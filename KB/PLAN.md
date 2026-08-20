@@ -175,3 +175,103 @@ Almanac, boosts, mutations, Rebirth, Gems, leaderboards.
   * **Server size.** Eight bases means eight players. Third-party data reports the reference game
     caps at seven. `MaxBases` and `MaxPlayers` must be one number, and the boot warning that catches
     a mismatch is worth reproducing.
+
+---
+
+## What the reference game actually looks like (2026-08-20)
+
+Read from a 2:47 screen recording of live play, sampled at one frame per ten seconds. This section
+exists because **four things in the plan above were wrong**, and they were only wrong until somebody
+looked.
+
+The recording is at `C:\Users\Maykel\Videos\Roblox\Roblox-2026-08-20T15_10_08.256Z.mp4`. There is no
+ffmpeg on PATH, but CapCut ships one at
+`%LOCALAPPDATA%\CapCut\Apps\9.2.0.3931\ffmpeg.exe` — worth remembering, it is the only way to look
+at a video on this machine.
+
+### THE MAP IS NOT HUB-AND-SPOKE WITH BASES AROUND IT
+
+This is the big one, and it changes MapService completely.
+
+There is **one large shared green field** which is the safe zone, and every player's plot sits ON it
+behind low orange fences. Biomes are **walled lanes** running off the edge of that field — high
+brick walls either side, a flat run down the middle, the nest at the far end. Not islands, not
+spokes radiating from a hub: corridors.
+
+```
+      [ SNOW lane ]   [ dark/COSMIC lane ]   [ desert lane ]
+   ═══════════════════════════════════════════════════════
+                 THE GREEN FIELD  (safe zone)
+        plot   plot   plot   plot   plot   plot
+              treadmills, SELL stand, shops
+```
+
+That shape is doing real work. A walled lane means the run home is a **committed corridor** with no
+flanking and one exit, so a chase down it is genuinely tense. The 8-bases-around-a-hub layout that
+was already built gives you nothing like that.
+
+### THE SAFE ZONE IS A RED LINE PAINTED ON THE GROUND
+
+Literally: a red stripe across the grass with the words **SAFE ZONE** written flat on the floor in
+white. No dome, no shader, no billboard. You can see exactly where safety ends from thirty studs
+away while sprinting, which is the entire requirement.
+
+**Copy this.** It is the cheapest possible implementation of the most important boundary in the
+game.
+
+### OFFLINE INCOME IS REAL, AND IT IS ADVERTISED
+
+A banner across the top of the screen reads **"You earn $397M/Day offline!"**. The plan deferred
+offline income as a v1 complexity. The reference game treats it as a headline feature — it is the
+reason to come back tomorrow.
+
+Reconsider. It is still the top source of "my cash reset" reports, but it is clearly load-bearing
+for retention here.
+
+### THE NUMBERS ARE FAR BIGGER THAN THE PLAN ASSUMED
+
+The in-game leaderboard, live, showed:
+
+| player | Money/s | Speed |
+| --- | --- | --- |
+| KIAN_butSPIDENER4 | **2.7B** | 3.2B |
+| cutelang_128 | 278M | 666M |
+| prettyboyush | 147M | 268M |
+
+**Speed of 3.2 BILLION.** The plan's speed curve normalises at 100,000, which is five orders of
+magnitude short — the curve still works (it asymptotes, so 3.2B just pins WalkSpeed at the maximum)
+but every gate, treadmill rate and rebirth threshold in the plan is scaled wrong.
+
+**Money/s of 2.7B is 2.3e14 per day.** The plan's 1e15 hard cap is roughly **four days of idling**
+at that rate. That is not the comfortable margin it was described as. Either the cap moves, income
+is balanced far below the reference, or rebirth resets are frequent enough that nobody approaches
+it. This needs deciding before the save schema, exactly as the plan says — but with better numbers
+than the plan had.
+
+### CONFIRMED FROM THE FOOTAGE
+
+  * **Two stats, and only two, on the leaderboard: Money/s and Speed.** That is the whole game
+    stated in a table. The HUD agrees: a feather icon with `193.5K` and a dollar figure `$51.2M`,
+    bottom-left, nothing else.
+  * **Plants/pets are BIG.** Mammoths, triceratops and a gorilla the height of the fence, standing
+    on the plot. Not small models on plinths — landmarks. Each carries a billboard reading e.g.
+    `Epic Fox $158/s`, and `+$158` floats off it every tick.
+  * **The treadmill floats `+45` per step** in several colours at once, with `+30/step` on a sign
+    beside it and an upgrade board reading `Level 4 > Level 5   $120M   49 gems`.
+  * **Biome entrances carry a big yellow banner with a difficulty emoji** — `Snow 😟`. One word, one
+    face, no numbers.
+  * **A day/night cycle with a visible countdown** — a moon icon and `in 2m 24s` bottom-right.
+  * **UI is two stacked buttons top-left** (`Shop`, `Index` with a red badge count), **two icons
+    right** (an egg and a paw — inventories), a hotbar bottom-centre, and a `Slow Mode` toggle.
+  * **`Friend Boost: +10%`** sits permanently under the cash figure.
+  * Monetisation is in-world and blunt: `x2 Speed  ONLY 30R$` as a button, `TRAILS SHOP  FREE!` as a
+    stall.
+
+### WHAT THIS CHANGES IN THE PLAN
+
+1. **MapService is rewritten, not adapted.** One shared field plus walled biome lanes. The
+   hub-and-spoke geometry is gone.
+2. **Safe zone gets built in Phase A**, not Phase B — it is a floor decal and a boundary test, and
+   the whole map reads wrong without the red line.
+3. **Rebalance every number against 2.7B/s and 3.2B speed** before writing the save schema.
+4. **Revisit offline income.** It is a headline feature in the reference, not a nicety.
