@@ -1,4 +1,4 @@
-# Steal an Artifact — Session Handoff
+# Steal a Seed — Session Handoff
 
 > Living document. **Read this first when picking up the project. Update it before ending any
 > session, then commit and push** (see the git policy in [CLAUDE.md](../CLAUDE.md)).
@@ -87,7 +87,7 @@ proves nothing about the lifecycle.
 ### FIRST THING NEXT SESSION
 
 1. Connect Rojo (`localhost:34872`) and sync.
-2. Press Play. Watch for `[Artifact] Steal an Artifact v0.1.0 (Phase 1) online -- 5 service(s)`.
+2. Press Play. Watch for `[Artifact] Steal a Seed v0.1.0 (Phase 1) online -- 5 service(s)`.
 3. Confirm a base is claimed, the sign shows your name, and you spawn on its pad.
 4. Tick API Services and confirm `SaveService` reports the store reachable.
 
@@ -109,6 +109,6 @@ starting points — read them before writing anything.
     Bar line for building it in Edit.
   * **Rojo project files reject unknown keys.** A `"//"` comment key is a parse error, not a
     comment. Explanations go in CLAUDE.md.
-  * The place is `Steal an Artifact`, placeId `114075467877655`, and it was an empty baseplate when
+  * The place is `Steal a Seed`, placeId `114075467877655`, and it was an empty baseplate when
     this session found it. A test map was built into it and removed again; `HttpEnabled` was toggled
     on for the compile checks and set back to false.

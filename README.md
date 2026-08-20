@@ -1,4 +1,4 @@
-# Steal an Artifact
+# Steal a Seed
 
 A multiplayer PvP extraction simulator for Roblox. Find an artifact in a dangerous zone, carry it
 home slower than you walked in, and get it onto your display before somebody takes it off you.
@@ -37,7 +37,7 @@ rojo serve --port 34872
 `servePlaceIds` in the project file means the plugin refuses to sync it into any place except the
 one below. See CLAUDE.md for why that matters on this machine.
 
-Place: `Steal an Artifact`, placeId `114075467877655`.
+Place: `Steal a Seed`, placeId `114075467877655`.
 
 ## The map is code
 

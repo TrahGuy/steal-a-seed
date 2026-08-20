@@ -1,4 +1,4 @@
-# Steal an Artifact — Roblox Place Project
+# Steal a Seed — Roblox Place Project
 
 Multiplayer PvP extraction / collection simulator. Rojo 7.6.1, synced to Roblox Studio.
 
@@ -13,7 +13,7 @@ rojo serve --port 34872
 
 **The guard is the place pin, not the port.** `default.project.json` carries
 `servePlaceIds: [114075467877655]`, so the plugin REFUSES to sync this project into any place that
-is not `Steal an Artifact`. A wrong connection fails loudly instead of quietly.
+is not `Steal a Seed`. A wrong connection fails loudly instead of quietly.
 
 That matters because of what happened on 2026-08-18, before the pin existed. Three projects on this
 machine all default to 34872. `D:\KAPE\Tetris Arena` was serving, the Cloud Cafe Studio was
@@ -23,7 +23,7 @@ word.
 
 | project | port | pinned? |
 | --- | --- | --- |
-| **Steal an Artifact** | **34872** | **yes — `114075467877655`** |
+| **Steal a Seed** | **34872** | **yes — `114075467877655`** |
 | Cloud Cafe Tycoon | 34873 | no |
 | Tetris Arena / BlockArena | 34872 | no |
 
@@ -93,7 +93,7 @@ From the blueprint, plus what this repo has learned:
 
 - Rojo: `C:\Users\Maykel\AppData\Local\Microsoft\WinGet\Packages\Rojo.Rojo_Microsoft.Winget.Source_8wekyb3d8bbwe\rojo.exe` (on PATH)
 - No Node.js on this machine. The npm package named `rojo` is unrelated — do not use it.
-- Build a place file: `rojo build -o build/StealAnArtifact.rbxlx`
+- Build a place file: `rojo build -o build/StealASeed.rbxlx`
 
 ### Previewing the map in Edit
 
