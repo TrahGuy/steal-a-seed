@@ -2,113 +2,133 @@
 
 > Living document. **Read this first when picking up the project. Update it before ending any
 > session, then commit and push** (see the git policy in [CLAUDE.md](../CLAUDE.md)).
+>
+> [PLAN.md](PLAN.md) is what we are building and in what order. [BLUEPRINT.md](BLUEPRINT.md) is the
+> reference design. This file is where things actually stand.
 
-## Phase 1: a foundation built out of two projects' scar tissue (2026-08-20)
+---
 
-New repo, created from the owner's master blueprint. The decision that shaped everything else was
-made before a line was written: **port the proven systems out of `Steal the Ore and Forge` rather
-than either rebuilding them or pivoting that project in place.**
+## Where it stands (2026-08-20)
 
-That project already had ~2,300 lines of tested Luau covering base claiming, carry, drop, steal and
-deposit — the blueprint's Phases 1 through 3 under different names. But it is a different GAME: you
-BUY ore off a conveyor there and you FIND artifacts in a zone here, and its 3,204-part foundry is
-the wrong theme and not in version control. So: new repo, systems lifted, OreForge left intact.
+**Phase A, map only.** The world exists and is dressed. Nothing else does: no plot claiming, no
+profiles, no seeds, no carrying, no HUD. Four files.
 
-`BaseService` is `PlotService` with its bugs fixed. `ServerMain` is `ServerBootstrap` verbatim in
-spirit — and it earns its keep every phase from here, because **adding a service is dropping a
-`*Service.luau` file in the folder.** No registry, no require list, no way to add a service and
-forget to start it.
+```
+src/ReplicatedStorage/SeedGame/Shared/
+  GameConfig.luau     names, capacity, map geometry, the speed curve, save schema
+  BiomeData.luau      the five biomes and where they sit on the road
+src/ServerScriptService/SeedGameServer/
+  ServerMain.server.luau   bootstrap: Init() all, then Start() all
+  MapService.luau          layout, lighting
+  MapDecor.luau            dressing  (NOT a *Service -- see below)
+```
 
-### THE MAP IS CODE, AND THAT IS THE POINT OF THE WHOLE PROJECT
+**889 parts, built in 0.14 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+zero tall props inside the racing line.
 
-Both predecessors carry the same open item in their handoffs: the map exists only inside a `.rbxl`
-and cannot be reproduced. Cloud Cafe's audit calls it the thing a lost file would destroy; OreForge
-still lists its foundry as "the only remaining unreproducible artifact".
+---
 
-`MapService` builds all **148 parts in 0.040s** from `GameConfig.Map` and `ZoneData`, every boot,
-destroying and rebuilding rather than patching. Moving the entire island is one edit to `BaseY`. The
-cost is that it will never look hand-crafted; for a blocky studded simulator that is the right trade
-every single time.
+## THE MAP IS ONE ROAD
 
-### FOUR THINGS FIXED THAT THE PREDECESSORS STILL CARRY AS OPEN BUGS
+```
+FIELD ══ GREENHOLLOW ─── DUSTBOWL ─── TANGLEMIRE ─── EMBERROOT ─── STARBLOOM
+(safe)       300            600           900            1200          1500
+  ▲          🙂             😐            😟             😨            💀
+the red line                                              studs from safety
+```
 
-  * **A real waiting queue.** OreForge's audit still says: *"releasePlot never offers a freed plot to
-    a player already waiting, and the join-time retry gives up after 10 attempts one second apart."*
-    `BaseService` keeps a join-ordered queue; a base freed at any point goes to whoever has waited
-    longest. Nobody retries and nobody gives up. It costs one table.
-  * **Capacity is one number.** Cloud Cafe shipped a 6-plot map on a 60-player place and nine of ten
-    joiners got nothing. `MaxBases` and `MaxPlayers` sit together, and `ServerMain` **warns at boot**
-    if `Players.MaxPlayers` disagrees — it is a place setting code cannot change, so the only honest
-    move is to refuse to be quiet about it.
-  * **A failed profile load is not a new player.** The most destructive save bug available: the
-    DataStore blips, the game hands out a fresh profile, the first autosave writes it over a real
-    account. A failed load is marked `readOnly` and is **never written back**. The player plays; they
-    just do not overwrite anything.
-  * **One coin faucet.** `EconomyService.AwardArtifact` and nothing else. Cloud Cafe's audit names
-    this as the invariant that kept its economy reasonable at Phase 5.
+Built it as five parallel lanes first. **That was wrong and the owner corrected it.** Biomes are
+segments of a single corridor laid end to end, and that one change expresses the whole risk curve as
+geometry, for free:
 
-### TWO BUGS FOUND BY LOOKING, NOT BY READING
+  * Distance IS difficulty. Nothing needs explaining -- the rarer seed is visibly further away.
+  * **The run home gets longer as the prize gets better.** A Starbloom seed is 1,500 studs from
+    safety, through every other biome.
+  * Everybody shares one road, so PvP happens on the way past instead of having to be arranged.
+    Parallel lanes let players miss each other entirely.
+  * Standing at the red line you can see all five biomes receding into the distance. **That is the
+    entire progression display and there is no UI in it.**
 
-Both were invisible to the compiler and to the arithmetic:
+The biome names are ours. Forest/Desert/Jungle/Volcano/Cosmic is the generic simulator ladder every
+game in the genre uses; these read as a garden going progressively wrong, which is the game actually
+being made.
 
-  1. **The bases intersected the Vault's floor.** A base reaches `BaseRingRadius + Size/2` = 178; a
-     zone 160 deep centred at 250 starts at 170. Eight studs of overlap, obvious in a screenshot and
-     in nothing else. `ZoneDistance` is 280 now, giving 33.4 studs of clearance —
-     **and `MapService` now checks the three numbers against each other at boot and warns**, because
-     a comment saying "keep these apart" is not a thing that keeps them apart.
-  2. **A `require` inside the artifact roll function**, re-resolving `GameConfig` on every single
-     spawn. Hoisted.
+---
 
-### VERIFIED
+## FOUR INVARIANTS THAT ARE LOAD-BEARING
 
-  * All 11 files compile.
-  * Map: 148 parts, 8 bases, 2 zones, 16 pedestals, **0 unanchored**, ring radius identical on all
-    eight (150.0 min and max), nearest base **57.4 studs** off the zone axis, **0 base/zone overlaps**.
-  * Every base carries all eight blueprint components — SpawnPad, ArtifactDisplay, CoinCollector,
-    UpgradeArea, OwnerSign, ProtectionZone, Base, Runtime.
-  * `ArtifactData.RollRarity` over **200,000 samples** matches its documented odds: Common 61.92%,
-    Uncommon 24.96%, Rare 10.03%, Epic 2.53%, Legendary 0.499%, Mythic 0.059%, Secret 0.002%.
-  * Photographed from above and at base level. The layout matches the blueprint's ASCII.
+Each one is enforced by a check in the build that warns rather than by a comment asking nicely.
 
-### NOT VERIFIED — READ THIS BEFORE TRUSTING ANY OF IT
+1. **Nothing decorative is collidable.** Every prop is `CanCollide`, `CanTouch` and `CanQuery`
+   false. A player sprinting home at WalkSpeed 150 who catches on a mushroom has been robbed by the
+   scenery, and in a game whose whole tension is a chase that is not a small bug. Same reason the
+   plot fences are non-collidable.
+2. **Height falls off toward the centre.** Tall props only near the walls; the middle 48 studs gets
+   ground cover and nothing else. A row of trees down the middle deletes the sightline, which is the
+   reason the map is a corridor at all.
+3. **Pods sit along the walls, alternating sides, never in the middle.** Taking one costs you the
+   racing line -- a real decision with somebody behind you.
+4. **Nothing may obscure the road.** `MapService` zeroes `FogEnd` *and* the `Atmosphere` instance.
+   Either one alone still greys out the far end at 1,500 studs.
 
-**Nothing has run in a Play session.** Not one line. `start_stop_play` over MCP wedged Studio three
-times earlier in the day and was not attempted again here. So:
+### The bug that made invariant 2 real
 
-  * No player has ever been assigned a base. **That is Phase 1's entire success criterion.**
-  * `SaveService` has never reached a DataStore. It will report itself unreachable in Studio until
-    Game Settings → Security → *Enable Studio Access to API Services* is ticked.
-  * `PlayerDataService`, `BaseService` and `MainHUD` have never been past `Init()`.
+The first decoration pass put a rock inside the racing line. Not because the rule was ignored --
+because `scatter` guarded the prop's **anchor point**, and a rock carries a second block three studs
+off that anchor. A prop placed exactly on the boundary spilled its far half over it.
 
-Everything above was proved by compiling each file inside a `local function __check()` wrapper and
-by calling `MapService.Init()` directly in the Edit datamodel. That proves the map and the data. It
-proves nothing about the lifecycle.
+The fix is that the margin now includes the prop's own declared `radius`, which `scatter` already
+knew because it needs it for spacing. **Reusing the number the prop already declares means the
+margin can never drift out of step with the prop it protects against.** And `dressSegment` now
+checks the parts it ACTUALLY placed and warns, because this class of bug is invisible to reading and
+only shows up in geometry.
 
-### FIRST THING NEXT SESSION
+---
 
-1. Connect Rojo (`localhost:34872`) and sync.
-2. Press Play. Watch for `[Artifact] Steal a Seed v0.1.0 (Phase 1) online -- 5 service(s)`.
-3. Confirm a base is claimed, the sign shows your name, and you spawn on its pad.
-4. Tick API Services and confirm `SaveService` reports the store reachable.
+## Things worth not rediscovering
 
-Then Phase 2: `ArtifactService` (spawn on pedestals), carry, deposit. `CarryService`,
-`DroppedOreService` and `DepositService` in `D:\KAPE\Steal the Ore and Forge` are the proven
-starting points — read them before writing anything.
+  * **`MapDecor` is deliberately not named `*Service`.** `ServerMain` auto-requires and starts every
+    ModuleScript in that folder ending in `Service`. `MapDecor` is a helper with no lifecycle, called
+    by `MapService` during its own `Init`.
+  * **Decoration placement is deterministic** -- `Random.new(seedFor(biome.Id))`, never
+    `math.random`, so every server builds the identical world.
+  * **`seedFor` is a mod-p polynomial hash, not FNV-1a.** FNV's `h * 16777619` exceeds the double
+    mantissa in Luau and silently loses precision, which breaks reproducibility at exactly the point
+    you are relying on it.
+  * **Lighting is in `MapService`.** A blank place defaults to a gloomy evening and the first build
+    rendered almost black -- which looks like a bug and is not one. `Lighting.Technology` is
+    deliberately untouched: it is not scriptable and every read of it is wrapped.
+  * **Seed pods take the biome's accent colour**, which makes them the brightest solid thing in
+    every biome. That was an accident and it is correct -- they are the objective.
 
-### HOUSEKEEPING
+---
 
-  * Port **34872**, the plugin default, pinned with `servePlaceIds: [114075467877655]` so the
-    plugin refuses to sync it into the wrong place. `/api/rojo` confirms `expectedPlaceIds`. It
-    started on 34874 to dodge the 08-18 collision; the pin turned out to be the better guard, and
-    the owner's plugin was already on the default.
-  * **A Rojo restart drops the plugin's connection AND leaves a stale `__Rojo_SessionLock` behind.**
-    Four restarts during the rename cost a round trip: the server logged no connection at all while
-    the place still held a lock with `Value=nil`. Delete the lock, reconnect.
-  * **A synced place still looks like an empty baseplate in Edit.** Rojo syncs code; `MapService`
-    builds the map at runtime. Check the Explorer, not the viewport. CLAUDE.md carries the Command
-    Bar line for building it in Edit.
-  * **Rojo project files reject unknown keys.** A `"//"` comment key is a parse error, not a
-    comment. Explanations go in CLAUDE.md.
-  * The place is `Steal a Seed`, placeId `114075467877655`, and it was an empty baseplate when
-    this session found it. A test map was built into it and removed again; `HttpEnabled` was toggled
-    on for the compile checks and set back to false.
+## Verified, and NOT verified
+
+Verified in Edit, by building the map for real and measuring it: part counts, zero unanchored, road
+continuity, pod placement, decoration invariants, plot-to-road distance (106 studs), and the speed
+curve against the reference game's real scale — **3.2 billion Speed maps to WalkSpeed 150.0**.
+
+**Nothing has run in a Play session.** `ServerMain` has never executed. `start_stop_play` over MCP
+wedged Studio three times on 2026-08-20 and has not been retried since; restart Studio before trying
+again, because the wedged state does not clear on its own.
+
+---
+
+## Still open
+
+  * **The cash cap.** PLAN.md picks 1e15 and then the footage showed the reference game running at
+    2.7B/sec, which reaches that in about four days of idling. Must be settled **before the save
+    schema is written**.
+  * **SpeedGate values are known to be wrong** — spaced correctly relative to each other, absolute
+    numbers meaningless until the treadmill exists and there is a measured rate to scale against.
+  * **The Roblox place is still named "Steal an Artifact"** (`114075467877655`), as is the repo
+    folder. Only the owner can rename the place.
+  * **Offline income.** Deferred in the plan; the reference advertises it in a banner across the top
+    of the screen as the reason to come back tomorrow.
+
+## Next
+
+`PlotService` — claim a plot on join, name on the sign, spawn on its pad, release on leave with a
+join-ordered waiting queue. Then `PlayerDataService` + `SaveService`, then the seed → carry →
+planter loop that is Phase A's actual success criterion.

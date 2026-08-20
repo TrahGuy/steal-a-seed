@@ -30,6 +30,9 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
+-- Dressing, not layout. Deliberately not a "*Service" so ServerMain does not
+-- try to start it -- MapService calls it during its own build.
+local MapDecor = require(script.Parent:WaitForChild("MapDecor"))
 
 local MapService = {}
 -- First. Every other service reads the world this builds.
@@ -421,6 +424,11 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		mount.Parent = pod
 	end
 
+	--== DRESSING ==--
+	-- Last, so the decorator can claim the pod positions and place nothing on
+	-- top of them.
+	MapDecor.dressSegment(biome, model)
+
 	--== LIGHT ==--
 	-- Darkness is the cheapest atmosphere there is, but a segment you cannot
 	-- see across is a segment you cannot be chased through. One non-casting
@@ -619,6 +627,10 @@ function MapService.Init()
 		-- Facing the lanes, which is the direction every run comes home from.
 		buildPlot(id, CFrame.new(x, Y, z), plots)
 	end
+
+	--== FIELD DRESSING ==--
+	-- After the plots, so the beds are placed around them rather than under.
+	MapDecor.dressField(props)
 
 	--== LANES ==--
 	local lanes = Instance.new("Folder")
