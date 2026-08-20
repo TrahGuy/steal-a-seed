@@ -85,6 +85,32 @@ From the blueprint, plus what this repo has learned:
 - No Node.js on this machine. The npm package named `rojo` is unrelated — do not use it.
 - Build a place file: `rojo build -o build/StealAnArtifact.rbxlx`
 
+### Previewing the map in Edit
+
+**The place is an empty baseplate in Edit and that is correct.** Rojo syncs code into
+ServerScriptService / ReplicatedStorage / StarterPlayerScripts; the 148-part map is not stored
+anywhere, because `MapService` builds it at RUNTIME. Press Play and it appears. Stop, and it is gone
+again.
+
+That is the cost of the map being code, and it is worth paying -- but it does mean you cannot eyeball
+the layout without starting a server. To build it in Edit anyway, paste this into the Command Bar:
+
+```lua
+require(game.ServerScriptService.ArtifactGameServer.MapService).Init()
+```
+
+`Init()` destroys any previous `ArtifactMap` before building, so it is safe to run repeatedly --
+which is what makes it usable for tuning geometry: edit `GameConfig.Map` or `ZoneData`, let Rojo
+sync, run the line again, look.
+
+**Delete `Workspace.ArtifactMap` before saving the place.** A map committed into the .rbxl is
+exactly the thing this project exists not to have, and the runtime build would then be fighting a
+stale copy on every boot.
+
+```lua
+local m = workspace:FindFirstChild("ArtifactMap") if m then m:Destroy() end
+```
+
 ### Checking Luau syntax without a Play session
 
 `start_stop_play` over MCP is unreliable on this machine. To compile-check a file without running it:
