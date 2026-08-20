@@ -52,29 +52,45 @@ One logical change per commit. Never end a session with uncommitted work.
 ```
 default.project.json          Rojo map
 src/
-  ReplicatedStorage/ArtifactGame/
-    Shared/GameConfig.luau      names, capacity, map geometry, remotes, save
-    Shared/Types.luau           shared type vocabulary
-    Shared/ArtifactData.luau    artifacts, odds, carry, economy
-    Shared/ZoneData.luau        zone geometry and pedestal layout
+  ReplicatedStorage/SeedGame/
+    Shared/GameConfig.luau      names, capacity, map geometry, speed curve, save
+    Shared/BiomeData.luau       the five biomes and where they sit on the road
     Remotes/                    created at runtime by ServerMain
-  ServerScriptService/ArtifactGameServer/
+  ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
-    MapService.luau             builds the whole map from code
-    SaveService.luau            the only DataStore caller
-    PlayerDataService.luau      owns every profile
-    BaseService.luau            base ownership + spawning
-    EconomyService.luau         the only coin faucet
-  StarterPlayer/StarterPlayerScripts/
-    MainHUD.client.luau
+    MapService.luau             builds the whole map, and the lighting, from code
 ```
+
+Phase A still to come: `PlotService`, `PlayerDataService`, `SaveService`, `SeedService`,
+`CarryService`, `PlantService`, `EconomyService`, and the HUD. See [KB/PLAN.md](KB/PLAN.md).
+
+## The map is ONE ROAD
+
+```
+FIELD ══ FOREST ─── DESERT ─── JUNGLE ─── VOLCANO ─── COSMIC
+(safe)    300         600        900       1200       1500   studs from safety
+  ▲
+the red line
+```
+
+Biomes are segments of a single corridor, not separate areas. **Distance is difficulty**, the run
+home gets longer as the prize gets better, everybody shares one road so PvP happens on the way past,
+and standing at the safe line you can see all five biomes receding into the distance — which is the
+entire progression display, with no UI.
+
+Two consequences worth not breaking:
+
+- **Pods sit along the walls, never in the middle.** Taking one costs you the racing line. There is
+  a build-time check that fails loudly if a pod ends up near the centre.
+- **Nothing may obscure the road.** `MapService` zeroes `FogEnd` *and* the `Atmosphere` instance,
+  because either one alone still greys out the far end at 1,500 studs.
 
 ## Rules
 
 From the blueprint, plus what this repo has learned:
 
 1. **Never rebuild an existing system.** Check the repo before adding code.
-2. **Adding a service is dropping a `*Service.luau` file in `ArtifactGameServer`.** ServerMain finds
+2. **Adding a service is dropping a `*Service.luau` file in `SeedGameServer`.** ServerMain finds
    it, orders it by `Priority`, runs `Init()` then `Start()`. No registry to update.
 3. **The server owns economy and ownership.** A client never picks, claims or pays.
 4. **Validate every RemoteEvent argument.** The sender is engine-stamped and cannot be forged; every
@@ -82,9 +98,9 @@ From the blueprint, plus what this repo has learned:
 5. **Nothing is placed by hand.** The map, the HUD, every instance is built in code. Both
    predecessor projects on this machine still carry "the map is not in version control" as an open
    item; this one never will.
-6. **One faucet.** Coins mint in `EconomyService.AwardArtifact` and nowhere else.
-7. **Numbers live in data files.** Artifact values and odds in `ArtifactData`, zone geometry in
-   `ZoneData`. `GameConfig` holds names and structure, never balance.
+6. **One faucet.** Cash mints in `EconomyService` and nowhere else.
+7. **Numbers live in data files.** Seed and plant balance in `SeedData`, biome content in
+   `BiomeData`. `GameConfig` holds names, structure and the speed curve, never balance.
 8. **Mobile first.** Blocky studded plastic, low part counts, no per-frame allocation.
 9. **`--!strict` on every file.**
 10. **Scripts must be safe to re-run.** `MapService` destroys and rebuilds rather than patching.
@@ -98,7 +114,7 @@ From the blueprint, plus what this repo has learned:
 ### Previewing the map in Edit
 
 **The place is an empty baseplate in Edit and that is correct.** Rojo syncs code into
-ServerScriptService / ReplicatedStorage / StarterPlayerScripts; the 148-part map is not stored
+ServerScriptService / ReplicatedStorage / StarterPlayerScripts; the map is not stored
 anywhere, because `MapService` builds it at RUNTIME. Press Play and it appears. Stop, and it is gone
 again.
 
@@ -106,19 +122,19 @@ That is the cost of the map being code, and it is worth paying -- but it does me
 the layout without starting a server. To build it in Edit anyway, paste this into the Command Bar:
 
 ```lua
-require(game.ServerScriptService.ArtifactGameServer.MapService).Init()
+require(game.ServerScriptService.SeedGameServer.MapService).Init()
 ```
 
-`Init()` destroys any previous `ArtifactMap` before building, so it is safe to run repeatedly --
-which is what makes it usable for tuning geometry: edit `GameConfig.Map` or `ZoneData`, let Rojo
+`Init()` destroys any previous `SeedMap` before building, so it is safe to run repeatedly --
+which is what makes it usable for tuning geometry: edit `GameConfig.Map` or `BiomeData`, let Rojo
 sync, run the line again, look.
 
-**Delete `Workspace.ArtifactMap` before saving the place.** A map committed into the .rbxl is
+**Delete `Workspace.SeedMap` before saving the place.** A map committed into the .rbxl is
 exactly the thing this project exists not to have, and the runtime build would then be fighting a
 stale copy on every boot.
 
 ```lua
-local m = workspace:FindFirstChild("ArtifactMap") if m then m:Destroy() end
+local m = workspace:FindFirstChild("SeedMap") if m then m:Destroy() end
 ```
 
 ### Checking Luau syntax without a Play session
