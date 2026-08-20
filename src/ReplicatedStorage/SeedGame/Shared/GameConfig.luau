@@ -18,8 +18,8 @@ GameConfig.Phase = 1
 -- Players.MaxPlayers disagrees -- it is a place setting a script cannot change,
 -- so the only honest thing code can do is refuse to be quiet about it.
 --==============================================================================
-GameConfig.MaxPlots = 8
-GameConfig.MaxPlayers = 8
+GameConfig.MaxPlots = 6
+GameConfig.MaxPlayers = 6
 
 --==============================================================================
 -- THE SHAPE OF THE MAP, AND WHY IT IS THIS SHAPE
@@ -68,8 +68,17 @@ GameConfig.Map = {
 	GroundY = 0,
 
 	-- The shared safe field.
-	FieldWidth = 460,   -- X
-	FieldDepth = 300,   -- Z
+	--
+	-- TIGHT ON PURPOSE. The first build put the plots 246 studs from the road,
+	-- which meant every single run began and ended with a long walk across empty
+	-- grass. That is dead time, it is the first thing a new player experiences,
+	-- and none of it is the game.
+	--
+	-- The field only has to be big enough to hold the plots, the shops and a
+	-- readable gap before the red line. Everything past that is distance the
+	-- BIOMES are supposed to provide -- and they do, at 300 studs a segment.
+	FieldWidth = 400,   -- X
+	FieldDepth = 170,   -- Z
 	FieldThickness = 6,
 
 	-- THE RED LINE. A stripe painted flat on the grass at the field's far edge
@@ -107,9 +116,10 @@ GameConfig.Map = {
 GameConfig.Plot = {
 	NamePrefix = "Plot_",
 	Size = 48,
-	-- Distance from the field's south edge to the plot centres.
-	InsetFromEdge = 54,
-	Pitch = 56,
+	-- Distance from the field's near edge to the plot centres. Larger moves the
+	-- plots TOWARD the road.
+	InsetFromEdge = 40,
+	Pitch = 58,
 
 	FloorName = "Ground",
 	SignName = "OwnerSign",

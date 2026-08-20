@@ -579,7 +579,9 @@ function MapService.Init()
 	local stand = build({
 		name = MAP.SellStandName,
 		size = Vector3.new(18, 12, 8),
-		cframe = CFrame.new(0, Y + 6, 20),
+		-- Between the plots and the red line, on the route everybody already
+		-- runs. A shop off to one side is a shop nobody walks past.
+		cframe = CFrame.new(0, Y + 6, -14),
 		color = Color3.fromRGB(232, 68, 68),
 		studs = false,
 		parent = props,

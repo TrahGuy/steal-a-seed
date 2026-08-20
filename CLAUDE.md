@@ -67,9 +67,9 @@ Phase A still to come: `PlotService`, `PlayerDataService`, `SaveService`, `SeedS
 ## The map is ONE ROAD
 
 ```
-FIELD ══ FOREST ─── DESERT ─── JUNGLE ─── VOLCANO ─── COSMIC
-(safe)    300         600        900       1200       1500   studs from safety
-  ▲
+FIELD ══ GREENHOLLOW ─── DUSTBOWL ─── TANGLEMIRE ─── EMBERROOT ─── STARBLOOM
+(safe)       300            600           900            1200          1500
+  ▲                                                          studs from safety
 the red line
 ```
 

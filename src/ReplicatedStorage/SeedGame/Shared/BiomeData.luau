@@ -1,8 +1,20 @@
 --!strict
 -- Steal a Seed :: BiomeData
 --
--- The five lanes: what they look like, what they cost in Speed to enter, and
--- how good the seeds at the far end are.
+-- The five segments of the road: what they look like, what they cost in Speed
+-- to enter, and how good the seeds are.
+--
+--==============================================================================
+-- THE NAMES ARE OURS
+--
+-- Forest / Desert / Jungle / Volcano / Cosmic is the generic simulator ladder
+-- and every game in the genre uses it. These are the same ladder read as a
+-- garden going progressively wrong, which is the game actually being made here:
+--
+--   Greenhollow -> Dustbowl -> Tanglemire -> Emberroot -> Starbloom
+--
+-- A player should be able to guess the difficulty order from the words alone,
+-- and should not be able to confuse this game's map with anybody else's.
 --
 --==============================================================================
 -- ONE WORD AND A FACE
@@ -58,8 +70,8 @@ export type Biome = {
 --==============================================================================
 BiomeData.Biomes = {
 	{
-		Id = "forest",
-		DisplayName = "Forest",
+		Id = "greenhollow",
+		DisplayName = "Greenhollow",
 		Mood = "🙂",
 		Order = 1,
 		SpeedGate = 0,
@@ -72,56 +84,56 @@ BiomeData.Biomes = {
 		LiveInPhaseA = true,
 	},
 	{
-		Id = "desert",
-		DisplayName = "Desert",
+		Id = "dustbowl",
+		DisplayName = "Dustbowl",
 		Mood = "😐",
 		Order = 2,
 		SpeedGate = 2500,
-		GroundColor = Color3.fromRGB(232, 206, 142),
-		WallColor = Color3.fromRGB(198, 156, 104),
-		AccentColor = Color3.fromRGB(214, 170, 96),
+		GroundColor = Color3.fromRGB(226, 198, 138),
+		WallColor = Color3.fromRGB(186, 142, 92),
+		AccentColor = Color3.fromRGB(212, 158, 78),
 		Brightness = 1.0,
 		Pods = 7,
 		RarityBonus = 1.6,
 		LiveInPhaseA = false,
 	},
 	{
-		Id = "jungle",
-		DisplayName = "Jungle",
+		Id = "tanglemire",
+		DisplayName = "Tanglemire",
 		Mood = "😟",
 		Order = 3,
 		SpeedGate = 12000,
-		GroundColor = Color3.fromRGB(58, 138, 78),
-		WallColor = Color3.fromRGB(48, 92, 58),
-		AccentColor = Color3.fromRGB(196, 214, 74),
+		GroundColor = Color3.fromRGB(58, 116, 96),
+		WallColor = Color3.fromRGB(40, 74, 62),
+		AccentColor = Color3.fromRGB(168, 214, 96),
 		Brightness = 0.78,
 		Pods = 6,
 		RarityBonus = 2.6,
 		LiveInPhaseA = false,
 	},
 	{
-		Id = "volcano",
-		DisplayName = "Volcano",
+		Id = "emberroot",
+		DisplayName = "Emberroot",
 		Mood = "😨",
 		Order = 4,
 		SpeedGate = 45000,
-		GroundColor = Color3.fromRGB(72, 58, 58),
-		WallColor = Color3.fromRGB(52, 40, 40),
-		AccentColor = Color3.fromRGB(255, 112, 48),
+		GroundColor = Color3.fromRGB(74, 54, 50),
+		WallColor = Color3.fromRGB(50, 36, 34),
+		AccentColor = Color3.fromRGB(255, 118, 44),
 		Brightness = 0.55,
 		Pods = 5,
 		RarityBonus = 4.5,
 		LiveInPhaseA = false,
 	},
 	{
-		Id = "cosmic",
-		DisplayName = "Cosmic",
+		Id = "starbloom",
+		DisplayName = "Starbloom",
 		Mood = "💀",
 		Order = 5,
 		SpeedGate = 150000,
-		GroundColor = Color3.fromRGB(26, 26, 52),
-		WallColor = Color3.fromRGB(18, 18, 38),
-		AccentColor = Color3.fromRGB(150, 122, 255),
+		GroundColor = Color3.fromRGB(30, 24, 60),
+		WallColor = Color3.fromRGB(20, 16, 42),
+		AccentColor = Color3.fromRGB(158, 128, 255),
 		Brightness = 0.3,
 		Pods = 4,
 		RarityBonus = 9.0,
