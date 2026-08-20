@@ -5,25 +5,35 @@ Multiplayer PvP extraction / collection simulator. Rojo 7.6.1, synced to Roblox 
 Read [KB/HANDOFF.md](KB/HANDOFF.md) at the start of every session and update it before ending one.
 [KB/BLUEPRINT.md](KB/BLUEPRINT.md) is the design source of truth — the game's direction, not its code.
 
-## Rojo port: 34874 — NOT the default
+## Rojo port: 34872 (the plugin default), guarded by servePlaceIds
 
 ```
-rojo serve --port 34874
+rojo serve --port 34872
 ```
 
-**This is not a preference.** Three projects live on this machine and Rojo defaults all of them to
-34872. On 2026-08-18 that cost a full session: `D:\KAPE\Tetris Arena` was serving, the Cloud Cafe
-Studio was connected to it, and Rojo cheerfully synced BlockArena's 41 scripts into the cafe place
-while the cafe's own disk edits reached nothing. Whichever Studio connects last wins and neither
-side says a word.
+**The guard is the place pin, not the port.** `default.project.json` carries
+`servePlaceIds: [114075467877655]`, so the plugin REFUSES to sync this project into any place that
+is not `Steal an Artifact`. A wrong connection fails loudly instead of quietly.
 
-| project | port |
-| --- | --- |
-| Tetris Arena / BlockArena | 34872 |
-| Cloud Cafe Tycoon | 34873 |
-| **Steal an Artifact** | **34874** |
+That matters because of what happened on 2026-08-18, before the pin existed. Three projects on this
+machine all default to 34872. `D:\KAPE\Tetris Arena` was serving, the Cloud Cafe Studio was
+connected to it, and Rojo cheerfully synced BlockArena's 41 scripts into the cafe place while the
+cafe's own disk edits reached nothing. Whichever Studio connects last wins and neither side says a
+word.
 
-Check in five seconds: `curl -s localhost:34874/api/rojo` names the project it is serving.
+| project | port | pinned? |
+| --- | --- | --- |
+| **Steal an Artifact** | **34872** | **yes — `114075467877655`** |
+| Cloud Cafe Tycoon | 34873 | no |
+| Tetris Arena / BlockArena | 34872 | no |
+
+**Only one process can bind 34872 at a time**, so the live risk is sequential rather than
+simultaneous: stop this server, start BlockArena's on the same port, and a Studio that auto-reconnects
+finds the wrong project. The pin protects THIS project in that scenario; the other two are still
+unguarded and should get `servePlaceIds` of their own.
+
+Check in five seconds: `curl -s localhost:34872/api/rojo` names the project and the place it will
+accept.
 
 ## Git policy
 

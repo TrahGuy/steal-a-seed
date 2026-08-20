@@ -86,7 +86,7 @@ proves nothing about the lifecycle.
 
 ### FIRST THING NEXT SESSION
 
-1. Connect Rojo (`localhost:34874`) and sync.
+1. Connect Rojo (`localhost:34872`) and sync.
 2. Press Play. Watch for `[Artifact] Steal an Artifact v0.1.0 (Phase 1) online -- 5 service(s)`.
 3. Confirm a base is claimed, the sign shows your name, and you spawn on its pad.
 4. Tick API Services and confirm `SaveService` reports the store reachable.
@@ -97,8 +97,16 @@ starting points — read them before writing anything.
 
 ### HOUSEKEEPING
 
-  * Port **34874**, and the project is pinned with `servePlaceIds: [114075467877655]` so the plugin
-    refuses to sync it into the wrong place. `/api/rojo` confirms `expectedPlaceIds`.
+  * Port **34872**, the plugin default, pinned with `servePlaceIds: [114075467877655]` so the
+    plugin refuses to sync it into the wrong place. `/api/rojo` confirms `expectedPlaceIds`. It
+    started on 34874 to dodge the 08-18 collision; the pin turned out to be the better guard, and
+    the owner's plugin was already on the default.
+  * **A Rojo restart drops the plugin's connection AND leaves a stale `__Rojo_SessionLock` behind.**
+    Four restarts during the rename cost a round trip: the server logged no connection at all while
+    the place still held a lock with `Value=nil`. Delete the lock, reconnect.
+  * **A synced place still looks like an empty baseplate in Edit.** Rojo syncs code; `MapService`
+    builds the map at runtime. Check the Explorer, not the viewport. CLAUDE.md carries the Command
+    Bar line for building it in Edit.
   * **Rojo project files reject unknown keys.** A `"//"` comment key is a parse error, not a
     comment. Explanations go in CLAUDE.md.
   * The place is `Steal an Artifact`, placeId `114075467877655`, and it was an empty baseplate when

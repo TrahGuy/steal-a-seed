@@ -30,11 +30,12 @@ it compiles; nothing has run in a live session yet.
 ## Running it
 
 ```
-rojo serve --port 34874
+rojo serve --port 34872
 ```
 
-**Port 34874 is not optional** — see CLAUDE.md. The project is also pinned to its place with
-`servePlaceIds`, so the plugin refuses to sync it anywhere else.
+34872 is the Rojo plugin's default. What keeps this project safe is not the port but the pin:
+`servePlaceIds` in the project file means the plugin refuses to sync it into any place except the
+one below. See CLAUDE.md for why that matters on this machine.
 
 Place: `Steal an Artifact`, placeId `114075467877655`.
 
