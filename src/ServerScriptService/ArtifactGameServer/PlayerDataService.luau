@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: PlayerDataService
+-- Steal an Artifact :: PlayerDataService
 --
 -- Owns every player's profile in memory: coins, level, experience, artifact
 -- counts, base level, equipment. Loads through SaveService on join, autosaves,

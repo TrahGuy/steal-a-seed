@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: ArtifactData
+-- Steal an Artifact :: ArtifactData
 --
 -- Every artifact in the game, the odds of finding one, and the economy numbers
 -- that depend on them. THE SINGLE SOURCE OF TRUTH for all three -- GameConfig

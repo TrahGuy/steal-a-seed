@@ -1,5 +1,5 @@
 {
-  "name": "Steal The Artifact",
+  "name": "Steal an Artifact",
   "servePlaceIds": [114075467877655],
   "tree": {
     "$className": "DataModel",

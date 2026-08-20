@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: EconomyService
+-- Steal an Artifact :: EconomyService
 --
 -- The one place an artifact turns into coins and experience.
 --

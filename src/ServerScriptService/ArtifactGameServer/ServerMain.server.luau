@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: ServerMain
+-- Steal an Artifact :: ServerMain
 --
 -- Requires every "*Service" ModuleScript sitting beside it, runs Init() on all
 -- of them, then Start() on all of them, ordered by an optional Priority.

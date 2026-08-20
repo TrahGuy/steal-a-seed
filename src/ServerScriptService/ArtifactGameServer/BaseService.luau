@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: BaseService
+-- Steal an Artifact :: BaseService
 --
 -- Owns base ownership, base lifecycle, and player spawning. Server-authoritative:
 -- a client can never pick, claim or release a base. Every spawn position is

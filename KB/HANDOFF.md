@@ -1,4 +1,4 @@
-# Steal The Artifact — Session Handoff
+# Steal an Artifact — Session Handoff
 
 > Living document. **Read this first when picking up the project. Update it before ending any
 > session, then commit and push** (see the git policy in [CLAUDE.md](../CLAUDE.md)).
@@ -87,7 +87,7 @@ proves nothing about the lifecycle.
 ### FIRST THING NEXT SESSION
 
 1. Connect Rojo (`localhost:34874`) and sync.
-2. Press Play. Watch for `[Artifact] Steal The Artifact v0.1.0 (Phase 1) online -- 5 service(s)`.
+2. Press Play. Watch for `[Artifact] Steal an Artifact v0.1.0 (Phase 1) online -- 5 service(s)`.
 3. Confirm a base is claimed, the sign shows your name, and you spawn on its pad.
 4. Tick API Services and confirm `SaveService` reports the store reachable.
 

@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: SaveService
+-- Steal an Artifact :: SaveService
 --
 -- The only code in the game that touches DataStoreService. Everything else goes
 -- through PlayerDataService, which goes through here.

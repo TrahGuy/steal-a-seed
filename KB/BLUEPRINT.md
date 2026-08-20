@@ -1,4 +1,4 @@
-# Steal The Artifact — Master Blueprint
+# Steal an Artifact — Master Blueprint
 
 The project's design source of truth, as supplied by the owner on 2026-08-20. This file describes
 the GAME. It is not a description of the code, and where the code has had to make a decision the

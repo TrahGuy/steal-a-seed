@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: GameConfig
+-- Steal an Artifact :: GameConfig
 --
 -- Canonical shared configuration. Names live here so no later phase ever
 -- duplicates one. Every gameplay DECISION still happens on the server -- this
@@ -18,7 +18,7 @@
 
 local GameConfig = {}
 
-GameConfig.ProjectName = "Steal The Artifact"
+GameConfig.ProjectName = "Steal an Artifact"
 GameConfig.Version = "0.1.0"
 GameConfig.Phase = 1
 
@@ -169,7 +169,12 @@ GameConfig.RarityTier = rarityTier
 -- happens.
 --==============================================================================
 GameConfig.Save = {
-	StoreName = "StealTheArtifact_v1",
+	-- RENAMED WHILE IT WAS STILL FREE. This key was "StealTheArtifact_v1" for
+	-- about an hour, before the game had ever run and therefore before a single
+	-- profile existed under it. That is the ONLY moment a store name can be
+	-- changed: renaming it after launch orphans every save under the old key,
+	-- silently, and every player starts again from zero.
+	StoreName = "StealAnArtifact_v1",
 	CurrentVersion = 1,
 	AutosaveSeconds = 90,
 	-- Roblox throttles DataStore writes per key. Below this gap a save request

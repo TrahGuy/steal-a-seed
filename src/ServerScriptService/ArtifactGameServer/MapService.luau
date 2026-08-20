@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: MapService
+-- Steal an Artifact :: MapService
 --
 -- Builds the entire map from code, every boot, from GameConfig.Map and
 -- ZoneData. Nothing in this game is placed by hand.

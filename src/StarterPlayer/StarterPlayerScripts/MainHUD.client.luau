@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: MainHUD
+-- Steal an Artifact :: MainHUD
 --
 -- The top-left readout: coins, artifacts, level. Exactly the three lines the
 -- blueprint asks for and nothing else -- Phase 2 adds the carry card, Phase 4

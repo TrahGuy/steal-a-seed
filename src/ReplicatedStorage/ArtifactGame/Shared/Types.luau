@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: Types
+-- Steal an Artifact :: Types
 --
 -- Shared type vocabulary for every phase. No runtime behaviour.
 --

@@ -1,5 +1,5 @@
 --!strict
--- Steal The Artifact :: ZoneData
+-- Steal an Artifact :: ZoneData
 --
 -- Where artifacts appear, and how often. Geometry lives here rather than in
 -- GameConfig because a zone is content: adding a third one in Phase 5 should be

@@ -1,4 +1,4 @@
-# Steal The Artifact
+# Steal an Artifact
 
 A multiplayer PvP extraction simulator for Roblox. Find an artifact in a dangerous zone, carry it
 home slower than you walked in, and get it onto your display before somebody takes it off you.

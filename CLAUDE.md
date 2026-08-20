@@ -1,4 +1,4 @@
-# Steal The Artifact — Roblox Place Project
+# Steal an Artifact — Roblox Place Project
 
 Multiplayer PvP extraction / collection simulator. Rojo 7.6.1, synced to Roblox Studio.
 
@@ -21,7 +21,7 @@ side says a word.
 | --- | --- |
 | Tetris Arena / BlockArena | 34872 |
 | Cloud Cafe Tycoon | 34873 |
-| **Steal The Artifact** | **34874** |
+| **Steal an Artifact** | **34874** |
 
 Check in five seconds: `curl -s localhost:34874/api/rojo` names the project it is serving.
 
@@ -83,7 +83,7 @@ From the blueprint, plus what this repo has learned:
 
 - Rojo: `C:\Users\Maykel\AppData\Local\Microsoft\WinGet\Packages\Rojo.Rojo_Microsoft.Winget.Source_8wekyb3d8bbwe\rojo.exe` (on PATH)
 - No Node.js on this machine. The npm package named `rojo` is unrelated — do not use it.
-- Build a place file: `rojo build -o build/StealTheArtifact.rbxlx`
+- Build a place file: `rojo build -o build/StealAnArtifact.rbxlx`
 
 ### Checking Luau syntax without a Play session
 
