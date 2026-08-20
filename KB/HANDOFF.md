@@ -23,7 +23,7 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**889 parts, built in 0.14 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+**977 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
 zero tall props inside the racing line.
 
 ---
@@ -54,6 +54,29 @@ game in the genre uses; these read as a garden going progressively wrong, which 
 being made.
 
 ---
+
+## A PLOT IS PLAIN DIRT AND A WOODEN FENCE
+
+Nothing else. The first version was a coloured deck with a planter box, a treadmill and a rim, and
+six of those side by side read as a row of arcade cabinets rather than a row of gardens. Every one
+of those props would have been noise behind the plants that are eventually meant to stand there.
+
+**The whole plot is the planter.** There is no box to walk up to -- the `Planter` tag sits on the
+plot's own soil, so a seed goes into the ground it was carried home to. That removes an object and a
+step, and it is what "plant it in your plot" should have meant from the start.
+
+Visible materials on a plot are exactly `Ground` and `Wood`, and there is a check for it. The only
+non-soil, non-fence object is the owner sign, which earns its place: without it nobody can tell
+whose garden they are standing in, and UNCLAIMED is how a new player finds a free one. The
+SpawnLocation is invisible -- it is a hook for `Player.RespawnLocation`, not scenery.
+
+Treadmills moved **off** the plots onto the grass in front of each one, which is also where the
+reference game puts them. They are the one deliberately collidable thing out there, because you
+stand on them.
+
+The SELL stall moved to the **upper left of the field**. In the middle it sat on the exact line
+every player runs between their plot and the road -- a shop should be somewhere you choose to go,
+not something you run around twice a lap.
 
 ## FOUR INVARIANTS THAT ARE LOAD-BEARING
 

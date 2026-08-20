@@ -118,17 +118,28 @@ end
 --==============================================================================
 -- A PLOT
 --
--- Sits on the field behind a low fence. THE FENCE IS NOT COLLIDABLE, and that
--- is deliberate rather than lazy: a player sprinting home at WalkSpeed 120 who
--- clips a fence post and stops dead has been robbed by the scenery. The fence
--- is a property line, not a wall.
+-- PLAIN DIRT AND A WOODEN FENCE. That is the whole thing, and the restraint is
+-- the point: this is a game about growing, so a plot has to read as SOIL --
+-- somewhere empty and waiting -- and everything that is not soil competes with
+-- the plants that will eventually stand in it.
+--
+-- The first version was a coloured deck with a planter box, a treadmill and a
+-- rim. Six of those side by side read as a row of arcade cabinets, not a row of
+-- gardens, and every one of those props would have been visual noise behind the
+-- thing the player actually cares about.
+--
+-- THE WHOLE PLOT IS THE PLANTER. There is no separate box to walk up to: a seed
+-- goes into the ground it was carried home to. That removes an object, removes
+-- a step, and is what "plant it in your plot" should have meant from the start.
+--
+-- THE FENCE IS NOT COLLIDABLE, deliberately. A player sprinting home at
+-- WalkSpeed 150 who clips a fence post and stops dead has been robbed by the
+-- scenery. It is a property line, not a wall.
 --==============================================================================
-local PLOT_COLORS = {
-	Color3.fromRGB(232, 92, 92),  Color3.fromRGB(238, 152, 66),
-	Color3.fromRGB(240, 206, 76), Color3.fromRGB(118, 206, 106),
-	Color3.fromRGB(88, 194, 196), Color3.fromRGB(92, 146, 232),
-	Color3.fromRGB(158, 116, 226), Color3.fromRGB(232, 116, 182),
-}
+local DIRT = Color3.fromRGB(106, 74, 50)
+local DIRT_DARK = Color3.fromRGB(88, 60, 40)
+local WOOD = Color3.fromRGB(128, 88, 52)
+local WOOD_DARK = Color3.fromRGB(96, 64, 38)
 
 local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	local model = Instance.new("Model")
@@ -139,130 +150,115 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	model.Parent = parent
 	CollectionService:AddTag(model, GameConfig.Tags.Plot)
 
-	local tint = PLOT_COLORS[((id - 1) % #PLOT_COLORS) + 1]
 	local size = PLOT.Size
 	local half = size * 0.5
 
-	-- A slightly raised deck, so a plot reads as somewhere you STAND ON rather
-	-- than a painted square of grass.
+	--== THE SOIL ==--
+	-- Ground material, no studs. Studs are right for the grass field because it
+	-- is a floor you walk on; soil is a thing you dig in, and a studded plot
+	-- reads as plastic decking.
 	local floor = build({
 		name = PLOT.FloorName,
-		size = Vector3.new(size, 2, size),
-		cframe = cf * CFrame.new(0, 1, 0),
-		color = tint,
+		size = Vector3.new(size, 2.5, size),
+		cframe = cf * CFrame.new(0, 1.25, 0),
+		color = DIRT,
+		material = Enum.Material.Ground,
+		studs = false,
 		parent = model,
 	})
 	model.PrimaryPart = floor
+	-- Tagged as the planter, because it IS the planter. Anything looking for
+	-- somewhere to put a seed finds the plot's own ground.
+	CollectionService:AddTag(floor, GameConfig.Tags.Planter)
 
-	--== FENCE ==--
-	-- Three sides. The side facing the field stays open, because that is the
-	-- side the owner sprints in through and a gate they have to aim at is a
-	-- gate they will miss at speed.
-	for _, spec in ipairs({
-		{ Vector3.new(size, 1.2, 1.2), CFrame.new(0, 4.2, half) },
-		{ Vector3.new(1.2, 1.2, size), CFrame.new(-half, 4.2, 0) },
-		{ Vector3.new(1.2, 1.2, size), CFrame.new(half, 4.2, 0) },
-		{ Vector3.new(size, 1.2, 1.2), CFrame.new(0, 2.4, half) },
-		{ Vector3.new(1.2, 1.2, size), CFrame.new(-half, 2.4, 0) },
-		{ Vector3.new(1.2, 1.2, size), CFrame.new(half, 2.4, 0) },
-	}) do
+	-- Two tilled furrows. Two parts, and they are what stop a flat brown square
+	-- reading as mud rather than as a garden bed waiting to be planted.
+	for _, offset in ipairs({ -10, 10 }) do
 		build({
-			name = "Rail",
-			size = spec[1],
-			cframe = cf * spec[2],
-			color = Color3.fromRGB(206, 122, 62),
+			name = "Furrow",
+			size = Vector3.new(size - 10, 0.4, 5),
+			cframe = cf * CFrame.new(0, 2.6, offset),
+			color = DIRT_DARK,
+			material = Enum.Material.Ground,
+			-- Non-collidable. It is a mark on the soil, not a step -- and a
+			-- 0.4-stud lip across the plot is exactly the sort of thing that
+			-- catches a player running in at speed.
 			collide = false,
 			studs = false,
 			parent = model,
 		})
 	end
 
-	--== SPAWN ==--
-	local pad = Instance.new("SpawnLocation")
-	pad.Name = PLOT.SpawnPadName
-	pad.Size = Vector3.new(10, 1, 10)
-	pad.CFrame = cf * CFrame.new(0, 2.5, -half + 8)
-	pad.Color = tint
-	pad.Material = Enum.Material.Neon
-	pad.Anchored = true
-	pad.Neutral = true
-	-- Only the owner's is enabled, by PlotService. Every pad live would let
-	-- Roblox's own respawn logic drop anybody on anybody's plot.
-	pad.Enabled = false
-	pad.Duration = 0
-	pad.TopSurface = Enum.SurfaceType.Smooth
-	pad.Parent = model
-	CollectionService:AddTag(pad, GameConfig.Tags.PlotSpawn)
+	--== THE FENCE ==--
+	-- Post and rail, three sides. The side facing the field stays open: that is
+	-- the side the owner sprints in through, and a gate they have to aim at is a
+	-- gate they will miss at speed.
+	local sides = {
+		{ axis = "z", sign = 1 },   -- back
+		{ axis = "x", sign = -1 },  -- left
+		{ axis = "x", sign = 1 },   -- right
+	}
+	for _, side in ipairs(sides) do
+		local along = (side.axis == "x") and Vector3.new(0, 0, 1) or Vector3.new(1, 0, 0)
+		local outward = (side.axis == "x")
+			and Vector3.new(side.sign, 0, 0) or Vector3.new(0, 0, side.sign)
 
-	--== PLANTER ==--
-	-- Where a carried seed is delivered. The finish line of every run.
-	local planter = build({
-		name = PLOT.PlanterName,
-		size = Vector3.new(12, 5, 12),
-		cframe = cf * CFrame.new(0, 4.5, half - 10),
-		color = Color3.fromRGB(122, 84, 56),
-		material = Enum.Material.Wood,
-		parent = model,
-	})
-	CollectionService:AddTag(planter, GameConfig.Tags.Planter)
-	build({
-		name = "Soil",
-		size = Vector3.new(10, 1, 10),
-		cframe = cf * CFrame.new(0, 7.2, half - 10),
-		color = Color3.fromRGB(74, 52, 36),
-		material = Enum.Material.Ground,
-		parent = model,
-	})
+		-- Two rails.
+		for _, h in ipairs({ 2.9, 5.0 }) do
+			local railSize = (side.axis == "x")
+				and Vector3.new(0.7, 0.7, size) or Vector3.new(size, 0.7, 0.7)
+			build({
+				name = "Rail",
+				size = railSize,
+				cframe = cf * CFrame.new(outward.X * half, h, outward.Z * half),
+				color = WOOD,
+				material = Enum.Material.Wood,
+				collide = false,
+				studs = false,
+				parent = model,
+			})
+		end
 
-	--== PLANT SLOTS ==--
-	-- Attachments, not parts. A slot costs nothing until something grows in it,
-	-- and Phase D only needs a CFrame.
-	local plants = Instance.new("Folder")
-	plants.Name = PLOT.PlantsFolderName
-	plants.Parent = model
-	local slots = PLOT.StartingPlantSlots
-	for slot = 1, slots do
-		local a = Instance.new("Attachment")
-		a.Name = string.format("Slot%02d", slot)
-		a:SetAttribute("SlotIndex", slot)
-		-- Two rows of three across the open half of the plot.
-		local col = ((slot - 1) % 3) - 1
-		local row = math.floor((slot - 1) / 3)
-		a.WorldCFrame = cf * CFrame.new(col * 13, 2, -half + 20 + row * 13)
-		a.Parent = floor
-		CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
+		-- Posts. Three a side, corners shared with the neighbouring run -- which
+		-- is a doubled post at each corner, and a doubled post looks like a
+		-- corner post, so it costs nothing to leave.
+		for _, t in ipairs({ -1, 0, 1 }) do
+			local p = along * (t * half)
+			build({
+				name = "Post",
+				size = Vector3.new(1.3, 6.4, 1.3),
+				cframe = cf * CFrame.new(
+					outward.X * half + p.X, 3.2, outward.Z * half + p.Z),
+				color = WOOD_DARK,
+				material = Enum.Material.Wood,
+				collide = false,
+				studs = false,
+				parent = model,
+			})
+		end
 	end
 
-	--== TREADMILL ==--
-	-- One per plot. The reference puts them out on the field next to the plot;
-	-- on the plot is tidier and means it belongs to somebody, which matters the
-	-- moment upgrades exist.
-	local mill = build({
-		name = PLOT.TreadmillName,
-		size = Vector3.new(8, 1.5, 16),
-		cframe = cf * CFrame.new(half - 10, 2.8, 0),
-		color = Color3.fromRGB(42, 42, 52),
-		material = Enum.Material.SmoothPlastic,
-		studs = false,
-		parent = model,
-	})
-	CollectionService:AddTag(mill, GameConfig.Tags.Treadmill)
-	build({
-		name = "TreadmillFrame",
-		size = Vector3.new(10, 1, 18),
-		cframe = cf * CFrame.new(half - 10, 2.1, 0),
-		color = Color3.fromRGB(240, 196, 62),
-		material = Enum.Material.SmoothPlastic,
-		studs = false,
-		parent = model,
-	})
-
 	--== OWNER SIGN ==--
-	local post = build({
+	-- The one thing on the plot that is not soil or fence, and it earns its
+	-- place: without it nobody can tell whose garden they are standing in, and
+	-- "UNCLAIMED" is how a new player finds a free one.
+	build({
+		name = "SignPost",
+		size = Vector3.new(1.2, 7, 1.2),
+		cframe = cf * CFrame.new(-half + 6, 3.5, -half - 1),
+		color = WOOD_DARK,
+		material = Enum.Material.Wood,
+		collide = false,
+		studs = false,
+		parent = model,
+	})
+	local board = build({
 		name = PLOT.SignName,
-		size = Vector3.new(16, 5, 1),
-		cframe = cf * CFrame.new(0, 11, -half + 1),
-		color = Color3.fromRGB(52, 46, 60),
+		size = Vector3.new(15, 4.5, 0.6),
+		cframe = cf * CFrame.new(-half + 6, 8.4, -half - 1),
+		color = WOOD,
+		material = Enum.Material.Wood,
+		collide = false,
 		studs = false,
 		parent = model,
 	})
@@ -272,7 +268,7 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 40
 	gui.LightInfluence = 0
-	gui.Parent = post
+	gui.Parent = board
 	local label = Instance.new("TextLabel")
 	label.Name = PLOT.SignLabelName
 	label.Size = UDim2.fromScale(1, 1)
@@ -280,16 +276,120 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	label.Font = Enum.Font.FredokaOne
 	label.Text = PLOT.UnclaimedText
 	label.TextScaled = true
-	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextColor3 = Color3.fromRGB(255, 247, 230)
 	label.Parent = gui
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 3
-	stroke.Color = Color3.fromRGB(24, 20, 30)
+	stroke.Color = Color3.fromRGB(48, 32, 20)
 	stroke.Parent = label
+
+	--== SPAWN ==--
+	-- INVISIBLE. A SpawnLocation has to exist so Player.RespawnLocation has
+	-- something to point at, but a glowing neon pad in the middle of a dirt plot
+	-- is exactly the kind of prop this pass is removing. It is a hook, not
+	-- scenery.
+	local pad = Instance.new("SpawnLocation")
+	pad.Name = PLOT.SpawnPadName
+	pad.Size = Vector3.new(10, 1, 10)
+	pad.CFrame = cf * CFrame.new(0, 2.5, -half + 9)
+	pad.Transparency = 1
+	pad.CanCollide = false
+	pad.Anchored = true
+	pad.Neutral = true
+	-- Only the owner's is enabled, by PlotService. Every pad live would let
+	-- Roblox's own respawn logic drop anybody on anybody's plot.
+	pad.Enabled = false
+	pad.Duration = 0
+	pad.Parent = model
+	CollectionService:AddTag(pad, GameConfig.Tags.PlotSpawn)
+
+	--== PLANT SLOTS ==--
+	-- Attachments, not parts. A slot costs nothing until something grows in it,
+	-- and PlantService only needs a CFrame.
+	local plants = Instance.new("Folder")
+	plants.Name = PLOT.PlantsFolderName
+	plants.Parent = model
+	local slots = PLOT.StartingPlantSlots
+	for slot = 1, slots do
+		local a = Instance.new("Attachment")
+		a.Name = string.format("Slot%02d", slot)
+		a:SetAttribute("SlotIndex", slot)
+		local col = ((slot - 1) % 3) - 1
+		local row = math.floor((slot - 1) / 3)
+		-- On the two furrows, which is why the furrows are where they are.
+		a.WorldCFrame = cf * CFrame.new(col * 14, 2.6, row == 0 and -10 or 10)
+		a.Parent = floor
+		CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
+	end
 
 	local runtime = Instance.new("Folder")
 	runtime.Name = PLOT.RuntimeFolderName
 	runtime.Parent = model
+
+	return model
+end
+
+--==============================================================================
+-- A TREADMILL
+--
+-- Moved OFF the plot by the same pass that stripped it back to dirt and fence.
+-- It still belongs to a plot -- one each, parked on the grass directly in front
+-- of its owner's fence -- which is also where the reference game puts them.
+--
+-- Low and collidable, unlike almost everything else on the field: you stand on
+-- this one, so it is the exception to the "nothing catches a runner" rule, and
+-- at 1.5 studs high it is a step rather than an obstacle.
+--==============================================================================
+local function buildTreadmill(id: number, cf: CFrame, parent: Instance): Model
+	local model = Instance.new("Model")
+	model.Name = string.format("%s%02d", PLOT.TreadmillName, id)
+	model:SetAttribute(GameConfig.Attributes.PlotId, id)
+	model.Parent = parent
+
+	local frame = build({
+		name = "Frame",
+		size = Vector3.new(11, 1.2, 19),
+		cframe = cf,
+		color = WOOD,
+		material = Enum.Material.Wood,
+		studs = false,
+		parent = model,
+	})
+	model.PrimaryPart = frame
+
+	local belt = build({
+		name = PLOT.TreadmillName,
+		size = Vector3.new(8, 1.4, 16),
+		cframe = cf * CFrame.new(0, 0.4, 0),
+		color = Color3.fromRGB(58, 52, 48),
+		material = Enum.Material.SmoothPlastic,
+		studs = false,
+		parent = model,
+	})
+	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
+
+	for _, side in ipairs({ -1, 1 }) do
+		build({
+			name = "Handrail",
+			size = Vector3.new(0.7, 5, 0.7),
+			cframe = cf * CFrame.new(side * 4.6, 3, -7),
+			color = WOOD_DARK,
+			material = Enum.Material.Wood,
+			collide = false,
+			studs = false,
+			parent = model,
+		})
+	end
+	build({
+		name = "HandrailTop",
+		size = Vector3.new(10, 0.7, 0.7),
+		cframe = cf * CFrame.new(0, 5.3, -7),
+		color = WOOD_DARK,
+		material = Enum.Material.Wood,
+		collide = false,
+		studs = false,
+		parent = model,
+	})
 
 	return model
 end
@@ -583,36 +683,94 @@ function MapService.Init()
 	})
 	overflow.CanQuery = false
 
-	--== SELL STAND ==--
-	local stand = build({
-		name = MAP.SellStandName,
-		size = Vector3.new(18, 12, 8),
-		-- Between the plots and the red line, on the route everybody already
-		-- runs. A shop off to one side is a shop nobody walks past.
-		cframe = CFrame.new(0, Y + 6, -14),
-		color = Color3.fromRGB(232, 68, 68),
-		studs = false,
-		parent = props,
-	})
+	--== THE SELL STALL ==--
+	-- UPPER LEFT OF THE FIELD, not the middle. In the middle it sat on the exact
+	-- line every player runs between their plot and the road, which is the one
+	-- strip of ground that has to stay clear -- a shop should be somewhere you
+	-- choose to go, not something you have to run around twice a lap.
+	--
+	-- A real stall rather than a red box: counter, posts, striped awning. It is
+	-- the only building in the safe zone, so it is the only thing that can make
+	-- the field read as a market garden rather than a lawn.
 	do
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = Enum.NormalId.Front
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 30
-		gui.LightInfluence = 0
-		gui.Parent = stand
+		local sx = -(MAP.FieldWidth * 0.5) + 46
+		local sz = -(MAP.FieldDepth * 0.5) + 30
+		local stallCF = CFrame.new(sx, Y, sz) * CFrame.Angles(0, math.rad(28), 0)
+
+		local stall = Instance.new("Model")
+		stall.Name = MAP.SellStandName
+		stall.Parent = props
+
+		local counter = build({
+			name = "Counter",
+			size = Vector3.new(20, 6, 7),
+			cframe = stallCF * CFrame.new(0, 3, 0),
+			color = WOOD,
+			material = Enum.Material.Wood,
+			studs = false,
+			parent = stall,
+		})
+		stall.PrimaryPart = counter
+
+		build({
+			name = "CounterTop",
+			size = Vector3.new(22, 0.8, 9),
+			cframe = stallCF * CFrame.new(0, 6.4, 0),
+			color = WOOD_DARK,
+			material = Enum.Material.Wood,
+			studs = false,
+			parent = stall,
+		})
+
+		for _, side in ipairs({ -1, 1 }) do
+			build({
+				name = "Post",
+				size = Vector3.new(1.2, 13, 1.2),
+				cframe = stallCF * CFrame.new(side * 10, 6.5, -3.5),
+				color = WOOD_DARK,
+				material = Enum.Material.Wood,
+				collide = false,
+				studs = false,
+				parent = stall,
+			})
+		end
+
+		-- Striped awning. Alternating slats rather than one part with a texture,
+		-- because a texture is an asset id that lives in somebody's account and
+		-- this has to survive without one.
+		for i = 0, 6 do
+			build({
+				name = "Awning",
+				size = Vector3.new(3.2, 0.6, 11),
+				cframe = stallCF * CFrame.new(-9.6 + i * 3.2, 13.6, -1.5)
+					* CFrame.Angles(math.rad(-16), 0, 0),
+				color = (i % 2 == 0) and Color3.fromRGB(226, 74, 74)
+					or Color3.fromRGB(248, 244, 236),
+				material = Enum.Material.SmoothPlastic,
+				collide = false,
+				studs = false,
+				parent = stall,
+			})
+		end
+
+		local sign = Instance.new("SurfaceGui")
+		sign.Face = Enum.NormalId.Back
+		sign.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		sign.PixelsPerStud = 30
+		sign.LightInfluence = 0
+		sign.Parent = counter
 		local t = Instance.new("TextLabel")
 		t.Size = UDim2.fromScale(1, 1)
 		t.BackgroundTransparency = 1
 		t.Font = Enum.Font.FredokaOne
 		t.Text = "SELL"
 		t.TextScaled = true
-		t.TextColor3 = Color3.fromRGB(255, 255, 255)
-		t.Parent = gui
-		local s = Instance.new("UIStroke")
-		s.Thickness = 4
-		s.Color = Color3.fromRGB(90, 20, 20)
-		s.Parent = t
+		t.TextColor3 = Color3.fromRGB(255, 248, 232)
+		t.Parent = sign
+		local ss = Instance.new("UIStroke")
+		ss.Thickness = 4
+		ss.Color = Color3.fromRGB(72, 34, 22)
+		ss.Parent = t
 	end
 
 	--== PLOTS ==--
@@ -626,6 +784,8 @@ function MapService.Init()
 		local x = (id - (n + 1) * 0.5) * PLOT.Pitch
 		-- Facing the lanes, which is the direction every run comes home from.
 		buildPlot(id, CFrame.new(x, Y, z), plots)
+		-- On the grass in front of its own plot, clear of the fence.
+		buildTreadmill(id, CFrame.new(x, Y + 0.6, z - PLOT.Size * 0.5 - 16), plots)
 	end
 
 	--== FIELD DRESSING ==--
