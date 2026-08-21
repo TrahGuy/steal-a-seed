@@ -1363,6 +1363,76 @@ character      colliding 4 (as before) | AnimationConstraints 15/15 | PlatformSt
 
 > Test cash reset to 0 afterwards; the two plants kept.
 
+## The grab is gone, and the ragdoll is finally visible — 2026-08-21
+
+### No hold. Contact is the hit.
+
+`GrabHoldSeconds` is deleted -- from the code and from `GameConfig`, because dead config is how a
+file starts lying about itself. The parent no longer catches you, holds you for the better part of a
+second and then throws; reaching you IS the hit. It read as a cutscene: the chase stopped dead, both
+bodies stood still, and the moment everything had been building to was a wait.
+
+```
+contact 1.94s -> hit 1.94s   (delay 0.00s, was 0.80s)
+```
+
+`GrabStuds` is untouched at 7 -- that is contact range, not a grab.
+
+### Why the ragdoll was invisible: the body was never the server's to move
+
+This is the important one, and it had nothing to do with the ragdoll code.
+
+**A player's character is network-owned by that player.** Their client simulates it and tells the
+server where it went. So the impulse, the tumble and the bounce were all being computed on the
+server and then quietly overwritten by the owning client's version of a character that was, as far
+as it knew, standing still. The ragdoll was real, correct, measurable from the server, and rendered
+by nobody.
+
+`SetNetworkOwner(nil)` for the duration fixes it -- but **only if it is claimed LAST**:
+
+```
+claimed first:  t+2.27s  SERVER      <- the claim
+                t+2.32s  player      <- gone again, 0.05s later
+claimed last:   server-owned for 86 of 87 ragdoll frames (99%)
+```
+
+Disabling fifteen constraints and flipping sixteen `CanCollide` flags **re-forms the assembly**, and
+a freshly formed assembly reverts to auto ownership -- which for a player's character means the
+player. The claim was being made and then thrown away by the next two loops. It is now made after
+the shape has finished changing, and re-asserted every poll of the settle loop, because anything
+that reshapes the assembly mid-flight takes it back the same way. Handed back with
+`SetNetworkOwnershipAuto()` on stand-up.
+
+### Measured on the CLIENT, which is the only place "visible" means anything
+
+Torso tilt away from upright, and the forearm's position relative to the chest:
+
+```
+ 9.5s  tilt  1.2 deg   arm rel  x+1.17 y+0.06 z-0.77
+ 9.7s  tilt 27.3 deg   arm rel  x+0.69 y-0.41 z+0.36
+10.0s  tilt 94.2 deg   arm rel  x+1.06 y+0.41 z-0.91
+10.2s  tilt 94.3 deg   arm rel  x+0.83 y+1.35 z-0.31
+10.4s  tilt 94.2 deg   arm rel  x+1.09 y-0.28 z-0.53
+max torso tilt while ragdolled: 94.8 deg
+```
+
+The body tips fully over, and the forearm moves relative to the chest between every sample -- a limp
+limb, not a posed one. The client also reports the state arriving: `PS=true constraints on=0 off=15
+collide=16`.
+
+> `screen_capture` was no use here and returned frames of a standing character while the server
+> measured 27.3 degrees of tilt at that instant -- the stale-frame problem this file already
+> records. The pose measurement above is the evidence; there is no screenshot of it.
+
+### Untouched, verified after
+
+```
+after stand-up  owner back to the player | colliding 4 | constraints 15/15 | PlatformStand false
+                WalkSpeed 16.000
+grip            Nubkin 1.58 / Bellchime 3.09
+world           mills 6 | signs 6 | chevrons 60 | plot 2 plants, 0 prompts
+```
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

@@ -298,14 +298,44 @@ end
 -- Accessories are skipped on purpose: a hat that collides with the floor wedges
 -- the head at a strange angle and stops the body settling at all.
 --==============================================================================
+--==============================================================================
+-- AND THE SERVER HAS TO OWN THE BODY, OR NOBODY SEES ANY OF IT
+--
+-- A player's character is network-owned by THAT PLAYER. Their client simulates
+-- it and tells the server where it went. So everything above -- the impulse,
+-- the tumble, the bounce -- was being computed on the server and then quietly
+-- overwritten by the owning client's version of a character that was, as far as
+-- it knew, standing still.
+--
+-- The ragdoll was real, correct, measurable from the server, and INVISIBLE.
+--
+-- SetNetworkOwner(nil) takes the assembly for the duration, so the server's
+-- simulation is the one that replicates -- to the victim and to everyone
+-- watching. Handed back on stand-up with SetNetworkOwnershipAuto(), which
+-- returns a player character to its player.
+--==============================================================================
 type Loosened = {
 	constraints: { AnimationConstraint },
 	motors: { Motor6D },
 	collides: { { part: BasePart, was: boolean } },
+	root: BasePart?,
 }
 
+-- Claiming the assembly. Kept separate because WHEN it happens matters: see
+-- the comment at the bottom of ragdollOn.
+local function claim(root: BasePart?): boolean
+	if not (root and root.Parent) then
+		return false
+	end
+	-- pcall: SetNetworkOwner throws on an anchored part or one outside
+	-- Workspace, and a throw here would strand the victim mid-ragdoll.
+	return (pcall(function()
+		(root :: BasePart):SetNetworkOwner(nil)
+	end))
+end
+
 local function ragdollOn(character: Model): Loosened
-	local out: Loosened = { constraints = {}, motors = {}, collides = {} }
+	local out: Loosened = { constraints = {}, motors = {}, collides = {}, root = nil }
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("AnimationConstraint") then
 			if d.Enabled then
@@ -325,10 +355,37 @@ local function ragdollOn(character: Model): Loosened
 			d.CanCollide = true
 		end
 	end
+
+	--==========================================================================
+	-- CLAIMED LAST, AND THAT ORDERING IS THE WHOLE FIX.
+	--
+	-- Claiming it FIRST looked right and did not work: ownership flipped to the
+	-- server and was back with the player 0.05 seconds later, every time.
+	--
+	-- Disabling fifteen constraints and flipping sixteen CanCollide flags
+	-- RE-FORMS THE ASSEMBLY, and a freshly formed assembly gets auto ownership
+	-- -- which for a player's character means the player. So the claim was
+	-- being made and then immediately thrown away by the next two loops.
+	--
+	-- Claim after the shape has finished changing. The settle loop re-asserts
+	-- it as well, because anything that reshapes the assembly mid-flight would
+	-- take it back the same way.
+	--==========================================================================
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") and claim(root) then
+		out.root = root
+	end
 	return out
 end
 
 local function ragdollOff(loosened: Loosened)
+	if loosened.root and loosened.root.Parent then
+		-- Auto rather than SetNetworkOwner(player): Roblox hands a character
+		-- back to its own player, and this does not need to know who that is.
+		pcall(function()
+			(loosened.root :: BasePart):SetNetworkOwnershipAuto()
+		end)
+	end
 	for _, c in ipairs(loosened.constraints) do
 		if c.Parent then
 			c.Enabled = true
@@ -411,8 +468,17 @@ local function throwPlayer(nest: Nest, player: Player)
 
 	local ok, err = pcall(function()
 
-	task.wait(P.GrabHoldSeconds)
-
+	--==========================================================================
+	-- NO HOLD. CONTACT IS THE HIT.
+	--
+	-- There used to be a GrabHoldSeconds pause here: the parent caught you,
+	-- held you for the better part of a second, and then threw. It read as a
+	-- cutscene -- the chase stopped dead, both bodies stood still, and the one
+	-- moment the chase had been building to was a wait.
+	--
+	-- Now reaching you IS the hit. The parent does not catch and consider; it
+	-- runs into you and you go.
+	--==========================================================================
 	if player.Parent ~= Players or humanoid.Health <= 0 then
 		return
 	end
@@ -477,6 +543,12 @@ local function throwPlayer(nest: Nest, player: Player)
 	while os.clock() < deadline do
 		if player.Parent ~= Players or not root.Parent or humanoid.Health <= 0 then
 			break
+		end
+		-- Hold the claim. Anything that reshapes the assembly hands it back to
+		-- the player, and a body simulated by its owner is a body nobody else
+		-- watching the chase can see move.
+		if root:GetNetworkOwner() ~= nil then
+			claim(root)
 		end
 		local v = root.AssemblyLinearVelocity
 		if Vector3.new(v.X, 0, v.Z).Magnitude < SETTLE_SPEED then
@@ -595,6 +667,8 @@ local function step(nest: Nest, now: number)
 			return
 		end
 		local flat = Vector3.new(pos.X - nest.root.Position.X, 0, pos.Z - nest.root.Position.Z)
+		-- CONTACT. Not a grab -- there is no hold any more, reaching the player
+		-- is the hit.
 		if flat.Magnitude <= P.GrabStuds then
 			local victim = nest.target
 			nest.busy = true

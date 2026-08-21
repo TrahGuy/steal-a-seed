@@ -503,7 +503,6 @@ GameConfig.Parent = {
 	-- Close enough to grab.
 	GrabStuds = 7,
 	-- Seconds it holds you before the throw. Long enough to read what happened.
-	GrabHoldSeconds = 0.8,
 }
 
 function GameConfig.parentWalkSpeedFor(biomeOrder: number): number
