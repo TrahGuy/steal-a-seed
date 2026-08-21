@@ -271,6 +271,13 @@ GameConfig.Tags = {
 	WildPatch = "WildPatch",
 	SeedPod = "SeedPod",
 	BiomeGate = "BiomeGate",
+	-- A pod in somebody's hands. Tagged separately from SeedPod because a pod on
+	-- the road is scenery you may take and a pod being carried is a target.
+	CarriedPod = "CarriedPod",
+	-- Planted and growing, or grown. Built and tagged by the server, SWAYED by
+	-- each client -- same split as the fairy, and the reason a creature costs
+	-- roughly what a plant costs.
+	Creature = "Creature",
 	-- Built and tagged by the server, MOVED by each client. See HubFairy.
 	Fairy = "Fairy",
 }
