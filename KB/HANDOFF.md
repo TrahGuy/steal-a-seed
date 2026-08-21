@@ -834,6 +834,39 @@ nest take      CarryingSpecies=petalpip, AlertUI word "RUN", pod consumed
 
 The alarm still belongs to the nest and only to the nest.
 
+### Re-verified on a genuinely empty plot
+
+The run above was done on a plot already holding eleven test plants. Re-run from zero, after
+clearing `Data.Plants` in the save record, so nothing could be inherited from an earlier state:
+
+```
+t+ 4.5s  HATCHING 0:09 | prompts 0 | carry nil | banked nil | alert "Label"@1.00
+t+12.0s  HATCHING 0:01 | prompts 0 | carry nil | banked nil | alert "Label"@1.00
+t+13.2s  GROWING  0:17 | prompts 0 | carry nil | banked nil | alert "Label"@1.00
+t+29.3s  GROWING  0:01 | prompts 0 | carry nil | banked nil | alert "Label"@1.00
+t+30.1s  NUBKIN     -  | prompts 0 | carry nil | banked nil | alert "Label"@1.00
+```
+
+`"Label"@1.00` is the strongest line there. That is the **default** `Text` of an untouched
+TextLabel, at full transparency — AlertUI's word has never been written to at all, so RUN and SAFE
+did not merely go unseen, they never fired. Watching `CarryingSpecies` alone could not have told
+those two apart.
+
+Then the counter-check from 22 studs out, far enough that the parent has to actually run:
+
+```
+nest take   CarryingSpecies=petalpip | AlertUI "RUN" at transparency 0.00 | pod consumed
+parent      t+10.5s  Asleep=true   WalkSpeed  0.0   0 studs   carrying=petalpip
+            t+11.8s  Asleep=false  WalkSpeed 31.0   0 studs   <- woke, 1.3s after the theft
+            t+12.4s  Asleep=false  WalkSpeed 31.0   9 studs   <- chased, grabbed, threw
+            t+14.1s  Asleep=true   WalkSpeed  0.0   4 studs   <- heading home
+plot        1 plant | SeedPod 0 | CarriedPod 0 | ProximityPrompts 0
+```
+
+> Clearing the save turned up a second thing: the profile lives under `record.Data`, not at the top
+> level. A first attempt wrote `Plants = {}` beside `Data` instead of inside it — harmless, nothing
+> reads it, but it was removed rather than left, because junk keys are how a save format rots.
+
 > A snapshot taken *after* that sequence showed `Asleep=true` and read as "the parent never woke".
 > It had woken, grabbed, thrown and gone back to sleep inside 3 seconds — the player was standing
 > **inside** the nest, well within `GrabStuds`, so there was no chase to see. Arm the watcher before
