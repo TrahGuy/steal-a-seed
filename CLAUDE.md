@@ -140,6 +140,23 @@ require(game.ServerScriptService.SeedGameServer.MapService).Init()
 which is what makes it usable for tuning geometry: edit `GameConfig.Map` or `BiomeData`, let Rojo
 sync, run the line again, look.
 
+### Why the workspace is empty every time you stop Play
+
+Two things combine, and neither is a fault:
+
+  * The map is built at RUNTIME by `MapService`, so it has never existed in the saved place.
+  * **Stopping Play discards everything Play created.** Play is a sandbox; the datamodel reverts to
+    its pre-Play state, and the map the server built goes with it.
+
+So an empty Edit workspace is the correct state for this project. To get the map back, press the
+**Build Map** button on the *Steal a Seed* toolbar — installed from
+[tools/studio-plugin/SeedMapBuilder.server.lua](tools/studio-plugin/SeedMapBuilder.server.lua) into
+`%LOCALAPPDATA%\Roblox\Plugins\`, restart Studio to pick it up. It does exactly what the command
+bar line below does, and exists because a line you have to remember is a line you will not remember.
+
+Nests are deliberately NOT built by the button: `NestService` starts a tick loop and raises Humanoids
+that would wander an Edit session forever with nothing to chase. Press Play for those.
+
 **You no longer have to delete `Workspace.SeedMap` before saving.** `MapService` builds the map
 folder with `Archivable = false`, which the engine honours both when the place is saved and when the
 datamodel is cloned — verified, not assumed: `map:Clone()` returns nil, and cloning its parent copies
