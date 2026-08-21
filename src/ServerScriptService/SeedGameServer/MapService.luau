@@ -317,7 +317,7 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	end
 
 	local soil = build({
-		name = "Soil",
+		name = PLOT.PlanterName,
 		size = Vector3.new(bedW, soilTop, bedSpan),
 		cframe = cf * CFrame.new(0, soilTop * 0.5, 0),
 		color = BED_SOIL,
@@ -347,7 +347,15 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 			a:SetAttribute("SlotIndex", slot)
 			a:SetAttribute("Row", row)
 			a:SetAttribute("Column", col)
-			a.WorldCFrame = cf * CFrame.new(colX, soilTop, rowZ)
+			-- LOCAL to the soil, deliberately, and not WorldCFrame.
+			-- WorldCFrame on an attachment with no parent yet is just CFrame, so
+			-- setting it before parenting wrote a world coordinate into a local
+			-- field and the soil's own CFrame was then applied on top -- every
+			-- slot landed ~100 studs off the bed. Latent until PlantService
+			-- became the first thing to read them.
+			-- Soil sits at cf * CFrame.new(0, soilTop * 0.5, 0), so this puts the
+			-- slot on its top face, independent of assignment order.
+			a.CFrame = CFrame.new(colX, soilTop * 0.5, rowZ)
 			a.Parent = soil
 			CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
 		end

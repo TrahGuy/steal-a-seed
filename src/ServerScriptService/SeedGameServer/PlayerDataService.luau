@@ -126,6 +126,29 @@ function PlayerDataService.AddSpeed(player: Player, amount: number): number?
 	return entry.profile.Speed
 end
 
+--==============================================================================
+-- PLANTS
+--
+-- Stored as a plain list of { SpeciesId, Slot, PlantedAt }. PlantedAt is
+-- os.time(), an ABSOLUTE clock rather than elapsed seconds, so a plant keeps
+-- growing while the player is offline instead of pausing when they leave --
+-- which is the difference between a garden and a screensaver.
+--
+-- ProfileSchema deliberately does not validate the contents: it checks that
+-- Plants is a table and leaves the shape to whoever owns it. PlantService
+-- re-validates every entry on restore, because a slot that has since been
+-- removed by a tier change is a real possibility and must not crash a load.
+--==============================================================================
+function PlayerDataService.SetPlants(player: Player, plants: { any }): boolean
+	local entry = entries[player]
+	if not entry or type(plants) ~= "table" then
+		return false
+	end
+	entry.profile.Plants = plants
+	touch(player)
+	return true
+end
+
 function PlayerDataService.SetPlotTier(player: Player, tier: number): boolean
 	local entry = entries[player]
 	if not entry or type(tier) ~= "number" then

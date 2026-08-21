@@ -160,7 +160,10 @@ GameConfig.Plot = {
 	Pitch = 58,
 
 	FloorName = "Ground",
-	PlanterName = "Planter",
+	-- The soil part. It says "Soil" because that is what MapService actually
+	-- names it -- this said "Planter" while the part was called Soil, and only a
+	-- fallback in PlantService hid the mismatch.
+	PlanterName = "Soil",
 	TreadmillName = "Treadmill",
 	SpawnPadName = "SpawnPad",
 	RuntimeFolderName = "Runtime",

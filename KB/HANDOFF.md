@@ -638,6 +638,104 @@ NOT the one the running server is using. `PlotService.PlotOf(player)` came back 
 where the player demonstrably owned Plot_01. **Read Instance attributes instead**, which are shared;
 module state is not.
 
+## PlantService — 2026-08-21
+
+The raid pays here. A banked pod becomes a Tool in the hotbar; clicking it plants into the nearest
+free slot, and it grows pod → sprout → creature in the ground.
+
+**Planted with the Tool, not a prompt.** Twelve slots per plot times six plots is seventy-two
+ProximityPrompts competing for one keypress. `Tool.Activated` is one click, works unchanged as a tap
+on a phone, and the player is already holding the thing.
+
+**Growth is absolute `os.time()`, never a countdown.** A countdown pauses when you log off, which
+turns a garden into a screensaver. Measured below: it does keep running.
+
+**Nearest FREE slot, not lowest-numbered**, so a plot fills up where you are standing.
+
+### Three defects found and fixed on the way in
+
+**1. Plant slots were ~100 studs off the bed, in every plot, since they were first built.**
+
+`MapService` did:
+
+```lua
+a.WorldCFrame = cf * CFrame.new(colX, soilTop, rowZ)
+a.Parent = soil                      -- <-- AFTER
+```
+
+`WorldCFrame` on an attachment with **no parent yet** is just `CFrame`. So a world coordinate went
+into a local field, and parenting it then applied the soil's own CFrame on top of it. Slot 1 landed
+at `(0.4, 0.75, -103.5)` when the soil is at `(-107.4, 0.25, -72.9)`.
+
+Latent for the whole life of the project because nothing read the slots until now. Fixed by writing
+the **local** offset, which does not care about assignment order at all:
+
+```lua
+a.CFrame = CFrame.new(colX, soilTop * 0.5, rowZ)   -- soil sits at cf * (0, soilTop*0.5, 0)
+```
+
+Measured after: 12 slots, all inside the bed footprint, **max Y error vs the soil top 0.000**, laid
+out 4 rows x 3 columns at x = ±11.33 / 0.00 against a 17.00 half-width.
+
+> An early check called two of them "off the bed". That was the *check* being wrong — it compared
+> world X/Z against the soil centre on world axes, and plots are **rotated** around the field. In
+> the soil's own frame all twelve are comfortably inside.
+
+**2. `GameConfig.Plot.PlanterName` said `"Planter"`; the part is named `"Soil"`.**
+
+Two names for one fact, the exact thing flagged in the CarryService review. `PlantService` only
+worked because of a `or plot:FindFirstChild("Soil")` fallback papering over it. Fixed at the source:
+config says `Soil`, `MapService` now *names the part from the config* rather than repeating the
+literal, and the fallback is gone. One name, one writer.
+
+**3. `hookTool`'s two connections were untracked, so `Init()` was not re-run safe.**
+
+`Init()` clears the `hooked` set; the `Activated` connection on a Tool survived it. A re-run would
+hook the same tool twice and one click would plant **twice** — the second handler still reads
+`SpeciesId` fine off the just-destroyed tool. Both connections now go into `serviceConnections`.
+
+### Measured, in a live Play session
+
+Pods were handed to the backpack built exactly as `CarryService.bank()` builds them, then equipped
+and planted through **real client input** — `Tool:Activate()` from the Client datamodel, which is
+the same call the CoreScript backpack makes on a click.
+
+```
+placement     Pod_nubkin in slot 2 | offset from the slot attachment 0.000 studs
+                                   | base Y vs slot Y 0.000
+lifecycle     t+ 0s  slot 6  nubkin -> pod
+              t+10s  slot 6  nubkin -> sprout      (expected  9s, tick is 1s)
+              t+27s  slot 6  nubkin -> grown       (expected 26s, tick is 1s)
+restore       6 plants back after a full server restart, slots and species intact,
+              ages 88s..398s -- real elapsed wall-clock, not restarted timers
+offline       slot 8 bellchime planted, server STOPPED 6s later while it was still
+              a pod, restarted ~68s afterwards -> came back GROWN, age 74s against
+              a 57s grow time. Two stage thresholds crossed with nothing running.
+```
+
+That last line is the one worth keeping. The restore test alone does not prove offline growth --
+everything in it was already grown before the restart. Planting a pod, killing the server while it
+is *still a pod*, and finding it grown on the way back in is what actually demonstrates that
+`PlantedAt` is absolute and the wait does not pause when you leave.
+
+**Read the `Stage` attribute, not the model name.** `CreatureModel.Build` names *both* the sprout
+and the grown model `Creature_<id>` — sprout is the same model at `SPROUT_SCALE`. A first pass read
+the name and reported a bellchime "grown" at t+20s, which was its sprout threshold. The service was
+right and the measurement was wrong.
+
+**Arm the watcher before the thing you are watching.** Three attempts at the lifecycle sampled
+*after* the transitions had already happened, purely from MCP round-trip latency. What worked: spawn
+the sampling loop on the server first, have it write into a `StringValue`, trigger the plant, then
+read the value back — attributes and Instances are the only channel shared with a running server.
+
+### Refusing to plant is working, and it is silent
+
+With the player on the spawn pad, all six in-range slots full and slots 7-12 at 33-47 studs against
+a `PLANT_RANGE` of 26, `Plant()` correctly returned false. You have to walk your own bed.
+
+**But nothing tells the player why.** The tool stays in hand and no feedback fires. Left as-is
+rather than half-built: it wants the HUD, which does not exist yet.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
