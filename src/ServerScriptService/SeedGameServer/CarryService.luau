@@ -73,7 +73,14 @@ local running = false
 -- How far above the head it floats. High enough to read across the road --
 -- everybody can see what you are carrying, which is what makes a carrier a
 -- target the moment PvP is switched on.
-local CARRY_HEIGHT = 3.0
+-- How far in front of the torso the pod rides, before its own radius is added.
+-- CARRY_HEIGHT used to be 3.0 and welded the pod to the HEAD, which floated it
+-- above the skull like a halo -- readable at distance, but it made a raid look
+-- like a delivery quest rather than somebody hauling something heavy.
+local CARRY_FORWARD = 0.85
+-- Slightly below the root's centre, which sits at chest height: the pod is held
+-- at the waist with both arms under it, not presented at eye level.
+local CARRY_DROP = -0.35
 -- A pod on the ground is fair game for anybody, and vanishes if nobody comes.
 local LOOSE_LIFETIME = 45
 -- How close you must be. The PROMPT is not a security boundary -- it is a
@@ -128,7 +135,78 @@ end
 --==============================================================================
 -- CARRYING
 --==============================================================================
-local function attachToHead(model: Model, head: BasePart)
+--==============================================================================
+-- THE WEIGHT, ON THE THING
+--
+-- kg rather than the species name: weight is what the player is deciding about
+-- while they run, and it is the number the carry multiplier and the payout both
+-- come from. Rarity is already the pod's colour and size is already its bulk.
+--
+-- ONE definition, used by the raid carry AND by the banked Tool, so the thing
+-- in your arms looks the same before and after the red line.
+--==============================================================================
+local function weightTag(handle: BasePart, species: SeedData.Species)
+	local existing = handle:FindFirstChild("CarryWeight")
+	if existing then
+		existing:Destroy()
+	end
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "CarryWeight"
+	billboard.Adornee = handle
+	billboard.AlwaysOnTop = true
+	billboard.Size = UDim2.fromOffset(96, 34)
+	billboard.StudsOffset = Vector3.new(0, SeedData.PodDiameter(species) * 0.5 + 1.1, 0)
+	billboard.MaxDistance = 140
+	billboard.Parent = handle
+
+	local panel = Instance.new("Frame")
+	panel.Size = UDim2.fromScale(1, 1)
+	panel.BackgroundColor3 = Color3.fromRGB(26, 24, 30)
+	panel.BackgroundTransparency = 0.2
+	panel.BorderSizePixel = 0
+	panel.Parent = billboard
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 9)
+	corner.Parent = panel
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(142, 196, 62)
+	stroke.Thickness = 2
+	stroke.Transparency = 0.3
+	stroke.Parent = panel
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(248, 246, 240)
+	label.Text = string.format("%dKg", species.Kg)
+	label.Parent = panel
+end
+
+-- Where a pod sits relative to a HumanoidRootPart. One function, so the raid
+-- carry and the banked Tool cannot drift into two different grips.
+local function gripFor(species: SeedData.Species): CFrame
+	-- -Z is forward in a root's frame. Offset by the pod's OWN RADIUS, because
+	-- pods are 1.3 to 4.5 studs across: a fixed offset either buries a
+	-- Bellchime in the ribs or leaves a Nubkin hovering clear of the hands.
+	return CFrame.new(0, CARRY_DROP, -(CARRY_FORWARD + SeedData.PodDiameter(species) * 0.5))
+end
+
+--==============================================================================
+-- IT RIDES IN FRONT OF THE TORSO, IN BOTH ARMS
+--
+-- Welded to HumanoidRootPart, not the head. The root is the part that turns
+-- with the body, so the pod stays in front of the player through every turn
+-- instead of swinging with a head that looks around independently.
+--
+-- Offset by the pod's OWN RADIUS, because pods are 1.3 to 4.5 studs across now:
+-- a fixed offset either buries a Bellchime in the ribs or leaves a Nubkin
+-- hovering a stud clear of the hands.
+--==============================================================================
+local function attachInFront(model: Model, root: BasePart, species: SeedData.Species)
 	local primary = model.PrimaryPart
 	if not primary then
 		return
@@ -147,13 +225,15 @@ local function attachToHead(model: Model, head: BasePart)
 			end
 		end
 	end
-	primary.CFrame = head.CFrame * CFrame.new(0, CARRY_HEIGHT, 0)
+	local grip = gripFor(species)
+	primary.CFrame = root.CFrame * grip
 	local weld = Instance.new("Weld")
 	weld.Name = "CarryWeld"
-	weld.Part0 = head
+	weld.Part0 = root
 	weld.Part1 = primary
-	weld.C0 = CFrame.new(0, CARRY_HEIGHT, 0)
+	weld.C0 = grip
 	weld.Parent = primary
+	weightTag(primary, species)
 end
 
 --==============================================================================
@@ -338,8 +418,9 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 
 	local taken = species :: SeedData.Species
 	local ok, err = pcall(function()
-		local model = CreatureModel.BuildPod(taken, CFrame.new(head.Position), character)
-		attachToHead(model, head)
+		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart
+		local model = CreatureModel.BuildPod(taken, root.CFrame, character)
+		attachInFront(model, root, taken)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
@@ -465,6 +546,44 @@ local function bank(player: Player): boolean
 	end
 	handle.Parent = tool
 	pod:Destroy()
+	weightTag(handle, species)
+
+	--== THE SAME GRIP AFTER THE LINE AS BEFORE IT ==--
+	-- A Tool is welded to the right HAND by a RightGrip weld Roblox makes on
+	-- equip, which would hold the pod out at arm's length in one fist. That is a
+	-- different game from the two-handed haul the raid uses.
+	--
+	-- So on equip the hand weld is replaced with the SAME root weld the raid
+	-- carry uses. Deferred by a frame because RightGrip does not exist until
+	-- after Equipped has fired, and destroying a weld that is not there yet
+	-- leaves the default one in place.
+	local grip = gripFor(species)
+	table.insert(serviceConnections, tool.Equipped:Connect(function()
+		task.defer(function()
+			local character = tool.Parent
+			if not (character and character:IsA("Model") and handle.Parent == tool) then
+				return
+			end
+			local root = character:FindFirstChild("HumanoidRootPart")
+			if not (root and root:IsA("BasePart")) then
+				return
+			end
+			local rightGrip = character:FindFirstChild("RightGrip")
+			if rightGrip then
+				rightGrip:Destroy()
+			end
+			local existing = handle:FindFirstChild("CarryWeld")
+			if existing then
+				existing:Destroy()
+			end
+			local weld = Instance.new("Weld")
+			weld.Name = "CarryWeld"
+			weld.Part0 = root
+			weld.Part1 = handle
+			weld.C0 = grip
+			weld.Parent = handle
+		end)
+	end))
 	tool.Parent = backpack
 
 	-- Consumed, not dropped: it is in the hotbar now, not on the floor.

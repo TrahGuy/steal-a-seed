@@ -1049,6 +1049,98 @@ Two details worth keeping:
 > The test balance (13,130) was reset to 0 in the save afterwards. The two plants were left — a
 > grown bed is a fine thing to come back to; a five-figure balance nobody played for is not.
 
+## TreadmillService and the carry hold — 2026-08-21
+
+### The Speed faucet, same shape as the cash one
+
+Only `TreadmillService` calls `PlayerDataService.AddSpeed`, and **it never writes `WalkSpeed`**.
+Both rules are checked mechanically now, not by eye:
+
+```
+AddCash callers:  EconomyService
+AddSpeed callers: TreadmillService
+writes WalkSpeed: HubFairy, ParentModel, NestService, CarryService
+```
+
+The three besides `CarryService` are NPC humanoids — the fairy, the parent rig, the nest's chase
+speed — plus `NestService`'s throw, which captures and restores the PLAYER's WalkSpeed around a
+ragdoll. That one stays: calling `RefreshWalkSpeed` instead would need a `NestService` ->
+`CarryService` require, which is forbidden, and capture/restore is exactly why it was written that
+way.
+
+```
+Speed score -> GameConfig.walkSpeedFor -> x carry multiplier -> WalkSpeed
+                                          ^ CarryService owns this whole line
+```
+
+**Occupancy, not input.** Standing on the belt pays; you never hold W. Tested by transforming the
+root into the belt's own frame rather than by `Touched` — a static part a player stands on for ten
+minutes fires `Touched` once, and all six mills are rotated, so an axis-aligned test would be wrong
+for every one of them.
+
+**Your mill, not the nearest one**, matched on the `PlotId` the map already stamps on both the plot
+and the treadmill. Six mills in a ring is a short walk between two of them.
+
+### The carry moved from the skull to the arms
+
+`attachToHead` and `CARRY_HEIGHT = 3.0` are gone. The pod welds to **HumanoidRootPart** — the part
+that turns with the body, so it stays in front through every turn instead of swinging with a head
+that looks around on its own — offset by the pod's OWN RADIUS, because pods run 1.3 to 4.5 studs
+across and a fixed offset either buries a Bellchime in the ribs or leaves a Nubkin hovering clear of
+the hands.
+
+`gripFor()` and `weightTag()` are single definitions used by **both** the raid carry and the banked
+Tool, so the thing in your arms looks the same either side of the red line. A Tool would otherwise
+be welded to the right hand by Roblox's `RightGrip` and held out at arm's length in one fist; on
+equip that weld is replaced with the same root weld the raid uses.
+
+### Measured in Play
+
+```
+TREADMILL, standing on my own mill
+  29 packets over 19.3s
+  Speed 20.27 -> 58.77   measured 1.990 /sec   configured 2
+  WalkSpeed 16.393  vs  walkSpeedFor(58.8) = 16.393   -> delta 0.0000
+  sign on the mill reads "+2/step"
+
+OFF the belt, in the field
+  Speed +0.00 over 11.0s = 0.000 /sec      <- the gate works
+  cash  +1248.8 over 11.0s = 113.20 /sec   (nubkin 2 + bellchime 110 = 112)
+
+THE CARRY, welded to HumanoidRootPart in both cases
+  Nubkin      2 kg   1.58 studs in front, 1.80 BELOW the head   tag "2Kg"
+  Bellchime 110 kg   3.09 studs in front, 1.81 BELOW the head   tag "110Kg"
+  (the old behaviour was 3.00 studs ABOVE the head)
+
+UNCHANGED
+  plot 2 plants | SeedPod 0 | prompts 0      nest 5 pods | 5 Take prompts
+  sway still running 3.09 deg                mills 6 | signs 6
+  readout "75,657" / "SPD 395"
+```
+
+### Two things that cost time, both worth writing down
+
+**`FindFirstChild` on a replicating remote is a race.** The `Remotes` FOLDER replicates before the
+`RemoteEvent`s inside it. `CashUI` used `FindFirstChild`, got nil, silently skipped the connection,
+and sat on its dash for a whole session with no error anywhere — while the remote was firing
+twenty-nine packets a measurement. Now `WaitForChild` with a timeout and a `warn` on the miss. A
+lookup that can lose a race has to wait or complain.
+
+**MCP's `execute_luau` require cache PERSISTS ACROSS CALLS within a Play session.** This file has
+said for weeks that a module required through MCP is "a fresh, empty copy" — true relative to the
+running server, but NOT fresh per invocation. A harness `CarryService.TryTake` succeeded once, left
+`carried[player]` set in that copy, and every later take returned false while all twelve validation
+checks passed by hand. `Init()` on the copy clears it. Destroying the model is not enough; the
+module's own table is the state.
+
+> Prompts would not show for the client at all in that session — `PromptShown` never fired even for
+> a freshly built default-style prompt five studs away, with nothing modal and the humanoid running.
+> Not caused by this pass: disabling both new client scripts changed nothing. The nest prompts still
+> EXIST server-side (5 on 5 pods), so the carry geometry was measured by driving `TryTake` directly
+> and is labelled as such above.
+
+> Test cash/Speed (76,699 / 395) were reset to 0 afterwards; the two plants were left.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

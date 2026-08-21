@@ -14,6 +14,16 @@
 -- keep in step with the first.
 --
 --==============================================================================
+-- WaitForChild ON THE REMOTES, NOT FindFirstChild
+--
+-- The Remotes FOLDER replicates before the RemoteEvents inside it do. A
+-- FindFirstChild here returned nil, the connection was silently skipped, and
+-- the readout sat on its dash for a whole session with no error anywhere --
+-- while the remote was firing twenty-nine packets a measurement.
+--
+-- A lookup that can lose a race needs to wait or to complain. This does both.
+--
+--==============================================================================
 -- IT DOES NOT SHOW ZERO UNTIL IT HAS BEEN TOLD
 --
 -- The dash matters. "0" and "we have not heard from the server yet" are
@@ -95,9 +105,20 @@ pad.PaddingTop = UDim.new(0, 6)
 pad.PaddingBottom = UDim.new(0, 6)
 pad.Parent = panel
 
+-- Two rows: cash, then speed under it. Speed shares this panel rather than
+-- getting one of its own because they arrive in the SAME profile packet, and
+-- two panels reading one packet is two things to keep in step.
+local rows = Instance.new("UIListLayout")
+rows.FillDirection = Enum.FillDirection.Vertical
+rows.HorizontalAlignment = Enum.HorizontalAlignment.Left
+rows.VerticalAlignment = Enum.VerticalAlignment.Center
+rows.SortOrder = Enum.SortOrder.LayoutOrder
+rows.Parent = panel
+
 local amount = Instance.new("TextLabel")
 amount.Name = "Amount"
-amount.Size = UDim2.fromScale(1, 1)
+amount.LayoutOrder = 1
+amount.Size = UDim2.new(1, 0, 0.58, 0)
 amount.BackgroundTransparency = 1
 amount.Font = Enum.Font.GothamBlack
 amount.TextScaled = true
@@ -105,6 +126,18 @@ amount.TextColor3 = PAPER
 amount.TextXAlignment = Enum.TextXAlignment.Left
 amount.Text = "—"
 amount.Parent = panel
+
+local speed = Instance.new("TextLabel")
+speed.Name = "Speed"
+speed.LayoutOrder = 2
+speed.Size = UDim2.new(1, 0, 0.42, 0)
+speed.BackgroundTransparency = 1
+speed.Font = Enum.Font.GothamBold
+speed.TextScaled = true
+speed.TextColor3 = ACCENT
+speed.TextXAlignment = Enum.TextXAlignment.Left
+speed.Text = "—"
+speed.Parent = panel
 
 --==============================================================================
 -- FORMATTING
@@ -124,6 +157,8 @@ end
 --==============================================================================
 local target: number? = nil
 local shown = 0
+local speedTarget: number? = nil
+local speedShown = 0
 
 local function receive(profile: any)
 	if type(profile) ~= "table" or type(profile.Cash) ~= "number" then
@@ -135,15 +170,23 @@ local function receive(profile: any)
 		shown = profile.Cash
 	end
 	target = profile.Cash
+	if type(profile.Speed) == "number" then
+		if speedTarget == nil then
+			speedShown = profile.Speed
+		end
+		speedTarget = profile.Speed
+	end
 end
 
 local remotes = SeedGame:WaitForChild("Remotes", 20)
 if remotes then
-	local updated = remotes:FindFirstChild(GameConfig.Remotes.ProfileUpdated)
+	local updated = remotes:WaitForChild(GameConfig.Remotes.ProfileUpdated, 20)
 	if updated and updated:IsA("RemoteEvent") then
 		updated.OnClientEvent:Connect(receive)
+	else
+		warn("[Seed] ProfileUpdated never arrived; the readout will stay blank.")
 	end
-	local ready = remotes:FindFirstChild(GameConfig.Remotes.ProfileReady)
+	local ready = remotes:WaitForChild(GameConfig.Remotes.ProfileReady, 20)
 	if ready and ready:IsA("RemoteEvent") then
 		-- (ok, profile, persistent) -- the same shape PlayerDataService fires.
 		ready.OnClientEvent:Connect(function(ok: boolean, profile: any)
@@ -171,5 +214,19 @@ RunService.RenderStepped:Connect(function(dt)
 	local text = commas(shown)
 	if amount.Text ~= text then
 		amount.Text = text
+	end
+
+	local wantSpeed = speedTarget
+	if wantSpeed then
+		local sgap = wantSpeed - speedShown
+		if math.abs(sgap) < 0.5 then
+			speedShown = wantSpeed
+		else
+			speedShown += sgap * math.min(1, dt * 6)
+		end
+		local stext = "SPD " .. commas(speedShown)
+		if speed.Text ~= stext then
+			speed.Text = stext
+		end
 	end
 end)
