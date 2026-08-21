@@ -1,8 +1,9 @@
 --!strict
 -- Steal a Seed :: ParentModel
 --
--- The nest guardian, built to KB/biome1-parent.png. A hunched, fanged, mossy
--- brute that sleeps beside its pods until one is taken.
+-- The nest guardian, built to the orthographic sheet in
+-- KB/biome1-parent-ortho.png. A hunched, fanged, mossy brute that sleeps beside
+-- its pods until one is taken.
 --
 -- NOT a *Service. Geometry only, like CreatureModel and HubFairy.
 --
@@ -14,22 +15,25 @@
 -- handful of parents in a server, they CHASE, and a chase has to be
 -- server-simulated or every player sees the monster somewhere different.
 --
--- So it is a real Humanoid on real legs, and its WalkSpeed is a game balance
--- number rather than a decoration. That is the whole gate: the parent's speed
--- is what you must out-run, your speed comes off the treadmill, and the deeper
--- biomes hold faster parents. No abstract boundary check needed -- the monster
--- IS the check, and being too slow is something you feel rather than read.
+-- So it is a real Humanoid on real legs, and its WalkSpeed is a balance number
+-- rather than a decoration. That is the whole gate: the parent's speed is what
+-- you must out-run, your speed comes off the treadmill, and the deeper biomes
+-- hold faster parents. No abstract boundary check needed -- the monster IS the
+-- check, and being too slow is something you feel rather than read.
 --
 --==============================================================================
 -- JOINTS ONLY WHERE SOMETHING MOVES
 --
--- Six Motor6Ds: head, jaw, two arms, two legs. Everything else is welded solid.
--- The rule is the same one the fairy taught -- the SERVER owns where it is
--- standing, each CLIENT owns what its limbs are doing, and the two never write
--- the same property.
+-- Six Motor6Ds: neck, jaw, two shoulders, two hips. Everything else is welded
+-- solid. Same rule the fairy taught -- the SERVER owns where it is standing,
+-- each CLIENT owns what its limbs are doing, and the two never write the same
+-- property.
 --
 -- The jaw is a joint because the snap is the whole character. A monster that
 -- charges you with a closed mouth is a shrub in a hurry.
+--
+-- IF THE BLENDER MESH REPLACES THIS, keep those six bone names and everything
+-- that drives them keeps working. Only this file changes.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -40,17 +44,17 @@ local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameCon
 
 local ParentModel = {}
 
--- Sampled from the reference sheet.
-local BARK = Color3.fromRGB(84, 66, 50)
-local BARK_DARK = Color3.fromRGB(62, 48, 38)
-local FLESH = Color3.fromRGB(138, 154, 82)
-local FLESH_LIT = Color3.fromRGB(164, 178, 98)
-local MANE = Color3.fromRGB(88, 118, 60)
-local MANE_DARK = Color3.fromRGB(68, 94, 48)
-local THORN = Color3.fromRGB(214, 148, 140)
-local TOOTH = Color3.fromRGB(242, 238, 220)
-local EYE = Color3.fromRGB(224, 104, 104)
-local CLAW = Color3.fromRGB(180, 192, 124)
+-- Sampled from the sheet.
+local BARK = Color3.fromRGB(96, 76, 54)
+local BARK_DARK = Color3.fromRGB(68, 54, 40)
+local FLESH = Color3.fromRGB(140, 158, 78)
+local FLESH_LIT = Color3.fromRGB(170, 184, 96)
+local MANE = Color3.fromRGB(84, 116, 56)
+local MANE_DARK = Color3.fromRGB(62, 90, 44)
+local THORN = Color3.fromRGB(206, 146, 128)
+local TOOTH = Color3.fromRGB(244, 240, 224)
+local EYE = Color3.fromRGB(226, 108, 104)
+local CLAW = Color3.fromRGB(178, 192, 116)
 
 local STUD_FACES = {
 	"TopSurface", "BottomSurface", "LeftSurface",
@@ -77,7 +81,7 @@ local function part(o: Opts): BasePart
 	p.Shape = o.shape or Enum.PartType.Block
 	p.Transparency = o.transparency or 0
 	-- UNANCHORED, unlike everything else this project builds. It walks, so the
-	-- Humanoid needs to own its physics.
+	-- Humanoid owns its physics.
 	p.Anchored = false
 	p.CanCollide = false
 	p.CanQuery = false
@@ -115,9 +119,8 @@ local function wedge(name: string, size: Vector3, cf: CFrame, color: Color3,
 	return p
 end
 
--- Solid attachment. Welds rather than Motor6Ds for everything that never moves
--- on its own -- a joint you never drive is a joint somebody later assumes is
--- animated.
+-- Welds for anything that never moves on its own. A joint you never drive is a
+-- joint somebody later assumes is animated.
 local function weldTo(anchor: BasePart, piece: BasePart)
 	local w = Instance.new("WeldConstraint")
 	w.Part0 = anchor
@@ -141,6 +144,22 @@ end
 --
 -- `cf` is where its FEET go, matching the contract CreatureModel uses: every
 -- builder in this project takes the base, never the centre.
+--
+--==============================================================================
+-- PROPORTIONS ARE MEASURED OFF THE ORTHOGRAPHIC SHEET, NOT GUESSED
+--
+-- Fractions of total height, feet at 0, mane tip at 1:
+--
+--     0.00 - 0.33   legs, short and thick, wide stance
+--     0.33 - 0.57   torso: bark trunk under green leaf plates
+--     0.56          shoulders
+--     0.56 - 0.20   arms, hanging nearly to the knee
+--     0.58 - 0.83   head, jutting forward
+--     0.68 - 1.00   mane
+--
+-- THE LEGS ARE ONLY A THIRD OF IT, and that one number is what makes the
+-- silhouette squat and heavy rather than humanoid. Both earlier attempts made
+-- them half and got a man in a costume.
 --==============================================================================
 function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: Instance): Model
 	local H = height
@@ -151,225 +170,248 @@ function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: 
 	model.Parent = parent
 
 	--== ROOT ==--
-	-- Invisible, and the only part the Humanoid really cares about.
 	local root = part({
 		name = "HumanoidRootPart",
-		size = Vector3.new(H * 0.30, H * 0.24, H * 0.22),
-		cframe = cf * CFrame.new(0, H * 0.46, 0),
+		size = Vector3.new(H * 0.28, H * 0.22, H * 0.20),
+		cframe = cf * CFrame.new(0, H * 0.45, 0),
 		color = BARK, transparency = 1, studs = false, parent = model,
 	})
 	model.PrimaryPart = root
 
-	--==========================================================================
-	-- PROPORTIONS COME OFF THE SHEET, AND THE SHEET IS TOP-HEAVY
-	--
-	-- First attempt built a normal humanoid: big torso, small head on top. It
-	-- came out as a stack of green boxes with a pea for a face, because the
-	-- reference is nothing like that. On the sheet the HEAD AND MANE ARE THE TOP
-	-- THIRD of the creature and nearly as wide as the body, the mouth is open,
-	-- and the legs are short. The silhouette is a triangle standing on stumps.
-	--
-	--   0.00 - 0.10   splayed root feet
-	--   0.06 - 0.36   short thick legs, wide stance
-	--   0.32 - 0.62   torso, bark with a mossy chest
-	--   0.58 - 0.24   arms, hanging past the knee
-	--   0.60 - 0.92   HEAD: lower jaw, open maw, heavy skull
-	--   0.72 - 1.05   mane, fanning back and up
-	--==========================================================================
-
 	--== TORSO ==--
-	local torsoY = H * 0.47
+	-- Green leaf plates over a bark trunk, which is the sheet's read: brown
+	-- underneath, mossy armour laid on top of it.
+	local torsoY = H * 0.45
 	local torso = part({
 		name = "Torso",
-		size = Vector3.new(H * 0.34, H * 0.30, H * 0.25),
+		size = Vector3.new(H * 0.30, H * 0.24, H * 0.22),
 		cframe = cf * CFrame.new(0, torsoY, 0),
 		color = BARK, parent = model,
 	})
 	weldTo(root, torso)
 	weldTo(torso, part({
-		name = "Chest",
-		size = Vector3.new(H * 0.19, H * 0.14, H * 0.09),
-		cframe = cf * CFrame.new(0, torsoY + H * 0.04, -H * 0.11),
+		name = "ChestPlate",
+		size = Vector3.new(H * 0.20, H * 0.11, H * 0.07),
+		cframe = cf * CFrame.new(0, torsoY + H * 0.06, -H * 0.10),
 		color = FLESH, parent = model,
 	}))
 	weldTo(torso, part({
-		name = "Hump",
-		size = Vector3.new(H * 0.30, H * 0.16, H * 0.14),
-		cframe = cf * CFrame.new(0, torsoY + H * 0.11, H * 0.06),
-		color = MANE_DARK, parent = model,
+		name = "AbPlate",
+		size = Vector3.new(H * 0.13, H * 0.10, H * 0.06),
+		cframe = cf * CFrame.new(0, torsoY - H * 0.07, -H * 0.10),
+		color = FLESH_LIT, parent = model,
 	}))
+	-- The back view is almost entirely leaf, so the back is armoured too.
+	for i = 0, 2 do
+		weldTo(torso, part({
+			name = "BackPlate",
+			size = Vector3.new(H * (0.24 - i * 0.04), H * 0.08, H * 0.05),
+			cframe = cf * CFrame.new(0, torsoY + H * (0.08 - i * 0.08), H * 0.10),
+			color = if i % 2 == 0 then MANE else MANE_DARK, parent = model,
+		}))
+	end
 
 	--== LEGS ==--
+	-- Thigh and shin as separate blocks with a plate over the thigh. One
+	-- tapering column reads as a table leg.
 	for _, side in ipairs({ -1, 1 }) do
 		local leg = part({
 			name = if side < 0 then "LeftLeg" else "RightLeg",
-			size = Vector3.new(H * 0.15, H * 0.30, H * 0.16),
-			cframe = cf * CFrame.new(side * H * 0.13, H * 0.21, 0),
+			size = Vector3.new(H * 0.13, H * 0.19, H * 0.14),
+			cframe = cf * CFrame.new(side * H * 0.105, H * 0.235, 0),
 			color = BARK, parent = model,
 		})
 		motor(if side < 0 then "LeftHip" else "RightHip", torso, leg,
-			CFrame.new(side * H * 0.13, -H * 0.26, 0))
+			CFrame.new(side * H * 0.105, -H * 0.215, 0))
+		weldTo(leg, part({
+			name = "Shin",
+			size = Vector3.new(H * 0.12, H * 0.14, H * 0.13),
+			cframe = cf * CFrame.new(side * H * 0.105, H * 0.10, 0),
+			color = BARK, parent = model,
+		}))
+		weldTo(leg, part({
+			name = "ThighPlate",
+			size = Vector3.new(H * 0.10, H * 0.12, H * 0.05),
+			cframe = cf * CFrame.new(side * H * 0.105, H * 0.25, -H * 0.07),
+			color = FLESH, parent = model,
+		}))
 		for i = -1, 1 do
 			weldTo(leg, part({
-				name = "Root",
-				size = Vector3.new(H * 0.06, H * 0.08, H * 0.15),
+				name = "RootClaw",
+				size = Vector3.new(H * 0.05, H * 0.055, H * 0.11),
 				cframe = cf
-					* CFrame.new(side * H * 0.13 + i * H * 0.055, H * 0.04, -H * 0.04)
-					* CFrame.Angles(math.rad(-12), i * math.rad(20), 0),
+					* CFrame.new(side * H * 0.105 + i * H * 0.042, H * 0.028, -H * 0.03)
+					* CFrame.Angles(math.rad(-10), i * math.rad(22), 0),
 				color = BARK_DARK, parent = model,
 			}))
 		end
+		weldTo(leg, part({
+			name = "AnkleLeaf",
+			size = Vector3.new(H * 0.11, H * 0.045, H * 0.055),
+			cframe = cf * CFrame.new(side * H * 0.105, H * 0.062, -H * 0.045)
+				* CFrame.Angles(math.rad(26), 0, 0),
+			color = MANE, parent = model,
+		}))
 	end
 
 	--== ARMS ==--
-	-- Upper arm plus a forearm angled forward, so they hang like the sheet's
-	-- rather than lying flat against the body like sleeves.
+	-- Shoulder at 0.56, claws down at 0.20. On the sheet they nearly reach the
+	-- knee, and that length is most of why it reads as a brute rather than a man.
+	local shoulderY = H * 0.56
 	for _, side in ipairs({ -1, 1 }) do
-		local shoulderY = H * 0.58
 		local arm = part({
 			name = if side < 0 then "LeftArm" else "RightArm",
-			size = Vector3.new(H * 0.14, H * 0.22, H * 0.15),
-			cframe = cf * CFrame.new(side * H * 0.24, shoulderY - H * 0.09, 0),
+			size = Vector3.new(H * 0.105, H * 0.17, H * 0.115),
+			cframe = cf * CFrame.new(side * H * 0.195, shoulderY - H * 0.09, 0),
 			color = FLESH, parent = model,
 		})
 		motor(if side < 0 then "LeftShoulder" else "RightShoulder", torso, arm,
-			CFrame.new(side * H * 0.24, H * 0.02, 0))
+			CFrame.new(side * H * 0.195, H * 0.02, 0))
 
 		weldTo(arm, part({
 			name = "Forearm",
-			size = Vector3.new(H * 0.13, H * 0.20, H * 0.14),
-			cframe = cf * CFrame.new(side * H * 0.25, shoulderY - H * 0.28, -H * 0.03)
-				* CFrame.Angles(math.rad(-10), 0, 0),
-			color = MANE, parent = model,
-		}))
-
-		weldTo(torso, part({
-			name = "Pad",
-			size = Vector3.new(H * 0.17, H * 0.13, H * 0.18),
-			cframe = cf * CFrame.new(side * H * 0.24, shoulderY + H * 0.03, 0),
+			size = Vector3.new(H * 0.095, H * 0.17, H * 0.105),
+			cframe = cf * CFrame.new(side * H * 0.205, shoulderY - H * 0.25, -H * 0.01),
 			color = FLESH_LIT, parent = model,
 		}))
-		for i = 0, 2 do
+		weldTo(torso, part({
+			name = "Pad",
+			size = Vector3.new(H * 0.13, H * 0.10, H * 0.14),
+			cframe = cf * CFrame.new(side * H * 0.195, shoulderY + H * 0.025, 0),
+			color = FLESH_LIT, parent = model,
+		}))
+		-- Thorns march down the shoulder and the outer forearm.
+		for i = 0, 4 do
 			weldTo(arm, part({
 				name = "Thorn",
-				size = Vector3.new(H * 0.04, H * 0.10, H * 0.04),
+				size = Vector3.new(H * 0.028, H * 0.07, H * 0.028),
 				cframe = cf
-					* CFrame.new(side * H * 0.30, shoulderY + H * 0.04 - i * H * 0.11, 0)
-					* CFrame.Angles(0, 0, side * math.rad(62)),
+					* CFrame.new(side * H * 0.25, shoulderY + H * 0.035 - i * H * 0.075, 0)
+					* CFrame.Angles(0, 0, side * math.rad(64)),
 				color = THORN, parent = model,
 			}))
 		end
 		for i = 0, 3 do
 			weldTo(arm, part({
 				name = "Claw",
-				size = Vector3.new(H * 0.035, H * 0.13, H * 0.045),
+				size = Vector3.new(H * 0.026, H * 0.10, H * 0.034),
 				cframe = cf
-					* CFrame.new(side * H * 0.25 + (i - 1.5) * H * 0.040,
-						shoulderY - H * 0.44, -H * 0.06)
-					* CFrame.Angles(math.rad(26), 0, (i - 1.5) * math.rad(10)),
+					* CFrame.new(side * H * 0.205 + (i - 1.5) * H * 0.030,
+						shoulderY - H * 0.38, -H * 0.02)
+					* CFrame.Angles(math.rad(16), 0, (i - 1.5) * math.rad(8)),
 				color = CLAW, parent = model,
 			}))
 		end
 	end
 
 	--== HEAD ==--
-	-- Big, forward, and OPEN. The maw is built as a gap between a heavy skull
-	-- and a hinged jaw, with a dark interior behind so it does not read as a
-	-- hole punched through the model.
-	-- HEAD HEIGHT IS LOAD-BEARING. At 0.82 the jaw bottom landed at 0.655H
-	-- against a torso top of 0.62H -- overlapping it -- and the whole creature
-	-- read as one green mass with a mouth in its chest. There has to be a
-	-- visible gap of neck between the two.
-	local headZ = -H * 0.10
-	local skullY = H * 0.94
-	local headW = H * 0.36
+	-- SKULL HEIGHT IS LOAD-BEARING, and 0.735 was still a hair too low: the jaw
+	-- bottom landed at 0.548H against a torso top of 0.570H and clipped into the
+	-- chest. Pushing the head forward instead would need headZ past -0.225H to
+	-- clear, which detaches it from the body entirely -- so it goes up, not out.
+	--
+	--     jaw bottom = skullY - 0.152 - 0.035, and must exceed 0.570.
+	local headZ = -H * 0.08
+	local skullY = H * 0.78
+	local headW = H * 0.30
 
 	local head = part({
 		name = "Head",
-		size = Vector3.new(headW, H * 0.20, H * 0.30),
+		size = Vector3.new(headW, H * 0.15, H * 0.23),
 		cframe = cf * CFrame.new(0, skullY, headZ),
 		color = FLESH_LIT, parent = model,
 	})
-	motor("Neck", torso, head, CFrame.new(0, H * 0.47, headZ))
+	motor("Neck", torso, head, CFrame.new(0, H * 0.33, headZ))
 
 	weldTo(head, part({
 		name = "Brow",
-		size = Vector3.new(headW * 0.98, H * 0.05, H * 0.16),
-		cframe = cf * CFrame.new(0, skullY + H * 0.08, headZ - H * 0.06)
-			* CFrame.Angles(math.rad(-10), 0, 0),
+		size = Vector3.new(headW * 1.02, H * 0.045, H * 0.13),
+		cframe = cf * CFrame.new(0, skullY + H * 0.058, headZ - H * 0.045)
+			* CFrame.Angles(math.rad(-12), 0, 0),
 		color = FLESH, parent = model,
 	}))
 	for _, side in ipairs({ -1, 1 }) do
 		weldTo(head, part({
 			name = "Eye",
-			size = Vector3.new(H * 0.07, H * 0.028, H * 0.025),
-			cframe = cf * CFrame.new(side * H * 0.08, skullY + H * 0.035, headZ - H * 0.145)
-				* CFrame.Angles(0, 0, side * math.rad(14)),
+			size = Vector3.new(H * 0.058, H * 0.026, H * 0.022),
+			cframe = cf * CFrame.new(side * H * 0.068, skullY + H * 0.022, headZ - H * 0.113)
+				* CFrame.Angles(0, 0, side * math.rad(15)),
 			color = EYE, studs = false, parent = model,
 		}))
 	end
-
-	-- The dark of the throat, filling the gap.
+	-- The dark of the throat, so an open maw is not a hole through the model.
 	weldTo(head, part({
 		name = "Maw",
-		size = Vector3.new(headW * 0.82, H * 0.10, H * 0.16),
-		cframe = cf * CFrame.new(0, skullY - H * 0.12, headZ - H * 0.03),
-		color = Color3.fromRGB(48, 30, 32), studs = false, parent = model,
+		size = Vector3.new(headW * 0.80, H * 0.075, H * 0.13),
+		cframe = cf * CFrame.new(0, skullY - H * 0.092, headZ - H * 0.02),
+		color = Color3.fromRGB(96, 44, 44), studs = false, parent = model,
 	}))
 
 	local jaw = part({
 		name = "Jaw",
-		size = Vector3.new(headW * 0.92, H * 0.09, H * 0.26),
-		cframe = cf * CFrame.new(0, skullY - H * 0.20, headZ + H * 0.01),
+		size = Vector3.new(headW * 0.90, H * 0.07, H * 0.20),
+		cframe = cf * CFrame.new(0, skullY - H * 0.152, headZ + H * 0.012),
 		color = FLESH, parent = model,
 	})
-	motor("JawJoint", head, jaw, CFrame.new(0, -H * 0.20, H * 0.11))
+	motor("JawJoint", head, jaw, CFrame.new(0, -H * 0.152, H * 0.082))
 
-	-- Teeth point INTO the gap from both sides: upper hang down, lower point up.
 	for i = -2, 2 do
 		local big = (i % 2 == 0)
 		weldTo(head, wedge("Tooth",
-			Vector3.new(H * 0.035, H * (big and 0.075 or 0.055), H * 0.035),
-			cf * CFrame.new(i * H * 0.055, skullY - H * 0.10, headZ - H * 0.10)
+			Vector3.new(H * 0.030, H * (big and 0.058 or 0.042), H * 0.030),
+			cf * CFrame.new(i * H * 0.046, skullY - H * 0.076, headZ - H * 0.082)
 				* CFrame.Angles(math.rad(180), 0, 0),
 			TOOTH, model))
 		weldTo(jaw, wedge("Tooth",
-			Vector3.new(H * 0.035, H * (big and 0.055 or 0.075), H * 0.035),
-			cf * CFrame.new(i * H * 0.055, skullY - H * 0.155, headZ - H * 0.10),
+			Vector3.new(H * 0.030, H * (big and 0.042 or 0.058), H * 0.030),
+			cf * CFrame.new(i * H * 0.046, skullY - H * 0.120, headZ - H * 0.082),
 			TOOTH, model))
 	end
-
-	--== MANE ==--
-	-- Sixteen long leaves fanned back and up from behind the skull. This is most
-	-- of the silhouette and the only reason it reads as a plant rather than a
-	-- bear -- the first pass made them a third this size and they vanished.
-	for i = 1, 16 do
-		local t = (i - 1) / 15
-		local spread = (t - 0.5) * 2
-		local reach = 1 - 0.30 * math.abs(spread)
-		weldTo(head, part({
-			name = "ManeLeaf",
-			size = Vector3.new(H * 0.085, H * 0.42 * reach, H * 0.055),
-			cframe = cf
-				* CFrame.new(0, skullY + H * 0.04, headZ + H * 0.10)
-				* CFrame.Angles(0, spread * math.rad(104), 0)
-				* CFrame.new(0, H * 0.19 * reach, H * 0.12)
-				* CFrame.Angles(math.rad(20 + 26 * math.abs(spread)), 0,
-					spread * math.rad(16)),
-			color = if i % 2 == 0 then MANE else MANE_DARK,
-			parent = model,
-		}))
-	end
-
 	for _, side in ipairs({ -1, 1 }) do
-		for i = 0, 1 do
+		for i = 0, 2 do
 			weldTo(head, part({
 				name = "CheekSpike",
-				size = Vector3.new(H * 0.035, H * 0.09, H * 0.035),
+				size = Vector3.new(H * 0.026, H * 0.065, H * 0.026),
 				cframe = cf
-					* CFrame.new(side * H * 0.17, skullY - i * H * 0.09, headZ - H * 0.04)
-					* CFrame.Angles(0, 0, side * math.rad(66)),
+					* CFrame.new(side * H * 0.145, skullY + H * 0.028 - i * H * 0.055,
+						headZ - H * 0.028)
+					* CFrame.Angles(0, 0, side * math.rad(70)),
 				color = THORN, parent = model,
+			}))
+		end
+	end
+
+	--==========================================================================
+	-- THE MANE
+	--
+	-- TWO RINGS ON A SPHERE, not a fan. Both earlier builds swept the leaves
+	-- through one flat arc and produced a mohawk; the SIDE view shows a crest
+	-- wrapping the whole back of the skull and carrying on down over the
+	-- shoulders. It has to radiate in PITCH as well as in yaw.
+	--
+	-- This is most of the silhouette, and the only reason the thing reads as a
+	-- plant rather than as a bear.
+	--==========================================================================
+	local maneOrigin = cf * CFrame.new(0, skullY + H * 0.02, headZ + H * 0.06)
+	for _, ring in ipairs({
+		{ count = 9, pitch = 62, len = 0.30, spread = 96, out = 0.09 },
+		{ count = 11, pitch = 20, len = 0.26, spread = 130, out = 0.12 },
+	}) do
+		for i = 1, ring.count do
+			local t = (i - 1) / (ring.count - 1)
+			local yaw = (t - 0.5) * 2 * ring.spread
+			local reach = 1 - 0.26 * math.abs((t - 0.5) * 2)
+			local len = H * ring.len * reach
+			weldTo(head, part({
+				name = "ManeLeaf",
+				size = Vector3.new(H * 0.070, len, H * 0.045),
+				cframe = maneOrigin
+					* CFrame.Angles(0, math.rad(yaw), 0)
+					* CFrame.new(0, 0, H * ring.out)
+					* CFrame.Angles(math.rad(90 - ring.pitch), 0, 0)
+					* CFrame.new(0, len * 0.5, 0),
+				color = if i % 2 == 0 then MANE else MANE_DARK,
+				parent = model,
 			}))
 		end
 	end
@@ -378,15 +420,14 @@ function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: 
 	local humanoid = Instance.new("Humanoid")
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
-	-- ASLEEP. WalkSpeed is set by the service when it wakes, not here -- a
-	-- monster that spawns already able to run is a monster that will one day
-	-- run before anything told it to.
+	-- ASLEEP. WalkSpeed is set by the service when it wakes, never here: a
+	-- monster that spawns already able to run is a monster that will one day run
+	-- before anything told it to.
 	humanoid.WalkSpeed = 0
 	humanoid.AutoRotate = false
-	humanoid.HipHeight = H * 0.34
+	humanoid.HipHeight = H * 0.33
 	humanoid.MaxHealth = math.huge
 	humanoid.Health = math.huge
-	-- It cannot be killed, shoved, or ragdolled by anything a player can do.
 	humanoid.BreakJointsOnDeath = false
 	humanoid.Parent = model
 
