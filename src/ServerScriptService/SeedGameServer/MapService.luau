@@ -118,33 +118,31 @@ end
 --==============================================================================
 -- A PLOT
 --
--- PLAIN DIRT AND A WOODEN FENCE. That is the whole thing, and the restraint is
--- the point: this is a game about growing, so a plot has to read as SOIL --
--- somewhere empty and waiting -- and everything that is not soil competes with
--- the plants that will eventually stand in it.
+-- Built to the owner's reference sketch: a fenced square of GRASS with two
+-- raised bed blocks standing on it, each divided into rows.
 --
--- The first version was a coloured deck with a planter box, a treadmill and a
--- rim. Six of those side by side read as a row of arcade cabinets, not a row of
--- gardens, and every one of those props would have been visual noise behind the
--- thing the player actually cares about.
+-- The version before this was a solid dirt rectangle, and the sketch is better
+-- for a reason worth keeping: a slab of dirt is one shape, whereas two framed
+-- blocks divided into rows is a GRID. A grid tells the player how many things
+-- fit and exactly where they go before a single plant exists -- and it gives
+-- expansion something to SAY, because another tier is visibly more rows.
 --
--- THE WHOLE PLOT IS THE PLANTER. There is no separate box to walk up to: a seed
--- goes into the ground it was carried home to. That removes an object, removes
--- a step, and is what "plant it in your plot" should have meant from the start.
+-- A ROW IS A SLOT, so there is no slot count to keep in step with the geometry.
 --
--- THE FENCE IS NOT COLLIDABLE, deliberately. A player sprinting home at
--- WalkSpeed 150 who clips a fence post and stops dead has been robbed by the
--- scenery. It is a property line, not a wall.
+-- THE FENCE ENCLOSES ALL FOUR SIDES, which an earlier version deliberately did
+-- not: it left the road-facing side open so nobody had to aim at a gate at
+-- speed. That reasoning was wrong about its own code. The fence is
+-- NON-COLLIDABLE -- you run straight through it -- so closing the fourth side
+-- costs nothing and reads far better as "this ground is claimed".
 --==============================================================================
-local DIRT = Color3.fromRGB(106, 74, 50)
-local DIRT_DARK = Color3.fromRGB(88, 60, 40)
+local GRASS = Color3.fromRGB(112, 200, 84)
+local BED_SOIL = Color3.fromRGB(168, 104, 70)
+local BED_FRAME = Color3.fromRGB(112, 68, 44)
+local FENCE = Color3.fromRGB(96, 66, 44)
 local WOOD = Color3.fromRGB(128, 88, 52)
 local WOOD_DARK = Color3.fromRGB(96, 64, 38)
 
--- `depth` comes from the plot's TIER, not from config directly, so rebuilding a
--- plot at a new size is one argument rather than a map change.
-local function buildPlot(id: number, cf: CFrame, depth: number, slots: number,
-	parent: Instance): Model
+local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = string.format("%s%02d", PLOT.NamePrefix, id)
 	model:SetAttribute(GameConfig.Attributes.PlotId, id)
@@ -153,116 +151,148 @@ local function buildPlot(id: number, cf: CFrame, depth: number, slots: number,
 	model.Parent = parent
 	CollectionService:AddTag(model, GameConfig.Tags.Plot)
 
-	local size = PLOT.Width
-	local half = size * 0.5
-	-- cf sits at the plot's CENTRE, so the front edge is half its depth ahead.
-	local halfD = depth * 0.5
+	local width = PLOT.Width
+	local depth = GameConfig.plotDepthFor(rows)
+	local halfW, halfD = width * 0.5, depth * 0.5
+	model:SetAttribute("Rows", rows)
 	model:SetAttribute("Depth", depth)
 
-	--== THE SOIL ==--
-	-- Ground material, no studs. Studs are right for the grass field because it
-	-- is a floor you walk on; soil is a thing you dig in, and a studded plot
-	-- reads as plastic decking.
+	--== THE GROUND IS GRASS ==--
+	-- Studded, and the same green as the field, so a plot reads as a fenced-off
+	-- piece of the lawn rather than as a separate platform dropped onto it. The
+	-- soil is the BEDS; the plot is where the beds stand.
 	local floor = build({
 		name = PLOT.FloorName,
-		size = Vector3.new(size, 2.5, depth),
-		cframe = cf * CFrame.new(0, 1.25, 0),
-		color = DIRT,
-		material = Enum.Material.Ground,
-		studs = false,
+		size = Vector3.new(width, 2, depth),
+		cframe = cf * CFrame.new(0, 1, 0),
+		color = GRASS,
+		material = Enum.Material.Grass,
 		parent = model,
 	})
 	model.PrimaryPart = floor
-	-- Tagged as the planter, because it IS the planter. Anything looking for
-	-- somewhere to put a seed finds the plot's own ground.
-	CollectionService:AddTag(floor, GameConfig.Tags.Planter)
 
-	-- ONE FURROW PER ROW OF SLOTS, spread down whatever depth this tier is. They
-	-- stop a flat brown rectangle reading as mud rather than as a bed waiting to
-	-- be planted, and tying them to the slot rows means a deeper plot looks
-	-- tilled for its whole length rather than having two stripes at one end.
-	local rows = math.max(1, math.ceil(slots / 3))
-	for row = 1, rows do
-		local offset = -halfD + (row / (rows + 1)) * depth
+	--== THE FENCE ==--
+	-- All four sides. Non-collidable, which is what makes that safe.
+	local runs = {
+		{ sideways = false, outZ = -halfD },
+		{ sideways = false, outZ = halfD },
+		{ sideways = true, outX = -halfW },
+		{ sideways = true, outX = halfW },
+	}
+	for _, run in ipairs(runs) do
+		local sideways = run.sideways
+		local runLength = sideways and depth or width
+		local ox = run.outX or 0
+		local oz = run.outZ or 0
+
+		for _, h in ipairs({ 3.2, 5.4 }) do
+			build({
+				name = "Rail",
+				size = sideways and Vector3.new(0.6, 0.6, depth)
+					or Vector3.new(width, 0.6, 0.6),
+				cframe = cf * CFrame.new(ox, h, oz),
+				color = FENCE,
+				material = Enum.Material.Wood,
+				collide = false,
+				studs = false,
+				parent = model,
+			})
+		end
+
+		-- Posts every ~11 studs, which is roughly one per bed row and is what
+		-- gives the reference sketch its rhythm. A fixed count would leave a
+		-- 130-stud strip with three posts holding it up.
+		local postCount = math.max(3, math.floor(runLength / 11) + 1)
+		for i = 1, postCount do
+			local t = (i - 1) / (postCount - 1) - 0.5
+			local along = sideways and Vector3.new(0, 0, t * runLength)
+				or Vector3.new(t * runLength, 0, 0)
+			build({
+				name = "Post",
+				size = Vector3.new(1.1, 7, 1.1),
+				cframe = cf * CFrame.new(ox + along.X, 3.5, oz + along.Z),
+				color = FENCE,
+				material = Enum.Material.Wood,
+				collide = false,
+				studs = false,
+				parent = model,
+			})
+		end
+	end
+
+	--== THE BEDS ==--
+	local plants = Instance.new("Folder")
+	plants.Name = PLOT.PlantsFolderName
+	plants.Parent = model
+
+	local cols = PLOT.BedColumns
+	local usableW = width - PLOT.BedInsetX * 2
+	local blockW = (usableW - PLOT.BedCentreGap * (cols - 1)) / cols
+	local bedSpan = rows * PLOT.RowDepth + (rows - 1) * PLOT.RowGap
+
+	local slot = 0
+	for col = 1, cols do
+		-- Centres of `cols` blocks laid across usableW with the aisle between.
+		local blockX = (col - (cols + 1) * 0.5) * (blockW + PLOT.BedCentreGap)
+
+		-- ONE FRAME PER BLOCK, sitting a little proud of the soil. The reference
+		-- sketch's beds have a continuous dark border round the whole block with
+		-- the rows divided inside it -- not a border per row -- and that is what
+		-- makes it read as a raised bed rather than as tiles on a floor.
 		build({
-			name = "Furrow",
-			size = Vector3.new(size - 10, 0.4, 5),
-			cframe = cf * CFrame.new(0, 2.6, offset),
-			color = DIRT_DARK,
-			material = Enum.Material.Ground,
-			-- Non-collidable. It is a mark on the soil, not a step -- and a
-			-- 0.4-stud lip across the plot is exactly the sort of thing that
-			-- catches a player running in at speed.
+			name = "BedFrame",
+			size = Vector3.new(blockW + 1.6, 2.2, bedSpan + 1.6),
+			cframe = cf * CFrame.new(blockX, 2.1, 0),
+			color = BED_FRAME,
+			material = Enum.Material.Wood,
 			collide = false,
 			studs = false,
 			parent = model,
 		})
-	end
 
-	--== THE FENCE ==--
-	-- Post and rail, three sides. The side facing the field stays open: that is
-	-- the side the owner sprints in through, and a gate they have to aim at is a
-	-- gate they will miss at speed.
-	local sides = {
-		{ axis = "z", sign = 1 },   -- back
-		{ axis = "x", sign = -1 },  -- left
-		{ axis = "x", sign = 1 },   -- right
-	}
-	for _, side in ipairs(sides) do
-		local sideways = (side.axis == "x")
-		-- The long runs are DEPTH now, not width -- a deep plot is a strip, and
-		-- a fence that still assumed a square would stop halfway down it.
-		local runLength = sideways and depth or size
-		local along = sideways and Vector3.new(0, 0, 1) or Vector3.new(1, 0, 0)
-		local outward = sideways
-			and Vector3.new(side.sign, 0, 0) or Vector3.new(0, 0, side.sign)
-		local outX = sideways and half or 0
-		local outZ = sideways and 0 or (side.sign * halfD)
+		for row = 1, rows do
+			slot += 1
+			-- Rows run front to back, so row 1 is the one nearest the gate and
+			-- new rows appear at the BACK when a plot is expanded.
+			local rowZ = -bedSpan * 0.5 + (row - 0.5) * PLOT.RowDepth
+				+ (row - 1) * PLOT.RowGap
 
-		-- Two rails.
-		for _, h in ipairs({ 2.9, 5.0 }) do
-			local railSize = sideways
-				and Vector3.new(0.7, 0.7, depth) or Vector3.new(size, 0.7, 0.7)
-			build({
-				name = "Rail",
-				size = railSize,
-				cframe = cf * CFrame.new(outward.X * outX, h, outZ),
-				color = WOOD,
-				material = Enum.Material.Wood,
+			local bed = build({
+				name = string.format("Bed%02d", slot),
+				size = Vector3.new(blockW, 1.6, PLOT.RowDepth),
+				cframe = cf * CFrame.new(blockX, 2.9, rowZ),
+				color = BED_SOIL,
+				-- STUDDED, AND THEREFORE PLASTIC. Ground was the obvious material
+				-- for soil and it is the wrong one: its noise texture renders
+				-- OVER the studs, so a bed set to TopSurface = Studs came out
+				-- looking smooth while the grass around it was visibly studded.
+				-- Plastic is the material that actually shows them, which is the
+				-- whole classic Roblox look this game is built in.
+				material = Enum.Material.Plastic,
 				collide = false,
-				studs = false,
 				parent = model,
 			})
-		end
+			bed:SetAttribute("SlotIndex", slot)
+			bed:SetAttribute("Row", row)
+			bed:SetAttribute("Column", col)
+			CollectionService:AddTag(bed, GameConfig.Tags.Planter)
 
-		-- Posts every ~20 studs along the run, minimum three. A fixed count would
-		-- leave a 144-stud strip with two rails floating between three posts.
-		local postCount = math.max(3, math.floor(runLength / 20) + 1)
-		for i = 1, postCount do
-			local t = (i - 1) / (postCount - 1) - 0.5   -- -0.5 .. +0.5
-			local p = along * (t * runLength)
-			build({
-				name = "Post",
-				size = Vector3.new(1.3, 6.4, 1.3),
-				cframe = cf * CFrame.new(
-					outward.X * outX + p.X, 3.2, outZ + p.Z),
-				color = WOOD_DARK,
-				material = Enum.Material.Wood,
-				collide = false,
-				studs = false,
-				parent = model,
-			})
+			-- Where a plant stands. On the bed rather than on the plot floor,
+			-- so a plant is rooted in soil and moves if the bed ever does.
+			local a = Instance.new("Attachment")
+			a.Name = string.format("Slot%02d", slot)
+			a:SetAttribute("SlotIndex", slot)
+			a.Position = Vector3.new(0, 0.8, 0)
+			a.Parent = bed
+			CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
 		end
 	end
 
 	--== OWNER SIGN ==--
-	-- The one thing on the plot that is not soil or fence, and it earns its
-	-- place: without it nobody can tell whose garden they are standing in, and
-	-- "UNCLAIMED" is how a new player finds a free one.
 	build({
 		name = "SignPost",
 		size = Vector3.new(1.2, 7, 1.2),
-		cframe = cf * CFrame.new(-half + 6, 3.5, -halfD - 1),
+		cframe = cf * CFrame.new(-halfW + 6, 3.5, -halfD - 1.5),
 		color = WOOD_DARK,
 		material = Enum.Material.Wood,
 		collide = false,
@@ -272,7 +302,7 @@ local function buildPlot(id: number, cf: CFrame, depth: number, slots: number,
 	local board = build({
 		name = PLOT.SignName,
 		size = Vector3.new(15, 4.5, 0.6),
-		cframe = cf * CFrame.new(-half + 6, 8.4, -halfD - 1),
+		cframe = cf * CFrame.new(-halfW + 6, 8.4, -halfD - 1.5),
 		color = WOOD,
 		material = Enum.Material.Wood,
 		collide = false,
@@ -301,45 +331,21 @@ local function buildPlot(id: number, cf: CFrame, depth: number, slots: number,
 	stroke.Parent = label
 
 	--== SPAWN ==--
-	-- INVISIBLE. A SpawnLocation has to exist so Player.RespawnLocation has
-	-- something to point at, but a glowing neon pad in the middle of a dirt plot
-	-- is exactly the kind of prop this pass is removing. It is a hook, not
-	-- scenery.
+	-- Invisible. It exists so Player.RespawnLocation has something to point at.
+	-- On the grass aisle between the beds, so a respawn never drops somebody
+	-- standing inside a bed.
 	local pad = Instance.new("SpawnLocation")
 	pad.Name = PLOT.SpawnPadName
-	pad.Size = Vector3.new(10, 1, 10)
-	-- Just inside the front edge, so a respawn puts you where you run in.
-	pad.CFrame = cf * CFrame.new(0, 2.5, -halfD + 9)
+	pad.Size = Vector3.new(6, 1, 6)
+	pad.CFrame = cf * CFrame.new(0, 2.5, -halfD + 3)
 	pad.Transparency = 1
 	pad.CanCollide = false
 	pad.Anchored = true
 	pad.Neutral = true
-	-- Only the owner's is enabled, by PlotService. Every pad live would let
-	-- Roblox's own respawn logic drop anybody on anybody's plot.
 	pad.Enabled = false
 	pad.Duration = 0
 	pad.Parent = model
 	CollectionService:AddTag(pad, GameConfig.Tags.PlotSpawn)
-
-	--== PLANT SLOTS ==--
-	-- Attachments, not parts. A slot costs nothing until something grows in it,
-	-- and PlantService only needs a CFrame.
-	local plants = Instance.new("Folder")
-	plants.Name = PLOT.PlantsFolderName
-	plants.Parent = model
-	for slot = 1, slots do
-		local a = Instance.new("Attachment")
-		a.Name = string.format("Slot%02d", slot)
-		a:SetAttribute("SlotIndex", slot)
-		local col = ((slot - 1) % 3) - 1
-		local row = math.floor((slot - 1) / 3) + 1
-		-- On the furrows, which is why the furrows are placed off the same
-		-- row arithmetic -- one expression, so they cannot drift apart.
-		a.WorldCFrame = cf * CFrame.new(col * 14, 2.6,
-			-halfD + (row / (rows + 1)) * depth)
-		a.Parent = floor
-		CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
-	end
 
 	local runtime = Instance.new("Folder")
 	runtime.Name = PLOT.RuntimeFolderName
@@ -803,10 +809,10 @@ function MapService.Init()
 	local tier = GameConfig.PlotTiers[GameConfig.StartingPlotTier]
 	-- Anchored by the FRONT edge, so the plot centre moves back as depth grows
 	-- and the edge the owner runs in through never does.
-	local z = PLOT.FrontZ + tier.depth * 0.5
+	local z = PLOT.FrontZ + GameConfig.plotDepthFor(tier.rows) * 0.5
 	for id = 1, n do
 		local x = (id - (n + 1) * 0.5) * PLOT.Pitch
-		buildPlot(id, CFrame.new(x, Y, z), tier.depth, tier.slots, plots)
+		buildPlot(id, CFrame.new(x, Y, z), tier.rows, plots)
 		-- On the grass in front of the fixed front edge, so it never has to move
 		-- when the plot behind it grows.
 		buildTreadmill(id, CFrame.new(x, Y + 0.6, PLOT.FrontZ - 16), plots)

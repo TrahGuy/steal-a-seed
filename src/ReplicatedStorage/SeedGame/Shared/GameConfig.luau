@@ -146,6 +146,34 @@ GameConfig.Plot = {
 	UnclaimedText = "UNCLAIMED",
 
 	SpawnHeightOffset = 4,
+
+	--==========================================================================
+	-- THE BEDS
+	--
+	-- From the owner's reference sketch: the inside of a plot is GRASS, and the
+	-- soil is two raised bed blocks standing on it, each divided into rows.
+	--
+	-- That is a better plot than a solid dirt rectangle for a reason worth
+	-- writing down. A slab of dirt is one shape; two framed blocks divided into
+	-- rows is a GRID, and a grid tells the player how many things fit here and
+	-- exactly where they go before a single plant exists. It also gives
+	-- expansion something to say -- a tier is more ROWS, which is visible from
+	-- across the field.
+	--
+	-- A ROW IS A SLOT. There is no separate slot count to keep in step with the
+	-- bed geometry: rows x columns IS the number of plants, so the two can never
+	-- disagree.
+	--==========================================================================
+	BedColumns = 2,
+	RowDepth = 11,
+	RowGap = 1.2,
+	-- Grass between the beds and the fence.
+	BedMargin = 6,
+	BedInsetX = 5,
+	-- Grass down the middle, between the two blocks. This is the aisle the
+	-- reference sketch has, and it is what stops eight beds reading as one slab
+	-- with lines drawn on it.
+	BedCentreGap = 3,
 }
 
 --==============================================================================
@@ -171,11 +199,13 @@ GameConfig.Plot = {
 -- Slot counts are a first pass and will move once a plant model exists and
 -- there is something real to space.
 --==============================================================================
+-- ROWS, not depth. Depth is derived from them, so a tier cannot be defined with
+-- a size that does not fit a whole number of beds.
 GameConfig.PlotTiers = {
-	{ depth = 48,  slots = 6 },
-	{ depth = 80,  slots = 12 },
-	{ depth = 112, slots = 20 },
-	{ depth = 144, slots = 30 },
+	{ rows = 4 },
+	{ rows = 6 },
+	{ rows = 8 },
+	{ rows = 10 },
 }
 
 -- What a plot is built at before anything is bought.
@@ -289,6 +319,17 @@ GameConfig.Save = {
 	RetryAttempts = 4,
 }
 
+-- How deep a plot with this many bed rows has to be. One expression, read by
+-- the tier table, the map builder and the field-size check alike.
+function GameConfig.plotDepthFor(rows: number): number
+	local P = GameConfig.Plot
+	return P.BedMargin * 2 + rows * P.RowDepth + (rows - 1) * P.RowGap
+end
+
+function GameConfig.plotSlotsFor(rows: number): number
+	return rows * GameConfig.Plot.BedColumns
+end
+
 --==============================================================================
 -- DERIVED
 --
@@ -305,7 +346,7 @@ GameConfig.Map.FieldCenterZ = (GameConfig.Map.FieldBack - GameConfig.Map.FieldFr
 do
 	local deepest = 0
 	for _, tier in ipairs(GameConfig.PlotTiers) do
-		deepest = math.max(deepest, tier.depth)
+		deepest = math.max(deepest, GameConfig.plotDepthFor(tier.rows))
 	end
 	GameConfig.Plot.MaxDepth = deepest
 	GameConfig.Plot.MaxBackZ = GameConfig.Plot.FrontZ + deepest

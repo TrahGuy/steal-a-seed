@@ -23,7 +23,7 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**985 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+**1,123 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
 zero tall props inside the racing line.
 
 ---
@@ -78,6 +78,29 @@ The SELL stall moved to the **upper left of the field**. In the middle it sat on
 every player runs between their plot and the road -- a shop should be somewhere you choose to go,
 not something you run around twice a lap.
 
+## A PLOT IS GRASS WITH TWO RAISED BED BLOCKS ON IT
+
+Built to the owner's sketch, [plot-reference.jpg](plot-reference.jpg). Fenced square of studded
+grass, two framed bed blocks standing on it, each divided into rows.
+
+That beats the solid dirt rectangle it replaced for a reason worth keeping: a slab of dirt is one
+shape, whereas two framed blocks divided into rows is a **grid**. A grid tells the player how many
+things fit and exactly where, before a single plant exists — and it gives expansion something to
+*say*, because another tier is visibly more rows.
+
+**A row is a slot.** There is no separate slot count to keep in step with the geometry: rows ×
+columns IS the plant count, so the two cannot disagree.
+
+**Beds are `Plastic`, not `Ground`.** `Ground` was the obvious material for soil and it is the wrong
+one — its noise texture renders *over* the studs, so a bed set to `TopSurface = Studs` came out
+smooth while the grass around it was visibly studded. `Plastic` is the material that actually shows
+them.
+
+**The fence encloses all four sides**, which an earlier version deliberately did not: it left the
+road-facing side open so nobody had to aim at a gate at speed. That reasoning was wrong about its
+own code — the fence is non-collidable, you run straight through it, so closing the fourth side
+costs nothing and reads far better as "this ground is claimed".
+
 ## PLOTS EXPAND BACKWARD, AND THE ROOM IS ALREADY RESERVED
 
 The expansion SYSTEM is Phase D. The SPACE it needs is reserved now, and that ordering is the whole
@@ -96,14 +119,17 @@ outermost plot to the road. **Depth is free; width is not.**
 The field is asymmetric for this: `FieldFront = 85` toward the road (must never grow),
 `FieldBack = 180` away from it (deliberately oversized, empty grass today).
 
-| tier | depth | slots | back edge |
-| --- | --- | --- | --- |
-| 1 | 48 | 6 | Z=69  ← built |
-| 2 | 80 | 12 | Z=101 |
-| 3 | 112 | 20 | Z=133 |
-| 4 | 144 | 30 | Z=165 |
+Tiers are defined in **rows**, and depth is derived — so a tier cannot be given a size that does not
+fit a whole number of beds.
 
-Field back is Z=180, so tier 4 fits with 15 studs to spare — and `MapService` **warns at boot** if a
+| tier | rows | beds | depth | back edge |
+| --- | --- | --- | --- | --- |
+| 1 | 4 | 8 | 59.6 | Z=81  ← built |
+| 2 | 6 | 12 | 84.0 | Z=105 |
+| 3 | 8 | 16 | 108.4 | Z=129 |
+| 4 | 10 | 20 | 132.8 | Z=154 |
+
+Field back is Z=180, so tier 4 fits with 26 studs to spare — and `MapService` **warns at boot** if a
 future tier stops fitting, because a reservation nobody verified is a guess.
 
 Tier 4 was built through the real code path and photographed before being reverted: six long
