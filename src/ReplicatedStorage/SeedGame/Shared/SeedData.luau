@@ -198,6 +198,27 @@ end
 -- behind you -- is how badly they want it. That is rarity. Which species it
 -- turns out to be is a question for after you are safe.
 --==============================================================================
+--==============================================================================
+-- A POD IS AS BIG AS IT IS HEAVY
+--
+-- Every pod used to be the same size, which threw away the one piece of
+-- information the player most needs before committing to a hold: how much this
+-- is going to cost to carry. Weight already decides the income and the slow;
+-- making it decide the SILHOUETTE means a player reads the trade before
+-- pressing anything, from across the nest, with no UI at all.
+--
+-- kg^0.28 rather than a straight ratio, because straight would make a 110 kg
+-- Bellchime fifty-five times the size of a Nubkin. Clamped at both ends: below
+-- 1.3 a pod is hard to see on studded grass, and above 4.5 it stops fitting in
+-- a nest ring -- which matters once the 10,000 kg end of the range exists.
+--
+--     2 kg -> 1.45      14 kg -> 2.16      110 kg -> 3.72
+--     5 kg -> 1.72      40 kg -> 2.85   10,000 kg -> clamped to 4.5
+--==============================================================================
+function SeedData.PodDiameter(species: Species): number
+	return math.clamp(1.2 * (species.Kg ^ 0.28), 1.3, 4.5)
+end
+
 function SeedData.PodColor(species: Species): Color3
 	return GameConfig.RarityColor[species.Rarity] or Color3.fromRGB(200, 200, 200)
 end

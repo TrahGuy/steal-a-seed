@@ -492,6 +492,52 @@ It is a POLL, not a `Touched` on the stripe. The stripe is a thin
 non-collidable decal a player at WalkSpeed 150 can cross between two frames
 without ever touching, and the safe zone is a region rather than a part.
 
+## ONE NEST PER BIOME, AND A PARENT THAT ESCALATES
+
+**One nest, at the far corner.** Nests used to be spread down the segment and the
+first sat close enough to the safe line to be raided almost from home — which
+made the length of a biome optional. You could farm the near nest forever and
+never walk the rest of it. One nest at the far end means raiding Greenhollow
+requires crossing Greenhollow. Sides alternate by biome order so a player running
+the whole road is not hugging one wall the entire way.
+
+**A pod is as big as it is heavy.** `1.2 * kg^0.28`, clamped 1.3–4.5. Every pod
+used to be identical, which threw away the one thing a player most needs before
+committing to a hold: what this will cost to carry. Now the trade is readable
+from across the nest with no UI. Measured: Nubkin 2 kg → 1.46, Bellchime 110 kg
+→ 4.47.
+
+**The parent is fast.** 26 at biome 1 against a fresh player's 16 (it was 19,
+which felt like a hazard you could stroll away from). 74 at Starbloom.
+
+**And it escalates.** Every theft while it is still angry adds 5, up to 4 stacks.
+Verified: take #1 chased at 31, take #2 at 36.
+
+### Two bugs behind those, both invisible by inspection
+
+**`AutoRotate` did nothing because the assembly root was wrong.** Every part on
+the rig is `Massless` so it cannot out-weigh its own Humanoid — including the
+HumanoidRootPart, which quietly made the **Torso** the assembly root, because a
+massless part cannot root an assembly. Roblox rotates an assembly about its root,
+so the Humanoid turned a HumanoidRootPart that was steering nothing and the
+creature walked home backwards with `AutoRotate` switched on. `Humanoid.RootPart`
+said `HumanoidRootPart` while `root.AssemblyRootPart` said `Torso` — **those two
+disagreeing is the bug**. Giving the root mass fixed it: facing-vs-motion went
+from −1.00 to +0.80.
+
+The manual `root.CFrame` write that used to hide this is gone too. It only ran
+while *chasing*, which is why the walk home was the backwards half, and it
+teleported a physics assembly eight times a second while the Humanoid was trying
+to move it.
+
+**Rage reset on sleep, which made it unreachable.** A caught player is thrown
+clear, the parent walks home and settles within a couple of seconds, and the pod
+is still on the ground — so by the time anyone picks it back up the anger was
+already gone. Measured before the fix: two thefts in a row, both at 31, when the
+second should have been 36. It fades on a timer now
+(`RageForgetSeconds = 45`), so coming back for a dropped pod is exactly the case
+that stacks, and a nest left alone still forgives.
+
 ## Things worth not rediscovering
 
   * **Moving the Edit viewport takes `Camera.Focus`, not `Camera.CFrame`.** Writing `CFrame` alone

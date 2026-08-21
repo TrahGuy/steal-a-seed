@@ -85,8 +85,8 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(126, 92, 62),
 		AccentColor = Color3.fromRGB(74, 148, 66),
 		Brightness = 1.0,
-		Nests = 3,
-		PodsPerNest = 4,
+		Nests = 1,
+		PodsPerNest = 5,
 		RarityBonus = 1.0,
 		LiveInPhaseA = true,
 	},
@@ -100,7 +100,7 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(186, 142, 92),
 		AccentColor = Color3.fromRGB(212, 158, 78),
 		Brightness = 1.0,
-		Nests = 3,
+		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 1.6,
 		LiveInPhaseA = false,
@@ -115,7 +115,7 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(40, 74, 62),
 		AccentColor = Color3.fromRGB(168, 214, 96),
 		Brightness = 0.78,
-		Nests = 2,
+		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 2.6,
 		LiveInPhaseA = false,
@@ -130,7 +130,7 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(50, 36, 34),
 		AccentColor = Color3.fromRGB(255, 118, 44),
 		Brightness = 0.55,
-		Nests = 2,
+		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 4.5,
 		LiveInPhaseA = false,
@@ -145,7 +145,7 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(20, 16, 42),
 		AccentColor = Color3.fromRGB(158, 128, 255),
 		Brightness = 0.3,
-		Nests = 2,
+		Nests = 1,
 		PodsPerNest = 2,
 		RarityBonus = 9.0,
 		LiveInPhaseA = false,
@@ -201,29 +201,43 @@ end
 -- server builds the identical segment and "the third pod on the left" means
 -- something in a bug report.
 --==============================================================================
+--==============================================================================
+-- ONE NEST, IN THE FAR CORNER
+--
+-- Nests used to be spread down the segment, and the first of them sat close
+-- enough to the safe line to be raided almost from home. That made the whole
+-- length of a biome optional: you could farm the near nest forever and never
+-- walk the rest of it.
+--
+-- One nest, at the FAR corner, makes the segment mean something. To raid
+-- Greenhollow you cross Greenhollow. The prize is at the end of the walk,
+-- which is the only place a prize can be if the walk is the game.
+--
+-- Still hard against a wall, because the rule that outlived every layout is
+-- unchanged: NOTHING in the racing line. Alternating sides by biome order so a
+-- player running the whole road is not hugging one wall the entire way.
+--==============================================================================
 function BiomeData.NestCFrames(biome: Biome): { CFrame }
 	local out: { CFrame } = {}
-	local count = biome.Nests
-	if count <= 0 then
+	if biome.Nests <= 0 then
 		return out
 	end
 
 	local MAP = GameConfig.Map
-	local nearZ = select(1, BiomeData.SegmentBounds(biome))
-	-- Nests need more clearance than a single pod did: the ring of pods and the
-	-- parent standing in the middle of it are both wider than one prop, and the
-	-- rule they exist to respect is unchanged -- NOTHING in the racing line.
+	local _, farZ = BiomeData.SegmentBounds(biome)
+	-- Clear of the boundary, so the nest belongs to this biome rather than
+	-- straddling the gate into the next one.
+	local FAR_MARGIN = 55
 	local x = MAP.CorridorWidth * 0.5 - MAP.PodInset - 6
+	local side = if biome.Order % 2 == 0 then 1 else -1
 
-	for index = 1, count do
-		-- Spread down the segment with a half step of padding at each end, so
-		-- no pod sits flush against a biome boundary.
-		local t = (index - 0.5) / count
-		local z = nearZ - t * MAP.SegmentLength
-		local side = (index % 2 == 0) and 1 or -1
+	for index = 1, biome.Nests do
+		-- A second nest, if a biome ever wants one, steps back up the segment
+		-- rather than sideways: the far corner is the point.
+		local z = farZ + FAR_MARGIN + (index - 1) * 90
 		out[index] = CFrame.new(side * x, GameConfig.Map.GroundY, z)
-			-- Facing the middle of the road, so the pod presents its front to
-			-- somebody running past rather than its back.
+			-- Facing the middle of the road, so the parent looks out at traffic
+			-- rather than at the wall behind it.
 			* CFrame.Angles(0, side > 0 and math.pi * 0.5 or -math.pi * 0.5, 0)
 	end
 	return out

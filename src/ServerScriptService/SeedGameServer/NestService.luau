@@ -80,6 +80,11 @@ type Nest = {
 	target: Player?,
 	stateUntil: number,
 	busy: boolean,
+	-- How many times it has been robbed recently. Each one adds speed.
+	rage: number,
+	-- When it last settled. Rage fades this long after, rather than the instant
+	-- it lies down -- see GameConfig.Parent.RageForgetSeconds.
+	calmSince: number,
 }
 
 local nests: { Nest } = {}
@@ -170,6 +175,8 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		target = nil,
 		stateUntil = 0,
 		busy = false,
+		rage = 0,
+		calmSince = 0,
 	}
 	for i = 1, biome.PodsPerNest do
 		growPod(nest, i)
@@ -186,7 +193,17 @@ end
 -- collect it has to wake the parent again -- otherwise being caught once makes
 -- the rest of the raid free.
 --==============================================================================
+-- Base speed for the biome, plus whatever it is currently furious about.
+local function speedFor(nest: Nest): number
+	return GameConfig.parentWalkSpeedFor(nest.biome.Order)
+		+ math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
+end
+
 local function provoke(nest: Nest, thief: Player)
+	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
+	-- and strolling back for it is the obvious way to farm a nest safely, so the
+	-- second attempt has to be harder than the first.
+	nest.rage += 1
 	-- WAKE, ON A DELAY. The delay is the head start, and it is the whole skill
 	-- of a raid.
 	if nest.state == "asleep" then
@@ -201,6 +218,11 @@ local function provoke(nest: Nest, thief: Player)
 	-- should make it chase YOU, or two players could take turns feeding it a
 	-- decoy.
 	nest.target = thief
+	if nest.state == "chasing" then
+		-- Already running. Speed up mid-chase rather than waiting for the next
+		-- state change, which might never come.
+		nest.humanoid.WalkSpeed = speedFor(nest)
+	end
 end
 
 --==============================================================================
@@ -381,11 +403,23 @@ end
 local function sleep(nest: Nest)
 	nest.state = "asleep"
 	nest.target = nil
+	-- Rage is NOT cleared here. It fades on a timer instead, because a parent
+	-- settles within a couple of seconds of throwing somebody while the pod it
+	-- was defending is still lying on the ground -- clearing on sleep made
+	-- coming back for that pod free, which is the exact case this exists for.
+	nest.calmSince = os.clock()
 	nest.humanoid.WalkSpeed = 0
 	nest.parent:SetAttribute("Asleep", true)
 end
 
 local function step(nest: Nest, now: number)
+	--== RAGE FADES ==--
+	if nest.rage > 0 and nest.state == "asleep" and nest.calmSince > 0
+		and now - nest.calmSince >= P.RageForgetSeconds then
+		nest.rage = 0
+		nest.calmSince = 0
+	end
+
 	--== REGROWTH ==--
 	for slot, at in pairs(nest.regrowAt) do
 		if at > 0 and now >= at and not nest.pods[slot] then
@@ -403,7 +437,7 @@ local function step(nest: Nest, now: number)
 	elseif nest.state == "waking" then
 		if now >= nest.stateUntil then
 			nest.state = "chasing"
-			nest.humanoid.WalkSpeed = GameConfig.parentWalkSpeedFor(nest.biome.Order)
+			nest.humanoid.WalkSpeed = speedFor(nest)
 			nest.parent:SetAttribute("Asleep", false)
 		end
 		return
@@ -452,11 +486,12 @@ local function step(nest: Nest, now: number)
 			end)
 			return
 		end
+		-- NO MANUAL FACING. This used to write root.CFrame every tick to look at
+		-- the target, which did two bad things: it only ran while CHASING, so
+		-- the walk home was done backwards, and it teleported a physics assembly
+		-- eight times a second while the Humanoid was trying to move it.
+		-- AutoRotate does it properly, in both directions.
 		nest.humanoid:MoveTo(pos)
-		if flat.Magnitude > 1 then
-			nest.root.CFrame = CFrame.lookAt(nest.root.Position,
-				nest.root.Position + flat.Unit)
-		end
 		return
 
 	else -- returning
@@ -535,8 +570,9 @@ function NestService.Start()
 			pods += 1
 		end
 	end
-	log(string.format("Ready. %d nest(s), %d pod(s). Parents sleep until robbed.",
-		#nests, pods))
+	log(string.format(
+		"Ready. %d nest(s), %d pod(s). Parents sleep until robbed, then run at %d (+%d per theft).",
+		#nests, pods, GameConfig.parentWalkSpeedFor(1), P.RageSpeedPerTake))
 
 	local quiet = {}
 	for id, n in pairs(skipped) do

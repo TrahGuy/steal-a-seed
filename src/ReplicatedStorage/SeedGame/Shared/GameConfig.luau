@@ -438,8 +438,35 @@ GameConfig.Parent = {
 	-- Biome 1 sits just above a fresh player's 16 -- you WILL be caught on your
 	-- first raid, and that is the lesson. Each biome further out is faster.
 	--==========================================================================
-	BaseWalkSpeed = 19,
-	WalkSpeedPerBiome = 11,
+	-- FAST. At 19 against a fresh player's 16 the parent was technically faster
+	-- and felt like a slow-moving hazard you could stroll away from. A guard
+	-- that never quite catches you is scenery.
+	BaseWalkSpeed = 26,
+	WalkSpeedPerBiome = 12,
+
+	--==========================================================================
+	-- IT GETS ANGRIER
+	--
+	-- Every theft from the same nest before it gets back to sleep adds speed.
+	-- Being caught and coming back for the same pod is the obvious way to farm a
+	-- nest safely -- lose it, wait, collect -- so the second attempt has to be
+	-- harder than the first, and the fourth harder again.
+	--
+	-- It resets on sleep, so a nest left alone forgives. The escalation punishes
+	-- pestering, not the player.
+	--==========================================================================
+	RageSpeedPerTake = 5,
+	MaxRageStacks = 4,
+	-- Rage FADES, it does not vanish the moment the parent lies down. Resetting
+	-- on sleep sounded right and made the mechanic almost unreachable: a caught
+	-- player is thrown clear, the parent walks home and sleeps in a couple of
+	-- seconds, and the pod is still on the ground -- so by the time anyone picks
+	-- it back up the anger is already gone. Measured: two thefts in a row, both
+	-- at 31, when the second should have been 36.
+	--
+	-- Held for this long after it settles, so coming back for a dropped pod is
+	-- the case that stacks. Leave the nest alone and it forgives.
+	RageForgetSeconds = 45,
 
 	-- How far a biome-1 parent throws you, in studs.
 	BaseThrowStuds = 60,

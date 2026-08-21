@@ -424,17 +424,37 @@ function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: 
 	-- monster that spawns already able to run is a monster that will one day run
 	-- before anything told it to.
 	humanoid.WalkSpeed = 0
-	humanoid.AutoRotate = false
+	-- AUTOROTATE ON. It was off, with NestService writing root.CFrame every tick
+	-- to face the target -- which only ran while CHASING, so the walk home was
+	-- done facing backwards. It also meant the server teleporting a physics
+	-- assembly eight times a second, fighting the very Humanoid moving it.
+	-- Letting the Humanoid turn itself fixes the moonwalk and removes the fight.
+	humanoid.AutoRotate = true
 	humanoid.HipHeight = H * 0.33
 	humanoid.MaxHealth = math.huge
 	humanoid.Health = math.huge
 	humanoid.BreakJointsOnDeath = false
 	humanoid.Parent = model
 
+	--==========================================================================
+	-- THE HUMANOIDROOTPART MUST HAVE MASS, OR AutoRotate DOES NOTHING
+	--
+	-- Every part here is Massless so the rig cannot out-weigh its own Humanoid
+	-- -- and the root was too, which quietly made the TORSO the assembly root,
+	-- because a massless part cannot root an assembly. Roblox rotates an
+	-- assembly about its root, so the Humanoid dutifully turned a
+	-- HumanoidRootPart that was not steering anything and the creature walked
+	-- home backwards with AutoRotate switched on.
+	--
+	-- Verified: Humanoid.RootPart said HumanoidRootPart while
+	-- root.AssemblyRootPart said Torso. Those disagreeing is the bug.
+	--==========================================================================
+	root.Massless = false
+
 	-- One collidable part, so it has physical presence without ten colliders
-	-- catching on scenery.
+	-- catching on scenery. Massless now: the root carries the weight.
 	torso.CanCollide = true
-	torso.Massless = false
+	torso.Massless = true
 
 	CollectionService:AddTag(model, GameConfig.Tags.NestParent)
 	return model

@@ -444,7 +444,9 @@ function CreatureModel.BuildPod(sp: SeedData.Species, cf: CFrame, parent: Instan
 	-- THE CFRAME IS THE BASE, not the centre -- same contract as BuildCreature,
 	-- because two builders in one file meaning different things by the same
 	-- argument is a trap for every caller.
-	local D = 1.7
+	-- Size comes from weight, so the pod tells you what it will cost to carry
+	-- before you commit to the hold. See SeedData.PodDiameter.
+	local D = SeedData.PodDiameter(sp)
 	local color = SeedData.PodColor(sp)
 	local baseCF = cf * CFrame.new(0, D * 0.5, 0)
 
