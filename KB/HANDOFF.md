@@ -736,6 +736,18 @@ a `PLANT_RANGE` of 26, `Plant()` correctly returned false. You have to walk your
 **But nothing tells the player why.** The tool stays in hand and no feedback fires. Left as-is
 rather than half-built: it wants the HUD, which does not exist yet.
 
+### The map plugin rebuilds on ABSENCE, not on staleness
+
+After fixing the slot placement, the Edit map still showed 0/12 slots on the bed while the Edit copy
+of `MapService` demonstrably contained the fix. Nothing was cached and nothing was wrong: stopping
+Play restores Edit to its pre-Play snapshot, which still held a map built earlier in the session by
+the *old* MapService — and the plugin only rebuilds when `Workspace.SeedMap` is **missing**. A
+manual `require(...MapService).Init()` gave 12/12 immediately.
+
+So: **after changing `MapService`, press Clear Map then Build Map**, or run `Init()` from the command
+bar. Auto-rebuild is there so the map is never *absent*; it was never going to notice the map is out
+of date, and making it diff geometry every second to find out would cost more than it saves.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
