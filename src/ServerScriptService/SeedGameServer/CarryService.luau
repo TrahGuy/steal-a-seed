@@ -1,38 +1,40 @@
 --!strict
 -- Steal a Seed :: CarryService
 --
--- Picking pods up, carrying them home, and dropping them when it goes wrong.
+-- Picking a pod up, carrying it home, and losing it when it goes wrong.
 --
 --==============================================================================
--- YOU CAN CARRY AS MANY AS YOU LIKE, AND THAT IS THE POINT
+-- ONE POD. THAT IS THE WHOLE RULE.
 --
--- One pod at a time would have been simpler and it would have gutted the nest.
--- A nest asks "how many can I take before it wakes up?", and that question only
--- exists if the answer can be more than one.
+-- An earlier build let you stack them and summed the weight. One is better, and
+-- for a reason worth keeping: with a stack, a raid is an optimisation problem --
+-- how many can I grab before it wakes. With one, it is a COMMITMENT. You picked
+-- that pod, you are carrying that pod, and the walk home is about that pod.
 --
--- So weight SUMS. Four pods is four pods of income and four pods of slow, and
--- the parent behind you does not care how rich you are. Greed is priced by the
--- same number that pays you, which is why the carry curve and the income curve
--- are the same stat:
+-- It also makes the weight legible. A single number on your back, a single
+-- number off your speed, and a player learns the whole economy by carrying two
+-- different things.
 --
---     2 kg   99.6% speed        one Nubkin, basically free
---     110 kg 95.3%              one Bellchime
---     440 kg 91.2%              four Bellchimes, and a decision
+--==============================================================================
+-- GETTING CAUGHT COSTS YOU THE POD, NOT JUST THE WALK
 --
--- MaxPods exists only so a stack cannot become absurd on screen. WEIGHT is the
--- real limiter and always should be -- a cap teaches nothing, a slow walk home
--- past an angry parent teaches everything.
+-- Being ragdolled drops it. Any ragdoll, not just the parent's throw -- the
+-- trigger is Humanoid.PlatformStand going true, so anything that ever knocks a
+-- player down takes their cargo with it and no future system has to remember to
+-- call anything.
+--
+-- That is what makes the parent frightening. The throw alone costs distance,
+-- which is recoverable; losing the pod at the same time is what makes you creep
+-- rather than sprint.
 --
 --==============================================================================
 -- THIS SERVICE IS THE ONLY WRITER OF WalkSpeed
 --
--- Base speed comes from the profile's Speed score through GameConfig's curve,
--- and carry weight is the LAST multiplier applied to it. Something has to have
--- the final say or two systems will fight over the property every frame, and
--- the one holding the last multiplier is the one that must own it.
---
--- When a TreadmillService exists it will raise the Speed SCORE and call
--- RefreshWalkSpeed. It will not touch WalkSpeed itself.
+-- Base comes from the profile's Speed through GameConfig's curve, and carry
+-- weight is the LAST multiplier applied to it. Something has to have the final
+-- say or two systems fight over the property every frame, and the one holding
+-- the last multiplier is the one that must own it. A future TreadmillService
+-- raises the Speed SCORE and calls RefreshWalkSpeed; it never touches WalkSpeed.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -56,18 +58,16 @@ export type Held = {
 	model: Model,
 }
 
-local carried: { [Player]: { Held } } = {}
+local carried: { [Player]: Held } = {}
 local serviceConnections: { RBXScriptConnection } = {}
+local perPlayer: { [Player]: { RBXScriptConnection } } = {}
 local prompted: { [Model]: true } = {}
 
--- How far above the head the first pod floats, and the gap between stacked
--- pods. A stack reads instantly at distance -- everybody can see how loaded you
--- are, which is what makes a heavy carrier a target.
-local STACK_BASE = 2.6
-local STACK_GAP = 1.9
-local MAX_PODS = 5
--- A pod dropped on the ground is fair game for anybody, and vanishes if nobody
--- comes for it.
+-- How far above the head it floats. High enough to read across the road --
+-- everybody can see what you are carrying, which is what makes a carrier a
+-- target the moment PvP is switched on.
+local CARRY_HEIGHT = 3.0
+-- A pod on the ground is fair game for anybody, and vanishes if nobody comes.
 local LOOSE_LIFETIME = 45
 
 local function log(message: string)
@@ -75,18 +75,26 @@ local function log(message: string)
 end
 
 --==============================================================================
--- WEIGHT AND SPEED
+-- STATE THE CLIENT CAN SEE
+--
+-- An ATTRIBUTE ON THE PLAYER, because attributes replicate on their own and the
+-- prompt UI has to know instantly whether to draw itself. A remote would be a
+-- round trip to answer a question the client asks every frame it renders a
+-- prompt.
 --==============================================================================
+local function publish(player: Player)
+	local held = carried[player]
+	player:SetAttribute("CarryingSpecies", if held then held.species.Id else nil)
+	player:SetAttribute("CarryingKg", if held then held.species.Kg else nil)
+end
+
+function CarryService.IsCarrying(player: Player): boolean
+	return carried[player] ~= nil
+end
+
 function CarryService.TotalKg(player: Player): number
 	local held = carried[player]
-	if not held then
-		return 0
-	end
-	local kg = 0
-	for _, entry in ipairs(held) do
-		kg += entry.species.Kg
-	end
-	return kg
+	return if held then held.species.Kg else 0
 end
 
 function CarryService.RefreshWalkSpeed(player: Player)
@@ -101,9 +109,9 @@ function CarryService.RefreshWalkSpeed(player: Player)
 end
 
 --==============================================================================
--- THE STACK
+-- CARRYING
 --==============================================================================
-local function anchorless(model: Model)
+local function attachToHead(model: Model, head: BasePart)
 	local primary = model.PrimaryPart
 	if not primary then
 		return
@@ -122,37 +130,22 @@ local function anchorless(model: Model)
 			end
 		end
 	end
-end
-
-local function restack(player: Player)
-	local held = carried[player]
-	local character = player.Character
-	local head = character and character:FindFirstChild("Head")
-	if not (held and head and head:IsA("BasePart")) then
-		return
-	end
-	for index, entry in ipairs(held) do
-		local primary = entry.model.PrimaryPart
-		if primary then
-			for _, j in ipairs(primary:GetChildren()) do
-				if j:IsA("Weld") and j.Name == "CarryWeld" then
-					j:Destroy()
-				end
-			end
-			primary.CFrame = head.CFrame
-				* CFrame.new(0, STACK_BASE + (index - 1) * STACK_GAP, 0)
-			local weld = Instance.new("Weld")
-			weld.Name = "CarryWeld"
-			weld.Part0 = head
-			weld.Part1 = primary
-			weld.C0 = CFrame.new(0, STACK_BASE + (index - 1) * STACK_GAP, 0)
-			weld.Parent = primary
-		end
-	end
+	primary.CFrame = head.CFrame * CFrame.new(0, CARRY_HEIGHT, 0)
+	local weld = Instance.new("Weld")
+	weld.Name = "CarryWeld"
+	weld.Part0 = head
+	weld.Part1 = primary
+	weld.C0 = CFrame.new(0, CARRY_HEIGHT, 0)
+	weld.Parent = primary
 end
 
 --==============================================================================
--- PICKING UP
+-- PROMPTS
+--
+-- Style = Custom, so the look is drawn by PromptUI.client.luau rather than by
+-- Roblox's default chrome. ActionText is still set because the client reads it
+-- for the label, and ObjectText is deliberately EMPTY: the prompt shows "Take"
+-- and a key, nothing else.
 --==============================================================================
 local function attachPrompt(pod: Model)
 	if prompted[pod] or not pod:IsA("Model") then
@@ -164,14 +157,14 @@ local function attachPrompt(pod: Model)
 	end
 	prompted[pod] = true
 
-	local species = SeedData.Get(pod:GetAttribute("SpeciesId") or "")
 	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "TakePrompt"
+	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.ActionText = "Take"
-	prompt.ObjectText = if species
-		then string.format("%s  %d kg", species.Rarity, species.Kg)
-		else "Pod"
-	prompt.HoldDuration = 0.25
-	prompt.MaxActivationDistance = 12
+	prompt.ObjectText = ""
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 11
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = primary
 
@@ -184,19 +177,20 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	if player.Parent ~= Players or not pod.Parent then
 		return false
 	end
-	local held = carried[player]
-	if held and #held >= MAX_PODS then
+	-- THE SERVER IS THE AUTHORITY. The client hides the prompt while you are
+	-- carrying, and this refuses anyway: hiding a prompt is a courtesy, not a
+	-- rule, and a rule enforced only on the client is not a rule.
+	if carried[player] then
 		return false
 	end
 
 	local species: SeedData.Species?
 	if pod:GetAttribute("NestId") then
 		-- Nest-owned: NestService decides, because taking one is what wakes the
-		-- parent, and it is also the only thing that can lose the race between
-		-- two players reaching for the same pod.
+		-- parent, and it is the only thing that can lose the race between two
+		-- players reaching for the same pod.
 		species = NestService.TakePod(pod, player)
 	else
-		-- Loose on the ground: whoever gets there.
 		species = SeedData.Get(pod:GetAttribute("SpeciesId") or "")
 		if species then
 			pod:Destroy()
@@ -213,14 +207,11 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	end
 
 	local model = CreatureModel.BuildPod(species, CFrame.new(head.Position), character)
-	anchorless(model)
+	attachToHead(model, head)
 	CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
 
-	held = carried[player] or {}
-	table.insert(held, { species = species, model = model })
-	carried[player] = held
-
-	restack(player)
+	carried[player] = { species = species, model = model }
+	publish(player)
 	CarryService.RefreshWalkSpeed(player)
 	return true
 end
@@ -228,9 +219,9 @@ end
 --==============================================================================
 -- DROPPING
 --
--- Dropped pods become loose pods anybody can take. That is the whole PvP hook
--- waiting to be switched on: the moment a carrier can be made to drop, a heavy
--- stack stops being a prize and becomes a target.
+-- A dropped pod becomes a loose pod anybody can take. That is the PvP hook
+-- waiting to be switched on: the moment a carrier can be made to drop, what
+-- they are carrying stops being a prize and becomes a target.
 --==============================================================================
 local function spawnLoose(species: SeedData.Species, at: CFrame, parent: Instance)
 	local pod = CreatureModel.BuildPod(species, at, parent)
@@ -247,88 +238,109 @@ local function spawnLoose(species: SeedData.Species, at: CFrame, parent: Instanc
 	end)
 end
 
-function CarryService.DropAll(player: Player, at: Vector3?)
+function CarryService.Drop(player: Player, at: Vector3?): boolean
 	local held = carried[player]
-	carried[player] = nil
 	if not held then
-		return
+		return false
 	end
-	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
+	carried[player] = nil
+
 	local where = at
 	if not where then
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		where = if root and root:IsA("BasePart") then root.Position else nil
 	end
-
-	for index, entry in ipairs(held) do
-		if entry.model.Parent then
-			entry.model:Destroy()
-		end
-		if where and map then
-			-- Scattered, not stacked: a pile of pods on one stud is one pod as
-			-- far as anybody running past can tell.
-			local a = (index / #held) * math.pi * 2
-			spawnLoose(entry.species,
-				CFrame.new(where + Vector3.new(math.sin(a) * 4, 0, math.cos(a) * 4)),
-				map)
-		end
+	if held.model.Parent then
+		held.model:Destroy()
 	end
+	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
+	if where and map then
+		spawnLoose(held.species, CFrame.new(where + Vector3.new(0, 1, -3)), map)
+	end
+
+	publish(player)
 	CarryService.RefreshWalkSpeed(player)
+	return true
 end
 
 --==============================================================================
 -- READ API, for PlantService
 --==============================================================================
-function CarryService.GetCarried(player: Player): { Held }
-	return carried[player] or {}
+function CarryService.GetCarried(player: Player): Held?
+	return carried[player]
 end
 
--- Removes one pod from the stack and hands back its species. Planting is the
--- only thing that should consume a carried pod without dropping it.
-function CarryService.Consume(player: Player, index: number): SeedData.Species?
+-- Consumes the pod without dropping it. Planting is the only thing that should
+-- take a carried pod off a player and leave nothing on the ground.
+function CarryService.Consume(player: Player): SeedData.Species?
 	local held = carried[player]
-	if not held or not held[index] then
+	if not held then
 		return nil
 	end
-	local entry = table.remove(held, index)
-	if not entry then
-		return nil
+	carried[player] = nil
+	if held.model.Parent then
+		held.model:Destroy()
 	end
-	if entry.model.Parent then
-		entry.model:Destroy()
-	end
-	if #held == 0 then
-		carried[player] = nil
-	end
-	restack(player)
+	publish(player)
 	CarryService.RefreshWalkSpeed(player)
-	return entry.species
+	return held.species
 end
 
 --==============================================================================
 -- LIFECYCLE
 --==============================================================================
-local function onCharacterAdded(player: Player, _character: Model)
-	-- A new body carries nothing. The pods were dropped where the old one died.
+local function forget(player: Player)
+	local conns = perPlayer[player]
+	if conns then
+		for _, c in ipairs(conns) do
+			c:Disconnect()
+		end
+		perPlayer[player] = nil
+	end
+end
+
+local function onCharacterAdded(player: Player, character: Model)
+	-- A new body carries nothing: whatever the old one had is on the ground
+	-- where it fell.
 	carried[player] = nil
-	task.defer(function()
-		CarryService.RefreshWalkSpeed(player)
-	end)
+	publish(player)
+
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if not (humanoid and humanoid:IsA("Humanoid")) then
+		return
+	end
+	local conns = perPlayer[player] or {}
+	perPlayer[player] = conns
+
+	CarryService.RefreshWalkSpeed(player)
+
+	-- RAGDOLLED MEANS DROPPED, and watching the PROPERTY rather than the event
+	-- that caused it means every future knockdown gets this for free -- nothing
+	-- has to remember to call Drop.
+	table.insert(conns, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+		if humanoid.PlatformStand then
+			local root = character:FindFirstChild("HumanoidRootPart")
+			CarryService.Drop(player,
+				if root and root:IsA("BasePart") then root.Position else nil)
+		end
+	end))
+
+	table.insert(conns, humanoid.Died:Connect(function()
+		local root = character:FindFirstChild("HumanoidRootPart")
+		CarryService.Drop(player,
+			if root and root:IsA("BasePart") then root.Position else nil)
+	end))
 end
 
 local function watch(player: Player)
 	table.insert(serviceConnections, player.CharacterAdded:Connect(function(character)
+		forget(player)
 		onCharacterAdded(player, character)
-		local humanoid = character:WaitForChild("Humanoid", 5)
-		if humanoid and humanoid:IsA("Humanoid") then
-			table.insert(serviceConnections, humanoid.Died:Connect(function()
-				local root = character:FindFirstChild("HumanoidRootPart")
-				CarryService.DropAll(player,
-					if root and root:IsA("BasePart") then root.Position else nil)
-			end))
-		end
 	end))
+	if player.Character then
+		onCharacterAdded(player, player.Character)
+	end
 end
 
 function CarryService.Init()
@@ -336,6 +348,9 @@ function CarryService.Init()
 		c:Disconnect()
 	end
 	table.clear(serviceConnections)
+	for player in pairs(perPlayer) do
+		forget(player)
+	end
 	table.clear(carried)
 	table.clear(prompted)
 end
@@ -359,28 +374,22 @@ function CarryService.Start()
 
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(watch))
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player)
+		forget(player)
 		carried[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do
 		watch(player)
 	end
 
-	local C = GameConfig.Carry
-	log(string.format("Ready. Up to %d pods, %d kg costs %.0f%% of your speed.",
-		MAX_PODS, C.MaxKg, (1 - C.MinMultiplier) * 100))
+	log("Ready. One pod at a time; being ragdolled drops it.")
 end
 
 function CarryService.Snapshot(): string
 	local rows = {}
 	for player, held in pairs(carried) do
-		local names = {}
-		for _, e in ipairs(held) do
-			table.insert(names, e.species.Name)
-		end
-		table.insert(rows, string.format("%s: %d pod(s) %.0f kg -> %.1f%% speed [%s]",
-			player.Name, #held, CarryService.TotalKg(player),
-			GameConfig.carryMultiplierFor(CarryService.TotalKg(player)) * 100,
-			table.concat(names, ", ")))
+		table.insert(rows, string.format("%s: %s %d kg -> %.1f%% speed",
+			player.Name, held.species.Name, held.species.Kg,
+			GameConfig.carryMultiplierFor(held.species.Kg) * 100))
 	end
 	return if #rows > 0 then table.concat(rows, " | ") else "nobody carrying"
 end

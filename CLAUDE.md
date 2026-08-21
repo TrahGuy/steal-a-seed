@@ -66,6 +66,10 @@ src/
     CreatureModel.luau          pods and creatures (NOT a *Service)
     ParentModel.luau            the nest guardian (NOT a *Service)
     NestService.luau            nests, and the parent that sleeps beside them
+    CarryService.luau           one pod at a time, and what it costs to carry
+src/StarterPlayer/StarterPlayerScripts/
+    Ambience.client.luau        wings, walk cycles -- decoration only
+    PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
 ```
 
 Phase A still to come: `CarryService`, `PlantService`, `EconomyService`, `TreadmillService` and the
