@@ -47,6 +47,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(script.Parent:WaitForChild("CreatureModel"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
+local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 
 local ATTR = GameConfig.Attributes
@@ -58,12 +59,16 @@ CarryService.Priority = 45
 export type Held = {
 	species: SeedData.Species,
 	model: Model,
+	-- Which nest it came off, carried through a drop so that picking it back up
+	-- can annoy the same parent again.
+	fromNest: string?,
 }
 
 local carried: { [Player]: Held } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 local perPlayer: { [Player]: { RBXScriptConnection } } = {}
 local prompted: { [Model]: true } = {}
+local running = false
 
 -- How far above the head it floats. High enough to read across the road --
 -- everybody can see what you are carrying, which is what makes a carrier a
@@ -78,6 +83,9 @@ local TAKE_RANGE = 11
 -- Slack for latency: the client saw them in range a moment ago and the take
 -- lands a moment later. Tight enough to stop a reach across the road.
 local RANGE_SLACK = 5
+-- How often the crossing is checked. Five times a second is finer than a player
+-- can cross a line and notice.
+local SAFE_CHECK_SECONDS = 0.2
 
 local function log(message: string)
 	print("[Seed/CarryService] " .. message)
@@ -182,10 +190,39 @@ local function attachPrompt(pod: Model)
 	end)
 end
 
+--==============================================================================
+-- DROPPED PODS SIT ON THE GROUND, NOT IN THE AIR
+--
+-- Pods are anchored, and a dropped one was placed at the player's ROOT
+-- position -- which is about three studs up. It hung there. Nothing falls in
+-- this game, so anything placed has to be placed correctly: cast down and put
+-- its base on whatever it finds.
+--==============================================================================
+local function groundUnder(position: Vector3, ignore: { Instance }): Vector3
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+	local hit = workspace:Raycast(position + Vector3.new(0, 4, 0),
+		Vector3.new(0, -60, 0), params)
+	if hit then
+		return hit.Position
+	end
+	-- Nothing beneath. The field surface is the honest fallback -- better a pod
+	-- on the floor of the world than one hanging where the player happened to be.
+	return Vector3.new(position.X, GameConfig.Map.GroundY, position.Z)
+end
+
 -- A dropped pod becomes a loose pod anybody can take. Declared before TryTake
 -- because taking one that then cannot be attached has to put it back.
-local function spawnLoose(species: SeedData.Species, at: CFrame, parent: Instance)
+local function spawnLoose(species: SeedData.Species, at: CFrame, parent: Instance,
+	fromNest: string?)
 	local pod = CreatureModel.BuildPod(species, at, parent)
+	if fromNest then
+		-- Not "NestId": that would make TryTake route it back through TakePod,
+		-- which would look for a slot this pod no longer occupies. It only says
+		-- WHICH PARENT TO ANNOY.
+		pod:SetAttribute("FromNestId", fromNest)
+	end
 	for _, d in ipairs(pod:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.CanQuery = true
@@ -244,6 +281,14 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	end
 
 	--== EVERYTHING BELOW THIS LINE CHANGES THE WORLD ==--
+	-- Read before the take: TakePod destroys the pod, and its attributes with it.
+	local nestId = pod:GetAttribute("NestId")
+	local fromNest: string? = if type(nestId) == "string"
+		then nestId
+		else (if type(pod:GetAttribute("FromNestId")) == "string"
+			then pod:GetAttribute("FromNestId") :: string
+			else nil)
+
 	local species: SeedData.Species?
 	if pod:GetAttribute("NestId") then
 		-- Nest-owned: NestService decides, because taking one is what wakes the
@@ -255,6 +300,15 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		species = SeedData.Get(pod:GetAttribute("SpeciesId") or "")
 		if species then
 			pod:Destroy()
+			-- Picking a dropped pod back up wakes the parent it came from. Being
+			-- caught once must not make the rest of the raid free.
+			--
+			-- Uses the value read BEFORE the destroy: reading an attribute off a
+			-- destroyed instance happens to work today and is not something to
+			-- build on.
+			if fromNest then
+				NestService.Provoke(fromNest, player)
+			end
 		end
 	end
 	if not species then
@@ -266,7 +320,11 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		local model = CreatureModel.BuildPod(taken, CFrame.new(head.Position), character)
 		attachToHead(model, head)
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
-		carried[player] = { species = taken, model = model }
+		carried[player] = {
+			species = taken,
+			model = model,
+			fromNest = fromNest,
+		}
 	end)
 
 	if not ok or not carried[player] then
@@ -312,11 +370,88 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 	end
 	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 	if where and map then
-		spawnLoose(held.species, CFrame.new(where + Vector3.new(0, 1, -3)), map)
+		local character = player.Character
+		-- Only the character. Excluding the map would exclude the ground, which
+		-- is the one thing the cast is looking for.
+		local ground = groundUnder(where, if character then { character } else {})
+		spawnLoose(held.species, CFrame.new(ground + Vector3.new(0, 0.05, 0)), map,
+			held.fromNest)
 	end
 
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
+	return true
+end
+
+--==============================================================================
+-- CROSSING THE RED LINE BANKS IT
+--
+-- Reaching the safe zone is the moment a raid PAYS, and until now nothing
+-- marked it -- you simply stopped being chased. Stepping over the line converts
+-- the pod on your head into a Tool in your hotbar: it stops being a thing that
+-- can be knocked out of your hands and becomes a thing you own.
+--
+-- That is also what finally makes the walk home mean something. Everything
+-- between the nest and the line is at risk; everything past it is banked.
+--
+-- The test is MapService.IsInSafeZone, the same one the whole game uses, so the
+-- line painted on the grass and the line the code checks are the same line.
+--==============================================================================
+local function bank(player: Player): boolean
+	local held = carried[player]
+	local character = player.Character
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not (held and character and backpack) then
+		return false
+	end
+
+	local species = held.species
+	-- Built fresh as the Tool's handle rather than reusing the carried model:
+	-- that one is welded to a head and unanchored, and a Tool wants a part named
+	-- Handle that it owns outright.
+	local pod = CreatureModel.BuildPod(species, CFrame.new(), backpack)
+	local handle = pod.PrimaryPart
+	if not handle then
+		pod:Destroy()
+		return false
+	end
+
+	local tool = Instance.new("Tool")
+	tool.Name = species.Name
+	tool.ToolTip = string.format("%s  -  %d kg", species.Rarity, species.Kg)
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool:SetAttribute("SpeciesId", species.Id)
+	tool:SetAttribute(ATTR.CarryingKg, species.Kg)
+
+	handle.Name = "Handle"
+	for _, d in ipairs(pod:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = false
+			d.CanCollide = false
+			d.Massless = true
+			d.CanQuery = false
+			if d ~= handle then
+				local w = Instance.new("WeldConstraint")
+				w.Part0 = handle
+				w.Part1 = d
+				w.Parent = handle
+				d.Parent = tool
+			end
+		end
+	end
+	handle.Parent = tool
+	pod:Destroy()
+	tool.Parent = backpack
+
+	-- Consumed, not dropped: it is in the hotbar now, not on the floor.
+	if held.model.Parent then
+		held.model:Destroy()
+	end
+	carried[player] = nil
+	publish(player)
+	CarryService.RefreshWalkSpeed(player)
+	log(string.format("%s banked a %s (%d kg).", player.Name, species.Name, species.Kg))
 	return true
 end
 
@@ -400,6 +535,7 @@ local function watch(player: Player)
 end
 
 function CarryService.Init()
+	running = false
 	for _, c in ipairs(serviceConnections) do
 		c:Disconnect()
 	end
@@ -437,7 +573,30 @@ function CarryService.Start()
 		watch(player)
 	end
 
-	log("Ready. One pod at a time; being ragdolled drops it.")
+	--== THE LINE ==--
+	-- A poll rather than a Touched event on the stripe: the stripe is a thin
+	-- non-collidable decal that a player at WalkSpeed 150 can cross between two
+	-- frames without ever touching, and the safe zone is a REGION rather than a
+	-- part.
+	running = true
+	task.spawn(function()
+		while running do
+			task.wait(SAFE_CHECK_SECONDS)
+			for player in pairs(carried) do
+				local character = player.Character
+				local root = character and character:FindFirstChild("HumanoidRootPart")
+				if root and root:IsA("BasePart")
+					and MapService.IsInSafeZone(root.Position) then
+					local ok, err = pcall(bank, player)
+					if not ok then
+						warn("[Seed/CarryService] banking failed: " .. tostring(err))
+					end
+				end
+			end
+		end
+	end)
+
+	log("Ready. One pod at a time, dropped when ragdolled, banked at the red line.")
 end
 
 function CarryService.Snapshot(): string

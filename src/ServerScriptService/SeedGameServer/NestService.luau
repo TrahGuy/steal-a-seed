@@ -178,6 +178,32 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 end
 
 --==============================================================================
+-- BEING PROVOKED
+--
+-- One definition of "somebody stole from me", used by taking a pod off the nest
+-- AND by picking one up again after it has been dropped. A pod that has been
+-- knocked out of a thief's hands is still this nest's pod, and walking back to
+-- collect it has to wake the parent again -- otherwise being caught once makes
+-- the rest of the raid free.
+--==============================================================================
+local function provoke(nest: Nest, thief: Player)
+	-- WAKE, ON A DELAY. The delay is the head start, and it is the whole skill
+	-- of a raid.
+	if nest.state == "asleep" then
+		nest.state = "waking"
+		nest.stateUntil = os.clock() + P.WakeDelaySeconds
+	elseif nest.state == "returning" then
+		-- Already up and walking home. No second delay -- it never went back to
+		-- sleep, so it has nothing to wake up from.
+		nest.state = "chasing"
+	end
+	-- Always re-target: stealing from a parent already chasing somebody else
+	-- should make it chase YOU, or two players could take turns feeding it a
+	-- decoy.
+	nest.target = thief
+end
+
+--==============================================================================
 -- TAKING A POD
 --
 -- The seam CarryService calls. Returns the species so the caller knows what it
@@ -202,17 +228,7 @@ function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 			nest.pods[slot] = nil
 			nest.regrowAt[slot] = os.clock() + REGROW_SECONDS
 			pod:Destroy()
-
-			-- WAKE, ON A DELAY. The delay is the head start, and it is the
-			-- whole skill of a raid.
-			if nest.state == "asleep" then
-				nest.state = "waking"
-				nest.stateUntil = os.clock() + P.WakeDelaySeconds
-			end
-			-- Always re-target: stealing from a parent already chasing somebody
-			-- else should make it chase YOU, or two players could take turns
-			-- feeding it a decoy.
-			nest.target = thief
+			provoke(nest, thief)
 			return SeedData.Get(speciesId)
 		end
 	end
@@ -534,6 +550,23 @@ function NestService.Start()
 end
 
 -- For the console, and for CarryService to find what is near a player.
+--==============================================================================
+-- PROVOKING WITHOUT TAKING
+--
+-- For a pod that is already out of the nest: dropped on the ground and picked
+-- up again. There is no slot to clear and nothing to destroy, only a parent to
+-- annoy.
+--==============================================================================
+function NestService.Provoke(nestId: string, thief: Player): boolean
+	for _, nest in ipairs(nests) do
+		if nest.id == nestId then
+			provoke(nest, thief)
+			return true
+		end
+	end
+	return false
+end
+
 function NestService.Snapshot(): string
 	local rows = {}
 	for _, nest in ipairs(nests) do

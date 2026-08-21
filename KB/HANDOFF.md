@@ -461,6 +461,37 @@ because `TakePod` checks `pods[slot] ~= pod`.
 every reader — server and client — takes them from there. Two names for one fact
 is a bug waiting for whoever trusts the wrong one.
 
+## THE RAID LOOP, END TO END
+
+    take (hold E)  ->  carry, slowed by kg  ->  caught: ragdoll drops it
+                                            ->  reach the red line: banked to the hotbar
+
+**A dropped pod sits on the ground.** Pods are anchored and nothing in this game
+falls, so anything placed has to be placed correctly. Dropping used the player's
+ROOT position — about three studs up — and the pod hung there. It casts down now
+and puts its base on whatever it finds, with the field surface as the fallback.
+Measured: 0.05 studs of gap, against roughly 3 before.
+
+**Picking a dropped pod back up wakes the same parent again.** A pod knocked out
+of a thief's hands is still that nest's pod, and strolling back to collect it
+must not be free — otherwise being caught once makes the rest of the raid safe.
+The loose pod carries `FromNestId` (deliberately NOT `NestId`, which would route
+it back through `TakePod` looking for a slot it no longer occupies), and
+`NestService.Provoke` re-targets without clearing a slot or destroying anything.
+One `provoke()` defines what "somebody stole from me" means, so taking and
+re-taking cannot drift apart.
+
+**Crossing the red line banks it.** The pod on your head becomes a Tool in your
+hotbar: it stops being a thing that can be knocked out of your hands and becomes
+a thing you own. That is what finally makes the walk home mean something —
+everything between the nest and the line is at risk, everything past it is
+banked. Verified: at z −140, `IsInSafeZone` true, head empty, hotbar holds
+`Nubkin [nubkin, 2 kg, handle=true]`, WalkSpeed back to 16.
+
+It is a POLL, not a `Touched` on the stripe. The stripe is a thin
+non-collidable decal a player at WalkSpeed 150 can cross between two frames
+without ever touching, and the safe zone is a region rather than a part.
+
 ## Things worth not rediscovering
 
   * **Moving the Edit viewport takes `Camera.Focus`, not `Camera.CFrame`.** Writing `CFrame` alone
