@@ -280,6 +280,10 @@ GameConfig.Tags = {
 	Creature = "Creature",
 	-- Built and tagged by the server, MOVED by each client. See HubFairy.
 	Fairy = "Fairy",
+	-- The nest guardian. Unlike everything else that moves for decoration, this
+	-- one is server-simulated: it chases, and a chase every player sees in a
+	-- different place is not a chase.
+	NestParent = "NestParent",
 }
 
 GameConfig.Remotes = {
@@ -398,6 +402,33 @@ GameConfig.Speed = {
 -- be run away from.
 --==============================================================================
 GameConfig.Parent = {
+	--==========================================================================
+	-- IT SLEEPS, AND THE DELAY IS THE GAME
+	--
+	-- The parent is asleep beside its pods until one is taken. It then wakes on
+	-- a SHORT DELAY -- not instantly -- and that delay is the entire skill of a
+	-- raid. It is your head start, it is what makes grabbing the near pod
+	-- different from grabbing the far one, and it is why a player creeps in and
+	-- then sprints out rather than just running in a straight line.
+	--
+	-- Instant aggro would delete all of that and make the mechanic a tax.
+	--==========================================================================
+	WakeDelaySeconds = 1.2,
+
+	--==========================================================================
+	-- ITS SPEED IS THE GATE, AND THE TREADMILL IS THE ANSWER
+	--
+	-- This is what the treadmill was always for. The player trains on it to earn
+	-- Speed per second; Speed feeds the WalkSpeed curve; WalkSpeed is measured
+	-- against THIS number. So "can I loot Emberroot yet" is not a menu check, it
+	-- is a footrace you either win or feel yourself losing.
+	--
+	-- Biome 1 sits just above a fresh player's 16 -- you WILL be caught on your
+	-- first raid, and that is the lesson. Each biome further out is faster.
+	--==========================================================================
+	BaseWalkSpeed = 19,
+	WalkSpeedPerBiome = 11,
+
 	-- How far a biome-1 parent throws you, in studs.
 	BaseThrowStuds = 60,
 	-- Added per biome further down the road. Starbloom throws 240.
@@ -413,9 +444,49 @@ GameConfig.Parent = {
 	GrabStuds = 7,
 	-- Seconds it holds you before the throw. Long enough to read what happened.
 	GrabHoldSeconds = 0.8,
-	-- It must be catchable-but-not-hopeless: faster than a fresh player, slower
-	-- than one who has bought any Speed at all. That is the tuition curve.
-	WalkSpeed = 19,
+}
+
+function GameConfig.parentWalkSpeedFor(biomeOrder: number): number
+	local P = GameConfig.Parent
+	local order = math.max(1, math.floor(tonumber(biomeOrder) or 1))
+	return P.BaseWalkSpeed + P.WalkSpeedPerBiome * (order - 1)
+end
+
+--==============================================================================
+-- THE TREADMILL
+--
+-- Speed per second while you stand on it. The only faucet for Speed, the same
+-- way EconomyService is the only faucet for cash -- one source is what keeps a
+-- number auditable when a dozen systems want to grant it.
+--==============================================================================
+GameConfig.Treadmill = {
+	--==========================================================================
+	-- THIS IS A BASE RATE AND IT IS MEANT TO LOOK SLOW
+	--
+	-- The whole speed ladder measured against the parents:
+	--
+	--     out-run biome 1 (19)     453 Speed    ~4 min
+	--     out-run biome 2 (30)   2,208 Speed   ~18 min
+	--     out-run biome 3 (41)   4,133 Speed   ~34 min
+	--     out-run biome 4 (52)   6,260 Speed   ~52 min
+	--     out-run biome 5 (63)   8,636 Speed   ~72 min
+	--
+	-- At the 12/sec this started as, that entire ladder was TWELVE MINUTES, and
+	-- a progression game whose progression is over before the first session is
+	-- not a progression game. Dropped to 2 and left there.
+	--
+	-- The number is low because it is a BASE. Upgrades and Rebirth multiply it,
+	-- which is where the actual pacing will come from -- and it is much easier
+	-- to add multipliers on top of a slow floor than to claw back a fast one
+	-- from players who already have the speed.
+	--
+	-- Also worth knowing: speed is not a hard gate on biome 1. The parent's
+	-- wake delay means a quick raid on a near pod succeeds at WalkSpeed 16. You
+	-- buy speed to stop being nervous, not to be allowed in.
+	--==========================================================================
+	SpeedPerSecond = 2,
+	-- Only pays while you are actually standing on it, alive.
+	TickSeconds = 1,
 }
 
 function GameConfig.parentThrowStudsFor(biomeOrder: number): number
