@@ -57,7 +57,8 @@ scenery.
 
 ## Status
 
-It boots and runs. A single-player Play session assigns a plot, places the character on it, and returns them there on respawn. Nothing has been tested with two or more players yet.
+It boots and runs. A single-player Play session assigns a plot, places the character on it, and
+returns them there on respawn. Nothing has been tested with two or more players yet.
 
 | Phase | State |
 | --- | --- |
