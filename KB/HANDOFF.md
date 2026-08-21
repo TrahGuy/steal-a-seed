@@ -371,15 +371,45 @@ only shows up in geometry.
 
 ## Verified, and NOT verified
 
-Verified in Edit, by building the map for real and measuring it: part counts, zero unanchored, road
-continuity, pod placement, decoration invariants, plot-to-road distance (106 studs), and the speed
-curve against the reference game's real scale — **3.2 billion Speed maps to WalkSpeed 150.0**.
+**It runs.** First real Play boot on 2026-08-21, and `start_stop_play` over MCP did **not** wedge
+Studio this time — the three failures on 2026-08-20 have not recurred since Studio was restarted.
 
-**Nothing has run in a Play session.** `ServerMain` has never executed. `start_stop_play` over MCP
-wedged Studio three times on 2026-08-20 and has not been retried since; restart Studio before trying
-again, because the wedged state does not clear on its own.
+Measured in a live Play session, single player:
 
----
+```
+[Seed/MapService] Built SeedMap: 6 plots, 5 biomes, 1204 parts. Road is 1500 studs end to end.
+[Seed/PlotService] Ready. 6 plot(s): 1, 2, 3, 4, 5, 6.
+[Seed/FairyService] Ready. 1 fairy(s) walking, 13 x 4 studs of wander.
+[Seed] Steal a Seed v0.1.0 (Phase 1) online -- 3 service(s): MapService, PlotService, FairyService
+```
+
+  * Plot assigned on join, `Claimed`/`OwnerUserId`/`OwnerName` all stamped, `RespawnLocation` set.
+  * **`PivotTo` puts the character on its own pad to 0.00 studs.** Standing in the gate between the
+    posts, on the grass margin in front of the soil rather than in it, facing the hub.
+  * **Respawn returns you to your own plot.** Killed 549 studs out in Dustbowl; respawned 3.8s later
+    at 0.00 studs from the pad, lease intact.
+  * Marigold walks — server-simulated Humanoid, standing on the riser, wandering and pausing.
+  * No client errors. `Ambience` runs clean.
+  * No `FireClient` warning, unlike in Edit: on a real server `IsServer()` is true.
+
+Verified in Edit by building the map and measuring it: part counts, road continuity, pod placement,
+decoration invariants, plot fit, treadmill clearance (52.3 studs), no solid obstacle in the racing
+line, and the speed curve against the reference game's real scale — **3.2 billion Speed maps to
+WalkSpeed 150.0**.
+
+### NOT verified
+
+  * **Anything with two or more players.** Queue promotion when a plot frees is the specific gap:
+    it needs somebody to leave while somebody else waits. Studio's "Start Server + 2 Players" is the
+    way to test it, and it has not been run.
+  * The whole Phase A loop past owning ground — no seeds, carrying, planting or economy exist yet.
+
+### Testing gotcha that will bite again
+
+**`execute_luau` has its OWN require cache.** A module required through MCP is a fresh, empty copy —
+NOT the one the running server is using. `PlotService.PlotOf(player)` came back nil in a Play session
+where the player demonstrably owned Plot_01. **Read Instance attributes instead**, which are shared;
+module state is not.
 
 ## Still open
 

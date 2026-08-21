@@ -57,11 +57,11 @@ scenery.
 
 ## Status
 
-Nothing has run in a live multiplayer session yet.
+It boots and runs. A single-player Play session assigns a plot, places the character on it, and returns them there on respawn. Nothing has been tested with two or more players yet.
 
 | Phase | State |
 | --- | --- |
-| **A — the loop** | **in progress** — map and plot ownership built; seeds, carrying, planting, economy and HUD not started |
+| **A — the loop** | **in progress** — map and plot ownership built and running; seeds, carrying, planting, economy and HUD not started |
 | B — the theft | not started |
 | C — the progression | not started |
 | D — the numbers | not started |
