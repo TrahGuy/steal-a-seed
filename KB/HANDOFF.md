@@ -23,7 +23,7 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**1,123 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+**1,141 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
 zero tall props inside the racing line.
 
 ---
@@ -96,10 +96,16 @@ one — its noise texture renders *over* the studs, so a bed set to `TopSurface 
 smooth while the grass around it was visibly studded. `Plastic` is the material that actually shows
 them.
 
-**The fence encloses all four sides**, which an earlier version deliberately did not: it left the
-road-facing side open so nobody had to aim at a gate at speed. That reasoning was wrong about its
-own code — the fence is non-collidable, you run straight through it, so closing the fourth side
-costs nothing and reads far better as "this ground is claimed".
+**The fence encloses all four sides, with a gap at the front for the gate.** Two taller capped
+gateposts flank it. The fence is non-collidable throughout, so the gap is not what lets you in — you
+could always walk through the rails — it is what *shows* you the way in. A sealed rectangle read as
+a pen rather than as a garden. The opening faces the road, so you arrive at your gate rather than at
+the back of a fence, and the invisible spawn sits three studs inside it.
+
+**There is no owner sign, and there will not be one.** An UNCLAIMED board existed so a new player
+could find a free plot — and nobody ever does that: `PlotService` assigns a vacant plot the moment
+you spawn. Every sign in the row would just read as somebody's name. If in-world ownership is ever
+wanted, it goes over the gate, seen on the way in, rather than on a board facing an empty field.
 
 ## PLOTS EXPAND BACKWARD, AND THE ROOM IS ALREADY RESERVED
 

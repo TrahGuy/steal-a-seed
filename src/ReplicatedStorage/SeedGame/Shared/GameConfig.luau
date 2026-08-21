@@ -136,14 +136,23 @@ GameConfig.Plot = {
 	Pitch = 58,
 
 	FloorName = "Ground",
-	SignName = "OwnerSign",
-	SignLabelName = "OwnerLabel",
 	PlanterName = "Planter",
 	TreadmillName = "Treadmill",
 	SpawnPadName = "SpawnPad",
 	RuntimeFolderName = "Runtime",
 	PlantsFolderName = "Plants",
-	UnclaimedText = "UNCLAIMED",
+
+	-- THE GAP IN THE FRONT FENCE.
+	--
+	-- The fence encloses all four sides, and without this there was no way IN --
+	-- not physically, since the fence is non-collidable and you walk through it,
+	-- but visually, which is the part that matters. A fully sealed rectangle
+	-- reads as a pen. A gap with two taller posts either side reads as a garden
+	-- gate, and it tells a player where their plot begins without a word.
+	--
+	-- It faces the road, so the opening is on the side every run comes home
+	-- through -- you arrive at your gate rather than at the back of a fence.
+	GateWidth = 13,
 
 	SpawnHeightOffset = 4,
 

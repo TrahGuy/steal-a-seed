@@ -172,25 +172,29 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	model.PrimaryPart = floor
 
 	--== THE FENCE ==--
-	-- All four sides. Non-collidable, which is what makes that safe.
-	local runs = {
-		{ sideways = false, outZ = -halfD },
-		{ sideways = false, outZ = halfD },
-		{ sideways = true, outX = -halfW },
-		{ sideways = true, outX = halfW },
-	}
-	for _, run in ipairs(runs) do
-		local sideways = run.sideways
-		local runLength = sideways and depth or width
-		local ox = run.outX or 0
-		local oz = run.outZ or 0
+	--
+	-- Four sides with a GAP AT THE FRONT for the gate. Non-collidable
+	-- throughout, so the gap is not what lets you in -- you could always walk
+	-- through the rails. It is what SHOWS you the way in, and a sealed
+	-- rectangle read as a pen rather than as a garden.
+	--
+	-- Built as segments between two coordinates rather than as four whole
+	-- sides, because the front is now two pieces and a special case for it
+	-- would be a second copy of the same rail-and-post code.
+	local function fenceRun(alongX: boolean, fixed: number, from: number, to: number)
+		local length = math.abs(to - from)
+		if length < 0.5 then
+			return
+		end
+		local mid = (from + to) * 0.5
 
 		for _, h in ipairs({ 3.2, 5.4 }) do
 			build({
 				name = "Rail",
-				size = sideways and Vector3.new(0.6, 0.6, depth)
-					or Vector3.new(width, 0.6, 0.6),
-				cframe = cf * CFrame.new(ox, h, oz),
+				size = alongX and Vector3.new(length, 0.6, 0.6)
+					or Vector3.new(0.6, 0.6, length),
+				cframe = cf * (alongX and CFrame.new(mid, h, fixed)
+					or CFrame.new(fixed, h, mid)),
 				color = FENCE,
 				material = Enum.Material.Wood,
 				collide = false,
@@ -199,18 +203,16 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 			})
 		end
 
-		-- Posts every ~11 studs, which is roughly one per bed row and is what
-		-- gives the reference sketch its rhythm. A fixed count would leave a
-		-- 130-stud strip with three posts holding it up.
-		local postCount = math.max(3, math.floor(runLength / 11) + 1)
+		-- Roughly one post per bed row, which is what gives the sketch its
+		-- rhythm. Minimum two so a short segment still has an end at each end.
+		local postCount = math.max(2, math.floor(length / 11) + 1)
 		for i = 1, postCount do
-			local t = (i - 1) / (postCount - 1) - 0.5
-			local along = sideways and Vector3.new(0, 0, t * runLength)
-				or Vector3.new(t * runLength, 0, 0)
+			local p = from + (to - from) * ((i - 1) / (postCount - 1))
 			build({
 				name = "Post",
 				size = Vector3.new(1.1, 7, 1.1),
-				cframe = cf * CFrame.new(ox + along.X, 3.5, oz + along.Z),
+				cframe = cf * (alongX and CFrame.new(p, 3.5, fixed)
+					or CFrame.new(fixed, 3.5, p)),
 				color = FENCE,
 				material = Enum.Material.Wood,
 				collide = false,
@@ -218,6 +220,40 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 				parent = model,
 			})
 		end
+	end
+
+	local gateHalf = PLOT.GateWidth * 0.5
+	fenceRun(true, halfD, -halfW, halfW)      -- back
+	fenceRun(false, -halfW, -halfD, halfD)    -- left
+	fenceRun(false, halfW, -halfD, halfD)     -- right
+	fenceRun(true, -halfD, -halfW, -gateHalf) -- front, left of the gate
+	fenceRun(true, -halfD, gateHalf, halfW)   -- front, right of the gate
+
+	--== THE GATEPOSTS ==--
+	-- Taller than the fence and capped. Two posts standing proud of the line
+	-- is the whole signal -- it reads as an entrance from across the field,
+	-- with no arch to build and nothing to walk into.
+	for _, side in ipairs({ -1, 1 }) do
+		build({
+			name = "GatePost",
+			size = Vector3.new(1.6, 10, 1.6),
+			cframe = cf * CFrame.new(side * gateHalf, 5, -halfD),
+			color = FENCE,
+			material = Enum.Material.Wood,
+			collide = false,
+			studs = false,
+			parent = model,
+		})
+		build({
+			name = "GateCap",
+			size = Vector3.new(2.6, 0.8, 2.6),
+			cframe = cf * CFrame.new(side * gateHalf, 10.3, -halfD),
+			color = WOOD,
+			material = Enum.Material.Wood,
+			collide = false,
+			studs = false,
+			parent = model,
+		})
 	end
 
 	--== THE BEDS ==--
@@ -288,52 +324,20 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		end
 	end
 
-	--== OWNER SIGN ==--
-	build({
-		name = "SignPost",
-		size = Vector3.new(1.2, 7, 1.2),
-		cframe = cf * CFrame.new(-halfW + 6, 3.5, -halfD - 1.5),
-		color = WOOD_DARK,
-		material = Enum.Material.Wood,
-		collide = false,
-		studs = false,
-		parent = model,
-	})
-	local board = build({
-		name = PLOT.SignName,
-		size = Vector3.new(15, 4.5, 0.6),
-		cframe = cf * CFrame.new(-halfW + 6, 8.4, -halfD - 1.5),
-		color = WOOD,
-		material = Enum.Material.Wood,
-		collide = false,
-		studs = false,
-		parent = model,
-	})
-	local gui = Instance.new("SurfaceGui")
-	gui.Name = "SignFace"
-	gui.Face = Enum.NormalId.Front
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 40
-	gui.LightInfluence = 0
-	gui.Parent = board
-	local label = Instance.new("TextLabel")
-	label.Name = PLOT.SignLabelName
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.FredokaOne
-	label.Text = PLOT.UnclaimedText
-	label.TextScaled = true
-	label.TextColor3 = Color3.fromRGB(255, 247, 230)
-	label.Parent = gui
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 3
-	stroke.Color = Color3.fromRGB(48, 32, 20)
-	stroke.Parent = label
+	--== NO OWNER SIGN ==--
+	-- There was an UNCLAIMED board here and it has been removed. It existed so a
+	-- new player could find a free plot, and that is not a thing anybody does:
+	-- PlotService assigns a vacant plot the moment you spawn, so nobody ever
+	-- shops for one and every sign in the row would read as somebody's name.
+	--
+	-- If in-world ownership is ever wanted, the gate is where it goes -- a
+	-- nameplate over the entrance, seen on the way in, rather than a board
+	-- facing an empty field.
 
 	--== SPAWN ==--
 	-- Invisible. It exists so Player.RespawnLocation has something to point at.
-	-- On the grass aisle between the beds, so a respawn never drops somebody
-	-- standing inside a bed.
+	-- Just inside the gate, on the grass aisle between the beds -- so a respawn
+	-- puts you where you walk in and never drops you standing inside a bed.
 	local pad = Instance.new("SpawnLocation")
 	pad.Name = PLOT.SpawnPadName
 	pad.Size = Vector3.new(6, 1, 6)
