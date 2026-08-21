@@ -714,35 +714,75 @@ function MapService.Init()
 	})
 	overflow.CanQuery = false
 
-	--== THE SELL STALL ==--
-	-- UPPER LEFT OF THE FIELD, not the middle. In the middle it sat on the exact
-	-- line every player runs between their plot and the road, which is the one
-	-- strip of ground that has to stay clear -- a shop should be somewhere you
-	-- choose to go, not something you have to run around twice a lap.
+	--== THE HUB ==--
 	--
-	-- A real stall rather than a red box: counter, posts, striped awning. It is
-	-- the only building in the safe zone, so it is the only thing that can make
-	-- the field read as a market garden rather than a lawn.
+	-- A fenced circle in the middle of the plot ring, with the stall inside it.
+	--
+	-- The stall was in the field's upper-left corner, which was right for a ROW
+	-- of plots -- it kept a shop off the one strip everybody ran down. A ring
+	-- has a natural centre instead, equidistant from every plot, which is a
+	-- better place for a shop than any corner: nobody has to detour, because
+	-- everybody passes through.
+	--
+	-- The circle is approximated with straight segments. Sixteen is where a
+	-- Roblox fence stops looking like a polygon at the distance you see it from.
 	do
-		local sx = -(MAP.FieldWidth * 0.5) + 46
-		local sz = -MAP.FieldFront + 30
-		local stallCF = CFrame.new(sx, Y, sz) * CFrame.Angles(0, math.rad(28), 0)
+		local hub = Instance.new("Model")
+		hub.Name = "Hub"
+		hub.Parent = props
 
-		local stall = Instance.new("Model")
-		stall.Name = MAP.SellStandName
-		stall.Parent = props
+		local R = MAP.HubRadius
+		local SEGMENTS = 16
+		local gapHalf = math.rad(MAP.RoadGapDegrees * 0.5)
 
+		for i = 1, SEGMENTS do
+			local a0 = (i - 1) / SEGMENTS * math.pi * 2
+			local a1 = i / SEGMENTS * math.pi * 2
+			local mid = (a0 + a1) * 0.5
+			-- Leave the arc facing the road open, so the hub reads as having a
+			-- way out toward the biomes rather than as a pen.
+			local toRoad = math.abs(((mid - math.pi) + math.pi) % (math.pi * 2) - math.pi)
+			if toRoad > gapHalf then
+				local p0 = Vector3.new(math.sin(a0) * R, 0, math.cos(a0) * R)
+				local p1 = Vector3.new(math.sin(a1) * R, 0, math.cos(a1) * R)
+				local seg = (p1 - p0)
+				for _, h in ipairs({ 3.2, 5.4 }) do
+					local part = build({
+						name = "HubRail",
+						size = Vector3.new(0.6, 0.6, seg.Magnitude + 0.4),
+						cframe = CFrame.lookAt((p0 + p1) * 0.5 + Vector3.new(0, Y + h, 0),
+							p1 + Vector3.new(0, Y + h, 0)),
+						color = FENCE,
+						material = Enum.Material.Wood,
+						collide = false,
+						studs = false,
+						parent = hub,
+					})
+				end
+				build({
+					name = "HubPost",
+					size = Vector3.new(1.1, 7, 1.1),
+					cframe = CFrame.new(p0.X, Y + 3.5, p0.Z),
+					color = FENCE,
+					material = Enum.Material.Wood,
+					collide = false,
+					studs = false,
+					parent = hub,
+				})
+			end
+		end
+
+		--== THE STALL ==--
+		local stallCF = CFrame.new(0, Y, 14) * CFrame.Angles(0, math.pi, 0)
 		local counter = build({
-			name = "Counter",
+			name = MAP.SellStandName,
 			size = Vector3.new(20, 6, 7),
 			cframe = stallCF * CFrame.new(0, 3, 0),
 			color = WOOD,
 			material = Enum.Material.Wood,
 			studs = false,
-			parent = stall,
+			parent = hub,
 		})
-		stall.PrimaryPart = counter
-
 		build({
 			name = "CounterTop",
 			size = Vector3.new(22, 0.8, 9),
@@ -750,9 +790,8 @@ function MapService.Init()
 			color = WOOD_DARK,
 			material = Enum.Material.Wood,
 			studs = false,
-			parent = stall,
+			parent = hub,
 		})
-
 		for _, side in ipairs({ -1, 1 }) do
 			build({
 				name = "Post",
@@ -762,13 +801,9 @@ function MapService.Init()
 				material = Enum.Material.Wood,
 				collide = false,
 				studs = false,
-				parent = stall,
+				parent = hub,
 			})
 		end
-
-		-- Striped awning. Alternating slats rather than one part with a texture,
-		-- because a texture is an asset id that lives in somebody's account and
-		-- this has to survive without one.
 		for i = 0, 6 do
 			build({
 				name = "Awning",
@@ -780,10 +815,9 @@ function MapService.Init()
 				material = Enum.Material.SmoothPlastic,
 				collide = false,
 				studs = false,
-				parent = stall,
+				parent = hub,
 			})
 		end
-
 		local sign = Instance.new("SurfaceGui")
 		sign.Face = Enum.NormalId.Back
 		sign.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
@@ -811,15 +845,41 @@ function MapService.Init()
 
 	local n = GameConfig.MaxPlots
 	local tier = GameConfig.PlotTiers[GameConfig.StartingPlotTier]
-	-- Anchored by the FRONT edge, so the plot centre moves back as depth grows
-	-- and the edge the owner runs in through never does.
-	local z = PLOT.FrontZ + GameConfig.plotDepthFor(tier.rows) * 0.5
+	local depth = GameConfig.plotDepthFor(tier.rows)
+
+	-- ANGLES ARE MEASURED FROM +Z, WHICH IS AWAY FROM THE ROAD. So 180 degrees
+	-- points straight up the road, and that is precisely the arc left empty.
+	--
+	-- The plots are spread evenly across whatever is left, which means the gaps
+	-- between neighbours are equal AND nothing is ever placed in the road's
+	-- mouth -- rather than placing six evenly round the full circle and hoping
+	-- none of them lands in the way.
+	local gap = math.rad(MAP.RoadGapDegrees)
+	local usable = math.pi * 2 - gap
+	local step = usable / n
+	local start = math.pi + gap * 0.5   -- the near edge of the empty arc
+
 	for id = 1, n do
-		local x = (id - (n + 1) * 0.5) * PLOT.Pitch
-		buildPlot(id, CFrame.new(x, Y, z), tier.rows, plots)
-		-- On the grass in front of the fixed front edge, so it never has to move
-		-- when the plot behind it grows.
-		buildTreadmill(id, CFrame.new(x, Y + 0.6, PLOT.FrontZ - 16), plots)
+		local angle = start + (id - 0.5) * step
+		-- The GATE sits on the ring, at the same radius for every plot and at
+		-- every tier. The plot centre is half its depth further out, so growth
+		-- moves the back edge and never the gate.
+		local gateR = MAP.PlotRingInner
+		local centreR = gateR + depth * 0.5
+		local pos = Vector3.new(math.sin(angle) * centreR, Y, math.cos(angle) * centreR)
+		-- lookAt points local -Z at the hub, and local -Z is where buildPlot puts
+		-- the gate -- so every gate faces the middle and every plot grows
+		-- outward, with no per-plot rotation maths.
+		local cf = CFrame.lookAt(pos, Vector3.new(0, Y, 0))
+		buildPlot(id, cf, tier.rows, plots)
+
+		-- Just outside the gate, on the ring's inner walkway. Placed off the
+		-- GATE radius rather than off the plot, so it stays put when the plot
+		-- behind it grows.
+		local millR = gateR - 15
+		buildTreadmill(id, CFrame.lookAt(
+			Vector3.new(math.sin(angle) * millR, Y + 0.6, math.cos(angle) * millR),
+			Vector3.new(0, Y + 0.6, 0)), plots)
 	end
 
 	--== FIELD DRESSING ==--
@@ -839,25 +899,27 @@ function MapService.Init()
 	-- Three independent numbers decide whether the plots fit on the field, and
 	-- nothing stops a future edit to one of them pushing a plot off the edge.
 	-- Arithmetic that can catch it belongs in the build, not in a comment.
-	--== IS THE RESERVED ROOM ACTUALLY THERE ==--
-	-- The whole point of an oversized FieldBack is that the deepest tier fits
-	-- inside it. Nothing enforces that but this.
-	if PLOT.MaxBackZ > MAP.FieldBack then
+	--== DO THE PLOTS FIT ON THE RING ==--
+	-- The tightest point is the INNER edge, where the radius is smallest and the
+	-- same 48-stud width subtends the widest angle. If they clear there they
+	-- clear everywhere, at every tier -- which is the property that makes
+	-- outward expansion safe.
+	local step = (math.pi * 2 - math.rad(MAP.RoadGapDegrees)) / n
+	local arcAtGate = step * MAP.PlotRingInner
+	if arcAtGate < PLOT.Width + 8 then
 		warn(string.format(
-			"[Seed/MapService] Tier %d plots reach Z=%d but the field ends at %d. " ..
-			"Raise GameConfig.Map.FieldBack -- the deepest tier will hang off the edge.",
-			#GameConfig.PlotTiers, PLOT.MaxBackZ, MAP.FieldBack))
-	end
-	if PLOT.Pitch <= PLOT.Width then
-		warn("[Seed/MapService] Plot.Pitch <= Plot.Width: neighbouring plots overlap.")
+			"[Seed/MapService] %d plots leave only %.0f studs of arc at the gate radius for a " ..
+			"%d-stud plot. Raise PlotRingInner or lower MaxPlots.",
+			n, arcAtGate, PLOT.Width))
 	end
 
-	local plotSpan = (n - 1) * PLOT.Pitch + PLOT.Width
-	if plotSpan > MAP.FieldWidth then
+	-- Nothing may reach into the road's mouth.
+	local reach = PLOT.MaxReach
+	if reach + 20 > MAP.FieldBack then
 		warn(string.format(
-			"[Seed/MapService] %d plots at pitch %d span %d studs but the field is only %d wide. " ..
-			"Raise FieldWidth or lower Plot.Pitch.",
-			n, PLOT.Pitch, plotSpan, MAP.FieldWidth))
+			"[Seed/MapService] Tier %d plots reach %.0f studs from the hub but the field only " ..
+			"extends %d back. Raise FieldBack.",
+			#GameConfig.PlotTiers, reach, MAP.FieldBack))
 	end
 	if MAP.CorridorWidth > MAP.FieldWidth then
 		warn(string.format(

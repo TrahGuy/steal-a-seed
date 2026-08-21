@@ -80,17 +80,39 @@ GameConfig.Map = {
 	--   FieldBack   away from the road. DELIBERATELY OVERSIZED. It is empty
 	--               grass today and it is reserved room for plots to grow into.
 	--
-	-- Plots are anchored by their ROAD-FACING EDGE (Plot.FrontZ) and grow
-	-- BACKWARD. So expanding a plot never moves the point its owner runs in
-	-- through, and the trip home is the same length at tier 4 as at tier 1.
-	--
-	-- Growing sideways instead would have meant a wider pitch, a wider field,
-	-- and a longer diagonal from the outermost plot to the road -- reintroducing
-	-- exactly the dead time that was just removed. Depth is free; width is not.
-	FieldWidth = 400,   -- X
-	FieldFront = 85,    -- Z toward the road
-	FieldBack = 180,    -- Z away from it. Room for tier 4 plus a margin.
+	-- Plots ring the hub (see THE RING below) and grow OUTWARD from it. Their
+	-- gates all sit on one radius, so expanding a plot never moves the point its
+	-- owner walks in through -- the same property an earlier row layout got from
+	-- a fixed front edge, kept through the change of shape.
+	FieldWidth = 540,   -- X
+	FieldFront = 170,   -- Z toward the road
+	FieldBack = 265,    -- Z away from it
 	FieldThickness = 6,
+
+	--==========================================================================
+	-- THE RING
+	--
+	-- Plots are arranged around a central hub rather than in a row, from the
+	-- owner's second sketch. It is a better shape and the reason is expansion:
+	--
+	--   A RING GIVES MORE ROOM THE FURTHER OUT YOU GROW. Plots expand OUTWARD,
+	--   so their inner edges never move and the gaps between them there never
+	--   change -- while the arc at their outer edge gets longer as the radius
+	--   does. A row can only expand into space reserved up front; a ring makes
+	--   room as it goes.
+	--
+	-- It also puts the hub the same distance from every plot, which a row never
+	-- did: in a row the end plots were 145 studs from the centre and the middle
+	-- ones were 29.
+	--
+	-- HubRadius is the shop circle in the middle. PlotRingInner is where every
+	-- plot's GATE sits -- identical for all of them, at every tier.
+	--==========================================================================
+	HubRadius = 46,
+	PlotRingInner = 100,
+	-- The arc left empty for the road, centred on the road's own axis. Nothing
+	-- is built inside it.
+	RoadGapDegrees = 62,
 
 	-- THE RED LINE. A stripe painted flat on the grass at the field's far edge
 	-- with SAFE ZONE written on it. Not a dome, not a forcefield, not a
@@ -128,11 +150,13 @@ GameConfig.Plot = {
 	NamePrefix = "Plot_",
 	-- Width never changes. Only depth does -- see Tiers.
 	Width = 48,
-	-- THE ROAD-FACING EDGE, IN WORLD Z. Fixed forever. Every plot's front edge
-	-- sits here at every tier, which is what makes the run home a constant.
-	FrontZ = 21,
-	-- Must exceed Width. It does not need to exceed the deepest tier, because
-	-- plots grow backward rather than sideways.
+	-- There is no FrontZ any more. It was the row layout's anchor -- one world Z
+	-- every plot's front edge sat on -- and on a ring the anchor is a RADIUS
+	-- (Map.PlotRingInner) which every gate sits at instead. Keeping a dead
+	-- coordinate around is keeping a number that looks authoritative and is not.
+	-- Kept for the fit check. Plots are on a ring now, so this is no longer what
+	-- spaces them -- the angle is -- but two plots closer together than this
+	-- would still be too close, and MapService checks the arc against it.
 	Pitch = 58,
 
 	FloorName = "Ground",
@@ -358,7 +382,9 @@ do
 		deepest = math.max(deepest, GameConfig.plotDepthFor(tier.rows))
 	end
 	GameConfig.Plot.MaxDepth = deepest
-	GameConfig.Plot.MaxBackZ = GameConfig.Plot.FrontZ + deepest
+	-- How far from the hub the deepest tier reaches. The ring equivalent of the
+	-- old MaxBackZ, and what the field has to contain.
+	GameConfig.Plot.MaxReach = GameConfig.Map.PlotRingInner + deepest
 end
 
 local function deepFreeze(target: { [any]: any }): { [any]: any }

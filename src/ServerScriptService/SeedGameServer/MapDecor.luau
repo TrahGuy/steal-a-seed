@@ -517,32 +517,56 @@ function MapDecor.dressField(parent: Instance)
 		end
 	end
 
-	-- Flower beds in the strip between the plots and the red line, off to
-	-- either side of the running lane. This is the stretch every player crosses
-	-- twice a run, so it is the decoration with the most screen time in the
-	-- whole game.
-	for i = 1, 26 do
-		local side = (i % 2 == 0) and 1 or -1
-		local x = side * rng:NextNumber(46, halfW - 22)
-		-- The strip between the red line and the plots, which is the ground
-		-- every player crosses twice a run. Bounded by the plots' FIXED front
-		-- edge, so beds never end up under a plot that grew.
-		local z = rng:NextNumber(front + 20, GameConfig.Plot.FrontZ - 26)
-		local palette = {
-			Color3.fromRGB(255, 226, 92), Color3.fromRGB(255, 138, 178),
-			Color3.fromRGB(146, 186, 255), Color3.fromRGB(255, 146, 96),
-		}
-		flower(folder, CFrame.new(x, Y, z) * CFrame.Angles(0, rng:NextNumber(0, 6.28), 0),
-			rng:NextNumber(0.9, 1.3), Color3.fromRGB(84, 156, 74),
-			palette[rng:NextInteger(1, #palette)])
+	--== EVERYTHING ELSE GOES OUTSIDE THE RING ==--
+	--
+	-- The field decoration used to fill "the strip between the plots and the red
+	-- line", which was the ROW layout's shape and does not exist any more. On a
+	-- ring the empty ground is the outer field, and the ground that must stay
+	-- empty is everything inside the plot ring: the hub, the walkway between the
+	-- hub and the gates, and the plots themselves.
+	--
+	-- So decoration is placed by RADIUS. Nothing inside the ring's outer reach,
+	-- and nothing in the arc the road comes out of -- which is the one direction
+	-- a player is looking when they sprint in.
+	local outer = GameConfig.Plot.MaxReach + 18
+	local roadHalf = math.rad(MAP.RoadGapDegrees * 0.5)
+
+	local function outsideTheRing(count: number, place: (CFrame, number) -> ())
+		for i = 1, count do
+			for _ = 1, 14 do
+				local x = rng:NextNumber(-halfW + 20, halfW - 20)
+				local z = rng:NextNumber(front + 20, back - 20)
+				local r = math.sqrt(x * x + z * z)
+				if r > outer then
+					-- Angle from +Z, matching how the plots are placed. Anything
+					-- within the road's arc AND north of the ring is in the way.
+					local a = math.atan2(x, z)
+					local toRoad = math.abs((a - math.pi + math.pi) % (math.pi * 2) - math.pi)
+					if toRoad > roadHalf or z > 0 then
+						place(CFrame.new(x, Y, z)
+							* CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0),
+							rng:NextNumber(0.9, 1.35))
+						break
+					end
+				end
+			end
+		end
 	end
 
-	for i = 1, 8 do
-		local side = (i % 2 == 0) and 1 or -1
-		bush(folder, CFrame.new(side * rng:NextNumber(40, halfW - 26), Y,
-			rng:NextNumber(front + 24, GameConfig.Plot.FrontZ - 30)),
-			rng:NextNumber(0.9, 1.4), Color3.fromRGB(88, 172, 84))
-	end
+	local palette = {
+		Color3.fromRGB(255, 226, 92), Color3.fromRGB(255, 138, 178),
+		Color3.fromRGB(146, 186, 255), Color3.fromRGB(255, 146, 96),
+	}
+	outsideTheRing(34, function(cf, s2)
+		flower(folder, cf, s2, Color3.fromRGB(84, 156, 74),
+			palette[rng:NextInteger(1, #palette)])
+	end)
+	outsideTheRing(14, function(cf, s2)
+		bush(folder, cf, s2, Color3.fromRGB(88, 172, 84))
+	end)
+	outsideTheRing(9, function(cf, s2)
+		tree(folder, cf, s2 * 1.1, Color3.fromRGB(112, 78, 52), Color3.fromRGB(92, 178, 82))
+	end)
 end
 
 return MapDecor

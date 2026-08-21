@@ -23,7 +23,7 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**1,141 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+**1,243 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
 zero tall props inside the racing line.
 
 ---
@@ -107,7 +107,48 @@ could find a free plot — and nobody ever does that: `PlotService` assigns a va
 you spawn. Every sign in the row would just read as somebody's name. If in-world ownership is ever
 wanted, it goes over the gate, seen on the way in, rather than on a board facing an empty field.
 
-## PLOTS EXPAND BACKWARD, AND THE ROOM IS ALREADY RESERVED
+## PLOTS RING A CENTRAL HUB, AND EXPAND OUTWARD
+
+From the owner's second sketch, [plot-ring-reference.png](plot-ring-reference.png). Six plots
+around a fenced circle with the SELL stall inside it, gates facing in, road leaving through a gap in
+the ring.
+
+**A ring gives more room the further out you grow.** Plots expand outward, so their gates never move
+and the gaps between them at the inner edge never change — while the arc at their outer edge gets
+*longer* as the radius does. A row could only expand into space reserved up front; a ring makes room
+as it goes. That is why this shape was worth the rebuild.
+
+It also puts the hub the same distance from every plot — **every gate is at radius 100.0, verified**
+— which the row never did: the end plots were 145 studs from the centre and the middle ones 29.
+
+The stall moved from the field's upper-left corner into the hub. The corner was right for a *row*,
+where it kept a shop off the one strip everybody ran down. A ring has a natural centre instead, and
+nobody has to detour to a place everybody already passes through.
+
+### What a ring costs, measured
+
+Gate-to-red-line distance is **141 / 219 / 264 / 264 / 219 / 141** studs — a spread of **123**. The
+row's spread was 116, so this is very slightly worse and not materially so. Worth knowing rather
+than assuming: it is the one real price of the shape, and it is small.
+
+### Angles avoid the road rather than hoping
+
+Plots are spread evenly across `360 − RoadGapDegrees`, starting at the far edge of the empty arc, so
+gaps between neighbours are equal AND nothing is ever placed in the road's mouth. Placing six evenly
+round a full circle and hoping none lands in the way would work until `MaxPlots` changed.
+
+`CFrame.lookAt(pos, hub)` points local −Z at the centre, and local −Z is where `buildPlot` puts the
+gate — so every gate faces in and every plot grows out, with no per-plot rotation maths.
+
+### Row-layout leftovers removed
+
+`Plot.FrontZ` and `Plot.MaxBackZ` were the row's anchor — one world Z every front edge sat on. On a
+ring the anchor is a radius, so they are gone rather than left as numbers that look authoritative
+and mean nothing. `MaxReach` (hub → deepest tier) replaces `MaxBackZ`. Field decoration is placed by
+radius now, outside the ring, instead of in a "strip between the plots and the red line" that no
+longer exists.
+
+## PLOTS EXPAND OUTWARD, AND THE ROOM IS ALREADY RESERVED
 
 The expansion SYSTEM is Phase D. The SPACE it needs is reserved now, and that ordering is the whole
 point: an upgrade button is a day's work whenever it is wanted, but plot geometry is baked into the
