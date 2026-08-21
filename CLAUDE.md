@@ -148,11 +148,19 @@ Two things combine, and neither is a fault:
   * **Stopping Play discards everything Play created.** Play is a sandbox; the datamodel reverts to
     its pre-Play state, and the map the server built goes with it.
 
-So an empty Edit workspace is the correct state for this project. To get the map back, press the
-**Build Map** button on the *Steal a Seed* toolbar — installed from
+**You should never see this happen**, because the *Steal a Seed* Studio plugin rebuilds the map
+automatically whenever it is missing in Edit. Plugins run in the Edit datamodel, which is suspended
+for the duration of a Play session and resumes on Stop — so the first tick after you stop testing is
+what puts the map back, with no input at all.
+
+Installed from
 [tools/studio-plugin/SeedMapBuilder.server.lua](tools/studio-plugin/SeedMapBuilder.server.lua) into
-`%LOCALAPPDATA%\Roblox\Plugins\`, restart Studio to pick it up. It does exactly what the command
-bar line below does, and exists because a line you have to remember is a line you will not remember.
+`%LOCALAPPDATA%\Roblox\Plugins\`; restart Studio to pick up changes to it. **Build Map** forces a
+rebuild and re-enables auto-rebuild; **Clear Map** removes it and turns auto-rebuild off, because a
+clear that undid itself a second later would look broken.
+
+None of this ever makes the map savable: `MapService` marks the folder `Archivable = false` and the
+plugin sets it again, so even a map built by an older `MapService` cannot reach the `.rbxl`.
 
 Nests are deliberately NOT built by the button: `NestService` starts a tick loop and raises Humanoids
 that would wander an Edit session forever with nothing to chase. Press Play for those.
