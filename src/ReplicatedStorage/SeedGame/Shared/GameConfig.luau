@@ -311,12 +311,15 @@ for index, name in ipairs(GameConfig.Rarities) do
 end
 GameConfig.RarityTier = rarityTier
 
+-- Sampled off the pod artwork rather than picked, so the pods in the world are
+-- the pods that were designed. The first five are the ones the reference sheet
+-- actually shows; the last three follow its logic outward.
 GameConfig.RarityColor = {
-	Common    = Color3.fromRGB(196, 200, 206),
-	Uncommon  = Color3.fromRGB(118, 206, 106),
-	Rare      = Color3.fromRGB(92, 146, 232),
-	Epic      = Color3.fromRGB(158, 116, 226),
-	Legendary = Color3.fromRGB(255, 176, 62),
+	Common    = Color3.fromRGB(238, 235, 226),
+	Uncommon  = Color3.fromRGB(142, 196, 62),
+	Rare      = Color3.fromRGB(108, 168, 214),
+	Epic      = Color3.fromRGB(146, 62, 158),
+	Legendary = Color3.fromRGB(250, 198, 48),
 	Mythic    = Color3.fromRGB(232, 92, 132),
 	Secret    = Color3.fromRGB(120, 240, 236),
 	Divine    = Color3.fromRGB(255, 246, 194),
@@ -346,6 +349,51 @@ GameConfig.Speed = {
 	MaxWalkSpeed = 150,
 	Scale = 20000,
 }
+
+--==============================================================================
+-- WEIGHT IS THE WHOLE RISK/REWARD, AND IT IS ONE NUMBER
+--
+-- A creature's KILOGRAMS decide both what it earns and what it costs to get
+-- home with. Rarity decides only how OFTEN you find one. That split is the
+-- entire design of a theft game expressed as a single stat:
+--
+--   the fat pod is the one worth taking, and the one that gets you caught.
+--
+-- ONE KILOGRAM IS ONE CASH PER SECOND. No conversion, no table, no tooltip
+-- maths -- a player reads an object's worth straight off its weight, and can
+-- compare any two things in the game at a glance without opening anything.
+-- Scale comes later from multipliers and Rebirth, never from bending this.
+--
+-- The slow curve is deliberately flat at the bottom and brutal at the top:
+--
+--       2 kg  ->  99.6% speed   (a starter pod is free to carry)
+--     110 kg  ->  95.4%         (noticeable, not punishing)
+--   1,000 kg  ->  82.4%
+--  10,000 kg  ->  30.0%         (a crawl, and a very long walk home)
+--
+-- Flat at the bottom matters: a new player must never feel taxed for picking up
+-- the only thing they can find. Brutal at the top is what makes an endgame
+-- carry a decision rather than a formality.
+--==============================================================================
+GameConfig.Carry = {
+	-- The heaviest thing in the game. Biome 1 tops out at ~110.
+	MaxKg = 10000,
+	-- Speed multiplier when carrying MaxKg.
+	MinMultiplier = 0.30,
+	-- Below 1 flattens the low end. 0.6 keeps small pods nearly free.
+	Exponent = 0.6,
+	CashPerKg = 1,
+}
+
+-- What a carried weight does to your WalkSpeed, as a multiplier.
+function GameConfig.carryMultiplierFor(kg: number): number
+	local C = GameConfig.Carry
+	if type(kg) ~= "number" or kg ~= kg or kg <= 0 then
+		return 1
+	end
+	local t = math.clamp(kg / C.MaxKg, 0, 1) ^ C.Exponent
+	return 1 - (1 - C.MinMultiplier) * t
+end
 
 function GameConfig.walkSpeedFor(speedScore: number): number
 	local S = GameConfig.Speed

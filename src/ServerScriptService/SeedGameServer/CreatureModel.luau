@@ -1,33 +1,41 @@
 --!strict
 -- Steal a Seed :: CreatureModel
 --
--- Builds the three things a species can be: the pod you steal, the sprout it
--- becomes when planted, and the creature it grows into.
+-- Builds the pod you steal and the creature it grows into, to the Greenhollow
+-- reference sheets in KB/biome1-plants.png and KB/biome1-pods.png.
 --
 -- NOT a *Service. No lifecycle, just geometry -- same as MapDecor and HubFairy.
 --
 --==============================================================================
--- ONE BULB WITH A FACE, NOT A BODY AND A HEAD
+-- ROBLOX HAS NO CONE, NO EGG, AND NO DOME
 --
--- The obvious build is root, stem, body, head, face. This merges body and head
--- into a single bulb that carries the face, and that is not only a part count
--- saving. A separate head on a small creature reads as a lump on a stick; a
--- bulb with eyes reads as a character immediately, at any size, from any angle,
--- on a phone screen, across a field.
+-- Four of the five forms on the sheet are shapes the engine cannot make. Every
+-- one is approximated from Block, Ball and Cylinder, and the approximations are
+-- written down here because the next person will otherwise assume a mesh went
+-- missing:
 --
--- Ten parts for two eyes. Seventy-two of these in a server is the budget that
--- made rooted creatures possible at all, so the number matters.
+--   teardrop  a Ball with two mirrored Wedges above it, which from the front
+--             reads as a point rather than as a roof.
+--   dome cap  a Cylinder disc with a Ball resting on it. A Ball alone cannot
+--             do it -- Roblox sizes a Ball by its SMALLEST axis, so a wide flat
+--             sphere is not a thing that exists.
+--   bell      three stacked Cylinders widening downward. A cone by staircase.
+--   egg       two overlapping Balls, the upper slightly smaller.
+--
+-- That Ball rule catches everyone once: setting a Ball to (4, 1, 4) does not
+-- give a squashed sphere, it gives a sphere of diameter 1.
 --
 --==============================================================================
--- ROOTED IS A PROMISE, NOT A LIMITATION
+-- THE FACE IS THE WHOLE CHARACTER, AND IT IS SEVEN PARTS
 --
--- Nothing here has a Humanoid, a PrimaryPart that moves, or any network
--- ownership. A creature is an anchored model in a slot. Every bit of life it
--- has -- sway, blink, the head turning as you walk past -- is composed on each
--- CLIENT against the rest pose captured here, exactly like the fairy's wings.
+-- Two black eyes, two white highlights, three blocks of smile. The highlights
+-- are what make it read as alive rather than as a hole, and the smile is three
+-- parts rather than one because a straight bar reads as a grimace -- offsetting
+-- the ends upward by a hair is the entire difference between a creature that
+-- looks pleased and one that looks unwell.
 --
--- The server owns where it is. The client owns what it is doing. They never
--- write the same property, which is why they cannot fight.
+-- Budget: ~12 parts of body plus 0-8 of crown. Six plots of twelve slots is 72
+-- creatures, so roughly 1,200 parts at tier 1. Worth watching as tiers grow.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -40,304 +48,403 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local CreatureModel = {}
 
-export type Stage = number -- 1 pod, 2 sprout, 3 grown
-
 CreatureModel.STAGE_POD = 1
 CreatureModel.STAGE_SPROUT = 2
 CreatureModel.STAGE_GROWN = 3
 
--- How big a sprout is relative to its grown self. Small enough that growth is
--- obviously incomplete from across the plot, big enough to tell what it is --
--- because knowing what is nearly ready is what makes a plot worth raiding.
+export type Stage = number
+
+-- Small enough that growth is obviously incomplete from across the plot, big
+-- enough to tell what it is -- because knowing what is nearly ready is what
+-- makes somebody else's plot worth watching.
 local SPROUT_SCALE = 0.45
 
-type PartOpts = {
+local DARK = Color3.fromRGB(38, 34, 40)
+local WHITE = Color3.fromRGB(252, 252, 250)
+
+type Opts = {
 	name: string,
 	size: Vector3,
 	cframe: CFrame,
 	color: Color3,
 	parent: Instance,
-	material: Enum.Material?,
 	shape: Enum.PartType?,
-	transparency: number?,
-	glow: boolean?,
+	material: Enum.Material?,
 }
 
-local function build(o: PartOpts): BasePart
-	local part = Instance.new("Part")
-	part.Name = o.name
-	part.Size = o.size
-	part.CFrame = o.cframe
-	part.Color = o.color
-	part.Material = o.material or Enum.Material.SmoothPlastic
-	part.Shape = o.shape or Enum.PartType.Block
-	part.Transparency = o.transparency or 0
-	part.Anchored = true
-	part.CanCollide = false
-	-- Nothing here is ever queried by a raycast except through its model, and 72
-	-- creatures is 720 parts the mouse would otherwise have to consider.
-	part.CanQuery = false
-	part.CanTouch = false
-	-- Enum.SurfaceType, NOT Enum.NormalId -- they both have a Top and the
-	-- assignment fails at runtime rather than at compile time. Smooth on
-	-- purpose: the field and the beds are studded, but studs on a face at this
-	-- size read as acne.
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = o.parent
-	return part
+local function part(o: Opts): BasePart
+	local p = Instance.new("Part")
+	p.Name = o.name
+	p.Size = o.size
+	p.CFrame = o.cframe
+	p.Color = o.color
+	p.Material = o.material or Enum.Material.SmoothPlastic
+	p.Shape = o.shape or Enum.PartType.Block
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	-- Enum.SurfaceType, not Enum.NormalId. Both have a Top and the wrong one
+	-- fails at runtime rather than at compile time.
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Parent = o.parent
+	return p
+end
+
+-- An upright cylinder. Roblox cylinders run along their LOCAL X, so standing
+-- one up is a 90-degree roll, and the caller should not have to remember that.
+local function upright(name: string, height: number, diameter: number, cf: CFrame,
+	color: Color3, parent: Instance): BasePart
+	return part({
+		name = name,
+		size = Vector3.new(height, diameter, diameter),
+		cframe = cf * CFrame.Angles(0, 0, math.rad(90)),
+		color = color,
+		shape = Enum.PartType.Cylinder,
+		parent = parent,
+	})
+end
+
+local function ball(name: string, diameter: number, cf: CFrame, color: Color3,
+	parent: Instance): BasePart
+	return part({
+		name = name,
+		size = Vector3.new(diameter, diameter, diameter),
+		cframe = cf,
+		color = color,
+		shape = Enum.PartType.Ball,
+		parent = parent,
+	})
+end
+
+local function wedge(name: string, size: Vector3, cf: CFrame, color: Color3,
+	parent: Instance): BasePart
+	local p = Instance.new("WedgePart")
+	p.Name = name
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = Enum.Material.SmoothPlastic
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Parent = parent
+	return p
 end
 
 --==============================================================================
--- THE POD
+-- THE FACE
 --
--- A rarity-coloured ovoid with a paler seam around its middle. The seam is what
--- makes it read as something that OPENS rather than as a stone, and it costs one
--- part.
---
--- Rarity colour rather than species colour, deliberately: while it is in your
--- hands the only question anybody has is how badly they want it.
+-- Placed on the front of whatever head the form produced. `front` is the local
+-- -Z offset of the head's surface, because -Z is the facing direction.
 --==============================================================================
-function CreatureModel.BuildPod(species: SeedData.Species, cframe: CFrame, parent: Instance): Model
-	local model = Instance.new("Model")
-	model.Name = "Pod_" .. species.Id
-	model:SetAttribute("SpeciesId", species.Id)
-	model:SetAttribute("Rarity", species.Rarity)
-	model:SetAttribute("Stage", CreatureModel.STAGE_POD)
-	model.Parent = parent
+local function addFace(model: Model, headCF: CFrame, width: number, front: number)
+	local eyeW = width * 0.17
+	local eyeH = width * 0.21
+	local gap = width * 0.21
 
-	-- THE CFRAME IS THE BASE, NOT THE CENTRE -- same contract as BuildCreature,
-	-- whose root sits on the frame it is given. They disagreed at first and
-	-- every pod rendered half sunk into the ground, because a caller placing one
-	-- on a surface has no reason to expect two builders in one file to mean
-	-- different things by the same argument.
-	local POD_H = 2.0
-	local base = cframe * CFrame.new(0, POD_H * 0.5, 0)
-
-	local color = SeedData.PodColor(species)
-	local shell = build({
-		name = "Shell",
-		size = Vector3.new(1.5, POD_H, 1.5),
-		cframe = base,
-		color = color,
-		shape = Enum.PartType.Ball,
-		parent = model,
-	})
-	build({
-		name = "Seam",
-		size = Vector3.new(1.58, 0.18, 1.58),
-		cframe = base * CFrame.new(0, 0.1, 0),
-		color = species.Accent,
-		shape = Enum.PartType.Ball,
-		parent = model,
-	})
-	-- A single leaf tip, so even a pod says "plant" before it says "egg".
-	build({
-		name = "Tip",
-		size = Vector3.new(0.35, 0.55, 0.12),
-		cframe = base * CFrame.new(0, 1.05, 0) * CFrame.Angles(0, 0, math.rad(18)),
-		color = species.Leaf,
-		parent = model,
-	})
-
-	model.PrimaryPart = shell
-	if species.Glow then
-		local light = Instance.new("PointLight")
-		light.Color = color
-		light.Brightness = 1.4
-		light.Range = 8
-		light.Parent = shell
+	for _, side in ipairs({ -1, 1 }) do
+		local eyeCF = headCF * CFrame.new(side * gap, width * 0.06, -front)
+		part({
+			name = "Eye",
+			size = Vector3.new(eyeW, eyeH, 0.08),
+			cframe = eyeCF,
+			color = DARK,
+			parent = model,
+		})
+		-- The glint. Upper-LEFT of each eye on both sides, not mirrored --
+		-- a shared light source is what makes two eyes read as one face.
+		part({
+			name = "Glint",
+			size = Vector3.new(eyeW * 0.34, eyeH * 0.30, 0.08),
+			cframe = eyeCF * CFrame.new(-eyeW * 0.22, eyeH * 0.24, -0.02),
+			color = WHITE,
+			parent = model,
+		})
 	end
-	return model
+
+	-- Three blocks of smile. A single bar reads as a grimace; lifting the ends
+	-- by a hair is the whole difference between pleased and unwell.
+	local mw = width * 0.10
+	for i, spec in ipairs({ { -1, 0.030 }, { 0, 0 }, { 1, 0.030 } }) do
+		local sx: number, lift: number = spec[1], spec[2]
+		part({
+			name = "Smile",
+			size = Vector3.new(mw, width * 0.045, 0.08),
+			cframe = headCF * CFrame.new(sx * mw * 0.92, -width * 0.15 + lift * width, -front),
+			color = DARK,
+			parent = model,
+		})
+	end
+end
+
+--==============================================================================
+-- THE CROWNS
+--==============================================================================
+local function addFlower(model: Model, sp: SeedData.Species, top: CFrame, w: number)
+	-- Five petals flat around a centre, as on the sheet.
+	for i = 1, 5 do
+		local a = (i - 1) / 5 * math.pi * 2
+		part({
+			name = "Petal",
+			size = Vector3.new(w * 0.38, w * 0.11, w * 0.30),
+			cframe = top * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -w * 0.28),
+			color = sp.Crown,
+			parent = model,
+		})
+	end
+	ball("FlowerCentre", w * 0.24, top, sp.Accent, model)
+end
+
+local function addSpikes(model: Model, sp: SeedData.Species, top: CFrame, w: number, h: number)
+	-- Three upright leaf-spikes: one tall in the middle, two shorter leaning out.
+	for _, spec in ipairs({ { 0, 1.0, 0 }, { -1, 0.68, 26 }, { 1, 0.68, -26 } }) do
+		local sx: number, scale: number, tilt: number = spec[1], spec[2], spec[3]
+		part({
+			name = "Spike",
+			size = Vector3.new(w * 0.16, h * 0.30 * scale, w * 0.13),
+			cframe = top
+				* CFrame.new(sx * w * 0.28, h * 0.13 * scale, 0)
+				* CFrame.Angles(0, 0, math.rad(tilt)),
+			color = sp.Crown,
+			parent = model,
+		})
+	end
+end
+
+local function addFronds(model: Model, sp: SeedData.Species, top: CFrame, w: number)
+	-- The drooping green fronds over the mushroom cap.
+	for i = 1, 3 do
+		local a = (i - 1) / 3 * math.pi * 2
+		local arm = top * CFrame.Angles(0, a, 0)
+		part({
+			name = "Frond",
+			size = Vector3.new(w * 0.09, w * 0.42, w * 0.09),
+			cframe = arm * CFrame.new(0, w * 0.20, -w * 0.10),
+			color = sp.Leaf,
+			parent = model,
+		})
+		part({
+			name = "FrondTip",
+			size = Vector3.new(w * 0.22, w * 0.09, w * 0.16),
+			cframe = arm * CFrame.new(0, w * 0.36, -w * 0.30)
+				* CFrame.Angles(math.rad(-38), 0, 0),
+			color = sp.Leaf,
+			parent = model,
+		})
+	end
+end
+
+local function addBuds(model: Model, sp: SeedData.Species, top: CFrame, w: number)
+	-- A ring of stalked buds, as on the Bellchime.
+	for i = 1, 7 do
+		local a = (i - 1) / 7 * math.pi * 2
+		local lean = (i % 2 == 0) and 1.0 or 0.76
+		local arm = top * CFrame.Angles(0, a, 0)
+		local reach = w * 0.26
+		part({
+			name = "BudStalk",
+			size = Vector3.new(w * 0.05, w * 0.40 * lean, w * 0.05),
+			cframe = arm * CFrame.new(0, w * 0.20 * lean, -reach * 0.7)
+				* CFrame.Angles(math.rad(-11), 0, 0),
+			color = sp.Accent,
+			parent = model,
+		})
+		ball("Bud", w * 0.18, arm * CFrame.new(0, w * 0.42 * lean, -reach), sp.Crown, model)
+	end
 end
 
 --==============================================================================
 -- THE CREATURE
 --
--- Root mound, stem, bulb with a face, two leaves. Scaled whole for the sprout
--- stage, so a species is described once and both stages come from it -- a
--- separate sprout model would be a second thing to keep in step for no gain.
+-- Soil mound, stem, two leaves, a head that depends on the form, a face, and a
+-- crown. The CFrame handed in is the BASE -- where it meets the ground.
 --==============================================================================
-local function addEyes(model: Model, species: SeedData.Species, bulbCF: CFrame,
-	bulbW: number, bulbD: number, bulbH: number, scale: number)
-	local count = math.clamp(species.Eyes, 1, 3)
-	local eyeR = bulbW * (count == 1 and 0.30 or 0.22)
-	local spread = bulbW * 0.26
-
-	for i = 1, count do
-		-- Centred when odd, straddling the middle when even.
-		local offset = (i - (count + 1) * 0.5) * spread * 2
-		local at = bulbCF * CFrame.new(offset, bulbH * 0.12, -(bulbD * 0.5))
-		build({
-			name = "Eye",
-			size = Vector3.new(eyeR, eyeR, eyeR * 0.6),
-			cframe = at,
-			color = Color3.fromRGB(252, 252, 250),
-			shape = Enum.PartType.Ball,
-			parent = model,
-		})
-		build({
-			name = "Pupil",
-			size = Vector3.new(eyeR * 0.5, eyeR * 0.5, eyeR * 0.5),
-			cframe = at * CFrame.new(0, 0, -eyeR * 0.22),
-			color = Color3.fromRGB(28, 26, 34),
-			shape = Enum.PartType.Ball,
-			parent = model,
-		})
-	end
-
-	-- One dark sliver of a mouth. It does more for personality per part than
-	-- anything else on the model.
-	build({
-		name = "Mouth",
-		size = Vector3.new(bulbW * 0.30, bulbH * 0.06, 0.08),
-		cframe = bulbCF * CFrame.new(0, -bulbH * 0.16, -(bulbD * 0.5) - 0.02),
-		color = Color3.fromRGB(46, 34, 44),
-		parent = model,
-	})
-end
-
-function CreatureModel.BuildCreature(species: SeedData.Species, stage: Stage,
-	cframe: CFrame, parent: Instance): Model
+function CreatureModel.BuildCreature(sp: SeedData.Species, stage: Stage,
+	cf: CFrame, parent: Instance): Model
 	local model = Instance.new("Model")
-	model.Name = "Creature_" .. species.Id
-	model:SetAttribute("SpeciesId", species.Id)
-	model:SetAttribute("Rarity", species.Rarity)
+	model.Name = "Creature_" .. sp.Id
+	model:SetAttribute("SpeciesId", sp.Id)
+	model:SetAttribute("Rarity", sp.Rarity)
+	model:SetAttribute("Kg", sp.Kg)
 	model:SetAttribute("Stage", stage)
 	model.Parent = parent
 
 	local scale = if stage == CreatureModel.STAGE_SPROUT then SPROUT_SCALE else 1
-	local H = species.Height * scale
+	local H = sp.Height * scale
 
-	local rootH = 0.5 * scale
-	local stemH = H * 0.30
-	local bulbH = H * 0.55
-	local bulbW = H * 0.46
-	local bulbD = H * 0.40
+	--== MOUND ==--
+	local moundH = H * 0.11
+	local mound = upright("Mound", moundH, H * 0.66, cf * CFrame.new(0, moundH * 0.5, 0),
+		sp.Soil, model)
 
-	local rootCF = cframe * CFrame.new(0, rootH * 0.5, 0)
-	local root = build({
-		name = "Root",
-		size = Vector3.new(bulbW * 0.9, rootH, bulbW * 0.9),
-		cframe = rootCF,
-		color = species.Leaf,
-		material = Enum.Material.Plastic,
-		parent = model,
-	})
-
-	build({
-		name = "Stem",
-		size = Vector3.new(H * 0.13, stemH, H * 0.13),
-		cframe = cframe * CFrame.new(0, rootH + stemH * 0.5, 0),
-		color = species.Leaf,
-		parent = model,
-	})
-
-	--== THE BULB ==--
-	--
-	-- bulbCF stays UNROTATED whatever shape the bulb is, because the face is
-	-- placed off it. A cylinder has to be tipped on its side to stand up --
-	-- Roblox cylinders run along their local X -- and rotating the reference
-	-- frame with it would send the eyes round the back.
-	local bulbCF = cframe * CFrame.new(0, rootH + stemH + bulbH * 0.5, 0)
-
-	local shape, bulbSize, bulbSpin = Enum.PartType.Block,
-		Vector3.new(bulbW, bulbH, bulbD), CFrame.new()
-	if species.Shape == "ball" then
-		shape = Enum.PartType.Ball
-		-- Balls ignore two of their three dimensions, so a ball bulb is sized
-		-- by its width or it renders smaller than the block it replaced.
-		bulbSize = Vector3.new(bulbW, bulbW, bulbW)
-	elseif species.Shape == "cylinder" then
-		shape = Enum.PartType.Cylinder
-		bulbSize = Vector3.new(bulbH, bulbW, bulbW)
-		bulbSpin = CFrame.Angles(0, 0, math.rad(90))
-	end
-
-	local bulb = build({
-		name = "Bulb",
-		size = bulbSize,
-		cframe = bulbCF * bulbSpin,
-		color = species.Body,
-		-- ALWAYS SmoothPlastic, never Neon, even for glowing species. Neon
-		-- clips to white at brightness and takes the face with it -- the fairy
-		-- was a featureless white blob for exactly this reason. Glow goes on
-		-- the CROWN and a PointLight, where losing detail costs nothing.
-		material = Enum.Material.SmoothPlastic,
-		shape = shape,
-		parent = model,
-	})
+	--== STEM ==--
+	local stemH = H * 0.34
+	local stemBase = moundH * 0.7
+	upright("Stem", stemH, H * 0.13, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
+		SeedData.Stem, model)
 
 	--== LEAVES ==--
-	-- Low on the stem and angled UP. The first version put them at the bulb
-	-- join, small and flat, where they read as tiny shoulders rather than as
-	-- leaves. Halfway down and tilted they frame the creature instead.
 	for _, side in ipairs({ -1, 1 }) do
-		build({
+		part({
 			name = "Leaf",
-			size = Vector3.new(bulbW * 0.95, H * 0.07, bulbW * 0.52),
-			cframe = cframe
-				* CFrame.new(side * bulbW * 0.52, rootH + stemH * 0.5, 0)
-				* CFrame.Angles(0, side * math.rad(12), side * math.rad(38)),
-			color = species.Leaf,
+			size = Vector3.new(H * 0.27, H * 0.05, H * 0.12),
+			cframe = cf
+				* CFrame.new(side * H * 0.16, stemBase + stemH * 0.40, 0)
+				-- Down and out. Level bars read as propellers, which is exactly
+				-- what the first build looked like.
+				* CFrame.Angles(0, side * math.rad(16), side * math.rad(-13)),
+			color = sp.Leaf,
 			parent = model,
 		})
 	end
 
-	--== THE CROWN ==--
-	-- Petals or spikes radiating off the top. This is what stops eleven species
-	-- reading as one species in eleven colours: at distance the crown is the
-	-- whole silhouette, and a five-petal ball is nothing like a four-spike
-	-- block even at the same size and hue.
-	local crown = math.clamp(species.Crown or 0, 0, 8)
-	if crown > 0 and species.CrownKind ~= "none" then
-		local spike = species.CrownKind == "spike"
-		local ring = bulbW * (spike and 0.34 or 0.42)
-		for i = 1, crown do
-			local angle = (i - 1) / crown * math.pi * 2
-			local size = if spike
-				then Vector3.new(bulbW * 0.16, bulbH * 0.55, bulbW * 0.16)
-				else Vector3.new(bulbW * 0.52, H * 0.055, bulbW * 0.46)
-			build({
-				name = if spike then "Spike" else "Petal",
-				size = size,
-				cframe = bulbCF
-					* CFrame.Angles(0, angle, 0)
-					* CFrame.new(0, bulbH * (spike and 0.42 or 0.34), -ring)
-					* CFrame.Angles(spike and math.rad(-28) or math.rad(-52), 0, 0),
-				color = if spike then species.Accent else species.Accent,
-				material = if species.Glow then Enum.Material.Neon
-					else Enum.Material.SmoothPlastic,
-				parent = model,
-			})
+	--== HEAD ==--
+	local headW = H * 0.46
+	local headCentreY = stemBase + stemH + headW * 0.46
+	local headCF = cf * CFrame.new(0, headCentreY, 0)
+	local topCF = headCF * CFrame.new(0, headW * 0.5, 0)
+
+	-- WHERE THE FACE GOES IS PER-FORM, and it has to be, because the widest
+	-- part of a head is not always the part the face sits on. The bell proved
+	-- it: one shared `front` put the smile at local z -0.78 inside a skirt of
+	-- radius 0.99, so the creature had eyes and no mouth and nobody could see
+	-- why. Each branch sets these three explicitly now.
+	local faceCF = headCF
+	local faceW = headW
+	local front = headW * 0.5
+
+	if sp.Form == "cube" then
+		part({ name = "Head", size = Vector3.new(headW, headW, headW),
+			cframe = headCF, color = sp.Body, parent = model })
+
+	elseif sp.Form == "orb" then
+		ball("Head", headW, headCF, sp.Body, model)
+		front = headW * 0.46
+		addFlower(model, sp, topCF * CFrame.new(0, headW * 0.06, 0), headW)
+
+	elseif sp.Form == "teardrop" then
+		ball("Head", headW, headCF, sp.Body, model)
+		front = headW * 0.46
+		-- Two mirrored wedges make a point from the front rather than a roof.
+		for _, side in ipairs({ -1, 1 }) do
+			wedge("HeadPoint", Vector3.new(headW * 0.5, headW * 0.52, headW * 0.5),
+				headCF * CFrame.new(side * headW * 0.25, headW * 0.44, 0)
+					* CFrame.Angles(0, side > 0 and 0 or math.pi, 0),
+				sp.Body, model)
 		end
+		addSpikes(model, sp, topCF * CFrame.new(0, headW * 0.38, 0), headW, H)
+
+	elseif sp.Form == "mushroom" then
+		ball("Head", headW * 0.86, headCF, sp.Body, model)
+		faceW = headW * 0.86
+		front = headW * 0.42
+		local capY = headW * 0.42
+		upright("CapDisc", headW * 0.16, headW * 1.32,
+			headCF * CFrame.new(0, capY, 0), sp.Crown, model)
+		ball("CapDome", headW * 1.10, headCF * CFrame.new(0, capY + headW * 0.10, 0),
+			sp.Crown, model)
+		-- Spots, set into the dome's upper face.
+		for i = 1, 5 do
+			local a = (i - 1) / 5 * math.pi * 2
+			upright("Spot", headW * 0.05, headW * 0.24,
+				headCF * CFrame.Angles(0, a, 0)
+					* CFrame.new(0, capY + headW * 0.36, -headW * 0.40),
+				sp.Accent, model)
+		end
+		addFronds(model, sp, headCF * CFrame.new(0, capY + headW * 0.44, 0), headW)
+
+	else -- "bell"
+		-- A cone by staircase. Four tiers rather than three, and a wider spread
+		-- top to bottom: at 0.62-to-1.08 the flare was too slight to read as a
+		-- skirt and the whole thing looked like a lump.
+		local tiers = { { 0.50, 0.40 }, { 0.74, 0.16 }, { 1.00, -0.08 }, { 1.20, -0.30 } }
+		for _, t in ipairs(tiers) do
+			local d: number, dy: number = t[1], t[2]
+			upright("BellTier", headW * 0.28, headW * d,
+				headCF * CFrame.new(0, dy * headW, 0), sp.Body, model)
+		end
+		upright("Collar", headW * 0.16, headW * 0.58,
+			headCF * CFrame.new(0, headW * 0.54, 0), sp.Accent, model)
+		addBuds(model, sp, headCF * CFrame.new(0, headW * 0.60, 0), headW)
+		-- The face rides the WIDE lower skirt, which is where the sheet puts it,
+		-- so `front` is that tier's radius rather than the head's.
+		faceCF = headCF * CFrame.new(0, -headW * 0.10, 0)
+		faceW = headW * 1.00
+		front = headW * 0.60
 	end
 
-	addEyes(model, species, bulbCF, bulbW, bulbD, bulbH, scale)
+	addFace(model, faceCF, faceW, front + 0.04)
 
-	if species.Glow then
-		local light = Instance.new("PointLight")
-		light.Color = species.Accent
-		light.Brightness = 1.6
-		light.Range = 10 * scale
-		light.Parent = bulb
-	end
-
-	-- The ROOT is the PrimaryPart, not the bulb: a creature's pivot is where it
-	-- meets the soil, so planting one is placing its pivot on a slot rather than
-	-- working out how tall it is first.
-	model.PrimaryPart = root
+	-- PrimaryPart is the MOUND: a creature's pivot is where it meets the soil,
+	-- so planting one is placing its pivot on a slot rather than working out how
+	-- tall it is first.
+	model.PrimaryPart = mound
 	CollectionService:AddTag(model, GameConfig.Tags.Creature)
 	return model
 end
 
--- Convenience: whichever shape this species should be at this stage.
-function CreatureModel.Build(species: SeedData.Species, stage: Stage,
-	cframe: CFrame, parent: Instance): Model
-	if stage == CreatureModel.STAGE_POD then
-		return CreatureModel.BuildPod(species, cframe, parent)
+--==============================================================================
+-- THE POD
+--
+-- Egg, jagged seam, curled tendril -- the pod sheet. Rarity colour, not species
+-- colour: while it is in your hands the only question anybody has is how badly
+-- they want it.
+--==============================================================================
+function CreatureModel.BuildPod(sp: SeedData.Species, cf: CFrame, parent: Instance): Model
+	local model = Instance.new("Model")
+	model.Name = "Pod_" .. sp.Id
+	model:SetAttribute("SpeciesId", sp.Id)
+	model:SetAttribute("Rarity", sp.Rarity)
+	model:SetAttribute("Kg", sp.Kg)
+	model:SetAttribute("Stage", CreatureModel.STAGE_POD)
+	model.Parent = parent
+
+	-- THE CFRAME IS THE BASE, not the centre -- same contract as BuildCreature,
+	-- because two builders in one file meaning different things by the same
+	-- argument is a trap for every caller.
+	local D = 1.7
+	local color = SeedData.PodColor(sp)
+	local baseCF = cf * CFrame.new(0, D * 0.5, 0)
+
+	-- Egg: two overlapping balls, the upper smaller. A Ball is sized by its
+	-- smallest axis, so a single elongated one is not available.
+	local shell = ball("Shell", D, baseCF, color, model)
+	ball("Crown", D * 0.84, baseCF * CFrame.new(0, D * 0.34, 0), color, model)
+
+	-- The seam. A disc a hair proud of the shell, slightly darkened -- the
+	-- sheet's zigzag is not worth twenty parts to reproduce, and at a distance
+	-- what reads is that there IS a seam.
+	upright("Seam", D * 0.07, D * 1.02, baseCF * CFrame.new(0, D * 0.02, 0),
+		color:Lerp(Color3.new(0, 0, 0), 0.18), model)
+
+	-- The curled tendril, four blocks around a quarter turn.
+	local tip = baseCF * CFrame.new(0, D * 0.62, 0)
+	for i = 1, 4 do
+		local t = (i - 1) / 4
+		tip = tip * CFrame.new(0, D * 0.13, 0) * CFrame.Angles(0, 0, math.rad(38))
+		part({
+			name = "Tendril",
+			size = Vector3.new(D * 0.10, D * 0.16, D * 0.10),
+			cframe = tip,
+			color = Color3.fromRGB(104, 158, 62),
+			parent = model,
+		})
 	end
-	return CreatureModel.BuildCreature(species, stage, cframe, parent)
+
+	model.PrimaryPart = shell
+	CollectionService:AddTag(model, GameConfig.Tags.SeedPod)
+	return model
+end
+
+function CreatureModel.Build(sp: SeedData.Species, stage: Stage, cf: CFrame,
+	parent: Instance): Model
+	if stage == CreatureModel.STAGE_POD then
+		return CreatureModel.BuildPod(sp, cf, parent)
+	end
+	return CreatureModel.BuildCreature(sp, stage, cf, parent)
 end
 
 return CreatureModel
