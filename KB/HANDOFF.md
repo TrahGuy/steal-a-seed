@@ -23,7 +23,7 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**977 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+**985 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
 zero tall props inside the racing line.
 
 ---
@@ -77,6 +77,42 @@ stand on them.
 The SELL stall moved to the **upper left of the field**. In the middle it sat on the exact line
 every player runs between their plot and the road -- a shop should be somewhere you choose to go,
 not something you run around twice a lap.
+
+## PLOTS EXPAND BACKWARD, AND THE ROOM IS ALREADY RESERVED
+
+The expansion SYSTEM is Phase D. The SPACE it needs is reserved now, and that ordering is the whole
+point: an upgrade button is a day's work whenever it is wanted, but plot geometry is baked into the
+map. A plot that has to grow with no room reserved forces every other plot to move, and everybody's
+saved plot id then points at a different patch of ground.
+
+**Plots are anchored by their road-facing edge** (`Plot.FrontZ = 21`, fixed forever) and grow
+backward. So expanding never moves the point an owner runs in through, and **the trip home is the
+same length at tier 4 as at tier 1** — which is the property that was just bought by tightening the
+field, and would have been thrown away by growing sideways.
+
+Growing sideways would have meant a wider pitch, a wider field, and a longer diagonal from the
+outermost plot to the road. **Depth is free; width is not.**
+
+The field is asymmetric for this: `FieldFront = 85` toward the road (must never grow),
+`FieldBack = 180` away from it (deliberately oversized, empty grass today).
+
+| tier | depth | slots | back edge |
+| --- | --- | --- | --- |
+| 1 | 48 | 6 | Z=69  ← built |
+| 2 | 80 | 12 | Z=101 |
+| 3 | 112 | 20 | Z=133 |
+| 4 | 144 | 30 | Z=165 |
+
+Field back is Z=180, so tier 4 fits with 15 studs to spare — and `MapService` **warns at boot** if a
+future tier stops fitting, because a reservation nobody verified is a guess.
+
+Tier 4 was built through the real code path and photographed before being reverted: six long
+allotment strips, front edges all still at Z=21, 10-stud gaps between neighbours, treadmills still in
+front. Long thin strips are what an allotment actually looks like, which is a happy accident of the
+constraint that keeps the run home constant.
+
+Shipping tier 2 is changing a player's stored tier number and rebuilding their plot. No map surgery,
+no repacking the row.
 
 ## FOUR INVARIANTS THAT ARE LOAD-BEARING
 
@@ -145,8 +181,8 @@ again, because the wedged state does not clear on its own.
     schema is written**.
   * **SpeedGate values are known to be wrong** — spaced correctly relative to each other, absolute
     numbers meaningless until the treadmill exists and there is a measured rate to scale against.
-  * **The Roblox place is still named "Steal an Artifact"** (`114075467877655`), as is the repo
-    folder. Only the owner can rename the place.
+  * **The repo FOLDER is still `D:\KAPE\Steal an Artifact`.** The Roblox place itself was renamed
+    to "Steal a Seed" by the owner on 2026-08-21.
   * **Offline income.** Deferred in the plan; the reference advertises it in a banner across the top
     of the screen as the reason to come back tomorrow.
 

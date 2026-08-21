@@ -494,13 +494,13 @@ function MapDecor.dressField(parent: Instance)
 
 	local rng = Random.new(seedFor("thefield"))
 	local halfW = MAP.FieldWidth * 0.5
-	local halfD = MAP.FieldDepth * 0.5
+	local front, back = -MAP.FieldFront, MAP.FieldBack
 
 	-- Hedges down both side edges. They frame the field and, more usefully,
 	-- they point: the only gap in them is the road.
 	for _, side in ipairs({ -1, 1 }) do
-		local z = -halfD + 10
-		while z < halfD - 10 do
+		local z = front + 10
+		while z < back - 10 do
 			local len = rng:NextNumber(14, 26)
 			prop(folder, "Hedge", Vector3.new(6, 7, len),
 				CFrame.new(side * (halfW - 5), Y + 3.5, z + len * 0.5),
@@ -511,8 +511,8 @@ function MapDecor.dressField(parent: Instance)
 
 	-- Corner trees, well clear of the plots and the run.
 	for _, sx in ipairs({ -1, 1 }) do
-		for _, sz in ipairs({ -1, 1 }) do
-			tree(folder, CFrame.new(sx * (halfW - 24), Y, sz * (halfD - 22)), 1.3,
+		for _, z in ipairs({ front + 22, back - 22 }) do
+			tree(folder, CFrame.new(sx * (halfW - 24), Y, z), 1.3,
 				Color3.fromRGB(112, 78, 52), Color3.fromRGB(92, 178, 82))
 		end
 	end
@@ -524,7 +524,10 @@ function MapDecor.dressField(parent: Instance)
 	for i = 1, 26 do
 		local side = (i % 2 == 0) and 1 or -1
 		local x = side * rng:NextNumber(46, halfW - 22)
-		local z = rng:NextNumber(-halfD + 20, halfD - 62)
+		-- The strip between the red line and the plots, which is the ground
+		-- every player crosses twice a run. Bounded by the plots' FIXED front
+		-- edge, so beds never end up under a plot that grew.
+		local z = rng:NextNumber(front + 20, GameConfig.Plot.FrontZ - 26)
 		local palette = {
 			Color3.fromRGB(255, 226, 92), Color3.fromRGB(255, 138, 178),
 			Color3.fromRGB(146, 186, 255), Color3.fromRGB(255, 146, 96),
@@ -537,8 +540,8 @@ function MapDecor.dressField(parent: Instance)
 	for i = 1, 8 do
 		local side = (i % 2 == 0) and 1 or -1
 		bush(folder, CFrame.new(side * rng:NextNumber(40, halfW - 26), Y,
-			rng:NextNumber(-halfD + 24, halfD - 66)), rng:NextNumber(0.9, 1.4),
-			Color3.fromRGB(88, 172, 84))
+			rng:NextNumber(front + 24, GameConfig.Plot.FrontZ - 30)),
+			rng:NextNumber(0.9, 1.4), Color3.fromRGB(88, 172, 84))
 	end
 end
 

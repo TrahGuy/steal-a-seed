@@ -69,16 +69,27 @@ GameConfig.Map = {
 
 	-- The shared safe field.
 	--
-	-- TIGHT ON PURPOSE. The first build put the plots 246 studs from the road,
-	-- which meant every single run began and ended with a long walk across empty
-	-- grass. That is dead time, it is the first thing a new player experiences,
-	-- and none of it is the game.
+	-- ASYMMETRIC, AND THAT IS THE WHOLE EXPANSION STORY. The field is measured
+	-- separately in each direction from the origin:
 	--
-	-- The field only has to be big enough to hold the plots, the shops and a
-	-- readable gap before the red line. Everything past that is distance the
-	-- BIOMES are supposed to provide -- and they do, at 300 studs a segment.
+	--   FieldFront  toward the road. TIGHT ON PURPOSE -- an early build put the
+	--               plots 246 studs from the road and every run began and ended
+	--               with a long walk across empty grass. Dead time, and the
+	--               first thing a new player experiences. This number is the one
+	--               that must never grow.
+	--   FieldBack   away from the road. DELIBERATELY OVERSIZED. It is empty
+	--               grass today and it is reserved room for plots to grow into.
+	--
+	-- Plots are anchored by their ROAD-FACING EDGE (Plot.FrontZ) and grow
+	-- BACKWARD. So expanding a plot never moves the point its owner runs in
+	-- through, and the trip home is the same length at tier 4 as at tier 1.
+	--
+	-- Growing sideways instead would have meant a wider pitch, a wider field,
+	-- and a longer diagonal from the outermost plot to the road -- reintroducing
+	-- exactly the dead time that was just removed. Depth is free; width is not.
 	FieldWidth = 400,   -- X
-	FieldDepth = 170,   -- Z
+	FieldFront = 85,    -- Z toward the road
+	FieldBack = 180,    -- Z away from it. Room for tier 4 plus a margin.
 	FieldThickness = 6,
 
 	-- THE RED LINE. A stripe painted flat on the grass at the field's far edge
@@ -115,10 +126,13 @@ GameConfig.Map = {
 --==============================================================================
 GameConfig.Plot = {
 	NamePrefix = "Plot_",
-	Size = 48,
-	-- Distance from the field's near edge to the plot centres. Larger moves the
-	-- plots TOWARD the road.
-	InsetFromEdge = 40,
+	-- Width never changes. Only depth does -- see Tiers.
+	Width = 48,
+	-- THE ROAD-FACING EDGE, IN WORLD Z. Fixed forever. Every plot's front edge
+	-- sits here at every tier, which is what makes the run home a constant.
+	FrontZ = 21,
+	-- Must exceed Width. It does not need to exceed the deepest tier, because
+	-- plots grow backward rather than sideways.
 	Pitch = 58,
 
 	FloorName = "Ground",
@@ -132,10 +146,40 @@ GameConfig.Plot = {
 	UnclaimedText = "UNCLAIMED",
 
 	SpawnHeightOffset = 4,
-	-- Phase D grows this. Built now so a plant has somewhere to stand the day
-	-- PlantService exists, rather than being a map change later.
-	StartingPlantSlots = 6,
 }
+
+--==============================================================================
+-- PLOT TIERS
+--
+-- THE SYSTEM THAT SPENDS THESE IS PHASE D. THE SPACE THEY NEED IS RESERVED NOW,
+-- and that ordering is not laziness in one direction or over-engineering in the
+-- other -- it is the only order that works.
+--
+-- An upgrade button is a day's work whenever it is wanted. Plot GEOMETRY is
+-- not: pitch, field size and the fixed front edge are baked into the map, and
+-- a plot that has to grow with no room reserved forces every other plot to
+-- move. Everybody's saved plot id then points at a different patch of ground.
+--
+-- So the tiers are decided today and only tier 1 is built. `MapService` reads
+-- `depth` from here, so shipping tier 2 is changing a player's stored tier
+-- number and rebuilding their plot -- no map surgery, no repacking the row.
+--
+-- Depth grows, width never does. Six long strips side by side is what an
+-- allotment actually looks like, which is a happy accident of the constraint
+-- that keeps the run home constant.
+--
+-- Slot counts are a first pass and will move once a plant model exists and
+-- there is something real to space.
+--==============================================================================
+GameConfig.PlotTiers = {
+	{ depth = 48,  slots = 6 },
+	{ depth = 80,  slots = 12 },
+	{ depth = 112, slots = 20 },
+	{ depth = 144, slots = 30 },
+}
+
+-- What a plot is built at before anything is bought.
+GameConfig.StartingPlotTier = 1
 
 GameConfig.Attributes = {
 	PlotId = "PlotId",
@@ -244,6 +288,28 @@ GameConfig.Save = {
 	MinWriteGap = 7,
 	RetryAttempts = 4,
 }
+
+--==============================================================================
+-- DERIVED
+--
+-- Computed rather than typed, so the two halves of the field can never disagree
+-- with the whole. Set before the freeze, because after it they cannot be.
+--==============================================================================
+GameConfig.Map.FieldDepth = GameConfig.Map.FieldFront + GameConfig.Map.FieldBack
+-- The field is not centred on the origin any more, so anything placing the slab
+-- itself needs this. The ROAD side stays at -FieldFront regardless.
+GameConfig.Map.FieldCenterZ = (GameConfig.Map.FieldBack - GameConfig.Map.FieldFront) * 0.5
+
+-- The deepest tier's back edge. MapService checks the field actually contains
+-- it -- a reservation nobody verified is not a reservation.
+do
+	local deepest = 0
+	for _, tier in ipairs(GameConfig.PlotTiers) do
+		deepest = math.max(deepest, tier.depth)
+	end
+	GameConfig.Plot.MaxDepth = deepest
+	GameConfig.Plot.MaxBackZ = GameConfig.Plot.FrontZ + deepest
+end
 
 local function deepFreeze(target: { [any]: any }): { [any]: any }
 	for _, value in pairs(target) do

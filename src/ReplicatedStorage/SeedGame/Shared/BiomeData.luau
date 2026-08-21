@@ -159,7 +159,9 @@ BiomeData.ById = byId
 --==============================================================================
 function BiomeData.SegmentBounds(biome: Biome): (number, number)
 	local MAP = GameConfig.Map
-	local mouth = -MAP.FieldDepth * 0.5
+	-- The road starts at the field's FRONT edge, which is fixed. The field's
+	-- back edge moves as plots grow and must never affect where a biome sits.
+	local mouth = -MAP.FieldFront
 	local nearZ = mouth - (biome.Order - 1) * MAP.SegmentLength
 	return nearZ, nearZ - MAP.SegmentLength
 end
@@ -169,7 +171,7 @@ end
 -- directly rather than deriving it at three call sites.
 function BiomeData.DistanceFromSafety(biome: Biome): number
 	local _, farZ = BiomeData.SegmentBounds(biome)
-	return math.abs(farZ) - GameConfig.Map.FieldDepth * 0.5
+	return math.abs(farZ) - GameConfig.Map.FieldFront
 end
 
 --==============================================================================

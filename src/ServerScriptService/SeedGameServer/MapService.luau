@@ -141,7 +141,10 @@ local DIRT_DARK = Color3.fromRGB(88, 60, 40)
 local WOOD = Color3.fromRGB(128, 88, 52)
 local WOOD_DARK = Color3.fromRGB(96, 64, 38)
 
-local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
+-- `depth` comes from the plot's TIER, not from config directly, so rebuilding a
+-- plot at a new size is one argument rather than a map change.
+local function buildPlot(id: number, cf: CFrame, depth: number, slots: number,
+	parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = string.format("%s%02d", PLOT.NamePrefix, id)
 	model:SetAttribute(GameConfig.Attributes.PlotId, id)
@@ -150,8 +153,11 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	model.Parent = parent
 	CollectionService:AddTag(model, GameConfig.Tags.Plot)
 
-	local size = PLOT.Size
+	local size = PLOT.Width
 	local half = size * 0.5
+	-- cf sits at the plot's CENTRE, so the front edge is half its depth ahead.
+	local halfD = depth * 0.5
+	model:SetAttribute("Depth", depth)
 
 	--== THE SOIL ==--
 	-- Ground material, no studs. Studs are right for the grass field because it
@@ -159,7 +165,7 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	-- reads as plastic decking.
 	local floor = build({
 		name = PLOT.FloorName,
-		size = Vector3.new(size, 2.5, size),
+		size = Vector3.new(size, 2.5, depth),
 		cframe = cf * CFrame.new(0, 1.25, 0),
 		color = DIRT,
 		material = Enum.Material.Ground,
@@ -171,9 +177,13 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	-- somewhere to put a seed finds the plot's own ground.
 	CollectionService:AddTag(floor, GameConfig.Tags.Planter)
 
-	-- Two tilled furrows. Two parts, and they are what stop a flat brown square
-	-- reading as mud rather than as a garden bed waiting to be planted.
-	for _, offset in ipairs({ -10, 10 }) do
+	-- ONE FURROW PER ROW OF SLOTS, spread down whatever depth this tier is. They
+	-- stop a flat brown rectangle reading as mud rather than as a bed waiting to
+	-- be planted, and tying them to the slot rows means a deeper plot looks
+	-- tilled for its whole length rather than having two stripes at one end.
+	local rows = math.max(1, math.ceil(slots / 3))
+	for row = 1, rows do
+		local offset = -halfD + (row / (rows + 1)) * depth
 		build({
 			name = "Furrow",
 			size = Vector3.new(size - 10, 0.4, 5),
@@ -199,18 +209,24 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 		{ axis = "x", sign = 1 },   -- right
 	}
 	for _, side in ipairs(sides) do
-		local along = (side.axis == "x") and Vector3.new(0, 0, 1) or Vector3.new(1, 0, 0)
-		local outward = (side.axis == "x")
+		local sideways = (side.axis == "x")
+		-- The long runs are DEPTH now, not width -- a deep plot is a strip, and
+		-- a fence that still assumed a square would stop halfway down it.
+		local runLength = sideways and depth or size
+		local along = sideways and Vector3.new(0, 0, 1) or Vector3.new(1, 0, 0)
+		local outward = sideways
 			and Vector3.new(side.sign, 0, 0) or Vector3.new(0, 0, side.sign)
+		local outX = sideways and half or 0
+		local outZ = sideways and 0 or (side.sign * halfD)
 
 		-- Two rails.
 		for _, h in ipairs({ 2.9, 5.0 }) do
-			local railSize = (side.axis == "x")
-				and Vector3.new(0.7, 0.7, size) or Vector3.new(size, 0.7, 0.7)
+			local railSize = sideways
+				and Vector3.new(0.7, 0.7, depth) or Vector3.new(size, 0.7, 0.7)
 			build({
 				name = "Rail",
 				size = railSize,
-				cframe = cf * CFrame.new(outward.X * half, h, outward.Z * half),
+				cframe = cf * CFrame.new(outward.X * outX, h, outZ),
 				color = WOOD,
 				material = Enum.Material.Wood,
 				collide = false,
@@ -219,16 +235,17 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 			})
 		end
 
-		-- Posts. Three a side, corners shared with the neighbouring run -- which
-		-- is a doubled post at each corner, and a doubled post looks like a
-		-- corner post, so it costs nothing to leave.
-		for _, t in ipairs({ -1, 0, 1 }) do
-			local p = along * (t * half)
+		-- Posts every ~20 studs along the run, minimum three. A fixed count would
+		-- leave a 144-stud strip with two rails floating between three posts.
+		local postCount = math.max(3, math.floor(runLength / 20) + 1)
+		for i = 1, postCount do
+			local t = (i - 1) / (postCount - 1) - 0.5   -- -0.5 .. +0.5
+			local p = along * (t * runLength)
 			build({
 				name = "Post",
 				size = Vector3.new(1.3, 6.4, 1.3),
 				cframe = cf * CFrame.new(
-					outward.X * half + p.X, 3.2, outward.Z * half + p.Z),
+					outward.X * outX + p.X, 3.2, outZ + p.Z),
 				color = WOOD_DARK,
 				material = Enum.Material.Wood,
 				collide = false,
@@ -245,7 +262,7 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	build({
 		name = "SignPost",
 		size = Vector3.new(1.2, 7, 1.2),
-		cframe = cf * CFrame.new(-half + 6, 3.5, -half - 1),
+		cframe = cf * CFrame.new(-half + 6, 3.5, -halfD - 1),
 		color = WOOD_DARK,
 		material = Enum.Material.Wood,
 		collide = false,
@@ -255,7 +272,7 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	local board = build({
 		name = PLOT.SignName,
 		size = Vector3.new(15, 4.5, 0.6),
-		cframe = cf * CFrame.new(-half + 6, 8.4, -half - 1),
+		cframe = cf * CFrame.new(-half + 6, 8.4, -halfD - 1),
 		color = WOOD,
 		material = Enum.Material.Wood,
 		collide = false,
@@ -291,7 +308,8 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	local pad = Instance.new("SpawnLocation")
 	pad.Name = PLOT.SpawnPadName
 	pad.Size = Vector3.new(10, 1, 10)
-	pad.CFrame = cf * CFrame.new(0, 2.5, -half + 9)
+	-- Just inside the front edge, so a respawn puts you where you run in.
+	pad.CFrame = cf * CFrame.new(0, 2.5, -halfD + 9)
 	pad.Transparency = 1
 	pad.CanCollide = false
 	pad.Anchored = true
@@ -309,15 +327,16 @@ local function buildPlot(id: number, cf: CFrame, parent: Instance): Model
 	local plants = Instance.new("Folder")
 	plants.Name = PLOT.PlantsFolderName
 	plants.Parent = model
-	local slots = PLOT.StartingPlantSlots
 	for slot = 1, slots do
 		local a = Instance.new("Attachment")
 		a.Name = string.format("Slot%02d", slot)
 		a:SetAttribute("SlotIndex", slot)
 		local col = ((slot - 1) % 3) - 1
-		local row = math.floor((slot - 1) / 3)
-		-- On the two furrows, which is why the furrows are where they are.
-		a.WorldCFrame = cf * CFrame.new(col * 14, 2.6, row == 0 and -10 or 10)
+		local row = math.floor((slot - 1) / 3) + 1
+		-- On the furrows, which is why the furrows are placed off the same
+		-- row arithmetic -- one expression, so they cannot drift apart.
+		a.WorldCFrame = cf * CFrame.new(col * 14, 2.6,
+			-halfD + (row / (rows + 1)) * depth)
 		a.Parent = floor
 		CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
 	end
@@ -633,7 +652,9 @@ function MapService.Init()
 	local field = build({
 		name = MAP.FieldName,
 		size = Vector3.new(MAP.FieldWidth, MAP.FieldThickness, MAP.FieldDepth),
-		cframe = CFrame.new(0, Y - MAP.FieldThickness * 0.5, 0),
+		-- Offset, because the field is no longer centred on the origin: it
+		-- reaches further back than forward to reserve room for plot growth.
+		cframe = CFrame.new(0, Y - MAP.FieldThickness * 0.5, MAP.FieldCenterZ),
 		color = Color3.fromRGB(112, 200, 84),
 		parent = folder,
 	})
@@ -645,7 +666,7 @@ function MapService.Init()
 	local line = build({
 		name = "SafeLine",
 		size = Vector3.new(MAP.FieldWidth, 0.4, MAP.SafeLineThickness),
-		cframe = CFrame.new(0, Y + 0.2, -MAP.FieldDepth * 0.5 + MAP.SafeLineThickness),
+		cframe = CFrame.new(0, Y + 0.2, -MAP.FieldFront + MAP.SafeLineThickness),
 		color = MAP.SafeLineColor,
 		material = Enum.Material.SmoothPlastic,
 		collide = false,
@@ -657,7 +678,7 @@ function MapService.Init()
 	local plate = build({
 		name = "SafeLineText",
 		size = Vector3.new(150, 0.3, 22),
-		cframe = CFrame.new(0, Y + 0.15, -MAP.FieldDepth * 0.5 + 16),
+		cframe = CFrame.new(0, Y + 0.15, -MAP.FieldFront + 16),
 		color = Color3.fromRGB(112, 200, 84),
 		collide = false,
 		transparency = 1,
@@ -694,7 +715,7 @@ function MapService.Init()
 	-- the field read as a market garden rather than a lawn.
 	do
 		local sx = -(MAP.FieldWidth * 0.5) + 46
-		local sz = -(MAP.FieldDepth * 0.5) + 30
+		local sz = -MAP.FieldFront + 30
 		local stallCF = CFrame.new(sx, Y, sz) * CFrame.Angles(0, math.rad(28), 0)
 
 		local stall = Instance.new("Model")
@@ -779,13 +800,16 @@ function MapService.Init()
 	plots.Parent = folder
 
 	local n = GameConfig.MaxPlots
-	local z = MAP.FieldDepth * 0.5 - PLOT.InsetFromEdge
+	local tier = GameConfig.PlotTiers[GameConfig.StartingPlotTier]
+	-- Anchored by the FRONT edge, so the plot centre moves back as depth grows
+	-- and the edge the owner runs in through never does.
+	local z = PLOT.FrontZ + tier.depth * 0.5
 	for id = 1, n do
 		local x = (id - (n + 1) * 0.5) * PLOT.Pitch
-		-- Facing the lanes, which is the direction every run comes home from.
-		buildPlot(id, CFrame.new(x, Y, z), plots)
-		-- On the grass in front of its own plot, clear of the fence.
-		buildTreadmill(id, CFrame.new(x, Y + 0.6, z - PLOT.Size * 0.5 - 16), plots)
+		buildPlot(id, CFrame.new(x, Y, z), tier.depth, tier.slots, plots)
+		-- On the grass in front of the fixed front edge, so it never has to move
+		-- when the plot behind it grows.
+		buildTreadmill(id, CFrame.new(x, Y + 0.6, PLOT.FrontZ - 16), plots)
 	end
 
 	--== FIELD DRESSING ==--
@@ -805,7 +829,20 @@ function MapService.Init()
 	-- Three independent numbers decide whether the plots fit on the field, and
 	-- nothing stops a future edit to one of them pushing a plot off the edge.
 	-- Arithmetic that can catch it belongs in the build, not in a comment.
-	local plotSpan = (n - 1) * PLOT.Pitch + PLOT.Size
+	--== IS THE RESERVED ROOM ACTUALLY THERE ==--
+	-- The whole point of an oversized FieldBack is that the deepest tier fits
+	-- inside it. Nothing enforces that but this.
+	if PLOT.MaxBackZ > MAP.FieldBack then
+		warn(string.format(
+			"[Seed/MapService] Tier %d plots reach Z=%d but the field ends at %d. " ..
+			"Raise GameConfig.Map.FieldBack -- the deepest tier will hang off the edge.",
+			#GameConfig.PlotTiers, PLOT.MaxBackZ, MAP.FieldBack))
+	end
+	if PLOT.Pitch <= PLOT.Width then
+		warn("[Seed/MapService] Plot.Pitch <= Plot.Width: neighbouring plots overlap.")
+	end
+
+	local plotSpan = (n - 1) * PLOT.Pitch + PLOT.Width
 	if plotSpan > MAP.FieldWidth then
 		warn(string.format(
 			"[Seed/MapService] %d plots at pitch %d span %d studs but the field is only %d wide. " ..
@@ -874,9 +911,8 @@ end
 -- check and the combat rules can never disagree about where safety ends.
 function MapService.IsInSafeZone(position: Vector3): boolean
 	local halfW = MAP.FieldWidth * 0.5
-	local halfD = MAP.FieldDepth * 0.5
 	return position.X >= -halfW and position.X <= halfW
-		and position.Z >= -halfD and position.Z <= halfD
+		and position.Z >= -MAP.FieldFront and position.Z <= MAP.FieldBack
 end
 
 return MapService
