@@ -264,6 +264,12 @@ GameConfig.Attributes = {
 	-- the wrong one.
 	CarryingSpecies = "CarryingSpecies",
 	CarryingKg = "CarryingKg",
+	-- Bumped every time a pod is banked at the red line. A COUNTER rather than a
+	-- flag, because two banks in a row have to be two events -- setting a flag
+	-- true twice changes nothing and the second one would go unnoticed. The
+	-- client watches it to tell "I made it" apart from "I lost it", which from
+	-- the client's side otherwise look identical: CarryingSpecies goes nil.
+	BankedCount = "BankedCount",
 	SeedInstanceId = "SeedInstanceId",
 	InSafeZone = "InSafeZone",
 }

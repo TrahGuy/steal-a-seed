@@ -69,7 +69,9 @@ src/
     CarryService.luau           one pod at a time, and what it costs to carry
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
+    ParentAnim.client.luau      the nest parent's limbs
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
+    AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
 ```
 
 Phase A still to come: `CarryService`, `PlantService`, `EconomyService`, `TreadmillService` and the

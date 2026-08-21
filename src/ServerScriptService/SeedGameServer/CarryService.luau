@@ -451,6 +451,11 @@ local function bank(player: Player): boolean
 	carried[player] = nil
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
+	-- Tell the client it MADE IT. Dropping and banking both end with
+	-- CarryingSpecies going nil, so without this the alert has no way to tell a
+	-- success from a mugging.
+	player:SetAttribute(ATTR.BankedCount,
+		(player:GetAttribute(ATTR.BankedCount) or 0) + 1)
 	log(string.format("%s banked a %s (%d kg).", player.Name, species.Name, species.Kg))
 	return true
 end
