@@ -59,6 +59,12 @@ type Fairy = {
 	-- driven cycle slides when she is slow and sprints on the spot when she
 	-- stops.
 	stride: number,
+	-- HOW FAR THE WALK IS FADED IN, 0 to 1. It lived in a separate table keyed
+	-- by Model, which leaked: the tag-removed handler cleared `fairies` and
+	-- could not clear `blend`, because `blend` was declared twenty lines below
+	-- it and would have been a nil global there. On the record there is only one
+	-- table to forget to clean, and it is already cleaned.
+	blend: number,
 }
 
 local fairies: { [Model]: Fairy } = {}
@@ -115,6 +121,7 @@ local function track(model: Instance)
 		leftHip = joint("Left Hip"),
 		phase = phaseFor(model),
 		stride = 0,
+		blend = 0,
 	}
 end
 
@@ -145,8 +152,6 @@ local ARM_SHARE = 0.7
 -- she stops.
 local BLEND_RATE = 6
 
-local blend: { [Model]: number } = {}
-
 RunService.Heartbeat:Connect(function(dt)
 	if next(fairies) == nil then
 		return
@@ -158,7 +163,6 @@ RunService.Heartbeat:Connect(function(dt)
 			-- Despawned without the removed signal firing, so the table cannot
 			-- grow without bound.
 			fairies[model] = nil
-			blend[model] = nil
 		else
 			--== WINGS ==--
 			local flap = math.sin(t * FLAP_RATE + f.phase) * FLAP_ANGLE
@@ -183,11 +187,9 @@ RunService.Heartbeat:Connect(function(dt)
 
 			f.stride += speed * dt * SWING_PER_STUD
 			local target = speed > 0.4 and 1 or 0
-			local b = blend[model] or 0
-			b += (target - b) * math.min(1, dt * BLEND_RATE)
-			blend[model] = b
+			f.blend += (target - f.blend) * math.min(1, dt * BLEND_RATE)
 
-			local swing = math.sin(f.stride) * SWING_ANGLE * b
+			local swing = math.sin(f.stride) * SWING_ANGLE * f.blend
 			-- ABOUT LOCAL Z, AND THAT WAS MEASURED RATHER THAN GUESSED. R6 bakes
 			-- a 90-degree yaw into every shoulder and hip C0, so the joint's axes
 			-- are not the torso's and the obvious X is wrong: rotating a shoulder

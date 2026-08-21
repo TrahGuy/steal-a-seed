@@ -94,6 +94,13 @@ local plotOf: { [Player]: number } = {}
 local waiting: { Player } = {}
 
 local connections: { [Player]: { RBXScriptConnection } } = {}
+-- The service's OWN signal connections, kept so Init can drop them. Without
+-- this, calling Start twice -- which Rule 10 says has to be safe, and which is
+-- exactly what tuning in Edit does -- leaves the previous run's PlayerAdded
+-- still connected. They accumulate silently: nothing misbehaves visibly,
+-- because onPlayerAdded is idempotent, but every re-run adds another listener
+-- that never goes away.
+local serviceConnections: { RBXScriptConnection } = {}
 
 type Listener = (player: Player, plot: Model) -> ()
 local onAssigned: { Listener } = {}
@@ -183,25 +190,39 @@ end
 -- The pivot runs after HumanoidRootPart exists, which is after the engine has
 -- finished placing the character -- so it corrects rather than races.
 --==============================================================================
+--
+-- SPAWNED, NEVER INLINE, because this function YIELDS: a character can be
+-- parented before its HumanoidRootPart exists, so the WaitForChild below is
+-- real and can burn five seconds. Called inline from `assign` that would mean
+-- the lease's listeners and the client notification wait behind a character
+-- that may never finish loading -- and worse, `drainQueue` assigns in a LOOP,
+-- so one slow character would stall every other queued player behind it. It
+-- would also open a yield in the middle of assignment, letting a release run
+-- and mutate the queue half way through draining it.
+--
+-- Placement is not part of the lease. It can take as long as it takes.
 local function placeCharacter(player: Player, character: Model)
-	local root = character:FindFirstChild("HumanoidRootPart")
-		or character:WaitForChild("HumanoidRootPart", 5)
-	-- Either of those can come back with the player already gone.
-	if not root or character.Parent == nil or player.Parent ~= Players then
-		return
-	end
+	task.spawn(function()
+		local root = character:FindFirstChild("HumanoidRootPart")
+			or character:WaitForChild("HumanoidRootPart", 5)
+		-- Either of those can come back with the player already gone.
+		if not root or character.Parent == nil or player.Parent ~= Players then
+			return
+		end
 
-	local plot = PlotService.PlotOf(player)
-	local target = if plot
-		then PlotService.SpawnCFrameFor(plot)
-		else MapService.GetOverflowCFrame()
+		local plot = PlotService.PlotOf(player)
+		local target = if plot
+			then PlotService.SpawnCFrameFor(plot)
+			else MapService.GetOverflowCFrame()
 
-	local ok, err = pcall(function()
-		character:PivotTo(target)
+		local ok, err = pcall(function()
+			character:PivotTo(target)
+		end)
+		if not ok then
+			warn(string.format("[Seed/PlotService] could not place %s: %s",
+				player.Name, tostring(err)))
+		end
 	end)
-	if not ok then
-		warn(string.format("[Seed/PlotService] could not place %s: %s", player.Name, tostring(err)))
-	end
 end
 
 --==============================================================================
@@ -399,6 +420,10 @@ function PlotService.Init()
 	table.clear(ownerOf)
 	table.clear(plotOf)
 	table.clear(waiting)
+	for _, c in ipairs(serviceConnections) do
+		c:Disconnect()
+	end
+	table.clear(serviceConnections)
 	for player, conns in pairs(connections) do
 		for _, c in ipairs(conns) do
 			c:Disconnect()
@@ -451,8 +476,9 @@ function PlotService.Start()
 	end
 
 	--== PLAYERS ==--
-	Players.PlayerAdded:Connect(onPlayerAdded)
-	Players.PlayerRemoving:Connect(onPlayerRemoving)
+	-- Tracked, so Init can drop them and a second Start does not double up.
+	table.insert(serviceConnections, Players.PlayerAdded:Connect(onPlayerAdded))
+	table.insert(serviceConnections, Players.PlayerRemoving:Connect(onPlayerRemoving))
 	-- ANYONE ALREADY HERE. In Play Solo the local player exists before
 	-- ServerMain has finished booting, so connecting PlayerAdded and stopping
 	-- there would miss the only player in the session -- which is precisely the

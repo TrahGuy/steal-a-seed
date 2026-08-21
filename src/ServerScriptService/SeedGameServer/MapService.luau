@@ -705,7 +705,14 @@ function MapService.Init()
 	local line = build({
 		name = "SafeLine",
 		size = Vector3.new(MAP.FieldWidth, 0.4, MAP.SafeLineThickness),
-		cframe = CFrame.new(0, Y + 0.2, -MAP.FieldFront + MAP.SafeLineThickness),
+		-- HALF the thickness in, not a whole one, so the stripe's OUTER edge
+		-- lands exactly on the field edge -- which is the boundary
+		-- IsInSafeZone actually tests. At a full thickness the paint sat 1.25
+		-- studs inside the real line, leaving a band where a player stood
+		-- past the mark and was still counted safe. In a game whose central
+		-- question is "am I safe yet", the paint and the check answering
+		-- differently is the one disagreement that must not exist.
+		cframe = CFrame.new(0, Y + 0.2, -MAP.FieldFront + MAP.SafeLineThickness * 0.5),
 		color = MAP.SafeLineColor,
 		material = Enum.Material.SmoothPlastic,
 		collide = false,

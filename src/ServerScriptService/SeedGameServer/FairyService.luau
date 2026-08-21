@@ -43,6 +43,10 @@ local PAUSE_MAX = 4.5
 local MOVE_TIMEOUT = 6
 
 local running: { [Model]: boolean } = {}
+-- Kept so Init can drop them. Start connects two CollectionService signals, and
+-- without this a second Start -- which Rule 10 requires to be safe -- leaves the
+-- first run's still connected.
+local serviceConnections: { RBXScriptConnection } = {}
 
 local function log(message: string)
 	print("[Seed/FairyService] " .. message)
@@ -109,14 +113,27 @@ local function start(model: Instance)
 	task.spawn(walkLoop, model)
 end
 
+function FairyService.Init()
+	for _, c in ipairs(serviceConnections) do
+		c:Disconnect()
+	end
+	table.clear(serviceConnections)
+	-- The walk loops themselves stop on their own: each one re-checks
+	-- running[model] and model.Parent every lap, so clearing this is enough to
+	-- retire the previous run's fairies without hunting down their threads.
+	table.clear(running)
+end
+
 function FairyService.Start()
 	for _, m in ipairs(CollectionService:GetTagged(GameConfig.Tags.Fairy)) do
 		start(m)
 	end
-	CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Fairy):Connect(start)
-	CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.Fairy):Connect(function(m)
-		running[m] = nil
-	end)
+	table.insert(serviceConnections,
+		CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Fairy):Connect(start))
+	table.insert(serviceConnections,
+		CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.Fairy):Connect(function(m)
+			running[m] = nil
+		end))
 
 	local n = #CollectionService:GetTagged(GameConfig.Tags.Fairy)
 	log(string.format("Ready. %d fairy(s) walking, %.0f x %.0f studs of wander.",
