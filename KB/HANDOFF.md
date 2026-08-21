@@ -21,6 +21,9 @@ src/ServerScriptService/SeedGameServer/
   ServerMain.server.luau   bootstrap: Init() all, then Start() all
   MapService.luau          layout, lighting
   PlotService.luau         the plot <-> player lease, and the overflow queue
+  ProfileSchema.luau       what a profile is + the validator  (NOT a *Service)
+  SaveService.luau         DataStore transport, session locking
+  PlayerDataService.luau   profiles in memory, autosave, replication
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
@@ -346,6 +349,67 @@ only shows up in geometry.
 
 ---
 
+## SAVING, AND THE ONE RULE THAT MATTERS
+
+**Never write a profile you did not successfully read.** Every account-wiping bug in every simulator
+ever shipped is this one: a read fails for three seconds, the game hands out a fresh profile because
+that is the graceful-looking thing to do, and ninety seconds later the autosave writes those
+defaults over a year of progress. Nothing errored.
+
+So `SaveService.Load` returns a **status**, not just data, and four cases stay deliberately distinct:
+
+| status | meaning | may we write? |
+| --- | --- | --- |
+| `ok` | read it, here it is | yes |
+| `new` | read it, genuinely nothing there | yes |
+| `locked` | another live server holds it | no |
+| `unavailable` | DataStores unreachable this session | **no** |
+| `failed` | tried, could not | **no** |
+
+`new` and `failed` look identical from outside — both are "no data" — and treating them the same
+*is* the bug.
+
+**`unavailable` gives a temporary profile; `failed` kicks.** Not the same. `unavailable` is the
+normal state of a Studio place without API access, so kicking there would make the game untestable;
+instead saving is switched off and it says so loudly. `failed` means the store exists and would not
+answer after five attempts across ~15s — a real outage — and kicking is the *kind* option, because a
+player bounced with an honest message rejoins in ten seconds while a player whose account is erased
+does not come back. "Do not save this" is a property of the entry, checked at every write, never a
+flag each call site remembers.
+
+**The session lock** closes the classic hop: leave server A, join B before A has written, B loads
+stale data, B saves over A. Load claims the profile *inside* an `UpdateAsync` — read and claim as
+one atomic operation, because doing it in two is the race it exists to close — and Save refuses to
+write if somebody else now holds the claim. A claim older than `SessionLockSeconds` is taken, since
+servers crash without releasing and a profile locked forever by a machine that no longer exists is
+worse than a little contention.
+
+**Sanitising is the migration strategy.** A loaded profile is poured into fresh defaults field by
+field; anything missing, mistyped or out of range gets the default. Adding a field therefore needs
+no migration ladder — old profiles just get the default, which is what a migration would have
+written. `Version` is carried so the day a field must be *reshaped* can be detected. Unknown keys
+are dropped by construction, because everything copies *from* raw *into* a default.
+
+**NaN is checked separately, and it is not pedantry.** NaN fails every comparison you would normally
+write, so a plain clamp passes it straight through — verified: `math.clamp(NaN, 0, 1e15)` returns
+`nan`. One NaN in Cash poisons every sum it touches, saves cleanly, and reloads as NaN forever.
+`value ~= value` is the whole test.
+
+**The cash cap is 1e15, and the rate is the real lever.** Luau doubles are exact to 2^53 (~9.007e15)
+and silently approximate above — no error, just cash that stops adding up and a profile that
+round-trips to a different value than it left as. The reference game's 2.7B/sec would eat 1e15 in
+four days, which is not an argument for a bigger number because there isn't one: 9e15 is only 9×
+further and no cap survives an unbounded rate. Plant yields get tuned so Rebirth arrives before the
+ceiling does.
+
+### Verified 2026-08-21 against the real DataStore
+
+`ProfileSchema` passes 21 assertions — NaN, infinity, negatives, over-cap, bad types, tier
+out-of-range, absent fields, unknown keys, absurd timestamps. Round-trip confirmed: a profile with
+nested `Plants` data saved and reloaded identical. A save attempted while another JobId held the
+lock was **refused** rather than clobbering. This place has Studio API access **on**, so all of that
+ran against a live store rather than a mock; the test profile was reset to defaults afterwards.
+
 ## Things worth not rediscovering
 
   * **Moving the Edit viewport takes `Camera.Focus`, not `Camera.CFrame`.** Writing `CFrame` alone
@@ -448,9 +512,7 @@ module state is not.
 
 ## Still open
 
-  * **The cash cap.** PLAN.md picks 1e15 and then the footage showed the reference game running at
-    2.7B/sec, which reaches that in about four days of idling. Must be settled **before the save
-    schema is written**.
+  * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
   * **SpeedGate values are known to be wrong** — spaced correctly relative to each other, absolute
     numbers meaningless until the treadmill exists and there is a measured rate to scale against.
   * **The repo FOLDER is still `D:\KAPE\Steal an Artifact`.** The Roblox place itself was renamed

@@ -60,10 +60,13 @@ src/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
     MapService.luau             builds the whole map, and the lighting, from code
     PlotService.luau            who owns which plot, and puts them on it
+    ProfileSchema.luau          what a profile is, and the validator (NOT a *Service)
+    SaveService.luau            DataStore transport, session locking
+    PlayerDataService.luau      profiles in memory, autosave, replication
 ```
 
-Phase A still to come: `PlayerDataService`, `SaveService`, `SeedService`, `CarryService`,
-`PlantService`, `EconomyService`, and the HUD. See [KB/PLAN.md](KB/PLAN.md).
+Phase A still to come: `SeedService`, `CarryService`, `PlantService`, `EconomyService`, and the
+HUD. See [KB/PLAN.md](KB/PLAN.md).
 
 ## The map is ONE ROAD
 

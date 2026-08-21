@@ -278,6 +278,10 @@ GameConfig.Tags = {
 GameConfig.Remotes = {
 	PlotAssigned = "PlotAssigned",
 	ProfileUpdated = "ProfileUpdated",
+	-- Sent once when a profile is ready, or when it could not be loaded. A
+	-- client that never hears this must not pretend the player has 0 cash --
+	-- that is indistinguishable from a real new account.
+	ProfileReady = "ProfileReady",
 	CarryStateChanged = "CarryStateChanged",
 	DropSeedRequest = "DropSeedRequest",
 	GameEvent = "GameEvent",
@@ -357,6 +361,42 @@ GameConfig.Save = {
 	AutosaveSeconds = 90,
 	MinWriteGap = 7,
 	RetryAttempts = 4,
+
+	--==========================================================================
+	-- THE CEILINGS, AND WHY THEY ARE HERE RATHER THAN IN A BALANCE FILE
+	--
+	-- Luau numbers are IEEE doubles: exact for integers to 2^53 (~9.007e15) and
+	-- silently approximate above it. Silently is the whole problem -- no error,
+	-- just cash that stops adding up and a profile that round-trips to a
+	-- different value than it left as. That makes these a SAVE INTEGRITY
+	-- constraint, not a tuning knob, which is why they live next to the schema.
+	--
+	-- 1e15 leaves an order of magnitude of headroom under the exact range, so
+	-- intermediate arithmetic cannot drift either.
+	--
+	-- The reference game runs at 2.7 BILLION/sec, which would reach this in
+	-- about four days. That is not an argument for a bigger number, because
+	-- there isn't one -- 9e15 is only 9x further and no cap survives an
+	-- unbounded rate. It is an argument about the RATE, which is ours to set:
+	-- plant yields get tuned so Rebirth arrives long before the ceiling does.
+	--==========================================================================
+	MaxCash = 1e15,
+	MaxSpeedScore = 1e15,
+
+	--==========================================================================
+	-- SESSION LOCK
+	--
+	-- How long another server's claim on a profile is respected before it is
+	-- assumed dead and taken. Too short and a live server gets its profile
+	-- stolen mid-session; too long and a player who hops servers waits.
+	--
+	-- The failure this prevents is the classic one: leave server A, join server
+	-- B before A has written, B loads stale data, B saves over A. Progress is
+	-- gone and nothing errored.
+	--==========================================================================
+	SessionLockSeconds = 45,
+	LoadAttempts = 5,
+	LoadRetryGap = 3,
 }
 
 -- How deep a plot with this many bed rows has to be. One expression, read by

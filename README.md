@@ -75,6 +75,8 @@ Built so far:
 | `MapService` | the whole world and its lighting, from code |
 | `PlotService` | who owns which plot, and puts them on it |
 | `FairyService` | walks Marigold, who runs the shop |
+| `SaveService` | DataStore transport under a session lock |
+| `PlayerDataService` | profiles, autosave, replication to the client |
 
 Phase A is done when a player can steal a seed, get it home, plant it, and watch it pay.
 
