@@ -329,6 +329,9 @@ local function drainQueue()
 		end
 		table.remove(waiting, 1)
 		assign(nextUp, id)
+		local plot = plotsById[id]
+		log(string.format("%s promoted off the queue onto %s. %d still waiting.",
+			nextUp.Name, plot and plot.Name or ("plot " .. id), #waiting - 1))
 		moved = true
 	end
 
@@ -363,6 +366,7 @@ local function release(player: Player)
 		-- was growing here still has something left to read.
 		fire(onReleased, player, plot)
 		clearPlot(plot)
+		log(string.format("%s released %s. It is empty again.", player.Name, plot.Name))
 	end
 
 	drainQueue()
@@ -384,6 +388,8 @@ local function onPlayerAdded(player: Player)
 	local id = firstFreePlotId()
 	if id then
 		assign(player, id)
+		local plot = plotsById[id]
+		log(string.format("%s -> %s.", player.Name, plot and plot.Name or ("plot " .. id)))
 	else
 		table.insert(waiting, player)
 		log(string.format("%s is waiting -- all %d plots are taken (position %d).",

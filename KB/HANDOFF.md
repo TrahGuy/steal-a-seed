@@ -405,10 +405,39 @@ WalkSpeed 150.0**.
 
 ### NOT verified
 
-  * **Anything with two or more players.** Queue promotion when a plot frees is the specific gap:
-    it needs somebody to leave while somebody else waits. Studio's "Start Server + 2 Players" is the
-    way to test it, and it has not been run.
+  * **`clearPlot` has never had anything to clear.** The handover test ran on an empty plot
+    (`plantsbefore=0`), so "a lease returns the ground empty" is asserted, not demonstrated. It
+    cannot be until `PlantService` exists and there are plants to leave behind.
   * The whole Phase A loop past owning ground — no seeds, carrying, planting or economy exist yet.
+
+### The plot queue, verified 2026-08-21 with two clients
+
+```
+2state      who=Player1  plot=Plot_01  queue=0  hubdist=103  onoverflowpad=false
+2state      who=Player2  plot=NONE     queue=1  hubdist=0    onoverflowpad=true
+5released   who=Player1  plot=Plot_01
+3assigned   who=Player2  plot=Plot_01  claimed=true  ownerattr=Player2
+4settled    who=Player2  plot=Plot_01  drift=0.00
+```
+
+Player2 queued on the overflow pad, then on Player1 leaving was promoted onto Plot_01 and **moved
+there** — drift 0.00 from the pad, from hubdist 0. That last number is the point: it separates a
+real promotion from relabelling a plot's owner while the player stands where they were.
+
+### Studio's multi-client server is invisible to MCP, and here is the way round it
+
+`Start Server + N Players` runs the server in a **separate process with no MCP plugin in it**, so
+`list_roblox_studios` shows only the editor and the Server datamodel reads as unavailable. Play Solo
+is different — it puts the *same* window into Play, which is why that was readable. Controlling
+Studio does not help either: `screen_capture` is viewport-only and both input tools are locked to
+`datamodel_type: "Client"`, so they drive the game, not the ribbon.
+
+**The way round it is to make the server report out.** A throwaway `*Service` rides
+`PlotService.OnAssigned`/`OnReleased` and beacons each event to `http://127.0.0.1:8732/?...`, where a
+tiny Python endpoint appends to a file. Two things that matter if this is rebuilt: set
+`HttpService.HttpEnabled` **in Edit**, because it is a place-level property the spawned server
+inherits; and have the endpoint `flush()` + `fsync()`, because `python -m http.server`'s own request
+log never reached the task output file at all.
 
 ### Testing gotcha that will bite again
 
