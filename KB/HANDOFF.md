@@ -24,8 +24,12 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**1,226 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
-zero tall props inside the racing line.
+**1,204 parts, built in 0.12 seconds.** Zero gaps in the road, zero solid decoration, zero tall props
+inside the racing line.
+
+**Fifteen parts are unanchored and all fifteen are Marigold** — a Humanoid cannot walk anchored.
+This line used to read "zero unanchored", which was true until she existed; anything else loose in
+the world is a bug.
 
 ---
 
