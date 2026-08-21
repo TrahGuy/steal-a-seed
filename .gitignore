@@ -3,3 +3,6 @@
 *.rbxl.lock
 *.rbxlx.lock
 build/
+
+# Blender build artefacts -- regenerate with tools/blender/parent_biome1.py
+tools/blender/out/
