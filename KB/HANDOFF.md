@@ -23,7 +23,7 @@ src/ServerScriptService/SeedGameServer/
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
-**1,243 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
+**1,226 parts, built in ~0.15 seconds.** Zero unanchored, zero gaps in the road, zero solid decoration,
 zero tall props inside the racing line.
 
 ---
@@ -186,6 +186,55 @@ constraint that keeps the run home constant.
 
 Shipping tier 2 is changing a player's stored tier number and rebuilding their plot. No map surgery,
 no repacking the row.
+
+## THE HUB, AND THE FAIRY WHO RUNS IT
+
+No fence. It had a ring of posts and rails, and **a fence around a shop says keep out** — the
+opposite of what a shop is for. A low sand deck with a darker rim marks the square instead: a floor
+you walk onto rather than a barrier you walk through.
+
+The stall is dressed now — plank counter, striped awning, back shelf of jars, crates of produce,
+lanterns on the posts. The jars are one part each and are the cheapest possible "somebody works
+here".
+
+**The fairy is built on the server and MOVED on every client**, meeting at one CollectionService
+tag. A server loop writing her CFrame would replicate a position stream to every player forever, run
+at the server's framerate so she stutters exactly when the server is busy, and arrive interpolated
+and late. Animating per-client costs no bandwidth and runs at each player's own framerate. Positions
+diverge by a fraction of a stud, which nobody can observe on a decoration they cannot touch.
+`Ambience.client.luau` is the first client script in this project and the home for anything else
+that moves for decoration.
+
+Four things about her were wrong first and are worth not redoing:
+
+  * **She was made entirely of `Neon`.** At Brightness 2.4, Neon does not glow — it *clips*. Body,
+    hair, head and four translucent wings all saturated to the same white and she came out a
+    featureless blob. Everything is plain plastic now; the glow comes from the PointLight, which
+    lights the stall without touching her own shading.
+  * **Her wings were flat horizontal panels**, which read as a plank driven through her. A wing seen
+    from the side is a tall thin shape. They are vertical panels swept out and back.
+  * **Hair and wings were at −Z, which is FORWARD.** A CFrame's local −Z is the direction it faces,
+    so the obvious-looking "behind" offset put them over her face. Behind is +Z.
+  * **She faced her orbit tangent**, so she spent half of every circuit with her back to the
+    counter. Fixed facing with drifting movement reads as somebody hovering in place attending to
+    you, which is the job.
+
+Wing rest poses are full **CFrames** in attributes, not three numbers — a Vector3 cannot express
+"swept back 28 degrees" — and they are read from the attribute rather than from the live CFrame,
+because deriving a rest pose from something already moving is how a flapping wing walks off the body
+one rounding error at a time. Verified: 240 simulated frames leave head-to-root at exactly the
+authored 0.620.
+
+## PLOTS SIT IN THE GROUND, NOT ON IT
+
+The plot had a 2-stud grass slab, so every one was a platform you stepped up onto. The fix was
+**removing** the slab, not sinking it: plots are rotated to face the hub, so their stud grid runs at
+an angle to the field's, and a rotated studded patch laid on a studded field shows a seam at every
+plot no matter how thin. With no slab, the field's studs run continuously under the fence and the
+beds. The **fence** marks the plot now, which is what a fence is for.
+
+A 0.2-stud invisible footprint survives as `PrimaryPart` and as the rectangle every fit check
+measures. Beds sit directly on the field.
 
 ## FOUR INVARIANTS THAT ARE LOAD-BEARING
 

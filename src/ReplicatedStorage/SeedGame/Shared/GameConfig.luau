@@ -266,6 +266,8 @@ GameConfig.Tags = {
 	WildPatch = "WildPatch",
 	SeedPod = "SeedPod",
 	BiomeGate = "BiomeGate",
+	-- Built and tagged by the server, MOVED by each client. See HubFairy.
+	Fairy = "Fairy",
 }
 
 GameConfig.Remotes = {

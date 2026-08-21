@@ -33,6 +33,7 @@ local BiomeData = require(Shared:WaitForChild("BiomeData"))
 -- Dressing, not layout. Deliberately not a "*Service" so ServerMain does not
 -- try to start it -- MapService calls it during its own build.
 local MapDecor = require(script.Parent:WaitForChild("MapDecor"))
+local HubFairy = require(script.Parent:WaitForChild("HubFairy"))
 
 local MapService = {}
 -- First. Every other service reads the world this builds.
@@ -157,18 +158,35 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	model:SetAttribute("Rows", rows)
 	model:SetAttribute("Depth", depth)
 
-	--== THE GROUND IS GRASS ==--
-	-- Studded, and the same green as the field, so a plot reads as a fenced-off
-	-- piece of the lawn rather than as a separate platform dropped onto it. The
-	-- soil is the BEDS; the plot is where the beds stand.
+	--== THE PLOT HAS NO GROUND OF ITS OWN ==--
+	--
+	-- It used to: a 2-stud grass slab that sat ON TOP of the field, so every
+	-- plot was a platform you stepped up onto. Asked to make them mix into the
+	-- ground instead, and the right answer turned out to be removing the slab
+	-- rather than sinking it.
+	--
+	-- Sinking it flush would z-fight with the field, and raising it a hair would
+	-- not: plots are ROTATED to face the hub, so their stud grid runs at an
+	-- angle to the field's. A rotated studded patch laid on a studded field
+	-- shows a seam at every plot no matter how thin it is.
+	--
+	-- With no slab at all, the field's studs run continuously under the fence
+	-- and the beds, which is exactly "they should mix". The FENCE is what marks
+	-- the plot now, which is what a fence is for.
+	--
+	-- This part survives as an invisible footprint: PrimaryPart for GetPivot,
+	-- and the rectangle every fit check measures. It is never seen.
 	local floor = build({
 		name = PLOT.FloorName,
-		size = Vector3.new(width, 2, depth),
-		cframe = cf * CFrame.new(0, 1, 0),
+		size = Vector3.new(width, 0.2, depth),
+		cframe = cf * CFrame.new(0, 0.1, 0),
 		color = GRASS,
-		material = Enum.Material.Grass,
+		transparency = 1,
+		collide = false,
+		studs = false,
 		parent = model,
 	})
+	floor.CanQuery = false
 	model.PrimaryPart = floor
 
 	--== THE FENCE ==--
@@ -277,8 +295,10 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		-- makes it read as a raised bed rather than as tiles on a floor.
 		build({
 			name = "BedFrame",
+			-- Bottom at ground level, because there is no deck under it any
+			-- more -- the bed stands directly on the field.
 			size = Vector3.new(blockW + 1.6, 2.2, bedSpan + 1.6),
-			cframe = cf * CFrame.new(blockX, 2.1, 0),
+			cframe = cf * CFrame.new(blockX, 1.1, 0),
 			color = BED_FRAME,
 			material = Enum.Material.Wood,
 			collide = false,
@@ -296,7 +316,9 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 			local bed = build({
 				name = string.format("Bed%02d", slot),
 				size = Vector3.new(blockW, 1.6, PLOT.RowDepth),
-				cframe = cf * CFrame.new(blockX, 2.9, rowZ),
+				-- Recessed a little below the frame's lip, so the frame reads as
+				-- a raised edge holding soil in rather than as a mat under it.
+				cframe = cf * CFrame.new(blockX, 1.2, rowZ),
 				color = BED_SOIL,
 				-- STUDDED, AND THEREFORE PLASTIC. Ground was the obvious material
 				-- for soil and it is the wrong one: its noise texture renders
@@ -341,7 +363,7 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	local pad = Instance.new("SpawnLocation")
 	pad.Name = PLOT.SpawnPadName
 	pad.Size = Vector3.new(6, 1, 6)
-	pad.CFrame = cf * CFrame.new(0, 2.5, -halfD + 3)
+	pad.CFrame = cf * CFrame.new(0, 0.6, -halfD + 3)
 	pad.Transparency = 1
 	pad.CanCollide = false
 	pad.Anchored = true
@@ -716,108 +738,106 @@ function MapService.Init()
 
 	--== THE HUB ==--
 	--
-	-- A fenced circle in the middle of the plot ring, with the stall inside it.
-	--
-	-- The stall was in the field's upper-left corner, which was right for a ROW
-	-- of plots -- it kept a shop off the one strip everybody ran down. A ring
-	-- has a natural centre instead, equidistant from every plot, which is a
-	-- better place for a shop than any corner: nobody has to detour, because
-	-- everybody passes through.
-	--
-	-- The circle is approximated with straight segments. Sixteen is where a
-	-- Roblox fence stops looking like a polygon at the distance you see it from.
+	-- The market square: a low deck, one dressed stall, and the fairy who runs
+	-- it. NO FENCE. It had a ring of posts and rails around it, and a fence
+	-- around a shop says "keep out" -- the opposite of what a shop is for. The
+	-- deck marks the square instead, which is a floor you walk onto rather than
+	-- a barrier you walk through.
 	do
 		local hub = Instance.new("Model")
 		hub.Name = "Hub"
 		hub.Parent = props
 
 		local R = MAP.HubRadius
-		local SEGMENTS = 16
-		local gapHalf = math.rad(MAP.RoadGapDegrees * 0.5)
 
-		for i = 1, SEGMENTS do
-			local a0 = (i - 1) / SEGMENTS * math.pi * 2
-			local a1 = i / SEGMENTS * math.pi * 2
-			local mid = (a0 + a1) * 0.5
-			-- Leave the arc facing the road open, so the hub reads as having a
-			-- way out toward the biomes rather than as a pen.
-			local toRoad = math.abs(((mid - math.pi) + math.pi) % (math.pi * 2) - math.pi)
-			if toRoad > gapHalf then
-				local p0 = Vector3.new(math.sin(a0) * R, 0, math.cos(a0) * R)
-				local p1 = Vector3.new(math.sin(a1) * R, 0, math.cos(a1) * R)
-				local seg = (p1 - p0)
-				for _, h in ipairs({ 3.2, 5.4 }) do
-					local part = build({
-						name = "HubRail",
-						size = Vector3.new(0.6, 0.6, seg.Magnitude + 0.4),
-						cframe = CFrame.lookAt((p0 + p1) * 0.5 + Vector3.new(0, Y + h, 0),
-							p1 + Vector3.new(0, Y + h, 0)),
-						color = FENCE,
-						material = Enum.Material.Wood,
-						collide = false,
-						studs = false,
-						parent = hub,
-					})
-				end
-				build({
-					name = "HubPost",
-					size = Vector3.new(1.1, 7, 1.1),
-					cframe = CFrame.new(p0.X, Y + 3.5, p0.Z),
-					color = FENCE,
-					material = Enum.Material.Wood,
-					collide = false,
-					studs = false,
-					parent = hub,
-				})
-			end
-		end
+		-- One cylinder for the whole square. A ring of straight segments would
+		-- be a dozen parts to say the same thing, and a cylinder never shows the
+		-- polygon.
+		local deck = Instance.new("Part")
+		deck.Name = "Deck"
+		deck.Shape = Enum.PartType.Cylinder
+		deck.Size = Vector3.new(0.9, R * 2, R * 2)
+		deck.CFrame = CFrame.new(0, Y + 0.45, 0) * CFrame.Angles(0, 0, math.rad(90))
+		deck.Color = Color3.fromRGB(206, 178, 132)
+		deck.Material = Enum.Material.Sand
+		deck.Anchored = true
+		deck.TopSurface = Enum.SurfaceType.Smooth
+		deck.BottomSurface = Enum.SurfaceType.Smooth
+		deck.Parent = hub
+
+		-- A darker rim, so the square has an edge without needing a fence.
+		local rim = deck:Clone()
+		rim.Name = "DeckRim"
+		rim.Size = Vector3.new(0.6, R * 2 + 5, R * 2 + 5)
+		rim.CFrame = CFrame.new(0, Y + 0.3, 0) * CFrame.Angles(0, 0, math.rad(90))
+		rim.Color = Color3.fromRGB(150, 120, 84)
+		rim.Parent = hub
 
 		--== THE STALL ==--
-		local stallCF = CFrame.new(0, Y, 14) * CFrame.Angles(0, math.pi, 0)
-		local counter = build({
-			name = MAP.SellStandName,
-			size = Vector3.new(20, 6, 7),
-			cframe = stallCF * CFrame.new(0, 3, 0),
-			color = WOOD,
-			material = Enum.Material.Wood,
-			studs = false,
-			parent = hub,
-		})
-		build({
-			name = "CounterTop",
-			size = Vector3.new(22, 0.8, 9),
-			cframe = stallCF * CFrame.new(0, 6.4, 0),
-			color = WOOD_DARK,
-			material = Enum.Material.Wood,
-			studs = false,
-			parent = hub,
-		})
-		for _, side in ipairs({ -1, 1 }) do
-			build({
-				name = "Post",
-				size = Vector3.new(1.2, 13, 1.2),
-				cframe = stallCF * CFrame.new(side * 10, 6.5, -3.5),
-				color = WOOD_DARK,
-				material = Enum.Material.Wood,
-				collide = false,
-				studs = false,
-				parent = hub,
-			})
+		local stallCF = CFrame.new(0, Y, 15) * CFrame.Angles(0, math.pi, 0)
+
+		build({ name = "StallFloor", size = Vector3.new(24, 0.6, 14),
+			cframe = stallCF * CFrame.new(0, 0.3, -2), color = WOOD_DARK,
+			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
+
+		local counter = build({ name = MAP.SellStandName, size = Vector3.new(20, 5.4, 6),
+			cframe = stallCF * CFrame.new(0, 2.7, 0), color = WOOD,
+			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
+		build({ name = "CounterTop", size = Vector3.new(22.5, 0.9, 8),
+			cframe = stallCF * CFrame.new(0, 5.8, 0), color = WOOD_DARK,
+			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
+
+		-- Back shelf with produce on it, which is what turns a counter into a
+		-- shop. Jars are one part each and are the cheapest possible "somebody
+		-- works here".
+		build({ name = "Shelf", size = Vector3.new(18, 0.7, 3),
+			cframe = stallCF * CFrame.new(0, 7.6, -6), color = WOOD_DARK,
+			material = Enum.Material.WoodPlanks, collide = false, studs = false, parent = hub })
+		local jarColors = {
+			Color3.fromRGB(226, 96, 84), Color3.fromRGB(240, 190, 74),
+			Color3.fromRGB(126, 198, 106), Color3.fromRGB(150, 130, 226),
+			Color3.fromRGB(238, 140, 178), Color3.fromRGB(120, 200, 214),
+		}
+		for i, c in ipairs(jarColors) do
+			build({ name = "Jar", size = Vector3.new(1.5, 2, 1.5),
+				cframe = stallCF * CFrame.new(-7.5 + (i - 1) * 3, 8.9, -6),
+				color = c, material = Enum.Material.Glass,
+				collide = false, studs = false, parent = hub })
 		end
+
+		for _, side in ipairs({ -1, 1 }) do
+			build({ name = "Post", size = Vector3.new(1.2, 13, 1.2),
+				cframe = stallCF * CFrame.new(side * 10.5, 6.5, -3),
+				color = WOOD_DARK, material = Enum.Material.Wood,
+				collide = false, studs = false, parent = hub })
+			-- A crate of produce either side of the counter.
+			build({ name = "Crate", size = Vector3.new(4, 3.4, 4),
+				cframe = stallCF * CFrame.new(side * 13, 1.7, 1) * CFrame.Angles(0, side * 0.3, 0),
+				color = WOOD, material = Enum.Material.WoodPlanks,
+				collide = false, studs = false, parent = hub })
+			build({ name = "Produce", size = Vector3.new(3.2, 1, 3.2),
+				cframe = stallCF * CFrame.new(side * 13, 3.7, 1) * CFrame.Angles(0, side * 0.3, 0),
+				color = Color3.fromRGB(214, 96, 88), material = Enum.Material.Plastic,
+				collide = false, studs = false, parent = hub })
+			-- A lantern hung off each post.
+			build({ name = "Lantern", size = Vector3.new(1.4, 1.8, 1.4),
+				cframe = stallCF * CFrame.new(side * 10.5, 11.4, -1),
+				color = Color3.fromRGB(255, 214, 130), material = Enum.Material.Neon,
+				collide = false, studs = false, parent = hub })
+		end
+
+		-- Striped awning. Alternating slats rather than a texture, because a
+		-- texture is an asset id that lives in one account.
 		for i = 0, 6 do
-			build({
-				name = "Awning",
-				size = Vector3.new(3.2, 0.6, 11),
-				cframe = stallCF * CFrame.new(-9.6 + i * 3.2, 13.6, -1.5)
-					* CFrame.Angles(math.rad(-16), 0, 0),
+			build({ name = "Awning", size = Vector3.new(3.4, 0.6, 12),
+				cframe = stallCF * CFrame.new(-10.2 + i * 3.4, 13.4, -1.5)
+					* CFrame.Angles(math.rad(-17), 0, 0),
 				color = (i % 2 == 0) and Color3.fromRGB(226, 74, 74)
 					or Color3.fromRGB(248, 244, 236),
 				material = Enum.Material.SmoothPlastic,
-				collide = false,
-				studs = false,
-				parent = hub,
-			})
+				collide = false, studs = false, parent = hub })
 		end
+
 		local sign = Instance.new("SurfaceGui")
 		sign.Face = Enum.NormalId.Back
 		sign.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
@@ -836,6 +856,15 @@ function MapService.Init()
 		ss.Thickness = 4
 		ss.Color = Color3.fromRGB(72, 34, 22)
 		ss.Parent = t
+
+		--== THE SHOPKEEPER ==--
+		-- Behind her own counter, at head height. Built here and MOVED on each
+		-- client -- see HubFairy for why that split.
+		-- Between the counter and the shelf, at head height. Forward of the
+		-- jars rather than level with them, or she reads as one more jar.
+		-- Facing -Z, which is the side the counter's SELL face is on and the
+		-- side every customer walks up from.
+		HubFairy.build(stallCF * CFrame.new(0, 9.4, -1.5), Vector3.new(0, 0, -1), hub)
 	end
 
 	--== PLOTS ==--
