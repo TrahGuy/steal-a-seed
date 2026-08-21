@@ -31,8 +31,15 @@
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+
+-- The attribute name comes from GameConfig so the client and the server cannot
+-- drift onto two spellings of the same fact.
+local GameConfig = require(ReplicatedStorage:WaitForChild("SeedGame")
+	:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local CARRYING = GameConfig.Attributes.CarryingSpecies
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -51,7 +58,7 @@ type Panel = {
 local shown: { [ProximityPrompt]: Panel } = {}
 
 local function carrying(): boolean
-	return player:GetAttribute("CarryingSpecies") ~= nil
+	return player:GetAttribute(CARRYING) ~= nil
 end
 
 --==============================================================================
@@ -278,7 +285,7 @@ end)
 
 -- Picking something up must take the prompt away in the same frame, or the
 -- player is left looking at an offer the server has already refused.
-player:GetAttributeChangedSignal("CarryingSpecies"):Connect(function()
+player:GetAttributeChangedSignal(CARRYING):Connect(function()
 	if carrying() then
 		for prompt in pairs(shown) do
 			hide(prompt)

@@ -410,6 +410,57 @@ nested `Plants` data saved and reloaded identical. A save attempted while anothe
 lock was **refused** rather than clobbering. This place has Studio API access **on**, so all of that
 ran against a live store rather than a mock; the test profile was reset to defaults afterwards.
 
+## CARRYING, AND TWO BUGS THE ORDER OF OPERATIONS CAUSED
+
+Both found by review rather than by play, and both are the same shape: a
+mutation happening before the thing that decides whether it should.
+
+### The thrown player kept their carry speed
+
+`throwPlayer` captured `humanoid.WalkSpeed` **before** setting `PlatformStand`.
+Setting PlatformStand is what makes `CarryService` drop the pod, and its drop
+calls `RefreshWalkSpeed` — so the correct unencumbered speed only comes into
+existence *after* that line. The captured value was the CARRY speed, and
+restoring it after the flight left the player trudging along with empty hands
+until something else happened to refresh them.
+
+Ragdoll first, capture second. The `task.wait()` between them is load-bearing:
+property-changed signals are deferred, so without it the capture still reads the
+pre-drop value.
+
+Grabbing also sets `WalkSpeed = 0`, so anything that threw between the grab and
+the landing stranded a player at zero permanently. There is now **one** `restore()`
+reached by every exit — success, early return, and the error path — because a
+lock only one branch releases is not a lock, it is a trap.
+
+Measured: carrying 5 kg gives 15.883; after being grabbed, thrown and landed the
+player reads **16.0000**, which is `walkSpeedFor(0)` exactly, not the 15.8829 the
+old code restored.
+
+### Taking a pod could destroy the prize
+
+`TryTake` called `NestService.TakePod` and *then* checked for a Head. `TakePod`
+is not a query — it clears the nest slot, starts the wake timer and destroys the
+pod. A player with no Head (mid-respawn, or dying in the same frame) left the
+parent waking over an empty slot with the pod gone and nobody holding it.
+
+Everything that can refuse is now checked before anything is touched: player
+present, character alive, Humanoid with health, Head is a BasePart, pod still
+parented with a PrimaryPart, and **the server measures the distance itself** —
+the prompt is a courtesy drawn on a client, not a security boundary.
+
+The one step that cannot be pre-checked is attaching to the character, so if
+that fails the species goes back on the ground as a loose pod rather than
+vanishing. Two players racing one pod still only ever produces one winner,
+because `TakePod` checks `pods[slot] ~= pod`.
+
+### One name per fact
+
+`GameConfig.Attributes` said `CarryingSeed` while `CarryService` wrote
+`CarryingSpecies` and `CarryingKg`. Both names now live in `GameConfig` and
+every reader — server and client — takes them from there. Two names for one fact
+is a bug waiting for whoever trusts the wrong one.
+
 ## Things worth not rediscovering
 
   * **Moving the Edit viewport takes `Camera.Focus`, not `Camera.CFrame`.** Writing `CFrame` alone

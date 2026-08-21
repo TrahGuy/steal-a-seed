@@ -233,18 +233,44 @@ local function throwPlayer(nest: Nest, player: Player)
 		return
 	end
 
+	--==========================================================================
+	-- RAGDOLL FIRST, CAPTURE SECOND. THE ORDER IS THE WHOLE FIX.
+	--
+	-- Setting PlatformStand is what makes CarryService drop the pod, and its
+	-- drop calls RefreshWalkSpeed -- so the correct UNENCUMBERED speed only
+	-- exists after this line. Capturing before it captured the CARRY speed, and
+	-- restoring that after the flight left the player trudging at 95% with empty
+	-- hands until something else happened to refresh them.
+	--
+	-- The task.wait() is not decoration: property-changed signals are deferred,
+	-- so without it the capture would run before the drop handler and read the
+	-- old value anyway.
+	--==========================================================================
+	humanoid.PlatformStand = true
+	task.wait()
+
 	local walk = humanoid.WalkSpeed
 	local jump = humanoid.JumpPower
 	humanoid.WalkSpeed = 0
 	humanoid.JumpPower = 0
-	humanoid.PlatformStand = true
+
+	-- ONE restore, reached by every exit: success, early return, and error.
+	-- Grabbing sets WalkSpeed to 0, so anything that can throw between here and
+	-- the end can strand a player at zero permanently -- and a lock that only
+	-- one path releases is not a lock, it is a trap.
+	local function restore()
+		if humanoid.Parent then
+			humanoid.PlatformStand = false
+			humanoid.WalkSpeed = walk
+			humanoid.JumpPower = jump
+		end
+	end
+
+	local ok, err = pcall(function()
 
 	task.wait(P.GrabHoldSeconds)
 
 	if player.Parent ~= Players or humanoid.Health <= 0 then
-		humanoid.PlatformStand = false
-		humanoid.WalkSpeed = walk
-		humanoid.JumpPower = jump
 		return
 	end
 
@@ -311,9 +337,13 @@ local function throwPlayer(nest: Nest, player: Player)
 	end
 	local v = root.AssemblyLinearVelocity
 	root.AssemblyLinearVelocity = Vector3.new(0, math.min(v.Y, 0), 0)
-	humanoid.PlatformStand = false
-	humanoid.WalkSpeed = walk
-	humanoid.JumpPower = jump
+
+	end)
+
+	restore()
+	if not ok then
+		warn("[Seed/NestService] throw failed after the grab: " .. tostring(err))
+	end
 end
 
 --==============================================================================

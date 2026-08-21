@@ -255,7 +255,15 @@ GameConfig.Attributes = {
 	Claimed = "Claimed",
 	BiomeId = "BiomeId",
 	-- Phase A+
-	CarryingSeed = "CarryingSeed",
+	-- What the player is holding. Set on the PLAYER, not the character, so it
+	-- survives a respawn boundary and replicates to every client for free --
+	-- the prompt UI reads it to decide whether to draw itself at all.
+	--
+	-- These were "CarryingSeed" here while CarryService wrote CarryingSpecies
+	-- and CarryingKg. Two names for one fact is a bug waiting for whoever trusts
+	-- the wrong one.
+	CarryingSpecies = "CarryingSpecies",
+	CarryingKg = "CarryingKg",
 	SeedInstanceId = "SeedInstanceId",
 	InSafeZone = "InSafeZone",
 }
