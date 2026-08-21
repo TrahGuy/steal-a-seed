@@ -261,6 +261,98 @@ function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 end
 
 --==============================================================================
+-- THE RAGDOLL
+--
+-- What used to happen here was a ballistic HOP: solve a parabola, fire it, wait
+-- the exact flight time, then zero the horizontal velocity on the way down. The
+-- arc was mathematically perfect and it could never bounce, never clip a wall,
+-- never do anything but land on its mark and stand up. A thrown player looked
+-- like a thrown crate on rails.
+--
+-- Now: shove, let go of the pose, and let the world do the rest. Walls and the
+-- floor bounce the body because they COLLIDE, not because anything in Lua
+-- reflects a velocity vector.
+--
+--==============================================================================
+-- DRIVE WHATEVER THE RIG ACTUALLY HAS
+--
+-- The same lesson CarryPose paid for. A modern Roblox avatar is a physics rig:
+--
+--     AnimationConstraint x15   BallSocketConstraint x14   Motor6D x0
+--
+-- The sockets are ALREADY THERE holding the skeleton together; what keeps it
+-- standing in a pose is the AnimationConstraints driving each joint. Switch
+-- those off and the sockets are all that is left, which is a ragdoll. A
+-- Motor6D-only implementation would have found nothing to disable here and
+-- silently produced the same rigid hop.
+--
+--==============================================================================
+-- LIMBS HAVE TO COLLIDE OR THERE IS NO BOUNCE
+--
+-- If only the HumanoidRootPart collides, the body is a capsule on a string and
+-- you are back to the hop with extra steps. Every body part's CanCollide is
+-- captured and forced on, and put back exactly as it was on stand-up --
+-- captured rather than assumed, because a character that stands up with the
+-- wrong collision set is a character that falls through the road later.
+--
+-- Accessories are skipped on purpose: a hat that collides with the floor wedges
+-- the head at a strange angle and stops the body settling at all.
+--==============================================================================
+type Loosened = {
+	constraints: { AnimationConstraint },
+	motors: { Motor6D },
+	collides: { { part: BasePart, was: boolean } },
+}
+
+local function ragdollOn(character: Model): Loosened
+	local out: Loosened = { constraints = {}, motors = {}, collides = {} }
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("AnimationConstraint") then
+			if d.Enabled then
+				d.Enabled = false
+				table.insert(out.constraints, d)
+			end
+		elseif d:IsA("Motor6D") then
+			-- Classic rigs only. Left ENABLED: without ball sockets to take over,
+			-- disabling these does not ragdoll a character, it dismembers one.
+			-- Such a rig tumbles rigidly, which still bounces.
+			table.insert(out.motors, d)
+		end
+	end
+	for _, d in ipairs(character:GetChildren()) do
+		if d:IsA("BasePart") then
+			table.insert(out.collides, { part = d, was = d.CanCollide })
+			d.CanCollide = true
+		end
+	end
+	return out
+end
+
+local function ragdollOff(loosened: Loosened)
+	for _, c in ipairs(loosened.constraints) do
+		if c.Parent then
+			c.Enabled = true
+		end
+	end
+	for _, entry in ipairs(loosened.collides) do
+		if entry.part.Parent then
+			entry.part.CanCollide = entry.was
+		end
+	end
+end
+
+-- How still counts as settled, and how long it has to stay that still. Short
+-- enough that a body wedged against a wall is not held down for a second after
+-- it stops, long enough that the top of a bounce -- where horizontal speed dips
+-- through zero -- is not mistaken for the end of one.
+local SETTLE_SPEED = 3.5
+local SETTLE_HOLD = 0.35
+local SETTLE_STEP = 0.1
+-- The backstop. A body that never settles -- wedged in geometry, thrown off the
+-- road -- must still get its character back.
+local THROW_TIMEOUT = 6
+
+--==============================================================================
 -- THE GRAB
 --
 -- Spawned rather than run in the tick, because it holds for the better part of
@@ -299,7 +391,17 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- Grabbing sets WalkSpeed to 0, so anything that can throw between here and
 	-- the end can strand a player at zero permanently -- and a lock that only
 	-- one path releases is not a lock, it is a trap.
+	--
+	-- The RAGDOLL goes through here too, for exactly the same reason. It was
+	-- first written unwinding itself at the end of the happy path, which meant
+	-- an error mid-flight left a player loose-jointed with collision forced on,
+	-- forever. Joints and collides are as much a lock as WalkSpeed is.
+	local loosened: Loosened? = nil
 	local function restore()
+		if loosened then
+			ragdollOff(loosened)
+			loosened = nil
+		end
 		if humanoid.Parent then
 			humanoid.PlatformStand = false
 			humanoid.WalkSpeed = walk
@@ -315,10 +417,18 @@ local function throwPlayer(nest: Nest, player: Player)
 		return
 	end
 
-	-- Range of a projectile launched at v with vertical component k*v is
-	-- 2*k*v^2/g, so the speed that lands them the configured distance away is
-	-- sqrt(R*g / 2k). Solved rather than tuned, so changing the distance in
-	-- GameConfig actually changes the distance.
+	--==========================================================================
+	-- THE CONFIGURED STUDS ARE IMPULSE STRENGTH NOW, NOT A LANDING COORDINATE.
+	--
+	-- The formula is unchanged and the numbers are unchanged -- range of a
+	-- projectile launched at v with vertical component k*v is 2*k*v^2/g, so
+	-- sqrt(R*g / 2k) is the speed for a clean R-stud arc. What changed is the
+	-- PROMISE. A body that bounces off a wall does not land where a parabola
+	-- says it will, and pretending otherwise would make the comment a lie.
+	--
+	-- So: bigger biome number, harder shove. Where they end up is the world's
+	-- business.
+	--==========================================================================
 	local R = GameConfig.parentThrowStudsFor(nest.biome.Order)
 	local k = P.ThrowLift
 	local g = Workspace.Gravity
@@ -335,49 +445,74 @@ local function throwPlayer(nest: Nest, player: Player)
 		dir = Vector3.new(0, 0, 1)
 	end
 	--==========================================================================
-	-- PlatformStand STAYS ON THROUGH THE FLIGHT, and that is not cosmetic.
+	-- PlatformStand STAYS ON, and that is not cosmetic.
 	--
 	-- Releasing it before applying the velocity gives the Humanoid controller
 	-- the assembly back, and it immediately damps whatever it was given: a
 	-- throw solved for 60 studs measured NINE. With PlatformStand held the
 	-- humanoid applies no movement forces of its own and the body keeps what it
 	-- was thrown with.
-	--
-	-- It also looks right -- a thrown player should tumble, not jog through the
-	-- air in a running pose.
 	--==========================================================================
+	loosened = ragdollOn(character)
 	root.AssemblyLinearVelocity = dir * speed + Vector3.new(0, speed * k, 0)
 
 	--==========================================================================
-	-- LAND THEM, DO NOT LET THEM SKID.
+	-- WAIT FOR IT TO SETTLE, NOT FOR AN ARC.
 	--
-	-- The arc itself is exact -- measured apex 6.6 studs against a predicted
-	-- vy^2/2g of 6.76, and 0.52s of flight at 114 studs/sec is the configured
-	-- 60. What broke the number was what happened AFTER touchdown: a
-	-- PlatformStand body keeps its horizontal velocity and slides, and a
-	-- controlled test measured 143 studs of travel for a 60-stud throw.
+	-- The old code waited the parabola's exact duration and then wiped the
+	-- horizontal velocity, which is what made this a hop: the body could not
+	-- bounce, because the one moment a bounce would start was the moment its
+	-- speed was set to zero.
 	--
-	-- So the throw waits for the floor and then stops the slide. The distance in
-	-- GameConfig is now the distance the player actually travels, which is the
-	-- only reason to have the number there at all.
+	-- Nothing here predicts where the body goes. It polls until the thing has
+	-- actually stopped moving sideways for a beat, or until the backstop fires.
+	--
+	-- FloorMaterial is not usable for this, and that is not a guess: it is part
+	-- of the Humanoid state machine, PlatformStand switches that machine off, so
+	-- FloorMaterial reads Air for the entire ragdoll no matter where the body
+	-- is. An earlier version polled it and ran to its timeout every single time.
 	--==========================================================================
-	--
-	-- TIMED, NOT FLOOR-DETECTED. The obvious landing check is
-	-- `humanoid.FloorMaterial ~= Air`, and it can never become true here:
-	-- PlatformStand switches the Humanoid's state machine off, and floor
-	-- detection is part of it. FloorMaterial stays Air for the whole flight, so
-	-- the poll ran to its timeout every time and the body skidded for two and a
-	-- half seconds -- 143 studs for a 60-stud throw, twice.
-	--
-	-- The arc is exact, so its duration is exact. Wait it.
-	local flight = 2 * (speed * k) / g
-	task.wait(flight)
-
-	if player.Parent ~= Players then
-		return
+	local settledFor = 0
+	local deadline = os.clock() + THROW_TIMEOUT
+	while os.clock() < deadline do
+		if player.Parent ~= Players or not root.Parent or humanoid.Health <= 0 then
+			break
+		end
+		local v = root.AssemblyLinearVelocity
+		if Vector3.new(v.X, 0, v.Z).Magnitude < SETTLE_SPEED then
+			settledFor += SETTLE_STEP
+			if settledFor >= SETTLE_HOLD then
+				break
+			end
+		else
+			settledFor = 0
+		end
+		task.wait(SETTLE_STEP)
 	end
-	local v = root.AssemblyLinearVelocity
-	root.AssemblyLinearVelocity = Vector3.new(0, math.min(v.Y, 0), 0)
+
+	--==========================================================================
+	-- STAND UP LEVEL, OR THE SOLVER LAUNCHES YOU.
+	--
+	-- Re-enabling the joints while limbs are half inside the floor makes the
+	-- physics solver resolve the overlap the only way it can -- by throwing the
+	-- body out of it. Measured: settled at Y 0.5, then a 12.6 stud pop on
+	-- stand-up and a second fall.
+	--
+	-- So the body is levelled and stilled BEFORE the joints come back: keep
+	-- where it landed, drop the pitch and roll, lift it clear of the ground, and
+	-- zero the velocity.
+	--
+	-- This is NOT the old landing wipe. That one fired on first ground contact
+	-- and is what made the throw a hop. This fires after the body has already
+	-- stopped moving, which is the one moment killing velocity costs nothing.
+	--==========================================================================
+	if root.Parent then
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		-- Facing the way they were thrown, which is home.
+		root.CFrame = CFrame.new(root.Position + Vector3.new(0, 1.6, 0))
+			* CFrame.Angles(0, math.atan2(dir.X, dir.Z), 0)
+	end
 
 	end)
 

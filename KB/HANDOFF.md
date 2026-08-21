@@ -1255,6 +1255,114 @@ world     plot 2 plants, 0 SeedPod, 0 prompts | nest 5 pods, 5 Take prompts
 
 > Test cash/Speed (116,324 / 279) reset to 0 afterwards; the two plants kept.
 
+## The throw is a ragdoll now, not a hop — 2026-08-21
+
+The old `throwPlayer` solved a parabola, fired it, waited the exact flight time, then **zeroed the
+horizontal velocity on the way down**. Mathematically perfect and physically dead: the one moment a
+bounce would begin was the moment the speed was set to zero. A thrown player was a crate on rails.
+
+Now: shove, let go of the pose, and poll until the body has actually stopped. Walls and the floor
+bounce it because they COLLIDE, not because anything in Lua reflects a vector.
+
+### What was kept, deliberately
+
+  * `PlatformStand` **first**, `task.wait()`, **then** capture WalkSpeed. That order is the whole
+    reason a thrown player does not stand up at carry speed with empty hands.
+  * **One `restore()` on every exit** — and the ragdoll unwind now goes through it too. First draft
+    unwound at the end of the happy path, which meant an error mid-flight left a player loose-jointed
+    with collision forced on, permanently. Joints and collides are as much a lock as WalkSpeed.
+  * No `NestService` -> `CarryService` require. Checked: the only mentions are comments.
+  * Throw toward **+Z**, small X nudge off the wall. Grab hold, range, leash, wake delay and parent
+    WalkSpeed all untouched.
+
+### The rig, again
+
+Same lesson as `CarryPose`, and the reason a Motor6D ragdoll would have silently done nothing:
+
+```
+AnimationConstraint x15   BallSocketConstraint x14   Motor6D x0
+```
+
+The ball sockets are ALREADY holding the skeleton together. What keeps it standing in a pose is the
+AnimationConstraints driving each joint — switch those off and what remains IS a ragdoll.
+
+**Limbs had to be made to collide.** Measured before the first throw:
+
+```
+body parts 16, CanCollide: 4  (HumanoidRootPart, Head, UpperTorso, LowerTorso)
+```
+
+Twelve of sixteen parts pass through the world. A body that only collides on its torso capsule is
+the hop again with extra steps. `ragdollOn` captures every part's CanCollide, forces it on, and
+`ragdollOff` puts back exactly what was there — captured rather than assumed, because a character
+that stands up with the wrong collision set falls through the road later. Accessories are skipped:
+a hat that collides wedges the head and the body never settles.
+
+### Stand-up had to be levelled, or the solver launches you
+
+First measured run settled at Y 0.5 and then **popped 12.6 studs into the air** and fell again. Not
+a bounce: re-enabling the joints while limbs are half inside the floor leaves the solver one way to
+resolve the overlap, and that is to throw the body out of it.
+
+So before the joints come back the body is levelled — keep where it landed, drop pitch and roll,
+lift clear of the ground, zero the velocity. **This is not the old landing wipe.** That one fired on
+first ground contact and is what made the throw a hop; this fires after the body has already stopped,
+which is the one moment killing velocity costs nothing.
+
+### Measured in Play
+
+The chain below is the real code — provoke -> wake -> chase -> grab -> throw. Only the instance
+driving it is a harness: an `execute_luau` copy of NestService and CarryService, `Init()` and
+`Start()`ed so their own nests exist and their own ticks run.
+
+```
+ 2.4s Y  1.6  +Z    0.0  vY -13.0  ragdoll   <- grabbed, pod drops here
+ 3.4s Y  9.3  +Z   29.9  vY  -1.3  ragdoll   <- the arc
+ 3.7s Y  2.2  +Z   65.7  vY +19.8  ragdoll   <- A BOUNCE off the ground
+ 4.0s Y  1.2  +Z   95.7  vY -32.8  ragdoll
+ 4.6s Y  0.5  +Z  139.7  vY  -1.6  ragdoll
+ 5.6s Y  0.5  +Z  161.1  vY  +0.0  ragdoll   <- settled
+ 5.9s Y  2.1  +Z  161.1  vY  +0.0  up        <- stands up
+ 6.2s Y  3.0  +Z  161.1  vY  +0.0  up
+
+bounces 3 | +Z 161.1 | lateral 5.3 | peak Y after stand-up 3.0 | WalkSpeed 16.000
+```
+
+Pod-drop and the unencumbered stand-up, from the run before it:
+
+```
+t+0.0s  colliding  4  PlatformStand=false  WalkSpeed 16.000  carrying=nil
+t+0.6s  colliding  4  PlatformStand=false  WalkSpeed 15.883  carrying=petalpip
+t+2.6s  colliding  4  PlatformStand=true   WalkSpeed  0.000  carrying=nil    <- dropped
+t+3.5s  colliding 16  PlatformStand=true   WalkSpeed  0.000  carrying=nil    <- ragdoll
+t+6.5s  colliding  4  PlatformStand=false  WalkSpeed 16.000  carrying=nil    <- stood up
+dropped pod Pod_petalpip on the ground at Y 0.99, 158 studs behind the player
+```
+
+`15.883` is the 5 kg carry multiplier; `16.000` is `walkSpeedFor(0)`. Standing up returns the
+UNENCUMBERED number, which is the bug that ordering fix exists to prevent.
+
+### The configured studs are impulse strength now
+
+The formula and the numbers are unchanged — `sqrt(R*g / 2k)` is still the speed for a clean R-stud
+arc. What changed is the promise. A body that bounces off a wall does not land where a parabola says,
+so 60 studs of config produced 161 studs of travel here. Bigger biome number, harder shove; where
+they end up is the world's business.
+
+### Untouched, verified after
+
+```
+grip forward   Nubkin 1.58, Bellchime 3.09          mills 6 | signs 6 | chevrons 60
+plot           2 plants | SeedPod 0 | prompts 0     nest 5 pods | 5 Take prompts
+cash           110.86/sec (112 expected)            sway 1.68 deg
+character      colliding 4 (as before) | AnimationConstraints 15/15 | PlatformStand false
+```
+
+> A mid-test reading of "nest 6 pods | 12 Take prompts" was the harness: two CarryService instances
+> each attaching a prompt to every pod. A clean session shows 5 and 5.
+
+> Test cash reset to 0 afterwards; the two plants kept.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
