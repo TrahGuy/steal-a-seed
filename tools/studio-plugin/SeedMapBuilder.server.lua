@@ -60,8 +60,11 @@ end
 --==============================================================================
 local buildButton = toolbar:CreateButton(
 	"Build Map",
+	-- No icon. The rbxasset paths guessed for these do not exist and Studio
+	-- warns about it on every single load; a text button is better than a
+	-- broken one plus a log line.
 	"Rebuild the runtime map in Edit, exactly as a server would on boot",
-	"rbxasset://textures/AnimationEditor/icon_addKeyframe.png")
+	"")
 
 buildButton.Click:Connect(function()
 	buildButton:SetActive(false)
@@ -116,7 +119,7 @@ end)
 local clearButton = toolbar:CreateButton(
 	"Clear Map",
 	"Remove the map from the Edit workspace",
-	"rbxasset://textures/AnimationEditor/icon_deleteKeyframe.png")
+	"")
 
 clearButton.Click:Connect(function()
 	clearButton:SetActive(false)
