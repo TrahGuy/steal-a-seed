@@ -67,6 +67,8 @@ src/
     ParentModel.luau            the nest guardian (NOT a *Service)
     NestService.luau            nests, and the parent that sleeps beside them
     CarryService.luau           one pod at a time, and what it costs to carry
+    PlantService.luau           planting, and growing pod -> sprout -> creature
+    EconomyService.luau         THE FAUCET -- grown plants pay kg/sec, nothing else mints
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
     ParentAnim.client.luau      the nest parent's limbs
@@ -74,10 +76,11 @@ src/StarterPlayer/StarterPlayerScripts/
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
     PlantUI.client.luau         hatch/grow timer over anything tagged Planted
     PlantSway.client.luau       idle lean on planted sprouts/creatures (rooted)
+    CashUI.client.luau          one number, drawn from the ProfileUpdated remote
 ```
 
-Phase A still to come: `EconomyService`, `TreadmillService` and the
-HUD. See [KB/PLAN.md](KB/PLAN.md).
+**Phase A is complete**: steal -> carry -> bank -> plant -> grow -> earn, with cash moving on
+screen. Still to come: `TreadmillService` and the HUD. See [KB/PLAN.md](KB/PLAN.md).
 
 ## The map is ONE ROAD
 

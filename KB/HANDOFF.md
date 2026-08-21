@@ -967,6 +967,88 @@ client-only: same plants, same fourteen seconds, literally zero movement.
 > "91 degrees" — the pivot's own 90-degree cylinder rotation. Measured **relative to the rest pose**
 > the numbers above fall out. Twice in one change, the instrument was the thing that was wrong.
 
+## EconomyService — the faucet, and Phase A closes — 2026-08-21
+
+**Phase A is complete: cash moves on screen because of something you stole.** Steal a pod, run it
+home past a parent that wants it back, plant it, watch the number climb. That loop now runs end to
+end.
+
+### One faucet, checked mechanically rather than by eye
+
+Rule 6 says cash mints in `EconomyService` and nowhere else. That is now verifiable in one grep, and
+it was run:
+
+```
+AddCash callers outside PlayerDataService: EconomyService
+```
+
+`PlayerDataService.AddCash` is the MECHANISM — it clamps to `MaxCash` (1e15) and marks dirty. It
+does not decide what earns. If five services each paid out "just this one case", the answer to *why
+does this player have eight million* would live in five files.
+
+### What earns
+
+Grown plants only, `SeedData.IncomePerSecond` (kg x `CashPerKg`), read from
+`PlantService.GrownIn(plot)`. A pod pays nothing and a sprout pays nothing — the wait IS the cost,
+and paying during it turns planting from a bet into a deposit. It also keeps the plot readable as a
+balance sheet: what is standing up is what is paying.
+
+Gated on the plot's owner *and* on `PlotService.OwnerOf`, which are separate tables — a lease that
+changed hands between them is exactly the sort of thing that pays the wrong person.
+
+**Paid for time actually elapsed, `rate * dt`, not a flat amount per tick.** A server that hitches
+for three seconds still owes three seconds; a loop that pays per iteration quietly underpays exactly
+when the server is struggling. The clock does not start until the profile is ready, so seconds spent
+loading do not become income the moment it lands.
+
+**No offline payout this pass, deliberately.** Growth uses an absolute `os.time()` and keeps running
+while you are away; cash does not. An offline faucet needs a claim flow, a cap and an anti-abuse
+story, and none of that belongs in the pass that first makes the number move.
+
+### Measured in Play
+
+Cash and plants cleared to zero in the save record first, so the slopes are clean.
+
+```
+ONE GROWN NUBKIN  (2 kg)
+  20 ProfileUpdated packets over 19.2s
+  cash 14.23 -> 52.66      measured 2.000 /sec     expected 2
+
+ONE NUBKIN + ONE BELLCHIME  (2 kg + 110 kg)
+  20 packets over 19.2s
+  cash 5404.55 -> 7560.53  measured 112.100 /sec   expected 112   (+0.09%)
+```
+
+The 0.09% is sample-window boundaries, not drift. Unchanged alongside it:
+
+```
+plot plants 2 | SeedPod 0 | CarriedPod 0 | prompts 0
+nest pods   5 | Take prompts 5
+carry       CarryingSpecies nil, BankedCount nil
+AlertUI     word "Label" at transparency 1.00 -- untouched default, never fired
+sway        still running, 5.99 deg over 6s
+plots       1 owned, 5 unowned and all empty
+```
+
+### The readout is one TextLabel on an EXISTING remote
+
+`CashUI.client.luau`. `PlayerDataService` already pushes the whole profile down `ProfileUpdated`,
+coalesced at 0.25s, and announces the first on `ProfileReady` — so the client draws `profile.Cash`
+and **no second remote was invented**. Not a HUD: no shop, no speed, no inventory.
+
+Two details worth keeping:
+
+  * **It shows a dash, not a zero, until the server has spoken.** "0" and "we have not heard yet"
+    are different facts, and rendering the second as the first shows a player with a real balance an
+    empty wallet during a slow DataStore call — which looks exactly like being robbed. `GameConfig`
+    warns about this where `ProfileReady` is declared; this is that warning obeyed.
+  * **It eases toward the value rather than snapping.** Cash arrives in 0.25s batches, so the raw
+    number steps visibly. Easing reads as *earning* rather than as a field being overwritten, and at
+    2 cash a second that difference is the whole feeling of the thing.
+
+> The test balance (13,130) was reset to 0 in the save afterwards. The two plants were left — a
+> grown bed is a fine thing to come back to; a five-figure balance nobody played for is not.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
