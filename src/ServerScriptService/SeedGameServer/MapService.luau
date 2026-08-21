@@ -137,8 +137,10 @@ end
 -- costs nothing and reads far better as "this ground is claimed".
 --==============================================================================
 local GRASS = Color3.fromRGB(112, 200, 84)
-local BED_SOIL = Color3.fromRGB(168, 104, 70)
-local BED_FRAME = Color3.fromRGB(112, 68, 44)
+-- Straight off the owner's photo: a warm rust soil inside a mid-brown border,
+-- both a good deal more saturated than the washed-out pair they replace.
+local BED_SOIL = Color3.fromRGB(158, 82, 52)
+local BED_FRAME = Color3.fromRGB(124, 84, 56)
 local FENCE = Color3.fromRGB(96, 66, 44)
 local WOOD = Color3.fromRGB(128, 88, 52)
 local WOOD_DARK = Color3.fromRGB(96, 64, 38)
@@ -274,74 +276,79 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		})
 	end
 
-	--== THE BEDS ==--
+	--== THE BED ==--
+	--
+	-- One soil rectangle inside a raised wooden border, matching the reference
+	-- photo.
+	--
+	-- THE BORDER IS FOUR BARS, NOT ONE SLAB. A slab was the first attempt, on the
+	-- reasoning that its middle would be hidden under the soil anyway. It is
+	-- not: the border stands PROUD of the soil, so a solid slab's top face sits
+	-- ABOVE the soil and covers it completely. The whole plot rendered as a
+	-- wooden floor with no dirt anywhere in it.
 	local plants = Instance.new("Folder")
 	plants.Name = PLOT.PlantsFolderName
 	plants.Parent = model
 
 	local cols = PLOT.BedColumns
-	local usableW = width - PLOT.BedInsetX * 2
-	local blockW = (usableW - PLOT.BedCentreGap * (cols - 1)) / cols
+	local bedW = width - PLOT.BedInsetX * 2 - PLOT.BedFrameWidth * 2
 	local bedSpan = rows * PLOT.RowDepth + (rows - 1) * PLOT.RowGap
+	local fw = PLOT.BedFrameWidth
+	local soilTop = PLOT.BedHeight
+	local frameTop = soilTop + PLOT.BedFrameLip
 
-	local slot = 0
-	for col = 1, cols do
-		-- Centres of `cols` blocks laid across usableW with the aisle between.
-		local blockX = (col - (cols + 1) * 0.5) * (blockW + PLOT.BedCentreGap)
-
-		-- ONE FRAME PER BLOCK, sitting a little proud of the soil. The reference
-		-- sketch's beds have a continuous dark border round the whole block with
-		-- the rows divided inside it -- not a border per row -- and that is what
-		-- makes it read as a raised bed rather than as tiles on a floor.
+	for _, bar in ipairs({
+		-- Front and back run the full outer width so the corners close.
+		{ Vector3.new(bedW + fw * 2, frameTop, fw), CFrame.new(0, 0, -(bedSpan + fw) * 0.5) },
+		{ Vector3.new(bedW + fw * 2, frameTop, fw), CFrame.new(0, 0, (bedSpan + fw) * 0.5) },
+		{ Vector3.new(fw, frameTop, bedSpan), CFrame.new(-(bedW + fw) * 0.5, 0, 0) },
+		{ Vector3.new(fw, frameTop, bedSpan), CFrame.new((bedW + fw) * 0.5, 0, 0) },
+	}) do
 		build({
 			name = "BedFrame",
-			-- Bottom at ground level, because there is no deck under it any
-			-- more -- the bed stands directly on the field.
-			size = Vector3.new(blockW + 1.6, 2.2, bedSpan + 1.6),
-			cframe = cf * CFrame.new(blockX, 1.1, 0),
+			size = bar[1],
+			cframe = cf * (bar[2] + Vector3.new(0, frameTop * 0.5, 0)),
 			color = BED_FRAME,
-			material = Enum.Material.Wood,
+			material = Enum.Material.WoodPlanks,
 			collide = false,
 			studs = false,
 			parent = model,
 		})
+	end
 
-		for row = 1, rows do
+	local soil = build({
+		name = "Soil",
+		size = Vector3.new(bedW, soilTop, bedSpan),
+		cframe = cf * CFrame.new(0, soilTop * 0.5, 0),
+		color = BED_SOIL,
+		-- STUDDED, AND THEREFORE PLASTIC. Ground and Grass both render their own
+		-- noise texture OVER the studs, so a bed set to TopSurface = Studs comes
+		-- out looking smooth while the field beside it is visibly studded.
+		-- Plastic is the material that actually shows them.
+		material = Enum.Material.Plastic,
+		collide = false,
+		parent = model,
+	})
+	CollectionService:AddTag(soil, GameConfig.Tags.Planter)
+
+	--== PLANT SLOTS ==--
+	-- An INVISIBLE grid on the soil. Attachments, so a slot costs nothing until
+	-- something grows in it, and the reference's plain rectangle keeps its plain
+	-- rectangle -- the layout is known without being drawn on the ground.
+	local slot = 0
+	for row = 1, rows do
+		local rowZ = -bedSpan * 0.5 + (row - 0.5) * PLOT.RowDepth
+			+ (row - 1) * PLOT.RowGap
+		for col = 1, cols do
 			slot += 1
-			-- Rows run front to back, so row 1 is the one nearest the gate and
-			-- new rows appear at the BACK when a plot is expanded.
-			local rowZ = -bedSpan * 0.5 + (row - 0.5) * PLOT.RowDepth
-				+ (row - 1) * PLOT.RowGap
-
-			local bed = build({
-				name = string.format("Bed%02d", slot),
-				size = Vector3.new(blockW, 1.6, PLOT.RowDepth),
-				-- Recessed a little below the frame's lip, so the frame reads as
-				-- a raised edge holding soil in rather than as a mat under it.
-				cframe = cf * CFrame.new(blockX, 1.2, rowZ),
-				color = BED_SOIL,
-				-- STUDDED, AND THEREFORE PLASTIC. Ground was the obvious material
-				-- for soil and it is the wrong one: its noise texture renders
-				-- OVER the studs, so a bed set to TopSurface = Studs came out
-				-- looking smooth while the grass around it was visibly studded.
-				-- Plastic is the material that actually shows them, which is the
-				-- whole classic Roblox look this game is built in.
-				material = Enum.Material.Plastic,
-				collide = false,
-				parent = model,
-			})
-			bed:SetAttribute("SlotIndex", slot)
-			bed:SetAttribute("Row", row)
-			bed:SetAttribute("Column", col)
-			CollectionService:AddTag(bed, GameConfig.Tags.Planter)
-
-			-- Where a plant stands. On the bed rather than on the plot floor,
-			-- so a plant is rooted in soil and moves if the bed ever does.
+			local colX = (col - (cols + 1) * 0.5) * (bedW / cols)
 			local a = Instance.new("Attachment")
 			a.Name = string.format("Slot%02d", slot)
 			a:SetAttribute("SlotIndex", slot)
-			a.Position = Vector3.new(0, 0.8, 0)
-			a.Parent = bed
+			a:SetAttribute("Row", row)
+			a:SetAttribute("Column", col)
+			a.WorldCFrame = cf * CFrame.new(colX, soilTop, rowZ)
+			a.Parent = soil
 			CollectionService:AddTag(a, GameConfig.Tags.PlantSlot)
 		end
 	end
@@ -804,22 +811,31 @@ function MapService.Init()
 			cframe = stallCF * CFrame.new(0, 4.65, 0), color = WOOD_DARK,
 			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
 
-		-- Back shelf with produce on it, which is what turns a counter into a
-		-- shop. Jars are one part each and are the cheapest possible "somebody
-		-- works here".
-		build({ name = "Shelf", size = Vector3.new(18, 0.7, 3),
-			cframe = stallCF * CFrame.new(0, 7.2, -6.5), color = WOOD_DARK,
-			material = Enum.Material.WoodPlanks, collide = false, studs = false, parent = hub })
+		-- DISPLAY TRAYS AT HER SIDES, NOT A SHELF OVER HER HEAD. The produce
+		-- used to sit on a high back shelf, which put the whole display directly
+		-- above Marigold -- so the thing the stall is selling and the person
+		-- selling it competed for the same patch of screen, and she lost.
+		--
+		-- On the counter beside her, the goods are at the height a customer
+		-- actually looks at and she has the middle to herself.
 		local jarColors = {
 			Color3.fromRGB(226, 96, 84), Color3.fromRGB(240, 190, 74),
 			Color3.fromRGB(126, 198, 106), Color3.fromRGB(150, 130, 226),
 			Color3.fromRGB(238, 140, 178), Color3.fromRGB(120, 200, 214),
 		}
-		for i, c in ipairs(jarColors) do
-			build({ name = "Jar", size = Vector3.new(1.5, 2, 1.5),
-				cframe = stallCF * CFrame.new(-7.5 + (i - 1) * 3, 8.5, -6.5),
-				color = c, material = Enum.Material.Glass,
+		for _, side in ipairs({ -1, 1 }) do
+			build({ name = "Tray", size = Vector3.new(5.5, 0.5, 5),
+				cframe = stallCF * CFrame.new(side * 6.6, 5.35, 0),
+				color = WOOD_DARK, material = Enum.Material.WoodPlanks,
 				collide = false, studs = false, parent = hub })
+			for i = 1, 3 do
+				local c = jarColors[((side < 0 and 0 or 3) + i)]
+				build({ name = "Produce", size = Vector3.new(1.3, 1.3, 1.3),
+					cframe = stallCF * CFrame.new(side * 6.6 + (i - 2) * 1.7, 6.2,
+						(i % 2 == 0) and 0.9 or -0.9),
+					color = c, material = Enum.Material.Plastic,
+					collide = false, parent = hub })
+			end
 		end
 
 		for _, side in ipairs({ -1, 1 }) do
@@ -924,13 +940,15 @@ function MapService.Init()
 		local cf = CFrame.lookAt(pos, Vector3.new(0, Y, 0))
 		buildPlot(id, cf, tier.rows, plots)
 
-		-- Just outside the gate, on the ring's inner walkway. Placed off the
-		-- GATE radius rather than off the plot, so it stays put when the plot
-		-- behind it grows.
-		local millR = gateR - 15
-		buildTreadmill(id, CFrame.lookAt(
-			Vector3.new(math.sin(angle) * millR, Y + 0.6, math.cos(angle) * millR),
-			Vector3.new(0, Y + 0.6, 0)), plots)
+		-- BESIDE THE PLOT, NOT IN FRONT OF IT. It used to sit on the ring's
+		-- inner walkway directly outside the gate, which is the one patch of
+		-- ground every single run passes through -- an obstacle parked in your
+		-- own doorway. Alongside the right-hand fence it is out of the way and
+		-- still obviously yours.
+		--
+		-- Placed off the plot's own CFrame, so it swings round with the plot and
+		-- needs no angle maths of its own.
+		buildTreadmill(id, cf * CFrame.new(PLOT.Width * 0.5 + 11, 0.6, 0), plots)
 	end
 
 	--== FIELD DRESSING ==--

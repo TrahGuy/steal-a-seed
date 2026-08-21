@@ -181,32 +181,33 @@ GameConfig.Plot = {
 	SpawnHeightOffset = 4,
 
 	--==========================================================================
-	-- THE BEDS
+	-- THE BED
 	--
-	-- From the owner's reference sketch: the inside of a plot is GRASS, and the
-	-- soil is two raised bed blocks standing on it, each divided into rows.
+	-- ONE continuous bed of soil inside a raised wooden border, from the owner's
+	-- photo reference. An earlier version split it into two framed blocks with
+	-- visible row divisions; the reference is a single plain rectangle and it is
+	-- the better read -- soil is soil, and drawing rows on it before anything
+	-- grows there is labelling an empty field.
 	--
-	-- That is a better plot than a solid dirt rectangle for a reason worth
-	-- writing down. A slab of dirt is one shape; two framed blocks divided into
-	-- rows is a GRID, and a grid tells the player how many things fit here and
-	-- exactly where they go before a single plant exists. It also gives
-	-- expansion something to say -- a tier is more ROWS, which is visible from
-	-- across the field.
+	-- The grid still exists, it is just invisible: plant slots are laid out
+	-- Columns x rows across the surface. A ROW IS STILL A SLOT ROW, so the plant
+	-- count and the bed's depth cannot drift apart.
 	--
-	-- A ROW IS A SLOT. There is no separate slot count to keep in step with the
-	-- bed geometry: rows x columns IS the number of plants, so the two can never
-	-- disagree.
+	-- ELEVATION IS 0.5. It was 2.2, which made every plot a platform you climbed
+	-- rather than a bed set into the lawn.
 	--==========================================================================
-	BedColumns = 2,
+	BedColumns = 3,
 	RowDepth = 11,
 	RowGap = 1.2,
-	-- Grass between the beds and the fence.
+	-- Grass between the bed's FRAME and the fence.
 	BedMargin = 6,
 	BedInsetX = 5,
-	-- Grass down the middle, between the two blocks. This is the aisle the
-	-- reference sketch has, and it is what stops eight beds reading as one slab
-	-- with lines drawn on it.
-	BedCentreGap = 3,
+	-- How far the soil surface stands above the grass, and how far the wooden
+	-- border stands above the soil. Both deliberately small: the border only has
+	-- to read as an edge, not as a wall.
+	BedHeight = 0.5,
+	BedFrameLip = 0.25,
+	BedFrameWidth = 2,
 }
 
 --==============================================================================

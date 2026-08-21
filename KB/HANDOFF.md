@@ -78,23 +78,37 @@ The SELL stall moved to the **upper left of the field**. In the middle it sat on
 every player runs between their plot and the road -- a shop should be somewhere you choose to go,
 not something you run around twice a lap.
 
-## A PLOT IS GRASS WITH TWO RAISED BED BLOCKS ON IT
+## A PLOT IS ONE BED OF SOIL IN A WOODEN FRAME
 
-Built to the owner's sketch, [plot-reference.jpg](plot-reference.jpg). Fenced square of studded
-grass, two framed bed blocks standing on it, each divided into rows.
+Built to the owner's photo, [plot-bed-reference.png](plot-bed-reference.png). A fenced square of
+studded grass with a single rust-brown soil rectangle set into it, ringed by a low wooden border.
 
-That beats the solid dirt rectangle it replaced for a reason worth keeping: a slab of dirt is one
-shape, whereas two framed blocks divided into rows is a **grid**. A grid tells the player how many
-things fit and exactly where, before a single plant exists — and it gives expansion something to
-*say*, because another tier is visibly more rows.
+An earlier version split it into two framed blocks divided into visible rows. The reference is one
+plain rectangle and it is the better read — soil is soil, and drawing rows on it before anything
+grows there is labelling an empty field. **The grid still exists, it is just invisible**: plant slots
+are `Attachment`s laid out columns × rows across the surface, so a slot costs nothing until something
+occupies it. A row is still a slot row, so the plant count and the bed's depth cannot drift apart.
 
-**A row is a slot.** There is no separate slot count to keep in step with the geometry: rows ×
-columns IS the plant count, so the two cannot disagree.
+**Elevation is 0.5.** It was 2.2, which made every plot a platform you climbed onto rather than a
+bed set into the lawn.
 
 **Beds are `Plastic`, not `Ground`.** `Ground` was the obvious material for soil and it is the wrong
 one — its noise texture renders *over* the studs, so a bed set to `TopSurface = Studs` came out
 smooth while the grass around it was visibly studded. `Plastic` is the material that actually shows
 them.
+
+**The border is four bars, not one slab — and this one cost a build.** A single slab looks like the
+economical choice, on the reasoning that its middle is hidden under the soil anyway. It is not: the
+border stands *proud* of the soil (`BedFrameLip` above `BedHeight`), so a solid slab's top face sits
+ABOVE the soil and covers every stud of it. The whole plot rendered as a wooden floor with no dirt
+anywhere in it, and the numbers all still checked out — soil material, colour, height and stud
+setting were each individually correct while nothing could see them. **Verifying a part's properties
+is not verifying that the part is visible.**
+
+**The treadmill sits beside the plot, not in front of it.** It used to be on the ring's inner
+walkway directly outside the gate — the one patch of ground every single run passes through, an
+obstacle parked in your own doorway. It is now placed off the plot's own CFrame, so it swings round
+with the plot and needs no angle maths of its own.
 
 **The fence encloses all four sides, with a gap at the front for the gate.** Two taller capped
 gateposts flank it. The fence is non-collidable throughout, so the gap is not what lets you in — you
@@ -214,6 +228,10 @@ owns `Motor6D.C0`. That is why they cannot fight.
     forward (dZ −0.35).
   * **Both sides take the SAME sign.** The left joints are already mirrored by that −90° yaw, so
     opposite signs cancel the mirroring out — she walked doing star jumps.
+  * **The produce is on trays at her sides, not on a shelf behind her.** A high back shelf put the
+    whole display directly above Marigold, so the thing the stall sells and the person selling it
+    competed for the same patch of screen and she lost. On the counter beside her the goods are at
+    the height a customer actually looks at, and she has the middle to herself.
   * **She was invisible behind her own counter**: five studs tall, head exactly level with a
     5.4-tall counter top. Fixed with a raised deck *behind* the counter rather than by shrinking the
     counter, which would have made it ankle-high for the players walking up to it. The customer side
@@ -276,6 +294,11 @@ only shows up in geometry.
 
 ## Things worth not rediscovering
 
+  * **Moving the Edit viewport takes `Camera.Focus`, not `Camera.CFrame`.** Writing `CFrame` alone
+    appears to work — you can read the new value straight back — and the viewport quietly keeps
+    rendering from wherever it was, so every screenshot comes out of the old camera and looks like a
+    stale capture. The editor camera derives its own CFrame from `Focus`; set both and it moves.
+    This is how you photograph a specific corner of the map without starting a Play session.
   * **`MapDecor` is deliberately not named `*Service`.** `ServerMain` auto-requires and starts every
     ModuleScript in that folder ending in `Service`. `MapDecor` is a helper with no lifecycle, called
     by `MapService` during its own `Init`.
