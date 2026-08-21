@@ -163,7 +163,7 @@ local function attachPrompt(pod: Model)
 	prompt.ActionText = "Take"
 	prompt.ObjectText = ""
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
-	prompt.HoldDuration = 0
+	prompt.HoldDuration = GameConfig.Carry.TakeHoldSeconds
 	prompt.MaxActivationDistance = 11
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = primary

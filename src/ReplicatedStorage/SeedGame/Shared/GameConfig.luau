@@ -507,6 +507,17 @@ GameConfig.Carry = {
 	-- Below 1 flattens the low end. 0.6 keeps small pods nearly free.
 	Exponent = 0.6,
 	CashPerKg = 1,
+
+	--==========================================================================
+	-- TAKING A POD IS HELD, NOT TAPPED
+	--
+	-- An instant take made a raid a drive-by: run through a nest, tap, gone. A
+	-- hold is what puts the player STILL and EXPOSED next to a sleeping monster
+	-- for a moment, which is the only part of the raid that has any tension in
+	-- it -- and it is what makes the wake delay mean something, since the timer
+	-- and the head start now overlap.
+	--==========================================================================
+	TakeHoldSeconds = 0.7,
 }
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.

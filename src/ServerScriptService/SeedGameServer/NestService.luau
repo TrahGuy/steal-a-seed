@@ -28,16 +28,19 @@
 -- your first raid, and that is the lesson rather than a bug.
 --
 --==============================================================================
--- IT THROWS YOU DEEPER, NOT AWAY
+-- IT THROWS YOU OUT, TOWARD THE SAFE ZONE
 --
--- The obvious implementation is "fling the player away from the monster", and
--- it is exactly backwards. A player is caught while running HOME, so the
--- direction away from the parent is the direction they were already going --
--- being caught would launch them most of the way to safety. The punishment
--- would be a bonus.
+-- This was deeper down the road at first, on the argument that throwing a
+-- fleeing player homeward rewards them for being caught. That argument was
+-- right about the direction and wrong about the punishment, because it assumed
+-- you kept the pod.
 --
--- So the throw goes DEEPER down the road, away from the safe zone. It costs the
--- one thing this whole game is made of: the length of the walk home.
+-- You do not. Being ragdolled drops it (see CarryService), so LOSING THE POD IS
+-- THE PUNISHMENT and the throw is just ejection -- get away from my nest. Doing
+-- both would strand a player deep in a biome with nothing to show for the trip,
+-- which is not a harder game, only a more tedious one.
+--
+-- So it throws toward safety. Home is +Z; the road runs to -Z.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -254,16 +257,15 @@ local function throwPlayer(nest: Nest, player: Player)
 	local g = Workspace.Gravity
 	local speed = math.sqrt(R * g / (2 * k))
 
-	-- DEEPER DOWN THE ROAD, not away from the monster. A player is caught while
-	-- running home, so "away from the parent" is the way they were already
-	-- going and the punishment would fling them most of the way to safety.
-	-- Home is +Z; deeper is -Z.
+	-- OUT, toward the safe zone. Home is +Z. The lateral term only nudges them
+	-- off the wall they were probably hugging, so they land on the road rather
+	-- than inside it.
 	local lateral = (root.Position.X - nest.root.Position.X)
-	local dir = Vector3.new(lateral * 0.02, 0, -1)
+	local dir = Vector3.new(lateral * 0.02, 0, 1)
 	if dir.Magnitude > 0 then
 		dir = dir.Unit
 	else
-		dir = Vector3.new(0, 0, -1)
+		dir = Vector3.new(0, 0, 1)
 	end
 	--==========================================================================
 	-- PlatformStand STAYS ON THROUGH THE FLIGHT, and that is not cosmetic.
@@ -379,8 +381,24 @@ local function step(nest: Nest, now: number)
 			local victim = nest.target
 			nest.busy = true
 			task.spawn(function()
+				-- pcall'd because `busy` MUST be released. An error in here kills
+				-- the thread and leaves the nest busy forever -- its parent frozen
+				-- mid-grab, never chasing, never sleeping, never recovering. That
+				-- is not hypothetical: a bad edit left `dir` undefined, throwPlayer
+				-- threw on a nil index, and the nest went catatonic with no error
+				-- anywhere near the thing that stopped working.
 				if victim then
-					throwPlayer(nest, victim)
+					local ok, err = pcall(throwPlayer, nest, victim)
+					if not ok then
+						warn("[Seed/NestService] throw failed: " .. tostring(err))
+						-- Never leave somebody ragdolled because the throw broke.
+						local character = victim.Character
+						local humanoid = character
+							and character:FindFirstChildOfClass("Humanoid")
+						if humanoid then
+							humanoid.PlatformStand = false
+						end
+					end
 				end
 				nest.state = "returning"
 				nest.target = nil
