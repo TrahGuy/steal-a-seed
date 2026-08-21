@@ -10,8 +10,8 @@
 
 ## Where it stands (2026-08-20)
 
-**Phase A, map only.** The world exists and is dressed. Nothing else does: no plot claiming, no
-profiles, no seeds, no carrying, no HUD. Four files.
+**Phase A: the map, and who owns which piece of it.** The world exists, is dressed, and hands
+itself out. Still missing: profiles, save, seeds, carrying, planting, economy, HUD.
 
 ```
 src/ReplicatedStorage/SeedGame/Shared/
@@ -20,6 +20,7 @@ src/ReplicatedStorage/SeedGame/Shared/
 src/ServerScriptService/SeedGameServer/
   ServerMain.server.luau   bootstrap: Init() all, then Start() all
   MapService.luau          layout, lighting
+  PlotService.luau         the plot <-> player lease, and the overflow queue
   MapDecor.luau            dressing  (NOT a *Service -- see below)
 ```
 
@@ -77,6 +78,55 @@ stand on them.
 The SELL stall moved to the **upper left of the field**. In the middle it sat on the exact line
 every player runs between their plot and the road -- a shop should be somewhere you choose to go,
 not something you run around twice a lap.
+
+## A PLOT IS A LEASE ON THIS SERVER, NOT A PROPERTY OF AN ACCOUNT
+
+**This is the decision the save schema hangs off, so settle it before writing one.** WHICH plot you
+get is never saved. It is a slot in *this* server: lowest free id on arrival, handed back on
+departure.
+
+What persists is what is *on* a plot — its tier, and later its plants — restored onto whatever
+ground the lease gave you this session. Saving the plot id buys nothing and costs plenty: a
+returning player either waits for "their" plot while three sit empty, or is quietly given a
+different one anyway — which is this behaviour with an extra field to keep in step. And a stored
+plot id is a **pointer into the map**, while the map is code that moves every time the geometry
+does.
+
+**Nobody shops for a plot.** No claim prompt, no board to walk up to, no choosing. Picking is a
+decision with no inputs — the plots are identical — so the only thing a player learns from choosing
+is that the game made them do paperwork first.
+
+**More players than plots is the normal case, not the error case.** `MaxPlayers` is 60 against six
+plots until somebody opens Game Settings, so a joiner with no plot goes into a **join-ordered
+queue** and stands on the overflow pad in the hub until one frees. Not a kick and not a random draw
+— both punish a player for a setting they cannot see.
+
+**A lease that ends returns the ground empty.** Release clears the plot's `Plants` and `Runtime`
+folders, so the next player cannot inherit the last one's crop. That is the invariant PlotService
+owns and nothing else can: **anything that puts something on a plot puts it in one of those two
+folders and gets cleanup for free.** When tiers ship, release gains one more job — a plot left at
+tier 3 is the wrong *shape* for an arriving player whose save says tier 1, so handover will have to
+rebuild it.
+
+### Two things that were nearly wrong
+
+  * **Plots are found by TAG, not by folder children.** `Plots` holds twelve children for six plots
+    — each plot has a treadmill parked beside it in the same folder. Taking every child would have
+    handed somebody a treadmill and reported twice as many plots as exist. Measured: *12 children,
+    6 tagged.*
+  * **Telling the client is not part of the transaction.** `FireClient` sat in the middle of
+    `assign`, so anything it threw left the lease half-applied — attributes stamped, tables updated,
+    listeners never run. Not hypothetical: that call throws in the Edit datamodel, where
+    `IsServer()` is false. It is pcall'd and runs last now, which is why assignment still completed
+    in Edit while the notification failed.
+
+**Placement is `PivotTo`, not `RespawnLocation`.** RespawnLocation is set too — one line, and the
+engine then usually spawns a character roughly right rather than at the origin — but nothing relies
+on it. It cannot express a queued player's destination, which is a marker Part on the hub deck
+rather than a SpawnLocation; and the plot pads are deliberately `Enabled = false`, because six
+enabled spawns on one field would scatter players through other people's gardens any time
+RespawnLocation went unhonoured. One mechanism covering every case beats two covering half each.
+The pivot runs after `HumanoidRootPart` exists, so it corrects rather than races.
 
 ## A PLOT IS ONE BED OF SOIL IN A WOODEN FRAME
 
@@ -341,6 +391,10 @@ again, because the wedged state does not clear on its own.
 
 ## Next
 
-`PlotService` — claim a plot on join, name on the sign, spawn on its pad, release on leave with a
-join-ordered waiting queue. Then `PlayerDataService` + `SaveService`, then the seed → carry →
-planter loop that is Phase A's actual success criterion.
+`PlayerDataService` + `SaveService` — profiles, and the schema whose central question (does the
+plot id persist?) PlotService has now answered: **no**. Then the seed → carry → planter loop that is
+Phase A's actual success criterion.
+
+`PlotService` is done and hooked: `OnAssigned` / `OnReleased` are the seam a profile service
+restores and saves through, and `OnReleased` deliberately fires **before** the plot is cleared so
+there is still something left to read.

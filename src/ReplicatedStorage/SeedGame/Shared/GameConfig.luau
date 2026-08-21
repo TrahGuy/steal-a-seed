@@ -248,6 +248,10 @@ GameConfig.StartingPlotTier = 1
 GameConfig.Attributes = {
 	PlotId = "PlotId",
 	OwnerUserId = "OwnerUserId",
+	-- The owner's NAME as well as their id, so a client can label a plot without
+	-- a GetNameFromUserIdAsync round trip per plot. Attributes replicate on
+	-- their own, so this is also why "who owns this" needs no remote.
+	OwnerName = "OwnerName",
 	Claimed = "Claimed",
 	BiomeId = "BiomeId",
 	-- Phase A+

@@ -59,10 +59,11 @@ src/
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
     MapService.luau             builds the whole map, and the lighting, from code
+    PlotService.luau            who owns which plot, and puts them on it
 ```
 
-Phase A still to come: `PlotService`, `PlayerDataService`, `SaveService`, `SeedService`,
-`CarryService`, `PlantService`, `EconomyService`, and the HUD. See [KB/PLAN.md](KB/PLAN.md).
+Phase A still to come: `PlayerDataService`, `SaveService`, `SeedService`, `CarryService`,
+`PlantService`, `EconomyService`, and the HUD. See [KB/PLAN.md](KB/PLAN.md).
 
 ## The map is ONE ROAD
 
