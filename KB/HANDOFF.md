@@ -1141,6 +1141,120 @@ module's own table is the state.
 
 > Test cash/Speed (76,699 / 395) were reset to 0 afterwards; the two plants were left.
 
+## Prompts were never broken, and the mill now looks used — 2026-08-21
+
+### The prompt "outage" was my instrument, twice over
+
+Last session reported `PromptShown` dead. It was not. Walking in from 30 studs with `PromptUI`
+watching, the custom panel drew correctly:
+
+```
+walked 30.1 -> 7.2 studs
+PromptShown seen by an execute_luau connection: NONE
+custom panels drawn by PromptUI:               1  SeedPrompt key="E" action="Take"
+```
+
+**`ProximityPromptService` events do not reach connections made from `execute_luau`.** They reach a
+real LocalScript perfectly well — `PromptUI` built its panel off the very event my probe said never
+fired. On top of that, the first session's probe connected while the character was ALREADY inside
+the radius, and `PromptShown` is an edge. Two independent measurement faults stacked into a
+confident wrong conclusion.
+
+Reading instance PROPERTIES from `execute_luau` works fine. It is only engine EVENT connections that
+are dead there. That is the rule to remember.
+
+### What is still unproven: a hand-driven take
+
+Synthetic input reaches the client — `UserInputService:IsKeyDown(E)` returns true, and holding W
+moved the character exactly 24.24 studs. But neither synthetic keyboard nor a synthetic click on the
+panel begins the hold: `PromptUI`'s fill bar stayed at **0.00**, so `PromptButtonHoldBegan` never
+fired, with Style Custom AND with Style flipped to Default as a control.
+
+So the prompt path is healthy up to the point where a hold must begin, and VirtualInput does not
+appear able to drive that. **A real hold-E take is still unverified by me** and wants a human at the
+keyboard. The carry geometry below was measured by driving `TryTake` directly, which is a harness
+and is not a take.
+
+### The character rig has no Motor6Ds
+
+`CarryPose` posed nothing because it was looking for joints this avatar does not have:
+
+```
+AnimationConstraint x15   BallSocketConstraint x14   Motor6D x0
+```
+
+Modern Roblox avatars are physics rigs. `RightShoulder` is an `AnimationConstraint`, not a Motor6D,
+and the old code's `buildRig` found nothing and gave up silently.
+
+`AnimationConstraint.Transform` drives fine — measured by writing it and watching the hand move
+1.956 studs, then snap back 1.957 on release. Unlike `Motor6D.C0` it OVERRIDES the animation rather
+than composing under it, which is right for a carry: arms holding something should not swing. It
+must be written in `Stepped`, after the animation has been evaluated.
+
+**Which axis swings an arm forward is per-rig, and was measured rather than guessed.** Right
+shoulder, hand position in ROOT space:
+
+```
+rest       x +1.47  y -0.99  z -0.64
+X +60 deg  x +1.26  y -0.06  z -1.63   <- FORWARD
+Y +60 deg  x +1.02  y -1.02  z -0.67      barely moves
+Z +60 deg  x +2.47  y +0.24  z -0.40      sideways and up
+```
+
+R15 swings on X. R6 swings on Z — the opposite — because of a 90-degree yaw baked into its shoulder
+C0, which `Ambience` measured when the fairy walked doing star jumps. `CarryPose` now handles
+AnimationConstraint, Motor6D R15 and Motor6D R6, and warns rather than silently doing nothing.
+
+### `MoveDirection` is 0.00 on a moving character
+
+The streak had two faults, not one. The gate was too high — `walkSpeedFor(0) * 1.55` = 24.8, which
+this curve (Scale 20,000) does not reach until ~1,265 Speed, about twenty-one minutes of milling.
+But it also tested `MoveDirection`, which read **0.00 through a 39.2 stud walk** on this rig. Now
+gated on `AssemblyLinearVelocity` and on base + 1.2:
+
+```
+gate 17.20 (base 16.00), reached at ~180 Speed -- about 90 seconds on the belt
+running   peak ground velocity 18.23  -> gate opens
+standing  ground velocity 0.00        -> gate closed
+```
+
+Opacity now scales from a hint at the gate to a full ribbon 14 studs/sec above it, so a first
+session and an hour-long grind do not draw the same streak.
+
+### The mill
+
+`OnTreadmill` is set on the PLAYER, so it replicates to everybody and each client can play the run
+cycle on somebody else's character with no remote. The run animation id is read off the character's
+own `Animate` script, so a player with a purchased run trains in THEIR run and there is no asset id
+in this repo to rot.
+
+Five chevrons per belt, two bars each, built by the server and scrolled by each client — the same
+split as the fairy. Sixty parts moving on the server would be sixty parts of replication a second,
+for paint.
+
+```
+standing on the mill, no key held:
+  MoveDirection 0.00, WalkSpeed 16.18
+  playing: Animation(pri=Action, w=1.00)      <- the run cycle
+  chevron travelled 15.91 studs in 2.5s       <- belt span is 16, so a full wrap
+  OnTreadmill = true, cleared to nil on stepping off
+```
+
+### Measured, unchanged
+
+```
+carry     Nubkin 1.58 studs in front, tag "2Kg"          <- settled numbers, untouched
+arms      pod        x +0.00 y -0.35 z -1.58
+          RightHand  x +1.05 y -0.19 z -1.52   1.06 from the pod
+          LeftHand   x -1.19 y -0.30 z -1.35   1.21 from the pod
+          (rest was x +-1.47 y -0.99 z -0.64)
+faucets   cash 113.35/sec (112 expected)   Speed 0.000/sec off the mill
+world     plot 2 plants, 0 SeedPod, 0 prompts | nest 5 pods, 5 Take prompts
+          sway 1.97 deg | mills 6 | signs 6 | chevrons 60
+```
+
+> Test cash/Speed (116,324 / 279) reset to 0 afterwards; the two plants kept.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
@@ -1153,10 +1267,16 @@ module's own table is the state.
 
 ## Next
 
-`PlayerDataService` + `SaveService` — profiles, and the schema whose central question (does the
-plot id persist?) PlotService has now answered: **no**. Then the seed → carry → planter loop that is
-Phase A's actual success criterion.
+Phase A is closed: steal -> carry -> bank -> plant -> grow -> earn, plus the mill that buys speed.
+All of it is measured in KB/HANDOFF above rather than asserted.
 
-`PlotService` is done and hooked: `OnAssigned` / `OnReleased` are the seam a profile service
-restores and saves through, and `OnReleased` deliberately fires **before** the plot is cleared so
-there is still something left to read.
+The two things standing between this and a playable loop:
+
+  * **A hand-driven take has never been verified.** Everything up to the hold works; VirtualInput
+    cannot begin one. Somebody at the keyboard needs to walk to a nest and hold E.
+  * **`Players.MaxPlayers` is 60 against 6 plots.** Joiner 7 gets no plot. It is not settable from
+    code -- Game Settings -> Places, set it to 6.
+
+Then: the HUD, and Phase D upgrades (the mill rate is deliberately a slow FLOOR for multipliers to
+sit on). Offline income is still deferred on purpose -- growth uses an absolute clock, cash does not,
+and an offline faucet needs a claim flow, a cap and an anti-abuse story before it needs code.

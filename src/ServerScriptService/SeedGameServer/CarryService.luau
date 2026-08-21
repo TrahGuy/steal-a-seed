@@ -73,14 +73,12 @@ local running = false
 -- How far above the head it floats. High enough to read across the road --
 -- everybody can see what you are carrying, which is what makes a carrier a
 -- target the moment PvP is switched on.
--- How far in front of the torso the pod rides, before its own radius is added.
 -- CARRY_HEIGHT used to be 3.0 and welded the pod to the HEAD, which floated it
 -- above the skull like a halo -- readable at distance, but it made a raid look
 -- like a delivery quest rather than somebody hauling something heavy.
-local CARRY_FORWARD = 0.85
--- Slightly below the root's centre, which sits at chest height: the pod is held
--- at the waist with both arms under it, not presented at eye level.
-local CARRY_DROP = -0.35
+--
+-- The numbers now live in GameConfig.Carry because the CLIENT needs them too,
+-- to aim the arms at the pod. Same values, one home.
 -- A pod on the ground is fair game for anybody, and vanishes if nobody comes.
 local LOOSE_LIFETIME = 45
 -- How close you must be. The PROMPT is not a security boundary -- it is a
@@ -192,7 +190,7 @@ local function gripFor(species: SeedData.Species): CFrame
 	-- -Z is forward in a root's frame. Offset by the pod's OWN RADIUS, because
 	-- pods are 1.3 to 4.5 studs across: a fixed offset either buries a
 	-- Bellchime in the ribs or leaves a Nubkin hovering clear of the hands.
-	return CFrame.new(0, CARRY_DROP, -(CARRY_FORWARD + SeedData.PodDiameter(species) * 0.5))
+	return CFrame.new(0, GameConfig.Carry.GripDrop, -SeedData.GripForward(species))
 end
 
 --==============================================================================

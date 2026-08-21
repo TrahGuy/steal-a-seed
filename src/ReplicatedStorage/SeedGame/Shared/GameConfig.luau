@@ -275,6 +275,10 @@ GameConfig.Attributes = {
 	BankedCount = "BankedCount",
 	SeedInstanceId = "SeedInstanceId",
 	InSafeZone = "InSafeZone",
+	-- Set while the owner is standing on their own mill and earning. On the
+	-- PLAYER, so it replicates to everybody for free -- which is what lets each
+	-- client play the run cycle on somebody else's character without a remote.
+	OnTreadmill = "OnTreadmill",
 }
 
 GameConfig.Tags = {
@@ -306,6 +310,9 @@ GameConfig.Tags = {
 	-- is somebody's property mid-hatch. Nothing tagged Planted is ever takeable,
 	-- and CarryService refuses it even if a stale prompt survives on it.
 	Planted = "Planted",
+	-- One arrow painted on a treadmill belt. Server builds them where they
+	-- belong; each client scrolls its own copies, same split as the fairy.
+	MillChevron = "MillChevron",
 	-- An empty marker MapService leaves behind saying "a nest belongs here".
 	-- NestService builds the actual nest on top of it, because a nest has state
 	-- and the map deliberately has none.
@@ -589,6 +596,18 @@ GameConfig.Carry = {
 	-- and the head start now overlap.
 	--==========================================================================
 	TakeHoldSeconds = 0.7,
+	--==========================================================================
+	-- WHERE A POD RIDES, AND WHY IT LIVES HERE
+	--
+	-- CarryService owns the weld, but the CLIENT needs the same numbers to point
+	-- the arms at the thing. Two copies of "how far in front" is the two-names-
+	-- for-one-fact bug in another coat.
+	--
+	-- Unchanged values, new home: a Nubkin lands 1.58 studs out and a Bellchime
+	-- 3.09, which is settled and not to be retuned.
+	--==========================================================================
+	GripForwardBase = 0.85,
+	GripDrop = -0.35,
 }
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.

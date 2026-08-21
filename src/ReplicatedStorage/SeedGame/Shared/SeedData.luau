@@ -261,6 +261,12 @@ function SeedData.Girth(species: Species): number
 	return math.clamp((species.Kg / GIRTH_REF_KG) ^ GIRTH_EXP, 0.70, 1.75)
 end
 
+-- How far in front of the root this species rides. ONE definition: CarryService
+-- welds with it, CarryPose aims the arms with it.
+function SeedData.GripForward(species: Species): number
+	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(species) * 0.5
+end
+
 function SeedData.PodColor(species: Species): Color3
 	return GameConfig.RarityColor[species.Rarity] or Color3.fromRGB(200, 200, 200)
 end

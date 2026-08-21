@@ -215,3 +215,89 @@ RunService.Heartbeat:Connect(function(dt)
 		end
 	end
 end)
+
+--==============================================================================
+-- TREADMILL BELTS
+--
+-- Same contract as everything else in this file: the server built the arrows and
+-- tagged them, and this scrolls each client's own copies. A belt whose arrows
+-- everybody sees at a different offset is still a belt; sixty parts moving on
+-- the SERVER would be sixty parts of replication a second, for paint.
+--
+-- They scroll toward the BACK of the belt, which is the direction the surface
+-- would travel under somebody running forward on it.
+--==============================================================================
+local CHEVRON_TAG = GameConfig.Tags.MillChevron
+local CHEVRON_SPEED = 5.5
+
+type Chevron = {
+	part: BasePart,
+	belt: BasePart,
+	-- Its resting offset in the belt's own frame, captured once.
+	rest: CFrame,
+	span: number,
+	phase: number,
+}
+
+local chevrons: { Chevron } = {}
+local chevronIndex: { [BasePart]: number } = {}
+
+local function forgetChevron(instance: Instance)
+	local part = instance :: BasePart
+	local at = chevronIndex[part]
+	if not at then
+		return
+	end
+	local last = #chevrons
+	chevrons[at] = chevrons[last]
+	chevronIndex[chevrons[at].part] = at
+	chevrons[last] = nil
+	chevronIndex[part] = nil
+end
+
+local function rememberChevron(instance: Instance)
+	if not instance:IsA("BasePart") or chevronIndex[instance :: BasePart] then
+		return
+	end
+	local part = instance :: BasePart
+	local belt = part.Parent and part.Parent.Parent
+	if not (belt and belt:IsA("BasePart")) then
+		return
+	end
+	local span = tonumber(part:GetAttribute("ChevronSpan")) or belt.Size.Z
+	local index = tonumber(part:GetAttribute("ChevronIndex")) or 1
+	local entry: Chevron = {
+		part = part,
+		belt = belt :: BasePart,
+		rest = (belt :: BasePart).CFrame:ToObjectSpace(part.CFrame),
+		span = span,
+		-- Evenly spaced along the belt by index, so five arrows read as a
+		-- repeating surface rather than a clump.
+		phase = ((index - 1) / 5) * span,
+	}
+	chevrons[#chevrons + 1] = entry
+    chevronIndex[part] = #chevrons
+end
+
+for _, instance in ipairs(CollectionService:GetTagged(CHEVRON_TAG)) do
+	rememberChevron(instance)
+end
+CollectionService:GetInstanceAddedSignal(CHEVRON_TAG):Connect(rememberChevron)
+CollectionService:GetInstanceRemovedSignal(CHEVRON_TAG):Connect(forgetChevron)
+
+local beltClock = 0
+RunService.Heartbeat:Connect(function(dt)
+	beltClock += dt * CHEVRON_SPEED
+	for i = #chevrons, 1, -1 do
+		local c = chevrons[i]
+		if not (c.part.Parent and c.belt.Parent) then
+			forgetChevron(c.part)
+		else
+			-- Wrap within the belt's length. Modulo rather than a reset test, so
+			-- a dropped frame cannot leave an arrow stranded off the end.
+			local z = ((c.phase + beltClock) % c.span) - c.span * 0.5
+			c.part.CFrame = c.belt.CFrame
+				* (c.rest + Vector3.new(0, 0, z - c.rest.Z))
+		end
+	end
+end)

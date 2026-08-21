@@ -1,102 +1,170 @@
 --!strict
 -- Steal a Seed :: CarryPose
 --
--- Both arms out, under the pod, while you are carrying one.
+-- Both arms out under the pod while you are carrying one.
 --
 --==============================================================================
--- WHY THE ARMS NEED SAYING AT ALL
+-- THE FIRST VERSION POSED JOINTS THAT DO NOT EXIST
 --
--- The server welds the pod in front of HumanoidRootPart. That alone puts the
--- object in the right place and leaves the player's arms hanging at their
--- sides, so a 110 kg Bellchime floats in front of somebody strolling with their
--- hands in their pockets. The weld makes it CARRIED; this makes it HELD.
+-- It looked for Motor6D shoulders and composed against `C0`, which is how
+-- Ambience moves the fairy and how ParentAnim moves the nest parent. Both of
+-- those are rigs THIS REPO BUILDS, and both really do have Motor6Ds.
 --
---==============================================================================
--- C0, NOT Transform -- THE SAME REASON AMBIENCE USES C0
+-- A modern Roblox avatar does not. The test account's character is:
 --
--- Transform is the field Roblox's own Animator writes every frame, so a pose
--- put there is erased by the walk cycle before it is ever drawn. C0 is a plain
--- joint property that composes UNDER the animation: the walk still plays, and
--- the arms play it from a raised rest position.
+--     AnimationConstraint x15, BallSocketConstraint x14, Motor6D x0
 --
--- Captured once per joint and composed against, never read back and re-derived
--- -- reading the current C0 to compute the next one feeds each frame's rounding
--- into the following one and the arms drift.
+-- so `buildRig` found nothing, gave up silently, and the arms hung while the
+-- pod floated in front of them. Measured, not assumed: a scan of the character
+-- on both server and client returned zero joints of any class.
 --
 --==============================================================================
--- IT DRAWS EVERY PLAYER, NOT JUST YOU
+-- SO IT DRIVES WHATEVER THE RIG ACTUALLY HAS
 --
--- CarryingSpecies is a Player attribute and attributes replicate on their own,
--- so this poses whoever is carrying. Somebody sprinting past with a pod should
--- look like they are holding it from the outside too -- that is the whole read
--- of a chase you are not in.
+--   AnimationConstraint  ->  .Transform, written every Stepped
+--   Motor6D              ->  .C0, composed against a captured rest pose
+--
+-- The two behave differently and the difference matters. C0 composes UNDER the
+-- animation, so a walk cycle still plays through it. `Transform` OVERRIDES the
+-- animation for that joint -- verified by driving it and watching the hand move
+-- 1.956 studs, then snap back 1.957 when released. For a carry that is what we
+-- want anyway: arms that hold something should not also be swinging.
+--
+-- Written in `Stepped` rather than `Heartbeat` because that is after the
+-- animation has been evaluated for the frame. Writing earlier loses the race.
+--
+--==============================================================================
+-- WHICH AXIS SWINGS AN ARM FORWARD IS PER-RIG AND WAS MEASURED
+--
+-- Right shoulder, R15 AnimationConstraint, hand position in ROOT space:
+--
+--     rest       x +1.47  y -0.99  z -0.64
+--     X +60 deg  x +1.26  y -0.06  z -1.63   <- FORWARD
+--     Y +60 deg  x +1.02  y -1.02  z -0.67      barely moves
+--     Z +60 deg  x +2.47  y +0.24  z -0.40      sideways and up
+--
+-- So X swings forward and Z spreads sideways. That is the OPPOSITE of R6, where
+-- Ambience measured that a 90-degree yaw baked into every shoulder C0 makes X
+-- slide the arm sideways and Z swing it. Two rigs, two answers, and guessing
+-- either one gives you a character doing star jumps.
 --==============================================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
-local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
+
 local CARRYING = GameConfig.Attributes.CarryingSpecies
 
--- How far the shoulders swing forward, in radians. Enough to read as "holding",
--- short of the zombie salute.
-local LIFT = math.rad(58)
--- Elbows in, so the arms cradle rather than present.
-local TUCK = math.rad(9)
--- How fast the pose blends in and out. A snap looks like a glitch; this is
--- about a fifth of a second.
+-- How fast the pose blends in and out. A snap reads as a glitch.
 local BLEND = 9
 
+type Side = {
+	-- Exactly one of these two is set.
+	constraint: AnimationConstraint?,
+	motor: Motor6D?,
+	rest: CFrame,
+	-- +1 right, -1 left.
+	sign: number,
+}
+
 type Rig = {
-	joints: { { motor: Motor6D, rest: CFrame, side: number } },
+	sides: { Side },
+	-- "constraint" | "motor6d-r15" | "motor6d-r6"
+	kind: string,
 	weight: number,
 }
 
 local rigs: { [Player]: Rig } = {}
 
 --==============================================================================
--- FINDING THE SHOULDERS, R6 AND R15
---
--- Different rigs, different joint names, different parents. Named rather than
--- searched by class, because a character contains a dozen Motor6Ds and posing
--- the wrong two is how a player ends up walking with their hips rotated.
+-- FINDING WHATEVER THE SHOULDERS ARE
 --==============================================================================
-local R6 = { { "Torso", "Right Shoulder", 1 }, { "Torso", "Left Shoulder", -1 } }
-local R15 = { { "UpperTorso", "RightShoulder", 1 }, { "UpperTorso", "LeftShoulder", -1 } }
-
 local function buildRig(character: Model): Rig?
-	local joints = {}
-	for _, set in ipairs({ R15, R6 }) do
-		for _, entry in ipairs(set) do
-			local parent = character:FindFirstChild(entry[1] :: string)
-			local motor = parent and parent:FindFirstChild(entry[2] :: string)
-			if motor and motor:IsA("Motor6D") then
-				table.insert(joints, {
-					motor = motor,
-					rest = motor.C0,
-					side = entry[3] :: number,
+	local sides: { Side } = {}
+
+	-- 1. The modern physics rig.
+	for _, entry in ipairs({ { "RightUpperArm", "RightShoulder", 1 },
+		{ "LeftUpperArm", "LeftShoulder", -1 } }) do
+		local part = character:FindFirstChild(entry[1] :: string)
+		local joint = part and part:FindFirstChild(entry[2] :: string)
+		if joint and joint:IsA("AnimationConstraint") then
+			table.insert(sides, {
+				constraint = joint, motor = nil,
+				rest = joint.Transform, sign = entry[3] :: number,
+			})
+		end
+	end
+	if #sides == 2 then
+		return { sides = sides, kind = "constraint", weight = 0 }
+	end
+	table.clear(sides)
+
+	-- 2. Motor6D R15.
+	local upper = character:FindFirstChild("UpperTorso")
+	if upper then
+		for _, entry in ipairs({ { "RightShoulder", 1 }, { "LeftShoulder", -1 } }) do
+			local m = upper:FindFirstChild(entry[1] :: string)
+			if m and m:IsA("Motor6D") then
+				table.insert(sides, {
+					constraint = nil, motor = m, rest = m.C0, sign = entry[2] :: number,
 				})
 			end
 		end
-		if #joints > 0 then
-			-- Whichever rig matched first wins; do not mix the two.
-			break
+		if #sides == 2 then
+			return { sides = sides, kind = "motor6d-r15", weight = 0 }
 		end
 	end
-	if #joints == 0 then
-		return nil
+	table.clear(sides)
+
+	-- 3. Motor6D R6.
+	local torso = character:FindFirstChild("Torso")
+	if torso then
+		for _, entry in ipairs({ { "Right Shoulder", 1 }, { "Left Shoulder", -1 } }) do
+			local m = torso:FindFirstChild(entry[1] :: string)
+			if m and m:IsA("Motor6D") then
+				table.insert(sides, {
+					constraint = nil, motor = m, rest = m.C0, sign = entry[2] :: number,
+				})
+			end
+		end
+		if #sides == 2 then
+			return { sides = sides, kind = "motor6d-r6", weight = 0 }
+		end
 	end
-	return { joints = joints, weight = 0 }
+	return nil
+end
+
+--==============================================================================
+-- AIMING AT THE POD
+--
+-- Not a fixed pose: the arms follow the thing. gripFor() puts a Nubkin 1.58
+-- studs out and a Bellchime 3.09, so one angle cannot serve both -- a pose tuned
+-- for the small pod leaves the big one held at the fingertips.
+--
+-- Reach drives how far the shoulders swing forward, and how far apart. A big pod
+-- needs the hands WIDER, not just further out, which is why the spread relaxes
+-- as reach grows.
+--==============================================================================
+local function anglesFor(speciesId: string?): (number, number)
+	local species = if speciesId then SeedData.Get(speciesId) else nil
+	local reach = if species then SeedData.GripForward(species) else 1.6
+	-- 1.3 studs of reach -> ~52 deg, 4.5 -> ~80. Clamped so no pod folds the arm
+	-- back through the shoulder.
+	local lift = math.clamp(43 + 9.2 * reach, 45, 82)
+	-- Negative is inward. Small pods are hugged; big ones are braced.
+	local spread = math.clamp(-24 + 6 * reach, -22, 4)
+	return math.rad(lift), math.rad(spread)
 end
 
 local function track(player: Player)
 	local function onCharacter(character: Model)
 		rigs[player] = nil
 		task.spawn(function()
-			-- The joints arrive a beat after the character does.
-			local deadline = os.clock() + 10
+			local deadline = os.clock() + 12
 			local rig = buildRig(character)
 			while not rig and character.Parent and os.clock() < deadline do
 				task.wait(0.15)
@@ -104,6 +172,9 @@ local function track(player: Player)
 			end
 			if rig and character.Parent and player.Character == character then
 				rigs[player] = rig
+			elseif not rig then
+				warn("[Seed/CarryPose] no shoulders found on " .. player.Name
+					.. "'s rig; arms will not pose.")
 			end
 		end)
 	end
@@ -123,25 +194,53 @@ end)
 
 --==============================================================================
 -- THE POSE
+--
+-- Stepped, not Heartbeat: after the animation has been evaluated for the frame.
 --==============================================================================
-RunService.Heartbeat:Connect(function(dt)
+RunService.Stepped:Connect(function(_, dt)
 	local alpha = math.min(1, dt * BLEND)
 	for player, rig in pairs(rigs) do
 		local character = player.Character
 		if not character or not character.Parent then
 			rigs[player] = nil
 		else
-			local want = if player:GetAttribute(CARRYING) ~= nil then 1 else 0
-			-- Blend even when already there, so a pose interrupted mid-way
-			-- always finishes rather than sticking part-raised.
+			local speciesId = player:GetAttribute(CARRYING)
+			local want = if speciesId ~= nil then 1 else 0
 			rig.weight += (want - rig.weight) * alpha
-			if rig.weight < 0.001 and want == 0 then
+			if rig.weight < 0.002 and want == 0 then
 				rig.weight = 0
 			end
-			for _, joint in ipairs(rig.joints) do
-				if joint.motor.Parent then
-					joint.motor.C0 = joint.rest
-						* CFrame.Angles(LIFT * rig.weight, 0, joint.side * TUCK * rig.weight)
+
+			if rig.weight > 0 then
+				local lift, spread = anglesFor(if type(speciesId) == "string"
+					then speciesId else nil)
+				for _, side in ipairs(rig.sides) do
+					local w = rig.weight
+					local pose: CFrame
+					if rig.kind == "motor6d-r6" then
+						-- R6 swings on Z. Ambience measured this the hard way.
+						pose = CFrame.Angles(0, 0, side.sign * lift * w)
+					else
+						-- R15, both joint kinds: X forward, Z spreads.
+						pose = CFrame.Angles(lift * w, 0, side.sign * spread * w)
+					end
+					if side.constraint then
+						-- OVERRIDES the animation for this joint, every frame.
+						side.constraint.Transform = side.rest * pose
+					elseif side.motor then
+						-- Composes UNDER the animation.
+						side.motor.C0 = side.rest * pose
+					end
+				end
+			elseif rig.weight == 0 then
+				-- Hand the joints back. A constraint left driven would freeze the
+				-- arms mid-walk; a Motor6D would keep an offset forever.
+				for _, side in ipairs(rig.sides) do
+					if side.constraint and side.constraint.Transform ~= side.rest then
+						side.constraint.Transform = side.rest
+					elseif side.motor and side.motor.C0 ~= side.rest then
+						side.motor.C0 = side.rest
+					end
 				end
 			end
 		end

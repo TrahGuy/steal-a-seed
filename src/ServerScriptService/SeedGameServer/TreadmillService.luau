@@ -136,6 +136,13 @@ local function payEveryone()
 	local now = os.clock()
 	for _, player in ipairs(Players:GetPlayers()) do
 		local rate = TreadmillService.RateFor(player)
+		-- ON THE PLAYER, so it replicates to everybody. That is what lets each
+		-- client play the run cycle on somebody else's character, and it is why
+		-- this needs no remote.
+		local on = rate > 0
+		if (player:GetAttribute(ATTR.OnTreadmill) == true) ~= on then
+			player:SetAttribute(ATTR.OnTreadmill, on or nil)
+		end
 		if rate > 0 then
 			local since = lastPaid[player]
 			lastPaid[player] = now
@@ -215,6 +222,54 @@ local function signOn(belt: BasePart)
 end
 
 --==============================================================================
+-- ARROWS ON THE BELT
+--
+-- A treadmill that never moves is a box you stand on. These are the only thing
+-- that says the belt is running -- built here because the map is code, scrolled
+-- on each client because a belt everybody sees at a different offset is still a
+-- belt, and moving 60 parts on the server is 60 parts of replication a second.
+--
+-- Anchored, non-collidable, and deliberately thin: they are paint, not geometry
+-- you can trip over.
+--==============================================================================
+local CHEVRONS_PER_BELT = 5
+
+local function chevronsOn(belt: BasePart)
+	local existing = belt:FindFirstChild("Chevrons")
+	if existing then
+		existing:Destroy()
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = "Chevrons"
+	folder.Parent = belt
+
+	local span = belt.Size.Z
+	local width = belt.Size.X * 0.30
+	for i = 1, CHEVRONS_PER_BELT do
+		-- Two bars meeting at a point: an arrow reads a direction, a bar does not.
+		for _, side in ipairs({ -1, 1 }) do
+			local bar = Instance.new("Part")
+			bar.Name = "Chevron"
+			bar.Size = Vector3.new(width, 0.08, 0.5)
+			bar.Anchored = true
+			bar.CanCollide = false
+			bar.CanQuery = false
+			bar.CanTouch = false
+			bar.Material = Enum.Material.SmoothPlastic
+			bar.Color = Color3.fromRGB(96, 92, 88)
+			bar.CFrame = belt.CFrame
+				* CFrame.new(side * width * 0.42, belt.Size.Y * 0.5 + 0.05, 0)
+				* CFrame.Angles(0, side * math.rad(24), 0)
+			bar.Parent = folder
+			bar:SetAttribute("ChevronIndex", i)
+			bar:SetAttribute("ChevronSide", side)
+			bar:SetAttribute("ChevronSpan", span)
+			CollectionService:AddTag(bar, GameConfig.Tags.MillChevron)
+		end
+	end
+end
+
+--==============================================================================
 -- LIFECYCLE
 --==============================================================================
 function TreadmillService.Init()
@@ -225,6 +280,11 @@ function TreadmillService.Init()
 	table.clear(serviceConnections)
 	table.clear(lastPaid)
 	table.clear(granted)
+	-- Nobody is on a belt across a restart, and a stale attribute would leave a
+	-- character running on the spot forever.
+	for _, player in ipairs(Players:GetPlayers()) do
+		player:SetAttribute(ATTR.OnTreadmill, nil)
+	end
 end
 
 function TreadmillService.Start()
@@ -234,6 +294,7 @@ function TreadmillService.Start()
 	for _, belt in ipairs(CollectionService:GetTagged(GameConfig.Tags.Treadmill)) do
 		if belt:IsA("BasePart") then
 			signOn(belt)
+			chevronsOn(belt)
 			mills += 1
 		end
 	end
@@ -241,6 +302,7 @@ function TreadmillService.Start()
 		CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Treadmill):Connect(function(belt)
 			if belt:IsA("BasePart") then
 				signOn(belt)
+				chevronsOn(belt)
 			end
 		end))
 
