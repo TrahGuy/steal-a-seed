@@ -83,10 +83,13 @@ export type Species = {
 	--     Nubkin     Height 2.4  ->  1.74 studs finished
 	--     Bellchime  Height 4.0  ->  6.41 studs finished
 	--
-	-- Pinning the finished height to this number exactly is possible, but only
-	-- by decoupling every form's vertical extent from its width -- and doing
-	-- that collapses the width spread back to 1.78x, which is the problem this
-	-- was fixing. Weight is allowed to make a thing bigger in both directions.
+	-- DECIDED, do not re-open: this stays a frame height. Pinning the finished
+	-- silhouette to it exactly would mean decoupling every form's vertical
+	-- extent from its width, and that collapses the width spread back to 1.78x
+	-- -- which is the problem the girth curve exists to fix.
+	--
+	-- Visible weight at a glance beats 2.4 finishing at 2.4. Weight is allowed
+	-- to make a thing bigger in both directions.
 	Height: number,
 	-- "cube" | "orb" | "teardrop" | "mushroom" | "bell"
 	Form: string,

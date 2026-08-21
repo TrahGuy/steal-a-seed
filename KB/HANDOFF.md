@@ -914,10 +914,13 @@ after    height 3.68x     width 3.90x        sprout = 0.45 of grown, exactly
 
 **`Height` is a FRAME height, not the finished silhouette, and the type now says so.** Girth widens
 the head, and a wider head is also a taller one, so Nubkin's `Height = 2.4` finishes at 1.74 and
-Bellchime's `4.0` finishes at 6.41. Pinning the finished height to the data exactly is possible, but
-only by decoupling every form's vertical extent from its width — and that collapses the width spread
-back to 1.78x, which is the thing being fixed. Weight is allowed to make something bigger in both
-directions.
+Bellchime's `4.0` finishes at 6.41.
+
+**Settled by the owner on 2026-08-21, do not re-open.** Pinning the finished height to the data
+exactly would mean threading separate vertical and horizontal scalars through all five forms, and
+that collapses the width spread back to 1.78x — the very thing the girth curve fixes. The ruling:
+*visible weight at a glance matters more than 2.4 finishing at 2.4; frame-height in the type is
+enough.* Keep girth.
 
 > Two measurements had to be thrown away first. `Model:GetBoundingBox()` reports in the **pivot's**
 > frame, and these models pivot on the mound — a cylinder rotated 90 degrees — so X and Y come back
