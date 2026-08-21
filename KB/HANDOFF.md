@@ -353,6 +353,12 @@ only shows up in geometry.
     rendering from wherever it was, so every screenshot comes out of the old camera and looks like a
     stale capture. The editor camera derives its own CFrame from `Focus`; set both and it moves.
     This is how you photograph a specific corner of the map without starting a Play session.
+  * **The map is `Archivable = false`, and that is load-bearing.** A copy of it saved into the
+    .rbxl is the one thing this project exists not to have — the runtime build would fight a stale
+    duplicate every boot. The old guard was a human rule ("delete SeedMap before saving"), which is
+    both forgettable and actively harmful: obeying it left Studio looking empty, which reads as
+    breakage. The engine flag does the job unconditionally — excluded from save AND from clone, so
+    Play cannot inherit an Edit-built copy either. **Do not delete the map from Edit any more.**
   * **`MapDecor` is deliberately not named `*Service`.** `ServerMain` auto-requires and starts every
     ModuleScript in that folder ending in `Service`. `MapDecor` is a helper with no lifecycle, called
     by `MapService` during its own `Init`.

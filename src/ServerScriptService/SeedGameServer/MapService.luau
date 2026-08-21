@@ -680,6 +680,24 @@ function MapService.Init()
 
 	local folder = Instance.new("Folder")
 	folder.Name = MAP.FolderName
+	--==========================================================================
+	-- Archivable = false IS WHAT KEEPS THE MAP OUT OF THE PLACE FILE.
+	--
+	-- The map is code, so a copy of it saved into the .rbxl is the one thing
+	-- this project exists not to have: the runtime build would then be fighting
+	-- a stale duplicate on every boot. The rule used to be a human one -- "delete
+	-- Workspace.SeedMap before saving" -- and a rule you have to remember is a
+	-- rule that gets forgotten. Worse, obeying it left Studio looking EMPTY,
+	-- which reads as something being broken and cost two rounds of "where did
+	-- the map go".
+	--
+	-- Archivable = false is the engine's own answer: the instance is skipped
+	-- when the place is saved AND when the datamodel is cloned. So the map can
+	-- sit in Edit permanently for eyeballing, it never reaches the file, and
+	-- pressing Play cannot carry an Edit-built copy into the session either.
+	-- Nobody has to remember anything.
+	--==========================================================================
+	folder.Archivable = false
 	folder.Parent = workspace
 	mapFolder = folder
 

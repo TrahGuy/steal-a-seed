@@ -130,13 +130,18 @@ require(game.ServerScriptService.SeedGameServer.MapService).Init()
 which is what makes it usable for tuning geometry: edit `GameConfig.Map` or `BiomeData`, let Rojo
 sync, run the line again, look.
 
-**Delete `Workspace.SeedMap` before saving the place.** A map committed into the .rbxl is
-exactly the thing this project exists not to have, and the runtime build would then be fighting a
-stale copy on every boot.
+**You no longer have to delete `Workspace.SeedMap` before saving.** `MapService` builds the map
+folder with `Archivable = false`, which the engine honours both when the place is saved and when the
+datamodel is cloned — verified, not assumed: `map:Clone()` returns nil, and cloning its parent copies
+a normal child while skipping an `Archivable = false` one.
 
-```lua
-local m = workspace:FindFirstChild("SeedMap") if m then m:Destroy() end
-```
+So the map can sit in Edit permanently for eyeballing, it never reaches the .rbxl, and pressing Play
+cannot carry an Edit-built copy into the session either.
+
+That used to be a human rule — *remember to delete it before saving* — and a rule you have to
+remember is a rule that gets forgotten. It was worse than that: obeying it left Studio looking
+**empty**, which reads as breakage and twice cost a round of "where did the map go". Leave the map
+where it is.
 
 ### Checking Luau syntax without a Play session
 
