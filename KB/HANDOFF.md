@@ -187,7 +187,43 @@ constraint that keeps the run home constant.
 Shipping tier 2 is changing a player's stored tier number and rebuilding their plot. No map surgery,
 no repacking the row.
 
-## THE HUB, AND THE FAIRY WHO RUNS IT
+## MARIGOLD, THE FAIRY WHO RUNS THE STALL
+
+A real **R6 Humanoid** with wings, 14 parts and 6 Motor6Ds, built in code — not
+`CreateHumanoidModelFromDescription`, which is a web call needing API access, carries asset ids that
+can 404, and has the trap the predecessor hit: a fresh `HumanoidDescription` defaults every body
+colour to BLACK, and the BodyColors rides along inside a `:Clone()` and repaints the rig on parent.
+The one external reference is the face, and it is `rbxasset://` — shipped in the client, not
+uploaded — so it is exactly as available as the engine.
+
+**The server walks her; every client animates her.** `FairyService` drives `Humanoid:MoveTo` around
+a wander box, because a Humanoid *is* server-simulated and faking a walk per-client would put her
+somewhere different for every player — fine for a hovering sprite, not for a character standing on a
+floor who will one day carry a shop prompt. `Ambience.client.luau` flaps the wings and swings the
+limbs. **The two never write the same property**: the server owns her root's position, each client
+owns `Motor6D.C0`. That is why they cannot fight.
+
+### Measured, not guessed — three of these were wrong first
+
+  * **`Motor6D.Transform` does nothing here.** It is the field Roblox's own animator uses and the
+    obvious choice, but it is consumed and reset by the animation step — so it cannot even be tested
+    in Edit — and any Animator the Humanoid gains overwrites it every frame. Composing `C0` against
+    a rest pose captured once is a plain property that stays put.
+  * **Limbs swing about local Z, not X.** R6 bakes a ±90° yaw into every shoulder and hip `C0`, so
+    the joint's axes are not the torso's. X slides an arm sideways (dX −0.50, dZ 0.00); Z swings it
+    forward (dZ −0.35).
+  * **Both sides take the SAME sign.** The left joints are already mirrored by that −90° yaw, so
+    opposite signs cancel the mirroring out — she walked doing star jumps.
+  * **She was invisible behind her own counter**: five studs tall, head exactly level with a
+    5.4-tall counter top. Fixed with a raised deck *behind* the counter rather than by shrinking the
+    counter, which would have made it ankle-high for the players walking up to it. The customer side
+    stays flush, so nobody has a step to climb to reach the shop.
+
+Earlier, as a hovering sprite, she was also made entirely of `Neon` — which **clips** at Brightness
+2.4 rather than glowing, turning her into a featureless white blob — with wings as flat horizontal
+panels, and hair and wings offset to −Z, which is **forward** in Roblox.
+
+## THE HUB
 
 No fence. It had a ring of posts and rails, and **a fence around a shop says keep out** — the
 opposite of what a shop is for. A low sand deck with a darker rim marks the square instead: a floor
@@ -196,34 +232,6 @@ you walk onto rather than a barrier you walk through.
 The stall is dressed now — plank counter, striped awning, back shelf of jars, crates of produce,
 lanterns on the posts. The jars are one part each and are the cheapest possible "somebody works
 here".
-
-**The fairy is built on the server and MOVED on every client**, meeting at one CollectionService
-tag. A server loop writing her CFrame would replicate a position stream to every player forever, run
-at the server's framerate so she stutters exactly when the server is busy, and arrive interpolated
-and late. Animating per-client costs no bandwidth and runs at each player's own framerate. Positions
-diverge by a fraction of a stud, which nobody can observe on a decoration they cannot touch.
-`Ambience.client.luau` is the first client script in this project and the home for anything else
-that moves for decoration.
-
-Four things about her were wrong first and are worth not redoing:
-
-  * **She was made entirely of `Neon`.** At Brightness 2.4, Neon does not glow — it *clips*. Body,
-    hair, head and four translucent wings all saturated to the same white and she came out a
-    featureless blob. Everything is plain plastic now; the glow comes from the PointLight, which
-    lights the stall without touching her own shading.
-  * **Her wings were flat horizontal panels**, which read as a plank driven through her. A wing seen
-    from the side is a tall thin shape. They are vertical panels swept out and back.
-  * **Hair and wings were at −Z, which is FORWARD.** A CFrame's local −Z is the direction it faces,
-    so the obvious-looking "behind" offset put them over her face. Behind is +Z.
-  * **She faced her orbit tangent**, so she spent half of every circuit with her back to the
-    counter. Fixed facing with drifting movement reads as somebody hovering in place attending to
-    you, which is the job.
-
-Wing rest poses are full **CFrames** in attributes, not three numbers — a Vector3 cannot express
-"swept back 28 degrees" — and they are read from the attribute rather than from the live CFrame,
-because deriving a rest pose from something already moving is how a flapping wing walks off the body
-one rounding error at a time. Verified: 240 simulated frames leave head-to-root at exactly the
-authored 0.620.
 
 ## PLOTS SIT IN THE GROUND, NOT ON IT
 

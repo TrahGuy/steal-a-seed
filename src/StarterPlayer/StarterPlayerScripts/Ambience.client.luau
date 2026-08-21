@@ -1,7 +1,7 @@
 --!strict
 -- Steal a Seed :: Ambience
 --
--- Everything in the world that MOVES for decoration moves here, on each
+-- Everything in the world that moves for DECORATION moves here, on each
 -- player's own machine.
 --
 --==============================================================================
@@ -9,15 +9,22 @@
 --
 -- The server builds a thing and tags it; this walks the tagged set once per
 -- frame. Not one script per object, not one connection per object -- one
--- Heartbeat over a flat table, so twenty fairies cost twenty table lookups
--- rather than twenty coroutines.
+-- Heartbeat over a flat table.
 --
--- Nothing here is authoritative and nothing here replicates. Two players see
--- the fairy in slightly different places, which for a decoration nobody can
--- touch is not a difference either of them can observe -- and it buys a
--- position stream per object per frame that would otherwise run forever.
+-- Nothing here is authoritative and nothing here replicates. It composes each
+-- joint's `C0` against a rest pose captured once, and a C0 written on a client
+-- is local to that client. So the SERVER owns where Marigold is standing and
+-- each CLIENT owns what her wings and limbs are doing, and the two never touch
+-- the same property.
 --
--- See HubFairy for the server half and the full argument.
+-- NOT `Motor6D.Transform`, which is the field Roblox's own animator uses and
+-- was the obvious choice. Two problems: it is consumed and reset by the
+-- animation step, so it does nothing at all outside a running simulation and
+-- cannot be checked in Edit; and if the Humanoid ever gains an Animator, that
+-- Animator overwrites it every frame and the wings silently stop. C0 is a plain
+-- joint property that stays where it is put.
+--
+-- That split is the whole design: see FairyService for the server half.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -27,34 +34,44 @@ local RunService = game:GetService("RunService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 
---==============================================================================
--- FAIRIES
---==============================================================================
 local FAIRY_TAG = GameConfig.Tags.Fairy
 
-type Wing = { part: BasePart, offset: CFrame, side: number }
+-- Rest poses are captured ONCE and every frame composes against them. Reading a
+-- joint's current C0 to derive the next one feeds each frame's rounding into the
+-- next, which is how a limb slowly walks off the body.
+type Joint = { motor: Motor6D, rest: CFrame, side: number }
+
 type Fairy = {
 	model: Model,
 	root: BasePart,
-	home: Vector3,
-	facing: Vector3,
-	wings: { Wing },
-	-- Per-fairy phase, so two fairies in one place never bob in lockstep.
+	wings: { Joint },
+	-- Named limbs, or nil if this rig is missing one. Nothing here assumes a
+	-- complete R6: a rig with no left arm should walk with one arm, not throw
+	-- sixty times a second.
+	rightShoulder: Joint?,
+	leftShoulder: Joint?,
+	rightHip: Joint?,
+	leftHip: Joint?,
+	-- Per-fairy phase, so two of them in one place never move in lockstep.
 	phase: number,
-	parts: { { part: BasePart, offset: CFrame } },
+	-- How far through her stride she is. Advanced by DISTANCE COVERED rather
+	-- than by wall-clock, which is what keeps a foot on the ground: a clock-
+	-- driven cycle slides when she is slow and sprints on the spot when she
+	-- stops.
+	stride: number,
 }
 
 local fairies: { [Model]: Fairy } = {}
 
--- Derived from the model's name and position rather than random, so a fairy
--- looks the same on every client -- the point of a shared world is that two
--- players describing it agree.
-local function phaseFor(model: Model, home: Vector3): number
+local function phaseFor(model: Model): number
 	local h = 0
 	for i = 1, #model.Name do
 		h += string.byte(model.Name, i) * i
 	end
-	h += math.floor(math.abs(home.X) + math.abs(home.Z))
+	local root = model.PrimaryPart
+	if root then
+		h += math.floor(math.abs(root.Position.X) + math.abs(root.Position.Z))
+	end
 	return (h % 628) / 100
 end
 
@@ -62,53 +79,42 @@ local function track(model: Instance)
 	if not model:IsA("Model") then
 		return
 	end
-	local root = model.PrimaryPart or model:FindFirstChild("Root")
+	local root = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
 	if not (root and root:IsA("BasePart")) then
 		return
 	end
+	local torso = model:FindFirstChild("Torso")
+	if not torso then
+		return
+	end
 
-	local home = Vector3.new(
-		model:GetAttribute("HomeX") or root.Position.X,
-		model:GetAttribute("HomeY") or root.Position.Y,
-		model:GetAttribute("HomeZ") or root.Position.Z)
-
-	-- Every part's REST offset from the root, captured once. Recomputing this
-	-- from live CFrames each frame is how a model slowly comes apart: each
-	-- frame's rounding feeds into the next.
-	local parts: { { part: BasePart, offset: CFrame } } = {}
-	local wings: { Wing } = {}
+	local wings: { Joint } = {}
 	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("BasePart") and d ~= root then
-			local offset = root.CFrame:ToObjectSpace(d.CFrame)
-			if d:GetAttribute("Side") then
-				-- A full CFrame, because the rest pose carries the wing's SWEEP
-				-- as well as its position and a Vector3 cannot say "angled back
-				-- 28 degrees".
-				local rest = d:GetAttribute("RestOffset")
-				table.insert(wings, {
-					part = d,
-					offset = (typeof(rest) == "CFrame") and rest or offset,
-					side = d:GetAttribute("Side") or 1,
-				})
-			else
-				table.insert(parts, { part = d, offset = offset })
-			end
+		if d:IsA("Motor6D") and d.Part1 and d.Part1:GetAttribute("Side") then
+			table.insert(wings, {
+				motor = d, rest = d.C0, side = d.Part1:GetAttribute("Side") or 1,
+			})
 		end
 	end
 
-	local fx = model:GetAttribute("FaceX")
-	local fz = model:GetAttribute("FaceZ")
-	local facing = (fx and fz and (math.abs(fx) + math.abs(fz)) > 0)
-		and Vector3.new(fx, 0, fz).Unit or Vector3.new(0, 0, -1)
+	local function joint(name: string): Joint?
+		local m = torso:FindFirstChild(name)
+		if m and m:IsA("Motor6D") then
+			return { motor = m, rest = m.C0, side = 1 }
+		end
+		return nil
+	end
 
 	fairies[model] = {
 		model = model,
 		root = root,
-		home = home,
-		facing = facing,
 		wings = wings,
-		parts = parts,
-		phase = phaseFor(model, home),
+		rightShoulder = joint("Right Shoulder"),
+		leftShoulder = joint("Left Shoulder"),
+		rightHip = joint("Right Hip"),
+		leftHip = joint("Left Hip"),
+		phase = phaseFor(model),
+		stride = 0,
 	}
 end
 
@@ -123,19 +129,25 @@ end)
 --==============================================================================
 -- THE LOOP
 --
--- Orbit slowly, bob quickly, flap much faster, and face where she is going.
--- Three different rates on purpose: matched rates read as one mechanical
--- motion, and the whole point of a fairy is that she does not look driven by a
--- clock.
+-- Wings flap constantly and fast. Limbs swing only while she is actually
+-- moving, and settle back to rest when she stops -- a walk cycle that keeps
+-- running on a stationary character is the single most obvious tell that an NPC
+-- is faked.
 --==============================================================================
-local ORBIT_RADIUS = 1.9
-local ORBIT_RATE = 0.55
-local BOB_HEIGHT = 0.55
-local BOB_RATE = 2.1
-local FLAP_RATE = 21
-local FLAP_ANGLE = math.rad(34)
+local FLAP_RATE = 19
+local FLAP_ANGLE = math.rad(32)
+-- Radians of limb swing per stud walked. Tuned against WalkSpeed 5: a whole
+-- stride every ~2.6 studs, which is roughly a step per leg length.
+local SWING_PER_STUD = 0.62
+local SWING_ANGLE = math.rad(26)
+local ARM_SHARE = 0.7
+-- How fast the swing fades in and out. Without it, arms snap to rest the frame
+-- she stops.
+local BLEND_RATE = 6
 
-RunService.Heartbeat:Connect(function()
+local blend: { [Model]: number } = {}
+
+RunService.Heartbeat:Connect(function(dt)
 	if next(fairies) == nil then
 		return
 	end
@@ -143,35 +155,61 @@ RunService.Heartbeat:Connect(function()
 
 	for model, f in pairs(fairies) do
 		if not f.root.Parent then
-			-- Despawned without the removed signal firing. Drops out here so the
-			-- table cannot grow without bound.
+			-- Despawned without the removed signal firing, so the table cannot
+			-- grow without bound.
 			fairies[model] = nil
+			blend[model] = nil
 		else
-			local a = t * ORBIT_RATE + f.phase
-			local pos = f.home + Vector3.new(
-				math.sin(a) * ORBIT_RADIUS,
-				math.sin(t * BOB_RATE + f.phase) * BOB_HEIGHT,
-				math.cos(a) * ORBIT_RADIUS)
-
-			-- FIXED FACING. She drifts and bobs but keeps looking the way the
-			-- stall does -- see HubFairy. Facing the orbit tangent instead meant
-			-- she spent half of every circuit with her back to the counter.
-			local cf = CFrame.lookAt(pos, pos + f.facing)
-			f.root.CFrame = cf
-
-			for _, entry in ipairs(f.parts) do
-				entry.part.CFrame = cf * entry.offset
-			end
-
+			--== WINGS ==--
 			local flap = math.sin(t * FLAP_RATE + f.phase) * FLAP_ANGLE
 			for _, w in ipairs(f.wings) do
-				-- Rotated about the BODY, not about the wing's own centre, so it
-				-- hinges at the shoulder the way a wing does rather than
-				-- spinning like a propeller.
-				w.part.CFrame = cf
-					* CFrame.Angles(0, 0, flap * w.side)
-					* w.offset
+				-- About local Z, also measured: X does nothing at all on a wing
+				-- (it spins the panel about its own long axis) and Y sweeps it
+				-- flat sideways. Z is the one that beats up and down.
+				--
+				-- Composed AFTER the rest pose, so the beat happens about the
+				-- wing's own hinge rather than about the torso -- the sweep the
+				-- rest pose carries stays intact.
+				w.motor.C0 = w.rest * CFrame.Angles(0, 0, flap * w.side)
 			end
+
+			--== WALK ==--
+			-- Speed from the ROOT'S VELOCITY, not from Humanoid.MoveDirection:
+			-- MoveDirection is intent and stays set while she is wedged against
+			-- something, which would leave her walking on the spot.
+			local speed = Vector3.new(
+				f.root.AssemblyLinearVelocity.X, 0,
+				f.root.AssemblyLinearVelocity.Z).Magnitude
+
+			f.stride += speed * dt * SWING_PER_STUD
+			local target = speed > 0.4 and 1 or 0
+			local b = blend[model] or 0
+			b += (target - b) * math.min(1, dt * BLEND_RATE)
+			blend[model] = b
+
+			local swing = math.sin(f.stride) * SWING_ANGLE * b
+			-- ABOUT LOCAL Z, AND THAT WAS MEASURED RATHER THAN GUESSED. R6 bakes
+			-- a 90-degree yaw into every shoulder and hip C0, so the joint's axes
+			-- are not the torso's and the obvious X is wrong: rotating a shoulder
+			-- about X slides the arm SIDEWAYS (dX -0.50, dZ 0.00), while Z swings
+			-- it forward and back (dZ -0.35). The first version used X and she
+			-- walked doing star jumps.
+			local function pose(j: Joint?, amount: number)
+				if j then
+					j.motor.C0 = j.rest * CFrame.Angles(0, 0, amount)
+				end
+			end
+			-- BOTH SIDES TAKE THE SAME SIGN, which looks wrong and is right.
+			-- R6 mirrors its left joints with a -90 degree yaw in C0 against the
+			-- right's +90, so the two sides' local Z axes ALREADY point opposite
+			-- ways in the world. Passing opposite signs cancels that mirroring
+			-- out and both legs swing forward together -- measured, and it walked
+			-- doing star jumps.
+			pose(f.rightHip, swing)
+			pose(f.leftHip, swing)
+			-- Arms counter the legs, which is what walking is.
+			pose(f.rightShoulder, -swing * ARM_SHARE)
+			pose(f.leftShoulder, -swing * ARM_SHARE)
 		end
 	end
 end)

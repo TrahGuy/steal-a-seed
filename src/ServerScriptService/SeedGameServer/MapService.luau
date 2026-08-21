@@ -780,18 +780,35 @@ function MapService.Init()
 			cframe = stallCF * CFrame.new(0, 0.3, -2), color = WOOD_DARK,
 			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
 
-		local counter = build({ name = MAP.SellStandName, size = Vector3.new(20, 5.4, 6),
-			cframe = stallCF * CFrame.new(0, 2.7, 0), color = WOOD,
+		-- A RAISED DECK BEHIND THE COUNTER, and it is not decoration. Marigold
+		-- is five studs tall and her head came out exactly level with the
+		-- counter top, so she was invisible from the customer side -- a
+		-- shopkeeper you cannot see is not a shopkeeper.
+		--
+		-- Lowering the counter instead would have made it ankle-high on the
+		-- players who walk up to it. Standing the keeper up is what a real market
+		-- stall does, and it only raises the ground she actually walks on: the
+		-- customer side stays flush with the square, so nobody has a step to
+		-- climb to reach the shop.
+		build({ name = "StallRiser", size = Vector3.new(22, 2, 7),
+			cframe = stallCF * CFrame.new(0, 1, -5.5), color = WOOD,
+			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
+
+		-- 3.6 TALL, NOT 5.4. The first counter was chest-height on a five-stud
+		-- character and Marigold disappeared entirely behind her own shop. A
+		-- shopkeeper you cannot see is not a shopkeeper.
+		local counter = build({ name = MAP.SellStandName, size = Vector3.new(20, 3.6, 6),
+			cframe = stallCF * CFrame.new(0, 2.4, 0), color = WOOD,
 			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
 		build({ name = "CounterTop", size = Vector3.new(22.5, 0.9, 8),
-			cframe = stallCF * CFrame.new(0, 5.8, 0), color = WOOD_DARK,
+			cframe = stallCF * CFrame.new(0, 4.65, 0), color = WOOD_DARK,
 			material = Enum.Material.WoodPlanks, studs = false, parent = hub })
 
 		-- Back shelf with produce on it, which is what turns a counter into a
 		-- shop. Jars are one part each and are the cheapest possible "somebody
 		-- works here".
 		build({ name = "Shelf", size = Vector3.new(18, 0.7, 3),
-			cframe = stallCF * CFrame.new(0, 7.6, -6), color = WOOD_DARK,
+			cframe = stallCF * CFrame.new(0, 7.2, -6.5), color = WOOD_DARK,
 			material = Enum.Material.WoodPlanks, collide = false, studs = false, parent = hub })
 		local jarColors = {
 			Color3.fromRGB(226, 96, 84), Color3.fromRGB(240, 190, 74),
@@ -800,7 +817,7 @@ function MapService.Init()
 		}
 		for i, c in ipairs(jarColors) do
 			build({ name = "Jar", size = Vector3.new(1.5, 2, 1.5),
-				cframe = stallCF * CFrame.new(-7.5 + (i - 1) * 3, 8.9, -6),
+				cframe = stallCF * CFrame.new(-7.5 + (i - 1) * 3, 8.5, -6.5),
 				color = c, material = Enum.Material.Glass,
 				collide = false, studs = false, parent = hub })
 		end
@@ -862,9 +879,14 @@ function MapService.Init()
 		-- client -- see HubFairy for why that split.
 		-- Between the counter and the shelf, at head height. Forward of the
 		-- jars rather than level with them, or she reads as one more jar.
-		-- Facing -Z, which is the side the counter's SELL face is on and the
-		-- side every customer walks up from.
-		HubFairy.build(stallCF * CFrame.new(0, 9.4, -1.5), Vector3.new(0, 0, -1), hub)
+		-- She is a walking Humanoid now, so this is a spot on the FLOOR rather
+		-- than a hover point: on the riser behind her own counter.
+		-- HubFairy lifts her the 3 studs an R6 root sits above its feet, and
+		-- FairyService wanders her either side of here.
+		--
+		-- Rotated to look out over the counter, which is the direction the SELL
+		-- face points and the side every customer walks up from.
+		HubFairy.build(stallCF * CFrame.new(0, 2, -5.5) * CFrame.Angles(0, math.pi, 0), hub)
 	end
 
 	--== PLOTS ==--
