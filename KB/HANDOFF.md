@@ -872,6 +872,98 @@ plot        1 plant | SeedPod 0 | CarriedPod 0 | ProximityPrompts 0
 > **inside** the nest, well within `GrabStuds`, so there was no chase to see. Arm the watcher before
 > the event; a snapshot after a fast state machine is not evidence about it.
 
+## Grown plants: size follows the species, and they move — 2026-08-21
+
+Grown creatures read as statues of one size. Two separate things, fixed together.
+
+### Size — the defect was BULK, not height
+
+`BuildCreature` was already using `sp.Height`, and `SPROUT_SCALE` was already 0.45. The problem was
+that every HORIZONTAL dimension was a fraction of that same height, so bulk tracked height and
+**nothing tracked weight**. Across a 55x weight range:
+
+```
+before   height 1.67x     width 1.67x
+```
+
+Worse, the Bellchime came out proportionally *slimmer* than the Nubkin — 1.73 tall-to-wide against
+1.30 — so weight read backwards.
+
+Fixed with `SeedData.Girth(species)`, same curve family as `PodDiameter` and referenced against the
+middle species so Spiretip is 1.00 and the curve spreads either side of something that already
+looked right:
+
+```lua
+math.clamp((kg / 14) ^ 0.24, 0.70, 1.75)      -- 2kg -> 0.70   110kg -> 1.64
+```
+
+Applied in exactly **four** places — mound, stem, leaves, `headW` — because every other horizontal
+measurement in the five forms is already derived from `headW` and inherits it for free.
+
+### Measured in Play, on real slots
+
+```
+Nubkin        2 kg  grown | H 1.74  W 1.54 | base offset from slot -0.000
+Petalpip      5 kg  grown | H 2.48  W 2.15 | base offset from slot +0.000
+Spiretip     14 kg  grown | H 4.20  W 2.93 | base offset from slot -0.000
+Toadcap      40 kg  grown | H 5.26  W 4.25 | base offset from slot -0.000
+Bellchime   110 kg  grown | H 6.41  W 6.01 | base offset from slot -0.000
+
+after    height 3.68x     width 3.90x        sprout = 0.45 of grown, exactly
+```
+
+**`Height` is a FRAME height, not the finished silhouette, and the type now says so.** Girth widens
+the head, and a wider head is also a taller one, so Nubkin's `Height = 2.4` finishes at 1.74 and
+Bellchime's `4.0` finishes at 6.41. Pinning the finished height to the data exactly is possible, but
+only by decoupling every form's vertical extent from its width — and that collapses the width spread
+back to 1.78x, which is the thing being fixed. Weight is allowed to make something bigger in both
+directions.
+
+> Two measurements had to be thrown away first. `Model:GetBoundingBox()` reports in the **pivot's**
+> frame, and these models pivot on the mound — a cylinder rotated 90 degrees — so X and Y come back
+> swapped. It read as "height 1.58 for a Height of 2.4" and "bases float by up to 1.045 studs".
+> Both were artefacts. World-space extents, computed from each part's own eight corners, show the
+> bases were always flush. **The bug report's "bases sink or float" was my bad instrument, not the
+> models.**
+
+### Motion — PlantSway.client.luau, and it is CLIENT ONLY
+
+Rooted. No Humanoid, no pathfinding, nothing leaves the slot — seventy-two Humanoids running state
+machines and floor raycasts to move things that are planted in the ground is a performance bug in a
+costume. The motion is a **lean**: the model is pivoted about its own base, so the pivot *is* the
+slot and it cannot walk off.
+
+Server builds and tags; every client leans its own copy. Plant parts are anchored, so a CFrame
+written on a client is local to it and there is nothing for the server to fight with — the same
+split as Marigold's wings in `Ambience`.
+
+It rides the **existing `Planted` tag** rather than a new one, filtered to `Stage >= SPROUT`. That
+is why nest pods, carried pods and the parent can never pick it up: only `PlantService` ever applies
+that tag. Verified — `Planted`-tagged models outside a `Plants` folder: **0**.
+
+**One `PivotTo` per plant, and not every plant every frame.** A grown creature is ~19 parts; writing
+each part's CFrame would be a thousand property writes a frame on a full server. The set is walked
+in slices at ~20 Hz instead of 60 — the sway has a 6-to-11 second period, so each step is a fraction
+of a degree and nothing looks stepped. No `Instance.new` anywhere in the loop.
+
+```
+                CLIENT                                        SERVER
+Nubkin      2 kg  peak lean 6.12 deg  period ~6.4s        0.000000 deg
+Petalpip    5 kg  peak lean 5.28 deg                      0.000000 deg
+Spiretip   14 kg  peak lean 4.34 deg  period ~8.0s        0.000000 deg
+Toadcap    40 kg  peak lean 3.55 deg                      0.000000 deg
+Bellchime 110 kg  peak lean 2.85 deg  period ~10.7s       0.000000 deg
+
+position drift, every species: 0.0000 studs     Humanoids in the Plants folder: 0
+```
+
+Heavier leans less and slower, monotonically. The server column is the proof that the sway is
+client-only: same plants, same fourteen seconds, literally zero movement.
+
+> Measuring the lean needed the same correction as the sizes. Against world up, every plant read
+> "91 degrees" — the pivot's own 90-degree cylinder rotation. Measured **relative to the rest pose**
+> the numbers above fall out. Twice in one change, the instrument was the thing that was wrong.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

@@ -73,6 +73,7 @@ src/StarterPlayer/StarterPlayerScripts/
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
     PlantUI.client.luau         hatch/grow timer over anything tagged Planted
+    PlantSway.client.luau       idle lean on planted sprouts/creatures (rooted)
 ```
 
 Phase A still to come: `EconomyService`, `TreadmillService` and the

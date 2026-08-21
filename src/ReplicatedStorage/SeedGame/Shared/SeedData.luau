@@ -75,7 +75,18 @@ export type Species = {
 	Biome: string,
 	-- Earns this many cash per second, and slows you by this much to carry.
 	Kg: number,
-	-- Studs, fully grown.
+	-- The FRAME height in studs -- the mound-stem-head column the form is built
+	-- around, not the finished silhouette. Girth widens the head, and a wider
+	-- head is also a taller one, so a heavy species finishes above this number
+	-- and a light one below it:
+	--
+	--     Nubkin     Height 2.4  ->  1.74 studs finished
+	--     Bellchime  Height 4.0  ->  6.41 studs finished
+	--
+	-- Pinning the finished height to this number exactly is possible, but only
+	-- by decoupling every form's vertical extent from its width -- and doing
+	-- that collapses the width spread back to 1.78x, which is the problem this
+	-- was fixing. Weight is allowed to make a thing bigger in both directions.
 	Height: number,
 	-- "cube" | "orb" | "teardrop" | "mushroom" | "bell"
 	Form: string,
@@ -217,6 +228,34 @@ end
 --==============================================================================
 function SeedData.PodDiameter(species: Species): number
 	return math.clamp(1.2 * (species.Kg ^ 0.28), 1.3, 4.5)
+end
+
+--==============================================================================
+-- A GROWN CREATURE IS AS FAT AS IT IS HEAVY
+--
+-- Height already came from Height. Everything HORIZONTAL was a fixed fraction
+-- of that height, which meant bulk tracked height and nothing tracked weight --
+-- so across a 55x weight range the five species differed by 2.21x in height and
+-- 1.67x in width, and a Bellchime came out proportionally SLIMMER than a Nubkin
+-- (1.73 tall-to-wide against 1.30). Weight read backwards.
+--
+-- Same curve family as PodDiameter, for the same reason: a straight ratio would
+-- make the Bellchime fifty-five times the Nubkin. Referenced against 14 kg --
+-- the middle species -- so Spiretip is 1.00 and the curve spreads either side
+-- of something that already looked right.
+--
+--     2 kg -> 0.70 (clamped)    14 kg -> 1.00     110 kg -> 1.64
+--     5 kg -> 0.78              40 kg -> 1.29
+--
+-- Clamped at both ends because this multiplies a width that is already small:
+-- below 0.70 a Nubkin's stem stops being visible against studded soil, and the
+-- ceiling keeps the 10,000 kg end of the range from growing wider than its slot.
+--==============================================================================
+local GIRTH_REF_KG = 14
+local GIRTH_EXP = 0.24
+
+function SeedData.Girth(species: Species): number
+	return math.clamp((species.Kg / GIRTH_REF_KG) ^ GIRTH_EXP, 0.70, 1.75)
 end
 
 function SeedData.PodColor(species: Species): Color3

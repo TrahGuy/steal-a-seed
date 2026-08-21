@@ -313,25 +313,40 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, stage: Stage,
 
 	local scale = if stage == CreatureModel.STAGE_SPROUT then SPROUT_SCALE else 1
 	local H = sp.Height * scale
+	--==========================================================================
+	-- TWO SCALARS, NOT ONE. H IS TALLNESS, G IS FATNESS.
+	--
+	-- Every horizontal dimension used to be a fraction of H, so bulk tracked
+	-- HEIGHT and nothing at all tracked WEIGHT -- a 2 kg Nubkin and a 110 kg
+	-- Bellchime came out 1.67x apart in width across a 55x weight range, and
+	-- the Bellchime was proportionally the slimmer of the two.
+	--
+	-- G multiplies the width terms only. It is applied in FOUR places -- mound,
+	-- stem, leaves, headW -- because every other horizontal measurement in the
+	-- forms below is already derived from headW, so they inherit it for free.
+	--==========================================================================
+	local G = SeedData.Girth(sp)
 
 	--== MOUND ==--
 	local moundH = H * 0.11
-	local mound = upright("Mound", moundH, H * 0.66, cf * CFrame.new(0, moundH * 0.5, 0),
+	local mound = upright("Mound", moundH, H * 0.66 * G, cf * CFrame.new(0, moundH * 0.5, 0),
 		sp.Soil, model)
 
 	--== STEM ==--
 	local stemH = H * 0.34
 	local stemBase = moundH * 0.7
-	upright("Stem", stemH, H * 0.13, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
+	upright("Stem", stemH, H * 0.13 * G, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
 		SeedData.Stem, model)
 
 	--== LEAVES ==--
 	for _, side in ipairs({ -1, 1 }) do
 		part({
 			name = "Leaf",
-			size = Vector3.new(H * 0.27, H * 0.05, H * 0.12),
+			-- X and Z are the leaf's length and width and take G; Y is its
+			-- thickness and does not.
+			size = Vector3.new(H * 0.27 * G, H * 0.05, H * 0.12 * G),
 			cframe = cf
-				* CFrame.new(side * H * 0.16, stemBase + stemH * 0.40, 0)
+				* CFrame.new(side * H * 0.16 * G, stemBase + stemH * 0.40, 0)
 				-- Down and out. Level bars read as propellers, which is exactly
 				-- what the first build looked like.
 				* CFrame.Angles(0, side * math.rad(16), side * math.rad(-13)),
@@ -341,7 +356,9 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, stage: Stage,
 	end
 
 	--== HEAD ==--
-	local headW = H * 0.46
+	-- The one that matters: the head, the cap, the bell tiers, the flower, the
+	-- spikes, the buds, the fronds and the face are all measured off headW.
+	local headW = H * 0.46 * G
 	local headCentreY = stemBase + stemH + headW * 0.46
 	local headCF = cf * CFrame.new(0, headCentreY, 0)
 	local topCF = headCF * CFrame.new(0, headW * 0.5, 0)
