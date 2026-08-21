@@ -125,6 +125,9 @@ local function growPod(nest: Nest, index: number)
 		return
 	end
 	local pod = CreatureModel.BuildPod(species, nest.slots[index], nest.folder)
+	-- Loot. CreatureModel deliberately does not decide this: the same model
+	-- hatching in a plot must never be takeable.
+	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
 	pod:SetAttribute(GameConfig.Attributes.BiomeId, nest.biome.Id)
 	pod:SetAttribute("NestId", nest.id)
 	pod:SetAttribute("SlotIndex", index)

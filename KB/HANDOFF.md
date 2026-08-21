@@ -748,6 +748,97 @@ So: **after changing `MapService`, press Clear Map then Build Map**, or run `Ini
 bar. Auto-rebuild is there so the map is never *absent*; it was never going to notice the map is out
 of date, and making it diff geometry every second to find out would cost more than it saves.
 
+## A planted pod is not loot — 2026-08-21
+
+Taking a pod home and putting it in the ground gave it a **Take** prompt, and using that prompt ran
+the entire raid alarm — RUN, then SAFE — in the middle of the safe zone, for a pod the player had
+just carried home themselves.
+
+### The cause was a geometry builder making a gameplay claim
+
+`CreatureModel.BuildPod` tagged every pod it built `SeedPod`. `CarryService` attaches a Take prompt
+to everything wearing that tag. So *every* pod in the game was loot — including the three that are
+not:
+
+| caller | is it loot? | was it tagged? |
+| --- | --- | --- |
+| `NestService` nest pod | yes | yes |
+| `CarryService` dropped pod | yes | yes |
+| `CarryService` pod welded to your head | **no** | yes — a Take prompt on your own head |
+| `CarryService` pod used as a Tool handle | **no** | yes |
+| `PlantService` plant | **no** | yes — **the reported bug** |
+
+Two of five. The fix is that **the builder no longer decides**: it builds geometry, and the caller
+says what the thing means. `NestService` and `spawnLoose` now tag their own pods; nothing else does.
+
+The carried-pod case fell out for free — it had been wearing a stray Take prompt the whole time.
+
+### What a plant is instead
+
+`PlantService.render` tags every model it builds `Planted`. One tag, two jobs: `CarryService`
+refuses it, and `PlantUI` uses it as the seam to draw a hatch timer.
+
+`TryTake` refuses on **two independent checks**, at the top with the other refusals, above the line
+where the world starts changing:
+
+```lua
+if CollectionService:HasTag(pod, GameConfig.Tags.Planted) then return false end
+if pod.Parent.Name == GameConfig.Plot.PlantsFolderName then return false end
+```
+
+The tag is the fact; the folder is *where the thing lives*, which no amount of tag drift can fake.
+The rule was "refuse even if a stale prompt exists", so one check was not enough.
+
+### PlantUI — a word and a clock
+
+`HATCHING` while it is a pod, `GROWING` as a sprout, then the species **name** and no clock. The
+name is the only place a species is ever written down, and that is the point: pods are coloured by
+*rarity*, so Greenhollow's two Commons arrive identical and which one you got stays hidden until it
+finishes. Free content at the end of every run home.
+
+Same three colours as `PromptUI` (ink / paper / green), no ProximityPrompt anywhere near it, drawn
+for **everybody** rather than just the owner — a plot half-grown is meant to be readable by whoever
+walks past deciding whether it is worth coming back to.
+
+Two things worth keeping:
+
+  * **The clock is `GetServerTimeNow()`, not the client's `os.time()`.** `PlantedAt` is an absolute
+    server stamp; a client clock sitting a few seconds off would either hit 0:00 while the pod sat
+    there or change shape with 0:04 still showing. Either reads as broken.
+  * **`SproutAt` moved out of PlantService into `GameConfig.Plant`.** The client has to compute the
+    same thresholds the server transitions on, and a private constant in the service would have let
+    the countdown and the transition drift apart. Along with `TickSeconds` and `RangeStuds`.
+
+### Measured in Play, on my own plot
+
+```
+plot        12 plants | SeedPod tags: 0 | ProximityPrompts: 0
+nest        5 SeedPod models | 5 Take prompts   (unchanged)
+
+stale prompt   forced SeedPod onto a plant so the REAL CarryService attached a REAL
+               Take prompt, then held it to completion 5.5 studs away:
+                 plant still there: true    CarryingSpecies: nil    BankedCount: nil
+
+hatch timer    t+ 5.4s  HATCHING | 0:09 | prompts on model: 0
+               t+14.0s  HATCHING | 0:01 | prompts on model: 0
+               t+14.8s  GROWING  | 0:17 | prompts on model: 0
+               t+30.0s  GROWING  | 0:01 | prompts on model: 0
+               t+30.9s  NUBKIN   |   -  | prompts on model: 0
+               (nubkin: sprout at 9s, grown at 26s -- both hit on the tick)
+
+nest take      CarryingSpecies=petalpip, AlertUI word "RUN", pod consumed
+               parent  t+0.0s Asleep=true  WalkSpeed 0.0
+                       t+6.4s Asleep=false WalkSpeed 31.0   <- wake delay 1.2s
+                       t+9.0s Asleep=true  WalkSpeed 0.0    <- grabbed, threw, slept
+```
+
+The alarm still belongs to the nest and only to the nest.
+
+> A snapshot taken *after* that sequence showed `Asleep=true` and read as "the parent never woke".
+> It had woken, grabbed, thrown and gone back to sleep inside 3 seconds — the player was standing
+> **inside** the nest, well within `GrabStuds`, so there was no chase to see. Arm the watcher before
+> the event; a snapshot after a fast state machine is not evidence about it.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

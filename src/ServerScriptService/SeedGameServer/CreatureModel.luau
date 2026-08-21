@@ -476,7 +476,22 @@ function CreatureModel.BuildPod(sp: SeedData.Species, cf: CFrame, parent: Instan
 	end
 
 	model.PrimaryPart = shell
-	CollectionService:AddTag(model, GameConfig.Tags.SeedPod)
+	--==========================================================================
+	-- IT DOES NOT TAG ITSELF SeedPod. THE CALLER DECIDES WHAT A POD MEANS.
+	--
+	-- This used to add the tag here, which quietly made every pod in the game
+	-- loot -- including the three that are not. Five callers, and only two want
+	-- it: a nest pod and a dropped pod are takeable; a pod welded to your head,
+	-- a pod being used as a Tool handle, and a pod HATCHING IN SOMEBODY'S PLOT
+	-- are not.
+	--
+	-- The plot case was a live bug: a planted pod grew a Take prompt, and taking
+	-- it ran the whole raid alarm -- RUN, then SAFE -- in the middle of the safe
+	-- zone, for a pod the player had just carried home themselves.
+	--
+	-- Whether a thing is loot is a gameplay claim. A geometry builder has no
+	-- business making it.
+	--==========================================================================
 	return model
 end
 

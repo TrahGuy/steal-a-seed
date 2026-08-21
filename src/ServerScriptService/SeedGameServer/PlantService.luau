@@ -69,14 +69,14 @@ local serviceConnections: { RBXScriptConnection } = {}
 local hooked: { [Tool]: true } = {}
 local running = false
 
--- How far through its growth a pod becomes a sprout. Early, on purpose: a plot
--- that still looks like bare pods reads as empty from a distance, and the
--- sprout is what says "something is happening here".
-local SPROUT_AT = 0.35
-local TICK = 1
--- How close you must stand to plant. Generous -- this is a convenience, not a
--- skill check, and fighting the camera to hit a slot is nobody's idea of a game.
-local PLANT_RANGE = 26
+-- All three live in GameConfig because THE CLIENT NEEDS THEM: the hatch timer
+-- counts down to the next stage, so it has to compute the same thresholds this
+-- does. Private constants here would have let the countdown and the transition
+-- drift apart.
+local PLANTING = GameConfig.Plant
+local SPROUT_AT = PLANTING.SproutAt
+local TICK = PLANTING.TickSeconds
+local PLANT_RANGE = PLANTING.RangeStuds
 
 local function log(message: string)
 	print("[Seed/PlantService] " .. message)
@@ -137,6 +137,18 @@ local function render(entry: Planted, slot: Attachment)
 			* entry.plot:GetPivot().Rotation, plantsFolder(entry.plot))
 	model:SetAttribute("SlotIndex", entry.slot)
 	model:SetAttribute("PlantedAt", entry.plantedAt)
+	--==========================================================================
+	-- HATCHING, NOT LOOT
+	--
+	-- At the POD stage this is the identical model a nest grows, so without this
+	-- tag it is indistinguishable from something you are meant to steal --
+	-- which is exactly what went wrong: CarryService put a Take prompt on it and
+	-- taking it ran the raid alarm inside the safe zone.
+	--
+	-- Also the seam PlantUI watches to draw the hatch timer, so one tag both
+	-- refuses the take and asks for the countdown.
+	--==========================================================================
+	CollectionService:AddTag(model, GameConfig.Tags.Planted)
 	entry.model = model
 end
 

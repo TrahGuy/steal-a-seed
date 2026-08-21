@@ -217,6 +217,8 @@ end
 local function spawnLoose(species: SeedData.Species, at: CFrame, parent: Instance,
 	fromNest: string?)
 	local pod = CreatureModel.BuildPod(species, at, parent)
+	-- Loot, explicitly. This is the whole point of a loose pod.
+	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
 	if fromNest then
 		-- Not "NestId": that would make TryTake route it back through TakePod,
 		-- which would look for a slot this pod no longer occupies. It only says
@@ -260,6 +262,25 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		return false
 	end
 	if not pod.Parent then
+		return false
+	end
+	--==========================================================================
+	-- A PLOT PLANT IS NOT LOOT
+	--
+	-- Checked here, at the top, with everything else that refuses -- above the
+	-- line where the world starts changing. Reaching the take path at all would
+	-- destroy the plant, set CarryingSpecies (the client's RUN alarm), and then
+	-- clear it again the moment the safe-zone poll ran (SAFE) -- the full raid
+	-- alarm, in the safe zone, for a pod the player carried home themselves.
+	--
+	-- TWO INDEPENDENT CHECKS, deliberately. The tag is the fact; the folder is
+	-- WHERE THE THING LIVES, which no amount of tag drift can fake. A stale
+	-- prompt on a plant must still refuse, and one of these will always catch it.
+	--==========================================================================
+	if CollectionService:HasTag(pod, GameConfig.Tags.Planted) then
+		return false
+	end
+	if pod.Parent.Name == GameConfig.Plot.PlantsFolderName then
 		return false
 	end
 	local anchor = pod.PrimaryPart
@@ -319,6 +340,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	local ok, err = pcall(function()
 		local model = CreatureModel.BuildPod(taken, CFrame.new(head.Position), character)
 		attachToHead(model, head)
+		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
+		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
 		carried[player] = {
 			species = taken,

@@ -72,9 +72,10 @@ src/StarterPlayer/StarterPlayerScripts/
     ParentAnim.client.luau      the nest parent's limbs
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
+    PlantUI.client.luau         hatch/grow timer over anything tagged Planted
 ```
 
-Phase A still to come: `CarryService`, `PlantService`, `EconomyService`, `TreadmillService` and the
+Phase A still to come: `EconomyService`, `TreadmillService` and the
 HUD. See [KB/PLAN.md](KB/PLAN.md).
 
 ## The map is ONE ROAD

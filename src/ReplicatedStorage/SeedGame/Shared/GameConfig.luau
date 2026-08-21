@@ -301,6 +301,11 @@ GameConfig.Tags = {
 	-- one is server-simulated: it chases, and a chase every player sees in a
 	-- different place is not a chase.
 	NestParent = "NestParent",
+	-- GROWING IN SOMEBODY'S PLOT. The opposite of SeedPod, and the reason both
+	-- exist: a pod in a nest is loot, and the identical model standing in a plot
+	-- is somebody's property mid-hatch. Nothing tagged Planted is ever takeable,
+	-- and CarryService refuses it even if a stale prompt survives on it.
+	Planted = "Planted",
 	-- An empty marker MapService leaves behind saying "a nest belongs here".
 	-- NestService builds the actual nest on top of it, because a nest has state
 	-- and the map deliberately has none.
@@ -507,6 +512,28 @@ end
 -- way EconomyService is the only faucet for cash -- one source is what keeps a
 -- number auditable when a dozen systems want to grant it.
 --==============================================================================
+--==============================================================================
+-- PLANTING
+--
+-- Structure, not balance: WHEN a plant changes shape as a fraction of its own
+-- grow time, not how long any particular species takes -- that is SeedData's.
+--
+-- Here rather than inside PlantService because THE CLIENT NEEDS IT. The hatch
+-- timer counts down to the next stage, so it has to compute the same thresholds
+-- the server does, from the same numbers. A private constant in the service
+-- would have meant the countdown and the transition disagreeing.
+--==============================================================================
+GameConfig.Plant = {
+	-- How far through its growth a pod becomes a sprout. Early on purpose: a
+	-- plot that still looks like bare pods reads as empty from a distance, and
+	-- the sprout is what says "something is happening here".
+	SproutAt = 0.35,
+	TickSeconds = 1,
+	-- How close you must stand to plant. Generous -- a convenience, not a skill
+	-- check, and fighting the camera to hit a slot is nobody's idea of a game.
+	RangeStuds = 26,
+}
+
 GameConfig.Treadmill = {
 	--==========================================================================
 	-- THIS IS A BASE RATE AND IT IS MEANT TO LOOK SLOW
