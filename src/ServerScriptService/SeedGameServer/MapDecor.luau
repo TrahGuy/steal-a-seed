@@ -452,10 +452,12 @@ function MapDecor.dressSegment(biome: BiomeData.Biome, model: Model)
 		taken = {},
 	}
 
-	-- The pods are claimed before anything scatters, so no decoration is ever
-	-- placed on top of the thing the player is trying to reach.
-	for _, podCF in ipairs(BiomeData.PodCFrames(biome)) do
-		table.insert(ctx.taken, { x = podCF.X, z = podCF.Z, r = 9 })
+	-- NESTS are claimed before anything scatters, so no decoration is ever
+	-- placed on top of the thing the player is trying to reach. The radius grew
+	-- with the rename: a nest is a parent standing inside a ring of pods, not a
+	-- single prop, so it needs the whole clearing reserved rather than 9 studs.
+	for _, nestCF in ipairs(BiomeData.NestCFrames(biome)) do
+		table.insert(ctx.taken, { x = nestCF.X, z = nestCF.Z, r = 22 })
 	end
 
 	kit(ctx, biome)

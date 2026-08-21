@@ -48,8 +48,14 @@ export type Biome = {
 	AccentColor: Color3,
 	-- Ambient light level in the lane, 0..1. Cosmic is dark on purpose.
 	Brightness: number,
-	-- How many seed pods stand in the Wild Patch at the end.
-	Pods: number,
+	-- How many NESTS stand in this segment, and how many pods ring each one.
+	--
+	-- A nest is a sleeping parent with its pods around it, so these two replace
+	-- the old flat pod count. Fewer, denser clusters is a better shape than pods
+	-- dotted evenly down a wall: a cluster is a DECISION -- how many can I grab
+	-- before it wakes -- where a lone pod is just a pickup.
+	Nests: number,
+	PodsPerNest: number,
 	-- Weight multiplier on the Epic-and-above bands. 1.0 is the base table.
 	RarityBonus: number,
 	-- Phase A only builds Forest's pods live. The rest are geometry and a gate
@@ -79,7 +85,8 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(126, 92, 62),
 		AccentColor = Color3.fromRGB(74, 148, 66),
 		Brightness = 1.0,
-		Pods = 8,
+		Nests = 3,
+		PodsPerNest = 4,
 		RarityBonus = 1.0,
 		LiveInPhaseA = true,
 	},
@@ -93,7 +100,8 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(186, 142, 92),
 		AccentColor = Color3.fromRGB(212, 158, 78),
 		Brightness = 1.0,
-		Pods = 7,
+		Nests = 3,
+		PodsPerNest = 3,
 		RarityBonus = 1.6,
 		LiveInPhaseA = false,
 	},
@@ -107,7 +115,8 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(40, 74, 62),
 		AccentColor = Color3.fromRGB(168, 214, 96),
 		Brightness = 0.78,
-		Pods = 6,
+		Nests = 2,
+		PodsPerNest = 3,
 		RarityBonus = 2.6,
 		LiveInPhaseA = false,
 	},
@@ -121,7 +130,8 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(50, 36, 34),
 		AccentColor = Color3.fromRGB(255, 118, 44),
 		Brightness = 0.55,
-		Pods = 5,
+		Nests = 2,
+		PodsPerNest = 3,
 		RarityBonus = 4.5,
 		LiveInPhaseA = false,
 	},
@@ -135,7 +145,8 @@ BiomeData.Biomes = {
 		WallColor = Color3.fromRGB(20, 16, 42),
 		AccentColor = Color3.fromRGB(158, 128, 255),
 		Brightness = 0.3,
-		Pods = 4,
+		Nests = 2,
+		PodsPerNest = 2,
 		RarityBonus = 9.0,
 		LiveInPhaseA = false,
 	},
@@ -190,16 +201,19 @@ end
 -- server builds the identical segment and "the third pod on the left" means
 -- something in a bug report.
 --==============================================================================
-function BiomeData.PodCFrames(biome: Biome): { CFrame }
+function BiomeData.NestCFrames(biome: Biome): { CFrame }
 	local out: { CFrame } = {}
-	local count = biome.Pods
+	local count = biome.Nests
 	if count <= 0 then
 		return out
 	end
 
 	local MAP = GameConfig.Map
 	local nearZ = select(1, BiomeData.SegmentBounds(biome))
-	local x = MAP.CorridorWidth * 0.5 - MAP.PodInset
+	-- Nests need more clearance than a single pod did: the ring of pods and the
+	-- parent standing in the middle of it are both wider than one prop, and the
+	-- rule they exist to respect is unchanged -- NOTHING in the racing line.
+	local x = MAP.CorridorWidth * 0.5 - MAP.PodInset - 6
 
 	for index = 1, count do
 		-- Spread down the segment with a half step of padding at each end, so

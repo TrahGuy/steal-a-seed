@@ -63,9 +63,12 @@ src/
     ProfileSchema.luau          what a profile is, and the validator (NOT a *Service)
     SaveService.luau            DataStore transport, session locking
     PlayerDataService.luau      profiles in memory, autosave, replication
+    CreatureModel.luau          pods and creatures (NOT a *Service)
+    ParentModel.luau            the nest guardian (NOT a *Service)
+    NestService.luau            nests, and the parent that sleeps beside them
 ```
 
-Phase A still to come: `SeedService`, `CarryService`, `PlantService`, `EconomyService`, and the
+Phase A still to come: `CarryService`, `PlantService`, `EconomyService`, `TreadmillService` and the
 HUD. See [KB/PLAN.md](KB/PLAN.md).
 
 ## The map is ONE ROAD

@@ -284,6 +284,10 @@ GameConfig.Tags = {
 	-- one is server-simulated: it chases, and a chase every player sees in a
 	-- different place is not a chase.
 	NestParent = "NestParent",
+	-- An empty marker MapService leaves behind saying "a nest belongs here".
+	-- NestService builds the actual nest on top of it, because a nest has state
+	-- and the map deliberately has none.
+	NestSite = "NestSite",
 }
 
 GameConfig.Remotes = {

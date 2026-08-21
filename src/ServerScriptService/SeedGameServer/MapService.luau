@@ -556,30 +556,31 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		ts.Parent = text
 	end
 
-	--== PODS ==--
-	local pods = Instance.new("Folder")
-	pods.Name = "Pods"
-	pods.Parent = model
-	CollectionService:AddTag(pods, GameConfig.Tags.WildPatch)
+	--== NESTS ==--
+	-- MapService only marks WHERE a nest goes. NestService builds what stands
+	-- there -- the sleeping parent and the ring of pods around it -- because a
+	-- nest has STATE and the map has none. MapService is destroy-and-rebuild
+	-- geometry; a parent mid-chase is not something to rebuild under.
+	local nests = Instance.new("Folder")
+	nests.Name = "Nests"
+	nests.Parent = model
+	CollectionService:AddTag(nests, GameConfig.Tags.WildPatch)
 
-	for index, podCF in ipairs(BiomeData.PodCFrames(biome)) do
-		local pod = build({
-			name = string.format("Pod%02d", index),
-			size = Vector3.new(7, 6, 7),
-			cframe = podCF * CFrame.new(0, 3, 0),
+	for index, nestCF in ipairs(BiomeData.NestCFrames(biome)) do
+		local marker = build({
+			name = string.format("NestSite%02d", index),
+			size = Vector3.new(2, 0.2, 2),
+			cframe = nestCF,
 			color = biome.AccentColor,
-			material = Enum.Material.Slate,
-			parent = pods,
+			transparency = 1,
+			collide = false,
+			studs = false,
+			parent = nests,
 		})
-		pod:SetAttribute(GameConfig.Attributes.BiomeId, biome.Id)
-		pod:SetAttribute("PodIndex", index)
-		pod:SetAttribute(GameConfig.Attributes.SeedInstanceId, "")
-		CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
-
-		local mount = Instance.new("Attachment")
-		mount.Name = "Mount"
-		mount.Position = Vector3.new(0, 4, 0)
-		mount.Parent = pod
+		marker.CanQuery = false
+		marker:SetAttribute(GameConfig.Attributes.BiomeId, biome.Id)
+		marker:SetAttribute("NestIndex", index)
+		CollectionService:AddTag(marker, GameConfig.Tags.NestSite)
 	end
 
 	--== DRESSING ==--
