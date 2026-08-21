@@ -375,6 +375,55 @@ GameConfig.Speed = {
 -- the only thing they can find. Brutal at the top is what makes an endgame
 -- carry a decision rather than a formality.
 --==============================================================================
+--==============================================================================
+-- THE PARENT
+--
+-- Every wild patch is a NEST: pods spawn in a ring around a big hostile parent
+-- creature that guards them. It ignores you until a pod is taken, then chases
+-- whoever took it, and on catching them it GRABS and THROWS.
+--
+-- Throwing rather than damaging is the right punishment for this game. Damage
+-- would mean health bars, respawns and a death loop; a throw costs you the one
+-- thing the whole design is already about -- the length of the walk home -- and
+-- it is funny to watch, which matters more than it sounds for a game people
+-- clip.
+--
+-- THROW DISTANCE SCALES WITH THE BIOME, so the parent guarding a 1,500-stud
+-- Starbloom nest hurls you far further than the one in the starter field. That
+-- keeps the punishment proportional to the prize without needing a second
+-- mechanic: the deep biomes are not more dangerous because the parent hits
+-- harder, they are more dangerous because being thrown there costs more walking.
+--
+-- Numbers are a first pass and cannot be anything else until a parent exists to
+-- be run away from.
+--==============================================================================
+GameConfig.Parent = {
+	-- How far a biome-1 parent throws you, in studs.
+	BaseThrowStuds = 60,
+	-- Added per biome further down the road. Starbloom throws 240.
+	ThrowPerBiome = 45,
+	-- Upward component, as a fraction of the horizontal throw. Enough to arc.
+	ThrowLift = 0.45,
+	-- It only wakes when a pod leaves its nest.
+	AggroOnTheftOnly = true,
+	-- Gives up past this from its nest, so a parent can never be kited into the
+	-- safe field.
+	LeashStuds = 220,
+	-- Close enough to grab.
+	GrabStuds = 7,
+	-- Seconds it holds you before the throw. Long enough to read what happened.
+	GrabHoldSeconds = 0.8,
+	-- It must be catchable-but-not-hopeless: faster than a fresh player, slower
+	-- than one who has bought any Speed at all. That is the tuition curve.
+	WalkSpeed = 19,
+}
+
+function GameConfig.parentThrowStudsFor(biomeOrder: number): number
+	local P = GameConfig.Parent
+	local order = math.max(1, math.floor(tonumber(biomeOrder) or 1))
+	return P.BaseThrowStuds + P.ThrowPerBiome * (order - 1)
+end
+
 GameConfig.Carry = {
 	-- The heaviest thing in the game. Biome 1 tops out at ~110.
 	MaxKg = 10000,

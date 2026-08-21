@@ -70,6 +70,28 @@ type Opts = {
 	parent: Instance,
 	shape: Enum.PartType?,
 	material: Enum.Material?,
+	-- Studded unless told otherwise. Only the face opts out.
+	studs: boolean?,
+}
+
+--==============================================================================
+-- STUDS GO ON EVERYTHING, INCLUDING THE ROUND PARTS
+--
+-- Worth stating because the obvious assumption is wrong: Roblox renders surface
+-- studs on Ball and Cylinder parts too, not only on Blocks -- they wrap round
+-- the curve. Tested before relying on it, because building the creatures out of
+-- blocks to "make studs possible" would have thrown away the shapes.
+--
+-- Material must be Plastic. SmoothPlastic has no studs at all, and Ground,
+-- Grass and WoodPlanks paint their own noise OVER the studs -- which is the
+-- trap that made the plot beds look smooth next to a studded field.
+--
+-- All six faces, not just the top: a creature is seen from every side, and
+-- studs on the top alone reads as a manufacturing defect.
+--==============================================================================
+local STUD_FACES = {
+	"TopSurface", "BottomSurface", "LeftSurface",
+	"RightSurface", "FrontSurface", "BackSurface",
 }
 
 local function part(o: Opts): BasePart
@@ -78,16 +100,21 @@ local function part(o: Opts): BasePart
 	p.Size = o.size
 	p.CFrame = o.cframe
 	p.Color = o.color
-	p.Material = o.material or Enum.Material.SmoothPlastic
 	p.Shape = o.shape or Enum.PartType.Block
 	p.Anchored = true
 	p.CanCollide = false
 	p.CanQuery = false
 	p.CanTouch = false
-	-- Enum.SurfaceType, not Enum.NormalId. Both have a Top and the wrong one
+
+	local studded = o.studs ~= false
+	p.Material = o.material or (if studded then Enum.Material.Plastic
+		else Enum.Material.SmoothPlastic)
+	-- Enum.SurfaceType, not Enum.NormalId. Both have a Top, and the wrong one
 	-- fails at runtime rather than at compile time.
-	p.TopSurface = Enum.SurfaceType.Smooth
-	p.BottomSurface = Enum.SurfaceType.Smooth
+	local surface = if studded then Enum.SurfaceType.Studs else Enum.SurfaceType.Smooth
+	for _, face in ipairs(STUD_FACES) do
+		(p :: any)[face] = surface
+	end
 	p.Parent = o.parent
 	return p
 end
@@ -95,7 +122,7 @@ end
 -- An upright cylinder. Roblox cylinders run along their LOCAL X, so standing
 -- one up is a 90-degree roll, and the caller should not have to remember that.
 local function upright(name: string, height: number, diameter: number, cf: CFrame,
-	color: Color3, parent: Instance): BasePart
+	color: Color3, parent: Instance, studs: boolean?): BasePart
 	return part({
 		name = name,
 		size = Vector3.new(height, diameter, diameter),
@@ -103,11 +130,12 @@ local function upright(name: string, height: number, diameter: number, cf: CFram
 		color = color,
 		shape = Enum.PartType.Cylinder,
 		parent = parent,
+		studs = studs,
 	})
 end
 
 local function ball(name: string, diameter: number, cf: CFrame, color: Color3,
-	parent: Instance): BasePart
+	parent: Instance, studs: boolean?): BasePart
 	return part({
 		name = name,
 		size = Vector3.new(diameter, diameter, diameter),
@@ -115,6 +143,7 @@ local function ball(name: string, diameter: number, cf: CFrame, color: Color3,
 		color = color,
 		shape = Enum.PartType.Ball,
 		parent = parent,
+		studs = studs,
 	})
 end
 
@@ -125,11 +154,16 @@ local function wedge(name: string, size: Vector3, cf: CFrame, color: Color3,
 	p.Size = size
 	p.CFrame = cf
 	p.Color = color
-	p.Material = Enum.Material.SmoothPlastic
+	p.Material = Enum.Material.Plastic
 	p.Anchored = true
 	p.CanCollide = false
 	p.CanQuery = false
 	p.CanTouch = false
+	for _, face in ipairs(STUD_FACES) do
+		pcall(function()
+			(p :: any)[face] = Enum.SurfaceType.Studs
+		end)
+	end
 	p.Parent = parent
 	return p
 end
@@ -153,6 +187,9 @@ local function addFace(model: Model, headCF: CFrame, width: number, front: numbe
 			cframe = eyeCF,
 			color = DARK,
 			parent = model,
+			-- The face is the one thing that stays smooth. A stud on a
+			-- 0.3-stud eye is a blister, not a texture.
+			studs = false,
 		})
 		-- The glint. Upper-LEFT of each eye on both sides, not mirrored --
 		-- a shared light source is what makes two eyes read as one face.
@@ -162,6 +199,7 @@ local function addFace(model: Model, headCF: CFrame, width: number, front: numbe
 			cframe = eyeCF * CFrame.new(-eyeW * 0.22, eyeH * 0.24, -0.02),
 			color = WHITE,
 			parent = model,
+			studs = false,
 		})
 	end
 
@@ -176,6 +214,7 @@ local function addFace(model: Model, headCF: CFrame, width: number, front: numbe
 			cframe = headCF * CFrame.new(sx * mw * 0.92, -width * 0.15 + lift * width, -front),
 			color = DARK,
 			parent = model,
+			studs = false,
 		})
 	end
 end
