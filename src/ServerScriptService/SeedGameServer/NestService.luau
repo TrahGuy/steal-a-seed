@@ -239,11 +239,11 @@ local function throwPlayer(nest: Nest, player: Player)
 	task.wait(P.GrabHoldSeconds)
 
 	if player.Parent ~= Players or humanoid.Health <= 0 then
+		humanoid.PlatformStand = false
+		humanoid.WalkSpeed = walk
+		humanoid.JumpPower = jump
 		return
 	end
-	humanoid.PlatformStand = false
-	humanoid.WalkSpeed = walk
-	humanoid.JumpPower = jump
 
 	-- Range of a projectile launched at v with vertical component k*v is
 	-- 2*k*v^2/g, so the speed that lands them the configured distance away is
@@ -265,7 +265,53 @@ local function throwPlayer(nest: Nest, player: Player)
 	else
 		dir = Vector3.new(0, 0, -1)
 	end
+	--==========================================================================
+	-- PlatformStand STAYS ON THROUGH THE FLIGHT, and that is not cosmetic.
+	--
+	-- Releasing it before applying the velocity gives the Humanoid controller
+	-- the assembly back, and it immediately damps whatever it was given: a
+	-- throw solved for 60 studs measured NINE. With PlatformStand held the
+	-- humanoid applies no movement forces of its own and the body keeps what it
+	-- was thrown with.
+	--
+	-- It also looks right -- a thrown player should tumble, not jog through the
+	-- air in a running pose.
+	--==========================================================================
 	root.AssemblyLinearVelocity = dir * speed + Vector3.new(0, speed * k, 0)
+
+	--==========================================================================
+	-- LAND THEM, DO NOT LET THEM SKID.
+	--
+	-- The arc itself is exact -- measured apex 6.6 studs against a predicted
+	-- vy^2/2g of 6.76, and 0.52s of flight at 114 studs/sec is the configured
+	-- 60. What broke the number was what happened AFTER touchdown: a
+	-- PlatformStand body keeps its horizontal velocity and slides, and a
+	-- controlled test measured 143 studs of travel for a 60-stud throw.
+	--
+	-- So the throw waits for the floor and then stops the slide. The distance in
+	-- GameConfig is now the distance the player actually travels, which is the
+	-- only reason to have the number there at all.
+	--==========================================================================
+	--
+	-- TIMED, NOT FLOOR-DETECTED. The obvious landing check is
+	-- `humanoid.FloorMaterial ~= Air`, and it can never become true here:
+	-- PlatformStand switches the Humanoid's state machine off, and floor
+	-- detection is part of it. FloorMaterial stays Air for the whole flight, so
+	-- the poll ran to its timeout every time and the body skidded for two and a
+	-- half seconds -- 143 studs for a 60-stud throw, twice.
+	--
+	-- The arc is exact, so its duration is exact. Wait it.
+	local flight = 2 * (speed * k) / g
+	task.wait(flight)
+
+	if player.Parent ~= Players then
+		return
+	end
+	local v = root.AssemblyLinearVelocity
+	root.AssemblyLinearVelocity = Vector3.new(0, math.min(v.Y, 0), 0)
+	humanoid.PlatformStand = false
+	humanoid.WalkSpeed = walk
+	humanoid.JumpPower = jump
 end
 
 --==============================================================================
