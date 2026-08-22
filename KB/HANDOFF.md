@@ -1867,11 +1867,36 @@ joints back after 0.18s (true)
 landing` is the teleport meter: it is the distance the head has travelled from where the body
 actually came to rest, and it must stay near zero.
 
+### The owner's own console, and it says exactly this
+
+The diagnostic line added in `0bbf543` did its job. This is from the owner's machine, on the build
+WITHOUT the fix -- one throw, trimmed to the frames that matter:
+
+```
+rootY 14.11  headY 15.14  gap  1.04 | vel 124.1 | camera 40.5 away    the flight, correct
+rootY  2.68  headY  3.61  gap  0.95 | vel 131.8 | camera 41.2 away    coming down
+rootY  1.47  headY  1.51  gap  0.70 | vel  96.8 | camera 41.9 away    THE BODY LANDS
+rootY  1.78  headY  3.10  gap  2.98 | vel  98.3 | camera 44.0 away    the box carries on
+rootY  0.50  headY  0.96  gap 16.44 | vel  65.0 | camera 55.8 away
+rootY  0.50  headY  0.96  gap 46.94 | vel   0.0 | camera 83.0 away    forty-seven studs apart
+settled and levelled at (-25.96, 2.10, -178.31)                       <- the BOX's position
+```
+
+Read `headY`: after the landing it sits at 0.96 and never moves again. The body was down, at rest,
+for the whole second half of that log. Meanwhile `gap` runs 0.70 -> 46.94 and `vel` -- which was the
+ROOT's velocity -- is still 65 when the head has been still for half a second.
+
+**The invisible box slid forty-seven studs along the ground after the body stopped**, the camera
+went with it (40.5 -> 83.0 studs from the head), the settle poll kept waiting because it was
+watching the box, and then `PivotTo` dragged the body to it. Three symptoms, one log, and every
+number in it is the argument for the fix above.
+
 ### NOT CONFIRMED
 
-Same rule as every previous round: this is not fixed until the owner says so. They have confirmed
-the landing; the flight-vs-landing split above is exactly the kind of partial pass that has twice
-been mistaken for a whole one.
+The DIAGNOSIS is confirmed, from the owner's screen. The FIX is not: they tested `0bbf543`, not
+`465f696` -- Rojo was down when they started, so Studio still had the old ThrowFX (checked with
+`script_grep`: line 7 still read "A LIMP BODY IS SIXTEEN ASSEMBLIES"). **Before believing a ragdoll
+report, check that Studio has the build being reported on.**
 
 ### Untouched
 
@@ -1881,6 +1906,70 @@ girth 0.70 / 1.64                        plot 2 plants, 0 prompts
 GrabStuds 7, GrabHoldSeconds nil         no SetNetworkOwner anywhere
 16-part impulse, Physics state, client-side nudge -- all kept
 ```
+
+## Your saved speed did nothing until you touched a pod — 2026-08-22
+
+Reported as "as I start the game, the current speed I have doesn't work, I need to take pods to
+recover". It is a join-order race, and the owner's own log has both halves of it.
+
+### The order, from their console
+
+```
+[Seed/PlotService]       nicnicniccoal -> Plot_01.
+[Seed/ThrowFX]           listening on ThrowVictim          <- a CLIENT script: the body exists
+[Seed/PlayerDataService] nicnicniccoal loaded (ok): cash 1046473, speed 14454, tier 1.
+```
+
+The character is up and running two log lines before the profile lands. `PlayerDataService`
+deliberately loads on a `task.spawn` off the `PlayerAdded` thread -- a fifteen-second DataStore round
+trip must not hold up everything else that cares about a join -- so the body always wins that race.
+
+`CarryService.onCharacterAdded` calls `RefreshWalkSpeed` at spawn. That reads:
+
+```lua
+local profile = PlayerDataService.Get(player)
+local base = GameConfig.walkSpeedFor(if profile then profile.Speed else 0)
+```
+
+`Get` returns nil, so it takes the `else 0` branch. **Nothing ever ran it again.**
+
+### What it cost, in their numbers
+
+```
+saved score 14454 -> walkSpeedFor = 84.95 studs/sec
+nil profile       -> walkSpeedFor = 16.00 studs/sec
+                     18.8% of their speed, 5.31x slower
+```
+
+`carryMultiplierFor(0)` is exactly 1, so nothing else was involved -- the fallback IS the whole
+number.
+
+### Why taking a pod fixed it
+
+`RefreshWalkSpeed` has five callers, and after the spawn one they are all carry events: take, drop,
+bank, and the treadmill award. So the first time you touched a pod the profile was long since loaded
+and the speed came right. That is not pods restoring anything; it is the only other code path that
+happens to recompute it.
+
+### The fix
+
+`CarryService.onCharacterAdded` refreshes again once the profile actually arrives, in the shape
+`PlantService.restore` already uses for the same ordering problem -- `task.spawn`, wait on
+`PlayerDataService.IsReady`, 30s deadline, then re-validate that the thing is still current
+(`player.Character ~= character` bails, because a respawn inside thirty seconds has already started
+a wait of its own).
+
+**Not** a `PlayerDataService` -> `CarryService` call: `CarryService` already requires
+`PlayerDataService`, so the hook would have been a require cycle. And still nothing new writes
+`WalkSpeed` -- `RefreshWalkSpeed` stays the only writer, called one more time.
+
+### Not fixed by this, and it cannot be
+
+If the profile lands DURING a throw, `NestService.restore()` puts back the `WalkSpeed` it captured
+at the grab, which would be the stale 16. The clean fix is for `restore()` to call
+`RefreshWalkSpeed`, which is a `NestService` -> `CarryService` require -- a cycle, and explicitly
+ruled out. Left alone on purpose: the window is the second or two of profile load, and the nearest
+nest is 300 studs down the road, so it cannot be reached in time.
 
 ## Still open
 

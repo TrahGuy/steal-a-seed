@@ -651,6 +651,40 @@ local function onCharacterAdded(player: Player, character: Model)
 
 	CarryService.RefreshWalkSpeed(player)
 
+	--==========================================================================
+	-- AND AGAIN WHEN THE PROFILE LANDS
+	--
+	-- The body spawns immediately. The profile is a DataStore round trip behind
+	-- it, so the call above reads `nil` and falls back to walkSpeedFor(0) --
+	-- BASE speed, 16 -- for a player whose saved score is worth eighty.
+	--
+	-- Nothing re-ran it. The only other callers of RefreshWalkSpeed are taking
+	-- a pod, dropping one, banking one and earning on the mill, so a player who
+	-- joined and just ran was stuck at base until they happened to touch a pod.
+	-- Reported as "the speed I have doesn't work, I need to take pods to
+	-- recover", and that is exactly what it was.
+	--
+	-- Same shape as PlantService's restore: wait for the profile rather than
+	-- assume an order that is not guaranteed.
+	--==========================================================================
+	if not PlayerDataService.IsReady(player) then
+		task.spawn(function()
+			local deadline = os.clock() + 30
+			while not PlayerDataService.IsReady(player) and os.clock() < deadline do
+				task.wait(0.25)
+			end
+			-- Still this body? A respawn inside thirty seconds has already
+			-- started a wait of its own, and two of them refreshing is one of
+			-- them writing on behalf of a character that no longer exists.
+			if player.Parent ~= Players or player.Character ~= character then
+				return
+			end
+			if PlayerDataService.IsReady(player) then
+				CarryService.RefreshWalkSpeed(player)
+			end
+		end)
+	end
+
 	-- RAGDOLLED MEANS DROPPED, and watching the PROPERTY rather than the event
 	-- that caused it means every future knockdown gets this for free -- nothing
 	-- has to remember to call Drop.
