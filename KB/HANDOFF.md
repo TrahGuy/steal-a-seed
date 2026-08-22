@@ -1978,23 +1978,33 @@ nothing else from it. No Shop, Rebirth, Growing Eggs, Grow All, egg or paw rail,
 Friend Boost, Robux packs, Fuse or Reels overlay -- and no tigers. The species stay Nubkin,
 Petalpip, Spiretip, Toadcap, Bellchime.
 
-### 1. The billboard names the rate
+### 1. The billboard is the rate, and NOTHING else
 
 ```
 Nubkin        Petalpip       Spiretip       Toadcap        Bellchime
 $2/s          $5/s           $14/s          $40/s          $110/s
 ```
 
-Title case, not `NUBKIN`: this is a name now, where HATCHING and GROWING are states.
+**No name tag.** It briefly said `Nubkin` over `$2/s` and the owner cut the name the same day, on a
+second reference clip: the name is the one line a full plot multiplies into clutter. Twelve plants
+is twelve name plates competing with each other AND with the `+$N` pops rising through them, and the
+90-second clip shows exactly what that costs -- a pile of small overlapping labels in the middle of
+the frame that nobody can read, while the thing you actually track is the big lime number.
 
-The finished state used to be the QUIETEST one -- clock line collapsed to zero height, panel shrunk
-to 124x26, stroke faded to 0.75, on the reasoning that a bed needing nothing from you should not
-shout. That was wrong about what the bed IS. A grown plant is the thing paying you every second, and
-to a stranger on the road it is a price tag on a target. It is now the loudest: 132x44, the rate at
-19px in accent, stroke fully lit. Still drawn for everybody, not just the owner.
+So the loud element is the POP, and this is a quiet price tag under it: one line, 98x30, stroke at
+0.45. Still drawn for everybody, not just the owner.
+
+Nothing is lost by dropping the word. A Nubkin is a cube and a Bellchime is a bell -- the shapes are
+the whole reason `CreatureModel` switches on Form -- and the girth curve makes a heavy one visibly
+heavy. Reading a name off a model you are already looking at is the caption-on-a-photograph rule.
+Names, rarity words and weights live in the Index, for when you are reading rather than glancing.
+
+The reveal survives. It was never the WORD appearing; it is the pod opening into a shape you have
+not got yet, and the line under it going from a clock to a number.
 
 **Pods and sprouts print no rate.** The wait is the cost of the thing, and `$5/s` on something that
-pays nothing yet would be a lie told in the game's own accent colour.
+pays nothing yet would be a lie told in the game's own accent colour. HATCHING / GROWING plus the
+m:ss clock is unchanged.
 
 ### 2. Lime `+$N` pops, off each plant
 

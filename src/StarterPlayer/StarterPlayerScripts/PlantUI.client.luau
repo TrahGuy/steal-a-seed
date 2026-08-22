@@ -21,28 +21,35 @@
 --
 --   HATCHING   it is still a pod
 --   GROWING    it is a sprout
---   <name>     it is done -- and this is the only place the species is ever
---   $N/s       named, which is the point: pods are coloured by RARITY, so the
---              two Commons arrive identical and which one you actually got
---              stays hidden until it finishes. The reveal is free content at
---              the end of every run home.
+--   $N/s       it is done, and this is what it pays
 --
 -- No rarity, no weight, no owner. The model's colour is its rarity and its size
 -- is its weight, exactly as at the nest -- repeating either in text would be a
--- caption on a photograph, which is the same rule PromptUI follows. Rarity as a
--- WORD belongs in the Index, where you are reading rather than glancing.
+-- caption on a photograph, which is the same rule PromptUI follows.
 --
 --==============================================================================
--- A FINISHED PLANT SHOUTS WHAT IT EARNS
+-- AND NO NAME TAG. THE SIDEBAR IS WHERE SPECIES LIVE.
 --
--- This used to go QUIETER when a plant finished: the clock line collapsed to
--- zero height, the panel shrank to 124x26 and the stroke faded to 0.75, on the
--- reasoning that a bed needing nothing from you should not shout.
+-- A finished plant briefly said `Nubkin` over `$2/s`. It is now just the rate.
 --
--- That was wrong about what the bed IS. A grown plant is not a finished chore,
--- it is the thing paying you every second -- and to somebody walking past it is
--- a price tag on a target. So the finished state is now the LOUDEST one: the
--- name in paper, the rate under it in accent at 19px, and the stroke fully lit.
+-- The name was the one line here that a full plot multiplied into clutter:
+-- twelve plants in a bed is twelve name plates competing with each other and
+-- with the `+$N` pops rising through them, and the reference clip shows exactly
+-- what that costs -- a pile of small overlapping labels in the middle of the
+-- frame that nobody can read, while the thing you actually track is the big lime
+-- number. So the loud element is the POP, and this is a quiet price tag under
+-- it.
+--
+-- Nothing is lost by dropping the word. A Nubkin is a cube and a Bellchime is a
+-- bell -- the shapes are the whole reason CreatureModel switches on Form -- and
+-- the girth curve makes a heavy one visibly heavy. Reading the name off a model
+-- you are already looking at is the caption-on-a-photograph rule again, and the
+-- Index is where the names, the rarity words and the weights are, for when you
+-- are reading rather than glancing.
+--
+-- The reveal survives too. It was never the WORD appearing; it is the pod
+-- opening into a shape you have not got yet, and the rate underneath it going
+-- from a clock to a number.
 --
 --==============================================================================
 -- THE CLOCK IS THE SERVER'S, NOT THIS MACHINE'S
@@ -257,14 +264,13 @@ local function refresh(panel: Panel, now: number)
 	elseif elapsed < total then
 		word, timer, grown = "GROWING", clock(total - elapsed), false
 	else
-		-- Done. Title case, not SHOUTED CAPS: this is a NAME now, where HATCHING
-		-- and GROWING are states. The caps made the reveal read as one more
-		-- status word rather than as the thing you have been waiting for.
+		-- Done. No word at all: no name, no rarity, no "GROWN". Just the rate,
+		-- which is the only thing about a finished plant that its own silhouette
+		-- does not already tell you.
 		--
-		-- No clock. A timer reading 0:00 forever is worse than no timer, and the
-		-- line is worth more as the rate -- the only number anybody, owner or
-		-- passer-by, actually wants off a finished plant.
-		word = species.Name
+		-- And no clock. A timer reading 0:00 forever is worse than no timer, and
+		-- the creature standing there already says it grew.
+		word = ""
 		timer = "$" .. GameConfig.compact(SeedData.IncomePerSecond(species)) .. "/s"
 		grown = true
 	end
@@ -277,15 +283,21 @@ local function refresh(panel: Panel, now: number)
 	panel.word.Text = word
 	panel.timer.Text = timer
 
-	-- The rate line only ever carries a RATE on a grown plant; on a pod or a
+	-- The second line only ever carries a RATE on a grown plant; on a pod or a
 	-- sprout it is the clock. Nothing prints $/s on something that pays nothing
 	-- yet -- the wait is the cost of the thing, and a rate on a pod would be a
 	-- lie told in the game's own accent colour.
-	panel.timer.Size = UDim2.new(1, 0, 0, if grown then 19 else 17)
-	panel.timer.TextSize = if grown then 19 else 17
+	--
+	-- Grown collapses the word row to nothing and shrinks the plate to one line.
+	-- Quieter than the countdown on purpose: while it is growing this panel is
+	-- the only thing the plant has to say, and once it is finished the `+$N`
+	-- rising off it every second is doing the shouting.
+	panel.word.Size = if grown then UDim2.new(1, 0, 0, 0) else UDim2.new(1, 0, 0, 15)
 	panel.word.TextColor3 = PAPER
-	panel.stroke.Transparency = if grown then 0.15 else 0.3
-	panel.billboard.Size = if grown then UDim2.fromOffset(132, 44)
+	panel.timer.Size = UDim2.new(1, 0, 0, if grown then 20 else 17)
+	panel.timer.TextSize = if grown then 18 else 17
+	panel.stroke.Transparency = if grown then 0.45 else 0.3
+	panel.billboard.Size = if grown then UDim2.fromOffset(98, 30)
 		else UDim2.fromOffset(124, 40)
 end
 
