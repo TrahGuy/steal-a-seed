@@ -4,6 +4,29 @@
 -- Being hit by a nest parent, on the machine that actually owns the body.
 --
 --==============================================================================
+-- THE LANDING IS NOT THE FLIGHT
+--
+-- Sixteen assemblies fixed the throw. It did not fix the END of the throw,
+-- because settling, levelling and the camera were all still keyed off the
+-- HumanoidRootPart -- the one part of this character nobody can see.
+--
+-- What the owner saw: the visible body arrives on the ground, the camera keeps
+-- following something else, and then they teleport.
+--
+--   the camera        CameraSubject is the Humanoid, and a Humanoid tracks its
+--                     root. The root is Transparency = 1 and, while limp, is
+--                     its own assembly -- so the camera watches an empty box.
+--   the settle        `root.AssemblyLinearVelocity` said "still flying" while
+--                     the body was already down. The body can be at rest and
+--                     the box still moving; they are not the same object.
+--   the teleport      `PivotTo(r.Position + up)` pivoted the whole character
+--                     onto the ROOT. Whatever the box had drifted to, the body
+--                     was dragged there the instant joints came back.
+--
+-- The rule for all three: DO NOT YANK THE BODY TO THE ROOT. Put the root under
+-- the body, then re-pose. The box comes to the body, never the other way.
+--
+--==============================================================================
 -- A LIMP BODY IS SIXTEEN ASSEMBLIES, NOT ONE
 --
 -- This is the bug that survived three rewrites, and every one of them measured
@@ -90,6 +113,12 @@ local HOLD_VELOCITY_FOR = 0.2
 -- Push the camera out so it cannot sit inside the parent -- or inside the
 -- player's own head once the body is horizontal.
 local THROW_ZOOM = 12
+-- How long to keep printing after the joints come back. The teleport used to
+-- happen in this window, so this is the window that has to be watched.
+local STANDUP_WATCH = 0.9
+-- Waiting for the server's ragdollOff to arrive. Polled on the constraints
+-- themselves rather than slept, because a sleep is a guess about the round trip.
+local JOINTS_BACK_TIMEOUT = 1.5
 
 local throwing = false
 local remote: RemoteEvent? = nil
@@ -117,6 +146,42 @@ local function rootOf(): BasePart?
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	return if root and root:IsA("BasePart") then root else nil
+end
+
+-- The part the player actually watches. R15 calls it UpperTorso, R6 calls it
+-- Torso, and everything about the landing hangs off it.
+local function torsoOf(character: Model): BasePart?
+	local t = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	return if t and t:IsA("BasePart") then t else nil
+end
+
+--==============================================================================
+-- WHERE THE ROOT SITS ON A BODY THAT IS NOT BROKEN
+--
+-- Measured off a resting rig at spawn, not guessed at, and not measured mid
+-- tumble -- during the tumble the root and the torso have drifted apart, which
+-- is the whole bug. This is the offset that says "the box belongs HERE", and it
+-- is what puts the box back on the body before the joints return.
+--==============================================================================
+local restOffset: CFrame? = nil
+
+local function captureRest(character: Model)
+	task.spawn(function()
+		local root = character:WaitForChild("HumanoidRootPart", 10)
+		if not (root and root:IsA("BasePart")) then
+			return
+		end
+		-- Half a second of standing there: long enough that the rig is posed
+		-- rather than still assembling.
+		task.wait(0.5)
+		local torso = torsoOf(character)
+		if torso and root.Parent then
+			local offset = torso.CFrame:ToObjectSpace(root.CFrame)
+			restOffset = offset
+			say(string.format("rest offset, root relative to %s: %s",
+				torso.Name, tostring(offset.Position)))
+		end
+	end)
 end
 
 --==============================================================================
@@ -259,11 +324,28 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		player.CameraMinZoomDistance = math.max(wasMin, THROW_ZOOM)
 		bindVisible()
 
+		--======================================================================
+		-- AND IT FOLLOWS THE HEAD, NOT THE HUMANOID
+		--
+		-- CameraSubject defaults to the Humanoid, and a Humanoid tracks its
+		-- HumanoidRootPart. That is fine on a character whose parts are welded
+		-- into one assembly; on a limp one the root flies off on its own and the
+		-- camera goes with it, watching an invisible box while the body lands
+		-- somewhere else entirely. Measured: 148 studs of separation.
+		--
+		-- The Head is a part the owner can see. Restored to the Humanoid the
+		-- moment the root is back underneath the body.
+		--======================================================================
 		local camera = workspace.CurrentCamera
-		say(string.format("camera: mode %s -> %s | zoom %.1f..%.1f -> %.1f..%.1f | type %s | subject %s",
+		local wasSubject: Instance? = if camera then camera.CameraSubject else nil
+		local headPart = character:FindFirstChild("Head")
+		if camera and headPart and headPart:IsA("BasePart") then
+			camera.CameraSubject = headPart
+		end
+		say(string.format("camera: mode %s -> %s | zoom %.1f..%.1f -> %.1f..%.1f | subject %s -> %s",
 			tostring(wasMode), tostring(player.CameraMode), wasMin, wasMax,
 			player.CameraMinZoomDistance, player.CameraMaxZoomDistance,
-			tostring(camera and camera.CameraType),
+			tostring(wasSubject and wasSubject.Name),
 			tostring(camera and camera.CameraSubject and camera.CameraSubject.Name)))
 
 		--== 4. THROW EVERY PART, AND KEEP THROWING FOR A FEW FRAMES ==--
@@ -284,8 +366,20 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			RunService.Heartbeat:Wait()
 		end
 
-		--== 5. WAIT UNTIL IT HAS REALLY STOPPED ==--
+		--======================================================================
+		-- 5. WAIT UNTIL THE BODY HAS STOPPED -- THE BODY, NOT THE BOX
+		--
+		-- This used to read the root's velocity, which is a different assembly
+		-- with a different trajectory. The body can be lying still on the road
+		-- while the invisible root is still sailing over it, and that mismatch
+		-- is what held the tumble open past the landing.
+		--
+		-- Head AND torso, both under the threshold: the head bobbles on its
+		-- socket after the torso has stopped, and the torso can slide out from
+		-- under a head resting on a kerb.
+		--======================================================================
 		local head = character:FindFirstChild("Head")
+		local torso = torsoOf(character)
 		local settledFor = 0
 		local deadline = os.clock() + GIVE_UP_AFTER
 		while os.clock() < deadline do
@@ -293,24 +387,32 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			if not r then
 				break
 			end
+			local bodySpeed = 0
+			if head and head:IsA("BasePart") then
+				bodySpeed = math.max(bodySpeed, head.AssemblyLinearVelocity.Magnitude)
+			end
+			if torso and torso.Parent then
+				bodySpeed = math.max(bodySpeed, torso.AssemblyLinearVelocity.Magnitude)
+			end
+
 			-- Per-frame, as asked: this is the number that says whether the
 			-- player can actually see themselves.
 			if head and head:IsA("BasePart") then
 				-- observedLTM is what the CAMERA wanted before this script
-				-- overrode it, camDist says whether the camera is even near the
-				-- body, and Transparency catches anything setting it outright.
-				local camera = workspace.CurrentCamera
-				local camDist = if camera then (camera.CFrame.Position - head.Position).Magnitude else -1
-				-- headGap is the number that matters: the distance between the
+				-- overrode it, and camDist says whether the camera is even near
+				-- the body it is supposed to be showing.
+				local cam = workspace.CurrentCamera
+				local camDist = if cam then (cam.CFrame.Position - head.Position).Magnitude else -1
+				-- gap is the number that matters: the distance between the
 				-- INVISIBLE root and the VISIBLE head. If that grows, the body
 				-- has been left behind again.
-				say(string.format("  rootY %.2f headY %.2f gap %.2f | vel %.1f | camera %.1f away | LTM wanted %.2f | %s",
+				say(string.format("  rootY %.2f headY %.2f gap %.2f | body %.1f box %.1f | camera %.1f away | LTM wanted %.2f | %s",
 					r.Position.Y, head.Position.Y, (head.Position - r.Position).Magnitude,
-					r.AssemblyLinearVelocity.Magnitude, camDist,
+					bodySpeed, r.AssemblyLinearVelocity.Magnitude, camDist,
 					observedLTM, tostring(humanoid:GetState())))
 			end
-			local v = r.AssemblyLinearVelocity
-			if Vector3.new(v.X, 0, v.Z).Magnitude < SETTLE_SPEED then
+
+			if bodySpeed < SETTLE_SPEED then
 				settledFor += SETTLE_STEP
 				if settledFor >= SETTLE_HOLD then
 					break
@@ -322,31 +424,108 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		end
 
 		--======================================================================
-		-- 6. LEVEL IN PLACE, WHERE THIS SIMULATION ACTUALLY STOPPED
+		-- 6. BRING THE BOX TO THE BODY. NOT THE BODY TO THE BOX.
 		--
-		-- Not at a position anybody computed. The server is about to switch the
-		-- joints back on, and re-enabling them while limbs are half inside the
-		-- floor leaves the solver one way to resolve the overlap -- by flinging
-		-- the body out of it. Measured at 12.6 studs before this existed.
+		-- The joints are about to come back, and when they do the whole rig
+		-- re-poses around the HumanoidRootPart. So whatever CFrame the root
+		-- holds at that instant IS where the player ends up.
+		--
+		-- The old code pivoted the character onto `r.Position` -- the root, the
+		-- invisible box, wherever its separate flight had left it. That is the
+		-- teleport, in one line: the body landed, and then it was dragged to the
+		-- box.
+		--
+		--   1. stop everything, all sixteen assemblies, so joints do not come
+		--      back on a body that is still moving;
+		--   2. seat the root on the TORSO at the measured rest offset, so the
+		--      box is back inside the body it belongs to;
+		--   3. stand that pair up where the torso is, feet on the ground the
+		--      raycast found. The body does not travel; it stands up.
 		--======================================================================
 		local r = rootOf()
+		local landedAt: Vector3? = nil
+		local landedFrame: CFrame? = nil
 		if r then
-			-- Every part, again: stopping only the root leaves fifteen limbs
-			-- still drifting, and the joints come back on a moving body.
 			for _, part in ipairs(bodyParts()) do
 				part.AssemblyLinearVelocity = Vector3.zero
 				part.AssemblyAngularVelocity = Vector3.zero
 			end
-			local here = r.Position + Vector3.new(0, 1.6, 0)
-			character:PivotTo(CFrame.lookAt(here, here + unit))
-			say(string.format("settled and levelled at %s", tostring(r.Position)))
+
+			local body = torsoOf(character) or (if head and head:IsA("BasePart") then head else nil)
+			if body then
+				-- 2. the box comes to the body.
+				local offset = restOffset or CFrame.identity
+				local before = (body.Position - r.Position).Magnitude
+				r.CFrame = body.CFrame * offset
+				say(string.format("seated the root on %s: was %.2f studs away, now %.2f",
+					body.Name, before, (body.Position - r.Position).Magnitude))
+
+				-- 3. upright, at the body, on the floor. Height comes from the
+				-- humanoid's own HipHeight rather than a hand-picked 1.6.
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.FilterDescendantsInstances = { character }
+				local down = workspace:Raycast(body.Position + Vector3.new(0, 2, 0),
+					Vector3.new(0, -60, 0), params)
+				local standY = if down
+					then down.Position.Y + humanoid.HipHeight + r.Size.Y * 0.5
+					else r.Position.Y
+				local here = Vector3.new(body.Position.X, standY, body.Position.Z)
+				landedFrame = CFrame.lookAt(here, here + unit)
+				character:PivotTo(landedFrame)
+				landedAt = here
+				say(string.format("stood up at %s (ground %s, hip %.2f)",
+					tostring(here),
+					if down then string.format("%.2f", down.Position.Y) else "not found",
+					humanoid.HipHeight))
+			end
 		end
 
-		--== 7. GIVE THE CHARACTER BACK ==--
-		player.CameraMinZoomDistance = wasMin
-		player.CameraMaxZoomDistance = wasMax
-		player.CameraMode = wasMode
-		unbindVisible()
+		--======================================================================
+		-- 7. GIVE THE CHARACTER BACK
+		--
+		-- Telling the server first: ragdollOff lives there, and the humanoid
+		-- must not be handed a controller while the rig is still fifteen loose
+		-- sockets. Waiting on the constraints themselves rather than sleeping a
+		-- guessed round trip.
+		--======================================================================
+		if remote then
+			pcall(function()
+				(remote :: RemoteEvent):FireServer()
+			end)
+		end
+
+		local watched: AnimationConstraint? = nil
+		for _, d in ipairs(character:GetDescendants()) do
+			if d:IsA("AnimationConstraint") then
+				watched = d
+				break
+			end
+		end
+		--======================================================================
+		-- AND HOLD IT THERE WHILE THE ROUND TRIP HAPPENS
+		--
+		-- The pose built above is made of sixteen loose parts, and gravity does
+		-- not pause for a RemoteEvent. A quarter of a second of round trip is
+		-- six studs of free fall -- the body would scatter back out of the pose
+		-- and the joints would come back on the mess, which is the snap all over
+		-- again. So it is pinned, every frame, until the constraints answer.
+		--======================================================================
+		local jointDeadline = os.clock() + JOINTS_BACK_TIMEOUT
+		while watched and not watched.Enabled and os.clock() < jointDeadline do
+			if landedFrame and character.Parent then
+				character:PivotTo(landedFrame)
+				for _, part in ipairs(bodyParts()) do
+					part.AssemblyLinearVelocity = Vector3.zero
+					part.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+			RunService.Heartbeat:Wait()
+		end
+		say(string.format("joints back after %.2fs (%s)",
+			JOINTS_BACK_TIMEOUT - (jointDeadline - os.clock()),
+			if watched then tostring(watched.Enabled) else "no constraints to watch"))
+
 		if humanoid.Parent then
 			humanoid.PlatformStand = false
 			pcall(function()
@@ -354,12 +533,48 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			end)
 		end
 
-		throwing = false
-		if remote then
-			pcall(function()
-				(remote :: RemoteEvent):FireServer()
-			end)
+		-- The camera goes back on the Humanoid only now, with the root seated
+		-- under the body -- the two are the same place again, so there is
+		-- nothing for it to jump to.
+		if camera then
+			-- A respawn mid-flight destroys the humanoid this started with, and
+			-- pointing the camera at a destroyed instance is worse than leaving
+			-- it where the engine put it.
+			local subject: Instance? = if wasSubject and wasSubject.Parent
+				then wasSubject
+				else humanoid
+			if subject and subject.Parent then
+				camera.CameraSubject = subject :: any
+			end
 		end
+
+		--======================================================================
+		-- WATCH THE STAND-UP, BECAUSE THE TELEPORT USED TO LIVE HERE
+		--
+		-- gap stays around a stud and the camera distance stays flat: nothing
+		-- moved. Either one jumping means the body is being pulled somewhere.
+		--======================================================================
+		local watchUntil = os.clock() + STANDUP_WATCH
+		while os.clock() < watchUntil do
+			local rr = rootOf()
+			if not (rr and head and head:IsA("BasePart")) then
+				break
+			end
+			local cam = workspace.CurrentCamera
+			local camDist = if cam then (cam.CFrame.Position - head.Position).Magnitude else -1
+			local drift = if landedAt then (head.Position - landedAt).Magnitude else -1
+			say(string.format("  standing: gap %.2f | camera %.1f away | moved %.2f from the landing | %s",
+				(head.Position - rr.Position).Magnitude, camDist, drift,
+				tostring(humanoid:GetState())))
+			task.wait(0.1)
+		end
+
+		player.CameraMinZoomDistance = wasMin
+		player.CameraMaxZoomDistance = wasMax
+		player.CameraMode = wasMode
+		unbindVisible()
+
+		throwing = false
 		say("done, told the server")
 	end)
 end
@@ -382,7 +597,16 @@ else
 end
 
 -- A respawn cancels any tumble in progress: the body it belonged to is gone.
-player.CharacterAdded:Connect(function()
+-- It is also the one moment this script is guaranteed a rig standing in its
+-- rest pose, which is where the root-to-torso offset has to be read.
+player.CharacterAdded:Connect(function(character)
 	throwing = false
+	restOffset = nil
 	unbindVisible()
+	captureRest(character)
 end)
+
+local existing = player.Character
+if existing then
+	captureRest(existing)
+end

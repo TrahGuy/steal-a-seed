@@ -1707,6 +1707,11 @@ GrabStuds 7, GrabHoldSeconds nil         no SetNetworkOwner anywhere
 
 ## A limp body is sixteen assemblies, not one — 2026-08-22
 
+> **This fixed the flight, not the landing.** The owner playtested it and confirmed the visible
+> avatar now hits the ground -- but the camera still followed something else, and they still
+> teleported on stand-up. Same root part, three more places. See "The landing was still keyed off the
+> box" below.
+
 Fourth attempt, and the actual cause. Every previous fix measured clean because every previous fix
 measured **the HumanoidRootPart**, which was the one part that was working.
 
@@ -1781,6 +1786,100 @@ override, which is the camera module's actual intent.
 mill 6 mills / 6 signs / 60 chevrons     grip Nubkin 1.58 / Bellchime 3.09
 girth 0.70 / 1.64                        plot 2 plants, 0 prompts
 GrabStuds 7, GrabHoldSeconds nil         no SetNetworkOwner anywhere
+```
+
+## The landing was still keyed off the box — 2026-08-22
+
+The owner confirmed the landing, not the flight: **the visible avatar hits the ground.** So the
+sixteen-part impulse worked. What was left was everything that happens AFTER the tumble, because
+settling, levelling and the camera were all still reading the `HumanoidRootPart` -- the one part of
+this character nobody can see.
+
+Three symptoms, one root part, three separate places:
+
+| what the owner saw | what was reading the box |
+| --- | --- |
+| camera follows an invisible entity | `CameraSubject` is the Humanoid, and a Humanoid tracks its root |
+| tumble runs on past the landing | the settle poll read `root.AssemblyLinearVelocity` |
+| teleport on stand-up | `PivotTo(r.Position + up)` pivoted the whole body onto the root |
+
+The third one is the teleport in a single line. The body lands. The invisible box, a separate
+assembly on a separate trajectory, is somewhere else. `PivotTo` then drags the body to the box, and
+`restore()` re-enables the AnimationConstraints on top of that.
+
+### The rule
+
+**Do not yank the body to the root. Put the root under the body, then re-pose.** The box comes to
+the body; never the other way round.
+
+  * **camera** -- `CameraSubject = Head` for the duration of the tumble. A part the owner can
+    actually see. Back to the Humanoid only once the root is seated, at which point the two are the
+    same place and there is nothing to jump to.
+  * **settle** -- on `Head` AND `UpperTorso` speed, whichever is higher. The body can be lying still
+    on the road while the box is still sailing over it; that mismatch is what held the tumble open
+    past the landing.
+  * **landing** -- zero all sixteen assemblies, seat the root on the torso at the **measured** rest
+    offset, then stand THAT pair up where the torso is.
+
+### The two numbers that stopped being guesses
+
+Both measured off a real R15 rig in Edit rather than picked by hand:
+
+```
+rest offset, root relative to UpperTorso    (0.000, -0.249, 0.000)
+HipHeight 2.192 + root.Size.Y * 0.5         = 3.192
+root centre to the bottom of LeftFoot       = 3.192      <- the same number
+```
+
+So `root.CFrame = torso.CFrame * restOffset` is where the box belongs on this body, and
+`groundY + humanoid.HipHeight + root.Size.Y * 0.5` is standing height -- read off the humanoid at
+runtime, because HipHeight varies by avatar. It replaces a hand-picked `+1.6`. The ground itself
+comes from a downward raycast with the character excluded, not from the root's own Y.
+
+The offset is captured on `CharacterAdded`, from a rig standing in its rest pose. **Not mid-tumble**
+-- during the tumble the root and the torso have drifted apart, which is the entire bug.
+
+### Gravity does not pause for a RemoteEvent
+
+The pose built above is sixteen loose parts, and `ragdollOff` lives on the server. A quarter of a
+second of round trip is six studs of free fall, so the body would scatter back out of the pose and
+the joints would come back on the mess -- the snap all over again, from a new direction.
+
+So the landing is **pinned every Heartbeat** -- re-pivoted and re-zeroed -- until the constraints
+answer. Polled on `AnimationConstraint.Enabled` itself rather than sleeping a guessed round trip,
+with a 1.5s backstop.
+
+Order at the end, which matters: seat -> `FireServer` -> wait for the joints -> `PlatformStand =
+false` / `GettingUp` -> camera back on the Humanoid. The humanoid must not be handed a controller
+while the rig is still fifteen loose sockets.
+
+### What to read in the console
+
+```
+  rootY .. headY .. gap 1.04 | body 41.2 box 41.2 | camera 13.7 away
+seated the root on UpperTorso: was 8.31 studs away, now 0.25
+stood up at (-7.2, 3.4, -236.0) (ground 0.20, hip 2.19)
+joints back after 0.18s (true)
+  standing: gap 1.04 | camera 13.7 away | moved 0.00 from the landing
+```
+
+`gap` ~1 and a flat `camera N away` through the stand-up means nothing moved. `moved N from the
+landing` is the teleport meter: it is the distance the head has travelled from where the body
+actually came to rest, and it must stay near zero.
+
+### NOT CONFIRMED
+
+Same rule as every previous round: this is not fixed until the owner says so. They have confirmed
+the landing; the flight-vs-landing split above is exactly the kind of partial pass that has twice
+been mistaken for a whole one.
+
+### Untouched
+
+```
+mill 6 mills / 6 signs / 60 chevrons     grip Nubkin 1.58 / Bellchime 3.09
+girth 0.70 / 1.64                        plot 2 plants, 0 prompts
+GrabStuds 7, GrabHoldSeconds nil         no SetNetworkOwner anywhere
+16-part impulse, Physics state, client-side nudge -- all kept
 ```
 
 ## Still open
