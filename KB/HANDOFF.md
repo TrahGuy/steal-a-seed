@@ -1687,12 +1687,93 @@ immediately, which is what "stuck on the parent" was.
 > `ChangeState` prints `state now Running` on the line straight after the call -- the transition
 > lands a frame later. Every subsequent frame reads `Physics`.
 
-### NOT CONFIRMED YET
+### ~~NOT CONFIRMED YET~~ — and it was not fixed
+
+> The owner playtested that build too: **still invisible.** The Humanoid-state fix was real and
+> necessary, but it was not the cause. See "A limp body is sixteen assemblies" below.
 
 **This is not done until the owner says they can see their body leave the parent.** Two builds have
 now been declared fixed on the strength of numbers gathered from the wrong machine. The prints above
 are the evidence to look at during a real playtest; the per-frame line can come out once it is
 confirmed.
+
+### Untouched
+
+```
+mill 6 mills / 6 signs / 60 chevrons     grip Nubkin 1.58 / Bellchime 3.09
+girth 0.70 / 1.64                        plot 2 plants, 0 prompts
+GrabStuds 7, GrabHoldSeconds nil         no SetNetworkOwner anywhere
+```
+
+## A limp body is sixteen assemblies, not one — 2026-08-22
+
+Fourth attempt, and the actual cause. Every previous fix measured clean because every previous fix
+measured **the HumanoidRootPart**, which was the one part that was working.
+
+### The measurement that ended it
+
+A posed R15 rig is held together by `AnimationConstraint`s. Going limp disables those, and what is
+left is `BallSocketConstraint`s -- which are CONSTRAINTS, not joints, and **do not merge
+assemblies**. Measured on a live character the instant the fifteen constraints go off:
+
+```
+assembly roots while limp:
+  Head, HumanoidRootPart, LeftFoot, LeftHand, LeftLowerArm, LeftLowerLeg,
+  LeftUpperArm, LeftUpperLeg, LowerTorso, RightFoot, RightHand, RightLowerArm,
+  RightLowerLeg, RightUpperArm, RightUpperLeg, UpperTorso        -- sixteen, x1 each
+```
+
+So `root.AssemblyLinearVelocity = impulse` threw the HumanoidRootPart **on its own**: a
+`Transparency = 1` box, two studs by two by one, with the camera following it obediently into the
+distance while the body it belonged to stood exactly where it was hit.
+
+That is all three symptoms from one cause:
+
+  * **invisible** -- the visible body never moved, and the camera left with the invisible box.
+  * **stuck on the parent** -- because the body genuinely was still standing there.
+  * **teleport** -- the joints come back on and the body snaps to wherever the box got to.
+
+### The number that proves it, before and after
+
+Distance from the camera to the **head** during the flight:
+
+```
+before   30.3 -> 59.2 -> 92.6 -> 148.0 studs      camera abandons the body
+after    13.5 -> 13.7 -> 14.1 -> 13.7 studs       pinned at the zoom distance
+```
+
+And the gap between the invisible root and the visible head:
+
+```
+rootY 14.90  headY 15.94  gap 1.04     <- normal body geometry, held all the way up
+rootY 20.72  headY 21.76  gap 1.04     <- apex
+rootY  3.16  headY  4.20  gap 1.04
+rootY  0.88  headY  0.61  gap 0.54     <- tumbling on the ground
+```
+
+`LTM wanted 0.00` on every frame throughout, which retires the transparency theory entirely: the
+camera module never once asked to hide anything.
+
+### What changed
+
+Everything that used to be done to the root is now done to **all sixteen parts**:
+
+  * the impulse, and the few frames of re-asserting it;
+  * the step out of the parent -- `character:PivotTo(...)` rather than `root.CFrame = ...`, because
+    stepping the root alone moved the invisible box out and left the body inside;
+  * the stop at the end -- zeroing only the root left fifteen limbs drifting into the moment the
+    joints came back.
+
+### Instrumentation lessons, both paid for twice
+
+**Never measure the HumanoidRootPart to decide whether a player can see their character.** It is
+invisible by definition. `gap` -- root to head -- is the honest number, and it was 1.04 studs when
+things worked and unbounded when they did not.
+
+**A probe that reads back its own write proves nothing.** The previous build printed
+`Head.LocalTransparencyModifier` from a loop while a `BindToRenderStep` forced it to 0 every frame,
+and reported `0.00` as though it were evidence. `observedLTM` now records the value found BEFORE the
+override, which is the camera module's actual intent.
 
 ### Untouched
 

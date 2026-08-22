@@ -4,6 +4,36 @@
 -- Being hit by a nest parent, on the machine that actually owns the body.
 --
 --==============================================================================
+-- A LIMP BODY IS SIXTEEN ASSEMBLIES, NOT ONE
+--
+-- This is the bug that survived three rewrites, and every one of them measured
+-- clean because they all measured the HumanoidRootPart.
+--
+-- A posed R15 rig is held together by AnimationConstraints. Going limp means
+-- disabling those, and what is left is BallSocketConstraints -- which are
+-- CONSTRAINTS, not joints. They do not merge assemblies. Measured on a live
+-- character the moment the fifteen constraints go off:
+--
+--     assembly roots while limp: Head, HumanoidRootPart, LeftFoot, LeftHand,
+--       LeftLowerArm, LeftLowerLeg, LeftUpperArm, LeftUpperLeg, LowerTorso,
+--       RightFoot, RightHand, RightLowerArm, RightLowerLeg, RightUpperArm,
+--       RightUpperLeg, UpperTorso            -- sixteen, one part each
+--
+-- So `root.AssemblyLinearVelocity = impulse` threw the HumanoidRootPart. On its
+-- own. A Transparency = 1 box, two studs by two by one, with the camera dutifully
+-- following it into the distance while the body it belongs to stayed exactly
+-- where it was hit:
+--
+--     invisible   the visible body never moved; the camera left with the box.
+--                 Measured: 148 studs between camera and head, and the camera
+--                 module never once asked to hide anything (LTM wanted 0.00).
+--     stuck       because the body genuinely was still standing at the parent.
+--     teleport    the joints come back on and the body snaps to wherever the
+--                 box got to.
+--
+-- Every part gets the impulse now.
+--
+--==============================================================================
 -- THE LOCAL HUMANOID EATS THE THROW UNLESS YOU STOP IT FIRST
 --
 -- This is the bug that survived two rewrites, and neither of them was visible
@@ -68,6 +98,21 @@ local function say(message: string)
 	print("[Seed/ThrowFX] " .. message)
 end
 
+-- Every BasePart in the character. While limp each one is its own assembly, so
+-- anything done to "the body" has to be done to all of them.
+local function bodyParts(): { BasePart }
+	local out: { BasePart } = {}
+	local character = player.Character
+	if character then
+		for _, d in ipairs(character:GetChildren()) do
+			if d:IsA("BasePart") then
+				table.insert(out, d)
+			end
+		end
+	end
+	return out
+end
+
 local function rootOf(): BasePart?
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -77,17 +122,37 @@ end
 --==============================================================================
 -- KEEPING THE BODY ON SCREEN
 --
--- Bound ABOVE the camera's own render step, because the default camera module
--- is what sets LocalTransparencyModifier to hide a character the camera is
--- close to. Setting it earlier in the frame just gets overwritten.
+-- Bound at RenderPriority.Last, not Camera + 1. The default camera module is
+-- what sets LocalTransparencyModifier to hide a character the camera is close
+-- to, and it does not do it from one predictable place -- binding just after
+-- the camera is a guess about ordering. Last is the final callback before the
+-- frame renders, so this write cannot be overwritten by anything.
+--
+--==============================================================================
+-- AND IT RECORDS WHAT IT OVERWROTE
+--
+-- The previous build printed Head.LocalTransparencyModifier from the settle
+-- loop and reported 0.00 every frame. That number was worthless: it was reading
+-- back the value THIS binding had just written. A measurement of your own write
+-- proves nothing about whether the camera wanted you hidden.
+--
+-- `observedLTM` is the value found BEFORE forcing it, which is the camera
+-- module's actual intent -- if that reads 1.00 while the body is on screen,
+-- the camera is inside a mesh and this override is the only reason anything is
+-- visible at all.
 --==============================================================================
 local VISIBLE_BINDING = "SeedThrowVisible"
 local visibleBound = false
+local observedLTM = -1
 
 local function keepVisible()
 	local character = player.Character
 	if not character then
 		return
+	end
+	local head = character:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		observedLTM = head.LocalTransparencyModifier
 	end
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("BasePart") or d:IsA("Decal") then
@@ -101,8 +166,9 @@ local function bindVisible()
 		return
 	end
 	visibleBound = true
+	observedLTM = -1
 	RunService:BindToRenderStep(VISIBLE_BINDING,
-		Enum.RenderPriority.Camera.Value + 1, keepVisible)
+		Enum.RenderPriority.Last.Value, keepVisible)
 end
 
 local function unbindVisible()
@@ -158,32 +224,63 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		say(string.format("ChangeState(Physics) ok=%s -> state now %s",
 			tostring(changed), tostring(humanoid:GetState())))
 
-		--== 2. GET OUT OF THE PARENT, on a root this machine owns ==--
+		--== 2. GET OUT OF THE PARENT -- THE WHOLE BODY, NOT THE ROOT ==--
+		-- PivotTo moves every part. Writing root.CFrame would have stepped the
+		-- invisible box out of the parent and left the body standing in it.
 		local step = if type(clear) == "number" and clear > 0 then clear else 0
 		if step > 0 then
-			root.CFrame = root.CFrame + unit * step
+			character:PivotTo(character:GetPivot() + unit * step)
 			say(string.format("stepped %.1f studs clear along %s", step, tostring(unit)))
 		end
 
-		--== 3. THE CAMERA COMES OUT WITH US ==--
-		local wasZoom = player.CameraMinZoomDistance
-		player.CameraMinZoomDistance = math.max(wasZoom, THROW_ZOOM)
+		--======================================================================
+		-- 3. THE CAMERA COMES OUT WITH US
+		--
+		-- Three separate things can keep a player from seeing their own body,
+		-- and only one of them is LocalTransparencyModifier:
+		--
+		--   LockFirstPerson  the character is ALWAYS hidden. Raising the zoom
+		--                    floor does nothing while this is set.
+		--   MaxZoomDistance  a floor above the ceiling is ignored, so the
+		--                    ceiling has to move first.
+		--   MinZoomDistance  what actually pushes the camera out of the mesh.
+		--
+		-- All three are captured and restored.
+		--======================================================================
+		local wasMode = player.CameraMode
+		local wasMin = player.CameraMinZoomDistance
+		local wasMax = player.CameraMaxZoomDistance
+		if wasMode == Enum.CameraMode.LockFirstPerson then
+			player.CameraMode = Enum.CameraMode.Classic
+		end
+		if player.CameraMaxZoomDistance < THROW_ZOOM then
+			player.CameraMaxZoomDistance = THROW_ZOOM
+		end
+		player.CameraMinZoomDistance = math.max(wasMin, THROW_ZOOM)
 		bindVisible()
 
-		--== 4. THROW, AND KEEP THROWING FOR A FEW FRAMES ==--
-		root.AssemblyLinearVelocity = impulse
-		say(string.format("first velocity applied: %s (%.1f studs/sec)",
-			tostring(impulse), impulse.Magnitude))
+		local camera = workspace.CurrentCamera
+		say(string.format("camera: mode %s -> %s | zoom %.1f..%.1f -> %.1f..%.1f | type %s | subject %s",
+			tostring(wasMode), tostring(player.CameraMode), wasMin, wasMax,
+			player.CameraMinZoomDistance, player.CameraMaxZoomDistance,
+			tostring(camera and camera.CameraType),
+			tostring(camera and camera.CameraSubject and camera.CameraSubject.Name)))
+
+		--== 4. THROW EVERY PART, AND KEEP THROWING FOR A FEW FRAMES ==--
+		local parts = bodyParts()
+		for _, part in ipairs(parts) do
+			part.AssemblyLinearVelocity = impulse
+		end
+		say(string.format("first velocity applied to %d parts: %s (%.1f studs/sec)",
+			#parts, tostring(impulse), impulse.Magnitude))
 		local holdUntil = os.clock() + HOLD_VELOCITY_FOR
 		while os.clock() < holdUntil do
-			local r = rootOf()
-			if not r then
-				break
-			end
 			-- Re-assert rather than trusting one write. A controller that is
 			-- still winding down will zero this, and one frame of that is the
 			-- difference between a throw and a twitch.
-			r.AssemblyLinearVelocity = impulse
+			for _, part in ipairs(bodyParts()) do
+				part.AssemblyLinearVelocity = impulse
+			end
 			RunService.Heartbeat:Wait()
 		end
 
@@ -199,9 +296,18 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			-- Per-frame, as asked: this is the number that says whether the
 			-- player can actually see themselves.
 			if head and head:IsA("BasePart") then
-				say(string.format("  Y %.2f  vel %.1f  Head LTM %.2f  state %s",
-					r.Position.Y, r.AssemblyLinearVelocity.Magnitude,
-					head.LocalTransparencyModifier, tostring(humanoid:GetState())))
+				-- observedLTM is what the CAMERA wanted before this script
+				-- overrode it, camDist says whether the camera is even near the
+				-- body, and Transparency catches anything setting it outright.
+				local camera = workspace.CurrentCamera
+				local camDist = if camera then (camera.CFrame.Position - head.Position).Magnitude else -1
+				-- headGap is the number that matters: the distance between the
+				-- INVISIBLE root and the VISIBLE head. If that grows, the body
+				-- has been left behind again.
+				say(string.format("  rootY %.2f headY %.2f gap %.2f | vel %.1f | camera %.1f away | LTM wanted %.2f | %s",
+					r.Position.Y, head.Position.Y, (head.Position - r.Position).Magnitude,
+					r.AssemblyLinearVelocity.Magnitude, camDist,
+					observedLTM, tostring(humanoid:GetState())))
 			end
 			local v = r.AssemblyLinearVelocity
 			if Vector3.new(v.X, 0, v.Z).Magnitude < SETTLE_SPEED then
@@ -225,15 +331,21 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		--======================================================================
 		local r = rootOf()
 		if r then
-			r.AssemblyLinearVelocity = Vector3.zero
-			r.AssemblyAngularVelocity = Vector3.zero
+			-- Every part, again: stopping only the root leaves fifteen limbs
+			-- still drifting, and the joints come back on a moving body.
+			for _, part in ipairs(bodyParts()) do
+				part.AssemblyLinearVelocity = Vector3.zero
+				part.AssemblyAngularVelocity = Vector3.zero
+			end
 			local here = r.Position + Vector3.new(0, 1.6, 0)
-			r.CFrame = CFrame.lookAt(here, here + unit)
+			character:PivotTo(CFrame.lookAt(here, here + unit))
 			say(string.format("settled and levelled at %s", tostring(r.Position)))
 		end
 
 		--== 7. GIVE THE CHARACTER BACK ==--
-		player.CameraMinZoomDistance = wasZoom
+		player.CameraMinZoomDistance = wasMin
+		player.CameraMaxZoomDistance = wasMax
+		player.CameraMode = wasMode
 		unbindVisible()
 		if humanoid.Parent then
 			humanoid.PlatformStand = false
