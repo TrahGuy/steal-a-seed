@@ -327,6 +327,14 @@ GameConfig.Remotes = {
 	-- that is indistinguishable from a real new account.
 	ProfileReady = "ProfileReady",
 	CarryStateChanged = "CarryStateChanged",
+	-- The parent's hit. Server -> victim: a direction and a speed. Victim ->
+	-- server: "I have stopped."
+	--
+	-- It has to be a message rather than the server just applying the impulse,
+	-- because a player's character is simulated by THAT PLAYER. A velocity
+	-- written on the server is overwritten by the owner's next update, which is
+	-- exactly what made the first ragdoll invisible.
+	ThrowVictim = "ThrowVictim",
 	DropSeedRequest = "DropSeedRequest",
 	GameEvent = "GameEvent",
 }

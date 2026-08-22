@@ -299,43 +299,38 @@ end
 -- the head at a strange angle and stops the body settling at all.
 --==============================================================================
 --==============================================================================
--- AND THE SERVER HAS TO OWN THE BODY, OR NOBODY SEES ANY OF IT
+-- THE SERVER MAKES THE BODY LIMP. THE OWNER THROWS IT.
 --
--- A player's character is network-owned by THAT PLAYER. Their client simulates
--- it and tells the server where it went. So everything above -- the impulse,
--- the tumble, the bounce -- was being computed on the server and then quietly
--- overwritten by the owning client's version of a character that was, as far as
--- it knew, standing still.
+-- A player's character is simulated by THAT PLAYER, and there is no way around
+-- that worth having. An earlier version took the assembly with
+-- SetNetworkOwner(nil) so the server's simulation would be the one that
+-- replicated. On paper it worked -- 99% of ragdoll frames server-owned, a
+-- measurable tumble, a measurable bounce. In play it was worse than the hop:
+-- the victim stayed stuck inside the parent, saw nothing, and was then
+-- teleported to wherever the server's copy had landed when ownership went back.
 --
--- The ragdoll was real, correct, measurable from the server, and INVISIBLE.
+-- Everything measured about it was true and none of it was on the victim's
+-- screen, because the thing being measured was never the body being rendered.
 --
--- SetNetworkOwner(nil) takes the assembly for the duration, so the server's
--- simulation is the one that replicates -- to the victim and to everyone
--- watching. Handed back on stand-up with SetNetworkOwnershipAuto(), which
--- returns a player character to its player.
+-- So the work is split by WHO OWNS WHAT:
+--
+--   SERVER   PlatformStand, the pod drop, WalkSpeed, limpness, collision --
+--            all PROPERTIES, which replicate to everybody, so a watcher three
+--            plots away sees a limp body rather than a jogging one.
+--
+--   OWNER    the impulse and the tumble. Its physics already replicate out to
+--            the server and to every other client, for free.
+--
+-- Never take a player's character again.
 --==============================================================================
 type Loosened = {
 	constraints: { AnimationConstraint },
 	motors: { Motor6D },
 	collides: { { part: BasePart, was: boolean } },
-	root: BasePart?,
 }
 
--- Claiming the assembly. Kept separate because WHEN it happens matters: see
--- the comment at the bottom of ragdollOn.
-local function claim(root: BasePart?): boolean
-	if not (root and root.Parent) then
-		return false
-	end
-	-- pcall: SetNetworkOwner throws on an anchored part or one outside
-	-- Workspace, and a throw here would strand the victim mid-ragdoll.
-	return (pcall(function()
-		(root :: BasePart):SetNetworkOwner(nil)
-	end))
-end
-
 local function ragdollOn(character: Model): Loosened
-	local out: Loosened = { constraints = {}, motors = {}, collides = {}, root = nil }
+	local out: Loosened = { constraints = {}, motors = {}, collides = {} }
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("AnimationConstraint") then
 			if d.Enabled then
@@ -356,36 +351,10 @@ local function ragdollOn(character: Model): Loosened
 		end
 	end
 
-	--==========================================================================
-	-- CLAIMED LAST, AND THAT ORDERING IS THE WHOLE FIX.
-	--
-	-- Claiming it FIRST looked right and did not work: ownership flipped to the
-	-- server and was back with the player 0.05 seconds later, every time.
-	--
-	-- Disabling fifteen constraints and flipping sixteen CanCollide flags
-	-- RE-FORMS THE ASSEMBLY, and a freshly formed assembly gets auto ownership
-	-- -- which for a player's character means the player. So the claim was
-	-- being made and then immediately thrown away by the next two loops.
-	--
-	-- Claim after the shape has finished changing. The settle loop re-asserts
-	-- it as well, because anything that reshapes the assembly mid-flight would
-	-- take it back the same way.
-	--==========================================================================
-	local root = character:FindFirstChild("HumanoidRootPart")
-	if root and root:IsA("BasePart") and claim(root) then
-		out.root = root
-	end
 	return out
 end
 
 local function ragdollOff(loosened: Loosened)
-	if loosened.root and loosened.root.Parent then
-		-- Auto rather than SetNetworkOwner(player): Roblox hands a character
-		-- back to its own player, and this does not need to know who that is.
-		pcall(function()
-			(loosened.root :: BasePart):SetNetworkOwnershipAuto()
-		end)
-	end
 	for _, c in ipairs(loosened.constraints) do
 		if c.Parent then
 			c.Enabled = true
@@ -398,16 +367,18 @@ local function ragdollOff(loosened: Loosened)
 	end
 end
 
--- How still counts as settled, and how long it has to stay that still. Short
--- enough that a body wedged against a wall is not held down for a second after
--- it stops, long enough that the top of a bounce -- where horizontal speed dips
--- through zero -- is not mistaken for the end of one.
-local SETTLE_SPEED = 3.5
-local SETTLE_HOLD = 0.35
-local SETTLE_STEP = 0.1
--- The backstop. A body that never settles -- wedged in geometry, thrown off the
--- road -- must still get its character back.
+-- The backstop. The victim's client reports when it has stopped; this is what
+-- happens when it never does -- a body wedged in geometry, a client that left,
+-- a client that simply does not answer. A character must always come back.
 local THROW_TIMEOUT = 6
+-- How far out of the parent to move the victim before their limbs start
+-- colliding. Contact happens INSIDE a collidable torso, and switching a body
+-- to collidable while it overlaps another one either wedges it there or has
+-- the solver fling it. Cheaper to step out of the way first.
+local CLEAR_STUDS = 5
+
+-- Victims currently mid-throw, and the flag their client sets by answering.
+local throwDone: { [Player]: boolean } = {}
 
 --==============================================================================
 -- THE GRAB
@@ -415,6 +386,20 @@ local THROW_TIMEOUT = 6
 -- Spawned rather than run in the tick, because it holds for the better part of
 -- a second and the other eleven nests must not stop while it does.
 --==============================================================================
+-- Resolved lazily: ServerMain builds the Remotes folder from GameConfig at
+-- boot, and this module is required before that has necessarily happened.
+local throwRemote: RemoteEvent? = nil
+local function resolveThrowRemote()
+	local remotes = ReplicatedStorage:FindFirstChild("SeedGame")
+	remotes = remotes and remotes:FindFirstChild("Remotes")
+	local found = remotes and remotes:FindFirstChild(GameConfig.Remotes.ThrowVictim)
+	if found and found:IsA("RemoteEvent") then
+		throwRemote = found
+		return found
+	end
+	return nil
+end
+
 local function throwPlayer(nest: Nest, player: Player)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -511,80 +496,64 @@ local function throwPlayer(nest: Nest, player: Player)
 		dir = Vector3.new(0, 0, 1)
 	end
 	--==========================================================================
-	-- PlatformStand STAYS ON, and that is not cosmetic.
+	-- STEP OUT OF THE PARENT BEFORE THE LIMBS CAN COLLIDE
 	--
-	-- Releasing it before applying the velocity gives the Humanoid controller
-	-- the assembly back, and it immediately damps whatever it was given: a
-	-- throw solved for 60 studs measured NINE. With PlatformStand held the
-	-- humanoid applies no movement forces of its own and the body keeps what it
-	-- was thrown with.
+	-- Contact happens inside a collidable parent torso. Making sixteen body
+	-- parts collidable while they are overlapping another body embeds the
+	-- victim in it -- and with the camera inside a mesh, Roblox's own
+	-- LocalTransparencyModifier hides the character, so the player watches
+	-- nothing happen from inside somebody's chest.
+	--
+	-- Done while collision is still OFF, so nothing can block the step, and
+	-- while both machines still agree on where the body is -- which is what
+	-- makes this a nudge and not a teleport.
 	--==========================================================================
+	root.CFrame = root.CFrame + dir * CLEAR_STUDS
+
 	loosened = ragdollOn(character)
-	root.AssemblyLinearVelocity = dir * speed + Vector3.new(0, speed * k, 0)
 
 	--==========================================================================
-	-- WAIT FOR IT TO SETTLE, NOT FOR AN ARC.
+	-- THE OWNER THROWS IT. THE SERVER JUST ASKS.
 	--
-	-- The old code waited the parabola's exact duration and then wiped the
-	-- horizontal velocity, which is what made this a hop: the body could not
-	-- bounce, because the one moment a bounce would start was the moment its
-	-- speed was set to zero.
-	--
-	-- Nothing here predicts where the body goes. It polls until the thing has
-	-- actually stopped moving sideways for a beat, or until the backstop fires.
-	--
-	-- FloorMaterial is not usable for this, and that is not a guess: it is part
-	-- of the Humanoid state machine, PlatformStand switches that machine off, so
-	-- FloorMaterial reads Air for the entire ragdoll no matter where the body
-	-- is. An earlier version polled it and ran to its timeout every single time.
+	-- Writing AssemblyLinearVelocity here would be overwritten by the owning
+	-- client's next physics update, which is the bug this whole rewrite exists
+	-- to undo. The victim's client applies the impulse to a body it already
+	-- owns, and its physics replicate outward on their own.
 	--==========================================================================
-	local settledFor = 0
+	throwDone[player] = false
+	local sent = false
+	if throwRemote then
+		sent = pcall(function()
+			(throwRemote :: RemoteEvent):FireClient(player, dir, speed, P.ThrowLift,
+				CLEAR_STUDS)
+		end)
+	end
+	if not sent then
+		warn("[Seed/NestService] no ThrowVictim remote; the hit will look like a shove that never landed.")
+	end
+
+	--==========================================================================
+	-- WAIT FOR THE VICTIM TO SAY IT STOPPED
+	--
+	-- Not a server-side settle poll: the server's copy of a client-owned body is
+	-- a replica, and polling a replica's velocity to decide when the real thing
+	-- stopped is measuring the wrong body -- the mistake that produced a page of
+	-- convincing numbers about a ragdoll nobody could see.
+	--
+	-- The timeout is the only thing that MUST be honoured; the client's answer
+	-- is an optimisation on top of it.
+	--==========================================================================
 	local deadline = os.clock() + THROW_TIMEOUT
 	while os.clock() < deadline do
+		if throwDone[player] then
+			break
+		end
 		if player.Parent ~= Players or not root.Parent or humanoid.Health <= 0 then
 			break
 		end
-		-- Hold the claim. Anything that reshapes the assembly hands it back to
-		-- the player, and a body simulated by its owner is a body nobody else
-		-- watching the chase can see move.
-		if root:GetNetworkOwner() ~= nil then
-			claim(root)
-		end
-		local v = root.AssemblyLinearVelocity
-		if Vector3.new(v.X, 0, v.Z).Magnitude < SETTLE_SPEED then
-			settledFor += SETTLE_STEP
-			if settledFor >= SETTLE_HOLD then
-				break
-			end
-		else
-			settledFor = 0
-		end
-		task.wait(SETTLE_STEP)
+		task.wait(0.1)
 	end
-
-	--==========================================================================
-	-- STAND UP LEVEL, OR THE SOLVER LAUNCHES YOU.
-	--
-	-- Re-enabling the joints while limbs are half inside the floor makes the
-	-- physics solver resolve the overlap the only way it can -- by throwing the
-	-- body out of it. Measured: settled at Y 0.5, then a 12.6 stud pop on
-	-- stand-up and a second fall.
-	--
-	-- So the body is levelled and stilled BEFORE the joints come back: keep
-	-- where it landed, drop the pitch and roll, lift it clear of the ground, and
-	-- zero the velocity.
-	--
-	-- This is NOT the old landing wipe. That one fired on first ground contact
-	-- and is what made the throw a hop. This fires after the body has already
-	-- stopped moving, which is the one moment killing velocity costs nothing.
-	--==========================================================================
-	if root.Parent then
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
-		-- Facing the way they were thrown, which is home.
-		root.CFrame = CFrame.new(root.Position + Vector3.new(0, 1.6, 0))
-			* CFrame.Angles(0, math.atan2(dir.X, dir.Z), 0)
-	end
+	throwDone[player] = nil
 
 	end)
 
@@ -734,6 +703,29 @@ function NestService.Init()
 end
 
 function NestService.Start()
+	--==========================================================================
+	-- THE VICTIM'S ANSWER
+	--
+	-- Rule 4: the sender is engine-stamped and cannot be forged, but everything
+	-- else off the wire is a lie until checked. There are no arguments to check
+	-- here -- the message IS "I stopped" -- so the check is that this player is
+	-- actually mid-throw. A client shouting it at any other time is ignored.
+	--
+	-- The worst a victim can do by lying is end their own ragdoll early, which
+	-- is a punishment they are shortening for themselves; the timeout still
+	-- bounds it either way.
+	--==========================================================================
+	local remote = resolveThrowRemote()
+	if remote then
+		table.insert(serviceConnections, remote.OnServerEvent:Connect(function(player)
+			if throwDone[player] == false then
+				throwDone[player] = true
+			end
+		end))
+	else
+		warn("[Seed/NestService] No ThrowVictim remote. Throws will run to their timeout.")
+	end
+
 	local byId: { [string]: BiomeData.Biome } = {}
 	for _, biome in ipairs(BiomeData.Biomes) do
 		byId[biome.Id] = biome

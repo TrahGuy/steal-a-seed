@@ -1378,7 +1378,12 @@ contact 1.94s -> hit 1.94s   (delay 0.00s, was 0.80s)
 
 `GrabStuds` is untouched at 7 -- that is contact range, not a grab.
 
-### Why the ragdoll was invisible: the body was never the server's to move
+### ~~Why the ragdoll was invisible: the body was never the server's to move~~
+
+> **WRONG IN PLAY. Superseded — see "Never take a player's character" below.** Everything measured
+> in this section is true of the server's copy of the body, which is not the copy anybody is
+> looking at. Taking the assembly made the numbers good and the game worse. Left here because the
+> reasoning looks convincing and somebody will try it again otherwise.
 
 This is the important one, and it had nothing to do with the ragdoll code.
 
@@ -1510,6 +1515,98 @@ moving. No Humanoids in the Plants folder, and no `Planted`-tagged model outside
 girth   Nubkin 0.70 / Bellchime 1.64        grip    Nubkin 1.58 / Bellchime 3.09
 mill    6 mills, 6 signs, 60 chevrons, 2/s  nest    5 pods, 5 Take prompts
 ragdoll GrabStuds 7, GrabHoldSeconds nil, biome-1 throw 60
+```
+
+## Never take a player's character — 2026-08-22
+
+The owner playtested the ragdoll: **invisible during the tumble, stuck on the parent, then a
+teleport to where they landed.** The grab had already been removed, so the grab was never the cause.
+The cause was the fix from the pass before.
+
+### What SetNetworkOwner(nil) actually did
+
+A player's character is simulated by that player. Taking the assembly moved the simulation to the
+server, and the server's simulation is not what the victim's screen is drawing:
+
+  * **Invisible** -- the victim's client had a body still standing at the point of contact, inside
+    the parent. Camera inside a mesh, so Roblox's own `LocalTransparencyModifier` hid the character.
+  * **Stuck on the parent** -- because from their machine, nothing had happened.
+  * **Teleport** -- `SetNetworkOwnershipAuto()` plus the server-side stand-up CFrame snapped them
+    a hundred and sixty studs to wherever the server's copy had ended up.
+
+Every number in the previous section was true. None of it was on anybody's screen. **Measuring the
+server's copy of a client-owned body tells you nothing about what the player sees**, and that is
+the third time this rig has been measured with the wrong instrument.
+
+### The split that actually works
+
+```
+SERVER   PlatformStand, the pod drop, WalkSpeed, limpness, collision, the nudge
+         out of the parent -- all PROPERTIES, which replicate to everybody, so a
+         watcher three plots away sees a limp body rather than a jogging one.
+
+OWNER    the impulse, the tumble, the settle, and the level-in-place. Its physics
+         already replicate outward, which is the same reason nobody has to be
+         told where a walking player is.
+```
+
+The server sends direction and speed on a new `ThrowVictim` remote and waits; the victim's client
+applies `AssemblyLinearVelocity` to a body it already owns, polls its own settle, levels in place,
+and answers. The server's timeout is what actually bounds the ragdoll -- the client's answer is an
+optimisation, and a client that never answers changes nothing.
+
+`claim()`, the settle-loop re-claim and `SetNetworkOwnershipAuto()` are gone. So is the server-side
+settle poll, which was reading a replica's velocity to decide when the real thing had stopped.
+
+### Two things the rewrite had to add
+
+**Step out of the parent before the limbs collide.** Contact happens inside a collidable torso.
+Making sixteen parts collidable while they overlap another body either wedges the victim there or
+has the solver fling them. `CLEAR_STUDS = 5` along the throw direction, applied while collision is
+still off so nothing can block it, and while both machines still agree where the body is -- which is
+what makes it a nudge and not a teleport.
+
+**Level where the owning simulation stopped, not where the server thinks it did.** The old
+stand-up wrote a CFrame at the end of the server's arc. The client now does it, in place, keeping
+the overlap-pop fix (zero velocity, drop pitch and roll, lift clear of the floor) -- that fix is
+still needed, because the server is about to switch the joints back on and re-enabling them through
+a floor is what produced the 12.6 stud pop.
+
+### Measured on the VICTIM'S client, which is the only screen that matters
+
+```
+t+0.00s  PS=false
+t+13.13s PS=true
+ragdoll frames 76 | hidden (camera inside mesh) 0 | inside the parent 0 | max tilt 89.5 deg
+
+13.1s Y 4.8  tilt 48.7  transparency 0.00
+13.5s Y 8.5  tilt 78.3  transparency 0.00     <- the arc
+13.8s Y 3.2  tilt 86.1  transparency 0.00
+14.1s Y 1.1  tilt 83.7  transparency 0.00
+15.4s Y 1.0  tilt 85.5  transparency 0.00     <- settled
+
+biggest single-frame move from the hit onward: 2.55 studs
+  (one 60 fps frame at the ~114 studs/sec launch speed covers ~1.90, so that is
+   physics; the old server-owned version's stand-up moved 161 studs in one frame)
+
+server afterwards: PlatformStand false | WalkSpeed 16.000 | owner nicnicniccoal
+pod: Pod_nubkin on the ground at Y 0.78
+```
+
+Zero hidden frames, zero frames inside the parent, no snap, and the body tips to 89.5 degrees --
+visibly limp for the whole tumble.
+
+> An earlier version of this probe read `GetNetworkOwner()` on the client and died silently inside
+> its own `task.spawn`, leaving an empty StringValue and no error where I was looking. That API is
+> server-only. The console did have it -- "Network Ownership API can only be called from the Server"
+> -- which is an argument for reading the console before rewriting a probe.
+
+### Untouched, verified after
+
+```
+character  colliding 4 | constraints 15/15        grip   Nubkin 1.58 / Bellchime 3.09
+girth      Nubkin 0.70 / Bellchime 1.64           mill   6 mills, 6 signs, 60 chevrons
+plot       2 plants, 0 prompts                    GrabStuds 7, GrabHoldSeconds nil
 ```
 
 ## Still open
