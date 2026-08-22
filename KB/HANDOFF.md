@@ -1433,6 +1433,85 @@ grip            Nubkin 1.58 / Bellchime 3.09
 world           mills 6 | signs 6 | chevrons 60 | plot 2 plants, 0 prompts
 ```
 
+## The sway was leaning in the wrong frame — 2026-08-22
+
+Plants still read as statues after the sway shipped, and HANDOFF was reporting "sway 1.68 deg" the
+whole time. Both were true. The motion existed, was measured, and was almost entirely invisible.
+
+### The pivot's local X is world up
+
+`PrimaryPart` is the Mound, and `upright()` builds that as a **cylinder rolled 90 degrees**, so the
+model's pivot carries that roll. `PivotTo(rest * CFrame.Angles(ax, 0, az))` applies the rotation in
+that frame. Measured on a live Bellchime:
+
+```
+pivot local X dot world up = 1.000        <- local X IS world up
+6 deg about pivot-local X -> highest part moves 0.0821 studs
+6 deg about pivot-local Y -> highest part moves 0.6212 studs
+6 deg about pivot-local Z -> highest part moves 0.6224 studs
+```
+
+So the DOMINANT `ax` term was a twist about the stem -- invisible on a round head -- and the only
+real lean was the secondary `0.62x` term, at a degree or two. A bed of plants was genuinely swaying
+and genuinely still.
+
+**Never measure this model with CFrame-angle-vs-rest again.** That instrument has now lied twice
+about this exact rig: once here, and once when `GetBoundingBox` reported creature heights in the
+pivot's frame and invented base offsets of a stud. Measure world displacement of a part you can see.
+
+### The fix: lean about an upright anchor, and size the motion in studs
+
+Each plant captures an **anchor** -- a pure translation at the centre of its base, so its axes are
+the world's and tipping about X or Z is a lean with no twist available -- plus its rest pose
+expressed in that frame:
+
+```lua
+anchor = CFrame.new(baseCentreX, baseY, baseCentreZ)
+offset = anchor:Inverse() * model:GetPivot()
+model:PivotTo(anchor * CFrame.Angles(ax, 0, az) * offset)
+```
+
+`WorldPivot` would have been the obvious way to say this and does not work here: when a model has a
+`PrimaryPart`, `GetPivot()` returns that part's CFrame and `WorldPivot` is ignored. Clearing
+`PrimaryPart` would have broken `PlantUI`'s billboard adornee and `PlantSway`'s own replication wait,
+so the anchor is composed explicitly instead.
+
+**Amplitude is now derived from head travel, not set as an angle.** Degrees are the wrong unit for
+models running 1.7 to 6.4 studs tall -- the same angle is a twitch on one and a swing on the other.
+Pick the travel, solve the angle: `travel = 2 * h * sin(amp)`, with `h` measured from the model's
+own world-space extents.
+
+### Measured: head world displacement, not degrees
+
+```
+CLIENT, over 24s (nubkin period ~6.2s, bellchime ~10.0s)
+  nubkin     head at Y 1.99 | horizontal 0.658 studs | vertical 0.204 | total 0.688
+  bellchime  head at Y 6.63 | horizontal 0.399 studs | vertical 0.047 | total 0.401
+
+SERVER, same 24s
+  nubkin     0.0000        bellchime  0.0000
+```
+
+Heavy still reads heavy: the Bellchime's head covers 0.399 studs to the Nubkin's 0.658, and takes
+ten seconds to the Nubkin's six.
+
+Still rooted -- the anchor is a fixed point, so nothing can drift off its slot:
+
+```
+mound travel   nubkin 0.0596 studs | bellchime 0.0143
+```
+
+That is the mound rotating about a fixed base, which is what a lean does; it is not the plant
+moving. No Humanoids in the Plants folder, and no `Planted`-tagged model outside one.
+
+### Untouched, verified after
+
+```
+girth   Nubkin 0.70 / Bellchime 1.64        grip    Nubkin 1.58 / Bellchime 3.09
+mill    6 mills, 6 signs, 60 chevrons, 2/s  nest    5 pods, 5 Take prompts
+ragdoll GrabStuds 7, GrabHoldSeconds nil, biome-1 throw 60
+```
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
