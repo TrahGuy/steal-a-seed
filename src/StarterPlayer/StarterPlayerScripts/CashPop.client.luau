@@ -63,20 +63,17 @@ local STAGE_GROWN = 3
 local TICK = GameConfig.Plant.TickSeconds
 
 --==============================================================================
--- THE POP STARTS ABOVE THE PLATE, NOT THROUGH IT
+-- BACK DOWN ONTO THE PLANT
 --
--- It used to start at top + 0.5, which was under a two-line plate centred at
--- top + 1.2 -- so every pop rose straight through the label. At three lines the
--- plate is 64px tall and that stopped being survivable.
+-- This was briefly 2.4, pushed up to clear a three-line plate over grown plants.
+-- That plate is gone -- a finished plant carries no billboard at all now -- so
+-- there is nothing left to clear, and a number floating two and a half studs
+-- above a creature with empty air between them reads as belonging to nothing.
 --
--- HONEST LIMITATION: a BillboardGui's SIZE is in PIXELS and its OFFSET is in
--- STUDS, so no single stud value clears a fixed-pixel plate at every distance.
--- Far away the plate is still 64px while 1.2 studs has shrunk to nothing. This
--- is tuned for the range you actually read a plot at; at fifty studs they will
--- still touch, and the alternative is scaling the offset by camera distance
--- every frame for forty billboards.
+-- Half a stud above the measured top: close enough to be that plant's number,
+-- high enough not to start inside its own head.
 --==============================================================================
-local POP_START_ABOVE = 2.4
+local POP_START_ABOVE = 0.5
 local RISE_STUDS = 2.5
 local POP_SECONDS = 1.15
 -- Same as SpeedFX. Camera-relative, so it is the distance at which you stop

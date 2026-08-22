@@ -1978,6 +1978,21 @@ nothing else from it. No Shop, Rebirth, Growing Eggs, Grow All, egg or paw rail,
 Friend Boost, Robux packs, Fuse or Reels overlay -- and no tigers. The species stay Nubkin,
 Petalpip, Spiretip, Toadcap, Bellchime.
 
+### ~~1. The grown plate is rarity + name + rate~~ — the plate is gone entirely
+
+> **Superseded the same day.** The owner saw it on a real bed and cut it: *"plants name cards is
+> unattractive, we should remove it"*. The arithmetic is why. A starting plot is twelve holes, so a
+> full one was twelve three-line cards stacked over one patch of dirt with a `+$N` rising through
+> each. One card in a screenshot looks good; twelve is a wall.
+>
+> A grown plant now carries **no billboard at all**. What it earns is the `+$N` popping off it every
+> second; what it IS lives in the Garden panel. HATCHING / GROWING plus the m:ss clock is unchanged
+> on pods and sprouts -- that is the one case where the world has nothing to say for itself.
+>
+> Kept below because the colours and the hierarchy are correct and will be wanted again if a plate
+> ever comes back, and because this is the third shape this label took: name+rate, rate alone,
+> rarity+name+rate, none.
+
 ### 1. The grown plate is rarity + name + rate
 
 ```
@@ -2150,6 +2165,103 @@ footage:
 
 **Shop.** No button, no panel, no currency sink. Also still absent on purpose: paw inventory, sell,
 fuse, place-from-menu. Plants stay in the dirt.
+
+## The Garden is the clip's Active list, mapped onto dirt — 2026-08-22
+
+`GardenUI.client.luau`, on the RIGHT rail. At 0:58 of the reference recording the owner opens a
+right-docked panel: tall, a collapse chevron on its inner edge, a `7/9 Active` header, one row per
+occupant with a square thumbnail and a name and a rate, and a fat footer button.
+
+**The shape is borrowed. The idea underneath it is not.** That panel is a LOADOUT -- nine slots,
+seven equipped, UNEQUIP and Equip Best and `+1 EQUIP [$75M]`. This game has no loadout. Plants go in
+the ground and stay there: nothing to equip, nothing to bench, no tenth slot to sell.
+
+So the count means something better. `GARDEN 3/12` is three things planted in twelve holes of real
+dirt, and the empty rows are real empty slots you can walk over and fill. The clip's 7/9 is inventory
+management; this is a window onto a place.
+
+### What it shows
+
+```
+GARDEN  3/12                          <- planted / GameConfig.plotSlotsFor(tier rows)
+  [swatch]  Bellchime   $110/s        <- name tinted by rarity once grown
+  [swatch]  Nubkin      HATCHING 0:12 <- ghosted while it waits
+  [swatch]  Spiretip    GROWING 1:04
+  [     ]   Empty
+  ... nine more holes ...
+$117/s                                <- total of the GROWN ones, or empty
+```
+
+  * **Slot order, not species order.** Row 4 is hole 4 whether or not anything is in it.
+  * **Slots are computed.** `plotSlotsFor(rows)` over `PlotTiers[profile.PlotTier].rows` -- 12 / 18 /
+    24 / 30 across the four tiers. Never a typed 12.
+  * **Badge counts what is still cooking**, hatching and growing only. A grown plant does not badge:
+    it already pops `+$N` every second, and a badge that never clears is one you stop reading.
+  * **No plot** (overflow queue): header `GARDEN  —`, one row saying `No plot this server`, panel
+    still opens.
+  * **Footer is a number, not a button.** The clip's fat footer is `Equip Best`; there is nothing to
+    equip, so the space goes to what the plot earns per second. Summed on the client from the same
+    tagged models EconomyService pays from -- a readout of the server's arithmetic, not a second copy
+    of it, and **no remote**. Empty rather than `$0/s` when nothing has finished, because zero is a
+    number and nothing-yet is an absence.
+
+### Crown, not Body, for the swatch — measured
+
+```
+Nubkin     Body (146,196,106)   Crown (146,196,106)
+Petalpip   Body (146,196,106)   Crown (242,238,206)
+Spiretip   Body (132,186, 96)   Crown (168,208,122)
+Toadcap    Body (242,238,206)   Crown (216,112,100)
+Bellchime  Body (242,238,206)   Crown (234,158,158)
+
+Body  -> 2 duplicate squares      Crown -> 0
+```
+
+Body would put two identical cream squares next to each other and two identical green ones: four of
+five species reading as two. While a plant is still a POD the swatch is the RARITY colour instead --
+that is genuinely what the thing in the ground looks like, and the species is not supposed to be
+known yet.
+
+### Stage comes from the clock, not the attribute
+
+PlantUI decides HATCHING / GROWING / done from `PlantedAt` and `GrowSeconds`, and this does the
+identical sum, so a row and the plant it names can never show different clocks. Branching on the
+`Stage` attribute would be authoritative but would disagree with the world for up to a tick, and two
+numbers disagreeing on screen is worse than one being a second early. The footer therefore leads
+EconomyService by at most one tick on the frame a plant finishes.
+
+### Two panels, two jobs
+
+Opening one does not close the other. They dock on opposite rails.
+
+| | Index (left) | Garden (right) |
+| --- | --- | --- |
+| answers | what is this species worth | what is in my dirt right now |
+| changes | only when you discover something | every second, clocks running |
+| shows | `???` until grown, rarity WORD, kg | slot rows, empty holes, live timers |
+
+**The Index's plot footer is gone.** That one-line `Nubkin x2  Petalpip x1` was a stopgap for this
+panel -- and it was never the right shape for the question anyway, since it could tell you that you
+had two Nubkins and could not tell you that seven of your twelve holes were empty. Index is back to
+being one thing: the almanac.
+
+### Rejected from the same recording
+
+Everything the right rail does in that footage, and why not here:
+
+  * **UNEQUIP / Equip Best / +1 EQUIP [$75M]** -- there is no loadout. Plants live in the dirt.
+  * **Grow All** -- skipping the grow time deletes the vulnerability window. The wait is when
+    somebody can see what is nearly ready in your plot and come for it; a game where you can buy
+    past that has no theft in it.
+  * **Place-from-menu / drag onto the plot** -- planting is walking there with a pod in both hands.
+  * Wood-plank texture, paw and egg icons, Growing Eggs / OPEN, Shop, Reels, Friend Boost, the
+    offline banner.
+
+### The rarity word now has exactly one home
+
+Index spells it. Garden tints a finished row's NAME with the colour, which is a hint rather than a
+statement. The world says it only by pod colour, on a thing that has not hatched. Three surfaces,
+one word, no repetition.
 
 ## Still open
 

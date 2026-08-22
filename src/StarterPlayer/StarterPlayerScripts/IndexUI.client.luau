@@ -4,6 +4,9 @@
 -- The left rail. One button, and the panel it opens: what Greenhollow has, and
 -- which of it you have actually grown.
 --
+-- The ALMANAC, and only that. What is in your dirt right now is GardenUI, on the
+-- right rail.
+--
 --==============================================================================
 -- ONE BUTTON. NOT A RAIL OF THEM.
 --
@@ -14,20 +17,17 @@
 -- game has not made.
 --
 --==============================================================================
--- RARITY IS A WORD HERE, AND ON A GROWN PLATE -- BUT NEVER ON A POD
+-- THE RARITY WORD LIVES HERE
 --
--- This file used to claim the rarity word lived here "and nowhere else". The
--- uncorrupted reference recording says otherwise: every finished earner in it
--- carries its rarity above its name, in that rarity's colour, and PlantUI now
--- does the same.
+-- Nowhere in the world says it. A pod is COLOURED by rarity, so the word out
+-- there would be a caption on a photograph -- and it would spend the reveal
+-- early, since two Commons arrive in identical shells. A grown plant carries no
+-- plate at all any more. The Garden panel tints a finished row's NAME with the
+-- rarity colour, which is a hint rather than a statement.
 --
--- The rule that survived is the one about PODS. An unhatched pod is COLOURED by
--- rarity, so the word would be a caption on a photograph -- and more than that,
--- it would spend the reveal early: two Commons arrive in identical shells and
--- which one you got is meant to stay unknown until it finishes.
---
--- What this panel still owns alone is WEIGHT, and the rows for things you have
--- never grown.
+-- So this is the one surface that spells Common / Uncommon / Rare / Epic out,
+-- and it is also the only one that shows WEIGHT, and the only one that shows a
+-- row for a species you have never grown.
 --
 --==============================================================================
 -- SEEN MEANS GROWN, ON A PLOT YOU OWNED
@@ -46,10 +46,8 @@
 -- SpeedFX follow.
 --==============================================================================
 
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
@@ -59,8 +57,6 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
-
-local ATTR = GameConfig.Attributes
 
 -- The same three PromptUI, PlantUI and CashUI use.
 local INK = Color3.fromRGB(26, 24, 30)
@@ -271,7 +267,8 @@ corner(close, 8)
 local list = Instance.new("ScrollingFrame")
 list.Name = "List"
 list.Position = UDim2.fromOffset(0, 32)
-list.Size = UDim2.new(1, 0, 1, -66)
+-- Full height under the header now that nothing is pinned to the bottom.
+list.Size = UDim2.new(1, 0, 1, -36)
 list.BackgroundTransparency = 1
 list.BorderSizePixel = 0
 list.ScrollBarThickness = 3
@@ -287,33 +284,18 @@ rows.Padding = UDim.new(0, 6)
 rows.Parent = list
 
 --==============================================================================
--- THE FOOTER: WHAT IS IN YOUR DIRT RIGHT NOW
+-- THE PLOT FOOTER IS GONE. GardenUI IS WHAT IT WAS STANDING IN FOR.
 --
--- The sidebar's other job. "See what you have found" is the Almanac above; this
--- is "see what you are running", without walking the bed and reading twelve
--- billboards.
+-- There was a one-line `Nubkin x2  Petalpip x1` along the bottom of this panel,
+-- added because "see what you are running" had nowhere else to live. It now has
+-- somewhere else to live: a right-docked panel with a row per SLOT, the clocks
+-- still ticking, and the empty holes shown as empty.
 --
--- Counted off the tagged models themselves rather than off anything replicated,
--- because they are already here: PlantService tags every plant it renders and
--- parents it under the plot, so the plot's owner attribute and the tag together
--- are the whole query. No remote, and it cannot disagree with what is standing
--- in the ground.
---==============================================================================
-local footer = Instance.new("TextLabel")
-footer.Name = "Footer"
-footer.AnchorPoint = Vector2.new(0, 1)
-footer.Position = UDim2.new(0, 0, 1, 0)
-footer.Size = UDim2.new(1, 0, 0, 30)
-footer.BackgroundTransparency = 1
-footer.Font = Enum.Font.GothamBold
-footer.TextSize = 13
-footer.TextColor3 = GHOST
-footer.TextXAlignment = Enum.TextXAlignment.Left
-footer.TextYAlignment = Enum.TextYAlignment.Center
-footer.TextTruncate = Enum.TextTruncate.AtEnd
-footer.Text = ""
-footer.Parent = panel
-
+-- A count of species was never the right shape for that question anyway -- it
+-- could tell you that you had two Nubkins and could not tell you that seven of
+-- your twelve holes were empty.
+--
+-- This panel goes back to being one thing: the almanac.
 --==============================================================================
 -- ONE ROW PER SPECIES, BUILT ONCE
 --
@@ -480,52 +462,14 @@ else
 end
 
 --==============================================================================
--- WHAT IS ON YOUR PLOT
---==============================================================================
-local function myPlotOf(model: Model): boolean
-	-- plot -> Plants folder -> the model. PlantService parents every plant it
-	-- renders into the plot's own Plants folder, and PlotService stamps the
-	-- owner on the plot, so two hops answer it.
-	local plants = model.Parent
-	if not (plants and plants.Name == GameConfig.Plot.PlantsFolderName) then
-		return false
-	end
-	local plot = plants.Parent
-	if not plot then
-		return false
-	end
-	return plot:GetAttribute(ATTR.OwnerUserId) == player.UserId
-end
-
-local function refreshFooter()
-	local counts: { [string]: number } = {}
-	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Planted)) do
-		if instance:IsA("Model") and instance.Parent and myPlotOf(instance) then
-			local species = SeedData.Get(tostring(instance:GetAttribute("SpeciesId")))
-			if species then
-				counts[species.Id] = (counts[species.Id] or 0) + 1
-			end
-		end
-	end
-
-	-- SPECIES order, not pairs order, so the line does not reshuffle itself
-	-- every second while somebody is reading it.
-	local parts = {}
-	for _, species in ipairs(SPECIES) do
-		local n = counts[species.Id]
-		if n then
-			table.insert(parts, string.format("%s x%d", species.Name, n))
-		end
-	end
-	-- No plot, or an empty one: the footer is empty and the Index still opens.
-	footer.Text = if #parts > 0 then table.concat(parts, "   ") else ""
-end
-
---==============================================================================
 -- OPEN AND SHUT
+--
+-- Nothing here touches the Garden. They dock on opposite rails and answer
+-- different questions -- what a species is worth, and what is in your dirt --
+-- and closing one to open the other would mean you cannot read the first while
+-- looking at the second.
 --==============================================================================
 local open = false
-local footerTick = 0
 
 local function setOpen(want: boolean)
 	if open == want then
@@ -533,7 +477,6 @@ local function setOpen(want: boolean)
 	end
 	open = want
 	if want then
-		refreshFooter()
 		panel.Visible = true
 		panel.Position = UDim2.new(0, -PANEL_WIDTH - 24, 0, PANEL_TOP)
 		TweenService:Create(panel, TweenInfo.new(SLIDE, Enum.EasingStyle.Quad,
@@ -559,14 +502,6 @@ close.Activated:Connect(function()
 	setOpen(false)
 end)
 
-RunService.Heartbeat:Connect(function(dt)
-	if not open then
-		return
-	end
-	footerTick += dt
-	if footerTick < 1 then
-		return
-	end
-	footerTick = 0
-	refreshFooter()
-end)
+-- No tick. Nothing on this panel changes on its own: the almanac only moves when
+-- a profile packet says a species has been discovered, and `receive` repaints
+-- on that. GardenUI is the one with clocks to keep.
