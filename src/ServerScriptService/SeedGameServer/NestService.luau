@@ -345,7 +345,16 @@ local function ragdollOn(character: Model): Loosened
 		end
 	end
 	for _, d in ipairs(character:GetChildren()) do
-		if d:IsA("BasePart") then
+		--======================================================================
+		-- NOT THE HEAD, AND NOTHING INVISIBLE.
+		--
+		-- A colliding Head is what wedges a ragdoll against geometry and holds
+		-- the camera inside a mesh; and the HumanoidRootPart is a Transparency=1
+		-- box the player is not supposed to be able to touch the world with.
+		-- Making either collidable turns the tumble into a body jammed in a wall
+		-- with the camera inside its own skull.
+		--======================================================================
+		if d:IsA("BasePart") and d.Name ~= "Head" and d.Transparency < 1 then
 			table.insert(out.collides, { part = d, was = d.CanCollide })
 			d.CanCollide = true
 		end
@@ -496,20 +505,14 @@ local function throwPlayer(nest: Nest, player: Player)
 		dir = Vector3.new(0, 0, 1)
 	end
 	--==========================================================================
-	-- STEP OUT OF THE PARENT BEFORE THE LIMBS CAN COLLIDE
+	-- THE STEP OUT OF THE PARENT IS THE CLIENT'S JOB, NOT THIS ONE'S
 	--
-	-- Contact happens inside a collidable parent torso. Making sixteen body
-	-- parts collidable while they are overlapping another body embeds the
-	-- victim in it -- and with the camera inside a mesh, Roblox's own
-	-- LocalTransparencyModifier hides the character, so the player watches
-	-- nothing happen from inside somebody's chest.
-	--
-	-- Done while collision is still OFF, so nothing can block the step, and
-	-- while both machines still agree on where the body is -- which is what
-	-- makes this a nudge and not a teleport.
+	-- It used to happen here, as `root.CFrame = root.CFrame + dir * CLEAR_STUDS`.
+	-- That is a server CFrame write on a body the owning client is simulating --
+	-- the exact class of thing this rewrite exists to remove, and it fought the
+	-- owner rather than moving them. The distance is sent along with the shove
+	-- and the client applies it to a root it actually owns.
 	--==========================================================================
-	root.CFrame = root.CFrame + dir * CLEAR_STUDS
-
 	loosened = ragdollOn(character)
 
 	--==========================================================================

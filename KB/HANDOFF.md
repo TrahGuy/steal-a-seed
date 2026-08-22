@@ -1572,7 +1572,13 @@ the overlap-pop fix (zero velocity, drop pitch and roll, lift clear of the floor
 still needed, because the server is about to switch the joints back on and re-enabling them through
 a floor is what produced the 12.6 stud pop.
 
-### Measured on the VICTIM'S client, which is the only screen that matters
+### ~~Measured on the VICTIM'S client, which is the only screen that matters~~
+
+> **WRONG IN PLAY (583fa57).** The owner playtested this build and got the same three symptoms:
+> invisible, stuck on the parent, teleport on stand-up. The numbers below came out of an
+> `execute_luau` probe, which is not their screen, and they described a body that had not moved.
+> `hidden 0` and `transparency 0.00` in particular are worthless -- see the LocalTransparencyModifier
+> note in the section below. Superseded by "The local Humanoid was eating the throw".
 
 ```
 t+0.00s  PS=false
@@ -1607,6 +1613,93 @@ visibly limp for the whole tumble.
 character  colliding 4 | constraints 15/15        grip   Nubkin 1.58 / Bellchime 3.09
 girth      Nubkin 0.70 / Bellchime 1.64           mill   6 mills, 6 signs, 60 chevrons
 plot       2 plants, 0 prompts                    GrabStuds 7, GrabHoldSeconds nil
+```
+
+## The local Humanoid was eating the throw — 2026-08-22
+
+Third attempt at this, and the first two failures had the same shape: a fix that measured clean from
+the server or from an `execute_luau` probe, and produced **invisible / stuck on the parent /
+teleport on stand-up** in the owner's actual playtest.
+
+### The cause
+
+`PlatformStand = true` set on the **server** replicates as a property. It does **not** put the
+OWNER'S humanoid into the Physics state. That humanoid stayed in Running, its controller ran every
+frame on the victim's machine, and it **zeroed `AssemblyLinearVelocity` the frame after the impulse
+was applied**. So:
+
+  * the body never left contact -- it was still standing inside the parent;
+  * the camera was therefore inside the parent's mesh, and Roblox's own
+    `LocalTransparencyModifier` hides your character when that happens;
+  * the server timed out, `restore()` ran, and the character snapped.
+
+**Stop measuring `Transparency` to decide whether a player can see themselves.** It stays 0 the whole
+time. `LocalTransparencyModifier` is the one that moves, it is client-only, and it is set by the
+default camera module.
+
+### The fix, all on the owner
+
+```lua
+humanoid.PlatformStand = true                              -- locally, not just replicated
+humanoid:ChangeState(Enum.HumanoidStateType.Physics)       -- the controller stops fighting
+root.CFrame = root.CFrame + unit * clear                   -- step out of the parent, HERE
+root.AssemblyLinearVelocity = impulse                      -- and hold it for ~0.2s of Heartbeats
+```
+
+Re-asserting the velocity for a few frames matters: the controller does not stop dead on
+`ChangeState`, and one frame of it winding down is the difference between a throw and a twitch.
+
+While the tumble runs: `CameraMinZoomDistance` is pushed to 12 so the camera cannot sit inside any
+mesh, and `LocalTransparencyModifier = 0` is forced on every character part from a
+`BindToRenderStep` bound at `Camera + 1` -- **above** the camera module, because that module is what
+sets it and anything bound earlier just gets overwritten. Both restored on stand-up.
+
+**The server no longer writes a CFrame on the victim at all.** The step-clear used to happen there;
+it was still a server CFrame write on a client-owned body. The distance rides along with the shove
+and the client applies it.
+
+**`ragdollOn` no longer forces the Head or any invisible part to collide.** A colliding Head wedges
+a ragdoll against geometry and keeps the camera inside a skull; the HumanoidRootPart is a
+`Transparency = 1` box the player is not meant to touch the world with.
+
+### What the owner's own console now prints
+
+These come from `ThrowFX` in their PlayerScripts, so they are visible in a real playtest rather than
+in a probe:
+
+```
+HIT received: dir (0.10, 0, 0.99) speed 114.4 lift 0.45 clear 5.0
+ChangeState(Physics) ok=true
+stepped 5.0 studs clear
+first velocity applied: (11.7, 51.5, 113.8) = 125.4 studs/sec
+  Y 13.69  vel 123.8  Head LTM 0.00  state Physics      <- NOT zeroed, which is the fix
+  Y 19.16  vel 114.6  Head LTM 0.00  state Physics      <- apex
+  Y  2.52  vel  83.6  Head LTM 0.00  state Physics
+  Y  5.58  vel  75.9  Head LTM 0.00  state Physics      <- a bounce
+  Y  1.00  vel   0.0  Head LTM 0.00  state Physics      <- stopped
+settled and levelled at (-7.2, 2.6, -236.0)
+done, told the server
+```
+
+The velocity surviving frame after frame is the whole point: in the previous build it went to zero
+immediately, which is what "stuck on the parent" was.
+
+> `ChangeState` prints `state now Running` on the line straight after the call -- the transition
+> lands a frame later. Every subsequent frame reads `Physics`.
+
+### NOT CONFIRMED YET
+
+**This is not done until the owner says they can see their body leave the parent.** Two builds have
+now been declared fixed on the strength of numbers gathered from the wrong machine. The prints above
+are the evidence to look at during a real playtest; the per-frame line can come out once it is
+confirmed.
+
+### Untouched
+
+```
+mill 6 mills / 6 signs / 60 chevrons     grip Nubkin 1.58 / Bellchime 3.09
+girth 0.70 / 1.64                        plot 2 plants, 0 prompts
+GrabStuds 7, GrabHoldSeconds nil         no SetNetworkOwner anywhere
 ```
 
 ## Still open
