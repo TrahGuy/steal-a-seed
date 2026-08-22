@@ -150,6 +150,25 @@ local function render(entry: Planted, slot: Attachment)
 	--==========================================================================
 	CollectionService:AddTag(model, GameConfig.Tags.Planted)
 	entry.model = model
+
+	--==========================================================================
+	-- THE REVEAL IS THE GROW-UP, SO THIS IS WHERE THE ALMANAC IS WRITTEN
+	--
+	-- Every path that can produce a grown plant comes through render(): the
+	-- growth tick promoting a sprout, and restore() rebuilding a garden that was
+	-- already finished when the player left. So one line here covers both the
+	-- discovery and the backfill, and there is no second place to remember.
+	--
+	-- Nothing is credited for a pod in a nest, a pod in your hands, or a sprout.
+	-- Until it finishes you do not know which species you have -- pods are
+	-- coloured by rarity and two Commons arrive identical.
+	--==========================================================================
+	if entry.stage == CreatureModel.STAGE_GROWN then
+		local owner = PlotService.OwnerOf(entry.plot)
+		if owner then
+			PlayerDataService.MarkSeen(owner, entry.species.Id)
+		end
+	end
 end
 
 local function record(plot: Model): { any }

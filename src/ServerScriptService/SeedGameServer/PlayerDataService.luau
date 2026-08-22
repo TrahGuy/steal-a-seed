@@ -149,6 +149,32 @@ function PlayerDataService.SetPlants(player: Player, plants: { any }): boolean
 	return true
 end
 
+--==============================================================================
+-- THE ALMANAC
+--
+-- Set-once and never cleared. Called by PlantService the moment a plant renders
+-- as grown on a plot with an owner, which also makes the BACKFILL free: restore
+-- re-renders an existing garden at whatever stage it is already at, so a player
+-- who has been growing Bellchimes since before this existed has them filled in
+-- the first time their plot comes back.
+--
+-- Returns false for an id already known, and does NOT dirty the profile in that
+-- case. Without that check this would mark the save dirty once per grown plant
+-- per stage change forever, for a table that has not changed.
+--==============================================================================
+function PlayerDataService.MarkSeen(player: Player, speciesId: string): boolean
+	local entry = entries[player]
+	if not entry or type(speciesId) ~= "string" or speciesId == "" then
+		return false
+	end
+	if entry.profile.Almanac[speciesId] then
+		return false
+	end
+	entry.profile.Almanac[speciesId] = true
+	touch(player)
+	return true
+end
+
 function PlayerDataService.SetPlotTier(player: Player, tier: number): boolean
 	local entry = entries[player]
 	if not entry or type(tier) ~= "number" then

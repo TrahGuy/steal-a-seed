@@ -22,14 +22,27 @@
 --   HATCHING   it is still a pod
 --   GROWING    it is a sprout
 --   <name>     it is done -- and this is the only place the species is ever
---              named, which is the point: pods are coloured by RARITY, so the
+--   $N/s       named, which is the point: pods are coloured by RARITY, so the
 --              two Commons arrive identical and which one you actually got
 --              stays hidden until it finishes. The reveal is free content at
 --              the end of every run home.
 --
 -- No rarity, no weight, no owner. The model's colour is its rarity and its size
 -- is its weight, exactly as at the nest -- repeating either in text would be a
--- caption on a photograph, which is the same rule PromptUI follows.
+-- caption on a photograph, which is the same rule PromptUI follows. Rarity as a
+-- WORD belongs in the Index, where you are reading rather than glancing.
+--
+--==============================================================================
+-- A FINISHED PLANT SHOUTS WHAT IT EARNS
+--
+-- This used to go QUIETER when a plant finished: the clock line collapsed to
+-- zero height, the panel shrank to 124x26 and the stroke faded to 0.75, on the
+-- reasoning that a bed needing nothing from you should not shout.
+--
+-- That was wrong about what the bed IS. A grown plant is not a finished chore,
+-- it is the thing paying you every second -- and to somebody walking past it is
+-- a price tag on a target. So the finished state is now the LOUDEST one: the
+-- name in paper, the rate under it in accent at 19px, and the stroke fully lit.
 --
 --==============================================================================
 -- THE CLOCK IS THE SERVER'S, NOT THIS MACHINE'S
@@ -134,11 +147,22 @@ local function build(model: Model): Panel?
 	billboard.Adornee = anchor
 	billboard.AlwaysOnTop = true
 	billboard.Size = UDim2.fromOffset(124, 40)
-	-- Measured off the MODEL, not the anchor: PrimaryPart is the pod shell at
-	-- one stage and the soil mound at the next, so a fixed offset would sit on
-	-- top of a pod and inside a creature's chest.
-	local _, size = model:GetBoundingBox()
-	billboard.StudsOffset = Vector3.new(0, size.Y * 0.5 + 1.4, 0)
+	--==========================================================================
+	-- A FIXED GAP ABOVE THE REAL TOP
+	--
+	-- Measured off the MODEL, not the anchor: PrimaryPart is the pod shell at one
+	-- stage and the soil mound at the next, so a fixed offset would sit on top of
+	-- a pod and inside a creature's chest.
+	--
+	-- And measured in WORLD SPACE, not off GetBoundingBox. This was
+	-- `bbox.Y * 0.5 + 1.4`, and bbox.Y on these models is the WIDTH -- the pivot
+	-- is a cylinder rolled ninety degrees, so X and Y come back swapped. It put a
+	-- Bellchime's name plate 3.56 studs up on a plant 6.19 studs tall: buried in
+	-- its own head, on the most valuable species in the biome. A Nubkin happened
+	-- to land close enough to look correct, which is why it survived.
+	--==========================================================================
+	billboard.StudsOffset = Vector3.new(0,
+		GameConfig.topOfModel(model, anchor) + 1.2, 0)
 	-- Camera-relative, unlike a prompt's activation range -- the lesson
 	-- PromptUI paid for. Far enough to read a neighbour's plot from the road,
 	-- which is the whole point of showing it to people who do not own it.
@@ -227,15 +251,22 @@ local function refresh(panel: Panel, now: number)
 	local elapsed = now - panel.plantedAt
 	local sproutAt = total * PLANTING.SproutAt
 
-	local word, timer
+	local word, timer, grown
 	if elapsed < sproutAt then
-		word, timer = "HATCHING", clock(sproutAt - elapsed)
+		word, timer, grown = "HATCHING", clock(sproutAt - elapsed), false
 	elseif elapsed < total then
-		word, timer = "GROWING", clock(total - elapsed)
+		word, timer, grown = "GROWING", clock(total - elapsed), false
 	else
-		-- Done. The name, and no clock -- a timer reading 0:00 forever is worse
-		-- than no timer, and the creature standing there already says it grew.
-		word, timer = string.upper(species.Name), ""
+		-- Done. Title case, not SHOUTED CAPS: this is a NAME now, where HATCHING
+		-- and GROWING are states. The caps made the reveal read as one more
+		-- status word rather than as the thing you have been waiting for.
+		--
+		-- No clock. A timer reading 0:00 forever is worse than no timer, and the
+		-- line is worth more as the rate -- the only number anybody, owner or
+		-- passer-by, actually wants off a finished plant.
+		word = species.Name
+		timer = "$" .. GameConfig.compact(SeedData.IncomePerSecond(species)) .. "/s"
+		grown = true
 	end
 
 	local key = word .. "\0" .. timer
@@ -246,13 +277,15 @@ local function refresh(panel: Panel, now: number)
 	panel.word.Text = word
 	panel.timer.Text = timer
 
-	local grown = timer == ""
-	-- Quieter once it is finished. A full plot is twelve of these, and twelve
-	-- lit panels over a bed that needs nothing from you is noise.
-	panel.timer.Size = if grown then UDim2.new(1, 0, 0, 0) else UDim2.new(1, 0, 0, 17)
-	panel.word.TextColor3 = if grown then ACCENT else PAPER
-	panel.stroke.Transparency = if grown then 0.75 else 0.3
-	panel.billboard.Size = if grown then UDim2.fromOffset(124, 26)
+	-- The rate line only ever carries a RATE on a grown plant; on a pod or a
+	-- sprout it is the clock. Nothing prints $/s on something that pays nothing
+	-- yet -- the wait is the cost of the thing, and a rate on a pod would be a
+	-- lie told in the game's own accent colour.
+	panel.timer.Size = UDim2.new(1, 0, 0, if grown then 19 else 17)
+	panel.timer.TextSize = if grown then 19 else 17
+	panel.word.TextColor3 = PAPER
+	panel.stroke.Transparency = if grown then 0.15 else 0.3
+	panel.billboard.Size = if grown then UDim2.fromOffset(132, 44)
 		else UDim2.fromOffset(124, 40)
 end
 

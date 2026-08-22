@@ -71,12 +71,27 @@ gui.IgnoreGuiInset = false
 gui.DisplayOrder = 20
 gui.Parent = playerGui
 
--- Top-left, clear of the Roblox chrome. Sized in SCALE with a minimum, so it is
--- readable on a phone without being a billboard on a monitor.
+--==============================================================================
+-- BOTTOM-LEFT, BECAUSE THE INDEX HAS THE TOP-LEFT NOW
+--
+-- This sat at the top-left, which is where the left rail goes -- one Index
+-- button, in the same corner every game of this shape puts its rail. Cash moves
+-- down rather than across: PLAN wanted the dollar figure bottom-left and nothing
+-- else there, and a number you glance at belongs out of the way of a button you
+-- aim at.
+--
+-- Anchored to the BOTTOM edge (AnchorPoint Y = 1) rather than positioned by a
+-- computed top, so it stays put when the panel resizes itself on a phone.
+--
+-- Still one cash number and the SPD line under it. Not a stacked pair of
+-- currencies -- there is one currency.
+--==============================================================================
+-- Sized in SCALE with a minimum, so it is readable on a phone without being a
+-- billboard on a monitor.
 local panel = Instance.new("Frame")
 panel.Name = "Panel"
-panel.AnchorPoint = Vector2.new(0, 0)
-panel.Position = UDim2.new(0, 12, 0, 12)
+panel.AnchorPoint = Vector2.new(0, 1)
+panel.Position = UDim2.new(0, 12, 1, -12)
 panel.Size = UDim2.new(0.26, 0, 0.075, 0)
 panel.BackgroundColor3 = INK
 panel.BackgroundTransparency = 0.15

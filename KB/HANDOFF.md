@@ -1971,6 +1971,139 @@ at the grab, which would be the stale 16. The clean fix is for `restore()` to ca
 ruled out. Left alone on purpose: the window is the second or two of profile load, and the nearest
 nest is 300 studs down the road, so it cannot be reached in time.
 
+## A grown plant reads as an earner — 2026-08-22
+
+Three things matched off a Steal a Brainrot plot clip (`reference1 .mp4` in the repo root), and
+nothing else from it. No Shop, Rebirth, Growing Eggs, Grow All, egg or paw rail, hotbar, moon timer,
+Friend Boost, Robux packs, Fuse or Reels overlay -- and no tigers. The species stay Nubkin,
+Petalpip, Spiretip, Toadcap, Bellchime.
+
+### 1. The billboard names the rate
+
+```
+Nubkin        Petalpip       Spiretip       Toadcap        Bellchime
+$2/s          $5/s           $14/s          $40/s          $110/s
+```
+
+Title case, not `NUBKIN`: this is a name now, where HATCHING and GROWING are states.
+
+The finished state used to be the QUIETEST one -- clock line collapsed to zero height, panel shrunk
+to 124x26, stroke faded to 0.75, on the reasoning that a bed needing nothing from you should not
+shout. That was wrong about what the bed IS. A grown plant is the thing paying you every second, and
+to a stranger on the road it is a price tag on a target. It is now the loudest: 132x44, the rate at
+19px in accent, stroke fully lit. Still drawn for everybody, not just the owner.
+
+**Pods and sprouts print no rate.** The wait is the cost of the thing, and `$5/s` on something that
+pays nothing yet would be a lie told in the game's own accent colour.
+
+### 2. Lime `+$N` pops, off each plant
+
+`CashPop.client.luau`. Every grown plant pops its own income once a second: accent fill, ink stroke,
+GothamBlack, rising 2.5 studs with sideways jitter so twelve plants are not one column.
+
+**Cosmetic.** Nothing here calls `AddCash`; EconomyService is still the only faucet and a player who
+edits this script gets prettier numbers and not one extra coin.
+
+**Not driven by diffing `profile.Cash`.** That is the SUM of a plot -- a Nubkin and a Petalpip
+together move it by 7, and 7 cannot be aimed at either of them. The whole point is that the
+Bellchime pops `+$110` and the Nubkin beside it pops `+$2`, so you can see which square of dirt is
+carrying you. And no remote: one per plant per second is 72 packets a second on a full server to say
+something both ends already know.
+
+Pooled as a FREE LIST rather than SpeedFX's round robin. Round robin is fine when pops are seconds
+apart; here forty can be in flight at once and slot 1 coming round again would yank a billboard out
+from under a running tween. Range-gated at 90 studs BEFORE the pool is touched, so a pop nobody can
+read never takes a slot from one they can.
+
+### 3. The Index
+
+`IndexUI.client.luau`. One button, top-left, in PromptUI's vocabulary -- a book drawn from frames,
+because most of Gotham's symbol range is tofu on this engine and SpeedFX already paid for that with a
+trainer emoji. The badge is the number still undiscovered and hides at zero. **No Shop button**;
+there is no shop, and an empty one is a promise the game has not made.
+
+Cash moved to the BOTTOM-left to clear the rail -- which is where PLAN wanted the dollar figure
+anyway. Still one cash number and the SPD line, not a stacked pair of currencies.
+
+Rows are Greenhollow in `SeedData.Species` order, and the denominator is `#SPECIES` rather than a
+typed 5. Unseen is a silhouette and `???` with no rate and no kg. Seen gets the name, the rarity WORD
+in its rarity colour, `$N/s` and the weight -- rarity is a word only in here, because out in the
+world the pod colour already carries it. A footer lists what is in your own dirt this session,
+counted off the tagged models under the plot whose `OwnerUserId` is yours. No plot, empty footer,
+Index still opens.
+
+### 4. Almanac
+
+`Profile.Almanac: { [string]: boolean }`, defaulting to `{}`. **No Version bump** -- sanitise-into-
+defaults IS the migration, exactly as the schema comment always claimed.
+
+Written in `PlantService.render()` when a plant renders as `STAGE_GROWN` on a plot with an owner.
+That one line covers both the discovery and the BACKFILL, because restore() re-renders an existing
+garden at whatever stage it is already at -- so a player who has been growing Bellchimes since
+before this existed has them filled in the first time their plot comes back. No credit for a pod in
+a nest, a pod in your hands, or a sprout: the grow-up is the reveal.
+
+`MarkSeen` returns false for an id already known and does NOT dirty the profile in that case.
+Without that it would mark the save dirty once per grown plant per stage change, forever, for a
+table that had not changed.
+
+Sanitise, measured:
+
+```
+in : nubkin=true bellchime=true tiger=true petalpip=false [7]=true spiretip='yes'
+out: bellchime, nubkin
+a profile with no Almanac at all -> empty table, no migration needed
+```
+
+### The bug this pass found: GetBoundingBox was hiding four labels inside plants
+
+`Model:GetBoundingBox()` **reports in the PIVOT'S frame**, and a creature pivots on a cylinder rolled
+ninety degrees -- so X and Y come back swapped and the "height" it hands you is the WIDTH. HANDOFF
+has said this twice already. PlantUI was placing its name plate at `bbox.Y * 0.5 + 1.4` anyway:
+
+```
+species     true top   name plate was   now (+1.2)
+Nubkin        1.61         1.95            2.81
+Petalpip      2.31         2.17  <- inside  3.51
+Spiretip      4.03         2.46  <- inside  5.23
+Toadcap       5.06         2.93  <- inside  6.26
+Bellchime     6.19         3.56  <- inside  7.39
+```
+
+**Four of five species had their label buried in their own head**, including the most valuable thing
+in the biome. Only the Nubkin cleared it, and that is precisely why it survived: on the smallest
+species the wrong sum lands close enough to look right.
+
+`GameConfig.topOfModel(model, anchor)` measures in world space instead -- the vertical reach of a
+rotated box is the sum of the absolute vertical components of its three half-axes, and there is no
+frame to be wrong about. Both the name plate and the cash pop call it, so they cannot disagree about
+where a plant ends.
+
+### One compactor, not three
+
+`GameConfig.compact`. Three places wanted to shorten a number -- the rate, the pop, the Index row --
+and three hand-rolled versions is how the same plant reads $1.5K in one place and $2K in another.
+Verified against the clip's own numbers:
+
+```
+110 -> 110      1500 -> 1.5K      2000 -> 2K       3500 -> 3.5K
+39000 -> 39K    100000 -> 100K    553000000 -> 553M    1e9 -> 1B
+```
+
+### What was measured, and what still needs a playtest
+
+Measured in Edit, not eyeballed: all eight files compile; the compactor against twelve inputs; every
+species' rate string; the Almanac sanitiser against six junk keys; and the billboard geometry above.
+
+**Not measured: the running game.** The pops rising, the Index sliding, the badge dropping on a first
+grow, and a passer-by reading somebody else's plot are all Play-session facts, and `start_stop_play`
+is unreliable on this machine.
+
+### Still not started
+
+**Shop.** No button, no panel, no currency sink. Also still absent on purpose: paw inventory, sell,
+fuse, place-from-menu. Plants stay in the dirt.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

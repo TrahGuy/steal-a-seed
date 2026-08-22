@@ -637,6 +637,95 @@ function GameConfig.walkSpeedFor(speedScore: number): number
 end
 
 --==============================================================================
+-- ONE COMPACTOR, NOT THREE
+--
+-- Three places want to shorten a number -- the rate on a grown plant, the `+$N`
+-- that pops off it, and the Index row -- and three hand-rolled versions is how
+-- the same plant ends up reading $1.5K in one place and $2K in another. It sits
+-- here because here is the module all three already require.
+--
+-- Not balance, so Rule 7 is intact: this decides how a number is SPELLED, never
+-- what it is.
+--
+--     110      ->  110          1500  ->  1.5K       39000  ->  39K
+--     2000     ->  2K         100000  ->  100K     553000000 -> 553M
+--
+-- One decimal below ten, none above it, and a trailing .0 is dropped -- so 2000
+-- is "2K" rather than "2.0K". Straight off the reference clip, which shows
+-- $3.5K and $39K side by side.
+--==============================================================================
+local COMPACT_UNITS = {
+	{ 1e12, "T" },
+	{ 1e9, "B" },
+	{ 1e6, "M" },
+	{ 1e3, "K" },
+}
+
+function GameConfig.compact(n: number): string
+	if type(n) ~= "number" or n ~= n then
+		return "0"
+	end
+	local sign = if n < 0 then "-" else ""
+	local v = math.abs(n)
+	for _, unit in ipairs(COMPACT_UNITS) do
+		local divisor = unit[1] :: number
+		local suffix = unit[2] :: string
+		if v >= divisor then
+			local scaled = v / divisor
+			local text = if scaled < 10
+				then string.format("%.1f", scaled)
+				else string.format("%d", math.floor(scaled))
+			-- Parenthesised: gsub returns the count as a second value, and
+			-- returning it would make this function two-valued.
+			return sign .. (string.gsub(text, "%.0$", "")) .. suffix
+		end
+	end
+	return sign .. string.format("%d", math.floor(v))
+end
+
+--==============================================================================
+-- HOW HIGH A PLANT ACTUALLY REACHES
+--
+-- Model:GetBoundingBox() REPORTS IN THE PIVOT'S FRAME, and a creature pivots on
+-- a cylinder rolled ninety degrees -- so its X and Y come back swapped and the
+-- "height" it hands you is the WIDTH. Measured on real grown models:
+--
+--     Nubkin     bbox (1.74, 1.11, 1.11)      true height 1.74, width 1.11
+--     Spiretip   bbox (4.20, 2.11, 2.11)      true height 4.20, width 2.11
+--     Bellchime  bbox (6.41, 4.33, 4.33)      true height 6.41, width 4.33
+--
+-- Those X values are exactly the finished heights SeedData documents. PlantUI
+-- placed its billboard at `bbox.Y * 0.5 + 1.4` and so put a Bellchime's label
+-- 3.56 studs up on a plant 6.19 studs tall -- a label INSIDE the head of the
+-- most valuable thing in the biome, which nobody spotted because on a Nubkin the
+-- same wrong sum lands close enough to look right.
+--
+-- This measures in WORLD SPACE instead, where there is no frame to be wrong
+-- about: the vertical reach of a rotated box is the sum of the absolute vertical
+-- components of its three half-axes.
+--
+-- It lives here because two clients want it -- the name plate and the cash pop
+-- -- and two hand-rolled copies of a measurement is how they end up disagreeing
+-- about where the top of a plant is.
+--==============================================================================
+function GameConfig.topOfModel(model: Model, anchor: BasePart): number
+	local highest = -math.huge
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			local cf, size = d.CFrame, d.Size
+			local reach = math.abs(cf.UpVector.Y) * size.Y * 0.5
+				+ math.abs(cf.RightVector.Y) * size.X * 0.5
+				+ math.abs(cf.LookVector.Y) * size.Z * 0.5
+			highest = math.max(highest, cf.Position.Y + reach)
+		end
+	end
+	if highest == -math.huge then
+		return 2
+	end
+	return highest - anchor.Position.Y
+end
+
+--==============================================================================
 -- SAVE
 --
 -- Forward-only. Never lower CurrentVersion without also changing StoreName: an

@@ -28,6 +28,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+-- Only so an Almanac id can be checked against something real. A saved key
+-- naming a species that no longer exists is dropped rather than carried, which
+-- is the same rule every other field here follows.
+local SeedData = require(SeedGame:WaitForChild("Shared"):WaitForChild("SeedData"))
 local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
@@ -40,6 +44,20 @@ export type Profile = {
 	-- Filled by PlantService when it exists. Present from v1 so the shape of a
 	-- saved profile does not change on the day it starts being used.
 	Plants: { any },
+	--==========================================================================
+	-- WHAT THEY HAVE SEEN GROW
+	--
+	-- A set, not a list: the only question ever asked of it is "is this one
+	-- filled in", and a list would make that a linear scan on every Index row
+	-- and would let the same id in twice.
+	--
+	-- Earned by a plant reaching STAGE_GROWN on a plot you own. Not by carrying
+	-- a pod, not by a pod sitting in a nest, and not by a sprout -- because
+	-- until it finishes you have not actually found out which species it was.
+	-- The pod is coloured by rarity, so two Commons arrive identical; the
+	-- reveal IS the grow-up, and this records that moment and no other.
+	--==========================================================================
+	Almanac: { [string]: boolean },
 	CreatedAt: number,
 	LastSeen: number,
 }
@@ -57,6 +75,7 @@ function ProfileSchema.Default(): Profile
 		Speed = 0,
 		PlotTier = GameConfig.StartingPlotTier,
 		Plants = {},
+		Almanac = {},
 		CreatedAt = now,
 		LastSeen = now,
 	}
@@ -97,6 +116,18 @@ function ProfileSchema.Sanitise(raw: any): Profile
 
 	if type(raw.Plants) == "table" then
 		p.Plants = raw.Plants
+	end
+
+	-- Copied key by key rather than assigned wholesale, which is what makes the
+	-- "unknown ids dropped" promise true. A DataStore round trip can hand back
+	-- numeric keys, string values, or an id from a species that has since been
+	-- deleted; none of those reach the Index.
+	if type(raw.Almanac) == "table" then
+		for id, seen in pairs(raw.Almanac) do
+			if seen == true and type(id) == "string" and SeedData.Get(id) then
+				p.Almanac[id] = true
+			end
+		end
 	end
 
 	-- Carried, not trusted. Nothing branches on it yet; the day a field has to
