@@ -62,6 +62,21 @@ local STAGE_GROWN = 3
 -- mean a pacing change to one silently retimes the other.
 local TICK = GameConfig.Plant.TickSeconds
 
+--==============================================================================
+-- THE POP STARTS ABOVE THE PLATE, NOT THROUGH IT
+--
+-- It used to start at top + 0.5, which was under a two-line plate centred at
+-- top + 1.2 -- so every pop rose straight through the label. At three lines the
+-- plate is 64px tall and that stopped being survivable.
+--
+-- HONEST LIMITATION: a BillboardGui's SIZE is in PIXELS and its OFFSET is in
+-- STUDS, so no single stud value clears a fixed-pixel plate at every distance.
+-- Far away the plate is still 64px while 1.2 studs has shrunk to nothing. This
+-- is tuned for the range you actually read a plot at; at fifty studs they will
+-- still touch, and the alternative is scaling the offset by camera distance
+-- every frame for forty billboards.
+--==============================================================================
+local POP_START_ABOVE = 2.4
 local RISE_STUDS = 2.5
 local POP_SECONDS = 1.15
 -- Same as SpeedFX. Camera-relative, so it is the distance at which you stop
@@ -239,7 +254,7 @@ local function pop(entry: Tracked)
 	-- slot a plant gets changes every second and a jitter derived from it would
 	-- make each plant's pops wander.
 	local drift = (rng:NextNumber() - 0.5) * 1.7
-	local start = Vector3.new(drift, entry.top + 0.5, 0)
+	local start = Vector3.new(drift, entry.top + POP_START_ABOVE, 0)
 	billboard.Adornee = entry.anchor
 	billboard.StudsOffset = start
 	billboard.Enabled = true

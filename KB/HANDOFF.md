@@ -1978,33 +1978,48 @@ nothing else from it. No Shop, Rebirth, Growing Eggs, Grow All, egg or paw rail,
 Friend Boost, Robux packs, Fuse or Reels overlay -- and no tigers. The species stay Nubkin,
 Petalpip, Spiretip, Toadcap, Bellchime.
 
-### 1. The billboard is the rate, and NOTHING else
+### 1. The grown plate is rarity + name + rate
 
 ```
-Nubkin        Petalpip       Spiretip       Toadcap        Bellchime
-$2/s          $5/s           $14/s          $40/s          $110/s
+Common     cream (238,235,226)     Nubkin       $2/s
+Common     cream                   Petalpip     $5/s
+Uncommon   green (142,196, 62)     Spiretip     $14/s
+Rare       blue  (108,168,214)     Toadcap      $40/s
+Epic       purple(146, 62,158)     Bellchime    $110/s
 ```
 
-**No name tag.** It briefly said `Nubkin` over `$2/s` and the owner cut the name the same day, on a
-second reference clip: the name is the one line a full plot multiplies into clutter. Twelve plants
-is twelve name plates competing with each other AND with the `+$N` pops rising through them, and the
-90-second clip shows exactly what that costs -- a pile of small overlapping labels in the middle of
-the frame that nobody can read, while the thing you actually track is the big lime number.
+Three lines, always, for everybody -- 140x64, rows 15 / 16 / 21 inside 5px of padding. The rate is
+the tallest line and the name the smallest, which is the hierarchy the footage uses.
 
-So the loud element is the POP, and this is a quiet price tag under it: one line, 98x30, stroke at
-0.45. Still drawn for everybody, not just the owner.
+**This took three passes and two of them were wrong**, so the reasoning is worth keeping:
 
-Nothing is lost by dropping the word. A Nubkin is a cube and a Bellchime is a bell -- the shapes are
-the whole reason `CreatureModel` switches on Form -- and the girth curve makes a heavy one visibly
-heavy. Reading a name off a model you are already looking at is the caption-on-a-photograph rule.
-Names, rarity words and weights live in the Index, for when you are reading rather than glancing.
+  1. name + rate, with the finished state made the loudest thing on screen;
+  2. rate only -- the owner said "their name tags should be removed, we will make a sidebar to see
+     them", and the clip available at the time was corrupted past 7 seconds and showed a pile of
+     small overlapping labels that read as clutter;
+  3. rarity + name + rate, off the uncorrupted 90-second recording, which shows the real stack:
+     `Mythic / Tiger / $100K/s`, `Legendary / Axolotl / $5.9K/s`, `Uncommon / Catfish / $12/s` --
+     rarity word in its own colour, name in white, rate in lime and biggest.
 
-The reveal survives. It was never the WORD appearing; it is the pod opening into a shape you have
-not got yet, and the line under it going from a clock to a number.
+Read the footage before arguing from a still. A 7-second fragment of a 90-second clip made a
+three-line stack look like noise.
 
-**Pods and sprouts print no rate.** The wait is the cost of the thing, and `$5/s` on something that
-pays nothing yet would be a lie told in the game's own accent colour. HATCHING / GROWING plus the
-m:ss clock is unchanged.
+**Rarity is now a word in TWO places**, and the old comment claiming it lived only in the Index is
+retracted in both files. The rule that survived is about PODS: an unhatched pod is COLOURED by
+rarity, so the word there would be a caption on a photograph -- and worse, it would spend the reveal
+early, since two Commons arrive in identical shells. A GROWN creature is coloured by its SPECIES, not
+its tier: a Toadcap is cream and red because it is a mushroom, and nothing about it standing in a bed
+says it is the Rare one. The colour that carried rarity was on the shell, and the shell is gone.
+
+**No fourth line.** No kg -- kg IS the rate at one cash per kilogram, and printing both prints the
+same number twice. No owner, no slot, no gender, no `70,724Kg` tag.
+
+**Pods and sprouts print no rarity and no rate.** HATCHING / GROWING plus the m:ss clock, two lines,
+unchanged.
+
+> Note: `Uncommon` in `GameConfig.RarityColor` is (142,196,62), which is ACCENT exactly -- so a grown
+> Spiretip shows its rarity word in the same green as its rate. That is the rarity table as it
+> stands, not a bug introduced here.
 
 ### 2. Lime `+$N` pops, off each plant
 
@@ -2019,6 +2034,12 @@ together move it by 7, and 7 cannot be aimed at either of them. The whole point 
 Bellchime pops `+$110` and the Nubkin beside it pops `+$2`, so you can see which square of dirt is
 carrying you. And no remote: one per plant per second is 72 packets a second on a full server to say
 something both ends already know.
+
+The pop starts at `topOfModel + 2.4` rather than `+ 0.5`, so it clears the three-line plate instead
+of rising straight through it. **Honest limitation:** a BillboardGui's SIZE is in pixels and its
+OFFSET is in studs, so no single stud value clears a fixed-pixel plate at every distance -- far away
+the plate is still 64px while 2.4 studs has shrunk to nothing. Tuned for the range you actually read
+a plot at.
 
 Pooled as a FREE LIST rather than SpeedFX's round robin. Round robin is fine when pops are seconds
 apart; here forty can be in flight at once and slot 1 coming round again would yank a billboard out
@@ -2108,6 +2129,22 @@ species' rate string; the Almanac sanitiser against six junk keys; and the billb
 **Not measured: the running game.** The pops rising, the Index sliding, the badge dropping on a first
 grow, and a passer-by reading somebody else's plot are all Play-session facts, and `start_stop_play`
 is unreliable on this machine.
+
+### In the recording, and deliberately not built
+
+The 90-second clip is a whole competing HUD. Only the three-line plate, the lime pops and the
+left-rail Index were taken from it. Rejected on sight, so nobody re-proposes them from the same
+footage:
+
+  * **Reels / TikTok overlay** -- side arrows, likes, comments, a full-screen video panel. The owner
+    opened it twice in the recording. It is not a plant UI and it is not this game.
+  * **Growing Eggs** right-hand panel, `OPEN`, `Grow All`, brown wicker. That is their egg QUEUE.
+    Ours hatch in the dirt and PlantUI already is that timer, so cloning the panel would be a second
+    UI for a thing that already has one. No paw or egg button on the right either.
+  * Shop, x2 Speed Robux, Friend Boost, offline `$553M/Day`, OFFLINE CLAIM, `Hatch! Egg Ready`,
+    Upgrade Pen signs, hotbar, moon timer, event banners, SELL as HUD.
+  * `+$5.9K Axolotl` -- the clip puts the species name ON the pop. Skipped: the plate two studs below
+    it already says the name, and the pop is the one element that has to stay readable at a glance.
 
 ### Still not started
 

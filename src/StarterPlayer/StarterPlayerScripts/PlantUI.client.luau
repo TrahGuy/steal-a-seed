@@ -17,39 +17,43 @@
 -- just a plot of objects that ignore you.
 --
 --==============================================================================
--- A WORD AND A CLOCK, AND NOTHING ELSE
+-- TWO LINES WHILE IT WAITS, THREE ONCE IT EARNS
 --
---   HATCHING   it is still a pod
---   GROWING    it is a sprout
---   $N/s       it is done, and this is what it pays
+--   HATCHING          it is still a pod          + m:ss
+--   GROWING           it is a sprout             + m:ss
 --
--- No rarity, no weight, no owner. The model's colour is its rarity and its size
--- is its weight, exactly as at the nest -- repeating either in text would be a
--- caption on a photograph, which is the same rule PromptUI follows.
+--   <Rarity>          in that rarity's own colour
+--   <Name>            title case, paper -- Nubkin, not NUBKIN
+--   $N/s              in accent, the largest line of the three
+--
+-- Straight off the uncorrupted 90-second recording, where every finished earner
+-- carries the same three-line stack:
+--
+--     Mythic          crimson         Legendary        gold
+--     Tiger           white           Axolotl          white
+--     $100K/s         lime            $5.9K/s          lime
+--
+-- The RATE is the biggest line in that footage and the name is the smallest,
+-- which is the hierarchy copied here: what it pays first, what it is second.
 --
 --==============================================================================
--- AND NO NAME TAG. THE SIDEBAR IS WHERE SPECIES LIVE.
+-- SO RARITY IS A WORD IN TWO PLACES NOW
 --
--- A finished plant briefly said `Nubkin` over `$2/s`. It is now just the rate.
+-- An earlier pass in this file argued that rarity belonged only in the Index,
+-- because a pod is COLOURED by rarity and a caption on a photograph is a waste
+-- of a line. That argument still holds for a POD -- an unhatched thing says its
+-- rarity by colour and prints no word, and that has not changed.
 --
--- The name was the one line here that a full plot multiplied into clutter:
--- twelve plants in a bed is twelve name plates competing with each other and
--- with the `+$N` pops rising through them, and the reference clip shows exactly
--- what that costs -- a pile of small overlapping labels in the middle of the
--- frame that nobody can read, while the thing you actually track is the big lime
--- number. So the loud element is the POP, and this is a quiet price tag under
--- it.
+-- It does not hold for a grown one. The creature is coloured by its SPECIES, not
+-- its tier: a Toadcap is cream and red because it is a mushroom, and nothing
+-- about standing in a bed tells you it is the Rare one. The colour that carried
+-- rarity was on the shell, and the shell is gone. So the grown plate says the
+-- word, in the rarity's colour, exactly as the clip does.
 --
--- Nothing is lost by dropping the word. A Nubkin is a cube and a Bellchime is a
--- bell -- the shapes are the whole reason CreatureModel switches on Form -- and
--- the girth curve makes a heavy one visibly heavy. Reading the name off a model
--- you are already looking at is the caption-on-a-photograph rule again, and the
--- Index is where the names, the rarity words and the weights are, for when you
--- are reading rather than glancing.
---
--- The reveal survives too. It was never the WORD appearing; it is the pod
--- opening into a shape you have not got yet, and the rate underneath it going
--- from a clock to a number.
+-- No fourth line. No kg -- kg IS the rate, one cash per kilogram, and printing
+-- both is printing the same number twice. No owner, no slot, no gender, no
+-- 70,724Kg tag.
+--==============================================================================
 --
 --==============================================================================
 -- THE CLOCK IS THE SERVER'S, NOT THIS MACHINE'S
@@ -109,6 +113,8 @@ container.Parent = playerGui
 
 type Panel = {
 	billboard: BillboardGui,
+	-- Collapsed to zero height until the thing is grown; a pod says no rarity.
+	rarity: TextLabel,
 	word: TextLabel,
 	timer: TextLabel,
 	stroke: UIStroke,
@@ -208,6 +214,24 @@ local function build(model: Model): Panel?
 	column.SortOrder = Enum.SortOrder.LayoutOrder
 	column.Parent = panel
 
+	--==========================================================================
+	-- THE RARITY LINE
+	--
+	-- LayoutOrder 0 so it sits above the name, and its colour is set once here
+	-- rather than every tick: a species cannot change tier, so refresh() has
+	-- nothing to say about it.
+	--==========================================================================
+	local rarity = Instance.new("TextLabel")
+	rarity.Name = "Rarity"
+	rarity.LayoutOrder = 0
+	rarity.Size = UDim2.new(1, 0, 0, 0)
+	rarity.BackgroundTransparency = 1
+	rarity.Font = Enum.Font.GothamBold
+	rarity.TextSize = 13
+	rarity.TextColor3 = GameConfig.RarityColor[species.Rarity] or PAPER
+	rarity.Text = ""
+	rarity.Parent = panel
+
 	local word = Instance.new("TextLabel")
 	word.Name = "Word"
 	word.LayoutOrder = 1
@@ -232,6 +256,7 @@ local function build(model: Model): Panel?
 
 	return {
 		billboard = billboard,
+		rarity = rarity,
 		word = word,
 		timer = timer,
 		stroke = stroke,
@@ -258,46 +283,49 @@ local function refresh(panel: Panel, now: number)
 	local elapsed = now - panel.plantedAt
 	local sproutAt = total * PLANTING.SproutAt
 
-	local word, timer, grown
+	local tier, word, timer, grown
 	if elapsed < sproutAt then
-		word, timer, grown = "HATCHING", clock(sproutAt - elapsed), false
+		tier, word, timer, grown = "", "HATCHING", clock(sproutAt - elapsed), false
 	elseif elapsed < total then
-		word, timer, grown = "GROWING", clock(total - elapsed), false
+		tier, word, timer, grown = "", "GROWING", clock(total - elapsed), false
 	else
-		-- Done. No word at all: no name, no rarity, no "GROWN". Just the rate,
-		-- which is the only thing about a finished plant that its own silhouette
-		-- does not already tell you.
-		--
-		-- And no clock. A timer reading 0:00 forever is worse than no timer, and
-		-- the creature standing there already says it grew.
-		word = ""
+		-- Done. Rarity, name, rate -- and no clock. A timer reading 0:00 forever
+		-- is worse than no timer, and the creature standing there already says
+		-- it grew.
+		tier = species.Rarity
+		word = species.Name
 		timer = "$" .. GameConfig.compact(SeedData.IncomePerSecond(species)) .. "/s"
 		grown = true
 	end
 
-	local key = word .. "\0" .. timer
+	local key = tier .. "\0" .. word .. "\0" .. timer
 	if key == panel.lastText then
 		return
 	end
 	panel.lastText = key
+	panel.rarity.Text = tier
 	panel.word.Text = word
 	panel.timer.Text = timer
 
-	-- The second line only ever carries a RATE on a grown plant; on a pod or a
-	-- sprout it is the clock. Nothing prints $/s on something that pays nothing
-	-- yet -- the wait is the cost of the thing, and a rate on a pod would be a
-	-- lie told in the game's own accent colour.
+	--==========================================================================
+	-- TWO LINES BECOME THREE
 	--
-	-- Grown collapses the word row to nothing and shrinks the plate to one line.
-	-- Quieter than the countdown on purpose: while it is growing this panel is
-	-- the only thing the plant has to say, and once it is finished the `+$N`
-	-- rising off it every second is doing the shouting.
-	panel.word.Size = if grown then UDim2.new(1, 0, 0, 0) else UDim2.new(1, 0, 0, 15)
+	-- The rarity row is zero-height while it waits, so a pod prints no rarity
+	-- and no rate. The wait is the cost of the thing, and either word on a pod
+	-- would be telling you what you have before you have found out.
+	--
+	-- Rows are 15 / 16 / 21 inside 5px of padding top and bottom, which is the
+	-- 64 the plate grows to. The rate is the tallest on purpose -- it is the
+	-- tallest line in the footage too.
+	--==========================================================================
+	panel.rarity.Size = if grown then UDim2.new(1, 0, 0, 15) else UDim2.new(1, 0, 0, 0)
+	panel.word.Size = UDim2.new(1, 0, 0, if grown then 16 else 15)
+	panel.word.TextSize = if grown then 14 else 13
 	panel.word.TextColor3 = PAPER
-	panel.timer.Size = UDim2.new(1, 0, 0, if grown then 20 else 17)
-	panel.timer.TextSize = if grown then 18 else 17
-	panel.stroke.Transparency = if grown then 0.45 else 0.3
-	panel.billboard.Size = if grown then UDim2.fromOffset(98, 30)
+	panel.timer.Size = UDim2.new(1, 0, 0, if grown then 21 else 17)
+	panel.timer.TextSize = if grown then 19 else 17
+	panel.stroke.Transparency = if grown then 0.2 else 0.3
+	panel.billboard.Size = if grown then UDim2.fromOffset(140, 64)
 		else UDim2.fromOffset(124, 40)
 end
 

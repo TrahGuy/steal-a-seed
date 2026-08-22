@@ -14,13 +14,20 @@
 -- game has not made.
 --
 --==============================================================================
--- THE PANEL IS WHERE RARITY IS A WORD
+-- RARITY IS A WORD HERE, AND ON A GROWN PLATE -- BUT NEVER ON A POD
 --
--- On the world billboard a plant's rarity is its POD COLOUR and its weight is
--- its SIZE, so printing either as text out there would be a caption on a
--- photograph. In here you are reading rather than glancing, there is no model to
--- look at, and the word is the only thing carrying it -- so Common / Uncommon /
--- Rare / Epic live here and nowhere else.
+-- This file used to claim the rarity word lived here "and nowhere else". The
+-- uncorrupted reference recording says otherwise: every finished earner in it
+-- carries its rarity above its name, in that rarity's colour, and PlantUI now
+-- does the same.
+--
+-- The rule that survived is the one about PODS. An unhatched pod is COLOURED by
+-- rarity, so the word would be a caption on a photograph -- and more than that,
+-- it would spend the reveal early: two Commons arrive in identical shells and
+-- which one you got is meant to stay unknown until it finishes.
+--
+-- What this panel still owns alone is WEIGHT, and the rows for things you have
+-- never grown.
 --
 --==============================================================================
 -- SEEN MEANS GROWN, ON A PLOT YOU OWNED
