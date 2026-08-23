@@ -2329,6 +2329,81 @@ these are `AnimationConstraint.Transform` writes in `Stepped`, which is after th
 look the same in your hands. `gripFor()` was already the single definition of WHERE it rides; these
 were the two places that let something else win anyway.
 
+## The corner HUD, sampled off the reference rather than eyeballed — 2026-08-23
+
+`money speed gui.png` in the repo root. The owner asked for the money and speed readout to look
+exactly like it, so every value was taken out of the file with a pixel sampler.
+
+**The first impression was wrong, which is the reason for sampling.** At thumbnail size the icon
+reads as a blue shoe with a GREEN plus badge. Zoomed 6x it is a blue-and-white sneaker with a GOLD
+badge -- `rgb(255,216,0)`, 6.5% of the icon's pixels, the single most common colour in it.
+
+```
+speed fill      rgb( 25,144,255)   glyphs 24px tall,  "3.5M"   84px wide
+cash fill       rgb( 38,255,  0)   glyphs 32px tall,  "$1.8B" 105px wide
+outline         rgb(  0,  0,  0)   2px on the speed line, 3px on the cash (~9% of glyph height)
+badge           rgb(255,216,  0)   gold, white plus, black edge
+shoe highlight  rgb(223,242,252)
+```
+
+### The font was solved, not chosen
+
+Six heavy display faces ship with the engine. Measured aspect at TextSize 100 for `3.5M`:
+
+```
+LuckiestGuy 2.09   GothamBlack 2.06   FredokaOne 1.88   DenkOne 1.75   Bangers 1.63   Creepster 1.45
+```
+
+LuckiestGuy is the only one that is heavy AND slanted AND rounded, which is all three things the
+reference is. Then `TextService:GetTextSize` was used to solve for the sizes rather than pick them:
+
+```
+"3.5M"  at TextSize 39 ->  83 x 39 px    reference  84 px wide
+"$1.8B" at TextSize 47 -> 106 x 47 px    reference 105 px wide
+```
+
+Within a pixel on both, and at those sizes the cap heights land on 24 and 32 as well.
+
+Glyph coverage was checked rather than assumed: `$ 0 8 K M B .` and the em-dash all have widths
+DISTINCT from GothamBlack's, so LuckiestGuy is drawing its own glyphs and none of them is falling
+back to a substitute face. That is the same class of trap as the Gotham tofu dingbats.
+
+### What changed structurally
+
+  * **The ink plate is gone.** Corner radius, stroke, padding, all of it. The reference is bare
+    outlined text on grass, and the outline does the job the plate was doing.
+  * **Speed moved to the TOP and cash to the bottom**, cash larger. Both are the reference's.
+  * **No `SPD` prefix.** The shoe IS the label.
+  * The shoe is drawn from six frames -- sole, heel, toe, stripe, badge, two plus bars -- for the
+    same reason the Index book and the Garden sprout are. A glyph would be a tofu risk.
+
+### This is the one place the palette does not apply
+
+Ink / paper / accent is the vocabulary everywhere else. These four colours are not in it, on purpose,
+and there is a reason past "it was asked for": a HUD number is the only element with no plate behind
+it, so it has to survive grass, dirt, a nest and a treadmill on its own. Accent green (142,196,62) is
+olive, and on Greenhollow grass it disappears.
+
+The blue is deliberately NOT SpeedFX's shoe blue (96,164,232). Different element, not part of the
+request, left alone.
+
+### The cost of compact(), stated plainly
+
+The reference reads `$1.8B`, so the readout uses `GameConfig.compact`. That is lossy in a way commas
+were not:
+
+```
+the owner's save:  cash 1046473 -> "$1M"      speed 14454 -> "14K"
+```
+
+`$1M` will sit there for about eight minutes at 117/s before it becomes `$1.1M`. The ease-toward-
+value animation still runs underneath, but past a million there is nothing left for it to show. Under
+a thousand `compact` prints exact integers and the number moves on every payout, which is when the
+movement is actually teaching something.
+
+If ticking matters more than matching the picture, it is one line: commas, or a second decimal above
+a million.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

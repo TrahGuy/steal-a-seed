@@ -77,7 +77,10 @@ src/StarterPlayer/StarterPlayerScripts/
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
     PlantUI.client.luau         hatch/grow timer over anything tagged Planted
     PlantSway.client.luau       idle lean on planted sprouts/creatures (rooted)
-    CashUI.client.luau          cash + speed, drawn from the ProfileUpdated remote
+    CashUI.client.luau          corner HUD: cash + speed, from the ProfileUpdated remote
+    CashPop.client.luau         lime +$N rising off every grown plant (cosmetic only)
+    IndexUI.client.luau         LEFT rail: the almanac, ??? until you have grown it
+    GardenUI.client.luau        RIGHT rail: a row per plot slot, live clocks
     SpeedFX.client.luau         +N pops on Speed gain, and the run streak
     CarryPose.client.luau       both arms under the pod while carrying
 ```
