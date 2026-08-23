@@ -25,6 +25,19 @@ local UIKit = {}
 local RAIL = GameConfig.Rail
 
 --==============================================================================
+-- STUD DEFAULTS
+--
+-- They used to live in GameConfig.Rail, back when the rail was a drawn gold
+-- plate. The rail is artwork now and the shop panel is the only surface still
+-- studded, so the fallbacks live here with the code that uses them rather than
+-- in a config table nothing else reads.
+--==============================================================================
+local STUD_PITCH = 38
+local STUD_SIZE = 11
+local STUD_COLOUR = Color3.fromRGB(72, 78, 104)
+local STUD_TRANSPARENCY = 0.7
+
+--==============================================================================
 -- THE SMALL ONES
 --==============================================================================
 function UIKit.corner(parent: Instance, radius: number): UICorner
@@ -89,8 +102,8 @@ export type StudOptions = {
 function UIKit.studs(parent: GuiObject, width: number, height: number,
 	options: StudOptions?): Frame
 	local opts: StudOptions = options or {}
-	local studPitch = opts.pitch or RAIL.StudPitch
-	local studSize = opts.size or RAIL.StudSize
+	local studPitch = opts.pitch or STUD_PITCH
+	local studSize = opts.size or STUD_SIZE
 
 	local field = Instance.new("Frame")
 	field.Name = "Studs"
@@ -120,15 +133,15 @@ function UIKit.studs(parent: GuiObject, width: number, height: number,
 		local stud = Instance.new("Frame")
 		stud.Name = "Stud"
 		stud.LayoutOrder = i
-		stud.BackgroundColor3 = opts.colour or RAIL.Stud
-		stud.BackgroundTransparency = opts.transparency or RAIL.StudTransparency
+		stud.BackgroundColor3 = opts.colour or STUD_COLOUR
+		stud.BackgroundTransparency = opts.transparency or STUD_TRANSPARENCY
 		stud.BorderSizePixel = 0
 		stud.ZIndex = 0
 		stud.Parent = field
 		UIKit.corner(stud, math.max(1, math.floor(studSize / 2)))
 		if opts.rim then
 			UIKit.stroke(stud, opts.rim, opts.rimThickness or 1,
-				opts.transparency or RAIL.StudTransparency)
+				opts.transparency or STUD_TRANSPARENCY)
 		end
 	end
 
@@ -138,54 +151,26 @@ end
 --==============================================================================
 -- THE RAIL BUTTON
 --
--- Every HUD navigation button is this: a gold plate, studded, black-outlined.
--- Index and Shop on the left, Garden on the right, all identical because they
--- all come out of here.
+-- An ImageButton showing one of the three cropped slabs. There is nothing to
+-- draw: the border, the lattice, the icon and -- for Shop and Index -- the label
+-- are all in the artwork.
 --
--- The gold is sampled, not invented. `rgb(255,238,119)` is the highlight off the
--- reference's gold coin and `rgb(255,216,0)` is the plus-badge gold off the HUD
--- shot. No darker lip under it: the reference's own gold card has none either --
--- the black outline is what gives it an edge, and a lip would be inventing depth
--- the source does not have.
+-- Displayed at the image's NATIVE size. The source screenshot is 170 x 152, so
+-- there is no resolution to spare and scaling up would only blur it; 1:1 keeps
+-- every pixel the crop actually has.
 --
--- Returns the button. Callers parent their own icon and label into it; anything
--- they add lands above the studs, which sit at ZIndex 0.
+-- Callers still parent their badges into it. The button does not clip, because
+-- both badges hang half outside a corner on purpose.
 --==============================================================================
-function UIKit.railButton(parent: Instance, width: number, height: number): TextButton
-	local button = Instance.new("TextButton")
+function UIKit.railButton(parent: Instance, image: string, size: Vector2): ImageButton
+	local button = Instance.new("ImageButton")
 	button.Name = "RailButton"
-	button.Size = UDim2.fromOffset(width, height)
-	button.BackgroundColor3 = RAIL.GoldTop
+	button.Size = UDim2.fromOffset(size.X, size.Y)
+	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
+	button.Image = image
 	button.AutoButtonColor = false
-	button.Text = ""
 	button.Parent = parent
-
-	UIKit.corner(button, RAIL.CornerRadius)
-	UIKit.gradient(button, RAIL.GoldTop, RAIL.GoldBottom)
-	UIKit.stroke(button, RAIL.Outline, RAIL.OutlineThickness)
-
-	--======================================================================
-	-- THE STUDS GET THEIR OWN CLIPPED SURFACE
-	--
-	-- Not ClipsDescendants on the BUTTON. Both rail buttons that carry a
-	-- badge hang it half outside their own corner on purpose, and clipping
-	-- the button would cut it in half. So the clipping lives on an inner
-	-- frame that only the studs are inside.
-	--======================================================================
-	local surface = Instance.new("Frame")
-	surface.Name = "Surface"
-	surface.Size = UDim2.fromScale(1, 1)
-	surface.BackgroundTransparency = 1
-	surface.ClipsDescendants = true
-	surface.ZIndex = 0
-	surface.Parent = button
-	UIKit.corner(surface, RAIL.CornerRadius)
-	UIKit.studs(surface, width, height, {
-		rim = RAIL.StudRim,
-		rimThickness = RAIL.StudRimThickness,
-	})
-
 	return button
 end
 

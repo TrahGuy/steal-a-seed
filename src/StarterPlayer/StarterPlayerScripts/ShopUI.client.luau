@@ -79,10 +79,9 @@ local PANEL_NAME = "Shop"
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 local PANEL_WIDTH = 430
--- Below BOTH left-rail buttons: the Index sits at y = 12 and this one at y = 68,
--- each 46 tall, so 124 clears the pair and neither button is ever covered by the
--- panel it opened.
-local PANEL_TOP = 124
+-- Below BOTH left-rail slabs, computed from their real heights rather than
+-- typed, so neither button is ever covered by the panel it opened.
+local PANEL_TOP = GameConfig.Rail.PanelTop
 local SLIDE = 0.22
 local CARD_COLUMNS = 2
 
@@ -195,20 +194,20 @@ end
 --==============================================================================
 -- THE RAIL BUTTON
 --==============================================================================
-local button = UIKit.railButton(gui, 152, 46)
+--==============================================================================
+-- THE BUTTON IS THE ARTWORK
+--
+-- The cart and the word "Shop" are painted into `rail-shop.png`, so the toolbox
+-- and the label that used to be built here are gone. The toolbox function stays
+-- -- the panel's own title bar still draws one.
+--
+-- Positioned off the Index slab rather than a typed 68, so the two cannot drift
+-- apart when either crop is redone at a different height.
+--==============================================================================
+local RAIL = GameConfig.Rail
+local button = UIKit.railButton(gui, RAIL.ShopImage, RAIL.ShopSize)
 button.Name = "ShopButton"
-button.Position = UDim2.new(0, 12, 0, 68)
-
-local railIcon = toolbox(button, 1)
-railIcon.AnchorPoint = Vector2.new(0, 0.5)
-railIcon.Position = UDim2.new(0, 11, 0.5, 0)
-
-local railLabel = outlined(button, 18, WHITE, 2)
-railLabel.Name = "Label"
-railLabel.Position = UDim2.fromOffset(48, 0)
-railLabel.Size = UDim2.new(1, -58, 1, 0)
-railLabel.TextXAlignment = Enum.TextXAlignment.Left
-railLabel.Text = "Shop"
+button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.IndexSize.Y + RAIL.Gap)
 
 --==============================================================================
 -- THE PANEL

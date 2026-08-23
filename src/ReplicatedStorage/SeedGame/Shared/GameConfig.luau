@@ -666,57 +666,43 @@ function GameConfig.walkSpeedFor(speedScore: number): number
 end
 
 --==============================================================================
--- THE HUD RAIL: GOLD, STUDDED, BLACK-OUTLINED
+-- THE HUD RAIL IS ARTWORK NOW, NOT A DRAWN PLATE
 --
--- Every navigation button on screen -- Index and Shop on the left, Garden on the
--- right -- is one plate built by UIKit.railButton from these. One table, so the
--- three cannot drift apart.
+-- Cropped from the owner's `shop index.png` and uploaded. The gold studded plate
+-- that used to live here is gone: it was a code drawing of a look, and this is
+-- the look itself.
 --
--- THE GOLD IS SAMPLED, NOT INVENTED:
+--     rail-shop.png    123 x 49   green slab, cart and "Shop" baked in
+--     rail-index.png   123 x 48   blue slab, book and "Index" baked in
+--     rail-slab.png     49 x 49   the same skin, blank, hue-rotated to amber
 --
---     rgb(255,238,119)   the highlight off the reference's gold coin
---     rgb(255,216,0)     the plus-badge gold off the corner-HUD shot
+-- The sources are committed under `art/` so the crops can be redone. The Index
+-- crop needed repair -- the reference has a red "9" badge baked over its
+-- top-right corner and the count is dynamic, so that region was rebuilt by
+-- mirroring the slab VERTICALLY. It is symmetric top-to-bottom: matching
+-- borders, a cross-hatch lattice, a centred label, and the only glyph inside the
+-- damage is the final `x` of "Index", which is itself symmetric.
 --
--- No darker lip beneath. The reference's own gold card has none -- its edge is
--- the black outline, and adding a lip would be inventing depth the source does
--- not have. (The green BUY buttons in the shop do have one; that is theirs.)
+-- The Garden button has no reference of its own, so it borrows the family's
+-- skin: strictly clean columns of the Shop slab -- no cart, no letters, checked
+-- by luminance rather than by eye -- mirror-tiled so the diagonal lattice has no
+-- seam, then hue-rotated so three buttons read as three things and not two.
 --
---==============================================================================
--- A STUD NEEDS A DARK RIM, NOT A PALER FILL
---
--- The first attempt was a pale-gold disc at 0.62 over the plate and the owner
--- said flatly that it did not look studded. Measured, they were right and the
--- reason is arithmetic:
---
---     plate lum 230  ->  stud lum 237     delta  7.2   at the top of the gradient
---     plate lum 203  ->  stud lum 220     delta 17.3   at the bottom
---
--- rgb(255,252,214) against rgb(255,216,0) differs almost entirely in BLUE, and
--- blue carries 11% of luminance. So it composited to slightly-paler gold rather
--- than to anything with an edge. The studs were all there -- 44 frames, 6x6, a
--- measured 14px pitch, 33 of them inside the button -- and simply invisible.
---
--- What makes a stud read is not brightness, it is the DARK RING where the
--- cylinder meets the plate. rgb(191,132,0) against the gold is a luminance delta
--- of about 68, which is ten times the old fill and is what an eye actually
--- catches. The pale fill stays as the lit top face; the rim does the work.
---
--- Studs also grew 6 -> 8px, because a 1.5px rim on a 6px disc is most of the
--- disc.
+-- SIZES ARE NATIVE AND DISPLAYED 1:1. The source screenshot is 170 x 152, so
+-- there is no resolution to spare; scaling these up would only blur them.
 --==============================================================================
 GameConfig.Rail = {
-	GoldTop = Color3.fromRGB(255, 238, 119),
-	GoldBottom = Color3.fromRGB(255, 216, 0),
-	Outline = Color3.fromRGB(0, 0, 0),
-	Label = Color3.fromRGB(255, 255, 255),
-	Stud = Color3.fromRGB(255, 246, 176),
-	StudTransparency = 0.15,
-	StudRim = Color3.fromRGB(191, 132, 0),
-	StudRimThickness = 1.5,
-	StudPitch = 14,
-	StudSize = 8,
-	CornerRadius = 12,
-	OutlineThickness = 3,
+	ShopImage = "rbxassetid://98659233032073",
+	ShopSize = Vector2.new(123, 49),
+	IndexImage = "rbxassetid://125233705163038",
+	IndexSize = Vector2.new(123, 48),
+	SlabImage = "rbxassetid://130383639526295",
+	SlabSize = Vector2.new(49, 49),
+
+	-- Left rail: Index at the top, Shop under it, panels below both.
+	Inset = 12,
+	Gap = 6,
+	PanelTop = 126,
 }
 
 --==============================================================================

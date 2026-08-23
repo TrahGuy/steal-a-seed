@@ -98,7 +98,7 @@ local PANEL_WIDTH = 268
 -- One constant, because the resting position, the size and both ends of the
 -- slide all have to agree about it.
 --==============================================================================
-local PANEL_TOP = 124
+local PANEL_TOP = GameConfig.Rail.PanelTop
 local SLIDE = 0.22
 
 --==============================================================================
@@ -151,61 +151,17 @@ end
 --==============================================================================
 -- THE BUTTON
 --==============================================================================
--- Gold, studded, black-outlined -- and identical to the Shop and Garden buttons
--- because all three come out of the same builder.
-local button = UIKit.railButton(gui, 152, 46)
-button.Name = "IndexButton"
-button.Position = UDim2.new(0, 12, 0, 12)
-
 --==============================================================================
--- A DOCUMENT MADE OF RECTANGLES
+-- THE BUTTON IS THE ARTWORK
 --
--- Not a glyph. Most of Gotham's symbol range renders as tofu boxes in this
--- engine -- SpeedFX already paid for that lesson with a trainer emoji, and its
--- shoe is drawn the same way. A book made of frames is a book on every device.
+-- The book icon and the word "Index" used to be built here out of frames and a
+-- TextLabel. Both are painted into `rail-index.png` now, so there is nothing
+-- left to draw -- only the badge, which is a live count and cannot be baked.
 --==============================================================================
-local icon = Instance.new("Frame")
-icon.Name = "Icon"
-icon.Position = UDim2.fromOffset(12, 11)
-icon.Size = UDim2.fromOffset(20, 24)
-icon.BackgroundColor3 = PAPER
-icon.BorderSizePixel = 0
-icon.Parent = button
-corner(icon, 3)
--- On gold, a white page needs an edge or it dissolves into the plate.
-stroke(icon, INK, 2)
-
-local spine = Instance.new("Frame")
-spine.Name = "Spine"
-spine.Size = UDim2.fromOffset(5, 24)
-spine.BackgroundColor3 = ACCENT
-spine.BorderSizePixel = 0
-spine.Parent = icon
-corner(spine, 2)
-
-for i = 1, 3 do
-	local line = Instance.new("Frame")
-	line.Name = "Line" .. i
-	line.Position = UDim2.fromOffset(9, 4 + (i - 1) * 6)
-	line.Size = UDim2.fromOffset(8, 2)
-	line.BackgroundColor3 = INK
-	line.BackgroundTransparency = 0.35
-	line.BorderSizePixel = 0
-	line.Parent = icon
-end
-
-local buttonLabel = Instance.new("TextLabel")
-buttonLabel.Name = "Label"
-buttonLabel.Position = UDim2.fromOffset(42, 0)
-buttonLabel.Size = UDim2.new(1, -52, 1, 0)
-buttonLabel.BackgroundTransparency = 1
-buttonLabel.Font = Enum.Font.GothamBlack
-buttonLabel.TextSize = 18
-buttonLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-buttonLabel.TextXAlignment = Enum.TextXAlignment.Left
-buttonLabel.Text = "Index"
-buttonLabel.Parent = button
-stroke(buttonLabel, INK, 2)
+local RAIL = GameConfig.Rail
+local button = UIKit.railButton(gui, RAIL.IndexImage, RAIL.IndexSize)
+button.Name = "IndexButton"
+button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
 
 local badge = Instance.new("Frame")
 badge.Name = "Badge"

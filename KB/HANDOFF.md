@@ -2488,7 +2488,12 @@ because a shop cannot be drawn without prices and a placeholder in the data file
 buried in UI code would not be. Rough shape: ten times a tier. For scale, a starting plot of twelve
 mixed plants earns somewhere around 100-400/sec.
 
-## Gold studded rail buttons, and one UIKit — 2026-08-23
+## ~~Gold studded rail buttons~~, and one UIKit — 2026-08-23
+
+> **The gold plate is gone.** The owner supplied `shop index.png` and asked for those buttons
+> instead, cropped. The rail is artwork now; see "The rail is cropped artwork" below. UIKit survives
+> and so does `studs`, which the shop panel still uses -- everything below about the stud rim, the
+> clipping trap and the luminance lesson still holds for that surface.
 
 Every HUD navigation button is now the same gold plate: Index and Shop on the left, Garden on the
 right, studded, black-outlined.
@@ -2575,6 +2580,76 @@ half. The clipping lives on an inner `Surface` frame that only the studs are ins
 White on pale gold nearly disappears, and green on gold reads as a smudge without a border. So the
 Index book, the Garden sprout's stem and leaves, and both button labels all gained a black stroke --
 which is also what every readable element in the references has.
+
+## The rail is cropped artwork — 2026-08-23
+
+The owner supplied `shop index.png` -- a 170 x 152 screenshot of a green Shop button and a blue Index
+button -- and asked for those, cropped. They replace the gold studded plates.
+
+```
+art/rail-shop.png    123 x 49   green slab, cart and "Shop" baked in
+art/rail-index.png   123 x 48   blue slab, book and "Index" baked in
+art/rail-slab.png     49 x 49   the same skin, blank, hue-rotated to amber
+```
+
+Sources are committed under `art/` so the crops can be redone. Uploaded with the MCP
+`upload_image` tool off the local 8731 server; the ids live in `GameConfig.Rail`.
+
+### The Index crop had a badge baked into it
+
+The reference has a red "9" over the button's top-right corner. That count is live and cannot be
+painted in, so the corner had to be rebuilt.
+
+**The first repair mirrored HORIZONTALLY and dragged the book icon across the button** -- the icon
+lives at the left and the damage is at the right, so the mirror source was the icon. Visible as a
+white smear beside the word.
+
+**Vertical mirroring is correct**, and the slab supports it: matching top and bottom borders, a
+cross-hatch lattice that is symmetric, a vertically centred label, and the only glyph inside the
+damaged region is the final `x` of "Index" -- which is itself symmetric top to bottom.
+
+The crop also had to be taken at the button's TRUE rectangle. Scanning the whole band gave 132 x 51
+because the badge sticks out past the button's right edge; measuring from rows the badge does not
+touch gives the real 123 x 48.
+
+### The Garden button has no reference, so it borrows the skin
+
+Strictly clean columns of the Shop slab -- no cart, no letters -- found by luminance rather than by
+eye. The first attempt used a `> 200` white test and let glyph anti-aliasing through, which put
+smudges in the tile; requiring every pixel in a column to be within 14 luminance of the fill found
+one honest run at x 44..55.
+
+That patch is mirror-tiled so the diagonal lattice has no seam, bordered from the slab's own left and
+right edges, then hue-rotated green to amber so three buttons read as three things and not two.
+
+### Displayed 1:1, deliberately
+
+The source screenshot is 170 x 152. There is no resolution to spare, so the buttons are shown at the
+crops' native sizes and every pixel is the one the crop actually has. Scaling up would only blur
+them. The rail is a little narrower than the old 152px plates as a result.
+
+```
+Index  y  12.. 60
+Shop   y  66..115      gap 6, positioned off the Index slab's height, not typed
+panels y 126..         clears the pair by 11
+```
+
+### What came out of the client scripts
+
+IndexUI's book -- a frame, a spine and three lines -- and its "Index" TextLabel are deleted; so are
+ShopUI's rail toolbox and "Shop" label. All four are painted into the artwork. ShopUI keeps the
+`toolbox` function because the panel's own title bar still draws one. The badges stay: they are live
+counts.
+
+The stud defaults moved out of `GameConfig.Rail` and into UIKit beside the code that uses them, since
+the shop panel is now the only studded surface left.
+
+### Worth knowing before doing this again
+
+These crops are another game's UI art on the Roblox asset server. That is the owner's call and it is
+ordinary Roblox practice, but assets are moderated and a DMCA claim lands on the account, not on the
+file. Redrawing the same look in code -- which is what the gold plate was -- carries none of that
+risk and scales to any size.
 
 ## Still open
 

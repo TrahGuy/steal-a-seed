@@ -78,9 +78,8 @@ local BADGE = Color3.fromRGB(226, 76, 76)
 local PANEL_WIDTH = 276
 -- Mirrors IndexUI exactly: its button is at y = 12 and 46 tall, and its panel
 -- hangs ten pixels under that. Two rails at the same height read as a pair.
-local PANEL_TOP = 68
+local PANEL_TOP = GameConfig.Rail.PanelTop
 local SLIDE = 0.22
-local BUTTON = 46
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -117,12 +116,19 @@ end
 -- clip hangs an egg and a paw down that edge and a moon timer in the corner; we
 -- have one button and nothing under it.
 --==============================================================================
--- Gold, studded, black-outlined -- the same plate as the two on the left rail,
--- from the same builder, so the three cannot drift apart.
-local button = UIKit.railButton(gui, BUTTON, BUTTON)
+--==============================================================================
+-- THE SAME SKIN AS THE LEFT RAIL, BLANK
+--
+-- There is no Garden button in the owner's reference, so this wears the family's
+-- skin instead: clean columns of the Shop slab, mirror-tiled and hue-rotated to
+-- amber. The sprout below is still drawn, because unlike Shop and Index there is
+-- no icon painted into this one.
+--==============================================================================
+local RAIL = GameConfig.Rail
+local button = UIKit.railButton(gui, RAIL.SlabImage, RAIL.SlabSize)
 button.Name = "GardenButton"
 button.AnchorPoint = Vector2.new(1, 0)
-button.Position = UDim2.new(1, -12, 0, 12)
+button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
 
 --==============================================================================
 -- A SPROUT MADE OF RECTANGLES

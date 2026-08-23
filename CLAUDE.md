@@ -51,6 +51,7 @@ One logical change per commit. Never end a session with uncommitted work.
 
 ```
 default.project.json          Rojo map
+art/                          UI crops, uploaded to Roblox; ids in GameConfig.Rail
 src/
   ReplicatedStorage/SeedGame/
     Shared/GameConfig.luau      names, capacity, map geometry, speed curve, save
