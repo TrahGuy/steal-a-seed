@@ -87,11 +87,34 @@ local BIOME = "greenhollow"
 local SPECIES = SeedData.InBiome(BIOME)
 
 local PANEL_WIDTH = 268
--- Directly under the button: it sits at y = 12 and is 46 tall, so this leaves a
--- ten pixel gap. One constant, because the resting position, the size and both
--- ends of the slide all have to agree about it.
-local PANEL_TOP = 68
+--==============================================================================
+-- BELOW BOTH LEFT-RAIL BUTTONS
+--
+-- This was 68 -- ten pixels under this panel's own button. The Shop button now
+-- sits at y = 68 as well, so a panel opening at 68 covered the button that would
+-- close it. 124 clears the pair: Index at 12, Shop at 68, both 46 tall.
+--
+-- One constant, because the resting position, the size and both ends of the
+-- slide all have to agree about it.
+--==============================================================================
+local PANEL_TOP = 124
 local SLIDE = 0.22
+
+--==============================================================================
+-- THE LEFT RAIL HOLDS ONE PANEL AT A TIME
+--
+-- This and the Shop dock on the same edge at the same height, so they occupy one
+-- rectangle and cannot both be open. Each writes its own name to the OpenPanel
+-- attribute when it opens and closes itself on seeing a name that is not its
+-- own -- so neither script has to know the other exists, only that something
+-- else has taken the rail.
+--
+-- The GARDEN is deliberately not in this: it is on the RIGHT, it never overlaps
+-- either of these, and reading your own dirt while looking at the almanac is the
+-- whole reason there are two rails.
+--==============================================================================
+local ATTR = GameConfig.Attributes
+local PANEL_NAME = "Index"
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -477,11 +500,16 @@ local function setOpen(want: boolean)
 	end
 	open = want
 	if want then
+		-- Claim the left rail. Whoever else is holding it closes on this.
+		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
 		panel.Visible = true
 		panel.Position = UDim2.new(0, -PANEL_WIDTH - 24, 0, PANEL_TOP)
 		TweenService:Create(panel, TweenInfo.new(SLIDE, Enum.EasingStyle.Quad,
 			Enum.EasingDirection.Out), { Position = UDim2.new(0, 12, 0, PANEL_TOP) }):Play()
 	else
+		if player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
+			player:SetAttribute(ATTR.OpenPanel, nil)
+		end
 		local slideOut = TweenService:Create(panel, TweenInfo.new(SLIDE,
 			Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 			{ Position = UDim2.new(0, -PANEL_WIDTH - 24, 0, PANEL_TOP) })
@@ -500,6 +528,13 @@ button.Activated:Connect(function()
 end)
 close.Activated:Connect(function()
 	setOpen(false)
+end)
+
+player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
+	local holder = player:GetAttribute(ATTR.OpenPanel)
+	if open and holder ~= PANEL_NAME then
+		setOpen(false)
+	end
 end)
 
 -- No tick. Nothing on this panel changes on its own: the almanac only moves when

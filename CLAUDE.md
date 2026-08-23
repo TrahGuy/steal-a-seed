@@ -80,6 +80,7 @@ src/StarterPlayer/StarterPlayerScripts/
     CashUI.client.luau          corner HUD: cash + speed, from the ProfileUpdated remote
     CashPop.client.luau         lime +$N rising off every grown plant (cosmetic only)
     IndexUI.client.luau         LEFT rail: the almanac, ??? until you have grown it
+    ShopUI.client.luau          LEFT rail: the shop panel (UI only, nothing transacts yet)
     GardenUI.client.luau        RIGHT rail: a row per plot slot, live clocks
     SpeedFX.client.luau         +N pops on Speed gain, and the run streak
     CarryPose.client.luau       both arms under the pod while carrying

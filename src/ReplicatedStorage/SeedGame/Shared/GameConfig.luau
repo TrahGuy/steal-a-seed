@@ -238,11 +238,26 @@ GameConfig.Plot = {
 --==============================================================================
 -- ROWS, not depth. Depth is derived from them, so a tier cannot be defined with
 -- a size that does not fit a whole number of beds.
+--==============================================================================
+-- AND WHAT EACH ONE COSTS
+--
+-- `cost` is what the SHOP charges to move UP to that tier, in cash. Tier 1 is
+-- where everybody starts, so its cost is 0 and is never shown.
+--
+-- FIRST-PASS NUMBERS, NOT TUNED. They are here because a shop cannot be drawn
+-- without prices, and a placeholder in the data file is honest where a
+-- placeholder buried in UI code would not be. Rough shape: each tier is about
+-- ten times the last, so the first one is reachable in a session and the last
+-- one is a goal.
+--
+-- For scale: one grown Nubkin pays 2/sec and one Bellchime pays 110/sec, so a
+-- starting plot of twelve mixed plants is somewhere around 100-400/sec.
+--==============================================================================
 GameConfig.PlotTiers = {
-	{ rows = 4 },
-	{ rows = 6 },
-	{ rows = 8 },
-	{ rows = 10 },
+	{ rows = 4, cost = 0 },
+	{ rows = 6, cost = 25000 },
+	{ rows = 8, cost = 250000 },
+	{ rows = 10, cost = 2000000 },
 }
 
 -- What a plot is built at before anything is bought.
@@ -267,6 +282,20 @@ GameConfig.Attributes = {
 	-- the wrong one.
 	CarryingSpecies = "CarryingSpecies",
 	CarryingKg = "CarryingKg",
+	--==========================================================================
+	-- WHICH LEFT-RAIL PANEL IS OPEN, IF ANY
+	--
+	-- The Index and the Shop both dock on the LEFT and both are full height, so
+	-- they occupy the same rectangle and cannot both be open. Rather than have
+	-- one script reach into the other's ScreenGui, each writes its own name here
+	-- when it opens and clears it when it closes, and each closes itself when it
+	-- sees a name that is not its own.
+	--
+	-- The Garden is deliberately NOT part of this. It docks on the RIGHT, it
+	-- never overlaps either of them, and being able to read your own dirt while
+	-- looking at a shop price is the point of having two rails.
+	--==========================================================================
+	OpenPanel = "OpenPanel",
 	-- Bumped every time a pod is banked at the red line. A COUNTER rather than a
 	-- flag, because two banks in a row have to be two events -- setting a flag
 	-- true twice changes nothing and the second one would go unnoticed. The
@@ -635,6 +664,56 @@ function GameConfig.walkSpeedFor(speedScore: number): number
 	return S.BaseWalkSpeed
 		+ (S.MaxWalkSpeed - S.BaseWalkSpeed) * (1 - math.exp(-speedScore / S.Scale))
 end
+
+--==============================================================================
+-- THE SHOP'S PALETTE, SAMPLED OFF THE OWNER'S THREE REFERENCE SHOTS
+--
+-- `shop ui 1.png`, `shop ui 2.png`, `shop ui 3.png` in the repo root. Every
+-- value here came out of those files with a pixel sampler rather than off a
+-- first impression -- the same discipline the corner HUD needed, and for the
+-- same reason.
+--
+--     panel        rgb( 26, 28, 41)   very dark navy, black outline
+--     panel edge   rgb( 48, 50, 61)   the lighter inner lip
+--     card cyan    rgb(  0,247,237) -> rgb(  0,116,229)   vertical gradient
+--     card green   rgb(  4,229, 17) -> rgb( 19,126,  1)
+--     buy button   rgb( 31,246,  0)   flat, with rgb(22,143,0) under it
+--     close        rgb(255,  0,  0)   white X, black outline
+--
+-- The panel texture in the reference is a faint diagonal lattice with only ~5
+-- units of luminance spread -- barely there. Ours is STUDDED instead, because
+-- this game is blocky studded plastic (Rule 8) and a studded panel is the same
+-- idea said in our own accent. Kept at the reference's contrast: any louder and
+-- it competes with the cards it is behind.
+--
+-- These are NOT ink / paper / accent, exactly like the corner HUD is not. A shop
+-- panel is a full-screen-ish surface with its own internal contrast to manage.
+--==============================================================================
+GameConfig.Shop = {
+	Panel = Color3.fromRGB(26, 28, 41),
+	PanelEdge = Color3.fromRGB(48, 50, 61),
+	Outline = Color3.fromRGB(0, 0, 0),
+	Stud = Color3.fromRGB(52, 56, 76),
+	CardTop = Color3.fromRGB(0, 247, 237),
+	CardBottom = Color3.fromRGB(0, 116, 229),
+	CardBorder = Color3.fromRGB(0, 116, 229),
+	SoldTop = Color3.fromRGB(4, 229, 17),
+	SoldBottom = Color3.fromRGB(19, 126, 1),
+	Buy = Color3.fromRGB(31, 246, 0),
+	BuyShade = Color3.fromRGB(22, 143, 0),
+	Close = Color3.fromRGB(255, 0, 0),
+	Title = Color3.fromRGB(255, 255, 255),
+	-- The section headings in the reference are each a different colour: yellow
+	-- for PASSES, cyan for SPEED. One per section, so a long shop reads as a
+	-- list of shelves rather than one wall.
+	Heading = Color3.fromRGB(0, 232, 237),
+	Locked = Color3.fromRGB(120, 124, 140),
+	-- Studs every this many pixels. 38 keeps a full-height panel near 150 of
+	-- them, which is built once and never touched again -- the alternative was
+	-- an image asset, and nothing in this repo is placed by hand.
+	StudPitch = 38,
+	StudSize = 11,
+}
 
 --==============================================================================
 -- ONE COMPACTOR, NOT THREE

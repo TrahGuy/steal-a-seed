@@ -2404,6 +2404,90 @@ movement is actually teaching something.
 If ticking matters more than matching the picture, it is one line: commas, or a second decimal above
 a million.
 
+## The shop panel — 2026-08-23
+
+`ShopUI.client.luau`, left rail, under the Index. Built from `shop ui 1.png`, `shop ui 2.png` and
+`shop ui 3.png` in the repo root, sampled with a pixel reader rather than eyeballed -- the same
+discipline the corner HUD needed, and for the same reason.
+
+```
+panel        rgb( 26, 28, 41)   very dark navy, black outline, lighter inner lip rgb(48,50,61)
+card cyan    rgb(  0,247,237) -> rgb(  0,116,229)    vertical gradient
+card green   rgb(  4,229, 17) -> rgb( 19,126,  1)    the OWNED state
+buy button   rgb( 31,246,  0)   flat, rgb(22,143,0) shade under it
+close        rgb(255,  0,  0)   white X, black outline
+```
+
+Every one of those is in `GameConfig.Shop`, so a restyle is a data edit.
+
+### Studded, which the reference is not
+
+The reference panel carries a faint diagonal lattice -- measured at about five units of luminance
+spread, barely there. The owner asked for STUDDED, and it is the better call: Rule 8 is blocky
+studded plastic, so a studded panel says the same thing in our own accent.
+
+**Held at the reference's contrast on purpose.** `rgb(52,56,76)` studs on a `rgb(26,28,41)` panel at
+0.82 transparency. Any louder and the texture competes with the cards sitting on it, which is the one
+thing a shop panel must never do.
+
+Drawn as 12 x 17 = 204 frames on a `UIGridLayout` rather than a tiled image, because nothing in this
+repo is placed by hand and there is no asset id to rot. Built once at login, never touched again, and
+not rendered at all while the panel is shut.
+
+### The left rail now holds one panel at a time
+
+Index and Shop dock on the same edge at the same size, so they share one rectangle:
+
+```
+Index button   y  12..58
+Shop button    y  68..114
+both panels    y 124..        <- IndexUI's PANEL_TOP moved 68 -> 124
+```
+
+At 68 the Index panel covered the button that would have closed it. Both panels now open below the
+pair.
+
+They coordinate through a new `OpenPanel` attribute on the player: each writes its own name when it
+opens, clears it when it closes, and closes itself on seeing a name that is not its own. Neither
+script has to know the other exists, only that something took the rail.
+
+**The Garden is deliberately outside that.** It is on the RIGHT, it never overlaps either, and
+reading your own dirt while looking at a price is the whole reason there are two rails.
+
+### Nothing is buyable yet, and the buttons say SOON
+
+This is the UI. There is no `ShopService`, no purchase remote and no cash deduction, so a price
+button renders its state and does not transact.
+
+That is deliberate rather than unfinished. Taking money needs a server that owns the decision (Rule
+3), and a plot tier in particular is not buyable until `PlotService` can rebuild a bed at a new row
+count -- today every plot is tier 1 and nothing changes that, which is what `PlayerDataService`'s own
+"PLOT TIER GOES HERE when tiers ship" comment has always said.
+
+A button that read a price and silently did nothing would be the lie. These read `SOON`.
+
+### What it is stocked with, and why that is a placeholder
+
+The references sell Robux: speed packs, cash packs, and x2 gamepasses. All three are things this
+repo has explicitly rejected before, and two of them would be a second faucet -- cash mints in
+EconomyService and Speed only on the treadmill.
+
+So the first shelf is **PLOT**, selling the tiers `GameConfig.PlotTiers` already defines, priced in
+cash. It is the only upgrade the codebase had already designed, and it is a cash SINK, which this
+economy currently does not have at all: cash mints and never leaves.
+
+```
+tier 1   4 rows = 12 slots   where you start
+tier 2   6 rows = 18 slots   $25K
+tier 3   8 rows = 24 slots   $250K
+tier 4  10 rows = 30 slots   $2M
+```
+
+**Those prices are first-pass and untuned.** They live in `GameConfig.PlotTiers` next to the rows,
+because a shop cannot be drawn without prices and a placeholder in the data file is honest where one
+buried in UI code would not be. Rough shape: ten times a tier. For scale, a starting plot of twelve
+mixed plants earns somewhere around 100-400/sec.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
