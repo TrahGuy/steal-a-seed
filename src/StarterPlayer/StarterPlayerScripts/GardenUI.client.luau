@@ -58,6 +58,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -116,19 +117,12 @@ end
 -- clip hangs an egg and a paw down that edge and a moon timer in the corner; we
 -- have one button and nothing under it.
 --==============================================================================
-local button = Instance.new("TextButton")
+-- Gold, studded, black-outlined -- the same plate as the two on the left rail,
+-- from the same builder, so the three cannot drift apart.
+local button = UIKit.railButton(gui, BUTTON, BUTTON)
 button.Name = "GardenButton"
 button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -12, 0, 12)
-button.Size = UDim2.fromOffset(BUTTON, BUTTON)
-button.BackgroundColor3 = INK
-button.BackgroundTransparency = 0.15
-button.BorderSizePixel = 0
-button.AutoButtonColor = false
-button.Text = ""
-button.Parent = gui
-corner(button, 12)
-stroke(button, ACCENT, 2, 0.35)
 
 --==============================================================================
 -- A SPROUT MADE OF RECTANGLES
@@ -155,6 +149,7 @@ stem.BackgroundColor3 = ACCENT
 stem.BorderSizePixel = 0
 stem.Parent = sprout
 corner(stem, 2)
+stroke(stem, INK, 2)
 
 for _, side in ipairs({ -1, 1 }) do
 	local leaf = Instance.new("Frame")
@@ -167,6 +162,9 @@ for _, side in ipairs({ -1, 1 }) do
 	leaf.BorderSizePixel = 0
 	leaf.Parent = sprout
 	corner(leaf, 4)
+	-- Green on gold is legible, but an edge is what makes it read as a LEAF
+	-- rather than a smudge -- and everything in the references has one.
+	stroke(leaf, INK, 2)
 end
 
 --==============================================================================

@@ -54,6 +54,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -150,18 +151,11 @@ end
 --==============================================================================
 -- THE BUTTON
 --==============================================================================
-local button = Instance.new("TextButton")
+-- Gold, studded, black-outlined -- and identical to the Shop and Garden buttons
+-- because all three come out of the same builder.
+local button = UIKit.railButton(gui, 152, 46)
 button.Name = "IndexButton"
 button.Position = UDim2.new(0, 12, 0, 12)
-button.Size = UDim2.fromOffset(152, 46)
-button.BackgroundColor3 = INK
-button.BackgroundTransparency = 0.15
-button.BorderSizePixel = 0
-button.AutoButtonColor = false
-button.Text = ""
-button.Parent = gui
-corner(button, 12)
-stroke(button, ACCENT, 2, 0.35)
 
 --==============================================================================
 -- A DOCUMENT MADE OF RECTANGLES
@@ -178,6 +172,8 @@ icon.BackgroundColor3 = PAPER
 icon.BorderSizePixel = 0
 icon.Parent = button
 corner(icon, 3)
+-- On gold, a white page needs an edge or it dissolves into the plate.
+stroke(icon, INK, 2)
 
 local spine = Instance.new("Frame")
 spine.Name = "Spine"
@@ -203,12 +199,13 @@ buttonLabel.Name = "Label"
 buttonLabel.Position = UDim2.fromOffset(42, 0)
 buttonLabel.Size = UDim2.new(1, -52, 1, 0)
 buttonLabel.BackgroundTransparency = 1
-buttonLabel.Font = Enum.Font.GothamBold
+buttonLabel.Font = Enum.Font.GothamBlack
 buttonLabel.TextSize = 18
-buttonLabel.TextColor3 = PAPER
+buttonLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 buttonLabel.TextXAlignment = Enum.TextXAlignment.Left
 buttonLabel.Text = "Index"
 buttonLabel.Parent = button
+stroke(buttonLabel, INK, 2)
 
 local badge = Instance.new("Frame")
 badge.Name = "Badge"

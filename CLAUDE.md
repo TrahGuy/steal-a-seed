@@ -54,7 +54,9 @@ default.project.json          Rojo map
 src/
   ReplicatedStorage/SeedGame/
     Shared/GameConfig.luau      names, capacity, map geometry, speed curve, save
+    Shared/SeedData.luau        the five Greenhollow species, and what they earn
     Shared/BiomeData.luau       the five biomes and where they sit on the road
+    Shared/UIKit.luau           studs, and the one gold rail button all three use
     Remotes/                    created at runtime by ServerMain
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all

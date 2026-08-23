@@ -2488,6 +2488,65 @@ because a shop cannot be drawn without prices and a placeholder in the data file
 buried in UI code would not be. Rough shape: ten times a tier. For scale, a starting plot of twelve
 mixed plants earns somewhere around 100-400/sec.
 
+## Gold studded rail buttons, and one UIKit — 2026-08-23
+
+Every HUD navigation button is now the same gold plate: Index and Shop on the left, Garden on the
+right, studded, black-outlined.
+
+### The gold is sampled
+
+```
+rgb(255,238,119)   the highlight off the reference's gold coin (shop ui 3.png)
+rgb(255,216,0)     the plus-badge gold off the corner-HUD shot (money speed gui.png)
+```
+
+**No darker lip under the gradient.** The reference's own gold card has none -- its edge is the black
+outline, and adding a lip would be inventing depth the source does not have. The green BUY buttons
+inside the shop do have one; that is theirs, not the rail's.
+
+### One builder, because three copies is how they drift
+
+`Shared/UIKit.luau` is new, and it is where anything more than one client builds now lives:
+`corner`, `stroke`, `gradient`, `studs` and `railButton`.
+
+The reason is concrete rather than tidy-minded. Before this there were about to be **four**
+hand-rolled stud grids and **three** hand-rolled rail buttons. Four grids is how the shop panel and
+the Index button end up studded at different pitches; three buttons is how one of them quietly keeps
+a green stroke after the other two go gold. Same argument as `GameConfig.compact`: the second copy is
+where drift starts.
+
+It is NOT in GameConfig. GameConfig holds names, structure and the curves and does not build
+Instances; UIKit does nothing else.
+
+### Studs, everywhere, static
+
+```
+Index button   152 x 46   pitch 14 ->  44 studs
+Shop button    152 x 46   pitch 14 ->  44
+Garden button   46 x 46   pitch 14 ->  16
+Shop panel     430 x 620  pitch 38 -> 204
+                                      ---
+                          total        308
+```
+
+All built once at login and never touched again. There is no per-frame work anywhere in it, which is
+the half of Rule 8 that matters on a phone; the instance count is paid once.
+
+A finer pitch on the buttons than on the panel on purpose: 14px with a 6px stud puts about eleven
+across a 152px button, which is texture at a glance rather than a pattern you count.
+
+### The clipping trap this hit
+
+`railButton` does NOT set `ClipsDescendants` on the button. Both the Index and the Garden button hang
+a red badge half outside their own corner deliberately, and clipping the button cuts the badge in
+half. The clipping lives on an inner `Surface` frame that only the studs are inside.
+
+### Icons needed edges
+
+White on pale gold nearly disappears, and green on gold reads as a smudge without a border. So the
+Index book, the Garden sprout's stem and leaves, and both button labels all gained a black stroke --
+which is also what every readable element in the references has.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

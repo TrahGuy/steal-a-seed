@@ -68,6 +68,7 @@ local TweenService = game:GetService("TweenService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -194,18 +195,9 @@ end
 --==============================================================================
 -- THE RAIL BUTTON
 --==============================================================================
-local button = Instance.new("TextButton")
+local button = UIKit.railButton(gui, 152, 46)
 button.Name = "ShopButton"
 button.Position = UDim2.new(0, 12, 0, 68)
-button.Size = UDim2.fromOffset(152, 46)
-button.BackgroundColor3 = SHOP.Panel
-button.BackgroundTransparency = 0.1
-button.BorderSizePixel = 0
-button.AutoButtonColor = false
-button.Text = ""
-button.Parent = gui
-corner(button, 12)
-stroke(button, SHOP.Buy, 2, 0.35)
 
 local railIcon = toolbox(button, 1)
 railIcon.AnchorPoint = Vector2.new(0, 0.5)
@@ -215,7 +207,6 @@ local railLabel = outlined(button, 18, WHITE, 2)
 railLabel.Name = "Label"
 railLabel.Position = UDim2.fromOffset(48, 0)
 railLabel.Size = UDim2.new(1, -58, 1, 0)
-railLabel.Font = Enum.Font.GothamBold
 railLabel.TextXAlignment = Enum.TextXAlignment.Left
 railLabel.Text = "Shop"
 
@@ -245,41 +236,11 @@ panelSize.Parent = panel
 -- Sized for the panel's MAXIMUM height and clipped by the panel, so a short
 -- screen simply shows fewer of them and nothing has to be rebuilt on a resize.
 --==============================================================================
-local studField = Instance.new("Frame")
-studField.Name = "Studs"
-studField.Size = UDim2.fromScale(1, 1)
-studField.BackgroundTransparency = 1
-studField.ZIndex = 0
-studField.Parent = panel
-
-local studGrid = Instance.new("UIGridLayout")
-studGrid.CellSize = UDim2.fromOffset(SHOP.StudSize, SHOP.StudSize)
-studGrid.CellPadding = UDim2.fromOffset(SHOP.StudPitch - SHOP.StudSize,
-	SHOP.StudPitch - SHOP.StudSize)
-studGrid.FillDirection = Enum.FillDirection.Horizontal
-studGrid.SortOrder = Enum.SortOrder.LayoutOrder
-studGrid.Parent = studField
-
-local studPad = Instance.new("UIPadding")
-studPad.PaddingLeft = UDim.new(0, 9)
-studPad.PaddingTop = UDim.new(0, 9)
-studPad.Parent = studField
-
-do
-	local columns = math.ceil(PANEL_WIDTH / SHOP.StudPitch)
-	local rows = math.ceil(panelSize.MaxSize.Y / SHOP.StudPitch)
-	for i = 1, columns * rows do
-		local stud = Instance.new("Frame")
-		stud.Name = "Stud"
-		stud.LayoutOrder = i
-		stud.BackgroundColor3 = SHOP.Stud
-		stud.BackgroundTransparency = 0.82
-		stud.BorderSizePixel = 0
-		stud.ZIndex = 0
-		stud.Parent = studField
-		corner(stud, math.floor(SHOP.StudSize / 2))
-	end
-end
+-- Same builder the rail buttons use, at the panel's own coarser pitch. The
+-- panel already clips, and the grid is sized for its MAXIMUM height so a short
+-- screen just shows fewer studs.
+UIKit.studs(panel, PANEL_WIDTH, panelSize.MaxSize.Y,
+	SHOP.StudPitch, SHOP.StudSize, SHOP.Stud, 0.82)
 
 --==============================================================================
 -- THE TITLE BAR

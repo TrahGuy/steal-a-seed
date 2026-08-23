@@ -666,6 +666,40 @@ function GameConfig.walkSpeedFor(speedScore: number): number
 end
 
 --==============================================================================
+-- THE HUD RAIL: GOLD, STUDDED, BLACK-OUTLINED
+--
+-- Every navigation button on screen -- Index and Shop on the left, Garden on the
+-- right -- is one plate built by UIKit.railButton from these. One table, so the
+-- three cannot drift apart.
+--
+-- THE GOLD IS SAMPLED, NOT INVENTED:
+--
+--     rgb(255,238,119)   the highlight off the reference's gold coin
+--     rgb(255,216,0)     the plus-badge gold off the corner-HUD shot
+--
+-- No darker lip beneath. The reference's own gold card has none -- its edge is
+-- the black outline, and adding a lip would be inventing depth the source does
+-- not have. (The green BUY buttons in the shop do have one; that is theirs.)
+--
+-- Studs are a paler gold at 0.62, which reads as light catching a moulded
+-- surface rather than as dots printed on one. Pitch 14 with a 6px stud puts
+-- about eleven across a 152px button -- fine enough to be texture at a glance
+-- instead of a pattern you count.
+--==============================================================================
+GameConfig.Rail = {
+	GoldTop = Color3.fromRGB(255, 238, 119),
+	GoldBottom = Color3.fromRGB(255, 216, 0),
+	Outline = Color3.fromRGB(0, 0, 0),
+	Label = Color3.fromRGB(255, 255, 255),
+	Stud = Color3.fromRGB(255, 252, 214),
+	StudTransparency = 0.62,
+	StudPitch = 14,
+	StudSize = 6,
+	CornerRadius = 12,
+	OutlineThickness = 3,
+}
+
+--==============================================================================
 -- THE SHOP'S PALETTE, SAMPLED OFF THE OWNER'S THREE REFERENCE SHOTS
 --
 -- `shop ui 1.png`, `shop ui 2.png`, `shop ui 3.png` in the repo root. Every
