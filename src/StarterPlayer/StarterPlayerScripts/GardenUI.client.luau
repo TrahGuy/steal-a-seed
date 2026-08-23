@@ -173,7 +173,7 @@ end
 -- THE BADGE COUNTS WHAT IS STILL COOKING
 --
 -- Hatching and growing plants only. A grown one does not badge: it is already
--- shouting in the world with a three-line plate and a `+$N` every second, and a
+-- announcing itself in the world with a `+$N` popping off it every second, and a
 -- badge that never clears is a badge you stop reading.
 --
 -- On the button's LEFT corner, not its right -- the button is already against
@@ -554,7 +554,22 @@ local function refresh(paint: boolean)
 				row.swatch.BackgroundColor3 = if stage == STAGE_POD
 					then SeedData.PodColor(species)
 					else species.Crown
-				row.name.Text = species.Name
+				--==========================================================
+				-- A POD IS NOT NAMED, HERE EITHER
+				--
+				-- This printed the species name at every stage and only ghosted
+				-- its COLOUR while it waited, which spent the reveal in a list
+				-- and made the whole pod-colour design pointless: two Commons
+				-- are meant to arrive in identical shells so you cannot tell
+				-- which one you got until it opens, and the Garden was simply
+				-- telling you.
+				--
+				-- A SPROUT is named, though. By then the model in the ground is
+				-- the creature at SPROUT_SCALE -- the shape is out there being
+				-- looked at -- so withholding the word would be hiding
+				-- something the world has already shown.
+				--==========================================================
+				row.name.Text = if stage == STAGE_POD then "???" else species.Name
 				if stage == STAGE_GROWN then
 					row.name.TextColor3 = GameConfig.RarityColor[species.Rarity] or PAPER
 					row.sub.Text = "$" .. GameConfig.compact(

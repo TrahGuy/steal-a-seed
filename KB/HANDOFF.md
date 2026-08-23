@@ -2263,6 +2263,72 @@ Index spells it. Garden tints a finished row's NAME with the colour, which is a 
 statement. The world says it only by pod colour, on a thing that has not hatched. Three surfaces,
 one word, no repetition.
 
+## A pod you own was carried differently from one you stole — 2026-08-22
+
+Two bugs the owner found in one sentence, and the second one had two causes.
+
+### The Garden was naming a pod
+
+`GardenUI` printed `species.Name` at every stage and only ghosted its COLOUR while it waited. That
+spends the reveal in a list and makes the entire pod-colour design pointless: pods are coloured by
+RARITY precisely so the two Commons arrive in identical shells and you cannot tell which one you got
+until it opens.
+
+A pod row now reads `???`. A SPROUT is named, because by then the model in the ground IS the creature
+at `SPROUT_SCALE` -- the shape is out there being looked at, and withholding the word would be hiding
+something the world has already shown.
+
+### The hand weld was never being destroyed, because it is not where it was looked for
+
+`bank()` builds a Tool for the pod you carry home, and a Tool gets welded to the right HAND by the
+engine on equip -- one fist, arm's length, nothing like the two-handed haul the raid uses. The code
+already meant to replace that with the same root weld `attachInFront` uses. It never did. Measured on
+the owner's live equipped Tool:
+
+```
+joint "RightGrip" (Weld) parented to RightHand | Part0=RightHand      Part1=Handle
+joint "CarryWeld" (Weld) parented to Handle    | Part0=HumanoidRootPart Part1=Handle
+handle sits at (0.00, -0.35, -2.11) in the root's frame, 0.22 studs from the right hand
+```
+
+**Both of them, at once.** The engine parents its weld to the **RightHand**, and the code looked for
+it with `character:FindFirstChild("RightGrip")` -- which searches DIRECT CHILDREN only. It never
+found it, never destroyed it, and the pod was rigidly welded to the fist and to the root
+simultaneously.
+
+Note what the numbers do NOT say: `-2.11` is exactly `GripForward(Spiretip)`, so the POSITION was
+already right. Do not chase the offset; the fault was an extra weld and the animation that comes with
+it.
+
+Two fixes, because there were two ways to lose:
+
+  * **WHERE** -- scan the character's DESCENDANTS for any joint whose `Part1` is this handle and
+    which is not ours, instead of guessing a parent.
+  * **WHEN** -- the engine builds that weld asynchronously after `Equipped` fires, so a single
+    deferred destroy can also simply be early. A `DescendantAdded` watch stays live while the tool is
+    held and re-asserts the root weld if a hand weld turns up later. Disconnected on `Unequipped`.
+
+### And the arms were being handed back at the red line
+
+The other half, and the one that actually reads on screen. `CarryPose` poses both arms under the pod
+while `CarryingSpecies` is set -- and `bank()` clears that attribute the instant you cross the line,
+because as far as the server is concerned you have stopped carrying loot.
+
+But the pod does not leave your hands when you bank it. It becomes a Tool in your hotbar and you walk
+on with the same object. So the arms dropped and the default Roblox tool animation took over: the
+same pod, held two different ways depending on whose it was.
+
+`CarryPose` now falls back to the `SpeciesId` attribute `CarryService` already stamps on the Tool. An
+equipped Tool is parented INSIDE the character, so this reads for every player on screen and not only
+the local one -- the same property the attribute had. The pose still beats the tool animation, because
+these are `AnimationConstraint.Transform` writes in `Stepped`, which is after the animator has run.
+
+### The rule underneath both
+
+**A pod is a pod.** Stolen, banked, or on its way to the dirt, it is the same object and it should
+look the same in your hands. `gripFor()` was already the single definition of WHERE it rides; these
+were the two places that let something else win anyway.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

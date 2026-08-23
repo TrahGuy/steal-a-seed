@@ -193,6 +193,39 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 --==============================================================================
+-- A BANKED POD IS STILL A CARRIED POD
+--
+-- CarryingSpecies is set while you are running a stolen pod home and cleared the
+-- INSTANT you bank it -- but the pod does not leave your hands when you bank it.
+-- It becomes a Tool in your hotbar and you carry the same object onward. So the
+-- attribute alone posed both arms under a pod you had stolen and dropped them
+-- for one you owned, and the default Roblox tool animation took over: the same
+-- pod, held two different ways depending on whose it was.
+--
+-- CarryService stamps SpeciesId on that Tool, and an equipped Tool is parented
+-- INSIDE the character -- so this reads for every player on screen, not only the
+-- local one, exactly like the attribute it falls back from.
+--
+-- The pose still wins over the tool animation: these are AnimationConstraint
+-- Transforms written in Stepped, which is after the animator has run.
+--==============================================================================
+local function carriedSpeciesId(player: Player, character: Model): string?
+	local attribute = player:GetAttribute(CARRYING)
+	if type(attribute) == "string" then
+		return attribute
+	end
+	for _, d in ipairs(character:GetChildren()) do
+		if d:IsA("Tool") then
+			local id = d:GetAttribute("SpeciesId")
+			if type(id) == "string" then
+				return id
+			end
+		end
+	end
+	return nil
+end
+
+--==============================================================================
 -- THE POSE
 --
 -- Stepped, not Heartbeat: after the animation has been evaluated for the frame.
@@ -204,7 +237,7 @@ RunService.Stepped:Connect(function(_, dt)
 		if not character or not character.Parent then
 			rigs[player] = nil
 		else
-			local speciesId = player:GetAttribute(CARRYING)
+			local speciesId = carriedSpeciesId(player, character)
 			local want = if speciesId ~= nil then 1 else 0
 			rig.weight += (want - rig.weight) * alpha
 			if rig.weight < 0.002 and want == 0 then
@@ -212,8 +245,7 @@ RunService.Stepped:Connect(function(_, dt)
 			end
 
 			if rig.weight > 0 then
-				local lift, spread = anglesFor(if type(speciesId) == "string"
-					then speciesId else nil)
+				local lift, spread = anglesFor(speciesId)
 				for _, side in ipairs(rig.sides) do
 					local w = rig.weight
 					local pose: CFrame

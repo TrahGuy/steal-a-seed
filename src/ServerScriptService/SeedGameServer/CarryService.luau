@@ -546,41 +546,94 @@ local function bank(player: Player): boolean
 	pod:Destroy()
 	weightTag(handle, species)
 
-	--== THE SAME GRIP AFTER THE LINE AS BEFORE IT ==--
-	-- A Tool is welded to the right HAND by a RightGrip weld Roblox makes on
-	-- equip, which would hold the pod out at arm's length in one fist. That is a
-	-- different game from the two-handed haul the raid uses.
+	--==========================================================================
+	-- THE SAME GRIP AFTER THE LINE AS BEFORE IT
 	--
-	-- So on equip the hand weld is replaced with the SAME root weld the raid
-	-- carry uses. Deferred by a frame because RightGrip does not exist until
-	-- after Equipped has fired, and destroying a weld that is not there yet
-	-- leaves the default one in place.
+	-- A Tool is welded to the right HAND by a weld Roblox makes on equip, which
+	-- holds the pod out in one fist. That is a different game from the
+	-- two-handed haul the raid uses, and a pod you own should not be carried
+	-- differently from a pod you are stealing.
+	--
+	--==========================================================================
+	-- THE ENGINE PARENTS THAT WELD TO THE HAND, NOT TO THE CHARACTER
+	--
+	-- Measured on a live equipped Tool in a real session:
+	--
+	--   joint "RightGrip" (Weld) parented to RightHand | Part0=RightHand  Part1=Handle
+	--   joint "CarryWeld" (Weld) parented to Handle    | Part0=RootPart   Part1=Handle
+	--
+	-- BOTH of them, at once. This used to look for the hand weld with
+	-- `character:FindFirstChild("RightGrip")`, which searches DIRECT CHILDREN
+	-- only -- so it never found it, never destroyed it, and the pod ended up
+	-- rigidly welded to the fist and to the root simultaneously. Measured 0.22
+	-- studs from the right hand: over-constrained, with the hand winning.
+	--
+	-- Two fixes, because there were two ways to lose:
+	--
+	--   WHERE   scan the character's DESCENDANTS for anything jointed to this
+	--           handle that is not ours, rather than guessing a parent.
+	--   WHEN    the engine builds that weld asynchronously after Equipped fires,
+	--           so one deferred destroy can also simply be early. A
+	--           DescendantAdded watch stays live for as long as the tool is held
+	--           and re-asserts the root weld if a hand weld turns up later.
+	--==========================================================================
 	local grip = gripFor(species)
-	table.insert(serviceConnections, tool.Equipped:Connect(function()
-		task.defer(function()
-			local character = tool.Parent
-			if not (character and character:IsA("Model") and handle.Parent == tool) then
-				return
+
+	local function fitToRoot(character: Model)
+		if handle.Parent ~= tool then
+			return
+		end
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if not (root and root:IsA("BasePart")) then
+			return
+		end
+		-- Anything holding this handle that we did not make.
+		for _, d in ipairs(character:GetDescendants()) do
+			if d:IsA("JointInstance") and d.Name ~= "CarryWeld" and d.Part1 == handle then
+				d:Destroy()
 			end
-			local root = character:FindFirstChild("HumanoidRootPart")
-			if not (root and root:IsA("BasePart")) then
-				return
-			end
-			local rightGrip = character:FindFirstChild("RightGrip")
-			if rightGrip then
-				rightGrip:Destroy()
-			end
-			local existing = handle:FindFirstChild("CarryWeld")
-			if existing then
-				existing:Destroy()
-			end
+		end
+		if not handle:FindFirstChild("CarryWeld") then
+			-- Placed before the weld exists, exactly as attachInFront does, so
+			-- it arrives in front of the chest rather than snapping there.
+			handle.CFrame = root.CFrame * grip
 			local weld = Instance.new("Weld")
 			weld.Name = "CarryWeld"
 			weld.Part0 = root
 			weld.Part1 = handle
 			weld.C0 = grip
 			weld.Parent = handle
+		end
+	end
+
+	local watching: RBXScriptConnection? = nil
+
+	table.insert(serviceConnections, tool.Equipped:Connect(function()
+		local character = tool.Parent
+		if not (character and character:IsA("Model")) then
+			return
+		end
+		local model = character :: Model
+		if watching then
+			watching:Disconnect()
+		end
+		watching = model.DescendantAdded:Connect(function(d)
+			-- Part0/Part1 are not necessarily assigned yet when this fires, so
+			-- the test is deliberately loose and the real check happens inside
+			-- fitToRoot a frame later.
+			if d:IsA("JointInstance") and d.Name ~= "CarryWeld" then
+				task.defer(fitToRoot, model)
+			end
 		end)
+		fitToRoot(model)
+		task.defer(fitToRoot, model)
+	end))
+
+	table.insert(serviceConnections, tool.Unequipped:Connect(function()
+		if watching then
+			watching:Disconnect()
+			watching = nil
+		end
 	end))
 	tool.Parent = backpack
 
