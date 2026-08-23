@@ -2518,6 +2518,35 @@ where drift starts.
 It is NOT in GameConfig. GameConfig holds names, structure and the curves and does not build
 Instances; UIKit does nothing else.
 
+### The first stud attempt was invisible, and the reason is arithmetic
+
+> **The owner said flatly that they did not look studded, and they were right.** The studs were all
+> there -- measured on a live client: 44 frames, 6x6px, a 14px pitch, 33 of them inside the button,
+> none zero-sized. Not a layout bug. They simply had no contrast:
+>
+> ```
+> plate lum 230  ->  stud lum 237     delta  7.2   at the top of the gradient
+> plate lum 203  ->  stud lum 220     delta 17.3   at the bottom
+> ```
+>
+> `rgb(255,252,214)` against `rgb(255,216,0)` differs almost **entirely in BLUE**, and blue carries
+> 11% of luminance. It composited to slightly-paler gold rather than to anything with an edge.
+>
+> **What makes a stud read is not brightness, it is the dark ring where the cylinder meets the
+> plate.** `rgb(191,132,0)` on gold is a luminance delta of 58-81 -- an order of magnitude more than
+> the fill ever had. The pale fill stays as the lit top face; the rim does the work. Studs also grew
+> 6 -> 8px, because a 1.5px rim on a 6px disc is most of the disc.
+>
+> The shop panel went the same way for the same reason: its studs measured a delta of 5.1 and are now
+> 15.1. No rim there -- a dark ring on an already-dark panel is instances without contrast, and that
+> texture has cards sitting on it.
+>
+> `UIKit.studs` takes an options table now rather than six positional arguments, which is what made
+> `rim` addable without every call site growing two more nils.
+>
+> **The lesson, and it is the same one the corner HUD taught:** a colour difference is not a contrast
+> difference. Check luminance, not RGB.
+
 ### Studs, everywhere, static
 
 ```

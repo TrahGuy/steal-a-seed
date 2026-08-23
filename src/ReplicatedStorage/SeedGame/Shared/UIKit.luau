@@ -62,16 +62,35 @@ end
 --
 -- Built once and never touched again. There is no per-frame work here at all,
 -- which is the half of Rule 8 that actually matters on a phone -- the instance
--- count is paid at login, once, for a panel that is usually shut.
+-- count is paid at login, once.
 --
--- Contrast is deliberately low. The shop reference's own texture measured about
--- five units of luminance spread, and anything louder competes with whatever is
--- sitting on top of it.
 --==============================================================================
+-- THE RIM IS WHAT MAKES IT READ AS A STUD
+--
+-- `rim` is optional and the difference between a stud and a dot. A pale disc on
+-- a bright plate separates by almost nothing in LUMINANCE -- the rail's first
+-- attempt measured a delta of 7 and the owner said, correctly, that it did not
+-- look studded. A dark ring where the cylinder meets the plate is what an eye
+-- catches, and on gold that is a delta of about 68.
+--
+-- Passed nil on dark surfaces, where a dark ring would add instances and no
+-- contrast. The shop panel does that: it wants quiet texture behind cards, not
+-- a moulded surface.
+--==============================================================================
+export type StudOptions = {
+	pitch: number?,
+	size: number?,
+	colour: Color3?,
+	transparency: number?,
+	rim: Color3?,
+	rimThickness: number?,
+}
+
 function UIKit.studs(parent: GuiObject, width: number, height: number,
-	pitch: number?, size: number?, colour: Color3?, transparency: number?): Frame
-	local studPitch = pitch or RAIL.StudPitch
-	local studSize = size or RAIL.StudSize
+	options: StudOptions?): Frame
+	local opts: StudOptions = options or {}
+	local studPitch = opts.pitch or RAIL.StudPitch
+	local studSize = opts.size or RAIL.StudSize
 
 	local field = Instance.new("Frame")
 	field.Name = "Studs"
@@ -101,12 +120,16 @@ function UIKit.studs(parent: GuiObject, width: number, height: number,
 		local stud = Instance.new("Frame")
 		stud.Name = "Stud"
 		stud.LayoutOrder = i
-		stud.BackgroundColor3 = colour or RAIL.Stud
-		stud.BackgroundTransparency = transparency or RAIL.StudTransparency
+		stud.BackgroundColor3 = opts.colour or RAIL.Stud
+		stud.BackgroundTransparency = opts.transparency or RAIL.StudTransparency
 		stud.BorderSizePixel = 0
 		stud.ZIndex = 0
 		stud.Parent = field
 		UIKit.corner(stud, math.max(1, math.floor(studSize / 2)))
+		if opts.rim then
+			UIKit.stroke(stud, opts.rim, opts.rimThickness or 1,
+				opts.transparency or RAIL.StudTransparency)
+		end
 	end
 
 	return field
@@ -158,7 +181,10 @@ function UIKit.railButton(parent: Instance, width: number, height: number): Text
 	surface.ZIndex = 0
 	surface.Parent = button
 	UIKit.corner(surface, RAIL.CornerRadius)
-	UIKit.studs(surface, width, height)
+	UIKit.studs(surface, width, height, {
+		rim = RAIL.StudRim,
+		rimThickness = RAIL.StudRimThickness,
+	})
 
 	return button
 end

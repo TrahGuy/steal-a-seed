@@ -681,20 +681,40 @@ end
 -- the black outline, and adding a lip would be inventing depth the source does
 -- not have. (The green BUY buttons in the shop do have one; that is theirs.)
 --
--- Studs are a paler gold at 0.62, which reads as light catching a moulded
--- surface rather than as dots printed on one. Pitch 14 with a 6px stud puts
--- about eleven across a 152px button -- fine enough to be texture at a glance
--- instead of a pattern you count.
+--==============================================================================
+-- A STUD NEEDS A DARK RIM, NOT A PALER FILL
+--
+-- The first attempt was a pale-gold disc at 0.62 over the plate and the owner
+-- said flatly that it did not look studded. Measured, they were right and the
+-- reason is arithmetic:
+--
+--     plate lum 230  ->  stud lum 237     delta  7.2   at the top of the gradient
+--     plate lum 203  ->  stud lum 220     delta 17.3   at the bottom
+--
+-- rgb(255,252,214) against rgb(255,216,0) differs almost entirely in BLUE, and
+-- blue carries 11% of luminance. So it composited to slightly-paler gold rather
+-- than to anything with an edge. The studs were all there -- 44 frames, 6x6, a
+-- measured 14px pitch, 33 of them inside the button -- and simply invisible.
+--
+-- What makes a stud read is not brightness, it is the DARK RING where the
+-- cylinder meets the plate. rgb(191,132,0) against the gold is a luminance delta
+-- of about 68, which is ten times the old fill and is what an eye actually
+-- catches. The pale fill stays as the lit top face; the rim does the work.
+--
+-- Studs also grew 6 -> 8px, because a 1.5px rim on a 6px disc is most of the
+-- disc.
 --==============================================================================
 GameConfig.Rail = {
 	GoldTop = Color3.fromRGB(255, 238, 119),
 	GoldBottom = Color3.fromRGB(255, 216, 0),
 	Outline = Color3.fromRGB(0, 0, 0),
 	Label = Color3.fromRGB(255, 255, 255),
-	Stud = Color3.fromRGB(255, 252, 214),
-	StudTransparency = 0.62,
+	Stud = Color3.fromRGB(255, 246, 176),
+	StudTransparency = 0.15,
+	StudRim = Color3.fromRGB(191, 132, 0),
+	StudRimThickness = 1.5,
 	StudPitch = 14,
-	StudSize = 6,
+	StudSize = 8,
 	CornerRadius = 12,
 	OutlineThickness = 3,
 }
@@ -727,7 +747,7 @@ GameConfig.Shop = {
 	Panel = Color3.fromRGB(26, 28, 41),
 	PanelEdge = Color3.fromRGB(48, 50, 61),
 	Outline = Color3.fromRGB(0, 0, 0),
-	Stud = Color3.fromRGB(52, 56, 76),
+	Stud = Color3.fromRGB(72, 78, 104),
 	CardTop = Color3.fromRGB(0, 247, 237),
 	CardBottom = Color3.fromRGB(0, 116, 229),
 	CardBorder = Color3.fromRGB(0, 116, 229),
@@ -742,6 +762,12 @@ GameConfig.Shop = {
 	-- list of shelves rather than one wall.
 	Heading = Color3.fromRGB(0, 232, 237),
 	Locked = Color3.fromRGB(120, 124, 140),
+	-- The panel's studs stay far quieter than the rail's: there are cards
+	-- sitting on this and texture must never compete with them. No rim here --
+	-- a dark ring on an already-dark panel adds nothing but instances. Lifted
+	-- from rgb(52,56,76) at 0.82, which measured a luminance delta of 5 and was
+	-- as invisible as the rail's first attempt.
+	StudTransparency = 0.7,
 	-- Studs every this many pixels. 38 keeps a full-height panel near 150 of
 	-- them, which is built once and never touched again -- the alternative was
 	-- an image asset, and nothing in this repo is placed by hand.

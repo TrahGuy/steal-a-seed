@@ -239,8 +239,13 @@ panelSize.Parent = panel
 -- Same builder the rail buttons use, at the panel's own coarser pitch. The
 -- panel already clips, and the grid is sized for its MAXIMUM height so a short
 -- screen just shows fewer studs.
-UIKit.studs(panel, PANEL_WIDTH, panelSize.MaxSize.Y,
-	SHOP.StudPitch, SHOP.StudSize, SHOP.Stud, 0.82)
+-- No rim: a dark ring on an already-dark panel is instances without contrast.
+UIKit.studs(panel, PANEL_WIDTH, panelSize.MaxSize.Y, {
+	pitch = SHOP.StudPitch,
+	size = SHOP.StudSize,
+	colour = SHOP.Stud,
+	transparency = SHOP.StudTransparency,
+})
 
 --==============================================================================
 -- THE TITLE BAR
