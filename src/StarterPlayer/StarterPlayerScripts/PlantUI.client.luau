@@ -90,8 +90,9 @@ local INK = Color3.fromRGB(26, 24, 30)
 local PAPER = Color3.fromRGB(248, 246, 240)
 local ACCENT = Color3.fromRGB(142, 196, 62)
 
+-- The only two things that stand in a bed. There is no sprout any more: nothing
+-- grows in the ground, it hatches in your hands.
 local STAGE_POD = 1
-local STAGE_SPROUT = 2
 local STAGE_GROWN = 3
 
 --==============================================================================
@@ -180,6 +181,17 @@ local function build(model: Model): Panel?
 	-- PromptUI paid for. Far enough to read a neighbour's plot from the road,
 	-- which is the whole point of showing it to people who do not own it.
 	billboard.MaxDistance = 160
+	--==========================================================================
+	-- BORN OFF, TURNED ON BY refresh()
+	--
+	-- A BillboardGui defaults to Enabled and both labels are built empty. So
+	-- anything that stopped refresh() from running -- it threw once, on a
+	-- signature change, and every plant in the game wore a blank dark rectangle
+	-- for a session -- left a plate that was never written to and never switched
+	-- off. Starting off means a plate is only ever visible because something
+	-- actually put text in it.
+	--==========================================================================
+	billboard.Enabled = false
 	billboard.Parent = container
 
 	local panel = Instance.new("Frame")
@@ -252,42 +264,49 @@ end
 -- WHAT IT SAYS
 --
 -- Recomputed from the same two numbers the server uses -- PlantedAt and the
--- grow time for THIS PLANT'S WEIGHT -- rather than from anything pushed across.
+-- hatch time for THIS POD'S WEIGHT -- rather than from anything pushed across.
 -- Nothing to replicate, and it is already correct on the first frame after a
--- rejoin. Reading the species sheet instead would run a 9,000 kg plant's clock
--- at a 2 kg plant's speed and finish it four and a half minutes early.
+-- rejoin. Reading the species sheet instead would run a 9,000 kg pod's clock at
+-- a 2 kg pod's speed and finish it four and a half minutes early.
+--
+-- ONLY AN UNHATCHED POD HAS ANYTHING TO SAY. Two things stand in a bed now and
+-- neither of the others wants a plate:
+--
+--   A PLACED CREATURE has no clock at all. It was hatched somewhere else and
+--   put here already earning, so counting down from its PlantedAt would invent
+--   a wait nobody is having.
+--
+--   A READY POD has a prompt on it that says HATCH. A countdown frozen at 0:00
+--   beside it is the same fact twice, and the prompt is the half you can act
+--   on -- so the plate gets out of the way the moment the clock runs out.
 --==============================================================================
 local function refresh(panel: Panel, now: number)
 	local species = panel.species
 	if not species then
 		return
 	end
-	local total = SeedData.GrowSeconds(panel.kg)
-	local elapsed = now - panel.plantedAt
-	local sproutAt = total * PLANTING.SproutAt
-
-	--==========================================================================
-	-- FINISHED: THE PLATE SWITCHES OFF AND STAYS OFF
-	--
-	-- Not destroyed -- the model this belongs to is rebuilt by the server at
-	-- every stage change anyway, and clearing lastText means a plate that is
-	-- somehow shown again repaints from scratch rather than trusting a stale
-	-- key.
-	--==========================================================================
-	if elapsed >= total then
+	local function hide()
 		if panel.billboard.Enabled then
 			panel.billboard.Enabled = false
+			-- Cleared so a plate that is somehow shown again repaints from
+			-- scratch rather than trusting a stale key.
 			panel.lastText = ""
 		end
+	end
+
+	if panel.stage ~= STAGE_POD then
+		hide()
+		return
+	end
+	local remaining = SeedData.GrowSeconds(panel.kg) - (now - panel.plantedAt)
+
+	-- Ready. The prompt takes it from here.
+	if remaining <= 0 then
+		hide()
 		return
 	end
 
-	local word, timer
-	if elapsed < sproutAt then
-		word, timer = "HATCHING", clock(sproutAt - elapsed)
-	else
-		word, timer = "GROWING", clock(total - elapsed)
-	end
+	local word, timer = "HATCHING", clock(remaining)
 
 	local key = word .. "\0" .. timer
 	if key == panel.lastText then

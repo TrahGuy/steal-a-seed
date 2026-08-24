@@ -1,7 +1,8 @@
 --!strict
 -- Steal a Seed :: PlantService
 --
--- Putting a banked pod into the ground, and growing it into the creature.
+-- Putting a banked pod in the ground, hatching it by hand, and planting what
+-- comes out.
 --
 --==============================================================================
 -- THIS IS WHERE THE RAID PAYS
@@ -11,26 +12,48 @@
 -- Planting is the moment the trip turns into a thing you own and can see from
 -- across the field.
 --
--- Which is why growth is VISIBLE and staged rather than a timer with a number
--- on it. A pod, then a sprout, then the creature. A plot half way through is
--- readable at a glance -- by its owner, and by anybody walking past deciding
--- whether it is worth coming back to.
+--==============================================================================
+-- YOU PUT IT WHERE YOU CLICK
+--
+-- The bed used to be an invisible three-by-N grid, and planting snapped to the
+-- nearest free cell within reach. That made a plot a form to fill in: there was
+-- exactly one arrangement and everybody's was the same.
+--
+-- Now the click decides. A plot is a garden you lay out, which is the only
+-- reason to walk into somebody else's and look at it.
+--
+-- The grid attachments still exist in MapService. They are no longer positions
+-- anything is placed into -- they are the lookup table that says where a save
+-- written BEFORE free placement lands, once, on load.
 --
 --==============================================================================
--- PLANTED WITH THE TOOL, NOT WITH A PROMPT
+-- NOTHING HATCHES ON ITS OWN
 --
--- You are holding the thing. Clicking to plant it is the shortest possible
--- distance between intent and action, and it works unchanged on a phone, where
--- activating a tool is a tap.
+-- A planted pod counts down and then STOPS, sitting there ready with a prompt
+-- on it. Hold E and it shakes itself apart and hands you the creature.
 --
--- A ProximityPrompt on every slot would have meant twelve prompts per plot, six
--- plots of them competing for the same keypress, and a player hunting for the
--- one that lights up.
+-- That is the whole reason the change is worth making: growth used to be a
+-- thing that happened to you while you watched. Now the end of the clock is an
+-- invitation rather than an event, the pod is a thing on your land that you
+-- come back for, and the moment the shell breaks is something you did.
+--
+-- The sprout stage is gone with it. It existed to make a bed look busy halfway
+-- through, and it had no decision in it.
+--
+--==============================================================================
+-- THE CREATURE GOES IN YOUR HANDS, NOT IN THE HOLE
+--
+-- Hatching does not leave the plant where the egg was. It puts it in your
+-- hotbar and you carry it, and then you click where you actually want it.
+-- Where an egg happened to sit is not where the thing that comes out of it
+-- belongs, and a garden you arrange twice is a garden you arranged.
+--
+-- Only a placed creature earns. A pod in the ground is a promise.
 --
 --==============================================================================
 -- GROWTH IS ABSOLUTE TIME, SO IT KEEPS GOING WHILE YOU ARE AWAY
 --
--- PlantedAt is os.time(), not a countdown. A plant left overnight is grown when
+-- PlantedAt is os.time(), not a countdown. A pod left overnight is ready when
 -- you come back; a countdown would have paused the moment you logged off, which
 -- turns a garden into a screensaver and quietly punishes anybody with a life.
 --==============================================================================
@@ -38,6 +61,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -46,62 +70,67 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(script.Parent:WaitForChild("CreatureModel"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+local CarryService = require(script.Parent:WaitForChild("CarryService"))
 
 local PLOT = GameConfig.Plot
 
 local PlantService = {}
--- After CarryService (45), which is what puts the Tool in the hotbar.
+-- After CarryService (45), which is what puts a Tool in the hotbar and what
+-- hatching hands the creature to.
 PlantService.Priority = 50
 
 type Planted = {
 	plot: Model,
-	slot: number,
+	-- Unique within the plot, and only an identity -- it says nothing about
+	-- WHERE, which is what `offset` is for. It replaced the slot index, which
+	-- was both at once and could therefore not survive free placement.
+	id: number,
 	species: SeedData.Species,
 	-- What THIS one weighs, rolled when its pod spawned. Everything measured
-	-- about the plant -- size, grow time, payout -- comes from here, never from
+	-- about the plant -- size, hatch time, payout -- comes from here, never from
 	-- species.Kg.
 	kg: number,
+	-- Where it stands, LOCAL to the soil part, Y always zero. Local rather than
+	-- world because a plot is rebuilt at a different place and rotation every
+	-- time its tier changes, and a world position saved through that would put
+	-- somebody's garden in the road.
+	offset: Vector3,
 	-- os.time(), absolute.
 	plantedAt: number,
+	-- STAGE_POD (unhatched) or STAGE_GROWN (a creature you placed). Nothing in
+	-- the ground is ever a sprout any more.
 	stage: number,
 	model: Model?,
+	prompt: ProximityPrompt?,
 }
 
--- plot -> slotIndex -> Planted
+-- plot -> placementId -> Planted
 local growing: { [Model]: { [number]: Planted } } = {}
+local nextId: { [Model]: number } = {}
 local serviceConnections: { RBXScriptConnection } = {}
-local hooked: { [Tool]: true } = {}
 local running = false
 
--- All three live in GameConfig because THE CLIENT NEEDS THEM: the hatch timer
--- counts down to the next stage, so it has to compute the same thresholds this
--- does. Private constants here would have let the countdown and the transition
--- drift apart.
+-- These live in GameConfig because THE CLIENT NEEDS THEM: the hatch timer
+-- counts down to the same instant this does, and the click that asks to plant
+-- has to name the same verb this listens for.
 local PLANTING = GameConfig.Plant
-local SPROUT_AT = PLANTING.SproutAt
 local TICK = PLANTING.TickSeconds
 local PLANT_RANGE = PLANTING.RangeStuds
+local EDGE_MARGIN = PLANTING.EdgeMarginStuds
+local HATCH_HOLD = PLANTING.HatchHoldSeconds
+local BURST = PLANTING.BurstSeconds
+local PLACE_ACTION = PLANTING.PlaceAction
 
 local function log(message: string)
 	print("[Seed/PlantService] " .. message)
 end
 
 --==============================================================================
--- SLOTS
+-- THE BED
 --==============================================================================
-local function slotsOf(plot: Model): { [number]: Attachment }
-	local out: { [number]: Attachment } = {}
+local function soilOf(plot: Model): BasePart?
 	local soil = plot:FindFirstChild(PLOT.PlanterName)
-	local source: Instance = soil or plot
-	for _, d in ipairs(source:GetDescendants()) do
-		if d:IsA("Attachment") and CollectionService:HasTag(d, GameConfig.Tags.PlantSlot) then
-			local index = d:GetAttribute("SlotIndex")
-			if type(index) == "number" then
-				out[index] = d
-			end
-		end
-	end
-	return out
+	return if soil and soil:IsA("BasePart") then soil else nil
 end
 
 local function plantsFolder(plot: Model): Instance
@@ -115,31 +144,80 @@ local function plantsFolder(plot: Model): Instance
 	return made
 end
 
+-- How many things this plot may hold. Free placement removed the POSITIONS but
+-- not the limit: a tier still buys you more plants, it just no longer tells you
+-- where to put them. Same function GardenUI counts rows with.
+local function capacityOf(plot: Model): number
+	local rows = tonumber(plot:GetAttribute("Rows"))
+	return GameConfig.plotSlotsFor(rows or GameConfig.PlotTiers[1].rows)
+end
+
+local function countIn(plot: Model): number
+	local byPlot = growing[plot]
+	if not byPlot then
+		return 0
+	end
+	local n = 0
+	for _ in pairs(byPlot) do
+		n += 1
+	end
+	return n
+end
+
+--==============================================================================
+-- WHERE A CLICK LANDS
+--
+-- The position arrives from the client and is a claim, not a fact. It is pulled
+-- into the soil rectangle rather than refused: "exactly where I clicked" should
+-- stop being exact only at the very rim, and a click that silently does nothing
+-- reads as the game being broken rather than as a rule.
+--
+-- The reach check is the one that actually matters, and it is done on the
+-- CLAMPED point -- so a claim of "I clicked a thousand studs that way" becomes
+-- a point on the edge of the bed, which then fails the distance test honestly.
+--==============================================================================
+local function clampToSoil(soil: BasePart, worldPos: Vector3): Vector3
+	local here = soil.CFrame:PointToObjectSpace(worldPos)
+	local halfX = math.max(soil.Size.X * 0.5 - EDGE_MARGIN, 0)
+	local halfZ = math.max(soil.Size.Z * 0.5 - EDGE_MARGIN, 0)
+	return Vector3.new(
+		math.clamp(here.X, -halfX, halfX),
+		0,
+		math.clamp(here.Z, -halfZ, halfZ))
+end
+
+local function topOf(soil: BasePart, offset: Vector3): CFrame
+	return soil.CFrame * CFrame.new(offset.X, soil.Size.Y * 0.5, offset.Z)
+end
+
 --==============================================================================
 -- BUILDING WHAT IS IN THE GROUND
 --==============================================================================
-local function stageFor(entry: Planted, now: number): number
-	local total = SeedData.GrowSeconds(entry.kg)
-	local elapsed = now - entry.plantedAt
-	if elapsed >= total then
-		return CreatureModel.STAGE_GROWN
-	elseif elapsed >= total * SPROUT_AT then
-		return CreatureModel.STAGE_SPROUT
-	end
-	return CreatureModel.STAGE_POD
-end
+-- render() hangs the pick-up prompt on anything grown, and the prompt builders
+-- need render() to have run. One forward declaration breaks the knot, rather
+-- than shuffling three functions into an order that reads worse than it works.
+local attachPickup: (Planted) -> ()
 
-local function render(entry: Planted, slot: Attachment)
+local function render(entry: Planted)
 	if entry.model and entry.model.Parent then
 		entry.model:Destroy()
 	end
-	local cf = slot.WorldCFrame
-	-- Face the gate, so a plot reads as a row of creatures looking at whoever
-	-- walks in rather than a row of backs.
+	entry.model = nil
+	entry.prompt = nil
+	local soil = soilOf(entry.plot)
+	if not soil then
+		return
+	end
+
+	-- Face the gate, so a plot reads as a garden looking at whoever walks in
+	-- rather than a row of backs.
+	local base = topOf(soil, entry.offset)
 	local model = CreatureModel.Build(entry.species, entry.kg, entry.stage,
-		CFrame.new(cf.Position) * CFrame.Angles(0, math.rad(180), 0)
+		CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
 			* entry.plot:GetPivot().Rotation, plantsFolder(entry.plot))
-	model:SetAttribute("SlotIndex", entry.slot)
+	-- IDENTITY, not position. PlantSway phases its idle off this so a bed is not
+	-- a chorus line, and GardenUI keys its rows on it.
+	model:SetAttribute("PlacementId", entry.id)
 	model:SetAttribute("PlantedAt", entry.plantedAt)
 	--==========================================================================
 	-- HATCHING, NOT LOOT
@@ -149,32 +227,42 @@ local function render(entry: Planted, slot: Attachment)
 	-- which is exactly what went wrong: CarryService put a Take prompt on it and
 	-- taking it ran the raid alarm inside the safe zone.
 	--
-	-- Also the seam PlantUI watches to draw the hatch timer, so one tag both
-	-- refuses the take and asks for the countdown.
+	-- Also the seam PlantUI watches to draw the hatch clock and PlantSway
+	-- watches to shake it, so one tag does all three.
 	--==========================================================================
 	CollectionService:AddTag(model, GameConfig.Tags.Planted)
 	entry.model = model
 
 	--==========================================================================
-	-- THE REVEAL IS THE GROW-UP, SO THIS IS WHERE THE ALMANAC IS WRITTEN
+	-- A CREATURE IN THE GROUND HAS ALREADY BEEN REVEALED
 	--
-	-- Every path that can produce a grown plant comes through render(): the
-	-- growth tick promoting a sprout, and restore() rebuilding a garden that was
-	-- already finished when the player left. So one line here covers both the
-	-- discovery and the backfill, and there is no second place to remember.
+	-- The Almanac is written at the HATCH now, because that is where the reveal
+	-- moved: until the shell breaks you do not know which species you have --
+	-- pods are coloured by weight and two Commons arrive identical.
 	--
-	-- Nothing is credited for a pod in a nest, a pod in your hands, or a sprout.
-	-- Until it finishes you do not know which species you have -- pods are
-	-- coloured by rarity and two Commons arrive identical.
+	-- This stays as the backfill for the one path that produces a grown plant
+	-- without a hatch happening in front of anybody: a garden restored from a
+	-- save that was already finished when the player left.
 	--==========================================================================
 	if entry.stage == CreatureModel.STAGE_GROWN then
 		local owner = PlotService.OwnerOf(entry.plot)
 		if owner then
 			PlayerDataService.MarkSeen(owner, entry.species.Id)
 		end
+		-- A grown plant can always be taken back off your own farm, so the
+		-- prompt goes on the moment it is standing there. Declared above
+		-- because the prompt builders need render() and render() needs them.
+		attachPickup(entry)
 	end
 end
 
+--==============================================================================
+-- SAVING
+--
+-- X and Z rather than a slot index, because there are no slots any more. Stage
+-- as well, because a planted thing is no longer derivable from its clock: a pod
+-- whose timer finished an hour ago is still a pod until somebody hatches it.
+--==============================================================================
 local function record(plot: Model): { any }
 	local list = {}
 	local byPlot = growing[plot]
@@ -182,9 +270,11 @@ local function record(plot: Model): { any }
 		for _, entry in pairs(byPlot) do
 			table.insert(list, {
 				SpeciesId = entry.species.Id,
-				Slot = entry.slot,
 				PlantedAt = entry.plantedAt,
 				Kg = entry.kg,
+				X = entry.offset.X,
+				Z = entry.offset.Z,
+				Stage = entry.stage,
 			})
 		end
 	end
@@ -199,129 +289,351 @@ local function persist(plot: Model)
 end
 
 --==============================================================================
--- PLANTING
+-- READY, AND THE PROMPT THAT SAYS SO
 --==============================================================================
-function PlantService.Plant(player: Player, species: SeedData.Species,
-	kg: number): boolean
+local function isReady(entry: Planted, now: number): boolean
+	return entry.stage == CreatureModel.STAGE_POD
+		and (now - entry.plantedAt) >= SeedData.GrowSeconds(entry.kg)
+end
+
+local hatch: (Player, Planted) -> boolean
+local pickUp: (Player, Planted) -> boolean
+
+local function attachHatchPrompt(entry: Planted)
+	local model = entry.model
+	local handle = if model then model.PrimaryPart else nil
+	if not (model and handle) or entry.prompt then
+		return
+	end
+	-- Read by PlantUI, which drops its countdown plate the moment this appears:
+	-- a clock at 0:00 sitting next to a prompt that says HATCH is two things
+	-- saying the same thing, and the prompt is the one you can act on.
+	model:SetAttribute("Ready", true)
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "HatchPrompt"
+	-- Custom, like every prompt in the game: PromptUI draws them all.
+	prompt.Style = Enum.ProximityPromptStyle.Custom
+	prompt.ActionText = "Hatch"
+	prompt.ObjectText = ""
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.HoldDuration = HATCH_HOLD
+	prompt.MaxActivationDistance = PLANT_RANGE
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = handle
+	entry.prompt = prompt
+
+	--==========================================================================
+	-- THE SHAKE IS AN ATTRIBUTE, NOT A LOOP HERE
+	--
+	-- The pod is anchored and server-owned, so jittering it from this script
+	-- would push a CFrame down the wire every frame for every hatching pod on
+	-- the server. The attribute replicates once and PlantSway -- which already
+	-- moves every planted model, every frame, on each client -- does the motion
+	-- locally and for free.
+	--==========================================================================
+	table.insert(serviceConnections, prompt.PromptButtonHoldBegan:Connect(function()
+		if entry.model then
+			entry.model:SetAttribute("Hatching", true)
+		end
+	end))
+	table.insert(serviceConnections, prompt.PromptButtonHoldEnded:Connect(function()
+		if entry.model then
+			entry.model:SetAttribute("Hatching", false)
+		end
+	end))
+	table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
+		hatch(player, entry)
+	end))
+end
+
+--==============================================================================
+-- AND THE ONE THAT TAKES IT BACK
+--
+-- A grown plant is not furniture. You put it somewhere, you change your mind,
+-- you move it -- and until now the only way to free a place in the bed was to
+-- have never used it.
+--
+-- IT IS NOT A TAKE, AND IT IS NOT A HATCH. Both of those words already mean
+-- something else in this game: Take is what you do to somebody's nest and it
+-- runs the raid alarm, Hatch is what opens a shell. This is neither -- nothing
+-- is stolen and nothing is revealed, the thing simply comes back to your hands.
+--
+-- The owner check is server-side and it is the only thing standing between a
+-- neighbour and your garden. The prompt itself is drawn for anybody who walks
+-- close enough -- a ProximityPrompt has no per-player visibility -- so a
+-- stranger can see a Pick Up on your plant and get nothing for holding it.
+-- Worth fixing in PromptUI one day; not worth trusting the client over.
+--==============================================================================
+function attachPickup(entry: Planted)
+	local model = entry.model
+	local handle = if model then model.PrimaryPart else nil
+	if not (model and handle) or entry.prompt then
+		return
+	end
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "PickupPrompt"
+	-- Custom, like every prompt in the game: PromptUI draws them all.
+	prompt.Style = Enum.ProximityPromptStyle.Custom
+	prompt.ActionText = "Pick Up"
+	prompt.ObjectText = ""
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.HoldDuration = HATCH_HOLD
+	prompt.MaxActivationDistance = PLANT_RANGE
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = handle
+	entry.prompt = prompt
+	table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
+		pickUp(player, entry)
+	end))
+end
+
+--==============================================================================
+-- THE SHELL COMES APART
+--
+-- Tweened rather than unanchored: these parts are anchored, CanCollide is off
+-- across the whole game, and letting the engine simulate a dozen shards per
+-- hatch on a mobile-first project buys nothing you can see.
+--
+-- The tag comes off FIRST, so PlantUI's plate and PlantSway's idle let go of it
+-- before it starts flying -- otherwise the sway fights the burst for the same
+-- pivot and the pieces snap back to centre every frame.
+--==============================================================================
+local function burst(model: Model)
+	CollectionService:RemoveTag(model, GameConfig.Tags.Planted)
+	local origin = model:GetPivot().Position
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") then
+			d:Destroy()
+		end
+	end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			local away = d.Position - origin
+			-- A part sitting exactly on the pivot has no direction of its own,
+			-- so it goes straight up rather than nowhere.
+			local dir = if away.Magnitude > 0.05 then away.Unit else Vector3.new(0, 1, 0)
+			local goal = d.CFrame + (dir * 3.4 + Vector3.new(0, 2.6, 0))
+			TweenService:Create(d,
+				TweenInfo.new(BURST, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					CFrame = goal * CFrame.Angles(math.rad(55), math.rad(40), math.rad(25)),
+					Transparency = 1,
+				}):Play()
+		end
+	end
+	task.delay(BURST + 0.05, function()
+		if model.Parent then
+			model:Destroy()
+		end
+	end)
+end
+
+--==============================================================================
+-- AND A GENTLER ONE FOR A PLANT YOU ARE TAKING BACK
+--
+-- Same rules as the burst -- tag off first so the sway lets go of the pivot,
+-- prompts and plates destroyed now rather than in a quarter of a second -- but
+-- it lifts and fades instead of coming apart. Nothing broke; you picked it up.
+--
+-- A plant that simply vanished mid-frame reads as a deletion bug, and this is
+-- the one action in the game whose whole point is that nothing was lost.
+--==============================================================================
+local LIFT = 0.25
+
+local function lift(model: Model)
+	CollectionService:RemoveTag(model, GameConfig.Tags.Planted)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") then
+			d:Destroy()
+		end
+	end
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = false
+			TweenService:Create(d,
+				TweenInfo.new(LIFT, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					CFrame = d.CFrame + Vector3.new(0, 2.2, 0),
+					Transparency = 1,
+				}):Play()
+		end
+	end
+	task.delay(LIFT + 0.05, function()
+		if model.Parent then
+			model:Destroy()
+		end
+	end)
+end
+
+--==============================================================================
+-- HATCHING
+--
+-- The creature is handed over BEFORE the pod is destroyed. The other order
+-- loses the whole raid if the player has no Backpack at that instant -- dying
+-- with the prompt held is enough -- and a prize that evaporates because of a
+-- frame is the worst bug this game can have.
+--==============================================================================
+function hatch(player: Player, entry: Planted): boolean
+	local byPlot = growing[entry.plot]
+	if not byPlot or byPlot[entry.id] ~= entry then
+		return false
+	end
+	-- Yours. The prompt is drawn for anybody standing close enough, so this is
+	-- the check that actually owns the pod.
+	if PlotService.OwnerOf(entry.plot) ~= player then
+		return false
+	end
+	if not isReady(entry, os.time()) then
+		return false
+	end
+	if not CarryService.GiveHatched(player, entry.species, entry.kg) then
+		return false
+	end
+
+	byPlot[entry.id] = nil
+	local model = entry.model
+	entry.model = nil
+	entry.prompt = nil
+	if model and model.Parent then
+		burst(model)
+	end
+	persist(entry.plot)
+	-- THE REVEAL IS THE HATCH. Until the shell breaks you do not know which
+	-- species you had, so this is the moment the Almanac learns it.
+	PlayerDataService.MarkSeen(player, entry.species.Id)
+	log(string.format("%s hatched a %d kg %s.", player.Name, entry.kg, entry.species.Name))
+	return true
+end
+
+--==============================================================================
+-- TAKING A GROWN PLANT BACK OFF YOUR OWN FARM
+--
+-- The same Tool the hatch hands over -- same species, same kg, same Hatched
+-- flag -- so a plant that has been moved is indistinguishable from one that has
+-- never been placed. There is no second kind of creature in the hotbar.
+--
+-- Handed over BEFORE the plant is removed, for the same reason hatching is:
+-- if the Backpack is not there at that instant, the right answer is that
+-- nothing happened, not that the plant is gone.
+--
+-- The freed capacity is not bookkeeping -- it is the point. A full bed used to
+-- be permanent.
+--==============================================================================
+function pickUp(player: Player, entry: Planted): boolean
+	local byPlot = growing[entry.plot]
+	if not byPlot or byPlot[entry.id] ~= entry then
+		return false
+	end
+	-- Yours, and only yours. This is what stops a neighbour walking off with
+	-- your garden -- the prompt is visible to them, the action is not.
+	if PlotService.OwnerOf(entry.plot) ~= player then
+		return false
+	end
+	if entry.stage ~= CreatureModel.STAGE_GROWN then
+		return false
+	end
+	if not CarryService.GiveHatched(player, entry.species, entry.kg) then
+		return false
+	end
+
+	byPlot[entry.id] = nil
+	local model = entry.model
+	entry.model = nil
+	entry.prompt = nil
+	if model and model.Parent then
+		lift(model)
+	end
+	persist(entry.plot)
+	log(string.format("%s picked up a %d kg %s. %d/%d in the bed.",
+		player.Name, entry.kg, entry.species.Name, countIn(entry.plot),
+		capacityOf(entry.plot)))
+	return true
+end
+
+--==============================================================================
+-- PLANTING
+--
+-- One entry point for both things that can be in your hands: an unhatched pod,
+-- which goes in the ground and starts a clock, and a hatched creature, which
+-- goes in the ground already earning. The Tool says which.
+--==============================================================================
+function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	local plot = PlotService.PlotOf(player)
 	if not plot then
 		return false
 	end
+	local soil = soilOf(plot)
+	if not soil then
+		return false
+	end
 	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not (root and root:IsA("BasePart")) then
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not (character and root and root:IsA("BasePart")) then
 		return false
 	end
 
-	local slots = slotsOf(plot)
+	-- The EQUIPPED tool. A Tool sitting in the Backpack is not in your hands and
+	-- clicking the ground should not plant it.
+	local tool = character:FindFirstChildOfClass("Tool")
+	if not tool then
+		return false
+	end
+	local species = SeedData.Get(tostring(tool:GetAttribute("SpeciesId")))
+	if not species then
+		return false
+	end
+	-- The weight travelled with the pod: CarryService stamps it on the Tool when
+	-- the pod is banked and again when a creature is hatched. Falling back to
+	-- the species sheet would plant a 9,000 kg Nubkin as a 2 kg one.
+	local kg = math.clamp(
+		tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg)) or species.Kg,
+		1, GameConfig.Carry.MaxKg)
+	local hatched = tool:GetAttribute("Hatched") == true
+
+	local offset = clampToSoil(soil, worldPos)
+	if (topOf(soil, offset).Position - root.Position).Magnitude > PLANT_RANGE then
+		return false
+	end
+
 	local byPlot = growing[plot]
 	if not byPlot then
 		byPlot = {}
 		growing[plot] = byPlot
 	end
-
-	-- The nearest FREE slot within reach. Nearest rather than lowest-numbered,
-	-- so a plot fills up where the player is standing and planting a row feels
-	-- like walking a row.
-	local best, bestSlot, bestDist = nil, nil, PLANT_RANGE
-	for index, attachment in pairs(slots) do
-		if not byPlot[index] then
-			local d = (attachment.WorldPosition - root.Position).Magnitude
-			if d < bestDist then
-				best, bestSlot, bestDist = attachment, index, d
-			end
-		end
-	end
-	if not (best and bestSlot) then
+	if countIn(plot) >= capacityOf(plot) then
 		return false
 	end
 
+	local id = (nextId[plot] or 0) + 1
+	nextId[plot] = id
 	local entry: Planted = {
 		plot = plot,
-		slot = bestSlot,
+		id = id,
 		species = species,
 		kg = kg,
+		offset = offset,
 		plantedAt = os.time(),
-		stage = CreatureModel.STAGE_POD,
+		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
 		model = nil,
+		prompt = nil,
 	}
-	byPlot[bestSlot] = entry
-	render(entry, best)
+	byPlot[id] = entry
+	render(entry)
+	if isReady(entry, os.time()) then
+		attachHatchPrompt(entry)
+	end
 	persist(plot)
-	log(string.format("%s planted a %d kg %s in %s slot %d (%.0fs to grow).",
-		player.Name, kg, species.Name, plot.Name, bestSlot,
-		SeedData.GrowSeconds(kg)))
+	-- Consumed. Destroying the tool is what makes planting a decision rather
+	-- than a duplication bug.
+	tool:Destroy()
+
+	if hatched then
+		log(string.format("%s planted a %d kg %s.", player.Name, kg, species.Name))
+	else
+		log(string.format("%s buried a %d kg %s pod (%.0fs until it can be hatched).",
+			player.Name, kg, species.Name, SeedData.GrowSeconds(kg)))
+	end
 	return true
-end
-
---==============================================================================
--- THE TOOL
---
--- Hooked once per Tool. Activated only fires while the tool is equipped, so
--- there is no need to track equipping separately.
---==============================================================================
-local function hookTool(tool: Instance, player: Player)
-	if not tool:IsA("Tool") or hooked[tool] then
-		return
-	end
-	local speciesId = tool:GetAttribute("SpeciesId")
-	if type(speciesId) ~= "string" then
-		return
-	end
-	hooked[tool] = true
-
-	-- TRACKED, like every other connection here. Init() clears `hooked` so a
-	-- re-run re-hooks from scratch; if these two survived that, the tool would
-	-- carry two Activated handlers and one click would plant twice -- the second
-	-- handler still reads SpeciesId fine off the just-destroyed tool.
-	table.insert(serviceConnections, tool.Activated:Connect(function()
-		local species = SeedData.Get(tool:GetAttribute("SpeciesId") or "")
-		if not species then
-			return
-		end
-		-- The weight travelled with the pod: CarryService stamps it on the Tool
-		-- when the pod is banked. Falling back to the species sheet would plant
-		-- a 9,000 kg Nubkin as a 2 kg one.
-		local kg = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
-			or species.Kg
-		if PlantService.Plant(player, species, kg) then
-			-- Consumed. Destroying the tool is what makes planting a decision
-			-- rather than a duplication bug.
-			tool:Destroy()
-			hooked[tool] = nil
-		end
-	end))
-	table.insert(serviceConnections, tool.Destroying:Connect(function()
-		hooked[tool] = nil
-	end))
-end
-
-local function watchPlayer(player: Player)
-	local function scan(container: Instance)
-		for _, c in ipairs(container:GetChildren()) do
-			hookTool(c, player)
-		end
-		table.insert(serviceConnections, container.ChildAdded:Connect(function(c)
-			hookTool(c, player)
-		end))
-	end
-	local backpack = player:FindFirstChildOfClass("Backpack")
-	if backpack then
-		scan(backpack)
-	end
-	table.insert(serviceConnections, player.ChildAdded:Connect(function(c)
-		if c:IsA("Backpack") then
-			scan(c)
-		end
-	end))
-	-- Equipping moves the Tool into the character, so that is a second place a
-	-- previously unseen Tool can appear.
-	table.insert(serviceConnections, player.CharacterAdded:Connect(function(character)
-		scan(character)
-	end))
-	if player.Character then
-		scan(player.Character)
-	end
 end
 
 --==============================================================================
@@ -332,6 +644,33 @@ end
 -- assuming an order that is not guaranteed -- the exact ordering problem the
 -- OnAssigned hook was built for.
 --==============================================================================
+-- WHERE A PRE-FREE-PLACEMENT SAVE LANDS
+--
+-- Saves written against the old grid carry a Slot index and no position. The
+-- grid attachments are still on the soil for exactly this: look the index up,
+-- take its local offset, and the garden comes back where its owner left it.
+-- After one load it is written out as X and Z like everything else.
+--==============================================================================
+local function slotOffsets(plot: Model): { [number]: Vector3 }
+	local out: { [number]: Vector3 } = {}
+	local soil = soilOf(plot)
+	if not soil then
+		return out
+	end
+	for _, d in ipairs(soil:GetDescendants()) do
+		if d:IsA("Attachment") and CollectionService:HasTag(d, GameConfig.Tags.PlantSlot) then
+			local index = d:GetAttribute("SlotIndex")
+			if type(index) == "number" then
+				-- Already local to the soil -- MapService writes CFrame, not
+				-- WorldCFrame, and that distinction cost a day once.
+				local p = d.CFrame.Position
+				out[index] = Vector3.new(p.X, 0, p.Z)
+			end
+		end
+	end
+	return out
+end
+
 local function restore(player: Player, plot: Model)
 	task.spawn(function()
 		local deadline = os.clock() + 30
@@ -347,17 +686,22 @@ local function restore(player: Player, plot: Model)
 			return
 		end
 
-		local slots = slotsOf(plot)
+		local soil = soilOf(plot)
+		if not soil then
+			return
+		end
+		local legacy = slotOffsets(plot)
 		local byPlot = {}
 		growing[plot] = byPlot
+		nextId[plot] = 0
+		local cap = capacityOf(plot)
 		local restored, dropped = 0, 0
+		local now = os.time()
 
 		for _, saved in ipairs(profile.Plants) do
-			local species = if type(saved) == "table"
-				then SeedData.Get(tostring(saved.SpeciesId))
-				else nil
-			local index = if type(saved) == "table" then tonumber(saved.Slot) else nil
-			local at = if type(saved) == "table" then tonumber(saved.PlantedAt) else nil
+			local row = if type(saved) == "table" then saved else nil
+			local species = if row then SeedData.Get(tostring(row.SpeciesId)) else nil
+			local at = if row then tonumber(row.PlantedAt) else nil
 			--==============================================================
 			-- A SAVE FROM BEFORE WEIGHTS WERE ROLLED HAS NO Kg
 			--
@@ -367,23 +711,62 @@ local function restore(player: Player, plot: Model)
 			-- back worth something entirely different every time they rejoined,
 			-- which is a slot machine, not a save.
 			--==============================================================
-			local savedKg = if type(saved) == "table" then tonumber(saved.Kg) else nil
-			-- A slot can vanish between sessions -- a tier change rebuilds the
-			-- bed with a different grid -- so every entry is re-validated rather
-			-- than trusted.
-			if species and index and at and slots[index] and not byPlot[index] then
+			local kg = math.clamp(
+				(if row then tonumber(row.Kg) else nil) or (if species then species.Kg else 1),
+				1, GameConfig.Carry.MaxKg)
+
+			local x = if row then tonumber(row.X) else nil
+			local z = if row then tonumber(row.Z) else nil
+			if not (x and z) then
+				local index = if row then tonumber(row.Slot) else nil
+				local off = if index then legacy[index] else nil
+				if off then
+					x, z = off.X, off.Z
+				end
+			end
+
+			--==============================================================
+			-- A SAVE FROM BEFORE MANUAL HATCHING HAS NO Stage
+			--
+			-- Under the old rules a plant's stage WAS its clock, so anything
+			-- whose timer had run out was already a creature standing in the
+			-- ground and earning. Restoring those as unhatched pods would take
+			-- a finished garden away and ask for it to be hatched again, so
+			-- they come back as the creatures they already were. Anything
+			-- mid-clock comes back as a pod with its clock still running,
+			-- which is what it was.
+			--==============================================================
+			local stage = if row then tonumber(row.Stage) else nil
+			if not stage and species and at then
+				stage = if (now - at) >= SeedData.GrowSeconds(kg)
+					then CreatureModel.STAGE_GROWN
+					else CreatureModel.STAGE_POD
+			end
+			-- A sprout is not a thing any more. Anything saved as one was
+			-- halfway through a clock, so it goes back to being a pod.
+			if stage == CreatureModel.STAGE_SPROUT then
+				stage = CreatureModel.STAGE_POD
+			end
+
+			if species and at and x and z and stage and restored < cap then
+				local id = nextId[plot] + 1
+				nextId[plot] = id
 				local entry: Planted = {
 					plot = plot,
-					slot = index,
+					id = id,
 					species = species,
-					kg = math.clamp(savedKg or species.Kg, 1, GameConfig.Carry.MaxKg),
+					kg = kg,
+					offset = clampToSoil(soil, (soil.CFrame * CFrame.new(x, 0, z)).Position),
 					plantedAt = at,
-					stage = CreatureModel.STAGE_POD,
+					stage = stage,
 					model = nil,
+					prompt = nil,
 				}
-				entry.stage = stageFor(entry, os.time())
-				byPlot[index] = entry
-				render(entry, slots[index])
+				byPlot[id] = entry
+				render(entry)
+				if isReady(entry, now) then
+					attachHatchPrompt(entry)
+				end
 				restored += 1
 			else
 				dropped += 1
@@ -394,7 +777,8 @@ local function restore(player: Player, plot: Model)
 				if dropped > 0 then string.format(", dropped %d that no longer fit", dropped)
 				else ""))
 		end
-		-- Write back, so anything dropped stops being carried forever.
+		-- Write back, so anything dropped stops being carried forever and any
+		-- migrated position is saved in the new shape.
 		persist(plot)
 	end)
 end
@@ -416,7 +800,7 @@ function PlantService.Init()
 		end
 		growing[plot] = nil
 	end
-	table.clear(hooked)
+	table.clear(nextId)
 end
 
 function PlantService.Start()
@@ -427,14 +811,48 @@ function PlantService.Start()
 		-- PlotService clears the Plants folder itself right after this; all that
 		-- is needed here is to stop tracking what was in it.
 		growing[plot] = nil
+		nextId[plot] = nil
 	end)
 
-	table.insert(serviceConnections, Players.PlayerAdded:Connect(watchPlayer))
-	for _, player in ipairs(Players:GetPlayers()) do
-		watchPlayer(player)
+	--==========================================================================
+	-- THE CLICK ARRIVES OVER A REMOTE, BECAUSE IT CANNOT ARRIVE ANY OTHER WAY
+	--
+	-- Tool.Activated fires on the server with no idea where the player was
+	-- pointing, and ClickDetector does not carry a position either. So the
+	-- client raycasts and sends the point -- and everything it sends is treated
+	-- as a claim: the plot has to be theirs, the point is pulled onto their own
+	-- soil, and they have to be standing next to it.
+	--
+	-- No new remote. GameEvent has existed in GameConfig.Remotes since the
+	-- first boot and nothing has ever used it.
+	--==========================================================================
+	local remotes = SeedGame:FindFirstChild("Remotes")
+	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if channel and channel:IsA("RemoteEvent") then
+		table.insert(serviceConnections, channel.OnServerEvent:Connect(
+			function(player: Player, action: any, position: any)
+				if action ~= PLACE_ACTION or typeof(position) ~= "Vector3" then
+					return
+				end
+				-- NaN survives every comparison and would sail straight through
+				-- the clamp; a huge finite number would not, but there is no
+				-- reason to do the arithmetic on it either.
+				if position ~= position or position.Magnitude > 1e6 then
+					return
+				end
+				PlantService.PlaceAt(player, position)
+			end))
+	else
+		warn("[Seed/PlantService] No GameEvent remote. Nothing can be planted.")
 	end
 
-	--== GROWTH ==--
+	--==========================================================================
+	-- THE CLOCK ONLY EVER OPENS THE PROMPT
+	--
+	-- It used to promote pods to sprouts and sprouts to creatures. Now the only
+	-- thing time does is decide when a pod may be hatched -- the shell does not
+	-- open until somebody opens it.
+	--==========================================================================
 	running = true
 	task.spawn(function()
 		while running do
@@ -443,17 +861,11 @@ function PlantService.Start()
 			for plot, byPlot in pairs(growing) do
 				if not plot.Parent then
 					growing[plot] = nil
+					nextId[plot] = nil
 				else
-					local slots = nil
-					for index, entry in pairs(byPlot) do
-						local want = stageFor(entry, now)
-						if want ~= entry.stage then
-							slots = slots or slotsOf(plot)
-							local slot = slots[index]
-							if slot then
-								entry.stage = want
-								render(entry, slot)
-							end
+					for _, entry in pairs(byPlot) do
+						if not entry.prompt and isReady(entry, now) then
+							attachHatchPrompt(entry)
 						end
 					end
 				end
@@ -461,21 +873,20 @@ function PlantService.Start()
 		end
 	end)
 
-	log(string.format("Ready. Equip a pod and click to plant; sprouts at %.0f%% grown.",
-		SPROUT_AT * 100))
+	log(string.format(
+		"Ready. Click your soil to plant; hold E on a ready pod for %.1fs to hatch it.",
+		HATCH_HOLD))
 end
 
 --==============================================================================
 -- READ API, for EconomyService
 --==============================================================================
--- Everything fully grown in this plot. Income is somebody else's job -- this
--- only says what is standing there.
---==============================================================================
--- YIELDS THE WEIGHT, NOT JUST THE SPECIES
+-- Everything standing in this plot that EARNS -- which is placed creatures, and
+-- never a pod. A pod in the ground is a promise, and a promise pays nothing.
 --
--- EconomyService pays from this. Handing back only the species would leave it
--- no choice but to read species.Kg, and every plant in the game would earn its
--- form's fallback rate instead of what it actually weighs.
+-- YIELDS THE WEIGHT, NOT JUST THE SPECIES. EconomyService pays from this;
+-- handing back only the species would leave it no choice but to read species.Kg
+-- and every plant in the game would earn its form's fallback rate.
 --==============================================================================
 export type Grown = { species: SeedData.Species, kg: number }
 
@@ -494,15 +905,19 @@ end
 
 function PlantService.Snapshot(): string
 	local rows = {}
+	local now = os.time()
 	for plot, byPlot in pairs(growing) do
-		local n, grown = 0, 0
+		local n, grown, ready = 0, 0, 0
 		for _, entry in pairs(byPlot) do
 			n += 1
 			if entry.stage == CreatureModel.STAGE_GROWN then
 				grown += 1
+			elseif isReady(entry, now) then
+				ready += 1
 			end
 		end
-		table.insert(rows, string.format("%s: %d planted, %d grown", plot.Name, n, grown))
+		table.insert(rows, string.format("%s: %d in the ground, %d earning, %d ready to hatch",
+			plot.Name, n, grown, ready))
 	end
 	table.sort(rows)
 	return if #rows > 0 then table.concat(rows, " | ") else "nothing planted"

@@ -335,6 +335,22 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	-- An INVISIBLE grid on the soil. Attachments, so a slot costs nothing until
 	-- something grows in it, and the reference's plain rectangle keeps its plain
 	-- rectangle -- the layout is known without being drawn on the ground.
+	--
+	--==========================================================================
+	-- NOTHING IS PLANTED INTO THESE ANY MORE
+	--
+	-- Planting is by click now: PlantService puts a plant exactly where the
+	-- player pointed and stores an offset local to the soil. The grid is kept
+	-- for ONE job -- a save written before that change carries a Slot index and
+	-- no position, and this is the table that says where index N used to be. It
+	-- is read once, on load, and the garden is written back out as offsets.
+	--
+	-- The tier still decides HOW MANY plants fit; it just no longer decides
+	-- where they stand. GameConfig.plotSlotsFor is the count both sides use.
+	--
+	-- Delete these once no live profile can still carry a Slot -- and not
+	-- before, because what they migrate is somebody's garden.
+	--==========================================================================
 	local slot = 0
 	for row = 1, rows do
 		local rowZ = -bedSpan * 0.5 + (row - 0.5) * PLOT.RowDepth

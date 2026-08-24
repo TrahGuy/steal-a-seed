@@ -70,7 +70,7 @@ src/
     ParentModel.luau            the nest guardian (NOT a *Service)
     NestService.luau            nests, and the parent that sleeps beside them
     CarryService.luau           one pod at a time, and what it costs to carry
-    PlantService.luau           planting, and growing pod -> sprout -> creature
+    PlantService.luau           place by click, hatch by hand, pick back up
     EconomyService.luau         THE FAUCET -- grown plants pay kg/sec, nothing else mints
     TreadmillService.luau       THE FAUCET for Speed -- stand on your own mill
 src/StarterPlayer/StarterPlayerScripts/
@@ -78,13 +78,14 @@ src/StarterPlayer/StarterPlayerScripts/
     ParentAnim.client.luau      the nest parent's limbs
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
-    PlantUI.client.luau         hatch/grow timer over anything tagged Planted
-    PlantSway.client.luau       idle lean on planted sprouts/creatures (rooted)
+    PlantUI.client.luau         the hatch countdown over an unhatched pod
+    PlantPlace.client.luau      click-to-place, the ghost disc, and Put away
+    PlantSway.client.luau       idle lean, the hatch shake, and the grown-plant walk
     CashUI.client.luau          corner HUD: cash + speed, from the ProfileUpdated remote
     CashPop.client.luau         lime +$N rising off every grown plant (cosmetic only)
     IndexUI.client.luau         LEFT rail: the almanac, ??? until you have grown it
     ShopUI.client.luau          LEFT rail: the shop panel (UI only, nothing transacts yet)
-    GardenUI.client.luau        RIGHT rail: a row per plot slot, live clocks
+    GardenUI.client.luau        RIGHT rail: a row per plant, live clocks
     SpeedFX.client.luau         +N pops on Speed gain, and the run streak
     CarryPose.client.luau       both arms under the pod while carrying
 ```

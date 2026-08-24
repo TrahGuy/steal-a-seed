@@ -2781,6 +2781,266 @@ Verified in Studio Edit against the code on disk (localhost `http.server`, `Http
 **Not verified:** nothing has been played. The nest spread, the pick-up, the garden rows and the
 old-save fallback are all reasoned and compile-checked but have not been seen on screen.
 
+## Plant where you click, and hatch it yourself — 2026-08-24
+
+Three changes to one loop, and they only make sense together.
+
+```
+steal -> bank -> pod in the hotbar
+      -> CLICK YOUR SOIL          the pod goes exactly there
+      -> wait out its clock       weight decides how long, as before
+      -> HOLD E                   it shakes, then bursts
+      -> the creature is in your hands, equipped
+      -> CLICK YOUR SOIL          the plant goes exactly there, and earns
+```
+
+You plant twice on purpose. Where an egg happened to sit is not where the thing that comes out of
+it belongs, and a garden you arrange twice is a garden you arranged.
+
+### The grid is gone as a set of positions
+
+`MapService` still builds the invisible 3-by-N grid of `PlantSlot` attachments, and **nothing places
+into it any more**. It is kept for one job: a save written before this change carries a `Slot` index
+and no position, and that grid is the table saying where index N used to be. Read once on load,
+written back out as offsets. Delete the attachments once no live profile can still carry a `Slot` --
+not before, because what they migrate is somebody's garden.
+
+The tier still decides HOW MANY fit (`GameConfig.plotSlotsFor`, rows x BedColumns). It no longer
+decides where.
+
+**Overlap is allowed, deliberately.** A cap and no spacing rule, so you can cluster things on
+purpose. `CanCollide` is already off across the game so they pass through each other.
+
+### The click has to come over a remote, and does not need a new one
+
+`Tool.Activated` fires on the server with no idea where the player was pointing, and `ClickDetector`
+does not carry a hit position either. A click point exists on the client and nowhere else.
+
+`GameConfig.Remotes.GameEvent` has existed since the first boot and nothing had ever used it. The
+verb is `GameConfig.Plant.PlaceAction`. Everything sent is a claim and is treated as one -- the
+server re-checks the plot is theirs, pulls the point onto their own soil, and measures the distance
+itself.
+
+**Not `Tool.Activated`, on purpose.** The mobile tool button is UI in the corner, so the tap that
+activates a tool is nowhere near the ground and the last known cursor position is wherever they last
+touched. `PlantPlace.client.luau` listens for the touch on the WORLD instead, which behaves
+identically on desktop and phone. MOBILE FIRST is a repo rule and this is what it costs.
+
+The ray **ignores the Plants folder**, because overlap is legal -- otherwise a big Bellchime would
+shadow the soil behind it and there would be a patch of your own bed you could no longer reach.
+
+A translucent disc follows the cursor while a plantable Tool is held: sized to the thing's footprint,
+tinted by its weight band, and clamped by the same rule the server clamps by. Without it "exactly
+where I clicked" is a claim taken on faith, and the one place it is not exact -- the rim, where the
+point is pulled inside -- would read as the click being ignored.
+
+### Nothing hatches on its own
+
+A planted pod counts down and then STOPS, sitting there with a `HatchPrompt` on it. `Ready` goes on
+the model; PlantUI drops its countdown plate the moment that happens, because a clock frozen at 0:00
+next to a prompt that says HATCH is the same fact twice and the prompt is the half you can act on.
+
+Hold E for `HatchHoldSeconds` (1.1). `PromptButtonHoldBegan` sets `Hatching` on the model and
+PlantSway does the shake -- 13 degrees at 27 Hz with a rectified hop, so it only ever leaves the soil.
+
+**The shake is an attribute, not a server loop.** The pod is anchored and server-owned, so jittering
+it from PlantService would push a CFrame down the wire per pod per frame to animate a thing one
+player is looking at. PlantSway already moves every planted model on every client every frame.
+
+Two consequences in PlantSway worth not undoing:
+
+  * **Pods are in the set now**, with idle amplitude zero. It used to skip anything below SPROUT.
+    A ready pod breathes at 35% of a full plant's lean; a hatching one overrides everything.
+  * **A hatching pod is exempt from the round robin.** The slice gives each plant about 20 Hz, which
+    is fine for a lean and turns a 27 Hz rattle into a slow stagger.
+
+On trigger the shell **bursts** -- parts tweened outward and up, fading over `BurstSeconds` (0.45),
+then destroyed. Tweened rather than unanchored: these parts are anchored, CanCollide is off
+game-wide, and simulating a dozen shards per hatch on a mobile-first project buys nothing visible.
+**The Planted tag comes off first**, so PlantUI's plate and PlantSway's idle let go before the pieces
+fly -- otherwise the sway fights the burst for the same pivot and they snap back to centre.
+
+The creature is handed over **before** the pod is destroyed. The other order loses the whole raid if
+the player has no Backpack at that instant -- dying with the prompt held is enough.
+
+### The sprout is gone
+
+`CreatureModel.STAGE_SPROUT` still exists and is still buildable; nothing in a bed is ever one. It
+existed to make a plot look busy halfway through a timer and it had no decision in it. A save that
+carries a sprout restores as a pod, which is what it was.
+
+`GameConfig.Plant.SproutAt` is kept and unused, so old stage arithmetic still reads.
+
+### The Almanac moved to the hatch
+
+The reveal used to be the grow-up. It is the shell breaking now -- until then you do not know which
+species you have, because pods are coloured by WEIGHT and two Commons arrive identical. `render()`
+keeps a MarkSeen for the one path that produces a grown plant with no hatch in front of anybody: a
+garden restored from a save that was already finished.
+
+### Save format
+
+```
+{ SpeciesId, PlantedAt, Kg, X, Z, Stage }
+```
+
+`X`/`Z` are local to the soil part, never world -- a plot is rebuilt at a different place and
+rotation every time its tier changes, and a world position saved through that would put somebody's
+garden in the road.
+
+`Stage` is stored because a planted thing is no longer derivable from its clock: a pod whose timer
+finished an hour ago is still a pod. Two migrations, both once-on-load then written back:
+
+  * **no X/Z** -> look `Slot` up in the old grid.
+  * **no Stage** -> under the old rules a finished clock meant a creature was already standing there
+    earning, so those restore as creatures. Anything mid-clock restores as a pod still counting.
+
+### GardenUI is a list now, not a floor plan
+
+Rows were slot N, so an empty row meant "hole N is free". There are no holes. Rows are what you own
+in placement order, empty rows at the bottom are room left, and the row count is still the tier's
+capacity. Same panel, same style.
+
+A ready pod is the only ghosted row that lights up -- it is the only line in the panel that means GO
+AND DO SOMETHING. Still `???`: the name is the hatch's to give.
+
+### Also fixed here
+
+`PlantUI` billboards are **born disabled** and only turned on by `refresh()`. A BillboardGui defaults
+to Enabled with both labels empty, so when `refresh` threw -- which it did, for a session, on the
+kg signature change -- every plant in the game wore a blank dark rectangle that was never written to
+and never switched off. Starting off means a plate is only visible because something put text in it.
+
+### Verified, and not
+
+**Not verified at all.** Written and reasoned; the syntax check could not run because Studio was in
+Play (`loadstring` is Edit-only -- the Server datamodel has HttpService but no loadstring, the Client
+has neither). Nothing here has been compiled or played.
+
+Worth a hard look on the first run:
+
+  * a 10,000 kg creature is ~34 studs tall as a held Tool. `GiveHatched` measures the model and holds
+    it by the base at foot level, but the top of the weight range will still fill the screen.
+  * the ghost disc estimates a creature's footprint from `FrameHeight * 0.46 * Girth * 1.5` rather
+    than from the model, because the client does not build one. It is a ring, not a promise.
+  * a Tool in the hotbar is not saved. Hatch, then leave, and the creature is gone. The banked pod
+    has always had this and it is worse now that there are two steps.
+
+## Grown plants walk, and you can pick them back up — 2026-08-24
+
+### The "a plant that WALKS is a bug" comment is overridden, for grown plants only
+
+That comment was right about what it was refusing: **seventy-two Humanoids** on a full server, each
+running a state machine and a floor raycast, to move things planted in the ground. None of that is
+here. What was added is one more term in the CFrame `PlantSway` was already writing.
+
+```
+no Humanoid   no pathfinding   no raycast   no server traffic
+one PivotTo per plant, on the same 20 Hz slice it already used
+```
+
+Three rules hold it together, and undoing any of them breaks the design rather than the code:
+
+  * **They never leave the bed.** Targets are chosen in the SOIL's object space and clamped to its
+    rectangle with the same `EdgeMarginStuds` `PlantService` clamps a click by. A bounds test, not a
+    floor test -- nothing to fall through, nothing to path around, and the road is unreachable by
+    construction.
+  * **They never turn.** Facing stays the rotation `PlantService.render` stamps, so every plant looks
+    at the plot gate while its feet move sideways and backwards. A bed of twelve is a crowd watching
+    whoever walks in. Steering would turn a crowd into a flock and lose the whole point.
+  * **Pods stay put.** An egg does not stroll. Pods are in the set only for the hatch shake.
+
+**Targets are picked around HOME, never around where the plant currently stands.** A random walk that
+steps from wherever it is drifts, and after ten minutes a bed has piled into one corner -- wrong, and
+indistinguishable from a bug. Anchoring every leg to the planted offset makes it a bounded jitter
+that always comes back.
+
+Every number is a curve in kg, like everything else in this game:
+
+```
+kg        radius   speed   pause     reads as
+     1      6.0     2.6     2.2s     skittering
+     2      5.5     2.3     2.3s     bustling around its patch
+   110      3.3     1.2     2.8s     ambling
+ 1,000      2.4     0.8     3.2s     lumbering
+10,000      1.8     0.5     3.7s     a boulder shifting its weight
+```
+
+A tier-1 bed is 34 x 47.6 studs, so even the lightest plant's 6-stud radius is a patch it works
+rather than a lap of the garden.
+
+The walk **translates the same anchor the lean pivots about**, so the two compose instead of
+fighting. Smoothstep across a leg, and a `4t(1-t)` envelope on the bob, the roll and the arm swing so
+everything fades in and out with the step -- a standing plant is perfectly still apart from its
+breathing, and nothing snaps on the frame a leg begins or ends.
+
+**Two extra CFrame writes per moving plant** swing the Leaf parts as arms after the PivotTo, in
+opposition by side. Skipped entirely when standing, because zero swing is exactly what PivotTo
+already wrote. Two CFrames on a fifteen-part model is a rounding error next to the pivot, and it is
+the difference between a plant that walks and one that slides.
+
+`Sway` grew a per-plant `Random` seeded off `PlacementId`, so no two plants take the same walk and a
+rejoin takes the same one again.
+
+**Income does not care.** `GrownIn`, the Garden rows and CashPop all key off the planted entry; the
+server never sees the wander and the saved `offset` stays the planted home.
+
+### Unequip actually works now, and it was a weld
+
+`CarryWeld` joins the Handle to the HumanoidRootPart and is **parented to the Handle**, so it went to
+the Backpack with the tool and kept pointing at a root still in the workspace. Two failures:
+
+  * **now** -- a joint between a Backpack part and a world part is not something the engine has a
+    sensible answer for, and the pod could stay drawn in front of a player who had put it away.
+  * **later** -- `fitToRoot` only builds a weld `if not handle:FindFirstChild("CarryWeld")`. The
+    stale one survived, so it was never rebuilt, and after a respawn its `Part0` was a root that no
+    longer existed. Equip, die, equip again, held by nothing.
+
+`tool.Unequipped` now cuts the weld and the next `Equipped` rebuilds it. Nothing else about the tool
+changes -- same kg, same `Hatched`, still not droppable.
+
+A second way in for anyone not looking at the hotbar: **Q / "Put away"**, bound through
+`ContextActionService` (so a phone gets the button free) and bound **only while a plantable Tool is
+held**, because a touch button that does nothing is worse than no button. It cannot touch a raid
+carry -- that pod is a Model welded to the root, not a Tool, and `UnequipTools` does not know it
+exists. Two channels, still separate.
+
+`GiveHatched` also **skips the auto-equip while the player is raid-carrying**, since the pod is
+welded at the same grip and equipping on top would stack two objects in one place. The creature still
+lands in the hotbar and waits.
+
+### Picking a grown plant back up
+
+Owner-only hold-E on your own grown plant -> it lifts and fades, leaves `growing`, persists, and comes
+back as the **same Tool `GiveHatched` already builds** (same species, same kg, `Hatched = true`). A
+plant that has been moved is indistinguishable from one never placed; there is no second kind of
+creature in the hotbar.
+
+**It is not a Take and not a Hatch.** Both words already mean something else here -- Take is what you
+do to a nest and it runs the raid alarm, Hatch is what opens a shell. The prompt says **Pick Up**.
+
+Handed over BEFORE the plant is removed, same as hatching: if the Backpack is not there at that
+instant the right answer is that nothing happened, not that the plant is gone.
+
+**Freed capacity is the point**, not bookkeeping. A full bed used to be permanent.
+
+The owner check is server-side and is the only thing between a neighbour and your garden. A
+ProximityPrompt has no per-player visibility, so a stranger can see a Pick Up on your plant and get
+nothing for holding it. Worth fixing in PromptUI one day; not worth trusting the client over.
+
+### Verified, and not
+
+Compile-checked: all 15 touched files parse (`http.server` + `HttpService` + `loadstring` in Edit).
+The wander curves in the table above were computed, not estimated.
+
+**Not played.** Nothing in this entry has been seen moving. Specifically unverified:
+
+  * that a plant visibly stays on the bed at the corners, where home is already near the clamp
+  * that the leaf swing reads as arms rather than as a glitch
+  * hold-E on a walking plant -- the prompt rides the client-local position, which should be exactly
+    where the player sees it, but that is reasoning rather than observation
+  * whether a 10,000 kg creature at 0.5 studs/sec reads as heavy or as broken
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

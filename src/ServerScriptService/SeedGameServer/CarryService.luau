@@ -515,24 +515,25 @@ end
 -- The test is MapService.IsInSafeZone, the same one the whole game uses, so the
 -- line painted on the grass and the line the code checks are the same line.
 --==============================================================================
-local function bank(player: Player): boolean
-	local held = carried[player]
-	local character = player.Character
+--==============================================================================
+-- ONE WAY TO PUT SOMETHING IN A PLAYER'S HANDS
+--
+-- Two things end up in the hotbar and they must not be carried two different
+-- ways: a pod you banked, and the creature that comes out when you hatch one.
+-- This is everything they share -- the Handle weld, the weight tag, and the
+-- fight with the engine's own grip -- so the only thing a caller decides is
+-- WHAT the model is and HOW FAR OUT it rides.
+--
+-- The model handed in is consumed: its PrimaryPart becomes the Handle and every
+-- other part is welded to it.
+--==============================================================================
+local function giveTool(player: Player, model: Model, species: SeedData.Species,
+	kg: number, grip: CFrame, hatched: boolean): Tool?
 	local backpack = player:FindFirstChildOfClass("Backpack")
-	if not (held and character and backpack) then
-		return false
-	end
-
-	local species = held.species
-	local kg = held.kg
-	-- Built fresh as the Tool's handle rather than reusing the carried model:
-	-- that one is welded to a head and unanchored, and a Tool wants a part named
-	-- Handle that it owns outright.
-	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
-	local handle = pod.PrimaryPart
-	if not handle then
-		pod:Destroy()
-		return false
+	local handle = model.PrimaryPart
+	if not (backpack and handle) then
+		model:Destroy()
+		return nil
 	end
 
 	local tool = Instance.new("Tool")
@@ -544,9 +545,13 @@ local function bank(player: Player): boolean
 	tool.RequiresHandle = true
 	tool:SetAttribute("SpeciesId", species.Id)
 	tool:SetAttribute(ATTR.CarryingKg, kg)
+	-- WHICH OF THE TWO THIS IS. A pod goes in the ground and starts a clock; a
+	-- hatched creature goes in the ground already earning. PlantService reads
+	-- this to know which, and it is the only difference between them.
+	tool:SetAttribute("Hatched", hatched)
 
 	handle.Name = "Handle"
-	for _, d in ipairs(pod:GetDescendants()) do
+	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.Anchored = false
 			d.CanCollide = false
@@ -562,7 +567,7 @@ local function bank(player: Player): boolean
 		end
 	end
 	handle.Parent = tool
-	pod:Destroy()
+	model:Destroy()
 	weightTag(handle, kg)
 
 	--==========================================================================
@@ -596,8 +601,6 @@ local function bank(player: Player): boolean
 	--           DescendantAdded watch stays live for as long as the tool is held
 	--           and re-asserts the root weld if a hand weld turns up later.
 	--==========================================================================
-	local grip = gripFor(kg)
-
 	local function fitToRoot(character: Model)
 		if handle.Parent ~= tool then
 			return
@@ -632,29 +635,139 @@ local function bank(player: Player): boolean
 		if not (character and character:IsA("Model")) then
 			return
 		end
-		local model = character :: Model
+		local asModel = character :: Model
 		if watching then
 			watching:Disconnect()
 		end
-		watching = model.DescendantAdded:Connect(function(d)
+		watching = asModel.DescendantAdded:Connect(function(d)
 			-- Part0/Part1 are not necessarily assigned yet when this fires, so
 			-- the test is deliberately loose and the real check happens inside
 			-- fitToRoot a frame later.
 			if d:IsA("JointInstance") and d.Name ~= "CarryWeld" then
-				task.defer(fitToRoot, model)
+				task.defer(fitToRoot, asModel)
 			end
 		end)
-		fitToRoot(model)
-		task.defer(fitToRoot, model)
+		fitToRoot(asModel)
+		task.defer(fitToRoot, asModel)
 	end))
 
+	--==========================================================================
+	-- UNEQUIPPING HAS TO CUT THE ROOT WELD, OR THE TOOL NEVER LEAVES
+	--
+	-- CarryWeld joins the Handle to the HumanoidRootPart, and it is parented to
+	-- the Handle -- so it goes to the Backpack with it and keeps pointing at a
+	-- root that is still in the workspace. Two things went wrong with that:
+	--
+	--   NOW    a joint between a part in the Backpack and a part in the world is
+	--          not a thing the engine has a sensible answer for, and the pod
+	--          could stay drawn in front of a player who had put it away.
+	--   LATER  fitToRoot only builds a weld `if not handle:FindFirstChild
+	--          ("CarryWeld")`. The stale one is still there on re-equip, so it
+	--          is never rebuilt -- and after a respawn its Part0 is a root that
+	--          no longer exists. Equip, die, equip again, and the tool is held
+	--          by nothing.
+	--
+	-- So the weld is cut here and rebuilt from scratch on the next Equipped.
+	-- Nothing else about the tool changes: it is still in the hotbar, still
+	-- carries its kg and its Hatched flag, and is still not droppable.
+	--==========================================================================
 	table.insert(serviceConnections, tool.Unequipped:Connect(function()
 		if watching then
 			watching:Disconnect()
 			watching = nil
 		end
+		local weld = handle:FindFirstChild("CarryWeld")
+		if weld then
+			weld:Destroy()
+		end
 	end))
 	tool.Parent = backpack
+	return tool
+end
+
+--==============================================================================
+-- A HATCHED CREATURE IS CARRIED, NOT LEFT IN THE GROUND
+--
+-- Hatching does not put the creature where the pod was. It hands it to you and
+-- you choose where it goes, which is the whole reason placement is by click --
+-- the spot the egg happened to sit in is not the spot you want the plant.
+--
+-- HELD BY THE BASE, AND HELD LOW. A creature's PrimaryPart is its soil mound,
+-- so the weld lands at the bottom of the thing and it stands up out of your
+-- hands rather than hanging from its middle. The drop puts that base near your
+-- feet: at the top of the weight range this is a thirty-stud plant, and welding
+-- its middle to your chest would fill the screen with stem.
+--
+-- The reach is measured off the MODEL rather than off PodDiameter, because a
+-- creature is a different shape from the pod it came out of -- a Bellchime's
+-- skirt is far wider than its shell ever was.
+--==============================================================================
+function CarryService.GiveHatched(player: Player, species: SeedData.Species,
+	kg: number): boolean
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return false
+	end
+	local model = CreatureModel.BuildCreature(species, kg,
+		CreatureModel.STAGE_GROWN, CFrame.new(), backpack)
+	-- Built at the origin with its base on y = 0, so the extents ARE the size.
+	local size = model:GetExtentsSize()
+	local halfWidth = math.max(size.X, size.Z) * 0.5
+	local grip = CFrame.new(0,
+		-- The root sits about three studs off the ground, so this stands the
+		-- base at roughly foot level whatever the plant's height.
+		GameConfig.Carry.GripDrop - 2.2,
+		-(GameConfig.Carry.GripForwardBase + halfWidth))
+	local tool = giveTool(player, model, species, kg, grip, true)
+	if not tool then
+		return false
+	end
+	--==========================================================================
+	-- PUT IT IN THEIR HANDS, NOT JUST IN THE BAG
+	--
+	-- The shell has just burst in front of them and the thing that came out is
+	-- what they have been waiting for. Landing it silently in slot four and
+	-- making them go and find it throws away the only moment in the loop that
+	-- is a reveal.
+	--
+	-- Equipping is best-effort: mid-respawn there is no Humanoid to equip with,
+	-- and a creature sitting safely in the hotbar is a far better failure than
+	-- one that was never handed over.
+	--==========================================================================
+	--
+	-- NOT WHILE THEY ARE RUNNING A RAID POD HOME, though. That pod is welded to
+	-- the same root at the same grip -- two channels, one pair of hands -- and
+	-- equipping on top of it would stack two objects in the same place. The
+	-- creature still lands in the hotbar; it just waits until their hands are
+	-- their own again.
+	local character = player.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid and not CarryService.IsCarrying(player) then
+		pcall(function()
+			humanoid:EquipTool(tool)
+		end)
+	end
+	log(string.format("%s hatched a %d kg %s.", player.Name, kg, species.Name))
+	return true
+end
+
+local function bank(player: Player): boolean
+	local held = carried[player]
+	local character = player.Character
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not (held and character and backpack) then
+		return false
+	end
+
+	local species = held.species
+	local kg = held.kg
+	-- Built fresh as the Tool's handle rather than reusing the carried model:
+	-- that one is welded to a head and unanchored, and a Tool wants a part named
+	-- Handle that it owns outright.
+	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
+	if not giveTool(player, pod, species, kg, gripFor(kg), false) then
+		return false
+	end
 
 	-- Consumed, not dropped: it is in the hotbar now, not on the floor.
 	if held.model.Parent then

@@ -42,8 +42,9 @@
 -- NO REMOTE, NO SERVER CALL
 --
 -- Everything on this panel is read off the plants themselves. PlantService tags
--- every model it renders and stamps SpeciesId, Stage, PlantedAt and SlotIndex on
--- it, and PlotService stamps the owner on the plot -- so the tag plus two
+-- every model it renders and stamps SpeciesId, Stage, Kg, PlantedAt and
+-- PlacementId on it, and PlotService stamps the owner on the plot -- so the tag
+-- plus two
 -- parents is the whole query. It cannot disagree with what is standing in the
 -- ground, because it IS what is standing in the ground.
 --==============================================================================
@@ -420,11 +421,29 @@ type Occupant = {
 	-- $900/s, which they cannot if the sheet is consulted.
 	kg: number,
 	plantedAt: number,
+	-- STAGE_POD or STAGE_GROWN, off the model. Not derived from the clock any
+	-- more: a pod whose timer ran out an hour ago is STILL a pod until somebody
+	-- hatches it, and a creature you placed a second ago is already grown.
+	stage: number,
+	-- Placement order, which is the only order there is now that plants do not
+	-- live in numbered holes.
+	id: number,
 }
 
--- Everything of ours in the ground, keyed by the slot it is standing in.
-local function occupants(plot: Model): { [number]: Occupant }
-	local out: { [number]: Occupant } = {}
+--==============================================================================
+-- A LIST, NOT A GRID
+--
+-- This was keyed by slot index, and a row in the panel WAS slot N -- so an
+-- empty row meant "hole N is free" and the panel was a map of the bed. There
+-- are no holes any more; you put plants where you click.
+--
+-- So the rows are just what you own, in the order you planted it, and the empty
+-- ones at the bottom are how much room is left. Same panel, and the number of
+-- rows still equals the tier's capacity -- it has just stopped pretending to be
+-- a floor plan.
+--==============================================================================
+local function occupants(plot: Model): { Occupant }
+	local out: { Occupant } = {}
 	local plants = plot:FindFirstChild(GameConfig.Plot.PlantsFolderName)
 	if not plants then
 		return out
@@ -433,44 +452,60 @@ local function occupants(plot: Model): { [number]: Occupant }
 		if model:IsA("Model") and CollectionService:HasTag(model, GameConfig.Tags.Planted) then
 			local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
 			local plantedAt = model:GetAttribute("PlantedAt")
-			local slot = model:GetAttribute("SlotIndex")
 			local kg = tonumber(model:GetAttribute("Kg"))
-			if species and kg and type(plantedAt) == "number" and type(slot) == "number" then
-				out[slot] = { species = species, kg = kg, plantedAt = plantedAt }
+			local id = tonumber(model:GetAttribute("PlacementId"))
+			local stage = tonumber(model:GetAttribute("Stage"))
+			if species and kg and id and stage and type(plantedAt) == "number" then
+				table.insert(out, {
+					species = species,
+					kg = kg,
+					plantedAt = plantedAt,
+					stage = stage,
+					id = id,
+				})
 			end
 		end
 	end
+	-- GetChildren is in creation order, which is close but not guaranteed, and a
+	-- list that reshuffles itself between ticks would make the panel flicker.
+	table.sort(out, function(a: Occupant, b: Occupant): boolean
+		return a.id < b.id
+	end)
 	return out
 end
 
 --==============================================================================
--- STAGE COMES FROM THE CLOCK, NOT THE ATTRIBUTE
+-- WHAT IT IS COMES FROM THE SERVER; WHEN IT IS READY COMES FROM THE CLOCK
 --
--- PlantUI decides HATCHING / GROWING / done from PlantedAt and GrowSeconds, and
--- this does the identical sum -- so a row and the plate over the plant it names
--- can never show different clocks. Branching on the Stage attribute instead
--- would be authoritative but would disagree with the world for up to a tick,
--- and two numbers disagreeing on screen is worse than one being a second early.
+-- Those used to be one question and the clock answered both -- a plant's stage
+-- WAS how far through its timer it was. Manual hatching split them: a pod whose
+-- clock ran out an hour ago is still a pod, and the only thing that turns it
+-- into a creature is somebody holding E. So the STAGE is read off the model and
+-- the countdown is still computed here.
 --
--- The footer therefore leads EconomyService by at most one tick on the frame a
--- plant finishes. It is a display of a number that is changing anyway.
+-- The countdown does the identical sum PlantUI does, so a row and the plate over
+-- the plant it names can never show different clocks.
+--
+-- READY is a display state, not a server one -- there is no fourth stage. It is
+-- simply a pod whose remaining time has reached zero, which is exactly when
+-- PlantService hangs the prompt on it.
 --==============================================================================
-local STAGE_POD, STAGE_SPROUT, STAGE_GROWN = 1, 2, 3
+local STAGE_POD, STAGE_GROWN = 1, 3
+local STAGE_READY = -1
 
 local function stageOf(occupant: Occupant, now: number): (number, number)
-	local total = SeedData.GrowSeconds(occupant.kg)
-	local elapsed = now - occupant.plantedAt
-	local sproutAt = total * PLANTING.SproutAt
-	if elapsed < sproutAt then
-		return STAGE_POD, sproutAt - elapsed
-	elseif elapsed < total then
-		return STAGE_SPROUT, total - elapsed
+	if occupant.stage ~= STAGE_POD then
+		return STAGE_GROWN, 0
 	end
-	return STAGE_GROWN, 0
+	local remaining = SeedData.GrowSeconds(occupant.kg) - (now - occupant.plantedAt)
+	if remaining > 0 then
+		return STAGE_POD, remaining
+	end
+	return STAGE_READY, 0
 end
 
 --==============================================================================
--- HOW MANY HOLES
+-- HOW MANY THINGS FIT
 --==============================================================================
 local plotTier = GameConfig.StartingPlotTier
 
@@ -562,9 +597,9 @@ local function refresh(paint: boolean)
 				-- known yet.
 				--==========================================================
 				row.swatch.BackgroundTransparency = 0
-				row.swatch.BackgroundColor3 = if stage == STAGE_POD
-					then SeedData.ColorForKg(occupant.kg)
-					else species.Crown
+				row.swatch.BackgroundColor3 = if stage == STAGE_GROWN
+					then species.Crown
+					else SeedData.ColorForKg(occupant.kg)
 				--==========================================================
 				-- A POD IS NOT NAMED, HERE EITHER
 				--
@@ -575,12 +610,12 @@ local function refresh(paint: boolean)
 				-- which one you got until it opens, and the Garden was simply
 				-- telling you.
 				--
-				-- A SPROUT is named, though. By then the model in the ground is
-				-- the creature at SPROUT_SCALE -- the shape is out there being
-				-- looked at -- so withholding the word would be hiding
-				-- something the world has already shown.
+				-- A pod stays anonymous right up to the hatch, ready or not.
+				-- The clock running out does not open the shell any more, so
+				-- naming it at READY would spend the reveal on a timer -- which
+				-- is the one thing manual hatching was meant to stop.
 				--==========================================================
-				row.name.Text = if stage == STAGE_POD then "???" else species.Name
+				row.name.Text = if stage == STAGE_GROWN then species.Name else "???"
 				if stage == STAGE_GROWN then
 					--======================================================
 					-- TINTED BY WHAT IT WEIGHS, NOT BY WHAT SHAPE IT IS
@@ -595,12 +630,25 @@ local function refresh(paint: boolean)
 					row.sub.Text = "$" .. GameConfig.compact(
 						SeedData.IncomePerSecond(occupant.kg)) .. "/s"
 					row.sub.TextColor3 = ACCENT
+				elseif stage == STAGE_READY then
+					--======================================================
+					-- THE ONE ROW THAT IS ASKING FOR SOMETHING
+					--
+					-- Everything else in this panel is a status. This is the
+					-- only line that means GO AND DO SOMETHING, so it is the
+					-- only ghosted row that lights up -- a full bed reads at a
+					-- glance as "two of these want you".
+					--
+					-- Still ???: the name is the hatch's to give.
+					--======================================================
+					row.name.TextColor3 = SeedData.ColorForKg(occupant.kg)
+					row.sub.Text = "READY  ·  HOLD E"
+					row.sub.TextColor3 = ACCENT
 				else
-					-- Ghosted until it finishes, so the reveal still happens
+					-- Ghosted until it is hatched, so the reveal still happens
 					-- out in the world rather than in a list.
 					row.name.TextColor3 = GHOST
-					row.sub.Text = (if stage == STAGE_POD then "HATCHING " else "GROWING ")
-						.. clock(remaining)
+					row.sub.Text = "HATCHING " .. clock(remaining)
 					row.sub.TextColor3 = GHOST
 				end
 			end

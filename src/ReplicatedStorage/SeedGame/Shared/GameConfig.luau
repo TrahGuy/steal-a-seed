@@ -567,14 +567,54 @@ end
 -- would have meant the countdown and the transition disagreeing.
 --==============================================================================
 GameConfig.Plant = {
-	-- How far through its growth a pod becomes a sprout. Early on purpose: a
-	-- plot that still looks like bare pods reads as empty from a distance, and
-	-- the sprout is what says "something is happening here".
+	-- How far through its growth a pod becomes a sprout.
+	--
+	-- DEAD NOW, and kept only so an old save's stage maths still reads. Nothing
+	-- in the ground sprouts any more: a planted pod stays a pod until its owner
+	-- hatches it by hand, and what comes out is already the creature. The stage
+	-- between them had no decision in it -- it was a thing you watched.
 	SproutAt = 0.35,
 	TickSeconds = 1,
-	-- How close you must stand to plant. Generous -- a convenience, not a skill
-	-- check, and fighting the camera to hit a slot is nobody's idea of a game.
+	-- How close you must stand to plant, and to reach the point you clicked.
+	-- Generous -- a convenience, not a skill check.
 	RangeStuds = 26,
+
+	--==========================================================================
+	-- YOU PUT IT WHERE YOU CLICK
+	--
+	-- The bed used to be an invisible 3-by-N grid and planting snapped to the
+	-- nearest free cell. That made a plot a form to fill in. Free placement
+	-- makes it a garden you arrange -- which is the only reason to look at
+	-- somebody else's.
+	--
+	-- The grid attachments still exist in MapService, but only as the table
+	-- that says where a PRE-FREE-PLACEMENT save lands. Nothing places into
+	-- them any more.
+	--==========================================================================
+	-- How far inside the soil's edge a click is pulled, so nothing is planted
+	-- half-way through the bed frame. A click outside the bed is CLAMPED rather
+	-- than refused: "exactly where I clicked" should stop being exact only at
+	-- the rim, and a refusal there reads as the game being broken.
+	EdgeMarginStuds = 1.6,
+	-- Hold to hatch. Long enough that the pod visibly shakes and the hatch is a
+	-- thing you did, short enough that a full bed is not a chore.
+	HatchHoldSeconds = 1.1,
+	-- How long the shell burst lasts before its pieces are gone.
+	BurstSeconds = 0.45,
+
+	--==========================================================================
+	-- ONE VERB ON ONE EXISTING REMOTE
+	--
+	-- Tool.Activated fires on the server with no idea WHERE the player clicked,
+	-- and neither does ClickDetector. A click position can only come across the
+	-- wire. Rather than add a remote, this rides GameEvent -- which ServerMain
+	-- has always created and nothing has ever used.
+	--
+	-- The position is a claim by the client and is treated as one: the server
+	-- re-checks the plot is theirs, the point is on their own soil, and they
+	-- are standing within RangeStuds of it.
+	--==========================================================================
+	PlaceAction = "PlantAt",
 }
 
 GameConfig.Treadmill = {
