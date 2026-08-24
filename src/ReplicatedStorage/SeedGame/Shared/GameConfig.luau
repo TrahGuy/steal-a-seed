@@ -684,6 +684,37 @@ GameConfig.Carry = {
 	--==========================================================================
 	GripForwardBase = 0.85,
 	GripDrop = -0.35,
+
+	--==========================================================================
+	-- A CARRIED PLANT IS SHRUNK, AND THE CURVE MATTERS AS MUCH AS THE CAP
+	--
+	-- A hatched creature goes in the hotbar at full size, and full size runs
+	-- from 1.5 studs to 35. A character is about five, so anything past the
+	-- lightest pods stopped reading as a carry at all -- what the player got was
+	-- a plant standing on the ground beside them, filling the screen, with no
+	-- relationship to their hands.
+	--
+	--     scale = min(1, (CarriedHeight / finished) ^ CarriedFalloff)
+	--
+	-- A HARD cap would make every plant past the limit exactly the same size in
+	-- the hands, which throws away the one thing the player is playing for. The
+	-- exponent keeps them ordered and visibly different while compressing a 22x
+	-- range into under 3x:
+	--
+	--     finished  1.5 -> carried 1.5     a 2 kg Nubkin is untouched
+	--     finished  9.5 -> carried 3.2     110 kg
+	--     finished 13.0 -> carried 3.4     a 1,937 kg Petalpip
+	--     finished 35.1 -> carried 4.1     the top of the range
+	--
+	-- 2.4 rather than 5: the plant is held in FRONT, so matching the character's
+	-- height would put it across the camera. At these numbers the heaviest thing
+	-- in the game reaches about chin height and you can still see the road.
+	--
+	-- Nothing about the PLANT changes. PlantService builds a fresh model at full
+	-- size when it is planted; the scale lives and dies with the Tool.
+	--==========================================================================
+	CarriedHeight = 2.4,
+	CarriedFalloff = 0.8,
 }
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.

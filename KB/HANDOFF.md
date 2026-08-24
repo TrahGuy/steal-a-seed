@@ -3229,6 +3229,82 @@ anywhere in CarryService.
 **Not played.** What a `???` slot looks like in the Roblox backpack UI has not been seen, and neither
 has a raid carry without its billboard.
 
+## Carrying a plant was not a carry — 2026-08-24
+
+`GiveHatched` handed the creature over at **full size** with its base at **foot level**. On a 2 kg
+Nubkin that is fine. On anything else it stopped being a carry.
+
+Measured against a character-sized dummy in Edit — not guessed:
+
+```
+                 finished   base y   top y     character head ~5.3
+Nubkin     2kg       1.5      0.37     1.83
+Bellchime 110kg      9.5      0.13     9.60
+Petalpip 1937kg     13.0     -0.12    12.85    below the floor
+```
+
+What the player got was **a plant standing on the ground beside them**, taller than they are, with no
+relationship to their hands at all. The heaviest in the game is 35 studs.
+
+### Shrunk to carry, on a curve rather than a clamp
+
+```
+scale = min(1, (CarriedHeight / finished) ^ CarriedFalloff)      2.4 and 0.8
+```
+
+A **hard cap** would make every plant past the limit exactly the same size in the hands, which throws
+away the one thing the player is playing for. The exponent keeps them ordered and visibly different
+while compressing a 22x range into under 3x:
+
+```
+finished  1.5 ->  1.5     a 2 kg Nubkin is untouched
+finished  9.5 ->  3.2     110 kg
+finished 13.0 ->  3.4     a 1,937 kg Petalpip
+finished 35.1 ->  4.1     the top of the range
+```
+
+**2.4 rather than 5**: the plant is held in FRONT, so matching the character's height would put it
+across the camera. At these numbers the heaviest thing in the game reaches about chin height and you
+can still see the road.
+
+`Model:ScaleTo` scales about the model's pivot, which is the Base plate at its ground contact — so it
+shrinks toward its own feet and the grip still means what it says.
+
+**Nothing about the plant changes.** PlantService builds a fresh model at full size when it is
+planted; the scale lives and dies with the Tool.
+
+The numbers live in `GameConfig.Carry` beside `GripForwardBase` and `GripDrop`, not in CarryService.
+
+### Held at the hip, not the ankle
+
+The drop went `GripDrop - 2.2` -> `GripDrop - 1.0`. The old one put the base at roughly foot level,
+which read as the plant standing on the floor — and on a small one it looked dropped. One stud below
+the chest puts the base at about hip height at every size.
+
+### CarryPose was aiming the arms with a pod's radius
+
+`anglesFor` computed `SeedData.GripForward(kg)` for whatever was in the player's hands. That is right
+for a raid pod and wrong for everything else: a hatched creature is a different shape from the shell
+it came out of, and it is **scaled** on top of that, so the pod formula pointed the arms at a place
+the plant was not.
+
+CarryService now writes the real number on the Tool as **`GripReach`** when it builds the grip, from
+the model it has in front of it. `carriedReach` reads it. A raid pod has no Tool, so its reach still
+comes off the weight — correct there, because the thing in your arms IS the shell that formula
+describes. `bank` stamps `GripReach` on a pod Tool too, so there is one source rather than two ways
+to answer one question.
+
+### Verified, and not
+
+Screenshotted against a blocky stand-in the size of an R15 character, at 2 kg and at 10,000 kg. Both
+read as held: base at hip height, plant at chest to chin, character visible past it. The scale table
+above was run out of the real `GameConfig`. Three files compile.
+
+**Not played.** The arm pose itself has not been seen — `CarryPose` needs a real rig, and the dummy
+has fixed arms. The reach it now receives is correct; whether `43 + 9.2 * reach` still produces a
+good angle over the new, much smaller reach range (1.3 to 2.2 rather than 1.3 to 5.9) is untested and
+is the first thing to look at if the arms look wrong.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

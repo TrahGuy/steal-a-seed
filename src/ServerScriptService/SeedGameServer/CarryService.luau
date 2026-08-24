@@ -703,18 +703,62 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	end
 	local model = CreatureModel.BuildCreature(species, kg,
 		CreatureModel.STAGE_GROWN, CFrame.new(), backpack)
-	-- Built at the origin with its base on y = 0, so the extents ARE the size.
+
+	--==========================================================================
+	-- A CARRIED PLANT IS SHRUNK, AND IT HAS TO BE
+	--
+	-- This handed the creature over at FULL SIZE and stood its base at foot
+	-- level. On a 2 kg Nubkin that is fine. On anything else it stopped being a
+	-- carry: a 110 kg Bellchime is 9.5 studs against a 5-stud character and a
+	-- 10,000 kg one is 35, so what the player got was a plant standing on the
+	-- ground beside them, filling the screen, with no relationship to their
+	-- hands at all. Measured against a character-sized dummy, not guessed.
+	--
+	-- The curve and the reasoning are in GameConfig.Carry, because the numbers
+	-- belong with the other carry geometry rather than buried in here.
+	--==========================================================================
+	local finished = model:GetExtentsSize().Y
+	local scale = math.min(1,
+		(GameConfig.Carry.CarriedHeight / math.max(finished, 0.1))
+			^ GameConfig.Carry.CarriedFalloff)
+	if scale < 1 then
+		-- Scales about the model's pivot, which is the Base plate at its
+		-- ground contact -- so it shrinks toward its own feet and the grip
+		-- below still means what it says.
+		model:ScaleTo(scale)
+	end
+
+	-- Measured AFTER the scale, so the reach is the reach of the thing actually
+	-- in their hands.
 	local size = model:GetExtentsSize()
 	local halfWidth = math.max(size.X, size.Z) * 0.5
-	local grip = CFrame.new(0,
-		-- The root sits about three studs off the ground, so this stands the
-		-- base at roughly foot level whatever the plant's height.
-		GameConfig.Carry.GripDrop - 2.2,
-		-(GameConfig.Carry.GripForwardBase + halfWidth))
+	local reach = GameConfig.Carry.GripForwardBase + halfWidth
+	--==========================================================================
+	-- HELD AT THE HIP, NOT AT THE ANKLE
+	--
+	-- The old drop of -2.2 put the base at roughly foot level, which read as the
+	-- plant standing on the floor rather than being held -- and on a small one
+	-- it looked dropped. One stud below the chest puts the base at about hip
+	-- height on every size, so the thing is in the arms and the player can still
+	-- see over it.
+	--==========================================================================
+	local grip = CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
 	local tool = giveTool(player, model, species, kg, grip, true)
 	if not tool then
 		return false
 	end
+	--==========================================================================
+	-- THE REACH IS WRITTEN DOWN, BECAUSE CarryPose CANNOT DERIVE IT
+	--
+	-- CarryPose aims the arms at whatever is being carried, and for a raid pod
+	-- it works that out from SeedData.GripForward(kg) -- which is a POD's
+	-- radius. A creature is a different shape from the shell it came out of and
+	-- is scaled on top of that, so the pod formula points the arms at empty air.
+	--
+	-- One number, measured once here where the model still exists, and read
+	-- straight off the Tool there.
+	--==========================================================================
+	tool:SetAttribute("GripReach", reach)
 	--==========================================================================
 	-- PUT IT IN THEIR HANDS, NOT JUST IN THE BAG
 	--
@@ -758,9 +802,14 @@ local function bank(player: Player): boolean
 	-- that one is welded to a head and unanchored, and a Tool wants a part named
 	-- Handle that it owns outright.
 	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
-	if not giveTool(player, pod, species, kg, gripFor(kg), false) then
+	local tool = giveTool(player, pod, species, kg, gripFor(kg), false)
+	if not tool then
 		return false
 	end
+	-- The same number CarryPose reads off a hatched creature. A pod's reach IS
+	-- derivable from its weight, but having two ways to answer one question is
+	-- how the arms and the object drift apart.
+	tool:SetAttribute("GripReach", SeedData.GripForward(kg))
 
 	-- Consumed, not dropped: it is in the hotbar now, not on the floor.
 	if held.model.Parent then

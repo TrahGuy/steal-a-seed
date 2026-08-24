@@ -145,22 +145,29 @@ end
 -- studs out and a 10,000 kg one 5.8, so one angle cannot serve both -- a pose
 -- tuned for the small pod leaves the boulder held at the fingertips.
 --
--- IT IS THE WEIGHT, NOT THE SPECIES. Every pod rolls its own now, so the form
--- says nothing about how far out it rides: two Nubkins can want two different
--- poses. Reading the species here would brace the arms for a 2 kg cube while
--- the player is carrying a 9,000 kg one.
+-- IT IS THE REACH, AND THE REACH IS MEASURED, NOT DERIVED
+--
+-- This used to compute SeedData.GripForward(kg) -- a POD's radius -- for
+-- whatever was in the player's hands. That is right for a raid pod and wrong
+-- for everything else: a hatched creature is a different shape from the shell
+-- it came out of, and it is SCALED DOWN to be carried on top of that, so the
+-- pod formula aimed the arms at a place the plant was not.
+--
+-- CarryService writes the real number on the Tool as GripReach when it builds
+-- the grip, from the model it has in front of it. One measurement, taken where
+-- the thing exists, read here.
 --
 -- Reach drives how far the shoulders swing forward, and how far apart. A big pod
 -- needs the hands WIDER, not just further out, which is why the spread relaxes
 -- as reach grows.
 --==============================================================================
-local function anglesFor(kg: number?): (number, number)
-	local reach = if kg then SeedData.GripForward(kg) else 1.6
+local function anglesFor(reach: number?): (number, number)
+	local out = reach or 1.6
 	-- 1.5 studs of reach -> ~57 deg, 5.8 -> clamped at 82. Clamped so no pod
 	-- folds the arm back through the shoulder.
-	local lift = math.clamp(43 + 9.2 * reach, 45, 82)
+	local lift = math.clamp(43 + 9.2 * out, 45, 82)
 	-- Negative is inward. Small pods are hugged; big ones are braced.
-	local spread = math.clamp(-24 + 6 * reach, -22, 4)
+	local spread = math.clamp(-24 + 6 * out, -22, 4)
 	return math.rad(lift), math.rad(spread)
 end
 
@@ -213,20 +220,28 @@ end)
 -- The pose still wins over the tool animation: these are AnimationConstraint
 -- Transforms written in Stepped, which is after the animator has run.
 --==============================================================================
--- Returns the WEIGHT of whatever is being carried, or nil for empty hands. The
--- species id is not wanted here any more -- nothing about the pose depends on
--- the shape -- but the same two places still have to be checked, because the
--- attribute is only set during a raid and the Tool is what survives banking.
-local function carriedKg(player: Player, character: Model): number?
-	local attribute = player:GetAttribute(CARRYING_KG)
-	if type(attribute) == "number" then
-		return attribute
+-- How far in front of the root whatever is being carried actually rides, or nil
+-- for empty hands. Two places to look, because the player attribute is only set
+-- during a raid and the Tool is what survives banking.
+--
+-- A RAID POD has no Tool, so its reach still comes off the weight -- which is
+-- correct there, because the thing in your arms IS the shell that formula
+-- describes. Everything in the hotbar carries its own measured GripReach, and
+-- the weight fallback is only for a Tool built before that existed.
+local function carriedReach(player: Player, character: Model): number?
+	local kg = player:GetAttribute(CARRYING_KG)
+	if type(kg) == "number" then
+		return SeedData.GripForward(kg)
 	end
 	for _, d in ipairs(character:GetChildren()) do
 		if d:IsA("Tool") then
-			local kg = d:GetAttribute(CARRYING_KG)
-			if type(kg) == "number" then
-				return kg
+			local reach = d:GetAttribute("GripReach")
+			if type(reach) == "number" then
+				return reach
+			end
+			local weight = d:GetAttribute(CARRYING_KG)
+			if type(weight) == "number" then
+				return SeedData.GripForward(weight)
 			end
 		end
 	end
@@ -245,15 +260,15 @@ RunService.Stepped:Connect(function(_, dt)
 		if not character or not character.Parent then
 			rigs[player] = nil
 		else
-			local kg = carriedKg(player, character)
-			local want = if kg ~= nil then 1 else 0
+			local reach = carriedReach(player, character)
+			local want = if reach ~= nil then 1 else 0
 			rig.weight += (want - rig.weight) * alpha
 			if rig.weight < 0.002 and want == 0 then
 				rig.weight = 0
 			end
 
 			if rig.weight > 0 then
-				local lift, spread = anglesFor(kg)
+				local lift, spread = anglesFor(reach)
 				for _, side in ipairs(rig.sides) do
 					local w = rig.weight
 					local pose: CFrame
