@@ -528,11 +528,40 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	--==========================================================================
 	local tool = Instance.new("Tool")
 	tool.Name = if hatched then species.Name else "???"
-	-- The WEIGHT band and the weight, and on a pod that is ALL: the band is
-	-- derived from kg, which the shell is already wearing as its colour, so it
-	-- gives nothing away. A species name here would just move the spoiler from
-	-- the slot to the hover.
-	tool.ToolTip = string.format("%s  -  %d kg", SeedData.RarityForKg(kg), kg)
+	--==========================================================================
+	-- THE TOOLTIP MUST NOT SAY A RARITY IT DOES NOT MEAN
+	--
+	-- This printed SeedData.RarityForKg(kg) -- the WEIGHT band. There are two
+	-- vocabularies in this game and they share four words:
+	--
+	--     FORM rarity    Common Uncommon Rare Epic          how often a shape
+	--                                                       turns up. The Index
+	--                                                       spells this one.
+	--     WEIGHT band    Common .. Epic .. Mythic .. Divine what THIS one
+	--                                                       weighs. The pod
+	--                                                       wears this as its
+	--                                                       COLOUR.
+	--
+	-- So the hotbar was calling a 1,937 kg Petalpip "Mythic" while the Index
+	-- called Petalpip "Common", and a 5 kg Bellchime "Common" while the Index
+	-- called it "Epic". Both true, both about different things, and the player
+	-- has no way to tell which -- so the word was simply wrong twice over.
+	--
+	-- The design already settled who owns what: the WORD belongs to the form
+	-- and the COLOUR belongs to the weight. This is the one place they crossed.
+	--
+	--     hatched     the form's rarity, which is exactly what the Index says
+	--     unhatched   no rarity word at all
+	--
+	-- Not the form's rarity on an unhatched pod either, and not because of
+	-- tidiness: Epic means Bellchime in Greenhollow, so printing it would name
+	-- the species through the back door on the one item that must stay ???.
+	-- Its weight band is still legible -- it is the colour of the shell in the
+	-- player's hands.
+	--==========================================================================
+	tool.ToolTip = if hatched
+		then string.format("%s  ·  %d kg", species.Rarity, kg)
+		else string.format("Unhatched pod  ·  %d kg", kg)
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
 	tool:SetAttribute("SpeciesId", species.Id)

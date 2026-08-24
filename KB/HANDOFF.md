@@ -3495,6 +3495,41 @@ run. What was done instead:
 **Not parsed by a Luau compiler and not seen.** The balance check catches an unclosed block, which is
 what splicing causes; it does not catch a typo inside an expression. First Play will say.
 
+## The hotbar was saying a rarity it did not mean — 2026-08-24
+
+The Tool's ToolTip printed `SeedData.RarityForKg(kg)`. **There are two rarity vocabularies in this
+game and they share four words:**
+
+```
+FORM rarity    Common Uncommon Rare Epic             how often a shape turns up.
+                                                     The Index spells this one.
+WEIGHT band    Common .. Epic .. Mythic .. Divine    what THIS one weighs.
+                                                     The pod wears this as COLOUR.
+```
+
+So the hotbar called a 1,937 kg Petalpip **Mythic** while the Index called Petalpip **Common**, and a
+5 kg Bellchime **Common** while the Index called it **Epic**. Both statements true, both about
+different things, and nothing on screen told the player which — so the word was wrong twice over.
+Four of five sample weights disagreed.
+
+The design had already settled who owns what: **the WORD belongs to the form, the COLOUR belongs to
+the weight.** The tooltip was the one place they crossed.
+
+```
+hatched     species.Rarity      exactly what the Index says
+unhatched   no rarity word      "Unhatched pod  ·  9,000 kg"
+```
+
+**No form rarity on an unhatched pod either**, and not for tidiness: Epic means Bellchime in
+Greenhollow, so printing it would name the species through the back door on the one item that has to
+stay `???`. Its weight band is still perfectly legible — it is the colour of the shell in the
+player's hands.
+
+Nothing else reads the band as a word. `RarityForKg` is still what colours a pod, tints a grown
+Garden row and drives `ColorForKg`; only the tooltip stopped spelling it.
+
+Block-balanced. Not parsed by a compiler and not played.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
