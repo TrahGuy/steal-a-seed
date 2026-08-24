@@ -165,7 +165,7 @@ local function build(model: Model): Panel?
 	-- A FIXED GAP ABOVE THE REAL TOP
 	--
 	-- Measured off the MODEL, not the anchor: PrimaryPart is the pod shell at one
-	-- stage and the soil mound at the next, so a fixed offset would sit on top of
+	-- stage and the creature's base plate at the next, so a fixed offset would sit on top of
 	-- a pod and inside a creature's chest.
 	--
 	-- And measured in WORLD SPACE, not off GetBoundingBox. This was

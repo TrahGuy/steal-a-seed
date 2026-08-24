@@ -276,6 +276,84 @@ local function addFronds(model: Model, sp: SeedData.Species, top: CFrame, w: num
 	end
 end
 
+--==============================================================================
+-- THE DIRT IT GROWS OUT OF
+--
+-- What was here before was ONE CYLINDER, 0.66 of the frame height across, and it
+-- read as a hockey puck. Worse, it scaled with the frame: a 10,000 kg Bellchime
+-- stood on a twenty-four stud brown pancake, so the biggest thing you could
+-- grow was also the one that looked most like furniture.
+--
+-- The reference sheet has no plinth. It has a LOOSE HEAP -- a few clods of dirt
+-- shoved up around the stem, irregular enough that no angle shows a circle, low
+-- enough that the leaves hang over it. That is what this builds.
+--
+-- NINE BLOCKS, deterministic, overlapping and part-buried. Not spheres: a
+-- Roblox Ball takes its diameter from its smallest axis, so a squashed lump is
+-- not available without a mesh, and a tilted block reads as a clod perfectly
+-- well. Not random: every other decoration in this file is a literal table for
+-- the same reason -- two servers must build the same creature, and a bug report
+-- that says "the third one looked wrong" has to mean something.
+--
+-- The first pass used six, spaced, sitting flat on the surface. They read as
+-- separate BRICKS with gaps between them, which is worse than the puck was. It
+-- takes overlap, a fifth of each clod buried, and a few degrees of tilt before
+-- the eye stops counting them and starts seeing a heap.
+--
+-- Sized off the STEM, not off the frame. That is the whole fix: dirt belongs to
+-- the thing growing out of it, and a heavier plant gets a thicker stem and a
+-- proportionally bigger heap rather than a bigger pancake.
+--
+-- Smooth, against a studded bed. The heap is the one thing here that is not
+-- moulded plastic, and dropping the studs is what says so.
+--==============================================================================
+-- turn round the stem, distance out, width, height, yaw, and a tilt
+local SOIL_CLODS = {
+	-- Highest at the stem and thinning outward, so the heap has a peak rather
+	-- than being a ring of debris.
+	{ 0.00, 0.00, 1.70, 0.95, 0, 0 },
+	{ 0.07, 0.78, 1.30, 0.78, 18, 7 },
+	{ 0.19, 1.30, 1.00, 0.58, -34, -5 },
+	{ 0.28, 0.58, 1.15, 0.88, 41, 9 },
+	{ 0.41, 1.44, 0.90, 0.60, -12, 6 },
+	{ 0.53, 0.86, 1.40, 0.80, 27, -8 },
+	{ 0.64, 1.48, 0.82, 0.55, -39, 5 },
+	{ 0.76, 0.66, 1.20, 0.90, 12, -6 },
+	{ 0.88, 1.22, 1.02, 0.64, -21, 8 },
+}
+
+local function addSoil(model: Model, sp: SeedData.Species, cf: CFrame, stemW: number)
+	for _, clod in ipairs(SOIL_CLODS) do
+		local turn: number, out: number = clod[1], clod[2]
+		local wide: number, tall: number = clod[3], clod[4]
+		local yaw: number, tilt: number = clod[5], clod[6]
+		local w = stemW * wide
+		local h = stemW * tall
+		part({
+			name = "Soil",
+			-- Deeper than wide by a fifth, so even the silhouette of one clod
+			-- is not square.
+			size = Vector3.new(w, h, w * 0.8),
+			cframe = cf
+				* CFrame.Angles(0, turn * math.pi * 2, 0)
+				-- 0.38 rather than 0.5: each clod is a fifth buried, which is
+				-- what merges nine boxes into one heap instead of nine boxes.
+				--
+				-- The tilt sinks the low corner further -- 1.2 studs under the
+				-- surface on a 10,000 kg Bellchime. That is deliberate and it
+				-- is not visible: planted, it is inside the bed; carried, the
+				-- base rides below foot height so the overhang is inside the
+				-- floor. PlantSway's anchor drops with it and the walk carries
+				-- that same Y through, so nothing sinks or floats.
+				* CFrame.new(0, h * 0.38, -stemW * out)
+				* CFrame.Angles(math.rad(tilt * 0.6), math.rad(yaw), math.rad(tilt)),
+			color = sp.Soil,
+			parent = model,
+			studs = false,
+		})
+	end
+end
+
 local function addBuds(model: Model, sp: SeedData.Species, top: CFrame, w: number)
 	-- A ring of stalked buds, as on the Bellchime.
 	for i = 1, 7 do
@@ -298,8 +376,9 @@ end
 --==============================================================================
 -- THE CREATURE
 --
--- Soil mound, stem, two leaves, a head that depends on the form, a face, and a
--- crown. The CFrame handed in is the BASE -- where it meets the ground.
+-- An invisible pivot plate, a heap of dirt clods, stem, two leaves, a head that
+-- depends on the form, a face, and a crown. The CFrame handed in is the BASE --
+-- where it meets the ground.
 --==============================================================================
 --==============================================================================
 -- WEIGHT IS AN ARGUMENT NOW, NOT A PROPERTY OF THE SPECIES
@@ -334,21 +413,66 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	-- Bellchime came out 1.67x apart in width across a 55x weight range, and
 	-- the Bellchime was proportionally the slimmer of the two.
 	--
-	-- G multiplies the width terms only. It is applied in FOUR places -- mound,
+	-- G multiplies the width terms only. It is applied in THREE places now --
 	-- stem, leaves, headW -- because every other horizontal measurement in the
-	-- forms below is already derived from headW, so they inherit it for free.
+	-- forms below is already derived from one of them, so they inherit it for
+	-- free. The dirt heap comes off the stem width, which already carries it.
 	--==========================================================================
 	local G = SeedData.Girth(kg)
 
-	--== MOUND ==--
-	local moundH = H * 0.11
-	local mound = upright("Mound", moundH, H * 0.66 * G, cf * CFrame.new(0, moundH * 0.5, 0),
-		sp.Soil, model)
+	local stemW = H * 0.13 * G
 
-	--== STEM ==--
-	local stemH = H * 0.34
-	local stemBase = moundH * 0.7
-	upright("Stem", stemH, H * 0.13 * G, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
+	--==========================================================================
+	-- THE PIVOT IS A PLATE NOBODY SEES
+	--
+	-- Everything downstream needs a part at the creature's ground contact and
+	-- needs it to be the PrimaryPart: PlantService places by that pivot,
+	-- PlantSway leans and walks about it, CarryService welds it low in the
+	-- hands, and the Hatch and Pick Up prompts hang off it.
+	--
+	-- None of that requires it to be VISIBLE, and the old mound was only ever
+	-- visible by accident -- it was the pivot and the decoration at once, so
+	-- getting rid of the puck meant getting rid of the anchor for four systems.
+	-- Splitting them costs one invisible part and settles it.
+	--
+	-- A BLOCK, NOT A ROLLED CYLINDER, AND THAT IS A FIX. `upright` builds its
+	-- cylinders rotated ninety degrees about Z so their length runs up the
+	-- world Y -- which meant the model's pivot had its local X pointing at the
+	-- sky. Harmless while the plant is in the ground, because PlantSway leans
+	-- about a computed upright anchor rather than about the pivot. NOT harmless
+	-- when carried: giveTool sets `handle.CFrame = root.CFrame * grip` and
+	-- everything else is welded to it, so a rolled handle carried the whole
+	-- plant on its side. This is axis-aligned, so a held creature stands up.
+	--==========================================================================
+	local base = part({
+		name = "Base",
+		size = Vector3.new(stemW * 1.2, 0.06, stemW * 1.2),
+		cframe = cf * CFrame.new(0, 0.03, 0),
+		color = sp.Soil,
+		parent = model,
+		studs = false,
+	})
+	base.Transparency = 1
+
+	--== THE DIRT ==--
+	addSoil(model, sp, cf, stemW)
+
+	--==========================================================================
+	-- THE STEM STARTS AT THE BED
+	--
+	-- It used to start at `moundH * 0.7`, sunk three tenths into the puck so it
+	-- did not look planted on top of one. With the puck gone that offset would
+	-- be a stem hovering a fraction of a stud over the soil, so the base goes
+	-- to zero and the stem grows the difference.
+	--
+	-- 0.417 is not a new number: it is exactly what `moundH * 0.7 + H * 0.34`
+	-- came to. The head therefore sits at precisely the height it sat at
+	-- before, every finished-height figure on the SeedData sheet still holds,
+	-- and the boot report prints the same table. Only the plinth is gone.
+	--==========================================================================
+	local stemH = H * 0.417
+	local stemBase = 0
+	upright("Stem", stemH, stemW, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
 		SeedData.Stem, model)
 
 	--== LEAVES ==--
@@ -359,7 +483,10 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 			-- thickness and does not.
 			size = Vector3.new(H * 0.27 * G, H * 0.05, H * 0.12 * G),
 			cframe = cf
-				* CFrame.new(side * H * 0.16 * G, stemBase + stemH * 0.40, 0)
+				-- 0.51 of a stem that is now 23% longer, which lands the leaves
+				-- at the same height above the soil they have always been at --
+				-- low, with the heap coming up around them.
+				* CFrame.new(side * H * 0.16 * G, stemBase + stemH * 0.51, 0)
 				-- Down and out. Level bars read as propellers, which is exactly
 				-- what the first build looked like.
 				* CFrame.Angles(0, side * math.rad(16), side * math.rad(-13)),
@@ -447,10 +574,11 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 
 	addFace(model, faceCF, faceW, front + 0.04)
 
-	-- PrimaryPart is the MOUND: a creature's pivot is where it meets the soil,
-	-- so planting one is placing its pivot on a slot rather than working out how
-	-- tall it is first.
-	model.PrimaryPart = mound
+	-- PrimaryPart is the BASE plate: a creature's pivot is where it meets the
+	-- soil, so planting one is placing its pivot on the dirt rather than working
+	-- out how tall it is first. It is invisible, and deliberately so -- see the
+	-- block where it is built.
+	model.PrimaryPart = base
 	CollectionService:AddTag(model, GameConfig.Tags.Creature)
 	return model
 end

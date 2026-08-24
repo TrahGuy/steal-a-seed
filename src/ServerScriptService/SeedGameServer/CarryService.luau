@@ -692,9 +692,11 @@ end
 -- you choose where it goes, which is the whole reason placement is by click --
 -- the spot the egg happened to sit in is not the spot you want the plant.
 --
--- HELD BY THE BASE, AND HELD LOW. A creature's PrimaryPart is its soil mound,
--- so the weld lands at the bottom of the thing and it stands up out of your
--- hands rather than hanging from its middle. The drop puts that base near your
+-- HELD BY THE BASE, AND HELD LOW. A creature's PrimaryPart is a flat invisible
+-- plate at its ground contact, so the weld lands at the bottom of the thing and
+-- it stands up out of your hands rather than hanging from its middle. It is
+-- axis-aligned, which is what keeps it standing: this used to be a cylinder
+-- rolled ninety degrees and the plant was carried on its side. The drop puts that base near your
 -- feet: at the top of the weight range this is a thirty-stud plant, and welding
 -- its middle to your chest would fill the screen with stem.
 --

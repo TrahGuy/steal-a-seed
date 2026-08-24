@@ -3075,6 +3075,106 @@ The wander curves in the table above were computed, not estimated.
     where the player sees it, but that is reasoning rather than observation
   * whether a 10,000 kg creature at 0.5 studs/sec reads as heavy or as broken
 
+## The plinth is gone — plants grow out of the bed now — 2026-08-24
+
+Every grown plant and every sprout stood on `upright("Mound", H*0.11, H*0.66*G, …)` — one brown
+cylinder two thirds of the frame height across. On the bed it read as a **hockey puck**, and it
+scaled with the frame, so the biggest thing you could grow was also the one that looked most like
+furniture: a 10,000 kg Bellchime stood on a **24-stud dirt pancake**, wider than its own skirt.
+
+The reference sheet (`KB/biome1-plants.png`) has no plinth. It has a loose heap of dirt shoved up
+around the stem.
+
+### The pivot and the decoration were the same part, and that was the problem
+
+Four systems need a part at the creature's ground contact and need it to be the `PrimaryPart`:
+`PlantService` places by that pivot, `PlantSway` leans and walks about it, `CarryService.GiveHatched`
+welds it low in the hands, and the Hatch / Pick Up prompts hang off it. None of that requires it to
+be **visible** — the mound was visible by accident, because it was both jobs at once.
+
+Splitting them costs one invisible part:
+
+```
+Base   1.2 x 0.06 x 1.2 stem-widths, Transparency 1, PrimaryPart
+Soil   nine tilted blocks, overlapping, a fifth buried
+```
+
+**A BLOCK, NOT A ROLLED CYLINDER, AND THAT IS A FIX.** `upright` builds cylinders rotated 90° about
+Z so their length runs up world Y — which meant the model's pivot had its local X pointing at the
+sky. Harmless planted, because `PlantSway` leans about a computed upright anchor rather than about
+the pivot. **Not** harmless carried: `giveTool` sets `handle.CFrame = root.CFrame * grip` and welds
+everything else to it, so a rolled handle carried the whole plant **on its side**. The Base is
+axis-aligned, so a held creature stands up. Pods never had this — `BuildPod`'s PrimaryPart is a ball.
+
+### The stem starts at the bed
+
+`stemBase` was `moundH * 0.7`, sunk three tenths into the puck. With the puck gone that offset would
+be a stem hovering, so the base goes to zero and the stem grows the difference:
+
+```
+stemH  H * 0.34  ->  H * 0.417     which is exactly moundH * 0.7 + H * 0.34
+```
+
+**Every finished height is unchanged** — measured, not asserted. The head sits where it always sat,
+`SeedData`'s table still holds, and the boot report prints the same numbers:
+
+```
+kg           1     2    14   110  1000 10000
+Nubkin       1.2   1.4   2.3   4.0   7.4  14.1
+Bellchime    2.5   3.0   5.2   9.2  17.3  33.8
+```
+
+Leaves moved to `stemH * 0.51` so they stay at the same height above the soil on the longer stem.
+
+### Two passes on the heap, and the first one was worse than the puck
+
+**Six clods, spaced, sitting flat on the surface, in `sp.Soil`.** They read as separate black
+BRICKS with gaps. Two things were wrong:
+
+  * **Colour.** `sp.Soil` was 74, 54, 44 — nearly black — which nobody noticed while it was one big
+    cylinder. Against MapService's bed at 158, 82, 52 those clods were lumps of coal. Now
+    **124, 76, 50**: a shade darker and browner than the bed, so the heap reads as the same dirt
+    shovelled up rather than as a different material.
+  * **Shape.** It takes **overlap, a fifth of each clod buried, and a few degrees of tilt** before
+    the eye stops counting boxes and starts seeing a heap. Nine clods, highest at the stem and
+    thinning outward so it has a peak rather than being a ring of debris.
+
+Sized off the **stem width**, not the frame — that is the whole fix. Dirt belongs to the thing
+growing out of it. At 10,000 kg the widest part of a plant is its head or skirt, never a clod:
+
+```
+Nubkin    @10,000kg   extents 13.6 wide   widest part Head 10.2      widest clod 3.2
+Bellchime @10,000kg   extents 22.7 wide   widest part BellTier 20.5  widest clod 5.3
+```
+
+Blocks rather than spheres because a Roblox `Ball` takes its diameter from its smallest axis, so a
+squashed lump needs a mesh. Deterministic literal tables, like every other decoration in the file.
+
+The tilt sinks the low corner up to 1.2 studs under the surface on the heaviest plant. Deliberate,
+and not visible: planted it is inside the bed; carried, the base rides below foot height so the
+overhang is inside the floor. PlantSway's anchor drops with it and the walk carries that same Y
+through, so nothing sinks or floats.
+
+Part count went 24 -> 34 on a Toadcap. Nine small smooth blocks against one cylinder.
+
+### Naming
+
+The part is `Base`, not `Mound`. **Nothing keyed off the string** — only comments did, and they are
+updated. The one surviving mention of "Mound" is in PlantSway's lean block, where it is history:
+it explains why the lean is computed about an anchor instead of about the pivot, and that reasoning
+is why changing the pivot's orientation did not break anything.
+
+### Verified, and not
+
+Screenshotted in Edit against a bed the same colour and stud pattern MapService builds — Nubkin
+through Bellchime, plus a sprout and a 1,000 kg Nubkin. **No round brown circles; stems meet the
+studded soil.** Heights re-measured off real models. All six touched files compile.
+
+**Not played.** Untested in a live session: that the heap still reads at gameplay camera distance
+rather than only in a close-up, that a walking plant's heap does not visibly slide against the bed
+(it is welded to the model and moves with it, by design), and that a carried creature now stands
+upright in the hands — the sideways-carry fix is reasoned from the weld, not observed.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

@@ -537,9 +537,9 @@ local function apply(entry: Sway, now: number)
 	-- repeating figure and the eye picks that up as machinery.
 	local az = amp * 0.62 * math.sin(t * 0.73 + entry.phase * 1.3)
 	-- ABOUT THE ANCHOR, NOT THE PIVOT. `rest * CFrame.Angles(ax, 0, az)` reads
-	-- like a lean and is not one: the model's pivot is the Mound, which
-	-- upright() builds as a cylinder rolled 90 degrees, so the pivot's local X
-	-- IS WORLD UP. Measured on a live Bellchime:
+	-- like a lean and is not one. When this was written the model's pivot was
+	-- the Mound, which upright() builds as a cylinder rolled ninety degrees, so
+	-- the pivot's local X pointed at the sky. Measured on a live Bellchime:
 	--
 	--     6 deg about pivot-local X -> highest part moves 0.0821 studs
 	--     6 deg about pivot-local Z -> highest part moves 0.6224 studs
@@ -547,6 +547,12 @@ local function apply(entry: Sway, now: number)
 	-- The dominant `ax` term was spinning the plant about its own stem, which on
 	-- a round head is invisible, and the only real lean was the 0.62x term at a
 	-- degree or two. A bed of these was measurably swaying and visibly still.
+	--
+	-- The pivot is an axis-aligned plate now and that trap is gone, but the
+	-- anchor stays: it is a pure translation at the ground contact, so leaning
+	-- about it is a world-axis tip whatever the pivot's own orientation turns
+	-- out to be. This code should not have an opinion about how the builder
+	-- happens to orient its base part.
 	--
 	-- The anchor is a pure translation at the base, so its axes are the world's:
 	-- X and Z both tip, nothing twists.

@@ -84,7 +84,7 @@ export type Species = {
 	-- this is only what a plant saved before that rolled gets restored onto,
 	-- once, on load. Anything that pays out or measures from it is a bug.
 	Kg: number,
-	-- The FRAME height in studs AT THE REFERENCE WEIGHT -- the mound-stem-head
+	-- The FRAME height in studs AT THE REFERENCE WEIGHT -- the stem-and-head
 	-- column the form is built around, not the finished silhouette, and not an
 	-- absolute size any more. SizeScale multiplies it by what the pod actually
 	-- rolled, so this number says how tall this form stands relative to the
@@ -114,7 +114,16 @@ export type Species = {
 
 local LEAF = Color3.fromRGB(86, 150, 66)
 local STEM = Color3.fromRGB(124, 182, 92)
-local SOIL = Color3.fromRGB(74, 54, 44)
+--==============================================================================
+-- THE DIRT A PLANT COMES WITH
+--
+-- 74, 54, 44 -- nearly black -- while it was one big cylinder nobody looked at
+-- twice. Now it is a heap of small clods sitting on MapService's bed, which is
+-- 158, 82, 52, and at that contrast they read as lumps of coal rather than as
+-- soil. Pitched a shade darker and browner than the bed it sits on, so the heap
+-- reads as the same dirt shovelled up rather than as a different material.
+--==============================================================================
+local SOIL = Color3.fromRGB(124, 76, 50)
 local GREEN = Color3.fromRGB(146, 196, 106)
 local CREAM = Color3.fromRGB(242, 238, 206)
 
@@ -352,7 +361,7 @@ end
 -- -- the MEDIAN ROLL. A median pod stands at exactly its sheet size, so the
 -- sheet keeps meaning what it always meant.
 --
--- FINISHED height, mound to crown -- what a player actually sees, and the same
+-- FINISHED height, soil to crown -- what a player actually sees, and the same
 -- measurement the Height field is documented in:
 --
 --     kg        Nubkin  Petalpip  Spiretip  Toadcap  Bellchime
