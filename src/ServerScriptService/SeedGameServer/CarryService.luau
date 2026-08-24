@@ -138,55 +138,28 @@ end
 -- CARRYING
 --==============================================================================
 --==============================================================================
--- THE WEIGHT, ON THE THING
+-- THERE IS NO WEIGHT BILLBOARD ANY MORE
 --
--- kg rather than the species name: weight is what the player is deciding about
--- while they run, and it is the number the carry multiplier and the payout both
--- come from. Rarity is already the pod's colour and size is already its bulk.
+-- A `CarryWeight` BillboardGui used to hang over the raid carry AND over the
+-- banked Tool, printing "6110Kg". Both are gone, and neither is missed:
 --
--- ONE definition, used by the raid carry AND by the banked Tool, so the thing
--- in your arms looks the same before and after the red line.
+--   ON A POD it was the same fact a third time. A shell is COLOURED by its
+--   weight band and SIZED by its weight, so the slab of UI beside the player's
+--   head from the nest to the red line was telling them what the thing in their
+--   arms was already telling them, twice.
+--
+--   ON A HATCHED CREATURE it was measured wrong and could not easily be
+--   measured right. The offset was `PodDiameter(kg) * 0.5 + 1.1` -- a SHELL's
+--   radius -- which put the label inside the chest of a plant. Sizing it off
+--   the creature instead would have hung it thirty-four studs up on a heavy
+--   Bellchime, off the top of the screen, which is not better.
+--
+-- Nothing functional went with it. `CarryingKg` is still on the player and on
+-- the Tool -- the walk speed, the payout and the planting all read it -- and
+-- the weight is still legible in three places: the shell's colour, the
+-- placement disc PlantPlace tints while you hold something, and the Tool's own
+-- ToolTip.
 --==============================================================================
-local function weightTag(handle: BasePart, kg: number)
-	local existing = handle:FindFirstChild("CarryWeight")
-	if existing then
-		existing:Destroy()
-	end
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "CarryWeight"
-	billboard.Adornee = handle
-	billboard.AlwaysOnTop = true
-	billboard.Size = UDim2.fromOffset(96, 34)
-	billboard.StudsOffset = Vector3.new(0, SeedData.PodDiameter(kg) * 0.5 + 1.1, 0)
-	billboard.MaxDistance = 140
-	billboard.Parent = handle
-
-	local panel = Instance.new("Frame")
-	panel.Size = UDim2.fromScale(1, 1)
-	panel.BackgroundColor3 = Color3.fromRGB(26, 24, 30)
-	panel.BackgroundTransparency = 0.2
-	panel.BorderSizePixel = 0
-	panel.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 9)
-	corner.Parent = panel
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(142, 196, 62)
-	stroke.Thickness = 2
-	stroke.Transparency = 0.3
-	stroke.Parent = panel
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
-	label.TextScaled = true
-	label.TextColor3 = Color3.fromRGB(248, 246, 240)
-	label.Text = string.format("%dKg", kg)
-	label.Parent = panel
-end
 
 -- Where a pod sits relative to a HumanoidRootPart. One function, so the raid
 -- carry and the banked Tool cannot drift into two different grips.
@@ -236,7 +209,9 @@ local function attachInFront(model: Model, root: BasePart, kg: number)
 	weld.Part1 = primary
 	weld.C0 = grip
 	weld.Parent = primary
-	weightTag(primary, kg)
+	-- NO WEIGHT TAG. The shell's colour is its weight band and its diameter is
+	-- its weight; a billboard would be the same fact a third time, floating
+	-- beside the player's head from the nest to the red line.
 end
 
 --==============================================================================
@@ -536,10 +511,27 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 		return nil
 	end
 
+	--==========================================================================
+	-- A BANKED POD IS STILL ANONYMOUS
+	--
+	-- This named the slot after the species, so crossing the red line printed
+	-- NUBKIN in the toolbar before the shell had opened -- and the whole design
+	-- rests on that not happening. Pods are coloured by WEIGHT, so two Commons
+	-- arrive in identical shells and which one you got is not knowable until it
+	-- hatches. The Garden says ??? on a buried pod for exactly this reason, and
+	-- the hotbar was quietly undoing it one slot along.
+	--
+	-- The HATCH is the reveal. Until then the slot says what the Index says.
+	--
+	-- SpeciesId stays on the Tool -- planting has to know what to build. The
+	-- player just cannot read it off the toolbar.
+	--==========================================================================
 	local tool = Instance.new("Tool")
-	tool.Name = species.Name
-	-- The WEIGHT band, not the form's drop tier: what the player wants off a
-	-- tooltip is what this one is worth.
+	tool.Name = if hatched then species.Name else "???"
+	-- The WEIGHT band and the weight, and on a pod that is ALL: the band is
+	-- derived from kg, which the shell is already wearing as its colour, so it
+	-- gives nothing away. A species name here would just move the spoiler from
+	-- the slot to the hover.
 	tool.ToolTip = string.format("%s  -  %d kg", SeedData.RarityForKg(kg), kg)
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
@@ -568,7 +560,6 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	end
 	handle.Parent = tool
 	model:Destroy()
-	weightTag(handle, kg)
 
 	--==========================================================================
 	-- THE SAME GRIP AFTER THE LINE AS BEFORE IT

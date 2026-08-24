@@ -3175,6 +3175,60 @@ rather than only in a close-up, that a walking plant's heap does not visibly sli
 (it is welded to the model and moves with it, by design), and that a carried creature now stands
 upright in the hands — the sideways-carry fix is reasoned from the weld, not observed.
 
+## Two spoilers on a stolen pod — 2026-08-24
+
+The hatch is the reveal. Two Commons arrive in identical shells and which one you got is not knowable
+until it opens — the Garden prints `???` on a buried pod for exactly that reason. Two other surfaces
+were quietly giving it away.
+
+### The hotbar named the plant before the shell opened
+
+`giveTool` did `tool.Name = species.Name`, so crossing the red line printed **NUBKIN** in the toolbar
+on a pod that had never been hatched. One slot along from a Garden row saying `???`.
+
+```
+Hatched ~= true   ->  tool.Name = "???"        a banked nest pod
+Hatched == true   ->  tool.Name = species.Name  hatched, or picked back up
+```
+
+The ToolTip is `band - N kg` in both cases and carries **no species name**. The band is derived from
+kg, which the shell is already wearing as its colour, so it gives nothing away — and putting the name
+there instead would only move the spoiler from the slot to the hover.
+
+`SpeciesId` still stamps the Tool. Planting has to know what to build; the player just cannot read it
+off the toolbar. **Nothing about MarkSeen moved** — the Index still unlocks on hatch and nowhere else.
+
+### The weight billboard is gone entirely
+
+`weightTag` hung a `CarryWeight` BillboardGui reading `6110Kg` on the raid carry **and** on the banked
+Tool. Both are gone, and the function with them.
+
+  * **On a pod** it was the same fact a third time. A shell is COLOURED by its weight band and SIZED
+    by its weight, so a slab of UI beside the player's head from the nest to the red line said what
+    the thing in their arms was already saying, twice.
+  * **On a hatched creature** it was measured wrong and could not easily be measured right. The
+    offset was `PodDiameter(kg) * 0.5 + 1.1` — a SHELL's radius — which put the label inside the
+    chest of a plant. Sizing it off the creature instead would hang it thirty-four studs up on a
+    heavy Bellchime, off the top of the screen, which is not better.
+
+That second point is why this went further than the brief, which only asked for pods and offered
+deleting both as a simplification. Keeping it for creatures alone would have meant keeping forty
+lines of billboard to render a label in the wrong place.
+
+**Nothing functional went with it.** `CarryingKg` is still on the player and on the Tool — walk
+speed, payout and planting all read it — and the weight stays legible in three places: the shell's
+colour, the placement disc `PlantPlace` tints while you hold something, and the ToolTip.
+
+### Verified, and not
+
+Compile-checked. Every semantic claim above was grepped out of the file rather than assumed:
+no `weightTag` function, no call sites, no `CarryWeight` built, `SpeciesId` and `CarryingKg` still
+stamped, `bank` passing `hatched = false` and `GiveHatched` passing `true`, and no `MarkSeen`
+anywhere in CarryService.
+
+**Not played.** What a `???` slot looks like in the Roblox backpack UI has not been seen, and neither
+has a raid carry without its billboard.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
