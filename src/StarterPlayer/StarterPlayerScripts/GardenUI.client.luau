@@ -414,6 +414,11 @@ end
 
 type Occupant = {
 	species: SeedData.Species,
+	-- What THIS one weighs. Every row number that is not the name comes from
+	-- here: the clock, the rate, and the colour the name is printed in. Two
+	-- Nubkins in the same bed at 4 kg and 900 kg have to read as $4/s and
+	-- $900/s, which they cannot if the sheet is consulted.
+	kg: number,
 	plantedAt: number,
 }
 
@@ -429,8 +434,9 @@ local function occupants(plot: Model): { [number]: Occupant }
 			local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
 			local plantedAt = model:GetAttribute("PlantedAt")
 			local slot = model:GetAttribute("SlotIndex")
-			if species and type(plantedAt) == "number" and type(slot) == "number" then
-				out[slot] = { species = species, plantedAt = plantedAt }
+			local kg = tonumber(model:GetAttribute("Kg"))
+			if species and kg and type(plantedAt) == "number" and type(slot) == "number" then
+				out[slot] = { species = species, kg = kg, plantedAt = plantedAt }
 			end
 		end
 	end
@@ -452,7 +458,7 @@ end
 local STAGE_POD, STAGE_SPROUT, STAGE_GROWN = 1, 2, 3
 
 local function stageOf(occupant: Occupant, now: number): (number, number)
-	local total = SeedData.GrowSeconds(occupant.species)
+	local total = SeedData.GrowSeconds(occupant.kg)
 	local elapsed = now - occupant.plantedAt
 	local sproutAt = total * PLANTING.SproutAt
 	if elapsed < sproutAt then
@@ -531,7 +537,7 @@ local function refresh(paint: boolean)
 			planted += 1
 			local stage, remaining = stageOf(occupant, now)
 			if stage == STAGE_GROWN then
-				rate += SeedData.IncomePerSecond(occupant.species)
+				rate += SeedData.IncomePerSecond(occupant.kg)
 			else
 				waiting += 1
 			end
@@ -549,14 +555,15 @@ local function refresh(paint: boolean)
 				-- and across Greenhollow it is green / cream / pale green /
 				-- red / pink: five distinguishable 28px squares.
 				--
-				-- While it is a POD the swatch is the RARITY colour instead,
+				-- While it is a POD the swatch is the WEIGHT BAND instead,
 				-- because that is genuinely what the thing in the ground
-				-- looks like from across the plot, and the species is not
-				-- supposed to be known yet.
+				-- looks like from across the plot -- the shell is coloured by
+				-- what it weighs -- and the species is not supposed to be
+				-- known yet.
 				--==========================================================
 				row.swatch.BackgroundTransparency = 0
 				row.swatch.BackgroundColor3 = if stage == STAGE_POD
-					then SeedData.PodColor(species)
+					then SeedData.ColorForKg(occupant.kg)
 					else species.Crown
 				--==========================================================
 				-- A POD IS NOT NAMED, HERE EITHER
@@ -575,9 +582,18 @@ local function refresh(paint: boolean)
 				--==========================================================
 				row.name.Text = if stage == STAGE_POD then "???" else species.Name
 				if stage == STAGE_GROWN then
-					row.name.TextColor3 = GameConfig.RarityColor[species.Rarity] or PAPER
+					--======================================================
+					-- TINTED BY WHAT IT WEIGHS, NOT BY WHAT SHAPE IT IS
+					--
+					-- The sheet's rarity is the FORM's drop rate now -- how
+					-- often a cube turns up against a bell -- and it says
+					-- nothing about the prize. Printing an 8,000 kg Nubkin
+					-- in Common white would call the best thing in the
+					-- garden ordinary.
+					--======================================================
+					row.name.TextColor3 = SeedData.ColorForKg(occupant.kg)
 					row.sub.Text = "$" .. GameConfig.compact(
-						SeedData.IncomePerSecond(species)) .. "/s"
+						SeedData.IncomePerSecond(occupant.kg)) .. "/s"
 					row.sub.TextColor3 = ACCENT
 				else
 					-- Ghosted until it finishes, so the reveal still happens

@@ -301,18 +301,31 @@ end
 -- Soil mound, stem, two leaves, a head that depends on the form, a face, and a
 -- crown. The CFrame handed in is the BASE -- where it meets the ground.
 --==============================================================================
-function CreatureModel.BuildCreature(sp: SeedData.Species, stage: Stage,
+--==============================================================================
+-- WEIGHT IS AN ARGUMENT NOW, NOT A PROPERTY OF THE SPECIES
+--
+-- `kg` is the weight THIS pod rolled. It decides how big the thing is, what it
+-- earns and what colour its shell was. The species decides only the form.
+--
+-- Nothing here may read `sp.Kg`. That field is the fallback for a plant saved
+-- before weights were rolled, and a spawn that used it would be a creature
+-- whose size disagreed with its own price tag.
+--==============================================================================
+function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: Stage,
 	cf: CFrame, parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = "Creature_" .. sp.Id
 	model:SetAttribute("SpeciesId", sp.Id)
+	-- The FORM's drop tier, for anything listing shapes. What this one is worth
+	-- is its Kg, and its band is SeedData.RarityForKg.
 	model:SetAttribute("Rarity", sp.Rarity)
-	model:SetAttribute("Kg", sp.Kg)
+	model:SetAttribute("Kg", kg)
 	model:SetAttribute("Stage", stage)
 	model.Parent = parent
 
 	local scale = if stage == CreatureModel.STAGE_SPROUT then SPROUT_SCALE else 1
-	local H = sp.Height * scale
+	-- The species frame, scaled by what this one weighs.
+	local H = SeedData.FrameHeight(sp, kg) * scale
 	--==========================================================================
 	-- TWO SCALARS, NOT ONE. H IS TALLNESS, G IS FATNESS.
 	--
@@ -325,7 +338,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, stage: Stage,
 	-- stem, leaves, headW -- because every other horizontal measurement in the
 	-- forms below is already derived from headW, so they inherit it for free.
 	--==========================================================================
-	local G = SeedData.Girth(sp)
+	local G = SeedData.Girth(kg)
 
 	--== MOUND ==--
 	local moundH = H * 0.11
@@ -449,12 +462,13 @@ end
 -- colour: while it is in your hands the only question anybody has is how badly
 -- they want it.
 --==============================================================================
-function CreatureModel.BuildPod(sp: SeedData.Species, cf: CFrame, parent: Instance): Model
+function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
+	parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = "Pod_" .. sp.Id
 	model:SetAttribute("SpeciesId", sp.Id)
 	model:SetAttribute("Rarity", sp.Rarity)
-	model:SetAttribute("Kg", sp.Kg)
+	model:SetAttribute("Kg", kg)
 	model:SetAttribute("Stage", CreatureModel.STAGE_POD)
 	model.Parent = parent
 
@@ -463,8 +477,16 @@ function CreatureModel.BuildPod(sp: SeedData.Species, cf: CFrame, parent: Instan
 	-- argument is a trap for every caller.
 	-- Size comes from weight, so the pod tells you what it will cost to carry
 	-- before you commit to the hold. See SeedData.PodDiameter.
-	local D = SeedData.PodDiameter(sp)
-	local color = SeedData.PodColor(sp)
+	local D = SeedData.PodDiameter(kg)
+	--==========================================================================
+	-- THE SHELL IS COLOURED BY WEIGHT, NOT BY SPECIES
+	--
+	-- This is the whole reason weight is rolled. A Nubkin shell glowing Divine
+	-- is a 9,000 kg cube, and the only way to know is to look at the pod --
+	-- which is what makes a nest worth walking into rather than pattern-matching
+	-- on shape from the road.
+	--==========================================================================
+	local color = SeedData.ColorForKg(kg)
 	local baseCF = cf * CFrame.new(0, D * 0.5, 0)
 
 	-- Egg: two overlapping balls, the upper smaller. A Ball is sized by its
@@ -512,12 +534,12 @@ function CreatureModel.BuildPod(sp: SeedData.Species, cf: CFrame, parent: Instan
 	return model
 end
 
-function CreatureModel.Build(sp: SeedData.Species, stage: Stage, cf: CFrame,
-	parent: Instance): Model
+function CreatureModel.Build(sp: SeedData.Species, kg: number, stage: Stage,
+	cf: CFrame, parent: Instance): Model
 	if stage == CreatureModel.STAGE_POD then
-		return CreatureModel.BuildPod(sp, cf, parent)
+		return CreatureModel.BuildPod(sp, kg, cf, parent)
 	end
-	return CreatureModel.BuildCreature(sp, stage, cf, parent)
+	return CreatureModel.BuildCreature(sp, kg, stage, cf, parent)
 end
 
 return CreatureModel

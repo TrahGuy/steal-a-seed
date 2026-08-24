@@ -2651,6 +2651,136 @@ ordinary Roblox practice, but assets are moderated and a DMCA claim lands on the
 file. Redrawing the same look in code -- which is what the gold plate was -- carries none of that
 risk and scales to any size.
 
+## Weight is rolled per pod, and species is only the shape — 2026-08-24
+
+Every pod that spawns now rolls its own weight, **1 to 10,000 kg, on one curve shared by all five
+species**. A 10,000 kg Nubkin is legal. A 12 kg Bellchime is legal. The species decides what the
+thing LOOKS like -- cube, orb, teardrop, mushroom, bell -- and nothing else.
+
+`species.Kg` survives on the sheet as exactly one thing: what a plant saved before this gets
+restored onto, once, on load. Anything that pays out or measures from it after this is a bug.
+
+### The roll
+
+`SeedData.RollKg(rng)` -- `kg = MaxKg ^ (u ^ 2.2)`, `u` uniform, rounded to an integer and clamped
+to 1..10,000. One exponent tunes the whole economy. Measured in Studio over 10,000 real rolls:
+
+```
+<=10 kg     54.3%      most pods are pocket change
+<=110 kg    73.8%      and most of the rest are ordinary
+>=1,000     12.5%      uncommon
+>=5,000      3.4%      rare
+>=9,000      0.4%      vanishing        min 1, max 9,994, every value an integer
+```
+
+A plain log-uniform roll (exponent 1) puts a quarter of all pods over 100 kg, which is far too
+generous at the top. **If 10,000 ever becomes common, or nothing exceeds 100, move `KG_CURVE`. Do
+not flatten it.** ServerMain prints this histogram at every boot for that reason -- it is a number
+that would otherwise drift in silence.
+
+### Instance weight, everywhere
+
+`CreatureModel.Build / BuildPod / BuildCreature` take `kg` and stamp it as the model's `Kg`
+attribute. That attribute is the single source afterwards:
+
+```
+NestService      SeedData.Roll(biome) for the FORM, then RollKg() for the WEIGHT.
+                 One rng, two independent draws.
+CarryService     reads pod.Kg BEFORE TakePod destroys it; carries it through drop,
+                 pick-up and banking; stamps it on the Tool.
+PlantService     Plant(player, species, kg); saves { SpeciesId, Slot, PlantedAt, Kg };
+                 GrownIn() yields { species, kg } so EconomyService can pay the
+                 instance rate rather than the sheet's.
+GardenUI         row clock, row $/s, footer total and the grown name's tint.
+PlantUI          the hatch/grow clock -- weight decides it, not form.
+CashPop          the +$N over a plant.
+CarryPose        the arm angles, off CarryingKg rather than CarryingSpecies.
+PlantSway        the idle lean.
+```
+
+**Two Nubkins at 4 kg and 900 kg show $4/s and $900/s.** That was the acceptance test and it is
+what the sheet-driven version got wrong.
+
+An old save with no `Kg` falls back to `species.Kg` **once**, on load, and the result is written
+back with the plant. Re-rolling would be worse than the fallback: a garden left full of heavy
+plants would be worth something different every rejoin, which is a slot machine, not a save.
+
+### What you see is what it weighs
+
+Pod shells are coloured by `RarityForKg`, not by the species tier:
+
+```
+1-9 Common   10-29 Uncommon   30-99 Rare   100-399 Epic
+400-1,499 Legendary   1,500-4,999 Mythic   5,000-8,999 Secret   9,000+ Divine
+```
+
+A Nubkin shell glowing Divine is a 9,000 kg cube, and the only way to know is to look at the pod --
+which is what makes a nest worth walking into instead of pattern-matching on shape from the road.
+
+The sheet's `Rarity` still means what it always meant: how often that FORM turns up in the pool.
+The Index spells that word and now shows **name and rarity only**. It used to print a kg and a $/s
+off the sheet; both became lies the moment weights were rolled, because there is no such thing as
+"what a Bellchime weighs" any more. The grown world plate stays off -- the `+$N` pop is the world
+number.
+
+### Size, and the one place the brief could not be met
+
+`SizeScale(kg)` multiplies the species' frame height; `Girth` halved its slope (0.24 -> 0.12) and
+raised its ceiling (1.75 -> 2.40) so the two do not compound into a puddle. `PodDiameter` dropped
+its exponent (0.28 -> 0.23) and raised its ceiling (4.5 -> 10.5), so the whole range spans 1.3 to
+10.0 studs without the clamp ever binding. `NEST_RADIUS` 13 -> 16: five pods on that ring sit 18.8
+studs apart, which clears two 10-stud shells with 8.8 studs to walk between.
+
+Finished heights, **measured off models actually built** in Studio, not read off the formula:
+
+```
+kg          Nubkin  Petalpip  Spiretip  Toadcap  Bellchime
+     1        1.2      1.6       2.5      2.4       2.5
+     2        1.4      1.9       2.9      2.9       3.0
+    14        2.3      3.2       4.8      5.0       5.2
+   110        4.0      5.6       8.1      9.0       9.2
+ 1,000        7.4     10.3      14.7     17.0      17.3
+10,000       14.1     19.9      27.7     33.4      33.8
+```
+
+**The brief asked for 2 kg to look like today's Nubkin (1.74), 110 kg like today's Bellchime
+(6.41), and 10,000 kg to land in 18..28 on every form. Those three cannot hold at once.** Worth
+writing down so nobody re-opens it expecting a better exponent to exist:
+
+  * 1.74 and 6.41 are 3.7x apart across a 55x weight range, and nearly all of that gap is the
+    HEIGHT SHEET (2.4 against 4.0) plus the bell's crown -- not the weight. Pin both and the weight
+    curve left over is almost flat (exponent 0.03) and 10,000 kg finishes at four studs. Pin either
+    one together with the landmark and the other misses by about 40%.
+  * 18..28 is a 1.56x band, but the five forms are 2.4x apart at the SAME weight, because a cube
+    ends at its head while a bell carries a skirt and a ring of buds. No exponent narrows that. It
+    is the sheet, not the curve.
+
+So `SIZE_EXP` is a least-squares fit to all four written targets at once and misses each by about
+the same amount rather than nailing one and abandoning the rest: 2 kg finishes at 1.4 against 1.7,
+110 kg at 9.2 against 6.4, and 10,000 kg spans 14..34 against 18..28. **Raising `SIZE_EXP` trades
+the small end away for the big one and lowering it does the reverse.** Pick which end matters and
+move that one number. A Nubkin stays shorter than a Bellchime at every weight, which was the other
+hard requirement and holds.
+
+Plants may overflow their slots at the top of the range. `CanCollide` stays off, so they pass
+through each other rather than shoving.
+
+### Verified, and not
+
+Verified in Studio Edit against the code on disk (localhost `http.server`, `HttpService`,
+`loadstring`, and a temp module tree so nothing synced was touched):
+
+  * all thirteen changed files compile
+  * the histogram above, over 10,000 real `RollKg` calls
+  * every band boundary, at both edges
+  * the height table above, off real `BuildCreature` output
+  * a 9,000 kg Nubkin pod: `Kg = 9000`, `Rarity = Common` (the FORM), shell painted Divine
+  * `GrowSeconds` 24s at 1 kg to 300s at 10,000 -- the five-minute wait is unchanged
+  * `IncomePerSecond(4) = 4`, `IncomePerSecond(900) = 900`, carry multiplier 1.00 -> 0.30
+
+**Not verified:** nothing has been played. The nest spread, the pick-up, the garden rows and the
+old-save fallback are all reasoned and compile-checked but have not been seen on screen.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

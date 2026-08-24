@@ -14,17 +14,24 @@
 -- up with forty things nobody designed.
 --
 --==============================================================================
--- WEIGHT IS THE STAT. RARITY IS ONLY THE DROP RATE.
+-- WEIGHT IS ROLLED PER POD. SPECIES IS ONLY THE SHAPE.
 --
--- Kilograms decide what a creature EARNS and what it COSTS to carry home.
--- Rarity decides only how often you find one. That is the whole risk/reward of
--- a theft game in a single number:
+-- Every pod that spawns rolls its own weight, 1 to 10,000 kg, on ONE curve
+-- shared by all five species. A 10,000 kg Nubkin is legal. A 12 kg Bellchime is
+-- legal. What the species decides is what the thing LOOKS like -- a cube, a
+-- bell, a mushroom -- and nothing else.
 --
---     the fat pod is the one worth taking, and the one that gets you caught.
+-- That is the whole change from the old design, where each species carried a
+-- fixed Kg and a Bellchime was worth 110 because it was a Bellchime. Now the
+-- form tells you nothing about the prize, so every pod has to be looked at.
 --
 -- ONE KILOGRAM IS ONE CASH PER SECOND. A player reads an object's worth
 -- straight off its weight and can compare any two things in the game without
 -- opening a menu.
+--
+-- `species.Kg` survives on the sheet as ONE thing only: the fallback weight for
+-- a plant saved before weights were rolled. It is not the live stat, and
+-- anything that pays out or measures from it after this is a bug.
 --
 --==============================================================================
 -- FIVE SPECIES, FOUR RARITIES, ON PURPOSE
@@ -73,15 +80,18 @@ export type Species = {
 	Name: string,
 	Rarity: string,
 	Biome: string,
-	-- Earns this many cash per second, and slows you by this much to carry.
+	-- NOT the live weight any more. Every pod rolls its own -- see RollKg -- and
+	-- this is only what a plant saved before that rolled gets restored onto,
+	-- once, on load. Anything that pays out or measures from it is a bug.
 	Kg: number,
-	-- The FRAME height in studs -- the mound-stem-head column the form is built
-	-- around, not the finished silhouette. Girth widens the head, and a wider
-	-- head is also a taller one, so a heavy species finishes above this number
-	-- and a light one below it:
+	-- The FRAME height in studs AT THE REFERENCE WEIGHT -- the mound-stem-head
+	-- column the form is built around, not the finished silhouette, and not an
+	-- absolute size any more. SizeScale multiplies it by what the pod actually
+	-- rolled, so this number says how tall this form stands relative to the
+	-- others rather than how tall it stands:
 	--
-	--     Nubkin     Height 2.4  ->  1.74 studs finished
-	--     Bellchime  Height 4.0  ->  6.41 studs finished
+	--     Nubkin     Height 2.4  ->  1.4 studs finished at 2 kg, 14.1 at 10,000
+	--     Bellchime  Height 4.0  ->  3.0 studs finished at 2 kg, 33.8 at 10,000
 	--
 	-- DECIDED, do not re-open: this stays a frame height. Pinning the finished
 	-- silhouette to it exactly would mean decoupling every form's vertical
@@ -143,6 +153,75 @@ SeedData.Species = {
 } :: { Species }
 
 --==============================================================================
+-- THE WEIGHT ROLL
+--
+-- One curve for all five species. Heavy is rare, and rare is very rare.
+--
+--     kg = MaxKg ^ (u ^ CURVE)      u uniform on [0, 1)
+--
+-- A plain log-uniform roll (CURVE = 1) puts a quarter of all pods over 10 kg
+-- and a quarter over 100 -- far too generous at the top. Raising the exponent
+-- bends the mass down toward the floor while still leaving the whole range
+-- reachable, and one number tunes the entire economy.
+--
+-- Measured over 10,000 samples at CURVE = 2.2, and printed at boot so it can
+-- never quietly drift:
+--
+--     kg <=     10    ~53%      most pods are pocket change
+--     kg <=    110    ~74%      and most of the rest are ordinary
+--     kg >=  1,000    ~12%      uncommon
+--     kg >=  5,000     ~3.5%    rare
+--     kg >=  9,000     ~0.5%    vanishing
+--
+-- If the histogram ever shows 10,000 as common, or nothing over 100, this is
+-- the number to move. Do not flatten it.
+--==============================================================================
+local KG_CURVE = 2.2
+
+function SeedData.RollKg(rng: Random): number
+	local u = rng:NextNumber()
+	local kg = GameConfig.Carry.MaxKg ^ (u ^ KG_CURVE)
+	return math.clamp(math.floor(kg + 0.5), 1, GameConfig.Carry.MaxKg)
+end
+
+--==============================================================================
+-- WHAT A WEIGHT LOOKS LIKE
+--
+-- The pod's colour is its WEIGHT band, not its species tier. That is the whole
+-- point of rolling: a Nubkin shell glowing Divine is an 9,000 kg cube, and the
+-- player has to read the pod rather than recognise the shape.
+--
+-- The sheet's `Rarity` field still exists and still means what it always meant
+-- -- how often that FORM turns up in the pool. The Index spells that word. It
+-- has nothing to do with what a given pod is worth any more.
+--==============================================================================
+local KG_BANDS = {
+	{ 9000, "Divine" },
+	{ 5000, "Secret" },
+	{ 1500, "Mythic" },
+	{ 400, "Legendary" },
+	{ 100, "Epic" },
+	{ 30, "Rare" },
+	{ 10, "Uncommon" },
+	{ 0, "Common" },
+}
+
+function SeedData.RarityForKg(kg: number): string
+	local n = if type(kg) == "number" and kg == kg then kg else 0
+	for _, band in ipairs(KG_BANDS) do
+		if n >= (band[1] :: number) then
+			return band[2] :: string
+		end
+	end
+	return "Common"
+end
+
+function SeedData.ColorForKg(kg: number): Color3
+	return GameConfig.RarityColor[SeedData.RarityForKg(kg)]
+		or Color3.fromRGB(200, 200, 200)
+end
+
+--==============================================================================
 -- LOOKUPS, AND THE CHECKS THAT RUN AT REQUIRE
 --==============================================================================
 local byId: { [string]: Species } = {}
@@ -154,8 +233,10 @@ for _, species in ipairs(SeedData.Species) do
 		string.format("species %q has unknown rarity %q", species.Id, species.Rarity))
 	assert(SeedData.RarityWeight[species.Rarity] ~= nil,
 		string.format("rarity %q has no drop weight", species.Rarity))
+	-- Kg is only the old-save fallback now, but it still has to be sane:
+	-- a plant restored onto a nonsense weight would pay a nonsense rate.
 	assert(species.Kg > 0 and species.Kg <= GameConfig.Carry.MaxKg,
-		string.format("species %q weighs %g, outside 0..%d",
+		string.format("species %q has fallback weight %g, outside 0..%d",
 			species.Id, species.Kg, GameConfig.Carry.MaxKg))
 	byId[species.Id] = species
 	local list = byBiome[species.Biome]
@@ -180,12 +261,12 @@ end
 --==============================================================================
 -- WHAT IT IS WORTH, AND WHAT IT COSTS
 --==============================================================================
-function SeedData.IncomePerSecond(species: Species): number
-	return species.Kg * GameConfig.Carry.CashPerKg
+function SeedData.IncomePerSecond(kg: number): number
+	return kg * GameConfig.Carry.CashPerKg
 end
 
-function SeedData.CarryMultiplier(species: Species): number
-	return GameConfig.carryMultiplierFor(species.Kg)
+function SeedData.CarryMultiplier(kg: number): number
+	return GameConfig.carryMultiplierFor(kg)
 end
 
 --==============================================================================
@@ -200,20 +281,13 @@ local GROW_BASE = 20
 local GROW_SPAN = 280
 local GROW_EXP = 0.45
 
-function SeedData.GrowSeconds(species: Species): number
-	local t = math.clamp(species.Kg / GameConfig.Carry.MaxKg, 0, 1) ^ GROW_EXP
+function SeedData.GrowSeconds(kg: number): number
+	local t = math.clamp(kg / GameConfig.Carry.MaxKg, 0, 1) ^ GROW_EXP
 	return GROW_BASE + GROW_SPAN * t
 end
 
 --==============================================================================
--- THE POD TAKES ITS RARITY COLOUR
---
--- While it is in your hands the only question anybody has -- you, and whoever is
--- behind you -- is how badly they want it. That is rarity. Which species it
--- turns out to be is a question for after you are safe.
---==============================================================================
---==============================================================================
--- A POD IS AS BIG AS IT IS HEAVY
+-- HOW BIG A POD IS
 --
 -- Every pod used to be the same size, which threw away the one piece of
 -- information the player most needs before committing to a hold: how much this
@@ -221,53 +295,131 @@ end
 -- making it decide the SILHOUETTE means a player reads the trade before
 -- pressing anything, from across the nest, with no UI at all.
 --
--- kg^0.28 rather than a straight ratio, because straight would make a 110 kg
--- Bellchime fifty-five times the size of a Nubkin. Clamped at both ends: below
--- 1.3 a pod is hard to see on studded grass, and above 4.5 it stops fitting in
--- a nest ring -- which matters once the 10,000 kg end of the range exists.
+-- THE CEILING HAD TO COME OFF. This clamped at 4.5, which was right when the
+-- heaviest thing in the game was a 110 kg Bellchime. Now that any pod can roll
+-- 10,000, a 4.5 clamp would make every pod over 400 kg look identical -- and
+-- the top of the range is exactly where a player needs to be able to tell.
 --
---     2 kg -> 1.45      14 kg -> 2.16      110 kg -> 3.72
---     5 kg -> 1.72      40 kg -> 2.85   10,000 kg -> clamped to 4.5
+-- The EXPONENT came down as the ceiling went up, 0.28 -> 0.23, chosen so the
+-- whole 1 .. 10,000 range lands inside 1.3 .. 10 without ever reaching the
+-- clamp. The clamp is a rail now rather than a limiter.
+--
+--     1 kg -> 1.30      110 kg -> 3.54      5,000 kg -> 8.51
+--     2 kg -> 1.41    1,000 kg -> 5.88     10,000 kg -> 9.98
+--
+-- Ten studs is a boulder at arm's length: it fills the screen, it rides five
+-- studs in front of the chest (see GripForward), and it still does not swallow
+-- the player carrying it.
 --==============================================================================
-function SeedData.PodDiameter(species: Species): number
-	return math.clamp(1.2 * (species.Kg ^ 0.28), 1.3, 4.5)
+function SeedData.PodDiameter(kg: number): number
+	return math.clamp(1.2 * (kg ^ 0.23), 1.3, 10.5)
 end
 
 --==============================================================================
--- A GROWN CREATURE IS AS FAT AS IT IS HEAVY
+-- GIRTH IS PROPORTION, NOT SIZE
 --
--- Height already came from Height. Everything HORIZONTAL was a fixed fraction
--- of that height, which meant bulk tracked height and nothing tracked weight --
--- so across a 55x weight range the five species differed by 2.21x in height and
--- 1.67x in width, and a Bellchime came out proportionally SLIMMER than a Nubkin
--- (1.73 tall-to-wide against 1.30). Weight read backwards.
+-- This used to be the ONLY thing weight changed, so it carried the whole "a
+-- heavy thing looks heavy" job by itself and ran 0.70 to 1.75 across the old
+-- 2 .. 110 kg range. SizeScale does that job now, and the two MULTIPLY: left at
+-- its old slope of 0.24 a 10,000 kg creature would be four times taller and
+-- five times wider than its sheet entry, which is not colossal, it is a puddle.
 --
--- Same curve family as PodDiameter, for the same reason: a straight ratio would
--- make the Bellchime fifty-five times the Nubkin. Referenced against 14 kg --
--- the middle species -- so Spiretip is 1.00 and the curve spreads either side
--- of something that already looked right.
+-- So the slope halves to 0.12 and the CEILING goes up instead, 1.75 -> 2.40.
+-- The reference stays 14 kg -- Spiretip's weight, the middle of the sheet -- so
+-- the species that already looked right still returns exactly 1.00 and the
+-- curve spreads either side of something known good.
 --
---     2 kg -> 0.70 (clamped)    14 kg -> 1.00     110 kg -> 1.64
---     5 kg -> 0.78              40 kg -> 1.29
+--     1 kg -> 0.73      14 kg -> 1.00      1,000 kg -> 1.67
+--     2 kg -> 0.79     110 kg -> 1.28     10,000 kg -> 2.20
 --
--- Clamped at both ends because this multiplies a width that is already small:
--- below 0.70 a Nubkin's stem stops being visible against studded soil, and the
--- ceiling keeps the 10,000 kg end of the range from growing wider than its slot.
+-- The floor stays 0.70: below it a Nubkin's stem stops being visible against
+-- studded soil.
 --==============================================================================
 local GIRTH_REF_KG = 14
-local GIRTH_EXP = 0.24
+local GIRTH_EXP = 0.12
 
-function SeedData.Girth(species: Species): number
-	return math.clamp((species.Kg / GIRTH_REF_KG) ^ GIRTH_EXP, 0.70, 1.75)
+function SeedData.Girth(kg: number): number
+	local n = if type(kg) == "number" and kg == kg and kg > 0 then kg else 1
+	return math.clamp((n / GIRTH_REF_KG) ^ GIRTH_EXP, 0.70, 2.40)
 end
 
--- How far in front of the root this species rides. ONE definition: CarryService
--- welds with it, CarryPose aims the arms with it.
-function SeedData.GripForward(species: Species): number
-	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(species) * 0.5
+--==============================================================================
+-- SIZE FOLLOWS THE WEIGHT, ON EVERY FORM
+--
+-- A multiplier on the species' FRAME height, so the shape stays the species'
+-- and the scale is the pod's. `Height` on the sheet now literally means "how
+-- tall this form stands at the reference weight", and the reference is 7.5 kg
+-- -- the MEDIAN ROLL. A median pod stands at exactly its sheet size, so the
+-- sheet keeps meaning what it always meant.
+--
+-- FINISHED height, mound to crown -- what a player actually sees, and the same
+-- measurement the Height field is documented in:
+--
+--     kg        Nubkin  Petalpip  Spiretip  Toadcap  Bellchime
+--          1       1.2      1.6       2.5      2.4       2.5
+--          2       1.4      1.9       2.9      2.9       3.0
+--         14       2.3      3.2       4.8      5.0       5.2
+--        110       4.0      5.6       8.1      9.0       9.2
+--      1,000       7.4     10.3      14.7     17.0      17.3
+--     10,000      14.1     19.9      27.7     33.4      33.8
+--
+-- Measured off models actually built, not read off this formula -- ServerMain
+-- rebuilds the Nubkin and Bellchime columns at every boot for that reason.
+--
+-- A Nubkin stays shorter than a Bellchime at every weight, which is what keeps
+-- the form readable while the weight decides how much of it there is.
+--
+-- WHY THESE ARE NOT THE NUMBERS THAT WERE ASKED FOR
+--
+-- The brief wanted 2 kg to look like today's Nubkin (1.74), 110 kg like today's
+-- Bellchime (6.41), and 10,000 kg to land in 18 .. 28 on every form. Those
+-- cannot all hold at once, and it is worth writing down why so nobody re-opens
+-- it expecting a better exponent to exist:
+--
+--   * 1.74 and 6.41 are 3.7x apart across a 55x weight range, and nearly all of
+--     that gap is the HEIGHT SHEET (2.4 against 4.0) plus the bell's crown, not
+--     the weight. Pin both and the weight curve left over is almost flat --
+--     exponent 0.03 -- and 10,000 kg finishes at four studs. Pin either one
+--     together with the landmark and the other misses by about 40%.
+--
+--   * 18 .. 28 is a 1.56x band, but the five forms are 2.4x apart at the SAME
+--     weight, because a cube ends at its head while a bell carries a skirt and
+--     a ring of buds. No exponent narrows that. It is the sheet, not the curve.
+--
+-- So SIZE_EXP is a least-squares fit to all four written targets at once, which
+-- misses each by roughly the same amount instead of nailing one and abandoning
+-- the rest: 2 kg finishes at 1.4 against 1.7, 110 kg at 9.2 against 6.4, and
+-- 10,000 kg spans 14 .. 34 against 18 .. 28. Raising SIZE_EXP trades the small
+-- end away for the big one and lowering it does the reverse. There is no value
+-- that satisfies both, so pick which end matters and move this one number.
+--==============================================================================
+local SIZE_REF_KG = 7.5
+local SIZE_EXP = 0.20
+
+function SeedData.SizeScale(kg: number): number
+	local n = if type(kg) == "number" and kg == kg and kg > 0 then kg else 1
+	return (n / SIZE_REF_KG) ^ SIZE_EXP
 end
 
-function SeedData.PodColor(species: Species): Color3
+-- How tall this form stands at this weight, before the builder adds a head.
+function SeedData.FrameHeight(species: Species, kg: number): number
+	return species.Height * SeedData.SizeScale(kg)
+end
+
+--==============================================================================
+-- How far in front of the root a pod of this weight rides. ONE definition:
+-- CarryService welds with it, CarryPose aims the arms with it. It follows the
+-- pod's DIAMETER, so a boulder is held further out than a pebble and the offset
+-- is never written down twice.
+--==============================================================================
+function SeedData.GripForward(kg: number): number
+	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(kg) * 0.5
+end
+
+-- The FORM's drop tier as a colour. Kept for the Index, which lists shapes and
+-- still colours them by how often each turns up. Anything looking at a real pod
+-- wants ColorForKg -- the band of what THAT ONE weighs.
+function SeedData.FormColor(species: Species): Color3
 	return GameConfig.RarityColor[species.Rarity] or Color3.fromRGB(200, 200, 200)
 end
 

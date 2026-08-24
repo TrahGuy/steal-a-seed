@@ -140,3 +140,106 @@ if Players.MaxPlayers ~= GameConfig.MaxPlayers then
 		Players.MaxPlayers, GameConfig.MaxPlots,
 		GameConfig.MaxPlots + 1, GameConfig.MaxPlayers))
 end
+
+--==============================================================================
+-- WHAT THE WEIGHT CURVE ACTUALLY DOES
+--
+-- Every pod rolls its own weight now, 1 to 10,000 kg, on one curve shared by
+-- all five species. That curve IS the economy -- one exponent decides how often
+-- anybody ever sees a heavy pod -- and it is exactly the kind of number that
+-- drifts silently: nothing in the game would look broken if it quietly went
+-- uniform and every nest started handing out five-figure creatures.
+--
+-- So it is measured at boot, over ten thousand real rolls, and printed. Read it
+-- as: most pods are pocket change and a Divine one is a story. If 10,000 has
+-- become common, or nothing exceeds 100, move SeedData's KG_CURVE. Do not
+-- flatten it.
+--
+-- The heights underneath are the other half of the same claim -- that weight is
+-- VISIBLE. They are measured off creatures actually BUILT and then thrown away,
+-- not recomputed from the formula, so a builder that stopped honouring the
+-- weight argument would show up here as four identical numbers rather than in a
+-- screenshot three days later.
+--==============================================================================
+local ServerStorage = game:GetService("ServerStorage")
+
+local function weightReport()
+	local SeedData = require(Shared:WaitForChild("SeedData"))
+
+	--== THE ROLL ==--
+	-- A fixed seed, so two servers print the same histogram and a change in it
+	-- is a change in the CURVE rather than in the luck of one boot.
+	local rng = Random.new(20260824)
+	local SAMPLES = 10000
+	local le10, le110, ge1k, ge5k, ge9k, heaviest = 0, 0, 0, 0, 0, 0
+	for _ = 1, SAMPLES do
+		local kg = SeedData.RollKg(rng)
+		if kg <= 10 then
+			le10 += 1
+		end
+		if kg <= 110 then
+			le110 += 1
+		end
+		if kg >= 1000 then
+			ge1k += 1
+		end
+		if kg >= 5000 then
+			ge5k += 1
+		end
+		if kg >= 9000 then
+			ge9k += 1
+		end
+		heaviest = math.max(heaviest, kg)
+	end
+	local function pct(n: number): number
+		return n / SAMPLES * 100
+	end
+	print(string.format(
+		"[Seed] weight roll, %d samples:  <=10kg %.1f%%  <=110kg %.1f%%  " ..
+		">=1,000kg %.1f%%  >=5,000kg %.2f%%  >=9,000kg %.2f%%  heaviest %d kg",
+		SAMPLES, pct(le10), pct(le110), pct(ge1k), pct(ge5k), pct(ge9k), heaviest))
+
+	--== THE SIZE ==--
+	-- Nubkin and Bellchime specifically: the shortest frame and the tallest, so
+	-- the pair brackets every other form. A Nubkin must stay shorter than a
+	-- Bellchime at the SAME weight -- the form has to keep reading -- while both
+	-- have to grow enormously across the range.
+	local CreatureModel = require(root:WaitForChild("CreatureModel"))
+	local stash = Instance.new("Folder")
+	stash.Name = "SeedWeightCheck"
+	stash.Parent = ServerStorage
+	for _, id in ipairs({ "nubkin", "bellchime" }) do
+		local species = SeedData.Get(id)
+		if species then
+			local cells = {}
+			for _, kg in ipairs({ 2, 110, 1000, 10000 }) do
+				-- Built at the origin, so the base sits on y = 0 and the tallest
+				-- corner of any part IS the finished height.
+				local model = CreatureModel.BuildCreature(species, kg,
+					CreatureModel.STAGE_GROWN, CFrame.new(), stash)
+				local top = 0
+				for _, d in ipairs(model:GetDescendants()) do
+					if d:IsA("BasePart") then
+						local cf, size = d.CFrame, d.Size
+						top = math.max(top, cf.Position.Y
+							+ math.abs(cf.UpVector.Y) * size.Y * 0.5
+							+ math.abs(cf.RightVector.Y) * size.X * 0.5
+							+ math.abs(cf.LookVector.Y) * size.Z * 0.5)
+					end
+				end
+				model:Destroy()
+				table.insert(cells, string.format("%d kg %.1f", kg, top))
+			end
+			print(string.format("[Seed] %-9s finished height:  %s",
+				species.Name, table.concat(cells, "   |   ")))
+		end
+	end
+	stash:Destroy()
+end
+
+-- pcall, because a boot report is a convenience and a server that cannot print
+-- one is still a server people can play on.
+local reported, reportErr = pcall(weightReport)
+if not reported then
+	warn("[Seed] weight report failed: " .. tostring(reportErr))
+end

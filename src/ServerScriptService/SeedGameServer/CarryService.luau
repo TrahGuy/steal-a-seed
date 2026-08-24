@@ -58,6 +58,10 @@ CarryService.Priority = 45
 
 export type Held = {
 	species: SeedData.Species,
+	-- What this pod weighs. Rolled where it spawned, carried through every drop
+	-- and pick-up, and stamped on the Tool when it is banked. The species sheet
+	-- has nothing to say about it.
+	kg: number,
 	model: Model,
 	-- Which nest it came off, carried through a drop so that picking it back up
 	-- can annoy the same parent again.
@@ -107,7 +111,7 @@ end
 local function publish(player: Player)
 	local held = carried[player]
 	player:SetAttribute(ATTR.CarryingSpecies, if held then held.species.Id else nil)
-	player:SetAttribute(ATTR.CarryingKg, if held then held.species.Kg else nil)
+	player:SetAttribute(ATTR.CarryingKg, if held then held.kg else nil)
 end
 
 function CarryService.IsCarrying(player: Player): boolean
@@ -116,7 +120,7 @@ end
 
 function CarryService.TotalKg(player: Player): number
 	local held = carried[player]
-	return if held then held.species.Kg else 0
+	return if held then held.kg else 0
 end
 
 function CarryService.RefreshWalkSpeed(player: Player)
@@ -143,7 +147,7 @@ end
 -- ONE definition, used by the raid carry AND by the banked Tool, so the thing
 -- in your arms looks the same before and after the red line.
 --==============================================================================
-local function weightTag(handle: BasePart, species: SeedData.Species)
+local function weightTag(handle: BasePart, kg: number)
 	local existing = handle:FindFirstChild("CarryWeight")
 	if existing then
 		existing:Destroy()
@@ -153,7 +157,7 @@ local function weightTag(handle: BasePart, species: SeedData.Species)
 	billboard.Adornee = handle
 	billboard.AlwaysOnTop = true
 	billboard.Size = UDim2.fromOffset(96, 34)
-	billboard.StudsOffset = Vector3.new(0, SeedData.PodDiameter(species) * 0.5 + 1.1, 0)
+	billboard.StudsOffset = Vector3.new(0, SeedData.PodDiameter(kg) * 0.5 + 1.1, 0)
 	billboard.MaxDistance = 140
 	billboard.Parent = handle
 
@@ -180,17 +184,17 @@ local function weightTag(handle: BasePart, species: SeedData.Species)
 	label.Font = Enum.Font.GothamBlack
 	label.TextScaled = true
 	label.TextColor3 = Color3.fromRGB(248, 246, 240)
-	label.Text = string.format("%dKg", species.Kg)
+	label.Text = string.format("%dKg", kg)
 	label.Parent = panel
 end
 
 -- Where a pod sits relative to a HumanoidRootPart. One function, so the raid
 -- carry and the banked Tool cannot drift into two different grips.
-local function gripFor(species: SeedData.Species): CFrame
+local function gripFor(kg: number): CFrame
 	-- -Z is forward in a root's frame. Offset by the pod's OWN RADIUS, because
-	-- pods are 1.3 to 4.5 studs across: a fixed offset either buries a
-	-- Bellchime in the ribs or leaves a Nubkin hovering clear of the hands.
-	return CFrame.new(0, GameConfig.Carry.GripDrop, -SeedData.GripForward(species))
+	-- pods are 1.3 to 10 studs across: a fixed offset either buries a heavy one
+	-- in the ribs or leaves a light one hovering clear of the hands.
+	return CFrame.new(0, GameConfig.Carry.GripDrop, -SeedData.GripForward(kg))
 end
 
 --==============================================================================
@@ -200,11 +204,12 @@ end
 -- with the body, so the pod stays in front of the player through every turn
 -- instead of swinging with a head that looks around independently.
 --
--- Offset by the pod's OWN RADIUS, because pods are 1.3 to 4.5 studs across now:
--- a fixed offset either buries a Bellchime in the ribs or leaves a Nubkin
--- hovering a stud clear of the hands.
+-- Offset by the pod's OWN RADIUS, because pods are 1.3 to 10 studs across now --
+-- weight is rolled per pod and any species can be either -- so a fixed offset
+-- either buries a heavy one in the ribs or leaves a light one hovering a stud
+-- clear of the hands.
 --==============================================================================
-local function attachInFront(model: Model, root: BasePart, species: SeedData.Species)
+local function attachInFront(model: Model, root: BasePart, kg: number)
 	local primary = model.PrimaryPart
 	if not primary then
 		return
@@ -223,7 +228,7 @@ local function attachInFront(model: Model, root: BasePart, species: SeedData.Spe
 			end
 		end
 	end
-	local grip = gripFor(species)
+	local grip = gripFor(kg)
 	primary.CFrame = root.CFrame * grip
 	local weld = Instance.new("Weld")
 	weld.Name = "CarryWeld"
@@ -231,7 +236,7 @@ local function attachInFront(model: Model, root: BasePart, species: SeedData.Spe
 	weld.Part1 = primary
 	weld.C0 = grip
 	weld.Parent = primary
-	weightTag(primary, species)
+	weightTag(primary, kg)
 end
 
 --==============================================================================
@@ -292,9 +297,12 @@ end
 
 -- A dropped pod becomes a loose pod anybody can take. Declared before TryTake
 -- because taking one that then cannot be attached has to put it back.
-local function spawnLoose(species: SeedData.Species, at: CFrame, parent: Instance,
-	fromNest: string?)
-	local pod = CreatureModel.BuildPod(species, at, parent)
+-- `kg` travels with it. A dropped pod that fell back on the species sheet would
+-- be a way to launder a 9,000 kg cube into a 2 kg one by dropping it, and the
+-- player who picked it up would be robbed by the physics rather than by anyone.
+local function spawnLoose(species: SeedData.Species, kg: number, at: CFrame,
+	parent: Instance, fromNest: string?)
+	local pod = CreatureModel.BuildPod(species, kg, at, parent)
 	-- Loot, explicitly. This is the whole point of a loose pod.
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
 	if fromNest then
@@ -381,6 +389,11 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 
 	--== EVERYTHING BELOW THIS LINE CHANGES THE WORLD ==--
 	-- Read before the take: TakePod destroys the pod, and its attributes with it.
+	-- The pod's own rolled weight, read here for the same reason the nest id is:
+	-- TakePod destroys the model and its attributes go with it. Falling back to
+	-- the species sheet would turn a 9,000 kg cube into a 2 kg one at the moment
+	-- of pickup, which is the one moment the player is watching the number.
+	local podKg = tonumber(pod:GetAttribute("Kg"))
 	local nestId = pod:GetAttribute("NestId")
 	local fromNest: string? = if type(nestId) == "string"
 		then nestId
@@ -415,15 +428,17 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	end
 
 	local taken = species :: SeedData.Species
+	local takenKg = math.clamp(podKg or taken.Kg, 1, GameConfig.Carry.MaxKg)
 	local ok, err = pcall(function()
 		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart
-		local model = CreatureModel.BuildPod(taken, root.CFrame, character)
-		attachInFront(model, root, taken)
+		local model = CreatureModel.BuildPod(taken, takenKg, root.CFrame, character)
+		attachInFront(model, root, takenKg)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
 		carried[player] = {
 			species = taken,
+			kg = takenKg,
 			model = model,
 			fromNest = fromNest,
 		}
@@ -437,7 +452,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		carried[player] = nil
 		local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 		if map then
-			spawnLoose(taken, CFrame.new(anchor.Position + Vector3.new(0, 1, 0)), map)
+			spawnLoose(taken, takenKg,
+				CFrame.new(anchor.Position + Vector3.new(0, 1, 0)), map)
 		end
 		return false
 	end
@@ -476,8 +492,8 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 		-- Only the character. Excluding the map would exclude the ground, which
 		-- is the one thing the cast is looking for.
 		local ground = groundUnder(where, if character then { character } else {})
-		spawnLoose(held.species, CFrame.new(ground + Vector3.new(0, 0.05, 0)), map,
-			held.fromNest)
+		spawnLoose(held.species, held.kg, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
+			map, held.fromNest)
 	end
 
 	publish(player)
@@ -508,10 +524,11 @@ local function bank(player: Player): boolean
 	end
 
 	local species = held.species
+	local kg = held.kg
 	-- Built fresh as the Tool's handle rather than reusing the carried model:
 	-- that one is welded to a head and unanchored, and a Tool wants a part named
 	-- Handle that it owns outright.
-	local pod = CreatureModel.BuildPod(species, CFrame.new(), backpack)
+	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
 	local handle = pod.PrimaryPart
 	if not handle then
 		pod:Destroy()
@@ -520,11 +537,13 @@ local function bank(player: Player): boolean
 
 	local tool = Instance.new("Tool")
 	tool.Name = species.Name
-	tool.ToolTip = string.format("%s  -  %d kg", species.Rarity, species.Kg)
+	-- The WEIGHT band, not the form's drop tier: what the player wants off a
+	-- tooltip is what this one is worth.
+	tool.ToolTip = string.format("%s  -  %d kg", SeedData.RarityForKg(kg), kg)
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
 	tool:SetAttribute("SpeciesId", species.Id)
-	tool:SetAttribute(ATTR.CarryingKg, species.Kg)
+	tool:SetAttribute(ATTR.CarryingKg, kg)
 
 	handle.Name = "Handle"
 	for _, d in ipairs(pod:GetDescendants()) do
@@ -544,7 +563,7 @@ local function bank(player: Player): boolean
 	end
 	handle.Parent = tool
 	pod:Destroy()
-	weightTag(handle, species)
+	weightTag(handle, kg)
 
 	--==========================================================================
 	-- THE SAME GRIP AFTER THE LINE AS BEFORE IT
@@ -577,7 +596,7 @@ local function bank(player: Player): boolean
 	--           DescendantAdded watch stays live for as long as the tool is held
 	--           and re-asserts the root weld if a hand weld turns up later.
 	--==========================================================================
-	local grip = gripFor(species)
+	local grip = gripFor(kg)
 
 	local function fitToRoot(character: Model)
 		if handle.Parent ~= tool then
@@ -649,7 +668,7 @@ local function bank(player: Player): boolean
 	-- success from a mugging.
 	player:SetAttribute(ATTR.BankedCount,
 		(player:GetAttribute(ATTR.BankedCount) or 0) + 1)
-	log(string.format("%s banked a %s (%d kg).", player.Name, species.Name, species.Kg))
+	log(string.format("%s banked a %s (%d kg).", player.Name, species.Name, kg))
 	return true
 end
 
@@ -835,8 +854,8 @@ function CarryService.Snapshot(): string
 	local rows = {}
 	for player, held in pairs(carried) do
 		table.insert(rows, string.format("%s: %s %d kg -> %.1f%% speed",
-			player.Name, held.species.Name, held.species.Kg,
-			GameConfig.carryMultiplierFor(held.species.Kg) * 100))
+			player.Name, held.species.Name, held.kg,
+			GameConfig.carryMultiplierFor(held.kg) * 100))
 	end
 	return if #rows > 0 then table.concat(rows, " | ") else "nobody carrying"
 end

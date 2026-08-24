@@ -57,7 +57,7 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 
-local CARRYING = GameConfig.Attributes.CarryingSpecies
+local CARRYING_KG = GameConfig.Attributes.CarryingKg
 
 -- How fast the pose blends in and out. A snap reads as a glitch.
 local BLEND = 9
@@ -141,19 +141,23 @@ end
 --==============================================================================
 -- AIMING AT THE POD
 --
--- Not a fixed pose: the arms follow the thing. gripFor() puts a Nubkin 1.58
--- studs out and a Bellchime 3.09, so one angle cannot serve both -- a pose tuned
--- for the small pod leaves the big one held at the fingertips.
+-- Not a fixed pose: the arms follow the thing. GripForward puts a 1 kg pod 1.5
+-- studs out and a 10,000 kg one 5.8, so one angle cannot serve both -- a pose
+-- tuned for the small pod leaves the boulder held at the fingertips.
+--
+-- IT IS THE WEIGHT, NOT THE SPECIES. Every pod rolls its own now, so the form
+-- says nothing about how far out it rides: two Nubkins can want two different
+-- poses. Reading the species here would brace the arms for a 2 kg cube while
+-- the player is carrying a 9,000 kg one.
 --
 -- Reach drives how far the shoulders swing forward, and how far apart. A big pod
 -- needs the hands WIDER, not just further out, which is why the spread relaxes
 -- as reach grows.
 --==============================================================================
-local function anglesFor(speciesId: string?): (number, number)
-	local species = if speciesId then SeedData.Get(speciesId) else nil
-	local reach = if species then SeedData.GripForward(species) else 1.6
-	-- 1.3 studs of reach -> ~52 deg, 4.5 -> ~80. Clamped so no pod folds the arm
-	-- back through the shoulder.
+local function anglesFor(kg: number?): (number, number)
+	local reach = if kg then SeedData.GripForward(kg) else 1.6
+	-- 1.5 studs of reach -> ~57 deg, 5.8 -> clamped at 82. Clamped so no pod
+	-- folds the arm back through the shoulder.
 	local lift = math.clamp(43 + 9.2 * reach, 45, 82)
 	-- Negative is inward. Small pods are hugged; big ones are braced.
 	local spread = math.clamp(-24 + 6 * reach, -22, 4)
@@ -195,30 +199,34 @@ end)
 --==============================================================================
 -- A BANKED POD IS STILL A CARRIED POD
 --
--- CarryingSpecies is set while you are running a stolen pod home and cleared the
+-- CarryingKg is set while you are running a stolen pod home and cleared the
 -- INSTANT you bank it -- but the pod does not leave your hands when you bank it.
 -- It becomes a Tool in your hotbar and you carry the same object onward. So the
 -- attribute alone posed both arms under a pod you had stolen and dropped them
 -- for one you owned, and the default Roblox tool animation took over: the same
 -- pod, held two different ways depending on whose it was.
 --
--- CarryService stamps SpeciesId on that Tool, and an equipped Tool is parented
--- INSIDE the character -- so this reads for every player on screen, not only the
--- local one, exactly like the attribute it falls back from.
+-- CarryService stamps the same CarryingKg on that Tool, and an equipped Tool is
+-- parented INSIDE the character -- so this reads for every player on screen, not
+-- only the local one, exactly like the attribute it falls back from.
 --
 -- The pose still wins over the tool animation: these are AnimationConstraint
 -- Transforms written in Stepped, which is after the animator has run.
 --==============================================================================
-local function carriedSpeciesId(player: Player, character: Model): string?
-	local attribute = player:GetAttribute(CARRYING)
-	if type(attribute) == "string" then
+-- Returns the WEIGHT of whatever is being carried, or nil for empty hands. The
+-- species id is not wanted here any more -- nothing about the pose depends on
+-- the shape -- but the same two places still have to be checked, because the
+-- attribute is only set during a raid and the Tool is what survives banking.
+local function carriedKg(player: Player, character: Model): number?
+	local attribute = player:GetAttribute(CARRYING_KG)
+	if type(attribute) == "number" then
 		return attribute
 	end
 	for _, d in ipairs(character:GetChildren()) do
 		if d:IsA("Tool") then
-			local id = d:GetAttribute("SpeciesId")
-			if type(id) == "string" then
-				return id
+			local kg = d:GetAttribute(CARRYING_KG)
+			if type(kg) == "number" then
+				return kg
 			end
 		end
 	end
@@ -237,15 +245,15 @@ RunService.Stepped:Connect(function(_, dt)
 		if not character or not character.Parent then
 			rigs[player] = nil
 		else
-			local speciesId = carriedSpeciesId(player, character)
-			local want = if speciesId ~= nil then 1 else 0
+			local kg = carriedKg(player, character)
+			local want = if kg ~= nil then 1 else 0
 			rig.weight += (want - rig.weight) * alpha
 			if rig.weight < 0.002 and want == 0 then
 				rig.weight = 0
 			end
 
 			if rig.weight > 0 then
-				local lift, spread = anglesFor(speciesId)
+				local lift, spread = anglesFor(kg)
 				for _, side in ipairs(rig.sides) do
 					local w = rig.weight
 					local pose: CFrame

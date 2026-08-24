@@ -17,26 +17,34 @@
 -- game has not made.
 --
 --==============================================================================
--- THE RARITY WORD LIVES HERE
+-- THE RARITY WORD LIVES HERE, AND IT MEANS THE FORM
 --
--- Nowhere in the world says it. A pod is COLOURED by rarity, so the word out
--- there would be a caption on a photograph -- and it would spend the reveal
--- early, since two Commons arrive in identical shells. A grown plant carries no
--- plate at all any more. The Garden panel tints a finished row's NAME with the
--- rarity colour, which is a hint rather than a statement.
+-- Nowhere in the world says it. A pod is COLOURED by what it WEIGHS, so the word
+-- out there would be describing a different thing entirely -- and it would spend
+-- the reveal early, since two Commons arrive in identically weighted shells. A
+-- grown plant carries no plate at all any more. The Garden panel tints a
+-- finished row's NAME by its weight, which is a hint rather than a statement.
+--
+-- This lists FORMS: how often a cube turns up against a bell. That is all
+-- Rarity has ever decided and it is all it decides now.
+--
+-- NO WEIGHT AND NO RATE ON THESE ROWS. It used to print both, off the species
+-- sheet, and both became lies the moment every pod started rolling its own
+-- weight -- there is no such thing as "what a Bellchime weighs" any more, and
+-- one number here would be quietly wrong for every Bellchime in the game. What
+-- a given one is worth is on the pod, in your hands, and in the Garden row.
 --
 -- So this is the one surface that spells Common / Uncommon / Rare / Epic out,
--- and it is also the only one that shows WEIGHT, and the only one that shows a
--- row for a species you have never grown.
+-- and the only one that shows a row for a species you have never grown.
 --
 --==============================================================================
 -- SEEN MEANS GROWN, ON A PLOT YOU OWNED
 --
--- Not carried, not stolen, not sprouted. Pods are coloured by rarity, so the two
--- Commons arrive identical and which one you got stays unknown until it
--- finishes -- the grow-up IS the reveal, and PlantService writes the Almanac at
--- exactly that moment. Filling a row in for a pod would spend the reveal before
--- it happened.
+-- Not carried, not stolen, not sprouted. Pods are coloured by WEIGHT, so the
+-- shell says nothing about which form is inside and which one you got stays
+-- unknown until it finishes -- the grow-up IS the reveal, and PlantService
+-- writes the Almanac at exactly that moment. Filling a row in for a pod would
+-- spend the reveal before it happened.
 --
 --==============================================================================
 -- NO NEW REMOTE
@@ -359,14 +367,16 @@ local function paint()
 		if row then
 			if almanac[species.Id] then
 				seen += 1
-				row.swatch.BackgroundColor3 = SeedData.PodColor(species)
+				row.swatch.BackgroundColor3 = SeedData.FormColor(species)
 				row.swatch.BackgroundTransparency = 0
 				row.name.Text = species.Name
 				row.name.TextColor3 = PAPER
-				row.sub.Text = string.format("%s  ·  %s kg", species.Rarity,
-					GameConfig.compact(species.Kg))
+				-- The form's drop tier, and nothing else. See the header: a kg or a
+				-- $/s here would be one invented number standing in for every pod of
+				-- this shape that will ever spawn.
+				row.sub.Text = species.Rarity
 				row.sub.TextColor3 = GameConfig.RarityColor[species.Rarity] or GHOST
-				row.rate.Text = "$" .. GameConfig.compact(SeedData.IncomePerSecond(species)) .. "/s"
+				row.rate.Text = ""
 			else
 				-- A silhouette: the row is the right shape and the swatch is the
 				-- right size, so you can see there IS a fifth thing without

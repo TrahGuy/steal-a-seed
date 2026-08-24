@@ -114,6 +114,10 @@ type Panel = {
 	word: TextLabel,
 	timer: TextLabel,
 	species: SeedData.Species?,
+	-- What THIS plant weighs. The clock is a function of weight, not of form:
+	-- a 4 kg Nubkin hatches in half a minute and a 9,000 kg one takes five, and
+	-- the two are the same species.
+	kg: number,
 	plantedAt: number,
 	stage: number,
 	lastText: string,
@@ -146,7 +150,8 @@ local function build(model: Model): Panel?
 
 	local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
 	local plantedAt = model:GetAttribute("PlantedAt")
-	if not (species and type(plantedAt) == "number") then
+	local kg = tonumber(model:GetAttribute("Kg"))
+	if not (species and kg and type(plantedAt) == "number") then
 		return nil
 	end
 
@@ -236,6 +241,7 @@ local function build(model: Model): Panel?
 		word = word,
 		timer = timer,
 		species = species,
+		kg = kg,
 		plantedAt = plantedAt,
 		stage = tonumber(model:GetAttribute("Stage")) or STAGE_POD,
 		lastText = "",
@@ -246,15 +252,17 @@ end
 -- WHAT IT SAYS
 --
 -- Recomputed from the same two numbers the server uses -- PlantedAt and the
--- species' grow time -- rather than from anything pushed across. Nothing to
--- replicate, and it is already correct on the first frame after a rejoin.
+-- grow time for THIS PLANT'S WEIGHT -- rather than from anything pushed across.
+-- Nothing to replicate, and it is already correct on the first frame after a
+-- rejoin. Reading the species sheet instead would run a 9,000 kg plant's clock
+-- at a 2 kg plant's speed and finish it four and a half minutes early.
 --==============================================================================
 local function refresh(panel: Panel, now: number)
 	local species = panel.species
 	if not species then
 		return
 	end
-	local total = SeedData.GrowSeconds(species)
+	local total = SeedData.GrowSeconds(panel.kg)
 	local elapsed = now - panel.plantedAt
 	local sproutAt = total * PLANTING.SproutAt
 

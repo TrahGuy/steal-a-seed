@@ -90,8 +90,11 @@ function EconomyService.RateFor(player: Player): number
 		return 0
 	end
 	local rate = 0
-	for _, species in ipairs(PlantService.GrownIn(plot)) do
-		rate += SeedData.IncomePerSecond(species)
+	-- The INSTANCE weight, not the species sheet. Paying species.Kg after
+	-- weights are rolled would hand every Nubkin 2/sec whatever it actually
+	-- weighs -- a faucet that ignores the only number the player is playing for.
+	for _, grown in ipairs(PlantService.GrownIn(plot)) do
+		rate += SeedData.IncomePerSecond(grown.kg)
 	end
 	return rate
 end

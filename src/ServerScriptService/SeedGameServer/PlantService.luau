@@ -57,6 +57,10 @@ type Planted = {
 	plot: Model,
 	slot: number,
 	species: SeedData.Species,
+	-- What THIS one weighs, rolled when its pod spawned. Everything measured
+	-- about the plant -- size, grow time, payout -- comes from here, never from
+	-- species.Kg.
+	kg: number,
 	-- os.time(), absolute.
 	plantedAt: number,
 	stage: number,
@@ -115,7 +119,7 @@ end
 -- BUILDING WHAT IS IN THE GROUND
 --==============================================================================
 local function stageFor(entry: Planted, now: number): number
-	local total = SeedData.GrowSeconds(entry.species)
+	local total = SeedData.GrowSeconds(entry.kg)
 	local elapsed = now - entry.plantedAt
 	if elapsed >= total then
 		return CreatureModel.STAGE_GROWN
@@ -132,7 +136,7 @@ local function render(entry: Planted, slot: Attachment)
 	local cf = slot.WorldCFrame
 	-- Face the gate, so a plot reads as a row of creatures looking at whoever
 	-- walks in rather than a row of backs.
-	local model = CreatureModel.Build(entry.species, entry.stage,
+	local model = CreatureModel.Build(entry.species, entry.kg, entry.stage,
 		CFrame.new(cf.Position) * CFrame.Angles(0, math.rad(180), 0)
 			* entry.plot:GetPivot().Rotation, plantsFolder(entry.plot))
 	model:SetAttribute("SlotIndex", entry.slot)
@@ -180,6 +184,7 @@ local function record(plot: Model): { any }
 				SpeciesId = entry.species.Id,
 				Slot = entry.slot,
 				PlantedAt = entry.plantedAt,
+				Kg = entry.kg,
 			})
 		end
 	end
@@ -196,7 +201,8 @@ end
 --==============================================================================
 -- PLANTING
 --==============================================================================
-function PlantService.Plant(player: Player, species: SeedData.Species): boolean
+function PlantService.Plant(player: Player, species: SeedData.Species,
+	kg: number): boolean
 	local plot = PlotService.PlotOf(player)
 	if not plot then
 		return false
@@ -234,6 +240,7 @@ function PlantService.Plant(player: Player, species: SeedData.Species): boolean
 		plot = plot,
 		slot = bestSlot,
 		species = species,
+		kg = kg,
 		plantedAt = os.time(),
 		stage = CreatureModel.STAGE_POD,
 		model = nil,
@@ -241,9 +248,9 @@ function PlantService.Plant(player: Player, species: SeedData.Species): boolean
 	byPlot[bestSlot] = entry
 	render(entry, best)
 	persist(plot)
-	log(string.format("%s planted a %s in %s slot %d (%.0fs to grow).",
-		player.Name, species.Name, plot.Name, bestSlot,
-		SeedData.GrowSeconds(species)))
+	log(string.format("%s planted a %d kg %s in %s slot %d (%.0fs to grow).",
+		player.Name, kg, species.Name, plot.Name, bestSlot,
+		SeedData.GrowSeconds(kg)))
 	return true
 end
 
@@ -272,7 +279,12 @@ local function hookTool(tool: Instance, player: Player)
 		if not species then
 			return
 		end
-		if PlantService.Plant(player, species) then
+		-- The weight travelled with the pod: CarryService stamps it on the Tool
+		-- when the pod is banked. Falling back to the species sheet would plant
+		-- a 9,000 kg Nubkin as a 2 kg one.
+		local kg = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
+			or species.Kg
+		if PlantService.Plant(player, species, kg) then
 			-- Consumed. Destroying the tool is what makes planting a decision
 			-- rather than a duplication bug.
 			tool:Destroy()
@@ -346,6 +358,16 @@ local function restore(player: Player, plot: Model)
 				else nil
 			local index = if type(saved) == "table" then tonumber(saved.Slot) else nil
 			local at = if type(saved) == "table" then tonumber(saved.PlantedAt) else nil
+			--==============================================================
+			-- A SAVE FROM BEFORE WEIGHTS WERE ROLLED HAS NO Kg
+			--
+			-- Fall back to the species sheet ONCE, on load, and write the
+			-- result back with the plant. Re-rolling would be worse than the
+			-- fallback: a garden a player left full of heavy plants would come
+			-- back worth something entirely different every time they rejoined,
+			-- which is a slot machine, not a save.
+			--==============================================================
+			local savedKg = if type(saved) == "table" then tonumber(saved.Kg) else nil
 			-- A slot can vanish between sessions -- a tier change rebuilds the
 			-- bed with a different grid -- so every entry is re-validated rather
 			-- than trusted.
@@ -354,6 +376,7 @@ local function restore(player: Player, plot: Model)
 					plot = plot,
 					slot = index,
 					species = species,
+					kg = math.clamp(savedKg or species.Kg, 1, GameConfig.Carry.MaxKg),
 					plantedAt = at,
 					stage = CreatureModel.STAGE_POD,
 					model = nil,
@@ -447,13 +470,22 @@ end
 --==============================================================================
 -- Everything fully grown in this plot. Income is somebody else's job -- this
 -- only says what is standing there.
-function PlantService.GrownIn(plot: Model): { SeedData.Species }
-	local out = {}
+--==============================================================================
+-- YIELDS THE WEIGHT, NOT JUST THE SPECIES
+--
+-- EconomyService pays from this. Handing back only the species would leave it
+-- no choice but to read species.Kg, and every plant in the game would earn its
+-- form's fallback rate instead of what it actually weighs.
+--==============================================================================
+export type Grown = { species: SeedData.Species, kg: number }
+
+function PlantService.GrownIn(plot: Model): { Grown }
+	local out: { Grown } = {}
 	local byPlot = growing[plot]
 	if byPlot then
 		for _, entry in pairs(byPlot) do
 			if entry.stage == CreatureModel.STAGE_GROWN then
-				table.insert(out, entry.species)
+				table.insert(out, { species = entry.species, kg = entry.kg })
 			end
 		end
 	end

@@ -92,7 +92,22 @@ local serviceConnections: { RBXScriptConnection } = {}
 local running = false
 
 local PARENT_HEIGHT = 15
-local NEST_RADIUS = 13
+--==============================================================================
+-- THE RING HAD TO GROW WITH THE PODS
+--
+-- Every pod rolls its own weight now, so any slot can hold a 10,000 kg one --
+-- and that is 10 studs across where the old heaviest was 4.5. Five pods on a
+-- radius-13 ring sit 2 * 13 * sin(36 deg) = 15.3 studs apart, which leaves two
+-- heavy neighbours 5 studs from touching and no way to walk between them.
+--
+-- At 16 the spacing is 18.8 and the gap is 8.8 -- wide enough to step through,
+-- which matters because taking a pod means standing next to it. The parent
+-- still sleeps at the centre, 11 studs clear of the widest shell.
+--
+-- The nest sits at x = 38 with the corridor wall at 70, so a 16-stud arm still
+-- has 16 studs of clearance to the wall and leaves the racing line alone.
+--==============================================================================
+local NEST_RADIUS = 16
 local TICK = 0.12
 -- How long a taken pod stays gone. Long enough that clearing a nest means
 -- something, short enough that a player coming back finds it alive.
@@ -119,12 +134,27 @@ local function growPod(nest: Nest, index: number)
 	if nest.pods[index] then
 		return
 	end
-	local species = SeedData.Roll(nest.biome.Id, Random.new(
-		math.floor(nest.origin.X * 31 + nest.origin.Z * 17 + index * 7 + os.clock() * 1000)))
+	--==========================================================================
+	-- TWO ROLLS, AND THEY ARE INDEPENDENT
+	--
+	-- FORM comes from the biome pool by drop weight -- how often a bell turns up
+	-- against a cube. WEIGHT comes from RollKg, one curve shared by all five
+	-- species. Nothing correlates them on purpose: that is what makes a nest
+	-- worth walking into instead of pattern-matching on shape from the road.
+	-- A 10,000 kg Nubkin is legal, and it looks like a Nubkin.
+	--
+	-- One rng for both, so a slot's whole outcome comes from one seed.
+	--==========================================================================
+	local rng = Random.new(
+		math.floor(nest.origin.X * 31 + nest.origin.Z * 17 + index * 7 + os.clock() * 1000))
+	local species = SeedData.Roll(nest.biome.Id, rng)
 	if not species then
 		return
 	end
-	local pod = CreatureModel.BuildPod(species, nest.slots[index], nest.folder)
+	-- Stamped on the model by BuildPod, which is where every later reader --
+	-- CarryService on pickup, the billboard, the shell colour -- gets it from.
+	local kg = SeedData.RollKg(rng)
+	local pod = CreatureModel.BuildPod(species, kg, nest.slots[index], nest.folder)
 	-- Loot. CreatureModel deliberately does not decide this: the same model
 	-- hatching in a plot must never be takeable.
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)

@@ -155,7 +155,11 @@ local function remember(instance: Instance)
 			return
 		end
 
-		local kg = math.max(species.Kg, 0.001)
+		-- THIS plant's weight, off the model. Two Nubkins in the same bed can be
+		-- 4 kg and 900 kg now, and a heavy one has to sway like a heavy one --
+		-- reading the species sheet would give a bed of identical shapes the
+		-- identical motion and undo the only thing that told them apart.
+		local kg = math.max(tonumber(model:GetAttribute("Kg")) or species.Kg, 0.001)
 
 		--==================================================================
 		-- MEASURE THE THING, THEN SIZE THE MOTION TO IT
