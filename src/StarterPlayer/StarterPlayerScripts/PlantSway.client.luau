@@ -26,11 +26,18 @@
 --   a floor test -- a bounds test -- so there is nothing to fall through and
 --   nothing to path around. The road is unreachable by construction.
 --
---   THEY NEVER TURN. Facing is the rotation PlantService stamped: everything
---   looks at the plot gate. They shuffle sideways and backwards rather than
---   steering, so a bed of twelve is a crowd watching whoever walks in while
---   their feet move. Turning to face the walk direction would turn a crowd into
---   a flock and lose the one thing the arrangement is for.
+--   THEY DO NOT STEER. Each plant has its own bearing, stamped by
+--   PlantService off its placement id, and it walks sideways and backwards
+--   rather than turning to face where it is going. Steering would make a bed
+--   into a flock all pointing one way -- the thing free placement exists to
+--   stop -- and it would spin every plant on the spot at the start of each leg.
+--
+--   IT DOES LOOK AROUND. On top of that fixed bearing, a standing plant turns
+--   slowly through a few tens of degrees and back. Independent of the walk, and
+--   only WHILE STANDING: the phase stops advancing mid-step, so it never turns
+--   and travels at once, and it picks up again where it left off when it
+--   stops. That is what keeps a bed from reading as a set of ornaments that
+--   happen to be facing different ways.
 --
 --   PODS STAY PUT. An egg does not stroll. Pods are in this set only for the
 --   hatch shake, and their idle amplitude is zero.
@@ -154,6 +161,23 @@ end
 -- half in the frame.
 local EDGE_MARGIN = GameConfig.Plant.EdgeMarginStuds
 
+--==============================================================================
+-- THE LOOK-AROUND
+--
+-- Far enough to be visible on a silhouette, nowhere near far enough to lose
+-- which way the plant is meant to be facing. Heavier turns slower, like
+-- everything else, and each plant is phased off its placement id so a bed does
+-- not sweep in unison.
+--
+--     2 kg      full sweep every ~12s
+--     10,000 kg full sweep every ~26s
+--==============================================================================
+local LOOK_AMP = math.rad(28)
+
+local function lookRate(kg: number): number
+	return math.clamp(0.55 / (kg ^ 0.09), 0.18, 0.75)
+end
+
 local SWING_AMP = math.rad(19)
 local BOB_FRACTION = 0.035
 local BOB_CEILING = 0.35
@@ -224,6 +248,16 @@ type Sway = {
 	-- The two Leaf parts and where they sit relative to the model's pivot, so
 	-- they can be swung as arms after the PivotTo without measuring anything.
 	leaves: { { part: BasePart, offset: CFrame, sign: number } },
+	-- The look-around. `lookPhase` ACCUMULATES rather than being derived from
+	-- the clock, because it has to stop while the plant is walking and carry on
+	-- from where it stopped -- a phase read straight off the clock would jump
+	-- forward by however long the leg took.
+	lookPhase: number,
+	lookRate: number,
+	-- The clock the last time this entry was touched, so the phase can advance
+	-- by real elapsed time. apply() is called on a slice, so the gap between two
+	-- visits to the same plant is not the frame time.
+	lastNow: number,
 }
 
 -- Both an array (to walk in slices) and a map (to find one by model on removal).
@@ -380,6 +414,14 @@ local function remember(instance: Instance)
 				wanderSpeed(kg) / math.max(headHeight * 0.35, 0.25), 0.5, 3.2),
 			bob = math.min(headHeight * BOB_FRACTION, BOB_CEILING),
 			leaves = {},
+			-- Off the placement id, so no two plants in a bed are looking the
+			-- same way at the same moment.
+			lookPhase = (tonumber(model:GetAttribute("PlacementId")) or 0) * 1.7,
+			lookRate = lookRate(kg),
+			-- NOT zero. A plant registered ten minutes into a session would
+			-- otherwise take its first `dt` as ten minutes and snap to an
+			-- arbitrary bearing instead of the one the server stamped.
+			lastNow = clock,
 		}
 
 		--==============================================================
@@ -569,6 +611,34 @@ local function apply(entry: Sway, now: number)
 	end
 
 	--==========================================================================
+	-- THE LOOK-AROUND
+	--
+	-- The phase only advances while the plant is STANDING, which is what makes
+	-- this a look-around rather than a wobble: `1 - moveT` is one when it is
+	-- still, zero at the middle of a step, and smooth at both ends -- so it eases
+	-- to a stop as the plant sets off and picks up again where it left off when
+	-- it arrives. Nothing turns and travels at the same time.
+	--
+	-- Advanced by REAL elapsed time for this entry, not by frame time: apply()
+	-- runs on a slice, so the gap between two visits to one plant is whatever
+	-- the round robin gave it.
+	--
+	-- The yaw goes on the LEFT of the lean so the lean tips in the plant's own
+	-- frame -- it leans the way it is looking, which is what a thing turning to
+	-- look at something does.
+	--==========================================================================
+	local dt = math.max(now - entry.lastNow, 0)
+	entry.lastNow = now
+	local yaw = 0
+	if not entry.pod then
+		entry.lookPhase += dt * entry.lookRate * (1 - moveT)
+		yaw = math.sin(entry.lookPhase) * LOOK_AMP
+	end
+
+	local target = base * CFrame.Angles(0, yaw, 0) * CFrame.Angles(ax, 0, az) * entry.offset
+	entry.model:PivotTo(target)
+
+	--==========================================================================
 	-- ONE PivotTo, AND THE ARMS
 	--
 	-- PivotTo has already placed the leaves; these two writes then swing them
@@ -579,9 +649,6 @@ local function apply(entry: Sway, now: number)
 	-- Skipped entirely when it is standing: swing is zero there, and zero swing
 	-- is exactly what PivotTo already wrote.
 	--==========================================================================
-	local target = base * CFrame.Angles(ax, 0, az) * entry.offset
-	entry.model:PivotTo(target)
-
 	if moveT > 0.02 then
 		local swing = math.sin(now * entry.strideHz * math.pi * 2) * SWING_AMP * moveT
 		for _, leaf in ipairs(entry.leaves) do

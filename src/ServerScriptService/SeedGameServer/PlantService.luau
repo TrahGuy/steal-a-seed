@@ -100,6 +100,11 @@ type Planted = {
 	-- STAGE_POD (unhatched) or STAGE_GROWN (a creature you placed). Nothing in
 	-- the ground is ever a sprout any more.
 	stage: number,
+	-- Which way it stands, in radians, on top of the plot's own rotation. Saved
+	-- rather than derived, so a garden you arranged looks the same tomorrow --
+	-- placement ids are handed out again on every load and would shuffle every
+	-- plant's facing with them.
+	facing: number,
 	model: Model?,
 	prompt: ProximityPrompt?,
 }
@@ -191,6 +196,31 @@ local function topOf(soil: BasePart, offset: Vector3): CFrame
 end
 
 --==============================================================================
+-- WHICH WAY IT STANDS
+--
+-- Every plant used to face the plot gate, on purpose: a bed read as a crowd
+-- watching whoever walked in. In practice it read as a PARADE -- twelve
+-- identical bearings in a rectangle, which is the one arrangement free
+-- placement was supposed to stop being able to happen by accident.
+--
+-- So each gets its own. The GOLDEN ANGLE rather than a random number: 137.5
+-- degrees is the rotation that never lands near a previous one for any count,
+-- so ten plants placed in a row come out visibly scattered instead of
+-- occasionally paired. Random would clump about a third of the time and the
+-- clumps are exactly what this is for.
+--
+--     1 -> 137.5   2 -> 275.0   3 ->  52.5   4 -> 190.0   5 -> 327.5
+--
+-- It is a starting bearing, not a fixed one. PlantSway turns each plant a
+-- little on its own while it is standing still -- see the look-around there.
+--==============================================================================
+local GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))
+
+local function facingFor(index: number): number
+	return (index * GOLDEN_ANGLE) % (math.pi * 2)
+end
+
+--==============================================================================
 -- BUILDING WHAT IS IN THE GROUND
 --==============================================================================
 -- render() hangs the pick-up prompt on anything grown, and the prompt builders
@@ -209,12 +239,15 @@ local function render(entry: Planted)
 		return
 	end
 
-	-- Face the gate, so a plot reads as a garden looking at whoever walks in
-	-- rather than a row of backs.
+	-- The gate is still the reference -- the 180 turns a plant to look back down
+	-- its own plot rather than out of the fence -- and each plant's own bearing
+	-- is added on top of it. Applied LAST, so it is a turn about the plant's own
+	-- up axis whatever the plot's rotation on the ring happens to be.
 	local base = topOf(soil, entry.offset)
 	local model = CreatureModel.Build(entry.species, entry.kg, entry.stage,
 		CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
-			* entry.plot:GetPivot().Rotation, plantsFolder(entry.plot))
+			* entry.plot:GetPivot().Rotation
+			* CFrame.Angles(0, entry.facing, 0), plantsFolder(entry.plot))
 	-- IDENTITY, not position. PlantSway phases its idle off this so a bed is not
 	-- a chorus line, and GardenUI keys its rows on it.
 	model:SetAttribute("PlacementId", entry.id)
@@ -275,6 +308,7 @@ local function record(plot: Model): { any }
 				X = entry.offset.X,
 				Z = entry.offset.Z,
 				Stage = entry.stage,
+				Facing = entry.facing,
 			})
 		end
 	end
@@ -614,6 +648,10 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 		offset = offset,
 		plantedAt = os.time(),
 		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
+		-- Off the placement id, so consecutive plantings come out scattered.
+		-- Re-placing a plant you picked up gives it a NEW bearing, which is the
+		-- honest answer: you put it down again, facing a different way.
+		facing = facingFor(id),
 		model = nil,
 		prompt = nil,
 	}
@@ -748,6 +786,17 @@ local function restore(player: Player, plot: Model)
 				stage = CreatureModel.STAGE_POD
 			end
 
+			--==============================================================
+			-- A SAVE FROM BEFORE PLANTS FACED DIFFERENT WAYS HAS NO Facing
+			--
+			-- Every one of them was pointed at the gate. Restoring them that
+			-- way would hand somebody back the parade this change exists to
+			-- get rid of, so they are scattered ONCE on load off their
+			-- position in the save and written back out. After that the
+			-- bearing is the plant's own and never moves again.
+			--==============================================================
+			local facing = if row then tonumber(row.Facing) else nil
+
 			if species and at and x and z and stage and restored < cap then
 				local id = nextId[plot] + 1
 				nextId[plot] = id
@@ -759,6 +808,7 @@ local function restore(player: Player, plot: Model)
 					offset = clampToSoil(soil, (soil.CFrame * CFrame.new(x, 0, z)).Position),
 					plantedAt = at,
 					stage = stage,
+					facing = facing or facingFor(id),
 					model = nil,
 					prompt = nil,
 				}

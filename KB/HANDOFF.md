@@ -2945,9 +2945,10 @@ Three rules hold it together, and undoing any of them breaks the design rather t
     rectangle with the same `EdgeMarginStuds` `PlantService` clamps a click by. A bounds test, not a
     floor test -- nothing to fall through, nothing to path around, and the road is unreachable by
     construction.
-  * **They never turn.** Facing stays the rotation `PlantService.render` stamps, so every plant looks
-    at the plot gate while its feet move sideways and backwards. A bed of twelve is a crowd watching
-    whoever walks in. Steering would turn a crowd into a flock and lose the whole point.
+  * **They do not steer.** Each plant has its own bearing and walks sideways and backwards rather
+    than turning to face where it is going. Steering would point a whole bed one way -- the thing
+    free placement exists to stop -- and would spin every plant on the spot at the start of each leg.
+    It does turn slowly on its own while standing; see the look-around below.
   * **Pods stay put.** An egg does not stroll. Pods are in the set only for the hatch shake.
 
 **Targets are picked around HOME, never around where the plant currently stands.** A random walk that
@@ -2984,6 +2985,39 @@ rejoin takes the same one again.
 
 **Income does not care.** `GrownIn`, the Garden rows and CashPop all key off the planted entry; the
 server never sees the wander and the saved `offset` stays the planted home.
+
+### Every plant faces its own way, and looks around
+
+The first pass pointed every plant at the plot gate, on the reasoning that a bed reads as a crowd
+watching whoever walks in. In practice it read as a **parade** -- twelve identical bearings in a
+rectangle, which is precisely the arrangement free placement exists to stop happening by accident.
+
+Each plant now gets its own bearing, stamped by `PlantService.render` on top of the plot's rotation.
+**The golden angle, not a random number:** 137.5 degrees never lands near a previous one for any
+count, so plants placed one after another come out visibly scattered. Random clumps about a third of
+the time and the clumps are exactly what this is for.
+
+```
+1 -> 138    2 -> 275    3 -> 53    4 -> 190    5 -> 328    6 -> 105
+```
+
+**`Facing` is saved**, not derived on load. Placement ids are handed out again on every restore, so
+deriving would reshuffle every plant's bearing each time somebody rejoined. A save with no `Facing`
+is scattered once on load and written back; before this change every plant in it was pointed at the
+gate, and restoring that faithfully would hand the parade back.
+
+On top of the fixed bearing, a standing plant **turns slowly through ±28° and back** -- 12 seconds a
+sweep at 2 kg, 26 at 10,000, phased per plant so a bed does not sweep in unison.
+
+`lookPhase` **accumulates** rather than being read off the clock, because it has to stop while the
+plant walks and carry on from where it stopped. It advances by `1 - moveT`, which is one when
+standing, zero mid-step and smooth at both ends -- so a plant eases out of its look as it sets off
+and picks it up again when it arrives. Nothing ever turns and travels at once. The `dt` is real
+elapsed time for that entry, not frame time, because `apply()` runs on a slice.
+
+One trap worth not re-stepping in: `lastNow` is seeded to the current `clock`, not zero. A plant
+registered ten minutes into a session would otherwise take its first `dt` as ten minutes and snap to
+an arbitrary bearing instead of the one the server stamped.
 
 ### Unequip actually works now, and it was a weld
 
