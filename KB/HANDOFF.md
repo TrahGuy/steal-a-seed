@@ -3231,6 +3231,11 @@ has a raid carry without its billboard.
 
 ## Carrying a plant was not a carry — 2026-08-24
 
+> **The carried scale in this entry was REVERTED the same day** — see "A plant is the same plant in
+> your hands as in the ground" below. The drop fix and the `GripReach` fix stand; the shrinking does
+> not. Left here because the measurements are still the evidence for why the drop was wrong.
+
+
 `GiveHatched` handed the creature over at **full size** with its base at **foot level**. On a 2 kg
 Nubkin that is fine. On anything else it stopped being a carry.
 
@@ -3304,6 +3309,71 @@ above was run out of the real `GameConfig`. Three files compile.
 has fixed arms. The reach it now receives is correct; whether `43 + 9.2 * reach` still produces a
 good angle over the new, much smaller reach range (1.3 to 2.2 rather than 1.3 to 5.9) is untested and
 is the first thing to look at if the arms look wrong.
+
+## A plant is the same plant in your hands as in the ground — 2026-08-24
+
+The carried scale added an hour earlier is **reverted**. It was the wrong fix for a real problem, and
+the owner caught it immediately: *"the size when i carry it is not the same, big plants become small
+when picked up."*
+
+**Weight is the whole game and SIZE IS HOW WEIGHT IS READ.** Shrinking a 9,000 kg plant to the same
+silhouette as a 200 kg one — at the exact moment the player is deciding where to put it — takes the
+number away from them at the worst possible moment. A plant you pick up must be the plant you put
+down.
+
+**Do not reintroduce a carried scale.** If a 35-stud Bellchime is unwieldy in the hands, that is the
+cost of a 35-stud Bellchime, and the player chose it when they hauled a 10,000 kg pod home.
+
+### What was actually wrong was the drop
+
+`GripDrop - 2.2` put the base at roughly **foot level**, so the plant stood on the floor next to the
+player and read as a separate object that happened to follow them around — and on a small one it
+looked dropped rather than held. That is the whole of the original complaint, and it is fixed at
+every size by `GripDrop - 1.0`:
+
+```
+                    height   reach    base y    top y      feet 0, head 5.3
+Nubkin      2kg        1.5    1.30      1.65      3.15     chest height
+Bellchime 110kg        9.5    3.54      1.65     11.15
+Petalpip 1937kg       13.0    5.89      1.65     14.65
+Bellchime 10000kg     35.1   12.20      1.65     36.75
+```
+
+Base at hip height at every size: a small plant is at chest level in front of you, a huge one is
+visibly lifted clear of the ground rather than planted in it.
+
+### The one consequence worth knowing
+
+Reach is `GripForwardBase + halfWidth` — the same rule pods use, so the plant's near edge just clears
+the player. At full size that means **the heaviest plants ride a long way out**: 12.2 studs on a
+10,000 kg Bellchime, against 5.85 for the widest possible pod.
+
+If that reads as detached rather than carried, the lever is the reach, not the size:
+
+  * **cap it** (say at the pod maximum, 5.85) and heavy plants overlap the player — you stand inside
+    the skirt, which reads as hugging something enormous
+  * **leave it** and they float ahead of you, fully visible and never clipping
+
+Left uncapped for now because it matches the pod rule and nothing clips. Changing it is one line.
+
+### What survived from the reverted pass
+
+  * **`GripReach` on the Tool.** CarryPose aimed the arms with `SeedData.GripForward(kg)` — a POD's
+    radius — for whatever was in the player's hands. Right for a raid pod, wrong for a creature: a
+    Bellchime's skirt is four times its pod's diameter, so the arms pointed at empty air.
+    CarryService writes the measured reach on the Tool; `carriedReach` reads it. `bank` stamps it on
+    pod Tools too, so there is one source rather than two ways to answer one question.
+  * **The drop**, above.
+
+### Verified, and not
+
+The geometry table was measured off real models against a character-sized dummy before the revert and
+recomputed after. Compile-checked.
+
+**Not played,** and the screenshots for this pass were not taken — Studio was in a Play session. The
+two things to look at: whether a 10,000 kg plant at 12 studs out still reads as carried, and whether
+`43 + 9.2 * reach` in CarryPose gives a sane arm angle now that reach runs 1.3 to 12.2 rather than
+1.3 to 5.9 (it clamps at 82 degrees, so anything past ~4.2 studs gets the same pose).
 
 ## Still open
 

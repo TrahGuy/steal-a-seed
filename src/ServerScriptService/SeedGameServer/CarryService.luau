@@ -705,42 +705,38 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 		CreatureModel.STAGE_GROWN, CFrame.new(), backpack)
 
 	--==========================================================================
-	-- A CARRIED PLANT IS SHRUNK, AND IT HAS TO BE
+	-- FULL SIZE. A PLANT IS THE SAME PLANT IN YOUR HANDS AS IN THE GROUND.
 	--
-	-- This handed the creature over at FULL SIZE and stood its base at foot
-	-- level. On a 2 kg Nubkin that is fine. On anything else it stopped being a
-	-- carry: a 110 kg Bellchime is 9.5 studs against a 5-stud character and a
-	-- 10,000 kg one is 35, so what the player got was a plant standing on the
-	-- ground beside them, filling the screen, with no relationship to their
-	-- hands at all. Measured against a character-sized dummy, not guessed.
+	-- This briefly scaled heavy creatures down to something a person could
+	-- plausibly hold, and that was the wrong fix for a real problem. Weight is
+	-- the whole game and SIZE IS HOW WEIGHT IS READ -- shrinking a 9,000 kg
+	-- plant to the same silhouette as a 200 kg one at the exact moment the
+	-- player is deciding where to put it takes the number away from them at the
+	-- worst possible moment. A plant you pick up must be the plant you put down.
 	--
-	-- The curve and the reasoning are in GameConfig.Carry, because the numbers
-	-- belong with the other carry geometry rather than buried in here.
+	-- What was actually wrong was the DROP, below: the base sat at foot level,
+	-- so the thing read as standing on the ground beside the player rather than
+	-- being carried. That is fixed there, and it is fixed at every size.
+	--
+	-- Do not reintroduce a carried scale. If a 35-stud Bellchime is unwieldy in
+	-- the hands, that is the cost of a 35-stud Bellchime, and the player chose
+	-- it when they hauled a 10,000 kg pod home.
 	--==========================================================================
-	local finished = model:GetExtentsSize().Y
-	local scale = math.min(1,
-		(GameConfig.Carry.CarriedHeight / math.max(finished, 0.1))
-			^ GameConfig.Carry.CarriedFalloff)
-	if scale < 1 then
-		-- Scales about the model's pivot, which is the Base plate at its
-		-- ground contact -- so it shrinks toward its own feet and the grip
-		-- below still means what it says.
-		model:ScaleTo(scale)
-	end
-
-	-- Measured AFTER the scale, so the reach is the reach of the thing actually
-	-- in their hands.
 	local size = model:GetExtentsSize()
 	local halfWidth = math.max(size.X, size.Z) * 0.5
 	local reach = GameConfig.Carry.GripForwardBase + halfWidth
 	--==========================================================================
 	-- HELD AT THE HIP, NOT AT THE ANKLE
 	--
-	-- The old drop of -2.2 put the base at roughly foot level, which read as the
-	-- plant standing on the floor rather than being held -- and on a small one
-	-- it looked dropped. One stud below the chest puts the base at about hip
-	-- height on every size, so the thing is in the arms and the player can still
-	-- see over it.
+	-- THIS is what made carrying feel wrong. The old drop of -2.2 put the base
+	-- at roughly foot level, so the plant stood on the floor next to the player
+	-- and read as a separate object that happened to follow them around -- and
+	-- on a small one it looked dropped rather than held.
+	--
+	-- One stud below the chest puts the base at about hip height, which is the
+	-- one arrangement that reads as CARRIED at every size: a 1.5-stud Nubkin is
+	-- at chest level in front of you, and a 35-stud Bellchime is visibly lifted
+	-- clear of the ground rather than planted in it.
 	--==========================================================================
 	local grip = CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
 	local tool = giveTool(player, model, species, kg, grip, true)
@@ -752,8 +748,9 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	--
 	-- CarryPose aims the arms at whatever is being carried, and for a raid pod
 	-- it works that out from SeedData.GripForward(kg) -- which is a POD's
-	-- radius. A creature is a different shape from the shell it came out of and
-	-- is scaled on top of that, so the pod formula points the arms at empty air.
+	-- radius. A creature is a completely different shape from the shell it came
+	-- out of -- a Bellchime's skirt is four times its pod's diameter -- so the
+	-- pod formula points the arms at empty air.
 	--
 	-- One number, measured once here where the model still exists, and read
 	-- straight off the Tool there.

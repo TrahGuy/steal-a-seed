@@ -149,9 +149,9 @@ end
 --
 -- This used to compute SeedData.GripForward(kg) -- a POD's radius -- for
 -- whatever was in the player's hands. That is right for a raid pod and wrong
--- for everything else: a hatched creature is a different shape from the shell
--- it came out of, and it is SCALED DOWN to be carried on top of that, so the
--- pod formula aimed the arms at a place the plant was not.
+-- for everything else: a hatched creature is a completely different shape from
+-- the shell it came out of, and a Bellchime's skirt is four times its pod's
+-- diameter, so the pod formula aimed the arms at a place the plant was not.
 --
 -- CarryService writes the real number on the Tool as GripReach when it builds
 -- the grip, from the model it has in front of it. One measurement, taken where
