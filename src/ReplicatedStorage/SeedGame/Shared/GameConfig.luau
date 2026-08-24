@@ -707,99 +707,114 @@ function GameConfig.walkSpeedFor(speedScore: number): number
 end
 
 --==============================================================================
--- THE HUD RAIL IS ARTWORK NOW, NOT A DRAWN PLATE
+-- THE HUD RAIL IS DRAWN AGAIN, IN CODE
 --
--- Cropped from the owner's `shop index.png` and uploaded. The gold studded plate
--- that used to live here is gone: it was a code drawing of a look, and this is
--- the look itself.
+-- It was three crops of `shop index.png` -- another game's UI, uploaded to the
+-- asset server -- for about a day. They looked cropped because they were: the
+-- black outline and the diamond lattice were clipped on both sides, the Index
+-- badge had to be mirrored out of the artwork, and all three were pinned to the
+-- source's native 123 x 48 because a 170 x 152 screenshot has no resolution to
+-- spare.
 --
---     rail-shop.png    123 x 49   green slab, cart and "Shop" baked in
---     rail-index.png   123 x 48   blue slab, book and "Index" baked in
---     rail-slab.png     49 x 49   the same skin, blank, hue-rotated to amber
+-- HANDOFF wrote down where that ends before it was a problem: "redrawing the
+-- same look in code carries none of that risk and scales to any size." The
+-- lattice, the slab, the icons and the labels are instances again. The image ids
+-- are gone and `art/rail-*.png` stays on disk as reference for what the buttons
+-- once looked like, not as anything the game loads.
 --
--- The sources are committed under `art/` so the crops can be redone. The Index
--- crop needed repair -- the reference has a red "9" badge baked over its
--- top-right corner and the count is dynamic, so that region was rebuilt by
--- mirroring the slab VERTICALLY. It is symmetric top-to-bottom: matching
--- borders, a cross-hatch lattice, a centred label, and the only glyph inside the
--- damage is the final `x` of "Index", which is itself symmetric.
---
--- The Garden button has no reference of its own, so it borrows the family's
--- skin: strictly clean columns of the Shop slab -- no cart, no letters, checked
--- by luminance rather than by eye -- mirror-tiled so the diagonal lattice has no
--- seam, then hue-rotated so three buttons read as three things and not two.
---
--- SIZES ARE NATIVE AND DISPLAYED 1:1. The source screenshot is 170 x 152, so
--- there is no resolution to spare; scaling these up would only blur them.
+-- STRUCTURE AND NAMES, NOT BALANCE. Rule 7 is intact: nothing here decides what
+-- a thing is worth, only where it sits and what colour it is.
 --==============================================================================
 GameConfig.Rail = {
-	ShopImage = "rbxassetid://98659233032073",
-	ShopSize = Vector2.new(123, 49),
-	IndexImage = "rbxassetid://125233705163038",
-	IndexSize = Vector2.new(123, 48),
-	SlabImage = "rbxassetid://130383639526295",
-	SlabSize = Vector2.new(49, 49),
-
-	-- Left rail: Index at the top, Shop under it, panels below both.
+	-- Left rail: Index at the top, Shop under it. Garden sits opposite.
 	Inset = 12,
 	Gap = 6,
-	PanelTop = 126,
+
+	-- Wide enough for an icon and a word; the square one is icon only. Chosen
+	-- rather than inherited now -- 130 x 50 puts Shop's top at 68, exactly where
+	-- the 123 x 48 crop left it, so nothing below the rail moved.
+	WideSize = Vector2.new(130, 50),
+	SquareSize = Vector2.new(50, 50),
+	Radius = 12,
+	LabelSize = 22,
+	IconSize = 28,
+
+	-- Thick, and black. The outline is what made the reference read as a button
+	-- rather than as a coloured rectangle, and it is the one part the crops kept
+	-- losing at the edges.
+	Outline = Color3.fromRGB(0, 0, 0),
+	OutlineThickness = 3,
+
+	--==========================================================================
+	-- THREE FACES, SO THREE BUTTONS READ AS THREE THINGS
+	--
+	-- Each is a face and a shade for the gradient under it. Blue, green and
+	-- amber: far enough apart to be told apart at a glance in the corner of the
+	-- eye, and none of them a Greenhollow plant colour -- chrome should not be
+	-- mistakable for something growing.
+	--==========================================================================
+	IndexFace = Color3.fromRGB(64, 148, 220),
+	IndexShade = Color3.fromRGB(36, 102, 168),
+	ShopFace = Color3.fromRGB(86, 182, 72),
+	ShopShade = Color3.fromRGB(46, 126, 44),
+	GardenFace = Color3.fromRGB(236, 160, 52),
+	GardenShade = Color3.fromRGB(186, 110, 28),
+
+	-- Red, and one of the few things allowed outside ink / paper / accent: the
+	-- job of a badge is to be what the eye finds before it has decided to look.
+	Badge = Color3.fromRGB(226, 76, 76),
 }
 
 --==============================================================================
--- THE SHOP'S PALETTE, SAMPLED OFF THE OWNER'S THREE REFERENCE SHOTS
+-- THE SHOP'S PALETTE
 --
--- `shop ui 1.png`, `shop ui 2.png`, `shop ui 3.png` in the repo root. Every
--- value here came out of those files with a pixel sampler rather than off a
--- first impression -- the same discipline the corner HUD needed, and for the
--- same reason.
+-- The panel, the outline and the close button were sampled off the owner's
+-- three reference shots -- `shop ui 1.png`, `shop ui 2.png`, `shop ui 3.png` --
+-- with a pixel sampler rather than off a first impression. Those stay.
 --
 --     panel        rgb( 26, 28, 41)   very dark navy, black outline
 --     panel edge   rgb( 48, 50, 61)   the lighter inner lip
---     card cyan    rgb(  0,247,237) -> rgb(  0,116,229)   vertical gradient
---     card green   rgb(  4,229, 17) -> rgb( 19,126,  1)
---     buy button   rgb( 31,246,  0)   flat, with rgb(22,143,0) under it
 --     close        rgb(255,  0,  0)   white X, black outline
 --
--- The panel texture in the reference is a faint diagonal lattice with only ~5
--- units of luminance spread -- barely there. Ours is STUDDED instead, because
--- this game is blocky studded plastic (Rule 8) and a studded panel is the same
--- idea said in our own accent. Kept at the reference's contrast: any louder and
--- it competes with the cards it is behind.
+--==============================================================================
+-- THE CARDS ARE NOT CYAN ANY MORE
+--
+-- They were rgb(0,247,237) -> rgb(0,116,229), sampled straight off the same
+-- shots. Faithful, and wrong for this game: a cyan-to-blue tile with a
+-- lime-green button is another simulator's shelf, and it sat two panels away
+-- from an Index full of Greenhollow greens and creams. One HUD cannot be two
+-- games.
+--
+-- A plot card sells DIRT AND ROWS, so it is green now -- the same leaf-and-stem
+-- family the plants are drawn in -- with an amber button, which is the Garden
+-- rail's colour and the one warm thing on the panel. Amber against green reads
+-- at a glance; lime against green does not.
+--
+-- OWNED goes SLATE rather than green. When the available card was cyan, green
+-- could mean sold; now that available IS green, an owned card has to stop
+-- competing some other way, and going grey is what "you already have this"
+-- looks like everywhere.
 --
 -- These are NOT ink / paper / accent, exactly like the corner HUD is not. A shop
--- panel is a full-screen-ish surface with its own internal contrast to manage.
+-- panel is a large surface with its own internal contrast to manage.
 --==============================================================================
 GameConfig.Shop = {
 	Panel = Color3.fromRGB(26, 28, 41),
 	PanelEdge = Color3.fromRGB(48, 50, 61),
 	Outline = Color3.fromRGB(0, 0, 0),
-	Stud = Color3.fromRGB(72, 78, 104),
-	CardTop = Color3.fromRGB(0, 247, 237),
-	CardBottom = Color3.fromRGB(0, 116, 229),
-	CardBorder = Color3.fromRGB(0, 116, 229),
-	SoldTop = Color3.fromRGB(4, 229, 17),
-	SoldBottom = Color3.fromRGB(19, 126, 1),
-	Buy = Color3.fromRGB(31, 246, 0),
-	BuyShade = Color3.fromRGB(22, 143, 0),
+	CardTop = Color3.fromRGB(108, 176, 84),
+	CardBottom = Color3.fromRGB(56, 112, 52),
+	CardBorder = Color3.fromRGB(34, 76, 36),
+	SoldTop = Color3.fromRGB(88, 94, 108),
+	SoldBottom = Color3.fromRGB(50, 54, 66),
+	Buy = Color3.fromRGB(250, 190, 46),
+	BuyShade = Color3.fromRGB(186, 130, 20),
 	Close = Color3.fromRGB(255, 0, 0),
 	Title = Color3.fromRGB(255, 255, 255),
-	-- The section headings in the reference are each a different colour: yellow
-	-- for PASSES, cyan for SPEED. One per section, so a long shop reads as a
-	-- list of shelves rather than one wall.
-	Heading = Color3.fromRGB(0, 232, 237),
+	-- One colour per section, so a long shop reads as a list of shelves rather
+	-- than one wall.
+	Heading = Color3.fromRGB(250, 214, 108),
 	Locked = Color3.fromRGB(120, 124, 140),
-	-- The panel's studs stay far quieter than the rail's: there are cards
-	-- sitting on this and texture must never compete with them. No rim here --
-	-- a dark ring on an already-dark panel adds nothing but instances. Lifted
-	-- from rgb(52,56,76) at 0.82, which measured a luminance delta of 5 and was
-	-- as invisible as the rail's first attempt.
-	StudTransparency = 0.7,
-	-- Studs every this many pixels. 38 keeps a full-height panel near 150 of
-	-- them, which is built once and never touched again -- the alternative was
-	-- an image asset, and nothing in this repo is placed by hand.
-	StudPitch = 38,
-	StudSize = 11,
 }
 
 --==============================================================================

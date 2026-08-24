@@ -1,52 +1,49 @@
 --!strict
 -- Steal a Seed :: ShopUI
 --
--- The shop panel, on the left rail under the Index.
+-- The shop. Its button is on the left rail under the Index; the panel opens in
+-- the middle of the screen.
 --
 --==============================================================================
--- BUILT FROM THREE REFERENCE SHOTS, SAMPLED NOT EYEBALLED
+-- THE SHAPE CAME FROM THREE REFERENCE SHOTS. THE SKIN DID NOT.
 --
--- `shop ui 1.png`, `shop ui 2.png`, `shop ui 3.png` in the repo root. Every
--- colour is in GameConfig.Shop and every one of them came out of those files
--- with a pixel sampler. The shape borrowed from them:
+-- `shop ui 1.png`, `shop ui 2.png`, `shop ui 3.png` in the repo root. What was
+-- taken from them is the LAYOUT -- a very dark panel with a thick black outline,
+-- a title bar with an icon and a red X, coloured section headings so a long shop
+-- reads as shelves rather than one wall, and cards that are an illustration over
+-- a line of outlined text over a price button.
 --
---   * a very dark panel with a thick black outline and a faint texture
---   * a title bar: an icon, SHOP in heavy white with a black outline, and a red
---     X in the far corner
---   * coloured section headings, each a different colour, so a long shop reads
---     as a list of shelves rather than one wall
---   * cards: a vertical gradient inside a coloured border, an illustration, a
---     line of white outlined text, and a bright green price button
---
---==============================================================================
--- STUDDED, WHICH THE REFERENCE IS NOT
---
--- The reference panel carries a faint diagonal lattice -- measured at about five
--- units of luminance spread, barely there at all. The owner asked for STUDDED
--- instead, and it is the better call for this game: Rule 8 is blocky studded
--- plastic, and a studded panel says the same thing in our own accent.
---
--- Held at the reference's contrast on purpose. Studs are `rgb(52,56,76)` on a
--- `rgb(26,28,41)` panel at 0.82 transparency -- any louder and the texture
--- competes with the cards sitting on it, which is the one thing a shop panel
--- must never do.
---
--- Drawn as a grid of frames rather than a tiled image, because nothing in this
--- repo is placed by hand and there is no asset id to rot. Two hundred-odd static
--- frames, built once at login, never touched again and not rendered at all while
--- the panel is shut.
+-- What was NOT taken is the palette. The cards were sampled cyan-to-blue with a
+-- lime button, faithfully, and a cyan tile is another simulator's shelf: it sat
+-- two panels away from an Index full of Greenhollow greens and creams and made
+-- one HUD look like two games. Cards are green with an amber button now, the
+-- plot art is drawn in the biome's own stem, leaf and soil, and the type is
+-- LuckiestGuy like the rest of the screen. See GameConfig.Shop.
 --
 --==============================================================================
--- TWO LEFT PANELS CANNOT BOTH BE OPEN
+-- THE LATTICE, NOT STUDS
 --
--- The Index and this dock on the same edge at the same size, so they share one
--- rectangle. Rather than have either script reach into the other's ScreenGui,
--- both write their own name to the OpenPanel attribute and both close on seeing
--- a name that is not theirs.
+-- The panel was studded for a while -- Rule 8 is blocky studded plastic, and a
+-- studded panel said that in our own accent. It is a diamond lattice now for one
+-- reason: the rail buttons carry a lattice, and a panel textured one way opening
+-- off a button textured another is two surfaces pretending not to be related.
 --
--- The GARDEN is deliberately outside that arrangement: it is on the right rail,
--- it never overlaps either of these, and reading your own dirt while looking at
--- a price is exactly what two rails are for.
+-- One builder in UIKit draws all of it -- rail slab, panel, buy button -- so the
+-- diamonds are the same size and the same angle wherever they turn up. Held far
+-- back on the panel: there are cards sitting on this and texture must never
+-- compete with them.
+--
+--==============================================================================
+-- ONE CENTRE PANEL AT A TIME
+--
+-- The Index, the Garden and this all open in the same rectangle now, so all
+-- three are in the mutex. Rather than have any script reach into another's
+-- ScreenGui, each writes its own name to the OpenPanel attribute and closes on
+-- seeing a name that is not its own.
+--
+-- The Garden used to be excluded, on the grounds that it docked on the RIGHT
+-- rail and could never overlap these two. That was true of a docked panel and is
+-- not true of a modal.
 --
 --==============================================================================
 -- NOTHING IS BUYABLE YET, AND THE BUTTONS SAY SO
@@ -63,11 +60,11 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
@@ -77,13 +74,19 @@ local SHOP = GameConfig.Shop
 local ATTR = GameConfig.Attributes
 local PANEL_NAME = "Shop"
 
+local RAIL = GameConfig.Rail
 local WHITE = Color3.fromRGB(255, 255, 255)
-local PANEL_WIDTH = 430
--- Below BOTH left-rail slabs, computed from their real heights rather than
--- typed, so neither button is ever covered by the panel it opened.
-local PANEL_TOP = GameConfig.Rail.PanelTop
-local SLIDE = 0.22
-local CARD_COLUMNS = 2
+--==============================================================================
+-- THE PANEL OPENS IN THE MIDDLE NOW
+--
+-- It used to slide in from x = -width and dock under the rail at a fixed
+-- PANEL_TOP. Three panels doing that on two opposite edges is three mental
+-- models of one interaction, and a docked panel is either unreadably narrow on a
+-- phone or the whole screen anyway. UIKit.modal owns the geometry; this is only
+-- the cap it may grow to.
+--==============================================================================
+local MAX_WIDTH = 460
+local MAX_HEIGHT = 560
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -126,183 +129,79 @@ local function gradient(parent: Instance, top: Color3, bottom: Color3)
 	return g
 end
 
--- Heavy white text with a thick black outline, which is every readable string in
--- the reference. Upright, not the HUD's LuckiestGuy: the reference's shop text
--- has no slant to it.
+--==============================================================================
+-- LUCKIESTGUY, NOT GOTHAM
+--
+-- This used to build GothamBlack, with a comment saying the reference's shop
+-- text has no slant to it. True of the reference and wrong for this HUD: the
+-- corner cash readout is LuckiestGuy, so a shop in Gotham made two thirds of the
+-- screen look like two different applications. Matching another game's font
+-- choice is not the goal -- looking like ONE game is.
+--
+-- One helper, in UIKit, so the Index cards, these prices and the Garden rows
+-- cannot drift apart again.
+--==============================================================================
 local function outlined(parent: Instance, size: number, colour: Color3,
 	thickness: number): TextLabel
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
-	label.TextSize = size
-	label.TextColor3 = colour
-	label.Text = ""
-	label.Parent = parent
-	stroke(label, SHOP.Outline, thickness)
-	return label
-end
-
---==============================================================================
--- THE TOOLBOX
---
--- Frames, not a glyph -- the same reason the Index book, the Garden sprout and
--- the HUD sneaker are frames. A red box with a grey handle over it; the handle
--- is an outlined frame with no fill, which is a loop without needing a hole.
---==============================================================================
-local function toolbox(parent: Instance, scale: number): Frame
-	local box = Instance.new("Frame")
-	box.Name = "Toolbox"
-	box.BackgroundTransparency = 1
-	box.Size = UDim2.fromOffset(math.floor(30 * scale), math.floor(30 * scale))
-	box.Parent = parent
-
-	local handle = Instance.new("Frame")
-	handle.Name = "Handle"
-	handle.AnchorPoint = Vector2.new(0.5, 0)
-	handle.Position = UDim2.new(0.5, 0, 0, 0)
-	handle.Size = UDim2.fromOffset(math.floor(16 * scale), math.floor(13 * scale))
-	handle.BackgroundTransparency = 1
-	handle.Parent = box
-	corner(handle, math.max(2, math.floor(4 * scale)))
-	stroke(handle, Color3.fromRGB(150, 152, 160), math.max(2, 3 * scale))
-
-	local body = Instance.new("Frame")
-	body.Name = "Body"
-	body.AnchorPoint = Vector2.new(0.5, 1)
-	body.Position = UDim2.new(0.5, 0, 1, 0)
-	body.Size = UDim2.fromOffset(math.floor(28 * scale), math.floor(18 * scale))
-	body.BackgroundColor3 = Color3.fromRGB(226, 32, 32)
-	body.BorderSizePixel = 0
-	body.Parent = box
-	corner(body, math.max(2, math.floor(4 * scale)))
-	stroke(body, SHOP.Outline, math.max(2, 2 * scale))
-
-	local lip = Instance.new("Frame")
-	lip.Name = "Lip"
-	lip.AnchorPoint = Vector2.new(0.5, 0)
-	lip.Position = UDim2.new(0.5, 0, 0, 0)
-	lip.Size = UDim2.new(1, math.floor(4 * scale), 0, math.floor(6 * scale))
-	lip.BackgroundColor3 = Color3.fromRGB(248, 66, 66)
-	lip.BorderSizePixel = 0
-	lip.ZIndex = 2
-	lip.Parent = body
-	corner(lip, math.max(2, math.floor(3 * scale)))
-
-	return box
+	return UIKit.outlined(parent, "Label", size, colour, thickness)
 end
 
 --==============================================================================
 -- THE RAIL BUTTON
---==============================================================================
---==============================================================================
--- THE BUTTON IS THE ARTWORK
 --
--- The cart and the word "Shop" are painted into `rail-shop.png`, so the toolbox
--- and the label that used to be built here are gone. The toolbox function stays
--- -- the panel's own title bar still draws one.
+-- Green slab, a cart, and the word. It was a crop of `shop index.png` for a day
+-- -- black outline clipped on both sides, "Shop" baked into the PNG -- and it is
+-- instances again. The red toolbox that used to sit in the panel's title bar
+-- went with it: the rail says CART, so the panel says cart too, because two
+-- icons for one shop is how a player learns there are two shops.
 --
--- Positioned off the Index slab rather than a typed 68, so the two cannot drift
--- apart when either crop is redone at a different height.
+-- Positioned off the Index slab's real height rather than a typed 68, so the two
+-- cannot drift apart when either is resized.
 --==============================================================================
-local RAIL = GameConfig.Rail
-local button = UIKit.railButton(gui, RAIL.ShopImage, RAIL.ShopSize)
-button.Name = "ShopButton"
-button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.IndexSize.Y + RAIL.Gap)
+local button = UIKit.railButton(playerGui, {
+	name = "ShopButton",
+	face = RAIL.ShopFace,
+	shade = RAIL.ShopShade,
+	label = "Shop",
+	wide = true,
+})
+button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
+UIKit.cartIcon(button, RAIL.IconSize, RAIL.ShopShade)
 
 --==============================================================================
 -- THE PANEL
 --==============================================================================
-local panel = Instance.new("Frame")
-panel.Name = "Panel"
-panel.Position = UDim2.new(0, -PANEL_WIDTH - 30, 0, PANEL_TOP)
-panel.Size = UDim2.new(0, PANEL_WIDTH, 1, -(PANEL_TOP + 14))
-panel.BackgroundColor3 = SHOP.Panel
-panel.BorderSizePixel = 0
-panel.ClipsDescendants = true
-panel.Visible = false
-panel.Parent = gui
-corner(panel, 16)
-stroke(panel, SHOP.Outline, 3)
-
-local panelSize = Instance.new("UISizeConstraint")
-panelSize.MinSize = Vector2.new(PANEL_WIDTH, 260)
-panelSize.MaxSize = Vector2.new(PANEL_WIDTH, 620)
-panelSize.Parent = panel
-
---==============================================================================
--- THE STUDS
---
--- Sized for the panel's MAXIMUM height and clipped by the panel, so a short
--- screen simply shows fewer of them and nothing has to be rebuilt on a resize.
---==============================================================================
--- Same builder the rail buttons use, at the panel's own coarser pitch. The
--- panel already clips, and the grid is sized for its MAXIMUM height so a short
--- screen just shows fewer studs.
--- No rim: a dark ring on an already-dark panel is instances without contrast.
-UIKit.studs(panel, PANEL_WIDTH, panelSize.MaxSize.Y, {
-	pitch = SHOP.StudPitch,
-	size = SHOP.StudSize,
-	colour = SHOP.Stud,
-	transparency = SHOP.StudTransparency,
+local modal = UIKit.modal(gui, {
+	name = PANEL_NAME,
+	title = "SHOP",
+	maxWidth = MAX_WIDTH,
+	maxHeight = MAX_HEIGHT,
 })
 
---==============================================================================
--- THE TITLE BAR
---==============================================================================
-local titleBar = Instance.new("Frame")
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 52)
-titleBar.BackgroundTransparency = 1
-titleBar.Parent = panel
+local titleBar = modal.title.Parent :: Frame
+UIKit.cartIcon(titleBar, 30, SHOP.CardBorder)
+modal.title.Position = UDim2.new(0, 46, 0.5, 0)
+modal.title.Size = UDim2.new(1, -98, 1, 0)
 
-local titleIcon = toolbox(titleBar, 1.25)
-titleIcon.AnchorPoint = Vector2.new(0, 0.5)
-titleIcon.Position = UDim2.new(0, 14, 0.5, 0)
-
-local title = outlined(titleBar, 30, SHOP.Title, 3)
-title.Name = "Title"
-title.Position = UDim2.fromOffset(60, 0)
-title.Size = UDim2.new(1, -130, 1, 0)
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Text = "SHOP"
-
-local close = Instance.new("TextButton")
-close.Name = "Close"
-close.AnchorPoint = Vector2.new(1, 0.5)
-close.Position = UDim2.new(1, -14, 0.5, 0)
-close.Size = UDim2.fromOffset(38, 38)
-close.BackgroundColor3 = SHOP.Close
-close.BorderSizePixel = 0
-close.AutoButtonColor = false
-close.Font = Enum.Font.GothamBlack
-close.TextSize = 22
-close.TextColor3 = WHITE
-close.Text = "X"
-close.Parent = titleBar
-corner(close, 9)
--- One stroke. It outlines the red square AND the X inside it, because a UIStroke
--- on a TextButton does both.
-stroke(close, SHOP.Outline, 3)
+local close = modal.close
 
 --==============================================================================
 -- THE BODY
 --==============================================================================
 local body = Instance.new("ScrollingFrame")
 body.Name = "Body"
-body.Position = UDim2.fromOffset(0, 52)
-body.Size = UDim2.new(1, 0, 1, -52)
+body.Size = UDim2.fromScale(1, 1)
 body.BackgroundTransparency = 1
 body.BorderSizePixel = 0
 body.ScrollBarThickness = 4
 body.ScrollBarImageColor3 = SHOP.PanelEdge
 body.CanvasSize = UDim2.new()
 body.AutomaticCanvasSize = Enum.AutomaticSize.Y
-body.Parent = panel
+body.ZIndex = 3
+body.Parent = modal.body
 
 local bodyPad = Instance.new("UIPadding")
-bodyPad.PaddingLeft = UDim.new(0, 14)
-bodyPad.PaddingRight = UDim.new(0, 14)
-bodyPad.PaddingBottom = UDim.new(0, 14)
+bodyPad.PaddingBottom = UDim.new(0, 12)
 bodyPad.Parent = body
 
 local bodyList = Instance.new("UIListLayout")
@@ -314,14 +213,45 @@ bodyList.Parent = body
 --==============================================================================
 -- SECTIONS AND CARDS
 --==============================================================================
-local CARD_WIDTH = math.floor((PANEL_WIDTH - 28 - 10 - 6) / CARD_COLUMNS)
-local CARD_HEIGHT = 186
+--==============================================================================
+-- THE CARDS ARE MEASURED, NOT TYPED
+--
+-- The panel used to be exactly 430 wide, so a card could be a constant. A modal
+-- is a fraction of the screen with a cap, and the same script now has to lay out
+-- at 248 pixels and at 460 -- so every shelf sizes its cells off the body it is
+-- in and re-sizes them when the screen turns.
+--==============================================================================
+local GUTTER = 10
+local CARD_ASPECT = 1.30
+
+local shelves: { UIGridLayout } = {}
+
+local function relayout()
+	local width = body.AbsoluteSize.X
+	if width <= 0 then
+		return
+	end
+	local columns = if width >= 400 then 3 else 2
+	local cell = math.floor((width - GUTTER * (columns - 1) - 6) / columns)
+	for _, grid in ipairs(shelves) do
+		grid.CellSize = UDim2.fromOffset(cell, math.floor(cell * CARD_ASPECT))
+		grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
+	end
+end
+
+-- Height the panel to whatever the shelves add up to. Read off the layout
+-- rather than counted here, because one shelf today is three shelves later and
+-- a sum written twice is a sum that disagrees with itself.
+local function fit()
+	modal.fitContent(bodyList.AbsoluteContentSize.Y + 12)
+end
 
 local function section(order: number, heading: string, colour: Color3): Frame
 	local header = outlined(body, 22, colour, 3)
 	header.Name = heading .. "Header"
 	header.LayoutOrder = order
 	header.Size = UDim2.new(1, 0, 0, 32)
+	header.TextXAlignment = Enum.TextXAlignment.Left
 	header.Text = heading
 
 	local shelf = Instance.new("Frame")
@@ -330,13 +260,16 @@ local function section(order: number, heading: string, colour: Color3): Frame
 	shelf.Size = UDim2.new(1, 0, 0, 0)
 	shelf.AutomaticSize = Enum.AutomaticSize.Y
 	shelf.BackgroundTransparency = 1
+	shelf.ZIndex = 3
 	shelf.Parent = body
 
 	local grid = Instance.new("UIGridLayout")
-	grid.CellSize = UDim2.fromOffset(CARD_WIDTH, CARD_HEIGHT)
-	grid.CellPadding = UDim2.fromOffset(10, 10)
+	grid.CellSize = UDim2.fromOffset(140, 182)
+	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
 	grid.SortOrder = Enum.SortOrder.LayoutOrder
+	grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	grid.Parent = shelf
+	table.insert(shelves, grid)
 
 	return shelf
 end
@@ -374,24 +307,26 @@ local function buildCard(parent: Instance, order: number): Card
 	corner(fill, 10)
 	local tint = gradient(fill, SHOP.CardTop, SHOP.CardBottom)
 
+	-- Scale, not offset: the cell is measured off the panel now, so a card laid
+	-- out at 248 pixels and one at 460 have to fill themselves the same way.
 	local art = Instance.new("Frame")
 	art.Name = "Art"
 	art.AnchorPoint = Vector2.new(0.5, 0)
-	art.Position = UDim2.new(0.5, 0, 0, 10)
-	art.Size = UDim2.fromOffset(96, 68)
+	art.Position = UDim2.new(0.5, 0, 0.04, 0)
+	art.Size = UDim2.new(0.84, 0, 0.44, 0)
 	art.BackgroundTransparency = 1
 	art.Parent = fill
 
 	local titleLabel = outlined(fill, 19, WHITE, 3)
 	titleLabel.Name = "Title"
-	titleLabel.Position = UDim2.fromOffset(0, 84)
+	titleLabel.Position = UDim2.new(0, 0, 0.52, 0)
 	titleLabel.Size = UDim2.new(1, 0, 0, 26)
 
 	local buy = Instance.new("TextButton")
 	buy.Name = "Buy"
 	buy.AnchorPoint = Vector2.new(0.5, 1)
-	buy.Position = UDim2.new(0.5, 0, 1, -10)
-	buy.Size = UDim2.new(1, -20, 0, 34)
+	buy.Position = UDim2.new(0.5, 0, 1, -9)
+	buy.Size = UDim2.new(1, -18, 0, 34)
 	buy.BackgroundColor3 = SHOP.Buy
 	buy.BorderSizePixel = 0
 	buy.AutoButtonColor = false
@@ -399,6 +334,14 @@ local function buildCard(parent: Instance, order: number): Card
 	buy.Parent = fill
 	corner(buy, 8)
 	stroke(buy, SHOP.Outline, 3)
+	-- The same lattice as the rail slab and the panel behind it, at the button's
+	-- own tighter pitch. Three surfaces, one texture, one angle.
+	UIKit.lattice(buy, {
+		spacing = 16,
+		thickness = 2,
+		transparency = 0.84,
+		inset = 3,
+	})
 
 	local shade = Instance.new("Frame")
 	shade.Name = "Shade"
@@ -429,48 +372,53 @@ end
 --==============================================================================
 -- A PLOT, DRAWN SMALL
 --
--- Soil with sprouts standing in it. Frames again, and the row count is what the
--- card is selling, so the art says it too.
+-- Soil with sprouts standing in it, and the row count is what the card sells so
+-- the art says it too.
+--
+-- IN THE BIOME'S OWN COLOURS. This used to be rgb(96,66,48) dirt with
+-- rgb(124,182,92) stems picked to sit on a cyan tile -- one of them happened to
+-- be the real stem colour and the other two did not. They come off SeedData now,
+-- which is the same stem, leaf and soil every Greenhollow plant shares and the
+-- same three the Index portraits are drawn in. A shop selling dirt should be
+-- selling THIS game's dirt.
 --==============================================================================
 local function plotArt(parent: Frame, sprouts: number)
 	for _, existingChild in ipairs(parent:GetChildren()) do
 		existingChild:Destroy()
 	end
 
-	local soil = Instance.new("Frame")
-	soil.Name = "Soil"
-	soil.AnchorPoint = Vector2.new(0.5, 1)
-	soil.Position = UDim2.new(0.5, 0, 1, -4)
-	soil.Size = UDim2.fromOffset(88, 22)
-	soil.BackgroundColor3 = Color3.fromRGB(96, 66, 48)
-	soil.BorderSizePixel = 0
-	soil.Parent = parent
-	corner(soil, 6)
-	stroke(soil, SHOP.Outline, 2)
+	-- A heap with a peak, not a plank. The first pass drew one thin bar and the
+	-- sprouts read as lollipops standing on a shelf.
+	local bed = UIKit.piece(parent, "Bed", 0.5, 0.80, 0.88, 0.32,
+		SeedData.Soil, 0.30, nil, 3)
+	stroke(bed, SHOP.Outline, 2)
+	for _, clod in ipairs({ { 0.20, 0.84, 0.28, 0.24 }, { 0.80, 0.85, 0.26, 0.22 } }) do
+		local lump = UIKit.piece(parent, "Clod", clod[1], clod[2], clod[3], clod[4],
+			SeedData.Soil, 0.5, nil, 3)
+		stroke(lump, SHOP.Outline, 2)
+	end
 
-	local spacing = 84 / (sprouts + 1)
+	--==========================================================================
+	-- OUTLINED, BECAUSE THE CARD IS GREEN NOW
+	--
+	-- These sprouts were legible on a cyan tile without any help. On the green
+	-- card that replaced it they are green on green, and the black edge is the
+	-- only thing separating them -- which is what every illustration in the
+	-- reference does anyway.
+	--==========================================================================
 	for i = 1, sprouts do
-		local stem = Instance.new("Frame")
-		stem.Name = "Stem" .. i
-		stem.AnchorPoint = Vector2.new(0.5, 1)
-		stem.Position = UDim2.new(0, math.floor(6 + spacing * i), 1, -22)
-		stem.Size = UDim2.fromOffset(5, 20)
-		stem.BackgroundColor3 = Color3.fromRGB(124, 182, 92)
-		stem.BorderSizePixel = 0
-		stem.Parent = parent
-		corner(stem, 2)
+		local x = 0.16 + (0.68 * (i - 0.5) / sprouts)
+		local stem = UIKit.piece(parent, "Stem" .. i, x, 0.55, 0.055, 0.44,
+			SeedData.Stem, 0.3, nil, 4)
 		stroke(stem, SHOP.Outline, 2)
-
-		local head = Instance.new("Frame")
-		head.Name = "Head" .. i
-		head.AnchorPoint = Vector2.new(0.5, 1)
-		head.Position = UDim2.new(0, math.floor(6 + spacing * i), 1, -38)
-		head.Size = UDim2.fromOffset(16, 16)
-		head.BackgroundColor3 = Color3.fromRGB(146, 196, 106)
-		head.BorderSizePixel = 0
-		head.Parent = parent
-		corner(head, 8)
-		stroke(head, SHOP.Outline, 2)
+		for _, side in ipairs({ -1, 1 }) do
+			local leaf = UIKit.piece(parent, "Leaf" .. i, x + side * 0.062, 0.50,
+				0.12, 0.16, SeedData.Leaf, 0.5, side * 30, 5)
+			stroke(leaf, SHOP.Outline, 2)
+		end
+		local bud = UIKit.piece(parent, "Bud" .. i, x, 0.27, 0.14, 0.24,
+			SeedData.Species[1].Body, 0.5, nil, 5)
+		stroke(bud, SHOP.Outline, 2)
 	end
 end
 
@@ -490,6 +438,13 @@ for tier = 2, #GameConfig.PlotTiers do
 	plotArt(card.art, math.min(4, tier))
 	card.title.Text = string.format("%d SLOTS", GameConfig.plotSlotsFor(rows))
 end
+
+-- Every shelf exists now, so the cells can be measured. Bound to the body rather
+-- than fired once: a phone that turns sideways is a resize, not a rebuild.
+body:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+bodyList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(fit)
+relayout()
+fit()
 
 --==============================================================================
 -- WHAT THE CARDS SAY, GIVEN WHERE THE PLAYER IS
@@ -595,6 +550,10 @@ end
 
 --==============================================================================
 -- OPEN AND SHUT
+--
+-- ONE CENTRE PANEL AT A TIME, and the Garden is in the mutex now. It used to be
+-- excluded because it docked on the RIGHT rail and could not overlap these two;
+-- all three open in the same rectangle now, so all three have to take turns.
 --==============================================================================
 local open = false
 
@@ -604,32 +563,20 @@ local function setOpen(want: boolean)
 	end
 	open = want
 	if want then
-		-- Claim the left rail. Whoever else is holding it closes on this.
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
-		panel.Visible = true
-		panel.Position = UDim2.new(0, -PANEL_WIDTH - 30, 0, PANEL_TOP)
-		TweenService:Create(panel, TweenInfo.new(SLIDE, Enum.EasingStyle.Quad,
-			Enum.EasingDirection.Out), { Position = UDim2.new(0, 12, 0, PANEL_TOP) }):Play()
-	else
-		if player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
-			player:SetAttribute(ATTR.OpenPanel, nil)
-		end
-		local slideOut = TweenService:Create(panel, TweenInfo.new(SLIDE,
-			Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{ Position = UDim2.new(0, -PANEL_WIDTH - 30, 0, PANEL_TOP) })
-		slideOut:Play()
-		slideOut.Completed:Connect(function()
-			if not open then
-				panel.Visible = false
-			end
-		end)
+	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
+		player:SetAttribute(ATTR.OpenPanel, nil)
 	end
+	modal.setOpen(want)
 end
 
 button.Activated:Connect(function()
 	setOpen(not open)
 end)
 close.Activated:Connect(function()
+	setOpen(false)
+end)
+modal.dimmer.Activated:Connect(function()
 	setOpen(false)
 end)
 

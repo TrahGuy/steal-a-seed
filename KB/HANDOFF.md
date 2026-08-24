@@ -3530,6 +3530,161 @@ Garden row and drives `ColorForKg`; only the tooltip stopped spelling it.
 
 Block-balanced. Not parsed by a compiler and not played.
 
+## The HUD is drawn again, not cropped — 2026-08-25
+
+The rail was three crops of `shop index.png` for two days. They looked cropped because they were: the
+black outline and the diamond lattice clipped on both sides, the Index badge mirrored out of the
+artwork, and all three pinned to the source's native 123 x 48 because a 170 x 152 screenshot has no
+resolution to spare. HANDOFF had already written down where that ends — *redrawing the same look in
+code carries none of that risk and scales to any size* — so this is that.
+
+`GameConfig.Rail` holds a palette and geometry now instead of three `rbxassetid`s. `art/rail-*.png`
+stays on disk as a record of what the buttons used to look like; nothing loads it.
+
+### One slab builder, three buttons
+
+`UIKit.slab` is a rounded rect, a thick black outline, a vertical gradient and a lattice. The rail
+buttons are slabs, the panels are slabs and the shop's buy buttons are slabs, so the diamonds are the
+same size and the same angle wherever they turn up.
+
+```
+Index   blue    130 x 50   book icon, "Index"
+Shop    green   130 x 50   cart icon, "Shop"      top at y 68, off the Index slab's height
+Garden  amber    50 x 50   sprout icon, no word
+```
+
+130 x 50 was chosen rather than inherited: it puts Shop's top at exactly the 68 the old crop left it
+at, so nothing below the rail moved. Icons are frames — the book, the cart and the sprout GardenUI
+was already drawing. `PanelTop` is gone with the dock.
+
+### ClipsDescendants DOES NOT CLIP A ROTATED CHILD
+
+Worth the heading. The lattice was one long line per row — the box's diagonal plus a margin — rotated
+45 degrees inside a `ClipsDescendants` holder. The holder reported `true` and clipped nothing:
+
+```
+Index button   position 12, 12   size 130 x 50
+its lattice    26 lines, 176 px long, spanning x -87..241, y -40..114
+```
+
+So every surface sprayed diamonds a hundred pixels past its own border, across the sky and the grass,
+and the texture read as belonging to the world rather than to the button. The panel was worse: its
+lattice was built for the 480 x 540 CAP rather than the panel's real size, so it covered the screen.
+
+**The fix is not a better clip, it is a shorter line.** Each row is drawn as the exact CHORD where its
+line crosses the box, so no part of any line is ever outside and no clipping is involved. Box centred,
+half-width `a`, half-height `b`, `c = sin 45`:
+
+```
+|d + t| <= a / c        and        |t - d| <= b / c
+```
+
+Intersecting those two ranges gives the visible span; a row whose span comes out empty misses the box
+and is not drawn. Both diagonal families reduce to the same pair, so one piece of arithmetic does
+both. Fewer instances as a result — fourteen lines on a rail button against twenty-six.
+
+`UIKit.lattice` measures its own parent now instead of being told a size, and rebuilds on resize —
+deferred 0.12s, because the open tween moves `AbsoluteSize` every frame and rebuilding forty-six
+frames per frame is the per-frame allocation Rule 8 exists to prevent. A few pixels of inset keep the
+chords clear of the rounded corner, where a chord cut to the plain rectangle would show outside the
+stroke by about 0.3 of the radius.
+
+### The panels open in the middle
+
+All three slid in from an edge and docked under the rail. A docked panel covers the button that
+closes it, a left panel and a right panel are two mental models of one interaction, and on a phone an
+edge-docked panel is either unreadably narrow or the whole screen anyway.
+
+`UIKit.modal` is a dimmer, a CanvasGroup and a shell: fade plus a 0.92 scale, red X, click the dimmer
+to close. One `GroupTransparency` tween fades the whole subtree; the alternative is walking the
+descendants and remembering what each was transparent to begin with. `fitContent` heights the panel
+to what is in it — five cards in a panel sized for twelve garden rows is two thirds empty, and empty
+is what a broken panel looks like.
+
+**The Garden joined the mutex.** It was deliberately outside it on the grounds that it docked on the
+RIGHT rail and could never overlap the other two. True of a docked panel, not of a modal.
+
+### The rail is its own layer, and that was a real bug
+
+Each button used to live in its own ScreenGui. Once panels became modals a dimmer filled the screen,
+ScreenGuis stack by DisplayOrder, and the Shop's dimmer at 32 sat on top of the Garden button at 30.
+
+**Clicking Garden while the Shop was open hit the dimmer.** The shop closed, the garden never opened,
+and nothing errored anywhere — the only trace was `OpenPanel` going to nil. All three buttons now
+share a `SeedRail` ScreenGui at DisplayOrder 40: above every dimmer, below SeedAlert's RUN vignette at
+50, because an alarm outranks a menu. Shared rather than owned, so a script that re-runs takes out its
+own button by name and leaves the other two standing.
+
+### The Index is a grid of plants
+
+It was five 46-pixel rows, each a coloured square beside a name. The square was the FORM RARITY
+colour, so a bed of five species read as a column of five TIERS — cream, cream, green, blue, purple —
+and there was no plant anywhere on the panel. An almanac whose entries are indistinguishable from a
+legend is not an almanac.
+
+Cards now, in a wrapping grid, two columns on a phone and three when there is room, measured off the
+panel rather than typed. Each card is a silhouette over a name over the form rarity word.
+
+`UIKit.plantPortrait` draws the five forms from frames — cube, orb, teardrop, mushroom, bell — with
+the engine's shape rules intact: a mushroom cap is a rounded pill with a gill bar cutting its
+underside, a teardrop is a circle with a rotated square behind it, a bell is tiers widening downward.
+The face is the model's nine parts, glint upper-LEFT on both eyes, smile in three blocks with the ends
+lifted.
+
+**Not a ViewportFrame.** Five live creatures at 29 to 40 parts each is 170 parts of camera work behind
+a panel, on a phone, for a picture that never moves.
+
+An unseen card is the same silhouette in one flat grey with no face and no accents, `???`, and **no
+tier — spelled or tinted.** The border stays grey rather than taking `FormColor`: Epic means Bellchime
+in Greenhollow, so a tinted border spells the tier in another alphabet. No kg and no $/s anywhere on
+this panel, and `ColorForKg` never touches it.
+
+Two flat-drawing fixes the first render caught: Bellchime's tiers were one white lump until each step
+took a shade of black — in three dimensions they separate by catching the light, and flat they do not
+— and Spiretip's collar at 0.34 wide in a near-white crown read as a plank laid across the plant.
+
+### Shop and Garden follow the same chrome
+
+Both keep what they are. The Shop still sells plot tiers and still says SOON, because there is still
+no ShopService; the Garden is still a slot list with the clocks running and still tints a grown row's
+name by `ColorForKg`.
+
+What changed is the skin. **The cards are not cyan any more** — they were sampled faithfully off the
+reference shots, and a cyan-to-blue tile with a lime button is another simulator's shelf sitting two
+panels away from an Index full of Greenhollow greens. Cards are green with an amber button, owned goes
+slate rather than green now that available is green, and the plot art is drawn in the biome's own
+stem, leaf and soil off `SeedData` — which is why `Leaf` and `Soil` are exported beside `Stem`.
+
+**No Gotham left on any of the three panels.** Everything runs through `UIKit.outlined`, which is
+CashUI's LuckiestGuy-plus-black-stroke recipe in one place. The shop's local `outlined` carried a
+comment saying the reference's shop text has no slant to it; true of the reference, and wrong for a
+HUD whose corner cash readout is LuckiestGuy.
+
+The panel texture went from studs to the lattice for one reason: the rail buttons carry a lattice, and
+a panel textured one way opening off a button textured another is two surfaces pretending not to be
+related. `UIKit.studs` and the `GameConfig.Shop.Stud*` values are gone with it.
+
+### Verified, and not
+
+Played. Every claim above was clicked, not assumed:
+
+  * all six changed files compile-checked over the localhost 8731 route
+  * each button opens its panel in the centre with a dimmer, and only one is ever open
+  * **a rail button pressed while another panel is open now works** — the bug this pass introduced and
+    then fixed
+  * containment measured on every lattice in the HUD by rotated footprint against its surface:
+    nine lattices, overhang +0.0 px on all of them
+  * the two-column path exercised for real by forcing the Index modal to 300 px
+  * the ghost card rendered through the same `plantPortrait` call IndexUI makes for an unseen species
+
+**The unseen state was not seen on a real save.** This account has all five discovered and `receive`
+only ever adds to the almanac, so the ghost path was proved by building the cards directly rather than
+by owning a fresh profile. The wiring around it — `paint` choosing ghost, the border staying grey — is
+read but not watched.
+
+**Rojo was not connected** while this was built. The sources were pushed into the Edit datamodel over
+HTTP to see them run; disk is still the only source of truth and re-syncs identically.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

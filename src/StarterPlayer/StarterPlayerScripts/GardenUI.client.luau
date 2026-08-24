@@ -1,7 +1,8 @@
 --!strict
 -- Steal a Seed :: GardenUI
 --
--- The right rail. What is in YOUR dirt, right now, one row per slot.
+-- What is in YOUR dirt, right now, one row per slot. Its button is top-right;
+-- the panel opens in the middle of the screen.
 --
 --==============================================================================
 -- THE SHAPE IS THE CLIP'S ACTIVE LIST. THE CONTENT IS NOT.
@@ -28,12 +29,17 @@
 --==============================================================================
 -- WHY THIS IS NOT THE INDEX
 --
--- Two panels, two jobs, and opening one does not close the other:
+-- Two panels, two jobs:
 --
---   Index    (left)   every species in the biome, ??? until you have grown it.
---                     An almanac. It does not change while you watch it.
---   Garden   (right)  the twelve holes in front of you and what is in them
---                     this second, with the clocks still running.
+--   Index    every species in the biome, ??? until you have grown it. An
+--            almanac, and it does not change while you watch it.
+--   Garden   the twelve holes in front of you and what is in them this second,
+--            with the clocks still running.
+--
+-- They used to be allowed open at once, because one docked left and the other
+-- docked right. Both open in the CENTRE now, so they take turns -- see OPEN AND
+-- SHUT. What that costs is the side-by-side read; what it buys is one panel
+-- shape instead of two and a phone screen that is not half panel.
 --
 -- The Index used to carry a one-line `Nubkin x2  Petalpip x1` footer, which was
 -- a stopgap for exactly this panel. It is gone now that the real thing exists.
@@ -53,7 +59,6 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -64,23 +69,27 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local RAIL = GameConfig.Rail
 local ATTR = GameConfig.Attributes
 local PLANTING = GameConfig.Plant
+local PANEL_NAME = "Garden"
 
--- The same vocabulary as IndexUI, PromptUI, PlantUI and CashUI.
+-- The same vocabulary as PromptUI, PlantUI and CashUI.
 local INK = Color3.fromRGB(26, 24, 30)
 local PAPER = Color3.fromRGB(248, 246, 240)
 local ACCENT = Color3.fromRGB(142, 196, 62)
 local GHOST = Color3.fromRGB(120, 116, 124)
--- Red, for the same reason IndexUI's badge is red: it has to be the thing your
--- eye finds before you have decided to look at anything.
-local BADGE = Color3.fromRGB(226, 76, 76)
 
-local PANEL_WIDTH = 276
--- Mirrors IndexUI exactly: its button is at y = 12 and 46 tall, and its panel
--- hangs ten pixels under that. Two rails at the same height read as a pair.
-local PANEL_TOP = GameConfig.Rail.PanelTop
-local SLIDE = 0.22
+--==============================================================================
+-- IT OPENS IN THE MIDDLE NOW, NOT OFF THE RIGHT EDGE
+--
+-- This docked on the right rail and the Index docked on the left, which is why
+-- the two were allowed to be open at once. A modal has no side, so the argument
+-- goes with it: all three panels share one rectangle and take turns. UIKit.modal
+-- owns the geometry; this is only the cap it may grow to.
+--==============================================================================
+local MAX_WIDTH = 380
+local MAX_HEIGHT = 560
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -116,18 +125,17 @@ end
 -- Square and top-right, mirroring the Index button's 12px inset on the left. The
 -- clip hangs an egg and a paw down that edge and a moon timer in the corner; we
 -- have one button and nothing under it.
---==============================================================================
---==============================================================================
--- THE SAME SKIN AS THE LEFT RAIL, BLANK
 --
--- There is no Garden button in the owner's reference, so this wears the family's
--- skin instead: clean columns of the Shop slab, mirror-tiled and hue-rotated to
--- amber. The sprout below is still drawn, because unlike Shop and Index there is
--- no icon painted into this one.
+-- Amber, so three buttons read as three things. There is no Garden button in the
+-- owner's reference to crop even if cropping were still the plan, so this one
+-- was always going to be drawn -- and now the other two are drawn beside it.
 --==============================================================================
-local RAIL = GameConfig.Rail
-local button = UIKit.railButton(gui, RAIL.SlabImage, RAIL.SlabSize)
-button.Name = "GardenButton"
+local button = UIKit.railButton(playerGui, {
+	name = "GardenButton",
+	face = RAIL.GardenFace,
+	shade = RAIL.GardenShade,
+	wide = false,
+})
 button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
 
@@ -135,153 +143,63 @@ button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
 -- A SPROUT MADE OF RECTANGLES
 --
 -- Not a paw, not an egg, and not a glyph. Most of Gotham's symbol range renders
--- as tofu boxes in this engine -- SpeedFX paid for that with a trainer emoji and
--- IndexUI's book is drawn the same way. A stem and two rotated leaves is a
--- sprout on every device.
+-- as tofu boxes in this engine, which is checked rather than assumed -- SpeedFX
+-- paid for it with a trainer emoji. A stem and three leaves is a sprout on every
+-- device.
+--
+-- In the BIOME'S stem and leaf, not the HUD's accent green. It is the only rail
+-- icon that depicts something the game actually grows, so it may as well be the
+-- colour the game grows it in.
 --==============================================================================
-local sprout = Instance.new("Frame")
-sprout.Name = "Sprout"
-sprout.AnchorPoint = Vector2.new(0.5, 0.5)
-sprout.Position = UDim2.fromScale(0.5, 0.5)
-sprout.Size = UDim2.fromOffset(24, 24)
-sprout.BackgroundTransparency = 1
-sprout.Parent = button
-
-local stem = Instance.new("Frame")
-stem.Name = "Stem"
-stem.AnchorPoint = Vector2.new(0.5, 1)
-stem.Position = UDim2.new(0.5, 0, 1, 0)
-stem.Size = UDim2.fromOffset(3, 15)
-stem.BackgroundColor3 = ACCENT
-stem.BorderSizePixel = 0
-stem.Parent = sprout
-corner(stem, 2)
-stroke(stem, INK, 2)
-
-for _, side in ipairs({ -1, 1 }) do
-	local leaf = Instance.new("Frame")
-	leaf.Name = if side < 0 then "LeafLeft" else "LeafRight"
-	leaf.AnchorPoint = Vector2.new(0.5, 0.5)
-	leaf.Position = UDim2.new(0.5, side * 6, 0, 8)
-	leaf.Size = UDim2.fromOffset(12, 8)
-	leaf.Rotation = side * 26
-	leaf.BackgroundColor3 = ACCENT
-	leaf.BorderSizePixel = 0
-	leaf.Parent = sprout
-	corner(leaf, 4)
-	-- Green on gold is legible, but an edge is what makes it read as a LEAF
-	-- rather than a smudge -- and everything in the references has one.
-	stroke(leaf, INK, 2)
-end
+UIKit.sproutIcon(button, 30, SeedData.Stem, SeedData.Leaf)
 
 --==============================================================================
 -- THE BADGE COUNTS WHAT IS STILL COOKING
 --
--- Hatching and growing plants only. A grown one does not badge: it is already
--- announcing itself in the world with a `+$N` popping off it every second, and a
--- badge that never clears is a badge you stop reading.
+-- Hatching plants only. A grown one does not badge: it is already announcing
+-- itself in the world with a `+$N` popping off it every second, and a badge that
+-- never clears is a badge you stop reading.
 --
 -- On the button's LEFT corner, not its right -- the button is already against
 -- the right edge of the screen and a badge hung off that corner would be half
--- off it.
+-- off it. Which is also why no slab clips its descendants.
 --==============================================================================
-local badge = Instance.new("Frame")
-badge.Name = "Badge"
-badge.AnchorPoint = Vector2.new(0.5, 0.5)
+local badge, badgeLabel = UIKit.badge(button, RAIL.Badge)
 badge.Position = UDim2.new(0, 0, 0, 0)
-badge.Size = UDim2.fromOffset(24, 24)
-badge.BackgroundColor3 = BADGE
-badge.BorderSizePixel = 0
-badge.Visible = false
-badge.Parent = button
-corner(badge, 12)
-stroke(badge, INK, 2, 0.2)
-
-local badgeLabel = Instance.new("TextLabel")
-badgeLabel.Name = "Count"
-badgeLabel.Size = UDim2.fromScale(1, 1)
-badgeLabel.BackgroundTransparency = 1
-badgeLabel.Font = Enum.Font.GothamBlack
-badgeLabel.TextSize = 14
-badgeLabel.TextColor3 = PAPER
-badgeLabel.Text = ""
-badgeLabel.Parent = badge
 
 --==============================================================================
 -- THE PANEL
---==============================================================================
-local panel = Instance.new("Frame")
-panel.Name = "Panel"
-panel.AnchorPoint = Vector2.new(1, 0)
-panel.Position = UDim2.new(1, PANEL_WIDTH + 24, 0, PANEL_TOP)
-panel.Size = UDim2.new(0, PANEL_WIDTH, 1, -(PANEL_TOP + 12))
-panel.BackgroundColor3 = INK
-panel.BackgroundTransparency = 0.08
-panel.BorderSizePixel = 0
-panel.Visible = false
-panel.Parent = gui
-corner(panel, 14)
-stroke(panel, ACCENT, 2, 0.3)
-
-local panelSize = Instance.new("UISizeConstraint")
-panelSize.MinSize = Vector2.new(PANEL_WIDTH, 260)
-panelSize.MaxSize = Vector2.new(PANEL_WIDTH, 560)
-panelSize.Parent = panel
-
-local panelPad = Instance.new("UIPadding")
-panelPad.PaddingLeft = UDim.new(0, 12)
-panelPad.PaddingRight = UDim.new(0, 12)
-panelPad.PaddingTop = UDim.new(0, 10)
-panelPad.PaddingBottom = UDim.new(0, 10)
-panelPad.Parent = panel
-
-local header = Instance.new("TextLabel")
-header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, 24)
-header.BackgroundTransparency = 1
-header.Font = Enum.Font.GothamBlack
-header.TextSize = 17
-header.TextColor3 = PAPER
-header.TextXAlignment = Enum.TextXAlignment.Left
-header.Text = "GARDEN"
-header.Parent = panel
-
---==============================================================================
--- THE COLLAPSE CHEVRON, ON THE INNER EDGE
 --
--- Which for a right-docked panel is its LEFT edge, and the clip hangs it there
--- as a tab sticking out past the corner rather than as an X tucked inside. `>`
--- rather than an arrow glyph: the rotation arrows in this font are tofu, and
--- that is checked, not assumed.
+-- The collapse chevron is gone with the dock. It hung off the panel's inner edge
+-- as a tab, which is a right-docked idea: a centred panel has no inner edge, and
+-- the modal already carries the red X every other panel closes with.
 --==============================================================================
-local chevron = Instance.new("TextButton")
-chevron.Name = "Collapse"
-chevron.AnchorPoint = Vector2.new(1, 0.5)
-chevron.Position = UDim2.new(0, -6, 0.5, 0)
-chevron.Size = UDim2.fromOffset(22, 44)
-chevron.BackgroundColor3 = INK
-chevron.BackgroundTransparency = 0.08
-chevron.BorderSizePixel = 0
-chevron.AutoButtonColor = false
-chevron.Font = Enum.Font.GothamBlack
-chevron.TextSize = 16
-chevron.TextColor3 = ACCENT
-chevron.Text = ">"
-chevron.Parent = panel
-corner(chevron, 8)
-stroke(chevron, ACCENT, 2, 0.35)
+local modal = UIKit.modal(gui, {
+	name = PANEL_NAME,
+	title = "GARDEN",
+	maxWidth = MAX_WIDTH,
+	maxHeight = MAX_HEIGHT,
+})
+
+local titleBar = modal.title.Parent :: Frame
+UIKit.sproutIcon(titleBar, 30, SeedData.Stem, SeedData.Leaf).Position =
+	UDim2.new(0, 24, 0.5, 0)
+modal.title.Position = UDim2.new(0, 46, 0.5, 0)
+modal.title.Size = UDim2.new(1, -98, 1, 0)
+
+local header = modal.title
 
 local list = Instance.new("ScrollingFrame")
 list.Name = "List"
-list.Position = UDim2.fromOffset(0, 32)
-list.Size = UDim2.new(1, 0, 1, -66)
+list.Size = UDim2.new(1, 0, 1, -32)
 list.BackgroundTransparency = 1
 list.BorderSizePixel = 0
-list.ScrollBarThickness = 3
+list.ScrollBarThickness = 4
 list.ScrollBarImageColor3 = ACCENT
 list.CanvasSize = UDim2.new()
 list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-list.Parent = panel
+list.ZIndex = 3
+list.Parent = modal.body
 
 local rows = Instance.new("UIListLayout")
 rows.FillDirection = Enum.FillDirection.Vertical
@@ -304,19 +222,13 @@ rows.Parent = list
 -- growing yet is an absence, and printing the first as the second makes a new
 -- plot look broken.
 --==============================================================================
-local footer = Instance.new("TextLabel")
-footer.Name = "Footer"
+local footer = UIKit.outlined(modal.body, "Footer", 19, ACCENT, 2.5)
 footer.AnchorPoint = Vector2.new(0, 1)
 footer.Position = UDim2.new(0, 0, 1, 0)
 footer.Size = UDim2.new(1, 0, 0, 28)
-footer.BackgroundTransparency = 1
-footer.Font = Enum.Font.GothamBlack
-footer.TextSize = 18
-footer.TextColor3 = ACCENT
 footer.TextXAlignment = Enum.TextXAlignment.Left
 footer.TextYAlignment = Enum.TextYAlignment.Center
-footer.Text = ""
-footer.Parent = panel
+footer.ZIndex = 4
 
 --==============================================================================
 -- ROWS
@@ -342,6 +254,7 @@ local function buildRow(index: number): Row
 	frame.BackgroundColor3 = PAPER
 	frame.BackgroundTransparency = 0.9
 	frame.BorderSizePixel = 0
+	frame.ZIndex = 3
 	frame.Parent = list
 	corner(frame, 10)
 
@@ -350,32 +263,22 @@ local function buildRow(index: number): Row
 	swatch.Position = UDim2.fromOffset(8, 8)
 	swatch.Size = UDim2.fromOffset(28, 28)
 	swatch.BorderSizePixel = 0
+	swatch.ZIndex = 4
 	swatch.Parent = frame
 	corner(swatch, 8)
+	stroke(swatch, INK, 2, 0.35)
 
-	local name = Instance.new("TextLabel")
-	name.Name = "Name"
-	name.Position = UDim2.fromOffset(46, 5)
-	name.Size = UDim2.new(1, -56, 0, 18)
-	name.BackgroundTransparency = 1
-	name.Font = Enum.Font.GothamBold
-	name.TextSize = 14
-	name.TextColor3 = PAPER
+	local name = UIKit.outlined(frame, "Name", 15, PAPER, 2)
+	name.Position = UDim2.fromOffset(46, 4)
+	name.Size = UDim2.new(1, -56, 0, 19)
 	name.TextXAlignment = Enum.TextXAlignment.Left
-	name.Text = ""
-	name.Parent = frame
+	name.ZIndex = 4
 
-	local sub = Instance.new("TextLabel")
-	sub.Name = "Sub"
+	local sub = UIKit.outlined(frame, "Sub", 13, GHOST, 2)
 	sub.Position = UDim2.fromOffset(46, 23)
 	sub.Size = UDim2.new(1, -56, 0, 16)
-	sub.BackgroundTransparency = 1
-	sub.Font = Enum.Font.GothamMedium
-	sub.TextSize = 13
-	sub.TextColor3 = GHOST
 	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Text = ""
-	sub.Parent = frame
+	sub.ZIndex = 4
 
 	local row: Row = { frame = frame, swatch = swatch, name = name, sub = sub }
 	pool[index] = row
@@ -712,9 +615,14 @@ end
 --==============================================================================
 -- OPEN AND SHUT
 --
--- Nothing here touches the Index. They dock on opposite rails and answer
--- different questions, and closing one to open the other would mean you cannot
--- check what a species is worth while looking at your own row for it.
+-- THE GARDEN IS IN THE MUTEX NOW. It used to be deliberately outside it: this
+-- docked on the right rail, the Index and Shop docked on the left, and the whole
+-- point of two rails was being able to read your own dirt while looking at a
+-- price. A centred modal has no rail, so the three of them share one rectangle
+-- and one at a time is the only arrangement left.
+--
+-- Each writes its own name to the OpenPanel attribute and closes itself on
+-- seeing a name that is not its own, so no script has to know the others exist.
 --==============================================================================
 local function setOpen(want: boolean)
 	if open == want then
@@ -722,29 +630,31 @@ local function setOpen(want: boolean)
 	end
 	open = want
 	if want then
+		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
+		-- Painted before it is shown: the clocks tick once a second and an
+		-- unpainted first frame is a panel full of last minute's numbers.
 		refresh(true)
-		panel.Visible = true
-		panel.Position = UDim2.new(1, PANEL_WIDTH + 24, 0, PANEL_TOP)
-		TweenService:Create(panel, TweenInfo.new(SLIDE, Enum.EasingStyle.Quad,
-			Enum.EasingDirection.Out), { Position = UDim2.new(1, -12, 0, PANEL_TOP) }):Play()
-	else
-		local slideOut = TweenService:Create(panel, TweenInfo.new(SLIDE,
-			Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{ Position = UDim2.new(1, PANEL_WIDTH + 24, 0, PANEL_TOP) })
-		slideOut:Play()
-		slideOut.Completed:Connect(function()
-			if not open then
-				panel.Visible = false
-			end
-		end)
+	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
+		player:SetAttribute(ATTR.OpenPanel, nil)
 	end
+	modal.setOpen(want)
 end
 
 button.Activated:Connect(function()
 	setOpen(not open)
 end)
-chevron.Activated:Connect(function()
+modal.close.Activated:Connect(function()
 	setOpen(false)
+end)
+modal.dimmer.Activated:Connect(function()
+	setOpen(false)
+end)
+
+player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
+	local holder = player:GetAttribute(ATTR.OpenPanel)
+	if open and holder ~= PANEL_NAME then
+		setOpen(false)
+	end
 end)
 
 --==============================================================================

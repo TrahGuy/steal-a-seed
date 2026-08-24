@@ -1,62 +1,64 @@
 --!strict
 -- Steal a Seed :: IndexUI
 --
--- The left rail. One button, and the panel it opens: what Greenhollow has, and
--- which of it you have actually grown.
+-- The almanac: what Greenhollow has, and which of it you have actually grown.
 --
--- The ALMANAC, and only that. What is in your dirt right now is GardenUI, on the
--- right rail.
+-- What is in your dirt right now is GardenUI. This is the sheet.
 --
 --==============================================================================
--- ONE BUTTON. NOT A RAIL OF THEM.
+-- A GRID OF PLANTS, NOT A LIST OF SWATCHES
 --
--- The reference clip stacks Shop above Index, and everything else it hangs off
--- the edges -- Rebirth, Growing Eggs, Grow All, a paw, a hotbar, a moon timer,
--- Friend Boost, Robux packs. None of that is here and most of it never will be.
--- There is no shop, so there is no Shop button; an empty one is a promise the
--- game has not made.
+-- This was five 46-pixel rows, each a coloured square beside a name. The square
+-- was the FORM RARITY colour, so a bed of five species read as a column of five
+-- TIERS -- cream, cream, green, blue, purple -- and there was no plant anywhere
+-- on the panel. An almanac whose entries are indistinguishable from a legend is
+-- not an almanac.
+--
+-- Cards now, in a wrapping grid, each showing the SILHOUETTE: cube, orb,
+-- teardrop, mushroom, bell. That is what a player recognises across a plot, and
+-- it is the only thing on this panel that could not be printed on a receipt.
+--
+-- Drawn from frames by UIKit.plantPortrait, not a ViewportFrame -- five live
+-- creatures at 29 to 40 parts each is 170 parts of camera work behind a panel,
+-- on a phone, for a picture that never moves.
 --
 --==============================================================================
 -- THE RARITY WORD LIVES HERE, AND IT MEANS THE FORM
 --
 -- Nowhere in the world says it. A pod is COLOURED by what it WEIGHS, so the word
--- out there would be describing a different thing entirely -- and it would spend
--- the reveal early, since two Commons arrive in identically weighted shells. A
--- grown plant carries no plate at all any more. The Garden panel tints a
--- finished row's NAME by its weight, which is a hint rather than a statement.
+-- out there would be describing a different thing entirely. This lists FORMS:
+-- how often a cube turns up against a bell. That is all Rarity has ever decided.
 --
--- This lists FORMS: how often a cube turns up against a bell. That is all
--- Rarity has ever decided and it is all it decides now.
+-- NO KG AND NO $/S ON A CARD, and not for tidiness. Every pod rolls its own
+-- weight, so there is no such thing as "what a Bellchime weighs" -- one number
+-- here would be quietly wrong for every Bellchime in the game. What a given one
+-- is worth is on the pod, in your hands, and in the Garden row.
 --
--- NO WEIGHT AND NO RATE ON THESE ROWS. It used to print both, off the species
--- sheet, and both became lies the moment every pod started rolling its own
--- weight -- there is no such thing as "what a Bellchime weighs" any more, and
--- one number here would be quietly wrong for every Bellchime in the game. What
--- a given one is worth is on the pod, in your hands, and in the Garden row.
---
--- So this is the one surface that spells Common / Uncommon / Rare / Epic out,
--- and the only one that shows a row for a species you have never grown.
+-- AND NO WEIGHT-BAND COLOUR. `ColorForKg` never touches this panel. The Index is
+-- the one surface that must not be tinted by kg: it lists shapes, and a shape's
+-- colour is how often that shape drops.
 --
 --==============================================================================
 -- SEEN MEANS GROWN, ON A PLOT YOU OWNED
 --
--- Not carried, not stolen, not sprouted. Pods are coloured by WEIGHT, so the
--- shell says nothing about which form is inside and which one you got stays
--- unknown until it finishes -- the grow-up IS the reveal, and PlantService
--- writes the Almanac at exactly that moment. Filling a row in for a pod would
--- spend the reveal before it happened.
+-- Not carried, not stolen. Pods are coloured by WEIGHT, so the shell says
+-- nothing about which form is inside; the HATCH is the reveal and PlantService
+-- writes the Almanac at exactly that moment.
+--
+-- An unseen card is a GHOST of the right form -- so you can see there is a fifth
+-- thing -- with the name "???" and NO TIER, spelled or tinted. Epic means
+-- Bellchime in Greenhollow, so a rarity on a locked card names the species
+-- through the back door.
 --
 --==============================================================================
 -- NO NEW REMOTE
 --
--- Almanac rides down inside the profile that ProfileUpdated already pushes four
--- times a second, and ProfileReady announces the first one. Same rule CashUI and
--- SpeedFX follow.
+-- Almanac rides down inside the profile ProfileUpdated already pushes four times
+-- a second, and ProfileReady announces the first one.
 --==============================================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -67,63 +69,26 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- The same three PromptUI, PlantUI and CashUI use.
-local INK = Color3.fromRGB(26, 24, 30)
-local PAPER = Color3.fromRGB(248, 246, 240)
-local ACCENT = Color3.fromRGB(142, 196, 62)
--- Grey paper: an unseen row is present but not lit.
-local GHOST = Color3.fromRGB(120, 116, 124)
---==============================================================================
--- THE BADGE IS RED, AND THAT IS DELIBERATE
---
--- It is the second thing in this game allowed outside ink / paper / accent --
--- SpeedFX's blue shoe is the first, for the same reason. A green badge on a
--- green-stroked button is a decoration; the whole job of this one is to be the
--- thing your eye goes to before you have decided to look at anything, and red is
--- what "there is something you have not seen" means everywhere else.
---==============================================================================
-local BADGE = Color3.fromRGB(226, 76, 76)
+local RAIL = GameConfig.Rail
+local SHOP = GameConfig.Shop
+local ATTR = GameConfig.Attributes
+local PANEL_NAME = "Index"
+
+local WHITE = Color3.fromRGB(255, 255, 255)
+-- Grey paper: an undiscovered card is present but not lit.
+local GHOST = Color3.fromRGB(116, 120, 136)
+local CARD = Color3.fromRGB(38, 42, 58)
+local CARD_LOCKED = Color3.fromRGB(29, 31, 44)
 
 --==============================================================================
 -- GREENHOLLOW ONLY, AND THE DENOMINATOR IS COUNTED NOT TYPED
 --
--- The other four biomes are geometry with no species in them yet -- NestService
--- says so at boot -- so an Index listing them would be four empty shelves. When
--- they get their art they get their rows, and `#SPECIES` picks that up without
--- anybody editing a header string.
+-- The other four biomes are geometry with no species in them yet, so an Index
+-- listing them would be four empty shelves. When they get their art they get
+-- their cards, and `#SPECIES` picks that up without anybody editing a header.
 --==============================================================================
 local BIOME = "greenhollow"
 local SPECIES = SeedData.InBiome(BIOME)
-
-local PANEL_WIDTH = 268
---==============================================================================
--- BELOW BOTH LEFT-RAIL BUTTONS
---
--- This was 68 -- ten pixels under this panel's own button. The Shop button now
--- sits at y = 68 as well, so a panel opening at 68 covered the button that would
--- close it. 124 clears the pair: Index at 12, Shop at 68, both 46 tall.
---
--- One constant, because the resting position, the size and both ends of the
--- slide all have to agree about it.
---==============================================================================
-local PANEL_TOP = GameConfig.Rail.PanelTop
-local SLIDE = 0.22
-
---==============================================================================
--- THE LEFT RAIL HOLDS ONE PANEL AT A TIME
---
--- This and the Shop dock on the same edge at the same height, so they occupy one
--- rectangle and cannot both be open. Each writes its own name to the OpenPanel
--- attribute when it opens and closes itself on seeing a name that is not its
--- own -- so neither script has to know the other exists, only that something
--- else has taken the rail.
---
--- The GARDEN is deliberately not in this: it is on the RIGHT, it never overlaps
--- either of these, and reading your own dirt while looking at the almanac is the
--- whole reason there are two rails.
---==============================================================================
-local ATTR = GameConfig.Attributes
-local PANEL_NAME = "Index"
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -140,219 +105,162 @@ gui.DisplayOrder = 30
 gui.Parent = playerGui
 
 --==============================================================================
--- SMALL BUILDERS
---==============================================================================
-local function corner(parent: Instance, radius: number)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, radius)
-	c.Parent = parent
-end
-
-local function stroke(parent: Instance, color: Color3, thickness: number, transparency: number)
-	local s = Instance.new("UIStroke")
-	s.Color = color
-	s.Thickness = thickness
-	s.Transparency = transparency
-	s.Parent = parent
-end
-
---==============================================================================
 -- THE BUTTON
---==============================================================================
---==============================================================================
--- THE BUTTON IS THE ARTWORK
 --
--- The book icon and the word "Index" used to be built here out of frames and a
--- TextLabel. Both are painted into `rail-index.png` now, so there is nothing
--- left to draw -- only the badge, which is a live count and cannot be baked.
+-- Blue slab, a book, and the word. All three are instances -- the crop that used
+-- to carry them baked the label into a PNG and clipped its own border.
 --==============================================================================
-local RAIL = GameConfig.Rail
-local button = UIKit.railButton(gui, RAIL.IndexImage, RAIL.IndexSize)
-button.Name = "IndexButton"
+local button = UIKit.railButton(playerGui, {
+	name = "IndexButton",
+	face = RAIL.IndexFace,
+	shade = RAIL.IndexShade,
+	label = "Index",
+	wide = true,
+})
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
+UIKit.bookIcon(button, RAIL.IconSize, RAIL.IndexShade)
 
-local badge = Instance.new("Frame")
-badge.Name = "Badge"
-badge.AnchorPoint = Vector2.new(0.5, 0.5)
-badge.Position = UDim2.new(1, 0, 0, 0)
-badge.Size = UDim2.fromOffset(24, 24)
-badge.BackgroundColor3 = BADGE
-badge.BorderSizePixel = 0
-badge.Visible = false
-badge.Parent = button
-corner(badge, 12)
-stroke(badge, INK, 2, 0.2)
-
-local badgeLabel = Instance.new("TextLabel")
-badgeLabel.Name = "Count"
-badgeLabel.Size = UDim2.fromScale(1, 1)
-badgeLabel.BackgroundTransparency = 1
-badgeLabel.Font = Enum.Font.GothamBlack
-badgeLabel.TextSize = 14
-badgeLabel.TextColor3 = PAPER
-badgeLabel.Text = ""
-badgeLabel.Parent = badge
+local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
 
 --==============================================================================
 -- THE PANEL
 --==============================================================================
-local panel = Instance.new("Frame")
-panel.Name = "Panel"
-panel.Position = UDim2.new(0, -PANEL_WIDTH - 24, 0, PANEL_TOP)
-panel.Size = UDim2.new(0, PANEL_WIDTH, 1, -(PANEL_TOP + 12))
-panel.BackgroundColor3 = INK
-panel.BackgroundTransparency = 0.08
-panel.BorderSizePixel = 0
-panel.Visible = false
-panel.Parent = gui
-corner(panel, 14)
-stroke(panel, ACCENT, 2, 0.3)
+local modal = UIKit.modal(gui, {
+	name = PANEL_NAME,
+	title = "INDEX",
+	maxWidth = 480,
+	maxHeight = 540,
+})
 
-local panelHeight = Instance.new("UISizeConstraint")
-panelHeight.MinSize = Vector2.new(PANEL_WIDTH, 260)
-panelHeight.MaxSize = Vector2.new(PANEL_WIDTH, 520)
-panelHeight.Parent = panel
+local titleBar = modal.title.Parent :: Frame
+UIKit.bookIcon(titleBar, 30, RAIL.IndexShade)
+modal.title.Position = UDim2.new(0, 46, 0.5, 0)
+modal.title.Size = UDim2.new(1, -98, 1, 0)
 
-local panelPad = Instance.new("UIPadding")
-panelPad.PaddingLeft = UDim.new(0, 12)
-panelPad.PaddingRight = UDim.new(0, 12)
-panelPad.PaddingTop = UDim.new(0, 10)
-panelPad.PaddingBottom = UDim.new(0, 10)
-panelPad.Parent = panel
-
-local header = Instance.new("TextLabel")
-header.Name = "Header"
-header.Size = UDim2.new(1, -30, 0, 24)
-header.BackgroundTransparency = 1
-header.Font = Enum.Font.GothamBlack
-header.TextSize = 17
-header.TextColor3 = PAPER
-header.TextXAlignment = Enum.TextXAlignment.Left
-header.Text = "INDEX"
-header.Parent = panel
-
-local close = Instance.new("TextButton")
-close.Name = "Close"
-close.AnchorPoint = Vector2.new(1, 0)
-close.Position = UDim2.new(1, 0, 0, 0)
-close.Size = UDim2.fromOffset(26, 26)
-close.BackgroundColor3 = PAPER
-close.BackgroundTransparency = 0.85
-close.BorderSizePixel = 0
-close.AutoButtonColor = false
-close.Font = Enum.Font.GothamBold
-close.TextSize = 16
-close.TextColor3 = PAPER
-close.Text = "X"
-close.Parent = panel
-corner(close, 8)
-
---== THE ROWS ==--
 local list = Instance.new("ScrollingFrame")
-list.Name = "List"
-list.Position = UDim2.fromOffset(0, 32)
--- Full height under the header now that nothing is pinned to the bottom.
-list.Size = UDim2.new(1, 0, 1, -36)
+list.Name = "Cards"
+list.Size = UDim2.fromScale(1, 1)
 list.BackgroundTransparency = 1
 list.BorderSizePixel = 0
-list.ScrollBarThickness = 3
-list.ScrollBarImageColor3 = ACCENT
+list.ScrollBarThickness = 4
+list.ScrollBarImageColor3 = SHOP.PanelEdge
 list.CanvasSize = UDim2.new()
 list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-list.Parent = panel
+list.ZIndex = 3
+list.Parent = modal.body
 
-local rows = Instance.new("UIListLayout")
-rows.FillDirection = Enum.FillDirection.Vertical
-rows.SortOrder = Enum.SortOrder.LayoutOrder
-rows.Padding = UDim.new(0, 6)
-rows.Parent = list
+local grid = Instance.new("UIGridLayout")
+grid.FillDirection = Enum.FillDirection.Horizontal
+grid.SortOrder = Enum.SortOrder.LayoutOrder
+grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+grid.Parent = list
 
 --==============================================================================
--- THE PLOT FOOTER IS GONE. GardenUI IS WHAT IT WAS STANDING IN FOR.
+-- TWO COLUMNS ON A PHONE, THREE WHEN THERE IS ROOM
 --
--- There was a one-line `Nubkin x2  Petalpip x1` along the bottom of this panel,
--- added because "see what you are running" had nowhere else to live. It now has
--- somewhere else to live: a right-docked panel with a row per SLOT, the clocks
--- still ticking, and the empty holes shown as empty.
---
--- A count of species was never the right shape for that question anyway -- it
--- could tell you that you had two Nubkins and could not tell you that seven of
--- your twelve holes were empty.
---
--- This panel goes back to being one thing: the almanac.
+-- Measured off the panel rather than typed, because the modal is a fraction of
+-- the screen with a cap on it -- the same script has to lay out at 248 pixels
+-- and at 480. Never one column: a single stack of cards is the row list this
+-- panel just stopped being.
 --==============================================================================
--- ONE ROW PER SPECIES, BUILT ONCE
---
--- The rows never change shape, only their contents, so they are built at start
--- and refilled. Rebuilding five frames every time a profile packet lands -- four
--- times a second -- would be four rebuilds a second of a panel nobody has open.
+local GUTTER = 10
+
+local function relayout()
+	local width = list.AbsoluteSize.X
+	if width <= 0 then
+		return
+	end
+	local columns = if width >= 400 then 3 else 2
+	local cell = math.floor((width - GUTTER * (columns - 1) - 6) / columns)
+	local cellHeight = math.floor(cell * 1.32)
+	grid.CellSize = UDim2.fromOffset(cell, cellHeight)
+	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
+
+	-- Five cards in a panel sized for twelve garden rows is two thirds empty,
+	-- and empty is what a broken panel looks like. Height it to the rows it
+	-- actually has -- which is three on a phone and two on a desktop, so this
+	-- cannot be a constant either.
+	local rows = math.ceil(#SPECIES / columns)
+	modal.fitContent(rows * cellHeight + (rows - 1) * GUTTER)
+end
+
+list:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+relayout()
+
 --==============================================================================
-type Row = {
-	swatch: Frame,
+-- ONE CARD PER SPECIES, BUILT ONCE
+--
+-- The cards never change shape, only their contents, so they are built at start
+-- and refilled. The PORTRAIT is the exception -- a ghost and a coloured plant
+-- are different instances -- so it is rebuilt only on the transition, which
+-- happens at most five times in a save's life.
+--==============================================================================
+type Card = {
+	frame: Frame,
+	border: UIStroke,
+	art: Frame,
 	name: TextLabel,
-	sub: TextLabel,
-	rate: TextLabel,
+	tier: TextLabel,
+	drawn: boolean?,
 }
 
-local built: { [string]: Row } = {}
+local built: { [string]: Card } = {}
+
+local function specFor(species: SeedData.Species): UIKit.PlantSpec
+	return {
+		form = species.Form,
+		body = species.Body,
+		crown = species.Crown,
+		accent = species.Accent,
+		leaf = species.Leaf,
+		stem = SeedData.Stem,
+		soil = species.Soil,
+		blush = SeedData.Blush,
+	}
+end
 
 for index, species in ipairs(SPECIES) do
-	local row = Instance.new("Frame")
-	row.Name = species.Id
-	row.LayoutOrder = index
-	row.Size = UDim2.new(1, -6, 0, 46)
-	row.BackgroundColor3 = PAPER
-	row.BackgroundTransparency = 0.9
-	row.BorderSizePixel = 0
-	row.Parent = list
-	corner(row, 10)
+	local frame = Instance.new("Frame")
+	frame.Name = species.Id
+	frame.LayoutOrder = index
+	frame.BackgroundColor3 = CARD
+	frame.BorderSizePixel = 0
+	frame.ZIndex = 3
+	frame.Parent = list
+	UIKit.corner(frame, 12)
+	local border = UIKit.stroke(frame, GHOST, 2.5)
 
-	local swatch = Instance.new("Frame")
-	swatch.Name = "Swatch"
-	swatch.Position = UDim2.fromOffset(8, 9)
-	swatch.Size = UDim2.fromOffset(28, 28)
-	swatch.BorderSizePixel = 0
-	swatch.Parent = row
-	corner(swatch, 8)
+	local art = Instance.new("Frame")
+	art.Name = "Art"
+	art.AnchorPoint = Vector2.new(0.5, 0)
+	art.Position = UDim2.new(0.5, 0, 0, 6)
+	art.Size = UDim2.new(1, -12, 0.66, 0)
+	art.BackgroundTransparency = 1
+	art.ZIndex = 4
+	art.Parent = frame
 
-	local name = Instance.new("TextLabel")
-	name.Name = "Name"
-	name.Position = UDim2.fromOffset(46, 6)
-	name.Size = UDim2.new(1, -110, 0, 19)
-	name.BackgroundTransparency = 1
-	name.Font = Enum.Font.GothamBold
-	name.TextSize = 15
-	name.TextColor3 = PAPER
-	name.TextXAlignment = Enum.TextXAlignment.Left
-	name.Text = ""
-	name.Parent = row
+	local name = UIKit.outlined(frame, "Name", 16, WHITE, 2)
+	name.AnchorPoint = Vector2.new(0.5, 1)
+	name.Position = UDim2.new(0.5, 0, 1, -22)
+	name.Size = UDim2.new(1, -8, 0, 20)
+	name.TextXAlignment = Enum.TextXAlignment.Center
+	name.TextScaled = false
+	name.ZIndex = 5
 
-	local sub = Instance.new("TextLabel")
-	sub.Name = "Sub"
-	sub.Position = UDim2.fromOffset(46, 24)
-	sub.Size = UDim2.new(1, -110, 0, 16)
-	sub.BackgroundTransparency = 1
-	sub.Font = Enum.Font.GothamMedium
-	sub.TextSize = 12
-	sub.TextColor3 = GHOST
-	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.Text = ""
-	sub.Parent = row
+	local tier = UIKit.outlined(frame, "Tier", 13, GHOST, 2)
+	tier.AnchorPoint = Vector2.new(0.5, 1)
+	tier.Position = UDim2.new(0.5, 0, 1, -5)
+	tier.Size = UDim2.new(1, -8, 0, 16)
+	tier.TextXAlignment = Enum.TextXAlignment.Center
+	tier.ZIndex = 5
 
-	local rate = Instance.new("TextLabel")
-	rate.Name = "Rate"
-	rate.AnchorPoint = Vector2.new(1, 0.5)
-	rate.Position = UDim2.new(1, -10, 0.5, 0)
-	rate.Size = UDim2.fromOffset(64, 22)
-	rate.BackgroundTransparency = 1
-	rate.Font = Enum.Font.GothamBlack
-	rate.TextSize = 15
-	rate.TextColor3 = ACCENT
-	rate.TextXAlignment = Enum.TextXAlignment.Right
-	rate.Text = ""
-	rate.Parent = row
-
-	built[species.Id] = { swatch = swatch, name = name, sub = sub, rate = rate }
+	built[species.Id] = {
+		frame = frame,
+		border = border,
+		art = art,
+		name = name,
+		tier = tier,
+	}
 end
 
 --==============================================================================
@@ -360,44 +268,51 @@ end
 --==============================================================================
 local almanac: { [string]: boolean } = {}
 
+local function draw(card: Card, species: SeedData.Species, seen: boolean)
+	if card.drawn == seen then
+		return
+	end
+	card.drawn = seen
+	card.art:ClearAllChildren()
+	UIKit.plantPortrait(card.art, specFor(species), if seen then nil else GHOST)
+end
+
 local function paint()
 	local seen = 0
 	for _, species in ipairs(SPECIES) do
-		local row = built[species.Id]
-		if row then
-			if almanac[species.Id] then
+		local card = built[species.Id]
+		if card then
+			local known = almanac[species.Id] == true
+			draw(card, species, known)
+			if known then
 				seen += 1
-				row.swatch.BackgroundColor3 = SeedData.FormColor(species)
-				row.swatch.BackgroundTransparency = 0
-				row.name.Text = species.Name
-				row.name.TextColor3 = PAPER
-				-- The form's drop tier, and nothing else. See the header: a kg or a
-				-- $/s here would be one invented number standing in for every pod of
-				-- this shape that will ever spawn.
-				row.sub.Text = species.Rarity
-				row.sub.TextColor3 = GameConfig.RarityColor[species.Rarity] or GHOST
-				row.rate.Text = ""
+				card.frame.BackgroundColor3 = CARD
+				-- The FORM's drop tier, and the only colour on this panel. It is
+				-- never ColorForKg: that is what a pod weighs, not what a shape
+				-- is worth finding.
+				card.border.Color = SeedData.FormColor(species)
+				card.name.Text = species.Name
+				card.name.TextColor3 = WHITE
+				card.tier.Text = species.Rarity
+				card.tier.TextColor3 = GameConfig.RarityColor[species.Rarity] or GHOST
 			else
-				-- A silhouette: the row is the right shape and the swatch is the
-				-- right size, so you can see there IS a fifth thing without
-				-- being told what it earns. No rate and no weight -- those are
-				-- the reward for growing one.
-				row.swatch.BackgroundColor3 = PAPER
-				row.swatch.BackgroundTransparency = 0.82
-				row.name.Text = "???"
-				row.name.TextColor3 = GHOST
-				row.sub.Text = "Undiscovered"
-				row.sub.TextColor3 = GHOST
-				row.rate.Text = ""
+				card.frame.BackgroundColor3 = CARD_LOCKED
+				-- Grey, not the form colour. A tinted border would spell the
+				-- tier in another alphabet, and Epic means Bellchime here.
+				card.border.Color = GHOST
+				card.name.Text = "???"
+				card.name.TextColor3 = GHOST
+				card.tier.Text = "Undiscovered"
+				card.tier.TextColor3 = GHOST
 			end
 		end
 	end
 
-	header.Text = string.format("INDEX  %d/%d", seen, #SPECIES)
+	modal.title.Text = string.format("INDEX  %d/%d", seen, #SPECIES)
 
 	local missing = #SPECIES - seen
 	badge.Visible = missing > 0
-	badgeLabel.Text = tostring(missing)
+	badgeCount.Text = tostring(missing)
 end
 
 paint()
@@ -450,10 +365,12 @@ end
 --==============================================================================
 -- OPEN AND SHUT
 --
--- Nothing here touches the Garden. They dock on opposite rails and answer
--- different questions -- what a species is worth, and what is in your dirt --
--- and closing one to open the other would mean you cannot read the first while
--- looking at the second.
+-- ONE CENTRE PANEL AT A TIME. All three now open in the same rectangle, so all
+-- three are in the mutex -- the Garden used to be excluded because it docked on
+-- the opposite rail and could not overlap. It can now.
+--
+-- Each writes its own name to the OpenPanel attribute and closes itself on
+-- seeing a name that is not its own, so no script has to know the others exist.
 --==============================================================================
 local open = false
 
@@ -463,33 +380,20 @@ local function setOpen(want: boolean)
 	end
 	open = want
 	if want then
-		-- Claim the left rail. Whoever else is holding it closes on this.
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
-		panel.Visible = true
-		panel.Position = UDim2.new(0, -PANEL_WIDTH - 24, 0, PANEL_TOP)
-		TweenService:Create(panel, TweenInfo.new(SLIDE, Enum.EasingStyle.Quad,
-			Enum.EasingDirection.Out), { Position = UDim2.new(0, 12, 0, PANEL_TOP) }):Play()
-	else
-		if player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
-			player:SetAttribute(ATTR.OpenPanel, nil)
-		end
-		local slideOut = TweenService:Create(panel, TweenInfo.new(SLIDE,
-			Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{ Position = UDim2.new(0, -PANEL_WIDTH - 24, 0, PANEL_TOP) })
-		slideOut:Play()
-		slideOut.Completed:Connect(function()
-			-- Only if nothing re-opened it during the slide.
-			if not open then
-				panel.Visible = false
-			end
-		end)
+	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
+		player:SetAttribute(ATTR.OpenPanel, nil)
 	end
+	modal.setOpen(want)
 end
 
 button.Activated:Connect(function()
 	setOpen(not open)
 end)
-close.Activated:Connect(function()
+modal.close.Activated:Connect(function()
+	setOpen(false)
+end)
+modal.dimmer.Activated:Connect(function()
 	setOpen(false)
 end)
 
@@ -501,5 +405,5 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 end)
 
 -- No tick. Nothing on this panel changes on its own: the almanac only moves when
--- a profile packet says a species has been discovered, and `receive` repaints
--- on that. GardenUI is the one with clocks to keep.
+-- a profile packet says a species has been discovered, and `receive` repaints on
+-- that. GardenUI is the one with clocks to keep.

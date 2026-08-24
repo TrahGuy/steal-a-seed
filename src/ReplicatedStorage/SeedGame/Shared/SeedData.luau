@@ -158,7 +158,19 @@ local BLUSH = Color3.fromRGB(238, 150, 138)
 
 SeedData.Blush = BLUSH
 
+--==============================================================================
+-- THE THREE THAT ARE SHARED, EXPORTED
+--
+-- Stem, leaf and soil are identical on all five and must remain so -- that
+-- family resemblance is what makes the fifth one read as a Greenhollow creature
+-- rather than a stray. They are exported because the HUD draws plants too: the
+-- Index portraits and the shop's plot art both need the biome's own greens, and
+-- reaching them through `Species[1].Leaf` would work right up until somebody
+-- reordered the sheet.
+--==============================================================================
 SeedData.Stem = STEM
+SeedData.Leaf = LEAF
+SeedData.Soil = SOIL
 
 SeedData.Species = {
 	{
