@@ -3375,6 +3375,126 @@ two things to look at: whether a 10,000 kg plant at 12 studs out still reads as 
 `43 + 9.2 * reach` in CarryPose gives a sane arm angle now that reach runs 1.3 to 12.2 rather than
 1.3 to 5.9 (it clamps at 82 degrees, so anything past ~4.2 studs gets the same pose).
 
+## The five plants, remodelled — 2026-08-24
+
+Two faults, one pass. **Five species shared two colours**, and every face was a **sticker made of
+parts**.
+
+### Two colours, not five
+
+Nubkin and Petalpip were both `GREEN`. Toadcap and Bellchime were both `CREAM`. Spiretip was fourteen
+RGB points off Nubkin, which is not a difference anybody sees across a plot. A bed of five species
+read as a bed of two — and GardenUI already carried a comment admitting it, because it had to swatch
+by CROWN after Body gave "two identical cream squares next to each other".
+
+```
+Nubkin     leaf green         the baseline, and the ordinary one
+Petalpip   pale yellow-green  sunlit, lifted off Nubkin
+Spiretip   deep pine          the only dark one, the only cool green
+Toadcap    warm cream         buttery, under the red cap
+Bellchime  cool porcelain     blue-white, so it is not Toadcap
+```
+
+**What stays shared is the part that makes it a biome.** Stem, leaf and soil are identical on all
+five and must remain so — that family resemblance is what makes the fifth one read as a Greenhollow
+creature rather than a stray. The HEAD is where a species gets to be itself.
+
+Still all greens and creams on purpose. Greenhollow is the first biome and the four after it need
+somewhere to go; spending saturated colour here leaves Emberroot and Starbloom nothing to be.
+
+### The face was a decal made of parts
+
+Two Eye cards, two Glints, two Cheeks and three Smile bars, every one of them **0.08 studs thick and
+smooth**, lying flat on the front of the head. It vanished from any angle off dead centre — and now
+that plants walk and each stands on its own bearing, dead centre is exactly where the player usually
+is not.
+
+The comment that lived there said a stud on a 0.3-stud eye is a blister rather than a texture. **That
+was true of a card and is not true of a ball.** A creature here is moulded plastic and its eyes are
+lumps of the same plastic.
+
+```
+eyes     dark balls, centred ON the surface so half stands proud. No fudge
+         factor -- the radius IS the proudness.
+glints   smaller balls sitting on the eyes, smooth. Upper-LEFT on BOTH, not
+         mirrored: one shared light is what makes two spheres read as one face.
+cheeks   balls
+smile    still three blocks -- one bar reads as a grimace -- but with depth
+```
+
+**The cheeks needed a fix the cards had hidden.** `front` is the surface distance at the CENTRE of
+the face, and four of the five heads are spheres, so the real surface falls away as you move out — at
+the old 1.9 gaps an orb's surface has dropped 0.19 head-widths behind `front`, and a ball placed
+there hangs in the air beside the head. A card got away with it: thin enough to read as outline from
+the front, invisible from the side. A sphere is visible from everywhere, floating included. 1.45 gaps
+is the furthest out the error stays under a cheek's own radius on all five, with no per-form
+parameter.
+
+`addFace` no longer takes `front + 0.04`. That was the sticker being pushed clear to avoid z-fighting.
+
+### Sculpture, per form
+
+Silhouettes are untouched — cube, orb, teardrop, mushroom, bell.
+
+  * **Nubkin** — a **brow** across the top of the face, standing proud, giving the eyes something to
+    sit under and stopping the front reading as a flat panel; two **nubs** on the upper corners,
+    which from the side are the difference between a box and a head. Plus the sprout it got earlier.
+  * **Petalpip** — five petals in one plane is a paper daisy that vanishes edge-on, and it started in
+    mid-air above a bald orb. Petals now **cup** (every one lifts its outer edge, turning five cards
+    into a shallow bowl) and three **sepals** sit under them in the leaf colour, offset half a step so
+    they show through the gaps. No extra petals.
+  * **Spiretip** — a banded **collar** where the head meets the stem. Without it a teardrop is a
+    balloon with sticks in the top and nothing explaining where it joins the plant. Plus the ring of
+    six spikes from the earlier pass, turned as well as tilted.
+  * **Toadcap** — gills under the cap, four bars at 45° giving eight spokes (a bar through the centre
+    covers both sides). Spots and fronds stay.
+  * **Bellchime** — a **fifth tier** at the hem so the skirt finishes on a ridge rather than just
+    stopping, and the scalloped pink collar from the earlier pass.
+  * **Leaves, all five** — two blades at the same height and angle read as a rotor from above. A
+    smaller **leaflet** higher up and turned the other way leaves no viewpoint where the four line
+    up. Both are named `Leaf`, so PlantSway swings the leaflet as an arm for free.
+
+### The budget, and what paid for it
+
+Asked for 25–40 parts per grown plant. Counted, not estimated:
+
+```
+shared body 13 (base 1, soil 7, stem 1, leaves 4) + face 9 = 22
+
+Nubkin     cube       head  7  ->  29
+Petalpip   orb        head 10  ->  32
+Spiretip   teardrop   head 10  ->  32
+Toadcap    mushroom   head 17  ->  39
+Bellchime  bell       head 18  ->  40
+```
+
+A tier-1 bed of twelve at the worst form is **480 parts**.
+
+Three things were cut to pay for the heads, all of them below eye level or behind something:
+
+  * **soil clods 9 -> 7** — still overlaps into one heap; the two bought a brow, a collar and a set
+    of sepals, which are at eye level
+  * **buds 7 -> 4** — two parts each made this the most expensive decoration in the file, on the
+    busiest form. The alternating lean keeps four from looking like a compass rose
+  * **collar petals 8 -> 5, gills 6 -> 4, spots 5 -> 4**
+
+Sprouts are the same function at `SPROUT_SCALE`, so every one of these scales down with `H`.
+
+### Verified, and not
+
+**No Studio this pass** — the brief said disk and Rojo only, so the usual `loadstring` parse could not
+run. What was done instead:
+
+  * a **block-balance check** over all five changed files (opens vs ends, handling Luau's
+    expression-`if`, which takes no `end`) — all balanced, final depth 0
+  * every `part()` call audited for keys outside the `Opts` type — none
+  * grepped for anything outside CreatureModel reading a face part by name — nothing; PlantSway reads
+    `Leaf`, which is preserved, and ParentModel's `Eye` is its own
+  * the part budget above, counted off the literal tables
+
+**Not parsed by a Luau compiler and not seen.** The balance check catches an unclosed block, which is
+what splicing causes; it does not catch a typo inside an expression. First Play will say.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

@@ -169,49 +169,81 @@ local function wedge(name: string, size: Vector3, cf: CFrame, color: Color3,
 end
 
 --==============================================================================
--- THE FACE
+-- THE FACE IS MOULDED, NOT PRINTED
 --
--- Placed on the front of whatever head the form produced. `front` is the local
--- -Z offset of the head's surface, because -Z is the facing direction.
+-- Every piece of it used to be 0.08 studs thick and smooth: two Eye cards, two
+-- Glints, two Cheeks and three Smile bars, all lying flat against the front of
+-- the head. That is a DECAL made of parts. It disappeared from any angle off
+-- dead centre -- and now that plants walk and each one stands on its own
+-- bearing, dead centre is exactly where the player usually is not.
+--
+-- The comment that used to live here said a stud on a 0.3-stud eye is a
+-- blister rather than a texture. That was true OF A CARD. It is not true of a
+-- ball: a creature in this game is moulded plastic, and its eyes are lumps of
+-- the same plastic, not stickers on it.
+--
+--     eyes     dark balls, centred ON the surface so half stands proud
+--     glints   smaller balls sitting on the eyes
+--     cheeks   balls, outboard and low
+--     smile    still three blocks -- one bar reads as a grimace -- but deep
+--
+-- ONE SHARED LIGHT. The glint sits upper-LEFT on BOTH eyes rather than being
+-- mirrored. That is what makes two spheres read as one face lit from one side
+-- instead of two googly eyes.
+--
+-- `front` is the surface the face sits on and it is per-form for a reason: the
+-- widest part of a head is not always the part the face is on. The bell proved
+-- it once already, with a smile inside its own skirt.
 --==============================================================================
 local function addFace(model: Model, headCF: CFrame, width: number, front: number)
-	local eyeW = width * 0.17
-	local eyeH = width * 0.21
-	local gap = width * 0.21
+	local eyeD = width * 0.23
+	local gap = width * 0.23
 
 	for _, side in ipairs({ -1, 1 }) do
+		-- Centred on the surface, so half the ball is outside the head. No
+		-- fudge factor: the radius IS the proudness.
 		local eyeCF = headCF * CFrame.new(side * gap, width * 0.06, -front)
-		part({
-			name = "Eye",
-			size = Vector3.new(eyeW, eyeH, 0.08),
-			cframe = eyeCF,
-			color = DARK,
-			parent = model,
-			-- The face is the one thing that stays smooth. A stud on a
-			-- 0.3-stud eye is a blister, not a texture.
-			studs = false,
-		})
-		-- The glint. Upper-LEFT of each eye on both sides, not mirrored --
-		-- a shared light source is what makes two eyes read as one face.
-		part({
-			name = "Glint",
-			size = Vector3.new(eyeW * 0.34, eyeH * 0.30, 0.08),
-			cframe = eyeCF * CFrame.new(-eyeW * 0.22, eyeH * 0.24, -0.02),
-			color = WHITE,
-			parent = model,
-			studs = false,
-		})
+		ball("Eye", eyeD, eyeCF, DARK, model)
+		-- Smooth, and only this. A glint is the one thing on a creature that is
+		-- meant to look wet.
+		ball("Glint", eyeD * 0.34,
+			eyeCF * CFrame.new(-eyeD * 0.26, eyeD * 0.24, -eyeD * 0.30),
+			WHITE, model, false)
 	end
 
-	-- Three blocks of smile. A single bar reads as a grimace; lifting the ends
-	-- by a hair is the whole difference between pleased and unwell.
+	--==========================================================================
+	-- CHEEKS SIT CLOSE, BECAUSE THE HEAD IS ROUND
+	--
+	-- `front` is the surface distance at the CENTRE of the face. Four of the
+	-- five heads are spheres, so the real surface falls away as you move out --
+	-- at 1.9 gaps from centre on an orb it has dropped 0.19 of a head width
+	-- behind `front`, and a ball placed there hangs in the air beside the head.
+	--
+	-- It got away with that as a flat card because a card that thin reads as
+	-- part of the outline from the front and is invisible from the side. A
+	-- sphere does not: it is visible from everywhere, floating included.
+	--
+	-- 1.45 gaps is the furthest out the error stays under a cheek's own radius
+	-- on every one of the five, and 0.88 of `front` sets it just into the skin.
+	-- No per-form parameter needed, which is worth more than the extra reach.
+	--==========================================================================
+	for _, side in ipairs({ -1, 1 }) do
+		ball("Cheek", width * 0.15,
+			headCF * CFrame.new(side * gap * 1.45, -width * 0.08, -front * 0.88),
+			SeedData.Blush, model)
+	end
+
+	-- Lifting the ends by a hair is the whole difference between pleased and
+	-- unwell. Smooth, like the eyes' glints -- a mouth is a line, and studs on
+	-- one really would be a blister.
 	local mw = width * 0.10
-	for i, spec in ipairs({ { -1, 0.030 }, { 0, 0 }, { 1, 0.030 } }) do
+	for _, spec in ipairs({ { -1, 0.030 }, { 0, 0 }, { 1, 0.030 } }) do
 		local sx: number, lift: number = spec[1], spec[2]
 		part({
 			name = "Smile",
-			size = Vector3.new(mw, width * 0.045, 0.08),
-			cframe = headCF * CFrame.new(sx * mw * 0.92, -width * 0.15 + lift * width, -front),
+			size = Vector3.new(mw, width * 0.05, width * 0.07),
+			cframe = headCF * CFrame.new(sx * mw * 0.92,
+				-width * 0.15 + lift * width, -front * 0.99),
 			color = DARK,
 			parent = model,
 			studs = false,
@@ -222,31 +254,83 @@ end
 --==============================================================================
 -- THE CROWNS
 --==============================================================================
+--==============================================================================
+-- A FLOWER WITH A BACK TO IT
+--
+-- Five petals lying flat in one plane is a paper daisy: edge-on from the side
+-- it vanishes to five lines, and there was nothing underneath it at all -- the
+-- flower simply started in mid-air above a bald orb.
+--
+-- Three changes, no extra petals: they TILT UP so the flower is a shallow bowl
+-- rather than a disc, they are thicker, and a ring of three SEPALS sits under
+-- them in the leaf colour. The sepals are what make it grow out of the head
+-- instead of resting on it.
+--==============================================================================
 local function addFlower(model: Model, sp: SeedData.Species, top: CFrame, w: number)
-	-- Five petals flat around a centre, as on the sheet.
+	-- Under the petals and offset half a step round, so they show through the
+	-- gaps rather than hiding directly behind.
+	for i = 1, 3 do
+		local a = (i - 1) / 3 * math.pi * 2 + math.pi / 5
+		part({
+			name = "Sepal",
+			size = Vector3.new(w * 0.20, w * 0.09, w * 0.34),
+			cframe = top
+				* CFrame.Angles(0, a, 0)
+				* CFrame.new(0, -w * 0.11, -w * 0.20)
+				* CFrame.Angles(math.rad(24), 0, 0),
+			color = sp.Leaf,
+			parent = model,
+		})
+	end
 	for i = 1, 5 do
 		local a = (i - 1) / 5 * math.pi * 2
 		part({
 			name = "Petal",
-			size = Vector3.new(w * 0.38, w * 0.11, w * 0.30),
-			cframe = top * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, -w * 0.28),
+			size = Vector3.new(w * 0.38, w * 0.13, w * 0.32),
+			cframe = top
+				* CFrame.Angles(0, a, 0)
+				* CFrame.new(0, 0, -w * 0.28)
+				-- Cupped. Every petal lifts its outer edge by the same amount,
+				-- which turns five flat cards into one shallow bowl.
+				* CFrame.Angles(math.rad(-17), 0, 0),
 			color = sp.Crown,
 			parent = model,
 		})
 	end
-	ball("FlowerCentre", w * 0.24, top, sp.Accent, model)
+	ball("FlowerCentre", w * 0.26, top * CFrame.new(0, w * 0.04, 0), sp.Accent, model)
 end
 
+--==============================================================================
+-- SIX SPIKES, NOT THREE
+--
+-- Three big ones in a flat row read as a fan seen edge-on: from the side the
+-- Spiretip had a crest, from the front it had a stick. The sheet has a RING of
+-- smaller ones round the crown, which reads the same from every angle -- which
+-- matters more now that plants walk and face different ways.
+--
+-- Turned as well as tilted, so each leans OUT from the centre rather than all
+-- of them leaning within one plane.
+--==============================================================================
+local SPIRE_SPIKES = {
+	-- turn round the crown, height, lean out
+	{ 0.00, 1.00, 6 },
+	{ 0.17, 0.72, 22 },
+	{ 0.33, 0.86, 15 },
+	{ 0.50, 0.66, 24 },
+	{ 0.67, 0.90, 13 },
+	{ 0.84, 0.74, 20 },
+}
+
 local function addSpikes(model: Model, sp: SeedData.Species, top: CFrame, w: number, h: number)
-	-- Three upright leaf-spikes: one tall in the middle, two shorter leaning out.
-	for _, spec in ipairs({ { 0, 1.0, 0 }, { -1, 0.68, 26 }, { 1, 0.68, -26 } }) do
-		local sx: number, scale: number, tilt: number = spec[1], spec[2], spec[3]
+	for _, spec in ipairs(SPIRE_SPIKES) do
+		local turn: number, scale: number, lean: number = spec[1], spec[2], spec[3]
 		part({
 			name = "Spike",
-			size = Vector3.new(w * 0.16, h * 0.30 * scale, w * 0.13),
+			size = Vector3.new(w * 0.13, h * 0.26 * scale, w * 0.11),
 			cframe = top
-				* CFrame.new(sx * w * 0.28, h * 0.13 * scale, 0)
-				* CFrame.Angles(0, 0, math.rad(tilt)),
+				* CFrame.Angles(0, turn * math.pi * 2, 0)
+				* CFrame.new(0, h * 0.11 * scale, -w * 0.24)
+				* CFrame.Angles(math.rad(-lean), 0, 0),
 			color = sp.Crown,
 			parent = model,
 		})
@@ -288,7 +372,7 @@ end
 -- shoved up around the stem, irregular enough that no angle shows a circle, low
 -- enough that the leaves hang over it. That is what this builds.
 --
--- NINE BLOCKS, deterministic, overlapping and part-buried. Not spheres: a
+-- SEVEN BLOCKS, deterministic, overlapping and part-buried. Not spheres: a
 -- Roblox Ball takes its diameter from its smallest axis, so a squashed lump is
 -- not available without a mesh, and a tilted block reads as a clod perfectly
 -- well. Not random: every other decoration in this file is a literal table for
@@ -299,6 +383,10 @@ end
 -- separate BRICKS with gaps between them, which is worse than the puck was. It
 -- takes overlap, a fifth of each clod buried, and a few degrees of tilt before
 -- the eye stops counting them and starts seeing a heap.
+--
+-- Nine became seven when the heads were remodelled. Seven still overlaps into
+-- one heap; the two it cost bought a brow, a collar and a set of sepals, which
+-- are at eye level rather than under the leaves.
 --
 -- Sized off the STEM, not off the frame. That is the whole fix: dirt belongs to
 -- the thing growing out of it, and a heavier plant gets a thicker stem and a
@@ -312,14 +400,12 @@ local SOIL_CLODS = {
 	-- Highest at the stem and thinning outward, so the heap has a peak rather
 	-- than being a ring of debris.
 	{ 0.00, 0.00, 1.70, 0.95, 0, 0 },
-	{ 0.07, 0.78, 1.30, 0.78, 18, 7 },
-	{ 0.19, 1.30, 1.00, 0.58, -34, -5 },
-	{ 0.28, 0.58, 1.15, 0.88, 41, 9 },
-	{ 0.41, 1.44, 0.90, 0.60, -12, 6 },
-	{ 0.53, 0.86, 1.40, 0.80, 27, -8 },
-	{ 0.64, 1.48, 0.82, 0.55, -39, 5 },
-	{ 0.76, 0.66, 1.20, 0.90, 12, -6 },
-	{ 0.88, 1.22, 1.02, 0.64, -21, 8 },
+	{ 0.09, 0.80, 1.35, 0.80, 18, 7 },
+	{ 0.24, 1.34, 1.05, 0.58, -34, -5 },
+	{ 0.38, 0.60, 1.20, 0.88, 41, 9 },
+	{ 0.53, 1.42, 0.95, 0.62, -12, 6 },
+	{ 0.68, 0.84, 1.40, 0.82, 27, -8 },
+	{ 0.84, 1.30, 1.00, 0.60, -39, 5 },
 }
 
 local function addSoil(model: Model, sp: SeedData.Species, cf: CFrame, stemW: number)
@@ -355,9 +441,12 @@ local function addSoil(model: Model, sp: SeedData.Species, cf: CFrame, stemW: nu
 end
 
 local function addBuds(model: Model, sp: SeedData.Species, top: CFrame, w: number)
-	-- A ring of stalked buds, as on the Bellchime.
-	for i = 1, 7 do
-		local a = (i - 1) / 7 * math.pi * 2
+	-- A ring of stalked buds, as on the Bellchime. Four rather than seven: two
+	-- parts each makes this the most expensive decoration in the file, and the
+	-- bell is already the busiest form. Four still reads as a ring and the
+	-- alternating lean keeps it from looking like a compass rose.
+	for i = 1, 4 do
+		local a = (i - 1) / 4 * math.pi * 2
 		local lean = (i % 2 == 0) and 1.0 or 0.76
 		local arm = top * CFrame.Angles(0, a, 0)
 		local reach = w * 0.26
@@ -475,7 +564,18 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	upright("Stem", stemH, stemW, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
 		SeedData.Stem, model)
 
-	--== LEAVES ==--
+	--==========================================================================
+	-- A LEAF AND A LEAFLET, NOT TWO PROPELLERS
+	--
+	-- Two blades, one per side, at the same height and the same angle: from
+	-- above it was a rotor. A second smaller leaflet higher up the stem and
+	-- turned the OTHER way breaks that -- there is no viewpoint left where the
+	-- four line up.
+	--
+	-- Both are still named "Leaf". PlantSway swings every part with that name
+	-- as an arm while a plant walks, and works out which side each is on from
+	-- its own offset, so a leaflet joins in for free.
+	--==========================================================================
 	for _, side in ipairs({ -1, 1 }) do
 		part({
 			name = "Leaf",
@@ -490,6 +590,16 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 				-- Down and out. Level bars read as propellers, which is exactly
 				-- what the first build looked like.
 				* CFrame.Angles(0, side * math.rad(16), side * math.rad(-13)),
+			color = sp.Leaf,
+			parent = model,
+		})
+		part({
+			name = "Leaf",
+			size = Vector3.new(H * 0.16 * G, H * 0.045, H * 0.08 * G),
+			cframe = cf
+				* CFrame.new(side * H * 0.105 * G, stemBase + stemH * 0.74, 0)
+				-- Swept back and lifted, against the big blade's forward droop.
+				* CFrame.Angles(0, side * math.rad(-27), side * math.rad(-34)),
 			color = sp.Leaf,
 			parent = model,
 		})
@@ -515,6 +625,63 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	if sp.Form == "cube" then
 		part({ name = "Head", size = Vector3.new(headW, headW, headW),
 			cframe = headCF, color = sp.Body, parent = model })
+		--==================================================================
+		-- BREAK THE BOX
+		--
+		-- One cube is a die with a face drawn on it. Two things fix that
+		-- without stopping it being a cube, which is the whole silhouette:
+		--
+		--   THE BROW   a bar across the top of the face, standing a little
+		--              proud. It gives the eyes something to sit under, and
+		--              it is the single part that stops the front reading as
+		--              a flat panel.
+		--   THE NUBS   two small blocks on the upper corners. From the side
+		--              -- which is where a walking plant usually is -- they
+		--              are the difference between a box and a head.
+		--==================================================================
+		part({
+			name = "Brow",
+			size = Vector3.new(headW * 0.74, headW * 0.11, headW * 0.10),
+			cframe = headCF * CFrame.new(0, headW * 0.24, -headW * 0.49),
+			color = sp.Crown,
+			parent = model,
+		})
+		for _, side in ipairs({ -1, 1 }) do
+			part({
+				name = "Nub",
+				size = Vector3.new(headW * 0.16, headW * 0.18, headW * 0.16),
+				cframe = headCF
+					* CFrame.new(side * headW * 0.46, headW * 0.40, 0)
+					* CFrame.Angles(0, 0, side * math.rad(14)),
+				color = sp.Body,
+				parent = model,
+			})
+		end
+		--==================================================================
+		-- A SPROUT, BECAUSE THE CUBE HAD NOTHING
+		--
+		-- Every other form carries something on its head -- a flower, spikes,
+		-- a cap, buds -- and reads as a plant because of it. The cube was a
+		-- green box with a face, and its Crown and Accent colours were the
+		-- only two fields on the sheet that nothing anywhere used.
+		--
+		-- Two small leaves and a pale tip. Deliberately tiny: a Nubkin is the
+		-- Common, it is often the smallest thing in the bed, and giving it a
+		-- crown to rival a Bellchime's would be a lie about what it is worth.
+		--==================================================================
+		for _, side in ipairs({ -1, 1 }) do
+			part({
+				name = "Sprout",
+				size = Vector3.new(headW * 0.30, headW * 0.09, headW * 0.17),
+				cframe = topCF
+					* CFrame.new(side * headW * 0.15, headW * 0.05, 0)
+					* CFrame.Angles(0, side * math.rad(22), side * math.rad(-30)),
+				color = sp.Crown,
+				parent = model,
+			})
+		end
+		ball("SproutTip", headW * 0.13, topCF * CFrame.new(0, headW * 0.10, 0),
+			sp.Accent, model)
 
 	elseif sp.Form == "orb" then
 		ball("Head", headW, headCF, sp.Body, model)
@@ -531,6 +698,11 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 					* CFrame.Angles(0, side > 0 and 0 or math.pi, 0),
 				sp.Body, model)
 		end
+		-- A banded collar where the head meets the stem. Without it the
+		-- teardrop is a balloon with sticks in the top and nothing explaining
+		-- where it joins the plant.
+		upright("Collar", headW * 0.13, headW * 0.62,
+			headCF * CFrame.new(0, -headW * 0.42, 0), sp.Crown, model)
 		addSpikes(model, sp, topCF * CFrame.new(0, headW * 0.38, 0), headW, H)
 
 	elseif sp.Form == "mushroom" then
@@ -538,13 +710,40 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 		faceW = headW * 0.86
 		front = headW * 0.42
 		local capY = headW * 0.42
+		--==================================================================
+		-- GILLS
+		--
+		-- The underside of the cap was a flat disc in the same red as the top,
+		-- so from anywhere below eye level -- which is most of the time, since
+		-- these are on the ground -- a Toadcap was a red plate on a stalk. Six
+		-- pale radial blocks set just under the rim give it an inside.
+		--
+		-- Under the disc rather than inside it, and pale rather than red, so
+		-- the two faces of the cap read as two different things.
+		--==================================================================
+		for i = 1, 4 do
+			part({
+				name = "Gill",
+				-- A bar through the centre covers BOTH sides, so four of them at
+				-- 45 degree steps give eight spokes. Long enough to reach 0.52
+				-- of the way out against the cap's own 0.66 radius -- they stop
+				-- just inside the rim rather than poking past it.
+				size = Vector3.new(headW * 0.08, headW * 0.10, headW * 1.05),
+				cframe = headCF
+					* CFrame.new(0, capY - headW * 0.10, 0)
+					* CFrame.Angles(0, (i - 1) / 4 * math.pi, 0),
+				color = sp.Accent,
+				parent = model,
+				studs = false,
+			})
+		end
 		upright("CapDisc", headW * 0.16, headW * 1.32,
 			headCF * CFrame.new(0, capY, 0), sp.Crown, model)
 		ball("CapDome", headW * 1.10, headCF * CFrame.new(0, capY + headW * 0.10, 0),
 			sp.Crown, model)
 		-- Spots, set into the dome's upper face.
-		for i = 1, 5 do
-			local a = (i - 1) / 5 * math.pi * 2
+		for i = 1, 4 do
+			local a = (i - 1) / 4 * math.pi * 2
 			upright("Spot", headW * 0.05, headW * 0.24,
 				headCF * CFrame.Angles(0, a, 0)
 					* CFrame.new(0, capY + headW * 0.36, -headW * 0.40),
@@ -556,14 +755,47 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 		-- A cone by staircase. Four tiers rather than three, and a wider spread
 		-- top to bottom: at 0.62-to-1.08 the flare was too slight to read as a
 		-- skirt and the whole thing looked like a lump.
-		local tiers = { { 0.50, 0.40 }, { 0.74, 0.16 }, { 1.00, -0.08 }, { 1.20, -0.30 } }
+		-- A fifth step at the hem, wider and shallower than the rest: the
+		-- skirt now finishes on a RIDGE rather than just stopping, which is
+		-- what the sheet's flared lip does.
+		local tiers = {
+			{ 0.50, 0.40 }, { 0.74, 0.16 }, { 1.00, -0.08 },
+			{ 1.20, -0.30 }, { 1.32, -0.44 },
+		}
 		for _, t in ipairs(tiers) do
 			local d: number, dy: number = t[1], t[2]
 			upright("BellTier", headW * 0.28, headW * d,
 				headCF * CFrame.new(0, dy * headW, 0), sp.Body, model)
 		end
-		upright("Collar", headW * 0.16, headW * 0.58,
-			headCF * CFrame.new(0, headW * 0.54, 0), sp.Accent, model)
+		--==================================================================
+		-- A SCALLOPED COLLAR, NOT A NAPKIN RING
+		--
+		-- This was one plain cylinder in the Accent green. The sheet has a ring
+		-- of overlapping PINK petals where the skirt meets the stem -- the
+		-- single most recognisable thing about a Bellchime after its shape --
+		-- and a smooth ring threw all of it away.
+		--
+		-- Five blocks round the rim, alternating slightly in size so the
+		-- outline scallops instead of stepping evenly. Crown, not Accent: on
+		-- the sheet the collar and the bud tips are the same pink and the
+		-- stalks between them are the green.
+		--==================================================================
+		for i = 1, 5 do
+			local big = (i % 2 == 0)
+			local petal = headW * (if big then 0.34 else 0.28)
+			part({
+				name = "CollarPetal",
+				size = Vector3.new(petal, headW * 0.13, petal * 0.72),
+				cframe = headCF
+					* CFrame.new(0, headW * 0.54, 0)
+					* CFrame.Angles(0, (i - 1) / 5 * math.pi * 2, 0)
+					* CFrame.new(0, 0, -headW * 0.29)
+					* CFrame.Angles(math.rad(-14), 0, 0),
+				color = sp.Crown,
+				parent = model,
+				studs = false,
+			})
+		end
 		addBuds(model, sp, headCF * CFrame.new(0, headW * 0.60, 0), headW)
 		-- The face rides the WIDE lower skirt, which is where the sheet puts it,
 		-- so `front` is that tier's radius rather than the head's.
@@ -572,7 +804,9 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 		front = headW * 0.60
 	end
 
-	addFace(model, faceCF, faceW, front + 0.04)
+	-- No +0.04 any more. That was the sticker being pushed a hair clear of the
+	-- head so it did not z-fight; a ball centred on the surface needs no help.
+	addFace(model, faceCF, faceW, front)
 
 	-- PrimaryPart is the BASE plate: a creature's pivot is where it meets the
 	-- soil, so planting one is placing its pivot on the dirt rather than working

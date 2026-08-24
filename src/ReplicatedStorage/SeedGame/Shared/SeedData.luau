@@ -124,8 +124,39 @@ local STEM = Color3.fromRGB(124, 182, 92)
 -- reads as the same dirt shovelled up rather than as a different material.
 --==============================================================================
 local SOIL = Color3.fromRGB(124, 76, 50)
+--==============================================================================
+-- FIVE BODIES, FIVE COLOURS
+--
+-- There used to be TWO. Nubkin and Petalpip were both `GREEN`, Toadcap and
+-- Bellchime were both `CREAM`, and Spiretip was 132,186,96 -- fourteen points
+-- off Nubkin, which is not a difference anybody can see across a plot. So a bed
+-- of five species read as a bed of two, and GardenUI already carried a comment
+-- saying exactly that: it had to swatch by CROWN because Body put "two
+-- identical cream squares next to each other".
+--
+-- WHAT STAYS SHARED IS THE PART THAT MAKES IT A BIOME. Stem, leaf and soil are
+-- identical on all five and must remain so -- that family resemblance is what
+-- makes the fifth one read as a Greenhollow creature rather than a stray. The
+-- HEAD is where a species is allowed to be itself.
+--
+-- Still all greens and creams, deliberately. Greenhollow is the first biome and
+-- the four after it need somewhere to go; spending saturated colour here would
+-- leave Emberroot and Starbloom nothing to be.
+--
+--     Nubkin     leaf green        the baseline, and the ordinary one
+--     Petalpip   pale yellow-green sunlit, lighter than Nubkin
+--     Spiretip   deep pine         the only dark one, and the only cool green
+--     Toadcap    warm cream        buttery, under a red cap
+--     Bellchime  cool porcelain    blue-white, so it is not Toadcap
+--==============================================================================
 local GREEN = Color3.fromRGB(146, 196, 106)
 local CREAM = Color3.fromRGB(242, 238, 206)
+
+-- The cheeks. One shared colour rather than a per-species one: a face is the
+-- thing all five have in common and it should read as one family of creature.
+local BLUSH = Color3.fromRGB(238, 150, 138)
+
+SeedData.Blush = BLUSH
 
 SeedData.Stem = STEM
 
@@ -133,31 +164,50 @@ SeedData.Species = {
 	{
 		Id = "nubkin", Name = "Nubkin", Rarity = "Common", Biome = "greenhollow",
 		Kg = 2, Height = 2.4, Form = "cube",
-		Body = GREEN, Crown = GREEN, Accent = CREAM, Leaf = LEAF, Soil = SOIL,
+		-- Crown is the pair of sprout leaves on top of the cube; Accent is
+		-- their pale tips. The cube used to have neither and was the only
+		-- species with nothing on its head at all.
+		Body = GREEN,
+		Crown = Color3.fromRGB(176, 214, 128),
+		Accent = CREAM, Leaf = LEAF, Soil = SOIL,
 	},
 	{
 		Id = "petalpip", Name = "Petalpip", Rarity = "Common", Biome = "greenhollow",
 		Kg = 5, Height = 3.0, Form = "orb",
-		Body = GREEN, Crown = CREAM,
-		Accent = Color3.fromRGB(226, 138, 116), Leaf = LEAF, Soil = SOIL,
+		-- Lifted off Nubkin's green toward yellow. Same family, sunlit.
+		Body = Color3.fromRGB(206, 224, 132),
+		Crown = Color3.fromRGB(250, 246, 226),
+		Accent = Color3.fromRGB(232, 132, 106), Leaf = LEAF, Soil = SOIL,
 	},
 	{
 		Id = "spiretip", Name = "Spiretip", Rarity = "Uncommon", Biome = "greenhollow",
 		Kg = 14, Height = 3.2, Form = "teardrop",
-		Body = Color3.fromRGB(132, 186, 96),
-		Crown = Color3.fromRGB(168, 208, 122), Accent = CREAM, Leaf = LEAF, Soil = SOIL,
+		-- The dark one. Fourteen points off Nubkin was invisible; this is a
+		-- different green, cooler and deeper, and it is the only one in the
+		-- biome that reads as shade rather than sunlight.
+		Body = Color3.fromRGB(94, 152, 104),
+		Crown = Color3.fromRGB(236, 242, 206),
+		Accent = Color3.fromRGB(242, 246, 220), Leaf = LEAF, Soil = SOIL,
 	},
 	{
 		Id = "toadcap", Name = "Toadcap", Rarity = "Rare", Biome = "greenhollow",
 		Kg = 40, Height = 3.6, Form = "mushroom",
-		Body = CREAM,
-		Crown = Color3.fromRGB(216, 112, 100), Accent = CREAM, Leaf = LEAF, Soil = SOIL,
+		-- Warm cream, against Bellchime's cool one. The red cap does most of
+		-- the work at distance; this is what separates them close up.
+		Body = Color3.fromRGB(240, 228, 198),
+		Crown = Color3.fromRGB(216, 112, 100),
+		Accent = Color3.fromRGB(250, 246, 226), Leaf = LEAF, Soil = SOIL,
 	},
 	{
 		Id = "bellchime", Name = "Bellchime", Rarity = "Epic", Biome = "greenhollow",
 		Kg = 110, Height = 4.0, Form = "bell",
-		Body = CREAM,
-		Crown = Color3.fromRGB(234, 158, 158), Accent = LEAF, Leaf = LEAF, Soil = SOIL,
+		-- Cool porcelain. The rarest thing in the biome should not be the same
+		-- colour as the fourth rarest.
+		Body = Color3.fromRGB(214, 226, 242),
+		-- The scalloped collar AND the bud tips. On the sheet both are the same
+		-- pink; the stalks between them are the Accent green.
+		Crown = Color3.fromRGB(240, 150, 168),
+		Accent = LEAF, Leaf = LEAF, Soil = SOIL,
 	},
 } :: { Species }
 
