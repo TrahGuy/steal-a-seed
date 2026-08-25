@@ -24,6 +24,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
@@ -333,6 +334,55 @@ end)
 --==============================================================================
 local millTrack: AnimationTrack? = nil
 
+--==============================================================================
+-- WHICH BELT IS UNDER THE PLAYER
+--
+-- The server says OnTreadmill and nothing else, which was all the FX needed
+-- until the belt had a speed worth matching. Rather than add a message, the
+-- nearest tagged belt is the one being stood on -- the attribute only goes up
+-- while the player is standing on one, so there is no ambiguity to resolve.
+--==============================================================================
+local function beltUnderPlayer(): BasePart?
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return nil
+	end
+	local nearest: BasePart? = nil
+	local best = math.huge
+	for _, belt in ipairs(CollectionService:GetTagged(GameConfig.Tags.Treadmill)) do
+		if belt:IsA("BasePart") then
+			local d = (belt.Position - (root :: BasePart).Position).Magnitude
+			if d < best then
+				best = d
+				nearest = belt
+			end
+		end
+	end
+	return if best < 24 then nearest else nil
+end
+
+--==============================================================================
+-- FEET AT THE SPEED OF THE BELT
+--
+-- Roblox's own Animate script scales the run cycle by speed/16, which is what
+-- keeps a running character's feet on the ground. A character on a mill does not
+-- move, so nothing did that division for it -- and the result was a sprint over
+-- a surface crawling at a flat 5.5 studs a second.
+--
+-- Same number the chevrons scroll at, off the same attribute.
+--==============================================================================
+local function matchBeltCadence()
+	local track = millTrack
+	if not track then
+		return
+	end
+	local belt = beltUnderPlayer()
+	local studs = (belt and tonumber(belt:GetAttribute("BeltSpeed")))
+		or GameConfig.Mill.Tiers[1].beltStuds
+	track:AdjustSpeed(studs / GameConfig.Mill.RunCycleStuds)
+end
+
 local function stopMillRun()
 	if millTrack then
 		millTrack:Stop(0.2)
@@ -365,6 +415,7 @@ local function startMillRun()
 	track.Looped = true
 	track:Play(0.2)
 	millTrack = track
+	matchBeltCadence()
 end
 
 player:GetAttributeChangedSignal(GameConfig.Attributes.OnTreadmill):Connect(function()

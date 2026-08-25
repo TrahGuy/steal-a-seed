@@ -45,8 +45,10 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+local MillModel = require(Shared:WaitForChild("MillModel"))
 
 local MILL = GameConfig.Treadmill
+local LADDER = GameConfig.Mill
 local ATTR = GameConfig.Attributes
 
 local TreadmillService = {}
@@ -126,7 +128,45 @@ function TreadmillService.RateFor(player: Player): number
 	if not belt or not standingOn(root :: BasePart, belt) then
 		return 0
 	end
-	return MILL.SpeedPerSecond
+	return TreadmillService.RateForTier(TreadmillService.TierOf(player))
+end
+
+--==============================================================================
+-- WHAT A TIER PAYS, AND WHICH TIER SOMEBODY HAS
+--
+-- Both read straight off the profile, which is the only place a mill tier
+-- exists. There is no per-plot cache to go stale, and a player with no profile
+-- yet is tier one rather than an error.
+--==============================================================================
+function TreadmillService.TierOf(player: Player): number
+	local profile = PlayerDataService.Get(player)
+	local tier = profile and tonumber(profile.MillTier) or LADDER.StartingTier
+	return math.clamp(math.floor(tier), 1, #LADDER.Tiers)
+end
+
+function TreadmillService.RateForTier(tier: number): number
+	local spec = LADDER.Tiers[math.clamp(math.floor(tier), 1, #LADDER.Tiers)]
+	return if spec then spec.speed else MILL.SpeedPerSecond
+end
+
+--==============================================================================
+-- HOW FAST THE SURFACE IS TRAVELLING
+--
+-- One number on the belt, and it is the whole of the feet problem. Ambience
+-- scrolls the chevrons at it, spins the rollers off it, and SpeedFX divides it
+-- by the sixteen studs a second Roblox authors its run cycle for to get the
+-- animation speed. Belt and legs cannot disagree because there is only one
+-- number for them to disagree about.
+--
+-- Set on a state CHANGE, not per tick: it is an attribute, and an attribute
+-- written sixty times a second to six belts is replication for nothing.
+--==============================================================================
+local function setBeltSpeed(belt: BasePart, occupied: boolean, tier: number)
+	local spec = LADDER.Tiers[math.clamp(tier, 1, #LADDER.Tiers)]
+	local want = if occupied then (spec and spec.beltStuds or 13) else LADDER.IdleStuds
+	if belt:GetAttribute("BeltSpeed") ~= want then
+		belt:SetAttribute("BeltSpeed", want)
+	end
 end
 
 --==============================================================================
@@ -142,6 +182,20 @@ local function payEveryone()
 		local on = rate > 0
 		if (player:GetAttribute(ATTR.OnTreadmill) == true) ~= on then
 			player:SetAttribute(ATTR.OnTreadmill, on or nil)
+			--==============================================================
+			-- THE BELT SPEEDS UP WHEN SOMEBODY IS ON IT
+			--
+			-- Written HERE, inside the state-change branch, so it costs one
+			-- attribute write per step-on and one per step-off rather than
+			-- one per tick per belt. Everything that moves on a mill reads
+			-- this one number.
+			--==============================================================
+			local plot = PlotService.PlotOf(player)
+			local plotId = plot and plot:GetAttribute(ATTR.PlotId)
+			local belt = if type(plotId) == "number" then beltFor(plotId) else nil
+			if belt then
+				setBeltSpeed(belt, on, TreadmillService.TierOf(player))
+			end
 		end
 		if rate > 0 then
 			local since = lastPaid[player]
@@ -174,99 +228,190 @@ local function forget(player: Player)
 end
 
 --==============================================================================
--- THE SIGN ON THE MILL
+-- THE MILL A PLOT IS WEARING
 --
--- Server-built and static: it says the RATE, which is a property of the mill
--- rather than of whoever is standing on it. Nothing here updates per player, so
--- there is nothing to replicate.
+-- MapService puts one on every plot at the starting tier, because it also runs
+-- in Edit where nobody owns anything. The moment a plot is claimed -- and every
+-- time its owner buys a step -- the geometry is thrown away and rebuilt at the
+-- tier the profile says.
+--
+-- REBUILT, NOT PATCHED. Rule 10: the tiers differ in materials, in colours and
+-- in which ornaments exist at all, and a function that tried to morph one into
+-- another would be seven times the code and wrong the first time an ornament
+-- was added. The mill is cheap to build; it is built again.
 --==============================================================================
-local function signOn(belt: BasePart)
-	local existing = belt:FindFirstChild("MillSign")
-	if existing then
-		existing:Destroy()
+local function millModelFor(plotId: number): Model?
+	for _, belt in ipairs(CollectionService:GetTagged(GameConfig.Tags.Treadmill)) do
+		local model = belt.Parent
+		if model and model:IsA("Model") and model:GetAttribute(ATTR.PlotId) == plotId then
+			return model
+		end
 	end
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "MillSign"
-	billboard.Adornee = belt
-	billboard.AlwaysOnTop = false
-	billboard.Size = UDim2.fromOffset(150, 46)
-	billboard.StudsOffset = Vector3.new(0, belt.Size.Y * 0.5 + 4.2, 0)
-	billboard.MaxDistance = 120
-	billboard.Parent = belt
+	return nil
+end
 
-	local panel = Instance.new("Frame")
-	panel.Size = UDim2.fromScale(1, 1)
-	panel.BackgroundColor3 = Color3.fromRGB(26, 24, 30)
-	panel.BackgroundTransparency = 0.2
-	panel.BorderSizePixel = 0
-	panel.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(142, 196, 62)
-	stroke.Thickness = 2
-	stroke.Transparency = 0.3
-	stroke.Parent = panel
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
-	label.TextScaled = true
-	label.TextColor3 = Color3.fromRGB(142, 196, 62)
-	label.Text = string.format("+%g/step", MILL.SpeedPerSecond)
-	label.Parent = panel
+local function signFor(plotId: number): Model?
+	for _, sign in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillSign)) do
+		if sign:IsA("Model") and sign:GetAttribute(ATTR.PlotId) == plotId then
+			return sign
+		end
+	end
+	return nil
 end
 
 --==============================================================================
--- ARROWS ON THE BELT
+-- WHAT THE BOARD SAYS
 --
--- A treadmill that never moves is a box you stand on. These are the only thing
--- that says the belt is running -- built here because the map is code, scrolled
--- on each client because a belt everybody sees at a different offset is still a
--- belt, and moving 60 parts on the server is 60 parts of replication a second.
+-- Current step, what it costs, and both rates -- because "Level 3 to Level 4"
+-- means nothing on its own and the only question a player is actually asking is
+-- how much faster it goes.
 --
--- Anchored, non-collidable, and deliberately thin: they are paint, not geometry
--- you can trip over.
+-- At the top there is no next step and no price. The button does not sit there
+-- greyed out inviting a press: it says MAX and stops being a button, which is
+-- the same rule the shop's SOON follows for the opposite reason.
 --==============================================================================
-local CHEVRONS_PER_BELT = 5
-
-local function chevronsOn(belt: BasePart)
-	local existing = belt:FindFirstChild("Chevrons")
-	if existing then
-		existing:Destroy()
-	end
-	local folder = Instance.new("Folder")
-	folder.Name = "Chevrons"
-	folder.Parent = belt
-
-	local span = belt.Size.Z
-	local width = belt.Size.X * 0.30
-	for i = 1, CHEVRONS_PER_BELT do
-		-- Two bars meeting at a point: an arrow reads a direction, a bar does not.
-		for _, side in ipairs({ -1, 1 }) do
-			local bar = Instance.new("Part")
-			bar.Name = "Chevron"
-			bar.Size = Vector3.new(width, 0.08, 0.5)
-			bar.Anchored = true
-			bar.CanCollide = false
-			bar.CanQuery = false
-			bar.CanTouch = false
-			bar.Material = Enum.Material.SmoothPlastic
-			bar.Color = Color3.fromRGB(96, 92, 88)
-			bar.CFrame = belt.CFrame
-				* CFrame.new(side * width * 0.42, belt.Size.Y * 0.5 + 0.05, 0)
-				* CFrame.Angles(0, side * math.rad(24), 0)
-			bar.Parent = folder
-			bar:SetAttribute("ChevronIndex", i)
-			bar:SetAttribute("ChevronSide", side)
-			bar:SetAttribute("ChevronSpan", span)
-			CollectionService:AddTag(bar, GameConfig.Tags.MillChevron)
+--==============================================================================
+-- WHOSE MILL IS THIS, AND WHAT TIER IS IT
+--
+-- Resolved from the plot rather than passed in, because the two callers cannot
+-- both know: a rebuild knows the tier it just built, but the tag signal that
+-- fires when a rebuilt sign appears knows only that a sign appeared.
+--
+-- That mattered. The rebuild refreshed the board and then CollectionService
+-- delivered the added-signal a frame later, which refreshed it again at the
+-- STARTING tier -- so a tier-7 mill sat beside a board still offering level 1
+-- for ten thousand.
+--==============================================================================
+local function tierOnPlot(plotId: number): number
+	for _, plot in ipairs(CollectionService:GetTagged(GameConfig.Tags.Plot)) do
+		if plot:IsA("Model") and plot:GetAttribute(ATTR.PlotId) == plotId then
+			local owner = PlotService.OwnerOf(plot)
+			if owner then
+				return TreadmillService.TierOf(owner)
+			end
 		end
 	end
+	return LADDER.StartingTier
+end
+
+local function refreshSign(plotId: number, tier: number)
+	local sign = signFor(plotId)
+	if not sign then
+		return
+	end
+	local board = sign:FindFirstChild("Board")
+	local face = board and board:FindFirstChild("Face")
+	if not face then
+		return
+	end
+	local step = face:FindFirstChild("Step") :: TextLabel?
+	local rate = face:FindFirstChild("Rate") :: TextLabel?
+	local buy = face:FindFirstChild("Buy") :: Frame?
+	local price = buy and buy:FindFirstChild("Price") :: TextLabel?
+	local prompt = board:FindFirstChildOfClass("ProximityPrompt")
+
+	local here = LADDER.Tiers[tier]
+	local next_ = LADDER.Tiers[tier + 1]
+
+	if step then
+		step.Text = if next_
+			then string.format("LEVEL %d  >  LEVEL %d", tier, tier + 1)
+			else string.format("LEVEL %d", tier)
+	end
+	if rate then
+		rate.Text = if next_
+			then string.format("%g/s  >  %g/s", here.speed, next_.speed)
+			else string.format("%s  ·  %g/s", string.upper(here.name), here.speed)
+	end
+	if price then
+		price.Text = if next_
+			then "$" .. GameConfig.compact(next_.cost)
+			else "MAX"
+	end
+	if buy then
+		buy.BackgroundColor3 = if next_
+			then Color3.fromRGB(214, 78, 66)
+			else Color3.fromRGB(96, 100, 108)
+	end
+	if prompt then
+		prompt.Enabled = next_ ~= nil
+		prompt.ObjectText = here.name
+	end
+end
+
+function TreadmillService.Rebuild(plot: Model, tier: number)
+	local plotId = plot:GetAttribute(ATTR.PlotId)
+	if type(plotId) ~= "number" then
+		return
+	end
+	local existing = millModelFor(plotId)
+	if not existing then
+		return
+	end
+	local cf = existing:GetPivot()
+	local parent = existing.Parent
+	local sign = signFor(plotId)
+	local signCF = sign and sign:GetPivot()
+	existing:Destroy()
+
+	local model, belt = MillModel.Build(tier, cf, parent)
+	model.Name = string.format("%s%02d", GameConfig.Plot.TreadmillName, plotId)
+	model:SetAttribute(ATTR.PlotId, plotId)
+	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
+	setBeltSpeed(belt, false, tier)
+
+	-- The sign was inside the model, so it went with it. Same place, new board.
+	local rebuiltSign = MillModel.BuildSign(
+		signCF or (cf * CFrame.new(8.6, -0.6, -6)), model)
+	rebuiltSign:SetAttribute(ATTR.PlotId, plotId)
+	-- Deferred, so it lands after the tag signal that fires when the sign above
+	-- appears. Both refresh from the profile now, so the order stopped mattering
+	-- -- this just makes the last word the right one.
+	task.defer(refreshSign, plotId, tier)
+end
+
+--==============================================================================
+-- BUYING A STEP
+--
+-- Rule 3: the server owns the economy, so everything the client sends is a
+-- claim. It sends nothing but the verb -- not a tier, not a price -- because
+-- the only mill it could possibly be upgrading is the one on its own plot, and
+-- both of those facts are things this side already knows.
+--
+-- Charged before it is built. If the cash is not there the mill does not
+-- change; if the build somehow failed the player has still been charged, which
+-- is why the build is last and cannot fail -- it is the same call the map makes
+-- six times at boot.
+--==============================================================================
+function TreadmillService.Upgrade(player: Player): boolean
+	if not PlayerDataService.IsReady(player) then
+		return false
+	end
+	local plot = PlotService.PlotOf(player)
+	if not plot or PlotService.OwnerOf(plot) ~= player then
+		return false
+	end
+	local tier = TreadmillService.TierOf(player)
+	local next_ = LADDER.Tiers[tier + 1]
+	if not next_ then
+		return false
+	end
+	local profile = PlayerDataService.Get(player)
+	if not profile or profile.Cash < next_.cost then
+		return false
+	end
+	if not PlayerDataService.AddCash(player, -next_.cost) then
+		return false
+	end
+	if not PlayerDataService.SetMillTier(player, tier + 1) then
+		-- Paid and not upgraded is the one outcome that must not stand.
+		PlayerDataService.AddCash(player, next_.cost)
+		return false
+	end
+	TreadmillService.Rebuild(plot, tier + 1)
+	log(string.format("%s upgraded their mill to %d (%s, %g/s) for %d.",
+		player.Name, tier + 1, next_.name, next_.speed, next_.cost))
+	return true
 end
 
 --==============================================================================
@@ -293,18 +438,104 @@ function TreadmillService.Start()
 	local mills = 0
 	for _, belt in ipairs(CollectionService:GetTagged(GameConfig.Tags.Treadmill)) do
 		if belt:IsA("BasePart") then
-			signOn(belt)
-			chevronsOn(belt)
+			setBeltSpeed(belt, false, LADDER.StartingTier)
 			mills += 1
 		end
 	end
-	table.insert(serviceConnections,
-		CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Treadmill):Connect(function(belt)
-			if belt:IsA("BasePart") then
-				signOn(belt)
-				chevronsOn(belt)
+
+	--==========================================================================
+	-- A CLAIMED PLOT GETS ITS OWNER'S MILL
+	--
+	-- The map built a starting one because it does not know who anybody is.
+	-- This is where it finds out.
+	--==========================================================================
+	table.insert(serviceConnections, PlotService.OnAssigned(function(player, plot)
+		local plotId = plot:GetAttribute(ATTR.PlotId)
+		if type(plotId) ~= "number" then
+			return
+		end
+		--======================================================================
+		-- WAIT FOR THE PROFILE, OR BUILD THE WRONG MILL
+		--
+		-- A plot is handed out the moment somebody joins; the save is a
+		-- DataStore round trip that finishes a second or two later. Reading the
+		-- tier straight away therefore found no profile at all and quietly
+		-- answered "tier 1" -- so a player who owned a Heartroot rejoined to a
+		-- Compost Walk, and the sign offered to sell them level 2 again.
+		--
+		-- Same wait, same deadline and same reason as the one PlantService uses
+		-- before it restores a bed.
+		--======================================================================
+		task.spawn(function()
+			local deadline = os.clock() + 20
+			while not PlayerDataService.IsReady(player) and os.clock() < deadline do
+				task.wait(0.25)
 			end
+			if player.Parent ~= Players or PlotService.OwnerOf(plot) ~= player then
+				return
+			end
+			local tier = TreadmillService.TierOf(player)
+			if tier ~= LADDER.StartingTier then
+				TreadmillService.Rebuild(plot, tier)
+			else
+				refreshSign(plotId, tier)
+			end
+		end)
+	end))
+
+	--==========================================================================
+	-- THE SIGN IS THE PRIMARY WAY IN
+	--
+	-- A ProximityPrompt fires Triggered on the SERVER with the player who
+	-- pressed it, so the world sign needs no remote at all -- and Style Custom
+	-- means PromptUI draws it, which is what makes it a thumb-sized target on a
+	-- phone rather than a keyboard hint.
+	--
+	-- Bound by tag so a rebuilt sign is picked up without anybody remembering
+	-- to rebind it.
+	--==========================================================================
+	local function bindSign(instance: Instance)
+		if not instance:IsA("Model") then
+			return
+		end
+		local board = instance:FindFirstChild("Board")
+		local prompt = board and board:FindFirstChildOfClass("ProximityPrompt")
+		if not prompt then
+			return
+		end
+		table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
+			TreadmillService.Upgrade(player)
 		end))
+		local plotId = instance:GetAttribute(ATTR.PlotId)
+		if type(plotId) == "number" then
+			refreshSign(plotId, tierOnPlot(plotId))
+		end
+	end
+
+	for _, sign in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillSign)) do
+		bindSign(sign)
+	end
+	table.insert(serviceConnections,
+		CollectionService:GetInstanceAddedSignal(GameConfig.Tags.MillSign):Connect(bindSign))
+
+	--==========================================================================
+	-- THE ONE THING A CLIENT MAY ASK FOR
+	--
+	-- Same remote and the same shape of validation as PlantAt and PickUp: a verb
+	-- and nothing else worth trusting.
+	--==========================================================================
+	local remotes = ReplicatedStorage:WaitForChild("SeedGame"):FindFirstChild("Remotes")
+	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if channel and channel:IsA("RemoteEvent") then
+		table.insert(serviceConnections, channel.OnServerEvent:Connect(
+			function(player: Player, action: any)
+				if action == LADDER.Action then
+					TreadmillService.Upgrade(player)
+				end
+			end))
+	else
+		warn("[Seed/TreadmillService] No GameEvent remote. Mills cannot be upgraded.")
+	end
 
 	running = true
 	task.spawn(function()
@@ -318,8 +549,9 @@ function TreadmillService.Start()
 	end)
 
 	log(string.format(
-		"Ready. The only faucet for Speed: +%g/sec while the owner stands on their own mill. %d mill(s).",
-		MILL.SpeedPerSecond, mills))
+		"Ready. The only faucet for Speed. %d mill(s), %d tiers, +%g/sec at tier 1 up to +%g/sec at tier %d.",
+		mills, #LADDER.Tiers, LADDER.Tiers[1].speed,
+		LADDER.Tiers[#LADDER.Tiers].speed, #LADDER.Tiers))
 end
 
 function TreadmillService.Snapshot(): string
