@@ -3688,8 +3688,9 @@ HTTP to see them run; disk is still the only source of truth and re-syncs identi
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
-  * **SpeedGate values are known to be wrong** — spaced correctly relative to each other, absolute
-    numbers meaningless until the treadmill exists and there is a measured rate to scale against.
+  * **SpeedGate** is on the billions ladder: Greenhollow 0, Dustbowl 167M, Tanglemire 800M,
+    Emberroot 3B, Starbloom 10B. Absolute numbers match the reference leaderboard's order of
+    magnitude; relative spacing is the old 0 / 2.5k / 12k / 45k / 150k ratio.
   * **The repo FOLDER is still `D:\KAPE\Steal an Artifact`.** The Roblox place itself was renamed
     to "Steal a Seed" by the owner on 2026-08-21.
   * **Offline income.** Deferred in the plan; the reference advertises it in a banner across the top

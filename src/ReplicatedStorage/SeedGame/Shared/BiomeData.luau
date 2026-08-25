@@ -68,11 +68,11 @@ export type Biome = {
 --==============================================================================
 -- THE FIVE
 --
--- SpeedGate values are placeholders and are KNOWN to be wrong. The reference
--- game's leaderboard runs to 3.2 billion Speed, so the real ladder is several
--- orders of magnitude above anything here. They are spaced correctly relative
--- to each other, which is what the map needs today; the absolute numbers get
--- set when the treadmill exists and there is a measured rate to scale against.
+-- SpeedGate is the Speed SCORE needed to pass that biome's arch (and, when
+-- raid checks land, to steal from its parent without an instant catch).
+-- Same relative spacing as the old 0 / 2.5k / 12k / 45k / 150k ladder, scaled
+-- so Starbloom is 10 billion — the reference leaderboard's order of magnitude,
+-- not a few minutes of milling. Greenhollow stays ungated.
 --==============================================================================
 BiomeData.Biomes = {
 	{
@@ -95,7 +95,7 @@ BiomeData.Biomes = {
 		DisplayName = "Dustbowl",
 		Mood = "😐",
 		Order = 2,
-		SpeedGate = 2500,
+		SpeedGate = 167_000_000,
 		GroundColor = Color3.fromRGB(226, 198, 138),
 		WallColor = Color3.fromRGB(186, 142, 92),
 		AccentColor = Color3.fromRGB(212, 158, 78),
@@ -110,7 +110,7 @@ BiomeData.Biomes = {
 		DisplayName = "Tanglemire",
 		Mood = "😟",
 		Order = 3,
-		SpeedGate = 12000,
+		SpeedGate = 800_000_000,
 		GroundColor = Color3.fromRGB(58, 116, 96),
 		WallColor = Color3.fromRGB(40, 74, 62),
 		AccentColor = Color3.fromRGB(168, 214, 96),
@@ -125,7 +125,7 @@ BiomeData.Biomes = {
 		DisplayName = "Emberroot",
 		Mood = "😨",
 		Order = 4,
-		SpeedGate = 45000,
+		SpeedGate = 3_000_000_000,
 		GroundColor = Color3.fromRGB(74, 54, 50),
 		WallColor = Color3.fromRGB(50, 36, 34),
 		AccentColor = Color3.fromRGB(255, 118, 44),
@@ -140,7 +140,7 @@ BiomeData.Biomes = {
 		DisplayName = "Starbloom",
 		Mood = "💀",
 		Order = 5,
-		SpeedGate = 150000,
+		SpeedGate = 10_000_000_000,
 		GroundColor = Color3.fromRGB(30, 24, 60),
 		WallColor = Color3.fromRGB(20, 16, 42),
 		AccentColor = Color3.fromRGB(158, 128, 255),
