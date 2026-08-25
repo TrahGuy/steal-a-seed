@@ -29,6 +29,7 @@ local CollectionService = game:GetService("CollectionService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MillModel = require(Shared:WaitForChild("MillModel"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 -- Dressing, not layout. Deliberately not a "*Service" so ServerMain does not
 -- try to start it -- MapService calls it during its own build.
@@ -422,56 +423,33 @@ end
 -- this one, so it is the exception to the "nothing catches a runner" rule, and
 -- at 1.5 studs high it is a step rather than an obstacle.
 --==============================================================================
+--==============================================================================
+-- THE MILL IS BUILT BY MillModel NOW
+--
+-- What used to be here was one wood slab and a smooth grey belt, and it was the
+-- same object on every plot forever. There are seven of them now and which one
+-- a plot gets depends on what its owner has bought, so the geometry moved to a
+-- shared builder that TreadmillService can call again when that changes.
+--
+-- The map still puts it THERE and stamps whose it is. Everything a mill needs to
+-- be found by -- the model name, the PlotId, the tag on the belt -- is set here,
+-- because those are the map's contract with the service and not part of the
+-- look.
+--
+-- Built at the starting tier: MapService also runs in Edit for previewing the
+-- layout, where nobody owns anything. TreadmillService rebuilds it at the
+-- owner's real tier the moment a plot is claimed.
+--==============================================================================
 local function buildTreadmill(id: number, cf: CFrame, parent: Instance): Model
-	local model = Instance.new("Model")
+	local model, belt = MillModel.Build(GameConfig.Mill.StartingTier, cf, parent)
 	model.Name = string.format("%s%02d", PLOT.TreadmillName, id)
 	model:SetAttribute(GameConfig.Attributes.PlotId, id)
-	model.Parent = parent
-
-	local frame = build({
-		name = "Frame",
-		size = Vector3.new(11, 1.2, 19),
-		cframe = cf,
-		color = WOOD,
-		material = Enum.Material.Wood,
-		studs = false,
-		parent = model,
-	})
-	model.PrimaryPart = frame
-
-	local belt = build({
-		name = PLOT.TreadmillName,
-		size = Vector3.new(8, 1.4, 16),
-		cframe = cf * CFrame.new(0, 0.4, 0),
-		color = Color3.fromRGB(58, 52, 48),
-		material = Enum.Material.SmoothPlastic,
-		studs = false,
-		parent = model,
-	})
 	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
 
-	for _, side in ipairs({ -1, 1 }) do
-		build({
-			name = "Handrail",
-			size = Vector3.new(0.7, 5, 0.7),
-			cframe = cf * CFrame.new(side * 4.6, 3, -7),
-			color = WOOD_DARK,
-			material = Enum.Material.Wood,
-			collide = false,
-			studs = false,
-			parent = model,
-		})
-	end
-	build({
-		name = "HandrailTop",
-		size = Vector3.new(10, 0.7, 0.7),
-		cframe = cf * CFrame.new(0, 5.3, -7),
-		color = WOOD_DARK,
-		material = Enum.Material.Wood,
-		collide = false,
-		studs = false,
-		parent = model,
-	})
+	-- Beside it, facing the same way the walker does, far enough out that it is
+	-- not something you catch with a shoulder getting on.
+	local sign = MillModel.BuildSign(cf * CFrame.new(8.6, -0.6, -6), model)
+	sign:SetAttribute(GameConfig.Attributes.PlotId, id)
 
 	return model
 end

@@ -45,12 +45,13 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
-local CreatureModel = require(script.Parent:WaitForChild("CreatureModel"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 
 local ATTR = GameConfig.Attributes
+local SAVE = GameConfig.Save
 
 local CarryService = {}
 -- After NestService (40), which owns the pods being taken.
@@ -810,7 +811,18 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 			humanoid:EquipTool(tool)
 		end)
 	end
-	log(string.format("%s hatched a %d kg %s.", player.Name, kg, species.Name))
+	--==========================================================================
+	-- NO LOG HERE. THIS FUNCTION DOES NOT KNOW WHY IT WAS CALLED.
+	--
+	-- It said "hatched a N kg X", and it is called by three different things:
+	-- the hatch, the Garden's PICK UP, and the restore that puts a saved hotbar
+	-- back on join. Two of those never hatched anything -- a pickup logged
+	-- "hatched" immediately followed by "picked up", and a rejoin claimed five
+	-- hatches that never happened.
+	--
+	-- Handing over a Tool is all this does. The caller knows what it means and
+	-- says so itself.
+	--==========================================================================
 	return true
 end
 
@@ -966,6 +978,222 @@ local function watch(player: Player)
 	end
 end
 
+--==============================================================================
+-- THE HOTBAR SURVIVES LOGGING OUT
+--
+-- It did not, and the omission ate plants. The bed was saved from the first day
+-- and the hands were not, so a plant taken out of your own dirt and still held
+-- when you left stopped existing -- gone from the bed AND gone from the hotbar.
+-- The Garden's PICK UP made that a one-click mistake, which is how it was found,
+-- but the world prompt had always done the same thing.
+--
+-- A Tool is three attributes -- SpeciesId, CarryingKg, Hatched -- and those
+-- three are the whole of it. Save them and a restored Tool is not a copy of what
+-- was lost, it is the same object rebuilt from its own definition.
+--==============================================================================
+local function heldSnapshot(player: Player): { any }
+	local rows = {}
+
+	--==========================================================================
+	-- BOTH PLACES A TOOL CAN BE
+	--
+	-- Equipping MOVES a Tool out of the Backpack and into the Character, so a
+	-- snapshot that only reads the Backpack loses whatever the player happens to
+	-- be holding -- which is the single most likely thing to be lost, because it
+	-- is the thing they just picked up.
+	--==========================================================================
+	local function collect(container: Instance?)
+		if not container then
+			return
+		end
+		for _, tool in ipairs(container:GetChildren()) do
+			if tool:IsA("Tool") and #rows < SAVE.MaxHeld then
+				local id = tool:GetAttribute("SpeciesId")
+				local kg = tonumber(tool:GetAttribute(ATTR.CarryingKg))
+				if type(id) == "string" and SeedData.Get(id) and kg and kg >= 1 then
+					table.insert(rows, {
+						Id = id,
+						Kg = math.floor(kg),
+						Hatched = tool:GetAttribute("Hatched") == true,
+					})
+				end
+			end
+		end
+	end
+
+	collect(player:FindFirstChildOfClass("Backpack"))
+	collect(player.Character)
+	return rows
+end
+
+--==============================================================================
+-- RECORDED WHEN IT CHANGES, AND NEVER BLANKED BY A TEARDOWN
+--
+-- The guard is the whole trick. A hotbar legitimately becomes empty only when
+-- the player plants or uses the last thing in it -- and they are alive, present
+-- and holding a Backpack when that happens.
+--
+-- No Backpack means we are not looking at a live hotbar at all: the player is
+-- still joining, or the session is being pulled down around them. An empty
+-- snapshot taken in either of those moments is not evidence that they own
+-- nothing, and writing it would destroy whatever they were carrying. So it is
+-- not written, and the last thing that WAS true stands.
+--==============================================================================
+local function syncHeld(player: Player)
+	if not player:FindFirstChildOfClass("Backpack") then
+		return
+	end
+	PlayerDataService.SetHeld(player, heldSnapshot(player))
+end
+
+--==============================================================================
+-- ONE SNAPSHOT AFTER THE DUST SETTLES, NOT ONE PER EVENT
+--
+-- Equipping does not copy a Tool, it REPARENTS it -- Backpack to Character --
+-- and equipping a second one unequips the first. A single click therefore fires
+-- several ChildAdded and ChildRemoved events, and for part of that sequence a
+-- Tool is parented to neither container.
+--
+-- Snapshotting straight off the event caught exactly that gap: two plants went
+-- in, the one that happened to be mid-move was invisible, and only the other
+-- came back. Deferring to the end of the frame and collapsing the burst into
+-- one snapshot means the hotbar is only ever read when it is whole.
+--==============================================================================
+local syncPending: { [Player]: boolean } = {}
+
+local function requestSync(player: Player)
+	if syncPending[player] then
+		return
+	end
+	syncPending[player] = true
+	task.defer(function()
+		syncPending[player] = nil
+		syncHeld(player)
+	end)
+end
+
+local function watchHeld(player: Player)
+	local function bind(container: Instance)
+		table.insert(serviceConnections, container.ChildAdded:Connect(function()
+			requestSync(player)
+		end))
+		table.insert(serviceConnections, container.ChildRemoved:Connect(function()
+			requestSync(player)
+		end))
+	end
+
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if backpack then
+		bind(backpack)
+	end
+	-- Equipping MOVES a Tool from the Backpack into the Character, so both ends
+	-- have to be watched or the hotbar looks empty for as long as something is
+	-- in the player's hands.
+	if player.Character then
+		bind(player.Character)
+	end
+	table.insert(serviceConnections, player.CharacterAdded:Connect(function(character)
+		bind(character)
+		requestSync(player)
+	end))
+
+	--==========================================================================
+	-- THE BACKPACK IS REPLACED ON EVERY RESPAWN
+	--
+	-- Roblox destroys it and makes a new one, so the connections above are to an
+	-- object that will not exist after the first death. Without this, dying once
+	-- silently stops the hotbar being recorded for the rest of the session.
+	--==========================================================================
+	table.insert(serviceConnections, player.ChildAdded:Connect(function(child)
+		if child:IsA("Backpack") then
+			bind(child)
+			requestSync(player)
+		end
+	end))
+end
+
+--==============================================================================
+-- PUTTING THEM BACK
+--
+-- The same two builders the live game uses, so a restored pod is a pod and a
+-- restored creature is a creature -- there is no third kind of thing that only
+-- exists after a rejoin.
+--
+-- NOT EQUIPPED. The hatch equips because a shell has just burst in front of the
+-- player and that is a moment; a rejoin is not, and forcing a 30-stud Bellchime
+-- into their hands at the spawn point is not a welcome.
+--==============================================================================
+local function restoreOne(player: Player, species: SeedData.Species, kg: number,
+	hatched: boolean): boolean
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return false
+	end
+	if hatched then
+		return CarryService.GiveHatched(player, species, kg)
+	end
+	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
+	local tool = giveTool(player, pod, species, kg, gripFor(kg), false)
+	if not tool then
+		return false
+	end
+	-- The same number CarryPose reads off a banked pod anywhere else.
+	tool:SetAttribute("GripReach", SeedData.GripForward(kg))
+	return true
+end
+
+local function restoreHeld(player: Player)
+	task.spawn(function()
+		--======================================================================
+		-- WAIT FOR THE PROFILE, THE SAME WAY THE BED DOES
+		--
+		-- The save is a DataStore round trip and this runs off PlayerAdded, so
+		-- there is nothing to restore for a second or two. PlantService has the
+		-- identical wait for the identical reason; a deadline rather than a bare
+		-- loop so a load that never finishes does not leave a thread spinning.
+		--======================================================================
+		local deadline = os.clock() + 20
+		while not PlayerDataService.IsReady(player) and os.clock() < deadline do
+			task.wait(0.25)
+		end
+		if player.Parent ~= Players then
+			return
+		end
+		local profile = PlayerDataService.Get(player)
+		if not profile or type(profile.Held) ~= "table" then
+			return
+		end
+		-- The Backpack is made by the engine shortly after the player joins, and
+		-- a Tool cannot be handed over before it exists.
+		if not player:FindFirstChildOfClass("Backpack") then
+			player:WaitForChild("Backpack", 10)
+		end
+		if player.Parent ~= Players then
+			return
+		end
+
+		local restored, dropped = 0, 0
+		for _, row in ipairs(profile.Held) do
+			local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
+			local kg = if type(row) == "table" then tonumber(row.Kg) else nil
+			if species and kg and kg >= 1 then
+				if restoreOne(player, species, kg, row.Hatched == true) then
+					restored += 1
+				else
+					dropped += 1
+				end
+			else
+				dropped += 1
+			end
+		end
+		if restored > 0 or dropped > 0 then
+			log(string.format("%s: restored %d held plant(s)%s.", player.Name,
+				restored,
+				if dropped > 0 then string.format(", %d could not be rebuilt", dropped) else ""))
+		end
+	end)
+end
+
 function CarryService.Init()
 	running = false
 	for _, c in ipairs(serviceConnections) do
@@ -980,6 +1208,15 @@ function CarryService.Init()
 end
 
 function CarryService.Start()
+	for _, player in ipairs(Players:GetPlayers()) do
+		restoreHeld(player)
+		watchHeld(player)
+	end
+	table.insert(serviceConnections, Players.PlayerAdded:Connect(function(player)
+		restoreHeld(player)
+		watchHeld(player)
+	end))
+
 	for _, pod in ipairs(CollectionService:GetTagged(GameConfig.Tags.SeedPod)) do
 		if pod:IsA("Model") then
 			attachPrompt(pod)

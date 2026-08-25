@@ -41,9 +41,32 @@ export type Profile = {
 	Cash: number,
 	Speed: number,
 	PlotTier: number,
+	-- Which mill stands on their plot. Exactly the same idea as PlotTier and
+	-- kept beside it on purpose: one number, owned by the server, that decides
+	-- what gets built on YOUR ground.
+	MillTier: number,
 	-- Filled by PlantService when it exists. Present from v1 so the shape of a
 	-- saved profile does not change on the day it starts being used.
 	Plants: { any },
+	--==========================================================================
+	-- WHAT IS IN THEIR HANDS, WHICH USED TO BE THROWN AWAY
+	--
+	-- The bed was saved from the first day and the HOTBAR was not, so anything
+	-- held at the moment you left stopped existing: pick a plant out of your own
+	-- dirt, leave, come back, and it is in neither place. That is not a UI bug,
+	-- it is the save destroying property, and it hit hardest exactly where the
+	-- game invites it -- the Garden's PICK UP.
+	--
+	-- One row per Tool, in hotbar order: the species id, what it weighs, and
+	-- whether the shell has been opened. That is the whole of a Tool -- the
+	-- three attributes CarryService stamps -- so a restored one is not a copy of
+	-- the original, it IS the original.
+	--
+	-- The raid carry is deliberately NOT in here. A pod welded to your head on
+	-- the wrong side of the red line is a bet you have not settled yet, and
+	-- logging out is not a way to bank it.
+	--==========================================================================
+	Held: { any },
 	--==========================================================================
 	-- WHAT THEY HAVE SEEN GROW
 	--
@@ -74,7 +97,9 @@ function ProfileSchema.Default(): Profile
 		Cash = 0,
 		Speed = 0,
 		PlotTier = GameConfig.StartingPlotTier,
+		MillTier = GameConfig.Mill.StartingTier,
 		Plants = {},
+		Held = {},
 		Almanac = {},
 		CreatedAt = now,
 		LastSeen = now,
@@ -111,11 +136,43 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.Speed = number(raw.Speed, 0, 0, SAVE.MaxSpeedScore)
 	p.PlotTier = math.floor(
 		number(raw.PlotTier, GameConfig.StartingPlotTier, 1, #GameConfig.PlotTiers))
+	p.MillTier = math.floor(
+		number(raw.MillTier, GameConfig.Mill.StartingTier, 1, #GameConfig.Mill.Tiers))
 	p.CreatedAt = math.floor(number(raw.CreatedAt, p.CreatedAt, 0, MAX_TIME))
 	p.LastSeen = math.floor(number(raw.LastSeen, p.LastSeen, 0, MAX_TIME))
 
 	if type(raw.Plants) == "table" then
 		p.Plants = raw.Plants
+	end
+
+	--==========================================================================
+	-- HELD IS REBUILT ROW BY ROW, NOT TRUSTED WHOLESALE
+	--
+	-- Same discipline as the Almanac below and for the same reason: a DataStore
+	-- round trip can hand back a species that has since been deleted, a weight
+	-- from before the roll existed, or a table with a hole in it. Every row has
+	-- to name a real species and carry a sane weight or it does not come back.
+	--
+	-- Capped, because the list is rebuilt into Tools on join and an unbounded
+	-- one is an unbounded amount of work at the worst moment.
+	--==========================================================================
+	if type(raw.Held) == "table" then
+		for _, row in ipairs(raw.Held) do
+			if #p.Held >= SAVE.MaxHeld then
+				break
+			end
+			if type(row) == "table" and type(row.Id) == "string"
+				and SeedData.Get(row.Id) then
+				local kg = number(row.Kg, 0, 1, GameConfig.Carry.MaxKg)
+				if kg >= 1 then
+					table.insert(p.Held, {
+						Id = row.Id,
+						Kg = math.floor(kg),
+						Hatched = row.Hatched == true,
+					})
+				end
+			end
+		end
 	end
 
 	-- Copied key by key rather than assigned wholesale, which is what makes the

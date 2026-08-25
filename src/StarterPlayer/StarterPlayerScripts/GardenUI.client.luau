@@ -64,6 +64,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
@@ -74,11 +75,32 @@ local ATTR = GameConfig.Attributes
 local PLANTING = GameConfig.Plant
 local PANEL_NAME = "Garden"
 
+--==============================================================================
+-- THE ONE MESSAGE THIS PANEL SENDS
+--
+-- Everything else here is read straight off the tagged models in the world. The
+-- unequip cannot be: the server owns ownership and the economy (Rule 3), so all
+-- the client may do is name a plant and ask.
+--
+-- GameEvent already existed and already carries PlantAt. Same remote, second
+-- verb -- see GameConfig.Plant.PickUpAction.
+--==============================================================================
+local gameEvent: RemoteEvent? = nil
+
+local function fire(action: string, payload: any)
+	if gameEvent then
+		gameEvent:FireServer(action, payload)
+	end
+end
+
 -- The same vocabulary as PromptUI, PlantUI and CashUI.
 local INK = Color3.fromRGB(26, 24, 30)
 local PAPER = Color3.fromRGB(248, 246, 240)
 local ACCENT = Color3.fromRGB(142, 196, 62)
-local GHOST = Color3.fromRGB(120, 116, 124)
+local GHOST = Color3.fromRGB(150, 148, 154)
+-- No card fill here any more: UIKit.plantCard owns the stage a plant stands on,
+-- and this file owns what the card says. See IndexUI for why the flat rectangle
+-- went.
 
 --==============================================================================
 -- IT OPENS IN THE MIDDLE NOW, NOT OFF THE RIGHT EDGE
@@ -88,7 +110,7 @@ local GHOST = Color3.fromRGB(120, 116, 124)
 -- goes with it: all three panels share one rectangle and take turns. UIKit.modal
 -- owns the geometry; this is only the cap it may grow to.
 --==============================================================================
-local MAX_WIDTH = 380
+local MAX_WIDTH = 480
 local MAX_HEIGHT = 560
 
 --==============================================================================
@@ -189,23 +211,79 @@ modal.title.Size = UDim2.new(1, -98, 1, 0)
 
 local header = modal.title
 
+local FOOTER_HEIGHT = 32
+
+-- The cards carry a rotated lattice, which a ScrollingFrame will not clip -- a
+-- half-scrolled card was drawing its diamonds straight over the footer below.
+-- See UIKit.rotationSafeClip.
+local clip = UIKit.rotationSafeClip(modal.body, "SlotsClip",
+	UDim2.new(1, 0, 1, -FOOTER_HEIGHT))
+
 local list = Instance.new("ScrollingFrame")
-list.Name = "List"
-list.Size = UDim2.new(1, 0, 1, -32)
+list.Name = "Slots"
+list.Size = UDim2.fromScale(1, 1)
 list.BackgroundTransparency = 1
 list.BorderSizePixel = 0
 list.ScrollBarThickness = 4
-list.ScrollBarImageColor3 = ACCENT
+list.ScrollBarImageColor3 = GameConfig.Panel.Edge
 list.CanvasSize = UDim2.new()
 list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 list.ZIndex = 3
-list.Parent = modal.body
+list.Parent = clip
 
-local rows = Instance.new("UIListLayout")
-rows.FillDirection = Enum.FillDirection.Vertical
-rows.SortOrder = Enum.SortOrder.LayoutOrder
-rows.Padding = UDim.new(0, 5)
-rows.Parent = list
+local grid = Instance.new("UIGridLayout")
+grid.FillDirection = Enum.FillDirection.Horizontal
+grid.SortOrder = Enum.SortOrder.LayoutOrder
+grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+grid.Parent = list
+
+--==============================================================================
+-- THREE COLUMNS WHEN THERE IS ROOM, TWO ON A PHONE
+--
+-- Measured off the panel rather than typed, the same way the Index measures its
+-- almanac -- the modal is a fraction of the screen with a cap, so one script has
+-- to lay out at 248 pixels and at 480.
+--
+-- Never one column. A single stack of cards is the row list this panel just
+-- stopped being.
+--==============================================================================
+local GUTTER = 8
+local CARD_ASPECT = 1.30
+local shownSlots = 0
+
+local function relayout()
+	local width = list.AbsoluteSize.X
+	if width <= 0 then
+		return
+	end
+	local columns = if width >= 400 then 3 else 2
+	local cell = math.floor((width - GUTTER * (columns - 1) - 6) / columns)
+	local cellHeight = math.floor(cell * CARD_ASPECT)
+	grid.CellSize = UDim2.fromOffset(cell, cellHeight)
+	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
+
+	local rows = math.max(1, math.ceil(math.max(shownSlots, 1) / columns))
+	modal.fitContent(rows * cellHeight + (rows - 1) * GUTTER + FOOTER_HEIGHT)
+end
+
+--==============================================================================
+-- FORWARD DECLARED, BECAUSE THE SCROLL HANDLER IS ABOVE THE SELECTION
+--
+-- The layout is built before the cards are, so this connection exists a couple
+-- of hundred lines before `clearSelection` does. A `local function` declared
+-- later is not in scope here -- the name compiles to a global, which is nil,
+-- and the only symptom is a scroll that quietly fails to drop the selection
+-- while an error goes to the log. Same shape of bug PlantService documents on
+-- `attachPickup`, and the same fix.
+--==============================================================================
+local clearSelection: () -> ()
+
+list:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+-- Scrolling away from a selected card drops it: a button that has slid half out
+-- of the list is a button nobody meant to be aiming at.
+list:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+	clearSelection()
+end)
 
 --==============================================================================
 -- THE FOOTER IS A NUMBER, NOT A BUTTON
@@ -231,63 +309,144 @@ footer.TextYAlignment = Enum.TextYAlignment.Center
 footer.ZIndex = 4
 
 --==============================================================================
--- ROWS
+-- MINI CARDS, IN THE PANEL AND NOWHERE ELSE
 --
--- Pooled and refilled, never rebuilt. A tier-4 plot is thirty of these and the
--- panel refreshes once a second while open; rebuilding thirty frames a second
--- on a phone is the kind of thing that makes a menu feel cheap.
+-- These were 44-pixel rows with a 28-pixel coloured square. The square had to be
+-- the species CROWN because Body put two identical creams side by side, which is
+-- a workaround for the fact that a swatch cannot show a plant. A card can: the
+-- same still 3D CreatureModel the Index shows and the plot builds, so a
+-- Bellchime in your bed, on your card and in the almanac are one thing.
+--
+-- IN THE PANEL. Grown plants in the plot still carry NO billboard -- what they
+-- earn is the `+$N` popping off them, and twelve name cards stacked over one
+-- patch of dirt is the wall the owner cut. This is the panel you open, not
+-- something bolted to the world.
+--
+-- WHAT A CARD SAYS IS NOT WHAT AN INDEX CARD SAYS. The almanac lists shapes and
+-- spells the FORM rarity; this lists the twelve holes in front of you and tints
+-- by ColorForKg, the WEIGHT band. Same drawing, different question, and the two
+-- vocabularies never cross.
+--
 --==============================================================================
-type Row = {
-	frame: Frame,
-	swatch: Frame,
-	name: TextLabel,
-	sub: TextLabel,
-}
+-- POOLED AND REFILLED, AND THE ART IS KEYED
+--
+-- A tier-4 plot is thirty cards and the panel refreshes once a second while
+-- open. The frames were always pooled; the PORTRAIT has to be too, or every
+-- second would tear down thirty plants of thirty frames each and build them
+-- again. `drawn` holds what the art currently depicts and the portrait is only
+-- rebuilt when that string changes -- which is a hatch, a pickup or a plant,
+-- not a clock tick.
+--==============================================================================
+type Slot = UIKit.PlantCard
 
-local pool: { Row } = {}
+local pool: { Slot } = {}
 
-local function buildRow(index: number): Row
-	local frame = Instance.new("Frame")
-	frame.Name = "Slot" .. index
-	frame.LayoutOrder = index
-	frame.Size = UDim2.new(1, -6, 0, 44)
-	frame.BackgroundColor3 = PAPER
-	frame.BackgroundTransparency = 0.9
-	frame.BorderSizePixel = 0
-	frame.ZIndex = 3
-	frame.Parent = list
-	corner(frame, 10)
+--==============================================================================
+-- ONE CARD AT A TIME, AND IT SAYS WHAT THE WORLD SAYS
+--
+-- The clip this panel borrowed its shape from unequips into an inventory. This
+-- game has no inventory: plants live in the dirt and the only place they can go
+-- is your hands.
+--
+-- So the button says PICK UP, which is exactly what the prompt on the plant
+-- says out in the field, because it is exactly the same act -- the same server
+-- call, handing over the same Tool the hatch does. It read UNEQUIP for a pass
+-- and that was a word borrowed from a game with a loadout: two names for one
+-- action is how a player ends up looking for the difference between them.
+--
+-- WHICH CARDS OFFER IT
+--
+--   grown, your plot   yes
+--   pod / hatching     no. That is HATCH, and it happens in the world.
+--   ready              no, for the same reason.
+--   empty              no.
+--   no plot            no.
+--
+-- SELECTING IS NOT DOING. A click selects; only the button underneath acts.
+-- Anything that would make the selection stale -- another card, the dimmer, a
+-- scroll, the panel closing, or the slot's own contents changing -- drops it.
+--==============================================================================
+local selectedId: number? = nil
+local selectedSlot: Slot? = nil
 
-	local swatch = Instance.new("Frame")
-	swatch.Name = "Swatch"
-	swatch.Position = UDim2.fromOffset(8, 8)
-	swatch.Size = UDim2.fromOffset(28, 28)
-	swatch.BorderSizePixel = 0
-	swatch.ZIndex = 4
-	swatch.Parent = frame
-	corner(swatch, 8)
-	stroke(swatch, INK, 2, 0.35)
-
-	local name = UIKit.outlined(frame, "Name", 15, PAPER, 2)
-	name.Position = UDim2.fromOffset(46, 4)
-	name.Size = UDim2.new(1, -56, 0, 19)
-	name.TextXAlignment = Enum.TextXAlignment.Left
-	name.ZIndex = 4
-
-	local sub = UIKit.outlined(frame, "Sub", 13, GHOST, 2)
-	sub.Position = UDim2.fromOffset(46, 23)
-	sub.Size = UDim2.new(1, -56, 0, 16)
-	sub.TextXAlignment = Enum.TextXAlignment.Left
-	sub.ZIndex = 4
-
-	local row: Row = { frame = frame, swatch = swatch, name = name, sub = sub }
-	pool[index] = row
-	return row
+function clearSelection()
+	if selectedSlot then
+		selectedSlot.setSelected(false)
+	end
+	selectedSlot = nil
+	selectedId = nil
 end
 
-local function rowAt(index: number): Row
-	return pool[index] or buildRow(index)
+local function selectSlot(slot: Slot, placementId: number)
+	if selectedSlot == slot then
+		clearSelection()
+		return
+	end
+	clearSelection()
+	selectedSlot = slot
+	selectedId = placementId
+	slot.setSelected(true, "PICK UP")
 end
+
+--==============================================================================
+-- WHAT A CARD IS OFFERING, IF ANYTHING
+--
+-- Set by the painter every time it fills a card in. nil means this card cannot
+-- be selected at all -- an empty hole, a pod, somebody's missing plot -- and a
+-- click on one of those does nothing rather than selecting a card with no
+-- button under it.
+--==============================================================================
+local offers: { [number]: number? } = {}
+
+local function buildSlot(index: number): Slot
+	local slot = UIKit.plantCard(list, {
+		name = "Slot" .. index,
+		layoutOrder = index,
+		nameSize = 14,
+		subSize = 12,
+	})
+	pool[index] = slot
+
+	slot.button.Activated:Connect(function()
+		local placementId = offers[index]
+		if placementId then
+			selectSlot(slot, placementId)
+		else
+			-- A card with nothing to offer still clears whatever was selected:
+			-- clicking an empty hole is a perfectly good way of saying "not
+			-- that one".
+			clearSelection()
+		end
+	end)
+
+	slot.action.Activated:Connect(function()
+		local placementId = offers[index]
+		if not placementId or selectedId ~= placementId then
+			return
+		end
+		--==================================================================
+		-- THE SERVER TAKES THE PLANT OUT, NOT THIS
+		--
+		-- Nothing is destroyed here and nothing is assumed. The plant leaves
+		-- the bed when PlantService says it does, and PlantService only says
+		-- so after CarryService has actually put the Tool in the backpack --
+		-- so a full hotbar leaves the plant standing where it was.
+		--
+		-- The panel finds out the same way it finds out about everything
+		-- else: the Planted tag disappears and refresh() repaints. There is
+		-- no reply to wait for and no local copy to keep in step.
+		--==================================================================
+		fire(PLANTING.PickUpAction, placementId)
+		clearSelection()
+	end)
+
+	return slot
+end
+
+local function slotAt(index: number): Slot
+	return pool[index] or buildSlot(index)
+end
+
 
 --==============================================================================
 -- READING THE DIRT
@@ -423,20 +582,24 @@ end
 --==============================================================================
 -- PAINTING
 --==============================================================================
-local shownRows = 0
 local open = false
 
-local function setRowCount(n: number)
-	for i = 1, math.max(n, shownRows) do
-		local row = pool[i]
+local function setSlotCount(n: number)
+	for i = 1, math.max(n, shownSlots) do
+		local slot = pool[i]
 		if i <= n then
-			row = rowAt(i)
-			row.frame.Visible = true
-		elseif row then
-			row.frame.Visible = false
+			slot = slotAt(i)
+			slot.holder.Visible = true
+		elseif slot then
+			slot.holder.Visible = false
 		end
 	end
-	shownRows = n
+	if shownSlots ~= n then
+		shownSlots = n
+		-- The panel is as tall as the bed it is showing, so a tier change is a
+		-- resize as well as a repaint.
+		relayout()
+	end
 end
 
 local function refresh(paint: boolean)
@@ -451,13 +614,16 @@ local function refresh(paint: boolean)
 		end
 		header.Text = "GARDEN  —"
 		footer.Text = ""
-		setRowCount(1)
-		local row = rowAt(1)
-		row.swatch.BackgroundColor3 = PAPER
-		row.swatch.BackgroundTransparency = 0.85
-		row.name.Text = "No plot this server"
-		row.name.TextColor3 = GHOST
-		row.sub.Text = ""
+		setSlotCount(1)
+		local slot = slotAt(1)
+		slot.setModel("noplot", nil)
+		slot.setBackdrop(nil)
+		slot.border.Color = GHOST
+		offers[1] = nil
+		slot.name.Text = "No plot"
+		slot.name.TextColor3 = GHOST
+		slot.sub.Text = "this server"
+		slot.sub.TextColor3 = GHOST
 		return
 	end
 
@@ -466,7 +632,7 @@ local function refresh(paint: boolean)
 	local planted, waiting, rate = 0, 0, 0
 
 	if paint then
-		setRowCount(slots)
+		setSlotCount(slots)
 	end
 
 	for index = 1, slots do
@@ -481,88 +647,162 @@ local function refresh(paint: boolean)
 			end
 
 			if paint then
-				local row = rowAt(index)
+				local slot = slotAt(index)
 				local species = occupant.species
 				--==========================================================
-				-- CROWN, NOT BODY
+				-- TINTED BY WHAT IT WEIGHS, NOT BY WHAT SHAPE IT IS
 				--
-				-- Body would put two identical cream squares next to each
-				-- other for Toadcap and Bellchime, and two identical green
-				-- ones for Nubkin and Petalpip -- four of five species
-				-- reading as two. Crown is the cap, the petals or the buds,
-				-- and across Greenhollow it is green / cream / pale green /
-				-- red / pink: five distinguishable 28px squares.
+				-- The sheet's rarity is the FORM's drop rate -- how often a
+				-- cube turns up against a bell -- and it says nothing about
+				-- the prize. Printing an 8,000 kg Nubkin in Common white
+				-- would call the best thing in the garden ordinary.
 				--
-				-- While it is a POD the swatch is the WEIGHT BAND instead,
-				-- because that is genuinely what the thing in the ground
-				-- looks like from across the plot -- the shell is coloured by
-				-- what it weighs -- and the species is not supposed to be
-				-- known yet.
+				-- This is the Garden, so it is ColorForKg on the name AND on
+				-- the border. FormColor belongs to the Index and stays there.
 				--==========================================================
-				row.swatch.BackgroundTransparency = 0
-				row.swatch.BackgroundColor3 = if stage == STAGE_GROWN
-					then species.Crown
-					else SeedData.ColorForKg(occupant.kg)
-				--==========================================================
-				-- A POD IS NOT NAMED, HERE EITHER
-				--
-				-- This printed the species name at every stage and only ghosted
-				-- its COLOUR while it waited, which spent the reveal in a list
-				-- and made the whole pod-colour design pointless: two Commons
-				-- are meant to arrive in identical shells so you cannot tell
-				-- which one you got until it opens, and the Garden was simply
-				-- telling you.
-				--
-				-- A pod stays anonymous right up to the hatch, ready or not.
-				-- The clock running out does not open the shell any more, so
-				-- naming it at READY would spend the reveal on a timer -- which
-				-- is the one thing manual hatching was meant to stop.
-				--==========================================================
-				row.name.Text = if stage == STAGE_GROWN then species.Name else "???"
+				local band = SeedData.ColorForKg(occupant.kg)
+
 				if stage == STAGE_GROWN then
 					--======================================================
-					-- TINTED BY WHAT IT WEIGHS, NOT BY WHAT SHAPE IT IS
+					-- THE PLANT ITSELF, IN THE INDEX'S LANGUAGE
 					--
-					-- The sheet's rarity is the FORM's drop rate now -- how
-					-- often a cube turns up against a bell -- and it says
-					-- nothing about the prize. Printing an 8,000 kg Nubkin
-					-- in Common white would call the best thing in the
-					-- garden ordinary.
+					-- Keyed on the species alone: the portrait does not vary
+					-- with weight -- size does, and a card is not a scale
+					-- model -- so a growing bed rebuilds no art at all.
 					--======================================================
-					row.name.TextColor3 = SeedData.ColorForKg(occupant.kg)
-					row.sub.Text = "$" .. GameConfig.compact(
+					--======================================================
+					-- THE PLANT THAT IS ACTUALLY IN THE GROUND
+					--
+					-- Built at the weight THIS one rolled, from the same
+					-- CreatureModel the plot builds -- so the card and the
+					-- thing standing in the dirt cannot disagree about what
+					-- a Bellchime looks like.
+					--
+					-- Keyed on the species alone. The camera frames whatever
+					-- it is given, so a plant putting on weight does not
+					-- change the picture and a growing bed rebuilds nothing.
+					--======================================================
+					slot.setModel("grown:" .. species.Id, function(into)
+						return CreatureModel.Build(species, occupant.kg,
+							CreatureModel.STAGE_GROWN, CFrame.new(), into)
+					end)
+					slot.setBackdrop(species.Id)
+					slot.border.Color = band
+					-- Grown, in your own bed: the one case that can be taken
+					-- back out. `occupant.id` is the PlacementId the server
+					-- stamped, which is the only name a plant has.
+					offers[index] = occupant.id
+					slot.name.Text = species.Name
+					slot.name.TextColor3 = band
+					slot.sub.Text = "$" .. GameConfig.compact(
 						SeedData.IncomePerSecond(occupant.kg)) .. "/s"
-					row.sub.TextColor3 = ACCENT
-				elseif stage == STAGE_READY then
-					--======================================================
-					-- THE ONE ROW THAT IS ASKING FOR SOMETHING
-					--
-					-- Everything else in this panel is a status. This is the
-					-- only line that means GO AND DO SOMETHING, so it is the
-					-- only ghosted row that lights up -- a full bed reads at a
-					-- glance as "two of these want you".
-					--
-					-- Still ???: the name is the hatch's to give.
-					--======================================================
-					row.name.TextColor3 = SeedData.ColorForKg(occupant.kg)
-					row.sub.Text = "READY  ·  HOLD E"
-					row.sub.TextColor3 = ACCENT
+					slot.sub.TextColor3 = ACCENT
 				else
-					-- Ghosted until it is hatched, so the reveal still happens
-					-- out in the world rather than in a list.
-					row.name.TextColor3 = GHOST
-					row.sub.Text = "HATCHING " .. clock(remaining)
-					row.sub.TextColor3 = GHOST
+					--======================================================
+					-- A POD IS A POD, AND IT IS NOT NAMED HERE EITHER
+					--
+					-- The card draws the SHELL, not the creature. Two Commons
+					-- arrive in identical shells so you cannot tell which one
+					-- you got until it opens, and drawing the form on this
+					-- card would spend the hatch exactly the way printing the
+					-- name would -- the whole reason pods are coloured by
+					-- weight instead of by species.
+					--
+					-- Keyed on the BAND rather than the weight: the shell's
+					-- colour is all that varies, so two 4,000 kg pods and a
+					-- 4,800 kg one share one drawing.
+					--======================================================
+					--==================================================
+					-- THE SHELL, NOT THE CREATURE
+					--
+					-- BuildPod colours itself by ColorForKg, which is the
+					-- one thing a buried pod is allowed to tell you and the
+					-- whole reason pods are coloured by weight instead of
+					-- by species. Two Commons arrive identical and the card
+					-- keeps it that way.
+					--
+					-- Keyed on the BAND: the shell's colour is all that
+					-- varies between pods, so two 4,000 kg pods and a 4,800
+					-- kg one share one model.
+					--
+					-- NO BACKDROP. A place would name the species as surely
+					-- as the word would.
+					--==================================================
+					slot.setModel("pod:" .. SeedData.RarityForKg(occupant.kg),
+						function(into)
+							return CreatureModel.BuildPod(species, occupant.kg,
+								CFrame.new(), into)
+						end)
+					slot.setBackdrop(nil)
+					slot.border.Color = band
+					-- A pod is not unequipped, it is HATCHED, and that happens
+					-- in the world with a hold on the prompt.
+					offers[index] = nil
+					slot.name.Text = "???"
+
+					if stage == STAGE_READY then
+						--==============================================
+						-- THE ONE CARD THAT IS ASKING FOR SOMETHING
+						--
+						-- Everything else in this panel is a status. This
+						-- means GO AND DO SOMETHING, so it is the only
+						-- ghosted card that lights up -- a full bed reads
+						-- at a glance as "two of these want you".
+						--
+						-- Still ???: the name is the hatch's to give. The
+						-- clock running out does not open the shell, so
+						-- naming it here would spend the reveal on a timer,
+						-- which is the one thing manual hatching stopped.
+						--==============================================
+						slot.name.TextColor3 = band
+						slot.sub.Text = "READY  \u{00b7}  HOLD E"
+						slot.sub.TextColor3 = ACCENT
+					else
+						slot.name.TextColor3 = GHOST
+						slot.sub.Text = clock(remaining)
+						slot.sub.TextColor3 = GHOST
+					end
 				end
 			end
 		elseif paint then
-			local row = rowAt(index)
-			row.swatch.BackgroundColor3 = PAPER
-			row.swatch.BackgroundTransparency = 0.88
-			row.name.Text = "Empty"
-			row.name.TextColor3 = GHOST
-			row.sub.Text = ""
-			row.sub.TextColor3 = GHOST
+			--==============================================================
+			-- AN EMPTY HOLE IS SHOWN, NOT HIDDEN
+			--
+			-- The clip this panel borrowed its shape from lists what you have
+			-- equipped. This lists the HOLES, and an empty one is a real place
+			-- you can walk over and fill -- so it gets a card with dirt in it
+			-- rather than being left out of the grid.
+			--==============================================================
+			local slot = slotAt(index)
+			slot.setModel("empty", nil)
+			slot.setBackdrop(nil)
+			slot.border.Color = GHOST
+			offers[index] = nil
+			slot.name.Text = "Empty"
+			slot.name.TextColor3 = GHOST
+			slot.sub.Text = ""
+			slot.sub.TextColor3 = GHOST
+		end
+	end
+
+	--==========================================================================
+	-- A SELECTION THAT NO LONGER NAMES ANYTHING IS DROPPED
+	--
+	-- The plant may have been picked up, stolen, or grown out from under the
+	-- card while the panel was open. Rather than trust the click that made it,
+	-- the selection is re-tested against what the bed actually holds on every
+	-- repaint -- so the button can never outlive the plant it would act on.
+	--==========================================================================
+	if paint and selectedId then
+		local stillThere = false
+		for _, id in pairs(offers) do
+			if id == selectedId then
+				stillThere = true
+				break
+			end
+		end
+		if not stillThere then
+			clearSelection()
 		end
 	end
 
@@ -637,8 +877,26 @@ local function setOpen(want: boolean)
 	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
 		player:SetAttribute(ATTR.OpenPanel, nil)
 	end
+	if not want then
+		clearSelection()
+	end
 	modal.setOpen(want)
 end
+
+--==============================================================================
+-- THE PANEL BACKGROUND DELIBERATELY DOES NOT CLEAR THE SELECTION
+--
+-- It did for one pass, on shell.InputBegan, and that is a race: InputBegan is
+-- mouse-DOWN and Activated is mouse-UP, so a press on UNEQUIP cleared the
+-- selection a frame before the button it was pressed on could act on it. The
+-- guard in the handler then read a nil selection and did nothing. It happened
+-- to work in testing, which is the worst way for a race to behave.
+--
+-- Nothing is lost. A selection is dropped by the things that actually make it
+-- stale -- the same card again, another card, an empty one, a scroll, the panel
+-- closing, or the plant no longer being there -- and the dimmer closes the
+-- panel, which is already one of those.
+--==============================================================================
 
 button.Activated:Connect(function()
 	setOpen(not open)
@@ -679,6 +937,18 @@ RunService.Heartbeat:Connect(function(dt)
 	since = 0
 	refresh(open)
 end)
+
+do
+	local remotes = SeedGame:WaitForChild("Remotes", 20)
+	local channel = if remotes
+		then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20)
+		else nil
+	if channel and channel:IsA("RemoteEvent") then
+		gameEvent = channel
+	else
+		warn("[Seed/GardenUI] No GameEvent remote; UNEQUIP will do nothing.")
+	end
+end
 
 local function onTagChanged()
 	refresh(open)

@@ -18,9 +18,13 @@
 -- teardrop, mushroom, bell. That is what a player recognises across a plot, and
 -- it is the only thing on this panel that could not be printed on a receipt.
 --
--- Drawn from frames by UIKit.plantPortrait, not a ViewportFrame -- five live
--- creatures at 29 to 40 parts each is 170 parts of camera work behind a panel,
--- on a phone, for a picture that never moves.
+-- A STILL 3D COPY of the real CreatureModel, in a ViewportFrame. This was flat
+-- frames for a pass, on the argument that five live creatures at 29 to 40 parts
+-- each is camera work behind a panel for a picture that never moves. Two things
+-- overturned it: the flat version needed rotated frames, which a ScrollingFrame
+-- will not clip, and a drawing of a Bellchime is a second Bellchime that can
+-- drift away from the first. The cost is real and it is paid once -- the models
+-- are keyed and the camera is set when one is built, never per frame.
 --
 --==============================================================================
 -- THE RARITY WORD LIVES HERE, AND IT MEANS THE FORM
@@ -64,21 +68,27 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local RAIL = GameConfig.Rail
-local SHOP = GameConfig.Shop
+local PANEL = GameConfig.Panel
 local ATTR = GameConfig.Attributes
 local PANEL_NAME = "Index"
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 -- Grey paper: an undiscovered card is present but not lit.
-local GHOST = Color3.fromRGB(116, 120, 136)
-local CARD = Color3.fromRGB(38, 42, 58)
-local CARD_LOCKED = Color3.fromRGB(29, 31, 44)
+local GHOST = Color3.fromRGB(150, 148, 154)
+--==============================================================================
+-- THE CARD IS A DIORAMA, AND THIS FILE ONLY DECIDES WHAT IT SAYS
+--
+-- UIKit.plantCard owns the backdrop, the viewport and the still 3D plant. What
+-- lives here is the almanac's vocabulary: which species, whether it has been
+-- grown, the FORM's rarity word, and the FORM's colour on the border.
+--==============================================================================
 
 --==============================================================================
 -- GREENHOLLOW ONLY, AND THE DENOMINATOR IS COUNTED NOT TYPED
@@ -137,17 +147,21 @@ UIKit.bookIcon(titleBar, 30, RAIL.IndexShade)
 modal.title.Position = UDim2.new(0, 46, 0.5, 0)
 modal.title.Size = UDim2.new(1, -98, 1, 0)
 
+-- The cards carry a rotated lattice, which a ScrollingFrame will not clip. See
+-- UIKit.rotationSafeClip.
+local clip = UIKit.rotationSafeClip(modal.body, "CardsClip", UDim2.fromScale(1, 1))
+
 local list = Instance.new("ScrollingFrame")
 list.Name = "Cards"
 list.Size = UDim2.fromScale(1, 1)
 list.BackgroundTransparency = 1
 list.BorderSizePixel = 0
 list.ScrollBarThickness = 4
-list.ScrollBarImageColor3 = SHOP.PanelEdge
+list.ScrollBarImageColor3 = PANEL.Edge
 list.CanvasSize = UDim2.new()
 list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 list.ZIndex = 3
-list.Parent = modal.body
+list.Parent = clip
 
 local grid = Instance.new("UIGridLayout")
 grid.FillDirection = Enum.FillDirection.Horizontal
@@ -164,6 +178,7 @@ grid.Parent = list
 -- panel just stopped being.
 --==============================================================================
 local GUTTER = 10
+local CARD_ASPECT = 1.30
 
 local function relayout()
 	local width = list.AbsoluteSize.X
@@ -172,7 +187,10 @@ local function relayout()
 	end
 	local columns = if width >= 400 then 3 else 2
 	local cell = math.floor((width - GUTTER * (columns - 1) - 6) / columns)
-	local cellHeight = math.floor(cell * 1.32)
+	-- 1.30, the same as the Garden. The card's horizon is arithmetic off the
+	-- aspect ratio (GameConfig.Card.Horizon), so two panels on two ratios would
+	-- put the plant on the dirt in one and slightly above it in the other.
+	local cellHeight = math.floor(cell * CARD_ASPECT)
 	grid.CellSize = UDim2.fromOffset(cell, cellHeight)
 	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
 
@@ -195,72 +213,17 @@ relayout()
 -- are different instances -- so it is rebuilt only on the transition, which
 -- happens at most five times in a save's life.
 --==============================================================================
-type Card = {
-	frame: Frame,
-	border: UIStroke,
-	art: Frame,
-	name: TextLabel,
-	tier: TextLabel,
-	drawn: boolean?,
-}
+type Card = UIKit.PlantCard
 
 local built: { [string]: Card } = {}
 
-local function specFor(species: SeedData.Species): UIKit.PlantSpec
-	return {
-		form = species.Form,
-		body = species.Body,
-		crown = species.Crown,
-		accent = species.Accent,
-		leaf = species.Leaf,
-		stem = SeedData.Stem,
-		soil = species.Soil,
-		blush = SeedData.Blush,
-	}
-end
-
 for index, species in ipairs(SPECIES) do
-	local frame = Instance.new("Frame")
-	frame.Name = species.Id
-	frame.LayoutOrder = index
-	frame.BackgroundColor3 = CARD
-	frame.BorderSizePixel = 0
-	frame.ZIndex = 3
-	frame.Parent = list
-	UIKit.corner(frame, 12)
-	local border = UIKit.stroke(frame, GHOST, 2.5)
-
-	local art = Instance.new("Frame")
-	art.Name = "Art"
-	art.AnchorPoint = Vector2.new(0.5, 0)
-	art.Position = UDim2.new(0.5, 0, 0, 6)
-	art.Size = UDim2.new(1, -12, 0.66, 0)
-	art.BackgroundTransparency = 1
-	art.ZIndex = 4
-	art.Parent = frame
-
-	local name = UIKit.outlined(frame, "Name", 16, WHITE, 2)
-	name.AnchorPoint = Vector2.new(0.5, 1)
-	name.Position = UDim2.new(0.5, 0, 1, -22)
-	name.Size = UDim2.new(1, -8, 0, 20)
-	name.TextXAlignment = Enum.TextXAlignment.Center
-	name.TextScaled = false
-	name.ZIndex = 5
-
-	local tier = UIKit.outlined(frame, "Tier", 13, GHOST, 2)
-	tier.AnchorPoint = Vector2.new(0.5, 1)
-	tier.Position = UDim2.new(0.5, 0, 1, -5)
-	tier.Size = UDim2.new(1, -8, 0, 16)
-	tier.TextXAlignment = Enum.TextXAlignment.Center
-	tier.ZIndex = 5
-
-	built[species.Id] = {
-		frame = frame,
-		border = border,
-		art = art,
-		name = name,
-		tier = tier,
-	}
+	built[species.Id] = UIKit.plantCard(list, {
+		name = species.Id,
+		layoutOrder = index,
+		nameSize = 15,
+		subSize = 12,
+	})
 end
 
 --==============================================================================
@@ -268,42 +231,76 @@ end
 --==============================================================================
 local almanac: { [string]: boolean } = {}
 
-local function draw(card: Card, species: SeedData.Species, seen: boolean)
-	if card.drawn == seen then
-		return
-	end
-	card.drawn = seen
-	card.art:ClearAllChildren()
-	UIKit.plantPortrait(card.art, specFor(species), if seen then nil else GHOST)
-end
-
 local function paint()
 	local seen = 0
 	for _, species in ipairs(SPECIES) do
 		local card = built[species.Id]
 		if card then
 			local known = almanac[species.Id] == true
-			draw(card, species, known)
+
+			--==========================================================
+			-- BUILT AT THE REFERENCE WEIGHT, NOT AT species.Kg
+			--
+			-- The almanac lists FORMS and has no weight to show one at.
+			-- `species.Kg` is the old-save fallback and sizing anything
+			-- from it is a bug; the median roll is the honest stand-in, so
+			-- a card shows the shape at exactly its sheet size.
+			--
+			-- Keyed on the state, so a model is built on a discovery and
+			-- never on a repaint.
+			--==========================================================
+			card.setModel(if known then "seen:" .. species.Id else "ghost:" .. species.Id,
+				function(into)
+					local model = CreatureModel.Build(species,
+						SeedData.SizeReferenceKg, CreatureModel.STAGE_GROWN,
+						CFrame.new(), into)
+					if not known then
+						--==========================================
+						-- A GHOST IS THE FORM AND NOTHING ELSE
+						--
+						-- Same model, drained to one flat grey. The
+						-- silhouette is the point -- you can see there
+						-- IS a fifth thing and roughly what shape it
+						-- is -- and colour is what would name it.
+						--==========================================
+						for _, part in ipairs(model:GetDescendants()) do
+							if part:IsA("BasePart") then
+								part.Color = GHOST
+								part.Material = Enum.Material.SmoothPlastic
+							end
+						end
+					end
+					return model
+				end)
+			-- The species' own place, but only once it has been grown. See
+			-- GameConfig.Card: a backdrop is identity.
+			card.setBackdrop(if known then species.Id else nil)
+
 			if known then
 				seen += 1
-				card.frame.BackgroundColor3 = CARD
 				-- The FORM's drop tier, and the only colour on this panel. It is
 				-- never ColorForKg: that is what a pod weighs, not what a shape
 				-- is worth finding.
 				card.border.Color = SeedData.FormColor(species)
 				card.name.Text = species.Name
 				card.name.TextColor3 = WHITE
-				card.tier.Text = species.Rarity
-				card.tier.TextColor3 = GameConfig.RarityColor[species.Rarity] or GHOST
+				card.sub.Text = species.Rarity
+				card.sub.TextColor3 = GameConfig.RarityColor[species.Rarity] or GHOST
 			else
-				card.frame.BackgroundColor3 = CARD_LOCKED
-				-- Grey, not the form colour. A tinted border would spell the
-				-- tier in another alphabet, and Epic means Bellchime here.
+				--==========================================================
+				-- NOTHING ON A LOCKED CARD MAY CARRY THE TIER
+				--
+				-- Not the word, not the border, and not the sky -- the stage
+				-- goes to dusk GREY rather than to the form's colour for the
+				-- same reason the word is withheld. Epic means Bellchime in
+				-- Greenhollow, so a rarity-tinted card names the species
+				-- through the back door in a different alphabet.
+				--==========================================================
 				card.border.Color = GHOST
 				card.name.Text = "???"
 				card.name.TextColor3 = GHOST
-				card.tier.Text = "Undiscovered"
-				card.tier.TextColor3 = GHOST
+				card.sub.Text = "Undiscovered"
+				card.sub.TextColor3 = GHOST
 			end
 		end
 	end

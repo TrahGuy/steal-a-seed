@@ -204,7 +204,7 @@ local function weightReport()
 	-- the pair brackets every other form. A Nubkin must stay shorter than a
 	-- Bellchime at the SAME weight -- the form has to keep reading -- while both
 	-- have to grow enormously across the range.
-	local CreatureModel = require(root:WaitForChild("CreatureModel"))
+	local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 	local stash = Instance.new("Folder")
 	stash.Name = "SeedWeightCheck"
 	stash.Parent = ServerStorage

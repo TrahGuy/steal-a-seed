@@ -224,6 +224,42 @@ SeedData.Species = {
 } :: { Species }
 
 --==============================================================================
+-- WHAT A PORTRAIT NEEDS, IN ONE PLACE
+--
+-- The HUD draws plants in two panels -- the Index almanac and the Garden bed --
+-- and both want the same seven colours plus the form. Assembling that table at
+-- each call site is how one of them ends up passing the wrong green six months
+-- from now, so the sheet hands it out itself.
+--
+-- Deliberately a plain table rather than the Species row: a portrait has no
+-- business seeing `Kg`, and the two shared colours it needs are module locals
+-- rather than fields.
+--==============================================================================
+export type PortraitSpec = {
+	form: string,
+	body: Color3,
+	crown: Color3,
+	accent: Color3,
+	leaf: Color3,
+	stem: Color3,
+	soil: Color3,
+	blush: Color3,
+}
+
+function SeedData.PortraitSpec(species: Species): PortraitSpec
+	return {
+		form = species.Form,
+		body = species.Body,
+		crown = species.Crown,
+		accent = species.Accent,
+		leaf = species.Leaf,
+		stem = STEM,
+		soil = species.Soil,
+		blush = BLUSH,
+	}
+end
+
+--==============================================================================
 -- THE WEIGHT ROLL
 --
 -- One curve for all five species. Heavy is rare, and rare is very rare.
@@ -466,6 +502,17 @@ end
 --==============================================================================
 local SIZE_REF_KG = 7.5
 local SIZE_EXP = 0.20
+
+--==============================================================================
+-- THE REFERENCE WEIGHT, EXPORTED
+--
+-- The Index lists FORMS and has no weight to show one at -- `species.Kg` is the
+-- old-save fallback and sizing anything from it is a bug (see the top of this
+-- file). The median roll is the honest answer: a plant built at 7.5 kg stands
+-- at exactly its sheet size, so an almanac card shows the shape as drawn rather
+-- than at some weight nobody rolled.
+--==============================================================================
+SeedData.SizeReferenceKg = SIZE_REF_KG
 
 function SeedData.SizeScale(kg: number): number
 	local n = if type(kg) == "number" and kg == kg and kg > 0 then kg else 1

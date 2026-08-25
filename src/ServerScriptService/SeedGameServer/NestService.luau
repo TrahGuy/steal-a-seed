@@ -53,7 +53,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
-local CreatureModel = require(script.Parent:WaitForChild("CreatureModel"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local ParentModel = require(script.Parent:WaitForChild("ParentModel"))
 -- No cycle: MapService knows nothing about nests, it only leaves the markers.
 local MapService = require(script.Parent:WaitForChild("MapService"))

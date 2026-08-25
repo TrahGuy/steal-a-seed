@@ -342,6 +342,37 @@ GameConfig.Tags = {
 	-- One arrow painted on a treadmill belt. Server builds them where they
 	-- belong; each client scrolls its own copies, same split as the fairy.
 	MillChevron = "MillChevron",
+	--==========================================================================
+	-- THE REST OF THE MILL'S MOVING PARTS
+	--
+	-- Same split as the chevrons and the fairy: the SERVER builds them, each
+	-- CLIENT moves them. A roller turning is paint, and paint replicated sixty
+	-- times a second from six plots is the single most expensive thing this game
+	-- could decide to do.
+	--==========================================================================
+	--==========================================================================
+	-- THE TREADS
+	--
+	-- The thing that actually makes a treadmill read as one. Arrows painted on a
+	-- surface say "this is meant to move"; slats sliding under your feet say it
+	-- is moving. Scrolled by the same client clock the chevrons use.
+	--==========================================================================
+	MillSlat = "MillSlat",
+	MillRoller = "MillRoller",
+	-- Turns the other way from whatever it is geared to, at its own ratio.
+	MillGear = "MillGear",
+	-- An arm driven off the belt: goes round, so the mill has something with a
+	-- stroke to it rather than only things that spin.
+	MillCrank = "MillCrank",
+	-- Cloth. Sways on its own slow cycle whether or not anybody is training,
+	-- because a flag in a garden does.
+	MillBanner = "MillBanner",
+	-- Neon that breathes. Slow and shallow when idle, quick and bright under
+	-- load -- which is most of how a premium mill says somebody is on it.
+	MillPulse = "MillPulse",
+	MillWheel = "MillWheel",
+	MillLeaf = "MillLeaf",
+	MillSign = "MillSign",
 	-- An empty marker MapService leaves behind saying "a nest belongs here".
 	-- NestService builds the actual nest on top of it, because a nest has state
 	-- and the map deliberately has none.
@@ -615,6 +646,19 @@ GameConfig.Plant = {
 	-- are standing within RangeStuds of it.
 	--==========================================================================
 	PlaceAction = "PlantAt",
+	--==========================================================================
+	-- TAKING ONE BACK, FROM THE PANEL
+	--
+	-- The world already has a way: walk over and hold E on the Pick Up prompt.
+	-- This is the same act reached from the Garden panel, which is the only
+	-- place a player can see the whole bed at once.
+	--
+	-- A SECOND ACTION ON THE SAME REMOTE, not a second remote. GameEvent already
+	-- carries PlantAt and the argument after the action string is already
+	-- treated as a claim rather than as an instruction; one more verb costs
+	-- nothing and keeps the validation in one place.
+	--==========================================================================
+	PickUpAction = "PickUp",
 }
 
 GameConfig.Treadmill = {
@@ -642,9 +686,128 @@ GameConfig.Treadmill = {
 	-- wake delay means a quick raid on a near pod succeeds at WalkSpeed 16. You
 	-- buy speed to stop being nervous, not to be allowed in.
 	--==========================================================================
+	-- The tier-1 rate, kept here because TreadmillService still reads it as the
+	-- floor. What a given mill actually pays is GameConfig.Mill.Tiers[n].Speed.
 	SpeedPerSecond = 2,
 	-- Only pays while you are actually standing on it, alive.
 	TickSeconds = 1,
+}
+
+--==============================================================================
+-- THE MILL, IN SEVEN STEPS
+--
+-- One per plot, and yours only. The ladder exists because the base rate above
+-- is deliberately a FLOOR -- the comment on it says the pacing was always meant
+-- to come from upgrades multiplying a slow number rather than from a fast one
+-- being clawed back.
+--
+-- WHAT THE RATES ARE MEASURED AGAINST. The speed needed to out-run each biome's
+-- parent is 453 / 2,208 / 4,133 / 6,260 / 8,636. At tier 1 the whole ladder is
+-- about 72 minutes of standing still; at tier 7 it is about three. Twenty-five
+-- times faster at the top, and a quarter of a billion in cash to get there --
+-- which is the point: the mill is what you spend a mature garden's income on.
+--
+-- COSTS CLIMB FASTER THAN RATES. Each step is roughly seven times the last
+-- while the rate is under two, so no tier is ever an obvious skip and the last
+-- one is a genuine goal rather than a formality.
+--
+-- BeltStuds is how fast the surface travels, and it is not decoration: the run
+-- animation is driven from the same number (see SpeedFX), so a faster mill has
+-- visibly faster feet. Roblox authors its run cycle for 16 studs a second, so
+-- that is the number a track speed of 1.0 corresponds to.
+--
+-- NOT BALANCE IN THE Rule 7 SENSE -- this is the speed curve, which GameConfig
+-- has always owned, sitting next to the curve it multiplies.
+--==============================================================================
+GameConfig.Mill = {
+	Tiers = {
+		{ name = "Compost Walk", speed = 2, cost = 0, beltStuds = 13 },
+		{ name = "Garden Path", speed = 4, cost = 10000, beltStuds = 15 },
+		{ name = "Trellis Trot", speed = 7, cost = 75000, beltStuds = 17 },
+		{ name = "Millstone", speed = 12, cost = 500000, beltStuds = 19 },
+		{ name = "Glasshouse", speed = 20, cost = 3500000, beltStuds = 21 },
+		{ name = "Sunwheel", speed = 32, cost = 25000000, beltStuds = 24 },
+		{ name = "Heartroot", speed = 50, cost = 150000000, beltStuds = 27 },
+	},
+	StartingTier = 1,
+
+	-- What the belt creeps at with nobody on it. Not zero: a dead mill reads as
+	-- broken, and a slow drift says "this is a machine and it is waiting".
+	IdleStuds = 1.6,
+
+	--==========================================================================
+	-- THE ANIMATION IS NOT AUTHORED AT ONE SPEED
+	--
+	-- Roblox's own Animate script scales the run cycle by speed/16, which is
+	-- what keeps feet on the ground when a character actually moves. A mill
+	-- character does not move, so the same division has to be done by hand --
+	-- and doing it from the SAME BeltStuds the chevrons use is what stops the
+	-- belt crawling under sprinting legs.
+	--==========================================================================
+	RunCycleStuds = 16,
+
+	--==========================================================================
+	-- WHAT THE BELT DOES, TIER BY TIER
+	--
+	-- One row per mill, and the ladder is meant to be read DOWN a column: every
+	-- tier is the tier below it plus exactly one new behaviour. That constraint
+	-- is the whole design. Seven belts that each do a different clever thing
+	-- would be seven belts a player cannot rank; seven belts that visibly ACCRUE
+	-- are a progression somebody can feel themselves climbing.
+	--
+	--   1  scroll .............. it moves, and nothing else
+	--   2  + breathe ........... the set brightens and dims: it is powered
+	--   3  + chase ............. arrows light in sequence along the run
+	--   4  + rake .............. they lean into the travel, harder when faster
+	--   5  + bloom ............. a band of light sweeps the belt through them
+	--                           -- painted as brightness, not built as a part
+	--   6  + bob and shimmer ... they ride a wave, the plate catches the light
+	--   7  + rainbow ........... a spectrum runs the surface itself
+	--
+	-- Rung 7 needs one thing none of the others do. A belt is a single part, so
+	-- its colour is one colour -- there is no varying anything ALONG it, at any
+	-- price -- and a plate that merely cycles hues is a plate that is lilac, and
+	-- then is blue. That is not a rainbow. A rainbow is all the hues at once, in
+	-- order, and the only way to have one on a single belt is to lay flat bands
+	-- on it and let them scroll through a spectrum that stays where it is. Which
+	-- is what Bands is for, and why it exists on exactly one tier.
+	--
+	-- Every amplitude here is multiplied by how hard the belt is WORKING, which
+	-- is what "animate as the player uses it" actually means: an unoccupied
+	-- tier-7 mill idles as a slow green drift, and lights up as a rainbow the
+	-- moment somebody steps on. A mill that put on its whole show to an empty
+	-- garden would spend most of its life spoiling its own best moment.
+	--
+	-- Arrows is the only column the SERVER reads -- it builds that many chevron
+	-- pairs and stamps the count on each. Everything else is paint and is
+	-- applied per client in Ambience, because sixty parts changing colour on the
+	-- server is sixty parts of replication a second for something nobody can
+	-- interact with.
+	--==========================================================================
+	Belt = {
+		-- Arrows is PAIRS: a chevron is two arms and lights as one. Bands are
+		-- flat strips lying on the plate, and only rung 7 has any.
+		{ Arrows = 2, Bands = 0, Neon = false, Breathe = 0, Chase = 0, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0 },
+		{ Arrows = 3, Bands = 0, Neon = false, Breathe = 0.30, Chase = 0, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0 },
+		{ Arrows = 4, Bands = 0, Neon = false, Breathe = 0.30, Chase = 0.85, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0 },
+		{ Arrows = 5, Bands = 0, Neon = false, Breathe = 0.30, Chase = 0.85, Rake = 0.30, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0 },
+		{ Arrows = 5, Bands = 0, Neon = true, Breathe = 0.35, Chase = 0.70, Rake = 0.26, Bloom = 0.90, Bob = 0, Shimmer = 0, Rainbow = 0 },
+		{ Arrows = 6, Bands = 0, Neon = true, Breathe = 0.35, Chase = 0.70, Rake = 0.22, Bloom = 0.90, Bob = 0.45, Shimmer = 0.35, Rainbow = 0 },
+		{ Arrows = 7, Bands = 9, Neon = true, Breathe = 0.40, Chase = 0.60, Rake = 0.18, Bloom = 1.00, Bob = 0.60, Shimmer = 0.50, Rainbow = 1 },
+	},
+
+	--==========================================================================
+	-- ARROWS DO NOT POP IN AND OUT AT THE WRAP
+	--
+	-- Every arrow teleports from the front of the belt to the back once a lap.
+	-- Unfaded that is a visible blink, and a blink reads as a bug rather than as
+	-- tier 1 being humble. This is the fraction of the run over which one fades,
+	-- and it applies to every tier for that reason -- it is correctness, not a
+	-- rung on the ladder.
+	--==========================================================================
+	BeltEdgeFade = 0.12,
+
+	Action = "MillUpgrade",
 }
 
 function GameConfig.parentThrowStudsFor(biomeOrder: number): number
@@ -766,6 +929,55 @@ GameConfig.Rail = {
 }
 
 --==============================================================================
+-- THE PANEL, WHICH IS NOT A SHOP THING
+--
+-- Index, Shop and Garden are one modal in three costumes, so the chrome they
+-- share lives in its own table rather than inside GameConfig.Shop. It sat there
+-- while the shop was the only panel and it stopped being true the moment the
+-- other two stopped sliding in from the edges.
+--
+--==============================================================================
+-- IT WAS BLACK, AND A BLACK RECTANGLE IS NOT A SURFACE
+--
+-- The fill was rgb(26,28,41) -- a very dark navy sampled off the reference
+-- shots. Faithful, and on a screen it read as a hole cut out of the game: the
+-- diamond lattice was there at 0.55 transparency and simply could not be seen,
+-- so three panels of a garden game looked like three empty boxes.
+--
+-- Warm dark soil instead, shaded. Not invented: SeedData.SOIL is 124,76,50 and
+-- MapService lays its beds at 158,82,52, so this is those two taken down into
+-- shadow -- the same dirt the plants grow out of, seen from underneath a lid.
+--
+--     fill    rgb( 58, 38, 29)     shaded soil, the top of the gradient
+--     shade   rgb( 38, 25, 19)     and the bottom of it
+--     lattice rgb(132, 88, 62)     a soil HIGHLIGHT, lighter than the fill
+--
+-- DARKER THAN THE CARDS, ALWAYS. A card has to sit ON the panel, so the panel
+-- has to be the darkest thing in the modal. Measured as relative luminance:
+--
+--     panel fill        42          panel shade       27
+--     Index locked      50          Index seen        68
+--
+-- The lattice is a LIGHTER line on a DARKER fill now, which is what makes it
+-- legible at all -- the old arrangement was a barely-lighter navy on navy. Pitch
+-- comes down from 34 to 22, nearer the rail's 18, so a panel reads as a field of
+-- diamonds rather than as four stray scratches. Still quieter than any card or
+-- buy button sitting on it: the texture is behind the content, never with it.
+--==============================================================================
+GameConfig.Panel = {
+	Fill = Color3.fromRGB(58, 38, 29),
+	Shade = Color3.fromRGB(38, 25, 19),
+	Outline = Color3.fromRGB(0, 0, 0),
+	Lattice = Color3.fromRGB(132, 88, 62),
+	LatticeSpacing = 22,
+	LatticeTransparency = 0.55,
+	-- The scrollbar and the thin inner lip: light enough to find on the fill.
+	Edge = Color3.fromRGB(126, 96, 76),
+	Title = Color3.fromRGB(255, 255, 255),
+	Close = Color3.fromRGB(255, 0, 0),
+}
+
+--==============================================================================
 -- THE SHOP'S PALETTE
 --
 -- The panel, the outline and the close button were sampled off the owner's
@@ -815,6 +1027,202 @@ GameConfig.Shop = {
 	-- than one wall.
 	Heading = Color3.fromRGB(250, 214, 108),
 	Locked = Color3.fromRGB(120, 124, 140),
+}
+
+--==============================================================================
+-- THE PLANT CARD
+--
+-- A card is a little diorama: a painted backdrop, a STILL 3D plant standing in
+-- front of it, and two lines of type. The plant is the subject and everything
+-- else is scenery.
+--
+--==============================================================================
+-- THE CARD HAS NO TEXTURE OF ITS OWN, AND WILL NOT GET ONE
+--
+-- It carried a diamond lattice for one pass. The lattice is drawn from ROTATED
+-- frames, and a rotated child escapes ClipsDescendants -- which is written up at
+-- length in UIKit. Inside a ScrollingFrame that is not cosmetic: a half-scrolled
+-- card threw its diamonds 342 pixels past the list and straight over the
+-- Garden's footer.
+--
+-- A CanvasGroup contained it, but containing a bug is not fixing one. The card
+-- surface is now a picture and nothing else. NO lattice, no studs, no diagonal
+-- anything -- do not put rotated frames inside a scrolling card again.
+--
+-- The rail buttons and the modal panel keep theirs. Neither of them scrolls.
+--
+--==============================================================================
+-- ONE PICTURE PER SPECIES, AND ONLY WHERE IT IS EARNED
+--
+-- Five species, five different places -- Nubkin's sunlit rows, Petalpip's
+-- meadow, Spiretip's misty pines, Toadcap's rotting log, Bellchime's lanterns
+-- at dusk. Drawn by tools/art/card_backdrops.py, which is the source; these ids
+-- are its output.
+--
+-- A backdrop is IDENTITY, so it is withheld wherever identity is withheld: an
+-- undiscovered Index card, a Garden pod and an empty hole all get the plain
+-- dusk gradient below instead. Painting Bellchime's lanterns behind a ??? would
+-- name the species through the back door as surely as printing the word.
+--==============================================================================
+GameConfig.Card = {
+	Art = {
+		nubkin = "rbxassetid://100196841981461",
+		petalpip = "rbxassetid://109778696165493",
+		spiretip = "rbxassetid://90680843858849",
+		toadcap = "rbxassetid://110972481430448",
+		bellchime = "rbxassetid://106856602665628",
+	},
+
+	-- What a card shows when it may not show a place. Grey on purpose: it
+	-- carries no information except "not yet".
+	DuskTop = Color3.fromRGB(134, 136, 132),
+	DuskBottom = Color3.fromRGB(92, 98, 92),
+
+	--==========================================================================
+	-- THE VIEWPORT
+	--
+	-- A still 3D copy of the real CreatureModel, lit from one side and shot from
+	-- three-quarters so the form reads as volume rather than as a sticker. The
+	-- creature faces -Z, so the camera sits in front of it, to the right and
+	-- above.
+	--
+	-- FRAMED PER MODEL, not at a fixed distance. A Bellchime is more than twice
+	-- a Nubkin's height and a fixed camera would leave one filling the card and
+	-- the other a speck. Relative height is already told by the sheet and by the
+	-- world; a card's job is to show the SHAPE.
+	--==========================================================================
+	--
+	-- Pitch matters more than it sounds. At 0.52 the camera looked down hard
+	-- enough to show the top of every head and turn the soil heap into a flat
+	-- disc jutting out of the bottom of the frame; 0.28 is a three-quarter view
+	-- of a creature rather than an aerial photograph of one.
+	CameraOffset = Vector3.new(0.66, 0.28, -1),
+	-- 0.94 cropped the soil heap off the bottom of several forms. Just over 1
+	-- fits the whole model with a hair of air, which is what a portrait wants:
+	-- the box already includes the heap, so there is no need to cut into it.
+	CameraFill = 1.02,
+	-- The visual mass sits above the geometric centre -- the heap is wide and
+	-- low -- so the camera looks a little higher than the middle of the box.
+	CameraRise = 0.08,
+	Ambient = Color3.fromRGB(132, 134, 146),
+	LightColour = Color3.fromRGB(255, 250, 236),
+	LightDirection = Vector3.new(-0.45, -1, -0.62),
+
+	--==========================================================================
+	-- THE BACKDROP IS TURNED DOWN
+	--
+	-- Rendered at full strength the pictures competed with the thing standing in
+	-- front of them -- worst on Spiretip, whose pale spikes sat against pale
+	-- mist and stopped reading. A flat multiply keeps all five recognisable as
+	-- places while putting every one of them behind the plant, which is the rule
+	-- the art bible states and the reason they were drawn soft to begin with.
+	--==========================================================================
+	ArtTint = Color3.fromRGB(202, 202, 202),
+
+	Radius = 12,
+	--==========================================================================
+	-- THE POP
+	--
+	-- A card lifts under the pointer. 1.07 is enough to read as a lift without
+	-- the card colliding with its neighbours at rest, and 0.12s is short enough
+	-- that a fast pass across a grid does not leave a wave behind it.
+	--==========================================================================
+	HoverScale = 1.07,
+	HoverSeconds = 0.12,
+
+	--==========================================================================
+	-- SELECTED IS NOT HOVERED
+	--
+	-- A hovered card grows; a SELECTED card gets out of its own way. It shrinks
+	-- toward the top of its cell and the strip that frees up at the bottom is
+	-- where the action button goes -- so the button belongs to that card, sits
+	-- under its plant, and never covers a neighbour.
+	--
+	-- 0.84 rather than the 0.90 that first suggested itself: a 184-pixel cell
+	-- only frees 18 pixels at 0.90, and a button that short cannot hold
+	-- LuckiestGuy at a readable size. 0.84 frees 29, which fits a 28-pixel slab
+	-- with a pixel to spare.
+	--
+	-- Hover is switched OFF while a card is selected. Two scales fighting over
+	-- one card is how a card ends up stuck at 1.07 with a button under it.
+	--==========================================================================
+	SelectScale = 0.84,
+	ActionHeight = 28,
+	ActionFace = Color3.fromRGB(226, 96, 84),
+	ActionShade = Color3.fromRGB(168, 56, 48),
+	ActionTextSize = 14,
+	-- Added to every layer of a hovered card so it draws over the ones beside
+	-- it. Bigger than any ZIndex a card uses, so a lifted card clears a resting
+	-- one whole rather than interleaving with it.
+	HoverLift = 40,
+}
+
+--==============================================================================
+-- THE MUSIC
+--
+-- ROBLOX CANNOT PLAY A FILE OFF THE DISK. The pieces live in `sfx/` and none of
+-- them is what the game plays: audio has to be uploaded to the asset server
+-- first, and what ships is the id that comes back. These are those ids, off the
+-- owner's own account.
+--
+--     BGM1   133940553394248     sfx/Garden at First Light.m4a
+--     BGM2    70722559996799     sfx/Garden at First Light_1.m4a
+--
+-- TWO TAKES OF ONE PIECE. Played in order and wrapped at the end, so the bed
+-- runs about three and a quarter minutes before it repeats itself. One id here
+-- would loop that one track forever instead; the list decides, not the code.
+--
+-- Nothing about the player picks a track. It is a bed, not a cue.
+--
+-- NOT BALANCE, so Rule 7 is intact: names and structure, the same way
+-- GameConfig.Rail carried the rail's image ids for as long as it had any.
+--==============================================================================
+GameConfig.Music = {
+	Tracks = {
+		"rbxassetid://133940553394248",  -- BGM1
+		"rbxassetid://70722559996799",   -- BGM2
+	},
+
+	--==========================================================================
+	-- UNDER THE GAME, NEVER OVER IT
+	--
+	-- A bed sits below every cue that means something -- the RUN alarm, the
+	-- hatch, the pod landing -- because a player who cannot hear the alarm over
+	-- the music turns the music off, and then they cannot hear the music
+	-- either. AlertUI's stinger plays at 0.55 and its pings at 0.42, so this
+	-- stays well under both.
+	--==========================================================================
+	Volume = 0.32,
+
+	-- Faded up at join rather than slammed on. A track that starts at full
+	-- level on the loading screen is the first thing a player mutes.
+	FadeSeconds = 2.5,
+}
+
+--==============================================================================
+-- THE REST OF THE UPLOADS, RECORDED BUT NOT YET TRIGGERED
+--
+-- Six more sounds went up with the music and every one of them has an obvious
+-- home -- Grab and Take pod on the hold that steals a pod, throw on the parent's
+-- throw, the chase pair on the RUN alarm, the sleep loop on a nest parent that
+-- has not been robbed yet.
+--
+-- OBVIOUS IS NOT THE SAME AS DECIDED. Each one needs a place in a specific
+-- script, a level against the four sounds AlertUI already plays, and an answer
+-- to whether it is 2D or positional -- a footstep that follows the thief is not
+-- the same design as one every player hears flat. None of that has been chosen,
+-- so nothing reads this table yet.
+--
+-- It is here so the ids are not lost. An asset id that exists only in a chat
+-- log is an asset id somebody re-uploads in a month.
+--==============================================================================
+GameConfig.Sfx = {
+	Grab = "rbxassetid://113282797733918",
+	TakePod = "rbxassetid://130694487616211",
+	Throw = "rbxassetid://131635221141553",
+	ChaseBed = "rbxassetid://86935894428393",
+	ChaseFootstep = "rbxassetid://84880778606132",
+	ParentSleep = "rbxassetid://81143161269823",
 }
 
 --==============================================================================
@@ -939,6 +1347,19 @@ GameConfig.Save = {
 	--==========================================================================
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
+	--==========================================================================
+	-- HOW MANY HELD PLANTS COME BACK
+	--
+	-- The hotbar is saved now, and a saved list is rebuilt into real Tools with
+	-- real geometry on join. Roblox gives a Backpack far more slots than a
+	-- player can reach, so the cap is about the WORK: twenty-four creatures at
+	-- up to forty parts each is already a thousand parts built at the least
+	-- convenient moment there is.
+	--
+	-- Nothing silently truncates -- ProfileSchema stops at this number and the
+	-- restore says how many it dropped.
+	--==========================================================================
+	MaxHeld = 24,
 
 	--==========================================================================
 	-- SESSION LOCK

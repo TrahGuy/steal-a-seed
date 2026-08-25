@@ -139,6 +139,29 @@ end
 -- re-validates every entry on restore, because a slot that has since been
 -- removed by a tier change is a real possibility and must not crash a load.
 --==============================================================================
+--==============================================================================
+-- THE HOTBAR IS RECORDED AS IT CHANGES, NOT READ AT SAVE TIME
+--
+-- The first attempt asked CarryService for a snapshot immediately before every
+-- write, which reads well and does not work: the last write of a session
+-- happens while the session is being TORN DOWN, and by then the Character --
+-- which is where an EQUIPPED Tool lives -- may already be gone. So the save
+-- faithfully recorded an empty hotbar and the plant in the player's hands was
+-- destroyed, which is the exact bug this field exists to fix.
+--
+-- Written on change instead, exactly like Plants. The save then serialises what
+-- was already true rather than asking a question at the worst possible moment.
+--==============================================================================
+function PlayerDataService.SetHeld(player: Player, held: { any }): boolean
+	local entry = entries[player]
+	if not entry or type(held) ~= "table" then
+		return false
+	end
+	entry.profile.Held = held
+	touch(player)
+	return true
+end
+
 function PlayerDataService.SetPlants(player: Player, plants: { any }): boolean
 	local entry = entries[player]
 	if not entry or type(plants) ~= "table" then
@@ -171,6 +194,27 @@ function PlayerDataService.MarkSeen(player: Player, speciesId: string): boolean
 		return false
 	end
 	entry.profile.Almanac[speciesId] = true
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- THE MILL TIER, WHICH IS THE PLOT TIER'S TWIN
+--
+-- Same shape, same guards, same reason: a number the server owns that decides
+-- what is built on somebody's ground. Kept separate from PlotTier because they
+-- are bought separately and neither implies the other.
+--==============================================================================
+function PlayerDataService.SetMillTier(player: Player, tier: number): boolean
+	local entry = entries[player]
+	if not entry or type(tier) ~= "number" or tier ~= tier then
+		return false
+	end
+	local clamped = math.floor(math.clamp(tier, 1, #GameConfig.Mill.Tiers))
+	if entry.profile.MillTier == clamped then
+		return false
+	end
+	entry.profile.MillTier = clamped
 	touch(player)
 	return true
 end

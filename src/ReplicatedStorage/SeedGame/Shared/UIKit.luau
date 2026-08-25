@@ -39,6 +39,8 @@ local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local UIKit = {}
 
 local RAIL = GameConfig.Rail
+local PANEL = GameConfig.Panel
+local CARD = GameConfig.Card
 local BLACK = Color3.fromRGB(0, 0, 0)
 local WHITE = Color3.fromRGB(255, 255, 255)
 
@@ -62,7 +64,22 @@ function UIKit.stroke(parent: Instance, colour: Color3, thickness: number,
 	return s
 end
 
-function UIKit.gradient(parent: Instance, top: Color3, bottom: Color3): UIGradient
+--==============================================================================
+-- A UIGradient MULTIPLIES. IT DOES NOT REPLACE.
+--
+-- The rendered colour is BackgroundColor3 TIMES the gradient, so a frame set to
+-- its own fill and then gradiented from that fill squares it. On a bright face
+-- that only looks a bit deeper and passes unnoticed; on the panel's shaded soil
+-- it turned rgb(58,38,29) into rgb(13,6,3), which is why a fill picked to stop
+-- the panel reading as black rendered blacker than the one it replaced.
+--
+-- So the surface goes WHITE and the gradient carries the colour. Callers pass
+-- the two real colours and get exactly those two colours. ShopUI's cards had
+-- this right already -- `fill.BackgroundColor3 = WHITE` then gradient -- and
+-- this is that, moved somewhere all three panels share.
+--==============================================================================
+function UIKit.gradient(parent: GuiObject, top: Color3, bottom: Color3): UIGradient
+	parent.BackgroundColor3 = WHITE
 	local g = Instance.new("UIGradient")
 	g.Color = ColorSequence.new(top, bottom)
 	g.Rotation = 90
@@ -150,6 +167,11 @@ export type LatticeOptions = {
 	colour: Color3?,
 	transparency: number?,
 	inset: number?,
+	-- These ScreenGuis run ZIndexBehavior.Global, where a lower number is behind
+	-- a higher one no matter who owns it. Zero is right on a panel, whose only
+	-- job is to be behind everything; on a plant card the sky sits above other
+	-- layers and its lattice has to come with it.
+	zIndex: number?,
 }
 
 local SIN45 = 0.70710678
@@ -163,13 +185,15 @@ function UIKit.lattice(parent: GuiObject, options: LatticeOptions?): Frame
 	local colour = opts.colour or WHITE
 	local transparency = opts.transparency or 0.88
 
+	local layer = opts.zIndex or 0
+
 	local holder = Instance.new("Frame")
 	holder.Name = "Lattice"
 	holder.Size = UDim2.fromScale(1, 1)
 	holder.BackgroundTransparency = 1
 	-- Behind the content and never in the way of a click: a Frame is not Active,
 	-- so it does not swallow input.
-	holder.ZIndex = 0
+	holder.ZIndex = layer
 	holder.Parent = parent
 
 	local builtFor = Vector2.zero
@@ -209,7 +233,7 @@ function UIKit.lattice(parent: GuiObject, options: LatticeOptions?): Frame
 					line.BackgroundColor3 = colour
 					line.BackgroundTransparency = transparency
 					line.BorderSizePixel = 0
-					line.ZIndex = 0
+					line.ZIndex = layer
 					line.Parent = holder
 				end
 			end
@@ -294,6 +318,9 @@ function UIKit.slab(parent: Instance, options: SlabOptions): ImageButton
 	UIKit.corner(slab, radius)
 	UIKit.stroke(slab, options.outline or RAIL.Outline, thickness)
 	if options.shade then
+		-- Sets the background white itself; see the note on UIKit.gradient. The
+		-- three rail faces were being squared before that was fixed, which is
+		-- why they all read a shade deeper than the palette says.
 		UIKit.gradient(slab, options.face, options.shade)
 	end
 
@@ -682,8 +709,14 @@ end
 -- worth writing where the ghost is built: Epic means Bellchime in Greenhollow,
 -- so a tier -- spelled OR tinted -- names the species through the back door.
 --==============================================================================
-function UIKit.plantPortrait(parent: GuiObject, spec: PlantSpec,
-	ghost: Color3?): Frame
+--==============================================================================
+-- ONE BOX AND ONE HEAP, SHARED BY EVERY PORTRAIT
+--
+-- A plant, a pod and an empty hole are three things that live in the same dirt,
+-- and drawing that dirt three ways is how a bed of twelve ends up with three
+-- different soil colours in it.
+--==============================================================================
+local function portraitBox(parent: GuiObject): Frame
 	local box = Instance.new("Frame")
 	box.Name = "Portrait"
 	box.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -692,11 +725,25 @@ function UIKit.plantPortrait(parent: GuiObject, spec: PlantSpec,
 	box.BackgroundTransparency = 1
 	box.Parent = parent
 
-	-- Square, whatever the cell does. Every coordinate below is a fraction of
+	-- Square, whatever the cell does. Every coordinate in here is a fraction of
 	-- the box, and a stretched box would stretch the plant with it.
 	local square = Instance.new("UIAspectRatioConstraint")
 	square.AspectRatio = 1
 	square.Parent = box
+	return box
+end
+
+-- A heap with a peak, thinning outward, overlapping into one mound rather than
+-- sitting as separate clods.
+local function drawSoil(box: GuiObject, soil: Color3)
+	piece(box, "Soil", 0.5, 0.885, 0.60, 0.145, soil, 0.35, nil, 4)
+	piece(box, "Clod", 0.275, 0.895, 0.26, 0.115, soil, 0.5, nil, 4)
+	piece(box, "Clod", 0.725, 0.900, 0.24, 0.105, soil, 0.5, nil, 4)
+end
+
+function UIKit.plantPortrait(parent: GuiObject, spec: PlantSpec,
+	ghost: Color3?): Frame
+	local box = portraitBox(parent)
 
 	local stem = ghost or spec.stem
 	local leaf = ghost or spec.leaf
@@ -717,17 +764,551 @@ function UIKit.plantPortrait(parent: GuiObject, spec: PlantSpec,
 	piece(box, "Leaf", 0.675, leafY, 0.27, 0.115, leaf, 0.5, 26, 3)
 	piece(box, "Leaflet", 0.645, leafY - 0.10, 0.18, 0.085, leaf, 0.5, -16, 3)
 
-	-- The heap, not a puck: a peak at the stem thinning outward, overlapping
-	-- into one mound rather than sitting as separate clods.
-	piece(box, "Soil", 0.5, 0.885, 0.60, 0.145, soil, 0.35, nil, 4)
-	piece(box, "Clod", 0.275, 0.895, 0.26, 0.115, soil, 0.5, nil, 4)
-	piece(box, "Clod", 0.725, 0.900, 0.24, 0.105, soil, 0.5, nil, 4)
+	drawSoil(box, soil)
 
 	if not ghost then
 		drawFace(box, faceX, faceY, faceW, spec.blush)
 	end
 
 	return box
+end
+
+--==============================================================================
+-- A POD, DRAWN FLAT
+--
+-- What sits in a hole before the shell breaks. Same vocabulary as
+-- CreatureModel.BuildPod -- an egg of two overlapping rounds with the upper one
+-- smaller, a seam a hair proud of it, and the curled tendril -- because a Ball
+-- is sized by its smallest axis and a single elongated one is not available in
+-- three dimensions either.
+--
+--==============================================================================
+-- COLOURED BY WEIGHT, AND IT IS NOT THE CREATURE
+--
+-- The shell takes ColorForKg and NOTHING here says which species is inside. Two
+-- Commons arrive in identical shells and which one you got is not knowable until
+-- it opens -- so drawing the form on a Garden card would spend the hatch exactly
+-- the way printing the name would. A pod card shows a pod.
+--==============================================================================
+function UIKit.podPortrait(parent: GuiObject, shell: Color3, soil: Color3): Frame
+	local box = portraitBox(parent)
+
+	drawSoil(box, soil)
+
+	-- The egg: the lower round is the body, the upper and smaller one closes it.
+	piece(box, "Shell", 0.5, 0.585, 0.52, 0.52, shell, 0.5, nil, 5)
+	piece(box, "Crown", 0.5, 0.395, 0.44, 0.44, shell, 0.5, nil, 5)
+	-- The seam. The sheet's zigzag is not worth twenty parts to reproduce and at
+	-- any size that matters what reads is that there IS one.
+	piece(box, "Seam", 0.5, 0.505, 0.545, 0.055,
+		shell:Lerp(BLACK, 0.18), 0.02, nil, 6)
+	-- The tendril, four blocks around a quarter turn.
+	for index, t in ipairs({ { 0.560, 0.175, 12 }, { 0.585, 0.115, 30 },
+		{ 0.635, 0.070, 52 }, { 0.700, 0.048, 74 } }) do
+		piece(box, "Tendril" .. index, t[1], t[2], 0.055, 0.085,
+			Color3.fromRGB(104, 158, 62), 0.2, t[3], 6)
+	end
+
+	return box
+end
+
+--==============================================================================
+-- AN EMPTY HOLE
+--
+-- Not a blank card. An empty slot is a real hole in real dirt that you can walk
+-- over and fill, so it is drawn as one -- the same heap every other portrait
+-- stands in, with the ground opened up in the middle of it.
+--==============================================================================
+function UIKit.emptyPortrait(parent: GuiObject, soil: Color3): Frame
+	local box = portraitBox(parent)
+	drawSoil(box, soil)
+	-- The hollow, sunk into the heap: darker than the dirt around it, because a
+	-- hole is the absence of the thing rather than a lighter patch of it.
+	piece(box, "Hollow", 0.5, 0.845, 0.30, 0.135,
+		soil:Lerp(BLACK, 0.45), 0.5, nil, 5)
+	return box
+end
+
+--==============================================================================
+-- A CLIP THAT SURVIVES ROTATION
+--
+-- ClipsDescendants does not clip a rotated child. That is written up at length
+-- on the lattice, where it was first measured, and the chord maths there stops
+-- a lattice escaping the surface it decorates.
+--
+-- It does not stop the surface itself being scrolled out of view. A card
+-- half-way off the bottom of a ScrollingFrame has its sky and its bed cut at
+-- the boundary, correctly, and its lattice lines carry on rendering below it --
+-- measured at 342 pixels past the edge, which is how a green diamond ended up
+-- sitting on the Garden's footer.
+--
+-- A CanvasGroup renders its descendants into a buffer of its own size, so what
+-- falls outside is simply not drawn -- rotation included. Proof it works was
+-- already on screen: the escaped lattice stopped at the panel's edge, and the
+-- panel is a CanvasGroup.
+--
+-- ONE PER LIST, not one per card. A render target per card would be thirty of
+-- them on a tier-4 plot, and Rule 8 is mobile first.
+--==============================================================================
+function UIKit.rotationSafeClip(parent: Instance, name: string,
+	size: UDim2): CanvasGroup
+	local clip = Instance.new("CanvasGroup")
+	clip.Name = name
+	clip.Size = size
+	clip.BackgroundTransparency = 1
+	clip.BorderSizePixel = 0
+	clip.ZIndex = 3
+	clip.Parent = parent
+	return clip
+end
+
+--==============================================================================
+-- LIFTING A WHOLE CARD, UNDER ZIndexBehavior.Global
+--
+-- Every ScreenGui in this game runs Global, which was measured rather than
+-- assumed: a GuiObject is ordered against every other one in the ScreenGui by
+-- its own ZIndex, and being somebody's child buys it nothing. Raising a card's
+-- own ZIndex therefore raises the CARD and leaves its sky, its plant and its
+-- labels behind, sitting under the neighbour it was supposed to rise above.
+--
+-- So the lift walks the subtree and moves every layer by the same offset, and
+-- puts them all back on the way down. Walked at hover time rather than cached,
+-- because the portrait inside a card is rebuilt whenever what it depicts
+-- changes and a cached list would be holding destroyed frames.
+--
+-- Guarded with `up`, because lifting twice would record the already-lifted
+-- values as the resting ones and the card would never come back down.
+--==============================================================================
+local function liftLayers(root: GuiObject, offset: number)
+	local resting: { [GuiObject]: number } = {}
+	local up = false
+
+	return function(want: boolean)
+		if up == want then
+			return
+		end
+		up = want
+		if want then
+			table.clear(resting)
+			resting[root] = root.ZIndex
+			root.ZIndex += offset
+			for _, d in ipairs(root:GetDescendants()) do
+				if d:IsA("GuiObject") then
+					resting[d] = d.ZIndex
+					d.ZIndex += offset
+				end
+			end
+		else
+			for object, z in pairs(resting) do
+				-- Anything rebuilt while the card was up is not in here and does
+				-- not need to be: it was built at its resting number.
+				if object.Parent then
+					object.ZIndex = z
+				end
+			end
+			table.clear(resting)
+		end
+	end
+end
+
+--==============================================================================
+-- THE POP
+--
+-- Scale, stroke and stacking order, on a tween. No Heartbeat: a hover is two
+-- events and two tweens, not a per-frame job.
+--
+-- TOUCH IS NOT HOVER. A phone has no pointer to enter with, so the same pop runs
+-- on press and releases on lift -- without it every card on mobile is a dead
+-- rectangle that never acknowledges being touched.
+--
+-- Returned as a function as well as wired to the events, because a hover cannot
+-- be fired from a script and a state that cannot be driven cannot be tested.
+--==============================================================================
+export type PopOptions = {
+	scale: number?,
+	seconds: number?,
+	lift: number?,
+	stroke: UIStroke?,
+	strokeThickness: number?,
+}
+
+function UIKit.popOnHover(target: GuiObject, scale: UIScale,
+	options: PopOptions?): ((boolean) -> (), (boolean) -> ())
+	local opts: PopOptions = options or {}
+	local up = opts.scale or CARD.HoverScale
+	local seconds = opts.seconds or CARD.HoverSeconds
+	local raise = liftLayers(target, opts.lift or CARD.HoverLift)
+
+	local stroke = opts.stroke
+	local restingThickness = if stroke then stroke.Thickness else 0
+	local thickThickness = opts.strokeThickness or (restingThickness + 1.25)
+
+	local info = TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	--==========================================================================
+	-- A CARD THAT IS DOING SOMETHING ELSE DOES NOT POP
+	--
+	-- Selection shrinks a card and hover grows it, and a card that can be in
+	-- both states at once is a card that gets stuck in one of them. Turning the
+	-- pop off also puts it DOWN, so a card selected while the pointer is on it
+	-- does not stay at 1.07 underneath the new state.
+	--==========================================================================
+	local enabled = true
+
+	local function setHovered(on: boolean)
+		if on and not enabled then
+			return
+		end
+		raise(on)
+		TweenService:Create(scale, info, { Scale = if on then up else 1 }):Play()
+		if stroke then
+			TweenService:Create(stroke, info,
+				{ Thickness = if on then thickThickness else restingThickness }):Play()
+		end
+	end
+
+	target.MouseEnter:Connect(function()
+		setHovered(true)
+	end)
+	target.MouseLeave:Connect(function()
+		setHovered(false)
+	end)
+	target.InputBegan:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			setHovered(true)
+		end
+	end)
+	target.InputEnded:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			setHovered(false)
+		end
+	end)
+
+	local function setEnabled(on: boolean)
+		enabled = on
+		if not on then
+			setHovered(false)
+		end
+	end
+
+	return setHovered, setEnabled
+end
+
+--==============================================================================
+-- THE PLANT CARD
+--
+-- One builder for the Index almanac and the Garden bed. They ask different
+-- questions -- what shapes exist, and what is in your dirt right now -- but they
+-- are the same object on screen, and two copies of it is how one of them keeps a
+-- backdrop the other has already changed.
+--
+-- Back to front: a shadow, the card, a clipped BACKDROP, a ViewportFrame with a
+-- still 3D plant in it, then two labels.
+--
+--==============================================================================
+-- THE PLANT IS A REAL MODEL NOW, AND IT DOES NOT MOVE
+--
+-- It was a flat drawing built from rotated frames -- which is why the card used
+-- to need a horizon, a soil bed and a solved art box to stand a 2D heap on. All
+-- of that is gone. The card shows a copy of the SAME CreatureModel the world
+-- builds, so a Bellchime in the Index is the Bellchime in the ground rather than
+-- an illustration of one that can drift away from it.
+--
+-- STILL. No sway, no lean, no walk, no spin, no camera orbit, no Heartbeat and
+-- nothing on RenderStepped. The camera is set once when the model is built and
+-- never touched again. A menu that animates thirty plants is a menu that costs
+-- frames for nothing.
+--
+-- A COPY, and never the plant in the plot. Nothing here is tagged, prompted or
+-- welded, and no ViewportFrame is ever pointed at a live model -- reparenting
+-- one would take it out of the world.
+--==============================================================================
+export type PlantCardOptions = {
+	name: string?,
+	layoutOrder: number?,
+	nameSize: number?,
+	subSize: number?,
+}
+
+export type PlantCard = {
+	holder: Frame,
+	button: ImageButton,
+	stage: Frame,
+	hero: ViewportFrame,
+	name: TextLabel,
+	sub: TextLabel,
+	border: UIStroke,
+	action: ImageButton,
+	setBackdrop: (string?) -> (),
+	setModel: (string, ((Instance) -> Model?)?) -> (),
+	setHovered: (boolean) -> (),
+	-- Shrink the card into the top of its cell and reveal the action button in
+	-- the strip that frees up. Hover is disabled for as long as it is on.
+	setSelected: (boolean, string?) -> (),
+}
+
+local Z_SHADOW = 3
+local Z_CARD = 4
+local Z_STAGE = 5
+local Z_HERO = 8
+local Z_LABEL = 22
+
+--==============================================================================
+-- FRAMING, ONCE
+--
+-- The model is built at the origin, so its bounding box is where the camera has
+-- to look. Distance comes off the box's diagonal and the camera's own field of
+-- view, which is what makes a Nubkin and a Bellchime both fill their card
+-- without a per-species number to keep in step.
+--==============================================================================
+local function frameModel(hero: ViewportFrame, model: Model)
+	local pivot, size = model:GetBoundingBox()
+	local extent = math.max(size.Magnitude, 0.1)
+
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = 40
+	local distance = (extent * CARD.CameraFill * 0.5)
+		/ math.tan(math.rad(camera.FieldOfView * 0.5))
+	local focus = pivot.Position + Vector3.new(0, size.Y * CARD.CameraRise, 0)
+	camera.CFrame = CFrame.lookAt(focus + CARD.CameraOffset.Unit * distance, focus)
+	camera.Parent = hero
+	hero.CurrentCamera = camera
+end
+
+function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
+	local radius = CARD.Radius
+
+	-- What the grid positions. Transparent, so the shadow and the card can be
+	-- siblings inside it -- a shadow parented to the card would draw on top of
+	-- the card's own fill, which is the opposite of a shadow.
+	local holder = Instance.new("Frame")
+	holder.Name = options.name or "PlantCard"
+	holder.BackgroundTransparency = 1
+	holder.LayoutOrder = options.layoutOrder or 0
+	holder.ZIndex = Z_SHADOW
+	holder.Parent = parent
+
+	local scale = Instance.new("UIScale")
+	scale.Scale = 1
+	scale.Parent = holder
+
+	--==========================================================================
+	-- A WRAPPER, SO TWO SCALES DO NOT FIGHT
+	--
+	-- The hover pop scales the HOLDER, which has to include the action button --
+	-- a button that stayed put while its card grew would come loose from it.
+	-- Selection scales this instead, and only this, so the button keeps its size
+	-- and its place at the bottom of the cell while the card above it shrinks.
+	--
+	-- Anchored top-centre: a card that shrank from its top-left corner would
+	-- slide away from the middle of its own cell.
+	--==========================================================================
+	local card = Instance.new("Frame")
+	card.Name = "CardWrap"
+	card.AnchorPoint = Vector2.new(0.5, 0)
+	card.Position = UDim2.fromScale(0.5, 0)
+	card.Size = UDim2.fromScale(1, 1)
+	card.BackgroundTransparency = 1
+	card.ZIndex = Z_SHADOW
+	card.Parent = holder
+
+	local selectScale = Instance.new("UIScale")
+	selectScale.Scale = 1
+	selectScale.Parent = card
+
+	local shadow = Instance.new("Frame")
+	shadow.Name = "Shadow"
+	shadow.Size = UDim2.fromScale(1, 1)
+	shadow.Position = UDim2.fromOffset(0, 4)
+	shadow.BackgroundColor3 = BLACK
+	shadow.BackgroundTransparency = 0.55
+	shadow.BorderSizePixel = 0
+	shadow.ZIndex = Z_SHADOW
+	shadow.Parent = card
+	UIKit.corner(shadow, radius)
+
+	-- An ImageButton with no image: it is the thing the pointer enters, and a
+	-- plain Frame does not raise MouseEnter unless it is Active anyway.
+	local button = Instance.new("ImageButton")
+	button.Name = "Card"
+	button.Size = UDim2.fromScale(1, 1)
+	button.BackgroundTransparency = 1
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.ZIndex = Z_CARD
+	button.Parent = card
+	local border = UIKit.stroke(button, BLACK, 2.5)
+
+	-- The stage clips so the backdrop stops at the rounded corner. The CARD does
+	-- not clip: a clipped card would cut its own pop off at the edge.
+	local stage = Instance.new("Frame")
+	stage.Name = "Stage"
+	stage.Size = UDim2.fromScale(1, 1)
+	stage.BorderSizePixel = 0
+	stage.ClipsDescendants = true
+	stage.ZIndex = Z_STAGE
+	stage.Parent = button
+	UIKit.corner(stage, radius)
+	local dusk = UIKit.gradient(stage, CARD.DuskTop, CARD.DuskBottom)
+
+	-- The species picture, when there is one to show. Crop rather than stretch:
+	-- these are 512 x 666 and a card is not, and a squashed meadow reads as a
+	-- mistake.
+	local backdrop = Instance.new("ImageLabel")
+	backdrop.Name = "Backdrop"
+	backdrop.Size = UDim2.fromScale(1, 1)
+	backdrop.BackgroundTransparency = 1
+	backdrop.BorderSizePixel = 0
+	backdrop.ScaleType = Enum.ScaleType.Crop
+	backdrop.ImageColor3 = CARD.ArtTint
+	backdrop.Visible = false
+	backdrop.ZIndex = Z_STAGE
+	backdrop.Parent = stage
+
+	--==========================================================================
+	-- THE VIEWPORT
+	--
+	-- Transparent, so the backdrop behind it is the sky. Its own rectangle bounds
+	-- everything it draws, which is the other half of why the card lost its
+	-- lattice: 3D content cannot slide off a card the way a rotated frame can.
+	--==========================================================================
+	local hero = Instance.new("ViewportFrame")
+	hero.Name = "Hero"
+	hero.AnchorPoint = Vector2.new(0.5, 0)
+	hero.Position = UDim2.fromScale(0.5, 0.02)
+	hero.Size = UDim2.fromScale(0.98, 0.74)
+	hero.BackgroundTransparency = 1
+	hero.BorderSizePixel = 0
+	hero.Ambient = CARD.Ambient
+	hero.LightColor = CARD.LightColour
+	hero.LightDirection = CARD.LightDirection
+	hero.ZIndex = Z_HERO
+	hero.Parent = button
+
+	local name = UIKit.outlined(button, "Name", options.nameSize or 15, WHITE, 2)
+	name.AnchorPoint = Vector2.new(0.5, 1)
+	name.Position = UDim2.new(0.5, 0, 1, -19)
+	name.Size = UDim2.new(1, -8, 0, 19)
+	name.TextXAlignment = Enum.TextXAlignment.Center
+	name.ZIndex = Z_LABEL
+
+	local sub = UIKit.outlined(button, "Sub", options.subSize or 12, WHITE, 2)
+	sub.AnchorPoint = Vector2.new(0.5, 1)
+	sub.Position = UDim2.new(0.5, 0, 1, -4)
+	sub.Size = UDim2.new(1, -8, 0, 16)
+	sub.TextXAlignment = Enum.TextXAlignment.Center
+	sub.ZIndex = Z_LABEL
+
+	--==========================================================================
+	-- A picture, or the dusk gradient. Passing nil is how a caller says "this
+	-- one has not earned a place yet" -- see the note in GameConfig.Card.
+	--==========================================================================
+	local shownArt: string? = nil
+	local function setBackdrop(speciesId: string?)
+		if shownArt == speciesId then
+			return
+		end
+		shownArt = speciesId
+		local image = if speciesId then CARD.Art[speciesId] else nil
+		backdrop.Visible = image ~= nil
+		backdrop.Image = image or ""
+	end
+
+	--==========================================================================
+	-- Keyed, so a Garden clock ticking once a second does not rebuild thirty
+	-- creatures. `build` returns the model it made, or nil for a card that shows
+	-- nothing at all -- an empty hole has no plant in it.
+	--==========================================================================
+	local modelKey: string? = nil
+	local function setModel(key: string, build: ((Instance) -> Model?)?)
+		if modelKey == key then
+			return
+		end
+		modelKey = key
+		hero:ClearAllChildren()
+		hero.CurrentCamera = nil
+		if not build then
+			return
+		end
+		local model = build(hero)
+		if model then
+			frameModel(hero, model)
+		end
+	end
+
+	--==========================================================================
+	-- THE ACTION BUTTON
+	--
+	-- A slab in the same family as the shop's buy buttons, lattice and all --
+	-- this one does not scroll inside itself and is not rotated relative to the
+	-- list, so the texture is safe here in a way it was never safe on the card.
+	--
+	-- Built once and hidden, rather than made on selection: a card that has to
+	-- build a button before it can show one is a card with a frame of lag in the
+	-- middle of a click.
+	--
+	-- A sibling of the card wrapper, pinned to the BOTTOM of the cell. It does
+	-- not move when the card shrinks -- the card moves away from it.
+	--==========================================================================
+	local action = UIKit.slab(holder, {
+		size = UDim2.new(1, -6, 0, CARD.ActionHeight),
+		face = CARD.ActionFace,
+		shade = CARD.ActionShade,
+		radius = 8,
+		latticeSpacing = 14,
+		latticeTransparency = 0.84,
+	})
+	action.Name = "Action"
+	action.AnchorPoint = Vector2.new(0.5, 1)
+	action.Position = UDim2.new(0.5, 0, 1, 0)
+	action.Visible = false
+	action.ZIndex = Z_CARD
+
+	local actionLabel = UIKit.outlined(action, "Label", CARD.ActionTextSize, WHITE, 2)
+	actionLabel.Size = UDim2.fromScale(1, 1)
+	actionLabel.Position = UDim2.fromOffset(0, 1)
+	actionLabel.TextXAlignment = Enum.TextXAlignment.Center
+	actionLabel.ZIndex = Z_LABEL
+
+	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale, { stroke = border })
+
+	local lift = liftLayers(holder, CARD.HoverLift)
+	local selected = false
+	local function setSelected(on: boolean, label: string?)
+		if selected == on then
+			if on and label then
+				actionLabel.Text = label
+			end
+			return
+		end
+		selected = on
+		-- Off first: the pop has to let go of the ZIndex before selection takes
+		-- it, or the two lifts stack and the card never comes back down.
+		setPopEnabled(not on)
+		if on and label then
+			actionLabel.Text = label
+		end
+		action.Visible = on
+		lift(on)
+		TweenService:Create(selectScale, TweenInfo.new(CARD.HoverSeconds,
+			Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Scale = if on then CARD.SelectScale else 1 }):Play()
+	end
+
+	return {
+		holder = holder,
+		button = button,
+		stage = stage,
+		hero = hero,
+		name = name,
+		sub = sub,
+		border = border,
+		action = action,
+		setBackdrop = setBackdrop,
+		setModel = setModel,
+		setHovered = setHovered,
+		setSelected = setSelected,
+	}
 end
 
 --==============================================================================
@@ -777,7 +1358,6 @@ export type Modal = {
 
 local DIM = 0.45
 local FADE = 0.16
-local SHOP = GameConfig.Shop
 
 function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	local outline = RAIL.OutlineThickness
@@ -821,27 +1401,40 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	shell.AnchorPoint = Vector2.new(0.5, 0.5)
 	shell.Position = UDim2.fromScale(0.5, 0.5)
 	shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2)
-	shell.BackgroundColor3 = SHOP.Panel
+	-- Overwritten by UIKit.gradient below, which needs the surface white to
+	-- multiply against. Set anyway so the shell is never momentarily the
+	-- default grey if the gradient is ever dropped.
+	shell.BackgroundColor3 = PANEL.Fill
 	shell.BorderSizePixel = 0
 	-- Consumes the click, so tapping the panel does not reach the dimmer under
 	-- it and close the thing you are reading.
 	shell.Active = true
 	shell.Parent = group
 	UIKit.corner(shell, 16)
-	UIKit.stroke(shell, SHOP.Outline, outline)
+	UIKit.stroke(shell, PANEL.Outline, outline)
+	UIKit.gradient(shell, PANEL.Fill, PANEL.Shade)
 
-	-- Quiet: there are cards sitting on this and texture must never compete with
-	-- them. Same lattice, same angle, much further back than the rail's.
+	--==========================================================================
+	-- THE SAME LATTICE AS THE RAIL, AND YOU CAN ACTUALLY SEE IT
+	--
+	-- A LIGHTER line on a DARKER fill, at a pitch near the rail's. The old one
+	-- was a barely-lighter navy on navy at a pitch of 34, which is a texture
+	-- that exists in the file and not on the screen.
+	--
+	-- Still quieter than anything sitting on it. Texture goes behind content,
+	-- never with it -- the moment a diamond competes with a card the panel stops
+	-- being a background.
 	--
 	-- Sized off the shell itself rather than off the cap: this panel is 0.9 of
 	-- the screen up to a limit, so its real width is 300 on a phone and 480 on a
 	-- desktop, and a lattice built for the larger one overhangs the smaller by
 	-- ninety pixels in every direction.
+	--==========================================================================
 	UIKit.lattice(shell, {
-		spacing = 34,
+		spacing = PANEL.LatticeSpacing,
 		thickness = 2,
-		colour = SHOP.PanelEdge,
-		transparency = 0.55,
+		colour = PANEL.Lattice,
+		transparency = PANEL.LatticeTransparency,
 		inset = 6,
 	})
 
@@ -854,7 +1447,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	titleBar.Parent = shell
 
 	local title = UIKit.outlined(titleBar, "Title", 26,
-		options.titleColour or SHOP.Title, 3)
+		options.titleColour or PANEL.Title, 3)
 	title.AnchorPoint = Vector2.new(0, 0.5)
 	title.Position = UDim2.new(0, 0, 0.5, 0)
 	title.Size = UDim2.new(1, -52, 1, 0)
@@ -867,7 +1460,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	close.AnchorPoint = Vector2.new(1, 0.5)
 	close.Position = UDim2.new(1, 0, 0.5, 0)
 	close.Size = UDim2.fromOffset(38, 38)
-	close.BackgroundColor3 = SHOP.Close
+	close.BackgroundColor3 = PANEL.Close
 	close.BorderSizePixel = 0
 	close.AutoButtonColor = false
 	close.Font = Enum.Font.LuckiestGuy
@@ -877,7 +1470,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	close.ZIndex = 4
 	close.Parent = titleBar
 	UIKit.corner(close, 10)
-	UIKit.stroke(close, SHOP.Outline, outline)
+	UIKit.stroke(close, PANEL.Outline, outline)
 
 	local body = Instance.new("Frame")
 	body.Name = "Body"
@@ -931,7 +1524,23 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		-- Never taller than the screen allows, never taller than the cap, never
 		-- shorter than a title bar and a row.
 		local ceiling = math.min(limit.MaxSize.Y, math.floor(screen * 0.86))
-		local want = math.clamp(contentHeight + 82, 240, ceiling)
+		--======================================================================
+		-- THE FLOOR GIVES WAY, IT DOES NOT WIN
+		--
+		-- `math.clamp(x, 240, ceiling)` THROWS when the ceiling is under 240 --
+		-- max must be >= min -- and that is reachable: a viewport reports a few
+		-- dozen pixels for a frame or two while a Play session starts up, which
+		-- is early enough that GardenUI's first relayout lands inside it. The
+		-- guard above only catches a screen of exactly zero:
+		--
+		--     invalid argument #3 to 'clamp' (max must be greater than or equal
+		--     to min)  --  UIKit fitContent <- GardenUI relayout
+		--
+		-- A 200-pixel screen and a 240-pixel minimum is not a contradiction to
+		-- resolve, it is the screen winning. So the minimum bends down to the
+		-- ceiling rather than the call blowing up and abandoning the layout.
+		--======================================================================
+		local want = math.clamp(contentHeight + 82, math.min(240, ceiling), ceiling)
 		group.Size = UDim2.new(0.9, 0, 0, want)
 	end
 

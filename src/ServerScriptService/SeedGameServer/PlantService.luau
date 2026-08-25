@@ -67,7 +67,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
-local CreatureModel = require(script.Parent:WaitForChild("CreatureModel"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
@@ -125,6 +125,7 @@ local EDGE_MARGIN = PLANTING.EdgeMarginStuds
 local HATCH_HOLD = PLANTING.HatchHoldSeconds
 local BURST = PLANTING.BurstSeconds
 local PLACE_ACTION = PLANTING.PlaceAction
+local PICKUP_ACTION = PLANTING.PickUpAction
 
 local function log(message: string)
 	print("[Seed/PlantService] " .. message)
@@ -523,6 +524,10 @@ function hatch(player: Player, entry: Planted): boolean
 	if not CarryService.GiveHatched(player, entry.species, entry.kg) then
 		return false
 	end
+	-- Said here rather than in CarryService, which also hands a Tool over for a
+	-- pickup and for a rejoin and cannot tell the three apart.
+	log(string.format("%s hatched a %d kg %s.", player.Name, entry.kg,
+		entry.species.Name))
 
 	byPlot[entry.id] = nil
 	local model = entry.model
@@ -582,6 +587,38 @@ function pickUp(player: Player, entry: Planted): boolean
 		player.Name, entry.kg, entry.species.Name, countIn(entry.plot),
 		capacityOf(entry.plot)))
 	return true
+end
+
+--==============================================================================
+-- THE SAME PICKUP, ASKED FOR BY NAME
+--
+-- The prompt in the world hands `pickUp` an entry it already had. A panel has
+-- only an id, so this is the lookup -- and the lookup is itself a check.
+--
+-- IT LOOKS IN THE CALLER'S OWN PLOT AND NOWHERE ELSE. `growing` is keyed by
+-- plot, so asking for a neighbour's placement id finds nothing: their plants
+-- are not in your table. That is the first guard and it is structural rather
+-- than conditional. `pickUp` then re-tests ownership, stage and the handover
+-- anyway, because a guard you can only see by reading two functions is a guard
+-- somebody will delete.
+--
+-- Returns false rather than erroring on every bad id. A client that sends
+-- nonsense gets nothing done, not a stack trace on the server.
+--==============================================================================
+function PlantService.PickUpById(player: Player, placementId: number): boolean
+	local plot = PlotService.PlotOf(player)
+	if not plot then
+		return false
+	end
+	local byPlot = growing[plot]
+	if not byPlot then
+		return false
+	end
+	local entry = byPlot[placementId]
+	if not entry then
+		return false
+	end
+	return pickUp(player, entry)
 end
 
 --==============================================================================
@@ -874,23 +911,44 @@ function PlantService.Start()
 	-- soil, and they have to be standing next to it.
 	--
 	-- No new remote. GameEvent has existed in GameConfig.Remotes since the
-	-- first boot and nothing has ever used it.
+	-- first boot, and it now carries the second verb too -- the Garden panel's
+	-- UNEQUIP, which is this same service's pickUp asked for by placement id.
 	--==========================================================================
 	local remotes = SeedGame:FindFirstChild("Remotes")
 	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if channel and channel:IsA("RemoteEvent") then
 		table.insert(serviceConnections, channel.OnServerEvent:Connect(
-			function(player: Player, action: any, position: any)
-				if action ~= PLACE_ACTION or typeof(position) ~= "Vector3" then
-					return
+			function(player: Player, action: any, payload: any)
+				if action == PLACE_ACTION then
+					if typeof(payload) ~= "Vector3" then
+						return
+					end
+					-- NaN survives every comparison and would sail straight
+					-- through the clamp; a huge finite number would not, but
+					-- there is no reason to do the arithmetic on it either.
+					if payload ~= payload or payload.Magnitude > 1e6 then
+						return
+					end
+					PlantService.PlaceAt(player, payload)
+				elseif action == PICKUP_ACTION then
+					--==========================================================
+					-- AN ID IS A CLAIM TOO
+					--
+					-- Rule 4: the sender is engine-stamped and everything else
+					-- came off the wire. A placement id has to be a real,
+					-- finite, whole, positive number before it is worth a table
+					-- lookup -- NaN indexes nothing but sails through <= and >=,
+					-- and a float key would silently miss an integer one.
+					--==========================================================
+					if type(payload) ~= "number" or payload ~= payload then
+						return
+					end
+					if payload < 1 or payload > 1e9
+						or math.floor(payload) ~= payload then
+						return
+					end
+					PlantService.PickUpById(player, payload)
 				end
-				-- NaN survives every comparison and would sail straight through
-				-- the clamp; a huge finite number would not, but there is no
-				-- reason to do the arithmetic on it either.
-				if position ~= position or position.Magnitude > 1e6 then
-					return
-				end
-				PlantService.PlaceAt(player, position)
 			end))
 	else
 		warn("[Seed/PlantService] No GameEvent remote. Nothing can be planted.")
