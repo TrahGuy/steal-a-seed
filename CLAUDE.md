@@ -75,6 +75,7 @@ src/
     TreadmillService.luau       THE FAUCET for Speed -- stand on your own mill
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
+    Music.client.luau           the background bed; ids in GameConfig.Music
     ParentAnim.client.luau      the nest parent's limbs
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
@@ -133,6 +134,18 @@ From the blueprint, plus what this repo has learned:
 8. **Mobile first.** Blocky studded plastic, low part counts, no per-frame allocation.
 9. **`--!strict` on every file.**
 10. **Scripts must be safe to re-run.** `MapService` destroys and rebuilds rather than patching.
+
+## Skills
+
+Four project skills under `.claude/skills/`. Each is the operative set for its area; the reasoning
+stays in the Luau files and KB/HANDOFF.
+
+| skill | read it before |
+| --- | --- |
+| [plant-art-bible](.claude/skills/plant-art-bible/SKILL.md) | changing how a plant, pod or creature LOOKS — silhouette, colour, rarity readout, size curves, part budget, billboards |
+| [plant-authoring](.claude/skills/plant-authoring/SKILL.md) | adding or changing a species, form, growth stage, or plant behaviour — the pipeline, in order |
+| [blender-to-roblox](.claude/skills/blender-to-roblox/SKILL.md) | running or editing anything in `tools/blender/` — flags, axes, and why a preview is not a mesh |
+| [luau-conventions](.claude/skills/luau-conventions/SKILL.md) | writing Luau, adding a service, touching remotes or economy, or running Rojo |
 
 ## Toolchain
 
