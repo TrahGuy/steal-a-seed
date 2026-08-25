@@ -130,6 +130,22 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	if not humanoid then
 		return
 	end
+	--==========================================================================
+	-- A MOUNTED PLAYER IS PARKED, AND THIS IS STILL THE ONLY WRITER
+	--
+	-- TreadmillService catches a player as they cross their own belt and needs
+	-- them to stop dead. It sets an attribute and asks; it does not write
+	-- WalkSpeed itself, because the entire reason this function exists is that
+	-- WalkSpeed is the product of two things no single caller knows.
+	--
+	-- Checked BEFORE the carry multiplier rather than multiplied into it: a
+	-- mounted player is at zero regardless of what they are holding, and zero
+	-- times a multiplier is a zero that stops being obviously deliberate.
+	--==========================================================================
+	if player:GetAttribute(GameConfig.Attributes.MillMounted) == true then
+		humanoid.WalkSpeed = 0
+		return
+	end
 	local profile = PlayerDataService.Get(player)
 	local base = GameConfig.walkSpeedFor(if profile then profile.Speed else 0)
 	humanoid.WalkSpeed = base * GameConfig.carryMultiplierFor(CarryService.TotalKg(player))

@@ -65,6 +65,37 @@ local EDGE_MARGIN = 1.2
 
 local lastPaid: { [Player]: number } = {}
 local granted: { [Player]: number } = {}
+
+--==============================================================================
+-- MOUNTING, WHICH IS THE OTHER HALF OF OCCUPANCY
+--
+-- The region test below answers "is this player on the belt right now". That is
+-- the right question for PAYING and the wrong one for CATCHING: a player at 90
+-- WalkSpeed crosses the whole deck between two ticks, so the faster they get the
+-- harder their own mill is to stand on. Which is backwards -- speed is the thing
+-- the mill SELLS, and buying more of it should not make the shop harder to reach.
+--
+-- So ENTRY is a Touched and OCCUPANCY stays a region test. The note at the top
+-- of this file is about Touched being useless for occupancy -- a static part you
+-- are standing on stops firing after the first frame -- and that is precisely
+-- what makes it right here. It fires on ARRIVAL, once, however fast you arrived.
+--
+-- Mounting parks the player: zero WalkSpeed (asked of CarryService, never
+-- written here) in the middle of their own belt, facing the console. Jump is
+-- left completely alone, so the way off is the button every Roblox player
+-- already presses without being told there is one.
+--==============================================================================
+local mounted: { [Player]: BasePart } = {}
+local mountConns: { [Player]: { RBXScriptConnection } } = {}
+--==============================================================================
+-- AND A DISMOUNT HAS TO SURVIVE THE LANDING
+--
+-- You jump off the belt and land back on the belt. That is a fresh Touched, and
+-- without this you are remounted before you are upright again -- a dismount
+-- button that cannot dismount. Set on unmount, cleared only once the player is
+-- genuinely off the thing.
+--==============================================================================
+local mountBlocked: { [Player]: boolean } = {}
 local running = false
 local serviceConnections: { RBXScriptConnection } = {}
 
@@ -85,6 +116,12 @@ local function beltFor(plotId: number): BasePart?
 		end
 	end
 	return nil
+end
+
+local function ownBeltOf(player: Player): BasePart?
+	local plot = PlotService.PlotOf(player)
+	local plotId = plot and plot:GetAttribute(ATTR.PlotId)
+	return if type(plotId) == "number" then beltFor(plotId) else nil
 end
 
 local function standingOn(root: BasePart, belt: BasePart): boolean
@@ -170,11 +207,116 @@ local function setBeltSpeed(belt: BasePart, occupied: boolean, tier: number)
 end
 
 --==============================================================================
+-- GETTING ON AND GETTING OFF
+--==============================================================================
+function TreadmillService.Unmount(player: Player)
+	if not mounted[player] then
+		return
+	end
+	mounted[player] = nil
+	for _, c in ipairs(mountConns[player] or {}) do
+		c:Disconnect()
+	end
+	mountConns[player] = nil
+	mountBlocked[player] = true
+	player:SetAttribute(ATTR.MillMounted, nil)
+	CarryService.RefreshWalkSpeed(player)
+end
+
+function TreadmillService.Mount(player: Player, belt: BasePart): boolean
+	if mounted[player] or mountBlocked[player] then
+		return false
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local rootInstance = character and character:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and rootInstance and rootInstance:IsA("BasePart")) then
+		return false
+	end
+	local root = rootInstance :: BasePart
+	if humanoid.Health <= 0 then
+		return false
+	end
+
+	mounted[player] = belt
+	player:SetAttribute(ATTR.MillMounted, true)
+
+	--==========================================================================
+	-- STOOD IN THE MIDDLE, FACING THE CONSOLE
+	--
+	-- LookVector is a CFrame's -Z, and the console is at -Z in the mill's own
+	-- frame -- so this is "face the instruments" without this service having to
+	-- know which way any of the six mills in the ring is pointing.
+	--
+	-- The velocity is zeroed as well as the position. A player caught at a
+	-- sprint still has that momentum in the assembly, and without this they are
+	-- placed in the middle and immediately slide out of it.
+	--==========================================================================
+	local lift = belt.Size.Y * 0.5 + humanoid.HipHeight + root.Size.Y * 0.5
+	local stand = belt.Position + Vector3.new(0, lift, 0)
+	root.CFrame = CFrame.lookAt(stand, stand + belt.CFrame.LookVector)
+	root.AssemblyLinearVelocity = Vector3.zero
+
+	CarryService.RefreshWalkSpeed(player)
+
+	local conns: { RBXScriptConnection } = {}
+	table.insert(conns, humanoid.Jumping:Connect(function(active: boolean)
+		if active then
+			TreadmillService.Unmount(player)
+		end
+	end))
+	table.insert(conns, humanoid.Died:Connect(function()
+		TreadmillService.Unmount(player)
+	end))
+	mountConns[player] = conns
+	return true
+end
+
+local function bindBelt(instance: Instance)
+	if not instance:IsA("BasePart") then
+		return
+	end
+	local belt = instance :: BasePart
+	table.insert(serviceConnections, belt.Touched:Connect(function(hit: BasePart)
+		if not running then
+			return
+		end
+		local character = hit:FindFirstAncestorOfClass("Model")
+		local player = if character then Players:GetPlayerFromCharacter(character) else nil
+		if not player then
+			return
+		end
+		-- Your mill, not the nearest one. Same rule as the payout, for the same
+		-- reason: six of these sit in a ring and the walk between two is short.
+		if ownBeltOf(player) ~= belt then
+			return
+		end
+		TreadmillService.Mount(player, belt)
+	end))
+end
+
+--==============================================================================
 -- THE TICK
 --==============================================================================
 local function payEveryone()
 	local now = os.clock()
 	for _, player in ipairs(Players:GetPlayers()) do
+		--==================================================================
+		-- Cheap because it only runs for somebody who just got off: one
+		-- region test until they step clear, then never again.
+		--==================================================================
+		if mountBlocked[player] then
+			local belt = ownBeltOf(player)
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			local still = belt ~= nil
+				and root ~= nil
+				and root:IsA("BasePart")
+				and standingOn(root :: BasePart, belt :: BasePart)
+			if not still then
+				mountBlocked[player] = nil
+			end
+		end
 		local rate = TreadmillService.RateFor(player)
 		-- ON THE PLAYER, so it replicates to everybody. That is what lets each
 		-- client play the run cycle on somebody else's character, and it is why
@@ -223,6 +365,11 @@ local function payEveryone()
 end
 
 local function forget(player: Player)
+	TreadmillService.Unmount(player)
+	-- After the unmount, which sets it.
+	mountBlocked[player] = nil
+	mounted[player] = nil
+	mountConns[player] = nil
 	lastPaid[player] = nil
 	granted[player] = nil
 end
@@ -425,10 +572,21 @@ function TreadmillService.Init()
 	table.clear(serviceConnections)
 	table.clear(lastPaid)
 	table.clear(granted)
+	table.clear(mounted)
+	table.clear(mountBlocked)
+	for _, conns in pairs(mountConns) do
+		for _, c in ipairs(conns) do
+			c:Disconnect()
+		end
+	end
+	table.clear(mountConns)
 	-- Nobody is on a belt across a restart, and a stale attribute would leave a
 	-- character running on the spot forever.
 	for _, player in ipairs(Players:GetPlayers()) do
 		player:SetAttribute(ATTR.OnTreadmill, nil)
+		-- Same reason: a stale mount would leave somebody parked at zero
+		-- WalkSpeed across a restart with nothing left to release them.
+		player:SetAttribute(ATTR.MillMounted, nil)
 	end
 end
 
@@ -439,9 +597,39 @@ function TreadmillService.Start()
 	for _, belt in ipairs(CollectionService:GetTagged(GameConfig.Tags.Treadmill)) do
 		if belt:IsA("BasePart") then
 			setBeltSpeed(belt, false, LADDER.StartingTier)
+			bindBelt(belt)
 			mills += 1
 		end
 	end
+	--==========================================================================
+	-- AND EVERY BELT BUILT AFTER THIS POINT
+	--
+	-- An upgrade destroys the mill and builds a new one, so the belt a player
+	-- mounts is rarely the one that existed at startup. Binding only the
+	-- starting six would mean the mount worked until the first time somebody
+	-- bought something -- which is the worst possible moment to stop working.
+	--==========================================================================
+	table.insert(serviceConnections, CollectionService
+		:GetInstanceAddedSignal(GameConfig.Tags.Treadmill)
+		:Connect(bindBelt))
+
+	--==========================================================================
+	-- A RESPAWN IS A DISMOUNT
+	--
+	-- Died covers dying on the belt. This covers everything else that replaces a
+	-- character -- /reset, a teleport, a manual LoadCharacter -- where the old
+	-- humanoid's connections go with it and nothing would ever clear the flag.
+	--==========================================================================
+	local function watchRespawn(player: Player)
+		table.insert(serviceConnections, player.CharacterRemoving:Connect(function()
+			TreadmillService.Unmount(player)
+			mountBlocked[player] = nil
+		end))
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchRespawn(player)
+	end
+	table.insert(serviceConnections, Players.PlayerAdded:Connect(watchRespawn))
 
 	--==========================================================================
 	-- A CLAIMED PLOT GETS ITS OWNER'S MILL

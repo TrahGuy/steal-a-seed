@@ -308,6 +308,15 @@ GameConfig.Attributes = {
 	-- PLAYER, so it replicates to everybody for free -- which is what lets each
 	-- client play the run cycle on somebody else's character without a remote.
 	OnTreadmill = "OnTreadmill",
+	--==========================================================================
+	-- PARKED ON YOUR OWN MILL
+	--
+	-- Set by TreadmillService when it catches a player crossing their belt, read
+	-- by CarryService to hold them at a standstill. On the PLAYER rather than the
+	-- character so it survives nothing in particular -- a respawn clears the mount
+	-- anyway -- but so that every client can see who is training without a remote.
+	--==========================================================================
+	MillMounted = "MillMounted",
 }
 
 GameConfig.Tags = {
@@ -809,6 +818,7 @@ GameConfig.Mill = {
 
 	Action = "MillUpgrade",
 }
+
 
 function GameConfig.parentThrowStudsFor(biomeOrder: number): number
 	local P = GameConfig.Parent
