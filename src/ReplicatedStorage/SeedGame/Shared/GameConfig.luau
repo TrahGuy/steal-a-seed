@@ -1427,20 +1427,26 @@ GameConfig.Mill = {
 	-- board in the game that has to be read was the one nobody was ever pointed
 	-- at.
 	--
-	-- BESIDE THE FENCE NOW. The plot's right-hand rail is at x = -11 in mill
-	-- space and the mill's own body reaches -10.2, so there is no gap alongside
-	-- it -- the sign goes past the mill's hub-ward corner instead, on the fence
-	-- line, where there is open ground and where it reads as part of the fence
-	-- rather than as something dumped next to the machine.
+	-- AT THE FRONT OF THE MILL. It spent a while out on the fence line, angled
+	-- at the plot gate, which put it where somebody walking out of their garden
+	-- met it first -- and left it looking sideways at the machine it belongs to.
+	-- The front is where the mill already points: the console is there, the
+	-- mount turns a player to face it, and it is the end everybody approaches
+	-- from because the road and the hub are both that way.
 	--
-	-- THE YAW IS NOT A GUESS. The spawn pad is at (-35, -26.8) in the same
-	-- frame, so the bearing from the sign to the place its owner walks in from
-	-- is atan2(23.6, 16.3) = 55 degrees. That is this number. Move the sign and
-	-- it has to be recomputed, which is why the two live together.
+	-- The mill's body ends at z = -8.6, so this stands four studs clear of it,
+	-- square on, with no yaw at all. YAW ZERO IS THE POINT rather than an
+	-- omission: the board's front already faces -Z, which is the mill's own
+	-- facing, so it needs no angle of its own and swings round with the plot for
+	-- free.
+	--
+	-- BOTH FACES EARN THEIR KEEP HERE. Front to whoever is walking up; back to
+	-- the player standing on the belt, who is turned to face exactly this way by
+	-- the mount.
 	--==========================================================================
 	Sign = {
-		Offset = Vector3.new(-11.4, -0.6, -10.5),
-		YawDegrees = 55,
+		Offset = Vector3.new(0, -0.6, -12.6),
+		YawDegrees = 0,
 		--======================================================================
 		-- SLIGHTLY SMALLER
 		--

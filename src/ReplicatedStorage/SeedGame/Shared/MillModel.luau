@@ -2652,12 +2652,28 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 	--==========================================================================
 	local S = MILL.Sign.Scale
 
+	--==========================================================================
+	-- NOTHING CATCHES A RUNNER, AND THAT NOW INCLUDES THIS
+	--
+	-- The post and the board were both solid, which did not matter while the
+	-- sign stood off to one side -- the map's own note said it was "far enough
+	-- out that it is not something you catch with a shoulder getting on". At the
+	-- FRONT of the mill it is in the walking line, and the board sits between
+	-- 2.9 and 7.2 studs up: chest to overhead on a five-stud character. Solid,
+	-- that is a wall across the way in to your own machine.
+	--
+	-- The field's rule is that nothing catches a runner -- the fence is
+	-- non-collidable for exactly this reason, and MapService calls the one
+	-- collidable prop out as "the exception". A sign is signage. You read it and
+	-- hold E at it; you never need to bump into it.
+	--==========================================================================
 	local post = part({
 		name = "Post",
 		size = Vector3.new(0.8, 5.2, 0.8) * S,
 		cframe = cf * CFrame.new(0, 2.6 * S, 0),
 		color = OAK_DARK,
 		material = Enum.Material.Wood,
+		collide = false,
 		parent = model,
 	})
 	model.PrimaryPart = post
@@ -2670,6 +2686,8 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 		-- rather than a hole cut in the world.
 		color = Color3.fromRGB(72, 54, 40),
 		material = Enum.Material.WoodPlanks,
+		-- See the post above: signage, in the walking line, at chest height.
+		collide = false,
 		parent = model,
 	})
 
