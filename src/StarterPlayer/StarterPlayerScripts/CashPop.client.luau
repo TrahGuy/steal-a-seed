@@ -47,8 +47,16 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local INK = Color3.fromRGB(26, 24, 30)
-local ACCENT = Color3.fromRGB(142, 196, 62)
+--==============================================================================
+-- IT IS A COIN NOW, NOT A LABEL
+--
+-- This and SpeedFX's `+N` were the same object -- GothamBlack, lime, a
+-- three-pixel ink outline, the same rise and the same fade -- and the only thing
+-- separating them was a 22-pixel shoe that is four pixels wide at the distance
+-- these are actually read from. See GameConfig.Pops for what each one is now and
+-- why they differ at SILHOUETTE rather than at colour.
+--==============================================================================
+local POP = GameConfig.Pops.Cash
 
 -- STAGE_GROWN, as CreatureModel numbers it. Read off the model's own attribute
 -- rather than recomputed from PlantedAt: PlantService rebuilds the model at
@@ -118,26 +126,58 @@ local function build(): BillboardGui
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Pop"
 	billboard.AlwaysOnTop = true
-	billboard.Size = UDim2.fromOffset(96, 30)
+	billboard.Size = UDim2.fromOffset(POP.Width, POP.Height)
 	billboard.MaxDistance = POP_RANGE
 	billboard.Enabled = false
 	billboard.Parent = gui
+
+	--==========================================================================
+	-- A UIScale ON A WRAPPER, NOT ON THE LABEL
+	--
+	-- The pop-in scales this; the label inside keeps TextScaled and fills it.
+	-- Scaling a TextScaled label directly fights the auto-size and the number
+	-- jitters while it grows.
+	--==========================================================================
+	local holder = Instance.new("Frame")
+	holder.Name = "Holder"
+	holder.Size = UDim2.fromScale(1, 1)
+	holder.BackgroundTransparency = 1
+	holder.Parent = billboard
+
+	local scale = Instance.new("UIScale")
+	scale.Name = "Pop"
+	scale.Scale = 1
+	scale.Parent = holder
 
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
+	label.Font = POP.Font
 	label.TextScaled = true
-	label.TextColor3 = ACCENT
+	-- Overwritten by the gradient below, which multiplies against it -- so it
+	-- has to be white or the gold comes out olive.
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
 	label.Text = ""
-	label.Parent = billboard
+	label.Parent = holder
 
-	-- The heavy ink outline is what makes lime legible over grass, which is the
-	-- one colour it would otherwise vanish into. Same thickness as SpeedFX's.
+	--==========================================================================
+	-- GOLD AT THE HEAD, LIME AT THE FOOT
+	--
+	-- Rotation 90 is top-to-bottom; the default 0 runs left-to-right and would
+	-- put the gold on the plus sign and the lime on the last digit, which reads
+	-- as a rendering fault rather than as metal.
+	--==========================================================================
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new(POP.Top, POP.Bottom)
+	gradient.Rotation = 90
+	gradient.Parent = label
+
+	-- The heavy outline is what makes this legible over grass, which is the one
+	-- colour it would otherwise vanish into.
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 3
-	stroke.Color = INK
+	stroke.Thickness = POP.OutlineThickness
+	stroke.Color = POP.Outline
 	stroke.Parent = label
 
 	return billboard
@@ -243,14 +283,24 @@ local function pop(entry: Tracked)
 	if not billboard then
 		return
 	end
-	local label = billboard:FindFirstChild("Label") :: TextLabel
+	local holder = billboard:FindFirstChild("Holder") :: Frame
+	local label = holder:FindFirstChild("Label") :: TextLabel
 	local stroke = label:FindFirstChildOfClass("UIStroke")
+	local scale = holder:FindFirstChildOfClass("UIScale")
 
 	label.Text = "+$" .. GameConfig.compact(SeedData.IncomePerSecond(entry.kg))
 	label.TextTransparency = 0
 	if stroke then
 		stroke.Transparency = 0
 	end
+	--==========================================================================
+	-- A TILT PER POP
+	--
+	-- LuckiestGuy is dead upright and a bed of twelve pays every second, so
+	-- without this it is a ruler-straight column of identical numbers climbing
+	-- the screen -- which looks printed rather than alive.
+	--==========================================================================
+	label.Rotation = (rng:NextNumber() - 0.5) * 2 * POP.TiltJitter
 
 	-- Sideways jitter, so twelve plants in a bed are not one illegible column of
 	-- numbers climbing the screen. Random rather than by pool slot, because the
@@ -263,11 +313,37 @@ local function pop(entry: Tracked)
 	billboard.Enabled = true
 	active[billboard] = entry.anchor
 
+	--==========================================================================
+	-- IT LANDS, THEN IT LIFTS
+	--
+	-- Back easing overshoots past 1 and settles, so the number arrives with
+	-- weight instead of simply existing. That impact is most of what makes a
+	-- payout read as a payout.
+	--==========================================================================
+	if scale then
+		scale.Scale = POP.PopFrom
+		TweenService:Create(scale, TweenInfo.new(POP.PopSeconds, Enum.EasingStyle.Back,
+			Enum.EasingDirection.Out), { Scale = 1 }):Play()
+	end
+
 	TweenService:Create(billboard, TweenInfo.new(POP_SECONDS, Enum.EasingStyle.Quad,
 		Enum.EasingDirection.Out), { StudsOffset = start + Vector3.new(0, RISE_STUDS, 0) }):Play()
-	TweenService:Create(label, TweenInfo.new(POP_SECONDS), { TextTransparency = 1 }):Play()
+
+	--==========================================================================
+	-- IT HOLDS BEFORE IT FADES
+	--
+	-- A fade that starts immediately means the number is at half opacity by the
+	-- time the eye reaches it, and the whole point is that a player can read
+	-- WHICH square of dirt is carrying them. TweenInfo's sixth argument is a
+	-- delay, so this is one tween rather than a tween and a task.delay that can
+	-- outlive the billboard.
+	--==========================================================================
+	local hold = POP_SECONDS * POP.Hold
+	local fade = TweenInfo.new(POP_SECONDS - hold, Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In, 0, false, hold)
+	TweenService:Create(label, fade, { TextTransparency = 1 }):Play()
 	if stroke then
-		TweenService:Create(stroke, TweenInfo.new(POP_SECONDS), { Transparency = 1 }):Play()
+		TweenService:Create(stroke, fade, { Transparency = 1 }):Play()
 	end
 
 	task.delay(POP_SECONDS + 0.05, function()

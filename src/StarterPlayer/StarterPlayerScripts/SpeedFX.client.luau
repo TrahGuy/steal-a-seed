@@ -36,11 +36,23 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local ACCENT = Color3.fromRGB(142, 196, 62)
-local INK = Color3.fromRGB(26, 24, 30)
--- The shoe is blue on purpose: it is the only thing in this palette that is not
--- ink, paper or green, which is what makes a +2 read as SPEED at a glance
--- rather than as another cash tick.
-local SHOE = Color3.fromRGB(96, 164, 232)
+--==============================================================================
+-- IT IS A STREAK NOW, NOT A LABEL
+--
+-- This and the plant's `+$N` were the same object: GothamBlack, lime, a
+-- three-pixel ink outline, the same rise and the same fade. The only thing
+-- separating them was the shoe below -- 22 pixels, which at the 90-stud draw
+-- distance these are read from is four. A player could not tell what had just
+-- paid them, which is the entire job of a floating number.
+--
+-- See GameConfig.Pops for what each is now. The short version: this one is
+-- narrow, sharp, slanted by the typeface itself, and it slides sideways as it
+-- rises so it reads as being LEFT BEHIND.
+--==============================================================================
+local POP = GameConfig.Pops.Speed
+-- The shoe's blue moved into GameConfig.Pops.Speed, where it is now the foot of
+-- the number's own gradient rather than a lone accent beside it -- so the icon
+-- and the digits are one object instead of a green label wearing a blue badge.
 
 --==============================================================================
 -- THE GATE IS AN ABSOLUTE MARGIN, NOT A MULTIPLIER
@@ -93,7 +105,7 @@ for i = 1, POOL_SIZE do
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "Pop" .. i
 	billboard.AlwaysOnTop = true
-	billboard.Size = UDim2.fromOffset(90, 30)
+	billboard.Size = UDim2.fromOffset(POP.Width, POP.Height)
 	billboard.Enabled = false
 	billboard.MaxDistance = 90
 	billboard.Parent = gui
@@ -103,12 +115,26 @@ for i = 1, POOL_SIZE do
 	label.Size = UDim2.new(1, -26, 1, 0)
 	label.Position = UDim2.fromOffset(26, 0)
 	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBlack
+	label.Font = POP.Font
 	label.TextScaled = true
-	label.TextColor3 = ACCENT
+	-- White, because the gradient below MULTIPLIES against it. Tinting here as
+	-- well would take the blue somewhere muddy.
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = ""
 	label.Parent = billboard
+
+	--==========================================================================
+	-- WHITE AT THE HEAD, BLUE AT THE FOOT
+	--
+	-- The same vertical gradient the cash pop uses, in the opposite temperature.
+	-- Two numbers with the same MECHANISM and opposite palettes read as a pair
+	-- of related things rather than as two unrelated bits of UI.
+	--==========================================================================
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new(POP.Top, POP.Bottom)
+	gradient.Rotation = 90
+	gradient.Parent = label
 
 	--== THE SHOE ==--
 	-- Drawn from two rounded frames rather than set as a glyph. Most of Gotham's
@@ -126,7 +152,7 @@ for i = 1, POOL_SIZE do
 	upper.Name = "Upper"
 	upper.Size = UDim2.fromOffset(14, 11)
 	upper.Position = UDim2.fromOffset(6, 0)
-	upper.BackgroundColor3 = SHOE
+	upper.BackgroundColor3 = POP.Bottom
 	upper.BorderSizePixel = 0
 	upper.Parent = shoe
 	local upperCorner = Instance.new("UICorner")
@@ -137,7 +163,7 @@ for i = 1, POOL_SIZE do
 	sole.Name = "Sole"
 	sole.Size = UDim2.fromOffset(22, 7)
 	sole.Position = UDim2.fromOffset(0, 10)
-	sole.BackgroundColor3 = SHOE
+	sole.BackgroundColor3 = POP.Bottom
 	sole.BorderSizePixel = 0
 	sole.Parent = shoe
 	local soleCorner = Instance.new("UICorner")
@@ -145,8 +171,10 @@ for i = 1, POOL_SIZE do
 	soleCorner.Parent = sole
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 3
-	stroke.Color = INK
+	stroke.Thickness = POP.OutlineThickness
+	-- A cooler ink than the cash pop's, so even the outline is a different
+	-- temperature at a distance where the letters have stopped being letters.
+	stroke.Color = POP.Outline
 	stroke.Parent = label
 
 	pool[i] = billboard
@@ -182,29 +210,44 @@ local function pop(amount: number)
 		stroke.Transparency = 0
 	end
 	billboard.Adornee = head
-	-- Sideways jitter by pool slot, so consecutive pops do not stack into one
-	-- illegible column.
-	billboard.StudsOffset = Vector3.new((nextInPool - 3) * 0.35, 1.6, 0)
+	local start = Vector3.new((nextInPool - 3) * 0.35, 1.6, 0)
+	billboard.StudsOffset = start
 	billboard.Enabled = true
 
-	local rise = TweenService:Create(billboard, TweenInfo.new(1.1, Enum.EasingStyle.Quad,
-		Enum.EasingDirection.Out), { StudsOffset = billboard.StudsOffset + Vector3.new(0, 2.6, 0) })
+	--==========================================================================
+	-- UP AND SIDEWAYS, NOT STRAIGHT UP
+	--
+	-- The cash pop climbs vertically because money is not going anywhere. This
+	-- one slides as it rises, alternating direction by pool slot -- which stops
+	-- consecutive pops stacking into an illegible column AND makes the number
+	-- read as something the player has run out from under. A speed readout that
+	-- lifts off gently is the one shape it must not have.
+	--==========================================================================
+	local sideways = if nextInPool % 2 == 0 then POP.DriftStuds else -POP.DriftStuds
+	local rise = TweenService:Create(billboard,
+		TweenInfo.new(POP.Seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ StudsOffset = start + Vector3.new(sideways, POP.RiseStuds, 0) })
 	rise:Play()
-	TweenService:Create(label, TweenInfo.new(1.1), { TextTransparency = 1 }):Play()
+
+	-- Held briefly, then faded -- one tween with a delay rather than a tween and
+	-- a task.delay that can outlive the slot it belongs to.
+	local hold = POP.Seconds * POP.Hold
+	local fade = TweenInfo.new(POP.Seconds - hold, Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In, 0, false, hold)
+	TweenService:Create(label, fade, { TextTransparency = 1 }):Play()
 	if stroke then
-		TweenService:Create(stroke, TweenInfo.new(1.1), { Transparency = 1 }):Play()
+		TweenService:Create(stroke, fade, { Transparency = 1 }):Play()
 	end
 	local shoe = billboard:FindFirstChild("Shoe")
 	if shoe then
 		for _, piece in ipairs(shoe:GetChildren()) do
 			if piece:IsA("Frame") then
 				piece.BackgroundTransparency = 0
-				TweenService:Create(piece, TweenInfo.new(1.1),
-					{ BackgroundTransparency = 1 }):Play()
+				TweenService:Create(piece, fade, { BackgroundTransparency = 1 }):Play()
 			end
 		end
 	end
-	task.delay(1.15, function()
+	task.delay(POP.Seconds + 0.05, function()
 		-- Only hide it if nothing else has claimed this slot since.
 		if label.TextTransparency >= 1 then
 			billboard.Enabled = false

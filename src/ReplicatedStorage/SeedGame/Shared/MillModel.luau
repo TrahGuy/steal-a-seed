@@ -2643,10 +2643,19 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 	model.Name = "MillSign"
 	model.Parent = parent
 
+	--==========================================================================
+	-- ONE SCALAR, APPLIED TO EVERY SIZE AND EVERY OFFSET
+	--
+	-- Sizes AND positions, because they are the same fact: a board at three
+	-- quarters that still floats at its old height is a board that has come off
+	-- its post. See GameConfig.Mill.Sign.Scale.
+	--==========================================================================
+	local S = MILL.Sign.Scale
+
 	local post = part({
 		name = "Post",
-		size = Vector3.new(0.8, 5.2, 0.8),
-		cframe = cf * CFrame.new(0, 2.6, 0),
+		size = Vector3.new(0.8, 5.2, 0.8) * S,
+		cframe = cf * CFrame.new(0, 2.6 * S, 0),
 		color = OAK_DARK,
 		material = Enum.Material.Wood,
 		parent = model,
@@ -2655,8 +2664,8 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 
 	local board = part({
 		name = "Board",
-		size = Vector3.new(9, 5.6, 0.6),
-		cframe = cf * CFrame.new(0, 7.4, 0),
+		size = Vector3.new(9, 5.6, 0.6) * S,
+		cframe = cf * CFrame.new(0, 7.4 * S, 0),
 		-- Dark enough for white type to sit on, warm enough to be a plank
 		-- rather than a hole cut in the world.
 		color = Color3.fromRGB(72, 54, 40),
@@ -2670,8 +2679,8 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 		Vector3.new(-3.9, -2.2, 0), Vector3.new(3.9, -2.2, 0) }) do
 		part({
 			name = "Bolt",
-			size = Vector3.new(0.5, 0.5, 0.7),
-			cframe = cf * CFrame.new(0, 7.4, 0) * CFrame.new(corner),
+			size = Vector3.new(0.5, 0.5, 0.7) * S,
+			cframe = cf * CFrame.new(0, 7.4 * S, 0) * CFrame.new(corner * S),
 			color = OAK,
 			material = Enum.Material.Wood,
 			collide = false,
@@ -2679,46 +2688,77 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 		})
 	end
 
-	local surface = Instance.new("SurfaceGui")
-	surface.Name = "Face"
-	surface.Face = Enum.NormalId.Front
-	surface.CanvasSize = Vector2.new(360, 224)
-	surface.LightInfluence = 0
-	surface.MaxDistance = 90
-	surface.Parent = board
+	--==========================================================================
+	-- LETTERED ON BOTH FACES
+	--
+	-- The two people who need this board are on OPPOSITE SIDES of it. Somebody
+	-- walking up from their own gate is at (-35, -27) in the mill's frame; a
+	-- player standing on the belt is at (0, 0); and the sign is between them.
+	-- Those bearings are 178 degrees apart, so no single facing serves both --
+	-- pointing it at the approach shows its back to the belt, and pointing it at
+	-- the belt hides it behind the mill from everywhere else.
+	--
+	-- The biome arches already solved this: "Named on BOTH faces. You read it
+	-- going out, and going home it tells you how much further there is to run."
+	-- Same answer here. The board is 0.46 studs thick and a SurfaceGui costs
+	-- nothing to leave on the other side of it.
+	--
+	-- BOTH ARE RETURNED, and refreshSign writes to both -- a back face that
+	-- silently stopped updating would be a board advertising last hour's price
+	-- to everybody standing on the machine.
+	--==========================================================================
+	local function buildFace(which: Enum.NormalId): SignFace
+		local surface = Instance.new("SurfaceGui")
+		surface.Name = if which == Enum.NormalId.Front then "Face" else "FaceBack"
+		surface.Face = which
+		surface.CanvasSize = Vector2.new(360, 224)
+		surface.LightInfluence = 0
+		surface.MaxDistance = 90
+		surface.Parent = board
 
-	local title = label(surface, "Title", 34, Color3.fromRGB(255, 255, 255))
-	title.Size = UDim2.new(1, 0, 0, 44)
-	title.Position = UDim2.fromOffset(0, 8)
-	title.Text = "UPGRADE"
+		local title = label(surface, "Title", 34, Color3.fromRGB(255, 255, 255))
+		title.Size = UDim2.new(1, 0, 0, 44)
+		title.Position = UDim2.fromOffset(0, 8)
+		title.Text = "UPGRADE"
 
-	local step = label(surface, "Step", 26, Color3.fromRGB(142, 214, 86))
-	step.Size = UDim2.new(1, 0, 0, 34)
-	step.Position = UDim2.fromOffset(0, 54)
+		local step = label(surface, "Step", 26, Color3.fromRGB(142, 214, 86))
+		step.Size = UDim2.new(1, 0, 0, 34)
+		step.Position = UDim2.fromOffset(0, 54)
 
-	local rate = label(surface, "Rate", 20, Color3.fromRGB(226, 214, 176))
-	rate.Size = UDim2.new(1, 0, 0, 28)
-	rate.Position = UDim2.fromOffset(0, 88)
+		local rate = label(surface, "Rate", 20, Color3.fromRGB(226, 214, 176))
+		rate.Size = UDim2.new(1, 0, 0, 28)
+		rate.Position = UDim2.fromOffset(0, 88)
 
-	local button = Instance.new("Frame")
-	button.Name = "Buy"
-	button.AnchorPoint = Vector2.new(0.5, 0)
-	button.Position = UDim2.new(0.5, 0, 0, 126)
-	button.Size = UDim2.fromOffset(300, 74)
-	button.BackgroundColor3 = Color3.fromRGB(214, 78, 66)
-	button.BorderSizePixel = 0
-	button.Parent = surface
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 12)
-	corner.Parent = button
-	local edge = Instance.new("UIStroke")
-	edge.Color = Color3.new(0, 0, 0)
-	edge.Thickness = 4
-	edge.Parent = button
+		local button = Instance.new("Frame")
+		button.Name = "Buy"
+		button.AnchorPoint = Vector2.new(0.5, 0)
+		button.Position = UDim2.new(0.5, 0, 0, 126)
+		button.Size = UDim2.fromOffset(300, 74)
+		button.BackgroundColor3 = Color3.fromRGB(214, 78, 66)
+		button.BorderSizePixel = 0
+		button.Parent = surface
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 12)
+		corner.Parent = button
+		local edge = Instance.new("UIStroke")
+		edge.Color = Color3.new(0, 0, 0)
+		edge.Thickness = 4
+		edge.Parent = button
 
-	local price = label(button, "Price", 32, Color3.fromRGB(255, 255, 255))
-	price.Size = UDim2.fromScale(1, 1)
-	price.Position = UDim2.fromOffset(0, 2)
+		local price = label(button, "Price", 32, Color3.fromRGB(255, 255, 255))
+		price.Size = UDim2.fromScale(1, 1)
+		price.Position = UDim2.fromOffset(0, 2)
+
+		return {
+			title = title, step = step, rate = rate,
+			price = price, button = button, prompt = nil :: any,
+		}
+	end
+
+	local front = buildFace(Enum.NormalId.Front)
+	buildFace(Enum.NormalId.Back)
+	local title, step, rate = front.title, front.step, front.rate
+	local price, button = front.price, front.button
 
 	--==========================================================================
 	-- ONE PROMPT, DRAWN BY PromptUI LIKE EVERY OTHER PROMPT
@@ -2734,7 +2774,9 @@ function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 	prompt.ObjectText = "Mill"
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.HoldDuration = 0.35
-	prompt.MaxActivationDistance = 14
+	-- Reaches the belt: the sign moved to the fence line and is 15.3 studs from
+	-- where a mounted player stands, and the mount holds them at WalkSpeed zero.
+	prompt.MaxActivationDistance = MILL.Sign.PromptRange
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = board
 

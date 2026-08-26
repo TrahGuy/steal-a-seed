@@ -559,14 +559,27 @@ local function refreshSign(plotId: number, tier: number)
 		return
 	end
 	local board = sign:FindFirstChild("Board")
-	local face = board and board:FindFirstChild("Face")
-	if not face then
+	if not board then
 		return
 	end
-	local step = face:FindFirstChild("Step") :: TextLabel?
-	local rate = face:FindFirstChild("Rate") :: TextLabel?
-	local buy = face:FindFirstChild("Buy") :: Frame?
-	local price = buy and buy:FindFirstChild("Price") :: TextLabel?
+	--==========================================================================
+	-- BOTH FACES, OR THE BACK ADVERTISES LAST HOUR'S PRICE
+	--
+	-- The board is lettered on both sides -- see MillModel, and the biome arches
+	-- before it -- because the person walking up to it and the person standing
+	-- on the belt are on opposite sides. Collected rather than named
+	-- individually so that adding a third face, or dropping the back, changes
+	-- nothing here.
+	--==========================================================================
+	local faces: { Instance } = {}
+	for _, child in ipairs(board:GetChildren()) do
+		if child:IsA("SurfaceGui") then
+			table.insert(faces, child)
+		end
+	end
+	if #faces == 0 then
+		return
+	end
 	local prompt = board:FindFirstChildOfClass("ProximityPrompt")
 
 	local here = LADDER.Tiers[tier]
@@ -585,54 +598,80 @@ local function refreshSign(plotId: number, tier: number)
 		then TreadmillService.RateOf(player)
 		else GameConfig.trainingRateFor(tier, 0, nil)
 
-	if step then
-		if stepInfo and stepInfo.kind == "overclock" then
-			step.Text = string.format("%s %d  >  %s %d",
-				string.upper(LADDER.Overclock.Label), overclock,
-				string.upper(LADDER.Overclock.Label), stepInfo.level)
-		elseif stepInfo and stepInfo.kind == "max" then
-			step.Text = string.format("%s %d  ·  MAX",
-				string.upper(LADDER.Overclock.Label), overclock)
-		else
-			step.Text = if next_
-				then string.format("LEVEL %d  >  LEVEL %d", tier, tier + 1)
-				else string.format("LEVEL %d", tier)
+	--==========================================================================
+	-- WORKED OUT ONCE, WRITTEN TO EVERY FACE
+	--
+	-- The board is lettered front and back, so the four strings are computed
+	-- here and then applied in a loop. Computing them inside the loop would be
+	-- the same tier lookup and the same rate arithmetic twice, and -- worse --
+	-- two places for the two sides to start disagreeing.
+	--==========================================================================
+	local stepText: string
+	if stepInfo and stepInfo.kind == "overclock" then
+		stepText = string.format("%s %d  >  %s %d",
+			string.upper(LADDER.Overclock.Label), overclock,
+			string.upper(LADDER.Overclock.Label), stepInfo.level)
+	elseif stepInfo and stepInfo.kind == "max" then
+		stepText = string.format("%s %d  ·  MAX",
+			string.upper(LADDER.Overclock.Label), overclock)
+	else
+		stepText = if next_
+			then string.format("LEVEL %d  >  LEVEL %d", tier, tier + 1)
+			else string.format("LEVEL %d", tier)
+	end
+
+	local rateText: string
+	if stepInfo and stepInfo.kind == "overclock" then
+		local after = GameConfig.trainingRateFor(tier, (stepInfo.level :: number),
+			if player then PlayerDataService.Get(player) else nil)
+		rateText = string.format("%s/s  >  %s/s",
+			GameConfig.compact(liveRate), GameConfig.compact(after))
+	elseif next_ then
+		rateText = string.format("%s/s  >  %s/s",
+			GameConfig.compact(liveRate), GameConfig.compact(next_.speed))
+	else
+		rateText = string.format("%s  ·  %s/s",
+			string.upper(here.name), GameConfig.compact(liveRate))
+	end
+
+	local priceText: string
+	if stepInfo and stepInfo.locked then
+		local biome = BiomeData.Biomes[stepInfo.needsOrder or 1]
+		priceText = string.upper(if biome then biome.DisplayName else "LOCKED")
+	elseif stepInfo and stepInfo.cost then
+		priceText = "$" .. GameConfig.compact(stepInfo.cost)
+	elseif next_ then
+		priceText = "$" .. GameConfig.compact(next_.cost)
+	else
+		priceText = "MAX"
+	end
+
+	local sellable = if stepInfo
+		then (stepInfo.kind ~= "max" and not stepInfo.locked)
+		else next_ ~= nil
+	local buyColour = if sellable
+		then Color3.fromRGB(214, 78, 66)
+		else Color3.fromRGB(96, 100, 108)
+
+	for _, face in ipairs(faces) do
+		local step = face:FindFirstChild("Step") :: TextLabel?
+		local rate = face:FindFirstChild("Rate") :: TextLabel?
+		local buy = face:FindFirstChild("Buy") :: Frame?
+		local price = buy and buy:FindFirstChild("Price") :: TextLabel?
+		if step then
+			step.Text = stepText
+		end
+		if rate then
+			rate.Text = rateText
+		end
+		if price then
+			price.Text = priceText
+		end
+		if buy then
+			buy.BackgroundColor3 = buyColour
 		end
 	end
-	if rate then
-		if stepInfo and stepInfo.kind == "overclock" then
-			local after = GameConfig.trainingRateFor(tier, (stepInfo.level :: number),
-				if player then PlayerDataService.Get(player) else nil)
-			rate.Text = string.format("%s/s  >  %s/s",
-				GameConfig.compact(liveRate), GameConfig.compact(after))
-		elseif next_ then
-			rate.Text = string.format("%s/s  >  %s/s",
-				GameConfig.compact(liveRate), GameConfig.compact(next_.speed))
-		else
-			rate.Text = string.format("%s  ·  %s/s",
-				string.upper(here.name), GameConfig.compact(liveRate))
-		end
-	end
-	if price then
-		if stepInfo and stepInfo.locked then
-			local biome = BiomeData.Biomes[stepInfo.needsOrder or 1]
-			price.Text = string.upper(if biome then biome.DisplayName else "LOCKED")
-		elseif stepInfo and stepInfo.cost then
-			price.Text = "$" .. GameConfig.compact(stepInfo.cost)
-		elseif next_ then
-			price.Text = "$" .. GameConfig.compact(next_.cost)
-		else
-			price.Text = "MAX"
-		end
-	end
-	if buy then
-		local sellable = if stepInfo
-			then (stepInfo.kind ~= "max" and not stepInfo.locked)
-			else next_ ~= nil
-		buy.BackgroundColor3 = if sellable
-			then Color3.fromRGB(214, 78, 66)
-			else Color3.fromRGB(96, 100, 108)
-	end
+
 	if prompt then
 		prompt.Enabled = if stepInfo then stepInfo.kind ~= "max" else next_ ~= nil
 		prompt.ObjectText = if stepInfo and stepInfo.kind == "overclock"
@@ -663,8 +702,12 @@ function TreadmillService.Rebuild(plot: Model, tier: number)
 	setBeltSpeed(belt, false, tier)
 
 	-- The sign was inside the model, so it went with it. Same place, new board.
+	-- The rebuilt sign goes back exactly where the old one stood. The fallback
+	-- is only reached when there was none -- and it has to agree with MapService,
+	-- which is why both read the same two numbers.
 	local rebuiltSign = MillModel.BuildSign(
-		signCF or (cf * CFrame.new(8.6, -0.6, -6)), model)
+		signCF or (cf * CFrame.new(LADDER.Sign.Offset)
+			* CFrame.Angles(0, math.rad(LADDER.Sign.YawDegrees), 0)), model)
 	rebuiltSign:SetAttribute(ATTR.PlotId, plotId)
 	-- Deferred, so it lands after the tag signal that fires when the sign above
 	-- appears. Both refresh from the profile now, so the order stopped mattering

@@ -446,9 +446,17 @@ local function buildTreadmill(id: number, cf: CFrame, parent: Instance): Model
 	model:SetAttribute(GameConfig.Attributes.PlotId, id)
 	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
 
-	-- Beside it, facing the same way the walker does, far enough out that it is
-	-- not something you catch with a shoulder getting on.
-	local sign = MillModel.BuildSign(cf * CFrame.new(8.6, -0.6, -6), model)
+	--==========================================================================
+	-- BESIDE THE FENCE, TURNED TO FACE WHOEVER IS COMING
+	--
+	-- Both numbers live in GameConfig.Mill.Sign, with the working for the yaw --
+	-- it is the bearing from the sign to this plot's spawn pad, not a taste
+	-- decision. Placed off the mill's own CFrame, so it swings round with the
+	-- plot and needs no angle maths here.
+	--==========================================================================
+	local SIGN = GameConfig.Mill.Sign
+	local sign = MillModel.BuildSign(
+		cf * CFrame.new(SIGN.Offset) * CFrame.Angles(0, math.rad(SIGN.YawDegrees), 0), model)
 	sign:SetAttribute(GameConfig.Attributes.PlotId, id)
 
 	return model

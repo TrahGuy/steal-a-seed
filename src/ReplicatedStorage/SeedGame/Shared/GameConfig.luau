@@ -1285,6 +1285,56 @@ GameConfig.Mill = {
 	Action = "MillUpgrade",
 
 	--==========================================================================
+	-- WHERE THE SIGN STANDS, AND WHICH WAY IT LOOKS
+	--
+	-- It used to sit at (8.6, -6) in the mill's own frame -- the OUTER side,
+	-- away from the plot -- facing the same way the walker does. Two problems,
+	-- and they are the same problem: a player coming out of their own gate saw
+	-- the BACK of it, and a player standing on the belt saw it edge-on. The one
+	-- board in the game that has to be read was the one nobody was ever pointed
+	-- at.
+	--
+	-- BESIDE THE FENCE NOW. The plot's right-hand rail is at x = -11 in mill
+	-- space and the mill's own body reaches -10.2, so there is no gap alongside
+	-- it -- the sign goes past the mill's hub-ward corner instead, on the fence
+	-- line, where there is open ground and where it reads as part of the fence
+	-- rather than as something dumped next to the machine.
+	--
+	-- THE YAW IS NOT A GUESS. The spawn pad is at (-35, -26.8) in the same
+	-- frame, so the bearing from the sign to the place its owner walks in from
+	-- is atan2(23.6, 16.3) = 55 degrees. That is this number. Move the sign and
+	-- it has to be recomputed, which is why the two live together.
+	--==========================================================================
+	Sign = {
+		Offset = Vector3.new(-11.4, -0.6, -10.5),
+		YawDegrees = 55,
+		--======================================================================
+		-- SLIGHTLY SMALLER
+		--
+		-- At full size the board is nine studs wide and stands where the mill
+		-- used to be visible, so walking up to your own machine meant looking at
+		-- a fence-height hoarding with the machine behind it. Three quarters is
+		-- enough to still read the price across the plot and small enough that
+		-- the mill is the thing you see.
+		--
+		-- Everything the builder places scales together -- post, board, bolts,
+		-- and their offsets -- because a board that shrank while its post did
+		-- not would be a lollipop.
+		--======================================================================
+		Scale = 0.76,
+		--======================================================================
+		-- FAR ENOUGH TO REACH FROM THE BELT
+		--
+		-- The sign is 15.3 studs from the belt centre now, and it was 10.5. At
+		-- the old 14 a mounted player -- who is held at WalkSpeed zero by the
+		-- mount -- could no longer buy the upgrade they are standing on the
+		-- thing to afford. Eighteen covers the belt and still will not open from
+		-- inside somebody's bed.
+		--======================================================================
+		PromptRange = 18,
+	},
+
+	--==========================================================================
 	-- OVERCLOCK: WHAT A TIER-SEVEN MILL DOES NEXT
 	--
 	-- Seven tiers top out at 50 Speed/sec. The ladder they feed runs to a
@@ -2213,6 +2263,117 @@ GameConfig.Sfx = {
 		Mythic = "RevealLegendary",
 		Secret = "RevealLegendary",
 		Divine = "RevealLegendary",
+	},
+}
+
+--==============================================================================
+-- THE TWO NUMBERS THAT POP OFF THINGS
+--
+-- A `+$N` rises off every grown plant once a second, and a `+N` rises off the
+-- player while they are on a mill. They are the only two floating numbers in the
+-- game and they were THE SAME OBJECT: GothamBlack, lime, three-pixel ink
+-- outline, rise two and a half studs, fade over 1.1 seconds. The only thing
+-- telling them apart was a 22-pixel blue shoe, and at any distance where these
+-- are actually read -- across a plot, from the road -- that shoe is four pixels
+-- wide.
+--
+-- So a player watching their own screen could not tell what had just paid them.
+-- Which is the entire job of a floating number.
+--
+--==============================================================================
+-- THEY ARE DIFFERENT AT SILHOUETTE, NOT AT COLOUR
+--
+-- Colour alone does not survive distance, colourblindness, a green plot, or a
+-- bright sky. The two differ in the shape of the letters first:
+--
+--     CASH    LuckiestGuy -- fat, round, upright. Gold into lime, top to
+--             bottom, like a coin catching the light. It POPS IN with an
+--             overshoot and a slight tilt, because money should land with
+--             weight, and it holds full opacity for half its life so the
+--             number is readable rather than glimpsed.
+--
+--     SPEED   Bangers -- narrow, sharp, and slanted by the typeface itself
+--             rather than by a rotation. White into blue. No pop-in, a shorter
+--             life, and it slides SIDEWAYS as it rises so it reads as being
+--             left behind rather than lifting off.
+--
+-- Round-fat-upright-gold against narrow-sharp-leaning-blue is a difference you
+-- can still make at the edge of the 90-stud draw distance, with the text too
+-- small to read.
+--
+-- BOTH FONTS WERE CHECKED FOR TOFU. Most of this engine's symbol range renders
+-- as blank boxes -- the shoe beside the speed pop is built from two rounded
+-- frames for exactly that reason -- so every glyph these need was rendered and
+-- looked at before either was chosen.
+--
+-- NOT BALANCE. How a number is dressed, never what it is worth.
+--==============================================================================
+GameConfig.Pops = {
+	Cash = {
+		Font = Enum.Font.LuckiestGuy,
+		-- Gold at the head, the game's lime at the foot. Gold is the one
+		-- saturated colour Greenhollow spends, and it is spent here because this
+		-- is a HUD readout rather than a plant -- the art bible's warning is
+		-- about the world, and a coin that looks like a leaf is not a coin.
+		Top = Color3.fromRGB(255, 216, 102),
+		Bottom = Color3.fromRGB(142, 196, 62),
+		Outline = Color3.fromRGB(26, 24, 30),
+		OutlineThickness = 3,
+		Width = 108,
+		Height = 34,
+		RiseStuds = 2.5,
+		-- Straight up. Money is not going anywhere.
+		DriftStuds = 0,
+		Seconds = 1.15,
+		--======================================================================
+		-- IT LANDS, THEN IT LIFTS
+		--
+		-- Scales up from small through an overshoot. A number that simply
+		-- appears at full size has no impact; one that arrives has weight, and
+		-- weight is the whole reading of a payout.
+		--======================================================================
+		PopFrom = 0.55,
+		PopOvershoot = 1.14,
+		PopSeconds = 0.22,
+		-- Degrees, plus or minus, chosen per pop. LuckiestGuy is dead upright,
+		-- and forty of them rising off one bed in a ruler-straight column looks
+		-- printed rather than alive.
+		TiltJitter = 6,
+		-- Fraction of its life at full opacity before the fade starts. Half,
+		-- because the number is the point.
+		Hold = 0.5,
+	},
+
+	Speed = {
+		Font = Enum.Font.Bangers,
+		-- Slanted by the typeface. Nothing here rotates the label -- a rotated
+		-- upright font reads as a mistake, a genuinely italic one reads as fast.
+		Top = Color3.fromRGB(240, 250, 255),
+		Bottom = Color3.fromRGB(96, 164, 232),
+		-- A cooler ink than the cash pop's, so even the outline is a different
+		-- temperature.
+		Outline = Color3.fromRGB(16, 26, 46),
+		OutlineThickness = 3,
+		Width = 104,
+		Height = 32,
+		RiseStuds = 2.0,
+		--======================================================================
+		-- IT SLIDES AS IT RISES
+		--
+		-- Sideways as well as up, alternating by pool slot. Two effects at once:
+		-- consecutive pops stop stacking into an illegible column, and the
+		-- number reads as being LEFT BEHIND, which is the only thing a speed
+		-- readout should ever look like.
+		--======================================================================
+		DriftStuds = 1.1,
+		-- Shorter than the cash pop on purpose. Fast things do not linger.
+		Seconds = 0.85,
+		-- No pop-in. It is already moving.
+		PopFrom = 1,
+		PopOvershoot = 1,
+		PopSeconds = 0,
+		TiltJitter = 0,
+		Hold = 0.22,
 	},
 }
 
