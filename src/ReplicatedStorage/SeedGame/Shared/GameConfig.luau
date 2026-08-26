@@ -211,6 +211,79 @@ GameConfig.Plot = {
 	BedHeight = 0.5,
 	BedFrameLip = 0.25,
 	BedFrameWidth = 2,
+	--==========================================================================
+	-- THE FENCE IS A REAL BOUNDARY NOW
+	--
+	-- It was non-collidable throughout, on the reasoning that "the gap is not
+	-- what lets you in -- you could always walk through the rails. It is what
+	-- SHOWS you the way in, and a sealed rectangle read as a pen rather than as
+	-- a garden." Asked to make it solid, so it is: the gate is now the way in
+	-- because it is the ONLY way in.
+	--
+	--======================================================================
+	-- THE RAILS THEMSELVES STAY NON-COLLIDABLE, AND THAT IS THE WHOLE TRICK
+	--
+	-- A rail is 0.6 studs thick. A player at 150 WalkSpeed covers 2.5 studs in a
+	-- frame. Simply flipping CanCollide on the visible fence would give a wall
+	-- that stops you when you walk up to it and lets you straight through when
+	-- you sprint -- which is worse than either answer on its own, because it is
+	-- the fast players who would find the hole and nobody could reproduce it.
+	--
+	-- So the LOOK and the RULE are separate parts, the same split the road's
+	-- Nightfall barrier uses: thin rails you can see, and an invisible slab you
+	-- cannot get through. Four studs is wider than a frame of travel at the
+	-- engine's cap, and eleven tall is above a jump.
+	--======================================================================
+	FenceColliderThickness = 4,
+	FenceColliderHeight = 11,
+
+	--==========================================================================
+	-- THE BED IS TILLED, NOT PAINTED
+	--
+	-- The soil was ONE PART in ONE COLOUR: a 34 x 121 stud slab of flat brown at
+	-- the biggest tier, which is the largest single surface a player looks at in
+	-- this game and had less going on than the grass beside it.
+	--
+	-- The rows already exist in the data -- RowDepth and RowGap have decided
+	-- where plants stand since the first build -- and nothing drew them. So the
+	-- gaps become FURROWS: a darker strip, set slightly below the surface, one
+	-- per gap. That is the bed's own structure made visible rather than a
+	-- texture invented on top of it, which is why it lines up with the planting
+	-- for free and keeps lining up if the rows are ever retuned.
+	--
+	-- CLODS in the furrows on top of that, for small-scale break-up. In the
+	-- furrows specifically because plants stand in row CENTRES -- a clod there
+	-- would end up inside somebody's Bellchime.
+	--
+	-- COUNTED, because this game is mobile-first and the bed is not the budget:
+	-- a four-row plot gains 3 furrows and 4 clods, a ten-row plot 9 and 10. At
+	-- six plots of the largest tier that is 114 parts against a 1,563-part map.
+	--==========================================================================
+	--======================================================================
+	-- THE ROWS ARE RAISED, THE GAPS ARE WHAT IS LEFT
+	--
+	-- The first attempt SANK a darker strip into the gaps and it was invisible:
+	-- the soil is one opaque slab and a part below its surface is simply inside
+	-- it. Nothing showed but the clods.
+	--
+	-- So it is the other way up, which is also how a real bed is built. The slab
+	-- itself is darkened to the furrow tone and never moves -- PlantService
+	-- derives every plant's height from `soil.Size.Y * 0.5`, so touching its size
+	-- or its CFrame would lift or sink every garden in the game. The ROWS are
+	-- added on top in the lighter earth, and the dark base showing between them
+	-- IS the furrow. Real relief, no z-fighting, and nothing planted moves.
+	--
+	-- A plant therefore stands 0.18 below the crown of its own row. On a
+	-- creature between 1.2 and 33 studs tall that is not a thing anybody can
+	-- see, and it is the price of not moving the surface the save is measured
+	-- against.
+	--======================================================================
+	SoilRowRise = 0.18,
+	SoilClodsPerFurrow = 2,
+	-- Every other furrow gets clods. All of them read as gravel rather than as
+	-- broken earth.
+	SoilClodStride = 2,
+	SoilClodSize = 1.1,
 }
 
 --==============================================================================

@@ -141,6 +141,11 @@ local GRASS = Color3.fromRGB(112, 200, 84)
 -- Straight off the owner's photo: a warm rust soil inside a mid-brown border,
 -- both a good deal more saturated than the washed-out pair they replace.
 local BED_SOIL = Color3.fromRGB(158, 82, 52)
+-- The furrow is the same earth in shadow rather than a second brown: same hue,
+-- pulled down in value. A different brown would read as two materials.
+local BED_FURROW = Color3.fromRGB(112, 56, 34)
+-- And the clods are the same earth turned up to the light.
+local BED_CLOD = Color3.fromRGB(184, 106, 70)
 local BED_FRAME = Color3.fromRGB(124, 84, 56)
 local FENCE = Color3.fromRGB(96, 66, 44)
 local WOOD = Color3.fromRGB(128, 88, 52)
@@ -194,20 +199,52 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 
 	--== THE FENCE ==--
 	--
-	-- Four sides with a GAP AT THE FRONT for the gate. Non-collidable
-	-- throughout, so the gap is not what lets you in -- you could always walk
-	-- through the rails. It is what SHOWS you the way in, and a sealed
-	-- rectangle read as a pen rather than as a garden.
+	-- Four sides with a GAP AT THE FRONT for the gate. The gate is the way in
+	-- because it is now the ONLY way in -- this used to be walk-through, and the
+	-- gap only SHOWED you the entrance rather than being it.
+	--
+	-- THE LOOK AND THE RULE ARE SEPARATE PARTS. The rails and posts you can see
+	-- stay non-collidable; an invisible slab down the middle of each run is what
+	-- actually stops anybody. A rail is 0.6 studs thick and a player at 150
+	-- WalkSpeed covers 2.5 in a frame, so flipping CanCollide on the visible
+	-- fence would give a wall that holds when you walk into it and lets you
+	-- through when you sprint -- the fast players would find the hole and nobody
+	-- would be able to reproduce it. Same split as the road's Nightfall barrier,
+	-- for the same reason.
 	--
 	-- Built as segments between two coordinates rather than as four whole
-	-- sides, because the front is now two pieces and a special case for it
-	-- would be a second copy of the same rail-and-post code.
+	-- sides, because the front is two pieces and a special case for it would be
+	-- a second copy of the same rail-and-post code.
 	local function fenceRun(alongX: boolean, fixed: number, from: number, to: number)
 		local length = math.abs(to - from)
 		if length < 0.5 then
 			return
 		end
 		local mid = (from + to) * 0.5
+
+		--==================================================================
+		-- THE SLAB THAT DOES THE WORK
+		--
+		-- CanQuery false as well as invisible: PlantPlace raycasts at the soil
+		-- to decide where a click lands, and a solid pane around the bed would
+		-- otherwise eat clicks aimed over the fence from outside.
+		--==================================================================
+		local wall = build({
+			name = "FenceCollider",
+			size = alongX
+				and Vector3.new(length, PLOT.FenceColliderHeight, PLOT.FenceColliderThickness)
+				or Vector3.new(PLOT.FenceColliderThickness, PLOT.FenceColliderHeight, length),
+			cframe = cf * (alongX
+				and CFrame.new(mid, PLOT.FenceColliderHeight * 0.5, fixed)
+				or CFrame.new(fixed, PLOT.FenceColliderHeight * 0.5, mid)),
+			color = FENCE,
+			transparency = 1,
+			studs = false,
+			parent = model,
+		})
+		wall.CanQuery = false
+		wall.CanTouch = false
+		wall.CastShadow = false
 
 		for _, h in ipairs({ 3.2, 5.4 }) do
 			build({
@@ -317,11 +354,24 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		})
 	end
 
+	--==========================================================================
+	-- THIS SLAB IS THE FURROW FLOOR, AND IT MUST NOT MOVE
+	--
+	-- It was one flat brown -- a 34 x 121 stud rectangle at the biggest tier,
+	-- the largest single surface in the game, with less going on than the grass
+	-- beside it. It is the DARK earth now and the rows are built on top of it,
+	-- so what shows between them is a furrow.
+	--
+	-- Its size and CFrame are load-bearing beyond the look: PlantService puts
+	-- every plant at `soil.CFrame * CFrame.new(x, soil.Size.Y * 0.5, z)`, so
+	-- changing either would lift or sink every garden that has ever been saved.
+	-- Only the colour changed.
+	--==========================================================================
 	local soil = build({
 		name = PLOT.PlanterName,
 		size = Vector3.new(bedW, soilTop, bedSpan),
 		cframe = cf * CFrame.new(0, soilTop * 0.5, 0),
-		color = BED_SOIL,
+		color = BED_FURROW,
 		-- STUDDED, AND THEREFORE PLASTIC. Ground and Grass both render their own
 		-- noise texture OVER the studs, so a bed set to TopSurface = Studs comes
 		-- out looking smooth while the field beside it is visibly studded.
@@ -331,6 +381,71 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		parent = model,
 	})
 	CollectionService:AddTag(soil, GameConfig.Tags.Planter)
+
+	--==========================================================================
+	-- THE BED IS TILLED
+	--
+	-- The rows already exist in the data -- RowDepth and RowGap have decided
+	-- where plants stand since the first build -- and nothing ever drew them.
+	-- Now they are mounded: a band of lighter earth per row, raised off the dark
+	-- slab, with the slab showing through between them as the furrow.
+	--
+	-- Built off the SAME expression the slot grid below uses for a row centre,
+	-- so the mounds and the planting cannot drift apart -- and if the rows are
+	-- ever retuned, both follow.
+	--
+	-- DETERMINISTIC, never random. Two servers must build the same garden, and
+	-- "the third bed looked wrong" has to mean something.
+	--==========================================================================
+	local rise = PLOT.SoilRowRise
+	for row = 1, rows do
+		local rowCentre = -bedSpan * 0.5 + (row - 0.5) * PLOT.RowDepth
+			+ (row - 1) * PLOT.RowGap
+		build({
+			name = "SoilRow",
+			size = Vector3.new(bedW, rise, PLOT.RowDepth),
+			cframe = cf * CFrame.new(0, soilTop + rise * 0.5, rowCentre),
+			color = BED_SOIL,
+			material = Enum.Material.Plastic,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	--==========================================================================
+	-- CLODS, IN THE FURROWS AND NOWHERE ELSE
+	--
+	-- Plants stand in row CENTRES, on the mounds. A clod there would end up
+	-- inside somebody's Bellchime, so they go in the gaps -- which is also where
+	-- broken earth would actually collect.
+	--
+	-- Every other gap gets them. On all of them they read as gravel rather than
+	-- as a tilled bed.
+	--==========================================================================
+	for gap = 1, rows - 1 do
+		if gap % PLOT.SoilClodStride == 1 then
+			local rowCentre = -bedSpan * 0.5 + (gap - 0.5) * PLOT.RowDepth
+				+ (gap - 1) * PLOT.RowGap
+			local furrowZ = rowCentre + PLOT.RowDepth * 0.5 + PLOT.RowGap * 0.5
+			for c = 1, PLOT.SoilClodsPerFurrow do
+				local across = (c - (PLOT.SoilClodsPerFurrow + 1) * 0.5)
+					* (bedW / (PLOT.SoilClodsPerFurrow + 1))
+				-- Nudged by the gap index so the scatter does not line up into a
+				-- second grid.
+				local jitter = ((gap * 7) % 5 - 2) * (bedW * 0.06)
+				local size = PLOT.SoilClodSize * (1 + ((gap + c) % 3) * 0.18)
+				build({
+					name = "Clod",
+					size = Vector3.new(size, size * 0.5, size),
+					cframe = cf * CFrame.new(across + jitter, soilTop, furrowZ),
+					color = BED_CLOD,
+					material = Enum.Material.Plastic,
+					collide = false,
+					parent = model,
+				})
+			end
+		end
+	end
 
 	--== PLANT SLOTS ==--
 	-- An INVISIBLE grid on the soil. Attachments, so a slot costs nothing until
