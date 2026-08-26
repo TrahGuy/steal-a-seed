@@ -346,6 +346,20 @@ GameConfig.Attributes = {
 	-- crosses, and this is only what the HUD reads.
 	--==========================================================================
 	HighestBiomeOrder = "HighestBiomeOrder",
+	--==========================================================================
+	-- THE WORLD CLOCK, ON THE WORKSPACE
+	--
+	-- Three read-only facts every client and every service reads the same way.
+	-- On the WORKSPACE rather than on a player, because they are true of the
+	-- world and not of anybody in it -- and because that makes a late joiner
+	-- correct on their first frame without being sent anything.
+	--
+	-- A client writing these changes only its own view; nothing on the server
+	-- ever reads them back off a client.
+	--==========================================================================
+	WorldPhase = "WorldPhase",
+	WorldPhaseEndsAt = "WorldPhaseEndsAt",
+	WorldCycleIndex = "WorldCycleIndex",
 }
 
 GameConfig.Tags = {
@@ -415,6 +429,10 @@ GameConfig.Tags = {
 	-- NestService builds the actual nest on top of it, because a nest has state
 	-- and the map deliberately has none.
 	NestSite = "NestSite",
+	-- The shutter across the mouth of the road. Tagged rather than found by
+	-- name because MapService rebuilds the whole map and the cycle service must
+	-- find whichever barrier exists now, not the one that existed at boot.
+	NightBarrier = "NightBarrier",
 }
 
 GameConfig.Remotes = {
@@ -544,6 +562,121 @@ GameConfig.Speed = {
 		{ 10e12, 124 },
 		{ 100e12, 138 },
 		{ 1e15, 150 },
+	},
+}
+
+--==============================================================================
+-- THE DAY, AND THE NIGHT THAT RESTOCKS IT
+--
+-- Greenhollow holds ONE nest of five pods. Under the old rule a taken slot grew
+-- a new pod 22 seconds later, which meant the nest was never really empty and
+-- clearing it meant nothing -- you could stand beside it and farm the same ring
+-- forever. The scarcity the whole road is built around existed on the map and
+-- not in the game.
+--
+-- So the supply is a BATCH, not a trickle. Every live nest is stocked once at
+-- dawn, a taken slot stays empty for the rest of the day, and an emptied nest
+-- stays emptied. What is left at dusk is destroyed rather than carried over, so
+-- a hoarded nest is not a way to start tomorrow ahead.
+--
+--     420s day     five pods for up to six players, then nothing until dawn
+--      60s night   the road is shut and the world is reset
+--      45s warning enough to decide whether to go in or turn round
+--
+-- SEVEN MINUTES IS THE NUMBER TO TUNE. It is the whole supply curve: five pods
+-- per eight-minute cycle across the whole server. Shorten the day and the road
+-- gets busier; lengthen it and the nest sits empty longer.
+--
+--==============================================================================
+-- THE PHASE IS AN ATTRIBUTE ON THE WORKSPACE, NOT A REMOTE
+--
+-- Three read-only facts, replicated by the engine, that every client and every
+-- service reads the same way:
+--
+--     WorldPhase        "Day" or "Night"
+--     WorldPhaseEndsAt  workspace:GetServerTimeNow() of the next change
+--     WorldCycleIndex   bumped at every dawn
+--
+-- A countdown is a SUBTRACTION, not a broadcast. The client works out the number
+-- on its own clock from the deadline, so a seven-minute day costs three
+-- attribute writes rather than 420 remote calls per player, and a player who
+-- joins at 03:12 is correct on their first frame with nothing sent to them.
+--
+-- Nothing reads this off a client. The client is told; it never asks and it is
+-- never believed.
+--==============================================================================
+GameConfig.WorldCycle = {
+	DaySeconds = 420,
+	NightSeconds = 60,
+	-- How long before dusk the HUD starts saying so.
+	WarnSeconds = 45,
+
+	PhaseDay = "Day",
+	PhaseNight = "Night",
+
+	--==========================================================================
+	-- THE ROAD IS SHUT BY A WALL, NOT BY THE DARK
+	--
+	-- Darkness and fog are a LOOK, and a look is not a rule: a player can turn
+	-- their graphics down, and anybody who does would be able to see straight
+	-- down a corridor that is supposed to be closed. The barrier is a real part
+	-- across the mouth -- opaque and collidable at night, invisible and
+	-- non-collidable by day -- so concealment does not depend on how somebody
+	-- has their settings.
+	--
+	-- It is also why the nests are EMPTIED at dusk rather than merely hidden.
+	-- Nothing waits behind it to be revealed.
+	--==========================================================================
+	Barrier = {
+		Name = "Nightfall",
+		-- Thin, but thick enough that a fast player cannot end a frame inside it.
+		Thickness = 4,
+		-- Above the corridor walls, so there is no gap to see over from the
+		-- field or to hop across.
+		HeightPad = 14,
+		-- Wider than the corridor by a wall thickness on each side, so there is
+		-- no seam at the wall line.
+		WidthPad = 24,
+		Colour = Color3.fromRGB(18, 22, 46),
+		--======================================================================
+		-- FULLY OPAQUE, AND 0.08 WAS NOT
+		--
+		-- It was 0.08 on the theory that a hint of the road beyond reads as
+		-- "shut" rather than as the world ending. Measured in a playtest, and it
+		-- leaked: the biome arch's name plate is a SurfaceGui with
+		-- LightInfluence = 0, so it is drawn at FULL brightness regardless of
+		-- the night lighting, and eight percent of full brightness against a
+		-- black corridor is perfectly legible. "Greenhollow" was floating in the
+		-- middle of a wall that is supposed to be opaque.
+		--
+		-- Anything unlit behind this would do the same, which is the general
+		-- form of the bug: a barrier that is nearly opaque conceals things in
+		-- proportion to how dark they happen to be, and unlit UI is never dark.
+		-- Concealment cannot be a matter of degree.
+		--======================================================================
+		NightTransparency = 0,
+	},
+
+	--==========================================================================
+	-- NIGHT IS BLUE, NOT BLACK
+	--
+	-- The plots stay usable: people plant, harvest and stand on their mills
+	-- through the night, and a night that made their own garden unreadable would
+	-- be a night they wait out staring at a wall. Every one of these is a target
+	-- for the CLIENT to tween towards -- the server never touches Lighting, so
+	-- the transition costs nothing and cannot desync anybody.
+	--
+	-- Dawn restores MapService's exact daytime values, which are captured once
+	-- rather than typed here, so the two can never drift apart.
+	--==========================================================================
+	Night = {
+		ClockTime = 0,
+		Brightness = 1.1,
+		Ambient = Color3.fromRGB(58, 66, 96),
+		OutdoorAmbient = Color3.fromRGB(66, 78, 116),
+		EnvironmentDiffuseScale = 0.7,
+		ExposureCompensation = 0.25,
+		FadeSeconds = 3.0,
 	},
 }
 
@@ -1543,6 +1676,23 @@ do
 		assert(anchors[i][2] > anchors[i - 1][2],
 			string.format("Speed anchor %d walks slower than the one before it", i))
 	end
+end
+
+--==============================================================================
+-- IS IT DAY
+--
+-- Here rather than in the cycle service, and read straight off the attribute,
+-- because CarryService and BiomeGateService both need the answer and both run
+-- BEFORE the service that sets it. Requiring it from them would be a cycle:
+-- WorldCycleService already requires both of them.
+--
+-- UNSET MEANS DAY. A server whose cycle service failed to start, or one in the
+-- moments before Init, is a server where the game works -- not one where every
+-- pod is unreachable and nobody can find out why.
+--==============================================================================
+function GameConfig.isDay(): boolean
+	local phase = workspace:GetAttribute(GameConfig.Attributes.WorldPhase)
+	return phase ~= GameConfig.WorldCycle.PhaseNight
 end
 
 --==============================================================================

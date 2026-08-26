@@ -667,6 +667,67 @@ end
 -- throws, and even reading it can error -- so it stays a manual place setting
 -- and every read of it is wrapped.
 --==============================================================================
+-- THE NIGHTFALL BARRIER
+--
+-- One part across the mouth of the road, at the field's front edge, which is
+-- also biome one's near plane. Invisible and walk-through by day; opaque and
+-- solid at night.
+--
+-- A WALL RATHER THAN DARKNESS, because darkness is a LOOK and a look is not a
+-- rule. A player can turn their graphics down, disable shadows, or simply have a
+-- brighter monitor, and any of those would let them see down a corridor that is
+-- supposed to be shut. This does not depend on how anybody has their settings.
+--
+-- It is deliberately NOT the only thing stopping them: BiomeGateService puts
+-- anybody past the plane back in the field ten times a second. The barrier is
+-- what you can see; the gate is what is enforced. A wall alone can be clipped
+-- through at 150 WalkSpeed, and a rule alone is invisible.
+--
+-- BUILT WITH THE MAP, so it is re-run safe for free -- MapService.Init destroys
+-- the whole SeedMap folder and builds it again, which is the project's answer
+-- to Rule 10 everywhere else and needs no special case here.
+--==============================================================================
+local function buildNightBarrier(parent: Instance): BasePart
+	local CYCLE = GameConfig.WorldCycle
+	local B = CYCLE.Barrier
+	local Y = MAP.GroundY
+	local height = MAP.WallHeight + B.HeightPad
+
+	local barrier = build({
+		name = B.Name,
+		size = Vector3.new(MAP.CorridorWidth + B.WidthPad, height, B.Thickness),
+		--==================================================================
+		-- IT ENDS ON THE PLANE, IT DOES NOT SIT ON IT
+		--
+		-- Centring it on -FieldFront put it EXACTLY where the biome arch already
+		-- is -- the arch is built at the same nearZ, four studs deep, same as
+		-- this -- so the two were coplanar and the gate's name plate z-fought
+		-- its way through a wall that is supposed to be opaque. Seen in a
+		-- playtest: "Greenhollow" legible in the middle of a black screen.
+		--
+		-- Offset by half its thickness toward the FIELD, so its far face lands
+		-- on the plane and its near face is the first thing anybody meets. The
+		-- gate rule is still the plane; this now fills the last two studs up to
+		-- it and hides the arch behind it rather than fighting with it.
+		--==================================================================
+		cframe = CFrame.new(0, Y + height * 0.5, -MAP.FieldFront + B.Thickness * 0.5),
+		color = B.Colour,
+		material = Enum.Material.SmoothPlastic,
+		studs = false,
+		parent = parent,
+	})
+	-- Day is the state a fresh map is in, because a fresh server starts in Day.
+	barrier.Transparency = 1
+	barrier.CanCollide = false
+	barrier.CanTouch = false
+	barrier.CanQuery = false
+	barrier.Anchored = true
+	barrier.CastShadow = false
+	CollectionService:AddTag(barrier, GameConfig.Tags.NightBarrier)
+	return barrier
+end
+
+--==============================================================================
 local function applyLighting()
 	local Lighting = game:GetService("Lighting")
 	-- Midday. The reference game is relentlessly bright, and for a game whose
@@ -1025,6 +1086,11 @@ function MapService.Init()
 	-- After the plots, so the beds are placed around them rather than under.
 	MapDecor.dressField(props)
 
+	--== THE ROAD'S SHUTTER ==--
+	-- After the props, so it is the last thing at the mouth and nothing dressed
+	-- afterwards can be left standing in front of it.
+	buildNightBarrier(props)
+
 	--== LANES ==--
 	local lanes = Instance.new("Folder")
 	lanes.Name = MAP.LanesFolderName
@@ -1097,6 +1163,36 @@ end
 --==============================================================================
 -- READ API
 --==============================================================================
+
+--==============================================================================
+-- OPEN AND SHUT
+--
+-- Server-owned, both properties. The night LIGHTING is the client's job and is
+-- animated there, but concealment is a rule and a rule cannot be left to
+-- whoever is rendering it -- a client that skipped the fade would be a client
+-- that could see down the road.
+--==============================================================================
+function MapService.SetNightBarrier(closed: boolean)
+	local barrier = MapService.GetNightBarrier()
+	if not barrier then
+		return false
+	end
+	local B = GameConfig.WorldCycle.Barrier
+	barrier.Transparency = if closed then B.NightTransparency else 1
+	barrier.CanCollide = closed
+	barrier.CanQuery = closed
+	return true
+end
+
+function MapService.GetNightBarrier(): BasePart?
+	for _, part in ipairs(CollectionService:GetTagged(GameConfig.Tags.NightBarrier)) do
+		if part:IsA("BasePart") and part.Parent then
+			return part
+		end
+	end
+	return nil
+end
+
 function MapService.GetMap(): Folder?
 	return mapFolder
 end

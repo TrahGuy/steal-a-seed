@@ -59,6 +59,7 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+local CarryService = require(script.Parent:WaitForChild("CarryService"))
 
 local BiomeGateService = {}
 -- After PlayerDataService (20), which owns the record this reads and raises.
@@ -158,10 +159,32 @@ local function step(player: Player, now: number)
 			GameConfig.compact(if biome then biome.SpeedGate else 0)))
 	end
 
-	local allowed = math.floor(profile.HighestBiomeOrder or 1)
-	if player:GetAttribute(ATTR.HighestBiomeOrder) ~= allowed then
-		player:SetAttribute(ATTR.HighestBiomeOrder, allowed)
+	--==========================================================================
+	-- THE RECORD IS WHAT THE HUD SHOWS. THE NIGHT IS WHAT THE GATE ENFORCES.
+	--
+	-- Published unchanged, because it is a permanent fact about the player and
+	-- night does not take biomes away from anybody -- a HUD that showed
+	-- Starbloom locked at 00:30 would be telling a player they had lost
+	-- something.
+	--==========================================================================
+	local earnedOrder = math.floor(profile.HighestBiomeOrder or 1)
+	if player:GetAttribute(ATTR.HighestBiomeOrder) ~= earnedOrder then
+		player:SetAttribute(ATTR.HighestBiomeOrder, earnedOrder)
 	end
+
+	--==========================================================================
+	-- AT NIGHT THE ROAD IS SHUT TO EVERYBODY
+	--
+	-- Order ZERO -- the field -- for every player regardless of what they have
+	-- unlocked. Not a separate night loop: this is the same poll that already
+	-- runs ten times a second, with one number changed, which is why closing the
+	-- road costs nothing and cannot be out of step with the gate that opens it.
+	--
+	-- The barrier at the mouth is the visible wall and this is the rule. Both,
+	-- because a wall can be clipped through at speed and a rule cannot be seen.
+	--==========================================================================
+	local night = not GameConfig.isDay()
+	local allowed = if night then 0 else earnedOrder
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -205,6 +228,22 @@ local function step(player: Player, now: number)
 		Vector3.new(at.X, at.Y, stop + 1))
 	root.AssemblyLinearVelocity = Vector3.zero
 
+	--==========================================================================
+	-- CAUGHT INSIDE AT NIGHTFALL COSTS YOU THE POD
+	--
+	-- Only at night, and only the ACTIVE CARRY. A daytime push-back at a gate
+	-- you cannot pass keeps everything -- that is a wall, not a punishment --
+	-- but a night ejection carries you home for free, and the walk home IS the
+	-- price of the pod. Without this the last minute of every day would be the
+	-- only sensible time to raid the far end of the road.
+	--
+	-- CarryService owns what "the active carry" means and what it is safe to
+	-- destroy; this only says when.
+	--==========================================================================
+	if night then
+		CarryService.ForfeitCarry(player)
+	end
+
 	local last = lastNotice[player] or 0
 	if now - last >= GATE.NoticeCooldown then
 		lastNotice[player] = now
@@ -216,6 +255,30 @@ local function step(player: Player, now: number)
 				GameConfig.compact(profile.Speed)))
 		end
 	end
+end
+
+--==============================================================================
+-- ONE TICK, ON DEMAND
+--
+-- The poll below already does this ten times a second. WorldCycleService calls
+-- it at the instant the road shuts so the ejection happens on THAT frame rather
+-- than up to a tenth of a second later -- which matters because the ejection
+-- also forfeits a carry, and a player should lose it to the rule changing, not
+-- to a timer catching up.
+--
+-- It is this function and not a copy of it in the cycle service, so there is one
+-- definition of where the safe side of the entrance is.
+--==============================================================================
+function BiomeGateService.SweepNow(): number
+	local now = os.clock()
+	local touched = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		local ok = pcall(step, player, now)
+		if ok then
+			touched += 1
+		end
+	end
+	return touched
 end
 
 --==============================================================================

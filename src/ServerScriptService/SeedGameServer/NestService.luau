@@ -73,10 +73,17 @@ type Nest = {
 	humanoid: Humanoid,
 	root: BasePart,
 	folder: Folder,
-	-- Pod slot -> the pod model standing in it, or nil while it regrows.
+	--==========================================================================
+	-- A SLOT IS FULL OR IT IS EMPTY UNTIL DAWN
+	--
+	-- There was a `regrowAt` here and a 22-second timer per slot, which meant a
+	-- nest was never actually empty: take a pod, wait, take it again. Clearing a
+	-- ring meant nothing, and the scarcity the whole road is built around
+	-- existed on the map rather than in the game. Emptied stays emptied; the
+	-- world cycle refills every slot at dawn and never in between.
+	--==========================================================================
 	slots: { CFrame },
 	pods: { [number]: Model? },
-	regrowAt: { [number]: number },
 	state: string,
 	target: Player?,
 	stateUntil: number,
@@ -110,9 +117,6 @@ local PARENT_HEIGHT = 15
 --==============================================================================
 local NEST_RADIUS = 16
 local TICK = 0.12
--- How long a taken pod stays gone. Long enough that clearing a nest means
--- something, short enough that a player coming back finds it alive.
-local REGROW_SECONDS = 22
 
 local function log(message: string)
 	print("[Seed/NestService] " .. message)
@@ -170,7 +174,6 @@ local function growPod(nest: Nest, index: number)
 		end
 	end
 	nest.pods[index] = pod
-	nest.regrowAt[index] = 0
 end
 
 local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
@@ -204,7 +207,6 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		folder = folder,
 		slots = podCFrames(centre, biome.PodsPerNest, outward),
 		pods = {},
-		regrowAt = {},
 		state = "asleep",
 		target = nil,
 		stateUntil = 0,
@@ -281,8 +283,8 @@ function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 				-- Somebody else already took it this frame.
 				return nil
 			end
+			-- Empty for the rest of the day. Nothing schedules it back.
 			nest.pods[slot] = nil
-			nest.regrowAt[slot] = os.clock() + REGROW_SECONDS
 			pod:Destroy()
 			provoke(nest, thief)
 			return SeedData.Get(speciesId)
@@ -692,13 +694,6 @@ local function step(nest: Nest, now: number)
 		nest.calmSince = 0
 	end
 
-	--== REGROWTH ==--
-	for slot, at in pairs(nest.regrowAt) do
-		if at > 0 and now >= at and not nest.pods[slot] then
-			growPod(nest, slot)
-		end
-	end
-
 	if nest.busy then
 		return
 	end
@@ -801,6 +796,104 @@ local function step(nest: Nest, now: number)
 		end
 		nest.humanoid:MoveTo(home)
 	end
+end
+
+--==============================================================================
+-- WHAT THE WORLD CYCLE DOES TO A NEST
+--
+-- Three calls, all from WorldCycleService and nowhere else. They are here rather
+-- than there because a nest's pods, its parent's state machine and its rage all
+-- live in this file, and a cycle service reaching into `nests` would be a second
+-- owner of the same table.
+--
+-- None of them touch anything a PLAYER owns. A banked pod is a Tool in a
+-- Backpack, a planted creature belongs to PlantService, and neither is reachable
+-- from here -- which is the property that makes a nightly wipe safe to run.
+--==============================================================================
+
+--==============================================================================
+-- DUSK: EVERYTHING IN THE RING GOES
+--
+-- Not hidden -- destroyed. The barrier at the road mouth is what stops anybody
+-- SEEING down the corridor, and if pods were merely concealed behind it then
+-- dawn would be a curtain going up on last night's leftovers, and a player who
+-- cleared a nest at 06:59 would find it full again at 00:01 without a batch
+-- having been rolled.
+--==============================================================================
+function NestService.ClearForNight(): number
+	local removed = 0
+	for _, nest in ipairs(nests) do
+		for slot, pod in pairs(nest.pods) do
+			if pod and pod.Parent then
+				pod:Destroy()
+				removed += 1
+			end
+			nest.pods[slot] = nil
+		end
+	end
+	return removed
+end
+
+--==============================================================================
+-- DUSK: EVERY PARENT GOES HOME AND FORGETS
+--
+-- Put back at its ORIGIN rather than walked there: a parent halfway down the
+-- road when the lights go out would spend the night pathing home past a barrier
+-- it cannot cross, and a player standing in the field would watch a monster
+-- jog at the wall for a minute.
+--
+-- Rage is cleared outright here, which is the one place that happens. It
+-- normally FADES on a timer -- see GameConfig.Parent.RageForgetSeconds -- so
+-- that coming back for the pod you dropped is not free. A night is long enough
+-- that the fade would have finished anyway, and carrying yesterday's grudge
+-- into a freshly stocked nest would punish the player who is first through the
+-- gate at dawn for something that happened to somebody else.
+--==============================================================================
+function NestService.ResetParents(): number
+	local reset = 0
+	for _, nest in ipairs(nests) do
+		nest.busy = false
+		if nest.target then
+			lastTargetAt[nest.target] = nil
+		end
+		nest.target = nil
+		nest.rage = 0
+		nest.calmSince = 0
+		nest.state = "asleep"
+		nest.stateUntil = 0
+		if nest.root.Parent then
+			nest.humanoid.WalkSpeed = 0
+			nest.root.CFrame = CFrame.new(nest.origin)
+			nest.root.AssemblyLinearVelocity = Vector3.zero
+		end
+		nest.parent:SetAttribute("Asleep", true)
+		reset += 1
+	end
+	return reset
+end
+
+--==============================================================================
+-- DAWN: ONE BATCH, EVERY SLOT, ONCE
+--
+-- Returns what it actually built so the caller can prove the batch exists before
+-- it opens the road. "Stocked the nests" is a claim; "15 of 15" is a fact, and
+-- the difference matters at the one moment the game is deciding whether players
+-- are allowed back in.
+--==============================================================================
+function NestService.StockAll(): (number, number)
+	local built, wanted = 0, 0
+	for _, nest in ipairs(nests) do
+		for index = 1, nest.biome.PodsPerNest do
+			wanted += 1
+			if not nest.pods[index] then
+				growPod(nest, index)
+			end
+			if nest.pods[index] then
+				built += 1
+			end
+		end
+	end
+	return built, wanted
 end
 
 --==============================================================================
@@ -930,6 +1023,30 @@ function NestService.Provoke(nestId: string, thief: Player): boolean
 		end
 	end
 	return false
+end
+
+--==============================================================================
+-- HOW MANY PODS ARE STANDING, AND HOW MANY SHOULD BE
+--
+-- Counted from the models rather than from the table, because the question being
+-- asked is "what is in the world", and a table that disagreed with the world is
+-- exactly the bug this would be used to find.
+--==============================================================================
+function NestService.PodCount(): (number, number)
+	local live, capacity = 0, 0
+	for _, nest in ipairs(nests) do
+		capacity += nest.biome.PodsPerNest
+		for _, pod in pairs(nest.pods) do
+			if pod and pod.Parent then
+				live += 1
+			end
+		end
+	end
+	return live, capacity
+end
+
+function NestService.NestCount(): number
+	return #nests
 end
 
 function NestService.Snapshot(): string

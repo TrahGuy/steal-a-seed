@@ -357,6 +357,24 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	if player.Parent ~= Players then
 		return false
 	end
+	--==========================================================================
+	-- NOTHING IS TAKEN AFTER DARK
+	--
+	-- FIRST, above every other refusal, because this is the one that has to win
+	-- a race. Dusk sets the phase before it closes the road or clears the nests,
+	-- so a hold that completes on the exact frame the lights go out is refused
+	-- here rather than half-succeeding into a world that is being torn down
+	-- around it -- which is how a player ends up holding a pod that no longer
+	-- has a nest, a slot, or a parent to annoy.
+	--
+	-- Covers loose pods as well as nest pods, because both arrive here. That is
+	-- deliberate: a wild pod lying on the road at dusk is about to be destroyed,
+	-- and letting somebody scoop it at 00:00 would be a free pod for standing in
+	-- the right place rather than for making the run.
+	--==========================================================================
+	if not GameConfig.isDay() then
+		return false
+	end
 	-- THE SERVER IS THE AUTHORITY. The client hides the prompt while you are
 	-- carrying, and this refuses anyway: hiding a prompt is a courtesy, not a
 	-- rule, and a rule enforced only on the client is not a rule.
@@ -919,6 +937,42 @@ local function bank(player: Player): boolean
 		(player:GetAttribute(ATTR.BankedCount) or 0) + 1)
 	log(string.format("%s banked a %s (%d kg).", player.Name, species.Name, kg))
 	return true
+end
+
+--==============================================================================
+-- THE NIGHT EJECTION FORFEIT
+--
+-- A player caught inside a biome at nightfall is moved to the safe side of the
+-- road entrance. Without this, that is a FREE EXTRACTION: stand deep in
+-- Starbloom holding a 9,000 kg pod, wait for the clock, and the game carries you
+-- home past every parent and every rival on the road. The run is the price of
+-- the pod, and a night that paid it for you would make the last minute of every
+-- day the only sensible time to raid.
+--
+-- SCOPED AS NARROWLY AS IT IS POSSIBLE TO SCOPE IT. It destroys ONE thing: the
+-- pod model welded to this player right now. It does not touch the Backpack, so
+-- every banked pod and every hatched creature is untouched; it does not touch
+-- the plot, so nothing planted is at risk; and it cannot run at all on somebody
+-- who is not carrying. Those are the three kinds of property a player can lose
+-- for real, and none of them is reachable from here.
+--
+-- Returns what was forfeited so the caller can say so rather than guess.
+--==============================================================================
+function CarryService.ForfeitCarry(player: Player): (string?, number)
+	local held = carried[player]
+	if not held then
+		return nil, 0
+	end
+	local speciesId, kg = held.species.Id, held.kg
+	if held.model and held.model.Parent then
+		held.model:Destroy()
+	end
+	carried[player] = nil
+	publish(player)
+	CarryService.RefreshWalkSpeed(player)
+	log(string.format("%s forfeited a %d kg %s: caught inside a biome at nightfall.",
+		player.Name, kg, held.species.Name))
+	return speciesId, kg
 end
 
 --==============================================================================
