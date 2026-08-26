@@ -38,6 +38,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local SaveService = require(script.Parent:WaitForChild("SaveService"))
 local ProfileSchema = require(script.Parent:WaitForChild("ProfileSchema"))
+local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 
 local SAVE = GameConfig.Save
 
@@ -123,7 +124,36 @@ function PlayerDataService.AddSpeed(player: Player, amount: number): number?
 	end
 	entry.profile.Speed = math.clamp(entry.profile.Speed + amount, 0, SAVE.MaxSpeedScore)
 	touch(player)
+	PlayerDataService.PublishSpeedTier(player)
 	return entry.profile.Speed
+end
+
+--==============================================================================
+-- HOW FAST THIS PLAYER LOOKS, TO EVERYBODY ELSE
+--
+-- One small integer rather than the score itself, deliberately: every OTHER
+-- client needs to know which ghost to draw, not how rich you are. The score
+-- stays in the profile packet, which only its owner ever receives.
+--
+-- ON LOAD AS WELL AS ON EARNING, and that is not belt-and-braces -- it was a bug
+-- caught in a live session. Published only from AddSpeed, the attribute did not
+-- exist until the player's first payout, so somebody rejoining with forty
+-- trillion Speed had NO ghosts until they next stood on a mill. The attribute
+-- has to describe the profile, not the last thing that happened to it.
+--
+-- Written only when it actually changes: AddSpeed runs once a second per player
+-- on a belt, and an attribute write per tick replicates to every client in the
+-- server for a number that moves four times a session.
+--==============================================================================
+function PlayerDataService.PublishSpeedTier(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local tier = GameConfig.speedVisualTierFor(entry.profile.Speed)
+	if player:GetAttribute(GameConfig.Attributes.SpeedVisualTier) ~= tier then
+		player:SetAttribute(GameConfig.Attributes.SpeedVisualTier, tier)
+	end
 end
 
 --==============================================================================
@@ -215,6 +245,55 @@ function PlayerDataService.SetMillTier(player: Player, tier: number): boolean
 		return false
 	end
 	entry.profile.MillTier = clamped
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- THE OVERCLOCK
+--
+-- Set rather than incremented, and clamped to the ladder's length, so a caller
+-- that computes the next level wrongly cannot walk a player past the top of it.
+-- Returns false when nothing changed, which is what keeps a repeated purchase
+-- from dirtying the save.
+--==============================================================================
+function PlayerDataService.SetMillOverclock(player: Player, level: number): boolean
+	local entry = entries[player]
+	if not entry or type(level) ~= "number" or level ~= level then
+		return false
+	end
+	local clamped = math.floor(math.clamp(level, 0, GameConfig.Mill.Overclock.MaxLevel))
+	if entry.profile.MillOverclock == clamped then
+		return false
+	end
+	entry.profile.MillOverclock = clamped
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- THE BIOME HIGH-WATER MARK
+--
+-- RAISES ONLY. Not a setter with a clamp -- a setter that can also go DOWN is
+-- one bad caller away from taking Starbloom off somebody, and there is no
+-- legitimate reason for this number to fall. If rebirth ever wants to reset it,
+-- that is a different function with a different name and a deliberate one.
+--
+-- A mutation method rather than the gate reaching into the profile table: this
+-- is where the clamp, the no-op check and the dirty flag live, and a caller that
+-- wrote entry.profile.HighestBiomeOrder directly would skip all three and its
+-- unlock would silently fail to save.
+--==============================================================================
+function PlayerDataService.RaiseHighestBiome(player: Player, order: number): boolean
+	local entry = entries[player]
+	if not entry or type(order) ~= "number" or order ~= order then
+		return false
+	end
+	local want = math.floor(math.clamp(order, 1, #BiomeData.Biomes))
+	if want <= entry.profile.HighestBiomeOrder then
+		return false
+	end
+	entry.profile.HighestBiomeOrder = want
 	touch(player)
 	return true
 end
@@ -317,6 +396,20 @@ local function onPlayerAdded(player: Player)
 			dirty = status == "new",
 			loadedAt = os.clock(),
 		}
+		--======================================================================
+		-- THE TIER IS RIGHT FROM THE FIRST FRAME, AND STAYS RIGHT
+		--
+		-- ON LOAD, so a rejoining player at a hundred trillion looks like it
+		-- immediately rather than after their next payout. AND ON EVERY
+		-- RESPAWN: the attribute lives on the Player and does survive a death,
+		-- but the client rebuilds its whole ghost pool against the new rig, and
+		-- re-stating the tier at that moment is one attribute write that removes
+		-- any question about which of the two happened first.
+		--======================================================================
+		PlayerDataService.PublishSpeedTier(player)
+		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
+			PlayerDataService.PublishSpeedTier(player)
+		end))
 
 		if not persistent then
 			warn(string.format(

@@ -32,6 +32,7 @@ local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameCon
 -- naming a species that no longer exists is dropped rather than carried, which
 -- is the same rule every other field here follows.
 local SeedData = require(SeedGame:WaitForChild("Shared"):WaitForChild("SeedData"))
+local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
@@ -45,6 +46,27 @@ export type Profile = {
 	-- kept beside it on purpose: one number, owned by the server, that decides
 	-- what gets built on YOUR ground.
 	MillTier: number,
+	--==========================================================================
+	-- HOW HARD THAT MILL IS BEING RUN
+	--
+	-- Separate from MillTier because it is a separate purchase and because the
+	-- tier ladder ENDS -- seven mills, seven models -- while this one continues.
+	-- Saved rather than derived: it is bought with cash and losing it to a bad
+	-- load would be losing hours.
+	--==========================================================================
+	MillOverclock: number,
+	--==========================================================================
+	-- THE DEEPEST BIOME THIS PLAYER HAS EVER EARNED
+	--
+	-- A HIGH-WATER MARK, not a current state. The gate is opened by Speed score,
+	-- and a future rebirth will set Speed back to zero -- so a gate that read the
+	-- live score would confiscate every biome the player has already worked for,
+	-- at the exact moment the game asked them to start again. That would make
+	-- rebirth a punishment, which is the one thing it must never be.
+	--
+	-- Only ever raised. Nothing in the game lowers it.
+	--==========================================================================
+	HighestBiomeOrder: number,
 	-- Filled by PlantService when it exists. Present from v1 so the shape of a
 	-- saved profile does not change on the day it starts being used.
 	Plants: { any },
@@ -98,6 +120,11 @@ function ProfileSchema.Default(): Profile
 		Speed = 0,
 		PlotTier = GameConfig.StartingPlotTier,
 		MillTier = GameConfig.Mill.StartingTier,
+		MillOverclock = 0,
+		-- Greenhollow is on record from the first second. It is the biome the
+		-- spawn is in, and a player who could be pushed out of it would have
+		-- nowhere legal to stand.
+		HighestBiomeOrder = 1,
 		Plants = {},
 		Held = {},
 		Almanac = {},
@@ -138,6 +165,18 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		number(raw.PlotTier, GameConfig.StartingPlotTier, 1, #GameConfig.PlotTiers))
 	p.MillTier = math.floor(
 		number(raw.MillTier, GameConfig.Mill.StartingTier, 1, #GameConfig.Mill.Tiers))
+	--==========================================================================
+	-- BOTH NEW FIELDS MIGRATE BY BEING ABSENT
+	--
+	-- `number` already answers "not a number, or out of range" with the default,
+	-- so a v1 save written before either field existed reads nil and lands on
+	-- overclock 0 and Greenhollow -- which is exactly the state such a player is
+	-- in. No version bump, no migration pass, no branch.
+	--==========================================================================
+	p.MillOverclock = math.floor(
+		number(raw.MillOverclock, 0, 0, GameConfig.Mill.Overclock.MaxLevel))
+	p.HighestBiomeOrder = math.floor(
+		number(raw.HighestBiomeOrder, 1, 1, #BiomeData.Biomes))
 	p.CreatedAt = math.floor(number(raw.CreatedAt, p.CreatedAt, 0, MAX_TIME))
 	p.LastSeen = math.floor(number(raw.LastSeen, p.LastSeen, 0, MAX_TIME))
 

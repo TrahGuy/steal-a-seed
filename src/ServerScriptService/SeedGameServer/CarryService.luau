@@ -126,6 +126,29 @@ function CarryService.TotalKg(player: Player): number
 end
 
 function CarryService.RefreshWalkSpeed(player: Player)
+	--==========================================================================
+	-- WHAT THE WEIGHT IS DOING TO THEM, PUBLISHED
+	--
+	-- The SAME multiplier this function applies to WalkSpeed, on the player as an
+	-- attribute, so every client can see how loaded every other player is without
+	-- being handed a profile and without ever being asked.
+	--
+	-- IT MUST BE THIS NUMBER AND NOT A RE-DERIVED ONE. A client that computed it
+	-- from a replicated CarryingKg would be a client that could lie about it, and
+	-- the whole point is that the visuals cannot be talked out of slowing down.
+	--
+	-- Published FIRST, above the mount check, because a mounted player is still
+	-- holding whatever they were holding -- and coming off the belt must not be
+	-- the moment their weight suddenly starts counting again.
+	--
+	-- Written only on a real change: this runs on every carry event and every
+	-- respawn, and an unchanged attribute rewritten is replication for nothing.
+	--==========================================================================
+	local multiplier = GameConfig.carryMultiplierFor(CarryService.TotalKg(player))
+	if player:GetAttribute(ATTR.CarrySpeedMultiplier) ~= multiplier then
+		player:SetAttribute(ATTR.CarrySpeedMultiplier, multiplier)
+	end
+
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
@@ -149,7 +172,7 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	end
 	local profile = PlayerDataService.Get(player)
 	local base = GameConfig.walkSpeedFor(if profile then profile.Speed else 0)
-	humanoid.WalkSpeed = base * GameConfig.carryMultiplierFor(CarryService.TotalKg(player))
+	humanoid.WalkSpeed = base * multiplier
 end
 
 --==============================================================================

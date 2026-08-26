@@ -616,6 +616,46 @@ end
 --==============================================================================
 -- ONE TICK OF ONE NEST
 --==============================================================================
+--==============================================================================
+-- THE GRAB IS SWEPT, BECAUSE 150 STUDS A SECOND IS 18 STUDS A TICK
+--
+-- The catch is a distance test -- correct, and not a Touched -- but it was
+-- sampled at the nest tick, and the two numbers do not fit each other:
+--
+--     GrabStuds  7        the radius a parent catches you inside
+--     TICK       0.12s    how often that radius is tested
+--     150 x 0.12 = 18     how far a capped player moves between two tests
+--
+-- So a fast player crossed the entire capture zone BETWEEN SAMPLES and was
+-- never once measured inside it. Not a rare race: at max speed it is the
+-- ordinary outcome, and it is worst exactly for the players the gates exist to
+-- create.
+--
+-- The fix is not a faster tick -- that is the same bug with a smaller window and
+-- eight times the cost. It is to stop testing a POINT and test the SEGMENT the
+-- player actually travelled: closest approach between the parent and the line
+-- from where the player was to where they are now. Exact at any speed, and it is
+-- one dot product.
+--==============================================================================
+local function distanceToSegment(point: Vector3, a: Vector3, b: Vector3): number
+	local ab = b - a
+	local len2 = ab:Dot(ab)
+	if len2 < 1e-6 then
+		-- Standing still: the segment is a point and this is the old test.
+		return (point - a).Magnitude
+	end
+	local t = math.clamp((point - a):Dot(ab) / len2, 0, 1)
+	return (point - (a + ab * t)).Magnitude
+end
+
+-- Where each chased player was at the previous tick. Keyed by player rather than
+-- by nest: a player can only be chased by one parent at a time, and this is
+-- cleared the moment they stop being a target.
+local lastTargetAt: { [Player]: Vector3 } = {}
+-- 150 WalkSpeed x 0.12s is 18 studs; double it so an ordinary hitch is still
+-- treated as travel and only a discontinuity is thrown away.
+local MAX_TICK_TRAVEL = 40
+
 local function targetPosition(player: Player?): Vector3?
 	if not player or player.Parent ~= Players then
 		return nil
@@ -631,6 +671,9 @@ end
 
 local function sleep(nest: Nest)
 	nest.state = "asleep"
+	if nest.target then
+		lastTargetAt[nest.target] = nil
+	end
 	nest.target = nil
 	-- Rage is NOT cleared here. It fades on a timer instead, because a parent
 	-- settles within a couple of seconds of throwing somebody while the pod it
@@ -685,10 +728,35 @@ local function step(nest: Nest, now: number)
 			nest.target = nil
 			return
 		end
-		local flat = Vector3.new(pos.X - nest.root.Position.X, 0, pos.Z - nest.root.Position.Z)
-		-- CONTACT. Not a grab -- there is no hold any more, reaching the player
-		-- is the hit.
-		if flat.Magnitude <= P.GrabStuds then
+		--==================================================================
+		-- CONTACT. Not a grab -- there is no hold any more, reaching the
+		-- player is the hit.
+		--
+		-- Measured against the whole path the player covered since the last
+		-- tick, flattened to the ground plane so a jump does not read as
+		-- distance. See distanceToSegment above for why the point test was
+		-- not enough.
+		--==================================================================
+		local here = Vector3.new(pos.X, 0, pos.Z)
+		local was = lastTargetAt[nest.target :: Player] or here
+		--==============================================================
+		-- A SEGMENT THIS LONG WAS NOT ONE TICK OF RUNNING
+		--
+		-- The last sample can be stale -- a chase that ended and restarted,
+		-- a respawn, a throw, a gate pushing somebody back. Sweeping from
+		-- there to here would be a line across half the map, and everything
+		-- it passed near would count as a hit.
+		--
+		-- The ceiling is the furthest a capped player can cover in a tick,
+		-- with room to spare. Past it the sample is discarded and this tick
+		-- is the plain point test it always was.
+		--==============================================================
+		if (here - was).Magnitude > MAX_TICK_TRAVEL then
+			was = here
+		end
+		lastTargetAt[nest.target :: Player] = here
+		local parentFlat = Vector3.new(nest.root.Position.X, 0, nest.root.Position.Z)
+		if distanceToSegment(parentFlat, was, here) <= P.GrabStuds then
 			local victim = nest.target
 			nest.busy = true
 			task.spawn(function()
@@ -744,6 +812,8 @@ function NestService.Init()
 		c:Disconnect()
 	end
 	table.clear(serviceConnections)
+	-- Rule 10. Sweep samples belong to a chase that no longer exists.
+	table.clear(lastTargetAt)
 	for _, nest in ipairs(nests) do
 		if nest.folder.Parent then
 			nest.folder:Destroy()
@@ -753,6 +823,11 @@ function NestService.Init()
 end
 
 function NestService.Start()
+	-- A player who leaves mid-chase would otherwise hold a Vector3 forever.
+	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player: Player)
+		lastTargetAt[player] = nil
+	end))
+
 	--==========================================================================
 	-- THE VICTIM'S ANSWER
 	--

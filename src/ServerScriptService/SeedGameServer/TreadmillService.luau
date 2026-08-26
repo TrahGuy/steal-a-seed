@@ -47,6 +47,7 @@ local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local MillModel = require(Shared:WaitForChild("MillModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local BiomeData = require(Shared:WaitForChild("BiomeData"))
 
 local MILL = GameConfig.Treadmill
 local LADDER = GameConfig.Mill
@@ -175,7 +176,7 @@ function TreadmillService.RateFor(player: Player): number
 	if not belt or not standingOn(root :: BasePart, belt) then
 		return 0
 	end
-	return TreadmillService.RateForTier(TreadmillService.TierOf(player))
+	return TreadmillService.RateOf(player)
 end
 
 --==============================================================================
@@ -194,6 +195,75 @@ end
 function TreadmillService.RateForTier(tier: number): number
 	local spec = LADDER.Tiers[math.clamp(math.floor(tier), 1, #LADDER.Tiers)]
 	return if spec then spec.speed else MILL.SpeedPerSecond
+end
+
+function TreadmillService.OverclockOf(player: Player): number
+	local profile = PlayerDataService.Get(player)
+	local level = profile and tonumber(profile.MillOverclock) or 0
+	return math.clamp(math.floor(level), 0, LADDER.Overclock.MaxLevel)
+end
+
+--==============================================================================
+-- THE RATE IS A PRODUCT NOW, AND GameConfig OWNS THE PRODUCT
+--
+--     tier.speed  x  Multiplier^overclock  x  rebirth
+--
+-- Computed in GameConfig rather than here because the mill SIGN has to print
+-- the same number the payout pays, and a rate derived in two places is a sign
+-- that lies the first time either half is touched.
+--==============================================================================
+function TreadmillService.RateOf(player: Player): number
+	return GameConfig.trainingRateFor(
+		TreadmillService.TierOf(player),
+		TreadmillService.OverclockOf(player),
+		PlayerDataService.Get(player))
+end
+
+--==============================================================================
+-- WHICH OVERCLOCK LEVEL IS NEXT, AND WHETHER IT MAY BE BOUGHT
+--
+-- Three separate answers, deliberately, because the sign wants to say something
+-- different for each: there is no next level (the ladder is finished), there is
+-- one but this player has not reached the biome it needs, or there is one and
+-- it costs this much.
+--
+-- Checked against HighestBiomeOrder -- the PERMANENT record -- rather than the
+-- live Speed score. A future rebirth zeroes Speed, and an overclock that
+-- un-bought itself at that moment would make rebirth a punishment.
+--==============================================================================
+export type NextStep = {
+	kind: string,       -- "tier" | "overclock" | "max"
+	level: number?,     -- the tier or overclock level being sold
+	cost: number?,
+	locked: boolean,    -- true when it exists but the biome is not on record
+	needsOrder: number?,
+}
+
+function TreadmillService.NextStepFor(player: Player): NextStep
+	local tier = TreadmillService.TierOf(player)
+	if tier < #LADDER.Tiers then
+		return {
+			kind = "tier",
+			level = tier + 1,
+			cost = LADDER.Tiers[tier + 1].cost,
+			locked = false,
+		}
+	end
+	local level = TreadmillService.OverclockOf(player) + 1
+	local cost = GameConfig.overclockCostFor(level)
+	if not cost then
+		return { kind = "max", locked = false }
+	end
+	local needs = GameConfig.overclockUnlockOrderFor(level) or 1
+	local profile = PlayerDataService.Get(player)
+	local reached = profile and tonumber(profile.HighestBiomeOrder) or 1
+	return {
+		kind = "overclock",
+		level = level,
+		cost = cost,
+		locked = reached < needs,
+		needsOrder = needs,
+	}
 end
 
 --==============================================================================
@@ -460,6 +530,29 @@ local function tierOnPlot(plotId: number): number
 	return LADDER.StartingTier
 end
 
+--==============================================================================
+-- THE SIGN READS THE SAME STEP THE PURCHASE USES
+--
+-- It printed the tier ladder directly and said "MAX" at seven, which was true
+-- for about a week. Now it asks NextStepFor -- the one function that knows
+-- whether the next thing is a tier, an overclock, a locked overclock or nothing
+-- -- so the board and the till can never disagree about what is on sale.
+--
+-- Every number goes through GameConfig.compact, because an overclocked rate is
+-- 52,428,800 and a sign that prints that is a sign nobody reads.
+--==============================================================================
+local function ownerOfPlotId(plotId: number): Player?
+	-- PlotService maps a PLAYER to a plot and not the other way round, and six
+	-- players is not a search worth an index for.
+	for _, candidate in ipairs(Players:GetPlayers()) do
+		local plot = PlotService.PlotOf(candidate)
+		if plot and plot:GetAttribute(ATTR.PlotId) == plotId then
+			return candidate
+		end
+	end
+	return nil
+end
+
 local function refreshSign(plotId: number, tier: number)
 	local sign = signFor(plotId)
 	if not sign then
@@ -477,31 +570,74 @@ local function refreshSign(plotId: number, tier: number)
 	local prompt = board:FindFirstChildOfClass("ProximityPrompt")
 
 	local here = LADDER.Tiers[tier]
+	--==========================================================================
+	-- THE SIGN BELONGS TO A PLOT, AND A PLOT MAY HAVE NOBODY ON IT
+	--
+	-- The step is a fact about a PLAYER -- their cash, their overclock, the
+	-- biomes on their record -- and an empty plot has none of those. It falls
+	-- back to the tier ladder in that case, which is what it always showed.
+	--==========================================================================
+	local player = ownerOfPlotId(plotId)
 	local next_ = LADDER.Tiers[tier + 1]
+	local stepInfo = if player then TreadmillService.NextStepFor(player) else nil
+	local overclock = if player then TreadmillService.OverclockOf(player) else 0
+	local liveRate = if player
+		then TreadmillService.RateOf(player)
+		else GameConfig.trainingRateFor(tier, 0, nil)
 
 	if step then
-		step.Text = if next_
-			then string.format("LEVEL %d  >  LEVEL %d", tier, tier + 1)
-			else string.format("LEVEL %d", tier)
+		if stepInfo and stepInfo.kind == "overclock" then
+			step.Text = string.format("%s %d  >  %s %d",
+				string.upper(LADDER.Overclock.Label), overclock,
+				string.upper(LADDER.Overclock.Label), stepInfo.level)
+		elseif stepInfo and stepInfo.kind == "max" then
+			step.Text = string.format("%s %d  ·  MAX",
+				string.upper(LADDER.Overclock.Label), overclock)
+		else
+			step.Text = if next_
+				then string.format("LEVEL %d  >  LEVEL %d", tier, tier + 1)
+				else string.format("LEVEL %d", tier)
+		end
 	end
 	if rate then
-		rate.Text = if next_
-			then string.format("%g/s  >  %g/s", here.speed, next_.speed)
-			else string.format("%s  ·  %g/s", string.upper(here.name), here.speed)
+		if stepInfo and stepInfo.kind == "overclock" then
+			local after = GameConfig.trainingRateFor(tier, (stepInfo.level :: number),
+				if player then PlayerDataService.Get(player) else nil)
+			rate.Text = string.format("%s/s  >  %s/s",
+				GameConfig.compact(liveRate), GameConfig.compact(after))
+		elseif next_ then
+			rate.Text = string.format("%s/s  >  %s/s",
+				GameConfig.compact(liveRate), GameConfig.compact(next_.speed))
+		else
+			rate.Text = string.format("%s  ·  %s/s",
+				string.upper(here.name), GameConfig.compact(liveRate))
+		end
 	end
 	if price then
-		price.Text = if next_
-			then "$" .. GameConfig.compact(next_.cost)
-			else "MAX"
+		if stepInfo and stepInfo.locked then
+			local biome = BiomeData.Biomes[stepInfo.needsOrder or 1]
+			price.Text = string.upper(if biome then biome.DisplayName else "LOCKED")
+		elseif stepInfo and stepInfo.cost then
+			price.Text = "$" .. GameConfig.compact(stepInfo.cost)
+		elseif next_ then
+			price.Text = "$" .. GameConfig.compact(next_.cost)
+		else
+			price.Text = "MAX"
+		end
 	end
 	if buy then
-		buy.BackgroundColor3 = if next_
+		local sellable = if stepInfo
+			then (stepInfo.kind ~= "max" and not stepInfo.locked)
+			else next_ ~= nil
+		buy.BackgroundColor3 = if sellable
 			then Color3.fromRGB(214, 78, 66)
 			else Color3.fromRGB(96, 100, 108)
 	end
 	if prompt then
-		prompt.Enabled = next_ ~= nil
-		prompt.ObjectText = here.name
+		prompt.Enabled = if stepInfo then stepInfo.kind ~= "max" else next_ ~= nil
+		prompt.ObjectText = if stepInfo and stepInfo.kind == "overclock"
+			then LADDER.Overclock.Label
+			else here.name
 	end
 end
 
@@ -561,6 +697,62 @@ function TreadmillService.Upgrade(player: Player): boolean
 	if type(plotId) ~= "number" then
 		return false
 	end
+	--==========================================================================
+	-- ONE INTERACTION, TWO LADDERS
+	--
+	-- The prompt on the sign does not change and neither does the verb. Past
+	-- tier seven the same hold buys an OVERCLOCK instead, because a second
+	-- control for "make my mill better" is a second thing to find, explain and
+	-- fail to notice -- and the player's question at the sign is the same
+	-- question either side of tier seven.
+	--
+	-- The tier branch below is unchanged. Everything above it is new.
+	--==========================================================================
+	local step = TreadmillService.NextStepFor(player)
+	if step.kind == "max" then
+		return false
+	end
+	if step.kind == "overclock" then
+		local level = step.level :: number
+		local cost = step.cost :: number
+		if step.locked then
+			-- Reachable only by buying the biome the level needs. Refused here
+			-- as well as greyed on the sign, because a greyed sign is a
+			-- courtesy and this is the rule.
+			return false
+		end
+		local profile = PlayerDataService.Get(player)
+		if not profile or profile.Cash < cost then
+			return false
+		end
+		if not PlayerDataService.AddCash(player, -cost) then
+			return false
+		end
+		if not PlayerDataService.SetMillOverclock(player, level) then
+			-- Paid and not upgraded is the one outcome that must not stand.
+			PlayerDataService.AddCash(player, cost)
+			return false
+		end
+		--======================================================================
+		-- NO REBUILD. THE MILL IS THE SAME MACHINE RUNNING HARDER.
+		--
+		-- Rebuilding would destroy and re-make 300-odd parts to change a number
+		-- that is not on any of them, and would drop anybody standing on the
+		-- belt at the moment they bought the thing that pays them for standing
+		-- on it.
+		--======================================================================
+		refreshSign(plotId, TreadmillService.TierOf(player))
+		local belt = beltFor(plotId)
+		if belt then
+			SoundKit.emit("MillUpgrade", belt)
+		end
+		log(string.format("%s overclocked their mill to level %d (%s/s) for %s.",
+			player.Name, level,
+			GameConfig.compact(TreadmillService.RateOf(player)),
+			GameConfig.compact(cost)))
+		return true
+	end
+
 	local tier = TreadmillService.TierOf(player)
 	local next_ = LADDER.Tiers[tier + 1]
 	if not next_ then
@@ -708,6 +900,34 @@ function TreadmillService.Start()
 			end
 		end)
 	end))
+
+	--==========================================================================
+	-- A BIOME UNLOCK CHANGES WHAT THE SIGN IS SELLING
+	--
+	-- An overclock the player could not afford to unlock reads as the biome's
+	-- name in place of a price. The moment BiomeGateService writes a higher
+	-- HighestBiomeOrder that becomes a real purchase -- and without this the
+	-- board goes on saying DUSTBOWL until something unrelated repaints it.
+	--
+	-- Off the ATTRIBUTE rather than a call from the gate service. The gate
+	-- already publishes it for the HUD, an attribute change is a signal the
+	-- engine delivers for free, and the alternative is two services that have to
+	-- know about each other in order to repaint a board.
+	--==========================================================================
+	local function watchUnlocks(player: Player)
+		table.insert(serviceConnections,
+			player:GetAttributeChangedSignal(ATTR.HighestBiomeOrder):Connect(function()
+				local plot = PlotService.PlotOf(player)
+				local plotId = plot and plot:GetAttribute(ATTR.PlotId)
+				if type(plotId) == "number" then
+					refreshSign(plotId, TreadmillService.TierOf(player))
+				end
+			end))
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchUnlocks(player)
+	end
+	table.insert(serviceConnections, Players.PlayerAdded:Connect(watchUnlocks))
 
 	--==========================================================================
 	-- THE SIGN IS THE PRIMARY WAY IN

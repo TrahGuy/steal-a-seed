@@ -317,6 +317,35 @@ GameConfig.Attributes = {
 	-- anyway -- but so that every client can see who is training without a remote.
 	--==========================================================================
 	MillMounted = "MillMounted",
+	--==========================================================================
+	-- HOW FAST THIS PLAYER LOOKS, TO EVERY OTHER CLIENT
+	--
+	-- 0 for a trail only, 1..3 for the afterimage tiers. An ATTRIBUTE and not a
+	-- number in the profile packet, because the client that has to draw your
+	-- ghosts is everybody ELSE'S -- and their clients must never be handed your
+	-- profile to find out you are fast.
+	--
+	-- One small integer, replicated by the engine, meaningless on its own.
+	--==========================================================================
+	SpeedVisualTier = "SpeedVisualTier",
+	--==========================================================================
+	-- HOW MUCH THE LOAD IS COSTING THEM, 0.30 TO 1
+	--
+	-- Exactly the multiplier CarryService applies to WalkSpeed, published so the
+	-- afterimage can dim and thin itself on somebody ELSE'S screen. Server-owned
+	-- and never re-derived on the client: a client that computed this from a
+	-- replicated weight is a client that could lie about it, and the entire
+	-- purpose is that running home rich cannot be made to look fast.
+	--==========================================================================
+	CarrySpeedMultiplier = "CarrySpeedMultiplier",
+	--==========================================================================
+	-- THE DEEPEST BIOME THIS PLAYER HAS EVER EARNED
+	--
+	-- Published so the client can grey a gate it cannot pass and say what it
+	-- wants, without a remote and without being trusted: the SERVER decides who
+	-- crosses, and this is only what the HUD reads.
+	--==========================================================================
+	HighestBiomeOrder = "HighestBiomeOrder",
 }
 
 GameConfig.Tags = {
@@ -449,19 +478,456 @@ GameConfig.RarityColor = {
 -- keep up.
 --
 -- The reference game's live leaderboard showed a player at 3.2 BILLION Speed.
--- That number can never reach WalkSpeed. So it does not: it feeds a curve that
--- asymptotes, the player watches an unbounded number climb, and the simulation
--- never sees past MaxWalkSpeed.
+-- That number can never reach WalkSpeed. So it does not: the score feeds a
+-- curve, the player watches an unbounded number climb, and the simulation never
+-- sees past MaxWalkSpeed.
 --
---     WalkSpeed = Base + (Max - Base) * (1 - e^(-Speed / Scale))
+--==============================================================================
+-- MILESTONES, NOT AN ASYMPTOTE
 --
--- Scale is what decides where the curve bends, and it is the one number to tune
--- when the game feels slow early or flat late.
+-- It was `Base + (Max - Base) * (1 - e^(-Speed / Scale))` with Scale = 20,000.
+-- That is a fine shape and completely the wrong RANGE for this game. Measured
+-- against the ladder it was supposed to serve:
+--
+--     Speed        150,000   ->  WalkSpeed 149.99
+--     Speed    167,000,000   ->  WalkSpeed 150.00   <- Dustbowl gate
+--     Speed 10,000,000,000   ->  WalkSpeed 150.00   <- Starbloom gate
+--
+-- The curve finished before the FIRST biome gate. Every gate, every mill tier
+-- above the third, and the entire billions ladder the game is built around all
+-- landed on the same 150 -- so the one stat the whole game grinds stopped
+-- changing anything a player could feel, four orders of magnitude before the
+-- content did.
+--
+-- ANCHORS FIX THAT BY BEING A DESIGN STATEMENT RATHER THAN A SHAPE. Each pair
+-- below is "at this score, you move this fast", and the biome gates are ON the
+-- list -- 167M is 42, 800M is 54, 3B is 68, 10B is 82. Passing a gate is now
+-- worth a visible step, because the number that opens the gate is the same
+-- number that moves the legs.
+--
+-- INTERPOLATED IN LOG SPACE, because the score is logarithmic and linear
+-- interpolation between 1M and 167M would leave 99% of that span in the last
+-- few walk-speed points. log(x + 1) rather than log(x), so the zero anchor
+-- needs no special case.
+--
+-- MONOTONIC BY CONSTRUCTION: both columns strictly increase and log
+-- interpolation between two increasing points cannot dip. More speed is never
+-- slower, which is the one property that must survive any retune.
+--
+-- To retune, move a row. Do not add a formula.
 --==============================================================================
 GameConfig.Speed = {
 	BaseWalkSpeed = 16,
 	MaxWalkSpeed = 150,
-	Scale = 20000,
+
+	--==========================================================================
+	-- { Speed score, WalkSpeed }
+	--
+	-- Must stay sorted and strictly increasing in BOTH columns. The last row is
+	-- the cap and must equal MaxWalkSpeed; the first must equal BaseWalkSpeed.
+	-- Verified on load below, because a typo here is a game that silently walks
+	-- backwards at one particular score.
+	--==========================================================================
+	Anchors = {
+		{ 0, 16 },
+		{ 1e3, 22 },
+		{ 1e4, 27 },
+		{ 1e6, 32 },
+		--== the biome gates ==--
+		{ 167e6, 42 },
+		{ 800e6, 54 },
+		{ 3e9, 68 },
+		{ 10e9, 82 },
+		--== past the last gate, where the idle game actually lives ==--
+		{ 100e9, 96 },
+		{ 1e12, 110 },
+		{ 10e12, 124 },
+		{ 100e12, 138 },
+		{ 1e15, 150 },
+	},
+}
+
+--==============================================================================
+-- THE GATES ACTUALLY GATE NOW
+--
+-- MapService has built an arch at every biome boundary since the first week,
+-- carrying the biome's name and a SpeedGate attribute, and NOTHING HAS EVER
+-- READ EITHER. The comment on it said "signage until Phase C gives it a Speed
+-- check". This is that check.
+--
+--==============================================================================
+-- A PLANE, NOT A PART
+--
+-- The arch is 4 studs deep and non-collidable, and a player at 150 WalkSpeed
+-- covers 2.5 studs a frame -- so a Touched on it is a coin flip at exactly the
+-- speeds the gates exist to reward. Worse, the arch is decoration: it can be
+-- moved or restyled without anybody thinking about the check hanging off it.
+--
+-- So the check is geometry. Biome N owns the segment from -FieldFront -
+-- (N-1)*SegmentLength going away from safety, its gate is the plane at that
+-- near edge, and "which biome is this position in" is one division. A player
+-- who is deeper than they are allowed gets put back on the safe side of the
+-- plane they crossed -- which cannot be missed at any speed, in any frame rate,
+-- through any amount of lag, because it does not depend on catching a moment.
+--
+--==============================================================================
+-- PUSHED BACK, NOT TELEPORTED HOME
+--
+-- Losing a pod and a two-minute walk because you brushed a gate you cannot pass
+-- would make the gates the most hated thing in the game. The push is the
+-- smallest one that works: back across the plane, facing the way they came,
+-- keeping everything they are carrying.
+--==============================================================================
+GameConfig.Gate = {
+	-- How far back inside the last allowed segment a blocked player is placed.
+	-- Enough that they are not standing on the plane and immediately re-caught,
+	-- small enough that it reads as being stopped rather than punished.
+	PushBackStuds = 8,
+	-- Server poll. Fast enough that the deepest a 150-WalkSpeed player gets past
+	-- a gate is about 15 studs -- inside the arch's own shadow -- and cheap
+	-- enough to run for every player forever.
+	PollSeconds = 0.1,
+	-- How long before the same player is told again, so a player leaning on a
+	-- gate is not a message every tenth of a second.
+	NoticeCooldown = 3,
+}
+
+--==============================================================================
+-- THE AFTERIMAGE
+--
+-- Seven tiers, from a single faint echo at a thousand Speed to a flowing rainbow
+-- at the save cap. It is the only thing in the game that says how far up the
+-- ladder somebody is without a number, and it is the reward for the one stat
+-- this game is entirely about.
+--
+--==============================================================================
+-- THE SCORE QUALIFIES. THE MOVEMENT EMITS. THEY ARE NOT THE SAME QUESTION.
+--
+-- A player standing still, ragdolled, mid-throw, dead, or crawling home under a
+-- 9,000 kg pod must produce NOTHING at any tier. An afterimage is a statement
+-- about motion; one that appears while you are pinned to the floor reads as a
+-- bug and cheapens it everywhere else.
+--
+--==============================================================================
+-- HIGHER TIERS BUY COLOUR, NEVER INSTANCES
+--
+-- The ghost count stops at four and stays there from tier 4 up. Everything above
+-- it is spent on the SAME four ghosts looking better: a gradient down the body,
+-- a wave travelling through it, a hue wheel turning, a pulse, an expansion. That
+-- is the whole performance strategy -- an eighth ghost costs fifteen more parts
+-- per player per frame forever, and a hue that moves costs one Color3 write at
+-- twelve hertz.
+--
+-- Which is also why a phone can have every tier. It gets fewer ghosts, not a
+-- worse rainbow.
+--
+--==============================================================================
+-- EMITTED BY DISTANCE, NOT BY FRAMES
+--
+-- A frame counter spaces ghosts by frame rate, so the same run leaves twice as
+-- many on a 120 Hz machine as on a 60 Hz one. Studs travelled is the same
+-- picture everywhere, and it is what makes the spacing numbers below mean
+-- something a person can see.
+--==============================================================================
+GameConfig.Afterimage = {
+	--==========================================================================
+	-- TEN STUDS A SECOND, WHICH IS BARELY WALKING
+	--
+	-- It has to be under the base 16 WalkSpeed, because tier 1 unlocks at a
+	-- THOUSAND Speed -- a player about ninety seconds into their first session,
+	-- moving at 22. A threshold near that number would mean the first echo only
+	-- appeared while sprinting downhill.
+	--
+	-- The cost is stated: at 10 studs/s a heavy pod only suppresses the ghosts up
+	-- to about 2M Speed, where 0.30 x walk finally clears the bar. Past that a
+	-- loaded player still leaves echoes -- slower and further apart, because the
+	-- spacing is in STUDS, which is the honest version of the same signal.
+	--==========================================================================
+	MoveStudsPerSecond = 10,
+
+	--==========================================================================
+	-- WEIGHT SUPPRESSES THE GHOSTS, AND THE SPEED GATE CANNOT DO IT ANY MORE
+	--
+	-- The gate used to do both jobs. At 35 studs/s a heavy pod held a player
+	-- under it and the echoes stopped; at 10 -- which tier 1 needs, because a
+	-- player at 1K Speed walks at 22 -- a loaded player clears it easily, and a
+	-- capped player hauling 9,000 kg still does 45. The one moment the whole
+	-- game is built around, running home rich and slow, was about to be the
+	-- moment with the most spectacular visual effect in the game attached.
+	--
+	-- So weight gets its own test, off the SERVER'S multiplier. Three bands:
+	--
+	--     above 0.75    empty-handed or nearly. The full tier, untouched.
+	--     0.50 to 0.75  laden. One echo, dimmer, further apart -- the effect is
+	--                   still there and is visibly struggling, which is a better
+	--                   reading than a hard cut.
+	--     below 0.50    heavy. Nothing but the trail. A maximum pod is 0.30, so
+	--                   this is what guarantees suppression at EVERY tier
+	--                   including the rainbow.
+	--
+	-- Bands rather than a smooth curve on purpose: three states a player can
+	-- learn are worth more than a continuum nobody can read, and "my ghosts went
+	-- away" has to be a fact rather than a feeling.
+	--==========================================================================
+	CarryFullAbove = 0.75,
+	CarryReducedAbove = 0.50,
+	-- What the middle band does to a tier.
+	CarryReducedGhosts = 1,
+	-- Added to StartTransparency, so a laden echo is fainter at every tier.
+	CarryReducedFade = 0.18,
+	-- Emitted this much further apart, so it is sparser as well as fainter.
+	CarryReducedSpacing = 1.6,
+
+	--==========================================================================
+	-- A JUMP THIS BIG WAS NOT A RUN
+	--
+	-- Respawns, the nest parent's throw, the mill mount, the biome gate's push
+	-- back, and any future teleport all move a character further in one frame
+	-- than running can. Emitting across one would draw a line of ghosts over the
+	-- whole map.
+	--==========================================================================
+	TeleportStuds = 24,
+
+	RemoteMaxStuds = 120,
+	LocalMaxGhosts = 4,
+	RemoteMaxGhosts = 2,
+	MobileMaxGhosts = 2,
+
+	--==========================================================================
+	-- COLOUR MOVES AT TWELVE HERTZ, NOT AT THE FRAME RATE
+	--
+	-- A hue wave is not something anybody can see at 60 Hz that they cannot see
+	-- at 12. Recomputing four ghosts x fifteen parts every frame is 3,600 Color3
+	-- writes a second for an animation that looks identical at a fifth of that.
+	--
+	-- Mobile drops to eight, which is still smooth for a wave this slow.
+	--==========================================================================
+	ColourHz = 12,
+	MobileColourHz = 8,
+
+	-- How far the hue travels from head to feet across one ghost. The reason the
+	-- rainbow FLOWS down the body instead of painting each echo one flat colour.
+	BodyHueSpread = 0.45,
+
+	--==========================================================================
+	-- THE TRAIL STEPS BACK SO THE GHOSTS HAVE ROOM
+	--
+	-- Both at full strength is a solid smear with no shape in it. The streak
+	-- keeps the LINE and the ghosts carry the reading.
+	--==========================================================================
+	--==========================================================================
+	-- THE SETTING THAT DOES NOT EXIST YET
+	--
+	-- An ATTRIBUTE on the local player rather than a global function, because it
+	-- is the only seam that is all four things a setting needs to be: writable
+	-- by a settings panel, readable by the effect, per-client without
+	-- replicating, and inspectable by anything that wants to know what a machine
+	-- is actually rendering.
+	--
+	-- Unset means Full on a desktop and Reduced on a phone -- the effect decides
+	-- the default, and this only ever overrides it.
+	--==========================================================================
+	QualityAttribute = "SeedAfterimageQuality",
+	TrailTransparencyFloor = 0.62,
+	-- Keypoints in the trail's travelling rainbow. Roblox caps a ColorSequence
+	-- at 20; eight is enough to read as a spectrum and cheap to rebuild.
+	TrailRainbowStops = 8,
+
+	--==========================================================================
+	-- THE SEVEN
+	--
+	--   From               the Speed score that unlocks it
+	--   Ghosts             how many echoes may exist at once
+	--   SpacingStuds       distance travelled between emissions
+	--   FadeSeconds        how long one echo lives
+	--   StartTransparency  how solid it is at birth
+	--   Palette            the colours it cycles through
+	--   GhostSpread        how far apart consecutive ghosts sit in the palette
+	--   BodyGradient       spread the palette down the body as well
+	--   Wave               palette travel per second (0 is static)
+	--   Pulse              brightness pulse depth while fading
+	--   Shimmer            fast, shallow brightness flicker
+	--   Rainbow            full hue wheel instead of the palette
+	--   Expand             outward growth over the fade, as a fraction
+	--   TrailRainbow       animate the movement trail as a travelling rainbow
+	--==========================================================================
+	Tiers = {
+		{
+			From = 1e3,
+			Name = "First Echo",
+			Ghosts = 1,
+			SpacingStuds = 11.5,
+			FadeSeconds = 0.14,
+			-- Barely there. It is a hint that something has started, not a
+			-- statement, and a player ninety seconds in has not earned a
+			-- statement.
+			StartTransparency = 0.62,
+			Palette = { Color3.fromRGB(206, 230, 255) },
+			GhostSpread = 0,
+			BodyGradient = false,
+			Wave = 0,
+			Pulse = 0,
+			Shimmer = 0,
+			Rainbow = false,
+			Expand = 0,
+			TrailRainbow = false,
+		},
+		{
+			From = 1e6,
+			Name = "Double Step",
+			Ghosts = 2,
+			--==================================================================
+			-- MEASURED AT 1M, WHERE IT IS ACTUALLY EARNED, AND IT WAS A SINGLE
+			--
+			-- 9.5 studs at fade 0.18 is a double at speed and a SINGLE at the
+			-- score that unlocks it: a player at 1M Speed walks at 32, so an
+			-- echo every 9.5 studs is one every 0.297s, and each was dead 0.12s
+			-- before the next was born. "Double Step" showed one ghost.
+			--
+			-- FADE IS WALL-CLOCK AND SPEED IS NOT. That is the whole reason this
+			-- number is longer than tier 3's: tier 2 is worn by somebody moving
+			-- at 32 and tier 3 by somebody at 56, so the same PERSISTENCE costs
+			-- a longer fade lower down the ladder. Reading the column on its own
+			-- and calling it out of order is reading it without the speeds.
+			--
+			-- 9.0 at 0.30 was the first attempt and it MEASURED AS A SINGLE.
+			-- The arithmetic said two -- 0.281s between echoes against a 0.30s
+			-- life -- but that overlap is nineteen milliseconds out of a 281ms
+			-- cycle, so for 93% of the time there was exactly one ghost and a
+			-- three-second run never once caught a pair. Winning a rounding is
+			-- not the same as looking like a double step.
+			--
+			-- 8.0 at 0.36 gives 0.25s between echoes against a 0.36s life: the
+			-- second one is alive for 44% of every cycle, which reads. Spacing
+			-- stays wider than tier 3's 7.5, so the ladder still tightens as it
+			-- climbs.
+			--
+			-- Measured at exactly 1,000,000 Speed, walking 32.00.
+			--==================================================================
+			SpacingStuds = 8.0,
+			FadeSeconds = 0.36,
+			StartTransparency = 0.54,
+			-- Two ghosts, two ends of the palette: the near one blue, the far
+			-- one cyan, so the pair reads as a direction rather than a stutter.
+			Palette = { Color3.fromRGB(150, 198, 255), Color3.fromRGB(140, 240, 246) },
+			GhostSpread = 1,
+			BodyGradient = false,
+			Wave = 0,
+			Pulse = 0,
+			Shimmer = 0,
+			Rainbow = false,
+			Expand = 0,
+			TrailRainbow = false,
+		},
+		{
+			From = 1e9,
+			Name = "Charged Blur",
+			Ghosts = 3,
+			SpacingStuds = 7.5,
+			FadeSeconds = 0.22,
+			StartTransparency = 0.46,
+			Palette = { Color3.fromRGB(132, 176, 255), Color3.fromRGB(192, 156, 255) },
+			GhostSpread = 1,
+			BodyGradient = false,
+			Wave = 0,
+			-- The first tier where an echo does something while it dies rather
+			-- than only getting fainter.
+			Pulse = 0.16,
+			Shimmer = 0,
+			Rainbow = false,
+			Expand = 0,
+			TrailRainbow = false,
+		},
+		{
+			From = 1e12,
+			Name = "Phase Runner",
+			Ghosts = 4,
+			SpacingStuds = 6.5,
+			FadeSeconds = 0.26,
+			StartTransparency = 0.40,
+			Palette = { Color3.fromRGB(248, 246, 255), Color3.fromRGB(168, 108, 255) },
+			-- The transition runs down the BODY here, not across the echoes:
+			-- white at the head, violet at the feet, the same on every ghost.
+			GhostSpread = 0,
+			BodyGradient = true,
+			Wave = 0,
+			Pulse = 0.14,
+			Shimmer = 0,
+			Rainbow = false,
+			Expand = 0,
+			TrailRainbow = false,
+		},
+		{
+			From = 1e13,
+			Name = "Prism Wake",
+			Ghosts = 4,
+			SpacingStuds = 5.75,
+			FadeSeconds = 0.28,
+			StartTransparency = 0.36,
+			Palette = {
+				Color3.fromRGB(120, 240, 250),
+				Color3.fromRGB(176, 120, 255),
+				Color3.fromRGB(255, 140, 220),
+			},
+			GhostSpread = 1,
+			BodyGradient = false,
+			Wave = 0,
+			Pulse = 0.12,
+			-- The shimmer is brightness, not geometry: no second part, no
+			-- emitter, nothing added to the scene.
+			Shimmer = 0.10,
+			Rainbow = false,
+			Expand = 0,
+			TrailRainbow = false,
+		},
+		{
+			From = 1e14,
+			Name = "Aurora Rush",
+			Ghosts = 4,
+			SpacingStuds = 5,
+			FadeSeconds = 0.30,
+			StartTransparency = 0.32,
+			Palette = {
+				Color3.fromRGB(110, 236, 246),
+				Color3.fromRGB(126, 240, 168),
+				Color3.fromRGB(176, 128, 255),
+				Color3.fromRGB(246, 246, 255),
+			},
+			-- Each echo starts somewhere else in the aurora AND the whole
+			-- palette drifts down the body: that is what makes it a curtain
+			-- rather than four coloured statues.
+			GhostSpread = 1,
+			BodyGradient = true,
+			Wave = 0.22,
+			Pulse = 0.12,
+			Shimmer = 0.06,
+			Rainbow = false,
+			Expand = 0,
+			TrailRainbow = false,
+		},
+		{
+			From = 1e15,
+			Name = "Rainbow Ascension",
+			-- STILL FOUR. Everything below is colour and motion; not one extra
+			-- instance is created for the top of the ladder.
+			Ghosts = 4,
+			SpacingStuds = 4.75,
+			FadeSeconds = 0.32,
+			StartTransparency = 0.28,
+			-- Ignored: Rainbow walks the whole hue wheel instead.
+			Palette = { Color3.fromRGB(255, 255, 255) },
+			GhostSpread = 1,
+			BodyGradient = true,
+			Wave = 0.5,
+			Pulse = 0.18,
+			Shimmer = 0.05,
+			Rainbow = true,
+			-- Three percent, over the whole fade. Enough to read as the echo
+			-- letting go; small enough that it never looks like a bug in the rig.
+			Expand = 0.03,
+			TrailRainbow = true,
+		},
+	},
 }
 
 --==============================================================================
@@ -817,6 +1283,91 @@ GameConfig.Mill = {
 	BeltEdgeFade = 0.12,
 
 	Action = "MillUpgrade",
+
+	--==========================================================================
+	-- OVERCLOCK: WHAT A TIER-SEVEN MILL DOES NEXT
+	--
+	-- Seven tiers top out at 50 Speed/sec. The ladder they feed runs to a
+	-- QUADRILLION. At 50/sec the last biome gate alone is six and a half years,
+	-- so the tier ladder is not a progression system past its own top -- it is a
+	-- wall with a number on it.
+	--
+	-- Overclock is the ladder that continues, and it is deliberately NOT more
+	-- tiers: seven mills are seven distinct machines with seven silhouettes and
+	-- seven sets of particles, and an eighth would have to be built, not typed.
+	-- An overclock is the SAME Heartroot running harder. No new model, no new
+	-- art, no new belt.
+	--
+	--     TrainingRate = tier.speed * Multiplier^level * rebirth
+	--
+	-- FOUR PER LEVEL, because the score ladder is logarithmic and anything
+	-- gentler makes the last three biomes take longer than the first four put
+	-- together. Ten levels is 4^10 = 1,048,576x, which turns 50/sec into
+	-- 52.4M/sec -- the rate the top of the map is priced for.
+	--
+	--     level  0        50 / sec        level  6   204,800 / sec
+	--     level  1       200 / sec        level  7   819,200 / sec
+	--     level  2       800 / sec        level  8     3.28M / sec
+	--     level  3     3,200 / sec        level  9     13.1M / sec
+	--     level  4    12,800 / sec        level 10     52.4M / sec
+	--     level  5    51,200 / sec
+	--
+	--==========================================================================
+	-- GATED BY BIOME, SO THE TWO LADDERS PULL EACH OTHER
+	--
+	-- Levels 1-5 are Greenhollow's, and 5 is enough to reach Dustbowl. After
+	-- that each biome releases exactly one more level. That is what stops the
+	-- game being two unrelated grinds side by side: cash buys the rate, the rate
+	-- buys the score, the score opens the biome, and the biome releases the next
+	-- level of rate.
+	--
+	-- Checked against HighestBiomeOrder -- the PERMANENT record -- and not
+	-- against where the player is standing or what their score is right now. A
+	-- future rebirth that zeroes Speed must not confiscate an overclock the
+	-- player already bought.
+	--
+	--==========================================================================
+	-- THE COSTS ARE PRICED OFF THE GARDEN, NOT OFF EACH OTHER
+	--
+	-- Cash comes from grown plants at 1 per kg per second, so a plot is worth
+	-- the sum of what is standing in it. Measured against the real weight roll
+	-- (mean 530 kg per pod, a curated bed far higher) a mill-tier-seven player
+	-- is realistically making 80-150K/sec.
+	--
+	-- Sized so CASH AND SCORE ARRIVE TOGETHER rather than one waiting on the
+	-- other. Cumulative to level 8 -- the last one the five biomes need -- is
+	-- 1.62B, which is about three hours at 150K/sec; the score side from zero to
+	-- Starbloom at the matching rates is about 3.1 hours. Neither is the wall.
+	--
+	-- Levels 9 and 10 are past the last gate and priced as endgame: 6.5B more,
+	-- against a garden that cannot exceed 300K/sec.
+	--
+	-- BALANCE, so this is the exception Rule 7 already carries for the tier
+	-- ladder directly above it -- the two are one price list and splitting them
+	-- across two files would be worse.
+	--==========================================================================
+	Overclock = {
+		-- Multiplier ^ level, applied to the tier's own rate.
+		Multiplier = 4,
+		MaxLevel = 10,
+		-- Level N costs Costs[N], and needs biome order UnlockedBy[N] on record.
+		Costs = {
+			3_000_000,
+			7_000_000,
+			16_000_000,
+			36_000_000,
+			80_000_000,
+			180_000_000,
+			400_000_000,
+			900_000_000,
+			2_000_000_000,
+			4_500_000_000,
+		},
+		UnlockedBy = { 1, 1, 1, 1, 1, 2, 3, 4, 5, 5 },
+		-- Shown on the mill sign in place of the tier name once the tier ladder
+		-- is finished.
+		Label = "Overclock",
+	},
 }
 
 
@@ -870,13 +1421,170 @@ function GameConfig.carryMultiplierFor(kg: number): number
 	return 1 - (1 - C.MinMultiplier) * t
 end
 
+--==============================================================================
+-- THE SCORE BECOMES A SPEED
+--
+-- Reads GameConfig.Speed.Anchors and interpolates between the two rows that
+-- bracket the score. Nothing here decides what anything is worth -- the table
+-- does, and this only walks it.
+--
+-- EVERY BAD INPUT LANDS ON BASE OR ON CAP, and neither is an error. A profile
+-- that failed to load reads nil, a corrupted save can read a string, and NaN
+-- propagates silently out of any arithmetic upstream. A game where a bad number
+-- freezes the player in place is worse than one where they walk at 16.
+--
+--     nil / string / NaN / negative / 0   ->  BaseWalkSpeed
+--     anything at or past the last anchor ->  MaxWalkSpeed  (math.huge included)
+--==============================================================================
 function GameConfig.walkSpeedFor(speedScore: number): number
 	local S = GameConfig.Speed
+	local anchors = S.Anchors
 	if type(speedScore) ~= "number" or speedScore ~= speedScore or speedScore <= 0 then
 		return S.BaseWalkSpeed
 	end
-	return S.BaseWalkSpeed
-		+ (S.MaxWalkSpeed - S.BaseWalkSpeed) * (1 - math.exp(-speedScore / S.Scale))
+	local last = anchors[#anchors]
+	if speedScore >= last[1] then
+		-- math.huge included, deliberately: the comparison is true for it and
+		-- the cap is the honest answer.
+		return S.MaxWalkSpeed
+	end
+	for i = 1, #anchors - 1 do
+		local lo = anchors[i]
+		local hi = anchors[i + 1]
+		if speedScore < hi[1] then
+			--==================================================================
+			-- log(x + 1), NOT log(x)
+			--
+			-- The first anchor is zero and log(0) is -inf, which would make the
+			-- entire first span NaN -- the one span every new player is in. The
+			-- +1 costs nothing at the scales that matter (it is a 0.04%
+			-- distortion at the 1,000 anchor and vanishes above it) and removes
+			-- the special case entirely.
+			--==================================================================
+			local a = math.log(lo[1] + 1)
+			local b = math.log(hi[1] + 1)
+			local t = if b > a then (math.log(speedScore + 1) - a) / (b - a) else 0
+			return lo[2] + (hi[2] - lo[2]) * math.clamp(t, 0, 1)
+		end
+	end
+	return S.MaxWalkSpeed
+end
+
+--==============================================================================
+-- THE TABLE IS CHECKED ON LOAD, NOT TRUSTED
+--
+-- A row typed out of order, a duplicated score, or a walk speed that dips is a
+-- game where being faster makes you slower at exactly one point on the ladder --
+-- which nobody would ever reproduce on purpose and which the curve above would
+-- happily serve. Cheap to assert once at require time; impossible to notice
+-- otherwise.
+--==============================================================================
+do
+	local anchors = GameConfig.Speed.Anchors
+	assert(#anchors >= 2, "GameConfig.Speed.Anchors needs at least two rows")
+	assert(anchors[1][1] == 0, "the first Speed anchor must be score 0")
+	assert(anchors[1][2] == GameConfig.Speed.BaseWalkSpeed,
+		"the first Speed anchor must equal BaseWalkSpeed")
+	assert(anchors[#anchors][2] == GameConfig.Speed.MaxWalkSpeed,
+		"the last Speed anchor must equal MaxWalkSpeed")
+	for i = 2, #anchors do
+		assert(anchors[i][1] > anchors[i - 1][1],
+			string.format("Speed anchor %d is not above the one before it", i))
+		assert(anchors[i][2] > anchors[i - 1][2],
+			string.format("Speed anchor %d walks slower than the one before it", i))
+	end
+end
+
+--==============================================================================
+-- REBIRTH, WHICH DOES NOT EXIST YET
+--
+-- A SEAM, not a stub with a TODO. Everything that computes a training rate
+-- multiplies by this, so the day rebirth lands there is one function to write
+-- and no call sites to find. Until then it answers 1 for everybody, which is
+-- exactly what a system that does not exist should contribute.
+--
+-- Takes the whole profile rather than a level, so adding rebirth does not
+-- change this signature.
+--==============================================================================
+function GameConfig.rebirthMultiplierFor(profile: any): number
+	if type(profile) ~= "table" then
+		return 1
+	end
+	return 1
+end
+
+--==============================================================================
+-- WHAT AN OVERCLOCK LEVEL IS WORTH, COSTS, AND NEEDS
+--
+-- Level 0 is "no overclock" and is always valid. Anything outside 0..MaxLevel
+-- is clamped rather than refused: this is read on the payout path, and a rate
+-- of nil once a second is worse than a rate that is merely wrong.
+--==============================================================================
+function GameConfig.overclockMultiplierFor(level: number): number
+	local O = GameConfig.Mill.Overclock
+	if type(level) ~= "number" or level ~= level or level <= 0 then
+		return 1
+	end
+	return O.Multiplier ^ math.clamp(math.floor(level), 0, O.MaxLevel)
+end
+
+-- nil when there is no such level to buy, which is also how the caller learns
+-- the ladder is finished.
+function GameConfig.overclockCostFor(level: number): number?
+	local O = GameConfig.Mill.Overclock
+	if type(level) ~= "number" or level ~= level then
+		return nil
+	end
+	return O.Costs[math.floor(level)]
+end
+
+-- Which biome order has to be ON RECORD before that level may be bought.
+function GameConfig.overclockUnlockOrderFor(level: number): number?
+	local O = GameConfig.Mill.Overclock
+	if type(level) ~= "number" or level ~= level then
+		return nil
+	end
+	return O.UnlockedBy[math.floor(level)]
+end
+
+--==============================================================================
+-- THE ONE PLACE A TRAINING RATE IS DECIDED
+--
+--     rate = tier.speed * Multiplier^overclock * rebirth
+--
+-- Here rather than in TreadmillService because the mill SIGN, the shop and any
+-- future UI all want to show the same number the payout uses, and a rate that
+-- is computed twice is a rate that reads differently in two places the first
+-- time either is touched.
+--==============================================================================
+function GameConfig.trainingRateFor(tierIndex: number, overclock: number, profile: any): number
+	local tiers = GameConfig.Mill.Tiers
+	local i = math.clamp(math.floor(if type(tierIndex) == "number" and tierIndex == tierIndex
+		then tierIndex else 1), 1, #tiers)
+	return tiers[i].speed
+		* GameConfig.overclockMultiplierFor(overclock)
+		* GameConfig.rebirthMultiplierFor(profile)
+end
+
+--==============================================================================
+-- WHICH AFTERIMAGE TIER A SCORE EARNS
+--
+-- 0 is "trail only". Returned as a plain integer because it is published as a
+-- player attribute so that every client can render every OTHER player without
+-- being handed their profile.
+--==============================================================================
+function GameConfig.speedVisualTierFor(speedScore: number): number
+	local tiers = GameConfig.Afterimage.Tiers
+	if type(speedScore) ~= "number" or speedScore ~= speedScore or speedScore <= 0 then
+		return 0
+	end
+	local tier = 0
+	for i, row in ipairs(tiers) do
+		if speedScore >= row.From then
+			tier = i
+		end
+	end
+	return tier
 end
 
 --==============================================================================
@@ -1511,27 +2219,65 @@ GameConfig.Sfx = {
 --==============================================================================
 -- ONE COMPACTOR, NOT THREE
 --
--- Three places want to shorten a number -- the rate on a grown plant, the `+$N`
--- that pops off it, and the Index row -- and three hand-rolled versions is how
--- the same plant ends up reading $1.5K in one place and $2K in another. It sits
--- here because here is the module all three already require.
+-- Four places want to shorten a number -- the rate on a grown plant, the `+$N`
+-- that pops off it, the Index row, and now every Speed readout in the game --
+-- and four hand-rolled versions is how the same plant ends up reading $1.5K in
+-- one place and $2K in another. It sits here because here is the module they
+-- all already require.
 --
 -- Not balance, so Rule 7 is intact: this decides how a number is SPELLED, never
 -- what it is.
 --
---     110      ->  110          1500  ->  1.5K       39000  ->  39K
---     2000     ->  2K         100000  ->  100K     553000000 -> 553M
+--==============================================================================
+-- THREE SIGNIFICANT DIGITS, AND THE LADDER RUNS TO Qa
 --
--- One decimal below ten, none above it, and a trailing .0 is dropped -- so 2000
--- is "2K" rather than "2.0K". Straight off the reference clip, which shows
--- $3.5K and $39K side by side.
+-- It was one decimal below ten and none above, which reads fine for cash and
+-- destroys the Speed HUD: the whole billions ladder this game is built on
+-- collapsed into "12B" for everything from 12.0B to 12.9B, so a player watching
+-- their score climb saw it sit still for the better part of an hour.
+--
+--     under 10     two decimals    1.25K   3.5K    1T
+--     10 to 99     one decimal     12.4B   39K
+--     100 and up   none            999B    553M    100K
+--
+-- Trailing zeros are dropped at every width, so 2,000 is "2K" rather than
+-- "2.00K" and 1e15 is "1Qa" rather than "1.00Qa" -- which is what keeps the old
+-- cash readouts spelled exactly as they were.
+--
+--     110    ->  110        1500  ->  1.5K       39000  ->  39K
+--     2000   ->  2K       100000  ->  100K   553000000  ->  553M
+--     12.4e9 -> 12.4B      999e9  ->  999B        1e12  ->  1T
+--     1e15   ->  1Qa
+--
+-- Qa AND NOT Q. "Q" is ambiguous the moment quintillion exists, and this ladder
+-- is one save-cap raise away from needing it. Qa/Qi/Sx is the convention the
+-- genre already uses.
+--
+-- THE SAVE CAP IS STILL 1e15 and this does not change that -- the formatter
+-- reaching Qa is what lets the CAP be displayed, not a licence to pass it.
 --==============================================================================
 local COMPACT_UNITS = {
+	{ 1e15, "Qa" },
 	{ 1e12, "T" },
 	{ 1e9, "B" },
 	{ 1e6, "M" },
 	{ 1e3, "K" },
 }
+
+local function trimZeros(text: string): string
+	-- A PLAIN find, so the needle is a full stop and not the PATTERN for one.
+	-- It was `"%."` with plain = true, which searches for the two literal
+	-- characters percent-full-stop -- never present -- so every value returned
+	-- early and the HUD read 1.00K, 3.00B, 1.00Qa. The pattern escape is exactly
+	-- what plain mode turns off.
+	if not string.find(text, ".", 1, true) then
+		return text
+	end
+	-- Parenthesised: gsub returns the count as a second value, and returning it
+	-- would make the caller two-valued.
+	text = (string.gsub(text, "0+$", ""))
+	return (string.gsub(text, "%.$", ""))
+end
 
 function GameConfig.compact(n: number): string
 	if type(n) ~= "number" or n ~= n then
@@ -1539,17 +2285,40 @@ function GameConfig.compact(n: number): string
 	end
 	local sign = if n < 0 then "-" else ""
 	local v = math.abs(n)
-	for _, unit in ipairs(COMPACT_UNITS) do
+	if v == math.huge then
+		-- Not "inf". Nothing in this game is legitimately infinite, so a readout
+		-- saying so is a bug report nobody can act on; the cap is the number a
+		-- player would actually be at.
+		return sign .. GameConfig.compact(GameConfig.Save.MaxSpeedScore)
+	end
+	for i, unit in ipairs(COMPACT_UNITS) do
 		local divisor = unit[1] :: number
 		local suffix = unit[2] :: string
 		if v >= divisor then
 			local scaled = v / divisor
-			local text = if scaled < 10
-				then string.format("%.1f", scaled)
-				else string.format("%d", math.floor(scaled))
-			-- Parenthesised: gsub returns the count as a second value, and
-			-- returning it would make this function two-valued.
-			return sign .. (string.gsub(text, "%.0$", "")) .. suffix
+			--==============================================================
+			-- 999.6M IS 1B, NOT 1000M
+			--
+			-- Rounding happens after the unit is chosen, so a value just under
+			-- a boundary can round up THROUGH it and print a four-digit
+			-- mantissa. Caught here rather than by widening the comparison,
+			-- because the comparison is what decides the suffix and it is
+			-- correct.
+			--==============================================================
+			if scaled >= 999.5 and i > 1 then
+				local bigger = COMPACT_UNITS[i - 1]
+				scaled = v / (bigger[1] :: number)
+				suffix = bigger[2] :: string
+			end
+			local text
+			if scaled < 10 then
+				text = string.format("%.2f", scaled)
+			elseif scaled < 100 then
+				text = string.format("%.1f", scaled)
+			else
+				text = string.format("%.0f", scaled)
+			end
+			return sign .. trimZeros(text) .. suffix
 		end
 	end
 	return sign .. string.format("%d", math.floor(v))

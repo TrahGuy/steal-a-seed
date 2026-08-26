@@ -542,8 +542,21 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		sign.LightInfluence = 0
 		sign.Parent = gate
 
+		--==================================================================
+		-- THE NAME, AND NOW WHAT IT COSTS
+		--
+		-- The arch was signage and its own comment said so, so a name and a face
+		-- was the whole of it. BiomeGateService turns it into a wall, and a wall
+		-- that does not say what opens it is a dead end.
+		--
+		-- The number is small and under the name rather than beside it: the
+		-- biome is what you are looking at, the requirement is what you check.
+		-- Greenhollow has no requirement and gets no second line.
+		--==================================================================
+		local named = biome.SpeedGate > 0
+
 		local text = Instance.new("TextLabel")
-		text.Size = UDim2.fromScale(1, 1)
+		text.Size = if named then UDim2.fromScale(1, 0.62) else UDim2.fromScale(1, 1)
 		text.BackgroundTransparency = 1
 		text.Font = Enum.Font.FredokaOne
 		-- ONE WORD AND A FACE. See the note at the top of BiomeData.
@@ -556,6 +569,27 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		ts.Thickness = 4
 		ts.Color = Color3.fromRGB(38, 26, 16)
 		ts.Parent = text
+
+		if named then
+			local need = Instance.new("TextLabel")
+			need.Name = "Requirement"
+			need.AnchorPoint = Vector2.new(0.5, 1)
+			need.Position = UDim2.fromScale(0.5, 1)
+			need.Size = UDim2.fromScale(1, 0.34)
+			need.BackgroundTransparency = 1
+			need.Font = Enum.Font.GothamBlack
+			-- The shared compactor, so the arch and the HUD spell the same
+			-- number the same way.
+			need.Text = GameConfig.compact(biome.SpeedGate) .. " SPEED"
+			need.TextScaled = true
+			need.TextColor3 = Color3.fromRGB(255, 255, 255)
+			need.Parent = sign
+
+			local ns = Instance.new("UIStroke")
+			ns.Thickness = 3
+			ns.Color = Color3.fromRGB(38, 26, 16)
+			ns.Parent = need
+		end
 	end
 
 	--== NESTS ==--

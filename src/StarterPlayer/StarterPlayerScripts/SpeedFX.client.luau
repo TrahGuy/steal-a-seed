@@ -23,6 +23,7 @@
 --==============================================================================
 
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
@@ -164,7 +165,17 @@ local function pop(amount: number)
 	end
 
 	local label = billboard:FindFirstChild("Label") :: TextLabel
-	label.Text = string.format("+%d", math.max(1, math.floor(amount + 0.5)))
+	--==========================================================================
+	-- COMPACTED, BECAUSE AN OVERCLOCKED MILL PAYS 52,428,800 A SECOND
+	--
+	-- This printed the raw integer, which was fine while the top tier paid 50
+	-- and became unreadable the moment overclocking existed: a nine-digit number
+	-- in a 90-pixel billboard, once a second, forever. `+52.4M` is the same fact
+	-- in five characters.
+	--
+	-- Still floored to at least 1, so a fractional tick never pops "+0".
+	--==========================================================================
+	label.Text = "+" .. GameConfig.compact(math.max(1, math.floor(amount + 0.5)))
 	label.TextTransparency = 0
 	local stroke = label:FindFirstChildOfClass("UIStroke")
 	if stroke then
@@ -312,8 +323,22 @@ RunService.Heartbeat:Connect(function()
 		-- and the streak stops meaning anything.
 		local strength = math.clamp(
 			(h.WalkSpeed - STREAK_AT) / (STREAK_FULL_AT - STREAK_AT), 0, 1)
+		local head = 0.82 - 0.5 * strength
+		--==================================================================
+		-- THE STREAK STEPS BACK SO THE GHOSTS HAVE ROOM
+		--
+		-- Both at full strength is a solid smear with no shape in it -- the
+		-- echoes land inside a ribbon that is already opaque and simply do
+		-- not read. The streak keeps the LINE and the ghosts carry the
+		-- information, which is the only arrangement where having both is
+		-- worth more than having either.
+		--==================================================================
+		local tier = player:GetAttribute(GameConfig.Attributes.SpeedVisualTier)
+		if type(tier) == "number" and tier > 0 then
+			head = math.max(head, GameConfig.Afterimage.TrailTransparencyFloor)
+		end
 		t.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 0.82 - 0.5 * strength),
+			NumberSequenceKeypoint.new(0, head),
 			NumberSequenceKeypoint.new(1, 1),
 		})
 	end
@@ -429,3 +454,717 @@ player.CharacterAdded:Connect(function()
 	-- The old track belonged to the old character's Animator.
 	millTrack = nil
 end)
+
+--==============================================================================
+-- THE AFTERIMAGE
+--
+-- Seven tiers. See GameConfig.Afterimage for what each one is -- every
+-- threshold, colour, spacing, lifetime and animation setting lives there, and
+-- there is deliberately not one `if score > N` anywhere in this file. This is
+-- the machine; the table is the design.
+--
+--==============================================================================
+-- THE SCORE QUALIFIES. THE MOVEMENT EMITS.
+--
+-- Two separate questions and they must not be merged. Standing still, dead,
+-- ragdolled, mid-throw, teleporting, or crawling under a heavy pod all produce
+-- nothing at any tier, because an afterimage is a statement about MOTION.
+--
+--==============================================================================
+-- FIXED POOLS. NOTHING IS CLONED PER FRAME.
+--
+-- The naive build is character:Clone() per ghost, which at four ghosts every
+-- five studs is a fifteen-part model built and thrown away several times a
+-- second, forever, per player. Instead: ONE template read off the character when
+-- it appears, a pool built once, and emitting is writing CFrames onto parts that
+-- already exist.
+--
+-- HIGHER TIERS BUY COLOUR, NOT INSTANCES. The pool is four from tier 4 up and
+-- never grows again. Rainbow Ascension costs exactly what Phase Runner costs in
+-- parts; what it spends is a Color3 write at twelve hertz.
+--
+--==============================================================================
+-- BODY ONLY
+--
+-- Direct BasePart children of the character and nothing else. That excludes
+-- accessories (their parts live inside Accessory), tools (inside Tool), every
+-- script, the Humanoid, and every ParticleEmitter -- all of which would either
+-- cost far more than the ghost is worth or actively misbehave: a cloned Humanoid
+-- tries to stand up, a cloned emitter keeps emitting, a cloned script runs.
+--
+-- Every ghost part is anchored, non-colliding, non-touching, non-queryable and
+-- shadowless. A ghost must never be something the game can collide with, cast a
+-- ray at, or light -- it is a smear, not an object.
+--
+--==============================================================================
+-- ONE LOOP DRIVES ALL OF IT
+--
+-- Lifetime, transparency, colour, shimmer and expansion are all advanced from a
+-- single Heartbeat over a single list. Not a Tween each and not a task.delay
+-- each: at four ghosts a second per player that is hundreds of live objects a
+-- minute whose only job is to count down, and none of them can be cancelled when
+-- a player respawns mid-fade.
+--
+-- Colour is throttled INSIDE that loop rather than given its own: a wave nobody
+-- can see move at 60 Hz does not need to be computed at 60 Hz.
+--==============================================================================
+
+local UserInputService = game:GetService("UserInputService")
+
+local FX = GameConfig.Afterimage
+local TIER_ATTR = GameConfig.Attributes.SpeedVisualTier
+local CARRY_ATTR = GameConfig.Attributes.CarrySpeedMultiplier
+
+--==============================================================================
+-- WHAT THE LOAD DOES TO A TIER
+--
+-- Reads the SERVER'S multiplier off the player and returns a tier that has been
+-- weakened, or nothing at all. Never re-derived from a weight: the attribute is
+-- the same number CarryService multiplied into WalkSpeed, and a client that
+-- worked it out for itself would be a client that could decide not to.
+--
+-- Missing means unloaded. A player whose attribute has not arrived yet is one
+-- who is not carrying anything -- the server writes it the moment they pick
+-- something up, and defaulting the other way would delete the effect for
+-- everybody during the first second of a session.
+--
+-- The reduced band returns a COPY with three fields changed rather than mutating
+-- the row, because the row is frozen shared config and is every player's.
+--==============================================================================
+local reducedCache: { [any]: any } = {}
+
+local function carriedTier(who: Player, tier: any): any
+	if not tier then
+		return nil
+	end
+	local multiplier = who:GetAttribute(CARRY_ATTR)
+	if type(multiplier) ~= "number" or multiplier ~= multiplier
+		or multiplier > FX.CarryFullAbove then
+		return tier
+	end
+	if multiplier < FX.CarryReducedAbove then
+		--==================================================================
+		-- HEAVY. NOTHING BUT THE TRAIL.
+		--
+		-- A maximum pod is 0.30, so this is the branch that guarantees a
+		-- 10,000 kg haul is silent at EVERY tier -- including the rainbow,
+		-- which the speed gate alone stopped being able to do the moment it
+		-- dropped to 10 studs/s for tier 1's sake.
+		--==================================================================
+		return nil
+	end
+	-- Laden. Built once per tier and reused: this runs every frame a loaded
+	-- player is moving, and allocating a table per frame to hold three numbers
+	-- is the kind of garbage that only shows up as a stutter an hour later.
+	local cached = reducedCache[tier]
+	if not cached then
+		cached = table.clone(tier)
+		cached.Ghosts = math.min(tier.Ghosts, FX.CarryReducedGhosts)
+		cached.SpacingStuds = tier.SpacingStuds * FX.CarryReducedSpacing
+		cached.StartTransparency = math.min(0.98,
+			tier.StartTransparency + FX.CarryReducedFade)
+		reducedCache[tier] = cached
+	end
+	return cached
+end
+
+--==============================================================================
+-- QUALITY IS ONE VARIABLE AND ONE FUNCTION
+--
+-- There is no settings panel yet. When there is, it writes here and nothing else
+-- changes -- which is the difference between adding a setting and doing an
+-- audit. Phones start Reduced without being asked: fewer ghosts and a slower
+-- colour clock, but every tier and every animation intact. A phone at the top of
+-- the ladder still gets the rainbow.
+--==============================================================================
+local QUALITY_FULL = "Full"
+local QUALITY_REDUCED = "Reduced"
+local QUALITY_OFF = "Off"
+
+local onPhone = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local quality = if onPhone then QUALITY_REDUCED else QUALITY_FULL
+
+local function maxGhostsFor(isLocal: boolean): number
+	if quality == QUALITY_OFF then
+		return 0
+	end
+	if quality == QUALITY_REDUCED then
+		return FX.MobileMaxGhosts
+	end
+	return if isLocal then FX.LocalMaxGhosts else FX.RemoteMaxGhosts
+end
+
+local function colourInterval(): number
+	local hz = if quality == QUALITY_REDUCED then FX.MobileColourHz else FX.ColourHz
+	return 1 / math.max(1, hz)
+end
+
+--==============================================================================
+-- STATE
+--==============================================================================
+type Ghost = {
+	parts: { BasePart },
+	sizes: { Vector3 },
+	active: boolean,
+	age: number,
+	tier: any,
+	phase: number,
+}
+
+type Tracked = {
+	player: Player,
+	character: Model,
+	humanoid: Humanoid,
+	root: BasePart,
+	source: { BasePart },
+	-- Where each part sits from feet (0) to head (1). Measured once off the rig,
+	-- because it is what lets a colour flow DOWN A BODY rather than paint a
+	-- whole echo one shade.
+	heights: { number },
+	pool: { Ghost },
+	nextGhost: number,
+	lastPos: Vector3?,
+	travelled: number,
+	isLocal: boolean,
+	folder: Folder,
+}
+
+local tracked: { [Player]: Tracked } = {}
+local active: { Ghost } = {}
+local buildPool: (Player, Model, Humanoid, BasePart) -> ()
+
+local ghostRoot = Workspace:FindFirstChild("SeedAfterimage")
+if ghostRoot then
+	-- Rule 10: a Rojo re-sync re-runs this while the last run's ghosts are still
+	-- standing in the world, anchored and invisible and never fading again.
+	ghostRoot:Destroy()
+end
+ghostRoot = Instance.new("Folder")
+ghostRoot.Name = "SeedAfterimage"
+ghostRoot.Parent = Workspace
+
+--==============================================================================
+-- THE COLOUR ENGINE
+--
+-- One function for all seven tiers, driven entirely by the row's own fields.
+-- Solid, per-ghost, down-the-body, travelling, and full-spectrum are the same
+-- expression with different numbers -- which is why adding an eighth tier is a
+-- row in a table and not a branch in here.
+--
+--     position = ghost's slot  +  height down the body  +  time
+--
+-- and that position is then read off either the hue wheel or the row's palette.
+--==============================================================================
+local function sampleAt(tier: any, position: number): Color3
+	if tier.Rainbow then
+		return Color3.fromHSV(position % 1, 0.82, 1)
+	end
+	local palette = tier.Palette
+	local count = #palette
+	if count == 1 then
+		return palette[1]
+	end
+	local scaled = (position % 1) * count
+	local index = math.floor(scaled) % count + 1
+	local next_ = index % count + 1
+	return palette[index]:Lerp(palette[next_], scaled % 1)
+end
+
+local function colourFor(tier: any, phase: number, height: number, clock: number): Color3
+	local position = phase * (tier.GhostSpread or 0)
+		+ (if tier.BodyGradient then (1 - height) * FX.BodyHueSpread else 0)
+		+ clock * (tier.Wave or 0)
+	return sampleAt(tier, position)
+end
+
+--==============================================================================
+-- WHAT A GHOST IS MADE OF
+--
+-- Read off the character once. Direct children only, and the HumanoidRootPart is
+-- skipped because it is invisible -- copying it would put an unlit box in the
+-- middle of every echo.
+--==============================================================================
+local function bodyPartsOf(character: Model): { BasePart }
+	local parts: { BasePart } = {}
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("BasePart") and child.Name ~= "HumanoidRootPart" then
+			table.insert(parts, child)
+		end
+	end
+	return parts
+end
+
+local function heightsOf(source: { BasePart }): { number }
+	local low, high = math.huge, -math.huge
+	for _, part in ipairs(source) do
+		low = math.min(low, part.Position.Y)
+		high = math.max(high, part.Position.Y)
+	end
+	local span = math.max(high - low, 0.001)
+	local out: { number } = {}
+	for i, part in ipairs(source) do
+		out[i] = (part.Position.Y - low) / span
+	end
+	return out
+end
+
+local function buildGhost(source: { BasePart }, parent: Folder): Ghost
+	local parts: { BasePart } = {}
+	local sizes: { Vector3 } = {}
+	for _, live in ipairs(source) do
+		local part = Instance.new("Part")
+		part.Name = "Echo"
+		part.Size = live.Size
+		part.Shape = if live:IsA("Part") then (live :: Part).Shape else Enum.PartType.Block
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+		part.Massless = true
+		-- Neon so it reads as light rather than as a second body. A ghost made of
+		-- plastic looks like a bug where the character failed to move.
+		part.Material = Enum.Material.Neon
+		part.Transparency = 1
+		part.Parent = parent
+		table.insert(parts, part)
+		table.insert(sizes, live.Size)
+	end
+	return {
+		parts = parts, sizes = sizes,
+		active = false, age = 0, tier = nil, phase = 0,
+	}
+end
+
+--==============================================================================
+-- TRACKING A CHARACTER
+--==============================================================================
+local function untrack(who: Player)
+	local entry = tracked[who]
+	if not entry then
+		return
+	end
+	for _, ghost in ipairs(entry.pool) do
+		ghost.active = false
+	end
+	-- Removed from the fade list by identity, so a ghost mid-fade on a player who
+	-- just left cannot keep writing to destroyed parts.
+	for i = #active, 1, -1 do
+		if table.find(entry.pool, active[i]) then
+			table.remove(active, i)
+		end
+	end
+	entry.folder:Destroy()
+	tracked[who] = nil
+end
+
+--==============================================================================
+-- CharacterAdded IS NOT "THE CHARACTER IS READY"
+--
+-- MEASURED, AND IT BROKE EVERY RESPAWN. The event fires when the model is
+-- parented, and an R15 rig's fifteen parts arrive over the frames after that --
+-- so reading them immediately gets a Humanoid, no HumanoidRootPart, and an empty
+-- body. The first version returned in that case and never tried again, which
+-- meant the pool existed exactly until the player first died and then never came
+-- back. It looked fine in testing because the character present at JOIN is
+-- already complete.
+--
+-- So: wait for the two parts that must exist, then let the rig settle until the
+-- part count stops changing. Bounded, and abandoned if the character is replaced
+-- underneath us.
+--==============================================================================
+local function track(who: Player, character: Model)
+	untrack(who)
+	task.spawn(function()
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		local rootInstance = character:WaitForChild("HumanoidRootPart", 10)
+		if not (humanoid and humanoid:IsA("Humanoid")
+			and rootInstance and rootInstance:IsA("BasePart")) then
+			return
+		end
+		local last = -1
+		for _ = 1, 30 do
+			local n = #bodyPartsOf(character)
+			if n > 0 and n == last then
+				break
+			end
+			last = n
+			task.wait()
+		end
+		if who.Character ~= character or not character.Parent then
+			return
+		end
+		buildPool(who, character, humanoid :: Humanoid, rootInstance :: BasePart)
+	end)
+end
+
+function buildPool(who, character, humanoid, rootInstance)
+	if tracked[who] then
+		return
+	end
+	local source = bodyPartsOf(character)
+	if #source == 0 then
+		return
+	end
+	local isLocal = who == player
+	local budget = maxGhostsFor(isLocal)
+	if budget <= 0 then
+		return
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = who.Name
+	folder.Parent = ghostRoot
+
+	local pool: { Ghost } = {}
+	for _ = 1, budget do
+		table.insert(pool, buildGhost(source, folder))
+	end
+
+	tracked[who] = {
+		player = who,
+		character = character,
+		humanoid = humanoid,
+		root = rootInstance,
+		source = source,
+		heights = heightsOf(source),
+		pool = pool,
+		nextGhost = 1,
+		lastPos = nil,
+		travelled = 0,
+		isLocal = isLocal,
+		folder = folder,
+	}
+end
+
+--==============================================================================
+-- IS THIS CHARACTER ACTUALLY RUNNING
+--
+-- Every reason NOT to emit, in one place. Ragdolled and thrown are the same
+-- test: NestService sets PlatformStand for the whole flight, and the physics
+-- state covers anything else that takes the humanoid off its feet.
+--==============================================================================
+local function isRunning(entry: Tracked): boolean
+	local humanoid = entry.humanoid
+	if humanoid.Health <= 0 or humanoid.PlatformStand then
+		return false
+	end
+	local state = humanoid:GetState()
+	if state == Enum.HumanoidStateType.Dead
+		or state == Enum.HumanoidStateType.Physics
+		or state == Enum.HumanoidStateType.FallingDown
+		or state == Enum.HumanoidStateType.Ragdoll then
+		return false
+	end
+	local v = entry.root.AssemblyLinearVelocity
+	return Vector3.new(v.X, 0, v.Z).Magnitude >= FX.MoveStudsPerSecond
+end
+
+--==============================================================================
+-- ONE ECHO
+--==============================================================================
+local function paint(entry: Tracked, ghost: Ghost, clock: number)
+	local tier = ghost.tier
+	if not tier then
+		return
+	end
+	for i, part in ipairs(ghost.parts) do
+		part.Color = colourFor(tier, ghost.phase, entry.heights[i] or 0, clock)
+	end
+end
+
+local function emit(entry: Tracked, tier: any, clock: number)
+	--==========================================================================
+	-- THE TIER'S GHOST COUNT IS A CAP, NOT A DESCRIPTION
+	--
+	-- MEASURED, AND IT WAS WRONG. The round-robin walked the whole POOL, which is
+	-- sized to the largest tier -- so how many echoes were on screen was an
+	-- accident of spacing, speed and fade time rather than the number in the
+	-- table. At 90 studs/s a tier-1 player got a fresh ghost every 0.12s and each
+	-- lived 0.18s, so `Ghosts = 1` rendered TWO.
+	--
+	-- Rotating through only the first N slots fixes it by construction: emitting
+	-- into a slot that is still fading restarts that same ghost, so N slots can
+	-- never show more than N echoes at any speed.
+	--==========================================================================
+	local slots = math.clamp(tier.Ghosts, 1, #entry.pool)
+	if entry.nextGhost > slots then
+		entry.nextGhost = 1
+	end
+	local ghost = entry.pool[entry.nextGhost]
+	if not ghost then
+		return
+	end
+	local slot = entry.nextGhost - 1
+	entry.nextGhost = entry.nextGhost % slots + 1
+
+	ghost.tier = tier
+	-- Where this echo starts in the palette or on the hue wheel. Consecutive
+	-- ghosts begin at different colours, which is what makes four echoes read as
+	-- a spectrum travelling with the player rather than four copies.
+	ghost.phase = if slots > 1 then slot / slots else 0
+	ghost.age = 0
+
+	for i, live in ipairs(entry.source) do
+		local part = ghost.parts[i]
+		if part and live.Parent then
+			part.CFrame = live.CFrame
+			part.Size = ghost.sizes[i]
+			part.Transparency = tier.StartTransparency
+		end
+	end
+	paint(entry, ghost, clock)
+
+	if not ghost.active then
+		ghost.active = true
+		table.insert(active, ghost)
+	end
+end
+
+--==============================================================================
+-- THE TRAIL BECOMES THE RAINBOW TOO
+--
+-- Tier 7 asks for the movement trail to flow rather than sit still, and the
+-- trail already exists -- so this rebuilds its ColorSequence on the colour clock
+-- instead of adding anything to the scene. Eight stops is enough to read as a
+-- spectrum; Roblox allows twenty.
+--
+-- Off every other tier, where the trail keeps the single colour it has always
+-- had. A rainbow streak at a thousand Speed would spend the whole ladder's
+-- reward on its first rung.
+--==============================================================================
+local function rainbowTrail(t: Trail, clock: number)
+	local stops: { ColorSequenceKeypoint } = {}
+	for i = 0, FX.TrailRainbowStops - 1 do
+		local at = i / (FX.TrailRainbowStops - 1)
+		table.insert(stops, ColorSequenceKeypoint.new(at,
+			Color3.fromHSV((at * 0.9 + clock * 0.5) % 1, 0.82, 1)))
+	end
+	t.Color = ColorSequence.new(stops)
+end
+
+--==============================================================================
+-- THE ONE LOOP
+--==============================================================================
+local colourClock = 0
+local sinceColour = 0
+-- So the streak is only reset to its resting colour once, rather than
+-- rebuilt every tick for every player who is not at tier 7.
+local trailIsRainbow = false
+
+RunService.Heartbeat:Connect(function(dt)
+	colourClock += dt
+	sinceColour += dt
+	local repaint = sinceColour >= colourInterval()
+	if repaint then
+		sinceColour = 0
+	end
+
+	--== every echo that is out there, whoever it belongs to ==--
+	for i = #active, 1, -1 do
+		local ghost = active[i]
+		local tier = ghost.tier
+		ghost.age += dt
+		local t = if tier and tier.FadeSeconds > 0 then ghost.age / tier.FadeSeconds else 1
+		if t >= 1 or not tier then
+			for _, part in ipairs(ghost.parts) do
+				part.Transparency = 1
+			end
+			ghost.active = false
+			table.remove(active, i)
+		else
+			--==============================================================
+			-- FADE, PULSE, SHIMMER, EXPAND -- ALL FROM ONE NUMBER
+			--
+			-- The pulse rides ON the fade rather than replacing it, so an echo
+			-- always ends invisible no matter what the tier asks for. A pulse
+			-- that could push transparency back down would leave ghosts on
+			-- screen forever at the top of the ladder.
+			--==============================================================
+			local base = tier.StartTransparency + (1 - tier.StartTransparency) * t
+			local pulse = if tier.Pulse > 0
+				then math.sin(t * math.pi * 2) * tier.Pulse * (1 - t)
+				else 0
+			local shimmer = if tier.Shimmer > 0
+				then math.sin(colourClock * 24 + ghost.phase * 6.28) * tier.Shimmer * (1 - t)
+				else 0
+			local transparency = math.clamp(base - pulse - shimmer, 0, 1)
+
+			local grow = if tier.Expand > 0 then 1 + tier.Expand * t else 1
+			for k, part in ipairs(ghost.parts) do
+				part.Transparency = transparency
+				if tier.Expand > 0 then
+					part.Size = ghost.sizes[k] * grow
+				end
+			end
+		end
+	end
+
+	if quality == QUALITY_OFF then
+		return
+	end
+
+	local localEntry = tracked[player]
+	local localRoot = localEntry and localEntry.root
+	local here = if localRoot and localRoot.Parent then localRoot.Position else nil
+
+	--==========================================================================
+	-- THE STREAK JOINS IN AT THE TOP OF THE LADDER
+	--
+	-- Driven off the same colour clock as the ghosts, so the trail and the echoes
+	-- are phases of one animation rather than two things that happen to be
+	-- rainbow. Restored to its resting colour the moment the tier drops, because
+	-- a Trail keeps whatever ColorSequence it was last given forever.
+	--==========================================================================
+	if repaint and trail and trail.Parent then
+		local mine = player:GetAttribute(TIER_ATTR)
+		local row = if type(mine) == "number" then FX.Tiers[mine] else nil
+		-- The streak is what a suppressed player is left with, so it must not
+		-- still be the most spectacular thing in the game while they crawl.
+		row = carriedTier(player, row)
+		if row and row.TrailRainbow then
+			rainbowTrail(trail, colourClock)
+			trailIsRainbow = true
+		elseif trailIsRainbow then
+			trail.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), ACCENT)
+			trailIsRainbow = false
+		end
+	end
+
+	for who, entry in pairs(tracked) do
+		if not (entry.character.Parent and entry.root.Parent) then
+			untrack(who)
+		else
+			local tierIndex = who:GetAttribute(TIER_ATTR)
+			local tier = if type(tierIndex) == "number" then FX.Tiers[tierIndex] else nil
+			-- Weight can weaken it to one faint echo, or take it away entirely.
+			tier = carriedTier(who, tier)
+			local at = entry.root.Position
+
+			local moved = if entry.lastPos
+				then Vector3.new(at.X - entry.lastPos.X, 0, at.Z - entry.lastPos.Z).Magnitude
+				else 0
+			entry.lastPos = at
+
+			--==============================================================
+			-- A JUMP THIS BIG WAS NOT A RUN
+			--
+			-- The accumulator is RESET rather than added to, so nothing is
+			-- emitted across the gap -- otherwise a respawn draws a line of
+			-- ghosts from where you died to where you came back.
+			--==============================================================
+			if moved > FX.TeleportStuds then
+				entry.travelled = 0
+			elseif tier and isRunning(entry) then
+				--==========================================================
+				-- NOBODY NEEDS SOMEBODY ELSE'S GHOSTS FROM 1,500 STUDS AWAY
+				--
+				-- Checked before the work rather than by MaxDistance on the
+				-- part, because the point is not to skip DRAWING them -- it is
+				-- to skip computing them at all.
+				--==========================================================
+				local inRange = entry.isLocal
+					or (here ~= nil and (at - here).Magnitude <= FX.RemoteMaxStuds)
+				if inRange then
+					entry.travelled += moved
+					if entry.travelled >= tier.SpacingStuds then
+						entry.travelled = 0
+						emit(entry, tier, colourClock)
+					end
+				else
+					entry.travelled = 0
+				end
+			else
+				entry.travelled = 0
+			end
+
+			--==============================================================
+			-- THE WAVE MOVES; THE FRAME RATE DOES NOT DECIDE HOW FAST
+			--
+			-- Repainted on the colour clock rather than every frame, and only
+			-- for the tiers whose colour actually moves. Tiers 1 to 4 are
+			-- painted once at emit and never touched again.
+			--==============================================================
+			if repaint then
+				for _, ghost in ipairs(entry.pool) do
+					if ghost.active and ghost.tier
+						and (ghost.tier.Wave > 0 or ghost.tier.Rainbow) then
+						paint(entry, ghost, colourClock)
+					end
+				end
+			end
+		end
+	end
+end)
+
+--==============================================================================
+-- WHO IS TRACKED
+--
+-- Everybody, including the local player -- the ghosts of the person you are
+-- playing are the whole point, and a separate path for them would be a second
+-- copy of all of the above.
+--==============================================================================
+local function watchPlayer(who: Player)
+	if who.Character then
+		track(who, who.Character)
+	end
+	who.CharacterAdded:Connect(function(character)
+		track(who, character)
+	end)
+	who.CharacterRemoving:Connect(function()
+		untrack(who)
+	end)
+end
+
+for _, who in ipairs(Players:GetPlayers()) do
+	watchPlayer(who)
+end
+Players.PlayerAdded:Connect(watchPlayer)
+Players.PlayerRemoving:Connect(untrack)
+
+--==============================================================================
+-- THE SEAM A SETTINGS PANEL WILL USE
+--
+-- Rebuilds the pools, because the budget decides how many ghosts exist and that
+-- is fixed at build time by design. Nothing else in the file has to know.
+--==============================================================================
+local function setQuality(mode: string)
+	if mode ~= QUALITY_FULL and mode ~= QUALITY_REDUCED and mode ~= QUALITY_OFF then
+		return
+	end
+	if quality == mode then
+		return
+	end
+	quality = mode
+	for _, who in ipairs(Players:GetPlayers()) do
+		local character = who.Character
+		untrack(who)
+		if character and mode ~= QUALITY_OFF then
+			track(who, character)
+		end
+	end
+end
+
+--==============================================================================
+-- DRIVEN BY AN ATTRIBUTE, NOT A GLOBAL
+--
+-- `player:SetAttribute("SeedAfterimageQuality", "Reduced")` and that is the
+-- whole interface. A settings panel writes it, this reads it, and anything at
+-- all can ask what a machine is rendering -- which a `_G` function cannot
+-- answer from outside its own VM, as the test harness found out.
+--
+-- Applied on connect as well as on change, so a value written before this script
+-- ran is not lost.
+--==============================================================================
+player:GetAttributeChangedSignal(FX.QualityAttribute):Connect(function()
+	local want = player:GetAttribute(FX.QualityAttribute)
+	if type(want) == "string" then
+		setQuality(want)
+	end
+end)
+do
+	local want = player:GetAttribute(FX.QualityAttribute)
+	if type(want) == "string" then
+		setQuality(want)
+	end
+end
