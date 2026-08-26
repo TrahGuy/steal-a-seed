@@ -2534,6 +2534,92 @@ GameConfig.Pops = {
 }
 
 --==============================================================================
+-- THE TWO PIECES OF TEXT THE WORLD ITSELF CARRIES
+--
+-- Everything else in this game that says something is on the HUD -- the cash
+-- readout, the world clock, the alarm. These two are in the WORLD, attached to a
+-- thing, and until now they were the same GothamBold paper-and-lime as the rest
+-- of it: a pod's countdown and a prompt's verb were typographically identical to
+-- the corner of the screen, so nothing about them said "this belongs to the
+-- object you are looking at".
+--
+--     POD     what a buried pod is doing, and how long is left of it
+--     PROMPT  the key, and the verb it performs
+--
+-- One is a LABEL on a growing thing and the other is a BUTTON. They should not
+-- look like each other either, and neither should look like the HUD.
+--==============================================================================
+GameConfig.Labels = {
+	--==========================================================================
+	-- THE POD: A SEED PACKET, NOT A PROGRESS BAR
+	--
+	-- FredokaOne is the roundest face in the project -- already used on the biome
+	-- arches -- and round is what a buried seed should read as. It is warm cream
+	-- rather than paper white, which is the Crown colour every Greenhollow
+	-- creature already wears, so the label looks like it grew there.
+	--
+	--======================================================================
+	-- THE CLOCK RIPENS FROM AMBER TO GREEN
+	--
+	-- This is the part that is worth more than the typeface. The number already
+	-- says how long is left; the COLOUR says it without being read. A pod
+	-- crossing a bed at a glance is amber when it has just gone in and green
+	-- when it is nearly out, so a player walking their plot knows which square
+	-- to stand near without stopping at any of them.
+	--
+	-- Green at the end and not at the start, because green is what this whole
+	-- palette means by "ready" -- it is the colour of the prompt that replaces
+	-- this label the moment the clock runs out.
+	--======================================================================
+	Pod = {
+		Font = Enum.Font.FredokaOne,
+		WordSize = 13,
+		ClockSize = 18,
+		-- The Crown cream off the species sheet.
+		Word = Color3.fromRGB(242, 238, 206),
+		ClockYoung = Color3.fromRGB(255, 190, 90),
+		ClockReady = Color3.fromRGB(142, 214, 86),
+		Outline = Color3.fromRGB(26, 24, 30),
+		OutlineThickness = 2,
+		--======================================================================
+		-- THE STRINGS
+		--
+		-- Growing is unreachable today: PlantService rebuilds a plant at every
+		-- stage change and nothing in a bed is ever a sprout, so a pod is a pod
+		-- until it is grown. It is here because the stage still exists in
+		-- CreatureModel and the day it comes back this is where its word lives
+		-- -- not buried in a client as a literal nobody can find.
+		--======================================================================
+		Hatching = "HATCHING",
+		Growing = "GROWING",
+	},
+
+	--==========================================================================
+	-- THE PROMPT: A BUTTON
+	--
+	-- DenkOne is condensed, geometric and upright -- it reads as a control
+	-- rather than as a caption, which is exactly what a prompt is. Distinct from
+	-- all four faces already in use: LuckiestGuy is money, Bangers is speed,
+	-- FredokaOne is now the pod, GothamBlack is the HUD.
+	--
+	-- THE VERB IS UPPERCASED HERE rather than in the four places that set an
+	-- ActionText. `prompt.ActionText` stays "Pick Up" because that is what it
+	-- is; how loudly it is said is this file's business, and a service should
+	-- not have to shout to be drawn correctly.
+	--==========================================================================
+	Prompt = {
+		Font = Enum.Font.DenkOne,
+		KeySize = 20,
+		VerbSize = 21,
+		Verb = Color3.fromRGB(248, 246, 240),
+		Key = Color3.fromRGB(26, 24, 30),
+		Outline = Color3.fromRGB(26, 24, 30),
+		OutlineThickness = 2,
+		Uppercase = true,
+	},
+}
+
+--==============================================================================
 -- ONE COMPACTOR, NOT THREE
 --
 -- Four places want to shorten a number -- the rate on a grown plant, the `+$N`

@@ -89,6 +89,16 @@ local playerGui = player:WaitForChild("PlayerGui")
 local INK = Color3.fromRGB(26, 24, 30)
 local PAPER = Color3.fromRGB(248, 246, 240)
 local ACCENT = Color3.fromRGB(142, 196, 62)
+--==============================================================================
+-- IT IS A SEED PACKET NOW, NOT THE HUD IN MINIATURE
+--
+-- The word and the clock were GothamBold and GothamBlack in paper and lime --
+-- the same type as the cash readout in the corner of the screen. Nothing about
+-- them said they belonged to the pod they were floating over. See
+-- GameConfig.Labels.Pod for what they are instead, and for why the clock
+-- changes colour as it runs down.
+--==============================================================================
+local POD = GameConfig.Labels.Pod
 
 -- The only two things that stand in a bed. There is no sprout any more: nothing
 -- grows in the ground, it hatches in your hands.
@@ -229,24 +239,34 @@ local function build(model: Model): Panel?
 	local word = Instance.new("TextLabel")
 	word.Name = "Word"
 	word.LayoutOrder = 1
-	word.Size = UDim2.new(1, 0, 0, 15)
+	word.Size = UDim2.new(1, 0, 0, POD.WordSize + 2)
 	word.BackgroundTransparency = 1
-	word.Font = Enum.Font.GothamBold
-	word.TextSize = 13
-	word.TextColor3 = PAPER
+	word.Font = POD.Font
+	word.TextSize = POD.WordSize
+	word.TextColor3 = POD.Word
 	word.Text = ""
 	word.Parent = panel
+
+	local wordEdge = Instance.new("UIStroke")
+	wordEdge.Color = POD.Outline
+	wordEdge.Thickness = POD.OutlineThickness
+	wordEdge.Parent = word
 
 	local timer = Instance.new("TextLabel")
 	timer.Name = "Timer"
 	timer.LayoutOrder = 2
-	timer.Size = UDim2.new(1, 0, 0, 17)
+	timer.Size = UDim2.new(1, 0, 0, POD.ClockSize + 1)
 	timer.BackgroundTransparency = 1
-	timer.Font = Enum.Font.GothamBlack
-	timer.TextSize = 17
-	timer.TextColor3 = ACCENT
+	timer.Font = POD.Font
+	timer.TextSize = POD.ClockSize
+	timer.TextColor3 = POD.ClockYoung
 	timer.Text = ""
 	timer.Parent = panel
+
+	local timerEdge = Instance.new("UIStroke")
+	timerEdge.Color = POD.Outline
+	timerEdge.Thickness = POD.OutlineThickness
+	timerEdge.Parent = timer
 
 	return {
 		billboard = billboard,
@@ -306,7 +326,7 @@ local function refresh(panel: Panel, now: number)
 		return
 	end
 
-	local word, timer = "HATCHING", clock(remaining)
+	local word, timer = POD.Hatching, clock(remaining)
 
 	local key = word .. "\0" .. timer
 	if key == panel.lastText then
@@ -315,8 +335,24 @@ local function refresh(panel: Panel, now: number)
 	panel.lastText = key
 	panel.word.Text = word
 	panel.timer.Text = timer
-	-- Sizes and colours are fixed at build() now that there is only one state to
-	-- draw. Nothing here resizes anything every tick.
+
+	--==========================================================================
+	-- THE CLOCK RIPENS
+	--
+	-- Amber when it has just gone in, green when it is nearly out. The number
+	-- already says how long is left; the colour says it WITHOUT BEING READ, so a
+	-- player walking their own bed can tell which square is nearly ready without
+	-- stopping at any of them.
+	--
+	-- Written in the same block that is already guarded by the text having
+	-- changed, so this costs one Color3 assignment per second per pod rather
+	-- than one per frame.
+	--==========================================================================
+	local total = SeedData.GrowSeconds(panel.kg)
+	local ripeness = if total > 0 then math.clamp(1 - remaining / total, 0, 1) else 1
+	panel.timer.TextColor3 = POD.ClockYoung:Lerp(POD.ClockReady, ripeness)
+
+	-- Sizes are fixed at build(); nothing here resizes anything every tick.
 	panel.billboard.Enabled = true
 end
 

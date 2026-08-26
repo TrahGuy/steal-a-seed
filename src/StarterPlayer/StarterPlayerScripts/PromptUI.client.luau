@@ -47,6 +47,15 @@ local playerGui = player:WaitForChild("PlayerGui")
 local INK = Color3.fromRGB(26, 24, 30)
 local PAPER = Color3.fromRGB(248, 246, 240)
 local ACCENT = Color3.fromRGB(142, 196, 62)
+--==============================================================================
+-- THE VERB IS A BUTTON, AND IT LOOKS LIKE ONE NOW
+--
+-- The key cap and the verb were GothamBold in paper -- the same type as the HUD
+-- and, until this pass, the same as the pod label floating a stud above them.
+-- Three different things in one typeface is three things that read as one.
+-- See GameConfig.Labels.Prompt.
+--==============================================================================
+local PROMPT = GameConfig.Labels.Prompt
 
 type Panel = {
 	billboard: BillboardGui,
@@ -158,9 +167,9 @@ local function build(prompt: ProximityPrompt): Panel?
 	local key = Instance.new("TextLabel")
 	key.Size = UDim2.fromScale(1, 1)
 	key.BackgroundTransparency = 1
-	key.Font = Enum.Font.GothamBold
-	key.TextSize = 19
-	key.TextColor3 = INK
+	key.Font = PROMPT.Font
+	key.TextSize = PROMPT.KeySize
+	key.TextColor3 = PROMPT.Key
 	key.ZIndex = 4
 	-- The bound key, not a hardcoded letter: rebinding the prompt should not
 	-- leave the UI lying about which key does it.
@@ -175,13 +184,27 @@ local function build(prompt: ProximityPrompt): Panel?
 	action.LayoutOrder = 2
 	action.Size = UDim2.fromOffset(80, 34)
 	action.BackgroundTransparency = 1
-	action.Font = Enum.Font.GothamBold
-	action.TextSize = 20
-	action.TextColor3 = PAPER
+	action.Font = PROMPT.Font
+	action.TextSize = PROMPT.VerbSize
+	action.TextColor3 = PROMPT.Verb
 	action.TextXAlignment = Enum.TextXAlignment.Left
 	action.ZIndex = 3
-	action.Text = if prompt.ActionText ~= "" then prompt.ActionText else "Use"
+	--==========================================================================
+	-- UPPERCASED HERE, NOT AT THE FOUR PLACES THAT SET IT
+	--
+	-- ActionText stays "Pick Up" on the prompt, because that is what the action
+	-- is called. How loudly it is said is this file's business -- a service
+	-- should not have to shout in its own data to be drawn correctly, and the
+	-- day somebody adds a fifth prompt they should not have to know.
+	--==========================================================================
+	local verb = if prompt.ActionText ~= "" then prompt.ActionText else "Use"
+	action.Text = if PROMPT.Uppercase then string.upper(verb) else verb
 	action.Parent = content
+
+	local verbEdge = Instance.new("UIStroke")
+	verbEdge.Color = PROMPT.Outline
+	verbEdge.Thickness = PROMPT.OutlineThickness
+	verbEdge.Parent = action
 
 	--== TOUCH ==--
 	-- Down and Up rather than Activated. Activated fires on release, which for a
