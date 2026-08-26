@@ -46,6 +46,7 @@ local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local MillModel = require(Shared:WaitForChild("MillModel"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local MILL = GameConfig.Treadmill
 local LADDER = GameConfig.Mill
@@ -85,6 +86,15 @@ local granted: { [Player]: number } = {}
 -- left completely alone, so the way off is the button every Roblox player
 -- already presses without being told there is one.
 --==============================================================================
+--==============================================================================
+-- THE REMOTE, AT FILE SCOPE
+--
+-- `bindSign` is written above Start() and closes over this, so it cannot be the
+-- local Start() resolves -- a name referenced before its `local` is a GLOBAL in
+-- Luau, and a global that is always nil is a refusal that never reaches anybody.
+--==============================================================================
+local upgradeChannel: RemoteEvent? = nil
+
 local mounted: { [Player]: BasePart } = {}
 local mountConns: { [Player]: { RBXScriptConnection } } = {}
 --==============================================================================
@@ -256,6 +266,15 @@ function TreadmillService.Mount(player: Player, belt: BasePart): boolean
 	local stand = belt.Position + Vector3.new(0, lift, 0)
 	root.CFrame = CFrame.lookAt(stand, stand + belt.CFrame.LookVector)
 	root.AssemblyLinearVelocity = Vector3.zero
+
+	--==========================================================================
+	-- ON THE BELT, NOT IN THE EAR
+	--
+	-- Positional and audible off the plot, because being caught by a mill is a
+	-- thing that happens TO A PLACE. A 2D thump would tell the mounted player
+	-- something they can already see and tell everybody else nothing.
+	--==========================================================================
+	SoundKit.emit("MillMount", belt)
 
 	CarryService.RefreshWalkSpeed(player)
 
@@ -538,6 +557,10 @@ function TreadmillService.Upgrade(player: Player): boolean
 	if not plot or PlotService.OwnerOf(plot) ~= player then
 		return false
 	end
+	local plotId = plot:GetAttribute(ATTR.PlotId)
+	if type(plotId) ~= "number" then
+		return false
+	end
 	local tier = TreadmillService.TierOf(player)
 	local next_ = LADDER.Tiers[tier + 1]
 	if not next_ then
@@ -556,6 +579,21 @@ function TreadmillService.Upgrade(player: Player): boolean
 		return false
 	end
 	TreadmillService.Rebuild(plot, tier + 1)
+	--==========================================================================
+	-- THE WHOLE ROAD HEARS IT
+	--
+	-- On the new belt rather than on the buyer, and with the longest range of
+	-- any cue in the game. A neighbour buying tier 6 is the most persuasive
+	-- advertisement this game has and it costs nothing to let them hear it.
+	--
+	-- After the rebuild, because the mill it plays on is the one that was just
+	-- built -- the old belt was destroyed two lines up and a Sound parented to it
+	-- would go with it.
+	--==========================================================================
+	local newBelt = beltFor(plotId)
+	if newBelt then
+		SoundKit.emit("MillUpgrade", newBelt)
+	end
 	log(string.format("%s upgraded their mill to %d (%s, %g/s) for %d.",
 		player.Name, tier + 1, next_.name, next_.speed, next_.cost))
 	return true
@@ -692,7 +730,23 @@ function TreadmillService.Start()
 			return
 		end
 		table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
-			TreadmillService.Upgrade(player)
+			--==============================================================
+			-- A REFUSAL IS THE ONE THING THE SIGN CANNOT SAY BY ITSELF
+			--
+			-- Success needs no message: the mill is rebuilt in front of you,
+			-- the sign repaints, and MillUpgrade plays off the new belt. A
+			-- REFUSAL changes nothing at all on screen, so holding a prompt
+			-- with $40 short is indistinguishable from holding a prompt that
+			-- is broken.
+			--
+			-- Sent back down the GameEvent remote that already exists and
+			-- already carries this verb, as the verb plus false. Not a new
+			-- remote, and not a reason -- the client is told that it did not
+			-- happen, which is all it needs to make a noise about.
+			--==============================================================
+			if not TreadmillService.Upgrade(player) and upgradeChannel then
+				upgradeChannel:FireClient(player, LADDER.Action, false)
+			end
 		end))
 		local plotId = instance:GetAttribute(ATTR.PlotId)
 		if type(plotId) == "number" then
@@ -715,6 +769,7 @@ function TreadmillService.Start()
 	local remotes = ReplicatedStorage:WaitForChild("SeedGame"):FindFirstChild("Remotes")
 	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if channel and channel:IsA("RemoteEvent") then
+		upgradeChannel = channel
 		table.insert(serviceConnections, channel.OnServerEvent:Connect(
 			function(player: Player, action: any)
 				if action == LADDER.Action then

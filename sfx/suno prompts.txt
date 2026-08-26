@@ -1,0 +1,383 @@
+STEAL A SEED -- SOUND PROMPTS FOR SUNO
+======================================
+
+Every prompt below is a COPY-PASTE LINE for Suno's Style box. Nothing else on
+the line is meant to be typed in.
+
+
+-------------------------------------------------------------------------------
+HOW TO RUN THESE
+-------------------------------------------------------------------------------
+
+  1. Custom mode. Instrumental ON. Leave the lyrics box EMPTY.
+  2. Paste one Style line. Do not add your own adjectives on top -- Suno gets
+     literal-minded past about 15 words and starts writing a song instead.
+  3. Generate 2 clips, keep the better one, Download -> WAV.
+  4. Trim in Audacity: select the part you want, Ctrl+T, then Effect ->
+     Fade Out on the last 30ms so it does not click when it stops.
+  5. Upload at create.roblox.com -> Creations -> Audio. Anything under six
+     seconds clears moderation in about a minute; music takes longer.
+  6. Put the id it gives you in GameConfig -- Music.Tracks for a bed,
+     GameConfig.Sfx for a one-shot. Do NOT leave the id only in a chat log.
+
+
+-------------------------------------------------------------------------------
+READ THIS BEFORE YOU DO THE POP
+-------------------------------------------------------------------------------
+
+SUNO IS A SONG MODEL. It will not hand you a 90-millisecond pop. It hands you a
+clip half a minute long and you cut the pop out of it. That works, but it is
+fishing -- so the one-shot prompts below are all written to make Suno produce a
+SPARSE clip of REPEATED single hits with silence between them, which gives you
+ten or fifteen candidates out of one generation to choose from.
+
+If a one-shot fights you for more than two generations, stop. ElevenLabs Sound
+Effects is built for exactly this and is free at this volume, and the Roblox
+library already has usable UI clicks. The beds in Part 2 are where Suno is
+actually the right tool, and that is where the generations are worth spending.
+
+
+===============================================================================
+PART 1 -- THE ONE-SHOTS
+===============================================================================
+
+-------------------------------------------------------------------------------
+1. CARD HOVER POP                                    <- the one you asked for
+-------------------------------------------------------------------------------
+Plays when the mouse enters a plant card in the Index, the Garden sheet, or a
+shop row -- the hover in UIKit already scales the card up and thickens its
+stroke, and this is the sound of that. It fires CONSTANTLY, so it has to be
+tiny, dry, and completely without a tail. Anything with reverb on it will smear
+into itself the moment somebody sweeps the mouse down a grid.
+
+  STYLE:
+  short soft mouth pop, dry, no reverb, one hit every two seconds, silence between, no music, no beat
+
+  Target: 60-110ms. Pitch it up 2 to 4 semitones in Audacity if it reads heavy.
+  Level in game: 0.18 to 0.22. It sits UNDER everything -- the alarm pings are
+  at 0.42 and a hover sound must never compete with them.
+
+  ALTERNATE, if the mouth pop comes out wet or vocal:
+  short wooden marimba tap, single note, very short decay, dry, spaced out with silence, no melody
+
+  One more thing: a hover that plays at the same pitch every time turns into a
+  woodpecker on a grid. Randomise PlaybackSpeed 0.94-1.06 on each play.
+
+-------------------------------------------------------------------------------
+2. CARD CLICK / CONFIRM
+-------------------------------------------------------------------------------
+The pop's louder sibling. Same family, one step firmer, so the two read as one
+instrument rather than two decisions.
+
+  STYLE:
+  short warm wood block click, single hit, dry, tight decay, spaced with silence, no music
+
+  Target: 90-140ms. Level 0.3.
+
+-------------------------------------------------------------------------------
+3. DENIED / NOT ENOUGH CASH
+-------------------------------------------------------------------------------
+Two descending notes. Never a buzzer -- a buzzer says "you broke it" when the
+truth is "come back with more money".
+
+  STYLE:
+  two soft descending marimba notes, minor second apart, dry, short, no backing, silence around it
+
+  Target: 250ms. Level 0.3.
+
+-------------------------------------------------------------------------------
+4. PANEL OPEN
+-------------------------------------------------------------------------------
+The Index and the shop slide in. Give them air moving, not a UI beep.
+
+  STYLE:
+  soft paper swoosh with a low wooden thump at the end, single gesture, dry, silence around it, no music
+
+  Target: 300ms. Level 0.28. For PANEL CLOSE, reverse the same file in
+  Audacity and cut it 30% shorter -- closing should be quicker than opening.
+
+-------------------------------------------------------------------------------
+5. BANKED -- A POD MADE IT HOME
+-------------------------------------------------------------------------------
+The most important sound in the game after the alarm, and the alert UI
+currently fakes it with a pitched-up stock ping. This is the payoff for a whole
+run.
+
+  STYLE:
+  bright bell arpeggio up, three notes, glockenspiel, warm, short, ending clean, no drums, no bass
+
+  Target: 700ms to 1s. Level 0.5.
+
+-------------------------------------------------------------------------------
+6. RARITY REVEAL -- ONE PER TIER, FOUR GENERATIONS
+-------------------------------------------------------------------------------
+The rarer it is, the longer the sound is allowed to take. Generate all four in
+one sitting from the same family, so a Legendary reads as a bigger version of a
+Common rather than as a different game.
+
+  COMMON:
+  single soft kalimba note, warm, dry, short decay, silence around it, no music
+
+  RARE:
+  two bright kalimba notes rising, light shimmer tail, dry, no drums
+
+  EPIC:
+  four note glockenspiel run rising with soft choir swell underneath, no drums, no bass, short
+
+  LEGENDARY:
+  rising glockenspiel and harp flourish with a low bell hit and airy choir, triumphant, no drums
+
+  Lengths 300ms / 500ms / 1.2s / 2.5s. Levels 0.3 / 0.35 / 0.45 / 0.55.
+
+-------------------------------------------------------------------------------
+7. MILL UPGRADE BOUGHT
+-------------------------------------------------------------------------------
+Mechanical, not magical -- the mill is a machine and the tier 7 one is still a
+machine. A clunk that resolves upward.
+
+  STYLE:
+  heavy mechanical lever clunk then a bright bell ding, single gesture, dry, no music, silence after
+
+  Target: 900ms. Level 0.4.
+
+-------------------------------------------------------------------------------
+8. MOUNTING THE BELT
+-------------------------------------------------------------------------------
+Fires when your own mill catches you mid-sprint. Short and physical -- feet
+landing on a rubber deck, not a chime. It must not sound like a reward,
+because it happens whether you aimed for it or not.
+
+  STYLE:
+  soft rubber thud with a short mechanical whir starting, dry, close mic, no music, silence around it
+
+  Target: 400ms. Level 0.3, positional on the belt rather than 2D.
+
+-------------------------------------------------------------------------------
+9. CASH TICK
+-------------------------------------------------------------------------------
+For the cash counter rolling up after a bank -- NOT for the +$N that rises off
+every grown plant once a second. If every one of those made a noise the garden
+would be unlistenable inside a minute.
+
+  STYLE:
+  tiny coin tick, very short, dry, single hit repeated with silence between, no music, no melody
+
+  Target: 50ms. Level 0.15, and play it every third digit rather than every
+  digit.
+
+
+===============================================================================
+PART 2 -- THE BEDS AND LOOPS
+===============================================================================
+
+This is what Suno is actually for, and these are worth five to ten generations
+each.
+
+Ask for the loopable length in the prompt and then still cut it by hand: find a
+bar line near the end, cut there, and crossfade 200ms onto the top.
+
+-------------------------------------------------------------------------------
+10. GARDEN BED, THIRD TAKE
+-------------------------------------------------------------------------------
+Two takes of Garden at First Light are already in and they wrap at about three
+and a quarter minutes. A third pushes that past five, which is roughly where a
+bed stops being noticed at all. Match the existing two -- same key, same tempo,
+one different texture.
+
+  STYLE:
+  gentle acoustic cottagecore instrumental, fingerpicked nylon guitar, soft marimba, warm pads, slow, no drums, loopable
+
+  Target: 2 to 3 minutes. Level 0.32, to match the two already playing.
+
+-------------------------------------------------------------------------------
+11. NIGHT GARDEN
+-------------------------------------------------------------------------------
+The same garden, later. Only worth doing if there is ever a day/night cycle --
+but it is the cheapest way there is to make a world feel like it has time in
+it.
+
+  STYLE:
+  quiet nocturnal instrumental, soft felt piano, low warm pad, distant crickets, very slow, sparse, no drums, loopable
+
+  Target: 2 to 3 minutes. Level 0.28 -- a night bed at day volume reads as
+  louder, not quieter.
+
+-------------------------------------------------------------------------------
+12. CHASE BED, SECOND TIER
+-------------------------------------------------------------------------------
+A chase bed is already uploaded. A second, more frantic one gives the chase
+somewhere to escalate TO -- when the pod being carried is expensive, or on the
+third theft from the same nest.
+
+  STYLE:
+  frantic percussive chase music, driving low toms, urgent plucked strings, rising tension, fast, loopable, no vocals
+
+  Target: 60 to 90 seconds. Level 0.4 -- above the garden bed, below the
+  stinger.
+
+-------------------------------------------------------------------------------
+13. SHOP / INDEX UNDERSCORE
+-------------------------------------------------------------------------------
+Optional, and it might genuinely be worse than silence. If you make it, it has
+to duck the garden bed rather than stack on top of it.
+
+  STYLE:
+  light music box and celesta loop, curious, gentle, slow, sparse, no drums, loopable
+
+  Target: 45 to 60 seconds. Level 0.22.
+
+-------------------------------------------------------------------------------
+14. TITLE / LOADING
+-------------------------------------------------------------------------------
+The one place a big statement is allowed, because the player is not doing
+anything yet and has nothing to hear it over.
+
+  STYLE:
+  warm orchestral folk theme, nylon guitar melody, strings swell, hopeful, cinematic, no vocals, no drums
+
+  Target: 30 to 45 seconds, faded under the garden bed at spawn.
+
+
+
+
+===============================================================================
+PART 3 -- REPLACING THE FIVE THAT WERE DELETED
+===============================================================================
+
+Five uploads are gone and their ids are dead. Every one of them has a real
+trigger in the game now, so these are not optional extras -- until they are back
+the game has a monster that runs at you in silence.
+
+-------------------------------------------------------------------------------
+15. GRAB -- THE PARENT REACHES YOU
+-------------------------------------------------------------------------------
+The instant before the throw. The chase has been building for the whole run home
+and this is the sound of it ending badly, so it wants to be ugly and it wants to
+be INSTANT -- no wind-up, because the wind-up already happened, it was the
+chase.
+
+  STYLE:
+  heavy cloth grab thump with a low leathery snatch, single hit, dry, close mic, no music, silence around it
+
+  Target: 200-300ms. Level 0.75, positional on the parent.
+
+-------------------------------------------------------------------------------
+16. THROW -- THE LAUNCH
+-------------------------------------------------------------------------------
+Fires about a fifth of a second after GRAB, so the two have to sit together: the
+grab is the impact and this is what follows it. Weight first, air second -- a
+pure whoosh with no body reads as a swing that missed.
+
+  STYLE:
+  fast heavy whoosh with a deep impact at the start, single gesture, dry, no music, silence after
+
+  Target: 500-700ms. Level 0.85, positional on the parent.
+
+-------------------------------------------------------------------------------
+17. TAKE POD -- THE HOLD COMPLETES
+-------------------------------------------------------------------------------
+Not the button, the SHELL COMING FREE. The player has held E for the better part
+of a second watching a bar fill, and this is the release at the end of it --
+which means it has to feel earned, and it has to be organic. A UI click here
+would make a nest raid feel like a menu.
+
+  STYLE:
+  soft organic pluck, stem snapping free with a low wooden pop, single hit, dry, no music, silence between
+
+  Target: 250-400ms. Level 0.55, positional on the pod.
+
+-------------------------------------------------------------------------------
+18. CHASE BED (LOOP)
+-------------------------------------------------------------------------------
+Runs for as long as you are carrying, and ducks the garden bed to a third while
+it plays. This is the BASE one -- number 12 in Part 2 is the more frantic second
+tier to escalate to, and if you only make one, make this.
+
+It has to loop without a seam. Generate long, then cut on a bar line and
+crossfade 200ms onto the top.
+
+  STYLE:
+  urgent percussive chase loop, running low toms, tense staccato strings, driving, fast, loopable, no vocals, no melody
+
+  Target: 45-90 seconds. Level 0.40.
+
+-------------------------------------------------------------------------------
+19. CHASE FOOTSTEP
+-------------------------------------------------------------------------------
+The parent's feet, positional, so a player hears WHERE it is rather than just
+that it exists. Its walk is deliberately wrong -- the legs are 140 degrees apart
+and one is always late -- so an even four-to-the-floor gait would fight the
+animation. Ask for the limp.
+
+  STYLE:
+  heavy monster footsteps on soil, slow uneven limping gait, deep thuds, dry, close, no music, no melody
+
+  Target: a 2-4 second loop of steps. Level 0.50, positional on the parent.
+
+  If what you get is a SINGLE step rather than a run of them, that is fine and
+  arguably better -- set Looped = false on the ChaseStep cue in GameConfig and
+  it will be retriggered per stride instead.
+
+
+===============================================================================
+THE ONE UPLOAD THAT SURVIVED
+===============================================================================
+
+  ParentSleep   81143161269823   sfx/parent sleep sound.wav
+
+Still live, still in GameConfig, and now actually playing -- it loops on any
+nest parent whose Asleep attribute is true and stops the moment one wakes up.
+
+The two music ids are also untouched:
+
+  BGM1  133940553394248   Garden at First Light
+  BGM2   70722559996799   Garden at First Light_1
+
+
+===============================================================================
+WHERE THE IDS GO
+===============================================================================
+
+One table, one line each, in
+src/ReplicatedStorage/SeedGame/Shared/GameConfig.luau:
+
+    GameConfig.Sfx.Cues = {
+        CardHover  = { id = "", volume = 0.20, ... },
+        CardClick  = { id = "", ... },
+        ...
+    }
+
+Paste the id between the quotes and that cue starts playing. An EMPTY id is a
+silent cue, not a broken one -- nothing errors, nothing warns twice, and the
+game runs exactly as it does today until an id arrives. So they can go in one at
+a time, in any order, and be heard immediately.
+
+Music beds go in GameConfig.Music.Tracks instead -- that is a plain list, so a
+third garden take needs no code at all.
+
+Cue names, in the order they appear in this file:
+
+     1  CardHover          11  RevealLegendary
+     2  CardClick          12  MillUpgrade
+     3  Denied             13  MillMount
+     4  PanelOpen          14  CashTick
+     5  PanelClose         15  Grab
+     6  Banked             16  Throw
+     7  RevealCommon       17  TakePod
+     8  RevealRare         18  ChaseBed
+     9  RevealEpic         19  ChaseStep
+    10  (Epic, see 9)      20  ParentSleep
+
+
+===============================================================================
+IF YOU ONLY HAVE AN HOUR
+===============================================================================
+
+  1. Chase bed + chase footstep + grab + throw
+                            the monster is the loudest thing in the game and
+                            all four of its sounds are currently missing
+  2. Card hover pop         fires more often than anything else
+  3. Banked                 the biggest payoff in the game has no sound of
+                            its own
+  4. Take pod               the other end of the same raid
+  5. Card click, denied, the four reveals

@@ -46,6 +46,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
@@ -452,6 +453,22 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
+	--==========================================================================
+	-- THE SHELL COMING FREE, NOT THE BUTTON
+	--
+	-- On the THIEF rather than on the pod, because the pod that was on the
+	-- ground has just been destroyed and the one in their hands is welded to
+	-- their head -- either way the sound is coming from the same place, and the
+	-- root is the one that is certain to still exist a frame from now.
+	--
+	-- Positional, so a player raiding a nest thirty studs away is audible. The
+	-- whole road is one corridor and everybody walks down it; hearing somebody
+	-- else's raid is the point.
+	--==========================================================================
+	local thiefRoot = character:FindFirstChild("HumanoidRootPart")
+	if thiefRoot and thiefRoot:IsA("BasePart") then
+		SoundKit.emit("TakePod", thiefRoot)
+	end
 	return true
 end
 

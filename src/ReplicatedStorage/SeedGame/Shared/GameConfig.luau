@@ -1210,29 +1210,302 @@ GameConfig.Music = {
 }
 
 --==============================================================================
--- THE REST OF THE UPLOADS, RECORDED BUT NOT YET TRIGGERED
+-- EVERY SOUND THAT IS NOT THE MUSIC BED
 --
--- Six more sounds went up with the music and every one of them has an obvious
--- home -- Grab and Take pod on the hold that steals a pod, throw on the parent's
--- throw, the chase pair on the RUN alarm, the sleep loop on a nest parent that
--- has not been robbed yet.
+-- ONE CUE PER LINE, AND AN EMPTY ID IS A SILENT CUE RATHER THAN A BROKEN ONE.
+-- SoundKit skips any row with no id: no error, no warning at the call site, and
+-- the game behaves exactly as it does with the row absent. That is what makes
+-- this table fillable ONE ROW AT A TIME, in any order, by somebody who is not
+-- reading the code that plays it. Paste an id, hear the cue.
 --
--- OBVIOUS IS NOT THE SAME AS DECIDED. Each one needs a place in a specific
--- script, a level against the four sounds AlertUI already plays, and an answer
--- to whether it is 2D or positional -- a footstep that follows the thief is not
--- the same design as one every player hears flat. None of that has been chosen,
--- so nothing reads this table yet.
+-- What was here before was six ids in a flat map that nothing read, kept "so
+-- the ids are not lost". Ids that nothing reads rot: five of those six were
+-- deleted off the account and this table went on claiming they existed. Every
+-- row below has a trigger in a specific script, which is the only thing that
+-- makes a wrong id noticeable.
 --
--- It is here so the ids are not lost. An asset id that exists only in a chat
--- log is an asset id somebody re-uploads in a month.
+--==============================================================================
+-- WHAT A ROW MEANS
+--
+--   id        rbxassetid://N, or "" for not recorded yet.
+--   volume    0-1, before the bus level below.
+--   pitch     PlaybackSpeed. 1 is the file as recorded.
+--   jitter    +/- this much pitch, per play. A hover that plays at exactly the
+--             same pitch every time turns into a woodpecker the moment somebody
+--             sweeps the pointer down a grid of cards.
+--   group     which bus it rides. Decides what a future volume slider moves.
+--   looped    for the two that are beds rather than hits.
+--   range     studs. Positional cues only; ignored by the 2D ones.
+--
+-- LEVELS ARE SET AGAINST THE FOUR SOUNDS ALREADY PLAYING. AlertUI's stinger is
+-- 0.55 and its alarm pings are 0.42, and the music bed sits under both at 0.32.
+--
+-- THE RULE IS ABOUT WHAT CAN PLAY WHILE THE ALARM IS UP, not about the loudest
+-- number in the table. Anything that can sound DURING a carry -- the hover, the
+-- click, the tick, the panels -- stays well under 0.42, because a player who
+-- cannot hear the alarm over a card hover is a player who turns the sound off,
+-- and then they cannot hear the alarm either.
+--
+-- Three cues sit above it on purpose. Banked (0.50) plays at the instant the
+-- alarm STOPS and is the thing replacing it. RevealEpic and RevealLegendary
+-- (0.45, 0.55) happen in your own garden, at the one moment this game reveals
+-- anything, and a payoff that has to be quieter than a warning is not a payoff.
+--
+-- NOT BALANCE, so Rule 7 is intact. How loud a thing is and how far it carries
+-- is structure; none of it decides what anything is worth.
 --==============================================================================
 GameConfig.Sfx = {
-	Grab = "rbxassetid://113282797733918",
-	TakePod = "rbxassetid://130694487616211",
-	Throw = "rbxassetid://131635221141553",
-	ChaseBed = "rbxassetid://86935894428393",
-	ChaseFootstep = "rbxassetid://84880778606132",
-	ParentSleep = "rbxassetid://81143161269823",
+	--==========================================================================
+	-- FOUR BUSES
+	--
+	-- Because they are four different arguments about volume: music is a
+	-- preference, the chase is drama, the UI is feedback and the world is
+	-- distance. One master would make "quieter menus" and "quieter monster" the
+	-- same setting, and they are not the same setting.
+	--==========================================================================
+	Mixer = {
+		Music = 1.0,
+		Chase = 1.0,
+		UI = 1.0,
+		World = 1.0,
+	},
+
+	--==========================================================================
+	-- THE GARDEN BED GETS OUT OF THE CHASE BED'S WAY
+	--
+	-- Down to a third rather than off. Off is a hole -- the moment the chase
+	-- ends the bed slams back in and the player hears the SYSTEM rather than the
+	-- game. A third is still there, still keying the garden, and no longer
+	-- arguing with the drums.
+	--==========================================================================
+	MusicDuck = 0.34,
+	DuckSeconds = 0.6,
+
+	--==========================================================================
+	-- WHICH FILE IN sfx/ BECOMES WHICH ROW
+	--
+	-- ROBLOX CANNOT PLAY A FILE OFF THE DISK. Everything in sfx/ is a source;
+	-- what the game plays is the id that comes back from uploading it. So this
+	-- table is the seam between the two, and this is the map across it -- because
+	-- "which WAV was CardHover again" is a question that has to be answerable a
+	-- month from now, by somebody looking at either end.
+	--
+	--   CardHover         CARD HOVER POP.wav
+	--   CardClick         CARD CLICK.wav
+	--   Denied            NOT ENOUGH CASH.wav
+	--   PanelOpen         PANEL OPEN.wav
+	--   PanelClose        PANEL OPEN.wav again -- the same asset, pitched up 6%
+	--                     and cut a third shorter. The reverse was never
+	--                     recorded; this is a stand-in, not the answer.
+	--   CashTick          CASH TICK.wav
+	--   Banked            BANKED -- A POD MADE IT HOME.wav
+	--   ChaseBed          Chase bed (Loop) -- the ORIGINAL upload, recovered.
+	--                     CHASE BED, SECOND TIER.wav is uploaded and unused: it
+	--                     is the escalation, and there is no state to escalate
+	--                     on yet.
+	--   RevealCommon      Common rarity.wav
+	--   RevealRare        rare rarity.wav
+	--   RevealEpic        epic rarity.wav
+	--   RevealLegendary   legendary rarity.wav
+	--   MillMount         MOUNTING belt.wav
+	--   MillUpgrade       MILL UPGRADE BOUGHT.wav
+	--   ParentSleep       parent sleep sound.wav -- uploaded, and the only row
+	--                     below that already has its id.
+	--
+	-- TakePod, Grab, Throw and ChaseStep have no local WAV -- those five files
+	-- were deleted. THE UPLOADED ASSETS WERE NOT, and all five still load, so
+	-- they are wired from the account's own audio inventory rather than left
+	-- silent. Prompts 15 to 19 in sfx/suno prompts.txt replace any of them.
+	--
+	-- TITLE  LOADING.wav has no row because it has no trigger: there is no
+	-- loading screen to play it under. It is a bed, not a cue -- when there is
+	-- somewhere to put it, it goes in GameConfig.Music, not here.
+	--==========================================================================
+	--==========================================================================
+	-- THE NUMBERS ARE MEASURED, NOT GUESSED
+	--
+	-- Every `volume`, `start` and `clip` below came off the WAV in sfx/ rather
+	-- than off a slider, because the uploads are RAW SUNO RENDERS and a raw
+	-- render is not a game sound. Two things were wrong with all fourteen and
+	-- neither is audible until it is in the game:
+	--
+	-- THEY ARE NOT TRIMMED. `CARD HOVER POP` is five seconds containing THIRTEEN
+	-- separate pops; playing it on hover plays all thirteen. `CARD CLICK` opens
+	-- with 140ms of silence, so the click lands a sixth of a second after the
+	-- press. `PANEL OPEN` has a 290ms lead-in and a second thump at 1.04s.
+	--
+	-- THEIR LEVELS ARE ALL OVER THE PLACE. Peak amplitude runs from 7% of full
+	-- scale (Common rarity) to 100% (Mill upgrade) -- a 23 dB spread across
+	-- sounds that are supposed to sit in one mix. Volume below is therefore the
+	-- DESIGNED level divided by the file's measured peak, which is why some of
+	-- them are above 1: Banked peaks at 11%, so 0.50 of designed level is 4.37
+	-- of gain.
+	--
+	-- Checked before doing it: the quietest 20ms window in each file is its
+	-- noise floor, and after the gain above the worst case (Banked, 8.7x) still
+	-- sits at -50 dB. Nothing here surfaces hiss. If a file is ever normalised
+	-- and re-uploaded, drop its volume back to the designed number in the
+	-- comment beside it.
+	--
+	-- start/clip are a WINDOW INTO THE ASSET, not a substitute for trimming. It
+	-- is exact and it costs nothing, but a trimmed re-upload is smaller, starts
+	-- instantly, and lets both fields go away.
+	--==========================================================================
+	Cues = {
+		--======================================================================
+		-- THE SCREEN
+		--======================================================================
+		-- Pop 1 of 13, at 0.088. Fires more often than anything else in the
+		-- game, so it is also the quietest thing in the game. Designed 0.20.
+		CardHover = {
+			id = "rbxassetid://93538481108310",
+			volume = 0.24, start = 0.08, clip = 0.14, jitter = 0.06, group = "UI",
+		},
+		-- 140ms of dead air before the click. Designed 0.30.
+		CardClick = {
+			id = "rbxassetid://113610810828248",
+			volume = 0.30, start = 0.12, clip = 0.20, jitter = 0.04, group = "UI",
+		},
+		-- Peaks at 18%. Designed 0.30.
+		Denied = { id = "rbxassetid://102715407432501", volume = 1.68, group = "UI" },
+		-- The swoosh starts at 0.29 and the thump lands at 0.43; the second
+		-- thump at 1.04 is a different take and is cut off. Designed 0.28.
+		PanelOpen = {
+			id = "rbxassetid://131340288435165",
+			volume = 0.28, start = 0.27, clip = 0.50, group = "UI",
+		},
+		--==================================================================
+		-- CLOSING IS THE SAME ASSET, PITCHED UP AND CUT SHORT
+		--
+		-- The reverse was never recorded, so this is the honest version of
+		-- what is available: the same gesture, 6% faster and a third
+		-- shorter, which reads as quicker without pretending to be a
+		-- different sound. It is a stand-in. A reversed upload of its own is
+		-- still the right answer.
+		--==================================================================
+		PanelClose = {
+			id = "rbxassetid://131340288435165",
+			volume = 0.28, pitch = 1.06, start = 0.27, clip = 0.34, group = "UI",
+		},
+		-- 130ms late, then a 540ms decay that would ring under a counter
+		-- ticking three times a second. Designed 0.15.
+		CashTick = {
+			id = "rbxassetid://107680742328909",
+			volume = 0.23, start = 0.13, clip = 0.16, jitter = 0.03, group = "UI",
+		},
+
+		--======================================================================
+		-- THE RUN
+		--======================================================================
+		-- Peaks at 11%, the quietest upload of the fourteen. Designed 0.50.
+		Banked = { id = "rbxassetid://90673825356478", volume = 4.37, group = "UI" },
+		--==================================================================
+		-- THE BASE BED, NOT THE SECOND TIER
+		--
+		-- There are two chase beds now. This is the original 5.56s loop --
+		-- the one written to run for a whole way home. `CHASE BED, SECOND
+		-- TIER` (110892791280400, 4.00s) is the more frantic one and has
+		-- nowhere to go yet: escalating needs a state that says a chase is
+		-- WORSE than usual, and this game does not have one. When it does --
+		-- an expensive pod, or a third theft from the same nest -- that id is
+		-- what it escalates to.
+		--==================================================================
+		ChaseBed = {
+			id = "rbxassetid://86935894428393",
+			volume = 0.40, looped = true, group = "Chase",
+		},
+
+		--======================================================================
+		-- THE REVEAL
+		--
+		-- The hatch is the only moment this game reveals anything, so the rarer
+		-- it is the longer the sound is allowed to take: 0.77s, 0.17s, 0.49s and
+		-- 1.06s of content. Not clipped -- every one of them starts at zero and
+		-- a musical tail is the part you would be cutting.
+		--======================================================================
+		-- Peaks at 7%. Designed 0.30.
+		RevealCommon = { id = "rbxassetid://74338267139417", volume = 4.45, group = "UI" },
+		-- Peaks at 83%. Designed 0.35.
+		RevealRare = { id = "rbxassetid://99776609601370", volume = 0.42, group = "UI" },
+		-- Peaks at 30%. Designed 0.45.
+		RevealEpic = { id = "rbxassetid://83653226797020", volume = 1.52, group = "UI" },
+		-- Peaks at 87%. Designed 0.55.
+		RevealLegendary = { id = "rbxassetid://73136314922937", volume = 0.64, group = "UI" },
+
+		--======================================================================
+		-- THE MILL
+		--
+		-- Both positional and both audible from off the plot, on purpose: a
+		-- neighbour buying tier 6 is the most persuasive advertisement this game
+		-- has, and it is free.
+		--======================================================================
+		-- 160ms of thud followed by three and a half seconds of nothing.
+		-- Designed 0.45.
+		MillMount = {
+			id = "rbxassetid://137166099826620",
+			volume = 0.82, clip = 0.60, range = 90, group = "World",
+		},
+		-- Designed 0.60, and the file already peaks at full scale.
+		MillUpgrade = {
+			id = "rbxassetid://102053237936114",
+			volume = 0.60, clip = 1.20, range = 140, group = "World",
+		},
+
+		--======================================================================
+		-- THE NEST
+		--
+		-- ALL FOUR OF THESE ARE THE ORIGINAL UPLOADS. The local WAVs were
+		-- deleted; the ASSETS were not, and all four still load. Recovered out
+		-- of the account's own audio inventory rather than left silent, because
+		-- the alternative was a monster that chases you without a sound.
+		--
+		-- Their numbers are the DESIGNED levels and nothing else -- unlike the
+		-- fourteen above, there is no local file left to measure, so no trim and
+		-- no gain compensation. If any of them turns out to be quiet or to open
+		-- with dead air, prompts 15 to 19 in sfx/suno prompts.txt will replace
+		-- it and the measurement can be done properly.
+		--
+		-- Grab is the parent's hand closing on you, a fifth of a second before
+		-- Throw. Two beats of one event, so they have to sit together.
+		--======================================================================
+		TakePod = { id = "rbxassetid://130694487616211", volume = 0.55, range = 90, group = "World" },
+		Grab = { id = "rbxassetid://113282797733918", volume = 0.75, range = 140, group = "World" },
+		Throw = { id = "rbxassetid://131635221141553", volume = 0.85, range = 160, group = "World" },
+		-- 7.72s of running steps. Set looped = false if it turns out to be a
+		-- SINGLE step; SoundCues retriggers it per stride in that case.
+		ChaseStep = {
+			id = "rbxassetid://84880778606132",
+			volume = 0.50, range = 110, looped = true, group = "World",
+		},
+		-- Peaks at 74%. Designed 0.35.
+		ParentSleep = {
+			id = "rbxassetid://81143161269823",
+			volume = 0.47, range = 70, looped = true, group = "World",
+		},
+	},
+
+	--==========================================================================
+	-- WHICH REVEAL A SPECIES GETS
+	--
+	-- EIGHT RARITIES, FOUR RECORDED CUES. Mapped here rather than in the script
+	-- that plays them, so recording a fifth is a line in this table and not a
+	-- branch somewhere in a client.
+	--
+	-- This is the FORM rarity off the species sheet -- how often that shape turns
+	-- up -- and not SeedData.RarityForKg, which is the weight band the pod wears
+	-- as its colour. Two vocabularies share four words in this game and the
+	-- hatch is the one that reveals the SHAPE.
+	--==========================================================================
+	RevealFor = {
+		Common = "RevealCommon",
+		Uncommon = "RevealCommon",
+		Rare = "RevealRare",
+		Epic = "RevealEpic",
+		Legendary = "RevealLegendary",
+		Mythic = "RevealLegendary",
+		Secret = "RevealLegendary",
+		Divine = "RevealLegendary",
+	},
 }
 
 --==============================================================================

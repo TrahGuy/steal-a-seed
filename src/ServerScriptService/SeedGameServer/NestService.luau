@@ -54,6 +54,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local ParentModel = require(script.Parent:WaitForChild("ParentModel"))
 -- No cycle: MapService knows nothing about nests, it only leaves the markers.
 local MapService = require(script.Parent:WaitForChild("MapService"))
@@ -460,6 +461,20 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- so without it the capture would run before the drop handler and read the
 	-- old value anyway.
 	--==========================================================================
+	--==========================================================================
+	-- CONTACT, AND THEN THE LAUNCH A FIFTH OF A SECOND LATER
+	--
+	-- Two beats of one event, and they only read as one event if the first one
+	-- is HERE -- at the line that actually makes contact -- rather than next to
+	-- the throw. PlatformStand going true is the hit; everything below it is the
+	-- consequence.
+	--
+	-- On the parent's root, so it comes from the monster. A hit sound on the
+	-- victim would put the loudest cue in the game inside the ear of the one
+	-- player who does not need to be told.
+	--==========================================================================
+	SoundKit.emit("Grab", nest.root)
+
 	humanoid.PlatformStand = true
 	task.wait()
 
@@ -553,6 +568,8 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- to undo. The victim's client applies the impulse to a body it already
 	-- owns, and its physics replicate outward on their own.
 	--==========================================================================
+	SoundKit.emit("Throw", nest.root)
+
 	throwDone[player] = false
 	local sent = false
 	if throwRemote then

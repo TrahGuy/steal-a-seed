@@ -42,8 +42,9 @@ local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
-local GameConfig = require(ReplicatedStorage:WaitForChild("SeedGame")
-	:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local ATTR = GameConfig.Attributes
 
 local player = Players.LocalPlayer
@@ -88,6 +89,20 @@ task.spawn(function()
 	end)
 end)
 
+--==============================================================================
+-- THE CHASE BED RIDES THE SAME STATE AS THE VIGNETTE
+--
+-- Not "a parent is chasing me", because nothing tells the client that -- a nest
+-- publishes Asleep and never who it woke up for. What it rides instead is the
+-- state this script already treats as danger: CARRYING. Which is the honest
+-- answer anyway. The vignette, the word RUN and the alarm all fire on the carry,
+-- and a bed that disagreed with the other three would be the odd one out.
+--
+-- It ducks the garden bed to a third while it runs. SoundKit does both in one
+-- call, because they are one decision -- and two calls is how the bed ends up
+-- ducked with no chase running, which is a game that has gone quiet for no
+-- reason anybody can see.
+--==============================================================================
 local function alarm()
 	sounds.stinger:Play()
 	task.spawn(function()
@@ -221,6 +236,8 @@ local function onCarryChanged()
 	end
 	carrying = nowCarrying
 
+	SoundKit.chase(carrying)
+
 	if carrying then
 		targetIntensity = 1
 		-- Snap to full rather than easing in: the alarm is the moment, and an
@@ -246,7 +263,19 @@ player:GetAttributeChangedSignal(ATTR.BankedCount):Connect(function()
 		f.BackgroundColor3 = SAFE
 	end
 	say("SAFE", SAFE, 0.7)
-	sounds.banked:Play()
+	--==========================================================================
+	-- THE STOCK PING IS THE FALLBACK, NOT THE LEFTOVER
+	--
+	-- Banked is the payoff for a whole run home and it deserves its own sound.
+	-- Until an id is pasted into GameConfig.Sfx.Cues.Banked there is not one, and
+	-- a silent bank would be a REGRESSION from the pitched-up engine ping this
+	-- has always used. So the ping stands in, and stands down the moment there
+	-- is something better -- which is why this is the one cue in the game with a
+	-- fallback rather than silence.
+	--==========================================================================
+	if not SoundKit.play("Banked") then
+		sounds.banked:Play()
+	end
 end)
 
 -- A respawn clears the carry without the attribute necessarily changing, so

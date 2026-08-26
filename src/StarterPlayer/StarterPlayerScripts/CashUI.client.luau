@@ -67,7 +67,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
-local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local Shared = SeedGame:WaitForChild("Shared")
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -254,6 +256,19 @@ amount.Size = UDim2.fromOffset(300, CASH_SIZE + 4)
 --==============================================================================
 local target: number? = nil
 local shown = 0
+--==============================================================================
+-- THE TICK IS EVERY THIRD STEP OF THE READOUT, NOT EVERY FRAME
+--
+-- The number eases toward the truth on RenderStepped, so a tick per frame would
+-- be sixty ticks a second for as long as a bank is being counted in -- a buzz,
+-- not a counter. Every third CHANGE of the printed text is roughly a tick per
+-- two frames while the gap is wide and nothing at all once it lands, which is
+-- the shape of the thing being described.
+--
+-- Deliberately NOT wired to CashPop's +$N. Every grown plant pays once a second
+-- and a garden of twelve would be twelve ticks a second forever.
+--==============================================================================
+local tickCount = 0
 local speedTarget: number? = nil
 local speedShown = 0
 
@@ -311,6 +326,10 @@ RunService.RenderStepped:Connect(function(dt)
 	local text = "$" .. GameConfig.compact(shown)
 	if amount.Text ~= text then
 		amount.Text = text
+		tickCount += 1
+		if tickCount % 3 == 0 then
+			SoundKit.play("CashTick")
+		end
 	end
 
 	local wantSpeed = speedTarget

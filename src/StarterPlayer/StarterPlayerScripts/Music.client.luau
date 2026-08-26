@@ -46,9 +46,9 @@ local TweenService = game:GetService("TweenService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local MUSIC = GameConfig.Music
-local GROUP_NAME = "SeedMusic"
 local TRACK_NAME = "SeedMusicTrack"
 
 --==============================================================================
@@ -58,11 +58,20 @@ local TRACK_NAME = "SeedMusicTrack"
 -- and two beds a semitone apart is the kind of thing that gets blamed on the
 -- track rather than on the reload.
 --==============================================================================
-for _, name in ipairs({ TRACK_NAME, GROUP_NAME }) do
-	local existing = SoundService:FindFirstChild(name)
-	if existing then
-		existing:Destroy()
-	end
+--==============================================================================
+-- THE TRACK IS DESTROYED, THE BUS IS NOT
+--
+-- The SoundGroup belongs to SoundKit now -- it is one of four, and the chase bed
+-- ducks this one by moving its Volume. Destroying it here would leave whatever
+-- is ducking it holding a reference to a group that is not in SoundService any
+-- more, which is a bed that never comes back up.
+--
+-- SoundKit finds an existing bus before it makes one, so a re-sync reuses the
+-- group and only the track is rebuilt.
+--==============================================================================
+local staleTrack = SoundService:FindFirstChild(TRACK_NAME)
+if staleTrack then
+	staleTrack:Destroy()
 end
 
 --==============================================================================
@@ -90,11 +99,14 @@ end
 --==============================================================================
 -- THE MIXER AND THE TRACK
 --==============================================================================
-local group = Instance.new("SoundGroup")
-group.Name = GROUP_NAME
 -- Starts silent and is faded up below, so joining does not begin with a slam.
-group.Volume = 0
-group.Parent = SoundService
+-- SoundKit builds the music bus at zero for exactly that reason; the other three
+-- have nothing to fade in from and start at their configured level.
+local group = SoundKit.group("Music")
+if not group then
+	warn("[Seed/Music] No music bus. Nothing will play.")
+	return
+end
 
 local sound = Instance.new("Sound")
 sound.Name = TRACK_NAME

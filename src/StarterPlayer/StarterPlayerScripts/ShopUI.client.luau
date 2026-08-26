@@ -66,6 +66,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -489,6 +490,34 @@ local function paint()
 end
 
 paint()
+
+--==============================================================================
+-- THE BUY BUTTON SAYS SOMETHING, EVEN THOUGH IT CANNOT SELL ANYTHING
+--
+-- There is still no ShopService, so none of these can take the money, and the
+-- price line says SOON rather than pretending otherwise. What was missing was
+-- any acknowledgement AT ALL: the button is drawn, it is thumb-sized, it is
+-- obviously a control, and pressing it did nothing whatsoever -- which is
+-- indistinguishable from the UI having frozen.
+--
+-- So it answers. DENIED on a tier that is out of reach or already owned, and the
+-- ordinary click on the one that is genuinely next -- which is the honest
+-- feedback available, and it stops claiming a purchase happened.
+--
+-- Wired AFTER paint() rather than inside the build loop on purpose: `plotTier`
+-- and `cash` are declared below the loop, so a closure written up there would
+-- resolve them as GLOBALS and silently read nil forever.
+--==============================================================================
+for tier = 2, #GameConfig.PlotTiers do
+	local card = plotCards[tier]
+	if card then
+		card.buy.Activated:Connect(function()
+			local cost = GameConfig.PlotTiers[tier].cost or 0
+			local reachable = plotTier == tier - 1 and heardFromServer and cash >= cost
+			SoundKit.play(if reachable then "CardClick" else "Denied")
+		end)
+	end
+end
 
 --==============================================================================
 -- THE PROFILE

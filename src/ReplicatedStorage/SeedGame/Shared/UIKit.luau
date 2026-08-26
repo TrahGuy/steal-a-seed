@@ -35,6 +35,7 @@
 local TweenService = game:GetService("TweenService")
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
+local SoundKit = require(script.Parent:WaitForChild("SoundKit"))
 
 local UIKit = {}
 
@@ -47,6 +48,24 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 --==============================================================================
 -- THE SMALL ONES
 --==============================================================================
+--==============================================================================
+-- A BUTTON THAT MAKES A NOISE
+--
+-- `Activated` and not MouseButton1Click: it is the one that also fires for a
+-- touch and for a gamepad, and every button in this game has to work on a phone.
+--
+-- Here rather than at each call site for the same reason the slab is here -- the
+-- second copy of a thing is where the drift starts, and a click that is 0.3 on
+-- the rail and 0.35 in the shop is a drift nobody will ever be able to hear well
+-- enough to report.
+--==============================================================================
+function UIKit.clicks(button: GuiButton): GuiButton
+	button.Activated:Connect(function()
+		SoundKit.play("CardClick")
+	end)
+	return button
+end
+
 function UIKit.corner(parent: Instance, radius: number): UICorner
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(0, radius)
@@ -332,6 +351,12 @@ function UIKit.slab(parent: Instance, options: SlabOptions): ImageButton
 		-- rectangle would otherwise poke out past the stroke.
 		inset = math.max(3, math.floor(radius * 0.35)),
 	})
+
+	-- Both slabs in the game are buttons -- the rail button and the card's
+	-- action -- so the click belongs to the builder rather than to its two
+	-- callers. If a slab is ever used as a surface rather than a control, this
+	-- is the line that has to move out.
+	UIKit.clicks(slab)
 
 	return slab
 end
@@ -954,10 +979,26 @@ function UIKit.popOnHover(target: GuiObject, scale: UIScale,
 	-- does not stay at 1.07 underneath the new state.
 	--==========================================================================
 	local enabled = true
+	local hovered = false
 
 	local function setHovered(on: boolean)
 		if on and not enabled then
 			return
+		end
+		--======================================================================
+		-- THE SOUND IS ON THE EDGE, NOT ON THE EVENT
+		--
+		-- MouseEnter fires once per entry, but touch fires setHovered(true) on
+		-- every InputBegan the card sees, and setEnabled(false) fires it the
+		-- other way -- so a card being selected under a stationary pointer would
+		-- pop without the pointer having moved. Only a real change makes a
+		-- noise.
+		--======================================================================
+		if hovered ~= on then
+			hovered = on
+			if on then
+				SoundKit.play("CardHover")
+			end
 		end
 		raise(on)
 		TweenService:Create(scale, info, { Scale = if on then up else 1 }):Play()
@@ -1270,6 +1311,10 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	actionLabel.TextXAlignment = Enum.TextXAlignment.Center
 	actionLabel.ZIndex = Z_LABEL
 
+	-- The card is a control too: clicking one selects it and raises the action
+	-- strip. The action slab gets its own click from UIKit.slab.
+	UIKit.clicks(button)
+
 	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale, { stroke = border })
 
 	local lift = liftLayers(holder, CARD.HoverLift)
@@ -1468,6 +1513,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	close.TextColor3 = WHITE
 	close.Text = "X"
 	close.ZIndex = 4
+	UIKit.clicks(close)
 	close.Parent = titleBar
 	UIKit.corner(close, 10)
 	UIKit.stroke(close, PANEL.Outline, outline)
@@ -1487,6 +1533,11 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 			return
 		end
 		open = want
+		-- Guarded by the equality check above, so a panel asked to open twice
+		-- makes one sound. Two scripts both closing the same panel -- which is
+		-- exactly what OpenPanel does when the Index and the Shop trade places
+		-- -- is the case this protects.
+		SoundKit.play(if want then "PanelOpen" else "PanelClose")
 		if want then
 			dimmer.Visible = true
 			dimmer.BackgroundTransparency = 1
