@@ -45,6 +45,12 @@
 -- disagreeing IS the bug. Do not make the root massless.
 --==============================================================================
 
+local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
+local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+
 local BramblebackModel = {}
 
 -- Sampled from the approved preview. Root/Sage/Husk are the Dustbowl biome
@@ -76,6 +82,12 @@ local COLORS = {
 -- 15 that factor is 1.007, so the approved proportions are what ships.
 --==============================================================================
 local AUTHORED_HEIGHT = 14.9
+
+-- The root's authored placement, hoisted because HipHeight is DERIVED from it.
+-- Left as two literals in two places these drift apart, and the symptom is a
+-- creature quietly standing in the ground.
+local ROOT_Y = 6.4
+local ROOT_SIZE = Vector3.new(4.0, 3.0, 3.2)
 
 local STUD_FACES = {
 	"TopSurface", "BottomSurface", "LeftSurface",
@@ -197,8 +209,8 @@ function BramblebackModel.Build(cf: CFrame, height: number, parent: Instance): M
 	-- Invisible, and the ONLY part with mass. See the header.
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
-	root.Size = Vector3.new(4.0, 3.0, 3.2) * ctx.s
-	root.CFrame = cf * scaled(CFrame.new(0, 6.4, 0.15), ctx.s)
+	root.Size = ROOT_SIZE * ctx.s
+	root.CFrame = cf * scaled(CFrame.new(0, ROOT_Y, 0.15), ctx.s)
 	root.Transparency = 1
 	root.Anchored = false
 	root.CanCollide = false
@@ -411,12 +423,51 @@ function BramblebackModel.Build(cf: CFrame, height: number, parent: Instance): M
 		end
 	end
 
+	--==========================================================================
+	-- THE HUMANOID CONTRACT, AND EVERY LINE OF IT EARNS ITS PLACE
+	--
+	-- This block was four properties long and the parent was BROKEN in three
+	-- ways at once, none of which throw: it stood five studs INSIDE the ground,
+	-- it never animated, and it spawned able to walk.
+	--
+	-- HIPHEIGHT IS WHAT HOLDS A RIG OFF THE FLOOR. Every part here is
+	-- CanCollide = false except the torso, so with no HipHeight the Humanoid
+	-- sinks until that one collider rests on the ground -- which put the torso
+	-- at ankle height and buried the legs. Derived from the root's own geometry
+	-- rather than written twice, so moving the root moves this with it.
+	--
+	-- ASLEEP. WalkSpeed is set by NestService when it wakes, never here: a
+	-- monster that spawns already able to run is one that will one day run
+	-- before anything told it to. It was defaulting to 16.
+	--
+	-- AUTOROTATE ON, which only works because the root has mass -- see below.
+	--==========================================================================
 	local humanoid = Instance.new("Humanoid")
 	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	humanoid.WalkSpeed = 0
+	humanoid.AutoRotate = true
+	humanoid.HipHeight = (ROOT_Y - ROOT_SIZE.Y * 0.5) * ctx.s
+	humanoid.MaxHealth = math.huge
+	humanoid.Health = math.huge
 	humanoid.BreakJointsOnDeath = false
 	humanoid.RequiresNeck = false
 	humanoid.Parent = model
+
+	-- One collidable part, so it has physical presence without ten colliders
+	-- catching on scenery. Massless, because the root carries the weight.
+	torso.CanCollide = true
+	torso.Massless = true
+
+	--==========================================================================
+	-- THE TAG IS NOT DECORATION -- IT IS HOW THE CLIENT FINDS IT AT ALL
+	--
+	-- ParentAnim.client.luau and SoundCues.client.luau both locate their rigs
+	-- with CollectionService:GetTagged(Tags.NestParent). Untagged, this creature
+	-- is a silent statue: six Motor6Ds built correctly and nothing ever driving
+	-- them. Nothing errors, which is what makes it easy to miss.
+	--==========================================================================
+	CollectionService:AddTag(model, GameConfig.Tags.NestParent)
 
 	--==========================================================================
 	-- COUNTED, NOT ASSUMED
