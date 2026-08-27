@@ -132,6 +132,55 @@ local function log(message: string)
 end
 
 --==============================================================================
+-- WHY A REFUSED PLACEMENT SAYS NOTHING, AND WHAT THIS DOES ABOUT IT
+--
+-- PlaceAt has seven guards and the client sends its click on a RemoteEvent, so
+-- it never learns which one stopped it. No plot, no soil, no character, no
+-- equipped tool, an unknown species, out of range and a full bed are all the
+-- same nothing: the pod stays in your hands and the game says why.
+--
+-- That is indistinguishable from a bug, and it cost a round of "pods and plants
+-- cannot be placed on plots" that turned out not to be a placement fault at all.
+--
+-- DIAGNOSTIC ONLY. Same guards, same order, same `return false`, no new remote
+-- and no change to what is or is not allowed. The only difference is that the
+-- server now says which guard fired.
+--
+-- RATE LIMITED PER PLAYER AND CODE. Placing is a click, and a player who cannot
+-- plant will click ten times: ten identical lines a second buries the one line
+-- that matters. The table has weak keys so a player who leaves is collected
+-- without a lifecycle hook to forget.
+--==============================================================================
+local REFUSE_QUIET_SECONDS = 3
+local lastRefusal: { [Player]: { [string]: number } } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Peeked rather than required: the earliest guards fire before PlaceAt has
+-- looked at a tool, and a refusal that cannot name the species is worth less.
+local function heldSpeciesId(player: Player): string
+	local character = player.Character
+	local tool = if character then character:FindFirstChildOfClass("Tool") else nil
+	local id = if tool then tool:GetAttribute("SpeciesId") else nil
+	return if id ~= nil then tostring(id) else "none"
+end
+
+-- Always returns false, so each guard reads `return refuse(...)` and cannot
+-- accidentally start allowing what it used to refuse.
+local function refuse(player: Player, code: string): boolean
+	local now = os.clock()
+	local seen = lastRefusal[player]
+	if not seen then
+		seen = {}
+		lastRefusal[player] = seen
+	end
+	if now - (seen[code] or -math.huge) >= REFUSE_QUIET_SECONDS then
+		seen[code] = now
+		log(string.format("%s placement refused: %s (species %s)",
+			player.Name, code, heldSpeciesId(player)))
+	end
+	return false
+end
+
+--==============================================================================
 -- THE BED
 --==============================================================================
 local function soilOf(plot: Model): BasePart?
@@ -631,27 +680,33 @@ end
 function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	local plot = PlotService.PlotOf(player)
 	if not plot then
-		return false
+		-- A player whose profile has not finished loading has no plot either,
+		-- and NO_PLOT would send somebody reading PlotService when the answer
+		-- is upstream of it. Same refusal either way; different thing to fix.
+		local code = if PlayerDataService.IsReady(player) then "NO_PLOT" else "NO_PROFILE"
+		return refuse(player, code)
 	end
 	local soil = soilOf(plot)
 	if not soil then
-		return false
+		return refuse(player, "NO_SOIL")
 	end
 	local character = player.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	if not (character and root and root:IsA("BasePart")) then
-		return false
+		-- NOT a profile check, whatever it looks like from outside: this is the
+		-- character being absent or mid-respawn.
+		return refuse(player, "NO_CHARACTER")
 	end
 
 	-- The EQUIPPED tool. A Tool sitting in the Backpack is not in your hands and
 	-- clicking the ground should not plant it.
 	local tool = character:FindFirstChildOfClass("Tool")
 	if not tool then
-		return false
+		return refuse(player, "NO_TOOL")
 	end
 	local species = SeedData.Get(tostring(tool:GetAttribute("SpeciesId")))
 	if not species then
-		return false
+		return refuse(player, "UNKNOWN_SPECIES")
 	end
 	-- The weight travelled with the pod: CarryService stamps it on the Tool when
 	-- the pod is banked and again when a creature is hatched. Falling back to
@@ -663,7 +718,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 
 	local offset = clampToSoil(soil, worldPos)
 	if (topOf(soil, offset).Position - root.Position).Magnitude > PLANT_RANGE then
-		return false
+		return refuse(player, "OUT_OF_RANGE")
 	end
 
 	local byPlot = growing[plot]
@@ -672,7 +727,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 		growing[plot] = byPlot
 	end
 	if countIn(plot) >= capacityOf(plot) then
-		return false
+		return refuse(player, "BED_FULL")
 	end
 
 	local id = (nextId[plot] or 0) + 1
