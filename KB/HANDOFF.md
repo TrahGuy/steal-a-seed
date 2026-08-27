@@ -3795,6 +3795,173 @@ this handoff, inspect the checkout and recent commits before editing, and record
 here with their implementing commit. Provider-specific copies of project rules must not be
 reintroduced.
 
+## Tanglemire is live, and Miremaw performs at its own nest — 2026-08-27
+
+The third biome is production content. Four commits:
+
+```
+6f2ddd1  Tanglemire species data and the approved geometry, frozen
+2d5ecc7  The five Tanglemire plants and the shared Mire-Cage Pod
+84baba8  Miremaw as the Tanglemire parent, and the pose it was approved in
+66f32f8  Miremaw sleeps, wakes, chases and settles at its own nest
+cbaa422  Tanglemire is live
+```
+
+`BiomeData.tanglemire.LiveInPhaseA` is true, with one three-pod nest as the
+biome was already configured. `SeedData` has exactly the five approved forms:
+
+```
+Bogbonnet    Rare        bonnet     36 parts
+Crookreed    Rare        reed       27 parts
+Snapmoss     Epic        moss       29 parts
+Lanterncap   Legendary   lantern    30 parts
+Gloomlotus   Mythic      lotus      39 parts
+```
+
+Two Rares in one biome is a first, and they are told apart by silhouette and
+palette rather than by rarity word. Gloomlotus is the game's first Mythic form
+and the only plant carrying a Neon halo, a Glass dew jewel, two emitters and a
+Highlight — that budget IS the rarity.
+
+### The approval was a MOVING mockup, and that changed the method
+
+Every earlier biome was approved as static art. Tanglemire's Miremaw was
+approved as an eighteen-second loop that was **still running** when it was read:
+the hood alone travels 2.28 studs across it. A single capture is therefore a
+mid-blend phase nobody approved, and a rig built on one would have baked a
+half-open hood in as its neutral pose.
+
+The mockup publishes its own `PreviewState`, so both endpoints were captured
+keyed to it, at the frame closest to each state's typical openness:
+
+```
+state       headY   hoodY   hoodZ
+ASLEEP      3.929   5.738  +0.868    head tucked, hood drawn back over
+WAKING      4.230   6.165  +0.231
+SETTLING    4.268   6.223  +0.117
+AWAKE       4.497   6.570  -0.573    head risen, hood opened forward
+```
+
+**If a future approval mockup animates, capture its endpoints by its own
+declared state.** Averaging, eyeballing or grabbing one frame all produce a pose
+that was never signed off.
+
+### `TanglemireForms.luau` is the approval, frozen
+
+The mockups lifted part for part: every size, CFrame, colour and material is the
+number that was approved. Counts reconcile with the approval exactly — 73
+creature parts for Miremaw once the mockup's own plinth is excluded, and 16 for
+the pod once its preview dais is.
+
+The pod is stored as **fractions of diameter**, which is not an assumption: 14 of
+its 16 parts agree across the three approved diameters to 5.7e-5, so a
+D-parametric builder is exact at every weight rather than only at the three that
+were drawn. The two that disagree are the dew seal and its stem, by up to
+0.021 D, because the dew pulse was running — their shipped pose is the mean of
+the three captured phases, which is the rest that pulse swings about.
+
+Plants replay through ONE conformance factor, `hs = FrameHeight / PreviewHeight`,
+the same trick Suncrown already uses. Each species `Height` IS its
+`PreviewHeight`, so hs is exactly 1.000000 at the median weight.
+
+**Tanglemire plants are ~1.6x the size of Dustbowl's at equal weight** (Heights
+6.07–6.81 against 2.6–4.2). The mockups carry no weight attribute, so nothing
+records what weight they were drawn at; preserving the approved silhouette
+exactly is what produces this. If they were drawn at a heavier reference than the
+median, it is one number per species to correct and no geometry changes.
+
+### Girth is damped and horizontal for this biome
+
+Two thirds of the approved parts are rotated off-axis, and scaling a rotated box
+along world X and Z does not widen it, it SHEARS it. Each part therefore keeps
+its approved proportions and girth spreads the parts apart instead — the same
+restraint Suncrown shows. Normalised so the term is exactly 1.0 at the size
+reference weight.
+
+### Miremaw: fifteen seams, and the ones that are absent matter as much
+
+Seven are the parent contract. The other eight exist because the two approved
+poses disagree across them: four fronds that lag independently, a throat, and
+three throat ribs.
+
+The hood and the eyelids are **welded** to the head, because measured between the
+two approved poses they do not move relative to it by a thousandth of a stud —
+the hood "opening" is the whole head-and-hood assembly rising on the neck, and
+the eyes close by transparency and lid colour. Giving either a seam would have
+been articulation the approval does not contain.
+
+The three ribs DO get seams, because the sac scales (3.13 -> 2.52) rather than
+moves, and a rib welded to a shrinking sac floats a third of a stud off the
+throat — nearly twice its own thickness.
+
+The jaw and hood hang off the **Head**, not the torso. Brambleback drives all six
+of its seams from the torso, which is fine for a creature whose head barely
+moves; Miremaw's head rises 0.87 studs and pitches ten degrees on waking.
+
+Three of the sleep channels are **properties, not joints**, and a joint-only
+animator drops all three silently: the throat shrinks, its light dims, and the
+eyes close by transparency with the lids recolouring.
+
+### Verification, from the live nest
+
+  * Play built **3 nests / 11 pods**; the Tanglemire nest holds three 16-part
+    Mire-Cage pods and one `Parent_tanglemire` at **exactly 73 parts**. Twelve
+    services started with no script error.
+  * All seven contract seams present; root is the assembly root and is not
+    massless; `Humanoid.RootPart` agrees; `Torso` is the only collider; the
+    silhouette stands 15.00 studs with its feet on the floor to within 0.000.
+  * Plants measured against the approval part for part at the median weight:
+    worst position error **0.004 studs**, sizes and colours exact, zero colour
+    mismatches across all five.
+  * All five species build a pod with identical part names, so the species is
+    not knowable before the hatch. 20,000 rolls of the biome produce those five
+    ids and nothing else.
+  * Sleep/wake sampled on the live client at 30Hz across a full transition
+    (approved values scaled by the rig's 0.9401):
+
+```
+             head    hood     eye  throat   light
+asleep      3.654   5.407   1.000   2.365   0.204
+approved    3.694   5.394   1.000   2.369   0.204
+awake       4.227   6.167   0.000   3.045   0.724
+approved    4.227   6.176   0.000   2.944   0.659
+settled     3.654   5.406   1.000   2.365   0.204
+```
+
+    Awake overshoots the approved throat and light because the waking pulse
+    rides on top of them. Largest single-frame head movement across both
+    transitions: **0.090 studs**, so there is no snap.
+  * Gait by phase, peak degrees off rest: asleep 0.00 everywhere; awake and
+    still 0.00 of swing; walking at 26 studs/sec, 24.6 on the hips.
+  * Greenhollow and Dustbowl still report their own parents at 86 and 83 parts,
+    and their animation profiles were not edited.
+  * `git diff --check` clean; a full `rojo build` produced
+    `build/StealASeed.rbxlx`.
+
+### Two traps this pass re-confirmed
+
+  * **Declaration order.** `mireChannels` first landed BELOW `track()`, so every
+    parent tracked at startup called a nil and the animator died mid-track. That
+    is `a42a12e` all over again, and it presents as "the animation is wrong"
+    rather than "the animation never ran".
+  * **Forking past shared code forks past its state.** Giving Miremaw its own
+    animation path also skipped the STRIDE, so a chasing guardian slid down the
+    road with its feet still. The stride is now computed above the fork.
+
+### Remaining hand-tests
+
+  * **A hand-driven take still has not been verified**, and this pass could not
+    close it: `ProximityPrompt:InputHoldBegin()` from a script does not fire
+    `Triggered`, and MCP's `require` returns a SEPARATE `NestService` whose nest
+    list is empty (`NestCount()` reads 0 against the live 3), so the real
+    lifecycle cannot be driven from that context at all. The wake blend above was
+    driven through the exact `Asleep` attribute `NestService` itself sets.
+    Somebody at the keyboard still needs to walk to the Tanglemire nest, hold E,
+    and confirm the parent wakes, chases and settles on its own.
+  * **Miremaw at other weights and scales** has only been seen at the one height
+    `NestService` asks for.
+  * **The plant size question above** is a design call, not a defect.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
