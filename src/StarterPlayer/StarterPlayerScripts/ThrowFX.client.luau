@@ -133,7 +133,7 @@ local function bodyParts(): { BasePart }
 	local out: { BasePart } = {}
 	local character = player.Character
 	if character then
-		for _, d in ipairs(character:GetChildren()) do
+		for _, d in ipairs(character:GetDescendants()) do
 			if d:IsA("BasePart") then
 				table.insert(out, d)
 			end
@@ -290,13 +290,9 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			tostring(changed), tostring(humanoid:GetState())))
 
 		--== 2. GET OUT OF THE PARENT -- THE WHOLE BODY, NOT THE ROOT ==--
-		-- PivotTo moves every part. Writing root.CFrame would have stepped the
-		-- invisible box out of the parent and left the body standing in it.
-		local step = if type(clear) == "number" and clear > 0 then clear else 0
-		if step > 0 then
-			character:PivotTo(character:GetPivot() + unit * step)
-			say(string.format("stepped %.1f studs clear along %s", step, tostring(unit)))
-		end
+		local step = if type(clear) == "number" and clear > 0 then clear else 6
+		character:PivotTo(character:GetPivot() + unit * step + Vector3.new(0, 3, 0))
+		say(string.format("stepped %.1f studs clear along %s", step, tostring(unit)))
 
 		--======================================================================
 		-- 3. THE CAMERA COMES OUT WITH US
@@ -348,18 +344,21 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			tostring(wasSubject and wasSubject.Name),
 			tostring(camera and camera.CameraSubject and camera.CameraSubject.Name)))
 
-		--== 4. THROW EVERY PART, AND KEEP THROWING FOR A FEW FRAMES ==--
+		--== 4. THROW EVERY PART WITH TUMBLE IMPULSE ==--
 		local parts = bodyParts()
+		local tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3), math.random(-6, 6))
 		for _, part in ipairs(parts) do
+			part:ApplyImpulse(impulse * part.AssemblyMass)
 			part.AssemblyLinearVelocity = impulse
+			part.AssemblyAngularVelocity = tumble
 		end
 		say(string.format("first velocity applied to %d parts: %s (%.1f studs/sec)",
 			#parts, tostring(impulse), impulse.Magnitude))
-		local holdUntil = os.clock() + HOLD_VELOCITY_FOR
+
+		-- Hold velocity for 0.35s to completely override any humanoid motor damping
+		local holdUntil = os.clock() + 0.35
 		while os.clock() < holdUntil do
-			-- Re-assert rather than trusting one write. A controller that is
-			-- still winding down will zero this, and one frame of that is the
-			-- difference between a throw and a twitch.
+			humanoid.PlatformStand = true
 			for _, part in ipairs(bodyParts()) do
 				part.AssemblyLinearVelocity = impulse
 			end
@@ -367,21 +366,15 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		end
 
 		--======================================================================
-		-- 5. WAIT UNTIL THE BODY HAS STOPPED -- THE BODY, NOT THE BOX
-		--
-		-- This used to read the root's velocity, which is a different assembly
-		-- with a different trajectory. The body can be lying still on the road
-		-- while the invisible root is still sailing over it, and that mismatch
-		-- is what held the tumble open past the landing.
-		--
-		-- Head AND torso, both under the threshold: the head bobbles on its
-		-- socket after the torso has stopped, and the torso can slide out from
-		-- under a head resting on a kerb.
+		-- 5. WAIT UNTIL THE BODY HAS FLOWN AND STOPPED
 		--======================================================================
 		local head = character:FindFirstChild("Head")
 		local torso = torsoOf(character)
 		local settledFor = 0
+		local flightStart = os.clock()
+		local minFlightTime = 0.9 -- Guarantee minimum flight arc
 		local deadline = os.clock() + GIVE_UP_AFTER
+
 		while os.clock() < deadline do
 			local r = rootOf()
 			if not r then
@@ -395,30 +388,17 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				bodySpeed = math.max(bodySpeed, torso.AssemblyLinearVelocity.Magnitude)
 			end
 
-			-- Per-frame, as asked: this is the number that says whether the
-			-- player can actually see themselves.
-			if head and head:IsA("BasePart") then
-				-- observedLTM is what the CAMERA wanted before this script
-				-- overrode it, and camDist says whether the camera is even near
-				-- the body it is supposed to be showing.
-				local cam = workspace.CurrentCamera
-				local camDist = if cam then (cam.CFrame.Position - head.Position).Magnitude else -1
-				-- gap is the number that matters: the distance between the
-				-- INVISIBLE root and the VISIBLE head. If that grows, the body
-				-- has been left behind again.
-				say(string.format("  rootY %.2f headY %.2f gap %.2f | body %.1f box %.1f | camera %.1f away | LTM wanted %.2f | %s",
-					r.Position.Y, head.Position.Y, (head.Position - r.Position).Magnitude,
-					bodySpeed, r.AssemblyLinearVelocity.Magnitude, camDist,
-					observedLTM, tostring(humanoid:GetState())))
-			end
-
-			if bodySpeed < SETTLE_SPEED then
-				settledFor += SETTLE_STEP
-				if settledFor >= SETTLE_HOLD then
-					break
+			-- Only allow settle check after minimum flight arc has elapsed
+			local flightElapsed = os.clock() - flightStart
+			if flightElapsed >= minFlightTime then
+				if bodySpeed < SETTLE_SPEED then
+					settledFor += SETTLE_STEP
+					if settledFor >= SETTLE_HOLD then
+						break
+					end
+				else
+					settledFor = 0
 				end
-			else
-				settledFor = 0
 			end
 			task.wait(SETTLE_STEP)
 		end

@@ -457,12 +457,25 @@ local throwDone: { [Player]: boolean } = {}
 -- Resolved lazily: ServerMain builds the Remotes folder from GameConfig at
 -- boot, and this module is required before that has necessarily happened.
 local throwRemote: RemoteEvent? = nil
-local function resolveThrowRemote()
-	local remotes = ReplicatedStorage:FindFirstChild("SeedGame")
-	remotes = remotes and remotes:FindFirstChild("Remotes")
+local throwRemoteConnected = false
+
+local function resolveThrowRemote(): RemoteEvent?
+	if throwRemote and throwRemote.Parent then
+		return throwRemote
+	end
+	local seedGame = ReplicatedStorage:FindFirstChild("SeedGame")
+	local remotes = seedGame and seedGame:FindFirstChild("Remotes")
 	local found = remotes and remotes:FindFirstChild(GameConfig.Remotes.ThrowVictim)
 	if found and found:IsA("RemoteEvent") then
 		throwRemote = found
+		if not throwRemoteConnected then
+			throwRemoteConnected = true
+			table.insert(serviceConnections, found.OnServerEvent:Connect(function(player)
+				if throwDone[player] == false then
+					throwDone[player] = true
+				end
+			end))
+		end
 		return found
 	end
 	return nil
@@ -567,48 +580,41 @@ local function throwPlayer(nest: Nest, player: Player)
 	local g = Workspace.Gravity
 	local speed = math.sqrt(R * g / (2 * k))
 
-	-- OUT, toward the safe zone. Home is +Z. The lateral term only nudges them
-	-- off the wall they were probably hugging, so they land on the road rather
-	-- than inside it.
-	local lateral = (root.Position.X - nest.root.Position.X)
-	local dir = Vector3.new(lateral * 0.02, 0, 1)
-	if dir.Magnitude > 0 then
-		dir = dir.Unit
-	else
+	-- OUT, away from the monster and biased toward the safe zone (+Z).
+	local diff = root.Position - nest.root.Position
+	local flatDiff = Vector3.new(diff.X, 0, diff.Z)
+	local awayDir = if flatDiff.Magnitude > 0.1 then flatDiff.Unit else Vector3.new(0, 0, 1)
+	local dir = (awayDir * 0.7 + Vector3.new(0, 0, 0.5)).Unit
+	if dir.Magnitude < 0.1 then
 		dir = Vector3.new(0, 0, 1)
 	end
-	--==========================================================================
-	-- THE STEP OUT OF THE PARENT IS THE CLIENT'S JOB, NOT THIS ONE'S
-	--
-	-- It used to happen here, as `root.CFrame = root.CFrame + dir * CLEAR_STUDS`.
-	-- That is a server CFrame write on a body the owning client is simulating --
-	-- the exact class of thing this rewrite exists to remove, and it fought the
-	-- owner rather than moving them. The distance is sent along with the shove
-	-- and the client applies it to a root it actually owns.
-	--==========================================================================
-	loosened = ragdollOn(character)
 
-	--==========================================================================
-	-- THE OWNER THROWS IT. THE SERVER JUST ASKS.
-	--
-	-- Writing AssemblyLinearVelocity here would be overwritten by the owning
-	-- client's next physics update, which is the bug this whole rewrite exists
-	-- to undo. The victim's client applies the impulse to a body it already
-	-- owns, and its physics replicate outward on their own.
-	--==========================================================================
+	loosened = ragdollOn(character)
+	-- nest.parent, not nest.model: the Nest type has no 'model' field, so this
+	-- indexed nil and threw -- AFTER the ragdoll and BEFORE the FireClient that
+	-- does the actual throwing. The victim went limp and was never flung.
+	nest.parent:SetAttribute("AttackSwipe", os.clock())
+
 	SoundKit.emit("Throw", nest.root)
 
 	throwDone[player] = false
 	local sent = false
-	if throwRemote then
+	local rem = resolveThrowRemote()
+	if rem then
 		sent = pcall(function()
-			(throwRemote :: RemoteEvent):FireClient(player, dir, speed, P.ThrowLift,
-				CLEAR_STUDS)
+			rem:FireClient(player, dir, speed, P.ThrowLift, CLEAR_STUDS)
 		end)
 	end
 	if not sent then
 		warn("[Seed/NestService] no ThrowVictim remote; the hit will look like a shove that never landed.")
 	end
+
+	-- Immediate physics impulse directly into solver momentum
+	pcall(function()
+		local impulse = dir * speed + Vector3.new(0, speed * P.ThrowLift, 0)
+		root:ApplyImpulse(impulse * root.AssemblyMass)
+		root.AssemblyLinearVelocity = impulse
+	end)
 
 	--==========================================================================
 	-- WAIT FOR THE VICTIM TO SAY IT STOPPED

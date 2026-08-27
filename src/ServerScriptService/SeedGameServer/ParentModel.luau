@@ -46,6 +46,7 @@ local ParentModel = {}
 
 local BramblebackModel = require(script.Parent:WaitForChild("BramblebackModel"))
 local MiremawModel = require(script.Parent:WaitForChild("MiremawModel"))
+local AstralmawModel = require(script.Parent:WaitForChild("AstralmawModel"))
 
 -- Sampled from the sheet.
 local BARK = Color3.fromRGB(96, 76, 54)
@@ -215,6 +216,7 @@ end
 local BY_BIOME: { [string]: (CFrame, number, Instance) -> Model } = {
 	dustbowl = BramblebackModel.Build,
 	tanglemire = MiremawModel.Build,
+	starbloom = AstralmawModel.Build,
 }
 
 function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: Instance): Model
@@ -232,251 +234,260 @@ function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: 
 	--== ROOT ==--
 	local root = part({
 		name = "HumanoidRootPart",
-		size = Vector3.new(H * 0.28, H * 0.22, H * 0.20),
+		size = Vector3.new(H * 0.32, H * 0.25, H * 0.24),
 		cframe = cf * CFrame.new(0, H * 0.45, 0),
 		color = BARK, transparency = 1, studs = false, parent = model,
 	})
 	model.PrimaryPart = root
 
-	--== TORSO ==--
-	-- Green leaf plates over a bark trunk, which is the sheet's read: brown
-	-- underneath, mossy armour laid on top of it.
-	local torsoY = H * 0.45
+	--== TORSO & JAGGED MOSS-BARK CARAPACE ==--
+	local torsoY = H * 0.46
 	local torso = part({
 		name = "Torso",
-		size = Vector3.new(H * 0.30, H * 0.24, H * 0.22),
-		cframe = cf * CFrame.new(0, torsoY, 0),
-		color = BARK, parent = model,
+		size = Vector3.new(H * 0.34, H * 0.28, H * 0.26),
+		cframe = cf * CFrame.new(0, torsoY, 0) * CFrame.Angles(math.rad(-6), 0, 0),
+		color = BARK_DARK, parent = model,
 	})
-	--==========================================================================
-	-- THE BRUTE GETS THE SEAM AND DOES NOT USE IT
-	--
-	-- Both parents implement one rig contract, so both carry RootJoint even
-	-- though only Brambleback moves it. Here root and torso are BOTH at
-	-- H * 0.45, so the joint rests at identity and nothing about this creature
-	-- changes -- and it sets no SleepBodyPose, so ParentAnim leaves it alone.
-	--
-	-- Giving it the seam anyway means the animator has one shape to drive
-	-- rather than a special case per species, which is how the six existing
-	-- seams already work.
-	--==========================================================================
 	socketMotor("RootJoint", root, torso, cf)
+
+	-- Spiked 3-Tier Chest & Abdominal Plates
 	weldTo(torso, part({
-		name = "ChestPlate",
-		size = Vector3.new(H * 0.20, H * 0.11, H * 0.07),
-		cframe = cf * CFrame.new(0, torsoY + H * 0.06, -H * 0.10),
+		name = "ChestPlateUpper",
+		size = Vector3.new(H * 0.25, H * 0.12, H * 0.08),
+		cframe = cf * CFrame.new(0, torsoY + H * 0.08, -H * 0.12) * CFrame.Angles(math.rad(-8), 0, 0),
 		color = FLESH, parent = model,
 	}))
 	weldTo(torso, part({
-		name = "AbPlate",
-		size = Vector3.new(H * 0.13, H * 0.10, H * 0.06),
-		cframe = cf * CFrame.new(0, torsoY - H * 0.07, -H * 0.10),
+		name = "ChestPlateMid",
+		size = Vector3.new(H * 0.21, H * 0.10, H * 0.07),
+		cframe = cf * CFrame.new(0, torsoY - H * 0.01, -H * 0.13) * CFrame.Angles(math.rad(-4), 0, 0),
 		color = FLESH_LIT, parent = model,
 	}))
-	-- The back view is almost entirely leaf, so the back is armoured too.
-	for i = 0, 2 do
-		weldTo(torso, part({
-			name = "BackPlate",
-			size = Vector3.new(H * (0.24 - i * 0.04), H * 0.08, H * 0.05),
-			cframe = cf * CFrame.new(0, torsoY + H * (0.08 - i * 0.08), H * 0.10),
-			color = if i % 2 == 0 then MANE else MANE_DARK, parent = model,
-		}))
+	weldTo(torso, part({
+		name = "AbPlate",
+		size = Vector3.new(H * 0.16, H * 0.09, H * 0.06),
+		cframe = cf * CFrame.new(0, torsoY - H * 0.09, -H * 0.12) * CFrame.Angles(math.rad(4), 0, 0),
+		color = FLESH, parent = model,
+	}))
+
+	-- Jagged Lateral Bark Ribs
+	for _, s in ipairs({ -1, 1 }) do
+		for r = 0, 2 do
+			weldTo(torso, wedge("BarkRib" .. r .. "_" .. s,
+				Vector3.new(H * 0.04, H * 0.08, H * 0.09),
+				cf * CFrame.new(s * H * 0.16, torsoY + H * (0.07 - r * 0.07), -H * 0.07)
+					* CFrame.Angles(0, (s < 0 and 0 or math.pi), s * math.rad(-18)),
+				BARK, model))
+		end
 	end
 
-	--== LEGS ==--
-	-- Thigh and shin as separate blocks with a plate over the thigh. One
-	-- tapering column reads as a table leg.
+	-- 4 Layered Dorsal Spine Plates
+	for i = 0, 3 do
+		weldTo(torso, part({
+			name = "BackPlate" .. i,
+			size = Vector3.new(H * (0.28 - i * 0.045), H * 0.085, H * 0.06),
+			cframe = cf * CFrame.new(0, torsoY + H * (0.12 - i * 0.08), H * 0.12) * CFrame.Angles(math.rad(-12), 0, 0),
+			color = if i % 2 == 0 then MANE else MANE_DARK, parent = model,
+		}))
+		weldTo(torso, wedge("SpinalThorn" .. i,
+			Vector3.new(H * 0.035, H * 0.09, H * 0.035),
+			cf * CFrame.new(0, torsoY + H * (0.16 - i * 0.08), H * 0.16) * CFrame.Angles(math.rad(-22), 0, 0),
+			THORN, model))
+	end
+
+	--== LEGS & ROOT CLAW TALONS ==--
 	for _, side in ipairs({ -1, 1 }) do
+		local legName = if side < 0 then "LeftLeg" else "RightLeg"
+		local hipX = side * H * 0.12
 		local leg = part({
-			name = if side < 0 then "LeftLeg" else "RightLeg",
-			size = Vector3.new(H * 0.13, H * 0.19, H * 0.14),
-			cframe = cf * CFrame.new(side * H * 0.105, H * 0.235, 0),
+			name = legName,
+			size = Vector3.new(H * 0.15, H * 0.22, H * 0.16),
+			cframe = cf * CFrame.new(hipX, H * 0.24, 0) * CFrame.Angles(math.rad(6), 0, side * math.rad(-6)),
 			color = BARK, parent = model,
 		})
 		motor(if side < 0 then "LeftHip" else "RightHip", torso, leg,
-			CFrame.new(side * H * 0.105, -H * 0.215, 0))
+			CFrame.new(hipX, -H * 0.22, 0))
+
 		weldTo(leg, part({
-			name = "Shin",
-			size = Vector3.new(H * 0.12, H * 0.14, H * 0.13),
-			cframe = cf * CFrame.new(side * H * 0.105, H * 0.10, 0),
-			color = BARK, parent = model,
-		}))
-		weldTo(leg, part({
-			name = "ThighPlate",
-			size = Vector3.new(H * 0.10, H * 0.12, H * 0.05),
-			cframe = cf * CFrame.new(side * H * 0.105, H * 0.25, -H * 0.07),
+			name = "ThighArmor",
+			size = Vector3.new(H * 0.12, H * 0.15, H * 0.06),
+			cframe = cf * CFrame.new(hipX, H * 0.26, -H * 0.08) * CFrame.Angles(math.rad(8), 0, 0),
 			color = FLESH, parent = model,
 		}))
-		for i = -1, 1 do
-			weldTo(leg, part({
-				name = "RootClaw",
-				size = Vector3.new(H * 0.05, H * 0.055, H * 0.11),
-				cframe = cf
-					* CFrame.new(side * H * 0.105 + i * H * 0.042, H * 0.028, -H * 0.03)
-					* CFrame.Angles(math.rad(-10), i * math.rad(22), 0),
-				color = BARK_DARK, parent = model,
-			}))
+		weldTo(leg, part({
+			name = "Shin",
+			size = Vector3.new(H * 0.14, H * 0.16, H * 0.15),
+			cframe = cf * CFrame.new(hipX + side * H * 0.015, H * 0.10, -H * 0.01),
+			color = BARK_DARK, parent = model,
+		}))
+		-- 4 Splayed Root Claws per Foot
+		for i = 1, 4 do
+			local toeX = hipX + (i - 2.5) * H * 0.038
+			weldTo(leg, wedge("RootClaw" .. i,
+				Vector3.new(H * 0.035, H * 0.06, H * 0.13),
+				cf * CFrame.new(toeX, H * 0.03, -H * 0.05)
+					* CFrame.Angles(math.rad(-14), (i - 2.5) * math.rad(12), 0),
+				CLAW, model))
 		end
 		weldTo(leg, part({
 			name = "AnkleLeaf",
-			size = Vector3.new(H * 0.11, H * 0.045, H * 0.055),
-			cframe = cf * CFrame.new(side * H * 0.105, H * 0.062, -H * 0.045)
-				* CFrame.Angles(math.rad(26), 0, 0),
+			size = Vector3.new(H * 0.12, H * 0.05, H * 0.06),
+			cframe = cf * CFrame.new(hipX, H * 0.065, -H * 0.055) * CFrame.Angles(math.rad(28), 0, 0),
 			color = MANE, parent = model,
 		}))
 	end
 
-	--== ARMS ==--
-	-- Shoulder at 0.56, claws down at 0.20. On the sheet they nearly reach the
-	-- knee, and that length is most of why it reads as a brute rather than a man.
-	local shoulderY = H * 0.56
+	--== MASSIVE SPIKED ARMS & FEROCIOUS ROOT CLAWS ==--
+	local shoulderY = H * 0.58
 	for _, side in ipairs({ -1, 1 }) do
+		local armName = if side < 0 then "LeftArm" else "RightArm"
+		local armX = side * H * 0.22
 		local arm = part({
-			name = if side < 0 then "LeftArm" else "RightArm",
-			size = Vector3.new(H * 0.105, H * 0.17, H * 0.115),
-			cframe = cf * CFrame.new(side * H * 0.195, shoulderY - H * 0.09, 0),
+			name = armName,
+			size = Vector3.new(H * 0.13, H * 0.20, H * 0.14),
+			cframe = cf * CFrame.new(armX, shoulderY - H * 0.10, 0) * CFrame.Angles(math.rad(-8), 0, side * math.rad(-8)),
 			color = FLESH, parent = model,
 		})
 		motor(if side < 0 then "LeftShoulder" else "RightShoulder", torso, arm,
-			CFrame.new(side * H * 0.195, H * 0.02, 0))
+			CFrame.new(armX, H * 0.04, 0))
 
+		-- Heavy Forearm
 		weldTo(arm, part({
 			name = "Forearm",
-			size = Vector3.new(H * 0.095, H * 0.17, H * 0.105),
-			cframe = cf * CFrame.new(side * H * 0.205, shoulderY - H * 0.25, -H * 0.01),
+			size = Vector3.new(H * 0.12, H * 0.22, H * 0.13),
+			cframe = cf * CFrame.new(armX + side * H * 0.02, shoulderY - H * 0.28, -H * 0.03) * CFrame.Angles(math.rad(-14), 0, 0),
 			color = FLESH_LIT, parent = model,
 		}))
+
+		-- Spiked Heavy Pauldron
 		weldTo(torso, part({
-			name = "Pad",
-			size = Vector3.new(H * 0.13, H * 0.10, H * 0.14),
-			cframe = cf * CFrame.new(side * H * 0.195, shoulderY + H * 0.025, 0),
-			color = FLESH_LIT, parent = model,
+			name = "Pauldron",
+			size = Vector3.new(H * 0.16, H * 0.13, H * 0.17),
+			cframe = cf * CFrame.new(armX, shoulderY + H * 0.03, 0) * CFrame.Angles(0, 0, side * math.rad(-16)),
+			color = BARK_DARK, parent = model,
 		}))
-		-- Thorns march down the shoulder and the outer forearm.
-		for i = 0, 4 do
-			weldTo(arm, part({
-				name = "Thorn",
-				size = Vector3.new(H * 0.028, H * 0.07, H * 0.028),
-				cframe = cf
-					* CFrame.new(side * H * 0.25, shoulderY + H * 0.035 - i * H * 0.075, 0)
-					* CFrame.Angles(0, 0, side * math.rad(64)),
-				color = THORN, parent = model,
-			}))
+		for p = 1, 3 do
+			weldTo(torso, wedge("PauldronThorn" .. p,
+				Vector3.new(H * 0.035, H * 0.09, H * 0.035),
+				cf * CFrame.new(armX + side * H * (0.06 + p * 0.02), shoulderY + H * (0.08 - p * 0.02), 0)
+					* CFrame.Angles(0, 0, side * math.rad(65)),
+				THORN, model))
 		end
-		for i = 0, 3 do
-			weldTo(arm, part({
-				name = "Claw",
-				size = Vector3.new(H * 0.026, H * 0.10, H * 0.034),
-				cframe = cf
-					* CFrame.new(side * H * 0.205 + (i - 1.5) * H * 0.030,
-						shoulderY - H * 0.38, -H * 0.02)
-					* CFrame.Angles(math.rad(16), 0, (i - 1.5) * math.rad(8)),
-				color = CLAW, parent = model,
-			}))
+
+		-- Arm Thorns down triceps and outer forearm
+		for i = 0, 5 do
+			weldTo(arm, wedge("ArmThorn" .. i,
+				Vector3.new(H * 0.03, H * 0.085, H * 0.03),
+				cf * CFrame.new(armX + side * H * 0.075, shoulderY + H * 0.02 - i * H * 0.07, -H * 0.01)
+					* CFrame.Angles(0, 0, side * math.rad(68)),
+				THORN, model))
+		end
+
+		-- 4 Heavy Curved Root Claws per Hand
+		for i = 1, 4 do
+			local clawX = armX + side * H * 0.02 + (i - 2.5) * H * 0.034
+			local clawLen = (i == 2 or i == 3) and 0.15 or 0.12
+			weldTo(arm, wedge("Claw" .. i,
+				Vector3.new(H * 0.032, H * clawLen, H * 0.042),
+				cf * CFrame.new(clawX, shoulderY - H * 0.42, -H * 0.05)
+					* CFrame.Angles(math.rad(24), 0, (i - 2.5) * math.rad(10)),
+				CLAW, model))
 		end
 	end
 
-	--== HEAD ==--
-	-- SKULL HEIGHT IS LOAD-BEARING, and 0.735 was still a hair too low: the jaw
-	-- bottom landed at 0.548H against a torso top of 0.570H and clipped into the
-	-- chest. Pushing the head forward instead would need headZ past -0.225H to
-	-- clear, which detaches it from the body entirely -- so it goes up, not out.
-	--
-	--     jaw bottom = skullY - 0.152 - 0.035, and must exceed 0.570.
-	local headZ = -H * 0.08
-	local skullY = H * 0.78
-	local headW = H * 0.30
+	--== FIERCE PREDATORY SKULL & SNAPPING JAW ==--
+	local headZ = -H * 0.10
+	local skullY = H * 0.80
+	local headW = H * 0.34
 
 	local head = part({
 		name = "Head",
-		size = Vector3.new(headW, H * 0.15, H * 0.23),
-		cframe = cf * CFrame.new(0, skullY, headZ),
+		size = Vector3.new(headW, H * 0.18, H * 0.26),
+		cframe = cf * CFrame.new(0, skullY, headZ) * CFrame.Angles(math.rad(-6), 0, 0),
 		color = FLESH_LIT, parent = model,
 	})
-	motor("Neck", torso, head, CFrame.new(0, H * 0.33, headZ))
+	motor("Neck", torso, head, CFrame.new(0, H * 0.34, headZ))
 
+	-- Heavy Angled Brow Ridge
 	weldTo(head, part({
 		name = "Brow",
-		size = Vector3.new(headW * 1.02, H * 0.045, H * 0.13),
-		cframe = cf * CFrame.new(0, skullY + H * 0.058, headZ - H * 0.045)
-			* CFrame.Angles(math.rad(-12), 0, 0),
+		size = Vector3.new(headW * 1.05, H * 0.055, H * 0.15),
+		cframe = cf * CFrame.new(0, skullY + H * 0.07, headZ - H * 0.05) * CFrame.Angles(math.rad(-15), 0, 0),
 		color = FLESH, parent = model,
 	}))
-	for _, side in ipairs({ -1, 1 }) do
-		weldTo(head, part({
-			name = "Eye",
-			size = Vector3.new(H * 0.058, H * 0.026, H * 0.022),
-			cframe = cf * CFrame.new(side * H * 0.068, skullY + H * 0.022, headZ - H * 0.113)
-				* CFrame.Angles(0, 0, side * math.rad(15)),
-			color = EYE, studs = false, parent = model,
-		}))
-	end
-	-- The dark of the throat, so an open maw is not a hole through the model.
-	weldTo(head, part({
-		name = "Maw",
-		size = Vector3.new(headW * 0.80, H * 0.075, H * 0.13),
-		cframe = cf * CFrame.new(0, skullY - H * 0.092, headZ - H * 0.02),
-		color = Color3.fromRGB(96, 44, 44), studs = false, parent = model,
-	}))
 
+	-- Glowing Predatory Red Neon Eyes with Ambient Light
+	for _, side in ipairs({ -1, 1 }) do
+		local eyePart = part({
+			name = "Eye",
+			size = Vector3.new(H * 0.065, H * 0.032, H * 0.028),
+			cframe = cf * CFrame.new(side * H * 0.082, skullY + H * 0.028, headZ - H * 0.13) * CFrame.Angles(0, 0, side * math.rad(18)),
+			color = EYE, material = Enum.Material.Neon, studs = false, parent = model,
+		})
+		weldTo(head, eyePart)
+		local eyeLight = Instance.new("PointLight", eyePart)
+		eyeLight.Color, eyeLight.Brightness, eyeLight.Range = EYE, 1.8, H * 0.6
+	end
+
+	-- Dark Cavernous Gullet
+	local maw = part({
+		name = "Maw",
+		size = Vector3.new(headW * 0.85, H * 0.09, H * 0.16),
+		cframe = cf * CFrame.new(0, skullY - H * 0.095, headZ - H * 0.03),
+		color = Color3.fromRGB(80, 24, 28), studs = false, parent = model,
+	})
+	weldTo(head, maw)
+
+	-- Articulated Fanged Lower Jaw
 	local jaw = part({
 		name = "Jaw",
-		size = Vector3.new(headW * 0.90, H * 0.07, H * 0.20),
-		cframe = cf * CFrame.new(0, skullY - H * 0.152, headZ + H * 0.012),
+		size = Vector3.new(headW * 0.92, H * 0.085, H * 0.24),
+		cframe = cf * CFrame.new(0, skullY - H * 0.16, headZ + H * 0.01),
 		color = FLESH, parent = model,
 	})
-	motor("JawJoint", head, jaw, CFrame.new(0, -H * 0.152, H * 0.082))
+	motor("JawJoint", head, jaw, CFrame.new(0, -H * 0.16, H * 0.08))
 
-	for i = -2, 2 do
-		local big = (i % 2 == 0)
-		weldTo(head, wedge("Tooth",
-			Vector3.new(H * 0.030, H * (big and 0.058 or 0.042), H * 0.030),
-			cf * CFrame.new(i * H * 0.046, skullY - H * 0.076, headZ - H * 0.082)
-				* CFrame.Angles(math.rad(180), 0, 0),
+	-- 14 Interlocking Serrated Fangs with Oversized Sabre Tusks
+	for i = 1, 7 do
+		local tx = (i - 4) * H * 0.044
+		local bigTusk = (i == 2 or i == 6)
+		local tLen = bigTusk and 0.075 or 0.048
+		weldTo(head, wedge("UpperTooth" .. i,
+			Vector3.new(H * 0.032, H * tLen, H * 0.032),
+			cf * CFrame.new(tx, skullY - H * 0.078, headZ - H * 0.10) * CFrame.Angles(math.pi, 0, 0),
 			TOOTH, model))
-		weldTo(jaw, wedge("Tooth",
-			Vector3.new(H * 0.030, H * (big and 0.042 or 0.058), H * 0.030),
-			cf * CFrame.new(i * H * 0.046, skullY - H * 0.120, headZ - H * 0.082),
+		weldTo(jaw, wedge("LowerTooth" .. i,
+			Vector3.new(H * 0.032, H * tLen, H * 0.032),
+			cf * CFrame.new(tx, skullY - H * 0.125, headZ - H * 0.095),
 			TOOTH, model))
 	end
+
+	-- Radiating Cheek Thorns
 	for _, side in ipairs({ -1, 1 }) do
 		for i = 0, 2 do
-			weldTo(head, part({
-				name = "CheekSpike",
-				size = Vector3.new(H * 0.026, H * 0.065, H * 0.026),
-				cframe = cf
-					* CFrame.new(side * H * 0.145, skullY + H * 0.028 - i * H * 0.055,
-						headZ - H * 0.028)
-					* CFrame.Angles(0, 0, side * math.rad(70)),
-				color = THORN, parent = model,
-			}))
+			weldTo(head, wedge("CheekSpike" .. i,
+				Vector3.new(H * 0.03, H * 0.08, H * 0.03),
+				cf * CFrame.new(side * H * 0.17, skullY + H * 0.035 - i * H * 0.055, headZ - H * 0.03)
+					* CFrame.Angles(0, 0, side * math.rad(72)),
+				THORN, model))
 		end
 	end
 
-	--==========================================================================
-	-- THE MANE
-	--
-	-- TWO RINGS ON A SPHERE, not a fan. Both earlier builds swept the leaves
-	-- through one flat arc and produced a mohawk; the SIDE view shows a crest
-	-- wrapping the whole back of the skull and carrying on down over the
-	-- shoulders. It has to radiate in PITCH as well as in yaw.
-	--
-	-- This is most of the silhouette, and the only reason the thing reads as a
-	-- plant rather than as a bear.
-	--==========================================================================
+	--== 3-TIER DENSE BRIAR MANE ==--
 	local maneOrigin = cf * CFrame.new(0, skullY + H * 0.02, headZ + H * 0.06)
 	for _, ring in ipairs({
-		{ count = 9, pitch = 62, len = 0.30, spread = 96, out = 0.09 },
-		{ count = 11, pitch = 20, len = 0.26, spread = 130, out = 0.12 },
+		{ count = 9, pitch = 68, len = 0.34, spread = 95, out = 0.08 },
+		{ count = 11, pitch = 35, len = 0.30, spread = 125, out = 0.12 },
+		{ count = 9, pitch = 10, len = 0.26, spread = 140, out = 0.15 },
 	}) do
 		for i = 1, ring.count do
 			local t = (i - 1) / (ring.count - 1)
 			local yaw = (t - 0.5) * 2 * ring.spread
-			local reach = 1 - 0.26 * math.abs((t - 0.5) * 2)
+			local reach = 1 - 0.24 * math.abs((t - 0.5) * 2)
 			local len = H * ring.len * reach
 			weldTo(head, part({
 				name = "ManeLeaf",
-				size = Vector3.new(H * 0.070, len, H * 0.045),
+				size = Vector3.new(H * 0.075, len, H * 0.048),
 				cframe = maneOrigin
 					* CFrame.Angles(0, math.rad(yaw), 0)
 					* CFrame.new(0, 0, H * ring.out)

@@ -567,19 +567,59 @@ RunService.Heartbeat:Connect(function(dt)
 				breath = math.sin(t * sleep.breathRate + p.phase) * sleep.breath * asleep
 			end
 
-			--== ARMS: near the beat, never on it ==--
+			--== ATTACK SWIPE / CATCH ANIMATION ==--
+			local attackTime = (model:GetAttribute("AttackSwipe") :: number?) or 0
+			local attackDt = t - attackTime
+			local attackArmPitch = 0
+			local attackArmYaw = 0
+			local attackArmRoll = 0
+			local attackJaw = 0
+			local attackHead = 0
+
+			if attackDt >= 0 and attackDt < 0.85 then
+				local pNorm = attackDt / 0.85
+				if pNorm < 0.28 then
+					-- Phase 1: High Windup (pull arms back & up, head rears back)
+					local u = pNorm / 0.28
+					local ease = math.sin(u * math.pi * 0.5)
+					attackArmPitch = -math.rad(75) * ease
+					attackArmRoll = math.rad(30) * ease
+					attackHead = -math.rad(18) * ease
+					attackJaw = math.rad(12) * ease
+				elseif pNorm < 0.60 then
+					-- Phase 2: Explosive Forward Claw Slash & Snap (violently swing arms forward)
+					local u = (pNorm - 0.28) / 0.32
+					local ease = math.sin(u * math.pi * 0.5)
+					attackArmPitch = -math.rad(75) + math.rad(165) * ease
+					attackArmYaw = math.rad(35) * ease
+					attackArmRoll = math.rad(30) - math.rad(45) * ease
+					attackHead = -math.rad(18) + math.rad(32) * ease
+					attackJaw = math.rad(12) + math.rad(32) * ease
+				else
+					-- Phase 3: Recovery / Follow-through blend back
+					local u = (pNorm - 0.60) / 0.25
+					local ease = 1 - u
+					attackArmPitch = math.rad(90) * ease
+					attackArmYaw = math.rad(35) * ease
+					attackArmRoll = -math.rad(15) * ease
+					attackHead = math.rad(14) * ease
+					attackJaw = math.rad(44) * ease
+				end
+			end
+
+			--== ARMS: near the beat, never on it + attack swipe ==--
 			-- Asleep they fold, by however much this species folds them.
 			local fold = asleep * sleep.armFold
 			local splay = asleep * sleep.armSplay
 			if p.leftArm then
 				p.leftArm.motor.C0 = p.leftArm.rest * CFrame.Angles(
-					math.sin(s + ARM_OFFSET_L) * ARM_SWING * moving + fold + breath,
-					0, splay)
+					math.sin(s + ARM_OFFSET_L) * ARM_SWING * moving + fold + breath + attackArmPitch,
+					attackArmYaw, splay + attackArmRoll)
 			end
 			if p.rightArm then
 				p.rightArm.motor.C0 = p.rightArm.rest * CFrame.Angles(
-					math.sin(s + ARM_OFFSET_R) * ARM_SWING * moving + fold + breath,
-					0, -splay)
+					math.sin(s + ARM_OFFSET_R) * ARM_SWING * moving + fold + breath + attackArmPitch,
+					-attackArmYaw, -splay - attackArmRoll)
 			end
 
 			--== HIPS SETTLE OUTWARD AS IT SLEEPS ==--
@@ -595,29 +635,24 @@ RunService.Heartbeat:Connect(function(dt)
 				end
 			end
 
-			--== HEAD: lolling on its own clock ==--
+			--== HEAD: lolling on its own clock + attack thrust ==--
 			-- Asleep it hangs forward and down. Awake it sways, on a slow cycle
 			-- unrelated to the stride, so it is never facing where it is going.
 			if p.neck then
 				local droop = asleep * sleep.neckDroop
 				local loll = wake * math.sin(t * 0.9 + p.phase) * math.rad(13)
 				local nod = wake * math.sin(s * 0.5 + 1.1) * math.rad(7) * moving
-				-- The head lifts a little on the breath, half as far as the
-				-- chest: a head that rose as much as the shoulders would look
-				-- like it was nodding rather than breathing.
 				p.neck.motor.C0 = p.neck.rest
-					* CFrame.Angles(droop + nod - breath * 0.5,
+					* CFrame.Angles(droop + nod - breath * 0.5 + attackHead,
 						loll * 0.7, loll + asleep * sleep.neckTilt)
 			end
 
-			--== JAW: chewing the air ==--
+			--== JAW: chewing the air + aggressive bite snap on attack ==--
 			-- Wall-clock, tied to nothing. Shut while it sleeps.
 			if p.jaw then
 				local chomp = (math.sin(t * 3.1 + p.phase) * 0.5 + 0.5) ^ 2
-				-- Negative X opens it: the hinge is behind, so the front of the
-				-- jaw drops. Positive would clamp it up through the skull.
 				p.jaw.motor.C0 = p.jaw.rest
-					* CFrame.Angles(-chomp * math.rad(19) * wake, 0, 0)
+					* CFrame.Angles(-chomp * math.rad(19) * wake - attackJaw, 0, 0)
 			end
 		end
 	end
