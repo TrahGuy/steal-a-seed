@@ -45,6 +45,7 @@ local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameCon
 local ParentModel = {}
 
 local BramblebackModel = require(script.Parent:WaitForChild("BramblebackModel"))
+local MiremawModel = require(script.Parent:WaitForChild("MiremawModel"))
 
 -- Sampled from the sheet.
 local BARK = Color3.fromRGB(96, 76, 54)
@@ -213,6 +214,7 @@ end
 --==============================================================================
 local BY_BIOME: { [string]: (CFrame, number, Instance) -> Model } = {
 	dustbowl = BramblebackModel.Build,
+	tanglemire = MiremawModel.Build,
 }
 
 function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: Instance): Model
