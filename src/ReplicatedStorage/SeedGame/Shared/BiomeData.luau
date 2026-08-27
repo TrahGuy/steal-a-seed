@@ -103,7 +103,12 @@ BiomeData.Biomes = {
 		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 1.6,
-		LiveInPhaseA = false,
+		-- Biome 2 has its art now: five species in SeedData, the Dust Husk pod
+		-- and Brambleback on the nest. Note this flag is NOT what turns a biome
+		-- on -- NestService gates on whether SeedData has species for it, and
+		-- MapService only copies this onto a Live attribute. It is a statement
+		-- of record, so it should stop saying the opposite of the truth.
+		LiveInPhaseA = true,
 	},
 	{
 		Id = "tanglemire",

@@ -184,6 +184,21 @@ end
 -- A separate helper, not a change to `wedge`: five shipped Greenhollow forms
 -- call that one and none of them should move today.
 --==============================================================================
+-- A disc lying in the XY plane, facing FORWARD along Z -- a coin seen face-on,
+-- not `upright`'s pancake seen edge-on. Paddlehop's pad is a flat slab and its
+-- rounded rims are these; without them the pad is a rectangle with corners.
+local function coin(name: string, diameter: number, thick: number, cf: CFrame,
+	color: Color3, parent: Instance): BasePart
+	return part({
+		name = name,
+		size = Vector3.new(thick, diameter, diameter),
+		cframe = cf * CFrame.Angles(0, math.rad(90), 0),
+		color = color,
+		shape = Enum.PartType.Cylinder,
+		parent = parent,
+	})
+end
+
 local function plate(name: string, width: number, length: number, thick: number,
 	cf: CFrame, color: Color3, parent: Instance, mirror: boolean?): BasePart
 	return wedge(name, Vector3.new(thick, length, width),
@@ -897,6 +912,332 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 		end
 		addFronds(model, sp, headCF * CFrame.new(0, capY + headW * 0.44, 0), headW)
 
+	--==========================================================================
+	-- DUSTBOWL FORMS
+	--
+	-- Ported from the approved Studio previews. Every one of them was authored
+	-- against `W = H * 0.46 * G` with a head centre at `stemH + W * 0.46` --
+	-- which are headW and headCentreY here, the same two numbers -- so the
+	-- shapes transfer without re-proportioning.
+	--
+	-- Each branch sets faceCF / faceW / front and stops. addFace below builds
+	-- the same nine parts for all ten species: the previews copied its
+	-- arithmetic verbatim, so there is nothing per-form left to do.
+	--==========================================================================
+	elseif sp.Form == "husk" then
+		--==================================================================
+		-- DUNEBUD: a sealed bud with ONE plate peeled down at the front
+		--
+		-- The brief ruled out "a plain ball or an egg", and a cream sphere in
+		-- a rust collar IS an egg in a cape -- so the husk closes OVER the top
+		-- and the face is recessed inside it. The plant is not wearing the
+		-- husk, it is looking out of it.
+		--
+		-- The whole head is canted: six degrees into the wind and five of
+		-- roll. That tilt is why it reads as weathered rather than placed.
+		--==================================================================
+		local hCF = headCF * CFrame.Angles(math.rad(-6), 0, math.rad(5))
+		local function plateCF(yawDeg: number, out: number, baseYOff: number,
+			length: number, tiltDeg: number): CFrame
+			return hCF
+				* CFrame.Angles(0, math.rad(yawDeg), 0)
+				-- yaw 0 is the FRONT (-Z)
+				* CFrame.new(0, baseYOff, -out)
+				-- tip the top OUTWARD
+				* CFrame.Angles(math.rad(-tiltDeg), 0, 0)
+				-- a wedge's origin is its middle, not its root
+				* CFrame.new(0, length * 0.5, 0)
+		end
+
+		upright("Collar", headW * 0.16, headW * 0.82,
+			hCF * CFrame.new(0, -headW * 0.46, 0), sp.Crown, model)
+		local budD = headW * 0.62
+		ball("Bud", budD, hCF * CFrame.new(0, -headW * 0.02, 0), sp.Body, model)
+
+		-- The low pair either side of the face SET THE WINDOW; the upper pair
+		-- turn IN and meet at the knot over the bud. At 132 degrees with
+		-- outward tilt they rose off the back of the head like two horns and
+		-- did nothing for the bud. At 112, tilted 20 inward, their tips land
+		-- just over the bud's crown -- a husk closing, not a pair of ears.
+		for _, side in ipairs({ 1, -1 }) do
+			plate("HuskLow", headW * 0.52, headW * 0.76, headW * 0.15,
+				plateCF(side * 78, headW * 0.31, -headW * 0.50, headW * 0.76, 8),
+				sp.Crown, model, side > 0)
+			plate("HuskUp", headW * 0.50, headW * 0.62, headW * 0.15,
+				plateCF(side * 112, headW * 0.37, -headW * 0.28, headW * 0.62, -20),
+				sp.Crown, model, side > 0)
+		end
+		plate("HuskBack", headW * 0.56, headW * 0.72, headW * 0.15,
+			plateCF(180, headW * 0.26, -headW * 0.48, headW * 0.72, 6),
+			sp.Crown, model, false)
+
+		-- A BLOCK, not a wedge. A wedge's taper is a RIGHT triangle: fine on a
+		-- mirrored pair, wrong on a single plate dead centre, where it read as
+		-- a sash tied across the mouth.
+		part({
+			name = "Peel",
+			size = Vector3.new(headW * 0.50, headW * 0.36, headW * 0.12),
+			cframe = plateCF(0, headW * 0.24, -headW * 0.54, headW * 0.36, 26),
+			color = sp.Crown,
+			parent = model,
+		})
+		ball("Knot", headW * 0.22, hCF * CFrame.new(0, headW * 0.22, 0),
+			sp.Accent, model)
+
+		faceW = headW * 0.54
+		front = budD * 0.5
+		faceCF = hCF
+		-- The single part that stops the front reading as a flat panel: it
+		-- gives the eyes something to sit under.
+		part({
+			name = "Brow",
+			size = Vector3.new(headW * 0.42, headW * 0.10, headW * 0.12),
+			cframe = hCF * CFrame.new(0, faceW * 0.30, -front * 0.74)
+				* CFrame.Angles(math.rad(-16), 0, 0),
+			color = sp.Crown,
+			parent = model,
+		})
+
+	elseif sp.Form == "pad" then
+		--==================================================================
+		-- PADDLEHOP: a flat prickly-pear pad, three buds, one bloom
+		--
+		-- ONE RULE makes the beige legible rather than stripey: every rounded
+		-- RIM is the dark olive, on the main pad and all three buds alike. The
+		-- eye reads "edge" once and then reads it everywhere. Before that,
+		-- core, edges and buds were one colour and three overlapping pads read
+		-- as one lumpy mass -- cardboard, not a plant.
+		--
+		-- The bloom is the most saturated thing in the biome and it is one
+		-- part the size of a thumbnail. Deliberate: a desaturated flower would
+		-- read as background scenery.
+		--==================================================================
+		local padW, padH, padD = headW * 0.84, headW * 0.98, headW * 0.38
+		part({
+			name = "PadCore",
+			size = Vector3.new(padW * 0.94, padH, padD),
+			cframe = headCF, color = sp.Body, parent = model,
+		})
+		coin("PadEdge", padW, padD * 0.34, headCF * CFrame.new(0, padH * 0.5, 0),
+			sp.Crown, model)
+		coin("PadEdge", padW, padD * 0.28, headCF * CFrame.new(0, -padH * 0.5, 0),
+			sp.Crown, model)
+
+		-- Three buds, no two alike in size, lean, height or depth.
+		local PADS = {
+			-- sign, out, up, roll, blockH, wide, deep, z, yaw
+			{ -1, 0.42, 0.18, 17, 0.68, 0.60, 0.26, 0.42, 0 },
+			{ 1, 0.56, -0.16, 44, 0.16, 0.48, 0.22, 0.86, 62 },
+			{ -1, 0.38, -0.44, 58, 0.14, 0.40, 0.14, -0.74, 38 },
+		}
+		local firstTip = headCF
+		for i, d in ipairs(PADS) do
+			local sign, out, up, roll = d[1], d[2], d[3], d[4]
+			local blockH, wide, deep, z, yaw = d[5], d[6], d[7], d[8], d[9]
+			local rootCF = headCF
+				* CFrame.new(sign * headW * out, headW * up, padD * z)
+				* CFrame.Angles(0, math.rad(sign * yaw), 0)
+				* CFrame.Angles(0, 0, math.rad(-sign * roll))
+			part({
+				name = "PadBud",
+				size = Vector3.new(headW * wide * 0.94, headW * blockH, headW * deep),
+				cframe = rootCF * CFrame.new(0, headW * blockH * 0.5, 0),
+				color = sp.Body:Lerp(sp.Crown, 0.32), parent = model,
+			})
+			local tipCF = rootCF * CFrame.new(0, headW * blockH, 0)
+			coin("PadEdge", headW * wide, headW * deep * 0.55, tipCF, sp.Crown, model)
+			if i == 1 then
+				firstTip = tipCF * CFrame.new(0, headW * wide * 0.5, 0)
+			end
+		end
+
+		local pale = sp.Accent:Lerp(WHITE, 0.62)
+		coin("Bract", headW * 0.30, headW * 0.07,
+			firstTip * CFrame.new(0, headW * 0.10, 0), pale, model)
+		ball("Bloom", headW * 0.24, firstTip * CFrame.new(0, headW * 0.14, 0),
+			sp.Accent, model)
+		ball("Glow", headW * 0.09,
+			firstTip * CFrame.new(-headW * 0.09, headW * 0.02, -headW * 0.06),
+			pale, model)
+
+		-- Four surface marks on the pad face. Smooth, because they are
+		-- markings ON the pad rather than lumps of it.
+		local frontZ = -padD * 0.5
+		local DETAIL = {
+			{ "Rib", 0.05, 0.46, 0.160, -0.26, 0.20, 9 },
+			{ "Areole", 0.11, 0.08, 0.130, 0.22, 0.14, 0 },
+			{ "Areole", 0.08, 0.06, 0.100, -0.30, -0.10, 0 },
+			{ "Scar", 0.22, 0.05, 0.070, 0.30, 0.40, -21 },
+		}
+		for _, d in ipairs(DETAIL) do
+			part({
+				name = d[1] :: string,
+				size = Vector3.new(headW * (d[2] :: number), headW * (d[3] :: number),
+					headW * (d[4] :: number)),
+				cframe = headCF
+					* CFrame.new(padW * (d[5] :: number), padH * (d[6] :: number), frontZ)
+					* CFrame.Angles(0, 0, math.rad(d[7] :: number)),
+				color = sp.Crown, parent = model, studs = false,
+			})
+		end
+
+		faceW = headW * 0.70
+		front = padD * 0.5
+
+	elseif sp.Form == "whorl" then
+		--==================================================================
+		-- THORNWHORL: five weathered blades spiralling off a bone core
+		--
+		-- The 26 degrees of shared twist about each blade's own length is what
+		-- makes the ring a SPIRAL rather than a gear. Without it, five plates
+		-- at even angles is a hub with spokes.
+		--
+		-- Two of the five are pulled darker and flatter so the whorl has depth
+		-- instead of five identical boards, and `up` spans -0.14 to +0.26 so
+		-- the SIDE view gets separated layers rather than one dense stack of
+		-- boards at eye level.
+		--==================================================================
+		upright("Collar", headW * 0.15, headW * 0.94,
+			headCF * CFrame.new(0, -headW * 0.30, 0), sp.Crown, model)
+		local coreD = headW * 0.74
+		ball("CoreBody", coreD, headCF, sp.Body, model)
+
+		local BLADES = {
+			-- yaw, out, up, back, splay, length, width, hook, dark
+			{ 85, 0.40, -0.14, 0.02, 88, 0.62, 0.80, 34, false },
+			{ 130, 0.38, 0.16, 0.02, 78, 0.56, 0.78, 30, true },
+			{ 180, 0.36, -0.04, 0.02, 92, 0.66, 0.90, 38, false },
+			{ 230, 0.42, 0.26, 0.02, 46, 0.98, 0.96, 26, false },
+			{ 275, 0.42, 0.06, 0.02, 84, 0.52, 0.74, 36, true },
+		}
+		local bladeDark = sp.Crown:Lerp(Color3.new(0, 0, 0), 0.16)
+		for i, b in ipairs(BLADES) do
+			local yaw, out, up, back = b[1] :: number, b[2] :: number,
+				b[3] :: number, b[4] :: number
+			local splay, length = b[5] :: number, b[6] :: number
+			local width, hook = b[7] :: number, b[8] :: number
+			local rootCF = headCF
+				* CFrame.Angles(0, math.rad(yaw), 0)
+				* CFrame.new(0, headW * up, headW * back - headW * out)
+				-- lean out from vertical
+				* CFrame.Angles(math.rad(-splay), 0, 0)
+				-- THE SPIRAL
+				* CFrame.Angles(0, 0, math.rad(26))
+			-- Hoisted rather than inlined as an expression-if: two of the five
+			-- blades are the darker tone, and the choice reads better named.
+			local plateColour = if b[9] then bladeDark else sp.Crown
+			plate("Plate", headW * width, headW * length, headW * 0.15,
+				rootCF * CFrame.new(0, headW * length * 0.5, 0),
+				plateColour, model, i % 2 == 0)
+			-- Pale ochre, barely above the plate it grows out of, which is what
+			-- makes it read as GROWN rather than as a cap screwed on the end.
+			plate("Hook", headW * width * 0.34, headW * length * 0.22, headW * 0.15,
+				rootCF * CFrame.new(0, headW * length * 0.94, 0)
+					* CFrame.Angles(math.rad(hook), 0, 0),
+				sp.Accent, model, i % 2 == 0)
+		end
+
+		local crownCF = headCF * CFrame.new(0, headW * 0.34, headW * 0.04)
+			* CFrame.Angles(math.rad(-16), math.rad(20), 0)
+		plate("Spur", headW * 0.34, headW * 0.62, headW * 0.13,
+			crownCF * CFrame.new(0, headW * 0.31, 0), sp.Crown, model, false)
+		plate("SpurTip", headW * 0.22, headW * 0.22, headW * 0.13,
+			crownCF * CFrame.new(0, headW * 0.58, 0) * CFrame.Angles(math.rad(52), 0, 0),
+			sp.Accent, model, false)
+
+		faceW = headW * 0.66
+		front = coreD * 0.5
+
+	elseif sp.Form == "cup" then
+		--==================================================================
+		-- RAINCUP: a stepped goblet, and the steps are the whole point
+		--
+		-- A Roblox Cylinder seen side-on is a plain RECTANGLE. One wide disc
+		-- read as a cup only from directly overhead; from the front -- the
+		-- angle a player actually has -- it was a blue box with two horns.
+		-- Three discs widening upward, 0.52 -> 0.92 -> 1.26, carry the
+		-- silhouette because the STEPS do; each disc alone is a rectangle.
+		--
+		-- The yellow floor is FLUSH with the rim and never sunk below it. The
+		-- engine has no hollow cylinder, so a floor "recessed" inside a solid
+		-- rim is simply buried, and the focal colour of the whole model
+		-- disappears from every angle including from above.
+		--==================================================================
+		upright("CupFoot", headW * 0.20, headW * 0.52,
+			headCF * CFrame.new(0, -headW * 0.34, 0),
+			sp.Body:Lerp(Color3.new(0, 0, 0), 0.28), model)
+		upright("CupWall", headW * 0.26, headW * 0.92,
+			headCF * CFrame.new(0, -headW * 0.13, 0), sp.Body, model)
+		upright("CupRim", headW * 0.34, headW * 1.26,
+			headCF * CFrame.new(0, headW * 0.09, 0), sp.Body, model)
+		upright("CupInner", headW * 0.12, headW * 0.72,
+			headCF * CFrame.new(0, headW * 0.22, 0), sp.Crown, model)
+		ball("CupCore", headW * 0.24, headCF * CFrame.new(0, headW * 0.30, 0),
+			sp.Crown, model)
+
+		-- Five lobes, ONE plate each. The first design spent fifteen parts on
+		-- five petals x (outer + liner + rim bar) -- three concentric rings of
+		-- five, which is a gear. They root at 0.52-0.56, inside the rim's 0.63
+		-- edge, so they rise FROM the rim and continue its flare.
+		local LOBES = {
+			-- yaw, out, splay, length, width
+			{ 50, 0.54, 20, 0.80, 0.80 },   -- the long one, and the most upright
+			{ 116, 0.52, 16, 0.74, 0.74 },
+			{ 192, 0.54, 24, 0.74, 0.76 },
+			{ 264, 0.52, 18, 0.76, 0.72 },
+			{ 322, 0.56, 44, 0.42, 0.68 },  -- lower, partly folded, widest reach
+		}
+		local ribColour = sp.Body:Lerp(Color3.new(0, 0, 0), 0.34)
+		for i, d in ipairs(LOBES) do
+			local yaw, out = d[1] :: number, d[2] :: number
+			local splay, length, width = d[3] :: number, d[4] :: number, d[5] :: number
+			local L = headW * length * (0.92 + 0.10 * G)
+			local rootCF = headCF
+				* CFrame.Angles(0, math.rad(yaw), 0)
+				* CFrame.new(0, headW * 0.20, -headW * out)
+				* CFrame.Angles(math.rad(-splay), 0, 0)
+			plate("Lobe", headW * width, L, headW * 0.20,
+				rootCF * CFrame.new(0, L * 0.5, 0), sp.Body, model, i % 2 == 0)
+			-- The rib PASSES THROUGH: 0.28 against the lobe's 0.20, so it stands
+			-- proud on BOTH faces and details the inner ones too. On the outer
+			-- face only it detailed the half of the crown facing away.
+			--
+			-- Darker than the lobe, never brighter. A bright vein out-values the
+			-- core and steals the focal point the hierarchy is built around.
+			part({
+				name = "LobeRib",
+				size = Vector3.new(headW * width * 0.16, L * 0.72, headW * 0.28),
+				cframe = rootCF * CFrame.new(0, L * 0.40, 0),
+				color = ribColour, parent = model,
+			})
+			-- The throat of TWO lobes only. A wedge, not a block: as a rectangle
+			-- its corners hung past the tapering edges of the lobe it was meant
+			-- to be colouring, and it read as a pink card standing in the cup.
+			if i == 1 or i == 3 then
+				plate("LobeBlush", headW * width * 0.70, L * 0.34, headW * 0.06,
+					rootCF * CFrame.new(0, L * 0.19, headW * 0.085),
+					sp.Accent, model, i % 2 == 0)
+			end
+		end
+
+		-- The caught drop. OPAQUE -- Roblox sorts transparency per part and the
+		-- bead is not allowed to be a second transparent layer -- and floored in
+		-- size so it is still visible at 1 kg, where the whole plant is about
+		-- two and a half studs tall.
+		local beadD = math.max(headW * 0.24 * (0.86 + 0.14 * G), 0.34)
+		local beadCF = headCF
+			* CFrame.new(-headW * 0.26, headW * 0.17 + beadD * 0.5, headW * 0.04)
+		ball("Bead", beadD, beadCF, Color3.fromRGB(74, 172, 246), model, false)
+		ball("BeadGlint", beadD * 0.36,
+			beadCF * CFrame.new(-beadD * 0.26, beadD * 0.30, -beadD * 0.24),
+			Color3.fromRGB(206, 236, 248), model, false)
+
+		faceW = headW * 0.60
+		-- On the RIM, the widest step. On the wall below it the rim ledge
+		-- overhung the face and dropped it into a shadow unreadable at distance.
+		front = headW * 1.26 * 0.5
+		faceCF = headCF * CFrame.new(0, headW * 0.09, 0)
+
 	else -- "bell"
 		-- A cone by staircase. Four tiers rather than three, and a wider spread
 		-- top to bottom: at 0.62-to-1.08 the flare was too slight to read as a
@@ -1005,21 +1346,91 @@ function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
 	-- The seam. A disc a hair proud of the shell, slightly darkened -- the
 	-- sheet's zigzag is not worth twenty parts to reproduce, and at a distance
 	-- what reads is that there IS a seam.
-	upright("Seam", D * 0.07, D * 1.02, baseCF * CFrame.new(0, D * 0.02, 0),
-		color:Lerp(Color3.new(0, 0, 0), 0.18), model)
+	--======================================================================
+	-- WHAT SITS ON TOP IS THE BIOME'S, NOT THE SPECIES'
+	--
+	-- The shell is coloured by the WEIGHT BAND and sized by the weight, and
+	-- neither of those changes per biome -- that is the whole readout and it has
+	-- to mean the same thing on every road. What changes is the dry matter
+	-- around it, because that is where a biome gets to look like itself.
+	--
+	-- The hatch stays unspoiled either way: no species id, no form rarity, no
+	-- label. Greenhollow means five possible shapes and Dustbowl means five
+	-- others, and a pod that named which would answer the only question an
+	-- unhatched pod exists to ask.
+	--======================================================================
+	if sp.Biome == "dustbowl" then
+		--==================================================================
+		-- THE DUST HUSK
+		--
+		-- Greenhollow's pod curls four green tendrils off its crown: alive,
+		-- growing. This one splits instead -- a cracked seam round the belly,
+		-- four dry bracts wrapping the lower half, three snapped bristles on
+		-- top. Same slot, opposite reading, and one part cheaper.
+		--
+		-- THE BRACTS ARE TANGENT, SHORT AND SUNK. An earlier pass flared them
+		-- and produced horizontal planks: a tip standing 3.4 studs off a 4.6
+		-- stud radius is not a flare, it is a propeller. A flat plate tangent to
+		-- a sphere touches at ONE point and its corners stand off by
+		-- (half-length)^2 / 2R -- geometry, not a tunable -- so shortening the
+		-- plate shrinks the standoff with the SQUARE of half-length. At 0.50 D
+		-- long and sunk to 0.91 R, the corners sit 13-21% of R proud across the
+		-- whole band table.
+		--==================================================================
+		local R = D * 0.5
+		upright("Split", D * 0.085, D * 1.02, baseCF,
+			color:Lerp(Color3.new(0, 0, 0), 0.34), model)
 
-	-- The curled tendril, four blocks around a quarter turn.
-	local tip = baseCF * CFrame.new(0, D * 0.62, 0)
-	for i = 1, 4 do
-		local t = (i - 1) / 4
-		tip = tip * CFrame.new(0, D * 0.13, 0) * CFrame.Angles(0, 0, math.rad(38))
-		part({
-			name = "Tendril",
-			size = Vector3.new(D * 0.10, D * 0.16, D * 0.10),
-			cframe = tip,
-			color = Color3.fromRGB(104, 158, 62),
-			parent = model,
-		})
+		for _, b in ipairs({ { 45, false }, { -45, true }, { 135, false }, { -135, true } }) do
+			local az = math.rad(b[1] :: number)
+			-- Four plates of width 0.54 D at this latitude cover about 72% of the
+			-- circumference: enough to read as a cup, short of a sealed collar
+			-- that would hide the band colour the pod exists to show.
+			local th = math.rad(-16)
+			local ca, sa = math.cos(az), math.sin(az)
+			local ct, st = math.cos(th), math.sin(th)
+			local outward = Vector3.new(sa * ct, st, ca * ct)
+			local meridian = Vector3.new(-sa * st, ct, -ca * st)
+			-- fromMatrix, not lookAt: this needs a TANGENT frame on the sphere,
+			-- and RightVector / UpVector is how you state one.
+			local cfb = CFrame.fromMatrix(
+				baseCF.Position + outward * (R * 0.91), outward, meridian)
+			if b[2] then
+				cfb = cfb * CFrame.Angles(0, math.rad(180), 0)
+			end
+			wedge("Bract", Vector3.new(D * 0.05, D * 0.50, D * 0.54), cfb,
+				Color3.fromRGB(178, 158, 106), model)
+		end
+
+		-- Three snapped stubs where Greenhollow curls four living tendrils.
+		-- Straight, uneven, leaning apart: dead and dry, the same silhouette
+		-- slot doing the opposite job.
+		local LEAN = { -22, 0, 22 }
+		for i = 1, 3 do
+			part({
+				name = "Bristle",
+				size = Vector3.new(D * 0.055, D * 0.34, D * 0.055),
+				cframe = baseCF * CFrame.new(0, D * 0.66, 0)
+					* CFrame.Angles(0, math.rad((i - 2) * 34), 0)
+					* CFrame.Angles(math.rad(LEAN[i]), 0, 0),
+				color = Color3.fromRGB(128, 122, 78),
+				parent = model,
+			})
+		end
+	else
+		upright("Seam", D * 0.07, D * 1.02, baseCF * CFrame.new(0, D * 0.02, 0),
+			color:Lerp(Color3.new(0, 0, 0), 0.18), model)
+		local tip = baseCF * CFrame.new(0, D * 0.62, 0)
+		for _ = 1, 4 do
+			tip = tip * CFrame.new(0, D * 0.13, 0) * CFrame.Angles(0, 0, math.rad(38))
+			part({
+				name = "Tendril",
+				size = Vector3.new(D * 0.10, D * 0.16, D * 0.10),
+				cframe = tip,
+				color = Color3.fromRGB(104, 158, 62),
+				parent = model,
+			})
+		end
 	end
 
 	model.PrimaryPart = shell
