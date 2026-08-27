@@ -1242,9 +1242,26 @@ GameConfig.Parent = {
 	ThrowLift = 0.45,
 	-- It only wakes when a pod leaves its nest.
 	AggroOnTheftOnly = true,
-	-- Gives up past this from its nest, so a parent can never be kited into the
-	-- safe field.
-	LeashStuds = 220,
+	--==========================================================================
+	-- THE BACKSTOP, NOT THE RULE
+	--
+	-- This was 220, and it was doing the job the safe-zone check should have
+	-- been doing. Every nest sits 240 studs from its own biome's near edge, so
+	-- a 220 radius meant a parent gave up TWENTY STUDS SHORT of the boundary --
+	-- in every biome, identically, because the nests are placed to a pattern.
+	-- Step across the line and the chase ended, which made a road that is
+	-- deliberately one continuous corridor behave like five separate rooms.
+	--
+	-- "So a parent can never be kited into the safe field" is now enforced
+	-- where it belongs: NestService tests the PARENT's own position against the
+	-- safe zone every tick. That is the actual rule, and a radius only ever
+	-- approximated it.
+	--
+	-- What is left here is a backstop -- two 300-stud segments -- so a chase
+	-- that goes wrong cannot walk the length of the map forever. It is not
+	-- meant to be the thing that ends a normal pursuit.
+	--==========================================================================
+	LeashStuds = 600,
 	-- Close enough to grab.
 	GrabStuds = 7,
 	-- Seconds it holds you before the throw. Long enough to read what happened.

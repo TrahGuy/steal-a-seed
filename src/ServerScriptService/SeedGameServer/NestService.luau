@@ -718,6 +718,24 @@ local function step(nest: Nest, now: number)
 			nest.target = nil
 			return
 		end
+		--==============================================================
+		-- THE PARENT STOPS AT THE RED LINE, NOT AT A RADIUS
+		--
+		-- Checked against the PARENT rather than the target, and it is the
+		-- guard that actually keeps the promise the map makes. The target is
+		-- already checked above -- that ends the chase when the player is home
+		-- -- but nothing stopped the monster itself crossing, and the radius
+		-- that used to stand in for this ended every pursuit twenty studs
+		-- before the chaser left its own biome.
+		--==============================================================
+		if MapService.IsInSafeZone(nest.root.Position) then
+			nest.state = "returning"
+			nest.target = nil
+			return
+		end
+		-- Backstop only. See GameConfig.Parent.LeashStuds: this is two segments,
+		-- so a normal cross-biome chase never reaches it and a broken one cannot
+		-- run forever.
 		if (nest.root.Position - nest.origin).Magnitude > P.LeashStuds then
 			nest.state = "returning"
 			nest.target = nil
