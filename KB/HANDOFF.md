@@ -3760,6 +3760,41 @@ Static verification passed with `git diff --check`, and a full Rojo build produc
 walk across the Greenhollow/Dustbowl boundary and one dusk ejection remain the hand-test before
 publishing.
 
+## Brambleback lies down through the shared seventh seam — 2026-08-27
+
+Commits `d3c0eb7` and `edbe25a` completed the approved sleep pose. Brambleback first gained its
+species-specific curl and breath, then both parent rigs gained a `RootJoint` between
+`HumanoidRootPart` and `Torso`. The original six seam names remain unchanged and load-bearing.
+
+The joint uses the model origin as its virtual socket. Brambleback's authored asleep pose is
+`CFrame.new(0, 2.58, 2.0) * CFrame.Angles(rad(-68), rad(2), 0)` before the existing `15 / 14.9`
+scale, producing the measured shipped translation `(0, 2.5973, 2.0134)`. Its wake scalar blends
+continuously to identity. Greenhollow has the same seam contract but no sleep body pose, so its
+appearance and 87-part count remain unchanged; Brambleback remains 83 visible parts.
+
+The remaining live check is collision: `Torso` is the only collider while `RootJoint` is animated
+locally. If the visible prone body collides at the old standing position, move only the RootJoint
+blend to the server. Do not pitch the Humanoid root or alter HipHeight/AutoRotate.
+
+## Placement refusals identify their guard — 2026-08-27
+
+Commit `704b04b` added diagnostic-only logging to `PlantService.PlaceAt`. Its seven refusal branches
+now report eight possible codes: `NO_PROFILE`, `NO_PLOT`, `NO_SOIL`, `NO_CHARACTER`, `NO_TOOL`,
+`UNKNOWN_SPECIES`, `OUT_OF_RANGE`, and `BED_FULL`. The profile/plot split deliberately distinguishes
+an account still loading from a ready player who has no assigned plot.
+
+Logs include player, code and held species, and are rate-limited per player and code for three
+seconds. No placement condition, RemoteEvent, or client behaviour changed. The next failed live
+placement should be reproduced once and its server code used to choose the actual fix.
+
+## Claude and Codex share one project memory — 2026-08-27
+
+`AGENTS.md` is the single canonical project guide and `.agents/skills/` is the single canonical
+five-skill set. `CLAUDE.md` and `.claude/skills/` are compatibility pointers only. All agents read
+this handoff, inspect the checkout and recent commits before editing, and record durable decisions
+here with their implementing commit. Provider-specific copies of project rules must not be
+reintroduced.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
