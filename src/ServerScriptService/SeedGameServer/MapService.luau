@@ -151,6 +151,12 @@ local FENCE = Color3.fromRGB(96, 66, 44)
 local WOOD = Color3.fromRGB(128, 88, 52)
 local WOOD_DARK = Color3.fromRGB(96, 64, 38)
 
+-- Fence boards: {centre height, height}. Two broad boards leaving a 0.6 gap,
+-- topping out at 5.0 -- low enough to jump, solid enough to walk into.
+local FENCE_THICK = 1.6
+local BOARDS = { { 1.1, 2.2 }, { 3.9, 2.2 } }
+local FENCE_TOP = 5.0
+
 local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = string.format("%s%02d", PLOT.NamePrefix, id)
@@ -203,18 +209,27 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	-- because it is now the ONLY way in -- this used to be walk-through, and the
 	-- gap only SHOWED you the entrance rather than being it.
 	--
-	-- THE LOOK AND THE RULE ARE SEPARATE PARTS. The rails and posts you can see
-	-- stay non-collidable; an invisible slab down the middle of each run is what
-	-- actually stops anybody. A rail is 0.6 studs thick and a player at 150
-	-- WalkSpeed covers 2.5 in a frame, so flipping CanCollide on the visible
-	-- fence would give a wall that holds when you walk into it and lets you
-	-- through when you sprint -- the fast players would find the hole and nobody
-	-- would be able to reproduce it. Same split as the road's Nightfall barrier,
-	-- for the same reason.
+	-- THE FENCE IS THE FENCE. There is no invisible slab any more.
 	--
-	-- Built as segments between two coordinates rather than as four whole
-	-- sides, because the front is two pieces and a special case for it would be
-	-- a second copy of the same rail-and-post code.
+	-- There used to be one: rails you could see, all non-collidable, and an
+	-- 11-stud pane down the middle of each run doing the actual stopping. The
+	-- height was chosen to be ABOVE A JUMP, which is why the plot could not be
+	-- hopped into -- and being able to hop your own fence is the point.
+	--
+	-- The reason for the split was real: a 0.6-stud rail is thinner than one
+	-- frame of travel at high WalkSpeed, so a sprinting player would pass
+	-- through it. The answer is not an invisible wall, it is a THICKER FENCE.
+	-- At 1.6 studs a board is wider than a frame of travel up to about 96
+	-- WalkSpeed at 60fps, and the plots sit in the safe field where nobody is
+	-- running at the cap. If somebody ever does clip a corner, thicken the
+	-- board -- do not put the pane back.
+	--
+	-- Two broad boards with a 0.6 gap between them, topping out at 5.0. A
+	-- character's root cannot pass a 0.6 gap, and 5.0 clears comfortably under
+	-- a default jump, so it stops a walk and permits a hop.
+	--
+	-- STUDDED, like everything else the player stands next to. The rails were
+	-- smooth because they were decoration; they are structure now.
 	local function fenceRun(alongX: boolean, fixed: number, from: number, to: number)
 		local length = math.abs(to - from)
 		if length < 0.5 then
@@ -222,41 +237,16 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		end
 		local mid = (from + to) * 0.5
 
-		--==================================================================
-		-- THE SLAB THAT DOES THE WORK
-		--
-		-- CanQuery false as well as invisible: PlantPlace raycasts at the soil
-		-- to decide where a click lands, and a solid pane around the bed would
-		-- otherwise eat clicks aimed over the fence from outside.
-		--==================================================================
-		local wall = build({
-			name = "FenceCollider",
-			size = alongX
-				and Vector3.new(length, PLOT.FenceColliderHeight, PLOT.FenceColliderThickness)
-				or Vector3.new(PLOT.FenceColliderThickness, PLOT.FenceColliderHeight, length),
-			cframe = cf * (alongX
-				and CFrame.new(mid, PLOT.FenceColliderHeight * 0.5, fixed)
-				or CFrame.new(fixed, PLOT.FenceColliderHeight * 0.5, mid)),
-			color = FENCE,
-			transparency = 1,
-			studs = false,
-			parent = model,
-		})
-		wall.CanQuery = false
-		wall.CanTouch = false
-		wall.CastShadow = false
-
-		for _, h in ipairs({ 3.2, 5.4 }) do
+		for _, board in ipairs(BOARDS) do
+			local centre, tall = board[1], board[2]
 			build({
 				name = "Rail",
-				size = alongX and Vector3.new(length, 0.6, 0.6)
-					or Vector3.new(0.6, 0.6, length),
-				cframe = cf * (alongX and CFrame.new(mid, h, fixed)
-					or CFrame.new(fixed, h, mid)),
+				size = alongX and Vector3.new(length, tall, FENCE_THICK)
+					or Vector3.new(FENCE_THICK, tall, length),
+				cframe = cf * (alongX and CFrame.new(mid, centre, fixed)
+					or CFrame.new(fixed, centre, mid)),
 				color = FENCE,
 				material = Enum.Material.Wood,
-				collide = false,
-				studs = false,
 				parent = model,
 			})
 		end
@@ -268,13 +258,11 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 			local p = from + (to - from) * ((i - 1) / (postCount - 1))
 			build({
 				name = "Post",
-				size = Vector3.new(1.1, 7, 1.1),
-				cframe = cf * (alongX and CFrame.new(p, 3.5, fixed)
-					or CFrame.new(fixed, 3.5, p)),
+				size = Vector3.new(1.6, FENCE_TOP + 0.8, 1.6),
+				cframe = cf * (alongX and CFrame.new(p, (FENCE_TOP + 0.8) * 0.5, fixed)
+					or CFrame.new(fixed, (FENCE_TOP + 0.8) * 0.5, p)),
 				color = FENCE,
 				material = Enum.Material.Wood,
-				collide = false,
-				studs = false,
 				parent = model,
 			})
 		end
@@ -287,32 +275,12 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	fenceRun(true, -halfD, -halfW, -gateHalf) -- front, left of the gate
 	fenceRun(true, -halfD, gateHalf, halfW)   -- front, right of the gate
 
-	--== THE GATEPOSTS ==--
-	-- Taller than the fence and capped. Two posts standing proud of the line
-	-- is the whole signal -- it reads as an entrance from across the field,
-	-- with no arch to build and nothing to walk into.
-	for _, side in ipairs({ -1, 1 }) do
-		build({
-			name = "GatePost",
-			size = Vector3.new(1.6, 10, 1.6),
-			cframe = cf * CFrame.new(side * gateHalf, 5, -halfD),
-			color = FENCE,
-			material = Enum.Material.Wood,
-			collide = false,
-			studs = false,
-			parent = model,
-		})
-		build({
-			name = "GateCap",
-			size = Vector3.new(2.6, 0.8, 2.6),
-			cframe = cf * CFrame.new(side * gateHalf, 10.3, -halfD),
-			color = WOOD,
-			material = Enum.Material.Wood,
-			collide = false,
-			studs = false,
-			parent = model,
-		})
-	end
+	--== NO GATEPOSTS ==--
+	--
+	-- Two tall capped posts used to stand proud of the line either side of the
+	-- gap, to read as an entrance from across the field. Removed on request:
+	-- the gap in the fence is legible on its own, and the posts were the only
+	-- thing at the entrance you could walk into.
 
 	--== THE BED ==--
 	--

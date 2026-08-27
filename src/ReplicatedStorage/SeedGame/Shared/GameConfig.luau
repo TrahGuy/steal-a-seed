@@ -221,21 +221,23 @@ GameConfig.Plot = {
 	-- because it is the ONLY way in.
 	--
 	--======================================================================
-	-- THE RAILS THEMSELVES STAY NON-COLLIDABLE, AND THAT IS THE WHOLE TRICK
+	-- THE FENCE IS THE FENCE, AND THERE IS NO INVISIBLE SLAB
 	--
-	-- A rail is 0.6 studs thick. A player at 150 WalkSpeed covers 2.5 studs in a
-	-- frame. Simply flipping CanCollide on the visible fence would give a wall
-	-- that stops you when you walk up to it and lets you straight through when
-	-- you sprint -- which is worse than either answer on its own, because it is
-	-- the fast players who would find the hole and nobody could reproduce it.
+	-- FenceColliderThickness and FenceColliderHeight lived here, sizing a pane
+	-- down the middle of each run: the rails were decoration and that pane did
+	-- the stopping, eleven studs tall so it was ABOVE A JUMP.
 	--
-	-- So the LOOK and the RULE are separate parts, the same split the road's
-	-- Nightfall barrier uses: thin rails you can see, and an invisible slab you
-	-- cannot get through. Four studs is wider than a frame of travel at the
-	-- engine's cap, and eleven tall is above a jump.
+	-- The worry behind it was sound -- a 0.6 stud rail is thinner than one
+	-- frame of travel at high WalkSpeed, so a sprinting player would pass
+	-- through a merely-collidable one. But the answer to that is a thicker
+	-- fence, not an invisible wall, and the wall cost something real: you could
+	-- not hop your own fence.
+	--
+	-- MapService now builds two 1.6-stud boards topping out at 5.0. Wider than
+	-- a frame of travel up to about 96 WalkSpeed, and low enough to jump. If a
+	-- corner ever gets clipped, thicken the board there -- do not bring the
+	-- pane back.
 	--======================================================================
-	FenceColliderThickness = 4,
-	FenceColliderHeight = 11,
 
 	--==========================================================================
 	-- THE BED IS TILLED, NOT PAINTED
