@@ -167,29 +167,29 @@ end
 -- watching for it -- and because the ejection forfeits a carry, which should
 -- happen on the frame the rule changed rather than on the next poll.
 --
--- The push and the forfeit are the gate's, not this file's. Asking it keeps one
+-- The push and the forfeit are the road service's, not this file's. Asking it keeps one
 -- definition of where the safe side is.
 --==============================================================================
 local function ejectEveryone(): (number, number)
 	local moved, forfeited = 0, 0
-	local gate = script.Parent:FindFirstChild("BiomeGateService")
-	local Gate = if gate then require(gate) :: any else nil
-	if not Gate then
+	local roadService = script.Parent:FindFirstChild("BiomeGateService")
+	local Road = if roadService then require(roadService) :: any else nil
+	if not Road then
 		return 0, 0
 	end
 	for _, player in ipairs(Players:GetPlayers()) do
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if root and root:IsA("BasePart") and Gate.OrderAt(root.Position) >= 1 then
+		if root and root:IsA("BasePart") and Road.OrderAt(root.Position) >= 1 then
 			if CarryService.IsCarrying(player) then
 				forfeited += 1
 			end
 			moved += 1
 		end
 	end
-	-- One tick of the gate's own logic, rather than a second copy of it here.
-	if Gate.SweepNow then
-		Gate.SweepNow()
+	-- One tick of the road service's logic, rather than a second copy here.
+	if Road.SweepNow then
+		Road.SweepNow()
 	end
 	return moved, forfeited
 end

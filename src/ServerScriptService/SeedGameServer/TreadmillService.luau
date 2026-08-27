@@ -224,7 +224,7 @@ end
 --
 -- Three separate answers, deliberately, because the sign wants to say something
 -- different for each: there is no next level (the ladder is finished), there is
--- one but this player has not reached the biome it needs, or there is one and
+-- one but this player has not reached its Speed milestone, or there is one and
 -- it costs this much.
 --
 -- Checked against HighestBiomeOrder -- the PERMANENT record -- rather than the
@@ -945,14 +945,14 @@ function TreadmillService.Start()
 	end))
 
 	--==========================================================================
-	-- A BIOME UNLOCK CHANGES WHAT THE SIGN IS SELLING
+	-- A BIOME MILESTONE CHANGES WHAT THE SIGN IS SELLING
 	--
 	-- An overclock the player could not afford to unlock reads as the biome's
-	-- name in place of a price. The moment BiomeGateService writes a higher
+	-- name in place of a price. The moment BiomeGateService records a higher
 	-- HighestBiomeOrder that becomes a real purchase -- and without this the
 	-- board goes on saying DUSTBOWL until something unrelated repaints it.
 	--
-	-- Off the ATTRIBUTE rather than a call from the gate service. The gate
+	-- Off the ATTRIBUTE rather than a call from the road service. The service
 	-- already publishes it for the HUD, an attribute change is a signal the
 	-- engine delivers for free, and the alternative is two services that have to
 	-- know about each other in order to repaint a board.

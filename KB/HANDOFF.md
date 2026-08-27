@@ -3740,12 +3740,32 @@ Verified against the committed, Rojo-synced files rather than the approval scrat
 The only startup warning was the existing `Players.MaxPlayers = 60` against six plots. It is not a
 Dustbowl regression and remains open below.
 
+## Biome Speed is guidance, not a daytime lock — 2026-08-27
+
+Every player may enter every biome during the day. `BiomeGateService` still records the permanent
+`HighestBiomeOrder` Speed milestone for treadmill overclock progression, but that record is no
+longer consulted when deciding whether a player may cross a biome boundary.
+
+The old `SpeedGate` data is now named `RecommendedSpeed`: Dustbowl 167M, Tanglemire 800M,
+Emberroot 3B and Starbloom 10B. Entrance arches label those values as recommendations. When the
+server observes a player entering any of those four biomes, `BiomeGuideUI` slides in a short banner
+with the biome name, mood and recommended Speed, plus an explicit “everyone may enter” note.
+
+The dusk rule did not change. At night the whole road closes, anyone already beyond the road mouth
+is returned to the field, and an active carried pod is forfeited. That is a world-cycle rule, not a
+Speed requirement.
+
+Static verification passed with `git diff --check`, and a full Rojo build produced
+`build/StealASeed.rbxlx`. Roblox Studio's MCP transport was closed during this pass, so one live
+walk across the Greenhollow/Dustbowl boundary and one dusk ejection remain the hand-test before
+publishing.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
-  * **SpeedGate** is on the billions ladder: Greenhollow 0, Dustbowl 167M, Tanglemire 800M,
-    Emberroot 3B, Starbloom 10B. Absolute numbers match the reference leaderboard's order of
-    magnitude; relative spacing is the old 0 / 2.5k / 12k / 45k / 150k ratio.
+  * **RecommendedSpeed** is advisory: Greenhollow 0, Dustbowl 167M, Tanglemire 800M, Emberroot 3B,
+    Starbloom 10B. These numbers tune chase readiness and progression milestones; they do not
+    restrict daytime entry.
   * **The repo FOLDER is still `D:\KAPE\Steal an Artifact`.** The Roblox place itself was renamed
     to "Steal a Seed" by the owner on 2026-08-21.
   * **Offline income.** Deferred in the plan; the reference advertises it in a banner across the top

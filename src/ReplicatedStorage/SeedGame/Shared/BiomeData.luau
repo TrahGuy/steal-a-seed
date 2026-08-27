@@ -1,8 +1,8 @@
 --!strict
 -- Steal a Seed :: BiomeData
 --
--- The five segments of the road: what they look like, what they cost in Speed
--- to enter, and how good the seeds are.
+-- The five segments of the road: what they look like, the Speed recommended
+-- for their difficulty, and how good the seeds are.
 --
 --==============================================================================
 -- THE NAMES ARE OURS
@@ -24,8 +24,8 @@
 -- paragraph. A player sprinting past reads a word and a facial expression and
 -- knows whether they are ready.
 --
--- Copy that restraint. `DisplayName` and `Mood` are the whole sign. The
--- SpeedGate number appears only when you are actually blocked by it.
+-- Copy that restraint. `DisplayName` and `Mood` lead the sign. The recommended
+-- Speed is supporting guidance, never an access requirement.
 --==============================================================================
 
 local Shared = script.Parent
@@ -41,8 +41,8 @@ export type Biome = {
 	Mood: string,
 	-- Order along the field's far edge, left to right. Also progression order.
 	Order: number,
-	-- Speed score required to pass the gate. 0 is the starter lane.
-	SpeedGate: number,
+	-- Speed score recommended for the biome's chase difficulty. Advisory only.
+	RecommendedSpeed: number,
 	GroundColor: Color3,
 	WallColor: Color3,
 	AccentColor: Color3,
@@ -58,21 +58,20 @@ export type Biome = {
 	PodsPerNest: number,
 	-- Weight multiplier on the Epic-and-above bands. 1.0 is the base table.
 	RarityBonus: number,
-	-- Phase A only builds Forest's pods live. The rest are geometry and a gate
-	-- until Phase C, which is deliberate: the lanes have to EXIST from the
-	-- start so the map reads correctly and the gates mean something, but
-	-- content in four biomes nobody can reach yet is content built on spec.
+	-- Records whether this segment has live nest and species content. Geometry
+	-- exists for every segment so the whole road reads correctly; unfinished
+	-- biomes stay empty without becoming inaccessible.
 	LiveInPhaseA: boolean,
 }
 
 --==============================================================================
 -- THE FIVE
 --
--- SpeedGate is the Speed SCORE needed to pass that biome's arch (and, when
--- raid checks land, to steal from its parent without an instant catch).
+-- RecommendedSpeed is the Speed SCORE at which a biome should feel fair. It is
+-- shown at the entrance and never blocks a player from going through.
 -- Same relative spacing as the old 0 / 2.5k / 12k / 45k / 150k ladder, scaled
 -- so Starbloom is 10 billion — the reference leaderboard's order of magnitude,
--- not a few minutes of milling. Greenhollow stays ungated.
+-- not a few minutes of milling. Greenhollow needs no warning.
 --==============================================================================
 BiomeData.Biomes = {
 	{
@@ -80,7 +79,7 @@ BiomeData.Biomes = {
 		DisplayName = "Greenhollow",
 		Mood = "🙂",
 		Order = 1,
-		SpeedGate = 0,
+		RecommendedSpeed = 0,
 		GroundColor = Color3.fromRGB(104, 190, 88),
 		WallColor = Color3.fromRGB(126, 92, 62),
 		AccentColor = Color3.fromRGB(74, 148, 66),
@@ -95,7 +94,7 @@ BiomeData.Biomes = {
 		DisplayName = "Dustbowl",
 		Mood = "😐",
 		Order = 2,
-		SpeedGate = 167_000_000,
+		RecommendedSpeed = 167_000_000,
 		GroundColor = Color3.fromRGB(226, 198, 138),
 		WallColor = Color3.fromRGB(186, 142, 92),
 		AccentColor = Color3.fromRGB(212, 158, 78),
@@ -115,7 +114,7 @@ BiomeData.Biomes = {
 		DisplayName = "Tanglemire",
 		Mood = "😟",
 		Order = 3,
-		SpeedGate = 800_000_000,
+		RecommendedSpeed = 800_000_000,
 		GroundColor = Color3.fromRGB(58, 116, 96),
 		WallColor = Color3.fromRGB(40, 74, 62),
 		AccentColor = Color3.fromRGB(168, 214, 96),
@@ -130,7 +129,7 @@ BiomeData.Biomes = {
 		DisplayName = "Emberroot",
 		Mood = "😨",
 		Order = 4,
-		SpeedGate = 3_000_000_000,
+		RecommendedSpeed = 3_000_000_000,
 		GroundColor = Color3.fromRGB(74, 54, 50),
 		WallColor = Color3.fromRGB(50, 36, 34),
 		AccentColor = Color3.fromRGB(255, 118, 44),
@@ -145,7 +144,7 @@ BiomeData.Biomes = {
 		DisplayName = "Starbloom",
 		Mood = "💀",
 		Order = 5,
-		SpeedGate = 10_000_000_000,
+		RecommendedSpeed = 10_000_000_000,
 		GroundColor = Color3.fromRGB(30, 24, 60),
 		WallColor = Color3.fromRGB(20, 16, 42),
 		AccentColor = Color3.fromRGB(158, 128, 255),

@@ -56,13 +56,11 @@ export type Profile = {
 	--==========================================================================
 	MillOverclock: number,
 	--==========================================================================
-	-- THE DEEPEST BIOME THIS PLAYER HAS EVER EARNED
+	-- THE HIGHEST BIOME SPEED MILESTONE THIS PLAYER HAS EARNED
 	--
-	-- A HIGH-WATER MARK, not a current state. The gate is opened by Speed score,
-	-- and a future rebirth will set Speed back to zero -- so a gate that read the
-	-- live score would confiscate every biome the player has already worked for,
-	-- at the exact moment the game asked them to start again. That would make
-	-- rebirth a punishment, which is the one thing it must never be.
+	-- A HIGH-WATER MARK, not access permission. Biome entrances are open, but
+	-- overclock progression uses the same Speed targets. A future rebirth may set
+	-- live Speed back to zero and must not confiscate milestones already earned.
 	--
 	-- Only ever raised. Nothing in the game lowers it.
 	--==========================================================================

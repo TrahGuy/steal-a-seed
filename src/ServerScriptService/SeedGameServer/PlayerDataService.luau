@@ -279,7 +279,7 @@ end
 -- legitimate reason for this number to fall. If rebirth ever wants to reset it,
 -- that is a different function with a different name and a deliberate one.
 --
--- A mutation method rather than the gate reaching into the profile table: this
+-- A mutation method rather than the milestone tracker reaching into the profile table: this
 -- is where the clamp, the no-op check and the dirty flag live, and a caller that
 -- wrote entry.profile.HighestBiomeOrder directly would skip all three and its
 -- unlock would silently fail to save.

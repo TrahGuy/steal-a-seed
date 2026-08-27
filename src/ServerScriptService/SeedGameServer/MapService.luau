@@ -592,7 +592,7 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = biome.Id
 	model:SetAttribute(GameConfig.Attributes.BiomeId, biome.Id)
-	model:SetAttribute("SpeedGate", biome.SpeedGate)
+	model:SetAttribute("RecommendedSpeed", biome.RecommendedSpeed)
 	model:SetAttribute("Live", biome.LiveInPhaseA)
 	model:SetAttribute("DistanceFromSafety", BiomeData.DistanceFromSafety(biome))
 	model.Parent = parent
@@ -639,8 +639,7 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 
 	--== THE GATE ==--
 	-- An arch across the road at the boundary, carrying the biome's name.
-	-- Non-collidable: it is signage until Phase C gives it a Speed check, and a
-	-- solid gate now would make the whole road impassable.
+	-- Non-collidable: this is an entrance marker, never an access wall.
 	local gate = build({
 		name = "Gate",
 		size = Vector3.new(W + wallT * 2, 10, 4),
@@ -651,7 +650,7 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		parent = model,
 	})
 	gate:SetAttribute(GameConfig.Attributes.BiomeId, biome.Id)
-	gate:SetAttribute("SpeedGate", biome.SpeedGate)
+	gate:SetAttribute("RecommendedSpeed", biome.RecommendedSpeed)
 	CollectionService:AddTag(gate, GameConfig.Tags.BiomeGate)
 
 	-- Named on BOTH faces. You read it going out, and going home it tells you
@@ -666,17 +665,16 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		sign.Parent = gate
 
 		--==================================================================
-		-- THE NAME, AND NOW WHAT IT COSTS
+		-- THE NAME, AND THE RECOMMENDED SPEED
 		--
-		-- The arch was signage and its own comment said so, so a name and a face
-		-- was the whole of it. BiomeGateService turns it into a wall, and a wall
-		-- that does not say what opens it is a dead end.
+		-- The arch is guidance, not a lock. Everyone can pass it during the day;
+		-- the smaller second line says how much Speed makes the chase feel fair.
 		--
 		-- The number is small and under the name rather than beside it: the
-		-- biome is what you are looking at, the requirement is what you check.
-		-- Greenhollow has no requirement and gets no second line.
+		-- biome is what you are looking at, the recommendation is what you check.
+		-- Greenhollow has no recommendation and gets no second line.
 		--==================================================================
-		local named = biome.SpeedGate > 0
+		local named = biome.RecommendedSpeed > 0
 
 		local text = Instance.new("TextLabel")
 		text.Size = if named then UDim2.fromScale(1, 0.62) else UDim2.fromScale(1, 1)
@@ -695,7 +693,7 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 
 		if named then
 			local need = Instance.new("TextLabel")
-			need.Name = "Requirement"
+			need.Name = "Recommendation"
 			need.AnchorPoint = Vector2.new(0.5, 1)
 			need.Position = UDim2.fromScale(0.5, 1)
 			need.Size = UDim2.fromScale(1, 0.34)
@@ -703,7 +701,7 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 			need.Font = Enum.Font.GothamBlack
 			-- The shared compactor, so the arch and the HUD spell the same
 			-- number the same way.
-			need.Text = GameConfig.compact(biome.SpeedGate) .. " SPEED"
+			need.Text = "RECOMMENDED " .. GameConfig.compact(biome.RecommendedSpeed) .. " SPEED"
 			need.TextScaled = true
 			need.TextColor3 = Color3.fromRGB(255, 255, 255)
 			need.Parent = sign
@@ -794,9 +792,8 @@ end
 -- supposed to be shut. This does not depend on how anybody has their settings.
 --
 -- It is deliberately NOT the only thing stopping them: BiomeGateService puts
--- anybody past the plane back in the field ten times a second. The barrier is
--- what you can see; the gate is what is enforced. A wall alone can be clipped
--- through at 150 WalkSpeed, and a rule alone is invisible.
+-- anybody past the road mouth back in the field ten times a second AT NIGHT.
+-- The barrier is what you can see; the server check is what prevents clipping.
 --
 -- BUILT WITH THE MAP, so it is re-run safe for free -- MapService.Init destroys
 -- the whole SeedMap folder and builds it again, which is the project's answer

@@ -591,7 +591,7 @@ local function carriedTier(who: Player, tier: any): any
 		--
 		-- A maximum pod is 0.30, so this is the branch that guarantees a
 		-- 10,000 kg haul is silent at EVERY tier -- including the rainbow,
-		-- which the speed gate alone stopped being able to do the moment it
+		-- which the Speed threshold alone stopped being able to do the moment it
 		-- dropped to 10 studs/s for tier 1's sake.
 		--==================================================================
 		return nil

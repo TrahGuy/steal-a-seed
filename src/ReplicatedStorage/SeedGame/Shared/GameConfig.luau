@@ -525,6 +525,9 @@ GameConfig.Remotes = {
 	-- exactly what made the first ragdoll invisible.
 	ThrowVictim = "ThrowVictim",
 	DropSeedRequest = "DropSeedRequest",
+	-- Server -> client. Fired when the player enters a non-starter biome so the
+	-- HUD can show that biome's advisory Speed target.
+	BiomeRecommendation = "BiomeRecommendation",
 	GameEvent = "GameEvent",
 }
 
@@ -581,20 +584,20 @@ GameConfig.RarityColor = {
 -- against the ladder it was supposed to serve:
 --
 --     Speed        150,000   ->  WalkSpeed 149.99
---     Speed    167,000,000   ->  WalkSpeed 150.00   <- Dustbowl gate
---     Speed 10,000,000,000   ->  WalkSpeed 150.00   <- Starbloom gate
+--     Speed    167,000,000   ->  WalkSpeed 150.00   <- Dustbowl target
+--     Speed 10,000,000,000   ->  WalkSpeed 150.00   <- Starbloom target
 --
--- The curve finished before the FIRST biome gate. Every gate, every mill tier
--- above the third, and the entire billions ladder the game is built around all
--- landed on the same 150 -- so the one stat the whole game grinds stopped
--- changing anything a player could feel, four orders of magnitude before the
--- content did.
+-- The curve finished before the FIRST biome recommendation. Every biome, every
+-- mill tier above the third, and the entire billions ladder the game is built
+-- around all landed on the same 150 -- so the one stat the whole game grinds
+-- stopped changing anything a player could feel, four orders of magnitude
+-- before the content did.
 --
 -- ANCHORS FIX THAT BY BEING A DESIGN STATEMENT RATHER THAN A SHAPE. Each pair
--- below is "at this score, you move this fast", and the biome gates are ON the
--- list -- 167M is 42, 800M is 54, 3B is 68, 10B is 82. Passing a gate is now
--- worth a visible step, because the number that opens the gate is the same
--- number that moves the legs.
+-- below is "at this score, you move this fast", and the biome recommendations
+-- are ON the list -- 167M is 42, 800M is 54, 3B is 68, 10B is 82. Reaching a
+-- recommendation is worth a visible step because its number also moves the
+-- legs faster.
 --
 -- INTERPOLATED IN LOG SPACE, because the score is logarithmic and linear
 -- interpolation between 1M and 167M would leave 99% of that span in the last
@@ -624,12 +627,12 @@ GameConfig.Speed = {
 		{ 1e3, 22 },
 		{ 1e4, 27 },
 		{ 1e6, 32 },
-		--== the biome gates ==--
+		--== the biome recommendations ==--
 		{ 167e6, 42 },
 		{ 800e6, 54 },
 		{ 3e9, 68 },
 		{ 10e9, 82 },
-		--== past the last gate, where the idle game actually lives ==--
+		--== past the last recommendation, where the idle game actually lives ==--
 		{ 100e9, 96 },
 		{ 1e12, 110 },
 		{ 10e12, 124 },
@@ -754,47 +757,36 @@ GameConfig.WorldCycle = {
 }
 
 --==============================================================================
--- THE GATES ACTUALLY GATE NOW
+-- BIOME ENTRANCES ARE ADVISORY; NIGHT STILL CLOSES THE ROAD
 --
--- MapService has built an arch at every biome boundary since the first week,
--- carrying the biome's name and a SpeedGate attribute, and NOTHING HAS EVER
--- READ EITHER. The comment on it said "signage until Phase C gives it a Speed
--- check". This is that check.
+-- MapService builds an arch at every biome boundary. The Speed number on it is
+-- a recommendation for the chase ahead, not a lock: every player may enter
+-- every biome during the day. The same geometric check remains valuable at
+-- night, when the entire road closes for the restock cycle.
 --
 --==============================================================================
 -- A PLANE, NOT A PART
 --
--- The arch is 4 studs deep and non-collidable, and a player at 150 WalkSpeed
--- covers 2.5 studs a frame -- so a Touched on it is a coin flip at exactly the
--- speeds the gates exist to reward. Worse, the arch is decoration: it can be
--- moved or restyled without anybody thinking about the check hanging off it.
+-- The visible night barrier can be clipped at high WalkSpeed, so the server
+-- also checks which side of the road entrance a player occupies.
 --
--- So the check is geometry. Biome N owns the segment from -FieldFront -
--- (N-1)*SegmentLength going away from safety, its gate is the plane at that
--- near edge, and "which biome is this position in" is one division. A player
--- who is deeper than they are allowed gets put back on the safe side of the
--- plane they crossed -- which cannot be missed at any speed, in any frame rate,
--- through any amount of lag, because it does not depend on catching a moment.
+-- The road mouth is one plane. During the day it is open; at night a player on
+-- the biome side is put back in the field. That rule cannot be missed at any
+-- speed or frame rate because it checks where the player is, not a touch event.
 --
 --==============================================================================
--- PUSHED BACK, NOT TELEPORTED HOME
+-- NIGHT EJECTION
 --
--- Losing a pod and a two-minute walk because you brushed a gate you cannot pass
--- would make the gates the most hated thing in the game. The push is the
--- smallest one that works: back across the plane, facing the way they came,
--- keeping everything they are carrying.
+-- At night the smallest correction that works is a short push across the road
+-- mouth. CarryService separately forfeits the active pod, preserving the cost
+-- of failing to return before the shutdown.
 --==============================================================================
 GameConfig.Gate = {
-	-- How far back inside the last allowed segment a blocked player is placed.
-	-- Enough that they are not standing on the plane and immediately re-caught,
-	-- small enough that it reads as being stopped rather than punished.
+	-- How far into the field a player caught on the road at night is placed.
 	PushBackStuds = 8,
-	-- Server poll. Fast enough that the deepest a 150-WalkSpeed player gets past
-	-- a gate is about 15 studs -- inside the arch's own shadow -- and cheap
-	-- enough to run for every player forever.
+	-- Server poll for entry recommendations and the nighttime closure.
 	PollSeconds = 0.1,
-	-- How long before the same player is told again, so a player leaning on a
-	-- gate is not a message every tenth of a second.
+	-- Throttles repeated night-ejection diagnostics.
 	NoticeCooldown = 3,
 }
 
@@ -887,7 +879,7 @@ GameConfig.Afterimage = {
 	--==========================================================================
 	-- A JUMP THIS BIG WAS NOT A RUN
 	--
-	-- Respawns, the nest parent's throw, the mill mount, the biome gate's push
+	-- Respawns, the nest parent's throw, the mill mount, the night road ejection
 	-- back, and any future teleport all move a character further in one frame
 	-- than running can. Emitting across one would draw a line of ghosts over the
 	-- whole map.
@@ -1550,7 +1542,8 @@ GameConfig.Mill = {
 	-- OVERCLOCK: WHAT A TIER-SEVEN MILL DOES NEXT
 	--
 	-- Seven tiers top out at 50 Speed/sec. The ladder they feed runs to a
-	-- QUADRILLION. At 50/sec the last biome gate alone is six and a half years,
+	-- QUADRILLION. At 50/sec the last biome recommendation alone is six and a
+	-- half years,
 	-- so the tier ladder is not a progression system past its own top -- it is a
 	-- wall with a number on it.
 	--
@@ -1575,13 +1568,13 @@ GameConfig.Mill = {
 	--     level  5    51,200 / sec
 	--
 	--==========================================================================
-	-- GATED BY BIOME, SO THE TWO LADDERS PULL EACH OTHER
+	-- RELEASED BY SPEED MILESTONE, SO THE TWO LADDERS PULL EACH OTHER
 	--
 	-- Levels 1-5 are Greenhollow's, and 5 is enough to reach Dustbowl. After
 	-- that each biome releases exactly one more level. That is what stops the
 	-- game being two unrelated grinds side by side: cash buys the rate, the rate
-	-- buys the score, the score opens the biome, and the biome releases the next
-	-- level of rate.
+	-- buys the score, and each biome's recommended score releases the next level
+	-- of rate. Biome access itself remains open to everyone during the day.
 	--
 	-- Checked against HighestBiomeOrder -- the PERMANENT record -- and not
 	-- against where the player is standing or what their score is right now. A

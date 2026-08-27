@@ -630,8 +630,8 @@ end
 --
 -- So a fast player crossed the entire capture zone BETWEEN SAMPLES and was
 -- never once measured inside it. Not a rare race: at max speed it is the
--- ordinary outcome, and it is worst exactly for the players the gates exist to
--- create.
+-- ordinary outcome, and it is worst exactly for the fast players the Speed
+-- ladder exists to create.
 --
 -- The fix is not a faster tick -- that is the same bug with a smaller window and
 -- eight times the cost. It is to stop testing a POINT and test the SEGMENT the
