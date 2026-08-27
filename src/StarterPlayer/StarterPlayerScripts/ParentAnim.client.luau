@@ -51,6 +51,7 @@ local RunService = game:GetService("RunService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local TanglemireForms = require(SeedGame.Shared:WaitForChild("TanglemireForms"))
 
 local TAG = GameConfig.Tags.NestParent
 
@@ -172,6 +173,227 @@ local SLEEP_BY_SPECIES: { [string]: SleepProfile } = {
 	brambleback = BRAMBLEBACK_SLEEP,
 }
 
+--==============================================================================
+-- MIREMAW: THE APPROVED PERFORMANCE, NOT AN IMPRESSION OF IT
+--
+-- Greenhollow's brute and Brambleback both sleep by ANGLES -- fold the arms
+-- this many degrees, droop the neck that many -- which works because their
+-- sleeping poses were described that way. Miremaw's was not described, it was
+-- DEMONSTRATED: an eighteen-second loop in Edit that nobody wrote down.
+--
+-- So it was measured instead. Both endpoints were captured keyed to the
+-- mockup's own PreviewState attribute, and TanglemireForms carries the result
+-- as one delta per seam plus the property channels. Everything below drives
+-- those from the same wake scalar the other two parents use, so the whole body
+-- arrives together and every value in between is a real interpolation.
+--
+-- THREE OF THE CHANNELS ARE NOT JOINTS, and a joint-only animator would drop
+-- them silently: the throat SHRINKS, the throat light DIMS, and the eyes close
+-- by transparency with the lids recolouring. They are lerped here beside the
+-- seams rather than snapped at either end.
+--
+-- Miremaw takes this path INSTEAD OF the shared limb code, not on top of it.
+-- Two writers on one Motor6D.C0 is the bug that would look like jitter and
+-- read as a physics problem.
+--==============================================================================
+type MireChannels = {
+	seams: { { motor: Motor6D, rest: CFrame, delta: CFrame } },
+	sizes: { { part: BasePart, awake: Vector3, asleep: Vector3 } },
+	fades: { { part: BasePart, awake: number, asleep: number } },
+	tints: { { part: BasePart, awake: Color3, asleep: Color3 } },
+	light: { light: PointLight, awake: number, asleep: number }?,
+	fronds: { { motor: Motor6D, rest: CFrame, delta: CFrame } },
+	byName: { [string]: { motor: Motor6D, rest: CFrame, delta: CFrame } },
+	throat: { part: BasePart, awake: Vector3 }?,
+	eyes: { BasePart },
+}
+
+local function mireChannels(model: Model, scale: number): MireChannels?
+	local byName: { [string]: BasePart } = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			byName[d.Name] = d
+		end
+	end
+
+	local ch: MireChannels = {
+		seams = {}, sizes = {}, fades = {}, tints = {},
+		light = nil, fronds = {}, throat = nil, eyes = {}, byName = {},
+	}
+
+	-- Translations were authored at the mockup's scale; angles must not be
+	-- touched. Same rule the builder follows.
+	local function scaledDelta(c: CFrame): CFrame
+		local p = c.Position
+		return CFrame.new(p.X * scale, p.Y * scale, p.Z * scale) * (c - p)
+	end
+
+	for _, seam in ipairs(TanglemireForms.MiremawSeams) do
+		local delta = TanglemireForms.MiremawSleep[seam.seam]
+		local motor: Motor6D? = nil
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("Motor6D") and d.Name == seam.seam then
+				motor = d
+				break
+			end
+		end
+		if motor and delta then
+			local row = { motor = motor, rest = motor.C0, delta = scaledDelta(delta) }
+			table.insert(ch.seams, row)
+			ch.byName[seam.seam] = row
+			if string.sub(seam.seam, 1, 5) == "Frond" then
+				table.insert(ch.fronds, row)
+			end
+		end
+	end
+
+	for name, asleepSize in pairs(TanglemireForms.MiremawSleepSize) do
+		local p = byName[name]
+		if p then
+			table.insert(ch.sizes,
+				{ part = p, awake = p.Size, asleep = asleepSize * scale })
+			if name == "ThroatSac" then
+				ch.throat = { part = p, awake = p.Size }
+			end
+		end
+	end
+	for name, asleepT in pairs(TanglemireForms.MiremawSleepTransparency) do
+		local p = byName[name]
+		if p then
+			table.insert(ch.fades, { part = p, awake = p.Transparency, asleep = asleepT })
+			table.insert(ch.eyes, p)
+		end
+	end
+	for name, asleepC in pairs(TanglemireForms.MiremawSleepColor) do
+		local p = byName[name]
+		if p then
+			table.insert(ch.tints, { part = p, awake = p.Color, asleep = asleepC })
+		end
+	end
+
+	--==========================================================================
+	-- THE THROAT LIGHT IS BUILT HERE, NOT BY THE RIG
+	--
+	-- It is pure decoration and the server has no use for it, so the client owns
+	-- it outright -- one PointLight per Miremaw, created once at track time
+	-- rather than replicated to everybody.
+	--==========================================================================
+	local spec = TanglemireForms.MiremawThroatLight
+	local host = byName[spec.Part]
+	if host then
+		local existing = host:FindFirstChildOfClass("PointLight")
+		local light = existing or Instance.new("PointLight")
+		light.Name = "MireDetail_ThroatLight"
+		light.Color = spec.Color
+		light.Range = spec.Range * scale
+		light.Shadows = false
+		light.Parent = host
+		ch.light = { light = light, awake = spec.Awake, asleep = spec.Asleep }
+	end
+
+	if #ch.seams == 0 then
+		return nil
+	end
+	return ch
+end
+
+--==============================================================================
+-- Awake it keeps breathing, blinking, working its throat and stirring its
+-- fronds. All of it rides on `wake`, so a sleeping Miremaw is still and a
+-- waking one picks these up as it rises rather than switching them on.
+--==============================================================================
+local MIRE_BLINK_EVERY = 4.3
+local MIRE_BLINK_FOR = 0.13
+local MIRE_THROAT_RATE = 1.35
+local MIRE_THROAT_DEPTH = 0.035
+local MIRE_FROND_RATE = 0.7
+local MIRE_FROND_SWAY = math.rad(2.4)
+-- Shallower than Brambleback's. Miremaw is the taller creature and a big
+-- mass swinging a big angle reads as flailing rather than as weight.
+local MIRE_LEG_SWING = math.rad(21)
+local MIRE_ARM_SWING = math.rad(11)
+
+local function animateMiremaw(p: any, wake: number, t: number,
+	stride: number, moving: number)
+	local ch = p.mire :: MireChannels
+	local asleep = 1 - wake
+
+	--== EVERY SEAM, FROM ONE SCALAR ==--
+	for _, row in ipairs(ch.seams) do
+		row.motor.C0 = row.rest * row.delta:Lerp(CFrame.identity, wake)
+	end
+
+	--== THE WALK ==--
+	-- Distance travelled, not the clock: a clock-driven leg slides, and this
+	-- creature does its most important work at a run. `moving` already carries
+	-- the wake scalar, so a sleeping Miremaw's legs are still.
+	local function swing(row, phase: number, amp: number)
+		if row then
+			row.motor.C0 = row.motor.C0
+				* CFrame.Angles(math.sin(stride + phase) * amp * moving, 0, 0)
+		end
+	end
+	swing(ch.byName.LeftHip, 0, MIRE_LEG_SWING)
+	swing(ch.byName.RightHip, math.pi, MIRE_LEG_SWING)
+	-- Arms counter the legs, and by less: it runs with them braced, not pumping.
+	swing(ch.byName.RightShoulder, 0, MIRE_ARM_SWING)
+	swing(ch.byName.LeftShoulder, math.pi, MIRE_ARM_SWING)
+
+	--== THE FRONDS LAG ==--
+	-- Each one on its own phase offset, so four fronds stirring never reads as
+	-- one plank with three copies.
+	for i, row in ipairs(ch.fronds) do
+		local lag = p.phase + i * 1.31
+		row.motor.C0 = row.motor.C0
+			* CFrame.Angles(math.sin(t * MIRE_FROND_RATE + lag) * MIRE_FROND_SWAY * wake, 0, 0)
+	end
+
+	--== THE THROAT: SIZE FIRST, THEN A WAKING PULSE ON TOP ==--
+	for _, row in ipairs(ch.sizes) do
+		row.part.Size = row.asleep:Lerp(row.awake, wake)
+	end
+	if ch.throat then
+		local pulse = 1 + math.sin(t * MIRE_THROAT_RATE + p.phase) * MIRE_THROAT_DEPTH * wake
+		ch.throat.part.Size = ch.throat.part.Size * pulse
+	end
+
+	--== THE EYES ==--
+	-- Shut asleep, and awake they blink: brief, and off a phase seeded from the
+	-- nest so two Miremaws never blink together.
+	local blink = 0
+	if wake > 0.5 then
+		local cycle = (t + p.phase) % MIRE_BLINK_EVERY
+		if cycle < MIRE_BLINK_FOR then
+			blink = math.sin(cycle / MIRE_BLINK_FOR * math.pi)
+		end
+	end
+	for _, row in ipairs(ch.fades) do
+		local open = row.asleep + (row.awake - row.asleep) * wake
+		row.part.Transparency = math.clamp(open + (row.asleep - row.awake) * blink, 0, 1)
+	end
+	for _, row in ipairs(ch.tints) do
+		row.part.Color = row.asleep:Lerp(row.awake, wake)
+	end
+
+	--== THE THROAT LIGHT ==--
+	if ch.light then
+		local lit = ch.light.asleep + (ch.light.awake - ch.light.asleep) * wake
+		-- The same slow pulse the sac swells on, so light and mass agree.
+		ch.light.light.Brightness = lit
+			* (1 + math.sin(t * MIRE_THROAT_RATE + p.phase) * 0.10 * wake)
+	end
+
+	--== BREATHING, WHICH NEVER STOPS ==--
+	-- Deeper and slower asleep, shallow and quicker awake: a big mass moving a
+	-- little, which is what says heavy.
+	if p.neck then
+		local rate = 0.85 + 0.55 * wake
+		local depth = math.rad(1.9) * (0.45 + 0.55 * asleep)
+		p.neck.motor.C0 = p.neck.motor.C0
+			* CFrame.Angles(math.sin(t * rate + p.phase) * depth, 0, 0)
+	end
+end
+
 local function track(model: Instance)
 	if not model:IsA("Model") or parents[model] then
 		return
@@ -219,6 +441,11 @@ local function track(model: Instance)
 		-- builder and never changes for the life of the rig.
 		sleep = SLEEP_BY_SPECIES[tostring(model:GetAttribute("Species"))]
 			or GREENHOLLOW_SLEEP,
+		-- Populated only for Miremaw. Nil for every other guardian, which
+		-- is what keeps this whole path off Greenhollow and Brambleback.
+		mire = if tostring(model:GetAttribute("Species")) == "miremaw"
+			then mireChannels(model, (model:GetAttribute("RigScale") :: number?) or 1)
+			else nil,
 	}
 end
 
@@ -262,6 +489,27 @@ RunService.Heartbeat:Connect(function(dt)
 			local target = if model:GetAttribute("Asleep") == false then 1 else 0
 			p.wake += (target - p.wake) * math.min(1, dt * BLEND_RATE)
 			local wake = p.wake
+
+			--==============================================================
+			-- MIREMAW TAKES ITS OWN PATH, AND TAKES IT INSTEAD
+			--
+			-- Its sleeping pose is measured per seam rather than described in
+			-- angles, so running the shared limb code as well would put two
+			-- writers on one Motor6D.C0 -- which shows up as jitter and reads
+			-- as a physics problem rather than as an animation one.
+			--==============================================================
+			--== SPEED FROM VELOCITY, FOR EITHER PATH ==--
+			-- Hoisted above the fork because Miremaw needs the same stride the
+			-- shared code does. It did not have it at first, and the result was
+			-- a guardian that chased down the road with its feet held still.
+			local fv = p.root.AssemblyLinearVelocity
+			local fspeed = Vector3.new(fv.X, 0, fv.Z).Magnitude
+			if p.mire then
+				p.stride += fspeed * dt * SWING_PER_STUD
+				animateMiremaw(p, wake, t, p.stride + p.phase,
+					math.clamp(fspeed / 6, 0, 1) * wake)
+				continue
+			end
 
 			--== SPEED FROM VELOCITY, NOT MoveDirection ==--
 			-- MoveDirection is intent and stays set while it is wedged against
