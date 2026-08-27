@@ -1298,6 +1298,36 @@ GameConfig.Parent = {
 	LeashStuds = 600,
 	-- Close enough to grab.
 	GrabStuds = 7,
+
+	--==========================================================================
+	-- HOW FAR PAST YOU THE PARENT AIMS WHILE IT IS CHASING
+	--
+	-- Not decoration, and not pathfinding. A Humanoid told to MoveTo a point
+	-- DECELERATES as it arrives, and a chase asks it to arrive at a point that
+	-- keeps moving away -- so it spends the whole run braking for a destination
+	-- it never reaches. Measured against a target running 40.6:
+	--
+	--     chase speed   closest it EVER gets
+	--         45.0            13.99
+	--         52.0            13.64
+	--         67.5            12.50
+	--         82.0            13.60
+	--
+	-- Thirteen studs, at every speed, against a GrabStuds of 7. A player running
+	-- in a straight line was UNCATCHABLE, and no amount of parent speed could
+	-- have fixed it -- the standoff does not shrink when the chaser gets faster,
+	-- which is why two rounds of making the parent quicker changed nothing. Stop
+	-- running and the point stops receding, the arrival completes, and it hits
+	-- you: exactly the "it only catches me when I stand still" that found this.
+	--
+	-- Aiming past the target means the goal is never within braking distance, so
+	-- the Humanoid runs flat out until it makes contact. 60 is comfortably clear
+	-- of the ~14 stud braking envelope with room for a faster biome.
+	--
+	-- CHASING ONLY. The walk home still uses a plain MoveTo, because arriving
+	-- and stopping is precisely what it wants.
+	--==========================================================================
+	ChaseOvershootStuds = 60,
 	-- Seconds it holds you before the throw. Long enough to read what happened.
 }
 

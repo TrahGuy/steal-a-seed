@@ -829,7 +829,32 @@ local function step(nest: Nest, now: number)
 		-- the walk home was done backwards, and it teleported a physics assembly
 		-- eight times a second while the Humanoid was trying to move it.
 		-- AutoRotate does it properly, in both directions.
-		nest.humanoid:MoveTo(pos)
+		--==============================================================
+		-- AIM PAST THEM, NEVER AT THEM
+		--
+		-- See GameConfig.Parent.ChaseOvershootStuds. Handing MoveTo the target's
+		-- own position makes the Humanoid brake for an arrival that never
+		-- happens, and it settles about thirteen studs back -- outside GrabStuds
+		-- at every speed the game can produce. The parent looked like it was
+		-- chasing and could not land a hit on anybody who kept running.
+		--
+		-- Flattened, because a target on higher ground would otherwise tilt the
+		-- aim point into the sky or the floor and shorten the overshoot to
+		-- nothing at exactly the moment it matters.
+		--==============================================================
+		local here3 = nest.root.Position
+		local toTarget = Vector3.new(pos.X - here3.X, 0, pos.Z - here3.Z)
+		local heading = toTarget
+		if heading.Magnitude > 0.05 then
+			heading = heading.Unit
+		else
+			-- Standing on top of them. The grab test above has already fired in
+			-- every real case; keep facing forward rather than divide by zero.
+			local look = nest.root.CFrame.LookVector
+			local flat = Vector3.new(look.X, 0, look.Z)
+			heading = if flat.Magnitude > 0.05 then flat.Unit else Vector3.new(0, 0, -1)
+		end
+		nest.humanoid:MoveTo(pos + heading * P.ChaseOvershootStuds)
 		return
 
 	else -- returning
