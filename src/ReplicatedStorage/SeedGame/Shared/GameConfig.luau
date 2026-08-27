@@ -1203,8 +1203,10 @@ GameConfig.Parent = {
 	-- FAST. At 19 against a fresh player's 16 the parent was technically faster
 	-- and felt like a slow-moving hazard you could stroll away from. A guard
 	-- that never quite catches you is scenery.
-	BaseWalkSpeed = 26,
-	WalkSpeedPerBiome = 12,
+	-- How much faster than the biome's own recommendation the guardian runs.
+	-- See parentWalkSpeedFor: 10 is what Greenhollow already had, so the shipped
+	-- value falls out of the formula instead of being special-cased.
+	SpeedMargin = 10,
 
 	--==========================================================================
 	-- IT GETS ANGRIER
@@ -1246,10 +1248,45 @@ GameConfig.Parent = {
 	-- Seconds it holds you before the throw. Long enough to read what happened.
 }
 
-function GameConfig.parentWalkSpeedFor(biomeOrder: number): number
-	local P = GameConfig.Parent
-	local order = math.max(1, math.floor(tonumber(biomeOrder) or 1))
-	return P.BaseWalkSpeed + P.WalkSpeedPerBiome * (order - 1)
+--==============================================================================
+-- THE PARENT IS AS FAST AS THE BIOME ASKS YOU TO BE, PLUS A MARGIN
+--
+-- It used to be Base + PerBiome * (order - 1): 26, 38, 50, 62, 74. Measured
+-- against what a player who MEETS each biome's own RecommendedSpeed actually
+-- runs at -- 16, 42, 54, 68, 82 -- only Greenhollow's parent could catch
+-- anyone. Every deeper biome had a guardian SLOWER than the player it exists to
+-- threaten, and the shortfall grew with depth: -4, -4, -6, -8. That is exactly
+-- backwards. The further you are from safety, the more the run home should
+-- cost, and a monster you can stroll away from is scenery.
+--
+-- Deriving the speed FROM the recommendation ties the two together, so a biome
+-- whose difficulty is retuned can never leave its guardian behind -- there is
+-- no second number to remember.
+--
+--     biome         player at rec   parent   was
+--     Greenhollow            16.0     26.0    26   unchanged
+--     Dustbowl               42.0     52.0    38   could not catch
+--     Tanglemire             54.0     64.0    50   could not catch
+--     Emberroot              68.0     78.0    62   could not catch
+--     Starbloom              82.0     92.0    74   could not catch
+--
+-- Rage still stacks on top of all of these (+5 each, four deep), and a player
+-- carrying a heavy pod is far slower than any of it -- 12.6 at Dustbowl with
+-- 10,000 kg in their arms. Being caught is meant to be what happens when you
+-- get greedy, not what happens because you turned up.
+--
+-- IT TAKES THE RECOMMENDATION, NOT THE BIOME: BiomeData requires GameConfig, so
+-- GameConfig cannot require BiomeData back. `walkSpeedFor` is declared further
+-- down this file and that is safe -- it is a table field resolved when this is
+-- CALLED, not an upvalue captured where it is defined.
+--==============================================================================
+function GameConfig.parentWalkSpeedFor(recommendedSpeed: number): number
+	local rec = tonumber(recommendedSpeed) or 0
+	-- NaN fails every comparison, so test it directly rather than clamping.
+	if rec ~= rec or rec < 0 then
+		rec = 0
+	end
+	return GameConfig.walkSpeedFor(rec) + GameConfig.Parent.SpeedMargin
 end
 
 --==============================================================================

@@ -231,7 +231,7 @@ end
 --==============================================================================
 -- Base speed for the biome, plus whatever it is currently furious about.
 local function speedFor(nest: Nest): number
-	return GameConfig.parentWalkSpeedFor(nest.biome.Order)
+	return GameConfig.parentWalkSpeedFor(nest.biome.RecommendedSpeed)
 		+ math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
 end
 
@@ -994,7 +994,7 @@ function NestService.Start()
 	end
 	log(string.format(
 		"Ready. %d nest(s), %d pod(s). Parents sleep until robbed, then run at %d (+%d per theft).",
-		#nests, pods, GameConfig.parentWalkSpeedFor(1), P.RageSpeedPerTake))
+		#nests, pods, GameConfig.parentWalkSpeedFor(0), P.RageSpeedPerTake))
 
 	local quiet = {}
 	for id, n in pairs(skipped) do
