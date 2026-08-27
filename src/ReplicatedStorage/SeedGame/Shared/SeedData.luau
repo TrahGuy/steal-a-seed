@@ -491,6 +491,36 @@ end
 --==============================================================================
 local KG_CURVE = 2.2
 
+--==============================================================================
+-- WHAT A BAG ITEM IS WORTH AT THE STALL
+--
+-- Selling is a CONVENIENCE, not a strategy, and the price says so out loud.
+--
+-- A grown plant pays its kg every second for as long as it stands. Selling the
+-- same thing hands over thirty seconds of that and takes it away forever, so
+-- anything worth keeping is worth planting and the stall is for clearing out a
+-- bag full of pocket change -- which, per the weight histogram above, is what
+-- most of a bag actually is.
+--
+-- ONE NUMBER TUNES IT. Raise SellSeconds and selling starts competing with
+-- planting; drop it and the stall stops being worth the walk. It is deliberately
+-- not per-species and not per-rarity: a bag is sold in one press, and a price
+-- the player cannot work out in their head before pressing is a price that will
+-- feel wrong however fair it is.
+--
+-- Floored, because cash is whole numbers everywhere else in the game.
+--==============================================================================
+SeedData.SellSeconds = 30
+
+function SeedData.SellPrice(kg: number): number
+	local n = tonumber(kg) or 0
+	-- NaN fails every comparison, so test it rather than clamping it.
+	if n ~= n or n < 0 then
+		n = 0
+	end
+	return math.floor(SeedData.IncomePerSecond(n) * SeedData.SellSeconds)
+end
+
 function SeedData.RollKg(rng: Random): number
 	local u = rng:NextNumber()
 	local kg = GameConfig.Carry.MaxKg ^ (u ^ KG_CURVE)
