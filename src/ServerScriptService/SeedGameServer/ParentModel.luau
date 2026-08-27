@@ -44,6 +44,8 @@ local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameCon
 
 local ParentModel = {}
 
+local BramblebackModel = require(script.Parent:WaitForChild("BramblebackModel"))
+
 -- Sampled from the sheet.
 local BARK = Color3.fromRGB(96, 76, 54)
 local BARK_DARK = Color3.fromRGB(68, 54, 40)
@@ -161,7 +163,33 @@ end
 -- silhouette squat and heavy rather than humanoid. Both earlier attempts made
 -- them half and got a man in a costume.
 --==============================================================================
+--==============================================================================
+-- ONE PARENT PER BIOME, DISPATCHED HERE
+--
+-- `biomeId` used to do nothing but name the model, so every biome raised THIS
+-- creature -- a mossy bark ogre sampled off KB/biome1-parent-ortho.png, standing
+-- on Dustbowl sand in Greenhollow green. It was only ever Greenhollow's.
+--
+-- Brambleback is biome 2's, approved and locked separately, and it is big
+-- enough to deserve its own file. Everything below this line is still
+-- Greenhollow's and should stay that way; biomes 3-5 join the table when they
+-- have art, and until then they fall through to the brute, which is the honest
+-- placeholder.
+--
+-- NestService gates on species, not on this: a biome with no entries in
+-- SeedData raises no nest at all. So adding a biome's species is what turns its
+-- nest ON -- and if the parent is not dispatched here first, that nest gets a
+-- Greenhollow monster.
+--==============================================================================
+local BY_BIOME: { [string]: (CFrame, number, Instance) -> Model } = {
+	dustbowl = BramblebackModel.Build,
+}
+
 function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: Instance): Model
+	local specific = BY_BIOME[biomeId]
+	if specific then
+		return specific(cf, height, parent)
+	end
 	local H = height
 	local model = Instance.new("Model")
 	model.Name = "Parent_" .. biomeId
