@@ -3988,18 +3988,67 @@ settled     3.654   5.406   1.000   2.365   0.204
 
 ### Remaining hand-tests
 
-  * **A hand-driven take still has not been verified**, and this pass could not
-    close it: `ProximityPrompt:InputHoldBegin()` from a script does not fire
-    `Triggered`, and MCP's `require` returns a SEPARATE `NestService` whose nest
-    list is empty (`NestCount()` reads 0 against the live 3), so the real
-    lifecycle cannot be driven from that context at all. The wake blend above was
-    driven through the exact `Asleep` attribute `NestService` itself sets.
-    Somebody at the keyboard still needs to walk to the Tanglemire nest, hold E,
-    and confirm the parent wakes, chases and settles on its own.
+  * ~~A hand-driven take has never been verified.~~ **Closed** — see below.
   * **Miremaw at other weights and scales** has only been seen at the one height
     `NestService` asks for.
   * **Heavy Tanglemire plants** grow on the shared curve rather than the
     faster girth-inflated curve the first two biomes use; see above.
+
+## A take was impossible, and the cause was debris in the place file — 2026-08-27
+
+Commit `dd4e4a1`. Reported as "i cant take the pod", and it was real: no pod in
+any biome could be picked up.
+
+**Cause: `Workspace.SeedGameServer`** — a clone of the entire server folder,
+including an ENABLED `ServerMain`, left in the EDIT datamodel by a verification
+call that errored before its `:Destroy()` ran. Edit-mode debris survives a Play
+session, so every Play booted a SECOND copy of the whole game. Two
+`CarryService` instances each attached their own prompt, giving all eleven nest
+pods **two `TakePrompt`s on the same part**. With `Exclusivity = OnePerButton`
+the engine arbitrates between them and the take never completed.
+
+The tell was in the boot log the whole time: every service printed its Ready
+line **twice**. Worth knowing for next time — a doubled boot log means a second
+server, not a chatty one.
+
+Removed `SeedGameServer`, a stray `Shared` clone and a `__rig` folder from
+Workspace. Immediately afterwards: 11 pods, **one prompt each**, and a take
+completes.
+
+**Do not clone `SeedGameServer` or `Shared` into Workspace in Edit to test a
+module.** A clone with an enabled Script boots a whole second game the next time
+anybody presses Play, and it persists in the place file. Clone into a Folder that
+is destroyed in the same call, or better, test in Play.
+
+### The take path now names its refusal
+
+`TryTake` has ten guards and every one returned a bare `false`, so "I can't take
+the pod" had ten candidate causes and no way to tell them apart. Same fix
+`PlantService` got in `704b04b`: eight refusal codes, rate-limited three seconds
+per player and code — `NO_PLAYER`, `NIGHT`, `ALREADY_CARRYING`, `POD_GONE`,
+`IS_PLANTED`, `IN_PLOT`, `NO_ANCHOR`, `NO_CHARACTER`, `NO_HEAD`, `OUT_OF_RANGE`
+— plus one unconditional line when a hold COMPLETES, which is what separates "the
+server refused" from "the input never arrived". Diagnostic only; no guard, no
+behaviour and no remote changed.
+
+### The full lifecycle, verified end to end
+
+With the debris gone, one hold on a real Tanglemire nest pod produced, in order:
+
+```
+[Seed/CarryService] nicnicniccoal completed a take hold on Pod_crookreed
+[Seed/ThrowFX] HIT received: ... speed 180.8
+[Seed/ThrowFX] stood up at -56.1, 3.0, -580.0
+```
+
+Pod destroyed, `CarryingSpecies = crookreed`, pod welded to the character —
+then Miremaw woke, chased the thief down, caught them and threw them clear to
+z = -580. Thirty seconds later it was back at z = -1011.9, `Asleep = true`,
+`WalkSpeed = 0`, settled in the approved sleeping pose.
+
+That closes criterion 5 through the real `NestService` path rather than through
+the `Asleep` attribute, and it is the first hand-driven take this project has
+ever confirmed.
 
 ## Still open
 

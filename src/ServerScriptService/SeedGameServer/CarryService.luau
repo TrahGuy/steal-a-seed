@@ -285,6 +285,11 @@ local function attachPrompt(pod: Model)
 	prompt.Parent = primary
 
 	prompt.Triggered:Connect(function(player)
+		-- Logged BEFORE the attempt, and unconditionally. A hold that
+		-- completes and then refuses looks identical, from the player's
+		-- side, to a hold whose input never reached the server at all --
+		-- and those have nothing in common to fix.
+		log(string.format("%s completed a take hold on %s", player.Name, pod.Name))
 		CarryService.TryTake(player, pod)
 	end)
 end
@@ -353,9 +358,43 @@ end
 -- step that still cannot be pre-checked -- attaching to the character -- puts
 -- the species back on the ground rather than dropping it out of the world.
 --==============================================================================
+--==============================================================================
+-- A REFUSED TAKE NAMES ITS GUARD
+--
+-- TryTake has ten guards and every one of them used to return a bare `false`.
+-- That is silent by design at the player -- there is nothing useful to say to
+-- somebody holding E at a pod they cannot have -- but it was silent in the LOG
+-- too, which left "I can't take the pod" with ten candidate causes and no way
+-- to tell them apart.
+--
+-- Same fix PlantService got in 704b04b, and the same rate limit: a player who
+-- cannot take a pod will hold E at it repeatedly, and ten identical lines a
+-- second bury the one line that matters. Weak keys so a player who leaves is
+-- collected without a lifecycle hook to forget them.
+--==============================================================================
+local TAKE_QUIET_SECONDS = 3
+local lastTakeRefusal: { [Player]: { [string]: number } } =
+	setmetatable({}, { __mode = "k" }) :: any
+
+-- Always returns false, so each guard reads `return refuseTake(...)` and cannot
+-- accidentally start allowing what it used to refuse.
+local function refuseTake(player: Player, pod: Model, code: string): boolean
+	local now = os.clock()
+	local seen = lastTakeRefusal[player]
+	if not seen then
+		seen = {}
+		lastTakeRefusal[player] = seen
+	end
+	if now - (seen[code] or -math.huge) >= TAKE_QUIET_SECONDS then
+		seen[code] = now
+		log(string.format("%s take refused: %s (%s)", player.Name, code, pod.Name))
+	end
+	return false
+end
+
 function CarryService.TryTake(player: Player, pod: Model): boolean
 	if player.Parent ~= Players then
-		return false
+		return refuseTake(player, pod, "NO_PLAYER")
 	end
 	--==========================================================================
 	-- NOTHING IS TAKEN AFTER DARK
@@ -373,16 +412,16 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- the right place rather than for making the run.
 	--==========================================================================
 	if not GameConfig.isDay() then
-		return false
+		return refuseTake(player, pod, "NIGHT")
 	end
 	-- THE SERVER IS THE AUTHORITY. The client hides the prompt while you are
 	-- carrying, and this refuses anyway: hiding a prompt is a courtesy, not a
 	-- rule, and a rule enforced only on the client is not a rule.
 	if carried[player] then
-		return false
+		return refuseTake(player, pod, "ALREADY_CARRYING")
 	end
 	if not pod.Parent then
-		return false
+		return refuseTake(player, pod, "POD_GONE")
 	end
 	--==========================================================================
 	-- A PLOT PLANT IS NOT LOOT
@@ -398,27 +437,27 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- prompt on a plant must still refuse, and one of these will always catch it.
 	--==========================================================================
 	if CollectionService:HasTag(pod, GameConfig.Tags.Planted) then
-		return false
+		return refuseTake(player, pod, "IS_PLANTED")
 	end
 	if pod.Parent.Name == GameConfig.Plot.PlantsFolderName then
-		return false
+		return refuseTake(player, pod, "IN_PLOT")
 	end
 	local anchor = pod.PrimaryPart
 	if not anchor then
-		return false
+		return refuseTake(player, pod, "NO_ANCHOR")
 	end
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local head = character and character:FindFirstChild("Head")
 	if not (humanoid and humanoid.Health > 0) then
-		return false
+		return refuseTake(player, pod, "NO_CHARACTER")
 	end
 	if not (head and head:IsA("BasePart")) then
-		return false
+		return refuseTake(player, pod, "NO_HEAD")
 	end
 	if (head.Position - anchor.Position).Magnitude > TAKE_RANGE + RANGE_SLACK then
-		return false
+		return refuseTake(player, pod, "OUT_OF_RANGE")
 	end
 
 	--== EVERYTHING BELOW THIS LINE CHANGES THE WORLD ==--
