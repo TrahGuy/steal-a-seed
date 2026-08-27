@@ -4050,6 +4050,69 @@ That closes criterion 5 through the real `NestService` path rather than through
 the `Asleep` attribute, and it is the first hand-driven take this project has
 ever confirmed.
 
+## The stall buys your bag — 2026-08-27
+
+Commit `796d129`. A board beside Marigold's stall: hold E, everything in the
+bag becomes cash.
+
+**Cash still mints in one file.** `EconomyService.SellHeld` does the paying, so
+Rule 6 survives -- but the rule's own banner used to read "one loop, one call"
+and now says "one file", because there are genuinely TWO ways to earn. Both sit
+forty lines apart in `EconomyService`, which is the point of the rule: "why does
+this player have eight million" still has one file to read.
+
+**Price: `SeedData.SellSeconds = 30`.** An item sells for thirty seconds of what
+the same plant would pay standing in the ground, so selling is deliberately the
+worse deal and the stall is for clearing out pocket change. One number tunes it;
+it is not per-species and not per-rarity, because a bag is sold in one press and
+a price the player cannot work out in their head will feel wrong however fair it
+is.
+
+```
+     kg     sells for   planted pays/sec   payback
+      1            30                  1       30s
+    110          3.3K                110       30s
+  1,000           30K                 1K       30s
+ 10,000          300K                10K       30s
+```
+
+**The sign is its own service, not a few lines in MapService.** `SellService`
+finds `StallFloor` at Start and builds beside it. That keeps the change out of
+`MapService` and `ShopUI` -- the two files the shop pass is most likely to be
+editing -- so this should not collide with that work. It is `Priority = 65`,
+destroys its own sign before rebuilding (Rule 10), and casts down for the floor
+rather than assuming the stall's, which is what stopped the post standing three
+tenths of a stud inside the deck.
+
+The raid pod welded to a player is NOT sold: it has not been banked yet, it is
+still loot being carried home, and taking it out of their arms at the stall
+would be taking something they never put down. Only Tools -- bag and hands both,
+because equipping moves a Tool between the two.
+
+### Verified in Play, whole loop
+
+```
+[Seed/CarryService] nicnicniccoal completed a take hold on Pod_spiretip
+[Seed/CarryService] nicnicniccoal banked a Spiretip (270 kg).
+[Seed/EconomyService] nicnicniccoal sold 1 item(s) at the stall for 8.1K.
+[Seed/SellService] nicnicniccoal pressed sell-all: 1 item(s), 8.1K
+```
+
+8.1K is 270 kg x 30 s exactly. Thirteen services start clean; the board stands on
+the deck with zero clearance and faces it dead on (dot 1.000); the hotbar
+re-syncs itself because CarryService already watches both containers for
+ChildRemoved.
+
+**Not done:** `AGENTS.md`'s file list does not mention `SellService`, because
+that file has another agent's uncommitted edit in the working tree and must not
+be staged. Add the line when that lands.
+
+**Worth knowing for any prompt test:** `Exclusivity = OnePerButton` means the
+engine shows ONE E-prompt at a time. Driving `InputHoldBegin()` on a prompt the
+engine has not shown does nothing at all, silently -- which is why a take at a
+five-pod nest looked broken until the test listened for `PromptShown` and drove
+whichever prompt came back.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
