@@ -3685,6 +3685,61 @@ read but not watched.
 **Rojo was not connected** while this was built. The sources were pushed into the Edit datamodel over
 HTTP to see them run; disk is still the only source of truth and re-syncs identically.
 
+## Dustbowl is live, and it is not Greenhollow in tan — 2026-08-27
+
+The second biome is production content now. It landed as four reviewable commits rather than one
+biome-sized lump:
+
+```
+3337b81  species data and the shared Dustbowl footing
+9fb6ea0  Brambleback as the Dustbowl parent
+df7784b  Dunebud, Paddlehop, Thornwhorl, Raincup and the Dust Husk pod
+dc44034  Suncrown, completing the biome
+```
+
+`BiomeData.dustbowl.LiveInPhaseA` is true, with one three-pod nest. `SeedData` has exactly the five
+approved forms:
+
+```
+Dunebud     Uncommon   husk
+Paddlehop   Uncommon   pad
+Thornwhorl  Rare       whorl
+Raincup     Epic       cup
+Suncrown    Legendary  crown
+```
+
+The shared body is not Greenhollow's soil mound recoloured. All five use the same Dustbowl root
+footing, stem and leaves, then spend their species budget on the approved head. The live grown-part
+counts are **31 / 37 / 35 / 40 / 74** in the order above. The Dust Husk is ten parts for every
+species and every weight; species remains unknown until hatch, while the shell still communicates
+the weight band.
+
+`ParentModel.Build` dispatches `dustbowl` to `BramblebackModel.Build`. The runtime parent is
+`Parent_dustbowl`, carries `BiomeId = dustbowl`, and reports the approved **83 visible parts** plus
+its invisible `HumanoidRootPart`. Greenhollow keeps its own parent builder. Do not fold the two back
+into one recoloured model.
+
+### Verification after the owner stopped Play
+
+Verified against the committed, Rojo-synced files rather than the approval scratchpads:
+
+  * the Rojo endpoint identified **Steal a Seed**, server 7.6.1, pinned to place
+    `114075467877655`; a full `rojo build` produced `build/StealASeed.rbxlx`
+  * Play started all twelve services with no script error; `NestService` built **2 nests / 8 pods**
+    — five Greenhollow and three Dustbowl — and left Tanglemire, Emberroot and Starbloom geometry-only
+  * the live Dustbowl nest contained only Dustbowl species and its parent was Brambleback, not the
+    Greenhollow parent
+  * all five Dustbowl species built in an isolated server folder at 1 kg, 7.5 kg and 10,000 kg;
+    every build preserved its `SpeciesId`, and the temporary folder was destroyed afterwards
+  * grown part counts were constant across weight; every grown test model had zero MeshParts,
+    unions, GUIs, unanchored parts, collidable parts, touchable parts and queryable parts
+  * the ten-part Dust Husk built for all five species at all three weights; the live nest then made
+    only those loot pods queryable, which keeps the geometry/gameplay boundary intact
+  * `git diff --check` passed across the four integration commits, and `main` matched `origin/main`
+
+The only startup warning was the existing `Players.MaxPlayers = 60` against six plots. It is not a
+Dustbowl regression and remains open below.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
@@ -3708,6 +3763,8 @@ The two things standing between this and a playable loop:
   * **`Players.MaxPlayers` is 60 against 6 plots.** Joiner 7 gets no plot. It is not settable from
     code -- Game Settings -> Places, set it to 6.
 
-Then: the HUD, and Phase D upgrades (the mill rate is deliberately a slow FLOOR for multipliers to
-sit on). Offline income is still deferred on purpose -- growth uses an absolute clock, cash does not,
-and an offline faucet needs a claim flow, a cap and an anti-abuse story before it needs code.
+The HUD and Dustbowl are complete. Next content is Tanglemire only after its art and approval pass;
+do not fill it from imagination. Phase D upgrades remain available as the next systems pass (the
+mill rate is deliberately a slow FLOOR for multipliers to sit on). Offline income is still deferred
+on purpose -- growth uses an absolute clock, cash does not, and an offline faucet needs a claim
+flow, a cap and an anti-abuse story before it needs code.
