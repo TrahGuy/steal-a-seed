@@ -169,6 +169,30 @@ local function wedge(name: string, size: Vector3, cf: CFrame, color: Color3,
 end
 
 --==============================================================================
+-- A TAPERED PLATE, WHICH IS NOT THE SAME AS A WEDGE
+--
+-- `wedge` above takes a raw Vector3 and applies no rotation of its own. Every
+-- Dustbowl plate -- root feet, sepals, husk plates, blades, lobes -- was
+-- authored against a different convention: size (thick, length, width) PLUS a
+-- 90-degree yaw, which is what makes the plate taper to a point across its
+-- WIDTH. Sized the other way it tapers the THICKNESS and reads as a rectangle
+-- from every angle, which is what the first Dunebud pass looked like.
+--
+-- The taper is a RIGHT triangle, so pairs must mirror or the whole set leans
+-- one way.
+--
+-- A separate helper, not a change to `wedge`: five shipped Greenhollow forms
+-- call that one and none of them should move today.
+--==============================================================================
+local function plate(name: string, width: number, length: number, thick: number,
+	cf: CFrame, color: Color3, parent: Instance, mirror: boolean?): BasePart
+	return wedge(name, Vector3.new(thick, length, width),
+		cf * CFrame.Angles(0, math.rad(90), 0)
+			* (if mirror then CFrame.Angles(0, math.pi, 0) else CFrame.new()),
+		color, parent)
+end
+
+--==============================================================================
 -- THE FACE IS MOULDED, NOT PRINTED
 --
 -- Every piece of it used to be 0.08 studs thick and smooth: two Eye cards, two
@@ -479,6 +503,108 @@ end
 -- before weights were rolled, and a spawn that used it would be a creature
 -- whose size disagreed with its own price tag.
 --==============================================================================
+-- THE DUSTBOWL FOOTING
+--
+-- What every Dustbowl species stands on, and it is identical on all five --
+-- same rule as the shared stem and leaf colour. It replaces the seven soil
+-- clods with four broad root feet spreading from one crown, plus a neck ring
+-- that hides the head-to-stem join.
+--
+--   greenhollow  Base 1 + Soil 7 + Stem 1 + Leaf 4                     = 13
+--   dustbowl     Base 1 + RootCrown 1 + RootFoot 4 + Stem 1 + Leaf 2
+--                + Neck 1 + Sepal 2                                    = 12
+--
+-- FEET ARE BROAD AND THIN: 0.38-0.50 of head width across, 0.09-0.11 thick.
+-- The first cut of this used 0.18-0.22 thick and produced four beams and a
+-- block -- a stool, not a root system.
+--
+-- TWO LEAVES, NOT FOUR, AND THEY MUST BE DIRECT CHILDREN. PlantSway swings
+-- parts named "Leaf" as opposed arms and finds them with model:GetChildren() --
+-- direct children only -- working out which side each is on from its own X
+-- offset. One per side is exactly what that wants.
+--
+-- The tables are literal and deterministic. Two servers must build the same
+-- creature, and a bug report saying "the third one looked wrong" has to mean
+-- something.
+--==============================================================================
+local DUST_FEET = {
+	-- yaw, length, width, splay, tipCurl, thick
+	{ 24, 0.72, 0.50, 82, 12, 0.11 },   -- the long front one, tip turns up
+	{ 108, 0.52, 0.44, 85, 4, 0.10 },
+	{ 200, 0.60, 0.48, 83, 7, 0.105 },
+	{ 296, 0.34, 0.38, 88, 2, 0.09 },   -- the short chipped one
+}
+local DUST_SEPALS = { { 52, 0.62, 0.34 }, { 214, 0.46, 0.28 } }
+local DUST_LEAVES = {
+	-- side, long, wide, up, yaw, roll
+	{ -1, 0.34, 0.15, 0.52, 18, -14 },
+	{ 1, 0.26, 0.12, 0.68, -24, -30 },
+}
+
+local function addDustbowlFooting(model: Model, sp: SeedData.Species, cf: CFrame,
+	H: number, G: number, stemW: number, stemH: number)
+	local W = H * 0.46 * G
+
+	-- Visible, unlike Base. This is the woody knot the feet spread from, and it
+	-- is what the eye reads as the plant meeting the ground.
+	part({
+		name = "RootCrown",
+		size = Vector3.new(stemW * 1.50, stemW * 0.44, stemW * 1.50),
+		cframe = cf * CFrame.new(0, stemW * 0.22, 0),
+		color = sp.Soil,
+		parent = model,
+	})
+
+	for i, t in ipairs(DUST_FEET) do
+		local yaw, length, width = t[1], t[2], t[3]
+		local splay, curl, thick = t[4], t[5], t[6]
+		local footCF = cf
+			* CFrame.Angles(0, math.rad(yaw), 0)
+			-- starts INSIDE the crown, not beside it, so it reads as emerging
+			* CFrame.new(0, stemW * 0.30, -stemW * 0.28)
+			* CFrame.Angles(math.rad(-splay + curl), 0, 0)
+		plate("RootFoot", W * width, W * length, W * thick,
+			footCF * CFrame.new(0, W * length * 0.5, 0), sp.Soil, model, i % 2 == 0)
+	end
+
+	upright("Stem", stemH, stemW, cf * CFrame.new(0, stemH * 0.5, 0), sp.Stem, model)
+
+	for _, lf in ipairs(DUST_LEAVES) do
+		local side, long, wide, up, yaw, roll = lf[1], lf[2], lf[3], lf[4], lf[5], lf[6]
+		part({
+			name = "Leaf",
+			-- X and Z take G; Y is thickness and does not.
+			size = Vector3.new(H * long * G, H * 0.055, H * wide * G),
+			cframe = cf * CFrame.new(side * H * long * 0.52 * G, stemH * up, 0)
+				* CFrame.Angles(0, side * math.rad(yaw), side * math.rad(roll)),
+			color = sp.Leaf,
+			parent = model,
+		})
+	end
+
+	--==========================================================================
+	-- THE NECK EARNS ITS PLACE TWICE
+	--
+	-- It hides the join where a head meets a cylinder, which every one of these
+	-- species previously left as a hard edge. And in GREYSCALE it is the value
+	-- break -- dark olive against a bright head and a mid-tan stem -- that keeps
+	-- the two separate when colour is taken away. Raincup's cup blue and the
+	-- stem tan land 17 luma apart and meet at exactly this point.
+	--==========================================================================
+	upright("Neck", W * 0.16, stemW * 2.40, cf * CFrame.new(0, stemH + W * 0.02, 0),
+		sp.Leaf, model)
+	for i, sd in ipairs(DUST_SEPALS) do
+		local yaw, long, wide = sd[1], sd[2], sd[3]
+		plate("Sepal", stemW * wide * 2.2, stemW * long * 2.2, stemW * 0.26,
+			cf * CFrame.Angles(0, math.rad(yaw), 0)
+				* CFrame.new(0, stemH + W * 0.04, -stemW * 0.82)
+				* CFrame.Angles(math.rad(-26), 0, 0)
+				* CFrame.new(0, stemW * long * 1.1, 0),
+			sp.Leaf, model, i % 2 == 0)
+	end
+end
+
+--==============================================================================
 function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: Stage,
 	cf: CFrame, parent: Instance): Model
 	local model = Instance.new("Model")
@@ -543,66 +669,86 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	})
 	base.Transparency = 1
 
-	--== THE DIRT ==--
-	addSoil(model, sp, cf, stemW)
-
-	--==========================================================================
-	-- THE STEM STARTS AT THE BED
-	--
-	-- It used to start at `moundH * 0.7`, sunk three tenths into the puck so it
-	-- did not look planted on top of one. With the puck gone that offset would
-	-- be a stem hovering a fraction of a stud over the soil, so the base goes
-	-- to zero and the stem grows the difference.
-	--
-	-- 0.417 is not a new number: it is exactly what `moundH * 0.7 + H * 0.34`
-	-- came to. The head therefore sits at precisely the height it sat at
-	-- before, every finished-height figure on the SeedData sheet still holds,
-	-- and the boot report prints the same table. Only the plinth is gone.
-	--==========================================================================
 	local stemH = H * 0.417
 	local stemBase = 0
-	upright("Stem", stemH, stemW, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
-		SeedData.Stem, model)
 
 	--==========================================================================
-	-- A LEAF AND A LEAFLET, NOT TWO PROPELLERS
+	-- THE BODY IS PER-BIOME FROM HERE DOWN
 	--
-	-- Two blades, one per side, at the same height and the same angle: from
-	-- above it was a rotor. A second smaller leaflet higher up the stem and
-	-- turned the OTHER way breaks that -- there is no viewpoint left where the
-	-- four line up.
+	-- Greenhollow's five stand in a heap of seven soil clods. Dustbowl's five
+	-- stand on four broad root feet with nothing shovelled around them -- the
+	-- crown, not a plinth, owns the ground silhouette. That is not a style
+	-- preference: a ring of clods says "this was planted" where the plant should
+	-- say "this grew", and it was the single biggest thing making the two biomes
+	-- look like different games.
 	--
-	-- Both are still named "Leaf". PlantSway swings every part with that name
-	-- as an arm while a plant walks, and works out which side each is on from
-	-- its own offset, so a leaflet joins in for free.
+	-- `Base` is built ABOVE this branch and stays shared. It is the pivot four
+	-- systems depend on -- PlantService places by it, PlantSway leans about it,
+	-- CarryService welds it low in the hands, both prompts hang off it -- and a
+	-- per-biome pivot would be a per-biome bug.
 	--==========================================================================
-	for _, side in ipairs({ -1, 1 }) do
-		part({
-			name = "Leaf",
-			-- X and Z are the leaf's length and width and take G; Y is its
-			-- thickness and does not.
-			size = Vector3.new(H * 0.27 * G, H * 0.05, H * 0.12 * G),
-			cframe = cf
-				-- 0.51 of a stem that is now 23% longer, which lands the leaves
-				-- at the same height above the soil they have always been at --
-				-- low, with the heap coming up around them.
-				* CFrame.new(side * H * 0.16 * G, stemBase + stemH * 0.51, 0)
-				-- Down and out. Level bars read as propellers, which is exactly
-				-- what the first build looked like.
-				* CFrame.Angles(0, side * math.rad(16), side * math.rad(-13)),
-			color = sp.Leaf,
-			parent = model,
-		})
-		part({
-			name = "Leaf",
-			size = Vector3.new(H * 0.16 * G, H * 0.045, H * 0.08 * G),
-			cframe = cf
-				* CFrame.new(side * H * 0.105 * G, stemBase + stemH * 0.74, 0)
-				-- Swept back and lifted, against the big blade's forward droop.
-				* CFrame.Angles(0, side * math.rad(-27), side * math.rad(-34)),
-			color = sp.Leaf,
-			parent = model,
-		})
+	if sp.Biome == "dustbowl" then
+		addDustbowlFooting(model, sp, cf, H, G, stemW, stemH)
+	else
+		--== THE DIRT ==--
+		addSoil(model, sp, cf, stemW)
+
+		--==========================================================================
+		-- THE STEM STARTS AT THE BED
+		--
+		-- It used to start at `moundH * 0.7`, sunk three tenths into the puck so it
+		-- did not look planted on top of one. With the puck gone that offset would
+		-- be a stem hovering a fraction of a stud over the soil, so the base goes
+		-- to zero and the stem grows the difference.
+		--
+		-- 0.417 is not a new number: it is exactly what `moundH * 0.7 + H * 0.34`
+		-- came to. The head therefore sits at precisely the height it sat at
+		-- before, every finished-height figure on the SeedData sheet still holds,
+		-- and the boot report prints the same table. Only the plinth is gone.
+		--==========================================================================
+		upright("Stem", stemH, stemW, cf * CFrame.new(0, stemBase + stemH * 0.5, 0),
+			SeedData.Stem, model)
+
+		--==========================================================================
+		-- A LEAF AND A LEAFLET, NOT TWO PROPELLERS
+		--
+		-- Two blades, one per side, at the same height and the same angle: from
+		-- above it was a rotor. A second smaller leaflet higher up the stem and
+		-- turned the OTHER way breaks that -- there is no viewpoint left where the
+		-- four line up.
+		--
+		-- Both are still named "Leaf". PlantSway swings every part with that name
+		-- as an arm while a plant walks, and works out which side each is on from
+		-- its own offset, so a leaflet joins in for free.
+		--==========================================================================
+		for _, side in ipairs({ -1, 1 }) do
+			part({
+				name = "Leaf",
+				-- X and Z are the leaf's length and width and take G; Y is its
+				-- thickness and does not.
+				size = Vector3.new(H * 0.27 * G, H * 0.05, H * 0.12 * G),
+				cframe = cf
+					-- 0.51 of a stem that is now 23% longer, which lands the leaves
+					-- at the same height above the soil they have always been at --
+					-- low, with the heap coming up around them.
+					* CFrame.new(side * H * 0.16 * G, stemBase + stemH * 0.51, 0)
+					-- Down and out. Level bars read as propellers, which is exactly
+					-- what the first build looked like.
+					* CFrame.Angles(0, side * math.rad(16), side * math.rad(-13)),
+				color = sp.Leaf,
+				parent = model,
+			})
+			part({
+				name = "Leaf",
+				size = Vector3.new(H * 0.16 * G, H * 0.045, H * 0.08 * G),
+				cframe = cf
+					* CFrame.new(side * H * 0.105 * G, stemBase + stemH * 0.74, 0)
+					-- Swept back and lifted, against the big blade's forward droop.
+					* CFrame.Angles(0, side * math.rad(-27), side * math.rad(-34)),
+				color = sp.Leaf,
+				parent = model,
+			})
+		end
 	end
 
 	--== HEAD ==--

@@ -109,6 +109,13 @@ export type Species = {
 	-- The small contrasting detail: flower centre, cap spots, bud tips.
 	Accent: Color3,
 	Leaf: Color3,
+	-- Per-species like Leaf and Soil, and for the same reason: it holds a BIOME
+	-- constant, not a species one. Greenhollow's five all carry 124,182,92 and
+	-- Dustbowl's all carry 178,158,106, and that shared stem is a third of what
+	-- makes a biome's plants look related. `SeedData.Stem` still exists and is
+	-- still Greenhollow's -- three UI call sites draw a generic sprout icon with
+	-- it and have no species to ask.
+	Stem: Color3,
 	Soil: Color3,
 }
 
@@ -149,6 +156,21 @@ local SOIL = Color3.fromRGB(124, 76, 50)
 --     Toadcap    warm cream        buttery, under a red cap
 --     Bellchime  cool porcelain    blue-white, so it is not Toadcap
 --==============================================================================
+--==============================================================================
+-- BIOME 2: DUSTBOWL
+--
+-- Same rule as Greenhollow: the STEM, LEAF and SOIL are shared by every species
+-- in the biome and must stay so -- that family resemblance is what makes the
+-- fifth read as a Dustbowl creature rather than a stray. The HEAD is where a
+-- species gets to be itself.
+--
+-- SOIL is deliberately the SAME 124,76,50 Greenhollow uses. The heap is the
+-- player's own bed shovelled up, not biome ground, so it does not change when
+-- the biome does.
+--==============================================================================
+local DUST_LEAF = Color3.fromRGB(128, 122, 78)
+local DUST_STEM = Color3.fromRGB(178, 158, 106)
+
 local GREEN = Color3.fromRGB(146, 196, 106)
 local CREAM = Color3.fromRGB(242, 238, 206)
 
@@ -181,7 +203,7 @@ SeedData.Species = {
 		-- species with nothing on its head at all.
 		Body = GREEN,
 		Crown = Color3.fromRGB(176, 214, 128),
-		Accent = CREAM, Leaf = LEAF, Soil = SOIL,
+		Accent = CREAM, Leaf = LEAF, Stem = STEM, Soil = SOIL,
 	},
 	{
 		Id = "petalpip", Name = "Petalpip", Rarity = "Common", Biome = "greenhollow",
@@ -189,7 +211,7 @@ SeedData.Species = {
 		-- Lifted off Nubkin's green toward yellow. Same family, sunlit.
 		Body = Color3.fromRGB(206, 224, 132),
 		Crown = Color3.fromRGB(250, 246, 226),
-		Accent = Color3.fromRGB(232, 132, 106), Leaf = LEAF, Soil = SOIL,
+		Accent = Color3.fromRGB(232, 132, 106), Leaf = LEAF, Stem = STEM, Soil = SOIL,
 	},
 	{
 		Id = "spiretip", Name = "Spiretip", Rarity = "Uncommon", Biome = "greenhollow",
@@ -199,7 +221,7 @@ SeedData.Species = {
 		-- biome that reads as shade rather than sunlight.
 		Body = Color3.fromRGB(94, 152, 104),
 		Crown = Color3.fromRGB(236, 242, 206),
-		Accent = Color3.fromRGB(242, 246, 220), Leaf = LEAF, Soil = SOIL,
+		Accent = Color3.fromRGB(242, 246, 220), Leaf = LEAF, Stem = STEM, Soil = SOIL,
 	},
 	{
 		Id = "toadcap", Name = "Toadcap", Rarity = "Rare", Biome = "greenhollow",
@@ -208,7 +230,7 @@ SeedData.Species = {
 		-- the work at distance; this is what separates them close up.
 		Body = Color3.fromRGB(240, 228, 198),
 		Crown = Color3.fromRGB(216, 112, 100),
-		Accent = Color3.fromRGB(250, 246, 226), Leaf = LEAF, Soil = SOIL,
+		Accent = Color3.fromRGB(250, 246, 226), Leaf = LEAF, Stem = STEM, Soil = SOIL,
 	},
 	{
 		Id = "bellchime", Name = "Bellchime", Rarity = "Epic", Biome = "greenhollow",
@@ -219,7 +241,92 @@ SeedData.Species = {
 		-- The scalloped collar AND the bud tips. On the sheet both are the same
 		-- pink; the stalks between them are the Accent green.
 		Crown = Color3.fromRGB(240, 150, 168),
-		Accent = LEAF, Leaf = LEAF, Soil = SOIL,
+		Accent = LEAF, Leaf = LEAF, Stem = STEM, Soil = SOIL,
+	},
+
+	--==========================================================================
+	-- DUSTBOWL -- biome 2
+	--
+	-- No Common. The biome carries RarityBonus 1.6 and sits behind a
+	-- 167,000,000 speed gate, so its floor is Uncommon and its ceiling is
+	-- Legendary -- one tier up from Greenhollow at both ends. `Roll` normalises
+	-- over whatever pool a biome has, so a missing tier costs nothing.
+	--
+	-- Heights keep the same job they do in Greenhollow: a FRAME height at the
+	-- reference weight, ordered so a Dunebud stays shorter than a Suncrown at
+	-- EVERY weight. 2.6 .. 4.2 sits just above Greenhollow's 2.4 .. 4.0.
+	--==========================================================================
+	{
+		Id = "dunebud", Name = "Dunebud", Rarity = "Uncommon", Biome = "dustbowl",
+		Kg = 8, Height = 2.6, Form = "husk",
+		-- A sealed bud with ONE plate peeled down at the front, so the face is
+		-- recessed inside the husk. The plant is not wearing the husk, it is
+		-- looking out of it.
+		Body = Color3.fromRGB(246, 220, 152),
+		-- The husk plates and the collar ring they spring from.
+		Crown = Color3.fromRGB(198, 124, 62),
+		-- The knot where the two upper plates meet over the bud.
+		Accent = Color3.fromRGB(246, 228, 182),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+	},
+	{
+		Id = "paddlehop", Name = "Paddlehop", Rarity = "Uncommon", Biome = "dustbowl",
+		Kg = 12, Height = 3.0, Form = "pad",
+		-- Two Uncommons in one biome have to be told apart at a glance, so the
+		-- MASS carries the difference: Dunebud is sand-and-rust, this is
+		-- sage-and-olive. Same family, opposite ends of it.
+		Body = Color3.fromRGB(168, 180, 96),
+		-- EVERY rounded rim, on the main pad and all three buds alike. The eye
+		-- reads "edge" once and then reads it everywhere.
+		Crown = Color3.fromRGB(122, 134, 68),
+		-- The bloom: the most saturated thing in the biome, and one part the
+		-- size of a thumbnail. Deliberate -- a desaturated flower would read as
+		-- background scenery.
+		Accent = Color3.fromRGB(228, 92, 66),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+	},
+	{
+		Id = "thornwhorl", Name = "Thornwhorl", Rarity = "Rare", Biome = "dustbowl",
+		Kg = 35, Height = 3.4, Form = "whorl",
+		-- Cold and bleached against both Uncommons: a warm desert-tan core in
+		-- weathered driftwood blades. Defensive and wind-carved without reaching
+		-- for anything that reads as dangerous.
+		Body = Color3.fromRGB(206, 184, 138),
+		-- The blade whorl. Two of the five sit darker so it has depth instead of
+		-- five identical boards.
+		Crown = Color3.fromRGB(172, 104, 68),
+		-- The hooks: pale dry ochre, barely above the plate they grow out of,
+		-- which is what makes them read as GROWN rather than screwed on.
+		Accent = Color3.fromRGB(230, 194, 128),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+	},
+	{
+		Id = "raincup", Name = "Raincup", Rarity = "Epic", Biome = "dustbowl",
+		Kg = 90, Height = 3.8, Form = "cup",
+		-- A rain-catching vessel first and a bloom second. The cup is a stepped
+		-- goblet, not one wide disc: a Roblox Cylinder seen side-on is a plain
+		-- rectangle, and one wide disc read as a box with two horns from the
+		-- only angle a player actually has.
+		Body = Color3.fromRGB(124, 188, 242),
+		-- The focal core: the recessed floor and the pollen boss. Flush with the
+		-- rim, never sunk below it -- the engine has no hollow cylinder, so a
+		-- floor "recessed" inside a solid rim is simply buried.
+		Crown = Color3.fromRGB(255, 216, 84),
+		-- The throat of TWO lobes only. Selected, not smeared over all five.
+		Accent = Color3.fromRGB(226, 100, 142),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+	},
+	{
+		Id = "suncrown", Name = "Suncrown", Rarity = "Legendary", Biome = "dustbowl",
+		Kg = 240, Height = 4.2, Form = "crown",
+		-- The tallest frame in the biome, and the only one whose head is a
+		-- radiating crown. Its preview was authored on its OWN size curve
+		-- ((kg/110)^0.18); conforming it to the shared SizeScale is what keeps
+		-- "a Dunebud stays shorter than a Suncrown at every weight" true.
+		Body = Color3.fromRGB(255, 198, 38),
+		Crown = Color3.fromRGB(239, 116, 25),
+		Accent = Color3.fromRGB(210, 61, 45),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
 	},
 } :: { Species }
 
@@ -253,7 +360,7 @@ function SeedData.PortraitSpec(species: Species): PortraitSpec
 		crown = species.Crown,
 		accent = species.Accent,
 		leaf = species.Leaf,
-		stem = STEM,
+		stem = species.Stem,
 		soil = species.Soil,
 		blush = BLUSH,
 	}
