@@ -1205,10 +1205,44 @@ GameConfig.Parent = {
 	-- FAST. At 19 against a fresh player's 16 the parent was technically faster
 	-- and felt like a slow-moving hazard you could stroll away from. A guard
 	-- that never quite catches you is scenery.
-	-- How much faster than the biome's own recommendation the guardian runs.
-	-- See parentWalkSpeedFor: 10 is what Greenhollow already had, so the shipped
-	-- value falls out of the formula instead of being special-cased.
+	-- How much faster than the biome's own recommendation the guardian runs
+	-- against a player who MEETS that recommendation. See parentWalkSpeedFor:
+	-- 10 is what Greenhollow already had, so the shipped value falls out of the
+	-- formula instead of being special-cased.
 	SpeedMargin = 10,
+
+	--==========================================================================
+	-- AND HOW MUCH FASTER AGAIN AGAINST SOMEBODY WHO TURNED UP UNDERGEARED
+	--
+	-- Added on a sliding scale: in full at Speed 0, and not at all once you meet
+	-- the recommendation. It exists because THE SPEED CURVE IS LOGARITHMIC and
+	-- SpeedMargin alone could not express "you should not be here yet".
+	--
+	-- Measured at Dustbowl, whose bar is 167M:
+	--
+	--     score     your walk    old parent   closing    time to catch
+	--         0        16.0          52.0       36.0          2.5s
+	--        10M       36.5          52.0       15.5          4.9s
+	--        80.5M     40.6          52.0       11.4          6.2s
+	--       167M       42.0          52.0       10.0          7.1s
+	--
+	-- Half the recommended score buys you three per cent of a walk speed. A
+	-- player at 80.5M -- less than half the bar -- ran only 1.4 slower than one
+	-- who had earned their way in, so the guardian treated them identically and
+	-- the recommendation meant nothing. The gate was removed from the road on
+	-- purpose; this is what replaced it, and it was not carrying the weight.
+	--
+	-- Sliding rather than a threshold, because a cliff at 166,999,999 would be a
+	-- check wearing a footrace's clothes -- and the first claim this file makes
+	-- is that the matter is settled by running.
+	--
+	-- 30 is set so a player at half the bar is caught in about three seconds
+	-- instead of six, and one who walked in with nothing is caught almost at
+	-- once. It is deliberately NOT enough to touch anybody at or above the
+	-- recommendation: that race is unchanged, and overshooting the bar still
+	-- buys a clean escape.
+	--==========================================================================
+	UnderSpeedMargin = 30,
 
 	--==========================================================================
 	-- IT GETS ANGRIER
@@ -1299,13 +1333,35 @@ GameConfig.Parent = {
 -- down this file and that is safe -- it is a table field resolved when this is
 -- CALLED, not an upvalue captured where it is defined.
 --==============================================================================
-function GameConfig.parentWalkSpeedFor(recommendedSpeed: number): number
+--
+-- THE SECOND ARGUMENT IS WHO IT IS CHASING, AND IT IS OPTIONAL
+--
+-- Omitted -- or from a player whose profile has not loaded -- this is exactly
+-- the flat margin it has always been. Unknown means UNCHANGED rather than
+-- unqualified: a mid-load player is not evidence of anything, and guessing
+-- against them would put the harshest speed in the game behind a race
+-- condition.
+--==============================================================================
+function GameConfig.parentWalkSpeedFor(
+	recommendedSpeed: number,
+	targetSpeedScore: number?
+): number
 	local rec = tonumber(recommendedSpeed) or 0
 	-- NaN fails every comparison, so test it directly rather than clamping.
 	if rec ~= rec or rec < 0 then
 		rec = 0
 	end
-	return GameConfig.walkSpeedFor(rec) + GameConfig.Parent.SpeedMargin
+	local base = GameConfig.walkSpeedFor(rec) + GameConfig.Parent.SpeedMargin
+
+	local score = tonumber(targetSpeedScore)
+	-- rec == 0 is Greenhollow, which recommends nothing and therefore cannot
+	-- have anybody fall short of it. Dividing by it would be a NaN, and the
+	-- tutorial biome keeping its shipped 26 is the point.
+	if score == nil or score ~= score or rec <= 0 then
+		return base
+	end
+	local shortfall = math.clamp(1 - math.max(score, 0) / rec, 0, 1)
+	return base + GameConfig.Parent.UnderSpeedMargin * shortfall
 end
 
 --==============================================================================

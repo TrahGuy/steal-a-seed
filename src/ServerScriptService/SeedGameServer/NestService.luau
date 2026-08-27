@@ -56,6 +56,9 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local ParentModel = require(script.Parent:WaitForChild("ParentModel"))
+-- No cycle: PlayerDataService requires GameConfig, SaveService, ProfileSchema
+-- and BiomeData, and none of those has ever heard of a nest.
+local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 -- No cycle: MapService knows nothing about nests, it only leaves the markers.
 local MapService = require(script.Parent:WaitForChild("MapService"))
 
@@ -229,9 +232,32 @@ end
 -- collect it has to wake the parent again -- otherwise being caught once makes
 -- the rest of the raid free.
 --==============================================================================
--- Base speed for the biome, plus whatever it is currently furious about.
+--==============================================================================
+-- WHAT THE THIEF HAS EARNED, OR NOTHING IF WE CANNOT TELL
+--
+-- The SCORE, not the walk speed. Walk speed is what the score becomes after the
+-- curve AND the carry multiplier, and a player hauling 10,000 kg would read as
+-- catastrophically underlevelled when they are merely loaded -- which is
+-- already punished, and does not need punishing twice.
+--
+-- nil for a player with no profile, which parentWalkSpeedFor reads as "leave
+-- the speed alone" rather than "assume the worst".
+--==============================================================================
+local function speedScoreOf(player: Player?): number?
+	if not player then
+		return nil
+	end
+	local profile = PlayerDataService.Get(player)
+	return if profile then profile.Speed else nil
+end
+
+-- Base speed for the biome, scaled by how far short of it the thief is, plus
+-- whatever the nest is currently furious about.
 local function speedFor(nest: Nest): number
-	return GameConfig.parentWalkSpeedFor(nest.biome.RecommendedSpeed)
+	return GameConfig.parentWalkSpeedFor(
+			nest.biome.RecommendedSpeed,
+			speedScoreOf(nest.target)
+		)
 		+ math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
 end
 
