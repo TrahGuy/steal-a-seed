@@ -702,7 +702,22 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	-- CarryService welds it low in the hands, both prompts hang off it -- and a
 	-- per-biome pivot would be a per-biome bug.
 	--==========================================================================
-	if sp.Biome == "dustbowl" then
+	if sp.Form == "crown" then
+		--==================================================================
+		-- SUNCROWN BUILDS ITS OWN GROUND, AND THAT IS DELIBERATE
+		--
+		-- It is the one species that already had real anatomy down here before
+		-- the shared footing existed: a central taproot, two rear heels and
+		-- THREE COLOURED ROOTS in coral, orange and gold. Handing it four
+		-- identical tan feet would delete the thing that makes it the
+		-- Legendary, so its form branch does the whole job -- roots, stem,
+		-- neck and leaves -- and nothing is built here.
+		--
+		-- Everything else in the biome shares the footing, which is the point
+		-- of the footing. One exception, stated out loud, is not a crack in
+		-- the rule.
+		--==================================================================
+	elseif sp.Biome == "dustbowl" then
 		addDustbowlFooting(model, sp, cf, H, G, stemW, stemH)
 	else
 		--== THE DIRT ==--
@@ -1237,6 +1252,268 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 		-- overhung the face and dropped it into a shadow unreadable at distance.
 		front = headW * 1.26 * 0.5
 		faceCF = headCF * CFrame.new(0, headW * 0.09, 0)
+
+	elseif sp.Form == "crown" then
+		--==================================================================
+		-- SUNCROWN: a nine-ray sun on a face disc
+		--
+		-- The only head in either biome that is RADIAL on purpose, so the usual
+		-- warning against a ring of identical parts does not apply -- but the
+		-- rays still earn it: three lengths, three widths, three colours, and
+		-- only three of the nine carry a crimson accent.
+		--
+		-- IT ALSO BUILDS ITS OWN FOOTING, and that is why this branch is longer
+		-- than the other four. Suncrown is the one species that already had real
+		-- anatomy at the ground -- a central taproot, two rear heels and THREE
+		-- COLOURED ROOTS -- before the shared footing existed. Handing it four
+		-- identical tan feet would delete the thing that makes it the Legendary,
+		-- so `addDustbowlFooting` is skipped for this form and the roots below
+		-- stand in for it.
+		--
+		-- IT WAS AUTHORED ON ITS OWN SIZE CURVE, (kg/110)^0.18, where
+		-- heightScale is 1.0 at 110 kg. headW on the sheet's shared curve is
+		-- 4.2306 studs at that same weight, so ONE factor carries the approved
+		-- proportions onto the shared frame and nothing else here has to know
+		-- the preview used different maths. Conforming it is what keeps "a
+		-- Dunebud stays shorter than a Suncrown at every weight" true: two
+		-- curves crossing would break that at one end or the other.
+		--==================================================================
+		local hs = (headW / 4.2306) * 0.95
+		local gs = math.clamp(G, 0.68, 2.60)
+		local ws = hs * (1.14 + 0.16 * gs)
+		local ds = hs * (0.85 + 0.15 * gs)
+		local sunStemH = 2.30 * hs
+		local sunStemD = 1.02 * ds
+		local faceD = 2.90 * hs * (0.88 + 0.12 * gs)
+		local faceThick = 0.72 * ds
+
+		-- A plate lying flat on the GROUND, splayed along a compass bearing.
+		-- fromMatrix, not lookAt: this states RightVector / UpVector directly,
+		-- which is what a tangent frame needs.
+		local function groundCF(pos: Vector3, radial: Vector3, roll: number): CFrame
+			local tangent = Vector3.yAxis:Cross(radial).Unit
+			return CFrame.fromMatrix(pos, Vector3.yAxis, radial.Unit, tangent)
+				* CFrame.Angles(0, 0, math.rad(roll))
+		end
+		-- The same idea stood upright against the crown disc.
+		local function crownCF(pos: Vector3, radial: Vector3): CFrame
+			local tangent = Vector3.new(-radial.Y, radial.X, 0).Unit
+			return CFrame.fromMatrix(pos, Vector3.zAxis, radial.Unit, tangent)
+		end
+		local origin = cf.Position
+
+		--== THE TAPROOT AND FIVE SPREADING ROOTS ==--
+		local tapH = 0.82 * hs
+		wedge("CentralTaproot",
+			Vector3.new(0.95 * ws, tapH, 1.00 * ds),
+			cf * CFrame.new(0, tapH * 0.47, -0.03 * ds), sp.Soil, model)
+		for _, d in ipairs({
+			-- name, bearing, length, width, colour, roll
+			{ "RearHeelL", 38, 2.18, 0.86, sp.Soil, 3 },
+			{ "RearHeelR", 322, 2.18, 0.86, sp.Soil, -3 },
+			{ "FrontCoral", 144, 1.86, 0.72, sp.Accent, 4 },
+			{ "FrontOrange", 180, 2.12, 0.75, sp.Crown, 0 },
+			{ "FrontGold", 216, 1.86, 0.72, sp.Body, -4 },
+		}) do
+			local angle = math.rad(d[2] :: number)
+			local radial = Vector3.new(math.sin(angle), 0, math.cos(angle))
+			local len = (d[3] :: number) * ws
+			local wid = (d[4] :: number) * ds
+			local rootH = 0.40 * hs
+			local pos = origin + radial * (len * 0.43) + Vector3.new(0, rootH * 0.47, 0)
+			wedge(d[1] :: string, Vector3.new(rootH, len, wid),
+				groundCF(pos, radial, d[6] :: number), d[5] :: Color3, model)
+		end
+
+		--== STEM AND NECK ==--
+		upright("Stem", sunStemH, sunStemD,
+			cf * CFrame.new(0, sunStemH * 0.50, 0.05 * ds), sp.Stem, model)
+		upright("Neck", sunStemH * 0.12, sunStemD * 2.35,
+			cf * CFrame.new(0, sunStemH * 0.90, 0.05 * ds), sp.Leaf, model)
+
+		--==================================================================
+		-- FOUR SUPPORT LEAVES, AND THEY ARE NAMED "Leaf" ON PURPOSE
+		--
+		-- The preview called them SupportLeaf1-4. PlantSway swings every part
+		-- named "Leaf" as an arm while a plant walks and works out which side
+		-- each is on from its own X offset -- and it finds them with
+		-- GetChildren(), direct children only. Under the preview's name they
+		-- would simply never move. Two point one way and two the other, so they
+		-- swing in opposition exactly as Greenhollow's four do.
+		--==================================================================
+		local leafSocketY = sunStemH * 0.60
+		for _, d in ipairs({
+			{ 58, 1.82, 0.74, 10, 1 },
+			{ 126, 1.94, 0.78, 13, -1 },
+			{ 234, 1.90, 0.76, -12, 1 },
+			{ 302, 1.78, 0.72, -9, -1 },
+		}) do
+			local angle = math.rad(d[1] :: number)
+			local radial = Vector3.new(math.sin(angle), 0, math.cos(angle))
+			local len = (d[2] :: number) * ws
+			local wid = (d[3] :: number) * ds
+			local thick = 0.23 * hs
+			-- Two tiers, a third of a thickness apart, so overlapping leaves
+			-- never share a plane -- two coincident faces sliding against each
+			-- other is exactly what flickers.
+			local tierY = thick * 0.30 * (d[5] :: number)
+			local pos = origin
+				+ Vector3.new(0, leafSocketY + tierY, 0)
+				+ radial * (sunStemD * 0.34 + len * 0.40)
+			wedge("Leaf", Vector3.new(thick, len, wid),
+				groundCF(pos, radial, d[4] :: number), sp.Leaf, model)
+		end
+
+		--== THE FACE DISC: five rows, widening to the middle ==--
+		local faceCentre = cf * CFrame.new(0, sunStemH + faceD * 0.48, 0)
+		for i, r in ipairs({
+			{ 0.58, 0.40 }, { 0.86, 0.20 }, { 1.00, 0.00 },
+			{ 0.86, -0.20 }, { 0.58, -0.40 },
+		}) do
+			part({
+				name = if i == 3 then "FaceCore" else "FaceRow",
+				size = Vector3.new(faceD * (r[1] :: number), faceD * 0.203, faceThick),
+				cframe = faceCentre * CFrame.new(0, faceD * (r[2] :: number), 0),
+				color = sp.Body, parent = model,
+			})
+		end
+		for _, side in ipairs({ -1, 1 }) do
+			part({
+				name = "FaceNotch",
+				size = Vector3.new(faceD * 0.11, faceD * 0.30, faceThick * 0.62),
+				cframe = faceCentre * CFrame.new(side * faceD * 0.44, 0, -faceThick * 0.32),
+				color = sp.Crown, parent = model,
+			})
+		end
+		local backThick = faceThick * 0.80
+		for _, r in ipairs({ { 0.74, 0.203 }, { 0.90, 0.0 }, { 0.74, -0.203 } }) do
+			part({
+				name = "FaceBack",
+				size = Vector3.new(faceD * (r[1] :: number), faceD * 0.203, backThick),
+				cframe = faceCentre
+					* CFrame.new(0, faceD * (r[2] :: number),
+						faceThick * 0.20 + backThick * 0.50),
+				color = sp.Crown, parent = model,
+			})
+		end
+
+		--== NINE RAYS ==--
+		-- Wings are longest and widest and sit outermost; the peak is the
+		-- crimson one dead centre; the two inner pairs are short fillers that
+		-- close the gaps without competing for the eye.
+		local CRIMSON = Color3.fromRGB(142, 42, 48)
+		local FILLER = sp.Body:Lerp(sp.Crown, 0.5)
+		local wings: { CFrame } = {}
+		for _, d in ipairs({
+			-- bearing, length, width, colour, accent, principal
+			{ -84, 3.70, 1.28, sp.Accent, false, true },
+			{ -58, 3.20, 1.44, sp.Body, false, true },
+			{ -34, 3.40, 1.27, sp.Crown, true, true },
+			{ -18, 2.05, 0.86, FILLER, false, false },
+			{ 0, 3.90, 1.43, CRIMSON, true, true },
+			{ 18, 2.05, 0.86, FILLER, false, false },
+			{ 34, 3.40, 1.27, sp.Crown, true, true },
+			{ 58, 3.20, 1.44, sp.Body, false, true },
+			{ 84, 3.70, 1.28, sp.Accent, false, true },
+		}) do
+			local bearing = d[1] :: number
+			local principal = d[6] :: boolean
+			local angle = math.rad(bearing)
+			local radial = Vector3.new(math.sin(angle), math.cos(angle), 0)
+			local len = (d[2] :: number) * (if principal then ws else hs)
+			local wid = (d[3] :: number) * ds
+			local thick = (if principal then 0.34 else 0.27) * ds
+			-- Principals sit a layer proud, so the fillers read as BEHIND them
+			-- rather than as part of one flat ring.
+			local layer = if principal then 0.65 else 0.48
+			local rootPos = (faceCentre * CFrame.new(0, faceD * 0.06, 0)).Position
+				+ radial * (faceD * (if principal then 0.35 else 0.30))
+				+ Vector3.new(0, 0, faceThick * layer)
+			-- A bar plus a round cap, and the bar gives up exactly the cap's
+			-- radius, so overall ray length is unchanged by the cap.
+			local capR = wid * 0.5
+			local plateCF = crownCF(rootPos + radial * (len * 0.44), radial)
+			part({
+				name = "Ray",
+				size = Vector3.new(thick, len - capR, wid),
+				cframe = plateCF * CFrame.new(0, -capR * 0.5, 0),
+				color = d[4] :: Color3, parent = model,
+			})
+			part({
+				name = "RayTip",
+				size = Vector3.new(thick * 0.78, wid, wid),
+				cframe = plateCF * CFrame.new(0, (len - capR) * 0.5 - capR * 0.5, 0),
+				color = d[4] :: Color3, shape = Enum.PartType.Cylinder, parent = model,
+			})
+			if d[5] then
+				local at = math.max(0.05, thick * 0.26)
+				part({
+					name = "RayAccent",
+					size = Vector3.new(at, len * 0.56, wid * 0.24),
+					cframe = plateCF * CFrame.new(
+						-(thick + at) * 0.50 - math.max(0.04, 0.05 * ds),
+						-len * 0.04, 0),
+					color = CRIMSON, parent = model,
+				})
+			end
+			if bearing == -84 or bearing == 84 then
+				table.insert(wings, crownCF(rootPos + radial * (len * 0.70), radial))
+			end
+		end
+
+		--==================================================================
+		-- FOUR PENDANTS, TWO PER WING
+		--
+		-- RIGID IN GAME. They swung on four independent phases in the preview
+		-- and that motion does not survive integration: PlantSway moves a whole
+		-- plant with ONE PivotTo and swings the leaves, and nothing else. The
+		-- geometry is kept because it is approved and it is most of what makes
+		-- the wings read as loaded rather than bare.
+		--==================================================================
+		for _, w in ipairs(wings) do
+			for _, drop in ipairs({ -0.10, 0.18 }) do
+				local top = w * CFrame.new(0, drop * faceD, 0)
+				local rodL = 0.62 * hs
+				local rodD = math.max(0.06, 0.095 * ds)
+				local beadD = 0.42 * hs * (0.92 + 0.08 * gs)
+				upright("PendantRod", rodL, rodD,
+					top * CFrame.new(0, -rodL * 0.5, 0), sp.Body, model)
+				local beadCF = top * CFrame.new(0, -rodL - beadD * 0.10, 0)
+				ball("SunCore", beadD, beadCF, sp.Body, model)
+				local barL, barT = beadD * 1.45, math.max(0.06, beadD * 0.23)
+				part({ name = "SunRay", size = Vector3.new(barL, barT, barT),
+					cframe = beadCF, color = sp.Body, parent = model })
+				part({ name = "SunRay", size = Vector3.new(barT, barL, barT),
+					cframe = beadCF, color = sp.Body, parent = model })
+			end
+		end
+
+		--== THE COLLAR: five cool blocks under the face ==--
+		-- The only cool note on a creature that is otherwise entirely hot, and
+		-- what stops the gold reading as one flat mass.
+		local CYAN = Color3.fromRGB(36, 183, 207)
+		local BLUE = Color3.fromRGB(30, 91, 180)
+		for i, d in ipairs({
+			{ -0.38, 18, CYAN }, { -0.19, 9, BLUE }, { 0.00, 0, CYAN },
+			{ 0.19, -9, BLUE }, { 0.38, -18, CYAN },
+		}) do
+			local px = (d[1] :: number) * faceD
+			-- Arched: the middle block rides highest, so the row reads as a
+			-- collar rather than as a straight bar of five.
+			local arch = (1 - math.abs(d[1] :: number) / 0.38) * faceD * 0.035
+			part({
+				name = "Collar" .. i,
+				size = Vector3.new(faceD * 0.235, faceD * 0.19, faceThick * 0.40),
+				cframe = faceCentre
+					* CFrame.new(px, -faceD * 0.46 - arch, -faceThick * 0.56)
+					* CFrame.Angles(0, 0, math.rad(d[2] :: number)),
+				color = d[3] :: Color3, parent = model,
+			})
+		end
+
+		faceW = faceD
+		front = faceThick * 0.5
+		faceCF = faceCentre
 
 	else -- "bell"
 		-- A cone by staircase. Four tiers rather than three, and a wider spread
