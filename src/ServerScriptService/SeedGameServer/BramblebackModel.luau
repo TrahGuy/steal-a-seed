@@ -156,6 +156,36 @@ local function weldTo(anchor: BasePart, piece: BasePart)
 	w.Parent = anchor
 end
 
+--==============================================================================
+-- THE SEVENTH SEAM: RootJoint
+--
+-- Part0 = HumanoidRootPart, Part1 = Torso, and its socket is the MODEL ORIGIN
+-- -- not the torso's centre. That is the whole trick: the approved sleep pose
+-- was authored as a transform of the creature about the point it stands on, so
+-- putting the socket anywhere else would need the pose re-derived. With the
+-- socket at the origin, the preview's body CFrame drops in unchanged.
+--
+--   C0 = root.CFrame:ToObjectSpace(socket)
+--   C1 = torso.CFrame:ToObjectSpace(socket)
+--
+-- Both derived from the parts' built positions rather than written as
+-- literals, so they follow the rig if it ever moves and they scale for free.
+--
+-- IT REPLACES A WELD. Torso used to be welded rigid to the root; a part cannot
+-- be welded and motored at once without the two fighting over it.
+--==============================================================================
+local function socketMotor(name: string, part0: BasePart, part1: BasePart,
+	socket: CFrame): Motor6D
+	local m = Instance.new("Motor6D")
+	m.Name = name
+	m.Part0 = part0
+	m.Part1 = part1
+	m.C0 = part0.CFrame:ToObjectSpace(socket)
+	m.C1 = part1.CFrame:ToObjectSpace(socket)
+	m.Parent = part0
+	return m
+end
+
 local function motor(name: string, part0: BasePart, part1: BasePart): Motor6D
 	local m = Instance.new("Motor6D")
 	m.Name = name
@@ -399,7 +429,7 @@ function BramblebackModel.Build(cf: CFrame, height: number, parent: Instance): M
 	-- matters: the motor has to exist before its group is welded, or the weld
 	-- would fight the joint for the same part.
 	--==========================================================================
-	weldTo(root, torso)
+	socketMotor("RootJoint", root, torso, cf)
 	weldTo(torso, pelvis)
 
 	local driven: { [BasePart]: boolean } = {}
@@ -467,6 +497,22 @@ function BramblebackModel.Build(cf: CFrame, height: number, parent: Instance): M
 	-- is a silent statue: six Motor6Ds built correctly and nothing ever driving
 	-- them. Nothing errors, which is what makes it easy to miss.
 	--==========================================================================
+	--==========================================================================
+	-- THE ASLEEP BODY POSE TRAVELS ON THE MODEL, NOT IN THE ANIMATOR
+	--
+	-- Its TRANSLATION has to scale with the creature and its rotation must not,
+	-- and this builder is the only place that knows the scale factor.
+	-- ParentAnim reads this attribute and blends toward CFrame.identity on the
+	-- wake scalar; a parent that does not set it -- Greenhollow's brute -- gets
+	-- identity and therefore no body movement at all, which is the point.
+	--
+	-- Straight from the approved preview's sleepBody. At the shipped
+	-- PARENT_HEIGHT the factor is 1.0067, so 2.58 becomes 2.5973.
+	--==========================================================================
+	model:SetAttribute("SleepBodyPose",
+		CFrame.new(0, 2.58 * ctx.s, 2.0 * ctx.s)
+			* CFrame.Angles(math.rad(-68), math.rad(2), 0))
+
 	CollectionService:AddTag(model, GameConfig.Tags.NestParent)
 
 	--==========================================================================

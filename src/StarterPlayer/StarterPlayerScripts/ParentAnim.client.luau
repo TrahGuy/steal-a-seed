@@ -77,6 +77,14 @@ type Parent = {
 	rightArm: Joint?,
 	leftLeg: Joint?,
 	rightLeg: Joint?,
+	-- The seventh seam. Its socket is the model ORIGIN, so driving it moves the
+	-- whole creature about the point it stands on -- which is how the approved
+	-- sleep pose was authored and why it drops in unchanged.
+	rootJoint: Joint?,
+	-- Where the body sits when fully asleep, already scaled by the builder that
+	-- knows the creature's size. Identity for anything that does not set it,
+	-- which is what keeps Greenhollow's brute exactly as it was.
+	sleepBody: CFrame,
 	stride: number,
 	-- 0 asleep, 1 awake. Blended so waking is a movement rather than a snap.
 	wake: number,
@@ -145,6 +153,8 @@ local function track(model: Instance)
 		rightArm = jointNamed(model, "RightShoulder"),
 		leftLeg = jointNamed(model, "LeftHip"),
 		rightLeg = jointNamed(model, "RightHip"),
+		rootJoint = jointNamed(model, "RootJoint"),
+		sleepBody = (model:GetAttribute("SleepBodyPose") :: CFrame?) or CFrame.identity,
 		stride = 0,
 		wake = 0,
 		phase = (math.abs(p.X) + math.abs(p.Z)) % 6.28,
@@ -259,6 +269,23 @@ RunService.Heartbeat:Connect(function(dt)
 			if p.rightLeg then
 				p.rightLeg.motor.C0 = p.rightLeg.rest
 					* CFrame.Angles(math.sin(s + LEG_OFFSET) * LEG_SWING_R * moving, 0, 0)
+			end
+
+			--==============================================================
+			-- THE BODY GOES DOWN FIRST
+			--
+			-- Driven before the limbs because everything else is measured
+			-- against a torso this moves. Lerped on the SAME wake scalar the
+			-- limbs use, so lying down and getting up are one continuous
+			-- movement rather than a pose that snaps at either end -- and any
+			-- value in between has to look right, not just the two ends.
+			--
+			-- A creature with no SleepBodyPose has sleepBody = identity, so
+			-- this lerps identity to identity and costs one CFrame a frame.
+			--==============================================================
+			if p.rootJoint then
+				p.rootJoint.motor.C0 = p.rootJoint.rest
+					* p.sleepBody:Lerp(CFrame.identity, wake)
 			end
 
 			--==============================================================

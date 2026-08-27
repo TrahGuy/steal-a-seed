@@ -130,6 +130,36 @@ local function weldTo(anchor: BasePart, piece: BasePart)
 	w.Parent = anchor
 end
 
+--==============================================================================
+-- THE SEVENTH SEAM: RootJoint
+--
+-- Part0 = HumanoidRootPart, Part1 = Torso, and its socket is the MODEL ORIGIN
+-- -- not the torso's centre. That is the whole trick: the approved sleep pose
+-- was authored as a transform of the creature about the point it stands on, so
+-- putting the socket anywhere else would need the pose re-derived. With the
+-- socket at the origin, the preview's body CFrame drops in unchanged.
+--
+--   C0 = root.CFrame:ToObjectSpace(socket)
+--   C1 = torso.CFrame:ToObjectSpace(socket)
+--
+-- Both derived from the parts' built positions rather than written as
+-- literals, so they follow the rig if it ever moves and they scale for free.
+--
+-- IT REPLACES A WELD. Torso used to be welded rigid to the root; a part cannot
+-- be welded and motored at once without the two fighting over it.
+--==============================================================================
+local function socketMotor(name: string, part0: BasePart, part1: BasePart,
+	socket: CFrame): Motor6D
+	local m = Instance.new("Motor6D")
+	m.Name = name
+	m.Part0 = part0
+	m.Part1 = part1
+	m.C0 = part0.CFrame:ToObjectSpace(socket)
+	m.C1 = part1.CFrame:ToObjectSpace(socket)
+	m.Parent = part0
+	return m
+end
+
 local function motor(name: string, part0: BasePart, part1: BasePart, c0: CFrame): Motor6D
 	local m = Instance.new("Motor6D")
 	m.Name = name
@@ -216,7 +246,19 @@ function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: 
 		cframe = cf * CFrame.new(0, torsoY, 0),
 		color = BARK, parent = model,
 	})
-	weldTo(root, torso)
+	--==========================================================================
+	-- THE BRUTE GETS THE SEAM AND DOES NOT USE IT
+	--
+	-- Both parents implement one rig contract, so both carry RootJoint even
+	-- though only Brambleback moves it. Here root and torso are BOTH at
+	-- H * 0.45, so the joint rests at identity and nothing about this creature
+	-- changes -- and it sets no SleepBodyPose, so ParentAnim leaves it alone.
+	--
+	-- Giving it the seam anyway means the animator has one shape to drive
+	-- rather than a special case per species, which is how the six existing
+	-- seams already work.
+	--==========================================================================
+	socketMotor("RootJoint", root, torso, cf)
 	weldTo(torso, part({
 		name = "ChestPlate",
 		size = Vector3.new(H * 0.20, H * 0.11, H * 0.07),
