@@ -4113,6 +4113,50 @@ engine has not shown does nothing at all, silently -- which is why a take at a
 five-pod nest looked broken until the test listened for `PromptShown` and drove
 whichever prompt came back.
 
+## A developer console, and the gate that makes it safe — 2026-08-27
+
+Commit `6b7f94e`. F4 opens a panel: Speed, Cash, spawn any pod at any weight,
+teleport, mill and plot tiers, nest restock, parents home, wake the nearest,
+sell/clear the bag, drop a carry, and a snapshot to the server log. Fifteen
+actions.
+
+**The gate is the feature.** This tool sets Speed and Cash, which in this game
+is every exploit at once behind one RemoteEvent. Allowed: Studio, the place
+owner on a live server, and anybody in `GameConfig.Debug.UserIds` (empty on
+purpose). The check runs on the SERVER before the payload is read; the client
+hiding the panel is a courtesy.
+
+Proven, not assumed. With `Debug.Enabled = false`, three commands fired straight
+at the remote with no panel involved:
+
+```
+[Seed/DebugService] REFUSED debug command from nicnicniccoal (4119740186)   x3
+```
+
+Zero replies, no panel built. With it true, all fifteen actions answer.
+
+**It is exempt from Rule 6, out loud.** DebugService mints cash. That is a
+deliberate exception written into its banner rather than an oversight, and it is
+safe ONLY because it cannot run for a player. If the gate is ever loosened this
+becomes a second faucet and Rule 6 is gone.
+
+**Every argument is validated anyway** (Rule 4), because "only I can call it"
+stops being true the moment somebody adds a UserId. `SetSpeed` with `"banana"`
+answers `not a number`; an unknown action is logged and dropped.
+
+Spawned pods go through the real builder, get the real `SeedPod` tag and are
+found by the real prompt -- the same three steps CarryService takes when a pod
+is dropped, so a debug pod can reproduce a bug in an ordinary one. They do not
+expire, unlike dropped pods.
+
+**A debug tool that lies is worse than none.** `RestockNests` first echoed
+"restocked 11 nest(s)" against a road with three, because `NestService.StockAll`
+returns `(built, wanted)` POD counts. Now reads "11 of 11 pod(s) standing".
+
+**Not done:** `AGENTS.md`'s file list mentions neither `SellService` nor
+`DebugService`, because that file has another agent's uncommitted edit and must
+not be staged. Add both lines when theirs lands.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
