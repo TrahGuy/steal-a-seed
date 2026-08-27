@@ -4157,6 +4157,62 @@ returns `(built, wanted)` POD counts. Now reads "11 of 11 pod(s) standing".
 `DebugService`, because that file has another agent's uncommitted edit and must
 not be staged. Add both lines when theirs lands.
 
+## The catch is a swipe now, and the throw actually lands — 2026-08-27
+
+Commit `141877d`. The guardian winds up, strikes and recovers on contact, and the
+victim tumbles clear instead of sliding away upright.
+
+`NestService` stamps `AttackSwipe` on the parent at the hit; `ParentAnim` plays a
+three-phase swing off it (wind-up to 28%, strike to 60%, recover to 85%) through
+arm pitch/yaw/roll with head and jaw following. The throw direction is now away
+from the monster biased toward safety, so being caught against a wall throws you
+down the road rather than into it. `ThrowFX` throws the whole body --
+`GetDescendants` picks up accessory parts the old `GetChildren` missed, 17 parts
+where it used to find fewer -- and holds `PlatformStand` through the launch so
+nothing damps the impulse back to a twitch.
+
+### One line of it was a bug, and it is worth remembering the shape
+
+The swipe stamp was written to `nest.model`. **The `Nest` type has no `model`
+field** -- it is `parent: Model`, and the other three sites in the file already
+used `nest.parent`. So it indexed nil and threw, and it threw *after*
+`ragdollOn(character)` and *before* the `FireClient` that does the throwing:
+
+```
+loosened = ragdollOn(character)      -- you go limp
+nest.model:SetAttribute(...)         -- dies here
+rem:FireClient(player, dir, ...)     -- never runs
+```
+
+The victim went limp and was never flung. **It presents as a ThrowFX bug and is
+not one** -- the whole client throw path is innocent, and it is where you would
+look first.
+
+Verified through a real catch at the Greenhollow nest: rise 32.7 studs, peak
+150.1 studs/sec, 142.2 studs travelled, client log clean from `HIT received`
+through `done, told the server`.
+
+### Starbloom has a guardian, and a runner that must not ship
+
+`AstralmawModel` is dispatched through `ParentModel`'s biome table, so
+`starbloom` no longer falls through to the Greenhollow brute.
+
+**`StarbloomGuardianRunner.server.luau` is an authoring aid and it runs on every
+server start**, spawning `Parent_starbloom_Preview` at (0, 2, -28) -- which is in
+the hub, next to the stall. It is committed so the work is not lost, but it is a
+`.server.luau`, so Roblox runs it with no registry entry and no gate:
+
+  * delete it, or
+  * gate it behind `RunService:IsStudio()`, or
+  * fold the preview into `DebugService` as an action
+
+before the place is published. The same lesson the Edit-mode `SeedGameServer`
+clone taught the hard way: a script that spawns things at boot does not care
+whether you meant it to.
+
+Greenhollow's guardian is also rebuilt heavier -- deeper torso on a forward
+pitch, layered chest plates, bark ribs, spinal thorns, thigh armour.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
