@@ -115,6 +115,63 @@ end
 -- and every joint sitting exactly at its rest pose -- which reads as "the
 -- animation code is wrong" rather than "the animation code never ran".
 --==============================================================================
+--==============================================================================
+-- DECLARED HERE, NOT DOWN WITH THE OTHER NUMBERS, AND THAT IS LOAD-BEARING
+--
+-- `track` reads SLEEP_BY_SPECIES, and track runs at the bottom of this file
+-- against every already-tagged parent. Left in THE NUMBERS section below,
+-- these locals were still nil at that moment: track threw on the first
+-- parent, NO parent was ever registered, and the Heartbeat loop early-outed
+-- on an empty table. Both creatures stood frozen -- no sleep pose, no
+-- breath, no walk cycle -- and nothing about it looked like an ordering
+-- mistake from the outside.
+--==============================================================================
+--==============================================================================
+-- SLEEP IS A POSE *AND* A MOVEMENT, AND IT ONLY HAD THE POSE
+--
+-- Asleep, every term in the loop below is multiplied by `wake`, so at wake = 0
+-- the only things left were two constants: a 9-degree arm slump and a
+-- 26-degree neck droop. Correct as far as it went, and completely still. A
+-- sleeping creature that does not breathe is a statue lying down, which is the
+-- same critique the plants got.
+--
+-- PER SPECIES, because ParentAnim drives every parent on the road and the two
+-- are not the same animal. Greenhollow's brute keeps EXACTLY the numbers it
+-- shipped with -- its profile is the old constants and a breath of zero -- so
+-- nothing about an approved creature changes because a second one arrived.
+--
+-- Brambleback's numbers are lifted from its approved preview's `sleepExtras`:
+-- arms folded right up across the chest, neck down and forward, hips turned
+-- out, jaw shut. The preview also pitched the whole BODY back 68 degrees to lie
+-- it down; that is not reachable from here and is noted at the call site.
+--==============================================================================
+local GREENHOLLOW_SLEEP: SleepProfile = {
+	armFold = math.rad(9),
+	armSplay = 0,
+	neckDroop = math.rad(26),
+	neckTilt = 0,
+	hipTurn = 0,
+	breath = 0,
+	breathRate = 0,
+}
+
+local BRAMBLEBACK_SLEEP: SleepProfile = {
+	-- 123 and 128 degrees in the preview. Folded that far the forearms cross
+	-- the chest, which is what makes it read as CURLED rather than as standing
+	-- with its arms down.
+	armFold = math.rad(125),
+	armSplay = math.rad(18),
+	neckDroop = math.rad(29),
+	neckTilt = math.rad(-3),
+	hipTurn = math.rad(10),
+	breath = math.rad(2.6),
+	breathRate = 1.1,
+}
+
+local SLEEP_BY_SPECIES: { [string]: SleepProfile } = {
+	brambleback = BRAMBLEBACK_SLEEP,
+}
+
 local function track(model: Instance)
 	if not model:IsA("Model") or parents[model] then
 		return
@@ -188,51 +245,6 @@ local ARM_OFFSET_L = 0.7
 local ARM_OFFSET_R = 3.9
 local BLEND_RATE = 3.5
 
---==============================================================================
--- SLEEP IS A POSE *AND* A MOVEMENT, AND IT ONLY HAD THE POSE
---
--- Asleep, every term in the loop below is multiplied by `wake`, so at wake = 0
--- the only things left were two constants: a 9-degree arm slump and a
--- 26-degree neck droop. Correct as far as it went, and completely still. A
--- sleeping creature that does not breathe is a statue lying down, which is the
--- same critique the plants got.
---
--- PER SPECIES, because ParentAnim drives every parent on the road and the two
--- are not the same animal. Greenhollow's brute keeps EXACTLY the numbers it
--- shipped with -- its profile is the old constants and a breath of zero -- so
--- nothing about an approved creature changes because a second one arrived.
---
--- Brambleback's numbers are lifted from its approved preview's `sleepExtras`:
--- arms folded right up across the chest, neck down and forward, hips turned
--- out, jaw shut. The preview also pitched the whole BODY back 68 degrees to lie
--- it down; that is not reachable from here and is noted at the call site.
---==============================================================================
-local GREENHOLLOW_SLEEP: SleepProfile = {
-	armFold = math.rad(9),
-	armSplay = 0,
-	neckDroop = math.rad(26),
-	neckTilt = 0,
-	hipTurn = 0,
-	breath = 0,
-	breathRate = 0,
-}
-
-local BRAMBLEBACK_SLEEP: SleepProfile = {
-	-- 123 and 128 degrees in the preview. Folded that far the forearms cross
-	-- the chest, which is what makes it read as CURLED rather than as standing
-	-- with its arms down.
-	armFold = math.rad(125),
-	armSplay = math.rad(18),
-	neckDroop = math.rad(29),
-	neckTilt = math.rad(-3),
-	hipTurn = math.rad(10),
-	breath = math.rad(2.6),
-	breathRate = 1.1,
-}
-
-local SLEEP_BY_SPECIES: { [string]: SleepProfile } = {
-	brambleback = BRAMBLEBACK_SLEEP,
-}
 
 RunService.Heartbeat:Connect(function(dt)
 	if next(parents) == nil then
