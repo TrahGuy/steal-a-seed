@@ -47,7 +47,6 @@ local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local MillModel = require(Shared:WaitForChild("MillModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
-local BiomeData = require(Shared:WaitForChild("BiomeData"))
 
 local MILL = GameConfig.Treadmill
 local LADDER = GameConfig.Mill
@@ -220,23 +219,21 @@ function TreadmillService.RateOf(player: Player): number
 end
 
 --==============================================================================
--- WHICH OVERCLOCK LEVEL IS NEXT, AND WHETHER IT MAY BE BOUGHT
+-- WHICH STEP IS NEXT, AND WHAT IT COSTS
 --
--- Three separate answers, deliberately, because the sign wants to say something
--- different for each: there is no next level (the ladder is finished), there is
--- one but this player has not reached its Speed milestone, or there is one and
--- it costs this much.
+-- Two answers, which is all the sign has to say: the ladder is finished, or
+-- here is the next rung and here is its price.
 --
--- Checked against HighestBiomeOrder -- the PERMANENT record -- rather than the
--- live Speed score. A future rebirth zeroes Speed, and an overclock that
--- un-bought itself at that moment would make rebirth a punishment.
+-- There was a third. An overclock could exist and still be withheld until the
+-- player had a biome on record, and the board announced that by printing
+-- DUSTBOWL where the price belongs. That gate is gone -- see the note on the
+-- Overclock table in GameConfig -- so nothing here has to know where a player
+-- has been, only what they have.
 --==============================================================================
 export type NextStep = {
 	kind: string,       -- "tier" | "overclock" | "max"
 	level: number?,     -- the tier or overclock level being sold
 	cost: number?,
-	locked: boolean,    -- true when it exists but the biome is not on record
-	needsOrder: number?,
 }
 
 function TreadmillService.NextStepFor(player: Player): NextStep
@@ -246,23 +243,17 @@ function TreadmillService.NextStepFor(player: Player): NextStep
 			kind = "tier",
 			level = tier + 1,
 			cost = LADDER.Tiers[tier + 1].cost,
-			locked = false,
 		}
 	end
 	local level = TreadmillService.OverclockOf(player) + 1
 	local cost = GameConfig.overclockCostFor(level)
 	if not cost then
-		return { kind = "max", locked = false }
+		return { kind = "max" }
 	end
-	local needs = GameConfig.overclockUnlockOrderFor(level) or 1
-	local profile = PlayerDataService.Get(player)
-	local reached = profile and tonumber(profile.HighestBiomeOrder) or 1
 	return {
 		kind = "overclock",
 		level = level,
 		cost = cost,
-		locked = reached < needs,
-		needsOrder = needs,
 	}
 end
 
@@ -535,7 +526,7 @@ end
 --
 -- It printed the tier ladder directly and said "MAX" at seven, which was true
 -- for about a week. Now it asks NextStepFor -- the one function that knows
--- whether the next thing is a tier, an overclock, a locked overclock or nothing
+-- whether the next thing is a tier, an overclock or nothing at all
 -- -- so the board and the till can never disagree about what is on sale.
 --
 -- Every number goes through GameConfig.compact, because an overclocked rate is
@@ -635,10 +626,7 @@ local function refreshSign(plotId: number, tier: number)
 	end
 
 	local priceText: string
-	if stepInfo and stepInfo.locked then
-		local biome = BiomeData.Biomes[stepInfo.needsOrder or 1]
-		priceText = string.upper(if biome then biome.DisplayName else "LOCKED")
-	elseif stepInfo and stepInfo.cost then
+	if stepInfo and stepInfo.cost then
 		priceText = "$" .. GameConfig.compact(stepInfo.cost)
 	elseif next_ then
 		priceText = "$" .. GameConfig.compact(next_.cost)
@@ -646,9 +634,7 @@ local function refreshSign(plotId: number, tier: number)
 		priceText = "MAX"
 	end
 
-	local sellable = if stepInfo
-		then (stepInfo.kind ~= "max" and not stepInfo.locked)
-		else next_ ~= nil
+	local sellable = if stepInfo then stepInfo.kind ~= "max" else next_ ~= nil
 	local buyColour = if sellable
 		then Color3.fromRGB(214, 78, 66)
 		else Color3.fromRGB(96, 100, 108)
@@ -758,12 +744,6 @@ function TreadmillService.Upgrade(player: Player): boolean
 	if step.kind == "overclock" then
 		local level = step.level :: number
 		local cost = step.cost :: number
-		if step.locked then
-			-- Reachable only by buying the biome the level needs. Refused here
-			-- as well as greyed on the sign, because a greyed sign is a
-			-- courtesy and this is the rule.
-			return false
-		end
 		local profile = PlayerDataService.Get(player)
 		if not profile or profile.Cash < cost then
 			return false
@@ -943,34 +923,6 @@ function TreadmillService.Start()
 			end
 		end)
 	end))
-
-	--==========================================================================
-	-- A BIOME MILESTONE CHANGES WHAT THE SIGN IS SELLING
-	--
-	-- An overclock the player could not afford to unlock reads as the biome's
-	-- name in place of a price. The moment BiomeGateService records a higher
-	-- HighestBiomeOrder that becomes a real purchase -- and without this the
-	-- board goes on saying DUSTBOWL until something unrelated repaints it.
-	--
-	-- Off the ATTRIBUTE rather than a call from the road service. The service
-	-- already publishes it for the HUD, an attribute change is a signal the
-	-- engine delivers for free, and the alternative is two services that have to
-	-- know about each other in order to repaint a board.
-	--==========================================================================
-	local function watchUnlocks(player: Player)
-		table.insert(serviceConnections,
-			player:GetAttributeChangedSignal(ATTR.HighestBiomeOrder):Connect(function()
-				local plot = PlotService.PlotOf(player)
-				local plotId = plot and plot:GetAttribute(ATTR.PlotId)
-				if type(plotId) == "number" then
-					refreshSign(plotId, TreadmillService.TierOf(player))
-				end
-			end))
-	end
-	for _, player in ipairs(Players:GetPlayers()) do
-		watchUnlocks(player)
-	end
-	table.insert(serviceConnections, Players.PlayerAdded:Connect(watchUnlocks))
 
 	--==========================================================================
 	-- THE SIGN IS THE PRIMARY WAY IN

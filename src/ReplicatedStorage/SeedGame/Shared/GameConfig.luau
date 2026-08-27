@@ -1710,18 +1710,22 @@ GameConfig.Mill = {
 	--     level  5    51,200 / sec
 	--
 	--==========================================================================
-	-- RELEASED BY SPEED MILESTONE, SO THE TWO LADDERS PULL EACH OTHER
+	-- CASH IS THE ONLY REQUIREMENT
 	--
-	-- Levels 1-5 are Greenhollow's, and 5 is enough to reach Dustbowl. After
-	-- that each biome releases exactly one more level. That is what stops the
-	-- game being two unrelated grinds side by side: cash buys the rate, the rate
-	-- buys the score, and each biome's recommended score releases the next level
-	-- of rate. Biome access itself remains open to everyone during the day.
+	-- Levels 6-10 used to need a biome ON RECORD before they could be bought --
+	-- level 6 wanted Dustbowl -- and the sign advertised that by printing the
+	-- biome's name where the price goes until you had been there. That gate is
+	-- gone. Every level is on sale the moment the ladder reaches it, and the
+	-- price is the whole of the requirement.
 	--
-	-- Checked against HighestBiomeOrder -- the PERMANENT record -- and not
-	-- against where the player is standing or what their score is right now. A
-	-- future rebirth that zeroes Speed must not confiscate an overclock the
-	-- player already bought.
+	-- It went because it made the upgrade board REFUSE MONEY. A player standing
+	-- at the sign holding 180 million was being told to go and do something
+	-- else, and a board that sends you away is not doing the job an upgrade
+	-- board exists for. Robux is the second currency this ladder will take,
+	-- when it takes one. A biome is not a currency.
+	--
+	-- The pacing that gate was doing is already in the Costs below, which climb
+	-- faster than the rates they buy -- see the note under this one.
 	--
 	--==========================================================================
 	-- THE COSTS ARE PRICED OFF THE GARDEN, NOT OFF EACH OTHER
@@ -1747,7 +1751,7 @@ GameConfig.Mill = {
 		-- Multiplier ^ level, applied to the tier's own rate.
 		Multiplier = 4,
 		MaxLevel = 10,
-		-- Level N costs Costs[N], and needs biome order UnlockedBy[N] on record.
+		-- Level N costs Costs[N], and that is the entire requirement.
 		Costs = {
 			3_000_000,
 			7_000_000,
@@ -1760,7 +1764,6 @@ GameConfig.Mill = {
 			2_000_000_000,
 			4_500_000_000,
 		},
-		UnlockedBy = { 1, 1, 1, 1, 1, 2, 3, 4, 5, 5 },
 		-- Shown on the mill sign in place of the tier name once the tier ladder
 		-- is finished.
 		Label = "Overclock",
@@ -1928,7 +1931,7 @@ function GameConfig.rebirthMultiplierFor(profile: any): number
 end
 
 --==============================================================================
--- WHAT AN OVERCLOCK LEVEL IS WORTH, COSTS, AND NEEDS
+-- WHAT AN OVERCLOCK LEVEL IS WORTH, AND WHAT IT COSTS
 --
 -- Level 0 is "no overclock" and is always valid. Anything outside 0..MaxLevel
 -- is clamped rather than refused: this is read on the payout path, and a rate
@@ -1950,15 +1953,6 @@ function GameConfig.overclockCostFor(level: number): number?
 		return nil
 	end
 	return O.Costs[math.floor(level)]
-end
-
--- Which biome order has to be ON RECORD before that level may be bought.
-function GameConfig.overclockUnlockOrderFor(level: number): number?
-	local O = GameConfig.Mill.Overclock
-	if type(level) ~= "number" or level ~= level then
-		return nil
-	end
-	return O.UnlockedBy[math.floor(level)]
 end
 
 --==============================================================================
