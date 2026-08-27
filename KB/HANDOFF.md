@@ -3861,14 +3861,52 @@ were drawn. The two that disagree are the dew seal and its stem, by up to
 the three captured phases, which is the rest that pulse swings about.
 
 Plants replay through ONE conformance factor, `hs = FrameHeight / PreviewHeight`,
-the same trick Suncrown already uses. Each species `Height` IS its
-`PreviewHeight`, so hs is exactly 1.000000 at the median weight.
+the same trick Suncrown already uses.
 
-**Tanglemire plants are ~1.6x the size of Dustbowl's at equal weight** (Heights
-6.07–6.81 against 2.6–4.2). The mockups carry no weight attribute, so nothing
-records what weight they were drawn at; preserving the approved silhouette
-exactly is what produces this. If they were drawn at a heavier reference than the
-median, it is one number per species to correct and no geometry changes.
+### The mockups were drawn about 1.55x oversize, and one factor fixed it
+
+They carry no weight attribute, so nothing records what weight they were drawn
+at. Taken at face value they made a Tanglemire plant about **1.6x a Dustbowl one
+of the same weight** — Heights 6.07–6.81 against a ladder that had reached 4.2,
+which is not a progression step, it is a different scale.
+
+Every `Height` is now its mockup height times **0.646109**, chosen so the biome's
+tallest lands on 4.4 and the top of each band still steps by two tenths:
+
+```
+greenhollow  2.40 3.00 3.20 3.60 4.00
+dustbowl     2.60 3.00 3.40 3.80 4.20
+tanglemire   3.92 3.99 4.35 4.21 4.40
+```
+
+**One factor rather than a per-species ladder**, because the five were approved
+TOGETHER: Lanterncap is deliberately shorter than Snapmoss, and a tidy ascending
+ladder would have quietly reversed that. Scaling the set preserves every such
+relationship to within a thousandth.
+
+The geometry did not move. `TanglemireForms` still holds the mockups part for
+part and `PreviewHeight` still records what they were drawn at — the commit
+changing this touched **zero non-comment lines** in that file. Divide the
+conformance factor back out of a shipped plant and every part returns to the
+mockup within 0.023 studs, with sizes matching to 3e-6.
+
+Finished heights, soil to crown:
+
+```
+kg        Bogbonnet  Crookreed  Snapmoss  Lanterncap  Gloomlotus
+     1         2.62       2.67      2.91        2.82        2.94
+   7.5         3.92       3.99      4.35        4.21        4.40
+10,000        16.52      16.83     18.34       17.76       18.57
+```
+
+**Known and deliberate:** Tanglemire grows with weight strictly on the shared
+`SizeScale` curve (4.19x from 7.5 kg to 10,000 kg), while Greenhollow's and
+Dustbowl's forms grow faster than that because their hand-authored widths
+multiply H by a raw girth term. A 10,000 kg Gloomlotus is therefore 18.6 studs
+where a 10,000 kg Suncrown is 43.6. Matching that would mean applying girth to
+part sizes, and two thirds of Tanglemire's approved parts are rotated off-axis,
+so a per-axis girth term shears them. Weights above 5,000 kg are 3.4% of rolls;
+revisit only if heavy Tanglemire plants read as undersized in play.
 
 ### Girth is damped and horizontal for this biome
 
@@ -3960,7 +3998,8 @@ settled     3.654   5.406   1.000   2.365   0.204
     and confirm the parent wakes, chases and settles on its own.
   * **Miremaw at other weights and scales** has only been seen at the one height
     `NestService` asks for.
-  * **The plant size question above** is a design call, not a defect.
+  * **Heavy Tanglemire plants** grow on the shared curve rather than the
+    faster girth-inflated curve the first two biomes use; see above.
 
 ## Still open
 

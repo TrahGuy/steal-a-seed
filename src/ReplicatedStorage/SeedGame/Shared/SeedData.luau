@@ -174,6 +174,33 @@ local DUST_STEM = Color3.fromRGB(178, 158, 106)
 --==============================================================================
 -- BIOME 3: TANGLEMIRE
 --
+-- ONE FACTOR CONFORMS THE WHOLE BIOME, AND IT HAD TO BE ONE
+--
+-- The approved mockups carry no weight attribute, so nothing records what
+-- weight they were drawn at. Taken at face value they made a Tanglemire plant
+-- about 1.6x a Dustbowl one of the same weight -- 6.07 to 6.81 against a ladder
+-- that had reached 4.2 -- which is not a progression step, it is a different
+-- scale.
+--
+-- Every Height below is its mockup height times 0.646109, chosen so the biome's
+-- tallest lands on 4.4 and the top of each band still steps by two tenths:
+--
+--     greenhollow  2.40 3.00 3.20 3.60 4.00
+--     dustbowl     2.60 3.00 3.40 3.80 4.20
+--     tanglemire   3.92 3.99 4.35 4.21 4.40
+--
+-- ONE factor rather than a per-species ladder, because the five were approved
+-- TOGETHER. Their heights relative to each other are part of what was signed
+-- off -- Lanterncap is deliberately shorter than Snapmoss, which a tidy
+-- ascending ladder would have quietly reversed. Scaling the set preserves every
+-- one of those relationships to within a thousandth; re-laddering them would
+-- have been a redesign wearing a balance change as a hat.
+--
+-- The GEOMETRY did not move. TanglemireForms still holds the mockups part for
+-- part, and PreviewHeight still holds what they were drawn at; the builder's
+-- conformance factor is Height / PreviewHeight, so changing Height here is the
+-- whole of the change.
+--
 -- Same rule a third time: STEM, LEAF and SOIL are shared by all five, and the
 -- head is where a species gets to be itself.
 --
@@ -356,7 +383,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "bogbonnet", Name = "Bogbonnet", Rarity = "Rare", Biome = "tanglemire",
-		Kg = 60, Height = 6.07, Form = "bonnet",
+		Kg = 60, Height = 3.92, Form = "bonnet",
 		Body = Color3.fromRGB(42, 92, 74),
 		Crown = Color3.fromRGB(196, 210, 162),
 		Accent = Color3.fromRGB(168, 214, 96),
@@ -364,7 +391,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "crookreed", Name = "Crookreed", Rarity = "Rare", Biome = "tanglemire",
-		Kg = 75, Height = 6.18, Form = "reed",
+		Kg = 75, Height = 3.99, Form = "reed",
 		-- The second Rare, and the only one whose dominant mass is BROWN. Two
 		-- Rares in one biome is a first, so they had to be told apart by
 		-- silhouette and by palette at once rather than by rarity word.
@@ -375,7 +402,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "snapmoss", Name = "Snapmoss", Rarity = "Epic", Biome = "tanglemire",
-		Kg = 180, Height = 6.73, Form = "moss",
+		Kg = 180, Height = 4.35, Form = "moss",
 		Body = Color3.fromRGB(42, 92, 74),
 		Crown = Color3.fromRGB(204, 94, 88),
 		Accent = Color3.fromRGB(168, 214, 96),
@@ -383,7 +410,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "lanterncap", Name = "Lanterncap", Rarity = "Legendary", Biome = "tanglemire",
-		Kg = 450, Height = 6.51, Form = "lantern",
+		Kg = 450, Height = 4.21, Form = "lantern",
 		Body = Color3.fromRGB(238, 188, 78),
 		Crown = Color3.fromRGB(220, 218, 176),
 		Accent = Color3.fromRGB(168, 214, 96),
@@ -391,7 +418,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "gloomlotus", Name = "Gloomlotus", Rarity = "Mythic", Biome = "tanglemire",
-		Kg = 1200, Height = 6.81, Form = "lotus",
+		Kg = 1200, Height = 4.40, Form = "lotus",
 		-- The first Mythic form in the game. It is the only plant carrying a
 		-- Neon halo, a Glass dew jewel, two emitters and a Highlight, and that
 		-- budget is the rarity: nothing below Mythic gets an aura.

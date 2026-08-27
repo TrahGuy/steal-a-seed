@@ -24,9 +24,15 @@
 --            factor, hs = FrameHeight(sp, kg) / PreviewHeight[id]. That is the
 --            trick Suncrown already uses: a preview drawn on its own curve is
 --            conformed to the shared frame by a single multiplier, so nothing
---            downstream has to know the mockup used different maths. Each
---            species Height in SeedData IS its PreviewHeight, so hs is exactly
---            1.0 at the median weight and the live plant is the mockup.
+--            downstream has to know the mockup used different maths.
+--
+--            PreviewHeight is what the mockup WAS, and it never changes. The
+--            species Height in SeedData is what it SHIPS at, and it carries the
+--            biome's scale: the five were drawn about 1.55x larger than the
+--            height ladder had reached, so every Height is its PreviewHeight
+--            times 0.646109. One factor for all five, because their heights
+--            relative to each other were approved together and re-laddering
+--            them would have reversed Lanterncap and Snapmoss.
 --
 --   pod      stored as FRACTIONS OF DIAMETER, so it is exact at every weight
 --            rather than only at the three that were approved. Fourteen of its
@@ -57,10 +63,13 @@ local TanglemireForms = {}
 --==============================================================================
 -- THE FIVE PLANTS
 --
--- PreviewHeight is the finished silhouette height of the approved mockup, and
--- it is what makes the conformance factor exact: SeedData carries the same
--- number as the species Height, so at the median weight the live plant is the
--- mockup, stud for stud.
+-- PreviewHeight is the finished silhouette height of the approved mockup, in
+-- the mockup's own studs. It is a RECORD OF WHAT WAS DRAWN and must not be
+-- edited to change how big a plant ships -- the species Height in SeedData is
+-- the number that does that, and the builder divides one by the other.
+--
+-- Moving this instead would silently rescale the geometry away from the
+-- approval while still claiming to be it.
 --==============================================================================
 TanglemireForms.PreviewHeight = {
 	bogbonnet = 6.07,
