@@ -94,6 +94,14 @@ end
 -- the top-bar inset, which is the space ViewportPointToRay expects, and it is
 -- the same call on a phone -- it returns the last touch. One code path for both.
 --==============================================================================
+-- What the bed is made of, beyond the planter itself. Named rather than
+-- inferred: a click must land on the BED, not on a fence rail or a neighbour's
+-- plot that happens to be behind it.
+local BED_PARTS: { [string]: boolean } = {
+	SoilRow = true,
+	Clod = true,
+}
+
 local function soilPoint(): (Vector3?, BasePart?)
 	local camera = workspace.CurrentCamera
 	local plot = myPlot()
@@ -122,7 +130,31 @@ local function soilPoint(): (Vector3?, BasePart?)
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = ignore
 	local hit = workspace:Raycast(ray.Origin, ray.Direction * 600, params)
-	if not (hit and hit.Instance == soil) then
+	if not hit then
+		return nil, soil
+	end
+	--==================================================================
+	-- THE BED IS MORE THAN ONE PART, AND THIS TEST STILL THOUGHT IT WAS
+	--
+	-- This required the ray to land on the single `Soil` planter. Then the bed
+	-- was tilled: MapService now raises a SoilRow slab per row on top of that
+	-- planter and scatters Clods in the furrows. Both sit ABOVE the planter, so
+	-- a click aimed at a row hits the row -- and this returned nil.
+	--
+	-- The symptom was "I can only place on the ground, not on a soil row",
+	-- which is exactly backwards from what a bed is for, and it never reached
+	-- the server: the client gave up here, so not even a refusal code was
+	-- logged. Every guard in PlaceAt was innocent.
+	--
+	-- Anything belonging to THIS plot's bed counts. The server does not care
+	-- which one was hit: clampToSoil projects the point into the planter's
+	-- object space and zeroes Y, so a row, a clod and the planter all flatten
+	-- to the same plane before anything is placed.
+	--==================================================================
+	local instance = hit.Instance
+	if instance ~= soil
+		and not (BED_PARTS[instance.Name] and instance:IsDescendantOf(plot))
+	then
 		return nil, soil
 	end
 	return hit.Position, soil
