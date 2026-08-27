@@ -171,6 +171,27 @@ local SOIL = Color3.fromRGB(124, 76, 50)
 local DUST_LEAF = Color3.fromRGB(128, 122, 78)
 local DUST_STEM = Color3.fromRGB(178, 158, 106)
 
+--==============================================================================
+-- BIOME 3: TANGLEMIRE
+--
+-- Same rule a third time: STEM, LEAF and SOIL are shared by all five, and the
+-- head is where a species gets to be itself.
+--
+-- These three are SAMPLED OFF THE APPROVED MOCKUPS rather than chosen. The mire
+-- green appears in all five approved plants twenty-three times, the muted stem
+-- thirteen, and every one of the five stands on a peat hummock of exactly
+-- 72,56,44. Picking a nicer green here would put the sheet and the art in
+-- disagreement on day one.
+--
+-- SOIL IS NOT THE SHARED BROWN THIS TIME, and that is deliberate. Greenhollow
+-- and Dustbowl both heap the player's own bed around the stem, so their soil is
+-- the bed's colour. A Tanglemire plant stands on peat it grew out of -- the
+-- approved footing is part of the plant, not a heap shovelled round it.
+--==============================================================================
+local MIRE_LEAF = Color3.fromRGB(70, 128, 88)
+local MIRE_STEM = Color3.fromRGB(82, 112, 76)
+local MIRE_PEAT = Color3.fromRGB(72, 56, 44)
+
 local GREEN = Color3.fromRGB(146, 196, 106)
 local CREAM = Color3.fromRGB(242, 238, 206)
 
@@ -193,6 +214,11 @@ SeedData.Blush = BLUSH
 SeedData.Stem = STEM
 SeedData.Leaf = LEAF
 SeedData.Soil = SOIL
+
+-- Tanglemire's three, for the same reason: the HUD draws plants too.
+SeedData.MireLeaf = MIRE_LEAF
+SeedData.MireStem = MIRE_STEM
+SeedData.MirePeat = MIRE_PEAT
 
 SeedData.Species = {
 	{
@@ -327,6 +353,52 @@ SeedData.Species = {
 		Crown = Color3.fromRGB(239, 116, 25),
 		Accent = Color3.fromRGB(210, 61, 45),
 		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+	},
+	{
+		Id = "bogbonnet", Name = "Bogbonnet", Rarity = "Rare", Biome = "tanglemire",
+		Kg = 60, Height = 6.07, Form = "bonnet",
+		Body = Color3.fromRGB(42, 92, 74),
+		Crown = Color3.fromRGB(196, 210, 162),
+		Accent = Color3.fromRGB(168, 214, 96),
+		Leaf = MIRE_LEAF, Stem = MIRE_STEM, Soil = MIRE_PEAT,
+	},
+	{
+		Id = "crookreed", Name = "Crookreed", Rarity = "Rare", Biome = "tanglemire",
+		Kg = 75, Height = 6.18, Form = "reed",
+		-- The second Rare, and the only one whose dominant mass is BROWN. Two
+		-- Rares in one biome is a first, so they had to be told apart by
+		-- silhouette and by palette at once rather than by rarity word.
+		Body = Color3.fromRGB(144, 98, 68),
+		Crown = Color3.fromRGB(70, 128, 88),
+		Accent = Color3.fromRGB(42, 92, 74),
+		Leaf = MIRE_LEAF, Stem = MIRE_STEM, Soil = MIRE_PEAT,
+	},
+	{
+		Id = "snapmoss", Name = "Snapmoss", Rarity = "Epic", Biome = "tanglemire",
+		Kg = 180, Height = 6.73, Form = "moss",
+		Body = Color3.fromRGB(42, 92, 74),
+		Crown = Color3.fromRGB(204, 94, 88),
+		Accent = Color3.fromRGB(168, 214, 96),
+		Leaf = MIRE_LEAF, Stem = MIRE_STEM, Soil = MIRE_PEAT,
+	},
+	{
+		Id = "lanterncap", Name = "Lanterncap", Rarity = "Legendary", Biome = "tanglemire",
+		Kg = 450, Height = 6.51, Form = "lantern",
+		Body = Color3.fromRGB(238, 188, 78),
+		Crown = Color3.fromRGB(220, 218, 176),
+		Accent = Color3.fromRGB(168, 214, 96),
+		Leaf = MIRE_LEAF, Stem = MIRE_STEM, Soil = MIRE_PEAT,
+	},
+	{
+		Id = "gloomlotus", Name = "Gloomlotus", Rarity = "Mythic", Biome = "tanglemire",
+		Kg = 1200, Height = 6.81, Form = "lotus",
+		-- The first Mythic form in the game. It is the only plant carrying a
+		-- Neon halo, a Glass dew jewel, two emitters and a Highlight, and that
+		-- budget is the rarity: nothing below Mythic gets an aura.
+		Body = Color3.fromRGB(146, 232, 204),
+		Crown = Color3.fromRGB(188, 224, 108),
+		Accent = Color3.fromRGB(92, 172, 154),
+		Leaf = MIRE_LEAF, Stem = MIRE_STEM, Soil = MIRE_PEAT,
 	},
 } :: { Species }
 
