@@ -122,7 +122,12 @@ BiomeData.Biomes = {
 		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 2.6,
-		LiveInPhaseA = false,
+		-- LIVE. The five species, their plant builders, the shared Mire-Cage
+		-- Pod, Miremaw and its dispatch all landed before this flag moved --
+		-- which is the order that matters, because NestService raises a nest as
+		-- soon as a biome HAS species and would otherwise have stood a
+		-- Greenhollow brute over Tanglemire pods.
+		LiveInPhaseA = true,
 	},
 	{
 		Id = "emberroot",
