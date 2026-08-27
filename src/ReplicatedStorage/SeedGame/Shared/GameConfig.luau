@@ -510,8 +510,40 @@ GameConfig.Tags = {
 	NightBarrier = "NightBarrier",
 }
 
+--==============================================================================
+-- THE DEBUG CONSOLE, AND WHO IS ALLOWED TO OPEN IT
+--
+-- This tool sets Speed and Cash directly. In a game whose entire progression IS
+-- Speed and Cash, that is not a convenience -- it is every exploit at once, in
+-- one RemoteEvent. So the gate is the feature.
+--
+-- ALLOWED: anyone in Studio (which is a private session by definition), and the
+-- place owner on a live server. Nothing else, ever. The check runs on the SERVER
+-- before the payload is even read: a client that hides the panel is a courtesy,
+-- and a rule enforced only on the client is not a rule.
+--
+-- UserIds is for a trusted tester who is not the owner. It is deliberately empty
+-- rather than pre-filled -- an id in here is a person who can mint themselves a
+-- quadrillion, and that should be a decision somebody typed on purpose.
+--
+-- A GROUP-OWNED PLACE has a CreatorId that is the GROUP, not a person, so the
+-- owner check cannot match anybody. Put the ids in UserIds if this game ever
+-- moves to a group.
+--==============================================================================
+GameConfig.Debug = {
+	Enabled = true,
+	UserIds = {} :: { number },
+	-- Opens and closes the panel. F4 rather than a letter, so it cannot fire
+	-- while somebody is typing into a text box.
+	ToggleKey = "F4",
+}
+
 GameConfig.Remotes = {
 	PlotAssigned = "PlotAssigned",
+	-- The debug console. Created like every other remote, and REFUSED like no
+	-- other: DebugService drops anything from a player who is not the owner
+	-- and not in Studio, before it looks at the payload at all.
+	DebugCommand = "DebugCommand",
 	ProfileUpdated = "ProfileUpdated",
 	-- Sent once when a profile is ready, or when it could not be loaded. A
 	-- client that never hears this must not pretend the player has 0 cash --
