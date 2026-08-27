@@ -45,6 +45,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local TanglemireForms = require(Shared:WaitForChild("TanglemireForms"))
 
 local CreatureModel = {}
 
@@ -620,6 +621,86 @@ local function addDustbowlFooting(model: Model, sp: SeedData.Species, cf: CFrame
 end
 
 --==============================================================================
+--==============================================================================
+-- TANGLEMIRE IS REPLAYED, NOT REASSEMBLED
+--
+-- Greenhollow and Dustbowl are ASSEMBLED here: a footing helper, a stem, two
+-- leaves, then a form branch that measures a head off headW. Tanglemire is not,
+-- and the difference is deliberate rather than lazy.
+--
+-- Its five were designed, reviewed and approved as WHOLE SCULPTURES. Each one
+-- already carries its own peat hummock, four clods, moss collar, stem, four wet
+-- leaves and a full face, so there is nothing left for a shared footing to
+-- contribute. Rebuilding them out of the shared vocabulary would mean
+-- re-deriving thirty-odd approved part positions by hand and hoping the result
+-- still looked like the thing that was signed off -- which is precisely the
+-- redesign the approval existed to end.
+--
+-- So the geometry is data (TanglemireForms) and this is the player. What it
+-- still shares is what actually matters: `Base` is the same invisible pivot the
+-- other ten use, so PlantService, PlantSway, CarryService and both prompts
+-- cannot tell the difference, and weight still drives size through the same H.
+--
+-- WHY GIRTH IS DAMPED AND HORIZONTAL HERE
+--
+-- Two thirds of the approved parts are rotated off-axis. Scaling a rotated box
+-- along world X and Z does not widen it, it SHEARS it, so girth cannot be the
+-- per-axis multiplier it is in a hand-authored form -- doing that would bend
+-- approved art out of shape at exactly the weights players see most.
+--
+-- Instead each part keeps its approved proportions (size scales by hs alone)
+-- and girth SPREADS THE PARTS APART horizontally. That is the same restraint
+-- Suncrown already shows, folding girth into a damped `0.85 + 0.15 * gs` rather
+-- than multiplying by it raw. Normalised so gs is exactly 1.0 at the size
+-- reference weight, which is what makes a median plant the approved mockup
+-- rather than the approved mockup within a few percent of itself.
+--==============================================================================
+local GIRTH_REF = SeedData.Girth(SeedData.SizeReferenceKg)
+local GIRTH_SPREAD = 0.16
+
+local function mireGirth(G: number): number
+	return 1 + GIRTH_SPREAD * (G - GIRTH_REF) / GIRTH_REF
+end
+
+local SHAPE_BY_NAME: { [string]: Enum.PartType } = {
+	Block = Enum.PartType.Block,
+	Ball = Enum.PartType.Ball,
+	Cylinder = Enum.PartType.Cylinder,
+}
+
+--------------------------------------------------------------------------------
+-- One approved part, placed. `cf` is the model base, matching every other
+-- builder in this file; `hs` conforms the mockup to the shared frame and `gs`
+-- is the damped horizontal spread. Rotation is copied through untouched.
+--------------------------------------------------------------------------------
+local function replayPart(spec: TanglemireForms.PartSpec, cf: CFrame, hs: number,
+	gs: number, color: Color3, parent: Instance): BasePart
+	local offset = spec.cf.Position
+	local placed = cf
+		* CFrame.new(offset.X * hs * gs, offset.Y * hs, offset.Z * hs * gs)
+		* (spec.cf - offset)
+
+	local p: BasePart
+	if spec.shape == "Wedge" then
+		p = wedge(spec.name, spec.size * hs, placed, color, parent)
+	else
+		p = part({
+			name = spec.name,
+			size = spec.size * hs,
+			cframe = placed,
+			color = color,
+			shape = SHAPE_BY_NAME[spec.shape] or Enum.PartType.Block,
+			parent = parent,
+		})
+	end
+	-- Material last and unconditionally: the approved set includes Glass and
+	-- Neon, and `part` would otherwise have picked Plastic for the studs.
+	p.Material = spec.material
+	p.Transparency = spec.transparency or 0
+	p.Reflectance = spec.reflectance or 0
+	return p
+end
+
 function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: Stage,
 	cf: CFrame, parent: Instance): Model
 	local model = Instance.new("Model")
@@ -683,6 +764,37 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 		studs = false,
 	})
 	base.Transparency = 1
+
+	--==========================================================================
+	-- TANGLEMIRE ANSWERS HERE AND STOPS
+	--
+	-- Everything below this point assembles a plant out of a stem, a footing and
+	-- a form branch. A Tanglemire plant is already assembled -- see the banner on
+	-- replayPart -- so it takes the shared pivot above and nothing else.
+	--
+	-- Deliberately AFTER `Base` and before the per-biome footing: the pivot is
+	-- the one thing four other systems reach for by name, and a biome that
+	-- skipped it would be a biome whose plants could not be planted, carried or
+	-- swayed.
+	--==========================================================================
+	if sp.Biome == "tanglemire" then
+		local specs = TanglemireForms.Plants[sp.Id]
+		if specs then
+			local hs = H / TanglemireForms.PreviewHeight[sp.Id]
+			local gs = mireGirth(G)
+			for _, spec in ipairs(specs) do
+				replayPart(spec, cf, hs, gs, spec.color or sp.Body, model)
+			end
+			return model
+		end
+		-- No approved geometry for this id. Falling through would build a
+		-- Greenhollow plant in mire colours and call it a Tanglemire species,
+		-- which is worse than an empty pivot somebody notices immediately.
+		warn(string.format(
+			"[Seed/CreatureModel] tanglemire species %q has no approved geometry",
+			sp.Id))
+		return model
+	end
 
 	local stemH = H * 0.417
 	local stemBase = 0
@@ -1694,6 +1806,35 @@ function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
 				parent = model,
 			})
 		end
+	elseif sp.Biome == "tanglemire" then
+		--==================================================================
+		-- THE MIRE-CAGE POD
+		--
+		-- Sixteen parts, shared by all five species, and the reason it is one
+		-- pod rather than five is the same reason the Dust Husk is: the shell
+		-- says what the pod WEIGHS and nothing says what is inside it until
+		-- somebody holds E. Tanglemire has a Mythic in its table, so a pod that
+		-- leaked its species would leak the jackpot.
+		--
+		-- Three lower sepals, a seven-reed crooked cage, the equatorial flood
+		-- seam, a cyan dew seal suspended on its stem, and the side water bead.
+		--
+		-- Shell and Crown are NOT rebuilt here. The shared code above already
+		-- built them, at exactly the size and offset the approval carries
+		-- (1.00 D at 0.50 D, and 0.84 D at 0.84 D), so replaying them would
+		-- double sixteen parts into eighteen for nothing.
+		--==================================================================
+		local hs = D
+		for _, spec in ipairs(TanglemireForms.Pod) do
+			if spec.name ~= "Shell" and spec.name ~= "Crown" then
+				replayPart(spec, cf, hs, 1,
+					if TanglemireForms.PodWeightColoured[spec.name]
+						then color
+						else (spec.color or color),
+					model)
+			end
+		end
+
 	else
 		upright("Seam", D * 0.07, D * 1.02, baseCF * CFrame.new(0, D * 0.02, 0),
 			color:Lerp(Color3.new(0, 0, 0), 0.18), model)
