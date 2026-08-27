@@ -3996,7 +3996,7 @@ settled     3.654   5.406   1.000   2.365   0.204
 
 ## A take was impossible, and the cause was debris in the place file — 2026-08-27
 
-Commit `dd4e4a1`. Reported as "i cant take the pod", and it was real: no pod in
+Commit `061a765`. Reported as "i cant take the pod", and it was real: no pod in
 any biome could be picked up.
 
 **Cause: `Workspace.SeedGameServer`** — a clone of the entire server folder,
