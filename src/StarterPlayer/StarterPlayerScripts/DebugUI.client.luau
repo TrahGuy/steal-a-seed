@@ -22,6 +22,7 @@
 --==============================================================================
 
 local ContextActionService = game:GetService("ContextActionService")
+local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -64,6 +65,10 @@ end
 local remotes = SeedGame:WaitForChild("Remotes")
 local channel = remotes:WaitForChild(GameConfig.Remotes.DebugCommand) :: RemoteEvent
 
+-- Right edge, vertically centred. Kept as a constant because the drag
+-- below can put the panel anywhere, and something has to know the way back.
+local DEFAULT_POSITION = UDim2.new(1, -16, 0.5, 0)
+
 local INK = Color3.fromRGB(232, 232, 236)
 local PANEL = Color3.fromRGB(24, 26, 30)
 local ROW = Color3.fromRGB(38, 41, 47)
@@ -87,7 +92,16 @@ gui.Parent = player:WaitForChild("PlayerGui")
 local root = Instance.new("Frame")
 root.Name = "Panel"
 root.Size = UDim2.fromOffset(330, 560)
-root.Position = UDim2.new(0, 16, 0.5, -280)
+--==============================================================================
+-- RIGHT SIDE, NOT LEFT
+--
+-- It used to open at (16, 16), which is exactly where the Index rail button
+-- lives -- so the one panel you open to test things covered the first thing you
+-- would want to click. Anchored to the right edge instead, and it stays put
+-- relative to that edge when the window is resized.
+--==============================================================================
+root.AnchorPoint = Vector2.new(1, 0.5)
+root.Position = DEFAULT_POSITION
 root.BackgroundColor3 = PANEL
 root.BorderSizePixel = 0
 root.Parent = gui
@@ -180,9 +194,59 @@ end
 --==============================================================================
 -- THE PANEL
 --==============================================================================
-local title = label("DEBUG  ·  F4", 22, INK)
+local title = label("DEBUG  ·  F4  ·  drag me", 22, INK)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 14
+
+--==============================================================================
+-- DRAGGING, BY THE TITLE BAR ONLY
+--
+-- Not Frame.Draggable: that is deprecated, ignores touch, and would let a stray
+-- press anywhere on the panel start a drag -- including on the buttons, which is
+-- most of the panel.
+--
+-- Active = true is what makes a TextLabel receive input at all. The move is
+-- tracked on UserInputService rather than on the label, because a fast drag
+-- leaves the cursor behind and a label-only connection drops the panel the
+-- moment the pointer outruns it.
+--==============================================================================
+title.Active = true
+
+local dragging = false
+local dragOrigin = Vector2.zero
+local dragFrom = DEFAULT_POSITION
+
+local function isDragInput(input: InputObject): boolean
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+title.InputBegan:Connect(function(input)
+	if isDragInput(input) then
+		dragging = true
+		dragOrigin = Vector2.new(input.Position.X, input.Position.Y)
+		dragFrom = root.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if not dragging then
+		return
+	end
+	if input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch then
+		local delta = Vector2.new(input.Position.X, input.Position.Y) - dragOrigin
+		root.Position = UDim2.new(
+			dragFrom.X.Scale, dragFrom.X.Offset + delta.X,
+			dragFrom.Y.Scale, dragFrom.Y.Offset + delta.Y)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if isDragInput(input) then
+		dragging = false
+	end
+end)
 
 local echo = label("", 34, Color3.fromRGB(150, 210, 150))
 echo.TextWrapped = true
@@ -330,6 +394,34 @@ end)
 -- a text box in the panel has focus -- which would close the panel every time
 -- somebody typed a weight.
 --==============================================================================
+--==============================================================================
+-- A PANEL DRAGGED OFF THE SCREEN IS A PANEL YOU CANNOT GET BACK
+--
+-- Checked on the way OPEN rather than clamped during the drag: clamping fights
+-- the pointer and feels broken, and this only has to catch the one case that
+-- actually strands the tool. If less than a corner of it is on screen, it goes
+-- home.
+--==============================================================================
+local function ensureReachable()
+	local view = root.Parent :: GuiBase2d
+	local screen = view.AbsoluteSize
+	local pos, size = root.AbsolutePosition, root.AbsoluteSize
+	local onX = math.min(pos.X + size.X, screen.X) - math.max(pos.X, 0)
+	local onY = math.min(pos.Y + size.Y, screen.Y) - math.max(pos.Y, 0)
+	if onX < 60 or onY < 40 then
+		root.Position = DEFAULT_POSITION
+	end
+end
+
+-- Bound to the PROPERTY, not to the keybind. F4 is only one way the panel can
+-- open, and a rescue that only runs on one of them is a rescue you will
+-- eventually be missing.
+gui:GetPropertyChangedSignal("Enabled"):Connect(function()
+	if gui.Enabled then
+		ensureReachable()
+	end
+end)
+
 ContextActionService:BindAction("SeedDebugToggle", function(_, state)
 	if state == Enum.UserInputState.Begin then
 		gui.Enabled = not gui.Enabled
