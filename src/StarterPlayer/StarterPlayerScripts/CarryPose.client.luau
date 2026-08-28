@@ -229,9 +229,9 @@ end)
 -- describes. Everything in the hotbar carries its own measured GripReach, and
 -- the weight fallback is only for a Tool built before that existed.
 local function carriedReach(player: Player, character: Model): number?
-	local kg = player:GetAttribute(CARRYING_KG)
-	if type(kg) == "number" then
-		return SeedData.GripForward(kg)
+	local tier = player:GetAttribute(CARRYING_KG)
+	if type(tier) == "number" then
+		return SeedData.GripForward(tier)
 	end
 	for _, d in ipairs(character:GetChildren()) do
 		if d:IsA("Tool") then

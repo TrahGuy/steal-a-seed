@@ -63,7 +63,7 @@ export type Held = {
 	-- What this pod weighs. Rolled where it spawned, carried through every drop
 	-- and pick-up, and stamped on the Tool when it is banked. The species sheet
 	-- has nothing to say about it.
-	kg: number,
+	tier: number,
 	model: Model,
 	-- Which nest it came off, carried through a drop so that picking it back up
 	-- can annoy the same parent again.
@@ -113,7 +113,7 @@ end
 local function publish(player: Player)
 	local held = carried[player]
 	player:SetAttribute(ATTR.CarryingSpecies, if held then held.species.Id else nil)
-	player:SetAttribute(ATTR.CarryingKg, if held then held.kg else nil)
+	player:SetAttribute(ATTR.CarryingKg, if held then held.tier else nil)
 end
 
 function CarryService.IsCarrying(player: Player): boolean
@@ -122,7 +122,7 @@ end
 
 function CarryService.TotalKg(player: Player): number
 	local held = carried[player]
-	return if held then held.kg else 0
+	return if held then held.tier else 0
 end
 
 function CarryService.RefreshWalkSpeed(player: Player)
@@ -204,11 +204,11 @@ end
 
 -- Where a pod sits relative to a HumanoidRootPart. One function, so the raid
 -- carry and the banked Tool cannot drift into two different grips.
-local function gripFor(kg: number): CFrame
+local function gripFor(tier: number): CFrame
 	-- -Z is forward in a root's frame. Offset by the pod's OWN RADIUS, because
 	-- pods are 1.3 to 10 studs across: a fixed offset either buries a heavy one
 	-- in the ribs or leaves a light one hovering clear of the hands.
-	return CFrame.new(0, GameConfig.Carry.GripDrop, -SeedData.GripForward(kg))
+	return CFrame.new(0, GameConfig.Carry.GripDrop, -SeedData.GripForward(tier))
 end
 
 --==============================================================================
@@ -223,7 +223,7 @@ end
 -- either buries a heavy one in the ribs or leaves a light one hovering a stud
 -- clear of the hands.
 --==============================================================================
-local function attachInFront(model: Model, root: BasePart, kg: number)
+local function attachInFront(model: Model, root: BasePart, tier: number)
 	local primary = model.PrimaryPart
 	if not primary then
 		return
@@ -242,7 +242,7 @@ local function attachInFront(model: Model, root: BasePart, kg: number)
 			end
 		end
 	end
-	local grip = gripFor(kg)
+	local grip = gripFor(tier)
 	primary.CFrame = root.CFrame * grip
 	local weld = Instance.new("Weld")
 	weld.Name = "CarryWeld"
@@ -321,9 +321,9 @@ end
 -- `kg` travels with it. A dropped pod that fell back on the species sheet would
 -- be a way to launder a 9,000 kg cube into a 2 kg one by dropping it, and the
 -- player who picked it up would be robbed by the physics rather than by anyone.
-local function spawnLoose(species: SeedData.Species, kg: number, at: CFrame,
+local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
 	parent: Instance, fromNest: string?)
-	local pod = CreatureModel.BuildPod(species, kg, at, parent)
+	local pod = CreatureModel.BuildPod(species, tier, at, parent)
 	-- Loot, explicitly. This is the whole point of a loose pod.
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
 	if fromNest then
@@ -466,7 +466,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- TakePod destroys the model and its attributes go with it. Falling back to
 	-- the species sheet would turn a 9,000 kg cube into a 2 kg one at the moment
 	-- of pickup, which is the one moment the player is watching the number.
-	local podKg = tonumber(pod:GetAttribute("Kg"))
+	local podTier = tonumber(pod:GetAttribute("Tier"))
 	local nestId = pod:GetAttribute("NestId")
 	local fromNest: string? = if type(nestId) == "string"
 		then nestId
@@ -501,17 +501,17 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	end
 
 	local taken = species :: SeedData.Species
-	local takenKg = math.clamp(podKg or taken.Kg, 1, GameConfig.Carry.MaxKg)
+	local takenTier = math.clamp(podTier or taken.Tier, 1, SeedData.TierCount)
 	local ok, err = pcall(function()
 		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart
-		local model = CreatureModel.BuildPod(taken, takenKg, root.CFrame, character)
-		attachInFront(model, root, takenKg)
+		local model = CreatureModel.BuildPod(taken, takenTier, root.CFrame, character)
+		attachInFront(model, root, takenTier)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
 		carried[player] = {
 			species = taken,
-			kg = takenKg,
+			tier = takenTier,
 			model = model,
 			fromNest = fromNest,
 		}
@@ -525,7 +525,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		carried[player] = nil
 		local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 		if map then
-			spawnLoose(taken, takenKg,
+			spawnLoose(taken, takenTier,
 				CFrame.new(anchor.Position + Vector3.new(0, 1, 0)), map)
 		end
 		return false
@@ -581,7 +581,7 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 		-- Only the character. Excluding the map would exclude the ground, which
 		-- is the one thing the cast is looking for.
 		local ground = groundUnder(where, if character then { character } else {})
-		spawnLoose(held.species, held.kg, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
+		spawnLoose(held.species, held.tier, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
 			map, held.fromNest)
 	end
 
@@ -617,7 +617,7 @@ end
 -- other part is welded to it.
 --==============================================================================
 local function giveTool(player: Player, model: Model, species: SeedData.Species,
-	kg: number, grip: CFrame, hatched: boolean): Tool?
+	tier: number, grip: CFrame, hatched: boolean): Tool?
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	local handle = model.PrimaryPart
 	if not (backpack and handle) then
@@ -645,7 +645,7 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	--==========================================================================
 	-- THE TOOLTIP MUST NOT SAY A RARITY IT DOES NOT MEAN
 	--
-	-- This printed SeedData.RarityForKg(kg) -- the WEIGHT band. There are two
+	-- This printed SeedData.RarityForTier(kg) -- the WEIGHT band. There are two
 	-- vocabularies in this game and they share four words:
 	--
 	--     FORM rarity    Common Uncommon Rare Epic          how often a shape
@@ -674,12 +674,12 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	-- player's hands.
 	--==========================================================================
 	tool.ToolTip = if hatched
-		then string.format("%s  ·  %d kg", species.Rarity, kg)
-		else string.format("Unhatched pod  ·  %d kg", kg)
+		then string.format("%s  ·  %d tier", species.Rarity, tier)
+		else string.format("Unhatched pod  ·  %d tier", tier)
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
 	tool:SetAttribute("SpeciesId", species.Id)
-	tool:SetAttribute(ATTR.CarryingKg, kg)
+	tool:SetAttribute(ATTR.CarryingKg, tier)
 	-- WHICH OF THE TWO THIS IS. A pod goes in the ground and starts a clock; a
 	-- hatched creature goes in the ground already earning. PlantService reads
 	-- this to know which, and it is the only difference between them.
@@ -839,12 +839,12 @@ end
 -- skirt is far wider than its shell ever was.
 --==============================================================================
 function CarryService.GiveHatched(player: Player, species: SeedData.Species,
-	kg: number): boolean
+	tier: number): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false
 	end
-	local model = CreatureModel.BuildCreature(species, kg,
+	local model = CreatureModel.BuildCreature(species, tier,
 		CreatureModel.STAGE_GROWN, CFrame.new(), backpack)
 
 	--==========================================================================
@@ -882,7 +882,7 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- clear of the ground rather than planted in it.
 	--==========================================================================
 	local grip = CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
-	local tool = giveTool(player, model, species, kg, grip, true)
+	local tool = giveTool(player, model, species, tier, grip, true)
 	if not tool then
 		return false
 	end
@@ -948,19 +948,19 @@ local function bank(player: Player): boolean
 	end
 
 	local species = held.species
-	local kg = held.kg
+	local tier = held.tier
 	-- Built fresh as the Tool's handle rather than reusing the carried model:
 	-- that one is welded to a head and unanchored, and a Tool wants a part named
 	-- Handle that it owns outright.
-	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, kg, gripFor(kg), false)
+	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
 	if not tool then
 		return false
 	end
 	-- The same number CarryPose reads off a hatched creature. A pod's reach IS
 	-- derivable from its weight, but having two ways to answer one question is
 	-- how the arms and the object drift apart.
-	tool:SetAttribute("GripReach", SeedData.GripForward(kg))
+	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
 
 	-- Consumed, not dropped: it is in the hotbar now, not on the floor.
 	if held.model.Parent then
@@ -974,7 +974,7 @@ local function bank(player: Player): boolean
 	-- success from a mugging.
 	player:SetAttribute(ATTR.BankedCount,
 		(player:GetAttribute(ATTR.BankedCount) or 0) + 1)
-	log(string.format("%s banked a %s (%d kg).", player.Name, species.Name, kg))
+	log(string.format("%s banked a %s (%d tier).", player.Name, species.Name, tier))
 	return true
 end
 
@@ -1002,16 +1002,16 @@ function CarryService.ForfeitCarry(player: Player): (string?, number)
 	if not held then
 		return nil, 0
 	end
-	local speciesId, kg = held.species.Id, held.kg
+	local speciesId, tier = held.species.Id, held.tier
 	if held.model and held.model.Parent then
 		held.model:Destroy()
 	end
 	carried[player] = nil
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
-	log(string.format("%s forfeited a %d kg %s: caught inside a biome at nightfall.",
-		player.Name, kg, held.species.Name))
-	return speciesId, kg
+	log(string.format("%s forfeited a %d tier %s: caught inside a biome at nightfall.",
+		player.Name, tier, held.species.Name))
+	return speciesId, tier
 end
 
 --==============================================================================
@@ -1158,11 +1158,11 @@ local function heldSnapshot(player: Player): { any }
 		for _, tool in ipairs(container:GetChildren()) do
 			if tool:IsA("Tool") and #rows < SAVE.MaxHeld then
 				local id = tool:GetAttribute("SpeciesId")
-				local kg = tonumber(tool:GetAttribute(ATTR.CarryingKg))
-				if type(id) == "string" and SeedData.Get(id) and kg and kg >= 1 then
+				local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
+				if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
 					table.insert(rows, {
 						Id = id,
-						Kg = math.floor(kg),
+						Tier = math.floor(tier),
 						Hatched = tool:GetAttribute("Hatched") == true,
 					})
 				end
@@ -1272,22 +1272,22 @@ end
 -- player and that is a moment; a rejoin is not, and forcing a 30-stud Bellchime
 -- into their hands at the spawn point is not a welcome.
 --==============================================================================
-local function restoreOne(player: Player, species: SeedData.Species, kg: number,
+local function restoreOne(player: Player, species: SeedData.Species, tier: number,
 	hatched: boolean): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false
 	end
 	if hatched then
-		return CarryService.GiveHatched(player, species, kg)
+		return CarryService.GiveHatched(player, species, tier)
 	end
-	local pod = CreatureModel.BuildPod(species, kg, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, kg, gripFor(kg), false)
+	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
 	if not tool then
 		return false
 	end
 	-- The same number CarryPose reads off a banked pod anywhere else.
-	tool:SetAttribute("GripReach", SeedData.GripForward(kg))
+	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
 	return true
 end
 
@@ -1324,9 +1324,9 @@ local function restoreHeld(player: Player)
 		local restored, dropped = 0, 0
 		for _, row in ipairs(profile.Held) do
 			local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
-			local kg = if type(row) == "table" then tonumber(row.Kg) else nil
-			if species and kg and kg >= 1 then
-				if restoreOne(player, species, kg, row.Hatched == true) then
+			local tier = if type(row) == "table" then tonumber(row.Tier) else nil
+			if species and tier and tier >= 1 then
+				if restoreOne(player, species, tier, row.Hatched == true) then
 					restored += 1
 				else
 					dropped += 1
@@ -1420,9 +1420,9 @@ end
 function CarryService.Snapshot(): string
 	local rows = {}
 	for player, held in pairs(carried) do
-		table.insert(rows, string.format("%s: %s %d kg -> %.1f%% speed",
-			player.Name, held.species.Name, held.kg,
-			GameConfig.carryMultiplierFor(held.kg) * 100))
+		table.insert(rows, string.format("%s: %s %d tier -> %.1f%% speed",
+			player.Name, held.species.Name, held.tier,
+			GameConfig.carryMultiplierFor(held.tier) * 100))
 	end
 	return if #rows > 0 then table.concat(rows, " | ") else "nobody carrying"
 end

@@ -89,7 +89,7 @@ type Planted = {
 	-- What THIS one weighs, rolled when its pod spawned. Everything measured
 	-- about the plant -- size, hatch time, payout -- comes from here, never from
 	-- species.Kg.
-	kg: number,
+	tier: number,
 	-- Where it stands, LOCAL to the soil part, Y always zero. Local rather than
 	-- world because a plot is rebuilt at a different place and rotation every
 	-- time its tier changes, and a world position saved through that would put
@@ -294,7 +294,7 @@ local function render(entry: Planted)
 	-- is added on top of it. Applied LAST, so it is a turn about the plant's own
 	-- up axis whatever the plot's rotation on the ring happens to be.
 	local base = topOf(soil, entry.offset)
-	local model = CreatureModel.Build(entry.species, entry.kg, entry.stage,
+	local model = CreatureModel.Build(entry.species, entry.tier, entry.stage,
 		CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
 			* entry.plot:GetPivot().Rotation
 			* CFrame.Angles(0, entry.facing, 0), plantsFolder(entry.plot))
@@ -354,7 +354,7 @@ local function record(plot: Model): { any }
 			table.insert(list, {
 				SpeciesId = entry.species.Id,
 				PlantedAt = entry.plantedAt,
-				Kg = entry.kg,
+				Tier = entry.tier,
 				X = entry.offset.X,
 				Z = entry.offset.Z,
 				Stage = entry.stage,
@@ -377,7 +377,7 @@ end
 --==============================================================================
 local function isReady(entry: Planted, now: number): boolean
 	return entry.stage == CreatureModel.STAGE_POD
-		and (now - entry.plantedAt) >= SeedData.GrowSeconds(entry.kg)
+		and (now - entry.plantedAt) >= SeedData.GrowSeconds(entry.tier)
 end
 
 local hatch: (Player, Planted) -> boolean
@@ -570,12 +570,12 @@ function hatch(player: Player, entry: Planted): boolean
 	if not isReady(entry, os.time()) then
 		return false
 	end
-	if not CarryService.GiveHatched(player, entry.species, entry.kg) then
+	if not CarryService.GiveHatched(player, entry.species, entry.tier) then
 		return false
 	end
 	-- Said here rather than in CarryService, which also hands a Tool over for a
 	-- pickup and for a rejoin and cannot tell the three apart.
-	log(string.format("%s hatched a %d kg %s.", player.Name, entry.kg,
+	log(string.format("%s hatched a %d tier %s.", player.Name, entry.tier,
 		entry.species.Name))
 
 	byPlot[entry.id] = nil
@@ -589,7 +589,7 @@ function hatch(player: Player, entry: Planted): boolean
 	-- THE REVEAL IS THE HATCH. Until the shell breaks you do not know which
 	-- species you had, so this is the moment the Almanac learns it.
 	PlayerDataService.MarkSeen(player, entry.species.Id)
-	log(string.format("%s hatched a %d kg %s.", player.Name, entry.kg, entry.species.Name))
+	log(string.format("%s hatched a %d tier %s.", player.Name, entry.tier, entry.species.Name))
 	return true
 end
 
@@ -620,7 +620,7 @@ function pickUp(player: Player, entry: Planted): boolean
 	if entry.stage ~= CreatureModel.STAGE_GROWN then
 		return false
 	end
-	if not CarryService.GiveHatched(player, entry.species, entry.kg) then
+	if not CarryService.GiveHatched(player, entry.species, entry.tier) then
 		return false
 	end
 
@@ -632,8 +632,8 @@ function pickUp(player: Player, entry: Planted): boolean
 		lift(model)
 	end
 	persist(entry.plot)
-	log(string.format("%s picked up a %d kg %s. %d/%d in the bed.",
-		player.Name, entry.kg, entry.species.Name, countIn(entry.plot),
+	log(string.format("%s picked up a %d tier %s. %d/%d in the bed.",
+		player.Name, entry.tier, entry.species.Name, countIn(entry.plot),
 		capacityOf(entry.plot)))
 	return true
 end
@@ -711,9 +711,9 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	-- The weight travelled with the pod: CarryService stamps it on the Tool when
 	-- the pod is banked and again when a creature is hatched. Falling back to
 	-- the species sheet would plant a 9,000 kg Nubkin as a 2 kg one.
-	local kg = math.clamp(
-		tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg)) or species.Kg,
-		1, GameConfig.Carry.MaxKg)
+	local tier = math.clamp(
+		tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg)) or species.Tier,
+		1, SeedData.TierCount)
 	local hatched = tool:GetAttribute("Hatched") == true
 
 	local offset = clampToSoil(soil, worldPos)
@@ -736,7 +736,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 		plot = plot,
 		id = id,
 		species = species,
-		kg = kg,
+		tier = tier,
 		offset = offset,
 		plantedAt = os.time(),
 		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
@@ -758,10 +758,10 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	tool:Destroy()
 
 	if hatched then
-		log(string.format("%s planted a %d kg %s.", player.Name, kg, species.Name))
+		log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))
 	else
-		log(string.format("%s buried a %d kg %s pod (%.0fs until it can be hatched).",
-			player.Name, kg, species.Name, SeedData.GrowSeconds(kg)))
+		log(string.format("%s buried a %d tier %s pod (%.0fs until it can be hatched).",
+			player.Name, tier, species.Name, SeedData.GrowSeconds(tier)))
 	end
 	return true
 end
@@ -835,15 +835,22 @@ local function restore(player: Player, plot: Model)
 			--==============================================================
 			-- A SAVE FROM BEFORE WEIGHTS WERE ROLLED HAS NO Kg
 			--
-			-- Fall back to the species sheet ONCE, on load, and write the
-			-- result back with the plant. Re-rolling would be worse than the
-			-- fallback: a garden a player left full of heavy plants would come
-			-- back worth something entirely different every time they rejoined,
-			-- which is a slot machine, not a save.
+			-- A row written before tiers existed has no Tier at all, and the
+			-- species sheet no longer carries a fallback either -- both were
+			-- weights, and weight is gone. So it lands on the BASE tier.
+			--
+			-- That is deliberate rather than a shrug: re-rolling would be worse,
+			-- because a garden left full of big plants would come back worth
+			-- something different every rejoin, which is a slot machine and not
+			-- a save. Everyone starts these at Tiny and grows them again.
+			--
+			-- Without the BaseTier fallback this crashed outright on the first
+			-- load of any pre-tier save: clamp got nil and the whole restore
+			-- died with it.
 			--==============================================================
-			local kg = math.clamp(
-				(if row then tonumber(row.Kg) else nil) or (if species then species.Kg else 1),
-				1, GameConfig.Carry.MaxKg)
+			local tier = math.clamp(
+				(if row then tonumber(row.Tier) else nil) or SeedData.BaseTier,
+				1, SeedData.TierCount)
 
 			local x = if row then tonumber(row.X) else nil
 			local z = if row then tonumber(row.Z) else nil
@@ -868,7 +875,7 @@ local function restore(player: Player, plot: Model)
 			--==============================================================
 			local stage = if row then tonumber(row.Stage) else nil
 			if not stage and species and at then
-				stage = if (now - at) >= SeedData.GrowSeconds(kg)
+				stage = if (now - at) >= SeedData.GrowSeconds(tier)
 					then CreatureModel.STAGE_GROWN
 					else CreatureModel.STAGE_POD
 			end
@@ -896,7 +903,7 @@ local function restore(player: Player, plot: Model)
 					plot = plot,
 					id = id,
 					species = species,
-					kg = kg,
+					tier = tier,
 					offset = clampToSoil(soil, (soil.CFrame * CFrame.new(x, 0, z)).Position),
 					plantedAt = at,
 					stage = stage,
@@ -1051,7 +1058,7 @@ end
 -- handing back only the species would leave it no choice but to read species.Kg
 -- and every plant in the game would earn its form's fallback rate.
 --==============================================================================
-export type Grown = { species: SeedData.Species, kg: number }
+export type Grown = { species: SeedData.Species, tier: number }
 
 function PlantService.GrownIn(plot: Model): { Grown }
 	local out: { Grown } = {}
@@ -1059,7 +1066,7 @@ function PlantService.GrownIn(plot: Model): { Grown }
 	if byPlot then
 		for _, entry in pairs(byPlot) do
 			if entry.stage == CreatureModel.STAGE_GROWN then
-				table.insert(out, { species = entry.species, kg = entry.kg })
+				table.insert(out, { species = entry.species, tier = entry.tier })
 			end
 		end
 	end

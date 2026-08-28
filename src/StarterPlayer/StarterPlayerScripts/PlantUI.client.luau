@@ -128,7 +128,7 @@ type Panel = {
 	-- What THIS plant weighs. The clock is a function of weight, not of form:
 	-- a 4 kg Nubkin hatches in half a minute and a 9,000 kg one takes five, and
 	-- the two are the same species.
-	kg: number,
+	tier: number,
 	plantedAt: number,
 	stage: number,
 	lastText: string,
@@ -161,8 +161,8 @@ local function build(model: Model): Panel?
 
 	local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
 	local plantedAt = model:GetAttribute("PlantedAt")
-	local kg = tonumber(model:GetAttribute("Kg"))
-	if not (species and kg and type(plantedAt) == "number") then
+	local tier = tonumber(model:GetAttribute("Tier"))
+	if not (species and tier and type(plantedAt) == "number") then
 		return nil
 	end
 
@@ -273,7 +273,7 @@ local function build(model: Model): Panel?
 		word = word,
 		timer = timer,
 		species = species,
-		kg = kg,
+		tier = tier,
 		plantedAt = plantedAt,
 		stage = tonumber(model:GetAttribute("Stage")) or STAGE_POD,
 		lastText = "",
@@ -318,7 +318,7 @@ local function refresh(panel: Panel, now: number)
 		hide()
 		return
 	end
-	local remaining = SeedData.GrowSeconds(panel.kg) - (now - panel.plantedAt)
+	local remaining = SeedData.GrowSeconds(panel.tier) - (now - panel.plantedAt)
 
 	-- Ready. The prompt takes it from here.
 	if remaining <= 0 then
@@ -348,7 +348,7 @@ local function refresh(panel: Panel, now: number)
 	-- changed, so this costs one Color3 assignment per second per pod rather
 	-- than one per frame.
 	--==========================================================================
-	local total = SeedData.GrowSeconds(panel.kg)
+	local total = SeedData.GrowSeconds(panel.tier)
 	local ripeness = if total > 0 then math.clamp(1 - remaining / total, 0, 1) else 1
 	panel.timer.TextColor3 = POD.ClockYoung:Lerp(POD.ClockReady, ripeness)
 

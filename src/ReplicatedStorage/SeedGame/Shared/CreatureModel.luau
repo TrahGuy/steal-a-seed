@@ -62,6 +62,22 @@ local SPROUT_SCALE = 0.45
 
 local DARK = Color3.fromRGB(38, 34, 40)
 local WHITE = Color3.fromRGB(252, 252, 250)
+-- Tanglemire is the only biome whose eye shows a sclera, so this colour is used
+-- exactly once. AMBER, not pale green: the first try was (206, 220, 190) and it
+-- sat within a few points of Bogbonnet's own pale mint head, so the eyeball sank
+-- into the face and only the slit carried it. A jaundiced yellow separates by
+-- hue as well as value against every green head in the biome, and it is what an
+-- amphibian's eye actually looks like -- which is the read the slit is after.
+-- TWO ambers, and the species picks whichever it contrasts with. One fixed
+-- colour cannot work: amber against Bogbonnet's mint head is a luminance gap of
+-- 0.417, but against Lanterncap's own pale amber body it is 0.035 and the
+-- eyeball vanishes into the face. Choosing by contrast costs no parts and needs
+-- no per-species table to keep in step when a body colour changes.
+local SCLERA_LIGHT = Color3.fromRGB(214, 192, 96)
+local SCLERA_DARK = Color3.fromRGB(78, 66, 24)
+-- Starbloom's pinprick. Cold where Emberroot's is hot, which is the whole
+-- difference between the last two biomes said in one part.
+local STARLIGHT = Color3.fromRGB(198, 214, 255)
 
 type Opts = {
 	name: string,
@@ -235,20 +251,279 @@ end
 -- widest part of a head is not always the part the face is on. The bell proved
 -- it once already, with a smile inside its own skirt.
 --==============================================================================
-local function addFace(model: Model, headCF: CFrame, width: number, front: number)
+--==============================================================================
+-- ONE EYE PER BIOME
+--
+-- Every species used to share a dark ball and a white glint. BiomeData already
+-- ranks the biomes by mood -- 🙂 😐 😟 😨 💀 in order -- so the eyes escalate
+-- along that ladder instead of being five unrelated looks, and each is a
+-- different KIND of eye rather than a recolour, so the difference survives being
+-- seen small and from across a plot.
+--
+-- THE RIG FALLS OUT OF THE NAMES. PlantSway takes the pupil rig for anything
+-- ending in "Pupil" and slides the whole eye otherwise. So the three biomes that
+-- have a pupil get the better treatment -- eye still, pupil travelling across it
+-- -- and the two that do not keep sliding the eye, which is the only thing you
+-- can do with an eye that is already all pupil.
+--==============================================================================
+local EYE_STYLE: { [string]: string } = {
+	greenhollow = "doe",
+	dustbowl = "squint",
+	tanglemire = "slit",
+	emberroot = "ember",
+	starbloom = "void",
+}
+
+--==============================================================================
+-- TANGLEMIRE'S EYE HAS TO BE RETROFITTED, BECAUSE IT NEVER MEETS addFace
+--
+-- Tanglemire replays frozen approved geometry and returns before the shared
+-- face builder runs, so its five would have kept the old dark-ball-and-glint
+-- while every other biome got its own eye. This reworks the eyes the mockup
+-- already placed rather than adding a second face: the balls stay exactly where
+-- and how big they were approved, and only their COLOUR changes, plus a slit.
+--
+-- Safe to hang a pupil on: measured against the PLACEMENT frame the frozen eyes
+-- sit at rotation (0, 0, 0), dead symmetric. They look rotated -94 degrees when
+-- measured against the model pivot, but that is the Base cylinder being rolled
+-- on its side, not the eyes -- and PlantSway reconstructs the eye's own frame
+-- from that same pivot, so a pupil in the eye's local space travels correctly.
+--==============================================================================
+--==============================================================================
+-- A LID ON EVERY EYE
+--
+-- Blinking needs something to close, and the eyes are BALLS -- a Roblox Ball
+-- renders as a sphere of its smallest axis, so squashing one shut does nothing
+-- at all. It has to be a separate part sweeping over the eye.
+--
+-- Built in the creature's own skin so it reads as brow rather than as a bar,
+-- and parked clear ABOVE the eye where it is part of the face until it drops.
+-- Dustbowl parks its much lower, which is what its squint is.
+--
+-- `gap` is where its lower edge rests relative to the eye's TOP, in
+-- diameters: positive floats it clear as a brow, negative parks it down over
+-- the eye, which is exactly what Dustbowl's squint is.
+-- The old note said `rest` was a height above the eye centre. The rig works the blink
+-- travel out from that and the eye's radius rather than being told, so a lid
+-- that starts low has a short blink and one that starts high has a long one --
+-- and it stays right at any weight, because both come off the parts.
+--==============================================================================
+-- Tall enough to hide a whole eye. At 0.56 the first version covered the
+-- bottom 56% and left the top staring out, however far it travelled.
+-- The eye SHRINKS as the lid comes down, so the lid no longer has to hide a
+-- full-size ball. At 1.16 it was a plate wider and taller than the eye,
+-- standing proud of a curved face -- two shutters bolted on rather than
+-- eyelids. Smaller, over a closing eye, reads as a lid.
+local LID_H = 0.72
+local function addLid(model: Model, tag: string, eyeCF: CFrame, eyeDia: number,
+	gap: number, skin: Color3?)
+	-- DEEP ENOUGH TO PASS IN FRONT OF THE EYE. The ball is centred ON the head
+	-- surface, so half of it stands proud -- a shallow lid sitting near the skin
+	-- sweeps down BEHIND that hemisphere and is hidden by the very thing it is
+	-- meant to cover. Held shut, the first version left the eyes wide open.
+	--
+	-- So it is pushed forward and 0.72 diameters deep -- spanning from just
+	-- behind the eye's centre to 0.16 clear of its front pole. 1.3 was the first
+	-- try and it worked, but it stood a whole diameter proud of the face and
+	-- read as two boxes glued on rather than as eyelids. The eye only sticks out
+	-- half a diameter; there is nothing to gain past that.
+	part({
+		name = tag .. "Lid",
+		size = Vector3.new(eyeDia * 1.24, eyeDia * LID_H, eyeDia * 0.62),
+		cframe = eyeCF * CFrame.new(0, eyeDia * (0.5 + LID_H * 0.5 + gap), -eyeDia * 0.30),
+		color = skin or DARK,
+		parent = model,
+		studs = false,
+	})
+end
+
+local function luminance(c: Color3): number
+	return 0.299 * c.R + 0.587 * c.G + 0.114 * c.B
+end
+
+--==============================================================================
+-- WHICH PART IS THE HEAD?
+--
+-- Cannot be answered by name. Only Bogbonnet calls its head "Bulb" -- Crookreed
+-- has a CattailBody, Lanterncap a Lantern, and Snapmoss has no part enclosing
+-- its eye at all. This is replayed mockup geometry and each of the five was
+-- authored on its own terms.
+--
+-- So it is answered by GEOMETRY: the biggest solid part whose box contains the
+-- eye, and failing that the nearest solid part. Transparent things are skipped
+-- or Gloomlotus would hand back its aura shell, which is not a head and is not
+-- the colour of one.
+--==============================================================================
+local FACEY = { "Eye", "Pupil", "Lid", "Cheek", "Smile", "Glint" }
+local function mireHeadColor(model: Model, eye: BasePart): Color3?
+	local best, bestVol, near, nearD = nil, 0, nil, math.huge
+	for _, d in ipairs(model:GetChildren()) do
+		if d:IsA("BasePart") and d.Transparency < 0.5 then
+			local facey = false
+			for _, tag in ipairs(FACEY) do
+				if string.find(d.Name, tag) then
+					facey = true
+					break
+				end
+			end
+			if not facey then
+				local lp = d.CFrame:PointToObjectSpace(eye.Position)
+				local dist = (d.Position - eye.Position).Magnitude
+				if dist < nearD then
+					nearD, near = dist, d
+				end
+				if math.abs(lp.X) <= d.Size.X * 0.6
+					and math.abs(lp.Y) <= d.Size.Y * 0.6
+					and math.abs(lp.Z) <= d.Size.Z * 0.6 then
+					local v = d.Size.X * d.Size.Y * d.Size.Z
+					if v > bestVol then
+						bestVol, best = v, d
+					end
+				end
+			end
+		end
+	end
+	local head = best or near
+	return if head then head.Color else nil
+end
+
+local function retrofitMireEye(model: Model, skin: Color3)
+	-- Whichever amber stands further from this species' own body.
+	local sclera = if math.abs(luminance(SCLERA_LIGHT) - luminance(skin))
+		>= math.abs(luminance(SCLERA_DARK) - luminance(skin))
+		then SCLERA_LIGHT else SCLERA_DARK
+	for _, tag in ipairs({ "Left", "Right" }) do
+		local eye = model:FindFirstChild(tag .. "Eye")
+		if eye and eye:IsA("BasePart") then
+			local r = eye.Size.X * 0.5
+			eye.Color = sclera
+			part({
+				name = tag .. "Pupil",
+				size = Vector3.new(r * 0.36, r * 1.70, r * 1.00),
+				-- Proud of the sclera by about a third of a radius, and rooted
+				-- inside it, so it cannot detach as the gaze swings.
+				cframe = eye.CFrame * CFrame.new(0, 0, -r * 0.86),
+				-- On the dark sclera the slit has to invert, or it is a dark
+				-- mark on a dark ball and there is no pupil at all.
+				color = if sclera == SCLERA_DARK then Color3.fromRGB(18, 16, 10) else DARK,
+				parent = model,
+				studs = false,
+			})
+			-- The approved glint was a third of the eye and white. On a pale
+			-- sclera that is invisible, so it moves onto the slit where a
+			-- highlight has something to sit against.
+			-- The frozen glint is renamed, not replaced: it becomes a second
+			-- pupil so it rides the slit instead of sitting still on the sclera
+			-- while the gaze swings out from under it.
+			local glint = model:FindFirstChild(tag .. "Glint")
+			if glint and glint:IsA("BasePart") then
+				glint.Size = Vector3.new(r * 0.30, r * 0.30, r * 0.30)
+				glint.CFrame = eye.CFrame * CFrame.new(-r * 0.20, r * 0.32, -r * 1.12)
+				glint.Name = tag .. "Pupil"
+			end
+			-- TWO THINGS THIS BIOME NEEDS THAT THE OTHERS DO NOT.
+			--
+			-- The gap is negative. Every other biome's face sits on a broad
+			-- head where a lid can float clear above the eye and still read as
+			-- brow; Tanglemire's is a small ball with the eyes set high on it,
+			-- so a lid 0.96 diameters up lands off the top of the skull
+			-- entirely -- two slabs hanging in the air by the bonnet brim.
+			-- Resting it ON the eye keeps it on the head.
+			--
+			-- And the colour comes off the HEAD PART, not sp.Body. This is
+			-- replayed mockup geometry: its head is pale mint while sp.Body is
+			-- the dark green of the stem, so a lid in sp.Body reads as a foreign
+			-- plate stuck to the face rather than as part of it.
+			addLid(model, tag, eye.CFrame, r * 2, -0.22, mireHeadColor(model, eye) or skin)
+		end
+	end
+end
+
+local function addFace(model: Model, headCF: CFrame, width: number, front: number,
+	biome: string?, skin: Color3?)
 	local eyeD = width * 0.23
 	local gap = width * 0.23
+	local style = EYE_STYLE[tostring(biome)] or "doe"
 
 	for _, side in ipairs({ -1, 1 }) do
+		local tag = if side < 0 then "Left" else "Right"
 		-- Centred on the surface, so half the ball is outside the head. No
 		-- fudge factor: the radius IS the proudness.
 		local eyeCF = headCF * CFrame.new(side * gap, width * 0.06, -front)
-		ball("Eye", eyeD, eyeCF, DARK, model)
-		-- Smooth, and only this. A glint is the one thing on a creature that is
-		-- meant to look wet.
-		ball("Glint", eyeD * 0.34,
-			eyeCF * CFrame.new(-eyeD * 0.26, eyeD * 0.24, -eyeD * 0.30),
-			WHITE, model, false)
+
+		if style == "doe" then
+			-- The biggest eye in the game, and the only one with a second
+			-- catchlight. Two highlights is the whole trick behind a friendly
+			-- cartoon eye -- one reads as wet, two reads as delighted.
+			-- THE OFFSETS SCALE WITH THE EYE. This ball is 1.14x the size the
+			-- other biomes use, and the first pass left the highlight offsets
+			-- at the old radius -- which put the small sparkle 0.481 out on a
+			-- ball of radius 0.570, entirely INSIDE it. It rendered as one
+			-- highlight, not two, and two is the whole point of this eye.
+			--
+			-- BOTH are Pupils, so both travel. The rig keeps each one's offset
+			-- from the eye centre and swings the pair together, which is what
+			-- stops the sparkle collapsing onto the main highlight.
+			local R = 1.14
+			ball(tag .. "Eye", eyeD * R, eyeCF, DARK, model)
+			ball(tag .. "Pupil", eyeD * 0.36,
+				eyeCF * CFrame.new(-eyeD * 0.29 * R, eyeD * 0.27 * R, -eyeD * 0.33 * R),
+				WHITE, model, false)
+			ball(tag .. "Pupil", eyeD * 0.17,
+				eyeCF * CFrame.new(eyeD * 0.23 * R, -eyeD * 0.25 * R, -eyeD * 0.36 * R),
+				WHITE, model, false)
+			addLid(model, tag, eyeCF, eyeD * R, 0.10, skin)
+
+		elseif style == "squint" then
+			ball(tag .. "Eye", eyeD, eyeCF, DARK, model)
+			ball(tag .. "Pupil", eyeD * 0.30,
+				eyeCF * CFrame.new(-eyeD * 0.26, eyeD * 0.18, -eyeD * 0.30),
+				WHITE, model, false)
+			-- This biome pays nothing for its blink. The slab that gives it the
+			-- squint is already a lid, sitting low over the eye -- blinking is
+			-- that same part finishing the movement it is already halfway
+			-- through. It rests LOWER than the other biomes' lids, which is the
+			-- squint, and the rig works the travel out from where it starts.
+			addLid(model, tag, eyeCF, eyeD, -0.34, skin)
+
+		elseif style == "slit" then
+			-- The only eye in the game that shows a sclera. Everything else is
+			-- a dark ball that is already all pupil, so a visible white-of-eye
+			-- is instantly non-mammalian -- which is the read a swamp wants.
+			ball(tag .. "Eye", eyeD * 1.02, eyeCF, SCLERA, model)
+			part({
+				name = tag .. "Pupil",
+				size = Vector3.new(eyeD * 0.18, eyeD * 0.88, eyeD * 0.52),
+				cframe = eyeCF * CFrame.new(0, 0, -eyeD * 0.44),
+				color = DARK,
+				parent = model,
+				studs = false,
+			})
+			-- The highlight rides the slit rather than sitting still on the
+			-- sclera: on an eye that HAS a pupil, a fixed catchlight drifts off
+			-- it as the gaze swings and reads as a blemish on the eyeball.
+			ball(tag .. "Pupil", eyeD * 0.20,
+				eyeCF * CFrame.new(-eyeD * 0.30, eyeD * 0.26, -eyeD * 0.34),
+				WHITE, model, false)
+			addLid(model, tag, eyeCF, eyeD * 1.02, 0.10, skin)
+
+		elseif style == "ember" then
+			ball(tag .. "Eye", eyeD, eyeCF, DARK, model)
+			ball(tag .. "Pupil", eyeD * 0.46,
+				eyeCF * CFrame.new(0, 0, -eyeD * 0.44),
+				Color3.fromRGB(255, 222, 150), model, false)
+			addLid(model, tag, eyeCF, eyeD, 0.10, skin)
+
+		else -- "void"
+			-- No glint. That is the entire design: a highlight is what makes an
+			-- eye look wet, and taking it away is what makes this one look like
+			-- it is not alive. One cold pinprick, and nothing else.
+			ball(tag .. "Eye", eyeD * 1.06, eyeCF, Color3.fromRGB(14, 12, 20), model)
+			ball(tag .. "Pupil", eyeD * 0.20,
+				eyeCF * CFrame.new(0, 0, -eyeD * 0.46),
+				STARLIGHT, model, false)
+			addLid(model, tag, eyeCF, eyeD * 1.06, 0.10, skin)
+		end
 	end
 
 	--==========================================================================
@@ -655,7 +930,7 @@ end
 -- reference weight, which is what makes a median plant the approved mockup
 -- rather than the approved mockup within a few percent of itself.
 --==============================================================================
-local GIRTH_REF = SeedData.Girth(SeedData.SizeReferenceKg)
+local GIRTH_REF = SeedData.Girth(SeedData.BaseTier)
 local GIRTH_SPREAD = 0.16
 
 local function mireGirth(G: number): number
@@ -701,7 +976,7 @@ local function replayPart(spec: TanglemireForms.PartSpec, cf: CFrame, hs: number
 	return p
 end
 
-function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: Stage,
+function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: Stage,
 	cf: CFrame, parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = "Creature_" .. sp.Id
@@ -709,13 +984,13 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	-- The FORM's drop tier, for anything listing shapes. What this one is worth
 	-- is its Kg, and its band is SeedData.RarityForKg.
 	model:SetAttribute("Rarity", sp.Rarity)
-	model:SetAttribute("Kg", kg)
+	model:SetAttribute("Tier", tier)
 	model:SetAttribute("Stage", stage)
 	model.Parent = parent
 
 	local scale = if stage == CreatureModel.STAGE_SPROUT then SPROUT_SCALE else 1
 	-- The species frame, scaled by what this one weighs.
-	local H = SeedData.FrameHeight(sp, kg) * scale
+	local H = SeedData.FrameHeight(sp, tier) * scale
 	--==========================================================================
 	-- TWO SCALARS, NOT ONE. H IS TALLNESS, G IS FATNESS.
 	--
@@ -729,7 +1004,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 	-- forms below is already derived from one of them, so they inherit it for
 	-- free. The dirt heap comes off the stem width, which already carries it.
 	--==========================================================================
-	local G = SeedData.Girth(kg)
+	local G = SeedData.Girth(tier)
 
 	local stemW = H * 0.13 * G
 
@@ -785,6 +1060,10 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 			for _, spec in ipairs(specs) do
 				replayPart(spec, cf, hs, gs, spec.color or sp.Body, model)
 			end
+			-- The one thing the approved geometry does not get to keep: this
+			-- biome's eye is a slit, and the shared face builder is never
+			-- reached from here to give it one.
+			retrofitMireEye(model, sp.Body)
 			return model
 		end
 		-- No approved geometry for this id. Falling through would build a
@@ -1682,7 +1961,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, kg: number, stage: St
 
 	-- No +0.04 any more. That was the sticker being pushed a hair clear of the
 	-- head so it did not z-fight; a ball centred on the surface needs no help.
-	addFace(model, faceCF, faceW, front)
+	addFace(model, faceCF, faceW, front, sp.Biome, sp.Body)
 
 	-- PrimaryPart is the BASE plate: a creature's pivot is where it meets the
 	-- soil, so planting one is placing its pivot on the dirt rather than working
@@ -1696,17 +1975,17 @@ end
 --==============================================================================
 -- THE POD
 --
--- Egg, jagged seam, curled tendril -- the pod sheet. Rarity colour, not species
--- colour: while it is in your hands the only question anybody has is how badly
--- they want it.
+-- Egg, jagged seam, curled tendril -- the pod sheet. The body says biome; its
+-- diameter and smaller tier-coloured crown/seam say how hard it is to carry.
+-- Species stays hidden until hatch.
 --==============================================================================
-function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
+function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = "Pod_" .. sp.Id
 	model:SetAttribute("SpeciesId", sp.Id)
 	model:SetAttribute("Rarity", sp.Rarity)
-	model:SetAttribute("Kg", kg)
+	model:SetAttribute("Tier", tier)
 	model:SetAttribute("Stage", CreatureModel.STAGE_POD)
 	model.Parent = parent
 
@@ -1715,129 +1994,457 @@ function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
 	-- argument is a trap for every caller.
 	-- Size comes from weight, so the pod tells you what it will cost to carry
 	-- before you commit to the hold. See SeedData.PodDiameter.
-	local D = SeedData.PodDiameter(kg)
-	--==========================================================================
-	-- THE SHELL IS COLOURED BY WEIGHT, NOT BY SPECIES
-	--
-	-- This is the whole reason weight is rolled. A Nubkin shell glowing Divine
-	-- is a 9,000 kg cube, and the only way to know is to look at the pod --
-	-- which is what makes a nest worth walking into rather than pattern-matching
-	-- on shape from the road.
-	--==========================================================================
-	local color = SeedData.ColorForKg(kg)
+	local D = SeedData.PodDiameter(tier)
+	-- The shell owns the BIOME colour now. Keeping tier colour over the entire
+	-- body made five different silhouettes collapse back into the same family at
+	-- normal viewing distance. Tier still has a fixed, readable home on the
+	-- smaller crown/seam (and the Colossal label); it no longer paints the egg.
+	local color = SeedData.ColorForTier(tier)
+	local biome = sp.Biome
 	local baseCF = cf * CFrame.new(0, D * 0.5, 0)
+	local BIOME_PALETTE = {
+		dustbowl = {
+			body = Color3.fromRGB(132, 74, 45),
+			accent = Color3.fromRGB(191, 119, 65),
+			shadow = Color3.fromRGB(76, 51, 41),
+			focal = Color3.fromRGB(242, 178, 91),
+		},
+		tanglemire = {
+			body = Color3.fromRGB(35, 72, 60),
+			accent = Color3.fromRGB(65, 126, 89),
+			shadow = Color3.fromRGB(23, 48, 43),
+			focal = Color3.fromRGB(126, 236, 222),
+		},
+		emberroot = {
+			body = Color3.fromRGB(43, 37, 39),
+			accent = Color3.fromRGB(108, 50, 34),
+			shadow = Color3.fromRGB(21, 19, 21),
+			-- Neon lifts toward yellow in Studio, so this starts red-hot.
+			focal = Color3.fromRGB(255, 45, 5),
+		},
+		starbloom = {
+			body = Color3.fromRGB(39, 37, 82),
+			accent = Color3.fromRGB(91, 70, 164),
+			shadow = Color3.fromRGB(24, 21, 55),
+			focal = Color3.fromRGB(213, 198, 255),
+		},
+	}
+	local palette = BIOME_PALETTE[biome]
+	local bodyColor = if palette then palette.body else color
+	local accent = if palette then palette.accent else color
+	local shadow = if palette then palette.shadow else color:Lerp(Color3.new(0, 0, 0), 0.30)
+	local focal = if palette then palette.focal else color
+	local shell: BasePart
+	local shellTop = 1.00
 
-	-- Egg: two overlapping balls, the upper smaller. A Ball is sized by its
-	-- smallest axis, so a single elongated one is not available.
-	local shell = ball("Shell", D, baseCF, color, model)
-	ball("Crown", D * 0.84, baseCF * CFrame.new(0, D * 0.34, 0), color, model)
-
-	-- The seam. A disc a hair proud of the shell, slightly darkened -- the
-	-- sheet's zigzag is not worth twenty parts to reproduce, and at a distance
-	-- what reads is that there IS a seam.
-	--======================================================================
-	-- WHAT SITS ON TOP IS THE BIOME'S, NOT THE SPECIES'
-	--
-	-- The shell is coloured by the WEIGHT BAND and sized by the weight, and
-	-- neither of those changes per biome -- that is the whole readout and it has
-	-- to mean the same thing on every road. What changes is the dry matter
-	-- around it, because that is where a biome gets to look like itself.
-	--
-	-- The hatch stays unspoiled either way: no species id, no form rarity, no
-	-- label. Greenhollow means five possible shapes and Dustbowl means five
-	-- others, and a pod that named which would answer the only question an
-	-- unhatched pod exists to ask.
-	--======================================================================
-	if sp.Biome == "dustbowl" then
-		--==================================================================
-		-- THE DUST HUSK
-		--
-		-- Greenhollow's pod curls four green tendrils off its crown: alive,
-		-- growing. This one splits instead -- a cracked seam round the belly,
-		-- four dry bracts wrapping the lower half, three snapped bristles on
-		-- top. Same slot, opposite reading, and one part cheaper.
-		--
-		-- THE BRACTS ARE TANGENT, SHORT AND SUNK. An earlier pass flared them
-		-- and produced horizontal planks: a tip standing 3.4 studs off a 4.6
-		-- stud radius is not a flare, it is a propeller. A flat plate tangent to
-		-- a sphere touches at ONE point and its corners stand off by
-		-- (half-length)^2 / 2R -- geometry, not a tunable -- so shortening the
-		-- plate shrinks the standoff with the SQUARE of half-length. At 0.50 D
-		-- long and sunk to 0.91 R, the corners sit 13-21% of R proud across the
-		-- whole band table.
-		--==================================================================
-		local R = D * 0.5
-		upright("Split", D * 0.085, D * 1.02, baseCF,
-			color:Lerp(Color3.new(0, 0, 0), 0.34), model)
-
-		for _, b in ipairs({ { 45, false }, { -45, true }, { 135, false }, { -135, true } }) do
-			local az = math.rad(b[1] :: number)
-			-- Four plates of width 0.54 D at this latitude cover about 72% of the
-			-- circumference: enough to read as a cup, short of a sealed collar
-			-- that would hide the band colour the pod exists to show.
-			local th = math.rad(-16)
-			local ca, sa = math.cos(az), math.sin(az)
-			local ct, st = math.cos(th), math.sin(th)
-			local outward = Vector3.new(sa * ct, st, ca * ct)
-			local meridian = Vector3.new(-sa * st, ct, -ca * st)
-			-- fromMatrix, not lookAt: this needs a TANGENT frame on the sphere,
-			-- and RightVector / UpVector is how you state one.
-			local cfb = CFrame.fromMatrix(
-				baseCF.Position + outward * (R * 0.91), outward, meridian)
-			if b[2] then
-				cfb = cfb * CFrame.Angles(0, math.rad(180), 0)
-			end
-			wedge("Bract", Vector3.new(D * 0.05, D * 0.50, D * 0.54), cfb,
-				Color3.fromRGB(178, 158, 106), model)
+	if biome == "greenhollow" then
+		-- LOCKED: the shipped Greenhollow shell is one D ball at baseCF.
+		shell = ball("Shell", D, baseCF, color, model)
+	elseif biome == "dustbowl" then
+		-- A squat clay urn: rusted clay body and sun-baked shoulder.
+		shell = upright("Shell", D * 0.74, D * 0.88,
+			cf * CFrame.new(0, D * 0.37, 0), bodyColor, model)
+		ball("ShellShoulder", D * 0.63,
+			cf * CFrame.new(0, D * 0.73, 0), accent, model)
+		shellTop = 1.045
+	elseif biome == "tanglemire" then
+		-- A leaning two-lobed gourd, with the mire colour concentrated above.
+		shell = ball("Shell", D * 0.80,
+			cf * CFrame.new(0, D * 0.40, 0), bodyColor, model)
+		ball("ShellShoulder", D * 0.64,
+			cf * CFrame.new(-D * 0.08, D * 0.79, D * 0.025), accent, model)
+		shellTop = 1.11
+	elseif biome == "emberroot" then
+		-- A compact furnace nut: basalt chamber, oxidized volcanic collar.
+		shell = upright("Shell", D * 0.80, D * 0.78,
+			cf * CFrame.new(0, D * 0.40, 0), bodyColor, model)
+		upright("ShellShoulder", D * 0.23, D * 0.65,
+			cf * CFrame.new(0, D * 0.805, 0), accent, model)
+		for i = 0, 1 do
+			local side = if i == 0 then -1 else 1
+			plate("ShoulderFacet", D * 0.25, D * 0.28, D * 0.075,
+				cf * CFrame.new(side * D * 0.29, D * 0.74, 0)
+					* CFrame.Angles(0, 0, side * math.rad(-18)),
+				shadow, model, i == 1)
 		end
-
-		-- Three snapped stubs where Greenhollow curls four living tendrils.
-		-- Straight, uneven, leaning apart: dead and dry, the same silhouette
-		-- slot doing the opposite job.
-		local LEAN = { -22, 0, 22 }
-		for i = 1, 3 do
-			part({
-				name = "Bristle",
-				size = Vector3.new(D * 0.055, D * 0.34, D * 0.055),
-				cframe = baseCF * CFrame.new(0, D * 0.66, 0)
-					* CFrame.Angles(0, math.rad((i - 2) * 34), 0)
-					* CFrame.Angles(math.rad(LEAN[i]), 0, 0),
-				color = Color3.fromRGB(128, 122, 78),
-				parent = model,
-			})
-		end
-	elseif sp.Biome == "tanglemire" then
-		--==================================================================
-		-- THE MIRE-CAGE POD
-		--
-		-- Sixteen parts, shared by all five species, and the reason it is one
-		-- pod rather than five is the same reason the Dust Husk is: the shell
-		-- says what the pod WEIGHS and nothing says what is inside it until
-		-- somebody holds E. Tanglemire has a Mythic in its table, so a pod that
-		-- leaked its species would leak the jackpot.
-		--
-		-- Three lower sepals, a seven-reed crooked cage, the equatorial flood
-		-- seam, a cyan dew seal suspended on its stem, and the side water bead.
-		--
-		-- Shell and Crown are NOT rebuilt here. The shared code above already
-		-- built them, at exactly the size and offset the approval carries
-		-- (1.00 D at 0.50 D, and 0.84 D at 0.84 D), so replaying them would
-		-- double sixteen parts into eighteen for nothing.
-		--==================================================================
-		local hs = D
-		for _, spec in ipairs(TanglemireForms.Pod) do
-			if spec.name ~= "Shell" and spec.name ~= "Crown" then
-				replayPart(spec, cf, hs, 1,
-					if TanglemireForms.PodWeightColoured[spec.name]
-						then color
-						else (spec.color or color),
-					model)
+		-- Three angular magma inclusions break through the egg itself. They are
+		-- short surface chips, not floating embers and not another dotted ring.
+		local MAGMA_BITS = {
+			{ -0.22, 0.57, -0.345,  31, -18, 0.12, 0.085 },
+			{  0.27, 0.28, -0.305, -40,  17, 0.10, 0.075 },
+			{  0.16, 0.70, -0.365, -24, -29, 0.085, 0.065 },
+		}
+		for _, spec in ipairs(MAGMA_BITS) do
+			local chip = wedge("MagmaBit",
+				Vector3.new(D * spec[6], D * spec[7], D * 0.055),
+				cf * CFrame.new(D * spec[1], D * spec[2], D * spec[3])
+					* CFrame.Angles(0, math.rad(spec[4]), math.rad(spec[5])),
+				focal, model)
+			chip.Material = Enum.Material.Neon
+			for _, face in ipairs(STUD_FACES) do
+				(chip :: any)[face] = Enum.SurfaceType.Smooth
 			end
 		end
+		shellTop = 0.92
+	elseif biome == "starbloom" then
+		-- A diagonal double-star seed rather than an upright egg.
+		shell = ball("Shell", D * 0.76,
+			cf * CFrame.new(0, D * 0.38, 0), bodyColor, model)
+		ball("ShellShoulder", D * 0.58,
+			cf * CFrame.new(D * 0.13, D * 0.70, -D * 0.04), accent, model)
+		shellTop = 0.99
+	else
+		shell = ball("Shell", D, baseCF, color, model)
+	end
 
+	--==========================================================================
+	-- THE TOP TWO TIERS SIGNAL WITH SILHOUETTE, NOT SIZE
+	--
+	-- Diameter is deliberately compressed and capped near 9 studs. It is not a
+	-- free dial: SeedData.GripForward reads it directly to place the pod in the
+	-- carrier's hands, and a player judges a hold by it from across the nest.
+	-- Tracking a 50x plant scale would mean an 83-stud pod on a 34-stud bed.
+	--
+	-- Carry cost is untouched by any of this -- CarryMultiplier keys off the
+	-- TIER's value, so a Colossal is 30% speed whatever its shell looks like.
+	-- Pod art and pod gameplay are deliberately separable.
+	--
+	-- ONE silhouette change each, and no decoration. A ring of spikes reads as
+	-- clutter at ten studs and as noise at fifty; a changed OUTLINE reads at
+	-- both.
+	--==========================================================================
+	if tier == 6 then
+		if biome == "greenhollow" then
+			-- LOCKED: shipped split-ball crown.
+			for i = 0, 1 do
+				local side = if i == 0 then -1 else 1
+				ball(if i == 0 then "CrownLeft" else "CrownRight", D * 0.56,
+					baseCF * CFrame.new(side * D * 0.20, D * 0.32, 0)
+						* CFrame.Angles(0, 0, side * math.rad(-16)),
+					color, model)
+			end
+		elseif biome == "dustbowl" then
+			for i = 0, 1 do
+				local side = if i == 0 then -1 else 1
+				wedge(if i == 0 then "CrownLeft" else "CrownRight",
+					Vector3.new(D * 0.38, D * 0.24, D * 0.42),
+					cf * CFrame.new(side * D * 0.18, D * 1.01, 0)
+						* CFrame.Angles(0, side * math.rad(9), side * math.rad(-17)),
+					if i == 0 then accent else color, model)
+			end
+		elseif biome == "tanglemire" then
+			for i = 0, 1 do
+				local side = if i == 0 then -1 else 1
+				plate(if i == 0 then "CrownLeft" else "CrownRight",
+					D * 0.36, D * (if i == 0 then 0.40 else 0.32), D * 0.09,
+					cf * CFrame.new(side * D * 0.12, D * 1.13, 0)
+						* CFrame.Angles(0, 0, side * math.rad(-23)),
+					if i == 0 then color else shadow, model, i == 1)
+			end
+		elseif biome == "emberroot" then
+			for i = 0, 1 do
+				local side = if i == 0 then -1 else 1
+				plate(if i == 0 then "CrownLeft" else "CrownRight",
+					D * 0.32, D * 0.34, D * 0.10,
+					cf * CFrame.new(side * D * 0.17, D * 0.98, 0)
+						* CFrame.Angles(0, 0, side * math.rad(-25)),
+					if i == 0 then shadow else color, model, i == 1)
+			end
+		elseif biome == "starbloom" then
+			for i = 0, 1 do
+				local side = if i == 0 then -1 else 1
+				local crown = wedge(if i == 0 then "CrownLeft" else "CrownRight",
+					Vector3.new(D * 0.34, D * 0.10, D * 0.28),
+					cf * CFrame.new(side * D * 0.16, D * 1.03, -side * D * 0.05)
+						* CFrame.Angles(math.rad(18), side * math.rad(12), side * math.rad(-30)),
+					if i == 0 then color else focal, model)
+				crown.Material = Enum.Material.SmoothPlastic
+			end
+		else
+			for i = 0, 1 do
+				local side = if i == 0 then -1 else 1
+				ball(if i == 0 then "CrownLeft" else "CrownRight", D * 0.56,
+					baseCF * CFrame.new(side * D * 0.20, D * 0.32, 0), color, model)
+			end
+		end
+
+		-- Restrained on purpose: this is punctuation on the cleft, not a fire.
+		-- An emitter animates itself, so the pod needs no driver to look alive.
+		local att = Instance.new("Attachment")
+		att.Name = "EmberVent"
+		att.Parent = shell
+		if biome == "greenhollow" then
+			att.Position = Vector3.new(0, D * 0.42, 0)
+		else
+			att.Position = shell.CFrame:PointToObjectSpace(
+				(cf * CFrame.new(0, D * (shellTop + 0.03), 0)).Position)
+		end
+		local em = Instance.new("ParticleEmitter")
+		em.Name = "EmberTrail"
+		em.Color = if biome == "greenhollow"
+			then ColorSequence.new(color, color:Lerp(Color3.fromRGB(120, 20, 10), 0.7))
+			else ColorSequence.new(color, focal)
+		em.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, D * 0.05),
+			NumberSequenceKeypoint.new(0.4, D * 0.11),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		em.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.35),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		em.Lifetime = NumberRange.new(0.9, 1.6)
+		em.Rate = 7
+		em.Speed = NumberRange.new(D * 0.10, D * 0.22)
+		em.Acceleration = Vector3.new(0, D * 0.30, 0)
+		em.SpreadAngle = Vector2.new(16, 16)
+		em.LightEmission = 1
+		em.LightInfluence = 0
+		em.Parent = att
+
+	elseif tier == 7 then
+		--== COLOSSAL: the shell is cracked open, and something is burning ==--
+		-- The crown is lifted and tilted off the shell rather than seated on it,
+		-- so the outline breaks and a gap opens. That gap is the silhouette
+		-- change; the core is what the gap is FOR.
+		-- THE CORE HAS TO BREAK THE SURFACE OR NOTHING IS REVEALED. First pass
+		-- put it at 0.26 D inside a shell of radius 0.5 D -- entirely buried --
+		-- and lifted the crown by too little to open a gap, so the pod just read
+		-- as a lopsided gourd. The core now sits ON the shell's crown line and
+		-- stands a quarter of a diameter proud of it.
+		-- OFFSETS ARE FROM baseCF, WHICH IS ALREADY HALF A DIAMETER UP. Measuring
+		-- from the ground instead double-counted that lift: the core ended up
+		-- 0.74 D clear of the shell and the pod grew to 19 studs tall against
+		-- the 13.5 it should be. The shell's own top is 0.50 D above baseCF, so
+		-- 0.44 puts the core through it by a quarter of a diameter -- enough to
+		-- be a burst, not a balloon on a stick.
+		local coreDiameter = if biome == "greenhollow" then 0.60
+			elseif biome == "dustbowl" then 0.52
+			elseif biome == "tanglemire" then 0.50
+			elseif biome == "emberroot" then 0.56
+			elseif biome == "starbloom" then 0.48
+			else 0.60
+		local coreColor = if biome == "dustbowl" then Color3.fromRGB(255, 210, 145)
+			elseif biome == "tanglemire" then Color3.fromRGB(158, 255, 223)
+			elseif biome == "emberroot" then Color3.fromRGB(255, 174, 92)
+			elseif biome == "starbloom" then Color3.fromRGB(222, 210, 255)
+			else Color3.fromRGB(255, 240, 190)
+		local coreCF = if biome == "greenhollow"
+			then baseCF * CFrame.new(0, D * 0.44, 0)
+			else cf * CFrame.new(0, D * (shellTop + 0.24 - coreDiameter * 0.5), 0)
+		local core = ball("Core", D * coreDiameter, coreCF, coreColor, model, false)
+		core.Material = Enum.Material.Neon
+
+		if biome == "greenhollow" then
+			-- LOCKED: shipped offset ball lid.
+			ball("Crown", D * 0.66,
+				baseCF * CFrame.new(D * 0.22, D * 0.62, -D * 0.06)
+					* CFrame.Angles(math.rad(-16), 0, math.rad(14)),
+				color, model)
+		elseif biome == "dustbowl" then
+			wedge("Crown", Vector3.new(D * 0.40, D * 0.18, D * 0.40),
+				cf * CFrame.new(D * 0.06, D * 1.12, -D * 0.03)
+					* CFrame.Angles(math.rad(-12), 0, math.rad(17)), color, model)
+		elseif biome == "tanglemire" then
+			plate("Crown", D * 0.56, D * 0.38, D * 0.11,
+				cf * CFrame.new(D * 0.19, D * 1.20, -D * 0.04)
+					* CFrame.Angles(math.rad(-10), 0, math.rad(21)),
+				color, model)
+		elseif biome == "emberroot" then
+			upright("Crown", D * 0.16, D * 0.58,
+				cf * CFrame.new(D * 0.15, D * 1.05, -D * 0.03)
+					* CFrame.Angles(math.rad(-12), 0, math.rad(13)),
+				color, model)
+		elseif biome == "starbloom" then
+			local crown = wedge("Crown", Vector3.new(D * 0.48, D * 0.13, D * 0.38),
+				cf * CFrame.new(D * 0.23, D * 1.09, -D * 0.07)
+					* CFrame.Angles(math.rad(20), math.rad(-10), math.rad(24)),
+				color, model)
+			crown.Material = Enum.Material.SmoothPlastic
+		else
+			ball("Crown", D * 0.66,
+				baseCF * CFrame.new(D * 0.22, D * 0.62, -D * 0.06), color, model)
+		end
+
+		local glow = Instance.new("PointLight")
+		glow.Name = "CoreGlow"
+		glow.Color = if biome == "greenhollow" then color else coreColor
+		glow.Brightness = 1.6
+		glow.Range = D * 2.4
+		glow.Shadows = false
+		glow.Parent = core
+
+		-- THE PULSE IS AN EMITTER, NOT A SCRIPT. A light animated from a driver
+		-- would need one more thing running per pod and would stop the moment
+		-- the driver did; a slow, wide, low-rate emitter breathes on its own and
+		-- costs nothing to keep alive.
+		local aura = Instance.new("Attachment")
+		aura.Name = "AuraAttachment"
+		aura.Parent = core
+		local pulse = Instance.new("ParticleEmitter")
+		pulse.Name = "AuraPulse"
+		pulse.Color = if biome == "greenhollow"
+			then ColorSequence.new(color)
+			else ColorSequence.new(coreColor, accent)
+		pulse.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, D * 0.30),
+			NumberSequenceKeypoint.new(1, D * 1.30),
+		})
+		pulse.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.25, 0.62),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		pulse.Lifetime = NumberRange.new(2.2, 2.6)
+		-- Slow. One swell about every second is a heartbeat; five is a strobe.
+		pulse.Rate = 1.1
+		pulse.Speed = NumberRange.new(0, 0)
+		pulse.LightEmission = 1
+		pulse.LightInfluence = 0
+		pulse.Parent = aura
+
+		--==================================================================
+		-- THE ONE LABEL A POD IS ALLOWED
+		--
+		-- Pods carry no species id, no form rarity and no name, because an
+		-- unhatched pod exists to ask what is inside it and a label would
+		-- answer that. A TIER label answers a different question -- how big,
+		-- how slow, how much -- which the diameter and tier-coloured crown/seam
+		-- already shout anyway. It spoils nothing, and at 0.5% of rolls it should be
+		-- unmistakable when it happens.
+		--==================================================================
+		local tag = Instance.new("BillboardGui")
+		tag.Name = "TierTag"
+		tag.Size = UDim2.new(0, 190, 0, 44)
+		tag.StudsOffsetWorldSpace = Vector3.new(0, D * 0.95, 0)
+		tag.AlwaysOnTop = true
+		tag.Parent = shell
+		local text = Instance.new("TextLabel")
+		text.Size = UDim2.new(1, 0, 1, 0)
+		text.BackgroundTransparency = 1
+		text.Font = Enum.Font.GothamBlack
+		text.TextScaled = true
+		text.TextColor3 = color
+		text.TextStrokeTransparency = 0.35
+		text.Text = "COLOSSAL"
+		text.Parent = tag
+
+		-- For CarryService and SoundCues to read. Geometry does not play sound,
+		-- and it does not decide when a pickup happened either.
+		model:SetAttribute("PickupSound", "ColossalPickup")
+	else
+		if biome == "greenhollow" then
+			-- LOCKED: shipped common crown.
+			ball("Crown", D * 0.84, baseCF * CFrame.new(0, D * 0.34, 0), color, model)
+		elseif biome == "dustbowl" then
+			wedge("Crown", Vector3.new(D * 0.58, D * 0.22, D * 0.42),
+				cf * CFrame.new(0, D * 1.00, 0), color, model)
+		elseif biome == "tanglemire" then
+			plate("Crown", D * 0.48, D * 0.34, D * 0.10,
+				cf * CFrame.new(-D * 0.10, D * 1.15, 0)
+					* CFrame.Angles(0, 0, math.rad(-19)), color, model)
+		elseif biome == "emberroot" then
+			plate("Crown", D * 0.42, D * 0.30, D * 0.12,
+				cf * CFrame.new(0, D * 1.02, 0)
+					* CFrame.Angles(0, 0, math.rad(-8)),
+				color, model)
+		elseif biome == "starbloom" then
+			local crown = plate("Crown", D * 0.50, D * 0.28, D * 0.09,
+				cf * CFrame.new(D * 0.13, D * 1.06, -D * 0.03)
+					* CFrame.Angles(math.rad(15), 0, math.rad(24)), color, model, true)
+			crown.Material = Enum.Material.SmoothPlastic
+		else
+			ball("Crown", D * 0.84, baseCF * CFrame.new(0, D * 0.34, 0), color, model)
+		end
+	end
+
+	-- The seam is still the family trait, but its direction now follows the body
+	-- plan instead of stamping the same ring onto all five pods.
+	if biome == "greenhollow" then
+		-- LOCKED: shipped waist seam.
+		upright("Seam", D * 0.07, D * 1.02, baseCF * CFrame.new(0, D * 0.02, 0),
+			color:Lerp(Color3.new(0, 0, 0), 0.18), model)
+	elseif biome == "dustbowl" then
+		upright("Seam", D * 0.055, D * 0.91, cf * CFrame.new(0, D * 0.43, 0),
+			color, model)
+	elseif biome == "tanglemire" then
+		wedge("Seam", Vector3.new(D * 0.11, D * 0.55, D * 0.085),
+			cf * CFrame.new(0, D * 0.63, -D * 0.405)
+				* CFrame.Angles(0, 0, math.rad(-18)), color, model)
+	elseif biome == "emberroot" then
+		local seam = part({
+			name = "Seam",
+			size = Vector3.new(D * 0.075, D * 0.38, D * 0.055),
+			cframe = cf * CFrame.new(-D * 0.05, D * 0.34, -D * 0.40)
+				* CFrame.Angles(0, 0, math.rad(-11)),
+			color = focal,
+			material = Enum.Material.Neon,
+			studs = false,
+			parent = model,
+		})
+		part({
+			name = "SeamFork",
+			size = Vector3.new(D * 0.06, D * 0.22, D * 0.055),
+			cframe = seam.CFrame * CFrame.new(D * 0.08, D * 0.24, 0)
+				* CFrame.Angles(0, 0, math.rad(29)),
+			color = seam.Color,
+			material = Enum.Material.Neon,
+			studs = false,
+			parent = model,
+		})
+	elseif biome == "starbloom" then
+		part({
+			name = "Seam",
+			size = Vector3.new(D * 0.10, D * 0.52, D * 0.055),
+			cframe = cf * CFrame.new(0, D * 0.60, -D * 0.385)
+				* CFrame.Angles(0, 0, math.rad(-32)),
+			color = color,
+			studs = false,
+			parent = model,
+		})
 	else
 		upright("Seam", D * 0.07, D * 1.02, baseCF * CFrame.new(0, D * 0.02, 0),
 			color:Lerp(Color3.new(0, 0, 0), 0.18), model)
+	end
+
+	--==========================================================================
+	-- EVERY BIOME OWNS A DIFFERENT REGION OF THE OUTLINE
+	--
+	-- Silhouette still carries the long-distance read; the new biome shell
+	-- palettes reinforce it at medium distance while the smaller crown/seam owns
+	-- the tier signal. Silhouette has only so many places to put
+	-- mass, so they are divided up, one region each, and none of them overlap:
+	--
+	--   greenhollow   ABOVE       tendrils curling off the crown
+	--   dustbowl      BELOW-WIDE  a cracked clay pan splayed round the foot
+	--   tanglemire    THE FLANK   a withe belt with strands hanging off it
+	--   emberroot     THE SIDES   charred claws gripping it, cracks glowing through
+	--   starbloom     DIAGONAL    a tilted halo crossing the whole outline
+	--
+	-- Top, bottom, fringe, grip, diagonal. Squint at any two and they are
+	-- different shapes -- which is the actual test, because a pod is first seen
+	-- across a nest, small and against the sky, and at that size detail is worth
+	-- nothing and outline is worth everything.
+	--
+	-- GREENHOLLOW IS LOCKED and is reproduced below exactly as it shipped. What
+	-- did change is that it is no longer the `else` branch: emberroot and
+	-- starbloom used to fall into it and wear Greenhollow's green tendrils,
+	-- which is why three of the five biomes had the same pod.
+	--
+	-- THERE IS NO `else` NOW, DELIBERATELY. All five biomes are named, and a
+	-- sixth would come out as a bare shell -- which is what it should look
+	-- like. A default branch here is how the last two biomes ended up
+	-- disguised as Greenhollow without anyone deciding they should be.
+	--
+	-- The hatch stays unspoiled on all five: no species id, no form rarity, no
+	-- name. Greenhollow means five possible shapes and Dustbowl means five
+	-- others, and a pod that named which would answer the only question an
+	-- unhatched pod exists to ask.
+	--==========================================================================
+	if sp.Biome == "greenhollow" then
+		--== LOCKED. Four tendrils curling up and off the crown. ==--
+		-- One incremental walk, each step rotated on from the last, which is what
+		-- makes it curl rather than fan. Do not straighten it.
 		local tip = baseCF * CFrame.new(0, D * 0.62, 0)
 		for _ = 1, 4 do
 			tip = tip * CFrame.new(0, D * 0.13, 0) * CFrame.Angles(0, 0, math.rad(38))
@@ -1848,6 +2455,156 @@ function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
 				color = Color3.fromRGB(104, 158, 62),
 				parent = model,
 			})
+		end
+
+	elseif sp.Biome == "dustbowl" then
+		--== THE BROKEN SUN PAN: low, wide and completely bare above. ==--
+		-- Five broad wedges overlap the shell's footprint and flare into an
+		-- irregular baked-clay saucer. The old upright bars read as a wooden cog;
+		-- these stay low enough that their taper, not their construction, makes
+		-- the outline. Every wedge is centred at half its own height, so its base
+		-- rests on `cf` instead of clipping through the nest pedestal.
+		local CLAY = Color3.fromRGB(164, 105, 62)
+		local BAKED = Color3.fromRGB(96, 67, 54)
+		local SHARDS = {
+			{ -12, 0.40, 0.46, 0.34, 0.15 },
+			{  61, 0.39, 0.38, 0.29, 0.11 },
+			{ 139, 0.42, 0.43, 0.36, 0.13 },
+			{ 218, 0.38, 0.36, 0.27, 0.10 },
+			{ 296, 0.41, 0.44, 0.32, 0.14 },
+		}
+		for i, spec in ipairs(SHARDS) do
+			local az, radius, length, width, height =
+				spec[1], spec[2], spec[3], spec[4], spec[5]
+			wedge("CrustShard", Vector3.new(D * width, D * height, D * length),
+				cf * CFrame.Angles(0, math.rad(az), 0)
+					* CFrame.new(0, D * height * 0.5, -D * radius),
+				if i == 2 or i == 5 then CLAY else BAKED, model)
+		end
+
+	elseif sp.Biome == "tanglemire" then
+		--== THE CROOKED WITHE: an incomplete living wrap on the flanks. ==--
+		-- TanglemireForms.Pod remains frozen as the Mire-Cage record; this branch
+		-- does not call or alter it. Four short tangent pieces imply a belt without
+		-- drawing a mechanical ring, and three tapered drops occupy the shoulder
+		-- gap where the shell curves away.
+		local BOG = Color3.fromRGB(43, 82, 67)
+		local REED = Color3.fromRGB(72, 126, 91)
+		local DEW = Color3.fromRGB(126, 236, 222)
+		local BELT = {
+			{  18,  0.05,  13, 0.42 },
+			{ 108, -0.02, -10, 0.34 },
+			{ 201,  0.04,  16, 0.39 },
+			{ 292, -0.05, -14, 0.31 },
+		}
+		for i, spec in ipairs(BELT) do
+			local az, y, roll, length = spec[1], spec[2], spec[3], spec[4]
+			part({
+				name = "WitheBelt",
+				size = Vector3.new(D * length, D * 0.09, D * 0.10),
+				cframe = baseCF * CFrame.new(0, D * y, 0)
+					* CFrame.Angles(0, math.rad(az), 0)
+					* CFrame.new(0, 0, -D * 0.50)
+					* CFrame.Angles(0, 0, math.rad(roll)),
+				color = if i == 2 then BOG else REED,
+				parent = model,
+			})
+		end
+
+		local DROPS = {
+			{  26, 0.38, true },
+			{ 157, 0.29, false },
+			{ 276, 0.34, true },
+		}
+		for i, spec in ipairs(DROPS) do
+			local az, amount, beaded = spec[1] :: number, spec[2] :: number, spec[3] :: boolean
+			local drop = D * amount
+			local anchor = baseCF * CFrame.Angles(0, math.rad(az), 0)
+				* CFrame.new(0, D * 0.01, -D * 0.515)
+			plate("WitheStrand", D * 0.13, drop, D * 0.06,
+				anchor * CFrame.new(0, -drop * 0.5, 0)
+					* CFrame.Angles(0, 0, math.rad(if i == 2 then -5 else 6)),
+				if i == 2 then BOG else REED, model, i == 2)
+			if beaded then
+				ball("Dew", D * 0.085, anchor * CFrame.new(0, -drop, 0), DEW, model, false)
+			end
+		end
+
+	elseif sp.Biome == "emberroot" then
+		--== THE CLINKER TALONS: side mass with a visible knuckle-to-tip taper. ==--
+		-- Four two-joint roots curl in from outside the shell. Their bases are
+		-- raised by the thickness allowance and every centre is measured from its
+		-- preceding root frame, so the angled wedges stay above `cf`. Reducing the
+		-- second joint to roughly half width is what makes a claw instead of a
+		-- fence post.
+		local CHAR = Color3.fromRGB(25, 22, 23)
+		local ASH = Color3.fromRGB(74, 67, 66)
+		for i, degrees in ipairs({ 38, 142, 224, 318 }) do
+			local root = cf * CFrame.Angles(0, math.rad(degrees), 0)
+				* CFrame.new(0, D * 0.035, -D * 0.555)
+				* CFrame.Angles(math.rad(-13), 0, math.rad(if i % 2 == 0 then -4 else 4))
+			local rootLen = D * (if i == 3 then 0.34 else 0.37)
+			plate("ClawRoot", D * 0.20, rootLen, D * 0.095,
+				root * CFrame.new(0, rootLen * 0.5, 0), CHAR, model, i % 2 == 0)
+
+			local tipRoot = root * CFrame.new(0, rootLen, 0)
+				* CFrame.Angles(math.rad(-25), 0, 0)
+			local tipLen = D * (if i == 1 then 0.25 else 0.22)
+			plate("ClawTip", D * 0.10, tipLen, D * 0.055,
+				tipRoot * CFrame.new(0, tipLen * 0.5, 0), ASH, model, i % 2 ~= 0)
+		end
+
+		-- Three angular coals punctuate the foot without turning it into a dotted
+		-- ring. Neon is intentionally pushed red so it renders ember-orange.
+		local COALS = {
+			{  76, 0.11, 0.08 },
+			{ 191, 0.08, 0.06 },
+			{ 302, 0.095, 0.07 },
+		}
+		for _, spec in ipairs(COALS) do
+			local az, width, height = spec[1], spec[2], spec[3]
+			local coal = wedge("Coal", Vector3.new(D * width, D * height, D * width),
+				cf * CFrame.Angles(0, math.rad(az), 0)
+					* CFrame.new(0, D * height * 0.5, -D * 0.46),
+				Color3.fromRGB(255, 66, 10), model)
+			coal.Material = Enum.Material.Neon
+		end
+
+	elseif sp.Biome == "starbloom" then
+		--== THE COMET CRESCENT: a diagonal open orbit, not a segmented torus. ==--
+		-- Five tangent wedges trace only the forward half of a tilted orbit. The
+		-- large break is intentional: it keeps the tier shell readable, gives the
+		-- halo a direction, and pulls the old 1.31 D width back under the rail.
+		local ORBIT = Color3.fromRGB(105, 86, 180)
+		local tilt = CFrame.Angles(math.rad(29), math.rad(-7), math.rad(-18))
+		local ARC = {
+			{ -108, 0.27, 0.11 },
+			{  -66, 0.32, 0.11 },
+			{  -22, 0.35, 0.10 },
+			{   23, 0.31, 0.09 },
+			{   65, 0.24, 0.075 },
+		}
+		for _, spec in ipairs(ARC) do
+			local az, length, depth = spec[1], spec[2], spec[3]
+			local arc = wedge("OrbitArc", Vector3.new(D * length, D * 0.065, D * depth),
+				baseCF * tilt * CFrame.Angles(0, math.rad(az), 0)
+					* CFrame.new(0, 0, -D * 0.535),
+				ORBIT, model)
+			arc.Material = Enum.Material.SmoothPlastic
+			for _, face in ipairs(STUD_FACES) do
+				(arc :: any)[face] = Enum.SurfaceType.Smooth
+			end
+		end
+
+		-- One bright head and one dim tail establish the comet direction. The
+		-- orbit stays non-neon so Colossal's core remains the tier focal point.
+		for i, spec in ipairs({ { -112, 0.075 }, { 69, 0.050 } }) do
+			local mote = ball(if i == 1 then "CometHead" else "CometTail",
+				D * (spec[2] :: number),
+				baseCF * tilt * CFrame.Angles(0, math.rad(spec[1] :: number), 0)
+					* CFrame.new(0, D * 0.035, -D * 0.555),
+				Color3.fromRGB(220, 205, 255), model, false)
+			mote.Material = Enum.Material.Neon
 		end
 	end
 
@@ -1871,12 +2628,12 @@ function CreatureModel.BuildPod(sp: SeedData.Species, kg: number, cf: CFrame,
 	return model
 end
 
-function CreatureModel.Build(sp: SeedData.Species, kg: number, stage: Stage,
+function CreatureModel.Build(sp: SeedData.Species, tier: number, stage: Stage,
 	cf: CFrame, parent: Instance): Model
 	if stage == CreatureModel.STAGE_POD then
-		return CreatureModel.BuildPod(sp, kg, cf, parent)
+		return CreatureModel.BuildPod(sp, tier, cf, parent)
 	end
-	return CreatureModel.BuildCreature(sp, kg, stage, cf, parent)
+	return CreatureModel.BuildCreature(sp, tier, stage, cf, parent)
 end
 
 return CreatureModel

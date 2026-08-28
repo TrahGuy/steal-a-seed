@@ -80,10 +80,6 @@ export type Species = {
 	Name: string,
 	Rarity: string,
 	Biome: string,
-	-- NOT the live weight any more. Every pod rolls its own -- see RollKg -- and
-	-- this is only what a plant saved before that rolled gets restored onto,
-	-- once, on load. Anything that pays out or measures from it is a bug.
-	Kg: number,
 	-- The FRAME height in studs AT THE REFERENCE WEIGHT -- the stem-and-head
 	-- column the form is built around, not the finished silhouette, and not an
 	-- absolute size any more. SizeScale multiplies it by what the pod actually
@@ -250,7 +246,7 @@ SeedData.MirePeat = MIRE_PEAT
 SeedData.Species = {
 	{
 		Id = "nubkin", Name = "Nubkin", Rarity = "Common", Biome = "greenhollow",
-		Kg = 2, Height = 2.4, Form = "cube",
+		Height = 3.72, Form = "cube",
 		-- Crown is the pair of sprout leaves on top of the cube; Accent is
 		-- their pale tips. The cube used to have neither and was the only
 		-- species with nothing on its head at all.
@@ -260,7 +256,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "petalpip", Name = "Petalpip", Rarity = "Common", Biome = "greenhollow",
-		Kg = 5, Height = 3.0, Form = "orb",
+		Height = 4.65, Form = "orb",
 		-- Lifted off Nubkin's green toward yellow. Same family, sunlit.
 		Body = Color3.fromRGB(206, 224, 132),
 		Crown = Color3.fromRGB(250, 246, 226),
@@ -268,7 +264,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "spiretip", Name = "Spiretip", Rarity = "Uncommon", Biome = "greenhollow",
-		Kg = 14, Height = 3.2, Form = "teardrop",
+		Height = 4.96, Form = "teardrop",
 		-- The dark one. Fourteen points off Nubkin was invisible; this is a
 		-- different green, cooler and deeper, and it is the only one in the
 		-- biome that reads as shade rather than sunlight.
@@ -278,7 +274,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "toadcap", Name = "Toadcap", Rarity = "Rare", Biome = "greenhollow",
-		Kg = 40, Height = 3.6, Form = "mushroom",
+		Height = 5.58, Form = "mushroom",
 		-- Warm cream, against Bellchime's cool one. The red cap does most of
 		-- the work at distance; this is what separates them close up.
 		Body = Color3.fromRGB(240, 228, 198),
@@ -287,7 +283,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "bellchime", Name = "Bellchime", Rarity = "Epic", Biome = "greenhollow",
-		Kg = 110, Height = 4.0, Form = "bell",
+		Height = 6.20, Form = "bell",
 		-- Cool porcelain. The rarest thing in the biome should not be the same
 		-- colour as the fourth rarest.
 		Body = Color3.fromRGB(214, 226, 242),
@@ -311,7 +307,7 @@ SeedData.Species = {
 	--==========================================================================
 	{
 		Id = "dunebud", Name = "Dunebud", Rarity = "Uncommon", Biome = "dustbowl",
-		Kg = 8, Height = 2.6, Form = "husk",
+		Height = 4.03, Form = "husk",
 		-- A sealed bud with ONE plate peeled down at the front, so the face is
 		-- recessed inside the husk. The plant is not wearing the husk, it is
 		-- looking out of it.
@@ -324,7 +320,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "paddlehop", Name = "Paddlehop", Rarity = "Uncommon", Biome = "dustbowl",
-		Kg = 12, Height = 3.0, Form = "pad",
+		Height = 4.65, Form = "pad",
 		-- Two Uncommons in one biome have to be told apart at a glance, so the
 		-- MASS carries the difference: Dunebud is sand-and-rust, this is
 		-- sage-and-olive. Same family, opposite ends of it.
@@ -340,7 +336,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "thornwhorl", Name = "Thornwhorl", Rarity = "Rare", Biome = "dustbowl",
-		Kg = 35, Height = 3.4, Form = "whorl",
+		Height = 5.27, Form = "whorl",
 		-- Cold and bleached against both Uncommons: a warm desert-tan core in
 		-- weathered driftwood blades. Defensive and wind-carved without reaching
 		-- for anything that reads as dangerous.
@@ -355,7 +351,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "raincup", Name = "Raincup", Rarity = "Epic", Biome = "dustbowl",
-		Kg = 90, Height = 3.8, Form = "cup",
+		Height = 5.89, Form = "cup",
 		-- A rain-catching vessel first and a bloom second. The cup is a stepped
 		-- goblet, not one wide disc: a Roblox Cylinder seen side-on is a plain
 		-- rectangle, and one wide disc read as a box with two horns from the
@@ -371,7 +367,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "suncrown", Name = "Suncrown", Rarity = "Legendary", Biome = "dustbowl",
-		Kg = 240, Height = 4.2, Form = "crown",
+		Height = 6.51, Form = "crown",
 		-- The tallest frame in the biome, and the only one whose head is a
 		-- radiating crown. Its preview was authored on its OWN size curve
 		-- ((kg/110)^0.18); conforming it to the shared SizeScale is what keeps
@@ -383,7 +379,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "bogbonnet", Name = "Bogbonnet", Rarity = "Rare", Biome = "tanglemire",
-		Kg = 60, Height = 3.92, Form = "bonnet",
+		Height = 6.07, Form = "bonnet",
 		Body = Color3.fromRGB(42, 92, 74),
 		Crown = Color3.fromRGB(196, 210, 162),
 		Accent = Color3.fromRGB(168, 214, 96),
@@ -391,7 +387,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "crookreed", Name = "Crookreed", Rarity = "Rare", Biome = "tanglemire",
-		Kg = 75, Height = 3.99, Form = "reed",
+		Height = 6.18, Form = "reed",
 		-- The second Rare, and the only one whose dominant mass is BROWN. Two
 		-- Rares in one biome is a first, so they had to be told apart by
 		-- silhouette and by palette at once rather than by rarity word.
@@ -402,7 +398,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "snapmoss", Name = "Snapmoss", Rarity = "Epic", Biome = "tanglemire",
-		Kg = 180, Height = 4.35, Form = "moss",
+		Height = 6.74, Form = "moss",
 		Body = Color3.fromRGB(42, 92, 74),
 		Crown = Color3.fromRGB(204, 94, 88),
 		Accent = Color3.fromRGB(168, 214, 96),
@@ -410,7 +406,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "lanterncap", Name = "Lanterncap", Rarity = "Legendary", Biome = "tanglemire",
-		Kg = 450, Height = 4.21, Form = "lantern",
+		Height = 6.52, Form = "lantern",
 		Body = Color3.fromRGB(238, 188, 78),
 		Crown = Color3.fromRGB(220, 218, 176),
 		Accent = Color3.fromRGB(168, 214, 96),
@@ -418,7 +414,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "gloomlotus", Name = "Gloomlotus", Rarity = "Mythic", Biome = "tanglemire",
-		Kg = 1200, Height = 4.40, Form = "lotus",
+		Height = 6.82, Form = "lotus",
 		-- The first Mythic form in the game. It is the only plant carrying a
 		-- Neon halo, a Glass dew jewel, two emitters and a Highlight, and that
 		-- budget is the rarity: nothing below Mythic gets an aura.
@@ -489,7 +485,6 @@ end
 -- If the histogram ever shows 10,000 as common, or nothing over 100, this is
 -- the number to move. Do not flatten it.
 --==============================================================================
-local KG_CURVE = 2.2
 
 --==============================================================================
 -- WHAT A BAG ITEM IS WORTH AT THE STALL
@@ -510,21 +505,119 @@ local KG_CURVE = 2.2
 --
 -- Floored, because cash is whole numbers everywhere else in the game.
 --==============================================================================
+--==============================================================================
+-- SIZE TIERS -- THE KILOGRAM IS GONE
+--
+-- Seven named tiers replace a continuous weight. A plant is TINY or TITAN, not
+-- 4,812 kg, and the name is the whole stat: it decides how big it stands, how
+-- much it pays, how long it grows, how big its pod is, and how much it slows
+-- you carrying it.
+--
+-- THE NUMBERS ARE CUT FROM THE OLD DISTRIBUTION, NOT INVENTED.
+--
+-- Weight rolled as MaxKg^(u^2.2) over 1 .. 10,000, which put 53% of pods at
+-- 10 kg or under and half a percent over 9,000. Each tier takes one band of
+-- that curve: `weight` is how often the band came up and `value` is the mean
+-- weight inside it. Income was kilograms per second, so income per plant lands
+-- where it already was and every mill price, sell price and progression gate
+-- keeps working untouched. That is the whole reason for deriving the numbers
+-- instead of picking seven round ones.
+--
+-- `mul` is the size ladder, and it is NOT geometric any more. The bottom three
+-- are locked where they were and the top four are set by hand:
+--
+--     Tiny 1     Big 1.308     Huge 1.710  |  Mega 5     Giant 10     Titan 20     Colossal 50
+--
+-- The step from Huge to Mega is 2.9x where the ones before it are 1.31x, so the
+-- ladder has a deliberate CLIFF a third of the way up: the bottom three are a
+-- gentle spread of ordinary plants and everything above Huge is an event. That
+-- is a design choice, not an oversight -- do not "fix" it back to geometric.
+--
+-- TINY IS THE LOCKED END, not COLOSSAL. The ladder used to be cut downward from
+-- the approved art; it is now pinned at the BOTTOM and grows upward, so the top
+-- is whatever five times gives you.
+--
+-- At 5x the tallest forms pass 46 studs -- Suncrown reaches 49.5 and Bellchime
+-- 46.9 -- and 46 is GameConfig.Map.WallHeight, which is why that number kept
+-- being treated as a ceiling. It is not one for plants. Those walls bound the
+-- ROAD, where pods are stolen; plants grow on plot beds, and a raycast straight
+-- up from a plot finds nothing within 120 studs. Open sky.
+--
+-- It IS a real ceiling for the nest guardians, which do stand in the lanes. If
+-- a parent ever grows past 46, that is a clipping bug; a Colossal plant at 49
+-- is just a tall plant.
+--
+-- `girth` and `pod` are the old curves sampled at each tier's own value, so a
+-- Titan is as thick, and carries as big a pod, as a 5,200 kg plant used to.
+--==============================================================================
+export type Tier = {
+	index: number,
+	name: string,
+	mul: number,
+	weight: number,
+	value: number,
+	girth: number,
+	pod: number,
+	color: Color3,
+}
+
+SeedData.Tiers = {
+	{ index = 1, name = "Tiny",       mul = 1.000, weight = 0.5325, value = 4,    girth = 0.82, pod = 1.66, color = Color3.fromRGB(170, 175, 180) },
+	{ index = 2, name = "Big",        mul = 1.308, weight = 0.1593, value = 28,   girth = 0.90, pod = 2.59, color = Color3.fromRGB(120, 200, 110) },
+	{ index = 3, name = "Huge",       mul = 1.710, weight = 0.1007, value = 140,  girth = 0.98, pod = 3.66, color = Color3.fromRGB( 90, 170, 240) },
+	{ index = 4, name = "Mega",       mul = 5.000, weight = 0.0789, value = 530,  girth = 1.07, pod = 4.87, color = Color3.fromRGB(170, 120, 240) },
+	{ index = 5, name = "Giant",      mul = 10.000, weight = 0.0592, value = 1650, girth = 1.17, pod = 6.09, color = Color3.fromRGB(255, 160,  60) },
+	{ index = 6, name = "Titan",      mul = 20.000, weight = 0.0642, value = 5200, girth = 1.30, pod = 7.94, color = Color3.fromRGB(240,  80,  70) },
+	{ index = 7, name = "Colossal",   mul = 50.000, weight = 0.0052, value = 9500, girth = 1.45, pod = 9.04, color = Color3.fromRGB(255, 215,  90) },
+} :: { Tier }
+
+SeedData.TierCount = #SeedData.Tiers
+SeedData.BaseTier = 1
+
+-- Anything arriving here with rubbish gets TINY rather than an error: a corrupt
+-- save should plant a small creature, not refuse to load a garden.
+function SeedData.Tier(index: number?): Tier
+	local i = tonumber(index) or 1
+	if i ~= i then
+		i = 1
+	end
+	return SeedData.Tiers[math.clamp(math.floor(i), 1, #SeedData.Tiers)]
+end
+
+function SeedData.TierName(index: number?): string
+	return SeedData.Tier(index).name
+end
+
+--==============================================================================
+-- ROLLING ONE
+--
+-- A straight weighted pick off the table, so the odds live in ONE place beside
+-- the tier they belong to rather than inside a curve somebody has to solve
+-- before they can read them.
+--==============================================================================
+function SeedData.RollTier(rng: Random): number
+	local roll = rng:NextNumber()
+	local acc = 0
+	for _, t in ipairs(SeedData.Tiers) do
+		acc += t.weight
+		if roll <= acc then
+			return t.index
+		end
+	end
+	return 1
+end
+
 SeedData.SellSeconds = 30
 
-function SeedData.SellPrice(kg: number): number
-	local n = tonumber(kg) or 0
-	-- NaN fails every comparison, so test it rather than clamping it.
-	if n ~= n or n < 0 then
-		n = 0
-	end
-	return math.floor(SeedData.IncomePerSecond(n) * SeedData.SellSeconds)
+function SeedData.SellPrice(tier: number?): number
+	return math.floor(SeedData.IncomePerSecond(tier) * SeedData.SellSeconds)
 end
 
 function SeedData.RollKg(rng: Random): number
-	local u = rng:NextNumber()
-	local kg = GameConfig.Carry.MaxKg ^ (u ^ KG_CURVE)
-	return math.clamp(math.floor(kg + 0.5), 1, GameConfig.Carry.MaxKg)
+	-- GONE. Kept only as a loud failure for anything still asking for weight,
+	-- because silently returning a number would let a caller keep working with
+	-- a stat that no longer exists.
+	error("SeedData.RollKg is gone -- use SeedData.RollTier", 2)
 end
 
 --==============================================================================
@@ -549,19 +642,12 @@ local KG_BANDS = {
 	{ 0, "Common" },
 }
 
-function SeedData.RarityForKg(kg: number): string
-	local n = if type(kg) == "number" and kg == kg then kg else 0
-	for _, band in ipairs(KG_BANDS) do
-		if n >= (band[1] :: number) then
-			return band[2] :: string
-		end
-	end
-	return "Common"
+function SeedData.RarityForTier(tier: number?): string
+	return SeedData.Tier(tier).name
 end
 
-function SeedData.ColorForKg(kg: number): Color3
-	return GameConfig.RarityColor[SeedData.RarityForKg(kg)]
-		or Color3.fromRGB(200, 200, 200)
+function SeedData.ColorForTier(tier: number?): Color3
+	return SeedData.Tier(tier).color
 end
 
 --==============================================================================
@@ -576,11 +662,6 @@ for _, species in ipairs(SeedData.Species) do
 		string.format("species %q has unknown rarity %q", species.Id, species.Rarity))
 	assert(SeedData.RarityWeight[species.Rarity] ~= nil,
 		string.format("rarity %q has no drop weight", species.Rarity))
-	-- Kg is only the old-save fallback now, but it still has to be sane:
-	-- a plant restored onto a nonsense weight would pay a nonsense rate.
-	assert(species.Kg > 0 and species.Kg <= GameConfig.Carry.MaxKg,
-		string.format("species %q has fallback weight %g, outside 0..%d",
-			species.Id, species.Kg, GameConfig.Carry.MaxKg))
 	byId[species.Id] = species
 	local list = byBiome[species.Biome]
 	if not list then
@@ -604,12 +685,12 @@ end
 --==============================================================================
 -- WHAT IT IS WORTH, AND WHAT IT COSTS
 --==============================================================================
-function SeedData.IncomePerSecond(kg: number): number
-	return kg * GameConfig.Carry.CashPerKg
+function SeedData.IncomePerSecond(tier: number?): number
+	return SeedData.Tier(tier).value * GameConfig.Carry.CashPerValue
 end
 
-function SeedData.CarryMultiplier(kg: number): number
-	return GameConfig.carryMultiplierFor(kg)
+function SeedData.CarryMultiplier(tier: number?): number
+	return GameConfig.carryMultiplierFor(SeedData.Tier(tier).value)
 end
 
 --==============================================================================
@@ -624,8 +705,13 @@ local GROW_BASE = 20
 local GROW_SPAN = 280
 local GROW_EXP = 0.45
 
-function SeedData.GrowSeconds(kg: number): number
-	local t = math.clamp(kg / GameConfig.Carry.MaxKg, 0, 1) ^ GROW_EXP
+function SeedData.GrowSeconds(tier: number?): number
+	-- Off the tier's VALUE against the top tier's, which is exactly what the old
+	-- curve did with kg against MaxKg. Keying it to ladder POSITION instead was
+	-- the first attempt and it put a 7x cliff between the two commonest tiers --
+	-- 20 seconds for a Tiny and 145 for a Big -- because the positions are
+	-- evenly spaced and the values are not.
+	local t = (SeedData.Tier(tier).value / SeedData.Tiers[#SeedData.Tiers].value) ^ GROW_EXP
 	return GROW_BASE + GROW_SPAN * t
 end
 
@@ -654,8 +740,8 @@ end
 -- studs in front of the chest (see GripForward), and it still does not swallow
 -- the player carrying it.
 --==============================================================================
-function SeedData.PodDiameter(kg: number): number
-	return math.clamp(1.2 * (kg ^ 0.23), 1.3, 10.5)
+function SeedData.PodDiameter(tier: number?): number
+	return SeedData.Tier(tier).pod
 end
 
 --==============================================================================
@@ -678,12 +764,25 @@ end
 -- The floor stays 0.70: below it a Nubkin's stem stops being visible against
 -- studded soil.
 --==============================================================================
-local GIRTH_REF_KG = 14
-local GIRTH_EXP = 0.12
+--==============================================================================
+-- THE CEILING CAME BACK DOWN WHEN THE SIZE CURVE CHANGED
+--
+-- 0.70 .. 2.40 was set when SizeScale ran 0.67 .. 4.22 -- a 6.3x spread -- and
+-- against that, girth was the smaller of the two and really was proportion.
+-- SizeScale is now clamped to 0.75 .. 1.30, a 1.73x spread, and girth at 3.4x
+-- became the DOMINANT driver of how big a plant looks. That is backwards
+-- against this block's own title, and it showed: with the size clamp doing its
+-- job perfectly on Tanglemire, a Nubkin still ranged 6.2 to 21.4 studs, and
+-- Suncrown reached 56.7 -- ten studs THROUGH the 46-stud corridor wall.
+--
+-- Back to a range that sits just either side of the size curve's, so the two
+-- read as one change of scale rather than fighting each other.
+--
+--     1 kg -> 0.82      14 kg -> 1.00      1,000 kg -> 1.45      10,000 -> 1.45
+--==============================================================================
 
-function SeedData.Girth(kg: number): number
-	local n = if type(kg) == "number" and kg == kg and kg > 0 then kg else 1
-	return math.clamp((n / GIRTH_REF_KG) ^ GIRTH_EXP, 0.70, 2.40)
+function SeedData.Girth(tier: number?): number
+	return SeedData.Tier(tier).girth
 end
 
 --==============================================================================
@@ -697,6 +796,12 @@ end
 --
 -- FINISHED height, soil to crown -- what a player actually sees, and the same
 -- measurement the Height field is documented in:
+--
+-- THESE NUMBERS ARE FROM THE OLD 7.5 kg REFERENCE AND ARE KEPT AS A RECORD OF
+-- WHAT CHANGED. Under the current sheet a plant stands at its Height at 1,000
+-- kg, the clamp holds the range to 0.75 .. 1.30 of that, and ServerMain still
+-- rebuilds the Nubkin and Bellchime columns at every boot -- read the log, not
+-- this block.
 --
 --     kg        Nubkin  Petalpip  Spiretip  Toadcap  Bellchime
 --          1       1.2      1.6       2.5      2.4       2.5
@@ -736,28 +841,55 @@ end
 -- end away for the big one and lowering it does the reverse. There is no value
 -- that satisfies both, so pick which end matters and move this one number.
 --==============================================================================
-local SIZE_REF_KG = 7.5
-local SIZE_EXP = 0.20
+--==============================================================================
+-- THE REFERENCE IS 1,000 kg NOW, NOT THE MEDIAN
+--
+-- It used to be 7.5 -- the MEDIAN roll -- so a typical pod stood at exactly its
+-- sheet size and the sheet meant "how tall a middling one is". The default is
+-- now 1,000 kg, and every Height on the sheet was raised to match: a default
+-- plant today stands where the heaviest roll in the game used to.
+--
+-- The factor is 4.21697 x 1.29. The first is exactly the old scale at 10,000
+-- kg; the second makes up for the girth ceiling coming down at the same time,
+-- which shrank everything by about a fifth. Both are measured against the
+-- heights ServerMain prints at boot, not derived -- the finished height of a
+-- plant is its frame PLUS a head whose size rides on girth, so no closed form
+-- predicts it.
+--
+-- MaxKg is unchanged at 10,000, so a lucky roll still grows past the default
+-- and a big weight is still worth having.
+--
+-- THE FLOOR IS ON THE SIZE, NOT ON THE WEIGHT
+--
+-- Without a clamp a 1 kg pod would come out at (1/1000)^0.20 = 0.251 -- a
+-- quarter of default, which is the "tiny one" this is meant to be rid of. The
+-- obvious fix is to stop rolling small weights, and it is the wrong one:
+-- income is LINEAR in kg, so moving the roll moves every price in the game.
+-- Clamping the SIZE leaves RollKg, income, sell prices, mill costs and every
+-- progression gate exactly as balanced as they already are.
+--
+-- The ceiling exists for a harder reason than taste. The corridor walls are
+-- GameConfig.Map.WallHeight = 46 studs, and unclamped, 10,000 kg would put the
+-- tallest form well through them.
+--==============================================================================
 
 --==============================================================================
 -- THE REFERENCE WEIGHT, EXPORTED
 --
 -- The Index lists FORMS and has no weight to show one at -- `species.Kg` is the
 -- old-save fallback and sizing anything from it is a bug (see the top of this
--- file). The median roll is the honest answer: a plant built at 7.5 kg stands
--- at exactly its sheet size, so an almanac card shows the shape as drawn rather
--- than at some weight nobody rolled.
+-- file). The DEFAULT weight is the honest answer: a plant built at 1,000 kg
+-- stands at exactly its sheet size, so an almanac card shows the shape as
+-- drawn and at the size a player will usually meet it.
 --==============================================================================
-SeedData.SizeReferenceKg = SIZE_REF_KG
 
-function SeedData.SizeScale(kg: number): number
-	local n = if type(kg) == "number" and kg == kg and kg > 0 then kg else 1
-	return (n / SIZE_REF_KG) ^ SIZE_EXP
+function SeedData.SizeScale(tier: number?): number
+	return SeedData.Tier(tier).mul
 end
 
 -- How tall this form stands at this weight, before the builder adds a head.
-function SeedData.FrameHeight(species: Species, kg: number): number
-	return species.Height * SeedData.SizeScale(kg)
+function SeedData.FrameHeight(species: Species, tier: number?): number
+	return species.Height * SeedData.SizeScale(tier)
 end
 
 --==============================================================================
@@ -766,8 +898,8 @@ end
 -- pod's DIAMETER, so a boulder is held further out than a pebble and the offset
 -- is never written down twice.
 --==============================================================================
-function SeedData.GripForward(kg: number): number
-	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(kg) * 0.5
+function SeedData.GripForward(tier: number?): number
+	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(tier) * 0.5
 end
 
 -- The FORM's drop tier as a colour. Kept for the Index, which lists shapes and

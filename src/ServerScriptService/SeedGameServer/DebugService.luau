@@ -201,14 +201,14 @@ ACTIONS.SpawnPod = function(player, payload)
 	if not species then
 		return "SpawnPod: unknown species"
 	end
-	local kg = num(payload.kg, 1, GameConfig.Carry.MaxKg)
-	if not kg then
-		kg = SeedData.RollKg(Random.new(os.clock() * 1000 % 1e6))
+	local tier = num(payload.tier, 1, SeedData.TierCount)
+	if not tier then
+		tier = SeedData.RollTier(Random.new(os.clock() * 1000 % 1e6))
 	end
-	kg = math.floor(kg :: number)
+	tier = math.floor(tier :: number)
 
 	local at = root.CFrame * CFrame.new(0, -root.Size.Y * 0.5, -6)
-	local pod = CreatureModel.BuildPod(species :: SeedData.Species, kg,
+	local pod = CreatureModel.BuildPod(species :: SeedData.Species, tier,
 		CFrame.new(at.Position.X, at.Position.Y, at.Position.Z), Workspace)
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
 	for _, d in ipairs(pod:GetDescendants()) do
@@ -216,7 +216,7 @@ ACTIONS.SpawnPod = function(player, payload)
 			d.CanQuery = true
 		end
 	end
-	return string.format("spawned %s at %d kg", (species :: SeedData.Species).Name, kg)
+	return string.format("spawned %s at %d tier", (species :: SeedData.Species).Name, tier)
 end
 
 ACTIONS.SetMill = function(player, payload)

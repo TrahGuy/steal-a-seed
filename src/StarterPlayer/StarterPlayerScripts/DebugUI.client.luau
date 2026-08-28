@@ -290,9 +290,9 @@ end)
 
 heading("SPAWN A POD")
 local podRow = row()
-local kgBox = field(podRow, "kg (blank = roll)", 150)
+local kgBox = field(podRow, "tier (blank = roll)", 150)
 button(podRow, "random", 74, function()
-	send("SpawnPod", { species = "random", kg = tonumber(kgBox.Text) })
+	send("SpawnPod", { species = "random", tier = tonumber(kgBox.Text) })
 end)
 
 -- One button per species, so a specific shape can be summoned without typing
@@ -307,7 +307,7 @@ for _, biome in ipairs(BiomeData.Biomes) do
 		end
 		inRow += 1
 		button(speciesRow, string.sub(sp.Name, 1, 7), 74, function()
-			send("SpawnPod", { species = sp.Id, kg = tonumber(kgBox.Text) })
+			send("SpawnPod", { species = sp.Id, tier = tonumber(kgBox.Text) })
 		end)
 	end
 end

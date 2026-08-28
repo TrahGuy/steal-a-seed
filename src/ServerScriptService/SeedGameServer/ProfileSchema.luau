@@ -200,11 +200,11 @@ function ProfileSchema.Sanitise(raw: any): Profile
 			end
 			if type(row) == "table" and type(row.Id) == "string"
 				and SeedData.Get(row.Id) then
-				local kg = number(row.Kg, 0, 1, GameConfig.Carry.MaxKg)
-				if kg >= 1 then
+				local tier = number(row.Tier, 0, 1, SeedData.TierCount)
+				if tier >= 1 then
 					table.insert(p.Held, {
 						Id = row.Id,
-						Kg = math.floor(kg),
+						Tier = math.floor(tier),
 						Hatched = row.Hatched == true,
 					})
 				end

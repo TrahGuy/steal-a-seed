@@ -252,7 +252,7 @@ local function paint()
 			card.setModel(if known then "seen:" .. species.Id else "ghost:" .. species.Id,
 				function(into)
 					local model = CreatureModel.Build(species,
-						SeedData.SizeReferenceKg, CreatureModel.STAGE_GROWN,
+						SeedData.BaseTier, CreatureModel.STAGE_GROWN,
 						CFrame.new(), into)
 					if not known then
 						--==========================================

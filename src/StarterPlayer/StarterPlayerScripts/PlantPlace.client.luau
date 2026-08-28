@@ -184,11 +184,11 @@ ghost.Parent = workspace
 
 -- How wide the thing in your hands will stand. A pod is its shell; a creature
 -- is its head, which is the widest part of every form the builder makes.
-local function footprint(species: SeedData.Species, kg: number, hatched: boolean): number
+local function footprint(species: SeedData.Species, tier: number, hatched: boolean): number
 	if not hatched then
-		return SeedData.PodDiameter(kg)
+		return SeedData.PodDiameter(tier)
 	end
-	return SeedData.FrameHeight(species, kg) * 0.46 * SeedData.Girth(kg) * 1.5
+	return SeedData.FrameHeight(species, tier) * 0.46 * SeedData.Girth(tier) * 1.5
 end
 
 local function hideGhost()
@@ -275,11 +275,11 @@ RunService.RenderStepped:Connect(function()
 		return
 	end
 
-	local kg = math.clamp(
-		tonumber(tool:GetAttribute(ATTR.CarryingKg)) or species.Kg,
-		1, GameConfig.Carry.MaxKg)
+	local tier = math.clamp(
+		tonumber(tool:GetAttribute(ATTR.CarryingKg)) or species.Tier,
+		1, SeedData.TierCount)
 	local hatched = tool:GetAttribute("Hatched") == true
-	local width = footprint(species, kg, hatched)
+	local width = footprint(species, tier, hatched)
 
 	-- The same clamp the server applies, so the disc sits where the plant will
 	-- actually go rather than where the cursor happens to be. Two copies of one
@@ -296,7 +296,7 @@ RunService.RenderStepped:Connect(function()
 	-- A cylinder's height runs along its X axis, so it has to be tipped on its
 	-- side to lie flat on the soil.
 	ghost.CFrame = on * CFrame.Angles(0, 0, math.rad(90))
-	ghost.Color = SeedData.ColorForKg(kg)
+	ghost.Color = SeedData.ColorForTier(tier)
 	ghost.Transparency = 0.72
 end)
 

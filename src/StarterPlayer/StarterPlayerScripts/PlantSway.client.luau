@@ -82,6 +82,7 @@
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -140,16 +141,26 @@ local READY_SCALE = 0.35
 -- reads as a glitch, not a stroll. The soil clamp is the hard limit; this is
 -- the one that makes it look deliberate.
 --==============================================================================
-local function wanderRadius(kg: number): number
-	return math.clamp(6.0 / (kg ^ 0.13), 1.2, 6.0)
+-- THESE TAKE A TIER AND LOOK UP ITS VALUE. Every curve here was fitted
+-- against a weight spanning 1 .. 10,000, and a tier index spans 1 .. 7 --
+-- feeding one straight in flattens the whole set. wanderRadius alone would
+-- go from a 6.0 .. 1.2 spread to 6.0 .. 4.7, and a Colossal would potter
+-- about like a Tiny. The tier's `value` is the weight it replaced, so the
+-- curves keep the shape they were tuned to.
+local function tierValue(tier: number): number
+	return SeedData.Tier(tier).value
 end
 
-local function wanderSpeed(kg: number): number
-	return math.clamp(2.6 / (kg ^ 0.17), 0.25, 2.6)
+local function wanderRadius(tier: number): number
+	return math.clamp(6.0 / (tierValue(tier) ^ 0.13), 1.2, 6.0)
 end
 
-local function wanderPause(kg: number): number
-	return math.clamp(1.2 + kg ^ 0.10, 1.4, 4.5)
+local function wanderSpeed(tier: number): number
+	return math.clamp(2.6 / (tierValue(tier) ^ 0.17), 0.25, 2.6)
+end
+
+local function wanderPause(tier: number): number
+	return math.clamp(1.2 + tierValue(tier) ^ 0.10, 1.4, 4.5)
 end
 
 -- How far the leaves swing as it steps, and how far the body bobs, as a
@@ -160,6 +171,30 @@ end
 -- that disagreed about the edge of the bed would show up as a plant standing
 -- half in the frame.
 local EDGE_MARGIN = GameConfig.Plant.EdgeMarginStuds
+
+--==============================================================================
+-- WHAT THE EYES ARE LOOKING AT
+--
+-- Cached against the clock rather than read per plant: apply() runs for a whole
+-- slice under one `now`, so this resolves once a frame instead of two dozen
+-- times. A dead or missing character simply returns nil and every plant falls
+-- back to idle saccades.
+--==============================================================================
+local viewerAt: Vector3? = nil
+local viewerNow = -1
+
+local function viewerPosition(now: number): Vector3?
+	if now ~= viewerNow then
+		viewerNow = now
+		viewerAt = nil
+		local char = Players.LocalPlayer and Players.LocalPlayer.Character
+		local head = char and char:FindFirstChild("Head")
+		if head and head:IsA("BasePart") then
+			viewerAt = head.Position
+		end
+	end
+	return viewerAt
+end
 
 --==============================================================================
 -- THE LOOK-AROUND
@@ -174,8 +209,8 @@ local EDGE_MARGIN = GameConfig.Plant.EdgeMarginStuds
 --==============================================================================
 local LOOK_AMP = math.rad(28)
 
-local function lookRate(kg: number): number
-	return math.clamp(0.55 / (kg ^ 0.09), 0.18, 0.75)
+local function lookRate(tier: number): number
+	return math.clamp(0.55 / (tierValue(tier) ^ 0.09), 0.18, 0.75)
 end
 
 local SWING_AMP = math.rad(19)
@@ -186,6 +221,77 @@ local ROLL_AMP = math.rad(3.5)
 -- Roughly how often each plant is refreshed. The set is walked in slices to
 -- hit this, whatever the frame rate and however many plants there are. A pod
 -- that is actively hatching is exempt -- see the Heartbeat.
+--==============================================================================
+-- THE EYES FOLLOW YOU
+--
+-- Everything above makes a plant MOVE. None of it makes one look ALIVE, because
+-- a face whose every part is welded to the skull is a mask however well it is
+-- shaped. The eyes were tuned four times -- colour, segment count, depth, size
+-- -- and stayed dead through all of it, for the reason a fixed highlight is
+-- always dead: it is pinned to the light, so it stares through you no matter
+-- where it sits.
+--
+-- WHAT MOVES DEPENDS ON WHAT THE CREATURE HAS, AND NOTHING IS REDESIGNED.
+--
+--   Pupil rig   a Pupil part travelling across the eyeball's surface. The
+--               better of the two, and what Emberroot is built for.
+--   Eye rig     no Pupil, so the whole Eye slides on the face and its Glint
+--               rides along. Every one of the twenty-five shipped species is
+--               this one, and it needs NO art change -- the parts are already
+--               there, they simply stop being welded to the bone.
+--
+-- Deliberately not "give every creature a pupil": production's eye is a dark
+-- ball that is already all pupil, so adding one would mean lightening every
+-- face in the game to make room. Moving the eye reads as gaze just as well and
+-- changes nothing that was already approved.
+--
+-- SACCADES, NOT GLIDING. Real eyes snap between fixations and then hold. An eye
+-- that slides smoothly to each new target is a security camera. So idle gaze
+-- holds a point for one to three seconds and flicks between them, and only
+-- PURSUIT -- following someone who is actually there -- is smooth.
+--
+-- WHAT IT COSTS. Two CFrame writes per plant per slice, on top of the PivotTo,
+-- exactly like the leaf swing below and affordable for the same reason: two
+-- extra CFrames on a fifteen-part model is a rounding error next to the pivot.
+--
+-- Note it CANNOT be skipped the way the swing is. PivotTo has just rewritten
+-- every part to its rest offset, so a held gaze still has to be re-applied
+-- afterwards or the eyes snap forward every slice. Only a plant looking dead
+-- ahead costs nothing.
+--==============================================================================
+local GAZE_MAX = math.rad(30)
+local GAZE_RANGE = 70
+-- Time constants. Pursuit is slow on purpose; being watched should feel
+-- unhurried rather than mechanical.
+local GAZE_PURSUIT_TAU = 0.13
+local GAZE_SACCADE_TAU = 0.045
+local GAZE_HOLD_MIN, GAZE_HOLD_MAX = 1.0, 2.8
+-- How far an Eye-rig eye slides, as a fraction of its own diameter. Small: the
+-- eye is half sunk into a curved head and a big excursion lifts it off the
+-- surface at the extremes.
+local GAZE_EYE_TRAVEL = 0.55
+
+--==============================================================================
+-- THE BLINK
+--
+-- The eyes are BALLS, and a Roblox Ball renders as a sphere of its SMALLEST
+-- axis -- squashing one shut does nothing at all. So every eye carries a lid
+-- part, and blinking sweeps it down over the ball.
+--
+-- The travel is not a constant. It is worked out per lid from where that lid
+-- rests and how big its eye is, so Dustbowl -- whose lid already sits low
+-- enough to be a permanent squint -- has a short blink, and a wide-open
+-- Greenhollow eye has a long one. Both come off the parts, so both stay right
+-- at any weight.
+--
+-- Fast down, slower up, which is what a real blink does and what stops it
+-- reading as a mechanical shutter. Intervals are per plant, so a bed never
+-- blinks in chorus.
+--==============================================================================
+local BLINK_DOWN = 0.055
+local BLINK_UP = 0.10
+local BLINK_GAP_MIN, BLINK_GAP_MAX = 2.6, 7.5
+
 local TARGET_HZ = 20
 
 type Sway = {
@@ -248,6 +354,21 @@ type Sway = {
 	-- The two Leaf parts and where they sit relative to the model's pivot, so
 	-- they can be swung as arms after the PivotTo without measuring anything.
 	leaves: { { part: BasePart, offset: CFrame, sign: number } },
+	-- The gaze rig, resolved once. `ref` is a face-aligned frame the aim is
+	-- measured in; `eyeOffset` and `radius` are set only on the Pupil rig.
+	gaze: {
+		pupilRig: boolean,
+		ref: CFrame,
+		parts: { { part: BasePart, offset: CFrame, eyeOffset: CFrame?, local_: CFrame? } },
+		lids: { { part: BasePart, eyeOffset: CFrame, local_: CFrame, drop: number } },
+		shrink: { { part: BasePart, rest: Vector3 } },
+		blinkT: number,
+		blinkAt: number,
+		travel: number,
+		yaw: number, pitch: number,
+		tYaw: number, tPitch: number,
+		holdUntil: number,
+	}?,
 	-- The look-around. `lookPhase` ACCUMULATES rather than being derived from
 	-- the clock, because it has to stop while the plant is walking and carry on
 	-- from where it stopped -- a phase read straight off the clock would jump
@@ -330,7 +451,7 @@ local function remember(instance: Instance)
 		-- 4 kg and 900 kg now, and a heavy one has to sway like a heavy one --
 		-- reading the species sheet would give a bed of identical shapes the
 		-- identical motion and undo the only thing that told them apart.
-		local kg = math.max(tonumber(model:GetAttribute("Kg")) or species.Kg, 0.001)
+		local tier = math.max(tonumber(model:GetAttribute("Tier")) or species.Tier, 0.001)
 
 		--==================================================================
 		-- MEASURE THE THING, THEN SIZE THE MOTION TO IT
@@ -373,7 +494,7 @@ local function remember(instance: Instance)
 		-- Pick the TRAVEL, then solve for the angle: travel = 2 * h * sin(amp).
 		-- Heavier travels less, which is the same fact the silhouette carries.
 		--==================================================================
-		local travel = math.clamp(0.75 / (kg ^ 0.16), 0.30, 0.75)
+		local travel = math.clamp(0.75 / (tierValue(tier) ^ 0.16), 0.30, 0.75)
 		local amp = math.clamp(travel / (2 * headHeight), 0.006, math.rad(14))
 
 		local entry: Sway = {
@@ -385,7 +506,7 @@ local function remember(instance: Instance)
 			-- Heavier is slower. A gentle power of weight, like every other
 			-- curve here: 110 kg is fifty-five times 2 kg and nothing should be
 			-- fifty-five times anything.
-			speed = math.clamp(1.1 / (kg ^ 0.12), 0.35, 1.4),
+			speed = math.clamp(1.1 / (tierValue(tier) ^ 0.12), 0.35, 1.4),
 			-- PHASED BY PLACEMENT, so a bed is not a chorus line. Irrational-ish
 			-- multiplier so a dozen plants do not land on a common period. It
 			-- was the slot index until slots stopped existing; the placement id
@@ -399,9 +520,9 @@ local function remember(instance: Instance)
 
 			soil = nil,
 			homeLocal = nil,
-			radius = wanderRadius(kg),
-			walkSpeed = wanderSpeed(kg),
-			pause = wanderPause(kg),
+			radius = wanderRadius(tier),
+			walkSpeed = wanderSpeed(tier),
+			pause = wanderPause(tier),
 			rng = nil,
 			from = nil,
 			to = nil,
@@ -411,13 +532,13 @@ local function remember(instance: Instance)
 			-- A step lands roughly every time the plant covers a third of its
 			-- own height. Small things patter, big things thud.
 			strideHz = math.clamp(
-				wanderSpeed(kg) / math.max(headHeight * 0.35, 0.25), 0.5, 3.2),
+				wanderSpeed(tier) / math.max(headHeight * 0.35, 0.25), 0.5, 3.2),
 			bob = math.min(headHeight * BOB_FRACTION, BOB_CEILING),
 			leaves = {},
 			-- Off the placement id, so no two plants in a bed are looking the
 			-- same way at the same moment.
 			lookPhase = (tonumber(model:GetAttribute("PlacementId")) or 0) * 1.7,
-			lookRate = lookRate(kg),
+			lookRate = lookRate(tier),
 			-- NOT zero. A plant registered ten minutes into a session would
 			-- otherwise take its first `dt` as ten minutes and snap to an
 			-- arbitrary bearing instead of the one the server stamped.
@@ -464,6 +585,125 @@ local function remember(instance: Instance)
 						-- pair of wings.
 						sign = if offset.Position.X < 0 then -1 else 1,
 					})
+				end
+			end
+
+			--==========================================================
+			-- RESOLVE THE GAZE RIG
+			--
+			-- Matched by name suffix rather than by an exact string, so
+			-- both naming conventions in the game are picked up: the
+			-- shipped species name their parts "Eye" and "Glint", and
+			-- Emberroot names them "LeftEye" / "LeftPupil".
+			--
+			-- A pod falls through with no eyes and gets no rig, which is
+			-- correct -- an egg has no face to look out of.
+			--==========================================================
+			local pupils, eyes, glints = {}, {}, {}
+			for _, d in ipairs(model:GetChildren()) do
+				if d:IsA("BasePart") then
+					local n = d.Name
+					if n:sub(-5) == "Pupil" then
+						table.insert(pupils, d)
+					elseif n:sub(-3) == "Eye" then
+						table.insert(eyes, d)
+					elseif n:sub(-5) == "Glint" then
+						table.insert(glints, d)
+					end
+				end
+			end
+
+			if #eyes > 0 then
+				local parts = {}
+				local pupilRig = false
+				if #pupils > 0 then
+					-- Pair each pupil to its own eye by the prefix they
+					-- share, so a mismatched pair is dropped rather than
+					-- guessed at.
+					local byPrefix: { [string]: BasePart } = {}
+					for _, e in ipairs(eyes) do
+						byPrefix[e.Name:sub(1, -4)] = e
+					end
+					for _, p in ipairs(pupils) do
+						local e = byPrefix[p.Name:sub(1, -6)]
+						if e then
+							table.insert(parts, {
+								part = p,
+								offset = inverse * p.CFrame,
+								eyeOffset = inverse * e.CFrame,
+								-- Its rest place ON the eye. The gaze
+								-- ROTATES the eyeball and carries this
+								-- along, rather than computing a point on
+								-- the sphere -- which is what lets one eye
+								-- hold several marks (Greenhollow has two
+								-- highlights) without them collapsing onto
+								-- each other.
+								local_ = e.CFrame:ToObjectSpace(p.CFrame),
+							})
+						end
+					end
+					pupilRig = #parts > 0
+				end
+				if not pupilRig then
+					-- The eyes slide, and their glints ride along so the
+					-- highlight stays put on the eye it belongs to.
+					for _, d in ipairs(eyes) do
+						table.insert(parts, { part = d, offset = inverse * d.CFrame })
+					end
+					for _, d in ipairs(glints) do
+						table.insert(parts, { part = d, offset = inverse * d.CFrame })
+					end
+				end
+				--== LIDS, for the blink ==--
+				local lids = {}
+				for _, d in ipairs(model:GetChildren()) do
+					if d:IsA("BasePart") and d.Name:sub(-3) == "Lid" then
+						local e = eyes[1]
+						for _, cand in ipairs(eyes) do
+							if cand.Name:sub(1, -4) == d.Name:sub(1, -4) then e = cand end
+						end
+						local lv = e.CFrame:ToObjectSpace(d.CFrame)
+						-- Centre onto centre. Matching the lower EDGES was
+						-- the first attempt and it only ever covered as much
+						-- of the eye as the lid was tall -- the bottom 56%,
+						-- with the top half still staring out. The lid is
+						-- taller than the eye now, so putting the two centres
+						-- together covers it by construction.
+						local drop = lv.Position.Y
+						table.insert(lids, {
+							part = d,
+							eyeOffset = inverse * e.CFrame,
+							local_ = lv,
+							drop = math.max(drop, 0),
+						})
+					end
+				end
+
+				-- Everything that has to close: the eyeballs and everything
+				-- riding on them.
+				local shrink = {}
+				for _, d in ipairs(eyes) do
+					table.insert(shrink, { part = d, rest = d.Size })
+				end
+				for _, it in ipairs(parts) do
+					table.insert(shrink, { part = it.part, rest = it.part.Size })
+				end
+
+				if #parts > 0 then
+					entry.gaze = {
+						pupilRig = pupilRig,
+						lids = lids,
+						shrink = shrink,
+						blinkT = 0,
+						blinkAt = clock + BLINK_GAP_MIN,
+						-- The first eye's frame. Its rotation is the head's,
+						-- which is the only part of it the aim maths uses.
+						ref = inverse * eyes[1].CFrame,
+						parts = parts,
+						travel = eyes[1].Size.X * GAZE_EYE_TRAVEL,
+						yaw = 0, pitch = 0, tYaw = 0, tPitch = 0,
+						holdUntil = 0,
+					}
 				end
 			end
 		end
@@ -659,6 +899,120 @@ local function apply(entry: Sway, now: number)
 		local swing = math.sin(now * entry.strideHz * math.pi * 2) * SWING_AMP * moveT
 		for _, leaf in ipairs(entry.leaves) do
 			leaf.part.CFrame = target * leaf.offset * CFrame.Angles(swing * leaf.sign, 0, 0)
+		end
+	end
+
+	--==========================================================================
+	-- AND THE EYES
+	--
+	-- After the PivotTo, always: the pivot has just put every part back at its
+	-- rest offset, so a gaze that is merely being HELD still has to be written
+	-- again or the eyes snap forward on every slice.
+	--==========================================================================
+	local g = entry.gaze
+	if g then
+		local viewer = viewerPosition(now)
+		local tracking = false
+		if viewer then
+			local face = target * g.ref
+			local rel = face:PointToObjectSpace(viewer)
+			local dist = rel.Magnitude
+			if dist > 0.01 and dist < GAZE_RANGE then
+				local d = rel / dist
+				local yaw = math.atan2(-d.X, -d.Z)
+				-- Only what is roughly in FRONT of the face. A plant does not
+				-- roll its eyes back into its own skull to follow someone
+				-- standing behind it.
+				if math.abs(yaw) < math.rad(85) then
+					g.tYaw = math.clamp(yaw, -GAZE_MAX, GAZE_MAX)
+					g.tPitch = math.clamp(math.asin(math.clamp(d.Y, -1, 1)), -GAZE_MAX, GAZE_MAX)
+					tracking = true
+				end
+			end
+		end
+		if not tracking and now >= g.holdUntil then
+			-- A new fixation. Narrower in pitch than in yaw: eyes range much
+			-- further side to side than up and down.
+			local rng = entry.rng
+			local u1 = if rng then rng:NextNumber(-1, 1) else math.random() * 2 - 1
+			local u2 = if rng then rng:NextNumber(-1, 1) else math.random() * 2 - 1
+			local u3 = if rng then rng:NextNumber() else math.random()
+			g.tYaw = u1 * GAZE_MAX * 0.8
+			g.tPitch = u2 * GAZE_MAX * 0.45
+			g.holdUntil = now + GAZE_HOLD_MIN + u3 * (GAZE_HOLD_MAX - GAZE_HOLD_MIN)
+		end
+
+		local a = 1 - math.exp(-dt / (if tracking then GAZE_PURSUIT_TAU else GAZE_SACCADE_TAU))
+		g.yaw += (g.tYaw - g.yaw) * a
+		g.pitch += (g.tPitch - g.pitch) * a
+
+		local cy, sy = math.cos(g.yaw), math.sin(g.yaw)
+		local cp, sp = math.cos(g.pitch), math.sin(g.pitch)
+		if g.pupilRig then
+			-- Turn the EYEBALL and let everything on it ride, rather than
+			-- placing each mark at a computed point. Same result for a single
+			-- pupil, and the only thing that works for an eye wearing more
+			-- than one.
+			local swing = CFrame.Angles(g.pitch, g.yaw, 0)
+			for _, it in ipairs(g.parts) do
+				it.part.CFrame = target * (it.eyeOffset :: CFrame) * swing
+					* (it.local_ :: CFrame)
+			end
+		else
+			-- The eyes and their glints all take the same slide, in the face's
+			-- own frame, so the pair stays a pair.
+			local slide = CFrame.new(-sy * g.travel, sp * g.travel, 0)
+			for _, it in ipairs(g.parts) do
+				it.part.CFrame = target * it.offset * slide
+			end
+		end
+
+		--======================================================================
+		-- AND THE BLINK
+		--
+		-- Down fast, up slower. A symmetric blink reads as a shutter; the
+		-- asymmetry is most of what makes it look like an eyelid.
+		--======================================================================
+		--== THE EYE CLOSES WITH IT ==--
+		-- A Ball cannot be squashed, but it CAN be scaled, and an eye that
+		-- shrinks as the lid arrives is what turns a plate sliding over a
+		-- sphere into a blink. It also means the lid can be small: it is
+		-- covering a closing eye, not a wide open one.
+		if #g.lids > 0 then
+			local since = now - g.blinkAt
+			local t = 0
+			if since >= 0 then
+				if since < BLINK_DOWN then
+					t = since / BLINK_DOWN
+				elseif since < BLINK_DOWN + BLINK_UP then
+					t = 1 - (since - BLINK_DOWN) / BLINK_UP
+				else
+					g.blinkAt = now + BLINK_GAP_MIN
+						+ math.random() * (BLINK_GAP_MAX - BLINK_GAP_MIN)
+				end
+			end
+			for _, it in ipairs(g.lids) do
+				-- Down the EYE's own axis, not the world's, so a lid on a
+				-- leaning plant still closes across its eye.
+				it.part.CFrame = target * it.eyeOffset
+					* CFrame.new(0, -it.drop * t, 0) * it.local_
+			end
+			-- Never quite to nothing: a part at zero size is a Roblox error, and
+			-- a sliver left behind reads as the lash line anyway.
+			--
+			-- ONLY WRITTEN WHILE THE VALUE IS CHANGING. A blink is 155ms against
+			-- a gap of three to seven seconds, so for about 97% of a plant's
+			-- life this is a no-op -- and writing Size on six parts every slice
+			-- for all of it is exactly the cost this file exists to avoid. The
+			-- last value is remembered so the frame that returns to rest still
+			-- gets written once.
+			if t ~= g.blinkT then
+				g.blinkT = t
+				local k = 1 - 0.88 * t
+				for _, it in ipairs(g.shrink) do
+					it.part.Size = it.rest * k
+				end
+			end
 		end
 	end
 end

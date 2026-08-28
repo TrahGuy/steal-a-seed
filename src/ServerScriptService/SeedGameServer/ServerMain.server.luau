@@ -167,55 +167,46 @@ local function weightReport()
 	local SeedData = require(Shared:WaitForChild("SeedData"))
 
 	--== THE ROLL ==--
-	-- A fixed seed, so two servers print the same histogram and a change in it
-	-- is a change in the CURVE rather than in the luck of one boot.
+	-- A fixed seed, so two servers print the same histogram and a change in it is
+	-- a change in the ODDS rather than in the luck of one boot.
+	--
+	-- This used to bucket by weight -- 10 kg, 110, 1,000 -- and after the tier
+	-- change it was testing "is tier <= 10", which is true of all seven. It
+	-- printed 100% in the first bucket and 0% everywhere else, which looks like a
+	-- broken roll and was a broken RULER.
 	local rng = Random.new(20260824)
 	local SAMPLES = 10000
-	local le10, le110, ge1k, ge5k, ge9k, heaviest = 0, 0, 0, 0, 0, 0
+	local seen = {}
+	for i = 1, SeedData.TierCount do
+		seen[i] = 0
+	end
 	for _ = 1, SAMPLES do
-		local kg = SeedData.RollKg(rng)
-		if kg <= 10 then
-			le10 += 1
-		end
-		if kg <= 110 then
-			le110 += 1
-		end
-		if kg >= 1000 then
-			ge1k += 1
-		end
-		if kg >= 5000 then
-			ge5k += 1
-		end
-		if kg >= 9000 then
-			ge9k += 1
-		end
-		heaviest = math.max(heaviest, kg)
+		seen[SeedData.RollTier(rng)] += 1
 	end
-	local function pct(n: number): number
-		return n / SAMPLES * 100
+	local parts = {}
+	for i, t in ipairs(SeedData.Tiers) do
+		table.insert(parts, string.format("%s %.2f%%", t.name, seen[i] / SAMPLES * 100))
 	end
-	print(string.format(
-		"[Seed] weight roll, %d samples:  <=10kg %.1f%%  <=110kg %.1f%%  " ..
-		">=1,000kg %.1f%%  >=5,000kg %.2f%%  >=9,000kg %.2f%%  heaviest %d kg",
-		SAMPLES, pct(le10), pct(le110), pct(ge1k), pct(ge5k), pct(ge9k), heaviest))
+	print(string.format("[Seed] tier roll, %d samples:  %s",
+		SAMPLES, table.concat(parts, "  ")))
 
 	--== THE SIZE ==--
 	-- Nubkin and Bellchime specifically: the shortest frame and the tallest, so
 	-- the pair brackets every other form. A Nubkin must stay shorter than a
-	-- Bellchime at the SAME weight -- the form has to keep reading -- while both
-	-- have to grow enormously across the range.
+	-- Bellchime at the SAME tier -- the form has to keep reading -- while both
+	-- have to grow enormously across the ladder.
 	local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 	local stash = Instance.new("Folder")
-	stash.Name = "SeedWeightCheck"
+	stash.Name = "SeedTierCheck"
 	stash.Parent = ServerStorage
 	for _, id in ipairs({ "nubkin", "bellchime" }) do
 		local species = SeedData.Get(id)
 		if species then
 			local cells = {}
-			for _, kg in ipairs({ 2, 110, 1000, 10000 }) do
+			for _, tier in ipairs({ 1, 4, 7 }) do
 				-- Built at the origin, so the base sits on y = 0 and the tallest
 				-- corner of any part IS the finished height.
-				local model = CreatureModel.BuildCreature(species, kg,
+				local model = CreatureModel.BuildCreature(species, tier,
 					CreatureModel.STAGE_GROWN, CFrame.new(), stash)
 				local top = 0
 				for _, d in ipairs(model:GetDescendants()) do
@@ -228,7 +219,7 @@ local function weightReport()
 					end
 				end
 				model:Destroy()
-				table.insert(cells, string.format("%d kg %.1f", kg, top))
+				table.insert(cells, string.format("%s %.1f", SeedData.TierName(tier), top))
 			end
 			print(string.format("[Seed] %-9s finished height:  %s",
 				species.Name, table.concat(cells, "   |   ")))

@@ -218,7 +218,7 @@ type Tracked = {
 	-- What THIS plant weighs, stamped on the model when it was built. The pop is
 	-- the only place the payout is shown in the world, so reading the species
 	-- sheet here would print +$2 over a plant paying nine thousand.
-	kg: number,
+	tier: number,
 	-- How far above the anchor the top of the plant is. Measured once, because
 	-- a rooted plant does not change shape without being rebuilt.
 	top: number,
@@ -240,8 +240,8 @@ local function add(instance: Instance)
 		end
 		local anchor = model.PrimaryPart
 		local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
-		local kg = tonumber(model:GetAttribute("Kg"))
-		if not (anchor and species and kg and model.Parent) then
+		local tier = tonumber(model:GetAttribute("Tier"))
+		if not (anchor and species and tier and model.Parent) then
 			return
 		end
 		if not CollectionService:HasTag(model, GameConfig.Tags.Planted) then
@@ -253,7 +253,7 @@ local function add(instance: Instance)
 		tracked[model] = {
 			anchor = anchor,
 			species = species,
-			kg = kg,
+			tier = tier,
 			-- The shared world-space measure, NOT GetBoundingBox -- which reports
 			-- in the pivot's frame on these models and hands back the width where
 			-- the height should be. PlantUI's name plate uses the same call, so
@@ -288,7 +288,7 @@ local function pop(entry: Tracked)
 	local stroke = label:FindFirstChildOfClass("UIStroke")
 	local scale = holder:FindFirstChildOfClass("UIScale")
 
-	label.Text = "+$" .. GameConfig.compact(SeedData.IncomePerSecond(entry.kg))
+	label.Text = "+$" .. GameConfig.compact(SeedData.IncomePerSecond(entry.tier))
 	label.TextTransparency = 0
 	if stroke then
 		stroke.Transparency = 0

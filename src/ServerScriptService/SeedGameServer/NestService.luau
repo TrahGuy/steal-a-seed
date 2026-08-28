@@ -161,8 +161,8 @@ local function growPod(nest: Nest, index: number)
 	end
 	-- Stamped on the model by BuildPod, which is where every later reader --
 	-- CarryService on pickup, the billboard, the shell colour -- gets it from.
-	local kg = SeedData.RollKg(rng)
-	local pod = CreatureModel.BuildPod(species, kg, nest.slots[index], nest.folder)
+	local tier = SeedData.RollTier(rng)
+	local pod = CreatureModel.BuildPod(species, tier, nest.slots[index], nest.folder)
 	-- Loot. CreatureModel deliberately does not decide this: the same model
 	-- hatching in a plot must never be takeable.
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)

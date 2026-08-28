@@ -4222,6 +4222,68 @@ whether you meant it to.
 Greenhollow's guardian is also rebuilt heavier -- deeper torso on a forward
 pitch, layered chest plates, bark ribs, spinal thorns, thigh armour.
 
+## Four-biome pod art pass — 2026-08-28
+
+`CreatureModel.BuildPod` now gives the unlocked biome rows four different silhouette regions while
+leaving Greenhollow byte-identical:
+
+  * **Dustbowl / below-wide:** five low, irregular wedge shards make a broken sunbaked pan. The old
+    upright shard ring read as a wooden cog. Every shard stands on `cf` and the pan is 1.249 D wide.
+  * **Tanglemire / flank:** four incomplete tangent withe segments and three tapered hanging strands,
+    with dew on only two ends. It implies a crooked living wrap without completing a mechanical
+    belt. `TanglemireForms.Pod` remains untouched. Width is 1.175 D, rising to 1.197 D on Colossal.
+  * **Emberroot / sides:** four two-joint clinker talons use width-tapered plates, plus three angular
+    neon coals resting at the foot. The 1.281 D grip is inside the width rail and no longer reads as
+    four straight posts.
+  * **Starbloom / diagonal:** five smooth tangent wedges form an open comet crescent with one bright
+    head and one dim tail. It retains the diagonal orbit read while dropping the old full ring from
+    1.31 D to at most 1.151 D.
+
+The owner approved those outside silhouettes but rejected the shared egg underneath them: five
+rows still had the same body, crown, seam, and tier-only colour. The dressing above remains
+part-for-part unchanged, while the four unlocked biomes now also own the pod itself:
+
+  * **Dustbowl:** a squat sunbaked-clay drum with a lighter rust shoulder. Its broken ground pan still
+    owns the low-wide outline; the smaller crown/seam carries the tier colour.
+  * **Tanglemire:** an offset two-lobed gourd in deep bog green and wet reed green. The crooked flank
+    wrap still hangs outside it, while the leaf crown and diagonal scar carry the tier colour.
+  * **Emberroot:** a basalt-black furnace nut with an oxidized volcanic collar, paired charcoal
+    shoulder facets, a forked molten seam and three angular Neon magma inclusions breaking through
+    the egg itself. Its four approved talons and three foot coals are unchanged.
+  * **Starbloom:** a midnight-indigo double-orb seed with a violet upper lobe and angled crown. The
+    approved comet crescent continues its diagonal through the outline.
+
+The biome now owns the dominant body colour. Tier colour moved to the smaller crown/seam, diameter,
+and the Colossal label, so value remains readable without making all five biome rows look like the
+same rainbow eggs. Titan crowns and Colossal lids retain their biome-specific geometry rather than
+reverting to the shared Greenhollow balls.
+
+No second stage was created. `Workspace.PodStages` still holds five biome rows by seven tiers at
+`(0, 40, 2400)`. Because `CreatureModel` is detached from Rojo, its Source was pushed directly from
+the working file over localhost; the 28 unlocked pods were then rebuilt inside that same stage from
+a fresh module clone, leaving the seven Greenhollow stage models in place.
+
+Final runtime audit against all 35 staged pods: 437 BaseParts checked, zero fully inside their
+primary `Shell` and zero below `y=40`; every biome's Titan has `CrownLeft`, `CrownRight`, and
+`Shell.EmberVent`; every Colossal has `Core`, `CoreGlow`, `AuraAttachment`, `TierTag`,
+`PickupSound=ColossalPickup`. Core proudness is `0.240 D` on Greenhollow and higher on the
+four revised biomes -- Emberroot `0.360 D`, Starbloom `0.470 D`, Dustbowl `0.545 D`,
+Tanglemire `0.550 D` -- because their shells are shorter than one diameter, so the same core
+clears a lower crown line. It is not a regression; the earlier `0.240 D` figure was measured
+before the bodies were revised and held for the shared egg only. Maximum widths are Greenhollow
+1.130 D, Dustbowl 1.303 D, Tanglemire 1.175 D, Emberroot 1.281 D, and Starbloom 1.123 D.
+
+A frozen pre-body-revision Studio clone built all seven Greenhollow tiers against the current
+module: 51 parts versus 51, identical by name, CFrame, size, colour, material, and shape. The same
+comparison filtered every approved outside dressing part across the other four biomes and seven
+tiers; all names, positions, sizes, colours, materials and shapes were identical. The temporary
+baseline and audit folders were destroyed afterward.
+
+`rojo build -o build/StealASeed.rbxlx` passes. The pod edits share
+`CreatureModel.luau` with the still-uncommitted 22-file kilogram-to-tier sweep; do not commit this
+file alone and leave a broken intermediate repository snapshot. Commit the pod pass with that sweep,
+or stage its hunks only after the sweep owner lands the prerequisite changes.
+
 ## Creature primitives must finish as freeform sculpture — 2026-08-28
 
 The owner rejected visible sphere/box/cylinder construction as the finished look for Emberroot and

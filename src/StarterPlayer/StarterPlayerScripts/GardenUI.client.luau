@@ -472,7 +472,7 @@ type Occupant = {
 	-- here: the clock, the rate, and the colour the name is printed in. Two
 	-- Nubkins in the same bed at 4 kg and 900 kg have to read as $4/s and
 	-- $900/s, which they cannot if the sheet is consulted.
-	kg: number,
+	tier: number,
 	plantedAt: number,
 	-- STAGE_POD or STAGE_GROWN, off the model. Not derived from the clock any
 	-- more: a pod whose timer ran out an hour ago is STILL a pod until somebody
@@ -505,13 +505,13 @@ local function occupants(plot: Model): { Occupant }
 		if model:IsA("Model") and CollectionService:HasTag(model, GameConfig.Tags.Planted) then
 			local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
 			local plantedAt = model:GetAttribute("PlantedAt")
-			local kg = tonumber(model:GetAttribute("Kg"))
+			local tier = tonumber(model:GetAttribute("Tier"))
 			local id = tonumber(model:GetAttribute("PlacementId"))
 			local stage = tonumber(model:GetAttribute("Stage"))
-			if species and kg and id and stage and type(plantedAt) == "number" then
+			if species and tier and id and stage and type(plantedAt) == "number" then
 				table.insert(out, {
 					species = species,
-					kg = kg,
+					tier = tier,
 					plantedAt = plantedAt,
 					stage = stage,
 					id = id,
@@ -550,7 +550,7 @@ local function stageOf(occupant: Occupant, now: number): (number, number)
 	if occupant.stage ~= STAGE_POD then
 		return STAGE_GROWN, 0
 	end
-	local remaining = SeedData.GrowSeconds(occupant.kg) - (now - occupant.plantedAt)
+	local remaining = SeedData.GrowSeconds(occupant.tier) - (now - occupant.plantedAt)
 	if remaining > 0 then
 		return STAGE_POD, remaining
 	end
@@ -632,7 +632,7 @@ local function refresh(paint: boolean)
 			planted += 1
 			local stage, remaining = stageOf(occupant, now)
 			if stage == STAGE_GROWN then
-				rate += SeedData.IncomePerSecond(occupant.kg)
+				rate += SeedData.IncomePerSecond(occupant.tier)
 			else
 				waiting += 1
 			end
@@ -651,8 +651,8 @@ local function refresh(paint: boolean)
 				-- This is the Garden, so it is ColorForKg on the name AND on
 				-- the border. FormColor belongs to the Index and stays there.
 				--==========================================================
-				local band = SeedData.ColorForKg(occupant.kg)
-				local kgFormatted = GameConfig.compact(occupant.kg) .. " kg"
+				local band = SeedData.ColorForTier(occupant.tier)
+				local kgFormatted = GameConfig.compact(occupant.tier) .. " tier"
 
 				if stage == STAGE_GROWN then
 					slot.setEmpty(false)
@@ -660,11 +660,11 @@ local function refresh(paint: boolean)
 					slot.setReadyPulse(false)
 					slot.setProgress(nil)
 					slot.setWeightTag(kgFormatted, band)
-					slot.setStatusTag("+$" .. GameConfig.compact(SeedData.IncomePerSecond(occupant.kg)) .. "/s",
+					slot.setStatusTag("+$" .. GameConfig.compact(SeedData.IncomePerSecond(occupant.tier)) .. "/s",
 						Color3.fromRGB(142, 220, 68), Color3.fromRGB(20, 36, 16))
 
 					slot.setModel("grown:" .. species.Id, function(into)
-						return CreatureModel.Build(species, occupant.kg,
+						return CreatureModel.Build(species, occupant.tier,
 							CreatureModel.STAGE_GROWN, CFrame.new(), into)
 					end, species.Form or species.Id)
 					slot.setBackdrop(species.Id)
@@ -673,13 +673,13 @@ local function refresh(paint: boolean)
 					offers[index] = occupant.id
 					slot.name.Text = species.Name
 					slot.name.TextColor3 = band
-					slot.sub.Text = string.upper(SeedData.RarityForKg(occupant.kg))
+					slot.sub.Text = string.upper(SeedData.RarityForTier(occupant.tier))
 					slot.sub.TextColor3 = Color3.fromRGB(220, 218, 225)
 				else
 					slot.setEmpty(false)
-					slot.setModel("pod:" .. SeedData.RarityForKg(occupant.kg),
+					slot.setModel("pod:" .. SeedData.RarityForTier(occupant.tier),
 						function(into)
-							return CreatureModel.BuildPod(species, occupant.kg,
+							return CreatureModel.BuildPod(species, occupant.tier,
 								CFrame.new(), into)
 						end, if stage == STAGE_READY then "ready" else "pod")
 					slot.setBackdrop(nil)
@@ -700,7 +700,7 @@ local function refresh(paint: boolean)
 					else
 						slot.setStageTheme("pod")
 						slot.setReadyPulse(false)
-						local totalSec = SeedData.GrowSeconds(occupant.kg)
+						local totalSec = SeedData.GrowSeconds(occupant.tier)
 						local frac = if totalSec > 0 then math.clamp(1 - (remaining / totalSec), 0, 1) else 0
 						slot.setProgress(frac, band)
 						slot.setStatusTag("⏱ " .. clock(remaining), Color3.fromRGB(250, 205, 75))

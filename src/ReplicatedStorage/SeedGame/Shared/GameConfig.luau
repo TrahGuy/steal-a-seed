@@ -1811,12 +1811,12 @@ end
 
 GameConfig.Carry = {
 	-- The heaviest thing in the game. Biome 1 tops out at ~110.
-	MaxKg = 10000,
+	TopTierValue = 9500,
 	-- Speed multiplier when carrying MaxKg.
 	MinMultiplier = 0.30,
 	-- Below 1 flattens the low end. 0.6 keeps small pods nearly free.
 	Exponent = 0.6,
-	CashPerKg = 1,
+	CashPerValue = 1,
 
 	--==========================================================================
 	-- TAKING A POD IS HELD, NOT TAPPED
@@ -1844,12 +1844,12 @@ GameConfig.Carry = {
 }
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.
-function GameConfig.carryMultiplierFor(kg: number): number
+function GameConfig.carryMultiplierFor(tier: number): number
 	local C = GameConfig.Carry
-	if type(kg) ~= "number" or kg ~= kg or kg <= 0 then
+	if type(tier) ~= "number" or tier ~= tier or tier <= 0 then
 		return 1
 	end
-	local t = math.clamp(kg / C.MaxKg, 0, 1) ^ C.Exponent
+	local t = math.clamp(tier / C.TopTierValue, 0, 1) ^ C.Exponent
 	return 1 - (1 - C.MinMultiplier) * t
 end
 

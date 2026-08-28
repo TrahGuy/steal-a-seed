@@ -100,7 +100,7 @@ function EconomyService.RateFor(player: Player): number
 	-- weights are rolled would hand every Nubkin 2/sec whatever it actually
 	-- weighs -- a faucet that ignores the only number the player is playing for.
 	for _, grown in ipairs(PlantService.GrownIn(plot)) do
-		rate += SeedData.IncomePerSecond(grown.kg)
+		rate += SeedData.IncomePerSecond(grown.tier)
 	end
 	return rate
 end
@@ -187,9 +187,9 @@ function EconomyService.SellHeld(player: Player): (number, number)
 		for _, tool in ipairs(container:GetChildren()) do
 			if tool:IsA("Tool") then
 				local id = tool:GetAttribute("SpeciesId")
-				local kg = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
-				if type(id) == "string" and SeedData.Get(id) and kg and kg >= 1 then
-					total += SeedData.SellPrice(kg)
+				local tier = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
+				if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
+					total += SeedData.SellPrice(tier)
 					sold += 1
 					tool:Destroy()
 				end
@@ -236,7 +236,7 @@ function EconomyService.Start()
 	end)
 
 	log(string.format(
-		"Ready. The only faucet: grown plants pay kg/sec (%d cash per kg), ticking every %ds.",
+		"Ready. The only faucet: grown plants pay tier/sec (%d cash per tier), ticking every %ds.",
 		1, TICK))
 end
 
