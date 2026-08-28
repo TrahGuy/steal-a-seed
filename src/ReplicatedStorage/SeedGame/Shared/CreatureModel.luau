@@ -1041,6 +1041,35 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 	base.Transparency = 1
 
 	--==========================================================================
+	-- EVERY EXIT FROM THIS FUNCTION GOES THROUGH HERE
+	--
+	-- BuildCreature has three returns and two of them are Tanglemire's, which
+	-- answers early because its geometry arrives already assembled. Both of
+	-- those sat about nine hundred lines above the two statements that actually
+	-- FINISH a creature, so every Tanglemire plant came out with a nil
+	-- PrimaryPart -- and the consequence was silent. giveTool reads
+	-- `model.PrimaryPart` as its Handle, finds nothing, destroys the model and
+	-- returns nil; GiveHatched returns false; hatch returns false. Holding E on
+	-- a ripe Tanglemire pod did nothing at all, with no error to go on.
+	--
+	-- A closure rather than three copies of two lines, because three copies is
+	-- how the third one goes missing. The next early return gets this for free.
+	--
+	-- THE TAG IS STILL LAST. CollectionService listeners fire the moment a tag
+	-- lands and none of them can tell a half-built model from a finished one,
+	-- so tagging where `base` is born would hand them a plant with no leaves.
+	--==========================================================================
+	local function finish(): Model
+		-- PrimaryPart is the BASE plate: a creature's pivot is where it meets
+		-- the soil, so planting one is placing its pivot on the dirt rather
+		-- than working out how tall it is first. It is invisible, and
+		-- deliberately so -- see the block where it is built.
+		model.PrimaryPart = base
+		CollectionService:AddTag(model, GameConfig.Tags.Creature)
+		return model
+	end
+
+	--==========================================================================
 	-- TANGLEMIRE ANSWERS HERE AND STOPS
 	--
 	-- Everything below this point assembles a plant out of a stem, a footing and
@@ -1064,7 +1093,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 			-- biome's eye is a slit, and the shared face builder is never
 			-- reached from here to give it one.
 			retrofitMireEye(model, sp.Body)
-			return model
+			return finish()
 		end
 		-- No approved geometry for this id. Falling through would build a
 		-- Greenhollow plant in mire colours and call it a Tanglemire species,
@@ -1072,7 +1101,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		warn(string.format(
 			"[Seed/CreatureModel] tanglemire species %q has no approved geometry",
 			sp.Id))
-		return model
+		return finish()
 	end
 
 	local stemH = H * 0.417
@@ -1963,13 +1992,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 	-- head so it did not z-fight; a ball centred on the surface needs no help.
 	addFace(model, faceCF, faceW, front, sp.Biome, sp.Body)
 
-	-- PrimaryPart is the BASE plate: a creature's pivot is where it meets the
-	-- soil, so planting one is placing its pivot on the dirt rather than working
-	-- out how tall it is first. It is invisible, and deliberately so -- see the
-	-- block where it is built.
-	model.PrimaryPart = base
-	CollectionService:AddTag(model, GameConfig.Tags.Creature)
-	return model
+	return finish()
 end
 
 --==============================================================================
