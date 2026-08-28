@@ -863,301 +863,191 @@ GameConfig.Gate = {
 --==============================================================================
 GameConfig.Afterimage = {
 	--==========================================================================
-	-- TEN STUDS A SECOND, WHICH IS BARELY WALKING
+	-- A RIBBON, NOT A CROWD OF COPIES
 	--
-	-- It has to be under the base 16 WalkSpeed, because tier 1 unlocks at a
-	-- THOUSAND Speed -- a player about ninety seconds into their first session,
-	-- moving at 22. A threshold near that number would mean the first echo only
-	-- appeared while sprinting downhill.
+	-- This used to emit cloned character limbs -- up to four echoes at a time,
+	-- fifteen parts each, respawned every few studs for as long as you ran. It
+	-- read well and it capped hard: a fifth ghost cost fifteen more parts, so
+	-- the count stopped at four and every tier above the fourth was spent on
+	-- making the SAME four echoes look better. That is why the top half of the
+	-- ladder had nothing structural left to give.
 	--
-	-- The cost is stated: at 10 studs/s a heavy pod only suppresses the ghosts up
-	-- to about 2M Speed, where 0.30 x walk finally clears the bar. Past that a
-	-- loaded player still leaves echoes -- slower and further apart, because the
-	-- spacing is in STUDS, which is the honest version of the same signal.
-	--==========================================================================
-	MoveStudsPerSecond = 10,
-
-	--==========================================================================
-	-- WEIGHT SUPPRESSES THE GHOSTS, AND THE SPEED GATE CANNOT DO IT ANY MORE
+	-- One Trail per character has no such cap. Length, width, brightness and
+	-- animation are all free to keep climbing, so every step up the ladder is
+	-- visibly more than the one below it in the SHAPE of the thing and not only
+	-- in its colour.
 	--
-	-- The gate used to do both jobs. At 35 studs/s a heavy pod held a player
-	-- under it and the echoes stopped; at 10 -- which tier 1 needs, because a
-	-- player at 1K Speed walks at 22 -- a loaded player clears it easily, and a
-	-- capped player hauling 9,000 kg still does 45. The one moment the whole
-	-- game is built around, running home rich and slow, was about to be the
-	-- moment with the most spectacular visual effect in the game attached.
-	--
-	-- So weight gets its own test, off the SERVER'S multiplier. Three bands:
-	--
-	--     above 0.75    empty-handed or nearly. The full tier, untouched.
-	--     0.50 to 0.75  laden. One echo, dimmer, further apart -- the effect is
-	--                   still there and is visibly struggling, which is a better
-	--                   reading than a hard cut.
-	--     below 0.50    heavy. Nothing but the trail. A maximum pod is 0.30, so
-	--                   this is what guarantees suppression at EVERY tier
-	--                   including the rainbow.
-	--
-	-- Bands rather than a smooth curve on purpose: three states a player can
-	-- learn are worth more than a continuum nobody can read, and "my ghosts went
-	-- away" has to be a fact rather than a feeling.
-	--==========================================================================
-	CarryFullAbove = 0.75,
-	CarryReducedAbove = 0.50,
-	-- What the middle band does to a tier.
-	CarryReducedGhosts = 1,
-	-- Added to StartTransparency, so a laden echo is fainter at every tier.
-	CarryReducedFade = 0.18,
-	-- Emitted this much further apart, so it is sparser as well as fainter.
-	CarryReducedSpacing = 1.6,
-
-	--==========================================================================
-	-- A JUMP THIS BIG WAS NOT A RUN
-	--
-	-- Respawns, the nest parent's throw, the mill mount, the night road ejection
-	-- back, and any future teleport all move a character further in one frame
-	-- than running can. Emitting across one would draw a line of ghosts over the
-	-- whole map.
-	--==========================================================================
-	TeleportStuds = 24,
-
-	RemoteMaxStuds = 120,
-	LocalMaxGhosts = 4,
-	RemoteMaxGhosts = 2,
-	MobileMaxGhosts = 2,
-
-	--==========================================================================
-	-- COLOUR MOVES AT TWELVE HERTZ, NOT AT THE FRAME RATE
-	--
-	-- A hue wave is not something anybody can see at 60 Hz that they cannot see
-	-- at 12. Recomputing four ghosts x fifteen parts every frame is 3,600 Color3
-	-- writes a second for an animation that looks identical at a fifth of that.
-	--
-	-- Mobile drops to eight, which is still smooth for a wave this slow.
-	--==========================================================================
-	ColourHz = 12,
-	MobileColourHz = 8,
-
-	-- How far the hue travels from head to feet across one ghost. The reason the
-	-- rainbow FLOWS down the body instead of painting each echo one flat colour.
-	BodyHueSpread = 0.45,
-
-	--==========================================================================
-	-- THE TRAIL STEPS BACK SO THE GHOSTS HAVE ROOM
-	--
-	-- Both at full strength is a solid smear with no shape in it. The streak
-	-- keeps the LINE and the ghosts carry the reading.
-	--==========================================================================
-	--==========================================================================
-	-- THE SETTING THAT DOES NOT EXIST YET
-	--
-	-- An ATTRIBUTE on the local player rather than a global function, because it
-	-- is the only seam that is all four things a setting needs to be: writable
-	-- by a settings panel, readable by the effect, per-client without
-	-- replicating, and inspectable by anything that wants to know what a machine
-	-- is actually rendering.
-	--
-	-- Unset means Full on a desktop and Reduced on a phone -- the effect decides
-	-- the default, and this only ever overrides it.
+	-- THE RIBBON NO LONGER STEPS BACK. There was a TrailTransparencyFloor here
+	-- that held the streak deliberately faint so the echoes had room to read
+	-- inside it. With the echoes gone the ribbon carries the whole reading, so
+	-- it gets STRONGER with tier -- the exact inverse of what it used to do.
 	--==========================================================================
 	QualityAttribute = "SeedAfterimageQuality",
-	TrailTransparencyFloor = 0.62,
-	-- Keypoints in the trail's travelling rainbow. Roblox caps a ColorSequence
-	-- at 20; eight is enough to read as a spectrum and cheap to rebuild.
-	TrailRainbowStops = 8,
+
+	--== movement gates ==--
+	-- Standing still at a high WalkSpeed must not smear a ribbon across a plot,
+	-- and a respawn must not draw one across the map.
+	MinGroundSpeed = 2,
+	TeleportStuds = 24,
+	-- Past this, somebody else's ribbon is not worth driving. Checked before the
+	-- work rather than by MaxDistance, because the point is to skip COMPUTING
+	-- it, not merely to skip drawing it.
+	RemoteMaxStuds = 120,
+
+	-- Roblox caps a ColorSequence at 20. Eight reads as a spectrum and is cheap
+	-- to rebuild on the colour clock.
+	RainbowStops = 8,
+	-- How often the animated tiers are repainted. A wave that moved at the frame
+	-- rate would run at a different speed on every machine.
+	ColourInterval = 1 / 30,
+
+	--==========================================================================
+	-- WHAT A LOAD DOES TO IT
+	--
+	-- Read off the SERVER'S carry multiplier, never re-derived from a size --
+	-- a client that worked it out for itself is a client that could decide not
+	-- to. Above CarryFullAbove nothing changes; below CarryReducedAbove the
+	-- ribbon goes out entirely, which is what guarantees a Colossal haul is
+	-- silent at every tier including the rainbow.
+	--==========================================================================
+	CarryFullAbove = 0.92,
+	CarryReducedAbove = 0.55,
+	CarryLifetimeScale = 0.45,
+	CarryWidthScale = 0.60,
+	CarryFadeAdd = 0.18,
+
+	-- Phones get a shorter, narrower ribbon rather than a different effect. The
+	-- whole point of moving off ghosts is that every machine can have every
+	-- tier.
+	ReducedLifetimeScale = 0.55,
+	ReducedWidthScale = 0.85,
 
 	--==========================================================================
 	-- THE SEVEN
 	--
-	--   From               the Speed score that unlocks it
-	--   Ghosts             how many echoes may exist at once
-	--   SpacingStuds       distance travelled between emissions
-	--   FadeSeconds        how long one echo lives
-	--   StartTransparency  how solid it is at birth
-	--   Palette            the colours it cycles through
-	--   GhostSpread        how far apart consecutive ghosts sit in the palette
-	--   BodyGradient       spread the palette down the body as well
-	--   Wave               palette travel per second (0 is static)
-	--   Pulse              brightness pulse depth while fading
-	--   Shimmer            fast, shallow brightness flicker
-	--   Rainbow            full hue wheel instead of the palette
-	--   Expand             outward growth over the fade, as a fraction
-	--   TrailRainbow       animate the movement trail as a travelling rainbow
+	--   From              the Speed score that unlocks it
+	--   Lifetime          how long the ribbon persists behind you, in seconds
+	--   WidthStuds        the separation of the two attachments, which IS the
+	--                     ribbon's width -- a Trail draws between a pair
+	--   HeadTransparency  how solid it is where it leaves the body
+	--   LightEmission     how much it ignores world lighting
+	--   Palette           the colours it cycles through
+	--   Wave              palette travel per second (0 is static)
+	--   Shimmer           fast, shallow brightness flicker
+	--   Rainbow           full hue wheel instead of the palette
+	--
+	-- EVERY COLUMN CLIMBS. That is the thing the ghost ladder could not do once
+	-- the count capped at four, and it is the whole reason for the change.
 	--==========================================================================
 	Tiers = {
 		{
 			From = 1e3,
 			Name = "First Echo",
-			Ghosts = 1,
-			SpacingStuds = 11.5,
-			FadeSeconds = 0.14,
-			-- Barely there. It is a hint that something has started, not a
-			-- statement, and a player ninety seconds in has not earned a
-			-- statement.
-			StartTransparency = 0.62,
+			-- Barely there. A hint that something has started, not a statement,
+			-- and a player ninety seconds in has not earned a statement.
+			Lifetime = 0.18,
+			WidthStuds = 1.00,
+			HeadTransparency = 0.62,
+			LightEmission = 0.15,
 			Palette = { Color3.fromRGB(206, 230, 255) },
-			GhostSpread = 0,
-			BodyGradient = false,
 			Wave = 0,
-			Pulse = 0,
 			Shimmer = 0,
 			Rainbow = false,
-			Expand = 0,
-			TrailRainbow = false,
 		},
 		{
 			From = 1e6,
 			Name = "Double Step",
-			Ghosts = 2,
-			--==================================================================
-			-- MEASURED AT 1M, WHERE IT IS ACTUALLY EARNED, AND IT WAS A SINGLE
-			--
-			-- 9.5 studs at fade 0.18 is a double at speed and a SINGLE at the
-			-- score that unlocks it: a player at 1M Speed walks at 32, so an
-			-- echo every 9.5 studs is one every 0.297s, and each was dead 0.12s
-			-- before the next was born. "Double Step" showed one ghost.
-			--
-			-- FADE IS WALL-CLOCK AND SPEED IS NOT. That is the whole reason this
-			-- number is longer than tier 3's: tier 2 is worn by somebody moving
-			-- at 32 and tier 3 by somebody at 56, so the same PERSISTENCE costs
-			-- a longer fade lower down the ladder. Reading the column on its own
-			-- and calling it out of order is reading it without the speeds.
-			--
-			-- 9.0 at 0.30 was the first attempt and it MEASURED AS A SINGLE.
-			-- The arithmetic said two -- 0.281s between echoes against a 0.30s
-			-- life -- but that overlap is nineteen milliseconds out of a 281ms
-			-- cycle, so for 93% of the time there was exactly one ghost and a
-			-- three-second run never once caught a pair. Winning a rounding is
-			-- not the same as looking like a double step.
-			--
-			-- 8.0 at 0.36 gives 0.25s between echoes against a 0.36s life: the
-			-- second one is alive for 44% of every cycle, which reads. Spacing
-			-- stays wider than tier 3's 7.5, so the ladder still tightens as it
-			-- climbs.
-			--
-			-- Measured at exactly 1,000,000 Speed, walking 32.00.
-			--==================================================================
-			SpacingStuds = 8.0,
-			FadeSeconds = 0.36,
-			StartTransparency = 0.54,
-			-- Two ghosts, two ends of the palette: the near one blue, the far
-			-- one cyan, so the pair reads as a direction rather than a stutter.
-			Palette = { Color3.fromRGB(150, 198, 255), Color3.fromRGB(140, 240, 246) },
-			GhostSpread = 1,
-			BodyGradient = false,
+			Lifetime = 0.30,
+			WidthStuds = 1.25,
+			HeadTransparency = 0.54,
+			LightEmission = 0.30,
+			Palette = {
+				Color3.fromRGB(150, 198, 255),
+				Color3.fromRGB(140, 240, 246),
+			},
 			Wave = 0,
-			Pulse = 0,
 			Shimmer = 0,
 			Rainbow = false,
-			Expand = 0,
-			TrailRainbow = false,
 		},
 		{
 			From = 1e9,
 			Name = "Charged Blur",
-			Ghosts = 3,
-			SpacingStuds = 7.5,
-			FadeSeconds = 0.22,
-			StartTransparency = 0.46,
-			Palette = { Color3.fromRGB(132, 176, 255), Color3.fromRGB(192, 156, 255) },
-			GhostSpread = 1,
-			BodyGradient = false,
-			Wave = 0,
-			-- The first tier where an echo does something while it dies rather
-			-- than only getting fainter.
-			Pulse = 0.16,
+			-- The first tier whose colour moves at all. Up to here the ribbon is
+			-- a fact about your speed; from here it starts being a performance.
+			Lifetime = 0.42,
+			WidthStuds = 1.50,
+			HeadTransparency = 0.46,
+			LightEmission = 0.45,
+			Palette = {
+				Color3.fromRGB(132, 176, 255),
+				Color3.fromRGB(192, 156, 255),
+			},
+			Wave = 0.10,
 			Shimmer = 0,
 			Rainbow = false,
-			Expand = 0,
-			TrailRainbow = false,
 		},
 		{
 			From = 1e12,
 			Name = "Phase Runner",
-			Ghosts = 4,
-			SpacingStuds = 6.5,
-			FadeSeconds = 0.26,
-			StartTransparency = 0.40,
-			Palette = { Color3.fromRGB(248, 246, 255), Color3.fromRGB(168, 108, 255) },
-			-- The transition runs down the BODY here, not across the echoes:
-			-- white at the head, violet at the feet, the same on every ghost.
-			GhostSpread = 0,
-			BodyGradient = true,
-			Wave = 0,
-			Pulse = 0.14,
+			Lifetime = 0.54,
+			WidthStuds = 1.80,
+			HeadTransparency = 0.40,
+			LightEmission = 0.60,
+			Palette = {
+				Color3.fromRGB(248, 246, 255),
+				Color3.fromRGB(168, 108, 255),
+			},
+			Wave = 0.18,
 			Shimmer = 0,
 			Rainbow = false,
-			Expand = 0,
-			TrailRainbow = false,
 		},
 		{
 			From = 1e13,
 			Name = "Prism Wake",
-			Ghosts = 4,
-			SpacingStuds = 5.75,
-			FadeSeconds = 0.28,
-			StartTransparency = 0.36,
+			Lifetime = 0.66,
+			WidthStuds = 2.05,
+			HeadTransparency = 0.36,
+			LightEmission = 0.75,
 			Palette = {
 				Color3.fromRGB(120, 240, 250),
 				Color3.fromRGB(176, 120, 255),
 				Color3.fromRGB(255, 140, 220),
 			},
-			GhostSpread = 1,
-			BodyGradient = false,
-			Wave = 0,
-			Pulse = 0.12,
-			-- The shimmer is brightness, not geometry: no second part, no
-			-- emitter, nothing added to the scene.
+			Wave = 0.26,
 			Shimmer = 0.10,
 			Rainbow = false,
-			Expand = 0,
-			TrailRainbow = false,
 		},
 		{
 			From = 1e14,
 			Name = "Aurora Rush",
-			Ghosts = 4,
-			SpacingStuds = 5,
-			FadeSeconds = 0.30,
-			StartTransparency = 0.32,
+			Lifetime = 0.76,
+			WidthStuds = 2.30,
+			HeadTransparency = 0.32,
+			LightEmission = 0.88,
 			Palette = {
 				Color3.fromRGB(110, 236, 246),
 				Color3.fromRGB(126, 240, 168),
 				Color3.fromRGB(176, 128, 255),
 				Color3.fromRGB(246, 246, 255),
 			},
-			-- Each echo starts somewhere else in the aurora AND the whole
-			-- palette drifts down the body: that is what makes it a curtain
-			-- rather than four coloured statues.
-			GhostSpread = 1,
-			BodyGradient = true,
-			Wave = 0.22,
-			Pulse = 0.12,
+			Wave = 0.38,
 			Shimmer = 0.06,
 			Rainbow = false,
-			Expand = 0,
-			TrailRainbow = false,
 		},
 		{
 			From = 1e15,
 			Name = "Rainbow Ascension",
-			-- STILL FOUR. Everything below is colour and motion; not one extra
-			-- instance is created for the top of the ladder.
-			Ghosts = 4,
-			SpacingStuds = 4.75,
-			FadeSeconds = 0.32,
-			StartTransparency = 0.28,
-			-- Ignored: Rainbow walks the whole hue wheel instead.
+			-- The end of the ladder, and it must not be a recolour of the one
+			-- below. It is nearly a second longer, the widest, the brightest,
+			-- and the only one that abandons a palette for the whole wheel.
+			Lifetime = 0.88,
+			WidthStuds = 2.60,
+			HeadTransparency = 0.28,
+			LightEmission = 1.00,
 			Palette = { Color3.fromRGB(255, 255, 255) },
-			GhostSpread = 1,
-			BodyGradient = true,
-			Wave = 0.5,
-			Pulse = 0.18,
+			Wave = 0.60,
 			Shimmer = 0.05,
 			Rainbow = true,
-			-- Three percent, over the whole fade. Enough to read as the echo
-			-- letting go; small enough that it never looks like a bug in the rig.
-			Expand = 0.03,
-			TrailRainbow = true,
 		},
 	},
 }
