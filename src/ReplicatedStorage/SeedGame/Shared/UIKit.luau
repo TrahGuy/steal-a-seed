@@ -32,7 +32,135 @@
 -- the HUD is an asset id.
 --==============================================================================
 
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+
+--==============================================================================
+-- ONE FRAME LOOP FOR EVERY CARD, NOT ONE PER CARD
+--
+-- A Garden with twelve rows and an Index with five is seventeen cards, and each
+-- one used to open its own RenderStepped. Seventeen connections, each running a
+-- chain of string.find and then a whole-model PivotTo, sixty times a second.
+--
+-- Worse, they never stopped. The guard was `if not holder.Visible` and
+-- VISIBLE IS NOT INHERITED IN ROBLOX: closing a panel sets the panel's own
+-- Visible to false and every descendant stays true, so the guard was true
+-- forever and the cards animated behind a closed menu for the whole session.
+--
+-- One connection now, over a registry, and it disconnects itself when the last
+-- card goes. Each card is asked whether it is actually on screen first -- see
+-- onScreen, which walks what Visible does not.
+--==============================================================================
+local cardUpdaters: { [Instance]: (number) -> () } = {}
+local cardCount = 0
+local cardLoop: RBXScriptConnection? = nil
+
+local function pumpCards(dt: number)
+	for _, update in pairs(cardUpdaters) do
+		update(dt)
+	end
+end
+
+local function registerCard(key: Instance, update: (number) -> ())
+	if cardUpdaters[key] == nil then
+		cardCount += 1
+	end
+	cardUpdaters[key] = update
+	if not cardLoop then
+		cardLoop = RunService.RenderStepped:Connect(pumpCards)
+	end
+end
+
+local function unregisterCard(key: Instance)
+	if cardUpdaters[key] == nil then
+		return
+	end
+	cardUpdaters[key] = nil
+	cardCount -= 1
+	if cardCount <= 0 and cardLoop then
+		cardLoop:Disconnect()
+		cardLoop = nil
+		cardCount = 0
+	end
+end
+
+--==============================================================================
+-- IS THIS THING ACTUALLY ON SCREEN?
+--
+-- GuiObject.Visible describes ONE object. A frame inside a hidden parent is
+-- still Visible = true and simply is not drawn, which is why the old guard
+-- never fired. This walks to the ScreenGui and asks the whole chain.
+--
+-- Four or five property reads, against a PivotTo over a forty-part model. It is
+-- not the expensive half.
+--==============================================================================
+local function onScreen(obj: GuiObject): boolean
+	local node: Instance? = obj
+	while node do
+		if node:IsA("ScreenGui") then
+			return (node :: ScreenGui).Enabled
+		end
+		if node:IsA("GuiObject") and not (node :: GuiObject).Visible then
+			return false
+		end
+		node = node.Parent
+	end
+	return false
+end
+
+--==============================================================================
+-- THE IDLE, PICKED ONCE
+--
+-- The form used to be matched with up to a dozen string.find calls PER CARD PER
+-- FRAME. It only changes when the card changes what it is showing, so it is
+-- resolved there instead and stored as a function.
+--==============================================================================
+local function idleFor(form: string): (number) -> CFrame
+	local f = string.lower(form)
+	if f == "cube" or string.find(f, "nubkin") then
+		return function(t)
+			local bounce = math.abs(math.sin(t * 3.4))
+			return CFrame.new(0, bounce * 0.16, 0)
+				* CFrame.Angles(0, math.sin(t * 2.6) * math.rad(6), math.sin(t * 3.4) * math.rad(4))
+		end
+	elseif f == "orb" or string.find(f, "petalpip") then
+		return function(t)
+			return CFrame.new(0, math.sin(t * 2.2) * 0.08, 0)
+				* CFrame.Angles(math.sin(t * 1.8) * math.rad(7), math.cos(t * 1.1) * math.rad(8),
+					math.sin(t * 2.2) * math.rad(5))
+		end
+	elseif f == "teardrop" or string.find(f, "spiretip") or string.find(f, "sprout") then
+		return function(t)
+			return CFrame.Angles(math.sin(t * 2.4) * math.rad(8), math.sin(t * 1.6) * math.rad(14),
+				math.cos(t * 2.4) * math.rad(6))
+		end
+	elseif f == "mushroom" or string.find(f, "toadcap") or string.find(f, "shroom") then
+		return function(t)
+			return CFrame.new(0, math.sin(t * 4.8) * 0.06, 0)
+				* CFrame.Angles(math.sin(t * 2.5) * math.rad(9), 0, math.cos(t * 2.5) * math.rad(8))
+		end
+	elseif f == "bell" or string.find(f, "bellchime") then
+		return function(t)
+			return CFrame.Angles(0, 0, math.sin(t * 2.2) * math.rad(14))
+				* CFrame.Angles(math.cos(t * 1.1) * math.rad(5), 0, 0)
+		end
+	elseif f == "ready" then
+		return function(t)
+			local hop = math.abs(math.sin(t * 6.0)) * 0.20
+			return CFrame.new(0, hop, 0)
+				* CFrame.Angles(math.sin(t * 16.0) * math.rad(5), 0, math.cos(t * 14.0) * math.rad(5))
+		end
+	elseif f == "pod" then
+		return function(t)
+			return CFrame.new(0, math.sin(t * 2.0) * 0.05, 0)
+				* CFrame.Angles(math.sin(t * 1.8) * math.rad(5), 0, math.cos(t * 2.4) * math.rad(4))
+		end
+	end
+	return function(t)
+		return CFrame.new(0, math.sin(t * 2.0) * 0.05, 0)
+			* CFrame.Angles(0, math.sin(t * 1.5) * math.rad(4), 0)
+	end
+end
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local SoundKit = require(script.Parent:WaitForChild("SoundKit"))
@@ -378,6 +506,7 @@ local function piece(parent: GuiObject, name: string, cx: number, cy: number,
 	f.Size = UDim2.fromScale(w, h)
 	f.BackgroundColor3 = colour
 	f.BorderSizePixel = 0
+	f.Active = false
 	f.ZIndex = z or 2
 	if rotation then
 		f.Rotation = rotation
@@ -1081,11 +1210,15 @@ export type PlantCard = {
 	border: UIStroke,
 	action: ImageButton,
 	setBackdrop: (string?) -> (),
-	setModel: (string, ((Instance) -> Model?)?) -> (),
+	setModel: (string, (((Instance) -> Model?)?), string?) -> (),
 	setHovered: (boolean) -> (),
-	-- Shrink the card into the top of its cell and reveal the action button in
-	-- the strip that frees up. Hover is disabled for as long as it is on.
 	setSelected: (boolean, string?) -> (),
+	setWeightTag: (string?, Color3?) -> (),
+	setStatusTag: (string?, Color3?, Color3?) -> (),
+	setProgress: (number?, Color3?) -> (),
+	setReadyPulse: (boolean) -> (),
+	setStageTheme: (string) -> (),
+	setEmpty: (boolean) -> (),
 }
 
 local Z_SHADOW = 3
@@ -1102,15 +1235,53 @@ local Z_LABEL = 22
 -- view, which is what makes a Nubkin and a Bellchime both fill their card
 -- without a per-species number to keep in step.
 --==============================================================================
+local function addPedestal(model: Model, pivot: CFrame, size: Vector3)
+	if model:FindFirstChild("Pedestal") then
+		return
+	end
+	local groundY = pivot.Position.Y - size.Y * 0.5
+	local rad = math.max(size.X, size.Z) * 0.58 + 0.35
+
+	local ped = Instance.new("Model")
+	ped.Name = "Pedestal"
+
+	local disc = Instance.new("Part")
+	disc.Name = "Soil"
+	disc.Shape = Enum.PartType.Cylinder
+	disc.Size = Vector3.new(0.20, rad * 2, rad * 2)
+	disc.CFrame = CFrame.new(pivot.Position.X, groundY - 0.10, pivot.Position.Z) * CFrame.Angles(0, 0, math.pi * 0.5)
+	disc.Color = Color3.fromRGB(64, 46, 32)
+	disc.Material = Enum.Material.Grass
+	disc.Anchored = true
+	disc.CanCollide = false
+	disc.Parent = ped
+
+	local rim = Instance.new("Part")
+	rim.Name = "Grass"
+	rim.Shape = Enum.PartType.Cylinder
+	rim.Size = Vector3.new(0.12, rad * 2.25, rad * 2.25)
+	rim.CFrame = CFrame.new(pivot.Position.X, groundY - 0.18, pivot.Position.Z) * CFrame.Angles(0, 0, math.pi * 0.5)
+	rim.Color = Color3.fromRGB(98, 168, 68)
+	rim.Material = Enum.Material.Grass
+	rim.Anchored = true
+	rim.CanCollide = false
+	rim.Parent = ped
+
+	ped.Parent = model
+end
+
 local function frameModel(hero: ViewportFrame, model: Model)
 	local pivot, size = model:GetBoundingBox()
+	addPedestal(model, pivot, size)
+
+	pivot, size = model:GetBoundingBox()
 	local extent = math.max(size.Magnitude, 0.1)
 
 	local camera = Instance.new("Camera")
-	camera.FieldOfView = 40
-	local distance = (extent * CARD.CameraFill * 0.5)
+	camera.FieldOfView = 38
+	local distance = (extent * CARD.CameraFill * 0.54)
 		/ math.tan(math.rad(camera.FieldOfView * 0.5))
-	local focus = pivot.Position + Vector3.new(0, size.Y * CARD.CameraRise, 0)
+	local focus = pivot.Position + Vector3.new(0, size.Y * (CARD.CameraRise * 0.88), 0)
 	camera.CFrame = CFrame.lookAt(focus + CARD.CameraOffset.Unit * distance, focus)
 	camera.Parent = hero
 	hero.CurrentCamera = camera
@@ -1119,9 +1290,6 @@ end
 function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	local radius = CARD.Radius
 
-	-- What the grid positions. Transparent, so the shadow and the card can be
-	-- siblings inside it -- a shadow parented to the card would draw on top of
-	-- the card's own fill, which is the opposite of a shadow.
 	local holder = Instance.new("Frame")
 	holder.Name = options.name or "PlantCard"
 	holder.BackgroundTransparency = 1
@@ -1133,17 +1301,6 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	scale.Scale = 1
 	scale.Parent = holder
 
-	--==========================================================================
-	-- A WRAPPER, SO TWO SCALES DO NOT FIGHT
-	--
-	-- The hover pop scales the HOLDER, which has to include the action button --
-	-- a button that stayed put while its card grew would come loose from it.
-	-- Selection scales this instead, and only this, so the button keeps its size
-	-- and its place at the bottom of the cell while the card above it shrinks.
-	--
-	-- Anchored top-centre: a card that shrank from its top-left corner would
-	-- slide away from the middle of its own cell.
-	--==========================================================================
 	local card = Instance.new("Frame")
 	card.Name = "CardWrap"
 	card.AnchorPoint = Vector2.new(0.5, 0)
@@ -1168,50 +1325,271 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	shadow.Parent = card
 	UIKit.corner(shadow, radius)
 
-	-- An ImageButton with no image: it is the thing the pointer enters, and a
-	-- plain Frame does not raise MouseEnter unless it is Active anyway.
 	local button = Instance.new("ImageButton")
 	button.Name = "Card"
 	button.Size = UDim2.fromScale(1, 1)
 	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
 	button.AutoButtonColor = false
+	button.Active = true
+	button.Selectable = true
 	button.ZIndex = Z_CARD
 	button.Parent = card
 	local border = UIKit.stroke(button, BLACK, 2.5)
 
-	-- The stage clips so the backdrop stops at the rounded corner. The CARD does
-	-- not clip: a clipped card would cut its own pop off at the edge.
 	local stage = Instance.new("Frame")
 	stage.Name = "Stage"
 	stage.Size = UDim2.fromScale(1, 1)
 	stage.BorderSizePixel = 0
 	stage.ClipsDescendants = true
+	stage.Active = false
 	stage.ZIndex = Z_STAGE
 	stage.Parent = button
 	UIKit.corner(stage, radius)
 	local dusk = UIKit.gradient(stage, CARD.DuskTop, CARD.DuskBottom)
 
-	-- The species picture, when there is one to show. Crop rather than stretch:
-	-- these are 512 x 666 and a card is not, and a squashed meadow reads as a
-	-- mistake.
+	-- Top gloss line for a sleek toy plastic sheen
+	local gloss = Instance.new("Frame")
+	gloss.Name = "Gloss"
+	gloss.Size = UDim2.new(1, 0, 0, 3)
+	gloss.Position = UDim2.fromOffset(0, 0)
+	gloss.BackgroundColor3 = WHITE
+	gloss.BackgroundTransparency = 0.72
+	gloss.BorderSizePixel = 0
+	gloss.Active = false
+	gloss.ZIndex = Z_STAGE + 1
+	gloss.Parent = stage
+
+	--==========================================================================
+	-- PROCEDURAL DECORATIVE BACKGROUND LAYERS
+	--==========================================================================
+	local bgDeco = Instance.new("Frame")
+	bgDeco.Name = "BgDeco"
+	bgDeco.Size = UDim2.fromScale(1, 1)
+	bgDeco.BackgroundTransparency = 1
+	bgDeco.BorderSizePixel = 0
+	bgDeco.Active = false
+	bgDeco.ZIndex = Z_STAGE
+	bgDeco.Parent = stage
+
+	-- 1. Soft Spotlight Halo
+	local halo = Instance.new("Frame")
+	halo.Name = "Halo"
+	halo.AnchorPoint = Vector2.new(0.5, 0.5)
+	halo.Position = UDim2.fromScale(0.5, 0.40)
+	halo.Size = UDim2.fromScale(0.85, 0.65)
+	halo.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	halo.BackgroundTransparency = 0.88
+	halo.BorderSizePixel = 0
+	halo.Active = false
+	halo.ZIndex = Z_STAGE
+	halo.Parent = bgDeco
+	UIKit.corner(halo, 36)
+
+	-- 2. Distant Hill Silhouette
+	local hillFar = Instance.new("Frame")
+	hillFar.Name = "HillFar"
+	hillFar.AnchorPoint = Vector2.new(0.5, 1)
+	hillFar.Position = UDim2.fromScale(0.5, 0.74)
+	hillFar.Size = UDim2.fromScale(1.3, 0.35)
+	hillFar.BackgroundColor3 = Color3.fromRGB(28, 48, 40)
+	hillFar.BackgroundTransparency = 0.5
+	hillFar.BorderSizePixel = 0
+	hillFar.Active = false
+	hillFar.ZIndex = Z_STAGE
+	hillFar.Parent = bgDeco
+	UIKit.corner(hillFar, 42)
+
+	-- 3. Near Hill / Lawn Silhouette
+	local hillNear = Instance.new("Frame")
+	hillNear.Name = "HillNear"
+	hillNear.AnchorPoint = Vector2.new(0.5, 1)
+	hillNear.Position = UDim2.fromScale(0.5, 0.80)
+	hillNear.Size = UDim2.fromScale(1.2, 0.28)
+	hillNear.BackgroundColor3 = Color3.fromRGB(38, 68, 52)
+	hillNear.BackgroundTransparency = 0.35
+	hillNear.BorderSizePixel = 0
+	hillNear.Active = false
+	hillNear.ZIndex = Z_STAGE
+	hillNear.Parent = bgDeco
+	UIKit.corner(hillNear, 36)
+
+	-- 4. Floating Glowing Spores / Sparkles
+	local spores = {}
+	local sporeCoords = {
+		{ x = 0.18, y = 0.20, s = 4, c = Color3.fromRGB(180, 245, 140), t = 0.4 },
+		{ x = 0.82, y = 0.25, s = 5, c = Color3.fromRGB(255, 235, 150), t = 0.35 },
+		{ x = 0.26, y = 0.44, s = 3, c = Color3.fromRGB(160, 230, 255), t = 0.45 },
+		{ x = 0.76, y = 0.48, s = 4, c = Color3.fromRGB(220, 255, 160), t = 0.4 },
+	}
+	for i, sp in ipairs(sporeCoords) do
+		local dot = Instance.new("Frame")
+		dot.Name = "Spore" .. i
+		dot.AnchorPoint = Vector2.new(0.5, 0.5)
+		dot.Position = UDim2.fromScale(sp.x, sp.y)
+		dot.Size = UDim2.fromOffset(sp.s, sp.s)
+		dot.BackgroundColor3 = sp.c
+		dot.BackgroundTransparency = sp.t
+		dot.BorderSizePixel = 0
+		dot.Active = false
+		dot.ZIndex = Z_STAGE
+		dot.Parent = bgDeco
+		UIKit.corner(dot, 3)
+		table.insert(spores, dot)
+	end
+
+	-- The species backdrop picture, when there is one to show.
 	local backdrop = Instance.new("ImageLabel")
 	backdrop.Name = "Backdrop"
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.BackgroundTransparency = 1
 	backdrop.BorderSizePixel = 0
+	backdrop.Active = false
 	backdrop.ScaleType = Enum.ScaleType.Crop
 	backdrop.ImageColor3 = CARD.ArtTint
 	backdrop.Visible = false
 	backdrop.ZIndex = Z_STAGE
 	backdrop.Parent = stage
 
+	-- Bottom text vignette for crystal-clear readability
+	local textShade = Instance.new("Frame")
+	textShade.Name = "TextShade"
+	textShade.AnchorPoint = Vector2.new(0, 1)
+	textShade.Position = UDim2.fromScale(0, 1)
+	textShade.Size = UDim2.new(1, 0, 0.44, 0)
+	textShade.BorderSizePixel = 0
+	textShade.Active = false
+	textShade.ZIndex = Z_STAGE + 1
+	textShade.Parent = stage
+	local shadeGrad = Instance.new("UIGradient")
+	shadeGrad.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(12, 10, 16)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 10, 16)),
+	})
+	shadeGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.4, 0.5),
+		NumberSequenceKeypoint.new(1, 0.15),
+	})
+	shadeGrad.Rotation = 90
+	shadeGrad.Parent = textShade
+
+	--==========================================================================
+	-- TOP TAG BADGES: Weight & Status
+	--==========================================================================
+	local tagLeft = Instance.new("Frame")
+	tagLeft.Name = "TagLeft"
+	tagLeft.Position = UDim2.fromOffset(6, 6)
+	tagLeft.Size = UDim2.fromOffset(46, 16)
+	tagLeft.AutomaticSize = Enum.AutomaticSize.X
+	tagLeft.BackgroundColor3 = Color3.fromRGB(14, 12, 18)
+	tagLeft.BackgroundTransparency = 0.32
+	tagLeft.BorderSizePixel = 0
+	tagLeft.Active = false
+	tagLeft.Visible = false
+	tagLeft.ZIndex = Z_LABEL
+	tagLeft.Parent = button
+	UIKit.corner(tagLeft, 5)
+	local tagLeftStroke = UIKit.stroke(tagLeft, Color3.fromRGB(255, 255, 255), 1, 0.82)
+
+	local tagLeftPad = Instance.new("UIPadding")
+	tagLeftPad.PaddingLeft = UDim.new(0, 5)
+	tagLeftPad.PaddingRight = UDim.new(0, 6)
+	tagLeftPad.Parent = tagLeft
+
+	local tagLeftList = Instance.new("UIListLayout")
+	tagLeftList.FillDirection = Enum.FillDirection.Horizontal
+	tagLeftList.VerticalAlignment = Enum.VerticalAlignment.Center
+	tagLeftList.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	tagLeftList.Padding = UDim.new(0, 4)
+	tagLeftList.Parent = tagLeft
+
+	local tagLeftDot = Instance.new("Frame")
+	tagLeftDot.Name = "Dot"
+	tagLeftDot.Size = UDim2.fromOffset(5, 5)
+	tagLeftDot.BackgroundColor3 = WHITE
+	tagLeftDot.BorderSizePixel = 0
+	tagLeftDot.Active = false
+	tagLeftDot.ZIndex = Z_LABEL
+	tagLeftDot.Parent = tagLeft
+	UIKit.corner(tagLeftDot, 3)
+
+	local tagLeftText = Instance.new("TextLabel")
+	tagLeftText.Name = "Text"
+	tagLeftText.AutomaticSize = Enum.AutomaticSize.X
+	tagLeftText.Size = UDim2.fromScale(0, 1)
+	tagLeftText.BackgroundTransparency = 1
+	tagLeftText.Font = Enum.Font.FredokaOne
+	tagLeftText.TextSize = 10
+	tagLeftText.TextColor3 = WHITE
+	tagLeftText.Active = false
+	tagLeftText.TextYAlignment = Enum.TextYAlignment.Center
+	tagLeftText.ZIndex = Z_LABEL
+	tagLeftText.Parent = tagLeft
+
+	local tagRight = Instance.new("Frame")
+	tagRight.Name = "TagRight"
+	tagRight.AnchorPoint = Vector2.new(1, 0)
+	tagRight.Position = UDim2.new(1, -6, 0, 6)
+	tagRight.Size = UDim2.fromOffset(50, 16)
+	tagRight.AutomaticSize = Enum.AutomaticSize.X
+	tagRight.BackgroundColor3 = Color3.fromRGB(14, 12, 18)
+	tagRight.BackgroundTransparency = 0.30
+	tagRight.BorderSizePixel = 0
+	tagRight.Active = false
+	tagRight.Visible = false
+	tagRight.ZIndex = Z_LABEL
+	tagRight.Parent = button
+	UIKit.corner(tagRight, 5)
+	local tagRightStroke = UIKit.stroke(tagRight, Color3.fromRGB(255, 255, 255), 1, 0.82)
+
+	local tagRightPad = Instance.new("UIPadding")
+	tagRightPad.PaddingLeft = UDim.new(0, 5)
+	tagRightPad.PaddingRight = UDim.new(0, 6)
+	tagRightPad.Parent = tagRight
+
+	local tagRightText = Instance.new("TextLabel")
+	tagRightText.Name = "Text"
+	tagRightText.AutomaticSize = Enum.AutomaticSize.X
+	tagRightText.Size = UDim2.fromScale(0, 1)
+	tagRightText.BackgroundTransparency = 1
+	tagRightText.Font = Enum.Font.FredokaOne
+	tagRightText.TextSize = 10
+	tagRightText.TextColor3 = Color3.fromRGB(142, 220, 68)
+	tagRightText.Active = false
+	tagRightText.TextYAlignment = Enum.TextYAlignment.Center
+	tagRightText.ZIndex = Z_LABEL
+	tagRightText.Parent = tagRight
+
+	--==========================================================================
+	-- GROWTH PROGRESS BAR (For Hatching Pods)
+	--==========================================================================
+	local progressBar = Instance.new("Frame")
+	progressBar.Name = "ProgressBar"
+	progressBar.AnchorPoint = Vector2.new(0.5, 1)
+	progressBar.Position = UDim2.new(0.5, 0, 1, -40)
+	progressBar.Size = UDim2.new(1, -16, 0, 4)
+	progressBar.BackgroundColor3 = Color3.fromRGB(10, 8, 14)
+	progressBar.BackgroundTransparency = 0.45
+	progressBar.BorderSizePixel = 0
+	progressBar.Active = false
+	progressBar.Visible = false
+	progressBar.ZIndex = Z_LABEL
+	progressBar.Parent = button
+	UIKit.corner(progressBar, 2)
+
+	local progressFill = Instance.new("Frame")
+	progressFill.Name = "Fill"
+	progressFill.Size = UDim2.fromScale(0, 1)
+	progressFill.BackgroundColor3 = Color3.fromRGB(142, 220, 68)
+	progressFill.BorderSizePixel = 0
+	progressFill.Active = false
+	progressFill.ZIndex = Z_LABEL
+	progressFill.Parent = progressBar
+	UIKit.corner(progressFill, 2)
+
 	--==========================================================================
 	-- THE VIEWPORT
-	--
-	-- Transparent, so the backdrop behind it is the sky. Its own rectangle bounds
-	-- everything it draws, which is the other half of why the card lost its
-	-- lattice: 3D content cannot slide off a card the way a rotated frame can.
 	--==========================================================================
 	local hero = Instance.new("ViewportFrame")
 	hero.Name = "Hero"
@@ -1220,6 +1598,7 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	hero.Size = UDim2.fromScale(0.98, 0.74)
 	hero.BackgroundTransparency = 1
 	hero.BorderSizePixel = 0
+	hero.Active = false
 	hero.Ambient = CARD.Ambient
 	hero.LightColor = CARD.LightColour
 	hero.LightDirection = CARD.LightDirection
@@ -1228,9 +1607,10 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 
 	local name = UIKit.outlined(button, "Name", options.nameSize or 15, WHITE, 2)
 	name.AnchorPoint = Vector2.new(0.5, 1)
-	name.Position = UDim2.new(0.5, 0, 1, -19)
+	name.Position = UDim2.new(0.5, 0, 1, -20)
 	name.Size = UDim2.new(1, -8, 0, 19)
 	name.TextXAlignment = Enum.TextXAlignment.Center
+	name.Active = false
 	name.ZIndex = Z_LABEL
 
 	local sub = UIKit.outlined(button, "Sub", options.subSize or 12, WHITE, 2)
@@ -1238,12 +1618,9 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	sub.Position = UDim2.new(0.5, 0, 1, -4)
 	sub.Size = UDim2.new(1, -8, 0, 16)
 	sub.TextXAlignment = Enum.TextXAlignment.Center
+	sub.Active = false
 	sub.ZIndex = Z_LABEL
 
-	--==========================================================================
-	-- A picture, or the dusk gradient. Passing nil is how a caller says "this
-	-- one has not earned a place yet" -- see the note in GameConfig.Card.
-	--==========================================================================
 	local shownArt: string? = nil
 	local function setBackdrop(speciesId: string?)
 		if shownArt == speciesId then
@@ -1256,40 +1633,134 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	end
 
 	--==========================================================================
-	-- Keyed, so a Garden clock ticking once a second does not rebuild thirty
-	-- creatures. `build` returns the model it made, or nil for a card that shows
-	-- nothing at all -- an empty hole has no plant in it.
+	-- 3D MODEL & CAMERA MANAGEMENT
 	--==========================================================================
+	local currentModel: Model? = nil
+	local modelBasePivot: CFrame = CFrame.identity
+	local activeCamera: Camera? = nil
+	local cameraDistance: number = 10
+	local cameraFocus: Vector3 = Vector3.zero
+	local cameraBasePitch: number = math.rad(-14)
+	local currentYaw: number = 0
+	local spinVelocity: number = 0
+	local isSelected: boolean = false
+	local currentFormType: string = ""
+	-- Resolved on change rather than matched per frame. See idleFor.
+	local currentIdle: (number) -> CFrame = idleFor("")
+	local animPhase: number = math.random() * math.pi * 2
+
+	local function setupCamera(model: Model)
+		local pivot, size = model:GetBoundingBox()
+		addPedestal(model, pivot, size)
+
+		pivot, size = model:GetBoundingBox()
+		modelBasePivot = pivot
+		local extent = math.max(size.Magnitude, 0.1)
+
+		local camera = Instance.new("Camera")
+		camera.FieldOfView = 38
+		cameraDistance = (extent * CARD.CameraFill * 0.54)
+			/ math.tan(math.rad(camera.FieldOfView * 0.5))
+		cameraFocus = pivot.Position + Vector3.new(0, size.Y * (CARD.CameraRise * 0.88), 0)
+		camera.CFrame = CFrame.lookAt(cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
+		camera.Parent = hero
+		hero.CurrentCamera = camera
+		activeCamera = camera
+	end
+
 	local modelKey: string? = nil
-	local function setModel(key: string, build: ((Instance) -> Model?)?)
+	local function setModel(key: string, build: ((Instance) -> Model?)?, formName: string?)
 		if modelKey == key then
+			if formName then
+				currentFormType = string.lower(formName)
+				currentIdle = idleFor(currentFormType)
+			end
 			return
 		end
 		modelKey = key
+		currentModel = nil
+		activeCamera = nil
 		hero:ClearAllChildren()
 		hero.CurrentCamera = nil
 		if not build then
 			return
 		end
+		if formName then
+			currentFormType = string.lower(formName)
+		else
+			currentFormType = ""
+		end
+		currentIdle = idleFor(currentFormType)
 		local model = build(hero)
 		if model then
-			frameModel(hero, model)
+			currentModel = model
+			setupCamera(model)
 		end
 	end
 
 	--==========================================================================
+	-- ANIMATION LOOP: Interactive Orbit & Unique Plant Idles
+	--==========================================================================
+	--==========================================================================
+	-- ONE UPDATER, DRIVEN BY THE SHARED LOOP
+	--
+	-- Registered rather than connected: see the loop at the top of the file for
+	-- why seventeen RenderSteppeds was the thing making the game lag.
+	--
+	-- onScreen(holder) is the guard that `holder.Visible` was supposed to be and
+	-- never was -- Visible is not inherited, so the old check was true even with
+	-- every panel shut and the cards animated all session.
+	--==========================================================================
+	local function updateCard(dt: number)
+		if not currentModel or not activeCamera then
+			return
+		end
+		if not onScreen(holder) then
+			return
+		end
+
+		local t = os.clock() + animPhase
+
+		--== SPIN ==--
+		if isSelected then
+			currentYaw += (1.5 + spinVelocity) * dt
+			spinVelocity = math.max(0, spinVelocity - dt * 4.8)
+		elseif spinVelocity > 0.05 then
+			currentYaw += spinVelocity * dt
+			spinVelocity = math.max(0, spinVelocity - dt * 4.8)
+		else
+			currentYaw = currentYaw + (-currentYaw) * math.min(1, dt * 7.5)
+		end
+
+		--======================================================================
+		-- THE CAMERA ORBITS THE AUTHORED VIEW, IT DOES NOT REPLACE IT
+		--
+		-- This used to rebuild the position from a hardcoded +Z, which threw
+		-- away CARD.CameraOffset entirely. That offset is (0.66, 0.28, -1), and
+		-- the Z is NEGATIVE for a reason: addFace puts the eyes at -front, so
+		-- -Z is the side with a face on it. Starting from +Z put the camera
+		-- behind every plant on the first frame, which is why they all appeared
+		-- to be facing away.
+		--
+		-- Now yaw rotates the authored direction, so yaw = 0 is exactly the
+		-- three-quarter view setupCamera framed, and a spin orbits around it.
+		--======================================================================
+		local dir = CFrame.Angles(0, currentYaw, 0) * CARD.CameraOffset.Unit
+		activeCamera.CFrame = CFrame.lookAt(cameraFocus + dir * cameraDistance, cameraFocus)
+
+		--== THE IDLE, ALREADY CHOSEN ==--
+		currentModel:PivotTo(modelBasePivot * currentIdle(t))
+	end
+
+	registerCard(button, updateCard)
+
+	button.Destroying:Connect(function()
+		-- The shared loop drops its own connection when the last card goes.
+		unregisterCard(button)
+	end)
+
+	--==========================================================================
 	-- THE ACTION BUTTON
-	--
-	-- A slab in the same family as the shop's buy buttons, lattice and all --
-	-- this one does not scroll inside itself and is not rotated relative to the
-	-- list, so the texture is safe here in a way it was never safe on the card.
-	--
-	-- Built once and hidden, rather than made on selection: a card that has to
-	-- build a button before it can show one is a card with a frame of lag in the
-	-- middle of a click.
-	--
-	-- A sibling of the card wrapper, pinned to the BOTTOM of the cell. It does
-	-- not move when the card shrinks -- the card moves away from it.
 	--==========================================================================
 	local action = UIKit.slab(holder, {
 		size = UDim2.new(1, -6, 0, CARD.ActionHeight),
@@ -1311,9 +1782,12 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	actionLabel.TextXAlignment = Enum.TextXAlignment.Center
 	actionLabel.ZIndex = Z_LABEL
 
-	-- The card is a control too: clicking one selects it and raises the action
-	-- strip. The action slab gets its own click from UIKit.slab.
 	UIKit.clicks(button)
+
+	-- Trigger instant celebratory spin on click!
+	button.MouseButton1Click:Connect(function()
+		spinVelocity = 8.5
+	end)
 
 	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale, { stroke = border })
 
@@ -1327,8 +1801,10 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 			return
 		end
 		selected = on
-		-- Off first: the pop has to let go of the ZIndex before selection takes
-		-- it, or the two lifts stack and the card never comes back down.
+		isSelected = on
+		if on then
+			spinVelocity = 8.5
+		end
 		setPopEnabled(not on)
 		if on and label then
 			actionLabel.Text = label
@@ -1338,6 +1814,131 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		TweenService:Create(selectScale, TweenInfo.new(CARD.HoverSeconds,
 			Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{ Scale = if on then CARD.SelectScale else 1 }):Play()
+	end
+
+	local function setWeightTag(text: string?, color: Color3?)
+		if text and text ~= "" then
+			tagLeftText.Text = text
+			tagLeftDot.BackgroundColor3 = color or WHITE
+			tagLeft.Visible = true
+		else
+			tagLeft.Visible = false
+		end
+	end
+
+	local function setStatusTag(text: string?, textColor: Color3?, bgColor: Color3?)
+		if text and text ~= "" then
+			tagRightText.Text = text
+			tagRightText.TextColor3 = textColor or WHITE
+			if bgColor then
+				tagRight.BackgroundColor3 = bgColor
+				tagRight.BackgroundTransparency = 0.2
+			else
+				tagRight.BackgroundColor3 = Color3.fromRGB(14, 12, 18)
+				tagRight.BackgroundTransparency = 0.30
+			end
+			tagRight.Visible = true
+		else
+			tagRight.Visible = false
+		end
+	end
+
+	local function setProgress(fraction: number?, color: Color3?)
+		if fraction ~= nil and fraction >= 0 then
+			progressBar.Visible = true
+			progressFill.Size = UDim2.fromScale(math.clamp(fraction, 0, 1), 1)
+			if color then
+				progressFill.BackgroundColor3 = color
+			end
+		else
+			progressBar.Visible = false
+		end
+	end
+
+	local pulsing = false
+	local pulseConn: RBXScriptConnection? = nil
+	local function setReadyPulse(on: boolean)
+		if pulsing == on then
+			return
+		end
+		pulsing = on
+		if pulseConn then
+			pulseConn:Disconnect()
+			pulseConn = nil
+		end
+		if on then
+			pulseConn = RunService.RenderStepped:Connect(function()
+				-- Same guard the card updater uses. A ready plant behind a shut
+				-- Garden was still lerping a colour sixty times a second.
+				if not onScreen(holder) then
+					return
+				end
+				local t = os.clock() * 4
+				local alpha = (math.sin(t) * 0.5 + 0.5)
+				local glowColor = Color3.fromRGB(245, 200, 45):Lerp(Color3.fromRGB(120, 245, 80), alpha)
+				border.Color = glowColor
+			end)
+		end
+	end
+
+	local function setStageTheme(theme: string)
+		if theme == "grown" then
+			dusk.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 52, 44)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 25, 20)),
+			})
+			halo.BackgroundColor3 = Color3.fromRGB(180, 255, 200)
+			halo.BackgroundTransparency = 0.86
+			hillFar.BackgroundColor3 = Color3.fromRGB(24, 45, 36)
+			hillNear.BackgroundColor3 = Color3.fromRGB(34, 64, 48)
+			bgDeco.Visible = true
+		elseif theme == "pod" then
+			dusk.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 32, 54)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 14, 24)),
+			})
+			halo.BackgroundColor3 = Color3.fromRGB(220, 180, 255)
+			halo.BackgroundTransparency = 0.88
+			hillFar.BackgroundColor3 = Color3.fromRGB(32, 24, 44)
+			hillNear.BackgroundColor3 = Color3.fromRGB(48, 36, 62)
+			bgDeco.Visible = true
+		elseif theme == "ready" then
+			dusk.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(68, 52, 22)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(24, 18, 10)),
+			})
+			halo.BackgroundColor3 = Color3.fromRGB(255, 230, 120)
+			halo.BackgroundTransparency = 0.78
+			hillFar.BackgroundColor3 = Color3.fromRGB(56, 42, 18)
+			hillNear.BackgroundColor3 = Color3.fromRGB(78, 60, 24)
+			bgDeco.Visible = true
+		elseif theme == "empty" then
+			dusk.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 24, 28)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 13, 16)),
+			})
+			halo.BackgroundColor3 = Color3.fromRGB(140, 150, 160)
+			halo.BackgroundTransparency = 0.95
+			hillFar.BackgroundColor3 = Color3.fromRGB(18, 20, 24)
+			hillNear.BackgroundColor3 = Color3.fromRGB(26, 28, 34)
+			bgDeco.Visible = true
+		end
+	end
+
+	local function setEmpty(isEmpty: boolean)
+		if isEmpty then
+			tagLeft.Visible = false
+			tagRight.Visible = false
+			progressBar.Visible = false
+			setReadyPulse(false)
+			setStageTheme("empty")
+			border.Color = Color3.fromRGB(110, 108, 116)
+			border.Transparency = 0.45
+			textShade.Visible = false
+		else
+			border.Transparency = 0
+			textShade.Visible = true
+		end
 	end
 
 	return {
@@ -1353,6 +1954,12 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		setModel = setModel,
 		setHovered = setHovered,
 		setSelected = setSelected,
+		setWeightTag = setWeightTag,
+		setStatusTag = setStatusTag,
+		setProgress = setProgress,
+		setReadyPulse = setReadyPulse,
+		setStageTheme = setStageTheme,
+		setEmpty = setEmpty,
 	}
 end
 

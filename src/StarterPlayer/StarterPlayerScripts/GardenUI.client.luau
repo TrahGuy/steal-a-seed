@@ -377,7 +377,7 @@ function clearSelection()
 	selectedId = nil
 end
 
-local function selectSlot(slot: Slot, placementId: number)
+local function selectSlot(slot: Slot, placementId: number?)
 	if selectedSlot == slot then
 		clearSelection()
 		return
@@ -385,16 +385,14 @@ local function selectSlot(slot: Slot, placementId: number)
 	clearSelection()
 	selectedSlot = slot
 	selectedId = placementId
-	slot.setSelected(true, "PICK UP")
+	slot.setSelected(true, if placementId then "PICK UP" else nil)
 end
 
 --==============================================================================
 -- WHAT A CARD IS OFFERING, IF ANYTHING
 --
 -- Set by the painter every time it fills a card in. nil means this card cannot
--- be selected at all -- an empty hole, a pod, somebody's missing plot -- and a
--- click on one of those does nothing rather than selecting a card with no
--- button under it.
+-- be picked up -- an empty hole, a pod, somebody's missing plot.
 --==============================================================================
 local offers: { [number]: number? } = {}
 
@@ -409,14 +407,7 @@ local function buildSlot(index: number): Slot
 
 	slot.button.Activated:Connect(function()
 		local placementId = offers[index]
-		if placementId then
-			selectSlot(slot, placementId)
-		else
-			-- A card with nothing to offer still clears whatever was selected:
-			-- clicking an empty hole is a perfectly good way of saying "not
-			-- that one".
-			clearSelection()
-		end
+		selectSlot(slot, placementId)
 	end)
 
 	slot.action.Activated:Connect(function()
@@ -616,13 +607,13 @@ local function refresh(paint: boolean)
 		footer.Text = ""
 		setSlotCount(1)
 		local slot = slotAt(1)
+		slot.setEmpty(true)
 		slot.setModel("noplot", nil)
 		slot.setBackdrop(nil)
-		slot.border.Color = GHOST
 		offers[1] = nil
-		slot.name.Text = "No plot"
+		slot.name.Text = "No Plot"
 		slot.name.TextColor3 = GHOST
-		slot.sub.Text = "this server"
+		slot.sub.Text = "Claim one first"
 		slot.sub.TextColor3 = GHOST
 		return
 	end
@@ -661,127 +652,76 @@ local function refresh(paint: boolean)
 				-- the border. FormColor belongs to the Index and stays there.
 				--==========================================================
 				local band = SeedData.ColorForKg(occupant.kg)
+				local kgFormatted = GameConfig.compact(occupant.kg) .. " kg"
 
 				if stage == STAGE_GROWN then
-					--======================================================
-					-- THE PLANT ITSELF, IN THE INDEX'S LANGUAGE
-					--
-					-- Keyed on the species alone: the portrait does not vary
-					-- with weight -- size does, and a card is not a scale
-					-- model -- so a growing bed rebuilds no art at all.
-					--======================================================
-					--======================================================
-					-- THE PLANT THAT IS ACTUALLY IN THE GROUND
-					--
-					-- Built at the weight THIS one rolled, from the same
-					-- CreatureModel the plot builds -- so the card and the
-					-- thing standing in the dirt cannot disagree about what
-					-- a Bellchime looks like.
-					--
-					-- Keyed on the species alone. The camera frames whatever
-					-- it is given, so a plant putting on weight does not
-					-- change the picture and a growing bed rebuilds nothing.
-					--======================================================
+					slot.setEmpty(false)
+					slot.setStageTheme("grown")
+					slot.setReadyPulse(false)
+					slot.setProgress(nil)
+					slot.setWeightTag(kgFormatted, band)
+					slot.setStatusTag("+$" .. GameConfig.compact(SeedData.IncomePerSecond(occupant.kg)) .. "/s",
+						Color3.fromRGB(142, 220, 68), Color3.fromRGB(20, 36, 16))
+
 					slot.setModel("grown:" .. species.Id, function(into)
 						return CreatureModel.Build(species, occupant.kg,
 							CreatureModel.STAGE_GROWN, CFrame.new(), into)
-					end)
+					end, species.Form or species.Id)
 					slot.setBackdrop(species.Id)
 					slot.border.Color = band
-					-- Grown, in your own bed: the one case that can be taken
-					-- back out. `occupant.id` is the PlacementId the server
-					-- stamped, which is the only name a plant has.
+
 					offers[index] = occupant.id
 					slot.name.Text = species.Name
 					slot.name.TextColor3 = band
-					slot.sub.Text = "$" .. GameConfig.compact(
-						SeedData.IncomePerSecond(occupant.kg)) .. "/s"
-					slot.sub.TextColor3 = ACCENT
+					slot.sub.Text = string.upper(SeedData.RarityForKg(occupant.kg))
+					slot.sub.TextColor3 = Color3.fromRGB(220, 218, 225)
 				else
-					--======================================================
-					-- A POD IS A POD, AND IT IS NOT NAMED HERE EITHER
-					--
-					-- The card draws the SHELL, not the creature. Two Commons
-					-- arrive in identical shells so you cannot tell which one
-					-- you got until it opens, and drawing the form on this
-					-- card would spend the hatch exactly the way printing the
-					-- name would -- the whole reason pods are coloured by
-					-- weight instead of by species.
-					--
-					-- Keyed on the BAND rather than the weight: the shell's
-					-- colour is all that varies, so two 4,000 kg pods and a
-					-- 4,800 kg one share one drawing.
-					--======================================================
-					--==================================================
-					-- THE SHELL, NOT THE CREATURE
-					--
-					-- BuildPod colours itself by ColorForKg, which is the
-					-- one thing a buried pod is allowed to tell you and the
-					-- whole reason pods are coloured by weight instead of
-					-- by species. Two Commons arrive identical and the card
-					-- keeps it that way.
-					--
-					-- Keyed on the BAND: the shell's colour is all that
-					-- varies between pods, so two 4,000 kg pods and a 4,800
-					-- kg one share one model.
-					--
-					-- NO BACKDROP. A place would name the species as surely
-					-- as the word would.
-					--==================================================
+					slot.setEmpty(false)
 					slot.setModel("pod:" .. SeedData.RarityForKg(occupant.kg),
 						function(into)
 							return CreatureModel.BuildPod(species, occupant.kg,
 								CFrame.new(), into)
-						end)
+						end, if stage == STAGE_READY then "ready" else "pod")
 					slot.setBackdrop(nil)
 					slot.border.Color = band
-					-- A pod is not unequipped, it is HATCHED, and that happens
-					-- in the world with a hold on the prompt.
 					offers[index] = nil
-					slot.name.Text = "???"
+					slot.setWeightTag(kgFormatted, band)
 
 					if stage == STAGE_READY then
-						--==============================================
-						-- THE ONE CARD THAT IS ASKING FOR SOMETHING
-						--
-						-- Everything else in this panel is a status. This
-						-- means GO AND DO SOMETHING, so it is the only
-						-- ghosted card that lights up -- a full bed reads
-						-- at a glance as "two of these want you".
-						--
-						-- Still ???: the name is the hatch's to give. The
-						-- clock running out does not open the shell, so
-						-- naming it here would spend the reveal on a timer,
-						-- which is the one thing manual hatching stopped.
-						--==============================================
+						slot.setStageTheme("ready")
+						slot.setReadyPulse(true)
+						slot.setProgress(1.0, Color3.fromRGB(255, 215, 0))
+						slot.setStatusTag("READY!", Color3.fromRGB(255, 235, 80), Color3.fromRGB(48, 40, 12))
+
+						slot.name.Text = "Ready to Hatch"
 						slot.name.TextColor3 = band
-						slot.sub.Text = "READY  \u{00b7}  HOLD E"
+						slot.sub.Text = "HOLD [E] IN FIELD"
 						slot.sub.TextColor3 = ACCENT
 					else
+						slot.setStageTheme("pod")
+						slot.setReadyPulse(false)
+						local totalSec = SeedData.GrowSeconds(occupant.kg)
+						local frac = if totalSec > 0 then math.clamp(1 - (remaining / totalSec), 0, 1) else 0
+						slot.setProgress(frac, band)
+						slot.setStatusTag("⏱ " .. clock(remaining), Color3.fromRGB(250, 205, 75))
+
+						slot.name.Text = "Hatching..."
 						slot.name.TextColor3 = GHOST
-						slot.sub.Text = clock(remaining)
+						slot.sub.Text = string.format("%d%% Grown", math.floor(frac * 100))
 						slot.sub.TextColor3 = GHOST
 					end
 				end
 			end
 		elseif paint then
-			--==============================================================
-			-- AN EMPTY HOLE IS SHOWN, NOT HIDDEN
-			--
-			-- The clip this panel borrowed its shape from lists what you have
-			-- equipped. This lists the HOLES, and an empty one is a real place
-			-- you can walk over and fill -- so it gets a card with dirt in it
-			-- rather than being left out of the grid.
-			--==============================================================
 			local slot = slotAt(index)
+			slot.setEmpty(true)
 			slot.setModel("empty", nil)
 			slot.setBackdrop(nil)
-			slot.border.Color = GHOST
 			offers[index] = nil
-			slot.name.Text = "Empty"
+			slot.name.Text = "Empty Slot"
 			slot.name.TextColor3 = GHOST
-			slot.sub.Text = ""
-			slot.sub.TextColor3 = GHOST
+			slot.sub.Text = "+ Plant"
+			slot.sub.TextColor3 = Color3.fromRGB(130, 175, 95)
 		end
 	end
 
@@ -811,7 +751,8 @@ local function refresh(paint: boolean)
 
 	if paint then
 		header.Text = string.format("GARDEN  %d/%d", planted, slots)
-		footer.Text = if rate > 0 then "$" .. GameConfig.compact(rate) .. "/s" else ""
+		footer.Text = if rate > 0 then "PLOT INCOME:  +$" .. GameConfig.compact(rate) .. "/s" else ""
+		footer.TextColor3 = Color3.fromRGB(145, 235, 75)
 	end
 end
 
