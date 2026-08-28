@@ -3790,10 +3790,19 @@ placement should be reproduced once and its server code used to choose the actua
 ## Claude and Codex share one project memory — 2026-08-27
 
 `AGENTS.md` is the single canonical project guide and `.agents/skills/` is the single canonical
-five-skill set. `CLAUDE.md` and `.claude/skills/` are compatibility pointers only. All agents read
+seven-skill set. `CLAUDE.md` and `.claude/skills/` are compatibility pointers only. All agents read
 this handoff, inspect the checkout and recent commits before editing, and record durable decisions
 here with their implementing commit. Provider-specific copies of project rules must not be
 reintroduced.
+
+## Character rigging and animation are shared skills — 2026-08-28
+
+Commit `496bf7a` adds `character-rigging` for translating an approved Studio sculpture into a
+stable Motor6D/weld/Humanoid assembly, and `character-animation` for state-driven procedural
+motion, joint ownership and live nest verification. Claude compatibility entries point back to
+those same canonical files. Together with `organic-roblox-form`, every agent now follows the same
+appearance -> rig -> animation workflow instead of treating an animated approval mockup as a
+production rig.
 
 ## Tanglemire is live, and Miremaw performs at its own nest — 2026-08-27
 
