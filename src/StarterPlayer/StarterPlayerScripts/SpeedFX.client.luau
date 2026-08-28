@@ -553,6 +553,7 @@ type Entry = {
 	isLocal: boolean,
 	lastPos: Vector3?,
 	width: number,
+	paintedTier: any,
 }
 
 local tracked: { [Player]: Entry } = {}
@@ -582,11 +583,27 @@ local function track(who: Player, character: Model)
 		if character.Parent == nil or who.Character ~= character then
 			return
 		end
+		--==================================================================
+		-- BORN AT A REAL WIDTH, NOT ON TOP OF EACH OTHER
+		--
+		-- The loop only writes the separation while a player is RUNNING, so a
+		-- freshly spawned character stood at rest with both attachments at the
+		-- origin -- a ribbon of zero width. It corrected itself on the first
+		-- running frame, but "correct once you move" is not a state worth
+		-- shipping: anything that reads the pair before then sees nothing, and
+		-- the first segment of the first run is drawn from a degenerate edge.
+		--
+		-- Tier 1's width is the honest default: it is the narrowest the ribbon
+		-- is ever allowed to be.
+		--==================================================================
+		local born = FX.Tiers[1].WidthStuds
 		local a0 = Instance.new("Attachment")
 		a0.Name = "SeedStreakA"
+		a0.Position = Vector3.new(0, born * 0.5, 0.4)
 		a0.Parent = root
 		local a1 = Instance.new("Attachment")
 		a1.Name = "SeedStreakB"
+		a1.Position = Vector3.new(0, -born * 0.5, 0.4)
 		a1.Parent = root
 
 		local t = Instance.new("Trail")
@@ -602,7 +619,8 @@ local function track(who: Player, character: Model)
 		tracked[who] = {
 			character = character, root = root :: BasePart,
 			humanoid = humanoid :: Humanoid, trail = t, a0 = a0, a1 = a1,
-			isLocal = who == player, lastPos = nil, width = -1,
+			isLocal = who == player, lastPos = nil, width = born,
+			paintedTier = nil,
 		}
 	end)
 end
@@ -678,6 +696,9 @@ RunService.Heartbeat:Connect(function(dt)
 			local want = tier ~= nil and not teleported and inRange and isRunning(entry)
 			if entry.trail.Enabled ~= want then
 				entry.trail.Enabled = want
+				if not want then
+					entry.paintedTier = nil
+				end
 			end
 
 			if want and tier then
@@ -713,13 +734,28 @@ RunService.Heartbeat:Connect(function(dt)
 					NumberSequenceKeypoint.new(1, 1),
 				})
 
-				-- Static tiers are painted once. `width` doubles as the flag for
-				-- "this ribbon has been set up at all" -- it starts at -1.
-				if repaint and (tier.Wave > 0 or tier.Rainbow) then
-					entry.trail.Color = paletteSequence(tier, colourClock)
-				elseif entry.width == width and tier.Wave == 0 and not tier.Rainbow then
+				--======================================================
+				-- A STATIC TIER IS PAINTED ONCE, NOT EVERY FRAME
+				--
+				-- Tiers 1 and 2 have no wave and no rainbow, so their colour
+				-- never changes -- and building a ColorSequence for them every
+				-- frame would allocate one per player per frame forever. It is
+				-- the exact garbage the old file called out and then avoided by
+				-- painting at emit; the equivalent here is remembering which
+				-- tier is currently on the ribbon.
+				--
+				-- `paintedTier` is cleared when the ribbon goes out, so coming
+				-- back from a carry or a stop repaints rather than trusting a
+				-- stale row.
+				--======================================================
+				if tier.Wave > 0 or tier.Rainbow then
+					if repaint then
+						entry.trail.Color = paletteSequence(tier, colourClock)
+					end
+				elseif entry.paintedTier ~= tier then
 					entry.trail.Color = paletteSequence(tier, 0)
 				end
+				entry.paintedTier = tier
 			end
 		end
 	end
