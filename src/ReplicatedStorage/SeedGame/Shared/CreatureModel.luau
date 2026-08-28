@@ -2341,6 +2341,22 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 		tag.Size = UDim2.new(0, 190, 0, 44)
 		tag.StudsOffsetWorldSpace = Vector3.new(0, D * 0.95, 0)
 		tag.AlwaysOnTop = true
+		--==================================================================
+		-- BOUNDED, LIKE EVERY OTHER LABEL IN THIS GAME
+		--
+		-- AlwaysOnTop with no MaxDistance is a label that draws THROUGH the
+		-- world at ANY range: one Colossal pod in one nest put the word
+		-- COLOSSAL through the terrain, into the eyeline of every player on a
+		-- 1,500 stud road, and it followed the carrier around because the tag
+		-- rides along when the pod becomes a Tool.
+		--
+		-- AlwaysOnTop is still right -- the label has to beat the pod's own
+		-- crown, which is taller than it is. The range is what was missing.
+		-- 160 is PlantUI's number for a label on a plant, which is the same
+		-- job; PromptUI uses 250 and SpeedFX 90. This was the only billboard
+		-- in the codebase that set no range at all.
+		--==================================================================
+		tag.MaxDistance = 160
 		tag.Parent = shell
 		local text = Instance.new("TextLabel")
 		text.Size = UDim2.new(1, 0, 1, 0)
