@@ -211,6 +211,19 @@ local DUST_STEM = Color3.fromRGB(178, 158, 106)
 -- the bed's colour. A Tanglemire plant stands on peat it grew out of -- the
 -- approved footing is part of the plant, not a heap shovelled round it.
 --==============================================================================
+--==============================================================================
+-- EMBERROOT SHARES ITS GROUND, NOT ITS BODY
+--
+-- Leaf, Stem and Soil are the biome's; Body, Crown and Accent are the species'.
+-- Emberroot pushes that further than the other three: only the cinder pad and
+-- the root-legs are shared, because an earlier pass shared the whole body and
+-- the five read as one plant in five hats. Soil is that pad -- cold clinker,
+-- not earth.
+--==============================================================================
+local EMBER_LEAF = Color3.fromRGB(92, 46, 32)
+local EMBER_STEM = Color3.fromRGB(120, 86, 66)
+local EMBER_CINDER = Color3.fromRGB(46, 34, 32)
+
 local MIRE_LEAF = Color3.fromRGB(70, 128, 88)
 local MIRE_STEM = Color3.fromRGB(82, 112, 76)
 local MIRE_PEAT = Color3.fromRGB(72, 56, 44)
@@ -422,6 +435,55 @@ SeedData.Species = {
 		Crown = Color3.fromRGB(188, 224, 108),
 		Accent = Color3.fromRGB(92, 172, 154),
 		Leaf = MIRE_LEAF, Stem = MIRE_STEM, Soil = MIRE_PEAT,
+	},
+	{
+		Id = "cinderpaw", Name = "Cinderpaw", Rarity = "Rare", Biome = "emberroot",
+		Height = 4.33, Form = "paw",
+		Body = Color3.fromRGB(52, 40, 38),
+		Crown = Color3.fromRGB(255, 118, 44),
+		Accent = Color3.fromRGB(198, 68, 24),
+		Leaf = EMBER_LEAF, Stem = EMBER_STEM, Soil = EMBER_CINDER,
+	},
+	{
+		Id = "emberquill", Name = "Emberquill", Rarity = "Rare", Biome = "emberroot",
+		Height = 7.47, Form = "quill",
+		-- The second Rare, and the tallest plant in the game. Two Rares in a
+		-- biome is Tanglemire's precedent, and the same rule applies: they are
+		-- told apart by SILHOUETTE, not by the word. Cinderpaw fans OUT and sits
+		-- low; this points UP. They are also the shortest and the tallest of the
+		-- five, so the pair cannot be confused at any distance.
+		Body = Color3.fromRGB(96, 78, 62),
+		Crown = Color3.fromRGB(255, 200, 92),
+		Accent = Color3.fromRGB(255, 196, 78),
+		Leaf = EMBER_LEAF, Stem = EMBER_STEM, Soil = EMBER_CINDER,
+	},
+	{
+		Id = "slagbloom", Name = "Slagbloom", Rarity = "Epic", Biome = "emberroot",
+		Height = 4.66, Form = "slag",
+		Body = Color3.fromRGB(38, 18, 18),
+		Crown = Color3.fromRGB(168, 38, 30),
+		Accent = Color3.fromRGB(255, 84, 26),
+		Leaf = EMBER_LEAF, Stem = EMBER_STEM, Soil = EMBER_CINDER,
+	},
+	{
+		Id = "kilnhusk", Name = "Kilnhusk", Rarity = "Legendary", Biome = "emberroot",
+		Height = 6.48, Form = "kiln",
+		-- The only cool grey in a biome of warm charcoal. Fired clay, and the
+		-- one species whose crown is a housing rather than foliage.
+		Body = Color3.fromRGB(60, 58, 56),
+		Crown = Color3.fromRGB(255, 148, 40),
+		Accent = Color3.fromRGB(255, 148, 40),
+		Leaf = EMBER_LEAF, Stem = EMBER_STEM, Soil = EMBER_CINDER,
+	},
+	{
+		Id = "pyrelotus", Name = "Pyrelotus", Rarity = "Mythic", Biome = "emberroot",
+		Height = 7.20, Form = "pyre",
+		-- Violet-charcoal: the only cool-dark in the biome, which is the Mythic
+		-- doing its job before you have read the word.
+		Body = Color3.fromRGB(52, 32, 56),
+		Crown = Color3.fromRGB(255, 140, 96),
+		Accent = Color3.fromRGB(255, 128, 148),
+		Leaf = EMBER_LEAF, Stem = EMBER_STEM, Soil = EMBER_CINDER,
 	},
 } :: { Species }
 

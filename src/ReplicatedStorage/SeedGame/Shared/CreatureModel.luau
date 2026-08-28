@@ -46,6 +46,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local TanglemireForms = require(Shared:WaitForChild("TanglemireForms"))
+local EmberrootForms = require(Shared:WaitForChild("EmberrootForms"))
 
 local CreatureModel = {}
 
@@ -1100,6 +1101,36 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		-- which is worse than an empty pivot somebody notices immediately.
 		warn(string.format(
 			"[Seed/CreatureModel] tanglemire species %q has no approved geometry",
+			sp.Id))
+		return finish()
+
+	--==========================================================================
+	-- EMBERROOT ANSWERS HERE TOO, AND FOR THE SAME REASON
+	--
+	-- Its five arrive already assembled -- their own cinder pad, root-legs,
+	-- stem, limbs, bulb and face -- so everything below this point, which builds
+	-- a plant out of a shared stem and a footing, would be building a second
+	-- plant inside the first.
+	--
+	-- One factor per plant, hs = the frame height asked for over the height the
+	-- plant was APPROVED at. That is the same trick Tanglemire uses and it
+	-- exists for the same reason: the five were drawn at sizes that are correct
+	-- RELATIVE TO EACH OTHER, and normalising them individually would flatten
+	-- the ladder the approval fixed. Emberquill is 1.73x Cinderpaw and stays
+	-- that way at every tier.
+	--==========================================================================
+	elseif sp.Biome == "emberroot" then
+		local authored = EmberrootForms.AuthoredHeight[sp.Id]
+		if authored and authored > 0 then
+			if EmberrootForms.Build(model, sp.Id, cf, H / authored) then
+				return finish()
+			end
+		end
+		-- Same refusal Tanglemire makes: falling through would build a
+		-- Greenhollow plant in ember colours and call it an Emberroot species,
+		-- which is worse than an empty pivot somebody notices immediately.
+		warn(string.format(
+			"[Seed/CreatureModel] emberroot species %q has no approved geometry",
 			sp.Id))
 		return finish()
 	end
