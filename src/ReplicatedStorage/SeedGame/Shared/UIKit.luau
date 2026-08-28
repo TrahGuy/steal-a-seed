@@ -1649,6 +1649,28 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	local currentIdle: (number) -> CFrame = idleFor("")
 	local animPhase: number = math.random() * math.pi * 2
 
+	--==========================================================================
+	-- A CARD ONLY ANIMATES WHILE SOMEBODY IS LOOKING AT IT
+	--
+	-- `hovered` is tracked here rather than read off popOnHover, because that
+	-- one is deliberately switched OFF while a card is selected -- a selected
+	-- card must not keep popping under the pointer -- and this gate needs the
+	-- raw pointer state, not the decorated one.
+	--
+	-- `animT` is accumulated instead of reading os.clock() directly. That is
+	-- the difference between pausing and stopping: wall-clock time keeps
+	-- running while a card sleeps, so resuming against it would snap the idle
+	-- curve forward by however long the pointer was away. Accumulated time just
+	-- picks up where it left off.
+	--
+	-- `parked` records that the resting pose has already been written, so the
+	-- sleeping branch costs one boolean test per card per frame and no
+	-- viewport work at all.
+	--==========================================================================
+	local hovered: boolean = false
+	local animT: number = 0
+	local parked: boolean = false
+
 	local function setupCamera(model: Model)
 		local pivot, size = model:GetBoundingBox()
 		addPedestal(model, pivot, size)
@@ -1695,6 +1717,9 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		if model then
 			currentModel = model
 			setupCamera(model)
+			-- A new model has never been placed, so the resting pose owes it one
+			-- write no matter what the pointer is doing.
+			parked = false
 		end
 	end
 
@@ -1711,6 +1736,19 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	-- never was -- Visible is not inherited, so the old check was true even with
 	-- every panel shut and the cards animated all session.
 	--==========================================================================
+	--==========================================================================
+	-- IS THERE ANY REASON TO TOUCH THE VIEWPORT THIS FRAME?
+	--
+	-- Hovered or selected means somebody is looking. The other two terms are
+	-- the wind-down: a clicked card carries spinVelocity, and a card returning
+	-- from a spin eases currentYaw back to zero. Cutting either off mid-flight
+	-- would stop the card dead the instant the pointer left it.
+	--==========================================================================
+	local function awake(): boolean
+		return hovered or isSelected
+			or spinVelocity > 0.05 or math.abs(currentYaw) > 0.0005
+	end
+
 	local function updateCard(dt: number)
 		if not currentModel or not activeCamera then
 			return
@@ -1719,7 +1757,30 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 			return
 		end
 
-		local t = os.clock() + animPhase
+		if not awake() then
+			--==================================================================
+			-- ONE LAST WRITE, THEN NOTHING
+			--
+			-- Squared up to the authored three-quarter view and set to the idle
+			-- pose at this card's own phase, so twelve sleeping cards are
+			-- twelve different plants rather than twelve identical ones -- and
+			-- none of them is frozen mid-lean at whatever angle the pointer
+			-- happened to leave it.
+			--==================================================================
+			if not parked then
+				parked = true
+				currentYaw = 0
+				activeCamera.CFrame = CFrame.lookAt(
+					cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
+				currentModel:PivotTo(modelBasePivot * currentIdle(animPhase))
+			end
+			return
+		end
+		parked = false
+
+		-- Accumulated, not wall-clock. See the note where animT is declared.
+		animT += dt
+		local t = animT + animPhase
 
 		--== SPIN ==--
 		if isSelected then
@@ -1787,6 +1848,24 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	-- Trigger instant celebratory spin on click!
 	button.MouseButton1Click:Connect(function()
 		spinVelocity = 8.5
+	end)
+
+	--==========================================================================
+	-- THE POINTER IS WHAT WAKES A CARD
+	--
+	-- Hooked on `button` because that is the card's hit area and the
+	-- ViewportFrame is its child. Separate from popOnHover on purpose: see the
+	-- note on `hovered` where it is declared.
+	--
+	-- Touch needs no case of its own. A tap fires MouseButton1Click, which sets
+	-- spinVelocity, and the gate treats a spinning card as awake until it has
+	-- coasted to a stop -- so a tap plays the whole flourish and then sleeps.
+	--==========================================================================
+	button.MouseEnter:Connect(function()
+		hovered = true
+	end)
+	button.MouseLeave:Connect(function()
+		hovered = false
 	end)
 
 	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale, { stroke = border })
