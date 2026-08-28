@@ -155,7 +155,7 @@ From the blueprint, plus what this repo has learned:
 
 ## Skills
 
-Five canonical project skills live under `.agents/skills/`. Every agent reads these same files;
+Seven canonical project skills live under `.agents/skills/`. Every agent reads these same files;
 provider-specific skill directories are compatibility pointers, never separate copies. The
 reasoning stays in the Luau files and KB/HANDOFF.
 
@@ -166,6 +166,8 @@ reasoning stays in the Luau files and KB/HANDOFF.
 | [blender-to-roblox](.agents/skills/blender-to-roblox/SKILL.md) | running or editing anything in `tools/blender/` — flags, axes, and why a preview is not a mesh |
 | [luau-conventions](.agents/skills/luau-conventions/SKILL.md) | writing Luau, adding a service, touching remotes or economy, or running Rojo |
 | [organic-roblox-form](.agents/skills/organic-roblox-form/SKILL.md) | concepting or reviewing plants, pods and guardians so primitive geometry stays organic, readable, colourful and purposeful |
+| [character-rigging](.agents/skills/character-rigging/SKILL.md) | converting an approved moving character into a production Motor6D/weld rig, or changing roots, sockets, colliders or physics assembly |
+| [character-animation](.agents/skills/character-animation/SKILL.md) | adding or changing procedural character motion, sleep/wake blends, gait, secondary motion or animation ownership |
 
 ## Toolchain
 
