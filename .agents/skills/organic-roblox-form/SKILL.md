@@ -32,6 +32,29 @@ let several equal-sized plates, petals, spikes, or panels compete for attention.
 Use the project's allowed primitive vocabulary. Do not add MeshParts, unions, or imported geometry
 to rescue a weak form.
 
+### Freeform is the finish
+
+Primitive-only describes the construction method, not the intended appearance. Never leave one
+untouched Ball, Block, Wedge, or Cylinder reading as a finished head, torso, muzzle, hand, or foot.
+Build each major anatomical mass from a small cluster of intersecting, rotated, scaled, or tapered
+forms, hide their attachment lines, and judge the combined outer contour. The result must look
+sculpted and organic at gameplay distance even though it is made entirely from primitives.
+
+- Use spheres sparingly for eyes, glints, dew, buds, knuckles, or other small secondary details.
+  Do not stack large balls into the main body plan.
+- Give limbs a continuous anatomical transition: shoulder into arm into hand, and hip or ankle into
+  foot. Hide the primitive attachment points inside the adjoining masses.
+- Shape hands and feet with a palm or sole plus a few tapered digits. Do not finish them as a ball
+  or plain rectangular pad.
+- Make a carved mouth as genuine negative space. Split the head shell into brow, cheek, and jaw
+  masses around a recessed cavity, so the opening changes the silhouette and has visible depth.
+  A black or emissive plate placed on the surface is paint, not a carving.
+- Inspect front, three-quarter, and side views. If a major body region is most naturally described
+  as “the sphere,” “the box,” or “the cylinder,” rework it before adding decoration.
+
+Freeforming does not authorize MeshParts, unions, terrain, imported models, or extra technology.
+The approved project vocabulary stays unchanged; the craft is in how those pieces combine.
+
 Every visible part must do at least one job:
 
 - change the outer silhouette;

@@ -152,6 +152,12 @@ From the blueprint, plus what this repo has learned:
 8. **Mobile first.** Blocky studded plastic, low part counts, no per-frame allocation.
 9. **`--!strict` on every file.**
 10. **Scripts must be safe to re-run.** `MapService` destroys and rebuilds rather than patching.
+11. **Primitive-built creature art must finish as a freeform silhouette.** A Ball, Block, Wedge or
+    Cylinder is raw sculpting material, never a finished head, torso, hand, foot or muzzle. Overlap,
+    taper and rotate a few broad masses until the outer contour reads as anatomy rather than an
+    obvious primitive. Reserve spheres for small details such as eyes, buds and joints. A carved
+    mouth is real recessed negative space built from brow, cheek and jaw masses, not a dark panel
+    pasted onto a round head. This does not authorize MeshParts, unions or imported geometry.
 
 ## Skills
 

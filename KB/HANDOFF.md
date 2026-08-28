@@ -4222,6 +4222,24 @@ whether you meant it to.
 Greenhollow's guardian is also rebuilt heavier -- deeper torso on a forward
 pitch, layered chest plates, bark ribs, spinal thorns, thigh armour.
 
+## Creature primitives must finish as freeform sculpture — 2026-08-28
+
+The owner rejected visible sphere/box/cylinder construction as the finished look for Emberroot and
+set this as the shared direction for all later creature work. Primitives remain the implementation
+vocabulary, but large anatomy must be composed from a few overlapping, tapered and rotated masses
+whose combined silhouette reads organic. Large spheres are not default heads or bodies. Hands,
+feet and limb transitions must be shaped rather than attached as obvious pads or balls.
+
+A “carved mouth” now has a specific acceptance test: brow, cheek and jaw masses must surround a
+recessed cavity with real visible depth. A black or glowing panel on a round head does not pass.
+Check the front, three-quarter and side silhouettes before detail. If a major region still reads as
+the primitive used to make it, rework the anatomy first.
+
+This direction is canonical in `AGENTS.md` and `.agents/skills/organic-roblox-form/SKILL.md`.
+`CLAUDE.md` already points Claude to those sources; `GEMINI.md` now gives Antigravity the same
+entrypoint. `.cursor/rules/organic-creature-freeform.mdc` carries the same concise always-on rule
+for editors that load project rules directly.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

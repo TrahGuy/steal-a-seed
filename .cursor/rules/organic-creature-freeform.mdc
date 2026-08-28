@@ -1,0 +1,20 @@
+---
+description: Keep all primitive-built plants, pods, and guardians sculpted and organic
+alwaysApply: true
+---
+
+# Freeform creature construction
+
+- Treat Roblox primitives as raw sculpting material, not finished anatomy.
+- Never leave one obvious Ball, Block, Wedge, or Cylinder as a finished head, torso, muzzle, hand,
+  or foot. Intersect, taper, scale, and rotate a few broad masses into one organic silhouette.
+- Reserve spheres for small details such as eyes, buds, joints, and glints; do not stack large
+  spheres into the main body plan.
+- Hide limb attachment points and build hands and feet from palms or soles with tapered digits.
+- A carved mouth must be recessed negative space framed by brow, cheek, and jaw masses. A dark
+  plate on the surface is not a carved mouth.
+- Check front, three-quarter, and side views at gameplay distance. If a major region reads first as
+  a primitive shape, rework it before adding decoration.
+- Stay within the approved primitive-only pipeline. Freeforming does not authorize MeshParts,
+  unions, or imported geometry.
+- Read `.agents/skills/organic-roblox-form/SKILL.md` before creature concept, preview, or review work.
