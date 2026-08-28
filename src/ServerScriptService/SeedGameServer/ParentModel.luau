@@ -46,6 +46,7 @@ local ParentModel = {}
 
 local BramblebackModel = require(script.Parent:WaitForChild("BramblebackModel"))
 local MiremawModel = require(script.Parent:WaitForChild("MiremawModel"))
+local ForgemawModel = require(script.Parent:WaitForChild("ForgemawModel"))
 local AstralmawModel = require(script.Parent:WaitForChild("AstralmawModel"))
 
 -- Sampled from the sheet.
@@ -216,6 +217,7 @@ end
 local BY_BIOME: { [string]: (CFrame, number, Instance) -> Model } = {
 	dustbowl = BramblebackModel.Build,
 	tanglemire = MiremawModel.Build,
+	emberroot = ForgemawModel.Build,
 	starbloom = AstralmawModel.Build,
 }
 
