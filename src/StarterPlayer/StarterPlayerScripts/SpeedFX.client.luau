@@ -581,13 +581,34 @@ end
 
 local function track(who: Player, character: Model)
 	untrack(who)
+	--==========================================================================
+	-- OFF MEANS NOTHING IS BUILT, NOT MERELY NOTHING IS DRAWN
+	--
+	-- The Heartbeat returns early on Off, so an entry made while Off is never
+	-- driven AND never cleaned up -- it sits in `tracked` holding a destroyed
+	-- character and eight instances, and a new one joins it on every respawn.
+	-- Off has to refuse at the door.
+	--==========================================================================
+	if quality == QUALITY_OFF then
+		return
+	end
 	task.spawn(function()
 		local root = character:WaitForChild("HumanoidRootPart", 5)
 		local humanoid = character:WaitForChild("Humanoid", 5)
 		if not (root and humanoid and root:IsA("BasePart") and humanoid:IsA("Humanoid")) then
 			return
 		end
-		if not character.Parent then
+		--==================================================================
+		-- THE CHARACTER WE WAITED FOR MAY NOT BE THE CURRENT ONE
+		--
+		-- WaitForChild above yields for up to five seconds. Die and respawn
+		-- inside that window and this thread finishes SECOND, overwriting the
+		-- live entry with one built on the corpse. The loop then untracks it
+		-- for having no parent and destroys ITS instances -- leaving the real
+		-- character with orphaned attachments and no ribbon until it dies
+		-- again.
+		--==================================================================
+		if not character.Parent or who.Character ~= character then
 			return
 		end
 
@@ -749,8 +770,6 @@ RunService.Heartbeat:Connect(function(dt)
 				entry.trailMain.Lifetime = tier.Lifetime * scale
 				entry.trailCore.Lifetime = tier.Lifetime * 0.75 * scale
 				entry.trailMain.LightEmission = tier.LightEmission
-				entry.trailCore.LightEmission = if tier.LightEmission < 0.2 then 0.0 else 1.0
-				entry.trailCore.Color = ColorSequence.new(tier.CoreColor or Color3.fromRGB(255, 255, 255))
 
 				-- Dynamic Width Adjustment
 				local width = tier.WidthStuds * widthScale
@@ -767,25 +786,51 @@ RunService.Heartbeat:Connect(function(dt)
 					head = math.clamp(head
 						- math.sin(colourClock * 24) * tier.Shimmer, 0, 1)
 				end
-				entry.trailMain.Transparency = NumberSequence.new({
-					NumberSequenceKeypoint.new(0, head),
-					NumberSequenceKeypoint.new(0.7, math.min(1, head + 0.3)),
-					NumberSequenceKeypoint.new(1, 1),
-				})
-
-				-- Particle FX Customization per Tier
-				if tier.Particle then
-					local p = tier.Particle
-					entry.particles.Texture = p.Texture or "rbxasset://textures/particles/sparkles_main.dds"
-					entry.particles.Rate = p.Rate or 20
-					entry.particles.Speed = NumberRange.new(p.Speed * 0.6, p.Speed)
-					entry.particles.LightEmission = p.LightEmission or 0.9
-					entry.particles.Color = ColorSequence.new(p.Color or Color3.fromRGB(255, 255, 255))
-					entry.particles.Size = NumberSequence.new({
-						NumberSequenceKeypoint.new(0, (p.Size or 1) * 0.4),
-						NumberSequenceKeypoint.new(0.5, p.Size or 1),
-						NumberSequenceKeypoint.new(1, 0.1),
+				-- Shimmer moves `head` every frame, so a shimmering tier has to
+				-- rebuild this. A tier that does not shimmer would rebuild an
+				-- identical sequence forever, so it writes once instead.
+				if tier.Shimmer > 0 or entry.paintedTier ~= tier then
+					entry.trailMain.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, head),
+						NumberSequenceKeypoint.new(0.7, math.min(1, head + 0.3)),
+						NumberSequenceKeypoint.new(1, 1),
 					})
+				end
+
+				--======================================================
+				-- THE PER-TIER DRESSING IS WRITTEN WHEN THE TIER CHANGES
+				--
+				-- None of this depends on the clock -- it is the row, copied
+				-- onto the instances. Written every frame it cost five
+				-- allocations per running player per frame (two ColorSequences,
+				-- two NumberSequences and a NumberRange) plus a Texture write,
+				-- which is the exact garbage the ribbon was built to avoid.
+				--
+				-- `paintedTier` is cleared when the ribbon goes out, so coming
+				-- back from a carry or a stop rewrites rather than trusting a
+				-- stale row.
+				--======================================================
+				if entry.paintedTier ~= tier then
+					entry.trailCore.LightEmission =
+						if tier.LightEmission < 0.2 then 0.0 else 1.0
+					entry.trailCore.Color = ColorSequence.new(
+						tier.CoreColor or Color3.fromRGB(255, 255, 255))
+
+					local p = tier.Particle
+					if p then
+						entry.particles.Texture = p.Texture
+							or "rbxasset://textures/particles/sparkles_main.dds"
+						entry.particles.Rate = p.Rate or 20
+						entry.particles.Speed = NumberRange.new(p.Speed * 0.6, p.Speed)
+						entry.particles.LightEmission = p.LightEmission or 0.9
+						entry.particles.Color = ColorSequence.new(
+							p.Color or Color3.fromRGB(255, 255, 255))
+						entry.particles.Size = NumberSequence.new({
+							NumberSequenceKeypoint.new(0, (p.Size or 1) * 0.4),
+							NumberSequenceKeypoint.new(0.5, p.Size or 1),
+							NumberSequenceKeypoint.new(1, 0.1),
+						})
+					end
 				end
 
 				if tier.Wave > 0 or tier.Rainbow then

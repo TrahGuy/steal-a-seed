@@ -926,7 +926,7 @@ GameConfig.Afterimage = {
 	ReducedWidthScale = 0.85,
 
 	--==========================================================================
-	-- THE SEVEN
+	-- THE TEN
 	--
 	--   From              the Speed score that unlocks it
 	--   Lifetime          how long the ribbon persists behind you, in seconds
@@ -938,9 +938,25 @@ GameConfig.Afterimage = {
 	--   Wave              palette travel per second (0 is static)
 	--   Shimmer           fast, shallow brightness flicker
 	--   Rainbow           full hue wheel instead of the palette
+	--   Particle          the emitter that rides with it: Texture, Color, Rate,
+	--                     Speed, Size, and an optional LightEmission
+	--   CoreColor         optional. The inner blade is white at full emission
+	--                     unless a tier names its own colour
 	--
-	-- EVERY COLUMN CLIMBS. That is the thing the ghost ladder could not do once
-	-- the count capped at four, and it is the whole reason for the change.
+	-- THE SHAPE OF IT CLIMBS AT EVERY STEP: Lifetime, WidthStuds and
+	-- HeadTransparency are strictly monotonic from 1 to 10, so no tier is ever
+	-- shorter, narrower or fainter than the one below it. That is the guarantee
+	-- the ghost ladder could not make once its count capped at four.
+	--
+	-- THE ANIMATION DIALS DELIBERATELY DO NOT. Wave and Shimmer are set by
+	-- THEME, not by rank -- Thunder Strike flickers harder than the Violet
+	-- Phantom above it because that is what those two things are. Do not
+	-- "correct" them into a ramp; the monotonic guarantee lives in the three
+	-- columns above and nowhere else.
+	--
+	-- AND TIER 10 BREAKS LightEmission ON PURPOSE. Every tier climbs toward
+	-- light; Void Singularity is the one that takes it away, which only reads
+	-- as an ending because the nine below it went the other way.
 	--==========================================================================
 	Tiers = {
 		{

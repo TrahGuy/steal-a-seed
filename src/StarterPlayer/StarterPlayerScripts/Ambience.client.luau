@@ -365,8 +365,10 @@ local ROLLER_TAG = GameConfig.Tags.MillRoller
 local WHEEL_TAG = GameConfig.Tags.MillWheel
 local LEAF_TAG = GameConfig.Tags.MillLeaf
 
-local spinRest: { [BasePart]: CFrame } = {}
-local spinAngle: { [BasePart]: number } = {}
+-- Keyed by Instance, not BasePart: the wing is tagged on its MODEL so that
+-- PivotTo carries all fifteen feathers, and a Model is what arrives here.
+local spinRest: { [Instance]: CFrame } = {}
+local spinAngle: { [Instance]: number } = {}
 
 local function beltOf(part: Instance): BasePart?
 	local curr: Instance? = part
