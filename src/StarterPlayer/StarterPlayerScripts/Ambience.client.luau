@@ -523,6 +523,41 @@ local function updateEmitters()
 	end
 end
 
+local HACKER_LOGS_A = {
+	"> INITIATING_QUANTUM_CORE_V10...",
+	"> BYPASSING_GRAVITY_MATRIX [OK]",
+	"> 0x7F4A :: TACHYON_FLOW = 99.8%",
+	"> DECRYPTING_SINGULARITY_KEY...",
+	"> OVERCLOCKING_HYPERDRIVE: 160/S",
+	"> [ROOT@COSMOS] sudo inject_flux",
+	"> 0x88B2A90F :: CORE_LOCK [ACTIVE]",
+	"> ANTIMATTER_RESONANCE = 1.000",
+	"> PARSING_COORDINATES: (42, 99, 160)",
+	"> MEMORY_DUMP: 0xDEAD -> 0x00FF88",
+	"> GRAVITATIONAL_SINGULARITY: OK",
+	"> HYPERLANE_TRAJECTORY_STABLE",
+}
+
+local HACKER_LOGS_B = {
+	"> 0x8F 0x3B 0xA1 0xFE 0x00 0x9C",
+	"> 01000001 01010011 01010100 0101",
+	"> 0x7A4F 0x99B1 0x001C 0xFF4D",
+	"> FLUX_DENSITY: 12.884 TeV [MAX]",
+	"> NODE_0: CONNECTED [127.0.0.1]",
+	"> 0xCAFE :: BUFFER_OVERFLOW [OK]",
+	"> STAR_MAP: ANDROMEDA_LOCKED",
+	"> 0x994F8A :: QUANTUM_KEY_SYNC",
+	"> SECTOR_EPSILON: MATRIX_ACTIVE",
+	"> EMITTER_GRID: 100% NOMINAL",
+}
+
+local TICKERS = {
+	"> root@cosmos: bypass_gravity --speed 160",
+	"> quantum_inject --flux 12.4TeV [ACTIVE]",
+	"> sudo override_physics --force-warp",
+	"> singularity_lock: 0x88B2A90F [ONLINE]",
+}
+
 local function spinMillParts(dt: number)
 	for _, tag in ipairs({ ROLLER_TAG, WHEEL_TAG }) do
 		for _, instance in ipairs(CollectionService:GetTagged(tag)) do
@@ -577,41 +612,6 @@ local function spinMillParts(dt: number)
 	--==========================================================================
 	-- TIER 10 HOLOGRAPHIC CYBER SCREENS DYNAMIC REACTIVE ANIMATION
 	--==========================================================================
-	local HACKER_LOGS_A = {
-		"> INITIATING_QUANTUM_CORE_V10...",
-		"> BYPASSING_GRAVITY_MATRIX [OK]",
-		"> 0x7F4A :: TACHYON_FLOW = 99.8%",
-		"> DECRYPTING_SINGULARITY_KEY...",
-		"> OVERCLOCKING_HYPERDRIVE: 160/S",
-		"> [ROOT@COSMOS] sudo inject_flux",
-		"> 0x88B2A90F :: CORE_LOCK [ACTIVE]",
-		"> ANTIMATTER_RESONANCE = 1.000",
-		"> PARSING_COORDINATES: (42, 99, 160)",
-		"> MEMORY_DUMP: 0xDEAD -> 0x00FF88",
-		"> GRAVITATIONAL_SINGULARITY: OK",
-		"> HYPERLANE_TRAJECTORY_STABLE",
-	}
-
-	local HACKER_LOGS_B = {
-		"> 0x8F 0x3B 0xA1 0xFE 0x00 0x9C",
-		"> 01000001 01010011 01010100 0101",
-		"> 0x7A4F 0x99B1 0x001C 0xFF4D",
-		"> FLUX_DENSITY: 12.884 TeV [MAX]",
-		"> NODE_0: CONNECTED [127.0.0.1]",
-		"> 0xCAFE :: BUFFER_OVERFLOW [OK]",
-		"> STAR_MAP: ANDROMEDA_LOCKED",
-		"> 0x994F8A :: QUANTUM_KEY_SYNC",
-		"> SECTOR_EPSILON: MATRIX_ACTIVE",
-		"> EMITTER_GRID: 100% NOMINAL",
-	}
-
-	local TICKERS = {
-		"> root@cosmos: bypass_gravity --speed 160",
-		"> quantum_inject --flux 12.4TeV [ACTIVE]",
-		"> sudo override_physics --force-warp",
-		"> singularity_lock: 0x88B2A90F [ONLINE]",
-	}
-
 	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillHolo or "MillHolo")) do
 		local pane = instance :: BasePart
 		if pane.Parent then

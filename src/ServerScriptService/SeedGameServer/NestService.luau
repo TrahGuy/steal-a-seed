@@ -595,7 +595,7 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- nest.parent, not nest.model: the Nest type has no 'model' field, so this
 	-- indexed nil and threw -- AFTER the ragdoll and BEFORE the FireClient that
 	-- does the actual throwing. The victim went limp and was never flung.
-	nest.parent:SetAttribute("AttackSwipe", os.clock())
+	nest.parent:SetAttribute("AttackSwipe", workspace:GetServerTimeNow())
 
 	SoundKit.emit("Throw", nest.root)
 

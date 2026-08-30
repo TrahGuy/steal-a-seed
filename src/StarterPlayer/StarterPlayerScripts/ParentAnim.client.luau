@@ -668,7 +668,7 @@ RunService.Heartbeat:Connect(function(dt)
 			local speed = math.max(physSpeed, posSpeed)
 
 			local attackTime = (model:GetAttribute("AttackSwipe") :: number?) or 0
-			local attackDt = t - attackTime
+			local attackDt = workspace:GetServerTimeNow() - attackTime
 
 			if p.mire then
 				p.stride += speed * dt * SWING_PER_STUD
@@ -737,7 +737,7 @@ RunService.Heartbeat:Connect(function(dt)
 
 			--== ATTACK SWIPE / CATCH ANIMATION ==--
 			local attackTime = (model:GetAttribute("AttackSwipe") :: number?) or 0
-			local attackDt = t - attackTime
+			local attackDt = workspace:GetServerTimeNow() - attackTime
 			local attackArmPitch = 0
 			local attackArmYaw = 0
 			local attackArmRoll = 0

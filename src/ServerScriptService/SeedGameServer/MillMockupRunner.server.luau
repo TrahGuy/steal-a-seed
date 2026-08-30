@@ -7,6 +7,20 @@
 -- placards, and live animated belts and particles for inspection and editing.
 --==============================================================================
 
+--==============================================================================
+-- STUDIO ONLY
+--
+-- This builds ten full mills into Workspace on every server start. That is a
+-- showroom, not a feature, and a published server has no reason to pay for it.
+-- The gate sits BELOW the banner on purpose: Luau reads --!strict only in the
+-- leading comment block, so code above it silently drops the whole file to
+-- nonstrict.
+--==============================================================================
+local RunService = game:GetService("RunService")
+if not RunService:IsStudio() then
+	return
+end
+
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
