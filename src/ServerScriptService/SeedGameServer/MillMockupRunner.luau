@@ -92,16 +92,21 @@ local function makePart(props: {
 	return p
 end
 
+function MillMockupRunner.Clear()
+	local existing = workspace:FindFirstChild(FOLDER_NAME)
+	if existing then
+		existing:Destroy()
+	end
+	print("[Seed/MillMockupRunner] Cleared MillMockup_Gallery from Workspace")
+end
+
 --==============================================================================
 -- BUILD ALL 10 TIERS
 --==============================================================================
 function MillMockupRunner.Build(): Folder
 	-- Clearing first is what makes this re-runnable: build, look, edit a tier,
 	-- build again, without ten galleries stacking up in the same place.
-	local existing = workspace:FindFirstChild(FOLDER_NAME)
-	if existing then
-		existing:Destroy()
-	end
+	MillMockupRunner.Clear()
 
 	local gallery = Instance.new("Folder")
 	gallery.Name = FOLDER_NAME

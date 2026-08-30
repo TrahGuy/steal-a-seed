@@ -2824,8 +2824,9 @@ local function celestialAscent(s: Signature)
 			collide = false,
 			parent = wingModel,
 		})
-		wingRoot:SetAttribute("WingSide", side)
-		CollectionService:AddTag(wingRoot, (GameConfig.Tags and GameConfig.Tags.MillWing) or "MillWing")
+		wingModel.PrimaryPart = wingRoot
+		wingModel:SetAttribute("WingSide", side)
+		CollectionService:AddTag(wingModel, (GameConfig.Tags and GameConfig.Tags.MillWing) or "MillWing")
 
 		-- Wing Bone / Shoulder Arch
 		local wingBone = part({

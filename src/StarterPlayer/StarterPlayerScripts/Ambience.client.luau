@@ -368,13 +368,18 @@ local LEAF_TAG = GameConfig.Tags.MillLeaf
 local spinRest: { [BasePart]: CFrame } = {}
 local spinAngle: { [BasePart]: number } = {}
 
-local function beltOf(part: BasePart): BasePart?
-	local model = part:FindFirstAncestorOfClass("Model")
-	if not model then
-		return nil
+local function beltOf(part: Instance): BasePart?
+	local curr: Instance? = part
+	while curr do
+		if curr:IsA("Model") then
+			local belt = curr:FindFirstChild(GameConfig.Plot.TreadmillName)
+			if belt and belt:IsA("BasePart") then
+				return belt
+			end
+		end
+		curr = curr.Parent
 	end
-	local belt = model:FindFirstChild(GameConfig.Plot.TreadmillName)
-	return if belt and belt:IsA("BasePart") then belt else nil
+	return nil
 end
 
 local GEAR_TAG = GameConfig.Tags.MillGear
@@ -688,31 +693,37 @@ local function spinMillParts(dt: number)
 	-- TIER 9 ANGEL WINGS SLOW MAJESTIC FLAPPING ANIMATION
 	--==========================================================================
 	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillWing or "MillWing")) do
-		local wingRoot = instance :: BasePart
-		if wingRoot.Parent then
-			if not spinRest[wingRoot] then
-				spinRest[wingRoot] = wingRoot.CFrame
-				spinAngle[wingRoot] = 0
+		local wing = instance
+		local rootPart = if wing:IsA("Model") then wing.PrimaryPart else (if wing:IsA("BasePart") then wing else nil)
+		if rootPart and rootPart.Parent then
+			if not spinRest[wing] then
+				spinRest[wing] = if wing:IsA("Model") then wing:GetPivot() else rootPart.CFrame
+				spinAngle[wing] = 0
 			end
-			local belt = beltOf(wingRoot)
+			local belt = beltOf(rootPart)
 			local work = if belt then (beltWork[belt] or (if beltSpeed(belt) > IDLE_STUDS * 2 then 1 else 0)) else 1
-			local side = tonumber(wingRoot:GetAttribute("WingSide")) or 1
+			local side = tonumber(wing:GetAttribute("WingSide")) or 1
 
 			-- Flap frequency accelerates gracefully under work
-			local flapSpeed = if work > 0.05 then (2.4 + work * 1.6) else 0.8
-			spinAngle[wingRoot] = (spinAngle[wingRoot] or 0) + dt * flapSpeed
+			local flapSpeed = if work > 0.05 then (2.8 + work * 2.0) else 1.2
+			spinAngle[wing] = (spinAngle[wing] or 0) + dt * flapSpeed
 
-			-- Flapping stroke angle
-			local flapAmp = if work > 0.05 then math.rad(22 * (0.6 + 0.4 * work)) else math.rad(5)
-			local stroke = math.sin(spinAngle[wingRoot])
+			-- Flapping stroke angles (pitch, yaw, and broad majestic roll)
+			local flapAmp = if work > 0.05 then math.rad(28 * (0.6 + 0.4 * work)) else math.rad(14)
+			local stroke = math.sin(spinAngle[wing])
 			local rollAngle = stroke * flapAmp * side
-			local yawAngle = math.cos(spinAngle[wingRoot]) * (flapAmp * 0.4) * side
-			local pitchAngle = -math.abs(stroke) * (flapAmp * 0.3)
+			local yawAngle = math.cos(spinAngle[wing]) * (flapAmp * 0.4) * side
+			local pitchAngle = -math.abs(stroke) * (flapAmp * 0.35)
 
-			wingRoot.CFrame = spinRest[wingRoot] * CFrame.Angles(pitchAngle, yawAngle, rollAngle)
+			local targetCF = spinRest[wing] * CFrame.Angles(pitchAngle, yawAngle, rollAngle)
+			if wing:IsA("Model") then
+				wing:PivotTo(targetCF)
+			else
+				rootPart.CFrame = targetCF
+			end
 		else
-			spinRest[wingRoot] = nil
-			spinAngle[wingRoot] = nil
+			spinRest[wing] = nil
+			spinAngle[wing] = nil
 		end
 	end
 

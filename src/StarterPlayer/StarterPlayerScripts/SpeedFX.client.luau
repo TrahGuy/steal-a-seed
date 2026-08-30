@@ -547,9 +547,14 @@ type Entry = {
 	character: Model,
 	root: BasePart,
 	humanoid: Humanoid,
-	trail: Trail,
+	trailMain: Trail,
+	trailCore: Trail,
+	particles: ParticleEmitter,
 	a0: Attachment,
 	a1: Attachment,
+	c0: Attachment,
+	c1: Attachment,
+	pAttach: Attachment,
 	isLocal: boolean,
 	lastPos: Vector3?,
 	width: number,
@@ -564,73 +569,119 @@ local function untrack(who: Player)
 		return
 	end
 	tracked[who] = nil
-	if entry.trail.Parent then entry.trail:Destroy() end
+	if entry.trailMain.Parent then entry.trailMain:Destroy() end
+	if entry.trailCore.Parent then entry.trailCore:Destroy() end
+	if entry.particles.Parent then entry.particles:Destroy() end
 	if entry.a0.Parent then entry.a0:Destroy() end
 	if entry.a1.Parent then entry.a1:Destroy() end
+	if entry.c0.Parent then entry.c0:Destroy() end
+	if entry.c1.Parent then entry.c1:Destroy() end
+	if entry.pAttach.Parent then entry.pAttach:Destroy() end
 end
 
 local function track(who: Player, character: Model)
 	untrack(who)
-	if quality == QUALITY_OFF then
-		return
-	end
 	task.spawn(function()
-		local root = character:WaitForChild("HumanoidRootPart", 10)
-		local humanoid = character:WaitForChild("Humanoid", 10)
-		if not (root and root:IsA("BasePart") and humanoid and humanoid:IsA("Humanoid")) then
+		local root = character:WaitForChild("HumanoidRootPart", 5)
+		local humanoid = character:WaitForChild("Humanoid", 5)
+		if not (root and humanoid and root:IsA("BasePart") and humanoid:IsA("Humanoid")) then
 			return
 		end
-		if character.Parent == nil or who.Character ~= character then
+		if not character.Parent then
 			return
 		end
-		--==================================================================
-		-- BORN AT A REAL WIDTH, NOT ON TOP OF EACH OTHER
-		--
-		-- The loop only writes the separation while a player is RUNNING, so a
-		-- freshly spawned character stood at rest with both attachments at the
-		-- origin -- a ribbon of zero width. It corrected itself on the first
-		-- running frame, but "correct once you move" is not a state worth
-		-- shipping: anything that reads the pair before then sees nothing, and
-		-- the first segment of the first run is drawn from a degenerate edge.
-		--
-		-- Tier 1's width is the honest default: it is the narrowest the ribbon
-		-- is ever allowed to be.
-		--==================================================================
+
 		local born = FX.Tiers[1].WidthStuds
+
+		-- 1. Outer Wide Primary Ribbon Attachments
 		local a0 = Instance.new("Attachment")
 		a0.Name = "SeedStreakA"
-		a0.Position = Vector3.new(0, born * 0.5, 0.4)
+		a0.Position = Vector3.new(0, born * 0.5, 0.45)
 		a0.Parent = root
+
 		local a1 = Instance.new("Attachment")
 		a1.Name = "SeedStreakB"
-		a1.Position = Vector3.new(0, -born * 0.5, 0.4)
+		a1.Position = Vector3.new(0, -born * 0.5, 0.45)
 		a1.Parent = root
 
-		local t = Instance.new("Trail")
-		t.Name = "SeedStreak"
-		t.Attachment0 = a0
-		t.Attachment1 = a1
-		t.MinLength = 0.2
-		t.FaceCamera = true
-		t.Enabled = false
-		t.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), ACCENT)
-		t.Parent = root
+		local tMain = Instance.new("Trail")
+		tMain.Name = "SeedStreakMain"
+		tMain.Attachment0 = a0
+		tMain.Attachment1 = a1
+		tMain.MinLength = 0.15
+		tMain.FaceCamera = true
+		tMain.Enabled = false
+		tMain.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), ACCENT)
+		tMain.Parent = root
+
+		-- 2. Inner High-Emission Core Glow Blade Attachments
+		local c0 = Instance.new("Attachment")
+		c0.Name = "SeedCoreA"
+		c0.Position = Vector3.new(0, born * 0.25, 0.42)
+		c0.Parent = root
+
+		local c1 = Instance.new("Attachment")
+		c1.Name = "SeedCoreB"
+		c1.Position = Vector3.new(0, -born * 0.25, 0.42)
+		c1.Parent = root
+
+		local tCore = Instance.new("Trail")
+		tCore.Name = "SeedStreakCore"
+		tCore.Attachment0 = c0
+		tCore.Attachment1 = c1
+		tCore.MinLength = 0.15
+		tCore.FaceCamera = true
+		tCore.Enabled = false
+		tCore.LightEmission = 1.0
+		tCore.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+		tCore.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.6, 0.5),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		tCore.Parent = root
+
+		-- 3. Dedicated Special Effects Particle Emitter
+		local pAttach = Instance.new("Attachment")
+		pAttach.Name = "SeedStreakFX"
+		pAttach.Position = Vector3.new(0, -1.2, 0.45)
+		pAttach.Parent = root
+
+		local pEmit = Instance.new("ParticleEmitter")
+		pEmit.Name = "SpeedParticles"
+		pEmit.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		pEmit.Rate = 20
+		pEmit.Lifetime = NumberRange.new(0.5, 1.2)
+		pEmit.Speed = NumberRange.new(2.5, 5.0)
+		pEmit.SpreadAngle = Vector2.new(30, 30)
+		pEmit.EmissionDirection = Enum.NormalId.Back
+		pEmit.Acceleration = Vector3.new(0, -2, -4)
+		pEmit.LightEmission = 0.9
+		pEmit.LightInfluence = 0
+		pEmit.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.5),
+			NumberSequenceKeypoint.new(0.5, 1.0),
+			NumberSequenceKeypoint.new(1, 0.1),
+		})
+		pEmit.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.8, 0.4),
+			NumberSequenceKeypoint.new(1, 1.0),
+		})
+		pEmit.Enabled = false
+		pEmit.Parent = pAttach
 
 		tracked[who] = {
 			character = character, root = root :: BasePart,
-			humanoid = humanoid :: Humanoid, trail = t, a0 = a0, a1 = a1,
+			humanoid = humanoid :: Humanoid,
+			trailMain = tMain, trailCore = tCore, particles = pEmit,
+			a0 = a0, a1 = a1, c0 = c0, c1 = c1, pAttach = pAttach,
 			isLocal = who == player, lastPos = nil, width = born,
 			paintedTier = nil,
 		}
 	end)
 end
 
---==============================================================================
--- OFF ITS FEET IS OFF
---
--- Dead, ragdolled, thrown or seated: the ribbon is a statement about running and
--- none of those are running.
---==============================================================================
 local function isRunning(entry: Entry): boolean
 	local humanoid = entry.humanoid
 	if humanoid.Health <= 0 or humanoid.PlatformStand then
@@ -646,13 +697,6 @@ local function isRunning(entry: Entry): boolean
 	return Vector3.new(v.X, 0, v.Z).Magnitude > FX.MinGroundSpeed
 end
 
---==============================================================================
--- THE ONE LOOP
---
--- Colour is repainted on a fixed clock rather than every frame, so a wave moves
--- at the same speed on a 144 Hz machine as on a 30 Hz one -- and so the tiers
--- whose colour does not move are painted once and never touched again.
---==============================================================================
 local colourClock = 0
 local sinceColour = 0
 
@@ -671,20 +715,13 @@ RunService.Heartbeat:Connect(function(dt)
 	local here = if mine and mine.root.Parent then mine.root.Position else nil
 
 	for who, entry in pairs(tracked) do
-		if not (entry.character.Parent and entry.root.Parent and entry.trail.Parent) then
+		if not (entry.character.Parent and entry.root.Parent and entry.trailMain.Parent) then
 			untrack(who)
 		else
 			local index = who:GetAttribute(TIER_ATTR)
 			local tier = if type(index) == "number" then FX.Tiers[index] else nil
 			tier = carriedTier(who, tier)
 
-			--==============================================================
-			-- A JUMP THIS BIG WAS NOT A RUN
-			--
-			-- A Trail draws a segment between where it was and where it is, so
-			-- a respawn would smear a ribbon straight across the map. Disabling
-			-- it for the frame that covers the gap is what breaks the segment.
-			--==============================================================
 			local at = entry.root.Position
 			local teleported = entry.lastPos ~= nil
 				and (at - entry.lastPos).Magnitude > FX.TeleportStuds
@@ -694,8 +731,10 @@ RunService.Heartbeat:Connect(function(dt)
 				or (here ~= nil and (at - here).Magnitude <= FX.RemoteMaxStuds)
 
 			local want = tier ~= nil and not teleported and inRange and isRunning(entry)
-			if entry.trail.Enabled ~= want then
-				entry.trail.Enabled = want
+			if entry.trailMain.Enabled ~= want then
+				entry.trailMain.Enabled = want
+				entry.trailCore.Enabled = want
+				entry.particles.Enabled = want
 				if not want then
 					entry.paintedTier = nil
 				end
@@ -707,21 +746,20 @@ RunService.Heartbeat:Connect(function(dt)
 				local widthScale = if quality == QUALITY_REDUCED
 					then FX.ReducedWidthScale else 1
 
-				entry.trail.Lifetime = tier.Lifetime * scale
-				entry.trail.LightEmission = tier.LightEmission
+				entry.trailMain.Lifetime = tier.Lifetime * scale
+				entry.trailCore.Lifetime = tier.Lifetime * 0.75 * scale
+				entry.trailMain.LightEmission = tier.LightEmission
+				entry.trailCore.LightEmission = if tier.LightEmission < 0.2 then 0.0 else 1.0
+				entry.trailCore.Color = ColorSequence.new(tier.CoreColor or Color3.fromRGB(255, 255, 255))
 
-				--======================================================
-				-- MOVING AN ATTACHMENT IS THE ONLY WAY TO CHANGE WIDTH
-				--
-				-- Guarded so it only writes when the width actually changes:
-				-- this runs every frame for every running player, and a Trail
-				-- rebuilds when its attachments move.
-				--======================================================
+				-- Dynamic Width Adjustment
 				local width = tier.WidthStuds * widthScale
 				if math.abs(entry.width - width) > 1e-3 then
 					entry.width = width
-					entry.a0.Position = Vector3.new(0, width * 0.5, 0.4)
-					entry.a1.Position = Vector3.new(0, -width * 0.5, 0.4)
+					entry.a0.Position = Vector3.new(0, width * 0.5, 0.45)
+					entry.a1.Position = Vector3.new(0, -width * 0.5, 0.45)
+					entry.c0.Position = Vector3.new(0, width * 0.25, 0.42)
+					entry.c1.Position = Vector3.new(0, -width * 0.25, 0.42)
 				end
 
 				local head = tier.HeadTransparency
@@ -729,31 +767,33 @@ RunService.Heartbeat:Connect(function(dt)
 					head = math.clamp(head
 						- math.sin(colourClock * 24) * tier.Shimmer, 0, 1)
 				end
-				entry.trail.Transparency = NumberSequence.new({
+				entry.trailMain.Transparency = NumberSequence.new({
 					NumberSequenceKeypoint.new(0, head),
+					NumberSequenceKeypoint.new(0.7, math.min(1, head + 0.3)),
 					NumberSequenceKeypoint.new(1, 1),
 				})
 
-				--======================================================
-				-- A STATIC TIER IS PAINTED ONCE, NOT EVERY FRAME
-				--
-				-- Tiers 1 and 2 have no wave and no rainbow, so their colour
-				-- never changes -- and building a ColorSequence for them every
-				-- frame would allocate one per player per frame forever. It is
-				-- the exact garbage the old file called out and then avoided by
-				-- painting at emit; the equivalent here is remembering which
-				-- tier is currently on the ribbon.
-				--
-				-- `paintedTier` is cleared when the ribbon goes out, so coming
-				-- back from a carry or a stop repaints rather than trusting a
-				-- stale row.
-				--======================================================
+				-- Particle FX Customization per Tier
+				if tier.Particle then
+					local p = tier.Particle
+					entry.particles.Texture = p.Texture or "rbxasset://textures/particles/sparkles_main.dds"
+					entry.particles.Rate = p.Rate or 20
+					entry.particles.Speed = NumberRange.new(p.Speed * 0.6, p.Speed)
+					entry.particles.LightEmission = p.LightEmission or 0.9
+					entry.particles.Color = ColorSequence.new(p.Color or Color3.fromRGB(255, 255, 255))
+					entry.particles.Size = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, (p.Size or 1) * 0.4),
+						NumberSequenceKeypoint.new(0.5, p.Size or 1),
+						NumberSequenceKeypoint.new(1, 0.1),
+					})
+				end
+
 				if tier.Wave > 0 or tier.Rainbow then
 					if repaint then
-						entry.trail.Color = paletteSequence(tier, colourClock)
+						entry.trailMain.Color = paletteSequence(tier, colourClock)
 					end
 				elseif entry.paintedTier ~= tier then
-					entry.trail.Color = paletteSequence(tier, 0)
+					entry.trailMain.Color = paletteSequence(tier, 0)
 				end
 				entry.paintedTier = tier
 			end
@@ -761,13 +801,6 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 end)
 
---==============================================================================
--- WHO IS TRACKED
---
--- Everybody, including the local player. Ghosts were emitted for everyone while
--- the ribbon was local-only; keeping that split would have meant every other
--- player silently lost their effect the day the ghosts went.
---==============================================================================
 local function watchPlayer(who: Player)
 	if who.Character then
 		track(who, who.Character)
@@ -786,13 +819,6 @@ end
 Players.PlayerAdded:Connect(watchPlayer)
 Players.PlayerRemoving:Connect(untrack)
 
---==============================================================================
--- THE SEAM A SETTINGS PANEL WILL USE
---
--- Cheaper than it was: the budget no longer decides how many objects exist, so
--- a quality change is a rebuild of one instance per player rather than of a
--- pool of sixty parts.
---==============================================================================
 local function setQuality(mode: string)
 	if mode ~= QUALITY_FULL and mode ~= QUALITY_REDUCED and mode ~= QUALITY_OFF then
 		return
@@ -810,17 +836,6 @@ local function setQuality(mode: string)
 	end
 end
 
---==============================================================================
--- DRIVEN BY AN ATTRIBUTE, NOT A GLOBAL
---
--- `player:SetAttribute("SeedAfterimageQuality", "Reduced")` and that is the
--- whole interface. A settings panel writes it, this reads it, and anything at
--- all can ask what a machine is rendering -- which a `_G` function cannot
--- answer from outside its own VM.
---
--- Applied on connect as well as on change, so a value written before this
--- script ran is not lost.
---==============================================================================
 player:GetAttributeChangedSignal(FX.QualityAttribute):Connect(function()
 	local want = player:GetAttribute(FX.QualityAttribute)
 	if type(want) == "string" then
