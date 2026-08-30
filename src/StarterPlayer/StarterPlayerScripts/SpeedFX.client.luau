@@ -480,7 +480,7 @@ local function carriedTier(who: Player, tier: any): any
 		return tier
 	end
 	-- Heavy. Nothing at all -- this is the branch that guarantees a Colossal
-	-- haul is silent at EVERY tier, including the rainbow.
+	-- haul is silent at EVERY tier, the void at the top included.
 	if multiplier < FX.CarryReducedAbove then
 		return nil
 	end
@@ -499,22 +499,16 @@ end
 -- COLOUR
 --
 -- A Trail takes a ColorSequence, so a palette becomes stops along the ribbon
--- rather than a colour per echo. `Wave` slides those stops along it; the
--- rainbow ignores the palette and walks the hue wheel instead.
+-- rather than a colour per echo, and `Wave` slides those stops along it.
+--
+-- THERE WAS A SECOND PATH HERE AND IT IS GONE. The old top tier walked the hue
+-- wheel and ignored its palette entirely. Void Singularity replaced it with the
+-- opposite idea -- a ribbon that takes light away -- so nothing set Rainbow any
+-- more and the branch became code that could not be reached, could not be
+-- tested, and would rot quietly. A tier is its palette now, with no exceptions
+-- for the code to carry.
 --==============================================================================
 local function paletteSequence(tier: any, clock: number): ColorSequence
-	if tier.Rainbow then
-		local stops = {}
-		local n = FX.RainbowStops
-		for i = 0, n - 1 do
-			local at = i / (n - 1)
-			local hue = (at * 0.85 + clock * tier.Wave) % 1
-			table.insert(stops, ColorSequenceKeypoint.new(at,
-				Color3.fromHSV(hue, 0.72, 1)))
-		end
-		return ColorSequence.new(stops)
-	end
-
 	local palette = tier.Palette
 	if #palette == 1 then
 		return ColorSequence.new(palette[1])
@@ -816,6 +810,37 @@ RunService.Heartbeat:Connect(function(dt)
 					entry.trailCore.Color = ColorSequence.new(
 						tier.CoreColor or Color3.fromRGB(255, 255, 255))
 
+					--==============================================
+					-- THE BLADE IS A TIER BELOW THE RIBBON, NOT A
+					-- CONSTANT
+					--
+					-- It was pinned at 0.1 -- nearly opaque -- at every
+					-- tier, so Breeze Whisper, whose whole brief is to
+					-- be barely there at 0.55, trailed a solid white
+					-- blade anyway. The bottom of the ladder read as
+					-- loud as the top.
+					--
+					-- It follows HeadTransparency now, sitting 0.18
+					-- fainter so it still reads as an inner edge rather
+					-- than a second ribbon. The shimmered `head` is
+					-- deliberately NOT used: the blade is the steady
+					-- line the outer wave flickers around, and shimmer
+					-- would also drag this out of the tier-change gate
+					-- and back into every frame.
+					--==============================================
+					local headCore = if tier.LightEmission < 0.2
+						-- Void Singularity absorbs light rather than
+						-- casting it, so its blade stays as solid as
+						-- the ribbon. Fading it would put a hole in
+						-- the one tier built to be a hole.
+						then tier.HeadTransparency
+						else math.clamp(tier.HeadTransparency + 0.18, 0, 0.95)
+					entry.trailCore.Transparency = NumberSequence.new({
+						NumberSequenceKeypoint.new(0, headCore),
+						NumberSequenceKeypoint.new(0.6, math.min(1, headCore + 0.3)),
+						NumberSequenceKeypoint.new(1, 1),
+					})
+
 					local p = tier.Particle
 					if p then
 						entry.particles.Texture = p.Texture
@@ -833,7 +858,7 @@ RunService.Heartbeat:Connect(function(dt)
 					end
 				end
 
-				if tier.Wave > 0 or tier.Rainbow then
+				if tier.Wave > 0 then
 					if repaint then
 						entry.trailMain.Color = paletteSequence(tier, colourClock)
 					end

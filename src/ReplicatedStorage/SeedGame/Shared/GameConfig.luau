@@ -897,9 +897,6 @@ GameConfig.Afterimage = {
 	-- it, not merely to skip drawing it.
 	RemoteMaxStuds = 120,
 
-	-- Roblox caps a ColorSequence at 20. Eight reads as a spectrum and is cheap
-	-- to rebuild on the colour clock.
-	RainbowStops = 8,
 	-- How often the animated tiers are repainted. A wave that moved at the frame
 	-- rate would run at a different speed on every machine.
 	ColourInterval = 1 / 30,
@@ -911,7 +908,7 @@ GameConfig.Afterimage = {
 	-- a client that worked it out for itself is a client that could decide not
 	-- to. Above CarryFullAbove nothing changes; below CarryReducedAbove the
 	-- ribbon goes out entirely, which is what guarantees a Colossal haul is
-	-- silent at every tier including the rainbow.
+	-- silent at every tier, the void at the top included.
 	--==========================================================================
 	CarryFullAbove = 0.92,
 	CarryReducedAbove = 0.55,
@@ -937,7 +934,6 @@ GameConfig.Afterimage = {
 	--   Palette           the colours it cycles through
 	--   Wave              palette travel per second (0 is static)
 	--   Shimmer           fast, shallow brightness flicker
-	--   Rainbow           full hue wheel instead of the palette
 	--   Particle          the emitter that rides with it: Texture, Color, Rate,
 	--                     Speed, Size, and an optional LightEmission
 	--   CoreColor         optional. The inner blade is white at full emission
@@ -957,6 +953,13 @@ GameConfig.Afterimage = {
 	-- AND TIER 10 BREAKS LightEmission ON PURPOSE. Every tier climbs toward
 	-- light; Void Singularity is the one that takes it away, which only reads
 	-- as an ending because the nine below it went the other way.
+	--
+	-- THAT IS ALSO WHY THERE IS NO LONGER A Rainbow COLUMN. The old top tier
+	-- ended the ladder by abandoning its palette for the whole hue wheel. The
+	-- void ends it by going the other way instead, so nothing set the flag, and
+	-- a branch no row can reach is a branch nobody tests. It went with it. If a
+	-- future tier wants the hue wheel back, it is in the history -- do not leave
+	-- a dead column here waiting for it.
 	--==========================================================================
 	Tiers = {
 		{
@@ -972,7 +975,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.15,
 			Shimmer = 0,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(150, 240, 170),
@@ -994,7 +996,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.20,
 			Shimmer = 0.05,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(110, 225, 255),
@@ -1016,7 +1017,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.38,
 			Shimmer = 0.16,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(255, 235, 90),
@@ -1038,7 +1038,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.25,
 			Shimmer = 0.08,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/smoke_main.dds",
 				Color = Color3.fromRGB(210, 110, 255),
@@ -1061,7 +1060,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.32,
 			Shimmer = 0.12,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(255, 210, 60),
@@ -1084,7 +1082,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.38,
 			Shimmer = 0.10,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(190, 250, 255),
@@ -1107,7 +1104,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.45,
 			Shimmer = 0.08,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(255, 170, 240),
@@ -1131,7 +1127,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.55,
 			Shimmer = 0.15,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/fire_main.dds",
 				Color = Color3.fromRGB(255, 120, 25),
@@ -1155,7 +1150,6 @@ GameConfig.Afterimage = {
 			},
 			Wave = 0.62,
 			Shimmer = 0.10,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(255, 250, 190),
@@ -1180,7 +1174,6 @@ GameConfig.Afterimage = {
 			CoreColor = Color3.fromRGB(10, 6, 16),
 			Wave = 0.65,
 			Shimmer = 0.25,
-			Rainbow = false,
 			Particle = {
 				Texture = "rbxasset://textures/particles/sparkles_main.dds",
 				Color = Color3.fromRGB(15, 10, 24),
