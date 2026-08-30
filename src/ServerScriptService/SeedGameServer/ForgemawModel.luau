@@ -211,6 +211,7 @@ local function buildGeometry(parent: Instance, at: CFrame): Model
 	local root = mk({ name = "HumanoidRootPart", size = Vector3.new(4.8, 3.6, 3.8),
 		cf = at * CFrame.new(rootPos), color = C.Basalt,
 		transparency = 1, smooth = true, parent = m })
+	root.Massless = false
 	m.PrimaryPart = root
 
 	bone(m, "Torso", SHOULDER, HIP, 5.6, 4.6, C.Char, at)
@@ -812,6 +813,9 @@ function ForgemawModel.Build(cf: CFrame, height: number, parent: Instance): Mode
 	humanoid.Parent = model
 
 	model:SetAttribute("RigScale", s)
+	model:SetAttribute("SleepBodyPose",
+		CFrame.new(0, -0.65 * s, 0.4 * s) * CFrame.Angles(math.rad(8), 0, 0))
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
 	CollectionService:AddTag(model, GameConfig.Tags.NestParent)
 
 	--==========================================================================

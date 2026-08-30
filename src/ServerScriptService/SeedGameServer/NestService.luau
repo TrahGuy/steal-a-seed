@@ -72,6 +72,7 @@ type Nest = {
 	id: string,
 	biome: BiomeData.Biome,
 	origin: Vector3,
+	homeCFrame: CFrame,
 	parent: Model,
 	humanoid: Humanoid,
 	root: BasePart,
@@ -204,6 +205,7 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		id = folder.Name,
 		biome = biome,
 		origin = centre,
+		homeCFrame = root.CFrame,
 		parent = parentModel,
 		humanoid = humanoid,
 		root = root,
@@ -938,7 +940,7 @@ function NestService.ResetParents(): number
 		nest.stateUntil = 0
 		if nest.root.Parent then
 			nest.humanoid.WalkSpeed = 0
-			nest.root.CFrame = CFrame.new(nest.origin)
+			nest.root.CFrame = nest.homeCFrame
 			nest.root.AssemblyLinearVelocity = Vector3.zero
 		end
 		nest.parent:SetAttribute("Asleep", true)

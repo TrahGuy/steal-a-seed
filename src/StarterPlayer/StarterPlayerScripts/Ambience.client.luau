@@ -554,6 +554,168 @@ local function spinMillParts(dt: number)
 		end
 	end
 
+	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillJaw)) do
+		local jaw = instance :: BasePart
+		if jaw.Parent then
+			if not spinRest[jaw] then
+				spinRest[jaw] = jaw.CFrame
+				spinAngle[jaw] = 0
+			end
+			local belt = beltOf(jaw)
+			local speed = if belt then beltSpeed(belt) else IDLE_STUDS
+			spinAngle[jaw] = (spinAngle[jaw] or 0) + dt * math.max(speed * 0.22, 2.5)
+			-- Demonic jaw opens and closes in an aggressive snarl/chomp
+			local chomp = (math.sin(spinAngle[jaw]) + 1) * 0.5
+			local chompAngle = math.rad(4 + chomp * 24)
+			jaw.CFrame = spinRest[jaw] * CFrame.Angles(-chompAngle, 0, 0)
+		else
+			spinRest[jaw] = nil
+			spinAngle[jaw] = nil
+		end
+	end
+
+	--==========================================================================
+	-- TIER 10 HOLOGRAPHIC CYBER SCREENS DYNAMIC REACTIVE ANIMATION
+	--==========================================================================
+	local HACKER_LOGS_A = {
+		"> INITIATING_QUANTUM_CORE_V10...",
+		"> BYPASSING_GRAVITY_MATRIX [OK]",
+		"> 0x7F4A :: TACHYON_FLOW = 99.8%",
+		"> DECRYPTING_SINGULARITY_KEY...",
+		"> OVERCLOCKING_HYPERDRIVE: 160/S",
+		"> [ROOT@COSMOS] sudo inject_flux",
+		"> 0x88B2A90F :: CORE_LOCK [ACTIVE]",
+		"> ANTIMATTER_RESONANCE = 1.000",
+		"> PARSING_COORDINATES: (42, 99, 160)",
+		"> MEMORY_DUMP: 0xDEAD -> 0x00FF88",
+		"> GRAVITATIONAL_SINGULARITY: OK",
+		"> HYPERLANE_TRAJECTORY_STABLE",
+	}
+
+	local HACKER_LOGS_B = {
+		"> 0x8F 0x3B 0xA1 0xFE 0x00 0x9C",
+		"> 01000001 01010011 01010100 0101",
+		"> 0x7A4F 0x99B1 0x001C 0xFF4D",
+		"> FLUX_DENSITY: 12.884 TeV [MAX]",
+		"> NODE_0: CONNECTED [127.0.0.1]",
+		"> 0xCAFE :: BUFFER_OVERFLOW [OK]",
+		"> STAR_MAP: ANDROMEDA_LOCKED",
+		"> 0x994F8A :: QUANTUM_KEY_SYNC",
+		"> SECTOR_EPSILON: MATRIX_ACTIVE",
+		"> EMITTER_GRID: 100% NOMINAL",
+	}
+
+	local TICKERS = {
+		"> root@cosmos: bypass_gravity --speed 160",
+		"> quantum_inject --flux 12.4TeV [ACTIVE]",
+		"> sudo override_physics --force-warp",
+		"> singularity_lock: 0x88B2A90F [ONLINE]",
+	}
+
+	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillHolo or "MillHolo")) do
+		local pane = instance :: BasePart
+		if pane.Parent then
+			local belt = beltOf(pane)
+			local work = if belt then (beltWork[belt] or (if beltSpeed(belt) > IDLE_STUDS * 2 then 1 else 0)) else 1
+			local live = work > 0.05
+
+			pane.Transparency = if live then (0.35 + 0.12 * math.sin(millClock * 3.5)) else 0.88
+
+			for _, sg in ipairs(pane:GetChildren()) do
+				if sg:IsA("SurfaceGui") then
+					sg.Enabled = true
+					local frame = sg:FindFirstChildWhichIsA("Frame")
+					if frame then
+						frame.BackgroundTransparency = if live then 0.55 else 0.95
+
+						-- 1. Dynamic Speed Readout
+						local speedVal = frame:FindFirstChild("SpeedVal", true) :: TextLabel?
+						if speedVal and belt then
+							local curSpeed = math.floor(beltSpeed(belt) * (0.8 + 0.2 * work))
+							speedVal.Text = string.format("%d STUDS/S", curSpeed)
+						end
+
+						-- 2. Dynamic Equalizer Waveform Bars
+						local eqHolder = frame:FindFirstChild("EqHolder", true)
+						if eqHolder then
+							for i, bar in ipairs(eqHolder:GetChildren()) do
+								if bar:IsA("Frame") then
+									local h = if live then (0.25 + 0.75 * math.abs(math.sin(millClock * 6.0 + i * 0.7))) else 0.12
+									bar.Size = UDim2.new(bar.Size.X.Scale, bar.Size.X.Offset, h, 0)
+								end
+							end
+						end
+
+						-- 3. Dynamic Hacker Command Line Ticker
+						local ticker = frame:FindFirstChild("HackerTicker", true) :: TextLabel?
+						if ticker then
+							if live then
+								local tickIdx = math.floor((millClock * 0.75) % #TICKERS) + 1
+								local cursor = if (math.floor(millClock * 3) % 2 == 0) then "_" else ""
+								ticker.Text = TICKERS[tickIdx] .. cursor
+								ticker.TextColor3 = Color3.fromRGB(0, 255, 170)
+							else
+								local cursor = if (math.floor(millClock * 1.5) % 2 == 0) then "_" else ""
+								ticker.Text = "> WAITING_FOR_OPERATOR..." .. cursor
+								ticker.TextColor3 = Color3.fromRGB(0, 180, 130)
+							end
+						end
+
+						-- 4. Dynamic Multi-Line Streaming Hacker Terminal Logs
+						local term = frame:FindFirstChild("HackerTerminal", true) :: TextLabel?
+						if term then
+							local list = if pane.Name:find("Left") then HACKER_LOGS_A else HACKER_LOGS_B
+							if live then
+								local stepTime = if belt then math.max(0.25, 2.0 / math.max(beltSpeed(belt), 10)) else 0.4
+								local step = math.floor(millClock / stepTime)
+								local lines = {}
+								for l = 0, 4 do
+									local itemIdx = ((step + l) % #list) + 1
+									table.insert(lines, list[itemIdx])
+								end
+								term.Text = table.concat(lines, "\n")
+							else
+								term.Text = "> SYSTEM_STANDBY\n> CORE_READY: 100%\n> WAITING_FOR_RUNNER...\n> 0x0000 -> IDLE"
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+
+	--==========================================================================
+	-- TIER 9 ANGEL WINGS SLOW MAJESTIC FLAPPING ANIMATION
+	--==========================================================================
+	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillWing or "MillWing")) do
+		local wingRoot = instance :: BasePart
+		if wingRoot.Parent then
+			if not spinRest[wingRoot] then
+				spinRest[wingRoot] = wingRoot.CFrame
+				spinAngle[wingRoot] = 0
+			end
+			local belt = beltOf(wingRoot)
+			local work = if belt then (beltWork[belt] or (if beltSpeed(belt) > IDLE_STUDS * 2 then 1 else 0)) else 1
+			local side = tonumber(wingRoot:GetAttribute("WingSide")) or 1
+
+			-- Flap frequency accelerates gracefully under work
+			local flapSpeed = if work > 0.05 then (2.4 + work * 1.6) else 0.8
+			spinAngle[wingRoot] = (spinAngle[wingRoot] or 0) + dt * flapSpeed
+
+			-- Flapping stroke angle
+			local flapAmp = if work > 0.05 then math.rad(22 * (0.6 + 0.4 * work)) else math.rad(5)
+			local stroke = math.sin(spinAngle[wingRoot])
+			local rollAngle = stroke * flapAmp * side
+			local yawAngle = math.cos(spinAngle[wingRoot]) * (flapAmp * 0.4) * side
+			local pitchAngle = -math.abs(stroke) * (flapAmp * 0.3)
+
+			wingRoot.CFrame = spinRest[wingRoot] * CFrame.Angles(pitchAngle, yawAngle, rollAngle)
+		else
+			spinRest[wingRoot] = nil
+			spinAngle[wingRoot] = nil
+		end
+	end
+
 	for _, instance in ipairs(CollectionService:GetTagged(LEAF_TAG)) do
 		local part = instance :: BasePart
 		if part.Parent then
@@ -719,12 +881,12 @@ RunService.Heartbeat:Connect(function(dt)
 			end
 			c.part.CFrame = c.belt.CFrame
 				* CFrame.new(c.restPos.X, c.restPos.Y + bob, z)
-				* CFrame.Angles((if c.spectrum then 0 else style.Rake) * work, 0, 0)
+				* CFrame.Angles((if c.spectrum and style.Rainbow > 0 then 0 else style.Rake) * work, 0, 0)
 				* c.restRot
 
 			local vis = math.clamp(math.min(u, 1 - u) / EDGE_FADE, 0, 1)
 
-			if c.spectrum then
+			if c.spectrum and style.Rainbow > 0 then
 				--==========================================================
 				-- RUNG 7 IS MADE OF THESE
 				--

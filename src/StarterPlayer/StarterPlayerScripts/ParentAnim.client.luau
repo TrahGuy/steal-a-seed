@@ -87,6 +87,7 @@ type Parent = {
 	-- which is what keeps Greenhollow's brute exactly as it was.
 	sleepBody: CFrame,
 	stride: number,
+	lastPos: Vector3,
 	-- 0 asleep, 1 awake. Blended so waking is a movement rather than a snap.
 	wake: number,
 	phase: number,
@@ -169,8 +170,19 @@ local BRAMBLEBACK_SLEEP: SleepProfile = {
 	breathRate = 1.1,
 }
 
+local FORGEMAW_SLEEP: SleepProfile = {
+	armFold = math.rad(16),
+	armSplay = math.rad(-6),
+	neckDroop = math.rad(24),
+	neckTilt = math.rad(-3),
+	hipTurn = math.rad(14),
+	breath = math.rad(3.6),
+	breathRate = 0.82,
+}
+
 local SLEEP_BY_SPECIES: { [string]: SleepProfile } = {
 	brambleback = BRAMBLEBACK_SLEEP,
+	forgemaw = FORGEMAW_SLEEP,
 }
 
 --==============================================================================
@@ -394,59 +406,202 @@ local function animateMiremaw(p: any, wake: number, t: number,
 	end
 end
 
+--==============================================================================
+-- FORGEMAW: VOLCANIC KNUCKLE-WALKER KINEMATICS
+--
+-- A heavy 4-legged beast with long pillar forelimbs and folded hind legs.
+-- Knuckle stride uses diagonal pairing (Left Arm + Right Leg vs Right Arm + Left Leg),
+-- with dynamic torso spine flexion/bobbing, lunging neck thrust, and wide snapping jaws.
+--==============================================================================
+local FORGE_ARM_SWING = math.rad(42)
+local FORGE_ARM_LIFT = math.rad(15)
+local FORGE_LEG_SWING = math.rad(46)
+local FORGE_TORSO_BOB = 0.65
+local FORGE_TORSO_PITCH = math.rad(8.5)
+local FORGE_TORSO_ROLL = math.rad(6.0)
+local FORGE_TORSO_YAW = math.rad(5.0)
+
+local function animateForgemaw(p: any, wake: number, t: number,
+	stride: number, moving: number, attackDt: number)
+	local asleep = 1 - wake
+	local sleep = p.sleep
+
+	--== VOLCANIC BREATHING & IDLE WEIGHT TRANSFER ==--
+	local breath = 0
+	if sleep.breath > 0 then
+		breath = math.sin(t * sleep.breathRate + p.phase) * sleep.breath * asleep
+	end
+	local idleWeight = (1 - moving * 0.7) * wake
+	local idleArmRoll = math.sin(t * 1.8 + p.phase) * math.rad(4.0) * idleWeight
+	local idleArmPitch = math.cos(t * 1.8 + p.phase) * math.rad(3.5) * idleWeight
+	local idleLegPitch = math.sin(t * 1.8 + p.phase) * math.rad(3.0) * idleWeight
+	local idleTorsoSway = math.sin(t * 1.3 + p.phase) * math.rad(2.5) * idleWeight
+
+	--== ATTACK SWIPE / KNUCKLE SLAM ==--
+	local attackArmPitch = 0
+	local attackArmYaw = 0
+	local attackArmRoll = 0
+	local attackJaw = 0
+	local attackHead = 0
+
+	if attackDt >= 0 and attackDt < 0.85 then
+		local pNorm = attackDt / 0.85
+		if pNorm < 0.28 then
+			-- Phase 1: High Knuckle Windup (rear back and lift heavy arms)
+			local u = pNorm / 0.28
+			local ease = math.sin(u * math.pi * 0.5)
+			attackArmPitch = -math.rad(65) * ease
+			attackArmRoll = math.rad(24) * ease
+			attackHead = -math.rad(16) * ease
+			attackJaw = math.rad(16) * ease
+		elseif pNorm < 0.60 then
+			-- Phase 2: Explosive Knuckle Slam & Furnace Lunge
+			local u = (pNorm - 0.28) / 0.32
+			local ease = math.sin(u * math.pi * 0.5)
+			attackArmPitch = -math.rad(65) + math.rad(140) * ease
+			attackArmYaw = math.rad(28) * ease
+			attackArmRoll = math.rad(24) - math.rad(36) * ease
+			attackHead = -math.rad(16) + math.rad(30) * ease
+			attackJaw = math.rad(16) + math.rad(36) * ease
+		else
+			-- Phase 3: Recovery / Re-plant
+			local u = (pNorm - 0.60) / 0.25
+			local ease = 1 - u
+			attackArmPitch = math.rad(75) * ease
+			attackArmYaw = math.rad(28) * ease
+			attackArmRoll = -math.rad(12) * ease
+			attackHead = math.rad(14) * ease
+			attackJaw = math.rad(52) * ease
+		end
+	end
+
+	--== 1. TORSO & SPINE HEAVE (RootJoint) ==--
+	-- Knuckle-walking gallop/prowl causes the heavy body to pitch, bob, and roll
+	if p.rootJoint then
+		local bob = -math.abs(math.sin(stride)) * FORGE_TORSO_BOB * moving
+		local pitch = (math.sin(stride * 2) * FORGE_TORSO_PITCH * moving) + idleTorsoSway
+		local roll = (math.sin(stride) * FORGE_TORSO_ROLL * moving) + (idleTorsoSway * 0.5)
+		local yaw = -math.sin(stride) * FORGE_TORSO_YAW * moving
+		local sleepOffset = p.sleepBody:Lerp(CFrame.identity, wake)
+		p.rootJoint.motor.C0 = p.rootJoint.rest
+			* sleepOffset
+			* CFrame.new(0, bob, 0)
+			* CFrame.Angles(pitch, yaw, roll)
+	end
+
+	--== 2. FORELIMBS / KNUCKLE ARMS ==--
+	-- Diagonal stride: Left Arm alternates with Right Arm
+	local armL_sin = math.sin(stride)
+	local armR_sin = math.sin(stride + math.pi)
+	local liftL = math.max(0, math.cos(stride)) * FORGE_ARM_LIFT * moving
+	local liftR = math.max(0, -math.cos(stride)) * FORGE_ARM_LIFT * moving
+	local fold = asleep * sleep.armFold
+	local splay = asleep * sleep.armSplay
+
+	if p.leftArm then
+		p.leftArm.motor.C0 = p.leftArm.rest * CFrame.Angles(
+			armL_sin * FORGE_ARM_SWING * moving - liftL + fold + breath + idleArmPitch + attackArmPitch,
+			math.sin(stride) * math.rad(8) * moving + attackArmYaw,
+			splay + idleArmRoll + attackArmRoll)
+	end
+	if p.rightArm then
+		p.rightArm.motor.C0 = p.rightArm.rest * CFrame.Angles(
+			armR_sin * FORGE_ARM_SWING * moving - liftR + fold + breath - idleArmPitch + attackArmPitch,
+			-math.sin(stride) * math.rad(8) * moving - attackArmYaw,
+			-splay - idleArmRoll - attackArmRoll)
+	end
+
+	--== 3. HIND LEGS ==--
+	-- Diagonal pairing: Left Leg pairs with Right Arm (phase pi), Right Leg pairs with Left Arm (phase 0)
+	local legL_sin = math.sin(stride + math.pi)
+	local legR_sin = math.sin(stride)
+	local hipTurn = asleep * sleep.hipTurn
+
+	if p.leftLeg then
+		p.leftLeg.motor.C0 = p.leftLeg.rest
+			* CFrame.Angles(legL_sin * FORGE_LEG_SWING * moving + idleLegPitch, -hipTurn * 0.7, -hipTurn)
+	end
+	if p.rightLeg then
+		p.rightLeg.motor.C0 = p.rightLeg.rest
+			* CFrame.Angles(legR_sin * FORGE_LEG_SWING * moving - idleLegPitch, hipTurn * 0.7, hipTurn)
+	end
+
+	--== 4. NECK & HEAD ==--
+	-- Lunging thrust with stride + predatory yaw tracking
+	if p.neck then
+		local droop = asleep * sleep.neckDroop
+		local loll = wake * math.sin(t * 1.5 + p.phase) * math.rad(12)
+		local nod = wake * math.sin(stride * 2 + 1.2) * math.rad(10.0) * moving
+		p.neck.motor.C0 = p.neck.rest
+			* CFrame.Angles(droop + nod - breath * 0.5 + attackHead,
+				loll * 0.8, loll * 0.5 + asleep * sleep.neckTilt)
+	end
+
+	--== 5. SNAPPING UNDERSLUNG JAW ==--
+	-- Active furnace chomp while pursuing
+	if p.jaw then
+		local chomp = (math.sin(t * 3.4 + p.phase) * 0.5 + 0.5) ^ 1.6
+		p.jaw.motor.C0 = p.jaw.rest
+			* CFrame.Angles(-chomp * math.rad(30) * wake - attackJaw, 0, 0)
+	end
+end
+
 local function track(model: Instance)
 	if not model:IsA("Model") or parents[model] then
 		return
 	end
-	local root = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
-	if not (root and root:IsA("BasePart")) then
-		-- Not here yet. Wait for it off the signal thread and try again.
-		task.spawn(function()
-			local waited = model:WaitForChild("HumanoidRootPart", 10)
-			if waited and waited:IsA("BasePart") and model.Parent then
-				track(model)
-			end
-		end)
-		return
-	end
-	-- Seeded off position so two parents in one biome never move in lockstep.
-	local p = root.Position
-	local neck = jointNamed(model, "Neck")
-	if not neck then
-		-- The rig is here but its joints are not. Same trap, same fix.
-		task.spawn(function()
-			task.wait(0.5)
-			if model.Parent and not parents[model] then
-				track(model)
-			end
-		end)
-		return
+
+	local function tryTrack(): boolean
+		if parents[model] or not model.Parent then
+			return true
+		end
+		local root = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart")
+		if not (root and root:IsA("BasePart")) then
+			return false
+		end
+		local neck = jointNamed(model, "Neck")
+		if not neck then
+			return false
+		end
+
+		local p = root.Position
+		parents[model] = {
+			model = model,
+			root = root,
+			neck = neck,
+			jaw = jointNamed(model, "JawJoint"),
+			leftArm = jointNamed(model, "LeftShoulder"),
+			rightArm = jointNamed(model, "RightShoulder"),
+			leftLeg = jointNamed(model, "LeftHip"),
+			rightLeg = jointNamed(model, "RightHip"),
+			rootJoint = jointNamed(model, "RootJoint"),
+			sleepBody = (model:GetAttribute("SleepBodyPose") :: CFrame?) or CFrame.identity,
+			stride = 0,
+			lastPos = root.Position,
+			wake = 0,
+			phase = (math.abs(p.X) + math.abs(p.Z)) % 6.28,
+			-- Read once at track time, not per frame. The attribute is set by the
+			-- builder and never changes for the life of the rig.
+			sleep = SLEEP_BY_SPECIES[tostring(model:GetAttribute("Species"))]
+				or GREENHOLLOW_SLEEP,
+			-- Populated only for Miremaw. Nil for every other guardian, which
+			-- is what keeps this whole path off Greenhollow and Brambleback.
+			mire = if tostring(model:GetAttribute("Species")) == "miremaw"
+				then mireChannels(model, (model:GetAttribute("RigScale") :: number?) or 1)
+				else nil,
+		}
+		return true
 	end
 
-	parents[model] = {
-		model = model,
-		root = root,
-		neck = neck,
-		jaw = jointNamed(model, "JawJoint"),
-		leftArm = jointNamed(model, "LeftShoulder"),
-		rightArm = jointNamed(model, "RightShoulder"),
-		leftLeg = jointNamed(model, "LeftHip"),
-		rightLeg = jointNamed(model, "RightHip"),
-		rootJoint = jointNamed(model, "RootJoint"),
-		sleepBody = (model:GetAttribute("SleepBodyPose") :: CFrame?) or CFrame.identity,
-		stride = 0,
-		wake = 0,
-		phase = (math.abs(p.X) + math.abs(p.Z)) % 6.28,
-		-- Read once at track time, not per frame. The attribute is set by the
-		-- builder and never changes for the life of the rig.
-		sleep = SLEEP_BY_SPECIES[tostring(model:GetAttribute("Species"))]
-			or GREENHOLLOW_SLEEP,
-		-- Populated only for Miremaw. Nil for every other guardian, which
-		-- is what keeps this whole path off Greenhollow and Brambleback.
-		mire = if tostring(model:GetAttribute("Species")) == "miremaw"
-			then mireChannels(model, (model:GetAttribute("RigScale") :: number?) or 1)
-			else nil,
-	}
+	if not tryTrack() then
+		local conn: RBXScriptConnection? = nil
+		conn = model.DescendantAdded:Connect(function()
+			if tryTrack() and conn then
+				conn:Disconnect()
+				conn = nil
+			end
+		end)
+	end
 end
 
 for _, m in ipairs(CollectionService:GetTagged(TAG)) do
@@ -498,24 +653,37 @@ RunService.Heartbeat:Connect(function(dt)
 			-- writers on one Motor6D.C0 -- which shows up as jitter and reads
 			-- as a physics problem rather than as an animation one.
 			--==============================================================
-			--== SPEED FROM VELOCITY, FOR EITHER PATH ==--
-			-- Hoisted above the fork because Miremaw needs the same stride the
-			-- shared code does. It did not have it at first, and the result was
-			-- a guardian that chased down the road with its feet held still.
+			--== SPEED FROM DELTA-POSITION & VELOCITY ==--
+			-- Server-moved Humanoids replicate position via CFrame interpolation,
+			-- so AssemblyLinearVelocity is often 0 on the client. Deriving speed from
+			-- actual displacement between frames guarantees the walk cycle runs.
+			local curPos = p.root.Position
+			local dp = curPos - p.lastPos
+			local flatDist = Vector3.new(dp.X, 0, dp.Z).Magnitude
+			local posSpeed = if dt > 0.0001 then flatDist / dt else 0
+			p.lastPos = curPos
+
 			local fv = p.root.AssemblyLinearVelocity
-			local fspeed = Vector3.new(fv.X, 0, fv.Z).Magnitude
+			local physSpeed = Vector3.new(fv.X, 0, fv.Z).Magnitude
+			local speed = math.max(physSpeed, posSpeed)
+
+			local attackTime = (model:GetAttribute("AttackSwipe") :: number?) or 0
+			local attackDt = t - attackTime
+
 			if p.mire then
-				p.stride += fspeed * dt * SWING_PER_STUD
+				p.stride += speed * dt * SWING_PER_STUD
 				animateMiremaw(p, wake, t, p.stride + p.phase,
-					math.clamp(fspeed / 6, 0, 1) * wake)
+					math.clamp(speed / 6, 0, 1) * wake)
 				continue
 			end
 
-			--== SPEED FROM VELOCITY, NOT MoveDirection ==--
-			-- MoveDirection is intent and stays set while it is wedged against
-			-- scenery, which would leave it running on the spot forever.
-			local v = p.root.AssemblyLinearVelocity
-			local speed = Vector3.new(v.X, 0, v.Z).Magnitude
+			if tostring(model:GetAttribute("Species")) == "forgemaw" then
+				p.stride += speed * dt * SWING_PER_STUD
+				animateForgemaw(p, wake, t, p.stride + p.phase,
+					math.clamp(speed / 6, 0, 1) * wake, attackDt)
+				continue
+			end
+
 			p.stride += speed * dt * SWING_PER_STUD
 
 			local s = p.stride + p.phase

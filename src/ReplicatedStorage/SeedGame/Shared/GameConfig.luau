@@ -500,6 +500,9 @@ GameConfig.Tags = {
 	MillWheel = "MillWheel",
 	MillLeaf = "MillLeaf",
 	MillSign = "MillSign",
+	MillJaw = "MillJaw",
+	MillHolo = "MillHolo",
+	MillWing = "MillWing",
 	-- An empty marker MapService leaves behind saying "a nest belongs here".
 	-- NestService builds the actual nest on top of it, because a nest has state
 	-- and the map deliberately has none.
@@ -1465,6 +1468,9 @@ GameConfig.Mill = {
 		{ name = "Glasshouse", speed = 20, cost = 3500000, beltStuds = 21 },
 		{ name = "Sunwheel", speed = 32, cost = 25000000, beltStuds = 24 },
 		{ name = "Heartroot", speed = 50, cost = 150000000, beltStuds = 27 },
+		{ name = "Inferno Forge", speed = 75, cost = 1000000000, beltStuds = 31 },
+		{ name = "Celestial Ascent", speed = 110, cost = 10000000000, beltStuds = 35 },
+		{ name = "Astral Singularity", speed = 160, cost = 100000000000, beltStuds = 40 },
 	},
 	StartingTier = 1,
 
@@ -1531,6 +1537,9 @@ GameConfig.Mill = {
 		{ Arrows = 5, Bands = 0, Neon = true, Breathe = 0.35, Chase = 0.70, Rake = 0.26, Bloom = 0.90, Bob = 0, Shimmer = 0, Rainbow = 0 },
 		{ Arrows = 6, Bands = 0, Neon = true, Breathe = 0.35, Chase = 0.70, Rake = 0.22, Bloom = 0.90, Bob = 0.45, Shimmer = 0.35, Rainbow = 0 },
 		{ Arrows = 7, Bands = 9, Neon = true, Breathe = 0.40, Chase = 0.60, Rake = 0.18, Bloom = 1.00, Bob = 0.60, Shimmer = 0.50, Rainbow = 1 },
+		{ Arrows = 7, Bands = 0, Neon = true, Breathe = 0.65, Chase = 0.95, Rake = 0.35, Bloom = 1.20, Bob = 0.80, Shimmer = 0.90, Rainbow = 0 },
+		{ Arrows = 8, Bands = 0, Neon = true, Breathe = 0.60, Chase = 0.80, Rake = 0.20, Bloom = 1.00, Bob = 0.50, Shimmer = 0.80, Rainbow = 0 },
+		{ Arrows = 8, Bands = 12, Neon = true, Breathe = 0.70, Chase = 0.95, Rake = 0.25, Bloom = 1.00, Bob = 0.80, Shimmer = 1.00, Rainbow = 1 },
 	},
 
 	--==========================================================================

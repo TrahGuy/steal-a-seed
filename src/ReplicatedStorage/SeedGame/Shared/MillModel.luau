@@ -65,6 +65,19 @@ local GLASS = Color3.fromRGB(206, 232, 226)
 local GOLD = Color3.fromRGB(226, 176, 66)
 local GOLD_DARK = Color3.fromRGB(160, 116, 34)
 local HEART = Color3.fromRGB(150, 226, 150)
+local OBSIDIAN = Color3.fromRGB(24, 22, 28)
+local MAGMA_CRUST = Color3.fromRGB(44, 26, 24)
+local LAVA_ORANGE = Color3.fromRGB(255, 95, 20)
+local LAVA_RED = Color3.fromRGB(210, 35, 20)
+local BRIMSTONE_YELLOW = Color3.fromRGB(255, 190, 40)
+local ALABASTER = Color3.fromRGB(250, 248, 242)
+local CELESTIAL_GOLD = Color3.fromRGB(255, 224, 110)
+local HOLY_BLUE = Color3.fromRGB(190, 230, 255)
+local HALO_WHITE = Color3.fromRGB(255, 255, 255)
+local VOID_BLACK = Color3.fromRGB(12, 10, 20)
+local NEBULA_PURPLE = Color3.fromRGB(140, 60, 235)
+local ASTRAL_CYAN = Color3.fromRGB(60, 220, 255)
+local COSMIC_MAGENTA = Color3.fromRGB(240, 50, 160)
 
 export type Dressing = {
 	deck: Color3,
@@ -157,14 +170,38 @@ local DRESSING: { Dressing } = {
 		roller = GOLD,
 		slats = 0, console = GOLD,
 	},
-	-- 7. Heartroot -- the machine has gone green. Living wood, a lit core, and a
-	-- ring of leaves that never lands.
+	-- 7. Heartroot -- living wood and spectral rainbow belt.
 	{
 		deck = HEART, deckMaterial = Enum.Material.Grass,
 		belt = LEAF, chevron = HEART,
 		rail = HEART, railMaterial = Enum.Material.Grass,
 		roller = GOLD,
 		slats = 0, console = HEART,
+	},
+	-- 8. Inferno Forge -- molten liquid lava, volcanic obsidian, and brimstone.
+	{
+		deck = OBSIDIAN, deckMaterial = Enum.Material.Slate,
+		belt = Color3.fromRGB(220, 48, 8), beltMaterial = Enum.Material.Neon,
+		chevron = Color3.fromRGB(255, 210, 40),
+		rail = OBSIDIAN, railMaterial = Enum.Material.Slate,
+		roller = Color3.fromRGB(180, 35, 8),
+		slats = 0, console = LAVA_ORANGE,
+	},
+	-- 9. Celestial Ascent -- pure alabaster, seraphic wings, and divine halo gold.
+	{
+		deck = ALABASTER, deckMaterial = Enum.Material.SmoothPlastic,
+		belt = CELESTIAL_GOLD, chevron = HALO_WHITE,
+		rail = CELESTIAL_GOLD, railMaterial = Enum.Material.Metal,
+		roller = CELESTIAL_GOLD,
+		slats = 0, console = CELESTIAL_GOLD,
+	},
+	-- 10. Astral Singularity -- void obelisks, gyroscopic astrolabe, and nebula dust.
+	{
+		deck = VOID_BLACK, deckMaterial = Enum.Material.SmoothPlastic,
+		belt = NEBULA_PURPLE, chevron = ASTRAL_CYAN,
+		rail = ASTRAL_CYAN, railMaterial = Enum.Material.ForceField,
+		roller = VOID_BLACK,
+		slats = 0, console = COSMIC_MAGENTA,
 	},
 }
 
@@ -954,6 +991,7 @@ end
 local function trellisTrot(s: Signature)
 	local cf, model, look = s.cf, s.model, s.look
 
+	--== 1. ROPE HANDRAILS ==--
 	for _, side in ipairs({ -1, 1 }) do
 		for _, z in ipairs({ -7.6, -1.2, 5.2 }) do
 			part({
@@ -972,66 +1010,97 @@ local function trellisTrot(s: Signature)
 		end
 	end
 
-	--==========================================================================
-	-- THE TUNNEL
-	--
-	-- Four ribs, seven segments each. Seven is where a boxy arc stops having
-	-- corners you can count from the belt -- five reads as a hexagon, and nine
-	-- costs twenty-eight parts across the tier for a curve nobody gets closer to.
-	--==========================================================================
-	--
-	-- TIMBER, NOT GREEN TIMBER. The tier's rail colour is STEM, and ribs in STEM
-	-- under ivy in LEAF under sprigs in STEM gave one green mass with no read at
-	-- all. A trellis has to be a DIFFERENT material from the thing growing on
-	-- it, or there is no "growing on" to see.
-	for _, z in ipairs({ -7.4, -2.6, 2.2, 7 }) do
-		arc(model, cf, z, 5.3, 0.7, 7, 0.45, OAK_DARK, Enum.Material.Wood, "Rib")
-	end
-	-- Stringers tying the ribs together, at the crown and at both shoulders.
-	for _, a in ipairs({ math.rad(38), math.rad(90), math.rad(142) }) do
+	--== 2. OPEN SIDE TRELLIS LATTICE SCREENS (FLANKS ONLY, NO OVERHEAD ROOF) ==--
+	for _, side in ipairs({ -1, 1 }) do
+		-- Upright trellis posts
+		for _, z in ipairs({ -7.4, -2.6, 2.2, 7.0 }) do
+			part({
+				name = "TrellisPost",
+				size = Vector3.new(0.45, 4.4, 0.45),
+				cframe = cf * CFrame.new(side * 5.5, 2.6, z),
+				color = OAK_DARK,
+				material = Enum.Material.WoodPlanks,
+				collide = false,
+				parent = model,
+			})
+			-- Post finial cap
+			part({
+				name = "PostCap",
+				size = Vector3.new(0.65, 0.4, 0.65),
+				cframe = cf * CFrame.new(side * 5.5, 4.9, z),
+				color = OAK,
+				material = Enum.Material.WoodPlanks,
+				collide = false,
+				parent = model,
+			})
+		end
+
+		-- Horizontal top and bottom guide rails along flank
 		part({
-			name = "Stringer",
-			size = Vector3.new(0.34, 0.34, 15.2),
-			cframe = cf * CFrame.new(math.cos(a) * 5.3, 0.7 + math.sin(a) * 5.3, -0.2),
+			name = "TrellisTopRail",
+			size = Vector3.new(0.35, 0.35, 15.2),
+			cframe = cf * CFrame.new(side * 5.5, 4.6, -0.2),
 			color = OAK,
 			material = Enum.Material.Wood,
 			collide = false,
 			parent = model,
 		})
-	end
-
-	--==========================================================================
-	-- THE IVY, WHICH IS THE PART THAT MOVES
-	--
-	-- Hung off the ribs and tagged as cloth, so it sways on its own slow cycle
-	-- rather than the belt's. A garden moves because there is weather, not
-	-- because somebody is training -- and on a tier with no machinery at all,
-	-- this is the only motion the mill has when it is empty.
-	--==========================================================================
-	for _, hang in ipairs({
-		{ -4.3, 4, -7.4 }, { 3.1, 5, -2.6 }, { -2.2, 5.6, 2.2 },
-		{ 4.6, 3.4, 7 }, { 0.6, 6, -7.4 }, { -4.9, 3, 2.2 },
-	}) do
-		local vine = part({
-			name = "Ivy",
-			size = Vector3.new(1.3, 2.2, 0.5),
-			cframe = cf * CFrame.new(hang[1], hang[2], hang[3])
-				* CFrame.Angles(0, math.rad(hang[1] * 8), 0),
-			color = if hang[2] > 5 then MOSS else LEAF,
-			material = Enum.Material.Grass,
+		part({
+			name = "TrellisBottomRail",
+			size = Vector3.new(0.35, 0.35, 15.2),
+			cframe = cf * CFrame.new(side * 5.5, 1.2, -0.2),
+			color = OAK,
+			material = Enum.Material.Wood,
 			collide = false,
 			parent = model,
 		})
-		vine:SetAttribute("SwaySide", if hang[1] < 0 then -1 else 1)
-		CollectionService:AddTag(vine, GameConfig.Tags.MillBanner)
+
+		-- Diagonal lattice cross-slats forming open garden mesh
+		for i = 0, 6 do
+			local zCenter = -6.5 + i * 2.1
+			part({
+				name = "LatticeSlatA",
+				size = Vector3.new(0.18, 3.8, 0.22),
+				cframe = cf * CFrame.new(side * 5.5, 2.9, zCenter) * CFrame.Angles(math.rad(35), 0, 0),
+				color = OAK_DARK,
+				material = Enum.Material.Wood,
+				collide = false,
+				parent = model,
+			})
+			part({
+				name = "LatticeSlatB",
+				size = Vector3.new(0.18, 3.8, 0.22),
+				cframe = cf * CFrame.new(side * 5.5, 2.9, zCenter) * CFrame.Angles(math.rad(-35), 0, 0),
+				color = OAK_DARK,
+				material = Enum.Material.Wood,
+				collide = false,
+				parent = model,
+			})
+		end
 	end
-	-- Vines climbing the rope posts, which is how the ivy got up there.
+
+	--== 3. CLIMBING IVY & FOLIAGE ON FLANK SCREENS ==--
 	for _, side in ipairs({ -1, 1 }) do
+		for _, z in ipairs({ -6.0, -1.5, 3.5 }) do
+			local vine = part({
+				name = "Ivy",
+				size = Vector3.new(0.5, 2.2, 1.4),
+				cframe = cf * CFrame.new(side * 5.4, 2.8, z)
+					* CFrame.Angles(0, math.rad(side * 12), math.rad(side * 6)),
+				color = LEAF,
+				material = Enum.Material.Grass,
+				collide = false,
+				parent = model,
+			})
+			vine:SetAttribute("SwaySide", side)
+			CollectionService:AddTag(vine, GameConfig.Tags.MillBanner)
+		end
+
 		for i = 1, 3 do
 			part({
 				name = "Climber",
 				size = Vector3.new(0.7, 0.7, 0.7),
-				cframe = cf * CFrame.new(side * 5.1, 0.9 + i * 0.9, -7.6)
+				cframe = cf * CFrame.new(side * 5.3, 0.9 + i * 0.9, -7.4)
 					* CFrame.Angles(0, math.rad(i * 40), 0),
 				color = STEM,
 				material = Enum.Material.Grass,
@@ -1041,13 +1110,12 @@ local function trellisTrot(s: Signature)
 		end
 	end
 
-	-- Long troughs instead of tier 2's corner boxes: the planting followed the
-	-- tunnel and became a run down both sides.
+	--== 4. LONG PLANTER TROUGHS ALONG OUTER FLANKS ==--
 	for _, side in ipairs({ -1, 1 }) do
 		part({
 			name = "Trough",
-			size = Vector3.new(1.5, 1.1, 7.4),
-			cframe = cf * CFrame.new(side * 6.7, 0.55, 3),
+			size = Vector3.new(1.5, 1.1, 8.4),
+			cframe = cf * CFrame.new(side * 6.8, 0.55, 2.6),
 			color = OAK_DARK,
 			material = Enum.Material.WoodPlanks,
 			collide = false,
@@ -1055,20 +1123,20 @@ local function trellisTrot(s: Signature)
 		})
 		part({
 			name = "TroughSoil",
-			size = Vector3.new(1.2, 0.3, 7),
-			cframe = cf * CFrame.new(side * 6.7, 1.2, 3),
+			size = Vector3.new(1.2, 0.3, 8.0),
+			cframe = cf * CFrame.new(side * 6.8, 1.2, 2.6),
 			color = EARTH,
 			material = Enum.Material.Ground,
 			collide = false,
 			parent = model,
 		})
-		for i = 0, 3 do
+		for i = 0, 4 do
 			part({
 				name = "Sprig",
 				size = Vector3.new(0.8, 1.2, 0.8),
-				cframe = cf * CFrame.new(side * 6.7, 1.8, 0.2 + i * 1.9)
+				cframe = cf * CFrame.new(side * 6.8, 1.8, -0.6 + i * 1.6)
 					* CFrame.Angles(0, math.rad(i * 30), 0),
-				color = LEAF,
+				color = if i % 2 == 0 then LEAF else STEM,
 				material = Enum.Material.Grass,
 				collide = false,
 				parent = model,
@@ -1077,17 +1145,6 @@ local function trellisTrot(s: Signature)
 	end
 end
 
---==============================================================================
--- 4. MILLSTONE -- it stopped being furniture
---
--- The first tier that is MACHINERY, and the way you say that is mass. A grinding
--- stone four studs across on the right-hand side, a gantry and a hopper feeding
--- it, a gear train on the left turning against itself.
---
--- Specifically NOT a paddle wheel. A paddle wheel is a water mill, this game has
--- no river, and the old build put the same one on this tier and the three above
--- it -- which is how four different mills ended up being one mill you could buy
--- four times. A millstone is what a mill called Millstone has.
 --==============================================================================
 local function millstone(s: Signature)
 	local cf, model, look = s.cf, s.model, s.look
@@ -1381,7 +1438,7 @@ end
 local function glasshouse(s: Signature)
 	local cf, model, look = s.cf, s.model, s.look
 
-	-- White metal balustrade, inside the glazing.
+	--== 1. WHITE METAL BALUSTRADE ==--
 	for _, side in ipairs({ -1, 1 }) do
 		cylinder({
 			name = "HandRail",
@@ -1407,147 +1464,110 @@ local function glasshouse(s: Signature)
 		end
 	end
 
-	--==========================================================================
-	-- THE GABLE
-	--
-	-- Ridge, rafters, and a pane per slope per half. The rafters are what make
-	-- the glass read as glazed rather than as two floating sheets -- a pane with
-	-- no frame is a window in nothing.
-	--==========================================================================
-	part({
-		name = "Ridge",
-		size = Vector3.new(0.6, 0.6, 19.4),
-		cframe = cf * CFrame.new(0, 8.6, 0),
-		color = look.rail,
-		material = Enum.Material.SmoothPlastic,
-		collide = false,
-		parent = model,
-	})
+	--== 2. CRYSTAL GLASS FLANK SCREENS & CORNER POSTS (OPEN TO SKY) ==--
 	for _, side in ipairs({ -1, 1 }) do
-		local ang = math.atan2(3.2, -side * 5.4)
+		-- Flank eave framing rail at balustrade height
 		part({
 			name = "EaveBeam",
-			size = Vector3.new(0.45, 0.45, 19.4),
-			cframe = cf * CFrame.new(side * 5.4, 5.4, 0),
+			size = Vector3.new(0.45, 0.45, 18.8),
+			cframe = cf * CFrame.new(side * 5.4, 4.4, 0),
 			color = look.rail,
 			material = Enum.Material.SmoothPlastic,
 			collide = false,
 			parent = model,
 		})
-		for _, z in ipairs({ -9.2, -4.6, 0, 4.6, 9.2 }) do
-			part({
-				name = "Rafter",
-				size = Vector3.new(6.4, 0.32, 0.32),
-				cframe = cf * CFrame.new(side * 2.7, 7, z) * CFrame.Angles(0, 0, ang),
-				color = look.rail,
-				material = Enum.Material.SmoothPlastic,
-				collide = false,
-				parent = model,
-			})
-		end
-		for _, z in ipairs({ -4.75, 4.75 }) do
-			part({
-				name = "RoofPane",
-				size = Vector3.new(6.3, 0.12, 9.3),
-				cframe = cf * CFrame.new(side * 2.7, 7, z) * CFrame.Angles(0, 0, ang),
-				color = GLASS,
-				material = Enum.Material.Glass,
-				transparency = 0.58,
-				collide = false,
-				studs = false,
-				parent = model,
-			})
-		end
+
+		-- Corner cast-iron posts with brass caps
 		for _, corner in ipairs({ -9.2, 9.2 }) do
 			part({
 				name = "CornerPost",
-				size = Vector3.new(0.45, 4.9, 0.45),
-				cframe = cf * CFrame.new(side * 5.4, 3, corner),
+				size = Vector3.new(0.55, 4.6, 0.55),
+				cframe = cf * CFrame.new(side * 5.4, 2.5, corner),
+				color = look.rail,
+				material = Enum.Material.SmoothPlastic,
+				collide = false,
+				parent = model,
+			})
+			part({
+				name = "CornerFinial",
+				size = Vector3.new(0.75, 0.4, 0.75),
+				cframe = cf * CFrame.new(side * 5.4, 4.9, corner),
+				color = GOLD,
+				material = Enum.Material.Metal,
+				collide = false,
+				parent = model,
+			})
+		end
+
+		-- Clear crystal glass flank screen
+		part({
+			name = "SidePane",
+			size = Vector3.new(0.14, 3.8, 18.0),
+			cframe = cf * CFrame.new(side * 5.42, 2.5, 0),
+			color = GLASS,
+			material = Enum.Material.Glass,
+			transparency = 0.55,
+			collide = false,
+			studs = false,
+			parent = model,
+		})
+
+		-- Vertical glazing mullion bars
+		for _, z in ipairs({ -6.2, -2.1, 2.1, 6.2 }) do
+			part({
+				name = "GlazingBar",
+				size = Vector3.new(0.22, 3.8, 0.22),
+				cframe = cf * CFrame.new(side * 5.42, 2.5, z),
 				color = look.rail,
 				material = Enum.Material.SmoothPlastic,
 				collide = false,
 				parent = model,
 			})
 		end
-		part({
-			name = "SidePane",
-			size = Vector3.new(0.14, 4.4, 18.4),
-			cframe = cf * CFrame.new(side * 5.42, 3.2, 0),
-			color = GLASS,
-			material = Enum.Material.Glass,
-			transparency = 0.6,
-			collide = false,
-			studs = false,
-			parent = model,
-		})
-		for _, z in ipairs({ -6.2, -2.1, 2.1, 6.2 }) do
+
+		-- Decorative cresting along the top rail
+		for i = 0, 8 do
 			part({
-				name = "GlazingBar",
-				size = Vector3.new(0.22, 4.4, 0.22),
-				cframe = cf * CFrame.new(side * 5.42, 3.2, z),
-				color = look.rail,
-				material = Enum.Material.SmoothPlastic,
+				name = "Cresting",
+				size = Vector3.new(0.2, 0.4, 0.2),
+				cframe = cf * CFrame.new(side * 5.4, 4.75, -8.0 + i * 2.0)
+					* CFrame.Angles(0, math.rad(45), 0),
+				color = GOLD,
+				material = Enum.Material.Metal,
 				collide = false,
 				parent = model,
 			})
 		end
 	end
 
-	-- Two roof lights propped open on the sunny slope. The prop is one part and
-	-- it is the difference between a vent and a crooked pane.
-	for _, z in ipairs({ -3.6, 3.6 }) do
+	--== 3. CONSERVATORY FLANK PLANTER TERRACES ==--
+	for _, side in ipairs({ -1, 1 }) do
 		part({
-			name = "RoofVent",
-			size = Vector3.new(3, 0.12, 3.4),
-			cframe = cf * CFrame.new(-1.9, 8.3, z) * CFrame.Angles(0, 0, math.rad(8)),
-			color = GLASS,
-			material = Enum.Material.Glass,
-			transparency = 0.5,
-			collide = false,
-			studs = false,
-			parent = model,
-		})
-		part({
-			name = "VentStay",
-			size = Vector3.new(0.16, 1.4, 0.16),
-			cframe = cf * CFrame.new(-3.2, 7.7, z) * CFrame.Angles(0, 0, math.rad(22)),
-			color = look.rail,
+			name = "PlanterTerrace",
+			size = Vector3.new(1.8, 1.2, 12.0),
+			cframe = cf * CFrame.new(side * 6.8, 0.6, 0),
+			color = CREAM,
 			material = Enum.Material.SmoothPlastic,
 			collide = false,
 			parent = model,
 		})
-	end
-
-	--==========================================================================
-	-- BASKETS, WHICH ARE THE REASON TO HAVE A ROOF
-	--==========================================================================
-	for _, z in ipairs({ -5.4, 0, 5.4 }) do
 		part({
-			name = "BasketChain",
-			size = Vector3.new(0.12, 1.9, 0.12),
-			cframe = cf * CFrame.new(0, 7.5, z),
-			color = look.rail,
-			material = Enum.Material.Metal,
+			name = "PlanterSoil",
+			size = Vector3.new(1.4, 0.3, 11.6),
+			cframe = cf * CFrame.new(side * 6.8, 1.3, 0),
+			color = EARTH,
+			material = Enum.Material.Ground,
 			collide = false,
 			parent = model,
 		})
-		cylinder({
-			name = "Basket",
-			size = Vector3.new(1, 2.1, 2.1),
-			cframe = cf * CFrame.new(0, 6.2, z) * CFrame.Angles(0, 0, math.rad(90)),
-			color = OAK_DARK,
-			material = Enum.Material.Wood,
-			collide = false,
-			parent = model,
-		})
-		for i = 1, 4 do
-			local a = (i / 4) * math.pi * 2
+		for i = 0, 5 do
+			local z = -5.0 + i * 2.0
 			part({
-				name = "Trailer",
-				size = Vector3.new(0.7, 1.6, 0.7),
-				cframe = cf * CFrame.new(0, 5.4, z) * CFrame.Angles(0, a, 0)
-					* CFrame.new(0, 0, -0.75),
-				color = if i % 2 == 0 then LEAF else MOSS,
+				name = "ExoticFern",
+				size = Vector3.new(1.0, 1.5, 1.0),
+				cframe = cf * CFrame.new(side * 6.8, 2.1, z)
+					* CFrame.Angles(0, math.rad(i * 45), 0),
+				color = if i % 2 == 0 then HEART else LEAF,
 				material = Enum.Material.Grass,
 				collide = false,
 				parent = model,
@@ -1555,13 +1575,34 @@ local function glasshouse(s: Signature)
 		end
 	end
 
-	--==========================================================================
-	-- VENTS THAT ONLY BREATHE UNDER LOAD
-	--
-	-- Built here and switched on by the client when the belt speeds up, so an
-	-- occupied mill is doing something an empty one is not. A ParticleEmitter
-	-- costs one instance and no per-frame work.
-	--==========================================================================
+	--== 4. FRONT CONSERVATORY STREETLAMPS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		local lampPost = part({
+			name = "LampPost",
+			size = Vector3.new(0.5, 5.0, 0.5),
+			cframe = cf * CFrame.new(side * 5.4, 2.7, -9.2),
+			color = look.rail,
+			material = Enum.Material.SmoothPlastic,
+			collide = false,
+			parent = model,
+		})
+		local lampGlobe = part({
+			name = "LampGlobe",
+			size = Vector3.new(0.8, 0.8, 0.8),
+			cframe = cf * CFrame.new(side * 5.4, 5.3, -9.2),
+			color = CREAM,
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = model,
+		})
+		local light = Instance.new("PointLight")
+		light.Brightness = 0.5
+		light.Range = 8
+		light.Color = Color3.fromRGB(255, 240, 205)
+		light.Parent = lampGlobe
+	end
+
+	--== 5. MIST EXHAUST VENTS & AMBIENT HAZE ==--
 	for _, side in ipairs({ -1, 1 }) do
 		local vent = part({
 			name = "Vent",
@@ -1592,14 +1633,7 @@ local function glasshouse(s: Signature)
 		whenRunning(puff)
 	end
 
-	--==========================================================================
-	-- AND THE AIR INSIDE IT
-	--
-	-- The vents say the machine is working. This says the ROOM is: a slow warm
-	-- haze gathering under the glass, which is the only thing on this tier that
-	-- uses the fact that tier 5 is the one you go inside.
-	--==========================================================================
-	local air = shell(model, cf, Vector3.new(0, 6.5, 0), Vector3.new(8.4, 2.4, 16.5), "GlassAir")
+	local air = shell(model, cf, Vector3.new(0, 2.5, 0), Vector3.new(8.4, 2.4, 16.5), "GlassAir")
 	local haze = Instance.new("ParticleEmitter")
 	haze.Name = "GrowHaze"
 	haze.Texture = "rbxasset://textures/particles/smoke_main.dds"
@@ -1612,9 +1646,6 @@ local function glasshouse(s: Signature)
 		NumberSequenceKeypoint.new(0, 2),
 		NumberSequenceKeypoint.new(1, 5),
 	})
-	-- Stays the faintest thing on any mill. It is the ROOM being warm, not the
-	-- machine working, and the vents two studs away are already saying the loud
-	-- half of that.
 	haze.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1),
 		NumberSequenceKeypoint.new(0.35, 0.66),
@@ -1623,21 +1654,6 @@ local function glasshouse(s: Signature)
 	haze.Color = ColorSequence.new(Color3.fromRGB(236, 250, 240))
 	haze.Parent = air
 	whenRunning(haze)
-
-	local lamp = part({
-		name = "Lamp",
-		size = Vector3.new(1.3, 1.3, 1.3),
-		cframe = cf * CFrame.new(0, 7.3, -8.2),
-		color = CREAM,
-		material = Enum.Material.Neon,
-		collide = false,
-		parent = model,
-	})
-	local light = Instance.new("PointLight")
-	light.Brightness = 0.9
-	light.Range = 12
-	light.Color = Color3.fromRGB(255, 236, 190)
-	light.Parent = lamp
 
 	for _, side in ipairs({ -1, 1 }) do
 		local strip = part({
@@ -1655,22 +1671,10 @@ local function glasshouse(s: Signature)
 end
 
 --==============================================================================
--- 6. SUNWHEEL -- gilded
---
--- One enormous disc, standing on its own A-frame directly behind the console --
--- which is to say, in the face of whoever is on the belt. Nothing else on the
--- mill is allowed to compete with it: the ribs are thin, the rails are fine, and
--- the disc is nine studs across.
---
--- It is round and so is tier 4's millstone, and they are not confusable: one is
--- grey rock lying against the right flank at head height, the other is gold neon
--- eleven studs up at the far end. Same primitive, opposite reading.
---==============================================================================
 local function sunwheel(s: Signature)
 	local cf, model, look = s.cf, s.model, s.look
 
-	-- Turned balusters: a shaft with a bead on it. Two parts each instead of
-	-- one is what separates gilt from a gold-painted fence.
+	--== 1. TURNED GILT BALUSTRADE ==--
 	for _, side in ipairs({ -1, 1 }) do
 		for i = 0, 6 do
 			local z = -7.8 + i * 2.6
@@ -1713,12 +1717,8 @@ local function sunwheel(s: Signature)
 		})
 	end
 
-	--==========================================================================
-	-- THE SUN
-	--==========================================================================
+	--== 2. THE GRAND RADIANT SUNWHEEL (FRONT FOCUS) ==--
 	local hubAt = CFrame.new(0, 11.2, -9.6) * CFrame.Angles(0, math.rad(90), 0)
-	-- Solid metal, not neon. The face is what gives the disc an EDGE, and an
-	-- edge is the entire reason a nine-stud circle reads as a sun.
 	local disc = cylinder({
 		name = "SunDisc",
 		size = Vector3.new(0.85, 9.2, 9.2),
@@ -1729,8 +1729,7 @@ local function sunwheel(s: Signature)
 		parent = model,
 	})
 	CollectionService:AddTag(disc, GameConfig.Tags.MillWheel)
-	-- The glow lives in the middle and in the rays, where it has something dark
-	-- to be bright against.
+
 	cylinder({
 		name = "SunCore",
 		size = Vector3.new(1, 2.7, 2.7),
@@ -1779,6 +1778,7 @@ local function sunwheel(s: Signature)
 	sunLight.Color = Color3.fromRGB(255, 224, 150)
 	sunLight.Parent = disc
 
+	-- A-frame support structure
 	for _, side in ipairs({ -1, 1 }) do
 		part({
 			name = "SunLeg",
@@ -1801,16 +1801,21 @@ local function sunwheel(s: Signature)
 		parent = model,
 	})
 
-	-- Slim gilt ribs. Thinner than the tier-3 pergola on purpose: at this tier
-	-- the arches are jewellery, not structure.
-	for _, z in ipairs({ -3, 2.4, 7.4 }) do
-		arc(model, cf, z, 5.2, 0.8, 6, 0.32, GOLD, Enum.Material.Metal, "GiltRib")
-	end
+	--== 3. SWAYING GILT BANNERS ON FLANKS ==--
 	for _, side in ipairs({ -1, 1 }) do
+		local post = part({
+			name = "BannerPost",
+			size = Vector3.new(0.4, 4.8, 0.4),
+			cframe = cf * CFrame.new(side * 4.9, 2.6, 2.4),
+			color = GOLD_DARK,
+			material = Enum.Material.Metal,
+			collide = false,
+			parent = model,
+		})
 		local banner = part({
 			name = "Banner",
-			size = Vector3.new(0.22, 3.2, 2),
-			cframe = cf * CFrame.new(side * 4.5, 3.8, 2.4),
+			size = Vector3.new(0.22, 3.2, 2.2),
+			cframe = cf * CFrame.new(side * 4.9, 3.6, 2.4),
 			color = GOLD,
 			material = Enum.Material.Fabric,
 			collide = false,
@@ -1820,6 +1825,7 @@ local function sunwheel(s: Signature)
 		CollectionService:AddTag(banner, GameConfig.Tags.MillBanner)
 	end
 
+	--== 4. ROTATING FLANK SPUR GEARS ==--
 	for index, spec in ipairs({ { 2.1, 2.6 }, { 3.8, 1.7 } }) do
 		local gear = cylinder({
 			name = "Gear",
@@ -1834,7 +1840,7 @@ local function sunwheel(s: Signature)
 		CollectionService:AddTag(gear, GameConfig.Tags.MillGear)
 	end
 
-	-- Urns at the entry, because a gilded thing has an entrance.
+	--== 5. CEREMONIAL GOLDEN URNS AT ENTRANCE ==--
 	for _, side in ipairs({ -1, 1 }) do
 		cylinder({
 			name = "UrnBowl",
@@ -1865,6 +1871,7 @@ local function sunwheel(s: Signature)
 		})
 	end
 
+	--== 6. STEAM VENTS, SPARKS & GILT MOTES ==--
 	for _, side in ipairs({ -1, 1 }) do
 		local vent = part({
 			name = "Vent",
@@ -1895,15 +1902,6 @@ local function sunwheel(s: Signature)
 		whenRunning(puff)
 	end
 
-	--==========================================================================
-	-- SPARKS OFF THE SUN, AND MOTES UP THE FLANKS
-	--
-	-- The sparks live ON the disc, so they come off the thing that is turning
-	-- rather than out of the air near it. The motes are the rehearsal for tier
-	-- 7: one colour, two sides, and half the rate -- so that when the rainbow
-	-- arrives it arrives as MORE of something the player has already seen and
-	-- not as a different game.
-	--==========================================================================
 	local sparks = Instance.new("ParticleEmitter")
 	sparks.Name = "SunSparks"
 	sparks.Texture = "rbxasset://textures/particles/sparkles_main.dds"
@@ -1972,18 +1970,6 @@ local function sunwheel(s: Signature)
 	end
 end
 
---==============================================================================
--- 7. HEARTROOT -- the machine went alive
---
--- A tree has grown up through the left flank, thrown a branch across the belt,
--- and roofed the whole thing in canopy. The mill is still under there; it is no
--- longer the thing you notice first.
---
--- This is the only tier with an ASYMMETRIC silhouette, and that is what buys the
--- top of the ladder. Every mill below it is a mirror down the centreline, which
--- is what "manufactured" looks like. Growth is not symmetrical, and after six
--- machines that are, one that is not reads as a different KIND of object rather
--- than a more expensive one.
 --==============================================================================
 local function heartroot(s: Signature)
 	local cf, model, deck = s.cf, s.model, s.deck
@@ -2270,15 +2256,1192 @@ local function heartroot(s: Signature)
 	motes.Parent = deck
 end
 
+
+--==============================================================================
+-- 8. INFERNO FORGE -- hellish volcanic forge
+--
+-- Volcanic obsidian and molten magma chassis. Massive jagged obsidian horns
+-- frame the front console with an open burning magma forge core pulsing with heat.
+-- Jagged obsidian spires with dark iron chains along the flanks, dual flaming
+-- brimstone cauldrons, rising smoke and fiery sparks, with zero overhead roofs!
+--==============================================================================
+local function infernoForge(s: Signature)
+	local cf, model, look, belt = s.cf, s.model, s.look, s.belt
+
+	--== 1. RADIANT MOLTEN LAVA ILLUMINATION & HEAT GLOW ==--
+	local lavaGlow = Instance.new("PointLight")
+	lavaGlow.Name = "LavaHeatLight"
+	lavaGlow.Brightness = 1.4
+	lavaGlow.Range = 16
+	lavaGlow.Color = Color3.fromRGB(255, 90, 15)
+	lavaGlow.Parent = belt
+
+	-- Lava bed glow underneath the belt
+	part({
+		name = "LavaBed",
+		size = Vector3.new(belt.Size.X + 0.6, 0.2, belt.Size.Z + 0.6),
+		cframe = cf * CFrame.new(0, 0.25, 0),
+		color = Color3.fromRGB(180, 30, 5),
+		material = Enum.Material.Neon,
+		studs = false,
+		collide = false,
+		parent = model,
+	})
+
+	--== 2. FLOATING CHARRED MAGMA CRUST ISLANDS ON THE LAVA BELT ==--
+	local crustFolder = Instance.new("Folder")
+	crustFolder.Name = "MagmaCrusts"
+	crustFolder.Parent = belt
+
+	local crustCount = 7
+	local beltSpan = belt.Size.Z
+	for c = 1, crustCount do
+		local zOffset = ((c - 1) / crustCount) * beltSpan - beltSpan * 0.5
+		for _, xSide in ipairs({ -1, 1 }) do
+			local crustWidth = if (c + xSide) % 2 == 0 then 2.3 else 1.7
+			local crustLen = 1.6 + ((c * 2) % 3) * 0.3
+			local xOffset = xSide * (belt.Size.X * 0.26 + ((c % 3) * 0.15 - 0.15))
+			local rotY = math.rad((c * 43 + xSide * 29) % 24 - 12)
+
+			local slab = part({
+				name = "CrustIsland",
+				size = Vector3.new(crustWidth, 0.16, crustLen),
+				cframe = cf * CFrame.new(xOffset, 0.49, zOffset) * CFrame.Angles(0, rotY, 0),
+				color = Color3.fromRGB(24, 18, 16),
+				material = Enum.Material.Slate,
+				studs = false,
+				collide = false,
+				parent = crustFolder,
+			})
+			slab:SetAttribute("ChevronSpan", beltSpan)
+			slab:SetAttribute("ChevronIndex", c)
+			slab:SetAttribute("SlatCount", crustCount)
+			CollectionService:AddTag(slab, GameConfig.Tags.MillSlat)
+
+			-- Molten crack in the center of the crust slab
+			part({
+				name = "CrustFissure",
+				size = Vector3.new(crustWidth * 0.65, 0.18, 0.22),
+				cframe = slab.CFrame * CFrame.new(0, 0.02, 0) * CFrame.Angles(0, math.rad(22), 0),
+				color = Color3.fromRGB(255, 140, 20),
+				material = Enum.Material.Neon,
+				studs = false,
+				collide = false,
+				parent = slab,
+			})
+		end
+	end
+
+	--== 3. LAVA BUBBLES & POPPING SPATTER PARTICLES ==--
+	local bubbles = Instance.new("ParticleEmitter")
+	bubbles.Name = "LavaBubbles"
+	bubbles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	bubbles.Rate = 18
+	bubbles.Lifetime = NumberRange.new(0.6, 1.4)
+	bubbles.Speed = NumberRange.new(1.0, 2.6)
+	bubbles.SpreadAngle = Vector2.new(24, 24)
+	bubbles.EmissionDirection = Enum.NormalId.Top
+	bubbles.Acceleration = Vector3.new(0, 2.0, 0)
+	bubbles.LightEmission = 0.95
+	bubbles.LightInfluence = 0
+	bubbles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.6, 0.9),
+		NumberSequenceKeypoint.new(1, 0.1),
+	})
+	bubbles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.1),
+		NumberSequenceKeypoint.new(0.8, 0.25),
+		NumberSequenceKeypoint.new(1, 1.0),
+	})
+	bubbles.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 230, 80)),
+		ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 100, 15)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(160, 20, 5)),
+	})
+	bubbles.Parent = belt
+	whenRunning(bubbles)
+
+	-- Steam / heat haze rising off the molten lava river
+	local steam = Instance.new("ParticleEmitter")
+	steam.Name = "LavaSteam"
+	steam.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	steam.Rate = 10
+	steam.Lifetime = NumberRange.new(1.5, 2.8)
+	steam.Speed = NumberRange.new(0.8, 2.0)
+	steam.SpreadAngle = Vector2.new(15, 15)
+	steam.EmissionDirection = Enum.NormalId.Top
+	steam.Acceleration = Vector3.new(0, 1.0, 0)
+	steam.LightEmission = 0.2
+	steam.LightInfluence = 0.1
+	steam.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1.0),
+		NumberSequenceKeypoint.new(0.5, 2.4),
+		NumberSequenceKeypoint.new(1, 3.8),
+	})
+	steam.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.85),
+		NumberSequenceKeypoint.new(0.3, 0.55),
+		NumberSequenceKeypoint.new(1, 1.0),
+	})
+	steam.Color = ColorSequence.new(Color3.fromRGB(50, 40, 38))
+	steam.Parent = belt
+	whenRunning(steam)
+
+	--== 4. JAGGED OBSIDIAN SPIRE BALUSTRADE WITH DARK CHAINS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		for i = 0, 5 do
+			local z = -7.5 + i * 3.0
+			part({
+				name = "ObsidianSpire",
+				size = Vector3.new(0.65, 3.4, 0.65),
+				cframe = cf * CFrame.new(side * 4.9, 1.8, z) * CFrame.Angles(0, math.rad(side * (i * 15)), math.rad(side * 5)),
+				color = OBSIDIAN,
+				material = Enum.Material.Slate,
+				collide = false,
+				parent = model,
+			})
+			part({
+				name = "MagmaVein",
+				size = Vector3.new(0.2, 2.2, 0.2),
+				cframe = cf * CFrame.new(side * 4.9, 1.8, z),
+				color = LAVA_ORANGE,
+				material = Enum.Material.Neon,
+				collide = false,
+				parent = model,
+			})
+		end
+		for i = 0, 4 do
+			local z1 = -7.5 + i * 3.0
+			local z2 = -7.5 + (i + 1) * 3.0
+			slack(model, cf, side * 4.9, z1, z2, 3.2, 0.5, 0.22,
+				Color3.fromRGB(30, 28, 32), Enum.Material.Metal, "IronChain")
+		end
+	end
+
+	--== 5. THE HEAD OF THE DEVIL (FRONT CONSOLE) ==--
+	local devilOrigin = cf * CFrame.new(0, 5.4, -9.2)
+
+	-- 5A. Cranium & Demonic Skull Structure
+	local skull = part({
+		name = "DevilSkull",
+		size = Vector3.new(4.6, 3.6, 3.6),
+		cframe = devilOrigin * CFrame.new(0, 0.8, 0),
+		color = Color3.fromRGB(24, 16, 18),
+		material = Enum.Material.Slate,
+		collide = false,
+		parent = model,
+	})
+
+	-- Menacing Angular Brow Ridge
+	for _, side in ipairs({ -1, 1 }) do
+		part({
+			name = "DevilBrow",
+			size = Vector3.new(2.1, 0.8, 1.4),
+			cframe = devilOrigin * CFrame.new(side * 1.05, 1.7, 1.3) * CFrame.Angles(math.rad(18), math.rad(side * -15), math.rad(side * -12)),
+			color = Color3.fromRGB(38, 14, 16),
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+
+		-- Jagged Cheekbones
+		part({
+			name = "Cheekbone",
+			size = Vector3.new(1.2, 1.6, 1.6),
+			cframe = devilOrigin * CFrame.new(side * 2.3, 0.2, 0.8) * CFrame.Angles(math.rad(15), math.rad(side * 25), math.rad(side * 10)),
+			color = Color3.fromRGB(28, 16, 18),
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	-- Snout & Upper Mandible
+	local snout = part({
+		name = "DevilSnout",
+		size = Vector3.new(3.2, 1.4, 2.4),
+		cframe = devilOrigin * CFrame.new(0, 0.2, 1.6),
+		color = Color3.fromRGB(26, 14, 16),
+		material = Enum.Material.Slate,
+		collide = false,
+		parent = model,
+	})
+
+	-- Demonic Nostrils with glowing heat
+	for _, nx in ipairs({ -0.5, 0.5 }) do
+		part({
+			name = "NostrilGlow",
+			size = Vector3.new(0.35, 0.25, 0.35),
+			cframe = snout.CFrame * CFrame.new(nx, -0.2, 1.15) * CFrame.Angles(math.rad(-30), 0, 0),
+			color = Color3.fromRGB(255, 90, 15),
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = snout,
+		})
+	end
+
+	-- Upper Sharp Fangs (Hanging menacingly from top jaw)
+	for _, fx in ipairs({ -1.3, -0.85, -0.4, 0.4, 0.85, 1.3 }) do
+		local isCanine = math.abs(fx) > 0.7
+		local fangLen = if isCanine then 1.35 else 0.85
+		local fang = part({
+			name = "DevilFangUpper",
+			size = Vector3.new(0.26, fangLen, 0.26),
+			cframe = snout.CFrame * CFrame.new(fx, -0.65 - fangLen * 0.4, 1.0) * CFrame.Angles(math.rad(-18), 0, math.rad(fx * 8)),
+			color = if isCanine then Color3.fromRGB(255, 230, 160) else Color3.fromRGB(240, 200, 150),
+			material = Enum.Material.SmoothPlastic,
+			collide = false,
+			parent = snout,
+		})
+	end
+
+	-- 5B. EYES ON FIRE (Blazing Eye Sockets)
+	for _, eyeX in ipairs({ -1.2, 1.2 }) do
+		-- Deep dark socket
+		local eyeSocket = part({
+			name = "DevilEyeSocket",
+			size = Vector3.new(1.3, 0.85, 0.6),
+			cframe = devilOrigin * CFrame.new(eyeX, 1.1, 1.5) * CFrame.Angles(math.rad(15), math.rad(eyeX * -20), math.rad(eyeX * 16)),
+			color = Color3.fromRGB(12, 6, 8),
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+
+		-- Glowing molten fiery eye orb
+		local eyeOrb = part({
+			name = "DevilEyeFire",
+			size = Vector3.new(0.85, 0.5, 0.4),
+			cframe = eyeSocket.CFrame * CFrame.new(0, 0, 0.25),
+			color = Color3.fromRGB(255, 235, 60),
+			material = Enum.Material.Neon,
+			shape = Enum.PartType.Ball,
+			collide = false,
+			parent = eyeSocket,
+		})
+
+		-- REAL BLAZING EYE FIRE
+		local eyeFire = Instance.new("Fire")
+		eyeFire.Name = "EyeFire"
+		eyeFire.Size = 4.0
+		eyeFire.Heat = 9
+		eyeFire.Color = Color3.fromRGB(255, 140, 20)
+		eyeFire.SecondaryColor = Color3.fromRGB(255, 30, 0)
+		eyeFire.Parent = eyeOrb
+
+		-- Eye Fire Sparks shooting forward out of pupils
+		local eyeSparks = Instance.new("ParticleEmitter")
+		eyeSparks.Name = "EyeSparks"
+		eyeSparks.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		eyeSparks.Rate = 24
+		eyeSparks.Lifetime = NumberRange.new(0.5, 1.2)
+		eyeSparks.Speed = NumberRange.new(3.0, 6.5)
+		eyeSparks.SpreadAngle = Vector2.new(20, 20)
+		eyeSparks.EmissionDirection = Enum.NormalId.Front
+		eyeSparks.LightEmission = 1.0
+		eyeSparks.LightInfluence = 0
+		eyeSparks.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.6),
+			NumberSequenceKeypoint.new(0.5, 1.1),
+			NumberSequenceKeypoint.new(1, 0.1),
+		})
+		eyeSparks.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 160)),
+			ColorSequenceKeypoint.new(0.4, Color3.fromRGB(255, 130, 20)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(180, 20, 5)),
+		})
+		eyeSparks.Parent = eyeOrb
+		whenRunning(eyeSparks)
+	end
+
+	-- 5C. GRAND CURVED DEMONIC HORNS (Sweeping outward and upward!)
+	for _, side in ipairs({ -1, 1 }) do
+		-- Horn Root (Out and back)
+		local hornRoot = part({
+			name = "DevilHornRoot",
+			size = Vector3.new(1.3, 3.2, 1.3),
+			cframe = devilOrigin * CFrame.new(side * 2.1, 2.2, -0.4) * CFrame.Angles(math.rad(-15), math.rad(side * 35), math.rad(side * 42)),
+			color = Color3.fromRGB(20, 14, 16),
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+
+		-- Horn Mid (Sweeping up and curving)
+		local hornMid = part({
+			name = "DevilHornMid",
+			size = Vector3.new(0.95, 3.4, 0.95),
+			cframe = hornRoot.CFrame * CFrame.new(0, 2.7, 0) * CFrame.Angles(math.rad(35), math.rad(side * -18), math.rad(side * -25)),
+			color = Color3.fromRGB(26, 16, 18),
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+
+		-- Horn Sharp Glowing Fiery Tip (Pointing majestically skyward)
+		part({
+			name = "DevilHornTip",
+			size = Vector3.new(0.6, 2.8, 0.6),
+			cframe = hornMid.CFrame * CFrame.new(0, 2.6, 0) * CFrame.Angles(math.rad(30), 0, math.rad(side * -15)),
+			color = Color3.fromRGB(255, 80, 15),
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = model,
+		})
+
+		-- Temple Blade Spikes
+		part({
+			name = "TempleBlade",
+			size = Vector3.new(0.4, 1.8, 0.7),
+			cframe = devilOrigin * CFrame.new(side * 2.5, 1.0, 0.6) * CFrame.Angles(math.rad(10), math.rad(side * 40), math.rad(side * 35)),
+			color = Color3.fromRGB(24, 14, 16),
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	-- Scalp Crown Spikes along centerline
+	for i = 1, 3 do
+		part({
+			name = "CrownSpike",
+			size = Vector3.new(0.45, 1.4 + i * 0.4, 0.45),
+			cframe = devilOrigin * CFrame.new(0, 2.3 + i * 0.2, -1.0 + i * 0.9) * CFrame.Angles(math.rad(-20 + i * 12), 0, 0),
+			color = Color3.fromRGB(255, 75, 15),
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	-- 5D. MOVING / CHOMPING ANIMATED LOWER JAW (Tagged MillJaw)
+	local jawRoot = part({
+		name = "DevilJaw",
+		size = Vector3.new(3.0, 1.2, 2.8),
+		cframe = devilOrigin * CFrame.new(0, -1.2, 1.4) * CFrame.Angles(math.rad(-12), 0, 0),
+		color = Color3.fromRGB(24, 14, 16),
+		material = Enum.Material.Slate,
+		collide = false,
+		parent = model,
+	})
+	CollectionService:AddTag(jawRoot, (GameConfig.Tags and GameConfig.Tags.MillJaw) or "MillJaw")
+
+	-- Jagged Chin Spikes on moving jaw
+	for _, cx in ipairs({ -0.6, 0, 0.6 }) do
+		part({
+			name = "ChinSpike",
+			size = Vector3.new(0.4, 1.2, 0.4),
+			cframe = jawRoot.CFrame * CFrame.new(cx, -0.6, 1.1) * CFrame.Angles(math.rad(-28), 0, math.rad(cx * 15)),
+			color = Color3.fromRGB(255, 75, 15),
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = jawRoot,
+		})
+	end
+
+	-- Lower Sharp Fangs (Pointing up on moving jaw)
+	for _, fx in ipairs({ -1.15, -0.7, -0.25, 0.25, 0.7, 1.15 }) do
+		local isCanine = math.abs(fx) > 0.6
+		local fangLen = if isCanine then 1.25 else 0.75
+		part({
+			name = "DevilFangLower",
+			size = Vector3.new(0.24, fangLen, 0.24),
+			cframe = jawRoot.CFrame * CFrame.new(fx, 0.55 + fangLen * 0.35, 1.1) * CFrame.Angles(math.rad(18), 0, math.rad(fx * -8)),
+			color = if isCanine then Color3.fromRGB(255, 230, 160) else Color3.fromRGB(240, 200, 150),
+			material = Enum.Material.SmoothPlastic,
+			collide = false,
+			parent = jawRoot,
+		})
+	end
+
+	-- 5E. THROAT FIRE & MOLTEN LAVA TONGUE CASCADE
+	local throatFirePart = part({
+		name = "ThroatFireCore",
+		size = Vector3.new(2.2, 1.4, 1.4),
+		cframe = devilOrigin * CFrame.new(0, -0.3, 0.5),
+		color = Color3.fromRGB(255, 95, 10),
+		material = Enum.Material.Neon,
+		collide = false,
+		parent = model,
+	})
+	local throatLight = Instance.new("PointLight")
+	throatLight.Name = "ThroatLight"
+	throatLight.Color = Color3.fromRGB(255, 110, 20)
+	throatLight.Brightness = 2.8
+	throatLight.Range = 16
+	throatLight.Parent = throatFirePart
+
+	local throatFire = Instance.new("Fire")
+	throatFire.Name = "ThroatFlames"
+	throatFire.Size = 4.5
+	throatFire.Heat = 7
+	throatFire.Color = Color3.fromRGB(255, 130, 20)
+	throatFire.SecondaryColor = Color3.fromRGB(180, 20, 5)
+	throatFire.Parent = throatFirePart
+
+	-- Molten lava tongue pouring down into the treadmill
+	part({
+		name = "DevilLavaTongue",
+		size = Vector3.new(2.6, 2.4, 1.4),
+		cframe = devilOrigin * CFrame.new(0, -2.0, 1.8) * CFrame.Angles(math.rad(-25), 0, 0),
+		color = Color3.fromRGB(240, 65, 10),
+		material = Enum.Material.Neon,
+		studs = false,
+		collide = false,
+		parent = model,
+	})
+
+	--== 6. FLANK MAGMA CAULDRONS / BRAZIERS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		cylinder({
+			name = "Cauldron",
+			size = Vector3.new(1.6, 2.4, 2.4),
+			cframe = cf * CFrame.new(side * 6.8, 1.2, 3.0) * CFrame.Angles(0, 0, math.rad(90)),
+			color = OBSIDIAN,
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+		local lavaPool = cylinder({
+			name = "CauldronLava",
+			size = Vector3.new(0.3, 2.0, 2.0),
+			cframe = cf * CFrame.new(side * 6.8, 2.0, 3.0) * CFrame.Angles(0, 0, math.rad(90)),
+			color = LAVA_ORANGE,
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = model,
+		})
+
+		local fire = Instance.new("Fire")
+		fire.Size = 4
+		fire.Heat = 6
+		fire.Color = Color3.fromRGB(255, 100, 20)
+		fire.SecondaryColor = Color3.fromRGB(180, 20, 10)
+		fire.Parent = lavaPool
+	end
+
+	--== 7. VOLCANIC SMOKE & EMBER VENTS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		local vent = part({
+			name = "MagmaVent",
+			size = Vector3.new(1.1, 0.9, 1.1),
+			cframe = cf * CFrame.new(side * 4.9, 1.4, -7.8),
+			color = OBSIDIAN,
+			material = Enum.Material.Slate,
+			collide = false,
+			parent = model,
+		})
+		local embers = Instance.new("ParticleEmitter")
+		embers.Name = "Embers"
+		embers.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		embers.Rate = 14
+		embers.Lifetime = NumberRange.new(1.2, 2.2)
+		embers.Speed = NumberRange.new(2.5, 5.0)
+		embers.SpreadAngle = Vector2.new(20, 20)
+		embers.EmissionDirection = Enum.NormalId.Top
+		embers.Acceleration = Vector3.new(0, 2, 0)
+		embers.LightEmission = 0.9
+		embers.LightInfluence = 0
+		embers.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.8),
+			NumberSequenceKeypoint.new(1, 0.1),
+		})
+		embers.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 200, 50)),
+			ColorSequenceKeypoint.new(0.6, Color3.fromRGB(255, 80, 20)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 20, 10)),
+		})
+		embers.Parent = vent
+		whenRunning(embers)
+	end
+end
+
+local function celestialAscent(s: Signature)
+	local cf, model, look, belt = s.cf, s.model, s.look, s.belt
+
+	--== 1. POLISHED ALABASTER FLANK COLUMNS WITH GOLD TRIM ==--
+	for _, side in ipairs({ -1, 1 }) do
+		for i = 0, 5 do
+			local z = -7.5 + i * 3.0
+			cylinder({
+				name = "AlabasterColumn",
+				size = Vector3.new(3.4, 0.75, 0.75),
+				cframe = cf * CFrame.new(side * 4.9, 1.8, z) * CFrame.Angles(0, 0, math.rad(90)),
+				color = ALABASTER,
+				material = Enum.Material.SmoothPlastic,
+				studs = false,
+				collide = false,
+				parent = model,
+			})
+			part({
+				name = "GoldCapital",
+				size = Vector3.new(0.95, 0.35, 0.95),
+				cframe = cf * CFrame.new(side * 4.9, 3.5, z),
+				color = CELESTIAL_GOLD,
+				material = Enum.Material.Metal,
+				studs = false,
+				collide = false,
+				parent = model,
+			})
+			part({
+				name = "GoldBase",
+				size = Vector3.new(0.95, 0.35, 0.95),
+				cframe = cf * CFrame.new(side * 4.9, 0.3, z),
+				color = CELESTIAL_GOLD,
+				material = Enum.Material.Metal,
+				studs = false,
+				collide = false,
+				parent = model,
+			})
+		end
+		cylinder({
+			name = "CelestialArchitrave",
+			size = Vector3.new(16.2, 0.35, 0.35),
+			cframe = cf * CFrame.new(side * 4.9, 3.7, -0.05) * CFrame.Angles(0, math.rad(90), 0),
+			color = CELESTIAL_GOLD,
+			material = Enum.Material.Metal,
+			studs = false,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	--== 2. REAL LAYERED ANGEL WINGS (FLAPS SLOWLY WHEN USED) ==--
+	for _, side in ipairs({ -1, 1 }) do
+		local wingModel = Instance.new("Model")
+		wingModel.Name = if side == -1 then "AngelWing_Left" else "AngelWing_Right"
+		wingModel.Parent = model
+
+		-- Wing Pivot / Root Part
+		local wingOrigin = cf * CFrame.new(side * 2.2, 6.2, -9.2)
+		local wingRoot = part({
+			name = "WingRoot",
+			size = Vector3.new(0.5, 0.5, 0.5),
+			cframe = wingOrigin,
+			color = ALABASTER,
+			transparency = 1,
+			collide = false,
+			parent = wingModel,
+		})
+		wingRoot:SetAttribute("WingSide", side)
+		CollectionService:AddTag(wingRoot, (GameConfig.Tags and GameConfig.Tags.MillWing) or "MillWing")
+
+		-- Wing Bone / Shoulder Arch
+		local wingBone = part({
+			name = "WingBone",
+			size = Vector3.new(0.65, 3.8, 0.65),
+			cframe = wingOrigin * CFrame.new(side * 1.4, 1.4, 0) * CFrame.Angles(math.rad(-10), 0, math.rad(side * 40)),
+			color = ALABASTER,
+			material = Enum.Material.SmoothPlastic,
+			studs = false,
+			collide = false,
+			parent = wingModel,
+		})
+
+		-- Weld all feathers to wingRoot for smooth performant client rotation
+		local function weldToRoot(p: BasePart)
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = wingRoot
+			weld.Part1 = p
+			weld.Parent = wingRoot
+		end
+		weldToRoot(wingBone)
+
+		-- Layer 1: Inner Covert Feathers (4 sleek soft feathers)
+		for f = 1, 4 do
+			local cov = part({
+				name = "CovertFeather",
+				size = Vector3.new(0.35, 2.2 + f * 0.4, 0.9),
+				cframe = wingOrigin * CFrame.new(side * (0.8 + f * 0.5), 0.4 + f * 0.5, -0.1)
+					* CFrame.Angles(math.rad(-5), 0, math.rad(side * (15 + f * 7))),
+				color = ALABASTER,
+				material = Enum.Material.SmoothPlastic,
+				studs = false,
+				collide = false,
+				parent = wingModel,
+			})
+			weldToRoot(cov)
+		end
+
+		-- Layer 2: Middle Secondary Feathers (5 sweeping flight feathers)
+		for f = 1, 5 do
+			local sec = part({
+				name = "SecondaryFeather",
+				size = Vector3.new(0.38, 3.2 + f * 0.6, 1.1),
+				cframe = wingOrigin * CFrame.new(side * (1.6 + f * 0.75), 1.2 + f * 0.7, -0.2)
+					* CFrame.Angles(math.rad(-12), math.rad(side * -8), math.rad(side * (28 + f * 9))),
+				color = ALABASTER,
+				material = Enum.Material.SmoothPlastic,
+				studs = false,
+				collide = false,
+				parent = wingModel,
+			})
+			weldToRoot(sec)
+
+			-- Golden Feather Spine Accent
+			local spine = part({
+				name = "FeatherSpine",
+				size = Vector3.new(0.18, 3.0 + f * 0.6, 0.22),
+				cframe = sec.CFrame * CFrame.new(side * 0.12, 0, -0.4),
+				color = CELESTIAL_GOLD,
+				material = Enum.Material.Metal,
+				studs = false,
+				collide = false,
+				parent = wingModel,
+			})
+			weldToRoot(spine)
+		end
+
+		-- Layer 3: Outer Primary Wingtips (6 grand sweeping flight feathers with glowing gold tips)
+		for f = 1, 6 do
+			local prim = part({
+				name = "PrimaryFeather",
+				size = Vector3.new(0.4, 4.4 + f * 0.7, 1.25),
+				cframe = wingOrigin * CFrame.new(side * (2.8 + f * 0.9), 2.2 + f * 0.95, -0.3)
+					* CFrame.Angles(math.rad(-18), math.rad(side * -12), math.rad(side * (40 + f * 8))),
+				color = ALABASTER,
+				material = Enum.Material.SmoothPlastic,
+				studs = false,
+				collide = false,
+				parent = wingModel,
+			})
+			weldToRoot(prim)
+
+			-- Radiant Glowing Wingtip
+			local tip = part({
+				name = "WingTipGlow",
+				size = Vector3.new(0.42, 1.6, 1.28),
+				cframe = prim.CFrame * CFrame.new(0, (4.4 + f * 0.7) * 0.5 - 0.7, 0),
+				color = Color3.fromRGB(255, 235, 120),
+				material = Enum.Material.Neon,
+				studs = false,
+				collide = false,
+				parent = wingModel,
+			})
+			weldToRoot(tip)
+		end
+	end
+
+	--== 3. ROTATING GOLDEN HALO DISC & CELESTIAL RADIANCE ==--
+	local haloAt = CFrame.new(0, 7.5, -9.4) * CFrame.Angles(0, math.rad(90), 0)
+	local halo = cylinder({
+		name = "HaloDisc",
+		size = Vector3.new(0.5, 6.2, 6.2),
+		cframe = cf * haloAt,
+		color = CELESTIAL_GOLD,
+		material = Enum.Material.Metal,
+		studs = false,
+		collide = false,
+		parent = model,
+	})
+	CollectionService:AddTag(halo, GameConfig.Tags.MillWheel)
+
+	cylinder({
+		name = "HaloGlow",
+		size = Vector3.new(0.65, 4.4, 4.4),
+		cframe = cf * haloAt,
+		color = Color3.fromRGB(255, 255, 255),
+		material = Enum.Material.Neon,
+		studs = false,
+		collide = false,
+		parent = halo,
+	})
+
+	local haloLight = Instance.new("PointLight")
+	haloLight.Brightness = 1.6
+	haloLight.Range = 16
+	haloLight.Color = Color3.fromRGB(255, 245, 210)
+	haloLight.Parent = halo
+
+	--== 4. SCULPTED CUMULUS CLOUD TERRACES ALONG FLANKS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		for c = 0, 4 do
+			local z = -6.0 + c * 3.0
+			part({
+				name = "CloudPuff",
+				size = Vector3.new(1.8, 1.2, 2.2),
+				cframe = cf * CFrame.new(side * 6.5, 0.8, z) * CFrame.Angles(0, math.rad(c * 35), 0),
+				color = ALABASTER,
+				material = Enum.Material.SmoothPlastic,
+				shape = Enum.PartType.Ball,
+				studs = false,
+				collide = false,
+				parent = model,
+			})
+		end
+	end
+
+	--== 5. CELESTIAL FEATHER PARTICLES (ACTIVATES WHEN USED) ==--
+	local featherEmitter = Instance.new("ParticleEmitter")
+	featherEmitter.Name = "AngelFeathers"
+	featherEmitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	featherEmitter.Rate = 22
+	featherEmitter.Lifetime = NumberRange.new(2.0, 4.0)
+	featherEmitter.Speed = NumberRange.new(1.5, 3.5)
+	featherEmitter.SpreadAngle = Vector2.new(45, 45)
+	featherEmitter.EmissionDirection = Enum.NormalId.Top
+	featherEmitter.Acceleration = Vector3.new(0, -0.6, 1.2)
+	featherEmitter.Rotation = NumberRange.new(0, 360)
+	featherEmitter.RotSpeed = NumberRange.new(-45, 45)
+	featherEmitter.LightEmission = 0.9
+	featherEmitter.LightInfluence = 0
+	featherEmitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.3, 0.85),
+		NumberSequenceKeypoint.new(0.8, 0.7),
+		NumberSequenceKeypoint.new(1, 0.1),
+	})
+	featherEmitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(0.7, 0.3),
+		NumberSequenceKeypoint.new(1, 1.0),
+	})
+	featherEmitter.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 245, 180)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 215, 110)),
+	})
+	featherEmitter.Parent = s.deck
+	whenRunning(featherEmitter)
+
+	-- Holy light motes
+	local stardust = Instance.new("ParticleEmitter")
+	stardust.Name = "HolyMotes"
+	stardust.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	stardust.Rate = 14
+	stardust.Lifetime = NumberRange.new(1.8, 3.2)
+	stardust.Speed = NumberRange.new(1.2, 2.8)
+	stardust.SpreadAngle = Vector2.new(30, 30)
+	stardust.EmissionDirection = Enum.NormalId.Top
+	stardust.Acceleration = Vector3.new(0, 1.5, 0)
+	stardust.LightEmission = 0.95
+	stardust.LightInfluence = 0
+	stardust.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.4),
+		NumberSequenceKeypoint.new(0.5, 1.2),
+		NumberSequenceKeypoint.new(1, 0.2),
+	})
+	stardust.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 235, 140)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 235, 255)),
+	})
+	stardust.Parent = s.deck
+	whenRunning(stardust)
+
+	for _, side in ipairs({ -1, 1 }) do
+		local strip = part({
+			name = "CelestialStrip",
+			size = Vector3.new(0.4, 0.3, 16),
+			cframe = cf * CFrame.new(side * 4.3, 1.2, 0),
+			color = CELESTIAL_GOLD,
+			material = Enum.Material.Neon,
+			collide = false,
+			studs = false,
+			parent = model,
+		})
+		CollectionService:AddTag(strip, GameConfig.Tags.MillPulse)
+	end
+end
+
+local function astralSingularity(s: Signature)
+	local cf, model, look, belt = s.cf, s.model, s.look, s.belt
+
+	--== 1. FLOATING OBSIDIAN OBELISKS & CONSTELLATION BEAMS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		for i = 0, 5 do
+			local z = -7.5 + i * 3.0
+			part({
+				name = "VoidObelisk",
+				size = Vector3.new(0.6, 3.2, 0.6),
+				cframe = cf * CFrame.new(side * 4.9, 2.0, z) * CFrame.Angles(0, math.rad(i * 30), 0),
+				color = VOID_BLACK,
+				material = Enum.Material.SmoothPlastic,
+				collide = false,
+				parent = model,
+			})
+			part({
+				name = "ObeliskGem",
+				size = Vector3.new(0.4, 0.6, 0.4),
+				cframe = cf * CFrame.new(side * 4.9, 3.9, z) * CFrame.Angles(0, math.rad(i * 30), 0),
+				color = ASTRAL_CYAN,
+				material = Enum.Material.Neon,
+				collide = false,
+				parent = model,
+			})
+		end
+		cylinder({
+			name = "ConstellationBeam",
+			size = Vector3.new(16.2, 0.25, 0.25),
+			cframe = cf * CFrame.new(side * 4.9, 3.2, -0.05) * CFrame.Angles(0, math.rad(90), 0),
+			color = ASTRAL_CYAN,
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	--== 2. GRAND CELESTIAL ASTROLABE ORBIT RINGS & SINGULARITY CORE ==--
+	local coreAt = CFrame.new(0, 7.8, -9.4)
+
+	local singularity = part({
+		name = "SingularityCore",
+		size = Vector3.new(3.2, 3.2, 3.2),
+		cframe = cf * coreAt,
+		color = NEBULA_PURPLE,
+		material = Enum.Material.Neon,
+		shape = Enum.PartType.Ball,
+		collide = false,
+		parent = model,
+	})
+	local singLight = Instance.new("PointLight")
+	singLight.Brightness = 1.8
+	singLight.Range = 16
+	singLight.Color = Color3.fromRGB(180, 80, 255)
+	singLight.Parent = singularity
+
+	local ringA = cylinder({
+		name = "OrbitRingA",
+		size = Vector3.new(0.4, 7.8, 7.8),
+		cframe = cf * coreAt * CFrame.Angles(0, math.rad(90), 0),
+		color = ASTRAL_CYAN,
+		material = Enum.Material.Metal,
+		collide = false,
+		parent = model,
+	})
+	CollectionService:AddTag(ringA, GameConfig.Tags.MillWheel)
+
+	part({
+		name = "OrbitNode",
+		size = Vector3.new(1.1, 1.1, 1.1),
+		cframe = ringA.CFrame * CFrame.new(0, 3.9, 0),
+		color = COSMIC_MAGENTA,
+		material = Enum.Material.Neon,
+		shape = Enum.PartType.Ball,
+		collide = false,
+		parent = ringA,
+	})
+
+	for _, side in ipairs({ -1, 1 }) do
+		part({
+			name = "AstrolabeStrut",
+			size = Vector3.new(0.6, 8.4, 0.6),
+			cframe = cf * CFrame.new(side * 2.2, 4.4, -9.4) * CFrame.Angles(0, 0, math.rad(side * 18)),
+			color = VOID_BLACK,
+			material = Enum.Material.SmoothPlastic,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	--== 3. HOVERING ANTIMATTER CRYSTAL PYLONS ON FLANKS ==--
+	for _, side in ipairs({ -1, 1 }) do
+		cylinder({
+			name = "MagPedestal",
+			size = Vector3.new(1.2, 2.6, 2.6),
+			cframe = cf * CFrame.new(side * 6.8, 0.8, 2.0) * CFrame.Angles(0, 0, math.rad(90)),
+			color = VOID_BLACK,
+			material = Enum.Material.SmoothPlastic,
+			collide = false,
+			parent = model,
+		})
+		part({
+			name = "AstralCrystal",
+			size = Vector3.new(1.4, 2.8, 1.4),
+			cframe = cf * CFrame.new(side * 6.8, 2.8, 2.0) * CFrame.Angles(math.rad(15), math.rad(45), math.rad(side * 15)),
+			color = COSMIC_MAGENTA,
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = model,
+		})
+	end
+
+	--== 4. HOLOGRAPHIC CYBER SCREENS (ACTIVATE WHEN USED) ==--
+	local holoFolder = Instance.new("Folder")
+	holoFolder.Name = "CyberHolograms"
+	holoFolder.Parent = model
+
+	-- Helper to build a cyber screen
+	local function makeHoloScreen(props: {
+		name: string,
+		cf: CFrame,
+		size: Vector3,
+		title: string,
+		subtitle: string,
+		isMain: boolean,
+	})
+		-- Glowing Projector Base Node
+		cylinder({
+			name = props.name .. "_Projector",
+			size = Vector3.new(0.3, 1.2, 1.2),
+			cframe = props.cf * CFrame.new(0, -props.size.Y * 0.5 - 1.2, 0) * CFrame.Angles(0, 0, math.rad(90)),
+			color = ASTRAL_CYAN,
+			material = Enum.Material.Neon,
+			collide = false,
+			parent = holoFolder,
+		})
+
+		-- Holographic Light Emitter Beam
+		part({
+			name = props.name .. "_Beam",
+			size = Vector3.new(props.size.X * 0.8, 1.2, 0.05),
+			cframe = props.cf * CFrame.new(0, -props.size.Y * 0.5 - 0.6, 0),
+			color = ASTRAL_CYAN,
+			material = Enum.Material.Neon,
+			transparency = 0.65,
+			collide = false,
+			parent = holoFolder,
+		})
+
+		-- Holographic Screen Pane
+		local pane = part({
+			name = props.name,
+			size = props.size,
+			cframe = props.cf,
+			color = ASTRAL_CYAN,
+			material = Enum.Material.Glass,
+			transparency = 0.45,
+			collide = false,
+			parent = holoFolder,
+		})
+		CollectionService:AddTag(pane, (GameConfig.Tags and GameConfig.Tags.MillHolo) or "MillHolo")
+
+		-- Corner Neon Cyber Brackets
+		for _, cx in ipairs({ -props.size.X * 0.5, props.size.X * 0.5 }) do
+			for _, cy in ipairs({ -props.size.Y * 0.5, props.size.Y * 0.5 }) do
+				part({
+					name = "CyberBracket",
+					size = Vector3.new(0.35, 0.35, 0.12),
+					cframe = props.cf * CFrame.new(cx, cy, 0),
+					color = if props.isMain then COSMIC_MAGENTA else ASTRAL_CYAN,
+					material = Enum.Material.Neon,
+					collide = false,
+					parent = pane,
+				})
+			end
+		end
+
+		-- Double-Sided SurfaceGui Interfaces (Front and Back so visible from every angle)
+		for _, face in ipairs({ Enum.NormalId.Back, Enum.NormalId.Front }) do
+			local sg = Instance.new("SurfaceGui")
+			sg.Name = "CyberHUD_" .. face.Name
+			sg.Face = face
+			sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			sg.PixelsPerStud = 55
+			sg.LightInfluence = 0
+			sg.Parent = pane
+
+			local rootFrame = Instance.new("Frame")
+			rootFrame.Size = UDim2.new(1, 0, 1, 0)
+			rootFrame.BackgroundColor3 = Color3.fromRGB(8, 20, 36)
+			rootFrame.BackgroundTransparency = 0.55
+			rootFrame.BorderSizePixel = 0
+			rootFrame.Parent = sg
+
+			local stroke = Instance.new("UIStroke")
+			stroke.Color = if props.isMain then Color3.fromRGB(0, 240, 255) else Color3.fromRGB(220, 80, 255)
+			stroke.Thickness = 2.5
+			stroke.Parent = rootFrame
+
+			local pad = Instance.new("UIPadding")
+			pad.PaddingLeft = UDim.new(0, 10)
+			pad.PaddingRight = UDim.new(0, 10)
+			pad.PaddingTop = UDim.new(0, 8)
+			pad.PaddingBottom = UDim.new(0, 8)
+			pad.Parent = rootFrame
+
+			-- Title Header
+			local title = Instance.new("TextLabel")
+			title.Size = UDim2.new(1, 0, 0, 24)
+			title.BackgroundTransparency = 1
+			title.Font = Enum.Font.FredokaOne
+			title.Text = props.title
+			title.TextColor3 = stroke.Color
+			title.TextSize = 14
+			title.TextXAlignment = Enum.TextXAlignment.Left
+			title.Parent = rootFrame
+
+			-- Status Subtitle
+			local status = Instance.new("TextLabel")
+			status.Size = UDim2.new(1, 0, 0, 18)
+			status.Position = UDim2.new(0, 0, 0, 24)
+			status.BackgroundTransparency = 1
+			status.Font = Enum.Font.GothamBold
+			status.Text = props.subtitle
+			status.TextColor3 = Color3.fromRGB(120, 255, 180)
+			status.TextSize = 11
+			status.TextXAlignment = Enum.TextXAlignment.Left
+			status.Parent = rootFrame
+
+			if props.isMain then
+				-- Center Big Velocity Readout
+				local speedLabel = Instance.new("TextLabel")
+				speedLabel.Name = "SpeedVal"
+				speedLabel.Size = UDim2.new(1, 0, 0, 36)
+				speedLabel.Position = UDim2.new(0, 0, 0, 42)
+				speedLabel.BackgroundTransparency = 1
+				speedLabel.Font = Enum.Font.FredokaOne
+				speedLabel.Text = "160 STUDS/S"
+				speedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+				speedLabel.TextSize = 22
+				speedLabel.TextXAlignment = Enum.TextXAlignment.Center
+				speedLabel.Parent = rootFrame
+
+				-- Equalizer Waveform Visualizer
+				local eqHolder = Instance.new("Frame")
+				eqHolder.Name = "EqHolder"
+				eqHolder.Size = UDim2.new(0.9, 0, 0, 24)
+				eqHolder.Position = UDim2.new(0.05, 0, 0, 78)
+				eqHolder.BackgroundTransparency = 1
+				eqHolder.Parent = rootFrame
+
+				local barCount = 12
+				for b = 1, barCount do
+					local bar = Instance.new("Frame")
+					bar.Name = "EqBar_" .. b
+					bar.Size = UDim2.new(1 / barCount - 0.02, 0, 0.4 + (b % 4) * 0.18, 0)
+					bar.Position = UDim2.new((b - 1) / barCount, 0, 1, 0)
+					bar.AnchorPoint = Vector2.new(0, 1)
+					bar.BackgroundColor3 = Color3.fromHSV((b / barCount) * 0.4 + 0.5, 0.9, 1.0)
+					bar.BorderSizePixel = 0
+					bar.Parent = eqHolder
+				end
+
+				-- Main Hacker Command Line Ticker
+				local ticker = Instance.new("TextLabel")
+				ticker.Name = "HackerTicker"
+				ticker.Size = UDim2.new(1, 0, 0, 24)
+				ticker.Position = UDim2.new(0, 0, 1, -26)
+				ticker.BackgroundTransparency = 1
+				ticker.Font = Enum.Font.Code
+				ticker.Text = "> root@cosmos: bypass_gravity --force"
+				ticker.TextColor3 = Color3.fromRGB(0, 255, 170)
+				ticker.TextSize = 11
+				ticker.TextXAlignment = Enum.TextXAlignment.Left
+				ticker.Parent = rootFrame
+			else
+				-- Full Streaming Hacker Terminal Console
+				local terminal = Instance.new("TextLabel")
+				terminal.Name = "HackerTerminal"
+				terminal.Size = UDim2.new(1, 0, 1, -44)
+				terminal.Position = UDim2.new(0, 0, 0, 44)
+				terminal.BackgroundTransparency = 1
+				terminal.Font = Enum.Font.Code
+				terminal.Text = if props.name:find("Left")
+					then "> INITIATING_QUANTUM_CORE...\n> 0x7F4A :: TACHYON_FLOW = 99.8%\n> BYPASSING_GRAVITY_MATRIX [OK]\n> OVERCLOCKING_DRIVE: 160 STUDS/S\n> [ROOT@COSMOS] sudo inject_flux"
+					else "> 0x88B2A90F :: CORE_LOCK [OK]\n> 0x8F 0x3B 0xA1 0xFE 0x00 0x9C\n> 01000001 01010011 01010100\n> DECRYPTING_SECTOR_EPSILON...\n> GRAVITATIONAL_WELL: STABLE"
+				terminal.TextColor3 = if props.name:find("Left") then Color3.fromRGB(0, 255, 170) else Color3.fromRGB(0, 230, 255)
+				terminal.TextSize = 9.5
+				terminal.TextXAlignment = Enum.TextXAlignment.Left
+				terminal.TextYAlignment = Enum.TextYAlignment.Top
+				terminal.TextWrapped = true
+				terminal.Parent = rootFrame
+			end
+		end
+
+		-- Scanline motes on hologram
+		local scanEmitter = Instance.new("ParticleEmitter")
+		scanEmitter.Name = "HoloScanlines"
+		scanEmitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		scanEmitter.Rate = 12
+		scanEmitter.Lifetime = NumberRange.new(0.8, 1.5)
+		scanEmitter.Speed = NumberRange.new(1.0, 2.5)
+		scanEmitter.SpreadAngle = Vector2.new(10, 10)
+		scanEmitter.EmissionDirection = Enum.NormalId.Top
+		scanEmitter.LightEmission = 1.0
+		scanEmitter.LightInfluence = 0
+		scanEmitter.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2),
+			NumberSequenceKeypoint.new(0.5, 0.5),
+			NumberSequenceKeypoint.new(1, 0.1),
+		})
+		scanEmitter.Color = ColorSequence.new(Color3.fromRGB(0, 240, 255))
+		scanEmitter.Parent = pane
+		whenRunning(scanEmitter)
+	end
+
+	-- 1. Main Center Hologram HUD (Eye-level in front of runner, angled back 14 deg toward runner)
+	makeHoloScreen({
+		name = "CenterCyberHUD",
+		cf = cf * CFrame.new(0, 5.5, -6.2) * CFrame.Angles(math.rad(14), 0, 0),
+		size = Vector3.new(5.4, 3.0, 0.06),
+		title = "⚡ ASTRAL QUANTUM DRIVE // T10",
+		subtitle = "● WARP SINGULARITY ACTIVE",
+		isMain = true,
+	})
+
+	-- 2. Left Flank Auxiliary Cyber HUD (Angled 30 deg inward toward runner)
+	makeHoloScreen({
+		name = "LeftCyberHUD",
+		cf = cf * CFrame.new(-3.6, 4.8, -4.4) * CFrame.Angles(math.rad(10), math.rad(30), 0),
+		size = Vector3.new(3.6, 2.4, 0.06),
+		title = "◈ DIAGNOSTICS",
+		subtitle = "● CORE EFFICIENCY 100%",
+		isMain = false,
+	})
+
+	-- 3. Right Flank Celestial Navigation HUD (Angled -30 deg inward toward runner)
+	makeHoloScreen({
+		name = "RightCyberHUD",
+		cf = cf * CFrame.new(3.6, 4.8, -4.4) * CFrame.Angles(math.rad(10), math.rad(-30), 0),
+		size = Vector3.new(3.6, 2.4, 0.06),
+		title = "✦ NAV-MATRIX",
+		subtitle = "● SECTOR: EPSILON-9",
+		isMain = false,
+	})
+
+	--== 5. SWIRLING GALAXY NEBULA DUST PARTICLES ==--
+	local galaxyDust = Instance.new("ParticleEmitter")
+	galaxyDust.Name = "CosmicDust"
+	galaxyDust.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	galaxyDust.Rate = 18
+	galaxyDust.Lifetime = NumberRange.new(2.0, 3.8)
+	galaxyDust.Speed = NumberRange.new(1.5, 3.5)
+	galaxyDust.SpreadAngle = Vector2.new(180, 180)
+	galaxyDust.LightEmission = 1.0
+	galaxyDust.LightInfluence = 0
+	galaxyDust.Rotation = NumberRange.new(0, 360)
+	galaxyDust.RotSpeed = NumberRange.new(-60, 60)
+	galaxyDust.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.6),
+		NumberSequenceKeypoint.new(0.5, 1.6),
+		NumberSequenceKeypoint.new(1, 0.2),
+	})
+	galaxyDust.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(60, 220, 255)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(180, 60, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 60, 180)),
+	})
+	galaxyDust.Parent = singularity
+	whenRunning(galaxyDust)
+
+	for _, side in ipairs({ -1, 1 }) do
+		local strip = part({
+			name = "CosmicStrip",
+			size = Vector3.new(0.45, 0.3, 16),
+			cframe = cf * CFrame.new(side * 4.3, 1.2, 0),
+			color = ASTRAL_CYAN,
+			material = Enum.Material.Neon,
+			collide = false,
+			studs = false,
+			parent = model,
+		})
+		CollectionService:AddTag(strip, GameConfig.Tags.MillPulse)
+	end
+end
+
 local SIGNATURE: { (Signature) -> () } = {
 	compostWalk, gardenPath, trellisTrot, millstone, glasshouse, sunwheel, heartroot,
+	infernoForge, celestialAscent, astralSingularity,
 }
 
 function MillModel.Build(tier: number, cf: CFrame, parent: Instance): (Model, BasePart)
 	local index = math.clamp(math.floor(tier), 1, #DRESSING)
 	local look = DRESSING[index]
-	local spec = MILL.Tiers[index]
-	local beltStyle = MILL.Belt[index] or MILL.Belt[1]
+	local currentMill = GameConfig.Mill
+	local spec = currentMill.Tiers[index] or { name = 'Tier ' .. index, speed = index * 10, cost = 0, beltStuds = 16 }
+	local beltStyle = currentMill.Belt[index] or currentMill.Belt[1]
 
 	local model = Instance.new("Model")
 	model.Name = "Mill"
@@ -2319,7 +3482,7 @@ function MillModel.Build(tier: number, cf: CFrame, parent: Instance): (Model, Ba
 		size = BELT,
 		cframe = cf * CFrame.new(0, 0.4, 0),
 		color = look.belt,
-		material = Enum.Material.SmoothPlastic,
+		material = look.beltMaterial or (if beltStyle.Neon then Enum.Material.Neon else Enum.Material.SmoothPlastic),
 		studs = false,
 		parent = model,
 	})
