@@ -121,6 +121,7 @@ container.Name = "SeedPlantUI"
 container.Parent = playerGui
 
 type Panel = {
+	model: Model,
 	billboard: BillboardGui,
 	word: TextLabel,
 	timer: TextLabel,
@@ -269,6 +270,7 @@ local function build(model: Model): Panel?
 	timerEdge.Parent = timer
 
 	return {
+		model = model,
 		billboard = billboard,
 		word = word,
 		timer = timer,
@@ -299,8 +301,27 @@ end
 --   A READY POD has a prompt on it that says HATCH. A countdown frozen at 0:00
 --   beside it is the same fact twice, and the prompt is the half you can act
 --   on -- so the plate gets out of the way the moment the clock runs out.
+--
+-- THE ATTRIBUTES ARE RE-READ HERE, NOT CACHED AT build(). A pod becomes a
+-- creature in place: the server rewrites Stage on the model it already tagged,
+-- and a panel holding the value it saw at build time would count down forever
+-- on a plant that had already hatched.
 --==============================================================================
 local function refresh(panel: Panel, now: number)
+	local model = panel.model
+	if not model or not model.Parent then
+		return
+	end
+	panel.stage = tonumber(model:GetAttribute("Stage")) or panel.stage
+	local pa = model:GetAttribute("PlantedAt")
+	if type(pa) == "number" then
+		panel.plantedAt = pa
+	end
+	panel.tier = tonumber(model:GetAttribute("Tier")) or panel.tier
+	if not panel.species then
+		panel.species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
+	end
+
 	local species = panel.species
 	if not species then
 		return
@@ -329,7 +350,7 @@ local function refresh(panel: Panel, now: number)
 	local word, timer = POD.Hatching, clock(remaining)
 
 	local key = word .. "\0" .. timer
-	if key == panel.lastText then
+	if key == panel.lastText and panel.billboard.Enabled then
 		return
 	end
 	panel.lastText = key
@@ -371,9 +392,21 @@ local function add(instance: Instance)
 	-- The model can be tagged before its parts have finished replicating, in
 	-- which case PrimaryPart is not there yet. ParentAnim learned this the hard
 	-- way and silently drew nothing for a whole session.
+	--
+	-- The wait covers the ATTRIBUTES too, not just the pivot. They replicate
+	-- separately from the parts, so a model that had its PrimaryPart already
+	-- could still answer nil to SpeciesId -- and a panel built from that has no
+	-- species, no clock, and no way to get one.
 	task.spawn(function()
 		local deadline = os.clock() + 5
-		while not model.PrimaryPart and model.Parent and os.clock() < deadline do
+		while model.Parent and os.clock() < deadline do
+			local anchor = model.PrimaryPart
+			local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
+			local plantedAt = model:GetAttribute("PlantedAt")
+			local tier = tonumber(model:GetAttribute("Tier"))
+			if anchor and species and tier and type(plantedAt) == "number" then
+				break
+			end
 			task.wait(0.1)
 		end
 		if not (model.Parent and CollectionService:HasTag(model, GameConfig.Tags.Planted)) then
@@ -411,6 +444,13 @@ CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.Planted):Connect(remo
 -- accumulator rather than a task.wait loop so it cannot drift, and the work is
 -- skipped entirely by refresh() when the text has not changed -- which for a
 -- grown plant is every tick, forever.
+--
+-- The sweep below rides the same second. GetInstanceRemovedSignal and
+-- GetInstanceAddedSignal only fire for changes this client saw, and a model
+-- tagged during the join handshake can land before the listener does -- so the
+-- tagged set is reconciled once a second rather than trusted to have been
+-- announced. It is a table walk over plants already in the bed; nothing is
+-- rebuilt for a model that already has a panel.
 --==============================================================================
 local since = 0
 RunService.Heartbeat:Connect(function(dt)
@@ -420,6 +460,14 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 	since = 0
 	local now = serverNow()
+
+	-- Periodically sweep any tagged models that might have missed initial signal
+	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Planted)) do
+		if instance:IsA("Model") and not panels[instance] then
+			add(instance)
+		end
+	end
+
 	for model, panel in pairs(panels) do
 		if not model.Parent then
 			remove(model)

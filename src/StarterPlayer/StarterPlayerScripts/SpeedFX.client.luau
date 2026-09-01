@@ -259,6 +259,39 @@ end
 -- WATCHING THE SCORE
 --==============================================================================
 local lastSpeed: number? = nil
+-- When the previous packet arrived, so a capped payout can be shown as an
+-- AMOUNT rather than as a rate. Client-local and only ever subtracted from
+-- itself, so os.clock() is the right clock here -- nothing compares it to the
+-- server's.
+local lastPacket: number? = nil
+
+--==============================================================================
+-- A CAPPED PLAYER IS STILL EARNING, AND STILL WANTS TO SEE IT
+--
+-- Speed saturates at Save.MaxSpeedScore. Past that the profile stops moving, so
+-- the difference between two packets is zero and the pop -- the one piece of
+-- feedback the mill gives -- goes quiet at exactly the moment a player has the
+-- biggest mill in the game.
+--
+-- SO THE CAP IS THE CONDITION, NOT "the score did not move". Those are not the
+-- same test: a profile packet sent for a CASH change also leaves Speed
+-- unchanged, and treating that as a capped payout pops a number nobody earned.
+--
+-- AND IT POPS AN AMOUNT, NOT A RATE. trainingRateFor returns Speed per SECOND;
+-- popping it raw prints the same figure whether the packets are a quarter of a
+-- second or four seconds apart. Multiplied by the real gap it is the number the
+-- mill would have paid, which is what every other pop in this file shows.
+--
+-- Read-only, and cosmetic. The server has already decided what was earned and
+-- has already refused to bank it; this only describes what the refusal cost.
+--==============================================================================
+local function cappedPayout(profile: any, elapsed: number): number
+	local rush = player:GetAttribute(GameConfig.Attributes.TrainingRush)
+	local mul = if type(rush) == "number" and rush > 0 then rush else 1
+	local tier = tonumber(profile.MillTier) or 1
+	local rate = GameConfig.trainingRateFor(tier, tonumber(profile.MillOverclock) or 0, profile)
+	return rate * mul * elapsed
+end
 
 local function receive(profile: any)
 	if type(profile) ~= "table" or type(profile.Speed) ~= "number" then
@@ -266,10 +299,22 @@ local function receive(profile: any)
 	end
 	local now = profile.Speed
 	local before = lastSpeed
+	local at = os.clock()
+	local since = if lastPacket then at - lastPacket else 0
 	lastSpeed = now
+	lastPacket = at
 	-- The first packet is not a gain, it is finding out where you already were.
-	if before and now > before + 0.05 then
-		pop(now - before)
+	if before then
+		if now > before + 0.05 then
+			pop(now - before)
+		elseif now >= GameConfig.Save.MaxSpeedScore
+			and player:GetAttribute(GameConfig.Attributes.OnTreadmill) == true
+			and since > 0 and since < 30 then
+			local earned = cappedPayout(profile, since)
+			if earned > 0 then
+				pop(earned)
+			end
+		end
 	end
 end
 

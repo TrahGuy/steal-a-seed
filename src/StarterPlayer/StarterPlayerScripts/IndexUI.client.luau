@@ -1,7 +1,7 @@
 --!strict
 -- Steal a Seed :: IndexUI
 --
--- The almanac: what Greenhollow has, and which of it you have actually grown.
+-- The almanac: every form in the game, and which of them you have actually grown.
 --
 -- What is in your dirt right now is GardenUI. This is the sheet.
 --
@@ -91,14 +91,19 @@ local GHOST = Color3.fromRGB(150, 148, 154)
 --==============================================================================
 
 --==============================================================================
--- GREENHOLLOW ONLY, AND THE DENOMINATOR IS COUNTED NOT TYPED
+-- EVERY SPECIES, AND THE DENOMINATOR IS COUNTED NOT TYPED
 --
--- The other four biomes are geometry with no species in them yet, so an Index
--- listing them would be four empty shelves. When they get their art they get
--- their cards, and `#SPECIES` picks that up without anybody editing a header.
+-- This was Greenhollow only, because the other four biomes were geometry with no
+-- species in them and an Index listing them would have been four empty shelves.
+-- All five have art now, so the filter came off -- and `#SPECIES` picked the new
+-- denominator up without anybody editing a header, which is what it was for.
+--
+-- A LOCKED CARD IS NOT A LEAK. An unreleased biome's species show as ghosts:
+-- the silhouette and "???", no name and no tier. That is the same thing an
+-- ungrown Greenhollow species shows, and it is the panel telling you the road
+-- keeps going -- see the ghost banner in paintPortraits.
 --==============================================================================
-local BIOME = "greenhollow"
-local SPECIES = SeedData.InBiome(BIOME)
+local SPECIES = SeedData.Species
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -231,8 +236,29 @@ end
 --==============================================================================
 local almanac: { [string]: boolean } = {}
 
-local function paint()
-	local seen = 0
+--==============================================================================
+-- THE PORTRAITS ARE BUILT WHEN THE PANEL OPENS, NOT WHEN THE GAME STARTS
+--
+-- Each card holds a real CreatureModel in a ViewportFrame, and this panel now
+-- lists every species in the game rather than Greenhollow's five. Measured, that
+-- is 1,078 parts across twenty-five viewports -- up from 192 -- and every one of
+-- them was being assembled at join, on a phone, for a panel most sessions never
+-- open.
+--
+-- So the portraits wait. Text, borders, the counter and the badge are pennies
+-- and still repaint immediately, because the badge is how a player finds out
+-- there is something new to look at in the first place -- it has to be right
+-- before the panel has ever been opened.
+--
+-- `pendingPortraits` is the debt. A discovery arriving while the panel is shut
+-- sets it and costs nothing; opening pays it once. setModel is keyed on state
+-- and returns early when the key has not moved, so paying it twice is free.
+--==============================================================================
+local panelOpen = false
+local pendingPortraits = true
+
+local function paintPortraits()
+	pendingPortraits = false
 	for _, species in ipairs(SPECIES) do
 		local card = built[species.Id]
 		if card then
@@ -275,6 +301,24 @@ local function paint()
 			-- The species' own place, but only once it has been grown. See
 			-- GameConfig.Card: a backdrop is identity.
 			card.setBackdrop(if known then species.Id else nil)
+		end
+	end
+end
+
+--==============================================================================
+-- THE CHEAP HALF, WHICH ALWAYS RUNS
+--
+-- Words, borders, the counter and the badge. All of it is a handful of string
+-- and Color3 writes, and the badge in particular has to be correct before the
+-- panel has ever been opened -- it is the thing that tells a player there is
+-- something new in there.
+--==============================================================================
+local function paint()
+	local seen = 0
+	for _, species in ipairs(SPECIES) do
+		local card = built[species.Id]
+		if card then
+			local known = almanac[species.Id] == true
 
 			if known then
 				seen += 1
@@ -310,6 +354,14 @@ local function paint()
 	local missing = #SPECIES - seen
 	badge.Visible = missing > 0
 	badgeCount.Text = tostring(missing)
+
+	-- The expensive half, only if somebody is looking. Otherwise write down
+	-- that it is owed and let the next open settle it.
+	if panelOpen then
+		paintPortraits()
+	else
+		pendingPortraits = true
+	end
 end
 
 paint()
@@ -369,13 +421,19 @@ end
 -- Each writes its own name to the OpenPanel attribute and closes itself on
 -- seeing a name that is not its own, so no script has to know the others exist.
 --==============================================================================
-local open = false
-
+-- `panelOpen` is declared up by the painters, which need to know whether
+-- anybody is looking before they spend anything.
 local function setOpen(want: boolean)
-	if open == want then
+	if panelOpen == want then
 		return
 	end
-	open = want
+	panelOpen = want
+	-- Settle the portrait debt BEFORE the panel is shown, so the first frame
+	-- of the open is the finished panel rather than twenty-five empty stages
+	-- filling in behind it.
+	if want and pendingPortraits then
+		paintPortraits()
+	end
 	if want then
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
 	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
@@ -385,7 +443,7 @@ local function setOpen(want: boolean)
 end
 
 button.Activated:Connect(function()
-	setOpen(not open)
+	setOpen(not panelOpen)
 end)
 modal.close.Activated:Connect(function()
 	setOpen(false)
@@ -396,7 +454,7 @@ end)
 
 player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 	local holder = player:GetAttribute(ATTR.OpenPanel)
-	if open and holder ~= PANEL_NAME then
+	if panelOpen and holder ~= PANEL_NAME then
 		setOpen(false)
 	end
 end)
