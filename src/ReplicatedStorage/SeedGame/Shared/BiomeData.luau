@@ -108,11 +108,15 @@ BiomeData.Biomes = {
 		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 1.6,
-		-- Biome 2 has its art now: five species in SeedData, the Dust Husk pod
-		-- and Brambleback on the nest. Note this flag is NOT what turns a biome
-		-- on -- NestService gates on whether SeedData has species for it, and
-		-- MapService only copies this onto a Live attribute. It is a statement
-		-- of record, so it should stop saying the opposite of the truth.
+		-- Biome 2 has its art: five species in SeedData, the Dust Husk pod and
+		-- Brambleback on the nest.
+		--
+		-- THIS NOTE USED TO SAY THE FLAG TURNS NOTHING ON, and that was true when
+		-- it was written -- NestService gated only on whether SeedData had
+		-- species, and MapService copied this onto a `Live` attribute that no
+		-- script ever read. It stopped being true when NestService started
+		-- reading the flag itself, because species presence opens by itself and
+		-- something had to be able to say "not yet".
 		LiveInPhaseA = true,
 	},
 	{
@@ -163,7 +167,16 @@ BiomeData.Biomes = {
 		Nests = 1,
 		PodsPerNest = 2,
 		RarityBonus = 9.0,
-		LiveInPhaseA = false,
+		-- LIVE. The last biome on the road, and everything it needs landed before
+		-- this line moved: five species with their own void eyes, the alien-stem
+		-- pod through Titan and Colossal, and Astralmaw on the nest carrying all
+		-- seven animation seams.
+		--
+		-- It is the first biome this flag has actually HELD BACK. The other four
+		-- went live the moment their species rows existed, because that was the
+		-- only gate there was; Starbloom opened by accident the same way and was
+		-- shut again deliberately, which is the whole reason the flag is read.
+		LiveInPhaseA = true,
 	},
 } :: { Biome }
 

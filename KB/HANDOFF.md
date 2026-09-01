@@ -4366,6 +4366,58 @@ Four commits: `5e85c47` (balance), `cd6a799` (Starbloom, girth, leaves, gates),
     no girth and baseline scale only. It is Edit-only and nobody calls it.
   * **HANDOFF-ADDENDUM-2026-08-31.md sits at the repo root**, not in `KB/`.
 
+## Starbloom opens, and the size curve becomes a live problem — 2026-09-01
+
+Four commits: `6515a73` (plants), `adb5f4e` (guardian and pod), `16dc84b` (the walk),
+and this one, which flips `BiomeData.starbloom.LiveInPhaseA` to true.
+
+Starbloom is the fifth biome and the first this flag has actually held back. The other
+four went live the moment their species rows existed, because species presence was the
+only gate there was; Starbloom opened by accident the same way and was shut again
+deliberately.
+
+### Verified before the flag moved (Studio Edit, clone-require against the synced tree)
+
+  * Nest gate passes for all five biomes. Starbloom raises 1 nest of 2 pods at
+    `(-38, 0, -1615)`, 1500 studs from safety — the deepest in the game.
+  * Astralmaw builds at the nest CFrame: 83 parts, 7 Motor6D, Humanoid and PrimaryPart
+    both present.
+  * `ParentAnim` dispatches on the `Species` attribute. Astralmaw sets `"astralmaw"`,
+    which is neither `miremaw` nor `forgemaw`, so it takes the generic path — and that
+    path resolves all seven seams by name, so it walks and chases.
+  * Plants: 30 / 33 / 31 / 33 / 46 parts, pupil rig and lids on all five, eyes on the
+    surface, girth +7.6% to +10.3% across the ladder.
+  * Pods: 21 parts common, 22 Titan, 23 Colossal, nothing below the pod base.
+  * Leg rig: emberroot 2 legs, novaorb 2, cosmospire/voidpetal/astralhorn 4,
+    supernovus 6, all alternating. Greenhollow, Dustbowl and Tanglemire correctly
+    get none.
+
+### Unresolved, and now shipping
+
+  * **The size curve.** `SeedData.SizeScale` returns `Tier.mul` — the VALUE multiplier
+    — as a linear height scale, so a Colossal is 50x a Tiny. The orphaned comment
+    directly above it still explains the ceiling clamp that was lost when tiers
+    replaced kilograms, and cites the reason: the corridor walls are 46 studs.
+    Measured share of a biome's pods that grow taller than the walls, weighted by that
+    biome's own RarityBonus:
+
+        greenhollow 11.7%   dustbowl 16.6%   tanglemire 25.1%
+        emberroot   30.4%   starbloom 39.5%
+
+    Four of the five Starbloom species breach at Giant, which is 20% of that biome's
+    rolls on its own. RarityBonus 9.0 is doing exactly what it was designed to do; the
+    size curve is what turns that into a defect. A cube root of `mul` keeps everything
+    under the walls and changes how every existing save's plants look, which is why it
+    is a decision and not a patch.
+  * **Astralmaw has no sleep pose of its own.** `SLEEP_BY_SPECIES` in
+    `ParentAnim.client.luau` carries `brambleback` and `forgemaw`; Miremaw has its own
+    channel path. Astralmaw falls back to `GREENHOLLOW_SLEEP` — a mossy brute's fold on
+    a cosmic behemoth. It works and it is not authored for it.
+  * **Parents do not gaze.** `ParentAnim` has no eye, pupil, lid or gaze code at all.
+    Astralmaw's eye parts are named to the contract so it is free to wire later, but
+    nothing drives them today.
+  * **Still no Play test.** Everything above is Edit-mode measurement.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
@@ -4395,3 +4447,38 @@ do not fill it from imagination. Phase D upgrades remain available as the next s
 mill rate is deliberately a slow FLOOR for multipliers to sit on). Offline income is still deferred
 on purpose -- growth uses an absolute clock, cash does not, and an offline faucet needs a claim
 flow, a cap and an anti-abuse story before it needs code.
+
+## Astralmaw void face and Starbloom falling-star pod -- 2026-09-01
+
+Two focused art changes are present in the working tree and intentionally uncommitted pending owner
+approval. `AstralmawModel.luau` replaces `Left/RightEyeMain` and `Left/RightEyeBrow` with the shared
+Starbloom void-eye contract: `LeftEye`, `LeftPupil`, `LeftLid`, `RightEye`, `RightPupil`, and
+`RightLid`. The sockets are dark blocks centred on the skull surface, each has one cold Neon
+pinprick, and there are no glints. The existing jaw, throat and teeth remain the expression.
+Astralmaw measures 81 -> 83 BaseParts and ParentModel still returns all seven Motor6Ds:
+RootJoint, Neck, JawJoint, LeftShoulder, RightShoulder, LeftHip, RightHip.
+
+`CreatureModel.BuildPod` replaces Starbloom's five identical `OrbitArc` pieces plus the two-dot
+comet with 15 biome-specific parts: four unequal accretion masses, a dark singularity framed by two
+event-horizon slivers, five stretched infall shards, and a comet head with a two-step tapered wake.
+The old arc spend produced one generic ring silhouette; the old tail was a second dot and did not
+establish motion. The replacement keeps Starbloom's diagonal silhouette slot but makes it read as
+matter being pulled into a void. No other biome branch was edited.
+
+Edit-mode clone-require verification against the Rojo-synced instances:
+
+  * Base-tier pod counts: Greenhollow 7, Dustbowl 9, Tanglemire 13, Emberroot 21, Starbloom 19.
+    Colossal counts are respectively 8, 10, 14, 22 and 20.
+  * Starbloom tier 1 -> 7 diameter is 1.66 -> 9.04. All 15 art pieces match after normalizing size
+    and position by diameter (maximum errors `2.98e-8` and `7.30e-8`).
+  * Starbloom maximum horizontal extent is 1.1703 D; vertical extent is 1.2934 D at tier 1 and
+    1.2901 D at tier 7. No pod corner falls below the base and no Starbloom-specific art part has
+    all eight bounding corners inside either shell lobe.
+  * Built Astralmaw, all five current Starbloom grown plants, and both checked pods contain zero
+    BaseParts whose name ends in `Glint`.
+  * `--!strict` remains the first bytes of both edited modules, `git diff --check` passes, and
+    `rojo build -o build/StealASeed.rbxlx` passes.
+
+Temporary Edit-mode review models and cloned modules were destroyed after measurement. This was a
+visual/static verification pass, not a Play test. Existing user-owned edits in `SeedData.luau`,
+`StarbloomForms.luau`, and `StarbloomMockupRunner.luau` were not touched by this pass.
