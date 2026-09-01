@@ -5,14 +5,18 @@
 -- Builds an exhibition showroom gallery of all 5 Starbloom (Biome 5) species
 -- side-by-side on dedicated cosmic pedestals with exhibition placards,
 -- starlight lanterns, and live cosmic particles for inspection.
+--
+-- Routes through CreatureModel.Build so real scale, girth, primary parts, and
+-- hierarchy matches live production game plants.
 --==============================================================================
 
 local StarbloomMockupRunner = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local SeedData = require(Shared:WaitForChild("SeedData"))
-local StarbloomForms = require(Shared:WaitForChild("StarbloomForms"))
+local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 
 local FOLDER_NAME = "StarbloomSpeciesMockup"
 
@@ -31,7 +35,7 @@ local RARITY_COLORS = {
 }
 
 local DESCRIPTIONS = {
-	novaorb = "Rotund alien toad-biped with muscular jumping legs, glowing cyan eyes, shoulder leaf fronds & 4 orbiting motes.",
+	novaorb = "Rotund alien toad-biped with muscular jumping legs, glowing cyan eyes, shoulder leaf fronds & 3 orbiting motes.",
 	cosmospire = "Tall 4-legged stilt mantis predator with raptor skull, eye slits, dorsal needle spire & crystal leaf wings.",
 	voidpetal = "Prowling void panther predator with 4 feline limbs, 6-petal orchid neck mane, glowing maw & twin leaf tails.",
 	astralhorn = "Armored stag-dragon behemoth with 4 heavy pillar legs, beast skull, spine leaf fronds & crystal antlers.",
@@ -73,8 +77,10 @@ function StarbloomMockupRunner.Clear()
 	print("[Seed/StarbloomMockupRunner] Cleared StarbloomSpeciesMockup from Workspace")
 end
 
-function StarbloomMockupRunner.Build(): Folder
+function StarbloomMockupRunner.Build(tierOpt: number?): Folder
 	StarbloomMockupRunner.Clear()
+
+	local tier = tierOpt or SeedData.BaseTier or 1
 
 	local gallery = Instance.new("Folder")
 	gallery.Name = FOLDER_NAME
@@ -154,13 +160,24 @@ function StarbloomMockupRunner.Build(): Folder
 			pLight.Parent = globe
 		end
 
-		-- 3. The Starbloom Plant Model
-		local plantModel = Instance.new("Model")
-		plantModel.Name = "Plant_" .. spec.Name
-		plantModel.Parent = group
-
+		-- 3. The Starbloom Plant Model (Built through CreatureModel)
 		local plantBaseCF = plinthCF * CFrame.new(0, 0.62, 0)
-		StarbloomForms.Build(plantModel, id, plantBaseCF, 1.0)
+		local plantModel = CreatureModel.Build(spec, tier, CreatureModel.STAGE_GROWN, plantBaseCF, group)
+		plantModel.Name = "Plant_" .. spec.Name
+
+		-- Count parts and leaves for verification & placard
+		local partCount = 0
+		local leafCount = 0
+		for _, desc in ipairs(plantModel:GetDescendants()) do
+			if desc:IsA("BasePart") then
+				partCount += 1
+			end
+		end
+		for _, child in ipairs(plantModel:GetChildren()) do
+			if child.Name == "Leaf" then
+				leafCount += 1
+			end
+		end
 
 		-- 4. Official Exhibition Placard (In front of each plinth facing -Z)
 		local placardCF = plinthCF * CFrame.new(0, 1.3, -5.6) * CFrame.Angles(math.rad(-22), 0, 0)
@@ -200,150 +217,155 @@ function StarbloomMockupRunner.Build(): Folder
 
 		local frame = Instance.new("Frame")
 		frame.Size = UDim2.new(1, 0, 1, 0)
-		frame.BackgroundTransparency = 1
+		frame.BackgroundColor3 = Color3.fromRGB(16, 12, 28)
+		frame.BorderSizePixel = 0
 		frame.Parent = sGui
 
+		local pad = Instance.new("UIPadding")
+		pad.PaddingTop = UDim.new(0, 10)
+		pad.PaddingBottom = UDim.new(0, 10)
+		pad.PaddingLeft = UDim.new(0, 14)
+		pad.PaddingRight = UDim.new(0, 14)
+		pad.Parent = frame
+
 		local title = Instance.new("TextLabel")
-		title.Position = UDim2.new(0, 12, 0, 10)
-		title.Size = UDim2.new(1, -24, 0, 36)
+		title.Size = UDim2.new(1, 0, 0, 28)
 		title.BackgroundTransparency = 1
-		title.Font = Enum.Font.GothamBold
 		title.Text = string.format("%d. %s", i, spec.Name:upper())
-		title.TextColor3 = Color3.fromRGB(242, 238, 255)
-		title.TextSize = 24
+		title.TextColor3 = RARITY_COLORS[spec.Rarity] or Color3.fromRGB(255, 255, 255)
+		title.TextSize = 22
+		title.Font = Enum.Font.GothamBold
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.Parent = frame
 
-		local rarityColor = RARITY_COLORS[spec.Rarity] or Color3.fromRGB(255, 255, 255)
+		local tierName = SeedData.TierName and SeedData.TierName(tier) or ("Tier " .. tostring(tier))
 		local rarityLabel = Instance.new("TextLabel")
-		rarityLabel.Position = UDim2.new(0, 12, 0, 48)
-		rarityLabel.Size = UDim2.new(1, -24, 0, 24)
+		rarityLabel.Size = UDim2.new(1, 0, 0, 18)
+		rarityLabel.Position = UDim2.new(0, 0, 0, 30)
 		rarityLabel.BackgroundTransparency = 1
+		rarityLabel.Text = string.format("%s // Tier %d (%s) // Frame Height: %.1f studs", spec.Rarity:upper(), tier, tierName, SeedData.FrameHeight and SeedData.FrameHeight(spec, tier) or spec.Height)
+		rarityLabel.TextColor3 = Color3.fromRGB(160, 210, 255)
+		rarityLabel.TextSize = 13
 		rarityLabel.Font = Enum.Font.GothamMedium
-		rarityLabel.Text = string.format("%s // Height: %.1f studs", spec.Rarity:upper(), StarbloomForms.AuthoredHeight[id] or 5.0)
-		rarityLabel.TextColor3 = rarityColor
-		rarityLabel.TextSize = 16
 		rarityLabel.TextXAlignment = Enum.TextXAlignment.Left
 		rarityLabel.Parent = frame
 
+		local statsLabel = Instance.new("TextLabel")
+		statsLabel.Size = UDim2.new(1, 0, 0, 16)
+		statsLabel.Position = UDim2.new(0, 0, 0, 50)
+		statsLabel.BackgroundTransparency = 1
+		statsLabel.Text = string.format("Parts: %d (Budget: 25-40) | Leaves: %d | PrimaryPart: %s", partCount, leafCount, plantModel.PrimaryPart and plantModel.PrimaryPart.Name or "NONE")
+		statsLabel.TextColor3 = Color3.fromRGB(140, 255, 180)
+		statsLabel.TextSize = 12
+		statsLabel.Font = Enum.Font.Gotham
+		statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+		statsLabel.Parent = frame
+
+		local divider = Instance.new("Frame")
+		divider.Size = UDim2.new(1, 0, 0, 1)
+		divider.Position = UDim2.new(0, 0, 0, 70)
+		divider.BackgroundColor3 = Color3.fromRGB(60, 50, 90)
+		divider.BorderSizePixel = 0
+		divider.Parent = frame
+
 		local desc = Instance.new("TextLabel")
-		desc.Position = UDim2.new(0, 12, 0, 80)
-		desc.Size = UDim2.new(1, -24, 1, -88)
+		desc.Size = UDim2.new(1, 0, 0, 70)
+		desc.Position = UDim2.new(0, 0, 0, 76)
 		desc.BackgroundTransparency = 1
+		desc.Text = DESCRIPTIONS[id] or "Cosmic endgame entity with articulated limbs and alien leaves."
+		desc.TextColor3 = Color3.fromRGB(220, 215, 235)
+		desc.TextSize = 13
 		desc.Font = Enum.Font.Gotham
-		desc.Text = DESCRIPTIONS[id] or ""
-		desc.TextColor3 = Color3.fromRGB(200, 195, 220)
-		desc.TextSize = 14
 		desc.TextWrapped = true
 		desc.TextXAlignment = Enum.TextXAlignment.Left
 		desc.TextYAlignment = Enum.TextYAlignment.Top
 		desc.Parent = frame
 	end
 
-	print(string.format("[Seed/StarbloomMockupRunner] Built all %d Starbloom Species mockups at Z = %d", TOTAL_SPECIES, BASE_Z))
+	print(string.format("[Seed/StarbloomMockupRunner] Successfully built Starbloom showroom gallery at Tier %d (%d species) in Workspace.", tier, TOTAL_SPECIES))
 	return gallery
 end
 
+--==============================================================================
+-- LIVE MOTION SIMULATION
+--==============================================================================
 local simConnection: RBXScriptConnection? = nil
 
-function StarbloomMockupRunner.Simulate(enable: boolean?): boolean
-	local RunService = game:GetService("RunService")
-	if enable == false then
-		if simConnection then
-			simConnection:Disconnect()
-			simConnection = nil
-		end
-		print("[Seed/StarbloomMockupRunner] Simulation stopped.")
-		return false
-	end
-
+function StarbloomMockupRunner.Simulate(enable: boolean)
 	if simConnection then
 		simConnection:Disconnect()
 		simConnection = nil
 	end
 
+	if not enable then
+		print("[Seed/StarbloomMockupRunner] Motion simulation stopped.")
+		return
+	end
+
 	local gallery = workspace:FindFirstChild(FOLDER_NAME)
 	if not gallery then
-		StarbloomMockupRunner.Build()
-		gallery = workspace:FindFirstChild(FOLDER_NAME)
+		warn("[Seed/StarbloomMockupRunner] Gallery not found! Run Build() first.")
+		return
 	end
-	if not gallery then return false end
 
-	local animated = {}
-	for _, group in ipairs(gallery:GetChildren()) do
-		local plant = group:FindFirstChildWhichIsA("Model")
-		local plinth = group:FindFirstChild("Plinth")
-		if plant and plinth then
-			local baseCF = plinth.CFrame * CFrame.new(0, 0.62, 0)
-			local entry = {
-				model = plant,
-				group = group,
-				baseCF = baseCF,
-				walkAngle = math.random() * math.pi * 2,
-				walkRadius = 1.4,
-				orbitAngle = 0,
-				motes = {},
-				capacitors = {},
-				satellites = {},
-			}
-			for _, child in ipairs(plant:GetChildren()) do
-				if child.Name == "Mote" then
-					table.insert(entry.motes, child)
-				elseif child.Name == "CapacitorNode" then
-					table.insert(entry.capacitors, child)
-				elseif child.Name == "CometSatellite" or child.Name == "OrbitalArc" then
-					table.insert(entry.satellites, child)
+	local baseOffsets: { [Model]: CFrame } = {}
+	local initialPartCFrames: { [BasePart]: CFrame } = {}
+
+	for i, id in ipairs(SPECIES_IDS) do
+		local group = gallery:FindFirstChild(string.format("Species%02d_%s", i, SeedData.Get(id).Name))
+		if group then
+			local plant = group:FindFirstChildWhichIsA("Model")
+			if plant and plant:IsA("Model") then
+				local prim = plant.PrimaryPart
+				if prim then
+					baseOffsets[plant] = prim.CFrame
+				end
+				for _, p in ipairs(plant:GetDescendants()) do
+					if p:IsA("BasePart") then
+						initialPartCFrames[p] = p.CFrame
+					end
 				end
 			end
-			table.insert(animated, entry)
 		end
 	end
 
-	local clock = 0
-	simConnection = RunService.Heartbeat:Connect(function(dt)
-		clock += dt
-		for _, e in ipairs(animated) do
-			if not e.model.Parent then continue end
-
-			-- 1. Organic stroll & stride bob
-			e.walkAngle += dt * 0.35
-			local swayX = math.sin(e.walkAngle) * e.walkRadius
-			local swayZ = math.cos(e.walkAngle * 0.75) * (e.walkRadius * 0.65)
-			local walkStep = math.sin(clock * 3.2) * 0.12
-			local lookYaw = math.sin(e.walkAngle * 1.4) * 0.30
-
-			local targetCF = e.baseCF * CFrame.new(swayX, math.abs(walkStep), swayZ) * CFrame.Angles(0, lookYaw, math.sin(clock * 1.8) * 0.035)
-			e.model:PivotTo(targetCF)
-
-			-- 2. Orbital motes & satellites
-			e.orbitAngle += dt * 1.6
-			for i, m in ipairs(e.motes) do
-				local a = e.orbitAngle + (i * math.pi * 0.5)
-				local orbitOffset = CFrame.Angles(math.rad(15), a, 0) * CFrame.new(0, 0, 1.8)
-				m.CFrame = targetCF * CFrame.new(0, 1.8, 0) * orbitOffset
+	local startTime = os.clock()
+	simConnection = RunService.Heartbeat:Connect(function()
+		local t = os.clock() - startTime
+		local gal = workspace:FindFirstChild(FOLDER_NAME)
+		if not gal then
+			if simConnection then
+				simConnection:Disconnect()
+				simConnection = nil
 			end
+			return
+		end
 
-			for i, cap in ipairs(e.capacitors) do
-				local a = -e.orbitAngle * 0.8 + (i * math.pi * 0.5)
-				local bob = math.sin(clock * 2.2 + i) * 0.18
-				local nodeCF = CFrame.Angles(0, a, 0) * CFrame.new(0, bob, 1.25) * CFrame.Angles(math.rad(45), math.rad(45), 0)
-				cap.CFrame = targetCF * CFrame.new(0, 3.2, 0) * nodeCF
-			end
+		for plant, rootCF in pairs(baseOffsets) do
+			if plant.Parent and plant.PrimaryPart then
+				local strollAngle = t * 0.8
+				local wanderRadius = 1.6
+				local strollX = math.cos(strollAngle) * wanderRadius
+				local strollZ = math.sin(strollAngle) * wanderRadius
+				local strideBob = math.abs(math.sin(t * 3.5)) * 0.28
+				local yaw = -strollAngle + math.pi * 0.5
+				local targetCF = rootCF * CFrame.new(strollX, strideBob, strollZ) * CFrame.Angles(0, yaw, 0)
+				plant:PivotTo(targetCF)
 
-			for i, sat in ipairs(e.satellites) do
-				local a = e.orbitAngle * 1.1 + (i * (math.pi * 2 / #e.satellites))
-				local ringTilt = CFrame.new(0, 1.6, 0) * CFrame.Angles(math.rad(22), math.rad(35) + e.orbitAngle * 0.25, 0)
-				if sat.Name == "CometSatellite" then
-					sat.CFrame = targetCF * CFrame.new(0, 3.8, 0) * ringTilt * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, 2.6)
-				elseif sat.Name == "OrbitalArc" then
-					sat.CFrame = targetCF * CFrame.new(0, 3.8, 0) * ringTilt * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, 2.2)
+				for _, part in ipairs(plant:GetDescendants()) do
+					if part:IsA("BasePart") and part.Name == "Mote" then
+						local orig = initialPartCFrames[part]
+						if orig then
+							local spin = CFrame.Angles(0, t * 1.8, 0)
+							part.CFrame = targetCF * (rootCF:ToObjectSpace(orig)) * spin
+						end
+					end
 				end
 			end
 		end
 	end)
 
-	print("[Seed/StarbloomMockupRunner] Live strolling & orbital kinematics active!")
-	return true
+	print("[Seed/StarbloomMockupRunner] Motion simulation active!")
 end
 
 return StarbloomMockupRunner

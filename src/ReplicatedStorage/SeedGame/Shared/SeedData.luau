@@ -494,6 +494,15 @@ SeedData.Species = {
 	--
 	-- The cosmic climax of the road. RarityBonus 9.0. Rare to Mythic.
 	-- Void-carapace foundations, amethyst crystal petals, neon nebula cores.
+	--
+	-- Leaf, Stem, Soil are the biome's; Body, Crown and Accent are the species'.
+	-- Each species sits at a different VALUE and HUE along the cosmic ladder:
+	--
+	--   Novaorb    cosmic indigo       Body 39,37,82   Crown 158,128,255 Accent 110,230,255
+	--   Cosmospire midnight slate      Body 24,18,46   Crown 180,150,255 Accent 110,230,255
+	--   Voidpetal  amethyst dark       Body 48,30,78   Crown 214,140,255 Accent 255,140,180
+	--   Astralhorn void obsidian       Body 28,22,54   Crown 130,100,220 Accent 242,238,255
+	--   Supernovus singularity void    Body 20,14,38   Crown 255,215,120 Accent 180,245,255
 	--==========================================================================
 	{
 		Id = "novaorb", Name = "Novaorb", Rarity = "Rare", Biome = "starbloom",
@@ -507,32 +516,32 @@ SeedData.Species = {
 		Id = "cosmospire", Name = "Cosmospire", Rarity = "Rare", Biome = "starbloom",
 		Height = 7.40, Form = "spire",
 		Body = Color3.fromRGB(24, 18, 46),
-		Crown = Color3.fromRGB(158, 128, 255),
+		Crown = Color3.fromRGB(180, 150, 255),
 		Accent = Color3.fromRGB(110, 230, 255),
 		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
 	},
 	{
 		Id = "voidpetal", Name = "Voidpetal", Rarity = "Epic", Biome = "starbloom",
 		Height = 5.60, Form = "petal",
-		Body = Color3.fromRGB(24, 18, 46),
-		Crown = Color3.fromRGB(158, 128, 255),
-		Accent = Color3.fromRGB(110, 230, 255),
+		Body = Color3.fromRGB(48, 30, 78),
+		Crown = Color3.fromRGB(214, 140, 255),
+		Accent = Color3.fromRGB(255, 140, 180),
 		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
 	},
 	{
 		Id = "astralhorn", Name = "Astralhorn", Rarity = "Legendary", Biome = "starbloom",
 		Height = 6.90, Form = "horn",
-		Body = Color3.fromRGB(39, 37, 82),
-		Crown = Color3.fromRGB(158, 128, 255),
+		Body = Color3.fromRGB(28, 22, 54),
+		Crown = Color3.fromRGB(130, 100, 220),
 		Accent = Color3.fromRGB(242, 238, 255),
 		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
 	},
 	{
 		Id = "supernovus", Name = "Supernovus", Rarity = "Mythic", Biome = "starbloom",
 		Height = 8.20, Form = "supernova",
-		Body = Color3.fromRGB(24, 18, 46),
-		Crown = Color3.fromRGB(158, 128, 255),
-		Accent = Color3.fromRGB(255, 225, 120),
+		Body = Color3.fromRGB(20, 14, 38),
+		Crown = Color3.fromRGB(255, 215, 120),
+		Accent = Color3.fromRGB(180, 245, 255),
 		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
 	},
 } :: { Species }

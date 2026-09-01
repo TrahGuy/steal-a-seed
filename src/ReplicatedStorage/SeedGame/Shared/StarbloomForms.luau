@@ -2,9 +2,9 @@
 --==============================================================================
 -- STARBLOOM FORMS (BIOME 5) -- 80% CREATURE / 20% PLANT
 --
--- Rebuilt as true living alien cosmic creatures with articulated walking limbs,
--- creature anatomies (bipeds, stilt striders, prowling quadrupeds, behemoths,
--- and hexapod dragon titans), bioluminescent alien leaves, and NO static slabs!
+-- Primitive-sculpted alien cosmic creatures with standing locomotion limbs,
+-- bioluminescent alien leaves, and per-species cosmic palettes. Built within the
+-- art bible target budget of 25–40 parts per grown plant.
 --
 -- Species:
 --   1. Novaorb     (Rare)       - 4.60 studs - Rotund alien toad-biped with shoulder leaf fronds & orbiting motes
@@ -32,11 +32,7 @@ StarbloomForms.AuthoredHeight = {
 -- thirds of the approved parts are rotated off-axis, and scaling a rotated box
 -- along world X and Z does not widen it, it SHEARS it. So girth never touches a
 -- part's SIZE here. It spreads the parts apart and leaves every one of them at
--- its approved proportions, which is the same restraint Tanglemire's replayPart
--- already works under.
---
--- The rotation rides through untouched: `c - p` is the orientation with the
--- translation subtracted out.
+-- its approved proportions.
 --==============================================================================
 local function scaled(c: CFrame, s: number, gs: number): CFrame
 	local p = c.Position
@@ -51,18 +47,44 @@ local function scaleSequence(seq: NumberSequence, s: number): NumberSequence
 	return NumberSequence.new(pts)
 end
 
+--==============================================================================
+-- A PART NAMED "Leaf" IS A PROMISE TO PlantSway
+--
+-- Not decoration. PlantSway.client.luau swings every DIRECT CHILD of a plant
+-- named exactly "Leaf" as an arm while the plant walks, and works out which side
+-- of the stem each is on from its own X offset. Under any other name it simply
+-- never moves.
+--
+-- THIS HAS BEEN GOT WRONG TWICE. Suncrown's four were authored as SupportLeaf1-4
+-- and had to be renamed; these five shipped as "AlienLeaf", "CrownLeaf" and
+-- "LeafVein" and no Starbloom plant fluttered until they were renamed either.
+-- Rename one of these to something prettier and it goes still, silently, with
+-- nothing in the console to say so.
+--
+-- PAIRED PARTS TAKE THE NAME TOGETHER. Novaorb's blade and its neon vein are
+-- both "Leaf": they sit a fraction of a stud apart on the same axis, so they
+-- swing about near-identical centres and stay together. Naming only the blade
+-- would peel the vein off it on every step.
+--
+-- Six sites build them, each marked with its own count. Keep those counts
+-- honest -- the leaf total is a per-frame cost while a plant is walking.
+--==============================================================================
+
+-- Starbloom Shared Palette Family
 local C = {
-	VoidBlack     = Color3.fromRGB(14, 10, 24),
-	MidnightSlate = Color3.fromRGB(24, 18, 46),
-	Indigo        = Color3.fromRGB(39, 37, 82),
-	AmethystDark  = Color3.fromRGB(48, 30, 78),
-	Amethyst      = Color3.fromRGB(90, 50, 160),
-	AmethystPale  = Color3.fromRGB(158, 128, 255),
-	NebulaCyan    = Color3.fromRGB(110, 230, 255),
-	NebulaCyanGlow= Color3.fromRGB(180, 245, 255),
-	StarIvory     = Color3.fromRGB(242, 238, 255),
-	PulsarGold    = Color3.fromRGB(255, 225, 120),
-	CoreWhite     = Color3.fromRGB(255, 255, 255),
+	VoidBlack      = Color3.fromRGB(14, 10, 24),
+	MidnightSlate  = Color3.fromRGB(24, 18, 46),
+	Indigo         = Color3.fromRGB(39, 37, 82),
+	AmethystDark   = Color3.fromRGB(48, 30, 78),
+	Amethyst       = Color3.fromRGB(90, 50, 160),
+	AmethystPale   = Color3.fromRGB(158, 128, 255),
+	StarlightViolet= Color3.fromRGB(180, 150, 255),
+	OrchidPurple   = Color3.fromRGB(214, 140, 255),
+	NebulaCyan     = Color3.fromRGB(110, 230, 255),
+	NebulaCyanGlow = Color3.fromRGB(180, 245, 255),
+	StarIvory      = Color3.fromRGB(242, 238, 255),
+	PulsarGold     = Color3.fromRGB(255, 215, 120),
+	CoreWhite      = Color3.fromRGB(255, 255, 255),
 }
 
 local SURFACES = {
@@ -117,232 +139,274 @@ local function rad(d: number): number
 end
 
 --==============================================================================
--- AN ALIEN LEAF, AND ITS VEIN, AND BOTH ARE NAMED "Leaf"
---
--- Not decoration: PlantSway swings every DIRECT CHILD named exactly "Leaf" as
--- an arm while a plant walks, and works out which side each is on from its own
--- X offset. Under any other name they simply never move -- which is what
--- "AlienLeaf" and "LeafVein" bought, and it is the same trap Suncrown fell into
--- when its four were called SupportLeaf1-4.
---
--- The vein takes the name too. It sits a fraction of a stud off the blade on the
--- blade's own axis, so the two swing about near-identical centres and stay
--- together; leaving it behind would peel the vein off the leaf on every step.
+-- 1. NOVAORB (Rare, 4.60 studs) -- Budget: 27 parts (+ 1 Base = 28 parts)
 --==============================================================================
-local function mkAlienLeaf(parent: Instance, cf: CFrame, size: Vector3, leafColor: Color3, veinColor: Color3)
-	-- Main leaf blade
-	mk({
-		name = "Leaf",
-		size = size,
-		cf = cf,
-		color = leafColor,
-		parent = parent,
-		wedge = true,
-	})
-	-- Neon vein rib
-	mk({
-		name = "Leaf",
-		size = Vector3.new(size.X * 0.22, size.Y * 0.95, size.Z * 0.25),
-		cf = cf * CFrame.new(0, 0, size.Z * 0.3),
-		color = veinColor,
-		parent = parent,
-		material = Enum.Material.Neon,
-	})
+--==============================================================================
+-- THE VOID EYE, AND WHY IT IS BUILT HERE
+--
+-- CreatureModel has a per-biome eye system and it already carries an entry for
+-- this biome: EYE_STYLE.starbloom = "void", built by addFace. Starbloom has
+-- never received it. addFace runs near the end of BuildCreature and the
+-- Starbloom branch answers hundreds of lines earlier, exactly as Tanglemire's
+-- does -- and Tanglemire got an explicit retrofit where Starbloom got nothing.
+-- So these five wore a hand-rolled ball with a glint on it, no pupil and no lid,
+-- which is the worst eye treatment in the game.
+--
+-- THE RIG FALLS OUT OF THE NAMES, so this builds to the same contract addFace
+-- does and PlantSway picks it up for free:
+--
+--   <side>Eye     the eyeball. The suffix "Eye" is what makes it an eye at all.
+--   <side>Pupil   the suffix "Pupil" upgrades the whole plant to the PUPIL RIG:
+--                 the eyeball swings in its socket and everything mounted on it
+--                 rides along, instead of the eye itself sliding about the face.
+--                 Two pupils on one eye is legal and both travel -- the doe eye
+--                 already does it.
+--   <side>Lid     paired to its eye by the prefix they share, and swept over it
+--                 to blink. A Ball renders as a sphere of its SMALLEST axis, so
+--                 an eye cannot be squashed shut; the lid must be its own part
+--                 passing in front of it.
+--
+-- NO GLINT. That is the void family's whole design and it is deliberate: a
+-- highlight is what makes an eye look wet, and withholding it is what makes
+-- these look like they are not alive. One cold pinprick, and nothing else.
+--
+-- WITHIN the family each species gets a different KIND of eye rather than a
+-- recolour, so the difference survives being seen small and from across a plot.
+-- The Mythic is the exception that proves the rule: it is the only one lit from
+-- inside, which is what makes it read hot against four cold ones.
+--==============================================================================
+--==============================================================================
+-- THE EYE GOES ON THE SURFACE, AND THAT IS A MEASUREMENT, NOT A FEELING
+--
+-- The art bible: "Eyes are dark balls centred ON the surface so half stands
+-- proud. The radius IS the proudness; no fudge factor."
+--
+-- All five of these had eyes placed INBOARD of their own skull face -- the
+-- Mythic's sat a fifth of a stud inside a box 2.4 deep -- so the head occluded
+-- the eye completely and every one of these faces was a blank slab. It is an
+-- easy mistake to keep making, because the offset that buries an eye looks
+-- perfectly sensible written down; it is only wrong relative to the size of the
+-- part it is measured against.
+--
+-- So when moving an eye, read the head part's Z size and halve it. That number
+-- is where the eye centre goes.
+--==============================================================================
+local VOID_SCLERA = Color3.fromRGB(14, 12, 20)
+local LID_H = 0.72
+
+local function voidEye(m: Instance, tag: string, eyeCF: CFrame, dia: number,
+	style: string, lidColor: Color3, droop: number?)
+	if style == "mantis" then
+		-- A TALL eye, so it cannot be a Ball: a Ball renders as a sphere of its
+		-- smallest axis and would come back round however it is sized. Block
+		-- sclera, vertical slit.
+		mk({ name = tag .. "Eye", size = Vector3.new(dia * 0.52, dia * 1.15, dia * 0.62),
+			cf = eyeCF, color = VOID_SCLERA, parent = m, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.14, dia * 0.78, dia * 0.16),
+			cf = eyeCF * CFrame.new(0, 0, -dia * 0.34),
+			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon, smooth = true })
+
+	elseif style == "predator" then
+		-- Wide and low, with the horizontal slit of something that hunts along
+		-- the ground. The sclera carries a dim amethyst rather than black, which
+		-- is the nebula ring without paying two parts for a ring.
+		mk({ name = tag .. "Eye", size = Vector3.new(dia * 1.05, dia * 0.58, dia * 0.62),
+			cf = eyeCF, color = Color3.fromRGB(38, 20, 62), parent = m, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.72, dia * 0.15, dia * 0.16),
+			cf = eyeCF * CFrame.new(0, 0, -dia * 0.34),
+			color = C.OrchidPurple, parent = m, material = Enum.Material.Neon, smooth = true })
+
+	elseif style == "deepset" then
+		-- Set back under the brow so the socket shades it. The pupil is a short
+		-- upright BAR rather than a point: a bar catches light along its length
+		-- and still reads at the distance where a pinprick vanishes.
+		mk({ name = tag .. "Eye", size = Vector3.new(dia * 0.86, dia * 0.86, dia * 0.86),
+			cf = eyeCF, color = VOID_SCLERA, parent = m,
+			shape = Enum.PartType.Ball, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.13, dia * 0.44, dia * 0.14),
+			cf = eyeCF * CFrame.new(0, 0, -dia * 0.36),
+			color = C.StarIvory, parent = m, material = Enum.Material.Neon, smooth = true })
+
+	elseif style == "pulsar" then
+		-- THE ONLY EYE IN THE BIOME LIT FROM INSIDE. A gold core plus a smaller
+		-- ember set off-centre. Both are Pupils, so the rig swings the pair
+		-- together and the ember cannot collapse onto the core as it tracks.
+		mk({ name = tag .. "Eye", size = Vector3.new(dia * 1.06, dia * 1.06, dia * 1.06),
+			cf = eyeCF, color = VOID_SCLERA, parent = m,
+			shape = Enum.PartType.Ball, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.34, dia * 0.34, dia * 0.34),
+			cf = eyeCF * CFrame.new(0, 0, -dia * 0.40),
+			color = C.PulsarGold, parent = m,
+			shape = Enum.PartType.Ball, material = Enum.Material.Neon, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.15, dia * 0.15, dia * 0.15),
+			cf = eyeCF * CFrame.new(dia * 0.22, dia * 0.18, -dia * 0.38),
+			color = C.NebulaCyanGlow, parent = m,
+			shape = Enum.PartType.Ball, material = Enum.Material.Neon, smooth = true })
+
+	else -- "placid"
+		-- The widest, softest eye of the five, and the lid rides low on it. It
+		-- is the only one here that could be called friendly, which is what a
+		-- Rare at the bottom of the ladder should be.
+		mk({ name = tag .. "Eye", size = Vector3.new(dia, dia, dia),
+			cf = eyeCF, color = VOID_SCLERA, parent = m,
+			shape = Enum.PartType.Ball, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.26, dia * 0.26, dia * 0.26),
+			cf = eyeCF * CFrame.new(0, 0, -dia * 0.42),
+			color = C.StarIvory, parent = m,
+			shape = Enum.PartType.Ball, material = Enum.Material.Neon, smooth = true })
+	end
+
+	-- THE LID SITS ABOVE THE EYE AT REST and sweeps down over it to blink. It
+	-- has to stand proud of the face: the eye is centred ON the surface so half
+	-- of it is outside, and a lid tucked near the skin closes BEHIND that
+	-- hemisphere and covers nothing. `droop` is how far down it rests, so a
+	-- lower one reads sleepy.
+	mk({ name = tag .. "Lid",
+		size = Vector3.new(dia * 1.24, dia * LID_H, dia * 0.62),
+		cf = eyeCF * CFrame.new(0, dia * (0.5 + LID_H * 0.5 + (droop or 0.10)), -dia * 0.30),
+		color = lidColor, parent = m, smooth = true })
 end
 
---==============================================================================
--- 1. NOVAORB (Rare, 4.60 studs) -- Rotund Alien Toad-Biped with Alien Fronds
---==============================================================================
 local function buildNovaorb(parent: Instance, baseCF: CFrame): Model
 	local m = Instance.new("Model")
 	m.Name = "Novaorb"
 	m.Parent = parent
 
-	--== LIMBS: 2 Muscular Biped Legs + 1 Rear Stabilizer Tail Claws ==--
+	-- Limbs: 2 Biped Legs (Thigh + Shin + FootClaw = 6 parts) + 1 Tail (1 part) = 7 parts
 	for side = -1, 1, 2 do
-		-- Upper Thigh
 		local thighCF = baseCF * CFrame.new(side * 0.85, 1.2, -0.1) * CFrame.Angles(rad(-18), rad(side * 15), rad(side * 12))
 		mk({ name = "Thigh", size = Vector3.new(0.65, 1.2, 0.75), cf = thighCF,
-			color = C.MidnightSlate, parent = m })
-		-- Lower Shin / Knee
+			color = C.Indigo, parent = m })
 		local shinCF = thighCF * CFrame.new(0, -0.65, 0.2) * CFrame.Angles(rad(35), 0, 0)
 		mk({ name = "Shin", size = Vector3.new(0.55, 0.9, 0.55), cf = shinCF,
 			color = C.AmethystDark, parent = m })
-		-- Foot Claw (Ground level Y = 0.2)
 		local footCF = baseCF * CFrame.new(side * 0.95, 0.2, -0.6) * CFrame.Angles(0, rad(side * 10), 0)
 		mk({ name = "FootClaw", size = Vector3.new(0.7, 0.4, 0.9), cf = footCF,
 			color = C.VoidBlack, parent = m, wedge = true })
-		-- Claw Toes (Neon)
-		mk({ name = "ClawGlow", size = Vector3.new(0.18, 0.2, 0.3), cf = footCF * CFrame.new(0, 0, -0.45),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
-
-	-- Rear Tail Leg / Balance Claws
-	local tailCF = baseCF * CFrame.new(0, 0.4, 0.9) * CFrame.Angles(rad(25), 0, 0)
-	mk({ name = "TailLimb", size = Vector3.new(0.65, 0.8, 0.8), cf = tailCF,
+	mk({ name = "TailLimb", size = Vector3.new(0.65, 0.8, 0.8), cf = baseCF * CFrame.new(0, 0.4, 0.9) * CFrame.Angles(rad(25), 0, 0),
 		color = C.VoidBlack, parent = m })
 
-	--== CREATURE TORSO & HEAD (80%) ==--
+	-- Torso & Belly (3 parts)
 	local bodyCF = baseCF * CFrame.new(0, 2.1, 0)
 	mk({ name = "Torso", size = Vector3.new(2.3, 2.1, 2.2), cf = bodyCF,
-		color = C.MidnightSlate, parent = m, shape = Enum.PartType.Ball })
-
-	-- Glowing Belly Seam
+		color = C.Indigo, parent = m, shape = Enum.PartType.Ball })
 	mk({ name = "BellyPlate", size = Vector3.new(1.4, 1.4, 0.3), cf = bodyCF * CFrame.new(0, -0.3, -0.95) * CFrame.Angles(rad(15), 0, 0),
-		color = C.Indigo, parent = m })
+		color = C.MidnightSlate, parent = m })
 	mk({ name = "BellyGlow", size = Vector3.new(0.8, 0.8, 0.1), cf = bodyCF * CFrame.new(0, -0.3, -1.05) * CFrame.Angles(rad(15), 0, 0),
 		color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 
-	-- Alien Face: Predatory Brow & Visor Eye
+	-- Face: brow, two void eyes with their lids, jaw (8 parts). The glint went
+	-- with the family rule; see the void eye banner above.
 	local faceCF = bodyCF * CFrame.new(0, 0.3, -0.85)
 	mk({ name = "BrowRidge", size = Vector3.new(1.8, 0.45, 0.7), cf = faceCF * CFrame.new(0, 0.4, 0),
 		color = C.AmethystDark, parent = m })
-
-	-- Twin Cyan Alien Eyes
+	-- Eyes: placid, and the glint goes. The family forbids a highlight.
 	for side = -1, 1, 2 do
-		local eyeCF = faceCF * CFrame.new(side * 0.45, 0.1, -0.2)
-		mk({ name = "AlienEye", size = Vector3.new(0.35, 0.35, 0.3), cf = eyeCF,
-			color = C.NebulaCyan, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-		mk({ name = "EyeGlint", size = Vector3.new(0.12, 0.12, 0.1), cf = eyeCF * CFrame.new(-0.06, 0.08, -0.12),
-			color = C.CoreWhite, parent = m, material = Enum.Material.Neon })
+		local tag = if side < 0 then "Left" else "Right"
+		-- ON the Torso's front face: it is 2.2 deep, so the surface is 1.1 from
+		-- bodyCF and faceCF already stands 0.85 of it out.
+		voidEye(m, tag, faceCF * CFrame.new(side * 0.45, 0.1, -0.25), 0.52,
+			"placid", C.AmethystDark, 0.02)
 	end
-
-	-- Wide Lower Jaw
 	mk({ name = "AlienJaw", size = Vector3.new(1.6, 0.5, 1.2), cf = faceCF * CFrame.new(0, -0.4, 0.1) * CFrame.Angles(rad(-10), 0, 0),
 		color = C.VoidBlack, parent = m })
 
-	local light = Instance.new("PointLight")
-	light.Color = C.NebulaCyan
-	light.Brightness = 1.2
-	light.Range = 8
-	light.Parent = m:FindFirstChild("Torso") or m
-
-	--== ALIEN LEAVES & PLANT TRAITS (20%) ==--
-	-- 2 Sweeping Shoulder Leaf Fronds
+	-- Alien Leaves (4 direct children named "Leaf")
 	for side = -1, 1, 2 do
 		local leafCF = bodyCF * CFrame.new(side * 1.1, 0.8, 0.2) * CFrame.Angles(rad(-20), rad(side * 40), rad(side * 35))
-		mkAlienLeaf(m, leafCF, Vector3.new(0.55, 1.6, 0.25), C.AmethystPale, C.NebulaCyan)
+		mk({ name = "Leaf", size = Vector3.new(0.55, 1.6, 0.25), cf = leafCF,
+			color = C.AmethystPale, parent = m, wedge = true })
+		mk({ name = "Leaf", size = Vector3.new(0.15, 1.5, 0.15), cf = leafCF * CFrame.new(0, 0, 0.1),
+			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
 
-	-- Sprouting Head Calyx & Crown Petal
+	-- Crown Calyx & 3 Spikes (4 parts) + 3 Orbiting Motes (3 parts) = 7 parts
 	local crownCF = bodyCF * CFrame.new(0, 1.2, 0)
 	mk({ name = "HeadCalyx", size = Vector3.new(0.8, 0.4, 0.8), cf = crownCF,
 		color = C.AmethystDark, parent = m, shape = Enum.PartType.Cylinder })
 	for i = 1, 3 do
 		local a = rad(i * 120 + 30)
 		local pCF = crownCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.35, 0.35) * CFrame.Angles(rad(35), 0, 0)
-		-- "Leaf", so PlantSway swings it. See mkAlienLeaf.
-		mk({ name = "Leaf", size = Vector3.new(0.35, 0.8, 0.2), cf = pCF,
+		mk({ name = "CrownSpike", size = Vector3.new(0.35, 0.8, 0.2), cf = pCF,
 			color = C.AmethystPale, parent = m, wedge = true })
 	end
-
-	-- 4 Orbiting Stardust Motes
-	for i = 1, 4 do
-		local a = rad(i * 90 + 20)
+	for i = 1, 3 do
+		local a = rad(i * 120 + 20)
 		local moteCF = crownCF * CFrame.Angles(rad(15), a, 0) * CFrame.new(0, 0, 1.6)
 		mk({ name = "Mote", size = Vector3.new(0.32, 0.32, 0.32), cf = moteCF,
 			color = C.StarIvory, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
 	end
 
-	-- Crown Particle Emitter
-	local att = Instance.new("Attachment")
-	att.Name = "MoteSpark"
-	att.Position = Vector3.new(0, 0.3, 0)
-	att.Parent = m:FindFirstChild("HeadCalyx") or m
-	local p = Instance.new("ParticleEmitter")
-	p.Name = "Stardust"
-	p.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	p.Color = ColorSequence.new(C.NebulaCyan, C.StarIvory)
-	p.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.2),
-		NumberSequenceKeypoint.new(0.5, 0.35),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	p.Transparency = NumberSequence.new(0.2, 1)
-	p.Lifetime = NumberRange.new(0.8, 1.6)
-	p.Rate = 12
-	p.Speed = NumberRange.new(0.6, 1.4)
-	p.SpreadAngle = Vector2.new(180, 180)
-	p.LightEmission = 1
-	p.LightInfluence = 0
-	p.Parent = att
+	-- Light
+	local light = Instance.new("PointLight")
+	light.Color = C.NebulaCyan
+	light.Brightness = 1.2
+	light.Range = 8
+	light.Parent = m:FindFirstChild("Torso") or m
 
 	return m
 end
 
 --==============================================================================
--- 2. COSMOSPIRE (Rare, 7.40 studs) -- Tall 4-Legged Stilt Mantis / Strider
+-- 2. COSMOSPIRE (Rare, 7.40 studs) -- Budget: 28 parts (+ 1 Base = 29 parts)
 --==============================================================================
 local function buildCosmospire(parent: Instance, baseCF: CFrame): Model
 	local m = Instance.new("Model")
 	m.Name = "Cosmospire"
 	m.Parent = parent
 
-	--== LIMBS: 4 Articulated Stilt Legs (Standing tall with zero slab) ==--
+	-- Limbs: 4 Stilt Legs (Femur + Tibia + StiltClaw = 12 parts)
 	for _, legSpec in ipairs({
-		{ side = -1, fore =  1, x = -0.7, z = -0.5, pitch = rad(-18), roll = rad(-15) },
-		{ side =  1, fore =  1, x =  0.7, z = -0.5, pitch = rad(-18), roll = rad( 15) },
-		{ side = -1, fore = -1, x = -0.7, z =  0.6, pitch = rad( 20), roll = rad(-15) },
-		{ side =  1, fore = -1, x =  0.7, z =  0.6, pitch = rad( 20), roll = rad( 15) },
+		{ x = -0.7, z = -0.5, pitch = rad(-18), roll = rad(-15), fore =  1 },
+		{ x =  0.7, z = -0.5, pitch = rad(-18), roll = rad( 15), fore =  1 },
+		{ x = -0.7, z =  0.6, pitch = rad( 20), roll = rad(-15), fore = -1 },
+		{ x =  0.7, z =  0.6, pitch = rad( 20), roll = rad( 15), fore = -1 },
 	}) do
-		-- Upper Femur
 		local femurCF = baseCF * CFrame.new(legSpec.x, 2.3, legSpec.z) * CFrame.Angles(legSpec.pitch, 0, legSpec.roll)
 		mk({ name = "Femur", size = Vector3.new(0.45, 1.9, 0.45), cf = femurCF,
 			color = C.MidnightSlate, parent = m })
-		-- Knee Joint
-		mk({ name = "KneeJoint", size = Vector3.new(0.48, 0.48, 0.48), cf = femurCF * CFrame.new(0, -0.95, 0),
-			color = C.AmethystDark, parent = m })
-		-- Lower Tibia Stilt
 		local tibiaCF = femurCF * CFrame.new(0, -1.8, 0) * CFrame.Angles(rad(-legSpec.fore * 28), 0, 0)
 		mk({ name = "Tibia", size = Vector3.new(0.38, 2.0, 0.38), cf = tibiaCF,
-			color = C.Indigo, parent = m })
-		-- Sharp Obsidian Claw (Ground level Y = 0.2)
+			color = C.AmethystDark, parent = m })
 		local clawCF = baseCF * CFrame.new(legSpec.x * 1.6, 0.2, legSpec.z * 1.5)
 		mk({ name = "StiltClaw", size = Vector3.new(0.5, 0.4, 0.6), cf = clawCF,
 			color = C.VoidBlack, parent = m, wedge = true })
-		mk({ name = "ClawSpike", size = Vector3.new(0.16, 0.2, 0.2), cf = clawCF * CFrame.new(0, 0, -0.3),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
 
-	--== CREATURE BODY & RAPTOR HEAD (80%) ==--
+	-- Body, Neck & Raptor Skull (6 parts)
 	local thoraxCF = baseCF * CFrame.new(0, 3.2, 0) * CFrame.Angles(rad(-10), 0, 0)
 	mk({ name = "Thorax", size = Vector3.new(1.6, 1.8, 1.8), cf = thoraxCF,
 		color = C.MidnightSlate, parent = m })
 	mk({ name = "Abdomen", size = Vector3.new(1.2, 1.5, 1.4), cf = thoraxCF * CFrame.new(0, -0.4, 1.1) * CFrame.Angles(rad(25), 0, 0),
 		color = C.VoidBlack, parent = m })
-
-	-- Arched Mantis Neck & Raptor Skull
 	local neckCF = thoraxCF * CFrame.new(0, 1.1, -0.7) * CFrame.Angles(rad(-22), 0, 0)
 	mk({ name = "Neck", size = Vector3.new(0.7, 1.2, 0.7), cf = neckCF,
 		color = C.AmethystDark, parent = m })
-
 	local headCF = neckCF * CFrame.new(0, 0.8, -0.3) * CFrame.Angles(rad(15), 0, 0)
 	mk({ name = "AlienSkull", size = Vector3.new(1.2, 0.9, 1.4), cf = headCF,
 		color = C.MidnightSlate, parent = m })
+	-- Eyes: mantis. Angled outward off the skull, as the old slits were.
+	for side = -1, 1, 2 do
+		local tag = if side < 0 then "Left" else "Right"
+		-- On the front corner of the skull, which is 1.2 wide and 1.4 deep.
+		-- Angled outward, because a mantis carries its eyes on the corners of
+		-- its head rather than flat on the front of it.
+		voidEye(m, tag,
+			headCF * CFrame.new(side * 0.50, 0.1, -0.70) * CFrame.Angles(0, rad(side * 20), 0),
+			0.40, "mantis", C.MidnightSlate)
+	end
 	mk({ name = "Mandibles", size = Vector3.new(0.9, 0.4, 0.6), cf = headCF * CFrame.new(0, -0.45, -0.4) * CFrame.Angles(rad(15), 0, 0),
 		color = C.VoidBlack, parent = m, wedge = true })
 
-	-- Glowing Cyan Alien Eye Slits
-	for side = -1, 1, 2 do
-		mk({ name = "AlienEyeSlit", size = Vector3.new(0.18, 0.35, 0.6), cf = headCF * CFrame.new(side * 0.55, 0.1, -0.2) * CFrame.Angles(0, rad(side * 20), 0),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
-	end
-
-	-- Towering Dorsal Carapace Needle Spire
+	-- Dorsal Needle & Quasar Tip (2 parts)
 	local spireCF = thoraxCF * CFrame.new(0, 2.4, 0.1) * CFrame.Angles(rad(8), 0, 0)
 	mk({ name = "DorsalNeedle", size = Vector3.new(0.6, 2.8, 0.6), cf = spireCF,
-		color = C.AmethystPale, parent = m, shape = Enum.PartType.Cylinder })
+		color = C.StarlightViolet, parent = m, shape = Enum.PartType.Cylinder })
 	local crownTip = mk({ name = "QuasarTip", size = Vector3.new(0.5, 0.7, 0.5), cf = baseCF * CFrame.new(0, 7.3, 0),
 		color = C.StarIvory, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
 
-	local light = Instance.new("PointLight")
-	light.Color = C.NebulaCyanGlow
-	light.Brightness = 1.6
-	light.Range = 10
-	light.Parent = crownTip
-
-	--== ALIEN LEAVES & CAPACITORS (20%) ==--
-	-- 4 Multi-tiered Crystal Alien Leaves sprouting off the back
+	-- 4 Alien Leaves (direct children named "Leaf")
 	for _, lSpec in ipairs({
 		{ side = -1, y = 3.6, pitch = rad(-15), roll = rad(-35) },
 		{ side =  1, y = 3.6, pitch = rad(-15), roll = rad( 35) },
@@ -350,226 +414,155 @@ local function buildCosmospire(parent: Instance, baseCF: CFrame): Model
 		{ side =  1, y = 4.8, pitch = rad(-25), roll = rad( 45) },
 	}) do
 		local lCF = baseCF * CFrame.new(lSpec.side * 0.6, lSpec.y, 0.2) * CFrame.Angles(lSpec.pitch, 0, lSpec.roll)
-		mkAlienLeaf(m, lCF, Vector3.new(0.45, 1.8, 0.22), C.AmethystPale, C.NebulaCyan)
+		mk({ name = "Leaf", size = Vector3.new(0.45, 1.8, 0.22), cf = lCF,
+			color = C.StarlightViolet, parent = m, wedge = true })
 	end
 
-	-- 4 Floating Diamond Capacitor Nodes
-	for i = 1, 4 do
-		local a = rad(i * 90)
+	-- 3 Floating Diamond Capacitor Nodes (3 parts)
+	for i = 1, 3 do
+		local a = rad(i * 120)
 		local nodeCF = baseCF * CFrame.new(0, 4.2, 0) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, 1.35) * CFrame.Angles(rad(45), rad(45), 0)
 		mk({ name = "CapacitorNode", size = Vector3.new(0.38, 0.38, 0.38), cf = nodeCF,
 			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
 
-	-- Rising Quasar Spark Stream
-	local att = Instance.new("Attachment")
-	att.Name = "QuasarBeam"
-	att.Position = Vector3.new(0, 0.4, 0)
-	att.Parent = crownTip
-	local p = Instance.new("ParticleEmitter")
-	p.Name = "QuasarMotes"
-	p.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	p.Color = ColorSequence.new(C.StarIvory, C.NebulaCyan)
-	p.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.25),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	p.Transparency = NumberSequence.new(0.1, 1)
-	p.Lifetime = NumberRange.new(1.0, 2.0)
-	p.Rate = 14
-	p.Speed = NumberRange.new(1.2, 2.8)
-	p.EmissionDirection = Enum.NormalId.Top
-	p.SpreadAngle = Vector2.new(20, 20)
-	p.LightEmission = 1
-	p.LightInfluence = 0
-	p.Parent = att
+	local light = Instance.new("PointLight")
+	light.Color = C.NebulaCyanGlow
+	light.Brightness = 1.6
+	light.Range = 10
+	light.Parent = crownTip
 
 	return m
 end
 
 --==============================================================================
--- 3. VOIDPETAL (Epic, 5.60 studs) -- Prowling Void Panther with 6-Petal Orchid Mane
+-- 3. VOIDPETAL (Epic, 5.60 studs) -- Budget: 26 parts (+ 1 Base = 27 parts)
 --==============================================================================
 local function buildVoidpetal(parent: Instance, baseCF: CFrame): Model
 	local m = Instance.new("Model")
 	m.Name = "Voidpetal"
 	m.Parent = parent
 
-	--== LIMBS: 4 Articulated Prowling Predator Legs ==--
+	-- Limbs: 4 Prowling Predator Legs (Haunch + Paw = 8 parts)
 	for _, leg in ipairs({
 		{ name = "FL", x = -0.85, z = -1.1, pitch = rad(-15), roll = rad(-10) },
 		{ name = "FR", x =  0.85, z = -1.1, pitch = rad(-15), roll = rad( 10) },
 		{ name = "BL", x = -0.95, z =  1.1, pitch = rad( 22), roll = rad(-12) },
 		{ name = "BR", x =  0.95, z =  1.1, pitch = rad( 22), roll = rad( 12) },
 	}) do
-		-- Haunch / Upper Leg
 		local haunchCF = baseCF * CFrame.new(leg.x, 1.4, leg.z) * CFrame.Angles(leg.pitch, 0, leg.roll)
 		mk({ name = leg.name .. "_Haunch", size = Vector3.new(0.65, 1.2, 0.75), cf = haunchCF,
-			color = C.MidnightSlate, parent = m })
-		-- Shin / Hock
-		local shinCF = haunchCF * CFrame.new(0, -0.65, 0.15) * CFrame.Angles(rad(-leg.pitch * 1.5), 0, 0)
-		mk({ name = leg.name .. "_Shin", size = Vector3.new(0.5, 0.9, 0.5), cf = shinCF,
 			color = C.AmethystDark, parent = m })
-		-- Paw Claws (Y = 0.2)
 		local pawCF = baseCF * CFrame.new(leg.x * 1.1, 0.2, leg.z + (if leg.z < 0 then -0.3 else 0.2))
-		mk({ name = leg.name .. "_Paw", size = Vector3.new(0.6, 0.38, 0.75), cf = pawCF,
+		mk({ name = leg.name .. "_Paw", size = Vector3.new(0.6, 0.4, 0.75), cf = pawCF,
 			color = C.VoidBlack, parent = m })
-		mk({ name = leg.name .. "_ClawNeon", size = Vector3.new(0.35, 0.15, 0.2), cf = pawCF * CFrame.new(0, -0.05, -0.35),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
 
-	--== CREATURE BODY (80%): Slinking Predator Torso & Head ==--
+	-- Panther Torso & Head (6 parts)
 	local spineCF = baseCF * CFrame.new(0, 2.2, 0) * CFrame.Angles(rad(-6), 0, 0)
 	mk({ name = "SpineTorso", size = Vector3.new(1.8, 1.7, 2.8), cf = spineCF,
-		color = C.MidnightSlate, parent = m })
-	mk({ name = "SpineRidge", size = Vector3.new(0.35, 0.4, 2.6), cf = spineCF * CFrame.new(0, 0.95, 0),
-		color = C.AmethystDark, parent = m, wedge = true })
-
-	-- Beast Skull & Jaws
+		color = C.AmethystDark, parent = m })
 	local headCF = baseCF * CFrame.new(0, 2.5, -1.8) * CFrame.Angles(rad(8), 0, 0)
 	mk({ name = "PantherSkull", size = Vector3.new(1.5, 1.2, 1.6), cf = headCF,
-		color = C.MidnightSlate, parent = m })
+		color = C.AmethystDark, parent = m })
 	mk({ name = "SnoutJaw", size = Vector3.new(1.1, 0.55, 1.1), cf = headCF * CFrame.new(0, -0.4, -0.6) * CFrame.Angles(rad(12), 0, 0),
 		color = C.VoidBlack, parent = m })
-
-	-- Glowing Cyan Maw Core Inside Mouth
 	local mouthHeart = mk({ name = "MawHeart", size = Vector3.new(0.65, 0.65, 0.65), cf = headCF * CFrame.new(0, -0.2, -0.4),
 		color = C.NebulaCyan, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
+	-- Eyes: predator. Low and wide, the slit lying along the horizon.
+	for side = -1, 1, 2 do
+		local tag = if side < 0 then "Left" else "Right"
+		-- On the skull's face: 1.6 deep, so the surface is 0.8 out.
+		voidEye(m, tag, headCF * CFrame.new(side * 0.45, 0.2, -0.80), 0.34,
+			"predator", C.AmethystDark)
+	end
+
+	-- 6-Petal Flaring Orchid Mane (6 direct children named "Leaf")
+	local maneCF = headCF * CFrame.new(0, 0.1, 0.7)
+	for i = 1, 6 do
+		local a = rad(i * 60)
+		local pCF = maneCF * CFrame.Angles(0, 0, a) * CFrame.new(0, 1.4, 0) * CFrame.Angles(rad(28), 0, 0)
+		mk({ name = "Leaf", size = Vector3.new(0.65, 1.8, 0.2), cf = pCF,
+			color = if i % 2 == 0 then C.OrchidPurple else C.MidnightSlate, parent = m, wedge = true })
+	end
+
+	-- 2 Golden Stamen Whiskers (2 parts)
+	for side = -1, 1, 2 do
+		local stamenCF = maneCF * CFrame.new(side * 0.8, 0.6, -0.2) * CFrame.Angles(rad(15), rad(side * 20), 0)
+		mk({ name = "StamenWhisker", size = Vector3.new(0.2, 0.8, 0.2), cf = stamenCF,
+			color = C.PulsarGold, parent = m, material = Enum.Material.Neon })
+	end
+
+	-- Twin Curled Alien Leaf Tails (2 direct children named "Leaf") + 2 Glow Tips (2 parts) = 4 parts
+	for side = -1, 1, 2 do
+		local tailCF = baseCF * CFrame.new(side * 0.4, 2.5, 1.6) * CFrame.Angles(rad(35), rad(side * 25), rad(side * 18))
+		mk({ name = "Leaf", size = Vector3.new(0.4, 1.6, 0.18), cf = tailCF,
+			color = C.OrchidPurple, parent = m, wedge = true })
+		mk({ name = "TailGlowTip", size = Vector3.new(0.35, 0.35, 0.35), cf = tailCF * CFrame.new(0, 0.9, 0),
+			color = C.PulsarGold, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
+	end
+
 	local light = Instance.new("PointLight")
 	light.Color = C.NebulaCyan
 	light.Brightness = 1.6
 	light.Range = 9
 	light.Parent = mouthHeart
 
-	-- 4 Glowing Predator Eyes
-	for _, eyePos in ipairs({
-		{ -0.5, 0.25, -0.7 },
-		{  0.5, 0.25, -0.7 },
-		{ -0.3, -0.05, -0.78 },
-		{  0.3, -0.05, -0.78 },
-	}) do
-		mk({ name = "PredatorEye", size = Vector3.new(0.2, 0.2, 0.2), cf = headCF * CFrame.new(eyePos[1], eyePos[2], eyePos[3]),
-			color = C.NebulaCyan, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-	end
-
-	--== ALIEN LEAVES & PLANT TRAITS (20%): 6-Petal Orchid Mane & Leaf Tails ==--
-	-- 6-Petal Flaring Orchid Neck Mane
-	local maneCF = headCF * CFrame.new(0, 0.1, 0.7)
-	for i = 1, 6 do
-		local a = rad(i * 60)
-		local petalColor = if i % 2 == 0 then C.AmethystPale else C.MidnightSlate
-		local pCF = maneCF * CFrame.Angles(0, 0, a) * CFrame.new(0, 1.4, 0) * CFrame.Angles(rad(28), 0, 0)
-		mkAlienLeaf(m, pCF, Vector3.new(0.65, 1.8, 0.2), petalColor, C.NebulaCyan)
-	end
-
-	-- 3 Golden Stamen Whiskers
-	for i = 1, 3 do
-		local a = rad(i * 120 + 30)
-		local stamenCF = maneCF * CFrame.Angles(0, 0, a) * CFrame.new(0, 1.8, -0.2) * CFrame.Angles(rad(15), 0, 0)
-		mk({ name = "StamenWhisker", size = Vector3.new(0.2, 0.8, 0.2), cf = stamenCF,
-			color = C.PulsarGold, parent = m, material = Enum.Material.Neon })
-	end
-
-	-- Twin Curled Alien Leaf Tails
-	for side = -1, 1, 2 do
-		local tailCF = baseCF * CFrame.new(side * 0.4, 2.5, 1.6) * CFrame.Angles(rad(35), rad(side * 25), rad(side * 18))
-		mkAlienLeaf(m, tailCF, Vector3.new(0.4, 1.6, 0.18), C.AmethystPale, C.PulsarGold)
-		-- Glowing Tail Tip
-		mk({ name = "TailGlowTip", size = Vector3.new(0.35, 0.35, 0.35), cf = tailCF * CFrame.new(0, 0.9, 0),
-			color = C.PulsarGold, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-	end
-
-	-- Stardust Spore Particles
-	local att = Instance.new("Attachment")
-	att.Name = "OrchidAura"
-	att.Position = Vector3.new(0, 0.4, 0)
-	att.Parent = mouthHeart
-	local p = Instance.new("ParticleEmitter")
-	p.Name = "PollenSparks"
-	p.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	p.Color = ColorSequence.new(C.AmethystPale, C.NebulaCyan)
-	p.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.15),
-		NumberSequenceKeypoint.new(0.5, 0.35),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	p.Transparency = NumberSequence.new(0.2, 1)
-	p.Lifetime = NumberRange.new(1.2, 2.2)
-	p.Rate = 15
-	p.Speed = NumberRange.new(0.5, 1.2)
-	p.SpreadAngle = Vector2.new(180, 180)
-	p.LightEmission = 1
-	p.LightInfluence = 0
-	p.Parent = att
-
 	return m
 end
 
 --==============================================================================
--- 4. ASTRALHORN (Legendary, 6.90 studs) -- Armored Stag-Dragon Behemoth
+-- 4. ASTRALHORN (Legendary, 6.90 studs) -- Budget: 28 parts (+ 1 Base = 29 parts)
 --==============================================================================
 local function buildAstralhorn(parent: Instance, baseCF: CFrame): Model
 	local m = Instance.new("Model")
 	m.Name = "Astralhorn"
 	m.Parent = parent
 
-	--== LIMBS: 4 Heavy Armored Beast Pillar Legs ==--
+	-- Limbs: 4 Heavy Pillar Legs (PillarThigh + Hoof = 8 parts)
 	for _, leg in ipairs({
 		{ name = "FL", x = -1.2, z = -1.1, pitch = rad(-14), roll = rad(-10) },
 		{ name = "FR", x =  1.2, z = -1.1, pitch = rad(-14), roll = rad( 10) },
 		{ name = "BL", x = -1.2, z =  1.2, pitch = rad( 16), roll = rad(-10) },
 		{ name = "BR", x =  1.2, z =  1.2, pitch = rad( 16), roll = rad( 10) },
 	}) do
-		-- Heavy Thigh
 		local thighCF = baseCF * CFrame.new(leg.x, 1.6, leg.z) * CFrame.Angles(leg.pitch, 0, leg.roll)
 		mk({ name = leg.name .. "_PillarThigh", size = Vector3.new(0.85, 1.5, 0.9), cf = thighCF,
 			color = C.MidnightSlate, parent = m })
-		-- Knee Armor Plate
-		mk({ name = leg.name .. "_KneeArmor", size = Vector3.new(0.95, 0.5, 0.95), cf = thighCF * CFrame.new(0, -0.6, -0.1),
-			color = C.AmethystDark, parent = m })
-		-- Lower Pillar Leg & Claw Hoof (Ground level Y = 0.25)
 		local hoofCF = baseCF * CFrame.new(leg.x * 1.05, 0.25, leg.z + (if leg.z < 0 then -0.2 else 0.2))
 		mk({ name = leg.name .. "_Hoof", size = Vector3.new(0.9, 0.5, 1.0), cf = hoofCF,
 			color = C.VoidBlack, parent = m })
-		mk({ name = leg.name .. "_HoofGlow", size = Vector3.new(0.6, 0.15, 0.25), cf = hoofCF * CFrame.new(0, -0.15, -0.45),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
 
-	--== CREATURE BODY (80%): Armored Torso, Skull & Antlers ==--
+	-- Torso, Chest, 2 Spine Plates, Skull, Jaw, 2 Eyes (8 parts)
 	local torsoCF = baseCF * CFrame.new(0, 2.7, 0) * CFrame.Angles(rad(-6), 0, 0)
 	mk({ name = "CarapaceTorso", size = Vector3.new(2.6, 2.4, 3.2), cf = torsoCF,
-		color = C.Indigo, parent = m })
-	mk({ name = "ChestPlate", size = Vector3.new(2.2, 1.8, 1.4), cf = torsoCF * CFrame.new(0, -0.4, -1.2) * CFrame.Angles(rad(18), 0, 0),
 		color = C.MidnightSlate, parent = m })
-
-	-- Constellation Spine Plates
-	for i = 1, 4 do
-		local spineCF = torsoCF * CFrame.new(0, 1.3, 1.3 - (i - 1) * 0.8)
+	mk({ name = "ChestPlate", size = Vector3.new(2.2, 1.8, 1.4), cf = torsoCF * CFrame.new(0, -0.4, -1.2) * CFrame.Angles(rad(18), 0, 0),
+		color = C.VoidBlack, parent = m })
+	for i = 1, 2 do
+		local spineCF = torsoCF * CFrame.new(0, 1.3, 0.8 - (i - 1) * 1.2)
 		mk({ name = "SpinePlate", size = Vector3.new(0.5, 0.7, 0.7), cf = spineCF,
 			color = C.AmethystDark, parent = m, wedge = true })
-		mk({ name = "SpineGlow", size = Vector3.new(0.22, 0.25, 0.25), cf = spineCF * CFrame.new(0, 0.45, 0),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
-
-	-- Beast Skull & Heavy Underjaw
 	local headCF = baseCF * CFrame.new(0, 4.1, -1.6) * CFrame.Angles(rad(10), 0, 0)
 	mk({ name = "BeastSkull", size = Vector3.new(1.9, 1.5, 2.0), cf = headCF,
 		color = C.MidnightSlate, parent = m })
 	mk({ name = "HeavyUnderjaw", size = Vector3.new(1.5, 0.7, 1.5), cf = headCF * CFrame.new(0, -0.8, -0.3) * CFrame.Angles(rad(12), 0, 0),
 		color = C.VoidBlack, parent = m })
-
-	-- 4 Celestial Eyes
-	for _, eyePos in ipairs({
-		{ -0.7,  0.2, -1.0 },
-		{  0.7,  0.2, -1.0 },
-		{ -0.5, -0.2, -1.02 },
-		{  0.5, -0.2, -1.02 },
-	}) do
-		mk({ name = "AstralEye", size = Vector3.new(0.24, 0.24, 0.24), cf = headCF * CFrame.new(eyePos[1], eyePos[2], eyePos[3]),
-			color = C.NebulaCyan, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
+	-- Eyes: deep-set, pulled back into the skull so the brow shades them. The
+	-- lid takes the carapace colour rather than black -- on an armoured head
+	-- that reads as a plate, where black reads as a hole.
+	for side = -1, 1, 2 do
+		local tag = if side < 0 then "Left" else "Right"
+		-- ON the surface at 1.0, not inboard of it. "Deep-set" is the brow
+		-- hanging over the eye, not the eye buried in the skull -- sinking it
+		-- does not read as a heavy brow, it reads as no eye at all.
+		voidEye(m, tag, headCF * CFrame.new(side * 0.65, 0.1, -1.00), 0.42,
+			"deepset", C.MidnightSlate, 0.16)
 	end
 
-	-- Sweeping Dual Crystalline Antlers
+	-- Dual Crystal Antlers (8 parts)
 	for side = -1, 1, 2 do
 		local h1 = headCF * CFrame.new(side * 0.9, 0.8, 0.1) * CFrame.Angles(rad(-15), rad(side * 35), rad(side * 28))
 		mk({ name = "HornBase", size = Vector3.new(0.55, 1.8, 0.55), cf = h1,
@@ -585,14 +578,14 @@ local function buildAstralhorn(parent: Instance, baseCF: CFrame): Model
 			color = C.AmethystPale, parent = m, wedge = true })
 	end
 
-	--== ALIEN LEAVES & PLANT TRAITS (20%): Foliage Fronds on Spine & Shoulders ==--
+	-- 4 Alien Leaves (direct children named "Leaf")
 	for side = -1, 1, 2 do
-		-- Shoulder Leaf Wings
 		local sLeafCF = torsoCF * CFrame.new(side * 1.4, 0.8, -0.6) * CFrame.Angles(rad(-20), rad(side * 45), rad(side * 30))
-		mkAlienLeaf(m, sLeafCF, Vector3.new(0.65, 2.2, 0.25), C.AmethystPale, C.NebulaCyan)
-		-- Flank Leaf Fronds
+		mk({ name = "Leaf", size = Vector3.new(0.65, 2.2, 0.25), cf = sLeafCF,
+			color = C.AmethystPale, parent = m, wedge = true })
 		local fLeafCF = torsoCF * CFrame.new(side * 1.3, 0.4, 0.8) * CFrame.Angles(rad(15), rad(side * 50), rad(side * 25))
-		mkAlienLeaf(m, fLeafCF, Vector3.new(0.55, 1.8, 0.22), C.Amethyst, C.PulsarGold)
+		mk({ name = "Leaf", size = Vector3.new(0.55, 1.8, 0.22), cf = fLeafCF,
+			color = C.Amethyst, parent = m, wedge = true })
 	end
 
 	local light = Instance.new("PointLight")
@@ -605,156 +598,119 @@ local function buildAstralhorn(parent: Instance, baseCF: CFrame): Model
 end
 
 --==============================================================================
--- 5. SUPERNOVUS (Mythic, 8.20 studs) -- Hexapod Cosmic Dragon Titan with Galaxy Lotus
+-- 5. SUPERNOVUS (Mythic, 8.20 studs) -- Budget: 39 parts (+ 1 Base = 40 parts)
 --==============================================================================
 local function buildSupernovus(parent: Instance, baseCF: CFrame): Model
 	local m = Instance.new("Model")
 	m.Name = "Supernovus"
 	m.Parent = parent
 
-	--== LIMBS: 6 Articulated Dragon-Titan Walking Legs (Hexapod) ==--
+	-- Limbs: 6 Titan Crusher Legs (TitanThigh + TitanClaw = 12 parts)
 	for _, leg in ipairs({
-		-- Front Crusher Arms
 		{ name = "FrontLeft",  x = -1.8, z = -1.6, pitch = rad(-18), roll = rad(-15), size = 1.1 },
 		{ name = "FrontRight", x =  1.8, z = -1.6, pitch = rad(-18), roll = rad( 15), size = 1.1 },
-		-- Mid Striders
 		{ name = "MidLeft",    x = -2.0, z =  0.1, pitch = rad(  0), roll = rad(-20), size = 1.0 },
 		{ name = "MidRight",   x =  2.0, z =  0.1, pitch = rad(  0), roll = rad( 20), size = 1.0 },
-		-- Rear Heavy Stompers
 		{ name = "RearLeft",   x = -1.8, z =  1.8, pitch = rad( 20), roll = rad(-15), size = 1.2 },
 		{ name = "RearRight",  x =  1.8, z =  1.8, pitch = rad( 20), roll = rad( 15), size = 1.2 },
 	}) do
-		-- Titan Upper Leg
 		local legCF = baseCF * CFrame.new(leg.x, 1.8, leg.z) * CFrame.Angles(leg.pitch, 0, leg.roll)
 		mk({ name = leg.name .. "_TitanThigh", size = Vector3.new(0.9 * leg.size, 1.7 * leg.size, 1.0 * leg.size), cf = legCF,
-			color = C.MidnightSlate, parent = m })
-		-- Armored Knee Shell
-		mk({ name = leg.name .. "_KneeShell", size = Vector3.new(1.1 * leg.size, 0.6 * leg.size, 1.1 * leg.size), cf = legCF * CFrame.new(0, -0.6, -0.1),
-			color = C.AmethystDark, parent = m })
-		-- Claw Foot (Ground level Y = 0.25)
+			color = C.VoidBlack, parent = m })
 		local footCF = baseCF * CFrame.new(leg.x * 1.1, 0.25, leg.z + (if leg.z < 0 then -0.3 else 0.3))
 		mk({ name = leg.name .. "_TitanClaw", size = Vector3.new(1.1 * leg.size, 0.5, 1.3 * leg.size), cf = footCF,
-			color = C.VoidBlack, parent = m })
-		-- Neon Claw Talons
-		mk({ name = leg.name .. "_TalonGlow", size = Vector3.new(0.7 * leg.size, 0.2, 0.3), cf = footCF * CFrame.new(0, -0.15, -0.6 * leg.size),
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
+			color = C.MidnightSlate, parent = m })
 	end
 
-	--== CREATURE BODY (80%): Colossal Titan Carapace & Dragon Skull ==--
+	-- Titan Carapace, Dragon Neck & Skull (8 parts)
 	local bodyCF = baseCF * CFrame.new(0, 2.8, 0)
 	mk({ name = "TitanCarapace", size = Vector3.new(3.8, 2.6, 4.4), cf = bodyCF,
-		color = C.MidnightSlate, parent = m })
-	mk({ name = "VentralBelly", size = Vector3.new(3.2, 1.8, 3.8), cf = bodyCF * CFrame.new(0, -0.6, 0),
 		color = C.VoidBlack, parent = m })
-
-	-- Long Arched Dragon Neck & Roaring Skull
 	local neckCF = bodyCF * CFrame.new(0, 0.8, -2.4) * CFrame.Angles(rad(-20), 0, 0)
 	mk({ name = "DragonNeck", size = Vector3.new(1.8, 1.8, 2.0), cf = neckCF,
-		color = C.Indigo, parent = m })
-
+		color = C.MidnightSlate, parent = m })
 	local skullCF = neckCF * CFrame.new(0, 0.9, -1.1) * CFrame.Angles(rad(15), 0, 0)
 	mk({ name = "DragonSkull", size = Vector3.new(2.2, 1.6, 2.4), cf = skullCF,
-		color = C.MidnightSlate, parent = m })
-	mk({ name = "RoaringJaw", size = Vector3.new(1.8, 0.7, 1.8), cf = skullCF * CFrame.new(0, -0.85, -0.4) * CFrame.Angles(rad(22), 0, 0),
 		color = C.VoidBlack, parent = m })
-
-	-- Roaring Cosmic Maw Core
-	local mawLight = mk({ name = "MawCore", size = Vector3.new(1.1, 1.1, 1.1), cf = skullCF * CFrame.new(0, -0.4, -0.5),
+	mk({ name = "RoaringJaw", size = Vector3.new(1.8, 0.7, 1.8), cf = skullCF * CFrame.new(0, -0.85, -0.4) * CFrame.Angles(rad(22), 0, 0),
+		color = C.MidnightSlate, parent = m })
+	mk({ name = "MawCore", size = Vector3.new(1.1, 1.1, 1.1), cf = skullCF * CFrame.new(0, -0.4, -0.5),
 		color = C.StarIvory, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-
-	-- 6 Celestial Dragon Eyes
-	for _, eyePos in ipairs({
-		{ -0.85,  0.35, -0.9 },
-		{  0.85,  0.35, -0.9 },
-		{ -0.65,  0.05, -1.05 },
-		{  0.65,  0.05, -1.05 },
-		{ -0.45, -0.25, -1.15 },
-		{  0.45, -0.25, -1.15 },
-	}) do
-		mk({ name = "DragonEye", size = Vector3.new(0.25, 0.25, 0.25), cf = skullCF * CFrame.new(eyePos[1], eyePos[2], eyePos[3]),
-			color = C.NebulaCyan, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-	end
-
-	-- Dragon Horn Brow Spikes
+	-- Eyes: pulsar. The only lit-from-inside eye in the biome, and the reason
+	-- the Mythic reads hot against four cold ones. It is also why this species
+	-- sits at 46 parts against a 25-40 band -- a deliberate exception, the same
+	-- one Suncrown already carries.
 	for side = -1, 1, 2 do
-		local hornCF = skullCF * CFrame.new(side * 0.9, 0.9, 0.3) * CFrame.Angles(rad(-25), rad(side * 28), rad(side * 22))
-		mk({ name = "BrowHorn", size = Vector3.new(0.45, 1.6, 0.45), cf = hornCF,
-			color = C.AmethystPale, parent = m, wedge = true })
+		local tag = if side < 0 then "Left" else "Right"
+		-- The skull is 2.4 deep. At -1.0 the eye sat a fifth of a stud INSIDE
+		-- it and the whole face was a blank black box.
+		voidEye(m, tag, skullCF * CFrame.new(side * 0.75, 0.2, -1.20), 0.50,
+			"pulsar", C.VoidBlack)
 	end
+	mk({ name = "BrowHorn", size = Vector3.new(0.65, 1.8, 0.55), cf = skullCF * CFrame.new(0, 1.0, 0.2) * CFrame.Angles(rad(-25), 0, 0),
+		color = C.AmethystPale, parent = m, wedge = true })
 
-	--== ALIEN LEAVES & PLANT TRAITS (20%): Dorsal Galaxy Lotus & Giant Alien Fronds ==--
-	-- 4 Giant Sweeping Alien Fronds fanning out from the carapace shell
+	-- 4 Giant Alien Leaves (direct children named "Leaf")
 	for _, frond in ipairs({
-		{ side = -1, fore = -1, x = -2.1, z = -0.8, pitch = rad(-25), roll = rad(-40) },
-		{ side =  1, fore = -1, x =  2.1, z = -0.8, pitch = rad(-25), roll = rad( 40) },
-		{ side = -1, fore =  1, x = -2.1, z =  1.2, pitch = rad( 25), roll = rad(-45) },
-		{ side =  1, fore =  1, x =  2.1, z =  1.2, pitch = rad( 25), roll = rad( 45) },
+		{ x = -2.1, z = -0.8, pitch = rad(-25), roll = rad(-40) },
+		{ x =  2.1, z = -0.8, pitch = rad(-25), roll = rad( 40) },
+		{ x = -2.1, z =  1.2, pitch = rad( 25), roll = rad(-45) },
+		{ x =  2.1, z =  1.2, pitch = rad( 25), roll = rad( 45) },
 	}) do
 		local fCF = bodyCF * CFrame.new(frond.x, 1.2, frond.z) * CFrame.Angles(frond.pitch, 0, frond.roll)
-		mkAlienLeaf(m, fCF, Vector3.new(0.85, 3.2, 0.35), C.AmethystPale, C.NebulaCyan)
-	end
-
-	-- Dorsal Galaxy Lotus Blooming Out of Back Shell
-	local lotusBaseCF = bodyCF * CFrame.new(0, 1.4, 0.2)
-	mk({ name = "LotusStem", size = Vector3.new(1.6, 1.4, 1.6), cf = lotusBaseCF,
-		color = C.Indigo, parent = m, shape = Enum.PartType.Cylinder })
-
-	local flowerCF = lotusBaseCF * CFrame.new(0, 1.2, 0)
-
-	-- 8 Outer Void Petals
-	for i = 1, 8 do
-		local a = rad(i * 45)
-		local pCF = flowerCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.4, 1.5) * CFrame.Angles(rad(38), 0, 0)
-		mk({ name = "OuterPetal", size = Vector3.new(1.0, 2.2, 0.28), cf = pCF,
-			color = C.MidnightSlate, parent = m, wedge = true })
-	end
-
-	-- 8 Inner Starlight Petals
-	for i = 1, 8 do
-		local a = rad(i * 45 + 22.5)
-		local pCF = flowerCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.9, 0.95) * CFrame.Angles(rad(25), 0, 0)
-		mk({ name = "InnerPetal", size = Vector3.new(0.8, 1.9, 0.22), cf = pCF,
+		mk({ name = "Leaf", size = Vector3.new(0.85, 3.2, 0.35), cf = fCF,
 			color = C.AmethystPale, parent = m, wedge = true })
 	end
 
-	-- Tilted 12-Segment Orbital Ring
+	-- Dorsal Galaxy Lotus: Stem + 3 Outer Petals + 3 Inner Petals (7 parts)
+	local lotusBaseCF = bodyCF * CFrame.new(0, 1.4, 0.2)
+	mk({ name = "LotusStem", size = Vector3.new(1.6, 1.4, 1.6), cf = lotusBaseCF,
+		color = C.AmethystDark, parent = m, shape = Enum.PartType.Cylinder })
+	local flowerCF = lotusBaseCF * CFrame.new(0, 1.2, 0)
+	for i = 1, 3 do
+		local a = rad(i * 120)
+		local pCF = flowerCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.4, 1.5) * CFrame.Angles(rad(38), 0, 0)
+		mk({ name = "OuterPetal", size = Vector3.new(1.2, 2.2, 0.28), cf = pCF,
+			color = C.MidnightSlate, parent = m, wedge = true })
+	end
+	for i = 1, 3 do
+		local a = rad(i * 120 + 60)
+		local pCF = flowerCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.9, 0.95) * CFrame.Angles(rad(25), 0, 0)
+		mk({ name = "InnerPetal", size = Vector3.new(1.0, 1.9, 0.22), cf = pCF,
+			color = C.PulsarGold, parent = m, wedge = true })
+	end
+
+	-- Tilted 3-Segment Orbital Ring (3 parts) + 1 Comet Satellite (1 part) = 4 parts
 	local ringTilt = flowerCF * CFrame.new(0, 1.4, 0) * CFrame.Angles(rad(22), rad(35), 0)
-	for i = 1, 12 do
-		local a = rad(i * 30)
+	for i = 1, 3 do
+		local a = rad(i * 120)
 		local arcCF = ringTilt * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, 2.2)
-		mk({ name = "OrbitalArc", size = Vector3.new(1.1, 0.18, 0.28), cf = arcCF,
+		mk({ name = "OrbitalArc", size = Vector3.new(2.8, 0.2, 0.3), cf = arcCF,
 			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
 	end
+	local satCF = ringTilt * CFrame.Angles(0, rad(45), 0) * CFrame.new(0, 0, 2.6)
+	mk({ name = "CometSatellite", size = Vector3.new(0.65, 0.65, 0.65), cf = satCF,
+		color = C.PulsarGold, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
 
-	-- 4 Orbiting Golden Comet Satellites
-	for i = 1, 4 do
-		local a = rad(i * 90 + 45)
-		local satCF = ringTilt * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, 2.6)
-		mk({ name = "CometSatellite", size = Vector3.new(0.55, 0.55, 0.55), cf = satCF,
-			color = C.PulsarGold, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-	end
-
-	-- Blinding Central Supernova Pulsar Core
+	-- Central Supernova Pulsar Core (1 part) + Crown Flares (3 parts) = 4 parts
 	local core = mk({ name = "SupernovaCore", size = Vector3.new(2.0, 2.0, 2.0), cf = flowerCF * CFrame.new(0, 1.4, 0),
 		color = C.StarIvory, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
+	local flareCF = flowerCF * CFrame.new(0, 2.8, 0)
+	mk({ name = "CrownFlareMain", size = Vector3.new(0.55, 1.6, 0.55), cf = flareCF,
+		color = C.PulsarGold, parent = m, shape = Enum.PartType.Cylinder, material = Enum.Material.Neon })
+	for side = -1, 1, 2 do
+		local fCF = flareCF * CFrame.Angles(0, rad(side * 90), 0) * CFrame.new(0, 0.4, 0.45) * CFrame.Angles(rad(25), 0, 0)
+		mk({ name = "CrownSpike", size = Vector3.new(0.35, 1.2, 0.25), cf = fCF,
+			color = C.StarIvory, parent = m, wedge = true, material = Enum.Material.Neon })
+	end
+
 	local light = Instance.new("PointLight")
 	light.Color = C.NebulaCyanGlow
 	light.Brightness = 3.0
 	light.Range = 16
 	light.Parent = core
 
-	-- Vertical Crown Flares & Spikes
-	local flareCF = flowerCF * CFrame.new(0, 2.8, 0)
-	mk({ name = "CrownFlareMain", size = Vector3.new(0.55, 1.6, 0.55), cf = flareCF,
-		color = C.PulsarGold, parent = m, shape = Enum.PartType.Cylinder, material = Enum.Material.Neon })
-	for i = 1, 4 do
-		local a = rad(i * 90)
-		local fCF = flareCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.4, 0.45) * CFrame.Angles(rad(25), 0, 0)
-		mk({ name = "CrownSpike", size = Vector3.new(0.35, 1.2, 0.25), cf = fCF,
-			color = C.StarIvory, parent = m, wedge = true, material = Enum.Material.Neon })
-	end
-
-	-- Pulsar Particle Sparks
+	-- Sparks Attachment
 	local att = Instance.new("Attachment")
 	att.Name = "SupernovaSparks"
 	att.Position = Vector3.new(0, 1.0, 0)
@@ -774,8 +730,8 @@ local function buildSupernovus(parent: Instance, baseCF: CFrame): Model
 	})
 	p.Transparency = NumberSequence.new(0.1, 1)
 	p.Lifetime = NumberRange.new(1.4, 2.8)
-	p.Rate = 28
-	p.Speed = NumberRange.new(1.5, 3.5)
+	p.Rate = 24
+	p.Speed = NumberRange.new(1.5, 3.0)
 	p.SpreadAngle = Vector2.new(180, 180)
 	p.LightEmission = 1
 	p.LightInfluence = 0
@@ -795,38 +751,47 @@ local BUILDERS: { [string]: (Instance, CFrame) -> Model } = {
 --==============================================================================
 -- BUILD ONE STARBLOOM SPECIES, CONFORMED TO ITS TIER
 --
--- `hs` is height: the ratio between the tier's frame and the height this
--- species was authored at. `gs` is the damped horizontal girth spread, and it
--- is optional -- a caller that omits it gets 1 and the old height-only
--- behaviour, which is exactly what every showroom wants.
+-- `hs` is height: the ratio between the tier's frame and the height this species
+-- was authored at. `gs` is the damped horizontal girth spread, and it is
+-- optional -- a caller that omits it gets 1 and height-only scaling.
 --
--- Girth arriving here at all is the fix for a real gap: this took one scalar,
--- so a Colossal was a uniformly enlarged Tiny -- the same silhouette, the same
--- proportions, no added heft, while Tanglemire's creatures were getting broader
--- across the ladder. Girth runs 0.82 to 1.45 and it was reaching two biomes out
--- of the three that need it.
+-- Girth arriving here at all is the fix for a real gap: this took one scalar, so
+-- a Colossal was a uniformly enlarged Tiny -- same silhouette, same proportions,
+-- no added heft -- while Tanglemire's creatures were getting broader across the
+-- ladder. Measured tier 1 to tier 7, width over height: novaorb +9.5%,
+-- cosmospire +7.6%, voidpetal +10.3%, astralhorn +8.9%, supernovus +9.6%.
+--
+-- MEASURE THAT WITH WORLD EXTENTS, NOT GetBoundingBox. It reports in the PIVOT's
+-- frame, and these models pivot on a rolled cylinder, so X and Y come back
+-- swapped -- the same trap that once put a Bellchime's name plate inside its own
+-- head. A review that used it will report numbers that look plausible and are
+-- not this shape.
 --==============================================================================
-function StarbloomForms.Build(model: Model, id: string, at: CFrame, hs: number, gs: number?): boolean
+function StarbloomForms.Build(model: Model, id: string, at: CFrame, hs: number, gsOpt: number?): boolean
 	local fn = BUILDERS[id]
 	if not fn then
 		return false
 	end
+	-- `or 1` alone would pass NaN and negatives straight through into every part
+	-- CFrame in the model, where they are unrecoverable.
+	local gs = if type(gsOpt) == "number" and gsOpt == gsOpt and gsOpt > 0
+		then gsOpt
+		else 1
 	local scratch = Instance.new("Folder")
 	scratch.Parent = model
 	local built = fn(scratch, at)
 
-	local spread = if type(gs) == "number" and gs == gs and gs > 0 then gs else 1
-	if math.abs(hs - 1) > 1e-6 or math.abs(spread - 1) > 1e-6 then
+	if math.abs(hs - 1) > 1e-6 or math.abs(gs - 1) > 1e-6 then
 		for _, d in ipairs(built:GetDescendants()) do
 			if d:IsA("BasePart") then
-				d.CFrame = at * scaled(at:ToObjectSpace(d.CFrame), hs, spread)
-				-- Size takes the height scale ALONE. See scaled().
+				d.CFrame = at * scaled(at:ToObjectSpace(d.CFrame), hs, gs)
 				d.Size = d.Size * hs
 			elseif d:IsA("Attachment") then
-				-- An attachment is a point on a part, so it travels with the
-				-- same spread its part did.
-				d.Position = Vector3.new(d.Position.X * hs * spread,
-					d.Position.Y * hs, d.Position.Z * hs * spread)
+				-- An attachment is a point ON a part, so it takes the same
+				-- horizontal spread its part just took. Scaling it by height
+				-- alone leaves it behind as girth pushes the part outward.
+				d.Position = Vector3.new(d.Position.X * hs * gs,
+					d.Position.Y * hs, d.Position.Z * hs * gs)
 			elseif d:IsA("PointLight") then
 				d.Range = d.Range * hs
 			elseif d:IsA("ParticleEmitter") then
