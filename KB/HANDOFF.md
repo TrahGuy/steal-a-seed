@@ -4302,12 +4302,77 @@ This direction is canonical in `AGENTS.md` and `.agents/skills/organic-roblox-fo
 entrypoint. `.cursor/rules/organic-creature-freeform.mdc` carries the same concise always-on rule
 for editors that load project rules directly.
 
+## The Speed ladder, Starbloom, and a review of three passes at once — 2026-09-01
+
+Four commits: `5e85c47` (balance), `cd6a799` (Starbloom, girth, leaves, gates),
+`35be6d0` (services), `29c6ea3` (review fixes).
+
+### Durable decisions
+
+  * **Mill rates are 20 / 100 / 1K / 8K / 50K / 300K / 2M / 12M / 70M / 400M per second.** Costs
+    unchanged. `GameConfig.Treadmill.SpeedPerSecond` is asserted equal to `Mill.Tiers[1].speed` at
+    require time, because the two live in different tables and had already drifted.
+  * **Overclock is x2 per level, not x4.** At x4 a tier-ten overclocked mill paid 4.19e14/sec and
+    crossed the whole score ladder in 2.5 seconds.
+  * **Training Rush**: 90s charge, 1x to 4x over 30s, restores at 0.5/s off the belt, capped at 8h
+    offline. Rest is credited on the FIRST tick of a visit only — the pay loop rewrites the stamp
+    every tick, so crediting it each time refunded half of every second being spent.
+  * **`LiveInPhaseA` is now a real gate.** NestService reads it as the second of two conditions.
+    Before this, species presence was the only gate in the game, so adding five SeedData rows
+    silently opened Starbloom. Only the NESTS are gated; the road stays walkable end to end.
+  * **Girth reaches all three assembled-form biomes.** Horizontal spread only — size scales by
+    height alone, because scaling a rotated box along world X/Z shears it.
+  * **Leaves are named `Leaf`, exactly, as direct children.** That is PlantSway's contract and
+    CreatureModel documents it twice. Tanglemire, Emberroot and Starbloom did not comply and their
+    plants had never fluttered. NOTE: this changes already-shipped Tanglemire animation.
+  * **Showroom runners are modules, never Scripts.** A Script cannot run in Edit at all, so a
+    `RunService:IsStudio()` gate can only ever pick the wrong half.
+
+### Verified (Studio Edit, clone-require against the synced tree)
+
+  * Every shared module loads clean; `rojo build` parses the whole project.
+  * `ServerMain` is the only self-starting Script in `SeedGameServer`.
+  * Nest gates resolve to: greenhollow, dustbowl, tanglemire, emberroot -> NESTS; starbloom held
+    (`species=5 live=false`).
+  * Girth Tiny -> Colossal, width over height: cinderpaw +6.2%, kilnhusk +5.7%, novaorb +10.8%,
+    voidpetal +10.3%, supernovus +11.1%. `emberquill` and `pyrelotus` are 0% — their parts sit on
+    the vertical axis and there is nothing to spread.
+  * Leaf counts per plant: Greenhollow 4, Dustbowl 2-4, Tanglemire 4, Emberroot cinderpaw 10 (the
+    other four have no frond parts), Starbloom 7-16.
+  * Progress HUD strings are pure ASCII at every score, both MAX states reached, WalkSpeed caps 150.
+  * `PrimaryPart` is set for all 25 species and the pivot sits 0.03-0.23 studs above the base.
+
+### Corrections to HANDOFF-ADDENDUM-2026-08-31.md
+
+  * Its **Finding 6 (no base pivot)** is a showroom artefact, not a live-plant bug.
+    `CreatureModel.finish()` sets `PrimaryPart = base` on every exit. `StarbloomMockupRunner` looked
+    broken because it calls `StarbloomForms.Build` directly, bypassing CreatureModel — which is also
+    why it only ever displayed baseline scale.
+  * Its **duplicate-name concern** (`FindFirstChild` returning one `DragonEye` of six) does not apply
+    to PlantSway, which iterates rather than looks up.
+
+### Unresolved risks
+
+  * **Nothing here has been Play-tested.** Everything above is static or Edit-mode measurement.
+  * **`voidpetal` has 16 leaves**, the most in the game — 16 CFrame writes per plant per 20 Hz slice
+    while walking. Harmless while Starbloom is held; measure it before opening that biome with a
+    30-plant garden.
+  * **Supernovus is 86 parts.** A 30-plant Starbloom garden is ~1,500-2,600 parts per player.
+  * **`AutosaveSeconds` went 90 -> 45**, doubling the DataStore write rate. Not reviewed against
+    budget at player count.
+  * **`LeashStuds` went 600 -> 2000** for the five-biome corridor. `NestService` still carries a
+    comment calling it "two segments", which is now wrong.
+  * **`StarbloomMockupRunner` still bypasses CreatureModel**, so the showroom shows no PrimaryPart,
+    no girth and baseline scale only. It is Edit-only and nobody calls it.
+  * **HANDOFF-ADDENDUM-2026-08-31.md sits at the repo root**, not in `KB/`.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
-  * **RecommendedSpeed** is advisory: Greenhollow 0, Dustbowl 167M, Tanglemire 800M, Emberroot 3B,
-    Starbloom 10B. These numbers tune chase readiness and progression milestones; they do not
-    restrict daytime entry.
+  * **RecommendedSpeed**: Greenhollow 0, Dustbowl 167M, Tanglemire 800M, Emberroot 3B,
+    Starbloom 10B. It does not restrict entry and never has — the road is open and looking around
+    is free at any Speed. Since 2026-09-01 it decides ONE thing: whether a thief gets the wake
+    delay when a pod leaves the nest. Under the recommendation the parent is up in the same tick.
   * **The repo FOLDER is still `D:\KAPE\Steal an Artifact`.** The Roblox place itself was renamed
     to "Steal a Seed" by the owner on 2026-08-21.
   * **Offline income.** Deferred in the plan; the reference advertises it in a banner across the top
