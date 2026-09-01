@@ -3,8 +3,8 @@
 -- ASTRALMAW -- THE STARBLOOM GUARDIAN (BIOME 5)
 --
 -- A colossal cosmic behemoth with midnight-indigo carapace plates, glowing
--- starlight constellation seams, triple star horns, stardust tail, 4 celestial
--- eyes, and crystalline astral claws.
+-- starlight constellation seams, triple star horns, stardust tail, void eyes,
+-- and crystalline astral claws.
 --
 -- Adheres strictly to the 7-seam parent contract:
 --   RootJoint, Neck, JawJoint, LeftShoulder, RightShoulder, LeftHip, RightHip
@@ -25,6 +25,7 @@ local ROOT_SIZE = Vector3.new(5.2, 4.2, 5.4)
 local COLORS = {
 	Midnight = Color3.fromRGB(24, 18, 46),
 	MidnightDark = Color3.fromRGB(16, 12, 32),
+	Void = Color3.fromRGB(14, 12, 20),
 	Amethyst = Color3.fromRGB(68, 44, 106),
 	AmethystDark = Color3.fromRGB(48, 30, 78),
 	SlateDark = Color3.fromRGB(20, 16, 38),
@@ -250,25 +251,35 @@ function AstralmawModel.Build(cf: CFrame, height: number, parent: Instance): Mod
 		end
 	end
 
-	--== HEAD, 4 CELESTIAL EYES, TRIPLE STAR HORNS & GAPE MAW ==--
+	--== HEAD, VOID EYES, TRIPLE STAR HORNS & GAPE MAW ==--
 	local headZ = -2.6
 	local skullY = 12.8
 	local headW = 5.8
+	local headFrame = CFrame.new(0, skullY, headZ) * CFrame.Angles(rad(-8), 0, 0)
 
 	local head = mk(ctx, "Neck", "Head", Vector3.new(headW, 3.2, 4.6),
-		CFrame.new(0, skullY, headZ) * CFrame.Angles(rad(-8), 0, 0), COLORS.Midnight)
+		headFrame, COLORS.Midnight)
 	mk(ctx, "Neck", "BrowArmor", Vector3.new(headW * 1.05, 1.2, 3.2),
 		CFrame.new(0, skullY + 1.4, headZ - 0.8) * CFrame.Angles(rad(-14), 0, 0), COLORS.AmethystDark)
 
-	-- 4 Glowing Celestial Eyes (2 Primary Starlight Cyan + 2 Brow Astral Violet)
+	-- The shared Starbloom face vocabulary is VOID: a tall dark eye sunk halfway
+	-- into the skull, one cold pinprick, and a heavy moulded lid. There is no
+	-- glint -- two highlights would turn the pinprick into an ordinary cute eye.
 	for _, side in ipairs({ { "Left", -1 }, { "Right", 1 } }) do
 		local nm, sign = side[1] :: string, side[2] :: number
-		-- Primary Eye
-		mk(ctx, "Neck", nm .. "EyeMain", Vector3.new(1.3, 0.55, 0.55),
-			CFrame.new(1.5 * sign, skullY + 0.4, headZ - 2.3) * CFrame.Angles(0, 0, rad(18 * sign)), COLORS.NebulaCyan, nil, Enum.Material.Neon, true)
-		-- Secondary Brow Eye
-		mk(ctx, "Neck", nm .. "EyeBrow", Vector3.new(0.85, 0.35, 0.4),
-			CFrame.new(1.8 * sign, skullY + 1.2, headZ - 1.8) * CFrame.Angles(rad(-10), rad(12 * sign), rad(25 * sign)), COLORS.NebulaViolet, nil, Enum.Material.Neon, true)
+		local eyeRoll = rad(10 * sign)
+		mk(ctx, "Neck", nm .. "Eye", Vector3.new(0.88, 1.20, 0.58),
+			headFrame * CFrame.new(1.45 * sign, 0.20, -2.30)
+				* CFrame.Angles(0, rad(-4 * sign), eyeRoll),
+			COLORS.Void)
+		mk(ctx, "Neck", nm .. "Pupil", Vector3.new(0.24, 0.32, 0.24),
+			headFrame * CFrame.new(1.45 * sign, 0.20, -2.64)
+				* CFrame.Angles(0, rad(-4 * sign), eyeRoll),
+			COLORS.StarIvory, nil, Enum.Material.Neon, true)
+		mk(ctx, "Neck", nm .. "Lid", Vector3.new(1.16, 0.42, 0.64),
+			headFrame * CFrame.new(1.45 * sign, 0.78, -2.23)
+				* CFrame.Angles(rad(-7), rad(-4 * sign), eyeRoll),
+			COLORS.AmethystDark)
 	end
 
 	-- Triple Star Horn Crown (Left, Center Star Crest, Right)

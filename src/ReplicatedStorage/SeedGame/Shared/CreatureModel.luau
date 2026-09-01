@@ -2192,7 +2192,168 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	-- clutter at ten studs and as noise at fifty; a changed OUTLINE reads at
 	-- both.
 	--==========================================================================
+	--==========================================================================
+	-- THE TOP TWO TIERS ARE A DIFFERENT OBJECT, NOT A BIGGER ONE
+	--
+	-- Tier used to live entirely on the crown and the seam: the shell itself was
+	-- the biome body colour at every tier from Tiny to Colossal. At arm's length
+	-- that reads; across a nest it does not, and a Titan looked like a Tiny that
+	-- had been scaled up. These two are 6.4% of all rolls between them -- rare
+	-- enough that seeing one should be an event, common enough that a player
+	-- will learn the silhouette.
+	--
+	-- So the SHELL takes the tier colour too, mixed into the biome body rather
+	-- than replacing it, because a Titan must still read as belonging to the
+	-- biome it was stolen from. Colossal mixes further than Titan, so the last
+	-- step of the ladder is still a step.
+	--
+	-- GREENHOLLOW IS EXCLUDED. Its shell is marked LOCKED above and shipped
+	-- that way; the tutorial biome does not get repainted for this.
+	--==========================================================================
+	--==========================================================================
+	-- STARBLOOM'S CROWN IS A STEM, NOT A PLATE
+	--
+	-- All three of this biome's crowns were one flat quadrilateral tilted at a
+	-- slightly different angle -- common, Titan and Colossal alike. Three
+	-- rotations of the same sticker, and every one of them read as geometry
+	-- sitting on a lid rather than as something the pod grew.
+	--
+	-- TWO SEGMENTS HINGED THE OPPOSITE WAY, so the stalk makes an S rather than
+	-- a spike. That is the whole difference between a stem and a spar: a single
+	-- straight piece at any angle still reads as a stick, and it is the CHANGE
+	-- of direction partway up that the eye reads as growth. The upper segment is
+	-- thinner than the lower, so it tapers.
+	--
+	-- The bud is the one Ball here, and the art bible allows a sphere for
+	-- exactly this -- a bud, a glint, a dew drop. It is Neon and it is the only
+	-- lit thing on a common pod, so the eye goes to the tip of the stalk.
+	--
+	-- ONE BUILDER, THREE TIERS. The crowns drifted apart because each tier
+	-- hand-rolled its own; the aura had already gone the same way. Tier is the
+	-- `frond` and the scale, not a different shape.
+	--==========================================================================
+	local function alienStem(anchor: CFrame, stalkColor: Color3, budColor: Color3,
+		scale: number, frond: boolean)
+		-- LONG AND THIN, OR THE TAPER NEVER SHOWS. The first pass ran these at
+		-- 0.13 and 0.085 of a diameter over a third of one in length, and a
+		-- segment that stubby reads as a spike no matter how it is hinged --
+		-- the two thicknesses were too close to tell apart at pod scale.
+		--
+		-- THINNESS IS FREE, LENGTH IS NOT. The fix for "reads as a spike" is the
+		-- 3.4:1 ratio below, and it is tempting to buy that with length -- but
+		-- length goes straight into the pod's HEIGHT. At 0.42 and 0.36 the
+		-- Colossal stood 18.7 studs against 10.6 wide, which is the same 19
+		-- studs this file already caught the core placement causing once. The
+		-- ratio comes from the diameters instead.
+		local lowerLen = D * 0.32 * scale
+		local upperLen = D * 0.26 * scale
+
+		-- Lower segment: leans out and forward off the shell.
+		local hingeA = anchor * CFrame.Angles(math.rad(8), 0, math.rad(-17))
+		upright("CrownStalk", lowerLen, D * 0.095 * scale,
+			hingeA * CFrame.new(0, lowerLen * 0.5, 0), stalkColor, model, false)
+
+		-- Upper segment: hinged BACK the other way, which is the S, and barely
+		-- over half the lower one's thickness.
+		local hingeB = hingeA * CFrame.new(0, lowerLen, 0)
+			* CFrame.Angles(math.rad(-6), 0, math.rad(36))
+		upright("CrownStalkTip", upperLen, D * 0.055 * scale,
+			hingeB * CFrame.new(0, upperLen * 0.5, 0), stalkColor, model, false)
+
+		local tip = hingeB * CFrame.new(0, upperLen, 0)
+		local bud = ball("CrownBud", D * 0.16 * scale, tip, budColor, model, false)
+		bud.Material = Enum.Material.Neon
+
+		if frond then
+			-- A single curled blade off the hinge. It hangs on the OUTSIDE of
+			-- the bend, where a leaf on a real stalk would sit, and it is what
+			-- separates the top two tiers from the common stem.
+			-- IT HANGS. Pointing the blade up off the bend gave the stalk a
+			-- barb and the whole crown read as an arrow; drooping it past
+			-- horizontal is what makes the same wedge read as a leaf. Longer
+			-- and thinner than the first pass for the same reason the stalk is.
+			local blade = plate("CrownFrond", D * 0.17 * scale, D * 0.40 * scale,
+				D * 0.035 * scale,
+				hingeB * CFrame.new(D * 0.06 * scale, -D * 0.04 * scale, 0)
+					* CFrame.Angles(math.rad(6), math.rad(-28), math.rad(-118)),
+				stalkColor, model, true)
+			blade.Material = Enum.Material.SmoothPlastic
+		end
+	end
+
+	local function tintTopTier(mix: number)
+		if biome == "greenhollow" then
+			return
+		end
+		shell.Color = bodyColor:Lerp(color, mix)
+		-- BOTH LOBES, OR IT READS AS A MISTAKE. Every biome but Greenhollow
+		-- builds the egg from two masses, and tinting only the main one left a
+		-- Titan with a crimson body and an indigo shoulder -- which looks like a
+		-- part somebody forgot rather than like a tier.
+		--
+		-- The shoulder takes LESS of the mix on purpose. It is the mass that
+		-- catches the light from behind, so holding it nearer the biome colour
+		-- keeps a shape in the egg; tinting the two identically flattened it
+		-- into one flat silhouette with no read of its own.
+		for _, d in ipairs(model:GetChildren()) do
+			if d:IsA("BasePart") and d.Name == "ShellShoulder" then
+				d.Color = bodyColor:Lerp(color, mix * 0.62)
+			end
+		end
+	end
+
+	--==========================================================================
+	-- AN AURA IS A FIELD, NOT A SPARKLE
+	--
+	-- Two pieces, and they do different jobs. The EMITTER is a slow wide swell
+	-- that breathes on its own -- no driver, so it cannot stop when a script
+	-- does and costs nothing per frame. The LIGHT is what makes the pod affect
+	-- the ground it sits on, which is the difference between a pod that glows
+	-- and a pod that is merely bright.
+	--
+	-- Sized off D, so a Colossal's aura is a Colossal's aura rather than a Tiny
+	-- effect stretched over a bigger egg.
+	--==========================================================================
+	local function addAura(host: BasePart, hue: Color3, tail: Color3,
+		reach: number, rate: number, bright: number)
+		local att = Instance.new("Attachment")
+		att.Name = "AuraAttachment"
+		att.Position = Vector3.new(0, 0, 0)
+		att.Parent = host
+
+		local halo = Instance.new("ParticleEmitter")
+		halo.Name = "AuraPulse"
+		halo.Color = ColorSequence.new(hue, tail)
+		halo.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, D * 0.30 * reach),
+			NumberSequenceKeypoint.new(1, D * 1.30 * reach),
+		})
+		-- In at the start, out at the end: a swell, not a pop.
+		halo.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.25, 0.62),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		halo.Lifetime = NumberRange.new(2.2, 2.6)
+		-- Slow. One swell a second is a heartbeat; five is a strobe.
+		halo.Rate = rate
+		halo.Speed = NumberRange.new(0, 0)
+		halo.LightEmission = 1
+		halo.LightInfluence = 0
+		halo.Parent = att
+
+		local glow = Instance.new("PointLight")
+		glow.Name = "AuraGlow"
+		glow.Color = hue
+		glow.Brightness = bright
+		glow.Range = D * 2.0 * reach
+		glow.Shadows = false
+		glow.Parent = host
+		return halo
+	end
+
 	if tier == 6 then
+		tintTopTier(0.42)
 		if biome == "greenhollow" then
 			-- LOCKED: shipped split-ball crown.
 			for i = 0, 1 do
@@ -2230,15 +2391,8 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 					if i == 0 then shadow else color, model, i == 1)
 			end
 		elseif biome == "starbloom" then
-			for i = 0, 1 do
-				local side = if i == 0 then -1 else 1
-				local crown = wedge(if i == 0 then "CrownLeft" else "CrownRight",
-					Vector3.new(D * 0.34, D * 0.10, D * 0.28),
-					cf * CFrame.new(side * D * 0.16, D * 1.03, -side * D * 0.05)
-						* CFrame.Angles(math.rad(18), side * math.rad(12), side * math.rad(-30)),
-					if i == 0 then color else focal, model)
-				crown.Material = Enum.Material.SmoothPlastic
-			end
+			-- A taller stem than the common one, and it grows a frond.
+			alienStem(cf * CFrame.new(0, D * 0.94, 0), color, focal, 1.10, true)
 		else
 			for i = 0, 1 do
 				local side = if i == 0 then -1 else 1
@@ -2281,7 +2435,15 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 		em.LightInfluence = 0
 		em.Parent = att
 
+		-- AND THE AURA. The vent trail above is punctuation on the cleft; this
+		-- is the field around the whole egg, and it is the thing a player sees
+		-- before they are close enough to read a crown. Pitched deliberately
+		-- under Colossal's -- shorter reach, slower rate, dimmer -- so the last
+		-- rung of the ladder is still a rung.
+		addAura(shell, color, accent, 0.78, 0.8, 1.1)
+
 	elseif tier == 7 then
+		tintTopTier(0.55)
 		--== COLOSSAL: the shell is cracked open, and something is burning ==--
 		-- The crown is lifted and tilted off the shell rather than seated on it,
 		-- so the outline breaks and a gap opens. That gap is the silhouette
@@ -2335,11 +2497,10 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 					* CFrame.Angles(math.rad(-12), 0, math.rad(13)),
 				color, model)
 		elseif biome == "starbloom" then
-			local crown = wedge("Crown", Vector3.new(D * 0.48, D * 0.13, D * 0.38),
-				cf * CFrame.new(D * 0.23, D * 1.09, -D * 0.07)
-					* CFrame.Angles(math.rad(20), math.rad(-10), math.rad(24)),
-				color, model)
-			crown.Material = Enum.Material.SmoothPlastic
+			-- The tallest stem, and its bud takes the CORE's colour rather than
+			-- the tier's: on a Colossal the shell is already broken open and the
+			-- stalk should look like it is lit by whatever got out.
+			alienStem(cf * CFrame.new(0, D * 0.94, 0), color, coreColor, 1.20, true)
 		else
 			ball("Crown", D * 0.66,
 				baseCF * CFrame.new(D * 0.22, D * 0.62, -D * 0.06), color, model)
@@ -2357,30 +2518,17 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 		-- would need one more thing running per pod and would stop the moment
 		-- the driver did; a slow, wide, low-rate emitter breathes on its own and
 		-- costs nothing to keep alive.
-		local aura = Instance.new("Attachment")
-		aura.Name = "AuraAttachment"
-		aura.Parent = core
-		local pulse = Instance.new("ParticleEmitter")
-		pulse.Name = "AuraPulse"
-		pulse.Color = if biome == "greenhollow"
-			then ColorSequence.new(color)
-			else ColorSequence.new(coreColor, accent)
-		pulse.Size = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, D * 0.30),
-			NumberSequenceKeypoint.new(1, D * 1.30),
-		})
-		pulse.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.25, 0.62),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		pulse.Lifetime = NumberRange.new(2.2, 2.6)
-		-- Slow. One swell about every second is a heartbeat; five is a strobe.
-		pulse.Rate = 1.1
-		pulse.Speed = NumberRange.new(0, 0)
-		pulse.LightEmission = 1
-		pulse.LightInfluence = 0
-		pulse.Parent = aura
+		-- The same aura Titan wears, turned up: wider reach, faster swell and a
+		-- brighter light. Hung on the CORE rather than the shell, because on a
+		-- Colossal the core is the thing that broke out and the aura should look
+		-- like it is coming from the burst rather than from the egg.
+		--
+		-- Shared with Titan on purpose. Two hand-rolled emitters drifted apart
+		-- once already -- Colossal had a field and Titan had seven sparks a
+		-- second -- and the ladder only reads if the two are the same effect at
+		-- two strengths.
+		addAura(core, if biome == "greenhollow" then color else coreColor,
+			accent, 1.0, 1.4, 2.2)
 
 		--==================================================================
 		-- THE ONE LABEL A POD IS ALLOWED
@@ -2444,10 +2592,9 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 					* CFrame.Angles(0, 0, math.rad(-8)),
 				color, model)
 		elseif biome == "starbloom" then
-			local crown = plate("Crown", D * 0.50, D * 0.28, D * 0.09,
-				cf * CFrame.new(D * 0.13, D * 1.06, -D * 0.03)
-					* CFrame.Angles(math.rad(15), 0, math.rad(24)), color, model, true)
-			crown.Material = Enum.Material.SmoothPlastic
+			-- The plain stem: no frond, and the bud is the only lit thing on the
+			-- pod. Same builder as the top two tiers, one size down.
+			alienStem(cf * CFrame.new(0, D * 0.94, 0), color, focal, 1.0, false)
 		else
 			ball("Crown", D * 0.84, baseCF * CFrame.new(0, D * 0.34, 0), color, model)
 		end
@@ -2666,40 +2813,100 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 		end
 
 	elseif sp.Biome == "starbloom" then
-		--== THE COMET CRESCENT: a diagonal open orbit, not a segmented torus. ==--
-		-- Five tangent wedges trace only the forward half of a tilted orbit. The
-		-- large break is intentional: it keeps the tier shell readable, gives the
-		-- halo a direction, and pulls the old 1.31 D width back under the rail.
+		--== THE FALLING STAR: ACCRETION, NOT A DECORATIVE RING. ==--
+		-- A dark singularity terminates one end of a broad, uneven crescent. Five
+		-- shards are visibly stretched across the shell toward it, while a comet
+		-- enters from the open end. The pieces deliberately differ in mass and
+		-- spacing: this is matter being pulled apart, not five copies of one halo
+		-- segment. The diagonal remains Starbloom's silhouette territory.
 		local ORBIT = Color3.fromRGB(105, 86, 180)
 		local tilt = CFrame.Angles(math.rad(29), math.rad(-7), math.rad(-18))
-		local ARC = {
-			{ -108, 0.27, 0.11 },
-			{  -66, 0.32, 0.11 },
-			{  -22, 0.35, 0.10 },
-			{   23, 0.31, 0.09 },
-			{   65, 0.24, 0.075 },
-		}
-		for _, spec in ipairs(ARC) do
-			local az, length, depth = spec[1], spec[2], spec[3]
-			local arc = wedge("OrbitArc", Vector3.new(D * length, D * 0.065, D * depth),
-				baseCF * tilt * CFrame.Angles(0, math.rad(az), 0)
-					* CFrame.new(0, 0, -D * 0.535),
-				ORBIT, model)
-			arc.Material = Enum.Material.SmoothPlastic
+		local function smoothPart(p: BasePart): BasePart
+			p.Material = Enum.Material.SmoothPlastic
 			for _, face in ipairs(STUD_FACES) do
-				(arc :: any)[face] = Enum.SurfaceType.Smooth
+				(p :: any)[face] = Enum.SurfaceType.Smooth
+			end
+			return p
+		end
+
+		local function accretionPlate(name: string, azimuth: number, size: Vector3,
+			lift: number, radius: number, roll: number, plateColor: Color3): BasePart
+			return smoothPart(wedge(name, size * D,
+				baseCF * tilt * CFrame.Angles(0, math.rad(azimuth), 0)
+					* CFrame.new(0, D * lift, -D * radius)
+					* CFrame.Angles(0, 0, math.rad(roll)),
+				plateColor, model))
+		end
+
+		-- Four unequal masses carry the main silhouette. The heavy middle sweep
+		-- and small hooked tip are readable even when the surface shards disappear
+		-- on a low-end phone.
+		accretionPlate("AccretionAnchor", -101, Vector3.new(0.24, 0.075, 0.18),
+			0.040, 0.525, -11, shadow)
+		accretionPlate("AccretionSweep", -58, Vector3.new(0.43, 0.085, 0.20),
+			0.025, 0.525, 4, accent)
+		accretionPlate("AccretionFan", -13, Vector3.new(0.36, 0.070, 0.16),
+			0.020, 0.530, 9, ORBIT)
+		accretionPlate("AccretionHook", 31, Vector3.new(0.25, 0.060, 0.12),
+			0.035, 0.535, 16, focal)
+
+		-- The void sits proud of the shell at the closed end of the crescent. Its
+		-- two thin horizon slivers frame darkness instead of filling it with glow.
+		local singularityCF = baseCF * tilt
+			* CFrame.Angles(0, math.rad(-116), 0)
+			* CFrame.new(0, D * 0.040, -D * 0.555)
+		local singularity = ball("Singularity", D * 0.16, singularityCF,
+			Color3.fromRGB(9, 8, 18), model, false)
+		singularity.Material = Enum.Material.SmoothPlastic
+		for _, sign in ipairs({ -1, 1 }) do
+			local horizon = smoothPart(wedge(
+				if sign < 0 then "EventHorizonLower" else "EventHorizonUpper",
+				Vector3.new(D * 0.21, D * 0.032, D * 0.052),
+				singularityCF * CFrame.new(0, D * 0.070 * sign, -D * 0.072)
+					* CFrame.Angles(0, 0, math.rad(12 * sign)),
+				focal, model))
+			horizon.Material = Enum.Material.Neon
+		end
+
+		-- Surface shards walk a separate diagonal across the front of the pod.
+		-- Every centre sits on or beyond the shell surface; none are hidden inside.
+		local INFALL = {
+			{  0.39, -0.14, -0.31, 0.13, 0.055, 0.065, -34, -15 },
+			{  0.27, -0.06, -0.41, 0.15, 0.052, 0.060, -31, -10 },
+			{  0.12,  0.02, -0.49, 0.17, 0.050, 0.055, -28,  -5 },
+			{ -0.05,  0.09, -0.50, 0.14, 0.045, 0.050, -24,   2 },
+			{ -0.21,  0.15, -0.46, 0.11, 0.040, 0.045, -19,   8 },
+		}
+		for i, spec in ipairs(INFALL) do
+			local shard = smoothPart(wedge("InfallShard" .. i,
+				Vector3.new(D * spec[4], D * spec[5], D * spec[6]),
+				baseCF * CFrame.new(D * spec[1], D * spec[2], D * spec[3])
+					* CFrame.Angles(0, math.rad(spec[8]), math.rad(spec[7])),
+				if i % 2 == 0 then focal else ORBIT, model))
+			if i == 2 or i == 4 then
+				shard.Material = Enum.Material.Neon
 			end
 		end
 
-		-- One bright head and one dim tail establish the comet direction. The
-		-- orbit stays non-neon so Colossal's core remains the tier focal point.
-		for i, spec in ipairs({ { -112, 0.075 }, { 69, 0.050 } }) do
-			local mote = ball(if i == 1 then "CometHead" else "CometTail",
-				D * (spec[2] :: number),
-				baseCF * tilt * CFrame.Angles(0, math.rad(spec[1] :: number), 0)
-					* CFrame.new(0, D * 0.035, -D * 0.555),
-				Color3.fromRGB(220, 205, 255), model, false)
-			mote.Material = Enum.Material.Neon
+		-- The open end receives one head and a two-step wake. Their taper points
+		-- toward the singularity, so the whole composition has one direction.
+		local cometCF = baseCF * tilt * CFrame.Angles(0, math.rad(68), 0)
+			* CFrame.new(0, D * 0.035, -D * 0.558)
+		local comet = ball("CometHead", D * 0.085, cometCF,
+			Color3.fromRGB(220, 205, 255), model, false)
+		comet.Material = Enum.Material.Neon
+		for i, spec in ipairs({
+			{ "CometWakeNear", 0.16, 0.045, 0.060, 0.11 },
+			{ "CometWakeFar", 0.11, 0.032, 0.045, 0.20 },
+		}) do
+			local wake = smoothPart(wedge(spec[1] :: string,
+				Vector3.new(D * (spec[2] :: number), D * (spec[3] :: number), D * (spec[4] :: number)),
+				cometCF * CFrame.new(D * (spec[5] :: number), 0, D * 0.025 * i)
+					* CFrame.Angles(0, math.rad(-18), math.rad(-28)),
+				if i == 1 then focal else ORBIT, model))
+			if i == 1 then
+				wake.Material = Enum.Material.Neon
+			end
 		end
 	end
 
