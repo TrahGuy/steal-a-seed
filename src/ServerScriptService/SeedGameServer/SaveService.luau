@@ -105,7 +105,7 @@ end
 -- Read and claim, atomically. The transform runs inside UpdateAsync, so nothing
 -- can slip between seeing the profile unlocked and locking it.
 --==============================================================================
-local function attemptLoad(userId: number, force: boolean): (LoadStatus, { [string]: any }?)
+local function attemptLoad(userId: number): (LoadStatus, { [string]: any }?)
 	local ds = getStore()
 	if not ds then
 		return "unavailable", nil
@@ -129,7 +129,7 @@ local function attemptLoad(userId: number, force: boolean): (LoadStatus, { [stri
 				and lock.JobId ~= JOB
 				and (now - (tonumber(lock.Stamp) or 0)) < SAVE.SessionLockSeconds
 
-			if heldByOther and not force then
+			if heldByOther then
 				status = "locked"
 				-- Returning nil CANCELS the write. The other server keeps its
 				-- claim and we have not touched anything.
@@ -158,7 +158,7 @@ local function attemptLoad(userId: number, force: boolean): (LoadStatus, { [stri
 	return status, payload
 end
 
--- Public: retries a locked profile a few times before taking it, because the
+-- Public: retries a locked profile a few times before failing, because the
 -- overwhelmingly common cause of a live lock is the player's PREVIOUS server
 -- still shutting down, and that resolves in seconds.
 function SaveService.Load(userId: number): (LoadStatus, { [string]: any }?)
@@ -167,14 +167,9 @@ function SaveService.Load(userId: number): (LoadStatus, { [string]: any }?)
 	end
 
 	for attempt = 1, SAVE.LoadAttempts do
-		local force = attempt == SAVE.LoadAttempts
-		local status, payload = attemptLoad(userId, force)
+		local status, payload = attemptLoad(userId)
 
 		if status == "ok" or status == "new" or status == "unavailable" then
-			if force and status == "ok" then
-				log(string.format("%d: took a stale session lock after %d attempts.",
-					userId, attempt))
-			end
 			return status, payload
 		end
 
@@ -187,7 +182,7 @@ function SaveService.Load(userId: number): (LoadStatus, { [string]: any }?)
 		end
 	end
 
-	return "failed", nil
+	return "locked", nil
 end
 
 --==============================================================================
@@ -206,44 +201,55 @@ function SaveService.Save(userId: number, payload: { [string]: any }, release: b
 		return false
 	end
 
-	local wrote = false
-	local now = os.time()
+	local maxAttempts = math.max(1, SAVE.RetryAttempts or 1)
+	local backoff = SAVE.RetryBackoff or 1
 
-	local ok, err = pcall(function()
-		ds:UpdateAsync(keyFor(userId), function(old)
-			local lock = if type(old) == "table" then old.Lock else nil
-			if type(lock) == "table" and lock.JobId ~= nil and lock.JobId ~= JOB
-				and (now - (tonumber(lock.Stamp) or 0)) < SAVE.SessionLockSeconds then
-				-- Somebody took it while we were playing. Their data is newer
-				-- than ours by definition, so ours is the copy that loses.
-				return nil
-			end
-			wrote = true
-			return {
-				Data = payload,
-				Lock = if release then nil else { JobId = JOB, Stamp = now },
-			}
+	for attempt = 1, maxAttempts do
+		local wrote = false
+		local staleOrLost = false
+		local now = os.time()
+
+		local ok, err = pcall(function()
+			ds:UpdateAsync(keyFor(userId), function(old)
+				local lock = if type(old) == "table" then old.Lock else nil
+				if type(lock) == "table" and lock.JobId ~= nil and lock.JobId ~= JOB
+					and (now - (tonumber(lock.Stamp) or 0)) < SAVE.SessionLockSeconds then
+					-- Somebody took it while we were playing. Their data is newer
+					-- than ours by definition, so ours is the copy that loses.
+					staleOrLost = true
+					return nil
+				end
+				wrote = true
+				return {
+					Data = payload,
+					Lock = if release then nil else { JobId = JOB, Stamp = now },
+				}
+			end)
 		end)
-	end)
 
-	if not ok then
-		local message = tostring(err)
-		if isPermanent(message) then
-			available = false
+		if not ok then
+			local message = tostring(err)
+			if isPermanent(message) then
+				available = false
+				warn(string.format("[Seed/SaveService] permanent save failure for %d: %s", userId, message))
+				return false
+			end
+			warn(string.format("[Seed/SaveService] save attempt %d/%d failed for %d: %s", attempt, maxAttempts, userId, message))
+			if attempt < maxAttempts then
+				task.wait(backoff * attempt)
+			end
+		elseif staleOrLost or not wrote then
+			warn(string.format(
+				"[Seed/SaveService] %d: another server holds this profile now. Not overwriting it.",
+				userId))
+			return false
+		else
+			lastWrite[userId] = os.clock()
+			return true
 		end
-		warn(string.format("[Seed/SaveService] save failed for %d: %s", userId, message))
-		return false
 	end
 
-	if not wrote then
-		warn(string.format(
-			"[Seed/SaveService] %d: another server holds this profile now. Not overwriting it.",
-			userId))
-		return false
-	end
-
-	lastWrite[userId] = os.clock()
-	return true
+	return false
 end
 
 -- Has this player been written recently enough that another write would be

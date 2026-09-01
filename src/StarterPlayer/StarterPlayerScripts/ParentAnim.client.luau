@@ -326,7 +326,7 @@ local MIRE_LEG_SWING = math.rad(21)
 local MIRE_ARM_SWING = math.rad(11)
 
 local function animateMiremaw(p: any, wake: number, t: number,
-	stride: number, moving: number)
+	stride: number, moving: number, attackDt: number)
 	local ch = p.mire :: MireChannels
 	local asleep = 1 - wake
 
@@ -335,21 +335,47 @@ local function animateMiremaw(p: any, wake: number, t: number,
 		row.motor.C0 = row.rest * row.delta:Lerp(CFrame.identity, wake)
 	end
 
+	--== ATTACK SWIPE / BITE ==--
+	local attackArmPitch = 0
+	local attackJaw = 0
+	if attackDt >= 0 and attackDt < 0.85 then
+		local pNorm = attackDt / 0.85
+		if pNorm < 0.28 then
+			local u = pNorm / 0.28
+			local ease = math.sin(u * math.pi * 0.5)
+			attackArmPitch = -math.rad(60) * ease
+			attackJaw = math.rad(20) * ease
+		elseif pNorm < 0.60 then
+			local u = (pNorm - 0.28) / 0.32
+			local ease = math.sin(u * math.pi * 0.5)
+			attackArmPitch = -math.rad(60) + math.rad(130) * ease
+			attackJaw = math.rad(20) + math.rad(40) * ease
+		else
+			local u = math.clamp((pNorm - 0.60) / 0.40, 0, 1)
+			local ease = 1 - u
+			attackArmPitch = math.rad(70) * ease
+			attackJaw = math.rad(60) * ease
+		end
+	end
+
 	--== THE WALK ==--
 	-- Distance travelled, not the clock: a clock-driven leg slides, and this
 	-- creature does its most important work at a run. `moving` already carries
 	-- the wake scalar, so a sleeping Miremaw's legs are still.
-	local function swing(row, phase: number, amp: number)
+	local function swing(row, phase: number, amp: number, extraPitch: number?)
 		if row then
 			row.motor.C0 = row.motor.C0
-				* CFrame.Angles(math.sin(stride + phase) * amp * moving, 0, 0)
+				* CFrame.Angles(math.sin(stride + phase) * amp * moving + (extraPitch or 0), 0, 0)
 		end
 	end
 	swing(ch.byName.LeftHip, 0, MIRE_LEG_SWING)
 	swing(ch.byName.RightHip, math.pi, MIRE_LEG_SWING)
 	-- Arms counter the legs, and by less: it runs with them braced, not pumping.
-	swing(ch.byName.RightShoulder, 0, MIRE_ARM_SWING)
-	swing(ch.byName.LeftShoulder, math.pi, MIRE_ARM_SWING)
+	swing(ch.byName.RightShoulder, 0, MIRE_ARM_SWING, attackArmPitch)
+	swing(ch.byName.LeftShoulder, math.pi, MIRE_ARM_SWING, attackArmPitch)
+	if ch.byName.JawJoint then
+		ch.byName.JawJoint.motor.C0 = ch.byName.JawJoint.motor.C0 * CFrame.Angles(-attackJaw, 0, 0)
+	end
 
 	--== THE FRONDS LAG ==--
 	-- Each one on its own phase offset, so four fronds stirring never reads as
@@ -465,7 +491,7 @@ local function animateForgemaw(p: any, wake: number, t: number,
 			attackJaw = math.rad(16) + math.rad(36) * ease
 		else
 			-- Phase 3: Recovery / Re-plant
-			local u = (pNorm - 0.60) / 0.25
+			local u = math.clamp((pNorm - 0.60) / 0.40, 0, 1)
 			local ease = 1 - u
 			attackArmPitch = math.rad(75) * ease
 			attackArmYaw = math.rad(28) * ease
@@ -673,7 +699,7 @@ RunService.Heartbeat:Connect(function(dt)
 			if p.mire then
 				p.stride += speed * dt * SWING_PER_STUD
 				animateMiremaw(p, wake, t, p.stride + p.phase,
-					math.clamp(speed / 6, 0, 1) * wake)
+					math.clamp(speed / 6, 0, 1) * wake, attackDt)
 				continue
 			end
 
@@ -765,7 +791,7 @@ RunService.Heartbeat:Connect(function(dt)
 					attackJaw = math.rad(12) + math.rad(32) * ease
 				else
 					-- Phase 3: Recovery / Follow-through blend back
-					local u = (pNorm - 0.60) / 0.25
+					local u = math.clamp((pNorm - 0.60) / 0.40, 0, 1)
 					local ease = 1 - u
 					attackArmPitch = math.rad(90) * ease
 					attackArmYaw = math.rad(35) * ease

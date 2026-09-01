@@ -370,6 +370,11 @@ local LEAF_TAG = GameConfig.Tags.MillLeaf
 local spinRest: { [Instance]: CFrame } = {}
 local spinAngle: { [Instance]: number } = {}
 
+local function forgetSpin(instance: Instance)
+	spinRest[instance] = nil
+	spinAngle[instance] = nil
+end
+
 local function beltOf(part: Instance): BasePart?
 	local curr: Instance? = part
 	while curr do
@@ -388,6 +393,10 @@ local GEAR_TAG = GameConfig.Tags.MillGear
 local CRANK_TAG = GameConfig.Tags.MillCrank
 local BANNER_TAG = GameConfig.Tags.MillBanner
 local PULSE_TAG = GameConfig.Tags.MillPulse
+
+for _, tag in ipairs({ ROLLER_TAG, WHEEL_TAG, LEAF_TAG, GEAR_TAG, CRANK_TAG, BANNER_TAG, PULSE_TAG, GameConfig.Tags.MillJaw }) do
+	CollectionService:GetInstanceRemovedSignal(tag):Connect(forgetSpin)
+end
 
 --==============================================================================
 -- EVERYTHING ELSE THAT MOVES

@@ -1210,14 +1210,21 @@ end
 --==============================================================================
 local syncPending: { [Player]: boolean } = {}
 
+function CarryService.SyncHeldNow(player: Player)
+	syncPending[player] = nil
+	syncHeld(player)
+end
+
 local function requestSync(player: Player)
 	if syncPending[player] then
 		return
 	end
 	syncPending[player] = true
 	task.defer(function()
-		syncPending[player] = nil
-		syncHeld(player)
+		if syncPending[player] then
+			syncPending[player] = nil
+			syncHeld(player)
+		end
 	end)
 end
 

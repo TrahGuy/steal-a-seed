@@ -756,6 +756,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	-- Consumed. Destroying the tool is what makes planting a decision rather
 	-- than a duplication bug.
 	tool:Destroy()
+	CarryService.SyncHeldNow(player)
 
 	if hatched then
 		log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))

@@ -58,6 +58,7 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlantService = require(script.Parent:WaitForChild("PlantService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+local CarryService = require(script.Parent:WaitForChild("CarryService"))
 
 local EconomyService = {}
 -- After PlantService (50): this reads what PlantService is growing.
@@ -198,6 +199,7 @@ function EconomyService.SellHeld(player: Player): (number, number)
 	end
 	take(player:FindFirstChildOfClass("Backpack"))
 	take(player.Character)
+	CarryService.SyncHeldNow(player)
 
 	if sold == 0 then
 		return 0, 0

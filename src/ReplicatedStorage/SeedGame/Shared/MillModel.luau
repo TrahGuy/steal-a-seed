@@ -230,6 +230,7 @@ type Opts = {
 	collide: boolean?,
 	transparency: number?,
 	shape: Enum.PartType?,
+	anchored: boolean?,
 }
 
 --==============================================================================
@@ -258,13 +259,21 @@ local EFFECT_MATERIAL: { [Enum.Material]: boolean } = {
 	[Enum.Material.ForceField] = true,
 }
 
+local function weld(p0: BasePart, p1: BasePart): WeldConstraint
+	local w = Instance.new("WeldConstraint")
+	w.Part0 = p0
+	w.Part1 = p1
+	w.Parent = p0
+	return w
+end
+
 local function part(o: Opts): BasePart
 	local p = Instance.new("Part")
 	p.Name = o.name
 	p.Size = o.size
 	p.CFrame = o.cframe
 	p.Color = o.color
-	p.Anchored = true
+	p.Anchored = if o.anchored == nil then true else o.anchored
 	p.CanCollide = if o.collide == nil then true else o.collide
 	p.CanQuery = true
 	p.Transparency = o.transparency or 0
@@ -2319,7 +2328,7 @@ local function infernoForge(s: Signature)
 			CollectionService:AddTag(slab, GameConfig.Tags.MillSlat)
 
 			-- Molten crack in the center of the crust slab
-			part({
+			local fissure = part({
 				name = "CrustFissure",
 				size = Vector3.new(crustWidth * 0.65, 0.18, 0.22),
 				cframe = slab.CFrame * CFrame.new(0, 0.02, 0) * CFrame.Angles(0, math.rad(22), 0),
@@ -2327,8 +2336,10 @@ local function infernoForge(s: Signature)
 				material = Enum.Material.Neon,
 				studs = false,
 				collide = false,
+				anchored = false,
 				parent = slab,
 			})
+			weld(slab, fissure)
 		end
 	end
 
@@ -2629,30 +2640,34 @@ local function infernoForge(s: Signature)
 
 	-- Jagged Chin Spikes on moving jaw
 	for _, cx in ipairs({ -0.6, 0, 0.6 }) do
-		part({
+		local spike = part({
 			name = "ChinSpike",
 			size = Vector3.new(0.4, 1.2, 0.4),
 			cframe = jawRoot.CFrame * CFrame.new(cx, -0.6, 1.1) * CFrame.Angles(math.rad(-28), 0, math.rad(cx * 15)),
 			color = Color3.fromRGB(255, 75, 15),
 			material = Enum.Material.Neon,
 			collide = false,
+			anchored = false,
 			parent = jawRoot,
 		})
+		weld(jawRoot, spike)
 	end
 
 	-- Lower Sharp Fangs (Pointing up on moving jaw)
 	for _, fx in ipairs({ -1.15, -0.7, -0.25, 0.25, 0.7, 1.15 }) do
 		local isCanine = math.abs(fx) > 0.6
 		local fangLen = if isCanine then 1.25 else 0.75
-		part({
+		local fang = part({
 			name = "DevilFangLower",
 			size = Vector3.new(0.24, fangLen, 0.24),
 			cframe = jawRoot.CFrame * CFrame.new(fx, 0.55 + fangLen * 0.35, 1.1) * CFrame.Angles(math.rad(18), 0, math.rad(fx * -8)),
 			color = if isCanine then Color3.fromRGB(255, 230, 160) else Color3.fromRGB(240, 200, 150),
 			material = Enum.Material.SmoothPlastic,
 			collide = false,
+			anchored = false,
 			parent = jawRoot,
 		})
+		weld(jawRoot, fang)
 	end
 
 	-- 5E. THROAT FIRE & MOLTEN LAVA TONGUE CASCADE
