@@ -139,7 +139,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf1",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.92, 0.24, 2.07),
 			cf = CFrame.new(-1.15, 1.049999, 0, 0.324792, 0.151453, 0.93358, -0.563123, 0.824026, 0.06223, -0.75987, -0.545933, 0.352924),
@@ -147,7 +147,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf2",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(1, 0.24, 2.25),
 			cf = CFrame.new(1.200001, 1.25, 0.25, -0.636999, 0.382748, 0.669131, 0.623032, 0.766784, 0.154509, -0.453941, 0.515312, -0.726905),
@@ -155,7 +155,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf3",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.74, 0.24, 1.665),
 			cf = CFrame.new(-0.4, 1.599998, 0.849976, -0.871536, -0.185251, -0.453991, -0.127641, 0.979678, -0.154722, 0.473427, -0.076898, -0.87747),
@@ -163,7 +163,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf4",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.78, 0.24, 1.755),
 			cf = CFrame.new(0.549999, 1.799999, -0.75, 0.099961, -0.030561, -0.994522, 0.088245, 0.995862, -0.021733, 0.991071, -0.085589, 0.102244),
@@ -434,7 +434,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf1",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.92, 0.24, 2.07),
 			cf = CFrame.new(-1.15, 1.049999, 0, 0.324792, 0.151453, 0.93358, -0.563123, 0.824026, 0.06223, -0.75987, -0.545933, 0.352924),
@@ -442,7 +442,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf2",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(1, 0.24, 2.25),
 			cf = CFrame.new(1.2, 1.25, 0.25, -0.636999, 0.382748, 0.669131, 0.623032, 0.766784, 0.154509, -0.453941, 0.515312, -0.726905),
@@ -450,7 +450,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf3",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.74, 0.24, 1.665),
 			cf = CFrame.new(-0.4, 1.599998, 0.849976, -0.871536, -0.185251, -0.453991, -0.127641, 0.979678, -0.154722, 0.473427, -0.076898, -0.87747),
@@ -458,7 +458,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf4",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.78, 0.24, 1.755),
 			cf = CFrame.new(0.55, 1.799999, -0.75, 0.099961, -0.030561, -0.994522, 0.088245, 0.995862, -0.021733, 0.991071, -0.085589, 0.102244),
@@ -654,7 +654,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf1",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.92, 0.24, 2.07),
 			cf = CFrame.new(-1.15, 1.049999, 0, 0.324792, 0.151453, 0.93358, -0.563123, 0.824026, 0.06223, -0.75987, -0.545933, 0.352924),
@@ -662,7 +662,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf2",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(1, 0.24, 2.25),
 			cf = CFrame.new(1.2, 1.25, 0.25, -0.636999, 0.382748, 0.669131, 0.623032, 0.766784, 0.154509, -0.453941, 0.515312, -0.726905),
@@ -670,7 +670,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf3",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.74, 0.24, 1.665),
 			cf = CFrame.new(-0.4, 1.599998, 0.849976, -0.871536, -0.185251, -0.453991, -0.127641, 0.979678, -0.154722, 0.473427, -0.076898, -0.87747),
@@ -678,7 +678,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf4",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.78, 0.24, 1.755),
 			cf = CFrame.new(0.55, 1.799999, -0.75, 0.099961, -0.030561, -0.994522, 0.088245, 0.995862, -0.021733, 0.991071, -0.085589, 0.102244),
@@ -890,7 +890,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf1",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.92, 0.24, 2.07),
 			cf = CFrame.new(-1.15, 1.049999, 0, 0.324792, 0.151453, 0.93358, -0.563123, 0.824026, 0.06223, -0.75987, -0.545933, 0.352924),
@@ -898,7 +898,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf2",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(1, 0.24, 2.25),
 			cf = CFrame.new(1.2, 1.25, 0.25, -0.636999, 0.382748, 0.669131, 0.623032, 0.766784, 0.154509, -0.453941, 0.515312, -0.726905),
@@ -906,7 +906,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf3",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.74, 0.24, 1.665),
 			cf = CFrame.new(-0.4, 1.599998, 0.849976, -0.871536, -0.185251, -0.453991, -0.127641, 0.979678, -0.154722, 0.473427, -0.076898, -0.87747),
@@ -914,7 +914,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf4",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.78, 0.24, 1.755),
 			cf = CFrame.new(0.55, 1.799999, -0.75, 0.099961, -0.030561, -0.994522, 0.088245, 0.995862, -0.021733, 0.991071, -0.085589, 0.102244),
@@ -1134,7 +1134,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf1",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.92, 0.24, 2.07),
 			cf = CFrame.new(-1.15, 1.049999, 0, 0.324792, 0.151453, 0.93358, -0.563123, 0.824026, 0.06223, -0.75987, -0.545933, 0.352924),
@@ -1142,7 +1142,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf2",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(1, 0.24, 2.25),
 			cf = CFrame.new(1.200001, 1.25, 0.25, -0.636999, 0.382748, 0.669131, 0.623032, 0.766784, 0.154509, -0.453941, 0.515312, -0.726905),
@@ -1150,7 +1150,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf3",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.74, 0.24, 1.665),
 			cf = CFrame.new(-0.4, 1.599998, 0.849976, -0.871536, -0.185251, -0.453991, -0.127641, 0.979678, -0.154722, 0.473427, -0.076898, -0.87747),
@@ -1158,7 +1158,7 @@ TanglemireForms.Plants = {
 			material = Enum.Material.Plastic,
 		},
 		{
-			name = "WetLeaf4",
+			name = "Leaf",
 			shape = "Wedge",
 			size = Vector3.new(0.78, 0.24, 1.755),
 			cf = CFrame.new(0.549999, 1.799999, -0.75, 0.099961, -0.030561, -0.994522, 0.088245, 0.995862, -0.021733, 0.991071, -0.085589, 0.102244),

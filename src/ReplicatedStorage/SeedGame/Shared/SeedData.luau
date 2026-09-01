@@ -224,6 +224,10 @@ local EMBER_LEAF = Color3.fromRGB(92, 46, 32)
 local EMBER_STEM = Color3.fromRGB(120, 86, 66)
 local EMBER_CINDER = Color3.fromRGB(46, 34, 32)
 
+local STAR_LEAF = Color3.fromRGB(158, 128, 255)
+local STAR_STEM = Color3.fromRGB(48, 30, 78)
+local STAR_SOIL = Color3.fromRGB(16, 12, 32)
+
 local MIRE_LEAF = Color3.fromRGB(70, 128, 88)
 local MIRE_STEM = Color3.fromRGB(82, 112, 76)
 local MIRE_PEAT = Color3.fromRGB(72, 56, 44)
@@ -485,6 +489,52 @@ SeedData.Species = {
 		Accent = Color3.fromRGB(255, 128, 148),
 		Leaf = EMBER_LEAF, Stem = EMBER_STEM, Soil = EMBER_CINDER,
 	},
+	--==========================================================================
+	-- STARBLOOM -- biome 5
+	--
+	-- The cosmic climax of the road. RarityBonus 9.0. Rare to Mythic.
+	-- Void-carapace foundations, amethyst crystal petals, neon nebula cores.
+	--==========================================================================
+	{
+		Id = "novaorb", Name = "Novaorb", Rarity = "Rare", Biome = "starbloom",
+		Height = 4.60, Form = "orb",
+		Body = Color3.fromRGB(39, 37, 82),
+		Crown = Color3.fromRGB(158, 128, 255),
+		Accent = Color3.fromRGB(110, 230, 255),
+		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
+	},
+	{
+		Id = "cosmospire", Name = "Cosmospire", Rarity = "Rare", Biome = "starbloom",
+		Height = 7.40, Form = "spire",
+		Body = Color3.fromRGB(24, 18, 46),
+		Crown = Color3.fromRGB(158, 128, 255),
+		Accent = Color3.fromRGB(110, 230, 255),
+		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
+	},
+	{
+		Id = "voidpetal", Name = "Voidpetal", Rarity = "Epic", Biome = "starbloom",
+		Height = 5.60, Form = "petal",
+		Body = Color3.fromRGB(24, 18, 46),
+		Crown = Color3.fromRGB(158, 128, 255),
+		Accent = Color3.fromRGB(110, 230, 255),
+		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
+	},
+	{
+		Id = "astralhorn", Name = "Astralhorn", Rarity = "Legendary", Biome = "starbloom",
+		Height = 6.90, Form = "horn",
+		Body = Color3.fromRGB(39, 37, 82),
+		Crown = Color3.fromRGB(158, 128, 255),
+		Accent = Color3.fromRGB(242, 238, 255),
+		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
+	},
+	{
+		Id = "supernovus", Name = "Supernovus", Rarity = "Mythic", Biome = "starbloom",
+		Height = 8.20, Form = "supernova",
+		Body = Color3.fromRGB(24, 18, 46),
+		Crown = Color3.fromRGB(158, 128, 255),
+		Accent = Color3.fromRGB(255, 225, 120),
+		Leaf = STAR_LEAF, Stem = STAR_STEM, Soil = STAR_SOIL,
+	},
 } :: { Species }
 
 --==============================================================================
@@ -657,12 +707,32 @@ end
 -- the tier they belong to rather than inside a curve somebody has to solve
 -- before they can read them.
 --==============================================================================
-function SeedData.RollTier(rng: Random): number
+function SeedData.RollTier(rng: Random, rarityBonus: number?): number
+	local bonus = math.max(1, rarityBonus or 1)
 	local roll = rng:NextNumber()
+	if bonus <= 1 then
+		local acc = 0
+		for _, t in ipairs(SeedData.Tiers) do
+			acc += t.weight
+			if roll <= acc then
+				return t.index
+			end
+		end
+		return 1
+	end
+
+	local total = 0
+	for _, t in ipairs(SeedData.Tiers) do
+		local w = if t.index >= 4 then t.weight * bonus else t.weight
+		total += w
+	end
+
+	local target = roll * total
 	local acc = 0
 	for _, t in ipairs(SeedData.Tiers) do
-		acc += t.weight
-		if roll <= acc then
+		local w = if t.index >= 4 then t.weight * bonus else t.weight
+		acc += w
+		if target <= acc then
 			return t.index
 		end
 	end

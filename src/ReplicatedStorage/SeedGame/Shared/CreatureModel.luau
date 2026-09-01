@@ -47,6 +47,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local TanglemireForms = require(Shared:WaitForChild("TanglemireForms"))
 local EmberrootForms = require(Shared:WaitForChild("EmberrootForms"))
+local StarbloomForms = require(Shared:WaitForChild("StarbloomForms"))
 
 local CreatureModel = {}
 
@@ -934,7 +935,10 @@ end
 local GIRTH_REF = SeedData.Girth(SeedData.BaseTier)
 local GIRTH_SPREAD = 0.16
 
-local function mireGirth(G: number): number
+-- Named for the biome that needed it first; it is now the one girth curve all
+-- three assembled-form biomes share, so a Colossal is the same amount broader
+-- whichever road it came off.
+local function girthSpread(G: number): number
 	return 1 + GIRTH_SPREAD * (G - GIRTH_REF) / GIRTH_REF
 end
 
@@ -1086,7 +1090,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		local specs = TanglemireForms.Plants[sp.Id]
 		if specs then
 			local hs = H / TanglemireForms.PreviewHeight[sp.Id]
-			local gs = mireGirth(G)
+			local gs = girthSpread(G)
 			for _, spec in ipairs(specs) do
 				replayPart(spec, cf, hs, gs, spec.color or sp.Body, model)
 			end
@@ -1122,7 +1126,7 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 	elseif sp.Biome == "emberroot" then
 		local authored = EmberrootForms.AuthoredHeight[sp.Id]
 		if authored and authored > 0 then
-			if EmberrootForms.Build(model, sp.Id, cf, H / authored) then
+			if EmberrootForms.Build(model, sp.Id, cf, H / authored, girthSpread(G)) then
 				return finish()
 			end
 		end
@@ -1131,6 +1135,27 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		-- which is worse than an empty pivot somebody notices immediately.
 		warn(string.format(
 			"[Seed/CreatureModel] emberroot species %q has no approved geometry",
+			sp.Id))
+		return finish()
+
+	elseif sp.Biome == "starbloom" then
+		--======================================================================
+		-- STARBLOOM ANSWERS HERE TOO, AND ON THE SAME TWO FACTORS
+		--
+		-- Authored at a fixed height per species and conformed to the tier's
+		-- frame by the ratio, exactly as Emberroot does -- and spread by the same
+		-- girth curve, so the ladder reads as heavier and not merely as bigger.
+		--======================================================================
+		local authored = StarbloomForms.AuthoredHeight[sp.Id]
+		if authored and authored > 0 then
+			if StarbloomForms.Build(model, sp.Id, cf, H / authored, girthSpread(G)) then
+				return finish()
+			end
+		end
+		-- The same refusal again. A starbloom species with no builder must not
+		-- come out as a Greenhollow plant painted violet.
+		warn(string.format(
+			"[Seed/CreatureModel] starbloom species %q has no approved geometry",
 			sp.Id))
 		return finish()
 	end

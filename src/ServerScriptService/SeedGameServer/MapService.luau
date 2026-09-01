@@ -561,6 +561,11 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 	model.Name = biome.Id
 	model:SetAttribute(GameConfig.Attributes.BiomeId, biome.Id)
 	model:SetAttribute("RecommendedSpeed", biome.RecommendedSpeed)
+	-- Informational, for the Explorer and the debug panel. It is NOT the gate --
+	-- NestService reads BiomeData.LiveInPhaseA directly and decides whether the
+	-- biome raises nests. This attribute was the only consumer of the flag for a
+	-- long time, and since nothing read the attribute either, the flag did
+	-- nothing at all.
 	model:SetAttribute("Live", biome.LiveInPhaseA)
 	model:SetAttribute("DistanceFromSafety", BiomeData.DistanceFromSafety(biome))
 	model.Parent = parent

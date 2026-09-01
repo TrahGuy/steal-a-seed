@@ -162,7 +162,7 @@ local function growPod(nest: Nest, index: number)
 	end
 	-- Stamped on the model by BuildPod, which is where every later reader --
 	-- CarryService on pickup, the billboard, the shell colour -- gets it from.
-	local tier = SeedData.RollTier(rng)
+	local tier = SeedData.RollTier(rng, nest.biome.RarityBonus)
 	local pod = CreatureModel.BuildPod(species, tier, nest.slots[index], nest.folder)
 	-- Loot. CreatureModel deliberately does not decide this: the same model
 	-- hatching in a plot must never be takeable.
@@ -263,6 +263,37 @@ local function speedFor(nest: Nest): number
 		+ math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
 end
 
+--==============================================================================
+-- HAS THIS THIEF EARNED A HEAD START
+--
+-- The biome's RecommendedSpeed stops being purely advisory at exactly one
+-- moment: the instant a pod leaves the nest. Walking in, looking around and
+-- walking out again is free at any Speed and stays free -- the road is open and
+-- nothing here closes it.
+--
+-- GREENHOLLOW ALWAYS QUALIFIES. Its recommendation is 0, so there is nothing to
+-- fall short of, and the tutorial biome must never be the one that teaches a
+-- new player they are not allowed to play.
+--
+-- SO DOES A PLAYER WE CANNOT MEASURE. A nil score is a profile that has not
+-- loaded, not a poor one; the same reading parentWalkSpeedFor already takes.
+--
+-- The score is the SERVER'S. Not a replicated attribute, not an afterimage
+-- tier, not anything the client has touched -- those are all things a client
+-- can be made to say.
+--==============================================================================
+local function qualifiesForHeadStart(nest: Nest, thief: Player): boolean
+	local recommended = nest.biome.RecommendedSpeed
+	if type(recommended) ~= "number" or recommended ~= recommended or recommended <= 0 then
+		return true
+	end
+	local score = speedScoreOf(thief)
+	if score == nil or score ~= score then
+		return true
+	end
+	return score >= recommended
+end
+
 local function provoke(nest: Nest, thief: Player)
 	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
@@ -271,8 +302,30 @@ local function provoke(nest: Nest, thief: Player)
 	-- WAKE, ON A DELAY. The delay is the head start, and it is the whole skill
 	-- of a raid.
 	if nest.state == "asleep" then
-		nest.state = "waking"
-		nest.stateUntil = os.clock() + P.WakeDelaySeconds
+		if qualifiesForHeadStart(nest, thief) then
+			nest.state = "waking"
+			nest.stateUntil = os.clock() + P.WakeDelaySeconds
+		else
+			--==============================================================
+			-- UNDER-SPEED: THE DELAY IS WHAT IS TAKEN AWAY, NOT THE RULES
+			--
+			-- The parent is up and after them in the same tick, which is the
+			-- whole of the penalty. It is not a second catch system and it is
+			-- not an absurd WalkSpeed: it is the ONE chase, minus the 1.2
+			-- seconds that make a raid winnable. parentWalkSpeedFor is
+			-- already leaning on the same shortfall, so an under-levelled
+			-- thief now meets a faster parent that also never overslept.
+			--
+			-- Asleep must be cleared HERE. It is normally cleared by the
+			-- waking -> chasing transition in the tick, and skipping that
+			-- state skips the clear -- which would leave the parent sprinting
+			-- down the road while every client still drew it curled up
+			-- asleep beside the nest.
+			--==============================================================
+			nest.state = "chasing"
+			nest.stateUntil = 0
+			nest.parent:SetAttribute("Asleep", false)
+		end
 	elseif nest.state == "returning" then
 		-- Already up and walking home. No second delay -- it never went back to
 		-- sleep, so it has nothing to wake up from.
@@ -1026,18 +1079,44 @@ function NestService.Start()
 		byId[biome.Id] = biome
 	end
 
-	-- A BIOME WITH NO SPECIES GETS NO NESTS. SeedData is deliberately
-	-- Greenhollow-only until each biome has its own art, so the other four would
-	-- otherwise raise nine parents -- roughly 800 parts of monster -- to stand
-	-- guard over nothing at all. Skipped and counted, never skipped silently:
-	-- an empty biome is a thing somebody should notice, not discover.
+	--==========================================================================
+	-- WHICH BIOMES ACTUALLY RAISE A NEST
+	--
+	-- Two conditions, and they answer different questions.
+	--
+	-- NO SPECIES, NO NESTS. SeedData was deliberately Greenhollow-only until
+	-- each biome had its own art, so the other four would otherwise raise nine
+	-- parents -- roughly 800 parts of monster -- to stand guard over nothing at
+	-- all. That test is automatic: art arrives, the biome wakes up.
+	--
+	-- AND THAT IS EXACTLY WHY THE FLAG HAS TO BE HERE TOO. Automatic is the
+	-- wrong behaviour for a biome whose art has landed but is not FINISHED --
+	-- adding five species rows silently opened Starbloom, because species
+	-- presence was the only gate in the game. `LiveInPhaseA` was supposed to be
+	-- the other one and was not read by anything: MapService wrote it to a
+	-- `Live` attribute that no script has ever looked at. It is read here now,
+	-- so the flag in BiomeData means what it says and a biome goes live when
+	-- somebody decides it does.
+	--
+	-- ONLY THE NESTS. The segment, the road, the walls and the gate arch are
+	-- built regardless -- you can still walk the whole corridor and look at
+	-- where the game is going. What a not-yet-live biome has is no pods to steal
+	-- and no parent standing over them.
+	--
+	-- Skipped and counted, never skipped silently: an empty biome is a thing
+	-- somebody should notice, not discover.
+	--==========================================================================
 	local skipped: { [string]: number } = {}
+	local held: { [string]: number } = {}
 
 	for _, site in ipairs(CollectionService:GetTagged(GameConfig.Tags.NestSite)) do
 		if site:IsA("BasePart") and site:IsDescendantOf(Workspace) then
 			local biome = byId[site:GetAttribute(GameConfig.Attributes.BiomeId) or ""]
 			if biome and #SeedData.InBiome(biome.Id) == 0 then
 				skipped[biome.Id] = (skipped[biome.Id] or 0) + 1
+				biome = nil
+			elseif biome and biome.LiveInPhaseA ~= true then
+				held[biome.Id] = (held[biome.Id] or 0) + 1
 				biome = nil
 			end
 			if biome then
@@ -1081,6 +1160,17 @@ function NestService.Start()
 		table.sort(quiet)
 		log("No species yet, so no nests built in: " .. table.concat(quiet, ", ")
 			.. ". Those biomes are geometry until they have art.")
+	end
+
+	local waiting = {}
+	for id, n in pairs(held) do
+		table.insert(waiting, string.format("%s (%d)", id, n))
+	end
+	if #waiting > 0 then
+		table.sort(waiting)
+		log("Has art but is not live yet, so no nests built in: "
+			.. table.concat(waiting, ", ")
+			.. ". Flip LiveInPhaseA in BiomeData to open it.")
 	end
 end
 

@@ -45,9 +45,23 @@ local EmberrootForms = {}
 -- Position scales; rotation does not. Subtracting a CFrame's own position
 -- leaves the rotation-only CFrame. The same arithmetic every other builder in
 -- the project uses, so nothing grows differently here.
-local function scaled(c: CFrame, s: number): CFrame
+--==============================================================================
+-- ONE PART, MOVED OUT AND SIZED UP
+--
+-- `s` is the height scale and applies to all three axes. `gs` is GIRTH, and it
+-- is horizontal only -- see the banner on CreatureModel.BuildCreature: two
+-- thirds of the approved parts are rotated off-axis, and scaling a rotated box
+-- along world X and Z does not widen it, it SHEARS it. So girth never touches a
+-- part's SIZE here. It spreads the parts apart and leaves every one of them at
+-- its approved proportions, which is the same restraint Tanglemire's replayPart
+-- already works under.
+--
+-- The rotation rides through untouched: `c - p` is the orientation with the
+-- translation subtracted out.
+--==============================================================================
+local function scaled(c: CFrame, s: number, gs: number): CFrame
 	local p = c.Position
-	return CFrame.new(p.X * s, p.Y * s, p.Z * s) * (c - p)
+	return CFrame.new(p.X * s * gs, p.Y * s, p.Z * s * gs) * (c - p)
 end
 
 local C = {
@@ -435,9 +449,19 @@ local function cinderpaw(parent: Instance, at: CFrame): Model
 		local base = b.hub * CFrame.Angles(0, rad(f[1] :: number), 0)
 			* CFrame.Angles(rad(-(f[3] :: number)), 0, 0)
 		local L = f[2] :: number
-		mk({ name = "FrondRib" .. i, size = Vector3.new(0.11, 0.10, L),
+		--======================================================================
+		-- RIB AND BLADE, BOTH NAMED "Leaf"
+		--
+		-- PlantSway swings every direct child named exactly "Leaf" as an arm
+		-- while a plant walks. "FrondRib1" and "FrondBlade1" match nothing, so
+		-- these fronds have never moved -- the same trap Suncrown fell into with
+		-- SupportLeaf1-4. Both halves take the name: they share an axis and sit
+		-- within a twentieth of a stud of each other, so they swing as one frond
+		-- rather than peeling apart.
+		--======================================================================
+		mk({ name = "Leaf", size = Vector3.new(0.11, 0.10, L),
 			cf = base * CFrame.new(0, 0, -L * 0.5), color = C.Cinder, parent = m })
-		mk({ name = "FrondBlade" .. i, size = Vector3.new(f[4] :: number, 0.13, L * 0.86),
+		mk({ name = "Leaf", size = Vector3.new(f[4] :: number, 0.13, L * 0.86),
 			cf = base * CFrame.new(0, 0.045, -L * 0.52)
 				* CFrame.Angles(0, 0, rad((i % 2 == 0) and 7 or -6)),
 			color = f[5] :: Color3, parent = m })
@@ -1024,7 +1048,21 @@ end
 -- the parts to the caller's model -- so CreatureModel keeps its own pivot and
 -- its own tag, and the approved code is never touched.
 --==============================================================================
-function EmberrootForms.Build(model: Model, id: string, at: CFrame, hs: number): boolean
+--==============================================================================
+-- BUILD ONE EMBERROOT SPECIES, CONFORMED TO ITS TIER
+--
+-- `hs` is height: the ratio between the tier's frame and the height this
+-- species was authored at. `gs` is the damped horizontal girth spread, and it
+-- is optional -- a caller that omits it gets 1 and the old height-only
+-- behaviour, which is exactly what every showroom wants.
+--
+-- Girth arriving here at all is the fix for a real gap: this took one scalar,
+-- so a Colossal was a uniformly enlarged Tiny -- the same silhouette, the same
+-- proportions, no added heft, while Tanglemire's creatures were getting broader
+-- across the ladder. Girth runs 0.82 to 1.45 and it was reaching two biomes out
+-- of the three that need it.
+--==============================================================================
+function EmberrootForms.Build(model: Model, id: string, at: CFrame, hs: number, gs: number?): boolean
 	local fn = BUILDERS[id]
 	if not fn then
 		return false
@@ -1033,13 +1071,18 @@ function EmberrootForms.Build(model: Model, id: string, at: CFrame, hs: number):
 	scratch.Parent = model
 	local built = fn(scratch, at)
 
-	if math.abs(hs - 1) > 1e-6 then
+	local spread = if type(gs) == "number" and gs == gs and gs > 0 then gs else 1
+	if math.abs(hs - 1) > 1e-6 or math.abs(spread - 1) > 1e-6 then
 		for _, d in ipairs(built:GetDescendants()) do
 			if d:IsA("BasePart") then
-				d.CFrame = at * scaled(at:ToObjectSpace(d.CFrame), hs)
+				d.CFrame = at * scaled(at:ToObjectSpace(d.CFrame), hs, spread)
+				-- Size takes the height scale ALONE. See scaled().
 				d.Size = d.Size * hs
 			elseif d:IsA("Attachment") then
-				d.Position = d.Position * hs
+				-- An attachment is a point on a part, so it travels with the
+				-- same spread its part did.
+				d.Position = Vector3.new(d.Position.X * hs * spread,
+					d.Position.Y * hs, d.Position.Z * hs * spread)
 			elseif d:IsA("PointLight") then
 				d.Range = d.Range * hs
 			elseif d:IsA("ParticleEmitter") then

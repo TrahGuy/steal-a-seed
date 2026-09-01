@@ -58,9 +58,15 @@ export type Biome = {
 	PodsPerNest: number,
 	-- Weight multiplier on the Epic-and-above bands. 1.0 is the base table.
 	RarityBonus: number,
-	-- Records whether this segment has live nest and species content. Geometry
-	-- exists for every segment so the whole road reads correctly; unfinished
-	-- biomes stay empty without becoming inaccessible.
+	-- Whether this segment raises nests. Geometry exists for every segment so the
+	-- whole road reads correctly; unfinished biomes stay empty without becoming
+	-- inaccessible, and nothing here ever blocks the road.
+	--
+	-- NestService reads this. It is the SECOND of two gates -- the first is
+	-- whether the biome has any species at all -- and it exists because the
+	-- first one opens by itself: dropping five species rows into SeedData is
+	-- enough to put a biome in the game, which is how Starbloom went live
+	-- without anybody deciding it should. Turning a biome on is this line.
 	LiveInPhaseA: boolean,
 }
 
@@ -142,7 +148,7 @@ BiomeData.Biomes = {
 		Nests = 1,
 		PodsPerNest = 3,
 		RarityBonus = 4.5,
-		LiveInPhaseA = false,
+		LiveInPhaseA = true,
 	},
 	{
 		Id = "starbloom",
