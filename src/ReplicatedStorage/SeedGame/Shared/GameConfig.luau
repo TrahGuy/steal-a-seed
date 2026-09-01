@@ -384,6 +384,19 @@ GameConfig.Attributes = {
 	-- client play the run cycle on somebody else's character without a remote.
 	OnTreadmill = "OnTreadmill",
 	--==========================================================================
+	-- WHAT TRAINING RUSH IS DOING, PUBLISHED READ-ONLY
+	--
+	-- The multiplier the SERVER actually paid on, and the rested charge left, so
+	-- the HUD can show both without computing either. A client that derived them
+	-- would be a client that could disagree with its own payout -- and one that
+	-- could be talked into showing 4x forever.
+	--
+	-- On the player, written only when the rounded value changes, so a training
+	-- session is a handful of replications rather than one per tick.
+	--==========================================================================
+	TrainingRush = "TrainingRush",
+	TrainingCharge = "TrainingCharge",
+	--==========================================================================
 	-- PARKED ON YOUR OWN MILL
 	--
 	-- Set by TreadmillService when it catches a player crossing their belt, read
@@ -664,6 +677,10 @@ GameConfig.Speed = {
 		{ 1e3, 22 },
 		{ 1e4, 27 },
 		{ 1e6, 32 },
+		-- The long climb from 1M to Dustbowl is the emptiest stretch on the
+		-- ladder, so it gets a waypoint of its own: 100M is a round number a
+		-- player passes on the way and a visible +8 for having done it.
+		{ 100e6, 40 },
 		--== the biome recommendations ==--
 		{ 167e6, 42 },
 		{ 800e6, 54 },
@@ -1347,11 +1364,12 @@ GameConfig.Parent = {
 	-- safe zone every tick. That is the actual rule, and a radius only ever
 	-- approximated it.
 	--
-	-- What is left here is a backstop -- two 300-stud segments -- so a chase
-	-- that goes wrong cannot walk the length of the map forever. It is not
-	-- meant to be the thing that ends a normal pursuit.
+	-- What is left here is a backstop -- sized for the full 5-biome corridor
+	-- (1500+ studs) -- so a normal cross-biome chase from Emberroot or Starbloom
+	-- can reach the red line / safe zone, while a broken chase off-map cannot
+	-- run forever.
 	--==========================================================================
-	LeashStuds = 600,
+	LeashStuds = 2000,
 	-- Close enough to grab.
 	GrabStuds = 7,
 
@@ -1558,29 +1576,45 @@ GameConfig.Treadmill = {
 	-- buy speed to stop being nervous, not to be allowed in.
 	--==========================================================================
 	-- The tier-1 rate, kept here because TreadmillService still reads it as the
-	-- floor. What a given mill actually pays is GameConfig.Mill.Tiers[n].Speed.
-	SpeedPerSecond = 2,
+	-- floor when a tier index falls off the end of the table. It must MATCH
+	-- Tiers[1].speed -- a fallback that disagrees with the row it stands in for
+	-- is a silent wrong answer at exactly the moment something else is already
+	-- wrong. Asserted below the table.
+	SpeedPerSecond = 20,
 	-- Only pays while you are actually standing on it, alive.
 	TickSeconds = 1,
 }
 
 --==============================================================================
--- THE MILL, IN SEVEN STEPS
+-- THE MILL, IN TEN STEPS
 --
--- One per plot, and yours only. The ladder exists because the base rate above
--- is deliberately a FLOOR -- the comment on it says the pacing was always meant
--- to come from upgrades multiplying a slow number rather than from a fast one
--- being clawed back.
+-- One per plot, and yours only.
 --
--- WHAT THE RATES ARE MEASURED AGAINST. The speed needed to out-run each biome's
--- parent is 453 / 2,208 / 4,133 / 6,260 / 8,636. At tier 1 the whole ladder is
--- about 72 minutes of standing still; at tier 7 it is about three. Twenty-five
--- times faster at the top, and a quarter of a billion in cash to get there --
--- which is the point: the mill is what you spend a mature garden's income on.
+-- THE RATES ARE PRICED OFF THE BIOME RECOMMENDATIONS, NOT OFF EACH OTHER.
+-- Each tier is sized so that the milestone it is meant to serve takes tens of
+-- minutes rather than tens of hours:
 --
--- COSTS CLIMB FASTER THAN RATES. Each step is roughly seven times the last
--- while the rate is under two, so no tier is ever an obvious skip and the last
--- one is a genuine goal rather than a formality.
+--     T1     20/s    1K in 50s          the first trail, inside a minute
+--     T2    100/s    10K in 100s        an immediate reward for the first buy
+--     T3      1K/s   1M in 17 min       the early-session goal
+--     T4      8K/s                      the bridge to Dustbowl
+--     T5     50K/s   167M in 56 min     Dustbowl
+--     T6    300K/s   800M in 44 min     Tanglemire
+--     T7      2M/s   3B in 25 min       Emberroot
+--     T8     12M/s   10B in 14 min      Starbloom
+--     T9     70M/s                      post-Starbloom
+--     T10   400M/s   1e15 in 29 days    post-Starbloom, and why Overclock
+--                                       still exists
+--
+-- THE OLD LADDER RAN 2 TO 160 AND WAS NOT A LADDER. It spanned 80x while the
+-- score ladder it feeds spans a QUADRILLION, so every tier past the third was
+-- indistinguishable in practice and the whole of the pacing had been pushed
+-- onto Overclock. This one spans 20 million times, which is the same shape as
+-- the thing it is climbing.
+--
+-- COSTS ARE UNCHANGED. They already climbed faster than the old rates and they
+-- climb slower than these, which is deliberate: a tier now buys a visible jump
+-- rather than a rounding error, so no step is an obvious skip.
 --
 -- BeltStuds is how fast the surface travels, and it is not decoration: the run
 -- animation is driven from the same number (see SpeedFX), so a faster mill has
@@ -1591,17 +1625,28 @@ GameConfig.Treadmill = {
 -- has always owned, sitting next to the curve it multiplies.
 --==============================================================================
 GameConfig.Mill = {
+	--==========================================================================
+	-- THE ONE AUTHORITATIVE RATE TABLE
+	--
+	-- `speed` is Speed SCORE per second, not studs. Everything that prints a
+	-- rate -- the mill sign, the upgrade board, the showroom placards, the
+	-- startup log -- reads this row through TreadmillService, so a number
+	-- changed here is a number changed everywhere.
+	--
+	-- BeltStuds is the only studs-per-second column and drives the belt
+	-- animation and the run cycle. It is untouched by this pass.
+	--==========================================================================
 	Tiers = {
-		{ name = "Compost Walk", speed = 2, cost = 0, beltStuds = 13 },
-		{ name = "Garden Path", speed = 4, cost = 10000, beltStuds = 15 },
-		{ name = "Trellis Trot", speed = 7, cost = 75000, beltStuds = 17 },
-		{ name = "Millstone", speed = 12, cost = 500000, beltStuds = 19 },
-		{ name = "Glasshouse", speed = 20, cost = 3500000, beltStuds = 21 },
-		{ name = "Sunwheel", speed = 32, cost = 25000000, beltStuds = 24 },
-		{ name = "Heartroot", speed = 50, cost = 150000000, beltStuds = 27 },
-		{ name = "Inferno Forge", speed = 75, cost = 1000000000, beltStuds = 31 },
-		{ name = "Celestial Ascent", speed = 110, cost = 10000000000, beltStuds = 35 },
-		{ name = "Astral Singularity", speed = 160, cost = 100000000000, beltStuds = 40 },
+		{ name = "Compost Walk", speed = 20, cost = 0, beltStuds = 13 },
+		{ name = "Garden Path", speed = 100, cost = 10000, beltStuds = 15 },
+		{ name = "Trellis Trot", speed = 1000, cost = 75000, beltStuds = 17 },
+		{ name = "Millstone", speed = 8000, cost = 500000, beltStuds = 19 },
+		{ name = "Glasshouse", speed = 50000, cost = 3500000, beltStuds = 21 },
+		{ name = "Sunwheel", speed = 300000, cost = 25000000, beltStuds = 24 },
+		{ name = "Heartroot", speed = 2000000, cost = 150000000, beltStuds = 27 },
+		{ name = "Inferno Forge", speed = 12000000, cost = 1000000000, beltStuds = 31 },
+		{ name = "Celestial Ascent", speed = 70000000, cost = 10000000000, beltStuds = 35 },
+		{ name = "Astral Singularity", speed = 400000000, cost = 100000000000, beltStuds = 40 },
 	},
 	StartingTier = 1,
 
@@ -1743,33 +1788,47 @@ GameConfig.Mill = {
 	},
 
 	--==========================================================================
-	-- OVERCLOCK: WHAT A TIER-SEVEN MILL DOES NEXT
+	-- OVERCLOCK: WHAT A TIER-TEN MILL DOES NEXT
 	--
-	-- Seven tiers top out at 50 Speed/sec. The ladder they feed runs to a
-	-- QUADRILLION. At 50/sec the last biome recommendation alone is six and a
-	-- half years,
-	-- so the tier ladder is not a progression system past its own top -- it is a
-	-- wall with a number on it.
-	--
-	-- Overclock is the ladder that continues, and it is deliberately NOT more
-	-- tiers: seven mills are seven distinct machines with seven silhouettes and
-	-- seven sets of particles, and an eighth would have to be built, not typed.
-	-- An overclock is the SAME Heartroot running harder. No new model, no new
-	-- art, no new belt.
+	-- Overclock is the ladder that continues past the last machine, and it is
+	-- deliberately NOT more tiers: ten mills are ten distinct silhouettes with
+	-- ten sets of particles, and an eleventh would have to be built, not typed.
+	-- An overclock is the SAME Astral Singularity running harder. No new model,
+	-- no new art, no new belt.
 	--
 	--     TrainingRate = tier.speed * Multiplier^level * rebirth
 	--
-	-- FOUR PER LEVEL, because the score ladder is logarithmic and anything
-	-- gentler makes the last three biomes take longer than the first four put
-	-- together. Ten levels is 4^10 = 1,048,576x, which turns 50/sec into
-	-- 52.4M/sec -- the rate the top of the map is priced for.
+	--==========================================================================
+	-- TWO PER LEVEL, NOT FOUR, AND THAT IS A CONSEQUENCE OF THE RATE PASS
 	--
-	--     level  0        50 / sec        level  6   204,800 / sec
-	--     level  1       200 / sec        level  7   819,200 / sec
-	--     level  2       800 / sec        level  8     3.28M / sec
-	--     level  3     3,200 / sec        level  9     13.1M / sec
-	--     level  4    12,800 / sec        level 10     52.4M / sec
-	--     level  5    51,200 / sec
+	-- Four was correct when the tier ladder spanned 2 to 160. It had to be:
+	-- eighty times was nothing against a score ladder that runs to a
+	-- quadrillion, so ALL of the pacing lived here and 4^10 = 1,048,576x was
+	-- what carried it.
+	--
+	-- The tiers now span 20 to 400,000,000 -- twenty million times -- and carry
+	-- their own pacing. Left at four, this would multiply a rate that is already
+	-- correct by another million: tier 10 overclocked would pay 4.19e14 a
+	-- second and cross the entire score ladder, quadrillion and all, in TWO AND
+	-- A HALF SECONDS. Every biome recommendation, every trail threshold and the
+	-- whole WalkSpeed curve would be consumed between two ticks.
+	--
+	-- Two per level is 2^10 = 1,024x, which puts a fully overclocked tier 10 at
+	-- 409.6 billion a second -- the cap in about forty minutes, which is what an
+	-- endgame ceiling should cost.
+	--
+	-- It also makes the two ladders PRICE-COMPARABLE rather than one dominating.
+	-- Cumulative overclock to level 5 is 142M and turns a Glasshouse into
+	-- 1.6M/sec; tier 7 costs 150M and pays 2M/sec. Near enough that buying
+	-- either is defensible. At four per level the same 142M bought 51.2M/sec and
+	-- the tier ladder was strictly the wrong purchase at every price.
+	--
+	--     level  0    400M / sec         level  6   25.6B / sec
+	--     level  1    800M / sec         level  7   51.2B / sec
+	--     level  2    1.6B / sec         level  8    102B / sec
+	--     level  3    3.2B / sec         level  9    205B / sec
+	--     level  4    6.4B / sec         level 10    410B / sec
+	--     level  5   12.8B / sec
 	--
 	--==========================================================================
 	-- CASH IS THE ONLY REQUIREMENT
@@ -1810,8 +1869,10 @@ GameConfig.Mill = {
 	-- across two files would be worse.
 	--==========================================================================
 	Overclock = {
-		-- Multiplier ^ level, applied to the tier's own rate.
-		Multiplier = 4,
+		-- Multiplier ^ level, applied to the tier's own rate. See the note
+		-- above before changing it: this number is sized against the SPREAD of
+		-- the tier ladder, not chosen on its own.
+		Multiplier = 2,
 		MaxLevel = 10,
 		-- Level N costs Costs[N], and that is the entire requirement.
 		Costs = {
@@ -1830,7 +1891,85 @@ GameConfig.Mill = {
 		-- is finished.
 		Label = "Overclock",
 	},
+
+	--==========================================================================
+	-- TRAINING RUSH: A REASON TO LEAVE THE MILL
+	--
+	-- Standing on a belt for an hour is not the loop this game wants. The loop
+	-- is: train briefly, raid, plant, come back to a mill that is fresh again.
+	-- Training Rush is what makes the fourth step worth anything -- a rested
+	-- charge that pays up to four times the base rate while it lasts and
+	-- nothing extra once it is spent.
+	--
+	-- IT IS NOT A SECOND FAUCET. TreadmillService still mints every point of
+	-- Speed in the game; this is one more multiplier inside the product it
+	-- already computes, alongside Overclock:
+	--
+	--     paid = tier.speed x Multiplier^overclock x rebirth x rush
+	--
+	-- AND IT IS NOT OVERCLOCK. Overclock is bought once and is permanent, which
+	-- is why it is a profile field and a price list. This is spent and refills,
+	-- which is why it is a clock. They multiply; neither replaces the other, and
+	-- an overclocked mill rushes exactly as hard as a fresh one.
+	--
+	--==========================================================================
+	-- WHY THESE FIVE NUMBERS
+	--
+	-- A full charge is 90 seconds of boosted training. The first 30 of those are
+	-- spent climbing from 1x to 4x, so a full charge is worth about 315 seconds
+	-- of base rate rather than 360 -- the ramp is a real cost, and it is what
+	-- stops a player tapping on and off the belt to skim only the peak.
+	--
+	-- Refilling a full charge takes 180 seconds AWAY from the belt, which is
+	-- roughly one raid and one planting round. That ratio is the whole design:
+	-- three minutes of game earns ninety seconds of boosted mill.
+	--
+	-- The ramp DECAYS off the belt at the rate it builds, so a player who steps
+	-- off for a moment keeps most of their climb and one who leaves to raid
+	-- comes back at 1x. Nothing here can be gamed by remounting: charge is
+	-- restored from a timestamp against real elapsed time, so the only way to
+	-- gain charge is to actually spend time not training.
+	--==========================================================================
+	Training = {
+		-- Seconds of boosted training a full charge is worth. New profiles start
+		-- full, so a player's first mill session is their fastest.
+		MaxChargeSeconds = 90,
+		-- What the multiplier reaches at the top of the ramp.
+		PeakMultiplier = 4,
+		-- How long the climb from 1x to PeakMultiplier takes, in seconds of
+		-- boosted training.
+		RampSeconds = 30,
+		-- Charge restored per second spent off the belt. Half real time, so a
+		-- full 90 costs 180 seconds away.
+		RestorePerSecond = 0.5,
+		-- The ramp falls at this per second off the belt. Equal to the rate it
+		-- builds, so leaving costs exactly what it bought.
+		RampDecayPerSecond = 1,
+		--======================================================================
+		-- THE OFFLINE CLAMP
+		--
+		-- Charge is capped at MaxChargeSeconds, so a week away cannot buy more
+		-- than three minutes away could -- there is no unbounded offline Speed
+		-- here even without this. It exists so the ARITHMETIC is bounded too: an
+		-- absent or corrupted timestamp must not produce a multi-million-second
+		-- elapsed to multiply, and a documented ceiling is easier to reason
+		-- about than one that happens to be safe.
+		--======================================================================
+		MaxOfflineRestoreSeconds = 8 * 3600,
+	},
 }
+
+--==============================================================================
+-- THE FLOOR MUST MATCH THE ROW IT STANDS IN FOR
+--
+-- GameConfig.Treadmill.SpeedPerSecond -- a DIFFERENT table from the one above,
+-- which is half the reason this check exists -- is what TreadmillService pays
+-- when a tier index falls off the end of Tiers. Left disagreeing with Tiers[1]
+-- it would answer a different wrong number at exactly the moment something else
+-- had already gone wrong, which is the hardest kind of bug to see.
+--==============================================================================
+assert(GameConfig.Treadmill.SpeedPerSecond == GameConfig.Mill.Tiers[1].speed,
+	"GameConfig.Treadmill.SpeedPerSecond must equal GameConfig.Mill.Tiers[1].speed")
 
 
 function GameConfig.parentThrowStudsFor(biomeOrder: number): number
@@ -2043,6 +2182,27 @@ end
 -- player attribute so that every client can render every OTHER player without
 -- being handed their profile.
 --==============================================================================
+--==============================================================================
+-- WHAT A RAMP IS WORTH
+--
+-- Linear from 1x at a cold start to PeakMultiplier at RampSeconds, and flat
+-- after that. Shared rather than server-private because the HUD prints the same
+-- number the payout uses, and a multiplier derived twice is a display that
+-- disagrees with the score the first time either half is touched.
+--
+-- The CLIENT still never decides it: the server publishes the ramp it actually
+-- paid on. This function only spares both sides from writing the same line.
+--==============================================================================
+function GameConfig.trainingRushMultiplier(rampSeconds: number): number
+	local T = GameConfig.Mill.Training
+	local r = tonumber(rampSeconds)
+	if r == nil or r ~= r or r <= 0 or T.RampSeconds <= 0 then
+		return 1
+	end
+	local t = math.clamp(r / T.RampSeconds, 0, 1)
+	return 1 + (T.PeakMultiplier - 1) * t
+end
+
 function GameConfig.speedVisualTierFor(speedScore: number): number
 	local tiers = GameConfig.Afterimage.Tiers
 	if type(speedScore) ~= "number" or speedScore ~= speedScore or speedScore <= 0 then
@@ -3042,9 +3202,10 @@ end
 GameConfig.Save = {
 	StoreName = "StealASeed_v1",
 	CurrentVersion = 1,
-	AutosaveSeconds = 90,
+	AutosaveSeconds = 45,
 	MinWriteGap = 7,
 	RetryAttempts = 4,
+	RetryBackoff = 1,
 
 	--==========================================================================
 	-- THE CEILINGS, AND WHY THEY ARE HERE RATHER THAN IN A BALANCE FILE
@@ -3091,7 +3252,7 @@ GameConfig.Save = {
 	-- B before A has written, B loads stale data, B saves over A. Progress is
 	-- gone and nothing errored.
 	--==========================================================================
-	SessionLockSeconds = 45,
+	SessionLockSeconds = 120,
 	LoadAttempts = 5,
 	LoadRetryGap = 3,
 }

@@ -69,7 +69,9 @@ local RunService = game:GetService("RunService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local ATTR = GameConfig.Attributes
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -242,6 +244,140 @@ amount.Position = UDim2.new(0, 0, 1, 0)
 amount.Size = UDim2.fromOffset(300, CASH_SIZE + 4)
 
 --==============================================================================
+-- WHAT THE SPEED IS FOR
+--
+-- The score on its own is a number going up. This is the line that says what it
+-- is going up TOWARD: the next trail, the next biome, the next walk speed --
+-- and, while a Training Rush is running, what the mill is actually paying.
+--
+-- ONE ROTATING LINE, NOT A PANEL, AND NOT FOUR LABELS. Four facts would be four
+-- rows of permanent furniture on a HUD that is two numbers and a shoe, and on a
+-- phone that is most of the bottom of the screen. Rotating them costs one
+-- label, needs no tap target to discover, and cannot be left open covering the
+-- road.
+--
+-- It sits ABOVE the block rather than inside it, so nothing established moves:
+-- the shoe, the speed and the cash are exactly where they were.
+--
+-- ASCII ONLY. Roblox drops a lot of punctuation to blank boxes -- this project
+-- has already lost a set of rotation arrows that way -- so this uses letters,
+-- digits, slash and '>' and nothing else.
+--==============================================================================
+local PROGRESS_TEXT = Color3.fromRGB(226, 238, 250)
+local RUSH_TEXT = Color3.fromRGB(250, 215, 80)
+
+local progress = Instance.new("TextLabel")
+progress.Name = "Progress"
+progress.BackgroundTransparency = 1
+progress.Font = Enum.Font.GothamMedium
+progress.TextSize = 15
+progress.TextColor3 = PROGRESS_TEXT
+progress.TextXAlignment = Enum.TextXAlignment.Left
+progress.TextYAlignment = Enum.TextYAlignment.Center
+progress.TextTruncate = Enum.TextTruncate.AtEnd
+progress.AnchorPoint = Vector2.new(0, 1)
+progress.Position = UDim2.new(0, 4, 0, -2)
+progress.Size = UDim2.fromOffset(336, 18)
+progress.Text = ""
+progress.Parent = root
+do
+	local edge = Instance.new("UIStroke")
+	edge.Color = OUTLINE
+	edge.Thickness = 2
+	edge.Parent = progress
+end
+
+--==============================================================================
+-- THE THREE THINGS IT ROTATES THROUGH
+--
+-- Each answers its own end of the ladder, so a maxed player is told they are
+-- maxed rather than shown a blank or a stale target.
+--==============================================================================
+local ROTATE_SECONDS = 3.2
+
+local function nextTrailLine(score: number): string
+	for _, tier in ipairs(GameConfig.Afterimage.Tiers) do
+		if score < tier.From then
+			return string.format("NEXT TRAIL  %s  %s / %s",
+				string.upper(tier.Name),
+				GameConfig.compact(score), GameConfig.compact(tier.From))
+		end
+	end
+	local tiers = GameConfig.Afterimage.Tiers
+	local last = tiers[#tiers]
+	return string.format("TRAIL  %s  MAX",
+		if last then string.upper(last.Name) else "MAX")
+end
+
+local function nextBiomeLine(score: number): string
+	local bestName, bestAt = nil, nil
+	for _, biome in ipairs(BiomeData.Biomes) do
+		local need = biome.RecommendedSpeed
+		if type(need) == "number" and need > score
+			and (bestAt == nil or need < bestAt) then
+			bestName, bestAt = biome.DisplayName, need
+		end
+	end
+	if bestName and bestAt then
+		return string.format("NEXT BIOME  %s  %s / %s",
+			string.upper(bestName),
+			GameConfig.compact(score), GameConfig.compact(bestAt))
+	end
+	return "ALL BIOMES RECOMMENDED"
+end
+
+local function walkSpeedLine(score: number): string
+	local now = GameConfig.walkSpeedFor(score)
+	for _, anchor in ipairs(GameConfig.Speed.Anchors) do
+		if score < anchor[1] then
+			return string.format("WALKSPEED  %d > %d", math.floor(now), anchor[2])
+		end
+	end
+	return string.format("WALKSPEED  %d  MAX", math.floor(now))
+end
+
+local ROTATION = { nextTrailLine, nextBiomeLine, walkSpeedLine }
+local rotateClock = 0
+local rotateIndex = 1
+-- How often the line is rebuilt. Fast enough that a Training Rush countdown
+-- ticks smoothly, slow enough that the formatting is not a per-frame cost.
+local REFRESH_SECONDS = 0.25
+local refreshClock = 0
+
+--==============================================================================
+-- TRAINING RUSH TAKES THE LINE WHILE IT IS RUNNING
+--
+-- Both numbers are read straight off the attributes the SERVER publishes -- the
+-- multiplier it actually paid on and the charge it has left. Nothing here
+-- derives either, which is the point: a client that computed the multiplier
+-- could be talked into showing 4x forever.
+--
+-- x1.0 IS NOT A RUSH, AND MUST NOT SAY IT IS. TreadmillService clears the
+-- attribute rather than publishing 1, so a player standing on a mill with the
+-- charge spent has no multiplier to show -- and printing "TRAINING RUSH x1.0"
+-- at them for the rest of the session reads as a stuck HUD. Standing on a spent
+-- mill gets the one fact that is actually actionable instead: the charge comes
+-- back when you get off.
+--==============================================================================
+local function progressText(score: number): (string, Color3)
+	local rush = player:GetAttribute(ATTR.TrainingRush)
+	if type(rush) == "number" and rush > 1 then
+		local charge = player:GetAttribute(ATTR.TrainingCharge)
+		if type(charge) == "number" and charge > 0 then
+			return string.format("TRAINING RUSH  x%.1f   %ds LEFT", rush, charge), RUSH_TEXT
+		end
+		return string.format("TRAINING RUSH  x%.1f", rush), RUSH_TEXT
+	end
+	if player:GetAttribute(ATTR.OnTreadmill) == true then
+		local charge = player:GetAttribute(ATTR.TrainingCharge)
+		if type(charge) == "number" and charge <= 0 then
+			return "RUSH SPENT  IT REFILLS OFF THE MILL", RUSH_TEXT
+		end
+	end
+	return ROTATION[rotateIndex](score), PROGRESS_TEXT
+end
+
+--==============================================================================
 -- STATE
 --
 -- Eased rather than stepped: cash arrives in 0.25s batches, so the raw value
@@ -345,6 +481,35 @@ RunService.RenderStepped:Connect(function(dt)
 		local stext = GameConfig.compact(speedShown)
 		if speed.Text ~= stext then
 			speed.Text = stext
+		end
+	end
+
+	--======================================================================
+	-- THE ROTATION IS A CLOCK, AND THE LINE IS REBUILT FOUR TIMES A SECOND
+	--
+	-- Every branch above this one is a comparison; this one is string.format,
+	-- which allocates. At sixty frames that is sixty throwaway strings a second
+	-- on a phone, for a line that changes about as often as a clock does -- so
+	-- it is gated to 4 Hz and the write is still on change.
+	--
+	-- Driven off the TARGET rather than the eased readout: the eased number is
+	-- still counting up for a second after a payout and would make the milestone
+	-- text flicker between two answers while it caught up.
+	--======================================================================
+	rotateClock += dt
+	if rotateClock >= ROTATE_SECONDS then
+		rotateClock -= ROTATE_SECONDS
+		rotateIndex = rotateIndex % #ROTATION + 1
+	end
+	refreshClock += dt
+	if refreshClock >= REFRESH_SECONDS then
+		refreshClock -= REFRESH_SECONDS
+		local ptext, pcolour = progressText(speedTarget or 0)
+		if progress.Text ~= ptext then
+			progress.Text = ptext
+		end
+		if progress.TextColor3 ~= pcolour then
+			progress.TextColor3 = pcolour
 		end
 	end
 end)

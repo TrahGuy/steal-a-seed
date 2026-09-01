@@ -56,6 +56,25 @@ export type Profile = {
 	--==========================================================================
 	MillOverclock: number,
 	--==========================================================================
+	-- THE RESTED TRAINING CHARGE, AND WHEN IT WAS LAST TRUE
+	--
+	-- Seconds of boosted training left, and the os.time() at which that number
+	-- was correct. Two fields rather than one because charge REFILLS while the
+	-- player is not here, and the only honest way to credit that is to store a
+	-- clock and subtract, never to store a rate and trust the session.
+	--
+	-- It is also why remounting cannot duplicate charge: the restore is a
+	-- function of real elapsed time, so stepping off and straight back on is
+	-- worth the fraction of a second it actually took.
+	--
+	-- The RAMP is deliberately NOT here. It is worth at most thirty seconds, it
+	-- decays whenever the player is off the belt, and persisting it would mean a
+	-- rejoin handed back a climb the player had already left behind. It lives in
+	-- TreadmillService for the length of a session and no longer.
+	--==========================================================================
+	TrainingCharge: number,
+	TrainingChargeAt: number,
+	--==========================================================================
 	-- THE HIGHEST BIOME SPEED MILESTONE THIS PLAYER HAS EARNED
 	--
 	-- A HIGH-WATER MARK, not access permission. Biome entrances are open, but
@@ -119,6 +138,10 @@ function ProfileSchema.Default(): Profile
 		PlotTier = GameConfig.StartingPlotTier,
 		MillTier = GameConfig.Mill.StartingTier,
 		MillOverclock = 0,
+		-- A NEW PLAYER STARTS RESTED. Their first mill session is their fastest,
+		-- which is the moment the mechanic is most worth teaching.
+		TrainingCharge = GameConfig.Mill.Training.MaxChargeSeconds,
+		TrainingChargeAt = now,
 		-- Greenhollow is on record from the first second. It is the biome the
 		-- spawn is in, and a player who could be pushed out of it would have
 		-- nowhere legal to stand.
@@ -173,13 +196,59 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	--==========================================================================
 	p.MillOverclock = math.floor(
 		number(raw.MillOverclock, 0, 0, GameConfig.Mill.Overclock.MaxLevel))
+	--==========================================================================
+	-- AN OLD SAVE ARRIVES RESTED, NOT EMPTY
+	--
+	-- Absent reads as the Default's full charge rather than zero. Both readings
+	-- are defensible and this one is kinder: a player returning after the
+	-- feature ships has been off the belt for weeks, which is exactly the state
+	-- a full charge describes. Zero would have punished them for the update.
+	--
+	-- The timestamp is clamped to a real date like every other clock here, so a
+	-- garbage value cannot produce an elapsed of centuries for the restore to
+	-- multiply.
+	--==========================================================================
+	p.TrainingCharge = number(raw.TrainingCharge,
+		GameConfig.Mill.Training.MaxChargeSeconds,
+		0, GameConfig.Mill.Training.MaxChargeSeconds)
+	p.TrainingChargeAt = math.floor(
+		number(raw.TrainingChargeAt, p.TrainingChargeAt, 0, MAX_TIME))
 	p.HighestBiomeOrder = math.floor(
 		number(raw.HighestBiomeOrder, 1, 1, #BiomeData.Biomes))
 	p.CreatedAt = math.floor(number(raw.CreatedAt, p.CreatedAt, 0, MAX_TIME))
 	p.LastSeen = math.floor(number(raw.LastSeen, p.LastSeen, 0, MAX_TIME))
 
 	if type(raw.Plants) == "table" then
-		p.Plants = raw.Plants
+		for _, row in ipairs(raw.Plants) do
+			if type(row) == "table" and type(row.SpeciesId) == "string" and SeedData.Get(row.SpeciesId) then
+				local tier = number(row.Tier, 0, 1, SeedData.TierCount)
+				local plantedAt = number(row.PlantedAt, 0, 0, MAX_TIME)
+				local x = number(row.X, 0, -1000, 1000)
+				local z = number(row.Z, 0, -1000, 1000)
+				local facing = number(row.Facing, 0, -360, 360)
+				local stage = 1
+				if type(row.Stage) == "number" then
+					stage = number(row.Stage, 1, 1, 3)
+				elseif type(row.Stage) == "string" then
+					if row.Stage == "grown" then
+						stage = 3
+					else
+						stage = 1
+					end
+				end
+				if tier >= 1 then
+					table.insert(p.Plants, {
+						SpeciesId = row.SpeciesId,
+						PlantedAt = math.floor(plantedAt),
+						Tier = math.floor(tier),
+						X = x,
+						Z = z,
+						Stage = math.floor(stage),
+						Facing = facing,
+					})
+				end
+			end
+		end
 	end
 
 	--==========================================================================

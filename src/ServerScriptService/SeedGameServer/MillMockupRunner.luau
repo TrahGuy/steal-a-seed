@@ -210,7 +210,12 @@ function MillMockupRunner.Build(): Folder
 					local prompt = child:FindFirstChild("Prompt") :: TextLabel?
 
 					if title then title.Text = spec.name:upper() end
-					if stats then stats.Text = string.format("%d studs/s", spec.speed) end
+					-- Speed SCORE per second, not studs. `beltStuds` is the studs
+					-- column and it is a different number entirely; printing one
+					-- under the other's name is how a placard starts lying.
+					if stats then
+						stats.Text = GameConfig.compact(spec.speed) .. " SPEED/S"
+					end
 					if prompt then
 						prompt.Text = if spec.cost > 0 then "$" .. GameConfig.compact(spec.cost) else "FREE"
 					end
@@ -281,8 +286,8 @@ function MillMockupRunner.Build(): Folder
 		statsLabel.Size = UDim2.new(1, 0, 0, 18)
 		statsLabel.BackgroundTransparency = 1
 		statsLabel.Font = Enum.Font.GothamBold
-		statsLabel.Text = string.format("Speed: %d/s | %s",
-			spec.speed,
+		statsLabel.Text = string.format("Speed: %s/s | %s",
+			GameConfig.compact(spec.speed),
 			if spec.cost > 0 then "$" .. GameConfig.compact(spec.cost) else "FREE")
 		statsLabel.TextColor3 = Color3.fromRGB(150, 226, 150)
 		statsLabel.TextSize = 13

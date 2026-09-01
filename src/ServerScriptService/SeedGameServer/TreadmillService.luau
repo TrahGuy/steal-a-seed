@@ -68,6 +68,174 @@ local lastPaid: { [Player]: number } = {}
 local granted: { [Player]: number } = {}
 
 --==============================================================================
+-- TRAINING RUSH
+--
+-- A rested charge that pays up to 4x while it lasts, so the loop is train
+-- briefly -> raid -> plant -> come back to a fresh mill, rather than stand on a
+-- belt for an hour. The design and the five numbers are in GameConfig.Mill.
+--
+-- THIS IS NOT A SECOND FAUCET. AddSpeed below is still the only call that mints
+-- Speed in the game; this multiplies the rate that call is handed, exactly as
+-- Overclock does.
+--
+-- TWO PIECES OF STATE, IN TWO PLACES, ON PURPOSE:
+--
+--   * The CHARGE is in the profile, because it refills while the player is not
+--     here and has to survive a rejoin. It is stored as a value PLUS the time
+--     that value was true, so the restore is always a subtraction against a
+--     real clock -- which is why stepping off the belt and straight back on is
+--     worth the fraction of a second it actually took, and nothing more.
+--
+--   * The RAMP is here and dies with the session. It is worth at most thirty
+--     seconds, it decays whenever the player is off the belt, and persisting it
+--     would hand a rejoining player back a climb they had already walked away
+--     from.
+--==============================================================================
+local TRAIN = LADDER.Training
+-- Seconds of boosted training accumulated, which is what the multiplier reads.
+local ramp: { [Player]: number } = {}
+-- When `ramp` was last correct, so a tick decays it by real elapsed time rather
+-- than by an assumed tick length.
+local rampAt: { [Player]: number } = {}
+--==============================================================================
+-- WAS THIS PLAYER ALREADY TRAINING LAST TICK
+--
+-- Rest is credited by comparing the profile's stamp against now -- and while
+-- training, that stamp is rewritten every tick BY the training. Crediting it
+-- unconditionally therefore refunds rest for the very seconds being spent: at
+-- 0.5 restored against 1.0 spent, a ninety second charge lasted a hundred and
+-- eighty. This is the flag that says "the stamp you are looking at is a
+-- training stamp, not a resting one".
+--==============================================================================
+local wasTraining: { [Player]: boolean } = {}
+
+--==============================================================================
+-- THE CHARGE, BROUGHT UP TO NOW
+--
+-- Nothing is written while a player is off the belt: the pair in the profile
+-- says "this much, as of then", and the restore is computed when it is next
+-- needed. That is what makes an idle player free, and it is also what makes
+-- remounting worthless -- there is no event here that could fire twice.
+--==============================================================================
+local function restoredCharge(profile: any): number
+	local stored = tonumber(profile.TrainingCharge)
+	if stored == nil or stored ~= stored then
+		stored = TRAIN.MaxChargeSeconds
+	end
+	local at = tonumber(profile.TrainingChargeAt)
+	if at == nil or at ~= at then
+		-- A missing stamp is not a licence to invent time. Treat it as now, which
+		-- credits nothing and lets the next tick stamp it properly.
+		at = os.time()
+	end
+	local elapsed = math.clamp(os.time() - at, 0, TRAIN.MaxOfflineRestoreSeconds)
+	return math.clamp(stored + elapsed * TRAIN.RestorePerSecond,
+		0, TRAIN.MaxChargeSeconds)
+end
+
+--==============================================================================
+-- SPEND A SLICE OF CHARGE, AND SAY WHAT IT WAS WORTH
+--
+-- Returns the multiplier to pay this slice at, sampled at the MIDDLE of the
+-- slice rather than at either end. Paying a whole tick at the ramp it finished
+-- on over-pays every tick of the climb; paying it at the ramp it started on
+-- under-pays every one of them. The midpoint is the exact average of a linear
+-- ramp and costs one addition.
+--==============================================================================
+local function consumeRush(player: Player, dt: number, now: number): number
+	local profile = PlayerDataService.Get(player)
+	rampAt[player] = now
+	if not profile then
+		return 1
+	end
+	-- Only the FIRST tick of a visit credits rest. Every tick after it is
+	-- reading a stamp this loop wrote a second ago.
+	local charge
+	if wasTraining[player] then
+		charge = tonumber(profile.TrainingCharge) or 0
+		if charge ~= charge then
+			charge = 0
+		end
+		charge = math.clamp(charge, 0, TRAIN.MaxChargeSeconds)
+	else
+		charge = restoredCharge(profile)
+	end
+	wasTraining[player] = true
+	local r = ramp[player] or 0
+	local multiplier = 1
+	if charge > 0 then
+		local spend = math.min(charge, dt)
+		charge -= spend
+		local before = r
+		r = math.min(TRAIN.RampSeconds, r + spend)
+		multiplier = GameConfig.trainingRushMultiplier((before + r) * 0.5)
+	else
+		-- Spent. The mill keeps paying its base rate, and the climb unwinds
+		-- rather than snapping off, so the fall-off is something the player
+		-- watches happen instead of something that has already happened.
+		r = math.max(0, r - dt * TRAIN.RampDecayPerSecond)
+	end
+	ramp[player] = r
+	profile.TrainingCharge = charge
+	profile.TrainingChargeAt = os.time()
+	return multiplier
+end
+
+--==============================================================================
+-- OFF THE BELT: THE CLIMB UNWINDS, THE CHARGE LOOKS AFTER ITSELF
+--
+-- Only the ramp is touched here. The charge needs no write -- its stamp is
+-- already the moment training stopped, so it has been refilling ever since.
+--==============================================================================
+local function decayRush(player: Player, now: number)
+	-- Off the belt: the next mount credits the rest that starts accruing now.
+	wasTraining[player] = nil
+	local r = ramp[player]
+	if r == nil or r <= 0 then
+		ramp[player] = nil
+		rampAt[player] = nil
+		return
+	end
+	local since = rampAt[player]
+	rampAt[player] = now
+	if since then
+		local dt = now - since
+		if dt > 0 then
+			r -= dt * TRAIN.RampDecayPerSecond
+		end
+	end
+	ramp[player] = if r > 0 then r else nil
+end
+
+--==============================================================================
+-- WHAT THE HUD IS ALLOWED TO KNOW
+--
+-- The multiplier the server ACTUALLY PAID ON, and the charge left. Published
+-- rather than derivable, because a client that worked the multiplier out for
+-- itself is a client that could disagree with its own payout -- and one that
+-- could be talked into showing 4x forever.
+--
+-- Rounded, and written only when the rounded value moves: a full charge is a
+-- couple of dozen replications rather than one per tick, and a player nowhere
+-- near a mill replicates nothing at all.
+--==============================================================================
+local function publishRush(player: Player, multiplier: number?, charge: number?)
+	local m = if multiplier then math.floor(multiplier * 100 + 0.5) / 100 else nil
+	if m == 1 then
+		-- 1x is not a rush. Clearing it rather than writing it keeps the
+		-- attribute meaning "something is happening".
+		m = nil
+	end
+	if player:GetAttribute(ATTR.TrainingRush) ~= m then
+		player:SetAttribute(ATTR.TrainingRush, m)
+	end
+	local c = if charge then math.floor(charge + 0.5) else nil
+	if player:GetAttribute(ATTR.TrainingCharge) ~= c then
+		player:SetAttribute(ATTR.TrainingCharge, c)
+	end
+end
+
+--==============================================================================
 -- MOUNTING, WHICH IS THE OTHER HALF OF OCCUPANCY
 --
 -- The region test below answers "is this player on the belt right now". That is
@@ -428,11 +596,23 @@ local function payEveryone()
 				-- elapsed, but never a lump for a gap this long -- that gap
 				-- means they stepped off and came back.
 				if dt > 0 and dt < 30 then
-					if PlayerDataService.AddSpeed(player, rate * dt) then
-						granted[player] = (granted[player] or 0) + rate * dt
+					--==========================================================
+					-- THE RATE IS A PRODUCT, AND THE RUSH IS ITS LAST TERM
+					--
+					--     tier x Multiplier^overclock x rebirth x rush
+					--
+					-- Charge is spent for `dt` whether or not the payout lands,
+					-- because the time was spent standing on the belt either way.
+					--==========================================================
+					local rush = consumeRush(player, dt, now)
+					local paid = rate * rush * dt
+					if PlayerDataService.AddSpeed(player, paid) then
+						granted[player] = (granted[player] or 0) + paid
 						-- CarryService owns WalkSpeed. Ask, do not write.
 						CarryService.RefreshWalkSpeed(player)
 					end
+					local profile = PlayerDataService.Get(player)
+					publishRush(player, rush, profile and profile.TrainingCharge)
 				end
 			end
 		else
@@ -440,6 +620,8 @@ local function payEveryone()
 			-- away for a minute from being paid for the minute when they
 			-- step back on.
 			lastPaid[player] = nil
+			decayRush(player, now)
+			publishRush(player, nil, nil)
 		end
 	end
 end
@@ -452,6 +634,9 @@ local function forget(player: Player)
 	mountConns[player] = nil
 	lastPaid[player] = nil
 	granted[player] = nil
+	ramp[player] = nil
+	rampAt[player] = nil
+	wasTraining[player] = nil
 end
 
 --==============================================================================
@@ -675,6 +860,16 @@ function TreadmillService.Rebuild(plot: Model, tier: number)
 	if not existing then
 		return
 	end
+
+	local oldBelt = beltFor(plotId)
+	local mountedPlayer: Player? = nil
+	for p, b in pairs(mounted) do
+		if b == oldBelt then
+			mountedPlayer = p
+			break
+		end
+	end
+
 	local cf = existing:GetPivot()
 	local parent = existing.Parent
 	local sign = signFor(plotId)
@@ -685,7 +880,34 @@ function TreadmillService.Rebuild(plot: Model, tier: number)
 	model.Name = string.format("%s%02d", GameConfig.Plot.TreadmillName, plotId)
 	model:SetAttribute(ATTR.PlotId, plotId)
 	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
-	setBeltSpeed(belt, false, tier)
+
+	if mountedPlayer and mountedPlayer.Parent == Players then
+		mounted[mountedPlayer] = belt
+		local character = mountedPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health > 0 then
+			for _, c in ipairs(mountConns[mountedPlayer] or {}) do
+				c:Disconnect()
+			end
+			local conns: { RBXScriptConnection } = {}
+			table.insert(conns, humanoid.Jumping:Connect(function(active: boolean)
+				if active then
+					TreadmillService.Unmount(mountedPlayer)
+				end
+			end))
+			table.insert(conns, humanoid.Died:Connect(function()
+				TreadmillService.Unmount(mountedPlayer)
+			end))
+			mountConns[mountedPlayer] = conns
+
+			local on = TreadmillService.RateFor(mountedPlayer) > 0
+			setBeltSpeed(belt, on, tier)
+		else
+			setBeltSpeed(belt, false, tier)
+		end
+	else
+		setBeltSpeed(belt, false, tier)
+	end
 
 	-- The sign was inside the model, so it went with it. Same place, new board.
 	-- The rebuilt sign goes back exactly where the old one stood. The fallback
@@ -1007,9 +1229,10 @@ function TreadmillService.Start()
 	end)
 
 	log(string.format(
-		"Ready. The only faucet for Speed. %d mill(s), %d tiers, +%g/sec at tier 1 up to +%g/sec at tier %d.",
-		mills, #LADDER.Tiers, LADDER.Tiers[1].speed,
-		LADDER.Tiers[#LADDER.Tiers].speed, #LADDER.Tiers))
+		"Ready. The only faucet for Speed. %d mill(s), %d tiers, +%s/sec at tier 1 up to +%s/sec at tier %d, x%d rush at full charge.",
+		mills, #LADDER.Tiers, GameConfig.compact(LADDER.Tiers[1].speed),
+		GameConfig.compact(LADDER.Tiers[#LADDER.Tiers].speed), #LADDER.Tiers,
+		TRAIN.PeakMultiplier))
 end
 
 function TreadmillService.Snapshot(): string
