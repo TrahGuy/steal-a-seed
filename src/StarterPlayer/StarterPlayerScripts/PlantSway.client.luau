@@ -208,6 +208,15 @@ end
 --     10,000 kg full sweep every ~26s
 --==============================================================================
 local LOOK_AMP = math.rad(28)
+-- How long the turn takes to mostly finish, in seconds. Short enough that a
+-- plant is pointed the right way within the first fifth of a leg -- it should
+-- look like it turned and then set off -- and long enough that the turn itself
+-- is visible rather than a snap on one frame.
+local TURN_TAU = 0.22
+-- How far a leg swings fore and aft at the top of a stride. Bigger than the
+-- leaf swing because a leg is doing the walking and a leaf is only reacting to
+-- it; small enough that the foot does not visibly scythe through the soil.
+local LEG_SWING = math.rad(21)
 
 local function lookRate(tier: number): number
 	return math.clamp(0.55 / (tierValue(tier) ^ 0.09), 0.18, 0.75)
@@ -354,6 +363,9 @@ type Sway = {
 	-- The two Leaf parts and where they sit relative to the model's pivot, so
 	-- they can be swung as arms after the PivotTo without measuring anything.
 	leaves: { { part: BasePart, offset: CFrame, sign: number } },
+	-- One entry per LEG PART, already resolved to the hip it hangs from and its
+	-- own place on that hip, so a swing is one multiply per part per slice.
+	legs: { { part: BasePart, hip: CFrame, rel: CFrame, phase: number } },
 	-- The gaze rig, resolved once. `ref` is a face-aligned frame the aim is
 	-- measured in; `eyeOffset` and `radius` are set only on the Pupil rig.
 	gaze: {
@@ -374,6 +386,10 @@ type Sway = {
 	-- from where it stopped -- a phase read straight off the clock would jump
 	-- forward by however long the leg took.
 	lookPhase: number,
+	-- Where the plant is actually POINTED, in radians about world Y, measured
+	-- from its rest bearing. Eased rather than assigned: it is the difference
+	-- between a plant turning to walk and a plant snapping to a heading.
+	facing: number,
 	lookRate: number,
 	-- The clock the last time this entry was touched, so the phase can advance
 	-- by real elapsed time. apply() is called on a slice, so the gap between two
@@ -535,9 +551,11 @@ local function remember(instance: Instance)
 				wanderSpeed(tier) / math.max(headHeight * 0.35, 0.25), 0.5, 3.2),
 			bob = math.min(headHeight * BOB_FRACTION, BOB_CEILING),
 			leaves = {},
+			legs = {},
 			-- Off the placement id, so no two plants in a bed are looking the
 			-- same way at the same moment.
 			lookPhase = (tonumber(model:GetAttribute("PlacementId")) or 0) * 1.7,
+			facing = 0,
 			lookRate = lookRate(tier),
 			-- NOT zero. A plant registered ten minutes into a session would
 			-- otherwise take its first `dt` as ten minutes and snap to an
@@ -585,6 +603,177 @@ local function remember(instance: Instance)
 						-- pair of wings.
 						sign = if offset.Position.X < 0 then -1 else 1,
 					})
+				end
+			end
+
+			--==========================================================
+			-- RESOLVE THE LEGS
+			--
+			-- These creatures have legs and the walk never touched them: the
+			-- body translated, bobbed, rolled and swung its leaves while the
+			-- legs were dragged along underneath as scenery. Feet that do not
+			-- move are what makes a walk read as a slide, however well the rest
+			-- of the body is animated.
+			--
+			-- FOUND BY NAME, CLUSTERED BY POSITION. Name alone cannot group
+			-- them: Novaorb has two Thighs, two Shins and two FootClaws with no
+			-- side in any name, and Cosmospire has four of each. But every part
+			-- of one leg sits in the same place in plan view, so clustering the
+			-- matched parts by their X/Z offset recovers the legs whatever they
+			-- are called -- two for a biped, four for Astralhorn, six for
+			-- Supernovus. It also means a species that renames a part keeps
+			-- working as long as the word is still in there.
+			--
+			-- GREENHOLLOW AND TANGLEMIRE MATCH NOTHING, and that is correct:
+			-- their plants stand on roots and a bulb, they have no legs to
+			-- swing, and their whole-body bob is already their walk.
+			--
+			-- THE SWING IS ABOUT THE HIP, NOT THE PART. Rotating a thigh about
+			-- its own centre swings the top of it backwards while the bottom
+			-- goes forward, which reads as a part rocking rather than a limb
+			-- stepping -- and it tears the shin off the bottom of it. Each leg
+			-- gets ONE hip frame at the top of its highest part, and every part
+			-- in that leg is stored relative to it, so the whole limb turns as
+			-- one piece. Same shape as the pupil rig below.
+			--==========================================================
+			local LEG_WORDS = { "Thigh", "Femur", "Haunch", "Shin", "Tibia",
+				"Knee", "Hock", "Foot", "Hoof", "Paw", "Toe", "Stilt", "Pillar" }
+			local legParts = {}
+			for _, d in ipairs(model:GetChildren()) do
+				if d:IsA("BasePart") then
+					for _, w in ipairs(LEG_WORDS) do
+						if string.find(d.Name, w) then
+							table.insert(legParts, { part = d, cf = inverse * d.CFrame })
+							break
+						end
+					end
+				end
+			end
+			--==========================================================
+			-- NO THIGH, NO LEG
+			--
+			-- Dustbowl's five match on "RootFoot" and have nothing above it:
+			-- four roots around a stem, which is a root ball and not a pair of
+			-- legs. Clustered, they collapse into one group and all four swing
+			-- together -- a hop, and a worse read than leaving them still.
+			--
+			-- A limb is a thing that hangs FROM something. Requiring an upper
+			-- part is what separates Emberroot's root-THIGH, which really is a
+			-- leg, from Dustbowl's root-FOOT, which is a toe on a stump.
+			--==========================================================
+			local hasUpper = false
+			for _, it in ipairs(legParts) do
+				local n = it.part.Name
+				if string.find(n, "Thigh") or string.find(n, "Femur")
+					or string.find(n, "Haunch") then
+					hasUpper = true
+					break
+				end
+			end
+			if #legParts > 0 and hasUpper then
+				--==================================================
+				-- FIND THE HIPS, THEN HANG EVERYTHING ON THE NEAREST ONE
+				--
+				-- Grouping every leg part by how far along the body it sits
+				-- confuses two different things: which leg a part belongs to,
+				-- and how far forward that part reaches. A foot projects
+				-- FORWARD of the hip it hangs from, so Novaorb's FootClaw banded
+				-- with the opposite leg and came out in antiphase with its own
+				-- thigh -- which would have swung the foot off the end of the
+				-- leg every stride. Cosmospire's four stilts merged into two.
+				--
+				-- A HIP IS ONE PER LEG BY CONSTRUCTION. Take the parts in the
+				-- upper half of the leg geometry, cluster those, and the count
+				-- that falls out is the number of legs. Every remaining part --
+				-- shin, tibia, paw, hoof, toe -- then joins whichever hip it is
+				-- nearest in plan view, which is always its own.
+				--==================================================
+				local spread = math.max(hi.X - lo.X, hi.Z - lo.Z)
+
+				local yLo, yHi = math.huge, -math.huge
+				for _, it in ipairs(legParts) do
+					local y = it.cf.Position.Y
+					yLo = math.min(yLo, y)
+					yHi = math.max(yHi, y)
+				end
+				-- A single-part leg (Supernovus is thighs and nothing else) has
+				-- no spread in Y, and every part is its own hip. The >= is what
+				-- makes that fall out rather than needing a special case.
+				local hipLine = yLo + (yHi - yLo) * 0.55
+
+				local hips = {}
+				local hipNear = math.max(spread * 0.12, 0.25)
+				for _, it in ipairs(legParts) do
+					if it.cf.Position.Y >= hipLine then
+						local p = it.cf.Position
+						local found = nil
+						for _, h in ipairs(hips) do
+							local dx, dz = h.x - p.X, h.z - p.Z
+							if dx * dx + dz * dz <= hipNear * hipNear then
+								found = h
+								break
+							end
+						end
+						if found then
+							local n = found.n
+							found.x = (found.x * n + p.X) / (n + 1)
+							found.z = (found.z * n + p.Z) / (n + 1)
+							found.top = math.max(found.top, p.Y + it.part.Size.Y * 0.5)
+							found.n = n + 1
+						else
+							table.insert(hips, { x = p.X, z = p.Z, n = 1,
+								top = p.Y + it.part.Size.Y * 0.5, items = {} })
+						end
+					end
+				end
+
+				if #hips > 0 then
+					-- Rank the hips along the body, so opposite corners can
+					-- share a phase. Legs abreast share a rank; a gap in Z
+					-- starts a new one.
+					local ranked = table.clone(hips)
+					table.sort(ranked, function(a, b)
+						return a.z < b.z
+					end)
+					local bandGap = math.max(spread * 0.15, 0.30)
+					local rank, prevZ = 0, nil
+					for _, h in ipairs(ranked) do
+						if prevZ == nil or h.z - prevZ > bandGap then
+							rank += 1
+						end
+						prevZ = h.z
+						-- DIAGONALS, out of one line: rank along the body plus
+						-- which side it is on. A quadruped trots, a hexapod
+						-- falls into alternating tripods, a biped alternates.
+						h.phase = math.pi * ((rank + (if h.x < 0 then 0 else 1)) % 2)
+					end
+
+					-- Every leg part joins its nearest hip in plan view.
+					for _, it in ipairs(legParts) do
+						local p = it.cf.Position
+						local best, bestD = nil, math.huge
+						for _, h in ipairs(hips) do
+							local dx, dz = h.x - p.X, h.z - p.Z
+							local d = dx * dx + dz * dz
+							if d < bestD then
+								bestD, best = d, h
+							end
+						end
+						table.insert((best :: any).items, it)
+					end
+
+					for _, h in ipairs(hips) do
+						local hip = CFrame.new(h.x, h.top, h.z)
+						local invHip = hip:Inverse()
+						for _, it in ipairs(h.items) do
+							table.insert(entry.legs, {
+								part = it.part,
+								hip = hip,
+								rel = invHip * it.cf,
+								phase = h.phase,
+							})
+						end
+					end
 				end
 			end
 
@@ -881,6 +1070,57 @@ local function apply(entry: Sway, now: number)
 		yaw = math.sin(entry.lookPhase) * LOOK_AMP
 	end
 
+	--==========================================================================
+	-- IT FACES WHERE IT IS GOING
+	--
+	-- `yaw` above is the look-around and nothing else -- an oscillation about
+	-- the plant's rest bearing, deliberately frozen while it travels. The
+	-- direction of the LEG never entered this pivot, so a plant crossing its bed
+	-- crabbed sideways or reversed into the target while still facing wherever
+	-- it had last looked. The leaves swung the whole time, which made it worse:
+	-- the arms said walking and the body said dragged.
+	--
+	-- MEASURED AGAINST THE REST BEARING, because that is what `entry.offset`
+	-- applies on the right of this expression. The yaw here is a world-Y turn
+	-- through the anchor, and the anchor is a pure translation -- so the number
+	-- this needs is the signed angle from where the plant natively points to
+	-- where the leg is going, not the heading's absolute bearing.
+	--
+	-- EASED, NOT ASSIGNED, and eased on a time constant rather than a fraction
+	-- of a frame, so the turn takes the same real time whatever the slice gave
+	-- this plant. It settles back onto the look-around when the leg is over,
+	-- which is what stops the bed freezing in whatever direction it last walked.
+	--
+	-- The exponential never quite arrives, so a plant that is standing still is
+	-- carrying a fraction of a degree of old heading forever. That is invisible
+	-- and it is cheaper than a special case to zero it.
+	--==========================================================================
+	if not entry.pod then
+		local heading = yaw
+		local walking = entry.to and entry.from and now < entry.legEnd
+		if walking then
+			local d = (entry.to :: Vector3) - (entry.from :: Vector3)
+			local flat = Vector3.new(d.X, 0, d.Z)
+			-- A leg with no horizontal length has no heading to face. It can
+			-- happen: the target is clamped to the soil rectangle, and a plant
+			-- already against an edge can be handed its own position back.
+			if flat.Magnitude > 1e-3 then
+				local dir = flat.Unit
+				local restLook = entry.rest.LookVector
+				local restFlat = Vector3.new(restLook.X, 0, restLook.Z)
+				if restFlat.Magnitude > 1e-3 then
+					local ref = restFlat.Unit
+					heading = math.atan2(ref:Cross(dir).Y, ref:Dot(dir))
+				end
+			end
+		end
+		-- Wrap into (-pi, pi] before easing, or a plant turning past the seam
+		-- takes the long way round -- 359 degrees of spin to correct one.
+		local delta = (heading - entry.facing + math.pi) % (math.pi * 2) - math.pi
+		entry.facing += delta * (1 - math.exp(-dt / TURN_TAU))
+		yaw = entry.facing
+	end
+
 	local target = base * CFrame.Angles(0, yaw, 0) * CFrame.Angles(ax, 0, az) * entry.offset
 	entry.model:PivotTo(target)
 
@@ -896,9 +1136,25 @@ local function apply(entry: Sway, now: number)
 	-- is exactly what PivotTo already wrote.
 	--==========================================================================
 	if moveT > 0.02 then
-		local swing = math.sin(now * entry.strideHz * math.pi * 2) * SWING_AMP * moveT
+		local phase = now * entry.strideHz * math.pi * 2
+		local swing = math.sin(phase) * SWING_AMP * moveT
 		for _, leaf in ipairs(entry.leaves) do
 			leaf.part.CFrame = target * leaf.offset * CFrame.Angles(swing * leaf.sign, 0, 0)
+		end
+		--======================================================================
+		-- AND THE LEGS
+		--
+		-- Same stride the body is bobbing to, so the step and the bounce land
+		-- together instead of beating against each other. Each leg carries its
+		-- own phase, which is what makes the pair alternate rather than hop.
+		--
+		-- Guarded by the same moveT as the arms: a standing plant's legs are
+		-- exactly where PivotTo just put them, and rewriting them to the same
+		-- value every slice is the cost this file exists to avoid.
+		--======================================================================
+		for _, leg in ipairs(entry.legs) do
+			local a = math.sin(phase + leg.phase) * LEG_SWING * moveT
+			leg.part.CFrame = target * leg.hip * CFrame.Angles(a, 0, 0) * leg.rel
 		end
 	end
 
