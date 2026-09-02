@@ -22,9 +22,14 @@
 --==============================================================================
 -- WHAT EARNS: GROWN PLANTS, AND ONLY GROWN ONES
 --
--- kg per second, straight off SeedData.IncomePerSecond. A pod in the ground
--- pays nothing and a sprout pays nothing -- the wait IS the cost, and paying
--- during it would turn planting into a deposit rather than a bet.
+-- Straight off SeedData.IncomePerSecond, which is the size tier scaled by the
+-- species' rarity and by how deep the biome it came from is. This file does not
+-- know those factors and must not learn them: one calculation, in SeedData,
+-- shared with every readout that shows the player a number.
+--
+-- A pod in the ground pays nothing and a sprout pays nothing -- the wait IS the
+-- cost, and paying during it would turn planting into a deposit rather than a
+-- bet.
 --
 -- That also makes the plot readable as a balance sheet: what you can SEE
 -- standing up is what is paying you.
@@ -97,11 +102,16 @@ function EconomyService.RateFor(player: Player): number
 		return 0
 	end
 	local rate = 0
-	-- The INSTANCE weight, not the species sheet. Paying species.Kg after
-	-- weights are rolled would hand every Nubkin 2/sec whatever it actually
-	-- weighs -- a faucet that ignores the only number the player is playing for.
+	-- The INSTANCE tier, not the species sheet -- a faucet that ignored the roll
+	-- would pay every Nubkin the same whatever came out of the pod. The SPECIES
+	-- goes with it because rarity and biome are the other two factors, and
+	-- GrownIn has always returned both.
+	--
+	-- Rounded per PLANT, inside IncomePerSecond, and summed after: a bed of
+	-- twelve pays the sum of twelve whole numbers, which is what the garden
+	-- panel adds up and shows.
 	for _, grown in ipairs(PlantService.GrownIn(plot)) do
-		rate += SeedData.IncomePerSecond(grown.tier)
+		rate += SeedData.IncomePerSecond(grown.species, grown.tier)
 	end
 	return rate
 end
@@ -189,8 +199,12 @@ function EconomyService.SellHeld(player: Player): (number, number)
 			if tool:IsA("Tool") then
 				local id = tool:GetAttribute("SpeciesId")
 				local tier = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
-				if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
-					total += SeedData.SellPrice(tier)
+				-- The species was already being looked up to validate the tool;
+				-- it is now also what prices it, so a Mythic out of Starbloom
+				-- sells for what it was worth standing up.
+				local species = if type(id) == "string" then SeedData.Get(id) else nil
+				if species and tier and tier >= 1 then
+					total += SeedData.SellPrice(species, tier)
 					sold += 1
 					tool:Destroy()
 				end
@@ -238,8 +252,10 @@ function EconomyService.Start()
 	end)
 
 	log(string.format(
-		"Ready. The only faucet: grown plants pay tier/sec (%d cash per tier), ticking every %ds.",
-		1, TICK))
+		"Ready. The only faucet: grown plants pay their size tier scaled by species "
+		.. "rarity (%.2f-%.2fx) and biome depth (%.2f-%.2fx), ticking every %ds.",
+		SeedData.RarityMultiplier.Common, SeedData.RarityMultiplier.Divine,
+		SeedData.BiomeMultiplier.greenhollow, SeedData.BiomeMultiplier.starbloom, TICK))
 end
 
 --==============================================================================

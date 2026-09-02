@@ -65,6 +65,52 @@ SeedData.RarityWeight = {
 }
 
 --==============================================================================
+-- WHAT A SPECIES IS WORTH, AND WHAT THE ROAD TO IT IS WORTH
+--
+-- Two factors on top of the size tier, and they answer two different questions:
+-- WHAT you found, and HOW FAR you went to find it. Kept apart rather than
+-- blended into one number per species, because a player can act on each of them
+-- independently -- chase a rarer roll, or walk deeper -- and a single figure
+-- would hide which lever they were pulling.
+--
+-- THEY ARE GENTLE ON PURPOSE. Rarity already carries an enormous spread in
+-- RarityWeight above: Common is 1000 against Divine's 0.004, a quarter of a
+-- million to one. A large income multiplier on top of that would be multiplying
+-- a rarity that is already multiplied, and the top of the ladder would stop
+-- being a prize and start being the only thing worth planting. 12x at odds of
+-- one in 250,000 is a flourish, not a strategy.
+--
+-- The biome ladder is flatter still -- 1.0 to 1.4 across the whole road --
+-- because it applies to EVERYTHING in a segment rather than to one lucky roll.
+-- It is there to stop the deeper biomes being a cosmetic choice, not to make
+-- Greenhollow worthless.
+--
+-- Every rarity in RarityWeight has an entry here and every biome in BiomeData
+-- has one below, and the asserts at require time keep it that way: a new rarity
+-- or a new biome refuses the file rather than quietly paying Common rates.
+--==============================================================================
+SeedData.RarityMultiplier = {
+	Common = 1.00,
+	Uncommon = 1.25,
+	Rare = 1.50,
+	Epic = 2.00,
+	Legendary = 3.00,
+	Mythic = 5.00,
+	Secret = 8.00,
+	Divine = 12.00,
+}
+
+-- Depth along the one road. Order matches BiomeData.Biomes, and the step is
+-- deliberately even: a player should be able to guess the next one.
+SeedData.BiomeMultiplier = {
+	greenhollow = 1.00,
+	dustbowl = 1.10,
+	tanglemire = 1.20,
+	emberroot = 1.30,
+	starbloom = 1.40,
+}
+
+--==============================================================================
 -- THE SPECIES -- GREENHOLLOW
 --
 -- Straight off the reference sheet, left to right. Each is described by its
@@ -612,17 +658,21 @@ end
 --
 -- Selling is a CONVENIENCE, not a strategy, and the price says so out loud.
 --
--- A grown plant pays its kg every second for as long as it stands. Selling the
+-- A grown plant pays its adjusted rate every second for as long as it stands.
+-- Selling the
 -- same thing hands over thirty seconds of that and takes it away forever, so
 -- anything worth keeping is worth planting and the stall is for clearing out a
 -- bag full of pocket change -- which, per the weight histogram above, is what
 -- most of a bag actually is.
 --
 -- ONE NUMBER TUNES IT. Raise SellSeconds and selling starts competing with
--- planting; drop it and the stall stops being worth the walk. It is deliberately
--- not per-species and not per-rarity: a bag is sold in one press, and a price
--- the player cannot work out in their head before pressing is a price that will
--- feel wrong however fair it is.
+-- planting; drop it and the stall stops being worth the walk.
+--
+-- IT IS THIRTY SECONDS OF THE ADJUSTED RATE, so a rarer plant and a deeper
+-- biome are worth more at the stall in exactly the proportion they are worth
+-- more in the ground. The number the player has to hold in their head is still
+-- one number -- "thirty seconds" -- which was always the point; what it is
+-- thirty seconds OF is now worth knowing.
 --
 -- Floored, because cash is whole numbers everywhere else in the game.
 --==============================================================================
@@ -639,7 +689,7 @@ end
 -- Weight rolled as MaxKg^(u^2.2) over 1 .. 10,000, which put 53% of pods at
 -- 10 kg or under and half a percent over 9,000. Each tier takes one band of
 -- that curve: `weight` is how often the band came up and `value` is the mean
--- weight inside it. Income was kilograms per second, so income per plant lands
+-- weight inside it. Income was kilograms per second, so the BASE rate per plant lands
 -- where it already was and every mill price, sell price and progression gate
 -- keeps working untouched. That is the whole reason for deriving the numbers
 -- instead of picking seven round ones.
@@ -750,8 +800,12 @@ end
 
 SeedData.SellSeconds = 30
 
-function SeedData.SellPrice(tier: number?): number
-	return math.floor(SeedData.IncomePerSecond(tier) * SeedData.SellSeconds)
+function SeedData.SellPrice(species: Species?, tier: number?): number
+	-- Exactly SellSeconds of what the same plant pays standing up, and it takes
+	-- the same species so the two can never drift apart. Income is already a
+	-- whole number, so this multiplication is exact and wants no second
+	-- rounding -- and the player can still check it in their head.
+	return SeedData.IncomePerSecond(species, tier) * SeedData.SellSeconds
 end
 
 function SeedData.RollKg(rng: Random): number
@@ -803,6 +857,15 @@ for _, species in ipairs(SeedData.Species) do
 		string.format("species %q has unknown rarity %q", species.Id, species.Rarity))
 	assert(SeedData.RarityWeight[species.Rarity] ~= nil,
 		string.format("rarity %q has no drop weight", species.Rarity))
+	-- Income has two more tables to stay in step with. Refusing the file here
+	-- is the whole reason IncomePerSecond can fall back to 1.00x quietly: the
+	-- fallback is for a legacy save, and this is what stops it ever covering
+	-- for a species we actually ship.
+	assert(SeedData.RarityMultiplier[species.Rarity] ~= nil,
+		string.format("rarity %q has no income multiplier", species.Rarity))
+	assert(SeedData.BiomeMultiplier[species.Biome] ~= nil,
+		string.format("species %q sits in biome %q, which has no income multiplier",
+			species.Id, species.Biome))
 	byId[species.Id] = species
 	local list = byBiome[species.Biome]
 	if not list then
@@ -825,9 +888,44 @@ end
 
 --==============================================================================
 -- WHAT IT IS WORTH, AND WHAT IT COSTS
+--
+-- ONE CALCULATION, AND EVERY CALLER USES IT. EconomyService pays from this, the
+-- garden panel and the world pop display it, and the stall prices from it. A
+-- second copy anywhere is a readout that can disagree with the payout, and the
+-- player believes the readout.
+--
+-- THE SPECIES IS THE ARGUMENT NOW, not the tier alone. Rarity and biome both
+-- come off it and neither can be recovered from a number -- and every caller
+-- already had a species in hand, so nothing needed new plumbing to find one.
+--
+-- AN UNKNOWN SPECIES PAYS THE BASE RATE. Not zero, which would stop a plant
+-- that is visibly standing in the ground from paying and look like the tick had
+-- died; and not an invented multiplier either. Anything the tables do not know
+-- is worth exactly 1.00x. The require-time asserts are what stop that fallback
+-- ever being reached by a species this file ships -- it exists for a legacy
+-- save, not for a typo.
+--
+-- HALF-UP, AND SPELLED OUT. floor(x + 0.5) rather than a rounding helper,
+-- because the client and the server must land on the same whole number every
+-- time: the pop over the plant and the cash in the profile are the same figure
+-- or the game looks broken.
 --==============================================================================
-function SeedData.IncomePerSecond(tier: number?): number
-	return SeedData.Tier(tier).value * GameConfig.Carry.CashPerValue
+local function factorsFor(species: Species?): (number, number)
+	-- A `type` test rather than a truth test: a legacy caller that still passes
+	-- the tier as the first argument arrives here as a NUMBER, and indexing a
+	-- number would throw inside the pay loop rather than fall back.
+	if type(species) ~= "table" then
+		return 1, 1
+	end
+	local rarity = SeedData.RarityMultiplier[(species :: Species).Rarity]
+	local biome = SeedData.BiomeMultiplier[(species :: Species).Biome]
+	return rarity or 1, biome or 1
+end
+
+function SeedData.IncomePerSecond(species: Species?, tier: number?): number
+	local base = SeedData.Tier(tier).value * GameConfig.Carry.CashPerValue
+	local rarity, biome = factorsFor(species)
+	return math.floor(base * rarity * biome + 0.5)
 end
 
 function SeedData.CarryMultiplier(tier: number?): number

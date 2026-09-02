@@ -632,7 +632,7 @@ local function refresh(paint: boolean)
 			planted += 1
 			local stage, remaining = stageOf(occupant, now)
 			if stage == STAGE_GROWN then
-				rate += SeedData.IncomePerSecond(occupant.tier)
+				rate += SeedData.IncomePerSecond(occupant.species, occupant.tier)
 			else
 				waiting += 1
 			end
@@ -660,7 +660,8 @@ local function refresh(paint: boolean)
 					slot.setReadyPulse(false)
 					slot.setProgress(nil)
 					slot.setWeightTag(kgFormatted, band)
-					slot.setStatusTag("+$" .. GameConfig.compact(SeedData.IncomePerSecond(occupant.tier)) .. "/s",
+					slot.setStatusTag("+$" .. GameConfig.compact(
+						SeedData.IncomePerSecond(occupant.species, occupant.tier)) .. "/s",
 						Color3.fromRGB(142, 220, 68), Color3.fromRGB(20, 36, 16))
 
 					slot.setModel("grown:" .. species.Id, function(into)

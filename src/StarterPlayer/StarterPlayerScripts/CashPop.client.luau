@@ -288,7 +288,10 @@ local function pop(entry: Tracked)
 	local stroke = label:FindFirstChildOfClass("UIStroke")
 	local scale = holder:FindFirstChildOfClass("UIScale")
 
-	label.Text = "+$" .. GameConfig.compact(SeedData.IncomePerSecond(entry.tier))
+	-- The same shared calculation the server pays from -- see SeedData. This is
+	-- display only; the number it prints is the number already banked.
+	label.Text = "+$" .. GameConfig.compact(
+		SeedData.IncomePerSecond(entry.species, entry.tier))
 	label.TextTransparency = 0
 	if stroke then
 		stroke.Transparency = 0

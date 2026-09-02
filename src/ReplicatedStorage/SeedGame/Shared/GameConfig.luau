@@ -1851,10 +1851,11 @@ GameConfig.Mill = {
 	--==========================================================================
 	-- THE COSTS ARE PRICED OFF THE GARDEN, NOT OFF EACH OTHER
 	--
-	-- Cash comes from grown plants at 1 per kg per second, so a plot is worth
-	-- the sum of what is standing in it. Measured against the real weight roll
-	-- (mean 530 kg per pod, a curated bed far higher) a mill-tier-seven player
-	-- is realistically making 80-150K/sec.
+	-- Cash comes from grown plants: a size-tier base rate scaled by the species'
+	-- rarity and by how deep its biome sits, so a plot is worth the sum of what
+	-- is standing in it. See SeedData.IncomePerSecond -- the figures below were
+	-- sized against the older tier-only rate and a curated deep-biome bed now
+	-- earns rather more than the 80-150K/sec they assume.
 	--
 	-- Sized so CASH AND SCORE ARRIVE TOGETHER rather than one waiting on the
 	-- other. Cumulative to level 8 -- the last one the five biomes need -- is
