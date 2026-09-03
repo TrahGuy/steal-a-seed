@@ -5203,23 +5203,52 @@ that keeps a foot down at every speed. Measured after: **2.63 cycles a second,
 deliberate 140-degree limp belongs to Greenhollow's brute), shoulders
 counter-swing against them at 46 degrees to the hips' 34, trailing by 0.55 rad.
 
-### THE CHASE
+### THE CHASE, AND THE CEILING THAT CAME BACK DOWN
 
-    configured WalkSpeed  0 -> 67 -> 85 -> 90 -> 98 -> 109 -> 121 -> 123 (plateau)
-    measured studs/sec    0 ->  7 -> 87 -> 91 -> 96 -> 106 -> 118 -> 124
-    50 studs   0.85s after the wake delay
-    100 studs  1.40s
+Opening 78, ramping squared to 96 over 3.4 seconds, plus rage and plus the
+under-speed shortfall exactly as before. Walking home is 64 and the gait drops to
+43% of the chase's swing. Measured live with rage cleared -- and note that every
+provoke does `rage += 1`, so even a FIRST theft carries +5:
+
+    configured WalkSpeed  0 -> 63 -> 84 -> 85 -> 87 -> 90 -> 93 -> 98 -> 101
+    measured studs/sec    0 -> 39 -> 84 -> 85 -> 87 -> 91 -> 93 -> 98 -> 101
+    gap to a player fleeing at 81.5   28 -> 103 (peak) -> 77 -> 44 -> contact
     hip span   68.0 degrees      shoulder span  92.0 degrees
 
-Opening 78, ramping squared to 118 over 2.6 seconds, plus rage and plus the
-under-speed shortfall exactly as before. The measured displacement tracks the
-configured speed within a few per cent, so nothing in the movement code is a
-bottleneck. Walking home is 64 and the gait drops to 43% of the chase's swing.
+The measured displacement tracks the configured speed within a couple of per
+cent, so nothing in the movement code is a bottleneck.
+
+**IT WAS 118 AND THAT WAS TOO MUCH, WHICH ONLY LOOKING AT THE WHOLE LADDER
+SHOWED.** Simulated at 50 Hz -- 1.2s head start, contact at GrabStuds, the red
+line as the finish -- for a player who has exactly met each biome's bar and taken
+the lightest pod there is, the fraction of the run home they cover before being
+caught goes:
+
+    greenhollow 11%   dustbowl 28%   tanglemire 29%   emberroot 34%
+
+Eleven is the tutorial teaching you that you get caught. The rest is a gentle
+rise: the road gets slightly more forgiving per raid as the walk back gets
+longer, which is what stops distance from double-counting as difficulty.
+
+    starbloom on flat 92 (before any of this)   38%   -- continued the line
+    starbloom on 118 / ramp 2.6                 28%   -- EQUAL TO DUSTBOWL
+    starbloom on 96 / ramp 3.4                  43%   -- back on the line
+
+At 118 the last biome was the least survivable ATTEMPT on the road as well as
+the longest walk home. At 96 it is the most survivable attempt, which is right:
+you get further before it lands, and there is far more road left when it does.
+
+The ramp is the part that was actually wrong before any of this and it stays --
+what a player feels is the acceleration, not the ceiling. The slow opening is
+also what makes this row generous: the gap peaks at 103 studs before the ramp
+takes hold, which is more head start than a flat 92 ever gave.
 
 **A capped player still outruns it.** WalkSpeed caps at 150 and a trained player
-measured 146.6; against 118 that is 28 studs a second of escape. The brief asked
-for 105-120 and this sits at the top of it, but the last biome cannot catch a
-maxed runner in a straight line and that is a design decision, not a bug.
+measured 146.6. But a chase only ever happens against an ENCUMBERED player --
+`AggroOnTheftOnly` -- and the carry curve is brutal: x0.99 for a Tiny pod, x0.51
+for a Titan, x0.30 for a Colossal. A maxed player walks away with anything light
+and cannot outrun anything in the game while carrying the thing that is actually
+worth taking. That is the design, not a gap in it.
 
 ### THE HIT, AND THE WIND-UP THAT PLAYING IT KILLED
 
