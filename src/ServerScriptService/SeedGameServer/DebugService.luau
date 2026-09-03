@@ -237,8 +237,23 @@ ACTIONS.SetPlotTier = function(player, payload)
 	if not tier then
 		return "SetPlotTier: not a number"
 	end
-	PlayerDataService.SetPlotTier(player, math.floor(tier))
-	return string.format("plot tier %d", math.floor(tier))
+	--==========================================================================
+	-- BOTH HALVES, OR IT IS NOT A PLOT TIER
+	--
+	-- This used to write the profile and stop, back when nothing could rebuild
+	-- a bed and the number was inert. It is not inert now: the profile would
+	-- say Level 5 while the plot in the world stayed Level 1, and since
+	-- PlantService enforces capacity off the PLOT, the tester would be told
+	-- they own twenty slots by every panel and refused at the sixth plant.
+	--
+	-- Clamped to the real ladder rather than the 1..99 the payload allows, so
+	-- the two writes cannot be given different numbers.
+	--==========================================================================
+	local level = math.clamp(math.floor(tier), 1, #GameConfig.PlotTiers)
+	PlayerDataService.SetPlotTier(player, level)
+	PlotService.SetDesiredLevel(player, level)
+	return string.format("plot level %d (%d slots)",
+		level, GameConfig.plotCapacityForTier(level))
 end
 
 --==============================================================================

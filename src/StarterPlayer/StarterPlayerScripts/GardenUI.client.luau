@@ -562,12 +562,27 @@ end
 --==============================================================================
 local plotTier = GameConfig.StartingPlotTier
 
-local function slotCount(): number
-	local tier = GameConfig.PlotTiers[math.clamp(plotTier, 1, #GameConfig.PlotTiers)]
-	-- Never a hardcoded 12. A starting plot is 4 rows of BedColumns, and every
-	-- tier after it is a different number of rows through the same function
-	-- MapService builds the bed with.
-	return GameConfig.plotSlotsFor(if tier then tier.rows else GameConfig.PlotTiers[1].rows)
+--==============================================================================
+-- CAPACITY, AND WHERE IT IS READ FROM
+--
+-- The PLOT is asked first and the profile is the fallback. Both are written by
+-- the server and they agree in the steady state, but they do not update in the
+-- same instant: an upgrade rebuilds the plot immediately and the profile packet
+-- that carries the new PlotTier follows up to a quarter second later. Reading
+-- the plot means the panel grows the moment the bed does.
+--
+-- It used to be plotSlotsFor(rows) -- the invisible planting grid. That has not
+-- equalled the number of plants a level holds since the ladder was re-cut, and
+-- reading it here would have drawn 21 rows for a level that holds 7.
+--==============================================================================
+local function capacityOf(plot: Model?): number
+	if plot then
+		local n = tonumber(plot:GetAttribute("Capacity"))
+		if n and n == n and n > 0 then
+			return math.floor(n)
+		end
+	end
+	return GameConfig.plotCapacityForTier(plotTier)
 end
 
 --==============================================================================
@@ -619,14 +634,32 @@ local function refresh(paint: boolean)
 	end
 
 	local here = occupants(plot)
-	local slots = slotCount()
+	local capacity = capacityOf(plot)
+
+	--==========================================================================
+	-- EVERY PLANT GETS A ROW, EVEN THE ONES THAT DO NOT FIT
+	--
+	-- A garden can legitimately hold more than its level's capacity: the ladder
+	-- was re-cut under live saves, so an old profile migrates in over its new
+	-- limit and PlantService restores all of it rather than discarding the
+	-- overflow. Capacity blocks PLANTING, not owning.
+	--
+	-- So the row count is whichever is larger. Drawing only `capacity` rows
+	-- would hide plants the player owns, can see standing in their own bed, and
+	-- cannot select or pick up from the one panel that lists them -- which reads
+	-- as the game having eaten them.
+	--
+	-- Below capacity the extra rows are empty and mean "room left". There are
+	-- none beyond it: at or over capacity the list stops at the last real plant.
+	--==========================================================================
+	local rows = math.max(capacity, #here)
 	local planted, waiting, rate = 0, 0, 0
 
 	if paint then
-		setSlotCount(slots)
+		setSlotCount(rows)
 	end
 
-	for index = 1, slots do
+	for index = 1, rows do
 		local occupant = here[index]
 		if occupant then
 			planted += 1
@@ -751,7 +784,11 @@ local function refresh(paint: boolean)
 	badgeLabel.Text = tostring(waiting)
 
 	if paint then
-		header.Text = string.format("GARDEN  %d/%d", planted, slots)
+		-- Reads "GARDEN 8/10" normally and "GARDEN 23/20" for a migrated garden
+		-- that is over its level. The second one looks wrong and is not: it is
+		-- the honest description of a bed holding more than it can be planted
+		-- with, and hiding it would not make the plants go away.
+		header.Text = string.format("GARDEN  %d/%d", planted, capacity)
 		footer.Text = if rate > 0 then "PLOT INCOME:  +$" .. GameConfig.compact(rate) .. "/s" else ""
 		footer.TextColor3 = Color3.fromRGB(145, 235, 75)
 	end

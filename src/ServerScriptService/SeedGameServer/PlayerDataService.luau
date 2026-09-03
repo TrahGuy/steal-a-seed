@@ -38,6 +38,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local SaveService = require(script.Parent:WaitForChild("SaveService"))
 local ProfileSchema = require(script.Parent:WaitForChild("ProfileSchema"))
+local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 
 local SAVE = GameConfig.Save
@@ -421,12 +422,26 @@ local function onPlayerAdded(player: Player)
 				player.Name, status, profile.Cash, profile.Speed, profile.PlotTier))
 		end
 
-		-- PLOT TIER GOES HERE when tiers ship. PlotService.OnAssigned is the
-		-- hook, and this is the ordering problem it was built for: the plot is
-		-- assigned the instant a player joins, while the profile arrives
-		-- seconds later, so the plot has to be rebuilt to tier once the profile
-		-- says what tier it is. Deliberately not wired yet -- every plot is
-		-- tier 1 and nothing changes that.
+		--======================================================================
+		-- THE PLOT LEARNS ITS SIZE, AND THIS IS THE FIRST MOMENT IT CAN
+		--
+		-- The ordering problem this comment used to reserve space for. A plot is
+		-- handed out the instant a player joins; the profile that says how big
+		-- it should be arrives from the DataStore seconds later. So the plot is
+		-- standing there at Level 1 -- or at whatever its last owner left it --
+		-- until right here.
+		--
+		-- BEFORE the profileReady packet below, deliberately. The client builds
+		-- its garden HUD off that packet and reads capacity from the plot's own
+		-- attributes; sending "you are Level 4" while the plot in the world
+		-- still says Level 1 gives the first frame a HUD that disagrees with the
+		-- ground. One line earlier and it never happens.
+		--
+		-- SetDesiredLevel handles the case where the player has no plot at all
+		-- -- a full server, and they are in the queue. It remembers, and the
+		-- plot is built to size when their turn comes.
+		--======================================================================
+		PlotService.SetDesiredLevel(player, profile.PlotTier)
 
 		if profileReady then
 			pcall(function()

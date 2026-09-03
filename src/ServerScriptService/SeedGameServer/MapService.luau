@@ -157,7 +157,9 @@ local FENCE_THICK = 1.6
 local BOARDS = { { 1.1, 2.2 }, { 3.9, 2.2 } }
 local FENCE_TOP = 5.0
 
-local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance): Model
+local dressPlot
+
+local function buildPlot(id: number, cf: CFrame, level: number, parent: Instance): Model
 	local model = Instance.new("Model")
 	model.Name = string.format("%s%02d", PLOT.NamePrefix, id)
 	model:SetAttribute(GameConfig.Attributes.PlotId, id)
@@ -166,11 +168,88 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	model.Parent = parent
 	CollectionService:AddTag(model, GameConfig.Tags.Plot)
 
+	dressPlot(model, cf, level)
+	return model
+end
+
+--==============================================================================
+-- EVERYTHING A PLOT IS MADE OF, BUILT INTO A MODEL THAT ALREADY EXISTS
+--
+-- Split out of buildPlot so an UPGRADE can re-dress a plot in place instead of
+-- destroying and replacing it. The Model instance has to survive: PlotService
+-- holds it in `plotsById`, PlantService keys its growing table on it, and every
+-- client that has ever looked at it holds the same reference. Swapping in a new
+-- Model would invalidate all of that at once, for a change the player asked for
+-- and expects to be seamless.
+--
+-- So the geometry is disposable and the Model is not. This function only ever
+-- ADDS parts; clearing the old ones is the caller's job, because the caller is
+-- the one that knows which children are geometry and which are the garden.
+--
+-- `cf` is the plot CENTRE. Local -Z faces the hub, which is where the gate is.
+--==============================================================================
+function dressPlot(model: Model, cf: CFrame, level: number)
+	local rows = GameConfig.plotRowsForTier(level)
 	local width = PLOT.Width
 	local depth = GameConfig.plotDepthFor(rows)
 	local halfW, halfD = width * 0.5, depth * 0.5
+
+	--==========================================================================
+	-- THE FOUR NUMBERS A PLOT REPLICATES ABOUT ITSELF
+	--
+	-- Level and Capacity are the gameplay pair; Rows and Depth are the geometry
+	-- pair that follows from them. All four are stamped together, here, in the
+	-- one function that changes any of them -- so a plot cannot be caught
+	-- claiming Level 3 with a Level 2 capacity, which is the shape of bug that
+	-- lets a player plant into a slot the server will refuse.
+	--
+	-- CAPACITY IS STAMPED, NOT DERIVED BY THE READER. PlantService reads this
+	-- attribute rather than recomputing from Rows, because Rows is the invisible
+	-- planting grid and has not equalled capacity since the ladder was re-cut.
+	--==========================================================================
+	model:SetAttribute("Level", level)
+	model:SetAttribute("Capacity", GameConfig.plotCapacityForTier(level))
 	model:SetAttribute("Rows", rows)
 	model:SetAttribute("Depth", depth)
+
+	--==========================================================================
+	-- AND THE CENTRE ITSELF, WRITTEN DOWN
+	--
+	-- Because GetPivot() is NOT this CFrame and cannot be made into it. The
+	-- PrimaryPart is the invisible floor, and the floor is built half its own
+	-- thickness above the centre -- `cf * CFrame.new(0, 0.1, 0)` a few lines
+	-- below. So a resize that took GetPivot() as the centre would rebuild the
+	-- plot 0.1 studs higher than it found it, EVERY TIME, and the error would
+	-- compound: five upgrades and the bed floats half a stud off the field.
+	--
+	-- Measured, before this attribute existed: one upgrade moved the gate
+	-- 0.10000 studs. Exactly the floor's lift, which is what named the cause.
+	--
+	-- So the frame a plot was built in is stored rather than re-derived. It is
+	-- the one number a rebuild cannot reconstruct from what it can see.
+	--==========================================================================
+	model:SetAttribute("PlotCF", cf)
+
+	--==========================================================================
+	-- THE WING
+	--
+	-- Zero-width below Level 3, which is what makes every "if there is a wing"
+	-- branch below collapse to the original rectangle rather than needing a
+	-- second code path.
+	--
+	-- `wingZ0` is where the fence steps out: far enough behind the bed's front
+	-- edge to leave grass, and always well behind the gate. Measured at Level 5
+	-- it is 13.2 studs back from the front fence; at Level 3, 25.4.
+	--==========================================================================
+	local SIDE = PLOT.SideBed
+	local sideRows = GameConfig.plotSideRowsForTier(level)
+	local wingW = if sideRows > 0 then SIDE.WingWidth else 0
+	local sideFrontZ, sideBackZ = GameConfig.plotSideBedZ(level)
+	local wingZ0 = if sideFrontZ
+		then sideFrontZ - SIDE.WingMargin - PLOT.BedFrameWidth
+		else 0
+	model:SetAttribute("WingWidth", wingW)
+	model:SetAttribute("WingFrontZ", wingZ0)
 
 	--== THE PLOT HAS NO GROUND OF ITS OWN ==--
 	--
@@ -268,12 +347,36 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 		end
 	end
 
+	--==========================================================================
+	-- THE FENCE TRACES THE PLOT, INCLUDING ITS WING
+	--
+	-- From Level 3 the footprint is an L, and the fence is the L. The lazy
+	-- version -- one big rectangle around the whole bounding box -- would put a
+	-- fence around a large triangle of grass the plot does not own, run it
+	-- straight through the neighbouring plot's gap, and tell the player they
+	-- have room at the front that they demonstrably do not.
+	--
+	-- Seven runs instead of five when there is a wing. Without one the geometry
+	-- collapses back to exactly the original five, because wingW is zero and
+	-- both wing runs are shorter than fenceRun's half-stud minimum.
+	--==========================================================================
 	local gateHalf = PLOT.GateWidth * 0.5
-	fenceRun(true, halfD, -halfW, halfW)      -- back
-	fenceRun(false, -halfW, -halfD, halfD)    -- left
-	fenceRun(false, halfW, -halfD, halfD)     -- right
+	local outerW = halfW + wingW
+
+	fenceRun(true, halfD, -halfW, outerW)     -- back, across the wing too
+	fenceRun(false, -halfW, -halfD, halfD)    -- left, full depth
 	fenceRun(true, -halfD, -halfW, -gateHalf) -- front, left of the gate
 	fenceRun(true, -halfD, gateHalf, halfW)   -- front, right of the gate
+
+	if wingW > 0 then
+		-- The right side steps out: forward of the wing it is the plot edge,
+		-- then a return across the step, then the wing's own outer edge.
+		fenceRun(false, halfW, -halfD, wingZ0)  -- right, up to the step
+		fenceRun(true, wingZ0, halfW, outerW)   -- the step itself
+		fenceRun(false, outerW, wingZ0, halfD)  -- the wing's outer edge
+	else
+		fenceRun(false, halfW, -halfD, halfD)   -- right, full depth
+	end
 
 	--== NO GATEPOSTS ==--
 	--
@@ -292,9 +395,15 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	-- not: the border stands PROUD of the soil, so a solid slab's top face sits
 	-- ABOVE the soil and covers it completely. The whole plot rendered as a
 	-- wooden floor with no dirt anywhere in it.
-	local plants = Instance.new("Folder")
-	plants.Name = PLOT.PlantsFolderName
-	plants.Parent = model
+	-- FOUND, NOT MADE, because a resize re-dresses a plot that is already being
+	-- gardened in. Every living plant Model is parented here, and replacing the
+	-- folder would take the whole garden with it.
+	local plants = model:FindFirstChild(PLOT.PlantsFolderName)
+	if not plants then
+		plants = Instance.new("Folder")
+		plants.Name = PLOT.PlantsFolderName
+		plants.Parent = model
+	end
 
 	local cols = PLOT.BedColumns
 	local bedW = width - PLOT.BedInsetX * 2 - PLOT.BedFrameWidth * 2
@@ -303,116 +412,124 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	local soilTop = PLOT.BedHeight
 	local frameTop = soilTop + PLOT.BedFrameLip
 
-	for _, bar in ipairs({
-		-- Front and back run the full outer width so the corners close.
-		{ Vector3.new(bedW + fw * 2, frameTop, fw), CFrame.new(0, 0, -(bedSpan + fw) * 0.5) },
-		{ Vector3.new(bedW + fw * 2, frameTop, fw), CFrame.new(0, 0, (bedSpan + fw) * 0.5) },
-		{ Vector3.new(fw, frameTop, bedSpan), CFrame.new(-(bedW + fw) * 0.5, 0, 0) },
-		{ Vector3.new(fw, frameTop, bedSpan), CFrame.new((bedW + fw) * 0.5, 0, 0) },
-	}) do
-		build({
-			name = "BedFrame",
-			size = bar[1],
-			cframe = cf * (bar[2] + Vector3.new(0, frameTop * 0.5, 0)),
-			color = BED_FRAME,
-			material = Enum.Material.WoodPlanks,
-			collide = false,
-			studs = false,
-			parent = model,
-		})
-	end
+	--==========================================================================
+	-- ONE BED BUILDER, CALLED ONCE OR TWICE
+	--
+	-- Frame, furrow slab, tilled rows and clods, at a given centre and width.
+	-- The main bed is this with centre (0, 0) and the width it has always had,
+	-- so it comes out byte-identical to the version that was written inline --
+	-- which matters, because PlantService puts every saved plant at
+	-- `soil.CFrame * CFrame.new(x, soil.Size.Y * 0.5, z)` and moving that
+	-- surface by a stud would lift or sink every garden ever saved.
+	--
+	-- The side bed is the same function with a different centre and a narrower
+	-- width. There is no second copy of the rustic style to keep in step.
+	--==========================================================================
+	local function buildBed(bedName: string, centreX: number, centreZ: number,
+		bedWidth: number, bedRows: number): BasePart
+		local span = bedRows * PLOT.RowDepth + (bedRows - 1) * PLOT.RowGap
+		local at = function(x: number, y: number, z: number): CFrame
+			return cf * CFrame.new(centreX + x, y, centreZ + z)
+		end
 
-	--==========================================================================
-	-- THIS SLAB IS THE FURROW FLOOR, AND IT MUST NOT MOVE
-	--
-	-- It was one flat brown -- a 34 x 121 stud rectangle at the biggest tier,
-	-- the largest single surface in the game, with less going on than the grass
-	-- beside it. It is the DARK earth now and the rows are built on top of it,
-	-- so what shows between them is a furrow.
-	--
-	-- Its size and CFrame are load-bearing beyond the look: PlantService puts
-	-- every plant at `soil.CFrame * CFrame.new(x, soil.Size.Y * 0.5, z)`, so
-	-- changing either would lift or sink every garden that has ever been saved.
-	-- Only the colour changed.
-	--==========================================================================
-	local soil = build({
-		name = PLOT.PlanterName,
-		size = Vector3.new(bedW, soilTop, bedSpan),
-		cframe = cf * CFrame.new(0, soilTop * 0.5, 0),
-		color = BED_FURROW,
-		-- STUDDED, AND THEREFORE PLASTIC. Ground and Grass both render their own
-		-- noise texture OVER the studs, so a bed set to TopSurface = Studs comes
-		-- out looking smooth while the field beside it is visibly studded.
-		-- Plastic is the material that actually shows them.
-		material = Enum.Material.Plastic,
-		collide = false,
-		parent = model,
-	})
-	CollectionService:AddTag(soil, GameConfig.Tags.Planter)
+		for _, bar in ipairs({
+			-- Front and back run the full outer width so the corners close.
+			{ Vector3.new(bedWidth + fw * 2, frameTop, fw), Vector3.new(0, 0, -(span + fw) * 0.5) },
+			{ Vector3.new(bedWidth + fw * 2, frameTop, fw), Vector3.new(0, 0, (span + fw) * 0.5) },
+			{ Vector3.new(fw, frameTop, span), Vector3.new(-(bedWidth + fw) * 0.5, 0, 0) },
+			{ Vector3.new(fw, frameTop, span), Vector3.new((bedWidth + fw) * 0.5, 0, 0) },
+		}) do
+			build({
+				name = "BedFrame",
+				size = bar[1],
+				cframe = at(bar[2].X, frameTop * 0.5, bar[2].Z),
+				color = BED_FRAME,
+				material = Enum.Material.WoodPlanks,
+				collide = false,
+				studs = false,
+				parent = model,
+			})
+		end
 
-	--==========================================================================
-	-- THE BED IS TILLED
-	--
-	-- The rows already exist in the data -- RowDepth and RowGap have decided
-	-- where plants stand since the first build -- and nothing ever drew them.
-	-- Now they are mounded: a band of lighter earth per row, raised off the dark
-	-- slab, with the slab showing through between them as the furrow.
-	--
-	-- Built off the SAME expression the slot grid below uses for a row centre,
-	-- so the mounds and the planting cannot drift apart -- and if the rows are
-	-- ever retuned, both follow.
-	--
-	-- DETERMINISTIC, never random. Two servers must build the same garden, and
-	-- "the third bed looked wrong" has to mean something.
-	--==========================================================================
-	local rise = PLOT.SoilRowRise
-	for row = 1, rows do
-		local rowCentre = -bedSpan * 0.5 + (row - 0.5) * PLOT.RowDepth
-			+ (row - 1) * PLOT.RowGap
-		build({
-			name = "SoilRow",
-			size = Vector3.new(bedW, rise, PLOT.RowDepth),
-			cframe = cf * CFrame.new(0, soilTop + rise * 0.5, rowCentre),
-			color = BED_SOIL,
+		local slab = build({
+			name = bedName,
+			size = Vector3.new(bedWidth, soilTop, span),
+			cframe = at(0, soilTop * 0.5, 0),
+			color = BED_FURROW,
+			-- STUDDED, AND THEREFORE PLASTIC. Ground and Grass both render their
+			-- own noise texture OVER the studs, so a bed set to TopSurface =
+			-- Studs comes out looking smooth while the field beside it is
+			-- visibly studded. Plastic is the material that actually shows them.
 			material = Enum.Material.Plastic,
 			collide = false,
 			parent = model,
 		})
-	end
+		CollectionService:AddTag(slab, GameConfig.Tags.Planter)
 
-	--==========================================================================
-	-- CLODS, IN THE FURROWS AND NOWHERE ELSE
-	--
-	-- Plants stand in row CENTRES, on the mounds. A clod there would end up
-	-- inside somebody's Bellchime, so they go in the gaps -- which is also where
-	-- broken earth would actually collect.
-	--
-	-- Every other gap gets them. On all of them they read as gravel rather than
-	-- as a tilled bed.
-	--==========================================================================
-	for gap = 1, rows - 1 do
-		if gap % PLOT.SoilClodStride == 1 then
-			local rowCentre = -bedSpan * 0.5 + (gap - 0.5) * PLOT.RowDepth
-				+ (gap - 1) * PLOT.RowGap
-			local furrowZ = rowCentre + PLOT.RowDepth * 0.5 + PLOT.RowGap * 0.5
-			for c = 1, PLOT.SoilClodsPerFurrow do
-				local across = (c - (PLOT.SoilClodsPerFurrow + 1) * 0.5)
-					* (bedW / (PLOT.SoilClodsPerFurrow + 1))
-				-- Nudged by the gap index so the scatter does not line up into a
-				-- second grid.
-				local jitter = ((gap * 7) % 5 - 2) * (bedW * 0.06)
-				local size = PLOT.SoilClodSize * (1 + ((gap + c) % 3) * 0.18)
-				build({
-					name = "Clod",
-					size = Vector3.new(size, size * 0.5, size),
-					cframe = cf * CFrame.new(across + jitter, soilTop, furrowZ),
-					color = BED_CLOD,
-					material = Enum.Material.Plastic,
-					collide = false,
-					parent = model,
-				})
+		local rise = PLOT.SoilRowRise
+		for row = 1, bedRows do
+			local rowCentre = -span * 0.5 + (row - 0.5) * PLOT.RowDepth
+				+ (row - 1) * PLOT.RowGap
+			build({
+				name = "SoilRow",
+				size = Vector3.new(bedWidth, rise, PLOT.RowDepth),
+				cframe = at(0, soilTop + rise * 0.5, rowCentre),
+				color = BED_SOIL,
+				material = Enum.Material.Plastic,
+				collide = false,
+				parent = model,
+			})
+		end
+
+		for gap = 1, bedRows - 1 do
+			if gap % PLOT.SoilClodStride == 1 then
+				local rowCentre = -span * 0.5 + (gap - 0.5) * PLOT.RowDepth
+					+ (gap - 1) * PLOT.RowGap
+				local furrowZ = rowCentre + PLOT.RowDepth * 0.5 + PLOT.RowGap * 0.5
+				for c = 1, PLOT.SoilClodsPerFurrow do
+					local across = (c - (PLOT.SoilClodsPerFurrow + 1) * 0.5)
+						* (bedWidth / (PLOT.SoilClodsPerFurrow + 1))
+					-- Nudged by the gap index so the scatter does not line up
+					-- into a second grid.
+					local jitter = ((gap * 7) % 5 - 2) * (bedWidth * 0.06)
+					local size = PLOT.SoilClodSize * (1 + ((gap + c) % 3) * 0.18)
+					build({
+						name = "Clod",
+						size = Vector3.new(size, size * 0.5, size),
+						cframe = at(across + jitter, soilTop, furrowZ),
+						color = BED_CLOD,
+						material = Enum.Material.Plastic,
+						collide = false,
+						parent = model,
+					})
+				end
 			end
 		end
+		return slab
+	end
+
+	local soil = buildBed(PLOT.PlanterName, 0, 0, bedW, rows)
+
+	--==========================================================================
+	-- AND THE SECOND BED, FROM LEVEL 3
+	--
+	-- Same builder, so it is the same rustic bed in a narrower strip -- not a
+	-- second look to keep in step with the first.
+	--
+	-- It carries a BedId attribute because "which bed is this" has to survive
+	-- being asked by a service that only has the part. The MAIN bed carries one
+	-- too, so no caller has to special-case the absence of it.
+	--
+	-- It adds NO capacity. Twenty is twenty at Level 5 whether the plot has one
+	-- bed or two; this is floor space for twenty things that walk.
+	--==========================================================================
+	soil:SetAttribute("BedId", "main")
+	if sideRows > 0 and sideFrontZ and sideBackZ then
+		local sideW = SIDE.WingWidth - SIDE.WingMargin * 2 - PLOT.BedFrameWidth * 2
+		local sideCx = halfW + SIDE.WingWidth * 0.5
+		local sideCz = (sideFrontZ + sideBackZ) * 0.5
+		local side = buildBed(SIDE.Name, sideCx, sideCz, sideW, sideRows)
+		side:SetAttribute("BedId", "side")
 	end
 
 	--== PLANT SLOTS ==--
@@ -488,11 +605,67 @@ local function buildPlot(id: number, cf: CFrame, rows: number, parent: Instance)
 	pad.Parent = model
 	CollectionService:AddTag(pad, GameConfig.Tags.PlotSpawn)
 
-	local runtime = Instance.new("Folder")
-	runtime.Name = PLOT.RuntimeFolderName
-	runtime.Parent = model
+	-- Same reasoning as the Plants folder above.
+	local runtime = model:FindFirstChild(PLOT.RuntimeFolderName)
+	if not runtime then
+		runtime = Instance.new("Folder")
+		runtime.Name = PLOT.RuntimeFolderName
+		runtime.Parent = model
+	end
+end
 
-	return model
+--==============================================================================
+-- GROW OR SHRINK A PLOT WITHOUT DISTURBING WHAT IS GROWING IN IT
+--
+-- THE GATE STAYS PUT. That is the whole geometric contract. A plot is placed by
+-- its centre, and its depth is measured from the gate backwards, so a deeper
+-- plot placed at the same centre would swallow the walkway and push its gate
+-- into the hub ring. The gate is the fixed point players walk through and stand
+-- at; the plot grows AWAY from it, out into the empty field behind.
+--
+--   gate  = oldCF * CFrame.new(0, 0, -oldDepth/2)
+--   newCF = gate  * CFrame.new(0, 0,  newDepth/2)
+--
+-- Returns the new centre CFrame so the caller can rebase what it is holding.
+--
+-- What survives: the Model itself, its name, its attributes, its tags, the
+-- Plants folder with every plant standing in it, and the Runtime folder. What
+-- is replaced: every part -- floor, soil, bed, fences, gate, slots, spawn pad.
+--==============================================================================
+function MapService.ResizePlot(plot: Model, level: number): CFrame
+	assert(typeof(plot) == "Instance" and plot:IsA("Model"), "ResizePlot: not a Model")
+	local n = tonumber(level)
+	assert(n and n == n, "ResizePlot: bad level")
+	n = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
+
+	local oldDepth = tonumber(plot:GetAttribute("Depth"))
+		or GameConfig.plotDepthFor(GameConfig.plotRowsForTier(plot:GetAttribute("Level")))
+
+	-- The stored centre, never GetPivot() -- see "AND THE CENTRE ITSELF" in
+	-- dressPlot for why the two differ and why using the pivot drifts.
+	local stored = plot:GetAttribute("PlotCF")
+	local oldCF = if typeof(stored) == "CFrame" then stored else plot:GetPivot()
+	local gateCF = oldCF * CFrame.new(0, 0, -oldDepth * 0.5)
+	local newDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(n))
+	local newCF = gateCF * CFrame.new(0, 0, newDepth * 0.5)
+
+	-- Geometry goes; the garden stays. Named explicitly rather than by class,
+	-- because "destroy everything that is not a Folder" would be one refactor
+	-- away from eating a folder somebody adds later.
+	local keep = {
+		[PLOT.PlantsFolderName] = true,
+		[PLOT.RuntimeFolderName] = true,
+	}
+	for _, child in ipairs(plot:GetChildren()) do
+		if not keep[child.Name] then
+			child:Destroy()
+		end
+	end
+
+	-- PrimaryPart died with the floor. dressPlot sets a new one; until it does,
+	-- GetPivot would fall back to the bounding box of whatever is left.
+	dressPlot(plot, newCF, n)
+	return newCF
 end
 
 --==============================================================================
@@ -1154,7 +1327,7 @@ function MapService.Init()
 		-- the gate -- so every gate faces the middle and every plot grows
 		-- outward, with no per-plot rotation maths.
 		local cf = CFrame.lookAt(pos, Vector3.new(0, Y, 0))
-		buildPlot(id, cf, tier.rows, plots)
+		buildPlot(id, cf, GameConfig.StartingPlotTier, plots)
 
 		-- BESIDE THE PLOT, NOT IN FRONT OF IT. It used to sit on the ring's
 		-- inner walkway directly outside the gate, which is the one patch of

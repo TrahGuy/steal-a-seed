@@ -4418,6 +4418,498 @@ deliberately.
     nothing drives them today.
   * **Still no Play test.** Everything above is Edit-mode measurement.
 
+## Handoff: economy multipliers, Starbloom, and the Emberroot roots — 2026-09-02
+
+Written for whoever picks this up next, in any tool. `HEAD` is `e683b3c` and pushed;
+`origin/main` matches. There is UNCOMMITTED work in the tree — see "In flight" below.
+
+### What landed this session, newest first
+
+  * `e683b3c` **Plant income gained rarity and biome factors.** `SeedData.IncomePerSecond`
+    now takes `(species, tier)` rather than a tier alone and returns
+    `floor(tier base x rarity x biome + 0.5)`. `RarityMultiplier` runs Common 1.00 to
+    Divine 12.00; `BiomeMultiplier` runs greenhollow 1.00 to starbloom 1.40. `SellPrice`
+    is still exactly `SellSeconds` (30) times that. All five callers pass a species
+    (EconomyService x2, CashPop, GardenUI x2) — there is ONE calculation and no copy of
+    the formula anywhere else. Two require-time asserts refuse the file if a species has
+    a rarity or biome with no multiplier, which is what allows the runtime fallback for
+    an unknown species to be a quiet 1.00x rather than a crash.
+    Measured live: a bed of five paid 3,244/sec before and 6,330/sec after (6,323 predicted).
+  * `d84d797` **Starbloom went live.** `LiveInPhaseA = true`. It is the first biome the
+    flag has actually held back; the other four opened the moment their species rows
+    existed. NestService reads the flag as the second of two gates.
+  * `16dc84b` **Plants walk.** They now face their leg's heading (eased, 0.22s), and legs
+    swing from the hip. Verified in a running server: a plant mid-leg turned 124.7 degrees
+    where the old cap was LOOK_AMP at 28.
+  * `adb5f4e` Astralmaw face + Starbloom pod; `6515a73` the Starbloom five into the art
+    bible band with void eyes.
+
+### In flight, NOT committed — awaiting owner approval of the look
+
+  * `EmberrootForms.luau` (modified) and `EmberrootRootMockupRunner.luau` (new).
+  * `CinderPad` — a flat 2.30 x 0.26 x 2.10 slab that scaled with the body — is gone from
+    all five Emberroot species, replaced by a sculpted root system: a three-mass knot plus
+    four or five paths of two to four overlapping tapered segments with wedge tips,
+    deterministic per-segment jitter, and one or two neon fissures lying along a root.
+  * Ground roots carry a `GroundRoot` attribute and scale on their OWN curve in
+    `EmberrootForms.Build`: `min(hs ^ ROOT_DAMP, ROOT_MAX_SCALE)` with `ROOT_DAMP = 0.16`
+    and a ceiling of 2.0, applied uniformly on all three axes so taper and path shape
+    survive. The body still takes the full `hs`.
+  * Measured, Tiny -> Colossal: part counts 41->59, 42->60, 43->60, 41->59, 51->70;
+    14-16 root parts each; largest Colossal footprint 7.75 studs inside an 11 cell; zero
+    root corners below the base plane; `Base` PrimaryPart intact; exactly two walking-leg
+    clusters per species with alternating phases.
+  * Preview: `require(game.ServerScriptService.SeedGameServer.EmberrootRootMockupRunner).Build()`
+    — ten models in open sky at (600, 300, -600), Tiny row on a 16-stud pitch and Colossal
+    row 300 studs behind on a 280-stud pitch. `Ghost(true)` fades everything that is not a
+    root or a leg, because the crown completely hides the roots from directly above.
+  * **Do not commit this until the owner has approved the appearance in Studio.**
+
+#### Independently re-verified
+
+A second pass rebuilt all ten models from fresh clones with CreatureModel's requires
+repointed, changed nothing, and reproduced every figure to the decimal. Colossal:
+
+    cinderpaw  59 parts 15 roots 4.52 x 7.75    kilnhusk   59 parts 15 roots 4.65 x 7.41
+    emberquill 60 parts 15 roots 3.32 x 5.91    pyrelotus  70 parts 16 roots 5.37 x 6.66
+    slagbloom  60 parts 14 roots 5.74 x 6.97
+
+CinderPad 0 | largest footprint 7.75 | below base plane 0 | Base PrimaryPart 10/10 |
+two leg clusters per species, phases 180/0.
+
+The ART constraints were asserted in the first report but never measured. They were then
+measured, and they hold:
+
+    species      balls  cyls  wedges  segment widths   bearing gaps (deg)
+    cinderpaw        0     0       4  0.12-0.41        1 6 7 14 23 33
+    emberquill       0     0       4  0.08-0.28        2 4 5 7 10 10
+    slagbloom        0     0       4  0.18-0.48        0 6 13 16 50 60
+    kilnhusk         0     0       4  0.21-0.52        2 3 10 18 18 30
+    pyrelotus        0     0       5  0.12-0.31        3 4 4 7 20 22
+
+Zero Ball and zero Cylinder parts in any root system -- the sphere-pile tell is absent in
+fact, not just in description. Widths vary three to four times within a species, so no
+equal-width bars. Bearing gaps run 0 to 60 degrees, which is the numeric form of "not a
+radial wheel": an evenly spaced system would show near-identical gaps.
+
+#### The roots are NOT black
+
+Base is burnt bark `88, 60, 48` over basalt `52, 40, 38` and char `30, 24, 23`, with one
+species ember each -- Cinderpaw `198, 68, 24` through Pyrelotus `255, 128, 148`. That is
+the charcoal / basalt / burnt-bark / cooling-slag direction as briefed. A summary calling
+them "black" has already been written once; do not act on it and repaint a palette that is
+already correct.
+
+#### Locked, until the owner says otherwise
+
+  * Do not restore a square CinderPad.
+  * Do not turn the roots into spheres, cylinders, equal-width bars or radial wheels.
+  * Do not enlarge the roots beyond the planting cell to compensate for oversized Colossal
+    bodies. The roots obey their limit; the body curve is the thing that is wrong.
+  * Do not redesign the five silhouettes without explicit approval.
+  * Measurements establish technical compliance. They do NOT certify artistic quality --
+    that needs a close three-quarter Studio orbit with `Ghost(true)`, by eye.
+
+### Unresolved, and known
+
+  * **The 50x size curve.** `SeedData.SizeScale` returns `Tier.mul` and uses it as a linear
+    HEIGHT scale, so Colossal is fifty times Tiny. The orphaned comment directly above it
+    still explains the ceiling clamp that was lost when tiers replaced kilograms, and cites
+    the reason: the corridor walls are 46 studs. The game prints the evidence at every boot:
+    `Bellchime finished height: Tiny 6.3 | Mega 36.9 | Colossal 453.9`.
+    Share of a biome's pods that grow taller than the walls, weighted by that biome's own
+    RarityBonus: greenhollow 11.7%, dustbowl 16.6%, tanglemire 25.1%, emberroot 30.4%,
+    starbloom 39.5%. A Colossal Emberroot measures 210 x 233 x 373 studs.
+    A cube root of `mul` keeps everything under the walls and changes how every existing
+    save's plants look, which is why it is a decision and not a patch.
+  * **The Emberroot roots no longer meet the feet at high tiers** — a direct consequence of
+    damping the roots while the body keeps the 50x curve. On a Colossal Cinderpaw the
+    `LeftRootSole` is 26 x 13 x 39 studs and the claw reaches 31 studs forward, against a
+    root system spanning 4.5 x 7.75. Containing the footprint was the instruction; the
+    mismatch belongs to the size curve above.
+  * **`Players.MaxPlayers` is 60 against 6 plots.** Self-reported at boot. Needs Game
+    Settings, not code.
+  * **Guardian health is inconsistent**: greenhollow, dustbowl and starbloom parents are
+    `inf`; tanglemire and emberroot are `100`.
+  * **Parents do not gaze.** `ParentAnim.client.luau` has no eye, pupil, lid or gaze code at
+    all. Astralmaw's eye parts are named to the contract so it is free to wire later, but
+    nothing drives them. Astralmaw also has no entry in `SLEEP_BY_SPECIES`, so it falls back
+    to `GREENHOLLOW_SLEEP` — a mossy brute's fold on a cosmic behemoth.
+  * **One unexplained observation.** In a long Play session the cash HUD sat on its "—"
+    placeholders and never updated, though profile packets were arriving. It works on a
+    clean boot. Ruled out: stale source, scoping, missing remote, duplicate scripts and
+    `ResetOnSpawn` (all ten HUDs pin it false). Not reproduced, cause unknown.
+
+### Traps that cost real time — read before measuring anything in Studio
+
+Four separate measurements this session produced confident, wrong answers. Each would have
+become a false bug report.
+
+  * **The require cache keys on the ModuleScript INSTANCE, and Rojo rewrites `Source` in
+    place.** A module required earlier in a session keeps answering with its old body no
+    matter how many times the file changes. Clone before requiring — and if you need
+    `CreatureModel` to pick up your clone, rewrite the `WaitForChild("X")` in the clone's
+    own Source too. Reading a live service this way also gives you a FRESH module with no
+    game state: `PlayerDataService.Get` returned nil for a player who was plainly loaded.
+  * **`StreamingEnabled = true`.** Client-side queries about distant parts are lies. Two
+    biomes' pods looked completely empty from the client and were perfectly intact on the
+    server. Measure world content on the SERVER.
+  * **Every creature part has `CanQuery = false`.** Raycasts through them hit nothing, so a
+    "is this eye occluded" test silently answers "nothing there" for all 25 species.
+  * **A Ball renders as a sphere of its SMALLEST axis and a WedgePart is half its box.** A
+    box-containment test therefore reports parts as buried inside geometry that does not
+    exist. Nine species were flagged as having buried eyes; one actually did.
+  * **`GetBoundingBox` reports in the PIVOT's frame** and these models pivot on a rolled
+    cylinder, so X and Y come back swapped. Use world extents from part corners.
+  * **`rojo build` only PARSES.** It never compiles Luau and never runs a module body, so a
+    register-limit error, a bad assert or a wrong table reference all survive it. Require
+    the module in Studio to find those.
+  * **`--!strict` must be the first bytes of the file** — no BOM, no banner above it. Luau
+    reads the pragma only in the leading comment block and silently drops the whole file to
+    nonstrict otherwise, and the build will not catch it.
+  * **A `.server.luau` Script cannot run in Edit at all.** `RunService:IsStudio()` is true in
+    Play, so that gate protects the published game and leaves playtests building your
+    gallery. Showroom runners are ModuleScripts with `Build()`/`Clear()`. Three were
+    converted or deleted for this.
+
+### Naming contracts the client animates on
+
+`PlantSway.client.luau` finds rigs by name, on DIRECT CHILDREN of the plant model:
+
+  * `Leaf` — exact match. Swung as an arm while the plant walks. Suncrown's four were
+    renamed from `SupportLeaf1-4` to comply, and Tanglemire, Emberroot and Starbloom were
+    all renamed for the same reason.
+  * `*Eye`, `*Pupil`, `*Lid` — suffix match. A `*Pupil` upgrades the plant to the pupil rig,
+    where the eyeball swings in its socket and everything mounted on it rides along.
+    `LeftEyeMain` satisfies nothing.
+  * Legs are matched from a vocabulary — Thigh, Femur, Haunch, Shin, Tibia, Knee, Hock,
+    Foot, Hoof, Paw, Toe, Stilt, Pillar — then grouped by HIP: the parts in the upper half
+    cluster one per leg, and everything else joins the nearest in plan view. A leg needs an
+    upper part to exist at all, which is what separates Emberroot's root-THIGH from
+    Dustbowl's root-FOOT. Parts that must travel with the body without swinging must avoid
+    every one of those words.
+
+## THE FIVE-LEVEL PLOT LADDER — 2026-09-02
+
+Plots are bought, one rung at a time, and the bed grows outward from a gate that does
+not move. Uncommitted; the Emberroot work in the tree is separate and untouched.
+
+    level  capacity  rows  cost         depth   plantable reach from the gate
+      1       5        2   free         35.2     7.6 - 27.6
+      2       7        3   25,000       47.4     7.6 - 39.8
+      3      10        4   250,000      59.6     7.6 - 52.0
+      4      15        5   2,500,000    71.8     7.6 - 64.2
+      5      20        7   25,000,000   96.2     7.6 - 88.6
+
+### CAPACITY IS WRITTEN DOWN, NOT DERIVED
+
+It used to be `rows * BedColumns` — the invisible planting grid doubling as the gameplay
+limit — which tied how DEEP a plot looks to how MANY plants it holds. Level 5 is seven
+rows for twenty plants precisely because those two had to come apart.
+
+`GameConfig.plotCapacityForTier(level)` is the single answer. `plotSlotsFor(rows)` still
+exists and is still the attachment grid; it is NOT capacity and nothing reads it as such
+any more. MapService stamps `Level`, `Capacity`, `Rows`, `Depth` and `PlotCF` together in
+`dressPlot`, and PlantService/GardenUI read the `Capacity` attribute rather than
+recomputing.
+
+### THE GATE IS THE FIXED POINT
+
+A plot is placed by its CENTRE and its depth runs from the gate backwards, so a deeper
+plot at the same centre would swallow the walkway and push its gate into the hub ring.
+`MapService.ResizePlot` therefore recovers the gate, and rebuilds the centre from it:
+
+    gate  = oldCF * CFrame.new(0, 0, -oldDepth/2)
+    newCF = gate  * CFrame.new(0, 0,  newDepth/2)
+
+**`oldCF` is the `PlotCF` attribute, never `GetPivot()`.** The PrimaryPart is the invisible
+floor and the floor is built 0.1 studs above the centre, so a resize that used the pivot
+rebuilt the plot 0.1 higher every time — measured, then fixed, then re-measured at
+0.000015 studs of drift over ten consecutive resizes.
+
+`ResizePlot` keeps the Model, its attributes, its tags, and the `Plants` and `Runtime`
+folders as the SAME instances; everything else is destroyed and rebuilt. `buildPlot` was
+split into itself plus `dressPlot(model, cf, level)` to make that possible.
+
+### THE PLANTS DO NOT MOVE
+
+Offsets are stored SOIL-LOCAL and the soil moves when the depth changes, so doing nothing
+would slide a whole garden backwards by half the depth change. `PlotService` fires
+`OnResizing` / `OnResized` around every rebuild and `PlantService` captures world points
+and rebases offsets across them — the dependency is inverted through those two listener
+lists because PlantService requires PlotService and not the other way round.
+
+On a GROW the clamp is a no-op and not one model moves. On a SHRINK a plant can end up
+behind the new back edge, and then its model is moved onto the bed to match its rebased
+record — otherwise record and model disagree and the plant jumps on next login. Measured:
+one pod relocated 60.64 studs, the five plants already in reach moved 0.00.
+
+### ORDERING, WHICH IS THE WHOLE RACE
+
+A plot is handed out the instant a player joins; the profile that says how big it should be
+arrives seconds later. `PlotService.SetDesiredLevel` is the only entry point and is safe
+before assignment, after leaving, and with rubbish. `assign()` sizes the plot BEFORE the
+SpawnPad lookup, before `placeCharacter` and before `onAssigned` — so PlantService restores
+into a correctly sized bed and the player is given their real plot in ONE build.
+`release()` returns the plot to Level 1 after `clearPlot`, and forgets the desired level.
+
+`PlayerDataService` calls `SetDesiredLevel` one line BEFORE it fires `profileReady`, so the
+client never sees a packet claiming a level the world has not built yet.
+
+### SAVE VERSION 2
+
+`GameConfig.Save.CurrentVersion = 2`. `ProfileSchema.Sanitise` migrates v1 profiles once,
+after the plants are sanitised, and two things are non-negotiable:
+
+  * **Not one valid saved plant is ever discarded.** The level is raised to fit the garden,
+    never the garden cut to fit the level. Over twenty plants is Level 5 and over capacity,
+    which is legal and persists.
+  * **The plants do not move.** Distance from the gate is `z + depth/2` and is independent
+    of which ladder measured it, which is also what breaks the apparent circularity —
+    the new depth depends on the new level, the level depends on whether the plants fit,
+    and gate distance depends on neither, so it is measured once up front.
+
+**v2's deepest level is SHALLOWER than v1's** — 96.2 against 132.8, because capacity stopped
+being tied to the grid. So an old tier 3 or 4 garden has a rear section with nowhere to
+stand; those plants are clamped to the back of the new bed. They keep everything else.
+Anyone below old tier 3 sees nothing at all.
+
+### PlotUpgradeService
+
+Priority 60. A third verb on the existing `GameEvent` remote — no new remote. **The client
+sends a verb and nothing else**: not a level, not a price, not a plot id. Charge, record,
+build; any later failure refunds and reverts, because paid-and-not-upgraded is the one
+outcome that must not stand. Per-player reentrancy guard. The purchase cue is fired by the
+server at the plot, so a refused click never sounds like a purchase.
+
+`DebugService.SetPlotTier` now writes the profile AND rebuilds the plot. It used to write
+only the profile, which was harmless while the number was inert and is not now.
+
+### Verified
+
+`tools/tests/PlotSpec.luau` — 33 assertions, all passing, run from Edit:
+
+    python -m http.server 8731
+    local run = loadstring(game:GetService("HttpService"):GetAsync(
+        "http://127.0.0.1:8731/tools/tests/run.luau", true))()
+    print(run("PlotSpec"))
+
+In a live server: gate drift 0.000000 on a real purchase and 0.000015 over ten resizes;
+plant drift 0.000000; Plants and Runtime folders identical instances; PrimaryPart and
+SpawnPad rebuilt and `RespawnLocation` refreshed; two clicks in one frame charged once;
+a 6-plant garden in a capacity-5 plot restored **all six** across a rejoin, logging
+`restored 6 plant(s) -- 1 over the level's capacity of 5, kept`.
+
+### Concurrency, closed out
+
+**The whole transaction is atomic, and that is why none of this can interleave.** Every step
+between `busy = true` and `busy = false` was audited: `AddCash`, `SetPlotTier` and
+`SetPlants` are pure table writes through `touch`; `ResizePlot`/`dressPlot` are Instance
+work; `SoundKit.emit` uses `Debris` and `task.delay`. **`TryUpgrade` never yields**, so
+`PlayerRemoving` cannot fire inside it. The same audit clears `assign` — `placeCharacter`'s
+`WaitForChild` sits inside a `task.spawn` — so `release -> drainQueue -> assign` completes
+in one frame.
+
+That is an accident of the current implementation, not a guarantee, so the ownership
+re-check was added anyway. Three defects were found and fixed:
+
+  * **`desiredLevel` leaked for queued players.** The clear sat past `release`'s
+    `if not id then ... return end`, so it never ran for a player who left while QUEUED --
+    which is the player most likely to have an entry, since a queued player's profile loads
+    and records their level while they wait. The table is keyed by the Player instance, so
+    each miss held a Player object for the life of the server.
+  * **`SetDesiredLevel` would record for a departed player.** It wrote before checking. Now
+    refuses when `player.Parent ~= Players`.
+  * **`TryUpgrade` used a stale plot reference** for the geometry step and the purchase
+    cue. Both now re-fetch. If ownership is gone the purchase STANDS -- charged, recorded,
+    geometry deferred to their next plot -- which is complete and consistent, and strictly
+    better for a player who did nothing wrong than an unwind.
+
+Measured live, all in one Play session:
+
+    upgrade L3 -> L4, charged exactly 2,500,000, 0.27s          (no income confusion:
+                                                                 a charge is ~400s of income)
+    release right after it:  L4 -> L1, cap 15 -> 5, owner -> 0,
+                             OwnerName -> "", Claimed -> false,
+                             Plants 6 -> 0, Runtime 0
+    gate drift on release            0.000004 studs
+    gate drift over 5 resizes        0.000021 studs
+    TREADMILL drift                  0.000000 studs   (it is a SIBLING of the plot, so
+                                                       ResizePlot cannot reach it)
+    Model still reusable: PrimaryPart, SpawnPad, Soil, PlotId, Plot tag all intact
+    rejoin: plot rebuilt to L4 (soil span 59.80 = L4), THEN 6 plants restored, 0 off soil
+
+**Plants cannot restore before geometry.** `restore` is a spawned thread that polls
+`IsReady` every 0.25s. It becomes eligible the instant the profile lands -- but
+`PlayerDataService` goes from `entries[player] = {...}` to `SetDesiredLevel` with no yield
+between, so the parked thread cannot resume in the gap. The resize always wins. `restore`
+also already carried the right guard for a reassigned plot:
+`if PlotService.PlotOf(player) ~= plot then return end`.
+
+**No double-assign is structural**: `drainQueue` does `table.remove(waiting, 1)` BEFORE
+`assign`, and `assign` sets `ownerOf[id]` synchronously, so the next `firstFreePlotId()`
+cannot return the same id.
+
+**Observation, not a defect:** a handover currently performs TWO rebuilds in the same frame
+-- down to Level 1 on release, then up to the new owner's level on assignment. The end state
+is correct and no client renders the intermediate, but the Level 1 build is wasted work when
+somebody is queued. Left alone deliberately; changing the release/drain ordering would be a
+redesign.
+
+### What could NOT be executed here
+
+`Instance.new("Player")` is blocked and this Studio setup runs one client, so **filling six
+plots and queueing two players was not run.** The queue assertions -- first waiting player
+receives the plot, no second queued player receives the same one -- are established by the
+code reading above (append-ordered `waiting`, dequeue-before-assign, yield-free `assign`)
+and by section 6 of `PlotSpec`, which drives the real `MapService.ResizePlot` through the
+exact release-then-assign geometry sequence on a real Model. The queue ORDERING itself is
+read, not run. Worth one real two-client test before ship.
+
+
+## A SECOND BED, AND CREATURES THAT WALK THE WHOLE PLOT — 2026-09-02
+
+Built on the uncommitted plot-upgrade work; the ladder, capacities and prices are
+untouched. Uncommitted. The Emberroot roots and heads were not opened.
+
+### THE WING
+
+From Level 3 a plot grows a rear flare on its +X local side, holding a second bed.
+**It adds no capacity** — 10 / 15 / 20 whether a plot has one bed or two. It is floor
+space for twenty things that walk, which a single 34-stud strip does not have.
+
+    level  main bed     side bed    plot depth  wing
+      1     34 x 23.2   --            35.2       --
+      2     34 x 35.4   --            47.4       --
+      3     34 x 47.6   30 x 23.2     59.6       40 wide
+      4     34 x 59.8   30 x 35.4     71.8       40 wide
+      5     34 x 84.2   30 x 47.6     96.2       40 wide
+
+**REAR-ANCHORED, which is what makes it fit.** Plots sit on a ring, so the chord between
+neighbouring centre lines is `0.84 * r` — 84 studs at the gate, 165 at the back of a Level 5
+plot. The wing starts where that room exists. The front edge never widens, so nothing
+changes at the ring radius where the plots are tightest.
+
+**IT IS WIDE RATHER THAN LONG, AND THE TREADMILL IS WHY.** Every plot's mill sits at local
+X 24.6–43.8, Z −43.4 to −19 — the same side as the wing, in the front half. The first build
+reached forward past it and fenced it in at 0.93 studs. So the wing starts BEHIND the mill
+(`SideBed.WingFrontZ = -15`) and takes its area back across instead. That cap is what makes
+the row counts 2/3/4 rather than the 2/4/7 a plot with no mill beside it could carry.
+
+Measured with all six plots at Level 5:
+
+    neighbour clearance (worst of 15 pairs)   37.56 studs, no overlap
+    treadmill clearance   L1/L2 (no wing)      0.15 / 0.16 studs   <- pre-existing
+                          L3/L4 (wing)         0.71
+                          L5    (wing)         1.30
+    gate radius                               100.00, unchanged
+    max reach from the hub                    207.4 vs FieldBack 265
+    usable ground                             4,618 -> 7,142 sq studs  (+55%)
+    soil area                                 2,863 -> 4,291 sq studs  (+50%)
+
+**Every level with a wing has BETTER treadmill clearance than the wingless baseline.** The
+0.15-stud gap at Level 1 is the plot's own fence and predates this work.
+
+`dressPlot` builds both beds through ONE `buildBed(name, centreX, centreZ, width, rows)`, so
+there is no second copy of the rustic style. The main bed is that function at centre (0,0)
+with its original width, so its size and CFrame are unchanged — which matters, because every
+saved plant is an offset in that part's space.
+
+### TWO BEDS, ONE FRAME, NO SAVE CHANGE
+
+**The save format did not change and there is no migration.** `entry.offset` has always been
+an X/Z offset in the MAIN bed's object space, and the main bed is centred on the plot and
+shares its rotation — so that frame is the PLOT's frame in all but name. A creature on the
+side bed or on the grass between the two is stored exactly as before; the offset simply
+stopped being confined to the rectangle it is measured against. `ProfileSchema` and
+`Save.CurrentVersion` are untouched.
+
+  * `bedsOf(plot)` finds every surface by the **Planter tag**, main first.
+  * `pickBed(plot, worldPos)` chooses the nearest planting surface, on the SERVER. **The
+    client never names a bed** — a bed id crossing the wire would be forgeable.
+  * `clampToPlotRegion` is the one clamp that understands the whole plot: the main rectangle
+    plus the wing, sharing an edge so the union is connected, inset from the fence and kept
+    out of the gateway.
+  * `clampToSoil` now exists only inside `pickBed`.
+
+### WANDERING
+
+**Pods do not move.** Only grown creatures walk, and they walk the whole plot.
+
+The server owns every decision and publishes four attributes per leg — `WanderFrom`,
+`WanderTo`, `WanderT0`, `WanderT1`, in world space. Clients interpolate them against
+`Workspace:GetServerTimeNow()`. **No CFrame crosses the wire and nothing is chosen locally**,
+which is what makes a creature appear in the same place on every screen. The version this
+replaced rolled dice on each client inside a 6-stud disc around the PLANTED point — cheap,
+disagreed between viewers, and the reason a bed planted in one corner stayed a pile.
+
+  * Pacing lives in `SeedData.WanderReach/Speed/Pause`, and **the server is the only caller**.
+    The client derives the speed it draws from the leg it was handed (distance / duration),
+    so the gait follows the motion instead of assuming it — no second copy of the curves.
+  * Destinations: several candidates a leg's reach away, each clamped into the region, scored
+    on distance from other plants' positions AND their reserved destinations. The separation
+    target is bounded (14 studs) on purpose — scoring against real Colossal sizes would make
+    every candidate illegal at once.
+  * `entry.offset` is committed **at arrival**, then persisted. A save mid-leg is at most one
+    leg behind, and there is no profile write per frame.
+
+Measured live. A garden squeezed into a Level 1 bed and then given a Level 5 plot:
+
+    clustered:              mean pair 22.0   closest 4.3    bounding area   814
+    after 63s of wandering: mean pair 32.9   closest 13.8   bounding area 1,780
+    out-of-bounds samples at any point: 0
+
+Cost: 0.06 legs per creature per second. **A full plot of 20 is 5 attribute writes/sec; six
+full plots (120 creatures) is 30 writes/sec.** Client PivotTo is PlantSway's existing 20 Hz
+round robin, one per plant per visit, unchanged.
+
+### THE BUG THIS PASS FOUND, AND WHAT FIXED IT
+
+A published leg is a pair of WORLD points, and a plot rebuild moves the ground under them.
+The first version cleared the attributes on resize, which tells a client to STOP but not
+where the server now thinks the creature is. On a shrink the server pulled creatures that no
+longer fitted back onto the smaller plot while every client carried on drawing them at the
+old spot until the next leg arrived half a second later — **72 studs of client-side
+disagreement across one upgrade, 17.3 studs of server-side movement in the rebuild frame.**
+
+Fixed by PARKING instead of clearing: `CaptureWorld` first commits each creature's
+interpolated position (`currentOffset`, using the same smoothstep the client draws with),
+and `RebaseTo` publishes a degenerate leg at the rebased point. Record and picture move in
+the same frame. After:
+
+    walking baseline over 0.3s      0.41 studs
+    L2 -> L3                        2.38 studs
+    L3 -> L5                        1.24 studs
+    L5 -> L2                        3.29 studs   (the genuine relocation of creatures
+                                                  that no longer fit)
+
+### Verified live
+
+Pods carry no leg and moved 0.0115 studs in 12s (the existing idle sway). Placement on the
+side bed landed 0.7 studs from the aim point; bed routing is 4/4 on aimed points and sends a
+grass click to the nearer bed. A forged click on another plot's main OR side bed created
+nothing anywhere — the server resolves the plot from the sender. Pickup removes the plant, so
+movement necessarily stops. Release: L5 -> L1, side bed gone, one Planter tag, wing attributes
+zeroed, Plants and Runtime empty, **0 leftover wander instances**, Model reusable. Rejoin
+restored all six inside the plot region.
+
+`tools/tests/PlotSpec.luau` — **65 assertions, all passing**, including the unchanged
+capacities and prices.
+
+### Preview, awaiting a look
+
+Edit holds Plot_01 at Level 5, Plot_02 at Level 3 and Plot_03 at Level 2, camera parked over
+the Level 5 plot. **No test plants**: Edit has no path to a saved garden without a profile,
+and building creatures there would be the second preview stage the brief rules out. **The
+motion has not been judged by eye — only measured.**
+
+### Still open
+
+The real two-client queue test remains outstanding from the previous pass. Main-bed placement
+was not re-run end to end through the carry flow after the bed change (the scripted
+pod-pickup path is flaky); routing is verified numerically and six existing plants sit on the
+main bed.
+
 ## THE STARBLOOM LIMB PASS — 2026-09-03
 
 **Four of the five Starbloom species had their legs rebuilt.** Uncommitted, and

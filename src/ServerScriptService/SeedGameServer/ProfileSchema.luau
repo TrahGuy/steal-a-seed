@@ -293,10 +293,98 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		end
 	end
 
-	-- Carried, not trusted. Nothing branches on it yet; the day a field has to
-	-- be reshaped rather than added, this tells the ladder where to start.
+	-- Carried, not trusted. Version 2 is the first time this has branched.
+	local from = 1
 	if type(raw.Version) == "number" and raw.Version == raw.Version then
-		p.Version = math.floor(math.clamp(raw.Version, 1, 1e6))
+		from = math.floor(math.clamp(raw.Version, 1, 1e6))
+		p.Version = from
+	end
+
+	--==========================================================================
+	-- MIGRATION v1 -> v2: THE PLOT LADDER WAS RE-CUT UNDER LIVE SAVES
+	--
+	-- Version 1 had four levels of 4, 6, 8 and 10 rows, and capacity fell out of
+	-- `rows * 3` -- so twelve plants at level 1. Version 2 has five levels with
+	-- capacity written down, and level 1 holds FIVE. Every v1 garden is
+	-- therefore potentially over its own level's new capacity, and the plot it
+	-- is standing in is a different depth than the one its plants were saved in.
+	--
+	-- Two things have to be true when this finishes, and nothing else matters
+	-- as much as these two:
+	--
+	--   1. NOT ONE VALID SAVED PLANT IS DISCARDED. Not one. The player grew
+	--      them; a ladder change on our side is not a reason to take them. The
+	--      level is raised to fit the garden rather than the garden cut to fit
+	--      the level -- and a garden of more than twenty simply gets Level 5 and
+	--      stays over capacity, which PlantService now restores intact.
+	--   2. THE PLANTS DO NOT MOVE. Z is stored relative to the plot's CENTRE and
+	--      the centre shifts when the depth changes, so leaving Z alone would
+	--      slide the whole garden backwards by half the difference.
+	--
+	-- The gate is the fixed thing. Local -Z faces it, so a plant's distance from
+	-- the gate is `z + depth/2` and that number does not care which ladder it
+	-- was measured under. Convert through it and the garden stays put.
+	--
+	-- Which also resolves what looks circular: the new depth depends on the new
+	-- level, and the new level depends on whether the plants fit the new depth.
+	-- Gate distance is independent of both, so it is measured once, up front.
+	--==========================================================================
+	if from < 2 then
+		local oldRows = GameConfig.LegacyPlotRowsV1[p.PlotTier]
+			or GameConfig.LegacyPlotRowsV1[#GameConfig.LegacyPlotRowsV1]
+		local oldDepth = GameConfig.plotDepthFor(oldRows)
+
+		-- Distance from the gate, before anything moves.
+		local gateDist = table.create(#p.Plants)
+		local deepest = 0
+		for i, plant in ipairs(p.Plants) do
+			local d = plant.Z + oldDepth * 0.5
+			gateDist[i] = d
+			if d > deepest then
+				deepest = d
+			end
+		end
+
+		-- Big enough to HOLD them, then big enough to REACH the furthest one.
+		-- Capacity first because that is the promise the level makes; reach
+		-- second because a plant beyond the bed gets clamped to its back edge,
+		-- and a row of plants all clamped to the same line is a visible loss.
+		local level = math.max(p.PlotTier, GameConfig.plotLevelForPlants(#p.Plants))
+		while level < #GameConfig.PlotTiers do
+			local _, far = GameConfig.plotGateReach(GameConfig.plotRowsForTier(level))
+			if deepest <= far then
+				break
+			end
+			level += 1
+		end
+		p.PlotTier = level
+
+		--======================================================================
+		-- THE NEW LADDER IS SHALLOWER AT THE TOP THAN THE OLD ONE WAS
+		--
+		-- v1 level 4 was ten rows, 132.8 studs deep. v2 level 5 is seven rows
+		-- and 96.2, because capacity stopped being tied to the grid and twenty
+		-- plants no longer need ten rows to sit in. So the loop above CANNOT
+		-- always succeed: a v1 tier 3 or 4 garden with plants near its back
+		-- fence has a rear section with nowhere to stand in any v2 plot.
+		--
+		-- Those plants are clamped to the back of the new bed. They keep their
+		-- species, tier, age and stage -- they are not lost, which is the rule
+		-- that outranks everything here -- but a deep old garden will find its
+		-- last row or two bunched against the fence. That is the visible cost of
+		-- re-cutting the ladder, and it is the cheapest one available: the
+		-- alternatives were deleting the plants or keeping a ten-row level 5
+		-- that no capacity number justifies.
+		--
+		-- Anyone below old tier 3 sees nothing at all. Their whole bed fits.
+		--======================================================================
+		local near, far = GameConfig.plotGateReach(GameConfig.plotRowsForTier(level))
+		local half = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(level)) * 0.5
+		for i, plant in ipairs(p.Plants) do
+			plant.Z = math.clamp(gateDist[i], near, far) - half
+		end
+
+		p.Version = 2
 	end
 
 	-- Unknown keys are dropped by construction: everything above copies FROM

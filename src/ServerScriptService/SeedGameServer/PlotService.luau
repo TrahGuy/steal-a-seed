@@ -102,9 +102,35 @@ local connections: { [Player]: { RBXScriptConnection } } = {}
 -- that never goes away.
 local serviceConnections: { RBXScriptConnection } = {}
 
+--==============================================================================
+-- WHAT LEVEL EACH PLAYER'S PLOT SHOULD BE, WHICH IS NOT WHAT IT IS
+--
+-- A plot is handed out the instant a player joins. Their profile arrives from
+-- the DataStore seconds later. So for those seconds the server knows the player
+-- owns a plot but not how big it is, and the plot is standing there at whatever
+-- size its last owner left it.
+--
+-- This table is the answer to that: PlayerDataService writes the level here the
+-- moment the profile lands, and PlotUpgradeService writes it again on a
+-- purchase. Either way the write goes through SetDesiredLevel, which rebuilds
+-- the plot if it is already assigned and simply remembers if it is not.
+--
+-- The remembering is the important half. A player who joins into a FULL server
+-- waits in the queue with no plot at all; their profile still loads, their
+-- level is still recorded, and when a plot frees up they are given it at the
+-- right size in one build -- not handed a Level 1 plot that visibly grows a
+-- moment later.
+--==============================================================================
+local desiredLevel: { [Player]: number } = {}
+
 type Listener = (player: Player, plot: Model) -> ()
 local onAssigned: { Listener } = {}
 local onReleased: { Listener } = {}
+-- Fired either side of a live rebuild, so PlantService can carry the garden
+-- across it. PlotService cannot require PlantService -- PlantService requires
+-- THIS -- so the dependency is inverted into these two lists.
+local onResizing: { Listener } = {}
+local onResized: { Listener } = {}
 
 local function fire(listeners: { Listener }, player: Player, plot: Model)
 	for _, fn in ipairs(listeners) do
@@ -168,6 +194,40 @@ function PlotService.OnReleased(fn: Listener): () -> ()
 			table.remove(onReleased, i)
 		end
 	end
+end
+
+-- Called with the plot ABOUT to be rebuilt, while its old geometry still
+-- stands. The last chance to read anything measured against it.
+function PlotService.OnResizing(fn: Listener): () -> ()
+	table.insert(onResizing, fn)
+	return function()
+		local i = table.find(onResizing, fn)
+		if i then
+			table.remove(onResizing, i)
+		end
+	end
+end
+
+-- Called with the new geometry in place, same frame.
+function PlotService.OnResized(fn: Listener): () -> ()
+	table.insert(onResized, fn)
+	return function()
+		local i = table.find(onResized, fn)
+		if i then
+			table.remove(onResized, i)
+		end
+	end
+end
+
+--==============================================================================
+-- WHAT LEVEL THIS PLOT IS
+--==============================================================================
+function PlotService.LevelOf(plot: Model): number
+	local n = tonumber(plot:GetAttribute("Level"))
+	if n == nil or n ~= n then
+		return GameConfig.StartingPlotTier
+	end
+	return math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
 end
 
 --==============================================================================
@@ -267,6 +327,111 @@ local function firstFreePlotId(): number?
 	return nil
 end
 
+--==============================================================================
+-- THE ONE PLACE A PLOT CHANGES SIZE
+--
+-- Everything that wants a plot at a different level comes through here: the
+-- assignment path, the release path and the shop. That is what keeps the
+-- Level attribute, the geometry and the plants from ever disagreeing.
+--
+-- No-ops when the plot is already the right size, which is the common case --
+-- every join by a Level 1 player, and every release of a plot that was never
+-- upgraded. Rebuilding a plot to the size it already is would destroy and
+-- recreate ~200 parts for nothing.
+--==============================================================================
+local function levelOf(plot: Model): number
+	local n = tonumber(plot:GetAttribute("Level"))
+	if n == nil or n ~= n then
+		return GameConfig.StartingPlotTier
+	end
+	return math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
+end
+
+local function resizeTo(plot: Model, level: number, owner: Player?): boolean
+	local want = math.clamp(math.floor(level), 1, #GameConfig.PlotTiers)
+	if levelOf(plot) == want then
+		return false
+	end
+
+	-- Only fired for an OWNED plot. A plot being reset on release has already
+	-- been emptied, so there is nothing to carry across and no owner to name.
+	if owner then
+		fire(onResizing, owner, plot)
+	end
+	MapService.ResizePlot(plot, want)
+	if owner then
+		fire(onResized, owner, plot)
+
+		-- The old SpawnLocation was destroyed with the rest of the geometry, so
+		-- a player who died right now would respawn at the world default.
+		local pad = plot:FindFirstChild(PLOT.SpawnPadName)
+		if pad and pad:IsA("SpawnLocation") then
+			owner.RespawnLocation = pad
+		end
+	end
+	return true
+end
+
+-- DEFINED HERE, NOT WITH THE REST OF THE PUBLIC API ABOVE, because it calls
+-- resizeTo and pushState. Both are locals declared further up this file, and a
+-- function written above their declarations would capture the NAMES as globals
+-- -- nil at call time, with a parse that succeeds and a build that passes.
+--==============================================================================
+-- SET THE LEVEL THIS PLAYER'S PLOT SHOULD BE
+--
+-- The only entry point. Safe to call before the player has a plot, after they
+-- have left, with a level they already have, or with rubbish -- all of which
+-- happen, because the two callers are a DataStore load racing a join and a shop
+-- button racing everything.
+--
+-- Returns true if a plot was actually rebuilt, so a caller can tell "applied
+-- now" from "remembered for later" without inspecting the plot itself.
+--==============================================================================
+function PlotService.SetDesiredLevel(player: Player, level: number): boolean
+	-- A caller with no player at all. Reached while testing by asking for the
+	-- owner of an unowned plot and passing the nil straight in; it threw on the
+	-- presence check below. Nothing in production does that today, but a public
+	-- entry point should answer "no" rather than raise.
+	if typeof(player) ~= "Instance" then
+		return false
+	end
+	local n = tonumber(level)
+	if n == nil or n ~= n then
+		return false
+	end
+	local want = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
+
+	--==========================================================================
+	-- NOTHING IS REMEMBERED FOR A PLAYER WHO HAS LEFT
+	--
+	-- The profile load runs on a spawned thread across a DataStore call that
+	-- can take fifteen seconds, and PlayerDataService says so in as many words.
+	-- It re-checks presence after the load, so today this cannot be reached
+	-- late -- but this is a public entry point with three callers, and a table
+	-- keyed by Player must not be written from a path whose cleanup has already
+	-- run. That is how the entry outlives the player.
+	--
+	-- Checked BEFORE the write rather than after, because the write is the
+	-- thing being prevented.
+	--==========================================================================
+	if player.Parent ~= Players then
+		return false
+	end
+	desiredLevel[player] = want
+
+	local id = plotOf[player]
+	local plot = if id then plotsById[id] else nil
+	if not plot then
+		-- Queued, or gone. assign() will read the table when their turn comes.
+		return false
+	end
+	local changed = resizeTo(plot, want, player)
+	if changed then
+		pushState(player)
+	end
+	return changed
+end
+
 local function clearPlot(plot: Model)
 	for _, folderName in ipairs({ PLOT.PlantsFolderName, PLOT.RuntimeFolderName }) do
 		local folder = plot:FindFirstChild(folderName)
@@ -287,6 +452,22 @@ local function assign(player: Player, id: number)
 
 	ownerOf[id] = player
 	plotOf[player] = id
+
+	--==========================================================================
+	-- SIZED BEFORE IT IS ANNOUNCED
+	--
+	-- Ahead of the SpawnPad lookup below, ahead of placeCharacter, and ahead of
+	-- the onAssigned listeners -- because ResizePlot destroys and rebuilds every
+	-- part in the plot, including that pad, and PlantService restores the whole
+	-- garden from an onAssigned listener. Doing this afterwards would hand the
+	-- player a stale pad reference and drop their restored plants into soil that
+	-- was about to be replaced.
+	--
+	-- It is also why the player is given the plot at their real size in ONE
+	-- build. Assigning at Level 1 and growing it a moment later would work, and
+	-- would look like a bug every single join.
+	--==========================================================================
+	resizeTo(plot, desiredLevel[player] or GameConfig.StartingPlotTier, nil)
 
 	-- Attributes, not a remote. They replicate on their own, so any client that
 	-- can see the plot can already read who owns it without being told.
@@ -349,6 +530,21 @@ local function release(player: Player)
 		table.remove(waiting, queued)
 	end
 
+	--==========================================================================
+	-- CLEARED HERE, AHEAD OF THE EARLY RETURN BELOW
+	--
+	-- This used to sit further down, past `if not id then ... return end`, and
+	-- so it never ran for a player who left while QUEUED -- which is the exact
+	-- player most likely to have an entry, because a queued player's profile
+	-- loads and records their level while they wait for a plot.
+	--
+	-- The table is keyed by the Player instance, so a missed clear is a strong
+	-- reference held for the life of the server: the leak is one Player object
+	-- per queued joiner who gave up waiting, on a server whose whole purpose is
+	-- to make people wait.
+	--==========================================================================
+	desiredLevel[player] = nil
+
 	local id = plotOf[player]
 	if not id then
 		if queued then
@@ -366,6 +562,12 @@ local function release(player: Player)
 		-- was growing here still has something left to read.
 		fire(onReleased, player, plot)
 		clearPlot(plot)
+		-- BACK TO LEVEL 1. A plot is not the player's property, it is a slot on
+		-- this server; leaving it at Level 5 would hand the next joiner a plot
+		-- worth 27 million cash that their profile says they do not own. The
+		-- attributes and the profile would then disagree about capacity, and the
+		-- attributes are what PlantService enforces against.
+		resizeTo(plot, GameConfig.StartingPlotTier, nil)
 		log(string.format("%s released %s. It is empty again.", player.Name, plot.Name))
 	end
 

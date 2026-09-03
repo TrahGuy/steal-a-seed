@@ -205,6 +205,223 @@ local PALETTES: { [string]: Palette } = {
 }
 
 --==============================================================================
+-- THE GROUND ROOTS
+--
+-- WHAT WAS HERE was one part called CinderPad: 2.30 x 0.26 x 2.10, a flat
+-- charcoal rectangle under every plant in the biome. It read as a slab at Tiny,
+-- and because it scaled with the body it became a black square well over a
+-- hundred studs across at Colossal -- the plot paved over, and the one shape in
+-- Emberroot that announced itself as a Roblox part.
+--
+-- WHAT REPLACES IT is a root system sculpted from overlapping tapered masses.
+-- Primitive CONSTRUCTION is fine; primitive APPEARANCE is not, and these are the
+-- rules that separate the two, in the order they matter:
+--
+--   NO SEGMENT IS A FINISHED SHAPE. A root is two to four short masses that
+--   overlap by about a fifth of their length, so each joint is buried inside the
+--   mass before it. One long part reads as a bar however it is angled.
+--
+--   NOTHING REPEATS. Yaw, pitch, roll, width, thickness and length all change
+--   between segments and between roots, driven by a deterministic hash of the
+--   root's seed and the segment index. Deterministic rather than random because
+--   the server and every client must build the same plant, and because
+--   "authored" means the same shape every time -- but never the same recipe
+--   twice, and never evenly spaced around the stem.
+--
+--   IT RISES AND FALLS. Each path lifts at its middle and returns to the ground
+--   at its tip, so from the side the system is not a pancake.
+--
+--   THE TIP IS A WEDGE. A flat rectangular end is the clearest tell that a root
+--   is really a box.
+--
+--   FORKS ARE UNEQUAL and one direction always dominates. A root system with
+--   four matching arms is a wheel.
+--
+-- NAMES AVOID PlantSway'S LEG VOCABULARY on purpose -- no Thigh, Shin, Foot,
+-- Toe, Paw or Hoof anywhere in here. These roots travel with the body and must
+-- never be picked up as a limb to swing; the walking feet below are the parts
+-- that are allowed those words.
+--==============================================================================
+type RootSpec = {
+	yaw: number,      -- degrees around the stem, measured off +Z
+	reach: number,    -- how far the whole path runs
+	segs: number,     -- 2 .. 4 overlapping masses
+	w: number,        -- width where it leaves the knot
+	t: number,        -- thickness where it leaves the knot
+	taper: number,    -- tip width as a fraction of w
+	lift: number,     -- how high the middle of the path rises
+	drift: number,    -- degrees the path wanders across its run
+	seed: number,
+	broken: boolean?, -- snapped short at the tip
+}
+
+-- Deterministic irregularity. A hash rather than a Random: the plant has to come
+-- out identical wherever it is built, and a shape that changes between the
+-- server and the client is not an approved shape at all.
+local function wob(seed: number, i: number): number
+	local x = math.sin(seed * 12.9898 + i * 78.233) * 43758.5453
+	return x - math.floor(x)
+end
+
+local function jit(seed: number, i: number, amount: number): number
+	return (wob(seed, i) - 0.5) * 2 * amount
+end
+
+--==============================================================================
+-- SITTING ON THE GROUND, NOT THROUGH IT
+--
+-- Nothing in the root system may reach below the plant's base plane -- it is
+-- planted in soil the player can walk on, and a root corner under the floor is
+-- a root corner poking out of somebody's plot from beneath.
+--
+-- Half the thickness is the right lift only for a box that is not turned. These
+-- are all turned, in pitch and in roll, on purpose -- and a rotated box reaches
+-- further below its own centre than half its height. Measured before this was
+-- added: 0.12 studs through the plane at Tiny and 0.22 at Colossal, on every
+-- one of the five.
+--
+-- The exact reach is the box's three half-extents projected onto world Y, which
+-- is what the three axis vectors give. Lifting by precisely that puts the lowest
+-- corner ON the plane rather than a guessed distance above it.
+--==============================================================================
+local function groundLift(size: Vector3, rot: CFrame): number
+	return size.X * 0.5 * math.abs(rot.RightVector.Y)
+		+ size.Y * 0.5 * math.abs(rot.UpVector.Y)
+		+ size.Z * 0.5 * math.abs(rot.LookVector.Y)
+end
+
+--==============================================================================
+-- ONE ROOT, LAID ALONG AN IRREGULAR PATH
+--
+-- `place` is the caller's part maker, already carrying the plant's base frame
+-- and the GroundRoot tag. Everything here is authored at scale 1; Build applies
+-- the damped root scale afterwards.
+--==============================================================================
+local function layRoot(m: Model, place: (Opts) -> BasePart, spec: RootSpec,
+	bark: Color3, dark: Color3)
+	local run = spec.reach / spec.segs
+	local yaw = rad(spec.yaw)
+	-- Start inside the knot rather than at the stem's centre, so the first
+	-- segment emerges from a mass instead of from a point.
+	local dist = 0.26
+	for i = 1, spec.segs do
+		local last = i == spec.segs
+		local u = (i - 0.5) / spec.segs
+		local len = run * (1 + jit(spec.seed, i, 0.30))
+		if spec.broken and last then
+			-- Snapped. A root that stops mid-stride is worth more than a root
+			-- that tapers politely to nothing.
+			len *= 0.55
+		end
+		-- Width and thickness both taper, and deliberately not at the same rate:
+		-- a root that thins evenly in both reads as a cone.
+		local w = spec.w * (1 - (1 - spec.taper) * u) * (1 + jit(spec.seed, i + 7, 0.20))
+		local t = spec.t * (1 - (1 - spec.taper * 0.75) * u) * (1 + jit(spec.seed, i + 13, 0.16))
+		-- The path wanders across its run and jitters per segment.
+		local a = yaw + rad(spec.drift) * u + rad(jit(spec.seed, i + 3, 15))
+		local rise = math.sin(u * math.pi) * spec.lift
+		local mid = dist + len * 0.5
+		local size = Vector3.new(w, t, len)
+		local rot = CFrame.Angles(0, a, 0)
+			* CFrame.Angles(rad(jit(spec.seed, i + 5, 7)), 0,
+				rad(jit(spec.seed, i + 11, 14)))
+		place({
+			name = if last then "RootSpurTip" else "RootSpur",
+			size = size,
+			-- Lifted by the turned box's own reach, plus the arc. See groundLift.
+			cf = CFrame.new(math.sin(a) * mid, groundLift(size, rot) + rise,
+				math.cos(a) * mid) * rot,
+			color = if last then dark else bark,
+			wedge = last,
+			parent = m,
+		})
+		-- Overlap, so the joint disappears inside the mass before it.
+		dist += len * 0.78
+	end
+end
+
+--==============================================================================
+-- THE KNOT, AND WHY IT IS THREE MASSES
+--
+-- Where the roots meet the stem is the most-looked-at point of the sculpture,
+-- and one Ball or one cube there is the single clearest way to say "primitive".
+-- Three overlapping masses at disagreeing angles, none of them centred, none of
+-- them the same proportion.
+--==============================================================================
+local function layKnot(m: Model, place: (Opts) -> BasePart, seed: number)
+	local masses = {
+		{ Vector3.new(0.94, 0.42, 0.88), 0.03, -0.02,
+			CFrame.Angles(rad(5), rad(23 + jit(seed, 1, 12)), rad(-4)), C.Basalt },
+		{ Vector3.new(0.72, 0.36, 1.04), -0.15, 0.12,
+			CFrame.Angles(rad(-6), rad(-38 + jit(seed, 2, 14)), rad(7)), C.Char },
+		{ Vector3.new(0.60, 0.31, 0.68), 0.20, 0.17,
+			CFrame.Angles(rad(9), rad(64 + jit(seed, 3, 16)), rad(-11)), C.Basalt },
+	}
+	for _, mass in ipairs(masses) do
+		local size = mass[1] :: Vector3
+		local rot = mass[4] :: CFrame
+		place({ name = "RootKnot", size = size,
+			cf = CFrame.new(mass[2] :: number, groundLift(size, rot), mass[3] :: number) * rot,
+			color = mass[5] :: Color3, parent = m })
+	end
+end
+
+--==============================================================================
+-- THE FIVE ROOT PROFILES
+--
+-- One system, five silhouettes. Each has a DOMINANT direction, a supporting
+-- counter-root and one or two shorter or broken branches, and the negative space
+-- between them is deliberately uneven -- the gaps are as authored as the roots.
+--==============================================================================
+local ROOTS: { [string]: { RootSpec } } = {
+	-- CINDERPAW: a low, wide, braced stance. Short heavy runs and a broad front
+	-- pair, so it reads as crouched and about to move without ever becoming four
+	-- animal paws.
+	cinderpaw = {
+		{ yaw = 22,   reach = 2.05, segs = 3, w = 0.44, t = 0.28, taper = 0.34, lift = 0.07, drift = -26, seed = 11 },
+		{ yaw = 196,  reach = 1.62, segs = 3, w = 0.38, t = 0.25, taper = 0.30, lift = 0.05, drift = 20,  seed = 23 },
+		{ yaw = 104,  reach = 1.18, segs = 2, w = 0.30, t = 0.21, taper = 0.32, lift = 0.09, drift = 30,  seed = 37, broken = true },
+		{ yaw = 288,  reach = 1.02, segs = 2, w = 0.27, t = 0.19, taper = 0.30, lift = 0.04, drift = -22, seed = 51 },
+	},
+	-- EMBERQUILL: everything dragged one way, like quills scorched flat by a
+	-- wind. The single short forward root is what stops the back three reading
+	-- as a fan.
+	emberquill = {
+		{ yaw = 184,  reach = 2.24, segs = 3, w = 0.30, t = 0.19, taper = 0.22, lift = 0.10, drift = 16,  seed = 61 },
+		{ yaw = 149,  reach = 1.88, segs = 3, w = 0.25, t = 0.17, taper = 0.20, lift = 0.13, drift = 24,  seed = 73 },
+		{ yaw = 217,  reach = 1.54, segs = 2, w = 0.23, t = 0.16, taper = 0.24, lift = 0.08, drift = -18, seed = 89 },
+		{ yaw = 6,    reach = 0.86, segs = 2, w = 0.22, t = 0.15, taper = 0.28, lift = 0.03, drift = -34, seed = 97, broken = true },
+	},
+	-- SLAGBLOOM: three heavy masses and one unequal fork off the dominant one.
+	-- Thick, short and partly collapsed -- cooled slag that broke as it set.
+	slagbloom = {
+		{ yaw = 332,  reach = 1.96, segs = 3, w = 0.52, t = 0.33, taper = 0.40, lift = 0.06, drift = 22,  seed = 103 },
+		{ yaw = 302,  reach = 1.14, segs = 2, w = 0.34, t = 0.24, taper = 0.36, lift = 0.11, drift = -26, seed = 113, broken = true },
+		{ yaw = 84,   reach = 1.78, segs = 2, w = 0.47, t = 0.31, taper = 0.42, lift = 0.04, drift = -20, seed = 127 },
+		{ yaw = 198,  reach = 1.44, segs = 2, w = 0.41, t = 0.28, taper = 0.38, lift = 0.08, drift = 28,  seed = 139, broken = true },
+	},
+	-- KILNHUSK: architectural, the broadest of the five, braced like a furnace
+	-- footing -- but at four UNEQUAL yaws with unequal reach and a broken corner,
+	-- because four matching supports is a table and not a plant.
+	kilnhusk = {
+		{ yaw = 28,   reach = 1.94, segs = 3, w = 0.56, t = 0.31, taper = 0.46, lift = 0.05, drift = -18, seed = 149 },
+		{ yaw = 121,  reach = 1.52, segs = 2, w = 0.49, t = 0.28, taper = 0.44, lift = 0.09, drift = 24,  seed = 157 },
+		{ yaw = 209,  reach = 1.80, segs = 3, w = 0.52, t = 0.30, taper = 0.42, lift = 0.06, drift = 16,  seed = 167 },
+		{ yaw = 303,  reach = 1.22, segs = 2, w = 0.44, t = 0.26, taper = 0.40, lift = 0.11, drift = -30, seed = 179, broken = true },
+	},
+	-- PYRELOTUS: five directions, and the whole point is that they are NOT five
+	-- petals. One dominant, two supporting it at unequal angles, two short and
+	-- broken -- an opened lotus that has burnt unevenly.
+	pyrelotus = {
+		{ yaw = 14,   reach = 2.18, segs = 3, w = 0.34, t = 0.21, taper = 0.26, lift = 0.12, drift = 20,  seed = 191 },
+		{ yaw = 86,   reach = 1.66, segs = 2, w = 0.29, t = 0.19, taper = 0.28, lift = 0.09, drift = -24, seed = 199 },
+		{ yaw = 296,  reach = 1.58, segs = 2, w = 0.28, t = 0.18, taper = 0.26, lift = 0.14, drift = 26,  seed = 211 },
+		{ yaw = 168,  reach = 1.06, segs = 2, w = 0.24, t = 0.16, taper = 0.30, lift = 0.05, drift = -32, seed = 223, broken = true },
+		{ yaw = 236,  reach = 0.92, segs = 2, w = 0.22, t = 0.15, taper = 0.32, lift = 0.07, drift = 18,  seed = 227, broken = true },
+	},
+}
+
+--==============================================================================
 -- THE SHARED BODY -- ground contact shared, everything above it per-species
 --
 -- Returns the crown hub and the head frame, because those are the two places a
@@ -213,16 +430,55 @@ local PALETTES: { [string]: Palette } = {
 type Body = { hub: CFrame, head: CFrame }
 
 local function body(m: Model, at: CFrame, stemScale: number, brace: number,
-	pal: Palette): Body
+	pal: Palette, roots: { RootSpec }, rootSeed: number): Body
 	local function P(o: Opts): BasePart
 		o.cf = at * o.cf
 		o.parent = m
 		return mk(o)
 	end
 
-	P({ name = "CinderPad", size = Vector3.new(2.30, 0.26, 2.10),
-		cf = CFrame.new(0, 0.13, 0) * CFrame.Angles(0, rad(9), 0),
-		color = C.Char, parent = m })
+	--== GROUND ROOTS ==--
+	-- Tagged rather than named, so Build can scale them on their own curve
+	-- without matching on strings. See ROOT_DAMP.
+	local function R(o: Opts): BasePart
+		o.cf = at * o.cf
+		o.parent = m
+		local p = mk(o)
+		p:SetAttribute("GroundRoot", true)
+		return p
+	end
+	layKnot(m, R, rootSeed)
+	for _, spec in ipairs(roots) do
+		layRoot(m, R, spec, C.Bark, C.Basalt)
+	end
+	-- ONE OR TWO FISSURES, AND THEY LIE ALONG THE ROOT. Neon is the loudest
+	-- thing available and a glowing ball in the roots would out-shout the face,
+	-- so the heat is a thin split following the dominant root's own line -- the
+	-- crack the stem already wears, continued into the ground.
+	do
+		local lead = roots[1]
+		local a = rad(lead.yaw + lead.drift * 0.35)
+		local fs = Vector3.new(0.06, 0.045, lead.reach * 0.46)
+		local fr = CFrame.Angles(0, a, 0) * CFrame.Angles(rad(-4), 0, rad(6))
+		R({ name = "RootFissure", size = fs,
+			-- Sitting ON the root it splits, not floating over it: the lift is
+			-- the fissure's own reach plus most of the root's thickness.
+			cf = CFrame.new(math.sin(a) * lead.reach * 0.40,
+					groundLift(fs, fr) + lead.t * 0.42,
+					math.cos(a) * lead.reach * 0.40) * fr,
+			color = pal.crack, material = Enum.Material.Neon, smooth = true, parent = m })
+		if #roots >= 4 then
+			local b = roots[3]
+			local ab = rad(b.yaw - 8)
+			local bs = Vector3.new(0.05, 0.04, b.reach * 0.34)
+			local br = CFrame.Angles(0, ab, 0) * CFrame.Angles(rad(3), 0, rad(-9))
+			R({ name = "RootFissure", size = bs,
+				cf = CFrame.new(math.sin(ab) * b.reach * 0.36,
+						groundLift(bs, br) + b.t * 0.40,
+						math.cos(ab) * b.reach * 0.36) * br,
+				color = pal.crack, material = Enum.Material.Neon, smooth = true, parent = m })
+		end
+	end
 
 	--== ROOT-LEGS ==--
 	for i = 0, 1 do
@@ -238,13 +494,34 @@ local function body(m: Model, at: CFrame, stemScale: number, brace: number,
 			cf = hip * CFrame.new(side * 0.16, -0.42, -0.10)
 				* CFrame.Angles(rad(-26), 0, side * rad(-14)),
 			color = C.Basalt, parent = m })
-		mk({ name = tag .. "Sole", size = Vector3.new(0.52, 0.24, 0.72),
-			cf = hip * CFrame.new(side * 0.24, -0.63, -0.26)
-				* CFrame.Angles(rad(4), side * rad(16), 0),
+		--======================================================================
+		-- THE FOOT IS A ROOT TOO
+		--
+		-- The sole was a 0.52 x 0.24 x 0.72 box with one wedge on the front of
+		-- it -- a shoe. It is a splayed root foot now: a narrower sole, a
+		-- forward claw, and two tapered toes at unequal angles.
+		--
+		-- THE TOES CARRY "Toe" IN THEIR NAMES ON PURPOSE. PlantSway matches leg
+		-- parts by that vocabulary and clusters them onto the nearest hip, so
+		-- naming them this way is what makes them swing WITH this leg instead of
+		-- staying behind while it steps. The ground roots above are named to
+		-- avoid exactly these words for the opposite reason.
+		--======================================================================
+		mk({ name = tag .. "Sole", size = Vector3.new(0.42, 0.20, 0.62),
+			cf = hip * CFrame.new(side * 0.24, -0.64, -0.24)
+				* CFrame.Angles(rad(6), side * rad(16), side * rad(-5)),
 			color = C.Basalt, parent = m })
-		mk({ name = tag .. "Claw", size = Vector3.new(0.24, 0.20, 0.38),
-			cf = hip * CFrame.new(side * 0.22, -0.67, -0.62)
-				* CFrame.Angles(rad(-10), side * rad(16), 0),
+		mk({ name = tag .. "Claw", size = Vector3.new(0.21, 0.17, 0.40),
+			cf = hip * CFrame.new(side * 0.20, -0.67, -0.60)
+				* CFrame.Angles(rad(-12), side * rad(14), 0),
+			color = C.Char, wedge = true, parent = m })
+		mk({ name = tag .. "Toe1", size = Vector3.new(0.15, 0.13, 0.34),
+			cf = hip * CFrame.new(side * 0.40, -0.68, -0.46)
+				* CFrame.Angles(rad(-8), side * rad(42), side * rad(9)),
+			color = C.Basalt, wedge = true, parent = m })
+		mk({ name = tag .. "Toe2", size = Vector3.new(0.13, 0.11, 0.28),
+			cf = hip * CFrame.new(side * 0.06, -0.69, -0.48)
+				* CFrame.Angles(rad(-6), side * rad(-27), side * rad(-7)),
 			color = C.Char, wedge = true, parent = m })
 	end
 
@@ -325,72 +602,217 @@ end
 -- colour, because Cinderpaw's signature IS the ember maw and a dark line would
 -- throw that away.
 --==============================================================================
+--==============================================================================
+-- THE FIVE HEAD PROFILES
+--
+-- One carving system, five silhouettes. Every field exists because some species
+-- needed it to stop looking like the others: `long` stretches the snout,
+-- `jawSquare` squares the jaw off, `heavySide` picks which cheek carries the
+-- mass, `crestSplit` breaks the crown in two, `petals` is Pyrelotus alone.
+--==============================================================================
+type HeadSpec = {
+	long: number, tall: number,
+	browDrop: number, browTilt: number,
+	jawJut: number, jawSquare: number,
+	mouthW: number, mouthH: number, cornerLift: number,
+	heavySide: number, chipYaw: number,
+	crestSplit: number, petals: number, seed: number,
+}
+
+local HEADS: { [string]: HeadSpec } = {
+	-- CINDERPAW: broad, low and crouched to match its braced body. Sloped
+	-- forehead, one much stronger cheek, and the widest grin of the five.
+	cinderpaw = { long = 0.94, tall = 0.92, browDrop = -0.02, browTilt = 7,
+		jawJut = 0.16, jawSquare = 0.55, mouthW = 0.52, mouthH = 0.19,
+		cornerLift = 1, heavySide = -1, chipYaw = 128, crestSplit = 0,
+		petals = 0, seed = 311 },
+	-- EMBERQUILL: longer and swept back, with the brow carried forward as a
+	-- snout plane. Narrow mouth, one corner up. Long, not beaked -- the depth is
+	-- in the cranium, not in a point.
+	emberquill = { long = 1.26, tall = 0.86, browDrop = 0.04, browTilt = 14,
+		jawJut = 0.22, jawSquare = 0.15, mouthW = 0.36, mouthH = 0.15,
+		cornerLift = 1, heavySide = 1, chipYaw = 206, crestSplit = 0,
+		petals = 0, seed = 337 },
+	-- SLAGBLOOM: lumpy and fractured. The crown splits into two unequal masses
+	-- and the mouth is the deepest and least regular -- partly melted, but the
+	-- corners still lift, so it reads soft rather than ruined.
+	slagbloom = { long = 1.02, tall = 1.00, browDrop = -0.05, browTilt = -6,
+		jawJut = 0.10, jawSquare = 0.35, mouthW = 0.48, mouthH = 0.23,
+		cornerLift = -1, heavySide = 1, chipYaw = 62, crestSplit = 11,
+		petals = 0, seed = 359 },
+	-- KILNHUSK: the architectural one. Broad kiln brow, squared jaw, deep
+	-- furnace mouth -- and one side deliberately taller, which is what keeps it
+	-- off being a cube.
+	kilnhusk = { long = 1.00, tall = 1.06, browDrop = 0.06, browTilt = -12,
+		jawJut = 0.08, jawSquare = 1.00, mouthW = 0.46, mouthH = 0.24,
+		cornerLift = -1, heavySide = -1, chipYaw = 288, crestSplit = 0,
+		petals = 0, seed = 373 },
+	-- PYRELOTUS: the premium head. Volcanic petal planes layered AROUND a carved
+	-- face, leaning one way and no two the same -- a bloom growing off a skull,
+	-- never a flower set on top of one.
+	pyrelotus = { long = 0.96, tall = 0.94, browDrop = 0.02, browTilt = 4,
+		jawJut = 0.12, jawSquare = 0.25, mouthW = 0.40, mouthH = 0.18,
+		cornerLift = 1, heavySide = 1, chipYaw = 154, crestSplit = 0,
+		petals = 4, seed = 397 },
+}
+
 local function face(m: Model, head: CFrame, wide: number, throat: Color3,
-	pal: Palette)
-	mk({ name = "Bulb", size = Vector3.new(0.96 * wide, 0.96, 0.96 * wide),
-		cf = head, color = pal.bulb, shape = Enum.PartType.Ball, parent = m })
-	-- Narrowed from 1.00: it was wider than the 0.96 head it sits on, so it
-	-- read as a shelf laid across the top rather than as part of the skull.
+	pal: Palette, species: string)
+	-- Every carved piece goes through here, so the whole skull can be found
+	-- again by attribute rather than by guessing at names.
+	local function P2(o: Opts): BasePart
+		o.parent = m
+		local p = mk(o)
+		p:SetAttribute("HeadPiece", true)
+		return p
+	end
 	--==========================================================================
-	-- EVERY DEPTH ON THIS FACE SCALES WITH `wide`
+	-- THE SKULL IS CARVED, NOT A BALL WITH A FACE ON IT
 	--
-	-- The bulb is Vector3.new(0.96 * wide, 0.96, 0.96 * wide) -- so its Z radius
-	-- is 0.48 * wide, not 0.48. Every z offset here used to be a fixed number
-	-- tuned against wide = 1, which meant the face sat at the wrong DEPTH on any
-	-- species whose head is not that width: Slagbloom (1.18) had its mouth and
-	-- eyes buried inside the skull, and Emberquill (0.88) had them floating
-	-- three-quarters clear of it. Scaling the depths fixes all five at once
-	-- rather than tuning each species by hand.
+	-- What was here: one `Bulb`, a 0.96 Ball, with a brow laid across the top, a
+	-- jaw slung under it and three neon bars floating off the front. Every plant
+	-- in the biome had the same round outline from every angle, and the mouth was
+	-- stuck ON the head rather than cut INTO it -- so the one feature that should
+	-- carry the expression read as a decal.
+	--
+	-- The replacement is planes. A dominant cranial mass, a second crest mass
+	-- turned against it so the outline breaks, an overhanging brow, two cheeks
+	-- that are deliberately NOT the same size, and an upper and lower jaw that
+	-- read as two separate silhouettes with a recessed cavity between them.
+	--
+	-- NO BALL AND NO CYLINDER in any of it. The eyes below stay spheres, which is
+	-- what the art bible asks for -- "spheres sparingly, for eyes, glints and
+	-- buds" -- but nothing that decides the SKULL's outline is round.
+	--
+	-- THE CAVITY IS SET BACK BEHIND THE JAW PLANES that frame it. That is the
+	-- whole difference between a carved mouth and a painted one: the opening has
+	-- depth, the surrounding material overhangs it, and at garden distance the
+	-- shadow is what you read rather than the colour.
+	--
+	-- Still cute. Big readable mouth, heavy brow, chunky asymmetry -- these are
+	-- collectible plants, not the guardian, and the tone is the one thing the
+	-- previous face got right.
 	--==========================================================================
-	local D = wide
+	local h = HEADS[species] or HEADS.cinderpaw
+	local W = wide
+	local L = h.long
+	local sd = h.seed
+	-- The eyes below still measure their depth in D, as they did against the old
+	-- Bulb. It is the head's LENGTH now, so a snouted species carries its eyes
+	-- further forward instead of sinking them into a longer skull.
+	local D = L
 
-	mk({ name = "Brow", size = Vector3.new(0.86 * wide, 0.22, 0.50),
-		cf = head * CFrame.new(0, 0.26, -0.34 * D) * CFrame.Angles(rad(-28), 0, 0),
-		color = pal.brow, parent = m })
-	mk({ name = "Jaw", size = Vector3.new(0.78 * wide, 0.28, 0.60),
-		cf = head * CFrame.new(0, -0.58, -0.30 * D) * CFrame.Angles(rad(-18), 0, rad(-3)),
-		color = pal.bulb, parent = m })
+	-- 1. THE CRANIUM. Turned off every axis so no face of it is square to the
+	-- camera, which is what stops a block reading as a block.
+	P2({ name = "Skull", size = Vector3.new(0.90 * W, 0.74 * h.tall, 0.84 * L),
+		cf = head * CFrame.new(0.02 * W, 0.02, 0.02 * L)
+			* CFrame.Angles(rad(-5 + jit(sd, 1, 4)), rad(5), rad(-4)),
+		color = pal.bulb })
 
-	--== THE MAW: three segments, ends lifted ==--
-	-- Lifting the ends is the difference between pleased and unwell, and it is
-	-- the only thing keeping these on the friendly side of the game's tone --
-	-- they are collectible plants, not the guardian.
-	-- NO ROLL ON THE END SEGMENTS. Tilting them outward dips their inner
-	-- corners and the three pieces stop being a mouth and become a BOWTIE --
-	-- which is exactly what the first attempt produced. Production rolls none
-	-- of them; the ends only STEP UP. Flat bars too: at 0.145 tall against
-	-- 0.165 wide these were near-square chunks rather than a line.
-	-- SIZED OFF THE PRODUCTION FACE, NOT BY EYE.
+	-- 2. THE CREST, turned AGAINST the cranium. Two unequal pieces where the
+	-- species wants a split crown; one otherwise. This is the mass that breaks
+	-- the round outline from the side and the three-quarter.
+	if h.crestSplit > 0 then
+		P2({ name = "SkullCrest", size = Vector3.new(0.44 * W, 0.40 * h.tall, 0.58 * L),
+			cf = head * CFrame.new(-0.20 * W, 0.30 * h.tall, 0.10 * L)
+				* CFrame.Angles(rad(12), rad(-18), rad(9 + h.crestSplit)),
+			color = pal.stem })
+		P2({ name = "SkullCrest", size = Vector3.new(0.34 * W, 0.30 * h.tall, 0.48 * L),
+			cf = head * CFrame.new(0.22 * W, 0.26 * h.tall, 0.04 * L)
+				* CFrame.Angles(rad(-8), rad(24), rad(-14 - h.crestSplit)),
+			color = pal.bulb })
+	else
+		P2({ name = "SkullCrest", size = Vector3.new(0.70 * W, 0.40 * h.tall, 0.62 * L),
+			cf = head * CFrame.new(0.05 * W, 0.30 * h.tall, 0.12 * L)
+				* CFrame.Angles(rad(13 + jit(sd, 2, 5)), rad(-12), rad(7)),
+			color = pal.stem })
+	end
+
+	-- 3. THE BROW, overhanging. A wedge, so its underside cuts back over the eyes
+	-- and the sockets fall into shadow rather than sitting on a flat forehead.
+	P2({ name = "BrowPlate", size = Vector3.new(0.86 * W, 0.24, 0.46),
+		cf = head * CFrame.new(0, 0.22 + h.browDrop, -0.30 * L)
+			* CFrame.Angles(rad(-26 - h.browTilt), rad(jit(sd, 3, 6)), rad(-5)),
+		color = pal.brow, wedge = true })
+
+	-- 4. TWO CHEEKS THAT ARE NOT THE SAME. One carries more mass, sits lower and
+	-- turns further out; the light one is smaller and set back. A face with
+	-- matching cheeks is a face with a mirror line down it.
+	local hs = h.heavySide
+	P2({ name = "CheekHeavy", size = Vector3.new(0.30 * W, 0.42 * h.tall, 0.46 * L),
+		cf = head * CFrame.new(hs * 0.34 * W, -0.08, -0.16 * L)
+			* CFrame.Angles(rad(6), rad(hs * -16), rad(hs * 11)),
+		color = pal.bulb })
+	P2({ name = "CheekLight", size = Vector3.new(0.23 * W, 0.32 * h.tall, 0.38 * L),
+		cf = head * CFrame.new(-hs * 0.32 * W, 0.01, -0.13 * L)
+			* CFrame.Angles(rad(-4), rad(hs * 13), rad(hs * 7)),
+		color = pal.stem })
+
+	-- 5. THE UPPER JAW PLANE, which is the top lip of the carving.
+	P2({ name = "UpperJaw", size = Vector3.new(0.66 * W, 0.20, 0.40 * L),
+		cf = head * CFrame.new(0, -0.19, -0.33 * L) * CFrame.Angles(rad(-9), 0, rad(2)),
+		color = pal.brow })
+
+	-- 6. THE LOWER JAW, a silhouette of its own. It juts, it is squarer or more
+	-- tapered by species, and it is the piece that says whether the head is
+	-- furnace-heavy or swept.
+	P2({ name = "LowerJaw",
+		size = Vector3.new((0.54 + 0.10 * h.jawSquare) * W, 0.30,
+			(0.44 + h.jawJut) * L),
+		cf = head * CFrame.new(0, -0.55, (-0.30 - h.jawJut * 0.34) * L)
+			* CFrame.Angles(rad(-14 + jit(sd, 4, 5)), 0, rad(-3 + h.cornerLift * 4)),
+		color = pal.bulb })
+
+	--==========================================================================
+	-- 7. THE CAVITY, AND WHY ITS Z IS COMPUTED
 	--
-	-- A Greenhollow plant built next to this one settled it. CreatureModel's
-	-- smile is 28% of the head's width and 5% of it tall, in DARK. This was 45%
-	-- wide and 8.9% tall in full-brightness Neon -- roughly 1.6x too wide, 1.8x
-	-- too tall, and glowing. At that size a mouth stops being a feature on a
-	-- face and becomes the face, and three stepped blocks that big read as a
-	-- BOWTIE rather than a smile. The eyes needed none of this: at 22% of head
-	-- width against production's 23% they were already right, and only their
-	-- colour was wrong.
+	-- "Recessed" is a measurement, not a look. The cavity's front face has to sit
+	-- BEHIND the front faces of the jaw planes around it, or the dark block is
+	-- simply a dark block glued to the front of the head -- which is what the
+	-- three neon bars were.
 	--
-	-- The proportions below are production's, against this head's own width
-	-- (0.96 * wide). It stays Neon in the species' throat colour, because small
-	-- and glowing still reads as Cinderpaw's ember maw -- it is the SIZE that
-	-- was doing the damage, not the light.
-	local HW = 0.96 * wide
-	local mw = 0.10 * HW
-	for i, spec in ipairs({ { -1, 0.030 }, { 0, 0 }, { 1, 0.030 } }) do
-		local sx = spec[1] :: number
-		local lift = (spec[2] :: number) * 0.96
-		mk({ name = "Maw" .. i,
-			size = Vector3.new(mw, 0.05 * 0.96, 0.07 * 0.96),
-			-- z pushed out to 0.315. At 0.275 the front face landed on 0.345
-			-- against a surface of 0.344 at the centre and 0.353 at the ends --
-			-- flush in the middle and SUNK at both ends, so the head's own skin
-			-- cut across the mouth and every junction showed as a dark notch.
-			-- The segments were overlapping the whole time; they were underwater.
-			-- This stands all three clearly proud, like a moulded lip.
-			cf = head * CFrame.new(sx * mw * 0.92, -0.30 + lift, -0.375 * D),
-			color = throat, material = Enum.Material.Neon,
-			smooth = true, parent = m })
+	-- The upper jaw's front reaches (0.33 * L + 0.20) forward. The cavity is
+	-- placed so its own front lands a clear 0.06 behind that, and the surrounding
+	-- material overhangs it on every side.
+	--==========================================================================
+	local mouthW = h.mouthW * 0.96 * W
+	local mouthH = h.mouthH
+	local cavityDepth = 0.26
+	local jawFront = 0.33 * L + 0.20
+	local cavityFront = jawFront - 0.06
+	P2({ name = "MouthCavity", size = Vector3.new(mouthW, mouthH, cavityDepth),
+		cf = head * CFrame.new(0, -0.35, -(cavityFront - cavityDepth * 0.5))
+			* CFrame.Angles(0, 0, rad(h.cornerLift * 5)),
+		color = C.Char, smooth = true })
+	-- The heat INSIDE the opening. Thin, set deeper still, and the only neon on
+	-- the head -- a lit throat seen through a carved gap, not a glowing mouth
+	-- stuck on the outside.
+	P2({ name = "ThroatGlow", size = Vector3.new(mouthW * 0.74, mouthH * 0.34, 0.08),
+		cf = head * CFrame.new(0, -0.35 + mouthH * 0.06,
+				-(cavityFront - cavityDepth * 0.86))
+			* CFrame.Angles(0, 0, rad(h.cornerLift * 5)),
+		color = throat, material = Enum.Material.Neon, smooth = true })
+
+	-- 8. A BROKEN CORNER. One chip, placed by species, so the skull looks cooled
+	-- and fractured rather than moulded.
+	P2({ name = "SkullChip", size = Vector3.new(0.26 * W, 0.22, 0.30 * L),
+		cf = head * CFrame.new(math.sin(rad(h.chipYaw)) * 0.36 * W, 0.14,
+				math.cos(rad(h.chipYaw)) * 0.34 * L)
+			* CFrame.Angles(rad(18), rad(h.chipYaw), rad(-22)),
+		color = pal.stemPale, wedge = true })
+
+	-- 9. LAYERED PETAL PLANES, Pyrelotus only. Directional and uneven -- they
+	-- lean one way and no two are the same size, so they read as a burnt bloom
+	-- growing off a skull rather than a flower laid on top of one.
+	for i = 1, h.petals do
+		local a = rad(-40 + i * 46 + jit(sd, i + 20, 12))
+		local k = 1 - (i - 1) * 0.16
+		P2({ name = "HeadPetal",
+			size = Vector3.new(0.30 * W * k, 0.09, 0.44 * L * k),
+			cf = head * CFrame.new(math.sin(a) * 0.40 * W, 0.16 + i * 0.05,
+					math.cos(a) * 0.30 * L)
+				* CFrame.Angles(rad(24 + i * 7), a, rad(jit(sd, i + 30, 18))),
+			color = if i % 2 == 0 then pal.stemPale else pal.brow, wedge = true })
 	end
 
 	for i = 0, 1 do
@@ -436,8 +858,8 @@ end
 local function cinderpaw(parent: Instance, at: CFrame): Model
 	local m = Instance.new("Model"); m.Name = "Cinderpaw"; m.Parent = parent
 	local pal = PALETTES.cinderpaw
-	local b = body(m, at, 1.0, 0, pal)
-	face(m, b.head, 1.0, C.Throat, pal)
+	local b = body(m, at, 1.0, 0, pal, ROOTS.cinderpaw, 11)
+	face(m, b.head, 1.0, C.Throat, pal, "cinderpaw")
 	mk({ name = "CrownHub", size = Vector3.new(0.60, 0.34, 0.58),
 		cf = b.hub * CFrame.Angles(rad(-6), 0, 0), color = C.Cinder, parent = m })
 	local fronds = {
@@ -478,8 +900,8 @@ end
 local function emberquill(parent: Instance, at: CFrame): Model
 	local m = Instance.new("Model"); m.Name = "Emberquill"; m.Parent = parent
 	local pal = PALETTES.emberquill
-	local b = body(m, at, 1.22, -6, pal)
-	face(m, b.head, 0.88, C.Throat, pal)
+	local b = body(m, at, 1.22, -6, pal, ROOTS.emberquill, 61)
+	face(m, b.head, 0.88, C.Throat, pal, "emberquill")
 	mk({ name = "CrownHub", size = Vector3.new(0.46, 0.30, 0.46),
 		cf = b.hub, color = C.Cinder, parent = m })
 	-- Six quills, uneven lean, none vertical: a fence of equal spikes is the
@@ -527,8 +949,8 @@ end
 local function slagbloom(parent: Instance, at: CFrame): Model
 	local m = Instance.new("Model"); m.Name = "Slagbloom"; m.Parent = parent
 	local pal = PALETTES.slagbloom
-	local b = body(m, at, 0.90, 10, pal)
-	face(m, b.head, 1.18, C.SlagDrip, pal)
+	local b = body(m, at, 0.90, 10, pal, ROOTS.slagbloom, 103)
+	face(m, b.head, 1.18, C.SlagDrip, pal, "slagbloom")
 	mk({ name = "CrownHub", size = Vector3.new(0.78, 0.40, 0.74),
 		cf = b.hub * CFrame.Angles(rad(4), 0, 0), color = C.Cinder, parent = m })
 	local petals = {
@@ -580,8 +1002,8 @@ end
 local function kilnhusk(parent: Instance, at: CFrame): Model
 	local m = Instance.new("Model"); m.Name = "Kilnhusk"; m.Parent = parent
 	local pal = PALETTES.kilnhusk
-	local b = body(m, at, 0.86, -18, pal)
-	face(m, b.head, 1.0, C.KilnGlow, pal)
+	local b = body(m, at, 0.86, -18, pal, ROOTS.kilnhusk, 149)
+	face(m, b.head, 1.0, C.KilnGlow, pal, "kilnhusk")
 
 	--== THE BARREL: three stacked courses, standing BEHIND the head ==--
 	-- The first build put these boxes straight through the face. Each course was
@@ -678,8 +1100,8 @@ end
 local function pyrelotus(parent: Instance, at: CFrame): Model
 	local m = Instance.new("Model"); m.Name = "Pyrelotus"; m.Parent = parent
 	local pal = PALETTES.pyrelotus
-	local b = body(m, at, 0.94, 8, pal)
-	face(m, b.head, 0.92, C.LotusCore, pal)
+	local b = body(m, at, 0.94, 8, pal, ROOTS.pyrelotus, 191)
+	face(m, b.head, 0.92, C.LotusCore, pal, "pyrelotus")
 
 	--== THE CAGE MOUTH ==--
 	-- A flared collar the ribs spring from, so they look grown rather than
@@ -1062,6 +1484,30 @@ end
 -- across the ladder. Girth runs 0.82 to 1.45 and it was reaching two biomes out
 -- of the three that need it.
 --==============================================================================
+--==============================================================================
+-- THE ROOTS DO NOT GROW LIKE THE BODY
+--
+-- Plant height comes off the game's tier curve, where Colossal is fifty times
+-- Tiny. That curve is a known problem and it is NOT this file's to fix -- but
+-- the footprint is. A root system taking the full multiplier would put a
+-- Colossal Emberroot's roots roughly 270 studs across, in a planting cell that
+-- is eleven.
+--
+-- So a tagged ground root takes hs^ROOT_DAMP instead, under a hard ceiling.
+-- UNIFORMLY, on all three axes: the whole point is to keep the sculpture's
+-- shape -- its taper, its arc, its overlaps -- and change only how much of the
+-- plot it covers. Scaling the axes differently would squash it back into the
+-- slab this replaced.
+--
+--     hs        1.25 (Tiny)      62.4 (Colossal)
+--     root      1.03             1.94
+--
+-- The upper body is still on the 50x curve and still wrong. This bounds the
+-- ground, not the plant.
+--==============================================================================
+local ROOT_DAMP = 0.16
+local ROOT_MAX_SCALE = 2.0
+
 function EmberrootForms.Build(model: Model, id: string, at: CFrame, hs: number, gs: number?): boolean
 	local fn = BUILDERS[id]
 	if not fn then
@@ -1072,12 +1518,16 @@ function EmberrootForms.Build(model: Model, id: string, at: CFrame, hs: number, 
 	local built = fn(scratch, at)
 
 	local spread = if type(gs) == "number" and gs == gs and gs > 0 then gs else 1
+	local rootHs = math.min(hs ^ ROOT_DAMP, ROOT_MAX_SCALE)
 	if math.abs(hs - 1) > 1e-6 or math.abs(spread - 1) > 1e-6 then
 		for _, d in ipairs(built:GetDescendants()) do
 			if d:IsA("BasePart") then
-				d.CFrame = at * scaled(at:ToObjectSpace(d.CFrame), hs, spread)
+				-- A tagged ground root grows on the damped curve; everything
+				-- else is the body and grows with it.
+				local s = if d:GetAttribute("GroundRoot") then rootHs else hs
+				d.CFrame = at * scaled(at:ToObjectSpace(d.CFrame), s, spread)
 				-- Size takes the height scale ALONE. See scaled().
-				d.Size = d.Size * hs
+				d.Size = d.Size * s
 			elseif d:IsA("Attachment") then
 				-- An attachment is a point on a part, so it travels with the
 				-- same spread its part did.

@@ -211,6 +211,65 @@ GameConfig.Plot = {
 	BedHeight = 0.5,
 	BedFrameLip = 0.25,
 	BedFrameWidth = 2,
+
+	--==========================================================================
+	-- THE SIDE BED: ROOM, NOT CAPACITY
+	--
+	-- From Level 3 a plot grows a wing on ONE side. It holds a second bed and
+	-- adds no slots whatsoever -- capacity stays 10 / 15 / 20 and lives in
+	-- PlotTiers. This is floor space for twenty walking creatures, which a
+	-- single 34-stud strip does not have.
+	--
+	-- ALWAYS THE SAME LOCAL SIDE, on every plot. Two neighbours flaring toward
+	-- each other would meet in the gap between them; flaring the same way makes
+	-- every wing point into the gap its neighbour just vacated, and the whole
+	-- ring stays evenly spaced.
+	--
+	-- REAR-ANCHORED, which is what makes it fit at all. Plots sit on a ring, so
+	-- the arc between two of them GROWS with distance from the hub: the chord
+	-- between neighbouring centre lines is 0.84 * r, which is 84 studs at the
+	-- gate and 165 at the back of a Level 5 plot. The wing starts where that
+	-- extra room actually exists and the front edge never widens -- the gate
+	-- stays exactly as narrow as it was, so nothing changes at the ring radius
+	-- where the plots are tightest.
+	--
+	-- Rows here are PHYSICAL rows of soil. They are deliberately fewer than the
+	-- main bed's at the same level, because the wing is shorter than the plot
+	-- is deep -- it starts behind the gate, not at it.
+	--==========================================================================
+	SideBed = {
+		-- How much wider the plot gets, on the +X local side.
+		--
+		-- WIDE RATHER THAN LONG, and that is the treadmill's doing. Measured in
+		-- Edit, every plot's mill occupies local X 24.6 to 43.8 at Z -43.4 to
+		-- -19 -- the same side as this wing, in the plot's front half. A wing
+		-- reaching forward past Z = -19 fenced the mill in: the first build of
+		-- this came out with 0.93 studs between plot and treadmill.
+		--
+		-- So the wing starts BEHIND the mill and takes its area back across
+		-- instead. Sideways is the direction with room -- the ring's arc grows
+		-- with radius and the neighbour clearance measured 26.7 studs at 28
+		-- wide, which is slack this can spend.
+		WingWidth = 40,
+		-- Grass inside the wing's fence before the bed's frame starts.
+		WingMargin = 3,
+		--==================================================================
+		-- THE WING'S FENCE MAY NOT REACH FORWARD OF THIS
+		--
+		-- The mill's rear face is at local Z = -19. This is that, plus room to
+		-- walk between the two, and it is what caps the row counts below.
+		--==================================================================
+		WingFrontZ = -15,
+		-- Physical soil rows per level. Nothing below Level 3 has a wing.
+		--
+		-- Rear-anchored and capped by WingFrontZ, which is why these are 2/3/4
+		-- rather than the 2/4/7 a plot with no mill beside it could carry:
+		-- at Level 5 the bed may span 52.1 studs and five rows need 59.8.
+		RowsByLevel = { 0, 0, 2, 3, 4 },
+		-- Named so PlantService can find it, and so a save can say where a
+		-- plant stands without the name being a position.
+		Name = "SoilSide",
+	},
 	--==========================================================================
 	-- THE FENCE IS A REAL BOUNDARY NOW
 	--
@@ -328,15 +387,53 @@ GameConfig.Plot = {
 -- For scale: one grown Nubkin pays 2/sec and one Bellchime pays 110/sec, so a
 -- starting plot of twelve mixed plants is somewhere around 100-400/sec.
 --==============================================================================
+--==============================================================================
+-- CAPACITY IS WRITTEN DOWN, NOT DERIVED
+--
+-- It used to be `rows * BedColumns` -- the invisible planting grid doubling as
+-- the gameplay limit. That tied two things that have no business moving
+-- together: how DEEP the plot looks and how MANY plants it holds. Widening the
+-- bed by a column would silently have handed every player in the game three
+-- more slots per row, and a ladder nobody can read off the table is a ladder
+-- nobody can balance.
+--
+-- So `capacity` is the number, `rows` is the geometry, and the two are allowed
+-- to disagree. Level 5 is seven rows for twenty plants precisely because the
+-- plot has to LOOK like the biggest one without the count following the grid.
+--
+-- A planted pod and a grown creature each take one space. A creature being
+-- carried takes none -- it is not in the ground.
+--==============================================================================
 GameConfig.PlotTiers = {
-	{ rows = 4, cost = 0 },
-	{ rows = 6, cost = 25000 },
-	{ rows = 8, cost = 250000 },
-	{ rows = 10, cost = 2000000 },
+	{ capacity = 5,  rows = 2, cost = 0 },
+	{ capacity = 7,  rows = 3, cost = 25000 },
+	{ capacity = 10, rows = 4, cost = 250000 },
+	{ capacity = 15, rows = 5, cost = 2500000 },
+	{ capacity = 20, rows = 7, cost = 25000000 },
 }
+
+--==============================================================================
+-- WHAT VERSION 1 PLOTS WERE, KEPT FOR THE MIGRATION AND NOTHING ELSE
+--
+-- The old ladder was four levels of 4, 6, 8 and 10 rows, and capacity came out
+-- of `rows * 3`. A saved garden's Z coordinates were measured against THAT
+-- plot's depth, so migrating a profile needs the old depth to convert them --
+-- see ProfileSchema. Nothing else may read this.
+--==============================================================================
+GameConfig.LegacyPlotRowsV1 = { 4, 6, 8, 10 }
 
 -- What a plot is built at before anything is bought.
 GameConfig.StartingPlotTier = 1
+
+--==============================================================================
+-- ONE ACTION NAME, AND THE CLIENT SENDS NOTHING ELSE
+--
+-- The Shop fires GameEvent with this and no payload worth forging: not a level,
+-- not a price, not a plot id. The server reads the sender -- which is
+-- engine-stamped -- looks up what they own, and decides everything. A client
+-- that could name its own target level could buy Level 5 for the price of two.
+--==============================================================================
+GameConfig.PlotUpgradeAction = "PlotUpgrade"
 
 GameConfig.Attributes = {
 	PlotId = "PlotId",
@@ -1516,6 +1613,51 @@ GameConfig.Plant = {
 	-- than refused: "exactly where I clicked" should stop being exact only at
 	-- the rim, and a refusal there reads as the game being broken.
 	EdgeMarginStuds = 1.6,
+	--==========================================================================
+	-- WANDERING, WHICH THE SERVER DECIDES AND THE CLIENT ONLY DRAWS
+	--
+	-- A grown creature walks its owner's whole plot. A POD DOES NOT MOVE: it
+	-- sits where it was planted until it is hatched, because a seed that
+	-- strolled off would be a seed you could not find again.
+	--
+	-- The server picks each destination and stamps four facts on the model --
+	-- where from, where to, when it starts, when it arrives. Every client
+	-- interpolates the same four numbers against Workspace:GetServerTimeNow(),
+	-- so a plant is in the same place on every screen. The alternative, which
+	-- this replaced, was each client rolling its own dice: cheap, and wrong the
+	-- moment two people look at the same garden.
+	--
+	-- Four attribute writes per creature per LEG -- roughly one every five to
+	-- twelve seconds -- and no CFrame ever crosses the wire.
+	--==========================================================================
+	Wander = {
+		-- How far inside the fence a creature may walk. The fence boards are
+		-- 1.6 thick and stand at the plot edge, so this keeps a body off them.
+		FenceMargin = 4.5,
+		-- Extra room kept clear in front of the gate, so nothing loiters in the
+		-- doorway looking like it is about to leave.
+		GateMargin = 7,
+		-- Candidate destinations generated per leg. Enough that the least
+		-- crowded of them is meaningfully better than the first; small enough
+		-- that twenty plants scoring them is nothing.
+		Candidates = 6,
+		-- How far apart the scorer TRIES to keep them. Bounded on purpose: a
+		-- Colossal is currently hundreds of studs tall, and scoring against its
+		-- real size would make every destination illegal at once. This is a
+		-- logical spacing, not a physical one.
+		SeparationStuds = 14,
+		-- A leg is at least this long, so a creature never twitches in place.
+		MinLegStuds = 6,
+		-- Recomputed only when a leg ends. Between legs the server does nothing
+		-- at all for that plant.
+		TickSeconds = 0.5,
+		-- How often the authoritative offset is written back to the profile.
+		-- Committed at the END of a leg rather than continuously -- a creature
+		-- mid-stride has no saved position worth having, and a profile write
+		-- per frame is the thing this exists to avoid.
+		CommitOnArrival = true,
+	},
+
 	-- Hold to hatch. Long enough that the pod visibly shakes and the hatch is a
 	-- thing you did, short enough that a full bed is not a chore.
 	HatchHoldSeconds = 1.1,
@@ -3202,7 +3344,7 @@ end
 --==============================================================================
 GameConfig.Save = {
 	StoreName = "StealASeed_v1",
-	CurrentVersion = 1,
+	CurrentVersion = 2,
 	AutosaveSeconds = 45,
 	MinWriteGap = 7,
 	RetryAttempts = 4,
@@ -3265,8 +3407,129 @@ function GameConfig.plotDepthFor(rows: number): number
 	return P.BedMargin * 2 + rows * P.RowDepth + (rows - 1) * P.RowGap
 end
 
+--==============================================================================
+-- HOW WIDE A PLOT IS AT A GIVEN LEVEL, WING INCLUDED
+--
+-- Levels 1 and 2 are the plain rectangle they have always been. From Level 3
+-- the footprint is an L: full width at the front, wider across the back half.
+--==============================================================================
+function GameConfig.plotSideRowsForTier(tier: number?): number
+	local n = tonumber(tier)
+	if n == nil or n ~= n then
+		n = GameConfig.StartingPlotTier
+	end
+	local level = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
+	return GameConfig.Plot.SideBed.RowsByLevel[level] or 0
+end
+
+function GameConfig.plotHasSideBed(tier: number?): boolean
+	return GameConfig.plotSideRowsForTier(tier) > 0
+end
+
+--==============================================================================
+-- WHERE THE WING SITS, IN PLOT-LOCAL Z
+--
+-- Rear-anchored: its BACK edge lines up with the main bed's back edge, and it
+-- reaches forward only as far as its own rows need. Returns front and back Z,
+-- or nil when the level has no wing.
+--
+-- The main bed spans `rows * RowDepth + (rows - 1) * RowGap` centred on the
+-- plot, so its back edge is at half that. The wing shares it.
+--==============================================================================
+function GameConfig.plotSideBedZ(tier: number?): (number?, number?)
+	local sideRows = GameConfig.plotSideRowsForTier(tier)
+	if sideRows <= 0 then
+		return nil, nil
+	end
+	local P = GameConfig.Plot
+	local mainRows = GameConfig.plotRowsForTier(tier)
+	local backZ = (mainRows * P.RowDepth + (mainRows - 1) * P.RowGap) * 0.5
+	local span = sideRows * P.RowDepth + (sideRows - 1) * P.RowGap
+	-- Capped so the wing's FENCE -- which stands WingMargin + a frame width
+	-- forward of the bed -- can never reach past the treadmill. RowsByLevel is
+	-- already chosen to satisfy this; the clamp is here so that changing a row
+	-- count can shorten a bed but can never fence in the mill.
+	local minBedFront = P.SideBed.WingFrontZ + P.SideBed.WingMargin + P.BedFrameWidth
+	return math.max(backZ - span, minBedFront), backZ
+end
+
+--==============================================================================
+-- HOW FAR FROM THE GATE A PLANT CAN ACTUALLY STAND
+--
+-- The gate is the one fixed landmark in a plot: local -Z faces it, so a plant's
+-- distance from it is `z + depth/2` -- a number that survives the plot being
+-- rebuilt at a different depth, which is exactly what an upgrade does and what
+-- the v1 -> v2 migration has to reason about.
+--
+-- The reachable range is set by the SOIL, not the plot. Soil is centred on the
+-- plot and spans `depth - BedMargin * 2`, and PlantService keeps plants
+-- EdgeMargin inside that, so both ends come out as a constant inset from the
+-- fence. Near edge is `BedMargin + EdgeMargin` at every level -- the bed always
+-- starts the same distance behind the gate -- and only the far edge grows.
+--
+-- Two callers need the same answer and must not each derive it: the migration,
+-- deciding whether an old garden reaches, and anything later that has to place
+-- a plant against a plot it is not standing in.
+--==============================================================================
+function GameConfig.plotGateReach(rows: number): (number, number)
+	local P = GameConfig.Plot
+	local inset = P.BedMargin + GameConfig.Plant.EdgeMarginStuds
+	local depth = GameConfig.plotDepthFor(rows)
+	return inset, math.max(depth - inset, inset)
+end
+
+--==============================================================================
+-- THE INVISIBLE GRID, WHICH IS NOT THE CAPACITY
+--
+-- Still how many attachment points a bed of `rows` rows has, and MapService and
+-- PlantService both lay plants out against it. It is NOT how many plants a plot
+-- may hold -- that is plotCapacityForTier below, and confusing the two is the
+-- bug this pass exists to remove.
+--==============================================================================
 function GameConfig.plotSlotsFor(rows: number): number
 	return rows * GameConfig.Plot.BedColumns
+end
+
+--==============================================================================
+-- HOW MANY PLANTS A LEVEL HOLDS
+--
+-- The single answer, for the server that enforces it and the two panels that
+-- display it. Clamped rather than nil-returning: a profile carrying a level
+-- from a future build, or a corrupted one, must still be able to garden.
+--==============================================================================
+function GameConfig.plotCapacityForTier(tier: number?): number
+	local n = tonumber(tier)
+	if n == nil or n ~= n then
+		n = GameConfig.StartingPlotTier
+	end
+	local level = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
+	return GameConfig.PlotTiers[level].capacity
+end
+
+function GameConfig.plotRowsForTier(tier: number?): number
+	local n = tonumber(tier)
+	if n == nil or n ~= n then
+		n = GameConfig.StartingPlotTier
+	end
+	local level = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
+	return GameConfig.PlotTiers[level].rows
+end
+
+--==============================================================================
+-- THE LOWEST LEVEL THAT WOULD HOLD THIS MANY PLANTS
+--
+-- Used by the migration, which must never decide a saved garden does not fit.
+-- Answers the TOP level when nothing fits, because the alternative -- refusing,
+-- or silently choosing a level too small -- is how saved plants get discarded.
+--==============================================================================
+function GameConfig.plotLevelForPlants(count: number?): number
+	local n = math.max(math.floor(tonumber(count) or 0), 0)
+	for level, tier in ipairs(GameConfig.PlotTiers) do
+		if n <= tier.capacity then
+			return level
+		end
+	end
+	return #GameConfig.PlotTiers
 end
 
 --==============================================================================

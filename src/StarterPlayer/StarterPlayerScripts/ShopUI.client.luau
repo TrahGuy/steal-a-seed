@@ -46,16 +46,21 @@
 -- not true of a modal.
 --
 --==============================================================================
--- NOTHING IS BUYABLE YET, AND THE BUTTONS SAY SO
+-- THE PLOT CARDS TRANSACT. THE OTHER SHELVES STILL DO NOT.
 --
--- This is the UI. There is no ShopService, no purchase remote and no cash
--- deduction, so a price button renders its state and does not transact. That is
--- deliberate rather than unfinished: taking money needs a server that owns the
--- decision (Rule 3), and a plot tier in particular is not buyable until
--- PlotService can rebuild a bed at a new row count -- today every plot is tier 1
--- and nothing changes that.
+-- These read SOON for a long time, because there was no server that owned the
+-- decision and a button that took money without one would have been the lie.
+-- PlotUpgradeService owns it now, so the plot shelf is live.
 --
--- A button that silently did nothing would be the lie. These read SOON.
+-- THE CLIENT SENDS A VERB AND NOTHING ELSE -- not the level, not the price.
+-- Everything below is presentation: which card looks buyable, what the price
+-- line says, whether the button is lit. The server re-derives all of it from
+-- the sender before it moves a single coin, so the worst a tampered copy of
+-- this file can do is ask for the upgrade it was already entitled to buy.
+--
+-- Which is also why nothing here writes `plotTier` on click. The card turns
+-- OWNED when the profile packet says so and not one frame earlier: the client
+-- does not get to decide it succeeded.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -383,20 +388,46 @@ end
 -- same three the Index portraits are drawn in. A shop selling dirt should be
 -- selling THIS game's dirt.
 --==============================================================================
-local function plotArt(parent: Frame, sprouts: number)
+--==============================================================================
+-- THE CARD DRAWS WHAT THE PLOT ACTUALLY IS
+--
+-- One bed up to Level 2 and TWO from Level 3, because that is when the plot
+-- grows its wing. The card is the only place a player can see what they are
+-- buying before they own it, and a card that kept drawing one strip for a plot
+-- with two beds would be selling the wrong thing.
+--
+-- The second bed is drawn narrower and set to one side, which is the shape of
+-- the real thing: a wing off the back, not a second plot.
+--==============================================================================
+local function plotArt(parent: Frame, sprouts: number, twoBeds: boolean?)
 	for _, existingChild in ipairs(parent:GetChildren()) do
 		existingChild:Destroy()
 	end
 
 	-- A heap with a peak, not a plank. The first pass drew one thin bar and the
 	-- sprouts read as lollipops standing on a shelf.
-	local bed = UIKit.piece(parent, "Bed", 0.5, 0.80, 0.88, 0.32,
+	local bedW = if twoBeds then 0.60 else 0.88
+	local bedX = if twoBeds then 0.38 else 0.5
+	local bed = UIKit.piece(parent, "Bed", bedX, 0.80, bedW, 0.32,
 		SeedData.Soil, 0.30, nil, 3)
 	stroke(bed, SHOP.Outline, 2)
 	for _, clod in ipairs({ { 0.20, 0.84, 0.28, 0.24 }, { 0.80, 0.85, 0.26, 0.22 } }) do
 		local lump = UIKit.piece(parent, "Clod", clod[1], clod[2], clod[3], clod[4],
 			SeedData.Soil, 0.5, nil, 3)
 		stroke(lump, SHOP.Outline, 2)
+	end
+
+	if twoBeds then
+		-- The wing: narrower, shorter, and set back to the side.
+		local wing = UIKit.piece(parent, "SideBed", 0.82, 0.72, 0.22, 0.46,
+			SeedData.Soil, 0.30, nil, 3)
+		stroke(wing, SHOP.Outline, 2)
+		local sprig = UIKit.piece(parent, "SideStem", 0.82, 0.52, 0.05, 0.30,
+			SeedData.Stem, 0.3, nil, 4)
+		stroke(sprig, SHOP.Outline, 2)
+		local tip = UIKit.piece(parent, "SideBud", 0.82, 0.36, 0.12, 0.18,
+			SeedData.Species[1].Body, 0.5, nil, 5)
+		stroke(tip, SHOP.Outline, 2)
 	end
 
 	--==========================================================================
@@ -407,8 +438,10 @@ local function plotArt(parent: Frame, sprouts: number)
 	-- only thing separating them -- which is what every illustration in the
 	-- reference does anyway.
 	--==========================================================================
+	local spread = if twoBeds then 0.46 else 0.68
+	local left = if twoBeds then 0.12 else 0.16
 	for i = 1, sprouts do
-		local x = 0.16 + (0.68 * (i - 0.5) / sprouts)
+		local x = left + (spread * (i - 0.5) / sprouts)
 		local stem = UIKit.piece(parent, "Stem" .. i, x, 0.55, 0.055, 0.44,
 			SeedData.Stem, 0.3, nil, 4)
 		stroke(stem, SHOP.Outline, 2)
@@ -424,6 +457,26 @@ local function plotArt(parent: Frame, sprouts: number)
 end
 
 --==============================================================================
+-- THE REMOTE THE BUY BUTTON SENDS ON
+--
+-- GameEvent, which already carries PlantAt, PickUp and now PlotUpgrade. Fetched
+-- up here rather than beside the handlers because WaitForChild yields, and a
+-- yield in the middle of building the shelves would leave a half-built panel on
+-- screen for as long as replication takes.
+--==============================================================================
+local shopRemotes = SeedGame:WaitForChild("Remotes", 20)
+local gameEvent: RemoteEvent? = nil
+if shopRemotes then
+	local ev = shopRemotes:WaitForChild(GameConfig.Remotes.GameEvent, 20)
+	if ev and ev:IsA("RemoteEvent") then
+		gameEvent = ev
+	end
+end
+if not gameEvent then
+	warn("[Seed/ShopUI] No GameEvent remote; plot upgrades cannot be bought.")
+end
+
+--==============================================================================
 -- THE PLOT SHELF
 --
 -- One card per tier above the one you start on. Tier 1 is where everybody
@@ -435,9 +488,12 @@ local plotCards: { Card } = {}
 for tier = 2, #GameConfig.PlotTiers do
 	local card = buildCard(plotShelf, tier)
 	plotCards[tier] = card
-	local rows = GameConfig.PlotTiers[tier].rows
-	plotArt(card.art, math.min(4, tier))
-	card.title.Text = string.format("%d SLOTS", GameConfig.plotSlotsFor(rows))
+	plotArt(card.art, math.min(3, tier), GameConfig.plotHasSideBed(tier))
+	-- CAPACITY, not the planting grid. plotSlotsFor counts attachment points in
+	-- the bed and has not equalled the number of plants a level holds since the
+	-- ladder was re-cut -- a card reading "21 SLOTS" for a level that holds 7
+	-- would be advertising a number the server refuses to honour.
+	card.title.Text = string.format("%d SLOTS", GameConfig.plotCapacityForTier(tier))
 end
 
 -- Every shelf exists now, so the cells can be measured. Bound to the body rather
@@ -454,6 +510,25 @@ local plotTier = GameConfig.StartingPlotTier
 local cash = 0
 local heardFromServer = false
 
+--==============================================================================
+-- ONE CLICK IN FLIGHT AT A TIME
+--
+-- The purchase is a fire-and-forget RemoteEvent, so the only acknowledgement is
+-- the profile packet that follows -- up to a quarter second later, because
+-- PlayerDataService coalesces them. That is four or five frames in which the
+-- card still says BUY and the player's cash still reads the old number, and a
+-- second click in that window sends a second purchase.
+--
+-- The server's own reentrancy guard would refuse it, so nothing breaks either
+-- way. This exists so the BUTTON does not look broken: it goes quiet, says
+-- BUYING, and comes back when the answer arrives.
+--
+-- Cleared by any profile packet, not only a successful one -- a refusal sends
+-- no signal of its own, and a button stuck on BUYING forever would be worse
+-- than one that flickers.
+--==============================================================================
+local pending: number? = nil
+
 local function paint()
 	for tier = 2, #GameConfig.PlotTiers do
 		local card = plotCards[tier]
@@ -469,20 +544,25 @@ local function paint()
 				card.frame.BackgroundColor3 = SHOP.SoldBottom
 				card.buy.BackgroundColor3 = SHOP.BuyShade
 				card.price.Text = "OWNED"
+			elseif pending == tier then
+				-- Sent, not yet answered.
+				card.tint.Color = ColorSequence.new(SHOP.CardTop, SHOP.CardBottom)
+				card.frame.BackgroundColor3 = SHOP.CardBorder
+				card.buy.BackgroundColor3 = SHOP.BuyShade
+				card.price.Text = "BUYING..."
 			else
 				card.tint.Color = ColorSequence.new(SHOP.CardTop, SHOP.CardBottom)
 				card.frame.BackgroundColor3 = SHOP.CardBorder
-				card.buy.BackgroundColor3 = if next_ then SHOP.Buy else SHOP.Locked
 				--==========================================================
-				-- SOON, NOT A DEAD BUTTON
+				-- ONLY THE NEXT LEVEL IS LIT
 				--
-				-- There is no ShopService yet, so nothing here can take the
-				-- money. Saying SOON is the honest version of that; a button
-				-- reading a price and doing nothing when pressed is not.
+				-- The ladder is bought one rung at a time -- the server adds
+				-- exactly one level per purchase and charges for that one --
+				-- so a card two rungs up is not a thing you can buy at any
+				-- price. It shows its price and stays dark.
 				--==========================================================
-				card.price.Text = if heardFromServer and cash >= cost
-					then "SOON  ·  $" .. GameConfig.compact(cost)
-					else "$" .. GameConfig.compact(cost)
+				card.buy.BackgroundColor3 = if next_ then SHOP.Buy else SHOP.Locked
+				card.price.Text = "$" .. GameConfig.compact(cost)
 			end
 			card.fill.BackgroundTransparency = if owned or next_ then 0 else 0.25
 		end
@@ -492,29 +572,42 @@ end
 paint()
 
 --==============================================================================
--- THE BUY BUTTON SAYS SOMETHING, EVEN THOUGH IT CANNOT SELL ANYTHING
+-- THE BUY BUTTON
 --
--- There is still no ShopService, so none of these can take the money, and the
--- price line says SOON rather than pretending otherwise. What was missing was
--- any acknowledgement AT ALL: the button is drawn, it is thumb-sized, it is
--- obviously a control, and pressing it did nothing whatsoever -- which is
--- indistinguishable from the UI having frozen.
+-- Sends the verb and nothing else. Every refusal the client can see for itself
+-- -- wrong rung, not enough cash, already in flight -- is answered here with
+-- DENIED and no packet, because there is no reason to spend a remote call
+-- asking a question this side already knows the answer to.
 --
--- So it answers. DENIED on a tier that is out of reach or already owned, and the
--- ordinary click on the one that is genuinely next -- which is the honest
--- feedback available, and it stops claiming a purchase happened.
+-- NO SUCCESS SOUND ON CLICK. A click is a request. The purchase cue is fired by
+-- the server, at the plot, on the path where the money actually moved -- so a
+-- request that gets refused for a reason only the server can see does not sound
+-- like a purchase that happened.
 --
--- Wired AFTER paint() rather than inside the build loop on purpose: `plotTier`
--- and `cash` are declared below the loop, so a closure written up there would
--- resolve them as GLOBALS and silently read nil forever.
+-- Wired AFTER paint() rather than inside the build loop on purpose: `plotTier`,
+-- `cash` and `pending` are declared below the loop, so a closure written up
+-- there would resolve them as GLOBALS and silently read nil forever.
 --==============================================================================
 for tier = 2, #GameConfig.PlotTiers do
 	local card = plotCards[tier]
 	if card then
 		card.buy.Activated:Connect(function()
 			local cost = GameConfig.PlotTiers[tier].cost or 0
-			local reachable = plotTier == tier - 1 and heardFromServer and cash >= cost
-			SoundKit.play(if reachable then "CardClick" else "Denied")
+			local reachable = plotTier == tier - 1 and heardFromServer
+				and cash >= cost and pending == nil
+			if not reachable then
+				SoundKit.play("Denied")
+				return
+			end
+			if not gameEvent then
+				-- No remote means nothing can be bought; say so rather than
+				-- going quiet on BUYING forever.
+				SoundKit.play("Denied")
+				return
+			end
+			pending = tier
+			paint()
+			gameEvent:FireServer(GameConfig.PlotUpgradeAction)
 		end)
 	end
 end
@@ -550,6 +643,22 @@ local function receive(profile: any)
 	end
 	if not heardFromServer then
 		heardFromServer = true
+		changed = true
+	end
+	--==========================================================================
+	-- THE ANSWER, WHICHEVER WAY IT WENT
+	--
+	-- A successful upgrade arrives as a PlotTier change; a refusal arrives as
+	-- nothing at all, and this packet is simply the next routine one. Both clear
+	-- the pending click, because the alternative is a button that says BUYING
+	-- until the player closes the panel.
+	--
+	-- The success cue is deliberately NOT played here. The server already fired
+	-- one in 3D at the plot; a second one on the client would double it for
+	-- every player standing in their own garden, which is all of them.
+	--==========================================================================
+	if pending ~= nil then
+		pending = nil
 		changed = true
 	end
 	if changed then

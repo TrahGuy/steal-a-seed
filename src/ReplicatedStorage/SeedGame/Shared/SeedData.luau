@@ -798,6 +798,51 @@ function SeedData.RollTier(rng: Random, rarityBonus: number?): number
 	return 1
 end
 
+--==============================================================================
+-- HOW A CREATURE OF THIS SIZE GETS AROUND ITS GARDEN
+--
+-- Curves in the tier's `value`, for the same reason every other number here is:
+-- a 2 kg Nubkin and a 10,000 kg Bellchime are one creature at opposite ends of
+-- one scale, and the heavy one has to MOVE heavy without a second set of
+-- constants to keep in step.
+--
+--     value     reach    speed    pause      what it reads as
+--         1      22.0      2.6      2.2s     skittering across the plot
+--         2      20.2      2.3      2.3s     bustling
+--       110      12.1      1.2      2.8s     ambling
+--     1,000       8.8      0.8      3.2s     lumbering
+--    10,000       6.6      0.5      3.7s     a boulder shifting its weight
+--
+-- REACH replaced a 6-stud radius about the planting point. That radius was the
+-- whole problem: five creatures planted in a corner each pottered inside their
+-- own 6-stud disc and the corner stayed a pile. A reach is how far ONE leg may
+-- carry it, and the destination is chosen anywhere in the plot -- so a garden
+-- spreads over a few legs instead of never.
+--
+-- PAUSE IS LONGER THAN THE WALK, deliberately. A plot of twenty things all
+-- permanently in motion reads as an infestation; mostly-still with something
+-- always moving somewhere reads as a garden.
+--
+-- THE SERVER IS THE ONLY CALLER. Clients derive the speed they draw from the
+-- leg they were handed -- distance over duration -- so there is no second copy
+-- of these curves to fall out of step with this one.
+--==============================================================================
+local function tierValue(tier: number?): number
+	return SeedData.Tier(tier).value
+end
+
+function SeedData.WanderReach(tier: number?): number
+	return math.clamp(22.0 / (tierValue(tier) ^ 0.13), 6.0, 22.0)
+end
+
+function SeedData.WanderSpeed(tier: number?): number
+	return math.clamp(2.6 / (tierValue(tier) ^ 0.17), 0.25, 2.6)
+end
+
+function SeedData.WanderPause(tier: number?): number
+	return math.clamp(1.2 + tierValue(tier) ^ 0.10, 1.4, 4.5)
+end
+
 SeedData.SellSeconds = 30
 
 function SeedData.SellPrice(species: Species?, tier: number?): number

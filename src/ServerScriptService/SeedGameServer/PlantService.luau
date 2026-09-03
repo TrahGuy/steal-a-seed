@@ -60,6 +60,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
@@ -107,6 +108,25 @@ type Planted = {
 	facing: number,
 	model: Model?,
 	prompt: ProximityPrompt?,
+	--==========================================================================
+	-- WHERE IT IS WALKING, IN THE PLOT'S OWN FRAME
+	--
+	-- `offset` above is the COMMITTED position -- what a save writes down. These
+	-- are the leg in progress. `legTo` becomes `offset` the moment the creature
+	-- arrives, which is what "commit at waypoint completion" means: at most one
+	-- leg of error in a save, and no profile write per frame.
+	--
+	-- `legEnd` and `restUntil` are Workspace:GetServerTimeNow() stamps, the same
+	-- clock the client interpolates against.
+	--==========================================================================
+	legFrom: Vector3?,
+	legTo: Vector3?,
+	legStart: number?,
+	legEnd: number?,
+	restUntil: number?,
+	-- Seeded off the placement id, so a garden restored on join does not send
+	-- every creature off on the same tick.
+	rng: Random?,
 }
 
 -- plot -> placementId -> Planted
@@ -183,9 +203,47 @@ end
 --==============================================================================
 -- THE BED
 --==============================================================================
+--==============================================================================
+-- THE MAIN BED, WHICH IS ALSO THE PLOT'S FRAME OF REFERENCE
+--
+-- Every saved plant is stored as an X/Z offset in THIS part's object space, and
+-- has been since the first save. The main bed is centred on the plot and shares
+-- its rotation, so that frame is the PLOT's frame in all but name -- which is
+-- what lets a creature stand on the side bed, or on the grass between the two,
+-- without the save format changing by a single field. The offset simply stops
+-- being confined to the rectangle it is measured against.
+--
+-- That is why this is not "the bed you are standing on". It is the ruler.
+--==============================================================================
 local function soilOf(plot: Model): BasePart?
 	local soil = plot:FindFirstChild(PLOT.PlanterName)
 	return if soil and soil:IsA("BasePart") then soil else nil
+end
+
+--==============================================================================
+-- EVERY SURFACE YOU MAY PLANT ON, MAIN FIRST
+--
+-- From Level 3 a plot has two. Found by the Planter tag rather than by name, so
+-- a third bed would need no change here -- and MAIN FIRST, because that is the
+-- fallback for anything that has to pick one without being told.
+--
+-- ONE HELPER, and every caller uses it. The alternative -- placement looking up
+-- `Soil` and wandering looking up something else -- is how the two end up
+-- disagreeing about where the garden is.
+--==============================================================================
+local function bedsOf(plot: Model): { BasePart }
+	local out: { BasePart } = {}
+	local main = soilOf(plot)
+	if main then
+		table.insert(out, main)
+	end
+	for _, d in ipairs(plot:GetChildren()) do
+		if d:IsA("BasePart") and d ~= main
+			and CollectionService:HasTag(d, GameConfig.Tags.Planter) then
+			table.insert(out, d)
+		end
+	end
+	return out
 end
 
 local function plantsFolder(plot: Model): Instance
@@ -199,12 +257,25 @@ local function plantsFolder(plot: Model): Instance
 	return made
 end
 
--- How many things this plot may hold. Free placement removed the POSITIONS but
--- not the limit: a tier still buys you more plants, it just no longer tells you
--- where to put them. Same function GardenUI counts rows with.
+--==============================================================================
+-- HOW MANY THINGS THIS PLOT MAY HOLD
+--
+-- Off the plot's own Capacity attribute, which MapService stamps when it builds
+-- or resizes it. It used to be `rows * BedColumns` -- the invisible planting
+-- grid doubling as the gameplay limit -- which tied how DEEP a plot looks to
+-- how MANY plants it holds. Level 5 is seven rows for twenty plants precisely
+-- because those two had to come apart.
+--
+-- The fallback is the LEVEL's capacity, not a row count: a plot whose attribute
+-- has not replicated yet must not silently answer with a different number than
+-- the one the player was sold.
+--==============================================================================
 local function capacityOf(plot: Model): number
-	local rows = tonumber(plot:GetAttribute("Rows"))
-	return GameConfig.plotSlotsFor(rows or GameConfig.PlotTiers[1].rows)
+	local cap = tonumber(plot:GetAttribute("Capacity"))
+	if cap and cap == cap and cap > 0 then
+		return math.floor(cap)
+	end
+	return GameConfig.plotCapacityForTier(tonumber(plot:GetAttribute("Level")))
 end
 
 local function countIn(plot: Model): number
@@ -246,6 +317,109 @@ local function topOf(soil: BasePart, offset: Vector3): CFrame
 end
 
 --==============================================================================
+-- WHICH BED A CLICK LANDS ON, AND THE SERVER DECIDES
+--
+-- THE CLIENT NEVER NAMES A BED. It sends a world point, exactly as it always
+-- has, and the server works out which planting surface that point belongs to.
+-- A bed id crossing the wire would be a claim worth forging: name the side bed
+-- while clicking your own doorstep and you would be planting through a wall.
+--
+-- Nearest surface wins, measured to the clamped point on each -- so a click
+-- inside a bed picks that bed at distance zero, and a click on the grass
+-- between them picks whichever is genuinely closer. There is no tie to break
+-- that matters: the two beds do not touch.
+--==============================================================================
+local function pickBed(plot: Model, worldPos: Vector3): (BasePart?, Vector3?)
+	local best, bestOffset, bestD = nil, nil, math.huge
+	for _, bed in ipairs(bedsOf(plot)) do
+		local offset = clampToSoil(bed, worldPos)
+		local d = (topOf(bed, offset).Position - worldPos).Magnitude
+		if d < bestD then
+			best, bestOffset, bestD = bed, offset, d
+		end
+	end
+	return best, bestOffset
+end
+
+--==============================================================================
+-- ONE PLOT-LOCAL POINT, WHICHEVER BED IT CAME FROM
+--
+-- Converts a world point to the main bed's frame, which is where every saved
+-- plant lives. A plant on the side bed is stored the same way as one on the
+-- main bed -- as a distance across and along the PLOT -- so nothing downstream
+-- has to know which surface it stands on.
+--==============================================================================
+local function plotOffsetOf(plot: Model, worldPos: Vector3): Vector3?
+	local main = soilOf(plot)
+	if not main then
+		return nil
+	end
+	local here = main.CFrame:PointToObjectSpace(worldPos)
+	return Vector3.new(here.X, 0, here.Z)
+end
+
+--==============================================================================
+-- WHERE A CREATURE MAY WALK
+--
+-- Not the beds -- the whole fenced interior, both beds and the grass between
+-- them, because a garden where everything stands on the dirt and nothing ever
+-- crosses the lawn is a garden nobody is living in.
+--
+-- The shape is the plot's L: the main rectangle, plus the wing when the level
+-- has one. Expressed as two rectangles that SHARE an edge, so the union is
+-- connected and a creature can walk from one into the other without a corridor
+-- being described anywhere.
+--
+-- Kept clear of three things:
+--   * the fence, by FenceMargin, so a body never overlaps a board;
+--   * the gateway, by GateMargin, so nothing loiters in the doorway looking
+--     like it is about to leave the plot;
+--   * anything outside, by construction -- the region is bounded by the plot's
+--     own dimensions, so no candidate can name another player's ground.
+--
+-- Returns the clamped PLOT-LOCAL point. Every wander destination goes through
+-- here, which is what makes "stays inside the fence" a property of the code
+-- rather than of the numbers that happen to be fed to it.
+--==============================================================================
+local WANDER = PLANTING.Wander
+
+local function clampToPlotRegion(plot: Model, local_: Vector3): Vector3
+	local depth = tonumber(plot:GetAttribute("Depth"))
+		or GameConfig.plotDepthFor(GameConfig.plotRowsForTier(plot:GetAttribute("Level")))
+	local halfW = PLOT.Width * 0.5
+	local halfD = depth * 0.5
+	local m = WANDER.FenceMargin
+	local wingW = tonumber(plot:GetAttribute("WingWidth")) or 0
+	local wingZ0 = tonumber(plot:GetAttribute("WingFrontZ")) or 0
+
+	local x, z = local_.X, local_.Z
+	-- Inside the main rectangle, or inside the wing? Clamp into whichever is
+	-- nearer, then take the result -- a point in the shared edge lands in both
+	-- and either answer is the same point.
+	local mainX = math.clamp(x, -halfW + m, halfW - m)
+	local mainZ = math.clamp(z, -halfD + m, halfD - m)
+	local bx, bz = mainX, mainZ
+	if wingW > 0 then
+		local wingMinX, wingMaxX = halfW - m, halfW + wingW - m
+		local wx = math.clamp(x, wingMinX, wingMaxX)
+		local wz = math.clamp(z, wingZ0 + m, halfD - m)
+		local dMain = (Vector2.new(x, z) - Vector2.new(mainX, mainZ)).Magnitude
+		local dWing = (Vector2.new(x, z) - Vector2.new(wx, wz)).Magnitude
+		if dWing < dMain then
+			bx, bz = wx, wz
+		end
+	end
+
+	-- And out of the doorway. Only the mouth of the gate, not the whole front
+	-- edge: a creature may stand along the front fence, just not in the gap.
+	local gateHalf = PLOT.GateWidth * 0.5 + 2
+	if bz < -halfD + WANDER.GateMargin and math.abs(bx) < gateHalf then
+		bz = -halfD + WANDER.GateMargin
+	end
+	return Vector3.new(bx, 0, bz)
+end
+
+--==============================================================================
 -- WHICH WAY IT STANDS
 --
 -- Every plant used to face the plot gate, on purpose: a bed read as a crowd
@@ -277,8 +451,23 @@ end
 -- need render() to have run. One forward declaration breaks the knot, rather
 -- than shuffling three functions into an order that reads worse than it works.
 local attachPickup: (Planted) -> ()
+-- Same knot as attachPickup: render() destroys the model a leg was published
+-- on, and stopWander is defined with the rest of the wander further down.
+local stopWander: (Planted) -> ()
 
 local function render(entry: Planted)
+	--==========================================================================
+	-- A REBUILT MODEL HAS NO LEG
+	--
+	-- render() destroys and recreates the model, which takes the four wander
+	-- attributes with it -- so the leg they described has to go too, or the
+	-- entry would claim to be walking a route no client can see. The next tick
+	-- issues a fresh one.
+	--
+	-- This is also the hatch path: a pod becomes a creature here, and a creature
+	-- is the thing that is allowed to walk.
+	--==========================================================================
+	stopWander(entry)
 	if entry.model and entry.model.Parent then
 		entry.model:Destroy()
 	end
@@ -578,6 +767,10 @@ function hatch(player: Player, entry: Planted): boolean
 	log(string.format("%s hatched a %d tier %s.", player.Name, entry.tier,
 		entry.species.Name))
 
+	-- STOPS WALKING BEFORE IT LEAVES THE TABLE. The model outlives this call by
+	-- the length of a burst or a lift, and a model still carrying a leg is a
+	-- model every client keeps walking toward a destination nobody owns.
+	stopWander(entry)
 	byPlot[entry.id] = nil
 	local model = entry.model
 	entry.model = nil
@@ -624,6 +817,10 @@ function pickUp(player: Player, entry: Planted): boolean
 		return false
 	end
 
+	-- STOPS WALKING BEFORE IT LEAVES THE TABLE. The model outlives this call by
+	-- the length of a burst or a lift, and a model still carrying a leg is a
+	-- model every client keeps walking toward a destination nobody owns.
+	stopWander(entry)
 	byPlot[entry.id] = nil
 	local model = entry.model
 	entry.model = nil
@@ -716,9 +913,31 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 		1, SeedData.TierCount)
 	local hatched = tool:GetAttribute("Hatched") == true
 
-	local offset = clampToSoil(soil, worldPos)
-	if (topOf(soil, offset).Position - root.Position).Magnitude > PLANT_RANGE then
+	--==========================================================================
+	-- WHICH BED, DECIDED HERE AND NOWHERE ELSE
+	--
+	-- The click is still a claim and still gets clamped rather than refused.
+	-- What is new is that there may be two surfaces to clamp against, and the
+	-- SERVER picks: nearest planting surface to the point the client sent.
+	--
+	-- The reach test then runs on the clamped point, so "I clicked a thousand
+	-- studs that way" becomes a point on the rim of the nearer bed and fails
+	-- the distance check honestly -- including the case where the forged point
+	-- names a bed on somebody else's plot, because `plot` was resolved from the
+	-- SENDER before any of this and the beds are read off that plot only.
+	--==========================================================================
+	local bed, bedOffset = pickBed(plot, worldPos)
+	if not (bed and bedOffset) then
+		return refuse(player, "NO_SOIL")
+	end
+	local landing = topOf(bed, bedOffset).Position
+	if (landing - root.Position).Magnitude > PLANT_RANGE then
 		return refuse(player, "OUT_OF_RANGE")
+	end
+	-- Stored in the PLOT's frame, whichever bed it landed on.
+	local offset = plotOffsetOf(plot, landing)
+	if not offset then
+		return refuse(player, "NO_SOIL")
 	end
 
 	local byPlot = growing[plot]
@@ -897,7 +1116,21 @@ local function restore(player: Player, plot: Model)
 			--==============================================================
 			local facing = if row then tonumber(row.Facing) else nil
 
-			if species and at and x and z and stage and restored < cap then
+			--==============================================================
+			-- EVERY VALID ROW COMES BACK, EVEN OVER CAPACITY
+			--
+			-- This used to read `and restored < cap`, and persist() below then
+			-- wrote the shortened list back to the profile -- so a garden that
+			-- ended up over its plot's capacity lost the overflow PERMANENTLY,
+			-- on the next join, with no message and nothing to undo.
+			--
+			-- A player can be over capacity honestly: the ladder was re-cut and
+			-- an old save legitimately holds more than its migrated level. The
+			-- limit belongs on PLACING a new plant, which is where it now lives
+			-- and nowhere else. Restoration is not the place to enforce it --
+			-- the plants already exist and they are already theirs.
+			--==============================================================
+			if species and at and x and z and stage then
 				local id = nextId[plot] + 1
 				nextId[plot] = id
 				local entry: Planted = {
@@ -905,7 +1138,15 @@ local function restore(player: Player, plot: Model)
 					id = id,
 					species = species,
 					tier = tier,
-					offset = clampToSoil(soil, (soil.CFrame * CFrame.new(x, 0, z)).Position),
+					-- Clamped to the PLOT, not to the main bed. A creature that
+					-- wandered onto the side bed or across the grass saved a
+					-- perfectly legal offset that the main bed's rectangle
+					-- would drag it back out of.
+					--
+					-- An old save has no idea any of this happened: its X/Z are
+					-- in this same frame and land exactly where they always
+					-- did, on the main bed.
+					offset = clampToPlotRegion(plot, Vector3.new(x, 0, z)),
 					plantedAt = at,
 					stage = stage,
 					facing = facing or facingFor(id),
@@ -923,14 +1164,406 @@ local function restore(player: Player, plot: Model)
 			end
 		end
 		if restored > 0 or dropped > 0 then
-			log(string.format("%s: restored %d plant(s)%s.", player.Name, restored,
-				if dropped > 0 then string.format(", dropped %d that no longer fit", dropped)
-				else ""))
+			-- `dropped` now only ever counts rows that were not valid plants at
+			-- all -- a species that no longer exists, a missing timestamp. It no
+			-- longer counts anything that merely did not fit.
+			local over = restored - cap
+			log(string.format("%s: restored %d plant(s)%s%s.", player.Name, restored,
+				if dropped > 0 then string.format(", %d unreadable row(s) skipped", dropped) else "",
+				if over > 0 then string.format(" -- %d over the level's capacity of %d, kept",
+					over, cap) else ""))
 		end
 		-- Write back, so anything dropped stops being carried forever and any
 		-- migrated position is saved in the new shape.
 		persist(plot)
 	end)
+end
+
+--==============================================================================
+-- WANDERING
+--
+-- A GROWN creature walks its owner's plot. A POD DOES NOT MOVE -- it sits where
+-- it was planted until somebody hatches it, because a seed that strolled off is
+-- a seed you cannot find again.
+--
+-- The server owns every decision: whether a plant may move, where it is, where
+-- it is going, when it set off and when it arrives. It publishes those as four
+-- attributes and nothing else crosses the wire -- no CFrames, no per-frame
+-- anything. Clients interpolate the same four numbers against the same server
+-- clock, so a creature is in the same place on every screen. The version this
+-- replaced rolled dice on each client, which was cheap and disagreed with
+-- itself the moment two people looked at one garden.
+--
+-- Cost: four attribute writes per creature per leg, and a leg lasts five to
+-- twelve seconds. Twenty creatures on a full plot is under two writes a second.
+--==============================================================================
+--==============================================================================
+-- WHERE A CREATURE IS RIGHT NOW, MID-STRIDE
+--
+-- `offset` is the last COMMITTED position -- the start of the current leg, or
+-- wherever it last arrived. That is the right thing to save and the wrong thing
+-- to answer with when something needs to know where the creature is standing.
+--
+-- Eased with the SAME smoothstep the client draws with. Two different curves
+-- would put the server's idea of the creature and the player's picture of it in
+-- different places, which is the one thing a shared clock was supposed to stop.
+--==============================================================================
+local function currentOffset(entry: Planted, srvNow: number): Vector3
+	local from, to = entry.legFrom, entry.legTo
+	local t0, t1 = entry.legStart, entry.legEnd
+	if not (from and to and t0 and t1) or t1 <= t0 then
+		return entry.offset
+	end
+	local raw = math.clamp((srvNow - t0) / (t1 - t0), 0, 1)
+	local eased = raw * raw * (3 - 2 * raw)
+	return from:Lerp(to, eased)
+end
+
+local function wanderWorld(plot: Model, offset: Vector3): Vector3?
+	local main = soilOf(plot)
+	if not main then
+		return nil
+	end
+	return topOf(main, offset).Position
+end
+
+--==============================================================================
+-- PUBLISH A LEG
+--
+-- The four facts, and the only thing that ever crosses the wire. World points,
+-- so a client needs no plot frame to draw the walk.
+--==============================================================================
+local function publishLeg(entry: Planted, fromW: Vector3, toW: Vector3,
+	t0: number, t1: number)
+	local model = entry.model
+	if not (model and model.Parent) then
+		return
+	end
+	model:SetAttribute("WanderFrom", fromW)
+	model:SetAttribute("WanderTo", toW)
+	model:SetAttribute("WanderT0", t0)
+	model:SetAttribute("WanderT1", t1)
+end
+
+--==============================================================================
+-- PARK IT WHERE IT NOW STANDS
+--
+-- A degenerate leg -- nowhere to nowhere, already finished. Published after a
+-- rebuild instead of simply clearing the attributes, because clearing them only
+-- tells a client to STOP; it does not tell it where the server thinks the
+-- creature is.
+--
+-- That gap was visible. On a shrink the server pulls a creature that no longer
+-- fits back onto the smaller plot, while every client carries on drawing it at
+-- the old spot until the next leg arrives half a second later -- and then it
+-- jumps. Measured before this: 17.3 studs on the server in the rebuild frame,
+-- and up to 72 studs of client-side disagreement across the same upgrade.
+--
+-- Parking closes it in the same frame: the record and the picture move together.
+--==============================================================================
+local function parkAt(entry: Planted, atW: Vector3, srvNow: number)
+	entry.legFrom = nil
+	entry.legTo = nil
+	entry.legStart = nil
+	entry.legEnd = nil
+	entry.restUntil = srvNow
+	publishLeg(entry, atW, atW, srvNow - 0.1, srvNow)
+end
+
+--==============================================================================
+-- PICK SOMEWHERE, PREFERRING WHEREVER NOBODY ELSE IS
+--
+-- Several candidates, each a leg's reach from where the creature stands, each
+-- clamped into the plot region -- so an out-of-bounds candidate becomes an
+-- in-bounds one rather than being thrown away, and a creature in a corner still
+-- gets a full set of choices.
+--
+-- Scored on DISTANCE FROM EVERYONE ELSE, counting both where other plants are
+-- and where they have already said they are going. Reserved destinations matter
+-- as much as current positions: without them, five creatures deciding in the
+-- same tick all pick the same empty corner and arrive as the pile they were
+-- supposed to stop being.
+--
+-- The separation target is BOUNDED and logical, not physical. A Colossal is
+-- currently hundreds of studs tall -- scoring against real sizes would make
+-- every candidate illegal at once and the whole thing would deadlock. This
+-- promises visible distribution, not non-overlap; the creatures do not collide
+-- and at the top of the size curve they never will.
+--==============================================================================
+local function chooseDestination(plot: Model, byPlot: { [number]: Planted },
+	entry: Planted, rng: Random): Vector3
+	local reach = SeedData.WanderReach(entry.tier)
+	local here = entry.offset
+	local best, bestScore = nil, -math.huge
+
+	for _ = 1, WANDER.Candidates do
+		-- Uniform over the disc: sqrt is what stops every candidate bunching
+		-- near the middle of the reach.
+		local a = rng:NextNumber(0, math.pi * 2)
+		local r = WANDER.MinLegStuds
+			+ (reach - WANDER.MinLegStuds) * math.sqrt(rng:NextNumber())
+		local cand = clampToPlotRegion(plot,
+			Vector3.new(here.X + math.cos(a) * r, 0, here.Z + math.sin(a) * r))
+
+		-- How lonely is it there? Nearest other plant, current or intended.
+		local nearest = math.huge
+		for id, other in pairs(byPlot) do
+			if id ~= entry.id then
+				local d = (Vector2.new(cand.X, cand.Z)
+					- Vector2.new(other.offset.X, other.offset.Z)).Magnitude
+				if d < nearest then nearest = d end
+				local claim = other.legTo
+				if claim then
+					local dc = (Vector2.new(cand.X, cand.Z)
+						- Vector2.new(claim.X, claim.Z)).Magnitude
+					if dc < nearest then nearest = dc end
+				end
+			end
+		end
+
+		-- Past the separation target there is nothing more to gain, so a
+		-- candidate 40 studs from anybody does not beat one at 15 purely for
+		-- being further out at the fence. Ties break on the trip being worth
+		-- taking at all.
+		local score = math.min(nearest, WANDER.SeparationStuds)
+			+ (cand - here).Magnitude * 0.05
+		if score > bestScore then
+			best, bestScore = cand, score
+		end
+	end
+	return best or here
+end
+
+--==============================================================================
+-- ONE STEP OF THE WANDER, FOR ONE PLOT
+--
+-- Called on the service's existing tick. Between legs this does nothing at all
+-- for a plant: it looks at one number and moves on.
+--==============================================================================
+local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: number)
+	local owner = PlotService.OwnerOf(plot)
+	if not owner then
+		return
+	end
+	for id, entry in pairs(byPlot) do
+		local model = entry.model
+		if entry.stage == CreatureModel.STAGE_GROWN and model and model.Parent then
+			local rng = entry.rng
+			if not rng then
+				-- Seeded off the placement id so a plot restored on join does
+				-- not set every creature off on the same tick.
+				rng = Random.new(entry.id * 7919 + 13)
+				entry.rng = rng
+			end
+
+			local arriving = entry.legEnd and srvNow >= entry.legEnd
+			if arriving then
+				--==========================================================
+				-- ARRIVED: COMMIT, THEN REST
+				--
+				-- This is the only place the saved position moves. A creature
+				-- mid-stride has no position worth writing down, and a profile
+				-- write per frame is exactly what this design exists to avoid.
+				--==========================================================
+				entry.offset = entry.legTo or entry.offset
+				entry.legEnd = nil
+				entry.restUntil = srvNow
+					+ SeedData.WanderPause(entry.tier) * rng:NextNumber(0.7, 1.7)
+				persist(plot)
+			end
+
+			if not entry.legEnd and srvNow >= (entry.restUntil or 0) then
+				local to = chooseDestination(plot, byPlot, entry, rng)
+				local fromW = wanderWorld(plot, entry.offset)
+				local toW = wanderWorld(plot, to)
+				if fromW and toW then
+					local dist = (toW - fromW).Magnitude
+					local speed = SeedData.WanderSpeed(entry.tier)
+					local t0 = srvNow
+					local t1 = t0 + math.max(dist / math.max(speed, 0.05), 0.4)
+					entry.legFrom = entry.offset
+					entry.legTo = to
+					entry.legStart = t0
+					entry.legEnd = t1
+
+					--==================================================
+					-- THE ONLY THING THAT CROSSES THE WIRE
+					--
+					-- World points, so a client needs no plot frame to draw
+					-- the walk -- and re-stamped on a resize, because a
+					-- rebuilt plot moves the soil these were measured off.
+					--==================================================
+					publishLeg(entry, fromW, toW, t0, t1)
+				end
+			end
+		end
+	end
+end
+
+--==============================================================================
+-- STOP WALKING, NOW
+--
+-- Picked up, put away, sold, released, destroyed. Clears the leg AND the
+-- attributes, so a client that still holds the model parks it instead of
+-- interpolating toward a destination nothing is going to honour.
+--==============================================================================
+function stopWander(entry: Planted)
+	entry.legFrom = nil
+	entry.legTo = nil
+	entry.legStart = nil
+	entry.legEnd = nil
+	entry.restUntil = nil
+	local model = entry.model
+	if model and model.Parent then
+		model:SetAttribute("WanderFrom", nil)
+		model:SetAttribute("WanderTo", nil)
+		model:SetAttribute("WanderT0", nil)
+		model:SetAttribute("WanderT1", nil)
+	end
+end
+
+--==============================================================================
+-- MOVING THE SOIL OUT FROM UNDER A LIVING GARDEN
+--
+-- A plot upgrade rebuilds the bed further from the hub, so the soil part is
+-- destroyed and a new one appears at a new CFrame. Every entry's `offset` is
+-- SOIL-LOCAL, so doing nothing would teleport the whole garden outward by half
+-- the depth change -- the plants would appear to slide backwards as the fence
+-- grew past them.
+--
+-- So the transaction captures each plant's WORLD point first, and rebases the
+-- offsets against the new soil afterwards. The models are not recreated and not
+-- moved: they are already standing in the right place, and the rebase is only
+-- teaching the record where that place is in the new frame.
+--
+-- THE SERVER'S OFFSETS ARE THE AUTHORITY, never a client animation CFrame.
+-- PlantSway pivots these models continuously; reading a live pivot would
+-- capture a plant mid-stride and bake its walk into the save.
+--==============================================================================
+-- Held only between OnResizing and OnResized, which are fired one after the
+-- other in the same frame. A plot released mid-resize would leave a stale entry,
+-- so OnReleased clears it too.
+local carried: { [Model]: { [number]: Vector3 } } = {}
+
+function PlantService.CaptureWorld(plot: Model): { [number]: Vector3 }
+	local out: { [number]: Vector3 } = {}
+	local byPlot = growing[plot]
+	local soil = soilOf(plot)
+	if not (byPlot and soil) then
+		return out
+	end
+	--==========================================================================
+	-- A WALKING CREATURE IS COMMITTED WHERE IT STANDS, NOT WHERE IT SET OFF
+	--
+	-- Without this a resize captured the START of whatever leg was in progress,
+	-- so a creature halfway across its plot was rebased as though it had never
+	-- left -- and the client, still interpolating its own copy of the leg, drew
+	-- it somewhere else entirely. Measured: after a Level 5 -> 1 shrink the
+	-- garden did not visibly move at all, because the records had been dragged
+	-- into the small bed while every model carried on walking the old route.
+	--
+	-- Committing first makes the capture the truth, and stopWander below makes
+	-- the client agree with it.
+	--==========================================================================
+	local srvNow = Workspace:GetServerTimeNow()
+	for id, entry in pairs(byPlot) do
+		entry.offset = currentOffset(entry, srvNow)
+		out[id] = topOf(soil, entry.offset).Position
+	end
+	return out
+end
+
+--==============================================================================
+-- PUT THEM BACK WHERE THEY WERE, IN THE NEW FRAME
+--
+-- On a GROW -- which is every upgrade, and the only thing the shop can do --
+-- the clamp is a no-op and not one model moves. The plants are already standing
+-- in the right place; all that changes is the frame their offsets are measured
+-- in, so the record follows the soil and the world is untouched.
+--
+-- A SHRINK is the other direction, and it is the one that needs care. The new
+-- bed can be shorter than where a plant is standing, and then the clamp pulls
+-- its OFFSET onto the soil while the MODEL stays out in the field. Measured on
+-- a live L5 -> L1: two of five plants ended up 23 studs behind the new back
+-- edge, record and model disagreeing, and the plant would have jumped forward
+-- on the owner's next login with nothing to explain it.
+--
+-- So a plant the clamp actually moved is moved for real. Its facing is kept --
+-- a garden somebody arranged should not spin because the bed changed size --
+-- and only the position is rewritten.
+--
+-- Nothing in normal play shrinks an occupied plot: the shop only sells upward,
+-- and a released plot is emptied before it is reset. This is for the debug
+-- action, for a rolled-back purchase, and for whatever wants to shrink a bed
+-- later without having to rediscover why it broke.
+--==============================================================================
+function PlantService.RebaseTo(plot: Model, captured: { [number]: Vector3 }): number
+	local byPlot = growing[plot]
+	local soil = soilOf(plot)
+	if not (byPlot and soil) then
+		return 0
+	end
+	local rebased, relocated = 0, 0
+	for id, world in pairs(captured) do
+		local entry = byPlot[id]
+		if entry then
+			entry.offset = clampToPlotRegion(plot,
+				plotOffsetOf(plot, world) or Vector3.zero)
+			rebased += 1
+
+			local target = topOf(soil, entry.offset).Position
+			if (target - world).Magnitude > 0.01 then
+				local model = entry.model
+				if model and model.Parent then
+					-- Position only. The rotation it is standing at already
+					-- carries the plot's bearing and the plant's own facing.
+					model:PivotTo(CFrame.new(target) * model:GetPivot().Rotation)
+					relocated += 1
+				end
+			end
+		end
+	end
+	--==========================================================================
+	-- NO LEG SURVIVES A REBUILD, AND EVERY CREATURE IS TOLD WHERE IT IS
+	--
+	-- The published leg is a pair of WORLD points and the plot has just moved
+	-- underneath them, so none of them may stand. But clearing alone leaves each
+	-- client holding its own last picture, which after a shrink is a creature
+	-- standing somewhere its plot no longer reaches.
+	--
+	-- So every entry is PARKED at its rebased position instead. One publish per
+	-- creature per rebuild -- the same cost as clearing -- and the picture and
+	-- the record agree in the frame the plot changed rather than half a second
+	-- later.
+	--==========================================================================
+	local parkNow = Workspace:GetServerTimeNow()
+	for _, entry in pairs(byPlot) do
+		local atW = wanderWorld(plot, entry.offset)
+		if atW then
+			parkAt(entry, atW, parkNow)
+		else
+			stopWander(entry)
+		end
+	end
+	if rebased > 0 then
+		persist(plot)
+	end
+	if relocated > 0 then
+		log(string.format("%s shrank under %d plant(s); they were moved onto the new bed.",
+			plot.Name, relocated))
+	end
+	return rebased
+end
+
+-- What the plot may hold, and what is standing in it. Public because
+-- PlotUpgradeService and the HUD both have to answer "is this full" and neither
+-- may re-derive it.
+function PlantService.CapacityOf(plot: Model): number
+	return capacityOf(plot)
+end
+
+function PlantService.CountIn(plot: Model): number
+	return countIn(plot)
 end
 
 --==============================================================================
@@ -962,6 +1595,35 @@ function PlantService.Start()
 		-- is needed here is to stop tracking what was in it.
 		growing[plot] = nil
 		nextId[plot] = nil
+		carried[plot] = nil
+	end)
+
+	--==========================================================================
+	-- AN UPGRADE MOVES THE SOIL OUT FROM UNDER THE GARDEN
+	--
+	-- Plant offsets are stored SOIL-LOCAL, and a bigger plot puts its soil at a
+	-- new CFrame further from the hub. Left alone, every plant in the bed would
+	-- appear to slide backwards by half the depth change the instant the player
+	-- bought the upgrade -- the plot growing out from under them.
+	--
+	-- So the world points are taken while the old soil still stands, and the
+	-- offsets are rebased once the new one is in place. The plant MODELS are
+	-- never touched: they are already standing in the right spot in the world,
+	-- and what changes is only the frame the record measures them in.
+	--
+	-- Registered as PlotService listeners rather than called from the upgrade
+	-- service, so that EVERY resize is covered -- including any future one that
+	-- has nothing to do with the shop.
+	--==========================================================================
+	PlotService.OnResizing(function(_player, plot)
+		carried[plot] = PlantService.CaptureWorld(plot)
+	end)
+	PlotService.OnResized(function(_player, plot)
+		local snapshot = carried[plot]
+		carried[plot] = nil
+		if snapshot then
+			PlantService.RebaseTo(plot, snapshot)
+		end
 	end)
 
 	--==========================================================================
@@ -1029,6 +1691,7 @@ function PlantService.Start()
 		while running do
 			task.wait(TICK)
 			local now = os.time()
+			local srvNow = Workspace:GetServerTimeNow()
 			for plot, byPlot in pairs(growing) do
 				if not plot.Parent then
 					growing[plot] = nil
@@ -1039,6 +1702,8 @@ function PlantService.Start()
 							attachHatchPrompt(entry)
 						end
 					end
+					-- The garden takes a step. Pods are skipped inside.
+					stepWander(plot, byPlot, srvNow)
 				end
 			end
 		end

@@ -85,6 +85,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -141,37 +142,27 @@ local READY_SCALE = 0.35
 -- reads as a glitch, not a stroll. The soil clamp is the hard limit; this is
 -- the one that makes it look deliberate.
 --==============================================================================
--- THESE TAKE A TIER AND LOOK UP ITS VALUE. Every curve here was fitted
--- against a weight spanning 1 .. 10,000, and a tier index spans 1 .. 7 --
--- feeding one straight in flattens the whole set. wanderRadius alone would
--- go from a 6.0 .. 1.2 spread to 6.0 .. 4.7, and a Colossal would potter
--- about like a Tiny. The tier's `value` is the weight it replaced, so the
--- curves keep the shape they were tuned to.
+-- THE CURVES ARE NOT HERE ANY MORE, AND THAT IS THE POINT
+--
+-- Reach, speed and pause live in SeedData and are read by the SERVER alone. A
+-- client that kept its own copy would be a second opinion about how fast a
+-- Bellchime walks, and the two would drift the first time one was tuned.
+--
+-- What this file needs is the speed of the leg it was actually handed, which is
+-- distance over duration -- the real number, not a curve's guess at it. That is
+-- also what keeps the feet from sliding: the gait is driven by the motion
+-- rather than the motion being assumed from the gait.
+--
+-- tierValue stays, because the LEAN uses it too and the lean has nothing to do
+-- with walking: how far a plant sways in the breeze is a fact about its mass,
+-- not about where the server is sending it.
 local function tierValue(tier: number): number
 	return SeedData.Tier(tier).value
-end
-
-local function wanderRadius(tier: number): number
-	return math.clamp(6.0 / (tierValue(tier) ^ 0.13), 1.2, 6.0)
-end
-
-local function wanderSpeed(tier: number): number
-	return math.clamp(2.6 / (tierValue(tier) ^ 0.17), 0.25, 2.6)
-end
-
-local function wanderPause(tier: number): number
-	return math.clamp(1.2 + tierValue(tier) ^ 0.10, 1.4, 4.5)
 end
 
 -- How far the leaves swing as it steps, and how far the body bobs, as a
 -- fraction of the plant's own height. Both are scaled by how far through a leg
 -- it is, so they settle to nothing when it stops rather than snapping.
--- The same margin PlantService pulls a click inside by, so a plant may walk to
--- exactly the places you are allowed to plant one and no further. Two rules
--- that disagreed about the edge of the bed would show up as a plant standing
--- half in the frame.
-local EDGE_MARGIN = GameConfig.Plant.EdgeMarginStuds
-
 --==============================================================================
 -- WHAT THE EYES ARE LOOKING AT
 --
@@ -338,26 +329,28 @@ type Sway = {
 	-- Nil on a pod: an egg does not stroll, and the fields would only be dead
 	-- weight in a table there are seventy-two of.
 	--==========================================================================
-	-- The bed it may not leave, and its CFrame at the moment this was measured.
-	soil: BasePart?,
-	-- Where it was PLANTED, in the soil's object space. Legs are chosen around
-	-- this, never around wherever it happens to have wandered to -- otherwise a
-	-- random walk drifts and after ten minutes the bed has emptied into a corner.
-	homeLocal: Vector3?,
-	radius: number,
-	walkSpeed: number,
-	pause: number,
-	-- Per-plant, seeded off PlacementId, so two plants never take the same walk
-	-- and a rejoin takes the same one again.
-	rng: Random?,
-	-- The leg in progress, in world space.
+	-- THE LEG THE SERVER PUBLISHED, IN WORLD SPACE
+	--
+	-- Read off four attributes and re-read whenever they change. Nothing here is
+	-- chosen locally: the destination, the departure and the arrival are all the
+	-- server's, so every client draws the same creature in the same place.
+	--
+	-- The old fields -- soil, homeLocal, radius, walkSpeed, pause, rng, nextLeg
+	-- -- are gone with the local random walk they served. That walk kept each
+	-- plant inside a 6-stud disc around where it was PLANTED, which is exactly
+	-- why a bed planted in one corner stayed a pile in that corner.
 	from: Vector3?,
 	to: Vector3?,
 	legStart: number,
 	legEnd: number,
-	-- When the next leg begins. legEnd .. nextLeg is the pause.
-	nextLeg: number,
-	-- How often a step lands, derived from speed and size.
+	-- Measured off the leg: distance / duration. Zero while resting.
+	legSpeed: number,
+	-- COSMETIC ONLY, and local on purpose: which way it happens to be looking
+	-- between fixations. Nothing gameplay-visible hangs off it, so it does not
+	-- need to agree between clients the way the walk does.
+	rng: Random?,
+	-- How often a step lands. Recomputed per leg from legSpeed and size, so a
+	-- creature carried across a long leg strides faster than one shuffling.
 	strideHz: number,
 	bob: number,
 	-- The two Leaf parts and where they sit relative to the model's pivot, so
@@ -403,6 +396,19 @@ local index: { [Model]: number } = {}
 
 local connections: { RBXScriptConnection } = {}
 local clock = 0
+--==============================================================================
+-- THE SERVER'S CLOCK, SAMPLED ONCE A FRAME
+--
+-- `clock` above is this client's own accumulator and is fine for breathing,
+-- blinking and looking around -- none of which anybody else can check. The WALK
+-- is different: two players watching one garden have to see one creature, so
+-- every leg is interpolated against a clock both of them share.
+--
+-- Sampled once per Heartbeat rather than per plant. GetServerTimeNow is cheap
+-- but it is not free, and twenty plants asking it twenty times for the same
+-- answer is twenty times the work for none of the benefit.
+--==============================================================================
+local serverNow = 0
 local cursor = 1
 
 --==============================================================================
@@ -534,21 +540,16 @@ local function remember(instance: Instance)
 			hatching = model:GetAttribute("Hatching") == true,
 			watches = {},
 
-			soil = nil,
-			homeLocal = nil,
-			radius = wanderRadius(tier),
-			walkSpeed = wanderSpeed(tier),
-			pause = wanderPause(tier),
-			rng = nil,
 			from = nil,
 			to = nil,
 			legStart = 0,
 			legEnd = 0,
-			nextLeg = 0,
+			legSpeed = 0,
+			rng = Random.new((tonumber(model:GetAttribute("PlacementId")) or 1) * 7919),
 			-- A step lands roughly every time the plant covers a third of its
-			-- own height. Small things patter, big things thud.
-			strideHz = math.clamp(
-				wanderSpeed(tier) / math.max(headHeight * 0.35, 0.25), 0.5, 3.2),
+			-- own height. Small things patter, big things thud. Recomputed each
+			-- leg once the leg's real speed is known.
+			strideHz = 1,
 			bob = math.min(headHeight * BOB_FRACTION, BOB_CEILING),
 			leaves = {},
 			legs = {},
@@ -573,22 +574,12 @@ local function remember(instance: Instance)
 		-- failure, wandering with no bounds is not.
 		--==============================================================
 		if not entry.pod then
-			local plants = model.Parent
-			local plot = if plants then plants.Parent else nil
-			local soil = if plot
-				then plot:FindFirstChild(GameConfig.Plot.PlanterName)
-				else nil
-			if soil and soil:IsA("BasePart") then
-				entry.soil = soil
-				entry.homeLocal = soil.CFrame:PointToObjectSpace(anchor.Position)
-				entry.rng = Random.new(
-					(tonumber(model:GetAttribute("PlacementId")) or 1) * 7919)
-				entry.from = anchor.Position
-				entry.to = anchor.Position
-				-- Staggered first step, so a garden restored on join does not
-				-- set off as one.
-				entry.nextLeg = (entry.rng :: Random):NextNumber(0, entry.pause)
-			end
+			-- Where it is standing until the server says otherwise. No bed
+			-- lookup: the plot's shape is the server's problem, and a client
+			-- that thought it knew the bounds would be a second opinion about
+			-- them.
+			entry.from = anchor.Position
+			entry.to = anchor.Position
 
 			local pivot = model:GetPivot()
 			local inverse = pivot:Inverse()
@@ -986,47 +977,82 @@ local function apply(entry: Sway, now: number)
 	-- The anchor is a pure translation at the base, so its axes are the world's:
 	-- X and Z both tip, nothing twists.
 	--==========================================================================
-	-- THE LEG
+	-- THE LEG, WHICH THIS FILE DOES NOT CHOOSE
 	--
-	-- Targets are picked around HOME, never around where it currently stands.
-	-- A random walk that steps from wherever it is drifts, and after ten minutes
-	-- an entire bed has piled into one corner -- which is both wrong and
-	-- impossible to tell from a bug. Anchoring every leg to the planted spot
-	-- makes the whole thing a bounded jitter that always comes back.
+	-- Four attributes, published by PlantService when a leg begins: where from,
+	-- where to, and the two server timestamps. Everything below interpolates
+	-- them. No destination is picked here, no bounds are known here, and no
+	-- randomness enters here -- which is what makes a creature appear in the
+	-- same place on every screen.
 	--
-	-- Nothing here raycasts, and nothing here can leave the bed: the point is
-	-- chosen in the SOIL's object space and clamped to its rectangle before it
-	-- is ever turned into a world position.
+	-- ONE ATTRIBUTE READ PER VISIT in the common case. apply() runs on every
+	-- plant on every frame, so the arrival stamp is the only thing checked; the
+	-- other three are read on the frame it changes, which is once a leg.
+	--
+	-- WHEN THE ATTRIBUTES VANISH the plant was picked up, sold or re-rendered.
+	-- It parks exactly where it stands rather than finishing a journey nobody
+	-- owns any more.
 	--==========================================================================
 	local base = entry.anchor
 	local moveT = 0
-	local soil, rng, homeLocal = entry.soil, entry.rng, entry.homeLocal
 	local from, to = entry.from, entry.to
-	if soil and rng and homeLocal and from and to then
-		if now >= entry.nextLeg then
-			entry.from = to
-			from = to
-			local halfX = math.max(soil.Size.X * 0.5 - EDGE_MARGIN, 0)
-			local halfZ = math.max(soil.Size.Z * 0.5 - EDGE_MARGIN, 0)
-			-- Uniform over the DISC rather than over the radius -- sqrt is what
-			-- stops every target clustering near the middle.
-			local a = rng:NextNumber(0, math.pi * 2)
-			local r = entry.radius * math.sqrt(rng:NextNumber())
-			local lx = math.clamp(homeLocal.X + math.cos(a) * r, -halfX, halfX)
-			local lz = math.clamp(homeLocal.Z + math.sin(a) * r, -halfZ, halfZ)
-			-- Y is the home's own Y, so it stays exactly on the soil surface
-			-- whatever the plot's rotation. No floor test, because there is no
-			-- floor to test -- the bed is flat and this never leaves it.
-			to = soil.CFrame:PointToWorldSpace(Vector3.new(lx, homeLocal.Y, lz))
-			entry.to = to
-			local dist = (to - from).Magnitude
-			entry.legStart = now
-			entry.legEnd = now + math.max(dist / entry.walkSpeed, 0.05)
-			entry.nextLeg = entry.legEnd + entry.pause * rng:NextNumber(0.6, 1.6)
+	if not entry.pod then
+		local model = entry.model
+		local t1 = model:GetAttribute("WanderT1")
+		if type(t1) == "number" and t1 ~= entry.legEnd then
+			local a = model:GetAttribute("WanderFrom")
+			local b = model:GetAttribute("WanderTo")
+			local t0 = model:GetAttribute("WanderT0")
+			if typeof(a) == "Vector3" and typeof(b) == "Vector3"
+				and type(t0) == "number" and t1 > t0 then
+				entry.from, entry.to = a, b
+				entry.legStart, entry.legEnd = t0, t1
+				from, to = a, b
+				--==========================================================
+				-- THE GAIT COMES OFF THE LEG, NOT OFF A CURVE
+				--
+				-- Distance over duration is the speed this creature is
+				-- ACTUALLY travelling, so the feet land at the rate the body
+				-- moves. A stride rate assumed from a size curve is how feet
+				-- come to slide: the two only agree while the assumption
+				-- holds, and it stops holding the moment the server paces a
+				-- leg differently.
+				--==========================================================
+				entry.legSpeed = (b - a).Magnitude / math.max(t1 - t0, 1e-3)
+				entry.strideHz = math.clamp(
+					entry.legSpeed / math.max(entry.headHeight * 0.35, 0.25), 0.5, 3.2)
+			end
+		elseif t1 == nil and entry.legEnd ~= 0 then
+			--==============================================================
+			-- STOPPED MID-STRIDE: FREEZE HERE, DO NOT FINISH THE JOURNEY
+			--
+			-- Snapping to the destination would teleport a creature the length
+			-- of its leg the instant it was picked up, or the instant its plot
+			-- was rebuilt underneath it. The server commits the same
+			-- interpolated point at the same moment, so both sides stop in the
+			-- same place and the next leg starts from there.
+			--==============================================================
+			local a, b = entry.from, entry.to
+			local span = entry.legEnd - entry.legStart
+			local here = b
+			if a and b and span > 0 then
+				local raw = math.clamp((serverNow - entry.legStart) / span, 0, 1)
+				here = a:Lerp(b, raw * raw * (3 - 2 * raw))
+			end
+			entry.from, entry.to = here, here
+			from, to = here, here
+			entry.legStart, entry.legEnd, entry.legSpeed = 0, 0, 0
 		end
+	end
 
+	if from and to and entry.legEnd > 0 then
 		local span = entry.legEnd - entry.legStart
-		local raw = if span > 0 then math.clamp((now - entry.legStart) / span, 0, 1) else 1
+		-- AGAINST THE SERVER'S CLOCK. `now` is this client's own accumulator and
+		-- starts at zero whenever the script does, so two players who joined
+		-- minutes apart would draw the same creature in two different places.
+		local raw = if span > 0
+			then math.clamp((serverNow - entry.legStart) / span, 0, 1)
+			else 1
 		-- Smoothstep: it leans into the step and settles out of it rather than
 		-- starting and stopping at full speed like a dragged icon.
 		local eased = raw * raw * (3 - 2 * raw)
@@ -1097,7 +1123,8 @@ local function apply(entry: Sway, now: number)
 	--==========================================================================
 	if not entry.pod then
 		local heading = yaw
-		local walking = entry.to and entry.from and now < entry.legEnd
+		local walking = entry.to and entry.from and entry.legEnd > 0
+			and serverNow < entry.legEnd
 		if walking then
 			local d = (entry.to :: Vector3) - (entry.from :: Vector3)
 			local flat = Vector3.new(d.X, 0, d.Z)
@@ -1281,6 +1308,7 @@ table.insert(connections, CollectionService:GetInstanceRemovedSignal(PLANTED):Co
 
 table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 	clock += dt
+	serverNow = Workspace:GetServerTimeNow()
 	local n = #list
 	if n == 0 then
 		return
