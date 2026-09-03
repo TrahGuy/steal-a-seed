@@ -4418,6 +4418,222 @@ deliberately.
     nothing drives them today.
   * **Still no Play test.** Everything above is Edit-mode measurement.
 
+## THE STARBLOOM LIMB PASS — 2026-09-03
+
+**Four of the five Starbloom species had their legs rebuilt.** Uncommitted, and
+stacked on the uncommitted plot ladder / side-bed / wandering work, none of which
+this touches. **Not approved — built, measured, and left in the showroom for a
+look.**
+
+Files: `StarbloomForms.luau`, `StarbloomMockupRunner.luau`, and a new
+`tools/tests/StarbloomLimbSpec.luau`. Nothing else. Novaorb — the only one with
+its feet already on its legs — was rebuilt at Tiny, Mega and Colossal and
+compared part by part against the pre-change builder: **identical, property for
+property.**
+
+**IT WAS ONE FAULT, FOUR TIMES.** Every species except Novaorb positioned its
+feet from the PLANT'S ORIGIN rather than from the leg that is supposed to end in
+them — `baseCF * CFrame.new(leg.x * 1.05, 0.25, leg.z + 0.2)` and variations of
+it. The leg was built down one frame and the foot was placed in another, so the
+two only ever met by coincidence, and none of them did. It was found on
+Cosmospire, and then found three more times by going and looking.
+
+### WHAT WAS ACTUALLY WRONG, IN STUDS
+
+    COSMOSPIRE
+      knee (femur box to tibia box)      +0.0104 studs OPEN   -> 0.52 at Colossal
+      claw to its own shank's tip         1.538 front / 1.660 rear
+      nearest claw to a front shank tip   0.383 -- the REAR leg's
+      lowest corner of the whole model   -0.2002  (the shanks stood IN the floor)
+      tibia's nearest-hip margin          1.03:1 -- against the OPPOSITE hip
+
+    ASTRALHORN
+      column's lowest corner to its hoof +0.2029 front / +0.1950 rear, all four
+                                         -> 10.1 and 9.8 studs of air at Colossal
+      column bottom vs hoof centre        0.38 studs apart in Z, the wrong way
+
+    VOIDPETAL
+      haunch's lowest corner to its pad  +0.2777 front / +0.2527 rear, all four
+                                         -> 12.6 to 13.9 studs of air at Colossal
+      the haunch's own lean               AWAY from the paw it ends in
+
+    SUPERNOVUS
+      thigh's lowest corner to its pad   +0.0376 rear / +0.1493 front / +0.3474 mid
+                                         -> 1.9 to 17.4 studs of air at Colossal
+      the six pads in the rig             NOT PRESENT
+
+**The Cosmospire claw was stuck to the SIDE of the shank**, forward of the hip,
+while the shank reached backward past it -- which is why the 1.5-stud separation
+does not show up as a box gap. And at 1.03:1 the shank was one part in thirty
+from joining the opposite hip, where PlantSway would have swung it in antiphase
+with its own femur.
+
+**Voidpetal's front haunches pitch fifteen degrees BACKWARD**, so the bottom of
+each one travels away from the camera as it descends -- while its pad sat 0.3
+studs FORWARD of the hip. Nothing about the leg pointed at the foot it ended in.
+
+**Supernovus's feet were never animated at all.** PlantSway matches limb parts
+against an anatomy vocabulary -- Thigh, Femur, Haunch, Shin, Tibia, Knee, Hock,
+Foot, Hoof, Paw, Toe, Stilt, Pillar -- and `TitanClaw` contains none of those
+words. PlantSway's own comment records the consequence without naming it as a
+bug: "a single-part leg (Supernovus is thighs and nothing else)". Six thighs
+stepped; six pads stayed where they were.
+
+### WHAT THEY ARE NOW
+
+**Cosmospire: hip -> femur -> knee -> shank -> claw, four parts per leg.** Every
+joint is a CFrame and every mass is built from the joint above it by one `shaft`
+helper that runs each segment PAST both of its own joints, so the seam is inside
+the next mass at any pose. The knuckle turns half the bend itself and is wider
+than either shaft. The shank now counter-bends BACK toward vertical instead of
+continuing the femur's lean, which is what puts each foot under its own hip.
+
+**Astralhorn: column -> hoof -> toe, three parts per leg.** Three and not four,
+because a PILLAR leg is meant to have no visible bend -- that is what the word
+means, and it is the difference between this and the mantis. So the parts went on
+the foot, where the read was actually missing. The column is extended rather than
+moved, and the hoof is deep (1.44) because the stance is authored: the foot goes
+where the foot went, the column arrives off-centre in it, and a hoof only 1.0
+deep would have left a third of the column's cut face hanging out of the back
+with daylight under it. The ground the four feet cover is the same 3.70 studs it
+always was.
+
+**Voidpetal: haunch -> shin -> pad -> claw, four parts per leg.** The shin is
+AIMED rather than angled: its direction is solved from the hock at the bottom of
+the haunch and from where the paw actually stands, so the shaft is built along
+the line between its own joints by construction. That also buys the pose for
+free -- the front haunch leans back and its shin reaches forward, the rear haunch
+leans forward and its shin tucks back under the body, which is the reaching
+foreleg and folded hind leg of a cat, and neither angle had to be picked.
+
+One claw per pad rather than three. The pad is 0.68 studs across on a creature
+5.6 tall; a second and third toe are two more dark pieces inside the same
+outline, which the art bible calls static rather than detail. It also keeps this
+species inside the band at 39 instead of pushing it to 47.
+
+**Supernovus: thigh -> ankle -> sole -> heel -> two unequal toes, six per leg.**
+The thigh is EXTENDED, not moved -- its top is exactly where it was, and its
+lower end grows by however much the geometry says it takes to bury its cut face
+inside the sole, computed per leg from the box's own rotated corner reach because
+the six sit at three pitches and two rolls.
+
+**The feet stand slightly out of line with the hips on purpose.** Front feet
+0.45 ahead, rear feet 0.55 behind. It reads as a planted hexapod, and it is also
+what keeps each foot in its own rig cluster: with 1.7 studs between neighbouring
+hips, a foot placed straight under its own thigh put its HEEL 1.07:1 toward the
+NEXT leg -- which walks in antiphase.
+
+### MEASURED, AT TINY / MEGA / TITAN / COLOSSAL
+
+`tools/tests/StarbloomLimbSpec.luau` -- **71 assertions, all passing.** It reads
+PlantSway's vocabulary and swing angle out of PlantSway's own Source, mirrors its
+clustering through `StarbloomMockupRunner.RigOf`, and measures joints with a full
+fifteen-axis separating-axis test, which for two boxes is the exact distance.
+
+    worst gap at any joint, any pose      -0.153 studs  (i.e. still 0.153 of OVERLAP)
+    deepest overlap                       -0.886 studs  (supernovus hip, Tiny)
+    lowest foot corner, every tier         0.000000
+    nothing below the base plane           0.000000
+    nearest-hip margin, worst part         1.31:1 cosmospire, 2.93:1 voidpetal,
+                                           1.68:1 astralhorn, 1.54:1 supernovus
+    leg clusters                           4, 4, 4 and 6, two alternating phases
+                                           each
+
+Rest, both gait extremes and a turn. **A turn cannot open a joint and a stride
+cannot either** -- PlantSway rotates a whole leg rigidly about one hip frame, so
+within a cluster the geometry is pose-invariant. What a stride CAN do is tear a
+part off a leg it was never on, which is the 1.07:1 case above and what the
+margin assertion exists to catch.
+
+### THE PART COUNT, WHICH IS THE COST
+
+    cosmospire   33 -> 37     legs 12 -> 16
+    voidpetal    31 -> 39     legs  8 -> 16
+    astralhorn   33 -> 37     legs  8 -> 12
+    supernovus   46 -> 70     legs 12 -> 36
+
+**Supernovus at 70 is the number worth arguing about.** Six legs multiply
+everything: the ankle, sole, heel and two toes each foot needs are thirty parts
+before the thighs are counted. It also quadruples what PlantSway writes while the
+creature walks -- 36 leg CFrames per plant per 20 Hz slice against 6 before, plus
+its 4 leaves. A twenty-plant Supernovus plot is 800 writes a slice.
+
+Dropping the separate heel would bring it to 64 and lose the rear counterweight.
+Nothing else in the foot can come out without losing something the brief asked
+for by name.
+
+### SILHOUETTE, AGAINST THE AUTHORED SHAPE
+
+    cosmospire   3.20 -> 3.24 wide   7.85 -> 7.65 tall   4.74 -> 4.74 deep
+    voidpetal    4.21 -> 4.21 wide   4.67 -> 4.67 tall   5.52 -> 5.52 deep
+    astralhorn   4.15 -> 4.16 wide   7.31 -> 7.31 tall   4.76 -> 4.87 deep
+    supernovus   7.06 -> 7.06 wide   9.20 -> 9.20 tall   8.20 -> 8.26 deep
+
+**Cosmospire's height did not drop; its floor did.** The old model measured 7.85
+because 0.20 of it was below the base plane. Top edge unchanged at 7.65.
+
+The first cut ran 3.85 wide -- toe-out is paid for in width, roughly 0.8 of a
+foot's length times the sine of its turn, twice over -- and was pulled back.
+
+### THE SHOWROOM
+
+`StarbloomMockupRunner` keeps its five plinths and gains three things:
+
+  * `Build({1, 7})` lays extra tiers out as bare rows behind the dressed one.
+  * `Pose(0)`, `Pose(0.25)`, `Pose(-0.25)` freeze every plant at rest or at
+    either gait extreme, using PlantSway's own transform.
+  * `Simulate(true)` now drives the LEGS as well as the body, on the same clock
+    the bob runs on. It used to slide each plant round a circle with its legs
+    dragged along, which is the half of the animation an anatomy review needs.
+  * The gallery folder is `Archivable = false`, so it cannot reach the .rbxl.
+    Verified: `gallery:Clone()` returns nil.
+
+`RigOf` is exported so the spec measures against the SAME mirror the preview
+poses with. Two copies would drift the first time either was tuned.
+
+**Left parked on row 1 only, at Tiny.** `Build({1, 7})` works and was used for
+the Colossal measurements, but a 460-stud creature 380 studs behind an 8-stud one
+fills the sky and makes the showroom unreadable -- that is the size curve this
+file already lists as an open defect, seen from the ground.
+
+### THREE THINGS THE MEASUREMENTS CAUGHT THAT AN EYE WOULD NOT HAVE
+
+**A raked shaft reaches much further below its own end than half its thickness.**
+Voidpetal's rear-right shin is raked thirty-seven degrees, so its DEPTH
+half-extent projects 0.56 onto world Y -- its bottom corner finished 0.0226 studs
+under the base plane, which is 1.13 studs at Colossal: a leg through the floor of
+somebody's plot. Raising the ankle 0.04 and trimming the overrun 0.05 clears it by
+0.07 and still buries the shin 0.17 under the pad.
+
+**A foot big enough to fix the read can become the widest thing on the creature.**
+Astralhorn's enlarged toes came out 2.25 studs from the centreline against its
+widest antler leaf's 2.08, so the FEET quietly became its silhouette and it
+gained 8% across. Pulling the hooves 12% inboard of the columns put them back
+inside the crown; the width is now 4.16 against an authored 4.15.
+
+**The spec failed a leg that was correct.** Its "only upper-leg pieces are
+anchors" check knew `Thigh` and `Femur` but not `Haunch`, which is the third word
+PlantSway's own `hasUpper` test accepts -- so it failed Voidpetal's four haunches
+for being haunches. Fixed in the spec, not in the art.
+
+### Still open here
+
+  * **The art is not approved.** Measured, screenshotted from front, side, both
+    three-quarters and above, and left standing. Not judged.
+  * **PlantSway's hip line caps how high Cosmospire's knee can sit.** Anything in
+    the upper 45% of a leg's height becomes a hip anchor, so the knee is forced
+    to y 1.06 of a 2.30-stud leg. Raising it past 1.19 merges the knee into the
+    femur's hip, which moves the hip's centre far enough to collapse two rank
+    bands into one -- the trot becomes a pace. The low knee is a rig constraint,
+    not a drawing choice.
+  * **EmberrootForms names its cinderpaw's `Sole` and `Claw` outside the leg
+    vocabulary**, so those two parts per leg do not swing with it -- the same
+    class of fault as Supernovus's pads. Not touched: that file is approved art
+    and outside this pass.
+  * **Voidpetal's claws are one value step off its pads** -- MidnightSlate on
+    VoidBlack. They read close up and may not read at all across a plot. Making
+    them lighter is a palette decision, not a geometry one.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
