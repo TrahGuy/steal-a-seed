@@ -451,14 +451,51 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			local guardUntil = os.clock() + CLEAN_GUARD
 			local launchedAt = os.clock()
 			local restored = 0
+			local struck = false
 			while os.clock() < guardUntil do
 				humanoid.PlatformStand = true
 				local r = character:FindFirstChild("HumanoidRootPart")
 				if r and r:IsA("BasePart") then
 					local flight = os.clock() - launchedAt
 					local want = impulse - Vector3.new(0, workspace.Gravity * flight, 0)
-					if (r.AssemblyLinearVelocity - want).Magnitude
-						> want.Magnitude * OFF_ARC_BY then
+					local have = r.AssemblyLinearVelocity
+
+					--==================================================
+					-- A WALL IS NOT THE STATE MACHINE, AND THE GUARD IS
+					-- NOT ALLOWED TO ARGUE WITH ONE
+					--
+					-- To a magnitude test the two are the same event, and
+					-- in the plane they are opposites. Measured, the state
+					-- machine eats the VERTICAL and leaves the horizontal
+					-- alone: 234.7 and 6.7 out of a launch of 235 and 141.
+					-- A collision does the reverse -- it takes the
+					-- horizontal, because the horizontal is the component
+					-- that drove the body into the thing it hit.
+					--
+					-- Without this the guard reads a wall as interference
+					-- and writes the full launch speed back into it, every
+					-- frame for the rest of the window. That is how a part
+					-- is pushed THROUGH geometry, and it puts back energy
+					-- the collision had just taken out. It is reachable:
+					-- the corridor walls are 46 studs and a 300/165 launch
+					-- is still under them for the whole guard, at 40.7 when
+					-- it ends, so anything thrown near a wall meets it
+					-- while the guard is live.
+					--
+					-- Both wipe shapes still pass, because a wipe loses the
+					-- vertical and a wall does not touch it.
+					--==================================================
+					local wantFlat = Vector3.new(want.X, 0, want.Z)
+					local haveFlat = Vector3.new(have.X, 0, have.Z)
+					local verticalOnArc = math.abs(have.Y - want.Y)
+						<= math.abs(want.Y) * OFF_ARC_BY
+					if verticalOnArc
+						and haveFlat.Magnitude < wantFlat.Magnitude * (1 - OFF_ARC_BY) then
+						struck = true
+						break
+					end
+
+					if (have - want).Magnitude > want.Magnitude * OFF_ARC_BY then
 						-- Every part again: they are separate assemblies, and a
 						-- torso left behind is the 373-stud separation above.
 						for _, part in ipairs(bodyParts()) do
@@ -469,8 +506,9 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				end
 				RunService.Heartbeat:Wait()
 			end
-			say(string.format("one impulse; put back on the arc %d time(s) in %.2fs",
-				restored, CLEAN_GUARD))
+			say(string.format("one impulse; put back on the arc %d time(s) in %.2fs%s",
+				restored, CLEAN_GUARD,
+				if struck then " (guard released early: hit something)" else ""))
 		end
 
 		--======================================================================

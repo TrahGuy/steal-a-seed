@@ -82,6 +82,10 @@ type Parent = {
 	-- whole creature about the point it stands on -- which is how the approved
 	-- sleep pose was authored and why it drops in unchanged.
 	rootJoint: Joint?,
+	-- Kept alive while any seam above is still nil, so a rig that streams in
+	-- piece by piece gets the rest of its joints as they land. Dropped the
+	-- moment the set is complete, and again if the model streams out.
+	fill: RBXScriptConnection?,
 	-- Where the body sits when fully asleep, already scaled by the builder that
 	-- knows the creature's size. Identity for anything that does not set it,
 	-- which is what keeps Greenhollow's brute exactly as it was.
@@ -842,6 +846,63 @@ local function animateAstralmaw(p: any, wake: number, t: number, dt: number,
 	end
 end
 
+--==============================================================================
+-- THE SEAMS THAT MAY ARRIVE LATE
+--
+-- Neck is not in here: it is the seam tryTrack refuses to register without, so
+-- an entry always has one. Everything else is read once at registration and may
+-- legitimately still be in flight, so it is absorbed as it lands.
+--
+-- WAITING FOR ALL SIX IS THE WRONG STOPPING CONDITION, and it is worth writing
+-- down why. Only Astralmaw, Forgemaw and the shared ParentModel build the whole
+-- seven-seam contract. TanglemireForms has no RootJoint, BramblebackModel has
+-- three seams, and MiremawModel has one -- it drives everything else through
+-- mireChannels. So "keep looking until nothing is nil" never terminates for
+-- three of the five, which turns a bounded retry into a permanent one.
+--
+-- The seam is therefore taken off the SIGNAL instead of searched for. A
+-- Motor6D that has just arrived is handed to the handler, so absorbing it is a
+-- name compare rather than a walk of the model, and a rig that will never own
+-- a RootJoint costs the same as one that already does.
+--==============================================================================
+local FILL_SEAMS = {
+	{ field = "jaw", seam = "JawJoint" },
+	{ field = "leftArm", seam = "LeftShoulder" },
+	{ field = "rightArm", seam = "RightShoulder" },
+	{ field = "leftLeg", seam = "LeftHip" },
+	{ field = "rightLeg", seam = "RightHip" },
+	{ field = "rootJoint", seam = "RootJoint" },
+}
+
+-- How long after a model appears its seams are still expected to be arriving.
+-- Generous: streaming a rig in takes a small number of frames, and the cost of
+-- being wrong in this direction is one idle connection.
+local FILL_WINDOW = 10
+
+-- One arrived Motor6D against the seams still missing. No search.
+local function absorbSeam(p: Parent, d: Instance)
+	if not d:IsA("Motor6D") then
+		return
+	end
+	local entry = p :: any
+	for _, f in ipairs(FILL_SEAMS) do
+		if f.seam == d.Name and entry[f.field] == nil then
+			entry[f.field] = { motor = d, rest = d.C0 }
+			return
+		end
+	end
+end
+
+local function seamsComplete(p: Parent): boolean
+	local entry = p :: any
+	for _, f in ipairs(FILL_SEAMS) do
+		if entry[f.field] == nil then
+			return false
+		end
+	end
+	return true
+end
+
 local function track(model: Instance)
 	if not model:IsA("Model") or parents[model] then
 		return
@@ -900,14 +961,65 @@ local function track(model: Instance)
 		return true
 	end
 
-	if not tryTrack() then
-		local conn: RBXScriptConnection? = nil
-		conn = model.DescendantAdded:Connect(function()
-			if tryTrack() and conn then
-				conn:Disconnect()
-				conn = nil
+	--==================================================================
+	-- REGISTERING IS NOT THE SAME AS BEING COMPLETE
+	--
+	-- tryTrack gates on the root and the Neck, then reads the other six
+	-- seams ONCE, and the retry used to disconnect the first time the entry
+	-- existed. With StreamingEnabled a rig arrives in pieces, so a model
+	-- whose Neck lands before its LeftHip registers with leftLeg = nil --
+	-- and because the entry now exists, nothing ever looked again. That leg
+	-- was frozen until the next stream cycle, with nothing in the output.
+	--
+	-- Same shape as the bug written up at the top of this file, and as the
+	-- stream-out one below: a snapshot taken before the model had finished
+	-- arriving. So the retry now stays armed past registration and absorbs
+	-- seams as they land, and it stops on whichever comes first -- the
+	-- contract being complete, or the arrival window closing.
+	--==================================================================
+	local conn: RBXScriptConnection? = nil
+	local openUntil = os.clock() + FILL_WINDOW
+
+	local function release()
+		if conn then
+			conn:Disconnect()
+			conn = nil
+		end
+		local q = parents[model]
+		if q then
+			q.fill = nil
+		end
+	end
+
+	-- true once there is nothing left worth waiting for.
+	local function arrived(d: Instance?): boolean
+		if not model.Parent then
+			return true
+		end
+		if not tryTrack() then
+			return os.clock() > openUntil
+		end
+		local p = parents[model]
+		if not p then
+			return true
+		end
+		if d then
+			absorbSeam(p, d)
+		end
+		return seamsComplete(p) or os.clock() > openUntil
+	end
+
+	if not arrived(nil) then
+		conn = model.DescendantAdded:Connect(function(d)
+			if arrived(d) then
+				release()
 			end
 		end)
+		-- Held on the entry so that dropping the entry drops the connection.
+		local p = parents[model]
+		if p then
+			p.fill = conn
+		end
 	end
 end
 
@@ -916,6 +1028,11 @@ for _, m in ipairs(CollectionService:GetTagged(TAG)) do
 end
 CollectionService:GetInstanceAddedSignal(TAG):Connect(track)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(function(m)
+	local p = parents[m :: Model]
+	if p and p.fill then
+		p.fill:Disconnect()
+		p.fill = nil
+	end
 	parents[m :: Model] = nil
 end)
 
@@ -971,6 +1088,10 @@ RunService.Heartbeat:Connect(function(dt)
 			-- which is correct: the server never writes C0, so what comes back
 			-- is the builder's rest pose.
 			--==============================================================
+			if p.fill then
+				p.fill:Disconnect()
+				p.fill = nil
+			end
 			parents[model] = nil
 			if model.Parent then
 				task.defer(track, model)

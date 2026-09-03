@@ -1536,24 +1536,30 @@ GameConfig.Parent = {
 			--
 			-- THE CEILING IS 96 AND NOT 118, AND THAT IS THE ROAD'S OWN CURVE.
 			-- Simulated at 50 Hz -- 1.2 second head start, contact at GrabStuds,
-			-- the red line as the finish -- for a player who has exactly met each
-			-- biome's bar and grabbed the lightest pod there is, the fraction of
-			-- the run home they cover before they are caught goes:
+			-- the red line as the finish, and the +5 rage that EVERY theft
+			-- carries because provoke does `rage += 1` -- for a player who has
+			-- exactly met each biome's bar and grabbed the lightest pod there is,
+			-- the fraction of the run home they cover before being caught goes:
 			--
-			--     greenhollow 13%   dustbowl 38%   tanglemire 40%   emberroot 47%
+			--     greenhollow 11%   dustbowl 28%   tanglemire 29%   emberroot 34%
 			--
-			-- Thirteen is the tutorial teaching you that you get caught. The rest
+			-- Eleven is the tutorial teaching you that you get caught. The rest
 			-- is a deliberate, gentle rise: the road gets a little more forgiving
 			-- per raid as the run home gets longer, which is what stops distance
 			-- from double-counting as difficulty. On the flat 92 it derived,
-			-- Starbloom sat at 53% and continued that line exactly.
+			-- Starbloom sat at 38% and continued that line exactly.
 			--
-			-- A ceiling of 118 put it at 30% -- BELOW DUSTBOWL, making the last
-			-- biome the least survivable attempt on the road as well as the
-			-- longest walk back. 96 with a 3.4-second ramp puts it at 56%, back
+			-- A ceiling of 118 put it at 28% -- LEVEL WITH DUSTBOWL, making the
+			-- last biome the least survivable attempt on the road as well as the
+			-- longest walk back. 96 with a 3.4-second ramp puts it at 43%, back
 			-- on the line, and it is still the fastest guardian in the game and
 			-- still opens by accelerating into you, which is the part that was
 			-- actually wrong before any of this.
+			--
+			-- (These read low against an earlier draft of this comment, which
+			-- was simulated WITHOUT the rage every theft carries. The ordering
+			-- and the conclusion are the same in both runs; the figures here are
+			-- the ones in the commit and in KB/HANDOFF.md.)
 			--==================================================================
 			OpeningSpeed = 78,
 			TopSpeed = 96,

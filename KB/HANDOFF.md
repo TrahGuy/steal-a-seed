@@ -5359,6 +5359,85 @@ resolves back through the parent. The four unprofiled parents keep the literal
     zero. Untouched deliberately: the brief locked the sleep pose.
   * **Nothing here has been played by a person.** Every number is instrumented.
 
+## 2026-09-03 -- A REVIEW PASS OVER THE GUARDIAN WORK
+
+A read-only review of `dfc0833` and `81f58cb`. Two real defects, one stale
+comment, and one wrong first fix that is worth keeping written down.
+
+### REGISTERING IS NOT ARRIVING
+
+`ParentAnim.track` gates on the root and the `Neck` and then reads the other six
+seams ONCE, and the retry disconnected the first time the entry existed. With
+StreamingEnabled a rig lands in pieces, so a model whose Neck arrives before its
+`LeftHip` registers with `leftLeg = nil` -- and because the entry now exists,
+nothing looks again. That limb is frozen until the next stream cycle, silently.
+
+Same shape as the stream-out bug fixed in `dfc0833` and as the PrimaryPart one
+written up at the top of that file: a snapshot taken before the model finished
+arriving. The retry now stays armed past registration.
+
+### AND WAITING FOR ALL SEVEN SEAMS IS THE WRONG STOPPING CONDITION
+
+The obvious fix -- keep looking until no seam is nil -- does not terminate, and
+this is the part to remember. **Only Astralmaw, Forgemaw and the shared
+ParentModel build the whole seven-seam contract.** `TanglemireForms` has no
+`RootJoint`, `BramblebackModel` has three seams, `MiremawModel` has one and
+drives the rest through `mireChannels`. Three of the five are never complete, so
+that retry runs forever -- and it ran six full `GetDescendants()` walks per
+descendant added, which is O(n^2) during the exact streaming storm it exists to
+survive.
+
+The seam is taken off the SIGNAL instead: `DescendantAdded` hands you the
+Motor6D, so absorbing it is a name compare. It stops on whichever comes first,
+the contract completing or a 10-second arrival window closing. Bounded for all
+six builders -- three by completeness, three by the window.
+
+### A WALL IS NOT THE STATE MACHINE
+
+`ThrowFX`'s ballistic guard corrected on ANY deviation over 22%, every frame,
+for the whole 0.30s. A collision looks exactly like interference to a magnitude
+test, so a body thrown into a wall had the full launch speed written back into
+it every frame -- which is how a part is pushed THROUGH geometry, and it puts
+back the energy the collision just took out.
+
+Reachable, not theoretical: a 300/165 launch is at 40.7 studs when the guard
+ends and does not clear the 46-stud corridor wall until 0.353s, so anything
+thrown near a wall meets it while the guard is live.
+
+The two failures are opposites in the plane. Measured, the state machine eats
+the VERTICAL and leaves the horizontal alone -- 234.7 and 6.7 out of 235 and
+141. A wall takes the horizontal, because the horizontal is what drove the body
+into it. So a lost horizontal with the vertical still on the arc releases the
+guard outright, and gravity and the collision own the rest of the flight:
+
+    MEASURED state-machine wipe (234.7/6.7 shape)  -> restore to arc
+    full wipe to zero                              -> restore to arc
+    wall, horizontal killed, vertical untouched    -> RELEASE
+    wall, bounced back off it                      -> RELEASE
+    clean frame already on the arc                 -> leave alone
+    glancing scrape, 250 of 300 horizontal         -> leave alone
+
+Both wipe shapes still get corrected, so the bug the guard exists for is
+untouched, and the legacy hold path for the four unprofiled guardians is
+byte-identical.
+
+### THE CONFIG COMMENT DISAGREED WITH THE COMMIT THAT SET THE NUMBER
+
+`GameConfig`'s ladder comment carried a simulation run WITHOUT the `rage += 1`
+every theft carries; the commit and this file carry the run with it. Hence
+11/28/29/34 here against 13/38/40/47 there -- rage makes the guardian faster, so
+every figure comes down. Ordering and conclusion are identical in both runs, so
+`96` / `3.4` does not move. The comment now matches, and says why a reader might
+remember it reading high.
+
+### NOT VERIFIED
+
+Both fixes compile under `loadstring`, which is past what `rojo build` checks,
+and the guard's discriminator was tested against the real profiled launch. But
+**neither has been exercised in Play**: the fill path needs a real stream-out
+and stream-in to confirm a late `LeftHip` actually lands, and the released guard
+needs somebody thrown into the left wall to confirm the body now stops at it.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.
