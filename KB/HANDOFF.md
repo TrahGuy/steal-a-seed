@@ -5126,6 +5126,210 @@ for being haunches. Fixed in the spec, not in the art.
     VoidBlack. They read close up and may not read at all across a plot. Making
     them lighter is a palette decision, not a geometry one.
 
+## ASTRALMAW: THE CHASE, THE LIMBS, AND THE HIT — 2026-09-03
+
+Uncommitted, stacked on the uncommitted plot / side-bed / wandering work, none
+of which this touches. Five files: `GameConfig`, `AstralmawModel`, `NestService`,
+`ParentAnim`, `ThrowFX`. **Every measurement below is from the real Astralmaw
+`NestService` builds in Play, not from a preview.**
+
+### THE LIMBS WERE NOT ANIMATING, AND IT WAS NEVER THE ANIMATION CODE
+
+`ParentAnim` drops a parent from its table when the root's parts go away, which
+is right — and it never asks for it back, which is not. With StreamingEnabled the
+MODEL persists on the client as a two-child stub and keeps its tag, so
+`GetInstanceRemovedSignal` never fires, `GetInstanceAdded` never fires again, and
+the `DescendantAdded` retry `track` arms was disconnected the first time it
+succeeded.
+
+**So the first time a player walked out of range of a guardian and came back,
+that guardian stopped animating for the rest of the session.** Measured from
+spawn after one walk down the road:
+
+    Parent_greenhollow   0 of  7 motors changed over 0.4s
+    Parent_dustbowl      0 of  7
+    Parent_tanglemire    0 of 15
+    Parent_starbloom     0 of  7   <- and its LeftHip sat at -0.00 through a chase
+    Parent_emberroot     3 of  7   <- the only one still alive
+
+Emberroot survived only because it is far enough out that the whole MODEL
+streams rather than just its parts, so the tag signal did fire. **Four of the
+five guardians in this game have not been animating.** One deferred `track` on
+stream-out fixes all five; nothing about their profiles changes.
+
+### THE SEAMS HAD NO SOCKETS
+
+Six of Astralmaw's seven Motor6Ds were built with `C1 = identity`, which puts the
+pivot at the CENTRE of whatever part the seam drives. The rest pose looks right
+and everything after it is wrong, in two opposite directions at once. Travel of
+each part in the root's own frame over 2.5 seconds of running:
+
+                      before   after
+    LeftUpperLeg        1.17    2.91     6% -> 15% of a 19-stud creature
+    LeftLowerLeg        2.39    5.30
+    LeftToe2            3.74    6.68    19% -> 35%
+    LeftUpperArm        1.77    4.46
+    LeftForearm         8.24    9.05
+    LeftClaw2          13.83   12.75    72% of the creature's own height
+    LeftPauldronTop     5.97    5.52    now the torso's, not the arm's
+
+A thigh turning about its own middle barely goes anywhere — the top swings back
+as far as the bottom swings forward. The arm has the opposite problem: the
+forearm and four claws hang eight studs BELOW the point it turns about, so the
+same angle threw the claws three quarters of the creature's height. Legs that do
+not read as walking under arms that read as thrashing.
+
+**The geometry did not change.** `socketMotor` derives both joint frames from one
+world socket, so the rest pose is preserved by construction — and proved:
+building the old and new models side by side, 83 parts each, **worst position
+difference 0.000137 studs and worst orientation 0.066 degrees**, and not one part
+differing in size, colour, material, class, transparency or masslessness.
+HipHeight, collider count, SleepBodyPose and all four effects identical.
+
+The two top pauldrons moved from the arm seam to the body. They are shoulder
+plates that were flying off the shoulder.
+
+### THE STRIDE WAS A VIBRATION
+
+`SWING_PER_STUD = 0.40` is one full cycle every 15.7 studs, tuned against
+WalkSpeed 19 where it gives a comfortable 1.2 strides a second. Astralmaw runs at
+a hundred and twenty. Measured before: **4.2 cycles a second, one stride every
+0.24s, 13.6 frames per cycle at 57 fps and seven on a phone.**
+
+Astralmaw now lengthens its stride instead of quickening it — `12 + 0.30 * speed`
+studs per cycle, capped at 48 — which is what real animals do and the only model
+that keeps a foot down at every speed. Measured after: **2.63 cycles a second,
+23 frames per cycle.** Hips alternate at a clean 180 degrees (the shared gait's
+deliberate 140-degree limp belongs to Greenhollow's brute), shoulders
+counter-swing against them at 46 degrees to the hips' 34, trailing by 0.55 rad.
+
+### THE CHASE
+
+    configured WalkSpeed  0 -> 67 -> 85 -> 90 -> 98 -> 109 -> 121 -> 123 (plateau)
+    measured studs/sec    0 ->  7 -> 87 -> 91 -> 96 -> 106 -> 118 -> 124
+    50 studs   0.85s after the wake delay
+    100 studs  1.40s
+    hip span   68.0 degrees      shoulder span  92.0 degrees
+
+Opening 78, ramping squared to 118 over 2.6 seconds, plus rage and plus the
+under-speed shortfall exactly as before. The measured displacement tracks the
+configured speed within a few per cent, so nothing in the movement code is a
+bottleneck. Walking home is 64 and the gait drops to 43% of the chase's swing.
+
+**A capped player still outruns it.** WalkSpeed caps at 150 and a trained player
+measured 146.6; against 118 that is 28 studs a second of escape. The brief asked
+for 105-120 and this sits at the top of it, but the last biome cannot catch a
+maxed runner in a straight line and that is a design decision, not a bug.
+
+### THE HIT, AND THE WIND-UP THAT PLAYING IT KILLED
+
+The first cut gave the strike 0.32 seconds of anticipation before the launch, and
+measured 0.327-0.359 across six hits. **Played, it read as lag.** Contact
+happened, nothing happened, and a third of a second later the victim went. The
+chase is the anticipation; a pause at the end of one is a pause however good the
+pose in it is. It also handed the player a dodge — 150 walk speed covers 48 studs
+during the coil, past the range re-check — so charging the monster beat it.
+
+**`WindupSeconds` is 0. Contact is the hit, measured at 0.000 seconds.** The arm
+still swings: `astralStrike` carries a `coil` scalar that drops the draw-back to
+22% when there is no wind-up, so the sweep opens 18 degrees back instead of 84
+and there is no pop on the impact frame. The block in `NestService` that would
+run a wind-up is left standing, unused, because its four re-checks are the right
+ones for any wind-up somebody adds later.
+
+`ParentState` is published as an attribute on the parent, once per change, by the
+tick that owns the state machine. `Asleep` alone could not tell a chase from a
+walk home.
+
+### THE THROW, AND THE WALL
+
+Two bugs made the launch un-tunable:
+
+  * **The velocity was applied twice.** `ApplyImpulse` ADDS and the assignment
+    SETS, and both the server and the client did both. Configured 235 and 141;
+    measured **467.6 and 291.9**, exactly double, apex 237 studs.
+  * **`ThrowFX` re-wrote the velocity every frame for 0.35 seconds**, which does
+    not hold a throw, it cancels gravity for a third of a second.
+
+Astralmaw now gets one write per part — a ragdolled R15 body is seventeen
+separate assemblies, so it does have to be per part — and a guard that restores
+the BALLISTIC velocity (`impulse - g*t`) only when the humanoid state machine
+eats it. The four unprofiled parents send no hold value at all and keep the
+tested 0.35-second path byte for byte.
+
+**THE LIFT IS 0.55, NOT THE 0.45 EVERY OTHER BIOME USES, AND THAT IS A WALL.**
+The Starbloom corridor is walled at x = +/-75 and those walls are 46 studs tall.
+Clearing them needs `v^2/2g > 43`, which is 130 studs/second of vertical; 0.45 of
+235 gives 103 and an apex of 27, half the wall. 0.55 of 300 gives 165 and an apex
+of 69, and 1.7 seconds of air.
+
+**AND IT THROWS YOU HOME.** The first cut had `away` dominating at 1.00 against
+0.30 of road, and played it was backwards: the guardian aims sixty studs PAST you
+while it chases -- ChaseOvershootStuds exists so it does not brake -- so by
+contact it is very often level with you or in front, "away from the monster" is
+"further down the corridor", and the hit fired people deeper into the biome they
+were running out of. Now the road wins at 1.00 against 0.45, which `away` cannot
+take past ninety degrees off it, so every hit goes up the corridor toward the
+plots while `away` still picks which side of the road.
+
+Four hits after the retune:
+
+    position                hit lag   launch H/V     apex   flew   direction
+    standing, mid-road       0.000  300.0 / 160.9    79.2   1060   HOMEWARD 1058
+    running AWAY (+Z)        0.000  299.6 / 161.4    75.0   1090   HOMEWARD 1089
+    running AT it (-Z)       0.000  300.0 / 164.3    44.5    127   HOMEWARD  127
+    beside the LEFT wall     0.000  300.0 / 163.8    76.8    916   HOMEWARD  914  -> into the void
+
+From the Starbloom nest at z = -1600 that lands people around z = -450 to -670,
+which is two biomes closer to home, and a hit taken beside a wall still leaves
+the corridor entirely: the last row ended at x = -132, y = -511, below the kill
+plane. **Death and respawn were measured before the retune at 5.0-7.0 seconds to
+die and 8.5-10.5 to be back**, at the normal spawn, on the existing kill plane at
+y = -500. No new recovery code was needed.
+
+Running straight at it no longer dodges -- it lands, and the victim's own -Z
+momentum eats most of the throw, which is why that row only travels 127 studs.
+
+The road direction is derived from the nest's own position toward the hub pad
+rather than the hardcoded world +Z the shared throw uses, so it is still right
+for a nest placed anywhere; there is an assertion and a warn if any mixture ever
+resolves back through the parent. The four unprofiled parents keep the literal
+`(0, 0, 0.5)` and the formula speed they shipped with.
+
+### Verified
+
+  * All seven Motor6Ds present; every part held by a motor or a weld, none loose,
+    none anchored — so no frame rate can detach anything.
+  * Full state cycle asleep -> waking -> chasing -> returning -> asleep, with the
+    gait dropping from 68 degrees of hip to 29 on the way home and to zero asleep.
+  * One impulse per attack; `nest.busy` still gates the whole grab, and the
+    console shows exactly one launch line per hit.
+  * Phase is seeded from the nest's own position (2.928 here, 5.728 sixty studs
+    up-road), so two Astralmaws could never be in lockstep.
+  * Greenhollow, Brambleback, Miremaw and Forgemaw: builders untouched, no
+    profile, so no ramp, no wind-up, no return speed, the legacy velocity hold and
+    the legacy throw direction. Emberroot measured at speed 206.2 / lift 0.45 and
+    "held the launch velocity for 0.35s" during this pass.
+
+### Still open
+
+  * **THE FOOT STILL SLIDES.** At its most planted the foot is doing 35% of the
+    body's speed and at its fastest 2.0x. That is what a leg with ONE joint can
+    do: with no knee the foot travels a circular arc about the hip and can only
+    match the ground instantaneously. Removing the last of it needs a `LeftKnee` /
+    `RightKnee` seam, which is a change to the seven-name parent contract and was
+    out of scope here.
+  * **THE LIMP LASTS 3.3 TO 7.6 SECONDS NOW**, measured from the launch to the
+    last frame of PlatformStand. That is a consequence of the distance: a
+    thousand-stud throw is 1.7 seconds of air and then a long tumble, and the
+    settle machinery waits for the body to stop. It is well past the 1.2-1.8
+    seconds the brief asked for, and it is the number to cut if being helpless
+    that long turns out to be worse than being thrown that far.
+  * **Astralmaw does not breathe while asleep.** It has no entry in
+    `SLEEP_BY_SPECIES`, so it falls back to `GREENHOLLOW_SLEEP`, whose breath is
+    zero. Untouched deliberately: the brief locked the sleep pose.
+  * **Nothing here has been played by a person.** Every number is instrumented.
+
 ## Still open
 
   * ~~The cash cap.~~ **Settled at 1e15** — see SAVING below.

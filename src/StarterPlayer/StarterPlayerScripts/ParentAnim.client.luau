@@ -88,6 +88,14 @@ type Parent = {
 	sleepBody: CFrame,
 	stride: number,
 	lastPos: Vector3,
+	-- Eased rather than read straight off the speed, so stopping blends the
+	-- run out instead of freezing it mid-step.
+	moving: number,
+	-- The heading the HEAD is currently pointed at, chasing the body's own.
+	headYaw: number,
+	-- Whether the head has ever been aimed. A parent tracked mid-turn would
+	-- otherwise start with a 180-degree lag and swing its skull round once.
+	headSet: boolean,
 	-- 0 asleep, 1 awake. Blended so waking is a movement rather than a snap.
 	wake: number,
 	phase: number,
@@ -95,6 +103,21 @@ type Parent = {
 }
 
 local parents: { [Model]: Parent } = {}
+
+--==============================================================================
+-- THE ONE LIGHT A STRIKE IS ALLOWED TO TOUCH
+--
+-- Found once at track time. Astralmaw's builder puts a PointLight in its throat;
+-- peaking that for a sixth of a second at impact is the whole visual effect
+-- budget of the hit, and it is why there is no new emitter anywhere in here.
+--==============================================================================
+local function glowOf(model: Model): PointLight?
+	local throat = model:FindFirstChild("MawThroat")
+	if throat then
+		return throat:FindFirstChildOfClass("PointLight")
+	end
+	return nil
+end
 
 local function jointNamed(model: Model, name: string): Joint?
 	for _, d in ipairs(model:GetDescendants()) do
@@ -572,6 +595,253 @@ local function animateForgemaw(p: any, wake: number, t: number,
 	end
 end
 
+--==============================================================================
+-- ASTRALMAW: THE LAST GUARDIAN ON THE ROAD
+--
+-- THE BUG THIS EXISTS FOR IS A RATE, NOT AN AMPLITUDE. The shared walk advances
+-- its stride by SWING_PER_STUD = 0.40 radians per stud travelled -- one full
+-- cycle every 15.7 studs -- and that was tuned against WalkSpeed 19, where it
+-- gives a comfortable 1.2 strides a second. Astralmaw runs at ninety-odd.
+-- Measured in a real chase: one complete stride every 0.24 seconds, 4.2 Hz,
+-- 13.6 frames per cycle at 57 fps and barely seven on a phone. Legs oscillating
+-- that fast do not read as a stride at all; they read as a vibration, or as
+-- nothing, which is the report.
+--
+-- SO THE STRIDE GETS LONGER INSTEAD OF FASTER. Real animals lengthen their
+-- stride far more than they quicken it, and it is also the only model that
+-- keeps a foot on the ground: amplitude rises with speed, the cycle stays
+-- between about 1.1 and 2.5 Hz, and there is no speed at which acceleration
+-- makes the feet skate.
+--
+-- EVERYTHING ELSE IS PREDATOR RATHER THAN LIMP. The shared gait deliberately
+-- puts the legs 140 degrees apart and gives them different amplitudes, because
+-- Greenhollow's brute is meant to lurch. This one alternates cleanly at 180,
+-- counter-swings the shoulders against the hips, and gives the arms half again
+-- the amplitude of the legs with a trailing phase -- heavy things arrive late.
+--==============================================================================
+local ASTRAL_STRIDE_BASE = 12.0
+local ASTRAL_STRIDE_PER_SPEED = 0.30
+local ASTRAL_STRIDE_MAX = 48.0
+-- The speed at which the gait is at full amplitude. Below it the creature takes
+-- shorter steps rather than the same step more slowly.
+local ASTRAL_FULL_GAIT_AT = 90.0
+local ASTRAL_HIP_SWING = math.rad(34)
+local ASTRAL_ARM_SWING = math.rad(46)
+-- Radians of phase the arms trail the legs by. Not a whole beat -- a lag.
+local ASTRAL_ARM_LAG = 0.55
+local ASTRAL_LEAN = math.rad(13)
+local ASTRAL_BOB = 0.55
+local ASTRAL_ROLL = math.rad(4.5)
+local ASTRAL_HEAD_LAG_TAU = 0.16
+local ASTRAL_HEAD_LAG_MAX = math.rad(26)
+local ASTRAL_MOVE_TAU = 0.18
+-- How much of the chase gait the walk home keeps. It still animates; it stops
+-- looking like it wants something.
+local ASTRAL_RETURN_CALM = 0.55
+local ASTRAL_JAW_IDLE = math.rad(9)
+
+--==============================================================================
+-- THE STRIKE, AND IT STARTS AT THE IMPACT
+--
+-- `windup` is how long the server waits after stamping AttackSwipe before it
+-- applies the impulse, replicated as an attribute so this does not have to
+-- guess. Astralmaw's is ZERO, on purpose and after playing it: a coil before
+-- the launch reads as lag rather than as anticipation, and the chase itself was
+-- already the anticipation. Every other guardian has always been zero too.
+--
+-- SO THE SWEEP CANNOT START FROM A POSE THE ARM NEVER REACHED. With a wind-up
+-- the arm is drawn 84 degrees back by the time the sweep begins; without one it
+-- is wherever the run left it, and starting the sweep at -84 would snap the
+-- shoulder backwards on the impact frame -- the pop this `coil` scalar exists
+-- to prevent. At zero the strike opens 18 degrees back and is through you in a
+-- seventh of a second.
+--
+-- Which arm strikes is derived from the attack's own timestamp rather than
+-- rolled, so every client draws the same shoulder swinging.
+--==============================================================================
+local ASTRAL_SWEEP = 0.14
+local ASTRAL_RECOVER = 0.36
+
+local function astralStrike(dt: number, windup: number)
+	-- returns: leadPitch, offPitch, coilYaw, jaw, headPitch, glow  (all 0 at rest)
+	local total = windup + ASTRAL_SWEEP + ASTRAL_RECOVER
+	if dt < 0 or dt >= total then
+		return 0, 0, 0, 0, 0, 0
+	end
+	-- How far back the arm is when the sweep begins. A wind-up earns the full
+	-- draw; without one it is a flick of the same swing.
+	local coil = if windup > 0 then 1 else 0.22
+	local back = -math.rad(84) * coil
+	if dt < windup and windup > 0 then
+		-- COIL. The striking arm draws back and up, the other braces forward,
+		-- the shoulders turn into it and the jaw cracks open.
+		local u = dt / windup
+		local ease = math.sin(u * math.pi * 0.5)
+		return back * ease, math.rad(26) * ease, math.rad(20) * ease,
+			math.rad(16) * ease, -math.rad(15) * ease, ease * 0.55
+	elseif dt < windup + ASTRAL_SWEEP then
+		-- THE SWEEP. Everything unwinds through the impact in a seventh of a
+		-- second, which is what makes it read as a strike rather than a push.
+		local u = (dt - windup) / ASTRAL_SWEEP
+		local ease = u * u
+		return back + (math.rad(96) - back) * ease,
+			math.rad(26) * coil - math.rad(50) * ease,
+			math.rad(20) * coil - math.rad(46) * ease,
+			math.rad(16) * coil + math.rad(40) * ease,
+			-math.rad(15) * coil + math.rad(34) * ease,
+			0.55 * coil + (1 - 0.55 * coil) * ease
+	end
+	-- FOLLOW THROUGH, then settle.
+	local u = math.clamp((dt - windup - ASTRAL_SWEEP) / ASTRAL_RECOVER, 0, 1)
+	local ease = 1 - u
+	return math.rad(96) * ease, -math.rad(24) * ease, -math.rad(26) * ease,
+		math.rad(56) * ease, math.rad(19) * ease, ease
+end
+
+local function animateAstralmaw(p: any, wake: number, t: number, dt: number,
+	speed: number, state: string, attackDt: number, windup: number)
+	--==========================================================================
+	-- STRIDE: DISTANCE OVER A STRIDE LENGTH THAT GROWS WITH SPEED
+	--==========================================================================
+	local strideStuds = math.min(
+		ASTRAL_STRIDE_BASE + speed * ASTRAL_STRIDE_PER_SPEED, ASTRAL_STRIDE_MAX)
+	p.stride += speed * dt * (math.pi * 2 / strideStuds)
+	local s = p.stride + p.phase
+
+	local calm = if state == "returning" then ASTRAL_RETURN_CALM else 1.0
+	local target = math.clamp(speed / ASTRAL_FULL_GAIT_AT, 0, 1) * wake
+	p.moving += (target - p.moving) * math.min(1, dt / ASTRAL_MOVE_TAU)
+	local gait = p.moving * calm
+	local asleep = 1 - wake
+	local sleep = p.sleep
+	local breath = 0
+	if sleep.breath > 0 then
+		breath = math.sin(t * sleep.breathRate + p.phase) * sleep.breath * asleep
+	end
+
+	--== WHICH ARM, AND WHERE IN THE STRIKE ==--
+	local leadPitch, offPitch, coilYaw, jawOpen, headPitch, glow =
+		astralStrike(attackDt, windup)
+	local leadLeft = (math.floor((p.attackAt or 0) * 4) % 2) == 0
+
+	--==========================================================================
+	-- 1. THE BODY LEANS INTO IT
+	--
+	-- On RootJoint, which is socketed at the point the creature stands on --
+	-- never on HumanoidRootPart, which the server owns and the physics solver
+	-- would fight over.
+	--==========================================================================
+	if p.rootJoint then
+		local bob = -math.abs(math.sin(s)) * ASTRAL_BOB * gait
+		local lean = -ASTRAL_LEAN * gait
+		local roll = math.sin(s) * ASTRAL_ROLL * gait
+		local sleepOffset = p.sleepBody:Lerp(CFrame.identity, wake)
+		p.rootJoint.motor.C0 = p.rootJoint.rest
+			* sleepOffset
+			* CFrame.new(0, bob, 0)
+			* CFrame.Angles(lean, coilYaw * 0.35, roll)
+	end
+
+	--==========================================================================
+	-- 2. HIPS, CLEANLY ALTERNATING
+	--==========================================================================
+	local fold = asleep * sleep.armFold
+	local splay = asleep * sleep.armSplay
+	if p.leftLeg then
+		p.leftLeg.motor.C0 = p.leftLeg.rest
+			* CFrame.Angles(math.sin(s) * ASTRAL_HIP_SWING * gait, 0, 0)
+	end
+	if p.rightLeg then
+		p.rightLeg.motor.C0 = p.rightLeg.rest
+			* CFrame.Angles(math.sin(s + math.pi) * ASTRAL_HIP_SWING * gait, 0, 0)
+	end
+
+	--==========================================================================
+	-- 3. SHOULDERS COUNTER-SWING, AND CARRY MORE
+	--
+	-- Opposite the hip on the same side, trailing it by a fraction of a beat,
+	-- and half again the amplitude. That is the whole difference between a
+	-- creature walking and a creature coming for you.
+	--==========================================================================
+	local lp = math.sin(s + math.pi + ASTRAL_ARM_LAG) * ASTRAL_ARM_SWING * gait
+	local rp = math.sin(s + ASTRAL_ARM_LAG) * ASTRAL_ARM_SWING * gait
+	if p.leftArm then
+		p.leftArm.motor.C0 = p.leftArm.rest * CFrame.Angles(
+			lp + fold + breath + (if leadLeft then leadPitch else offPitch),
+			coilYaw, splay)
+	end
+	if p.rightArm then
+		p.rightArm.motor.C0 = p.rightArm.rest * CFrame.Angles(
+			rp + fold + breath + (if leadLeft then offPitch else leadPitch),
+			-coilYaw, -splay)
+	end
+	if sleep.hipTurn > 0 then
+		local turn = asleep * sleep.hipTurn
+		if p.leftLeg then
+			p.leftLeg.motor.C0 = p.leftLeg.motor.C0 * CFrame.Angles(0, -turn, -turn * 0.7)
+		end
+		if p.rightLeg then
+			p.rightLeg.motor.C0 = p.rightLeg.motor.C0 * CFrame.Angles(0, turn, turn * 0.7)
+		end
+	end
+
+	--==========================================================================
+	-- 4. THE HEAD KEEPS LOOKING AT YOU, A BEAT LATE
+	--
+	-- The Humanoid's AutoRotate already turns the BODY at the target, so the
+	-- honest way to make the head "track with restrained lag" is to let it trail
+	-- the body's own heading and catch up -- no target position has to cross the
+	-- wire for it, and it is right in both directions: chasing, the skull swings
+	-- in behind the turn; walking home, it drifts.
+	--==========================================================================
+	local lag = 0
+	do
+		local look = p.root.CFrame.LookVector
+		local yaw = math.atan2(-look.X, -look.Z)
+		if not p.headSet then
+			p.headYaw = yaw
+			p.headSet = true
+		end
+		local d = (yaw - p.headYaw + math.pi) % (math.pi * 2) - math.pi
+		p.headYaw += d * (1 - math.exp(-dt / ASTRAL_HEAD_LAG_TAU))
+		lag = math.clamp((p.headYaw - yaw + math.pi) % (math.pi * 2) - math.pi,
+			-ASTRAL_HEAD_LAG_MAX, ASTRAL_HEAD_LAG_MAX) * wake
+	end
+	if p.neck then
+		local droop = asleep * sleep.neckDroop
+		local nod = math.sin(s * 2 + 0.9) * math.rad(5.5) * gait
+		p.neck.motor.C0 = p.neck.rest
+			* CFrame.Angles(droop + nod - breath * 0.5 + headPitch,
+				lag, asleep * sleep.neckTilt)
+	end
+
+	--==========================================================================
+	-- 5. THE JAW, AND THE GLOW IT DRAGS WITH IT
+	--
+	-- A low idle working of the jaw rather than the shared chomp: constant
+	-- chewing on a creature this size is noise, and the mouth has one job here
+	-- which is to be wide open at the moment of impact.
+	--==========================================================================
+	if p.jaw then
+		local idle = (math.sin(t * 1.7 + p.phase) * 0.5 + 0.5) * ASTRAL_JAW_IDLE * wake
+		p.jaw.motor.C0 = p.jaw.rest * CFrame.Angles(-(idle + jawOpen), 0, 0)
+	end
+
+	--==========================================================================
+	-- 6. THE VOID FACE PEAKS AT IMPACT AND NOWHERE ELSE
+	--
+	-- One brightness write on one light, and only while a strike is running --
+	-- not a particle system turned up, and nothing every frame the rest of the
+	-- time. Restored to the value the builder set the moment the strike ends.
+	--==========================================================================
+	if p.glow then
+		local want = p.glowRest * (1 + glow * 1.6)
+		if math.abs(p.glow.Brightness - want) > 0.01 then
+			p.glow.Brightness = want
+		end
+	end
+end
+
 local function track(model: Instance)
 	if not model:IsA("Model") or parents[model] then
 		return
@@ -604,6 +874,9 @@ local function track(model: Instance)
 			sleepBody = (model:GetAttribute("SleepBodyPose") :: CFrame?) or CFrame.identity,
 			stride = 0,
 			lastPos = root.Position,
+			moving = 0,
+			headYaw = 0,
+			headSet = false,
 			wake = 0,
 			phase = (math.abs(p.X) + math.abs(p.Z)) % 6.28,
 			-- Read once at track time, not per frame. The attribute is set by the
@@ -615,6 +888,14 @@ local function track(model: Instance)
 			mire = if tostring(model:GetAttribute("Species")) == "miremaw"
 				then mireChannels(model, (model:GetAttribute("RigScale") :: number?) or 1)
 				else nil,
+			-- The throat light Astralmaw's builder already made, found once so
+			-- the strike can peak it without searching the model per frame.
+			glow = glowOf(model),
+			glowRest = (function()
+				local g = glowOf(model)
+				return if g then g.Brightness else 0
+			end)(),
+			attackAt = 0,
 		}
 		return true
 	end
@@ -662,7 +943,38 @@ RunService.Heartbeat:Connect(function(dt)
 
 	for model, p in pairs(parents) do
 		if not p.root.Parent then
+			--==============================================================
+			-- STREAMING TOOK ITS PARTS, AND THIS USED TO BE PERMANENT
+			--
+			-- Dropping the entry is right -- the parts it held are destroyed.
+			-- Not asking for the model back is not: with StreamingEnabled the
+			-- MODEL persists on the client as a two-child stub and keeps its
+			-- tag, so GetInstanceRemovedSignal never fires, GetInstanceAdded
+			-- never fires again either, and the DescendantAdded retry that
+			-- `track` arms was disconnected the first time it succeeded.
+			--
+			-- So the FIRST time a player walked out of range of a guardian and
+			-- came back, that guardian stopped animating for the rest of the
+			-- session. Measured in Play, from spawn, after one walk down the
+			-- road: four of the five parents reported 0 of 7 motors changing
+			-- over 0.4 seconds, and Astralmaw's LeftHip sat at exactly -0.00
+			-- degrees through an entire chase. Only Emberroot's still moved,
+			-- and only because it is far enough out that the whole MODEL
+			-- streams rather than just its parts, so the tag signal did fire.
+			--
+			-- That is the report -- "its limbs do not visibly animate while
+			-- chasing" -- and it was never in the animation code at all.
+			--
+			-- Re-arming costs one deferred call per stream-out. `track` bails
+			-- immediately if the entry is back or the model has really gone,
+			-- and it re-reads every rest C0 from the freshly streamed motors,
+			-- which is correct: the server never writes C0, so what comes back
+			-- is the builder's rest pose.
+			--==============================================================
 			parents[model] = nil
+			if model.Parent then
+				task.defer(track, model)
+			end
 		else
 			--== AWAKE OR NOT ==--
 			-- The attribute is set by NestService and replicates, so the client
@@ -707,6 +1019,20 @@ RunService.Heartbeat:Connect(function(dt)
 				p.stride += speed * dt * SWING_PER_STUD
 				animateForgemaw(p, wake, t, p.stride + p.phase,
 					math.clamp(speed / 6, 0, 1) * wake, attackDt)
+				continue
+			end
+
+			--==============================================================
+			-- ASTRALMAW TAKES ITS OWN PATH, AND TAKES IT INSTEAD
+			--
+			-- Same rule as Miremaw: one writer per Motor6D.C0. It advances its
+			-- own stride because the shared rate is the thing it is replacing.
+			--==============================================================
+			if tostring(model:GetAttribute("Species")) == "astralmaw" then
+				p.attackAt = attackTime
+				animateAstralmaw(p, wake, t, dt, speed,
+					tostring(model:GetAttribute("ParentState")), attackDt,
+					(model:GetAttribute("AttackWindup") :: number?) or 0)
 				continue
 			end
 

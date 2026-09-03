@@ -112,15 +112,57 @@ local function socketMotor(name: string, part0: BasePart, part1: BasePart, socke
 	return m
 end
 
-local function motor(name: string, part0: BasePart, part1: BasePart): Motor6D
-	local m = Instance.new("Motor6D")
-	m.Name = name
-	m.Part0 = part0
-	m.Part1 = part1
-	m.C0 = part0.CFrame:ToObjectSpace(part1.CFrame)
-	m.C1 = CFrame.new()
-	m.Parent = part0
-	return m
+--==============================================================================
+-- WHERE EACH SEAM ACTUALLY BENDS
+--
+-- Every one of these used to be built with C1 = identity, which puts the pivot
+-- at the CENTRE of whatever part the seam drives. It preserves the rest pose --
+-- nothing looks wrong standing still -- and it is wrong the moment anything
+-- moves, in two opposite directions at once. Measured in a real chase, as the
+-- travel of each part in the root's own frame over 2.5 seconds of running:
+--
+--     LeftUpperLeg     1.17 studs    6% of a 19-stud creature
+--     LeftLowerLeg     2.39         12%
+--     LeftToe2         3.74         19%
+--     LeftUpperArm     1.77          9%
+--     LeftForearm      8.24         43%
+--     LeftClaw2       13.83         72%   <- flailing
+--
+-- A thigh rotating about its own middle barely goes anywhere: the top swings
+-- back exactly as far as the bottom swings forward, so the leg rocks and the
+-- foot manages a fifth of a stride. The arm has the opposite problem, because
+-- the forearm and four claws are welded to it and hang eight studs BELOW the
+-- point it turns about -- so the same angle throws the claws three quarters of
+-- the creature's own height. Legs that do not read as walking under arms that
+-- read as thrashing is exactly the report: "the limbs do not visibly animate".
+--
+-- The fix is the one the rigging skill states: choose the physical attachment
+-- point in world space and derive BOTH joint frames from it. The rest pose is
+-- preserved exactly -- that is the property socketMotor has and the reason it
+-- can be dropped onto approved geometry without touching the geometry.
+--
+-- Offsets are fractions of the driven part's own SIZE, so they scale with the
+-- creature instead of being authored numbers that only hold at one height.
+--==============================================================================
+local function seamSocket(seam: string, driver: BasePart): CFrame
+	if seam == "LeftShoulder" or seam == "RightShoulder" then
+		-- The top of the upper arm, under the pauldron: a shoulder.
+		return driver.CFrame * CFrame.new(0, driver.Size.Y * 0.5, 0)
+	elseif seam == "LeftHip" or seam == "RightHip" then
+		-- The top of the thigh, inside the pelvis.
+		return driver.CFrame * CFrame.new(0, driver.Size.Y * 0.5, 0)
+	elseif seam == "Neck" then
+		-- Low and to the BACK of the skull, where a neck would be. Pivoting a
+		-- head about its own middle drives the muzzle up as the crown goes
+		-- down; about the back of the jaw it nods.
+		return driver.CFrame * CFrame.new(0, -driver.Size.Y * 0.34, driver.Size.Z * 0.44)
+	elseif seam == "JawJoint" then
+		-- The hinge, at the back of the jaw. About its middle the chin and the
+		-- hinge open by the same amount, which is a jaw sliding rather than one
+		-- opening.
+		return driver.CFrame * CFrame.new(0, driver.Size.Y * 0.30, driver.Size.Z * 0.46)
+	end
+	return driver.CFrame
 end
 
 local SEAM_DRIVER = {
@@ -235,10 +277,25 @@ function AstralmawModel.Build(cf: CFrame, height: number, parent: Instance): Mod
 		mk(ctx, g, nm .. "Forearm", Vector3.new(2.4, 4.6, 2.6),
 			CFrame.new(ax + 0.6 * sign, shoulderY - 5.6, -1.9) * CFrame.Angles(rad(-15), 0, 0), COLORS.Midnight)
 
-		-- Triple-Tiered Constellation Pauldrons
-		mk(ctx, g, nm .. "PauldronTop", Vector3.new(3.2, 1.8, 3.2),
+		--======================================================================
+		-- THE TOP PAULDRON IS BODY ARMOUR, NOT ARM ARMOUR
+		--
+		-- It sat in the shoulder seam with the arm, so it swung with the arm --
+		-- measured at 5.97 studs of travel, 31% of the creature's height, for a
+		-- plate that is supposed to sit ON the shoulder and cap the joint. A
+		-- shoulder plate that flies off the shoulder is what stops the seam
+		-- reading as a shoulder at all.
+		--
+		-- Moved to BodyCore, so it rides the torso and the arm turns underneath
+		-- it, which is what a pauldron does. Its position, size, colour and
+		-- material are untouched; only which mass it is welded to changes.
+		--
+		-- The MID pauldron keeps the arm: it sits below the socket and is the
+		-- top of the limb rather than a cap over it.
+		--======================================================================
+		mk(ctx, "BodyCore", nm .. "PauldronTop", Vector3.new(3.2, 1.8, 3.2),
 			CFrame.new(ax, shoulderY + 0.8, -0.6) * CFrame.Angles(0, 0, rad(-18 * sign)), COLORS.SlateDark)
-		mk(ctx, g, nm .. "PauldronRune", Vector3.new(2.4, 0.4, 2.4),
+		mk(ctx, "BodyCore", nm .. "PauldronRune", Vector3.new(2.4, 0.4, 2.4),
 			CFrame.new(ax, shoulderY + 1.8, -0.6) * CFrame.Angles(0, 0, rad(-18 * sign)), COLORS.NebulaCyan, nil, Enum.Material.Neon, true)
 		mk(ctx, g, nm .. "PauldronMid", Vector3.new(2.8, 1.6, 2.8),
 			CFrame.new(ax + 0.4 * sign, shoulderY - 0.6, -0.6) * CFrame.Angles(0, 0, rad(-25 * sign)), COLORS.AmethystDark)
@@ -342,11 +399,8 @@ function AstralmawModel.Build(cf: CFrame, height: number, parent: Instance): Mod
 	for seam, driverName in pairs(SEAM_DRIVER) do
 		local driver = ctx.parts[driverName]
 		if driver then
-			if seam == "Neck" or seam == "JawJoint" then
-				motor(seam, if seam == "JawJoint" then head else torso, driver)
-			else
-				motor(seam, torso, driver)
-			end
+			local part0 = if seam == "JawJoint" then head else torso
+			socketMotor(seam, part0, driver, seamSocket(seam, driver))
 			driven[driver] = true
 			for _, p in ipairs(ctx.seams[seam] or {}) do
 				if p ~= driver then
@@ -355,6 +409,22 @@ function AstralmawModel.Build(cf: CFrame, height: number, parent: Instance): Mod
 			end
 		end
 	end
+	--==========================================================================
+	-- A MISSING SEAM FAILS OUT LOUD
+	--
+	-- A parent whose LeftHip never got built is a monster that runs at you with
+	-- one leg welded to its chest, and nothing anywhere says so: ParentAnim
+	-- looks the joint up by name, finds nil, and silently animates the six it
+	-- did find. This is the only moment the absence is knowable.
+	--==========================================================================
+	for seam, driverName in pairs(SEAM_DRIVER) do
+		if not ctx.parts[driverName] then
+			warn(string.format(
+				"[Seed/AstralmawModel] seam %q wants a part named %q and there is none;"
+				.. " that limb will not move", seam, driverName))
+		end
+	end
+
 	for seam, bucket in pairs(ctx.seams) do
 		if not SEAM_DRIVER[seam] then
 			for _, p in ipairs(bucket) do

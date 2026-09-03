@@ -1500,7 +1500,137 @@ GameConfig.Parent = {
 	--==========================================================================
 	ChaseOvershootStuds = 60,
 	-- Seconds it holds you before the throw. Long enough to read what happened.
+
+	--==========================================================================
+	-- ONE GUARDIAN CAN BE MORE THAN THE FORMULA
+	--
+	-- Everything above derives every parent from its biome's recommendation, and
+	-- that is right for four of the five: the road's difficulty curve and its
+	-- guardians should not be two numbers that can drift apart.
+	--
+	-- Astralmaw is the end of the road, and measurement says the formula alone
+	-- does not get it there. `parentWalkSpeedFor` gives it 92 against a player
+	-- who has trained to the Starbloom recommendation and runs 82 -- ten studs a
+	-- second of margin, which is the same margin Greenhollow's brute has over a
+	-- beginner. The last biome reading exactly like the first one is the thing
+	-- being fixed here.
+	--
+	-- A PROFILE IS AN OVERRIDE, NOT A SECOND SYSTEM. Rage still stacks on top,
+	-- the under-speed shortfall still applies on top, the safe zone still ends
+	-- the chase, and a species with no entry here is untouched -- which is what
+	-- keeps Greenhollow, Brambleback, Miremaw and Forgemaw exactly as they were.
+	--==========================================================================
+	Guardians = {
+		astralmaw = {
+			--==================================================================
+			-- IT OPENS FAST AND THEN KEEPS GETTING WORSE
+			--
+			-- A flat top speed is a single fact a player learns once. A ramp is
+			-- a chase that changes while it is happening: the first two seconds
+			-- are survivable and every second after that is less so, which is
+			-- what makes running the whole way home a decision rather than a
+			-- formality.
+			--
+			-- Squared rather than linear, so the frightening part is the end of
+			-- the ramp and not the beginning.
+			--==================================================================
+			OpeningSpeed = 78,
+			TopSpeed = 118,
+			RampSeconds = 2.6,
+			-- Walking home is not a chase. Slower, and the animator reads the
+			-- same state to take the aggression out of the gait.
+			ReturnSpeed = 64,
+
+			--==================================================================
+			-- NO ANTICIPATION. CONTACT IS THE HIT.
+			--
+			-- This was 0.32 seconds of coil before the launch, and played it
+			-- read as LAG: the monster reaches you, nothing happens, and a third
+			-- of a second later you go. Anticipation is a real technique and it
+			-- is the wrong one here -- the whole chase has already been the
+			-- anticipation, and a pause at the end of it is a pause, not a
+			-- flourish.
+			--
+			-- It is also what made charging the monster a dodge: at 150 walk
+			-- speed a player covered 48 studs during the coil, past the range
+			-- re-check, and the swing missed. Zero puts the impulse on the frame
+			-- contact happens, so running at it is running at it.
+			--
+			-- The arm still swings. ParentAnim starts Astralmaw's strike at the
+			-- impact and follows through, which is what every other guardian
+			-- already does -- see astralStrike, which reads this number and
+			-- drops its coil phase when it is zero.
+			--==================================================================
+			WindupSeconds = 0,
+
+			--==================================================================
+			-- THE THROW, AND THE WALL IT HAS TO CLEAR
+			--
+			-- Horizontal is in the same band the formula produced (228.7); this
+			-- is a deliberate hair over it.
+			--
+			-- LIFT IS NOT. The Starbloom corridor is walled at x = +/-75 and
+			-- those walls are FORTY-SIX STUDS TALL. A ballistic launch clears
+			-- them only if v^2/2g beats 43, which needs 130 studs/second of
+			-- vertical: the 0.45 lift every other biome uses gives 103 and an
+			-- apex of 27, half the wall. 0.60 gives 141 and an apex of 53.7,
+			-- which is over the top with seven studs to spare -- and past the
+			-- wall there is no floor, so the victim goes to the void.
+			--
+			-- That is the whole reason this number is not shared: it is not a
+			-- taste for a bigger number, it is the height of a specific wall.
+			--==================================================================
+			--
+			-- 300 rather than 235 because "very far" was the ask after seeing
+			-- it, and 235 was landing people in the middle of the biome they
+			-- were trying to leave. Ballistic range at this lift is 504 studs
+			-- before the tumble, against 338 at the old number.
+			ThrowSpeed = 300,
+			-- 0.55 puts the apex at 69 studs, still well over the 46-stud
+			-- corridor wall, and gives 1.7 seconds of air -- which is the
+			-- control-loss window as well, since the body is limp until it
+			-- settles.
+			ThrowLift = 0.55,
+
+			--==================================================================
+			-- IT THROWS YOU HOME, AND THAT IS THE POINT
+			--
+			-- Away used to dominate at 1.00 against 0.30 of road, and played it
+			-- was backwards: the guardian aims SIXTY STUDS PAST you while it
+			-- chases -- see ChaseOvershootStuds, which exists so it does not
+			-- brake -- so by the time it makes contact it is very often level
+			-- with you or in front. "Away from the monster" is then "further
+			-- down the corridor", and the hit fired people deeper into the
+			-- biome they were running out of.
+			--
+			-- The road wins now. At 1.00 against 0.45, `away` can never take the
+			-- sum past ninety degrees off the road, so every hit sends the
+			-- victim up the corridor toward the plots however the two bodies
+			-- happen to be standing -- while `away` still decides which side of
+			-- the road they go, so the launch and the visible strike agree.
+			--
+			-- The road direction itself is derived from this nest's own position
+			-- toward the hub pad rather than a hardcoded world axis, so it is
+			-- still right for a nest placed anywhere.
+			--==================================================================
+			AwayWeight = 0.45,
+			RoadWeight = 1.00,
+		},
+	},
 }
+
+--==============================================================================
+-- THE PROFILE FOR A SPECIES, OR NOTHING
+--
+-- Nothing is the answer for four of the five guardians and that is the point:
+-- an absent profile is what makes this whole block unable to touch them.
+--==============================================================================
+function GameConfig.guardianProfile(species: any): any
+	if type(species) ~= "string" then
+		return nil
+	end
+	return GameConfig.Parent.Guardians[species]
+end
 
 --==============================================================================
 -- THE PARENT IS AS FAST AS THE BIOME ASKS YOU TO BE, PLUS A MARGIN

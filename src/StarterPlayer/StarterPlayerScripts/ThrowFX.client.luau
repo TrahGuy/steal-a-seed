@@ -249,7 +249,35 @@ end
 --==============================================================================
 -- THE HIT
 --==============================================================================
-local function onThrown(dir: Vector3, speed: number, lift: number, clear: number)
+--==============================================================================
+-- HOW LONG THE LAUNCH VELOCITY IS HELD, AND WHY IT IS NOT ALWAYS 0.35
+--
+-- The loop below re-writes AssemblyLinearVelocity every frame for the hold, and
+-- that does not "hold" a throw -- it CANCELS GRAVITY for the duration. Measured
+-- on a Starbloom hit: a launch of 228.8 horizontal and 102.9 vertical, whose
+-- ballistic apex is 27 studs, reached 73 and carried the victim 797 studs. No
+-- number anybody configured described the arc that resulted.
+--
+-- What the hold is really for is real, though, and it is written up at the top
+-- of this file: setting PlatformStand makes the humanoid state machine zero the
+-- assembly's velocity on the following frame. So a hold of zero does not mean
+-- "no guard" -- it means one impulse, and then a short watch that puts the
+-- velocity back ONCE if it collapses, after which gravity owns the flight.
+--
+-- The four guardians that shipped with the old behaviour still get it, because
+-- their server sends no hold at all and this falls through to the tested value.
+--==============================================================================
+local LEGACY_HOLD = 0.35
+-- Long enough for the humanoid state machine to stop trying to stand up. Being
+-- generous costs nothing, because the guard below tracks the PARABOLA rather
+-- than the launch, so a frame that needs no correction does not get one.
+local CLEAN_GUARD = 0.30
+-- How far the real velocity may drift from the ballistic one before it counts
+-- as the engine having eaten it rather than gravity having taken it.
+local OFF_ARC_BY = 0.22
+
+local function onThrown(dir: Vector3, speed: number, lift: number, clear: number,
+	hold: number?)
 	-- Everything here came off the wire. A malformed packet should do nothing
 	-- rather than throw inside an event handler and leave the flag stuck.
 	if typeof(dir) ~= "Vector3" or type(speed) ~= "number" or type(lift) ~= "number" then
@@ -344,25 +372,105 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			tostring(wasSubject and wasSubject.Name),
 			tostring(camera and camera.CameraSubject and camera.CameraSubject.Name)))
 
-		--== 4. THROW EVERY PART WITH TUMBLE IMPULSE ==--
+		--== 4. THE LAUNCH ==--
 		local parts = bodyParts()
 		local tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3), math.random(-6, 6))
-		for _, part in ipairs(parts) do
-			part:ApplyImpulse(impulse * part.AssemblyMass)
-			part.AssemblyLinearVelocity = impulse
-			part.AssemblyAngularVelocity = tumble
-		end
-		say(string.format("first velocity applied to %d parts: %s (%.1f studs/sec)",
-			#parts, tostring(impulse), impulse.Magnitude))
+		local holdFor = if type(hold) == "number" and hold == hold and hold >= 0
+			then hold
+			else LEGACY_HOLD
 
-		-- Hold velocity for 0.35s to completely override any humanoid motor damping
-		local holdUntil = os.clock() + 0.35
-		while os.clock() < holdUntil do
-			humanoid.PlatformStand = true
-			for _, part in ipairs(bodyParts()) do
+		if holdFor > 0 then
+			for _, part in ipairs(parts) do
+				part:ApplyImpulse(impulse * part.AssemblyMass)
 				part.AssemblyLinearVelocity = impulse
+				part.AssemblyAngularVelocity = tumble
 			end
-			RunService.Heartbeat:Wait()
+			say(string.format("first velocity applied to %d parts: %s (%.1f studs/sec)",
+				#parts, tostring(impulse), impulse.Magnitude))
+		else
+			--==============================================================
+			-- ONE WRITE PER PART, AND EVERY PART IS ITS OWN ASSEMBLY
+			--
+			-- What was wrong with the loop above is not that it touches every
+			-- part -- it has to. A ragdolled R15 character has had its Motor6Ds
+			-- replaced with BallSocketConstraints, so the limbs are seventeen
+			-- SEPARATE assemblies and the root's velocity moves the root alone.
+			-- Setting it there and nowhere else was measured: the root flew its
+			-- full 373 studs while the body it belongs to travelled a hundred,
+			-- and ThrowFX had to drag the root back onto the torso.
+			--
+			-- What was wrong is ApplyImpulse ON TOP of the assignment. Impulse
+			-- ADDS and the assignment SETS, so with a server that had already
+			-- done both the body left at 467.6 and 291.9 out of a configured
+			-- 235 and 141 -- exactly double -- and rose to an apex of 237. The
+			-- number in the config was not the number the body got, so nothing
+			-- downstream of it could be tuned.
+			--
+			-- So: every part, once, assignment only.
+			--==============================================================
+			for _, part in ipairs(parts) do
+				part.AssemblyLinearVelocity = impulse
+				part.AssemblyAngularVelocity = tumble
+			end
+			say(string.format("one impulse across %d parts: %s (%.1f studs/sec)",
+				#parts, tostring(impulse), impulse.Magnitude))
+		end
+
+		if holdFor > 0 then
+			-- The tested path, unchanged: hold the velocity outright.
+			local holdUntil = os.clock() + holdFor
+			while os.clock() < holdUntil do
+				humanoid.PlatformStand = true
+				for _, part in ipairs(bodyParts()) do
+					part.AssemblyLinearVelocity = impulse
+				end
+				RunService.Heartbeat:Wait()
+			end
+			say(string.format("held the launch velocity for %.2fs", holdFor))
+		else
+			--==============================================================
+			-- ONE IMPULSE. The watch below restores it only if the state
+			-- machine wipes it, and never otherwise, so the flight is the
+			-- parabola the server asked for and can be measured against it.
+			--==============================================================
+			--==============================================================
+			-- THE GUARD FOLLOWS THE PARABOLA, NOT THE LAUNCH
+			--
+			-- Setting the velocity once is not enough on its own: the humanoid
+			-- is still Running when it is set, and the state machine cancels the
+			-- VERTICAL component on the next step while leaving the horizontal
+			-- alone. Measured: a launch configured at 235 and 141 left at 234.7
+			-- and 6.7, and the body slid forty studs along the floor.
+			--
+			-- The old hold fixed that by rewriting the whole velocity every
+			-- frame, which also cancels gravity. This restores the velocity the
+			-- launch SHOULD have at this instant -- impulse minus g*t -- so a
+			-- correction puts the body back on its own arc instead of on a flat
+			-- line, and a frame already on the arc is left alone.
+			--==============================================================
+			local guardUntil = os.clock() + CLEAN_GUARD
+			local launchedAt = os.clock()
+			local restored = 0
+			while os.clock() < guardUntil do
+				humanoid.PlatformStand = true
+				local r = character:FindFirstChild("HumanoidRootPart")
+				if r and r:IsA("BasePart") then
+					local flight = os.clock() - launchedAt
+					local want = impulse - Vector3.new(0, workspace.Gravity * flight, 0)
+					if (r.AssemblyLinearVelocity - want).Magnitude
+						> want.Magnitude * OFF_ARC_BY then
+						-- Every part again: they are separate assemblies, and a
+						-- torso left behind is the 373-stud separation above.
+						for _, part in ipairs(bodyParts()) do
+							part.AssemblyLinearVelocity = want
+						end
+						restored += 1
+					end
+				end
+				RunService.Heartbeat:Wait()
+			end
+			say(string.format("one impulse; put back on the arc %d time(s) in %.2fs",
+				restored, CLEAN_GUARD))
 		end
 
 		--======================================================================

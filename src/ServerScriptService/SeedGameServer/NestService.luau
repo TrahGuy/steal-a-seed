@@ -97,6 +97,9 @@ type Nest = {
 	-- When it last settled. Rage fades this long after, rather than the instant
 	-- it lies down -- see GameConfig.Parent.RageForgetSeconds.
 	calmSince: number,
+	-- When the CURRENT chase started. A guardian with a ramp profile reads it
+	-- every tick; one without never looks at it.
+	chaseSince: number,
 }
 
 local nests: { Nest } = {}
@@ -213,6 +216,7 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		slots = podCFrames(centre, biome.PodsPerNest, outward),
 		pods = {},
 		state = "asleep",
+		chaseSince = 0,
 		target = nil,
 		stateUntil = 0,
 		busy = false,
@@ -261,6 +265,65 @@ local function speedFor(nest: Nest): number
 			speedScoreOf(nest.target)
 		)
 		+ math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
+end
+
+--==============================================================================
+-- A GUARDIAN WITH A PROFILE, OR NOBODY
+--
+-- Keyed on the SPECIES the builder stamped on the model, because that is the
+-- same key ParentAnim dispatches on and a guardian's speed and its gait have to
+-- be talking about the same animal. Four of the five return nil here and are
+-- untouched by everything below.
+--==============================================================================
+local function profileOf(nest: Nest): any
+	return GameConfig.guardianProfile(nest.parent:GetAttribute("Species"))
+end
+
+--==============================================================================
+-- THE CHASE THAT GETS WORSE
+--
+-- The profile replaces the biome's flat speed and keeps everything that was
+-- stacked on top of it: rage, and the shortfall a player who turned up
+-- undergeared already pays. The shortfall is recovered by asking the formula
+-- twice -- once with the thief and once without -- rather than by copying the
+-- expression, so the two can never drift apart.
+--
+-- Squared, so most of the acceleration happens in the second half of the ramp:
+-- the opening is survivable and it is the third second that is frightening.
+--==============================================================================
+local function chaseSpeedFor(nest: Nest, now: number): number
+	local prof = profileOf(nest)
+	if not prof then
+		return speedFor(nest)
+	end
+	local rage = math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
+	local rec = nest.biome.RecommendedSpeed
+	local shortfall = GameConfig.parentWalkSpeedFor(rec, speedScoreOf(nest.target))
+		- GameConfig.parentWalkSpeedFor(rec)
+	local since = if nest.chaseSince > 0 then now - nest.chaseSince else 0
+	local u = math.clamp(since / math.max(prof.RampSeconds, 0.01), 0, 1)
+	return prof.OpeningSpeed + (prof.TopSpeed - prof.OpeningSpeed) * u * u
+		+ rage + shortfall
+end
+
+local function returnSpeedFor(nest: Nest): number
+	local prof = profileOf(nest)
+	if prof then
+		return prof.ReturnSpeed
+	end
+	return speedFor(nest)
+end
+
+--==============================================================================
+-- WRITE A WALKSPEED ONLY WHEN IT CHANGED
+--
+-- The ramp recomputes eight times a second and the Humanoid does not need to be
+-- told the same number again; a property write that replicates is not free.
+--==============================================================================
+local function setWalk(nest: Nest, speed: number)
+	if math.abs(nest.humanoid.WalkSpeed - speed) > 0.05 then
+		nest.humanoid.WalkSpeed = speed
+	end
 end
 
 --==============================================================================
@@ -323,6 +386,7 @@ local function provoke(nest: Nest, thief: Player)
 			-- asleep beside the nest.
 			--==============================================================
 			nest.state = "chasing"
+			nest.chaseSince = os.clock()
 			nest.stateUntil = 0
 			nest.parent:SetAttribute("Asleep", false)
 		end
@@ -330,6 +394,7 @@ local function provoke(nest: Nest, thief: Player)
 		-- Already up and walking home. No second delay -- it never went back to
 		-- sleep, so it has nothing to wake up from.
 		nest.state = "chasing"
+		nest.chaseSince = os.clock()
 	end
 	-- Always re-target: stealing from a parent already chasing somebody else
 	-- should make it chase YOU, or two players could take turns feeding it a
@@ -338,7 +403,7 @@ local function provoke(nest: Nest, thief: Player)
 	if nest.state == "chasing" then
 		-- Already running. Speed up mid-chase rather than waiting for the next
 		-- state change, which might never come.
-		nest.humanoid.WalkSpeed = speedFor(nest)
+		setWalk(nest, chaseSpeedFor(nest, os.clock()))
 	end
 end
 
@@ -569,6 +634,43 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- victim would put the loudest cue in the game inside the ear of the one
 	-- player who does not need to be told.
 	--==========================================================================
+	--==========================================================================
+	-- A WIND-UP, IF ANY GUARDIAN EVER WANTS ONE. NONE DOES.
+	--
+	-- Astralmaw was given 0.32 seconds of anticipation here and it was WRONG,
+	-- which only playing it showed: contact happened, nothing happened, and a
+	-- third of a second later the victim went. It read as lag, not as a strike
+	-- being loaded -- the chase is the anticipation, and stopping at the end of
+	-- one to pose is a pause however good the pose is. It also handed the player
+	-- a dodge: 150 walk speed covers 48 studs during the coil, past the range
+	-- re-check below, so charging the monster beat it.
+	--
+	-- So every profile is at zero and this block does not run. It is left
+	-- standing because the re-checks in it are the correct ones for any wind-up
+	-- somebody adds later -- the victim can die, disconnect, reach the safe zone
+	-- or get out of reach inside it, and all four have to cost the parent its
+	-- hit rather than throwing a body that is no longer there.
+	--==========================================================================
+	local prof = profileOf(nest)
+	local windup = if prof then (tonumber(prof.WindupSeconds) or 0) else 0
+	if windup > 0 then
+		nest.parent:SetAttribute("AttackWindup", windup)
+		nest.parent:SetAttribute("AttackSwipe", workspace:GetServerTimeNow())
+		task.wait(windup)
+		-- Everything that could have changed while it was coiling.
+		if player.Parent ~= Players or humanoid.Health <= 0 or not root.Parent
+			or character.Parent == nil then
+			return
+		end
+		if MapService.IsInSafeZone(root.Position) then
+			return
+		end
+		if (root.Position - nest.root.Position).Magnitude > P.GrabStuds * 4 then
+			-- They got out of reach during the wind-up. The swing misses.
+			return
+		end
+	end
+
 	SoundKit.emit("Grab", nest.root)
 
 	humanoid.PlatformStand = true
@@ -629,26 +731,96 @@ local function throwPlayer(nest: Nest, player: Player)
 	--
 	-- So: bigger biome number, harder shove. Where they end up is the world's
 	-- business.
+	--
+	-- A PROFILED GUARDIAN STATES ITS OWN TWO NUMBERS INSTEAD, because the arc it
+	-- needs is not a function of its biome index -- it is a function of a wall.
+	-- See GameConfig.Parent.Guardians.astralmaw.
 	--==========================================================================
-	local R = GameConfig.parentThrowStudsFor(nest.biome.Order)
-	local k = P.ThrowLift
 	local g = Workspace.Gravity
-	local speed = math.sqrt(R * g / (2 * k))
+	local speed, k
+	if prof then
+		speed = tonumber(prof.ThrowSpeed) or 0
+		k = tonumber(prof.ThrowLift) or P.ThrowLift
+	else
+		local R = GameConfig.parentThrowStudsFor(nest.biome.Order)
+		k = P.ThrowLift
+		speed = math.sqrt(R * g / (2 * k))
+	end
 
-	-- OUT, away from the monster and biased toward the safe zone (+Z).
+	--==========================================================================
+	-- WHICH WAY, AND WHY IT IS NOT (0, 0, 1)
+	--
+	-- AWAY FROM THE MONSTER, always: the flat vector from its root to the
+	-- victim's, which is also the direction the arm just swung, so the launch
+	-- and the strike agree. Overlapping exactly -- a hit landed from inside the
+	-- torso -- falls back to the monster's own facing rather than dividing by a
+	-- zero-length vector.
+	--
+	-- The second term is the road. The four unprofiled parents keep the literal
+	-- +Z they shipped with, byte for byte, because that IS their tested
+	-- behaviour. A profiled one derives it from its OWN nest instead: the flat
+	-- direction to the hub pad in the safe field, which points up the corridor
+	-- from wherever the nest happens to be, and would still point the right way
+	-- if the road were rebuilt facing anywhere else.
+	--
+	-- Away outweighs it better than three to one on Astralmaw, which is what
+	-- makes a hit taken beside a wall go OVER the wall rather than obediently
+	-- down the middle of the road. Even with the road term pointing straight
+	-- back, the sum keeps 70% of `away`, so no mixture of the two can throw a
+	-- victim through the torso that hit them -- asserted below rather than
+	-- assumed.
+	--==========================================================================
 	local diff = root.Position - nest.root.Position
 	local flatDiff = Vector3.new(diff.X, 0, diff.Z)
-	local awayDir = if flatDiff.Magnitude > 0.1 then flatDiff.Unit else Vector3.new(0, 0, 1)
-	local dir = (awayDir * 0.7 + Vector3.new(0, 0, 0.5)).Unit
+	local facing = nest.root.CFrame.LookVector
+	local flatFacing = Vector3.new(facing.X, 0, facing.Z)
+	local awayDir
+	if flatDiff.Magnitude > 0.1 then
+		awayDir = flatDiff.Unit
+	elseif flatFacing.Magnitude > 0.1 then
+		awayDir = flatFacing.Unit
+	else
+		awayDir = Vector3.new(0, 0, 1)
+	end
+
+	local roadOut = Vector3.new(0, 0, 1)
+	if prof then
+		local hub = MapService.GetOverflowCFrame().Position - nest.origin
+		local flatHub = Vector3.new(hub.X, 0, hub.Z)
+		if flatHub.Magnitude > 1 then
+			roadOut = flatHub.Unit
+		end
+	end
+	local aw = if prof then (tonumber(prof.AwayWeight) or 1) else 0.7
+	local rw = if prof then (tonumber(prof.RoadWeight) or 0) else 0.5
+	local dir = awayDir * aw + roadOut * rw
 	if dir.Magnitude < 0.1 then
-		dir = Vector3.new(0, 0, 1)
+		dir = awayDir
+	else
+		dir = dir.Unit
+	end
+	if dir:Dot(awayDir) <= 0 then
+		-- Cannot happen with the weights above; it would mean a launch back
+		-- through the creature that threw it, and that is worth a line in the
+		-- log rather than a shrug.
+		warn(string.format(
+			"[Seed/NestService] %s throw resolved back toward the parent; using away only",
+			tostring(nest.parent:GetAttribute("Species"))))
+		dir = awayDir
 	end
 
 	loosened = ragdollOn(character)
 	-- nest.parent, not nest.model: the Nest type has no 'model' field, so this
 	-- indexed nil and threw -- AFTER the ragdoll and BEFORE the FireClient that
 	-- does the actual throwing. The victim went limp and was never flung.
-	nest.parent:SetAttribute("AttackSwipe", workspace:GetServerTimeNow())
+	--
+	-- A profiled guardian already stamped it at the START of its wind-up, and
+	-- stamping again here would restart the animation at the impact frame --
+	-- which is the bug the wind-up exists to fix.
+	if windup <= 0 then
+		nest.parent:SetAttribute("AttackWindup", 0)
+		nest.parent:SetAttribute("AttackSwipe", workspace:GetServerTimeNow())
+	end
 
 	SoundKit.emit("Throw", nest.root)
 
@@ -657,7 +829,12 @@ local function throwPlayer(nest: Nest, player: Player)
 	local rem = resolveThrowRemote()
 	if rem then
 		sent = pcall(function()
-			rem:FireClient(player, dir, speed, P.ThrowLift, CLEAR_STUDS)
+			-- The fifth argument is how long the client should HOLD the launch
+			-- velocity. Omitted for the four unprofiled parents, which leaves
+			-- them on the value ThrowFX has always used; zero for a profiled
+			-- one, which asks for a single impulse and a real ballistic arc.
+			rem:FireClient(player, dir, speed, k, CLEAR_STUDS,
+				if prof then 0 else nil)
 		end)
 	end
 	if not sent then
@@ -666,8 +843,21 @@ local function throwPlayer(nest: Nest, player: Player)
 
 	-- Immediate physics impulse directly into solver momentum
 	pcall(function()
-		local impulse = dir * speed + Vector3.new(0, speed * P.ThrowLift, 0)
-		root:ApplyImpulse(impulse * root.AssemblyMass)
+		-- `k`, not P.ThrowLift: the server's own hint has to be the same arc it
+		-- just described to the client, or the two disagree for the frame
+		-- before the owner takes over.
+		local impulse = dir * speed + Vector3.new(0, speed * k, 0)
+		--==================================================================
+		-- ONE OF THESE, NOT BOTH, WHEN THE CLIENT IS GOING TO LAUNCH IT
+		--
+		-- ApplyImpulse ADDS to the velocity and the line under it SETS it, so
+		-- on a body the owning client is about to set as well the two stack.
+		-- Measured: 467.6 out of a configured 235. The unprofiled parents keep
+		-- both calls, because both is what they were tuned against.
+		--==================================================================
+		if not prof then
+			root:ApplyImpulse(impulse * root.AssemblyMass)
+		end
 		root.AssemblyLinearVelocity = impulse
 	end)
 
@@ -769,11 +959,28 @@ local function sleep(nest: Nest)
 	-- was defending is still lying on the ground -- clearing on sleep made
 	-- coming back for that pod free, which is the exact case this exists for.
 	nest.calmSince = os.clock()
+	nest.chaseSince = 0
 	nest.humanoid.WalkSpeed = 0
 	nest.parent:SetAttribute("Asleep", true)
 end
 
 local function step(nest: Nest, now: number)
+	--==========================================================================
+	-- THE STATE IS PUBLISHED, ONCE, WHENEVER IT CHANGES
+	--
+	-- `Asleep` was the only thing a client knew, and it cannot tell a chase from
+	-- a walk home -- so a guardian that had just thrown somebody strolled back
+	-- to its nest with the same hunting gait it arrived with.
+	--
+	-- Published HERE rather than at each of the nine places `state` is assigned:
+	-- one writer, and it cannot go stale because the tick is the thing that owns
+	-- the state machine. Written only on a change, so it is not eight property
+	-- replications a second per nest.
+	--==========================================================================
+	if nest.parent:GetAttribute("ParentState") ~= nest.state then
+		nest.parent:SetAttribute("ParentState", nest.state)
+	end
+
 	--== RAGE FADES ==--
 	if nest.rage > 0 and nest.state == "asleep" and nest.calmSince > 0
 		and now - nest.calmSince >= P.RageForgetSeconds then
@@ -791,7 +998,8 @@ local function step(nest: Nest, now: number)
 	elseif nest.state == "waking" then
 		if now >= nest.stateUntil then
 			nest.state = "chasing"
-			nest.humanoid.WalkSpeed = speedFor(nest)
+			nest.chaseSince = os.clock()
+			setWalk(nest, chaseSpeedFor(nest, os.clock()))
 			nest.parent:SetAttribute("Asleep", false)
 		end
 		return
@@ -837,6 +1045,21 @@ local function step(nest: Nest, now: number)
 		-- distance. See distanceToSegment above for why the point test was
 		-- not enough.
 		--==================================================================
+		--==================================================================
+		-- THE RAMP, RE-EVALUATED EVERY TICK -- AND ONLY FOR A PROFILE
+		--
+		-- Guarded rather than relying on chaseSpeedFor returning the same
+		-- number for everybody else. It would, mostly, but not always: the
+		-- unprofiled speed reads the thief's Speed SCORE, and the treadmill can
+		-- raise that mid-chase. Those four parents lock their speed in at the
+		-- state change and have always done so, and re-deriving it eight times
+		-- a second would be a quiet behaviour change in four creatures this
+		-- pass is not allowed to touch.
+		--==================================================================
+		if profileOf(nest) then
+			setWalk(nest, chaseSpeedFor(nest, now))
+		end
+
 		local here = Vector3.new(pos.X, 0, pos.Z)
 		local was = lastTargetAt[nest.target :: Player] or here
 		--==============================================================
@@ -923,6 +1146,12 @@ local function step(nest: Nest, now: number)
 		if (nest.root.Position - home).Magnitude < 6 then
 			sleep(nest)
 			return
+		end
+		-- Slower going home than coming. A guardian that walks back at hunting
+		-- speed reads as still hunting. Profiled only: the other four have
+		-- always walked home at whatever the chase left them on.
+		if profileOf(nest) then
+			setWalk(nest, returnSpeedFor(nest))
 		end
 		nest.humanoid:MoveTo(home)
 	end
