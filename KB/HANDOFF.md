@@ -8,6 +8,26 @@
 
 ---
 
+## Premium creature reference skill -- 2026-09-04
+
+Added `seed-premium-creature-art` under `.agents/skills/`, with a matching `.claude/skills/`
+compatibility pointer. Both agents use the same instructions and two saved user-supplied images.
+The reference study distinguishes observed anatomy from inferred construction: a long blue maw
+with a pink interior, a floral quadruped, and the earlier crouching horned green creature.
+
+This is skill authoring only. No Divine/Secret species, pod models, live data, geometry, animation,
+or Studio state were changed. Divine/Secret color and motif suggestions are proposals, not approved
+palettes or new size tiers. The skill preserves primitive-only construction, current scaling and
+economy, hidden hatch results, existing previews, and separate visual/runtime approval. Historical
+kg-era skills are explicitly not authority to restore obsolete systems.
+
+Skill frontmatter, local reference paths, saved reference image hashes and whitespace passed
+direct checks. The bundled Python validator could not run because PyYAML is absent; this is not
+reported as a validator pass. No future model quality or runtime behavior is claimed as tested. The pre-existing
+shop/loadout/swing/trap changes and their handoff entries remain owned by the ongoing work. Only
+this new skill/reference package, its AGENTS skill-list entry, and this handoff entry belong to
+the premium-skill commit.
+
 ## Where it stands (2026-08-20)
 
 **Phase A: the map, and who owns which piece of it.** The world exists, is dressed, and hands
