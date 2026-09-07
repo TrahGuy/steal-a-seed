@@ -1,0 +1,17 @@
+# Supernovus colossal-value thumbnail v1
+
+Generated using the built-in image-generation tool. Species identity informed by StarbloomForms.luau; live Supernovus was present but occluded by neighboring plants during attempted screenshots. This is a stylized illustration, not an exact Studio render. The displayed 99999999 is requested promotional artwork, not verified game earnings. No game code or economic value changed; no Roblox upload.
+
+## Generation prompt
+
+Use case: ads-marketing
+Asset type: original 16:9 Roblox game thumbnail for Steal a Seed.
+Primary request: One COLOSSAL Supernovus plant towers over one very small classic Roblox noob who looks up in amazed awe. Display the exact value "99999999" prominently. An exciting polished Roblox 3D-render thumbnail, not photorealistic, not a screenshot with UI.
+
+Species identity, based on the game's actual Supernovus model: a SIX-LEGGED cosmic dragon-plant titan, squat broad rectangular near-black purple carapace, three pairs of stout jointed legs with chunky connected dark-violet feet and two unequal wedge toes per foot. A short thick rising neck at the front, broad angular rectangular dragon skull, a separate open lower jaw around a white glowing mouth core, two small luminous pulsar eyes, ONE swept-back pale lavender central brow horn. Four long pale lavender alien leaf blades emerge from its flanks. A giant dorsal galaxy LOTUS rises from its back: three dark-indigo outer wedge petals, three warm golden inner petals, luminous ivory spherical star core, golden upright crown flare with two ivory points. A tilted cyan orbital halo, distinctly made of three straight luminous segments, surrounds the flower core, with one small golden comet satellite. Surfaces are stylized Roblox blocks/wedges with subtle square stud relief, not a realistic organic dragon. Colors deep purple-black RGB14,10,24 / midnight violet24,18,46, lavender158,128,255, gold255,215,120 and cyan110,230,255. Do not add wings or a tail or extra heads or extra horns.
+
+Composition: dramatic low-angle three-quarter view that clearly shows the face, multiple planted legs, and the complete tall luminous dorsal flower. Colossal plant occupies most of image, huge above the noob. Noob in lower foreground at about one-eighth plant height, close enough for expression to read, head tipped far up at the plant, round open O mouth, wide astonished eyes, both block hands near cheeks, leaning back in delighted disbelief. Classic Roblox noob only: yellow cylindrical head, yellow block arms, blue rectangular torso, green rectangular legs, no hair, no hat, no clothing accessories. No other characters. Not running, no weapons, no carried pod.
+
+Background: simplified vivid green Roblox garden with small white fence and distant blocky terrain to convey enormous scale, vivid blue-to-violet sky, sparse cosmic star sparkles near plant. Strong daylight and cyan/gold rim glow, crisp silhouettes, balanced bloom that does not erase geometry or face, rich saturated color and high thumbnail legibility. Plant must feel collectible and wondrous, not attacking the noob.
+Text (verbatim): "99999999" -- exactly EIGHT digits, all nines, no commas, no suffix, no per-second claim. Huge bold lime-green game-value lettering with thick very dark outline and a thin bright highlight, across a clear upper-left area, readable at small size, separated from the flower. No other text, no UI, no shop icons, no labels, no arrows, no watermark. Keep text and head inside safe margins. Original composition.
+
