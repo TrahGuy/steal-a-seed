@@ -72,7 +72,9 @@ src/
     Shared/GameConfig.luau      names, capacity, map geometry, speed curve, save
     Shared/SeedData.luau        Greenhollow + Dustbowl species, and what they earn
     Shared/BiomeData.luau       the five biomes and where they sit on the road
-    Shared/UIKit.luau           studs, and the one gold rail button all three use
+    Shared/UIKit.luau           the modal, the slab, the lattice and one camera framer
+    Shared/WeaponData.luau      Marigold's shelf: six bats, one trap, prices and combat
+    Shared/WeaponModel.luau     their geometry -- Tool, shop viewport and world trap
     Remotes/                    created at runtime by ServerMain
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
@@ -89,6 +91,10 @@ src/
     PlantService.luau           place by click, hatch by hand, pick back up
     EconomyService.luau         THE FAUCET -- grown plants pay kg/sec, nothing else mints
     TreadmillService.luau       THE FAUCET for Speed -- stand on your own mill
+    SellService.luau            the sell-all board beside the stall
+    DebugService.luau           F4 console, gated to Studio and the place owner
+    WeaponShopService.luau      Marigold's counter: buying, equipping, and the one Tool
+    CombatService.luau          what a bat and a trap DO -- knockback, restraint, cleanup
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
     Music.client.luau           the background bed; ids in GameConfig.Music
@@ -106,6 +112,11 @@ src/StarterPlayer/StarterPlayerScripts/
     SpeedFX.client.luau         +N pops on Speed gain, and the run streak
     BiomeGuideUI.client.luau    advisory Speed banner on biome entry
     CarryPose.client.luau       both arms under the pod while carrying
+    MarigoldShopUI.client.luau  Marigold's Garden Goods -- opened by her prompt
+    WeaponFX.client.luau        how a bat is HELD and SWUNG -- poses the right
+                                arm, and the impact burst
+    LoadoutUI.client.luau       the bag, the two equipment slots, and the hotbar
+    TrapUI.client.luau          the red countdown over a trapped player
 ```
 
 **Phase A and the HUD are complete**, and Dustbowl is live production content. Tanglemire comes only

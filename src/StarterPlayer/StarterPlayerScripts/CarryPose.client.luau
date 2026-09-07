@@ -76,6 +76,14 @@ type Rig = {
 	-- "constraint" | "motor6d-r15" | "motor6d-r6"
 	kind: string,
 	weight: number,
+	--==========================================================================
+	-- WHETHER THE JOINTS HAVE ALREADY BEEN HANDED BACK
+	--
+	-- Releasing an AnimationConstraint means WRITING TO IT ONCE AND THEN LEAVING
+	-- IT ALONE. Without this latch the release branch below wrote `rest` on every
+	-- single frame, which is not a release at all -- see the block there.
+	--==========================================================================
+	released: boolean,
 }
 
 local rigs: { [Player]: Rig } = {}
@@ -99,7 +107,7 @@ local function buildRig(character: Model): Rig?
 		end
 	end
 	if #sides == 2 then
-		return { sides = sides, kind = "constraint", weight = 0 }
+		return { sides = sides, kind = "constraint", weight = 0, released = true }
 	end
 	table.clear(sides)
 
@@ -115,7 +123,7 @@ local function buildRig(character: Model): Rig?
 			end
 		end
 		if #sides == 2 then
-			return { sides = sides, kind = "motor6d-r15", weight = 0 }
+			return { sides = sides, kind = "motor6d-r15", weight = 0, released = true }
 		end
 	end
 	table.clear(sides)
@@ -132,7 +140,7 @@ local function buildRig(character: Model): Rig?
 			end
 		end
 		if #sides == 2 then
-			return { sides = sides, kind = "motor6d-r6", weight = 0 }
+			return { sides = sides, kind = "motor6d-r6", weight = 0, released = true }
 		end
 	end
 	return nil
@@ -268,6 +276,8 @@ RunService.Stepped:Connect(function(_, dt)
 			end
 
 			if rig.weight > 0 then
+				-- Driving again, so the joints will need handing back again.
+				rig.released = false
 				local lift, spread = anglesFor(reach)
 				for _, side in ipairs(rig.sides) do
 					local w = rig.weight
@@ -287,13 +297,44 @@ RunService.Stepped:Connect(function(_, dt)
 						side.motor.C0 = side.rest * pose
 					end
 				end
-			elseif rig.weight == 0 then
-				-- Hand the joints back. A constraint left driven would freeze the
-				-- arms mid-walk; a Motor6D would keep an offset forever.
+			elseif rig.weight == 0 and not rig.released then
+				--==============================================================
+				-- HAND THE JOINTS BACK -- ONCE, AND THEN NEVER AGAIN
+				--
+				-- THIS BRANCH USED TO RUN EVERY FRAME, AND IT PINNED BOTH
+				-- SHOULDERS OF EVERY PLAYER FOR THE WHOLE SESSION.
+				--
+				-- The old guard was `if constraint.Transform ~= rest then write`,
+				-- which reads like "only correct it when something moved it".
+				-- What actually moves it is THE ANIMATOR, every frame, and this
+				-- loop runs in `Stepped` -- after the animation is evaluated. So
+				-- the guard was true on every frame forever and the write landed
+				-- on every frame forever, reverting the animation.
+				--
+				-- Measured on the live avatar, playing Roblox's own `wave`:
+				--
+				--     CarryPose running    right shoulder swept  0.0 deg
+				--     CarryPose disabled   right shoulder swept 17.1 deg
+				--
+				-- and a sweep of all fifteen joints showed the animator visibly
+				-- driving eleven of them while BOTH SHOULDERS sat at exactly
+				-- (-0.0, 0.0, -0.0) -- the shape of a value being written, not
+				-- one being left alone.
+				--
+				-- That cost more than the arms: it is why three passes of notes
+				-- in HANDOFF, WeaponData and build_swing.luau record the shoulder
+				-- as "INERT -- the animator never writes it" and concluded a
+				-- custom PUBLISHED animation was the only way to swing a bat. The
+				-- shoulder was never inert. This line was overwriting it.
+				--
+				-- A one-shot is the whole fix: write rest once so nothing is left
+				-- displaced, latch, and let the animator have the joint back.
+				--==============================================================
+				rig.released = true
 				for _, side in ipairs(rig.sides) do
-					if side.constraint and side.constraint.Transform ~= side.rest then
+					if side.constraint then
 						side.constraint.Transform = side.rest
-					elseif side.motor and side.motor.C0 ~= side.rest then
+					elseif side.motor then
 						side.motor.C0 = side.rest
 					end
 				end

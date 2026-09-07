@@ -40,6 +40,7 @@ local SaveService = require(script.Parent:WaitForChild("SaveService"))
 local ProfileSchema = require(script.Parent:WaitForChild("ProfileSchema"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
+local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
 
 local SAVE = GameConfig.Save
 
@@ -108,6 +109,23 @@ local function touch(player: Player)
 	end
 end
 
+-- Server success paths only. No client can submit a milestone or step number.
+function PlayerDataService.RecordTutorial(player: Player, milestone: string): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then return false end
+	if not TutorialData.Record(entry.profile.Tutorial, milestone) then return false end
+	touch(player)
+	return true
+end
+
+function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
+	if not TutorialData.SetSkipped(entry.profile.Tutorial, skipped) then return false end
+	touch(player)
+	return true
+end
+
 function PlayerDataService.AddCash(player: Player, amount: number): number?
 	local entry = entries[player]
 	if not entry or type(amount) ~= "number" or amount ~= amount then
@@ -126,6 +144,23 @@ function PlayerDataService.AddSpeed(player: Player, amount: number): number?
 	entry.profile.Speed = math.clamp(entry.profile.Speed + amount, 0, SAVE.MaxSpeedScore)
 	touch(player)
 	PlayerDataService.PublishSpeedTier(player)
+	--==========================================================================
+	-- THE GUIDE'S TWO SPEED MILESTONES, RECORDED WHERE THE SPEED ACTUALLY MOVES
+	--
+	-- Here rather than in TreadmillService because this is the function that
+	-- OWNS the score: any future faucet routes through it, and a milestone hung
+	-- off the mill would quietly stop being true. Both calls are no-ops once
+	-- recorded -- Record returns false and nothing is marked dirty -- so this
+	-- costs two table lookups on a once-a-second tick.
+	--
+	-- A positive gain is what proves training; a refund or clamp is not.
+	--==========================================================================
+	if amount > 0 then
+		PlayerDataService.RecordTutorial(player, "train")
+		if entry.profile.Speed >= TutorialData.SpeedTarget then
+			PlayerDataService.RecordTutorial(player, "speed")
+		end
+	end
 	return entry.profile.Speed
 end
 
@@ -227,6 +262,82 @@ function PlayerDataService.MarkSeen(player: Player, speciesId: string): boolean
 	entry.profile.Almanac[speciesId] = true
 	touch(player)
 	return true
+end
+
+--==============================================================================
+-- MARIGOLD'S SHELF
+--
+-- Shaped like MarkSeen above, and for the same three reasons: it is a set, it
+-- is set-once, and it REFUSES to dirty the profile for a write that changes
+-- nothing. That last one is not tidiness -- an equip button pressed twice, or a
+-- purchase re-sent by a client that did not see the first answer, must not each
+-- schedule a DataStore write.
+--
+-- Returning false for "already owned" is also half of the double-charge guard:
+-- WeaponShopService charges only when this returns true, so two purchases that
+-- somehow reach the till in the same frame can take money exactly once.
+--==============================================================================
+function PlayerDataService.GrantWeapon(player: Player, weaponId: string): boolean
+	local entry = entries[player]
+	if not entry or type(weaponId) ~= "string" or weaponId == "" then
+		return false
+	end
+	if entry.profile.Weapons[weaponId] then
+		return false
+	end
+	entry.profile.Weapons[weaponId] = true
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- WHAT IS IN THEIR LOADOUT OFF THAT SHELF
+--
+-- One slot per category -- "bat" and "trap" -- so equipping a trap cannot clear
+-- a bat. The empty string is "nothing in this slot", not nil, because the
+-- profile is replicated whole and a nil field is a field the client cannot tell
+-- from one that was never sent.
+--
+-- OWNERSHIP IS RE-CHECKED HERE and not only at the call site. This is the last
+-- line before the value is persisted, and a saved slot naming a weapon the
+-- player does not own is the one state that survives a rejoin and hands out a
+-- free bat. ProfileSchema drops it on load, but a profile that never has to be
+-- repaired is better than one that is.
+--
+-- The CATEGORY is checked by the caller rather than here: this file must not
+-- have to know what a bat is. WeaponShopService owns that and refuses first.
+--==============================================================================
+local LOADOUT_FIELD: { [string]: string } = {
+	bat = "EquippedBat",
+	trap = "EquippedTrap",
+}
+
+function PlayerDataService.SetLoadout(player: Player, category: string,
+	weaponId: string): boolean
+	local entry = entries[player]
+	local field = LOADOUT_FIELD[category]
+	if not entry or not field or type(weaponId) ~= "string" then
+		return false
+	end
+	if weaponId ~= "" and not entry.profile.Weapons[weaponId] then
+		return false
+	end
+	if (entry.profile :: any)[field] == weaponId then
+		return true
+	end
+	;(entry.profile :: any)[field] = weaponId
+	touch(player)
+	return true
+end
+
+function PlayerDataService.LoadoutOf(player: Player, category: string): string
+	local entry = entries[player]
+	local field = LOADOUT_FIELD[category]
+	if not entry or not field then
+		return ""
+	end
+	local id = (entry.profile :: any)[field]
+	return if type(id) == "string" then id else ""
 end
 
 --==============================================================================

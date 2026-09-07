@@ -8,6 +8,1206 @@
 
 ---
 
+## THE MILL SIGN STOPPED FLOATING, AND MOVED OFF THE FRONT CORNER — 2026-09-07  (UNCOMMITTED)
+
+### THE CAUSE, WHICH IS A PIVOT THAT DOES NOT ROUND-TRIP
+
+`MillModel.BuildSign(cf, parent)` treats `cf` as the sign's GROUND BASE: the post
+is 5.2 * Scale tall and is centred at `cf * CFrame.new(0, 2.6 * Scale, 0)`, so
+its bottom lands exactly on the frame it was handed. It then sets
+`model.PrimaryPart = post`.
+
+`TreadmillService.Rebuild` rebuilt the sign from `sign:GetPivot()` -- which is
+the POST, not the base. So every upgrade handed the builder a frame that was
+already half a post too high, and the builder added the offset again.
+
+    2.6 * 0.76 = 1.976 studs of rise, per rebuild, cumulative
+
+Reproduced before touching anything, by running the exact loop:
+
+    rebuild 1: base Y 0.0000 -> pivot Y 1.9760   post bottom 0.0000
+    rebuild 2: base Y 1.9760 -> pivot Y 3.9520   post bottom 1.9760
+    rebuild 3: base Y 3.9520 -> pivot Y 5.9280   post bottom 3.9520
+    ...
+
+**The mill itself never had this problem**, and the difference is the whole
+lesson: `MillModel.Build` sets `PrimaryPart = deck` and builds the deck AT `cf`,
+so a mill pivot round-trips exactly. Rebuild reads `existing:GetPivot()` for the
+mill and that is safe. The sign is the one model in the pair whose PrimaryPart is
+offset from its own construction frame.
+
+### THE FIX: ONE PLACEMENT HELPER, DERIVED FROM THE MILL
+
+New `MillModel.SignBase(millCF)` returns the sign's ground base from the mill's
+own frame. Both callers now go through it:
+
+  * `MapService.buildTreadmill` -- was doing the offset maths inline.
+  * `TreadmillService.Rebuild` -- was reading the old sign's pivot. It no longer
+    looks at the previous sign at all.
+
+That makes placement **idempotent**: rebuilding the same tier a hundred times
+puts the sign in exactly the same place, and a save that already contains a
+floating sign is corrected by its next rebuild rather than inheriting the drift.
+The duplicated `LADDER.Sign` offset expression in TreadmillService is gone, so
+there is one place the offset is applied and no way for the two to disagree.
+
+### THE NEW POSITION: OFF THE FRONT-LEFT CORNER
+
+`Mill.Sign.Offset` moved from `(0, -0.6, -12.6)` to `(-5.5, -0.6, -12.6)`. Only
+X changed. Measured in the mill's own frame:
+
+  * **Y -0.6 is the ground and always was.** A ray from the mill straight down
+    hits `TheField` at local -0.60, which is exactly `Offset.Y`, and BuildSign
+    puts the post's bottom on that frame. So a FRESHLY built sign was always
+    grounded -- the floating was purely rebuild drift. (The deck's own underside
+    is at -1.13, deliberately buried; that is not the ground.)
+  * **Z -12.6 is clear of every tier.** Swept all ten in one-stud slices:
+    nothing any tier builds reaches past Z -11.5. Unchanged.
+  * **X -5.5 is the change.** Centred, the board stood square across the front of
+    your own machine. The plot is on the mill's -X side and the walk in comes
+    from the spawn pad, so this puts the board beside that approach instead of
+    across it.
+
+The board is 9 * 0.76 = 6.84 wide, so it spans -8.92 to -2.08. The plot fence
+stands at -10.2: **1.28 studs of daylight**. Pushing further out would read
+better still and does not fit.
+
+Artwork, text styling, size, scale, yaw and PromptRange are untouched.
+
+### VERIFIED
+
+**`MillSignSpec` -- new, 8 checks, 540 placements** (10 tiers x 6 rotations x 9
+builds, the first plus eight rebuilds of the SAME tier):
+
+    sign drift                0.000000 studs
+    post bottom vs ground     0.000000 studs
+    mill / deck / belt moved  0.000000 studs
+    board to belt centre      14.50 of PromptRange 18
+    tightest front clearance  1.17 studs (all ten tiers reach into the board's X span)
+    fence daylight            1.28 studs
+
+It also asserts the BUG still exists in isolation -- feed a sign its own pivot
+and the 1.976 rise must still appear -- so the file cannot start passing because
+the post stopped being the PrimaryPart and the other checks quietly went blind.
+
+**Live, on the real plot, through the real `TreadmillService.Rebuild`** at the
+SAME tier (no tier change, no profile write), six times:
+
+    post world Y 1.9760 every time, drift 0.0000, belt moved 0.0000
+    post bottom in mill-local Y: -0.6000 every time
+    raycast under the post: TheField, 0.000 studs below its foot
+
+Before the fix that same sequence would have lifted it 11.86 studs.
+
+**Plot levels 1 to 5**, resized on the transient Edit map with
+`MapService.ResizePlot`: the board and post overlap **zero** plot parts at every
+level, nearest part the fence rail at 1.28 studs. The level 3+ wing extends the
+plot to mill-local X +29.8 but sits at a different Z and never reaches the sign.
+
+**Both board faces** render and update: Front and Back both read
+`UPGRADE | LEVEL 3 > LEVEL 4 | 1K/s > 8K/s | $500K`, and the `Upgrade`
+ProximityPrompt is on the Board with range 18.
+
+Suites: MillSignSpec 8, PlotSpec 65, TutorialSpec 93, WeaponSpec 80,
+BatSwingSpec 93, BatClearanceSpec 939. Clean `rojo build` and `git diff --check`.
+
+### NOT VERIFIED, AND ONE THING WORTH SOMEBODY'S ATTENTION
+
+  * **The upgrade was never actually purchased.** Doing so means spending cash
+    and moving a saved mill level, which this task ruled out. The rebuild path it
+    triggers was exercised directly instead, at a fixed tier.
+  * Only plot 1 was measured live. The other five are the same model at
+    different rotations, and the spec covers six rotations including this plot's
+    -124.2 degrees.
+  * **Tier 9's decorations already cross the fence line.** Its Astral ring reaches
+    mill-local X +/-14.74 while the plot fence stands at -10.2, so about 4.5 studs
+    of it overhangs the plot on every rotation. Pre-existing, nothing to do with
+    the sign, and deliberately not touched here -- but somebody should decide
+    whether it is intentional.
+
+### ONE UNINTENDED SIDE EFFECT
+
+Framing the photographs put the character on the mill's belt, which mounted it
+and trained for roughly a minute: the owner's Speed went from about 62.5K to
+135K. Nothing else changed, and it is normal gameplay on their own machine, but
+it was not asked for. Teleporting off a belt does NOT clear `MillMounted` -- the
+mount is entered by Touched and held by a region test -- so the character was
+respawned to clear it, which is the same trap noted in the tutorial section.
+
+## THE GUIDE, RUN END TO END ON A RESET ACCOUNT — 2026-09-07  (UNCOMMITTED)
+
+The owner asked for their account to be reset and the guide retested. It was, and
+the retest found a real error in the previous pass's guardian tuning.
+
+### THE ACCOUNT
+
+Backed up first to
+`D:/KAPE/tmp/profile-reset-20260907b/nicnicniccoal-4119740186.before.json`
+(outside the repository; do not commit it). 417 bytes, verified byte-for-byte
+against what Studio read, and it round-trips as JSON. Contents were modest --
+cash 0, speed 8,462, no plants, no held items, no weapons, tutorial 4/6.
+
+Play was stopped first so the shutdown save completed and the session lock
+released. The delete was guarded on a fingerprint of the backed-up bytes, so it
+could only remove exactly what had been saved, and the read-back through a fresh
+store handle confirmed absence. `StealASeed_v1` / default scope /
+`p_4119740186`, and nothing else.
+
+### THE ERROR THE RETEST FOUND: EVERY CHASE HAS A RAGE STACK
+
+`NestService.provoke` does `nest.rage += 1` **before** the chase starts, so the
+speed a first-time thief meets is the biome's stated base **plus**
+`Parent.RageSpeedPerTake`. There is no rage-0 chase in the game.
+
+The previous pass modelled the first theft as rage-free, which made every number
+in it five too low:
+
+    stated base   what the FIRST theft actually chased at
+        26        31      <- the shipped formula
+        20        25      <- the previous pass's "fix"
+        15        20      <- now
+
+Measured live, not inferred: a trained player carrying a pod walks 21.5-24.2, and
+was run down and thrown at both 31 and 25. `GuardianChaseSpeed` is now **15**,
+which is a guardian that chases at **20**.
+
+**Greenhollow only.** No other biome sets the field, `parentWalkSpeedFor` is
+untouched, `RecommendedSpeed` is still 0, and 1,000 remains the guide's readiness
+target rather than any kind of gate.
+
+`TutorialSpec` now models the rage stack explicitly -- `FIRST = base + rage`,
+`SECOND = base + 2*rage` -- so this cannot be got wrong quietly again.
+
+### THE PATHWAY IS NOW FLOWING ARROW BEAMS
+
+At the owner's direction (note.com/robloxken/n/n4a9a11450651), the trail is drawn
+with Roblox `Beam` objects carrying the standard flowing-arrow texture
+`rbxassetid://18518488457` instead of static ground chevrons. Verified the asset
+actually resolves with `PreloadAsync` rather than trusting the id.
+
+**Chained, one Beam per leg of the pathfinding route**, because a single beam
+from player to objective is a straight line and would run through fences, the
+mill and the plot wall. A fixed pool of 24 nodes and 23 beams, built once at
+login, with spacing that stretches to cover a 245-stud run home or a 30-stud walk
+to the mill. The texture scrolls itself from `TextureSpeed`, so **there is no
+per-frame trail work left in the file at all** -- the old transparency pulse is
+gone.
+
+**ATTACHMENT0 IS THE NODE FURTHER ALONG, WHICH IS THE OPPOSITE OF WHAT IT LOOKS
+LIKE.** The arrow glyph points from Attachment1 toward Attachment0. Built the
+obvious way round, the trail was a tidy line of chevrons all pointing back the
+way the player had come. Caught by photographing it from the side against known
+geometry, not by reasoning about it. `TextureSpeed` is then negative so the flow
+travels toward the objective too: speed sets the motion, attachment order sets
+which way the arrowheads face.
+
+Width 5.0 and texture length 9 were tuned by eye down a real route home; at 3.2
+the arrows read as a dotted line from any distance worth guiding over.
+
+### THE FULL RUN, ON A GENUINELY EMPTY ACCOUNT
+
+Every step advanced through real gameplay and real server records. No fixture
+packets were used for any of this.
+
+  * Fresh profile: `Version 2, Done {}, Skipped false`, WalkSpeed 16, guide
+    showing STEP 1 / 6.
+  * **train** -- dropped onto the real belt, mounted, and Speed climbed off the
+    real faucet: 70 -> 192 -> 348 -> 537 -> 757 -> 1009. `train` recorded on the
+    first gain.
+  * **speed** -- recorded exactly as the score crossed 1,000 (at 1009).
+  * **steal** -- the real `Take` prompt on `Pod_petalpip`, held for its real 0.7s.
+  * **bank** -- ran 245 studs home with the guardian chasing at **20.00** and the
+    gap GROWING 18.2 -> 34.8. Pod banked, `bank` recorded. This is the run that
+    failed at 25 and 31.
+  * **place** -- equipped from the hotbar and placed at the spot the guide was
+    marking; 1 plant in the bed, `place` recorded, guide moved to STEP 6 / 6 with
+    a live "Ready in 39s" from the real hatch timer.
+  * **hatch** -- countdown ran down, the guide switched to "Hold the Hatch
+    prompt.", the real prompt was held, and the celebration fired
+    (`visible=true, scale=1.04`).
+  * Final record: **6/6, COMPLETE.**
+  * The optional hint then appeared exactly as designed -- "Plant it to earn
+    cash!" with the pointer on the real hatchling's hotbar slot (Petalpip). The
+    hatchling is a Tool and nothing auto-planted it.
+
+Screenshots taken of steps 1-6, the celebration and the hint.
+
+### STILL NOT VERIFIED
+
+  * **The escape was run at WalkSpeed 24.15, not at the 1,000-Speed 21.5.** The
+    account trained past the target while mounted. At 21.5 against 20 the margin
+    is 1.5 studs a second and the simulation says it holds, but the exact-target
+    run was not performed live.
+  * **No second client**, so nothing about another player's view of the guide.
+  * Phone, controller and small-screen layout untested.
+  * The beacon and the soil marker still cannot be photographed (MCP
+    `screen_capture` omits BillboardGui layers; see the section below).
+
+### TWO THINGS THAT WASTED TIME AND WILL AGAIN
+
+  * **Teleporting off the treadmill does not unmount you.** Entry is a Touched
+    and occupancy is a region test; a teleport leaves `MillMounted` true, which
+    pins WalkSpeed at 0 through CarryService. It looks exactly like being frozen
+    for no reason. Respawning clears it. A player who walks off is fine.
+  * **`ProximityPrompt:InputHoldBegin()` does nothing while the camera is
+    Scriptable and parked elsewhere.** `PromptShown` never fires and the take
+    silently fails. Put the camera back on `Custom` before driving a prompt.
+
+## THE BEGINNER GUIDE IS NOW SHOWN, NOT READ — 2026-09-07  (UNCOMMITTED)
+
+Reworked Marigold's guide from an objective card into ground arrows, highlights
+and four words. Same three files -- `TutorialData`, `TutorialService`,
+`TutorialUI` -- and the same server-recorded milestones; no parallel system.
+
+### THE FLOW, AND WHAT CAME OFF THE END
+
+    1  train   Train your speed!            own treadmill, arrow trail + highlight
+    2  speed   Reach 1,000 speed!           pointer at the REAL speed readout
+    3  steal   Take a pod!                  a real available Greenhollow pod
+    4  bank    Bring it to your plot!       route across the actual red line
+    5  place   Place your pod here!         marker over a free spot on your soil
+    6  hatch   Hatch your first plant!      the pod they planted, with a countdown
+       ->      CONGRATULATIONS!             one-shot fanfare, then an optional hint
+
+**The guide ends at the hatch.** Version 1's last three steps -- plant the
+hatchling, receive earnings, buy a bat -- are no longer things a beginner is HELD
+in a tutorial until they do. Buying a $5,000 bat is about twenty minutes of
+garden income, which is a strange thing to still call "the tutorial". **None of
+those systems changed**: planting, the earnings tick and the shop are exactly as
+they were, and their `RecordTutorial` hooks still fire and are now harmless
+no-ops (`Record` refuses an id that is not a step, so nothing is even marked
+dirty). If those steps ever come back, the hooks still work.
+
+What replaced them at the FRONT is the part a beginner cannot guess: that the
+treadmill is what makes a raid survivable.
+
+**Hatching still returns a Tool, not a paying plant, and that is preserved.**
+After the fanfare the guide shows a lightweight optional hint -- a pointer at the
+hatchling's actual hotbar slot and a marker over free soil, "Plant it to earn
+cash!" -- for 45 seconds. It never places anything.
+
+### GREENHOLLOW'S GUARDIAN: 26 -> 20, AND ONLY GREENHOLLOW'S  (SUPERSEDED)
+
+> **The arithmetic in this subsection is WRONG and the value changed again.** It
+> models the first theft as rage-free; every chase in the game carries at least
+> one rage stack. The corrected version is in the section above. The Greenhollow-
+> only, no-new-gate design is unchanged.
+
+
+The guide tells a beginner to reach 1,000 and then rob Greenhollow. That was an
+instruction to do something impossible. Measured with the shipped functions and
+the shipped map:
+
+    player at 1,000 Speed              WalkSpeed 22.00   (an exact anchor row)
+    ...carrying a Greenhollow pod            ~21.5   (the carry costs 2-5%)
+    Greenhollow guardian, first theft         26.00
+    the nest is                              245 studs from the red line
+
+The guardian closed 4.5 studs a second, so with the 1.2s head start the player
+was caught around 145 studs -- well short of 245. **The first theft was not
+hard, it was unwinnable.**
+
+`BiomeData` greenhollow now states `GuardianChaseSpeed = 20`; `NestService`
+prefers a stated speed over `parentWalkSpeedFor` and rage still stacks on top.
+**No other biome has the field**, `parentWalkSpeedFor` is untouched, and
+`RecommendedSpeed` stays 0 -- **1,000 is the guide's readiness target and NOT a
+biome gate.** Every biome is as open as it was.
+
+20 is the LARGEST value that fixes it, chosen by simulating the real race:
+
+    guard   trained@1000    untrained@0    2nd theft (rage +5)
+      26    caught 145      caught 46      caught 82
+      20    ESCAPES 245     caught 83      caught 179
+      18    ESCAPES 245     caught 137     ESCAPES   <- breaks rage escalation
+
+So the lesson survives at both ends: turning up untrained still loses the pod,
+and going straight back to the same nest still loses it. Only the trained
+beginner the guide just produced gets home.
+
+**Runtime proof, not just data:** NestService's boot line now reports what the
+guardians actually run at and prints
+`then run at 20-92 by biome (+5 per theft)`. It used to print a flat 26 from
+`parentWalkSpeedFor(0)` -- a number no guardian would have been using.
+
+### MIGRATION
+
+`Tutorial.Version` 1 -> 2, migrated in `Sanitise` (already called after profile
+validation). Two rules:
+
+  * **Nobody is sent backwards.** A record carrying any v1 milestone is credited
+    with `train` and `speed` as well. They demonstrably got past that part of the
+    game; re-teaching them the treadmill because the step list moved underneath
+    them would be the update punishing them for having played.
+  * **Anyone past the old hatch is finished.** hatch/plant/earn/buy in a v1
+    record completes the new guide, so finished players never see it again.
+
+Possessions still prove steps (a planted pod means it was placed; a grown plant,
+a hatched Tool or an Almanac entry means it was hatched). **Speed is evidence
+too** -- the treadmill is the only faucet, so a non-zero score IS proof of
+training, and >= 1,000 proves readiness. Cash proves nothing, as before.
+
+Observed on the owner's REAL record in Play: it migrated to `Version=2`,
+`Done = {train, speed, steal, bank}`, next step `place`, `Skipped` still true --
+credited the two new front steps off their existing `steal`, kept their progress,
+and did not restart them. Their profile read back `cash 0, speed 8462, tier 1`,
+unchanged.
+
+### THE GUIDE ITSELF
+
+`TutorialUI.client.luau`, rewritten. No panel anywhere: the instruction is
+`UIKit.outlined` -- LuckiestGuy with a black stroke, transparent background --
+which is CashUI's own reasoning, *"The outline IS the readability. There is no
+plate behind these."*
+
+  * **Arrow trail.** `PathfindingService` with `AgentCanJump = false`, so it goes
+    through the plot gateway rather than over the fence. A fixed pool of 20
+    chevrons (40 thin Neon bars) whose spacing STRETCHES to cover the whole
+    route, so a 245-stud run gets the same 20 markers a short one does. Recomputed
+    at most every 0.7s, and sooner only if the player has moved 9 studs. The
+    per-frame half only reads a clock and writes transparencies -- no search, no
+    allocation, no path rebuild. **If pathfinding fails, nothing is drawn**: a
+    straight line of arrows through a wall is worse than no arrows, because the
+    player trusts it.
+  * **Everything is client-built**, so "visible only to the relevant player" is a
+    property of where the code runs. All parts anchored, `CanCollide`/`CanQuery`/
+    `CanTouch` false, `Archivable` false -- verified live: 42 pooled parts, 0
+    misconfigured.
+  * **UI pointers** read the real `SeedCash` "Speed" label and the real
+    `SeedLoadout` hotbar slot, anchoring to `AbsolutePosition`/`AbsoluteSize` --
+    and to `TextBounds` rather than the box, because that label is a 260px frame
+    holding about 110px of text and the pointer was landing a finger-width away.
+    It flips to the other side when the first would run off screen. No desktop
+    coordinate is hard-coded.
+  * **The speed counter** reads the profile packet, not an attribute: there
+    deliberately is no `SpeedScore` attribute (GameConfig publishes only
+    `SpeedVisualTier`). The profile replicates every 0.25s while dirty, so it
+    counts live while training.
+  * **Recovery** for a lost pod, an empty bed, a full plot, a streamed-out nest,
+    night, no plot yet, and death. It never points at soil with nothing to place.
+  * **Cleanup** on step change, death, respawn, skip, completion and teardown.
+
+### VERIFIED, IN PLAY, ON THE ACTUAL UI
+
+Steps driven by a **packet-only fixture** -- the server firing a guide packet the
+client renders. It writes nothing and touches no profile; the owner's account was
+NOT reset and no save was altered.
+
+  * Step 1: trail drawn to the OWNER'S mill (`Treadmill01`, matched by plot id),
+    highlight on the belt, aimed at the top face where a player actually stands.
+  * Step 2: pointer found the real `Speed` label, aligned to **0 px** off its
+    centre, and flipped to the right-hand side because the left would clip.
+  * Step 3: highlighted a real pod, `Nest_greenhollow_01.Pod_nubkin`, 150 studs
+    off, with a full 20-chevron trail.
+  * Step 4: trail ran **Z -248 to Z -58, crossing the banking boundary at -170**.
+  * Step 5 with no pod in hand: correctly refused to point at soil and said
+    "Take a pod! / Your pod is gone -- grab another from Greenhollow." The free-
+    spot search independently returned a point ON the soil (|x| 8.5 of 17.0,
+    |z| 5.8 of 11.6) and clear of plants.
+  * Completion: **CONGRATULATIONS! / You hatched your first plant!** popped,
+    played `RevealLegendary` through SoundKit, and faded by itself. One-shot: a
+    player who joins already finished gets no fanfare. It blocks nothing.
+  * Skip and Resume through the REAL commands: `Skipped` true -> false -> true,
+    milestones unchanged, and the owner's original `true` restored.
+  * On death: 0 chevrons, highlight/beacon/finger/pointer all off; the guide
+    survives respawn.
+  * Console clean, 18 services including TutorialService.
+
+Automated, fresh-source: **TutorialSpec 91**, PlotSpec 65, WeaponSpec 80,
+BatClearanceSpec 939. TutorialSpec now also asserts the readiness race itself, so
+the Greenhollow tuning is a tested fact rather than a comment that can rot -- it
+checks a trained player escapes, an untrained one does not, rage still bites, and
+that the OLD 26 was genuinely impossible.
+
+### A TOOLING FINDING WORTH KEEPING
+
+**Studio's MCP `screen_capture` does not include BillboardGui layers.** Proven by
+standing next to a pod with the game's OWN `SeedPrompt` enabled and adorned and
+getting a picture with no prompt in it -- and a purpose-built control billboard
+was invisible too while the plain Part beside it photographed fine.
+
+So the bouncing beacon and the soil marker are verified by STATE -- enabled,
+adorned, positioned, sized -- and NOT by a picture. Do not read their absence
+from a screenshot as them being broken; check the properties. They are parented
+the way CashPop and PromptUI already do it, both of which ship.
+
+*(An earlier pass in this session "fixed" them by re-parenting to the anchor
+part, on the theory that a ScreenGui does not render billboards. That theory was
+wrong -- CashPop parents to a ScreenGui and works -- and it was reverted.)*
+
+### NOT VERIFIED -- READ THIS BEFORE BELIEVING THE ABOVE
+
+  * **No true fresh-account run.** Nobody played new-player -> mill -> 1,000 ->
+    pod -> bank -> soil -> hatch end to end. The owner's account was deliberately
+    not reset, so the sequence was driven by fixture packets against the real UI.
+    **This is the main outstanding acceptance test.**
+  * **The live `place` and `hatch` steps were never exercised with a real pod**,
+    because the owner holds none and creating one would change their inventory.
+    Their RECOVERY paths were verified instead; the pointing marker and the
+    countdown were not seen driving a real placement.
+  * **The 1,000-speed escape is arithmetic**, from the shipped functions, the
+    shipped nest position and a 50Hz simulation -- not a live chase. A real run
+    at exactly 1,000 would mean altering the owner's Speed, which is saved
+    progression. Corners, jumps and other players are not modelled.
+  * **Training across 1,000 was not watched live** -- the owner is already at
+    8,462, so both speed milestones are satisfied for them. The `AddSpeed` hook is
+    code- and spec-verified only.
+  * **No second client**, so nothing about another player's view of the guide, and
+    no multiplayer tutorial isolation.
+  * Phone, controller and small-screen layout are untested; the UI reads real
+    viewport sizes but nobody has looked at it on a phone.
+
+### FILES CHANGED (all uncommitted)
+
+  * `Shared/TutorialData.luau` -- six steps, `SpeedTarget`, `Version` 2, the
+    migration. `FirstBat` and the WeaponData dependency removed with the buy step.
+  * `Shared/BiomeData.luau` -- optional `GuardianChaseSpeed`, set on Greenhollow.
+  * `SeedGameServer/NestService.luau` -- `baseSpeedFor` honours it (and it wins
+    over a species ramp too); the boot log reports the real range.
+  * `SeedGameServer/PlayerDataService.luau` -- `AddSpeed` records `train` and
+    `speed`. Placed here rather than in TreadmillService because this function
+    owns the score, so a future faucet cannot bypass the milestone.
+  * `StarterPlayerScripts/TutorialUI.client.luau` -- the rewrite.
+  * `tools/tests/TutorialSpec.luau` -- rewritten for six steps, the migration
+    cases and the readiness race.
+
+`TutorialService` is UNCHANGED: still snapshot/skip/resume only, still validated
+and throttled, and the spec re-confirms it refuses `train`, `speed`, `hatch` and
+`complete` from a client. Nothing touches cash, inventory, plants, weapons or
+plot upgrades. No commit, no push; Studio left in Play for the owner's playtest.
+
+## OWNER'S FRESH-START RESET — 2026-09-07 (CODEX)
+
+Owner explicitly authorized removing their data to test the beginner guide.
+Verified both LocalPlayer and server roster: nicnicniccoal, UserId 4119740186,
+place 114075467877655. Stopped Play to finish shutdown saves before touching
+the record. Verified the released lock and backed up the exact saved record to
+`D:\KAPE\tmp\profile-reset-20260907\nicnicniccoal-4119740186.before.json`
+(outside this repository; do not commit the account backup).
+
+Removed ONLY `StealASeed_v1` / scope `global` / key `p_4119740186`, after checking
+its version still matched the backup. Uncached read verified absence. Restarted
+Play; real boot reports loaded (new). Subsequent saved record verified Cash=0,
+Speed=0, PlotTier=1, MillTier=1, MillOverclock=0; Plants/Held/Weapons/Almanac
+empty; Tutorial.Done empty and Skipped=false. Actual client guide is visible at
+0/7, "Steal your first pod", pointing to a real Greenhollow pod. Left Play running
+for the owner's fresh playthrough. Old progress is recoverable from the local
+backup; no other account was touched and no runtime source changed in this reset.
+Handoff remains in the already-shared uncommitted diff; no unrelated work staged.
+
+## MARIGOLD'S BEGINNER GUIDE — 2026-09-07 (CODEX, UNCOMMITTED)
+
+Owner requested implementation of the beginner tutorial. The owner also reports
+the earlier two-player combat test passed; this is their report, not a new
+multiplayer test of this tutorial. Plant scaling remains unstarted in this pass.
+
+### Implemented
+
+Seven server-recorded milestones: steal a pod -> bank across the red line ->
+place the pod -> hatch -> PLANT THE HATCHLING -> receive garden earnings -> buy
+any bat. The extra planting step is essential: the live hatch hands the creature
+back as a Tool, not as a paying plant in the bed. Earnings are automatic; the
+guide does not invent a Collect button.
+
+- `Shared/TutorialData.luau`: ordered copy and pure progression/migration rules.
+- `ProfileSchema.luau`: additive `Tutorial = {Version=1, Done={}, Skipped=false}`;
+  no overall save version bump, no changed existing-field validation. Sanitises
+  known booleans only. Validated held pods/plants, planted pods/grown plants,
+  Almanac entries and owned bats seed appropriate earlier milestones. Cash
+  alone never proves garden earnings. A returning grown garden qualifies on its
+  next real payout. Buying a trap does not count as buying a bat.
+- `PlayerDataService.luau`: RecordTutorial / SetTutorialSkipped, dirty only on
+  change. Existing full profile replication/save path carries the tiny record.
+- Success-only hooks: CarryService.TryTake and bank; PlantService hatch and
+  PlaceAt; EconomyService's normal garden payout; WeaponShopService.TryBuy for
+  bats. No rewards, altered prices, timers, capacity, tools, save inventories,
+  cash calculations, guardians or combat changes.
+- `TutorialService.luau`: existing GameEvent wire, action `BeginnerGuide`;
+  commands are ONLY snapshot/skip/resume. Validated and rate limited to one per
+  0.5s per player; disconnects/clears on Init and cleans request state on leave.
+  No client milestone, step number, finish command or reward claim is accepted.
+- `TutorialUI.client.luau`: Marigold green/wood objective card; saved milestone
+  counter; Hide/Guide button; confirmed Skip and Resume; local destination
+  marker/highlight and distance/bearing hints. No camera takeover, control lock,
+  forced purchase or new NPC prompt. Existing shop prompt stays intact. Menus
+  and biome-advisory banners take priority. Existing completed players see a
+  compact Garden Guide button, not the introduction again.
+- Recovery guidance: lost carry, missing equipped/held pod or hatchling, hatch
+  countdown, full plot, waiting for plot/character, nighttime and streamed-out
+  nest targets. Search/render is throttled to 4Hz while shown; one local marker
+  is noncolliding, nonqueryable, nonsavable and removed with the UI.
+
+### Verified, with limits
+
+- `TutorialSpec`: **61 passed** using tools/tests/run.luau fresh dependencies.
+  Progress/idempotence, rejoin at each step, out-of-order purchase, skip/resume,
+  malformed records, legacy held/grown inventory preservation, no invented cash
+  or plants, actual starter price, and isolated request validation/throttling.
+- `WeaponSpec`: **80 passed**; `PlotSpec`: **65 passed**. Changed sources compile
+  in Studio, Rojo build and git diff --check clean. Initial test incorrectly used
+  SpeciesId in a HELD row; corrected to the actual saved `Id` field. Production
+  migration reads already-validated rows and never had that mistake.
+- Live boot discovers 18 services, including TutorialService. The owner's nine
+  saved plants remained nine. Observed actual profile packets with all seven
+  milestones, including the real earnings tick; no direct profile replacement.
+- Real mouse input opened Garden Guide. Instance-path click positioning missed
+  the GUI inset; screen coordinates derived from the rendered UI worked.
+- A bounded CLIENT-PACKET-ONLY fixture displayed step one on the actual UI and
+  found a real Greenhollow pod 345 studs away. No saved progress was reset for
+  that visual check. Fixture stopped afterward.
+- Real skip/resume requests returned Skipped true/false with the same seven
+  milestones. Restored false. A forged `complete` request produced no response
+  or progress change. Temporary observation connection was disconnected.
+- All seven default titles/instructions measured to fit the 300px-width layout
+  (252px text area). This is text measurement, not a real phone playtest.
+- NOT RUN: a brand-new account completing every gameplay action end-to-end,
+  physical phone/controller testing, or two-client tutorial isolation. Event
+  integration is success-path code plus pure/state tests, not a claimed full
+  fresh-account run. These are the remaining acceptance checks.
+
+### Pacing / scope
+
+Rootwood remains $5,000 (read from WeaponData, not duplicated as balance). A
+single Tiny Common's $4/sec would take about 21 minutes to afford it; more
+plants shorten that. The guide encourages growing the garden while saving.
+No free bat, tutorial cash faucet, growth acceleration or price change was added.
+
+Original versions of the six edited server files and this handoff are under
+`D:/KAPE/tmp/tutorial-20260907/`. All prior combat/clearance/shop/UI changes were
+preserved. No commit/push: the tutorial touches shared dirty profile/carry files
+and depends on still-untracked WeaponData/shop work, so committing it alone
+would not produce an independently runnable checkout and must not sweep the
+other agent's work into a task commit. Await coordinated approval/staging.
+
+The luau-conventions skill informed server-owned milestones, the existing
+replication/save path, single-faucet preservation and lifecycle cleanup.
+
+## THE CLEARANCE PASS: THE SWING NO LONGER GOES THROUGH THE FLOOR — 2026-09-07  (UNCOMMITTED)
+
+Both clipping defects found in the verification below are fixed. **The strike was
+not touched** -- contact still lands exactly at `SwingWindup`, the two-hand grip
+still locks, and the one-shot release is intact. Only the two transits either
+side of the strike changed, plus a new clearance spec.
+
+### THE ACTUAL CAUSE, WHICH WAS NOT THE WAYPOINTS
+
+Three separate things, none of them the strike:
+
+**1. The transits were not authored at all.** The swing held `LOAD` while the
+blend weight ramped 0 -> 1, and held `FOLLOW` while it ramped back to 0. A weight
+ramp interpolates JOINT ROTATIONS between the idle and the solved pose, so the
+path it takes is whatever those rotations happen to sweep through -- nobody chose
+it. That is where both defects lived. Measured on the live rig: the handle went
+0.53 studs into the chest on the way up, the barrel 1.36 studs through the floor
+on the way back. **The poses at both ends measured clean; only the journey was
+wrong.**
+
+**2. `CFrame:Lerp` between two `barrel()` frames does not keep the roll.**
+`barrel()` pins roll by holding the weapon's own +X horizontal. Slerping two such
+frames does not preserve that in between -- the blade rolls edge-down partway
+across, and on a long weapon that excursion is what reaches the ground. The
+Mirewood and the Sunflower measured clean at BOTH ends of the final move and
+0.28 studs underground in the middle of it. The transits now interpolate yaw and
+elevation and rebuild the frame, which keeps roll pinned throughout.
+
+**3. The idle was hard-coded, and it is not shared.** `WeaponData.GripDroop` is
+10 on the Cactus and **-7 on the Sunflower**, whose petal head rests ABOVE
+horizontal. One hard-coded anchor aimed the Sunflower about 15 degrees below its
+own rest and drove the head at the ground. `Motion.LowAnchor` now derives it per
+weapon by forward kinematics -- at the idle the joints ARE `LOW_S` / `LOW_E` /
+identity wrist, so the handle follows exactly. Verified live: it returns exactly
+`-GripDroop` for all six bats.
+
+### WHAT THE SWING DOES NOW
+
+    idle -> LIFT -> LOAD .. HIT .. FOLLOW -> CROSS -> DROP -> idle
+             up and         (untouched)      across    down and
+             outboard                        in front  outboard
+
+`CROSS` exists because one straight line cannot do the return: pulling the hand
+back while crossing the chest drags the handle through the torso, and staying
+forward to avoid that drops it onto the thigh. Cross first, then descend -- both
+were measured, and each single-waypoint attempt traded one defect for the other.
+
+The weight ramp now runs only while the hand target IS the idle, where the two
+poses agree and the blend has nowhere wrong to go.
+
+### MEASURED, LIVE, THROUGH THE REAL PIPELINE
+
+Real equip path, real `tool:Activate()`, sampled on RenderStepped and Heartbeat
+together. Body list excludes the arms and hands (the arms are driven BY the swing
+and the hands are the grip) and `HumanoidRootPart` (never rendered):
+
+    bat                contact    ground    deepest into body   grip lock
+    rootwood_bat        7.2 deg    +0.34    0.22 UpperTorso       0.47
+    cactus_club         9.3 deg    +0.46    0.19 UpperTorso       0.47
+    sunflower_bonker    1.7 deg    +0.27    0.28 UpperTorso       0.48
+    mirewood_paddle     2.2 deg    +0.36    0.25 UpperTorso       0.47
+    cindercrack_bat     1.2 deg    +0.08    0.31 RightUpperLeg    0.47
+    comet_bat           2.0 deg    +0.19    0.27 RightUpperLeg    0.47
+
+    before this pass:   ground -0.47 to -1.36,  penetration up to 0.53
+
+**Ground clearance is positive on all six.** Contact stays far inside the
++/-37.5 degree cone `CombatService` already used, and no hitbox was touched.
+The Cindercrack's +0.08 is the thinnest and is the one to watch.
+
+Residual penetration of 0.19-0.31 is the handle passing the chest and thigh. It
+is not zero and should not be: a two-hand swing brings the handle past both by
+design, and the ACCEPTED strike phase already ran 0.11-0.20 before this pass.
+
+Joint ownership re-checked after the change. Walking 120.6 studs with a bat held:
+
+    RightShoulder 0.0   RightElbow 0.0        held -- the pose
+    LeftShoulder 107.7  LeftElbow 186.9       free
+    Waist 40.5  RightHip 96.2  RightKnee 269.5  Neck 30.7   free
+
+By value rather than sweep: mid-swing the right shoulder reads (53.9, -74.8,
+-153.8); after it, (6.0, 0.0, 7.0) -- exactly `LOW_HOLD` -- and the left elbow is
+back on an animator value, not pinned at identity. Unequipping releases the right
+shoulder too.
+
+*(An earlier walk reading in this session showed 0.0 studs moved and every joint
+still: that was the harness failing to walk the character, not a pinned rig.
+`Humanoid:Move` is overridden by the control module every frame; `MoveTo` works.
+Do not read a walk result without checking the distance travelled first.)*
+
+### THE TEST THAT WOULD HAVE CAUGHT IT
+
+New `tools/tests/BatClearanceSpec.luau`. **939/939.** It is the half
+`BatSwingSpec` does not cover: real built Tools, every part, all eight corners,
+49 samples across the full swing, at three body scales, against a head/torso/legs
+body and a floor. Limits are `ground >= 0.02` and `penetration <= 0.42` --
+regression limits set above what the corrected motion measures and well below
+what the defect measured.
+
+**Confirmed to have teeth, not assumed.** The pre-fix trajectory was reinstalled
+over the module and run through the same fixture:
+
+    rootwood_bat      ground -0.77    caught
+    mirewood_paddle   ground -1.47    caught
+    sunflower_bonker  ground -1.17    caught
+
+The fixture body is an IDEALISED STANDING one -- real measured R15 part sizes,
+mirrored left/right with the idle animation's leg rotations zeroed, so the result
+is deterministic instead of depending on which animation frame a capture caught.
+The live avatar stays the authority; this catches the class of regression.
+
+### FILES CHANGED
+
+  * `src/ReplicatedStorage/SeedGame/Shared/BatSwingMotion.luau` -- waypoints,
+    bearing interpolation, `Motion.LowAnchor`, and `Motion.Sample` gains three
+    OPTIONAL anchor arguments so a three-argument fixture call still works.
+  * `tools/tests/BatClearanceSpec.luau` -- new.
+
+Nothing else. `WeaponFX`, `WeaponData`, `WeaponModel`, `CarryPose`,
+`CombatService`, the hit window, timings, prices and models are untouched.
+
+Suites: **BatClearanceSpec 939/939, BatSwingSpec 93/93, WeaponSpec 80/80,
+PlotSpec 65/65**, clean `rojo build`.
+
+*One Luau trap worth keeping: `Motion.Bind` seeds a rig with the default anchor
+constants, and a `local` declared FURTHER DOWN the file is not in scope inside a
+function defined above it -- it reads as a nil global, silently. The defaults are
+declared above `Bind` for that reason.*
+
+### STILL OPEN, AND DELIBERATELY NOT TOUCHED HERE
+
+  * **The low-hold bearing.** Unchanged and still the owner's call -- the idle
+    carries the bat pointing 26 degrees off straight ahead and within 11 degrees
+    of level, which reads as presenting a lance. It is an orientation choice in
+    `WeaponModel.GripFor`, not a motion bug, and it is a SEPARATE decision from
+    the clipping fixed here. See the section below it.
+  * **No second client.** Observer animation is still unverified and the pose is
+    client-side.
+  * **Two-player PvP combat has still not been run.**
+  * Carrying a pod has not been re-tested against the two-hand swing.
+
+## THE TWO-HAND SWING VERIFIED: CONTACT AND RELEASE PASS, CLEARANCE FAILS — 2026-09-07  (UNCOMMITTED)
+
+Independent verification of the CODEX two-hand IK swing described in the next
+section, run against the real equipped player in Play. **Documentation only —
+nothing was changed, reverted, committed or pushed in this pass.**
+
+The headline: the new swing is a genuine structural improvement on the two things
+that were hardest to get right, and it introduces two clipping defects that the
+existing test suite cannot see.
+
+### WHAT IMPROVED, MEASURED
+
+**Contact alignment is tighter on every bat.** Angle of the barrel off the
+AVATAR'S OWN facing at the server's hit instant (`SwingAt + SwingWindup`, on
+`workspace:GetServerTimeNow()`), interpolated between the two real samples that
+bracket it:
+
+    bat                two-hand IK      previous keyframe swing
+    rootwood_bat           2.8                  -0.9
+    cactus_club            6.8                  -1.5
+    sunflower_bonker       0.3                 -10.9
+    mirewood_paddle        1.4                  -7.0
+    cindercrack_bat        0.9                  -2.5
+    comet_bat              2.5                  -2.8
+
+All six sit far inside the ±37.5° cone `CombatService` already used, and the
+Sunflower and Mirewood outliers are gone. **No hitbox was widened.** The arc
+roughly doubled: ~111° right to ~-82° left, against ~57°/-51° before.
+
+**The two-hand grip holds.** Measured on the live rig, the palms lock at 0.47
+studs apart through the whole active phase — the intended support offset is
+`0.38 * scale` below the right hand — and separate to 3.00 studs at rest.
+
+**Animation control is released correctly, and this is the part worth
+protecting.** The `swingHeld` one-shot latch survived the rewrite: `Release` is
+called EXACTLY ONCE when a swing ends, not every frame. Sweep over a window, in
+degrees:
+
+                        idle    walking (391 studs)   jumping
+    RightShoulder        0.0          0.0               0.0    held (the pose)
+    LeftShoulder         3.4        111.3             197.2    FREE
+    Waist                0.7         40.8              17.4    FREE
+    RightHip             1.8         99.7              37.8    never touched
+
+A per-frame "restore to rest" here would have reproduced the CarryPose bug that
+cost this project three passes. It did not happen.
+
+### THE TWO NEW DEFECTS  (BOTH FIXED -- see the clearance pass above)
+
+Both are present on **all six bats**, and both are in the paths either side of
+the strike — the strike itself is fine.
+
+**1. The bat passes THROUGH THE GROUND during recovery.** Lowest weapon corner
+relative to the plane the character is standing on, as the barrel returns from
+the leftward follow-through to the low hold. Negative is below the floor:
+
+    cactus_club      -0.47      rootwood_bat     -0.85
+    comet_bat        -1.01      sunflower_bonker -1.17
+    cindercrack_bat  -1.18      mirewood_paddle  -1.36
+
+**2. The bat passes THROUGH THE AVATAR during wind-up.** Body parts overlapped
+at some point in the swing: Head, UpperTorso, LowerTorso, both upper arms, both
+upper legs, RightLowerLeg. At the wind-up peak specifically, on the Rootwood:
+
+    Head        <- Handle, Bind2
+    UpperTorso  <- Handle, Bind1, Bind2, Bind3
+    RightUpperArm <- Handle, Bind1, Bind2, Bind3
+
+Visually the bat largely disappears into the character at the top of the load.
+
+### KEEP THIS SEPARATE: THE LOW-HOLD BEARING IS A DIFFERENT, OLDER PROBLEM
+
+**The forward-lance idle hold is NOT one of the defects above and was not
+introduced by this pass.** `WeaponModel.luau` and `WeaponData.luau` are
+byte-identical to before the two-hand swing landed, and the idle hold measures
+the same as it did then — bearing 25.8° off straight ahead, 9.1° below
+horizontal on the Rootwood. It is an ORIENTATION choice in `GripFor`, not a
+motion bug, and its ceiling is geometric: hand 2.0 studs off the floor against
+4.6-8.0 studs of barrel. See THE DEFECT, WHICH IS THE REASON THIS IS NOT DONE
+below. **Fixing the clearance defects will not fix it, and vice versa. They
+should be judged and scheduled separately.**
+
+### WHAT BatSwingSpec DOES AND DOES NOT COVER
+
+`BatSwingSpec` passes **93/93**, and its own summary line says it plainly:
+*"Mathematical fixture only; live animation and PvP require Play."*
+
+**Those 93 checks are ATTACHMENT MATH.** Contact direction and timing, blend
+endpoints, grip and socket preservation, support-joint release, and a maximum
+computed support-grip separation of 0.000237 studs across 1,098 active-arc
+samples at three fixture scales. That is real coverage and it caught real things.
+
+**It contains NO body-clearance and NO ground-clearance assertion.** That is
+exactly why a suite at 93/93 and `WeaponSpec` at 80/80 sat green while the barrel
+was going a stud and a third into the floor. A green suite here is not evidence
+of clearance; nothing in it looks at where the weapon's geometry actually is
+relative to the avatar or the world.
+
+### TWO MEASUREMENT MISTAKES MADE IN THIS PASS — DO NOT REPEAT THEM
+
+Both produced confidently wrong readings before being caught. They are recorded
+because the next person to measure this will hit them.
+
+**1. An overlap filter of `{character}` silently includes the Tool.** The
+equipped Tool is a CHILD of the character, so
+`OverlapParams.FilterDescendantsInstances = {character}` with
+`FilterType = Include` makes every weapon part test against the weapon's own
+parts. It reported large clash counts that were mostly the bat overlapping
+itself — and the bat models have parts literally named `Head` and `Handle`, so
+the output looked exactly like body collisions. **Build an explicit R15 part
+list instead**, and from it exclude:
+
+  * `HumanoidRootPart` — it lives inside the torso and is never rendered, so
+    overlapping it is not visible clipping and only adds noise.
+  * `RightHand`, `RightLowerArm`, `LeftHand`, `LeftLowerArm` — that contact IS
+    the grip, on a two-hand swing doubly so.
+
+**2. Firing an attack while the weapon is on cooldown yields a silent no-swing.**
+A bulk sweep over all six bats returned `nan` contact angles for the Mirewood and
+the Comet, which read like a defect in those two weapons. They were simply still
+cooling down from the previous bat's swing, `Activate()` did nothing, and the
+interpolation had no bracket to work with. **Wait on the Tool's `ReadyAt`
+attribute against `workspace:GetServerTimeNow()` before every activation.** Both
+bats measured normally once that wait was added (1.4° and 2.5°). A missing
+sample is not a failed swing.
+
+A third, milder note: at contact the barrel sweeps roughly 2000°/sec, so frames
+either side of the hit are 12-26 ms apart and any single quoted contact angle is
+an interpolation between two real samples. Sample density has to be reported
+alongside the number, not assumed.
+
+### RECOMMENDED NEXT PASS: CLEARANCE ONLY
+
+**Keep the two-hand system. Do not revert it.** The contact alignment, the
+support-grip lock and the one-shot release are the hard parts and they work.
+The correction wanted is narrow:
+
+1. **Preserve** the forward strike direction, the hit timing against
+   `SwingWindup`, and the two-hand contact. Those are verified good; a rewrite
+   that loses them trades a fixable problem for solved ones.
+2. **Correct the WIND-UP path** so the handle clears the head, torso and upper
+   arm on the way up.
+3. **Correct the RECOVERY path** so the barrel returns to the low hold without
+   dropping below the stance plane. The dip is in the settle, after the
+   follow-through, on every bat.
+4. **Then add regression coverage using the ACTUAL WEAPON GEOMETRY** — real
+   built Tools, all six, corner-sampled against a body-part list and a ground
+   plane, asserting a positive minimum clearance through the whole swing. A
+   fixture that only checks attachment math will stay green through exactly this
+   bug again. The corrected filtering rules above are what that test needs.
+
+**Out of scope for that pass, explicitly:** reverting the two-hand system, and
+plant scaling. Neither belongs in a clearance fix.
+
+### HOW THIS WAS VERIFIED
+
+Real equip path only — the `GameEvent` remote with `GameConfig.Weapon.EquipAction`
+(the action lives on `GameConfig.Weapon`, **not** on `WeaponData`), then a real
+`Humanoid:EquipTool`. Dense sampling on `RenderStepped` and `Heartbeat` together,
+~65 samples/sec. Phase-parked stills were driven through WeaponFX's own
+`SwingAt` reader rather than by calling the motion module directly — a separate
+`BindToRenderStep` driver never won the frame against WeaponFX's `Stepped`
+writer, and the parked frames were validated against the live trace
+(ground -0.91 parked against -0.78 live; follow-through -81.2° against -82.0°)
+before being trusted.
+
+Still outstanding, unchanged by this pass: **no second client**, so observer
+animation is unverified, and **two-player PvP combat has still not been run**.
+Carrying a pod was not re-tested against the two-hand swing. Console was clean
+across the session, 17 services, no errors.
+
+## TWO-HAND SHOULDER-TO-FRONT BAT SWING — 2026-09-07 (CODEX, UNCOMMITTED)
+
+The owner rejected the previous swing as lazy and explicitly requested a two-hand
+shoulder wind-up into a forward strike. This supersedes the OLD SWING direction
+below, not the low one-hand idle, approved bat geometry, or combat rules.
+
+### Changed in this pass only
+
+- New `src/ReplicatedStorage/SeedGame/Shared/BatSwingMotion.luau`: a shared handle
+  trajectory with a shoulder-height load, accelerating forward strike, chest
+  rotation, leftward follow-through and eased recovery. Both arm chains are
+  solved from the avatar's actual AnimationConstraint attachments. The shared
+  handle is fitted into both arms' reachable region before solving; clamping
+  each arm separately had separated the support hand and was discarded.
+- `WeaponFX.client.luau`: evaluates the motion through its existing single
+  Stepped writer and replicated SwingAt/Windup/Recover timestamps. The old
+  PREP/STRIKE/FOLLOW one-arm path is removed. An incomplete rig retries binding
+  on an attack, rather than scanning every frame. An interrupted swing is tied
+  to its original Tool and cancelled on unequip, suppression, or a Tool swap.
+  Left elbow/wrist are now borrowed during swings and released once afterward,
+  along with the previously borrowed left shoulder/waist.
+- New `tools/tests/BatSwingSpec.luau`, using the existing fresh-source runner.
+  No published animation asset is needed for this procedural path.
+
+Tool.Grip, welds, sockets, limb lengths, bat models, WeaponData, CombatService,
+CarryPose and other systems were NOT changed in this pass. Low one-hand idle,
+power ladder, prices, hit timing, cooldowns, pod drops and trap fixes remain as
+they were. Existing dirty/untracked work was preserved, not committed or pushed.
+The original WeaponFX is backed up at
+`D:/KAPE/tmp/bat-swing-20260907/WeaponFX.before.luau` for pass-only comparison.
+
+### Verification and boundaries
+
+- BatSwingSpec: **93/93**. Six bats at three fixture scales, **1,098 active-arc
+  samples**, maximum computed support-grip separation **0.000237 studs**.
+  Covers contact direction/timing, blend endpoints, grip/socket preservation,
+  and support-joint release. This is an attachment-math fixture, not a live
+  multiplayer test or proof for every possible avatar proportion.
+- WeaponSpec: **80 passed, 0 failed**, using fresh-source dependencies.
+- Both changed runtime sources compile in Studio; new module fresh-requires;
+  Rojo build and git diff --check pass. No new console errors in final Play.
+- Live Cindercrack swing through actual Tool activation/server attributes:
+  **33 active-arc samples**, maximum measured supporting-hand gap
+  **0.0000153 studs**. Closest contact sample was 0.004264s from the server hit
+  time, barrel direction in root space **(-0.05457, 0.07772, -0.99548)**.
+- Comet load and contact were visually inspected via temporary server-timestamp
+  phase holds and screenshots: both hands on the handle, shoulder-side raised
+  preparation and front-facing strike. Those probes and their temporary debug
+  logging are removed. Do not treat a separately required module's monkeypatch
+  inside an MCP command as evidence of what the actual LocalScript executed.
+- Live unequip during attack left no equipped Tool; the off elbow returned to
+  Animator motion. Re-equipped the same existing bat, temporarily toggled
+  PlatformStand and restored it; low-hold right-shoulder magnitude returned to
+  0.160842 radians. This is a suppression smoke test, NOT a guardian ragdoll or
+  two-player combat test. No inventory/profile fields were directly edited.
+- Final Studio state: Play, normal Custom camera restored, existing Cindercrack
+  equipped. User artistic approval and a real second-client observer/PvP test
+  remain outstanding. No claim of multiplayer verification.
+
+The character-animation/rigging skills informed the single-writer, unchanged
+socket and explicit release design. The pose is ready for the owner's eye;
+measurements do not substitute for approval of its feel.
+
+## THE LOW HOLD, AND WHAT VERIFYING IT ACTUALLY FOUND — 2026-09-07  (UNCOMMITTED)
+
+### THE DIRECTION CHANGED, AND THEN THE NEW POSE FAILED ITS OWN REVIEW
+
+The owner rejected the over-the-shoulder rest and asked for a NORMAL RELAXED
+STANCE with the bat held LOW in one hand beside the body. That is built, it is
+measurably correct against every number in the brief, and **on screen it still
+reads wrong** — see THE DEFECT below. Both halves of that are in this section
+because the second half is the part the next session needs.
+
+### WHAT WAS ACTUALLY WRONG BEFORE — THREE LAYERS, NOT ONE
+
+1. **`CarryPose.client.luau` pinned both shoulders every frame.** It "released"
+   a joint with `if Transform ~= rest then Transform = rest` inside `Stepped`,
+   which runs AFTER the animator — so the guard was true forever and the write
+   landed forever. This is why three earlier passes recorded the shoulder as
+   INERT and concluded a published animation asset was the only way to swing.
+   Fixed with a one-shot `released` latch. **Do not reintroduce it.**
+2. **The grip was being fought across two layers.** `WeaponFX` wrote
+   `grip.C0 = rest * angles(pose.Grip + perWeapon)` every frame ON TOP of
+   `Tool.Grip`. Once the per-weapon offsets were zeroed that write became
+   `rest * identity` every frame — which is not "leave it alone", it is "pin it
+   at neutral", the exact CarryPose bug a second time.
+3. **The old strike landed outside the server's own hit cone.** Measured: the
+   hold put the barrel 161.4° BEHIND the avatar and the strike frame sat 89.7°
+   off forward with the tip beside the body. `CombatService` accepts a hit
+   within ±37.5° of the root's LookVector, so the visible swing and the hit
+   were unrelated events that happened to share a clock.
+
+**There is now exactly ONE layer that decides how a weapon sits in the hand:**
+`Tool.Grip`, built by `WeaponModel.GripFor(droop)`. Verified on the live avatar
+that `Tool.Grip` IS the grip weld's C1 (`handle = hand.CFrame * C0 * C1:Inverse()`
+to 0.0000 studs). The arm joints are the swing layer and never touch the weld.
+Nothing stacks compensating rotations any more.
+
+`GripFor` builds an explicit orthonormal frame rather than three Euler angles,
+because a barrel DIRECTION pins only two degrees of freedom — roll is free, so
+solving Euler angles per weapon landed six bats on six different branches with
+roll disagreeing by up to 180°, and a paddle showed its edge where a bat showed
+its face.
+
+### THE DEFECT, WHICH IS THE REASON THIS IS NOT DONE
+
+Measured on the live equipped player, all six bats, barrel taken from the
+Handle's own +Y axis:
+
+    weapon              below horizontal   bearing off straight-ahead   reach
+    rootwood_bat               8.8                   25.5              5.69
+    cactus_club               10.9                   25.8              4.61
+    sunflower_bonker          -6.1  (ABOVE)          25.7              5.44
+    mirewood_paddle            5.1                   25.8              8.03
+    cindercrack_bat            6.0                   25.8              6.53
+    comet_bat                  9.1                   25.7              6.18
+
+Bearing 0 is dead ahead, 90 is the avatar's right. **Every bat is carried within
+26° of straight forward and within 11° of level.** That is not a relaxed carry;
+it reads as PRESENTING the weapon — a lance held out in front. The front and
+side captures show it plainly, and the Sunflower is the worst because it carries
+seven degrees ABOVE horizontal.
+
+**AND IT CANNOT BE FIXED BY DROOPING FURTHER.** The hand sits 2.0 studs above
+the floor at the low hold and the barrels run 4.6 to 8.0 studs, so the steepest
+the barrel can hang before the tip reaches the ground is:
+
+    cactus 25.6   sunflower 21.6   rootwood 20.7   comet 19.1
+    cindercrack 17.9   mirewood 14.5      (degrees)
+
+Current droops are already close to those ceilings. **At this weapon scale a
+hanging low hold is geometrically impossible** — the only free choice is the
+compass BEARING, and it is currently pointed forward. Trailing it back and
+outward (bearing ~150°) is the one option that reads as a relaxed carry at this
+length, but the owner has rejected a rear-pointing barrel once already in a
+different context, so **that is an owner decision, not a fix to make silently.**
+Changing it is one constant: `BEARING_X, BEARING_Z` in `WeaponModel.luau`.
+
+### THE SWING IS GOOD, AND IT IS MEASURED  (SUPERSEDED — KEYFRAME SWING)
+
+> **This subsection describes the one-arm PREP/STRIKE/FOLLOW keyframe swing,
+> which NO LONGER EXISTS.** `STRIKE_LEAD` and those three pose tables were
+> deleted when the two-hand IK swing landed. The numbers below are kept as the
+> baseline the new swing is compared against in the top section — they are
+> history, not current behaviour. **Everything else in this section (the low
+> hold, joint ownership, suppression and recovery) is still current.**
+
+
+`LOW HOLD -> PREP -> STRIKE -> FOLLOW -> LOW HOLD`, all in front. Contact angle
+off the avatar's facing at the server's own hit instant (`SwingAt + SwingWindup`,
+on `workspace:GetServerTimeNow()`), sampled at ~65/sec through the real swing:
+
+    rootwood -0.9    cactus -1.5    sunflower -10.9
+    mirewood -7.0    cindercrack -2.5    comet -2.8      (degrees)
+
+All six inside the ±37.5° cone `CombatService` already used. **No hitbox was
+widened**; the animation was moved onto the existing hit (`STRIKE_LEAD = 0.55`).
+The arc runs ~57° right to ~51° left.
+
+**Forward means the AVATAR'S facing**, verified rather than assumed — the same
+swing at headings 0 / 90 / 180 / -60 / 137 lands at -1.0 / +2.8 / -0.7 / -0.7 /
+-0.4 off facing. Nothing is camera-locked or pinned to a world axis.
+
+*Honest caveat on the contact figure:* at the strike the barrel sweeps roughly
+2000°/sec, so the frames bracketing contact are 12-26 ms apart and the quoted
+angle is interpolated between two real samples. `cactus_club`'s bracket spans
+49.0° -> -3.0°, so its -1.5° carries real uncertainty. The others bracket much
+tighter.
+
+### JOINT OWNERSHIP, WHICH IS THE THING THAT BREAKS QUIETLY
+
+Writing `AnimationConstraint.Transform` OVERRIDES the animator for that joint, so
+every joint held is a joint the walk cycle loses. Measured sweep in degrees:
+
+                        idle    walking (391 studs)   jumping
+    RightShoulder        0.0          0.0               0.0     held (the pose)
+    RightElbow           0.0          0.0               0.0     held
+    RightWrist           0.0          0.0               0.0     held
+    LeftShoulder         3.4        111.3             197.2     FREE
+    Waist                0.7         40.8              17.4     FREE
+    RightHip             1.8         99.7              37.8     never touched
+
+The off arm and the waist are borrowed for the swing and given straight back.
+
+**A sweep of 0.0 does not prove a script is pinning a joint** — a STATIC
+animation pose reads 0.0 too. Reading the VALUE separates them, and that is what
+the release checks below actually do.
+
+### SUPPRESSION AND RECOVERY, BY VALUE
+
+LOW_HOLD commands shoulder (6, 0, 7) and elbow (5, 0, 0). Roblox's own tool-hold
+animation sits the shoulder near (84, 1, -7).
+
+    bat held        shoulder (  6.0, 0.0,  7.0)   elbow ( 5.0, 0.0, 0.0)   posed
+    unequipped      shoulder ( -0.2,-0.6, -5.3)   elbow (11.3,-1.6, 7.5)   released
+    holding trap    shoulder ( 83.6,12.4,  5.8)   elbow ( 8.4,-0.4, 6.6)   released
+    back to the bat shoulder (  6.0, 0.0,  7.0)   elbow ( 5.0, 0.0, 0.0)   posed
+    ragdolled       shoulder ( 83.6,12.4,  5.8)   elbow ( 8.4,-0.4, 6.6)   released
+    recovered       shoulder (  6.0, 0.0,  7.0)   elbow ( 5.0, 0.0, 0.0)   posed
+
+Death and respawn: the new character comes up empty-handed with animator values,
+and re-equipping restores the hold exactly. `battedTool` gates on
+`Category == "bat"`, which is why the trap is left alone.
+
+### FILES CHANGED (all uncommitted)
+
+  * `src/ReplicatedStorage/SeedGame/Shared/WeaponModel.luau` — `GripFor`, and
+    `BuildTool` now sets `Tool.Grip` from it. The single holding-orientation
+    layer. `LOW_HOLD_HAND` is tied to the arm pose in WeaponFX; change that pose
+    and this must be re-measured, not patched around.
+  * `src/ReplicatedStorage/SeedGame/Shared/WeaponData.luau` — `Grip: Vector3?`
+    replaced by `GripDroop: number?`; `WeaponData.GripOffset` deleted.
+  * `src/StarterPlayer/StarterPlayerScripts/WeaponFX.client.luau` — LOW_HOLD /
+    PREP / STRIKE / FOLLOW; the whole procedural grip layer removed;
+    `STRIKE_LEAD` puts the strike on the server's hit.
+  * `src/StarterPlayer/StarterPlayerScripts/CarryPose.client.luau` — the
+    one-shot `released` latch. **Load-bearing. Do not revert.**
+  * `.claude/settings.json` — NEW. Allowlists the eight Roblox Studio MCP tools
+    for this project, at the owner's explicit request.
+
+Antigravity's duplicate-`Wrist`-declaration cleanup is kept.
+
+### VERIFIED
+
+Automated, in Edit against the on-disk source: **WeaponSpec 80/80,
+PlotSpec 65/65, StarbloomLimbSpec 71/71.**
+
+One client, in Play, through the REAL equip path (`GameEvent` +
+`GameConfig.Weapon.EquipAction`, then `Humanoid:EquipTool`) — note that the
+action lives on `GameConfig.Weapon`, NOT on `WeaponData`:
+
+  * All six bats hold with **zero body clashes** beyond the gripping hand and
+    forearm, ground clearance 0.42-0.49 studs.
+  * Swing contact, arc, and heading-independence as tabulated above.
+  * Walking (391 studs of real displacement), jumping, unequip, switching to the
+    trap and back, ragdoll via `PlatformStand` and recovery, death and respawn.
+  * Console clean: 17 services ready, no errors or warnings.
+  * Front and side captures of all six holds, plus five-frame swing sequences
+    from the side and the front. **These are FRAME SEQUENCES, not video** — the
+    MCP tooling has no recorder. Each frame is the real animation parked at one
+    instant by rewriting `SwingAt` to `now - t` every Heartbeat, so the pose
+    shown is WeaponFX's own, not a re-creation. The strike frames carry the same
+    timing jitter noted above (captured near -20° where the sampled contact is
+    -1°).
+
+### NOT VERIFIED
+
+  * **No second client.** Nobody has watched another player's hold or swing, and
+    the pose is client-side. Observer animation is UNVERIFIED.
+  * **Two-player PvP combat is still unrun**, carried over from earlier passes.
+  * **Carrying a pod** was not re-tested after this rewrite. Unequip, trap,
+    ragdoll and respawn all exercise the same `mayPose` suppression path and all
+    pass, but the pod case specifically was verified against the OLD pose only.
+  * `Combat.SwingAnimation` (ToolSlash) still plays and is still a garnish.
+
+### ONE UNINTENDED SIDE EFFECT, AND IT IS THE OWNER'S TO UNDO
+
+During this session three grown plants moved from the plot bed into the bag —
+**Cinderpaw t6, Novaorb t7, Crookreed t5** — leaving 9/20 in the bed. They are
+INTACT in the Backpack with species, tier and kg unchanged, and replanting them
+restores them fully (a hatched creature goes back in the ground already
+earning). The only code path is an E-hold on the plant's `PickupPrompt`;
+**no keyboard input was sent by this session** and the `PickUp` remote action was
+never fired, so the trigger is unexplained. It is recorded here rather than
+quietly fixed because putting them back is another write to a live profile.
+
+Studio state was otherwise restored: camera to `Custom`/Humanoid/FOV 70,
+`AutoRotate` true, `Lighting.Brightness`/`GlobalShadows` to MapService's authored
+values, the loadout back to `mirewood_paddle`, and the `_G` helpers cleared.
+
+## Bat Handling & Forward Swing Kinematic Solve — 2026-09-04  (SUPERSEDED)
+
+> **The pose in this section is SUPERSEDED and was REJECTED by the owner.**
+> It rests the bat over the right shoulder with the hand beside the head.
+> The owner's direction is now a LOW HOLD — bat carried low in one hand
+> beside the body — and the section below it is the current state.
+> Its clearance tables describe a pose nothing builds any more.
+
+Replaced the rejected ready pose and backward swing with an anatomically solved R15 kinematic solve across all 6 bats (`rootwood_bat`, `cactus_club`, `sunflower_bonker`, `mirewood_paddle`, `cindercrack_bat`, `comet_bat`) in `src/StarterPlayer/StarterPlayerScripts/WeaponFX.client.luau` and `src/ReplicatedStorage/SeedGame/Shared/WeaponData.luau`.
+
+### Root Cause of Previous Rejection
+1. **Inverted Joint Flexion**: The previous implementation wrote `Elbow = Vector3.new(-145, 0, 0)`. Negative angle on an R15 elbow hyperextends the joint backward rather than flexing naturally forward/up.
+2. **Band-Aid Grip Hack**: To force the bat upright after breaking the arm kinematics, a massive rotation `Grip = Vector3.new(140, 35, -80)` was piled on top of the grip weld, pointing the barrel diagonally across the face toward the left shoulder.
+3. **Inverted Swing Trajectory**: Because the ready pose rested over the left shoulder, the swing was authored sweeping from left to right, rising up and swinging *behind* the avatar's back rather than striking forward.
+
+### Anatomical & Forward Kinematic Solution
+Built and validated using the live R15 rig's attachment frames (`child.CFrame = parent.CFrame * att0.CFrame * Transform * att1.CFrame:Inverse()`):
+1. **READY Pose**:
+   - `Shoulder = Vector3.new(-20, 0, 40)`: Right upper arm naturally abducted away from ribs and slightly pitched back.
+   - `Elbow = Vector3.new(105, 0, 0)`: True anatomical positive flexion, folding the forearm up and forward so the hand sits beside the outer right shoulder.
+   - `Wrist = Vector3.new(-25, 0, 0)`: Natural slight wrist extension that aligns the bat barrel extending backward over the right shoulder at a ~20.0° upward pitch (closer to horizontal than vertical).
+   - `Waist = Vector3.zero`, `Left = Vector3.zero`: Chest and off-arm remain natural, relaxed, and fully driven by the animator/walk cycle.
+   - `Grip = Vector3.zero`: Zero artificial grip hack. `Tool.Grip` (`Angles(-100, 0, 0)`) sits naturally in the hand.
+2. **SWING Sequence (Forward Strike Across the Front)**:
+   - `READY -> WINDUP -> STRIKE -> FOLLOW -> READY`:
+   - `WINDUP`: Torso coils +16° right (`Waist = (0, 16, -2)`), right shoulder draws back slightly loaded (`Shoulder = (-28, 8, 46)`, `Elbow = (112, 0, 0)`), off-arm balances (`Left = (-12, 0, -18)`). Bat barrel remains cocked behind shoulder.
+   - `STRIKE`: Waist unwinds with power through neutral to -22° left (`Waist = (0, -22, 4)`), shoulder drives forward (`Shoulder = (35, -25, 10)`), elbow extends naturally (`Elbow = (70, 0, 0)`), and wrist releases forward (`Wrist = (0, 0, 55)`). The bat sweeps cleanly from right to left across the front through the frontal target area at chest-to-waist height (midpoint $Z = -0.61$ to $-1.15$, tip $Z = -1.35$ to $-2.36$, height $Y = 2.42$).
+   - `FOLLOW`: Waist completes follow-through to -36° left (`Waist = (0, -36, 6)`), arm decelerates cleanly across the left hip (`Shoulder = (25, -35, 5)`, `Elbow = (85, 0, 0)`, `Wrist = (0, 0, 70)`), before smooth hermite settle back to `READY`.
+
+### Measured Clearance Across All 6 Bats (Zero Clipping)
+Tested and verified in Edit mode with live R15 dummy:
+- `rootwood_bat`: READY Pitch 20.0°, HeadClr 1.98s, TorsoClr 1.59s | STRIKE TipZ -1.35, TorsoClr 0.71s
+- `cactus_club`: READY Pitch 20.0°, HeadClr 1.89s, TorsoClr 1.63s | STRIKE TipZ -1.35, TorsoClr 0.45s
+- `sunflower_bonker`: READY Pitch 20.0°, HeadClr 1.92s, TorsoClr 1.63s | STRIKE TipZ -1.35, TorsoClr 0.61s
+- `mirewood_paddle`: READY Pitch 20.0°, HeadClr 1.99s, TorsoClr 1.59s | STRIKE TipZ -1.35, TorsoClr 0.67s
+- `cindercrack_bat`: READY Pitch 20.0°, HeadClr 1.97s, TorsoClr 1.60s | STRIKE TipZ -1.35, TorsoClr 0.63s
+- `comet_bat`: READY Pitch 20.0°, HeadClr 1.92s, TorsoClr 1.63s | STRIKE TipZ -1.35, TorsoClr 0.64s
+- Full continuous timeline check: overall minimum head clearance is 1.83 studs, minimum torso clearance is 0.85 studs throughout the entire swing and settle.
+
+### Status & Git Policy
+- All edits left **uncommitted** in the working tree for the owner's playtest.
+- `rojo build -o build/StealASeed.rbxlx` passes clean.
+- `git diff --check` passes clean.
+- Test dummy was destroyed after measurement; workspace is clean.
+
 ## Premium creature reference skill -- 2026-09-04
 
 Added `seed-premium-creature-art` under `.agents/skills/`, with a matching `.claude/skills/`
@@ -5457,6 +6657,1168 @@ and the guard's discriminator was tested against the real profiled launch. But
 **neither has been exercised in Play**: the fill path needs a real stream-out
 and stream-in to confirm a late `LeftHip` actually lands, and the released guard
 needs somebody thrown into the left wall to confirm the body now stops at it.
+
+## 2026-09-03 -- GUARDIANS TAKE THE POD BACK  (UNCOMMITTED, awaiting review)
+
+Past Dustbowl, being caught no longer scatters the pod on the road: Miremaw,
+Forgemaw and Astralmaw confiscate it and carry it home. Greenhollow and Dustbowl
+are untouched and still drop it where you fell.
+
+### THE SHAPE OF IT
+
+One shared state transition, not three biome implementations. `Nest` gains a
+`haul` record and the state machine gains `hauling`, which is `returning` that
+cannot simply end -- every exit runs `depositHaul`.
+
+    catch -> confiscateFrom -> nest.haul + weld + state "hauling"
+          -> throwPlayer (unchanged)
+          -> walkHome (shared with "returning")
+          -> depositHaul -> slot in the ring it came off
+                         -> else loose pod at that nest
+                         -> else a loud warning
+          -> sleep
+
+`GameConfig.Parent.Confiscate` is keyed by BIOME and absent for the first two,
+exactly the way `Guardians` is keyed by species and absent for four. It is a
+SEPARATE table on purpose: adding Miremaw and Forgemaw to `Guardians` to give
+them a carry point would have handed them a chase ramp, a return speed and a new
+throw as a side effect. `Guardians` still has one entry.
+
+**The dependency could not point the way the work does.** CarryService is
+Priority 45 and requires NestService at 40, but the catch happens in NestService's
+tick and the pod lives in CarryService. So CarryService hands over two functions
+at Start -- `NestService.SetCarryBridge{Confiscate, SpawnLoose}` -- and if it
+never starts, nothing is ever confiscated and every catch is the old one.
+
+**Ordering is the feature.** The throw sets PlatformStand and CarryService turns
+that into a Drop; confiscating BEFORE the throw leaves that watcher nothing to
+drop. The other order produces a loose pod AND a hauled one out of one pod.
+
+**One pod, once.** `CarryService.Confiscate` does not yield, so the read and the
+clear of a player's slot happen in one resumption: two guardians reaching the
+same person in the same frame cannot both come away holding something.
+
+### WHERE THE POD SITS IS DERIVED, AND HAD TO BE
+
+A pod is 1.66 studs across at Tiny and 9.04 at the top of the curve, on guardians
+15 to 19 studs tall. Three hand-tuned offsets were written first and measured
+against the live rigs:
+
+    astralmaw  buried 2.62 studs inside its own ChestNebula
+    forgemaw   hung 8.55 studs BELOW the ground it was walking on
+
+Clearing the front of the whole bounding body was tried next and is too blunt --
+Forgemaw's head reaches 8.47 studs forward, so its pod ended up 13.4 out, five
+past the nose and ten from the fist it was welded to. What ships starts AT the
+limb and pushes forward only as far as it takes to stop overlapping anything,
+with the centre clamped above the lowest point of the body. Measured after:
+
+    astralmaw   0.40 clear of UpperTooth3   8.89 above the feet   3 passes
+    forgemaw    0.40 clear of CheekR        0.40 above the feet   6 passes
+    miremaw     0.40 clear of RightHand     0.40 above the feet   4 passes
+
+The pod is parented to the NEST FOLDER and welded across, not parented into the
+guardian. That is not tidiness: `mireChannels` name-scans every descendant
+BasePart of a Miremaw into one table and keeps the last of each name, so a pod
+inside the model could be re-scanned on a stream-in re-track and either be
+resized by the sleep pose or REPLACE a real part in the channel.
+
+### MEASURED IN PLAY, all three guardians
+
+    miremaw   x3   took, walked home, returned it to its own ring
+    forgemaw  x2   same, 7 of 7 motors animating throughout the walk
+    astralmaw x1   same, pod 3.95 studs off the jaw, 44 of 45 samples "hauling"
+
+    caught empty-handed in a profiled biome   Hauling never set, chasing->returning
+    greenhollow                               pod dropped loose on the road, no haul
+    guardian DESTROYED mid-haul               pod recovered into the ring, 0 stranded
+    streamed out 1400 studs and back          still animating, 7 motors
+
+The legacy throw still logs "held the launch velocity for 0.35s" for the
+unprofiled four and Astralmaw still logs "one impulse", so the two ThrowFX paths
+are still separated.
+
+### ONE BUG THIS PASS MADE AND FIXED
+
+The state was assigned after `throwPlayer`, which YIELDS for seconds, and the
+tick publishes `ParentState` before it checks `busy` -- so Forgemaw read
+`chasing` for 5.5 seconds while already holding a pod. Now assigned at the
+confiscation, which is safe precisely because `busy` keeps movement out.
+
+### AND ONE CORRECTION TO THE COMMIT BEFORE IT
+
+`736e6c7` says TanglemireForms has no RootJoint, Brambleback has three seams and
+Miremaw has one. **That is wrong** -- it was grepped per file, and these rigs are
+composed across several. Measured on the live guardians:
+
+    greenhollow 7   dustbowl 7   emberroot 7   starbloom 7   tanglemire 15
+
+All five carry the whole seven-seam contract. The fill fix is still right and
+still bounded; only its justification was wrong, and the comment in
+ParentAnim.client.luau has been corrected to say so.
+
+### THE PLAYTEST FOUND A POD SHREDDER, AND IT WAS OLDER THAN THIS PASS
+
+Reported after the first real session: *"once i steal the pods couldnt be taken
+and floating, it seems like im carrying an invisible pod, the pods despawned
+too"*, with
+
+    [Seed/CarryService] could not attach emberquill:
+        CarryService:507: attempt to index nil with 'CFrame'
+
+Four symptoms, one missing line. `TryTake` guarded the Humanoid, the Head and the
+range, and never the ROOT -- then built the carried pod at `root.CFrame` below
+the point of no return. A nil root threw INSIDE the pcall, by which time
+`NestService.TakePod` had already destroyed the pod and emptied the slot. The
+failure handler then did exactly what it is written to do: put the species back
+on the floor a stud in the air, as a LOOSE pod, which despawns in 45 seconds.
+
+    pod destroyed from the ring        -> "the pods despawned"
+    nothing arrives in your hands      -> "carrying an invisible pod"
+    respawned a stud up, untakeable    -> "couldn't be taken and floating"
+    every later attempt does it again  -> the whole nest, one press at a time
+
+**A LIVING CHARACTER REALLY CAN HAVE NO ROOT.** A ragdolled R15 body is seventeen
+separate assemblies, so a thrown root travels on its own -- ThrowFX has measured
+it 780 studs from its own torso -- and `FallenPartsDestroyHeight` is -500. The
+root crosses the plane alone and is destroyed while the body lands on the road.
+Read off a live character in Play, before anything was touched:
+
+    HRP = false    Head = true    Humanoid.Health = 100
+
+All three existing guards pass in that state. `throwPlayer`'s wait loop already
+broke on `not root.Parent`, so the case was known about and nothing acted on it.
+
+Two fixes. `TryTake` now refuses with `NO_ROOT` above the line where the world
+changes -- refusing rather than falling back to the Head, because a fallback
+hands a pod to a body that cannot carry it. And `throwPlayer` respawns a body
+that comes out of a throw alive and rootless, with `LoadCharacter` rather than
+`Health = 0`: they have just been thrown across the biome and lost the pod, and a
+death on top would be a second punishment for the engine's bookkeeping.
+
+Verified in Play against a deliberately rootless body: three take attempts,
+`NO_ROOT` refused each time (the third suppressed by the existing 3-second
+rate limit), ring 3 -> 3, nothing carried, zero loose pods created. The recovery
+condition evaluates true on a real broken body and `LoadCharacter` returns a
+working one immediately. A normal Forgemaw haul cycle still runs end to end after
+the fix.
+
+**This predates the confiscation pass** -- the guard has never existed -- but the
+pass is what made it easy to hit, because it puts players through the throw far
+more often and Astralmaw's is the one that clears the corridor walls.
+
+### SECOND PLAYTEST: A FREE POD, AND A THROW STILL GOING BACKWARDS
+
+*"theres a rare chance when i ragdoll on opposite direction, as the guardian gets
+back while carrying the pod, i took one again and it doesnt chase me this time"*
+
+Two separate faults in one sentence.
+
+**THE FREE POD WAS A DESIGN CALL, AND IT WAS THE WRONG ONE.** `provoke` refused
+to retarget a guardian mid-haul, on the reasoning that dropping a haul to chase a
+second thief is how one pod becomes zero. The reasoning was sound and the
+behaviour was not: the walk home is ten to fifteen seconds during which the
+guardian CANNOT respond, so steal, get caught, then rob the ring while it trudges
+away was a free pod every single time -- precisely the safe farm `rage` exists to
+prevent, and written up two functions above the code that allowed it.
+
+The haul never needed protecting from the chase, because a haul is not a state,
+it is a field. It survives a chase the way it survives anything else. What was
+missing was that all four exits from `chasing` assigned `"returning"` directly;
+they now go through `goHome`, which returns to `"hauling"` whenever there is
+still something to carry and restarts the haul clock so a chase does not eat the
+ninety seconds meant for the walk.
+
+A guardian that catches you while already holding a pod cannot take a second one
+-- `confiscateFrom` sees its hands are full -- so you keep yours until the throw
+knocks it onto the road, exactly as Greenhollow's would.
+
+**AND THE THROW WAS STILL AWAY-DOMINANT FOR EVERYONE BUT ASTRALMAW.** The legacy
+weighting is away 0.70 against road 0.50, and away wins. Fine while the guardian
+is behind you; wrong the moment it is not, and `ChaseOvershootStuds` aims sixty
+studs PAST you, so it regularly ends up level or in front. Then the sum is -0.20
+of the road and you are fired deeper into the biome. Measured on Forgemaw during
+this session:
+
+    dir (0.25, 0, -0.97)  ->  landed z -1623, y -410  ->  past Starbloom, void, dead
+
+Only Astralmaw was ever fixed, when the same complaint was made about Starbloom.
+The other two confiscators now carry `AwayWeight = 0.45, RoadWeight = 1.00` in
+their `Confiscate` profile, and `throwPlayer` asks the species profile first and
+the biome profile second. **This changes Miremaw's and Forgemaw's throw
+direction** -- deliberately, and it is the change the report asks for.
+Greenhollow and Dustbowl have no entry and keep 0.70 / 0.50 and the hardcoded +Z.
+
+The `dir:Dot(awayDir) <= 0` fallback was also wrong and is fixed: it dropped to
+`awayDir` alone, which in that exact geometry is the way the road weighting
+exists to avoid. It now keeps the road and uses only the SIDEWAYS part of away,
+so you go home past the guardian rather than back over its shoulder.
+
+Verified in Play, Forgemaw, one continuous run:
+
+    first theft, fled 600      confiscated, hauled
+    upright again after 4.7s   guardian still hauling
+    second theft MID-HAUL      CHASED: true, kept the pod while chasing: true
+    no second confiscation     hands full, so the pod dropped on the road
+    haul finished              "returned a 4 tier cinderpaw ... (arrived)"
+    every throw direction      +Z homeward: (-0.54,0,0.84) (-0.02,0,1.00) (-0.54,0,0.84)
+
+**AND THE ROOTLESS RECOVERY FIRED FOR REAL** in the same run, which was the open
+item from the previous fix: `nicnicniccoal lost its HumanoidRootPart to the
+throw; respawning.` The race against the kill plane is winnable after all -- it
+just needed enough throws.
+
+One consequence worth watching rather than changing: a reliable homeward throw
+from Emberroot covers about 1,150 studs, which is most of the walk back. The
+distance is not new -- the speed did not change, only the direction did -- but it
+does mean being caught now saves you the walk it used to scatter you across. You
+lost the pod, so there is nothing to carry home; if that reads as a reward rather
+than a punishment, `ThrowSpeed` is the number, not the weights.
+
+### A SECOND THIEF DURING THE THROW WAS COUNTED AND THEN THROWN AWAY
+
+Asked rather than reported: *"what if a player take the pod and guardian is
+chasing then another player will take the pod, what could happen?"* Tracing it
+found one intended behaviour and one hole.
+
+**THE INTENDED PART.** `provoke` re-targets unconditionally, so the guardian
+drops the first thief and turns on the second in the same tick. The first walks
+away with the pod untouched -- even stood on top of the guardian, because only
+`nest.target` is measured against `GrabStuds`. That is deliberate and the comment
+has always said so, but it is worth naming what it makes possible: **pulling
+aggro off a partner is a real co-op tactic.** Two players can alternate stealing
+to free each other. The tax is `rage`, which is per NEST and not per player, so
+the second thief inherits the first one's anger -- and `chaseSince` is not reset
+on a mid-chase re-target, so they also inherit the accumulated ramp and meet a
+guardian already at or near `TopSpeed` instead of `OpeningSpeed`. Four thefts cap
+it at +20 WalkSpeed and it only fades after 45 seconds asleep. Left alone; the
+trick costs more every time it is used, which is the shape the tax should have.
+
+**THE HOLE.** `busy` keeps the TICK out of a nest for the five-odd seconds of a
+throw. It does not keep `provoke` out -- `TakePod` never looks at it -- so a
+second thief inside that window did everything they normally do: stacked rage,
+set the state to chasing, pointed `target` at themselves, wrote the new speed.
+Then the catch's `task.spawn` ended with
+
+    goHome(nest)
+    nest.target = nil
+
+unconditionally, and threw all of it away. The guardian walked home with the
+first player's pod, past somebody who had just emptied a slot in front of it.
+
+This is the SAME fault `provoke` was fixed for last pass, narrowed from the whole
+walk back to the throw window -- rarer, and identical from the road, which is
+exactly why it survived that fix. The release is now conditional on the nest
+still being pointed at the person who was just thrown.
+
+Two smaller things found in the same trace and fixed with it:
+
+  * `lastTargetAt` was never cleared when `provoke` re-targeted -- only when the
+    tick let a target go. The dropped player's sweep sample sat there until
+    something else cleared it, and the next nest to want them would sweep a
+    segment from wherever they were standing when the first one lost interest.
+    `MAX_TICK_TRAVEL` discards the worst of it; it should not have to. Cleared in
+    `provoke` and at the end of a catch, which meant moving the declaration up
+    beside `nests` -- it is read eight hundred lines before where it was
+    declared. Its old comment also claimed a player can only be chased by one
+    parent at a time. Rob two biomes and that is not true.
+  * The `hauling` branch still carried the pre-fix comment claiming `provoke`
+    refuses to retarget a hauler. It has not refused since the last pass.
+
+Verified in Play: one full Forgemaw cycle after the change -- take, confiscate,
+throw, haul, `"returned a 4 tier emberquill to Nest_emberroot_01 (arrived)"`,
+ring back to 3 pods, no `HauledPod` left behind, nest asleep. The release guard
+does not regress the ordinary catch, and the module compiled and ran, which
+`rojo build` alone would not have told us.
+
+### NOT VERIFIED
+
+  * **The second-thief-during-the-throw case itself.** It needs a second Player
+    object and a solo Play session has one. `DebugService.WakeNearest` reaches
+    the real `NestService.Provoke`, but only ever with the caller, so it cannot
+    make `nest.target ~= victim` happen. Joins the two-client list below.
+  * The 90-second `HaulSeconds` timeout has not been reached in play. It runs the
+    same `depositHaul` the destroyed-guardian test exercised.
+  * Two guardians catching one player still needs two clients.
+  * Two guardians catching one player needs two clients.
+  * `SpeedSpec` errors on `GameConfig.overclockUnlockOrderFor` and `CycleSpec`
+    fails "exactly one biome is live" -- BOTH PRE-EXISTING, both fail identically
+    at `736e6c7`, and neither file is touched by this pass. PlotSpec 65/65 and
+    StarbloomLimbSpec 71/71 pass.
+
+## MARIGOLD SELLS WEAPONS -- 2026-09-04  (UNCOMMITTED, awaiting review)
+
+Six knockback bats and one reusable trap, bought off a prompt on Marigold, in a
+scrolling panel of horizontal product cards. Knockback only; nothing in the
+feature reads or writes Health.
+
+### THE REFERENCE IMAGE DID NOT ARRIVE
+
+The brief says *"Use the attached image as the visual reference"* and describes
+it in detail -- warm wooden frame, green patterned header with leaves, stacked
+horizontal cards, cream names, green prices with a coin, a category badge. **No
+image was attached and none is in the repo** (`shop ui 1-3.png` and
+`shop index.png` are August, `art/` is unchanged). Every visual number in
+`MarigoldShopUI.client.luau` is a reading of the WORDS.
+
+That matters because of what this project already knows: the corner HUD and the
+first shop panel were both SAMPLED off their references with a pixel reader, and
+both were wrong at first impression and right only after measuring. The palette
+here is at least borrowed rather than invented -- panel from `GameConfig.Panel`
+(the warm dark soil), header green from `GameConfig.Rail.ShopFace` -- so it is
+wrong in the same direction as the rest of the HUD. Assume it needs a sampling
+pass against the picture.
+
+The reference's stock counts, restocking and Restock button were explicitly NOT
+copied, as the brief instructs. There is no quantity anywhere: these are
+permanent unlocks, saved as a set.
+
+### WHAT LANDED
+
+```
+Shared/WeaponData.luau        seven items: ids, prices, combat values, palettes
+Shared/WeaponModel.luau       ONE builder -> the Tool, the shop viewport, the world trap
+SeedGameServer/WeaponShopService.luau   the prompt, buying, equipping, the Tool
+SeedGameServer/CombatService.luau       swings, hits, knockback, the Bramblejaw
+StarterPlayerScripts/MarigoldShopUI.client.luau   the panel
+StarterPlayerScripts/WeaponFX.client.luau         the swing and the impact
+tools/tests/WeaponSpec.luau   68 assertions
+```
+
+Edited, and nothing else: `GameConfig` (three verbs, `Trapped`, the `Trap` tag),
+`ProfileSchema` (`Weapons` set + `Equipped`), `PlayerDataService` (`GrantWeapon`,
+`SetEquipped`), `CarryService` (one `Trapped` branch in `RefreshWalkSpeed`),
+`NestService` (two aliases over the existing ragdoll), `UIKit` (its dead
+`frameModel` became the exported `frameViewport`), `ThrowFX` (one optional
+argument), `AGENTS.md` (the file list, including SellService and DebugService
+which have been missing since August).
+
+### REUSED RATHER THAN REBUILT
+
+  * `UIKit.modal` for the dimmer, panel, fade and close button. The header is
+    dressed on top of the modal's own title bar rather than replacing it.
+  * The `OpenPanel` attribute mutex, so this is the fourth panel taking turns
+    with the Index, the Shop and the Garden.
+  * `GameEvent`, which already carries PlantAt, PickUp, PlotUpgrade and the mill
+    ladder. Three more verbs, no new remote.
+  * The `ProfileUpdated` packet. No new replication: `Weapons`, `Equipped` and
+    `Cash` all ride the one that arrives four times a second.
+  * `ThrowVictim` and `NestService`'s ragdoll for the knockback -- the same
+    pipeline a guardian uses, because everything expensive about it was learned
+    the hard way and must not be relearned in a second file.
+  * `CarryService.RefreshWalkSpeed` as the ONLY writer of WalkSpeed.
+  * `UIKit.frameViewport`, which was a private `frameModel` nothing called.
+
+### A WEAPON TOOL IS INVISIBLE TO THE BAG
+
+It carries `WeaponId` and no `SpeciesId`, and that one fact keeps it out of three
+services without a line added to any of them -- `EconomyService.SellHeld` prices
+a Tool by its species, `CarryService.heldSnapshot` saves it by its species, and
+`PlantService.PlaceAt` plants it by its species. Asserted in WeaponSpec, because
+a Comet Bat sold at the stall for nothing would be a very quiet disaster.
+
+### THE RESTRAINT IS A MODIFIER, NOT A WRITE
+
+`CarryService` is still the only file that assigns WalkSpeed. A trap sets the
+`Trapped` attribute and asks it to recompute; releasing clears it and asks
+again. Nothing captures a speed and puts it back -- which is the difference
+between this and the bug written up over `throwPlayer`, where a captured value
+was stale by the time it was restored. Jumping is disabled with
+`SetStateEnabled` at the two edges of the hold and nowhere else, deliberately
+NOT inside RefreshWalkSpeed, which runs on every carry event and every respawn.
+The camera is never touched.
+
+Measured live, forcing the real service to recompute through a respawn:
+
+    at rest          WalkSpeed 139.75
+    Trapped = true   WalkSpeed   0.00
+    Trapped cleared  WalkSpeed 139.75   == walkSpeedFor(saved Speed), recomputed
+
+### PRICES AND COMBAT VALUES
+
+```
+                price      reach  fling  lift  windup  recover  cooldown  yaw
+Rootwood Bat      5,000     12     22    0.45   0.18    0.30      1.10     0
+Cactus Club      40,000      8.5   16    0.30   0.09    0.20      0.65    70
+Sunflower Bonker 300,000    11     26    1.60   0.42    0.55      2.30     0
+Mirewood Paddle  1,200,000  17     24    0.35   0.24    0.34      1.50    55
+Cindercrack Bat  9,000,000  13     44    0.40   0.60    0.75      2.90     0
+Comet Bat        60,000,000 14     34    0.70   0.28    0.38      1.80    25
+Bramblejaw Trap  150,000    -- arm 1s, hold 2s, immunity 4s, expire 20s, cd 15s
+```
+
+Shared: victim limp 1.1s, hit immunity 1.5s, arc 75 degrees either side, reach
+tolerance 7 studs vertical, line of sight required.
+
+**The ladder sits UNDER the progression ladder at every rung.** Plot levels are
+25K / 250K / 2.5M / 25M and mills are 10K / 75K / 500K / 3.5M / 25M, so nobody
+ever chooses between a bat and the upgrade that earns them the next bat.
+Rootwood at 5,000 is under both first upgrades and inside one good pod sale
+(`SellSeconds = 30`, so a 170 kg pod pays for it).
+
+**WeaponSpec caught the Comet Bat beating the Sunflower on reach, fling, wind-up
+AND cooldown** -- the "every expensive bat is strictly better" failure the brief
+names, invisible from reading the table. The Sunflower's lift went 1.10 -> 1.60,
+which is the axis it is named after and the one thing the Comet cannot have:
+
+    bat            launch v   apex    airtime
+    rootwood          69.3     2.48    0.32s
+    cactus            72.3     1.20    0.22s
+    sunflower         39.9    10.40    0.65s   <- twice the height of anything
+    mirewood          82.0     2.10    0.29s
+    cindercrack      103.9     4.40    0.42s
+    comet             69.0     5.95    0.49s
+
+### THREE THINGS PLAY DISPROVED THAT READING DID NOT
+
+**1. The legacy hold was the wrong branch, by a factor of seven.** `hold = nil`
+puts a throw on the path the four unprofiled guardians use, and ThrowFX's own
+banner says what that path does: it re-writes velocity every frame for 0.35s,
+which does not hold a launch, it CANCELS GRAVITY. Measured: a Rootwood
+configured for 22 studs carried 152. `hold = 0` is one impulse and then gravity.
+This is NOT routing a bat through Astralmaw -- what is exceptional about
+Astralmaw is its numbers, and none of them are here.
+
+**2. FlingStuds is not how far they land, and the card was saying it was.**
+With the arc fixed, measured travel is still 2-4x the configured number, because
+a limp body is seventeen assemblies: it lands, keeps its horizontal speed, and
+SKIDS. A flat fast arc skids furthest.
+
+    rootwood     22 -> 59.5      sunflower   26 ->  31.1
+    cactus       16 -> 58.7      cindercrack 44 -> 147.5
+
+The guardians have exactly the same property and nobody has ever measured one
+landing at its configured range either, so this is not a bug in the bats. The
+CARD changed instead: FLING prints a bare number now, REACH keeps its studs
+because reach genuinely is one -- the server measures it.
+
+**3. The player avatar has no Motor6Ds, and `AnimationConstraint.Transform` does
+not work either.** The first WeaponFX looked for a `RightShoulder` Motor6D
+(there are none -- HANDOFF has said so since August and this pass did not read
+it). The second used `.Transform` the way `CarryPose` does. Measured, writing
+X + 0.9 rad to the right shoulder of a live character:
+
+    RenderStepped   hand moved 0.03 studs
+    Stepped         hand moved 0.03 studs      <- CarryPose's own phase
+    Heartbeat       hand moved 0.01 studs
+
+and a one-shot write read back as **-0.000 rad** on the next frame. The animator
+overwrites it in every phase.
+
+**So CarryPose's arm pose is not applying either.** That is a pre-existing
+regression this pass FOUND and did not cause, and it is not fixed here -- fixing
+character posing engine-wide is a different job. It is the next thing somebody
+should look at, because "both arms under the pod while carrying" is currently
+not happening.
+
+The swing drives the engine's own `RightGrip` WELD instead. Rig-independent, and
+it works:
+
+    cindercrack   tip travel peak 8.02 studs, settled 0.04   (0.6s windup visible)
+    cactus        tip travel peak 7.27 studs, settled 0.04
+
+### AND ONE VALIDATION HOLE PLAY FOUND
+
+`TryEquip` coerced any non-string payload to `""` -- and `""` is a real command
+meaning "put everything away". So `FireServer(EquipAction, 99)` unequipped the
+player. Harmless as exploits go and wrong as validation: Rule 4 is that an
+argument off the wire is a lie until checked, and checking it by converting it
+into a different valid command is not checking it. Non-strings are refused now;
+`""` from the panel still works.
+
+### VERIFIED IN PLAY
+
+  * 17 services boot clean; both new ones report ready.
+  * The prompt on Marigold opens the panel: `WeaponShop/true` arrives and the
+    panel comes up. Verified from a fresh session.
+  * All seven cards render with a live ViewportFrame of the REAL model, correct
+    prices, correct badges, and the trap card states 2s / 1s / 15s.
+  * Bought all seven; each logged exactly once. Repeat purchases of an owned
+    item and three forged ids (`"excalibur"`, `42`, a table) all refused with no
+    charge and no log line.
+  * Equip cycles through three weapons and back to nothing; the Tool follows.
+  * **A rejoin restored all seven, the equipped one, 12 plants and the cash.**
+  * Cooldowns enforced: Cactus 4 swings in 3.0s (0.65s), Cindercrack 2 (2.90s).
+  * Trap placement refused in the hub, refused on the plot field, refused
+    standing on a nest pod, ALLOWED on the open road, refused for a second trap
+    while one is down -- each with a denial packet.
+  * Trap arming measured frame by frame: 6.2 -> 74.0 degrees over exactly 1.00s,
+    then held. Expiry at t+20.2s against 20 configured. Placement refused every
+    second from t+1 to t+19.
+  * The guardian throw is UNCHANGED: a full Emberroot raid still confiscates and
+    hauls (`hauling: right`), and the camera floor still goes 0.5 -> 12.0 -> 0.5,
+    which is the proof the optional ThrowFX argument did not touch that path. A
+    bat's payload leaves the camera at 0.5 throughout.
+  * `WeaponSpec` 68/68, `PlotSpec` 65/65, `StarbloomLimbSpec` 71/71. `SpeedSpec`
+    and `CycleSpec` still fail exactly as they did at `736e6c7`; neither file is
+    touched by this pass.
+  * `rojo build` passes, `git diff --check` clean.
+
+### NOT VERIFIED -- AND THE FIRST TWO NEED A HUMAN
+
+  * **NOTHING IN THE PANEL HAS EVER BEEN CLICKED.** Every transaction behind the
+    buttons is verified by firing the exact payloads they send, but the click
+    itself is not: MCP's mouse input does not reach the game viewport (it closed
+    the panel by hitting the dimmer instead), and `VirtualInputManager` is
+    refused with "lacking capability RobloxScript". Same wall HANDOFF already
+    records for a hand-driven take. The buttons are built exactly like ShopUI's
+    working buy buttons, in the same modal, at the same depth -- but somebody at
+    the keyboard needs to press BUY, EQUIP, a filter tab and the X.
+  * **NO PvP HIT HAS EVER LANDED.** A single Play session has one player, and
+    every target test is `other ~= swinger`. Untested end to end: the arc and
+    line-of-sight filter against a real second body, the knockback on a victim,
+    one-hit-per-target, the chain-fling immunity, the trap CATCHING anybody, the
+    2-second hold, the 4-second immunity, and a bat releasing a trapped player
+    before launching them. The knockback PIPELINE is measured (payload, arc,
+    camera, ragdoll, recovery) and the restraint MECHANISM is measured (the
+    attribute path through RefreshWalkSpeed); what is missing is the two of them
+    meeting a second player.
+  * The 15-second placement cooldown is honoured but was never the binding
+    constraint in test: an unsprung trap stands for 20s and the one-active-trap
+    rule outlives the cooldown. A SPRUNG trap is removed after 0.6s, so there the
+    15s binds -- reasoned, not measured, because springing one needs two clients.
+  * Marigold's prompt and the SELL ALL board are ~15 studs apart and
+    `Exclusivity` is `OnePerButton`, so the engine offers ONE of them. Standing
+    at her offers hers; this cost half an hour of scripted tests looking like a
+    broken shop before the cause was remembered.
+  * The panel closes when the player walks 26 studs from Marigold. That is
+    deliberate and it fired legitimately during testing when a character slid
+    across the deck.
+
+### FLAGGED FOR JUDGEMENT, NOT CHANGED
+
+  * **Cindercrack knocks somebody about 147 studs.** That is half of Greenhollow
+    and more than a biome-1 guardian's configured throw. It is the 9M hammer with
+    the longest telegraph in the game, so it is probably earned -- but it is the
+    one number worth watching, and `FlingStuds` is the lever.
+  * Buying auto-equips. Buying the trap therefore puts your bat away, which is
+    one click to undo and is what "I bought this" means everywhere else.
+  * Seven ViewportFrames sit behind this panel. IndexUI refused viewports for
+    five plants at 29-40 parts, on the grounds that it was 170 parts of CAMERA
+    WORK on a phone -- the cost it refused was the ANIMATION. These are static:
+    one camera write at build and nothing per frame, 13-19 parts each.
+
+## BATS SWING, PODS DROP, AND THE LOADOUT BECAME TWO SLOTS -- 2026-09-04  (UNCOMMITTED)
+
+Second pass over Marigold's stock. The shop panel itself is untouched and still
+approved; everything here is what happens after you buy something.
+
+### FILES
+
+New: `StarterPlayerScripts/LoadoutUI.client.luau` -- the bag button, the
+inventory panel, the two side equipment slots and the hotbar, in one script.
+
+Changed: `WeaponData` (POWER replaces FlingStuds, swing animation config),
+`ProfileSchema` + `PlayerDataService` (two loadout slots and the migration),
+`WeaponShopService` (two slots, two Tools), `CombatService` (the pod drop, the
+swing animation, a cooldown attribute), `UIKit` (`itemPreview`, `frameItem`),
+`MarigoldShopUI` (reads two slots; shares the framing -- no visual change),
+`WeaponSpec`, `AGENTS.md`.
+
+### THE ANIMATION, AND THE BLOCKER
+
+**The avatar is an R15 PHYSICS rig.** Measured on the character the game spawns:
+
+    AnimationConstraint x15   BallSocketConstraint x14   Motor6D x0
+
+So there is no `Motor6D.C0`. And `AnimationConstraint.Transform` is not the
+channel either -- writes read back as `-0.000` the next frame in RenderStepped,
+Stepped AND Heartbeat, and the animator never writes it either: it stayed at
+(-0.5, -1.2, -4.5) degrees through a whole animation while the hand moved 1.19
+studs. **CarryPose's arm pose is therefore not applying**, which this pass found
+and did not cause, and did not fix -- it is the next thing worth looking at.
+
+What DOES move this rig is `Animator:LoadAnimation` with a published asset,
+played at Action priority. Bat-tip displacement, two runs each:
+
+    point      507770453   4.18 studs      <- a real, readable arc
+    wave       507770239   2.02
+    ToolSlash  522635514   0.21            <- Roblox's own R15 tool swing
+    ToolLunge  522638767   0.21
+
+**THE BLOCKER.** The semantically right assets -- Roblox's own tool animations --
+move this rig 0.21 studs, which is invisible. A readable bat swing needs a
+CUSTOM PUBLISHED animation, and publishing one needs Studio's Animation Editor
+(a human pressing Publish) or Open Cloud `AssetService:CreateAssetAsync` with an
+API key. Neither exists in a coding session.
+
+`KeyframeSequenceProvider:RegisterKeyframeSequence` was investigated properly and
+rejected. Re-registering a FETCHED Roblox sequence unchanged reproduces its
+motion exactly (point -> 1.19 studs), so the mechanism works. Hand-authored ones
+did not: the root `Pose` needs `Weight = 0` and the sequence needs an
+`AnimationRigData` child cloned in, and even with both, six trials gave
+non-reproducible results -- five different pose axes returned byte-identical
+displacement, then three different lengths did, then an amplitude sweep from 20
+to 150 degrees returned 0.00 for every value including ones that had produced
+0.55 minutes earlier. And the id it returns is local to the machine that
+registered it, so it would never replicate.
+
+**SO THE PIPELINE SHIPS WIRED AND THE ID LIVES IN ONE PLACE.**
+`WeaponData.Combat.SwingAnimation` + `SwingAnimationLength`. Author one swing in
+the Animation Editor, publish, paste the id and its length, and all six bats
+animate with no code change -- the per-bat scaling already works off it. Today it
+is ToolSlash: a real, supported, correctly-timed swing that is simply subtle.
+
+Two things that cost a round each and are worth not rediscovering:
+
+  * **`track.Length` is 0 on the SERVER.** The asset is never fetched there, so a
+    speed derived from it silently never runs. The configured length is used
+    instead, with the real Length preferred if it ever resolves.
+  * **`AdjustSpeed` after `Play` does not replicate.** All three bats arrived on
+    the client at Speed 1.00. `Play(fade, weight, speed)` carries it in the one
+    message. Verified after the change:
+
+        cactus_club       wants 0.41s -> speed 1.22, playing over 0.41s
+        rootwood_bat      wants 0.60s -> speed 0.83, playing over 0.60s
+        cindercrack_bat   wants 1.47s -> speed 0.34, playing over 1.47s
+
+Played SERVER-SIDE, so it replicates to everyone with nothing to trust. Stopped
+on the next swing, on unequip mid-swing, on respawn and on leaving.
+
+`WeaponFX` still rotates the weapon in the hand -- 8 studs of tip travel. That is
+the weapon's own motion layered under the arm animation, not a stand-in for it,
+and it is what carries the read while the arm animation is a placeholder.
+
+### THE POD DROP
+
+A confirmed bat hit now drops the victim's carry BEFORE the launch, through
+`CarryService.Drop` -- the same canonical call the guardian throw, the death
+handler and the red-line drop all make. This supersedes the previous "bats do not
+affect carried pods" rule, which was wrong twice: it made the most valuable thing
+on the road immune to the only PvP verb, and it was not even reliable, because
+the `PlatformStand` that fired the incidental drop is written by the victim's
+CLIENT and reaching the server was a race.
+
+  * BEFORE the launch, at the position captured before anything moves, so the
+    pod lands at their feet rather than travelling with a body doing 80 studs a
+    second.
+  * `Drop` clears `carried[player]` first, so duplicate hits find nothing and
+    return false -- and the PlatformStand watcher firing a moment later, which it
+    still does, duplicates nothing.
+  * Guarded by `IsCarrying`, so a miss, a blocked hit, a safe-zone hit and a hit
+    refused by immunity all drop nothing -- none of them reach `knockBack`.
+  * Nothing in CombatService names a species, a tier or a nest. There is no
+    second pod ownership system; it calls one function.
+
+Verified through a real guardian hit (the same `Drop` path):
+
+    took a petalpip, tier 2 -> caught -> carrying nil
+    loose pod: species=petalpip tier=2 fromNest=Nest_greenhollow_01, on the ground
+    walked away, walked back, held the prompt -> carrying petalpip again
+
+### POWER, AND WHY FlingStuds HAD TO GO
+
+The direction changed to a climbing ladder, and the old model could not express
+one. `FlingStuds` fed `sqrt(R*g / 2k)`, where raising Lift LOWERS the speed -- so
+the Sunflower, whose whole identity is a lob, had the weakest shove in the shop
+while sitting third on the price list. There is no assignment of that field which
+makes power climb with price while lift still means anything.
+
+POWER is its own axis now: `horizontal = Power * SpeedPerPower`, `vertical =
+horizontal * Lift`. Vertical is ADDED rather than traded, so the power column and
+the felt shove cannot disagree. The card prints POWER as a bare rating -- it is
+deliberately not a distance, because a ragdoll skids.
+
+    bat            price   POWER  lift   launch   travelled (3 runs)
+    Rootwood        5,000    10    0.50    25.0    12.3 / 16.1 / 15.0
+    Cactus         40,000    14    0.35    35.0    18.5 / 19.7 / 22.0
+    Sunflower     300,000    19    1.05    47.5    44.5 / 43.2 / 44.2
+    Mirewood    1,200,000    25    0.40    62.5    48.4 / 48.0 / 46.7
+    Cindercrack 9,000,000    32    0.45    80.0    79.4 / 75.4 / 79.4
+    Comet      60,000,000    40    0.62   100.0   149.5 / 135.4 / 119.7
+
+Measurement conditions: same avatar, flat road at z -200, server-side ragdoll
+then the exact `ThrowVictim` payload CombatService sends, head displacement
+measured flat, three runs each, character respawned between runs.
+
+Configured power and observed travel are separate numbers and both are recorded
+above. Travel rises at every step; it is noisy (the Comet spans 120 to 150)
+because a ragdoll's skid is.
+
+**One thing measurement changed.** At Lift 1.55 the Sunflower travelled 71 and 77
+studs against the Mirewood's 47 and 65 -- a cheaper bat visibly stronger, which
+this ladder may not do. Under the new solve a big lift buys AIRTIME and airtime
+buys ground. It is 1.05 now: still nearly twice the lift ratio of anything else
+and still the only bat that takes somebody off the ground for half a second, but
+no longer the tallest arc in absolute terms. The Comet hits twice as hard so it
+throws people higher too, which under a climbing ladder is correct. WeaponSpec's
+assertion moved from "highest apex" to "steepest launch angle" to match.
+
+Prices are unchanged. The strongest bat launches at 100 against a biome-1
+guardian's 114.4, so no bat out-shoves the gentlest guardian -- asserted.
+
+### THE LOADOUT, AND THE MIGRATION
+
+`Equipped` (one field) became `EquippedBat` and `EquippedTrap`. Both Tools live
+in the Backpack at once; SELECTING one is `Humanoid:EquipTool`, a local action on
+an object the server already granted, so switching weapons costs no round trip
+and touches no profile.
+
+Migration reads the old `Equipped` and places it in the slot its own CATEGORY
+names, leaves the other slot EMPTY rather than guessing, and drops anything
+unowned or miscategorised. No version bump: the old field was replaced, not
+reshaped, and `Weapons` is untouched.
+
+Verified against this account's real saved profile, which was written with the
+old field:
+
+    owned (7): all seven still owned
+    EquippedBat="rootwood_bat"  EquippedTrap=""  legacy Equipped=nil
+    plants still saved: 12   cash 92.6B
+
+And the slots are independent:
+
+    equip the trap    -> bat kept
+    swap the bat      -> trap kept
+    clear only        -> the other survives
+    forged category   -> refused (a number and a bogus string, both)
+
+### THE UI
+
+One script owns the bag, the two side slots and the hotbar, because they show one
+fact and must not disagree. There is no `selected` variable: the selected slot IS
+the Tool parented to the Character, which is what the engine and the server
+already believe. The two sources of truth are the profile packet and the live
+Tools.
+
+`UIKit.itemPreview` is the shared transparent preview and `UIKit.frameItem` the
+one posing/camera rule -- the shop now calls it too, with its own numbers moved
+across unchanged, so the approved card is unaltered. Previews have no backplate:
+a ViewportFrame at `BackgroundTransparency = 1` over a faint scrim.
+
+The hotbar replaces the CoreGui Backpack, and it is safe to because it enumerates
+TOOLS rather than categories -- whatever the engine would have shown, it shows.
+Number keys are rebound through ContextActionService, since turning the CoreGui
+off takes its bindings with it. Cooldowns are drawn from a `ReadyAt` attribute
+stamped in SERVER time, so the readout cannot show a bat as ready a frame early.
+
+Two fixes measurement caught: the bag button sat at 1136..1186 on an 1148-wide
+viewport because `UIKit.railButton` does not set an AnchorPoint (GardenUI sets
+its own); and every card name ellipsed at 104px, so names wrap to two lines and
+the side slots say BAT and TRAP rather than a truncated weapon name.
+
+### VERIFIED
+
+Automated, in Edit: `WeaponSpec` 80/80, `PlotSpec` 65/65, `StarbloomLimbSpec`
+71/71. `SpeedSpec` and `CycleSpec` still fail exactly as at `736e6c7`; neither is
+touched. `rojo build` passes, `git diff --check` clean, all eleven touched
+modules compile.
+
+One client, in Play: 17 services boot clean; the legacy profile migrates with
+nothing lost; both loadout slots independent and forged categories refused; the
+hotbar shows five real-model Tools (bat, trap, three plants) on transparent
+backgrounds; the bag panel renders seven owned items at desktop and at 300px with
+no overflow; swing animation replicates and scales per bat; the cooldown survives
+a weapon swap and the trap keeps its own timer; a dropped pod retains species,
+tier and origin nest and picks up normally; guardian confiscation and the
+guardian throw are unchanged.
+
+### NOT VERIFIED -- ALL OF IT NEEDS A SECOND PLAYER
+
+A solo Play session has one player and every target test is `other ~= swinger`.
+Untested end to end, and none of it should be described as working:
+
+  * **A bat hit landing on anybody.** The arc, the line-of-sight filter and the
+    one-hit-per-target rule have never met a second body.
+  * **The pod drop from a BAT.** The `Drop` call and the re-pickup are verified
+    through the guardian's path; the bat-specific ordering -- drop, then ragdoll,
+    then launch -- is reasoned and unrun.
+  * **A second player SEEING the swing.** It is played server-side, which is what
+    makes it replicate, and this client sees its own. Nobody has watched
+    somebody else's.
+  * Chain-fling immunity, the trap catching anybody, the 2-second hold, the
+    4-second immunity, and a bat releasing a trapped player before launching.
+  * Clicking anything in the new panels. The buttons are built exactly as the
+    shop's are, and the shop's are confirmed working by the owner, but MCP cannot
+    click and `VirtualInputManager` is refused with "lacking capability
+    RobloxScript". The bag panel in the screenshots was forced visible by
+    property, not opened by a press.
+
+### WORTH WATCHING
+
+  * **The Comet throws people 120-150 studs.** Half of Greenhollow, from the
+    60M bat with a 1.8s cooldown. It is the top of a ladder that was asked to
+    climb, so it is doing what it was told; `Power` is the lever if it is too
+    much.
+  * **CarryPose is not applying.** Measured above. Nothing in this pass depends
+    on it, and it means arms do not fold under a carried pod today.
+
+## THE BAT IS HELD, AND THE SHOULDER WAS NEVER INERT -- 2026-09-04  (UNCOMMITTED)
+
+### THE ONE-LINE VERSION
+
+Three passes of notes -- in HANDOFF, `WeaponData.luau` and
+`tools/animation/build_swing.luau` -- recorded the right shoulder as INERT and
+concluded that a hand-published animation asset was the only way to swing a bat.
+**The shoulder was never inert. `CarryPose.client.luau` was overwriting it every
+frame.** With that fixed, the ready pose and the whole swing are authored in
+code, in degrees, and no asset is needed by anything.
+
+### HOW IT WAS FOUND
+
+The old evidence was real but misread: writing `AnimationConstraint.Transform`
+read back as `-0.000` on the next frame, and the joint did not move under a
+PUBLISHED animation either -- which looked like a property of the rig rather
+than something sitting on top of it.
+
+What settled it was asking a different question: not "does my write survive?"
+but **"which joints does the animator itself write?"** Sweeping all fifteen
+during Roblox's own `wave`:
+
+    WRITTEN (11)   LeftAnkle LeftElbow LeftHip LeftKnee Neck RightAnkle
+                   RightElbow RightHip RightKnee Root Waist
+    UNTOUCHED (4)  LeftShoulder LeftWrist RightShoulder RightWrist
+
+Both shoulders, symmetrically, and nothing else that an arm-posing script would
+own. Then, directly:
+
+    CarryPose running     right shoulder swept   0.0 deg
+    CarryPose disabled    right shoulder swept  17.1 deg
+
+### THE BUG, WHICH IS WORTH RECOGNISING AGAIN
+
+`CarryPose` released the shoulders like this:
+
+    if side.constraint.Transform ~= side.rest then
+        side.constraint.Transform = side.rest
+    end
+
+It reads as "only correct it if something moved it". What moves it is THE
+ANIMATOR, every frame -- and this loop runs in `Stepped`, which is *after* the
+animation is evaluated. So the guard was true forever and the write landed
+forever. **Releasing an AnimationConstraint means writing to it once and then
+leaving it alone.** It now writes rest once and latches (`rig.released`).
+
+The blast radius was everything: for the whole session, on every character, both
+shoulders were pinned at identity -- CarryPose's own carry pose included.
+
+`WeaponFX` drives the same joints from the same phase, so it carries the same
+latch (`posed.released`), and a comment saying why.
+
+### WHAT THE RIG ACTUALLY DOES, MEASURED
+
+Driven from `Stepped`, the shoulder tracks to within a degree:
+
+    commanded X 30 -> 29.4      X 60 -> 59.4      X 90 -> 89.6
+
+Forward kinematics was rebuilt from the rig's own attachment CFrames and agrees
+with the standing character **to 0.000 studs, weapon included**, so poses could
+be solved before being applied. What the axes do -- and the names mislead:
+
+    shoulder Z   the HORIZONTAL sweep.  Z 80 -> tip left and behind (-2.1, 3.3, 3.0)
+                                        Z -20 -> tip right and in front (4.3, 4.0, -1.3)
+    shoulder X   the DROP, and it carries the tip backward as it falls
+    shoulder Y   turns the arm across the body; moves the tip least
+
+**The wrist is not optional.** Undriven, the bat's own weight rotates it: the
+barrel fell from (-0.30, 0.91, 0.29) to (-0.46, -0.56, 0.69) within a second and
+stayed there. A four-stud lever on a physics rig is a lever.
+
+### THE POSE AND THE SWING
+
+`READY` is the approved reference: hand beside the right shoulder at
+(1.47, 0.89, 0.68) in torso space, elbow raised and folded under it, barrel up
+and across the chest on axis (-0.52, 0.77, 0.36). Solved, not guessed.
+
+The swing is `READY -> WINDUP -> STRIKE -> FOLLOW -> READY`, and it returns to
+the identical ready pose -- verified frame by frame through the real system:
+
+    t 0.31  swing starts from READY   (shoulderZ 62, elbow -145, waist 0)
+    t 0.70  WIND-UP                   (Z 72, elbow -155, waist +26)  tip (-2.5, 3.8, 1.4)
+    t 0.90  STRIKE                    (Z -10, waist -8.7)            tip ( 4.6, 4.0,-0.9)
+    t 1.20  FOLLOW                    (Z -34, waist -40)             tip ( 6.0, 1.8, 0.5)
+    t 1.70  back to READY exactly     (Z 62, elbow -145, waist 0)
+
+**22.67 studs of bat-tip travel.** On this same rig `ToolSlash` moves it 0.21 and
+`point` moves it 4.18. The strike crosses ~6 studs of the space in front of the
+chest inside 0.1s, and it lands on the server's hit: Cindercrack's wind-up is
+0.60s and the swing began at 0.31.
+
+### WHICH JOINTS ARE TAKEN, AND FOR HOW LONG
+
+Writing `Transform` OVERRIDES the animation for that joint, so every joint taken
+is a joint the walk cycle loses. Measured with a bat held, character jumping:
+
+    RightShoulder / RightElbow   swept 0.0    held -- the ready pose
+    LeftShoulder / Waist         swept 5.1 / 3.3   free at rest, 63.8 / 54.7 mid-swing
+    RightHip / RightKnee / Neck  swept 4.4 / 4.4 / 2.5   never touched
+
+The off arm and the waist are **borrowed for the swing and given straight back**.
+An earlier cut of this file wrote them whenever a bat was equipped -- their READY
+values are zero, so that write is `identity` every frame, which is not "leave
+this joint alone", it is "hold this joint at neutral". Measured at 0.0 sweep for
+both, and fixed with the same one-shot latch. *The file that documents the
+CarryPose bug reproduced it two hundred lines further down.*
+
+### PER-WEAPON GRIP, AND CLEARANCE FOR ALL SIX
+
+One arm pose carries all six bats; `WeaponData.Item.Grip` nudges each barrel so a
+weapon that clears the head on the Rootwood clears it on the Comet. Measured on
+the live character -- gap to the nearest body part, and a real overlap test:
+
+    rootwood_bat      0.35     cactus_club       0.46 *
+    sunflower_bonker  0.48     mirewood_paddle   0.37
+    cindercrack_bat   0.41     comet_bat         0.31
+
+    OVERLAPS WITH HEAD OR TORSO: ZERO, on all six.
+
+\* Cactus needed the work: the fattest head on the shortest handle cleared by
+0.18 at the shared grip. Six offsets were measured; the roomiest (0.57) was
+rejected for laying the club too flat to match the others.
+
+### CLEARING
+
+Verified live, each one: switching to the TRAP, unequipping, ragdoll
+(`PlatformStand`), death, and carrying a pod -- which hands the arms to
+CarryPose, one writer per joint. In every case the shoulder returns to a live
+animator value and comes back to (5, 34, 62) when the state clears.
+
+**One bug found here and fixed.** Letting go used to stop the loop, and the wake
+calls all hang off a Tool arriving or leaving -- neither of which happens when
+somebody stands up off the floor. So a player ragdolled while holding a bat kept
+the animator's tool pose at (83.8, 1.4, -6.5) until they re-equipped. The loop
+now stays alive while a bat is held but suppressed; an EMPTY hand still stops it,
+which is the case that matters for cost.
+
+### VERIFIED
+
+Automated, in Edit: **WeaponSpec 80/80, PlotSpec 65/65, StarbloomLimbSpec 71/71**,
+clean `rojo build`.
+
+`SpeedSpec` and `CycleSpec` fail, and **both are pre-existing and unrelated** --
+SpeedSpec:280 calls `GameConfig.overclockUnlockOrderFor`, which does not exist in
+GameConfig at all; CycleSpec asserts exactly one live biome and finds five, which
+is the Dustbowl integration. Neither spec mentions weapons, neither file is
+modified, and this session's GameConfig diff is +192/-0.
+
+One client, in Play: the pose applies through the real equip path on all six
+bats, the swing runs end to end and returns to the ready pose, walking and
+jumping still animate underneath it, and **front and side screenshots were taken
+of the Rootwood and of the Cindercrack** -- the largest of the six by bulk
+(16 parts, 7.73 long; Mirewood is the longest at 8.79).
+
+### NOT VERIFIED
+
+  * **No second client.** Nobody has watched somebody else's pose or swing, and
+    the pose is client-side, so a second machine drawing it is untested.
+  * The two-player PvP regression carried over from the last pass is still unrun.
+  * `Combat.SwingAnimation` (ToolSlash) still plays and is now a garnish -- the
+    arm joints are overridden after it. Left wired and labelled rather than
+    removed, because taking it out means touching verified playback code for no
+    visible gain. **It is a cleanup candidate, not a dependency.**
+  * `tools/animation/build_swing.luau` is superseded. Its header now says so; its
+    KeyframeSequence findings are kept because they were expensive and are still
+    true.
+
+## THE TRAP FREEZE, THE COUNTDOWN, AND A SWING THAT WAS WAITING ON NOTHING -- 2026-09-04  (UNCOMMITTED)
+
+> **The swing section below is SUPERSEDED.** It concludes that a
+> published animation asset was the only way to move this rig's
+> shoulder. That was wrong, and the next section explains why. The
+> trap, countdown and playback notes in it are still current.
+
+### FILES
+
+New: `StarterPlayerScripts/TrapUI.client.luau` (the overhead countdown),
+`tools/animation/build_swing.luau` (authors the swing, ready to publish).
+
+Changed: `NestService` (combat bridge, and `restore()` stops replaying a
+captured WalkSpeed), `CarryService` (hands `RefreshWalkSpeed` down the bridge),
+`CombatService` (one identity-checked release path, the replicated expiry,
+contact-frame alignment), `GameConfig` (`TrappedUntil`), `WeaponData`
+(`SwingAnimationContact`, speed clamps).
+
+### THE PERMANENT IMMOBILITY -- ROOT CAUSE
+
+`NestService.throwPlayer` captured `humanoid.WalkSpeed` and wrote it back when
+the throw ended. WalkSpeed is **0 while a Bramblejaw holds somebody**, so a
+guardian landing on a trapped player captured zero and replayed it seconds
+later, after the trap's own release had already restored the correct speed:
+
+    t 0.0   trapped                      WalkSpeed 0
+    t 0.5   guardian hits, captures      walk = 0
+    t 2.0   trap expires, recomputes     WalkSpeed 139.75
+    t 5.5   throw ends, restore()        WalkSpeed = walk = 0    <- stuck
+
+Nothing ran afterwards to correct it, so it was permanent. It is the same
+capture-and-replay shape HANDOFF recorded once before -- a thrown player keeping
+their CARRY speed -- which was fixed by moving the capture rather than removing
+it, so the shape survived to bite again.
+
+**Fixed twice over, deliberately.**
+
+  * `restore()` now asks CarryService to RECOMPUTE rather than replaying a
+    number. CarryService owns WalkSpeed because it is the product of a saved
+    Speed score, a carry multiplier, a mill mount and a trap, and no caller
+    knows all four. The captured value survives only as a fallback for a server
+    running without CarryService. Reached through the existing bridge, since
+    NestService (40) cannot require CarryService (45).
+  * A confirmed catch RELEASES THE TRAP FIRST, through a new `SetCombatBridge`
+    -- same shape as the carry bridge, for the same dependency reason. So by the
+    time the throw touches WalkSpeed there is no restraint holding it at zero.
+    It sits inside the contact branch, after `distanceToSegment` accepts the
+    hit, so a miss or an abandoned chase releases nothing. The release grants
+    the usual four seconds of trap immunity on the way out.
+
+Either fix alone would close the report. Both are in because the ordering one is
+what the brief asks for and the recompute one is what makes the whole class of
+bug impossible -- with both ends recomputing rather than replaying, the order
+they happen in stops mattering.
+
+### ONE RELEASE PATH
+
+Expiry, a bat hit, a guardian hit, death, respawn, trap removal, the owner
+leaving and a service restart all go through `releaseHold`. It takes the record
+out of the table on its first line, so a second call is a no-op and returns
+false -- which is also how a stale callback is neutralised.
+
+Every hold now carries the `character` it was placed on and a monotonic `token`.
+The Died and CharacterRemoving handlers pass their token and are refused if it
+is not current, so a late callback from a restraint that has already ended
+cannot release a newer one on a rebuilt body. The tick carries a backstop for
+the case where those signals are missed entirely: a hold whose `character` is no
+longer the player's is a hold about nobody.
+
+Nothing hard-codes a speed, unanchors anything, clears another system's ragdoll,
+or polls movement back on.
+
+### THE COUNTDOWN
+
+`CombatService` writes `TrappedUntil` once, in SERVER time, beside `Trapped`,
+and clears both on release. `TrapUI.client.luau` subtracts it from
+`Workspace:GetServerTimeNow()` and renders locally, so a two-second restraint
+costs two replications rather than a stream, and every watcher reads one clock.
+
+A BillboardGui on the head -- red LuckiestGuy at `TextTransparency` 0.12 over a
+dark stroke, `BackgroundTransparency` 1, no plate of any kind. 3.4 studs up so it
+clears the platform's own name label, `MaxDistance` 90. Parented to the head, so
+a respawn destroys it without this file having to be trusted to.
+
+The label is a rendering of an attribute rather than a timer this file started,
+so a bat or a guardian ending the hold early removes it on the next attribute
+change instead of running to zero. A new body rebuilds rather than re-pointing an
+old label, and `CharacterAdded` re-checks so a streamed-in player picks theirs up.
+
+### THE SWING -- **NOT FINISHED. IT NEEDS YOU TO PRESS PUBLISH.**
+
+**What was established about the rig, by measurement.** Driving a
+locally-registered copy of the authored sequence and sweeping one joint at a
+time on the live avatar:
+
+    UpperTorso      WORKS.   Y 0 / 25 / 50 / -35  ->  chest yaw 3.2 / 27.8 / 39.6 / -26.5 deg
+    RightLowerArm   WORKS.   X 0..135             ->  the hand travels about 1.2 studs
+    RightUpperArm   INERT.   X 0/45/90/135, and a full 0..180 sweep, both left
+                             the hand at (1.49, -1.07, 0.13) to two decimals --
+                             with LowerTorso at Weight 0 and at Weight 1 alike
+
+Two things that DO matter and were found the same way: the root Pose must carry
+`Weight = 0` (at 1 it pins the body and the arm moves 0.18 studs instead of a
+stride), and the sequence needs an `AnimationRigData` child, which is not
+constructible and is cloned from a fetched Roblox animation.
+
+**The authored swing.** `tools/animation/build_swing.luau` builds a five-frame
+`SeedBatSwing` into ServerStorage: neutral, wind-up at 0.26, contact at 0.40,
+follow-through at 0.55, neutral at 0.90. Legs are absent entirely and LowerTorso
+is weightless, so walking and jumping keep their joints.
+
+Previewed on the real avatar: **1.61 studs of hand travel and 80.6 degrees of
+chest rotation**, from +34 coiled right to -46 following through left.
+Photographed: the WIND-UP reads properly -- torso coiled, bat drawn back across
+the body, hand on the handle. The CONTACT frame does not: with the shoulder
+inert the arm cannot rise, so the elbow alone carries the bat down past the leg
+rather than across the front.
+
+**Why publishing is the blocker AND the answer.** `AssetService:CreateAssetAsync`
+exists in this Studio and refuses: *"CreateAssetAsync and CreateAssetVersionAsync
+are not available yet"*. `RegisterKeyframeSequence` works but returns an id local
+to the machine that registered it, so it never replicates -- it is a preview
+tool, and nothing in `src/` uses it. A published animation goes through Roblox's
+own import and retarget, which is NOT the path a locally-registered sequence
+takes, and the published `point` animation demonstrably moves this rig. So
+whether the shoulder wakes up is a question only the publish step answers.
+
+**PLACE OWNER: user `4119740186`, CreatorType User (not a group).** Publish under
+that account.
+
+**What to do, and it is four steps:**
+
+    1. Studio, EDIT mode, with `python -m http.server 8731` running at the repo root:
+         local build = loadstring(game:GetService("HttpService"):GetAsync(
+             "http://127.0.0.1:8731/tools/animation/build_swing.luau", true))()
+         print(build())
+       That puts `SeedBatSwing` in ServerStorage.
+    2. Right-click it in Explorer -> Save to Roblox. Set the type to Animation.
+       (Or open the Animation Editor on an R15 rig and import it, if you would
+       rather scrub the timeline first -- that is also the place to see whether
+       the shoulder moves.)
+    3. Copy the asset id it gives back.
+    4. In `WeaponData.Combat`, set
+         SwingAnimation        = "rbxassetid://<the id>"
+         SwingAnimationLength  = 0.90
+         SwingAnimationContact = 0.444
+       and nothing else changes -- the per-bat timing already scales off those.
+
+Until then `SwingAnimation` stays on Roblox's own `ToolSlash` (522635514). That
+is a real, supported, correctly-timed animation that moves this rig 0.21 studs at
+the bat tip -- effectively invisible. The pipeline is exercised end to end by it;
+the motion is not there yet.
+
+### PLAYBACK: CONTACT NOW LANDS ON THE HIT
+
+Scaling was by TOTAL length over total swing, which lines the visible strike up
+with the server's hit only where a bat's wind-up is the same fraction of its
+swing as the animation's contact is of its length. Across the six that fraction
+runs 0.22 to 0.42, so it was right for none of them. It scales by the CONTACT
+FRACTION now -- `speed = length * contact / Windup` -- clamped to 0.45..3.0 so
+neither end becomes a blur or a crawl. Measured, replicated to the client:
+
+    cactus_club       windup 0.09s   speed 2.78   visible contact 0.090s
+    rootwood_bat      windup 0.18s   speed 1.39   visible contact 0.180s
+    cindercrack_bat   windup 0.60s   speed 0.45   visible contact 0.556s   (clamped)
+
+The two earlier playback fixes are preserved and still load-bearing: server-side
+`track.Length` is 0 so the configured length is what is used, and the speed goes
+into `Play(fade, weight, speed)` because `AdjustSpeed` after `Play` does not
+replicate.
+
+### VERIFIED
+
+Automated, in Edit: WeaponSpec 80/80, PlotSpec 65/65, StarbloomLimbSpec 71/71,
+clean `rojo build`, `git diff --check` clean, every touched module compiles.
+
+One client, in Play:
+
+  * **The freeze, driven as the exact race.** Trapped so WalkSpeed read **0.00
+    at the moment the guardian landed** -- which is precisely the value the old
+    `restore()` captured -- released mid-throw, and **139.75 after the throw
+    finished**. That is the reported bug reproduced and closed.
+  * Countdown appears, counts 1.4 -> 1.0 -> 0.7 -> 0.4 -> 0.1, has a fully
+    transparent background, vanishes on early release, and does not duplicate
+    when a second restraint starts. On a rebuilt body it rebuilds rather than
+    leaving a stale one.
+  * Repeated releases are harmless; movement stays correct after four.
+  * Swing timing aligned for three bats; eight swings in a row leave ONE track
+    playing, and unequipping leaves none.
+  * Guardian confiscation, the guardian throw and the pod-drop-before-fling all
+    still behave.
+
+### NOT VERIFIED
+
+  * **The swing itself is not finished** and cannot be until the asset is
+    published. The contact pose is wrong in local preview for the reason above.
+  * **No PvP.** One client means the trap has never actually caught anybody, so
+    the real `holdPlayer` -> `releaseHold` cycle is unrun end to end. What IS
+    verified is every piece of it: the movement integration (server-set
+    `Trapped` -> the real CarryService computes 0, cleared -> 139.75), the
+    guardian race, the release path's idempotence, and the countdown.
+  * The exact eight-step multiplayer regression in the brief -- P2 carrying a
+    pod, entering P1's trap, guardian hit before expiry -- has NOT been run.
+    Its two hard parts are each verified separately and their meeting is not.
+  * A second player watching somebody else's swing.
+  * Client-side probes that set `Trapped` from the CLIENT exercise TrapUI only;
+    the attribute never reaches the server, so those runs say nothing about the
+    hold. Called out because the numbers look like a passing movement test and
+    are not one.
 
 ## Still open
 

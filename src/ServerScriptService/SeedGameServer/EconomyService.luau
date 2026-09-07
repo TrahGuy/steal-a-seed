@@ -138,6 +138,7 @@ local function payEveryone()
 						-- THE ONLY POSITIVE AddCash IN THE GAME.
 						if PlayerDataService.AddCash(player, amount) then
 							minted[player] = (minted[player] or 0) + amount
+							PlayerDataService.RecordTutorial(player, "earn")
 						end
 					end
 				end

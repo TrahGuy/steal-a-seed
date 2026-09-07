@@ -710,9 +710,7 @@ local function buildTreadmill(id: number, cf: CFrame, parent: Instance): Model
 	-- decision. Placed off the mill's own CFrame, so it swings round with the
 	-- plot and needs no angle maths here.
 	--==========================================================================
-	local SIGN = GameConfig.Mill.Sign
-	local sign = MillModel.BuildSign(
-		cf * CFrame.new(SIGN.Offset) * CFrame.Angles(0, math.rad(SIGN.YawDegrees), 0), model)
+	local sign = MillModel.BuildSign(MillModel.SignBase(cf), model)
 	sign:SetAttribute(GameConfig.Attributes.PlotId, id)
 
 	return model

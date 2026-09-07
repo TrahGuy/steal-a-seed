@@ -1270,21 +1270,41 @@ local function addPedestal(model: Model, pivot: CFrame, size: Vector3)
 	ped.Parent = model
 end
 
-local function frameModel(hero: ViewportFrame, model: Model)
+--==============================================================================
+-- FRAME A MODEL IN A VIEWPORT, ONCE, AND LEAVE IT THERE
+--
+-- The camera solve on its own: distance off the model's own bounding diagonal
+-- and the camera's field of view, so a five-stud bat and a nine-stud paddle both
+-- fill their card without a per-item number to keep in step.
+--
+-- This existed as a private `frameModel` that nothing called -- plantCard grew
+-- its own `setupCamera` when it needed to ORBIT, and the plain version was left
+-- behind. It is exported now rather than deleted, because the weapon cards want
+-- exactly this and a second copy of a camera solve in a client script is how
+-- two panels end up framing the same object two different ways.
+--
+-- `offset` overrides the authored three-quarter direction. Plants face -Z and
+-- want CARD.CameraOffset; a weapon stands up +Y and wants to be looked at from
+-- the side, so it passes its own.
+--==============================================================================
+function UIKit.frameViewport(hero: ViewportFrame, model: Model,
+	offset: Vector3?, fill: number?): Camera
 	local pivot, size = model:GetBoundingBox()
-	addPedestal(model, pivot, size)
-
-	pivot, size = model:GetBoundingBox()
 	local extent = math.max(size.Magnitude, 0.1)
+	local dir = (offset or CARD.CameraOffset)
+	if dir.Magnitude < 1e-4 then
+		dir = CARD.CameraOffset
+	end
 
 	local camera = Instance.new("Camera")
 	camera.FieldOfView = 38
-	local distance = (extent * CARD.CameraFill * 0.54)
+	local distance = (extent * (fill or CARD.CameraFill) * 0.54)
 		/ math.tan(math.rad(camera.FieldOfView * 0.5))
 	local focus = pivot.Position + Vector3.new(0, size.Y * (CARD.CameraRise * 0.88), 0)
-	camera.CFrame = CFrame.lookAt(focus + CARD.CameraOffset.Unit * distance, focus)
+	camera.CFrame = CFrame.lookAt(focus + dir.Unit * distance, focus)
 	camera.Parent = hero
 	hero.CurrentCamera = camera
+	return camera
 end
 
 function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
@@ -2040,6 +2060,132 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		setStageTheme = setStageTheme,
 		setEmpty = setEmpty,
 	}
+end
+
+--==============================================================================
+-- HOW AN ITEM IS POSED IN ITS OWN BOX
+--
+-- The shop worked this out and the inventory and the hotbar must not work it
+-- out again differently -- three surfaces drawing the same bat at three angles
+-- is exactly the "competing rendering implementations" the brief forbids. So
+-- the posing and the camera live here, keyed on the item's category, and the
+-- shop now calls this instead of its own copy. The numbers are the shop's own,
+-- unchanged, so its approved appearance is preserved to the pixel.
+--
+--   bat    six studs tall and under two wide, so a square box framed on its
+--          bounding diagonal is mostly empty air either side. Tipped 34 degrees
+--          the box is nearly square and the weapon fills the card.
+--   trap   already wider than it is tall. Left flat, looked at from higher up.
+--   plant  a pod or a grown creature. Upright, framed a little looser because a
+--          Colossal is four hundred studs of silhouette and a Tiny is three.
+--==============================================================================
+function UIKit.frameItem(hero: ViewportFrame, model: Model, kind: string): Camera
+	if kind == "trap" then
+		model:PivotTo(CFrame.new())
+		return UIKit.frameViewport(hero, model, Vector3.new(0.45, 0.62, -1), 1.02)
+	elseif kind == "plant" then
+		model:PivotTo(CFrame.new())
+		return UIKit.frameViewport(hero, model, Vector3.new(0.62, 0.30, -1), 1.06)
+	end
+	model:PivotTo(CFrame.Angles(0, 0, math.rad(-34)))
+	return UIKit.frameViewport(hero, model, Vector3.new(0.55, 0.22, -1), 0.96)
+end
+
+--==============================================================================
+-- AN ITEM PREVIEW WITH NOTHING BEHIND IT
+--
+-- A ViewportFrame and nothing else: no plate, no fill, no gradient. The brief
+-- asks for transparent previews everywhere outside the shop, and the reason is
+-- worth writing down -- a solid backplate behind every item turns a bag into a
+-- grid of tiles, and the thing a player is actually looking for is the SHAPE.
+--
+-- Readable on bright and dark scenes is the one thing transparency costs, and
+-- it is bought back with an optional dark scrim at very low opacity plus the
+-- viewport's own lighting, which is brighter than the world's. Not a plate: a
+-- breath of shade under the silhouette.
+--
+-- `setModel` is keyed, so a hotbar slot that redraws sixty times a second
+-- because its cooldown is ticking rebuilds its model zero times.
+--==============================================================================
+export type ItemPreviewOptions = {
+	name: string?,
+	size: UDim2?,
+	position: UDim2?,
+	anchorPoint: Vector2?,
+	layoutOrder: number?,
+	-- A whisper of shade behind the item so a pale bat survives a pale sky.
+	-- 1 is fully transparent; the default is nearly so.
+	scrim: number?,
+}
+
+export type ItemPreview = {
+	holder: Frame,
+	hero: ViewportFrame,
+	-- key, builder, category. A repeated key is a no-op.
+	setModel: (string, ((Instance) -> Model?)?, string?) -> (),
+}
+
+function UIKit.itemPreview(parent: Instance, options: ItemPreviewOptions?): ItemPreview
+	local opts: ItemPreviewOptions = options or {}
+
+	local holder = Instance.new("Frame")
+	holder.Name = opts.name or "ItemPreview"
+	holder.BackgroundTransparency = 1
+	holder.BorderSizePixel = 0
+	holder.Size = opts.size or UDim2.fromScale(1, 1)
+	if opts.position then
+		holder.Position = opts.position
+	end
+	if opts.anchorPoint then
+		holder.AnchorPoint = opts.anchorPoint
+	end
+	holder.LayoutOrder = opts.layoutOrder or 0
+	holder.ZIndex = 6
+	holder.Parent = parent
+
+	local scrim = Instance.new("Frame")
+	scrim.Name = "Scrim"
+	scrim.AnchorPoint = Vector2.new(0.5, 0.5)
+	scrim.Position = UDim2.fromScale(0.5, 0.56)
+	scrim.Size = UDim2.fromScale(0.82, 0.72)
+	scrim.BackgroundColor3 = BLACK
+	scrim.BackgroundTransparency = opts.scrim or 0.86
+	scrim.BorderSizePixel = 0
+	scrim.ZIndex = 6
+	scrim.Parent = holder
+	UIKit.corner(scrim, 24)
+
+	local hero = Instance.new("ViewportFrame")
+	hero.Name = "Hero"
+	hero.Size = UDim2.fromScale(1, 1)
+	-- THE WHOLE POINT. No fill, no image, nothing behind the model.
+	hero.BackgroundTransparency = 1
+	hero.BorderSizePixel = 0
+	hero.Active = false
+	hero.Ambient = CARD.Ambient
+	hero.LightColor = CARD.LightColour
+	hero.LightDirection = CARD.LightDirection
+	hero.ZIndex = 7
+	hero.Parent = holder
+
+	local shownKey: string? = nil
+	local function setModel(key: string, build: ((Instance) -> Model?)?, kind: string?)
+		if shownKey == key then
+			return
+		end
+		shownKey = key
+		hero:ClearAllChildren()
+		hero.CurrentCamera = nil
+		if not build then
+			return
+		end
+		local ok, model = pcall(build, hero)
+		if ok and model then
+			pcall(UIKit.frameItem, hero, model, kind or "bat")
+		end
+	end
+
+	return { holder = holder, hero = hero, setModel = setModel }
 end
 
 --==============================================================================

@@ -100,11 +100,105 @@ type Nest = {
 	-- When the CURRENT chase started. A guardian with a ramp profile reads it
 	-- every tick; one without never looks at it.
 	chaseSince: number,
+	--==========================================================================
+	-- WHAT IT TOOK OFF SOMEBODY, IF ANYTHING
+	--
+	-- Present only between the catch and the deposit, and only in the three
+	-- biomes with a Confiscate profile. While this is set the guardian is
+	-- holding the ONLY copy of that pod: it is off the player, out of the world
+	-- and not yet back in a ring, so every path out of the haul has to put it
+	-- somewhere. See depositHaul, which is the only way this is cleared.
+	--==========================================================================
+	haul: Haul?,
+}
+
+--==============================================================================
+-- A CONFISCATED POD IS A RECORD, NOT A MODEL
+--
+-- The model welded to the guardian is decoration and is rebuilt on deposit --
+-- the same choice `bank` makes in CarryService, and for the same reason: the
+-- carried one is unanchored and welded to something, and a pod in a ring wants
+-- to own itself. Losing the decoration to a stream-out or a dead guardian
+-- therefore costs nothing, because this is the pod.
+--==============================================================================
+type Haul = {
+	speciesId: string,
+	tier: number,
+	-- Which ring it came off, so it goes back into that one rather than into
+	-- whichever nest happened to catch the thief.
+	fromNest: string?,
+	-- The decoration. Nil if the weld could not be made, which does not stop
+	-- the haul -- an invisible pod still gets home.
+	model: Model?,
+	since: number,
 }
 
 local nests: { Nest } = {}
 local serviceConnections: { RBXScriptConnection } = {}
+
+--==============================================================================
+-- WHERE EACH CHASED PLAYER WAS AT THE PREVIOUS TICK
+--
+-- The other end of the segment `distanceToSegment` sweeps, and the reason a
+-- fast player cannot run THROUGH a guardian between two ticks.
+--
+-- Keyed by PLAYER, not by nest, and declared up here rather than beside the
+-- geometry that reads it because `provoke` has to be able to clear it and
+-- `provoke` runs eight hundred lines earlier. Every place that stops aiming at
+-- somebody drops their sample: a stale one is a segment drawn across however
+-- long the gap was, and everything it passes near counts as a hit. It also
+-- outlived the claim in its old comment that a player can only be chased by one
+-- parent at a time -- rob two biomes and two of them want you.
+--==============================================================================
+local lastTargetAt: { [Player]: Vector3 } = {}
 local running = false
+
+--==============================================================================
+-- WHAT CARRYING LOOKS LIKE FROM IN HERE
+--
+-- Two functions and no module. CarryService requires THIS file -- it is
+-- Priority 45 to this one's 40, because the pods it takes are the ones grown
+-- here -- so this file cannot require it back. The catch happens in this tick
+-- though, and the pod being caught lives over there.
+--
+-- Handed over at Start rather than required, which also means the failure mode
+-- is the honest one: if CarryService never starts, this is nil, nothing is ever
+-- confiscated, and every catch falls through to the throw it always was.
+--==============================================================================
+--==============================================================================
+-- WHAT THIS SERVICE IS ALLOWED TO ASK OF THE ONES ABOVE IT
+--
+-- CarryService (45) and CombatService (70) both require NestService (40), so it
+-- cannot require them back. Each hands down the few functions the nests need,
+-- exactly as CarryService has since the confiscation pass.
+--
+-- `RefreshWalkSpeed` and `ReleaseTrap` are here for one reason, and it is the
+-- freeze written up over `restore()` below: a guardian must be able to hand a
+-- player's movement back correctly, and it cannot do that by remembering a
+-- number, only by asking the file that owns the number.
+--==============================================================================
+type CarryBridge = {
+	Confiscate: (Player) -> any,
+	SpawnLoose: (string, number, CFrame, string?) -> boolean,
+	RefreshWalkSpeed: ((Player) -> ())?,
+}
+
+type CombatBridge = {
+	-- Ends a trap restraint early, idempotently. Returns true if one was held.
+	ReleaseTrap: (Player, string) -> boolean,
+}
+
+local combatBridge: CombatBridge? = nil
+
+function NestService.SetCombatBridge(bridge: CombatBridge?)
+	combatBridge = bridge
+end
+
+local carryBridge: CarryBridge? = nil
+
+function NestService.SetCarryBridge(bridge: CarryBridge?)
+	carryBridge = bridge
+end
 
 local PARENT_HEIGHT = 15
 --==============================================================================
@@ -142,6 +236,33 @@ local function podCFrames(centre: Vector3, count: number, facing: number): { CFr
 	return out
 end
 
+--==============================================================================
+-- A POD INTO A SLOT, WHOEVER DECIDED WHAT IT IS
+--
+-- Split out of growPod so that a pod coming BACK -- confiscated off a thief and
+-- walked home -- lands in a ring by exactly the same route a rolled one does:
+-- same tags, same attributes, same queryability. A second way to put a pod in a
+-- slot is a second set of attributes to keep in step, and the one that gets
+-- forgotten is the one that makes a pod untakeable.
+--==============================================================================
+local function placePod(nest: Nest, index: number, species: SeedData.Species, tier: number)
+	local pod = CreatureModel.BuildPod(species, tier, nest.slots[index], nest.folder)
+	-- Loot. CreatureModel deliberately does not decide this: the same model
+	-- hatching in a plot must never be takeable.
+	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
+	pod:SetAttribute(GameConfig.Attributes.BiomeId, nest.biome.Id)
+	pod:SetAttribute("NestId", nest.id)
+	pod:SetAttribute("SlotIndex", index)
+	-- A pod on the ground is something you can walk up to and take, so it needs
+	-- to be queryable even though nothing else this project builds is.
+	for _, d in ipairs(pod:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = true
+		end
+	end
+	nest.pods[index] = pod
+end
+
 local function growPod(nest: Nest, index: number)
 	if nest.pods[index] then
 		return
@@ -166,21 +287,7 @@ local function growPod(nest: Nest, index: number)
 	-- Stamped on the model by BuildPod, which is where every later reader --
 	-- CarryService on pickup, the billboard, the shell colour -- gets it from.
 	local tier = SeedData.RollTier(rng, nest.biome.RarityBonus)
-	local pod = CreatureModel.BuildPod(species, tier, nest.slots[index], nest.folder)
-	-- Loot. CreatureModel deliberately does not decide this: the same model
-	-- hatching in a plot must never be takeable.
-	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
-	pod:SetAttribute(GameConfig.Attributes.BiomeId, nest.biome.Id)
-	pod:SetAttribute("NestId", nest.id)
-	pod:SetAttribute("SlotIndex", index)
-	-- A pod on the ground is something you can walk up to and take, so it needs
-	-- to be queryable even though nothing else this project builds is.
-	for _, d in ipairs(pod:GetDescendants()) do
-		if d:IsA("BasePart") then
-			d.CanQuery = true
-		end
-	end
-	nest.pods[index] = pod
+	placePod(nest, index, species, tier)
 end
 
 local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
@@ -222,6 +329,7 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		busy = false,
 		rage = 0,
 		calmSince = 0,
+		haul = nil,
 	}
 	for i = 1, biome.PodsPerNest do
 		growPod(nest, i)
@@ -259,11 +367,31 @@ end
 
 -- Base speed for the biome, scaled by how far short of it the thief is, plus
 -- whatever the nest is currently furious about.
-local function speedFor(nest: Nest): number
+local function baseSpeedFor(nest: Nest): number
+	--==========================================================================
+	-- A BIOME MAY STATE ITS OWN CHASE SPEED, AND ONE DOES
+	--
+	-- Greenhollow sets GuardianChaseSpeed because the formula's answer there was
+	-- faster than the beginner the tutorial produces (see BiomeData). Every
+	-- other biome leaves it nil and gets parentWalkSpeedFor exactly as before,
+	-- shortfall scaling included.
+	--
+	-- The override deliberately does NOT take the shortfall term: a biome that
+	-- names a flat speed is naming the speed it wants, and Greenhollow's
+	-- recommendation is 0 so there was never a shortfall to scale there anyway.
+	--==========================================================================
+	local stated = tonumber((nest.biome :: any).GuardianChaseSpeed)
+	if stated and stated == stated and stated > 0 then
+		return stated
+	end
 	return GameConfig.parentWalkSpeedFor(
-			nest.biome.RecommendedSpeed,
-			speedScoreOf(nest.target)
-		)
+		nest.biome.RecommendedSpeed,
+		speedScoreOf(nest.target)
+	)
+end
+
+local function speedFor(nest: Nest): number
+	return baseSpeedFor(nest)
 		+ math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
 end
 
@@ -298,6 +426,13 @@ local function chaseSpeedFor(nest: Nest, now: number): number
 	end
 	local rage = math.min(nest.rage, P.MaxRageStacks) * P.RageSpeedPerTake
 	local rec = nest.biome.RecommendedSpeed
+	-- A stated chase speed wins over a species ramp too. No biome currently has
+	-- both -- Greenhollow's guardian has no profile -- but a future one adding a
+	-- profile must not silently un-do the override sitting in its own data.
+	local stated = tonumber((nest.biome :: any).GuardianChaseSpeed)
+	if stated and stated == stated and stated > 0 then
+		return stated + rage
+	end
 	local shortfall = GameConfig.parentWalkSpeedFor(rec, speedScoreOf(nest.target))
 		- GameConfig.parentWalkSpeedFor(rec)
 	local since = if nest.chaseSince > 0 then now - nest.chaseSince else 0
@@ -357,6 +492,25 @@ local function qualifiesForHeadStart(nest: Nest, thief: Player): boolean
 	return score >= recommended
 end
 
+--==============================================================================
+-- CARRYING SOMETHING IS NOT AN EXCUSE NOT TO CHASE YOU
+--
+-- This refused to retarget a guardian mid-haul, on the theory that dropping the
+-- haul to chase a second thief is how one pod becomes zero. The theory was
+-- fine and the behaviour was not: the walk home is ten to fifteen seconds of a
+-- guardian that CANNOT respond, so stealing, getting caught, and then robbing
+-- the ring while it trudges away was a free pod every time. Reported from the
+-- first real session -- *"i took one again and it doesnt chase me this time"* --
+-- and it is precisely the safe farm `rage` exists to prevent.
+--
+-- The haul does not need protecting from the chase, because the haul is not a
+-- STATE, it is a field. It survives a chase the way it survives anything else,
+-- and every road back to the nest goes through `goHome`, which returns to
+-- `hauling` whenever there is still something to carry. A guardian that catches
+-- you while already holding a pod simply cannot take a second one --
+-- `confiscateFrom` sees its hands are full -- so you keep yours, and the throw
+-- knocks it out of them onto the road exactly as Greenhollow's would.
+--==============================================================================
 local function provoke(nest: Nest, thief: Player)
 	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
@@ -390,15 +544,29 @@ local function provoke(nest: Nest, thief: Player)
 			nest.stateUntil = 0
 			nest.parent:SetAttribute("Asleep", false)
 		end
-	elseif nest.state == "returning" then
-		-- Already up and walking home. No second delay -- it never went back to
-		-- sleep, so it has nothing to wake up from.
+	elseif nest.state == "returning" or nest.state == "hauling" then
+		-- Already up and walking home, with or without a pod in its fist. No
+		-- second delay -- it never went back to sleep, so it has nothing to wake
+		-- up from. The haul rides along and `goHome` picks the walk back up.
 		nest.state = "chasing"
 		nest.chaseSince = os.clock()
 	end
-	-- Always re-target: stealing from a parent already chasing somebody else
-	-- should make it chase YOU, or two players could take turns feeding it a
-	-- decoy.
+	--==========================================================================
+	-- ALWAYS RE-TARGET
+	--
+	-- Stealing from a parent already chasing somebody else should make it chase
+	-- YOU, or two players could take turns feeding it a decoy. It does mean the
+	-- first thief walks away clean, which is the intended cost: rage is the tax
+	-- on the trick, and four thefts leave the nest permanently at +20 speed.
+	--
+	-- The one being dropped loses its sweep sample on the way out. Nothing else
+	-- clears it here -- the tick only clears the target it is holding -- so it
+	-- would sit there until the next nest to want them swept a segment from
+	-- wherever they were standing when this one lost interest.
+	--==========================================================================
+	if nest.target and nest.target ~= thief then
+		lastTargetAt[nest.target] = nil
+	end
 	nest.target = thief
 	if nest.state == "chasing" then
 		-- Already running. Speed up mid-chase rather than waiting for the next
@@ -555,6 +723,22 @@ local function ragdollOff(loosened: Loosened)
 	end
 end
 
+--==============================================================================
+-- THE RAGDOLL, UNDER A PUBLIC NAME
+--
+-- CombatService needs exactly this when a player's bat lands: the same sixteen
+-- constraints off, the same head left non-collidable, the same restore. Two
+-- thin aliases rather than a second copy, because the reasoning above them --
+-- what a limp R15 actually is, and why the Head must not collide -- was paid
+-- for once and must not be paid for again in another file.
+--
+-- ALIASES, NOT A MOVE. Every guardian call site still goes through the locals,
+-- unchanged and un-renamed, so nothing about the guardian throw is touched by
+-- this being here.
+--==============================================================================
+NestService.RagdollOn = ragdollOn
+NestService.RagdollOff = ragdollOff
+
 -- The backstop. The victim's client reports when it has stopped; this is what
 -- happens when it never does -- a body wedged in geometry, a client that left,
 -- a client that simply does not answer. A character must always come back.
@@ -676,6 +860,31 @@ local function throwPlayer(nest: Nest, player: Player)
 	humanoid.PlatformStand = true
 	task.wait()
 
+	--==========================================================================
+	-- THE CAPTURED SPEED IS ONLY A FALLBACK NOW
+	--
+	-- This used to be the restore value, and it is what froze players caught in
+	-- a trap. WalkSpeed is 0 while a Bramblejaw holds somebody, so a guardian
+	-- landing on a trapped player captured ZERO here and wrote it back four
+	-- seconds later -- after the trap's own release had already put the correct
+	-- speed back. Reported exactly that way: trapped, hit, immobile forever.
+	--
+	--     t 0.0  trapped                     WalkSpeed 0
+	--     t 0.5  guardian hits, captures     walk = 0
+	--     t 2.0  trap expires, recomputes    WalkSpeed 139
+	--     t 5.5  throw ends, restore()       WalkSpeed = walk = 0   <- stuck
+	--
+	-- It is the same capture-and-replay trap HANDOFF recorded once before, when
+	-- a thrown player kept their CARRY speed; that was fixed by moving the
+	-- capture rather than by removing it, so the shape survived.
+	--
+	-- The fix is not to capture a better moment. It is to stop replaying a
+	-- number at all: CarryService owns WalkSpeed because it is the product of a
+	-- saved Speed score, a carry multiplier, a mill and now a trap, and no
+	-- caller knows all four. `restore()` asks it to recompute. The capture stays
+	-- only for the case where the bridge is absent, which is a server booting
+	-- without CarryService and therefore without any of this mattering.
+	--==========================================================================
 	local walk = humanoid.WalkSpeed
 	local jump = humanoid.JumpPower
 	humanoid.WalkSpeed = 0
@@ -698,8 +907,20 @@ local function throwPlayer(nest: Nest, player: Player)
 		end
 		if humanoid.Parent then
 			humanoid.PlatformStand = false
-			humanoid.WalkSpeed = walk
 			humanoid.JumpPower = jump
+			--==================================================================
+			-- RECOMPUTED, NOT REPLAYED. See the banner over the capture.
+			--==================================================================
+			local bridge = carryBridge
+			local refresh = if bridge then bridge.RefreshWalkSpeed else nil
+			if refresh then
+				local okRefresh = pcall(refresh, player)
+				if not okRefresh then
+					humanoid.WalkSpeed = walk
+				end
+			else
+				humanoid.WalkSpeed = walk
+			end
 		end
 	end
 
@@ -783,16 +1004,30 @@ local function throwPlayer(nest: Nest, player: Player)
 		awayDir = Vector3.new(0, 0, 1)
 	end
 
+	--==========================================================================
+	-- WHICH WAY IS HOME, AND HOW MUCH IT MATTERS
+	--
+	-- Two profiles can answer, and they are asked in order: the SPECIES speed
+	-- profile first (Astralmaw), then the BIOME confiscate profile (the three
+	-- that take pods back). A guardian in neither -- Greenhollow's and
+	-- Brambleback's -- falls through to the legacy pair and to the hardcoded
+	-- +Z, exactly as it always has.
+	--
+	-- The hardcoded axis is only correct because this map's road runs along Z;
+	-- anything with a profile derives the direction from its OWN nest toward
+	-- the hub instead, which is what makes it right for a nest placed anywhere.
+	--==========================================================================
+	local dprof: any = prof or GameConfig.confiscateProfile(nest.biome.Id)
 	local roadOut = Vector3.new(0, 0, 1)
-	if prof then
+	if dprof then
 		local hub = MapService.GetOverflowCFrame().Position - nest.origin
 		local flatHub = Vector3.new(hub.X, 0, hub.Z)
 		if flatHub.Magnitude > 1 then
 			roadOut = flatHub.Unit
 		end
 	end
-	local aw = if prof then (tonumber(prof.AwayWeight) or 1) else 0.7
-	local rw = if prof then (tonumber(prof.RoadWeight) or 0) else 0.5
+	local aw = if dprof then (tonumber(dprof.AwayWeight) or 1) else 0.7
+	local rw = if dprof then (tonumber(dprof.RoadWeight) or 0) else 0.5
 	local dir = awayDir * aw + roadOut * rw
 	if dir.Magnitude < 0.1 then
 		dir = awayDir
@@ -800,13 +1035,30 @@ local function throwPlayer(nest: Nest, player: Player)
 		dir = dir.Unit
 	end
 	if dir:Dot(awayDir) <= 0 then
-		-- Cannot happen with the weights above; it would mean a launch back
-		-- through the creature that threw it, and that is worth a line in the
-		-- log rather than a shrug.
-		warn(string.format(
-			"[Seed/NestService] %s throw resolved back toward the parent; using away only",
-			tostring(nest.parent:GetAttribute("Species"))))
-		dir = awayDir
+		--======================================================================
+		-- THE GUARDIAN IS STANDING BETWEEN YOU AND HOME
+		--
+		-- Reachable, and it was throwing people the wrong way. The old fallback
+		-- dropped to `awayDir` alone, and away-from-the-guardian in exactly this
+		-- geometry is DEEPER INTO THE BIOME -- the direction the whole road
+		-- weighting exists to avoid. Reported as *"theres a rare chance when i
+		-- ragdoll on opposite direction"*, and rare is right: it needs the
+		-- guardian roughly on the line between the victim and the hub, which the
+		-- 60-stud chase overshoot produces every so often.
+		--
+		-- So the road is kept and only the SIDEWAYS part of away is used, which
+		-- launches them home PAST the guardian rather than back over its
+		-- shoulder. If they are dead on the line there is no sideways part and
+		-- the road wins outright: being smashed past a guardian at 300 studs a
+		-- second reads as the hit landing, and being fired back into the biome
+		-- reads as a bug, because it was one.
+		--======================================================================
+		local lateral = awayDir - roadOut * awayDir:Dot(roadOut)
+		if lateral.Magnitude > 0.05 then
+			dir = (roadOut + lateral.Unit * 0.6).Unit
+		else
+			dir = roadOut
+		end
 	end
 
 	loosened = ragdollOn(character)
@@ -890,6 +1142,35 @@ local function throwPlayer(nest: Nest, player: Player)
 	if not ok then
 		warn("[Seed/NestService] throw failed after the grab: " .. tostring(err))
 	end
+
+	--==========================================================================
+	-- A BODY WITH NO ROOT IS NOT A BODY, AND THIS IS WHERE IT LOSES ONE
+	--
+	-- The wait loop above already breaks on `not root.Parent`, so the case was
+	-- known about; nothing acted on it. A ragdoll is seventeen separate
+	-- assemblies and the root travels on its own -- measured 780 studs from its
+	-- own torso on a Starbloom throw -- so it can cross
+	-- `FallenPartsDestroyHeight` while the body it belongs to lands on the road.
+	-- The Humanoid stays alive at full health with a Head and no root.
+	--
+	-- That body is finished: it cannot be carried on, cannot be thrown again,
+	-- and made every later pod take destroy a pod for nothing. Nothing in Roblox
+	-- repairs it, so the only way out is a new one.
+	--
+	-- LoadCharacter rather than Health = 0: they have just been thrown across
+	-- the biome and lost the pod, and a death on top of that would be a second
+	-- punishment for the engine's bookkeeping rather than for anything they did.
+	--==========================================================================
+	local body = player.Character
+	local hum = body and body:FindFirstChildOfClass("Humanoid")
+	if body and hum and hum.Health > 0 and not body:FindFirstChild("HumanoidRootPart") then
+		warn(string.format(
+			"[Seed/NestService] %s lost its HumanoidRootPart to the throw; respawning.",
+			player.Name))
+		pcall(function()
+			player:LoadCharacter()
+		end)
+	end
 end
 
 --==============================================================================
@@ -927,10 +1208,6 @@ local function distanceToSegment(point: Vector3, a: Vector3, b: Vector3): number
 	return (point - (a + ab * t)).Magnitude
 end
 
--- Where each chased player was at the previous tick. Keyed by player rather than
--- by nest: a player can only be chased by one parent at a time, and this is
--- cleared the moment they stop being a target.
-local lastTargetAt: { [Player]: Vector3 } = {}
 -- 150 WalkSpeed x 0.12s is 18 studs; double it so an ordinary hitch is still
 -- treated as travel and only a discontinuity is thrown away.
 local MAX_TICK_TRAVEL = 40
@@ -948,7 +1225,303 @@ local function targetPosition(player: Player?): Vector3?
 	return root.Position
 end
 
+--==============================================================================
+-- IT CARRIES IT WHERE IT MAKES SENSE TO CARRY IT
+--
+-- Welded to a real limb, so the client's animation carries the pod for free:
+-- every cosmetic piece on these rigs is already a WeldConstraint onto the part
+-- it belongs to, and ParentAnim moving a seam moves everything welded past it.
+-- There is no second render loop here and nothing on the client is told a pod
+-- is attached -- it is just more geometry hanging off a jaw or a fist.
+--
+-- WHERE IT SITS IS DERIVED, NOT CONFIGURED, and that is the whole reason this
+-- function is longer than a weld. A pod is 1.66 studs across at Tiny and 9.04
+-- at the top of the curve -- a factor of five -- on guardians that are 15 to 19
+-- studs tall. Hand-tuned offsets were tried first and measured on the live
+-- rigs: the same three numbers that looked right at Tiny buried Astralmaw's pod
+-- 2.62 studs inside its own ChestNebula and hung Forgemaw's 8.55 studs below
+-- the ground it was walking on.
+--
+-- So two things are solved from the rig instead, and both are one pass over the
+-- parts, once, at the moment of the catch:
+--
+--   ABOVE THE GROUND. The lowest point of the body is where it stands, so the
+--   pod's centre is never allowed below that plus its own radius. A clamp
+--   rather than an offset: a small pod still hangs at the height of the limb
+--   carrying it, and only a big one gets lifted.
+--
+--   OUT OF THE BODY. Starting AT the limb and pushed forward only as far as it
+--   takes to stop overlapping anything. Clearing the front-most point of the
+--   whole body was tried first and it is too blunt: Forgemaw's head reaches
+--   8.47 studs forward of its root, so a 9-stud pod cleared to the front of
+--   THAT ended up 13.4 out -- five studs past the nose and ten studs from the
+--   fist it was welded to, which reads as a floating boulder rather than as
+--   something being carried.
+--
+-- The push is iterative because moving out of one part can move into another,
+-- and it converges in a handful of passes because each pass moves at least the
+-- depth of the worst overlap. Eight is a ceiling, not an expectation.
+--
+-- The seam still decides WHICH limb it is welded to, and therefore how it
+-- moves. Side is cosmetic and stays in the profile.
+--
+-- It is decoration and is built as decoration: untagged, so nothing can take
+-- it; CanQuery and CanTouch false, so nothing can click or trip over it;
+-- massless and non-colliding, so a 10,000 kg shell does not change how the
+-- guardian walks. It never fails loudly -- a haul with no visible pod still
+-- walks home and still deposits.
+--==============================================================================
+local function attachHaul(nest: Nest, haul: Haul): boolean
+	local prof = GameConfig.confiscateProfile(nest.biome.Id)
+	local species = SeedData.Get(haul.speciesId)
+	if not (prof and species and nest.root.Parent) then
+		return false
+	end
+	local seam = nest.parent:FindFirstChild(tostring(prof.Seam), true)
+	if not (seam and seam:IsA("BasePart")) then
+		warn(string.format("[Seed/NestService] %s has no %s to carry a pod on.",
+			nest.id, tostring(prof.Seam)))
+		return false
+	end
+
+	local radius = SeedData.PodDiameter(haul.tier) * 0.5
+	local clear = tonumber(P.HaulClearance) or 0.4
+	local rootCF = nest.root.CFrame
+	local seamLocal = rootCF:ToObjectSpace(seam.CFrame).Position
+
+	--== WHERE THE BODY IS, IN THE GUARDIAN'S OWN FRAME ==--
+	-- Gathered once. The rotated half-extent along Y is the same corner reach
+	-- the Starbloom limb work needed to put feet on the ground: a raked piece
+	-- projects more than half its thickness.
+	local boxes: { { cf: CFrame, half: Vector3 } } = {}
+	local footY = 0
+	for _, d in ipairs(nest.parent:GetDescendants()) do
+		if d:IsA("BasePart") then
+			local lp = rootCF:ToObjectSpace(d.CFrame)
+			local half = d.Size * 0.5
+			table.insert(boxes, { cf = lp, half = half })
+			footY = math.min(footY, lp.Position.Y
+				- (math.abs(lp.RightVector.Y) * half.X
+					+ math.abs(lp.UpVector.Y) * half.Y
+					+ math.abs(lp.LookVector.Y) * half.Z))
+		end
+	end
+
+	local podX = seamLocal.X + (tonumber(prof.Side) or 0) * radius
+	-- The limb's own height, unless that would drag it along the road.
+	local podY = math.max(seamLocal.Y, footY + radius + clear)
+	local podZ = seamLocal.Z
+
+	for _ = 1, 8 do
+		local at = Vector3.new(podX, podY, podZ)
+		local worst = 0
+		for _, b in ipairs(boxes) do
+			-- Distance from the pod's centre to this box, zero inside it.
+			local d = b.cf:PointToObjectSpace(at)
+			local out = Vector3.new(
+				math.max(math.abs(d.X) - b.half.X, 0),
+				math.max(math.abs(d.Y) - b.half.Y, 0),
+				math.max(math.abs(d.Z) - b.half.Z, 0))
+			worst = math.max(worst, radius + clear - out.Magnitude)
+		end
+		if worst <= 0.01 then
+			break
+		end
+		podZ -= worst
+	end
+
+	local centre = rootCF * CFrame.new(podX, podY, podZ)
+
+	--==========================================================================
+	-- PARENTED BESIDE THE GUARDIAN, NOT INSIDE IT
+	--
+	-- The weld is what carries it, and a WeldConstraint does not care which
+	-- model each end lives in -- so the pod goes in the nest folder and the
+	-- guardian's own descendant tree is left exactly as the builder made it.
+	--
+	-- That is not tidiness. ParentAnim's mireChannels NAME-SCANS every
+	-- descendant BasePart of a Miremaw into one table and keeps the last of
+	-- each name, then drives whatever it finds under the names in
+	-- MiremawSleepSize and MiremawSleepTransparency. A pod hanging inside the
+	-- model would be re-scanned on the next stream-in re-track, and a pod part
+	-- that happened to share a name with a channel would either be resized by
+	-- the sleep pose or, worse, REPLACE the real part in the channel and stop
+	-- it animating. Keeping the pod outside the model makes that unreachable
+	-- rather than unlikely.
+	--==========================================================================
+	-- BuildPod takes the BASE, not the centre. Same contract as everywhere else.
+	local pod = CreatureModel.BuildPod(species, haul.tier,
+		centre * CFrame.new(0, -radius, 0), nest.folder)
+	pod.Name = "HauledPod"
+	local primary = pod.PrimaryPart
+	if not primary then
+		pod:Destroy()
+		return false
+	end
+	for _, d in ipairs(pod:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = false
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CanTouch = false
+			d.Massless = true
+			if d ~= primary then
+				local w = Instance.new("WeldConstraint")
+				w.Part0 = primary
+				w.Part1 = d
+				w.Parent = primary
+			end
+		end
+	end
+	local hold = Instance.new("WeldConstraint")
+	hold.Name = "HaulWeld"
+	hold.Part0 = seam
+	hold.Part1 = primary
+	hold.Parent = primary
+
+	haul.model = pod
+	-- WHICH limb, not merely that there is one. The client steadies the seam it
+	-- names, so the profile that chose the weld point also chooses the pose and
+	-- ParentAnim needs no species table of its own.
+	nest.parent:SetAttribute("Hauling", tostring(prof.Steady or "right"))
+	return true
+end
+
+local function detachHaul(nest: Nest)
+	local haul = nest.haul
+	if haul and haul.model then
+		if haul.model.Parent then
+			haul.model:Destroy()
+		end
+		haul.model = nil
+	end
+	if nest.parent.Parent then
+		nest.parent:SetAttribute("Hauling", nil)
+	end
+end
+
+--==============================================================================
+-- PUTTING IT BACK, AND THE THREE PLACES IT CAN GO
+--
+-- The only way a haul is ever cleared, and it is called from every exit: the
+-- guardian arriving, the walk timing out, the guardian or its nest going away,
+-- a reset, and settling down. That is deliberate -- while `haul` is set the
+-- guardian holds the ONLY copy of that pod, so an exit that forgot to come
+-- through here would delete it.
+--
+-- In order of preference:
+--
+--   1. AN EMPTY SLOT IN THE RING IT CAME OFF. The pod is back where it was
+--      taken from, so the raid is genuinely undone: walk in again and it is
+--      there. `fromNest` rather than this nest, because a thief can be caught
+--      by a guardian whose ring the pod did not come from.
+--   2. LOOSE ON THE GROUND at that nest's centre, through the same call a drop
+--      makes -- tagged, prompted, on the same lifetime. This is the full-ring
+--      case, and it is reachable: dawn restocks every slot, so a pod taken
+--      yesterday has nowhere of its own to go back to.
+--   3. A WARNING. Reachable only if the species has stopped existing AND the
+--      ring is full AND CarryService never started. Loud rather than silent,
+--      because a pod that quietly stops existing is the one failure in here
+--      that nobody would ever notice.
+--==============================================================================
+local function depositHaul(nest: Nest, why: string): boolean
+	local haul = nest.haul
+	if not haul then
+		return true
+	end
+
+	local home = nest
+	if haul.fromNest then
+		for _, n in ipairs(nests) do
+			if n.id == haul.fromNest then
+				home = n
+				break
+			end
+		end
+	end
+
+	local placed = false
+	local species = SeedData.Get(haul.speciesId)
+	if species then
+		for index = 1, home.biome.PodsPerNest do
+			if not home.pods[index] then
+				placePod(home, index, species, haul.tier)
+				if home.pods[index] then
+					placed = true
+					break
+				end
+			end
+		end
+		if not placed and carryBridge then
+			placed = carryBridge.SpawnLoose(haul.speciesId, haul.tier,
+				CFrame.new(home.origin), home.id)
+		end
+	end
+
+	detachHaul(nest)
+	nest.haul = nil
+
+	if placed then
+		log(string.format("%s returned a %d tier %s to %s (%s).",
+			nest.id, haul.tier, haul.speciesId, home.id, why))
+	else
+		warn(string.format(
+			"[Seed/NestService] %s could not put a %d tier %s back anywhere (%s).",
+			nest.id, haul.tier, haul.speciesId, why))
+	end
+	return placed
+end
+
+--==============================================================================
+-- TAKING IT OFF THE PLAYER, ONCE
+--
+-- Returns whether there is now something to walk home with. Everything that
+-- makes this safe is upstream of it: `Confiscate` does not yield, so the read
+-- and the clear of that player's slot happen in one resumption. Two guardians
+-- reaching the same person in the same frame cannot both come away holding
+-- something -- the second sees an empty hand and throws them exactly as
+-- Greenhollow's would.
+--
+-- The record is set BEFORE the weld is attempted, so a rig with a missing seam
+-- costs the pod its picture and not its journey home.
+--==============================================================================
+local function confiscateFrom(nest: Nest, victim: Player): boolean
+	if nest.haul then
+		return true
+	end
+	if not GameConfig.confiscateProfile(nest.biome.Id) then
+		return false
+	end
+	local bridge = carryBridge
+	if not bridge then
+		return false
+	end
+	local held = bridge.Confiscate(victim)
+	if type(held) ~= "table" or not held.species or type(held.tier) ~= "number" then
+		return false
+	end
+
+	local haul: Haul = {
+		speciesId = held.species.Id,
+		tier = held.tier,
+		fromNest = held.fromNest,
+		model = nil,
+		since = os.clock(),
+	}
+	nest.haul = haul
+	attachHaul(nest, haul)
+	log(string.format("%s took a %d tier %s off %s.",
+		nest.id, haul.tier, haul.speciesId, victim.Name))
+	return true
+end
+
 local function sleep(nest: Nest)
+	-- Defensive. Every path that sets `hauling` deposits before it reaches here,
+	-- but settling down holding the only copy of a pod is the one outcome this
+	-- state machine must never have.
+	if nest.haul then
+		depositHaul(nest, "settled")
+	end
 	nest.state = "asleep"
 	if nest.target then
 		lastTargetAt[nest.target] = nil
@@ -962,6 +1535,55 @@ local function sleep(nest: Nest)
 	nest.chaseSince = 0
 	nest.humanoid.WalkSpeed = 0
 	nest.parent:SetAttribute("Asleep", true)
+end
+
+--==============================================================================
+-- THE WALK BACK, WHICHEVER STATE ASKED FOR IT
+--
+-- True once it has arrived. Shared by `returning` and `hauling` so that a
+-- guardian carrying something walks home exactly the way an empty-handed one
+-- does -- same speed rule, same arrival radius, same MoveTo. The only thing
+-- carrying changes is what happens at the end of it.
+--
+-- Slower going home than coming, and PROFILED ONLY: the other four have always
+-- walked back at whatever the chase left them on, and that is not this pass's
+-- to change.
+--==============================================================================
+--==============================================================================
+-- THE ONE WAY BACK
+--
+-- Every exit from a chase comes through here rather than assigning "returning"
+-- directly, because whether the walk home is a walk or a haul is not something
+-- the four exits should each have to remember. Get it wrong in one of them and
+-- the guardian strolls home holding the only copy of a pod and then sleeps on
+-- it -- which `sleep` would recover from, but recovering is not the same as
+-- being right.
+--
+-- The haul clock is restarted rather than carried, because it exists to stop a
+-- WALK running forever and a chase is not that walk. A guardian dragged up and
+-- down the road three times still gets its full ninety seconds to finish.
+--==============================================================================
+local function goHome(nest: Nest)
+	if nest.haul then
+		if nest.state ~= "hauling" then
+			nest.haul.since = os.clock()
+		end
+		nest.state = "hauling"
+	else
+		nest.state = "returning"
+	end
+end
+
+local function walkHome(nest: Nest): boolean
+	local home = Vector3.new(nest.origin.X, nest.root.Position.Y, nest.origin.Z)
+	if (nest.root.Position - home).Magnitude < 6 then
+		return true
+	end
+	if profileOf(nest) then
+		setWalk(nest, returnSpeedFor(nest))
+	end
+	nest.humanoid:MoveTo(home)
+	return false
 end
 
 local function step(nest: Nest, now: number)
@@ -1009,7 +1631,7 @@ local function step(nest: Nest, now: number)
 		-- Safety is safety. A parent that could be kited across the red line
 		-- would make the one promise the map makes into a lie.
 		if not pos or MapService.IsInSafeZone(pos) then
-			nest.state = "returning"
+			goHome(nest)
 			nest.target = nil
 			return
 		end
@@ -1024,7 +1646,7 @@ local function step(nest: Nest, now: number)
 		-- before the chaser left its own biome.
 		--==============================================================
 		if MapService.IsInSafeZone(nest.root.Position) then
-			nest.state = "returning"
+			goHome(nest)
 			nest.target = nil
 			return
 		end
@@ -1032,7 +1654,7 @@ local function step(nest: Nest, now: number)
 		-- so a normal cross-biome chase never reaches it and a broken one cannot
 		-- run forever.
 		if (nest.root.Position - nest.origin).Magnitude > P.LeashStuds then
-			nest.state = "returning"
+			goHome(nest)
 			nest.target = nil
 			return
 		end
@@ -1089,7 +1711,78 @@ local function step(nest: Nest, now: number)
 				-- is not hypothetical: a bad edit left `dir` undefined, throwPlayer
 				-- threw on a nil index, and the nest went catatonic with no error
 				-- anywhere near the thing that stopped working.
+				local took = false
 				if victim then
+					--==========================================================
+					-- CONFISCATE FIRST, THEN THROW. THE ORDER IS THE FEATURE.
+					--
+					-- The throw sets PlatformStand, and CarryService turns that
+					-- into a Drop -- which is how being caught has always put
+					-- the pod on the road. Taking it first leaves that watcher
+					-- with nothing to drop, so the pod goes home with the
+					-- guardian instead of landing at the victim's feet.
+					--
+					-- Doing it the other way round would produce BOTH: a loose
+					-- pod on the road and a hauled one, out of a single pod.
+					--
+					-- Also pcall'd, and outside the throw's pcall on purpose: a
+					-- confiscation that threw would otherwise skip the throw,
+					-- and being caught has to cost the distance whether or not
+					-- the pod part of it worked.
+					--==========================================================
+					--==========================================================
+					-- A TRAP LETS GO BEFORE A GUARDIAN THROWS
+					--
+					-- Required in its own right -- a player cannot be held by
+					-- two things at once and the guardian's hit is the louder
+					-- one -- and it is also the ordering that makes the freeze
+					-- impossible rather than merely fixed: by the time
+					-- `throwPlayer` touches WalkSpeed there is no trap holding
+					-- it at zero.
+					--
+					-- Only on a CONFIRMED catch. This runs inside the contact
+					-- branch, after `distanceToSegment` has accepted the hit, so
+					-- a miss or a chase that ends releases nothing.
+					--
+					-- The release grants the usual four seconds of trap immunity
+					-- on its way out, so being caught in a trap by a guardian
+					-- does not immediately re-arm the same trap on the victim.
+					--==========================================================
+					local combat = combatBridge
+					if combat then
+						pcall(combat.ReleaseTrap, victim, "a guardian caught them")
+					end
+
+					local tookOk, tookErr = pcall(confiscateFrom, nest, victim)
+					if tookOk then
+						took = tookErr :: any
+					else
+						warn("[Seed/NestService] confiscate failed: " .. tostring(tookErr))
+					end
+					if took then
+						--======================================================
+						-- THE STATE CHANGES WITH THE POD, NOT AFTER THE THROW
+						--
+						-- throwPlayer YIELDS -- the ragdoll, the flight and the
+						-- stand-up are seconds, not a frame -- and `busy` keeps
+						-- the tick out for all of it. But the tick publishes
+						-- ParentState BEFORE it checks busy, so leaving the
+						-- assignment until afterwards left the guardian reading
+						-- `chasing` while it was already holding the pod.
+						--
+						-- Measured on Forgemaw: 5.5 seconds of a hunting gait
+						-- with a pod welded to its fist, which is exactly the
+						-- tell that it is not really carrying anything.
+						--
+						-- Assigning here is safe precisely BECAUSE busy is set:
+						-- no movement runs off this state until the throw is
+						-- done, so this changes what the client draws and
+						-- nothing else. The assignment below still stands for
+						-- the empty-handed case.
+						--======================================================
+						nest.state = "hauling"
+					end
+
 					local ok, err = pcall(throwPlayer, nest, victim)
 					if not ok then
 						warn("[Seed/NestService] throw failed: " .. tostring(err))
@@ -1102,8 +1795,38 @@ local function step(nest: Nest, now: number)
 						end
 					end
 				end
-				nest.state = "returning"
-				nest.target = nil
+				--==========================================================
+				-- SOMEBODY MAY HAVE ROBBED THE RING WHILE THIS ONE WAS IN
+				-- THE AIR
+				--
+				-- `busy` keeps the TICK out of the nest for the five-odd
+				-- seconds a throw lasts. It does not keep `provoke` out --
+				-- `TakePod` never looks at it -- so a second thief during
+				-- that window does everything it normally does: stacks rage,
+				-- sets the state to chasing, points the target at itself and
+				-- writes the new speed. Then these lines ran unconditionally
+				-- and threw all of it away, and the guardian walked home past
+				-- somebody who had just emptied a slot in front of it.
+				--
+				-- The same fault `provoke` was fixed for, narrowed from the
+				-- whole walk back to the throw window -- rarer, and identical
+				-- from the road, which is why it survived that fix.
+				--
+				-- So the nest is released only if it is still pointed at the
+				-- person who was just thrown. Anything else means someone
+				-- claimed it while this ran, `provoke` has already set the
+				-- state and the speed, and the only correct thing to do here
+				-- is leave both alone. Holding something still makes the walk
+				-- home a different state, and an empty-handed catch that
+				-- nobody interrupted is bit-for-bit the old one.
+				--==========================================================
+				if nest.target == victim or nest.target == nil then
+					goHome(nest)
+					nest.target = nil
+				end
+				if victim then
+					lastTargetAt[victim] = nil
+				end
 				nest.busy = false
 			end)
 			return
@@ -1141,19 +1864,55 @@ local function step(nest: Nest, now: number)
 		nest.humanoid:MoveTo(pos + heading * P.ChaseOvershootStuds)
 		return
 
-	else -- returning
-		local home = Vector3.new(nest.origin.X, nest.root.Position.Y, nest.origin.Z)
-		if (nest.root.Position - home).Magnitude < 6 then
+	elseif nest.state == "hauling" then
+		--==================================================================
+		-- WALKING HOME HOLDING THE ONLY COPY OF SOMETHING
+		--
+		-- Identical to `returning` except that it cannot simply end. Every
+		-- way out of this state goes through depositHaul, including the ways
+		-- that are not the guardian arriving, because the pod exists nowhere
+		-- else while this is running.
+		--
+		-- Chasing is not one of those ways either, but not because it cannot
+		-- happen: `provoke` retargets a hauler like anything else and the
+		-- pod rides along in its fist. The chase does not END the haul, it
+		-- interrupts it, and `goHome` puts the guardian back here afterwards
+		-- with the clock restarted. This comment used to claim the opposite,
+		-- and was wrong from the moment provoke stopped refusing.
+		--==================================================================
+		local haul = nest.haul
+		if not haul then
+			-- Deposited by something outside the tick. Finish as a plain walk.
+			nest.state = "returning"
+			return
+		end
+		-- The rig can go away underneath a haul: a nest rebuild, a dead
+		-- guardian, a map reload. Checked every tick rather than at the end,
+		-- because the end is the thing that would never arrive.
+		if not (nest.parent.Parent and nest.root.Parent) then
+			depositHaul(nest, "the guardian went away")
+			nest.state = "returning"
+			return
+		end
+		-- A route that never completes must not hold a pod forever. Past the
+		-- ceiling it goes back into the ring anyway -- depositHaul does not
+		-- care where the guardian got to, and a pod in its slot is a better
+		-- outcome than a pod beside a guardian wedged on a rock.
+		if now - haul.since > P.HaulSeconds then
+			depositHaul(nest, "the walk home timed out")
 			sleep(nest)
 			return
 		end
-		-- Slower going home than coming. A guardian that walks back at hunting
-		-- speed reads as still hunting. Profiled only: the other four have
-		-- always walked home at whatever the chase left them on.
-		if profileOf(nest) then
-			setWalk(nest, returnSpeedFor(nest))
+		if walkHome(nest) then
+			depositHaul(nest, "arrived")
+			sleep(nest)
 		end
-		nest.humanoid:MoveTo(home)
+		return
+
+	else -- returning
+		if walkHome(nest) then
+			sleep(nest)
+		end
 	end
 end
 
@@ -1182,6 +1941,26 @@ end
 function NestService.ClearForNight(): number
 	local removed = 0
 	for _, nest in ipairs(nests) do
+		--======================================================================
+		-- A POD IN A GUARDIAN'S JAWS IS IN THE RING TOO
+		--
+		-- Destroyed with the rest of the batch rather than deposited, and this
+		-- is the one place a haul ends without going back into the world. It is
+		-- the night rule, not an exception to it: everything in the ring goes at
+		-- dusk so that dawn is a fresh roll, and a confiscated pod is the nest's
+		-- property by the time it is being carried. Depositing it here would
+		-- also lose the race -- this runs BEFORE ResetParents and before the
+		-- dawn restock, so the pod would sit in a slot the restock skips and
+		-- survive a night nothing else survives.
+		--
+		-- The player already lost it at the catch. This decides only whether the
+		-- nest keeps it until morning, and no other pod does.
+		--======================================================================
+		if nest.haul then
+			detachHaul(nest)
+			nest.haul = nil
+			removed += 1
+		end
 		for slot, pod in pairs(nest.pods) do
 			if pod and pod.Parent then
 				pod:Destroy()
@@ -1211,6 +1990,12 @@ end
 function NestService.ResetParents(): number
 	local reset = 0
 	for _, nest in ipairs(nests) do
+		-- A reset outside dusk must not eat a pod. At dusk ClearForNight has
+		-- already run and this finds nothing, so the night rule above still
+		-- decides what happens on a night.
+		if nest.haul then
+			depositHaul(nest, "the parents were reset")
+		end
 		nest.busy = false
 		if nest.target then
 			lastTargetAt[nest.target] = nil
@@ -1377,9 +2162,30 @@ function NestService.Start()
 			pods += 1
 		end
 	end
+	--==========================================================================
+	-- REPORT WHAT THEY ACTUALLY RUN AT
+	--
+	-- This line used to print parentWalkSpeedFor(0) -- the formula's answer for a
+	-- biome that recommends nothing -- and call it "parents run at N". Once
+	-- Greenhollow started stating its own chase speed that became a boot message
+	-- confidently reporting a number no guardian in the game was using.
+	--==========================================================================
+	local slowest, fastest = math.huge, 0
+	for _, nest in ipairs(nests) do
+		local base = baseSpeedFor(nest)
+		slowest = math.min(slowest, base)
+		fastest = math.max(fastest, base)
+	end
+	if slowest > fastest then
+		slowest, fastest = GameConfig.parentWalkSpeedFor(0), GameConfig.parentWalkSpeedFor(0)
+	end
 	log(string.format(
-		"Ready. %d nest(s), %d pod(s). Parents sleep until robbed, then run at %d (+%d per theft).",
-		#nests, pods, GameConfig.parentWalkSpeedFor(0), P.RageSpeedPerTake))
+		"Ready. %d nest(s), %d pod(s). Parents sleep until robbed, then run at %s (+%d per theft).",
+		#nests, pods,
+		(if math.abs(fastest - slowest) < 0.05
+			then string.format("%d", slowest)
+			else string.format("%d-%d by biome", slowest, fastest)),
+		P.RageSpeedPerTake))
 
 	local quiet = {}
 	for id, n in pairs(skipped) do

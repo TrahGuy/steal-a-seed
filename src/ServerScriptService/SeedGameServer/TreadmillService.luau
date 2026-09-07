@@ -872,8 +872,6 @@ function TreadmillService.Rebuild(plot: Model, tier: number)
 
 	local cf = existing:GetPivot()
 	local parent = existing.Parent
-	local sign = signFor(plotId)
-	local signCF = sign and sign:GetPivot()
 	existing:Destroy()
 
 	local model, belt = MillModel.Build(tier, cf, parent)
@@ -909,13 +907,21 @@ function TreadmillService.Rebuild(plot: Model, tier: number)
 		setBeltSpeed(belt, false, tier)
 	end
 
-	-- The sign was inside the model, so it went with it. Same place, new board.
-	-- The rebuilt sign goes back exactly where the old one stood. The fallback
-	-- is only reached when there was none -- and it has to agree with MapService,
-	-- which is why both read the same two numbers.
-	local rebuiltSign = MillModel.BuildSign(
-		signCF or (cf * CFrame.new(LADDER.Sign.Offset)
-			* CFrame.Angles(0, math.rad(LADDER.Sign.YawDegrees), 0)), model)
+	--==========================================================================
+	-- THE SIGN IS PLACED FROM THE MILL, NOT FROM THE OLD SIGN
+	--
+	-- This used to re-use `sign:GetPivot()` so the board went back "exactly where
+	-- it stood". It did not: the sign's PrimaryPart is its POST, centred
+	-- 2.6 * Scale above the base BuildSign expects, so each upgrade re-applied
+	-- that offset and the sign rose 1.976 studs -- every time, for ever.
+	--
+	-- Deriving from the mill instead makes the placement idempotent: the mill's
+	-- pivot is its Deck, built at the mill's own CFrame, so rebuilding the same
+	-- tier a hundred times puts the sign in exactly the same place. It also
+	-- means a save that already contains a floating sign is corrected by the
+	-- next rebuild rather than inheriting the drift.
+	--==========================================================================
+	local rebuiltSign = MillModel.BuildSign(MillModel.SignBase(cf), model)
 	rebuiltSign:SetAttribute(ATTR.PlotId, plotId)
 	-- Deferred, so it lands after the tag signal that fires when the sign above
 	-- appears. Both refresh from the profile now, so the order stopped mattering

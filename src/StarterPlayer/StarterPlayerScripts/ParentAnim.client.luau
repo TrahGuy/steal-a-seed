@@ -853,17 +853,22 @@ end
 -- an entry always has one. Everything else is read once at registration and may
 -- legitimately still be in flight, so it is absorbed as it lands.
 --
--- WAITING FOR ALL SIX IS THE WRONG STOPPING CONDITION, and it is worth writing
--- down why. Only Astralmaw, Forgemaw and the shared ParentModel build the whole
--- seven-seam contract. TanglemireForms has no RootJoint, BramblebackModel has
--- three seams, and MiremawModel has one -- it drives everything else through
--- mireChannels. So "keep looking until nothing is nil" never terminates for
--- three of the five, which turns a bounded retry into a permanent one.
+-- WAITING FOR ALL SIX IS THE WRONG STOPPING CONDITION, even though all five
+-- rigs do in fact have all six. Measured on the live guardians rather than read
+-- off the builders -- the rigs are composed from several files and no single
+-- one lists a whole contract:
 --
--- The seam is therefore taken off the SIGNAL instead of searched for. A
--- Motor6D that has just arrived is handed to the handler, so absorbing it is a
--- name compare rather than a walk of the model, and a rig that will never own
--- a RootJoint costs the same as one that already does.
+--     greenhollow 7   dustbowl 7   emberroot 7   starbloom 7   tanglemire 15
+--
+-- So the completeness test does terminate today. It is not what this leans on,
+-- because "every rig happens to be complete" is a fact about content, not a
+-- property of the code, and a future guardian built without a jaw would turn a
+-- bounded retry into a permanent one. The window is what makes it bounded.
+--
+-- The seam is also taken off the SIGNAL rather than searched for. A Motor6D
+-- that has just arrived is handed to the handler, so absorbing it is a name
+-- compare instead of a walk of the whole model on every descendant added --
+-- which, during a streaming storm, is the difference that matters.
 --==============================================================================
 local FILL_SEAMS = {
 	{ field = "jaw", seam = "JawJoint" },
@@ -1052,6 +1057,45 @@ local ARM_OFFSET_R = 3.9
 local BLEND_RATE = 3.5
 
 
+--==============================================================================
+-- A LIMB WITH A POD IN IT DOES NOT SWING LIKE AN EMPTY ONE
+--
+-- The pod is welded to a real limb by NestService, so it already moves with
+-- whatever that limb does -- there is nothing here to attach and nothing to
+-- draw. What is left is that a full arm should not swing like an empty one, and
+-- a jaw holding something cannot open.
+--
+-- Done by BLENDING THE SEAM BACK TOWARD ITS REST POSE after the species
+-- animator has written it, rather than by teaching four animators about
+-- carrying. That keeps one writer per frame per motor -- this reads the value
+-- the animator just produced and shrinks it, which is a filter, not a second
+-- opinion -- and it means a guardian that gains a carry point later needs no
+-- code here at all.
+--
+-- The server publishes WHICH limb as the attribute's value rather than a bare
+-- true, so this needs no species table and no biome mapping: the same profile
+-- that chose the weld point names the limb to steady.
+--==============================================================================
+local HAUL_STEADY = 0.35
+-- A mouth with a pod in it is a mouth that is shut.
+local HAUL_JAW_STEADY = 0.12
+
+local function steadyHaul(p: Parent, model: Model)
+	local which = model:GetAttribute("Hauling")
+	if type(which) ~= "string" then
+		return
+	end
+	local joint = if which == "jaw"
+		then p.jaw
+		elseif which == "left" then p.leftArm
+		else p.rightArm
+	if not joint then
+		return
+	end
+	local keep = if which == "jaw" then HAUL_JAW_STEADY else HAUL_STEADY
+	joint.motor.C0 = joint.rest:Lerp(joint.motor.C0, keep)
+end
+
 RunService.Heartbeat:Connect(function(dt)
 	if next(parents) == nil then
 		return
@@ -1133,6 +1177,7 @@ RunService.Heartbeat:Connect(function(dt)
 				p.stride += speed * dt * SWING_PER_STUD
 				animateMiremaw(p, wake, t, p.stride + p.phase,
 					math.clamp(speed / 6, 0, 1) * wake, attackDt)
+				steadyHaul(p, model)
 				continue
 			end
 
@@ -1140,6 +1185,7 @@ RunService.Heartbeat:Connect(function(dt)
 				p.stride += speed * dt * SWING_PER_STUD
 				animateForgemaw(p, wake, t, p.stride + p.phase,
 					math.clamp(speed / 6, 0, 1) * wake, attackDt)
+				steadyHaul(p, model)
 				continue
 			end
 
@@ -1154,6 +1200,7 @@ RunService.Heartbeat:Connect(function(dt)
 				animateAstralmaw(p, wake, t, dt, speed,
 					tostring(model:GetAttribute("ParentState")), attackDt,
 					(model:GetAttribute("AttackWindup") :: number?) or 0)
+				steadyHaul(p, model)
 				continue
 			end
 

@@ -33,11 +33,17 @@ local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameCon
 -- is the same rule every other field here follows.
 local SeedData = require(SeedGame:WaitForChild("Shared"):WaitForChild("SeedData"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
+-- Same reason as SeedData above: so a saved weapon id can be checked against
+-- something real, and an id for an item that has been removed from the shelf is
+-- dropped rather than carried forever.
+local WeaponData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WeaponData"))
+local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
 local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
 
 export type Profile = {
+	Tutorial: TutorialData.Progress,
 	Version: number,
 	Cash: number,
 	Speed: number,
@@ -120,6 +126,39 @@ export type Profile = {
 	-- reveal IS the grow-up, and this records that moment and no other.
 	--==========================================================================
 	Almanac: { [string]: boolean },
+	--==========================================================================
+	-- WHAT THEY HAVE BOUGHT OFF MARIGOLD, AND WHAT THEY HAVE OUT
+	--
+	-- A SET, like the Almanac, and for the same reason: the only question ever
+	-- asked of it is "do they own this one", a list would make that a scan on
+	-- every card repaint, and a set cannot contain the same purchase twice --
+	-- which is one of the two things standing between a double-click and a
+	-- double charge.
+	--
+	-- These are PERMANENT UNLOCKS. There is no count, no durability and no
+	-- restock; a weapon bought in 2026 is a weapon owned in 2036.
+	--
+	--==========================================================================
+	-- TWO LOADOUT SLOTS, ONE PER CATEGORY
+	--
+	-- This was a single `Equipped` field, because one shop tool was out at a
+	-- time. A player may now have a bat AND a trap ready at once, so the slot
+	-- is per CATEGORY -- which is also what makes "switching to the trap must
+	-- not clear the bat" true by construction rather than by remembering.
+	--
+	-- Each is one id or the empty string. Saved rather than derived from the
+	-- Backpack, so a player rejoins with what they logged out holding, and both
+	-- are sanitised against Weapons AND against the item's own category below:
+	-- a profile naming a bat in the trap slot comes back with an empty trap
+	-- slot rather than a bat that cannot be placed.
+	--
+	-- Everything here migrates by being ABSENT. A save written before Marigold
+	-- sold anything reads nil and lands on an empty set with both slots empty,
+	-- which is exactly the state such a player is in. No version bump.
+	--==========================================================================
+	Weapons: { [string]: boolean },
+	EquippedBat: string,
+	EquippedTrap: string,
 	CreatedAt: number,
 	LastSeen: number,
 }
@@ -132,6 +171,7 @@ local MAX_TIME = 4102444800
 function ProfileSchema.Default(): Profile
 	local now = os.time()
 	return {
+		Tutorial = TutorialData.Default(),
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
 		Speed = 0,
@@ -149,6 +189,9 @@ function ProfileSchema.Default(): Profile
 		Plants = {},
 		Held = {},
 		Almanac = {},
+		Weapons = {},
+		EquippedBat = "",
+		EquippedTrap = "",
 		CreatedAt = now,
 		LastSeen = now,
 	}
@@ -293,6 +336,78 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		end
 	end
 
+	--==========================================================================
+	-- COPIED KEY BY KEY, NOT ASSIGNED
+	--
+	-- Same construction as the Almanac immediately above: a DataStore round trip
+	-- can hand back numeric keys, string values, or the id of an item that has
+	-- since been taken off the shelf, and none of those may reach the shop.
+	--==========================================================================
+	if type(raw.Weapons) == "table" then
+		for id, owned in pairs(raw.Weapons) do
+			if owned == true and type(id) == "string" and WeaponData.Get(id) then
+				p.Weapons[id] = true
+			end
+		end
+	end
+
+	--==========================================================================
+	-- A SLOT MUST BE OWNED **AND** OF THE RIGHT CATEGORY
+	--
+	-- Ownership is the interesting check and it is not hypothetical: a refund,
+	-- a shelf change, or a partial write that landed the equip and lost the
+	-- purchase would each produce a slot naming something unowned. Category is
+	-- the new one -- a bat in the trap slot would be a tool that cannot do the
+	-- only thing that slot's button offers.
+	--
+	-- Failing either check empties that slot and nothing else. The worst
+	-- outcome is a player who presses EQUIP again.
+	--==========================================================================
+	local function slot(value: any, want: string): string
+		if type(value) ~= "string" or value == "" or not p.Weapons[value] then
+			return ""
+		end
+		local item = WeaponData.Get(value)
+		if not item or item.Category ~= want then
+			return ""
+		end
+		return value
+	end
+
+	p.EquippedBat = slot(raw.EquippedBat, "bat")
+	p.EquippedTrap = slot(raw.EquippedTrap, "trap")
+
+	--==========================================================================
+	-- THE ONE-SLOT SAVE, SORTED INTO THE RIGHT DRAWER
+	--
+	-- Profiles written while Marigold sold a single equipped item carry
+	-- `Equipped`, which this schema no longer has. It is read here ONLY to
+	-- place it, and only into the slot its own category names -- so somebody
+	-- who logged out holding a Comet Bat comes back with a Comet Bat in the bat
+	-- slot and an empty trap slot, and somebody holding the Bramblejaw comes
+	-- back the other way round.
+	--
+	-- The other slot is left EMPTY rather than guessed at. A player who owned
+	-- five bats had exactly one out, and picking one of the other four for them
+	-- would be inventing a decision they never made.
+	--
+	-- It runs only when the target slot is still empty, so a profile that has
+	-- both the old field and a new one keeps the new one. No version bump: the
+	-- old field is not a reshape of a field that still exists, it is a field
+	-- that was replaced, and `Weapons` -- the thing that actually matters -- is
+	-- untouched by any of this.
+	--==========================================================================
+	if type(raw.Equipped) == "string" and raw.Equipped ~= "" then
+		local item = WeaponData.Get(raw.Equipped)
+		if item and p.Weapons[raw.Equipped] then
+			if item.Category == "bat" and p.EquippedBat == "" then
+				p.EquippedBat = raw.Equipped
+			elseif item.Category == "trap" and p.EquippedTrap == "" then
+				p.EquippedTrap = raw.Equipped
+			end
+		end
+	end
+
 	-- Carried, not trusted. Version 2 is the first time this has branched.
 	local from = 1
 	if type(raw.Version) == "number" and raw.Version == raw.Version then
@@ -387,6 +502,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		p.Version = 2
 	end
 
+	p.Tutorial = TutorialData.Sanitise(raw.Tutorial, p)
 	-- Unknown keys are dropped by construction: everything above copies FROM
 	-- raw INTO a fresh default, so a field removed from the schema stops being
 	-- carried the moment it stops being read here.

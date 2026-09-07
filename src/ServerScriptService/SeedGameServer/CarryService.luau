@@ -166,6 +166,33 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	-- mounted player is at zero regardless of what they are holding, and zero
 	-- times a multiplier is a zero that stops being obviously deliberate.
 	--==========================================================================
+	--==========================================================================
+	-- HELD BY A TRAP, AND THIS IS STILL THE ONLY WRITER
+	--
+	-- Checked FIRST, above the mill, because a trap is something done TO a
+	-- player and a mill is something they chose -- and because the two can never
+	-- both be true anyway: a mill stands on a plot, every plot is inside the
+	-- safe field, and CombatService refuses to place a trap anywhere in it.
+	--
+	-- THIS IS WHY THE TRAP IS AN ATTRIBUTE AND NOT A CAPTURED NUMBER.
+	-- CombatService never reads WalkSpeed, never stores it and never puts one
+	-- back; it sets this, calls RefreshWalkSpeed, clears it, and calls again --
+	-- so a release recomputes from the truth of the moment it happens. The
+	-- alternative is the bug written up over throwPlayer: capture a speed,
+	-- something else changes it while the player is held, and the restore hands
+	-- back a number that was true two seconds ago and is now wrong. A trap
+	-- firing on somebody who picks up a pod while held would do exactly that.
+	--
+	-- Jumping is NOT handled here. CombatService disables the Jumping state at
+	-- the two edges of the restraint and nowhere else, because this function
+	-- runs on every carry event and every respawn -- and a system that wrote
+	-- "jumping is allowed" a hundred times a session would eventually be the
+	-- thing that re-enabled it underneath somebody else's hold.
+	--==========================================================================
+	if player:GetAttribute(GameConfig.Attributes.Trapped) == true then
+		humanoid.WalkSpeed = 0
+		return
+	end
 	if player:GetAttribute(GameConfig.Attributes.MillMounted) == true then
 		humanoid.WalkSpeed = 0
 		return
@@ -456,6 +483,36 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	if not (head and head:IsA("BasePart")) then
 		return refuseTake(player, pod, "NO_HEAD")
 	end
+	--==========================================================================
+	-- AND THE ROOT, WHICH IS NOT THE SAME QUESTION AS THE HEAD
+	--
+	-- This guard was missing, and its absence was not harmless -- it was the
+	-- most destructive bug in the file. Below this line `TryTake` builds the
+	-- carried pod at `root.CFrame`, and a nil root threw INSIDE the pcall, by
+	-- which point NestService.TakePod had already destroyed the pod and emptied
+	-- the slot. So the failure handler did what it is supposed to do and put the
+	-- species back on the floor a stud in the air, where it despawned in 45
+	-- seconds. Reported as "the pods couldn't be taken and floating, it seems
+	-- like I'm carrying an invisible pod, the pods despawned too" -- which is
+	-- four symptoms of this one line not existing.
+	--
+	-- A LIVING CHARACTER REALLY CAN HAVE NO ROOT, and the other three guards all
+	-- pass while it does. A ragdolled R15 body is seventeen separate assemblies,
+	-- so a thrown root goes its own way -- ThrowFX has measured it 780 studs
+	-- from the body it belongs to -- and `FallenPartsDestroyHeight` is -500. The
+	-- root crosses the plane alone and is destroyed; the Head, the Humanoid and
+	-- its Health are all still there on the road. Verified by reading a live
+	-- character in Play: HRP=false, Head=true, Health=100.
+	--
+	-- Refusing rather than falling back to the Head is deliberate. A fallback
+	-- would hand a pod to a body that cannot carry it; refusing costs the player
+	-- one prompt press and costs the world nothing. NestService respawns the
+	-- body that got into this state -- see the end of throwPlayer.
+	--==========================================================================
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (root and root:IsA("BasePart")) then
+		return refuseTake(player, pod, "NO_ROOT")
+	end
 	if (head.Position - anchor.Position).Magnitude > TAKE_RANGE + RANGE_SLACK then
 		return refuseTake(player, pod, "OUT_OF_RANGE")
 	end
@@ -503,7 +560,9 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	local taken = species :: SeedData.Species
 	local takenTier = math.clamp(podTier or taken.Tier, 1, SeedData.TierCount)
 	local ok, err = pcall(function()
-		local root = character:FindFirstChild("HumanoidRootPart") :: BasePart
+		-- Found and checked above, not re-found and cast here. The `:: BasePart`
+		-- that used to be on this line asserted away exactly the nil that was
+		-- destroying pods.
 		local model = CreatureModel.BuildPod(taken, takenTier, root.CFrame, character)
 		attachInFront(model, root, takenTier)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
@@ -549,6 +608,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	if thiefRoot and thiefRoot:IsA("BasePart") then
 		SoundKit.emit("TakePod", thiefRoot)
 	end
+	PlayerDataService.RecordTutorial(player, "steal")
 	return true
 end
 
@@ -975,6 +1035,7 @@ local function bank(player: Player): boolean
 	player:SetAttribute(ATTR.BankedCount,
 		(player:GetAttribute(ATTR.BankedCount) or 0) + 1)
 	log(string.format("%s banked a %s (%d tier).", player.Name, species.Name, tier))
+	PlayerDataService.RecordTutorial(player, "bank")
 	return true
 end
 
@@ -997,21 +1058,90 @@ end
 --
 -- Returns what was forfeited so the caller can say so rather than guess.
 --==============================================================================
-function CarryService.ForfeitCarry(player: Player): (string?, number)
+--==============================================================================
+-- TAKING IT OFF THEM, WITHOUT PUTTING IT ANYWHERE
+--
+-- The one mutation shared by the nightfall forfeit and a guardian's
+-- confiscation: clear the slot, destroy the model welded to this body, publish,
+-- re-derive the walk speed. What the caller does with the returned record is
+-- the only thing that differs between them.
+--
+-- IT MUST NOT YIELD, and every line here is chosen so that it does not. That is
+-- the whole of the race protection: `carried[player]` is read and cleared
+-- inside one resumption, so two guardians reaching the same player in the same
+-- frame cannot both come away with a pod, and a player planting or banking in
+-- that frame either got there first or did not.
+--==============================================================================
+local function takeAway(player: Player): Held?
 	local held = carried[player]
 	if not held then
-		return nil, 0
+		return nil
 	end
-	local speciesId, tier = held.species.Id, held.tier
+	carried[player] = nil
 	if held.model and held.model.Parent then
 		held.model:Destroy()
 	end
-	carried[player] = nil
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
+	return held
+end
+
+function CarryService.ForfeitCarry(player: Player): (string?, number)
+	local held = takeAway(player)
+	if not held then
+		return nil, 0
+	end
 	log(string.format("%s forfeited a %d tier %s: caught inside a biome at nightfall.",
-		player.Name, tier, held.species.Name))
-	return speciesId, tier
+		player.Name, held.tier, held.species.Name))
+	return held.species.Id, held.tier
+end
+
+--==============================================================================
+-- CONFISCATED. IT IS THE GUARDIAN'S NOW.
+--
+-- Being caught in the last three biomes does not scatter the pod on the road --
+-- the guardian takes it and walks it home. So this deliberately does NOT drop:
+-- CarryService.Drop would put a takeable pod on the floor at the moment of the
+-- hit, which is the behaviour this replaces, and for one frame there would be
+-- two of them.
+--
+-- Ordering matters at the call site and is worth stating here, because it is
+-- not obvious from either end: the throw sets PlatformStand, and the ragdoll
+-- watcher below turns that into a Drop. Confiscating BEFORE the throw leaves
+-- that watcher with nothing to drop, which is why the pod does not land on the
+-- road as well as going home. Confiscating after would produce both.
+--
+-- Returns the whole record rather than an id and a weight, because the haul has
+-- to know which nest the pod came off to put it back in the right ring.
+--==============================================================================
+function CarryService.Confiscate(player: Player): Held?
+	local held = takeAway(player)
+	if not held then
+		return nil
+	end
+	log(string.format("%s lost a %d tier %s: confiscated by a guardian.",
+		player.Name, held.tier, held.species.Name))
+	return held
+end
+
+--==============================================================================
+-- PUTTING ONE BACK ON THE GROUND, FROM OUTSIDE
+--
+-- The recovery path for a haul that cannot be deposited in a ring -- the nest
+-- was full, or the guardian died holding it. It is the SAME loose pod a drop
+-- makes: tagged, prompted, and on the same lifetime, because a second kind of
+-- recoverable pod is a second thing to reason about and there is no reason for
+-- one to exist.
+--==============================================================================
+function CarryService.SpawnLoose(speciesId: string, tier: number, at: CFrame,
+	fromNest: string?): boolean
+	local species = SeedData.Get(speciesId)
+	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
+	if not (species and map) then
+		return false
+	end
+	spawnLoose(species, tier, at, map, fromNest)
+	return true
 end
 
 --==============================================================================
@@ -1364,6 +1494,27 @@ function CarryService.Init()
 end
 
 function CarryService.Start()
+	--==========================================================================
+	-- THE SEAM POINTS THIS WAY BECAUSE THE REQUIRE DOES
+	--
+	-- NestService is Priority 40 and this is 45: this module requires it, so it
+	-- cannot require this one back without a cycle. But the CATCH happens in its
+	-- tick, and the pod being caught lives here.
+	--
+	-- So the dependency stays one-way and the capability is handed over instead.
+	-- NestService holds two functions and knows nothing else about carrying;
+	-- if this service never starts, it holds nothing and confiscation simply
+	-- does not happen -- the catch falls through to the throw it always did.
+	--==========================================================================
+	NestService.SetCarryBridge({
+		Confiscate = CarryService.Confiscate,
+		SpawnLoose = CarryService.SpawnLoose,
+		-- So a guardian's throw can hand movement back by RECOMPUTING it rather
+		-- than by replaying a number it captured before the throw -- which is
+		-- what froze players who were caught while a trap held them at zero.
+		RefreshWalkSpeed = CarryService.RefreshWalkSpeed,
+	})
+
 	for _, player in ipairs(Players:GetPlayers()) do
 		restoreHeld(player)
 		watchHeld(player)

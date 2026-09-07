@@ -783,6 +783,7 @@ function hatch(player: Player, entry: Planted): boolean
 	-- species you had, so this is the moment the Almanac learns it.
 	PlayerDataService.MarkSeen(player, entry.species.Id)
 	log(string.format("%s hatched a %d tier %s.", player.Name, entry.tier, entry.species.Name))
+	PlayerDataService.RecordTutorial(player, "hatch")
 	return true
 end
 
@@ -976,6 +977,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	-- than a duplication bug.
 	tool:Destroy()
 	CarryService.SyncHeldNow(player)
+	PlayerDataService.RecordTutorial(player, if hatched then "plant" else "place")
 
 	if hatched then
 		log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))

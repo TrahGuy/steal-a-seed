@@ -276,8 +276,40 @@ local CLEAN_GUARD = 0.30
 -- as the engine having eaten it rather than gravity having taken it.
 local OFF_ARC_BY = 0.22
 
+--==============================================================================
+-- A PLAYER'S BAT USES THIS SAME PIPELINE, DIALLED DOWN
+--
+-- Everything expensive in this file was learned the hard way -- sixteen
+-- assemblies, a local humanoid that eats the impulse, a camera following an
+-- invisible box -- and none of it is any less true when the thing that hit you
+-- is another player holding a club. So a bat comes down the same remote rather
+-- than getting a second knockback system that would have to relearn all of it.
+--
+-- What a bat needs differently is presentation, and it is exactly three things:
+-- it must not shove the body five studs and pop it three more before it starts,
+-- it must not reframe the camera for a hit that is over in a second, and it
+-- tumbles less. Those are this table, and NOTHING ELSE IN THIS FILE BRANCHES ON
+-- IT.
+--
+-- IT IS OPTIONAL AND NIL FOR EVERY GUARDIAN. NestService sends five arguments
+-- and always has; each field below falls back to the constant that was there
+-- before this existed, so a guardian throw runs the identical code with the
+-- identical numbers. That is the whole design of the change: the guardian path
+-- is not modified, it is defaulted.
+--==============================================================================
+export type ThrowStyle = {
+	-- Studs the body is lifted while it is stepped clear. 3 for a monster you
+	-- are standing inside; a fraction of that for a swing at arm's length.
+	up: number?,
+	-- Whether to push the camera out and put it on the head. A guardian needs
+	-- both; a bat hit ends before a camera move would finish reading as one.
+	camera: boolean?,
+	-- Scale on the random spin. 1 is the tested guardian tumble.
+	tumble: number?,
+}
+
 local function onThrown(dir: Vector3, speed: number, lift: number, clear: number,
-	hold: number?)
+	hold: number?, style: ThrowStyle?)
 	-- Everything here came off the wire. A malformed packet should do nothing
 	-- rather than throw inside an event handler and leave the flag stuck.
 	if typeof(dir) ~= "Vector3" or type(speed) ~= "number" or type(lift) ~= "number" then
@@ -292,6 +324,26 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		return
 	end
 	throwing = true
+
+	-- Read once, here, so every use below is a plain local and no branch has to
+	-- remember that `style` might be absent.
+	local styleTable: any = if type(style) == "table" then style else nil
+	local stepUp = 3
+	local wantCamera = true
+	local tumbleScale = 1
+	if styleTable then
+		local u = tonumber(styleTable.up)
+		if u and u == u and u >= 0 then
+			stepUp = u
+		end
+		if styleTable.camera == false then
+			wantCamera = false
+		end
+		local t = tonumber(styleTable.tumble)
+		if t and t == t and t >= 0 then
+			tumbleScale = t
+		end
+	end
 
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	local unit = if flat.Magnitude > 0 then flat.Unit else Vector3.new(0, 0, 1)
@@ -319,8 +371,9 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 
 		--== 2. GET OUT OF THE PARENT -- THE WHOLE BODY, NOT THE ROOT ==--
 		local step = if type(clear) == "number" and clear > 0 then clear else 6
-		character:PivotTo(character:GetPivot() + unit * step + Vector3.new(0, 3, 0))
-		say(string.format("stepped %.1f studs clear along %s", step, tostring(unit)))
+		character:PivotTo(character:GetPivot() + unit * step + Vector3.new(0, stepUp, 0))
+		say(string.format("stepped %.1f studs clear (+%.1f up) along %s",
+			step, stepUp, tostring(unit)))
 
 		--======================================================================
 		-- 3. THE CAMERA COMES OUT WITH US
@@ -339,14 +392,26 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		local wasMode = player.CameraMode
 		local wasMin = player.CameraMinZoomDistance
 		local wasMax = player.CameraMaxZoomDistance
-		if wasMode == Enum.CameraMode.LockFirstPerson then
-			player.CameraMode = Enum.CameraMode.Classic
+		--==================================================================
+		-- A BAT DOES NOT TOUCH THE CAMERA
+		--
+		-- The three captures above still happen, because the restore at the
+		-- end of this function is unconditional and putting back a value that
+		-- was never captured is how a camera ends up stuck at a zoom floor.
+		-- Only the WRITES are skipped: capturing and restoring the same three
+		-- numbers is a no-op, and a no-op is the safest possible version of a
+		-- branch that has to unwind.
+		--==================================================================
+		if wantCamera then
+			if wasMode == Enum.CameraMode.LockFirstPerson then
+				player.CameraMode = Enum.CameraMode.Classic
+			end
+			if player.CameraMaxZoomDistance < THROW_ZOOM then
+				player.CameraMaxZoomDistance = THROW_ZOOM
+			end
+			player.CameraMinZoomDistance = math.max(wasMin, THROW_ZOOM)
+			bindVisible()
 		end
-		if player.CameraMaxZoomDistance < THROW_ZOOM then
-			player.CameraMaxZoomDistance = THROW_ZOOM
-		end
-		player.CameraMinZoomDistance = math.max(wasMin, THROW_ZOOM)
-		bindVisible()
 
 		--======================================================================
 		-- AND IT FOLLOWS THE HEAD, NOT THE HUMANOID
@@ -363,7 +428,7 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		local camera = workspace.CurrentCamera
 		local wasSubject: Instance? = if camera then camera.CameraSubject else nil
 		local headPart = character:FindFirstChild("Head")
-		if camera and headPart and headPart:IsA("BasePart") then
+		if wantCamera and camera and headPart and headPart:IsA("BasePart") then
 			camera.CameraSubject = headPart
 		end
 		say(string.format("camera: mode %s -> %s | zoom %.1f..%.1f -> %.1f..%.1f | subject %s -> %s",
@@ -374,7 +439,8 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 
 		--== 4. THE LAUNCH ==--
 		local parts = bodyParts()
-		local tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3), math.random(-6, 6))
+		local tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3),
+			math.random(-6, 6)) * tumbleScale
 		local holdFor = if type(hold) == "number" and hold == hold and hold >= 0
 			then hold
 			else LEGACY_HOLD

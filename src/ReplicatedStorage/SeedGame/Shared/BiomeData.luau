@@ -62,6 +62,20 @@ export type Biome = {
 	-- whole road reads correctly; unfinished biomes stay empty without becoming
 	-- inaccessible, and nothing here ever blocks the road.
 	--
+	--==========================================================================
+	-- AN EXPLICIT CHASE SPEED FOR THIS SEGMENT, INSTEAD OF THE FORMULA'S
+	--
+	-- Absent on every biome but Greenhollow, and absent means "use
+	-- parentWalkSpeedFor", which is the shipped behaviour for all four others.
+	--
+	-- It exists because Greenhollow is the biome the tutorial sends a beginner
+	-- into, and the formula's answer there was unwinnable. See the Greenhollow
+	-- row for the measurement.
+	--
+	-- Rage still stacks on top of this: it replaces the BASE speed, not the
+	-- escalation, so coming back to the same nest is still worse each time.
+	--==========================================================================
+	GuardianChaseSpeed: number?,
 	-- NestService reads this. It is the SECOND of two gates -- the first is
 	-- whether the biome has any species at all -- and it exists because the
 	-- first one opens by itself: dropping five species rows into SeedData is
@@ -86,6 +100,34 @@ BiomeData.Biomes = {
 		Mood = "🙂",
 		Order = 1,
 		RecommendedSpeed = 0,
+		--======================================================================
+		-- GREENHOLLOW ONLY, AND THE NUMBER TO READ IS 20, NOT 15
+		--
+		-- EVERY THEFT ADDS A RAGE STACK INCLUDING ITS OWN. `provoke` does
+		-- `nest.rage += 1` before the chase starts, so there is no such thing as a
+		-- rage-0 chase: the FIRST theft already runs at this value plus
+		-- Parent.RageSpeedPerTake. 15 here is a guardian that chases at 20.
+		--
+		-- That detail is the whole reason this value moved twice. Measured live:
+		--
+		--   shipped formula      26 base -> the first theft chased at 31
+		--   first attempt        20 base -> the first theft chased at 25
+		--   this                 15 base -> the first theft chases at 20
+		--
+		-- Against the run the guide actually asks a beginner to make -- this nest
+		-- is 245 studs from the red line, and 1,000 Speed is WalkSpeed 22, about
+		-- 21.5 carrying a pod -- 31 and 25 were both simply faster than the player.
+		-- The first theft was not hard, it was arithmetic they could not win.
+		--
+		-- At 20 the trained beginner gains about 1.5 studs a second and gets home.
+		-- The lesson survives at both ends: a player who turns up untrained walks
+		-- at 16 and is still run down, and a SECOND theft before the nest calms
+		-- runs at 25 and takes the pod back. Only the beginner the guide just
+		-- trained gets away with it, which is the point of training them.
+		--
+		-- No other biome sets this; every one of them keeps parentWalkSpeedFor.
+		--======================================================================
+		GuardianChaseSpeed = 15,
 		GroundColor = Color3.fromRGB(104, 190, 88),
 		WallColor = Color3.fromRGB(126, 92, 62),
 		AccentColor = Color3.fromRGB(74, 148, 66),

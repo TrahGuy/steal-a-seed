@@ -3817,6 +3817,31 @@ local function label(parent: Instance, name: string, size: number,
 	return t
 end
 
+--==============================================================================
+-- WHERE THE SIGN STANDS, DERIVED FROM THE MILL AND NOWHERE ELSE
+--
+-- `cf` is the mill's own CFrame. The returned frame is the sign's GROUND BASE:
+-- BuildSign puts the post's bottom exactly on it.
+--
+-- THIS EXISTS BECAUSE THE SIGN USED TO CLIMB. TreadmillService rebuilt it from
+-- `sign:GetPivot()`, and the sign's PrimaryPart is the POST, whose centre sits
+-- 2.6 * Scale above the base. So every rebuild handed BuildSign a frame that was
+-- already one post-half-height too high and it added the offset again --
+-- 1.976 studs of rise per upgrade at Scale 0.76, cumulative, measured.
+--
+-- The mill does not have that problem: its PrimaryPart is the Deck, built AT
+-- `cf`, so a mill pivot round-trips exactly. That is why the mill is the stable
+-- reference and the sign's own position is never read back.
+--
+-- Both callers -- MapService at build time and TreadmillService on every
+-- upgrade -- go through here, so there is one place the offset is applied and
+-- no way for the two to disagree.
+--==============================================================================
+function MillModel.SignBase(millCF: CFrame): CFrame
+	local SIGN = MILL.Sign
+	return millCF * CFrame.new(SIGN.Offset) * CFrame.Angles(0, math.rad(SIGN.YawDegrees), 0)
+end
+
 function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)
 	local model = Instance.new("Model")
 	model.Name = "MillSign"

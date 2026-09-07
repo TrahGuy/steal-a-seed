@@ -435,6 +435,51 @@ GameConfig.StartingPlotTier = 1
 --==============================================================================
 GameConfig.PlotUpgradeAction = "PlotUpgrade"
 
+--==============================================================================
+-- MARIGOLD'S COUNTER: THREE VERBS ON THE SAME REMOTE
+--
+-- Same discipline as the plot upgrade above and for the same reason. The client
+-- sends a VERB and, for two of these, one string that names a shelf item -- and
+-- nothing else. Not a price, not a stat, not a target.
+--
+-- An item id has to cross the wire because the shop sells seven different
+-- things and the server cannot read the player's mind about which card was
+-- pressed. What it cannot do is decide anything: WeaponShopService looks the id
+-- up in WeaponData, prices it from there, and charges the sender the server's
+-- own number. A forged id names a weapon that does not exist and is dropped; a
+-- real one buys exactly what its card says at exactly its card's price.
+--
+-- The shop OPEN verb travels the other way -- server to client, on the prompt
+-- being held -- so that the panel cannot be opened by a client deciding it is
+-- standing next to Marigold.
+--==============================================================================
+GameConfig.Weapon = {
+	BuyAction = "WeaponBuy",
+	EquipAction = "WeaponEquip",
+	ShopAction = "WeaponShop",
+	-- Server -> client only, carrying false. A refused PLACEMENT is the one
+	-- weapon action that changes nothing on screen: a swing on cooldown is
+	-- obviously a swing on cooldown, and a trap that will not go down looks
+	-- exactly like a trap tool that is broken. Same shape as the mill's refusal
+	-- and for the same reason -- the verb and `false`, no reason attached.
+	DeniedAction = "WeaponDenied",
+	--==========================================================================
+	-- WHAT THE PROMPT SAYS, AND HOW LONG IT IS HELD
+	--
+	-- Longer than a pod's 0.7s and shorter than the sell board's 1.1s. Opening
+	-- a shop is not destructive, so it does not need the sell board's pause --
+	-- but Marigold stands two steps from that board and a shop that opened on a
+	-- tap would open every time somebody walked past to sell their bag.
+	--==========================================================================
+	PromptText = "Open Shop",
+	PromptHold = 0.5,
+	PromptDistance = 11,
+	-- The panel shuts itself when the player walks away. Deliberately WIDER
+	-- than the prompt: a shop that slammed shut the instant you took a step
+	-- back would be unusable on a phone, where the thumb is on the screen.
+	CloseDistance = 26,
+}
+
 GameConfig.Attributes = {
 	PlotId = "PlotId",
 	OwnerUserId = "OwnerUserId",
@@ -545,6 +590,35 @@ GameConfig.Attributes = {
 	WorldPhase = "WorldPhase",
 	WorldPhaseEndsAt = "WorldPhaseEndsAt",
 	WorldCycleIndex = "WorldCycleIndex",
+	--==========================================================================
+	-- HELD BY A TRAP
+	--
+	-- On the PLAYER, and it is a movement MODIFIER, not a movement WRITE.
+	-- CarryService owns WalkSpeed -- it is the only file that assigns it,
+	-- because the speed is a product of things no single caller knows -- so a
+	-- trap sets this and asks CarryService to recompute, exactly as
+	-- TreadmillService does with MillMounted.
+	--
+	-- That is the whole reason it is an attribute rather than a captured number
+	-- somewhere in CombatService. Capturing WalkSpeed and putting it back is how
+	-- a trap that fires while a player is stepping onto a mill hands them the
+	-- wrong speed forever; recomputing cannot, because it reads the truth.
+	--
+	-- It replicates, so every client can see who is stuck without a remote.
+	--==========================================================================
+	Trapped = "Trapped",
+	--==========================================================================
+	-- WHEN THAT TRAP LETS GO, IN SERVER TIME
+	--
+	-- One number, written once when the jaws close and cleared once when they
+	-- open. Every client subtracts it from `Workspace:GetServerTimeNow()` and
+	-- draws its own countdown, so a two-second timer costs two attribute writes
+	-- rather than sixty replicated updates a second per trapped player.
+	--
+	-- Server time, not os.clock: the two ends have to be reading one clock, and
+	-- GetServerTimeNow is the same value on both.
+	--==========================================================================
+	TrappedUntil = "TrappedUntil",
 }
 
 GameConfig.Tags = {
@@ -621,6 +695,10 @@ GameConfig.Tags = {
 	-- name because MapService rebuilds the whole map and the cycle service must
 	-- find whichever barrier exists now, not the one that existed at boot.
 	NightBarrier = "NightBarrier",
+	-- A Bramblejaw lying on the road. Tagged so a client can find one to
+	-- animate and so a placement check can find the others without a spatial
+	-- query on parts that are deliberately CanQuery = false.
+	Trap = "Trap",
 }
 
 --==============================================================================
@@ -1644,7 +1722,121 @@ GameConfig.Parent = {
 			RoadWeight = 1.00,
 		},
 	},
+
+	--======================================================================
+	-- THE THREE THAT TAKE IT BACK
+	--
+	-- Past Dustbowl, being caught does not scatter the pod on the road for
+	-- you to run back to -- the guardian CONFISCATES it and carries it home.
+	-- The pod stops being recoverable by the player who took it, which is
+	-- the whole point: the deep biomes are where a failed raid costs you the
+	-- raid rather than costing you the walk.
+	--
+	-- KEYED BY BIOME, and absent for Greenhollow and Dustbowl. Absence is
+	-- the switch, exactly as it is for Guardians above: those two nests
+	-- never look this up, never confiscate, and drop the pod on the floor as
+	-- they always have. That is the tutorial contract -- you can always go
+	-- back for what you lost in the first two biomes.
+	--
+	-- SEPARATE FROM `Guardians` ON PURPOSE. That table is the speed and
+	-- throw profile and only Astralmaw has one; adding Miremaw and Forgemaw
+	-- there to get a carry point would have handed them a chase ramp, a
+	-- return speed and a new throw as a side effect. Two different questions
+	-- deserve two different tables.
+	--
+	-- SEAM is a PART NAME on that guardian, verified against the live rigs
+	-- rather than read off a builder -- the rigs are composed from several
+	-- files and no one file lists them all:
+	--
+	--     miremaw   RightHand  1.83 cubed, at root-space  4.67 -4.39 -2.11
+	--     forgemaw  FistR      2.28 x 1.75 x 2.62,        3.70 -7.46 -3.83
+	--     astralmaw LowerJaw   4.89 x 1.31 x 3.56,        0.00  2.81 -2.16
+	--
+	-- The two brutes carry it in a fist; the maw carries it in its mouth,
+	-- which is what it is for. That is ALL the seam decides: which limb the
+	-- pod is welded to, and therefore how it moves. WHERE it sits is derived
+	-- from the rig at attach time rather than written here.
+	--
+	-- IT HAS TO BE DERIVED, because a pod is 1.66 studs across at Tiny and
+	-- 9.04 at the top of the curve, on guardians 15 to 19 studs tall. Three
+	-- hand-tuned offsets were tried first and measured against the live rigs:
+	-- at Tiny they were fine, and at 9.04 the same numbers buried Astralmaw's
+	-- pod 2.62 studs inside its own ChestNebula and hung Forgemaw's 8.55
+	-- studs BELOW its feet. There is no constant that is right at both ends.
+	--
+	-- SIDE is the only offset left, in pod radii, and it is cosmetic: which
+	-- side of the centre line a fist-carried pod rides on. See
+	-- NestService.attachHaul for the two derivations that matter -- pushed out
+	-- of the body, and clamped above the ground.
+	--======================================================================
+	--======================================================================
+	-- AND WHICH WAY IT THROWS YOU
+	--
+	-- The legacy weighting is away 0.70 against road 0.50, and away WINS.
+	-- That is fine while the guardian is behind you, which is most of a
+	-- chase -- and wrong the moment it is not, because `ChaseOvershootStuds`
+	-- aims sixty studs PAST you so it regularly ends up level with you or in
+	-- front. Then away-from-the-guardian is deeper into the biome, the sum
+	-- comes out at -0.20 of the road, and you are fired backwards.
+	--
+	-- Measured on Forgemaw during the playtest: dir (0.25, 0, -0.97), landing
+	-- at z -1623 and y -410 -- past Starbloom, in the void, dead. Reported as
+	-- *"theres a rare chance when i ragdoll on opposite direction"*. Rare
+	-- because it needs that geometry; not rare enough, because it kills you.
+	--
+	-- 0.45 against 1.00 is what Astralmaw was given when the same complaint
+	-- was made about Starbloom, and the road wins from every angle at those
+	-- numbers. `away` still decides which SIDE of the road you go, so the
+	-- launch and the visible strike still agree.
+	--
+	-- GREENHOLLOW AND DUSTBOWL KEEP 0.70 / 0.50 by having no entry here at
+	-- all. Their throws are short enough that the geometry never sends
+	-- anybody anywhere dangerous, and they are the two biomes that are not
+	-- allowed to change.
+	--======================================================================
+	Confiscate = {
+		tanglemire = { Seam = "RightHand", Side = 0.35, Steady = "right",
+			AwayWeight = 0.45, RoadWeight = 1.00 },
+		emberroot = { Seam = "FistR", Side = 0.30, Steady = "right",
+			AwayWeight = 0.45, RoadWeight = 1.00 },
+		starbloom = { Seam = "LowerJaw", Side = 0.00, Steady = "jaw",
+			AwayWeight = 0.45, RoadWeight = 1.00 },
+	},
+
+	--======================================================================
+	-- HOW MUCH DAYLIGHT A CARRIED POD KEEPS
+	--
+	-- Between the pod and the front of the guardian, and between the pod and
+	-- the ground. Small on purpose: it is carried, not held at arm's length.
+	--======================================================================
+	HaulClearance = 0.4,
+
+	--======================================================================
+	-- HOW LONG A WALK HOME IS ALLOWED TO TAKE
+	--
+	-- A guardian hauling a pod is holding the only copy of it, so the one
+	-- thing that must not happen is the walk never ending. Past this the
+	-- haul is deposited wherever the guardian has got to -- see
+	-- NestService.depositHaul, which prefers the nest slot and falls back to
+	-- a loose pod on the ground. Generous: the longest real leash is two
+	-- biome segments at the slowest return speed, which is about forty
+	-- seconds.
+	--======================================================================
+	HaulSeconds = 90,
 }
+
+--==============================================================================
+-- WHERE THIS BIOME'S GUARDIAN PUTS A CONFISCATED POD, OR NOTHING
+--
+-- Nothing for Greenhollow and Dustbowl, and that absence is load-bearing in
+-- exactly the way guardianProfile's is.
+--==============================================================================
+function GameConfig.confiscateProfile(biomeId: any): any
+	if type(biomeId) ~= "string" then
+		return nil
+	end
+	return GameConfig.Parent.Confiscate[biomeId]
+end
 
 --==============================================================================
 -- THE PROFILE FOR A SPECIES, OR NOTHING
@@ -2058,7 +2250,34 @@ GameConfig.Mill = {
 	-- the mount.
 	--==========================================================================
 	Sign = {
-		Offset = Vector3.new(0, -0.6, -12.6),
+		--======================================================================
+		-- OFF THE FRONT-LEFT CORNER, ON THE WAY IN
+		--
+		-- Measured, not chosen by eye. In the mill's own frame:
+		--
+		--   Y -0.6    is the ground. The field's surface sits exactly there --
+		--             raycast from the mill down to TheField returns local
+		--             -0.60 -- and BuildSign puts the post's bottom on this
+		--             frame, so the post meets the grass. The deck's own
+		--             underside is at -1.13, i.e. deliberately buried.
+		--
+		--   Z -12.6   is clear of EVERY tier. Swept all ten in one-stud slices:
+		--             nothing any tier builds reaches past Z -11.5, and the
+		--             widest -- tier 9's Astral ring at 14.7 studs -- stops
+		--             there too. Unchanged from the original placement.
+		--
+		--   X -5.5    is the new part. Centred, the board stood square across
+		--             the front of your own machine. The plot is on the mill's
+		--             -X side and the walk in comes from the spawn pad, so this
+		--             puts the board beside that approach instead of across it,
+		--             like a station you pass rather than a hoarding you look
+		--             through.
+		--
+		-- The board is 9 * Scale = 6.84 wide, so at -5.5 it spans -8.92 to
+		-- -2.08. The plot fence is at -10.2: 1.28 studs of daylight. Pushing
+		-- further out would read better still and does not fit.
+		--======================================================================
+		Offset = Vector3.new(-5.5, -0.6, -12.6),
 		YawDegrees = 0,
 		--======================================================================
 		-- SLIGHTLY SMALLER
