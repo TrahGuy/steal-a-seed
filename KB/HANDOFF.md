@@ -8,7 +8,13 @@
 
 ---
 
-## THE MILL SIGN STOPPED FLOATING, AND MOVED OFF THE FRONT CORNER — 2026-09-07  (UNCOMMITTED)
+> **STATE, 2026-09-07.** Everything below that was marked UNCOMMITTED is now in
+> **a01c372** "Marigold's shop, the bat swing, the beginner guide and the mill
+> sign", with the generated key art in **938457a**. Both commits are LOCAL --
+> nothing has been pushed to `origin/main` yet, so the history is still freely
+> rewritable. The working tree is clean.
+
+## THE MILL SIGN STOPPED FLOATING, AND MOVED OFF THE FRONT CORNER — 2026-09-07 (in a01c372)
 
 ### THE CAUSE, WHICH IS A PIVOT THAT DOES NOT ROUND-TRIP
 
@@ -134,7 +140,7 @@ it was not asked for. Teleporting off a belt does NOT clear `MillMounted` -- the
 mount is entered by Touched and held by a region test -- so the character was
 respawned to clear it, which is the same trap noted in the tutorial section.
 
-## THE GUIDE, RUN END TO END ON A RESET ACCOUNT — 2026-09-07  (UNCOMMITTED)
+## THE GUIDE, RUN END TO END ON A RESET ACCOUNT — 2026-09-07 (in a01c372)
 
 The owner asked for their account to be reset and the guide retested. It was, and
 the retest found a real error in the previous pass's guardian tuning.
@@ -253,7 +259,7 @@ Screenshots taken of steps 1-6, the celebration and the hint.
     Scriptable and parked elsewhere.** `PromptShown` never fires and the take
     silently fails. Put the camera back on `Custom` before driving a prompt.
 
-## THE BEGINNER GUIDE IS NOW SHOWN, NOT READ — 2026-09-07  (UNCOMMITTED)
+## THE BEGINNER GUIDE IS NOW SHOWN, NOT READ — 2026-09-07 (in a01c372)
 
 Reworked Marigold's guide from an objective card into ground arrows, highlights
 and four words. Same three files -- `TutorialData`, `TutorialService`,
@@ -494,7 +500,7 @@ for the owner's fresh playthrough. Old progress is recoverable from the local
 backup; no other account was touched and no runtime source changed in this reset.
 Handoff remains in the already-shared uncommitted diff; no unrelated work staged.
 
-## MARIGOLD'S BEGINNER GUIDE — 2026-09-07 (CODEX, UNCOMMITTED)
+## MARIGOLD'S BEGINNER GUIDE — 2026-09-07 (CODEX, in a01c372)
 
 Owner requested implementation of the beginner tutorial. The owner also reports
 the earlier two-player combat test passed; this is their report, not a new
@@ -581,7 +587,7 @@ other agent's work into a task commit. Await coordinated approval/staging.
 The luau-conventions skill informed server-owned milestones, the existing
 replication/save path, single-faucet preservation and lifecycle cleanup.
 
-## THE CLEARANCE PASS: THE SWING NO LONGER GOES THROUGH THE FLOOR — 2026-09-07  (UNCOMMITTED)
+## THE CLEARANCE PASS: THE SWING NO LONGER GOES THROUGH THE FLOOR — 2026-09-07 (in a01c372)
 
 Both clipping defects found in the verification below are fixed. **The strike was
 not touched** -- contact still lands exactly at `SwingWindup`, the two-hand grip
@@ -722,7 +728,7 @@ declared above `Bind` for that reason.*
   * **Two-player PvP combat has still not been run.**
   * Carrying a pod has not been re-tested against the two-hand swing.
 
-## THE TWO-HAND SWING VERIFIED: CONTACT AND RELEASE PASS, CLEARANCE FAILS — 2026-09-07  (UNCOMMITTED)
+## THE TWO-HAND SWING VERIFIED: CONTACT AND RELEASE PASS, CLEARANCE FAILS — 2026-09-07 (in a01c372)
 
 Independent verification of the CODEX two-hand IK swing described in the next
 section, run against the real equipped player in Play. **Documentation only —
@@ -893,7 +899,7 @@ animation is unverified, and **two-player PvP combat has still not been run**.
 Carrying a pod was not re-tested against the two-hand swing. Console was clean
 across the session, 17 services, no errors.
 
-## TWO-HAND SHOULDER-TO-FRONT BAT SWING — 2026-09-07 (CODEX, UNCOMMITTED)
+## TWO-HAND SHOULDER-TO-FRONT BAT SWING — 2026-09-07 (CODEX, in a01c372)
 
 The owner rejected the previous swing as lazy and explicitly requested a two-hand
 shoulder wind-up into a forward strike. This supersedes the OLD SWING direction
@@ -956,7 +962,7 @@ The character-animation/rigging skills informed the single-writer, unchanged
 socket and explicit release design. The pose is ready for the owner's eye;
 measurements do not substitute for approval of its feel.
 
-## THE LOW HOLD, AND WHAT VERIFYING IT ACTUALLY FOUND — 2026-09-07  (UNCOMMITTED)
+## THE LOW HOLD, AND WHAT VERIFYING IT ACTUALLY FOUND — 2026-09-07 (in a01c372)
 
 ### THE DIRECTION CHANGED, AND THEN THE NEW POSE FAILED ITS OWN REVIEW
 
@@ -6658,7 +6664,7 @@ and the guard's discriminator was tested against the real profiled launch. But
 and stream-in to confirm a late `LeftHip` actually lands, and the released guard
 needs somebody thrown into the left wall to confirm the body now stops at it.
 
-## 2026-09-03 -- GUARDIANS TAKE THE POD BACK  (UNCOMMITTED, awaiting review)
+## 2026-09-03 -- GUARDIANS TAKE THE POD BACK (in a01c372)
 
 Past Dustbowl, being caught no longer scatters the pod on the road: Miremaw,
 Forgemaw and Astralmaw confiscate it and carry it home. Greenhollow and Dustbowl
@@ -6946,7 +6952,7 @@ does not regress the ordinary catch, and the module compiled and ran, which
     at `736e6c7`, and neither file is touched by this pass. PlotSpec 65/65 and
     StarbloomLimbSpec 71/71 pass.
 
-## MARIGOLD SELLS WEAPONS -- 2026-09-04  (UNCOMMITTED, awaiting review)
+## MARIGOLD SELLS WEAPONS -- 2026-09-04 (in a01c372)
 
 Six knockback bats and one reusable trap, bought off a prompt on Marigold, in a
 scrolling panel of horizontal product cards. Knockback only; nothing in the
@@ -7198,7 +7204,7 @@ into a different valid command is not checking it. Non-strings are refused now;
     WORK on a phone -- the cost it refused was the ANIMATION. These are static:
     one camera write at build and nothing per frame, 13-19 parts each.
 
-## BATS SWING, PODS DROP, AND THE LOADOUT BECAME TWO SLOTS -- 2026-09-04  (UNCOMMITTED)
+## BATS SWING, PODS DROP, AND THE LOADOUT BECAME TWO SLOTS -- 2026-09-04 (in a01c372)
 
 Second pass over Marigold's stock. The shop panel itself is untouched and still
 approved; everything here is what happens after you buy something.
@@ -7443,7 +7449,7 @@ Untested end to end, and none of it should be described as working:
   * **CarryPose is not applying.** Measured above. Nothing in this pass depends
     on it, and it means arms do not fold under a carried pod today.
 
-## THE BAT IS HELD, AND THE SHOULDER WAS NEVER INERT -- 2026-09-04  (UNCOMMITTED)
+## THE BAT IS HELD, AND THE SHOULDER WAS NEVER INERT -- 2026-09-04 (in a01c372)
 
 ### THE ONE-LINE VERSION
 
@@ -7610,7 +7616,7 @@ of the Rootwood and of the Cindercrack** -- the largest of the six by bulk
     KeyframeSequence findings are kept because they were expensive and are still
     true.
 
-## THE TRAP FREEZE, THE COUNTDOWN, AND A SWING THAT WAS WAITING ON NOTHING -- 2026-09-04  (UNCOMMITTED)
+## THE TRAP FREEZE, THE COUNTDOWN, AND A SWING THAT WAS WAITING ON NOTHING -- 2026-09-04 (in a01c372)
 
 > **The swing section below is SUPERSEDED.** It concludes that a
 > published animation asset was the only way to move this rig's
