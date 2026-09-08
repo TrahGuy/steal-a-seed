@@ -36,55 +36,22 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 --==============================================================================
--- ONE FRAME LOOP FOR EVERY CARD, NOT ONE PER CARD
+-- THERE IS NO CARD LOOP ANY MORE
 --
--- A Garden with twelve rows and an Index with five is seventeen cards, and each
--- one used to open its own RenderStepped. Seventeen connections, each running a
--- chain of string.find and then a whole-model PivotTo, sixty times a second.
+-- This file used to run one shared RenderStepped over a registry of cards, and
+-- each card used it to bob, lean, spin and orbit its camera. All of that is
+-- gone: a card is a still three-quarter photograph of the real model and the
+-- camera is written once, when the model is built.
 --
--- Worse, they never stopped. The guard was `if not holder.Visible` and
--- VISIBLE IS NOT INHERITED IN ROBLOX: closing a panel sets the panel's own
--- Visible to false and every descendant stays true, so the guard was true
--- forever and the cards animated behind a closed menu for the whole session.
+-- The loop is REMOVED rather than left idling. A registry that nothing registers
+-- with is a connection waiting to be re-armed by the next person who wants "just
+-- a little" motion, and the whole point of this pass is that there is none.
 --
--- One connection now, over a registry, and it disconnects itself when the last
--- card goes. Each card is asked whether it is actually on screen first -- see
--- onScreen, which walks what Visible does not.
+-- `onScreen` below survives because the selection and pop helpers still use it.
 --==============================================================================
-local cardUpdaters: { [Instance]: (number) -> () } = {}
-local cardCount = 0
-local cardLoop: RBXScriptConnection? = nil
-
-local function pumpCards(dt: number)
-	for _, update in pairs(cardUpdaters) do
-		update(dt)
-	end
-end
-
-local function registerCard(key: Instance, update: (number) -> ())
-	if cardUpdaters[key] == nil then
-		cardCount += 1
-	end
-	cardUpdaters[key] = update
-	if not cardLoop then
-		cardLoop = RunService.RenderStepped:Connect(pumpCards)
-	end
-end
-
-local function unregisterCard(key: Instance)
-	if cardUpdaters[key] == nil then
-		return
-	end
-	cardUpdaters[key] = nil
-	cardCount -= 1
-	if cardCount <= 0 and cardLoop then
-		cardLoop:Disconnect()
-		cardLoop = nil
-		cardCount = 0
-	end
-end
 
 --==============================================================================
+-- IS THIS THING ACTUALLY ON SCREEN?--==============================================================================
 -- IS THIS THING ACTUALLY ON SCREEN?
 --
 -- GuiObject.Visible describes ONE object. A frame inside a hidden parent is
@@ -115,52 +82,9 @@ end
 -- FRAME. It only changes when the card changes what it is showing, so it is
 -- resolved there instead and stored as a function.
 --==============================================================================
-local function idleFor(form: string): (number) -> CFrame
-	local f = string.lower(form)
-	if f == "cube" or string.find(f, "nubkin") then
-		return function(t)
-			local bounce = math.abs(math.sin(t * 3.4))
-			return CFrame.new(0, bounce * 0.16, 0)
-				* CFrame.Angles(0, math.sin(t * 2.6) * math.rad(6), math.sin(t * 3.4) * math.rad(4))
-		end
-	elseif f == "orb" or string.find(f, "petalpip") then
-		return function(t)
-			return CFrame.new(0, math.sin(t * 2.2) * 0.08, 0)
-				* CFrame.Angles(math.sin(t * 1.8) * math.rad(7), math.cos(t * 1.1) * math.rad(8),
-					math.sin(t * 2.2) * math.rad(5))
-		end
-	elseif f == "teardrop" or string.find(f, "spiretip") or string.find(f, "sprout") then
-		return function(t)
-			return CFrame.Angles(math.sin(t * 2.4) * math.rad(8), math.sin(t * 1.6) * math.rad(14),
-				math.cos(t * 2.4) * math.rad(6))
-		end
-	elseif f == "mushroom" or string.find(f, "toadcap") or string.find(f, "shroom") then
-		return function(t)
-			return CFrame.new(0, math.sin(t * 4.8) * 0.06, 0)
-				* CFrame.Angles(math.sin(t * 2.5) * math.rad(9), 0, math.cos(t * 2.5) * math.rad(8))
-		end
-	elseif f == "bell" or string.find(f, "bellchime") then
-		return function(t)
-			return CFrame.Angles(0, 0, math.sin(t * 2.2) * math.rad(14))
-				* CFrame.Angles(math.cos(t * 1.1) * math.rad(5), 0, 0)
-		end
-	elseif f == "ready" then
-		return function(t)
-			local hop = math.abs(math.sin(t * 6.0)) * 0.20
-			return CFrame.new(0, hop, 0)
-				* CFrame.Angles(math.sin(t * 16.0) * math.rad(5), 0, math.cos(t * 14.0) * math.rad(5))
-		end
-	elseif f == "pod" then
-		return function(t)
-			return CFrame.new(0, math.sin(t * 2.0) * 0.05, 0)
-				* CFrame.Angles(math.sin(t * 1.8) * math.rad(5), 0, math.cos(t * 2.4) * math.rad(4))
-		end
-	end
-	return function(t)
-		return CFrame.new(0, math.sin(t * 2.0) * 0.05, 0)
-			* CFrame.Angles(0, math.sin(t * 1.5) * math.rad(4), 0)
-	end
-end
+-- The per-form idle poses -- the bell's swing, the orb's breath, the cube's
+-- settle -- were removed with the loop that drove them. A card's pose is now
+-- whatever the builder authored, written once.
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local SoundKit = require(script.Parent:WaitForChild("SoundKit"))
@@ -1235,6 +1159,44 @@ local Z_LABEL = 22
 -- view, which is what makes a Nubkin and a Bellchime both fill their card
 -- without a per-species number to keep in step.
 --==============================================================================
+--==============================================================================
+-- SPECIES-SPECIFIC CAMERA NUDGES
+--
+-- A two-axis fit gets almost everything right on its own, so this table is
+-- deliberately nearly empty -- a nudge is an admission that the general rule
+-- failed, and every entry needs a reason.
+--
+-- A value above 1 pulls the camera BACK (smaller); below 1 pushes it IN.
+-- Keyed on the form name the caller already passes to setModel.
+--==============================================================================
+--==============================================================================
+-- HOW MUCH OF THE FRAME THE CREATURE TAKES
+--
+-- 0.86 -- the middle of the 80-90% the art direction asks for, with enough
+-- margin left that a leaf tip or a horn does not touch the glass.
+--
+-- NOT `CARD.CameraFill`, which is 1.02 and is not a fill fraction at all: in the
+-- old formula it scaled 0.54 of the bounding DIAGONAL, so reading it as "fill
+-- this much of the frame" overflows by 2%. CameraFill is left alone in
+-- GameConfig -- it has no other consumer, but it also has no business being
+-- silently redefined.
+--
+-- A creature that is wider than it is tall lands BELOW this on height, because
+-- the width is what ran out of room first. That is the shape's business, not a
+-- miss: see the measurements in KB/HANDOFF.md.
+--==============================================================================
+local FRAME_FILL = 0.86
+
+local FRAME_NUDGE: { [string]: number } = {
+	-- A bell's silhouette is its skirt, and the fit centres on the whole solid
+	-- -- which puts the hem against the frame edge. A hair back keeps the rim.
+	bell = 1.04,
+	-- A ready pod is a shell with nothing to read but its outline, and it looks
+	-- wrong pressed against the glass.
+	ready = 1.08,
+	pod = 1.08,
+}
+
 local function addPedestal(model: Model, pivot: CFrame, size: Vector3)
 	if model:FindFirstChild("Pedestal") then
 		return
@@ -1661,53 +1623,221 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	local cameraDistance: number = 10
 	local cameraFocus: Vector3 = Vector3.zero
 	local cameraBasePitch: number = math.rad(-14)
-	local currentYaw: number = 0
-	local spinVelocity: number = 0
 	local isSelected: boolean = false
+	--==========================================================================
+	-- THE FORM NAME IS STILL TAKEN, AND IT STILL DOES SOMETHING
+	--
+	-- It used to pick an idle animation. Now it picks a CAMERA nudge: a bell is
+	-- top-heavy and a spire is a needle, and a single fit that suits a cube
+	-- leaves one of them small. See FRAME_NUDGE.
+	--==========================================================================
 	local currentFormType: string = ""
-	-- Resolved on change rather than matched per frame. See idleFor.
-	local currentIdle: (number) -> CFrame = idleFor("")
-	local animPhase: number = math.random() * math.pi * 2
 
 	--==========================================================================
-	-- A CARD ONLY ANIMATES WHILE SOMEBODY IS LOOKING AT IT
+	-- NOTHING HERE MOVES
 	--
-	-- `hovered` is tracked here rather than read off popOnHover, because that
-	-- one is deliberately switched OFF while a card is selected -- a selected
-	-- card must not keep popping under the pointer -- and this gate needs the
-	-- raw pointer state, not the decorated one.
-	--
-	-- `animT` is accumulated instead of reading os.clock() directly. That is
-	-- the difference between pausing and stopping: wall-clock time keeps
-	-- running while a card sleeps, so resuming against it would snap the idle
-	-- curve forward by however long the pointer was away. Accumulated time just
-	-- picks up where it left off.
-	--
-	-- `parked` records that the resting pose has already been written, so the
-	-- sleeping branch costs one boolean test per card per frame and no
-	-- viewport work at all.
+	-- What used to live in this space: a hover gate, an accumulated animation
+	-- clock, a `parked` latch, a spin velocity and a yaw that orbited the
+	-- camera. All of it is gone, and so is the loop that drove it. A card is a
+	-- still photograph -- the pose and the camera are written once, when the
+	-- model is built, and never again.
 	--==========================================================================
-	local hovered: boolean = false
-	local animT: number = 0
-	local parked: boolean = false
+
+	--==========================================================================
+	-- WHAT THE CAMERA IS ACTUALLY LOOKING AT
+	--
+	-- `model:GetBoundingBox()` was the old input and it is the wrong box twice
+	-- over. It includes the invisible `Base` plate -- every creature carries one
+	-- at ground level purely as a pivot -- and it includes the Pedestal this
+	-- file adds underneath. Framing to that put a margin of nothing around every
+	-- plant, which is why the previews read as distant.
+	--
+	-- This walks the DRAWN parts instead: anything fully transparent is skipped,
+	-- and so is the pedestal, which is card furniture rather than creature.
+	--==========================================================================
+	local function drawnBounds(model: Model): (Vector3?, Vector3?, { Vector3 })
+		local lo = Vector3.new(math.huge, math.huge, math.huge)
+		local hi = -lo
+		local found = false
+		-- Kept, because the FIT is done against the real corners rather than
+		-- against the box that contains them: a creature does not reach its own
+		-- bounding corners, so fitting the box leaves it visibly small.
+		local points: { Vector3 } = {}
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") and d.Transparency < 1
+				and not d:IsDescendantOf(model:FindFirstChild("Pedestal") or model) then
+				found = true
+				local h = d.Size * 0.5
+				for sx = -1, 1, 2 do
+					for sy = -1, 1, 2 do
+						for sz = -1, 1, 2 do
+							local q = (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
+							points[#points + 1] = q
+							lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
+							hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
+						end
+					end
+				end
+			end
+		end
+		if not found then
+			return nil, nil, points
+		end
+		return lo, hi, points
+	end
 
 	local function setupCamera(model: Model)
 		local pivot, size = model:GetBoundingBox()
 		addPedestal(model, pivot, size)
 
-		pivot, size = model:GetBoundingBox()
-		modelBasePivot = pivot
-		local extent = math.max(size.Magnitude, 0.1)
+		local lo, hi, points = drawnBounds(model)
+		if not (lo and hi) then
+			-- Nothing drawn: keep the old behaviour rather than divide by zero.
+			pivot, size = model:GetBoundingBox()
+			lo = pivot.Position - size * 0.5
+			hi = pivot.Position + size * 0.5
+		end
+		local centre = ((lo :: Vector3) + (hi :: Vector3)) * 0.5
+		local span = (hi :: Vector3) - (lo :: Vector3)
+		--======================================================================
+		-- THE MODEL IS NOT MOVED. THE CAMERA MOVES.
+		--
+		-- An earlier pass set the pivot to the drawn centre and then PivotTo'd
+		-- the model onto it -- which TRANSLATES the creature, because a
+		-- creature's pivot is the Base plate at its feet and the drawn centre is
+		-- half its height above that. The camera was then aimed at bounds that
+		-- no longer described where the model was, and a Supernovus lost its
+		-- crown, brow horn, orbital arcs and comet off the top of the frame:
+		-- measured at -0.389 in viewport space, 39% above the glass.
+		--
+		-- The builder put the creature where it wants it. Nothing here has any
+		-- business moving it.
+		--======================================================================
+		modelBasePivot = model:GetPivot()
 
 		local camera = Instance.new("Camera")
 		camera.FieldOfView = 38
-		cameraDistance = (extent * CARD.CameraFill * 0.54)
-			/ math.tan(math.rad(camera.FieldOfView * 0.5))
-		cameraFocus = pivot.Position + Vector3.new(0, size.Y * (CARD.CameraRise * 0.88), 0)
-		camera.CFrame = CFrame.lookAt(cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
+
+		--======================================================================
+		-- FIT BOTH AXES, NOT THE DIAGONAL
+		--
+		-- The old distance came off `size.Magnitude` -- the bounding box's
+		-- DIAGONAL -- which is larger than either the height or the width and
+		-- therefore always pushed the camera back further than it needed to be.
+		-- The diagonal of a tall thin spire is dominated by its height and the
+		-- diagonal of a broad crown by its width, so one number could never suit
+		-- both.
+		--
+		-- Solved twice instead: the distance that makes the height fill FILL of
+		-- the frame, and the distance that makes the width fill it, then take
+		-- whichever is further. The plant is then as close as it can be without
+		-- either axis spilling.
+		--
+		-- The viewport is 0.98 wide by 0.74 of a 1:1.30 card -- so very nearly
+		-- square -- and the aspect is read off it rather than assumed, because
+		-- the Index and the Garden are free to size their cards differently.
+		--======================================================================
+		local FILL = FRAME_FILL
+		local nudge = FRAME_NUDGE[currentFormType] or 1
+		local half = math.tan(math.rad(camera.FieldOfView * 0.5))
+
+		local box = hero.AbsoluteSize
+		local aspect = if box.X > 0 and box.Y > 0 then box.X / box.Y else 1.019
+
+		local distH = (span.Y * 0.5) / (FILL * half)
+		-- Horizontal half-angle is the vertical one scaled by the aspect.
+		local distW = (math.max(span.X, span.Z) * 0.5) / (FILL * half * aspect)
+		cameraDistance = math.max(distH, distW) * nudge
+
+		--======================================================================
+		-- AIMED AT THE MIDDLE OF THE CREATURE, AND NOWHERE ELSE
+		--
+		-- `CARD.CameraRise` existed to correct an aim taken off a box that
+		-- included the pedestal and the invisible base plate. The centre of the
+		-- DRAWN box needs no correction, and applying the rise on top of it
+		-- spent 8% of the frame's margin pushing the subject down -- which on a
+		-- tall creature is the difference between keeping a crown and cropping
+		-- it. The knob is left in GameConfig for the other viewport helper.
+		--======================================================================
+		cameraFocus = centre
+		camera.CFrame = CFrame.lookAt(
+			cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
+
+		--======================================================================
+		-- ONE CORRECTIVE PASS, BECAUSE THE VIEW IS OBLIQUE
+		--
+		-- The estimate above treats the creature as a flat rectangle facing the
+		-- lens. It is not: CameraOffset looks in at (0.66, 0.28, -1), so the box
+		-- is seen corner-on and its CORNERS rotate into the frame. Measured, a
+		-- box that should have filled 86% of the height actually filled 98% and
+		-- a Supernovus lost a front foot off the bottom edge.
+		--
+		-- Rather than guess a fudge factor, the eight corners are projected
+		-- through the camera that was just built and the distance is scaled by
+		-- whatever it actually came out as. Projected size goes as 1/distance,
+		-- so one pass lands within a percent -- and it is exact for any shape
+		-- and any camera angle, which a constant never would be.
+		--======================================================================
+		--======================================================================
+		-- MEASURE WHAT THE LENS ACTUALLY SEES, THEN CORRECT ONCE
+		--
+		-- The estimate above treats the creature as a flat rectangle facing the
+		-- lens. It is not: CameraOffset looks in at (0.66, 0.28, -1), so the box
+		-- is seen corner-on and its corners rotate into frame. Measured, a fit
+		-- that should have filled 86% of the height filled 98%, and a Supernovus
+		-- lost a front foot off the bottom edge.
+		--
+		-- So the REAL part corners -- not the bounding box's, which a creature
+		-- never reaches -- are projected through the camera that was just built,
+		-- and two things come back: how much of the frame they span, and where
+		-- their middle sits. The distance is scaled by the first and the aim is
+		-- nudged by the second, which is what stops an off-centre silhouette
+		-- from being fitted as though it were centred.
+		--
+		-- Projected size goes as 1/distance, so one pass lands within a percent,
+		-- and it is exact for any shape at any camera angle -- which no constant
+		-- fudge factor could be.
+		--======================================================================
+		local function survey(cf: CFrame): (number, number, number)
+			local minU, maxU = math.huge, -math.huge
+			local minV, maxV = math.huge, -math.huge
+			for _, corner in ipairs(points) do
+				local rel = cf:PointToObjectSpace(corner)
+				if rel.Z < -0.01 then
+					local u = rel.X / (-rel.Z * half * aspect)
+					local v = rel.Y / (-rel.Z * half)
+					minU = math.min(minU, u); maxU = math.max(maxU, u)
+					minV = math.min(minV, v); maxV = math.max(maxV, v)
+				end
+			end
+			if minU > maxU then
+				return 0, 0, 0
+			end
+			-- NDC runs -1..1 across the frame, so a span of 1.72 is 86%.
+			return math.max(maxU - minU, maxV - minV) * 0.5,
+				(minU + maxU) * 0.5, (minV + maxV) * 0.5
+		end
+
+		local extent, offU, offV = survey(camera.CFrame)
+		if extent > 0.001 then
+			-- Slide the aim so the silhouette is centred, in the camera's own
+			-- right/up axes rather than the world's.
+			local right = camera.CFrame.RightVector
+			local up = camera.CFrame.UpVector
+			cameraFocus = cameraFocus
+				+ right * (offU * cameraDistance * half * aspect)
+				+ up * (offV * cameraDistance * half)
+			cameraDistance *= extent / FILL
+			camera.CFrame = CFrame.lookAt(
+				cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
+		end
+
 		camera.Parent = hero
 		hero.CurrentCamera = camera
 		activeCamera = camera
+
+		-- WRITTEN ONCE. There is no loop to write it again, so the view a card
+		-- is built with is the view it keeps for the life of the card.
 	end
 
 	local modelKey: string? = nil
@@ -1715,7 +1845,6 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		if modelKey == key then
 			if formName then
 				currentFormType = string.lower(formName)
-				currentIdle = idleFor(currentFormType)
 			end
 			return
 		end
@@ -1732,113 +1861,14 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		else
 			currentFormType = ""
 		end
-		currentIdle = idleFor(currentFormType)
 		local model = build(hero)
 		if model then
 			currentModel = model
+			-- setupCamera writes the camera AND the pose, once. Nothing writes
+			-- either again.
 			setupCamera(model)
-			-- A new model has never been placed, so the resting pose owes it one
-			-- write no matter what the pointer is doing.
-			parked = false
 		end
 	end
-
-	--==========================================================================
-	-- ANIMATION LOOP: Interactive Orbit & Unique Plant Idles
-	--==========================================================================
-	--==========================================================================
-	-- ONE UPDATER, DRIVEN BY THE SHARED LOOP
-	--
-	-- Registered rather than connected: see the loop at the top of the file for
-	-- why seventeen RenderSteppeds was the thing making the game lag.
-	--
-	-- onScreen(holder) is the guard that `holder.Visible` was supposed to be and
-	-- never was -- Visible is not inherited, so the old check was true even with
-	-- every panel shut and the cards animated all session.
-	--==========================================================================
-	--==========================================================================
-	-- IS THERE ANY REASON TO TOUCH THE VIEWPORT THIS FRAME?
-	--
-	-- Hovered or selected means somebody is looking. The other two terms are
-	-- the wind-down: a clicked card carries spinVelocity, and a card returning
-	-- from a spin eases currentYaw back to zero. Cutting either off mid-flight
-	-- would stop the card dead the instant the pointer left it.
-	--==========================================================================
-	local function awake(): boolean
-		return hovered or isSelected
-			or spinVelocity > 0.05 or math.abs(currentYaw) > 0.0005
-	end
-
-	local function updateCard(dt: number)
-		if not currentModel or not activeCamera then
-			return
-		end
-		if not onScreen(holder) then
-			return
-		end
-
-		if not awake() then
-			--==================================================================
-			-- ONE LAST WRITE, THEN NOTHING
-			--
-			-- Squared up to the authored three-quarter view and set to the idle
-			-- pose at this card's own phase, so twelve sleeping cards are
-			-- twelve different plants rather than twelve identical ones -- and
-			-- none of them is frozen mid-lean at whatever angle the pointer
-			-- happened to leave it.
-			--==================================================================
-			if not parked then
-				parked = true
-				currentYaw = 0
-				activeCamera.CFrame = CFrame.lookAt(
-					cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
-				currentModel:PivotTo(modelBasePivot * currentIdle(animPhase))
-			end
-			return
-		end
-		parked = false
-
-		-- Accumulated, not wall-clock. See the note where animT is declared.
-		animT += dt
-		local t = animT + animPhase
-
-		--== SPIN ==--
-		if isSelected then
-			currentYaw += (1.5 + spinVelocity) * dt
-			spinVelocity = math.max(0, spinVelocity - dt * 4.8)
-		elseif spinVelocity > 0.05 then
-			currentYaw += spinVelocity * dt
-			spinVelocity = math.max(0, spinVelocity - dt * 4.8)
-		else
-			currentYaw = currentYaw + (-currentYaw) * math.min(1, dt * 7.5)
-		end
-
-		--======================================================================
-		-- THE CAMERA ORBITS THE AUTHORED VIEW, IT DOES NOT REPLACE IT
-		--
-		-- This used to rebuild the position from a hardcoded +Z, which threw
-		-- away CARD.CameraOffset entirely. That offset is (0.66, 0.28, -1), and
-		-- the Z is NEGATIVE for a reason: addFace puts the eyes at -front, so
-		-- -Z is the side with a face on it. Starting from +Z put the camera
-		-- behind every plant on the first frame, which is why they all appeared
-		-- to be facing away.
-		--
-		-- Now yaw rotates the authored direction, so yaw = 0 is exactly the
-		-- three-quarter view setupCamera framed, and a spin orbits around it.
-		--======================================================================
-		local dir = CFrame.Angles(0, currentYaw, 0) * CARD.CameraOffset.Unit
-		activeCamera.CFrame = CFrame.lookAt(cameraFocus + dir * cameraDistance, cameraFocus)
-
-		--== THE IDLE, ALREADY CHOSEN ==--
-		currentModel:PivotTo(modelBasePivot * currentIdle(t))
-	end
-
-	registerCard(button, updateCard)
-
-	button.Destroying:Connect(function()
-		-- The shared loop drops its own connection when the last card goes.
-		unregisterCard(button)
-	end)
 
 	--==========================================================================
 	-- THE ACTION BUTTON
@@ -1865,30 +1895,20 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 
 	UIKit.clicks(button)
 
-	-- Trigger instant celebratory spin on click!
-	button.MouseButton1Click:Connect(function()
-		spinVelocity = 8.5
-	end)
-
 	--==========================================================================
-	-- THE POINTER IS WHAT WAKES A CARD
+	-- HOVER IS FEEDBACK, NOT MOTION
 	--
-	-- Hooked on `button` because that is the card's hit area and the
-	-- ViewportFrame is its child. Separate from popOnHover on purpose: see the
-	-- note on `hovered` where it is declared.
+	-- The two MouseEnter/MouseLeave handlers that used to live here existed only
+	-- to wake the animation, and there is nothing to wake. What stays is
+	-- popOnHover with its SCALE PINNED AT 1: the card no longer grows under the
+	-- pointer, and what is left of it -- the stroke thickening and the hover
+	-- sound -- is the button feedback that tells you what you are about to
+	-- click.
 	--
-	-- Touch needs no case of its own. A tap fires MouseButton1Click, which sets
-	-- spinVelocity, and the gate treats a spinning card as awake until it has
-	-- coasted to a stop -- so a tap plays the whole flourish and then sleeps.
+	-- Pinned here rather than changed in popOnHover, which is a public helper.
 	--==========================================================================
-	button.MouseEnter:Connect(function()
-		hovered = true
-	end)
-	button.MouseLeave:Connect(function()
-		hovered = false
-	end)
-
-	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale, { stroke = border })
+	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale,
+		{ stroke = border, scale = 1 })
 
 	local lift = liftLayers(holder, CARD.HoverLift)
 	local selected = false
@@ -1901,9 +1921,6 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		end
 		selected = on
 		isSelected = on
-		if on then
-			spinVelocity = 8.5
-		end
 		setPopEnabled(not on)
 		if on and label then
 			actionLabel.Text = label

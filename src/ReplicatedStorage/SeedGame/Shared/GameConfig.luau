@@ -2919,25 +2919,69 @@ GameConfig.Shop = {
 -- The rail buttons and the modal panel keep theirs. Neither of them scrolls.
 --
 --==============================================================================
--- ONE PICTURE PER SPECIES, AND ONLY WHERE IT IS EARNED
+-- ONE PAINTED PLACE PER BIOME, BEHIND EVERY SPECIES THAT LIVES THERE
 --
--- Five species, five different places -- Nubkin's sunlit rows, Petalpip's
--- meadow, Spiretip's misty pines, Toadcap's rotting log, Bellchime's lanterns
--- at dusk. Drawn by tools/art/card_backdrops.py, which is the source; these ids
--- are its output.
+-- Five illustrated background plates -- woodland, dunes, swamp, basalt, nebula
+-- -- supplied 2026-09-08 and mapped onto all twenty-five species by the road
+-- they come off. Background scenery ONLY: no creature, no name, no rarity, no
+-- border, nothing animated. The real static ViewportFrame plant stands in front.
+--
+-- Masters art/cards/backgrounds/biome1..5.png; the runtime copies are the
+-- 512px <biome>-bg.png beside them, which is all a 116-151 pixel card can show.
+--
+-- BEFORE THIS, five Greenhollow species had bespoke procedural backdrops drawn
+-- by tools/art/card_backdrops.py -- Nubkin's sunlit rows, Petalpip's meadow,
+-- Spiretip's misty pines, Toadcap's rotting log, Bellchime's lanterns at dusk.
+-- They are superseded rather than deleted: the script and the ids are still in
+-- the repository, and the reason for dropping them is COHESION. Two art styles
+-- in one collection -- soft procedural gradients on five cards and painted
+-- scenes on twenty -- reads as a bug rather than as variety.
+--
+--   nubkin    rbxassetid://100196841981461     spiretip  rbxassetid://90680843858849
+--   petalpip  rbxassetid://109778696165493     toadcap   rbxassetid://110972481430448
+--   bellchime rbxassetid://106856602665628
 --
 -- A backdrop is IDENTITY, so it is withheld wherever identity is withheld: an
 -- undiscovered Index card, a Garden pod and an empty hole all get the plain
--- dusk gradient below instead. Painting Bellchime's lanterns behind a ??? would
--- name the species through the back door as surely as printing the word.
+-- dusk gradient below instead. Painting Emberroot's magma behind a ??? would
+-- narrow the species to five as surely as printing the word.
 --==============================================================================
 GameConfig.Card = {
 	Art = {
-		nubkin = "rbxassetid://100196841981461",
-		petalpip = "rbxassetid://109778696165493",
-		spiretip = "rbxassetid://90680843858849",
-		toadcap = "rbxassetid://110972481430448",
-		bellchime = "rbxassetid://106856602665628",
+		--== GREENHOLLOW ==--
+		nubkin = "rbxassetid://101119022870924",
+		petalpip = "rbxassetid://101119022870924",
+		spiretip = "rbxassetid://101119022870924",
+		toadcap = "rbxassetid://101119022870924",
+		bellchime = "rbxassetid://101119022870924",
+
+		--== DUSTBOWL ==--
+		dunebud = "rbxassetid://133554639098352",
+		paddlehop = "rbxassetid://133554639098352",
+		thornwhorl = "rbxassetid://133554639098352",
+		raincup = "rbxassetid://133554639098352",
+		suncrown = "rbxassetid://133554639098352",
+
+		--== TANGLEMIRE ==--
+		bogbonnet = "rbxassetid://127784202754052",
+		crookreed = "rbxassetid://127784202754052",
+		snapmoss = "rbxassetid://127784202754052",
+		lanterncap = "rbxassetid://127784202754052",
+		gloomlotus = "rbxassetid://127784202754052",
+
+		--== EMBERROOT ==--
+		cinderpaw = "rbxassetid://107428058230890",
+		emberquill = "rbxassetid://107428058230890",
+		slagbloom = "rbxassetid://107428058230890",
+		kilnhusk = "rbxassetid://107428058230890",
+		pyrelotus = "rbxassetid://107428058230890",
+
+		--== STARBLOOM ==--
+		novaorb = "rbxassetid://80623858180990",
+		cosmospire = "rbxassetid://80623858180990",
+		voidpetal = "rbxassetid://80623858180990",
+		astralhorn = "rbxassetid://80623858180990",
+		supernovus = "rbxassetid://80623858180990",
 	},
 
 	-- What a card shows when it may not show a place. Grey on purpose: it
