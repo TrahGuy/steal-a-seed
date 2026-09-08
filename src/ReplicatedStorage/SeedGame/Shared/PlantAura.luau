@@ -33,9 +33,15 @@
 -- parts, cost nothing to place, and need no texture upload -- which also keeps
 -- this inside the project's "everything is built from primitives" rule.
 --
--- Neon carries the glow on its own. There is deliberately NO PointLight: a light
--- per arc is the difference between a crackle and a lightning storm, and a
--- hundred and twenty of them is the difference between a game and a slideshow.
+-- Neon carries the glow on its own, and there is still NO PointLight PER ARC: a
+-- light on every bolt is the difference between a crackle and a lightning storm,
+-- and a hundred and twenty of them is the difference between a game and a
+-- slideshow.
+--
+-- There IS one light per PULSE on the nearest few, added when the effect was
+-- retuned from "slight" to "noticeable" -- four at a time, client-wide, Full
+-- quality only. See the LightStuds block in the config for why that is a
+-- different proposition from the per-arc version this paragraph refuses.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -97,29 +103,42 @@ local FALLBACK: Palette = {
 --==============================================================================
 -- THE NUMBERS
 --
--- Tuned toward "slight". Every one of these was chosen by asking what the
--- SMALLEST version that still reads is, and the gap and the arc count were both
--- pushed down rather than up when it was close.
+-- RETUNED TOWARD "NOTICEABLE". The first pass answered a brief that asked for
+-- "slight" and picked the smallest version of every number that still read. The
+-- owner has since asked for the opposite -- a Colossal should feel like an
+-- event -- so the same numbers were pushed the other way.
+--
+-- What did NOT change is the SHAPE of the thing: it is still a crackle with
+-- gaps, not a permanent glow. Making it constant would turn the rarest plant in
+-- a garden into background lighting, and a thing that is always on stops being
+-- noticed within about a minute. The hype is in the STRIKE, so the strike got
+-- brighter, thicker, longer and more frequent while the silence between strikes
+-- survived -- shortened, not removed.
 --==============================================================================
 PlantAura.Config = {
 	--== when ==--
-	-- The starting point the brief asks for. Two to four seconds of nothing is
-	-- most of a Colossal's life, which is what keeps it a punctuation mark.
-	GapMin = 2.0,
-	GapMax = 4.0,
-	-- A pulse is over before a player can look at it directly. That is the
-	-- point: it is caught in peripheral vision and confirms itself on the next
-	-- one, which is how a crackle reads rather than a lamp.
-	Life = 0.22,
+	-- Was 2.0-4.0. Roughly one strike a second now, so a player standing in a
+	-- bed of Colossals sees near-continuous activity ACROSS THE BED while any
+	-- single plant still goes dark between its own strikes.
+	GapMin = 0.85,
+	GapMax = 1.9,
+	-- Was 0.22 -- fast enough that it could only ever be caught in peripheral
+	-- vision. 0.32 is long enough to actually look AT, which is the difference
+	-- between noticing a flicker and watching a bolt.
+	Life = 0.32,
 	-- The FIRST gap is drawn from the whole window plus a slop, so a bed that
 	-- streams in as one batch does not fire as one batch.
-	FirstGapMax = 5.0,
+	FirstGapMax = 2.4,
 
 	--== how much ==--
-	ArcsNear = 3,
-	ArcsMid = 2,
-	ArcsFar = 1,
-	Segments = 4,
+	-- Doubled. One arc reads as a stray spark; six reads as a discharge
+	-- wrapping the silhouette, which is the thing worth walking over to see.
+	ArcsNear = 6,
+	ArcsMid = 4,
+	ArcsFar = 2,
+	-- One more hinge. The read of lightning is entirely in the kinks, so an
+	-- extra joint buys more jaggedness than any amount of extra length.
+	Segments = 5,
 
 	--== how big ==--
 	-- Arc length is a fraction of the plant's MEASURED height, so it tracks
@@ -127,31 +146,69 @@ PlantAura.Config = {
 	-- that matters: a planting cell is 16 x 13.7 studs, so an arc that may
 	-- reach five studs off the silhouette cannot cross into a neighbour's cell,
 	-- let alone a neighbouring plot -- no matter how wide the plant gets.
-	LengthFraction = 0.10,
-	LengthMin = 1.6,
-	LengthMax = 5.0,
+	LengthFraction = 0.20,
+	LengthMin = 2.4,
+	--==========================================================================
+	-- THE CAP, RE-DERIVED FROM WHAT AN ARC ACTUALLY REACHES
+	--
+	-- The first pass capped at 5.0 by treating the whole arc length as outward
+	-- reach and comparing it to half a planting cell (16 x 13.7, so 6.85). That
+	-- was the safe reading, and it was far too conservative: `dir` is built
+	-- mostly up or down the silhouette and only then given `outward * 0.25`, so
+	-- roughly a QUARTER of an arc's length is spent moving away from the plant
+	-- and the rest runs along it.
+	--
+	-- Outward reach is therefore about `length * 0.25 + Standoff`. At 9.0 that
+	-- is 2.5 studs off the surface against 6.85 studs of half-cell -- still a
+	-- wide margin, and the bolt is half again as long as it was.
+	--
+	-- This matters most on the big Colossals. A nubkin finishes near 33 studs
+	-- tall and a bellchime near 69; a 5-stud arc on either was a scratch, which
+	-- is a large part of why the effect read as small no matter how bright it
+	-- got.
+	--==========================================================================
+	LengthMax = 9.0,
 	-- Sideways kink per joint, as a fraction of the arc's length.
-	Jitter = 0.22,
-	ThickFraction = 0.055,
-	ThickMin = 0.10,
-	ThickMax = 0.30,
+	Jitter = 0.28,
+	-- Was 0.055/0.10/0.30. Thickness is what carries a bolt at distance: a thin
+	-- arc at sixty studs is a pixel of noise, and the Neon glow scales with the
+	-- surface area doing the emitting.
+	ThickFraction = 0.09,
+	ThickMin = 0.16,
+	ThickMax = 0.48,
 	-- How far off the surface the arc floats. Enough to read as separate from
 	-- the plastic, small enough to still be "around the silhouette".
-	Standoff = 0.18,
+	Standoff = 0.22,
 
 	--== how bright ==--
-	-- Never fully opaque even at its peak. This is the single biggest lever on
-	-- "subtle" and it is deliberately not 0.
-	PeakTransparency = 0.18,
-	-- Per-frame flicker, added to the fade. Small -- it is the difference
-	-- between electricity and a fading streak.
-	Flicker = 0.14,
+	-- Was 0.18, and the old comment called it "the single biggest lever on
+	-- subtle". This is the same lever pulled the other way: 0 means the strike
+	-- lands at FULL Neon and the fade starts from there.
+	PeakTransparency = 0.0,
+	-- Per-frame flicker, added to the fade. Bigger now -- more shimmer along the
+	-- length, which reads as unstable current rather than a lit bar.
+	Flicker = 0.22,
+	--==========================================================================
+	-- HOW THE STRIKE DECAYS
+	--
+	-- `fade` is a TRANSPARENCY, so a LOWER exponent fades it out FASTER. The
+	-- first pass used 0.55, which is already 30% transparent a tenth of the way
+	-- in -- most of the pulse was spent nearly invisible, which is most of why
+	-- it read as slight. 1.15 holds the bolt near-opaque through its first half
+	-- and then drops it, and that hold-then-cut is what makes a strike feel like
+	-- it hit something.
+	--==========================================================================
+	FadePower = 1.15,
 
 	--== how many at once ==--
 	-- CLIENT-WIDE. Six full gardens is up to 120 Colossals; this is what stops
 	-- 120 plants from ever being 120 simultaneous effects. A plant that is due
 	-- while the budget is full is RESCHEDULED, not skipped forever.
-	MaxConcurrent = 10,
+	--
+	-- Raised along with the gap: strikes are roughly three times as frequent
+	-- now, so holding the old ceiling of 10 would have spent most frames
+	-- rescheduling and the bed would have looked THROTTLED rather than busy.
+	MaxConcurrent = 18,
 
 	--== how far ==--
 	NearStuds = 70,
@@ -159,7 +216,32 @@ PlantAura.Config = {
 	FarStuds = 200,
 	-- Inside this, an off-screen plant still pulses: it is close enough that a
 	-- small camera turn brings it into frame mid-pulse.
-	AlwaysStuds = 40,
+	AlwaysStuds = 55,
+
+	--==========================================================================
+	-- THE LIGHT, WHICH THIS MODULE USED TO REFUSE OUTRIGHT
+	--
+	-- The header still says a PointLight per ARC is the difference between a
+	-- crackle and a lightning storm, and between a game and a slideshow. That is
+	-- still true, and this does not do that.
+	--
+	-- What this does is ONE light per PULSE, only for pulses close enough for a
+	-- light to be worth anything, and only four of them at a time client-wide.
+	-- Worst case is four unshadowed point lights -- about the cost of a couple
+	-- of torches -- against the 18 x 6 = 108 the per-arc version would have
+	-- reached.
+	--
+	-- It earns the cost because it is the only part of the effect that touches
+	-- anything OTHER than the bolt: the plant, the soil and the fence all catch
+	-- the flash, which is what sells it as a discharge happening in the world
+	-- rather than a decal drawn on top of one.
+	--==========================================================================
+	LightStuds = 60,
+	MaxLights = 4,
+	-- 3.4 at 17 studs washed the grass out under the plant on a close strike.
+	-- The flash wants to be READ, not to be the brightest thing on the road.
+	LightBrightness = 2.6,
+	LightRange = 15,
 }
 
 local CFG = PlantAura.Config
@@ -194,7 +276,7 @@ end
 --==============================================================================
 type Seg = { part: BasePart, localCF: CFrame, core: boolean }
 type Arc = { anchor: BasePart, segs: { Seg } }
-type Pulse = { state: any, arcs: { Arc }, t: number }
+type Pulse = { state: any, arcs: { Arc }, t: number, light: PointLight? }
 
 export type State = {
 	model: Model,
@@ -211,6 +293,8 @@ local plants: { State } = {}
 local slot: { [State]: number } = {}
 local active: { Pulse } = {}
 local pool: { BasePart } = {}
+local lightPool: { PointLight } = {}
+local lightsOut = 0
 local folder: Folder? = nil
 local quality = "Full"
 local made = 0
@@ -305,6 +389,39 @@ local function give(p: BasePart)
 end
 
 --==============================================================================
+-- THE LIGHT POOL
+--
+-- Pooled for the same reason the segments are: a strike a second across a bed
+-- of Colossals is a lot of Instance.new if each one builds its own.
+--
+-- Shadows are OFF and stay off. A shadow-casting light is the expensive kind,
+-- and this one exists for a third of a second -- long enough to throw colour
+-- onto the soil, nowhere near long enough for anyone to notice the plant is not
+-- casting a shadow from it.
+--==============================================================================
+local function takeLight(): PointLight
+	local n = #lightPool
+	if n > 0 then
+		local l = lightPool[n]
+		lightPool[n] = nil
+		return l
+	end
+	local l = Instance.new("PointLight")
+	l.Name = "ArcFlash"
+	l.Shadows = false
+	l.Enabled = true
+	return l
+end
+
+local function giveLight(l: PointLight)
+	-- Unparented rather than merely disabled, so a pooled SEGMENT can never be
+	-- handed back out with a light still hanging off it.
+	l.Parent = nil
+	table.insert(lightPool, l)
+	lightsOut -= 1
+end
+
+--==============================================================================
 -- ONE ARC, IN THE ANCHOR PART'S OWN SPACE
 --
 -- Built in LOCAL coordinates and stored that way. Every frame of the pulse the
@@ -377,13 +494,28 @@ local function buildArc(state: State, anchor: BasePart, arcs: { Arc })
 		local d = b - a
 		local len = d.Magnitude
 		if len > 0.02 then
+			--==============================================================
+			-- TWO CORE SEGMENTS NOW, NOT ONE
+			--
+			-- The arc colours are biome-tinted on purpose -- greenhollow's is a
+			-- pale leaf-green -- and a pale green bolt over a green Colossal is
+			-- the one combination in the game with almost no contrast. The core
+			-- is the near-white, so putting more of it in each bolt is what
+			-- makes the shape read against the plant it is wrapped around,
+			-- without repainting the biome tint that identifies it.
+			--
+			-- Segments 2 and 4 of 5: alternating rather than adjacent, so the
+			-- bolt reads as hot-cold-hot along its length instead of as one
+			-- white half and one green half.
+			--==============================================================
+			local hot = (i == 2) or (i == 4 and n >= 5)
 			local p = take()
 			p.Size = Vector3.new(state.thick, state.thick, len)
-			p.Color = if i == 2 then state.palette.core else state.palette.arc
+			p.Color = if hot then state.palette.core else state.palette.arc
 			table.insert(segs, {
 				part = p,
 				localCF = CFrame.lookAt((a + b) * 0.5, b),
-				core = i == 2,
+				core = hot,
 			})
 		end
 	end
@@ -454,6 +586,12 @@ function PlantAura.Prepare(model: Model, headHeight: number, biomeId: string,
 end
 
 local function endPulse(pulse: Pulse)
+	-- The light first: it is parented to one of the segments below, and a
+	-- segment must never return to the pool still carrying it.
+	if pulse.light then
+		giveLight(pulse.light)
+		pulse.light = nil
+	end
 	for _, arc in ipairs(pulse.arcs) do
 		for _, seg in ipairs(arc.segs) do
 			give(seg.part)
@@ -503,10 +641,19 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 			endPulse(pulse)
 			table.remove(active, i)
 		else
-			-- Quick out: brightest at the strike, gone by the end. The power
-			-- puts most of the visible life in the first third.
+			-- Hold, then cut: full Neon at the strike, near-opaque through the
+			-- first half, gone by the end. FadePower is what sets that shape.
 			local fade = CFG.PeakTransparency
-				+ (1 - CFG.PeakTransparency) * (k ^ 0.55)
+				+ (1 - CFG.PeakTransparency) * (k ^ CFG.FadePower)
+			--==============================================================
+			-- The flash rides the SAME curve as the bolt, so the light dies
+			-- with the thing that is supposed to be casting it. A light on
+			-- its own timing reads as a separate effect that happens to
+			-- overlap.
+			--==============================================================
+			if pulse.light then
+				pulse.light.Brightness = CFG.LightBrightness * (1 - fade)
+			end
 			for _, arc in ipairs(pulse.arcs) do
 				local anchor = arc.anchor
 				if anchor.Parent then
@@ -599,7 +746,30 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 			end
 
 			if #arcs > 0 then
-				table.insert(active, { state = state, arcs = arcs, t = 0 })
+				--==========================================================
+				-- ONE FLASH, IF THERE IS ONE GOING SPARE
+				--
+				-- Close pulses only, four at a time, and never on Reduced --
+				-- which is the touch-device default, and a phone is the one
+				-- place a handful of dynamic lights is actually felt.
+				--
+				-- A pulse that misses out is not delayed or downgraded: it
+				-- draws its bolts exactly as it would have anyway. The light
+				-- is a bonus on the nearest few, never a requirement.
+				--==========================================================
+				local light: PointLight? = nil
+				if quality == "Full" and d <= CFG.LightStuds and lightsOut < CFG.MaxLights then
+					local host = arcs[1].segs[1].part
+					local l = takeLight()
+					l.Color = state.palette.core
+					l.Range = CFG.LightRange
+					l.Brightness = CFG.LightBrightness
+					l.Parent = host
+					lightsOut += 1
+					light = l
+				end
+
+				table.insert(active, { state = state, arcs = arcs, t = 0, light = light })
 				state.pulsing = true
 				free -= 1
 			end
@@ -611,8 +781,8 @@ end
 --==============================================================================
 -- FOR VERIFICATION, AND FOR A PREVIEW THAT IS REBUILT UNDER ITSELF
 --==============================================================================
-function PlantAura.Stats(): (number, number, number, number)
-	return #plants, #active, #pool, made
+function PlantAura.Stats(): (number, number, number, number, number)
+	return #plants, #active, #pool, made, lightsOut
 end
 
 function PlantAura.Reset()
