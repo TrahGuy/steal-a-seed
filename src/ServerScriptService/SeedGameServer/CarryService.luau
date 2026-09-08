@@ -1491,6 +1491,38 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 	return true
 end
 
+--==============================================================================
+-- A POD FROM OUTSIDE THE ROAD
+--
+-- Everything else in this file puts a pod in the hotbar because the player
+-- carried it home. A purchased one has no journey behind it, so it needs a way
+-- in that is not the red line -- but it must be the SAME pod when it gets there:
+-- same builder, same Tool, same grip, same GripReach the pose reads. Hence a
+-- wrapper over restoreOne rather than a second way to bank something.
+--
+-- Returns false rather than throwing when there is no backpack -- a player can
+-- be mid-respawn when a receipt lands, and StoreService has to be able to tell
+-- the difference between "not now" and "done".
+--==============================================================================
+function CarryService.GivePod(player: Player, speciesId: string, tier: number): boolean
+	local species = SeedData.Get(speciesId)
+	if not species then
+		return false
+	end
+	local n = tonumber(tier)
+	if n == nil or n ~= n then
+		return false
+	end
+	local ok = restoreOne(player, species,
+		math.clamp(math.floor(n), 1, SeedData.TierCount), false)
+	if ok then
+		-- The hotbar is the source of truth for Held; tell the profile what it
+		-- now holds rather than waiting for the next sync to notice.
+		CarryService.SyncHeldNow(player)
+	end
+	return ok
+end
+
 local function restoreHeld(player: Player)
 	task.spawn(function()
 		--======================================================================

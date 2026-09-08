@@ -44,6 +44,18 @@ local ProfileSchema = {}
 
 export type Profile = {
 	Tutorial: TutorialData.Progress,
+	--==========================================================================
+	-- RECEIPTS ALREADY HONOURED
+	--
+	-- Roblox retries ProcessReceipt until it is told PurchaseGranted, including
+	-- across a server restart and a rejoin. Without a record that survives the
+	-- save, a retry after a crash grants a second time -- and this is the one
+	-- table in the profile where getting it wrong costs somebody real money.
+	--
+	-- Bounded, newest last. A player who buys more than the cap between one save
+	-- and the next does not exist; a list that grows forever does.
+	--==========================================================================
+	Receipts: { string },
 	Version: number,
 	Cash: number,
 	Speed: number,
@@ -172,6 +184,7 @@ function ProfileSchema.Default(): Profile
 	local now = os.time()
 	return {
 		Tutorial = TutorialData.Default(),
+		Receipts = {},
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
 		Speed = 0,
@@ -500,6 +513,21 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		end
 
 		p.Version = 2
+	end
+
+	--==========================================================================
+	-- Strings only, capped, order preserved. A corrupt entry is dropped rather
+	-- than repaired: the worst case for a dropped receipt is one retry that
+	-- grants again, and the worst case for a repaired one is a grant that never
+	-- happens because a mangled id matched.
+	--==========================================================================
+	if type(raw.Receipts) == "table" then
+		for _, id in ipairs(raw.Receipts) do
+			if type(id) == "string" and #id > 0 and #id <= 128
+				and #p.Receipts < SAVE.MaxReceipts then
+				table.insert(p.Receipts, id)
+			end
+		end
 	end
 
 	p.Tutorial = TutorialData.Sanitise(raw.Tutorial, p)

@@ -374,126 +374,161 @@ local function buildCard(parent: Instance, order: number): Card
 		buy = buy,
 	}
 end
+-- plotArt was here: the bed-and-sprouts illustration for the plot shelf. The
+-- plot ladder is a board by the gate now, so the drawing went with the shelf.
 
 --==============================================================================
--- A PLOT, DRAWN SMALL
+-- THE SHELVES
 --
--- Soil with sprouts standing in it, and the row count is what the card sells so
--- the art says it too.
+-- Built from GameConfig.Store, which is also what the server grants from, so a
+-- tile cannot advertise something StoreService does not know how to give.
 --
--- IN THE BIOME'S OWN COLOURS. This used to be rgb(96,66,48) dirt with
--- rgb(124,182,92) stems picked to sit on a cyan tile -- one of them happened to
--- be the real stem colour and the other two did not. They come off SeedData now,
--- which is the same stem, leaf and soil every Greenhollow plant shares and the
--- same three the Index portraits are drawn in. A shop selling dirt should be
--- selling THIS game's dirt.
+-- There is NO REMOTE in this file any more. A Robux purchase is a prompt to
+-- Roblox and a receipt to the server; the client's whole part is asking for the
+-- prompt. The plot ladder -- the one thing here that ever sent a verb -- moved
+-- to the board by the gate.
 --==============================================================================
+local MarketplaceService = game:GetService("MarketplaceService")
+local STORE = GameConfig.Store
+
 --==============================================================================
--- THE CARD DRAWS WHAT THE PLOT ACTUALLY IS
+-- THE ICONS ARE DRAWN, NOT UPLOADED
 --
--- One bed up to Level 2 and TWO from Level 3, because that is when the plot
--- grows its wing. The card is the only place a player can see what they are
--- buying before they own it, and a card that kept drawing one strip for a plot
--- with two beds would be selling the wrong thing.
---
--- The second bed is drawn narrower and set to one side, which is the shape of
--- the real thing: a wing off the back, not a second plot.
+-- Rule 5: nothing is placed by hand, and that includes art. Four shapes from
+-- plain frames, in the shelf's own colour, so a new shelf needs no asset and no
+-- upload -- the same reason plotArt was drawn rather than imported.
 --==============================================================================
-local function plotArt(parent: Frame, sprouts: number, twoBeds: boolean?)
-	for _, existingChild in ipairs(parent:GetChildren()) do
-		existingChild:Destroy()
-	end
+local function chip(parent: Instance, x: number, y: number, w: number, h: number,
+	colour: Color3, rot: number?): Frame
+	local f = Instance.new("Frame")
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromScale(x, y)
+	f.Size = UDim2.fromScale(w, h)
+	f.BackgroundColor3 = colour
+	f.BorderSizePixel = 0
+	f.Rotation = rot or 0
+	f.ZIndex = 6
+	f.Parent = parent
+	UIKit.corner(f, 4)
+	return f
+end
 
-	-- A heap with a peak, not a plank. The first pass drew one thin bar and the
-	-- sprouts read as lollipops standing on a shelf.
-	local bedW = if twoBeds then 0.60 else 0.88
-	local bedX = if twoBeds then 0.38 else 0.5
-	local bed = UIKit.piece(parent, "Bed", bedX, 0.80, bedW, 0.32,
-		SeedData.Soil, 0.30, nil, 3)
-	stroke(bed, SHOP.Outline, 2)
-	for _, clod in ipairs({ { 0.20, 0.84, 0.28, 0.24 }, { 0.80, 0.85, 0.26, 0.22 } }) do
-		local lump = UIKit.piece(parent, "Clod", clod[1], clod[2], clod[3], clod[4],
-			SeedData.Soil, 0.5, nil, 3)
-		stroke(lump, SHOP.Outline, 2)
-	end
-
-	if twoBeds then
-		-- The wing: narrower, shorter, and set back to the side.
-		local wing = UIKit.piece(parent, "SideBed", 0.82, 0.72, 0.22, 0.46,
-			SeedData.Soil, 0.30, nil, 3)
-		stroke(wing, SHOP.Outline, 2)
-		local sprig = UIKit.piece(parent, "SideStem", 0.82, 0.52, 0.05, 0.30,
-			SeedData.Stem, 0.3, nil, 4)
-		stroke(sprig, SHOP.Outline, 2)
-		local tip = UIKit.piece(parent, "SideBud", 0.82, 0.36, 0.12, 0.18,
-			SeedData.Species[1].Body, 0.5, nil, 5)
-		stroke(tip, SHOP.Outline, 2)
-	end
-
-	--==========================================================================
-	-- OUTLINED, BECAUSE THE CARD IS GREEN NOW
-	--
-	-- These sprouts were legible on a cyan tile without any help. On the green
-	-- card that replaced it they are green on green, and the black edge is the
-	-- only thing separating them -- which is what every illustration in the
-	-- reference does anyway.
-	--==========================================================================
-	local spread = if twoBeds then 0.46 else 0.68
-	local left = if twoBeds then 0.12 else 0.16
-	for i = 1, sprouts do
-		local x = left + (spread * (i - 0.5) / sprouts)
-		local stem = UIKit.piece(parent, "Stem" .. i, x, 0.55, 0.055, 0.44,
-			SeedData.Stem, 0.3, nil, 4)
-		stroke(stem, SHOP.Outline, 2)
-		for _, side in ipairs({ -1, 1 }) do
-			local leaf = UIKit.piece(parent, "Leaf" .. i, x + side * 0.062, 0.50,
-				0.12, 0.16, SeedData.Leaf, 0.5, side * 30, 5)
-			stroke(leaf, SHOP.Outline, 2)
+local function storeArt(parent: Frame, kind: string)
+	if kind == "speed" then
+		-- Three chevrons leaning forward: the one shape that reads as speed at
+		-- forty pixels without a running shoe to draw it on.
+		for i = 0, 2 do
+			local light = Color3.fromRGB(198, 236, 255):Lerp(Color3.fromRGB(96, 170, 240), i / 2)
+			chip(parent, 0.30 + i * 0.20, 0.5, 0.10, 0.62, light, 18)
 		end
-		local bud = UIKit.piece(parent, "Bud" .. i, x, 0.27, 0.14, 0.24,
-			SeedData.Species[1].Body, 0.5, nil, 5)
-		stroke(bud, SHOP.Outline, 2)
+	elseif kind == "cash" then
+		-- A stack of notes, offset so the stack reads as depth.
+		for i = 0, 2 do
+			chip(parent, 0.5 - i * 0.045, 0.62 - i * 0.13, 0.62, 0.26,
+				Color3.fromRGB(122, 200, 96):Lerp(Color3.fromRGB(196, 240, 150), i / 2))
+		end
+	elseif kind == "pod" then
+		-- A shell: a wide base under a narrower crown, which is the pod
+		-- silhouette every card in the Index already uses.
+		chip(parent, 0.5, 0.62, 0.52, 0.44, Color3.fromRGB(238, 226, 198))
+		chip(parent, 0.5, 0.34, 0.38, 0.34, Color3.fromRGB(250, 244, 224))
+	else
+		-- A sprout: stem and two blades.
+		chip(parent, 0.5, 0.66, 0.09, 0.46, Color3.fromRGB(124, 182, 92))
+		chip(parent, 0.36, 0.40, 0.30, 0.13, Color3.fromRGB(142, 206, 104), -22)
+		chip(parent, 0.64, 0.40, 0.30, 0.13, Color3.fromRGB(142, 206, 104), 22)
 	end
 end
 
 --==============================================================================
--- THE REMOTE THE BUY BUTTON SENDS ON
+-- ONE SHELF PER SECTION, ONE TILE PER ITEM
 --
--- GameEvent, which already carries PlantAt, PickUp and now PlotUpgrade. Fetched
--- up here rather than beside the handlers because WaitForChild yields, and a
--- yield in the middle of building the shelves would leave a half-built panel on
--- screen for as long as replication takes.
+-- A product with an id of 0 has not been created in the Creator Dashboard yet.
+-- Its tile is still DRAWN -- the shelf has to look like a shelf -- but it reads
+-- SOON, goes dark, and its button refuses. Filling the id in is the only change
+-- needed to make it live.
 --==============================================================================
-local shopRemotes = SeedGame:WaitForChild("Remotes", 20)
-local gameEvent: RemoteEvent? = nil
-if shopRemotes then
-	local ev = shopRemotes:WaitForChild(GameConfig.Remotes.GameEvent, 20)
-	if ev and ev:IsA("RemoteEvent") then
-		gameEvent = ev
+local order = 1
+local liveCount, soonCount = 0, 0
+
+for _, spec in ipairs(STORE.Sections) do
+	local shelf = section(order, spec.heading, spec.colour)
+	order += 2
+
+	local items = STORE.Items[spec.id] or {}
+	if #items == 0 then
+		--==================================================================
+		-- AN EMPTY SHELF STILL SAYS SOMETHING
+		--
+		-- The owner asked for PLANTS now and the content later. A plate that
+		-- says so is a promise; a missing heading is nothing at all.
+		--==================================================================
+		local card = buildCard(shelf, 1)
+		storeArt(card.art, "plant")
+		card.title.Text = "COMING SOON"
+		card.price.Text = "SOON"
+		card.tint.Color = ColorSequence.new(SHOP.SoldTop, SHOP.SoldBottom)
+		card.frame.BackgroundColor3 = SHOP.SoldBottom
+		card.buy.BackgroundColor3 = SHOP.BuyShade
+		card.fill.BackgroundTransparency = 0.25
+		card.buy.Activated:Connect(function()
+			SoundKit.play("Denied")
+		end)
+		soonCount += 1
 	end
-end
-if not gameEvent then
-	warn("[Seed/ShopUI] No GameEvent remote; plot upgrades cannot be bought.")
-end
 
---==============================================================================
--- THE PLOT SHELF
---
--- One card per tier above the one you start on. Tier 1 is where everybody
--- begins, so it is not for sale and is not shown.
---==============================================================================
-local plotShelf = section(1, "PLOT", SHOP.Heading)
-local plotCards: { Card } = {}
+	for index, item in ipairs(items) do
+		local card = buildCard(shelf, index)
+		storeArt(card.art, tostring(item.kind))
+		card.title.Text = item.label
 
-for tier = 2, #GameConfig.PlotTiers do
-	local card = buildCard(plotShelf, tier)
-	plotCards[tier] = card
-	plotArt(card.art, math.min(3, tier), GameConfig.plotHasSideBed(tier))
-	-- CAPACITY, not the planting grid. plotSlotsFor counts attachment points in
-	-- the bed and has not equalled the number of plants a level holds since the
-	-- ladder was re-cut -- a card reading "21 SLOTS" for a level that holds 7
-	-- would be advertising a number the server refuses to honour.
-	card.title.Text = string.format("%d SLOTS", GameConfig.plotCapacityForTier(tier))
+		local productId = tonumber(item.product) or 0
+		local live = productId > 0
+		if live then
+			liveCount += 1
+			-- The Robux glyph, then the price. No currency word: the icon is
+			-- the currency, the same as the reference shelves.
+			card.price.Text = string.format("\u{E002}%d", item.robux)
+			card.buy.BackgroundColor3 = SHOP.Buy
+			card.fill.BackgroundTransparency = 0
+		else
+			soonCount += 1
+			card.price.Text = "SOON"
+			card.tint.Color = ColorSequence.new(SHOP.SoldTop, SHOP.SoldBottom)
+			card.frame.BackgroundColor3 = SHOP.SoldBottom
+			card.buy.BackgroundColor3 = SHOP.BuyShade
+			card.fill.BackgroundTransparency = 0.25
+		end
+
+		card.buy.Activated:Connect(function()
+			if not live then
+				--==========================================================
+				-- A BUTTON THAT CANNOT CHARGE SAYS SO
+				--
+				-- Prompting with a product id of 0 throws, and a thrown error
+				-- on a click reads to a player as a broken shop. The refusal
+				-- noise is the honest answer until the id exists.
+				--==========================================================
+				SoundKit.play("Denied")
+				return
+			end
+			--==============================================================
+			-- THE CLIENT ASKS FOR THE PROMPT AND NOTHING ELSE
+			--
+			-- No optimistic paint, no BUYING state, no local grant. What the
+			-- player gets is decided by StoreService when Roblox delivers the
+			-- receipt, and the profile packet that follows is what updates the
+			-- HUD. There is nothing for this side to be optimistic about.
+			--==============================================================
+			local ok, err = pcall(function()
+				MarketplaceService:PromptProductPurchase(player, productId)
+			end)
+			if not ok then
+				warn("[Seed/ShopUI] could not prompt for " .. item.key .. ": " .. tostring(err))
+				SoundKit.play("Denied")
+			end
+		end)
+	end
 end
 
 -- Every shelf exists now, so the cells can be measured. Bound to the body rather
@@ -503,187 +538,11 @@ bodyList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(fit)
 relayout()
 fit()
 
---==============================================================================
--- WHAT THE CARDS SAY, GIVEN WHERE THE PLAYER IS
---==============================================================================
-local plotTier = GameConfig.StartingPlotTier
-local cash = 0
-local heardFromServer = false
-
---==============================================================================
--- ONE CLICK IN FLIGHT AT A TIME
---
--- The purchase is a fire-and-forget RemoteEvent, so the only acknowledgement is
--- the profile packet that follows -- up to a quarter second later, because
--- PlayerDataService coalesces them. That is four or five frames in which the
--- card still says BUY and the player's cash still reads the old number, and a
--- second click in that window sends a second purchase.
---
--- The server's own reentrancy guard would refuse it, so nothing breaks either
--- way. This exists so the BUTTON does not look broken: it goes quiet, says
--- BUYING, and comes back when the answer arrives.
---
--- Cleared by any profile packet, not only a successful one -- a refusal sends
--- no signal of its own, and a button stuck on BUYING forever would be worse
--- than one that flickers.
---==============================================================================
-local pending: number? = nil
-
-local function paint()
-	for tier = 2, #GameConfig.PlotTiers do
-		local card = plotCards[tier]
-		if card then
-			local cost = GameConfig.PlotTiers[tier].cost or 0
-			local owned = plotTier >= tier
-			local next_ = plotTier == tier - 1
-
-			if owned then
-				-- Already yours: the card stays legible but stops competing for
-				-- attention with the one you could actually buy.
-				card.tint.Color = ColorSequence.new(SHOP.SoldTop, SHOP.SoldBottom)
-				card.frame.BackgroundColor3 = SHOP.SoldBottom
-				card.buy.BackgroundColor3 = SHOP.BuyShade
-				card.price.Text = "OWNED"
-			elseif pending == tier then
-				-- Sent, not yet answered.
-				card.tint.Color = ColorSequence.new(SHOP.CardTop, SHOP.CardBottom)
-				card.frame.BackgroundColor3 = SHOP.CardBorder
-				card.buy.BackgroundColor3 = SHOP.BuyShade
-				card.price.Text = "BUYING..."
-			else
-				card.tint.Color = ColorSequence.new(SHOP.CardTop, SHOP.CardBottom)
-				card.frame.BackgroundColor3 = SHOP.CardBorder
-				--==========================================================
-				-- ONLY THE NEXT LEVEL IS LIT
-				--
-				-- The ladder is bought one rung at a time -- the server adds
-				-- exactly one level per purchase and charges for that one --
-				-- so a card two rungs up is not a thing you can buy at any
-				-- price. It shows its price and stays dark.
-				--==========================================================
-				card.buy.BackgroundColor3 = if next_ then SHOP.Buy else SHOP.Locked
-				card.price.Text = "$" .. GameConfig.compact(cost)
-			end
-			card.fill.BackgroundTransparency = if owned or next_ then 0 else 0.25
-		end
-	end
-end
-
-paint()
-
---==============================================================================
--- THE BUY BUTTON
---
--- Sends the verb and nothing else. Every refusal the client can see for itself
--- -- wrong rung, not enough cash, already in flight -- is answered here with
--- DENIED and no packet, because there is no reason to spend a remote call
--- asking a question this side already knows the answer to.
---
--- NO SUCCESS SOUND ON CLICK. A click is a request. The purchase cue is fired by
--- the server, at the plot, on the path where the money actually moved -- so a
--- request that gets refused for a reason only the server can see does not sound
--- like a purchase that happened.
---
--- Wired AFTER paint() rather than inside the build loop on purpose: `plotTier`,
--- `cash` and `pending` are declared below the loop, so a closure written up
--- there would resolve them as GLOBALS and silently read nil forever.
---==============================================================================
-for tier = 2, #GameConfig.PlotTiers do
-	local card = plotCards[tier]
-	if card then
-		card.buy.Activated:Connect(function()
-			local cost = GameConfig.PlotTiers[tier].cost or 0
-			local reachable = plotTier == tier - 1 and heardFromServer
-				and cash >= cost and pending == nil
-			if not reachable then
-				SoundKit.play("Denied")
-				return
-			end
-			if not gameEvent then
-				-- No remote means nothing can be bought; say so rather than
-				-- going quiet on BUYING forever.
-				SoundKit.play("Denied")
-				return
-			end
-			pending = tier
-			paint()
-			gameEvent:FireServer(GameConfig.PlotUpgradeAction)
-		end)
-	end
-end
-
---==============================================================================
--- THE PROFILE
---
--- PlotTier says which cards are owned, Cash says which one is within reach. No
--- new remote: both ride the ProfileUpdated packet that already arrives four
--- times a second.
---==============================================================================
-local function receive(profile: any)
-	if type(profile) ~= "table" then
-		return
-	end
-	local changed = false
-	if type(profile.PlotTier) == "number" then
-		local tier = math.floor(profile.PlotTier)
-		if tier ~= plotTier then
-			plotTier = tier
-			changed = true
-		end
-	end
-	if type(profile.Cash) == "number" then
-		-- Only repaint when it crosses a price, not on every packet.
-		for tier = 2, #GameConfig.PlotTiers do
-			local cost = GameConfig.PlotTiers[tier].cost or 0
-			if (cash >= cost) ~= (profile.Cash >= cost) then
-				changed = true
-			end
-		end
-		cash = profile.Cash
-	end
-	if not heardFromServer then
-		heardFromServer = true
-		changed = true
-	end
-	--==========================================================================
-	-- THE ANSWER, WHICHEVER WAY IT WENT
-	--
-	-- A successful upgrade arrives as a PlotTier change; a refusal arrives as
-	-- nothing at all, and this packet is simply the next routine one. Both clear
-	-- the pending click, because the alternative is a button that says BUYING
-	-- until the player closes the panel.
-	--
-	-- The success cue is deliberately NOT played here. The server already fired
-	-- one in 3D at the plot; a second one on the client would double it for
-	-- every player standing in their own garden, which is all of them.
-	--==========================================================================
-	if pending ~= nil then
-		pending = nil
-		changed = true
-	end
-	if changed then
-		paint()
-	end
-end
-
-local remotes = SeedGame:WaitForChild("Remotes", 20)
-if remotes then
-	-- WaitForChild, not FindFirstChild: the folder replicates before the events
-	-- inside it, which is how CashUI once sat blank for a whole session.
-	local updated = remotes:WaitForChild(GameConfig.Remotes.ProfileUpdated, 20)
-	if updated and updated:IsA("RemoteEvent") then
-		updated.OnClientEvent:Connect(receive)
-	else
-		warn("[Seed/ShopUI] No ProfileUpdated; the shop will assume a starting plot.")
-	end
-	local ready = remotes:WaitForChild(GameConfig.Remotes.ProfileReady, 20)
-	if ready and ready:IsA("RemoteEvent") then
-		ready.OnClientEvent:Connect(function(ok: boolean, profile: any)
-			if ok then
-				receive(profile)
-			end
-		end)
-	end
+if liveCount == 0 then
+	warn(string.format(
+		"[Seed/ShopUI] Nothing is for sale: %d tile(s) and every product id is 0. "
+		.. "Create the Developer Products and fill their ids into GameConfig.Store.",
+		soonCount))
 end
 
 --==============================================================================
