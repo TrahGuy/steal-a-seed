@@ -181,6 +181,33 @@ GameConfig.Plot = {
 	-- through -- you arrive at your gate rather than at the back of a fence.
 	GateWidth = 13,
 
+	--==========================================================================
+	-- THE UPGRADE BOARD
+	--
+	-- Built by MillModel.BuildSign, the same one the mill uses, because two
+	-- upgrade boards drawn by two builders is two things to keep in step and the
+	-- one that gets forgotten is the one nobody is looking at.
+	--==========================================================================
+	Sign = {
+		-- Clear of the gate on the left as you walk in. See plotSignBase for the
+		-- arithmetic; this is not a number to nudge by eye.
+		OffsetX = -11.12,
+		-- BuildSign treats the frame it is handed as the post's GROUND BASE, so
+		-- this is where the post's foot lands relative to the plot's own frame.
+		--
+		-- ZERO, not the mill's -0.6. The mill sits 0.6 studs proud of the field and
+		-- its sign has to reach back down; a plot's frame is already on the ground.
+		-- Measured before and after: at -0.6 the post's foot was at y -0.60 against
+		-- a field at 0.00 -- buried by exactly that much.
+		GroundY = 0,
+		-- Just outside the fence line, so the board is read from the approach
+		-- rather than from inside somebody's garden.
+		Standoff = 1.6,
+		-- The board faces the way the gate does, which is the way the plot's own
+		-- local -Z points: at the hub, where players arrive from.
+		YawDegrees = 0,
+	},
+
 	SpawnHeightOffset = 4,
 
 	--==========================================================================
@@ -684,6 +711,16 @@ GameConfig.Tags = {
 	MillWheel = "MillWheel",
 	MillLeaf = "MillLeaf",
 	MillSign = "MillSign",
+	--==========================================================================
+	-- THE PLOT'S OWN UPGRADE BOARD
+	--
+	-- The same idea as MillSign and deliberately the same builder: a board by the
+	-- gate that says what the next level costs and carries the prompt that buys
+	-- it. The plot ladder used to live in the shop panel, which put the two
+	-- upgrades in a menu and at a sign respectively for no reason a player could
+	-- see.
+	--==========================================================================
+	PlotSign = "PlotSign",
 	MillJaw = "MillJaw",
 	MillHolo = "MillHolo",
 	MillWing = "MillWing",
@@ -2877,6 +2914,112 @@ GameConfig.Panel = {
 -- These are NOT ink / paper / accent, exactly like the corner HUD is not. A shop
 -- panel is a large surface with its own internal contrast to manage.
 --==============================================================================
+--==============================================================================
+-- THE ROBUX STOREFRONT
+--
+-- Four shelves: SPEED, CASH, PREMIUM PODS and PLANTS. The plot ladder used to
+-- live in this panel and does not any more -- it is a board by the gate now, the
+-- same as the mill's, because two upgrades reached two different ways was a
+-- difference with no reason behind it.
+--
+--==============================================================================
+-- EVERY `product` IS 0, AND THAT IS THE POINT
+--
+-- A Developer Product id can only be created in the Creator Dashboard, and an id
+-- typed in from memory is an id that silently sells the wrong thing. Zero means
+-- "not created yet": the shelf still draws the tile, the tile reads SOON, and
+-- the button refuses. Fill an id in and that tile becomes live with no other
+-- change anywhere.
+--
+-- StoreService asserts at boot that no two entries share a non-zero id, because
+-- a copy-pasted id is the one mistake here that charges for one thing and grants
+-- another.
+--
+--==============================================================================
+-- THE POD PRODUCTS ARE FIXED, NOT ROLLED
+--
+-- Each one names exactly what it gives -- a species and a tier -- and the server
+-- grants that and nothing else. This is deliberate and it is a COMPLIANCE
+-- position, not a design preference: a pod whose species or tier were rolled
+-- would be a paid random item, which Roblox requires you to disclose and to
+-- publish odds for. Every other pod in this game is rolled, and every one of
+-- them is obtained by stealing rather than by paying.
+--
+-- If these ever become random, the experience questionnaire has to change with
+-- them. Do not make that change here alone.
+--
+--==============================================================================
+-- THE NUMBERS ARE A STARTING POINT
+--
+-- The speed and cash ladders are the reference shots' shape. They have NOT been
+-- fitted to this economy -- a tier-1 mill trains at 20/sec, so +150K is about
+-- two hours of it, and the owner's own save is past 2B on both counters. Expect
+-- to move these once there is a beta to watch. The Robux prices are likewise
+-- the reference's and are the owner's to set.
+--==============================================================================
+export type StoreItem = {
+	key: string,
+	label: string,
+	robux: number,
+	product: number,
+	kind: "speed" | "cash" | "pod",
+	amount: number?,
+	species: string?,
+	tier: number?,
+}
+
+GameConfig.Store = {
+	--== the shelves, in the order they are drawn ==--
+	Sections = {
+		{ id = "Speed", heading = "SPEED", colour = Color3.fromRGB(120, 206, 250) },
+		{ id = "Cash", heading = "CASH", colour = Color3.fromRGB(142, 220, 68) },
+		{ id = "Pods", heading = "PREMIUM PODS", colour = Color3.fromRGB(250, 214, 108) },
+		{ id = "Plants", heading = "PLANTS", colour = Color3.fromRGB(196, 168, 255) },
+	},
+
+	--==========================================================================
+	-- PLANTS IS EMPTY ON PURPOSE
+	--
+	-- The owner asked for the shelf now and the content later. An empty shelf
+	-- with a COMING SOON plate on it is a promise; a missing shelf is nothing at
+	-- all, and the difference is what a player decides about whether to come
+	-- back.
+	--==========================================================================
+	ComingSoon = { Plants = true },
+
+	Items = {
+		Speed = {
+			{ key = "speed1", label = "+150K SPEED", robux = 35, product = 0, kind = "speed", amount = 150e3 },
+			{ key = "speed2", label = "+1M SPEED", robux = 99, product = 0, kind = "speed", amount = 1e6 },
+			{ key = "speed3", label = "+10M SPEED", robux = 279, product = 0, kind = "speed", amount = 10e6 },
+			{ key = "speed4", label = "+50M SPEED", robux = 599, product = 0, kind = "speed", amount = 50e6 },
+			{ key = "speed5", label = "+500M SPEED", robux = 799, product = 0, kind = "speed", amount = 500e6 },
+			{ key = "speed6", label = "+1B SPEED", robux = 1199, product = 0, kind = "speed", amount = 1e9 },
+		},
+		Cash = {
+			{ key = "cash1", label = "$24,000", robux = 19, product = 0, kind = "cash", amount = 24e3 },
+			{ key = "cash2", label = "$200,000", robux = 39, product = 0, kind = "cash", amount = 200e3 },
+			{ key = "cash3", label = "$800,000", robux = 99, product = 0, kind = "cash", amount = 800e3 },
+			{ key = "cash4", label = "$4,000,000", robux = 199, product = 0, kind = "cash", amount = 4e6 },
+			{ key = "cash5", label = "$8,000,000", robux = 319, product = 0, kind = "cash", amount = 8e6 },
+		},
+		--======================================================================
+		-- Species and tier are BOTH named, so nothing about the outcome is a
+		-- roll. Greenhollow commons at the low end and the biome's Epic at the
+		-- top, which is the shape of a reward ladder rather than a lottery.
+		--======================================================================
+		Pods = {
+			{ key = "pod1", label = "GIANT NUBKIN", robux = 79, product = 0,
+				kind = "pod", species = "nubkin", tier = 5 },
+			{ key = "pod2", label = "TITAN PETALPIP", robux = 189, product = 0,
+				kind = "pod", species = "petalpip", tier = 6 },
+			{ key = "pod3", label = "COLOSSAL BELLCHIME", robux = 449, product = 0,
+				kind = "pod", species = "bellchime", tier = 7 },
+		},
+		Plants = {},
+	},
+}
+
 GameConfig.Shop = {
 	Panel = Color3.fromRGB(26, 28, 41),
 	PanelEdge = Color3.fromRGB(48, 50, 61),
@@ -3788,6 +3931,15 @@ GameConfig.Save = {
 	-- unbounded rate. It is an argument about the RATE, which is ours to set:
 	-- plant yields get tuned so Rebirth arrives long before the ceiling does.
 	--==========================================================================
+	--==========================================================================
+	-- HOW MANY HONOURED RECEIPTS ARE REMEMBERED
+	--
+	-- Only enough to outlive a retry. Roblox re-delivers an unacknowledged
+	-- receipt for days, but it re-delivers the SAME one -- so the list only has
+	-- to be longer than the number of purchases a player could make between two
+	-- saves, and the autosave is every 45 seconds.
+	--==========================================================================
+	MaxReceipts = 32,
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
 	--==========================================================================
@@ -3906,6 +4058,32 @@ end
 -- may hold -- that is plotCapacityForTier below, and confusing the two is the
 -- bug this pass exists to remove.
 --==============================================================================
+--==============================================================================
+-- WHERE THE PLOT'S UPGRADE BOARD STANDS
+--
+-- Beside the gate, on the front fence line, turned to face whoever is walking
+-- up to it -- the same relationship the mill's board has to the mill.
+--
+-- THE FRONT EDGE NEVER MOVES. A plot grows BACKWARDS: PlotSpec asserts the gate
+-- does not move at any level pair and that the back edge takes the whole depth
+-- change. So a board placed off the front is placed once and is still right at
+-- Level 5, which is what keeps this out of the drift the mill sign once had.
+--
+-- The X is arithmetic, not taste. The board is 9 * Mill.Sign.Scale = 6.84 wide
+-- and the gate gap is GateWidth 13, so the gate's edge is at 6.5. Clearing it by
+-- 1.2 puts the board's inner edge at 7.7 and its centre at 11.12; the fence
+-- corner is at Width/2 = 24, so it sits in the middle of the fence run with
+-- room on both sides.
+--==============================================================================
+function GameConfig.plotSignBase(plotCF: CFrame, level: number?): CFrame
+	local P = GameConfig.Plot
+	local S = P.Sign
+	local halfD = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(level)) * 0.5
+	return plotCF
+		* CFrame.new(S.OffsetX, S.GroundY, -halfD - S.Standoff)
+		* CFrame.Angles(0, math.rad(S.YawDegrees), 0)
+end
+
 function GameConfig.plotSlotsFor(rows: number): number
 	return rows * GameConfig.Plot.BedColumns
 end

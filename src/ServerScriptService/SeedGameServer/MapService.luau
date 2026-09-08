@@ -1336,6 +1336,32 @@ function MapService.Init()
 		-- Placed off the plot's own CFrame, so it swings round with the plot and
 		-- needs no angle maths of its own.
 		buildTreadmill(id, cf * CFrame.new(PLOT.Width * 0.5 + 11, 0.6, 0), plots)
+
+		--==================================================================
+		-- THE PLOT'S UPGRADE BOARD, BESIDE ITS GATE
+		--
+		-- Parented to `plots` rather than to the plot, the same as the
+		-- treadmill above: ResizePlot clears the plot's own children, and a
+		-- board that had to be rebuilt on every upgrade is a board that can
+		-- drift on every upgrade. The front edge never moves, so this is
+		-- placed once and is still right at Level 5.
+		--==================================================================
+		local plotSign = MillModel.BuildSign(
+			GameConfig.plotSignBase(cf, GameConfig.StartingPlotTier), plots)
+		plotSign.Name = string.format("PlotSign%02d", id)
+		plotSign:SetAttribute(GameConfig.Attributes.PlotId, id)
+		--==================================================================
+		-- IT IS NOT A MILL SIGN, WHATEVER THE BUILDER THINKS
+		--
+		-- BuildSign tags what it makes `MillSign`, which is right for its only
+		-- previous caller and wrong here. TreadmillService finds its boards by
+		-- that tag and by PlotId -- both of which this one carries -- so left
+		-- alone it repaints the plot's board with the MILL's ladder, and the
+		-- owner's plot advertised "LEVEL 8 > LEVEL 9  ·  12M/s > 70M/s  ·  $10B"
+		-- on a board about garden slots. Measured, not guessed.
+		--==================================================================
+		CollectionService:RemoveTag(plotSign, GameConfig.Tags.MillSign)
+		CollectionService:AddTag(plotSign, GameConfig.Tags.PlotSign)
 	end
 
 	--== FIELD DRESSING ==--

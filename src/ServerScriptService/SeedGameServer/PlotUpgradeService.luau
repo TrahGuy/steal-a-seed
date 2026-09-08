@@ -32,6 +32,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local CollectionService = game:GetService("CollectionService")
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 
@@ -239,6 +240,109 @@ end
 --==============================================================================
 -- LIFECYCLE
 --==============================================================================
+--==============================================================================
+-- THE BOARD BY THE GATE
+--
+-- The plot ladder used to be a shelf in the shop panel, which put the two
+-- upgrades in this game -- the mill's and the plot's -- in two different kinds
+-- of place for no reason a player could see. One was a board you walked up to,
+-- the other a menu. They are both boards now, built by the same builder.
+--
+-- The board is lettered on BOTH faces, so every string is worked out once and
+-- written to each of them. Structure is MillModel's: a `Board` part carrying the
+-- SurfaceGuis and the prompt, and each face carrying Title / Step / Rate and a
+-- Buy frame with a Price in it.
+--==============================================================================
+local function boardOf(sign: Instance): (BasePart?, ProximityPrompt?)
+	local board = sign:FindFirstChild("Board")
+	if not (board and board:IsA("BasePart")) then
+		return nil, nil
+	end
+	return board, board:FindFirstChildOfClass("ProximityPrompt")
+end
+
+local function plotWithId(plotId: number): Model?
+	for _, candidate in ipairs(CollectionService:GetTagged(GameConfig.Tags.Plot)) do
+		if candidate:IsA("Model")
+			and candidate:GetAttribute(GameConfig.Attributes.PlotId) == plotId then
+			return candidate
+		end
+	end
+	return nil
+end
+
+local function paintSign(sign: Instance)
+	local plotId = tonumber(sign:GetAttribute(GameConfig.Attributes.PlotId))
+	local board, prompt = boardOf(sign)
+	if not (plotId and board) then
+		return
+	end
+	local plot = plotWithId(plotId)
+	local player = if plot then PlotService.OwnerOf(plot) else nil
+
+	--==========================================================================
+	-- AN EMPTY PLOT STILL ADVERTISES
+	--
+	-- The step is a fact about a PLAYER -- their level, their cash -- and a plot
+	-- on the ring with nobody on it has none of those. It falls back to the
+	-- first rung of the ladder, which is the honest thing for a board outside an
+	-- empty garden to be showing.
+	--==========================================================================
+	local level = if player then PlotUpgradeService.LevelOf(player)
+		else GameConfig.StartingPlotTier
+	local step: Step = if player then PlotUpgradeService.NextStepFor(player)
+		elseif level < #TIERS then { kind = "next", level = level + 1, cost = TIERS[level + 1].cost }
+		else { kind = "max", level = level, cost = 0 }
+
+	local sellable = step.kind ~= "max"
+	local stepText = if sellable
+		then string.format("LEVEL %d  >  LEVEL %d", level, step.level)
+		else string.format("LEVEL %d", level)
+	local rateText = if sellable
+		then string.format("%d  >  %d SLOTS",
+			GameConfig.plotCapacityForTier(level),
+			GameConfig.plotCapacityForTier(step.level))
+		else string.format("%d SLOTS", GameConfig.plotCapacityForTier(level))
+	local priceText = if sellable then "$" .. GameConfig.compact(step.cost) else "MAX"
+	local buyColour = if sellable then Color3.fromRGB(214, 78, 66)
+		else Color3.fromRGB(96, 100, 108)
+
+	for _, face in ipairs(board:GetChildren()) do
+		if face:IsA("SurfaceGui") then
+			local title = face:FindFirstChild("Title") :: TextLabel?
+			local stepLabel = face:FindFirstChild("Step") :: TextLabel?
+			local rate = face:FindFirstChild("Rate") :: TextLabel?
+			local buy = face:FindFirstChild("Buy") :: Frame?
+			local price = buy and buy:FindFirstChild("Price") :: TextLabel?
+			if title then title.Text = "PLOT" end
+			if stepLabel then stepLabel.Text = stepText end
+			if rate then rate.Text = rateText end
+			if price then price.Text = priceText end
+			if buy then buy.BackgroundColor3 = buyColour end
+		end
+	end
+
+	if prompt then
+		--======================================================================
+		-- A BUTTON THAT CANNOT DO ANYTHING IS WORSE THAN NO BUTTON
+		--
+		-- The same reasoning MillModel gives for not drawing a Robux button it
+		-- cannot charge. At Level 5 there is nothing to sell, so the prompt goes
+		-- and the board reads MAX.
+		--======================================================================
+		prompt.Enabled = sellable
+		prompt.ObjectText = "Plot"
+	end
+end
+
+local function repaintAll()
+	for _, sign in ipairs(CollectionService:GetTagged(GameConfig.Tags.PlotSign)) do
+		paintSign(sign)
+	end
+end
+
+PlotUpgradeService.RepaintSigns = repaintAll
+
 function PlotUpgradeService.Init()
 	for _, c in ipairs(serviceConnections) do
 		c:Disconnect()
@@ -269,9 +373,73 @@ function PlotUpgradeService.Start()
 		warn("[Seed/PlotUpgradeService] No GameEvent remote. Plots cannot be upgraded.")
 	end
 
+	--==========================================================================
+	-- THE BOARDS
+	--
+	-- Bound by tag, both directions: the ones already standing and any that
+	-- appear later, so a plot rebuilt at runtime is picked up without anybody
+	-- remembering to rebind it.
+	--
+	-- The prompt fires Triggered on the SERVER with the player who pressed it,
+	-- so the board needs no remote of its own -- and the sender is the ONLY
+	-- input. Not the plot the board stands on and not the level it is showing:
+	-- TryUpgrade looks up the caller's own plot and their own profile, so
+	-- pressing somebody else's board upgrades nothing.
+	--==========================================================================
+	local function bindSign(instance: Instance)
+		if not instance:IsA("Model") then
+			return
+		end
+		local _, prompt = boardOf(instance)
+		if prompt then
+			table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
+				if PlotUpgradeService.TryUpgrade(player) then
+					repaintAll()
+				end
+			end))
+		end
+		paintSign(instance)
+	end
+
+	for _, sign in ipairs(CollectionService:GetTagged(GameConfig.Tags.PlotSign)) do
+		bindSign(sign)
+	end
+	table.insert(serviceConnections,
+		CollectionService:GetInstanceAddedSignal(GameConfig.Tags.PlotSign):Connect(bindSign))
+
+	--==========================================================================
+	-- A PLOT IS HANDED OVER BEFORE THE SAVE ARRIVES
+	--
+	-- PlotService assigns on join and PlayerDataService loads asynchronously, so
+	-- at the moment OnAssigned fires there is usually no profile yet and
+	-- LevelOf falls back to the starting tier. Measured: an owner sitting on
+	-- Level 5 had a board advertising "LEVEL 1 > LEVEL 2".
+	--
+	-- So it paints once immediately -- an unowned-looking board is better than a
+	-- blank one while the load is in flight -- and again as soon as the profile
+	-- is actually there. Bounded, because a save that never arrives is a player
+	-- who was kicked.
+	--==========================================================================
+	table.insert(serviceConnections, PlotService.OnAssigned(function(player)
+		repaintAll()
+		task.spawn(function()
+			local deadline = os.clock() + 20
+			while os.clock() < deadline do
+				if PlayerDataService.IsReady(player) then
+					repaintAll()
+					return
+				end
+				task.wait(0.25)
+			end
+		end)
+	end))
+
 	table.insert(serviceConnections,
 		game:GetService("Players").PlayerRemoving:Connect(function(player)
 			busy[player] = nil
+			-- Their plot is about to be released; the board should stop showing
+			-- their level. Deferred so the release has actually happened.
+			task.defer(repaintAll)
 		end))
 end
 
