@@ -2970,11 +2970,31 @@ export type StoreItem = {
 
 GameConfig.Store = {
 	--== the shelves, in the order they are drawn ==--
+	--==========================================================================
+	-- A SHELF OWNS ITS COLOUR
+	--
+	-- `colour` is the heading. `top`/`bottom` are the tile's gradient and `rim`
+	-- the bright edge around it -- which is the thing that makes the reference
+	-- shelves read as shelves rather than as one wall of tiles. `accent` is the
+	-- colour the AMOUNT is printed in, with the noun left white beside it.
+	--==========================================================================
 	Sections = {
-		{ id = "Speed", heading = "SPEED", colour = Color3.fromRGB(120, 206, 250) },
-		{ id = "Cash", heading = "CASH", colour = Color3.fromRGB(142, 220, 68) },
-		{ id = "Pods", heading = "PREMIUM PODS", colour = Color3.fromRGB(250, 214, 108) },
-		{ id = "Plants", heading = "PLANTS", colour = Color3.fromRGB(196, 168, 255) },
+		{ id = "Speed", heading = "SPEED",
+			colour = Color3.fromRGB(120, 206, 250),
+			top = Color3.fromRGB(112, 216, 248), bottom = Color3.fromRGB(38, 132, 226),
+			rim = Color3.fromRGB(146, 236, 255), accent = Color3.fromRGB(126, 250, 128) },
+		{ id = "Cash", heading = "CASH",
+			colour = Color3.fromRGB(142, 220, 68),
+			top = Color3.fromRGB(126, 226, 96), bottom = Color3.fromRGB(30, 150, 52),
+			rim = Color3.fromRGB(168, 246, 122), accent = Color3.fromRGB(255, 255, 255) },
+		{ id = "Pods", heading = "PREMIUM PODS",
+			colour = Color3.fromRGB(250, 214, 108),
+			top = Color3.fromRGB(252, 222, 130), bottom = Color3.fromRGB(214, 140, 30),
+			rim = Color3.fromRGB(255, 238, 168), accent = Color3.fromRGB(255, 255, 255) },
+		{ id = "Plants", heading = "PLANTS",
+			colour = Color3.fromRGB(196, 168, 255),
+			top = Color3.fromRGB(198, 172, 255), bottom = Color3.fromRGB(112, 74, 208),
+			rim = Color3.fromRGB(220, 202, 255), accent = Color3.fromRGB(255, 255, 255) },
 	},
 
 	--==========================================================================
@@ -3031,6 +3051,16 @@ GameConfig.Shop = {
 	SoldBottom = Color3.fromRGB(50, 54, 66),
 	Buy = Color3.fromRGB(250, 190, 46),
 	BuyShade = Color3.fromRGB(186, 130, 20),
+	--==========================================================================
+	-- THE PRICE PILL IS GREEN ON EVERY SHELF
+	--
+	-- In the reference it is the same green on the cyan speed tiles and on the
+	-- green cash ones -- it is the BUY colour, not the shelf's, and keeping it
+	-- constant is what makes it read as the button rather than as decoration.
+	--==========================================================================
+	Pill = Color3.fromRGB(106, 208, 62),
+	PillShade = Color3.fromRGB(58, 140, 34),
+	PillEdge = Color3.fromRGB(168, 246, 122),
 	Close = Color3.fromRGB(255, 0, 0),
 	Title = Color3.fromRGB(255, 255, 255),
 	-- One colour per section, so a long shop reads as a list of shelves rather

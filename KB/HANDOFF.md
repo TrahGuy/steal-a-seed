@@ -952,13 +952,54 @@ watch.
 `StoreService` warns at boot about any id that is duplicated between two entries,
 because a copy-pasted id charges for one tile and grants another.
 
+### THE TILES, REDESIGNED TO THE REFERENCE
+
+The first pass reused the old plot-shelf card and it did not look like the shots.
+Four changes closed it:
+
+  * **Landscape, not portrait.** The Index and Garden are 1.30 because a plant is
+    taller than it is wide and the card is a photograph of one. A shop tile is an
+    icon, a price and a button, and the reference lays those out wider than tall.
+    0.86 is as flat as this panel goes and still fits the three bands.
+  * **A shelf owns its colour.** Cyan speed, green cash, gold pods, violet plants
+    -- a gradient face inside a bright rim, which is the thing that makes the
+    reference read as shelves rather than one wall of tiles. The rim is the
+    card's background with the face inset inside it, so it stays even at every
+    corner radius.
+  * **Two colours on one line.** RichText, so "+150K" prints in the shelf's
+    accent and "SPEED" in white beside it, split at the first space. An entry
+    with no space -- "$24,000" -- is all amount, which is how the reference
+    prints the cash shelf too.
+  * **A green pill on every shelf.** In the reference it is the same green on the
+    cyan tiles and on the green ones: it is the BUY colour, not the shelf's.
+
+Three things found by looking at it rather than by reasoning:
+
+  * **A grey "SOON" tile made the whole shop look broken.** Draining the tile to
+    slate when a product has no id is honest, and with every id at 0 it meant the
+    cyan-and-green the design rests on was nowhere on screen. Only the PILL goes
+    dark now -- which is also the smallest possible difference between this state
+    and the live one.
+  * **The label sat on the pill.** The title was 24 PIXELS tall on a card that is
+    124 pixels at three columns and 93 at two -- a quarter of the tile at one
+    width and a third at the other. Every band is a fraction now.
+  * **"COLOSSAL BELLCHIME" came out as "COLOSSAL BELLCHI(".** The title is scaled
+    with a floor of 9, so a long product name gets smaller type instead of losing
+    its last word. Measured after: zero titles overflow their card.
+
+Nothing in a shop card is rotated. A rotated child escapes ClipsDescendants and
+this panel scrolls -- the note at the top of ShopUI records the half-scrolled
+tile that threw its decoration 342 pixels past the list -- so every shape gets
+its curves from UICorner instead.
+
 ### VERIFIED
 
     compiles           GameConfig, StoreService, CarryService, ProfileSchema,
                        PlotUpgradeService, MapService, ShopUI
     boot               20 services, no errors; StoreService and ShopUI both say
                        plainly that nothing is for sale
-    shop               4 headings, 15 tiles, all reading SOON and refusing
+    shop               4 headings, 15 tiles in their shelf's colour, all
+                       reading SOON and refusing; 0 titles overflowing
     boards             6 built, correct per-plot text, prompt disabled at MAX
     suites             TutorialPodSpec 263, TutorialSpec 93, PlotSpec 65,
                        MillSignSpec 8, WeaponSpec 80, BatSwingSpec 93

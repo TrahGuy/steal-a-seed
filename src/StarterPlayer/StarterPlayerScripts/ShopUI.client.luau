@@ -228,7 +228,16 @@ bodyList.Parent = body
 -- in and re-sizes them when the screen turns.
 --==============================================================================
 local GUTTER = 10
-local CARD_ASPECT = 1.30
+--==============================================================================
+-- THE SHOP TILE IS LANDSCAPE, AND THE OTHER TWO PANELS ARE NOT
+--
+-- Index and Garden cards are 1.30 -- portrait, because a plant is taller than it
+-- is wide and the card is a photograph of one. A shop tile is not a portrait of
+-- anything: it is an icon, a price and a button, and the reference lays those
+-- out wider than tall. 0.86 is as flat as this panel can go and still fit a
+-- 52% illustration over a line of type over a 30-pixel pill at 248 pixels wide.
+--==============================================================================
+local CARD_ASPECT = 0.86
 
 local shelves: { UIGridLayout } = {}
 
@@ -291,78 +300,152 @@ type Card = {
 	title: TextLabel,
 	price: TextLabel,
 	buy: TextButton,
+	-- Greyed with the rest of the tile when a product has no id yet.
+	token: Frame,
 }
 
-local function buildCard(parent: Instance, order: number): Card
+--==============================================================================
+-- ONE TILE
+--
+-- Built to the reference: a bright rim in the shelf's own colour around a
+-- gradient face, an illustration filling the top half, one line of type where
+-- the AMOUNT is coloured and the noun beside it is white, and a green pill with
+-- a Robux token and a number.
+--
+-- The palette is passed in rather than read from a global, because the whole
+-- point of the redesign is that a speed tile and a cash tile are not the same
+-- colour.
+--==============================================================================
+local function buildCard(parent: Instance, order: number, palette: any): Card
 	local frame = Instance.new("Frame")
 	frame.Name = "Card" .. order
 	frame.LayoutOrder = order
-	frame.BackgroundColor3 = SHOP.CardBorder
+	-- The RIM. It is the card's background and the fill sits inset inside it,
+	-- so the bright edge is geometry rather than a stroke that would round
+	-- differently at every corner radius.
+	frame.BackgroundColor3 = palette.rim
 	frame.BorderSizePixel = 0
 	frame.Parent = parent
-	corner(frame, 14)
+	corner(frame, 12)
 	stroke(frame, SHOP.Outline, 3)
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
-	fill.Position = UDim2.fromOffset(5, 5)
-	fill.Size = UDim2.new(1, -10, 1, -10)
+	fill.Position = UDim2.fromOffset(4, 4)
+	fill.Size = UDim2.new(1, -8, 1, -8)
 	fill.BackgroundColor3 = WHITE
 	fill.BorderSizePixel = 0
 	fill.Parent = frame
-	corner(fill, 10)
-	local tint = gradient(fill, SHOP.CardTop, SHOP.CardBottom)
+	corner(fill, 9)
+	local tint = gradient(fill, palette.top, palette.bottom)
 
-	-- Scale, not offset: the cell is measured off the panel now, so a card laid
-	-- out at 248 pixels and one at 460 have to fill themselves the same way.
+	-- Scale, not offset: the cell is measured off the panel, so a card laid out
+	-- at 248 pixels and one at 460 have to fill themselves the same way.
 	local art = Instance.new("Frame")
 	art.Name = "Art"
 	art.AnchorPoint = Vector2.new(0.5, 0)
+	--==========================================================================
+	-- EVERY BAND IS A FRACTION, NOT A PIXEL COUNT
+	--
+	-- The title used to be 24 pixels tall on a card that is 124 pixels tall at
+	-- three columns and 93 at two -- a quarter of the tile at one width and a
+	-- third at the other, which is how the label ended up sitting on the pill.
+	-- Art 0.05-0.47, type 0.49-0.69, pill 0.73-0.95, all in scale.
+	--==========================================================================
 	art.Position = UDim2.new(0.5, 0, 0.04, 0)
-	art.Size = UDim2.new(0.84, 0, 0.44, 0)
+	art.Size = UDim2.new(0.78, 0, 0.46, 0)
 	art.BackgroundTransparency = 1
 	art.Parent = fill
 
-	local titleLabel = outlined(fill, 19, WHITE, 3)
+	--==========================================================================
+	-- ONE LINE, TWO COLOURS
+	--
+	-- RichText, so "+150K" can be green and "SPEED" white on the same baseline
+	-- the way the reference prints it. Two labels side by side would need to be
+	-- measured and centred as a pair, which is arithmetic RichText already does.
+	--==========================================================================
+	local titleLabel = outlined(fill, 18, WHITE, 3)
 	titleLabel.Name = "Title"
-	titleLabel.Position = UDim2.new(0, 0, 0.52, 0)
-	titleLabel.Size = UDim2.new(1, 0, 0, 26)
+	titleLabel.RichText = true
+	titleLabel.Position = UDim2.new(0, 0, 0.51, 0)
+	titleLabel.Size = UDim2.new(1, -8, 0.19, 0)
+	--==========================================================================
+	-- LONG NAMES SHRINK RATHER THAN SPILL
+	--
+	-- "+150K SPEED" fits at eighteen and "COLOSSAL BELLCHIME" does not -- it came
+	-- out as "COLOSSAL BELLCHI(" with the tail cut off the card. Scaled with a
+	-- floor, so a long product name gets smaller type instead of losing its last
+	-- word, and nothing here has to know in advance how long a label is.
+	--==========================================================================
+	titleLabel.TextScaled = true
+	local titleFit = Instance.new("UITextSizeConstraint")
+	titleFit.MaxTextSize = 18
+	titleFit.MinTextSize = 9
+	titleFit.Parent = titleLabel
 
 	local buy = Instance.new("TextButton")
 	buy.Name = "Buy"
 	buy.AnchorPoint = Vector2.new(0.5, 1)
-	buy.Position = UDim2.new(0.5, 0, 1, -9)
-	buy.Size = UDim2.new(1, -18, 0, 34)
-	buy.BackgroundColor3 = SHOP.Buy
+	buy.Position = UDim2.new(0.5, 0, 0.96, 0)
+	buy.Size = UDim2.new(0.86, 0, 0.22, 0)
+	buy.BackgroundColor3 = SHOP.Pill
 	buy.BorderSizePixel = 0
 	buy.AutoButtonColor = false
 	buy.Text = ""
 	buy.Parent = fill
-	corner(buy, 8)
-	stroke(buy, SHOP.Outline, 3)
-	-- The same lattice as the rail slab and the panel behind it, at the button's
-	-- own tighter pitch. Three surfaces, one texture, one angle.
-	UIKit.lattice(buy, {
-		spacing = 16,
-		thickness = 2,
-		transparency = 0.84,
-		inset = 3,
-	})
+	corner(buy, 7)
+	stroke(buy, SHOP.Outline, 2.5)
 
 	local shade = Instance.new("Frame")
 	shade.Name = "Shade"
 	shade.AnchorPoint = Vector2.new(0.5, 1)
 	shade.Position = UDim2.new(0.5, 0, 1, 0)
-	shade.Size = UDim2.new(1, 0, 0, 7)
-	shade.BackgroundColor3 = SHOP.BuyShade
+	shade.Size = UDim2.new(1, 0, 0, 6)
+	shade.BackgroundColor3 = SHOP.PillShade
 	shade.BorderSizePixel = 0
 	shade.Parent = buy
-	corner(shade, 8)
+	corner(shade, 7)
 
-	local price = outlined(buy, 17, WHITE, 2)
+	--==========================================================================
+	-- THE ROBUX MARK IS A DRAWN TOKEN, NOT A GLYPH
+	--
+	-- The real icon is a font character that renders as a blank box wherever the
+	-- font does not carry it, and this HUD has already been bitten once by
+	-- missing glyphs. A ring with a lighter centre reads as a coin at sixteen
+	-- pixels, needs no upload, and cannot come out as tofu.
+	--
+	-- NOT ROTATED. A rotated child escapes ClipsDescendants, and this panel
+	-- SCROLLS -- the card comment at the top of this file records the half-
+	-- scrolled tile that threw its decoration 342 pixels past the list.
+	--==========================================================================
+	local token = Instance.new("Frame")
+	token.Name = "Token"
+	token.AnchorPoint = Vector2.new(0, 0.5)
+	token.Position = UDim2.new(0.10, 0, 0.5, 0)
+	token.Size = UDim2.fromScale(0.42, 0.56)
+	token.SizeConstraint = Enum.SizeConstraint.RelativeYY
+	token.BackgroundColor3 = Color3.fromRGB(236, 252, 214)
+	token.BorderSizePixel = 0
+	token.ZIndex = 3
+	token.Parent = buy
+	corner(token, 20)
+	stroke(token, SHOP.Outline, 2)
+
+	local pip = Instance.new("Frame")
+	pip.AnchorPoint = Vector2.new(0.5, 0.5)
+	pip.Position = UDim2.fromScale(0.5, 0.5)
+	pip.Size = UDim2.fromScale(0.42, 0.42)
+	pip.BackgroundColor3 = SHOP.PillShade
+	pip.BorderSizePixel = 0
+	pip.ZIndex = 4
+	pip.Parent = token
+	corner(pip, 20)
+
+	local price = outlined(buy, 16, WHITE, 2)
 	price.Name = "Price"
-	price.Size = UDim2.fromScale(1, 1)
-	price.ZIndex = 2
+	price.Position = UDim2.new(0.16, 0, 0, 0)
+	price.Size = UDim2.new(0.84, -6, 1, 0)
+	price.ZIndex = 3
 
 	return {
 		frame = frame,
@@ -372,10 +455,9 @@ local function buildCard(parent: Instance, order: number): Card
 		title = titleLabel,
 		price = price,
 		buy = buy,
+		token = token,
 	}
 end
--- plotArt was here: the bed-and-sprouts illustration for the plot shelf. The
--- plot ladder is a board by the gate now, so the drawing went with the shelf.
 
 --==============================================================================
 -- THE SHELVES
@@ -395,49 +477,74 @@ local STORE = GameConfig.Store
 -- THE ICONS ARE DRAWN, NOT UPLOADED
 --
 -- Rule 5: nothing is placed by hand, and that includes art. Four shapes from
--- plain frames, in the shelf's own colour, so a new shelf needs no asset and no
--- upload -- the same reason plotArt was drawn rather than imported.
+-- plain frames, so a new shelf needs no asset and no upload.
+--
+-- NOTHING HERE IS ROTATED. A rotated child escapes ClipsDescendants and this
+-- panel SCROLLS -- the note at the top of this file records the half-scrolled
+-- card that threw its decoration 342 pixels past the list. Every shape below is
+-- axis-aligned and gets its curves from UICorner instead.
 --==============================================================================
 local function chip(parent: Instance, x: number, y: number, w: number, h: number,
-	colour: Color3, rot: number?): Frame
+	colour: Color3, radius: number?): Frame
 	local f = Instance.new("Frame")
 	f.AnchorPoint = Vector2.new(0.5, 0.5)
 	f.Position = UDim2.fromScale(x, y)
 	f.Size = UDim2.fromScale(w, h)
 	f.BackgroundColor3 = colour
 	f.BorderSizePixel = 0
-	f.Rotation = rot or 0
 	f.ZIndex = 6
 	f.Parent = parent
-	UIKit.corner(f, 4)
+	corner(f, radius or 6)
+	stroke(f, SHOP.Outline, 2)
 	return f
 end
 
 local function storeArt(parent: Frame, kind: string)
 	if kind == "speed" then
-		-- Three chevrons leaning forward: the one shape that reads as speed at
-		-- forty pixels without a running shoe to draw it on.
-		for i = 0, 2 do
-			local light = Color3.fromRGB(198, 236, 255):Lerp(Color3.fromRGB(96, 170, 240), i / 2)
-			chip(parent, 0.30 + i * 0.20, 0.5, 0.10, 0.62, light, 18)
-		end
+		--==================================================================
+		-- MOTION LINES, WHICH IS WHAT THE SHOE IN THE REFERENCE IS DOING
+		--
+		-- Three bars stepping shorter and paler behind a leading one. It is
+		-- the read of speed without needing a trainer drawn in frames.
+		--==================================================================
+		chip(parent, 0.58, 0.22, 0.76, 0.26, Color3.fromRGB(250, 253, 255), 12)
+		chip(parent, 0.50, 0.52, 0.60, 0.24, Color3.fromRGB(212, 240, 255), 12)
+		chip(parent, 0.42, 0.81, 0.44, 0.22, Color3.fromRGB(170, 222, 255), 12)
 	elseif kind == "cash" then
 		-- A stack of notes, offset so the stack reads as depth.
 		for i = 0, 2 do
-			chip(parent, 0.5 - i * 0.045, 0.62 - i * 0.13, 0.62, 0.26,
-				Color3.fromRGB(122, 200, 96):Lerp(Color3.fromRGB(196, 240, 150), i / 2))
+			chip(parent, 0.5 - i * 0.055, 0.78 - i * 0.23, 0.72, 0.30,
+				Color3.fromRGB(150, 214, 120):Lerp(Color3.fromRGB(230, 252, 200), i / 2), 6)
 		end
 	elseif kind == "pod" then
-		-- A shell: a wide base under a narrower crown, which is the pod
-		-- silhouette every card in the Index already uses.
-		chip(parent, 0.5, 0.62, 0.52, 0.44, Color3.fromRGB(238, 226, 198))
-		chip(parent, 0.5, 0.34, 0.38, 0.34, Color3.fromRGB(250, 244, 224))
+		-- A shell: a wide base under a narrower crown, the same silhouette
+		-- every pod in the Index already has.
+		chip(parent, 0.5, 0.70, 0.66, 0.50, Color3.fromRGB(244, 232, 202), 16)
+		chip(parent, 0.5, 0.30, 0.46, 0.38, Color3.fromRGB(255, 248, 230), 18)
 	else
-		-- A sprout: stem and two blades.
-		chip(parent, 0.5, 0.66, 0.09, 0.46, Color3.fromRGB(124, 182, 92))
-		chip(parent, 0.36, 0.40, 0.30, 0.13, Color3.fromRGB(142, 206, 104), -22)
-		chip(parent, 0.64, 0.40, 0.30, 0.13, Color3.fromRGB(142, 206, 104), 22)
+		-- A sprout: a stem with a leaf either side, both axis-aligned.
+		chip(parent, 0.5, 0.74, 0.13, 0.48, Color3.fromRGB(124, 182, 92), 5)
+		chip(parent, 0.29, 0.36, 0.36, 0.26, Color3.fromRGB(150, 214, 108), 14)
+		chip(parent, 0.71, 0.36, 0.36, 0.26, Color3.fromRGB(150, 214, 108), 14)
 	end
+end
+
+--==============================================================================
+-- THE LABEL IS TWO COLOURS ON ONE LINE
+--
+-- "+150K SPEED" prints the amount in the shelf's accent and the noun in white,
+-- which is how the reference separates the number you are buying from the thing
+-- it is. Split at the first space: an entry with no space -- "$24,000" -- is all
+-- amount, which is also how the reference prints the cash shelf.
+--==============================================================================
+local function twoTone(label: string, accent: Color3): string
+	local hex = string.format("#%02X%02X%02X",
+		math.round(accent.R * 255), math.round(accent.G * 255), math.round(accent.B * 255))
+	local head, tail = string.match(label, "^(%S+)%s+(.+)$")
+	if not head then
+		return string.format('<font color="%s">%s</font>', hex, label)
+	end
+	return string.format('<font color="%s">%s</font> %s', hex, head, tail)
 end
 
 --==============================================================================
@@ -445,11 +552,34 @@ end
 --
 -- A product with an id of 0 has not been created in the Creator Dashboard yet.
 -- Its tile is still DRAWN -- the shelf has to look like a shelf -- but it reads
--- SOON, goes dark, and its button refuses. Filling the id in is the only change
+-- SOON, goes grey, and its button refuses. Filling the id in is the only change
 -- needed to make it live.
 --==============================================================================
 local order = 1
 local liveCount, soonCount = 0, 0
+
+--==============================================================================
+-- "NOT YET" IS A GREY BUTTON, NOT A GREY SHELF
+--
+-- The first pass drained the whole tile to grey when a product had no id, which
+-- is honest and made the entire shop look broken: every id is 0 today, so every
+-- shelf was slate and the cyan-and-green the reference is built on was nowhere
+-- on screen.
+--
+-- The tile keeps its colour. Only the PILL goes dark and reads SOON, which is
+-- also the smallest possible difference between this state and the live one --
+-- fill in an id and the same tile simply shows a price.
+--==============================================================================
+local function markSoon(card: Card)
+	card.buy.BackgroundColor3 = Color3.fromRGB(122, 128, 140)
+	card.token.BackgroundColor3 = Color3.fromRGB(206, 210, 218)
+	card.price.Text = "SOON"
+	-- The shade under the pill has to go with it or the button reads as lit.
+	local shade = card.buy:FindFirstChild("Shade")
+	if shade and shade:IsA("Frame") then
+		shade.BackgroundColor3 = Color3.fromRGB(74, 78, 88)
+	end
+end
 
 for _, spec in ipairs(STORE.Sections) do
 	local shelf = section(order, spec.heading, spec.colour)
@@ -463,14 +593,10 @@ for _, spec in ipairs(STORE.Sections) do
 		-- The owner asked for PLANTS now and the content later. A plate that
 		-- says so is a promise; a missing heading is nothing at all.
 		--==================================================================
-		local card = buildCard(shelf, 1)
+		local card = buildCard(shelf, 1, spec)
 		storeArt(card.art, "plant")
-		card.title.Text = "COMING SOON"
-		card.price.Text = "SOON"
-		card.tint.Color = ColorSequence.new(SHOP.SoldTop, SHOP.SoldBottom)
-		card.frame.BackgroundColor3 = SHOP.SoldBottom
-		card.buy.BackgroundColor3 = SHOP.BuyShade
-		card.fill.BackgroundTransparency = 0.25
+		card.title.Text = twoTone("COMING SOON", spec.accent)
+		markSoon(card)
 		card.buy.Activated:Connect(function()
 			SoundKit.play("Denied")
 		end)
@@ -478,26 +604,18 @@ for _, spec in ipairs(STORE.Sections) do
 	end
 
 	for index, item in ipairs(items) do
-		local card = buildCard(shelf, index)
+		local card = buildCard(shelf, index, spec)
 		storeArt(card.art, tostring(item.kind))
-		card.title.Text = item.label
+		card.title.Text = twoTone(item.label, spec.accent)
 
 		local productId = tonumber(item.product) or 0
 		local live = productId > 0
 		if live then
 			liveCount += 1
-			-- The Robux glyph, then the price. No currency word: the icon is
-			-- the currency, the same as the reference shelves.
-			card.price.Text = string.format("\u{E002}%d", item.robux)
-			card.buy.BackgroundColor3 = SHOP.Buy
-			card.fill.BackgroundTransparency = 0
+			card.price.Text = tostring(item.robux)
 		else
 			soonCount += 1
-			card.price.Text = "SOON"
-			card.tint.Color = ColorSequence.new(SHOP.SoldTop, SHOP.SoldBottom)
-			card.frame.BackgroundColor3 = SHOP.SoldBottom
-			card.buy.BackgroundColor3 = SHOP.BuyShade
-			card.fill.BackgroundTransparency = 0.25
+			markSoon(card)
 		end
 
 		card.buy.Activated:Connect(function()
@@ -517,8 +635,7 @@ for _, spec in ipairs(STORE.Sections) do
 			--
 			-- No optimistic paint, no BUYING state, no local grant. What the
 			-- player gets is decided by StoreService when Roblox delivers the
-			-- receipt, and the profile packet that follows is what updates the
-			-- HUD. There is nothing for this side to be optimistic about.
+			-- receipt, and the profile packet that follows updates the HUD.
 			--==============================================================
 			local ok, err = pcall(function()
 				MarketplaceService:PromptProductPurchase(player, productId)
