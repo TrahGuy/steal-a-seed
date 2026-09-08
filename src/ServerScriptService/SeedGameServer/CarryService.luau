@@ -68,6 +68,15 @@ export type Held = {
 	-- Which nest it came off, carried through a drop so that picking it back up
 	-- can annoy the same parent again.
 	fromNest: string?,
+	--==========================================================================
+	-- WHOSE POD THIS IS, IF IT BELONGS TO SOMEBODY
+	--
+	-- Set only on a beginner's reserved pod (see TutorialPodService). Carried
+	-- through a drop for the same reason `fromNest` is: the thing that comes
+	-- back out of a drop has to be the same thing that went in, or a beginner
+	-- who fumbles their one pod watches a stranger walk off with it.
+	--==========================================================================
+	reservedFor: number?,
 }
 
 local carried: { [Player]: Held } = {}
@@ -87,6 +96,9 @@ local running = false
 -- to aim the arms at the pod. Same values, one home.
 -- A pod on the ground is fair game for anybody, and vanishes if nobody comes.
 local LOOSE_LIFETIME = 45
+-- The attribute naming a pod's owner. Read by TryTake, by TutorialPodService and
+-- by the beginner guide's arrow trail.
+local RESERVED_FOR = "ReservedFor"
 -- How close you must be. The PROMPT is not a security boundary -- it is a
 -- courtesy drawn on a client, and a client can call InputHoldBegin on a prompt
 -- from anywhere -- so the server measures the distance itself.
@@ -349,10 +361,22 @@ end
 -- be a way to launder a 9,000 kg cube into a 2 kg one by dropping it, and the
 -- player who picked it up would be robbed by the physics rather than by anyone.
 local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
-	parent: Instance, fromNest: string?)
+	parent: Instance, fromNest: string?, reservedFor: number?, keep: boolean?): Model
 	local pod = CreatureModel.BuildPod(species, tier, at, parent)
 	-- Loot, explicitly. This is the whole point of a loose pod.
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
+	--==========================================================================
+	-- THE ONE PLACE A POD IS MARKED AS SOMEBODY'S
+	--
+	-- On the MODEL rather than in a table, because the model is the thing that
+	-- survives being dropped, re-taken and streamed, and because the client
+	-- needs to read it to point its arrow trail at the right pod. It is not a
+	-- permission -- TryTake is -- it is the fact the permission is checked
+	-- against.
+	--==========================================================================
+	if reservedFor then
+		pod:SetAttribute(RESERVED_FOR, reservedFor)
+	end
 	if fromNest then
 		-- Not "NestId": that would make TryTake route it back through TakePod,
 		-- which would look for a slot this pod no longer occupies. It only says
@@ -365,11 +389,23 @@ local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
 		end
 	end
 	attachPrompt(pod)
-	task.delay(LOOSE_LIFETIME, function()
-		if pod.Parent then
-			pod:Destroy()
-		end
-	end)
+	--==========================================================================
+	-- A RESERVATION DOES NOT ROT ON THE GROUND
+	--
+	-- Loose pods expire so the road does not fill with litter. A pod standing in
+	-- the nest waiting for the one beginner it belongs to is not litter, and 45
+	-- seconds is not long enough to walk there -- so `keep` skips the timer.
+	-- TutorialPodService takes it away instead, at dusk or when it stops being
+	-- needed.
+	--==========================================================================
+	if not keep then
+		task.delay(LOOSE_LIFETIME, function()
+			if pod.Parent then
+				pod:Destroy()
+			end
+		end)
+	end
+	return pod
 end
 
 --==============================================================================
@@ -449,6 +485,21 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	end
 	if not pod.Parent then
 		return refuseTake(player, pod, "POD_GONE")
+	end
+	--==========================================================================
+	-- SOMEBODY ELSE'S POD IS SOMEBODY ELSE'S
+	--
+	-- THE SERVER REFUSES. TutorialPodService may also hide the prompt, and that
+	-- is a courtesy exactly like the carrying check above says: a rule enforced
+	-- only on the client is not a rule, and a forged prompt press arrives here
+	-- like any other.
+	--
+	-- Above the line where the world starts changing, with the other refusals,
+	-- so a refused take cannot half-destroy a pod on its way out.
+	--==========================================================================
+	local owner = tonumber(pod:GetAttribute(RESERVED_FOR))
+	if owner and owner ~= player.UserId then
+		return refuseTake(player, pod, "RESERVED")
 	end
 	--==========================================================================
 	-- A PLOT PLANT IS NOT LOOT
@@ -531,6 +582,10 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 			then pod:GetAttribute("FromNestId") :: string
 			else nil)
 
+	-- Read with the others, above the take, for the reason stated there: the
+	-- pod and its attributes are about to be destroyed.
+	local reservedFor = tonumber(pod:GetAttribute(RESERVED_FOR))
+
 	local species: SeedData.Species?
 	if pod:GetAttribute("NestId") then
 		-- Nest-owned: NestService decides, because taking one is what wakes the
@@ -573,6 +628,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 			tier = takenTier,
 			model = model,
 			fromNest = fromNest,
+			reservedFor = reservedFor,
 		}
 	end)
 
@@ -641,8 +697,11 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 		-- Only the character. Excluding the map would exclude the ground, which
 		-- is the one thing the cast is looking for.
 		local ground = groundUnder(where, if character then { character } else {})
+		-- Still theirs on the floor. A dropped ordinary pod is fair game and
+		-- stays that way; a dropped RESERVED one keeps its owner, so the run
+		-- back for it is a recovery rather than a race.
 		spawnLoose(held.species, held.tier, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
-			map, held.fromNest)
+			map, held.fromNest, held.reservedFor)
 	end
 
 	publish(player)
@@ -1134,14 +1193,18 @@ end
 -- one to exist.
 --==============================================================================
 function CarryService.SpawnLoose(speciesId: string, tier: number, at: CFrame,
-	fromNest: string?): boolean
+	fromNest: string?, reservedFor: number?, keep: boolean?): Model?
 	local species = SeedData.Get(speciesId)
 	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 	if not (species and map) then
-		return false
+		return nil
 	end
-	spawnLoose(species, tier, at, map, fromNest)
-	return true
+	return spawnLoose(species, tier, at, map, fromNest, reservedFor, keep)
+end
+
+-- Who a pod belongs to, or nil for the ordinary kind everybody may take.
+function CarryService.ReservedFor(pod: Model): number?
+	return tonumber(pod:GetAttribute(RESERVED_FOR))
 end
 
 --==============================================================================

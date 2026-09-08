@@ -1003,18 +1003,39 @@ local function refresh()
 			waitAtTheMill("The nests are closed for the night!")
 			return
 		end
+		--==================================================================
+		-- THE ONE WITH THEIR NAME ON IT COMES FIRST
+		--
+		-- A beginner who reaches this step gets a pod reserved for them standing
+		-- just outside the public ring (TutorialPodService), and it is the only
+		-- one on the road that CANNOT have been taken out from under them while
+		-- they ran. So it wins outright, no matter what is nearer.
+		--
+		-- The same attribute rules OTHER people's reservations out entirely.
+		-- Walking somebody to a pod the server will refuse them is worse than
+		-- walking them to nothing: nothing at least says "picked clean" and
+		-- offers the mill.
+		--==================================================================
 		local best: Model? = nil
 		local bestPos: Vector3? = nil
 		local bestDist = math.huge
+		local mineFound = false
 		for _, m in CollectionService:GetTagged(Config.Tags.SeedPod) do
 			local species = SeedData.Get(m:GetAttribute("SpeciesId"))
+			local owner = tonumber(m:GetAttribute("ReservedFor"))
 			if species and species.Biome == "greenhollow" and m:IsDescendantOf(workspace)
 				and not CollectionService:HasTag(m, Config.Tags.Planted)
+				and (owner == nil or owner == player.UserId)
 				and m:FindFirstChildWhichIsA("ProximityPrompt", true) then
 				local point = if m:IsA("Model") then m:GetPivot().Position else nil
 				if point then
 					local d = (point - here).Magnitude
-					if d < bestDist then
+					local mine = owner == player.UserId
+					-- A second reservation cannot exist, so the first one found is
+					-- final and nothing after it may displace it.
+					if mine and not mineFound then
+						best, bestPos, bestDist, mineFound = m :: Model, point, d, true
+					elseif not mineFound and d < bestDist then
 						best, bestPos, bestDist = m :: Model, point, d
 					end
 				end

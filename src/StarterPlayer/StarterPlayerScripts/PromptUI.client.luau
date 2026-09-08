@@ -40,6 +40,8 @@ local UserInputService = game:GetService("UserInputService")
 local GameConfig = require(ReplicatedStorage:WaitForChild("SeedGame")
 	:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local CARRYING = GameConfig.Attributes.CarryingSpecies
+-- Set by CarryService on a beginner's reserved pod, and on nothing else.
+local RESERVED_FOR = "ReservedFor"
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -65,6 +67,28 @@ type Panel = {
 }
 
 local shown: { [ProximityPrompt]: Panel } = {}
+
+--==============================================================================
+-- SOMEBODY ELSE'S POD DOES NOT OFFER ITSELF
+--
+-- A reserved beginner pod carries a ReservedFor attribute naming its owner, and
+-- attributes replicate, so this is answerable locally with no remote. Everyone
+-- can still SEE the pod -- it is a server-built model and hiding it per player
+-- is not something this architecture does cleanly -- but only its owner is
+-- offered the verb.
+--
+-- COURTESY, NOT ENFORCEMENT, exactly as the note at the top of this file says
+-- about the carrying check. CarryService.TryTake refuses a stranger's take
+-- whether or not this ran, and a forged trigger arrives there like any other.
+--==============================================================================
+local function reservedForSomebodyElse(prompt: ProximityPrompt): boolean
+	local pod = prompt.Parent and prompt.Parent.Parent
+	if not (pod and pod:IsA("Model")) then
+		return false
+	end
+	local owner = tonumber(pod:GetAttribute(RESERVED_FOR))
+	return owner ~= nil and owner ~= player.UserId
+end
 
 local function carrying(): boolean
 	return player:GetAttribute(CARRYING) ~= nil
@@ -249,7 +273,7 @@ local function hide(prompt: ProximityPrompt)
 end
 
 local function show(prompt: ProximityPrompt)
-	if shown[prompt] or carrying() then
+	if shown[prompt] or carrying() or reservedForSomebodyElse(prompt) then
 		return
 	end
 	local entry = build(prompt)

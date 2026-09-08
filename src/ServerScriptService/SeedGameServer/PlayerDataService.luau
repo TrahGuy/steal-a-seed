@@ -126,6 +126,25 @@ function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean):
 	return true
 end
 
+--==============================================================================
+-- ONE MORE RESERVED POD HANDED OUT
+--
+-- Server-only, like every other writer here: nothing a client sends can move
+-- this, and TutorialPodService is the only caller. It is what makes the
+-- reserved pod a bounded gift rather than a faucet -- see TutorialData.
+-- MaxPodGrants for why a faucet is the danger, and note that the CAP is
+-- enforced by the eligibility rule that reads this, not by this writer, which
+-- only counts.
+--==============================================================================
+function PlayerDataService.RecordPodGrant(player: Player): number?
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then return nil end
+	local tutorial = entry.profile.Tutorial
+	tutorial.PodGrants = (tutorial.PodGrants or 0) + 1
+	touch(player)
+	return tutorial.PodGrants
+end
+
 function PlayerDataService.AddCash(player: Player, amount: number): number?
 	local entry = entries[player]
 	if not entry or type(amount) ~= "number" or amount ~= amount then

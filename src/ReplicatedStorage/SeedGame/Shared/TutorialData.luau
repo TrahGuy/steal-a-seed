@@ -22,11 +22,41 @@
 --==============================================================================
 local Tutorial = {}
 
-export type Progress = { Version: number, Done: { [string]: boolean }, Skipped: boolean }
+export type Progress = {
+	Version: number,
+	Done: { [string]: boolean },
+	Skipped: boolean,
+	--==========================================================================
+	-- HOW MANY RESERVED PODS THIS PLAYER HAS BEEN GIVEN
+	--
+	-- The public Greenhollow nest is ONE nest of five pods that only restocks at
+	-- dawn, so a beginner can arrive at "Take a pod!" and find it stripped. A
+	-- reserved pod is the answer, and this is the thing that stops the answer
+	-- becoming a tap: banked pods can be SOLD (EconomyService.SellHeld takes
+	-- every Tool in the backpack), so "give them one whenever they have none"
+	-- is a loop that mints Tiny Commons for as long as somebody keeps selling
+	-- them. Absent on every existing save, which reads as zero.
+	--==========================================================================
+	PodGrants: number,
+}
 export type Step = { Id: string, Title: string, Detail: string }
 
 Tutorial.Action = "BeginnerGuide"
 Tutorial.Version = 2
+
+--==============================================================================
+-- THREE, WHICH IS GENEROUS AND STILL BOUNDED
+--
+-- One is the honest number -- the feature is "you always have a pod to start
+-- with" -- but a beginner can lose one to a guardian, to a mistimed drop, or to
+-- a loose pod despawning while they run back for it, and being told to wait
+-- until dawn is exactly the wall this exists to remove. Three covers those and
+-- caps the sell-loop at three of the cheapest item in the game.
+--
+-- Past it they are not stuck: the public nest still restocks every dawn, and by
+-- then they have been shown where it is.
+--==============================================================================
+Tutorial.MaxPodGrants = 3
 
 --==============================================================================
 -- THE READINESS TARGET, AND WHAT IT IS NOT
@@ -93,7 +123,80 @@ local LEGACY_PAST_HATCH = { "hatch", "plant", "earn", "buy" }
 local LEGACY_ANY = { "steal", "bank", "place", "hatch", "plant", "earn", "buy" }
 
 function Tutorial.Default(): Progress
-	return { Version = Tutorial.Version, Done = {}, Skipped = false }
+	return { Version = Tutorial.Version, Done = {}, Skipped = false, PodGrants = 0 }
+end
+
+--==============================================================================
+-- WHO IS OWED A RESERVED POD
+--
+-- Pure, and deliberately says nothing about the world: whether one should be
+-- STANDING somewhere also depends on daylight and on what the player already
+-- has, and those are TutorialPodService's business. This is only the record's
+-- opinion.
+--
+-- SKIPPED IS NOT CONSULTED, ON PURPOSE. Skip hides the guide; it does not
+-- surrender anything, and a player who skips, gets stuck at an empty nest and
+-- presses Resume must not have been quietly disinherited in between.
+--
+-- It ends at the HATCH rather than at the steal, because the run this protects
+-- is the whole first loop -- take, bank, place, hatch -- and losing the pod at
+-- any point before the end leaves a beginner in exactly the state the feature
+-- exists to prevent.
+--==============================================================================
+function Tutorial.PodEligible(progress: Progress): boolean
+	if progress.Done.hatch == true then
+		return false
+	end
+	if progress.Done.train ~= true or progress.Done.speed ~= true then
+		return false
+	end
+	return (progress.PodGrants or 0) < Tutorial.MaxPodGrants
+end
+
+--==============================================================================
+-- DOES THIS PLAYER ALREADY HAVE A FIRST POD, IN ANY STATE AT ALL
+--
+-- The four places one can be, and any of them means the tutorial is not blocked
+-- and nothing is owed:
+--
+--   carrying    on their head, right now
+--   inWorld     standing where it was reserved, or dropped on the road
+--   held        an unhatched pod row in the hotbar (a BANKED one)
+--   plants      a row still below Stage 3, which is planted and not yet hatched
+--
+-- AN ORDINARY POD COUNTS. If a beginner got one off the public nest they do not
+-- need a reserved one, and handing them a second is the duplicate the whole
+-- feature has to avoid. That is also why this asks about POSSESSION rather than
+-- about a particular pod's identity: what a beginner is owed is A pod.
+--
+-- Pure, and takes the facts rather than a Player, so the decision can be tested
+-- without a world -- and so that the one place that gathers them is the one
+-- place a fact can be gathered wrongly.
+--==============================================================================
+export type Possessions = {
+	carrying: boolean,
+	inWorld: boolean,
+	held: { any },
+	plants: { any },
+}
+
+function Tutorial.HasOutstandingPod(have: Possessions): boolean
+	if have.carrying or have.inWorld then
+		return true
+	end
+	for _, row in have.held or {} do
+		if type(row) == "table" and row.Hatched ~= true then
+			return true
+		end
+	end
+	for _, row in have.plants or {} do
+		-- Stage 3 is grown. Anything below it is still waiting to hatch, which is
+		-- the same reading Sanitise uses below to credit the `place` step.
+		if type(row) == "table" and (tonumber(row.Stage) or 3) < 3 then
+			return true
+		end
+	end
+	return false
 end
 
 function Tutorial.Record(progress: Progress, milestone: string): boolean
@@ -148,6 +251,15 @@ function Tutorial.Sanitise(raw: any, profile: any): Progress
 	local legacy: { [string]: boolean } = {}
 	if type(raw) == "table" then
 		p.Skipped = raw.Skipped == true
+		--======================================================================
+		-- A COUNT OFF THE WIRE IS A CLAIM. Absent, a string, a float, NaN or a
+		-- negative all read as zero, and it is clamped to the cap so a corrupted
+		-- save can neither mint grants nor lock somebody out of them for ever.
+		--======================================================================
+		local grants = tonumber(raw.PodGrants)
+		if grants and grants == grants then
+			p.PodGrants = math.clamp(math.floor(grants), 0, Tutorial.MaxPodGrants)
+		end
 		if type(raw.Done) == "table" then
 			for _, key in LEGACY_ANY do
 				if raw.Done[key] == true then
