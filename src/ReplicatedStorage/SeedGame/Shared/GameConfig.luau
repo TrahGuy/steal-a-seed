@@ -2979,22 +2979,36 @@ GameConfig.Store = {
 	-- colour the AMOUNT is printed in, with the noun left white beside it.
 	--==========================================================================
 	Sections = {
+		--======================================================================
+		-- THESE ARE SAMPLED OFF THE REFERENCE, NOT PICKED BY EYE
+		--
+		-- The first pass guessed them and every tile came out chalky. Clustering
+		-- the saturated pixels of shop ui 1/2/3 says the reference runs the RED
+		-- CHANNEL AT ZERO down both the cyan and the green ramps -- (0,240,224)
+		-- to (0,96,224) on speed, (0,240,16) to (0,160,0) on cash. The earlier
+		-- values started at 112 and 126 red, which is exactly the amount of grey
+		-- that made them read as washed out next to the reference.
+		--
+		-- `rim` stays a light tint rather than a sampled value: it is the bright
+		-- edge that separates one tile from the next, and it has to lift off the
+		-- top of the ramp it borders.
+		--======================================================================
 		{ id = "Speed", heading = "SPEED",
-			colour = Color3.fromRGB(120, 206, 250),
-			top = Color3.fromRGB(112, 216, 248), bottom = Color3.fromRGB(38, 132, 226),
-			rim = Color3.fromRGB(146, 236, 255), accent = Color3.fromRGB(126, 250, 128) },
+			colour = Color3.fromRGB(64, 226, 250),
+			top = Color3.fromRGB(0, 242, 236), bottom = Color3.fromRGB(0, 104, 224),
+			rim = Color3.fromRGB(128, 255, 250), accent = Color3.fromRGB(126, 250, 128) },
 		{ id = "Cash", heading = "CASH",
-			colour = Color3.fromRGB(142, 220, 68),
-			top = Color3.fromRGB(126, 226, 96), bottom = Color3.fromRGB(30, 150, 52),
-			rim = Color3.fromRGB(168, 246, 122), accent = Color3.fromRGB(255, 255, 255) },
+			colour = Color3.fromRGB(86, 232, 46),
+			top = Color3.fromRGB(0, 240, 20), bottom = Color3.fromRGB(0, 156, 0),
+			rim = Color3.fromRGB(140, 255, 120), accent = Color3.fromRGB(255, 255, 255) },
 		{ id = "Pods", heading = "PREMIUM PODS",
-			colour = Color3.fromRGB(250, 214, 108),
-			top = Color3.fromRGB(252, 222, 130), bottom = Color3.fromRGB(214, 140, 30),
-			rim = Color3.fromRGB(255, 238, 168), accent = Color3.fromRGB(255, 255, 255) },
+			colour = Color3.fromRGB(252, 220, 96),
+			top = Color3.fromRGB(255, 238, 130), bottom = Color3.fromRGB(238, 170, 20),
+			rim = Color3.fromRGB(255, 246, 180), accent = Color3.fromRGB(255, 255, 255) },
 		{ id = "Plants", heading = "PLANTS",
-			colour = Color3.fromRGB(196, 168, 255),
-			top = Color3.fromRGB(198, 172, 255), bottom = Color3.fromRGB(112, 74, 208),
-			rim = Color3.fromRGB(220, 202, 255), accent = Color3.fromRGB(255, 255, 255) },
+			colour = Color3.fromRGB(214, 120, 250),
+			top = Color3.fromRGB(214, 120, 250), bottom = Color3.fromRGB(128, 36, 205),
+			rim = Color3.fromRGB(232, 170, 255), accent = Color3.fromRGB(255, 255, 255) },
 	},
 
 	--==========================================================================
@@ -3006,6 +3020,45 @@ GameConfig.Store = {
 	-- back.
 	--==========================================================================
 	ComingSoon = { Plants = true },
+
+	--==========================================================================
+	-- THE SHELF ART IS UPLOADED, NOT DRAWN
+	--
+	-- Every tile used to draw its own icon out of plain frames, because no image
+	-- tool was available and inventing an asset id is worse than a rectangle.
+	-- These are real ids returned by the upload pipeline for the fifteen PNGs in
+	-- art/icons/tight -- keyed by the item's `key`, so a tile with no entry here
+	-- falls back to no icon rather than to a wrong one.
+	--
+	-- TIGHT-CROPPED, not square. ScaleType.Fit scales a square image to the band's
+	-- HEIGHT, so a square canvas made every icon as small as the shortest edge and
+	-- threw away the width -- which is why the tiles read as empty next to the
+	-- reference. Cropped to the object's own bounds, a wide shoe fills the band's
+	-- width and a tall pod fills its height, which is what the reference does.
+	--
+	-- `comingSoon` is the plate on the empty PLANTS shelf, which has no item and
+	-- therefore no key of its own.
+	--==========================================================================
+	Icons = {
+		speed1 = "rbxassetid://135726423224390",
+		speed2 = "rbxassetid://114410993760817",
+		speed3 = "rbxassetid://119870542364353",
+		speed4 = "rbxassetid://135967331922530",
+		speed5 = "rbxassetid://113277929496901",
+		speed6 = "rbxassetid://113755567466973",
+
+		cash1 = "rbxassetid://87550812316788",
+		cash2 = "rbxassetid://71606957709509",
+		cash3 = "rbxassetid://113035737316029",
+		cash4 = "rbxassetid://115379046300186",
+		cash5 = "rbxassetid://125540317398172",
+
+		pod1 = "rbxassetid://136330649728985",
+		pod2 = "rbxassetid://135956805691493",
+		pod3 = "rbxassetid://81480489766629",
+
+		comingSoon = "rbxassetid://84399068852963",
+	},
 
 	Items = {
 		Speed = {
@@ -3058,9 +3111,11 @@ GameConfig.Shop = {
 	-- green cash ones -- it is the BUY colour, not the shelf's, and keeping it
 	-- constant is what makes it read as the button rather than as decoration.
 	--==========================================================================
-	Pill = Color3.fromRGB(106, 208, 62),
-	PillShade = Color3.fromRGB(58, 140, 34),
-	PillEdge = Color3.fromRGB(168, 246, 122),
+	-- Sampled at (32, 241, 0) on the speed sheet, tempered slightly so the white
+	-- price on top of it still has somewhere to sit.
+	Pill = Color3.fromRGB(38, 220, 10),
+	PillShade = Color3.fromRGB(16, 140, 0),
+	PillEdge = Color3.fromRGB(150, 252, 96),
 	Close = Color3.fromRGB(255, 0, 0),
 	Title = Color3.fromRGB(255, 255, 255),
 	-- One colour per section, so a long shop reads as a list of shelves rather

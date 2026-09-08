@@ -91,7 +91,18 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 -- phone or the whole screen anyway. UIKit.modal owns the geometry; this is only
 -- the cap it may grow to.
 --==============================================================================
-local MAX_WIDTH = 460
+--==============================================================================
+-- THE SHOP PANEL IS WIDER THAN THE OTHER TWO
+--
+-- 460 is UIKit's default and it is right for the Index and the Garden, whose
+-- cards are portraits read one at a time. A shop shelf is scanned three across,
+-- and at 460 that left 144-pixel tiles -- against roughly 200 in the reference,
+-- which is why the tiles read as cramped no matter how the bands were divided.
+--
+-- maxWidth is already a per-caller option, so this widens the SHOP and nothing
+-- else: Index, Garden, Loadout and the Marigold stall keep their own numbers.
+--==============================================================================
+local MAX_WIDTH = 620
 local MAX_HEIGHT = 560
 
 --==============================================================================
@@ -282,7 +293,16 @@ local function section(order: number, heading: string, colour: Color3): Frame
 	grid.CellSize = UDim2.fromOffset(140, 182)
 	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
 	grid.SortOrder = Enum.SortOrder.LayoutOrder
-	grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	--==========================================================================
+	-- LEFT, NOT CENTRE
+	--
+	-- Centre aligns the whole grid BLOCK, and a partial last row then sits left
+	-- inside it -- which looks left-aligned on every shelf that fills a row, and
+	-- puts the lone COMING SOON plate on the empty PLANTS shelf in the middle
+	-- column. One card behaving differently from the other fifteen reads as a
+	-- bug; left aligns all of them the same way and moves the rest by 3 pixels.
+	--==========================================================================
+	grid.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	grid.Parent = shelf
 	table.insert(shelves, grid)
 
@@ -352,8 +372,16 @@ local function buildCard(parent: Instance, order: number, palette: any): Card
 	-- third at the other, which is how the label ended up sitting on the pill.
 	-- Art 0.05-0.47, type 0.49-0.69, pill 0.73-0.95, all in scale.
 	--==========================================================================
-	art.Position = UDim2.new(0.5, 0, 0.04, 0)
-	art.Size = UDim2.new(0.78, 0, 0.46, 0)
+	art.Position = UDim2.new(0.5, 0, 0.02, 0)
+	--==========================================================================
+	-- THE ART BAND IS SIZED BY ITS HEIGHT, NOT ITS WIDTH
+	--
+	-- The icons are square and ScaleType.Fit honours that, so a 115x59 band
+	-- renders a 59-pixel icon and wastes the other 56 pixels of width. Height is
+	-- the only dimension that makes the illustration bigger, so art takes half
+	-- the tile: 0.02-0.58 art, 0.59-0.76 type, 0.76-0.97 pill.
+	--==========================================================================
+	art.Size = UDim2.new(0.94, 0, 0.56, 0)
 	art.BackgroundTransparency = 1
 	art.Parent = fill
 
@@ -367,8 +395,8 @@ local function buildCard(parent: Instance, order: number, palette: any): Card
 	local titleLabel = outlined(fill, 18, WHITE, 3)
 	titleLabel.Name = "Title"
 	titleLabel.RichText = true
-	titleLabel.Position = UDim2.new(0, 0, 0.51, 0)
-	titleLabel.Size = UDim2.new(1, -8, 0.19, 0)
+	titleLabel.Position = UDim2.new(0, 0, 0.59, 0)
+	titleLabel.Size = UDim2.new(1, -8, 0.17, 0)
 	--==========================================================================
 	-- LONG NAMES SHRINK RATHER THAN SPILL
 	--
@@ -386,8 +414,8 @@ local function buildCard(parent: Instance, order: number, palette: any): Card
 	local buy = Instance.new("TextButton")
 	buy.Name = "Buy"
 	buy.AnchorPoint = Vector2.new(0.5, 1)
-	buy.Position = UDim2.new(0.5, 0, 0.96, 0)
-	buy.Size = UDim2.new(0.86, 0, 0.22, 0)
+	buy.Position = UDim2.new(0.5, 0, 0.97, 0)
+	buy.Size = UDim2.new(0.88, 0, 0.21, 0)
 	buy.BackgroundColor3 = SHOP.Pill
 	buy.BorderSizePixel = 0
 	buy.AutoButtonColor = false
@@ -474,59 +502,41 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local STORE = GameConfig.Store
 
 --==============================================================================
--- THE ICONS ARE DRAWN, NOT UPLOADED
+-- THE ICONS ARE UPLOADED NOW, AND THAT REPLACED FOUR DRAWN SHAPES
 --
--- Rule 5: nothing is placed by hand, and that includes art. Four shapes from
--- plain frames, so a new shelf needs no asset and no upload.
+-- Every tile used to draw its own icon out of plain frames -- three bars for
+-- speed, a stack of notes for cash, a two-part shell for a pod, a stem and two
+-- leaves for a plant. That was the honest answer while no image tool existed
+-- and inventing an asset id was the only alternative, but it never matched the
+-- reference, which uses rendered objects with a white sticker outline.
 --
--- NOTHING HERE IS ROTATED. A rotated child escapes ClipsDescendants and this
--- panel SCROLLS -- the note at the top of this file records the half-scrolled
--- card that threw its decoration 342 pixels past the list. Every shape below is
--- axis-aligned and gets its curves from UICorner instead.
+-- These are fifteen real ids in GameConfig.Store.Icons, keyed by the item's own
+-- `key`. A tile whose key is missing from that table gets NO icon rather than
+-- the wrong one -- a blank band reads as unfinished, a mismatched picture reads
+-- as a bug, and only one of those is true.
+--
+-- ScaleType.Fit, not Stretch. The art is square and the band is not, so Stretch
+-- would squash every shoe flat. Fit letterboxes inside the band instead, which
+-- is why the band above is sized off its HEIGHT.
 --==============================================================================
-local function chip(parent: Instance, x: number, y: number, w: number, h: number,
-	colour: Color3, radius: number?): Frame
-	local f = Instance.new("Frame")
-	f.AnchorPoint = Vector2.new(0.5, 0.5)
-	f.Position = UDim2.fromScale(x, y)
-	f.Size = UDim2.fromScale(w, h)
-	f.BackgroundColor3 = colour
-	f.BorderSizePixel = 0
-	f.ZIndex = 6
-	f.Parent = parent
-	corner(f, radius or 6)
-	stroke(f, SHOP.Outline, 2)
-	return f
-end
+local ICONS = STORE.Icons or {}
 
-local function storeArt(parent: Frame, kind: string)
-	if kind == "speed" then
-		--==================================================================
-		-- MOTION LINES, WHICH IS WHAT THE SHOE IN THE REFERENCE IS DOING
-		--
-		-- Three bars stepping shorter and paler behind a leading one. It is
-		-- the read of speed without needing a trainer drawn in frames.
-		--==================================================================
-		chip(parent, 0.58, 0.22, 0.76, 0.26, Color3.fromRGB(250, 253, 255), 12)
-		chip(parent, 0.50, 0.52, 0.60, 0.24, Color3.fromRGB(212, 240, 255), 12)
-		chip(parent, 0.42, 0.81, 0.44, 0.22, Color3.fromRGB(170, 222, 255), 12)
-	elseif kind == "cash" then
-		-- A stack of notes, offset so the stack reads as depth.
-		for i = 0, 2 do
-			chip(parent, 0.5 - i * 0.055, 0.78 - i * 0.23, 0.72, 0.30,
-				Color3.fromRGB(150, 214, 120):Lerp(Color3.fromRGB(230, 252, 200), i / 2), 6)
-		end
-	elseif kind == "pod" then
-		-- A shell: a wide base under a narrower crown, the same silhouette
-		-- every pod in the Index already has.
-		chip(parent, 0.5, 0.70, 0.66, 0.50, Color3.fromRGB(244, 232, 202), 16)
-		chip(parent, 0.5, 0.30, 0.46, 0.38, Color3.fromRGB(255, 248, 230), 18)
-	else
-		-- A sprout: a stem with a leaf either side, both axis-aligned.
-		chip(parent, 0.5, 0.74, 0.13, 0.48, Color3.fromRGB(124, 182, 92), 5)
-		chip(parent, 0.29, 0.36, 0.36, 0.26, Color3.fromRGB(150, 214, 108), 14)
-		chip(parent, 0.71, 0.36, 0.36, 0.26, Color3.fromRGB(150, 214, 108), 14)
+local function storeArt(parent: Frame, key: string): ImageLabel?
+	local asset = ICONS[key]
+	if not asset then
+		warn("[Seed/ShopUI] no icon for " .. key .. "; leaving the band empty")
+		return nil
 	end
+
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.Size = UDim2.fromScale(1, 1)
+	icon.BackgroundTransparency = 1
+	icon.Image = asset
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.ZIndex = 6
+	icon.Parent = parent
+	return icon
 end
 
 --==============================================================================
@@ -594,7 +604,7 @@ for _, spec in ipairs(STORE.Sections) do
 		-- says so is a promise; a missing heading is nothing at all.
 		--==================================================================
 		local card = buildCard(shelf, 1, spec)
-		storeArt(card.art, "plant")
+		storeArt(card.art, "comingSoon")
 		card.title.Text = twoTone("COMING SOON", spec.accent)
 		markSoon(card)
 		card.buy.Activated:Connect(function()
@@ -605,7 +615,7 @@ for _, spec in ipairs(STORE.Sections) do
 
 	for index, item in ipairs(items) do
 		local card = buildCard(shelf, index, spec)
-		storeArt(card.art, tostring(item.kind))
+		storeArt(card.art, tostring(item.key))
 		card.title.Text = twoTone(item.label, spec.accent)
 
 		local productId = tonumber(item.product) or 0
