@@ -90,6 +90,16 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+--==============================================================================
+-- THE COLOSSAL CRACKLE LIVES HERE BECAUSE THE LIFECYCLE DOES
+--
+-- PlantAura is a mechanism with no connections of its own: it needs a plant
+-- remembered, a plant dropped, and one call a frame, and this file already has
+-- all three. Giving it its own tag listener and its own Heartbeat would be a
+-- second index of the same bed, and the second index is the one that leaks a
+-- plant on pickup and lights a bolt in an empty patch of soil.
+--==============================================================================
+local PlantAura = require(Shared:WaitForChild("PlantAura"))
 
 local PLANTED = GameConfig.Tags.Planted
 
@@ -324,6 +334,16 @@ type Sway = {
 	watches: { RBXScriptConnection },
 
 	--==========================================================================
+	-- NIL ON EVERY TIER BUT COLOSSAL
+	--
+	-- PlantAura.Prepare answers nil for Tiny through Titan, so the other six
+	-- tiers carry no aura state at all -- they are not scanned, cannot be
+	-- scheduled and cannot fire. The check is made once, here, rather than every
+	-- frame in the effect.
+	--==========================================================================
+	aura: any,
+
+	--==========================================================================
 	-- THE WALK, ALL OF IT, PER PLANT
 	--
 	-- Nil on a pod: an egg does not stroll, and the fields would only be dead
@@ -427,6 +447,9 @@ local function forget(instance: Instance)
 		c:Disconnect()
 	end
 	table.clear(entry.watches)
+	-- Before anything else: a plant picked up mid-pulse must not leave four lit
+	-- segments hanging over the empty cell. Forget returns them to the pool.
+	PlantAura.Forget(entry.aura)
 	if entry.model.Parent then
 		pcall(function()
 			entry.model:PivotTo(entry.rest)
@@ -562,7 +585,20 @@ local function remember(instance: Instance)
 			-- otherwise take its first `dt` as ten minutes and snap to an
 			-- arbitrary bearing instead of the one the server stamped.
 			lastNow = clock,
+			aura = nil,
 		}
+
+		--==============================================================
+		-- A SEPARATE RANDOM STREAM, ON PURPOSE
+		--
+		-- `entry.rng` drives where the plant walks. Drawing arc positions from
+		-- it would change the walk depending on how often the aura fired, which
+		-- is a gameplay-visible difference caused by an effect -- and one that
+		-- would only show up as "the Colossals wander differently".
+		--==============================================================
+		entry.aura = PlantAura.Prepare(model, headHeight, species.Biome,
+			SeedData.TierCount, clock,
+			Random.new((tonumber(model:GetAttribute("PlacementId")) or 1) * 104729 + 17))
 
 		--==============================================================
 		-- ONLY A GROWN PLANT GETS A BED AND A PAIR OF ARMS
@@ -1306,9 +1342,31 @@ end
 table.insert(connections, CollectionService:GetInstanceAddedSignal(PLANTED):Connect(remember))
 table.insert(connections, CollectionService:GetInstanceRemovedSignal(PLANTED):Connect(forget))
 
+-- The existing reduced-effects control, not a new one: the same
+-- `SeedAfterimageQuality` attribute SpeedFX already reads, with the same touch
+-- default. Held in `connections` so it dies with the rest of them.
+do
+	local bound = PlantAura.BindQuality()
+	if bound then
+		table.insert(connections, bound)
+	end
+end
+
 table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 	clock += dt
 	serverNow = Workspace:GetServerTimeNow()
+
+	--==========================================================================
+	-- THE AURA, ONCE, BEFORE THE EARLY RETURN
+	--
+	-- Above `n == 0` deliberately: a bed that empties while an arc is lit still
+	-- has to finish that arc and hand its segments back, and a Tick that only
+	-- ran when plants existed would park them lit for ever.
+	--==========================================================================
+	local camera = Workspace.CurrentCamera
+	PlantAura.Tick(clock, dt,
+		if camera then camera.CFrame.Position else Vector3.zero, camera)
+
 	local n = #list
 	if n == 0 then
 		return
