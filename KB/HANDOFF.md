@@ -1,5 +1,19 @@
 # Steal a Seed — Session Handoff
 
+## DUSTBOWL STATIC CARD BACKGROUNDS — 2026-09-08 (CODEX, ASSETS ONLY)
+
+Owner requested five missing Dustbowl background-only scenes for restored static
+model cards. Generated with the built-in image tool and visually inspected:
+`art/cards/backgrounds/<species>-background-v1.png` for dunebud (sheltered dunes),
+paddlehop (cactus wash), thornwhorl (ravine), raincup (wet basin), suncrown (sunset
+mesa). Quiet centres reserved for the real plant models. No creature, text or
+border baked in. Exact prompts: `output/imagegen/cards/backgrounds/`.
+
+No uploads or integration; no new asset IDs. Actual card crops and contrast
+remain to be tested in integration. Existing artwork preserved. No Studio,
+UI source, gameplay or save changes. Remaining three biomes/15 backgrounds
+are outside this batch. Uncommitted/unpushed; shared work preserved.
+
 > Living document. **Read this first when picking up the project. Update it before ending any
 > session, then commit and push** (see the git policy in [CLAUDE.md](../CLAUDE.md)).
 >
@@ -8,11 +22,1484 @@
 
 ---
 
-> **STATE, 2026-09-07.** Everything below that was marked UNCOMMITTED is now in
-> **a01c372** "Marigold's shop, the bat swing, the beginner guide and the mill
-> sign", with the generated key art in **938457a**. Both commits are LOCAL --
-> nothing has been pushed to `origin/main` yet, so the history is still freely
-> rewritable. The working tree is clean.
+> **STATE, 2026-09-08.** Everything through the card work is now COMMITTED and
+> pushed. The six most recent commits:
+>
+>   44b3f90 Add the card artwork: five biome backgrounds and three unused portraits
+>   c14cc64 Bring the card plants closer, hold them still, and paint the biome behind them
+>   36c70ff Give Colossal plants a restrained lightning crackle
+>   07a2adf Reserve a beginner's first pod so an empty nest cannot block the tutorial
+>   f8f6d17 Rebuild the Tiny-to-Colossal size ladder
+>   082bea0 Mark the handoff sections as committed in a01c372
+>
+> Three items in the working tree are NOT mine and were deliberately left
+> unstaged: a deletion of the tracked `thumbnail1`, two new `thumbnail1.png` /
+> `thumbnail11.png`, and a stray `Codex Image ....png` at the repository root.
+> They look like the owner's or Codex's asset work; committing somebody else's
+> deletion of a tracked binary is not a call this session should make.
+>
+> **Known beta blockers**, in the order they matter: `Players.MaxPlayers` is 60
+> against 6 plots (a place setting; PlotService queues the overflow on a hub pad
+> rather than breaking, so it is a bad first impression rather than a fault); the
+> shared guardian rage makes the tutorial theft unwinnable on a busy nest; and
+> nothing has been tested on a phone despite "mobile first". `SpeedSpec` and
+> `CycleSpec` still fail for reasons that pre-date all of this.
+
+## REDESIGN INDEX / ALMANAC PLANT CARDS — 2026-09-08  (UNCOMMITTED, READY FOR REVIEW)
+
+> Follow-up, Codex 2026-09-08: the owner rejected the animated-model cards.
+> Three STATIC illustrated artwork samples are now generated with the built-in
+> image tool: `output/imagegen/cards/{nubkin,suncrown,supernovus}-illustrated-sample-v1.png`,
+> with exact generation prompts alongside. These are unapproved artwork, NOT
+> uploaded assets and NOT wired into either UI. Existing art/cards backdrops
+> are untouched. References were captured from actual built Tiny models in
+> Edit; the temporary CardReferenceCapture folder was removed and camera restored.
+> The samples preserve the broad identities but are stylized interpretations,
+> not a certified exact anatomy match (especially Supernovus limb visibility
+> and Suncrown ray counts). Review those and actual UI crop readability before
+> approval. No IndexUI/GardenUI or gameplay source changed in this art pass;
+> no profiles touched, no commit or push. The prior text-to-image blocker applied
+> to Claude's session, not this session. Next: owner sample approval or revisions,
+> then real asset upload and the static ImageLabel Index/Garden implementation.
+
+The Index / Almanac modal plant cards have been redesigned from flat icon tiles into
+rich, atmospheric collectible showcases with live 3D creature models, species-specific
+biome backdrops, subtle idle floating, and animated rarity text for Legendary and
+Mythic species.
+
+### SCOPE & ISOLATION
+
+* **Only one file modified**: `src/StarterPlayer/StarterPlayerScripts/IndexUI.client.luau`.
+* **Zero changes to shared UI**: `GardenUI.client.luau` and `UIKit.luau` (`UIKit.plantCard`,
+  `CARD` palettes) were untouched. The Index now uses an internal, self-contained
+  `buildIndexCard` function tailored specifically for showcase cards.
+* **Zero changes to gameplay or simulation**: `CreatureModel`, `SeedData`, `BiomeData`,
+  `GameConfig`, economy, inventories, combat, and saves are untouched.
+
+### 25 DISTINCT PROCEDURAL BACKDROPS
+
+Every species in the game now has a dedicated visual identity in `SPECIES_BACKDROPS`,
+combining rich sky gradients, atmospheric glowing halos, layered horizon silhouettes,
+biome motifs, and floating environmental particles:
+
+* **Greenhollow** (Meadow, Sun, Canopy, Twilight):
+  * *Nubkin*: Sunny dewdrop pasture with rolling clover slopes and floating pollen motes.
+  * *Petalpip*: Vibrant floral bloom garden with cherry blossom petals and warm morning mist.
+  * *Bramblebite*: Thorny berry thicket with dusk twilight gradients and prickly bush silhouettes.
+  * *Snapthorn*: Shadowed bramble grove with jagged thorn barriers and deep emerald hues.
+  * *Bellchime*: Sunlit cathedral canopy with golden dawn halos, ancient trunks, and floating golden spores.
+* **Dustbowl** (Desert, Canyon, Salt Flats, Dunes):
+  * *Duneshroom*: Baked sandstone ridges with drifting dust motes.
+  * *Rustleaf*: Red clay canyon cliffs with hot amber gradients.
+  * *Sandspire*: Bleached salt flats with mirage shimmer and distant spire silhouettes.
+  * *Thornhopper*: Weathered scrub plains with dry thistle bushes and baking heat glow.
+  * *Suncrown*: Blinding solar zenith with blazing corona rays and shimmering gold heat waves.
+* **Tanglemire** (Swamp, Murk, Deep Bog, Bioluminescence):
+  * *Gloomspore*: Murky bayou dusk with dripping moss willows and floating neon swamp motes.
+  * *Murkmoss*: Toxic bog shallows with stagnant algae layers and phosphorescent mist.
+  * *Mirefang*: Mangrove swamp tangle with winding root arches and deep cypress silhouettes.
+  * *Bogdrifter*: Eerie deep marsh with glowing lily pads and will-o'-the-wisp embers.
+  * *Lanterncap*: Midnight swamp hollow with radiant lantern halos and rising bioluminescent spores.
+* **Emberroot** (Volcanic, Cinders, Magma Chamber):
+  * *Cinderpaw*: Smoking basalt ledge with crackling ember sparks and orange magma glow.
+  * *Emberspit*: Flowing lava cascade with jagged obsidian crusts and rising soot motes.
+  * *Ashthorn*: Volcanic ash plain with charred caldera silhouettes and drifting grey embers.
+  * *Kilnhusk*: Burning furnace crevasse with radiant core glow and molten slag silhouettes.
+  * *Pyrelotus*: Superheated magma vent with swirling fire spirals and incandescence.
+* **Starbloom** (Astral, Cosmic Void, Nebula):
+  * *Astralhorn*: Twilight starlight crest with crescent nebula curves and silver stardust motes.
+  * *Cosmospire*: Void aurora night with deep ultraviolet nebulas and vertical starry spires.
+  * *Pulsarling*: Pulsing violet ion storm with radiant starburst arcs and ion particles.
+  * *Gloomlotus*: Velvet event horizon with dark astral lotus petals and ethereal magenta haze.
+  * *Supernovus*: Cosmic singularity eruption with stellar rings, brilliant cyan/gold rays, and hyper-dense starlight.
+
+### PRODUCTION 3D PLANT MODELS & DYNAMIC AUTO-FRAMING
+
+* Built using the real production pipeline: `CreatureModel.Build(species, SeedData.BaseTier, CreatureModel.STAGE_GROWN, CFrame.new(), into)`.
+* Each model rests upon a circular pedestal tinted to the species' canonical soil colour (`species.Soil`).
+* Viewport camera uses `FieldOfView = 36` with bounding-box auto-framing:
+  * `targetHeight = size.Y * 0.54 + extent * 0.38`
+  * `distance = math.clamp((targetHeight / 2) / math.tan(rad(fov / 2)) * 1.05, 10, 48)`
+  * Dynamically scales from 11.5 studs (Nubkin) to 34.1 studs (Supernovus), ensuring compact creatures fill the frame comfortably while massive spires never clip the edges.
+  * Camera elevated at 13.5 degrees looking at `cf.Position + Vector3.new(0, size.Y * 0.44, 0)` with a subtle 3D showcase perspective.
+
+### PREVIEW ANIMATION & PERFORMANCE
+
+* **Subtle preview movement**: Gentle sinusoidal hovering (`math.sin(t * 1.5 + phase) * 0.04`), micro-tilt (`math.sin(t * 1.1 + phase) * math.rad(1.2)`), and floating ambient motes with pulsing transparency. Absolutely no frantic 360-degree spinning.
+* **Lifecycle management**: A single `RenderStepped` loop is connected only while the Index modal is open (`setOpen(true)` connects, `setOpen(false)` disconnects and frees handles).
+* **Viewport culling**: Inside `update(dt, t)`, each card tests its `AbsolutePosition.Y` against `Cards.CanvasPosition` window. Cards outside the visible scroll window skip all model CFrame and gradient calculations.
+
+### ANIMATED RARITY TEXT
+
+Rarity typography accurately reflects `SeedData.Rarities`:
+* **Legendary** (*Suncrown, Lanterncap, Kilnhusk, Astralhorn*):
+  * Polished metallic gold sheen.
+  * An animated `UIGradient` sweep periodically glints across the text: runs `Offset.X = -1.0` to `+1.0` over 1.1s, then rests for 1.1s.
+* **Mythic** (*Gloomlotus, Pyrelotus, Supernovus*):
+  * Prismatic celestial iridescence with a 5-stop cosmic palette (rose-crimson, violet, ethereal cyan, magenta, rose).
+  * Continuously shifting phase and slight angle oscillation (`math.sin(t * 1.8) * 6`).
+* **Epic** (*Snapthorn, Bellchime, Thornhopper, Mirefang, Bogdrifter, Ashthorn, Pulsarling*):
+  * Deep amethyst/royal purple with subtle breathing luminescence (+/- 12% brightness over 2.4s).
+* **Common / Uncommon / Rare**:
+  * Clean, crisp static typography with bold dark outline stroke for readability.
+
+### DISCOVERY PRIVACY
+
+* If `discovered == false`, the card remains a flat silhouette:
+  * Model parts set to `Color = GHOST (Color3.fromRGB(155, 162, 172))` and `Material = SmoothPlastic`.
+  * Title displays `"???"`, subtitle `"Undiscovered"`.
+  * Backdrop replaced with neutral dusk grey gradient (`CARD.DuskTop` to `CARD.DuskBottom`).
+  * All species-specific landscapes, motifs, halos, and particle motes are hidden. Zero biome clues or silhouettes are leaked.
+
+### VERIFICATION
+
+* **Compilation**: `rojo build -o build/StealASeed.rbxlx` succeeded cleanly (code 0).
+* **Runtime**: Tested in live Studio Play mode; zero console warnings or errors.
+* **Animation verification**: Verified via live Studio inspection that:
+  * Production models bob gently (`math.sin(t * 1.5 + phase) * 0.04`).
+  * Legendary gold glint sweeps across text every ~2.2s.
+  * Mythic gradient wave oscillates smoothly.
+  * Undiscovered cards render as flat grey silhouettes with neutral backgrounds.
+  * Scrolling off-screen engages culling.
+* **Visuals**: Confirmed visually across all 5 biomes (screenshots archived in brain directory).
+
+---
+
+## CARDS RESTORED, PLANTS BROUGHT CLOSER, MOTION REMOVED — 2026-09-08  (UNCOMMITTED)
+
+**This supersedes the two sections below it.** Antigravity's Index redesign and
+the illustrated-card integration are both gone. The cards are the original
+shared-component design again, with three targeted changes on top.
+
+### THE BASELINE, AND WHY IT IS HEAD
+
+Every card change -- Antigravity's and mine -- was uncommitted, so the committed
+state at **082bea0** IS the original implementation. Nothing had to be dug out of
+history.
+
+Worth knowing: the original Index used **`UIKit.plantCard`**, the same shared
+component the Garden uses. Antigravity forked a private `buildIndexCard` out of
+it. Restoring HEAD puts both screens back on one card component.
+
+Three files were read out of HEAD and written back individually -- not a reset,
+not a revert, not a broad checkout:
+
+    src/StarterPlayer/StarterPlayerScripts/IndexUI.client.luau    (-982 +73)
+    src/StarterPlayer/StarterPlayerScripts/GardenUI.client.luau   (-33 +6)
+    src/ReplicatedStorage/SeedGame/Shared/UIKit.luau              (-69)
+
+Checked before doing it: **none of those diffs contained anything unrelated to
+the card work**, so nothing was lost. Every other modified file -- the reserved
+tutorial pod, the Colossal aura, PlantSway, TutorialData, CarryService,
+PlayerDataService, PromptUI, TutorialUI -- is untouched and still uncommitted.
+
+`Shared/CardArt.luau` was deleted after confirming it had **zero consumers**.
+
+**Preserved as unused work, not deleted:** the three approved illustrations and
+their prompts in `output/imagegen/cards/`, the 512px derivatives in `art/cards/`,
+and the uploaded asset ids, which are recorded in the superseded section below.
+The remote assets were not archived.
+
+### CHANGE 1 -- THE PLANTS CAME CLOSER
+
+The old distance came off `model:GetBoundingBox().Size.Magnitude` -- the
+**diagonal** of a box that includes the invisible `Base` plate every creature
+carries at its feet and the card's own pedestal. Three faults at once: the wrong
+geometry, the wrong axis, and a diagonal that is always longer than either the
+height or the width.
+
+Replaced with a real fit:
+
+  1. Bounds from **drawn parts only** -- anything fully transparent is skipped,
+     and so is the Pedestal, which is card furniture rather than creature.
+  2. A first estimate that fits height and width separately and takes the
+     further of the two, so a broad crown and a tall spire are both solved.
+  3. **One corrective pass.** The camera looks in at (0.66, 0.28, -1), so a box
+     is seen corner-on and its corners rotate into frame -- a fit that should
+     have filled 86% actually filled 98%, and a Supernovus lost a front foot off
+     the bottom. The real part corners are projected through the camera that was
+     just built, the distance is scaled by the span that comes back, and the aim
+     is nudged by its centre so an off-centre silhouette is not fitted as though
+     it were centred.
+
+Measured on all 25 species in the live Index:
+
+    before   plant filled 53-79% of the frame by the old formula's own numbers
+    after    82-86% on every species, 0 below 80%, ZERO parts clipped
+
+Two wrong turns on the way, both caught by measurement rather than by eye:
+
+  * The first pass set `modelBasePivot` to the drawn centre and then `PivotTo`'d
+    the model onto it, which **translates the creature** -- a pivot is the Base
+    plate at its feet, and the drawn centre is half a body above that. The camera
+    then aimed at bounds that no longer described where the model was, and a
+    Supernovus sat at **-0.389** in viewport space: 39% of it above the glass.
+    The model is no longer moved at all.
+  * The correction first read `|ndc| * 2` as the fraction of frame filled. NDC
+    already spans the whole frame, so every card was measured at twice its size
+    and pushed back until the plant filled a third of the card.
+
+`GameConfig.CameraFill` (1.02) and `CameraRise` (0.08) are **left alone** -- they
+still serve the other viewport helper. plantCard now uses its own `FRAME_FILL`
+of 0.86 and aims at the true centre; applying an 8% rise on top of a correct aim
+was spending margin that a tall creature needs for its crown.
+
+`FRAME_NUDGE` exists for species-specific corrections and has three entries
+(bell, pod, ready). It is nearly empty on purpose: a correct two-axis fit plus
+the projection pass got everything else right, and every nudge is an admission
+that the general rule failed.
+
+### CHANGE 2 -- NOTHING MOVES
+
+Removed from `UIKit`:
+
+  * The **shared card RenderStepped** and its registry (`cardUpdaters`,
+    `pumpCards`, `registerCard`, `unregisterCard`). Deleted rather than left
+    idling -- a registry nothing registers with is a connection waiting to be
+    re-armed by the next person who wants "just a little" motion.
+  * **`idleFor`** and every per-form idle pose -- the bell's swing, the orb's
+    breath, the cube's settle, the pod's drift.
+  * The **click spin** (`spinVelocity = 8.5` on MouseButton1Click and again on
+    selection), the **camera orbit** (`currentYaw`), the accumulated animation
+    clock and the `parked` latch.
+  * The two MouseEnter/MouseLeave handlers that existed only to wake the loop.
+
+**Hover scaling is off**: `popOnHover` is called with `scale = 1`, so the card no
+longer grows under the pointer. What remains is the stroke thickening and the
+hover sound -- button feedback, not decoration. `popOnHover` itself is a public
+helper and was not modified.
+
+Verified in the live panel with 25 cards on screen and the panel open:
+
+    model pivot moved <= 0.000000 studs over 2 seconds
+    camera moved      <= 0.000000 studs over 2 seconds
+
+The Garden's countdowns, income and totals still update -- those never ran on the
+card loop.
+
+### CHANGE 3 -- STATIC BIOME BACKGROUNDS, NOW COMPLETE
+
+The original per-species backdrop system needed no code change: `setBackdrop`
+reads `GameConfig.Card.Art[speciesId]` and draws it behind the ViewportFrame,
+and identity is withheld wherever identity is withheld. Only the manifest was
+empty for twenty of the twenty-five.
+
+**The owner supplied five illustrated background plates on 2026-09-08**, at
+`art/cards/backgrounds/biome1..5.png`, 1254x1254. They are background scenery
+only -- no creature, no name, no rarity, no border, nothing animated -- and each
+has an open, quieter centre for the plant to stand in.
+
+    biome1  greenhollow  sunlit woodland, moss, oversized leaves, white flowers
+    biome2  dustbowl     dunes, cracked clay, sandstone mesas, warm dusty light
+    biome3  tanglemire   swamp water, reeds, hanging roots, layered mist
+    biome4  emberroot    basalt, charred ground, restrained magma light
+    biome5  starbloom    alien garden, luminous flora, nebula sky
+
+**The folder's README described a different batch entirely** -- five Dustbowl
+PER-SPECIES plates, `dunebud-background-v1.png` and four siblings -- and none of
+those files are in the folder. The filenames were trusted over the prose after
+opening all five and confirming each one against its biome. The README has been
+replaced with what the folder actually holds; the orphaned Dustbowl prompts are
+left at `output/imagegen/cards/backgrounds/`.
+
+    greenhollow  rbxassetid://101119022870924
+    dustbowl     rbxassetid://133554639098352
+    tanglemire   rbxassetid://127784202754052
+    emberroot    rbxassetid://107428058230890
+    starbloom    rbxassetid://80623858180990
+
+Every id came back from an upload. Runtime copies are the 512px `<biome>-bg.png`
+beside the masters -- a card is 116-151 pixels wide and a 1254px texture for it
+is four times what it can show.
+
+`GameConfig.Card.Art` now maps **all 25 species** onto these five, generated from
+`SeedData` rather than typed, so a new species cannot be silently missed.
+
+**One judgement call worth reversing if you disagree.** Five Greenhollow species
+had bespoke procedural backdrops from `tools/art/card_backdrops.py` -- Nubkin's
+sunlit rows, Petalpip's meadow, Spiretip's misty pines, Toadcap's rotting log,
+Bellchime's lanterns at dusk. They are **superseded, not deleted**: the script
+and their five ids are recorded in the comment above `GameConfig.Card`. The
+reason is cohesion -- soft procedural gradients on five cards next to painted
+scenes on twenty reads as a bug rather than as variety. Say the word and
+Greenhollow goes back to its bespoke set.
+
+The trade this accepts: five species now share one plate per biome instead of
+each having its own place. Per-species backgrounds remain the better end state.
+
+### VERIFIED
+
+    original layout       both screens back on UIKit.plantCard, pedestals,
+                          name + rarity, action slab, selection behaviour
+    all 25 species        every card shows its own real model
+    framing               82-86% fill, 0 below 80%, 0 parts clipped, all 25
+    stillness             0.000000 studs of model or camera movement over 2s
+    privacy               22 concealed cards, none carrying a backdrop or a
+                          rarity word; 3/25 discovery count intact
+    Garden live data      3/20, tier badges "2 tier"/"5 tier"/"7 tier" (the
+                          ORIGINAL presentation), BIG/GIANT/COLOSSAL sub lines,
+                          +$196/s, +$11.6K/s, +$66.5K/s, plot +$78.2K/s
+    layouts               3-column desktop (151px cells) and 2-column narrow
+                          (116px cells) both measured; the fit is computed off
+                          the viewport's own AbsoluteSize, so it follows
+    repeated open/close   no duplicate previews, no growth in card count
+    console               clean, no errors from either panel
+    build                 clean rojo build
+    background manifest   25/25 species mapped, 0 wrong biome
+    background privacy    0 concealed Index cards and 0 empty Garden slots
+                          showing a biome plate
+    background z-order    0 backdrops drawn over a plant
+    background stillness  0.000000 studs of movement with the plates in
+
+**Not tested:** no pod was watched hatching in the live Garden (none is growing,
+and planting one would change the owner's bed), and nothing was tested on a
+phone. Only three of the five plates were seen behind a real card -- greenhollow
+and dustbowl in the Index, starbloom in the Garden -- because the account has
+three species discovered and three Starbloom plants. Tanglemire and emberroot are
+verified by the manifest check, not by eye.
+
+### UNTOUCHED
+
+Creature models, geometry, colours, faces, materials, the size curve, the
+Colossal aura, world plant animation, shop, inventory, hotbar, economy, saves,
+combat, tutorials, plots and guardians. `SeedData`, `CreatureModel` and
+`GameConfig` were not modified.
+
+## ILLUSTRATED CARDS — THREE SPECIES LIVE IN BOTH SCREENS — 2026-09-08  (UNCOMMITTED)
+
+The owner approved Codex's three sample illustrations. They are uploaded, mapped
+and drawing in the Index and the Garden. **The section below this one is now
+superseded on the blocker** -- the artwork arrived from outside this session;
+everything it recorded about the pipeline and the identity data still stands.
+
+### THE ASSET MAP — REAL IDS, EACH ONE CONFIRMED TO DRAW
+
+| species | rarity | asset id | crop x |
+|---|---|---|---|
+| nubkin | Common (static label) | `rbxassetid://140166526412766` | 0.115 |
+| suncrown | Legendary (gold shine) | `rbxassetid://124598790707157` | 0.115 |
+| supernovus | Mythic (iridescent) | `rbxassetid://72987812541207` | 0.231 |
+
+Every id came back from an actual `upload_image` call and was then put on a Decal
+and photographed before being written into the manifest. **The other 22 species
+have no entry and that is deliberate** -- see the interim fallback below.
+
+    master    output/imagegen/cards/<id>-illustrated-sample-v1.png   approved, untouched
+    runtime   art/cards/<id>-card.png                                512 x 512, resized
+
+512 because a card is **116 px wide** (2 columns at 248) to **151 px** (3 columns
+at 480), measured off both panels' own layout maths. A 1254 px master is four
+times the texture for a card that never exceeds 151, which is the "do not upload
+enormous textures for tiny cards" line. The masters are neither redrawn nor
+replaced -- the runtime files are resizes and nothing else.
+
+### THE CROP IS PER SPECIES, AND SUPERNOVUS IS WHY
+
+The masters are square; a card is 1 : 1.30 portrait. Every card keeps a strip of
+width 1/1.30 and only the horizontal offset differs.
+
+**Supernovus is drawn prowling with its skull, jaw and brow horn in the right
+third**, so a centred crop cuts exactly the features the brief forbids cropping.
+Its strip starts at 0.231 instead of 0.115. Verified in the running client:
+`ImageRectOffset` reads `118, 0` for Supernovus against `59, 0` for the other two,
+and the head sits inside the frame at both panel widths.
+
+### WHERE THE CODE LIVES
+
+  * **`Shared/CardArt.luau`** -- NEW. The manifest, the crops, `Has`/`Apply`, and
+    the one rarity scheduler. This is the shared presentation component: both
+    screens draw the same picture with the same crop, so a species cannot end up
+    illustrated in one panel and a 3D preview in the other.
+  * **`Shared/UIKit.luau`** -- `plantCard` gained `setIllustration(speciesId?)`.
+    **Audited first: GardenUI is `plantCard`'s only consumer**, so this cannot
+    reach another screen.
+  * **`StarterPlayerScripts/GardenUI.client.luau`** -- illustration on grown
+    plants only; tier badge now prints the tier NAME.
+  * **`StarterPlayerScripts/IndexUI.client.luau`** -- illustration gated on
+    discovery, hover motion removed, Epic animation removed, per-card render loop
+    deleted.
+
+### WHAT WAS REMOVED FROM ANTIGRAVITY'S INDEX
+
+  * **The per-card `update(dt, t)` and the RenderStepped that drove it.** It bobbed
+    and swayed the 3D model, drifted the ambient motes and swept the rarity
+    gradient. The first two are the card animation the owner rejected. The motes
+    are still BUILT, so the 22 unillustrated backdrops look the same -- they just
+    hold still.
+  * **The hover scale.** A card that grew to 1.02 under the pointer is card
+    animation. The border highlight stays: that is selection feedback, not
+    decoration.
+  * **The Epic rarity pulse.** On the real ladder Epic sits BELOW Legendary
+    (weight 9 against 1.4) and five species carry it. Only Legendary and Mythic
+    animate now. There is still no rarity between them, so the animated set is
+    exactly two labels -- there was no third "intermediate" tier to design.
+
+### ONE SCHEDULER, THREE WAYS TO PAUSE
+
+`CardArt` runs a single `RenderStepped` shared by both panels, and it exists only
+while a panel is open **and** a high-rarity label is registered. Panels are
+reference counted, so closing the Index while the Garden is open leaves the
+Garden's labels running.
+
+Measured on the Mythic label in the live panel:
+
+    panel OPEN, card on screen    0.268/5.1  0.299/6.5  0.290/7.7  0.243/8.7  0.164/9.4
+    panel OPEN, scrolled off      0.063/9.9  0.063/9.9  0.063/9.9
+    panel CLOSED                  frozen
+
+### THE INTERIM FALLBACK, AND IT IS LABELLED AS ONE
+
+**22 of 25 species have no approved artwork.** They keep the presentation they
+already had -- their procedural backdrop and their still 3D portrait -- with the
+decorative motion stopped. `CardArt.Has` answers false, `setIllustration` returns
+false, and the caller falls through to the existing path untouched. Nothing is
+blanked, nothing borrows another species' picture, and the collection is **not**
+finished. The remaining 22 follow in a separate art pass in this approved style.
+
+### VERIFIED
+
+**Isolated presentation fixture** (its own ScreenGui, real `UIKit.plantCard`, real
+`CardArt`, real uploaded assets -- the owner's almanac and garden were never
+unlocked or written):
+
+    desktop  panel 480px, 3 columns, cell 151x196  -- all three read clearly
+    narrow   panel 248px, 2 columns, cell 116x150  -- faces still legible
+    crops    nubkin/suncrown off 59,0   supernovus off 118,0   rect 394x512
+    viewport visible=false, children=0 on every illustrated card
+
+**The real Index, opened through its own rail button:**
+
+    INDEX 3/25 -- only Dunebud, Petalpip and Supernovus are discovered
+    illustrated cards           1  (Supernovus; nubkin and suncrown are concealed)
+    concealed cards             22, still "???" / UNDISCOVERED, no artwork, no rarity
+    rarity gradients            1  (MythicPrism), 24 labels static
+
+Discovery privacy holds: two of the three illustrated species are undiscovered on
+this account and neither shows its picture.
+
+**The real Garden**, with three grown Supernovus at different tiers:
+
+    GARDEN 3/20, plot income +$78.2K/s
+    same artwork on all three, tier badges BIG / GIANT / COLOSSAL
+    per-card income +$196/s, +$11.6K/s, +$66.5K/s
+
+That screenshot is also the argument for the badge change: three identical
+pictures, and the only thing telling a Big from a Colossal is the badge. It used
+to print `compact(tier) .. " tier"` -- "1 tier", "7 tier" -- which is a bare index
+on a card whose art carries no size information at all. It now prints the tier
+name.
+
+**Pod / unrevealed state**, driven directly on a fixture card because planting a
+pod in the owner's bed to find out would be changing their garden:
+
+    GROWN (illustrated)   illustration visible, viewport hidden AND emptied
+    POD (unrevealed)      illustration hidden, viewport restored
+    GROWN again           illustration visible again -- one label reused
+    species with no art   illustration hidden, viewport restored
+
+A pod never shows the species picture, which is the same back door the existing
+backdrop rule already closes.
+
+**No accumulation** after six Index open/close cycles and a Garden cycle:
+
+    SeedIndex   25 cards, 1 illustration, 25 viewports (48 children = 24 x model+camera), 1 gradient
+    SeedGarden  20 cards, 3 illustrations, 20 viewports holding 0 models
+
+The Supernovus viewport is empty because `setIllustration` **empties** it rather
+than merely hiding it -- a ViewportFrame with a model in it keeps rendering behind
+an opaque picture, which is exactly the "hidden but still running" cost this was
+meant to remove.
+
+Console clean. `rojo build` clean. All four changed files compile.
+
+### NOT TESTED, HONESTLY
+
+  * **No Legendary label was observed animating in a real panel.** Suncrown is the
+    only Legendary with artwork and it is undiscovered on this account, and no
+    other Legendary is discovered either. The gold sweep is exercised only by the
+    shared scheduler's code path, which the Mythic label proves runs. Worth a look
+    once a Legendary is discovered.
+  * **No pod was watched hatching in the live Garden** -- the pod path was proven
+    on a fixture, not on a real growing plant.
+  * Narrow layout was verified at 248 px in the fixture and by the panels' own
+    layout maths, not by resizing the actual Studio window.
+  * Nothing was tested on a phone.
+
+### UNTOUCHED
+
+Shop, inventory, hotbar, economy, rarity probabilities, growth times, saves,
+combat, guardians, tutorials, plots, mill, plant geometry, the size curve and the
+Colossal aura. `SeedData`, `CreatureModel` and `GameConfig` were not modified.
+`GameConfig.Card.Art` -- the five old backdrop ids -- is left exactly as it was and
+is still what the 22 fallback cards use.
+
+## ILLUSTRATED PLANT CARDS — BLOCKED ON ARTWORK, PREP DONE — 2026-09-08
+
+**No UI file was rewritten.** The owner rejected Antigravity's Index card design
+and asked for illustrated collectible cards; the artwork cannot be produced in
+this session, and the brief is explicit that procedural gradients and model
+screenshots must not be passed off as finished illustrations. So the audit, the
+references and the art briefs are done and the rewrite is not started.
+
+### ANTIGRAVITY'S CHANGES — CLAIMS VERIFIED
+
+Checked against the files, not taken on report:
+
+  * **`IndexUI.client.luau` IS modified**, +917 / -74 lines. It added per-species
+    procedural landscape tables with `motes` (a `BackdropMote` type and a
+    `motes = { ... }` block for all 25 species), `ViewportFrame` heroes with
+    per-card `Camera`s, `MouseEnter`/`MouseLeave` hover, and a `rarityMode`
+    driven from **one `RunService.RenderStepped` connection** at line 1117.
+  * **`GardenUI.client.luau` is UNTOUCHED.** Confirmed by `git status`.
+  * Rarity animation currently runs on **Epic, Legendary and Mythic**.
+  * Its `SPECIES_BACKDROPS` table **does** cover all 25 registered species
+    exactly -- 0 keys that are not a species, 0 species without a key, checked
+    against `SeedData`. Its own handoff section above names *Bramblebite* and
+    *Snapthorn* among the Greenhollow entries and **no such species exist**; the
+    prose is wrong, the code is not. Worth knowing before anyone trusts that
+    section's species lists for anything.
+
+### WHAT THE RARITY LADDER ACTUALLY SAYS
+
+    SeedData.RarityWeight:  Common 1000, Uncommon 260, Rare 55, Epic 9,
+                            Legendary 1.4, Mythic 0.22, Secret 0.03, Divine 0.004
+
+Species actually in use: Common 2, Uncommon 3, Rare 8, **Epic 5**, Legendary 4,
+Mythic 3. No species is Secret or Divine.
+
+Two consequences for the brief:
+
+  * **Epic is below Legendary, so its label must be static.** Antigravity's Epic
+    animation is the "extra lower-rarity animation" to remove. Confirmed against
+    the data rather than assumed.
+  * **There is no intermediate rarity between Legendary and Mythic.** The brief
+    asks for "existing intermediate rarity: a restrained distinct treatment" --
+    the ladder is adjacent, so the animated set is exactly **two labels**:
+    Legendary (slow gold shine) and Mythic (iridescent). Nothing to design for a
+    third. Flagging rather than inventing one.
+
+### THE BLOCKER, PRECISELY
+
+**There is no text-to-image tool in this session.** The Roblox Studio MCP
+provides `generate_mesh` and `generate_procedural_model` (3D), `generate_texture`
+(re-textures an existing MeshPart from a prompt) and `generate_material`
+(tileable surface materials). None of them produces a 2D illustration. The key
+art in `output/imagegen/` was made on 2026-09-04 with a tool that is not
+attached now; its prompts are committed, the generator is not.
+
+**What DOES work, verified end to end today:**
+
+    local PNG -> python -m http.server -> mcp upload_image
+      -> "rbxassetid://113235703512353"  (a real id, returned by the uploader)
+      -> renders in Studio
+
+Proved by putting the fresh id on a Decal beside two backdrops that already ship
+(`nubkin` 100196841981461, `bellchime` 106856602665628) and photographing all
+three: **all three drew**. So the moment artwork exists, getting it into the game
+is a solved, tested step.
+
+One trap recorded: **`ImageLabel.IsLoaded` reads `false` in the Edit datamodel
+even for the five backdrops that demonstrably ship.** It is not a usable probe
+here -- a Decal on a Part plus a screenshot is. `ContentImageSize` cannot be read
+at all from the MCP thread (`lacking capability RobloxScript`).
+
+### THE THREE SAMPLES, CHOSEN AND PREPARED
+
+A compact plant, a tall/broad plant and a Mythic, across three biomes and both
+animated rarity tiers:
+
+| role | species | rarity | biome | Mega h x w x d |
+|---|---|---|---|---|
+| compact | **nubkin** | Common (static label) | greenhollow | 18.1 x 12.3 x 10.7 |
+| tall / broad | **suncrown** | Legendary (gold shine) | dustbowl | 34.9 x 40.4 x 17.8 |
+| Mythic | **supernovus** | Mythic (iridescent) | starbloom | 46.0 x 36.3 x 43.2 |
+
+Production models were built and photographed from a three-quarter and a
+front-on angle, and their part inventories and exact `Color3` palettes read off
+the built model. Written up as briefs an illustrator or an image tool can
+execute:
+
+    output/imagegen/cards/README.md          the rules every card obeys
+    output/imagegen/cards/nubkin.prompt.md
+    output/imagegen/cards/suncrown.prompt.md
+    output/imagegen/cards/supernovus.prompt.md
+
+Three identity facts in there are **invisible in a reference render** and are
+exactly what "do not invent features because a reference is unclear" is about:
+
+  * **Supernovus has six legs**, not four -- `FrontLeft / FrontRight / MidLeft /
+    MidRight / RearLeft / RearRight`, each with thigh, hock, heel, pad and two
+    toes. A three-quarter render reads as a quadruped.
+  * **Suncrown's rays are two rings** -- nine `Ray` + nine `RayTip` outside eight
+    `SunRay`, three of them coral-red -- not one symmetrical corolla.
+  * **Nubkin's head is a cube** with two corner `Nub` bumps, and its pupils are
+    doubled (pupil + glint) with the glint upper-left on BOTH eyes.
+
+### WHAT THE EXISTING CARDS ALREADY ARE
+
+Worth knowing before replacing them. `GameConfig.Card.Art` already maps five
+Greenhollow species to backdrop asset ids, painted by `tools/art/card_backdrops.py`
+(Pillow, 10 KB) -- Nubkin's sunlit rows, Petalpip's meadow, Spiretip's misty
+pines, Toadcap's rotting log, Bellchime's lanterns at dusk. **The other 20
+species have no card art at all.** Those five backdrops are soft procedural
+paintings; they are not the illustrated creature cards being asked for, and
+extending that script is not a route to them.
+
+The existing privacy rule is already correct and must survive: a backdrop is
+IDENTITY, so an undiscovered Index card, a Garden pod and an empty hole get the
+plain dusk gradient instead. Painting Bellchime's lanterns behind a `???` names
+the species through the back door.
+
+### WHAT IS NOT DONE, AND WHY
+
+The engineering half -- ImageLabels replacing ViewportFrames, deleting the mote
+tables and hover connections, one bounded scheduler for visible high-rarity
+labels, off-screen pausing, the shared Index/Garden card component, the Garden
+layout -- is **not started**, deliberately.
+
+Doing it now would swap a card that currently shows a 3D plant for a card
+showing a background and nothing else, which is a visible regression the owner
+has not seen or approved, and the brief gates production on three approved
+sample cards that cannot be produced. It is ready to go the moment either
+condition changes, and none of it depends on which PNG lands in the ImageLabel.
+
+### TO UNBLOCK
+
+Any one of these is enough:
+
+  1. Attach an image-generation tool to this session; the three briefs are
+     written and the upload path is tested.
+  2. Drop finished PNGs into `art/cards/` and say so -- they get uploaded,
+     mapped and wired.
+  3. Say to proceed with the engineering half against the existing five
+     backdrops plus a neutral placeholder for the other twenty, accepting that
+     cards will look worse before they look better.
+
+### UNTOUCHED
+
+`IndexUI` and `GardenUI` are exactly as they were (IndexUI still carries
+Antigravity's uncommitted work). No shop, inventory, hotbar, economy, geometry,
+size curve, aura, save or plot code was touched. The only files added are the
+four documents above.
+
+## COLOSSAL PLANTS CRACKLE — 2026-09-08  (UNCOMMITTED, READY FOR VISUAL APPROVAL)
+
+Two or three short jagged arcs snap around a Colossal's silhouette for about a
+fifth of a second, then nothing for two to four seconds. Colossal only. No
+sound, no shake, no gameplay, nothing replicated.
+
+### WHERE IT LIVES
+
+  * **`Shared/PlantAura.luau`** -- NEW. Palettes, the numbers, the pool, the
+    budget and the arc geometry. It has **no connections and no lifecycle**: it
+    exposes `Prepare`, `Forget` and `Tick` and nothing else runs on its own.
+  * **`StarterPlayerScripts/PlantSway.client.luau`** -- six small edits. It
+    already indexes every `Planted` model, waits for a PrimaryPart, drops it on
+    tag removal and drives the whole bed from ONE Heartbeat on a round robin. A
+    second index of the same bed is the one that leaks a plant on pickup and
+    lights a bolt over empty soil, so the aura hangs off the existing one.
+  * **`PlantSizeMockupRunner.luau`** -- the existing size preview gained an aura
+    bench and now tags its grown specimens (see below). No second showroom.
+
+### HOW A PLANT GETS ONE, AND HOW EVERYTHING ELSE DOES NOT
+
+`PlantAura.Prepare` returns **nil** unless `model.Tier` equals
+`SeedData.TierCount`. Tiny through Titan carry no state, are never scanned and
+cannot fire. The check is made once, when the plant is remembered.
+
+The scope gate above that is free and was already there: the `Planted` tag is
+applied by **PlantService at the moment a pod becomes a plant in soil** --
+`CreatureModel.Build` does not tag. So carried Tools, shop viewports, inventory
+thumbnails and nest pods are never indexed by PlantSway and can never get an
+aura. Nothing had to be added to exclude them.
+
+### THE PALETTES
+
+Keyed by **`species.Biome` from the sheet, not by an attribute.** A planted
+creature carries `SpeciesId`, `Rarity`, `Tier` and `Stage` and nothing else --
+`BiomeId` is stamped by NestService on a pod in a ring and never survives into a
+plot. Reading it would have found nil on every plant in the game and quietly
+painted all five biomes the neutral fallback, which looks exactly like "the
+palettes are too similar". Caught before it shipped.
+
+| biome | arc | core (one segment) |
+|---|---|---|
+| greenhollow | pale leaf-green 198,240,168 | warm gold 255,236,176 |
+| dustbowl | amber 255,196,104 | sandy gold 255,232,176 |
+| tanglemire | muted teal-green 126,200,178 | pale teal 196,236,220 |
+| emberroot | ember-orange 255,142,62 | warm white 255,238,214 |
+| starbloom | lavender 190,168,255 | pale cyan 214,248,255 |
+
+### THE NUMBERS, AND WHY THEY ARE SMALL
+
+    gap                 2.0 - 4.0s, randomised per plant, per pulse
+    first gap           0.2 - 5.0s, so a bed streaming in does not flash together
+    pulse life          0.22s
+    arcs per pulse      3 near (<70) / 2 mid (<140) / 1 far (<200), minus one on Reduced
+    segments per arc    4 thin Neon blocks
+    arc length          measured height x 0.10, CLAMPED 1.6 .. 5.0 studs
+    peak transparency   0.18 -- never fully opaque, even at the strike
+    flicker             0.14, per segment, so a bolt shimmers along its length
+
+**The length cap is the neighbour-plot guarantee.** A planting cell is 16 x 13.7
+studs, so an arc that may reach five studs off the silhouette cannot cross into
+the next cell no matter how wide the plant becomes -- and it holds under the
+shipped 50x curve and the proposed 7.6x one alike, because the cap binds long
+before the fraction does.
+
+**No PointLight anywhere.** Neon carries the glow. A light per arc is the
+difference between a crackle and a lightning storm, and 120 of them is the
+difference between a game and a slideshow.
+
+### PERFORMANCE
+
+  * **One Heartbeat, shared.** PlantAura connects to nothing. On a frame where
+    no plant is due, 120 Colossals cost 120 number comparisons.
+  * **Pooled.** Segments are parked at y = -5000 and handed back out; the
+    ceiling is arithmetic -- 10 concurrent x 3 arcs x 4 segments = **120 parts**.
+  * **Client-wide budget of 10 concurrent pulses**, halved on Reduced. A plant
+    due while the budget is full is pushed back 0.2-0.8s, not left due, so no
+    queue forms and then fires as one wave.
+  * **Distance bands** cut the arc count and stop entirely past 200 studs
+    (140 on Reduced). Plants past the band are re-armed on the normal gap.
+  * **Off-screen plants are skipped**, and the viewport test is only asked of
+    plants actually due this frame -- never 120 times. Inside 40 studs the test
+    is skipped, because a small camera turn brings those into frame mid-pulse.
+  * **Reduced effects is the EXISTING control**, not a new one: the same
+    `SeedAfterimageQuality` player attribute SpeedFX reads, the same three words,
+    and the same touch-device default of Reduced. `Off` means no arcs.
+  * The aura draws from its **own random stream**, not `entry.rng` -- that one
+    decides where a plant walks, and sharing it would have made Colossals wander
+    differently depending on how often their aura fired.
+
+### VERIFIED IN A REAL PLAY SESSION
+
+All of the following was measured on the client with the effect running, off the
+shared `workspace.SeedPlantAura` folder rather than a second copy of the module.
+
+**Tier gate -- a Bellchime Titan beside a Bellchime Colossal, 30 seconds:**
+
+    lit-segment samples nearer the COLOSSAL   610
+    lit-segment samples nearer the TITAN        0
+
+**Arcs ride the moving creature.** The plants sway, so their parts move every
+frame. If an arc is anchored to a part its transform RELATIVE to that part is
+constant while its WORLD position changes:
+
+    anchor Leaf        segment moved 0.01773 in world | RELATIVE drift 0.000122
+    anchor PeatClod1   segment moved 0.04502 in world | RELATIVE drift 0.000123
+
+(A third sample read 0.087 -- that is the measurement guessing the anchor by
+proximity and picking the wrong part, not the arc slipping. `Lid` is on the
+never-anchor list and cannot hold an arc.)
+
+**Sparseness, which is the whole art direction:**
+
+| scene | camera | frames with any arc lit | peak lit |
+|---|---|---|---|
+| aura bench, 5 Colossals spread out | ~120 studs | **11%** | 21 |
+| realistic Level 5 bed, 1 Colossal among 20 plants | ~145 studs | **7%** | 4 |
+| twenty-Colossal stress bed | ~126 studs | 52% | 60 |
+
+**Stress case, 20 Colossals in one bed, 15 seconds:**
+
+    segments pooled          72 of a 120 ceiling
+    peak lit at once         60  = 5 concurrent pulses of a 10 budget
+    mean lit per frame       8.2
+    client frame time        16.82 ms (59 fps)
+
+The budget was never saturated: the 2-4s gaps spread twenty plants on their own.
+
+**Cleanup, after four build/clear cycles with clears landing mid-pulse:**
+
+    pool                                        76 segments (ceiling 120)
+    parked / returned                           76
+    still lit                                    0
+    lit segments with no plant within 40 studs    0
+
+The pool did not grow per cycle, so segments are reused rather than made and
+abandoned, and no mid-flight pulse was left hanging over destroyed soil.
+
+### THE PREVIEW
+
+The existing size stage gained two rows in front of the ladder:
+
+  * **AURA BENCH** -- one Colossal per biome: Bellchime (greenhollow), Suncrown
+    (dustbowl), Lanterncap (tanglemire), Cinderpaw (emberroot), Cosmospire
+    (starbloom), each in its real planting cell with an avatar beside it.
+  * **TIER GATE** -- a Bellchime Titan next to a Bellchime Colossal. If the Titan
+    ever crackles, this is the view that says so.
+
+The two Level 5 beds behind the ladder cover the mixed garden and the
+twenty-Colossal stress case.
+
+    require(game.ServerScriptService.SeedGameServer.PlantSizeMockupRunner).Build()
+
+**To see it crackle: press Play, get to the stage at (1200, 200, -1200), and run
+Build() from there.** In Edit the stage is geometry -- the sway and the aura are
+both client systems and Edit runs no client.
+
+### TWO THINGS FOUND ALONG THE WAY
+
+  * **The preview had to tag its own specimens.** `CreatureModel.Build` does not
+    apply `Planted`; PlantService does. Without the tag the stage was inert --
+    nothing swayed and no arc ever fired. The runner now tags its grown models,
+    which is what makes it a preview of a planted plant rather than of a statue.
+    `GardenUI` is unaffected (it only reads inside a plot's `Plants` folder) and
+    `CashPop` only tracks, never pops, without a server payment.
+  * **PlantSway loses a race with streaming, and this is NOT introduced here.**
+    `StreamingEnabled` is on. PlantSway waits five seconds for a PrimaryPart and
+    then gives up on a model **permanently**. A stage built 1,900 studs from the
+    character showed **82 tagged models and zero of them swaying**: the empty
+    Model containers replicated at once and their parts arrived much later. In
+    normal play a plant is in your own plot and streams in with you, so this has
+    probably never been hit -- but a player teleporting to a distant plot could
+    see plants that never sway and never crackle. **Flagged, not fixed:** it is a
+    PlantSway change with its own blast radius and it is out of scope here.
+
+### HONEST LIMITS
+
+  * **Not tested on a phone.** The Reduced path is exercised only by reading the
+    same attribute SpeedFX uses; no touch device was involved. All frame timings
+    above are Studio on this desktop.
+  * **The screen captures under-represent the effect and one is staged.** A pulse
+    is 0.22s and only 7-11% of frames have anything lit, so a capture usually
+    catches nothing. The close-up was taken by copying ONE real pulse into a
+    holding folder and leaving it standing -- real geometry, real colours, real
+    positions, fade stopped. The frozen folder was deleted afterwards.
+  * **No second player watched.** Nothing is replicated, so two clients see
+    different arcs by design, but that has not been observed.
+  * Arc colours were chosen against the biome palettes and the plant art, and
+    have not been reviewed by anybody but me. That is what the bench is for.
+
+### UNTOUCHED
+
+Pods, guardians, geometry, sizes, income, rarity weights, growth timers, plot
+capacities, saved data and the still-preview-only size curve. The aura reads
+`Tier`, `SpeciesId` and the model's own parts, and writes nothing but the
+transparency and CFrame of its own pooled segments.
+
+## PLANT SIZE CURVE — APPROVED AND APPLIED — 2026-09-08  (f8f6d17)
+
+**APPLIED 2026-09-08 in f8f6d17.** `SeedData.Tiers` now carries
+1 / 1.38 / 1.90 / 2.65 / 3.70 / 5.10 / 7.60. Re-measured after the change, the
+Colossal heights match the approved figures below to **0.04 studs**.
+
+`girth`, `weight`, `value`, `pod` and `color` were not touched, so rarity odds,
+income, growth timers, plot capacities, pod art, guardians and player saves are
+all unchanged. `PlantSizeMockupRunner` keeps the table as the record of what was
+agreed, and `Build({ live = true })` still stands the stage up on whatever
+SeedData currently says, so the two can be compared after any future change.
+
+Everything below this line was written while it was still a proposal and is kept
+as the reasoning and the measurements that supported it.
+
+### WHAT IS WRONG NOW, MEASURED
+
+Every species built at every tier through the production builders. The worst of
+it, in studs, against a **46-stud corridor wall** and a **16 x 13.7 planting
+cell**:
+
+| species | Tiny h | Colossal h | Colossal foot | Colossal Base |
+|---|---|---|---|---|
+| nubkin | 3.1 | **217.1** | 124.6 x 119.1 | 42.07 |
+| bellchime | 6.3 | **453.9** | 207.7 x 198.5 | 70.12 |
+| cinderpaw | 4.3 | **214.3** | 84.6 x 73.3 | 48.97 |
+| cosmospire | 7.7 | **382.5** | 177.8 x 105.8 | 83.69 |
+| supernovus | 9.2 | **459.8** | 381.6 x 313.2 | 92.74 |
+
+Bellchime at 454 studs is confirmed, and Supernovus is worse at 460. The shape
+of the ladder is the other half of the problem:
+
+    shipped  1.000  1.308  1.710  5.000  10.000  20.000  50.000
+    steps        x1.31  x1.31  x2.92   x2.00   x2.00   x2.50
+
+Three near-identical bottom tiers, then a 2.9x cliff at Huge -> Mega.
+
+### THE PROPOSAL: ONE CURVE, UNIFORM, WITH THE FINAL JUMP INTACT
+
+| tier | shipped | **proposed** | step | vs live |
+|---|---|---|---|---|
+| Tiny | 1.000 | **1.00** | -- | 100% |
+| Big | 1.308 | **1.38** | x1.38 | 106% |
+| Huge | 1.710 | **1.90** | x1.38 | 111% |
+| Mega | 5.000 | **2.65** | x1.39 | 53% |
+| Giant | 10.000 | **3.70** | x1.40 | 37% |
+| Titan | 20.000 | **5.10** | x1.38 | 26% |
+| Colossal | 50.000 | **7.60** | **x1.49** | 15% |
+
+Tiny is unchanged. Big and Huge get slightly BIGGER, which fixes the three-tiers-
+that-look-alike problem at the bottom. The cliff is gone. Titan -> Colossal is
+deliberately the largest step on the ladder.
+
+`girth` is untouched at 0.82 .. 1.45. It is a proportion, not a size -- broad
+creatures stay broad, and changing it would be the axis-squeezing the brief
+rules out.
+
+### WHAT THAT BUILDS, BESIDE A 5.2-STUD AVATAR
+
+Finished heights measured off the real models on the candidate curve:
+
+| species | Tiny | Big | Huge | Mega | Giant | Titan | **Colossal** | avatars | vs wall |
+|---|---|---|---|---|---|---|---|---|---|
+| nubkin | 3.1 | 4.5 | 6.5 | 9.6 | 14.1 | 20.7 | **33.0** | 6.3x | 72% |
+| bellchime | 6.3 | 9.1 | 13.2 | 19.5 | 28.9 | 42.9 | **69.0** | 13.3x | 150% |
+| cinderpaw | 4.3 | 5.9 | 8.1 | 11.4 | 15.9 | 21.9 | **32.6** | 6.3x | 71% |
+| cosmospire | 7.7 | 10.6 | 14.5 | 20.3 | 28.3 | 39.0 | **58.1** | 11.2x | 126% |
+| supernovus | 9.2 | 12.7 | 17.5 | 24.4 | 34.0 | 46.9 | **69.9** | 13.4x | 152% |
+
+Ground footprints at Colossal fall to **12.9 (cinderpaw) .. 58.0 (supernovus)**
+from 84 .. 382, so most Colossals cover one to two planting cells instead of the
+whole plot and its neighbours.
+
+**Why Colossal is still worth chasing.** Tiny to Colossal is a 10.6x linear jump
+in finished height -- about **1,200x in volume**. The tallest Colossals stand
+half again as tall as the corridor wall and thirteen avatars high; the shortest
+form still reaches six avatars. Titan -> Colossal alone adds 26 studs to a
+Bellchime, which is five avatars of pure growth in one tier. It reads as a
+landmark from anywhere on the plot without becoming the plot.
+
+### IT IS A PURE UNIFORM RESCALE, AND THAT IS VERIFIED
+
+The previous attempt shrank roots and left the body on the 50x curve, so feet
+and bodies dwarfed their root systems. This changes ONE number that every
+dimension already descends from -- `SeedData.Tiers[i].mul`, read through
+`FrameHeight` -- so nothing can move relative to anything else.
+
+Tested rather than asserted: every measured dimension of every proposed Colossal
+as a fraction of the shipped one, expected 7.60/50 = 0.1520.
+
+    cinderpaw   height .1521  widthX .1520  depthZ .1520  footX .1525  footZ .1514  base .1519  clearance .1516
+    nubkin      height .1520  widthX .1518  depthZ .1522  footX .1517  footZ .1520  base .1521  clearance .1525
+    supernovus  height .1520  widthX .1521  depthZ .1519  footX .1520  footZ .1520  base .1520  clearance .1525
+    cosmospire  height .1519  widthX .1519  depthZ .1521  footX .1519  footZ .1522  base .1520  clearance .1521
+    bellchime   height .1520  widthX .1520  depthZ .1519  footX .1521  footZ .1521  base .1520  clearance .1519
+
+    worst deviation 0.00057 (0.37%, which is the rounding in the source figures)
+
+No axis is squeezed, no part moves relative to another, and root-to-foot contact,
+mouth depth, animation sockets and the approved Emberroot freeform roots are the
+same geometry at a different size.
+
+### EVERY SCALING CONSUMER, TRACED
+
+| consumer | how it gets its size | effect of the change |
+|---|---|---|
+| `CreatureModel.BuildCreature` | `H = FrameHeight(sp, tier)`, `G = Girth(tier)` | the only reader of `mul`; everything below descends from H |
+| invisible `Base` | `stemW * 1.2` off H | scales with it; 42-93 studs today -> 6-14 |
+| `replayPart` (assembled forms) | `hs` for size, `hs * gs` for offsets | unchanged shape, smaller |
+| `PlantPlace` footprint radius | `FrameHeight * 0.46 * Girth * 1.5` | follows automatically |
+| `PlantSway` amplitude, bob, gait | measured world extents of the built model | follows automatically -- no constant to update |
+| `PlantUI` / `CashPop` billboards | `GameConfig.topOfModel(model, anchor)` | follows automatically |
+| Hatch / Pick Up prompts | parented to `model.PrimaryPart`, the ground Base | already at ground level, range 26; unaffected |
+| `PlotService` wander separation | bounded logical target, not physical size | unaffected by design |
+| income, rarity, timers | `tier.value`, `tier.weight`, GrowSeconds | **not touched** |
+
+### THE PREVIEW
+
+`src/ServerScriptService/SeedGameServer/PlantSizeMockupRunner.luau` -- new, a
+module, nothing calls it. Modelled on `EmberrootRootMockupRunner`: same
+`Archivable = false` scratch folder, same clear-then-build, same production
+builders.
+
+    require(game.ServerScriptService.SeedGameServer.PlantSizeMockupRunner).Build()
+    require(game.ServerScriptService.SeedGameServer.PlantSizeMockupRunner).Build({ live = true })
+    require(game.ServerScriptService.SeedGameServer.PlantSizeMockupRunner).Curve()
+    require(game.ServerScriptService.SeedGameServer.PlantSizeMockupRunner).Clear()
+
+It stands at (1200, 200, -1200) on its own floor, and carries all seven tiers for
+five species chosen to be awkward in different ways -- nubkin (the short floor),
+bellchime (tall Greenhollow Epic), cinderpaw (multi-legged on freeform Emberroot
+roots), cosmospire (Starbloom spire), supernovus (broadest creature in the game)
+-- each with a 5.2-stud blocky avatar beside it, the real 16 x 13.7 planting cell
+drawn under it, and a 46-stud wall post at the end of the row. Behind the ladder
+are two real Level 5 beds on the real 48 x 96.2 plot at the real 3-column pitch:
+one realistic roll (the tier weights are 53% Tiny and 0.41% Colossal, so a bed of
+twenty is mostly small with a couple of trophies) and one worst case of twenty
+Colossals.
+
+`{ live = true }` builds the same stage on the SHIPPED curve for side-by-side
+comparison; expect to stand well back.
+
+### ONE SPECIES FLAGGED, NOT CHANGED
+
+**Supernovus at Colossal is 58.0 x 47.6 studs across its own feet, and the plot
+is 48 wide.** It is the only species that still overruns the bed, because it is
+already the broadest creature in the game at Tiny (6.9 x 5.7). Dropping its
+`Height` from 6.4 to about 5.6 would bring the footprint to roughly 51 x 42 and
+the height to 61, uniformly, with no anatomy change.
+
+It was deliberately NOT applied: it is a Mythic form at a 0.41% tier, it is the
+single most spectacular thing in the game, and shrinking the trophy is the
+owner's call rather than a silent tidy-up. **Decide this during approval.**
+
+### GEOMETRY AND ANIMATION CHECKS, AND WHAT WAS NOT DONE
+
+Done:
+
+  * All 25 registered species x 7 tiers measured on the shipped curve, and the
+    five ladder species re-measured on the candidate, off real built parts:
+    finished height, ground/foot spread, max body width and depth, invisible
+    Base size, and body-to-ground clearance for the multi-legged forms.
+  * The uniform-rescale proof above, which is what guarantees feet stay attached
+    and roots keep meeting them at every tier.
+  * `PlantSway` traced and confirmed to derive amplitude, bob and gait speed from
+    the model's measured extents, so no animation constant needs updating.
+  * Prompts confirmed to hang off the ground-level `Base`, so interactions stay
+    reachable at any size.
+  * Clean `rojo build`.
+
+**NOT done, honestly:**
+
+  * **The preview has not been seen ANIMATED.** `PlantSway` is a client script
+    keyed on the `Planted` tag, and Edit runs no client. The preview models do
+    carry the tag, so building the stage inside a Play session would animate
+    them -- that check is still outstanding and needs a playtest.
+  * Billboard labels do not appear in MCP screen captures (a known limitation of
+    the capture path, not of the preview); they are visible in Studio.
+  * No camera-inside-the-body test was performed with a real character walking
+    the bed. The numbers say a 33-70 stud Colossal is well clear of a 26-stud
+    prompt range from the ground, but that is arithmetic, not a walkthrough.
+  * Dustbowl and Tanglemire were measured on the shipped curve only; they use the
+    same single multiplier, so the uniform-rescale proof covers them, but no
+    Dustbowl or Tanglemire specimen is on the preview stage.
+
+### THE OWNER'S TWO-PLAYER TEST
+
+**OWNER-REPORTED:** the owner ran the two-player Studio test of the reserved
+beginner pod and reports being satisfied with the result. That is their
+acceptance, recorded as reported -- it was not a test performed or observed from
+this side.
+
+### FILES
+
+  * `src/ServerScriptService/SeedGameServer/PlantSizeMockupRunner.luau` -- NEW,
+    preview only, nothing calls it.
+  * `KB/HANDOFF.md` -- this section.
+
+No other file was touched. `SeedData.Tiers`, `CreatureModel`, `EconomyService`,
+`ProfileSchema` and every save path are exactly as they were. Uncommitted and
+unpushed, together with the reserved beginner pod.
+
+## THE TWO STUDIO TEST ACCOUNTS WERE RESET — 2026-09-08  (no code change)
+
+Documentation only. **No file in `src/` was touched by this**, and the reserved
+beginner pod stays uncommitted exactly as it was.
+
+### WHAT THE TEST ACCOUNTS ACTUALLY ARE
+
+They are **persisted**, not in-memory. `SaveService` writes one DataStore blob
+per player:
+
+    store   StealASeed_v1          (GameConfig.Save.StoreName)
+    scope   global                 -- GetDataStore(name) is called with no scope
+    key     "p_" .. userId         -- SaveService.keyFor
+    record  { Data = <profile>, Lock = { JobId, Stamp } | nil }
+
+`ListKeysAsync` on that store returned **exactly three** keys, which is what
+made the identification unambiguous rather than a guess:
+
+| key | UserId | who |
+|---|---|---|
+| `p_-1` | **-1** | Studio local test client 1 (shown as `Player1`) |
+| `p_-2` | **-2** | Studio local test client 2 (shown as `Player2`) |
+| `p_4119740186` | 4119740186 | **nicnicniccoal -- the owner. Excluded.** |
+
+A negative UserId cannot belong to a real Roblox account; Studio assigns them to
+simulated test clients. The two records corroborated each other: their
+`CreatedAt` stamps are **one second apart** (2026-09-04 11:53:49 and 11:53:50 --
+two players joining one session) and their `LastSeen` stamps are **identical**
+(2026-09-07 09:45:33 -- leaving together on one shutdown). The owner's record
+has its own unrelated timestamps. Nothing else was a candidate.
+
+Both had accumulated real progress -- cash, plants, weapons, mill and plot
+levels, and grown plants -- which is precisely why they could not test the
+reserved pod: `TutorialData.Sanitise` credits the whole guide from a Stage-3
+plant, so both read as tutorial-complete and `PodEligible` was already false.
+
+### THE RESET, IN ORDER
+
+1. **No session was running.** Studio was in Edit (`RunService:IsEdit()` true,
+   `IsRunning()` false), so nothing could autosave over the delete. Both records
+   also read `Lock: none`, meaning the previous test session had released them
+   cleanly on shutdown.
+2. **Backed up outside the repository**, one file per record, carrying the
+   store, scope, key, DataStore version id (plus the two prior version ids),
+   UserId, identity, a SHA-256 of the exact record bytes, and the record itself:
+
+       C:\Users\Maykel\SeedSaveBackups\2026-09-08_reserved-pod-test-reset\
+         p_minus1.json
+         p_minus2.json
+         README.txt
+
+3. **Backups verified by reading them back**, 16 checks each: the wrapper
+   parses, the record parses, the recomputed SHA-256 matches the stored one,
+   every progression field matches what the live record held, and the record
+   re-encodes to an equal object -- which is the round trip a restore performs.
+4. **Re-checked immediately before removal.** Newest DataStore version id still
+   equalled the backed-up one and the encoded size was unchanged (799 and 615
+   bytes), so nothing had been written since the backup, and neither was locked.
+5. **Removed by exact key, one at a time**, with the owner's key named as a
+   forbidden constant in the same script. No pattern match, no loop over a key
+   listing, no store wipe, no StoreName change, no saving disabled.
+   `RemoveAsync` returned records of exactly 799 and 615 bytes with the same
+   cash and speed as the backups -- so what left is what was copied.
+6. **Absence verified with uncached reads** after waiting past the DataStore's
+   ~4s per-key read cache: `GetAsync` returns `nil` for both, and the newest
+   version of each is `IsDeleted = true`. `p_4119740186` still reads back
+   normally, `IsDeleted = false`.
+
+`ListKeysAsync` still lists all three names, because by default it includes keys
+whose newest version is a deletion. The read that matters is the one
+`SaveService.Load` performs, and that now sees nothing -- status `new`.
+
+Roblox keeps removed versions for **30 days**, so the DataStore's own version
+history is a second recovery route alongside the files above.
+
+### WHAT A FRESH PROFILE NOW LOOKS LIKE
+
+Verified by running `ProfileSchema.Sanitise(nil)` -- literally what a removed key
+produces -- against the current synced source rather than Studio's require
+cache. All 20 checks passed:
+
+    Cash 0   Speed 0   Plants 0   Held 0   Weapons 0   Almanac 0
+    EquippedBat ""     EquippedTrap ""
+    PlotTier 1   MillTier 1   MillOverclock 0   HighestBiomeOrder 1
+    Tutorial: 0 milestones done, Skipped false, step 1 of 6
+    first instruction: "Train your speed!"
+    PodGrants 0      PodEligible false
+
+`PodEligible false` is the correct new-player default, not a fault: entitlement
+opens only once `train` **and** `speed` are both recorded, which is the
+readiness bar the guide teaches. A brand-new player is owed nothing until they
+have trained to 1,000.
+
+Two checklist items could not be verified without a live session and are left
+for the manual test: that each player owns a **different** plot, and that each is
+guided to their **own** mill. `PlotService` assigns "the lowest-numbered free
+plot the moment you join" across 6 plots, so two joiners take Plot_01 and
+Plot_02 by construction.
+
+### STARTING THE TWO-CLIENT TEST -- THIS PART IS MANUAL
+
+`start_stop_play` over MCP only starts **Play Solo**, which runs as the owner's
+own account and therefore can never show this feature. A one-client session was
+NOT substituted. In Studio:
+
+> **Test** tab -> **Clients and Servers** group -> set **Players** to `2` ->
+> click **Start**.
+
+That opens one server window and two client windows, `Player1` and `Player2`.
+When finished, use **Shutdown** in that same group rather than closing the
+windows by hand, so the final saves complete.
+
+Practical notes for the run:
+
+  * The readiness step is **~50 seconds** on a tier-1 mill (20/sec to 1,000), or
+    about **12 seconds** at a full x4 rush charge.
+  * The reserved pod appears within **2 seconds** of becoming eligible (the
+    service polls at that interval) and only in daylight. The cycle is 420s day
+    / 60s night.
+  * It stands **24 studs** out from the Greenhollow nest centre, outside the
+    16-stud public ring, and only its owner is offered the Take verb.
+  * **F4** opens the debug console for both test clients (`isAllowed` returns
+    true for anything in Studio), which has `RestockNests` and `ResetParents` if
+    you want to strip the public nest first and prove the reservation still
+    arrives.
+  * Running the test gives both accounts progress again. A second fresh run
+    needs another reset.
+
+### ONE OBSERVATION WORTH CHECKING LATER
+
+`SaveService` carries the comment *"Studio leaves JobId empty, so every Studio
+session shares one id and cannot lock against itself."* In this Edit session
+`game.JobId` returned a real GUID, not `""`. That was **Edit**, not a Play
+server, so the comment may still hold where it matters -- but if a Play server
+also gets a distinct JobId per session, then a test session that dies without
+releasing would leave a lock that blocks the next one until
+`SessionLockSeconds` expires. Not investigated, not changed, and it did not
+affect this reset: both records were already unlocked.
+
+## AN EMPTY NEST NO LONGER BLOCKS THE TUTORIAL — 2026-09-08  (UNCOMMITTED)
+
+Greenhollow is ONE nest of FIVE pods and a taken slot does not grow back until
+dawn. A beginner could finish the training steps, walk to the nest the guide is
+pointing at, and find it stripped by other players -- the tutorial blocked by
+somebody else's play, which is the one thing a tutorial must never be.
+
+One extra pod now stands outside the ring with that beginner's name on it.
+
+### IT IS ADDITIONAL SUPPLY, NOT A PUBLIC SLOT
+
+The ring still holds five, the rolls are unchanged, and nobody else's raid is
+any easier or harder. What makes that true mechanically is that the reserved pod
+is spawned WITHOUT a `NestId`, which routes `CarryService.TryTake` down the
+LOOSE branch -- the one that provokes by `FromNestId` and touches no slot
+bookkeeping. `NestService.ClearForNight` iterates `nest.pods`, so it never sees
+a reservation either; TutorialPodService takes its own back.
+
+Live, on the built map: greenhollow **5 of 5** public slots before and after,
+**16 of 16** server-wide.
+
+### ELIGIBILITY: A PROPERTY OF THE RECORD, NOT OF THE WORLD
+
+`TutorialData.PodEligible(progress)` is pure and says only what the saved record
+thinks:
+
+  * `Done.hatch` -> **never again**. The guide's last step is the hatch, so
+    finishing it ends entitlement permanently. Existing completed players are
+    therefore excluded by the same line that excludes a beginner who just
+    finished.
+  * `Done.train` **and** `Done.speed` -> both required. Nothing is reserved
+    before a beginner has trained to 1,000, which is the readiness bar the guide
+    already teaches.
+  * `PodGrants < 3`.
+
+**`Skipped` is deliberately not consulted.** Skip hides the guide; it surrenders
+nothing. A player who skips, walks into an empty nest and presses Resume must
+not have been quietly disinherited in between -- nor re-entitled.
+
+Whether one should be STANDING somewhere also depends on daylight and on what
+the player already has, and those are the service's business, not the record's.
+
+### IDENTITY: POSSESSION, NOT A GUID
+
+The obvious design gives the pod an id and follows it through nest -> carried ->
+dropped -> banked -> planted -> hatched. That needs a new field in two save
+whitelists, because `ProfileSchema` rebuilds `Held` and `Plants` rows field by
+field on every load. **It was not done, and the reason matters:** the question
+is only ever *"does this player already have a pod?"*, because what the feature
+owes them is A pod, not a particular one.
+
+So `TutorialData.HasOutstandingPod` asks about POSSESSION, across the four
+places a first pod can be:
+
+| state | how it is seen |
+|---|---|
+| carrying | `CarryService.IsCarrying` |
+| in the world (standing **or dropped**) | server sweep of the `SeedPod` tag for `ReservedFor == UserId` |
+| banked | a `Held` row with `Hatched ~= true` |
+| planted, unhatched | a `Plants` row with `Stage < 3` |
+
+**An ordinary pod counts.** A beginner who got one off the public nest does not
+need a reserved one, and handing them a second is exactly the duplicate this
+has to avoid.
+
+The one piece of identity that DOES exist is the `ReservedFor` attribute on the
+pod Model, and it earns its place by answering the one thing possession cannot:
+telling *"their pod is lying on the ground over there"* apart from *"they have
+nothing"*. A dropped pod is invisible to a save-based check and would otherwise
+read as a loss.
+
+**Streaming cannot reach any of this.** `inWorld` is answered on the SERVER,
+where the model exists whether or not any client has been sent it. "The owner
+cannot see their pod" and "the pod is gone" stay different questions, and only
+the second buys a replacement. The service's source contains no `LocalPlayer`
+and no `Stream*` -- asserted in the spec, against the code with its comments
+stripped.
+
+### THE ANTI-FARM: A BOUNDED GRANT COUNT
+
+`EconomyService.SellHeld` destroys **every** Tool in the backpack with a valid
+`SpeciesId` -- so a banked tutorial pod can be SOLD, and "give them one whenever
+they have none" would mint Tiny Commons for as long as somebody kept selling
+them. The bound is `Tutorial.PodGrants`, capped at `MaxPodGrants = 3`, written
+only by `PlayerDataService.RecordPodGrant`.
+
+Three rather than one, because a beginner can lose a pod to a guardian, to a
+mistimed drop, or to a loose pod expiring while they run back for it -- and
+being told to wait until dawn is the wall this exists to remove. Past the cap
+they are not stuck: the public nest still restocks every dawn, and by then they
+have been shown where it is.
+
+**It is counted when the pod is PLACED, not when it is taken.** Counting on the
+take would let somebody farm the spawn -- stand there, never take it, log out,
+come back.
+
+### NIGHT, DAWN AND RECONNECT
+
+  * **Night** clears only the pod the service is holding a handle to, and places
+    nothing while `GameConfig.isDay()` is false. Nothing stealable stands behind
+    a closed barrier.
+  * Anything **carried, banked or planted is untouched by night** -- the service
+    never reads `Held` or `Plants` in its night branch, so it cannot reach them.
+  * A pod they took and then DROPPED is on the ordinary 45-second loose timer
+    and expires on its own; at dawn the possession sweep finds nothing and a
+    replacement is owed. That is one of the three the cap is sized for.
+  * **Dawn** restores one if and only if no copy is outstanding.
+  * **Reconnect** is reconciled by one line: with no profile loaded,
+    `hasOutstandingPod` answers YES, which refuses to spawn. A player rejoining
+    with a banked pod cannot be handed a second in the window before their save
+    arrives.
+  * **A leaver's unclaimed pod goes with them** -- both the standing one and one
+    they dropped. Anything they banked or planted is saved property and is none
+    of the service's business.
+
+### VISUAL PRIVACY IS A COURTESY; THE REFUSAL IS THE RULE
+
+`CarryService.TryTake` refuses a stranger with `RESERVED`, above the line where
+the world starts changing, so a refused take cannot half-destroy a pod on its
+way out. That is the enforcement, and it is the only enforcement.
+
+`PromptUI` additionally declines to DRAW the verb for a pod reserved to somebody
+else. The model itself is still visible to everyone -- it is a server-built
+model and hiding it per player is not something this architecture does cleanly,
+so that half was not attempted.
+
+### FILES CHANGED
+
+| file | what |
+|---|---|
+| `Shared/TutorialData.luau` | `PodGrants` on `Progress`; `MaxPodGrants = 3`; `PodEligible`; `HasOutstandingPod` + its `Possessions` type; `Default` and `Sanitise` |
+| `SeedGameServer/TutorialPodService.luau` | **NEW.** Priority 75. The whole policy: eligibility, possession, placement, night, leavers |
+| `SeedGameServer/CarryService.luau` | `RESERVED_FOR`; `spawnLoose` marks and `keep`s; `SpawnLoose` returns the Model; `ReservedFor()`; the `RESERVED` refusal in `TryTake`; the reservation survives `Drop` |
+| `SeedGameServer/PlayerDataService.luau` | `RecordPodGrant` |
+| `StarterPlayerScripts/PromptUI.client.luau` | a stranger's reserved pod does not offer its verb |
+| `StarterPlayerScripts/TutorialUI.client.luau` | the arrow trail prefers the player's own reservation and rules other people's out entirely |
+| `tools/tests/TutorialPodSpec.luau` | **NEW.** 263 checks |
+
+### MIGRATION
+
+`TutorialData.Sanitise` is the migration point -- `ProfileSchema` already calls
+it at line ~505. `PodGrants` is absent on every existing save and reads as
+**zero**; a value off the wire is a claim, so a string, a float, NaN, a negative
+or an over-cap number is clamped to `[0, MaxPodGrants]`. Nothing else about the
+record changed, and the round trip was checked to preserve cash, speed, banked
+pods, plants, mill level, weapons and tutorial progress.
+
+**Completed existing players receive no reservation**, by the `Done.hatch` line
+-- verified live below.
+
+### VERIFIED
+
+Kept in three groups on purpose, because they are worth different amounts.
+
+**PURE + FIXTURE (`TutorialPodSpec`, 263 checks, Edit mode, no save touched).**
+Covers all 11 enumerated cases at the level each can honestly be tested: the
+entitlement rule, the possession rule across every state, the 50-pass
+idempotence loop, the sell-loop terminating at 3, the save round trip, the
+migration and its corrupted-value clamps, and the placement geometry. The world
+half runs against **real Instances** in a throwaway Workspace folder tagged the
+way the game tags pods -- including that a `Planted` pod is skipped, that a
+destroyed one is gone, and that a model reparented out of Workspace is not found
+even though it still carries the tag.
+
+**SINGLE-CLIENT, LIVE, in a real Play session on the built map.** All of the
+following went through the RUNNING server, not a separately-required copy:
+
+    a stranger's reserved pod, real ProximityPrompt hold completed:
+      [Seed/CarryService] nicnicniccoal completed a take hold on Pod_petalpip
+      [Seed/CarryService] nicnicniccoal take refused: RESERVED (Pod_petalpip)
+      pod still exists: true      carrying: nil
+
+    the same pod reserved to the holder:  taken, carrying = petalpip
+
+    prompt panels drawn for the local player:
+      reserved to somebody else   0
+      reserved to me              1
+      an ordinary pod             1
+
+    knocked down while carrying (the real ragdoll -> Drop path):
+      Pod_nubkin  reserved=4119740186  NestId=nil  FromNestId=Nest_greenhollow_01
+
+    placement, measured on the built map:
+      24.01 studs from the nest centre (public ring is 16)
+      8.45 studs clear of the nearest public pod
+      10.80 studs between two beginners' reservations
+      |X| 38.0 and 27.5 inside a 70-stud half-corridor
+      NestId=nil, prompt attached, SeedPod tag present
+
+    the owner, who has completed the guide:
+      no reservation was ever placed, and no grant was logged
+
+The forged-request shape is exactly what was exercised: `PromptUI` declined to
+draw the verb, and the client held the prompt anyway. The server refused.
+
+**TWO REAL CLIENTS: NOT DONE.** Everything above ran on one datamodel. The
+refusal was driven with a real Player, a real prompt and the running
+`CarryService`, but a second person genuinely racing for the pod has not been
+observed and is not claimed. Neither has a full eligible-beginner run
+(place -> take -> chase -> bank -> plant -> hatch), because the only account in
+the session has already completed the guide and rewinding it was not worth the
+risk. Both are covered by the recipe below.
+
+**Regression suites:** TutorialSpec 93, PlotSpec 65, MillSignSpec 8,
+WeaponSpec 80, BatSwingSpec 93, TutorialPodSpec 263. Clean `rojo build` and
+`git diff --check`.
+
+Two suites fail, **both pre-existing and neither touching any file in this
+change**:
+
+  * `SpeedSpec:280` -- calls `GameConfig.overclockUnlockOrderFor`, which does not
+    exist in GameConfig (0 occurrences).
+  * `CycleSpec` -- asserts "exactly one biome is live" while all five now have
+    `LiveInPhaseA = true`. The spec was never updated when the road opened.
+
+### THE RISK WORTH SOMEBODY'S DECISION: SHARED GUARDIAN RAGE
+
+**Flagged separately, and deliberately not fixed here.** The reserved pod does
+not change the chase in any way -- same guardian, same nest, same shared rage --
+and a rage reset must not be buried inside a tutorial feature.
+
+Every theft carries at least one stack, because `NestService.provoke` does
+`nest.rage += 1` before the chase starts. Measured against the current numbers:
+
+    a beginner at 1,000 Speed walks 22.00, and 21.94 carrying a Tiny pod
+
+      rage 1: guardian 20.00  ->  ESCAPES  by +1.94
+      rage 2: guardian 25.00  ->  CAUGHT   by -3.06
+      rage 3: guardian 30.00  ->  CAUGHT   by -8.06
+      rage 4: guardian 35.00  ->  CAUGHT   by -13.06
+
+    rage fades after 45s, and is cleared outright at dusk (ResetParents)
+
+So the tutorial theft is winnable **only against a calm nest**. If any other
+player has raided Greenhollow in the previous 45 seconds, the beginner's run is
+a guaranteed loss at the exact readiness the guide told them to reach. On a busy
+server that is not a rare case.
+
+It is survivable rather than fatal -- a caught beginner loses the pod to
+confiscation, the possession sweep then finds nothing, and one of their three
+grants buys another attempt. But three attempts against a nest somebody else
+keeps angry is a real wall, and the honest options are all outside this feature:
+lower `Parent.RageSpeedPerTake`, shorten `RageForgetSeconds`, make rage
+per-thief rather than per-nest, or raise `Tutorial.SpeedTarget` so the readiness
+bar clears a raged guardian. **Somebody should pick one deliberately.**
+
+### HOW TO TEST THIS WITHOUT LOSING YOUR OWN PROGRESS
+
+Your account has completed the guide (`Done.hatch`), so **nothing will ever be
+reserved for you** -- which is correct, and also means Play Solo cannot show you
+the feature. Do NOT rewind your tutorial record to see it: your profile carries
+1.8B cash, 2.17B speed, mill tier 5 and two plants, and a mistake there is not
+recoverable.
+
+Use an isolated profile instead:
+
+  * **Studio -> Test -> Start Server + 2 Players.** Player1 and Player2 are fake
+    accounts with their own DataStore keys, untouched by and untouching your
+    real save. Train one to 1,000 on their own mill, then walk to Greenhollow:
+    the reservation appears 24 studs out. This is also the only way to do the
+    two-client check and the full beginner run that are still missing above.
+  * The debug console (**F4**) has `RestockNests` and `ResetParents` if you want
+    to strip the public nest first and prove the reservation still arrives.
+  * `TutorialPodService.Snapshot()` prints eligibility, possession and the grant
+    count per player. Note that reading it through the MCP console does NOT
+    work: `execute_luau` has its own require cache, so `PlayerDataService.Get`
+    there returns nil for a player whose profile is loaded. Read Instance
+    attributes, or fire `DebugCommand` from a client, which runs in the real
+    server.
+
+### WHAT THIS SESSION DID TO THE LIVE WORLD, AND PUT BACK
+
+Two public greenhollow pods were consumed by the take tests and the guardians
+were provoked. The nests were restocked through the real server
+(`RestockNests` -> 16 of 16) and the parents sent home (`ResetParents` -> 5).
+Final state before Play was stopped: 16 pods, greenhollow 5 of 5, zero pods
+carrying a reservation, nothing carried, no seed Tools in the backpack. **No
+profile field was written**: the guide's milestones were already complete so
+`RecordTutorial` was a no-op, no grant was ever recorded, and the character
+never touched a treadmill.
 
 ## THE MILL SIGN STOPPED FLOATING, AND MOVED OFF THE FRONT CORNER — 2026-09-07 (in a01c372)
 
