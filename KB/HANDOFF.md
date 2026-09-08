@@ -22,28 +22,26 @@ are outside this batch. Uncommitted/unpushed; shared work preserved.
 
 ---
 
-> **STATE, 2026-09-08.** Everything through the card work is now COMMITTED and
-> pushed. The six most recent commits:
+> **STATE, 2026-09-08.** Committed and pushed through the card work. On top of
+> that, uncommitted: the plot upgrade moved out of the shop onto a board by the
+> gate, and the shop became a Robux storefront.
 >
->   44b3f90 Add the card artwork: five biome backgrounds and three unused portraits
->   c14cc64 Bring the card plants closer, hold them still, and paint the biome behind them
->   36c70ff Give Colossal plants a restrained lightning crackle
->   07a2adf Reserve a beginner's first pod so an empty nest cannot block the tutorial
->   f8f6d17 Rebuild the Tiny-to-Colossal size ladder
->   082bea0 Mark the handoff sections as committed in a01c372
+> **Nothing in the shop can be bought yet.** Every `product` in
+> `GameConfig.Store` is 0 because a Developer Product id can only be created in
+> the Creator Dashboard. Each tile still draws, reads SOON and refuses; filling
+> an id in is the only change needed to make one live. `StoreService` says so at
+> boot and `ShopUI` warns as well.
 >
-> Three items in the working tree are NOT mine and were deliberately left
-> unstaged: a deletion of the tracked `thumbnail1`, two new `thumbnail1.png` /
-> `thumbnail11.png`, and a stray `Codex Image ....png` at the repository root.
-> They look like the owner's or Codex's asset work; committing somebody else's
-> deletion of a tracked binary is not a call this session should make.
+> **The pod products are FIXED, not rolled** -- each names a species and a tier.
+> That is a compliance position: a rolled pod would be a paid random item, which
+> the experience questionnaire currently answers No to. Do not make them random
+> without changing that answer.
 >
-> **Known beta blockers**, in the order they matter: `Players.MaxPlayers` is 60
-> against 6 plots (a place setting; PlotService queues the overflow on a hub pad
-> rather than breaking, so it is a bad first impression rather than a fault); the
-> shared guardian rage makes the tutorial theft unwinnable on a busy nest; and
-> nothing has been tested on a phone despite "mobile first". `SpeedSpec` and
-> `CycleSpec` still fail for reasons that pre-date all of this.
+> **Known beta blockers**, in order: shared guardian rage makes the tutorial
+> theft unwinnable on a busy nest; nothing has been tested on a phone despite
+> "mobile first"; `Players.MaxPlayers` is 60 against 6 plots (PlotService queues
+> the overflow, so it is a bad first impression rather than a fault).
+> `SpeedSpec` and `CycleSpec` still fail for reasons that pre-date all of this.
 
 ## REDESIGN INDEX / ALMANAC PLANT CARDS — 2026-09-08  (UNCOMMITTED, READY FOR REVIEW)
 
@@ -878,6 +876,96 @@ Pods, guardians, geometry, sizes, income, rarity weights, growth timers, plot
 capacities, saved data and the still-preview-only size curve. The aura reads
 `Tier`, `SpeciesId` and the model's own parts, and writes nothing but the
 transparency and CFrame of its own pooled segments.
+
+## THE PLOT BOARD AND THE ROBUX SHOP — 2026-09-08  (UNCOMMITTED)
+
+### THE PLOT UPGRADE IS A BOARD BY THE GATE
+
+It was a shelf in the shop panel, which put the game's two upgrades -- the
+mill's and the plot's -- in two different kinds of place for no reason a player
+could see. One was a board you walked up to; the other was a menu. They are both
+boards now, built by the same `MillModel.BuildSign`.
+
+Placed beside the gate on the front fence, facing the approach. The X is
+arithmetic rather than taste: the board is 6.84 wide and the gate gap is 13, so
+clearing the gate edge by 1.2 puts the centre at -11.12 against a fence corner at
+24. **The front edge never moves** -- PlotSpec asserts the gate holds still at
+every level pair and the back edge takes the whole depth change -- so the board
+is placed once and is still right at Level 5, which sidesteps the drift the mill
+sign once had.
+
+Two faults found by measuring rather than by looking:
+
+  * **`BuildSign` tags what it makes `MillSign`.** Right for its only previous
+    caller, wrong here: TreadmillService finds its boards by that tag and by
+    PlotId, both of which the new board carried, so it repainted the plot's board
+    with the mill's ladder. The owner's plot advertised
+    `LEVEL 8 > LEVEL 9 | 12M/s > 70M/s | $10B` on a board about garden slots.
+    The tag is now removed at build.
+  * **A plot is handed over before its save arrives.** PlotService assigns on
+    join and PlayerDataService loads asynchronously, so `LevelOf` fell back to
+    the starting tier and an owner on Level 5 had a board reading
+    `LEVEL 1 > LEVEL 2`. It now paints again as soon as the profile is there.
+
+Verified live: six boards, each showing its own plot's step; the owner's reads
+`LEVEL 5 | 20 SLOTS | MAX` with the prompt disabled; unowned plots read
+`LEVEL 1 > LEVEL 2 | 5 > 7 SLOTS | $25K`; zero signs carry both tags.
+
+### THE SHOP IS A ROBUX STOREFRONT
+
+Four shelves from `GameConfig.Store`: SPEED, CASH, PREMIUM PODS, PLANTS. The
+plot shelf is gone and `plotArt` went with it. There is **no remote in ShopUI any
+more** -- a Robux purchase is a prompt to Roblox and a receipt to the server, so
+the client's whole part is asking for the prompt.
+
+`StoreService` owns `MarketplaceService.ProcessReceipt`, which is a single
+callback for the whole experience -- assigning it twice silently replaces the
+first, so nothing else may take it.
+
+**Granted once, however many times it arrives.** Roblox re-delivers a receipt
+until told PurchaseGranted, across restarts and rejoins, so the honoured
+PurchaseIds live on the profile (`ProfileSchema.Receipts`, capped at
+`Save.MaxReceipts` = 32) and the profile is written **before** the receipt is
+acknowledged. A grant that has not reached the DataStore is deliberately left
+unacknowledged: being re-delivered and refused at the ledger check is better than
+losing both the item and the retry.
+
+`CarryService.GivePod` is new -- a public wrapper over the same `restoreOne` a
+rejoin uses, so a purchased pod is the same Tool with the same grip as a banked
+one.
+
+### WHAT IS NEEDED TO SELL ANYTHING
+
+Create these in **Creator Dashboard -> Monetization -> Developer Products** and
+paste each id into `GameConfig.Store`:
+
+    Speed   +150K / +1M / +10M / +50M / +500M / +1B
+    Cash    $24,000 / $200,000 / $800,000 / $4,000,000 / $8,000,000
+    Pods    GIANT NUBKIN / TITAN PETALPIP / COLOSSAL BELLCHIME
+
+The Robux prices in the manifest are the reference shots' and are the owner's to
+set. **The speed and cash amounts have NOT been fitted to this economy** -- a
+tier-1 mill trains at 20/sec, so +150K is about two hours of it, while the
+owner's own save is past 100B speed. Expect to move them once there is a beta to
+watch.
+
+`StoreService` warns at boot about any id that is duplicated between two entries,
+because a copy-pasted id charges for one tile and grants another.
+
+### VERIFIED
+
+    compiles           GameConfig, StoreService, CarryService, ProfileSchema,
+                       PlotUpgradeService, MapService, ShopUI
+    boot               20 services, no errors; StoreService and ShopUI both say
+                       plainly that nothing is for sale
+    shop               4 headings, 15 tiles, all reading SOON and refusing
+    boards             6 built, correct per-plot text, prompt disabled at MAX
+    suites             TutorialPodSpec 263, TutorialSpec 93, PlotSpec 65,
+                       MillSignSpec 8, WeaponSpec 80, BatSwingSpec 93
+
+**Not tested:** no purchase has been made end to end, because no product exists
+to buy -- `ProcessReceipt`, the ledger and `GivePod` are written and compile but
+have never run. Nothing on a phone.
 
 ## PLANT SIZE CURVE — APPROVED AND APPLIED — 2026-09-08  (f8f6d17)
 
