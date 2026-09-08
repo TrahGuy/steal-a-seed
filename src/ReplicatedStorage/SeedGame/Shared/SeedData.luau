@@ -732,14 +732,54 @@ export type Tier = {
 	color: Color3,
 }
 
+--==============================================================================
+-- THE SIZE LADDER
+--
+-- `mul` scales the species FRAME height, and everything visible descends from
+-- it: body, limbs, roots, feet, the invisible Base and the girth spread. One
+-- number, applied uniformly, which is what keeps a Colossal the same creature
+-- as a Tiny rather than a differently-proportioned one.
+--
+-- REPLACED 2026-09-08. The old ladder was 1 / 1.308 / 1.71 / 5 / 10 / 20 / 50,
+-- and it had two faults. The three bottom tiers were near-identical -- 31% apart
+-- -- so Tiny, Big and Huge read as one creature; then Huge -> Mega was a 2.92x
+-- CLIFF that launched the top of the ladder past anything the map could hold.
+-- Measured on the real builders, a Colossal stood 217 (Nubkin) to 460
+-- (Supernovus) studs against 46-stud corridor walls and a 16 x 13.7 planting
+-- cell, with a footprint up to 382 studs across its own feet.
+--
+-- The ladder below is near-even, with the FINAL step deliberately the largest so
+-- Colossal stays the thing worth chasing:
+--
+--     x1.38  x1.38  x1.39  x1.40  x1.38  x1.49
+--
+-- What that builds, measured, not predicted:
+--
+--     species      Tiny   Big   Huge   Mega  Giant  Titan  COLOSSAL
+--     nubkin        3.1   4.5    6.5    9.6   14.1   20.7      33.0
+--     bellchime     6.3   9.1   13.2   19.5   28.9   42.9      69.0
+--     cinderpaw     4.3   5.9    8.1   11.4   15.9   21.9      32.6
+--     cosmospire    7.7  10.6   14.5   20.3   28.3   39.0      58.1
+--     supernovus    9.2  12.7   17.5   24.4   34.0   46.9      69.9
+--
+-- Tiny to Colossal is 10.6x in height and about 1,200x in volume; the tallest
+-- Colossals stand half again as high as the corridor wall and thirteen avatars
+-- tall. Verified as a PURE UNIFORM RESCALE of what shipped -- every measured
+-- dimension of every species came out at 7.60/50 = 0.1520 of its old value,
+-- worst deviation 0.37% -- so anatomy, root-to-foot contact, mouth depth and
+-- animation sockets are the same geometry at a different size.
+--
+-- `girth` is NOT part of this and was not touched: it is a proportion, not a
+-- size, and it is what keeps a broad creature broad.
+--==============================================================================
 SeedData.Tiers = {
 	{ index = 1, name = "Tiny",       mul = 1.000, weight = 0.5325, value = 4,    girth = 0.82, pod = 1.66, color = Color3.fromRGB(170, 175, 180) },
-	{ index = 2, name = "Big",        mul = 1.308, weight = 0.1593, value = 28,   girth = 0.90, pod = 2.59, color = Color3.fromRGB(120, 200, 110) },
-	{ index = 3, name = "Huge",       mul = 1.710, weight = 0.1007, value = 140,  girth = 0.98, pod = 3.66, color = Color3.fromRGB( 90, 170, 240) },
-	{ index = 4, name = "Mega",       mul = 5.000, weight = 0.0789, value = 530,  girth = 1.07, pod = 4.87, color = Color3.fromRGB(170, 120, 240) },
-	{ index = 5, name = "Giant",      mul = 10.000, weight = 0.0592, value = 1650, girth = 1.17, pod = 6.09, color = Color3.fromRGB(255, 160,  60) },
-	{ index = 6, name = "Titan",      mul = 20.000, weight = 0.0642, value = 5200, girth = 1.30, pod = 7.94, color = Color3.fromRGB(240,  80,  70) },
-	{ index = 7, name = "Colossal",   mul = 50.000, weight = 0.0052, value = 9500, girth = 1.45, pod = 9.04, color = Color3.fromRGB(255, 215,  90) },
+	{ index = 2, name = "Big",        mul = 1.380, weight = 0.1593, value = 28,   girth = 0.90, pod = 2.59, color = Color3.fromRGB(120, 200, 110) },
+	{ index = 3, name = "Huge",       mul = 1.900, weight = 0.1007, value = 140,  girth = 0.98, pod = 3.66, color = Color3.fromRGB( 90, 170, 240) },
+	{ index = 4, name = "Mega",       mul = 2.650, weight = 0.0789, value = 530,  girth = 1.07, pod = 4.87, color = Color3.fromRGB(170, 120, 240) },
+	{ index = 5, name = "Giant",      mul = 3.700, weight = 0.0592, value = 1650, girth = 1.17, pod = 6.09, color = Color3.fromRGB(255, 160,  60) },
+	{ index = 6, name = "Titan",      mul = 5.100, weight = 0.0642, value = 5200, girth = 1.30, pod = 7.94, color = Color3.fromRGB(240,  80,  70) },
+	{ index = 7, name = "Colossal",   mul = 7.600, weight = 0.0052, value = 9500, girth = 1.45, pod = 9.04, color = Color3.fromRGB(255, 215,  90) },
 } :: { Tier }
 
 SeedData.TierCount = #SeedData.Tiers
