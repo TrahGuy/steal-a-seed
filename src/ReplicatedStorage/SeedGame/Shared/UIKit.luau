@@ -36,6 +36,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
 --==============================================================================
 -- THERE IS NO CARD LOOP ANY MORE
@@ -2685,6 +2686,75 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	titleBar.ZIndex = 3
 	titleBar.Parent = shell
 
+	--==========================================================================
+	-- THE HEADER STEPS CLEAR OF THE RAIL
+	--
+	-- The rail sits at DisplayOrder 40 against a panel's 30, deliberately: the
+	-- Index and Shop buttons stay pressable while a panel is open, which is what
+	-- lets a player move between panels without closing one first.
+	--
+	-- On a desktop that costs nothing, because a centred panel's header is
+	-- hundreds of pixels below the rail. On a 735-wide phone the panel is 520
+	-- across and its header lands squarely under the Index button -- the Bag's
+	-- title read "AG", with the B behind a rail button.
+	--
+	-- So the header is PADDED, not the panel narrowed and not the rail moved.
+	-- Narrowing the panel would take width from the cards, which are already at
+	-- their minimum touch size; hiding the rail would remove the thing the
+	-- DisplayOrder exists to protect. Padding costs a title a few pixels of a
+	-- line it was not using.
+	--
+	-- BOTH SIDES, because the rail has two. The left pair are 130 wide and the
+	-- right pair 50, and at narrower widths still it is the CLOSE BUTTON that
+	-- meets the Garden and Bag buttons -- the same fix moves it in, because it
+	-- is anchored to this bar's right edge.
+	--
+	-- COMPUTED FROM GameConfig.Rail, not from the rail's instances. This module
+	-- is required by the rail as well as by every panel, and reaching across to
+	-- another ScreenGui to measure it would make a panel depend on the rail
+	-- having been built first.
+	--
+	-- IT ONLY APPLIES WHERE THEY ACTUALLY MEET. The vertical test is what keeps
+	-- the desktop untouched: a centred panel on a tall screen has its header
+	-- well below the rail band, the overlap is zero, and the padding stays zero.
+	--==========================================================================
+	local headerPad = Instance.new("UIPadding")
+	headerPad.Parent = titleBar
+
+	local HEADER_GAP = 8
+
+	local function layoutHeader()
+		local camera = Workspace.CurrentCamera
+		if not camera then
+			return
+		end
+		local viewportX = camera.ViewportSize.X
+		-- The rail's own footprint, in the same gui space AbsolutePosition uses.
+		local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
+		local railLeftEdge = RAIL.Inset + RAIL.WideSize.X
+		local railRightEdge = viewportX - RAIL.Inset - RAIL.SquareSize.X
+
+		-- UIPadding insets a frame's CHILDREN, never the frame, so these read
+		-- the same whatever this function last set.
+		local at, size = titleBar.AbsolutePosition, titleBar.AbsoluteSize
+		local left, right = at.X, at.X + size.X
+		local top, bottom = at.Y, at.Y + size.Y
+
+		local padLeft, padRight = 0, 0
+		if bottom > RAIL.Inset and top < railBottom then
+			padLeft = math.max(0, (railLeftEdge + HEADER_GAP) - left)
+			padRight = math.max(0, right - (railRightEdge - HEADER_GAP))
+		end
+		headerPad.PaddingLeft = UDim.new(0, math.floor(padLeft))
+		headerPad.PaddingRight = UDim.new(0, math.floor(padRight))
+	end
+
+	-- The panel moves for three reasons -- opening, the viewport changing, and
+	-- fitContent resizing it -- and all three land on these two properties.
+	titleBar:GetPropertyChangedSignal("AbsolutePosition"):Connect(layoutHeader)
+	titleBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutHeader)
+	layoutHeader()
+
 	local title = UIKit.outlined(titleBar, "Title", 26,
 		options.titleColour or PANEL.Title, 3)
 	title.AnchorPoint = Vector2.new(0, 0.5)
@@ -2740,20 +2810,57 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- honoured, so there is no way to outline the glyph while the button still
 	-- has its keyline. A label carries its own.
 	--==========================================================================
+	--==========================================================================
+	-- THE BUTTON IS 44. THE PLATE IS STILL 38.
+	--
+	-- Roblox's own guidance is a 44-pixel minimum touch target, and this was
+	-- authored at 38 -- comfortably under it on a phone, where the close X is
+	-- the control a player reaches for most and the one nearest a screen edge.
+	--
+	-- Measured before touching it: at REST the button renders 38 x 38. An
+	-- earlier note in HANDOFF recorded 35 and blamed a responsive UIScale; that
+	-- was wrong and is corrected there. The 0.92 scale is the OPEN ANIMATION's
+	-- starting value, tweening to 1 over 0.16s, so 35 was a measurement taken
+	-- mid-tween. The shortfall was 6 pixels, not 9.
+	--
+	-- THE TARGET GROWS AND THE PLATE DOES NOT. The TextButton -- which is the
+	-- hit area, and the thing every consumer connects Activated to -- is 44 and
+	-- fully transparent. The red plate that was the button is now a Frame inside
+	-- it at the authored 38, carrying the gradient, corner, stroke and shade
+	-- exactly as before. Nothing about the appearance moves.
+	--
+	-- IT GROWS INWARD, not outward: AnchorPoint is still (1, 0.5) against the
+	-- title bar's right edge, so the extra six pixels are taken from the panel's
+	-- interior rather than from the outline, and the plate stays where it was.
+	--==========================================================================
+	local CLOSE_TARGET = 44
+	local CLOSE_PLATE = 38
+
 	local close = Instance.new("TextButton")
 	close.Name = "Close"
 	close.AnchorPoint = Vector2.new(1, 0.5)
 	close.Position = UDim2.new(1, 0, 0.5, 0)
-	close.Size = UDim2.fromOffset(38, 38)
+	close.Size = UDim2.fromOffset(CLOSE_TARGET, CLOSE_TARGET)
+	close.BackgroundTransparency = 1
 	close.BorderSizePixel = 0
 	close.AutoButtonColor = false
 	close.Text = ""
 	close.ZIndex = 4
 	UIKit.clicks(close)
 	close.Parent = titleBar
-	UIKit.corner(close, 10)
-	UIKit.stroke(close, PANEL.Outline, outline)
-	UIKit.gradient(close, PANEL.CloseTop, PANEL.CloseBottom)
+
+	local closePlate = Instance.new("Frame")
+	closePlate.Name = "Plate"
+	closePlate.AnchorPoint = Vector2.new(0.5, 0.5)
+	closePlate.Position = UDim2.fromScale(0.5, 0.5)
+	closePlate.Size = UDim2.fromOffset(CLOSE_PLATE, CLOSE_PLATE)
+	closePlate.BorderSizePixel = 0
+	-- Not Active: it must not eat the press on its way to the button.
+	closePlate.Active = false
+	closePlate.Parent = close
+	UIKit.corner(closePlate, 10)
+	UIKit.stroke(closePlate, PANEL.Outline, outline)
+	UIKit.gradient(closePlate, PANEL.CloseTop, PANEL.CloseBottom)
 
 	local closeShade = Instance.new("Frame")
 	closeShade.Name = "Shade"
@@ -2763,17 +2870,33 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	closeShade.BackgroundColor3 = PANEL.CloseShade
 	closeShade.BorderSizePixel = 0
 	closeShade.Active = false
-	closeShade.ZIndex = 5
-	closeShade.Parent = close
+	closeShade.Parent = closePlate
 	UIKit.corner(closeShade, 10)
 
-	local closeMark = UIKit.outlined(close, "Mark", 22, WHITE, 2.5)
+	local closeMark = UIKit.outlined(closePlate, "Mark", 22, WHITE, 2.5)
 	closeMark.Size = UDim2.fromScale(1, 1)
 	-- Two up, so the glyph is centred in the LIT face rather than in the whole
-	-- button including the shade it stands on.
+	-- plate including the shade it stands on.
 	closeMark.Position = UDim2.new(0, 0, 0, -2)
 	closeMark.Text = "X"
-	closeMark.ZIndex = 6
+
+	--==========================================================================
+	-- AND THE PLATE FOLLOWS THE BUTTON'S ZIndex
+	--
+	-- MarigoldShopUI raises `modal.close.ZIndex` to 8 to clear its own header,
+	-- and under GLOBAL ZIndexBehavior a child does not inherit that -- the plate
+	-- would have stayed at 5 and drawn UNDER the header the button was raised to
+	-- clear. Following it keeps "set the close button's ZIndex" meaning what a
+	-- caller expects, which is the only reason that override worked before the
+	-- visuals moved off the button.
+	--==========================================================================
+	local function stackClose()
+		closePlate.ZIndex = close.ZIndex + 1
+		closeShade.ZIndex = close.ZIndex + 2
+		closeMark.ZIndex = close.ZIndex + 3
+	end
+	stackClose()
+	close:GetPropertyChangedSignal("ZIndex"):Connect(stackClose)
 
 	local body = Instance.new("Frame")
 	body.Name = "Body"

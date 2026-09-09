@@ -598,6 +598,7 @@ local equipRequest: (WeaponData.Item) -> ()
 -- forward locals rather than one big function in the middle of the layout code.
 --==============================================================================
 local beginDrag: (any, InputObject) -> ()
+local cancelDrag: () -> ()
 local dragMoved = false
 
 type Card = {
@@ -1444,6 +1445,26 @@ local function endDrag(dropAt: Vector2?)
 	refreshHotbar()
 end
 
+--==============================================================================
+-- AND ANYTHING THAT ENDS THE MOMENT ENDS THE DRAG
+--
+-- endDrag runs off InputEnded, which is enough while a finger stays on the
+-- glass. It is not enough for the ways a drag can stop mattering without one
+-- being lifted: the bag shutting under it, or the character being destroyed
+-- while it is in the air. Neither fires an input event, and both would leave a
+-- ghost label on screen and the hotbar stuck at ZIndex 60 -- drawn over every
+-- panel in the game until the next drag tidied it.
+--
+-- Dropped with no point, so it cancels rather than pins: a drag interrupted by
+-- something else is not a placement anybody asked for.
+--==============================================================================
+function cancelDrag()
+	if dragRow then
+		endDrag(nil)
+	end
+	dragMoved = false
+end
+
 function beginDrag(row: any, input: InputObject)
 	if dragRow then
 		return
@@ -1647,8 +1668,10 @@ player.ChildAdded:Connect(function(child)
 	end
 end)
 player.CharacterAdded:Connect(function()
+	cancelDrag()
 	task.defer(rebindContainers)
 end)
+player.CharacterRemoving:Connect(cancelDrag)
 rebindContainers()
 
 --==============================================================================
@@ -1661,6 +1684,10 @@ local function setOpen(want: boolean)
 		return
 	end
 	open = want
+	if not want then
+		-- The cards a drag was started from are about to go away.
+		cancelDrag()
+	end
 	if want then
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
 		redraw()

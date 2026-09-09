@@ -1,5 +1,192 @@
 # Steal a Seed — Session Handoff
 
+## Two mobile UI defects fixed, and what the rest of the pass could and could not prove — 2026-09-09 (CLAUDE)
+
+Device emulator throughout: 735 × 413 landscape, `TouchEnabled`, `MouseEnabled`
+and `KeyboardEnabled` both false, top GUI inset 58.
+
+### 1. The Bag title no longer hides behind the rail
+
+The rail sits at DisplayOrder 40 against a panel's 30 **deliberately** — Index and
+Shop stay pressable while a panel is open, which is what lets a player move
+between panels without closing one first. On a desktop that costs nothing,
+because a centred panel's header is hundreds of pixels below the rail. At 735 the
+Bag is 520 across and its header landed under the Index button: the title read
+"AG".
+
+Fixed in `UIKit.modal`, so all five panels get it: the title bar carries a
+`UIPadding` computed from `GameConfig.Rail`, stepping its contents clear of
+whichever rail buttons it actually meets.
+
+  * **Padding, not a narrower panel and not a hidden rail.** Narrowing takes
+    width from cards already at their minimum touch size; hiding the rail removes
+    the thing the DisplayOrder exists to protect. Padding costs a title a few
+    pixels of a line it was not using.
+  * **Both sides.** The left buttons are 130 wide and the right 50, and at
+    narrower widths it is the CLOSE BUTTON that meets Garden and Bag. The same
+    padding moves it in, because it is anchored to the bar's right edge.
+  * **From config, not from the rail's instances**, because UIKit is required by
+    the rail as well as by every panel and a panel must not depend on the rail
+    having been built first.
+
+**The vertical guard is what keeps desktop unchanged**, and it was tested rather
+than argued: pushing the panel down so its header clears the rail band takes the
+padding to zero and back.
+
+```
+header beside the rail   titleBar top  45   padLeft 27  padRight 0
+header pushed below it   titleBar top 205   padLeft  0  padRight 0
+restored                 titleBar top  45   padLeft 27  padRight 0
+```
+
+Measured with all five panels open, rail edges at X<142 and X>673:
+
+```
+Bag       title "Bag" at 150 clear | close 568..612 clear | pad 27/0
+Index     title at 196 clear       | close 548..592 clear | pad  7/0
+Shop      cart icon at 160 clear, title at 472 | close 618..662 | pad 77/0
+Garden    title at 196 clear       | close 548..592 clear | pad  7/0
+Marigold  title at 150 clear       | close 566..610 clear | pad 25/0
+```
+
+Shop is worth noting: `ShopUI` injects a cart icon into the title bar, and it
+stepped clear with everything else because the padding is on the bar rather than
+on the title. In every panel the title's right edge stays left of the close
+button — no title/close collision.
+
+### 2. The shared close X now has a 44px touch target
+
+**First, a correction to the previous entry.** It recorded the close button
+rendering at 35 × 35 and blamed a responsive `UIScale` of 0.92. That was wrong.
+The 0.92 is the OPEN ANIMATION's starting value, tweening to 1 over 0.16s — the
+35 was a measurement taken mid-tween. At rest it rendered **38 × 38**, so the
+shortfall against Roblox's 44px guidance was 6 pixels, not 9.
+
+The TextButton — the hit area, and what every consumer connects `Activated` to —
+is now 44 × 44 and fully transparent. The red plate is a `Plate` Frame inside it
+at the authored 38, carrying the gradient, corner, stroke and shade exactly as
+before. **Nothing about the appearance moves.** It grows inward, because the
+anchor is still the bar's right edge, so the six pixels come from the panel's
+interior rather than the outline.
+
+Verified at rest (`UIScale 1.000`) on all five panels: **close 44 × 44, plate 38**.
+
+Two things the change had to handle:
+
+  * **`MarigoldShopUI` was overriding the size to 34 × 34** — already the smallest
+    close button in the game and the one thing that would have defeated a shared
+    fix. Removed; a phone player would otherwise have found every panel
+    comfortable to close except Marigold's.
+  * **Its ZIndex override had to keep working.** Marigold raises
+    `modal.close.ZIndex` to 8 to clear its header, and under GLOBAL
+    ZIndexBehavior a child does not inherit that — the plate would have stayed at
+    5 and drawn under the header the button was raised to clear. The plate, shade
+    and glyph now follow the button's ZIndex. Measured: close 8, plate 9.
+
+**All five panels close by their X**, tapped through the emulator.
+
+### 3. Five-slot hotbar and dragging — verified, not redesigned
+
+```
+all five slots fit           spans 196..540 of 735 px
+Bag opens, title clear       "Bag" at 150 vs rail edge 142
+drag onto an OCCUPIED slot   plant took Slot1, bat flowed to Slot2, 1 pin
+re-drag moves not copies     exactly 1 pinned slot after moving it
+tap equips, no pin           tool went in hand, pin count unchanged
+cancelled drag               released at 90,340 over the thumbstick corner:
+                             no pin, ghost gone, hotbar ZIndex back to 4, slots 5
+respawn mid-drag             ghost gone, ZIndex 4/5, TouchGui intact
+bat and trap                 both equipped independently
+carrying a pod               CarryingSpecies set with NO Tool in hand, so the pod
+                             owns the arms uncontested; cleared after banking
+```
+
+**One gap found and closed.** `endDrag` ran only off `InputEnded`, which is enough
+while a finger stays on the glass but not for the ways a drag stops mattering
+without one being lifted — the bag shutting under it, or the character being
+destroyed mid-air. Neither fires an input event, and both would have left a ghost
+label on screen and the hotbar stuck at ZIndex 60, drawn over every panel until
+the next drag tidied it. `cancelDrag` is now called from `setOpen(false)`,
+`CharacterAdded` and `CharacterRemoving`. The respawn path is the one tested live.
+
+Pins remain session-local. No profile field, no schema change, no migration.
+
+### 4. The bat ragdoll — NOT TESTED, and deliberately not touched
+
+**This environment cannot launch two genuine clients.** `start_stop_play` starts a
+single-player Play session; `list_roblox_studios` reports one instance with one
+Client datamodel; Studio's Clients-and-Servers multi-client test is a UI action
+MCP cannot invoke. `VirtualInputManager:SendTouchEvent` is also blocked
+(`lacking capability RobloxScript`).
+
+So the swing-to-hit PvP matrix — Rootwood, Mirewood, Comet against standing,
+running, jumping, carrying, trapped and wall-adjacent victims — **remains
+unverified**. Per the brief, a direct `ThrowVictim` call is not offered as proof
+of the real path and none was made this session.
+
+**No bat, guardian or ragdoll code was changed.** `git diff --name-only` touches
+no combat file. Mirewood has no confirmed defect and nothing was tuned.
+
+One relevant real observation stands from the previous entry: a genuine in-game
+guardian catch during a steal settled naturally at 2.37s and stood up once, so the
+guardian path is intact — but that is a guardian, not a bat.
+
+### 5. Night system — verified
+
+```
+DAY    barrier transparency 1.00, non-collidable, screen off
+       fog: 72 streamed, 0 visible, least transparent 1.000 -> road clear
+NIGHT  fog visible at 0.68 | wall "09:39" vs HUD "09:39" -> agree exactly
+       stars on the writing: 0
+       after touring the whole corridor: 76 streamed, 0 still invisible -> no gaps
+DAWN   driven through WorldCycleService.ForcePhaseNow, the module's own test door:
+       phase Day, barrier transparency 1.00, screen off, 0 fog visible
+```
+
+Fog is built per-lane, so the field and plots carry none by construction.
+`BiomeGateService` also logged the night ejection correctly while the corridor was
+toured.
+
+**Honest caveat on that dawn test:** `ForcePhaseNow` was called on an MCP-fresh
+module copy, so it drove the barrier and fog through the real code but its nest
+restock was a no-op — the log read `DAY 1. 420s. 0 nest(s) stocked`. The
+barrier/fog half is genuine; a full natural warning → closure → dawn with
+restocking was not observed.
+
+Emulator timing from the previous entry stands and is not a phone verdict: the fog
+cost +0.46 ms with all 80 masses in view on a desktop GPU at phone resolution. Fog
+was neither removed nor increased on the strength of it.
+
+### Validation
+
+Ten specs pass via the fresh-require harness (SpeedSpec 332, WeaponSpec 107,
+BatClearanceSpec 939/939, BatSwingSpec 93/93, CycleSpec 31, PlotSpec 65,
+StarbloomLimbSpec 71, TutorialPodSpec 263, TutorialSpec 93, MillSignSpec clean).
+`rojo build` passes, `git diff --check` is clean, and all three edited modules
+plus the three other modal consumers (`ShopUI`, `IndexUI`, `GardenUI`) compile via
+`loadstring`. Console carries no game errors — the single error in the log is my
+own harness calling `LoadCharacter` from a client.
+
+### Not covered
+
+  * **A second phone-sized viewport.** Studio's emulator device is a UI selection
+    and cannot be changed from a script; `ViewportSize` is read-only. The
+    responsive path was instead proven by moving the panel through the rail band
+    and watching the padding go 27 → 0 → 27, which exercises the same branch.
+    A narrower device would produce a larger left pad and a non-zero right pad;
+    the right-pad branch is therefore written and reasoned but not observed.
+  * **Desktop was not re-measured directly** for the same reason. The guard test
+    above is the evidence that it is unchanged.
+  * Real finger input, two touches at once, and a drag competing with the
+    thumbstick under real hardware.
+
+### Files
+
+`UIKit.luau` — header clearance in `modal`, and the close button's 44px target
+with the plate inside it. `MarigoldShopUI.client.luau` — dropped the 34px
+override, kept the ZIndex raise. `LoadoutUI.client.luau` — `cancelDrag` and its
+three call sites.
+
 ## Hotbar of five, drag to pin, and a mobile pass over the steal loop — 2026-09-09 (CLAUDE)
 
 Still on the device emulator: 735 × 413, `TouchEnabled`, and by this point

@@ -251,8 +251,19 @@ modal.title.TextTruncate = Enum.TextTruncate.AtEnd
 modal.title.TextXAlignment = Enum.TextXAlignment.Left
 modal.title.Size = UDim2.new(1, -50, 1, 0)
 modal.title.ZIndex = 7
+--==============================================================================
+-- THE CLOSE BUTTON'S SIZE IS NOT THIS PANEL'S BUSINESS ANY MORE
+--
+-- This shrank it to 34 so it sat neatly against a green header. That was already
+-- the smallest close button in the game and it is now the one thing that would
+-- defeat the shared 44-pixel touch target -- a phone player would find every
+-- panel comfortable to close except Marigold's.
+--
+-- The ZIndex raise stays: this header genuinely stacks above the default, and
+-- UIKit.modal now carries the plate and glyph up with the button when a caller
+-- does this.
+--==============================================================================
 modal.close.ZIndex = 8
-modal.close.Size = UDim2.fromOffset(34, 34)
 
 --==============================================================================
 -- THE FILTER ROW
