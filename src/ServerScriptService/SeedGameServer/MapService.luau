@@ -1052,14 +1052,45 @@ local function buildNightScreen(barrier: BasePart): SurfaceGui
 	stars.ZIndex = 2
 	stars.Parent = gui
 
+	--==========================================================================
+	-- AND THEY KEEP OFF THE WRITING
+	--
+	-- The first render said "THE ROAD IS.CLOSED". That is not a typo: a star had
+	-- landed in the gap between the two words and, at three pixels on a dark
+	-- sky, a star is a full stop.
+	--
+	-- The band alone could not fix it -- the caption sits at 0.245 and the timer
+	-- at 0.52, both well inside the part of the sky that should HAVE stars, so
+	-- lifting the band would empty the whole middle of the wall. A keep-out box
+	-- around the text column is the narrow fix, and it is invisible: the stars
+	-- either side of the words are untouched.
+	--
+	-- Rejection sampling, capped. If eight tries all land in the box the star is
+	-- skipped rather than forced somewhere -- one missing star out of
+	-- seventy-four is not a thing anybody can see, and a loop that cannot end is.
+	--==========================================================================
+	local function onTheWriting(x: number, y: number): boolean
+		return x > 0.26 and x < 0.74 and y > 0.17 and y < 0.88
+	end
+
 	for i = 1, SC.StarCount do
 		local near = rng:NextNumber() ^ 2
 		local px = 2 + near * 4
+		local x, y
+		for _ = 1, 8 do
+			x, y = rng:NextNumber(), rng:NextNumber() * SC.StarBand
+			if not onTheWriting(x, y) then
+				break
+			end
+			x = nil
+		end
+		if not x then
+			continue
+		end
 		local star = Instance.new("Frame")
 		star.Name = "Star" .. i
 		star.AnchorPoint = Vector2.new(0.5, 0.5)
-		star.Position = UDim2.fromScale(rng:NextNumber(),
-			rng:NextNumber() * SC.StarBand)
+		star.Position = UDim2.fromScale(x, y)
 		star.Size = UDim2.fromOffset(px, px)
 		star.BackgroundColor3 = SC.StarColour
 		star.BackgroundTransparency = 0.75 - near * 0.7

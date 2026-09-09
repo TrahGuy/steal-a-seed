@@ -79,30 +79,48 @@ fetched over http and loaded with a fresh require chain — see the warning belo
 for why that was necessary. Sky, stars, moon, all three lines and the day/night
 toggle confirmed by eye and by property.
 
-### NOT verified, and one thing to do first
+### Verified in a running session
 
-**THE ROJO PLUGIN IS DISCONNECTED IN STUDIO.** The background Rojo server was
-killed by the OS for memory pressure and restarting it does not reconnect the
-plugin — that is a button in Studio. Studio's synced `MapService` does not
-contain `buildNightScreen` at all, confirmed by reading its `Source`.
+The Rojo plugin was reconnected and the whole thing was tested in Play, on the
+map the real server built.
 
-Consequence: **the bat work from `fee0529` IS in Studio** (it synced before the
-server died, and all eight markers were re-checked), but **none of this night
-screen is**. Everything above was verified by loading the repo's own files over
-http; nothing was written into the Studio session.
+  * **The countdown ticks, and the two clocks agree.** Sampled once a second on
+    the client: `00:45, 00:44, 00:43 ... 00:38` against a deadline falling
+    `45.3s ... 38.2s`. Photographed at player eye height with the wall reading
+    `00:46` while the HUD read `00:46`.
+  * **The warning colour lands.** At 30s left the timer is the pale ink
+    `236,242,255`; at 8s it is `255,206,120`.
+  * **Dawn takes the screen with it.** `SetNightBarrier(false)` left
+    `enabled false, transparency 1.00, collide false, query false`, and the
+    photograph shows the Greenhollow arch and the open corridor with no floating
+    sky and no ghost timer — the failure this was most at risk of.
+  * The screen is built by the **running server**, not by an Edit-mode helper:
+    74 stars, face `Back`, 8 px/stud, and a fresh map starts in Day with the
+    screen off and the timer empty.
 
-So, before testing: reconnect the Rojo plugin, then press Play.
+**One thing the first render got wrong, found by eye.** The caption read
+`THE ROAD IS.CLOSED`. That is not a typo: a star had landed in the gap between
+the two words, and at three pixels on a dark sky a star is a full stop. The band
+could not fix it — the caption sits at 0.245 and the timer at 0.52, both well
+inside the part of the sky that should have stars — so there is a keep-out box
+around the text column now, with capped rejection sampling. Re-measured: 74 of
+74 stars kept, 0 on the writing, and the caption reads cleanly.
+
+**A note on reading a client-drawn label from the server.** The timer text reads
+as `""` in the Server datamodel forever, because `WorldClock` writes it on the
+client and a client's local write does not replicate up. That is the same lesson
+as `PlatformStand` in the bat work, and it is worth remembering before anybody
+concludes the countdown is broken: read it from the Client datamodel.
 
 Still unobserved:
 
-  * The countdown ticking live in a real session. The lookup chain it uses
-    (`NightBarrier` tag → `NightScreen` → `Timer`) was exercised repeatedly in
-    Edit, but the per-frame update has not run.
-  * How it reads from a distance, at night lighting, from a player's eye height
-    rather than a placed camera. The photographs are from 85 studs at 32 studs
-    up; the field is deeper than that.
   * Mobile. 74 Frames plus a gradient is cheap and static, but it has not been
     looked at on a phone.
+  * A natural transition. Night was driven by publishing the phase attributes and
+    calling `SetNightBarrier` directly, because the cycle loop sleeps in one long
+    `task.wait` and a real dusk is seven minutes away. The barrier half of
+    `toNight`/`toDay` is exactly the call that was exercised; the nest emptying
+    either side of it was not, and was not touched by this change.
 
 ### Files
 
