@@ -90,6 +90,20 @@ TutorialSpec       93 passed      WeaponSpec         80 passed
 production behaviour was changed by any of this: the only `src/` edit is the one
 comment above.
 
+### `Players.MaxPlayers` is set to 6 — stop re-raising it
+
+The owner has set it. It is a place setting a script cannot change, and older
+entries in this file still list it as an open action item; it is closed.
+
+One thing to know before anybody "re-checks" it and reopens it again: the Studio
+**Edit** datamodel reads `Players.MaxPlayers = 60`, because that is the local
+place file's copy, not the live server configuration. The boot check at
+`ServerMain.server.luau:136` compares `Players.MaxPlayers` against
+`GameConfig.MaxPlayers` (6) and warns only when the two differ — so a live server
+reads 6 and stays quiet, while a Studio playtest still prints the 60-against-6
+warning off the stale local value. That warning is a Studio artifact now, not a
+live bug.
+
 ## The close X is every panel's now — 2026-09-09 (CLAUDE)
 
 The Bag's restyled close button moved from `LoadoutUI` into `UIKit.modal`, so
