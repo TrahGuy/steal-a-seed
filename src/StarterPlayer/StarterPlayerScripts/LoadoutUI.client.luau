@@ -45,6 +45,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local StarterGui = game:GetService("StarterGui")
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -110,10 +111,21 @@ local PICKED = Color3.fromRGB(250, 214, 108)
 local ITEM_ATTR = WeaponModel.ItemAttribute
 local READY_AT = "ReadyAt"
 
--- Ten is what the number row can address. The bag lists everything; this is the
--- quick-access strip, not the inventory, and a hotbar that scrolls is a hotbar
--- nobody can hit without looking.
-local HOTBAR_SLOTS = 10
+--==============================================================================
+-- FIVE, AND WHY IT IS NOT TEN
+--
+-- It was ten, on the reasoning that ten is what the number row can address. That
+-- is a KEYBOARD's reason, and this game is mobile first: on a 735-pixel phone
+-- ten 64-pixel slots are 700 pixels of hotbar, which is the whole screen width
+-- and leaves a player thumbing between targets the size of a fingernail.
+--
+-- Five is what a thumb can reach without looking, and it is small enough that
+-- WHICH five becomes a decision worth making -- which is what the drag below is
+-- for. The bag still lists everything; this is the quick-access strip, not the
+-- inventory, and a hotbar that scrolls is a hotbar nobody can hit without
+-- looking.
+--==============================================================================
+local HOTBAR_SLOTS = 5
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -578,6 +590,16 @@ emptyLabel.ZIndex = 5
 --==============================================================================
 local equipRequest: (WeaponData.Item) -> ()
 
+--==============================================================================
+-- CARRYING A CARD TO THE HOTBAR
+--
+-- Declared before the card pool because `acquireCard` connects to it, and
+-- defined further down because it needs `hotSlots` and `refreshAll`. Two
+-- forward locals rather than one big function in the middle of the layout code.
+--==============================================================================
+local beginDrag: (any, InputObject) -> ()
+local dragMoved = false
+
 type Card = {
 	button: TextButton,
 	preview: UIKit.ItemPreview,
@@ -789,7 +811,35 @@ local function acquireCard(index: number): Card
 		statePillTint = statePillTint,
 		stroke = stroke,
 	}
+	--==========================================================================
+	-- TAP TO USE, DRAG TO PIN
+	--
+	-- One finger, two verbs, told apart by whether it MOVED. Under
+	-- DRAG_THRESHOLD it is a tap and does what tapping a card has always done;
+	-- past it the card is being carried to the hotbar and the tap is cancelled.
+	--
+	-- Activated is NOT how the tap is detected any more. Roblox fires it on
+	-- release over the button, which a drag that curves back would also satisfy,
+	-- so the two verbs would both run. `dragMoved` is the guard.
+	--==========================================================================
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local row = cardRows[index]
+		if not row or row.kind ~= "plant" then
+			-- Only plants are pinnable: a bat and a trap live in their own two
+			-- slots beside the bag and are not part of this strip.
+			return
+		end
+		beginDrag(row, input)
+	end)
+
 	button.Activated:Connect(function()
+		if dragMoved then
+			return
+		end
 		local row = cardRows[index]
 		if not row then
 			return
@@ -1000,29 +1050,118 @@ end
 --==============================================================================
 local liveSlots: { Slot } = {}
 
+--==============================================================================
+-- WHICH FIVE, AND WHO DECIDES
+--
+-- With ten slots the hotbar could simply BE the tool list -- everything fitted,
+-- so no choice had to be made and none was offered. Five is smaller than most
+-- players' bags, so something has to choose, and the player is the only one who
+-- knows which plant they are about to want.
+--
+-- `pinned` is that choice: slot index -> the item KEY the player dropped there.
+-- Anything not pinned is filled in the existing order, so a bag that has never
+-- been arranged behaves exactly as it did and a new pickup still appears.
+--
+-- KEYED BY WHAT A THING IS, NOT BY WHICH TOOL INSTANCE IT IS. `Slot.key` is
+-- "p:<species>:<tier>:<hatched>", so a pin survives a respawn -- which destroys
+-- and rebuilds every Tool -- and two identical Voidpetals are interchangeable,
+-- which is what a player means when they pin one.
+--
+-- SESSION-LOCAL, DELIBERATELY. Making this outlive a rejoin means a field on the
+-- profile, a schema version and a migration, and none of that should be decided
+-- by the feature that needed it first. Noted in HANDOFF as the follow-up.
+--==============================================================================
+local pinned: { [number]: string } = {}
+
+local function pinnedSlotFor(key: string): number?
+	for index, k in pairs(pinned) do
+		if k == key then
+			return index
+		end
+	end
+	return nil
+end
+
+--==============================================================================
+-- TWO PASSES, AND THE ORDER MATTERS
+--
+-- Pinned first, so a player's arrangement wins over the alphabet. Then the
+-- leftovers fill whatever is still empty, in the same bat/trap/plants order the
+-- strip has always used.
+--
+-- Each tool is CONSUMED as it is placed, which is what makes two slots pinned to
+-- the same key show two different Voidpetals rather than the same one twice --
+-- and what stops an unpinned pass re-showing something already pinned further
+-- along the strip.
+--==============================================================================
 local function refreshHotbar()
 	local held = heldTool()
-	local shown = math.min(#liveSlots, HOTBAR_SLOTS)
-	for i = 1, math.max(shown, #hotSlots) do
+
+	local taken: { [number]: boolean } = {}
+	local placed: { [number]: Slot } = {}
+
+	for i = 1, HOTBAR_SLOTS do
+		local want = pinned[i]
+		if want then
+			for j, data in ipairs(liveSlots) do
+				if not taken[j] and data.key == want then
+					taken[j] = true
+					placed[i] = data
+					break
+				end
+			end
+		end
+	end
+
+	local nextFree = 1
+	for i = 1, HOTBAR_SLOTS do
+		if not placed[i] and not pinned[i] then
+			while nextFree <= #liveSlots and taken[nextFree] do
+				nextFree += 1
+			end
+			if nextFree <= #liveSlots then
+				taken[nextFree] = true
+				placed[i] = liveSlots[nextFree]
+			end
+		end
+	end
+
+	--==========================================================================
+	-- EVERY SLOT IS DRAWN, EMPTY OR NOT
+	--
+	-- It used to hide the ones with nothing in them, which was right when the
+	-- strip was just a list. It is wrong now: an empty slot is the DROP TARGET,
+	-- and a drop target nobody can see is a feature nobody finds.
+	--==========================================================================
+	for i = 1, math.max(HOTBAR_SLOTS, #hotSlots) do
 		local slot = hotSlots[i]
-		local data = liveSlots[i]
-		if i > shown then
+		if i > HOTBAR_SLOTS then
 			if slot then
 				slot.button.Visible = false
 				slot.tool = nil
 			end
 		else
 			slot = acquireHotSlot(i)
+			local data = placed[i]
 			slot.button.Visible = true
-			slot.tool = data.tool
-			slot.item = data.item
-			slot.preview.setModel(data.key, builderFor(data), previewKind(data))
-			slot.name.Text = data.label
-			slot.key.Text = if i <= 9 then tostring(i) elseif i == 10 then "0" else ""
-			local isHeld = data.tool == held
-			slot.stroke.Color = if isHeld then PICKED else BLACK
+			slot.tool = if data then data.tool else nil
+			slot.item = if data then data.item else nil
+			slot.key.Text = tostring(i)
+			if data then
+				slot.preview.setModel(data.key, builderFor(data), previewKind(data))
+				slot.name.Text = data.label
+			else
+				slot.preview.setModel("empty:" .. i, nil, "plant")
+				slot.name.Text = ""
+			end
+			local isHeld = data ~= nil and data.tool == held
+			slot.stroke.Color = if isHeld then PICKED
+				elseif pinned[i] then PANEL.Edge
+				else BLACK
 			slot.stroke.Thickness = if isHeld then 3 else 2.5
-			slot.button.BackgroundTransparency = if isHeld then 0.1 else 0.3
+			slot.button.BackgroundTransparency = if isHeld then 0.1
+				elseif data then 0.3
+				else 0.62
 		end
 	end
 end
@@ -1198,6 +1337,173 @@ local function refreshBag()
 			end
 		end
 	end
+end
+
+--==============================================================================
+-- THE DRAG, IN FULL
+--
+-- WHY THE HOTBAR IS A LEGAL TARGET AT ALL. The bag's dimmer is ZIndex 1 and the
+-- hotbar is 4, and these ScreenGuis run ZIndexBehavior.Global -- so the strip
+-- already draws OVER the open bag. That is lucky rather than designed, and it
+-- is what makes "drag it onto the hotbar" possible without moving either one.
+-- The lift below only raises it further so it is unmistakably the target.
+--
+-- POSITIONS ARE COMPARED RAW, AND THAT WAS MEASURED RATHER THAN ASSUMED.
+--
+-- The first version subtracted GuiService:GetGuiInset() from InputObject.Position
+-- on the reasoning that input is screen-space while AbsolutePosition is measured
+-- from below the topbar. That is wrong, and it silently broke every drop: on the
+-- emulated phone the inset is 58 pixels, which is most of a 68-pixel slot, so the
+-- hit test landed in the gap above the strip and found nothing.
+--
+-- Measured on a real touch against a known card:
+--
+--     input.Position   526, 217
+--     card centre      526, 218      -- delta 0, -1
+--
+-- InputObject.Position is ALREADY in gui space. No conversion.
+--==============================================================================
+local DRAG_THRESHOLD = 8
+local dragGhost: TextLabel? = nil
+local dragRow: any = nil
+local dragConns: { RBXScriptConnection } = {}
+
+local function guiPoint(input: InputObject): Vector2
+	return Vector2.new(input.Position.X, input.Position.Y)
+end
+
+local function slotUnder(point: Vector2): number?
+	for i = 1, HOTBAR_SLOTS do
+		local slot = hotSlots[i]
+		if slot and slot.button.Visible then
+			local p, sz = slot.button.AbsolutePosition, slot.button.AbsoluteSize
+			if point.X >= p.X and point.X <= p.X + sz.X
+				and point.Y >= p.Y and point.Y <= p.Y + sz.Y then
+				return i
+			end
+		end
+	end
+	return nil
+end
+
+local function endDrag(dropAt: Vector2?)
+	for _, c in ipairs(dragConns) do
+		c:Disconnect()
+	end
+	table.clear(dragConns)
+	if dragGhost then
+		dragGhost:Destroy()
+		dragGhost = nil
+	end
+	hotbar.ZIndex = 4
+	for i = 1, HOTBAR_SLOTS do
+		local slot = hotSlots[i]
+		if slot then
+			slot.button.ZIndex = 5
+		end
+	end
+
+	local row = dragRow
+	dragRow = nil
+	if not (row and dropAt) then
+		return
+	end
+	local index = slotUnder(dropAt)
+	if not index then
+		return
+	end
+
+	--==========================================================================
+	-- A DROP IS A MOVE, NOT A COPY
+	--
+	-- The same plant pinned in two slots would show twice and waste one of five,
+	-- so wherever it was before is cleared first. Dropping onto a slot that is
+	-- already pinned to something else simply replaces it: the player is looking
+	-- at that slot and pointing at it, which is as clear a statement of intent
+	-- as this interface gets.
+	--==========================================================================
+	-- The SLOT key, not the Row key: a Row key carries the tool instance so that
+	-- two identical plants get separate cards, and a pin must not care which of
+	-- the two it gets.
+	local key: string? = nil
+	for _, data in ipairs(liveSlots) do
+		if data.tool == row.tool then
+			key = data.key
+			break
+		end
+	end
+	if not key then
+		return
+	end
+	local was = pinnedSlotFor(key)
+	if was then
+		pinned[was] = nil
+	end
+	pinned[index] = key
+	SoundKit.play("UIClick")
+	refreshHotbar()
+end
+
+function beginDrag(row: any, input: InputObject)
+	if dragRow then
+		return
+	end
+	dragRow = row
+	dragMoved = false
+	local startAt = guiPoint(input)
+
+	table.insert(dragConns, UserInputService.InputChanged:Connect(function(moved)
+		if moved.UserInputType ~= Enum.UserInputType.Touch
+			and moved.UserInputType ~= Enum.UserInputType.MouseMovement then
+			return
+		end
+		local at = guiPoint(moved)
+		if not dragMoved then
+			if (at - startAt).Magnitude < DRAG_THRESHOLD then
+				return
+			end
+			--==================================================================
+			-- PAST THE THRESHOLD: THE CARD IS IN THE AIR
+			--
+			-- The hotbar lifts above everything in this ScreenGui so there is no
+			-- doubt about where the card is going, and a label follows the
+			-- finger. A label rather than a copy of the card: a 104-pixel card
+			-- under a thumb hides the very slots it is being aimed at.
+			--==================================================================
+			dragMoved = true
+			hotbar.ZIndex = 60
+			for i = 1, HOTBAR_SLOTS do
+				local slot = hotSlots[i]
+				if slot then
+					slot.button.ZIndex = 61
+				end
+			end
+			local ghost = UIKit.outlined(gui, "DragGhost", 14, CREAM, 2)
+			ghost.AnchorPoint = Vector2.new(0.5, 1)
+			ghost.Size = UDim2.fromOffset(150, 22)
+			ghost.ZIndex = 70
+			ghost.Text = string.upper(row.label) .. "  ->  HOTBAR"
+			dragGhost = ghost
+		end
+		if dragGhost then
+			dragGhost.Position = UDim2.fromOffset(at.X, at.Y - 12)
+		end
+	end))
+
+	table.insert(dragConns, UserInputService.InputEnded:Connect(function(over)
+		if over.UserInputType ~= Enum.UserInputType.Touch
+			and over.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local at = if dragMoved then guiPoint(over) else nil
+		endDrag(at)
+		-- Cleared on the next frame, not now: Activated fires AFTER InputEnded,
+		-- and the guard has to still be up when it does or a completed drag
+		-- would also hold the tool it just pinned.
+		task.defer(function()
+			dragMoved = false
+		end)
+	end))
 end
 
 --==============================================================================

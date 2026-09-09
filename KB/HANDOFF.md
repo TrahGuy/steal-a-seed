@@ -1,5 +1,116 @@
 # Steal a Seed — Session Handoff
 
+## Hotbar of five, drag to pin, and a mobile pass over the steal loop — 2026-09-09 (CLAUDE)
+
+Still on the device emulator: 735 × 413, `TouchEnabled`, and by this point
+`MouseEnabled` and `KeyboardEnabled` had both gone **false**, so this was a
+genuinely keyboard-and-mouse-less device rather than the half-emulated one of the
+previous pass.
+
+### The hotbar is five slots
+
+It was ten, on the reasoning that ten is what the number row can address. That is
+a KEYBOARD's reason. On a 735-pixel phone ten 64-pixel slots are ~700 pixels of
+hotbar — the entire screen width. Five measures **344 px of 735**, which a thumb
+can cross without looking.
+
+Five is also smaller than most bags, so *which* five becomes a decision worth
+making — which is what the drag is for.
+
+### Plants drag from the bag onto it
+
+`pinned[slotIndex] = key` is the player's choice; everything unpinned fills the
+gaps in the existing bat/trap/plants order, so a bag nobody has arranged behaves
+exactly as it did and a new pickup still appears. Two passes, consuming each tool
+as it is placed, so two slots pinned to the same key show two different plants
+rather than one twice.
+
+Keyed by `Slot.key` — `p:<species>:<tier>:<hatched>` — not by Tool instance, so a
+pin survives a respawn, which destroys and rebuilds every Tool.
+
+**Empty slots are drawn now.** They used to be hidden, which was right when the
+strip was only a list; it is wrong when an empty slot is the drop target, and a
+drop target nobody can see is a feature nobody finds.
+
+**Why the drop is even possible:** the bag's dimmer is ZIndex 1 and the hotbar is
+4, and these ScreenGuis run `ZIndexBehavior.Global` — so the strip already drew
+over the open bag. That is lucky rather than designed. The drag lifts it further
+(60/61) so it is unmistakably the target, and puts it back afterwards.
+
+**Tap and drag are told apart by whether the finger MOVED** (8 px). `Activated`
+is not the tap detector any more: it fires on release over the button, which a
+drag curving back would also satisfy, so both verbs would run. The guard clears
+on the next frame, not immediately, because `Activated` fires *after*
+`InputEnded`.
+
+### The measurement that fixed it
+
+The first version subtracted `GuiService:GetGuiInset()` from `InputObject.Position`,
+reasoning that input is screen-space while `AbsolutePosition` is measured below
+the topbar. **That is wrong**, and it silently broke every drop: the inset is 58 px
+and a slot is 68 px tall, so the hit test landed in the gap above the strip and
+found nothing. Measured against a known card:
+
+```
+input.Position   526, 217
+card centre      526, 218      -- delta 0, -1
+```
+
+`InputObject.Position` is already in gui space. No conversion. (Note this is the
+opposite of `AbsolutePosition`, which IS inset-relative — the trap recorded in the
+previous entry. The two are not in the same space and neither is obvious.)
+
+### Verified, on the emulated device
+
+  * **Steal → carry → bank, end to end.** Four pods taken off nests via the real
+    `Take` prompt and run past the red line: `banked 4 run(s) | plant tools now: 4`.
+    Repeated for three more later.
+  * **The guardian still works.** A steal woke the parent, which caught and threw
+    the player: `HIT received: guardian ... speed 114.4`, `held the launch
+    velocity for 0.35s`, `settled after 2.37s`, `down for 3.40s`. Natural, not
+    forced — a real in-game guardian catch, which the bat work had never been
+    tested against.
+  * **The prompt is touch-correct.** With no keyboard it renders a `TAP` keycap
+    and `TAKE`, not a key name.
+  * **Drag pins.** Dragging a plant onto Slot1 (which held the Rootwood Bat) put
+    the plant there with the pinned stroke, and the bat and trap flowed around it
+    into 2 and 3.
+  * **A re-drag MOVES.** Dragging the same plant to Slot5 left exactly one pinned
+    slot and returned Slot1 to auto-fill. No duplication.
+  * **A tap still holds.** Tapping a card put the tool in hand and created no pin.
+  * Ghost destroyed and hotbar ZIndex restored after every drag.
+
+Ten specs still pass.
+
+### Found, not fixed
+
+  * **The Bag's title is unreadable at phone width.** `SeedRail` has DisplayOrder
+    40 against `SeedLoadout`'s 30, so INDEX and SHOP draw over the panel, and at
+    735 px the panel is wide enough to run under them — the title reads "AG". The
+    rail sitting above panels is deliberate; the collision is not, and it wants
+    either a narrower panel or a title that starts clear of the rail.
+  * **The close X is still 35 px** against Roblox's 44 px guidance, from the
+    previous pass. Unchanged.
+
+### Not covered
+
+  * **Real touch input is still unverified by automation.** `VirtualInputManager:
+    SendTouchEvent` is blocked in this sandbox (`lacking capability RobloxScript`).
+    Synthetic mouse *is* delivered as `UserInputType.Touch` — verified with a probe:
+    `CARDbegan:Touch`, 20 × `UISchanged:Touch`, `UISended:Touch` — so the code path
+    exercised is the touch one. What is untested is a real finger, in particular
+    two at once and the drag competing with the thumbstick.
+  * **Pins are session-local.** Surviving a rejoin means a profile field, a schema
+    version and a migration, which should not be decided by the feature that
+    needed it first.
+  * Plants banked in a Studio session are lost if Play is stopped inside the 45 s
+    autosave window. That is Studio, not the game.
+
+### Files
+
+`LoadoutUI.client.luau` — `HOTBAR_SLOTS` 10 → 5, the `pinned` table and two-pass
+fill, empty slots drawn, and the drag.
+
 ## Device-emulator pass on the night work — 2026-09-09 (CLAUDE)
 
 Studio's device emulator, 735 × 413 landscape (16:9), `TouchEnabled = true`, top
