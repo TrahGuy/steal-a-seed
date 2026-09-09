@@ -2806,34 +2806,34 @@ GameConfig.Rail = {
 	LabelSize = 22,
 
 	--==========================================================================
-	-- TWO ICON SIZES, BECAUSE A BUTTON EITHER CARRIES A WORD OR IT DOES NOT
+	-- TWO ICON SIZES, BECAUSE THE RAIL IS TWO KINDS OF BUTTON
 	--
-	-- The icon used to be 28 on a coloured slab. There is no slab any more -- the
-	-- artwork IS the button -- so the icon has to fill the footprint the slab
-	-- used to, or the rail loses half its presence.
-	--
-	-- A square button has nothing else in it, so its icon takes the whole 50.
-	-- A wide one shares its 130 with a word: at 40 the label has 66px and
-	-- "Index" measures 62 at 22pt LuckiestGuy, which leaves a margin. 44 would
-	-- leave exactly 62 and 50 would clip it -- measured, not guessed.
+	-- Index and Shop are SLABS: a coloured plate with a word on it, and the icon
+	-- is a passenger at 28. Garden and the Bag are BARE -- the artwork is the
+	-- button, with nothing behind it -- so their icon has to fill the whole 50
+	-- the plate used to, or those two lose half their presence next to the pair
+	-- that still have plates.
 	--==========================================================================
-	IconWide = 40,
-	IconSquare = 50,
+	IconSize = 28,
+	IconBare = 50,
 
-	-- Thick, and black. Kept because UIKit.slab still uses them for the plant
-	-- card's action button; the rail buttons no longer have an outline to lose,
-	-- because they no longer have a rectangle.
+	-- Thick, and black. The outline is what made the reference read as a button
+	-- rather than as a coloured rectangle, and it is the one part the crops kept
+	-- losing at the edges. Read by the two slab buttons and by the plant card's
+	-- action; the bare pair have no rectangle to outline.
 	Outline = Color3.fromRGB(0, 0, 0),
 	OutlineThickness = 3,
 
 	--==========================================================================
-	-- THREE FACES, WHICH THE RAIL NO LONGER PAINTS
+	-- THE SLAB FACES, WHICH TWO BUTTONS STILL PAINT
 	--
-	-- These were the slab colours: blue, green and amber, far enough apart to be
-	-- told apart in the corner of the eye. The rail buttons have no slab now, so
-	-- nothing reads them -- but they are NOT deleted, because they are what each
-	-- icon was drawn in. The identity moved into the artwork rather than being
-	-- lost, and these are the record of what it is.
+	-- Blue, green and amber: far enough apart to be told apart at a glance in the
+	-- corner of the eye, and none of them a Greenhollow plant colour -- chrome
+	-- should not be mistakable for something growing.
+	--
+	-- Index and Shop read these. Garden and the Bag are bare buttons and do not,
+	-- but Garden's pair stays: it is what the garden icon was DRAWN in, and it is
+	-- the record of that identity now that no plate carries it.
 	--==========================================================================
 	IndexFace = Color3.fromRGB(64, 148, 220),
 	IndexShade = Color3.fromRGB(36, 102, 168),
@@ -2868,20 +2868,25 @@ GameConfig.Rail = {
 	ShopIcon = "rbxassetid://90931969678136",
 	IndexIcon = "rbxassetid://126806966970007",
 	--==========================================================================
-	-- GARDEN AND THE BAG ARE OUTLINES, THE OTHER TWO ARE FILLED
+	-- GARDEN AND THE BAG ARE FILLED AGAIN, BECAUSE THEY LOST THEIR PLATE
 	--
-	-- Not an inconsistency, a fix. Each of these four icons is drawn in its own
-	-- button's colour family, and for these two that ran into the button itself:
-	-- the planter's amber (#FFC95A..#D77B22) against a #ECA034 button, and the
-	-- satchel's leather (#D89A59..#7A4328) against a #C4945C one. Near enough
-	-- the same colour to read as a lump rather than a picture.
+	-- These two were knocked out to hollow outlines for one good reason: each
+	-- icon is drawn in its own button's colour family, and for these two that
+	-- collided with the plate behind it -- the planter's amber against a #ECA034
+	-- slab, the satchel's leather against a #C4945C one. Near enough the same
+	-- colour to read as a lump.
 	--
-	-- So their bodies are knocked out in the SVG masters and the button shows
-	-- through. Shop is cream on green and Index is white on blue, so neither had
-	-- the problem and neither was touched.
+	-- That reason is gone. There is no slab behind either of them now, so there
+	-- is nothing left to clash with -- and a hollow outline on a bare button is
+	-- just the world showing through, which is how they ended up looking like
+	-- they had no colour at all. Filled artwork on nothing is the version that
+	-- reads.
+	--
+	-- These are the ORIGINAL filled uploads, not new ones. The knocked-out pair
+	-- (131355079577116 and 124800563254633) are superseded and unused.
 	--==========================================================================
-	GardenIcon = "rbxassetid://131355079577116",
-	BagIcon = "rbxassetid://124800563254633",
+	GardenIcon = "rbxassetid://106268245303506",
+	BagIcon = "rbxassetid://135554729755251",
 }
 
 --==============================================================================

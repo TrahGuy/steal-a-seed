@@ -178,6 +178,8 @@ end
 local button = UIKit.railButton(playerGui, {
 	name = "ShopButton",
 	icon = RAIL.ShopIcon,
+	face = RAIL.ShopFace,
+	shade = RAIL.ShopShade,
 	label = "Shop",
 	wide = true,
 })

@@ -604,8 +604,15 @@ end
 export type RailOptions = {
 	name: string,
 	icon: string,
+	-- Slab buttons only. A bare button has no plate to paint.
+	face: Color3?,
+	shade: Color3?,
 	label: string?,
 	wide: boolean?,
+	-- `bare` drops the slab entirely: the artwork IS the button, no background
+	-- and no rounded square. Index and Shop are slabs; Garden and the Bag are
+	-- bare.
+	bare: boolean?,
 }
 
 --==============================================================================
@@ -792,33 +799,46 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	end
 
 	--==========================================================================
-	-- THE ARTWORK IS THE BUTTON
+	-- TWO KINDS OF BUTTON, ONE BUILDER
 	--
-	-- This was a UIKit.slab: a coloured face, a gradient, a lattice, a rounded
-	-- corner and a black outline, with a small icon sitting on it. The owner
-	-- asked for the icon itself to be the button, with no background and not
-	-- inside a square, so the slab is gone and what is left is a transparent
-	-- ImageButton the same size the slab was.
+	-- A SLAB is the original: a coloured face, a gradient, a lattice, a rounded
+	-- corner and a black outline, with the icon riding on it and a word beside
+	-- it. Index and Shop are these.
 	--
-	-- SAME FOOTPRINT ON PURPOSE. 130x50 and 50x50 as before, so all four buttons
-	-- stay exactly where they were and the touch targets do not shrink -- an icon
-	-- is easier to miss than a plate, and making the target smaller as well would
-	-- be two regressions for the price of one.
+	-- A BARE button has none of that. The artwork is the button -- no background,
+	-- not inside a square -- so it is a transparent ImageButton and the icon
+	-- fills the whole footprint. Garden and the Bag are these.
 	--
-	-- UIKit.slab is NOT deleted: the plant card's action button still uses it.
-	-- Its UIKit.clicks was doing the click sound for the rail, so that call moves
-	-- here rather than being lost with the slab.
+	-- SAME FOOTPRINT EITHER WAY. 130x50 and 50x50 as they have always been, so
+	-- all four sit where they were and a bare button's touch target is no smaller
+	-- than the plate it replaced. An icon is already easier to miss than a slab;
+	-- shrinking the target with it would be two regressions for one change.
+	--
+	-- UIKit.slab carries its own UIKit.clicks, so only the bare branch has to ask
+	-- for the click cue.
 	--==========================================================================
-	local button = Instance.new("ImageButton")
+	local button: ImageButton
+	if options.bare then
+		button = Instance.new("ImageButton")
+		button.Size = UDim2.fromOffset(size.X, size.Y)
+		button.BackgroundTransparency = 1
+		button.BorderSizePixel = 0
+		button.AutoButtonColor = false
+		button.Parent = layer
+		UIKit.clicks(button)
+	else
+		button = UIKit.slab(layer, {
+			size = UDim2.fromOffset(size.X, size.Y),
+			face = options.face,
+			shade = options.shade,
+			radius = RAIL.Radius,
+			latticeSpacing = 18,
+			latticeSize = size,
+		})
+	end
 	button.Name = options.name
-	button.Size = UDim2.fromOffset(size.X, size.Y)
-	button.BackgroundTransparency = 1
-	button.BorderSizePixel = 0
-	button.AutoButtonColor = false
-	button.Parent = layer
-	UIKit.clicks(button)
 
-	local iconSize = if wide then RAIL.IconWide else RAIL.IconSquare
+	local iconSize = if options.bare then RAIL.IconBare else RAIL.IconSize
 	UIKit.railIcon(button, options.icon, iconSize)
 
 	if options.label then

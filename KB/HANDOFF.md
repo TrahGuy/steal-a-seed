@@ -1,5 +1,41 @@
 # Steal a Seed — Session Handoff
 
+## The rail is two kinds of button — 2026-09-09 (CLAUDE)
+
+Final shape, after the owner narrowed the previous change: **Index and Shop keep
+their slabs; Garden and the Bag are bare.**
+
+`UIKit.railButton` takes a `bare` flag. Bare builds a transparent `ImageButton`
+with the artwork filling all 50px and asks for its own `UIKit.clicks`; otherwise
+it builds a `UIKit.slab` exactly as it always did -- face, shade, gradient,
+lattice, corner, outline, a 28px icon and the word beside it. Same footprint for
+both: 130x50 and 50x50, so nothing moved and no touch target shrank.
+
+**Garden and the Bag are FILLED artwork again**, back on their original uploads:
+
+| icon | id | note |
+| --- | --- | --- |
+| Shop | `rbxassetid://90931969678136` | slab |
+| Index | `rbxassetid://126806966970007` | slab |
+| Garden | `rbxassetid://106268245303506` | bare, filled |
+| Inventory | `rbxassetid://135554729755251` | bare, filled |
+
+The knocked-out pair (`131355079577116`, `124800563254633`) are superseded and
+unused. Knocking the fills out was right while those two sat on a plate the same
+colour as themselves; with no plate there is nothing to clash with, and a hollow
+icon on a bare button is just the world showing through -- which is what made
+them look colourless. The SVG masters and PNGs were restored from `7540ba2`
+rather than re-cut, so the drop shadows came back with them.
+
+`RAIL.IconSize` (28, on a slab) and `RAIL.IconBare` (50, when the artwork is the
+button) replace the short-lived `IconWide`/`IconSquare`.
+
+Verified in Play: Index and Shop carry Corner+Stroke+Gradient+Lattice with 28px
+icons, labels and the Index badge; Garden and Bag have none of that, background
+transparency 1.00 and 50px icons; all four icons loaded; Index -> Shop -> Garden
+-> Bag each opened its own panel; all four back to UIScale 1.000 after hovering
+every one, one UIScale each; console 0 errors; rojo build clean.
+
 ## The rail lost its slabs — 2026-09-09 (CLAUDE)
 
 At the owner's direction the icon IS the button now: no background, not inside a

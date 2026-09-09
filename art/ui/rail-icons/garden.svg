@@ -3,20 +3,12 @@
     <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8E4F2B"/><stop offset="1" stop-color="#4A281D"/></linearGradient>
     <linearGradient id="bed" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFC95A"/><stop offset="1" stop-color="#D77B22"/></linearGradient>
     <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9BF56A"/><stop offset="1" stop-color="#31A84E"/></linearGradient>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="18" stdDeviation="12" flood-color="#352115" flood-opacity=".45"/></filter>
   </defs>
-  <!-- Fills knocked out at the owner's direction: the planter/satchel body is
-       transparent so the rail button's own colour shows through, leaving the dark
-       keyline, the cream separation stroke and the coloured accents.
-
-       THE DROP SHADOW WENT WITH THEM. feDropShadow paints behind the element, so
-       with a transparent interior it showed THROUGH the icon and put a dark smudge
-       across the very area that is meant to be reading as button colour. shop.svg
-       and index.svg keep theirs: their bodies are still solid, so their shadow is
-       still behind something. -->
-  <g stroke-linejoin="round" stroke-linecap="round">
-    <path d="M80 300 134 246H378L432 300 388 418H124Z" fill="none" stroke="#221A14" stroke-width="36"/>
-    <path d="M80 300 134 246H378L432 300 388 418H124Z" fill="none" stroke="#FFF1D0" stroke-width="15"/>
-    <path d="M111 301 151 267H361L401 301 368 338H144Z" fill="none" stroke="#221A14" stroke-width="17"/>
+  <g filter="url(#shadow)" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M80 300 134 246H378L432 300 388 418H124Z" fill="#FFF1D0" stroke="#221A14" stroke-width="36"/>
+    <path d="M80 300 134 246H378L432 300 388 418H124Z" fill="url(#bed)" stroke="#FFF1D0" stroke-width="15"/>
+    <path d="M111 301 151 267H361L401 301 368 338H144Z" fill="url(#soil)" stroke="#221A14" stroke-width="17"/>
     <path d="M143 366H369" fill="none" stroke="#FFD989" stroke-width="11" opacity=".8"/>
     <path d="M256 274V134" fill="none" stroke="#215F35" stroke-width="34"/>
     <path d="M256 274V134" fill="none" stroke="#68CF55" stroke-width="17"/>

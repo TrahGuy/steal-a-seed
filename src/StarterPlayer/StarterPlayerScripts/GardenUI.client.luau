@@ -152,10 +152,18 @@ end
 -- owner's reference to crop even if cropping were still the plan, so this one
 -- was always going to be drawn -- and now the other two are drawn beside it.
 --==============================================================================
+--==============================================================================
+-- BARE, UNLIKE INDEX AND SHOP
+--
+-- No plate behind it: the sprout artwork is the button. Which is also why the
+-- icon is filled rather than the hollow outline it briefly was -- with no slab
+-- to clash with, a knocked-out icon just showed the world through itself.
+--==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "GardenButton",
 	icon = RAIL.GardenIcon,
 	wide = false,
+	bare = true,
 })
 button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)

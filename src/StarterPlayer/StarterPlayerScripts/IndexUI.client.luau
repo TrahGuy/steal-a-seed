@@ -128,6 +128,8 @@ gui.Parent = playerGui
 local button = UIKit.railButton(playerGui, {
 	name = "IndexButton",
 	icon = RAIL.IndexIcon,
+	face = RAIL.IndexFace,
+	shade = RAIL.IndexShade,
 	label = "Index",
 	wide = true,
 })

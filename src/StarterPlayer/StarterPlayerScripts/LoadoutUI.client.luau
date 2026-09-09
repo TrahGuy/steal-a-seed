@@ -300,10 +300,12 @@ local heardProfile = false
 -- Nothing overlaps: the left rail is Index and Shop, the right is Garden and
 -- this, and the clock owns the middle.
 --==============================================================================
+-- Bare, like the Garden button above it and unlike the two slabs on the left.
 local bagButton = UIKit.railButton(playerGui, {
 	name = "BagButton",
 	icon = RAIL.BagIcon,
 	wide = false,
+	bare = true,
 })
 -- ANCHORED RIGHT, the same way GardenUI anchors the button above this one.
 -- `railButton` does not set one, so a right-edge Position without this puts the
