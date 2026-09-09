@@ -1,5 +1,94 @@
 # Steal a Seed — Session Handoff
 
+## Device-emulator pass on the night work — 2026-09-09 (CLAUDE)
+
+Studio's device emulator, 735 × 413 landscape (16:9), `TouchEnabled = true`, top
+GUI inset 58. This closes the two "not verified on mobile" items left by the
+night screen and the biome fog, and turned up one usability defect.
+
+**What this emulator does and does not prove.** It emulates RESOLUTION and INPUT.
+It does not emulate a mobile GPU — the frame times below are a desktop card
+drawing at phone resolution, so they bound the fill cost by pixel count but not
+by throughput. A phone GPU is perhaps 5–15× slower at fill, so read the fog
+number as "0.46 ms here, plausibly 2–7 ms there" rather than as a verdict.
+
+### The fog costs almost nothing to draw
+
+Measured with all 80 masses streamed in (character parked at Z = −900 by day so
+every lane loaded), frame TIME rather than fps because both cases sit on the
+60 fps cap, and with 2.5 s of settling after each camera move:
+
+```
+down the whole road          fog off 16.66 ms (60) | on 17.12 ms (58) | +0.46 ms
+inside a bank, looking out   fog off 16.72 ms (60) | on 16.67 ms (60) | +0.00 ms
+```
+
+**The first attempt at this measurement was wrong and is worth recording.** It
+reported 14.9 fps with fog off and 15.1 with it on — a scene-independent number,
+which a control caught: pointing the camera at empty sky gave 20.5 fps while the
+full road gave 60. The low readings were the camera move and streaming settling,
+sampled immediately. Any frame-rate number taken inside two seconds of a camera
+move in this harness is noise.
+
+### The night screen reads at phone size
+
+The wall's timer measures **66 screen px tall, 16% of the viewport height**, from
+a player's eye at the field edge — computed with `WorldToViewportPoint` against
+the label's real extent, then confirmed by photograph. Caption, timer and footer
+are all legible, and the HUD clock agrees with the wall to the second.
+
+### Nothing of ours is off screen
+
+An inset-aware audit of every drawn GuiObject across all 14 ScreenGuis found two
+items outside the viewport, and both are Roblox's own `DynamicThumbstickFrame` —
+which is meant to be, being an oversized touch region.
+
+**The first version of this audit produced a false positive worth remembering.**
+It flagged `SeedWorldClock` as entirely off the top of the screen. It is not:
+that ScreenGui sets `IgnoreGuiInset = true`, and `AbsolutePosition` is reported
+in inset-relative space, so a plate sitting 8 px below the true screen top
+correctly reads as Y = 8 − 58 = −50. The legal Y band differs per ScreenGui:
+`-inset .. viewportY - inset` when the inset is ignored, `0 .. viewportY - inset`
+when it is not.
+
+### The Bag is fine on touch
+
+Opened by tapping the rail button through the emulator, so this is the real input
+path, not a function call.
+
+  * Panel 520 × 291 — 71% × 82% of the screen, with margins.
+  * 17 tappable cards, smallest 64 px, all clear of Roblox's 44 px guidance.
+  * Rendered text 11–26 px throughout.
+
+### FOUND: the shared close X is under the touch-target minimum
+
+`UIKit.modal` builds the close button at 38 px, but every panel carries a
+`UIScale` — measured at **0.920** on this viewport, with a `UISizeConstraint` of
+min 248 × 240 — so it renders at **35 × 35**. Roblox's own guidance is 44 px.
+
+It is a comfort defect, not a break: tapped through the emulator at 35 px it
+closed the panel correctly. But it affects **all five panels**, since the close X
+was promoted into `UIKit.modal` in `f62c54f`, and the scale is viewport-derived,
+so a smaller phone renders it smaller still.
+
+**Not fixed, deliberately.** The button works, and its appearance was signed off;
+enlarging it changes a shared visual across five panels, which is more than a
+test pass should decide on its own. The fix, when wanted, is not simply "38 → 44":
+the panel's UIScale would take 44 down to 40.5 here and further on a smaller
+screen, so the size has to be compensated against the live scale — which `UIKit`
+can do, since it owns both the modal and the scale. The glyph itself would not
+change: `Mark` is a fixed TextSize 22 child, so only the red plate grows.
+
+### Still not covered
+
+  * A real phone. Everything above is a desktop GPU at phone resolution.
+  * Hover behaviour on a real touch device. The emulator leaves
+    `MouseEnabled = true`, so `UIKit.pointerIsMouse()` still reports a mouse and
+    the rail's hover pop is NOT suppressed here the way it would be on hardware.
+    That gate is unexercised by this pass.
+  * The 45-second `BIOMES CLOSE IN` window with players legitimately inside the
+    fogged corridor.
+
 ## Fog in the biomes at night — 2026-09-09 (CLAUDE)
 
 At night the corridor is shut, emptied and covered by the barrier — and from
