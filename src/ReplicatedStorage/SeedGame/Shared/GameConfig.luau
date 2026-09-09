@@ -997,6 +997,69 @@ GameConfig.WorldCycle = {
 		-- Concealment cannot be a matter of degree.
 		--======================================================================
 		NightTransparency = 0,
+
+		--======================================================================
+		-- AND IT IS A SCREEN, NOT A SLAB
+		--
+		-- It was a flat dark-blue wall, and a flat dark-blue wall at 164 by 60
+		-- studs is not read as "the road is shut for a minute", it is read as
+		-- the world having run out. Nothing on it said what had happened or how
+		-- long it would last, so the only way to know either was the one-line
+		-- HUD clock at the top of the screen -- which a player walking INTO the
+		-- thing is not looking at.
+		--
+		-- So the face that meets the field is a night sky with the countdown on
+		-- it, big enough to read at the far end of the field.
+		--
+		-- IT IS DRAWN ON THE OPAQUE PART, WHICH IS WHY THIS IS SAFE. The banner
+		-- above is emphatic that concealment cannot be a matter of degree, and
+		-- none of this changes that: the part stays Transparency = 0 at night,
+		-- the SurfaceGui paints its near face, and nothing behind it becomes any
+		-- more visible than it was.
+		--
+		-- BACK, NOT FRONT. NormalId.Front is -Z and the corridor runs toward -Z
+		-- -- measured, Starbloom's end wall is at Z = -1675 while the plots are
+		-- at -57.8 -- so the face the field can see is +Z. Getting this backwards
+		-- costs nothing at build time and shows a blank wall to every player.
+		--======================================================================
+		Screen = {
+			Face = "Back",
+			-- 8 gives a 1312 x 480 canvas on a 164 x 60 stud wall, which is
+			-- enough for the timer to have clean edges without paying for a
+			-- texture nobody can see the detail of from thirty studs.
+			PixelsPerStud = 8,
+
+			--== the sky ==--
+			-- Darkest at the zenith, lifting toward a horizon glow, which is
+			-- the way round a real sky goes and the way round that makes the
+			-- bottom of a 60-stud wall look like distance rather than paint.
+			SkyTop = Color3.fromRGB(6, 8, 22),
+			SkyHorizon = Color3.fromRGB(24, 30, 68),
+			-- Stars only in the upper part: a star below the horizon line is a
+			-- speck of dirt.
+			StarCount = 74,
+			StarBand = 0.66,
+			StarColour = Color3.fromRGB(226, 234, 255),
+			-- A fixed seed, so every client and every rebuild gets the SAME sky.
+			-- It replicates from the server either way; this is so a screenshot
+			-- taken today can be compared with one taken next month.
+			StarSeed = 20260909,
+
+			--== the moon ==--
+			MoonColour = Color3.fromRGB(238, 240, 226),
+			MoonGlow = Color3.fromRGB(120, 140, 210),
+
+			--== the words ==--
+			Caption = "THE ROAD IS CLOSED",
+			Footer = "PODS RETURN AT DAWN",
+			InkCaption = Color3.fromRGB(150, 170, 225),
+			InkTimer = Color3.fromRGB(236, 242, 255),
+			-- The last ten seconds. Same idea as the HUD's warning colour, and
+			-- deliberately the same INFORMATION as the HUD rather than extra:
+			-- a player should never have to compare two clocks.
+			InkSoon = Color3.fromRGB(255, 206, 120),
+			SoonSeconds = 10,
+		},
 	},
 
 	--==========================================================================

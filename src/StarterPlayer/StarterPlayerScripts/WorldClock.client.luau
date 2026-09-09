@@ -44,6 +44,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
+local CollectionService = game:GetService("CollectionService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -54,6 +55,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local CYCLE = GameConfig.WorldCycle
 local ATTR = GameConfig.Attributes
 local NIGHT = CYCLE.Night
+local SCREEN = CYCLE.Barrier.Screen
 
 local INK = Color3.fromRGB(26, 24, 30)
 local PAPER = Color3.fromRGB(248, 246, 240)
@@ -143,6 +145,74 @@ local function clock(seconds: number): string
 	return string.format("%02d:%02d", math.floor(whole / 60), whole % 60)
 end
 
+--==============================================================================
+-- THE BIG ONE, ON THE WALL
+--
+-- The barrier is a screen now -- MapService paints a night sky on the face that
+-- meets the field -- and the countdown on it is driven from here rather than
+-- from the server, for the same reason the HUD clock is: it is a subtraction
+-- both machines can already do, and a server writing this string thirty times a
+-- second would replicate it to every player to tell them something they know.
+--
+-- It is also why the two can never disagree. There is one `left` in this file
+-- and both readouts are formatted from it; a second timer computing its own
+-- would be a second thing to keep true.
+--
+-- RESOLVED FRESH, NEVER CACHED ACROSS A REBUILD. MapService.Init destroys the
+-- SeedMap folder and builds a new barrier, so a reference held from boot points
+-- at a part that is no longer in the world -- which is exactly what the tag on
+-- it exists to avoid. Cached until it goes stale, then looked up again: the
+-- lookup is one array read and it happens twice a session, not twice a frame.
+--==============================================================================
+local screenTimer: TextLabel? = nil
+
+local function bigTimer(): TextLabel?
+	local held = screenTimer
+	if held and held.Parent and held:IsDescendantOf(Workspace) then
+		return held
+	end
+	screenTimer = nil
+	for _, part in ipairs(CollectionService:GetTagged(GameConfig.Tags.NightBarrier)) do
+		local screen = part:FindFirstChild("NightScreen")
+		local label = screen and screen:FindFirstChild("Timer")
+		if label and label:IsA("TextLabel") then
+			screenTimer = label
+			return label
+		end
+	end
+	return nil
+end
+
+local lastBig = ""
+local lastBigInk: Color3? = nil
+
+local function drawBigTimer(phase: string?, left: number)
+	local label = bigTimer()
+	if not label then
+		return
+	end
+	--==========================================================================
+	-- BLANK BY DAY, AND BLANK IS NOT A COSMETIC CHOICE
+	--
+	-- The whole SurfaceGui is disabled by day -- MapService does that with the
+	-- wall -- so nothing here is visible either way. What this protects is the
+	-- FIRST FRAME OF NIGHT: a label still holding the last number of the
+	-- previous night would be shown for one frame before this runs, and a clock
+	-- that flashes a stale time is worse than one that arrives a frame late.
+	--==========================================================================
+	local wording = if phase == CYCLE.PhaseNight then clock(left) else ""
+	local ink = if left <= SCREEN.SoonSeconds then SCREEN.InkSoon else SCREEN.InkTimer
+
+	if wording ~= lastBig then
+		lastBig = wording
+		label.Text = wording
+	end
+	if ink ~= lastBigInk then
+		lastBigInk = ink
+		label.TextColor3 = ink
+	end
+end
+
 local lastText = ""
 local lastColour = PAPER
 
@@ -152,12 +222,15 @@ local function draw()
 	if type(phase) ~= "string" or type(endsAt) ~= "number" then
 		-- The cycle service has not published yet. Silent rather than wrong: a
 		-- readout guessing at a phase is worse than no readout for one frame.
+		-- The wall says nothing either, for the same reason.
 		plate.Visible = false
+		drawBigTimer(nil, 0)
 		return
 	end
 	plate.Visible = true
 
 	local left = math.max(0, endsAt - Workspace:GetServerTimeNow())
+	drawBigTimer(phase, left)
 	local wording: string
 	local colour: Color3
 

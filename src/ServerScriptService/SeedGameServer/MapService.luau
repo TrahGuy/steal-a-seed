@@ -983,6 +983,190 @@ end
 -- the whole SeedMap folder and builds it again, which is the project's answer
 -- to Rule 10 everywhere else and needs no special case here.
 --==============================================================================
+--==============================================================================
+-- THE SCREEN ON THE BARRIER
+--
+-- Built here, with the wall, for the reason every other piece of this map is:
+-- MapService.Init destroys the SeedMap folder and builds it again, so anything
+-- built here is re-run safe for free and there is no second place that has to
+-- remember to rebuild it.
+--
+-- STATIC ONLY. The sky, the stars, the moon and the two captions never change,
+-- so they are made once on the server and replicate as ordinary instances. The
+-- one thing that does change is the countdown, and that is driven by
+-- WorldClock on each CLIENT -- a server writing a TextLabel thirty times a
+-- second would replicate a string thirty times a second to every player, to say
+-- something each of them can already work out from an attribute they have.
+--
+-- Everything below is scale-based rather than pixel-based, so the layout is the
+-- same whatever PixelsPerStud is set to.
+--==============================================================================
+local function buildNightScreen(barrier: BasePart): SurfaceGui
+	local SC = GameConfig.WorldCycle.Barrier.Screen
+	local rng = Random.new(SC.StarSeed)
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "NightScreen"
+	gui.Face = Enum.NormalId[SC.Face]
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = SC.PixelsPerStud
+	-- Unlit on purpose: it is a screen. This is the same property that made the
+	-- biome name plate leak through a nearly-opaque barrier, and it is safe here
+	-- for the opposite reason -- this is drawn ON the opaque face, not behind it.
+	gui.LightInfluence = 0
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	-- Day is the state a fresh map is in, because a fresh server starts in Day.
+	gui.Enabled = false
+	gui.Parent = barrier
+
+	--== the sky ==--
+	local sky = Instance.new("Frame")
+	sky.Name = "Sky"
+	sky.Size = UDim2.fromScale(1, 1)
+	sky.BackgroundColor3 = Color3.new(1, 1, 1)
+	sky.BorderSizePixel = 0
+	sky.ZIndex = 1
+	sky.Parent = gui
+
+	local grad = Instance.new("UIGradient")
+	grad.Color = ColorSequence.new(SC.SkyTop, SC.SkyHorizon)
+	grad.Rotation = 90
+	grad.Parent = sky
+
+	--==========================================================================
+	-- THE STARS
+	--
+	-- Plain Frames with a UICorner, not an image: this map is built entirely in
+	-- code and a starfield is the one texture it would otherwise have to own,
+	-- upload and version. Seventy-four of them cost nothing to draw and nothing
+	-- per frame -- they are set once and never touched again.
+	--
+	-- Sized and faded together so the small ones read as far away. The band
+	-- keeps them out of the bottom third, where the captions live and where a
+	-- star would read as a blemish rather than a sky.
+	--==========================================================================
+	local stars = Instance.new("Frame")
+	stars.Name = "Stars"
+	stars.Size = UDim2.fromScale(1, 1)
+	stars.BackgroundTransparency = 1
+	stars.ZIndex = 2
+	stars.Parent = gui
+
+	for i = 1, SC.StarCount do
+		local near = rng:NextNumber() ^ 2
+		local px = 2 + near * 4
+		local star = Instance.new("Frame")
+		star.Name = "Star" .. i
+		star.AnchorPoint = Vector2.new(0.5, 0.5)
+		star.Position = UDim2.fromScale(rng:NextNumber(),
+			rng:NextNumber() * SC.StarBand)
+		star.Size = UDim2.fromOffset(px, px)
+		star.BackgroundColor3 = SC.StarColour
+		star.BackgroundTransparency = 0.75 - near * 0.7
+		star.BorderSizePixel = 0
+		star.ZIndex = 2
+		star.Parent = stars
+		local round = Instance.new("UICorner")
+		round.CornerRadius = UDim.new(1, 0)
+		round.Parent = star
+	end
+
+	--==========================================================================
+	-- THE MOON, AND WHY IT IS SIZED IN PIXELS
+	--
+	-- It was UDim2.fromScale, and it came out as a vertical PILL: this canvas is
+	-- 164 studs by 60, so equal scale on both axes is 2.7 times as many pixels
+	-- across as down. A circle cannot be specified in scale on a surface that is
+	-- not square, and every other element here is happy in scale precisely
+	-- because none of them is a circle.
+	--
+	-- Offset, from the height, which is the axis a moon should be measured
+	-- against -- it wants to be a fraction of the sky, not of the horizon.
+	--==========================================================================
+	local canvasY = barrier.Size.Y * SC.PixelsPerStud
+	local moonPx = math.round(canvasY * 0.115)
+	-- Wide and faint, so it reads as haze around the moon. At 0.30 and 0.72 it
+	-- was a hard-edged disc with a dot in it -- a bullseye, not a glow.
+	local glowPx = math.round(canvasY * 0.42)
+
+	local glow = Instance.new("Frame")
+	glow.Name = "MoonGlow"
+	glow.AnchorPoint = Vector2.new(0.5, 0.5)
+	glow.Position = UDim2.fromScale(0.845, 0.235)
+	glow.Size = UDim2.fromOffset(glowPx, glowPx)
+	glow.BackgroundColor3 = SC.MoonGlow
+	glow.BackgroundTransparency = 0.88
+	glow.BorderSizePixel = 0
+	glow.ZIndex = 2
+	glow.Parent = gui
+	local glowRound = Instance.new("UICorner")
+	glowRound.CornerRadius = UDim.new(1, 0)
+	glowRound.Parent = glow
+
+	local moon = Instance.new("Frame")
+	moon.Name = "Moon"
+	moon.AnchorPoint = Vector2.new(0.5, 0.5)
+	moon.Position = UDim2.fromScale(0.845, 0.235)
+	moon.Size = UDim2.fromOffset(moonPx, moonPx)
+	moon.BackgroundColor3 = SC.MoonColour
+	moon.BorderSizePixel = 0
+	moon.ZIndex = 3
+	moon.Parent = gui
+	local moonRound = Instance.new("UICorner")
+	moonRound.CornerRadius = UDim.new(1, 0)
+	moonRound.Parent = moon
+
+	--==========================================================================
+	-- THE WORDS
+	--
+	-- Three lines, and the middle one is the whole point. A player running at
+	-- the field edge should be able to read the number without stopping, so it
+	-- gets a third of the wall's height and the other two stay out of its way.
+	--
+	-- The timer's TEXT is not set here. WorldClock owns it, and it starts empty
+	-- rather than at a made-up time -- a screen showing 00:00 for the frame
+	-- before the client catches up is a screen that has lied.
+	--==========================================================================
+	local function line(name: string, y: number, h: number, size: number,
+		colour: Color3, text: string): TextLabel
+		local label = Instance.new("TextLabel")
+		label.Name = name
+		label.AnchorPoint = Vector2.new(0.5, 0.5)
+		label.Position = UDim2.fromScale(0.5, y)
+		label.Size = UDim2.fromScale(0.9, h)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.FredokaOne
+		label.Text = text
+		label.TextScaled = true
+		label.TextColor3 = colour
+		label.ZIndex = 4
+		label.Parent = gui
+		local cap = Instance.new("UITextSizeConstraint")
+		cap.MaxTextSize = size
+		cap.Parent = label
+		return label
+	end
+
+	--==========================================================================
+	-- THE TIMER IS THE BIGGEST THING ON THE WALL
+	--
+	-- The caption was 0.13 of the height against the timer's 0.34, and on the
+	-- first render the two read as near-equals -- a headline with a subtitle
+	-- rather than a countdown with a label. The number is what somebody sprinting
+	-- at the field edge needs; the words only have to say what it counts.
+	--==========================================================================
+	line("Caption", 0.245, 0.105, 48, SC.InkCaption, SC.Caption)
+	local timer = line("Timer", 0.520, 0.42, 240, SC.InkTimer, "")
+	local timerStroke = Instance.new("UIStroke")
+	timerStroke.Thickness = 4
+	timerStroke.Color = Color3.fromRGB(8, 10, 26)
+	timerStroke.Transparency = 0.35
+	timerStroke.Parent = timer
+	line("Footer", 0.805, 0.085, 40, SC.InkCaption, SC.Footer)
+
+	return gui
+end
+
 local function buildNightBarrier(parent: Instance): BasePart
 	local CYCLE = GameConfig.WorldCycle
 	local B = CYCLE.Barrier
@@ -1020,6 +1204,7 @@ local function buildNightBarrier(parent: Instance): BasePart
 	barrier.Anchored = true
 	barrier.CastShadow = false
 	CollectionService:AddTag(barrier, GameConfig.Tags.NightBarrier)
+	buildNightScreen(barrier)
 	return barrier
 end
 
@@ -1503,6 +1688,18 @@ function MapService.SetNightBarrier(closed: boolean)
 	barrier.Transparency = if closed then B.NightTransparency else 1
 	barrier.CanCollide = closed
 	barrier.CanQuery = closed
+	--==========================================================================
+	-- AND THE SCREEN GOES WITH IT
+	--
+	-- A SurfaceGui is NOT hidden by its part's Transparency. Leaving this on
+	-- would hang a lit night sky with a stopped clock in mid-air over the field
+	-- for the whole seven-minute day, which is the one failure of this feature
+	-- that would be visible from every plot at once.
+	--==========================================================================
+	local screen = barrier:FindFirstChild("NightScreen")
+	if screen and screen:IsA("SurfaceGui") then
+		screen.Enabled = closed
+	end
 	return true
 end
 

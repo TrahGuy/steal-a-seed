@@ -1,5 +1,116 @@
 # Steal a Seed — Session Handoff
 
+## The night barrier is a screen now — 2026-09-09 (CLAUDE)
+
+The wall that shuts the road at dusk was a flat dark-blue slab 164 by 60 studs.
+At that size a flat slab does not read as "the road is shut for a minute", it
+reads as the world having run out — and nothing on it said what had happened or
+how long it would last. The only place that said either was the one-line HUD
+clock at the top of the screen, which a player walking INTO the thing is not
+looking at.
+
+The face that meets the field is now a night sky with the countdown on it.
+
+### What it is
+
+`MapService.buildNightScreen` paints a `SurfaceGui` on the barrier: a vertical
+gradient sky (darkest at the zenith, lifting to a horizon glow), 74 star Frames
+scattered across the upper two-thirds, a moon with a haze around it, and three
+lines of text — `THE ROAD IS CLOSED`, the timer, `PODS RETURN AT DAWN`.
+
+  * **Built with the map**, so it is re-run safe for free: `MapService.Init`
+    destroys the SeedMap folder and builds it again, which is this project's
+    answer to Rule 10 everywhere else.
+  * **Static on the server, countdown on the client.** The sky never changes, so
+    it is made once and replicates as ordinary instances. The number is driven by
+    `WorldClock` on each client from the `WorldPhaseEndsAt` attribute that was
+    already there — a server writing that string thirty times a second would
+    replicate it to every player to tell them something they can already work out.
+  * **One `left`, two readouts.** `WorldClock` already computed the remaining
+    seconds for the HUD; the wall is formatted from the same number in the same
+    function, so the two can never disagree.
+  * **Stars are Frames, not a texture.** This map is built entirely in code and a
+    starfield would otherwise be the one image it had to own, upload and version.
+    A fixed seed (`StarSeed`) means every client and every rebuild gets the same
+    sky, so a screenshot today is comparable with one next month.
+
+### It does not weaken the barrier
+
+The banner on `NightTransparency = 0` is emphatic that concealment cannot be a
+matter of degree — an 8% transparent barrier once leaked the biome arch's unlit
+name plate straight through it. None of this changes that. The part stays opaque
+and collidable at night; the SurfaceGui paints its near face; nothing behind it
+became any more visible. `LightInfluence = 0` is the same property that caused
+that old leak and is safe here for the opposite reason: it is drawn ON the opaque
+face, not behind it.
+
+`MapService.SetNightBarrier` toggles `SurfaceGui.Enabled` along with the wall,
+because **a SurfaceGui is not hidden by its part's Transparency**. Leaving it on
+would hang a lit night sky with a stopped clock in mid-air over the field for the
+whole seven-minute day — the one failure of this feature that would be visible
+from every plot at once. Verified in all three states: a fresh map is Day with
+the screen off, night turns both on, dawn turns both off again.
+
+### Two things measured rather than assumed
+
+**The face is `Back`, not `Front`.** `NormalId.Front` is −Z and this corridor runs
+toward −Z: measured in the built map, Starbloom's end wall is at Z = −1675 while
+the plots are at −57.8 and the barrier at −168. Players stand at higher Z, so the
+face they can see is +Z. Getting this backwards costs nothing at build time and
+shows a blank wall to every player.
+
+**The moon had to be sized in pixels.** It was `UDim2.fromScale` and rendered as a
+vertical PILL: the canvas is 164 studs by 60, so equal scale on both axes is 2.7
+times as many pixels across as down. A circle cannot be specified in scale on a
+surface that is not square. Sized off the canvas height in offset now, and
+verified square at 55 × 55.
+
+The first render also had the caption and the timer reading as near-equals — a
+headline with a subtitle rather than a countdown with a label. The timer is
+0.42 of the wall height now against the caption's 0.105.
+
+### Verified
+
+Ten specs pass (unchanged: 939/939, 93/93, 31, clean, 65, 332, 71, 263, 93, 107).
+`rojo build` passes and all three edited files compile.
+
+The screen was built and photographed in Edit against the **real edited source**,
+fetched over http and loaded with a fresh require chain — see the warning below
+for why that was necessary. Sky, stars, moon, all three lines and the day/night
+toggle confirmed by eye and by property.
+
+### NOT verified, and one thing to do first
+
+**THE ROJO PLUGIN IS DISCONNECTED IN STUDIO.** The background Rojo server was
+killed by the OS for memory pressure and restarting it does not reconnect the
+plugin — that is a button in Studio. Studio's synced `MapService` does not
+contain `buildNightScreen` at all, confirmed by reading its `Source`.
+
+Consequence: **the bat work from `fee0529` IS in Studio** (it synced before the
+server died, and all eight markers were re-checked), but **none of this night
+screen is**. Everything above was verified by loading the repo's own files over
+http; nothing was written into the Studio session.
+
+So, before testing: reconnect the Rojo plugin, then press Play.
+
+Still unobserved:
+
+  * The countdown ticking live in a real session. The lookup chain it uses
+    (`NightBarrier` tag → `NightScreen` → `Timer`) was exercised repeatedly in
+    Edit, but the per-frame update has not run.
+  * How it reads from a distance, at night lighting, from a player's eye height
+    rather than a placed camera. The photographs are from 85 studs at 32 studs
+    up; the field is deeper than that.
+  * Mobile. 74 Frames plus a gradient is cheap and static, but it has not been
+    looked at on a phone.
+
+### Files
+
+`GameConfig.luau` (`WorldCycle.Barrier.Screen` — palette, star count and seed,
+captions, the "soon" colour), `MapService.luau` (`buildNightScreen`, the call,
+the `SetNightBarrier` toggle), `WorldClock.client.luau` (resolver and the big
+timer, driven from the `left` it already had).
+
 ## The bat ragdoll, rejected and repaired: it falls over now — 2026-09-09 (CLAUDE)
 
 ### What was rejected
