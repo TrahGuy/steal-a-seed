@@ -118,6 +118,81 @@ function UIKit.clicks(button: GuiButton): GuiButton
 	return button
 end
 
+--==============================================================================
+-- THE CLICK SHAKE
+--
+-- Applied to an INNER element, never to the one a layout owns. A UIGridLayout
+-- and a UIListLayout both write Position on their children every time they
+-- reflow, so a tween on a grid cell is a tween arguing with the layout -- it
+-- lands wherever the last writer won. Every caller here passes the wrapper
+-- inside the cell instead, whose position nothing else touches.
+--
+-- The resting position is read ONCE, when the shake is wired, and every step
+-- offsets from that. Reading it per click would capture a mid-shake position as
+-- "rest" the moment two clicks overlapped, and the card would walk off sideways
+-- a few pixels at a time.
+--
+-- Overlapping clicks are handled by a token rather than by a busy flag: a
+-- second click abandons the first sequence wherever it is and starts a new one
+-- from rest. Ignoring the second click instead would make a fast double-press
+-- feel like the second one did not register.
+--==============================================================================
+export type ShakeOptions = {
+	pixels: number?,
+	seconds: number?,
+}
+
+function UIKit.shake(target: GuiObject, options: ShakeOptions?): () -> ()
+	local opts: ShakeOptions = options or {}
+	local amp = opts.pixels or CARD.ShakePixels
+	local total = opts.seconds or CARD.ShakeSeconds
+	local rest = target.Position
+
+	-- Decaying reversals, ending exactly on rest so no rounding can leave the
+	-- card a pixel off centre after a hundred clicks.
+	local steps = { 1.0, -0.7, 0.45, -0.22, 0 }
+	local each = total / #steps
+	local info = TweenInfo.new(each, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	local token = 0
+	return function()
+		token += 1
+		local mine = token
+		task.spawn(function()
+			for _, k in ipairs(steps) do
+				-- A newer click owns the card now; leave it to finish.
+				if token ~= mine or not target.Parent then
+					return
+				end
+				local goal = UDim2.new(
+					rest.X.Scale, rest.X.Offset + math.round(amp * k),
+					rest.Y.Scale, rest.Y.Offset)
+				TweenService:Create(target, info, { Position = goal }):Play()
+				task.wait(each)
+			end
+			-- Snapped, not tweened: the last tween has already arrived and this
+			-- only guarantees the exact resting value.
+			if token == mine and target.Parent then
+				target.Position = rest
+			end
+		end)
+	end
+end
+
+--==============================================================================
+-- A CARD THAT SHAKES WHEN IT IS PRESSED
+--
+-- `button` is what the player actually hits and `target` is what moves, because
+-- in the shop those are not the same object: the pressable thing is the price
+-- pill and the thing worth moving is the whole tile.
+--==============================================================================
+function UIKit.shakeOnClick(button: GuiButton, target: GuiObject,
+	options: ShakeOptions?): () -> ()
+	local shake = UIKit.shake(target, options)
+	button.Activated:Connect(shake)
+	return shake
+end
+
 function UIKit.corner(parent: Instance, radius: number): UICorner
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(0, radius)
@@ -1894,21 +1969,30 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	actionLabel.ZIndex = Z_LABEL
 
 	UIKit.clicks(button)
+	--==========================================================================
+	-- AND IT SHAKES WHEN IT IS PRESSED
+	--
+	-- CardWrap, not `holder`. The holder is the grid cell and the layout writes
+	-- its Position on every reflow; CardWrap sits inside it and nothing else
+	-- touches where it sits.
+	--==========================================================================
+	UIKit.shakeOnClick(button, card)
 
 	--==========================================================================
-	-- HOVER IS FEEDBACK, NOT MOTION
+	-- HOVER POPS AGAIN
 	--
-	-- The two MouseEnter/MouseLeave handlers that used to live here existed only
-	-- to wake the animation, and there is nothing to wake. What stays is
-	-- popOnHover with its SCALE PINNED AT 1: the card no longer grows under the
-	-- pointer, and what is left of it -- the stroke thickening and the hover
-	-- sound -- is the button feedback that tells you what you are about to
-	-- click.
+	-- This was pinned at scale 1 -- stroke and sound only, no growth -- when the
+	-- owner asked for idle card motion to be removed. That reading was too
+	-- broad: what was asked for was the removal of motion the card makes BY
+	-- ITSELF, the rotation and the drift that ran whether anybody was looking or
+	-- not. A hover pop is not idle; it happens because the player moved the
+	-- pointer onto it, and it is now wanted on every card in the game.
 	--
-	-- Pinned here rather than changed in popOnHover, which is a public helper.
+	-- So the pin is gone and CARD.HoverScale applies. The stroke thickening and
+	-- the hover cue stay exactly as they were.
 	--==========================================================================
 	local setHovered, setPopEnabled = UIKit.popOnHover(holder, scale,
-		{ stroke = border, scale = 1 })
+		{ stroke = border })
 
 	local lift = liftLayers(holder, CARD.HoverLift)
 	local selected = false

@@ -3377,6 +3377,26 @@ GameConfig.Card = {
 	HoverSeconds = 0.12,
 
 	--==========================================================================
+	-- THE CLICK SHAKE
+	--
+	-- A short horizontal wobble that settles, so a press has a physical answer
+	-- rather than only a sound. Deliberately small: this fires on every card
+	-- click in the game, and an effect that fires that often is one a player
+	-- stops seeing and starts feeling -- which it can only do if it never gets
+	-- in the way of the thing they just pressed.
+	--
+	-- IT MOVES, IT DOES NOT ROTATE. A rotated GuiObject escapes ClipsDescendants
+	-- and the shop shelves SCROLL, so a rotating card caught half way past the
+	-- top of the list would draw its clipped-off half over the panel header.
+	-- Translation clips correctly, which is why ShakePixels is a distance.
+	--
+	-- 5px over 0.20s at four reversals: fast enough to read as an impact rather
+	-- than a wobble, small enough that the text stays readable throughout.
+	--==========================================================================
+	ShakePixels = 5,
+	ShakeSeconds = 0.20,
+
+	--==========================================================================
 	-- SELECTED IS NOT HOVERED
 	--
 	-- A hovered card grows; a SELECTED card gets out of its own way. It shrinks

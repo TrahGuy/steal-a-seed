@@ -387,7 +387,20 @@ local function buildCard(parent: Instance, order: number, palette: any): Card
 	frame.BorderSizePixel = 0
 	frame.Parent = parent
 	corner(frame, 12)
-	stroke(frame, SHOP.Outline, 3)
+	-- Captured, because the hover pop thickens it. It used to be built and
+	-- forgotten, which is fine right up until something wants to animate it.
+	local edge = stroke(frame, SHOP.Outline, 3)
+
+	--==========================================================================
+	-- THE POP LIVES ON THE CELL, THE SHAKE LIVES INSIDE IT
+	--
+	-- UIScale is visual only, so growing the cell on hover does not disturb the
+	-- UIGridLayout that placed it -- but the cell's POSITION belongs to that
+	-- layout, so the shake moves `fill` instead. See UIKit.shake.
+	--==========================================================================
+	local pop = Instance.new("UIScale")
+	pop.Scale = 1
+	pop.Parent = frame
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
@@ -515,6 +528,14 @@ local function buildCard(parent: Instance, order: number, palette: any): Card
 	price.Size = UDim2.new(0.84, -6, 1, 0)
 	price.ZIndex = 3
 
+	--==========================================================================
+	-- Hover is on the WHOLE TILE, because that is what the pointer is over; the
+	-- shake is fired by the pill, because that is the only part of a shop tile
+	-- a player can actually press.
+	--==========================================================================
+	UIKit.popOnHover(frame, pop, { stroke = edge })
+	UIKit.shakeOnClick(buy, fill)
+
 	return {
 		frame = frame,
 		fill = fill,
@@ -617,6 +638,17 @@ local function buildBanner(parent: Instance, order: number, palette: any,
 	art.Parent = frame
 
 	--==========================================================================
+	-- The same black keyline every tile carries, so the banner reads as part of
+	-- the same shelf rather than a picture pasted above one -- and so the hover
+	-- pop has something to thicken.
+	--
+	-- Thickness is what the tween moves, NOT transparency: a stroke left
+	-- transparent would thicken invisibly and the banner would be the one card
+	-- in the shop that does not answer the pointer.
+	--==========================================================================
+	local edge = stroke(frame, SHOP.Outline, 2.5)
+
+	--==========================================================================
 	-- THE BUTTON, IN THE QUARTER THE ARTWORK LEFT EMPTY
 	--
 	-- Anchored to the bottom right rather than positioned from the top left, so
@@ -656,6 +688,18 @@ local function buildBanner(parent: Instance, order: number, palette: any,
 	cap.MaxTextSize = 22
 	cap.MinTextSize = 10
 	cap.Parent = price
+
+	--==========================================================================
+	-- The same two behaviours as a tile. The banner is not in a grid, so its own
+	-- Position would have been safe to move -- but shaking the ARTWORK keeps
+	-- every card in the game shaking the same layer, and one rule is easier to
+	-- keep true than two.
+	--==========================================================================
+	local pop = Instance.new("UIScale")
+	pop.Scale = 1
+	pop.Parent = frame
+	UIKit.popOnHover(frame, pop, { stroke = edge })
+	UIKit.shakeOnClick(buy, art)
 
 	local _ = palette
 	return frame, buy, price
@@ -766,6 +810,12 @@ for _, spec in ipairs(STORE.Sections) do
 					SoundKit.play("Denied")
 					return
 				end
+				--==========================================================
+				-- The press cue only on the path that DOES something. A
+				-- refusal already has its own sound, and stacking the two
+				-- would say "yes" and "no" in the same tenth of a second.
+				--==========================================================
+				SoundKit.play("CardClick")
 				local ok, err = pcall(function()
 					MarketplaceService:PromptGamePassPurchase(player, passId)
 				end)
@@ -830,6 +880,7 @@ for _, spec in ipairs(STORE.Sections) do
 			-- player gets is decided by StoreService when Roblox delivers the
 			-- receipt, and the profile packet that follows updates the HUD.
 			--==============================================================
+			SoundKit.play("CardClick")
 			local ok, err = pcall(function()
 				MarketplaceService:PromptProductPurchase(player, productId)
 			end)
