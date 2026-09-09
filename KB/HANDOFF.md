@@ -1,5 +1,94 @@
 # Steal a Seed — Session Handoff
 
+## The tap has to land ON the prompt — 2026-09-09 (CLAUDE)
+
+**Corrects the entry below it.** That one shipped a rule where *any* unprocessed
+tap triggered whichever prompt was shown, on the reasoning that a prompt only
+appears when you are standing at the thing. The owner found the hole immediately:
+with a plant underfoot, every tap anywhere picked it back up — including the tap
+meant to place a plant somewhere else, so it had to be placed again.
+
+"You are near it" is not "you asked for it". The tap is now hit-tested.
+
+### Where the panel is, and why it has to be computed
+
+`PromptUI` draws each prompt inside a **BillboardGui**, and a BillboardGui is not
+laid out in screen space:
+
+  * its children report `AbsolutePosition 0,0` — measured;
+  * `playerGui:GetGuiObjectsAtPosition` does not return them — measured, with the
+    panel confirmed rendering 48 studs from the camera at the time;
+  * and their buttons never receive touch at all, which is the defect the entry
+    below fixed.
+
+So the rect is computed the same way Roblox places the billboard: project
+`adornee.Position + StudsOffset`, take `panel.AbsoluteSize` around it —
+`AbsoluteSize` is the size it is really drawn at, distance included. Verified
+against a live touch:
+
+```
+touch  371,201     proj 371,201     half 85,26     dx -85  dy -26     inFront true
+```
+
+The projection is exact. `TAP_PAD` is 16 anyway, because `StudsOffset` is applied
+along the CAMERA's axes rather than the world's, so a steeply tilted camera moves
+the panel slightly off this estimate; the nearest other prompt is metres away in
+world space, so slack costs nothing.
+
+### Verified on the emulated phone, touch only
+
+```
+Take, 0.7s hold   on-target tap -> HoldBegan, TRIGGERED,
+                  server log "completed a take hold on Pod_toadcap"
+                  far tap (90,322 vs prompt at 350,202), held 1.4s -> nothing
+Marigold, 0 hold  on-target tap -> TRIGGERED(MarigoldShopPrompt), shop opened
+                  far tap (400,300 vs prompt at 340,202) -> nothing
+```
+
+The zero-hold case is the one that matters, because an instant prompt is what
+made the original bug so visible, and it is the same class as the plot pickup.
+
+### Four traps that made this take far longer than it should have
+
+Recorded because every one of them made a working thing look broken.
+
+**The success signal for a stolen pod is the server log, not `CarryingSpecies`.**
+Twice a tap genuinely took the pod and the guardian immediately caught the player
+and threw them, which DROPS it — so the attribute read nil a second later and the
+tap looked dead. `[Seed/CarryService] ... completed a take hold` is the truth.
+(Those two catches also settled naturally at 3.20s and 2.87s, so the guardian path
+is still intact.)
+
+**A plot pickup's signal is a plant Tool appearing**, not `CarryingSpecies` either
+— that attribute is for nest pods.
+
+**A prompt at the screen edge is covered by the HUD.** An on-target tap at
+`71,193` did nothing because the left HUD sits there and the touch arrived
+`processed = true`. The same prompt at `340,202` worked. Stand so the prompt is
+not against an edge before concluding anything.
+
+**Prompts vanish while carrying.** `PromptUI.show` returns early on `carrying()`,
+so after any successful pickup every prompt hides and the next tap has nothing to
+hit. Bank first.
+
+And one self-inflicted one: destroying `SeedPrompt` billboards by hand leaves
+`shown` holding stale entries, so `show()` returns early and no prompt comes back
+until the player leaves range and returns.
+
+### Validation
+
+Ten specs pass, `rojo build` clean, `git diff --check` clean, `PromptUI` compiles.
+
+### Unchanged
+
+The hold values from the entry below are untouched: plot pickup 0, Marigold 0,
+sell board 1.1, hatch 1.1, nest Take 0.7, mill 0.35. Drag-cancellation
+(`TAP_SLOP` 34) is unchanged and still verified.
+
+### Files
+
+`PromptUI.client.luau` only.
+
 ## The prompt tap never worked on mobile, and two prompts lost their hold — 2026-09-09 (CLAUDE)
 
 Device emulator: 735 × 413, `TouchEnabled`, `MouseEnabled` and `KeyboardEnabled`

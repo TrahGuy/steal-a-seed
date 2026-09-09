@@ -350,47 +350,64 @@ end)
 --
 -- One pair of connections for the whole game rather than a pair per prompt.
 --
--- IT DOES NOT HIT-TEST THE PANEL, AND THAT IS DELIBERATE. The first attempt did:
--- project the adornee, build a rect from the panel's AbsoluteSize, require the
--- touch inside it. It did not work, and the reason is that a BillboardGui is not
--- laid out in screen space at all -- its children report AbsolutePosition 0,0,
--- and StudsOffset is applied relative to the CAMERA rather than the world, so a
--- projected rect is an approximation that was measurably in the wrong place.
+-- WHY IT IS CAUGHT HERE AT ALL. PromptUI draws each prompt inside a
+-- BillboardGui, and a BillboardGui's buttons do not take part in touch
+-- hit-testing -- measured, a tap on the panel arrives with processed = false and
+-- the panel silent, while a plain ScreenGui button at the same place fires.
+-- Setting BillboardGui.Active = true does not change it. Nobody noticed for a
+-- long time because a desktop presses E, and E is the only reason any prompt in
+-- this game has ever fired.
 --
--- Trying to be precise about where a billboard is drawn is the wrong problem.
--- A prompt only appears when the player is within MaxActivationDistance of the
--- thing -- eleven studs for a pod, and PromptShown/PromptHidden already own that
--- decision. If a prompt is on screen at all, the player is standing at it.
+-- IT MUST LAND ON THE PROMPT. A first version accepted any unprocessed tap while
+-- a prompt was shown, on the reasoning that a prompt only appears when you are
+-- standing at the thing. That shipped and was wrong in the owner's hands: with a
+-- plant underfoot, every tap anywhere -- including the tap that places a plant
+-- somewhere else -- picked the plant back up. "You are near it" is not "you
+-- asked for it".
 --
--- SO: A TAP WHILE A PROMPT IS SHOWN IS THAT PROMPT. Position is used only to
--- choose between two prompts that are somehow both up, and even then it is a
--- nearest-to-the-finger guess rather than a containment test.
+-- WHERE THE PANEL IS, GEOMETRICALLY. A BillboardGui is not laid out in screen
+-- space: its children report AbsolutePosition 0,0 and GetGuiObjectsAtPosition
+-- does not return them, so the rect has to be computed the same way Roblox
+-- places the billboard -- project the adornee, offset by StudsOffset, and take
+-- the panel's AbsoluteSize around it. AbsoluteSize IS the size it is drawn at,
+-- distance included.
 --
--- A DRAG IS NOT A TAP. The camera is panned by dragging, so a touch that travels
--- is the player looking around and must not hold a prompt down. That is the one
--- thing this has to get right, and it is a distance check rather than a rect.
+-- THE PAD IS DELIBERATE AND GENEROUS. StudsOffset is applied along the CAMERA's
+-- axes rather than the world's, so a steeply tilted camera moves the panel a
+-- little away from this estimate. Sixteen pixels of slack costs nothing -- the
+-- nearest other prompt is metres away in world space -- and it is the difference
+-- between a prompt that occasionally needs a second tap and one that does.
 --==============================================================================
+local TAP_PAD = 16
 local TAP_SLOP = 34
 
 local touchStart: Vector2? = nil
 
-local function anyShown(point: Vector2?): ProximityPrompt?
+local function promptAt(point: Vector2): ProximityPrompt?
 	local camera = Workspace.CurrentCamera
+	if not camera then
+		return nil
+	end
 	local best, bestDist = nil, math.huge
 	for prompt, entry in pairs(shown) do
 		local adornee = entry.billboard.Adornee
-		if adornee and adornee:IsA("BasePart") then
-			if not point or not camera then
-				return prompt
-			end
-			local at, inFront = camera:WorldToViewportPoint(adornee.Position)
-			-- Behind the lens is not a candidate: WorldToViewportPoint still
-			-- hands back an X and a Y for it, on the wrong side of the screen.
-			local d = if inFront
-				then (Vector2.new(at.X, at.Y) - point).Magnitude
-				else math.huge
-			if d < bestDist then
-				best, bestDist = prompt, d
+		local panel = entry.billboard:FindFirstChild("Panel")
+		if adornee and adornee:IsA("BasePart") and panel and panel:IsA("GuiObject") then
+			local at, inFront = camera:WorldToViewportPoint(
+				adornee.Position + entry.billboard.StudsOffset)
+			-- Behind the lens is never a hit: WorldToViewportPoint still returns
+			-- an X and a Y for it, on the wrong side of the screen.
+			if inFront then
+				local half = panel.AbsoluteSize * 0.5
+				local dx = math.abs(point.X - at.X) - (half.X + TAP_PAD)
+				local dy = math.abs(point.Y - at.Y) - (half.Y + TAP_PAD)
+				if dx <= 0 and dy <= 0 then
+					-- Inside. Two overlapping prompts go to the nearer centre.
+					local d = (Vector2.new(at.X, at.Y) - point).Magnitude
+					if d < bestDist then
+						best, bestDist = prompt, d
+					end
+				end
 			end
 		end
 	end
@@ -414,9 +431,10 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if holding then
 		return
 	end
-	local prompt = anyShown(Vector2.new(input.Position.X, input.Position.Y))
+	local point = Vector2.new(input.Position.X, input.Position.Y)
+	local prompt = promptAt(point)
 	if prompt then
-		touchStart = Vector2.new(input.Position.X, input.Position.Y)
+		touchStart = point
 		holding = prompt
 		-- With HoldDuration 0 this triggers on the press, which is what "no
 		-- hold" means; with a hold it starts the bar and the lift below ends it.
@@ -430,13 +448,18 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 end)
 
+--==============================================================================
+-- A DRAG IS NOT A TAP
+--
+-- The camera is panned by dragging, so a touch that travels is the player
+-- looking around and must not go on holding a prompt down.
+--==============================================================================
 UserInputService.InputChanged:Connect(function(input)
 	if not (holding and touchStart) or input.UserInputType ~= Enum.UserInputType.Touch then
 		return
 	end
 	local at = Vector2.new(input.Position.X, input.Position.Y)
 	if (at - touchStart).Magnitude > TAP_SLOP then
-		-- The finger is panning the camera, not pressing a prompt.
 		release()
 	end
 end)
