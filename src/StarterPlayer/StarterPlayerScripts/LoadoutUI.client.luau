@@ -69,8 +69,43 @@ local WHITE = Color3.fromRGB(255, 255, 255)
 local BLACK = Color3.fromRGB(0, 0, 0)
 local CREAM = Color3.fromRGB(242, 238, 206)
 local MUTED = Color3.fromRGB(198, 176, 152)
-local PICKED = Color3.fromRGB(250, 214, 108)
+
+--==============================================================================
+-- THE BAG'S OWN BROWNS
+--
+-- Every one of these is a step off GameConfig.Panel rather than a new colour:
+-- the panel fills at (58,38,29) and shades at (38,25,19), so a card sits ABOVE
+-- the panel and a well sits BELOW it, and the three read as one surface with
+-- things set into it. That is the whole trick of an inventory that looks built
+-- rather than drawn.
+--
+--   CARD_TOP/BOTTOM   the card face, lit from above. Both lighter than the
+--                     panel, which is what makes a card look like it is resting
+--                     on the panel instead of cut out of it.
+--   LIT_TOP/BOTTOM    the same face with the green pushed through it. Not a
+--                     different hue -- the same brown warmed toward the equip
+--                     green, so an equipped card reads as the SAME card in a
+--                     state rather than as a different kind of object.
+--   WELL              darker than the panel. Used twice: behind the whole grid
+--                     so empty space looks like a tray rather than a hole, and
+--                     behind each preview so the item sits IN something.
+--   LIP               the light top edge on a card. One pixel of it is what
+--                     turns a flat rectangle into a raised one.
+--==============================================================================
+local CARD_TOP = Color3.fromRGB(86, 58, 43)
+local CARD_BOTTOM = Color3.fromRGB(64, 42, 32)
+local LIT_TOP = Color3.fromRGB(84, 104, 52)
+local LIT_BOTTOM = Color3.fromRGB(56, 74, 36)
+local WELL = Color3.fromRGB(40, 26, 20)
+local LIP = Color3.fromRGB(140, 104, 82)
+local PILL_OFF_TOP = Color3.fromRGB(96, 68, 52)
+local PILL_OFF_BOTTOM = Color3.fromRGB(64, 44, 33)
+local PILL_ON_TOP = Color3.fromRGB(150, 220, 96)
+local PILL_ON_BOTTOM = Color3.fromRGB(92, 168, 56)
 local READY = Color3.fromRGB(142, 214, 86)
+-- The HOTBAR's held-slot colour. It used to be the bag card's equipped colour
+-- too; the cards use green now, and this stays because the hotbar still does.
+local PICKED = Color3.fromRGB(250, 214, 108)
 
 local ITEM_ATTR = WeaponModel.ItemAttribute
 local READY_AT = "ReadyAt"
@@ -325,12 +360,56 @@ local modal = UIKit.modal(gui, {
 	maxHeight = 600,
 })
 
+--==============================================================================
+-- THE CLOSE BUTTON, DRESSED FOR THIS PANEL ONLY
+--
+-- UIKit gives every modal a flat rgb(255,0,0) square with a bare white X on it.
+-- Pure red is the one colour in the palette that is not sampled from anything --
+-- it is the channel maxed out -- and against warm brown it reads as a warning
+-- rather than as a control.
+--
+-- Done HERE rather than in UIKit.modal because the brief is the BAG. The Index,
+-- Shop, Garden and Marigold panels keep the flat X until somebody asks for the
+-- set, and the moment they do, this block is what moves.
+--
+-- The X becomes a child label so it can carry its own outline: a UIStroke on the
+-- button strokes the BORDER, and only one UIStroke per object is honoured, so
+-- there is no way to outline the glyph while the button still has its keyline.
+--==============================================================================
+do
+	local close = modal.close
+	UIKit.gradient(close, Color3.fromRGB(216, 68, 60), Color3.fromRGB(152, 30, 26))
+	close.Text = ""
+
+	local closeShade = Instance.new("Frame")
+	closeShade.Name = "Shade"
+	closeShade.AnchorPoint = Vector2.new(0.5, 1)
+	closeShade.Position = UDim2.new(0.5, 0, 1, 0)
+	closeShade.Size = UDim2.new(1, 0, 0, 5)
+	closeShade.BackgroundColor3 = Color3.fromRGB(112, 20, 18)
+	closeShade.BorderSizePixel = 0
+	closeShade.Active = false
+	closeShade.ZIndex = 4
+	closeShade.Parent = close
+	UIKit.corner(closeShade, 10)
+
+	local closeMark = UIKit.outlined(close, "Mark", 22, WHITE, 2.5)
+	closeMark.Size = UDim2.fromScale(1, 1)
+	-- One pixel up, so the glyph sits centred in the light part of the face
+	-- rather than centred on the whole button including its shade.
+	closeMark.Position = UDim2.new(0, 0, 0, -2)
+	closeMark.Text = "X"
+	closeMark.ZIndex = 5
+end
+
 local TABS = {
 	{ id = "equipment", label = "Equipment" },
 	{ id = "plants", label = "Plants" },
 }
 local activeTab = "equipment"
 local tabButtons: { [string]: TextButton } = {}
+local tabTints: { [string]: UIGradient } = {}
+local tabShades: { [string]: Frame } = {}
 
 local tabRow = Instance.new("Frame")
 tabRow.Name = "Tabs"
@@ -354,15 +433,110 @@ for i, tab in ipairs(TABS) do
 	b.Parent = tabRow
 	UIKit.corner(b, 9)
 	UIKit.stroke(b, BLACK, 2)
+
+	--==========================================================================
+	-- A TAB IS A BUTTON, SO IT GETS A BUTTON'S DEPTH
+	--
+	-- The gradient and the shade bar are the same two tricks the shop's price
+	-- pills use, which is why they read as pressable here without inventing a
+	-- second button language for this panel.
+	--
+	-- The shade is only shown on the ACTIVE tab. A raised lip under both of them
+	-- would say both are selected, which is the one thing a tab row must not do.
+	--==========================================================================
+	local tabTint = UIKit.gradient(b, PANEL.Fill, PANEL.Shade)
+
+	local tabShade = Instance.new("Frame")
+	tabShade.Name = "Shade"
+	tabShade.AnchorPoint = Vector2.new(0.5, 1)
+	tabShade.Position = UDim2.new(0.5, 0, 1, 0)
+	tabShade.Size = UDim2.new(1, 0, 0, 5)
+	tabShade.BackgroundColor3 = Color3.fromRGB(46, 110, 34)
+	tabShade.BorderSizePixel = 0
+	tabShade.Active = false
+	tabShade.Visible = false
+	tabShade.ZIndex = 5
+	tabShade.Parent = b
+	UIKit.corner(tabShade, 9)
+
 	local label = UIKit.outlined(b, "Label", 15, CREAM, 2)
 	label.Size = UDim2.fromScale(1, 1)
 	label.Text = tab.label
 	label.ZIndex = 6
 	tabButtons[tab.id] = b
+	tabTints[tab.id] = tabTint
+	tabShades[tab.id] = tabShade
 end
 
 modal.body.Position = UDim2.fromOffset(12, 100)
 modal.body.Size = UDim2.new(1, -24, 1, -112)
+
+--==============================================================================
+-- THE TRAY
+--
+-- The body was a transparent hole in the panel, so a bag holding four items was
+-- four cards floating over four hundred pixels of nothing. Sunk into a darker
+-- well with a lip, the same space reads as a TRAY that happens to be part
+-- empty -- which is what an inventory with room left in it should look like.
+--
+-- Nothing moved to achieve it: the body is exactly where it was and holds
+-- exactly what it held.
+--==============================================================================
+modal.body.BackgroundColor3 = WELL
+modal.body.BackgroundTransparency = 0
+UIKit.corner(modal.body, 12)
+UIKit.stroke(modal.body, BLACK, 2)
+
+--==============================================================================
+-- AND IT IS TEXTURED, NOT BLANK
+--
+-- The panel behind it already carries a lattice; giving the tray a fainter one
+-- of its own is what stops a half-empty bag reading as a hole cut in a textured
+-- surface. Much fainter than the panel's -- 0.93 against 0.55 -- because this
+-- one sits UNDER the items and its whole job is to be noticed only when there
+-- is nothing on top of it.
+--
+-- Inset past the corner radius, for the reason UIKit.slab's own lattice is: a
+-- square grid drawn to the edge of a rounded box pokes its chords out through
+-- the curve.
+--==============================================================================
+UIKit.lattice(modal.body, {
+	spacing = 26,
+	thickness = 2,
+	colour = PANEL.Lattice,
+	transparency = 0.93,
+	inset = 7,
+	zIndex = 2,
+})
+
+--==============================================================================
+-- ONE SOFT SHADOW UNDER THE TOP LIP
+--
+-- A recess is a lie told by two things: a dark fill and a shadow where the
+-- surface above it overhangs. The fill alone reads as a dark rectangle, which is
+-- what this was before the gradient went in.
+--
+-- Top edge only, and fading out over 40 pixels. A shadow on all four sides is a
+-- vignette, and a vignette on a small brown panel reads as dirt.
+--==============================================================================
+do
+	local recess = Instance.new("Frame")
+	recess.Name = "Recess"
+	recess.Size = UDim2.new(1, 0, 0, 40)
+	recess.BackgroundColor3 = BLACK
+	recess.BorderSizePixel = 0
+	recess.Active = false
+	recess.ZIndex = 3
+	recess.Parent = modal.body
+	UIKit.corner(recess, 12)
+	local fade = Instance.new("UIGradient")
+	fade.Rotation = 90
+	fade.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.62),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	fade.Parent = recess
+end
 
 local grid = Instance.new("ScrollingFrame")
 grid.Name = "Items"
@@ -380,6 +554,12 @@ grid.ZIndex = 4
 grid.Parent = modal.body
 
 local gridPad = Instance.new("UIPadding")
+-- Even on all four sides now. It was right and bottom only, so the first card
+-- sat hard against the top-left corner of the tray while the other two edges had
+-- room -- which is the sort of thing that reads as "unfinished" without anybody
+-- being able to say why.
+gridPad.PaddingLeft = UDim.new(0, 10)
+gridPad.PaddingTop = UDim.new(0, 10)
 gridPad.PaddingRight = UDim.new(0, 10)
 gridPad.PaddingBottom = UDim.new(0, 10)
 gridPad.Parent = grid
@@ -406,11 +586,24 @@ emptyLabel.ZIndex = 5
 --==============================================================================
 -- AN INVENTORY CARD
 --
--- A transparent preview, a name, and a state word. NO BACKPLATE: the brief is
--- explicit, and the reason is that a plate behind every item turns a bag into a
--- grid of tiles when the thing a player is scanning for is the shape. What is
--- here instead is a rounded outline that lights up when the item is in a
--- loadout slot, which is information rather than decoration.
+-- THIS USED TO HAVE NO BACKPLATE, ON PURPOSE, AND THE OWNER HAS SINCE ASKED FOR
+-- ONE. The old note argued that a plate behind every item turns a bag into a
+-- grid of tiles when what a player scans for is the SHAPE. That was a real
+-- concern and it is answered rather than ignored: the plate is a dark, low
+-- contrast brown and the item sits in a WELL cut into it, so the silhouette is
+-- still the brightest thing on the card and the plate is the thing it sits on.
+--
+-- What the plate buys is everything a floating outline could not: a card can now
+-- be lit, shaded, raised and grouped, and an empty bag looks like a tray with
+-- room in it instead of a hole with nothing in it.
+--
+-- FIVE LAYERS, BOTTOM TO TOP:
+--   the button        the plate itself, gradient-lit from above
+--   Lip               one bright line along the top edge; this is the entire
+--                     difference between a rectangle and a raised surface
+--   PreviewWell       a darker recess the item stands in
+--   LitRing           an inset green ring, shown only when equipped
+--   name / state      the words, which stay the loudest thing on the card
 --==============================================================================
 --==============================================================================
 -- FORWARD-DECLARED, AND THAT IS NOT STYLE
@@ -428,9 +621,14 @@ type Card = {
 	preview: UIKit.ItemPreview,
 	name: TextLabel,
 	state: TextLabel,
-	-- The box behind the state word, and the rim that says whether it is lit.
 	statePill: Frame,
 	statePillEdge: UIStroke,
+	-- The card face's own gradient, the green ring over it, and the state
+	-- button's gradient. All three say the same thing -- equipped or not -- in
+	-- three registers, which is what makes it readable at a glance across a grid.
+	tint: UIGradient,
+	litRing: Frame,
+	statePillTint: UIGradient,
 	stroke: UIStroke,
 }
 
@@ -467,7 +665,6 @@ local function acquireCard(index: number): Card
 	end
 	local button = Instance.new("TextButton")
 	button.Name = "Item" .. index
-	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
 	button.AutoButtonColor = false
 	button.Text = ""
@@ -475,20 +672,82 @@ local function acquireCard(index: number): Card
 	UIKit.clicks(button)
 	button.Parent = grid
 	UIKit.corner(button, 12)
-	local stroke = UIKit.stroke(button, PANEL.Edge, 2, 0.45)
+	-- Black, always. The keyline is the game's house edge and it is what stops a
+	-- brown card on a brown panel from dissolving into it; the equipped state is
+	-- said by the green ring inside, not by removing the outline.
+	local stroke = UIKit.stroke(button, BLACK, 2)
+	local tint = UIKit.gradient(button, CARD_TOP, CARD_BOTTOM)
+
+	local lip = Instance.new("Frame")
+	lip.Name = "Lip"
+	lip.AnchorPoint = Vector2.new(0.5, 0)
+	lip.Position = UDim2.new(0.5, 0, 0, 3)
+	lip.Size = UDim2.new(1, -16, 0, 2)
+	lip.BackgroundColor3 = LIP
+	lip.BackgroundTransparency = 0.45
+	lip.BorderSizePixel = 0
+	lip.Active = false
+	lip.ZIndex = 6
+	lip.Parent = button
+	UIKit.corner(lip, 1)
+
+	local previewWell = Instance.new("Frame")
+	previewWell.Name = "PreviewWell"
+	previewWell.Position = UDim2.fromOffset(6, 6)
+	previewWell.Size = UDim2.new(1, -12, 0, 74)
+	previewWell.BackgroundColor3 = WELL
+	previewWell.BorderSizePixel = 0
+	previewWell.Active = false
+	previewWell.ZIndex = 5
+	previewWell.Parent = button
+	UIKit.corner(previewWell, 9)
+	UIKit.stroke(previewWell, BLACK, 1.5, 0.35)
 
 	local preview = UIKit.itemPreview(button, {
 		name = "Preview",
-		size = UDim2.new(1, -8, 0, 76),
-		position = UDim2.fromOffset(4, 4),
+		size = UDim2.new(1, -12, 0, 74),
+		position = UDim2.fromOffset(6, 6),
 	})
 
+	--==========================================================================
+	-- THE EQUIPPED RING
+	--
+	-- Inset by three, so it reads as a ring INSIDE the card rather than as a
+	-- second outline fighting the black one. A green card fill alone was not
+	-- enough at this size -- the cards are 104 wide and a tint that small reads
+	-- as a lighting difference; the ring is the part you actually notice.
+	--==========================================================================
+	local litRing = Instance.new("Frame")
+	litRing.Name = "LitRing"
+	litRing.Position = UDim2.fromOffset(3, 3)
+	litRing.Size = UDim2.new(1, -6, 1, -6)
+	litRing.BackgroundTransparency = 1
+	litRing.Active = false
+	litRing.Visible = false
+	litRing.ZIndex = 9
+	litRing.Parent = button
+	UIKit.corner(litRing, 9)
+	UIKit.stroke(litRing, READY, 2)
+
+	--==========================================================================
+	-- THE NAME SHRINKS RATHER THAN WRAPPING BADLY
+	--
+	-- "CINDERCRACK BAT" and "BRAMBLEJAW TRAP" are two lines at 12pt on a 104px
+	-- card and they were fitting only just. TextScaled with a floor of 9 lets a
+	-- long name give up a point or two instead of pushing its second line into
+	-- the state button, and a short name still draws at the full 12.
+	--==========================================================================
 	local nameLabel = UIKit.outlined(button, "Name", 12, CREAM, 2)
-	nameLabel.Position = UDim2.new(0, 3, 0, 82)
-	nameLabel.Size = UDim2.new(1, -6, 0, 32)
+	nameLabel.Position = UDim2.new(0, 7, 0, 84)
+	nameLabel.Size = UDim2.new(1, -14, 0, 30)
 	nameLabel.TextWrapped = true
-	nameLabel.TextYAlignment = Enum.TextYAlignment.Top
+	nameLabel.TextScaled = true
+	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
 	nameLabel.ZIndex = 8
+	local nameFit = Instance.new("UITextSizeConstraint")
+	nameFit.MaxTextSize = 12
+	nameFit.MinTextSize = 9
+	nameFit.Parent = nameLabel
 
 	--==========================================================================
 	-- THE STATE GETS A PILL
@@ -506,33 +765,54 @@ local function acquireCard(index: number): Card
 	statePill.Name = "StatePill"
 	statePill.AnchorPoint = Vector2.new(0.5, 0)
 	statePill.Position = UDim2.new(0.5, 0, 0, 117)
-	statePill.Size = UDim2.fromOffset(60, 17)
-	statePill.BackgroundColor3 = Color3.fromRGB(14, 12, 18)
-	statePill.BackgroundTransparency = 0.26
+	statePill.Size = UDim2.fromOffset(60, 20)
 	statePill.BorderSizePixel = 0
 	statePill.Active = false
 	statePill.ZIndex = 7
 	statePill.Parent = button
-	UIKit.corner(statePill, 5)
-	local statePillEdge = UIKit.stroke(statePill, MUTED, 1, 0.72)
+	UIKit.corner(statePill, 6)
+	local statePillEdge = UIKit.stroke(statePill, BLACK, 2)
+	local statePillTint = UIKit.gradient(statePill, PILL_OFF_TOP, PILL_OFF_BOTTOM)
+
+	--==========================================================================
+	-- IT LOOKS LIKE A BUTTON BECAUSE IT IS THE THING YOU PRESS
+	--
+	-- Strictly the whole CARD is the click target and this is a label on it --
+	-- but it is the label that says what pressing will do, so it is the part
+	-- that has to look pressable. Gradient, black keyline and a shade bar under
+	-- it: the same three things the shop's price pills use, so the game has one
+	-- button language rather than two.
+	--==========================================================================
+	local stateShade = Instance.new("Frame")
+	stateShade.Name = "Shade"
+	stateShade.AnchorPoint = Vector2.new(0.5, 1)
+	stateShade.Position = UDim2.new(0.5, 0, 1, 0)
+	stateShade.Size = UDim2.new(1, 0, 0, 5)
+	stateShade.BackgroundColor3 = Color3.fromRGB(44, 30, 22)
+	stateShade.BorderSizePixel = 0
+	stateShade.Active = false
+	stateShade.ZIndex = 7
+	stateShade.Parent = statePill
+	UIKit.corner(stateShade, 6)
 
 	local stateLabel = Instance.new("TextLabel")
 	stateLabel.Name = "State"
 	stateLabel.AnchorPoint = Vector2.new(0.5, 0)
-	stateLabel.Position = UDim2.new(0.5, 0, 0, 118)
-	stateLabel.Size = UDim2.new(1, -8, 0, 16)
+	stateLabel.Position = UDim2.new(0.5, 0, 0, 120)
+	stateLabel.Size = UDim2.new(1, -8, 0, 15)
 	stateLabel.BackgroundTransparency = 1
 	stateLabel.Font = Enum.Font.FredokaOne
 	stateLabel.TextSize = 11
-	stateLabel.TextColor3 = MUTED
+	stateLabel.TextColor3 = CREAM
 	stateLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	stateLabel.ZIndex = 8
 	stateLabel.Parent = button
+	UIKit.stroke(stateLabel, BLACK, 1.5)
 
 	-- Rides TextBounds so the pill follows the words without every caller having
 	-- to remember to resize it.
 	stateLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
-		statePill.Size = UDim2.fromOffset(math.ceil(stateLabel.TextBounds.X) + 16, 17)
+		statePill.Size = UDim2.fromOffset(math.ceil(stateLabel.TextBounds.X) + 20, 20)
 	end)
 
 	local card: Card = {
@@ -542,6 +822,9 @@ local function acquireCard(index: number): Card
 		state = stateLabel,
 		statePill = statePill,
 		statePillEdge = statePillEdge,
+		tint = tint,
+		litRing = litRing,
+		statePillTint = statePillTint,
 		stroke = stroke,
 	}
 	button.Activated:Connect(function()
@@ -830,7 +1113,19 @@ local function refreshBag()
 	for _, tab in ipairs(TABS) do
 		local b = tabButtons[tab.id]
 		local on = activeTab == tab.id
-		b.BackgroundColor3 = if on then RAIL.ShopFace else PANEL.Shade
+		-- The gradient owns the fill now, so the colour is set on it rather than
+		-- on the button -- UIKit.gradient leaves the background white and
+		-- multiplies, so writing BackgroundColor3 here would do nothing at all.
+		local tint = tabTints[tab.id]
+		if tint then
+			tint.Color = if on
+				then ColorSequence.new(RAIL.ShopFace, RAIL.ShopShade)
+				else ColorSequence.new(PANEL.Fill, PANEL.Shade)
+		end
+		local shade = tabShades[tab.id]
+		if shade then
+			shade.Visible = on
+		end
 		local label = b:FindFirstChild("Label")
 		if label and label:IsA("TextLabel") then
 			label.TextColor3 = if on then WHITE else MUTED
@@ -912,13 +1207,33 @@ local function refreshBag()
 			card.preview.setModel(row.key, row.build, row.kind)
 			card.name.Text = row.label
 			card.state.Text = row.state
-			card.state.TextColor3 = if row.lit then READY else MUTED
-			-- Lit means EQUIPPED or IN HAND: the rim picks that up so the two
-			-- states are told apart by more than a shade of grey.
-			card.statePillEdge.Color = if row.lit then READY else MUTED
-			card.statePillEdge.Transparency = if row.lit then 0.3 else 0.72
-			card.stroke.Color = if row.lit then PICKED else PANEL.Edge
-			card.stroke.Transparency = if row.lit then 0 else 0.45
+			--==============================================================
+			-- LIT SAYS ITSELF THREE TIMES
+			--
+			-- The card warms toward green, a green ring appears inside its
+			-- keyline, and the state button fills green. One of those alone is
+			-- a shade difference on a 104px card; all three together is a card
+			-- you can pick out of a grid without reading a word on it.
+			--
+			-- The black keyline does NOT change. It is the house edge on every
+			-- surface in this game, and swapping it for green would make an
+			-- equipped card a different kind of object rather than the same
+			-- card in a different state.
+			--==============================================================
+			card.state.TextColor3 = if row.lit then WHITE else CREAM
+			card.tint.Color = if row.lit
+				then ColorSequence.new(LIT_TOP, LIT_BOTTOM)
+				else ColorSequence.new(CARD_TOP, CARD_BOTTOM)
+			card.litRing.Visible = row.lit
+			card.statePillTint.Color = if row.lit
+				then ColorSequence.new(PILL_ON_TOP, PILL_ON_BOTTOM)
+				else ColorSequence.new(PILL_OFF_TOP, PILL_OFF_BOTTOM)
+			local shade = card.statePill:FindFirstChild("Shade")
+			if shade and shade:IsA("Frame") then
+				shade.BackgroundColor3 = if row.lit
+					then Color3.fromRGB(52, 118, 34)
+					else Color3.fromRGB(44, 30, 22)
+			end
 		end
 	end
 end

@@ -1,5 +1,57 @@
 # Steal a Seed — Session Handoff
 
+## Bag panel visual polish — 2026-09-09 (CLAUDE)
+
+Appearance only. One file, `LoadoutUI.client.luau`; no behaviour, no gameplay, no
+inventory logic touched, and nothing outside the Bag.
+
+**The cards got their backplate, and the old note explaining why they had none is
+now the record of the reversal rather than a contradiction.** That note argued a
+plate turns a bag into a grid of tiles when what a player scans for is the shape.
+It is answered rather than ignored: the plate is a low-contrast brown and the
+item stands in a WELL cut into it, so the silhouette is still the brightest thing
+on the card.
+
+Five layers per card, bottom to top: the gradient-lit plate, a one-pixel `Lip`
+along the top edge (the whole difference between a rectangle and a raised
+surface), a darker `PreviewWell`, an inset green `LitRing` shown only when
+equipped, then the words.
+
+**Equipped says itself three times** -- the card warms toward green, a green ring
+appears inside the keyline, and the state button fills green. One alone is a
+shade difference on a 104px card. The black keyline deliberately does NOT change:
+it is the house edge on every surface in the game, and swapping it for green
+would make an equipped card a different kind of object rather than the same card
+in a state.
+
+**Browns are steps off `GameConfig.Panel`, not new colours.** Panel fills at
+(58,38,29) and shades at (38,25,19); cards sit lighter, wells sit darker, so the
+three read as one surface with things set into it.
+
+**The body became a tray.** It was a transparent hole, so four items floated over
+four hundred pixels of nothing. Sunk into a dark well with a black keyline, a
+faint lattice (0.93 against the panel's 0.55) and a 40px top-edge shadow, the
+same space reads as a tray with room left in it. Nothing moved to achieve it.
+
+Also: grid padding evened to all four sides (it was right and bottom only); names
+use `TextScaled` with a 9pt floor so "CINDERCRACK BAT" gives up a point instead
+of pushing into the button; the state pill became a real button -- gradient,
+black keyline, shade bar -- matching the shop's pill language rather than
+inventing a second one; tabs gained gradients and an active-only shade bar; and
+the close X was restyled **for this panel only** -- gradient red with an outlined
+glyph, done in LoadoutUI rather than UIKit so Index, Shop, Garden and Marigold
+keep the flat one until somebody asks for the set.
+
+**One near-miss worth recording:** removing the now-unused `PICKED` gold broke
+the HOTBAR, which still uses it two hundred lines down. Luau parsed clean because
+an undefined local reads as a global; it would have thrown at runtime on the
+first held slot. Restored with a comment saying who owns it now.
+
+Verified in Play: both tabs, the equipped and unequipped states, the empty-state
+message, card geometry with no overlap (well 74, name 30, button 20, 9px bottom
+margin), console 0 errors, rojo build clean. Test clicks changed the live loadout
+and it was put back to Cindercrack Bat + Bramblejaw Trap as found.
+
 ## Rarity pills, state pills, and Gloomlotus's missing aura — 2026-09-09 (CLAUDE)
 
 **Garden rarity pills.** The card's `sub` line printed `RarityForTier`, which
