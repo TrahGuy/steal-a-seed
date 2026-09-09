@@ -389,6 +389,126 @@ local function mireHeadColor(model: Model, eye: BasePart): Color3?
 	return if head then head.Color else nil
 end
 
+--==============================================================================
+-- GLOOMLOTUS GETS THE AURA ITS SHEET ALREADY PROMISES
+--
+-- SeedData describes this species as carrying "a Neon halo, a Glass dew jewel,
+-- two emitters and a Highlight, and that budget is the rarity". It had the halo
+-- and the jewel and NEITHER of the other two -- a Mythic that built exactly as
+-- much moving detail as a Common Nubkin: none.
+--
+-- WHY IT WENT MISSING, WHICH IS ARCHITECTURAL RATHER THAN AN OVERSIGHT.
+-- Emberroot and Starbloom build their Mythics in CODE -- `pyrelotus(parent, at)`
+-- makes Attachments, ParticleEmitters and a PointLight as it goes. Tanglemire is
+-- a DATA table of PartSpecs replayed by replayPart, and a PartSpec can only ever
+-- become a BasePart. There was no way to say "emitter" in the format the
+-- approved geometry is stored in, so the two that were designed never shipped.
+--
+-- So it is retrofitted after the replay, which is exactly what retrofitMireEye
+-- below already does for this biome's slit eye, and for the same reason.
+--
+-- TWO EMITTERS, AS SPECIFIED, and they do different jobs -- one at a high rate
+-- just reads as fog:
+--
+--   Haze   slow, wide and long-lived, hanging around the crown rather than
+--          rising off it. Heavy drag so it hovers. This is the glow that says
+--          Mythic from across the plot.
+--   Motes  small, bright, sparse pinpricks drifting up through the haze. They
+--          stay small on purpose so they never merge into the haze -- the
+--          layering is what reads as radiating rather than as smoke.
+--
+-- LightInfluence 0 and LightEmission 1 on both, which is what keeps them bright
+-- under Tanglemire's dark ambient. A rarity tell that only works in good light
+-- is not a rarity tell, and this is the dim biome.
+--
+-- The Highlight is the third thing the sheet names: a rim on the crown alone,
+-- not the whole plant, so the silhouette lifts off the mire without the model
+-- turning into a lamp. Roblox stops rendering past about 31 Highlights at once;
+-- a 0.22% roll will not reach that, and the alternative -- a fourth emitter --
+-- is what the sheet explicitly did not ask for.
+--
+-- COST is about 40 live particles, an eighth of what Pyrelotus spends, because
+-- this plant is half its size and its aura hangs rather than churns.
+--==============================================================================
+local function retrofitGloomAura(model: Model, sp: SeedData.Species, hs: number)
+	-- The Neon shell is the aura's own geometry, so it is where the aura hangs.
+	local shell = model:FindFirstChild("Aura_HaloShell", true)
+	local crown = model:FindFirstChild("Premium_CrownHalo", true)
+	local host = shell or crown
+	if not (host and host:IsA("BasePart")) then
+		-- No approved aura geometry: this species is not the one this is for.
+		return
+	end
+
+	local glow = sp.Body
+	local pale = sp.Crown
+
+	local att = Instance.new("Attachment")
+	att.Name = "AuraAttachment"
+	att.Parent = host
+
+	local haze = Instance.new("ParticleEmitter")
+	haze.Name = "AuraHaze"
+	haze.Color = ColorSequence.new(glow, pale)
+	haze.LightInfluence = 0
+	haze.LightEmission = 1
+	haze.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.25 * hs),
+		NumberSequenceKeypoint.new(0.4, 1.05 * hs),
+		NumberSequenceKeypoint.new(1, 0.35 * hs),
+	})
+	haze.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.35, 0.72),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	haze.Lifetime = NumberRange.new(1.8, 3.0)
+	haze.Rate = 9
+	haze.Speed = NumberRange.new(0.15 * hs, 0.5 * hs)
+	haze.Drag = 3.2
+	haze.Rotation = NumberRange.new(-30, 30)
+	haze.RotSpeed = NumberRange.new(-14, 14)
+	haze.Acceleration = Vector3.new(0, 0.25 * hs, 0)
+	haze.EmissionDirection = Enum.NormalId.Top
+	haze.SpreadAngle = Vector2.new(180, 180)
+	haze.Parent = att
+
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "AuraMotes"
+	motes.Color = ColorSequence.new(pale)
+	motes.LightInfluence = 0
+	motes.LightEmission = 1
+	motes.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.25, 0.16 * hs),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	motes.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.25),
+		NumberSequenceKeypoint.new(0.8, 0.4),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	motes.Lifetime = NumberRange.new(1.4, 2.4)
+	motes.Rate = 7
+	motes.Speed = NumberRange.new(0.5 * hs, 1.2 * hs)
+	motes.Drag = 1.1
+	motes.Acceleration = Vector3.new(0, 0.6 * hs, 0)
+	motes.EmissionDirection = Enum.NormalId.Top
+	motes.SpreadAngle = Vector2.new(70, 70)
+	motes.Parent = att
+
+	local rim = Instance.new("Highlight")
+	rim.Name = "AuraRim"
+	rim.FillTransparency = 1
+	rim.OutlineColor = glow
+	rim.OutlineTransparency = 0.45
+	rim.DepthMode = Enum.HighlightDepthMode.Occluded
+	-- The crown only. A rim around the whole plant outlines the peat hummock and
+	-- the mud clods too, which reads as a selection box rather than as an aura.
+	rim.Adornee = crown or host
+	rim.Parent = model
+end
+
 local function retrofitMireEye(model: Model, skin: Color3)
 	-- Whichever amber stands further from this species' own body.
 	local sclera = if math.abs(luminance(SCLERA_LIGHT) - luminance(skin))
@@ -1098,6 +1218,8 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 			-- biome's eye is a slit, and the shared face builder is never
 			-- reached from here to give it one.
 			retrofitMireEye(model, sp.Body)
+			-- Answers immediately for the four species with no aura geometry.
+			retrofitGloomAura(model, sp, hs)
 			return finish()
 		end
 		-- No approved geometry for this id. Falling through would build a

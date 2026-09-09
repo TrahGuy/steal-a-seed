@@ -1406,6 +1406,7 @@ export type PlantCard = {
 	setSelected: (boolean, string?) -> (),
 	setWeightTag: (string?, Color3?) -> (),
 	setStatusTag: (string?, Color3?, Color3?) -> (),
+	setSubPill: (boolean?, Color3?) -> (),
 	setProgress: (number?, Color3?) -> (),
 	setReadyPulse: (boolean) -> (),
 	setStageTheme: (string) -> (),
@@ -1869,6 +1870,58 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	sub.TextXAlignment = Enum.TextXAlignment.Center
 	sub.Active = false
 	sub.ZIndex = Z_LABEL
+
+	--==========================================================================
+	-- A PILL BEHIND THE SUBTITLE, FOR WHEN IT IS A RARITY
+	--
+	-- The sub line carries different things on different cards -- a rarity, a
+	-- countdown, an instruction -- and only one of those is a LABEL worth
+	-- boxing. So the pill is off by default and the caller turns it on for the
+	-- line that is naming a thing rather than describing a state.
+	--
+	-- It sizes itself off the text rather than being given a width, because the
+	-- words it wraps run from "RARE" to "UNDISCOVERED" and a fixed pill would
+	-- either clip the long one or float around the short one. TextBounds is the
+	-- rendered width and it changes with the text, so the resize rides that
+	-- signal instead of every caller remembering to ask.
+	--
+	-- BEHIND, at Z_LABEL - 1. The sub keeps its own outline: on a busy plant
+	-- portrait the stroke is still what makes the word legible, and the pill is
+	-- there to group it, not to replace it.
+	--==========================================================================
+	local subPill = Instance.new("Frame")
+	subPill.Name = "SubPill"
+	subPill.AnchorPoint = Vector2.new(0.5, 1)
+	subPill.Position = UDim2.new(0.5, 0, 1, -3)
+	subPill.Size = UDim2.fromOffset(40, 17)
+	subPill.BackgroundColor3 = Color3.fromRGB(14, 12, 18)
+	subPill.BackgroundTransparency = 0.26
+	subPill.BorderSizePixel = 0
+	subPill.Active = false
+	subPill.Visible = false
+	subPill.ZIndex = Z_LABEL - 1
+	subPill.Parent = button
+	UIKit.corner(subPill, 5)
+	local subPillEdge = UIKit.stroke(subPill, WHITE, 1, 0.82)
+
+	local function fitSubPill()
+		subPill.Size = UDim2.fromOffset(math.ceil(sub.TextBounds.X) + 16, 17)
+	end
+	sub:GetPropertyChangedSignal("TextBounds"):Connect(fitSubPill)
+
+	local function setSubPill(on: boolean?, colour: Color3?)
+		if not on then
+			subPill.Visible = false
+			return
+		end
+		fitSubPill()
+		-- The rarity tints the EDGE, not the fill. A filled pill in Mythic pink
+		-- behind pink text is a smear; a dark pill with a coloured rim keeps the
+		-- word readable and still says which band it is at a glance.
+		subPillEdge.Color = colour or WHITE
+		subPillEdge.Transparency = if colour then 0.25 else 0.82
+		subPill.Visible = true
+	end
 
 	local shownArt: string? = nil
 	local function setBackdrop(speciesId: string?)
@@ -2348,6 +2401,7 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 		setSelected = setSelected,
 		setWeightTag = setWeightTag,
 		setStatusTag = setStatusTag,
+		setSubPill = setSubPill,
 		setProgress = setProgress,
 		setReadyPulse = setReadyPulse,
 		setStageTheme = setStageTheme,

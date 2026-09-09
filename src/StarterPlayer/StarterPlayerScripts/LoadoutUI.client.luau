@@ -428,6 +428,9 @@ type Card = {
 	preview: UIKit.ItemPreview,
 	name: TextLabel,
 	state: TextLabel,
+	-- The box behind the state word, and the rim that says whether it is lit.
+	statePill: Frame,
+	statePillEdge: UIStroke,
 	stroke: UIStroke,
 }
 
@@ -487,9 +490,36 @@ local function acquireCard(index: number): Card
 	nameLabel.TextYAlignment = Enum.TextYAlignment.Top
 	nameLabel.ZIndex = 8
 
+	--==========================================================================
+	-- THE STATE GETS A PILL
+	--
+	-- EQUIPPED and TAP TO EQUIP were 11pt muted text on a transparent card, at
+	-- the bottom of a column of previews -- the one thing on the card a player
+	-- actually has to read to know what pressing it will do, and the quietest
+	-- thing on it. Boxed, it reads at a glance.
+	--
+	-- The pill hugs the words rather than spanning the card: EQUIPPED and TAP TO
+	-- EQUIP are different lengths, and a full-width box behind a short word looks
+	-- like a broken background rather than a label.
+	--==========================================================================
+	local statePill = Instance.new("Frame")
+	statePill.Name = "StatePill"
+	statePill.AnchorPoint = Vector2.new(0.5, 0)
+	statePill.Position = UDim2.new(0.5, 0, 0, 117)
+	statePill.Size = UDim2.fromOffset(60, 17)
+	statePill.BackgroundColor3 = Color3.fromRGB(14, 12, 18)
+	statePill.BackgroundTransparency = 0.26
+	statePill.BorderSizePixel = 0
+	statePill.Active = false
+	statePill.ZIndex = 7
+	statePill.Parent = button
+	UIKit.corner(statePill, 5)
+	local statePillEdge = UIKit.stroke(statePill, MUTED, 1, 0.72)
+
 	local stateLabel = Instance.new("TextLabel")
 	stateLabel.Name = "State"
-	stateLabel.Position = UDim2.new(0, 4, 0, 118)
+	stateLabel.AnchorPoint = Vector2.new(0.5, 0)
+	stateLabel.Position = UDim2.new(0.5, 0, 0, 118)
 	stateLabel.Size = UDim2.new(1, -8, 0, 16)
 	stateLabel.BackgroundTransparency = 1
 	stateLabel.Font = Enum.Font.FredokaOne
@@ -499,11 +529,19 @@ local function acquireCard(index: number): Card
 	stateLabel.ZIndex = 8
 	stateLabel.Parent = button
 
+	-- Rides TextBounds so the pill follows the words without every caller having
+	-- to remember to resize it.
+	stateLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
+		statePill.Size = UDim2.fromOffset(math.ceil(stateLabel.TextBounds.X) + 16, 17)
+	end)
+
 	local card: Card = {
 		button = button,
 		preview = preview,
 		name = nameLabel,
 		state = stateLabel,
+		statePill = statePill,
+		statePillEdge = statePillEdge,
 		stroke = stroke,
 	}
 	button.Activated:Connect(function()
@@ -875,6 +913,10 @@ local function refreshBag()
 			card.name.Text = row.label
 			card.state.Text = row.state
 			card.state.TextColor3 = if row.lit then READY else MUTED
+			-- Lit means EQUIPPED or IN HAND: the rim picks that up so the two
+			-- states are told apart by more than a shade of grey.
+			card.statePillEdge.Color = if row.lit then READY else MUTED
+			card.statePillEdge.Transparency = if row.lit then 0.3 else 0.72
 			card.stroke.Color = if row.lit then PICKED else PANEL.Edge
 			card.stroke.Transparency = if row.lit then 0 else 0.45
 		end

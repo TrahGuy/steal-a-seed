@@ -621,6 +621,7 @@ local function refresh(paint: boolean)
 		offers[1] = nil
 		slot.name.Text = "No Plot"
 		slot.name.TextColor3 = GHOST
+		slot.setSubPill(false)
 		slot.sub.Text = "Claim one first"
 		slot.sub.TextColor3 = GHOST
 		return
@@ -713,8 +714,26 @@ local function refresh(paint: boolean)
 					offers[index] = occupant.id
 					slot.name.Text = species.Name
 					slot.name.TextColor3 = band
-					slot.sub.Text = string.upper(SeedData.RarityForTier(occupant.tier))
-					slot.sub.TextColor3 = Color3.fromRGB(220, 218, 225)
+					--==================================================
+					-- THE PILL NAMES THE RARITY, NOT THE TIER
+					--
+					-- This line printed RarityForTier, which despite its
+					-- name returns the TIER -- "COLOSSAL", "GIANT". The
+					-- weight tag in the corner already says "7 tier", so
+					-- the card was spending both of its word slots on the
+					-- same fact and never once said whether the thing was
+					-- Common or Mythic.
+					--
+					-- So it carries the SPECIES rarity now, in the rarity
+					-- palette the Index already uses, boxed so it reads as
+					-- a label rather than as a caption. Nothing is lost:
+					-- the tier is still on the tag above it.
+					--==================================================
+					local rarity = species.Rarity or "Common"
+					slot.sub.Text = string.upper(rarity)
+					slot.sub.TextColor3 = GameConfig.RarityColor[rarity]
+						or Color3.fromRGB(220, 218, 225)
+					slot.setSubPill(true, GameConfig.RarityColor[rarity])
 				else
 					slot.setEmpty(false)
 					slot.setModel("pod:" .. SeedData.RarityForTier(occupant.tier),
@@ -735,6 +754,7 @@ local function refresh(paint: boolean)
 
 						slot.name.Text = "Ready to Hatch"
 						slot.name.TextColor3 = band
+						slot.setSubPill(false)
 						slot.sub.Text = "HOLD [E] IN FIELD"
 						slot.sub.TextColor3 = ACCENT
 					else
@@ -747,6 +767,7 @@ local function refresh(paint: boolean)
 
 						slot.name.Text = "Hatching..."
 						slot.name.TextColor3 = GHOST
+						slot.setSubPill(false)
 						slot.sub.Text = string.format("%d%% Grown", math.floor(frac * 100))
 						slot.sub.TextColor3 = GHOST
 					end
@@ -760,6 +781,7 @@ local function refresh(paint: boolean)
 			offers[index] = nil
 			slot.name.Text = "Empty Slot"
 			slot.name.TextColor3 = GHOST
+			slot.setSubPill(false)
 			slot.sub.Text = "+ Plant"
 			slot.sub.TextColor3 = Color3.fromRGB(130, 175, 95)
 		end

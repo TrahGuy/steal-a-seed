@@ -1,5 +1,53 @@
 # Steal a Seed — Session Handoff
 
+## Rarity pills, state pills, and Gloomlotus's missing aura — 2026-09-09 (CLAUDE)
+
+**Garden rarity pills.** The card's `sub` line printed `RarityForTier`, which
+despite its name returns the TIER -- "COLOSSAL", "GIANT". The weight tag in the
+corner already said "7 tier", so the card spent both word slots on the same fact
+and never once said whether a plant was Common or Mythic. It now carries the
+SPECIES rarity in the `GameConfig.RarityColor` palette the Index already uses,
+boxed by a new `setSubPill` on `UIKit.plantCard`. Nothing was lost: the tier is
+still on the tag above it.
+
+The pill tints its EDGE, not its fill -- a filled pill in Mythic pink behind pink
+text is a smear. It sizes off `sub.TextBounds` so it hugs "RARE" and
+"UNDISCOVERED" alike, and it is OFF by default: the sub line also carries
+countdowns and instructions, and only a rarity is a label worth boxing.
+
+**Bag state pills.** `EQUIPPED` / `TAP TO EQUIP` were 11pt muted text on a
+transparent card -- the one thing a player must read to know what pressing it
+does, and the quietest thing on the card. Now a pill that hugs the words, with
+the rim picking up `lit` so equipped and unequipped differ by more than a shade
+of grey.
+
+**Gloomlotus had no aura, and the cause was architectural.** `SeedData` describes
+it as carrying "a Neon halo, a Glass dew jewel, two emitters and a Highlight, and
+that budget is the rarity". It had the halo and the jewel and NEITHER of the
+other two -- measured: 0 emitters, 0 Highlight, 0 lights, identical to a Common
+Nubkin, while Pyrelotus had 4 emitters and Supernovus 1.
+
+Emberroot and Starbloom build their Mythics in CODE, so `pyrelotus(parent, at)`
+can make Attachments and ParticleEmitters as it goes. Tanglemire is a DATA table
+of PartSpecs replayed by `replayPart`, and a PartSpec can only become a BasePart
+-- there was no way to say "emitter" in the format the approved geometry is
+stored in, so the two that were designed never shipped.
+
+`retrofitGloomAura` adds them after the replay, which is exactly what
+`retrofitMireEye` beside it already does for this biome. Two emitters as
+specified -- a slow wide Haze that hangs, and sparse bright Motes drifting
+through it -- plus a Highlight rimming the crown alone. Both run
+`LightInfluence 0` / `LightEmission 1`, because a rarity tell that only works in
+good light is no use in the dim biome. About 40 live particles, an eighth of
+Pyrelotus.
+
+Verified in Play: gloomlotus now builds `AuraHaze` + `AuraMotes` (both enabled)
+and one Highlight adorned to `Premium_CrownHalo`; nubkin still builds none. The
+Garden showed 20 pill frames with 9 visible on the 9 grown plants -- LEGENDARY
+gold, MYTHIC pink, EPIC purple, RARE blue -- with all 9 tier tags still present.
+The Bag showed 4 state pills sized 87x17 and 65x17, green rim on EQUIPPED and
+muted on TAP TO EQUIP. Console 0 errors; rojo build clean.
+
 ## The rail is two kinds of button — 2026-09-09 (CLAUDE)
 
 Final shape, after the owner narrowed the previous change: **Index and Shop keep
