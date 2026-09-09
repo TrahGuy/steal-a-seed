@@ -135,11 +135,35 @@ local swingTracks: { [Player]: AnimationTrack } = {}
 local animationCache: { [string]: Animation } = {}
 local immuneUntil: { [Player]: number } = {}
 local placeReadyAt: { [Player]: number } = {}
--- Victims currently mid-knockback, and the flag their own client sets when it
--- reports that the body has stopped. Same handshake NestService uses, and a
--- separate table on purpose: two systems each knowing about their own throws is
--- simpler than one shared flag two systems race for.
-local flying: { [Player]: boolean } = {}
+--==============================================================================
+-- WHO IS MID-KNOCKBACK, AND WHICH LAUNCH IT IS
+--
+-- This was `flying[player] = true` and an acknowledgement that carried nothing:
+-- any "I have stopped" from that player cleared whatever launch happened to be
+-- current. Two things went wrong with that, and the first one happened on
+-- every single hit.
+--
+-- A STALE ANSWER RELEASED A NEWER LAUNCH. The client could not report inside
+-- the old 1.1s deadline -- it needed about 1.55s -- so the server timed out,
+-- restored the rig, and the client went on running. Its eventual report then
+-- arrived against whatever came next.
+--
+-- AND `false` IS FALSY, which made the acknowledgement itself a hole. Every
+-- guard in this file asks `if flying[player] then`, so between the client's
+-- report and the backstop task waking up to clean up -- up to a twentieth of a
+-- second -- the victim read as NOT flying while another task still owned their
+-- ragdoll. A second knockback landing in that window would have called
+-- RagdollOn on an already-limp rig, taken an EMPTY set of constraints back, and
+-- left the player limp forever when its partner restored nothing.
+--
+-- So the value is the LAUNCH TOKEN, which is a non-empty string and therefore
+-- always truthy. Every `if flying[x] then` guard in this file is unchanged and
+-- now closes that window as well. The acknowledgement lands in a second table
+-- keyed by the same token, so a report can only ever end the launch it names.
+--==============================================================================
+local flying: { [Player]: string } = {}
+local acked: { [Player]: string } = {}
+local launchSeq = 0
 
 type Trap = {
 	owner: Player,
@@ -498,7 +522,22 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 	if flying[victim] then
 		return
 	end
-	flying[victim] = true
+
+	--==========================================================================
+	-- ONE TOKEN PER ACCEPTED LAUNCH
+	--
+	-- Server-minted, sent to the victim, and quoted back by them. It is what
+	-- makes "I have stopped" mean "I have stopped THIS", so a report from a
+	-- launch that has already ended cannot release the one that replaced it.
+	--
+	-- The counter alone would be enough within one server's life; the clock is
+	-- in there so a token is also readable in a log, which is where these are
+	-- actually going to be debugged from.
+	--==========================================================================
+	launchSeq += 1
+	local token = string.format("b%d@%.2f", launchSeq, now())
+	flying[victim] = token
+	acked[victim] = nil
 
 	--==========================================================================
 	-- THE POD COMES OFF FIRST, AT THE FEET THEY ARE STILL STANDING ON
@@ -563,11 +602,26 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 			-- here. What is shared is the branch that makes a launch obey the
 			-- parabola it was given, which is not a guardian behaviour at all.
 			--==================================================================
-			rem:FireClient(victim, dir, speed, item.Lift, C.ClearStuds, 0, {
-				up = C.ClearUpStuds,
-				camera = false,
-				tumble = 0.55,
-			})
+			--==============================================================
+			-- THE STYLE TABLE CARRIES THE PROTOCOL TOO
+			--
+			-- It is already the optional argument no guardian sends, which
+			-- makes it the one place a bat can say something without the
+			-- guardian path being able to hear it. No second remote: this one
+			-- is a table, and a table takes fields.
+			--
+			-- `deadline` is in SERVER time, not a duration, because a duration
+			-- starts counting when the packet is UNWRAPPED and the wire time is
+			-- exactly the error we are trying to leave room for. Both sides can
+			-- read Workspace:GetServerTimeNow(), so both sides mean the same
+			-- instant.
+			--
+			-- `minLimp` is a duration on purpose, and the opposite reasoning:
+			-- it is a floor on how long the victim SEES themselves down, so it
+			-- should start when their machine starts drawing it.
+			--==============================================================
+			rem:FireClient(victim, dir, speed, item.Lift, C.ClearStuds, 0,
+				WeaponData.BatThrowStyle(token, Workspace:GetServerTimeNow()))
 		end)
 	end
 
@@ -575,26 +629,73 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 	-- A BOUNDED TUMBLE, AND ONE RESTORE
 	--
 	-- The client says when it has settled and this waits for that -- but only up
-	-- to VictimLimpSeconds, because a bat hit has to END. A guardian can afford
-	-- a six-second backstop; a bat that left somebody limp for six seconds after
-	-- a shove would be a stun, and this file does not do stuns.
+	-- to VictimBackstopSeconds, because a bat hit has to END. A guardian can
+	-- afford a six-second backstop; a bat that left somebody limp for six
+	-- seconds after a shove would be a stun, and this file does not do stuns.
+	--
+	-- THIS WAITED ON VictimLimpSeconds AND THAT WAS THE BUG. The same 1.1
+	-- seconds was being used as the thing the player feels AND as the safety net
+	-- -- so the net was set earlier than the client could possibly answer, and
+	-- fired on every single hit. The client is given the 1.1 now; this is the
+	-- 1.35 behind it, and in the normal case it never reaches the end of its
+	-- own loop.
 	--
 	-- One exit, reached by every path, for the reason written over throwPlayer:
 	-- a lock only the happy path releases is not a lock, it is a trap.
 	--==========================================================================
 	task.spawn(function()
-		local deadline = now() + C.VictimLimpSeconds
+		local deadline = now() + C.VictimBackstopSeconds
+		local why = "the backstop"
 		while now() < deadline do
-			if flying[victim] == false then
+			-- Only THIS launch's acknowledgement ends this loop. One from the
+			-- launch before it names a token that is no longer here.
+			if acked[victim] == token then
+				why = "the client"
 				break
 			end
 			if victim.Parent ~= Players or not body.humanoid.Parent
 				or body.humanoid.Health <= 0 then
+				-- Not a failure to report. There is nothing left to report ON,
+				-- and warning about it would cry wolf on every death in a fight
+				-- -- which is most of them.
+				why = "the body went away"
 				break
 			end
 			task.wait(0.05)
 		end
+
+		--======================================================================
+		-- AND ONLY THIS LAUNCH CLEANS UP AFTER THIS LAUNCH
+		--
+		-- `loosened` is the set of constraints THIS knockback switched off, and
+		-- it is the only thing that can switch them back on: a later RagdollOn
+		-- would find them already off and take an empty set. So the restore is
+		-- gated on the token still being ours. It always is today, because no
+		-- second launch can begin while `flying` is set -- the check is here so
+		-- that stays true if anybody ever relaxes that guard.
+		--======================================================================
+		if flying[victim] ~= token then
+			return
+		end
 		flying[victim] = nil
+		acked[victim] = nil
+		if why == "the backstop" then
+			--==================================================================
+			-- WORTH A WARNING, AND ONLY IN THIS ONE CASE
+			--
+			-- The client is given 1.10s and this waits 1.35s, so on any normal
+			-- connection the report is already here. Reaching the end of the
+			-- loop means it did not arrive at all -- a client that crashed,
+			-- lagged past a quarter of a second of round trip, or is refusing
+			-- to answer. All three are worth seeing in a log, and none of them
+			-- is worth breaking a fight over: the restore below happens either
+			-- way, which is the entire point of a backstop.
+			--==================================================================
+			warn(string.format(
+				"[Seed/CombatService] %s never reported landing (%s); restored " ..
+				"by the backstop after %.2fs.", victim.Name, token,
+				C.VictimBackstopSeconds))
+		end
 		pcall(NestService.RagdollOff, loosened)
 		if body.humanoid.Parent then
 			body.humanoid.PlatformStand = false
@@ -1089,7 +1190,10 @@ local function forget(player: Player)
 	swingReadyAt[player] = nil
 	immuneUntil[player] = nil
 	placeReadyAt[player] = nil
+	-- Both halves of the handshake, or a rejoining player inherits a token for
+	-- a launch that ended before they left.
 	flying[player] = nil
+	acked[player] = nil
 end
 
 function CombatService.Init()
@@ -1119,6 +1223,7 @@ function CombatService.Init()
 	table.clear(immuneUntil)
 	table.clear(placeReadyAt)
 	table.clear(flying)
+	table.clear(acked)
 	channel = nil
 	throwRemote = nil
 end
@@ -1156,9 +1261,34 @@ function CombatService.Start()
 
 	local throwRem = resolveThrowRemote()
 	if throwRem then
-		table.insert(serviceConnections, throwRem.OnServerEvent:Connect(function(player)
-			if flying[player] then
-				flying[player] = false
+		--======================================================================
+		-- "I HAVE STOPPED" -- AND IT HAS TO SAY WHICH LAUNCH
+		--
+		-- Rule 4: the sender is engine-stamped and cannot be forged; everything
+		-- else off the wire is a lie until checked. There is one argument now
+		-- and it is checked twice -- that it is a string at all, and that it is
+		-- the string THIS server minted for the launch this player is currently
+		-- in. Anything else is dropped without comment.
+		--
+		-- That is what makes a stale report harmless. The client that was still
+		-- flying an already-restored launch used to report into whatever came
+		-- next and end it early; now it names a token nobody is holding.
+		--
+		-- A GUARDIAN THROW REPORTS WITH NO TOKEN AT ALL. NestService sends no
+		-- style table, so the client has nothing to quote and fires nil, which
+		-- fails the type check here and is ignored -- while NestService's own
+		-- handler, which takes no arguments and never did, is untouched. The two
+		-- systems no longer answer each other's post.
+		--
+		-- The worst a victim can do by lying is quote their own live token
+		-- early, which shortens their own ragdoll -- a punishment they are
+		-- cutting short for themselves, and the backstop still bounds it.
+		--======================================================================
+		table.insert(serviceConnections, throwRem.OnServerEvent:Connect(function(player, token)
+			-- The rule itself lives in WeaponData so a spec can reach it. This
+			-- is the only place on the server that asks.
+			if WeaponData.AcceptsAck(flying[player], token) then
+				acked[player] = token :: string
 			end
 		end))
 	end

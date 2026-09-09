@@ -417,10 +417,58 @@ WeaponData.Combat = {
 	--==========================================================================
 	-- HOW LONG A HIT KEEPS YOU DOWN, AND HOW LONG IT CANNOT HAPPEN AGAIN
 	--
-	-- The tumble is 1.1 seconds. That is deliberately far short of a guardian's
-	-- -- HANDOFF measures those at 3.3 to 7.6 -- because a guardian hit is the
-	-- end of a raid and a bat hit is an interruption in one.
+	-- The tumble is about 1.1 seconds. That is deliberately far short of a
+	-- guardian's -- HANDOFF measures those at 3.3 to 7.6 -- because a guardian
+	-- hit is the end of a raid and a bat hit is an interruption in one.
 	--
+	-- FOUR DURATIONS, BECAUSE THEY ANSWER FOUR DIFFERENT QUESTIONS
+	--
+	-- These were two numbers doing three jobs, and the contradiction between
+	-- them was the bat ragdoll bug:
+	--
+	--   VictimLimpSeconds was BOTH what the player should feel AND the server's
+	--   safety net. The server restored the rig when it expired. But the
+	--   victim's client could not possibly report back that fast -- it needed
+	--   0.30s of launch guard, then 0.9s of minimum flight, then 0.35s of
+	--   stillness before it would even look at standing up, so its earliest
+	--   possible answer was about 1.55 seconds against a 1.1-second deadline.
+	--
+	-- So the server ALWAYS timed out first and restored the body while the
+	-- client was still flying it. The client then ran on for another second,
+	-- and any legitimate second hit arriving in that window was dropped on the
+	-- floor by the client's own re-entry guard -- a victim who went limp, and
+	-- did not move.
+	--
+	-- Split, they can each be set to what they are actually for:
+	--
+	--   MinLimp    the FLOOR. The client will not stand up before this even if
+	--              the body has physically stopped, so a bat hit reads as a hit
+	--              rather than a stumble. Nothing enforces this on the server;
+	--              it is presentation and it belongs to the machine drawing it.
+	--   Limp       what the player feels, and the DEADLINE the client is given.
+	--              It may settle earlier -- landing against a wall often does --
+	--              but at this instant it stops waiting and stands up wherever
+	--              it is.
+	--   Backstop   the server's safety net, and nothing else. It exists for a
+	--              client that crashed, lagged or lied, and it must be LATER
+	--              than the deadline or it fights the client for the body.
+	--   Immunity   how long until another bat may touch this player, and it
+	--              must be later than the Backstop -- a target that is still
+	--              mid-flight is filtered out of every swing, so a hit landing
+	--              between the two would be silently discarded.
+	--
+	-- THE ORDER IS THE CONTRACT: MinLimp < Limp < Backstop < Immunity. It is
+	-- asserted in WeaponSpec, because every one of these numbers is individually
+	-- reasonable and only their ORDER makes the system work.
+	--
+	-- The 0.25s between Limp and Backstop is round-trip grace: the client's
+	-- "I have stopped" has to cross the wire, and a backstop that fired while
+	-- that packet was in flight would be the original bug with smaller numbers.
+	--==========================================================================
+	VictimMinLimpSeconds = 0.9,
+	VictimLimpSeconds = 1.1,
+	VictimBackstopSeconds = 1.35,
+	--==========================================================================
 	-- THE IMMUNITY IS THE ONLY THING STOPPING A CHAIN-FLING, and it has to be
 	-- longer than the fastest bat's cooldown or the Cactus Club alone locks a
 	-- player on the floor forever: 0.65s of cooldown against a 1.1s tumble means
@@ -428,7 +476,6 @@ WeaponData.Combat = {
 	-- victim is always upright and moving for at least four tenths of a second
 	-- between hits, and two players with Cactus Clubs cannot do better than one.
 	--==========================================================================
-	VictimLimpSeconds = 1.1,
 	HitImmunitySeconds = 1.5,
 	--==========================================================================
 	-- POWER -> HORIZONTAL LAUNCH SPEED
@@ -635,6 +682,74 @@ function WeaponData.LaunchSpeed(item: Item): number
 end
 
 --==============================================================================
+-- THE LAUNCH HANDSHAKE
+--
+-- Two functions, here rather than in CombatService, for one reason: a spec can
+-- require this file and cannot require a service. The rule that decides whether
+-- a victim's "I have stopped" is allowed to end a ragdoll is the rule most
+-- worth testing in this whole subsystem, and a rule living inside a closure in
+-- Start() is a rule no test can reach.
+--
+-- So the server calls these, the spec calls these, and there is no second copy
+-- of the decision to drift.
+--==============================================================================
+
+--==============================================================================
+-- IS THIS REPORT ALLOWED TO END THAT LAUNCH?
+--
+-- Three ways to say no, and each of them was a real failure mode:
+--
+--   the report carries no token   a guardian throw, or a client old enough to
+--                                 predate the handshake. It must not end a BAT
+--                                 launch, which is what the old argument-less
+--                                 acknowledgement did to whatever was current.
+--   nothing is live               a duplicate. The client reports once, but a
+--                                 retry, a double-fire or a lying client must
+--                                 not resurrect a launch that already ended.
+--   the tokens differ            the stale one. This is the case that was
+--                                 happening on every single hit: the client
+--                                 could not answer inside its old deadline, so
+--                                 its report arrived after the server had moved
+--                                 on, and released whatever had replaced it.
+--
+-- Rule 4 of AGENTS.md, in one line: `quoted` came off the wire and is checked
+-- for type before it is compared, so a table or a number is a no rather than an
+-- error inside an event handler.
+--==============================================================================
+function WeaponData.AcceptsAck(live: any, quoted: any): boolean
+	return type(live) == "string" and live ~= ""
+		and type(quoted) == "string" and live == quoted
+end
+
+--==============================================================================
+-- WHAT A BAT SENDS THE VICTIM
+--
+-- The three presentation numbers a bat differs by -- and they are the whole
+-- difference, which is the point. A guardian sends NO style table at all, so
+-- every field here is nil on that path and ThrowFX falls back to the constants
+-- it had before any of this existed. That is why the guardian throw is
+-- "defaulted, not branched".
+--
+-- The protocol fields ride along in the same table because it is already the
+-- optional argument no guardian sends. A second RemoteEvent would have bought
+-- nothing except another thing to create, resolve and tear down.
+--==============================================================================
+function WeaponData.BatThrowStyle(token: string, serverNow: number): { [string]: any }
+	local C = WeaponData.Combat
+	return {
+		-- presentation: a swing at arm's length, no camera move, less spin
+		up = C.ClearUpStuds,
+		camera = false,
+		tumble = 0.55,
+		-- protocol
+		kind = "bat",
+		token = token,
+		minLimp = C.VictimMinLimpSeconds,
+		deadline = serverNow + C.VictimLimpSeconds,
+	}
+end
+
+--==============================================================================
 -- WHAT A GUARDIAN'S THROW WOULD BE, IN THE SAME UNITS
 --
 -- The guardians ARE described by an arc, so comparing a bat to one means
@@ -722,5 +837,45 @@ assert(WeaponData.Combat.HitImmunitySeconds > fastestCooldown, string.format(
 	fastestCooldown))
 assert(WeaponData.Combat.HitImmunitySeconds > WeaponData.Combat.VictimLimpSeconds,
 	"a victim must be upright before the next hit can land")
+
+--==============================================================================
+-- THE ORDER OF THE FOUR DURATIONS IS THE CONTRACT
+--
+-- Every one of these numbers is individually reasonable. Only their ORDER makes
+-- the system work, and the bug this guards against was exactly an order that had
+-- gone wrong -- the server's safety net set EARLIER than the client could
+-- possibly answer, so it always fired, and always fought the client for the body.
+--
+-- Asserted at load rather than in a spec alone, because a spec is run when
+-- somebody remembers and this runs on every server boot.
+--==============================================================================
+do
+	local C = WeaponData.Combat
+	assert(C.VictimMinLimpSeconds < C.VictimLimpSeconds, string.format(
+		"the limp floor %.2fs must be under the client's deadline %.2fs, or the " ..
+		"client can never reach the deadline it was given",
+		C.VictimMinLimpSeconds, C.VictimLimpSeconds))
+	assert(C.VictimLimpSeconds < C.VictimBackstopSeconds, string.format(
+		"the client's deadline %.2fs must be BEFORE the server's backstop %.2fs, " ..
+		"or the server restores the rig while the client is still flying it",
+		C.VictimLimpSeconds, C.VictimBackstopSeconds))
+	assert(C.VictimBackstopSeconds < C.HitImmunitySeconds, string.format(
+		"the backstop %.2fs must be before immunity ends %.2fs: a player who is " ..
+		"still mid-flight is filtered out of every swing, so a hit landing " ..
+		"between the two would be silently discarded",
+		C.VictimBackstopSeconds, C.HitImmunitySeconds))
+	--==========================================================================
+	-- AND THERE HAS TO BE ROOM FOR THE ROUND TRIP
+	--
+	-- The gap between the client's deadline and the server's backstop is the
+	-- only budget the "I have stopped" packet has to cross the wire in. Ten
+	-- milliseconds would satisfy the ordering above and still be the original
+	-- bug, so the margin is asserted rather than merely the order.
+	--==========================================================================
+	assert(C.VictimBackstopSeconds - C.VictimLimpSeconds >= 0.2, string.format(
+		"only %.0fms of round-trip grace between the client deadline and the " ..
+		"server backstop; 200ms is the floor",
+		(C.VictimBackstopSeconds - C.VictimLimpSeconds) * 1000))
+end
 
 return WeaponData

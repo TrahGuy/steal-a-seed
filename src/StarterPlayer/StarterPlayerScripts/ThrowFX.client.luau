@@ -123,6 +123,47 @@ local JOINTS_BACK_TIMEOUT = 1.5
 local throwing = false
 local remote: RemoteEvent? = nil
 
+--==============================================================================
+-- WHICH LAUNCH IS THE LIVE ONE
+--
+-- This file used to open with `if throwing then return end` and drop the packet.
+-- That is the right instinct -- two tumbles running at once would fight over one
+-- body -- and it was the wrong answer, because the launch it threw away was a
+-- legitimate hit the server had already committed to. The server had ragdolled
+-- the victim, taken their walk speed and dropped their pod; the client just
+-- never moved them. A player went limp on the spot and slid.
+--
+-- It was reachable on ordinary play, not on a race: the old client could not
+-- finish inside the deadline it was given, so it was routinely still running
+-- when the next hit landed.
+--
+-- THE NEWER LAUNCH WINS. A generation counter, bumped on arrival, and every
+-- loop below checks it before it acts. The task that has been superseded
+-- returns without restoring anything -- the camera, the flag, the pose are all
+-- the new task's to own now, and an old task tidying up after itself would be
+-- tidying up around a live throw.
+--==============================================================================
+local generation = 0
+
+--==============================================================================
+-- THE CAMERA VALUES ARE CAPTURED ONCE, NOT PER THROW
+--
+-- With one throw at a time it did not matter where these lived. It does now: a
+-- second throw arriving mid-tumble would capture the ZOOM THIS FILE HAD JUST
+-- SET as though it were the player's own setting, and hand it back to them at
+-- the end. Two hits in a row and the player keeps a 12-stud zoom floor forever.
+--
+-- So they are captured by the first throw of a chain and restored by the last,
+-- and a throw that is superseded restores nothing.
+--==============================================================================
+type Pristine = {
+	mode: Enum.CameraMode,
+	min: number,
+	max: number,
+	subject: Instance?,
+}
+local pristine: Pristine? = nil
+
 local function say(message: string)
 	print("[Seed/ThrowFX] " .. message)
 end
@@ -306,28 +347,84 @@ export type ThrowStyle = {
 	camera: boolean?,
 	-- Scale on the random spin. 1 is the tested guardian tumble.
 	tumble: number?,
+	--==========================================================================
+	-- AND THE FOUR THE PROTOCOL ADDED
+	--
+	-- All nil for a guardian, which is what keeps that path defaulted rather
+	-- than branched. Every one of them falls back to the constant that was
+	-- there before, so a throw with no style runs the identical code with the
+	-- identical numbers.
+	--==========================================================================
+	-- What the server will accept back as "I have stopped". Nil means this
+	-- launch has no handshake of its own -- a guardian -- and the report goes
+	-- out with nothing to quote, exactly as it always has.
+	token: string?,
+	-- Free text for the log. The behaviour hangs off the three numbers, never
+	-- off this: a branch on a name is a branch that lies the first time somebody
+	-- adds a third kind of hit.
+	kind: string?,
+	-- The floor on visible helplessness, in seconds from the moment this
+	-- machine unwraps the packet.
+	minLimp: number?,
+	-- When to stop waiting and stand up, as an absolute Workspace server time.
+	deadline: number?,
 }
 
 local function onThrown(dir: Vector3, speed: number, lift: number, clear: number,
 	hold: number?, style: ThrowStyle?)
 	-- Everything here came off the wire. A malformed packet should do nothing
 	-- rather than throw inside an event handler and leave the flag stuck.
-	if typeof(dir) ~= "Vector3" or type(speed) ~= "number" or type(lift) ~= "number" then
-		say("bad payload, ignoring")
-		return
-	end
-	if dir.Magnitude <= 0 or speed ~= speed or speed <= 0 then
-		say("bad direction or speed, ignoring")
-		return
-	end
-	if throwing then
-		return
-	end
-	throwing = true
-
 	-- Read once, here, so every use below is a plain local and no branch has to
 	-- remember that `style` might be absent.
 	local styleTable: any = if type(style) == "table" then style else nil
+	local token: string? = if styleTable and type(styleTable.token) == "string"
+		then styleTable.token
+		else nil
+
+	--==========================================================================
+	-- A PACKET THIS FILE CANNOT USE STILL HAS TO BE ANSWERED
+	--
+	-- These returns used to be silent, and silence costs the victim a full
+	-- backstop of lying on the floor: the server has already gone limp, and it
+	-- waits for a report that is never coming. Quoting the token back says "not
+	-- happening" in the only vocabulary the handshake has, and the server
+	-- restores them on the next tick instead of on a timeout.
+	--
+	-- A guardian throw has no token, so this is a plain return for them, which
+	-- is what it always was.
+	--==========================================================================
+	local function refuse(why: string)
+		say(why)
+		if remote and token then
+			pcall(function()
+				(remote :: RemoteEvent):FireServer(token)
+			end)
+		end
+	end
+
+	if typeof(dir) ~= "Vector3" or type(speed) ~= "number" or type(lift) ~= "number" then
+		refuse("bad payload, ignoring")
+		return
+	end
+	if dir.Magnitude <= 0 or speed ~= speed or speed <= 0 then
+		refuse("bad direction or speed, ignoring")
+		return
+	end
+
+	--==========================================================================
+	-- THE NEWER LAUNCH TAKES THE BODY
+	--
+	-- Bumped BEFORE anything else happens, so a task already running sees a
+	-- generation it does not recognise at its very next await and lets go
+	-- without touching the pose, the camera or the flag.
+	--==========================================================================
+	generation += 1
+	local myGen = generation
+	local function superseded(): boolean
+		return generation ~= myGen
+	end
+	throwing = true
+
 	local stepUp = 3
 	local wantCamera = true
 	local tumbleScale = 1
@@ -345,18 +442,64 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		end
 	end
 
+	--==========================================================================
+	-- WHEN THIS ONE HAS TO BE OVER
+	--
+	-- Two instants, measured differently on purpose.
+	--
+	-- THE FLOOR IS MEASURED HERE, on this machine, from the moment the packet is
+	-- unwrapped -- because it is a floor on what the VICTIM SEES, and what they
+	-- see starts when their own machine starts drawing it. Measuring it from a
+	-- server instant would make a laggy player's hit look shorter than a local
+	-- one's, which is backwards.
+	--
+	-- THE DEADLINE IS SERVER TIME, converted once, here. It has to be: it is one
+	-- half of an agreement with a backstop running on another machine, and a
+	-- duration would start counting after the wire time -- which is exactly the
+	-- error the agreement exists to absorb. Both sides read the same clock, so
+	-- both sides mean the same instant.
+	--
+	-- CLAMPED, because it came off the wire. A deadline already in the past
+	-- would stand the body up on the frame it was launched; one an hour out
+	-- would be the five-second give-up under a new name. The floor is generous
+	-- enough to still show a launch and the ceiling is the guardian give-up.
+	--==========================================================================
+	local hitAt = os.clock()
+	local minStandAt: number? = nil
+	local forcedStandAt: number? = nil
+	if styleTable then
+		local m = tonumber(styleTable.minLimp)
+		if m and m == m and m >= 0 then
+			minStandAt = hitAt + m
+		end
+		local d = tonumber(styleTable.deadline)
+		if d and d == d then
+			local remaining = d - workspace:GetServerTimeNow()
+			forcedStandAt = hitAt + math.clamp(remaining, 0.35, GIVE_UP_AFTER)
+		end
+	end
+
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	local unit = if flat.Magnitude > 0 then flat.Unit else Vector3.new(0, 0, 1)
 	local impulse = unit * speed + Vector3.new(0, speed * lift, 0)
-	say(string.format("HIT received: dir %s speed %.1f lift %.2f clear %.1f",
-		tostring(unit), speed, lift, if type(clear) == "number" then clear else -1))
+	say(string.format("HIT received: %s dir %s speed %.1f lift %.2f clear %.1f%s",
+		if styleTable and type(styleTable.kind) == "string"
+			then tostring(styleTable.kind)
+			else "guardian",
+		tostring(unit), speed, lift,
+		if type(clear) == "number" then clear else -1,
+		if forcedStandAt
+			then string.format(" | up by %.2fs, no earlier than %.2fs",
+				forcedStandAt - hitAt,
+				if minStandAt then minStandAt - hitAt else 0)
+			else ""))
 
 	task.spawn(function()
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		local root = rootOf()
 		if not (humanoid and root) then
-			say("no character to throw")
+			refuse("no character to throw")
 			throwing = false
 			return
 		end
@@ -389,9 +532,24 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		--
 		-- All three are captured and restored.
 		--======================================================================
-		local wasMode = player.CameraMode
-		local wasMin = player.CameraMinZoomDistance
-		local wasMax = player.CameraMaxZoomDistance
+		--==================================================================
+		-- CAPTURED ONCE PER CHAIN, NOT ONCE PER HIT
+		--
+		-- See the banner on `pristine`: a second hit landing mid-tumble would
+		-- otherwise record this file's own 12-stud zoom floor as the player's
+		-- preference and give it back to them at the end.
+		--==================================================================
+		if not pristine then
+			pristine = {
+				mode = player.CameraMode,
+				min = player.CameraMinZoomDistance,
+				max = player.CameraMaxZoomDistance,
+			}
+		end
+		local kept = pristine :: Pristine
+		local wasMode = kept.mode
+		local wasMin = kept.min
+		local wasMax = kept.max
 		--==================================================================
 		-- A BAT DOES NOT TOUCH THE CAMERA
 		--
@@ -426,7 +584,13 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		-- moment the root is back underneath the body.
 		--======================================================================
 		local camera = workspace.CurrentCamera
-		local wasSubject: Instance? = if camera then camera.CameraSubject else nil
+		-- Into `pristine` with the other three, and for the same reason: a
+		-- second hit mid-tumble would capture the HEAD this file just pointed
+		-- the camera at, and restore the player to it permanently.
+		if camera and kept.subject == nil then
+			kept.subject = camera.CameraSubject
+		end
+		local wasSubject: Instance? = kept.subject
 		local headPart = character:FindFirstChild("Head")
 		if wantCamera and camera and headPart and headPart:IsA("BasePart") then
 			camera.CameraSubject = headPart
@@ -486,6 +650,9 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			-- The tested path, unchanged: hold the velocity outright.
 			local holdUntil = os.clock() + holdFor
 			while os.clock() < holdUntil do
+				if superseded() then
+					return
+				end
 				humanoid.PlatformStand = true
 				for _, part in ipairs(bodyParts()) do
 					part.AssemblyLinearVelocity = impulse
@@ -519,6 +686,9 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			local restored = 0
 			local struck = false
 			while os.clock() < guardUntil do
+				if superseded() then
+					return
+				end
 				humanoid.PlatformStand = true
 				local r = character:FindFirstChild("HumanoidRootPart")
 				if r and r:IsA("BasePart") then
@@ -584,10 +754,44 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		local torso = torsoOf(character)
 		local settledFor = 0
 		local flightStart = os.clock()
-		local minFlightTime = 0.9 -- Guarantee minimum flight arc
-		local deadline = os.clock() + GIVE_UP_AFTER
 
-		while os.clock() < deadline do
+		--======================================================================
+		-- HOW LONG THIS IS ALLOWED TO TAKE
+		--
+		-- THIS LOOP IS WHERE THE BAT BUG LIVED. Its three constants are tuned
+		-- for a guardian -- 0.9s of minimum flight, then 0.35s of stillness --
+		-- so the earliest it could possibly break was 1.25 seconds after the
+		-- guard ended, or about 1.55 from the hit. The server was restoring the
+		-- rig at 1.1. It timed out on EVERY hit, and the two machines then
+		-- fought over the body for the second it took this to finish.
+		--
+		-- Neither number was wrong. They were being asked to describe two
+		-- different events: a guardian pitching you across a biome, and a player
+		-- clubbing you two studs sideways. So the caller says now.
+		--
+		--   standNoEarlierThan   the floor. A bat lands almost immediately -- it
+		--                        is a shove, not a flight -- and standing up the
+		--                        instant it stops reads as a stumble rather than
+		--                        a hit. So the floor is what actually produces
+		--                        the visible second of helplessness, and it is
+		--                        the ONLY thing in this file that does.
+		--   mustStandBy          the ceiling, from the server's own clock. The
+		--                        body stands up here wherever it is.
+		--
+		-- A GUARDIAN GETS EXACTLY WHAT IT GOT. No style means no floor and no
+		-- deadline, so both fall back to the two lines under them -- the same
+		-- 0.9 measured from the same flightStart, and the same GIVE_UP_AFTER.
+		-- The arithmetic below is identical for them, variable names aside.
+		--======================================================================
+		local standNoEarlierThan = minStandAt or (flightStart + 0.9)
+		local mustStandBy = forcedStandAt or (flightStart + GIVE_UP_AFTER)
+		local settleHold = if forcedStandAt then 0.16 else SETTLE_HOLD
+		local forced = false
+
+		while true do
+			if superseded() then
+				return
+			end
 			local r = rootOf()
 			if not r then
 				break
@@ -600,20 +804,36 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				bodySpeed = math.max(bodySpeed, torso.AssemblyLinearVelocity.Magnitude)
 			end
 
-			-- Only allow settle check after minimum flight arc has elapsed
-			local flightElapsed = os.clock() - flightStart
-			if flightElapsed >= minFlightTime then
+			-- Nothing counts as settled before the floor, however still the body
+			-- is: a bat hit that ended the moment the body stopped moving would
+			-- be over before the player registered it had started.
+			if os.clock() >= standNoEarlierThan then
 				if bodySpeed < SETTLE_SPEED then
 					settledFor += SETTLE_STEP
-					if settledFor >= SETTLE_HOLD then
+					if settledFor >= settleHold then
 						break
 					end
 				else
 					settledFor = 0
 				end
 			end
+
+			--==================================================================
+			-- AND THE DEADLINE IS CHECKED AFTER THE SETTLE, NOT INSTEAD OF IT
+			--
+			-- A body that has genuinely come to rest should stand up because it
+			-- has stopped, not because a clock ran out -- the two are the same
+			-- pose but only one of them is worth reporting. `forced` is what
+			-- separates them in the log.
+			--==================================================================
+			if os.clock() >= mustStandBy then
+				forced = true
+				break
+			end
 			task.wait(SETTLE_STEP)
 		end
+		say(string.format("settled after %.2fs%s", os.clock() - hitAt,
+			if forced then " (forced: hit the deadline)" else ""))
 
 		--======================================================================
 		-- 6. BRING THE BOX TO THE BODY. NOT THE BODY TO THE BOX.
@@ -681,9 +901,17 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		-- sockets. Waiting on the constraints themselves rather than sleeping a
 		-- guessed round trip.
 		--======================================================================
+		--==================================================================
+		-- AND IT NAMES THE LAUNCH IT IS ANSWERING
+		--
+		-- Nil for a guardian, which is the report NestService has always taken
+		-- and still takes -- its handler reads no arguments. CombatService
+		-- requires a string that matches the launch that player is actually in,
+		-- so this can only ever end the throw it belongs to.
+		--==================================================================
 		if remote then
 			pcall(function()
-				(remote :: RemoteEvent):FireServer()
+				(remote :: RemoteEvent):FireServer(token)
 			end)
 		end
 
@@ -705,6 +933,12 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		--======================================================================
 		local jointDeadline = os.clock() + JOINTS_BACK_TIMEOUT
 		while watched and not watched.Enabled and os.clock() < jointDeadline do
+			-- A hit landing while this is pinning the pose owns the body from
+			-- that moment. Pinning it against a live launch is the one thing
+			-- that would look exactly like the bug this file just fixed.
+			if superseded() then
+				return
+			end
 			if landedFrame and character.Parent then
 				character:PivotTo(landedFrame)
 				for _, part in ipairs(bodyParts()) do
@@ -745,29 +979,59 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		--
 		-- gap stays around a stud and the camera distance stays flat: nothing
 		-- moved. Either one jumping means the body is being pulled somewhere.
+		--
+		-- NINE LINES OF IT, AND A BAT DOES NOT GET THEM. This is a diagnostic
+		-- for a throw that happens once a raid; a bat hit happens every few
+		-- seconds in a fight, from every player at once, and nine prints each is
+		-- how a console stops being readable at the exact moment somebody needs
+		-- to read it. The measurement that matters for a bat -- how long the
+		-- body was actually down -- is one line, and it is below.
+		--
+		-- It also ends the throw a second sooner, which is worth having on its
+		-- own: `throwing` is what a preempting hit has to work around, and the
+		-- less time it is true for reasons that are purely cosmetic, the less
+		-- often anything has to be preempted at all.
 		--======================================================================
-		local watchUntil = os.clock() + STANDUP_WATCH
-		while os.clock() < watchUntil do
-			local rr = rootOf()
-			if not (rr and head and head:IsA("BasePart")) then
-				break
+		if not forcedStandAt then
+			local watchUntil = os.clock() + STANDUP_WATCH
+			while os.clock() < watchUntil do
+				if superseded() then
+					return
+				end
+				local rr = rootOf()
+				if not (rr and head and head:IsA("BasePart")) then
+					break
+				end
+				local cam = workspace.CurrentCamera
+				local camDist = if cam then (cam.CFrame.Position - head.Position).Magnitude else -1
+				local drift = if landedAt then (head.Position - landedAt).Magnitude else -1
+				say(string.format("  standing: gap %.2f | camera %.1f away | moved %.2f from the landing | %s",
+					(head.Position - rr.Position).Magnitude, camDist, drift,
+					tostring(humanoid:GetState())))
+				task.wait(0.1)
 			end
-			local cam = workspace.CurrentCamera
-			local camDist = if cam then (cam.CFrame.Position - head.Position).Magnitude else -1
-			local drift = if landedAt then (head.Position - landedAt).Magnitude else -1
-			say(string.format("  standing: gap %.2f | camera %.1f away | moved %.2f from the landing | %s",
-				(head.Position - rr.Position).Magnitude, camDist, drift,
-				tostring(humanoid:GetState())))
-			task.wait(0.1)
 		end
 
+		--======================================================================
+		-- THE LAST THROW OF A CHAIN PUTS THE CAMERA BACK
+		--
+		-- A superseded task has already returned long before here; this check
+		-- catches the one remaining case -- a hit that arrived during the last
+		-- few lines -- and leaves the camera to the launch that is now live.
+		-- Restoring it here would hand the player their zoom back in the middle
+		-- of a tumble.
+		--======================================================================
+		if superseded() then
+			return
+		end
 		player.CameraMinZoomDistance = wasMin
 		player.CameraMaxZoomDistance = wasMax
 		player.CameraMode = wasMode
+		pristine = nil
 		unbindVisible()
 
 		throwing = false
-		say("done, told the server")
+		say(string.format("done, told the server -- down for %.2fs", os.clock() - hitAt))
 	end)
 end
 
@@ -792,7 +1056,21 @@ end
 -- It is also the one moment this script is guaranteed a rig standing in its
 -- rest pose, which is where the root-to-torso offset has to be read.
 player.CharacterAdded:Connect(function(character)
+	--==========================================================================
+	-- A RESPAWN CANCELS WHATEVER WAS RUNNING
+	--
+	-- Bumping the generation is what actually stops it. Clearing `throwing`
+	-- alone never did: the task was not reading that flag, it was reading the
+	-- character it had captured -- which is now a destroyed model it would go on
+	-- pivoting, pinning and standing up for another second and a half.
+	--
+	-- `pristine` goes with it. A player who died mid-tumble has a camera the
+	-- engine has already rebuilt around their new character, and handing them
+	-- the old body's zoom floor is a setting they never chose.
+	--==========================================================================
+	generation += 1
 	throwing = false
+	pristine = nil
 	restOffset = nil
 	unbindVisible()
 	captureRest(character)

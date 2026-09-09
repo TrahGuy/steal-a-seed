@@ -252,6 +252,124 @@ check(C.VictimLimpSeconds < 3.3,
 	string.format("%.2fs", C.VictimLimpSeconds))
 
 --==============================================================================
+-- 4b. THE LAUNCH HANDSHAKE
+--
+-- The bat ragdoll had a timing contradiction that fired on EVERY hit, and none
+-- of the checks above could see it, because every number involved was
+-- individually reasonable. Only their ORDER was wrong:
+--
+--   the server restored the rig when VictimLimpSeconds expired at 1.10s
+--   the client could not answer before roughly 1.55s
+--
+-- So the server always timed out, always restored the body while the client was
+-- still flying it, and the client ran on for another second afterwards holding
+-- a re-entry guard that silently discarded the next legitimate hit -- a victim
+-- who went limp and did not move.
+--
+-- These are the assertions that would have caught it.
+--==============================================================================
+say("\n-- the launch handshake --")
+
+check(C.VictimMinLimpSeconds < C.VictimLimpSeconds,
+	"the limp floor is under the client deadline",
+	string.format("%.2fs < %.2fs", C.VictimMinLimpSeconds, C.VictimLimpSeconds))
+check(C.VictimLimpSeconds < C.VictimBackstopSeconds,
+	"THE CLIENT DEADLINE IS BEFORE THE SERVER BACKSTOP",
+	string.format("%.2fs < %.2fs", C.VictimLimpSeconds, C.VictimBackstopSeconds))
+check(C.VictimBackstopSeconds < C.HitImmunitySeconds,
+	"and the backstop lands before immunity ends",
+	string.format("%.2fs < %.2fs", C.VictimBackstopSeconds, C.HitImmunitySeconds))
+check(C.VictimBackstopSeconds - C.VictimLimpSeconds >= 0.2,
+	"with room for the round trip between them",
+	string.format("%.0fms", (C.VictimBackstopSeconds - C.VictimLimpSeconds) * 1000))
+
+--==========================================================================
+-- IMMUNITY OUTLASTS THE WHOLE RECOVERY, NOT JUST THE TUMBLE
+--
+-- The existing check above compares immunity against VictimLimpSeconds, and
+-- that was never the number that mattered: the victim is not available again
+-- when the client stands them up, but when the SERVER has finished with them.
+-- A hit landing between those two is dropped on the floor -- targetsFor filters
+-- out anybody still marked flying -- so the swing connects with nothing at all.
+--==========================================================================
+check(C.HitImmunitySeconds > C.VictimBackstopSeconds,
+	"a victim is fully released before another bat can touch them",
+	string.format("immunity %.2fs > backstop %.2fs, %.0fms to spare",
+		C.HitImmunitySeconds, C.VictimBackstopSeconds,
+		(C.HitImmunitySeconds - C.VictimBackstopSeconds) * 1000))
+check(C.HitImmunitySeconds > fastest + C.VictimBackstopSeconds - C.VictimLimpSeconds,
+	"and the fastest bat still cannot reach them the moment they are up",
+	string.format("%.2fs vs %.2fs", C.HitImmunitySeconds,
+		fastest + C.VictimBackstopSeconds - C.VictimLimpSeconds))
+
+--==========================================================================
+-- ONLY THE LIVE TOKEN ENDS THE LIVE LAUNCH
+--
+-- WeaponData.AcceptsAck is the actual rule the server runs -- not a copy of it
+-- written for this file. It was put in WeaponData precisely so this check could
+-- exist: the decision used to live inside a closure in CombatService.Start()
+-- and nothing could reach it.
+--==========================================================================
+local LIVE = "b7@1234.50"
+local STALE = "b6@1230.25"
+for _, case in ipairs({
+	{ LIVE, LIVE, true, "the live token releases its own launch" },
+	{ LIVE, STALE, false, "A STALE TOKEN CANNOT RELEASE A NEWER LAUNCH" },
+	{ nil, LIVE, false, "a report against nothing live is a duplicate, ignored" },
+	{ LIVE, nil, false, "a guardian report carries no token and ends no bat launch" },
+	{ LIVE, 7, false, "a number off the wire is refused, not compared" },
+	{ LIVE, {}, false, "a table off the wire is refused, not compared" },
+	{ "", "", false, "an empty token is never live" },
+}) do
+	check(WeaponData.AcceptsAck(case[1], case[2]) == case[3], case[4])
+end
+
+--== and a duplicate of the SAME token is still only one release ==--
+do
+	local live: any = LIVE
+	local releases = 0
+	for _ = 1, 3 do
+		if WeaponData.AcceptsAck(live, LIVE) then
+			releases += 1
+			-- what the server does: the launch is over, so nothing is live
+			live = nil
+		end
+	end
+	check(releases == 1, "three copies of one report release the launch once",
+		tostring(releases))
+end
+
+--==========================================================================
+-- WHAT A BAT SENDS, AND WHAT A GUARDIAN DOES NOT
+--
+-- The three presentation numbers are the whole difference between a bat throw
+-- and a guardian throw, and they are checked here so that "the guardian path is
+-- defaulted, not branched" stays a fact rather than a comment. A guardian sends
+-- NO style table, so every field below is nil on that path and ThrowFX falls
+-- back to its own constants.
+--==========================================================================
+do
+	local NOW = 1000
+	local style = WeaponData.BatThrowStyle("b1@0.00", NOW)
+	check(style.camera == false, "a bat never takes the camera")
+	check(style.tumble == 0.55, "and tumbles less than a guardian's 1.0",
+		tostring(style.tumble))
+	check(style.up == C.ClearUpStuds, "and is stepped clear by a fraction of a stud",
+		string.format("%.2f", style.up))
+	check(style.kind == "bat", "it says what it is")
+	check(style.token == "b1@0.00", "and carries the token it will be answered with")
+	check(style.minLimp == C.VictimMinLimpSeconds, "the floor rides along")
+	check(style.deadline == NOW + C.VictimLimpSeconds,
+		"and the deadline is an ABSOLUTE server instant, not a duration",
+		string.format("%.2f = now %.0f + %.2f", style.deadline, NOW, C.VictimLimpSeconds))
+	--== the deadline must leave the client time to actually do the work ==--
+	check(style.deadline - NOW > style.minLimp,
+		"a client told to wait until the floor can still reach its deadline",
+		string.format("%.2fs of deadline against a %.2fs floor",
+			style.deadline - NOW, style.minLimp))
+end
+
+--==============================================================================
 -- 5. THE TRAP'S OWN NUMBERS, AS THE BRIEF FIXES THEM
 --==============================================================================
 say("\n-- the trap --")

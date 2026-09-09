@@ -1,5 +1,170 @@
 # Steal a Seed — Session Handoff
 
+## The bat ragdoll: a launch token, and four durations instead of two — 2026-09-09 (CLAUDE)
+
+### The cause
+
+`WeaponData.Combat` had ONE number, `VictimLimpSeconds = 1.1`, doing two jobs:
+what the victim should feel, AND the deadline at which `CombatService.knockBack`
+restored the rig. The victim's client could not answer inside it. Measured from
+the code, `ThrowFX` needed:
+
+```
+0.30  CLEAN_GUARD, the ballistic guard after the impulse
+0.90  minFlightTime, before it would even look at settling
+0.35  SETTLE_HOLD, of continuous stillness, in 0.08 steps
+----
+1.55  earliest possible "I have stopped"   against a 1.10 deadline
+```
+
+So the server timed out on EVERY hit, restored the body while the client was
+still flying it, and the client ran on for about another second. Two further
+things fell out of that, and both were reachable in ordinary play:
+
+  * **A stale report released a newer launch.** The acknowledgement was
+    `FireServer()` with no arguments and the handler was
+    `if flying[player] then flying[player] = false end` — so a report from an
+    already-abandoned throw ended whatever had replaced it.
+  * **A legitimate hit was silently discarded.** Immunity expires at 1.5s but the
+    client held `throwing = true` until roughly 2.5s, and `if throwing then
+    return end` dropped the packet. The server had already ragdolled the victim,
+    taken their walk speed and dropped their pod. **That is the limp-without-fling:
+    a victim who goes down and does not move.**
+
+### The protocol
+
+One token per accepted launch, minted server-side, carried in the style table
+that no guardian sends, and quoted back by the client.
+
+  * `flying[player]` **is** the token now, not `true`. Every `if flying[x] then`
+    guard is unchanged and reads the same, and it closes a second hole: the ack
+    used to write `false`, which is FALSY, so for up to 0.05s between the report
+    and the backstop task waking, a victim read as not-flying while another task
+    still owned their ragdoll. A second `RagdollOn` there would have taken an
+    EMPTY constraint set and left them limp permanently.
+  * The rule lives in `WeaponData.AcceptsAck(live, quoted)` rather than in a
+    closure inside `CombatService.Start()` — **so that a spec can reach it.**
+    Type-checked before compared, per AGENTS.md rule 4.
+  * `WeaponData.BatThrowStyle(token, serverNow)` builds the payload. `deadline`
+    is an ABSOLUTE `Workspace:GetServerTimeNow()` instant, because a duration
+    would start counting after the wire time — the exact error the grace budget
+    exists to absorb. `minLimp` is a duration on purpose: it is a floor on what
+    the victim SEES, so it starts when their machine starts drawing it.
+  * A guardian sends no style, so token, kind, minLimp and deadline are all nil
+    and every one falls back to the constant that was there before. The guardian
+    path is **defaulted, not branched.** Its acknowledgement carries nil, fails
+    `AcceptsAck`, and can no longer end a bat launch — while `NestService`'s own
+    handler, which reads no arguments and never did, is untouched. **NestService
+    was not edited.**
+
+### Four durations, and their order is the contract
+
+```
+VictimMinLimpSeconds  0.90   floor: the client will not stand before this
+VictimLimpSeconds     1.10   the client's deadline (was also the backstop)
+VictimBackstopSeconds 1.35   NEW. the server's safety net, and nothing else
+HitImmunitySeconds    1.50   unchanged
+```
+
+Asserted at load in `WeaponData` and again in `WeaponSpec`, including the 250ms
+of round-trip grace — ten milliseconds would satisfy the ordering and still be
+the original bug. The backstop must also stay UNDER immunity: `targetsFor`
+filters out anybody still marked flying, so a hit landing between the two would
+be silently discarded.
+
+### The client no longer drops a launch
+
+`if throwing then return end` is replaced by a generation counter. **The newer
+launch wins**: the superseded task returns at its next await without restoring
+the pose, the camera or the flag. Camera zoom/mode/subject moved into a
+`pristine` record captured by the first throw of a chain and restored by the
+last — per-throw capture would have recorded this file's own 12-stud zoom floor
+as the player's preference on a second hit. A respawn bumps the generation too;
+clearing `throwing` alone never stopped the old task, which was reading the
+character it had captured, not the flag.
+
+A packet this file cannot use (malformed, or no character) now quotes the token
+back rather than returning silently, so the server restores on the next tick
+instead of on a timeout.
+
+The nine-line per-100ms stand-up watch is guardian-only now. It is a diagnostic
+for a throw that happens once a raid; a bat hit happens every few seconds from
+every player at once.
+
+### Verified — AUTOMATED
+
+All ten specs pass. `WeaponSpec` went 80 → 102 assertions; the 22 new ones cover
+the duration ordering, the round-trip grace, immunity against the BACKSTOP
+rather than against the tumble, and `AcceptsAck` against live / stale /
+duplicate / nil / number / table / empty-string reports.
+
+```
+BatClearanceSpec 939/939   MillSignSpec  clean   PlotSpec          65/65
+BatSwingSpec      93/93    SpeedSpec     332     StarbloomLimbSpec 71/71
+CycleSpec         31       TutorialSpec  93/93   TutorialPodSpec   263
+WeaponSpec       102/102
+```
+
+`rojo build` passes, `git diff --check` is clean, and all four files compile via
+`loadstring` in Edit. `WeaponData` was executed rather than only compiled, so the
+new load-time ordering asserts actually fired.
+
+### Verified — SINGLE-PLAYER PLAY, by driving the real remote
+
+Not a simulation: `ThrowVictim` was fired at a live client with each of the three
+payload shapes, and these are that client's own log lines.
+
+```
+bat                stepped 1.4 clear (+0.6 up) | camera 0.5..128 -> 0.5..128,
+                   subject Humanoid -> Humanoid | one impulse across 17 parts
+                   settled after 1.13s (forced) | DOWN FOR 1.14s | 21.2 studs
+guardian, hold=nil stepped 6.0 clear (+3.0 up) | camera -> 12.0..128, subject
+                   -> Head | held the launch velocity for 0.35s  (LEGACY_HOLD)
+                   settled after 5.45s | down for 6.38s | stand-up watch present
+guardian, hold=0   stepped 6.0 clear (+3.0 up) | camera -> 12.0..128, subject
+   (Astralmaw)     -> Head | one impulse, back on the arc 0 times (CLEAN_GUARD)
+                   settled after 5.33s | down for 6.24s
+```
+
+**All three branches select as intended, and the bat never touches the camera.**
+
+**Preemption, proven live.** Token AAA fired, then token BBB 0.4s later while
+AAA was still flying: both launched, and exactly ONE `settled` and ONE `done`
+appeared — BBB's, at 1.13s. AAA's task returned silently without standing anyone
+up. Under the old code BBB would have been discarded and the victim would have
+gone limp without moving. Console clean, no errors, and the ack for a token no
+launch held was ignored in silence.
+
+### NOT verified — needs two players, and is the remaining risk
+
+Everything above drives the remote directly, which exercises the whole CLIENT
+half and none of the server's own path. **A real bat hit has not been observed.**
+Nothing in `DebugService`'s 16 actions can trigger one and `targetsFor` excludes
+the swinger, so a second client is required. Still to observe:
+
+  * The measured PlatformStand duration for a REAL hit, which adds the server
+    round trip for `RagdollOff` on top of the 1.14s measured here. Expect roughly
+    1.2–1.3s against the 1.35s backstop.
+  * Trap release before launch, and the pod dropping at the hit position.
+  * The ten-case matrix in the brief: standing / running / jumping / carrying /
+    trapped / beside a wall / repeat hit after immunity / two attackers / dying
+    mid-recovery / leaving mid-recovery.
+  * Travel range for the weakest and strongest bats (Rootwood measured at 21.2
+    studs synthetically; Comet is 4x the launch speed and unmeasured).
+
+One known, accepted degradation: a player whose round trip exceeds 250ms will
+trip the backstop and log
+`"<name> never reported landing (<token>); restored by the backstop"`. That is
+benign — the client then finds the constraints already enabled and stands up
+immediately — but it is the one path where the server still finishes first.
+
+### Files
+
+`WeaponData.luau` (durations, AcceptsAck, BatThrowStyle, load-time asserts),
+`CombatService.luau` (token, payload, backstop, ack handler, cleanup),
+`ThrowFX.client.luau` (generation, deadline arithmetic, settle bounds, pristine
+camera, tokenised ack), `WeaponSpec.luau` (+22). `NestService.luau` untouched.
+
 ## The test suite runs clean again — 2026-09-09 (CLAUDE)
 
 All ten specs in `tools/tests/` pass. `SpeedSpec` had been THROWING rather than
