@@ -2,6 +2,18 @@
 
 ## x2 Money shop card artwork — 2026-09-09 (CODEX, ART ONLY)
 
+**Superseded artwork:** use `art/shop/x2-money-card-v2.png`, not v1. At the
+owner's direction, v2 removes the decorative corner foliage, coins, rays and
+sparkles, reduces the hero to two broad money bundles, and uses a nearly solid
+emerald field. It adds the exact permanent-benefit line
+`PERMANENT • EARN ×2 MONEY` beneath the title while retaining calm lower-right
+space for the native purchase control. Exact edit prompt:
+`output/imagegen/shop/x2-money-card-v2.prompt.md`. The source output was copied
+without replacing v1 and verified by SHA256. Integration remains unperformed.
+The owner has now defined the benefit as permanent, so integration must use a
+Game Pass ownership entitlement rather than the store's repeatable Developer
+Product receipt path. Price and Game Pass id are still undecided/unset.
+
 Owner requested an original x2 Money card for a new top shop section, with
 Claude to perform integration later. Generated and visually inspected
 `art/shop/x2-money-card-v1.png`: 3:2 emerald/gold card, sprouting money bundles,
