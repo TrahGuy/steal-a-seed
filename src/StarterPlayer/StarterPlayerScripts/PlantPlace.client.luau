@@ -100,6 +100,21 @@ end
 local BED_PARTS: { [string]: boolean } = {
 	SoilRow = true,
 	Clod = true,
+	--==========================================================================
+	-- BedWalk IS PART OF THE BED, EVEN THOUGH YOU CANNOT SEE IT
+	--
+	-- It is the invisible pad that stops a player standing ankle-deep in their
+	-- own soil, and it shares its top surface exactly with SoilRow -- so a ray
+	-- aimed at a row can land on either one. It is marked CanQuery = false,
+	-- which is not enough on its own at an exact tie.
+	--
+	-- Leaving it out made the bed unclickable wherever the pad won: soilPoint
+	-- returned nil, the ghost vanished, and nothing reached the server to
+	-- explain why. Both parts mean the same thing -- the player clicked their
+	-- bed -- and the server does not care which was hit, because clampToSoil
+	-- projects the point into the planter and zeroes Y before placing anything.
+	--==========================================================================
+	BedWalk = true,
 }
 
 local function soilPoint(): (Vector3?, BasePart?)
@@ -287,9 +302,25 @@ RunService.RenderStepped:Connect(function()
 	local here = soil.CFrame:PointToObjectSpace(point)
 	local halfX = math.max(soil.Size.X * 0.5 - PLANTING.EdgeMarginStuds, 0)
 	local halfZ = math.max(soil.Size.Z * 0.5 - PLANTING.EdgeMarginStuds, 0)
+	--==========================================================================
+	-- ABOVE THE ROWS, NOT ABOVE THE SLAB
+	--
+	-- This used to sit at the slab's top plus 6 hundredths. The SoilRow strips
+	-- lie ON that slab and stand another 0.18 proud of it, so the disc was a
+	-- tenth of a stud INSIDE the soil it was meant to be lying on -- invisible
+	-- everywhere except the bare furrows between rows.
+	--
+	-- Cleared over the rows instead. Over a furrow it now floats by the row
+	-- height, which is the right way round for an indicator: slightly proud and
+	-- readable beats flush and hidden.
+	--
+	-- This moves the PREVIEW only. Where the plant actually lands is decided by
+	-- PlantService and is deliberately left alone -- every saved garden is
+	-- anchored to that surface.
+	--==========================================================================
 	local on = soil.CFrame * CFrame.new(
 		math.clamp(here.X, -halfX, halfX),
-		soil.Size.Y * 0.5 + 0.06,
+		soil.Size.Y * 0.5 + GameConfig.Plot.SoilRowRise + 0.06,
 		math.clamp(here.Z, -halfZ, halfZ))
 
 	ghost.Size = Vector3.new(0.12, width, width)

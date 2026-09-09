@@ -2384,8 +2384,23 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- default grey if the gradient is ever dropped.
 	shell.BackgroundColor3 = PANEL.Fill
 	shell.BorderSizePixel = 0
-	-- Consumes the click, so tapping the panel does not reach the dimmer under
-	-- it and close the thing you are reading.
+	--==========================================================================
+	-- THIS ALONE DID NOT WORK, AND HERE IS WHY
+	--
+	-- `Active` was supposed to consume the click so tapping the panel did not
+	-- reach the dimmer under it. It never did, and every panel in the game has
+	-- been closing when you click its contents.
+	--
+	-- Two things combine. The ScreenGui is ZIndexBehavior = GLOBAL, where ZIndex
+	-- is compared as a raw number across the whole tree instead of within each
+	-- parent -- and Shell was left at 1, the same number the dimmer has, so it
+	-- never sorted above it. And even level, an ACTIVE FRAME does not stop a
+	-- GuiButton underneath from firing Activated; only another GuiButton does.
+	--
+	-- Raising Shell.ZIndex was tried and did not fix it. What fixes it is the
+	-- blocker below. `Active` stays because it is still correct for the touch
+	-- and hover paths.
+	--==========================================================================
 	shell.Active = true
 	shell.Parent = group
 	UIKit.corner(shell, 16)
@@ -2432,6 +2447,34 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Text = options.title
 	title.ZIndex = 3
+
+	--==========================================================================
+	-- THE CLICK BLOCKER
+	--
+	-- An invisible button the size of the panel, behind everything in it. It has
+	-- no handler and does nothing when pressed -- SWALLOWING THE CLICK IS THE
+	-- ENTIRE JOB. Without it a click on any part of a panel that is not itself a
+	-- button falls through to the dimmer, whose Activated closes the panel, so
+	-- pressing a shop card or the empty space beside one shut the shop.
+	--
+	-- ZIndex 2, which is above the dimmer's 1 and below the content's 3. Under
+	-- GLOBAL ZIndexBehavior those numbers are compared across the whole ScreenGui
+	-- rather than per parent, so this is what decides it -- at 0 or 1 the blocker
+	-- loses to the dimmer and the bug comes straight back.
+	--
+	-- It must be a GuiButton. An Active Frame in the same place does not stop the
+	-- dimmer's Activated from firing; that was the original fix and it never
+	-- worked.
+	--==========================================================================
+	local blocker = Instance.new("TextButton")
+	blocker.Name = "ClickBlocker"
+	blocker.Size = UDim2.fromScale(1, 1)
+	blocker.BackgroundTransparency = 1
+	blocker.BorderSizePixel = 0
+	blocker.AutoButtonColor = false
+	blocker.Text = ""
+	blocker.ZIndex = 2
+	blocker.Parent = shell
 
 	local close = Instance.new("TextButton")
 	close.Name = "Close"

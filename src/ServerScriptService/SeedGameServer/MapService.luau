@@ -481,6 +481,46 @@ function dressPlot(model: Model, cf: CFrame, level: number)
 			})
 		end
 
+		--======================================================================
+		-- SOMETHING TO STAND ON
+		--
+		-- Every part of this bed is collide = false, so a player walking onto
+		-- their own plot kept walking at FIELD level -- Y 0 -- while the soil
+		-- they were standing in reached 0.68. Their feet were buried to the
+		-- ankle in their own garden.
+		--
+		-- The soil itself cannot simply be made solid. The frame, the slab, the
+		-- rows and the clods are four different heights, so a player would trip
+		-- up and down over furrows and clods; and the slab in particular is
+		-- raycast against when placing a plant.
+		--
+		-- So: one invisible pad level with the top of the rows, which is the
+		-- surface the eye reads as the ground here.
+		--
+		--   CanQuery  = false, so the placement raycast still reaches the
+		--               Planter slab underneath and click-to-plant is unchanged.
+		--   CanTouch  = false, so it cannot fire a touch handler.
+		--   Collide   = true, which is the whole point.
+		--
+		-- NOTHING VISIBLE MOVES. The slab stays exactly where it is, which
+		-- matters more than it looks: PlantService anchors every saved plant to
+		-- `soil.CFrame * CFrame.new(x, soil.Size.Y * 0.5, z)`, so shifting that
+		-- surface would lift or sink every garden ever saved.
+		--======================================================================
+		local walkPad = build({
+			name = "BedWalk",
+			size = Vector3.new(bedWidth, 0.2, span),
+			cframe = at(0, soilTop + rise - 0.1, 0),
+			color = BED_SOIL,
+			transparency = 1,
+			collide = true,
+			studs = false,
+			parent = model,
+		})
+		walkPad.CanQuery = false
+		walkPad.CanTouch = false
+		walkPad.CastShadow = false
+
 		for gap = 1, bedRows - 1 do
 			if gap % PLOT.SoilClodStride == 1 then
 				local rowCentre = -span * 0.5 + (gap - 0.5) * PLOT.RowDepth

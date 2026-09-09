@@ -1,5 +1,53 @@
 # Steal a Seed — Session Handoff
 
+## Three reported bugs — FIXED 2026-09-09 (CLAUDE)
+
+**Every panel closed when you clicked its contents.** `UIKit.modal` set
+`shell.Active = true` with a comment saying it consumed the click. It never did,
+and the bug reached Index, Garden, Loadout, Marigold and Shop alike -- it only
+became obvious once shop cards started popping on hover and inviting a click.
+
+Two things combined. The ScreenGui is `ZIndexBehavior = Global`, where ZIndex is
+compared as a raw number across the whole tree, and Shell sat at 1 -- the same
+number as the dimmer, so it never sorted above it. And even level, an ACTIVE
+FRAME does not stop a GuiButton underneath from firing `Activated`; only another
+GuiButton does. Raising `Shell.ZIndex` was tried and measured: still broken.
+
+The fix is an invisible `ClickBlocker` TextButton at ZIndex 2 inside the Shell,
+with no handler -- swallowing the click is the whole job. Measured: card body
+click lands on the blocker, dimmer fires only for a click outside the panel, buy
+buttons and scrolling unaffected.
+
+**Feet were buried in the soil.** Every part of a plot bed is `collide = false`,
+so a player walked at FIELD level (Y 0) while the soil they stood in reached
+0.68. Only the fence posts and rails were solid; nothing in the bed was.
+
+The soil itself cannot be made solid -- frame, slab, rows and clods are four
+heights, so a player would trip over furrows, and the slab is what the placement
+raycast is aimed at. So MapService now builds one invisible `BedWalk` pad level
+with the row tops. Measured: feet 0.680 against a 0.680 surface, zero
+penetration, FloorMaterial Plastic.
+
+**Nothing visible moved**, which matters more than it looks: PlantService anchors
+every saved plant to `soil.CFrame * CFrame.new(x, soil.Size.Y * 0.5, z)`, so
+shifting that surface would lift or sink every garden ever saved.
+
+**The placement disc was buried.** It sat at slab-top + 0.06 = 0.56, but the
+SoilRow strips lying on that slab stand 0.18 proud of it at 0.68 -- so the disc
+was a tenth of a stud inside the soil it was meant to lie on, invisible except
+over the bare furrows. Now cleared over the rows: spans 0.680-0.800, clearance
++0.000.
+
+**One regression caught in test, not shipped.** The new pad shares its top
+surface exactly with SoilRow, so the placement ray can land on either, and
+`CanQuery = false` is not enough at an exact tie. `PlantPlace.BED_PARTS` did not
+list `BedWalk`, so wherever the pad won the ray the bed became unclickable --
+`soilPoint` returned nil, the ghost vanished and nothing reached the server to
+explain why. `BedWalk` is whitelisted now. The server needed no change: it has
+no part whitelist and clamps any world position into the planter.
+
+Console clean, `rojo build` clean.
+
 ## x2 Money buff indicator — INTEGRATED 2026-09-09 (CLAUDE)
 
 Codex's art note below is now out of date on its last paragraph: the asset is
