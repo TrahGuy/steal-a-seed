@@ -177,13 +177,11 @@ end
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "ShopButton",
-	face = RAIL.ShopFace,
-	shade = RAIL.ShopShade,
+	icon = RAIL.ShopIcon,
 	label = "Shop",
 	wide = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
-UIKit.railIcon(button, RAIL.ShopIcon, RAIL.IconSize)
 
 --==============================================================================
 -- THE PANEL

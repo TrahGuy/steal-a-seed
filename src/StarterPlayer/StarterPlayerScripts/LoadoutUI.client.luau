@@ -302,8 +302,7 @@ local heardProfile = false
 --==============================================================================
 local bagButton = UIKit.railButton(playerGui, {
 	name = "BagButton",
-	face = Color3.fromRGB(196, 148, 92),
-	shade = Color3.fromRGB(140, 96, 52),
+	icon = RAIL.BagIcon,
 	wide = false,
 })
 -- ANCHORED RIGHT, the same way GardenUI anchors the button above this one.
@@ -313,19 +312,6 @@ local bagButton = UIKit.railButton(playerGui, {
 bagButton.AnchorPoint = Vector2.new(1, 0)
 bagButton.Position = UDim2.new(1, -RAIL.Inset, 0,
 	RAIL.Inset + RAIL.SquareSize.Y + RAIL.Gap)
-
---==============================================================================
--- A SATCHEL, UPLOADED
---
--- This was nine frames -- body, flap, buckle and two straps -- drawn because a
--- glyph is a tofu risk. The owner supplied vector art for all four rail buttons,
--- so it is the artwork now.
---
--- This is the ONLY one of the four with no second home: the Bag modal's title
--- bar carries no icon, so nothing here is shared with a panel and there is no
--- drawn version left to keep.
---==============================================================================
-UIKit.railIcon(bagButton, RAIL.BagIcon, RAIL.IconSize)
 
 --==============================================================================
 -- THE INVENTORY PANEL

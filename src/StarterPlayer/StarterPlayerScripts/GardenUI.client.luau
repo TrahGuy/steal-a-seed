@@ -154,25 +154,11 @@ end
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "GardenButton",
-	face = RAIL.GardenFace,
-	shade = RAIL.GardenShade,
+	icon = RAIL.GardenIcon,
 	wide = false,
 })
 button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
-
---==============================================================================
--- THE SPROUT IS ARTWORK NOW, ON THE BUTTON ONLY
---
--- This was three rectangles in the biome's own stem and leaf colours, drawn
--- because a font glyph is a tofu risk. That reasoning still stands and the drawn
--- sprout is still in the game -- it is in this panel's TITLE BAR a few lines
--- down, where UIKit.sproutIcon is called a second time and is deliberately left
--- alone.
---
--- Only the rail button takes the uploaded vector.
---==============================================================================
-UIKit.railIcon(button, RAIL.GardenIcon, RAIL.IconSize)
 
 --==============================================================================
 -- THE BADGE COUNTS WHAT IS STILL COOKING

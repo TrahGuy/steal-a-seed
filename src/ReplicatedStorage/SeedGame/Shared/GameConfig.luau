@@ -2804,21 +2804,36 @@ GameConfig.Rail = {
 	SquareSize = Vector2.new(50, 50),
 	Radius = 12,
 	LabelSize = 22,
-	IconSize = 28,
 
-	-- Thick, and black. The outline is what made the reference read as a button
-	-- rather than as a coloured rectangle, and it is the one part the crops kept
-	-- losing at the edges.
+	--==========================================================================
+	-- TWO ICON SIZES, BECAUSE A BUTTON EITHER CARRIES A WORD OR IT DOES NOT
+	--
+	-- The icon used to be 28 on a coloured slab. There is no slab any more -- the
+	-- artwork IS the button -- so the icon has to fill the footprint the slab
+	-- used to, or the rail loses half its presence.
+	--
+	-- A square button has nothing else in it, so its icon takes the whole 50.
+	-- A wide one shares its 130 with a word: at 40 the label has 66px and
+	-- "Index" measures 62 at 22pt LuckiestGuy, which leaves a margin. 44 would
+	-- leave exactly 62 and 50 would clip it -- measured, not guessed.
+	--==========================================================================
+	IconWide = 40,
+	IconSquare = 50,
+
+	-- Thick, and black. Kept because UIKit.slab still uses them for the plant
+	-- card's action button; the rail buttons no longer have an outline to lose,
+	-- because they no longer have a rectangle.
 	Outline = Color3.fromRGB(0, 0, 0),
 	OutlineThickness = 3,
 
 	--==========================================================================
-	-- THREE FACES, SO THREE BUTTONS READ AS THREE THINGS
+	-- THREE FACES, WHICH THE RAIL NO LONGER PAINTS
 	--
-	-- Each is a face and a shade for the gradient under it. Blue, green and
-	-- amber: far enough apart to be told apart at a glance in the corner of the
-	-- eye, and none of them a Greenhollow plant colour -- chrome should not be
-	-- mistakable for something growing.
+	-- These were the slab colours: blue, green and amber, far enough apart to be
+	-- told apart in the corner of the eye. The rail buttons have no slab now, so
+	-- nothing reads them -- but they are NOT deleted, because they are what each
+	-- icon was drawn in. The identity moved into the artwork rather than being
+	-- lost, and these are the record of what it is.
 	--==========================================================================
 	IndexFace = Color3.fromRGB(64, 148, 220),
 	IndexShade = Color3.fromRGB(36, 102, 168),

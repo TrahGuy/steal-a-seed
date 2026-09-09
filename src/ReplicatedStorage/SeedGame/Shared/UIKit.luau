@@ -603,8 +603,7 @@ end
 --==============================================================================
 export type RailOptions = {
 	name: string,
-	face: Color3,
-	shade: Color3,
+	icon: string,
 	label: string?,
 	wide: boolean?,
 }
@@ -792,21 +791,47 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 		previous:Destroy()
 	end
 
-	local slab = UIKit.slab(layer, {
-		size = UDim2.fromOffset(size.X, size.Y),
-		face = options.face,
-		shade = options.shade,
-		radius = RAIL.Radius,
-		latticeSpacing = 18,
-		latticeSize = size,
-	})
-	slab.Name = options.name
+	--==========================================================================
+	-- THE ARTWORK IS THE BUTTON
+	--
+	-- This was a UIKit.slab: a coloured face, a gradient, a lattice, a rounded
+	-- corner and a black outline, with a small icon sitting on it. The owner
+	-- asked for the icon itself to be the button, with no background and not
+	-- inside a square, so the slab is gone and what is left is a transparent
+	-- ImageButton the same size the slab was.
+	--
+	-- SAME FOOTPRINT ON PURPOSE. 130x50 and 50x50 as before, so all four buttons
+	-- stay exactly where they were and the touch targets do not shrink -- an icon
+	-- is easier to miss than a plate, and making the target smaller as well would
+	-- be two regressions for the price of one.
+	--
+	-- UIKit.slab is NOT deleted: the plant card's action button still uses it.
+	-- Its UIKit.clicks was doing the click sound for the rail, so that call moves
+	-- here rather than being lost with the slab.
+	--==========================================================================
+	local button = Instance.new("ImageButton")
+	button.Name = options.name
+	button.Size = UDim2.fromOffset(size.X, size.Y)
+	button.BackgroundTransparency = 1
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.Parent = layer
+	UIKit.clicks(button)
+
+	local iconSize = if wide then RAIL.IconWide else RAIL.IconSquare
+	UIKit.railIcon(button, options.icon, iconSize)
 
 	if options.label then
-		local label = UIKit.outlined(slab, "Label", RAIL.LabelSize, WHITE, 2.5)
+		--======================================================================
+		-- The word keeps its own outline, which is now the only thing keeping it
+		-- readable -- there is no plate behind it. That is the same bet CashUI
+		-- makes with the cash and speed numbers, and for the same reason: a
+		-- 2.5px black stroke reads on grass, dirt and sky without a panel.
+		--======================================================================
+		local label = UIKit.outlined(button, "Label", RAIL.LabelSize, WHITE, 2.5)
 		label.AnchorPoint = Vector2.new(1, 0.5)
 		label.Position = UDim2.new(1, -10, 0.5, 1)
-		label.Size = UDim2.new(1, -(RAIL.IconSize + 24), 0, RAIL.LabelSize + 6)
+		label.Size = UDim2.new(1, -(iconSize + 24), 0, RAIL.LabelSize + 6)
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.Text = options.label
 		label.ZIndex = 3
@@ -816,9 +841,9 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	-- Every rail button gets the pop, from here rather than from four call
 	-- sites. One place to wire it is one place it can be wired twice.
 	--==========================================================================
-	hoverPop(slab)
+	hoverPop(button)
 
-	return slab
+	return button
 end
 
 --==============================================================================

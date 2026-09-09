@@ -127,13 +127,11 @@ gui.Parent = playerGui
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "IndexButton",
-	face = RAIL.IndexFace,
-	shade = RAIL.IndexShade,
+	icon = RAIL.IndexIcon,
 	label = "Index",
 	wide = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
-UIKit.railIcon(button, RAIL.IndexIcon, RAIL.IconSize)
 
 local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
 

@@ -1,5 +1,45 @@
 # Steal a Seed — Session Handoff
 
+## The rail lost its slabs — 2026-09-09 (CLAUDE)
+
+At the owner's direction the icon IS the button now: no background, not inside a
+square. `UIKit.railButton` no longer builds a `UIKit.slab` -- the coloured face,
+the gradient, the lattice, the rounded corner and the black outline are all gone,
+leaving a transparent `ImageButton` carrying the artwork.
+
+**Same footprint on purpose.** 130x50 and 50x50 as before, so all four buttons sit
+exactly where they were and the touch targets did not shrink -- an icon is easier
+to miss than a plate, and shrinking the target too would have been two
+regressions for one change. The icon grew to fill what the slab used to: 50 on a
+square button, 40 on a wide one. 40 because the label needs the rest -- "Index"
+measures 62px at 22pt LuckiestGuy and a 40px icon leaves it 66; 44 leaves exactly
+62 and 50 clips it. Measured, not guessed.
+
+`UIKit.slab` is NOT deleted -- the plant card's action button still uses it. Its
+`UIKit.clicks` was providing the rail's click cue, so that call moved into
+`railButton` rather than disappearing with the slab.
+
+`RAIL.IndexFace`/`ShopFace`/`GardenFace` and their shades are kept though nothing
+reads them: they are what each icon was drawn in, so the colour identity moved
+into the artwork rather than being lost, and those values are the record of it.
+
+The Shop and Index words survive with no plate behind them, carried by their own
+2.5px black outline -- the same bet CashUI already makes with the cash and speed
+numbers on grass and sky.
+
+**Known consequence, flagged:** Garden and Inventory were knocked out to outlines
+in the previous change, so with no slab behind them the game world is visible
+through the planter and the satchel. Shop and Index are still solid artwork and
+are unaffected. Re-filling those two is a one-word edit per path in the SVG
+masters if it reads badly in motion.
+
+Verified in Play: four transparent ImageButtons, no stroke/gradient/corner/lattice
+left on any of them; icons 40/40/50/50 all loaded; Index -> Shop -> Garden -> Bag
+each opened its own panel; badges still at Index 129,-1 and Garden 889,-1; all
+four back to UIScale 1.000 after hovering every one; after respawn one SeedRail,
+one copy of each button, one UIScale and one Icon each; console 0 errors; rojo
+build clean.
+
 ## Rail button vector icons — INTEGRATED 2026-09-09 (CLAUDE)
 
 Codex's asset note below is now complete: the four PNGs are uploaded and wired.
