@@ -1,5 +1,22 @@
 # Steal a Seed — Session Handoff
 
+## x2 Money shop card artwork — 2026-09-09 (CODEX, ART ONLY)
+
+Owner requested an original x2 Money card for a new top shop section, with
+Claude to perform integration later. Generated and visually inspected
+`art/shop/x2-money-card-v1.png`: 3:2 emerald/gold card, sprouting money bundles,
+large x2 MONEY lettering and clear lower-right space for a native price/button.
+Exact built-in image-generation prompt: `output/imagegen/shop/x2-money-card-v1.prompt.md`.
+Original output preserved and copied asset verified by SHA256.
+
+Owner's pending UI instructions: put this above SPEED, rename PREMIUM PODS to
+`???`, and remove the PLANTS section from this storefront only. Do not remove
+Garden/Index plants or player plants. Price, entitlement type/id and multiplier
+scope are not yet specified; no price or permanence claim is baked into the art.
+No upload/id, shop integration, purchase logic, economy change or Studio test
+was performed in this art pass. Card crop/readability in the real UI still needs
+verification; Claude should use a real button, not treat painted artwork as one.
+
 ## DUSTBOWL STATIC CARD BACKGROUNDS — 2026-09-08 (CODEX, ASSETS ONLY)
 
 Owner requested five missing Dustbowl background-only scenes for restored static
