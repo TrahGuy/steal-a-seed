@@ -654,6 +654,19 @@ local function refresh(paint: boolean)
 	--==========================================================================
 	local rows = math.max(capacity, #here)
 	local planted, waiting, rate = 0, 0, 0
+	--==========================================================================
+	-- WHAT THIS PLAYER EARNS, NOT WHAT THE PLANT IS WORTH
+	--
+	-- IncomePerSecond is the plant's intrinsic rate and stays that way -- the
+	-- Index prints it for species nobody owns. This panel is the player's OWN
+	-- garden, so every figure on it is multiplied by their cash passes. Without
+	-- this the x2 Money pass would pay double while the garden reported half of
+	-- it, which reads as the pass being broken.
+	--
+	-- Read once per paint rather than per slot, so all ten rows and the footer
+	-- can never disagree with each other.
+	--==========================================================================
+	local mult = GameConfig.cashMultiplier(player)
 
 	if paint then
 		setSlotCount(rows)
@@ -694,7 +707,7 @@ local function refresh(paint: boolean)
 					slot.setProgress(nil)
 					slot.setWeightTag(kgFormatted, band)
 					slot.setStatusTag("+$" .. GameConfig.compact(
-						SeedData.IncomePerSecond(occupant.species, occupant.tier)) .. "/s",
+						SeedData.IncomePerSecond(occupant.species, occupant.tier) * mult) .. "/s",
 						Color3.fromRGB(142, 220, 68), Color3.fromRGB(20, 36, 16))
 
 					slot.setModel("grown:" .. species.Id, function(into)
@@ -789,7 +802,7 @@ local function refresh(paint: boolean)
 		-- the honest description of a bed holding more than it can be planted
 		-- with, and hiding it would not make the plants go away.
 		header.Text = string.format("GARDEN  %d/%d", planted, capacity)
-		footer.Text = if rate > 0 then "PLOT INCOME:  +$" .. GameConfig.compact(rate) .. "/s" else ""
+		footer.Text = if rate > 0 then "PLOT INCOME:  +$" .. GameConfig.compact(rate * mult) .. "/s" else ""
 		footer.TextColor3 = Color3.fromRGB(145, 235, 75)
 	end
 end

@@ -2993,6 +2993,21 @@ GameConfig.Store = {
 		-- edge that separates one tile from the next, and it has to lift off the
 		-- top of the ramp it borders.
 		--======================================================================
+		--======================================================================
+		-- PASSES SITS AT THE TOP, AND IS THE ONE SHELF THAT IS NOT A GRID
+		--
+		-- `layout = "banner"` tells ShopUI to draw one wide 3:2 card instead of
+		-- a row of tiles. A Game Pass is a permanent account entitlement rather
+		-- than one of a ladder of amounts, so it does not belong in a rank of
+		-- interchangeable tiles -- and putting it first is the point of it.
+		--
+		-- The gradient fields are still here because the SOON pill and the
+		-- heading read off them, even though the banner supplies its own art.
+		--======================================================================
+		{ id = "Passes", heading = "PASSES", layout = "banner",
+			colour = Color3.fromRGB(255, 214, 64),
+			top = Color3.fromRGB(0, 186, 72), bottom = Color3.fromRGB(0, 108, 40),
+			rim = Color3.fromRGB(255, 206, 64), accent = Color3.fromRGB(255, 226, 120) },
 		{ id = "Speed", heading = "SPEED",
 			colour = Color3.fromRGB(64, 226, 250),
 			top = Color3.fromRGB(0, 242, 236), bottom = Color3.fromRGB(0, 104, 224),
@@ -3001,25 +3016,38 @@ GameConfig.Store = {
 			colour = Color3.fromRGB(86, 232, 46),
 			top = Color3.fromRGB(0, 240, 20), bottom = Color3.fromRGB(0, 156, 0),
 			rim = Color3.fromRGB(140, 255, 120), accent = Color3.fromRGB(255, 255, 255) },
-		{ id = "Pods", heading = "PREMIUM PODS",
+		--======================================================================
+		-- "???" IS THE HEADING THE OWNER ASKED FOR
+		--
+		-- It was PREMIUM PODS. The shelf, its three items and their prices are
+		-- unchanged -- only what the header prints.
+		--======================================================================
+		{ id = "Pods", heading = "???",
 			colour = Color3.fromRGB(252, 220, 96),
 			top = Color3.fromRGB(255, 238, 130), bottom = Color3.fromRGB(238, 170, 20),
 			rim = Color3.fromRGB(255, 246, 180), accent = Color3.fromRGB(255, 255, 255) },
-		{ id = "Plants", heading = "PLANTS",
-			colour = Color3.fromRGB(214, 120, 250),
-			top = Color3.fromRGB(214, 120, 250), bottom = Color3.fromRGB(128, 36, 205),
-			rim = Color3.fromRGB(232, 170, 255), accent = Color3.fromRGB(255, 255, 255) },
+		--======================================================================
+		-- PLANTS IS GONE, NOT HIDDEN
+		--
+		-- It was an empty shelf carrying a COMING SOON plate. The owner asked
+		-- for it removed from the shop, so the section, its item list and its
+		-- ComingSoon entry all went with it rather than being left behind as a
+		-- disabled row somebody has to remember is deliberate.
+		--
+		-- Nothing else lost anything: plants are still grown, sold and indexed.
+		-- The SHOP simply no longer advertises a shelf it cannot stock.
+		--======================================================================
 	},
 
 	--==========================================================================
-	-- PLANTS IS EMPTY ON PURPOSE
+	-- NOTHING IS FLAGGED COMING SOON ANY MORE
 	--
-	-- The owner asked for the shelf now and the content later. An empty shelf
-	-- with a COMING SOON plate on it is a promise; a missing shelf is nothing at
-	-- all, and the difference is what a player decides about whether to come
-	-- back.
+	-- PLANTS was the only entry, and the shelf has been removed rather than
+	-- left standing empty. The table stays so a future shelf can be announced
+	-- before it is stocked, and so ShopUI's empty-shelf branch keeps a reason
+	-- to exist.
 	--==========================================================================
-	ComingSoon = { Plants = true },
+	ComingSoon = {},
 
 	--==========================================================================
 	-- THE SHELF ART IS UPLOADED, NOT DRAWN
@@ -3060,7 +3088,50 @@ GameConfig.Store = {
 		comingSoon = "rbxassetid://84399068852963",
 	},
 
+	--==========================================================================
+	-- CARDS ARE NOT ICONS
+	--
+	-- `Icons` above are small objects drawn INTO a tile the UI builds. A card is
+	-- the whole tile -- background, title and benefit line are painted into the
+	-- artwork -- so it is a separate table rather than a fifteenth icon, and the
+	-- UI draws only a purchase button on top of it.
+	--
+	-- 3:2, and the artwork deliberately leaves its lower right quarter calm so
+	-- that button has somewhere to sit. Anything laid over the LEFT of this card
+	-- covers the money bundles; anything above the midline covers the title.
+	--==========================================================================
+	Cards = {
+		x2money = "rbxassetid://114365661955846",
+	},
+
 	Items = {
+		--======================================================================
+		-- A GAME PASS, NOT A DEVELOPER PRODUCT
+		--
+		-- Every other row in this table is a Developer Product: bought over and
+		-- over, granted once per receipt, and reconciled by StoreService against
+		-- a saved ledger. This one is not. The benefit is PERMANENT, so it is an
+		-- account entitlement Roblox already stores and answers for, and the
+		-- right question is "does this player own it" rather than "have we
+		-- honoured this receipt yet".
+		--
+		-- That is why the field is `pass` and not `product`. StoreService skips
+		-- anything without a `product`, so this row can never reach the receipt
+		-- path by accident, and PassService is the only thing that reads it.
+		--
+		-- `multiplier` is the number EconomyService multiplies the plant faucet
+		-- by. It lives here so the shelf and the payout cannot disagree about
+		-- what was sold -- and it is applied to the FAUCET ONLY: not to bag
+		-- sales, not to Robux cash packs, not to refunds, not to admin grants.
+		--
+		-- pass = 0 and robux = 0 are the owner's "not decided yet". Both must be
+		-- filled in before this can sell, and until then the card reads SOON and
+		-- the button refuses.
+		--======================================================================
+		Passes = {
+			{ key = "x2money", label = "\u{00D7}2 MONEY", robux = 0, pass = 0,
+				kind = "pass", multiplier = 2 },
+		},
 		Speed = {
 			{ key = "speed1", label = "+150K SPEED", robux = 35, product = 0, kind = "speed", amount = 150e3 },
 			{ key = "speed2", label = "+1M SPEED", robux = 99, product = 0, kind = "speed", amount = 1e6 },
@@ -3089,9 +3160,45 @@ GameConfig.Store = {
 			{ key = "pod3", label = "COLOSSAL BELLCHIME", robux = 449, product = 0,
 				kind = "pod", species = "bellchime", tier = 7 },
 		},
-		Plants = {},
 	},
 }
+
+--==============================================================================
+-- WHAT A GAME PASS IS WORTH, AND HOW THE CLIENT FINDS OUT
+--
+-- PassService writes the player's total cash multiplier onto the Player as an
+-- attribute. Attributes replicate, so the three places that print an income
+-- figure can multiply by it without a remote, a request or a wait.
+--
+-- THE SERVER DOES NOT READ THIS BACK. EconomyService asks PassService directly.
+-- A client that overwrites its own copy changes what its own HUD says and
+-- nothing else -- which is worth stating plainly, because an attribute that
+-- looked authoritative would be an obvious place to try.
+--==============================================================================
+GameConfig.Pass = {
+	MultiplierAttribute = "CashMultiplier",
+}
+
+--==============================================================================
+-- Display only. `SeedData.IncomePerSecond` stays pass-agnostic on purpose: it
+-- is the plant's intrinsic worth and the Index prints it for species the player
+-- may not own, where a personal multiplier would be nonsense. Anything showing
+-- what THIS player earns multiplies by this; anything showing what a PLANT is
+-- worth does not.
+--==============================================================================
+function GameConfig.cashMultiplier(player: Player?): number
+	if not player then
+		return 1
+	end
+	local n = tonumber(player:GetAttribute(GameConfig.Pass.MultiplierAttribute))
+	-- Absent while PassService is still asking Roblox, and a hostile or stale
+	-- value is not worth trusting either: anything below 1 would let a display
+	-- under-report, which is the direction that looks like a bug.
+	if not n or n < 1 then
+		return 1
+	end
+	return n
+end
 
 GameConfig.Shop = {
 	Panel = Color3.fromRGB(26, 28, 41),

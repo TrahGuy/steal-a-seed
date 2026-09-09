@@ -251,6 +251,21 @@ local GUTTER = 10
 local CARD_ASPECT = 0.86
 
 local shelves: { UIGridLayout } = {}
+--==============================================================================
+-- BANNERS ARE MEASURED, NOT CONSTRAINED
+--
+-- The first attempt sized a banner with a UIAspectRatioConstraint inside a shelf
+-- set to AutomaticSize.Y. That is circular -- the shelf's height comes from the
+-- child, the child's height comes from its own width, and the width comes from
+-- the shelf -- and Roblox breaks the cycle by resolving the whole thing to ZERO.
+-- The card rendered at 0 x 0 and the shelf collapsed with it.
+--
+-- So a banner is sized the same way a tile is: in relayout(), off the panel
+-- width that is already being measured there, in whole pixels. Same source of
+-- truth, same moment, no constraint to fight with.
+--==============================================================================
+local BANNER_ASPECT = 1.5
+local banners: { { card: Frame, shelf: Frame } } = {}
 
 local function relayout()
 	local width = body.AbsoluteSize.X
@@ -263,6 +278,15 @@ local function relayout()
 		grid.CellSize = UDim2.fromOffset(cell, math.floor(cell * CARD_ASPECT))
 		grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
 	end
+
+	-- The tiles occupy `width - 6` across, so a banner takes the same span and
+	-- its left and right edges line up with the shelf below it.
+	local span = columns * cell + GUTTER * (columns - 1)
+	local tall = math.floor(span / BANNER_ASPECT)
+	for _, entry in ipairs(banners) do
+		entry.card.Size = UDim2.fromOffset(span, tall)
+		entry.shelf.Size = UDim2.new(1, 0, 0, tall)
+	end
 end
 
 -- Height the panel to whatever the shelves add up to. Read off the layout
@@ -272,7 +296,16 @@ local function fit()
 	modal.fitContent(bodyList.AbsoluteContentSize.Y + 12)
 end
 
-local function section(order: number, heading: string, colour: Color3): Frame
+--==============================================================================
+-- A SHELF IS A GRID UNLESS IT SAYS OTHERWISE
+--
+-- `banner` shelves hold ONE wide card that sizes itself off the panel width and
+-- keeps its own 3:2 aspect. They get no UIGridLayout and are never added to
+-- `shelves`, which is what relayout() walks -- a banner has no cell size to set
+-- and must not be handed the tile geometry.
+--==============================================================================
+local function section(order: number, heading: string, colour: Color3,
+	banner: boolean?): Frame
 	local header = outlined(body, 22, colour, 3)
 	header.Name = heading .. "Header"
 	header.LayoutOrder = order
@@ -288,6 +321,13 @@ local function section(order: number, heading: string, colour: Color3): Frame
 	shelf.BackgroundTransparency = 1
 	shelf.ZIndex = 3
 	shelf.Parent = body
+
+	if banner then
+		-- Explicit height, set by relayout. AutomaticSize here is exactly what
+		-- collapsed the card to nothing the first time.
+		shelf.AutomaticSize = Enum.AutomaticSize.None
+		return shelf
+	end
 
 	local grid = Instance.new("UIGridLayout")
 	grid.CellSize = UDim2.fromOffset(140, 182)
@@ -540,6 +580,88 @@ local function storeArt(parent: Frame, key: string): ImageLabel?
 end
 
 --==============================================================================
+-- A PASS CARD IS ARTWORK WITH A BUTTON ON IT
+--
+-- Every other tile in this shop is BUILT -- gradient, rim, icon, type, pill --
+-- because there are fourteen of them and they have to stay in step. A pass is
+-- one card. Its background, its title and its benefit line are painted into a
+-- single 3:2 image, so the only thing left for the UI to draw is the control
+-- the player actually presses.
+--
+-- WHERE THE BUTTON GOES IS NOT A FREE CHOICE. The artwork was commissioned with
+-- its lower right quarter left calm for exactly this. Moving it left covers the
+-- money bundles and moving it up covers "PERMANENT - EARN x2 MONEY", so the
+-- numbers below are anchored to the bottom right corner and kept inside that
+-- reserved area.
+--
+-- ScaleType.Fit, not Stretch: the shelf is as wide as the panel and the card is
+-- 3:2, and a stretched card would distort the type that is baked into it.
+--==============================================================================
+local function buildBanner(parent: Instance, order: number, palette: any,
+	image: string): (Frame, TextButton, TextLabel)
+	local frame = Instance.new("Frame")
+	frame.Name = "PassCard" .. order
+	frame.LayoutOrder = order
+	-- Overwritten by relayout on the first measure; a non-zero placeholder so a
+	-- frame rendered before that is a card rather than nothing.
+	frame.Size = UDim2.fromOffset(300, 200)
+	frame.BackgroundTransparency = 1
+	frame.Parent = parent
+
+	local art = Instance.new("ImageLabel")
+	art.Name = "Art"
+	art.Size = UDim2.fromScale(1, 1)
+	art.BackgroundTransparency = 1
+	art.Image = image
+	art.ScaleType = Enum.ScaleType.Fit
+	art.Parent = frame
+
+	--==========================================================================
+	-- THE BUTTON, IN THE QUARTER THE ARTWORK LEFT EMPTY
+	--
+	-- Anchored to the bottom right rather than positioned from the top left, so
+	-- it stays in the reserved area whatever the card's rendered size is.
+	--==========================================================================
+	local buy = Instance.new("TextButton")
+	buy.Name = "Buy"
+	buy.AnchorPoint = Vector2.new(1, 1)
+	buy.Position = UDim2.fromScale(0.945, 0.885)
+	buy.Size = UDim2.fromScale(0.365, 0.175)
+	buy.BackgroundColor3 = SHOP.Pill
+	buy.BorderSizePixel = 0
+	buy.AutoButtonColor = false
+	buy.Text = ""
+	buy.ZIndex = 4
+	buy.Parent = art
+	corner(buy, 8)
+	stroke(buy, SHOP.Outline, 3)
+
+	local shade = Instance.new("Frame")
+	shade.Name = "Shade"
+	shade.AnchorPoint = Vector2.new(0.5, 1)
+	shade.Position = UDim2.new(0.5, 0, 1, 0)
+	shade.Size = UDim2.new(1, 0, 0, 7)
+	shade.BackgroundColor3 = SHOP.PillShade
+	shade.BorderSizePixel = 0
+	shade.ZIndex = 4
+	shade.Parent = buy
+	corner(shade, 8)
+
+	local price = outlined(buy, 20, WHITE, 3)
+	price.Name = "Price"
+	price.Size = UDim2.fromScale(1, 1)
+	price.ZIndex = 5
+	price.TextScaled = true
+	local cap = Instance.new("UITextSizeConstraint")
+	cap.MaxTextSize = 22
+	cap.MinTextSize = 10
+	cap.Parent = price
+
+	local _ = palette
+	return frame, buy, price
+end
+
+--==============================================================================
 -- THE LABEL IS TWO COLOURS ON ONE LINE
 --
 -- "+150K SPEED" prints the amount in the shelf's accent and the noun in white,
@@ -592,10 +714,71 @@ local function markSoon(card: Card)
 end
 
 for _, spec in ipairs(STORE.Sections) do
-	local shelf = section(order, spec.heading, spec.colour)
+	local isBanner = spec.layout == "banner"
+	local shelf = section(order, spec.heading, spec.colour, isBanner)
 	order += 2
 
 	local items = STORE.Items[spec.id] or {}
+
+	if isBanner then
+		--======================================================================
+		-- A PASS SHELF, WHICH IS SOLD A DIFFERENT WAY
+		--
+		-- PromptGamePassPurchase, not PromptProductPurchase. The two take
+		-- different ids from different pages of the Creator Dashboard, and
+		-- calling one with the other's id fails at the till rather than here --
+		-- which is why the field is named `pass` and is read as `pass`.
+		--
+		-- The client still only ASKS. PassService decides what the player owns
+		-- by asking Roblox, and nothing on this side grants anything.
+		--======================================================================
+		for index, item in ipairs(items) do
+			local artwork = (STORE.Cards or {})[tostring(item.key)]
+			if not artwork then
+				warn("[Seed/ShopUI] no card art for pass " .. tostring(item.key))
+				continue
+			end
+			local card, buy, price = buildBanner(shelf, index, spec, artwork)
+			table.insert(banners, { card = card, shelf = shelf })
+
+			local passId = tonumber(item.pass) or 0
+			local live = passId > 0
+			if live then
+				liveCount += 1
+				price.Text = tostring(item.robux)
+			else
+				soonCount += 1
+				price.Text = "SOON"
+				--==============================================================
+				-- Greyed the same way a SOON tile is, and for the same reason:
+				-- the ARTWORK keeps its colour so the shelf still sells the
+				-- idea, and only the control the player would press goes dead.
+				--==============================================================
+				buy.BackgroundColor3 = Color3.fromRGB(122, 128, 140)
+				local shade = buy:FindFirstChild("Shade")
+				if shade and shade:IsA("Frame") then
+					shade.BackgroundColor3 = Color3.fromRGB(74, 78, 88)
+				end
+			end
+
+			buy.Activated:Connect(function()
+				if not live then
+					SoundKit.play("Denied")
+					return
+				end
+				local ok, err = pcall(function()
+					MarketplaceService:PromptGamePassPurchase(player, passId)
+				end)
+				if not ok then
+					warn("[Seed/ShopUI] could not prompt for pass " .. item.key
+						.. ": " .. tostring(err))
+					SoundKit.play("Denied")
+				end
+			end)
+		end
+		continue
+	end
+
 	if #items == 0 then
 		--==================================================================
 		-- AN EMPTY SHELF STILL SAYS SOMETHING

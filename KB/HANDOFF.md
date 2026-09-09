@@ -1,5 +1,43 @@
 # Steal a Seed — Session Handoff
 
+## x2 Money pass — INTEGRATED 2026-09-09 (CLAUDE)
+
+Codex's note below is now out of date on one point: integration has been done.
+
+`art/shop/x2-money-card-v2.png` is live at `rbxassetid://114365661955846`
+(uploaded from a controlled 1024-wide LANCZOS copy,
+`art/shop/x2-money-card-v2-1024.png`). It is a **banner** shelf — one wide 3:2
+card, not a grid of tiles — sized in `relayout()` alongside the tile cells. A
+`UIAspectRatioConstraint` inside an `AutomaticSize.Y` shelf was tried first and
+resolved the card to 0 x 0; that cycle is documented in ShopUI.
+
+**It is a Game Pass, not a Developer Product.** `PassService` (Priority 22) asks
+`UserOwnsGamePassAsync`, caches per session, never saves ownership, refreshes on
+`PromptGamePassPurchaseFinished`, and slow-re-asks non-owners every 90s to catch
+website purchases. Nothing is asked while the id is 0. `StoreService` skips any
+row carrying a `pass` field, so the pass can never reach the receipt ledger.
+
+**The x2 applies to `EconomyService.RateFor` and nowhere else** — the last line
+of the plant faucet. Measured live: 78,322/sec -> 156,644/sec -> 78,322/sec.
+Bag sales, Robux cash packs, plot/mill/weapon refunds and debug grants all reach
+`AddCash` by other routes and are unaffected.
+
+Clients read `player:GetAttribute("CashMultiplier")` via
+`GameConfig.cashMultiplier` so the garden footer, the per-plant `/s` tag and the
+`+$N` pops show what is actually banked. The server never reads that attribute
+back; `EconomyService` asks `PassService` directly.
+
+**Still owner's to do:** create the Game Pass, put its id and price into
+`GameConfig.Store.Items.Passes`. Until then the card reads SOON and the button
+refuses (verified with three real clicks, zero errors).
+
+`DebugService.SetPass` (Studio/owner only) toggles pretend ownership so the
+entitlement path stays testable before the id exists.
+
+Also done in this pass, as instructed: PASSES sits above SPEED, PREMIUM PODS is
+now headed `???`, and the shop's PLANTS section is removed — section, item list
+and `ComingSoon` entry. Garden, Index and player plants are untouched.
+
 ## x2 Money shop card artwork — 2026-09-09 (CODEX, ART ONLY)
 
 **Superseded artwork:** use `art/shop/x2-money-card-v2.png`, not v1. At the

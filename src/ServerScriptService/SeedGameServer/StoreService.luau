@@ -83,6 +83,18 @@ local function indexProducts(): (number, number)
 	local live, pending = 0, 0
 	for _, section in ipairs(STORE.Sections) do
 		for _, item in ipairs(STORE.Items[section.id] or {}) do
+			--==================================================================
+			-- A GAME PASS IS NOT A PRODUCT AND IS NOT COUNTED AS ONE
+			--
+			-- The pass row has no `product`, so it could never be indexed or
+			-- sold from here -- but it WOULD have been tallied as one more
+			-- pending product, and the boot line that says how many things are
+			-- waiting on an id would then name a number that does not match the
+			-- Developer Products the owner has to create. PassService owns it.
+			--==================================================================
+			if item.pass ~= nil then
+				continue
+			end
 			local id = tonumber(item.product) or 0
 			if id > 0 then
 				--==============================================================

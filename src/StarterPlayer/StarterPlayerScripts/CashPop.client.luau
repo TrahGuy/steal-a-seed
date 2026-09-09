@@ -290,8 +290,13 @@ local function pop(entry: Tracked)
 
 	-- The same shared calculation the server pays from -- see SeedData. This is
 	-- display only; the number it prints is the number already banked.
+	--
+	-- Times the player's cash passes, because "already banked" is the whole
+	-- claim this label makes. EconomyService multiplies the faucet by the same
+	-- figure, so a x2 Money owner watching a pop is watching what they got.
 	label.Text = "+$" .. GameConfig.compact(
-		SeedData.IncomePerSecond(entry.species, entry.tier))
+		SeedData.IncomePerSecond(entry.species, entry.tier)
+			* GameConfig.cashMultiplier(player))
 	label.TextTransparency = 0
 	if stroke then
 		stroke.Transparency = 0

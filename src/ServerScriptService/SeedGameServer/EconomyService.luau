@@ -64,6 +64,7 @@ local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlantService = require(script.Parent:WaitForChild("PlantService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+local PassService = require(script.Parent:WaitForChild("PassService"))
 
 local EconomyService = {}
 -- After PlantService (50): this reads what PlantService is growing.
@@ -113,7 +114,34 @@ function EconomyService.RateFor(player: Player): number
 	for _, grown in ipairs(PlantService.GrownIn(plot)) do
 		rate += SeedData.IncomePerSecond(grown.species, grown.tier)
 	end
-	return rate
+
+	--==========================================================================
+	-- THE x2 MONEY PASS MULTIPLIES HERE, AND ONLY HERE
+	--
+	-- This is the last line of the FAUCET, so a pass applied at this point
+	-- reaches exactly one kind of income: cash grown by plants. It does not
+	-- reach SellHeld forty lines below -- selling a bag at the stall is a sale,
+	-- not production -- and it cannot reach the other five positive AddCash
+	-- calls in the game, none of which come through here:
+	--
+	--   StoreService       a Robux cash pack, already paid for at its price
+	--   PlotUpgradeService a refund when an upgrade fails to apply
+	--   TreadmillService   the same, on a mill upgrade
+	--   WeaponShopService  the same, on a weapon
+	--   DebugService       an owner-only grant, which is not income
+	--
+	-- Doubling a REFUND is the one that would actually hurt: it would pay a
+	-- player more to fail a purchase than the purchase cost them.
+	--
+	-- Applied to the rate rather than inside the payout loop so the number this
+	-- function answers with is the number that gets banked. RateFor is what the
+	-- Snapshot prints, and a diagnostic that disagrees with the payout is worse
+	-- than no diagnostic.
+	--
+	-- Each term is already whole -- IncomePerSecond rounds per plant -- so an
+	-- integer multiplier keeps the sum whole.
+	--==========================================================================
+	return rate * PassService.CashMultiplier(player)
 end
 
 --==============================================================================

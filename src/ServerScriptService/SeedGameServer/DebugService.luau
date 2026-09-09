@@ -53,6 +53,7 @@ local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
+local PassService = require(script.Parent:WaitForChild("PassService"))
 
 local DebugService = {}
 
@@ -162,6 +163,24 @@ ACTIONS.SetCash = function(player, payload)
 	PlayerDataService.AddCash(player, target - (tonumber(profile.Cash) or 0))
 	local now = PlayerDataService.Get(player)
 	return string.format("Cash = %s", GameConfig.compact(now and now.Cash or 0))
+end
+
+--==============================================================================
+-- PRETEND TO OWN A GAME PASS
+--
+-- The x2 Money pass has no id yet, so this is the only way to see the faucet
+-- actually double before the owner creates it. Toggle it and watch the cash
+-- rate: plant income should change, and selling a bag should not.
+--==============================================================================
+ACTIONS.SetPass = function(player, payload)
+	local key = tostring(payload.key or "x2money")
+	local want = payload.value ~= false
+	if not PassService.DebugSetOwned(player, key, want) then
+		return string.format("SetPass: no such pass %q (or profile not ready)", key)
+	end
+	return string.format("%s: %s -- cash multiplier now x%.2f",
+		key, if want then "OWNED" else "not owned",
+		PassService.CashMultiplier(player))
 end
 
 ACTIONS.AddCash = function(player, payload)
@@ -387,6 +406,11 @@ ACTIONS.Snapshot = function(player, _payload)
 			GameConfig.compact(profile and profile.Speed or 0)),
 		NestService.Snapshot(),
 		CarryService.Snapshot(),
+		-- The faucet and the entitlement that multiplies it, together: the whole
+		-- point of reading them is comparing them, and two commands to get one
+		-- comparison is how a mismatch goes unnoticed.
+		EconomyService.Snapshot(),
+		PassService.Snapshot(),
 	}
 	log(player.Name .. " snapshot:\n  " .. table.concat(lines, "\n  "))
 	return "snapshot printed to the server log"
