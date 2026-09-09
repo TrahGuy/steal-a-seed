@@ -1,5 +1,28 @@
 # Steal a Seed — Session Handoff
 
+## The close X is every panel's now — 2026-09-09 (CLAUDE)
+
+The Bag's restyled close button moved from `LoadoutUI` into `UIKit.modal`, so
+Index, Shop, Garden, Bag and Marigold's stall all draw the same one from one
+place. The local copy in LoadoutUI is deleted rather than left as a second
+version to drift out of step with the first.
+
+`GameConfig.Panel.Close` -- the flat `rgb(255,0,0)` sampled off the reference
+shot -- is replaced by `CloseTop` / `CloseBottom` / `CloseShade`. Nothing else
+read that field, so there is no stale reference anywhere; the sampled value is
+kept in the comment as the record of where the button came from.
+
+It is now the same four things every other button in this game is made of: a lit
+face, a darker foot, a shade bar and a black keyline. The X is a child label
+because a UIStroke on a TextButton strokes its BORDER, and only one UIStroke per
+object is honoured -- there is no way to outline the glyph while the button also
+keeps its keyline.
+
+Verified in Play: all five panels report gradient + shade + outlined mark with an
+empty button Text; clicking the Index X closed it and left every other panel
+closed; the Bag is visually unchanged now that it draws the shared version;
+console 0 errors; rojo build clean.
+
 ## Bag panel visual polish — 2026-09-09 (CLAUDE)
 
 Appearance only. One file, `LoadoutUI.client.luau`; no behaviour, no gameplay, no
@@ -38,9 +61,9 @@ use `TextScaled` with a 9pt floor so "CINDERCRACK BAT" gives up a point instead
 of pushing into the button; the state pill became a real button -- gradient,
 black keyline, shade bar -- matching the shop's pill language rather than
 inventing a second one; tabs gained gradients and an active-only shade bar; and
-the close X was restyled **for this panel only** -- gradient red with an outlined
-glyph, done in LoadoutUI rather than UIKit so Index, Shop, Garden and Marigold
-keep the flat one until somebody asks for the set.
+the close X was restyled -- gradient red with an outlined glyph. It shipped in
+LoadoutUI for one commit and has since moved into `UIKit.modal`; see the entry
+above.
 
 **One near-miss worth recording:** removing the now-unused `PICKED` gold broke
 the HOTBAR, which still uses it two hundred lines down. Luau parsed clean because

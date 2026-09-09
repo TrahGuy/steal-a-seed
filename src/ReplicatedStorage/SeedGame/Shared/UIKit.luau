@@ -2722,23 +2722,58 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	blocker.ZIndex = 2
 	blocker.Parent = shell
 
+	--==========================================================================
+	-- THE CLOSE BUTTON
+	--
+	-- Lit face, darker foot, shade bar under it, black keyline: the same four
+	-- things the shop's price pills and the Bag's state buttons are made of, so
+	-- the game has ONE button language rather than a special case in the corner
+	-- of every panel.
+	--
+	-- It was a flat rgb(255,0,0) square with a bare white X on it. This shipped
+	-- on the Bag first and is here now, which means Index, Shop, Garden, Bag and
+	-- Marigold's stall all get it from one place -- five panels that would
+	-- otherwise have drifted apart the first time one of them was touched.
+	--
+	-- THE X IS A CHILD LABEL, NOT THE BUTTON'S OWN TEXT. A UIStroke on a
+	-- TextButton strokes its BORDER, and only one UIStroke per object is
+	-- honoured, so there is no way to outline the glyph while the button still
+	-- has its keyline. A label carries its own.
+	--==========================================================================
 	local close = Instance.new("TextButton")
 	close.Name = "Close"
 	close.AnchorPoint = Vector2.new(1, 0.5)
 	close.Position = UDim2.new(1, 0, 0.5, 0)
 	close.Size = UDim2.fromOffset(38, 38)
-	close.BackgroundColor3 = PANEL.Close
 	close.BorderSizePixel = 0
 	close.AutoButtonColor = false
-	close.Font = Enum.Font.LuckiestGuy
-	close.TextSize = 22
-	close.TextColor3 = WHITE
-	close.Text = "X"
+	close.Text = ""
 	close.ZIndex = 4
 	UIKit.clicks(close)
 	close.Parent = titleBar
 	UIKit.corner(close, 10)
 	UIKit.stroke(close, PANEL.Outline, outline)
+	UIKit.gradient(close, PANEL.CloseTop, PANEL.CloseBottom)
+
+	local closeShade = Instance.new("Frame")
+	closeShade.Name = "Shade"
+	closeShade.AnchorPoint = Vector2.new(0.5, 1)
+	closeShade.Position = UDim2.new(0.5, 0, 1, 0)
+	closeShade.Size = UDim2.new(1, 0, 0, 5)
+	closeShade.BackgroundColor3 = PANEL.CloseShade
+	closeShade.BorderSizePixel = 0
+	closeShade.Active = false
+	closeShade.ZIndex = 5
+	closeShade.Parent = close
+	UIKit.corner(closeShade, 10)
+
+	local closeMark = UIKit.outlined(close, "Mark", 22, WHITE, 2.5)
+	closeMark.Size = UDim2.fromScale(1, 1)
+	-- Two up, so the glyph is centred in the LIT face rather than in the whole
+	-- button including the shade it stands on.
+	closeMark.Position = UDim2.new(0, 0, 0, -2)
+	closeMark.Text = "X"
+	closeMark.ZIndex = 6
 
 	local body = Instance.new("Frame")
 	body.Name = "Body"

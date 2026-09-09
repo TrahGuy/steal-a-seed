@@ -2935,7 +2935,23 @@ GameConfig.Panel = {
 	-- The scrollbar and the thin inner lip: light enough to find on the fill.
 	Edge = Color3.fromRGB(126, 96, 76),
 	Title = Color3.fromRGB(255, 255, 255),
-	Close = Color3.fromRGB(255, 0, 0),
+
+	--==========================================================================
+	-- THE CLOSE BUTTON IS THREE REDS, NOT ONE
+	--
+	-- It was a single flat rgb(255,0,0) -- the sampled value off the reference
+	-- shot, and the one colour in this palette that is not a colour so much as a
+	-- channel turned all the way up. Flat maximum red against warm brown reads
+	-- as a warning rather than as a control, and it was the only chrome on a
+	-- panel with no light on it at all.
+	--
+	-- Three now, which is what every other button in this game already is: a lit
+	-- face, a darker foot, and a shade under it. The sampled 255,0,0 is kept in
+	-- this note as the record of where the button came from.
+	--==========================================================================
+	CloseTop = Color3.fromRGB(216, 68, 60),
+	CloseBottom = Color3.fromRGB(152, 30, 26),
+	CloseShade = Color3.fromRGB(112, 20, 18),
 }
 
 --==============================================================================

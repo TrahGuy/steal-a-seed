@@ -360,47 +360,9 @@ local modal = UIKit.modal(gui, {
 	maxHeight = 600,
 })
 
---==============================================================================
--- THE CLOSE BUTTON, DRESSED FOR THIS PANEL ONLY
---
--- UIKit gives every modal a flat rgb(255,0,0) square with a bare white X on it.
--- Pure red is the one colour in the palette that is not sampled from anything --
--- it is the channel maxed out -- and against warm brown it reads as a warning
--- rather than as a control.
---
--- Done HERE rather than in UIKit.modal because the brief is the BAG. The Index,
--- Shop, Garden and Marigold panels keep the flat X until somebody asks for the
--- set, and the moment they do, this block is what moves.
---
--- The X becomes a child label so it can carry its own outline: a UIStroke on the
--- button strokes the BORDER, and only one UIStroke per object is honoured, so
--- there is no way to outline the glyph while the button still has its keyline.
---==============================================================================
-do
-	local close = modal.close
-	UIKit.gradient(close, Color3.fromRGB(216, 68, 60), Color3.fromRGB(152, 30, 26))
-	close.Text = ""
-
-	local closeShade = Instance.new("Frame")
-	closeShade.Name = "Shade"
-	closeShade.AnchorPoint = Vector2.new(0.5, 1)
-	closeShade.Position = UDim2.new(0.5, 0, 1, 0)
-	closeShade.Size = UDim2.new(1, 0, 0, 5)
-	closeShade.BackgroundColor3 = Color3.fromRGB(112, 20, 18)
-	closeShade.BorderSizePixel = 0
-	closeShade.Active = false
-	closeShade.ZIndex = 4
-	closeShade.Parent = close
-	UIKit.corner(closeShade, 10)
-
-	local closeMark = UIKit.outlined(close, "Mark", 22, WHITE, 2.5)
-	closeMark.Size = UDim2.fromScale(1, 1)
-	-- One pixel up, so the glyph sits centred in the light part of the face
-	-- rather than centred on the whole button including its shade.
-	closeMark.Position = UDim2.new(0, 0, 0, -2)
-	closeMark.Text = "X"
-	closeMark.ZIndex = 5
-end
+-- The close button used to be restyled here, for this panel alone. It is in
+-- UIKit.modal now, so all five panels get it and this block would have been a
+-- second copy drifting out of step with the first.
 
 local TABS = {
 	{ id = "equipment", label = "Equipment" },
