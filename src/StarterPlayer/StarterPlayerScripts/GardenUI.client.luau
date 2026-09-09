@@ -162,18 +162,17 @@ button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
 
 --==============================================================================
--- A SPROUT MADE OF RECTANGLES
+-- THE SPROUT IS ARTWORK NOW, ON THE BUTTON ONLY
 --
--- Not a paw, not an egg, and not a glyph. Most of Gotham's symbol range renders
--- as tofu boxes in this engine, which is checked rather than assumed -- SpeedFX
--- paid for it with a trainer emoji. A stem and three leaves is a sprout on every
--- device.
+-- This was three rectangles in the biome's own stem and leaf colours, drawn
+-- because a font glyph is a tofu risk. That reasoning still stands and the drawn
+-- sprout is still in the game -- it is in this panel's TITLE BAR a few lines
+-- down, where UIKit.sproutIcon is called a second time and is deliberately left
+-- alone.
 --
--- In the BIOME'S stem and leaf, not the HUD's accent green. It is the only rail
--- icon that depicts something the game actually grows, so it may as well be the
--- colour the game grows it in.
+-- Only the rail button takes the uploaded vector.
 --==============================================================================
-UIKit.sproutIcon(button, 30, SeedData.Stem, SeedData.Leaf)
+UIKit.railIcon(button, RAIL.GardenIcon, RAIL.IconSize)
 
 --==============================================================================
 -- THE BADGE COUNTS WHAT IS STILL COOKING

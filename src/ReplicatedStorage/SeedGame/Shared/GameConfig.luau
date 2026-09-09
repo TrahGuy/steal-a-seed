@@ -2830,6 +2830,30 @@ GameConfig.Rail = {
 	-- Red, and one of the few things allowed outside ink / paper / accent: the
 	-- job of a badge is to be what the eye finds before it has decided to look.
 	Badge = Color3.fromRGB(226, 76, 76),
+
+	--==========================================================================
+	-- THE FOUR RAIL ICONS, WHICH ARE UPLOADED NOW
+	--
+	-- These four buttons drew their own icons out of frames -- a cart, a book, a
+	-- sprout and a satchel -- and the reason is still written beside each of
+	-- them: a font glyph renders as tofu on some devices and an uploaded id can
+	-- be moderated away. Both are true. What changed is that the owner supplied
+	-- vector masters, so the trade is now a drawn approximation against real
+	-- artwork rather than against a glyph.
+	--
+	-- Uploaded from art/ui/rail-icons/<name>-128.png, which are 128px reductions
+	-- of the 512px exports. They draw at 28 and pop to 30; 128 covers a 3x phone
+	-- with headroom at a sixteenth of the memory, which is rule 8.
+	--
+	-- THE DRAWN HELPERS ARE STILL LIVE. UIKit.cartIcon, bookIcon and sproutIcon
+	-- each appear twice -- once on the rail button and once in that panel's modal
+	-- TITLE BAR -- and only the rail half is replaced here. Deleting them would
+	-- take the title bars with them.
+	--==========================================================================
+	ShopIcon = "rbxassetid://90931969678136",
+	IndexIcon = "rbxassetid://126806966970007",
+	GardenIcon = "rbxassetid://106268245303506",
+	BagIcon = "rbxassetid://135554729755251",
 }
 
 --==============================================================================

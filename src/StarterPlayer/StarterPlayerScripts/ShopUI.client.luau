@@ -183,7 +183,7 @@ local button = UIKit.railButton(playerGui, {
 	wide = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
-UIKit.cartIcon(button, RAIL.IconSize, RAIL.ShopShade)
+UIKit.railIcon(button, RAIL.ShopIcon, RAIL.IconSize)
 
 --==============================================================================
 -- THE PANEL

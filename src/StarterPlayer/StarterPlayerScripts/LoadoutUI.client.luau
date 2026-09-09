@@ -314,31 +314,18 @@ bagButton.AnchorPoint = Vector2.new(1, 0)
 bagButton.Position = UDim2.new(1, -RAIL.Inset, 0,
 	RAIL.Inset + RAIL.SquareSize.Y + RAIL.Gap)
 
---== A SATCHEL, DRAWN. Same reason every icon in this HUD is drawn: a glyph is
---== a tofu risk and an uploaded id can be moderated away.
-do
-	local box = Instance.new("Frame")
-	box.Name = "BagIcon"
-	box.AnchorPoint = Vector2.new(0.5, 0.5)
-	box.Position = UDim2.fromScale(0.5, 0.54)
-	box.Size = UDim2.fromOffset(RAIL.IconSize, RAIL.IconSize)
-	box.BackgroundTransparency = 1
-	box.ZIndex = 3
-	box.Parent = bagButton
-
-	local body = UIKit.piece(box, "Body", 0.5, 0.62, 0.86, 0.60,
-		Color3.fromRGB(96, 62, 34), 0.18, nil, 3)
-	UIKit.stroke(body, BLACK, 2)
-	local flap = UIKit.piece(box, "Flap", 0.5, 0.34, 0.90, 0.30,
-		Color3.fromRGB(126, 84, 46), 0.30, nil, 4)
-	UIKit.stroke(flap, BLACK, 2)
-	local buckle = UIKit.piece(box, "Buckle", 0.5, 0.56, 0.20, 0.18,
-		Color3.fromRGB(250, 198, 48), 0.3, nil, 5)
-	UIKit.stroke(buckle, BLACK, 1.5)
-	-- The strap, one on each side, so the silhouette is a satchel and not a box.
-	UIKit.piece(box, "StrapL", 0.16, 0.40, 0.10, 0.34, Color3.fromRGB(126, 84, 46), 0.4, -18, 3)
-	UIKit.piece(box, "StrapR", 0.84, 0.40, 0.10, 0.34, Color3.fromRGB(126, 84, 46), 0.4, 18, 3)
-end
+--==============================================================================
+-- A SATCHEL, UPLOADED
+--
+-- This was nine frames -- body, flap, buckle and two straps -- drawn because a
+-- glyph is a tofu risk. The owner supplied vector art for all four rail buttons,
+-- so it is the artwork now.
+--
+-- This is the ONLY one of the four with no second home: the Bag modal's title
+-- bar carries no icon, so nothing here is shared with a panel and there is no
+-- drawn version left to keep.
+--==============================================================================
+UIKit.railIcon(bagButton, RAIL.BagIcon, RAIL.IconSize)
 
 --==============================================================================
 -- THE INVENTORY PANEL

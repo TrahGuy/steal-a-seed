@@ -1,5 +1,50 @@
 # Steal a Seed — Session Handoff
 
+## Rail button vector icons — INTEGRATED 2026-09-09 (CLAUDE)
+
+Codex's asset note below is now complete: the four PNGs are uploaded and wired.
+
+| button | asset | id |
+| --- | --- | --- |
+| Shop | `art/ui/rail-icons/shop.png` | `rbxassetid://90931969678136` |
+| Index | `art/ui/rail-icons/index.png` | `rbxassetid://126806966970007` |
+| Garden | `art/ui/rail-icons/garden.png` | `rbxassetid://106268245303506` |
+| Inventory | `art/ui/rail-icons/inventory.png` | `rbxassetid://135554729755251` |
+
+Uploaded from `<name>-128.png`, 128px reductions of the 512 exports. They draw at
+28 and pop to 30, so 128 covers a 3x phone with headroom at a sixteenth of the
+memory. Ids live in `GameConfig.Rail` (`ShopIcon`, `IndexIcon`, `GardenIcon`,
+`BagIcon`) — no literals in UI scripts.
+
+**Rendering was confirmed before use**, not just `IsLoaded`: a throwaway proof
+strip drew all four at 50px button size in Play and was screenshotted, then
+destroyed.
+
+`UIKit.railIcon` builds the ImageLabel: `ScaleType.Fit`, `Active = false`, and it
+reads its own placement off the button — a wide button insets it 10px left where
+`iconBox` put the drawn one, a square button centres it where `sproutIcon` did.
+The slab remains the only clickable thing.
+
+**The drawn helpers are still live and were not deleted.** `cartIcon`, `bookIcon`
+and `sproutIcon` each appear twice — rail button and modal title bar — and only
+the rail half was replaced. The satchel was the one icon with no second home (the
+Bag modal's title bar carries no icon), so its nine inline frames are gone.
+
+**Hover pop** is wired once inside `UIKit.railButton`, so all four get it and no
+call site can double-wire it. Measured on ShopButton: ENTER -> 1.080 in ~0.09s ->
+settles 1.040 in ~0.09s -> HOLDS 1.040 for 1.5s with no pulsing -> LEAVE -> 1.000
+in ~0.09s. Five rapid flicks all returned to exactly 1.000, one UIScale
+throughout. Gated on `MouseEnabled` AND `GetLastInputType` being a mouse, so
+touch never pops; suppressed entirely when `SeedAfterimageQuality` is `Off`
+(verified: scale stayed 1.000 while hovering).
+
+Verified in a fresh Play session: all four icons render; Index -> Shop -> Garden
+-> Bag each opened the right panel and closed the previous; two clicks inside an
+open panel left it open; badges unmoved (Index 129,-1 top-right, Garden 785,-1
+top-left, both half off the corner as designed); clicking 30ms into the tween
+opened the panel at scale 1.040; after respawn exactly one `SeedRail`, one of
+each button, one UIScale and one Icon each; console 0 errors; `rojo build` clean.
+
 ## Rail button vector icons — ASSETS READY 2026-09-09 (CODEX)
 
 Four transparent, icon-only SVG masters and matching 512 x 512 PNG exports are

@@ -133,7 +133,7 @@ local button = UIKit.railButton(playerGui, {
 	wide = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
-UIKit.bookIcon(button, RAIL.IconSize, RAIL.IndexShade)
+UIKit.railIcon(button, RAIL.IndexIcon, RAIL.IconSize)
 
 local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
 

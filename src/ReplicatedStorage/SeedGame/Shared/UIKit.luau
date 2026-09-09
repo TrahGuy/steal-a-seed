@@ -34,6 +34,8 @@
 
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 
 --==============================================================================
 -- THERE IS NO CARD LOOP ANY MORE
@@ -641,6 +643,145 @@ function UIKit.railLayer(playerGui: Instance): ScreenGui
 	return layer
 end
 
+--==============================================================================
+-- THE UPLOADED ICON
+--
+-- An ImageLabel, and deliberately NOT a button. The slab underneath is still the
+-- only thing a player clicks; an ImageLabel does not consume input, and Active
+-- is set false as well so that stays true if it ever becomes something that
+-- could.
+--
+-- ScaleType.Fit, because the art is square and the band it sits in is not always
+-- -- Fit letterboxes and keeps the aspect, Stretch would fatten the satchel on a
+-- wide button.
+--
+-- WHERE IT SITS IS READ OFF THE BUTTON, not passed in. A wide button carries a
+-- word, so its icon is inset at the left exactly where iconBox put the drawn one;
+-- a square button has nothing else in it, so its icon is centred exactly where
+-- sproutIcon put that one. Deciding it here is what stops four call sites each
+-- remembering a different pair of numbers.
+--==============================================================================
+function UIKit.railIcon(button: GuiObject, asset: string, size: number): ImageLabel
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.BackgroundTransparency = 1
+	icon.BorderSizePixel = 0
+	icon.Image = asset
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.Active = false
+	icon.ZIndex = 3
+	icon.Size = UDim2.fromOffset(size, size)
+
+	-- Off the authored Size rather than AbsoluteSize, which is still 0 here: the
+	-- button has not been laid out at the moment this runs.
+	if button.Size.X.Offset > button.Size.Y.Offset then
+		icon.AnchorPoint = Vector2.new(0, 0.5)
+		icon.Position = UDim2.new(0, 10, 0.5, 0)
+	else
+		icon.AnchorPoint = Vector2.new(0.5, 0.5)
+		icon.Position = UDim2.fromScale(0.5, 0.5)
+	end
+
+	icon.Parent = button
+	return icon
+end
+
+--==============================================================================
+-- THE HOVER POP
+--
+-- Up to 1.08, settle back to 1.04, hold there while the pointer is on it, and
+-- ease to 1.00 when it leaves. One shot -- it never loops and never pulses,
+-- because a button that keeps moving in the corner of the eye is a button you
+-- learn to ignore.
+--
+-- UIScale, so nothing around it moves. Scaling Size would push the button out of
+-- its corner and shove the one below it down the rail.
+--
+-- NOT ON TOUCH. A phone has no pointer, and Roblox still fires MouseEnter off a
+-- tap on some devices -- which would make every press grow the button and leave
+-- it grown, because no MouseLeave follows. Gated on the mouse being real AND on
+-- the last input actually having come from it.
+--
+-- ONE UIScale, ONE PAIR OF CONNECTIONS. Wired inside railButton below, which
+-- destroys any previous button of the same name first, so a script that re-runs
+-- cannot end up with two of either.
+--==============================================================================
+local HOVER_UP, HOVER_HOLD = 1.08, 1.04
+local HOVER_RISE, HOVER_SETTLE, HOVER_FALL = 0.09, 0.09, 0.12
+
+local function pointerIsMouse(): boolean
+	if not UserInputService.MouseEnabled then
+		return false
+	end
+	local last = UserInputService:GetLastInputType()
+	return last == Enum.UserInputType.MouseMovement
+		or last == Enum.UserInputType.MouseButton1
+		or last == Enum.UserInputType.MouseButton2
+		or last == Enum.UserInputType.MouseButton3
+		or last == Enum.UserInputType.MouseWheel
+end
+
+--==============================================================================
+-- The same attribute SpeedFX and PlantAura already read, rather than a second
+-- control a player would have to find. Off means no motion; Reduced is left
+-- alone, because it is the TOUCH default and touch never pops anyway.
+--==============================================================================
+local function motionOff(): boolean
+	local player = Players.LocalPlayer
+	return player ~= nil and player:GetAttribute("SeedAfterimageQuality") == "Off"
+end
+
+local function hoverPop(button: GuiObject)
+	local scale = button:FindFirstChildWhichIsA("UIScale")
+	if not scale then
+		scale = Instance.new("UIScale")
+		scale.Scale = 1
+		scale.Parent = button
+	end
+
+	-- `token` is what makes rapid enter/leave safe. Every gesture takes a new
+	-- one; a tween that finishes after a newer gesture started sees a token that
+	-- is not its own and does not queue the settle.
+	local token = 0
+	local running: Tween? = nil
+
+	local function play(goal: number, seconds: number, dir: Enum.EasingDirection): Tween
+		if running then
+			-- Cancelled rather than left to finish, so two tweens can never be
+			-- writing Scale on the same frame.
+			running:Cancel()
+		end
+		local tween = TweenService:Create(scale,
+			TweenInfo.new(seconds, Enum.EasingStyle.Quad, dir), { Scale = goal })
+		running = tween
+		tween:Play()
+		return tween
+	end
+
+	button.MouseEnter:Connect(function()
+		if not pointerIsMouse() or motionOff() then
+			return
+		end
+		token += 1
+		local mine = token
+		local rise = play(HOVER_UP, HOVER_RISE, Enum.EasingDirection.Out)
+		rise.Completed:Once(function(state: Enum.PlaybackState)
+			-- Cancel fires this too. Only a run that finished on its own, and is
+			-- still the current gesture, earns the settle.
+			if state == Enum.PlaybackState.Completed and token == mine then
+				play(HOVER_HOLD, HOVER_SETTLE, Enum.EasingDirection.InOut)
+			end
+		end)
+	end)
+
+	button.MouseLeave:Connect(function()
+		token += 1
+		-- No guard: leaving must return to rest even if the pop never ran, or a
+		-- button entered by touch and left by mouse could stay large.
+		play(1, HOVER_FALL, Enum.EasingDirection.Out)
+	end)
+end
+
 function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButton
 	local wide = options.wide ~= false
 	local size = if wide then RAIL.WideSize else RAIL.SquareSize
@@ -670,6 +811,12 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 		label.Text = options.label
 		label.ZIndex = 3
 	end
+
+	--==========================================================================
+	-- Every rail button gets the pop, from here rather than from four call
+	-- sites. One place to wire it is one place it can be wired twice.
+	--==========================================================================
+	hoverPop(slab)
 
 	return slab
 end
