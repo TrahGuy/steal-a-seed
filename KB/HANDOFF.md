@@ -1,5 +1,28 @@
 # Steal a Seed — Session Handoff
 
+## Rail button vector icons — ASSETS READY 2026-09-09 (CODEX)
+
+Four transparent, icon-only SVG masters and matching 512 x 512 PNG exports are
+ready under `art/ui/rail-icons/`: Shop is a green market stall, Garden is an
+amber raised bed with a sprout, Index is a blue plant almanac, and Inventory is
+a brown satchel. The silhouettes, dark outline, cream separation stroke and
+lighting language are shared, while each icon keeps the current rail button's
+colour identity. All PNGs were rendered from the SVGs with alpha intact and
+remain readable when sampled at the live 28 px icon size.
+
+This pass is ASSET-ONLY. No Roblox UI source or Studio state changed. On
+integration, upload the PNGs through the existing verified image pipeline and
+record the returned asset ids in shared configuration. Replace only the rail
+button icon drawings: keep the existing code-built slabs, Shop/Index labels,
+Garden/Index badges, click targets, hover feedback, modal behaviour and layout.
+Do not delete `UIKit` icon helpers that are still used in modal title bars, and
+do not replace title-bar artwork unless separately approved. Use `ScaleType.Fit`
+with transparent images so the parent button remains the interaction owner.
+
+The original raster references in `art/rail-shop.png`, `art/rail-index.png` and
+`art/rail-slab.png` were consulted only to preserve identity; the new art is not
+a traced copy. Visual approval and live mobile-size integration remain pending.
+
 ## Three reported bugs — FIXED 2026-09-09 (CLAUDE)
 
 **Every panel closed when you clicked its contents.** `UIKit.modal` set
