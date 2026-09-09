@@ -65,6 +65,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local TextService = game:GetService("TextService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -101,6 +103,26 @@ gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.DisplayOrder = 20
 gui.Parent = playerGui
+
+--==============================================================================
+-- CONNECTIONS DIE WITH THE GUI THEY DRAW
+--
+-- Destroying the old ScreenGui above was enough while every connection in this
+-- file wrote to something inside it -- a handler firing at a destroyed label is
+-- harmless. The buff indicator adds one on the PLAYER, which outlives the GUI,
+-- so a second run of this script would leave the first run's listener attached
+-- to a player that now has two of them.
+--
+-- Bound to Destroying rather than disconnected at the top, because the object
+-- that knows a run is over is the GUI that run created.
+--==============================================================================
+local connections: { RBXScriptConnection } = {}
+gui.Destroying:Once(function()
+	for _, c in ipairs(connections) do
+		c:Disconnect()
+	end
+	table.clear(connections)
+end)
 
 local function corner(parent: Instance, radius: number)
 	local c = Instance.new("UICorner")
@@ -288,6 +310,218 @@ do
 end
 
 --==============================================================================
+-- THE x2 MONEY BUFF CARD
+--
+-- One small card beside the cash line, shown only while the player owns the
+-- pass. It reads the CashMultiplier attribute the server publishes and NOTHING
+-- ELSE: it is a label on a state, never the state itself. EconomyService
+-- multiplies the faucet from PassService's own ownership table and never looks
+-- at this attribute, so a client that rewrites its own copy changes what its own
+-- HUD draws and not one coin of what it is paid.
+--
+-- NO ANIMATION. No pulse, no spin, no sparkle. It is furniture that says a thing
+-- is true; a permanent buff that flashes for attention is a permanent
+-- distraction, and this sits next to the number a player watches most.
+--
+-- IT MOVES WITH THE CASH TEXT, NOT WITH THE HUD. `$1.2K` and `$914.77T` are not
+-- the same width, so a card at a fixed offset would either overlap the number or
+-- float away from it. It is placed off the label's measured TextBounds every
+-- time the text changes, which is the only thing here that is responsive -- the
+-- shoe, the speed line and the cash line do not move at all.
+--==============================================================================
+local PASS = GameConfig.Pass
+local BUFF_SIZE = PASS.BuffSize or 46
+local BUFF_EMERALD = Color3.fromRGB(12, 58, 34)
+local BUFF_GOLD = Color3.fromRGB(238, 190, 62)
+local BUFF_GAP = 10
+
+local buff = Instance.new("TextButton")
+buff.Name = "MoneyBuff"
+buff.AnchorPoint = Vector2.new(0, 1)
+-- Two pixels under the cash label's bottom edge, which puts it just below the
+-- text baseline rather than centred on it.
+buff.Position = UDim2.new(0, 140, 1, 2)
+buff.Size = UDim2.fromOffset(BUFF_SIZE, BUFF_SIZE)
+buff.BackgroundColor3 = BUFF_EMERALD
+buff.BackgroundTransparency = 0.08
+buff.BorderSizePixel = 0
+buff.AutoButtonColor = false
+buff.Text = ""
+buff.Visible = false
+buff.ZIndex = 4
+buff.Parent = root
+corner(buff, 10)
+
+do
+	local edge = Instance.new("UIStroke")
+	edge.Color = BUFF_GOLD
+	edge.Thickness = 1.5
+	edge.Parent = buff
+end
+
+local buffIcon = Instance.new("ImageLabel")
+buffIcon.Name = "Icon"
+buffIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+buffIcon.Position = UDim2.fromScale(0.5, 0.5)
+buffIcon.Size = UDim2.new(1, -8, 1, -8)
+buffIcon.BackgroundTransparency = 1
+buffIcon.Image = PASS.BuffIcon or ""
+-- Fit, not Stretch: the cutout is wider than it is tall and a stretched one
+-- would squash the coin into an ellipse.
+buffIcon.ScaleType = Enum.ScaleType.Fit
+buffIcon.ZIndex = 5
+buffIcon.Parent = buff
+
+--==============================================================================
+-- THE MESSAGE
+--
+-- GothamMedium 15 on a 2px black outline with no plate, which is exactly what
+-- the progress line above already is -- the established treatment for secondary
+-- text on this HUD, so a second style is not invented for one sentence.
+--
+-- Its width is measured ONCE. The string never changes, so measuring it per
+-- click would be a TextService call on every tap for an answer that cannot
+-- differ.
+--==============================================================================
+local BUFF_TEXT = PASS.BuffMessage or "Earn x2 money permanently."
+local tip = Instance.new("TextLabel")
+tip.Name = "BuffMessage"
+tip.BackgroundTransparency = 1
+tip.Font = Enum.Font.GothamMedium
+tip.TextSize = 15
+tip.TextColor3 = PROGRESS_TEXT
+tip.TextXAlignment = Enum.TextXAlignment.Left
+tip.TextYAlignment = Enum.TextYAlignment.Center
+tip.AnchorPoint = Vector2.new(0, 1)
+tip.Size = UDim2.fromOffset(240, 18)
+tip.Text = BUFF_TEXT
+tip.Visible = false
+tip.ZIndex = 6
+tip.Parent = root
+
+local tipEdge = Instance.new("UIStroke")
+tipEdge.Color = OUTLINE
+tipEdge.Thickness = 2
+tipEdge.Parent = tip
+
+local TIP_WIDTH = TextService:GetTextSize(
+	BUFF_TEXT, tip.TextSize, tip.Font, Vector2.new(1000, 100)).X + 4
+tip.Size = UDim2.fromOffset(math.ceil(TIP_WIDTH), 18)
+
+--==============================================================================
+-- WHERE THE CARD SITS
+--
+-- Beside the cash number, so it has to be measured off it. TextBounds is the
+-- rendered width of the label's own text and updates with it; the floor is there
+-- for the first frames, before the server has said anything and the label is
+-- still a dash.
+--==============================================================================
+local BUFF_MIN_X = 120
+
+local function placeBuff()
+	local textWidth = math.max(amount.TextBounds.X, 0)
+	local x = math.max(BUFF_MIN_X, math.floor(textWidth) + BUFF_GAP)
+	buff.Position = UDim2.new(0, x, 1, 2)
+
+	--==========================================================================
+	-- The message follows the card, but is not allowed to leave the HUD's own
+	-- footprint. On a narrow phone the sentence is wider than the gap between
+	-- the card and the right edge, and a line that runs off the screen is a line
+	-- nobody can read -- so it slides left until it fits and stays directly
+	-- above the icon whenever there is room.
+	--==========================================================================
+	local limit = math.max(0, root.AbsoluteSize.X - TIP_WIDTH)
+	tip.Position = UDim2.new(0, math.clamp(x, 0, limit), 1, 2 - BUFF_SIZE - 4)
+end
+
+placeBuff()
+
+--==============================================================================
+-- SHOWN ONLY TO SOMEBODY WHO OWNS IT
+--
+-- GameConfig.cashMultiplier answers 1 for a missing, malformed or below-1
+-- attribute, so "not published yet" and "does not own it" both read as no card
+-- rather than as a card with nothing behind it.
+--==============================================================================
+local hideToken = 0
+local hideTween: Tween? = nil
+
+local function hideMessage(immediate: boolean?)
+	hideToken += 1
+	if hideTween then
+		hideTween:Cancel()
+		hideTween = nil
+	end
+	if immediate then
+		tip.Visible = false
+	end
+end
+
+local function refreshBuff()
+	local on = GameConfig.cashMultiplier(player) > 1
+	if buff.Visible == on then
+		return
+	end
+	buff.Visible = on
+	if not on then
+		-- The message belongs to the card. Losing the pass with the line still
+		-- up would leave a sentence about a buff that is no longer running.
+		hideMessage(true)
+	else
+		placeBuff()
+	end
+end
+
+--==============================================================================
+-- ONE MESSAGE, ONE TIMER, ONE TWEEN
+--
+-- A second tap does not add anything -- it cancels the fade that is running,
+-- puts the line back to full opacity and takes a new token. The old timer still
+-- wakes up, sees a token that is not its own and returns without touching
+-- anything, which is what keeps repeated taps from stacking fades on one label.
+--==============================================================================
+local FADE = PASS.BuffFade or 0.25
+
+table.insert(connections, buff.Activated:Connect(function()
+	hideMessage(false)
+	local mine = hideToken
+
+	tip.TextTransparency = 0
+	tipEdge.Transparency = 0
+	tip.Visible = true
+	placeBuff()
+	SoundKit.play("CardClick")
+
+	task.delay(PASS.BuffSeconds or 2.5, function()
+		if hideToken ~= mine or not tip.Parent then
+			return
+		end
+		local info = TweenInfo.new(FADE, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+		local fade = TweenService:Create(tip, info, { TextTransparency = 1 })
+		hideTween = fade
+		TweenService:Create(tipEdge, info, { Transparency = 1 }):Play()
+		fade.Completed:Once(function()
+			if hideToken == mine then
+				tip.Visible = false
+			end
+		end)
+		fade:Play()
+	end)
+end))
+
+--==============================================================================
+-- THE ATTRIBUTE IS THE ONLY INPUT
+--
+-- No remote and no poll. PassService writes CashMultiplier on the Player when it
+-- learns what they own -- at join, when a purchase prompt closes, and on its
+-- slow re-ask -- and every one of those arrives here as this signal.
+--==============================================================================
+table.insert(connections, player:GetAttributeChangedSignal(
+	GameConfig.Pass.MultiplierAttribute):Connect(refreshBuff))
+refreshBuff()
+
+
+--==============================================================================
 -- THE THREE THINGS IT ROTATES THROUGH
 --
 -- Each answers its own end of the ladder, so a maxed player is told they are
@@ -462,6 +696,12 @@ RunService.RenderStepped:Connect(function(dt)
 	local text = "$" .. GameConfig.compact(shown)
 	if amount.Text ~= text then
 		amount.Text = text
+		-- The card sits off the end of this string, so it moves when the string
+		-- does. Only on CHANGE -- placing it every frame would be arithmetic
+		-- sixty times a second for a number that mostly is not moving.
+		if buff.Visible then
+			placeBuff()
+		end
 		tickCount += 1
 		if tickCount % 3 == 0 then
 			SoundKit.play("CashTick")

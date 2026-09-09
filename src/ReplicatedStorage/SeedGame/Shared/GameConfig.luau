@@ -3177,6 +3177,27 @@ GameConfig.Store = {
 --==============================================================================
 GameConfig.Pass = {
 	MultiplierAttribute = "CashMultiplier",
+
+	--==========================================================================
+	-- THE HUD INDICATOR
+	--
+	-- A small card beside the cash line that says the multiplier is running. It
+	-- is COSMETIC AND NOTHING ELSE: it reads the attribute above, which the
+	-- server publishes, and it never decides or reports a payout. EconomyService
+	-- multiplies the faucet from PassService's own table and does not look here.
+	--
+	-- The icon is a transparent cutout uploaded from art/icons/x2_money_buff.png
+	-- via art/icons/x2_money_buff-256.png -- 256 square, because it draws at 46
+	-- and a 1254px texture for a 46px icon is memory nobody sees (rule 8).
+	--
+	-- The message is stated here rather than in the client script so the words a
+	-- player is shown are data, not a string literal buried in layout code.
+	--==========================================================================
+	BuffIcon = "rbxassetid://111194752241888",
+	BuffSize = 46,
+	BuffMessage = "Earn x2 money permanently.",
+	BuffSeconds = 2.5,
+	BuffFade = 0.25,
 }
 
 --==============================================================================

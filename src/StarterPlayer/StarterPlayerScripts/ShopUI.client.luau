@@ -251,21 +251,22 @@ local GUTTER = 10
 local CARD_ASPECT = 0.86
 
 local shelves: { UIGridLayout } = {}
+
 --==============================================================================
--- BANNERS ARE MEASURED, NOT CONSTRAINED
+-- THE PASS CARD IS ONE CELL, NOT A BANNER
 --
--- The first attempt sized a banner with a UIAspectRatioConstraint inside a shelf
--- set to AutomaticSize.Y. That is circular -- the shelf's height comes from the
--- child, the child's height comes from its own width, and the width comes from
--- the shelf -- and Roblox breaks the cycle by resolving the whole thing to ZERO.
--- The card rendered at 0 x 0 and the shelf collapsed with it.
+-- It used to span the whole shelf: a 3:2 card 584 wide and 389 tall, which was
+-- most of the panel before a player had scrolled to anything they could buy.
+-- The owner asked for it at tile size, with the rest of the row left for the
+-- passes still to come -- so it is now an ordinary grid cell, the same width and
+-- height as a SPEED tile, and the second and third pass will land beside it with
+-- no layout work at all.
 --
--- So a banner is sized the same way a tile is: in relayout(), off the panel
--- width that is already being measured there, in whole pixels. Same source of
--- truth, same moment, no constraint to fight with.
+-- That also retires the sizing problem the banner had. There is no measuring
+-- pass and no aspect constraint to go circular against an AutomaticSize parent;
+-- UIGridLayout gives the cell a definite size and the artwork fits inside it.
 --==============================================================================
 local BANNER_ASPECT = 1.5
-local banners: { { card: Frame, shelf: Frame } } = {}
 
 local function relayout()
 	local width = body.AbsoluteSize.X
@@ -279,14 +280,6 @@ local function relayout()
 		grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
 	end
 
-	-- The tiles occupy `width - 6` across, so a banner takes the same span and
-	-- its left and right edges line up with the shelf below it.
-	local span = columns * cell + GUTTER * (columns - 1)
-	local tall = math.floor(span / BANNER_ASPECT)
-	for _, entry in ipairs(banners) do
-		entry.card.Size = UDim2.fromOffset(span, tall)
-		entry.shelf.Size = UDim2.new(1, 0, 0, tall)
-	end
 end
 
 -- Height the panel to whatever the shelves add up to. Read off the layout
@@ -297,15 +290,15 @@ local function fit()
 end
 
 --==============================================================================
--- A SHELF IS A GRID UNLESS IT SAYS OTHERWISE
+-- EVERY SHELF IS A GRID
 --
--- `banner` shelves hold ONE wide card that sizes itself off the panel width and
--- keeps its own 3:2 aspect. They get no UIGridLayout and are never added to
--- `shelves`, which is what relayout() walks -- a banner has no cell size to set
--- and must not be handed the tile geometry.
+-- The PASSES shelf used to be an exception that got no UIGridLayout, because it
+-- held one card as wide as the panel. It holds a tile now, so the exception is
+-- gone and its cells come from the same relayout() as every other shelf -- which
+-- is what makes "the same size as SPEED" true by construction rather than by two
+-- numbers that have to be kept equal.
 --==============================================================================
-local function section(order: number, heading: string, colour: Color3,
-	banner: boolean?): Frame
+local function section(order: number, heading: string, colour: Color3): Frame
 	local header = outlined(body, 22, colour, 3)
 	header.Name = heading .. "Header"
 	header.LayoutOrder = order
@@ -321,13 +314,6 @@ local function section(order: number, heading: string, colour: Color3,
 	shelf.BackgroundTransparency = 1
 	shelf.ZIndex = 3
 	shelf.Parent = body
-
-	if banner then
-		-- Explicit height, set by relayout. AutomaticSize here is exactly what
-		-- collapsed the card to nothing the first time.
-		shelf.AutomaticSize = Enum.AutomaticSize.None
-		return shelf
-	end
 
 	local grid = Instance.new("UIGridLayout")
 	grid.CellSize = UDim2.fromOffset(140, 182)
@@ -623,30 +609,53 @@ local function buildBanner(parent: Instance, order: number, palette: any,
 	local frame = Instance.new("Frame")
 	frame.Name = "PassCard" .. order
 	frame.LayoutOrder = order
-	-- Overwritten by relayout on the first measure; a non-zero placeholder so a
-	-- frame rendered before that is a card rather than nothing.
-	frame.Size = UDim2.fromOffset(300, 200)
+	-- No Size. UIGridLayout writes it, which is the whole point: the cell is
+	-- whatever a SPEED tile is, measured once in relayout for every shelf.
 	frame.BackgroundTransparency = 1
 	frame.Parent = parent
 
+	--==========================================================================
+	-- THE ARTWORK KEEPS ITS OWN SHAPE INSIDE THE CELL
+	--
+	-- The card is 3:2 and a tile is not, so the image is given the card's aspect
+	-- and centred -- it fills the cell's width and leaves a little air above and
+	-- below rather than being cropped or squashed. Cropping would cut either the
+	-- money or the title; stretching would fatten the lettering.
+	--
+	-- The constraint is safe here in a way it was not on the old banner: a grid
+	-- cell has a definite size, so height-from-width resolves. It only went
+	-- circular before because the parent shelf was sizing itself FROM the child.
+	--==========================================================================
 	local art = Instance.new("ImageLabel")
 	art.Name = "Art"
-	art.Size = UDim2.fromScale(1, 1)
+	art.AnchorPoint = Vector2.new(0.5, 0.5)
+	art.Position = UDim2.fromScale(0.5, 0.5)
+	art.Size = UDim2.new(1, 0, 1, 0)
 	art.BackgroundTransparency = 1
 	art.Image = image
 	art.ScaleType = Enum.ScaleType.Fit
 	art.Parent = frame
 
+	local shape = Instance.new("UIAspectRatioConstraint")
+	shape.AspectRatio = BANNER_ASPECT
+	shape.DominantAxis = Enum.DominantAxis.Width
+	shape.Parent = art
+
 	--==========================================================================
-	-- The same black keyline every tile carries, so the banner reads as part of
-	-- the same shelf rather than a picture pasted above one -- and so the hover
-	-- pop has something to thicken.
+	-- THE KEYLINE GOES ON THE ARTWORK, NOT ON THE CELL
 	--
-	-- Thickness is what the tween moves, NOT transparency: a stroke left
-	-- transparent would thicken invisibly and the banner would be the one card
-	-- in the shop that does not answer the pointer.
+	-- The cell is 188 x 161 and the 3:2 card inside it is 188 x 125, so a stroke
+	-- on the cell drew a box with 18 empty pixels of shelf above and below the
+	-- picture -- a frame around nothing, which is worse than no frame at all.
+	--
+	-- On the art it traces the card, matches the black keyline every tile
+	-- carries, and still gives the hover pop something to thicken. Thickness is
+	-- what the tween moves, NOT transparency: a stroke left transparent would
+	-- thicken invisibly and this would be the one card in the shop that does not
+	-- answer the pointer.
 	--==========================================================================
-	local edge = stroke(frame, SHOP.Outline, 2.5)
+	corner(art, 8)
+	local edge = stroke(art, SHOP.Outline, 2.5)
 
 	--==========================================================================
 	-- THE BUTTON, IN THE QUARTER THE ARTWORK LEFT EMPTY
@@ -654,39 +663,46 @@ local function buildBanner(parent: Instance, order: number, palette: any,
 	-- Anchored to the bottom right rather than positioned from the top left, so
 	-- it stays in the reserved area whatever the card's rendered size is.
 	--==========================================================================
+	--==========================================================================
+	-- Still the artwork's reserved lower-right quarter, and still in SCALE, so
+	-- shrinking the card from 584 wide to a tile moves the button with it rather
+	-- than leaving a pill sized for a banner sitting off the corner.
+	--==========================================================================
 	local buy = Instance.new("TextButton")
 	buy.Name = "Buy"
 	buy.AnchorPoint = Vector2.new(1, 1)
-	buy.Position = UDim2.fromScale(0.945, 0.885)
-	buy.Size = UDim2.fromScale(0.365, 0.175)
+	buy.Position = UDim2.fromScale(0.945, 0.90)
+	buy.Size = UDim2.fromScale(0.40, 0.20)
 	buy.BackgroundColor3 = SHOP.Pill
 	buy.BorderSizePixel = 0
 	buy.AutoButtonColor = false
 	buy.Text = ""
 	buy.ZIndex = 4
 	buy.Parent = art
-	corner(buy, 8)
-	stroke(buy, SHOP.Outline, 3)
+	corner(buy, 6)
+	stroke(buy, SHOP.Outline, 2)
 
 	local shade = Instance.new("Frame")
 	shade.Name = "Shade"
 	shade.AnchorPoint = Vector2.new(0.5, 1)
 	shade.Position = UDim2.new(0.5, 0, 1, 0)
-	shade.Size = UDim2.new(1, 0, 0, 7)
+	shade.Size = UDim2.new(1, 0, 0, 5)
 	shade.BackgroundColor3 = SHOP.PillShade
 	shade.BorderSizePixel = 0
 	shade.ZIndex = 4
 	shade.Parent = buy
-	corner(shade, 8)
+	corner(shade, 6)
 
-	local price = outlined(buy, 20, WHITE, 3)
+	local price = outlined(buy, 16, WHITE, 2)
 	price.Name = "Price"
 	price.Size = UDim2.fromScale(1, 1)
 	price.ZIndex = 5
 	price.TextScaled = true
 	local cap = Instance.new("UITextSizeConstraint")
-	cap.MaxTextSize = 22
-	cap.MinTextSize = 10
+	-- The tile is a third of the banner's width, so the ceiling comes down with
+	-- it; SOON at 22 on a 190px card would have crowded the pill edge to edge.
+	cap.MaxTextSize = 15
+	cap.MinTextSize = 8
 	cap.Parent = price
 
 	--==========================================================================
@@ -759,7 +775,7 @@ end
 
 for _, spec in ipairs(STORE.Sections) do
 	local isBanner = spec.layout == "banner"
-	local shelf = section(order, spec.heading, spec.colour, isBanner)
+	local shelf = section(order, spec.heading, spec.colour)
 	order += 2
 
 	local items = STORE.Items[spec.id] or {}
@@ -782,8 +798,7 @@ for _, spec in ipairs(STORE.Sections) do
 				warn("[Seed/ShopUI] no card art for pass " .. tostring(item.key))
 				continue
 			end
-			local card, buy, price = buildBanner(shelf, index, spec, artwork)
-			table.insert(banners, { card = card, shelf = shelf })
+			local _, buy, price = buildBanner(shelf, index, spec, artwork)
 
 			local passId = tonumber(item.pass) or 0
 			local live = passId > 0

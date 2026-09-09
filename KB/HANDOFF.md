@@ -1,5 +1,55 @@
 # Steal a Seed — Session Handoff
 
+## x2 Money buff indicator — INTEGRATED 2026-09-09 (CLAUDE)
+
+Codex's art note below is now out of date on its last paragraph: the asset is
+uploaded and the indicator is built.
+
+`art/icons/x2_money_buff.png` is live at `rbxassetid://111194752241888`, uploaded
+from a tight-cropped 256 square copy (`art/icons/x2_money_buff-256.png`) — it
+draws at 46px, and a 1254px texture for a 46px icon is memory nobody sees.
+Recorded in `GameConfig.Pass` alongside `BuffSize`, `BuffMessage`, `BuffSeconds`
+and `BuffFade`, so the words a player is shown are data rather than a literal
+buried in layout code.
+
+Built inside the existing `CashUI.client.luau`; no second HUD controller, no
+remote, no poll. It listens to `GetAttributeChangedSignal("CashMultiplier")` and
+shows only while `GameConfig.cashMultiplier(player) > 1`. It is COSMETIC: it
+reads the attribute the server publishes and never reports or decides a payout.
+`EconomyService` and `PassService` are unchanged.
+
+The card is placed off `amount.TextBounds.X` every time the cash string changes,
+so it stays beside a number whose width moves between `$1.2K` and `$914.77T`.
+The Shoe, Speed and Cash lines do not move at all — measured identical before
+and after at (12,439), (68,434), (12,490).
+
+The message clamps left when it would overrun: with the card at offset 146 the
+line sits at 143, and both card and message finish inside the HUD's own 340px
+footprint, so this adds nothing to the existing narrow-screen overflow.
+
+`CashUI` now tracks its connections and drops them on `gui.Destroying`. It did
+not need to before — every connection wrote to something inside the GUI, where a
+handler firing at a destroyed label is harmless. This one attaches to the PLAYER,
+which outlives the GUI, so a second run would have left the first run's listener
+attached.
+
+Verified in Play: card absent at multiplier 1; appears 0.062s after
+`DebugService.SetPass`; one click shows the exact line and four rapid clicks give
+one show and one hide 2.70s after the LAST click (2.5s hold + 0.25s fade) with a
+single label throughout; revoking removes card and message in 0.050s; survives
+respawn as one instance; cash and speed keep updating; console clean; `rojo build`
+clean.
+
+**Shop pass card resized.** At the owner's direction it is no longer a banner
+spanning the shelf (584 x 389) but one grid cell, byte-identical in size to a
+SPEED tile — measured 188x161 and 158x135 at two panel widths, equal both times.
+The rest of the PASSES row is deliberately empty for the passes still to come.
+That also retired the banner's measuring pass; a grid cell has a definite size,
+so the 3:2 artwork keeps its shape with an aspect constraint that cannot go
+circular the way the old `AutomaticSize` shelf did. The keyline moved from the
+cell to the artwork — on the cell it drew a box with 18 empty pixels above and
+below the picture. Hover pop and click shake still measure 1.070 and 5px on it.
+
 ## x2 Money owned-buff HUD icon — 2026-09-09 (CODEX, ART ONLY)
 
 Owner requested a small persistent buff card beside/below the bottom-left Cash
