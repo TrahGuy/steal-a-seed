@@ -8,8 +8,33 @@ Codex's asset note below is now complete: the four PNGs are uploaded and wired.
 | --- | --- | --- |
 | Shop | `art/ui/rail-icons/shop.png` | `rbxassetid://90931969678136` |
 | Index | `art/ui/rail-icons/index.png` | `rbxassetid://126806966970007` |
-| Garden | `art/ui/rail-icons/garden.png` | `rbxassetid://106268245303506` |
-| Inventory | `art/ui/rail-icons/inventory.png` | `rbxassetid://135554729755251` |
+| Garden | `art/ui/rail-icons/garden.png` | `rbxassetid://131355079577116` |
+| Inventory | `art/ui/rail-icons/inventory.png` | `rbxassetid://124800563254633` |
+
+**Garden and Inventory were re-cut as outlines** at the owner's direction and
+re-uploaded; the ids above are the second pair (the filled first pair,
+`106268245303506` and `135554729755251`, is superseded). Each icon was drawn in
+its own button's colour family, and for these two that collided with the button:
+the planter's amber `#FFC95A..#D77B22` on a `#ECA034` button, the satchel's
+leather `#D89A59..#7A4328` on a `#C4945C` one. Their bodies are now `fill="none"`
+in the SVG masters so the button shows through, leaving the dark keyline, the
+cream stroke and the coloured accents. Shop (cream on green) and Index (white on
+blue) never had the problem and were not touched.
+
+The drop shadow came out of those two files with the fills. `feDropShadow` paints
+behind the element, so with a transparent interior it showed THROUGH the icon and
+smudged the area that is meant to be reading as button colour -- confirmed by
+rendering both ways before choosing. The unused `bed`/`soil`/`leather`/`flap`
+gradients are left in the masters so re-applying a fill is a one-word edit.
+
+There is no SVG rasteriser on this machine (no cairosvg, rsvg, inkscape or
+ImageMagick -- `convert` on PATH is Windows' disk tool). Re-exporting the edited
+masters needed one, so a small renderer covering exactly the subset these files
+use lives at `scratchpad/svgrender.py`. It was validated by rendering `shop.svg`
+and `index.svg` and diffing against their existing trusted PNGs: index matched to
+1.31/255 mean colour and 0.33/255 mean alpha, garden and inventory matched
+visually. Shop's scalloped awning is beyond it, which did not matter -- shop was
+not re-exported.
 
 Uploaded from `<name>-128.png`, 128px reductions of the 512 exports. They draw at
 28 and pop to 30, so 128 covers a 3x phone with headroom at a sixteenth of the

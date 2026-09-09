@@ -3,15 +3,23 @@
     <linearGradient id="leather" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D89A59"/><stop offset="1" stop-color="#7A4328"/></linearGradient>
     <linearGradient id="flap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0B86E"/><stop offset="1" stop-color="#A45F36"/></linearGradient>
     <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFF28A"/><stop offset="1" stop-color="#E39A22"/></linearGradient>
-    <filter id="shadow" x="-25%" y="-25%" width="150%" height="165%"><feDropShadow dx="0" dy="18" stdDeviation="12" flood-color="#2B1B14" flood-opacity=".48"/></filter>
   </defs>
-  <g filter="url(#shadow)" stroke-linejoin="round" stroke-linecap="round">
+  <!-- Fills knocked out at the owner's direction: the planter/satchel body is
+       transparent so the rail button's own colour shows through, leaving the dark
+       keyline, the cream separation stroke and the coloured accents.
+
+       THE DROP SHADOW WENT WITH THEM. feDropShadow paints behind the element, so
+       with a transparent interior it showed THROUGH the icon and put a dark smudge
+       across the very area that is meant to be reading as button colour. shop.svg
+       and index.svg keep theirs: their bodies are still solid, so their shadow is
+       still behind something. -->
+  <g stroke-linejoin="round" stroke-linecap="round">
     <path d="M151 195V153Q151 87 256 87T361 153V195" fill="none" stroke="#211813" stroke-width="53"/>
     <path d="M151 195V153Q151 87 256 87T361 153V195" fill="none" stroke="#FFF1D0" stroke-width="31"/>
     <path d="M151 195V153Q151 87 256 87T361 153V195" fill="none" stroke="#A35F38" stroke-width="18"/>
-    <path d="M104 192Q104 166 130 166H382Q408 166 408 192L429 406Q431 429 408 429H104Q81 429 83 406Z" fill="url(#leather)" stroke="#211813" stroke-width="38"/>
-    <path d="M104 192Q104 166 130 166H382Q408 166 408 192L429 406Q431 429 408 429H104Q81 429 83 406Z" fill="url(#leather)" stroke="#FFF1D0" stroke-width="15"/>
-    <path d="M103 196H409V273Q358 323 256 323T103 273Z" fill="url(#flap)" stroke="#211813" stroke-width="19"/>
+    <path d="M104 192Q104 166 130 166H382Q408 166 408 192L429 406Q431 429 408 429H104Q81 429 83 406Z" fill="none" stroke="#211813" stroke-width="38"/>
+    <path d="M104 192Q104 166 130 166H382Q408 166 408 192L429 406Q431 429 408 429H104Q81 429 83 406Z" fill="none" stroke="#FFF1D0" stroke-width="15"/>
+    <path d="M103 196H409V273Q358 323 256 323T103 273Z" fill="none" stroke="#211813" stroke-width="19"/>
     <path d="M126 201H386" fill="none" stroke="#FFD39A" stroke-width="10" opacity=".72"/>
     <path d="M216 289H296V353H216Z" fill="url(#gold)" stroke="#211813" stroke-width="17"/>
     <path d="M238 310H274V332H238Z" fill="#5E3825" stroke="#211813" stroke-width="8"/>

@@ -2852,8 +2852,21 @@ GameConfig.Rail = {
 	--==========================================================================
 	ShopIcon = "rbxassetid://90931969678136",
 	IndexIcon = "rbxassetid://126806966970007",
-	GardenIcon = "rbxassetid://106268245303506",
-	BagIcon = "rbxassetid://135554729755251",
+	--==========================================================================
+	-- GARDEN AND THE BAG ARE OUTLINES, THE OTHER TWO ARE FILLED
+	--
+	-- Not an inconsistency, a fix. Each of these four icons is drawn in its own
+	-- button's colour family, and for these two that ran into the button itself:
+	-- the planter's amber (#FFC95A..#D77B22) against a #ECA034 button, and the
+	-- satchel's leather (#D89A59..#7A4328) against a #C4945C one. Near enough
+	-- the same colour to read as a lump rather than a picture.
+	--
+	-- So their bodies are knocked out in the SVG masters and the button shows
+	-- through. Shop is cream on green and Index is white on blue, so neither had
+	-- the problem and neither was touched.
+	--==========================================================================
+	GardenIcon = "rbxassetid://131355079577116",
+	BagIcon = "rbxassetid://124800563254633",
 }
 
 --==============================================================================
