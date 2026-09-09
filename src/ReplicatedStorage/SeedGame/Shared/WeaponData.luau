@@ -417,64 +417,136 @@ WeaponData.Combat = {
 	--==========================================================================
 	-- HOW LONG A HIT KEEPS YOU DOWN, AND HOW LONG IT CANNOT HAPPEN AGAIN
 	--
-	-- The tumble is about 1.1 seconds. That is deliberately far short of a
-	-- guardian's -- HANDOFF measures those at 3.3 to 7.6 -- because a guardian
-	-- hit is the end of a raid and a bat hit is an interruption in one.
+	-- A bat hit is far shorter than a guardian's -- HANDOFF measures those at
+	-- 3.3 to 7.6 seconds -- because a guardian hit is the end of a raid and a
+	-- bat hit is an interruption in one. It is not, however, a SHOVE, and that
+	-- mistake is the whole history of this block.
 	--
-	-- FOUR DURATIONS, BECAUSE THEY ANSWER FOUR DIFFERENT QUESTIONS
-	--
-	-- These were two numbers doing three jobs, and the contradiction between
-	-- them was the bat ragdoll bug:
-	--
-	--   VictimLimpSeconds was BOTH what the player should feel AND the server's
-	--   safety net. The server restored the rig when it expired. But the
-	--   victim's client could not possibly report back that fast -- it needed
-	--   0.30s of launch guard, then 0.9s of minimum flight, then 0.35s of
-	--   stillness before it would even look at standing up, so its earliest
-	--   possible answer was about 1.55 seconds against a 1.1-second deadline.
-	--
-	-- So the server ALWAYS timed out first and restored the body while the
-	-- client was still flying it. The client then ran on for another second,
-	-- and any legitimate second hit arriving in that window was dropped on the
-	-- floor by the client's own re-entry guard -- a victim who went limp, and
-	-- did not move.
-	--
-	-- Split, they can each be set to what they are actually for:
-	--
-	--   MinLimp    the FLOOR. The client will not stand up before this even if
-	--              the body has physically stopped, so a bat hit reads as a hit
-	--              rather than a stumble. Nothing enforces this on the server;
-	--              it is presentation and it belongs to the machine drawing it.
-	--   Limp       what the player feels, and the DEADLINE the client is given.
-	--              It may settle earlier -- landing against a wall often does --
-	--              but at this instant it stops waiting and stands up wherever
-	--              it is.
-	--   Backstop   the server's safety net, and nothing else. It exists for a
-	--              client that crashed, lagged or lied, and it must be LATER
-	--              than the deadline or it fights the client for the body.
-	--   Immunity   how long until another bat may touch this player, and it
-	--              must be later than the Backstop -- a target that is still
-	--              mid-flight is filtered out of every swing, so a hit landing
-	--              between the two would be silently discarded.
-	--
-	-- THE ORDER IS THE CONTRACT: MinLimp < Limp < Backstop < Immunity. It is
-	-- asserted in WeaponSpec, because every one of these numbers is individually
-	-- reasonable and only their ORDER makes the system work.
-	--
-	-- The 0.25s between Limp and Backstop is round-trip grace: the client's
-	-- "I have stopped" has to cross the wire, and a backstop that fired while
-	-- that packet was in flight would be the original bug with smaller numbers.
 	--==========================================================================
-	VictimMinLimpSeconds = 0.9,
-	VictimLimpSeconds = 1.1,
-	VictimBackstopSeconds = 1.35,
+	-- WHAT WAS WRONG THE FIRST TIME: ONE NUMBER, THREE JOBS
+	--
+	-- `VictimLimpSeconds` was BOTH what the player should feel AND the server's
+	-- safety net, and the client could not answer inside it. The server timed
+	-- out on every hit and restored the rig while the client was still flying
+	-- it. Fixed in 147535c by splitting the number.
+	--
+	--==========================================================================
+	-- WHAT WAS WRONG THE SECOND TIME, AND IT IS WHY THESE ARE NOT CLOCKS
+	--
+	-- The split kept a bad assumption: that a bat "lands almost immediately --
+	-- it is a shove, not a flight". Two real players disproved it. The victim
+	-- did not visibly fall, did not stay down, and stood up on their own.
+	--
+	-- A DEADLINE MEASURED FROM THE HIT DOES NOT PROVE THE BODY HAS FALLEN. It
+	-- expires just as happily while the victim is still upright, still in the
+	-- air, or -- the case that was actually happening -- while the server's
+	-- disabled AnimationConstraints have not yet reached the victim's machine,
+	-- so the impulse was applied to a rig the animator was still holding in its
+	-- standing pose. A rigid body slid, a clock ran out, and it stood up.
+	--
+	-- So recovery is not on a clock any more. It is on EVENTS, and the clocks
+	-- below only bound them:
+	--
+	--   MinLimp     the floor, from the hit. The body may not stand before it,
+	--               however quickly it lands.
+	--   Knockdown   how long it stays limp AFTER IT TOUCHES THE GROUND. This is
+	--               the number that makes a hit read as a knockdown rather than
+	--               a stumble, and it is measured from the landing because that
+	--               is the moment the player can see.
+	--   Emergency   the client's failure containment. Not the animation: if
+	--               this fires, something went wrong and the log says so.
+	--   Backstop    the server's failure containment, behind the client's.
+	--   PostRecovery  a short window of protection at the moment the victim
+	--               stands, so two attackers cannot knock them down again on
+	--               the exact frame they get up.
+	--   Immunity    the immediate post-hit window, and the anti-chain guarantee
+	--               against the fastest bat's cooldown.
+	--
+	-- THE ORDER IS STILL THE CONTRACT: MinLimp < Emergency < Backstop, with
+	-- room between the last two for the round trip. Immunity no longer has to
+	-- outlast the backstop -- a victim is untargetable for as long as `flying`
+	-- holds their token, which is the whole ragdoll however long it takes, and
+	-- PostRecovery covers the seam as they stand.
+	--
+	-- EXPECTED TOTAL, which is an OUTCOME and not a setting: roughly 1.4 to 2.2
+	-- seconds, depending on the weapon and what the body hits on the way down.
+	-- If it is coming out at the Emergency value, the landing detection is not
+	-- working and the number to change is not in this block.
+	--==========================================================================
+	--==========================================================================
+	-- 1.4, MEASURED, NOT 0.9 GUESSED
+	--
+	-- 0.9 was carried over from the version the owner rejected, and measuring the
+	-- real thing is what showed why it could never have worked. A rootwood hit
+	-- puts the victim on the ground 0.75s after impact -- the body genuinely
+	-- falls, torso up-vector 0.16, almost flat -- and the old floor then stood
+	-- them up at 1.14s. That is 0.39 SECONDS of lying on the floor.
+	--
+	-- The fall was real. Nobody could see it. A knockdown that is over in four
+	-- tenths of a second reads as a stumble, which is exactly the report: "does
+	-- not visibly fall or remain knocked down".
+	--
+	-- So the floor is the bottom of the band the owner asked for, and the weakest
+	-- bat in the game now holds the victim down for 0.65s after they land instead
+	-- of 0.39s. Stronger bats fly longer and finish later on their own.
+	--==========================================================================
+	VictimMinLimpSeconds = 1.4,
+	VictimKnockdownHoldSeconds = 0.5,
+	--==========================================================================
+	-- 3.3, BECAUSE THE STRONGEST BAT IS IN THE AIR FOR TWO SECONDS
+	--
+	-- THIS EXCEEDS THE 2.5-3.0 THE BRIEF SUGGESTED, deliberately, and the whole
+	-- six-bat ladder measured on a real client is why:
+	--
+	--     rootwood      touched 0.57s   recovered 1.43s
+	--     cactus        touched 0.72s   recovered 1.42s
+	--     sunflower     touched 1.00s   recovered 1.55s
+	--     mirewood      touched 1.08s   recovered 1.60s
+	--     cindercrack   touched 1.15s   recovered 1.72s
+	--     comet         touched 2.05s   recovered 2.62s
+	--
+	-- The Comet throws its victim 138 studs. Two seconds of that is FLIGHT, and
+	-- flight is launch speed and lift -- both locked. At 3.0 the top of the
+	-- ladder had 0.38s of margin, and a victim who lands off a ledge or down a
+	-- slope would spend it and be emergency-recovered on a hit that was working
+	-- perfectly.
+	--
+	-- 3.3 gives that same hit 0.68s. It is the shortest guardian ragdoll HANDOFF
+	-- has measured, which sounds alarming and is not: this is the number that
+	-- fires when the landing detection FAILS, and it fired on none of the six.
+	-- What a player experiences is the floor plus their own fall -- 1.4 to 2.7
+	-- measured -- and that is the number held against guardian length below.
+	--
+	-- These were 2.8 and 3.2 until the two bats at the ends of the ladder were
+	-- measured, and the Comet does not fit behind 2.8 with any margin worth
+	-- having:
+	--
+	--     rootwood  touched down 0.47s, recovered 1.42s   (0.95s on the ground)
+	--     comet     touched down 1.89s, recovered 2.45s   (0.56s on the ground)
+	--
+	-- The Comet's 1.89 seconds is FLIGHT, and flight is launch speed and lift --
+	-- both locked. So the only honest place to put the emergency is behind the
+	-- longest legitimate fall, and 2.8 left the strongest bat 0.35s of margin
+	-- against a body that might land later still off a ledge or up a slope.
+	--
+	-- This is the only reason the numbers moved. The emergency is not the
+	-- animation and raising it does not make a single hit longer -- what ends a
+	-- bat ragdoll is the landing, and both bats above ended on theirs.
+	--==========================================================================
+	VictimEmergencySeconds = 3.3,
+	VictimBackstopSeconds = 3.7,
+	VictimPostRecoverySeconds = 0.4,
 	--==========================================================================
 	-- THE IMMUNITY IS THE ONLY THING STOPPING A CHAIN-FLING, and it has to be
 	-- longer than the fastest bat's cooldown or the Cactus Club alone locks a
-	-- player on the floor forever: 0.65s of cooldown against a 1.1s tumble means
-	-- the second swing lands while the first one is still playing. At 1.5 the
-	-- victim is always upright and moving for at least four tenths of a second
-	-- between hits, and two players with Cactus Clubs cannot do better than one.
+	-- player on the floor forever: 0.65s of cooldown means the second swing
+	-- would otherwise land while the first tumble is still playing.
+	--
+	-- IT IS NO LONGER THE ONLY GUARD, and it is no longer the longest one. A
+	-- victim is filtered out of every swing for as long as `flying` holds their
+	-- launch token, and that now outlives this window -- so the real protection
+	-- is the ragdoll itself, this covers the moment before it is established,
+	-- and PostRecovery covers the moment after it ends.
 	--==========================================================================
 	HitImmunitySeconds = 1.5,
 	--==========================================================================
@@ -737,15 +809,43 @@ end
 function WeaponData.BatThrowStyle(token: string, serverNow: number): { [string]: any }
 	local C = WeaponData.Combat
 	return {
-		-- presentation: a swing at arm's length, no camera move, less spin
+		--==================================================================
+		-- THE SPIN IS THE GUARDIAN'S NOW. THE DISTANCE IS NOT.
+		--
+		-- This was 0.55 -- a bat "tumbles less" -- and it was the wrong half of
+		-- the guardian to turn down. What the owner rejected was the PHYSICAL
+		-- LANGUAGE: limbs that do not read as limp, a body that does not read as
+		-- falling. Angular velocity is most of that language, and halving it
+		-- halved the one thing the hit needed.
+		--
+		-- So the tumble is 1.0, the tested guardian value, and the three things
+		-- that make a guardian a guardian are still turned off or down: it does
+		-- not take the camera, it is stepped 0.6 studs clear instead of 3, and
+		-- its launch speed is the power ladder rather than a thrown arc.
+		--
+		-- Distance is untouched. Angular velocity does not move a body.
+		--==================================================================
 		up = C.ClearUpStuds,
 		camera = false,
-		tumble = 0.55,
+		tumble = 1.0,
 		-- protocol
 		kind = "bat",
 		token = token,
+		--==================================================================
+		-- THE TERMS OF THE LANDING, NOT A DEADLINE TO STAND UP ON
+		--
+		-- `deadline` used to be the moment the client stopped waiting and
+		-- stood the body up wherever it was. That is what the owner saw and
+		-- rejected: it expires just as happily on a victim who never fell.
+		--
+		-- It is EMERGENCY containment now, and the two numbers above it are
+		-- what actually end a bat ragdoll -- a floor from the hit, and a hold
+		-- from the moment the body touches the ground. If `emergency` is what
+		-- ends a hit, the landing detection failed and the log says so.
+		--==================================================================
 		minLimp = C.VictimMinLimpSeconds,
-		deadline = serverNow + C.VictimLimpSeconds,
+		groundHold = C.VictimKnockdownHoldSeconds,
+		emergency = serverNow + C.VictimEmergencySeconds,
 	}
 end
 
@@ -835,47 +935,112 @@ assert(WeaponData.Combat.HitImmunitySeconds > fastestCooldown, string.format(
 	"hit immunity %.2fs must exceed the fastest bat's %.2fs cooldown, or that " ..
 	"bat alone can chain-fling a player", WeaponData.Combat.HitImmunitySeconds,
 	fastestCooldown))
-assert(WeaponData.Combat.HitImmunitySeconds > WeaponData.Combat.VictimLimpSeconds,
-	"a victim must be upright before the next hit can land")
+--==============================================================================
+-- A VICTIM IS UNTARGETABLE FOR THE WHOLE RAGDOLL, NOT FOR A FIXED WINDOW
+--
+-- This asserted `HitImmunitySeconds > VictimLimpSeconds` -- immunity outlasting
+-- the tumble -- and it stopped being the right question when the tumble stopped
+-- being a fixed length. A bat ragdoll now ends when the body has landed, which
+-- is usually 1.4-2.2s and is bounded rather than known.
+--
+-- What guarantees the property instead is `flying`: CombatService filters a
+-- player out of every swing for as long as their launch token is live, however
+-- long that is, and applies PostRecovery at the moment it clears. So the seam
+-- this used to protect is covered at both ends by construction.
+--==============================================================================
+assert(WeaponData.Combat.VictimPostRecoverySeconds > 0,
+	"a victim with no post-recovery window can be knocked down on the frame " ..
+	"they stand up")
 
 --==============================================================================
--- THE ORDER OF THE FOUR DURATIONS IS THE CONTRACT
+-- THE ORDER OF THE DURATIONS IS THE CONTRACT
 --
 -- Every one of these numbers is individually reasonable. Only their ORDER makes
--- the system work, and the bug this guards against was exactly an order that had
--- gone wrong -- the server's safety net set EARLIER than the client could
--- possibly answer, so it always fired, and always fought the client for the body.
+-- the system work, and both bat bugs were an order that had gone wrong -- first
+-- the server's net set earlier than the client could answer, then a client
+-- deadline set earlier than a body can fall.
 --
 -- Asserted at load rather than in a spec alone, because a spec is run when
 -- somebody remembers and this runs on every server boot.
 --==============================================================================
 do
 	local C = WeaponData.Combat
-	assert(C.VictimMinLimpSeconds < C.VictimLimpSeconds, string.format(
-		"the limp floor %.2fs must be under the client's deadline %.2fs, or the " ..
-		"client can never reach the deadline it was given",
-		C.VictimMinLimpSeconds, C.VictimLimpSeconds))
-	assert(C.VictimLimpSeconds < C.VictimBackstopSeconds, string.format(
-		"the client's deadline %.2fs must be BEFORE the server's backstop %.2fs, " ..
-		"or the server restores the rig while the client is still flying it",
-		C.VictimLimpSeconds, C.VictimBackstopSeconds))
-	assert(C.VictimBackstopSeconds < C.HitImmunitySeconds, string.format(
-		"the backstop %.2fs must be before immunity ends %.2fs: a player who is " ..
-		"still mid-flight is filtered out of every swing, so a hit landing " ..
-		"between the two would be silently discarded",
-		C.VictimBackstopSeconds, C.HitImmunitySeconds))
+
+	--==========================================================================
+	-- THE FLOOR HAS TO LEAVE ROOM FOR AN ACTUAL LANDING
+	--
+	-- Floor plus ground-hold is the FASTEST a bat ragdoll can legally end, and
+	-- it has to be comfortably under the emergency or every hit would be
+	-- emergency-recovered and nobody would notice.
+	--==========================================================================
+	assert(C.VictimMinLimpSeconds + C.VictimKnockdownHoldSeconds
+		< C.VictimEmergencySeconds, string.format(
+		"floor %.2fs + ground hold %.2fs must be under the emergency %.2fs, or " ..
+		"a bat can never recover normally",
+		C.VictimMinLimpSeconds, C.VictimKnockdownHoldSeconds,
+		C.VictimEmergencySeconds))
+	assert(C.VictimKnockdownHoldSeconds >= 0.35
+		and C.VictimKnockdownHoldSeconds <= 0.55, string.format(
+		"a %.2fs hold on the ground is outside the 0.35-0.55 the brief fixes: " ..
+		"under it a knockdown reads as a stumble, over it as a stun",
+		C.VictimKnockdownHoldSeconds))
+	--==========================================================================
+	-- AND THE FLOOR IS THE BOTTOM OF THE BAND
+	--
+	-- The fastest a bat can legally end is the floor itself, because a body that
+	-- lands early waits for it. So the floor IS the bottom of the intended
+	-- 1.4-2.2s of helplessness, and asserting it is the only way this file can
+	-- speak about that band at all -- everything above the bottom depends on how
+	-- long the body was in the air, which no data file knows.
+	--==========================================================================
+	assert(C.VictimMinLimpSeconds >= 1.4, string.format(
+		"a %.2fs floor is under the 1.4s bottom of the band: measured, a rootwood " ..
+		"victim is on the ground by 0.75s, so anything less is a stumble",
+		C.VictimMinLimpSeconds))
+	assert(C.VictimMinLimpSeconds < 2.2, string.format(
+		"a %.2fs floor is already at the TOP of the band, which leaves the " ..
+		"stronger bats nowhere to be longer than the weakest",
+		C.VictimMinLimpSeconds))
+	assert(C.VictimEmergencySeconds < C.VictimBackstopSeconds, string.format(
+		"the client's emergency %.2fs must be BEFORE the server's backstop " ..
+		"%.2fs, or the server restores the rig while the client still owns it",
+		C.VictimEmergencySeconds, C.VictimBackstopSeconds))
+
 	--==========================================================================
 	-- AND THERE HAS TO BE ROOM FOR THE ROUND TRIP
 	--
-	-- The gap between the client's deadline and the server's backstop is the
+	-- The gap between the client's last word and the server's backstop is the
 	-- only budget the "I have stopped" packet has to cross the wire in. Ten
-	-- milliseconds would satisfy the ordering above and still be the original
-	-- bug, so the margin is asserted rather than merely the order.
+	-- milliseconds would satisfy the ordering above and still be the first bug.
 	--==========================================================================
-	assert(C.VictimBackstopSeconds - C.VictimLimpSeconds >= 0.2, string.format(
-		"only %.0fms of round-trip grace between the client deadline and the " ..
+	assert(C.VictimBackstopSeconds - C.VictimEmergencySeconds >= 0.2,
+		string.format(
+		"only %.0fms of round-trip grace between the client emergency and the " ..
 		"server backstop; 200ms is the floor",
-		(C.VictimBackstopSeconds - C.VictimLimpSeconds) * 1000))
+		(C.VictimBackstopSeconds - C.VictimEmergencySeconds) * 1000))
+
+	--==========================================================================
+	-- AND IT MUST STILL BE A BAT, NOT A GUARDIAN
+	--
+	-- The whole point of the retune is a hit that reads as a knockdown. The point
+	-- it must not reach is a STUN: HANDOFF measures guardian ragdolls at 3.3 to
+	-- 7.6 seconds.
+	--
+	-- MEASURED AGAINST THE FLOOR, NOT THE EMERGENCY, and the distinction matters.
+	-- An earlier version of this assert compared the BACKSTOP against 3.3 and it
+	-- was the wrong comparison: the backstop is what happens when the landing
+	-- detection fails, and holding failure containment to the length of a normal
+	-- guardian ragdoll is what forced the emergency too tight to fit the Comet.
+	--
+	-- What a player experiences is the floor plus their own fall. That is what
+	-- has to stay short of guardian length, and it does: 1.4 against 3.3, with
+	-- the longest measured real hit at 2.50.
+	--==========================================================================
+	assert(C.VictimMinLimpSeconds + C.VictimKnockdownHoldSeconds < 3.3,
+		string.format(
+		"floor %.2fs + hold %.2fs is guardian length; bats interrupt a raid, " ..
+		"they do not end one",
+		C.VictimMinLimpSeconds, C.VictimKnockdownHoldSeconds))
 end
 
 return WeaponData

@@ -244,63 +244,100 @@ end
 check(C.HitImmunitySeconds > fastest,
 	"immunity outlasts the fastest bat's cooldown",
 	string.format("%.2fs > %.2fs", C.HitImmunitySeconds, fastest))
-check(C.HitImmunitySeconds > C.VictimLimpSeconds,
-	"a victim is upright before the next hit can land",
-	string.format("%.2fs > %.2fs", C.HitImmunitySeconds, C.VictimLimpSeconds))
-check(C.VictimLimpSeconds < 3.3,
-	"the tumble is far shorter than a guardian's measured 3.3-7.6s",
-	string.format("%.2fs", C.VictimLimpSeconds))
+check(C.VictimPostRecoverySeconds > 0,
+	"and a victim gets a moment of protection as they stand up",
+	string.format("%.2fs", C.VictimPostRecoverySeconds))
+check(C.VictimMinLimpSeconds + C.VictimKnockdownHoldSeconds < 3.3,
+	"what a victim actually experiences is far shorter than a guardian's 3.3-7.6s",
+	string.format("%.2f + %.2f = %.2fs", C.VictimMinLimpSeconds,
+		C.VictimKnockdownHoldSeconds,
+		C.VictimMinLimpSeconds + C.VictimKnockdownHoldSeconds))
 
 --==============================================================================
 -- 4b. THE LAUNCH HANDSHAKE
 --
--- The bat ragdoll had a timing contradiction that fired on EVERY hit, and none
--- of the checks above could see it, because every number involved was
--- individually reasonable. Only their ORDER was wrong:
+-- The bat ragdoll has been wrong twice, in two different ways, and neither was
+-- visible to any check that reads one number at a time.
 --
---   the server restored the rig when VictimLimpSeconds expired at 1.10s
---   the client could not answer before roughly 1.55s
+-- FIRST: a timing contradiction on every hit. The server restored the rig when
+-- VictimLimpSeconds expired at 1.10s; the client could not answer before about
+-- 1.55s. So the server always timed out, always restored the body while the
+-- client was still flying it, and the client then ran on holding a re-entry
+-- guard that discarded the next legitimate hit.
 --
--- So the server always timed out, always restored the body while the client was
--- still flying it, and the client ran on for another second afterwards holding
--- a re-entry guard that silently discarded the next legitimate hit -- a victim
--- who went limp and did not move.
+-- SECOND, and this is why the numbers below are not a deadline any more: two
+-- real players reported that the victim never visibly fell and stood up on
+-- their own. A clock started at the hit cannot tell whether a body has fallen,
+-- and it expires just as happily on one that never did -- which is exactly what
+-- was happening, because the server's disabled AnimationConstraints had not yet
+-- reached the victim's machine when the impulse was applied.
 --
--- These are the assertions that would have caught it.
+-- So recovery is on EVENTS now and these clocks only bound it. What can still
+-- be asserted from a data file is the ORDER, and that is what these are.
 --==============================================================================
 say("\n-- the launch handshake --")
 
-check(C.VictimMinLimpSeconds < C.VictimLimpSeconds,
-	"the limp floor is under the client deadline",
-	string.format("%.2fs < %.2fs", C.VictimMinLimpSeconds, C.VictimLimpSeconds))
-check(C.VictimLimpSeconds < C.VictimBackstopSeconds,
-	"THE CLIENT DEADLINE IS BEFORE THE SERVER BACKSTOP",
-	string.format("%.2fs < %.2fs", C.VictimLimpSeconds, C.VictimBackstopSeconds))
-check(C.VictimBackstopSeconds < C.HitImmunitySeconds,
-	"and the backstop lands before immunity ends",
-	string.format("%.2fs < %.2fs", C.VictimBackstopSeconds, C.HitImmunitySeconds))
-check(C.VictimBackstopSeconds - C.VictimLimpSeconds >= 0.2,
+check(C.VictimMinLimpSeconds + C.VictimKnockdownHoldSeconds < C.VictimEmergencySeconds,
+	"THE FASTEST LEGAL RECOVERY IS WELL INSIDE THE EMERGENCY",
+	string.format("%.2f + %.2f < %.2fs", C.VictimMinLimpSeconds,
+		C.VictimKnockdownHoldSeconds, C.VictimEmergencySeconds))
+check(C.VictimKnockdownHoldSeconds >= 0.3,
+	"the body stays down long enough after landing to read as a knockdown",
+	string.format("%.2fs on the ground", C.VictimKnockdownHoldSeconds))
+check(C.VictimEmergencySeconds < C.VictimBackstopSeconds,
+	"the client's emergency is before the server's backstop",
+	string.format("%.2fs < %.2fs", C.VictimEmergencySeconds, C.VictimBackstopSeconds))
+check(C.VictimBackstopSeconds - C.VictimEmergencySeconds >= 0.2,
 	"with room for the round trip between them",
-	string.format("%.0fms", (C.VictimBackstopSeconds - C.VictimLimpSeconds) * 1000))
+	string.format("%.0fms", (C.VictimBackstopSeconds - C.VictimEmergencySeconds) * 1000))
 
 --==========================================================================
--- IMMUNITY OUTLASTS THE WHOLE RECOVERY, NOT JUST THE TUMBLE
+-- THE EXPECTED TOTAL IS AN OUTCOME, AND IT IS STILL BOUNDED
 --
--- The existing check above compares immunity against VictimLimpSeconds, and
--- that was never the number that mattered: the victim is not available again
--- when the client stands them up, but when the SERVER has finished with them.
--- A hit landing between those two is dropped on the floor -- targetsFor filters
--- out anybody still marked flying -- so the swing connects with nothing at all.
+-- Nothing in a data file can prove a body fell over. What it CAN prove is that
+-- the range the design asks for -- roughly 1.4 to 2.2 seconds of helplessness --
+-- is reachable at all: the floor plus a landing plus the ground hold has to fit
+-- inside it, and the emergency has to sit outside it or it would be the normal
+-- path wearing a different name.
 --==========================================================================
-check(C.HitImmunitySeconds > C.VictimBackstopSeconds,
-	"a victim is fully released before another bat can touch them",
-	string.format("immunity %.2fs > backstop %.2fs, %.0fms to spare",
-		C.HitImmunitySeconds, C.VictimBackstopSeconds,
-		(C.HitImmunitySeconds - C.VictimBackstopSeconds) * 1000))
-check(C.HitImmunitySeconds > fastest + C.VictimBackstopSeconds - C.VictimLimpSeconds,
-	"and the fastest bat still cannot reach them the moment they are up",
-	string.format("%.2fs vs %.2fs", C.HitImmunitySeconds,
-		fastest + C.VictimBackstopSeconds - C.VictimLimpSeconds))
+check(C.VictimMinLimpSeconds >= 1.4 and C.VictimMinLimpSeconds < 2.2,
+	"THE FLOOR IS THE BOTTOM OF THE INTENDED 1.4-2.2s BAND",
+	string.format("%.2fs", C.VictimMinLimpSeconds))
+check(C.VictimKnockdownHoldSeconds >= 0.35 and C.VictimKnockdownHoldSeconds <= 0.55,
+	"and the grounded hold is inside the 0.35-0.55 the brief fixes",
+	string.format("%.2fs", C.VictimKnockdownHoldSeconds))
+check(C.VictimEmergencySeconds >= 2.62 + 0.5,
+	"and the emergency clears the strongest bat's measured 2.62s landing " ..
+	"by half a second",
+	string.format("%.2fs against a measured comet recovery of 2.62s",
+		C.VictimEmergencySeconds))
+
+--==========================================================================
+-- THE VICTIM IS COVERED AT BOTH ENDS, BY TWO DIFFERENT MECHANISMS
+--
+-- A previous version of this section asserted that immunity outlasted the
+-- backstop, so that a hit could never land on somebody still flying. That was
+-- the right property and it is now bought a different way, because a bat
+-- ragdoll no longer HAS a fixed length to outlast -- it ends when the body has
+-- landed.
+--
+--   during   `flying` holds the launch token, and targetsFor filters out
+--            anybody who has one. However long the fall takes, they cannot be
+--            hit, so no fixed window has to cover it.
+--   after    PostRecovery is applied at the moment the token clears, which is
+--            the one frame the old design could not protect: a second attacker
+--            standing over a downed player and swinging as they stand.
+--
+-- So the assertion is no longer about durations outlasting each other. It is
+-- that the second mechanism exists and is long enough to matter.
+--==========================================================================
+check(C.VictimPostRecoverySeconds >= 0.35,
+	"the moment a victim stands up is protected",
+	string.format("%.2fs", C.VictimPostRecoverySeconds))
+check(C.VictimPostRecoverySeconds < fastest,
+	"but not so long that it is a second immunity window in disguise",
+	string.format("%.2fs under the fastest cooldown %.2fs",
+		C.VictimPostRecoverySeconds, fastest))
 
 --==========================================================================
 -- ONLY THE LIVE TOKEN ENDS THE LIVE LAUNCH
@@ -352,21 +389,30 @@ do
 	local NOW = 1000
 	local style = WeaponData.BatThrowStyle("b1@0.00", NOW)
 	check(style.camera == false, "a bat never takes the camera")
-	check(style.tumble == 0.55, "and tumbles less than a guardian's 1.0",
+	--== the spin IS the guardian's; the distance and the camera are not ==--
+	check(style.tumble == 1.0,
+		"but it tumbles with a guardian's full spin -- that is the physical " ..
+		"language the owner asked for",
 		tostring(style.tumble))
 	check(style.up == C.ClearUpStuds, "and is stepped clear by a fraction of a stud",
 		string.format("%.2f", style.up))
 	check(style.kind == "bat", "it says what it is")
 	check(style.token == "b1@0.00", "and carries the token it will be answered with")
 	check(style.minLimp == C.VictimMinLimpSeconds, "the floor rides along")
-	check(style.deadline == NOW + C.VictimLimpSeconds,
-		"and the deadline is an ABSOLUTE server instant, not a duration",
-		string.format("%.2f = now %.0f + %.2f", style.deadline, NOW, C.VictimLimpSeconds))
-	--== the deadline must leave the client time to actually do the work ==--
-	check(style.deadline - NOW > style.minLimp,
-		"a client told to wait until the floor can still reach its deadline",
-		string.format("%.2fs of deadline against a %.2fs floor",
-			style.deadline - NOW, style.minLimp))
+	check(style.groundHold == C.VictimKnockdownHoldSeconds,
+		"AND SO DOES THE HOLD THAT STARTS WHEN THE BODY LANDS",
+		string.format("%.2fs", style.groundHold))
+	check(style.deadline == nil,
+		"there is no deadline field any more -- a clock cannot end a landing")
+	check(style.emergency == NOW + C.VictimEmergencySeconds,
+		"the emergency is an ABSOLUTE server instant, not a duration",
+		string.format("%.2f = now %.0f + %.2f", style.emergency, NOW,
+			C.VictimEmergencySeconds))
+	--== the emergency must leave room for a floor, a fall and a hold ==--
+	check(style.emergency - NOW > style.minLimp + style.groundHold,
+		"and it leaves room for the floor, a fall and the ground hold",
+		string.format("%.2fs against %.2f + %.2f",
+			style.emergency - NOW, style.minLimp, style.groundHold))
 end
 
 --==============================================================================

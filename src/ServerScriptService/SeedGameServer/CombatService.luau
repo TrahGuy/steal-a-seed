@@ -633,12 +633,16 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 	-- afford a six-second backstop; a bat that left somebody limp for six
 	-- seconds after a shove would be a stun, and this file does not do stuns.
 	--
-	-- THIS WAITED ON VictimLimpSeconds AND THAT WAS THE BUG. The same 1.1
+	-- THIS WAITED ON VictimLimpSeconds AND THAT WAS THE FIRST BUG. The same 1.1
 	-- seconds was being used as the thing the player feels AND as the safety net
 	-- -- so the net was set earlier than the client could possibly answer, and
-	-- fired on every single hit. The client is given the 1.1 now; this is the
-	-- 1.35 behind it, and in the normal case it never reaches the end of its
-	-- own loop.
+	-- fired on every single hit.
+	--
+	-- AND THEN 1.35 WAS STILL TOO SHORT, which was the second. A bat ragdoll is
+	-- not a fixed length any more: the client waits for the body to actually
+	-- land, which takes as long as the fall takes. So this is 3.2 -- behind the
+	-- client's own 2.8 emergency, and still under the 3.3 that would make a bat
+	-- feel like a guardian.
 	--
 	-- One exit, reached by every path, for the reason written over throwPlayer:
 	-- a lock only the happy path releases is not a lock, it is a trap.
@@ -683,13 +687,14 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 			--==================================================================
 			-- WORTH A WARNING, AND ONLY IN THIS ONE CASE
 			--
-			-- The client is given 1.10s and this waits 1.35s, so on any normal
-			-- connection the report is already here. Reaching the end of the
-			-- loop means it did not arrive at all -- a client that crashed,
-			-- lagged past a quarter of a second of round trip, or is refusing
-			-- to answer. All three are worth seeing in a log, and none of them
-			-- is worth breaking a fight over: the restore below happens either
-			-- way, which is the entire point of a backstop.
+			-- The client contains itself at 2.8s and this waits 3.2s, so on any
+			-- normal connection the report is already here -- and on a normal
+			-- HIT it arrived at about 1.5 to 2.0, when the body finished
+			-- landing. Reaching the end of this loop means no report came at
+			-- all: a client that crashed, lagged past 400ms of round trip, or
+			-- is refusing to answer. All three are worth seeing in a log, and
+			-- none is worth breaking a fight over -- the restore below happens
+			-- either way, which is the entire point of a backstop.
 			--==================================================================
 			warn(string.format(
 				"[Seed/CombatService] %s never reported landing (%s); restored " ..
@@ -703,6 +708,28 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 		-- Recomputed, never restored. The player may have dropped a pod on the
 		-- way down, which changes what their speed should be.
 		CarryService.RefreshWalkSpeed(victim)
+
+		--==================================================================
+		-- AND A MOMENT OF PROTECTION AT THE INSTANT THEY STAND
+		--
+		-- Until now the only immunity was counted from the HIT, and that was
+		-- sound while a ragdoll had a fixed length. It does not any more: the
+		-- client waits for the body to land, so recovery lands somewhere in a
+		-- range and the fixed window can expire well before the victim is back
+		-- on their feet.
+		--
+		-- The gap that leaves is real and it is the nastiest one in the system:
+		-- a second attacker standing over a downed player, swinging on the exact
+		-- frame the ragdoll clears. `flying` protects the whole tumble -- every
+		-- swing filters on it -- and this covers the seam on the other side, so
+		-- there is no instant at which a victim is both upright and free.
+		--
+		-- math.max, never assignment: a hit that landed a moment ago may have
+		-- set a longer window, and a recovery must not SHORTEN somebody's
+		-- immunity.
+		--==================================================================
+		immuneUntil[victim] = math.max(immuneUntil[victim] or 0,
+			now() + C.VictimPostRecoverySeconds)
 	end)
 end
 

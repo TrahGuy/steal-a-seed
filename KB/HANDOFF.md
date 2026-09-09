@@ -1,5 +1,199 @@
 # Steal a Seed — Session Handoff
 
+## The bat ragdoll, rejected and repaired: it falls over now — 2026-09-09 (CLAUDE)
+
+### What was rejected
+
+The owner tested `147535c` with two real players and rejected it. Observed: the
+victim **automatically stands up**, does **not visibly fall or stay knocked
+down**, and does **not look like a guardian hit**.
+
+The authoritative requirement is the guardian's *physical language*, not its
+scale: limbs go limp, the body falls or tumbles, it contacts the ground, it
+remains visibly down briefly, then it gets up once.
+
+### Two causes, and the second one was the real one
+
+`147535c` assumed a bat "lands almost immediately -- it is a shove, not a
+flight". Measuring all six bats on a live client disproved it twice over.
+
+**1. Recovery ran on a clock, not on a landing.** `VictimLimpSeconds` was an
+absolute deadline from the hit, and a deadline cannot tell whether a body has
+fallen. Rootwood measured: the victim genuinely reached the ground at 0.47s and
+lay flat (torso up-vector −0.12), and the deadline then stood them up at 1.14s.
+**That is 0.39 seconds of lying on the floor.** The fall was real and nobody
+could see it.
+
+**2. A bat was not guaranteed to fall over at all.** The tumble is built from
+`math.random(-6, 6)` -- an INTEGER draw, so both axes that tip a standing body
+can come out ZERO on the same hit. A guardian never noticed because it throws
+hard and high enough to rotate regardless. The Cactus Club has the lowest lift
+on the shelf (0.35), and with a near-zero tipping draw it measured:
+
+```
+cactus_club   touched down 0.63s, lowest torso up 0.86, EMERGENCY at 3.02s
+```
+
+0.86 is **a body still standing**. It went limp and slid eighteen studs upright
+on its feet. The old code stood it up at 1.1s and called that a hit.
+
+A third mechanism was found, instrumented, and turned out **not** to be the
+cause here: `CombatService` disables the constraints and fires the remote in the
+same frame on two unordered channels, so the impulse can land on a rig the
+animator still holds in its standing pose. Measured in Studio it replicates in
+**0.001s**, so it was not what the owner saw -- but it is real on a network, and
+the gate for it is cheap. Reported honestly rather than claimed as the fix.
+
+### The repair
+
+**Recovery is now four things that must have HAPPENED**, none of them a duration:
+
+  * **touched** -- a downward ray from the *visible torso* found floor. Not the
+    root: while limp the root is an invisible box that flies off on its own,
+    measured once at 148 studs away, and it is not what the player watched land.
+  * **fell** -- the torso's up-vector went past 0.55 (about 57° off vertical).
+    Tracked as the LOWEST value reached, not sampled at the end, because a body
+    can land hard, roll, and come to rest half-propped against a wall.
+  * **held** -- it stayed down for `VictimKnockdownHoldSeconds`, timed from the
+    CONTACT rather than the hit, because the contact is the moment the player
+    sees.
+  * **slow** -- still necessary, no longer sufficient.
+
+**The topple is guaranteed.** For a bat the spin about the horizontal axes is a
+random DIRECTION with a guaranteed MAGNITUDE (8–12 rad/s) instead of a draw that
+can be zero. Angular velocity is not linear velocity, so the launch is
+untouched. Guardians keep the integer draw.
+
+**Tumble scale 0.55 → 1.0.** Halving the guardian's spin was the wrong half of
+it to turn down; the spin *is* most of the physical language. The three things
+that make a guardian a guardian are still off or down: no camera, stepped 0.6
+studs clear instead of 3, launch from the power ladder.
+
+**A readiness gate before the launch** (bat only, so guardian tuning is
+untouched): wait up to 0.4s for all 15 constraints disabled AND the rig split
+into separate assemblies -- a posed R15 is ONE assembly, verified live, so a
+torso still sharing the root's assembly is a torso still held in its standing
+pose. On timeout it launches anyway and says so; the landing loop still requires
+a real fall, so a late limp still produces a real fall.
+
+**Durations.** `VictimLimpSeconds` is gone -- a number whose meaning had
+evaporated:
+
+```
+VictimMinLimpSeconds       1.4   floor from the hit (was 0.9)
+VictimKnockdownHoldSeconds 0.5   from GROUND CONTACT, not from the hit
+VictimEmergencySeconds     3.3   client failure containment
+VictimBackstopSeconds      3.7   server failure containment
+VictimPostRecoverySeconds  0.4   protection at the instant they stand
+HitImmunitySeconds         1.5   unchanged
+```
+
+**The emergency exceeds the 2.5–3.0 the brief suggested, deliberately.** The
+Comet throws its victim 127 studs and ~1.9s of that is FLIGHT, which is launch
+speed and lift -- both locked. At 3.0 the top of the ladder had 0.38s of margin
+and a victim landing off a ledge would have spent it and been emergency-recovered
+on a hit that was working. 3.3 gives it 0.68s. It is not the animation: it fired
+on none of the six bats.
+
+**Post-recovery immunity.** Until now the only immunity was counted from the hit,
+which is unsound once a ragdoll has no fixed length. `flying` makes a victim
+untargetable for the whole tumble however long it takes, and 0.4s is applied with
+`math.max` at the instant the token clears -- so there is no frame on which a
+victim is both upright and free. That closes the two-attackers-standing-over-you
+case.
+
+**`147535c`'s token work is intact**: one server-minted token per launch,
+exact-token acknowledgement via `WeaponData.AcceptsAck`, stale and duplicate
+reports rejected, a newer client generation supersedes an older task safely, one
+cleanup owner, one RagdollOn/RagdollOff pair. No bare boolean, no silent
+`if throwing then return`.
+
+### Measured — all six bats, live client, real server ordering
+
+`RagdollOn` then `FireClient` in the same frame, exactly as `knockBack` does.
+
+```
+bat            launch  lift  ready   touched  lowest up  recovered  down    travel
+rootwood        25.0   0.50  0.000s  0.74s    -0.01      natural    1.45s    16.8
+cactus          35.0   0.35  0.001s  0.72s    -0.00      natural    1.47s    20.6
+sunflower       47.5   1.05  0.001s  1.00s    -0.00      natural    1.60s    39.6
+mirewood        62.5   0.40  0.001s  1.08s    +0.01      natural    1.65s    45.3
+cindercrack     80.0   0.45  0.001s  1.15s    -0.62      natural    1.77s    55.6
+comet          100.0   0.62  0.000s  1.88s    -0.35      natural    2.48s   127.0
+```
+
+Every bat toppled past horizontal. **No emergency, no slide, on any of them.**
+Weakest 1.45s, strongest 2.48s; the grounded portion went from 0.39s to
+**0.66–0.95s**. Travel rose ~10% (rootwood 11.8 → 16.8) because a spinning body
+rolls further after it lands -- the launch impulse is byte-identical.
+
+Cactus, the case that failed: `3.07s EMERGENCY, lowest up 0.86` → `1.47s natural,
+lowest up −0.00`.
+
+**Guardians unchanged**, both branches, same session:
+
+```
+hold=nil   stepped 6.0 (+3.0) | camera -> 12.0..128, subject Head
+           "held the launch velocity for 0.35s"  (LEGACY_HOLD)  down 6.45s
+hold=0     stepped 6.0 (+3.0) | camera -> 12.0..128, subject Head
+           "one impulse; back on the arc 0 times" (CLEAN_GUARD) down 6.42s
+```
+
+Bats never touch the camera: `zoom 0.5..128.0 -> 0.5..128.0, subject Humanoid ->
+Humanoid` on every hit.
+
+**Respawn during ragdoll**: comet launched, `LoadCharacter()` at 0.8s mid-flight.
+New character came back with 15/15 constraints enabled, 1 assembly,
+PlatformStand false, WalkSpeed 96.3, Jump enabled, state Running. The abandoned
+task produced no `LANDING`, no `settled`, no `done` and no error -- it returned
+silently at its next await, as designed. Client log: 79 entries, 1 warning, and
+that warning is the pre-existing ShopUI "nothing is for sale" notice.
+
+### Automated
+
+Ten specs pass; WeaponSpec 102 → 107. `rojo build` passes, `git diff --check` is
+clean, all four files compile via `loadstring` in Edit, and `WeaponData` was
+executed so the retuned load-time ordering asserts actually fired.
+
+### NOT verified — the owner's acceptance test
+
+**Everything above drives `ThrowVictim` directly from the server.** It reproduces
+the real ORDERING and it is a far better test than the previous pass, but it is
+still not a swing: no `trySwing`, no arc resolution, no `targetsFor`, no real
+`knockBack`, and no second player watching. Per the brief it is **not acceptance
+evidence**. `DebugService`'s 16 actions cannot trigger a hit and `targetsFor`
+excludes the swinger, so a second client is the only way.
+
+Still to be observed by the owner, two clients, comparable camera angles:
+
+  * The nine-point visual checklist, and a guardian hit alongside for comparison.
+  * Victim running / jumping / carrying a pod / inside a trap / beside a wall.
+  * Second hit after recovery, and two attackers swinging close together.
+  * That pod-drop-before-launch and trap-release-before-launch still hold (both
+    are server-side and untouched by this pass, at `CombatService` lines 778 and
+    onwards).
+
+Open risks:
+
+  * **The Comet is 2.48s**, above the brief's suggested 2.2s ceiling. Its flight
+    alone is 1.9s and launch distance is locked, so the only lever is the ground
+    hold. If 2.48s reads as a stun, lower `VictimKnockdownHoldSeconds` toward
+    0.35 -- that is the one number to touch, and it is asserted to stay in
+    0.35–0.55.
+  * **Travel is ~10% further** on the weaker bats because the guaranteed spin
+    makes a landed body roll. If that matters, it is the topple magnitude
+    (`TOPPLE_MIN`/`TOPPLE_MAX` in ThrowFX), not the launch.
+  * The readiness gate has only ever been measured at ~0.001s on localhost. Its
+    behaviour under real latency is unproven; if it ever times out the log says
+    so in as many words.
+
+### Files
+
+`WeaponData.luau` (durations, style terms, load asserts), `CombatService.luau`
+(backstop retune, post-recovery immunity), `ThrowFX.client.luau` (readiness gate,
+landing-based recovery, guaranteed topple, bounded slide, emergency logging),
+`WeaponSpec.luau` (107). `NestService.luau` untouched.
+
 ## The bat ragdoll: a launch token, and four durations instead of two — 2026-09-09 (CLAUDE)
 
 ### The cause

@@ -120,6 +120,86 @@ local STANDUP_WATCH = 0.9
 -- themselves rather than slept, because a sleep is a guess about the round trip.
 local JOINTS_BACK_TIMEOUT = 1.5
 
+--==============================================================================
+-- WAITING FOR THE BODY TO ACTUALLY BE LIMP BEFORE THROWING IT
+--
+-- This is the bug two real players found, and it is a RACE nothing in this file
+-- could see from one machine.
+--
+-- CombatService disables the fifteen AnimationConstraints and then fires this
+-- remote in the same frame. Those are two different channels -- a property
+-- replication and a RemoteEvent -- and nothing orders them. The event usually
+-- wins. So the impulse was landing on a rig the animator was still holding in
+-- its standing pose: one rigid assembly, posed, upright. It slid. It did not
+-- fall, it did not tumble, and the clock then stood it up.
+--
+-- WHY THE GUARDIAN NEVER SHOWED THIS. Its legacy branch re-writes the velocity
+-- every frame for 0.35 seconds, so by the time the constraints arrive it is
+-- still being pushed and goes limp mid-flight; and its settle is a second
+-- longer again. The guardian was absorbing the race, not avoiding it.
+--
+-- So a bat waits -- briefly, and on evidence rather than on a sleep. Measured
+-- in a real session and printed on every hit, because if this ever starts
+-- timing out the symptom is exactly the one that was rejected.
+local RAGDOLL_READY_TIMEOUT = 0.4
+
+--==============================================================================
+-- WHAT COUNTS AS HAVING LANDED
+--
+-- SETTLE_SPEED alone was never enough, and on a bat it was actively wrong: a
+-- body that has not been launched at all is also below it.
+--
+--   GROUND_PROBE   how far under the visible torso to look for floor. Generous,
+--                  because a body on its side sits lower than one on its back.
+--   FALLEN_UP      the torso's up-vector against world up. 1.00 is standing;
+--                  this is about 57 degrees off vertical, which no standing rig
+--                  reaches and every fallen one passes through.
+--   LANDING_STEP   how often the landing is polled. Finer than SETTLE_STEP: it
+--                  is looking for a CONTACT, and a contact can be missed.
+local GROUND_PROBE = 3.0
+local FALLEN_UP = 0.55
+local LANDING_STEP = 0.05
+
+--==============================================================================
+-- A BAT HIT IS GUARANTEED TO TOPPLE THE BODY
+--
+-- This is the second thing two players were seeing, and it took measuring all
+-- six bats to find it. The random tumble is built from `math.random(-6, 6)`,
+-- which is an INTEGER draw -- so both of the axes that tip a standing body can
+-- come out ZERO, or near it, on the same hit.
+--
+-- A guardian never noticed. It throws hard enough and high enough that the body
+-- is airborne and rotating whatever the draw was. A bat with a flat launch has
+-- nothing else to tip it, and the Cactus Club has the lowest lift on the shelf
+-- at 0.35. Measured, that combination produced:
+--
+--     cactus_club   touched down 0.63s, lowest torso up 0.86, EMERGENCY at 3.02s
+--
+-- 0.86 is a body still standing. It went limp, it slid eighteen studs along the
+-- ground on its feet, and it never fell over -- so the landing test correctly
+-- refused to call it a landing and waited for the emergency. The old code did
+-- not refuse: it stood the body up at 1.1s and called it a hit, which is
+-- precisely the report.
+--
+-- So the spin about the horizontal axes is no longer a draw that can be zero.
+-- It is a random DIRECTION with a guaranteed MAGNITUDE, which is what a topple
+-- actually needs. 8 to 12 radians a second is one and a bit revolutions -- past
+-- horizontal inside a fifth of a second, from any starting pose.
+--
+-- IT DOES NOT MOVE THE BODY. Angular velocity is not linear velocity; the
+-- measured travel is unchanged (rootwood 11.8 -> 12.0 studs), so the locked
+-- power ladder and launch distances are untouched.
+--
+-- GUARDIANS KEEP THE INTEGER DRAW. Their tuning is signed off and their throws
+-- do not depend on it.
+local TOPPLE_MIN = 8
+local TOPPLE_MAX = 12
+-- A body that landed and stayed grounded and slow but never went past FALLEN_UP
+-- has slid rather than fallen. It should not happen now, and if it does this
+-- bounds it well short of the emergency instead of leaving somebody sliding for
+-- three seconds.
+local SLIDE_GRACE = 0.6
+
 local throwing = false
 local remote: RemoteEvent? = nil
 
@@ -194,6 +274,70 @@ end
 local function torsoOf(character: Model): BasePart?
 	local t = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
 	return if t and t:IsA("BasePart") then t else nil
+end
+
+--==============================================================================
+-- IS THIS RIG ACTUALLY LIMP YET, ON THIS MACHINE?
+--
+-- Two questions, and the second one is the one that matters.
+--
+-- THE PROPERTY: every AnimationConstraint disabled. That is what the server
+-- did, and it is what has to arrive here.
+--
+-- THE PHYSICAL TRUTH: the rig has come APART into separate assemblies. This
+-- file's own banner measured it -- a posed R15 is one assembly, and the moment
+-- the fifteen constraints go off it is sixteen, one part each. So a torso whose
+-- AssemblyRootPart is still the HumanoidRootPart is a torso that is still being
+-- held in the standing pose, whatever any property says.
+--
+-- Both are checked because they can disagree in the frame between: the property
+-- can be through while the physics assembly has not yet been rebuilt, and
+-- throwing on that frame is throwing a rigid body.
+--==============================================================================
+local function ragdollState(character: Model): (boolean, number, number, boolean)
+	local total, off = 0, 0
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("AnimationConstraint") then
+			total += 1
+			if not d.Enabled then
+				off += 1
+			end
+		end
+	end
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	local split = false
+	if root and root:IsA("BasePart") and torso and torso:IsA("BasePart") then
+		split = torso.AssemblyRootPart ~= root.AssemblyRootPart
+	end
+	-- A rig with no AnimationConstraints at all is a classic Motor6D one, which
+	-- ragdollOn deliberately leaves jointed -- it tumbles rigidly and that is
+	-- the documented behaviour, so there is nothing here to wait for.
+	local ready = (total == 0) or (off >= total and split)
+	return ready, off, total, split
+end
+
+--==============================================================================
+-- AND HAS IT LANDED?
+--
+-- Ground contact is a downward ray from the VISIBLE TORSO, not from the root
+-- and not from the humanoid. The root is an invisible box that flies off on its
+-- own while limp -- measured at 148 studs of separation -- and Humanoid
+-- FloorMaterial reads nothing useful in the Physics state. The torso is the
+-- thing the player is watching hit the floor, so it is the thing that is asked.
+--==============================================================================
+local function landingState(character: Model): (boolean, number)
+	local torso = torsoOf(character)
+	if not (torso and torso.Parent) then
+		return false, 1
+	end
+	local up = torso.CFrame.UpVector:Dot(Vector3.yAxis)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.IgnoreWater = true
+	local hit = workspace:Raycast(torso.Position, Vector3.new(0, -GROUND_PROBE, 0), params)
+	return hit ~= nil, up
 end
 
 --==============================================================================
@@ -443,41 +587,53 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 	end
 
 	--==========================================================================
-	-- WHEN THIS ONE HAS TO BE OVER
+	-- THE TERMS OF THIS LANDING
 	--
-	-- Two instants, measured differently on purpose.
+	-- `forcedStandAt` used to be a DEADLINE: the moment this file stopped
+	-- waiting and stood the body up wherever it was. Two real players rejected
+	-- exactly that. A clock started at the hit does not know whether the victim
+	-- has fallen, and it expired just as happily on one who never did.
 	--
-	-- THE FLOOR IS MEASURED HERE, on this machine, from the moment the packet is
-	-- unwrapped -- because it is a floor on what the VICTIM SEES, and what they
-	-- see starts when their own machine starts drawing it. Measuring it from a
-	-- server instant would make a laggy player's hit look shorter than a local
-	-- one's, which is backwards.
+	-- It is EMERGENCY containment now. What ends a bat ragdoll is the landing --
+	-- see the loop below -- and these three only bound it:
 	--
-	-- THE DEADLINE IS SERVER TIME, converted once, here. It has to be: it is one
-	-- half of an agreement with a backstop running on another machine, and a
-	-- duration would start counting after the wire time -- which is exactly the
-	-- error the agreement exists to absorb. Both sides read the same clock, so
-	-- both sides mean the same instant.
+	--   minStandAt    the floor, measured HERE on this machine, from the moment
+	--                 the packet is unwrapped, because it is a floor on what the
+	--                 VICTIM SEES and what they see starts when their own
+	--                 machine starts drawing it.
+	--   groundHold    how long the body stays limp after it TOUCHES DOWN. Not an
+	--                 instant, because the instant is not known yet: it starts
+	--                 at a contact that has not happened.
+	--   emergencyAt   server time, converted once, here. It has to be server
+	--                 time: it is one half of an agreement with a backstop on
+	--                 another machine, and a duration would start counting after
+	--                 the wire time, which is the error the agreement absorbs.
 	--
-	-- CLAMPED, because it came off the wire. A deadline already in the past
-	-- would stand the body up on the frame it was launched; one an hour out
-	-- would be the five-second give-up under a new name. The floor is generous
-	-- enough to still show a launch and the ceiling is the guardian give-up.
+	-- CLAMPED, because it came off the wire. Its floor is generous enough that a
+	-- body always has time to fall, and its ceiling is the guardian give-up.
 	--==========================================================================
 	local hitAt = os.clock()
 	local minStandAt: number? = nil
-	local forcedStandAt: number? = nil
+	local groundHold = 0
+	local emergencyAt: number? = nil
 	if styleTable then
 		local m = tonumber(styleTable.minLimp)
 		if m and m == m and m >= 0 then
 			minStandAt = hitAt + m
 		end
-		local d = tonumber(styleTable.deadline)
-		if d and d == d then
-			local remaining = d - workspace:GetServerTimeNow()
-			forcedStandAt = hitAt + math.clamp(remaining, 0.35, GIVE_UP_AFTER)
+		local g = tonumber(styleTable.groundHold)
+		if g and g == g and g >= 0 then
+			groundHold = g
+		end
+		local e = tonumber(styleTable.emergency)
+		if e and e == e then
+			local remaining = e - workspace:GetServerTimeNow()
+			emergencyAt = hitAt + math.clamp(remaining, 1.0, GIVE_UP_AFTER)
 		end
 	end
+	-- One discriminator, read once. Everything a bat does differently hangs off
+	-- this, and a guardian -- which sends no style at all -- never sets it.
+	local isBat = emergencyAt ~= nil
 
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	local unit = if flat.Magnitude > 0 then flat.Unit else Vector3.new(0, 0, 1)
@@ -488,10 +644,10 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			else "guardian",
 		tostring(unit), speed, lift,
 		if type(clear) == "number" then clear else -1,
-		if forcedStandAt
-			then string.format(" | up by %.2fs, no earlier than %.2fs",
-				forcedStandAt - hitAt,
-				if minStandAt then minStandAt - hitAt else 0)
+		if emergencyAt
+			then string.format(" | floor %.2fs, ground hold %.2fs, emergency %.2fs",
+				if minStandAt then minStandAt - hitAt else 0,
+				groundHold, emergencyAt - hitAt)
 			else ""))
 
 	task.spawn(function()
@@ -511,6 +667,46 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		end)
 		say(string.format("ChangeState(Physics) ok=%s -> state now %s",
 			tostring(changed), tostring(humanoid:GetState())))
+
+		--==================================================================
+		-- 1b. AND WAIT FOR THE BODY TO ACTUALLY BE LIMP
+		--
+		-- The race described at RAGDOLL_READY_TIMEOUT: the server disables the
+		-- constraints and fires this remote in the same frame, on two channels
+		-- nothing orders, and the event usually wins. Launching there throws a
+		-- rigid standing avatar, which is what the owner saw and rejected.
+		--
+		-- BAT ONLY, DELIBERATELY. A guardian is not gated, because a guardian
+		-- was never broken: its 0.35s velocity hold keeps pushing the body until
+		-- long after the constraints arrive, so it goes limp mid-flight on its
+		-- own. Adding a wait there would change tuning that is signed off, to
+		-- fix a problem it does not have.
+		--
+		-- ON TIMEOUT IT LAUNCHES ANYWAY, and that is safe rather than a
+		-- compromise: the constraints are already on their way -- the server set
+		-- them before it sent this -- so the body goes limp a moment into the
+		-- flight, exactly as a guardian's does. Recovery waits for a real
+		-- landing regardless, so a late limp still produces a real fall. The
+		-- wait makes the hit TIGHTER; the landing loop is what makes it CORRECT.
+		--==================================================================
+		local readyAfter = 0
+		if isBat then
+			local waitUntil = os.clock() + RAGDOLL_READY_TIMEOUT
+			local ready, off, total, split = ragdollState(character)
+			while not ready and os.clock() < waitUntil do
+				if superseded() then
+					return
+				end
+				RunService.Heartbeat:Wait()
+				ready, off, total, split = ragdollState(character)
+			end
+			readyAfter = os.clock() - hitAt
+			say(string.format(
+				"ragdoll ready after %.3fs: %d/%d constraints off, rig %s%s",
+				readyAfter, off, total,
+				if split then "split into loose assemblies" else "STILL ONE ASSEMBLY",
+				if ready then "" else "  <- TIMED OUT, launching a body that is not limp yet"))
+		end
 
 		--== 2. GET OUT OF THE PARENT -- THE WHOLE BODY, NOT THE ROOT ==--
 		local step = if type(clear) == "number" and clear > 0 then clear else 6
@@ -603,8 +799,24 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 
 		--== 4. THE LAUNCH ==--
 		local parts = bodyParts()
-		local tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3),
-			math.random(-6, 6)) * tumbleScale
+		--==================================================================
+		-- THE SPIN THAT PUTS THEM ON THE FLOOR
+		--
+		-- See the TOPPLE_MIN banner: the guardian's integer draw can be zero on
+		-- both tipping axes, and a bat has no lift to spare when it is.
+		--==================================================================
+		local tumble
+		if isBat then
+			local axis = math.random() * math.pi * 2
+			local tip = TOPPLE_MIN + math.random() * (TOPPLE_MAX - TOPPLE_MIN)
+			tumble = Vector3.new(
+				math.cos(axis) * tip,
+				math.random(-3, 3),
+				math.sin(axis) * tip) * tumbleScale
+		else
+			tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3),
+				math.random(-6, 6)) * tumbleScale
+		end
 		local holdFor = if type(hold) == "number" and hold == hold and hold >= 0
 			then hold
 			else LEGACY_HOLD
@@ -769,24 +981,57 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		-- different events: a guardian pitching you across a biome, and a player
 		-- clubbing you two studs sideways. So the caller says now.
 		--
-		--   standNoEarlierThan   the floor. A bat lands almost immediately -- it
-		--                        is a shove, not a flight -- and standing up the
-		--                        instant it stops reads as a stumble rather than
-		--                        a hit. So the floor is what actually produces
-		--                        the visible second of helplessness, and it is
-		--                        the ONLY thing in this file that does.
-		--   mustStandBy          the ceiling, from the server's own clock. The
-		--                        body stands up here wherever it is.
+		--   standNoEarlierThan   the floor. Even a body that lands instantly is
+		--                        held down to here, so a hit reads as a hit.
+		--   mustStandBy          the ceiling. For a guardian this is the
+		--                        five-second give-up it has always had; for a
+		--                        bat it is EMERGENCY containment and reaching it
+		--                        means the landing was never detected.
 		--
-		-- A GUARDIAN GETS EXACTLY WHAT IT GOT. No style means no floor and no
-		-- deadline, so both fall back to the two lines under them -- the same
-		-- 0.9 measured from the same flightStart, and the same GIVE_UP_AFTER.
-		-- The arithmetic below is identical for them, variable names aside.
+		-- A GUARDIAN GETS EXACTLY WHAT IT GOT. No style means no floor, no
+		-- ground hold and no emergency, so `isBat` is false, every branch below
+		-- falls through to the constants under it -- the same 0.9 from the same
+		-- flightStart, the same SETTLE_HOLD, the same GIVE_UP_AFTER -- and the
+		-- arithmetic is identical, variable names aside.
 		--======================================================================
 		local standNoEarlierThan = minStandAt or (flightStart + 0.9)
-		local mustStandBy = forcedStandAt or (flightStart + GIVE_UP_AFTER)
-		local settleHold = if forcedStandAt then 0.16 else SETTLE_HOLD
-		local forced = false
+		local mustStandBy = emergencyAt or (flightStart + GIVE_UP_AFTER)
+		local emergency = false
+
+		--======================================================================
+		-- A BAT RECOVERS FROM A LANDING. IT DOES NOT RECOVER FROM A CLOCK.
+		--
+		-- This is the whole repair, and it is here because this loop is where
+		-- the rejected behaviour actually came from. It used to break on "the
+		-- body is slow" plus "a deadline passed", and BOTH of those are true of
+		-- a victim who never fell over: a rigid standing avatar is slow, and the
+		-- deadline arrives regardless.
+		--
+		-- So four things have to have HAPPENED, and none of them is a duration:
+		--
+		--   touched   a downward ray from the visible torso found floor. Not the
+		--             root -- while limp the root is an invisible box that flies
+		--             off on its own, measured once at 148 studs away, and it is
+		--             not what the player watched land.
+		--   fell      the torso's up-vector went past FALLEN_UP at some point.
+		--             Tracked as the LOWEST value reached rather than sampled at
+		--             the end, because a body can land hard, roll, and come to
+		--             rest half-propped against a wall -- it fell, and the frame
+		--             it settles on does not say so.
+		--   held      it stayed down for the ground hold, timed from the CONTACT
+		--             and not from the hit, because the contact is the moment the
+		--             player sees. This is what makes it read as a knockdown
+		--             rather than a stumble.
+		--   slow      still true, still necessary, no longer sufficient.
+		--
+		-- A GUARDIAN SKIPS ALL OF IT and keeps the old two-term test, because
+		-- the old test describes the guardian correctly and its tuning is signed
+		-- off. `isBat` is the only gate.
+		--======================================================================
+		local touchedAt: number? = nil
+		local lowestUp = 1
+		local landedSpeed = -1
+		local slid = false
 
 		while true do
 			if superseded() then
@@ -804,36 +1049,109 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				bodySpeed = math.max(bodySpeed, torso.AssemblyLinearVelocity.Magnitude)
 			end
 
-			-- Nothing counts as settled before the floor, however still the body
-			-- is: a bat hit that ended the moment the body stopped moving would
-			-- be over before the player registered it had started.
-			if os.clock() >= standNoEarlierThan then
-				if bodySpeed < SETTLE_SPEED then
-					settledFor += SETTLE_STEP
-					if settledFor >= settleHold then
+			if isBat then
+				local touching, up = landingState(character)
+				lowestUp = math.min(lowestUp, up)
+				if touching and touchedAt == nil and bodySpeed < SETTLE_SPEED * 3 then
+					-- First contact. Recorded once: a body that bounces has
+					-- still landed, and restarting the hold on every bounce
+					-- would let a lively tumble run to the emergency.
+					touchedAt = os.clock()
+					landedSpeed = bodySpeed
+					say(string.format(
+						"touched down %.2fs after the hit, at %.1f studs/sec, torso up %.2f",
+						touchedAt - hitAt, bodySpeed, up))
+				end
+				local restedFor = if touchedAt then os.clock() - touchedAt else 0
+				local heldLongEnough = touchedAt ~= nil
+					and restedFor >= groundHold
+					and os.clock() >= standNoEarlierThan
+				if heldLongEnough and touching and bodySpeed < SETTLE_SPEED then
+					if lowestUp <= FALLEN_UP then
+						break
+					elseif restedFor >= groundHold + SLIDE_GRACE then
+						--======================================================
+						-- IT LANDED WITHOUT FALLING OVER
+						--
+						-- With a guaranteed topple this should be unreachable,
+						-- and it is kept because "should be unreachable" is
+						-- exactly what was assumed about the shove. A body
+						-- wedged upright against a wall is grounded, slow, and
+						-- never past FALLEN_UP -- and standing it up here is
+						-- both better than three seconds of sliding and worth
+						-- knowing about.
+						--======================================================
+						slid = true
 						break
 					end
-				else
-					settledFor = 0
+				end
+			else
+				-- The guardian test, unchanged.
+				if os.clock() >= standNoEarlierThan then
+					if bodySpeed < SETTLE_SPEED then
+						settledFor += SETTLE_STEP
+						if settledFor >= SETTLE_HOLD then
+							break
+						end
+					else
+						settledFor = 0
+					end
 				end
 			end
 
 			--==================================================================
-			-- AND THE DEADLINE IS CHECKED AFTER THE SETTLE, NOT INSTEAD OF IT
+			-- AND THE CEILING IS CHECKED AFTER, NOT INSTEAD OF
 			--
-			-- A body that has genuinely come to rest should stand up because it
-			-- has stopped, not because a clock ran out -- the two are the same
-			-- pose but only one of them is worth reporting. `forced` is what
-			-- separates them in the log.
+			-- A body that has genuinely landed should get up because it landed,
+			-- not because a clock ran out -- the two produce the same pose but
+			-- only one of them is worth reporting. For a bat, reaching this is a
+			-- FAILURE and is logged as one.
 			--==================================================================
 			if os.clock() >= mustStandBy then
-				forced = true
+				emergency = true
 				break
 			end
-			task.wait(SETTLE_STEP)
+			task.wait(if isBat then LANDING_STEP else SETTLE_STEP)
 		end
-		say(string.format("settled after %.2fs%s", os.clock() - hitAt,
-			if forced then " (forced: hit the deadline)" else ""))
+
+		if isBat then
+			say(string.format(
+				"LANDING: ready %.2fs | touched %s | lowest torso up %.2f | %s after %.2fs",
+				readyAfter,
+				if touchedAt then string.format("%.2fs at %.1f/sec",
+					touchedAt - hitAt, landedSpeed) else "NEVER",
+				lowestUp,
+				if emergency then "EMERGENCY RECOVERY"
+					elseif slid then "landed WITHOUT toppling -- slid upright"
+					else "settled naturally",
+				os.clock() - hitAt))
+			if slid then
+				warn(string.format("[Seed/ThrowFX] the body never fell over " ..
+					"(lowest torso up %.2f). It slid upright and was stood up " ..
+					"after %.2fs.", lowestUp, os.clock() - hitAt))
+			end
+			if emergency then
+				--==============================================================
+				-- CONTAINMENT, NOT ANIMATION
+				--
+				-- Reaching here means the body never landed, never fell, or
+				-- never went limp -- and the recovery below is written to be
+				-- safe in all three: it zeroes the velocities, finds real ground
+				-- under the VISIBLE torso, seats the root there and stands the
+				-- body on it. Nothing about that assumes a fall happened.
+				--
+				-- It is a warn rather than a print because a bat reaching its
+				-- emergency is the symptom the owner rejected, and it must not
+				-- be something a person has to go looking for.
+				--==============================================================
+				warn(string.format("[Seed/ThrowFX] emergency recovery after %.2fs " ..
+					"-- touched %s, lowest up %.2f. The body did not land.",
+					os.clock() - hitAt, tostring(touchedAt ~= nil), lowestUp))
+			end
+		else
+			say(string.format("settled after %.2fs%s", os.clock() - hitAt,
+				if emergency then " (forced: hit the give-up)" else ""))
+		end
 
 		--======================================================================
 		-- 6. BRING THE BOX TO THE BODY. NOT THE BODY TO THE BOX.
@@ -992,7 +1310,7 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		-- less time it is true for reasons that are purely cosmetic, the less
 		-- often anything has to be preempted at all.
 		--======================================================================
-		if not forcedStandAt then
+		if not isBat then
 			local watchUntil = os.clock() + STANDUP_WATCH
 			while os.clock() < watchUntil do
 				if superseded() then
