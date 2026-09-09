@@ -1,5 +1,95 @@
 # Steal a Seed — Session Handoff
 
+## The test suite runs clean again — 2026-09-09 (CLAUDE)
+
+All ten specs in `tools/tests/` pass. `SpeedSpec` had been THROWING rather than
+failing for a long time, and that is the whole story of this entry: a throw stops
+at the first bad line, so every check below it stopped being reported while still
+looking present in the file. Drift accumulated behind it invisibly, and each fix
+only revealed the next piece.
+
+Fixed, in the order they surfaced:
+
+  * `GameConfig.overclockUnlockOrderFor` — called at 2 sites. The function never
+    existed; overclock has no biome gate, which `GameConfig.Mill.Overclock` says
+    outright. Removed, with a comment saying so.
+  * The `O.UnlockedBy` block — 3 assertions against a table that never existed.
+  * `biome.SpeedGate` → `biome.RecommendedSpeed`, 6 occurrences.
+  * `GameConfig.Carry.MaxKg` → `Carry.TopTierValue`. Kilograms became size tiers,
+    so `carryMultiplierFor` takes a TIER VALUE now. `for tier = 0, nil` was the
+    throw that had been hiding everything below line 476. The local `maxKg` and
+    the 20 `kg` loop variables were renamed with it — holding tier values in
+    variables named `kg` is the same two-names-for-one-fact problem the codebase
+    warns about repeatedly.
+  * Sections 9 and 10 — rewritten, not patched. See below.
+  * The overclock rate table — 6 expectations, every one out by a factor of
+    250,000. They were written when the top mill ran at 1600/s; it runs at 400M/s
+    now and the ladder is ten tiers rather than seven.
+  * `SeedData.CarryMultiplier(500)` vs `carryMultiplierFor(500)` — not the same
+    question. SeedData takes a tier INDEX and passes that tier's `.value` on, so
+    500 meant "tier 500, clamped to Colossal" on one side and "a pod of value
+    500" on the other. Asked over the whole ladder now, because the risk being
+    guarded against is a SECOND carry curve appearing, and a second curve that
+    agreed at one sample would have passed the old check.
+
+### The afterimage sections tested a deleted effect
+
+Sections 9 and 10 asserted seven tiers named "First Echo" through "Rainbow
+Ascension", each rendering up to four cloned character limbs at a spacing in
+studs. `GameConfig.Afterimage` drives ONE Trail per character now, ten tiers
+deep, with new names, new thresholds and new columns.
+
+Ten of the fifteen `Afterimage` fields those sections read no longer exist
+(`LocalMaxGhosts`, `RemoteMaxGhosts`, `MobileMaxGhosts`, `CarryReducedGhosts`,
+`CarryReducedSpacing`, `CarryReducedFade`, `MoveStudsPerSecond`, `ColourHz`,
+`MobileColourHz`, `BodyHueSpread`). That is not repairable field by field, so
+both sections are rewritten against the ribbon. The old expectations are NOT
+kept as comments: the config's own history section already explains why the
+echoes went, and a spec carrying a second account of it is a second thing to
+keep true.
+
+What the new sections assert, all of it grounded in what the config already
+promises in prose:
+
+  * The ten thresholds and names, at each threshold and one below it.
+  * `Lifetime`, `WidthStuds` and `HeadTransparency` strictly monotonic 1→10 — the
+    guarantee the ghost ladder could not make once its count capped at four.
+    HeadTransparency runs the other way (lower is more solid), which is written
+    down where somebody would otherwise "fix" it.
+  * `LightEmission` climbs 1→9 and then tier 10 gives it up, asserted as a
+    REQUIREMENT rather than tolerated — a Void Singularity quietly corrected back
+    onto the ramp would delete the one moment the ladder is built to arrive at.
+  * `Wave` and `Shimmer` are set by THEME, not by rank, so the inversions are
+    asserted to EXIST. The config says in as many words not to correct them into
+    a ramp; a spec that merely permitted non-monotonic values would pass just as
+    happily after somebody did.
+  * No tier carries a `Rainbow` flag — the deleted column must stay deleted.
+  * Every tier fully dressed: palette of 2+ Color3s, complete particle emitter.
+  * The carry bands at their real edges (0.92 / 0.55, not the old 0.75 / 0.50),
+    and a maximum pod silent at every one of the ten tiers.
+
+Also fixed: `CycleSpec` asserted "exactly one biome is live" where the design
+allows several; it is "at least one" now and passes with 31 assertions. And
+`GameConfig.luau` had a comment reading "Speed multiplier when carrying MaxKg"
+directly above `MinMultiplier`, describing the current field by its old name —
+the one stale `MaxKg` reference in `src/` that was actively misleading rather
+than historical. The four in `SeedData.luau` are prose about the weight-roll
+curve's history and were left alone.
+
+Verified by running all ten specs through `tools/tests/run.luau` in Edit:
+
+```
+BatClearanceSpec   939/939        MillSignSpec       geometry clean, drift 0.000000
+BatSwingSpec       93/93          PlotSpec           65 passed, 0 failed
+CycleSpec          PASS -- 31     SpeedSpec          PASS -- 332 assertions
+StarbloomLimbSpec  71 passed      TutorialPodSpec    263 checks passed
+TutorialSpec       93 passed      WeaponSpec         80 passed
+```
+
+`SpeedSpec` went from throwing at line 476 to 332 passing assertions. No
+production behaviour was changed by any of this: the only `src/` edit is the one
+comment above.
+
 ## The close X is every panel's now — 2026-09-09 (CLAUDE)
 
 The Bag's restyled close button moved from `LoadoutUI` into `UIKit.modal`, so

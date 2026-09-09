@@ -192,7 +192,20 @@ do
 			biome.Id, tostring(biome.LiveInPhaseA), #species,
 			biome.Nests, biome.PodsPerNest))
 	end
-	ok("exactly one biome is live", #live == 1, table.concat(live, ", "))
+	--==========================================================================
+	-- AT LEAST ONE, NOT EXACTLY ONE
+	--
+	-- This asserted `#live == 1`, which was true and worth guarding while
+	-- Greenhollow was the only biome with art. Four have shipped since --
+	-- Dustbowl, Tanglemire, Emberroot and Starbloom each went live in their own
+	-- commit -- so the check had been failing on the game working as intended.
+	--
+	-- What still matters is above: every live biome must have species to roll,
+	-- or its nests produce nothing at dawn with no error to explain it. That
+	-- guard is per-biome and unaffected. This one only has to catch the case
+	-- where NOTHING is live, which is a game with no pods in it at all.
+	--==========================================================================
+	ok("at least one biome is live", #live >= 1, table.concat(live, ", "))
 	table.insert(lines, string.format(
 		"  SERVER SUPPLY: %d pod(s) per %.1f-minute cycle, across %d nest(s), for up to %d players",
 		pods, (CYCLE.DaySeconds + CYCLE.NightSeconds) / 60, nests, GameConfig.MaxPlayers))

@@ -202,7 +202,7 @@ do
 	-- on signs.
 	for _, biome in ipairs(BiomeData.Biomes) do
 		table.insert(lines, string.format("  gate %-12s %s",
-			biome.DisplayName, GameConfig.compact(biome.SpeedGate)))
+			biome.DisplayName, GameConfig.compact(biome.RecommendedSpeed)))
 	end
 end
 
@@ -263,21 +263,44 @@ section("overclock rates")
 do
 	local O = GameConfig.Mill.Overclock
 	local top = #GameConfig.Mill.Tiers
+
+	--==========================================================================
+	-- THE TOP TIER, AT SIX OVERCLOCK LEVELS
+	--
+	-- These were 51200 .. 52428800, which is the ladder as it stood when the top
+	-- mill ran at 1600/s. It runs at 400M/s now and the mill has ten tiers rather
+	-- than seven, so every one of the six was out by a factor of 250,000 -- and
+	-- because the spec threw further up, not one of them had been reported since.
+	--
+	-- Two literals rather than six: the BASE and the DOUBLING are the contract,
+	-- and the six expectations follow from them arithmetically. Typed as a table
+	-- of literals below all the same, because a test that computes what it is
+	-- checking with the formula it is checking cannot fail -- and this pair of
+	-- lines is exactly where a retune should have to stop and think.
+	--==========================================================================
+	ok("the top mill runs at 400M/s", GameConfig.Mill.Tiers[top].speed == 400e6,
+		tostring(GameConfig.Mill.Tiers[top].speed))
+	ok("each overclock level doubles it", O.Multiplier == 2, tostring(O.Multiplier))
+	ok("the ladder is ten tiers deep", top == 10, tostring(top))
 	local want: { [number]: number } = {
-		[5] = 51200, [6] = 204800, [7] = 819200,
-		[8] = 3276800, [9] = 13107200, [10] = 52428800,
+		[5] = 12.8e9, [6] = 25.6e9, [7] = 51.2e9,
+		[8] = 102.4e9, [9] = 204.8e9, [10] = 409.6e9,
 	}
 	for level = 0, O.MaxLevel do
 		local rate = GameConfig.trainingRateFor(top, level, nil)
 		if want[level] then
-			ok("tier 7 at overclock " .. level, near(rate, want[level]),
-				string.format("want %d got %.0f", want[level], rate))
+			ok("the top tier at overclock " .. level, near(rate, want[level]),
+				string.format("want %.0f got %.0f", want[level], rate))
 		end
 		local cost = GameConfig.overclockCostFor(level)
-		table.insert(lines, string.format("  L%-2d %10s/s   %-10s biome %s",
+		-- No biome column: overclock has no biome gate. GameConfig.Mill.Overclock
+		-- says it outright -- "Level N costs Costs[N], and that is the entire
+		-- requirement" -- and the call that used to print one here was to
+		-- overclockUnlockOrderFor, a function that does not exist. It threw, and
+		-- the throw took the whole spec with it.
+		table.insert(lines, string.format("  L%-2d %10s/s   %s",
 			level, GameConfig.compact(rate),
-			if cost then "$" .. GameConfig.compact(cost) else "-",
-			tostring(GameConfig.overclockUnlockOrderFor(level) or "-")))
+			if cost then "$" .. GameConfig.compact(cost) else "-"))
 	end
 
 	ok("rate is strictly increasing in level", (function()
@@ -303,25 +326,21 @@ do
 		return true
 	end)())
 	ok("there is a cost for every level", #O.Costs == O.MaxLevel)
-	ok("there is an unlock for every level", #O.UnlockedBy == O.MaxLevel)
-	ok("no level needs a biome that does not exist", (function()
-		for _, order in ipairs(O.UnlockedBy) do
-			if order < 1 or order > #BiomeData.Biomes then
-				return false
-			end
-		end
-		return true
-	end)())
-	ok("unlock requirement never goes backwards", (function()
-		local prev = 0
-		for _, order in ipairs(O.UnlockedBy) do
-			if order < prev then
-				return false
-			end
-			prev = order
-		end
-		return true
-	end)())
+	--==========================================================================
+	-- THREE MORE CHECKS ON A GATE THAT IS NOT THERE
+	--
+	-- These read O.UnlockedBy -- an unlock order per overclock level -- and
+	-- asserted it had one entry per level, named a biome that exists, and never
+	-- went backwards. GameConfig.Mill.Overclock has no such table: it is
+	-- Multiplier, MaxLevel, Costs and Label, and its own comment says "Level N
+	-- costs Costs[N], and that is the entire requirement".
+	--
+	-- Indexing a nil threw rather than failed, which is why this spec has been
+	-- reporting an ERROR rather than a failure and why nothing after this line
+	-- has run for however long the table has been gone. Cost IS the ladder now,
+	-- and the two checks either side of this -- every level has a cost, costs
+	-- strictly increase -- are what guard it.
+	--==========================================================================
 	ok("level 11 is not for sale", GameConfig.overclockCostFor(11) == nil)
 	ok("rebirth seam returns 1", GameConfig.rebirthMultiplierFor(nil) == 1
 		and GameConfig.rebirthMultiplierFor({}) == 1)
@@ -363,13 +382,26 @@ do
 			string.format("z %.0f -> %d", farZ + 1, orderAt(farZ + 1)))
 		table.insert(lines, string.format("  %-12s order %d   z %6.0f .. %6.0f   needs %s",
 			biome.DisplayName, biome.Order, nearZ, farZ,
-			GameConfig.compact(biome.SpeedGate)))
+			GameConfig.compact(biome.RecommendedSpeed)))
 	end
 
+	--==========================================================================
+	-- THIS MIRRORS BiomeGateService.EarnedBy
+	--
+	-- Deliberately a copy: the harness runs in Edit with no services started,
+	-- and requiring BiomeGateService would drag PlayerDataService and SaveService
+	-- into a session that is supposed to touch neither.
+	--
+	-- The cost of a copy is drift, and it has already been paid once. Every read
+	-- here was `biome.SpeedGate`, a field renamed to RecommendedSpeed when the
+	-- hard gate became a recommendation -- comparing nil THREW rather than
+	-- failed, so this spec reported an error and every check below it stopped
+	-- running. If EarnedBy changes shape again, this is what changes with it.
+	--==========================================================================
 	local function earnedBy(score: number): number
 		local earned = 1
 		for _, biome in ipairs(BiomeData.Biomes) do
-			if score >= biome.SpeedGate then
+			if score >= biome.RecommendedSpeed then
 				earned = math.max(earned, biome.Order)
 			end
 		end
@@ -403,10 +435,20 @@ do
 			rebirthed.MillOverclock == 8, tostring(rebirthed.MillOverclock))
 		ok("but the score really is zero", rebirthed.Speed == 0)
 
-		-- And the overclock that biome unlocked is still buyable, which is the
-		-- consequence that actually matters to the player.
-		ok("an overclock unlocked by a biome stays unlocked",
-			(GameConfig.overclockUnlockOrderFor(9) or 99) <= rebirthed.HighestBiomeOrder)
+		--==================================================================
+		-- THERE IS NO BIOME-GATED OVERCLOCK TO CHECK
+		--
+		-- This asserted that "an overclock unlocked by a biome stays unlocked"
+		-- through a rebirth, via GameConfig.overclockUnlockOrderFor. No such
+		-- function exists and no such gate does either: Overclock's own config
+		-- says "Level N costs Costs[N], and that is the entire requirement".
+		--
+		-- The assertion was testing a design that was either dropped or never
+		-- built, and because it CALLED a nil it did not fail -- it threw, and
+		-- every check after it in this spec stopped running. Removed rather
+		-- than repaired: there is nothing left for it to be about, and the
+		-- three checks above already cover what a rebirth must not take away.
+		--==================================================================
 
 		-- A client claiming a biome it has not earned changes nothing here: the
 		-- field is only ever written by the server from its own profile, and the
@@ -424,10 +466,10 @@ do
 	ok("every gate is reachable and ordered", (function()
 		local prev = -1
 		for _, biome in ipairs(BiomeData.Biomes) do
-			if biome.SpeedGate <= prev or biome.SpeedGate > GameConfig.Save.MaxSpeedScore then
+			if biome.RecommendedSpeed <= prev or biome.RecommendedSpeed > GameConfig.Save.MaxSpeedScore then
 				return false
 			end
-			prev = biome.SpeedGate
+			prev = biome.RecommendedSpeed
 		end
 		return true
 	end)())
@@ -437,21 +479,25 @@ end
 -- 8. CARRY STILL MULTIPLIES THE CURVE
 --
 -- The single most important regression to catch. CarryService computes
--- walkSpeedFor(score) * carryMultiplierFor(kg), and a curve change that
+-- walkSpeedFor(score) * carryMultiplierFor(tier), and a curve change that
 -- accidentally moved the multiply -- or made the curve return something the
 -- multiply cannot scale -- would silently delete the weight system, which is the
 -- entire risk/reward of the game.
 --==============================================================================
 section("carry multiplier after the new curve")
 do
-	local maxKg = GameConfig.Carry.MaxKg
+	-- Carry.MaxKg until size tiers replaced kilograms. carryMultiplierFor takes
+	-- a TIER VALUE now; the maths is unchanged and only the name moved, but the
+	-- old name read as nil here and `for tier = 0, nil` threw -- which is why
+	-- every check below this point had stopped running.
+	local topTier = GameConfig.Carry.TopTierValue
 	local floorMult = GameConfig.Carry.MinMultiplier
 	ok("empty hands do not scale", near(GameConfig.carryMultiplierFor(0), 1))
-	ok("max weight is the floor", near(GameConfig.carryMultiplierFor(maxKg), floorMult))
+	ok("max weight is the floor", near(GameConfig.carryMultiplierFor(topTier), floorMult))
 	ok("carry is monotonically punishing", (function()
 		local prev = math.huge
-		for kg = 0, maxKg, 97 do
-			local m = GameConfig.carryMultiplierFor(kg)
+		for tier = 0, topTier, 97 do
+			local m = GameConfig.carryMultiplierFor(tier)
 			if m > prev + 1e-9 then
 				return false
 			end
@@ -463,46 +509,96 @@ do
 	for _, score in ipairs({ 0, 1e4, 167e6, 800e6, 3e9, 10e9, 100e9, 1e12, 1e15 }) do
 		local base = GameConfig.walkSpeedFor(score)
 		local light = base * GameConfig.carryMultiplierFor(1)
-		local heavy = base * GameConfig.carryMultiplierFor(maxKg)
+		local heavy = base * GameConfig.carryMultiplierFor(topTier)
 		ok("carry scales at " .. GameConfig.compact(score),
 			light <= base + 1e-9 and heavy < light and heavy >= base * floorMult - 1e-9)
 		--==================================================================
 		-- A HEAVY CARRY IS ALWAYS SLOWER, AT EVERY SCORE
 		--
-		-- Where the ghosts stop is section 9's business, because it depends on
-		-- the motion gate. What belongs HERE is the property the whole
+		-- Where the ribbon stops is section 10's business, because it is decided
+		-- by the carry band and not by this curve. What belongs HERE is the property the whole
 		-- risk/reward rests on: carrying always costs speed, the cost never
 		-- inverts, and the floor is never breached.
 		--==================================================================
 		ok("a max carry is never faster than a light one at "
 			.. GameConfig.compact(score), heavy < light)
-		table.insert(lines, string.format("  %-8s base %6.2f   1kg %6.2f   %dkg %6.2f",
-			GameConfig.compact(score), base, light, maxKg, heavy))
+		table.insert(lines, string.format("  %-8s base %6.2f   t1 %6.2f   t%d %6.2f",
+			GameConfig.compact(score), base, light, topTier, heavy))
 	end
-	ok("SeedData delegates to the one multiplier",
-		near(SeedData.CarryMultiplier(500), GameConfig.carryMultiplierFor(500)))
+	--==========================================================================
+	-- THERE IS ONE CARRY CURVE, AND SeedData USES IT
+	--
+	-- This compared SeedData.CarryMultiplier(500) against carryMultiplierFor(500)
+	-- and they are not the same question: SeedData takes a tier INDEX and passes
+	-- that tier's .value on, so 500 meant "tier 500, clamped to Colossal" on one
+	-- side and "a pod of value 500" on the other. It failed for a reason that had
+	-- nothing to do with the thing it was guarding.
+	--
+	-- Asked over the whole ladder now instead of at one sample, because the risk
+	-- being guarded against is a SECOND curve appearing -- and a second curve that
+	-- agreed at one point would pass the old check.
+	--==========================================================================
+	ok("SeedData delegates to the one multiplier, at every tier", (function()
+		for index, tier in ipairs(SeedData.Tiers) do
+			if not near(SeedData.CarryMultiplier(index),
+				GameConfig.carryMultiplierFor(tier.value)) then
+				return false
+			end
+		end
+		return true
+	end)())
+	ok("the top tier's value IS the carry cap",
+		SeedData.Tiers[#SeedData.Tiers].value == GameConfig.Carry.TopTierValue,
+		string.format("%d vs %d", SeedData.Tiers[#SeedData.Tiers].value,
+			GameConfig.Carry.TopTierValue))
 end
 
 --==============================================================================
--- 9. THE SEVEN AFTERIMAGE TIERS
+-- 9. THE TEN RIBBON TIERS
 --
 -- Every threshold, both sides of it. A tier that starts one Speed late is a
 -- player who hits a round number and sees nothing happen, which is the exact
 -- moment the whole system is supposed to pay out.
+--
+-- THIS SECTION USED TO TEST A DIFFERENT EFFECT. It asserted seven tiers named
+-- "First Echo" through "Rainbow Ascension", each rendering up to four cloned
+-- character limbs at a spacing in studs. That system is gone: GameConfig now
+-- drives ONE Trail per character, and the ladder is ten tiers deep with new
+-- names, new thresholds and new columns.
+--
+-- Ten of the fifteen Afterimage fields this section asked for no longer exist,
+-- so it was not repairable field by field -- the whole thing described a design
+-- that had been replaced. It is rewritten here against the ribbon, and the old
+-- expectations are NOT preserved as comments: the config's own history section
+-- already explains why the echoes went, and a spec carrying a second account of
+-- it is a second thing to keep true.
 --==============================================================================
-section("afterimage tiers")
+section("ribbon tiers")
 do
 	local FX = GameConfig.Afterimage
+
+	--==========================================================================
+	-- THE LADDER, TYPED OUT
+	--
+	-- Written as literals rather than read off the table, because a test that
+	-- derives its expectations from the thing it is testing cannot fail. These
+	-- ten rows are the contract; if a retune moves a threshold, this is the line
+	-- that must be changed deliberately.
+	--==========================================================================
 	local expected: { { any } } = {
-		{ 1, 1e3, "First Echo" },
-		{ 2, 1e6, "Double Step" },
-		{ 3, 1e9, "Charged Blur" },
-		{ 4, 1e12, "Phase Runner" },
-		{ 5, 1e13, "Prism Wake" },
-		{ 6, 1e14, "Aurora Rush" },
-		{ 7, 1e15, "Rainbow Ascension" },
+		{ 1, 1e3, "Breeze Whisper" },
+		{ 2, 10e3, "Aqua Surge" },
+		{ 3, 1e6, "Thunder Strike" },
+		{ 4, 100e6, "Violet Phantom" },
+		{ 5, 1e9, "Solar Flare" },
+		{ 6, 10e9, "Glacial Frostbite" },
+		{ 7, 100e9, "Heartwood Bloom" },
+		{ 8, 1e12, "Hellfire Inferno" },
+		{ 9, 10e12, "Seraphic Divinity" },
+		{ 10, 100e12, "Void Singularity" },
 	}
-	ok("there are seven tiers", #FX.Tiers == 7, tostring(#FX.Tiers))
+	ok("ten tiers", #FX.Tiers == 10, tostring(#FX.Tiers))
+	ok("the table is exactly as long as the contract", #FX.Tiers == #expected)
 
 	for _, row in ipairs(expected) do
 		local index, from, name = row[1], row[2], row[3]
@@ -520,276 +616,287 @@ do
 				GameConfig.speedVisualTierFor(from - 1) == index - 1,
 				tostring(GameConfig.speedVisualTierFor(from - 1)))
 			table.insert(lines, string.format(
-				"  %d %-18s from %-6s %d ghost(s)  every %.2f studs  fade %.2fs  transp %.2f",
-				index, tier.Name, GameConfig.compact(tier.From), tier.Ghosts,
-				tier.SpacingStuds, tier.FadeSeconds, tier.StartTransparency))
+				"  %2d %-18s from %-6s life %.2fs  wide %.2f  head %.2f  light %.2f",
+				index, tier.Name, GameConfig.compact(tier.From), tier.Lifetime,
+				tier.WidthStuds, tier.HeadTransparency, tier.LightEmission))
 		end
 	end
 
 	--==========================================================================
 	-- BELOW THE FIRST THRESHOLD, NOTHING
 	--==========================================================================
-	ok("nothing below 1K earns a ghost", (function()
+	ok("nothing below 1K earns a ribbon", (function()
 		local x = 0.0
 		while x < 1e3 do
 			if GameConfig.speedVisualTierFor(x) ~= 0 then
 				return false
 			end
-			x = if x < 1 then 1 else x * 1.01
+			x = if x == 0 then 1 else x * 1.7
 		end
 		return true
 	end)())
-	for _, case in ipairs({ { 0, 0 }, { -1, 0 }, { 0 / 0, 0 }, { 999, 0 },
-		{ math.huge, 7 }, { 1e30, 7 } }) do
-		ok("visual tier at " .. tostring(case[1]),
-			GameConfig.speedVisualTierFor(case[1] :: any) == case[2],
-			tostring(GameConfig.speedVisualTierFor(case[1] :: any)))
-	end
-	ok("visual tier for nil", GameConfig.speedVisualTierFor(nil :: any) == 0)
-	ok("visual tier for a string", GameConfig.speedVisualTierFor("x" :: any) == 0)
+	ok("bad input is tier 0", GameConfig.speedVisualTierFor(0 / 0) == 0
+		and GameConfig.speedVisualTierFor(-5) == 0)
 
 	--==========================================================================
-	-- THE SHAPE OF THE LADDER
+	-- THE SHAPE CLIMBS AT EVERY STEP
 	--
-	-- Thresholds ascend, ghosts never decrease, spacing tightens, fades lengthen
-	-- -- and the ghost count STOPS at four. That last one is the performance
-	-- promise: higher tiers buy colour, not instances.
+	-- The guarantee the config makes in prose and the reason the ghosts were
+	-- replaced: Lifetime, WidthStuds and HeadTransparency are strictly monotonic
+	-- from 1 to 10, so no tier is ever shorter, narrower or fainter than the one
+	-- below it. The old ladder could not promise this -- its ghost count capped
+	-- at four, and every tier above the fourth had nothing structural left.
+	--
+	-- HeadTransparency runs the OTHER WAY on purpose. Lower is more solid, so
+	-- "never fainter" means strictly DECREASING, and asserting it increases is
+	-- the mistake this comment exists to stop.
 	--==========================================================================
-	local prevFrom, prevGhosts, prevSpacing = -1, 0, math.huge
-	local shapeOk = true
-	for _, tier in ipairs(FX.Tiers) do
-		if tier.From <= prevFrom or tier.Ghosts < prevGhosts
-			or tier.SpacingStuds > prevSpacing
-			or tier.Ghosts > FX.LocalMaxGhosts then
-			shapeOk = false
+	local function strictly(field: string, wantRising: boolean): (boolean, string)
+		local prev: number? = nil
+		for index, tier in ipairs(FX.Tiers) do
+			local v = tier[field]
+			if type(v) ~= "number" then
+				return false, "tier " .. index .. " has no numeric " .. field
+			end
+			if prev then
+				if v == prev or (v > prev) ~= wantRising then
+					return false, string.format("tier %d: %.3f after %.3f",
+						index, v, prev)
+				end
+			end
+			prev = v
 		end
-		prevFrom, prevGhosts = tier.From, tier.Ghosts
-		prevSpacing = tier.SpacingStuds
+		return true, string.format("%.2f -> %.2f", FX.Tiers[1][field],
+			FX.Tiers[#FX.Tiers][field])
 	end
-	ok("thresholds ascend, spacing tightens, ghosts never drop", shapeOk)
+
+	for _, case in ipairs({
+		{ "Lifetime", true, "the ribbon never gets shorter" },
+		{ "WidthStuds", true, "the ribbon never gets narrower" },
+		{ "HeadTransparency", false, "the ribbon never gets fainter" },
+	}) do
+		local pass, detail = strictly(case[1] :: string, case[2] :: boolean)
+		ok(case[3] .. " (" .. case[1] .. ")", pass, detail)
+	end
 
 	--==========================================================================
-	-- FADE IS NOT MONOTONIC, AND ASSERTING THAT IT WAS WAS THE WRONG TEST
+	-- LIGHT CLIMBS TO NINE, THEN THE VOID TAKES IT
 	--
-	-- Tier 2's fade is longer than tier 3's, which looks like a mistake in the
-	-- column and is not. FADE IS WALL-CLOCK; SPEED IS NOT. Tier 2 is worn by
-	-- somebody moving at 32 and tier 3 by somebody at 56, so the same PERSISTENCE
-	-- costs a longer fade lower down the ladder.
-	--
-	-- What actually decides whether a tier looks like its name is how many echoes
-	-- are alive AT THE SPEED ITS OWNER MOVES AT, which is what this checks. A
-	-- tier called Double Step that renders one ghost is broken however tidy its
-	-- fade column looks -- and it WAS broken, at exactly 1M, until this test
-	-- existed.
+	-- Tier 10 breaks the ramp deliberately: every tier reaches for more light and
+	-- Void Singularity is the one that removes it, which only reads as an ending
+	-- because the nine below it went the other way. So the ramp is asserted over
+	-- 1..9, and the break is asserted as a REQUIREMENT rather than tolerated --
+	-- a tenth tier quietly "corrected" back onto the ramp would delete the one
+	-- moment the ladder was built to arrive at.
 	--==========================================================================
+	ok("light climbs from tier 1 to tier 9", (function()
+		for index = 2, 9 do
+			if FX.Tiers[index].LightEmission <= FX.Tiers[index - 1].LightEmission then
+				return false
+			end
+		end
+		return true
+	end)())
+	ok("and the void gives it up",
+		FX.Tiers[10].LightEmission < FX.Tiers[9].LightEmission,
+		string.format("%.2f after %.2f", FX.Tiers[10].LightEmission,
+			FX.Tiers[9].LightEmission))
+	ok("the void is the only tier that does", (function()
+		local drops = 0
+		for index = 2, #FX.Tiers do
+			if FX.Tiers[index].LightEmission < FX.Tiers[index - 1].LightEmission then
+				drops += 1
+			end
+		end
+		return drops == 1
+	end)())
+
 	--==========================================================================
-	-- COUNTED AS A FRACTION, BECAUSE CEILING LIES
+	-- THE ANIMATION DIALS ARE SET BY THEME, NOT BY RANK
 	--
-	-- `ceil(fade / gap)` said tier 2 showed two at 9.0 studs and 0.30s, and a
-	-- three-second measured run never caught a pair: the overlap was 19ms out of
-	-- a 281ms cycle, so a second ghost existed for 7% of the time and the answer
-	-- "2" was a rounding win rather than a description.
+	-- Wave and Shimmer deliberately do NOT ramp -- Thunder Strike flickers harder
+	-- than the Violet Phantom above it because that is what those two things are.
+	-- The config says in as many words: do not "correct" them into a ramp.
 	--
-	-- fade / gap is the honest number -- the AVERAGE echoes alive -- and 1.4 is
-	-- the bar for a tier to genuinely read as a pair. Below that it is one echo
-	-- with an occasional flicker of a second.
+	-- So the inversion is asserted rather than merely allowed. A spec that only
+	-- permitted non-monotonic values would pass just as happily after somebody
+	-- tidied them into a ramp, which is the exact edit the config warns against
+	-- and the exact edit nothing else in the codebase would catch.
+	--==========================================================================
+	for _, field in ipairs({ "Wave", "Shimmer" }) do
+		local inversions = 0
+		for index = 2, #FX.Tiers do
+			if FX.Tiers[index][field] < FX.Tiers[index - 1][field] then
+				inversions += 1
+			end
+		end
+		ok(field .. " is set by theme, not by rank", inversions > 0,
+			tostring(inversions) .. " inversion(s)")
+	end
+	ok("every tier has both dials, and neither is negative", (function()
+		for _, tier in ipairs(FX.Tiers) do
+			if type(tier.Wave) ~= "number" or type(tier.Shimmer) ~= "number"
+				or tier.Wave < 0 or tier.Shimmer < 0 then
+				return false
+			end
+		end
+		return true
+	end)())
+
+	--==========================================================================
+	-- EVERY TIER IS FULLY DRESSED
+	--
+	-- A tier missing its Palette or its emitter is a tier that renders as a grey
+	-- streak, and it would reach a player before it reached anybody reading the
+	-- table -- the fields are only read at the moment the effect is built.
 	--==========================================================================
 	for index, tier in ipairs(FX.Tiers) do
-		local walk = GameConfig.walkSpeedFor(tier.From)
-		local secondsBetween = tier.SpacingStuds / walk
-		local alive = tier.FadeSeconds / secondsBetween
-		local shown = math.min(alive, tier.Ghosts)
-		table.insert(lines, string.format(
-			"  %d %-18s walk %6.2f -> echo every %.3fs, life %.2fs = %.2f alive (cap %d)",
-			index, tier.Name, walk, secondsBetween, tier.FadeSeconds, shown, tier.Ghosts))
-		if index == 2 then
-			ok("Double Step genuinely reads as a pair at 1M", shown >= 1.4,
-				string.format("%.2f alive", shown))
-		end
-		ok("tier " .. index .. " shows at least one echo at its own unlock speed",
-			alive >= 0.25, string.format("%.2f", alive))
-	end
-	ok("the top four tiers all cap at four ghosts",
-		FX.Tiers[4].Ghosts == 4 and FX.Tiers[5].Ghosts == 4
-			and FX.Tiers[6].Ghosts == 4 and FX.Tiers[7].Ghosts == 4)
-
-	--==========================================================================
-	-- SPACING AND FADE ARE WITHIN THE BRIEF
-	--==========================================================================
-	local want: { { number } } = {
-		{ 11, 12, 0.14 }, { 8, 10, 0.36 }, { 7, 8, 0.22 },
-		{ 6, 7, 0.26 }, { 5.5, 6, 0.28 }, { 5, 5, 0.30 }, { 4.5, 5, 0.32 },
-	}
-	for i, w in ipairs(want) do
-		local tier = FX.Tiers[i]
-		ok("tier " .. i .. " spacing is in range",
-			tier.SpacingStuds >= w[1] and tier.SpacingStuds <= w[2],
-			tostring(tier.SpacingStuds))
-		ok("tier " .. i .. " fade is about " .. w[3],
-			math.abs(tier.FadeSeconds - w[3]) <= 0.02, tostring(tier.FadeSeconds))
-	end
-
-	--==========================================================================
-	-- WHAT EACH TIER ANIMATES
-	--==========================================================================
-	ok("tiers 1 and 2 are static", FX.Tiers[1].Wave == 0 and FX.Tiers[2].Wave == 0
-		and FX.Tiers[1].Pulse == 0 and FX.Tiers[2].Pulse == 0)
-	ok("tier 3 pulses", FX.Tiers[3].Pulse > 0)
-	ok("tier 4 gradients down the body", FX.Tiers[4].BodyGradient == true)
-	ok("tier 5 shimmers", FX.Tiers[5].Shimmer > 0)
-	ok("tier 5 alternates three colours", #FX.Tiers[5].Palette == 3)
-	ok("tier 6 waves", FX.Tiers[6].Wave > 0)
-	ok("tier 6 gives each ghost a different phase", FX.Tiers[6].GhostSpread > 0)
-	ok("tier 6 uses a four-colour aurora", #FX.Tiers[6].Palette == 4)
-	ok("only tier 7 is a rainbow", (function()
-		for i, tier in ipairs(FX.Tiers) do
-			if tier.Rainbow ~= (i == 7) then
+		ok("tier " .. index .. " has at least two palette colours",
+			type(tier.Palette) == "table" and #tier.Palette >= 2,
+			tostring(if type(tier.Palette) == "table" then #tier.Palette else "none"))
+		ok("tier " .. index .. " palette holds Color3s", (function()
+			if type(tier.Palette) ~= "table" then
 				return false
 			end
-		end
-		return true
-	end)())
-	ok("tier 7 expands about 3 percent",
-		math.abs(FX.Tiers[7].Expand - 0.03) < 1e-9, tostring(FX.Tiers[7].Expand))
-	ok("tier 7 pulses", FX.Tiers[7].Pulse > 0)
-	ok("only tier 7 rainbows the trail", (function()
-		for i, tier in ipairs(FX.Tiers) do
-			if tier.TrailRainbow ~= (i == 7) then
-				return false
-			end
-		end
-		return true
-	end)())
-	ok("every tier has every field", (function()
-		for _, tier in ipairs(FX.Tiers) do
-			for _, key in ipairs({ "From", "Name", "Ghosts", "SpacingStuds",
-				"FadeSeconds", "StartTransparency", "Palette", "GhostSpread",
-				"BodyGradient", "Wave", "Pulse", "Shimmer", "Rainbow", "Expand",
-				"TrailRainbow" }) do
-				if (tier :: any)[key] == nil then
+			for _, c in ipairs(tier.Palette) do
+				if typeof(c) ~= "Color3" then
 					return false
 				end
 			end
+			return true
+		end)())
+		local p = tier.Particle
+		ok("tier " .. index .. " has an emitter", type(p) == "table")
+		if type(p) == "table" then
+			ok("tier " .. index .. " emitter is complete",
+				type(p.Texture) == "string" and typeof(p.Color) == "Color3"
+					and type(p.Rate) == "number" and type(p.Speed) == "number"
+					and type(p.Size) == "number")
+			ok("tier " .. index .. " emitter rate is positive", p.Rate > 0,
+				tostring(p.Rate))
+		end
+	end
+
+	--==========================================================================
+	-- THE PALETTE GROWS WITH THE LADDER
+	--
+	-- Not strictly -- four tiers share two colours at the bottom -- but it must
+	-- never SHRINK, or a higher tier would cycle through less than the one below
+	-- it, which is the same regression as a narrower ribbon in a different column.
+	--==========================================================================
+	ok("the palette never shrinks going up", (function()
+		for index = 2, #FX.Tiers do
+			if #FX.Tiers[index].Palette < #FX.Tiers[index - 1].Palette then
+				return false
+			end
+		end
+		return true
+	end)())
+	table.insert(lines, "  palette sizes: " .. (function()
+		local out = {}
+		for _, tier in ipairs(FX.Tiers) do
+			table.insert(out, tostring(#tier.Palette))
+		end
+		return table.concat(out, " ")
+	end)())
+
+	--==========================================================================
+	-- THE COLUMN THAT WAS DELETED MUST STAY DELETED
+	--
+	-- The old top tier ended the ladder by abandoning its palette for the whole
+	-- hue wheel, on a boolean column. Nothing sets it now, and the config is
+	-- explicit that a branch no row can reach is a branch nobody tests. This
+	-- asserts the column did not creep back in with a single row using it.
+	--==========================================================================
+	ok("no tier carries a Rainbow flag", (function()
+		for _, tier in ipairs(FX.Tiers) do
+			if tier.Rainbow ~= nil then
+				return false
+			end
+		end
+		return true
+	end)())
+	ok("only the void names its own core colour", (function()
+		for index, tier in ipairs(FX.Tiers) do
+			if (tier.CoreColor ~= nil) ~= (index == #FX.Tiers) then
+				return false
+			end
 		end
 		return true
 	end)())
 
 	--==========================================================================
-	-- TIER 7 REALLY IS A HUE WAVE, NOT ONE COLOUR PER GHOST
+	-- THE MOVEMENT GATES
 	--
-	-- Reproduces the client's own expression -- ghost phase, height down the
-	-- body, time -- and asserts it MOVES on all three. A rainbow that assigns
-	-- one static colour per echo is the failure mode the brief specifically
-	-- rules out, and it is invisible in a screenshot.
+	-- Standing still at a high WalkSpeed must not smear a ribbon across a plot,
+	-- and a respawn must not draw one across the map.
 	--==========================================================================
-	do
-		local tier = FX.Tiers[7]
-		local function hueAt(phase: number, height: number, clock: number): number
-			local position = phase * tier.GhostSpread
-				+ (1 - height) * FX.BodyHueSpread
-				+ clock * tier.Wave
-			return position % 1
-		end
-		local headNow = hueAt(0, 1, 0)
-		local footNow = hueAt(0, 0, 0)
-		ok("tier 7 hue changes from head to feet",
-			math.abs(headNow - footNow) > 0.05,
-			string.format("head %.3f foot %.3f", headNow, footNow))
-
-		local ghostA = hueAt(0, 1, 0)
-		local ghostB = hueAt(1 / 4, 1, 0)
-		ok("consecutive ghosts start at different hues",
-			math.abs(ghostA - ghostB) > 0.05,
-			string.format("%.3f vs %.3f", ghostA, ghostB))
-
-		local t0 = hueAt(0, 1, 0)
-		local t1 = hueAt(0, 1, 0.5)
-		ok("the wave travels over time", math.abs(t0 - t1) > 0.05,
-			string.format("%.3f -> %.3f", t0, t1))
-
-		local wrapped = hueAt(0, 1, 1 / tier.Wave)
-		ok("the hue wheel wraps", math.abs(wrapped - t0) < 1e-6)
-
-		-- Four ghosts must land on four DIFFERENT hues, not two pairs.
-		local seen: { [string]: boolean } = {}
-		local distinct = 0
-		for slot = 0, 3 do
-			local key = string.format("%.3f", hueAt(slot / 4, 1, 0))
-			if not seen[key] then
-				seen[key] = true
-				distinct += 1
-			end
-		end
-		ok("all four ghosts start on different hues", distinct == 4, tostring(distinct))
-		table.insert(lines, string.format(
-			"  tier 7 hue: head %.2f foot %.2f, ghost 2 starts %.2f, +0.5s -> %.2f",
-			headNow, footNow, ghostB, t1))
-	end
-
-	--==========================================================================
-	-- THE PERFORMANCE PROMISES
-	--==========================================================================
-	ok("colour updates are throttled to 10-15 Hz",
-		FX.ColourHz >= 10 and FX.ColourHz <= 15, tostring(FX.ColourHz))
-	ok("mobile updates colour more slowly", FX.MobileColourHz < FX.ColourHz)
-	ok("mobile gets fewer ghosts", FX.MobileMaxGhosts < FX.LocalMaxGhosts)
-	ok("four for the local player", FX.LocalMaxGhosts == 4)
-	ok("two for a remote player", FX.RemoteMaxGhosts == 2)
-	ok("remote effects stop at about 120 studs",
-		FX.RemoteMaxStuds >= 100 and FX.RemoteMaxStuds <= 140,
+	ok("there is a minimum ground speed", FX.MinGroundSpeed > 0,
+		tostring(FX.MinGroundSpeed))
+	ok("a teleport is further than a stride", FX.TeleportStuds > FX.MinGroundSpeed,
+		tostring(FX.TeleportStuds))
+	ok("a remote ribbon is dropped at a distance", FX.RemoteMaxStuds > 0,
 		tostring(FX.RemoteMaxStuds))
-	ok("the motion gate is about 10 studs/s",
-		FX.MoveStudsPerSecond >= 8 and FX.MoveStudsPerSecond <= 12,
-		tostring(FX.MoveStudsPerSecond))
-	ok("the motion gate is below base WalkSpeed, so tier 1 works at 1K",
-		FX.MoveStudsPerSecond < GameConfig.walkSpeedFor(1e3),
-		string.format("gate %d vs walk %.1f at 1K",
-			FX.MoveStudsPerSecond, GameConfig.walkSpeedFor(1e3)))
-	ok("a teleport is bigger than any real stride", FX.TeleportStuds > 16)
+	ok("the repaint interval is a real frame budget",
+		FX.ColourInterval > 0 and FX.ColourInterval < 1,
+		string.format("%.4f", FX.ColourInterval))
+	ok("the quality attribute is named",
+		type(FX.QualityAttribute) == "string" and #FX.QualityAttribute > 0)
 	table.insert(lines, string.format(
-		"  emit above %d studs/s | ignore jumps over %d studs | colour %d Hz (%d mobile)",
-		FX.MoveStudsPerSecond, FX.TeleportStuds, FX.ColourHz, FX.MobileColourHz))
-	table.insert(lines, string.format(
-		"  ghosts: %d local, %d remote, %d mobile, cut off past %d studs",
-		FX.LocalMaxGhosts, FX.RemoteMaxGhosts, FX.MobileMaxGhosts, FX.RemoteMaxStuds))
+		"  gates: moves past %d studs/s, teleport past %d, remote cut at %d, repaint %.0f Hz",
+		FX.MinGroundSpeed, FX.TeleportStuds, FX.RemoteMaxStuds, 1 / FX.ColourInterval))
 
 	--==========================================================================
-	-- A HEAVY POD STILL SUPPRESSES, BUT NOT AS FAR UP THE LADDER
+	-- A PHONE GETS THE SAME EFFECT, SMALLER
 	--
-	-- The gate dropped from 35 studs/s to 10 so tier 1 can work at a thousand
-	-- Speed, and the consequence is arithmetic: a maximum carry only holds a
-	-- player under 10 while 0.30 x walk is under 10. Recorded rather than
-	-- asserted at a typed number, so the report stays true after any retune.
+	-- The whole point of moving off ghosts is that every machine can have every
+	-- tier. So the reduced settings must SCALE the ribbon, never switch it off:
+	-- a scale of 0 would be the old "phones get fewer echoes" compromise back
+	-- again under a new name.
+	--==========================================================================
+	for _, field in ipairs({ "ReducedLifetimeScale", "ReducedWidthScale" }) do
+		ok(field .. " shrinks without deleting",
+			FX[field] > 0 and FX[field] < 1, string.format("%.2f", FX[field]))
+	end
+	table.insert(lines, string.format(
+		"  reduced: %.0f%% of the length, %.0f%% of the width -- still every tier",
+		FX.ReducedLifetimeScale * 100, FX.ReducedWidthScale * 100))
+
+	--==========================================================================
+	-- WHERE A MAXIMUM CARRY LEAVES A PLAYER ON THE SPEED GATE
+	--
+	-- Recorded rather than asserted at a typed number, so the report stays true
+	-- after any retune. Whether the ribbon actually draws is section 10's
+	-- business, because that is decided by the carry band and not by this gate.
 	--==========================================================================
 	do
-		local maxKg = GameConfig.Carry.MaxKg
-		local floorAt = GameConfig.carryMultiplierFor(maxKg)
-		ok("a max carry suppresses ghosts at the bottom of the ladder",
-			GameConfig.walkSpeedFor(0) * floorAt < FX.MoveStudsPerSecond)
+		local topTier = GameConfig.Carry.TopTierValue
+		local floorAt = GameConfig.carryMultiplierFor(topTier)
 		local lo, hi = 0.0, GameConfig.Save.MaxSpeedScore
 		for _ = 1, 200 do
 			local mid = (lo + hi) * 0.5
-			if GameConfig.walkSpeedFor(mid) * floorAt < FX.MoveStudsPerSecond then
+			if GameConfig.walkSpeedFor(mid) * floorAt < FX.MinGroundSpeed then
 				lo = mid
 			else
 				hi = mid
 			end
 		end
 		table.insert(lines, string.format(
-			"  a %d kg pod holds a player under the gate below %s Speed",
-			maxKg, GameConfig.compact(lo)))
+			"  a tier %d pod holds a player under the %d studs/s gate below %s Speed",
+			topTier, FX.MinGroundSpeed, GameConfig.compact(lo)))
 	end
 end
 
 
 --==============================================================================
--- 10. WEIGHT SUPPRESSES THE GHOSTS
+-- 10. WEIGHT SUPPRESSES THE RIBBON
 --
--- The speed gate cannot do this any more. It used to: at 35 studs/s a heavy pod
--- held a player under it. Tier 1 needs 10, because a player at 1K Speed walks at
--- 22 -- and at 10 a loaded player clears the gate easily. Without a separate
--- test, the one moment this game is built around (running home rich and slow)
--- would carry the most spectacular effect in the game.
+-- The speed gate cannot do this on its own. It used to: at 35 studs/s a heavy
+-- pod held a player under it. The gate is 2 now, because a ribbon should appear
+-- the moment you are actually moving -- and at 2 a loaded player clears it while
+-- barely walking. Without a separate test, the one moment this game is built
+-- around (running home rich and slow) would carry the most spectacular effect in
+-- the game.
 --==============================================================================
 section("carry bands")
 do
@@ -815,19 +922,32 @@ do
 	end
 
 	ok("the bands are ordered", FX.CarryReducedAbove < FX.CarryFullAbove)
-	ok("the full band starts above 0.75", FX.CarryFullAbove == 0.75)
-	ok("the dead band starts below 0.50", FX.CarryReducedAbove == 0.50)
-	ok("reduced means one ghost", FX.CarryReducedGhosts == 1)
-	ok("reduced is fainter", FX.CarryReducedFade > 0)
-	ok("reduced is sparser", FX.CarryReducedSpacing > 1)
+	ok("the full band starts above 0.92", FX.CarryFullAbove == 0.92,
+		tostring(FX.CarryFullAbove))
+	ok("the dead band starts below 0.55", FX.CarryReducedAbove == 0.55,
+		tostring(FX.CarryReducedAbove))
+
+	--==========================================================================
+	-- A LOAD SCALES THE RIBBON, IT DOES NOT RE-DRESS IT
+	--
+	-- The old middle band had its own ghost count, its own spacing and its own
+	-- fade -- three numbers describing a different effect. A ribbon needs only to
+	-- be shortened, narrowed and faded, so the loaded look is the SAME ribbon
+	-- under three multipliers. Each must do something, and none may erase it.
+	--==========================================================================
+	ok("a load shortens it", FX.CarryLifetimeScale > 0 and FX.CarryLifetimeScale < 1,
+		string.format("%.2f", FX.CarryLifetimeScale))
+	ok("a load narrows it", FX.CarryWidthScale > 0 and FX.CarryWidthScale < 1,
+		string.format("%.2f", FX.CarryWidthScale))
+	ok("a load fades it", FX.CarryFadeAdd > 0, string.format("%.2f", FX.CarryFadeAdd))
 
 	--== the three bands, on both sides of both edges ==--
 	for _, case in ipairs({
-		{ 1.00, FULL }, { 0.90, FULL }, { 0.7501, FULL },
-		{ 0.75, REDUCED }, { 0.60, REDUCED }, { 0.50, REDUCED },
-		{ 0.4999, NONE }, { 0.30, NONE }, { 0.0, NONE },
+		{ 1.00, FULL }, { 0.96, FULL }, { 0.9201, FULL },
+		{ 0.92, REDUCED }, { 0.70, REDUCED }, { 0.55, REDUCED },
+		{ 0.5499, NONE }, { 0.30, NONE }, { 0.0, NONE },
 	}) do
-		ok("multiplier " .. tostring(case[1]) .. " is " .. case[2],
+		ok("multiplier " .. tostring(case[1]) .. " is " .. tostring(case[2]),
 			bandFor(case[1]) == case[2], bandFor(case[1]))
 	end
 
@@ -837,56 +957,56 @@ do
 	ok("a string reads as unloaded", bandFor("heavy") == FULL)
 
 	--==========================================================================
-	-- WHAT EACH BAND MEANS IN KILOGRAMS
+	-- WHAT EACH BAND MEANS IN POD SIZE
 	--
-	-- The bands are about the multiplier, but a player experiences kilograms, so
+	-- The bands are about the multiplier, but a player experiences pod size, so
 	-- this is where the two are tied together and printed.
 	--==========================================================================
-	local maxKg = GameConfig.Carry.MaxKg
+	local topTier = GameConfig.Carry.TopTierValue
 	local edgeFull, edgeDead = -1, -1
-	for kg = 0, maxKg do
-		local band = bandFor(GameConfig.carryMultiplierFor(kg))
+	for tier = 0, topTier do
+		local band = bandFor(GameConfig.carryMultiplierFor(tier))
 		if band ~= FULL and edgeFull < 0 then
-			edgeFull = kg
+			edgeFull = tier
 		end
 		if band == NONE and edgeDead < 0 then
-			edgeDead = kg
+			edgeDead = tier
 		end
 	end
 	table.insert(lines, string.format(
-		"  full effect up to %d kg | reduced %d..%d kg | nothing from %d kg up",
+		"  full effect up to tier %d | reduced %d..%d | nothing from tier %d up",
 		edgeFull - 1, edgeFull, edgeDead - 1, edgeDead))
 	ok("an empty-handed player is unaffected",
 		bandFor(GameConfig.carryMultiplierFor(0)) == FULL)
-	ok("a 1 kg pod is unaffected", bandFor(GameConfig.carryMultiplierFor(1)) == FULL)
+	ok("a tier 1 pod is unaffected", bandFor(GameConfig.carryMultiplierFor(1)) == FULL)
 	ok("a maximum pod kills the effect",
-		bandFor(GameConfig.carryMultiplierFor(maxKg)) == NONE)
+		bandFor(GameConfig.carryMultiplierFor(topTier)) == NONE)
 
 	--==========================================================================
-	-- A MAXIMUM POD IS SILENT AT EVERY TIER, INCLUDING THE RAINBOW
+	-- A MAXIMUM POD IS SILENT AT EVERY TIER, THE VOID INCLUDED
 	--
-	-- The requirement that the speed gate can no longer meet on its own, and the
+	-- The requirement the speed gate can no longer meet on its own, and the
 	-- reason this whole section exists. Asserted at every tier rather than at the
 	-- top one, because a band that failed only in the middle would be invisible.
 	--==========================================================================
-	local heavyMultiplier = GameConfig.carryMultiplierFor(maxKg)
+	local heavyMultiplier = GameConfig.carryMultiplierFor(topTier)
 	for index, tier in ipairs(FX.Tiers) do
 		ok("a max pod suppresses tier " .. index .. " (" .. tier.Name .. ")",
 			bandFor(heavyMultiplier) == NONE)
 	end
 	table.insert(lines, string.format(
-		"  a %d kg pod is multiplier %.2f -> %s, at all %d tiers",
-		maxKg, heavyMultiplier, bandFor(heavyMultiplier), #FX.Tiers))
+		"  a tier %d pod is multiplier %.2f -> %s, at all %d tiers",
+		topTier, heavyMultiplier, bandFor(heavyMultiplier), #FX.Tiers))
 
 	--== and it is suppressed by WEIGHT, not by being slow ==--
 	local heavyWalkAtCap = GameConfig.walkSpeedFor(GameConfig.Save.MaxSpeedScore)
 		* heavyMultiplier
 	ok("at 1Qa a max pod is still well over the speed gate",
-		heavyWalkAtCap > FX.MoveStudsPerSecond,
-		string.format("%.1f vs %d", heavyWalkAtCap, FX.MoveStudsPerSecond))
+		heavyWalkAtCap > FX.MinGroundSpeed,
+		string.format("%.1f vs %d", heavyWalkAtCap, FX.MinGroundSpeed))
 	table.insert(lines, string.format(
 		"  at 1Qa a max pod still walks %.1f studs/s -- over the %d gate, so the",
-		heavyWalkAtCap, FX.MoveStudsPerSecond))
+		heavyWalkAtCap, FX.MinGroundSpeed))
 	table.insert(lines, "  band is what stops it, exactly as intended")
 
 	--==========================================================================
@@ -899,7 +1019,7 @@ do
 	do
 		local empty = GameConfig.carryMultiplierFor(0)
 		local laden = GameConfig.carryMultiplierFor(2000)
-		local heavy = GameConfig.carryMultiplierFor(maxKg)
+		local heavy = GameConfig.carryMultiplierFor(topTier)
 		ok("pick up heavy -> suppressed", bandFor(heavy) == NONE)
 		ok("bank it -> restored", bandFor(empty) == FULL)
 		ok("pick up mid-weight -> reduced", bandFor(laden) == REDUCED,
@@ -907,9 +1027,9 @@ do
 		ok("drop it -> restored", bandFor(empty) == FULL)
 		ok("an empty hand is exactly 1", empty == 1)
 		table.insert(lines, string.format(
-			"  0 kg -> %.2f (%s) | 2000 kg -> %.2f (%s) | %d kg -> %.2f (%s)",
+			"  tier 0 -> %.2f (%s) | tier 2000 -> %.2f (%s) | tier %d -> %.2f (%s)",
 			empty, bandFor(empty), laden, bandFor(laden),
-			maxKg, heavy, bandFor(heavy)))
+			topTier, heavy, bandFor(heavy)))
 	end
 
 	--==========================================================================
@@ -925,16 +1045,16 @@ do
 	ok("it is not the weight", GameConfig.Attributes.CarrySpeedMultiplier
 		~= GameConfig.Attributes.CarryingKg)
 	ok("the multiplier can never exceed 1", (function()
-		for kg = 0, maxKg, 13 do
-			if GameConfig.carryMultiplierFor(kg) > 1 then
+		for tier = 0, topTier, 13 do
+			if GameConfig.carryMultiplierFor(tier) > 1 then
 				return false
 			end
 		end
 		return true
 	end)())
 	ok("the multiplier never reaches zero", (function()
-		for kg = 0, maxKg, 13 do
-			if GameConfig.carryMultiplierFor(kg) <= 0 then
+		for tier = 0, topTier, 13 do
+			if GameConfig.carryMultiplierFor(tier) <= 0 then
 				return false
 			end
 		end
@@ -944,17 +1064,29 @@ do
 	--==========================================================================
 	-- THE REDUCED BAND STILL SHOWS SOMETHING
 	--
-	-- One echo, fainter, further apart -- but present. A middle band that
-	-- rendered nothing would be the dead band with extra steps, and the reading
-	-- "you are slowing down" would be lost.
+	-- Shorter, narrower and fainter -- but present. A middle band that rendered
+	-- nothing would be the dead band with extra steps, and the reading "you are
+	-- slowing down" would be lost.
+	--
+	-- The fade is the one that could actually reach nothing: it ADDS to a
+	-- transparency that is already 0.55 at tier 1, so the check is on the SUM
+	-- rather than on the add, at every tier rather than at the top one.
 	--==========================================================================
 	for index, tier in ipairs(FX.Tiers) do
-		local ghosts = math.min(tier.Ghosts, FX.CarryReducedGhosts)
-		local transparency = math.min(0.98, tier.StartTransparency + FX.CarryReducedFade)
-		ok("reduced tier " .. index .. " still draws one echo", ghosts == 1)
+		local lifetime = tier.Lifetime * FX.CarryLifetimeScale
+		local width = tier.WidthStuds * FX.CarryWidthScale
+		local transparency = math.min(0.98, tier.HeadTransparency + FX.CarryFadeAdd)
+		ok("reduced tier " .. index .. " still has length", lifetime > 0,
+			string.format("%.2fs", lifetime))
+		ok("reduced tier " .. index .. " still has width", width > 0,
+			string.format("%.2f", width))
 		ok("reduced tier " .. index .. " stays visible", transparency < 0.99,
 			string.format("%.2f", transparency))
 	end
+	table.insert(lines, string.format(
+		"  loaded tier 1 is the faintest case: %.2f + %.2f = %.2f, still under 0.99",
+		FX.Tiers[1].HeadTransparency, FX.CarryFadeAdd,
+		FX.Tiers[1].HeadTransparency + FX.CarryFadeAdd))
 end
 
 --==============================================================================

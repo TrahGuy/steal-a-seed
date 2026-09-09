@@ -2537,7 +2537,8 @@ end
 GameConfig.Carry = {
 	-- The heaviest thing in the game. Biome 1 tops out at ~110.
 	TopTierValue = 9500,
-	-- Speed multiplier when carrying MaxKg.
+	-- Speed multiplier when carrying a TopTierValue pod. (Read "MaxKg" here
+	-- until size tiers replaced kilograms.)
 	MinMultiplier = 0.30,
 	-- Below 1 flattens the low end. 0.6 keeps small pods nearly free.
 	Exponent = 0.6,
