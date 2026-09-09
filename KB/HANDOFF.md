@@ -1,5 +1,26 @@
 # Steal a Seed — Session Handoff
 
+## x2 Money owned-buff HUD icon — 2026-09-09 (CODEX, ART ONLY)
+
+Owner requested a small persistent buff card beside/below the bottom-left Cash
+HUD so pass owners can see that x2 Money is active. Generated and inspected
+`art/icons/x2_money_buff.png`: two emerald money bundles, gold bands and one
+gold `x2` badge, no background/card/particles/extra decoration. It is a genuine
+RGBA cutout (1254 square, corner alpha 0); copy verified by SHA256. Exact final
+prompt: `output/imagegen/shop/x2-money-buff-icon-v1.prompt.md`. The first render
+was rejected because its checkerboard was baked opaque and was not saved.
+
+Pending integration belongs in existing `CashUI.client.luau`. Show a small
+native clickable card only when the local player's server-published
+`GameConfig.Pass.MultiplierAttribute` (`CashMultiplier`) is greater than 1.
+Listen to the attribute rather than introducing a remote or polling ownership;
+this visual must never be an authority for payout. On activation, show the exact
+small information line `Earn x2 money permanently.` above the icon, then hide it
+after a short readable interval; repeated clicks restart the one message rather
+than stacking labels/connections. Preserve the current cash/speed placement,
+phone safe-area readability and re-run cleanup. The image asset is not uploaded
+and no UI/gameplay/entitlement code was changed in this art pass.
+
 ## x2 Money pass — INTEGRATED 2026-09-09 (CLAUDE)
 
 Codex's note below is now out of date on one point: integration has been done.
