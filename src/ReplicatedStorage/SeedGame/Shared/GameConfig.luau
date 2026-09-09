@@ -499,7 +499,16 @@ GameConfig.Weapon = {
 	-- tap would open every time somebody walked past to sell their bag.
 	--==========================================================================
 	PromptText = "Open Shop",
-	PromptHold = 0.5,
+	--==========================================================================
+	-- NO HOLD. Owner's call, over the reasoning above.
+	--
+	-- That reasoning is left standing because it is still true: Marigold does
+	-- stand near the sell board, and opening her shop is now a single tap. What
+	-- keeps the two apart is that THE SELL BOARD KEPT ITS HOLD -- 1.1s, and
+	-- deliberately not changed here -- so the destructive one of the pair is
+	-- still the one you have to mean.
+	--==========================================================================
+	PromptHold = 0,
 	PromptDistance = 11,
 	-- The panel shuts itself when the player walks away. Deliberately WIDER
 	-- than the prompt: a shop that slammed shut the instant you took a step
@@ -2175,6 +2184,18 @@ GameConfig.Plant = {
 	-- Hold to hatch. Long enough that the pod visibly shakes and the hatch is a
 	-- thing you did, short enough that a full bed is not a chore.
 	HatchHoldSeconds = 1.1,
+	--==========================================================================
+	-- PICKING A PLANT BACK UP IS A TAP, NOT A HOLD
+	--
+	-- It borrowed HatchHoldSeconds, which was never a decision -- the two
+	-- actions simply shared the only number in reach. They are not the same
+	-- thing. Hatching is irreversible and wants a beat of commitment; picking
+	-- your own plant up off your own plot is undoing a placement, and a hold on
+	-- an undo is friction with nothing behind it.
+	--
+	-- Zero means the prompt fires on press. Hatch keeps its 1.1 above.
+	--==========================================================================
+	PickupHoldSeconds = 0,
 	-- How long the shell burst lasts before its pieces are gone.
 	BurstSeconds = 0.45,
 

@@ -1,5 +1,117 @@
 # Steal a Seed — Session Handoff
 
+## The prompt tap never worked on mobile, and two prompts lost their hold — 2026-09-09 (CLAUDE)
+
+Device emulator: 735 × 413, `TouchEnabled`, `MouseEnabled` and `KeyboardEnabled`
+both false.
+
+### The tap did not work, and it never had
+
+Owner report: tapping a proximity prompt does nothing on mobile. It is worse than
+a regression — **it has never worked.** Nobody noticed because a desktop presses
+E, and E is the only reason any prompt in this game has ever fired.
+
+`PromptUI` drew each prompt as a TextButton inside a **BillboardGui** and hung
+`MouseButton1Down` / `MouseButton1Up` / `MouseLeave` on it. None of the three ever
+fires from touch. Measured, two taps a few pixels apart with the camera frozen:
+
+```
+on the prompt panel          GLOBAL:Touch(processed=false)   panel silent
+on a plain ScreenGui button  GLOBAL:Touch(processed=true)    button fired
+```
+
+`processed = false` is the whole story: **no GUI consumed the tap.** A BillboardGui's
+buttons do not take part in touch hit-testing the way a ScreenGui's do. Setting
+`BillboardGui.Active = true` was tried first and changed nothing.
+
+**The fix does not add a keyboard affordance on mobile**, as instructed. The tap
+is caught globally in `PromptUI` and routed to the shown prompt.
+
+**It deliberately does NOT hit-test the panel.** The first attempt did — project
+the adornee, build a rect from the panel's `AbsoluteSize`, require the touch
+inside it — and it failed, because a BillboardGui is not laid out in screen space
+at all: its children report `AbsolutePosition 0,0`, and `StudsOffset` is applied
+relative to the camera rather than the world, so a projected rect is measurably in
+the wrong place. Trying to be precise about where a billboard is drawn is the
+wrong problem. A prompt only appears when the player is inside
+`MaxActivationDistance`, and `PromptShown`/`PromptHidden` already own that: **if a
+prompt is on screen, the player is standing at it.** Position is used only to
+choose between two prompts that are somehow both up.
+
+**A drag is not a tap.** The camera is panned by dragging, so a touch that travels
+more than `TAP_SLOP` (34px) releases the hold. That is the one thing this had to
+get right and it is verified below.
+
+### Two prompts lost their hold; the sell board kept its
+
+  * **Plot pickup** was borrowing `HatchHoldSeconds`, which was never a decision —
+    the two actions simply shared the only number in reach. They are not the same
+    thing: hatching is irreversible, while picking your own plant off your own plot
+    is undoing a placement, and a hold on an undo is friction with nothing behind
+    it. New `Plant.PickupHoldSeconds = 0`. Hatch keeps its 1.1.
+  * **Marigold** `Weapon.PromptHold` 0.5 → 0. The old comment justifying the 0.5
+    is left standing because it is still true — she does stand near the sell board
+    — and what keeps the pair apart now is that **the sell board kept its 1.1s
+    hold**, so the destructive one is still the one you have to mean.
+  * Untouched: sell-all 1.1, hatch 1.1, nest Take 0.7, mill 0.35.
+
+### Verified on the emulated phone, touch only
+
+```
+pod Take, 0.7s hold   tap-and-hold 1.4s -> carrying "dunebud"
+                      a HELD prompt completed from touch alone, no keyboard
+Marigold, 0 hold      90ms tap -> shop open
+plot Pick Up, 0 hold  80ms tap -> Emberquill Tool appeared,
+                      pickup prompts in world 2 -> 1
+camera pan            480,130 -> 600,175 (~128px) held 1.6s over a 0.7s prompt
+                      -> nothing triggered
+sell board, 1.1s      90ms tap -> plant tools still held; a tap does not sell
+```
+
+### Two harness traps that cost real time, recorded so they are not re-learnt
+
+**`moveTo instance_path` is useless for BillboardGui children.** They report
+`AbsolutePosition 0,0`, so the synthetic pointer went to the screen's top-left
+corner. Several early "the tap does not work" results were that, not the game.
+
+**A prompt vanishes the moment the player carries something.** `PromptUI.show`
+returns early on `carrying()`, so after a successful pickup every prompt hides and
+the next tap has nothing to hit. Two failed runs were this. Bank first, then test.
+
+Also: the success signal for a plot pickup is a **plant Tool appearing**, not
+`CarryingSpecies` — that attribute is for nest pods. Checking the wrong one made a
+working pickup look broken.
+
+### Validation
+
+Ten specs pass via the fresh-require harness (SpeedSpec 332, WeaponSpec 107,
+BatClearance 939/939, BatSwing 93/93, Cycle 31, Plot 65, StarbloomLimb 71,
+TutorialPod 263, Tutorial 93, MillSign clean). `rojo build` clean,
+`git diff --check` clean, and all five touched or adjacent modules compile via
+`loadstring`. No client errors beyond the pre-existing ShopUI "nothing is for
+sale" warning.
+
+### Not covered
+
+  * **Desktop mouse clicking on a prompt still does nothing**, exactly as before —
+    the removed handlers never fired there either. Desktop uses E, which is
+    untouched. Adding mouse support was out of scope and would change desktop
+    behaviour.
+  * **Real finger input.** `VirtualInputManager:SendTouchEvent` is blocked in this
+    sandbox; synthetic mouse is delivered as `UserInputType.Touch`, which is the
+    path exercised, but two simultaneous touches and the prompt competing with the
+    thumbstick are unverified.
+  * Whether a 0-hold Marigold is a nuisance in play now that she opens on a tap
+    near the sell board. The two are separated by the sell board's hold, but only
+    real play will say whether that is enough.
+
+### Files
+
+`PromptUI.client.luau` — the global tap, drag cancellation, release on hide, and
+the removal of the three dead BillboardGui handlers. `GameConfig.luau` —
+`Plant.PickupHoldSeconds`, `Weapon.PromptHold`. `PlantService.luau` — pickup uses
+the new constant.
+
 ## Two mobile UI defects fixed, and what the rest of the pass could and could not prove — 2026-09-09 (CLAUDE)
 
 Device emulator throughout: 735 × 413 landscape, `TouchEnabled`, `MouseEnabled`

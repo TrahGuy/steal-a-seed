@@ -34,6 +34,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 -- The attribute name comes from GameConfig so the client and the server cannot
 -- drift onto two spellings of the same fact.
@@ -67,6 +68,12 @@ type Panel = {
 }
 
 local shown: { [ProximityPrompt]: Panel } = {}
+
+-- The prompt a finger is currently holding down, if any. Declared here rather
+-- than beside THE TAP because `hide` below has to be able to let go of it, and a
+-- local referenced before its declaration is silently a GLOBAL -- which would
+-- read nil in hide and quietly never release.
+local holding: ProximityPrompt? = nil
 
 --==============================================================================
 -- SOMEBODY ELSE'S POD DOES NOT OFFER ITSELF
@@ -230,19 +237,28 @@ local function build(prompt: ProximityPrompt): Panel?
 	verbEdge.Thickness = PROMPT.OutlineThickness
 	verbEdge.Parent = action
 
-	--== TOUCH ==--
-	-- Down and Up rather than Activated. Activated fires on release, which for a
-	-- HELD prompt means beginning and ending the hold in the same instant and
-	-- never completing it -- the button would simply never work on a phone.
-	panel.MouseButton1Down:Connect(function()
-		prompt:InputHoldBegin()
-	end)
-	panel.MouseButton1Up:Connect(function()
-		prompt:InputHoldEnd()
-	end)
-	panel.MouseLeave:Connect(function()
-		prompt:InputHoldEnd()
-	end)
+	--==========================================================================
+	-- THE TOUCH IS NOT HANDLED HERE, AND THAT IS THE FIX
+	--
+	-- This used to hang MouseButton1Down/Up and MouseLeave on this panel, and
+	-- ON A PHONE NONE OF THEM EVER FIRED. The panel lives in a BillboardGui, and
+	-- a BillboardGui's buttons do not take part in touch hit-testing the way a
+	-- ScreenGui's do -- setting `Active = true` on the billboard does not change
+	-- it either, which was tried.
+	--
+	-- Measured, two taps a few pixels apart on the same frozen camera:
+	--
+	--     on the prompt panel        GLOBAL:Touch(processed=false), panel silent
+	--     on a plain ScreenGui button GLOBAL:Touch(processed=true), button fired
+	--
+	-- `processed = false` is the whole story: no GUI consumed the tap. Nobody
+	-- noticed because a desktop presses E, and E is the only reason this prompt
+	-- has ever worked.
+	--
+	-- So the tap is caught globally and hit-tested against where this panel is
+	-- actually drawn -- see THE TAP below. It is deliberately NOT solved by
+	-- offering a keyboard affordance on mobile.
+	--==========================================================================
 
 	panel.Size = UDim2.fromScale(0.82, 0.82)
 	TweenService:Create(panel, TweenInfo.new(0.16, Enum.EasingStyle.Back,
@@ -254,6 +270,15 @@ end
 local function hide(prompt: ProximityPrompt)
 	local entry = shown[prompt]
 	shown[prompt] = nil
+	-- Walking out of range mid-hold: the prompt is going away and the hold it
+	-- was carrying has to go with it, or the next tap finds `holding` occupied
+	-- by something that is no longer on screen.
+	if holding == prompt then
+		holding = nil
+		pcall(function()
+			prompt:InputHoldEnd()
+		end)
+	end
 	if not entry then
 		return
 	end
@@ -318,6 +343,102 @@ ProximityPromptService.PromptButtonHoldEnded:Connect(function(prompt)
 		{ Size = UDim2.fromScale(0, 1) }):Play()
 	TweenService:Create(entry.cap, TweenInfo.new(0.12),
 		{ BackgroundColor3 = PAPER }):Play()
+end)
+
+--==============================================================================
+-- THE TAP
+--
+-- One pair of connections for the whole game rather than a pair per prompt.
+--
+-- IT DOES NOT HIT-TEST THE PANEL, AND THAT IS DELIBERATE. The first attempt did:
+-- project the adornee, build a rect from the panel's AbsoluteSize, require the
+-- touch inside it. It did not work, and the reason is that a BillboardGui is not
+-- laid out in screen space at all -- its children report AbsolutePosition 0,0,
+-- and StudsOffset is applied relative to the CAMERA rather than the world, so a
+-- projected rect is an approximation that was measurably in the wrong place.
+--
+-- Trying to be precise about where a billboard is drawn is the wrong problem.
+-- A prompt only appears when the player is within MaxActivationDistance of the
+-- thing -- eleven studs for a pod, and PromptShown/PromptHidden already own that
+-- decision. If a prompt is on screen at all, the player is standing at it.
+--
+-- SO: A TAP WHILE A PROMPT IS SHOWN IS THAT PROMPT. Position is used only to
+-- choose between two prompts that are somehow both up, and even then it is a
+-- nearest-to-the-finger guess rather than a containment test.
+--
+-- A DRAG IS NOT A TAP. The camera is panned by dragging, so a touch that travels
+-- is the player looking around and must not hold a prompt down. That is the one
+-- thing this has to get right, and it is a distance check rather than a rect.
+--==============================================================================
+local TAP_SLOP = 34
+
+local touchStart: Vector2? = nil
+
+local function anyShown(point: Vector2?): ProximityPrompt?
+	local camera = Workspace.CurrentCamera
+	local best, bestDist = nil, math.huge
+	for prompt, entry in pairs(shown) do
+		local adornee = entry.billboard.Adornee
+		if adornee and adornee:IsA("BasePart") then
+			if not point or not camera then
+				return prompt
+			end
+			local at, inFront = camera:WorldToViewportPoint(adornee.Position)
+			-- Behind the lens is not a candidate: WorldToViewportPoint still
+			-- hands back an X and a Y for it, on the wrong side of the screen.
+			local d = if inFront
+				then (Vector2.new(at.X, at.Y) - point).Magnitude
+				else math.huge
+			if d < bestDist then
+				best, bestDist = prompt, d
+			end
+		end
+	end
+	return best
+end
+
+local function release()
+	if holding then
+		holding:InputHoldEnd()
+		holding = nil
+	end
+	touchStart = nil
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	-- `processed` means a real GUI took it -- a rail button, a card, the jump
+	-- button. Those sit above the world and they win.
+	if processed or input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+	if holding then
+		return
+	end
+	local prompt = anyShown(Vector2.new(input.Position.X, input.Position.Y))
+	if prompt then
+		touchStart = Vector2.new(input.Position.X, input.Position.Y)
+		holding = prompt
+		-- With HoldDuration 0 this triggers on the press, which is what "no
+		-- hold" means; with a hold it starts the bar and the lift below ends it.
+		prompt:InputHoldBegin()
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.Touch then
+		release()
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if not (holding and touchStart) or input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+	local at = Vector2.new(input.Position.X, input.Position.Y)
+	if (at - touchStart).Magnitude > TAP_SLOP then
+		-- The finger is panning the camera, not pressing a prompt.
+		release()
+	end
 end)
 
 ProximityPromptService.PromptShown:Connect(function(prompt)

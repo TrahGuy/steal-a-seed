@@ -143,6 +143,7 @@ local TICK = PLANTING.TickSeconds
 local PLANT_RANGE = PLANTING.RangeStuds
 local EDGE_MARGIN = PLANTING.EdgeMarginStuds
 local HATCH_HOLD = PLANTING.HatchHoldSeconds
+local PICKUP_HOLD = PLANTING.PickupHoldSeconds
 local BURST = PLANTING.BurstSeconds
 local PLACE_ACTION = PLANTING.PlaceAction
 local PICKUP_ACTION = PLANTING.PickUpAction
@@ -651,7 +652,10 @@ function attachPickup(entry: Planted)
 	prompt.ActionText = "Pick Up"
 	prompt.ObjectText = ""
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
-	prompt.HoldDuration = HATCH_HOLD
+	-- PickupHoldSeconds, not HatchHoldSeconds: this borrowed the hatch's number
+	-- because it was the only one in reach, and the two actions are not the same
+	-- -- see the note on both in GameConfig.Planting.
+	prompt.HoldDuration = PICKUP_HOLD
 	prompt.MaxActivationDistance = PLANT_RANGE
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = handle
