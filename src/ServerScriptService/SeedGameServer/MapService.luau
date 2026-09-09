@@ -757,6 +757,88 @@ local function buildTreadmill(id: number, cf: CFrame, parent: Instance): Model
 end
 
 --==============================================================================
+-- THE FOG INSIDE A LANE
+--
+-- Banks of soft mass across the corridor, so the road does not stay legible to
+-- its far end on a night that is supposed to have closed it. The reasoning for
+-- why this is geometry rather than `FogEnd`, and why it is a LOOK rather than
+-- the rule, is on `GameConfig.WorldCycle.Fog`.
+--
+-- BUILT INVISIBLE. Every mass is Transparency = 1 here and never touched by this
+-- service again. WorldClock fades them in on each client off the same single
+-- `blend` number that carries the night lighting -- which is why a phase that
+-- flips back mid-fade simply reverses, and why the server spends nothing on a
+-- transition it does not need to own.
+--
+-- SEEDED FROM THE LANE, not from a running counter: each lane draws from the
+-- same seed plus its own near edge, so a lane's fog is identical on every client
+-- and every rebuild AND no two lanes get the same arrangement.
+--==============================================================================
+local function buildBiomeFog(model: Model, nearZ: number, farZ: number)
+	local F = GameConfig.WorldCycle.Fog
+	local W = MAP.CorridorWidth
+	local wallH = MAP.WallHeight
+	local rng = Random.new(F.Seed + math.floor(nearZ))
+
+	local folder = Instance.new("Folder")
+	folder.Name = F.Name
+	folder.Parent = model
+
+	local span = math.abs(farZ - nearZ)
+	for bank = 1, F.BanksPerLane do
+		-- Evenly down the lane, inset from both ends so a bank never straddles a
+		-- gate arch -- a mass sitting in a doorway reads as a bug rather than as
+		-- weather.
+		local t = (bank - 0.5) / F.BanksPerLane
+		local bankZ = nearZ + (farZ - nearZ) * t
+		for blob = 1, F.BlobsPerBank do
+			--==============================================================
+			-- SPREAD ACROSS THE CORRIDOR, NOT SCATTERED IN IT
+			--
+			-- Each mass owns a slice of the width and jitters inside it. Pure
+			-- randomness leaves gaps, and a gap in a fog bank is a window
+			-- straight down the road -- which is the one thing this is for.
+			--==============================================================
+			local slice = (blob - 0.5) / F.BlobsPerBank
+			local x = (slice - 0.5) * W + rng:NextNumber(-14, 14)
+			local sizeX = rng:NextNumber(62, 96)
+			local sizeY = rng:NextNumber(34, 52)
+			local sizeZ = rng:NextNumber(26, 42)
+			--==============================================================
+			-- AND IT STAYS INSIDE THE CORRIDOR
+			--
+			-- The first render let masses reach above the wall line, where they
+			-- stood against the open sky as exactly what they are: rectangles.
+			-- Inside the walls they are contained by geometry that is already
+			-- there, so the eye reads weather in a canyon rather than boxes on a
+			-- skyline -- and the strip of night sky over the road, which is the
+			-- one thing that still says "outdoors" in here, stays clear.
+			--==============================================================
+			local ceiling = wallH * 0.92 - sizeY * 0.5
+			local floorY = sizeY * 0.28
+			local y = if ceiling > floorY then rng:NextNumber(floorY, ceiling) else floorY
+			local part = build({
+				name = "Fog" .. bank .. "_" .. blob,
+				size = Vector3.new(sizeX, sizeY, sizeZ),
+				cframe = CFrame.new(x, y, bankZ + rng:NextNumber(-18, 18))
+					* CFrame.Angles(0, math.rad(rng:NextNumber(-12, 12)), 0),
+				color = F.Colour,
+				material = Enum.Material.SmoothPlastic,
+				studs = false,
+				parent = folder,
+			})
+			part.Transparency = 1
+			part.CanCollide = false
+			part.CanTouch = false
+			part.CanQuery = false
+			part.Anchored = true
+			part.CastShadow = false
+			CollectionService:AddTag(part, GameConfig.Tags.BiomeFog)
+		end
+	end
+end
+
+--==============================================================================
 -- A BIOME SEGMENT
 --
 -- One stretch of the single road. Floor, two wall runs, a gate arch at the near
@@ -797,6 +879,9 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 		parent = model,
 	})
 	model.PrimaryPart = floor
+
+	--== THE FOG THAT SHUTS IT AT NIGHT ==--
+	buildBiomeFog(model, nearZ, farZ)
 
 	--== WALLS ==--
 	for _, side in ipairs({ -1, 1 }) do

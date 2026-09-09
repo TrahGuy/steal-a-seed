@@ -303,6 +303,74 @@ local night: Look = {
 --==============================================================================
 local blend = 0
 
+--==============================================================================
+-- THE FOG RIDES THE SAME NUMBER
+--
+-- MapService builds the banks inside each lane at Transparency = 1 and never
+-- touches them again; this is the only thing that makes them visible. Off the
+-- same `blend` as the light, so fog and darkness arrive together and a phase
+-- that flips back mid-fade reverses both -- which is the whole reason that
+-- number exists rather than six tweens.
+--
+-- ENTIRELY CLIENT-SIDE, like the lighting above it and for the same reason: the
+-- server owns nothing here, so the transition costs it nothing and cannot
+-- desync anybody. It is also why this is allowed to be cosmetic. The wall
+-- across the road mouth is what actually closes the world; a client drawing no
+-- fog at all would be no more able to get in, and there is nothing left in
+-- there to see.
+--
+--==============================================================================
+-- AND THE LIST IS EVENT-DRIVEN, BECAUSE THIS PLACE STREAMS
+--
+-- The first version collected the tagged parts once and re-collected only when
+-- the first one lost its parent. Measured in a real session, that is wrong:
+-- `Workspace.StreamingEnabled` is TRUE here, so a client holds only the fog near
+-- its camera. Standing in Greenhollow at night the client had 51 of the 80
+-- masses -- Emberroot 3 of 16, Starbloom none at all.
+--
+-- A cached list therefore misses every mass that streams in afterwards, and a
+-- missed mass is not a dim one, it is an INVISIBLE one: the server builds them
+-- at Transparency = 1 and this is the only thing that ever changes that. Running
+-- down the road would have opened clean holes in the fog exactly where the
+-- player was heading.
+--
+-- So the tag's own signals drive it. A mass that arrives is faded to wherever
+-- the transition currently is, immediately, rather than waiting for the next
+-- phase change -- otherwise everything streamed in mid-night stays invisible
+-- until dawn.
+--==============================================================================
+local FOG_NIGHT = CYCLE.Fog.NightTransparency
+local fogParts: { [BasePart]: true } = {}
+
+local function fogTransparency(t: number): number
+	-- 1 is invisible, so this walks DOWN from 1 to the night value.
+	return 1 + (FOG_NIGHT - 1) * t
+end
+
+local function applyFog(t: number)
+	local want = fogTransparency(t)
+	for part in pairs(fogParts) do
+		part.Transparency = want
+	end
+end
+
+for _, part in ipairs(CollectionService:GetTagged(GameConfig.Tags.BiomeFog)) do
+	if part:IsA("BasePart") then
+		fogParts[part] = true
+	end
+end
+
+CollectionService:GetInstanceAddedSignal(GameConfig.Tags.BiomeFog):Connect(function(part)
+	if part:IsA("BasePart") then
+		fogParts[part] = true
+		part.Transparency = fogTransparency(blend)
+	end
+end)
+
+CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.BiomeFog):Connect(function(part)
+	fogParts[part] = nil
+end)
+
 local function applyLight(t: number)
 	Lighting.ClockTime = day.ClockTime + (night.ClockTime - day.ClockTime) * t
 	Lighting.Brightness = day.Brightness + (night.Brightness - day.Brightness) * t
@@ -312,6 +380,7 @@ local function applyLight(t: number)
 		+ (night.EnvironmentDiffuseScale - day.EnvironmentDiffuseScale) * t
 	Lighting.ExposureCompensation = day.ExposureCompensation
 		+ (night.ExposureCompensation - day.ExposureCompensation) * t
+	applyFog(t)
 end
 
 RunService.RenderStepped:Connect(function(dt)

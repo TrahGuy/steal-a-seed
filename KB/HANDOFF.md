@@ -1,5 +1,110 @@
 # Steal a Seed — Session Handoff
 
+## Fog in the biomes at night — 2026-09-09 (CLAUDE)
+
+At night the corridor is shut, emptied and covered by the barrier — and from
+INSIDE it, looking down the road, everything was still perfectly legible.
+Measured at night from Greenhollow: the Dustbowl arch, its `RECOMMENDED 167M
+SPEED` plate and the decor beyond all read clearly at three hundred studs. The
+world was closed and did not look closed.
+
+Each lane now carries four banks of fog, four masses to a bank — 80 across the
+whole road — which fade in with the night and out with the dawn.
+
+### It is a look, and the wall is still the rule
+
+The banner on `NightTransparency` is emphatic that concealment cannot depend on a
+look, because a player can turn their graphics down. **Nothing here is
+load-bearing.** The barrier is still opaque and collidable, `BiomeGateService`
+still puts anybody past the road mouth back in the field ten times a second, and
+the nests are still emptied at dusk. A client drawing none of this would be no
+more able to get in, and there is nothing left in there to see.
+
+That is also why the fade is **entirely client-side**, like the night lighting
+beside it: `MapService` builds every mass at `Transparency = 1` and never touches
+it again, and `WorldClock` is the only thing that makes them visible.
+
+### Why geometry and not `FogEnd`
+
+The one thing this map may never do is haze the road — being able to stand at the
+safe line and see five biomes receding IS the progression display, which is why
+`applyLighting` shuts off both `FogEnd` and the `Atmosphere` instance. Global fog
+also cannot be aimed: it would grey the FIELD too, where people plant and harvest
+all through the night, and `WorldCycle.Night` exists precisely to keep the plots
+usable.
+
+Banks of parts sit only where they are put. **Verified**: at day the road is clear
+end to end, photographed from the safe line through the Dustbowl gate to the far
+wall, with 0 of 51 streamed masses visible and the least transparent reading 1.000.
+
+### The depth does the work
+
+One bank is a haze; the far end of the road is behind twenty of them. That is the
+shape real fog has and it falls out of stacking rather than being tuned — which
+is why the per-mass number moved only from 0.72 to 0.68 to make the first gate
+unreadable, since eight deep that is 0.036 of the light through against 0.072.
+
+It rides the existing `blend`, the single number that already carries the night
+lighting, so fog and darkness arrive together and a phase that flips back
+mid-fade reverses both.
+
+### Two things found by measuring rather than by looking
+
+**`Workspace.StreamingEnabled` is TRUE here.** The first version collected the
+tagged parts once and re-collected only when the first had lost its parent.
+Measured in a real session, a client standing in Greenhollow at night holds only
+51 of the 80 masses — Emberroot 3 of 16, Starbloom none at all. A cached list
+misses everything that streams in afterwards, and a missed mass is not a dim one,
+it is an **invisible** one, because the server builds them at `Transparency = 1`
+and the client fade is the only thing that changes that. Running down the road
+would have opened clean holes in the fog exactly where the player was heading.
+
+It is driven by `GetInstanceAddedSignal` / `GetInstanceRemovedSignal` now, and a
+mass that arrives is faded to the live blend immediately rather than waiting for
+the next phase change. Verified by removing and re-adding the tag on a live part
+— which is exactly what a stream-in looks like locally: `0.720 → 1.000 (as built)
+→ 0.720` within a frame.
+
+**Blocks, not Balls.** A Roblox Ball renders at the diameter of its SMALLEST axis,
+so a 90 × 40 × 30 "cloud" would come out a 30-stud marble. Blocks are also right
+for this game, which is blocky studded plastic everywhere else.
+
+The first render also let masses reach above the 46-stud wall line, where they
+stood against the open sky as exactly what they are — rectangles. Contained under
+`wallH * 0.92` now: highest top measured at 42.3, 0 above the wall, so the strip
+of night sky over the road stays clear.
+
+### Verified
+
+Ten specs pass, `rojo build` passes, all three files compile.
+
+In a running session, photographed from the same camera before and after: the
+Dustbowl arch went from crisply legible with a readable Speed plate to a faint
+smudge with the corridor beyond it gone, while the ground and trees at the
+player's feet stayed clear. Day/night both ways: 80 masses built invisible on the
+server, faded to 0.68 on the client at night, back to 1.000 at dawn with the road
+clear end to end.
+
+### Not verified
+
+  * Mobile fill rate. 80 large transparent parts is real overdraw, and looking
+    down a fogged corridor is the worst case for it. It is mitigated by where a
+    player can legally BE at night — from the field the opaque barrier occludes
+    the lot, so it costs nothing from the only place anybody should be standing —
+    but nobody has measured it on a phone.
+  * A natural dusk. Night was forced by publishing the phase attributes; the
+    cycle loop sleeps in one long `task.wait` and a real dusk is seven minutes
+    away. The fade path exercised is the same one either way — `blend` reads the
+    attribute — but the 45-second `BIOMES CLOSE IN` warning window, where players
+    are still legitimately inside the corridor with the fog rolling in, has not
+    been watched.
+
+### Files
+
+`GameConfig.luau` (`WorldCycle.Fog`, and the `BiomeFog` tag), `MapService.luau`
+(`buildBiomeFog`, called from `buildSegment`), `WorldClock.client.luau` (the
+streaming-safe list and `applyFog`, folded into `applyLight`).
+
 ## The night barrier is a screen now — 2026-09-09 (CLAUDE)
 
 The wall that shuts the road at dusk was a flat dark-blue slab 164 by 60 studs.

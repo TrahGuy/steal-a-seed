@@ -732,6 +732,10 @@ GameConfig.Tags = {
 	-- name because MapService rebuilds the whole map and the cycle service must
 	-- find whichever barrier exists now, not the one that existed at boot.
 	NightBarrier = "NightBarrier",
+	-- The fog masses inside the biome lanes. Tagged for the same reason the
+	-- barrier is: MapService rebuilds the map, and WorldClock must fade whichever
+	-- fog exists now rather than a set it collected at boot.
+	BiomeFog = "BiomeFog",
 	-- A Bramblejaw lying on the road. Tagged so a client can find one to
 	-- animate and so a placement check can find the others without a spatial
 	-- query on parts that are deliberately CanQuery = false.
@@ -1060,6 +1064,67 @@ GameConfig.WorldCycle = {
 			InkSoon = Color3.fromRGB(255, 206, 120),
 			SoonSeconds = 10,
 		},
+	},
+
+	--==========================================================================
+	-- FOG INSIDE THE BIOMES, AND IT IS A LOOK RATHER THAN A RULE
+	--
+	-- At night the corridor is shut and emptied, and from the field the barrier
+	-- covers it completely -- but from INSIDE, looking down the road, every gate,
+	-- sign and tree is still perfectly legible. Measured at night from
+	-- Greenhollow: the Dustbowl arch, its Speed plate and the decor beyond it all
+	-- read clearly at three hundred studs. The world is closed and it does not
+	-- look closed.
+	--
+	-- SO THIS IS ATMOSPHERE, AND THE BARRIER IS STILL THE RULE. The banner above
+	-- `NightTransparency` is emphatic that concealment cannot depend on a look,
+	-- because a player can turn their graphics down. Nothing here changes that
+	-- and nothing here is load-bearing: the wall is opaque and collidable, the
+	-- gate check puts anybody past the road mouth back in the field ten times a
+	-- second, and the nests are emptied. A client that drew none of this would be
+	-- no more able to enter or to see anything worth seeing.
+	--
+	-- WHY IT IS PARTS AND NOT `FogEnd`. The one thing this map may never do is
+	-- haze the road -- being able to stand at the safe line and see five biomes
+	-- receding IS the progression display, and `applyLighting` shuts off both
+	-- FogEnd and Atmosphere to protect it. Global fog cannot be aimed: it would
+	-- grey the FIELD too, where people plant and harvest all through the night.
+	-- Banks of geometry sit only where they are put.
+	--
+	-- AND THE DEPTH DOES THE WORK. One bank is a haze; the far end of the road is
+	-- behind twenty of them, so it disappears while the ground at your feet does
+	-- not. That is the shape real fog has, and it falls out of stacking rather
+	-- than being tuned.
+	--==========================================================================
+	Fog = {
+		Name = "NightFog",
+		-- Four banks down each 300-stud lane, four masses in each bank. 80 parts
+		-- across the whole road, none of which collides, casts a shadow or can be
+		-- queried -- and all of which are behind an opaque wall from the only
+		-- place a player can legally stand at night, so they cost nothing to
+		-- draw from there.
+		BanksPerLane = 4,
+		BlobsPerBank = 4,
+		--======================================================================
+		-- BLOCKS, NOT BALLS
+		--
+		-- A Roblox Ball renders at the diameter of its SMALLEST axis, so a
+		-- 90 x 40 x 30 "cloud" comes out a 30-stud marble. Blocks also happen to
+		-- be right for this game: it is blocky studded plastic everywhere else,
+		-- and a blocky fog bank looks deliberate rather than like a sphere that
+		-- did not work.
+		--======================================================================
+		Colour = Color3.fromRGB(150, 168, 205),
+		-- Per mass. The number that matters is not this one but this one stacked:
+		-- two deep it is a haze, eight deep it is a wall.
+		-- 0.72 left the first gate down the road still readable. 0.68 is a small
+		-- move per mass and a large one stacked -- eight deep it is 0.036 of the
+		-- light through against 0.072 -- which is the whole reason the depth does
+		-- the work rather than the number.
+		NightTransparency = 0.68,
+		-- Fixed, so every client and every rebuild gets the same fog, and so a
+		-- screenshot stays comparable.
+		Seed = 20260910,
 	},
 
 	--==========================================================================
