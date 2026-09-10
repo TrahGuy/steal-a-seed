@@ -42,6 +42,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ContextActionService = game:GetService("ContextActionService")
+local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
@@ -112,20 +113,66 @@ local ITEM_ATTR = WeaponModel.ItemAttribute
 local READY_AT = "ReadyAt"
 
 --==============================================================================
--- FIVE, AND WHY IT IS NOT TEN
+-- TEN OR FIVE, DECIDED BY THE DEVICE RATHER THAN PICKED ONCE
 --
--- It was ten, on the reasoning that ten is what the number row can address. That
--- is a KEYBOARD's reason, and this game is mobile first: on a 735-pixel phone
--- ten 64-pixel slots are 700 pixels of hotbar, which is the whole screen width
--- and leaves a player thumbing between targets the size of a fingernail.
+-- It was ten, then five, and both were right for one machine and wrong for the
+-- other. Ten is what the NUMBER ROW can address, which is a keyboard's reason
+-- and worth having when there is a keyboard. Five is what a THUMB can cross
+-- without looking: ten 64-pixel slots come to 694 px of strip, which on a
+-- 735-pixel phone is the whole screen width and leaves a player poking at
+-- targets the size of a fingernail.
 --
--- Five is what a thumb can reach without looking, and it is small enough that
--- WHICH five becomes a decision worth making -- which is what the drag below is
--- for. The bag still lists everything; this is the quick-access strip, not the
--- inventory, and a hotbar that scrolls is a hotbar nobody can hit without
--- looking.
+-- So the count follows the device, and the SLOT SIZE NEVER CHANGES. Squeezing
+-- ten slots into 735 px would mean ~40 px each, well under the 44 px Roblox
+-- asks for a touch target and under what a thumb can hit while running from a
+-- guardian. A hotbar that scrolls is no better -- that is a hotbar nobody can
+-- hit without looking. Five real slots beat ten unusable ones.
+--
+-- BOTH CONDITIONS, not either. A keyboard alone is not enough: a narrow window
+-- on a desktop still cannot show 694 px of strip without eating the screen. A
+-- wide viewport alone is not enough either -- a tablet has the width and no
+-- number row, so slots 6-10 would be reachable only by touch, which is exactly
+-- the fingernail problem. Anything that is not both gets five.
 --==============================================================================
-local HOTBAR_SLOTS = 5
+local DESKTOP_SLOTS = 10
+local MOBILE_SLOTS = 5
+local MAX_SLOTS = DESKTOP_SLOTS
+
+-- 10 x 64 + 9 x 6 = 694 px of strip. Below this the strip is most of the
+-- window, so five is the better answer even with a keyboard attached.
+local DESKTOP_MIN_WIDTH = 900
+
+-- How many slots are LIVE right now. Everything reads this; nothing assumes a
+-- number. `MAX_SLOTS` is how many can ever exist, and the difference between the
+-- two is the overflow the mobile path has to keep reachable.
+local activeSlots = MOBILE_SLOTS
+
+local function wantedSlots(): number
+	local camera = Workspace.CurrentCamera
+	local width = if camera then camera.ViewportSize.X else 0
+	if UserInputService.KeyboardEnabled and width >= DESKTOP_MIN_WIDTH then
+		return DESKTOP_SLOTS
+	end
+	return MOBILE_SLOTS
+end
+
+--==============================================================================
+-- HOW LONG TWO TAPS COUNT AS ONE GESTURE
+--
+-- 0.30 s, in the middle of the 0.28-0.35 band. Shorter and a thumb that has to
+-- travel back to the slot misses it; longer and two deliberate weapon swaps in
+-- quick succession start reading as a double.
+--
+-- Nothing WAITS this long. See the banner on the slot's Activated handler: the
+-- first tap equips immediately and the second undoes the placement, so the
+-- window costs no latency at all on the common path.
+--==============================================================================
+local DOUBLE_WINDOW = 0.30
+
+-- Per slot, so a tap on 2 followed by a tap on 3 is never a double. os.clock is
+-- the right clock here: it is monotonic and this is a local input rhythm, not
+-- anything that has to agree with the server.
+local lastTap: { [number]: number } = {}
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -189,7 +236,47 @@ type Slot = {
 	label: string,
 	item: WeaponData.Item?,
 	rank: number,
+	-- Whether this thing may be ASSIGNED to a hotbar slot, which is a different
+	-- question from whether it can appear on one. See the capability below.
+	canHotbar: boolean,
 }
+
+--==============================================================================
+-- WHAT MAY BE ASSIGNED TO A SLOT, AND WHY A BAT MAY NOT
+--
+-- A CATEGORY decides this, never a species name -- a rule keyed on plant names
+-- would need editing every time somebody adds a seed, which is the same as not
+-- having a rule.
+--
+-- BATS AND TRAPS ARE EXEMPT ON PURPOSE. They are not ordinary carryables: each
+-- lives in its own dedicated equipment slot beside the bag, exactly one bat and
+-- one trap are equipped at a time, and that pairing is the whole of the combat
+-- loadout. Feeding them through the generic path would mean a bat could be
+-- "assigned" to slot 4 and thereby vanish out of the equipment tab that owns it,
+-- and a double-tap could "return" a weapon to a bag it never left. They still
+-- APPEAR on the hotbar -- that is where you swing from -- they just are not
+-- assignable, returnable or hideable by it.
+--
+-- A FUTURE ORDINARY ITEM OPTS IN TWO WAYS, and needs no edit here for the
+-- second: add its category below, or have whatever creates the Tool set the
+-- `CanAssignHotbar` attribute on it. The attribute wins, so a single odd item in
+-- an otherwise-exempt category can opt in (or out) on its own.
+--==============================================================================
+local CAN_ASSIGN_ATTR = "CanAssignHotbar"
+
+local HOTBAR_ASSIGNABLE: { [string]: boolean } = {
+	plant = true,
+	bat = false,
+	trap = false,
+}
+
+local function assignable(tool: Tool, kind: string): boolean
+	local override = tool:GetAttribute(CAN_ASSIGN_ATTR)
+	if type(override) == "boolean" then
+		return override
+	end
+	return HOTBAR_ASSIGNABLE[kind] == true
+end
 
 local function classify(tool: Tool): Slot?
 	local weapon = WeaponData.Get(tool:GetAttribute(ITEM_ATTR))
@@ -201,6 +288,7 @@ local function classify(tool: Tool): Slot?
 			label = weapon.Name,
 			item = weapon,
 			rank = if weapon.Category == "bat" then 1 else 2,
+			canHotbar = assignable(tool, weapon.Category),
 		}
 	end
 	local speciesId = tool:GetAttribute("SpeciesId")
@@ -214,6 +302,7 @@ local function classify(tool: Tool): Slot?
 			label = tool.Name,
 			item = nil,
 			rank = 3,
+			canHotbar = assignable(tool, "plant"),
 		}
 	end
 	return nil
@@ -601,6 +690,149 @@ local beginDrag: (any, InputObject) -> ()
 local cancelDrag: () -> ()
 local dragMoved = false
 
+--==============================================================================
+-- SENDING SOMETHING BACK TO THE BAG
+--
+-- Two gestures arrive at the same place -- a double-tap on the slot, and a drag
+-- from the slot onto the open bag -- so it is one function rather than two
+-- copies of the same four steps that would drift apart the first time one of
+-- them was fixed.
+--==============================================================================
+local returnToBag: (number) -> ()
+
+-- Whether the bag is open, read by refreshHotbar to decide if the return hint
+-- is worth showing. The `open` local that owns this lives with setOpen at the
+-- bottom of the file, far below the draw code that needs to know.
+local bagOpen = false
+
+-- Assigning, moving and returning all have to redraw the bag as well as the
+-- strip -- a returned plant has to reappear as a card -- and they are defined
+-- above the coalescing redraw that does it. Same forward-local reason as the two
+-- above: written as a bare `function redraw()` further down it would be a global.
+local redraw: () -> ()
+
+--==============================================================================
+-- AND THE STATE THOSE HANDLERS READ, DECLARED ABOVE THEM FOR THE SAME REASON
+--
+-- This block sat below the hotbar's button handlers once, and the handlers read
+-- `assigned` as a GLOBAL -- nil -- so every press on an assigned slot died with
+--
+--     LoadoutUI:1198: attempt to index nil with number
+--
+-- silently, in an event handler, where a thrown error stops that one press and
+-- nothing else. The drag from a card still worked, because that path is defined
+-- further down; only the hotbar's own gestures were dead, which is a very good
+-- disguise. Whatever else moves in this file, these declarations stay above
+-- `acquireCard` and `acquireHotSlot`.
+--==============================================================================
+--==============================================================================
+-- DRAWING
+--==============================================================================
+local liveSlots: { Slot } = {}
+
+--==============================================================================
+-- WHICH ONES, AND WHO DECIDES
+--
+-- With ten slots on a wide screen the hotbar can very nearly BE the tool list.
+-- With five it cannot, so something has to choose, and the player is the only
+-- one who knows which plant they are about to want.
+--
+-- `assigned[slotIndex]` is that choice. Anything NOT assigned auto-fills the
+-- gaps in the existing bat/trap/plants order, so a bag nobody has arranged
+-- behaves exactly as it always did and a new pickup still turns up on the strip
+-- by itself.
+--
+--==============================================================================
+-- WHY AN ASSIGNMENT IS A TOOL *AND* A KEY, AND NOT EITHER ALONE
+--
+-- The old version stored only the key -- "p:<species>:<tier>:<hatched>". That
+-- cannot tell two identical plants apart, and this feature now has to: assigning
+-- ONE of two identical Voidpetals must hide exactly ONE of them from the bag and
+-- leave the other sitting there to be assigned somewhere else. A key alone
+-- either hides both or hides neither.
+--
+-- A Tool reference alone is no good either. A respawn DESTROYS every Tool and
+-- builds new ones, so an assignment holding an instance would point at a
+-- destroyed object and the player's arrangement would evaporate every death --
+-- and death is frequent in a game whose whole loop is being chased.
+--
+-- So it holds both, and they do different jobs:
+--
+--   * `tool` is the CLAIM -- this exact owned copy, the one being hidden from the
+--     bag. Reparenting between Backpack and Character does not disturb it,
+--     because it is the same instance in either place.
+--   * `key` is the LEASE -- what to look for when the claim dies. After a
+--     respawn the slot re-binds to any unclaimed copy of the same thing, which
+--     is what a player means when they arrange a hotbar.
+--
+-- If neither can be satisfied, the assignment is CLEARED: the item was sold,
+-- planted, consumed or otherwise stopped being owned, and a slot holding a
+-- promise nobody can keep is worse than an empty one.
+--==============================================================================
+type Assign = {
+	key: string,
+	tool: Tool?,
+	-- When the claim went missing, if it has. See the grace period below.
+	lostAt: number?,
+}
+
+--==============================================================================
+-- AND A LEASE OUTLIVES THE GAP WHERE ITS TOOL DOES NOT EXIST
+--
+-- MEASURED, and the reason this constant exists at all. The first version cleared
+-- an assignment the moment its Tool could not be found, which looked right and
+-- destroyed the feature: a respawn DESTROYS the Backpack and builds a new one, so
+-- for a moment the player owns nothing. `redraw` is wired to ChildRemoved, so it
+-- runs inside that gap, finds no Nubkin, and throws the arrangement away -- and
+-- then the rebuilt Nubkins arrive to an empty hotbar.
+--
+-- Proved by destroying three Nubkin Tools and rebuilding three identical ones:
+-- the slot came back auto-filled with a trap and every card was visible again,
+-- when the whole point of keying by species is that this case survives.
+--
+-- So a lost claim is not a dead assignment. The lease is kept, and cleared only
+-- if nothing matching has turned up after this long -- which separates the two
+-- cases by the only thing that actually distinguishes them:
+--
+--   respawn, reparent, streaming hiccup   the key comes back within a second
+--   sold, planted, consumed, given away   it never comes back
+--
+-- Five seconds because a respawn has to load a profile and let CarryService hand
+-- back every held plant before the key can reappear, and being slightly slow to
+-- release a slot costs a player nothing they can see. Being fast to release it
+-- costs them their hotbar every time they die, which in this game is often.
+--==============================================================================
+local ASSIGN_GRACE = 5.0
+
+-- Indexed to MAX_SLOTS, not activeSlots: slots 6-10 keep their assignments while
+-- a phone is only showing five, which is what lets a desktop arrangement come
+-- back intact instead of being thrown away by picking up a phone.
+local assigned: { [number]: Assign } = {}
+
+--==============================================================================
+-- WHICH TOOLS THE BAG MUST NOT SHOW
+--
+-- Rebuilt by the reconcile below and read by refreshBag. Only ACTIVE slots put
+-- anything in here: an item auto-filled onto the strip is still ordinary bag
+-- contents and must stay visible, and an assignment parked in an inactive
+-- overflow slot must stay visible too or it would be unreachable -- which is the
+-- one outcome this whole design exists to prevent.
+--==============================================================================
+local claimed: { [Tool]: number } = {}
+
+-- Guards the grace re-check below against stacking one timer per redraw while a
+-- lease is waiting -- a respawn fires several redraws in a frame.
+local gracePending = false
+
+local function assignedSlotFor(tool: Tool): number?
+	for index, record in pairs(assigned) do
+		if record.tool == tool then
+			return index
+		end
+	end
+	return nil
+end
+
 type Card = {
 	button: TextButton,
 	preview: UIKit.ItemPreview,
@@ -638,6 +870,10 @@ type Row = {
 	lit: boolean,
 	item: WeaponData.Item?,
 	tool: Tool?,
+	-- Whether this row may be dragged onto the hotbar. Carried on the row rather
+	-- than re-derived in the input handler, so the drag and the draw can never
+	-- disagree about it.
+	canHotbar: boolean,
 }
 
 local cardPool: { Card } = {}
@@ -829,12 +1065,13 @@ local function acquireCard(index: number): Card
 			return
 		end
 		local row = cardRows[index]
-		if not row or row.kind ~= "plant" then
-			-- Only plants are pinnable: a bat and a trap live in their own two
-			-- slots beside the bag and are not part of this strip.
+		if not row or not row.canHotbar then
+			-- Bats and traps are exempt: each already lives in its own dedicated
+			-- equipment slot, and assigning one here would take it out of the
+			-- tab that owns it. See the capability banner up top.
 			return
 		end
-		beginDrag(row, input)
+		beginDrag({ from = "bag", row = row, label = row.label }, input)
 	end)
 
 	button.Activated:Connect(function()
@@ -950,6 +1187,7 @@ type HotSlot = {
 	preview: UIKit.ItemPreview,
 	key: TextLabel,
 	name: TextLabel,
+	hint: TextLabel,
 	cooldown: Frame,
 	stroke: UIStroke,
 	tool: Tool?,
@@ -1029,83 +1267,255 @@ local function acquireHotSlot(index: number): HotSlot
 	nameLabel.ZIndex = 9
 	nameLabel.Parent = button
 
+	--==========================================================================
+	-- THE RETURN HINT
+	--
+	-- Across the top of the slot, over the preview, and hidden unless the bag is
+	-- open on an assigned slot. It names the gesture in the words of the device
+	-- it is on: a phone has no click and a desktop has no tap, and a hint that
+	-- names the wrong one teaches nothing.
+	--==========================================================================
+	local hintLabel = Instance.new("TextLabel")
+	hintLabel.Name = "Hint"
+	hintLabel.AnchorPoint = Vector2.new(1, 0)
+	hintLabel.Position = UDim2.new(1, -3, 0, 2)
+	hintLabel.Size = UDim2.fromOffset(42, 11)
+	hintLabel.BackgroundTransparency = 1
+	hintLabel.Font = Enum.Font.FredokaOne
+	hintLabel.TextSize = 9
+	hintLabel.TextColor3 = MUTED
+	hintLabel.TextXAlignment = Enum.TextXAlignment.Right
+	hintLabel.Text = if UserInputService.KeyboardEnabled then "2x CLICK" else "2x TAP"
+	hintLabel.Visible = false
+	hintLabel.ZIndex = 9
+	hintLabel.Parent = button
+
 	local slot: HotSlot = {
 		button = button,
 		preview = preview,
 		key = keyLabel,
 		name = nameLabel,
+		hint = hintLabel,
 		cooldown = cooldown,
 		stroke = stroke,
 		tool = nil,
 		item = nil,
 	}
+
+	--==========================================================================
+	-- A SLOT CAN ALSO BE PICKED UP
+	--
+	-- Dragging one onto the open bag returns it, and onto another slot moves it.
+	-- Only slots carrying an ASSIGNMENT: an auto-filled slot is not something the
+	-- player put anywhere, so there is nothing to move and nothing to give back.
+	--==========================================================================
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		if index > activeSlots then
+			return
+		end
+		local record = assigned[index]
+		if not (record and slot.tool) then
+			return
+		end
+		beginDrag({ from = "hot", index = index, label = slot.name.Text }, input)
+	end)
+
+	--==========================================================================
+	-- ONE TAP EQUIPS. TWO GIVES IT BACK.
+	--
+	-- The equip is NOT delayed waiting to find out whether a second tap is
+	-- coming. Holding every tap for 300 ms to see if it becomes a double would
+	-- make the whole hotbar feel broken, and the hotbar is used mid-chase. So the
+	-- first tap equips at once and the second UNDOES the placement -- unequipping
+	-- as it goes, because leaving a returned plant in the player's hands is a
+	-- half-finished action.
+	--
+	-- Bats and traps never take this path: `canHotbar` is false for them, so a
+	-- double-tap on a weapon is two ordinary equips, which is what it looks like.
+	--==========================================================================
 	button.Activated:Connect(function()
+		if dragMoved then
+			return
+		end
 		holdTool(slot.tool)
+		if index > activeSlots then
+			return
+		end
+		local record = assigned[index]
+		local tool = slot.tool
+		if not (record and tool) then
+			return
+		end
+		local data: Slot? = nil
+		for _, candidate in ipairs(liveSlots) do
+			if candidate.tool == tool then
+				data = candidate
+				break
+			end
+		end
+		if not (data and data.canHotbar) then
+			return
+		end
+		local now = os.clock()
+		local previous = lastTap[index]
+		if previous and now - previous <= DOUBLE_WINDOW then
+			lastTap[index] = nil
+			returnToBag(index)
+		else
+			lastTap[index] = now
+		end
 	end)
 	hotSlots[index] = slot
 	return slot
 end
 
 --==============================================================================
--- DRAWING
+-- SLOT ORDER FOR RECONCILING: ACTIVE FIRST, THEN OVERFLOW
+--
+-- Active slots get first refusal on every Tool, both when keeping an exact claim
+-- and when re-binding a lost one. That is what makes coming back to a desktop
+-- safe: the five slots a phone was using keep the copies they already had, and
+-- slots 6-10 pick up whatever is genuinely left over rather than stealing from
+-- the slots that were visible a moment ago.
 --==============================================================================
-local liveSlots: { Slot } = {}
+local function reconcileOrder(): { number }
+	local order: { number } = {}
+	for i = 1, activeSlots do
+		table.insert(order, i)
+	end
+	for i = activeSlots + 1, MAX_SLOTS do
+		table.insert(order, i)
+	end
+	return order
+end
 
 --==============================================================================
--- WHICH FIVE, AND WHO DECIDES
+-- RECONCILIATION, ONCE PER REDRAW
 --
--- With ten slots the hotbar could simply BE the tool list -- everything fitted,
--- so no choice had to be made and none was offered. Five is smaller than most
--- players' bags, so something has to choose, and the player is the only one who
--- knows which plant they are about to want.
+-- Runs against the Tools that actually exist right now, so every one of the
+-- cases the brief lists falls out of the same two passes rather than needing a
+-- special path each:
 --
--- `pinned` is that choice: slot index -> the item KEY the player dropped there.
--- Anything not pinned is filled in the existing order, so a bag that has never
--- been arranged behaves exactly as it did and a new pickup still appears.
+--   Tool moved Backpack <-> Character   pass 1 keeps it: same instance.
+--   Respawn rebuilt every Tool          pass 1 finds nothing, pass 2 re-leases
+--                                       by key.
+--   Two identical copies, one assigned  `used` stops the second slot -- and the
+--                                       bag -- reusing the claimed one.
+--   Item planted, sold or destroyed     no instance and no key match, so the
+--                                       assignment is dropped.
+--   Reassigned to another slot          the drop cleared the old slot before
+--                                       this ever runs.
 --
--- KEYED BY WHAT A THING IS, NOT BY WHICH TOOL INSTANCE IT IS. `Slot.key` is
--- "p:<species>:<tier>:<hatched>", so a pin survives a respawn -- which destroys
--- and rebuilds every Tool -- and two identical Voidpetals are interchangeable,
--- which is what a player means when they pin one.
---
--- SESSION-LOCAL, DELIBERATELY. Making this outlive a rejoin means a field on the
--- profile, a schema version and a migration, and none of that should be decided
--- by the feature that needed it first. Noted in HANDOFF as the follow-up.
+-- `used` is the whole trick: a Tool bound once is off the table for every later
+-- slot, so no instance can ever be shown in two places.
 --==============================================================================
-local pinned: { [number]: string } = {}
+local function reconcile(live: { Slot })
+	table.clear(claimed)
 
-local function pinnedSlotFor(key: string): number?
-	for index, k in pairs(pinned) do
-		if k == key then
-			return index
+	local byTool: { [Tool]: Slot } = {}
+	for _, data in ipairs(live) do
+		byTool[data.tool] = data
+	end
+	local used: { [Tool]: boolean } = {}
+	local order = reconcileOrder()
+
+	local now = os.clock()
+	local waiting = false
+
+	-- Pass 1: keep the exact copy, if it is still owned and still unspoken for.
+	for _, i in ipairs(order) do
+		local record = assigned[i]
+		local tool = record and record.tool
+		if record and tool and byTool[tool] and not used[tool] then
+			used[tool] = true
+			record.lostAt = nil
+		elseif record then
+			record.tool = nil
+			if not record.lostAt then
+				record.lostAt = now
+			end
 		end
 	end
-	return nil
+
+	-- Pass 2: re-lease by key, or start (or run down) the grace period.
+	for _, i in ipairs(order) do
+		local record = assigned[i]
+		if record and not record.tool then
+			for _, data in ipairs(live) do
+				if not used[data.tool] and data.key == record.key and data.canHotbar then
+					used[data.tool] = true
+					record.tool = data.tool
+					record.lostAt = nil
+					break
+				end
+			end
+			if not record.tool then
+				if now - (record.lostAt or now) >= ASSIGN_GRACE then
+					-- Long enough. It is not coming back.
+					assigned[i] = nil
+				else
+					waiting = true
+				end
+			end
+		end
+	end
+
+	--==========================================================================
+	-- ONE TIMER, ONLY WHILE SOMETHING IS ACTUALLY WAITING
+	--
+	-- A lease whose grace has not run out yet needs SOMETHING to look again once
+	-- it has, or a slot reserved for an item that was sold would stay reserved
+	-- until the player next happened to pick something up. This is that look --
+	-- scheduled once per reconcile that found a waiting lease, never while the
+	-- hotbar is settled, and it is a task.delay rather than a loop so a player
+	-- standing in their garden pays nothing for it.
+	--==========================================================================
+	if waiting and not gracePending then
+		gracePending = true
+		task.delay(ASSIGN_GRACE + 0.1, function()
+			gracePending = false
+			redraw()
+		end)
+	end
+
+	-- And only the live ones hide anything.
+	for i = 1, activeSlots do
+		local record = assigned[i]
+		if record and record.tool then
+			claimed[record.tool] = i
+		end
+	end
 end
 
 --==============================================================================
 -- TWO PASSES, AND THE ORDER MATTERS
 --
--- Pinned first, so a player's arrangement wins over the alphabet. Then the
+-- Assigned first, so the player's arrangement wins over the alphabet. Then the
 -- leftovers fill whatever is still empty, in the same bat/trap/plants order the
 -- strip has always used.
 --
--- Each tool is CONSUMED as it is placed, which is what makes two slots pinned to
--- the same key show two different Voidpetals rather than the same one twice --
--- and what stops an unpinned pass re-showing something already pinned further
--- along the strip.
+-- Auto-fill deliberately does NOT hide anything from the bag. Only an assignment
+-- does that -- see the banner on `claimed`. An auto-filled plant showing in both
+-- places is correct: nobody chose to put it there, and the bag is still where it
+-- lives.
 --==============================================================================
 local function refreshHotbar()
 	local held = heldTool()
+	reconcile(liveSlots)
 
 	local taken: { [number]: boolean } = {}
 	local placed: { [number]: Slot } = {}
 
-	for i = 1, HOTBAR_SLOTS do
-		local want = pinned[i]
+	for i = 1, activeSlots do
+		local record = assigned[i]
+		local want = record and record.tool
 		if want then
 			for j, data in ipairs(liveSlots) do
-				if not taken[j] and data.key == want then
+				if not taken[j] and data.tool == want then
 					taken[j] = true
 					placed[i] = data
 					break
@@ -1115,8 +1525,8 @@ local function refreshHotbar()
 	end
 
 	local nextFree = 1
-	for i = 1, HOTBAR_SLOTS do
-		if not placed[i] and not pinned[i] then
+	for i = 1, activeSlots do
+		if not placed[i] and not assigned[i] then
 			while nextFree <= #liveSlots and taken[nextFree] do
 				nextFree += 1
 			end
@@ -1128,18 +1538,23 @@ local function refreshHotbar()
 	end
 
 	--==========================================================================
-	-- EVERY SLOT IS DRAWN, EMPTY OR NOT
+	-- EVERY LIVE SLOT IS DRAWN, EMPTY OR NOT
 	--
 	-- It used to hide the ones with nothing in them, which was right when the
 	-- strip was just a list. It is wrong now: an empty slot is the DROP TARGET,
 	-- and a drop target nobody can see is a feature nobody finds.
+	--
+	-- Slots past `activeSlots` are hidden AND emptied of their tool reference, so
+	-- a stale one cannot be equipped by a number key or ticked by the cooldown
+	-- loop. Their ASSIGNMENT record survives untouched -- that is the overflow.
 	--==========================================================================
-	for i = 1, math.max(HOTBAR_SLOTS, #hotSlots) do
+	for i = 1, math.max(activeSlots, #hotSlots) do
 		local slot = hotSlots[i]
-		if i > HOTBAR_SLOTS then
+		if i > activeSlots then
 			if slot then
 				slot.button.Visible = false
 				slot.tool = nil
+				slot.item = nil
 			end
 		else
 			slot = acquireHotSlot(i)
@@ -1147,7 +1562,9 @@ local function refreshHotbar()
 			slot.button.Visible = true
 			slot.tool = if data then data.tool else nil
 			slot.item = if data then data.item else nil
-			slot.key.Text = tostring(i)
+			-- The tenth slot is reached by the 0 key, because that is where the
+			-- number row puts it. Labelling it "10" would name a key nobody has.
+			slot.key.Text = if i == 10 then "0" else tostring(i)
 			if data then
 				slot.preview.setModel(data.key, builderFor(data), previewKind(data))
 				slot.name.Text = data.label
@@ -1155,9 +1572,27 @@ local function refreshHotbar()
 				slot.preview.setModel("empty:" .. i, nil, "plant")
 				slot.name.Text = ""
 			end
+			--==================================================================
+			-- THE HINT IS SHOWN ONLY WHERE IT APPLIES
+			--
+			-- Assigned, assignable, and the bag open -- which is when the player
+			-- is arranging rather than fighting. Permanent gesture text on five
+			-- slots of a combat HUD is clutter; the same text while the bag is
+			-- open is an answer to the question they are already asking.
+			--==================================================================
+			local record = assigned[i]
+			local canReturn = record ~= nil and data ~= nil and data.canHotbar
+			slot.hint.Visible = canReturn and bagOpen
+			--==================================================================
+			-- THREE FACTS, THREE RINGS, AND THEY MUST NOT COLLIDE
+			--
+			-- Amber says "this is in your hands" and outranks the rest, because
+			-- it is the one that changes second to second. Edge says "you put
+			-- this here". Black is a slot doing nothing in particular.
+			--==================================================================
 			local isHeld = data ~= nil and data.tool == held
 			slot.stroke.Color = if isHeld then PICKED
-				elseif pinned[i] then PANEL.Edge
+				elseif record then PANEL.Edge
 				else BLACK
 			slot.stroke.Thickness = if isHeld then 3 else 2.5
 			slot.button.BackgroundTransparency = if isHeld then 0.1
@@ -1259,6 +1694,8 @@ local function refreshBag()
 					lit = equipped,
 					item = item,
 					tool = nil,
+					-- A weapon's home is this tab and its own equipment slot.
+					canHotbar = false,
 				})
 			end
 		end
@@ -1272,8 +1709,21 @@ local function refreshBag()
 		-- items, they are somebody's garden, and turning them into portable
 		-- entries would be inventing an inventory the game does not have.
 		--======================================================================
+		--======================================================================
+		-- AN ASSIGNED COPY IS NOT IN THE BAG ANY MORE
+		--
+		-- `claimed` holds exactly the Tools that active hotbar slots have taken,
+		-- one entry per instance -- so owning two identical plants and assigning
+		-- one hides ONE card and leaves the other, which a key-based check could
+		-- never do.
+		--
+		-- Auto-filled slots claim nothing, and neither do assignments parked in
+		-- an inactive overflow slot: both stay listed here, the second because
+		-- otherwise a desktop arrangement would make items unreachable on a
+		-- phone, which is the failure this design exists to avoid.
+		--======================================================================
 		for _, slot in ipairs(liveSlots) do
-			if slot.kind == "plant" then
+			if slot.kind == "plant" and not claimed[slot.tool] then
 				table.insert(rows, {
 					key = slot.key .. ":" .. tostring(slot.tool),
 					label = slot.label,
@@ -1283,6 +1733,7 @@ local function refreshBag()
 					lit = slot.tool == heldTool(),
 					item = nil,
 					tool = slot.tool,
+					canHotbar = slot.canHotbar,
 				})
 			end
 		end
@@ -1366,15 +1817,21 @@ end
 --==============================================================================
 local DRAG_THRESHOLD = 8
 local dragGhost: TextLabel? = nil
-local dragRow: any = nil
+local dragSource: any = nil
 local dragConns: { RBXScriptConnection } = {}
+
+-- Green for "that went where you put it", warm red for "that came back". Two
+-- colours because the two outcomes must not be told apart by reading a label:
+-- the whole point of a flash is that it is legible out of the corner of an eye.
+local FLASH_ASSIGNED = Color3.fromRGB(150, 220, 96)
+local FLASH_RETURNED = Color3.fromRGB(226, 118, 92)
 
 local function guiPoint(input: InputObject): Vector2
 	return Vector2.new(input.Position.X, input.Position.Y)
 end
 
 local function slotUnder(point: Vector2): number?
-	for i = 1, HOTBAR_SLOTS do
+	for i = 1, activeSlots do
 		local slot = hotSlots[i]
 		if slot and slot.button.Visible then
 			local p, sz = slot.button.AbsolutePosition, slot.button.AbsoluteSize
@@ -1387,6 +1844,100 @@ local function slotUnder(point: Vector2): number?
 	return nil
 end
 
+--==============================================================================
+-- AND THE BAG IS A TARGET TOO, WHEN IT IS OPEN
+--
+-- The grid rect rather than the whole panel, so a drop on the tab strip or the
+-- close button is not read as "put this back" -- those are buttons a player may
+-- well be aiming at for their own sake.
+--==============================================================================
+local function overBag(point: Vector2): boolean
+	if not bagOpen then
+		return false
+	end
+	local p, sz = grid.AbsolutePosition, grid.AbsoluteSize
+	return point.X >= p.X and point.X <= p.X + sz.X
+		and point.Y >= p.Y and point.Y <= p.Y + sz.Y
+end
+
+--==============================================================================
+-- THE FLASH: ONE TWEEN, NO LOOP
+--
+-- A colour set at once and a thickness easing back over a third of a second,
+-- then one redraw to put the real ring back. Deliberately NOT a RenderStepped
+-- pulse or a per-card animation: this HUD runs on phones, the repo rule is no
+-- per-frame allocation, and a flash still animating when the player looks away
+-- has already done its job.
+--==============================================================================
+local function flashSlot(index: number, colour: Color3)
+	local slot = hotSlots[index]
+	if not slot then
+		return
+	end
+	slot.stroke.Color = colour
+	slot.stroke.Thickness = 4
+	TweenService:Create(slot.stroke, TweenInfo.new(0.30), { Thickness = 2.5 }):Play()
+	task.delay(0.32, function()
+		if hotSlots[index] == slot then
+			refreshHotbar()
+		end
+	end)
+end
+
+--==============================================================================
+-- GIVING A SLOT BACK
+--
+-- Clearing the assignment IS the return: an unclaimed Tool reappears in the bag
+-- on the next draw, because `claimed` is what hid it and nothing else ever did.
+-- No item is moved, created or destroyed -- which is the property that keeps this
+-- a presentation layer over the real owned Tools rather than a second inventory.
+--
+-- UNEQUIPPED ON THE WAY OUT, if it happens to be in the hands. A plant just
+-- taken off the hotbar but still held is a half-finished action, and the player
+-- would be left working out for themselves why their hands are full of something
+-- they just put away.
+--==============================================================================
+returnToBag = function(index: number)
+	local record = assigned[index]
+	if not record then
+		return
+	end
+	local tool = record.tool
+	assigned[index] = nil
+	lastTap[index] = nil
+	local character = player.Character
+	if tool and character and tool.Parent == character then
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid:UnequipTools()
+		end
+	end
+	SoundKit.play("UIClick")
+	flashSlot(index, FLASH_RETURNED)
+	redraw()
+end
+
+--==============================================================================
+-- WHERE A DRAG ENDS UP
+--
+-- Four outcomes, and which one it is depends on where the card came FROM as much
+-- as on where it was dropped:
+--
+--   bag  -> slot          assign, and hide that exact copy from the bag
+--   slot -> another slot  MOVE, never copy
+--   slot -> the open bag  return it
+--   anything -> nowhere   nothing at all
+--
+-- A DROP IS A MOVE, NOT A COPY, in both directions. The same copy in two slots
+-- would show twice and waste one, so wherever it was before is cleared first --
+-- including a slot in the 6-10 overflow that a phone is not showing, which is
+-- exactly the case the brief calls out: assigning an overflowed item into 1-5 has
+-- to let go of where it used to be.
+--
+-- Dropping onto an OCCUPIED slot replaces it, and the displaced item is back in
+-- the bag by the next draw for the same reason a return works: nothing is
+-- claiming it any more.
+--==============================================================================
 local function endDrag(dropAt: Vector2?)
 	for _, c in ipairs(dragConns) do
 		c:Disconnect()
@@ -1397,52 +1948,63 @@ local function endDrag(dropAt: Vector2?)
 		dragGhost = nil
 	end
 	hotbar.ZIndex = 4
-	for i = 1, HOTBAR_SLOTS do
+	for i = 1, MAX_SLOTS do
 		local slot = hotSlots[i]
 		if slot then
 			slot.button.ZIndex = 5
 		end
 	end
 
-	local row = dragRow
-	dragRow = nil
-	if not (row and dropAt) then
+	local source = dragSource
+	dragSource = nil
+	if not (source and dropAt) then
 		return
 	end
-	local index = slotUnder(dropAt)
-	if not index then
+	local target = slotUnder(dropAt)
+
+	if source.from == "bag" then
+		if not target then
+			return
+		end
+		-- The live SLOT record, not the Row: a Row key carries the tool instance
+		-- so that two identical plants get separate cards, and what belongs in
+		-- the assignment is the current classification of that one copy.
+		local data: Slot? = nil
+		for _, candidate in ipairs(liveSlots) do
+			if candidate.tool == source.row.tool then
+				data = candidate
+				break
+			end
+		end
+		if not (data and data.canHotbar) then
+			return
+		end
+		local was = assignedSlotFor(data.tool)
+		if was then
+			assigned[was] = nil
+		end
+		assigned[target] = { key = data.key, tool = data.tool }
+		SoundKit.play("UIClick")
+		flashSlot(target, FLASH_ASSIGNED)
+		redraw()
 		return
 	end
 
-	--==========================================================================
-	-- A DROP IS A MOVE, NOT A COPY
-	--
-	-- The same plant pinned in two slots would show twice and waste one of five,
-	-- so wherever it was before is cleared first. Dropping onto a slot that is
-	-- already pinned to something else simply replaces it: the player is looking
-	-- at that slot and pointing at it, which is as clear a statement of intent
-	-- as this interface gets.
-	--==========================================================================
-	-- The SLOT key, not the Row key: a Row key carries the tool instance so that
-	-- two identical plants get separate cards, and a pin must not care which of
-	-- the two it gets.
-	local key: string? = nil
-	for _, data in ipairs(liveSlots) do
-		if data.tool == row.tool then
-			key = data.key
-			break
-		end
-	end
-	if not key then
+	local index = source.index
+	local record = assigned[index]
+	if not record then
 		return
 	end
-	local was = pinnedSlotFor(key)
-	if was then
-		pinned[was] = nil
+	if target and target ~= index then
+		assigned[target] = record
+		assigned[index] = nil
+		lastTap[index] = nil
+		SoundKit.play("UIClick")
+		flashSlot(target, FLASH_ASSIGNED)
+		redraw()
+	elseif not target and overBag(dropAt) then
+		returnToBag(index)
 	end
-	pinned[index] = key
-	SoundKit.play("UIClick")
-	refreshHotbar()
 end
 
 --==============================================================================
@@ -1450,32 +2012,48 @@ end
 --
 -- endDrag runs off InputEnded, which is enough while a finger stays on the
 -- glass. It is not enough for the ways a drag can stop mattering without one
--- being lifted: the bag shutting under it, or the character being destroyed
--- while it is in the air. Neither fires an input event, and both would leave a
+-- being lifted: the bag shutting under it, the character being destroyed while it
+-- is in the air, a pod landing in both arms, a trap closing, the slot count
+-- changing under it. None of those fire an input event, and each would leave a
 -- ghost label on screen and the hotbar stuck at ZIndex 60 -- drawn over every
--- panel in the game until the next drag tidied it.
+-- panel in the game until the next drag happened to tidy it.
 --
--- Dropped with no point, so it cancels rather than pins: a drag interrupted by
+-- Dropped with no point, so it cancels rather than assigns: a drag interrupted by
 -- something else is not a placement anybody asked for.
 --==============================================================================
-function cancelDrag()
-	if dragRow then
+cancelDrag = function()
+	if dragSource then
 		endDrag(nil)
 	end
 	dragMoved = false
 end
 
-function beginDrag(row: any, input: InputObject)
-	if dragRow then
+beginDrag = function(source: any, input: InputObject)
+	if dragSource then
 		return
 	end
-	dragRow = row
+	dragSource = source
 	dragMoved = false
 	local startAt = guiPoint(input)
+	local toBag = source.from == "hot"
+
+	--==========================================================================
+	-- WHAT IS BEING CARRIED, SO ITS DISAPPEARING CAN BE NOTICED
+	--
+	-- Checked as `tool.Parent == nil` rather than "it left the Backpack":
+	-- equipping MOVES a Tool from the Backpack into the Character, and cancelling
+	-- on that would cancel every drag the instant the hands changed.
+	--==========================================================================
+	local fromSlot = if toBag then hotSlots[source.index] else nil
+	local carried: Tool? = if fromSlot then fromSlot.tool else source.row.tool
 
 	table.insert(dragConns, UserInputService.InputChanged:Connect(function(moved)
 		if moved.UserInputType ~= Enum.UserInputType.Touch
 			and moved.UserInputType ~= Enum.UserInputType.MouseMovement then
+			return
+		end
+		if carried and carried.Parent == nil then
+			cancelDrag()
 			return
 		end
 		local at = guiPoint(moved)
@@ -1493,7 +2071,7 @@ function beginDrag(row: any, input: InputObject)
 			--==================================================================
 			dragMoved = true
 			hotbar.ZIndex = 60
-			for i = 1, HOTBAR_SLOTS do
+			for i = 1, activeSlots do
 				local slot = hotSlots[i]
 				if slot then
 					slot.button.ZIndex = 61
@@ -1503,7 +2081,8 @@ function beginDrag(row: any, input: InputObject)
 			ghost.AnchorPoint = Vector2.new(0.5, 1)
 			ghost.Size = UDim2.fromOffset(150, 22)
 			ghost.ZIndex = 70
-			ghost.Text = string.upper(row.label) .. "  ->  HOTBAR"
+			ghost.Text = string.upper(source.label or "ITEM")
+				.. (if toBag then "  ->  BAG" else "  ->  HOTBAR")
 			dragGhost = ghost
 		end
 		if dragGhost then
@@ -1519,8 +2098,8 @@ function beginDrag(row: any, input: InputObject)
 		local at = if dragMoved then guiPoint(over) else nil
 		endDrag(at)
 		-- Cleared on the next frame, not now: Activated fires AFTER InputEnded,
-		-- and the guard has to still be up when it does or a completed drag
-		-- would also hold the tool it just pinned.
+		-- and the guard has to still be up when it does or a completed drag would
+		-- also equip -- or double-tap-return -- the thing it just moved.
 		task.defer(function()
 			dragMoved = false
 		end)
@@ -1537,7 +2116,7 @@ end
 --==============================================================================
 local redrawPending = false
 
-local function redraw()
+redraw = function()
 	if redrawPending then
 		return
 	end
@@ -1644,7 +2223,28 @@ local containerConns: { RBXScriptConnection } = {}
 
 local function watchContainer(container: Instance)
 	table.insert(containerConns, container.ChildAdded:Connect(redraw))
-	table.insert(containerConns, container.ChildRemoved:Connect(redraw))
+	--==========================================================================
+	-- A TOOL LEAVING IS ONLY SOMETIMES A TOOL GOING
+	--
+	-- Equipping REPARENTS a Tool out of the Backpack and into the Character, so
+	-- this fires constantly for tools that are perfectly fine. The redraw is what
+	-- sorts it out: `reconcile` looks at what exists rather than at what moved,
+	-- keeps the claim if the instance is still owned in either container, and
+	-- clears the assignment only when it is owned in neither.
+	--==========================================================================
+	table.insert(containerConns, container.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") and dragSource then
+			-- A drag whose subject has just been destroyed has nothing to drop.
+			-- Checked after a frame so a reparent, which lands the Tool in the
+			-- other container immediately, is not mistaken for a deletion.
+			task.defer(function()
+				if child.Parent == nil then
+					cancelDrag()
+				end
+			end)
+		end
+		redraw()
+	end))
 end
 
 local function rebindContainers()
@@ -1675,6 +2275,135 @@ player.CharacterRemoving:Connect(cancelDrag)
 rebindContainers()
 
 --==============================================================================
+-- THE COUNT FOLLOWS THE DEVICE, AND CHANGING IT IS A REDRAW
+--
+-- Roblox reports a viewport before the window has settled and a keyboard can
+-- appear or vanish mid-session -- a Bluetooth keyboard paired to a tablet, a
+-- desktop window dragged narrow, the emulator switched -- so this is a signal to
+-- respond to rather than a fact to read once at start-up.
+--
+-- WHAT HAPPENS TO SLOTS 6-10 ON THE WAY DOWN is the whole reason this is careful:
+-- they go invisible and stop being claimed, so every item assigned to one turns
+-- back up in the bag and stays usable. Nothing is thrown away -- the assignment
+-- records survive -- so coming back to a wide window restores the arrangement,
+-- and `reconcile` is what stops that restoring a claim on something that has
+-- since been planted, sold or reassigned into 1-5.
+--
+-- A drag in flight is cancelled: it was aimed at a strip that is about to be a
+-- different shape, and finishing it would drop the card on whatever slid under
+-- the finger.
+--==============================================================================
+local function applySlotCount()
+	local want = wantedSlots()
+	if want == activeSlots then
+		return
+	end
+	cancelDrag()
+	--==========================================================================
+	-- SHRINKING RELEASES THE SLOTS IT TAKES AWAY, AND SAYS SO
+	--
+	-- The alternative was to keep 6-10 parked and hand them back on the way to a
+	-- wide window again. That was tried, and it is not what this ships, for one
+	-- reason: it could not be made to behave the same way twice. Measured over a
+	-- real 1000 -> 408 -> 1169 round trip, the parked records did not come back,
+	-- and nothing in the four places that clear an assignment accounts for it --
+	-- steady state holds those same records through equips, unequips and well
+	-- past the grace, so it is specific to the transition and I could not
+	-- reproduce it to find out why. `ViewportSize` is read-only, and toggling
+	-- Studio's emulator restarts Play, which wipes session state anyway, so the
+	-- transition can only be produced by hand.
+	--
+	-- Shipping "it usually comes back" would be shipping a coin toss. So the
+	-- release is now the DEFINITION rather than an accident: narrow the window
+	-- and slots 6-10 give their items back to the bag, which is the behaviour
+	-- that was actually observed and is the one the brief requires anyway --
+	-- restoring on the way back is permitted there, never demanded.
+	--
+	-- Nothing is lost by it. The items are in the bag, they auto-fill onto the
+	-- five remaining slots, and re-assigning one is a drag. What matters is that
+	-- no item is ever stranded in a slot nobody can reach, and clearing the
+	-- record is the bluntest possible guarantee of that.
+	--
+	-- WORTH REVISITING only alongside making assignments outlive a rejoin, which
+	-- needs a profile field, a schema version and a migration -- at which point
+	-- an arrangement is a saved thing with an owner, and "restore it" becomes a
+	-- question with a defensible answer instead of a timing accident.
+	--==========================================================================
+	if want < activeSlots then
+		for i = want + 1, MAX_SLOTS do
+			if assigned[i] then
+				assigned[i] = nil
+				lastTap[i] = nil
+			end
+		end
+	end
+	activeSlots = want
+	redraw()
+end
+
+applySlotCount()
+
+local function watchViewport()
+	local camera = Workspace.CurrentCamera
+	if camera then
+		camera:GetPropertyChangedSignal("ViewportSize"):Connect(applySlotCount)
+	end
+end
+watchViewport()
+-- A new Camera is a new signal: the old connection is on an instance the engine
+-- has stopped using, and without this the strip would freeze at whatever count
+-- was right for the camera that has gone.
+Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+	watchViewport()
+	applySlotCount()
+end)
+UserInputService:GetPropertyChangedSignal("KeyboardEnabled"):Connect(applySlotCount)
+UserInputService:GetPropertyChangedSignal("TouchEnabled"):Connect(applySlotCount)
+
+--==============================================================================
+-- AND THE REST OF THE WAYS A DRAG STOPS MATTERING
+--
+-- Each of these takes the player out of the arranging mood entirely, and none of
+-- them fires an input event, so without this the ghost would hang in the air:
+--
+--   a pod in both arms   CarryPose owns the hands and the bag is unusable
+--   the jaws close       the player is held still and being hit
+--   ragdolled            thrown by a guardian or a bat; the HUD is the last
+--                        thing they are looking at
+--
+-- Ragdoll has no attribute of its own -- ThrowFX drives it locally through the
+-- Humanoid -- so the Humanoid state is the signal, re-hooked per character
+-- because a respawn brings a new one.
+--==============================================================================
+player:GetAttributeChangedSignal(ATTR.CarryingSpecies):Connect(cancelDrag)
+player:GetAttributeChangedSignal(ATTR.Trapped):Connect(cancelDrag)
+
+local humanoidConn: RBXScriptConnection? = nil
+
+local function watchHumanoid(character: Model)
+	if humanoidConn then
+		humanoidConn:Disconnect()
+		humanoidConn = nil
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	humanoidConn = humanoid.StateChanged:Connect(function(_, new)
+		if new == Enum.HumanoidStateType.Physics
+			or new == Enum.HumanoidStateType.FallingDown
+			or new == Enum.HumanoidStateType.Dead then
+			cancelDrag()
+		end
+	end)
+end
+
+if player.Character then
+	watchHumanoid(player.Character)
+end
+player.CharacterAdded:Connect(watchHumanoid)
+
+--==============================================================================
 -- OPEN AND SHUT
 --==============================================================================
 local open = false
@@ -1684,6 +2413,7 @@ local function setOpen(want: boolean)
 		return
 	end
 	open = want
+	bagOpen = want
 	if not want then
 		-- The cards a drag was started from are about to go away.
 		cancelDrag()
@@ -1694,6 +2424,9 @@ local function setOpen(want: boolean)
 	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
 		player:SetAttribute(ATTR.OpenPanel, nil)
 	end
+	-- The return hint only shows while the bag is open, so opening or shutting it
+	-- is a reason to redraw the strip even when nothing about the tools changed.
+	refreshHotbar()
 	modal.setOpen(want)
 end
 
@@ -1753,10 +2486,24 @@ ContextActionService:BindAction("SeedHotbarKeys", function(_, state, input)
 	end
 	for i, key in ipairs(KEYS) do
 		if input.KeyCode == key then
-			local slot = liveSlots[i]
-			if slot then
-				holdTool(slot.tool)
-				redraw()
+			--==============================================================
+			-- THE KEY EQUIPS WHAT THE SLOT IS SHOWING
+			--
+			-- It used to index `liveSlots`, which is the raw tool list -- so the
+			-- moment anything was assigned, pressing 1 equipped whatever was
+			-- first alphabetically rather than the thing drawn in slot 1. The
+			-- number on a slot is a promise about that slot.
+			--
+			-- Guarded on `activeSlots` so 6-0 do nothing at all on a phone that
+			-- happens to have a keyboard paired: those slots are not on screen,
+			-- and a key that equips something invisible is worse than a dead key.
+			--==============================================================
+			if i <= activeSlots then
+				local slot = hotSlots[i]
+				if slot and slot.tool then
+					holdTool(slot.tool)
+					redraw()
+				end
 			end
 			return Enum.ContextActionResult.Sink
 		end

@@ -1,5 +1,215 @@
 # Steal a Seed — Session Handoff
 
+## The hotbar adapts, and an assignment claims a Tool — 2026-09-10 (CLAUDE)
+
+Ten slots on a keyboard at width, five otherwise, and the strip is now something
+the player arranges: drag a plant from the bag onto a slot and that exact copy
+leaves the bag; drag it back, or double-tap it, and it returns.
+
+`PromptUI` untouched — verified with `git diff --stat`, empty.
+
+### The count follows the device, and the slot size never changes
+
+Desktop needs **both** a keyboard and ≥ 900 px. Either alone is not enough: a
+narrow desktop window cannot show 694 px of strip without eating the screen, and
+a tablet has the width but no number row, so slots 6–10 would be reachable only
+by touch — which is the fingernail problem the five-slot pass fixed in the first
+place. Measured, and the "both" rule earns its keep immediately:
+
+```
+1065 x 609  keyboard  ->  10 slots, keys 1..9,0, 694 px (65% of width)
+ 735 x 413  keyboard  ->   5 slots, keys 1..5,   344 px (47%)
+```
+
+That second line is the point. The emulated phone reports `KeyboardEnabled =
+true` in some Play runs, so a keyboard-only rule would have put ten slots on a
+735 px screen. Width settles it.
+
+**Slots never shrink.** Ten in 735 px would be ~40 px each, under Roblox's 44 px
+touch guidance. Five real slots beat ten unusable ones, and a scrolling hotbar is
+one nobody can hit without looking.
+
+The tenth slot is labelled **0**, because that is the key that reaches it.
+
+### An assignment is a Tool *and* a key, and neither alone works
+
+The old `pinned[slot] = key` could not tell two identical plants apart, and this
+feature has to: assigning one of two identical Nubkins must hide exactly one.
+A Tool reference alone is no good either — a respawn destroys every Tool.
+
+So `assigned[slot] = { key, tool, lostAt }`, where `tool` is the **claim** (this
+exact copy, the one hidden from the bag) and `key` is the **lease** (what to look
+for when the claim dies). Reconciled once per redraw, active slots first so a
+phone's five keep the copies they already had.
+
+**Only an assignment hides anything.** An auto-filled slot claims nothing, which
+is why a bat on the strip is still in the Equipment tab.
+
+### Measured, two identical Nubkins throughout
+
+```
+assign one of two          cards 3 -> 2, the other Nubkin stays        exactly one hidden
+which copy is where        slot1 debugid 1_2816345, slot4 1_2816277    two different Tools
+equip from slot1           assignment survives Backpack -> Character   claim is the instance
+replace an assigned slot   displaced Nubkin reappears as a card        return by clearing
+move slot1 -> slot5        one assigned slot, no duplicate             a drop is a move
+drag slot -> open bag      unequip[1_3137753] logged, card returns     unequips on the way out
+double-click a slot        first click equips, second returns it       no delay on the common path
+single click               equips, assignment KEPT                     one tap is not two
+```
+
+Tool count never moved from 5 in any of it: nothing is cloned, and there is no
+second ownership list — the bag is a filtered view of the real Tools.
+
+### Respawn: a lease has to outlive the gap where its Tool does not exist
+
+The first version cleared an assignment the moment its Tool went missing. That
+looked right and destroyed the feature — a respawn destroys the Backpack, so for
+a moment the player owns nothing, `redraw` runs inside that gap and throws the
+arrangement away. Proved by destroying three Nubkins and rebuilding three
+identical ones: the slot came back auto-filled with a trap.
+
+So a lost claim is not a dead assignment. `ASSIGN_GRACE` is 5 s, which separates
+the two cases by the only thing that distinguishes them — respawns come back
+within a second, sold items never do. Both branches measured:
+
+```
+destroy 3 Nubkins, 0.9s gap, rebuild 3    slot 2 still assigned, bound to a NEW
+                                          instance, 2 cards of 3 tools
+destroy 1, no replacement                 t+1.0 .. t+5.1s  slot reserved, empty
+                                          t+6.1s           released, auto-fills
+```
+
+One `task.delay` per loss, guarded by `gracePending`, so a settled hotbar costs
+nothing per frame.
+
+### Bats and traps are exempt, and it is a capability not a name list
+
+`HOTBAR_ASSIGNABLE` is keyed on **category**, and a Tool may override with a
+`CanAssignHotbar` attribute — so a future ordinary item opts in without this file
+being edited. Measured:
+
+```
+drag a bat card onto a slot     no ghost ever appeared, no assignment
+drag the bat's own slot         no ghost -- an unassigned slot cannot be dragged
+bat + trap on the strip         both still listed in Equipment, both EQUIPPED
+```
+
+Bats and traps still appear on the hotbar — that is where you swing from — they
+just are not assignable, returnable or hideable by it. Combat untouched.
+
+### Cancel, and the drag cannot be left hanging
+
+Cancelled by: the bag closing, character removal, a pod in both arms, the jaws
+closing, ragdoll (Humanoid state — ThrowFX drives it locally, there is no
+attribute), the Tool being destroyed, and the slot count changing. The hard one
+measured directly, with the button still physically held down:
+
+```
+Trapped = true mid-drag   ghost destroyed, hotbar Z 60 -> 4, all slot Z -> 5
+then released over slot2  assigned NOTHING -- a cancelled drag is not a placement
+3 full assign->return cycles   0 leftover ghosts, Z restored, no errors
+```
+
+A destroyed Tool is detected as `Parent == nil`, not "left the Backpack" —
+equipping reparents, and cancelling on that would cancel every drag the instant
+the hands changed.
+
+### The bug this nearly shipped with, and the rule it re-teaches
+
+The assignment state was declared **below** `acquireHotSlot`, so the slot's own
+handlers read `assigned` as a global — nil:
+
+```
+LoadoutUI:1198: attempt to index nil with number
+LoadoutUI:1226: attempt to index nil with number      (x30 in one session)
+```
+
+Thrown inside event handlers, so each press died on its own and nothing else
+broke. The card drag still worked, because that path is defined further down —
+only the hotbar's own gestures were dead, which is a very good disguise. This
+file already carries three forward-local banners warning about exactly this; the
+state now sits with them. **Whatever else moves in here, `assigned`, `claimed`
+and `liveSlots` stay above `acquireCard` and `acquireHotSlot`.**
+
+### Shrinking the bar releases the slots it takes away
+
+Measured over a real 1000 → 408 → 1169 round trip:
+
+```
+at 1000, slots 7 and 8 assigned      cards 2 of 4 plants
+narrowed to 408                      5 slots, slots 7-10 gone,
+                                     cards 2 -> 4, both items usable on the strip
+widened to 1169                      10 slots -- but 7 and 8 came back EMPTY
+```
+
+Everything mandatory passed: the slots go inactive, their items become visible
+and usable, nothing is stranded, nothing duplicated (4 plant tools throughout).
+What did not happen is restoration — and I could not find out why. Steady state
+holds those same records through equips, unequips and well past the grace, so it
+is specific to the transition, and the transition cannot be reproduced from
+script: `ViewportSize` is read-only (a detached Camera reports 1×1 until it
+becomes current, then the engine overwrites it with the real viewport), and
+toggling Studio's emulator restarts Play, which wipes session state.
+
+Rather than ship "it usually comes back", the release is now the **definition**:
+`applySlotCount` clears slots above the new count on the way down, and says so.
+The brief permits this — restoring on the way back is "may", never "must" — and
+nothing is lost, because the items are in the bag and auto-fill onto the five
+remaining slots. Worth revisiting only alongside making assignments outlive a
+rejoin, which needs a profile field, a schema version and a migration; at that
+point an arrangement is a saved thing and "restore it" has a defensible answer
+instead of being a timing accident.
+
+### Not verified, honestly
+
+  * **The number keys were never pressed.** `VirtualInput` refuses them:
+    `key is permanently bound to a CoreGUI core action`. The handler was fixed —
+    it indexed `liveSlots[i]` before, so pressing 1 equipped whatever was first
+    alphabetically rather than what slot 1 was showing — and it now reads the
+    same `slot.tool` that tapping uses, which IS verified. But nobody pressed a
+    number.
+  * **No physical phone**, and the mobile half of this pass ran on the emulator.
+  * **Double-tap on touch** was verified on desktop as a double-click (two
+    `mouseButtonClick` actions land inside the 300 ms window). On the emulated
+    phone the harness could not go faster than ~466 ms between activations, so
+    the touch flavour of the gesture is unproven; it is the same handler.
+  * **Plant placement and pod carrying were not re-run** this session. Neither is
+    touched by this change and the console is clean, but that is not a test.
+
+### Test fixtures worth reusing
+
+`CarryService.GiveHatched(player, SeedData.Get("nubkin"), 3)` from the **Server**
+datamodel makes a genuine plant Tool — the production builder, so the fixture is
+faithful. Two calls with the same species and tier give two Tools with the same
+key, which is the only way to exercise the duplicate-copy rules.
+
+Traps: a `BindableFunction` on the PlayerGui is wiped on respawn, so an inspector
+parked there vanishes when the character dies. And a card's `Visible` stays true
+while an ancestor dimmer is false — read `BagDimmer.Visible` before believing a
+card count.
+
+### Validation
+
+Ten specs: BatClearance 939/939, BatSwing 93/93, Cycle 31, MillSign 8/0,
+Plot 65/0, Speed 332, StarbloomLimb 71/0, TutorialPod 263, Tutorial 93/0,
+Weapon 107/0. `rojo build` clean, `git diff --check` clean, `LoadoutUI` compiles
+at 98,203 bytes, client and server console free of errors.
+
+### Owner checklist
+
+  1. On a phone: five slots, tap one to equip, double-tap an assigned plant to
+     send it back.
+  2. On desktop: ten slots, press 1–9 and 0 and check each equips what that slot
+     shows.
+  3. Own two identical plants, assign one, and confirm the other stays in the bag.
+  4. Die with an arrangement set and confirm it survives.
+  5. A bat and a trap stay equipped together and never leave the Equipment tab.
+
+### Files
+
+`LoadoutUI.client.luau` only.
+
 ## The prompt panel IS the touch target — 2026-09-10 (CLAUDE)
 
 **Corrects the entry below it,** which computed a hit rectangle by projecting the
