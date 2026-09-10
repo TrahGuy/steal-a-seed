@@ -1,5 +1,204 @@
 # Steal a Seed — Session Handoff
 
+## The prompt panel IS the touch target — 2026-09-10 (CLAUDE)
+
+**Corrects the entry below it,** which computed a hit rectangle by projecting the
+adornee. On a real phone the owner had to tap *below* the visible prompt. The
+estimate is gone: on a touch device the panel is now a `TextButton` in a real
+`ScreenGui`, so the thing that is drawn and the thing that is pressed are the
+same instance and no rectangle can be wrong.
+
+### The measured cause of that offset — never guess an offset again
+
+`Camera:WorldToViewportPoint` returns **window space** (the 3D view fills the
+whole window, topbar included). `InputObject.Position` and
+`GuiObject.AbsolutePosition` are both **below-inset**. Measured on this place at
+a 58 px inset, against the local character's head:
+
+```
+WorldToViewportPoint   367, 207     window space
+WorldToScreenPoint     367, 149     below-inset  (= viewport - 58)
+a marker drawn at y=207 in an IgnoreGuiInset=true ScreenGui
+    reports AbsolutePosition y=145, centre 149
+```
+
+The old hit test compared a window-space projection against a below-inset touch,
+so its rectangle sat exactly one inset — 58 px — below the panel. Confirmed again
+on the live panel, which is the clearest single proof in this whole entry:
+
+```
+panel.Position        409,161     window space, what we set
+AbsolutePosition      324,77      below-inset, centre 409,103
+GetGuiObjectsAtPosition(409,103) -> Panel(TextButton, Active=true)   HIT
+GetGuiObjectsAtPosition(409,161) -> TouchControlFrame only           MISS
+```
+
+**The coordinate contract now in the file:** the layer is `IgnoreGuiInset = true`
+and positions come from `WorldToViewportPoint`, so both are window space and no
+inset arithmetic appears anywhere. `AbsolutePosition` is only ever compared
+against `InputObject.Position` — same space, no conversion.
+
+### The second defect, which the rewrite did not fix and a test found
+
+`GuiObject.InputBegan` fires for a touch that **ENTERS** the button, not only for
+one that starts on it. So a finger landing on open ground and dragged across the
+panel got a full `InputBegan`, started a hold and completed it. Transcript, on a
+panel occupying y 4..56:
+
+```
+touch 253,140            <- UserInputService: the real landing point, outside
+>PANEL saw Touch         <- the panel, ~400ms later, on entry
+>HOLD SellPrompt
+>***TRIG SellPrompt      <- it sold the bed
+```
+
+On a `PICK UP` panel, whose hold is zero, one camera pan that swept the prompt
+would have lifted the plant instantly — the owner's original complaint by another
+route. **Fixed** with an `origin` table: `UserInputService.InputBegan` fires once
+per gesture at the true landing point, and a hold is refused if that point is
+outside the panel. Note the signal order, which is what distinguishes the two
+cases and is why the guard is written to not depend on it:
+
+| gesture | order | `origin[input]` at panel time | verdict |
+|---|---|---|---|
+| lands on the panel | panel first, UIS second | nil | allowed |
+| dragged onto it | UIS first, panel second | outside | refused |
+
+A `spent` table gives each finger one hold, so a pan-cancel cannot be used to
+start again without lifting.
+
+### Verified, emulated phone, 735×413, top inset 58 (nonzero throughout)
+
+Direct targeting, rect verified unmoved at 151,80 before **and** after the run:
+
+```
+centre 236,106      HOLD        20 above 236,60    nothing
+top edge 236,81     HOLD        20 below 236,152   nothing
+bottom edge 236,131 HOLD        left 121,106       nothing
+                                right 351,106      nothing
+                                elsewhere 520,300  nothing
+```
+
+The misses were pressed for 900 ms against a 700 ms hold — long enough to have
+completed had they registered. Four cameras, rect re-read for each:
+
+| camera | panel | centre | 25 px below |
+|---|---|---|---|
+| normal | 151,80 | HOLD | nothing |
+| steep tilt down | 283,113 | HOLD | nothing |
+| steep tilt up | 283,58 | HOLD | nothing |
+| close zoom | 283,38 | HOLD | nothing |
+| far zoom | 283,100 | HOLD | nothing (and left: nothing) |
+
+Holds, on the sell board (1.10 s), post-fix:
+
+```
+short 300ms   >PANEL saw Touch >HOLD >HOLD-ENDED            no trigger
+full 1400ms   >PANEL saw Touch >HOLD >HOLD-ENDED >***TRIG   sold
+drag off      >HOLD then >HOLD-ENDED BEFORE the lift        no trigger, held 1.7s
+begin outside >PANEL saw Touch, no HOLD at all              no trigger, held 1.9s
+```
+
+The drag-off cancel is provably caused by the drag, not the release: `HOLD-ENDED`
+is logged before `lift`.
+
+Zero-hold, the owner's exact bug class:
+
+```
+direct tap        >PANEL saw Touch >***TRIG MarigoldShopPrompt
+full-screen diagonal sweep through the rect (x347..517 y185..237)  no trigger
+```
+
+Plant pickup, `PickupPrompt`, hold 0, on the owner's own plot: **13 taps that
+were not on the panel** — soil, 18–25 px above/below/left/right, thumbstick,
+jump, hotbar, and a drag that began outside and slid onto it — and the plant
+never left the plot, the tool count never moved, and the server logged exactly
+one pickup for the whole session, from the one deliberate tap:
+
+```
+[Seed/PlantService] nicnicniccoal picked up a 4 tier Spiretip. 0/20 in the bed.
+```
+
+Under the entry below, any one of those 13 would have picked it up.
+
+The topbar clamp is engaged and reachable: at a 58 px inset the panel pins to
+`y 4..56` (`inset 58 + half 26 + 4` in window space) rather than drawing under
+the topbar, and a tap at its centre is `PROCESSED` and starts a hold.
+
+A pod take still works end to end — `[Seed/CarryService] ... completed a take
+hold on Pod_petalpip` — and the guardian ragdoll after it settled in 1.87 s and
+stood up once, down for 2.93 s, so that path is intact.
+
+`E` still triggers a prompt with the emulator on (`KeyboardEnabled=true`).
+
+### Not tested, honestly
+
+  * **No physical phone.** All of the above is Studio's device emulator, which
+    emulates resolution and input but not a real touchscreen or a real GPU.
+  * **The desktop billboard branch was not exercised**, because the emulator
+    forces `TouchEnabled = true` and the branch is chosen off that. It is
+    unchanged code and `E` is engine-handled, but nobody ran it this session.
+  * **No genuine two-finger test** — the harness has one pointer. The
+    second-finger rules are identity comparisons on the `InputObject`
+    (`input == activeTouch`), correct by construction but unproven by touch.
+  * **A second emulated viewport** was not run: the device profile is a Studio UI
+    setting this session cannot change. Nothing in the placement depends on
+    viewport size except off-screen culling.
+
+### On touch the panel no longer scales with distance
+
+Deliberate, and a change from the billboard: the button is a constant 170×52, so
+a far prompt keeps a finger-sized target instead of shrinking below reach.
+Desktop keeps the distance-scaled billboard.
+
+### Four harness traps that cost most of this session
+
+  * **`StreamingEnabled` streams the adornee out.** Every "the panel vanished
+    for no reason" was this. After the guardian threw the player across the map
+    there was no `TakePrompt` in the client's tree at all.
+  * **Marigold is the wandering fairy** (13×4 studs) and walks out of her own
+    11-stud prompt range. Stand within ~3 studs or pin her.
+  * **A `Scriptable` camera accumulates stray pan** from the synthetic pointer
+    and never recovers, so read-then-tap misses. `Custom` recomputes each frame
+    and self-heals — use `Custom` with an anchored character. Better still,
+    target `instance_path`, which now works because the panel is a real
+    ScreenGui element with a true `AbsolutePosition` (a BillboardGui child
+    reports 0,0 and cannot be targeted this way).
+  * **Signal order lies about causation.** `GuiObject.InputBegan` and
+    `PromptTriggered` both fire *before* `UserInputService.InputBegan` for a
+    genuine tap, so a trigger looks like it belongs to the previous line of the
+    transcript. Log the panel's rect at the instant of each touch or the
+    transcript cannot be read.
+
+### Validation
+
+Ten specs: BatClearance 939/939, BatSwing 93/93, Cycle 31, MillSign 8/0,
+Plot 65/0, Speed 332, StarbloomLimb 71/0, TutorialPod 263, Tutorial 93/0,
+Weapon 107/0. `rojo build` clean, `git diff --check` clean, `PromptUI` compiles
+at 28,334 bytes.
+
+### Owner test checklist for a real phone
+
+  1. Stand on a plant in your plot. Tap the soil, the hotbar, the thumbstick, the
+     jump button, and pan the camera. The plant must stay planted.
+  2. Tap the words `PICK UP`. It should lift once, first time.
+  3. Pan the camera so your finger sweeps straight across a `PICK UP` prompt.
+     Nothing must happen.
+  4. At a nest pod, hold `TAKE` for a second — it should take. Start the hold and
+     slide your finger off — it must not.
+  5. The sell board must still need its full hold.
+
+### Unchanged
+
+Hold durations: plot pickup 0, Marigold 0, sell board 1.10, hatch 1.10, nest
+Take 0.70, mill 0.35. `TAP_SLOP` 34. Server ownership validation untouched —
+`CarryService.TryTake` and `PlantService` still refuse a stranger, and nothing
+here invokes a server action directly or forges a trigger.
+
+### Files
+
+`PromptUI.client.luau` only.
+
 ## The tap has to land ON the prompt — 2026-09-09 (CLAUDE)
 
 **Corrects the entry below it.** That one shipped a rule where *any* unprocessed
