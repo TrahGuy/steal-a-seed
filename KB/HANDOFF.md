@@ -1,5 +1,189 @@
 # Steal a Seed — Session Handoff
 
+## A grown plant is tapped, then picked up by a button — 2026-09-10 (CLAUDE)
+
+On touch, the one-step pickup is gone. Tap your own grown plant and it is
+SELECTED and outlined; a real `PICK UP` button appears above the hotbar and that
+button is the only thing that takes it. Desktop keeps the floating prompt and `E`.
+
+### The interaction contract
+
+| step | rule |
+| --- | --- |
+| select | on touch RELEASE, never on touch-down |
+| qualifies | began outside GUI (`gameProcessedEvent` false at BEGIN), moved ≤ 10 px, lifted within 0.5 s, one finger only |
+| target | screen ray genuinely intersects the plant's own bounding box, nearer than any solid geometry |
+| eligible | in the local player's own `Plants` folder, tagged `Planted`, has an enabled `PickupPrompt`, and within that prompt's own `MaxActivationDistance` |
+| pick up | only the `PICK UP` button, debounced 0.4 s |
+| at most | one plant selected, one `Highlight`, reused |
+
+Nothing about a touch that has just landed says whether it is a tap or a camera
+swing, so nothing is decided until the finger lifts. Step 1 is harmless, which is
+what lets it be a guess about a fingertip at all; step 2 is a button with its own
+rectangle, so it cannot be guessed wrong.
+
+### The coordinate space, measured, so no inset can creep back in
+
+```
+InputObject.Position   below-inset   <- what a touch reports
+GetMouseLocation()     window        <- 58 px higher, same tap, measured
+ScreenPointToRay       below-inset   <- round-trips to 0.0000 studs
+ViewportPointToRay     window        <- round-trips to 0.0000 studs
+```
+
+The wrong pairing missed a point 12.5 studs away by **2.41 studs**. So this file
+does no arithmetic at all: the touch arrives below-inset and goes straight into
+`ScreenPointToRay`, which wants below-inset. There is no constant to drift.
+
+(`PlantPlace` pairs `GetMouseLocation` with `ViewportPointToRay` — the *other*
+matching pair, equally correct. Only the wording of its comment is inverted.)
+
+### Why the ray tests a box and not the parts
+
+Every creature part is `CanQuery = false`, and that is invariant 1, not an
+oversight — `CombatService` leans on it: *"a wall stops a bat, a pod does not."*
+Making plants queryable so they could be tapped would start blocking bat swings
+across a garden. So the ray is tested against `Model:GetBoundingBox()` instead and
+the invariant is untouched. Measured on a live 2.4 × 4.2 × 2.0 plant: dead centre
+hits at 72.9 studs, one stud off hits, two studs off misses.
+
+### THE DEFECT THIS UNCOVERED — desktop `E` is broken on a wandered plant
+
+The brief asked for the prompt to be driven through `InputHoldBegin()` /
+`InputHoldEnd()`. **It cannot be, and the reason is a pre-existing bug in
+something else.** Measured:
+
+```
+client draws the plant    7.5 studs from the character
+SERVER has its Base      63.0 studs from the character   (prompt max 26)
+```
+
+A grown plant is animated **by the client**. `PlantService` publishes a wander leg
+as four attributes and every client walks the model along it; the server never
+moves the parts — measured, `Base` byte-identical for five seconds while
+`WanderTo` pointed 65 studs away. That is deliberate (it is why the wander costs
+no per-frame replication) and invisible until something needs both copies to agree
+about where the plant *is*.
+
+A ProximityPrompt needs exactly that. The client shows it from the position the
+client drew; the server validates the trigger from the position the server kept.
+Two 26-stud spheres 63 studs apart do not overlap, so **no standing position
+satisfies both** and the trigger is refused in silence.
+
+Proved from both ends, and the boundary pinned:
+
+```
+positions diverged (7.5 vs 63.0)   server's PromptTriggered never fired -- from
+                                   the button, from a bare script call, and while
+                                   standing at the server's own copy
+positions agreed  (6.4 vs 6.9)     the prompt WORKS, plant picked up
+```
+
+**So desktop `E` works only while a plant is near where it was planted.** Verified
+on desktop after aligning the two copies: prompt drawn, `E` pressed, plant taken.
+Nobody has tested `E` on a plant that has walked, and by this measurement it
+cannot work. That is a `PlantService` replication decision, not a mobile-UI one,
+and it is the top follow-up.
+
+### So the button uses the verb that already existed
+
+`PickUpAction` → `PlantService.PickUpById`, which the Garden panel has used since
+it was written. **Nothing was added**: no remote, no handler, no second ownership
+list, no widening of what a client may ask. It is position-independent, which is
+why it works where the prompt cannot.
+
+The server checks, none of it client-side: payload must be a finite whole positive
+number; the lookup happens in the **caller's own plot and nowhere else**, so a
+neighbour's id is not in the table; then `pickUp` re-tests ownership, that the
+entry is still live, that it is grown, and that the bag accepted it.
+
+### Verified on the emulated phone, 735 × 413, touch
+
+```
+short tap on my grown plant     selected, outlined, NOT picked up
+                                button "PICK UP" / "PETALPIP", 168 x 46
+                                8 px clear above the hotbar top edge (y269)
+exactly one highlight           on the tapped plant, and only that one
+press the button                picked up; plants 3 -> 2, one Tool gained
+four rapid presses              ONE pickup -- one server log line
+tap bare ground                 cleared
+tap another owned plant         selection MOVED, still exactly one highlight
+tap a plant 47.7 studs away     not eligible, no button
+DRAG STARTING ON THE PLANT      nothing -- this is the reported defect
+drag from ground, across it,
+  and ENDING on it              nothing
+tap hotbar slot 1               PROCESSED; plant untouched, selection survived
+open the bag                    cleared, no stale button
+holding a plant for placement   selection disabled entirely
+equip a plant mid-selection     cleared
+walk 45 studs away              cleared
+die and respawn                 cleared; zero Highlight instances left in the tree
+forged ids -1 0 1e12 2.5
+  999999 NaN "hello" true nil   all refused, nothing moved
+Marigold's floating prompt      still drawn on touch, still opens her shop
+```
+
+The floating `PickUpPrompt` panel is not drawn on touch at all — measured 0 panels
+while standing 8 studs from the plant — and every other prompt still is.
+
+### Verified on desktop, 1065 × 609, touch off
+
+```
+SeedPromptLayer absent          PromptUI is on its unchanged billboard path
+SeedPrompt billboard drawn      adorned to Creature_bellchime.Base
+E pressed                       picked up once; billboard gone
+mobile button                   never appeared, stayed disabled
+hotbar                          10 slots -- b4faa43 intact
+```
+
+### Not verified
+
+  * **No physical phone.** All of the above is Studio's emulator.
+  * **Another player's plant** — no second player was available. The guard is
+    structural in two independent places (`PickUpById` looks only in
+    `PlotService.PlotOf(player)`; `pickUp` re-tests `OwnerOf`), and a neighbour's
+    plants are not in the folder the ray searches, so no button can appear for
+    one. Untested by a real second client.
+  * **Nest Take, hatch, mill and sell prompts** were not individually re-pressed.
+    Marigold was, and all five share the one code path the exclusion does not
+    touch; the exclusion is a single name in a table.
+  * **`E` on a plant that has wandered** — see the defect above. Expected to fail.
+
+### Test-rig notes worth keeping
+
+  * **Grown plants WANDER**, several studs at a time, so a scripted tap misses
+    unless the plant is parked. Park it by writing a degenerate leg on the client
+    — `WanderFrom == WanderTo`, `T0/T1` already past — re-asserted on
+    `WanderT1` changing, which is what `PlantService.parkAt` publishes. Park it on
+    the **server's** `PrimaryPart.Position` if the test needs the prompt to work.
+  * `PromptHidden` fires spuriously for a wandering plant (`hidden` then `SHOWN`
+    back to back while standing still 8 studs from a 26-stud prompt). Clearing the
+    selection on every one of those made the tap look broken; the handler now
+    re-checks real range instead of trusting the event. A ⅓-second watcher, alive
+    only while something is selected, closes the case where the player leaves
+    while the prompt is already hidden.
+  * A `BindableFunction` parked in PlayerGui is wiped on respawn.
+
+### Validation
+
+Ten specs: BatClearance 939/939, BatSwing 93/93, Cycle 31, MillSign 8/0,
+Plot 65/0, Speed 332, StarbloomLimb 71/0, TutorialPod 263, Tutorial 93/0,
+Weapon 107/0. `rojo build` clean, `git diff --check` clean, both edited files and
+the new one compile, client and server console free of errors.
+
+### Owner checklist, on a real phone
+
+  1. tap a grown plant — it should outline and a `PICK UP` button should appear;
+  2. drag the camera *starting on* the plant — nothing should happen;
+  3. drag the camera *across* the plant — nothing should happen;
+  4. press the `PICK UP` button — the plant should go into your bag;
+  5. hold a plant ready to place, then tap another plant — nothing should happen.
+
+### Files
+
+`PlantPickUI.client.luau` (new), `PromptUI.client.luau` (one exclusion),
+`AGENTS.md` (structure table).
+
 ## The hotbar adapts, and an assignment claims a Tool — 2026-09-10 (CLAUDE)
 
 Ten slots on a keyboard at width, five otherwise, and the strip is now something

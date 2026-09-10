@@ -247,6 +247,44 @@ local function carrying(): boolean
 end
 
 --==============================================================================
+-- ONE PROMPT THAT TOUCH DOES NOT DRAW, AND WHY IT IS THIS ONE
+--
+-- Every prompt in the game is Style = Custom and drawn here, and on touch the
+-- panel IS the button -- which is exactly right for the five prompts a player
+-- walks up to and means to press: a nest Take, a hatch, Marigold, a mill, the
+-- sell board. Each of those is a deliberate approach to a fixed object.
+--
+-- A GROWN PLANT IS NOT LIKE THAT, and the owner found the reason on a phone.
+-- Its hold is ZERO -- picking your own plant back up should not need a hold, and
+-- that was the right call -- but a zero-hold prompt fires on the touch that
+-- STARTS the gesture. So a thumb coming down near a plant to swing the camera
+-- lifted the plant instead, and no amount of movement cancellation can undo an
+-- action that has already happened. Widening the movement threshold only makes
+-- the panel harder to press on purpose; moving it only moves the collision.
+--
+-- The verb was wrong, not the geometry. On touch a plant is now SELECTED by a
+-- tap and picked up by a separate button, so the destructive step is never the
+-- first half of an ambiguous gesture -- see PlantPickUI, which owns that and
+-- drives THIS prompt to do the actual work.
+--
+-- SO NOTHING IS DRAWN FOR IT HERE, on touch only. The prompt itself stays,
+-- enabled and server-backed, because desktop still presses E on it and the
+-- server still validates every trigger through it.
+--
+-- Named rather than inferred: PlantService creates exactly one prompt with this
+-- name, the same way `reservedForSomebodyElse` above reads one attribute by
+-- name. A structural test would have to reach into the plot tree from here to
+-- learn something one string already says.
+--==============================================================================
+local DRAWN_BY_SOMEBODY_ELSE: { [string]: boolean } = {
+	PickupPrompt = true,
+}
+
+local function ownedByAnotherUI(prompt: ProximityPrompt): boolean
+	return TOUCH and DRAWN_BY_SOMEBODY_ELSE[prompt.Name] == true
+end
+
+--==============================================================================
 -- THE PANEL
 --==============================================================================
 local function build(prompt: ProximityPrompt): Panel?
@@ -533,7 +571,8 @@ local function hide(prompt: ProximityPrompt)
 end
 
 local function show(prompt: ProximityPrompt)
-	if shown[prompt] or carrying() or reservedForSomebodyElse(prompt) then
+	if shown[prompt] or carrying() or reservedForSomebodyElse(prompt)
+		or ownedByAnotherUI(prompt) then
 		return
 	end
 	local entry = build(prompt)

@@ -103,6 +103,8 @@ src/StarterPlayer/StarterPlayerScripts/
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
     PlantUI.client.luau         the hatch countdown over an unhatched pod
     PlantPlace.client.luau      click-to-place, the ghost disc, and Put away
+    PlantPickUI.client.luau     TOUCH ONLY: tap your grown plant to select it,
+                                then a real button picks it up
     PlantSway.client.luau       idle lean, the hatch shake, and the grown-plant walk
     CashUI.client.luau          corner HUD: cash + speed, from the ProfileUpdated remote
     CashPop.client.luau         lime +$N rising off every grown plant (cosmetic only)
