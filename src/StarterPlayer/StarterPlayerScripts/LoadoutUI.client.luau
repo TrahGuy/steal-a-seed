@@ -57,6 +57,7 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local WeaponData = require(Shared:WaitForChild("WeaponData"))
 local WeaponModel = require(Shared:WaitForChild("WeaponModel"))
+local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -108,6 +109,38 @@ local READY = Color3.fromRGB(142, 214, 86)
 -- The HOTBAR's held-slot colour. It used to be the bag card's equipped colour
 -- too; the cards use green now, and this stays because the hotbar still does.
 local PICKED = Color3.fromRGB(250, 214, 108)
+-- The soft cream a hovered card's inner edge warms to. A light line inside the
+-- black keyline, so the house edge never changes colour under a pointer.
+local GLOW = Color3.fromRGB(255, 236, 190)
+local INCOME = Color3.fromRGB(142, 220, 68)
+
+--==============================================================================
+-- THE BAG'S GEOMETRY
+--
+-- A card is a fixed 104 x 158 at every width: the preview, a name that may take
+-- two lines, and a 44-pixel action strip under it -- Roblox's touch minimum, so
+-- the explicit HOLD / EQUIP control is never a fingernail target. Width is what
+-- changes, and it changes the COLUMN COUNT, never the card.
+--
+-- The information column sits beside the grid while there is room for two
+-- columns of cards and a readable panel, and drops under the grid as a lower
+-- sheet when there is not (a portrait phone).
+--==============================================================================
+local CARD_W, CARD_H = 104, 158
+local CARD_GAP = 10
+local GRID_PAD = 10
+local ACTION_H = 44
+local INFO_GAP = 10
+local INFO_SIDE_MIN, INFO_SIDE_MAX = 184, 236
+local INFO_SHEET_H = 118
+local EDGE_GAP = 8
+local PANEL_MAX_W, PANEL_MAX_H = 780, 600
+-- Below this the tabs share the title's row, which buys a short phone a whole
+-- card row of height.
+local COMPACT_BELOW = 380
+-- How far a press may travel and still be a tap. A scroll or a camera drag moves
+-- further than this before it lifts, and must never select or equip anything.
+local TAP_SLOP = 10
 
 local ITEM_ATTR = WeaponModel.ItemAttribute
 local READY_AT = "ReadyAt"
@@ -368,6 +401,23 @@ end
 -- because it is derived from what a Tool IS rather than from what order the
 -- engine happened to rebuild them in.
 --==============================================================================
+--==============================================================================
+-- IDENTICAL COPIES KEEP THEIR PLACES
+--
+-- The sort used to end on `tool.Name`, which is the same string for every copy
+-- of a plant -- so four Nubkins tied, and an unstable sort put them in whatever
+-- order the containers happened to list them. Equipping one MOVES it from the
+-- Backpack to the Character, which changed that order: measured, holding a
+-- Nubkin from its card slid a different Nubkin under the pointer, and pressing
+-- HOLD again picked up the wrong copy.
+--
+-- So ties fall to the key (tier, hatched) and then to the order this script
+-- first saw each Tool. Neither changes when a Tool changes hands. Weak keys: a
+-- Tool that is destroyed is forgotten with it.
+--==============================================================================
+local toolOrder: { [Tool]: number } = setmetatable({}, { __mode = "k" }) :: any
+local nextToolOrder = 0
+
 local function scanTools(): { Slot }
 	local slots: { Slot } = {}
 	for _, container in ipairs({ player:FindFirstChildOfClass("Backpack"), player.Character }) do
@@ -376,6 +426,10 @@ local function scanTools(): { Slot }
 				if child:IsA("Tool") then
 					local slot = classify(child)
 					if slot then
+						if not toolOrder[child] then
+							nextToolOrder += 1
+							toolOrder[child] = nextToolOrder
+						end
 						table.insert(slots, slot)
 					end
 				end
@@ -389,7 +443,10 @@ local function scanTools(): { Slot }
 		if a.label ~= b.label then
 			return a.label < b.label
 		end
-		return a.tool.Name < b.tool.Name
+		if a.key ~= b.key then
+			return a.key < b.key
+		end
+		return (toolOrder[a.tool] or 0) < (toolOrder[b.tool] or 0)
 	end)
 	return slots
 end
@@ -457,8 +514,8 @@ bagButton.Position = UDim2.new(1, -RAIL.Inset, 0,
 local modal = UIKit.modal(gui, {
 	name = PANEL_NAME,
 	title = "Bag",
-	maxWidth = 520,
-	maxHeight = 600,
+	maxWidth = PANEL_MAX_W,
+	maxHeight = PANEL_MAX_H,
 })
 
 -- The close button used to be restyled here, for this panel alone. It is in
@@ -473,6 +530,9 @@ local activeTab = "equipment"
 local tabButtons: { [string]: TextButton } = {}
 local tabTints: { [string]: UIGradient } = {}
 local tabShades: { [string]: Frame } = {}
+-- How many things each section holds, on the tab itself: the heading and the
+-- answer to "is there anything in here" in one place.
+local tabCounts: { [string]: TextLabel } = {}
 
 local tabRow = Instance.new("Frame")
 tabRow.Name = "Tabs"
@@ -485,7 +545,10 @@ tabRow.Parent = modal.shell
 for i, tab in ipairs(TABS) do
 	local b = Instance.new("TextButton")
 	b.Name = "Tab" .. tab.id
-	b.Position = UDim2.fromScale((i - 1) * 0.5, 0)
+	-- Centre-anchored so the pop below scales in place. Same rectangle as the
+	-- old top-left anchoring: half the row, less the four-pixel gutter.
+	b.AnchorPoint = Vector2.new(0.5, 0.5)
+	b.Position = UDim2.new((i - 1) * 0.5 + 0.25, -2, 0.5, 0)
 	b.Size = UDim2.new(0.5, -4, 1, 0)
 	b.BackgroundColor3 = PANEL.Shade
 	b.BorderSizePixel = 0
@@ -526,6 +589,34 @@ for i, tab in ipairs(TABS) do
 	label.Size = UDim2.fromScale(1, 1)
 	label.Text = tab.label
 	label.ZIndex = 6
+
+	local count = Instance.new("TextLabel")
+	count.Name = "Count"
+	count.AnchorPoint = Vector2.new(1, 0.5)
+	count.Position = UDim2.new(1, -8, 0.5, -1)
+	count.Size = UDim2.fromOffset(0, 20)
+	count.AutomaticSize = Enum.AutomaticSize.X
+	count.BackgroundColor3 = BLACK
+	count.BackgroundTransparency = 0.55
+	count.BorderSizePixel = 0
+	count.Font = Enum.Font.FredokaOne
+	count.TextSize = 12
+	count.TextColor3 = CREAM
+	count.Text = "0"
+	count.Visible = false
+	count.ZIndex = 7
+	count.Parent = b
+	UIKit.corner(count, 10)
+	local countPad = Instance.new("UIPadding")
+	countPad.PaddingLeft = UDim.new(0, 7)
+	countPad.PaddingRight = UDim.new(0, 7)
+	countPad.Parent = count
+	tabCounts[tab.id] = count
+
+	local tabScale = Instance.new("UIScale")
+	tabScale.Parent = b
+	UIKit.cardPop(b, tabScale, { hoverScale = 1.04, pressScale = 0.97, sound = false })
+
 	tabButtons[tab.id] = b
 	tabTints[tab.id] = tabTint
 	tabShades[tab.id] = tabShade
@@ -545,10 +636,21 @@ modal.body.Size = UDim2.new(1, -24, 1, -112)
 -- Nothing moved to achieve it: the body is exactly where it was and holds
 -- exactly what it held.
 --==============================================================================
-modal.body.BackgroundColor3 = WELL
-modal.body.BackgroundTransparency = 0
-UIKit.corner(modal.body, 12)
-UIKit.stroke(modal.body, BLACK, 2)
+--
+-- The tray is its own frame inside the body now, rather than the body itself,
+-- so the information column can stand beside it (or under it) in the same body.
+-- Lightly translucent: the panel's lattice breathes through, and the cards on it
+-- are the solid things.
+local tray = Instance.new("Frame")
+tray.Name = "Tray"
+tray.Size = UDim2.fromScale(1, 1)
+tray.BackgroundColor3 = WELL
+tray.BackgroundTransparency = 0.18
+tray.BorderSizePixel = 0
+tray.ZIndex = 3
+tray.Parent = modal.body
+UIKit.corner(tray, 12)
+UIKit.stroke(tray, BLACK, 2)
 
 --==============================================================================
 -- AND IT IS TEXTURED, NOT BLANK
@@ -563,7 +665,7 @@ UIKit.stroke(modal.body, BLACK, 2)
 -- square grid drawn to the edge of a rounded box pokes its chords out through
 -- the curve.
 --==============================================================================
-UIKit.lattice(modal.body, {
+UIKit.lattice(tray, {
 	spacing = 26,
 	thickness = 2,
 	colour = PANEL.Lattice,
@@ -590,7 +692,7 @@ do
 	recess.BorderSizePixel = 0
 	recess.Active = false
 	recess.ZIndex = 3
-	recess.Parent = modal.body
+	recess.Parent = tray
 	UIKit.corner(recess, 12)
 	local fade = Instance.new("UIGradient")
 	fade.Rotation = 90
@@ -614,7 +716,7 @@ grid.ScrollBarImageColor3 = PANEL.Edge
 grid.ScrollBarImageTransparency = 0.1
 grid.ElasticBehavior = Enum.ElasticBehavior.Always
 grid.ZIndex = 4
-grid.Parent = modal.body
+grid.Parent = tray
 
 local gridPad = Instance.new("UIPadding")
 -- Even on all four sides now. It was right and bottom only, so the first card
@@ -622,9 +724,9 @@ local gridPad = Instance.new("UIPadding")
 -- room -- which is the sort of thing that reads as "unfinished" without anybody
 -- being able to say why.
 gridPad.PaddingLeft = UDim.new(0, 10)
-gridPad.PaddingTop = UDim.new(0, 10)
+gridPad.PaddingTop = UDim.new(0, 8)
 gridPad.PaddingRight = UDim.new(0, 10)
-gridPad.PaddingBottom = UDim.new(0, 10)
+gridPad.PaddingBottom = UDim.new(0, 8)
 gridPad.Parent = grid
 
 local gridLayout = Instance.new("UIGridLayout")
@@ -632,19 +734,192 @@ local gridLayout = Instance.new("UIGridLayout")
 -- one line at any size worth reading, and an ellipsis on a product name is the
 -- one truncation a bag cannot afford -- it is the only thing telling a player
 -- which of two similar silhouettes they are looking at.
-gridLayout.CellSize = UDim2.fromOffset(104, 146)
-gridLayout.CellPadding = UDim2.fromOffset(10, 10)
+gridLayout.CellSize = UDim2.fromOffset(CARD_W, CARD_H)
+gridLayout.CellPadding = UDim2.fromOffset(CARD_GAP, CARD_GAP)
 gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
-gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+-- Centred: a left-aligned grid left 24-34 px of dead tray down the right edge
+-- at every width, which reads as a column that failed to load.
+gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 gridLayout.Parent = grid
 
-local emptyLabel = UIKit.outlined(modal.body, "Empty", 15, MUTED, 2)
+local emptyLabel = UIKit.outlined(tray, "Empty", 15, MUTED, 2)
 emptyLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 emptyLabel.Position = UDim2.fromScale(0.5, 0.42)
 emptyLabel.Size = UDim2.new(1, -40, 0, 60)
 emptyLabel.TextWrapped = true
 emptyLabel.Visible = false
 emptyLabel.ZIndex = 5
+
+--==============================================================================
+-- THE INFORMATION PANEL
+--
+-- ONE panel, built once and repainted -- never one per card. It says what the
+-- selected plant is and where that exact Tool is. Every figure comes out of
+-- PlantInfo, which takes them from the calls the economy itself uses, so this
+-- file does no arithmetic on money at all.
+--
+-- Plants only. Bats and traps have their own slots and their own tab, and the
+-- brief keeps them exactly as they were.
+--==============================================================================
+local info = Instance.new("Frame")
+info.Name = "PlantInfo"
+info.BackgroundColor3 = WELL
+info.BackgroundTransparency = 0.18
+info.BorderSizePixel = 0
+info.Visible = false
+info.ZIndex = 3
+info.Parent = modal.body
+UIKit.corner(info, 12)
+UIKit.stroke(info, BLACK, 2)
+
+local infoPad = Instance.new("UIPadding")
+infoPad.PaddingLeft = UDim.new(0, 12)
+infoPad.PaddingRight = UDim.new(0, 12)
+infoPad.PaddingTop = UDim.new(0, 10)
+infoPad.PaddingBottom = UDim.new(0, 10)
+infoPad.Parent = info
+
+-- Scaled into its box rather than truncated: a species name is the one line a
+-- player reads first, and an ellipsis on it would hide the answer.
+local infoTitle = UIKit.outlined(info, "Title", 20, WHITE, 2)
+infoTitle.TextXAlignment = Enum.TextXAlignment.Left
+infoTitle.TextWrapped = true
+infoTitle.TextScaled = true
+infoTitle.ZIndex = 5
+local infoTitleFit = Instance.new("UITextSizeConstraint")
+infoTitleFit.MaxTextSize = 20
+infoTitleFit.MinTextSize = 11
+infoTitleFit.Parent = infoTitle
+
+local infoStage = Instance.new("TextLabel")
+infoStage.Name = "Stage"
+infoStage.Size = UDim2.fromOffset(0, 18)
+infoStage.AutomaticSize = Enum.AutomaticSize.X
+infoStage.BackgroundColor3 = BLACK
+infoStage.BackgroundTransparency = 0.45
+infoStage.BorderSizePixel = 0
+infoStage.Font = Enum.Font.FredokaOne
+infoStage.TextSize = 11
+infoStage.TextColor3 = CREAM
+infoStage.ZIndex = 5
+infoStage.Parent = info
+UIKit.corner(infoStage, 9)
+local infoStageEdge = UIKit.stroke(infoStage, INCOME, 1.5, 0.2)
+local infoStagePad = Instance.new("UIPadding")
+infoStagePad.PaddingLeft = UDim.new(0, 8)
+infoStagePad.PaddingRight = UDim.new(0, 8)
+infoStagePad.Parent = infoStage
+
+local infoRows = Instance.new("Frame")
+infoRows.Name = "Rows"
+infoRows.BackgroundTransparency = 1
+infoRows.ZIndex = 4
+infoRows.Parent = info
+local infoRowsLayout = Instance.new("UIGridLayout")
+infoRowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+infoRowsLayout.Parent = infoRows
+
+type InfoRow = { key: TextLabel, value: TextLabel, fit: UITextSizeConstraint }
+local INFO_KEYS = { "Biome", "Rarity", "Size", "Income", "Sell", "Status" }
+local infoRowFor: { [string]: InfoRow } = {}
+for order, keyName in ipairs(INFO_KEYS) do
+	local row = Instance.new("Frame")
+	row.Name = keyName
+	row.LayoutOrder = order
+	row.BackgroundTransparency = 1
+	row.ZIndex = 4
+	row.Parent = infoRows
+
+	local key = Instance.new("TextLabel")
+	key.Name = "Key"
+	key.Size = UDim2.new(0.4, 0, 1, 0)
+	key.BackgroundTransparency = 1
+	key.Font = Enum.Font.FredokaOne
+	key.TextSize = 11
+	key.TextColor3 = MUTED
+	key.TextXAlignment = Enum.TextXAlignment.Left
+	key.TextTruncate = Enum.TextTruncate.AtEnd
+	key.Text = string.upper(keyName)
+	key.ZIndex = 5
+	key.Parent = row
+
+	-- Scaled down rather than cut off when a value runs long -- "Hotbar slot
+	-- 10" in a lower-sheet column -- with a floor that stays readable.
+	local value = Instance.new("TextLabel")
+	value.Name = "Value"
+	value.AnchorPoint = Vector2.new(1, 0)
+	value.Position = UDim2.fromScale(1, 0)
+	value.Size = UDim2.new(0.6, 0, 1, 0)
+	value.BackgroundTransparency = 1
+	value.Font = Enum.Font.FredokaOne
+	value.TextScaled = true
+	value.TextColor3 = CREAM
+	value.TextXAlignment = Enum.TextXAlignment.Right
+	value.ZIndex = 5
+	value.Parent = row
+	UIKit.stroke(value, BLACK, 1.5, 0.3)
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 14
+	fit.MinTextSize = 9
+	fit.Parent = value
+
+	infoRowFor[keyName] = { key = key, value = value, fit = fit }
+end
+
+local infoHint = UIKit.outlined(info, "Hint", 14, MUTED, 2)
+infoHint.AnchorPoint = Vector2.new(0.5, 0.5)
+infoHint.Position = UDim2.fromScale(0.5, 0.5)
+infoHint.Size = UDim2.fromScale(1, 1)
+infoHint.TextWrapped = true
+infoHint.ZIndex = 5
+
+--==============================================================================
+-- THREE ARRANGEMENTS OF THE SAME PANEL
+--
+--   side      a column beside the grid: two-line title, the pill under it, one
+--             row per fact down the rest.
+--   compact   the same column on a short screen: one-line title, tighter rows,
+--             so all six facts fit in a phone's single card row of height.
+--   sheet     a strip under the grid: title and pill share a line, the six
+--             facts in two columns.
+--==============================================================================
+local infoMode = ""
+
+local function layoutInfo(mode: string)
+	if infoMode == mode then
+		return
+	end
+	infoMode = mode
+	if mode == "sheet" then
+		infoTitle.Position = UDim2.new()
+		infoTitle.Size = UDim2.new(1, -118, 0, 24)
+		infoStage.AnchorPoint = Vector2.new(1, 0)
+		infoStage.Position = UDim2.new(1, 0, 0, 3)
+		infoRows.Position = UDim2.fromOffset(0, 30)
+		infoRows.Size = UDim2.new(1, 0, 1, -30)
+		infoRowsLayout.CellSize = UDim2.new(0.5, -5, 0, 20)
+		infoRowsLayout.CellPadding = UDim2.fromOffset(10, 3)
+	elseif mode == "compact" then
+		infoTitle.Position = UDim2.new()
+		infoTitle.Size = UDim2.new(1, 0, 0, 24)
+		infoStage.AnchorPoint = Vector2.new(0, 0)
+		infoStage.Position = UDim2.fromOffset(0, 27)
+		infoRows.Position = UDim2.fromOffset(0, 50)
+		infoRows.Size = UDim2.new(1, 0, 1, -50)
+		infoRowsLayout.CellSize = UDim2.new(1, 0, 0, 16)
+		infoRowsLayout.CellPadding = UDim2.fromOffset(0, 2)
+	else
+		infoTitle.Position = UDim2.new()
+		infoTitle.Size = UDim2.new(1, 0, 0, 44)
+		infoStage.AnchorPoint = Vector2.new(0, 0)
+		infoStage.Position = UDim2.fromOffset(0, 48)
+		infoRows.Position = UDim2.fromOffset(0, 76)
+		infoRows.Size = UDim2.new(1, 0, 1, -76)
+		infoRowsLayout.CellSize = UDim2.new(1, 0, 0, 21)
+		infoRowsLayout.CellPadding = UDim2.fromOffset(0, 4)
+	end
+end
+layoutInfo("side")
 
 --==============================================================================
 -- AN INVENTORY CARD
@@ -660,13 +935,14 @@ emptyLabel.ZIndex = 5
 -- be lit, shaded, raised and grouped, and an empty bag looks like a tray with
 -- room in it instead of a hole with nothing in it.
 --
--- FIVE LAYERS, BOTTOM TO TOP:
---   the button        the plate itself, gradient-lit from above
+-- BOTTOM TO TOP, all on an inner Face the pop scales:
+--   Shadow / Plate    a soft drop and the plate, gradient-lit and translucent
 --   Lip               one bright line along the top edge; this is the entire
 --                     difference between a rectangle and a raised surface
---   PreviewWell       a darker recess the item stands in
---   LitRing           an inset green ring, shown only when equipped
---   name / state      the words, which stay the loudest thing on the card
+--   PreviewWell       a darker recess, carrying the biome art for grown plants
+--   LitRing           an inset green ring: equipped, or in hand
+--   Glow / Selected   the hover's warm inner edge and the selection's gold one
+--   Name / Action     the words, and the 44 px HOLD / EQUIP strip under them
 --==============================================================================
 --==============================================================================
 -- FORWARD-DECLARED, AND THAT IS NOT STYLE
@@ -710,6 +986,16 @@ local bagOpen = false
 -- above the coalescing redraw that does it. Same forward-local reason as the two
 -- above: written as a bare `function redraw()` further down it would be a global.
 local redraw: () -> ()
+
+--==============================================================================
+-- WHAT THE INFORMATION PANEL IS SHOWING
+--
+-- One Tool INSTANCE, never a species or a key: two identical Nubkins are two
+-- selections. Declared up here with the other forward locals because the card's
+-- handlers call it and the panel painter lives further down.
+--==============================================================================
+local selectedTool: Tool? = nil
+local selectTool: (Tool?) -> ()
 
 --==============================================================================
 -- AND THE STATE THOSE HANDLERS READ, DECLARED ABOVE THEM FOR THE SAME REASON
@@ -836,6 +1122,8 @@ end
 type Card = {
 	button: TextButton,
 	preview: UIKit.ItemPreview,
+	scrim: Instance?,
+	backdrop: ImageLabel,
 	name: TextLabel,
 	state: TextLabel,
 	statePill: Frame,
@@ -847,6 +1135,9 @@ type Card = {
 	litRing: Frame,
 	statePillTint: UIGradient,
 	stroke: UIStroke,
+	selectRing: Frame,
+	pop: UIKit.CardPop,
+	actionPop: UIKit.CardPop,
 }
 
 --==============================================================================
@@ -874,30 +1165,111 @@ type Row = {
 	-- than re-derived in the input handler, so the drag and the draw can never
 	-- disagree about it.
 	canHotbar: boolean,
+	-- Plants only: what the backdrop and the information panel read. Off the
+	-- Tool's own attributes, so a duplicate is described as itself.
+	speciesId: string?,
+	tier: number?,
+	hatched: boolean?,
 }
 
 local cardPool: { Card } = {}
 local cardRows: { [number]: Row } = {}
+
+local TextService = game:GetService("TextService")
+
+-- The pill hugs its words. Measured with TextService rather than off the label's
+-- own TextBounds, because the label now lives INSIDE the pill and a box sized off
+-- its own contents is a loop.
+local function fitPill(card: Card, text: string)
+	local size = TextService:GetTextSize(text, 11, Enum.Font.FredokaOne, Vector2.new(400, 40))
+	card.statePill.Size = UDim2.fromOffset(math.ceil(size.X) + 22, 24)
+end
+
+--==============================================================================
+-- A NAME THAT CANNOT FIT GIVES UP SCALING AND TRUNCATES
+--
+-- Scaled with a 9 pt floor, a name longer than two lines at that floor was cut
+-- off mid-word by its box -- measured on a 40-character test name, TextFits
+-- false. Measured here at the floor before painting: if two lines will not hold
+-- it, the label stops scaling and ends in an ellipsis instead. Every name the
+-- game actually ships fits well inside the scaled path.
+--==============================================================================
+local NAME_BOX = Vector2.new(CARD_W - 14, 1000)
+
+local function fitName(card: Card, text: string)
+	local label = card.name
+	label.Text = text
+	local need = TextService:GetTextSize(text, 9, Enum.Font.LuckiestGuy, NAME_BOX)
+	if need.Y > 26 then
+		label.TextScaled = false
+		label.TextSize = 10
+		label.TextTruncate = Enum.TextTruncate.AtEnd
+	else
+		label.TextTruncate = Enum.TextTruncate.None
+		label.TextScaled = true
+	end
+end
 
 local function acquireCard(index: number): Card
 	local existingCard = cardPool[index]
 	if existingCard then
 		return existingCard
 	end
+	--==========================================================================
+	-- THE CELL IS THE TARGET; THE FACE IS WHAT MOVES
+	--
+	-- The grid writes the cell's Position on every reflow, so nothing animates
+	-- the cell. Everything drawn sits on `Face`, centre-anchored inside it, and
+	-- the pop scales Face -- so a card lifts in place and its neighbours never
+	-- see a size change.
+	--==========================================================================
 	local button = Instance.new("TextButton")
 	button.Name = "Item" .. index
+	button.BackgroundTransparency = 1
 	button.BorderSizePixel = 0
 	button.AutoButtonColor = false
 	button.Text = ""
 	button.ZIndex = 5
 	UIKit.clicks(button)
 	button.Parent = grid
-	UIKit.corner(button, 12)
-	-- Black, always. The keyline is the game's house edge and it is what stops a
-	-- brown card on a brown panel from dissolving into it; the equipped state is
-	-- said by the green ring inside, not by removing the outline.
-	local stroke = UIKit.stroke(button, BLACK, 2)
-	local tint = UIKit.gradient(button, CARD_TOP, CARD_BOTTOM)
+
+	local face = Instance.new("Frame")
+	face.Name = "Face"
+	face.AnchorPoint = Vector2.new(0.5, 0.5)
+	face.Position = UDim2.fromScale(0.5, 0.5)
+	face.Size = UDim2.fromScale(1, 1)
+	face.BackgroundTransparency = 1
+	face.Active = false
+	face.ZIndex = 5
+	face.Parent = button
+	local popScale = Instance.new("UIScale")
+	popScale.Parent = face
+
+	local shadow = Instance.new("Frame")
+	shadow.Name = "Shadow"
+	shadow.Position = UDim2.fromOffset(0, 3)
+	shadow.Size = UDim2.fromScale(1, 1)
+	shadow.BackgroundColor3 = BLACK
+	shadow.BackgroundTransparency = 0.7
+	shadow.BorderSizePixel = 0
+	shadow.Active = false
+	shadow.ZIndex = 4
+	shadow.Parent = face
+	UIKit.corner(shadow, 12)
+
+	-- The same lit browns, now a translucent pane over the tray rather than a
+	-- solid tile. The black keyline stays the house edge.
+	local plate = Instance.new("Frame")
+	plate.Name = "Plate"
+	plate.Size = UDim2.fromScale(1, 1)
+	plate.BackgroundTransparency = 0.22
+	plate.BorderSizePixel = 0
+	plate.Active = false
+	plate.ZIndex = 5
+	plate.Parent = face
+	UIKit.corner(plate, 12)
+	local stroke = UIKit.stroke(plate, BLACK, 2)
+	local tint = UIKit.gradient(plate, CARD_TOP, CARD_BOTTOM)
 
 	local lip = Instance.new("Frame")
 	lip.Name = "Lip"
@@ -909,24 +1281,43 @@ local function acquireCard(index: number): Card
 	lip.BorderSizePixel = 0
 	lip.Active = false
 	lip.ZIndex = 6
-	lip.Parent = button
+	lip.Parent = face
 	UIKit.corner(lip, 1)
 
 	local previewWell = Instance.new("Frame")
 	previewWell.Name = "PreviewWell"
 	previewWell.Position = UDim2.fromOffset(6, 6)
-	previewWell.Size = UDim2.new(1, -12, 0, 74)
+	previewWell.Size = UDim2.new(1, -12, 0, 76)
 	previewWell.BackgroundColor3 = WELL
+	previewWell.BackgroundTransparency = 0.1
 	previewWell.BorderSizePixel = 0
 	previewWell.Active = false
 	previewWell.ZIndex = 5
-	previewWell.Parent = button
+	previewWell.Parent = face
 	UIKit.corner(previewWell, 9)
 	UIKit.stroke(previewWell, BLACK, 1.5, 0.35)
 
-	local preview = UIKit.itemPreview(button, {
+	-- The established biome art -- the same pictures the Index and the Garden
+	-- stand their plants in -- turned down by the same ArtTint. Grown plants
+	-- only: a pod keeps the plain well, as it does in the Garden.
+	local backdrop = Instance.new("ImageLabel")
+	backdrop.Name = "Backdrop"
+	backdrop.Size = UDim2.fromScale(1, 1)
+	backdrop.BackgroundTransparency = 1
+	backdrop.ScaleType = Enum.ScaleType.Crop
+	backdrop.ImageColor3 = GameConfig.Card.ArtTint
+	backdrop.ImageTransparency = 0.25
+	backdrop.Active = false
+	backdrop.Visible = false
+	backdrop.ZIndex = 5
+	backdrop.Parent = previewWell
+	UIKit.corner(backdrop, 9)
+
+	-- The same still preview as before: built once per key, framed once, never
+	-- rotated, never animated.
+	local preview = UIKit.itemPreview(face, {
 		name = "Preview",
-		size = UDim2.new(1, -12, 0, 74),
+		size = UDim2.new(1, -12, 0, 76),
 		position = UDim2.fromOffset(6, 6),
 	})
 
@@ -934,9 +1325,7 @@ local function acquireCard(index: number): Card
 	-- THE EQUIPPED RING
 	--
 	-- Inset by three, so it reads as a ring INSIDE the card rather than as a
-	-- second outline fighting the black one. A green card fill alone was not
-	-- enough at this size -- the cards are 104 wide and a tint that small reads
-	-- as a lighting difference; the ring is the part you actually notice.
+	-- second outline fighting the black one.
 	--==========================================================================
 	local litRing = Instance.new("Frame")
 	litRing.Name = "LitRing"
@@ -946,21 +1335,52 @@ local function acquireCard(index: number): Card
 	litRing.Active = false
 	litRing.Visible = false
 	litRing.ZIndex = 9
-	litRing.Parent = button
+	litRing.Parent = face
 	UIKit.corner(litRing, 9)
 	UIKit.stroke(litRing, READY, 2)
+
+	-- The hover's warm inner edge. Invisible at rest; the pop fades it in.
+	local glowRing = Instance.new("Frame")
+	glowRing.Name = "Glow"
+	glowRing.Position = UDim2.fromOffset(2, 2)
+	glowRing.Size = UDim2.new(1, -4, 1, -4)
+	glowRing.BackgroundTransparency = 1
+	glowRing.Active = false
+	glowRing.ZIndex = 9
+	glowRing.Parent = face
+	UIKit.corner(glowRing, 10)
+	local glow = UIKit.stroke(glowRing, GLOW, 1.5, 1)
+
+	--==========================================================================
+	-- SELECTED: A GOLD EDGE AND THE FAINTEST WARM WASH
+	--
+	-- Its own frame, over everything, so hover (scale and glow), equipped (the
+	-- green ring) and selected can all be true at once and no two of them ever
+	-- write the same property.
+	--==========================================================================
+	local selectRing = Instance.new("Frame")
+	selectRing.Name = "Selected"
+	selectRing.Size = UDim2.fromScale(1, 1)
+	selectRing.BackgroundColor3 = PICKED
+	selectRing.BackgroundTransparency = 0.9
+	selectRing.BorderSizePixel = 0
+	selectRing.Active = false
+	selectRing.Visible = false
+	selectRing.ZIndex = 10
+	selectRing.Parent = face
+	UIKit.corner(selectRing, 12)
+	UIKit.stroke(selectRing, PICKED, 3)
 
 	--==========================================================================
 	-- THE NAME SHRINKS RATHER THAN WRAPPING BADLY
 	--
 	-- "CINDERCRACK BAT" and "BRAMBLEJAW TRAP" are two lines at 12pt on a 104px
-	-- card and they were fitting only just. TextScaled with a floor of 9 lets a
-	-- long name give up a point or two instead of pushing its second line into
-	-- the state button, and a short name still draws at the full 12.
+	-- card. TextScaled with a floor of 9 lets a long name give up a point or two
+	-- instead of pushing into the action strip.
 	--==========================================================================
-	local nameLabel = UIKit.outlined(button, "Name", 12, CREAM, 2)
+	local nameLabel = UIKit.outlined(face, "Name", 12, CREAM, 2)
 	nameLabel.Position = UDim2.new(0, 7, 0, 84)
-	nameLabel.Size = UDim2.new(1, -14, 0, 30)
+	nameLabel.Size = UDim2.new(1, -14, 0, 26)
 	nameLabel.TextWrapped = true
 	nameLabel.TextScaled = true
 	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -971,39 +1391,44 @@ local function acquireCard(index: number): Card
 	nameFit.Parent = nameLabel
 
 	--==========================================================================
-	-- THE STATE GETS A PILL
+	-- THE ACTION STRIP: THE EXPLICIT HOLD / EQUIP
 	--
-	-- EQUIPPED and TAP TO EQUIP were 11pt muted text on a transparent card, at
-	-- the bottom of a column of previews -- the one thing on the card a player
-	-- actually has to read to know what pressing it will do, and the quietest
-	-- thing on it. Boxed, it reads at a glance.
+	-- A plant card's body SELECTS it now, so the verb that used to live on the
+	-- whole card -- put this plant in my hands -- needed a home that is not a
+	-- plain tap. It is the pill, which always said "TAP TO HOLD", made a real
+	-- 44-pixel button: the same holdTool call, reached the same way the label
+	-- always told the player to reach it.
 	--
-	-- The pill hugs the words rather than spanning the card: EQUIPPED and TAP TO
-	-- EQUIP are different lengths, and a full-width box behind a short word looks
-	-- like a broken background rather than a label.
+	-- A weapon card keeps one verb everywhere: body or pill, a tap equips, exactly
+	-- as before. Weapons gain no selection and no panel.
 	--==========================================================================
+	local action = Instance.new("TextButton")
+	action.Name = "Action"
+	action.Position = UDim2.new(0, 4, 0, 110)
+	action.Size = UDim2.new(1, -8, 0, ACTION_H)
+	action.BackgroundTransparency = 1
+	action.BorderSizePixel = 0
+	action.AutoButtonColor = false
+	action.Text = ""
+	action.ZIndex = 7
+	UIKit.clicks(action)
+	action.Parent = face
+
 	local statePill = Instance.new("Frame")
 	statePill.Name = "StatePill"
-	statePill.AnchorPoint = Vector2.new(0.5, 0)
-	statePill.Position = UDim2.new(0.5, 0, 0, 117)
-	statePill.Size = UDim2.fromOffset(60, 20)
+	statePill.AnchorPoint = Vector2.new(0.5, 0.5)
+	statePill.Position = UDim2.fromScale(0.5, 0.5)
+	statePill.Size = UDim2.fromOffset(60, 24)
 	statePill.BorderSizePixel = 0
 	statePill.Active = false
 	statePill.ZIndex = 7
-	statePill.Parent = button
-	UIKit.corner(statePill, 6)
+	statePill.Parent = action
+	UIKit.corner(statePill, 7)
 	local statePillEdge = UIKit.stroke(statePill, BLACK, 2)
 	local statePillTint = UIKit.gradient(statePill, PILL_OFF_TOP, PILL_OFF_BOTTOM)
+	local pillScale = Instance.new("UIScale")
+	pillScale.Parent = statePill
 
-	--==========================================================================
-	-- IT LOOKS LIKE A BUTTON BECAUSE IT IS THE THING YOU PRESS
-	--
-	-- Strictly the whole CARD is the click target and this is a label on it --
-	-- but it is the label that says what pressing will do, so it is the part
-	-- that has to look pressable. Gradient, black keyline and a shade bar under
-	-- it: the same three things the shop's price pills use, so the game has one
-	-- button language rather than two.
-	--==========================================================================
 	local stateShade = Instance.new("Frame")
 	stateShade.Name = "Shade"
 	stateShade.AnchorPoint = Vector2.new(0.5, 1)
@@ -1014,31 +1439,25 @@ local function acquireCard(index: number): Card
 	stateShade.Active = false
 	stateShade.ZIndex = 7
 	stateShade.Parent = statePill
-	UIKit.corner(stateShade, 6)
+	UIKit.corner(stateShade, 7)
 
 	local stateLabel = Instance.new("TextLabel")
 	stateLabel.Name = "State"
-	stateLabel.AnchorPoint = Vector2.new(0.5, 0)
-	stateLabel.Position = UDim2.new(0.5, 0, 0, 120)
-	stateLabel.Size = UDim2.new(1, -8, 0, 15)
+	stateLabel.Position = UDim2.fromOffset(0, -1)
+	stateLabel.Size = UDim2.fromScale(1, 1)
 	stateLabel.BackgroundTransparency = 1
 	stateLabel.Font = Enum.Font.FredokaOne
 	stateLabel.TextSize = 11
 	stateLabel.TextColor3 = CREAM
-	stateLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	stateLabel.ZIndex = 8
-	stateLabel.Parent = button
+	stateLabel.Parent = statePill
 	UIKit.stroke(stateLabel, BLACK, 1.5)
-
-	-- Rides TextBounds so the pill follows the words without every caller having
-	-- to remember to resize it.
-	stateLabel:GetPropertyChangedSignal("TextBounds"):Connect(function()
-		statePill.Size = UDim2.fromOffset(math.ceil(stateLabel.TextBounds.X) + 20, 20)
-	end)
 
 	local card: Card = {
 		button = button,
 		preview = preview,
+		scrim = preview.holder:FindFirstChild("Scrim"),
+		backdrop = backdrop,
 		name = nameLabel,
 		state = stateLabel,
 		statePill = statePill,
@@ -1047,23 +1466,43 @@ local function acquireCard(index: number): Card
 		litRing = litRing,
 		statePillTint = statePillTint,
 		stroke = stroke,
+		selectRing = selectRing,
+		pop = UIKit.cardPop(button, popScale, {
+			hoverScale = 1.05,
+			pressScale = 0.98,
+			glow = glow,
+			glowRest = 1,
+			glowHover = 0.45,
+		}),
+		actionPop = UIKit.cardPop(action, pillScale, {
+			hoverScale = 1.07,
+			pressScale = 0.95,
+			sound = false,
+		}),
 	}
+
 	--==========================================================================
-	-- TAP TO USE, DRAG TO PIN
+	-- A TAP IS A PRESS THAT STAYED PUT
 	--
-	-- One finger, two verbs, told apart by whether it MOVED. Under
-	-- DRAG_THRESHOLD it is a tap and does what tapping a card has always done;
-	-- past it the card is being carried to the hotbar and the tap is cancelled.
-	--
-	-- Activated is NOT how the tap is detected any more. Roblox fires it on
-	-- release over the button, which a drag that curves back would also satisfy,
-	-- so the two verbs would both run. `dragMoved` is the guard.
+	-- Three gestures start on a card and only one of them is a tap. A drag to
+	-- the hotbar is caught by `dragMoved`, as it always was. A SCROLL, or a camera
+	-- drag that happens to lift over a card, is caught here: the press remembers
+	-- where it began and where the canvas was, and a release that travelled past
+	-- TAP_SLOP -- or scrolled the grid under it -- selects nothing and equips
+	-- nothing. A press that never began with a pointer (a gamepad) still counts.
 	--==========================================================================
-	button.InputBegan:Connect(function(input)
+	local pressAt: Vector3? = nil
+	local pressCanvas: Vector2? = nil
+	local travelled = false
+
+	local function beginPress(input: InputObject)
 		if input.UserInputType ~= Enum.UserInputType.Touch
 			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 			return
 		end
+		pressAt = input.Position
+		pressCanvas = grid.CanvasPosition
+		travelled = false
 		local row = cardRows[index]
 		if not row or not row.canHotbar then
 			-- Bats and traps are exempt: each already lives in its own dedicated
@@ -1072,10 +1511,38 @@ local function acquireCard(index: number): Card
 			return
 		end
 		beginDrag({ from = "bag", row = row, label = row.label }, input)
-	end)
+	end
 
+	local function endPress(input: InputObject)
+		if input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local start = pressAt
+		if start and (input.Position - start).Magnitude > TAP_SLOP then
+			travelled = true
+		end
+		local canvas = pressCanvas
+		if canvas and (grid.CanvasPosition - canvas).Magnitude > 4 then
+			travelled = true
+		end
+	end
+
+	local function wasTap(): boolean
+		local tap = not dragMoved and not travelled
+		pressAt, pressCanvas, travelled = nil, nil, false
+		return tap
+	end
+
+	button.InputBegan:Connect(beginPress)
+	button.InputEnded:Connect(endPress)
+	action.InputBegan:Connect(beginPress)
+	action.InputEnded:Connect(endPress)
+
+	-- The body: a weapon equips, a plant is selected. Selecting never moves,
+	-- equips, clones or consumes anything.
 	button.Activated:Connect(function()
-		if dragMoved then
+		if not wasTap() then
 			return
 		end
 		local row = cardRows[index]
@@ -1085,9 +1552,29 @@ local function acquireCard(index: number): Card
 		if row.item then
 			equipRequest(row.item)
 		elseif row.tool then
+			selectTool(row.tool)
+		end
+	end)
+
+	-- The strip: the explicit verb. For a plant it is holdTool, exactly what a
+	-- tap on the card used to do, and the card it belongs to becomes the one the
+	-- panel describes.
+	action.Activated:Connect(function()
+		if not wasTap() then
+			return
+		end
+		local row = cardRows[index]
+		if not row then
+			return
+		end
+		if row.item then
+			equipRequest(row.item)
+		elseif row.tool then
+			selectTool(row.tool)
 			holdTool(row.tool)
 		end
 	end)
+
 	cardPool[index] = card
 	return card
 end
@@ -1646,7 +2133,103 @@ local function refreshSide()
 	end
 end
 
+--==============================================================================
+-- WHERE THE BAG SITS, AND WHAT IS BESIDE THE GRID
+--
+-- Forward, because refreshBag reflows it when the tab changes and the function
+-- itself lives with the other screen-shape code further down.
+--==============================================================================
+local layoutBag: () -> ()
+
+-- The auto-filled hotbar slot showing this exact Tool, if any. Assigned copies
+-- never reach the panel -- they are not in the bag -- so this only ever names a
+-- slot the item is ALSO on.
+local function hotbarSlotOf(tool: Tool): number?
+	for i = 1, activeSlots do
+		local slot = hotSlots[i]
+		if slot and slot.button.Visible and slot.tool == tool then
+			return i
+		end
+	end
+	return nil
+end
+
+--==============================================================================
+-- THE INFORMATION PANEL, PAINTED
+--
+-- Off the selected Tool's own attributes, through PlantInfo, every time. Nothing
+-- is cached, so a hatch, a pass landing, or the Tool moving between the Backpack
+-- and the hands repaints it from what is true now.
+--==============================================================================
+local function paintInfo()
+	local tool = selectedTool
+	if not (tool and tool.Parent) then
+		infoHint.Visible = true
+		infoHint.Text = if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+			then "Tap a plant to see what it is"
+			else "Select a plant to see what it is"
+		infoTitle.Visible = false
+		infoStage.Visible = false
+		infoRows.Visible = false
+		return
+	end
+	local details = PlantInfo.Describe(tool:GetAttribute("SpeciesId"),
+		tool:GetAttribute(ATTR.CarryingKg), tool:GetAttribute("Hatched") == true,
+		GameConfig.cashMultiplier(player))
+	local character = player.Character
+	local status = PlantInfo.Status(character ~= nil and tool.Parent == character,
+		hotbarSlotOf(tool))
+
+	infoHint.Visible = false
+	infoTitle.Visible = true
+	infoStage.Visible = true
+	infoRows.Visible = true
+	infoTitle.Text = details.title
+	infoStage.Text = string.upper(details.stage)
+	infoStageEdge.Color = if details.incomePerSecond then INCOME else details.sizeColour
+
+	local values: { [string]: { any } } = {
+		Biome = { details.biome, CREAM },
+		Rarity = { details.rarity, details.rarityColour },
+		Size = { details.size, details.sizeColour },
+		Income = { details.income, if details.incomePerSecond then INCOME else MUTED },
+		Sell = { details.sell or PlantInfo.Unknown, if details.sell then CREAM else MUTED },
+		Status = { status, CREAM },
+	}
+	for keyName, row in pairs(infoRowFor) do
+		local value = values[keyName]
+		row.value.Text = value[1]
+		row.value.TextColor3 = value[2]
+	end
+end
+
+local function paintSelection()
+	for i, card in pairs(cardPool) do
+		local row = cardRows[i]
+		card.selectRing.Visible = card.button.Visible and row ~= nil
+			and row.tool ~= nil and row.tool == selectedTool
+	end
+end
+
+selectTool = function(tool: Tool?)
+	selectedTool = tool
+	paintSelection()
+	paintInfo()
+end
+
 local function refreshBag()
+	local weaponCount, plantCount = 0, 0
+	for _, item in ipairs(WeaponData.Items) do
+		if owned[item.Id] then
+			weaponCount += 1
+		end
+	end
+	for _, slot in ipairs(liveSlots) do
+		if slot.kind == "plant" and not claimed[slot.tool] then
+			plantCount += 1
+		end
+	end
+
 	for _, tab in ipairs(TABS) do
 		local b = tabButtons[tab.id]
 		local on = activeTab == tab.id
@@ -1667,10 +2250,17 @@ local function refreshBag()
 		if label and label:IsA("TextLabel") then
 			label.TextColor3 = if on then WHITE else MUTED
 		end
+		local count = tabCounts[tab.id]
+		if count then
+			count.Text = tostring(if tab.id == "equipment" then weaponCount else plantCount)
+			-- The equipment count comes off the profile, so it waits for one.
+			count.Visible = tab.id == "plants" or heardProfile
+		end
 	end
 
 	--== WHAT THIS TAB SHOWS ==--
 	local rows: { Row } = {}
+	local held = heldTool()
 
 	if activeTab == "equipment" then
 		--======================================================================
@@ -1706,36 +2296,52 @@ local function refreshBag()
 		-- Exactly the banked pods and hatched creatures in the player's hands
 		-- and bag -- which is what `profile.Held` saves and what the hotbar
 		-- shows. Plants GROWING IN A PLOT are deliberately absent: they are not
-		-- items, they are somebody's garden, and turning them into portable
-		-- entries would be inventing an inventory the game does not have.
-		--======================================================================
-		--======================================================================
-		-- AN ASSIGNED COPY IS NOT IN THE BAG ANY MORE
+		-- items, they are somebody's garden.
 		--
-		-- `claimed` holds exactly the Tools that active hotbar slots have taken,
-		-- one entry per instance -- so owning two identical plants and assigning
-		-- one hides ONE card and leaves the other, which a key-based check could
-		-- never do.
-		--
-		-- Auto-filled slots claim nothing, and neither do assignments parked in
-		-- an inactive overflow slot: both stay listed here, the second because
-		-- otherwise a desktop arrangement would make items unreachable on a
-		-- phone, which is the failure this design exists to avoid.
+		-- AN ASSIGNED COPY IS NOT IN THE BAG ANY MORE. `claimed` holds exactly
+		-- the Tools that active hotbar slots have taken, one entry per instance,
+		-- so owning two identical plants and assigning one hides ONE card.
 		--======================================================================
 		for _, slot in ipairs(liveSlots) do
 			if slot.kind == "plant" and not claimed[slot.tool] then
+				local tier = math.floor(tonumber(slot.tool:GetAttribute(ATTR.CarryingKg)) or 1)
 				table.insert(rows, {
 					key = slot.key .. ":" .. tostring(slot.tool),
 					label = slot.label,
 					kind = "plant",
 					build = builderFor(slot),
-					state = if slot.tool == heldTool() then "IN HAND" else "TAP TO HOLD",
-					lit = slot.tool == heldTool(),
+					state = if slot.tool == held then "IN HAND" else "HOLD",
+					lit = slot.tool == held,
 					item = nil,
 					tool = slot.tool,
 					canHotbar = slot.canHotbar,
+					speciesId = slot.tool:GetAttribute("SpeciesId"),
+					tier = tier,
+					hatched = slot.tool:GetAttribute("Hatched") == true,
 				})
 			end
+		end
+	end
+
+	--==========================================================================
+	-- A SELECTION THAT NO LONGER NAMES A CARD IS DROPPED
+	--
+	-- Assigned to the hotbar, planted, sold, destroyed, or simply another tab:
+	-- rather than trust the tap that made it, the selection is re-tested against
+	-- what this draw is about to show.
+	--==========================================================================
+	if activeTab ~= "plants" then
+		selectedTool = nil
+	elseif selectedTool then
+		local still = false
+		for _, row in ipairs(rows) do
+			if row.tool == selectedTool then
+				still = true
+				break
+			end
+		end
+		if not still then
+			selectedTool = nil
 		end
 	end
 
@@ -1751,6 +2357,11 @@ local function refreshBag()
 			local spare = cardPool[i]
 			if spare then
 				spare.button.Visible = false
+				spare.selectRing.Visible = false
+				-- A hidden card may have been under the pointer; put it down now,
+				-- because no MouseLeave is coming.
+				spare.pop.reset()
+				spare.actionPop.reset()
 			end
 		else
 			cardRows[i] = row
@@ -1758,20 +2369,32 @@ local function refreshBag()
 			card.button.Visible = true
 			card.button.LayoutOrder = i
 			card.preview.setModel(row.key, row.build, row.kind)
-			card.name.Text = row.label
+
+			local art = if row.kind == "plant"
+				then PlantInfo.Backdrop(row.speciesId, row.hatched == true)
+				else nil
+			card.backdrop.Image = art or ""
+			card.backdrop.Visible = art ~= nil
+			local scrim = card.scrim
+			if scrim and scrim:IsA("Frame") then
+				-- The art is the backing when there is some; the scrim is for the
+				-- bare well, where a pale item needs a breath of shade.
+				scrim.BackgroundTransparency = if art then 1 else 0.86
+			end
+
+			fitName(card, row.label)
+			-- A plant's name wears its size band, the way the Garden prints it.
+			card.name.TextColor3 = if row.kind == "plant" and row.tier
+				then SeedData.ColorForTier(row.tier)
+				else CREAM
 			card.state.Text = row.state
+			fitPill(card, row.state)
 			--==============================================================
 			-- LIT SAYS ITSELF THREE TIMES
 			--
 			-- The card warms toward green, a green ring appears inside its
-			-- keyline, and the state button fills green. One of those alone is
-			-- a shade difference on a 104px card; all three together is a card
-			-- you can pick out of a grid without reading a word on it.
-			--
-			-- The black keyline does NOT change. It is the house edge on every
-			-- surface in this game, and swapping it for green would make an
-			-- equipped card a different kind of object rather than the same
-			-- card in a different state.
+			-- keyline, and the state button fills green. The black keyline does
+			-- NOT change: it is the house edge on every surface in this game.
 			--==============================================================
 			card.state.TextColor3 = if row.lit then WHITE else CREAM
 			card.tint.Color = if row.lit
@@ -1788,6 +2411,133 @@ local function refreshBag()
 					else Color3.fromRGB(44, 30, 22)
 			end
 		end
+	end
+
+	paintSelection()
+	paintInfo()
+	layoutBag()
+end
+
+--==============================================================================
+-- WHERE THE BAG SITS
+--
+-- MEASURED BEFORE THIS EXISTED: centred at 0.9 x 0.82 of the screen, the panel's
+-- bottom sat 33 px under the hotbar on a 1169 x 609 desktop, so the last row's
+-- buttons were behind the strip -- and on a 735 x 413 phone the strip covers most
+-- of a card row. The hotbar draws over the bag on purpose, because it is the drop
+-- target, so the answer is not to fight that. It is to keep the bag out of its
+-- way, and out from under the rail buttons as well.
+--
+-- So the panel is fitted into the space that is actually free:
+--
+--   between the rails   right of Index/Shop, left of the Garden/Bag buttons and
+--                       the BAT/TRAP column, from the top of the screen down to
+--                       just above the hotbar. Desktops and landscape phones.
+--   under the rails     when that gap is too narrow to hold a panel -- a portrait
+--                       phone -- it drops below the rail band instead.
+--
+-- Centred on the SCREEN when its width allows, so it lines up with the hotbar
+-- under it; otherwise centred in the free band.
+--==============================================================================
+local groupLimit = modal.group:FindFirstChildOfClass("UISizeConstraint")
+if groupLimit then
+	groupLimit.MinSize = Vector2.new(240, 160)
+end
+local titlePad = modal.title.Parent and modal.title.Parent:FindFirstChildOfClass("UIPadding")
+
+layoutBag = function()
+	local screen = gui.AbsoluteSize
+	if screen.X < 100 or screen.Y < 100 then
+		return
+	end
+	local hotTop = screen.Y + hotbar.Position.Y.Offset - hotbar.Size.Y.Offset
+	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
+	local leftEdge = RAIL.Inset + RAIL.WideSize.X + EDGE_GAP
+	local rightEdge = screen.X - RAIL.Inset - side.Size.X.Offset - EDGE_GAP
+	local top = EDGE_GAP
+	local bottom = hotTop - EDGE_GAP
+	if rightEdge - leftEdge < 420 then
+		leftEdge = EDGE_GAP
+		top = railBottom + EDGE_GAP
+	end
+
+	local height = math.max(160, math.min(PANEL_MAX_H, bottom - top))
+	--==========================================================================
+	-- CENTRED ON THE SCREEN WHEN THAT STILL LEAVES A REAL PANEL
+	--
+	-- The rails are not symmetric -- 130 px on the left, 64 on the right -- so
+	-- the middle of the free band is not the middle of the screen, and the first
+	-- measurement put the panel 33 px right of the hotbar under it. A panel
+	-- centred on the screen is kept whenever it clears both rails at a useful
+	-- width; a phone, which needs every pixel, takes the whole band instead.
+	--==========================================================================
+	local half = screen.X * 0.5
+	local symmetric = 2 * math.min(half - leftEdge, rightEdge - half)
+	local width, centreX
+	if symmetric >= 600 or symmetric >= rightEdge - leftEdge - 40 then
+		width = math.max(240, math.min(PANEL_MAX_W, symmetric))
+		centreX = half
+	else
+		width = math.max(240, math.min(PANEL_MAX_W, rightEdge - leftEdge))
+		centreX = (leftEdge + rightEdge) * 0.5
+	end
+	local centreY = top + (bottom - top) * 0.5
+	modal.group.AnchorPoint = Vector2.new(0.5, 0.5)
+	modal.group.Position = UDim2.fromOffset(math.floor(centreX), math.floor(centreY))
+	modal.group.Size = UDim2.fromOffset(math.floor(width), math.floor(height))
+
+	--==========================================================================
+	-- A SHORT SCREEN PUTS THE TABS ON THE TITLE'S ROW
+	--
+	-- On a landscape phone the whole panel is ~250 px tall, and a title row plus
+	-- a tab row under it left less than one card row of grid. Beside the title
+	-- they cost nothing: "BAG" is three letters.
+	--==========================================================================
+	local outline = RAIL.OutlineThickness
+	local shellH = height - outline * 2
+	local compact = shellH < COMPACT_BELOW
+	if compact then
+		local padLeft = if titlePad then titlePad.PaddingLeft.Offset else 0
+		local reserve = math.max(72, math.ceil(modal.title.TextBounds.X) + padLeft + 16)
+		tabRow.Position = UDim2.fromOffset(12 + reserve, 13)
+		tabRow.Size = UDim2.new(1, -(24 + reserve + 52), 0, 34)
+		modal.body.Position = UDim2.fromOffset(12, 58)
+		modal.body.Size = UDim2.new(1, -24, 1, -70)
+	else
+		tabRow.Position = UDim2.fromOffset(12, 58)
+		tabRow.Size = UDim2.new(1, -24, 0, 34)
+		modal.body.Position = UDim2.fromOffset(12, 100)
+		modal.body.Size = UDim2.new(1, -24, 1, -112)
+	end
+
+	--==========================================================================
+	-- BESIDE THE GRID, OR UNDER IT
+	--
+	-- Beside it while two columns of cards and the narrowest readable panel
+	-- both fit; under it, as a lower sheet, when they do not. Plants only -- the
+	-- equipment tab gives its tray the whole body.
+	--==========================================================================
+	local bodyW = width - outline * 2 - 24
+	local bodyH = shellH - (if compact then 70 else 112)
+	local twoColumns = CARD_W * 2 + CARD_GAP + GRID_PAD * 2
+	if activeTab ~= "plants" then
+		tray.Size = UDim2.fromScale(1, 1)
+		info.Visible = false
+	elseif bodyW >= twoColumns + INFO_GAP + INFO_SIDE_MIN then
+		local infoW = math.clamp(math.floor(bodyW * 0.34), INFO_SIDE_MIN, INFO_SIDE_MAX)
+		tray.Size = UDim2.new(1, -(infoW + INFO_GAP), 1, 0)
+		info.AnchorPoint = Vector2.new(1, 0)
+		info.Position = UDim2.fromScale(1, 0)
+		info.Size = UDim2.new(0, infoW, 1, 0)
+		layoutInfo(if bodyH < 240 then "compact" else "side")
+		info.Visible = true
+	else
+		tray.Size = UDim2.new(1, 0, 1, -(INFO_SHEET_H + INFO_GAP))
+		info.AnchorPoint = Vector2.new(0, 1)
+		info.Position = UDim2.fromScale(0, 1)
+		info.Size = UDim2.new(1, 0, 0, INFO_SHEET_H)
+		layoutInfo("sheet")
+		info.Visible = true
 	end
 end
 
@@ -2417,6 +3167,14 @@ local function setOpen(want: boolean)
 	if not want then
 		-- The cards a drag was started from are about to go away.
 		cancelDrag()
+		-- Closing the Bag is the other way a selection ends, and a card still
+		-- under the pointer is put down now rather than on a MouseLeave that
+		-- will never come.
+		for _, card in pairs(cardPool) do
+			card.pop.reset()
+			card.actionPop.reset()
+		end
+		selectTool(nil)
 	end
 	if want then
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
@@ -2455,6 +3213,74 @@ for _, tab in ipairs(TABS) do
 		grid.CanvasPosition = Vector2.zero
 		refreshBag()
 	end)
+end
+
+--==============================================================================
+-- THE REST OF THE SELECTION CONTRACT
+--
+-- A tap on EMPTY tray clears it. Empty means no card under the release, and a
+-- tap means a press that neither travelled nor scrolled the grid -- so a scroll
+-- that happens to lift over a gap does not throw the panel away.
+--==============================================================================
+local trayPressAt: Vector3? = nil
+local trayPressCanvas: Vector2? = nil
+
+grid.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch then
+		trayPressAt = input.Position
+		trayPressCanvas = grid.CanvasPosition
+	end
+end)
+
+grid.InputEnded:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1
+		and input.UserInputType ~= Enum.UserInputType.Touch then
+		return
+	end
+	local start, canvas = trayPressAt, trayPressCanvas
+	trayPressAt, trayPressCanvas = nil, nil
+	if not (start and canvas and selectedTool) then
+		return
+	end
+	if (input.Position - start).Magnitude > TAP_SLOP
+		or (grid.CanvasPosition - canvas).Magnitude > 4 then
+		return
+	end
+	local point = Vector2.new(input.Position.X, input.Position.Y)
+	for _, card in pairs(cardPool) do
+		if card.button.Visible then
+			local p, sz = card.button.AbsolutePosition, card.button.AbsoluteSize
+			if point.X >= p.X and point.X <= p.X + sz.X
+				and point.Y >= p.Y and point.Y <= p.Y + sz.Y then
+				return
+			end
+		end
+	end
+	selectTool(nil)
+end)
+
+-- The x2 pass can land while the panel is open, and the income line carries it.
+player:GetAttributeChangedSignal(GameConfig.Pass.MultiplierAttribute):Connect(function()
+	if selectedTool then
+		paintInfo()
+	end
+end)
+
+-- The screen changing shape moves the Bag, and the title's measured width is
+-- how much of its row the compact tabs may take.
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutBag)
+modal.title:GetPropertyChangedSignal("TextBounds"):Connect(layoutBag)
+
+-- The Bag's close button gets the same small press as its other controls. The
+-- plate is centre-anchored, so it scales in place; the 44 px target never moves.
+do
+	local plate = modal.close:FindFirstChild("Plate")
+	if plate and plate:IsA("GuiObject") then
+		local plateScale = Instance.new("UIScale")
+		plateScale.Parent = plate
+		UIKit.cardPop(modal.close, plateScale, { hoverScale = 1.06, pressScale = 0.94, sound = false })
+	end
 end
 
 --== A SIDE SLOT OPENS THE BAG ON ITS OWN TAB ==--

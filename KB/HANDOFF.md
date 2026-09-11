@@ -1,5 +1,120 @@
 # Steal a Seed — Session Handoff
 
+## The Bag: lighter cards, a plant information panel, and room for the hotbar — 2026-09-11 (CLAUDE)
+
+Brief: polish the existing Bag and add a compact information panel for the
+selected plant, without rebuilding the inventory or adding a controller.
+
+### Files
+
+  * `LoadoutUI.client.luau` -- still the one controller; restyled and extended.
+  * `Shared/UIKit.luau` -- new `UIKit.cardPop`: a lift under a mouse, a press
+    under a thumb.
+  * `Shared/PlantInfo.luau` -- new, pure: what the panel says about one Tool.
+  * `tools/tests/PlantInfoSpec.luau` -- new.
+
+### Layout, measured before and after
+
+Before, at 1169x609: a centred 520x452 panel whose bottom sat **33 px under the
+hotbar** (the last row's buttons were behind the strip), a left-aligned grid with
+24-34 px of dead tray on the right, and opaque brown cards. On a 735x413 phone
+the strip covered most of a card row.
+
+`layoutBag` now fits the panel into space that is actually free: between the
+rails (right of Index/Shop, left of the Garden/Bag buttons and the BAT/TRAP
+column), 8 px from the top and 8 px above the hotbar. If that gap is under
+420 px (a portrait phone) it drops below the rail band instead. It is centred
+on the screen whenever a symmetric panel still clears both rails at >= 600 px,
+otherwise in the free band. Max 780x600. Under 380 px of shell height the tabs
+move onto the title row.
+
+The plants tab puts the information column beside the grid (184-236 px) while
+two card columns and the column fit, and a 118 px lower sheet under the grid
+otherwise. The equipment tab gives the tray the whole body. Cards are a fixed
+104x158 (76 preview, 26 name, 44 px action strip); widths change the column
+count, never the card; the grid is centred.
+
+| screen | panel | vs hotbar | arrangement |
+| --- | --- | --- | --- |
+| 1169x609 desktop, 10 slots | 780x449, centre 584.0 (screen 584.5) | 12 px clear | column 236, 4 card columns, gaps 29/29 |
+| 735x413 emulated phone, 5 slots | 501x253 at (149,7) | 11 px clear | tabs on title row, 2 columns, compact 184 column |
+
+### Cards
+
+Translucent plate (0.22) on the tray, black keyline kept, soft shadow, lip and
+preview well. Grown plants stand on the established biome art
+(`GameConfig.Card.Art` at `ArtTint`), pods keep the plain well as in the Garden.
+The preview is the same `UIKit.itemPreview` -- framed once, never rotated. Names
+wear the tier colour (the Garden's convention) and fall back to a two-line
+ellipsis when even 9 pt cannot hold them (`fitName`). Tabs carry counts.
+
+### Interaction contract
+
+  * **Plant card body** selects it: gold ring, panel shows that exact Tool.
+    Selecting never equips, moves, clones or consumes anything.
+  * **Plant card strip** (44 px, `HOLD` / `IN HAND`) is the old whole-card
+    verb, `holdTool`, and also selects that card.
+  * **Weapon cards**: body or strip equips, exactly as before. No selection, no
+    panel, no drag, no double-click.
+  * Dragging a plant card past 8 px is the unchanged hotbar assignment.
+  * A tap is a press that stayed within 10 px and did not scroll the grid, so a
+    scroll or camera drag never selects or equips.
+  * Cleared by: an empty-tray tap, closing the Bag, switching tabs, and --
+    re-tested against the rows on every draw -- the Tool being assigned,
+    planted, sold or destroyed.
+  * Identical plants now sort by key, then by the order the script first saw
+    each Tool. The old tie on `tool.Name` was unstable: measured, equipping one
+    Nubkin reshuffled the cards and a second HOLD press picked up a different
+    copy. This also steadies hotbar auto-fill among duplicates.
+
+### Income
+
+`PlantInfo.Describe` -> `SeedData.IncomePerSecond(species, tier) *
+GameConfig.cashMultiplier(player)`: the Garden's own figure for the player's own
+plants. Sell is `SeedData.SellPrice`, pass-agnostic like the stall. A pod shows
+only size and biome (`???`, "After it hatches"). No ids or tier numbers anywhere.
+
+### Animation and performance
+
+`UIKit.cardPop`: mouse hover 1.05 (strip 1.07, tabs 1.04, close 1.06) over
+0.12 s Quad Out; touch press 0.98 (strip 0.95), released once a touch travels
+10 px. One tween per property, cancelled before the next. `SeedAfterimageQuality
+= "Off"` keeps scale at rest. `reset()` runs on hidden pooled cards and on close.
+No RenderStepped, no loops; one panel instance; cards pooled.
+
+### Verified in Play
+
+Desktop and the emulated 735x413 phone, using 10 client-only fixture Tools
+(never replicated or saved):
+
+  * Hover: cell unmoved at 104x158, Face 109.2x165.9 centred, glow 0.45, no other
+    card scaled; over the strip the card stays lifted and the pill pops to 1.07.
+  * Panel values equal the canonical calls: Nubkin t5 `+$1.65K/s` / `$49.5K` /
+    `Hotbar slot 8`; Supernovus t7 `+$66.5K/s` / `$2M`; a pod reads Unhatched pod /
+    Dustbowl / ??? / Colossal / After it hatches / ??? / Hotbar slot 4.
+  * Empty-tray tap cleared; scrolling the canvas 0 -> 179 selected nothing; a drag
+    ending on the grid assigned nothing, left no ghost, hotbar Z back to 4.
+  * HOLD then HOLD on one card equipped and put away the same Tool (after the
+    sort fix).
+  * Drag to slot 3: 10 -> 9 cards and the selection cleared; drag the slot back
+    onto the grid: 9 -> 10, the card exactly once.
+  * Close cleared; reopen -> one PlantInfo, pool still 10. Respawn -> one
+    SeedLoadout, one SeedRail, one BagButton, pool 10.
+  * Empty state (the real bag) and the Equipment tab (4 weapons, gaps 152/152,
+    EQUIPPED rings) rendered. Weapons were hovered, not clicked: a click changes
+    the saved loadout.
+  * Phone: every row fits (widest value 94 px in 96), tab labels fit, strips 96x44.
+  * `PlantInfoSpec` 45/45 over 350 grown combinations; the other 11 specs pass;
+    changed files compile through loadstring; `git diff --check` and `rojo build`
+    clean; console clean.
+
+### Not tested
+
+A physical phone; the portrait lower sheet (only landscape was emulated); a real
+touch press (MCP drives a mouse); the hotbar double-click return through MCP --
+its clicks land ~330 ms apart, past the untouched 0.30 s window, so the drag
+return was used; weapon-card clicks; `SeedAfterimageQuality = "Off"`.
+
 ## Confiscating guardians leave 40% of pods behind, for good — 2026-09-11 (CLAUDE)
 
 Brief: in Tanglemire, Emberroot and Starbloom a catch used to confiscate the pod

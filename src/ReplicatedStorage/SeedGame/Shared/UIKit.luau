@@ -789,6 +789,159 @@ local function hoverPop(button: GuiObject)
 	end)
 end
 
+--==============================================================================
+-- THE CARD POP: A LIFT UNDER A MOUSE, A PRESS UNDER A THUMB
+--
+-- `popOnHover` grows a card on touch as well, which is right for the Index and
+-- wrong for a grid a thumb is pressing: a press that grows reads as the card
+-- jumping at the finger. This one lifts under a real mouse and sinks under a
+-- touch, and the two never run at once -- the press wins while it is held.
+--
+-- UIScale on an element the caller owns, never on a layout-controlled cell, so a
+-- grid never sees a size change and nothing beside the card moves.
+--
+-- ONE TWEEN PER PROPERTY. Every change cancels the tween it replaces before
+-- starting the next, so a fast pass across a grid cannot leave two tweens
+-- writing Scale on the same frame. Nothing loops and nothing runs per frame.
+--
+-- `SeedAfterimageQuality = "Off"` keeps the scale at rest; the glow still
+-- answers, because a brighter edge is not motion.
+--
+-- A touch that turns into a scroll releases the press as soon as it moves, so
+-- a card a thumb dragged past does not stay sunk. `reset` puts everything back
+-- at once, for a pooled card that is hidden while the pointer is still on it.
+--==============================================================================
+export type CardPopOptions = {
+	hoverScale: number?,
+	pressScale: number?,
+	seconds: number?,
+	glow: UIStroke?,
+	glowRest: number?,
+	glowHover: number?,
+	sound: boolean?,
+}
+
+export type CardPop = {
+	reset: () -> (),
+	destroy: () -> (),
+}
+
+local PRESS_SLOP = 10
+
+function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOptions?): CardPop
+	local opts: CardPopOptions = options or {}
+	local hoverScale = opts.hoverScale or 1.05
+	local pressScale = opts.pressScale or 0.98
+	local seconds = opts.seconds or 0.12
+	local glow = opts.glow
+	local glowRest = opts.glowRest or (if glow then glow.Transparency else 1)
+	local glowHover = opts.glowHover or 0.35
+	local sound = opts.sound ~= false
+
+	local hovered, pressed = false, false
+	local pressedAt: Vector3? = nil
+	local scaleTween: Tween? = nil
+	local glowTween: Tween? = nil
+	local conns: { RBXScriptConnection } = {}
+
+	local function apply(instant: boolean?)
+		local goal = if motionOff() then 1
+			elseif pressed then pressScale
+			elseif hovered then hoverScale
+			else 1
+		if scaleTween then
+			scaleTween:Cancel()
+			scaleTween = nil
+		end
+		if instant then
+			scale.Scale = goal
+		elseif scale.Scale ~= goal then
+			local tween = TweenService:Create(scale, TweenInfo.new(
+				if pressed then seconds * 0.6 else seconds,
+				Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = goal })
+			scaleTween = tween
+			tween:Play()
+		end
+		if glow then
+			local want = if hovered or pressed then glowHover else glowRest
+			if glowTween then
+				glowTween:Cancel()
+				glowTween = nil
+			end
+			if instant then
+				glow.Transparency = want
+			elseif glow.Transparency ~= want then
+				local tween = TweenService:Create(glow, TweenInfo.new(seconds,
+					Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Transparency = want })
+				glowTween = tween
+				tween:Play()
+			end
+		end
+	end
+
+	table.insert(conns, target.MouseEnter:Connect(function()
+		if hovered or not pointerIsMouse() then
+			return
+		end
+		hovered = true
+		if sound then
+			SoundKit.play("CardHover")
+		end
+		apply()
+	end))
+	table.insert(conns, target.MouseLeave:Connect(function()
+		if hovered then
+			hovered = false
+			apply()
+		end
+	end))
+	table.insert(conns, target.InputBegan:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch and not pressed then
+			pressed = true
+			pressedAt = input.Position
+			apply()
+		end
+	end))
+	table.insert(conns, target.InputChanged:Connect(function(input: InputObject)
+		if pressed and input.UserInputType == Enum.UserInputType.Touch and pressedAt
+			and (input.Position - (pressedAt :: Vector3)).Magnitude > PRESS_SLOP then
+			pressed = false
+			pressedAt = nil
+			apply()
+		end
+	end))
+	table.insert(conns, target.InputEnded:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch and pressed then
+			pressed = false
+			pressedAt = nil
+			apply()
+		end
+	end))
+
+	local function reset()
+		hovered, pressed, pressedAt = false, false, nil
+		apply(true)
+	end
+
+	local function destroy()
+		for _, c in ipairs(conns) do
+			c:Disconnect()
+		end
+		table.clear(conns)
+		if scaleTween then
+			scaleTween:Cancel()
+			scaleTween = nil
+		end
+		if glowTween then
+			glowTween:Cancel()
+			glowTween = nil
+		end
+	end
+	table.insert(conns, target.Destroying:Connect(destroy))
+
+	return { reset = reset, destroy = destroy }
+end
+
 function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButton
 	local wide = options.wide ~= false
 	local size = if wide then RAIL.WideSize else RAIL.SquareSize
