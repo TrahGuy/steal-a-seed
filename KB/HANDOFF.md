@@ -1,5 +1,106 @@
 # Steal a Seed — Session Handoff
 
+## The AI-generated Suncrown mesh is imported, measured and set beside Suncrown — 2026-09-11 (CLAUDE)
+
+### What
+
+This is a test, not an integration: nothing in the game loads the mesh.
+
+  * **The file:** `AI mesh generated/suncrownmeshgenerated.fbx`, 4.7 MB, a binary
+    FBX 7400 exported by Blender 4.3.2. Read directly in Python:
+      - one mesh: 60,768 vertices and **121,500 triangles**, six times the
+        20,000 a mesh may carry;
+      - Y up, in centimetres: 167.6 x 189.9 x 104.3 cm, with its base on the
+        ground;
+      - UVs, but **no texture**, embedded or referenced, and one grey Phong
+        material;
+      - it is concept 2 in `art/creatures/suncrown/reference/`, the Solar Cactus
+        Golem.
+  * **The import:** the owner ran it through the 3D Importer. It is
+    `Workspace.suncrownmeshgenerated`, one MeshPart `model`, uploaded as
+    `rbxassetid://88451890524073`.
+      - **19,999 triangles** (counted through EditableMesh): the importer brought
+        it under the cap by itself.
+      - **167.58 x 189.86 x 104.32 studs**: the centimetres came in as studs.
+      - **Anchored = false**, with CollisionFidelity Box, standing over the
+        field.
+      - No TextureID and no SurfaceAppearance. It faces -Z, the way plants do.
+  * **`tools/art/suncrown_mesh_preview.luau`**: a Studio-only harness, run
+    through HTTP loadstring or the Command Bar. It differs from the brief's
+    sketch in five ways:
+      - **Correct builder call.** It builds the procedural Suncrown with
+        `CreatureModel.Build(species, tier, STAGE_GROWN, cf, parent)`, from fresh
+        module Source; `CreatureModel.BuildModel` does not exist.
+      - **One tier.** It compares both models at the same tier. 6.51 is the
+        frame at tier 1, not tier 4, which frames at 17.25. `tier` and `fit`
+        (`"frame"` or `"procedural"`) are options.
+      - **Works on a clone.** The import is never moved or scaled. The clone is
+        seated by its rotated corners, given the 0.06 `Base` pivot and scaled
+        with `Model:ScaleTo`.
+      - **Clear site.** The pair stands at (900, 150, -600) over a temporary
+        slab, because the world origin is the Hub's sell deck.
+      - **More checks.** It counts triangles through EditableMesh and reports
+        textures, SurfaceAppearance and unanchored parts.
+    With no import in the place, it builds a stand-in from
+    `AI mesh generated/suncrownmesh_decimated_19k.json` through
+    `AssetService:CreateEditableMesh` and `CreateMeshPartAsync`. The stand-in
+    does not save or publish, and a real import is preferred over it.
+  * **Not committed** (in `AI mesh generated/`):
+      - a Blender collapse decimation of the FBX to 19,500 triangles (FBX, 762
+        KB);
+      - the same triangles as JSON, for the stand-in.
+    The importer turned out to reduce the mesh by itself.
+
+### Measured
+
+| Tier, fit | Procedural, 76 parts | Mesh | Mesh vs procedural (w, h, d) |
+|---|---|---|---|
+| 1, frame 6.51 | 6.01 x 5.28 x 2.65 | 5.75 x 6.51 x 3.58 | 96%, 123%, 135% |
+| 1, procedural 5.28 | 6.01 x 5.28 x 2.65 | 4.66 x 5.28 x 2.90 | 78%, 100%, 110% |
+| 4, frame 17.25 | 21.44 x 18.70 x 9.45 | 15.23 x 17.25 x 9.48 | 71%, 92%, 100% |
+
+The procedural Suncrown stands at 0.81 of its frame height at tier 1 and 1.08 at
+tier 4, because it grows on its own girth curve. The mesh, scaled uniformly, does
+not, so no single fit matches it at every tier.
+
+### Owner calls, if it is to become Suncrown
+
+  * **Project rule.** Live plants are Luau part-builds (`blender-to-roblox`,
+    `organic-roblox-form`), so a MeshPart creature is a change of direction.
+  * **Look.** In Studio it is a smooth grey sculpt beside a studded, coloured
+    block creature. To read as a Legendary rather than a statue it needs a
+    texture, a SurfaceAppearance or segmented coloured parts, and the difference
+    in style remains either way.
+  * **Cost.** 19,999 triangles per plant, so a tier-1 bed of twelve is about 240k
+    before automatic LOD.
+  * **Motion.** PlantSway moves a plant with one PivotTo and swings direct
+    children named `Leaf`. A single MeshPart gets the lean, the bob and the walk,
+    but no arms, blink or steps.
+  * **The asset.** It was uploaded under the importing account. A group-owned
+    experience needs it shared or re-uploaded before it will load in game.
+  * **The import is unanchored** and 190 studs tall in Workspace. Anchor it, or
+    move it to `ReplicatedStorage.Assets`, before anyone presses Play.
+
+### Verified
+
+  * **The FBX,** read directly: triangles, bounds, axes, units, the material and
+    the absence of textures, plus a four-view render of the geometry.
+  * **The harness, in Edit, against the real import:**
+      - 19,999 triangles counted;
+      - the three comparisons in the table;
+      - the mesh's lowest point at 0.0000;
+      - screenshots of the pair and a front close-up.
+  * **The stand-in route:** it built a MeshPart of 9,768 vertices and 19,500
+    triangles (5.99 x 6.78 x 3.73) in 0.15 s. That stand-in was removed
+    afterwards.
+  * **Nothing under `src/` changed.**
+
+### Not verified
+
+  * The mesh in Play, in a garden, in the Almanac viewport, under PlantSway, or on
+    a phone.
+  * Texturing: the FBX has none.
+
 ## Gloomlotus is rebuilt as the Walking Mangrove Stilt Titan — 2026-09-11 (CLAUDE)
 
 ### What
