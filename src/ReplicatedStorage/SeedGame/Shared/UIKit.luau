@@ -1691,6 +1691,213 @@ function UIKit.frameViewport(hero: ViewportFrame, model: Model,
 	return camera
 end
 
+--==============================================================================
+-- WHAT THE CAMERA IS ACTUALLY LOOKING AT
+--
+-- `model:GetBoundingBox()` was the old input and it is the wrong box twice
+-- over. It includes the invisible `Base` plate -- every creature carries one
+-- at ground level purely as a pivot -- and it includes the Pedestal this
+-- file adds underneath. Framing to that put a margin of nothing around every
+-- plant, which is why the previews read as distant.
+--
+-- This walks the DRAWN parts instead: anything fully transparent is skipped,
+-- and so is the pedestal, which is card furniture rather than creature.
+--==============================================================================
+local function drawnBounds(model: Model): (Vector3?, Vector3?, { Vector3 })
+	local lo = Vector3.new(math.huge, math.huge, math.huge)
+	local hi = -lo
+	local found = false
+	-- Kept, because the FIT is done against the real corners rather than
+	-- against the box that contains them: a creature does not reach its own
+	-- bounding corners, so fitting the box leaves it visibly small.
+	local points: { Vector3 } = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1
+			and not d:IsDescendantOf(model:FindFirstChild("Pedestal") or model) then
+			found = true
+			local h = d.Size * 0.5
+			for sx = -1, 1, 2 do
+				for sy = -1, 1, 2 do
+					for sz = -1, 1, 2 do
+						local q = (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
+						points[#points + 1] = q
+						lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
+						hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
+					end
+				end
+			end
+		end
+	end
+	if not found then
+		return nil, nil, points
+	end
+	return lo, hi, points
+end
+
+--==============================================================================
+-- FRAME A PLANT THE WAY A CARD DOES
+--
+-- The plant card's camera solve, lifted out of UIKit.plantCard unchanged so the
+-- Index's shelf and showcase frame a creature with exactly the arithmetic the
+-- Garden and the Bag use, rather than growing a second copy -- see
+-- UIKit.frameViewport for how a second copy lets two panels drift apart.
+--
+-- Adds the soil pedestal unless the model already has a child named
+-- "Pedestal": a caller that wants a different base builds it first, and it is
+-- left out of the fit either way. `formName` picks a FRAME_NUDGE. `fill`
+-- replaces FRAME_FILL for a stage that should show more air around the plant.
+--
+-- Returns the camera, and the distance and focus it settled on.
+--==============================================================================
+function UIKit.framePlant(hero: ViewportFrame, model: Model, formName: string?,
+	fill: number?): (Camera, number, Vector3)
+	local pivot, size = model:GetBoundingBox()
+	addPedestal(model, pivot, size)
+
+	local lo, hi, points = drawnBounds(model)
+	if not (lo and hi) then
+		-- Nothing drawn: keep the old behaviour rather than divide by zero.
+		pivot, size = model:GetBoundingBox()
+		lo = pivot.Position - size * 0.5
+		hi = pivot.Position + size * 0.5
+	end
+	local centre = ((lo :: Vector3) + (hi :: Vector3)) * 0.5
+	local span = (hi :: Vector3) - (lo :: Vector3)
+	--==========================================================================
+	-- THE MODEL IS NOT MOVED. THE CAMERA MOVES.
+	--
+	-- An earlier pass set the pivot to the drawn centre and then PivotTo'd
+	-- the model onto it -- which TRANSLATES the creature, because a
+	-- creature's pivot is the Base plate at its feet and the drawn centre is
+	-- half its height above that. The camera was then aimed at bounds that
+	-- no longer described where the model was, and a Supernovus lost its
+	-- crown, brow horn, orbital arcs and comet off the top of the frame:
+	-- measured at -0.389 in viewport space, 39% above the glass.
+	--
+	-- The builder put the creature where it wants it. Nothing here has any
+	-- business moving it.
+	--==========================================================================
+
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = 38
+
+	--==========================================================================
+	-- FIT BOTH AXES, NOT THE DIAGONAL
+	--
+	-- The old distance came off `size.Magnitude` -- the bounding box's
+	-- DIAGONAL -- which is larger than either the height or the width and
+	-- therefore always pushed the camera back further than it needed to be.
+	-- The diagonal of a tall thin spire is dominated by its height and the
+	-- diagonal of a broad crown by its width, so one number could never suit
+	-- both.
+	--
+	-- Solved twice instead: the distance that makes the height fill FILL of
+	-- the frame, and the distance that makes the width fill it, then take
+	-- whichever is further. The plant is then as close as it can be without
+	-- either axis spilling.
+	--
+	-- The viewport is 0.98 wide by 0.74 of a 1:1.30 card -- so very nearly
+	-- square -- and the aspect is read off it rather than assumed, because
+	-- the Index and the Garden are free to size their cards differently.
+	--==========================================================================
+	local FILL = fill or FRAME_FILL
+	local nudge = FRAME_NUDGE[string.lower(formName or "")] or 1
+	local half = math.tan(math.rad(camera.FieldOfView * 0.5))
+
+	local box = hero.AbsoluteSize
+	local aspect = if box.X > 0 and box.Y > 0 then box.X / box.Y else 1.019
+
+	local distH = (span.Y * 0.5) / (FILL * half)
+	-- Horizontal half-angle is the vertical one scaled by the aspect.
+	local distW = (math.max(span.X, span.Z) * 0.5) / (FILL * half * aspect)
+	local distance = math.max(distH, distW) * nudge
+
+	--==========================================================================
+	-- AIMED AT THE MIDDLE OF THE CREATURE, AND NOWHERE ELSE
+	--
+	-- `CARD.CameraRise` existed to correct an aim taken off a box that
+	-- included the pedestal and the invisible base plate. The centre of the
+	-- DRAWN box needs no correction, and applying the rise on top of it
+	-- spent 8% of the frame's margin pushing the subject down -- which on a
+	-- tall creature is the difference between keeping a crown and cropping
+	-- it. The knob is left in GameConfig for the other viewport helper.
+	--==========================================================================
+	local focus = centre
+	camera.CFrame = CFrame.lookAt(focus + CARD.CameraOffset.Unit * distance, focus)
+
+	--==========================================================================
+	-- ONE CORRECTIVE PASS, BECAUSE THE VIEW IS OBLIQUE
+	--
+	-- The estimate above treats the creature as a flat rectangle facing the
+	-- lens. It is not: CameraOffset looks in at (0.66, 0.28, -1), so the box
+	-- is seen corner-on and its CORNERS rotate into the frame. Measured, a
+	-- box that should have filled 86% of the height actually filled 98% and
+	-- a Supernovus lost a front foot off the bottom edge.
+	--
+	-- Rather than guess a fudge factor, the eight corners are projected
+	-- through the camera that was just built and the distance is scaled by
+	-- whatever it actually came out as. Projected size goes as 1/distance,
+	-- so one pass lands within a percent -- and it is exact for any shape
+	-- and any camera angle, which a constant never would be.
+	--==========================================================================
+	--==========================================================================
+	-- MEASURE WHAT THE LENS ACTUALLY SEES, THEN CORRECT ONCE
+	--
+	-- The estimate above treats the creature as a flat rectangle facing the
+	-- lens. It is not: CameraOffset looks in at (0.66, 0.28, -1), so the box
+	-- is seen corner-on and its corners rotate into frame. Measured, a fit
+	-- that should have filled 86% of the height filled 98%, and a Supernovus
+	-- lost a front foot off the bottom edge.
+	--
+	-- So the REAL part corners -- not the bounding box's, which a creature
+	-- never reaches -- are projected through the camera that was just built,
+	-- and two things come back: how much of the frame they span, and where
+	-- their middle sits. The distance is scaled by the first and the aim is
+	-- nudged by the second, which is what stops an off-centre silhouette
+	-- from being fitted as though it were centred.
+	--
+	-- Projected size goes as 1/distance, so one pass lands within a percent,
+	-- and it is exact for any shape at any camera angle -- which no constant
+	-- fudge factor could be.
+	--==========================================================================
+	local function survey(cf: CFrame): (number, number, number)
+		local minU, maxU = math.huge, -math.huge
+		local minV, maxV = math.huge, -math.huge
+		for _, corner in ipairs(points) do
+			local rel = cf:PointToObjectSpace(corner)
+			if rel.Z < -0.01 then
+				local u = rel.X / (-rel.Z * half * aspect)
+				local v = rel.Y / (-rel.Z * half)
+				minU = math.min(minU, u); maxU = math.max(maxU, u)
+				minV = math.min(minV, v); maxV = math.max(maxV, v)
+			end
+		end
+		if minU > maxU then
+			return 0, 0, 0
+		end
+		-- NDC runs -1..1 across the frame, so a span of 1.72 is 86%.
+		return math.max(maxU - minU, maxV - minV) * 0.5,
+			(minU + maxU) * 0.5, (minV + maxV) * 0.5
+	end
+
+	local extent, offU, offV = survey(camera.CFrame)
+	if extent > 0.001 then
+		-- Slide the aim so the silhouette is centred, in the camera's own
+		-- right/up axes rather than the world's.
+		local right = camera.CFrame.RightVector
+		local up = camera.CFrame.UpVector
+		focus = focus
+			+ right * (offU * distance * half * aspect)
+			+ up * (offV * distance * half)
+		distance *= extent / FILL
+		camera.CFrame = CFrame.lookAt(focus + CARD.CameraOffset.Unit * distance, focus)
+	end
+
+	camera.Parent = hero
+	hero.CurrentCamera = camera
+	return camera, distance, focus
+end
+
 function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	local radius = CARD.Radius
 
@@ -2118,196 +2325,17 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	--==========================================================================
 
 	--==========================================================================
-	-- WHAT THE CAMERA IS ACTUALLY LOOKING AT
+	-- THE CAMERA IS SOLVED BY UIKit.framePlant
 	--
-	-- `model:GetBoundingBox()` was the old input and it is the wrong box twice
-	-- over. It includes the invisible `Base` plate -- every creature carries one
-	-- at ground level purely as a pivot -- and it includes the Pedestal this
-	-- file adds underneath. Framing to that put a margin of nothing around every
-	-- plant, which is why the previews read as distant.
-	--
-	-- This walks the DRAWN parts instead: anything fully transparent is skipped,
-	-- and so is the pedestal, which is card furniture rather than creature.
+	-- The drawn bounds, the two-axis fit and the corrective survey that lived
+	-- here moved to module level, unchanged, so the Index frames a creature with
+	-- the same arithmetic. What stays is this card's record of the result.
 	--==========================================================================
-	local function drawnBounds(model: Model): (Vector3?, Vector3?, { Vector3 })
-		local lo = Vector3.new(math.huge, math.huge, math.huge)
-		local hi = -lo
-		local found = false
-		-- Kept, because the FIT is done against the real corners rather than
-		-- against the box that contains them: a creature does not reach its own
-		-- bounding corners, so fitting the box leaves it visibly small.
-		local points: { Vector3 } = {}
-		for _, d in ipairs(model:GetDescendants()) do
-			if d:IsA("BasePart") and d.Transparency < 1
-				and not d:IsDescendantOf(model:FindFirstChild("Pedestal") or model) then
-				found = true
-				local h = d.Size * 0.5
-				for sx = -1, 1, 2 do
-					for sy = -1, 1, 2 do
-						for sz = -1, 1, 2 do
-							local q = (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
-							points[#points + 1] = q
-							lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
-							hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
-						end
-					end
-				end
-			end
-		end
-		if not found then
-			return nil, nil, points
-		end
-		return lo, hi, points
-	end
-
 	local function setupCamera(model: Model)
-		local pivot, size = model:GetBoundingBox()
-		addPedestal(model, pivot, size)
-
-		local lo, hi, points = drawnBounds(model)
-		if not (lo and hi) then
-			-- Nothing drawn: keep the old behaviour rather than divide by zero.
-			pivot, size = model:GetBoundingBox()
-			lo = pivot.Position - size * 0.5
-			hi = pivot.Position + size * 0.5
-		end
-		local centre = ((lo :: Vector3) + (hi :: Vector3)) * 0.5
-		local span = (hi :: Vector3) - (lo :: Vector3)
-		--======================================================================
-		-- THE MODEL IS NOT MOVED. THE CAMERA MOVES.
-		--
-		-- An earlier pass set the pivot to the drawn centre and then PivotTo'd
-		-- the model onto it -- which TRANSLATES the creature, because a
-		-- creature's pivot is the Base plate at its feet and the drawn centre is
-		-- half its height above that. The camera was then aimed at bounds that
-		-- no longer described where the model was, and a Supernovus lost its
-		-- crown, brow horn, orbital arcs and comet off the top of the frame:
-		-- measured at -0.389 in viewport space, 39% above the glass.
-		--
-		-- The builder put the creature where it wants it. Nothing here has any
-		-- business moving it.
-		--======================================================================
+		local camera, distance, focus = UIKit.framePlant(hero, model, currentFormType)
 		modelBasePivot = model:GetPivot()
-
-		local camera = Instance.new("Camera")
-		camera.FieldOfView = 38
-
-		--======================================================================
-		-- FIT BOTH AXES, NOT THE DIAGONAL
-		--
-		-- The old distance came off `size.Magnitude` -- the bounding box's
-		-- DIAGONAL -- which is larger than either the height or the width and
-		-- therefore always pushed the camera back further than it needed to be.
-		-- The diagonal of a tall thin spire is dominated by its height and the
-		-- diagonal of a broad crown by its width, so one number could never suit
-		-- both.
-		--
-		-- Solved twice instead: the distance that makes the height fill FILL of
-		-- the frame, and the distance that makes the width fill it, then take
-		-- whichever is further. The plant is then as close as it can be without
-		-- either axis spilling.
-		--
-		-- The viewport is 0.98 wide by 0.74 of a 1:1.30 card -- so very nearly
-		-- square -- and the aspect is read off it rather than assumed, because
-		-- the Index and the Garden are free to size their cards differently.
-		--======================================================================
-		local FILL = FRAME_FILL
-		local nudge = FRAME_NUDGE[currentFormType] or 1
-		local half = math.tan(math.rad(camera.FieldOfView * 0.5))
-
-		local box = hero.AbsoluteSize
-		local aspect = if box.X > 0 and box.Y > 0 then box.X / box.Y else 1.019
-
-		local distH = (span.Y * 0.5) / (FILL * half)
-		-- Horizontal half-angle is the vertical one scaled by the aspect.
-		local distW = (math.max(span.X, span.Z) * 0.5) / (FILL * half * aspect)
-		cameraDistance = math.max(distH, distW) * nudge
-
-		--======================================================================
-		-- AIMED AT THE MIDDLE OF THE CREATURE, AND NOWHERE ELSE
-		--
-		-- `CARD.CameraRise` existed to correct an aim taken off a box that
-		-- included the pedestal and the invisible base plate. The centre of the
-		-- DRAWN box needs no correction, and applying the rise on top of it
-		-- spent 8% of the frame's margin pushing the subject down -- which on a
-		-- tall creature is the difference between keeping a crown and cropping
-		-- it. The knob is left in GameConfig for the other viewport helper.
-		--======================================================================
-		cameraFocus = centre
-		camera.CFrame = CFrame.lookAt(
-			cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
-
-		--======================================================================
-		-- ONE CORRECTIVE PASS, BECAUSE THE VIEW IS OBLIQUE
-		--
-		-- The estimate above treats the creature as a flat rectangle facing the
-		-- lens. It is not: CameraOffset looks in at (0.66, 0.28, -1), so the box
-		-- is seen corner-on and its CORNERS rotate into the frame. Measured, a
-		-- box that should have filled 86% of the height actually filled 98% and
-		-- a Supernovus lost a front foot off the bottom edge.
-		--
-		-- Rather than guess a fudge factor, the eight corners are projected
-		-- through the camera that was just built and the distance is scaled by
-		-- whatever it actually came out as. Projected size goes as 1/distance,
-		-- so one pass lands within a percent -- and it is exact for any shape
-		-- and any camera angle, which a constant never would be.
-		--======================================================================
-		--======================================================================
-		-- MEASURE WHAT THE LENS ACTUALLY SEES, THEN CORRECT ONCE
-		--
-		-- The estimate above treats the creature as a flat rectangle facing the
-		-- lens. It is not: CameraOffset looks in at (0.66, 0.28, -1), so the box
-		-- is seen corner-on and its corners rotate into frame. Measured, a fit
-		-- that should have filled 86% of the height filled 98%, and a Supernovus
-		-- lost a front foot off the bottom edge.
-		--
-		-- So the REAL part corners -- not the bounding box's, which a creature
-		-- never reaches -- are projected through the camera that was just built,
-		-- and two things come back: how much of the frame they span, and where
-		-- their middle sits. The distance is scaled by the first and the aim is
-		-- nudged by the second, which is what stops an off-centre silhouette
-		-- from being fitted as though it were centred.
-		--
-		-- Projected size goes as 1/distance, so one pass lands within a percent,
-		-- and it is exact for any shape at any camera angle -- which no constant
-		-- fudge factor could be.
-		--======================================================================
-		local function survey(cf: CFrame): (number, number, number)
-			local minU, maxU = math.huge, -math.huge
-			local minV, maxV = math.huge, -math.huge
-			for _, corner in ipairs(points) do
-				local rel = cf:PointToObjectSpace(corner)
-				if rel.Z < -0.01 then
-					local u = rel.X / (-rel.Z * half * aspect)
-					local v = rel.Y / (-rel.Z * half)
-					minU = math.min(minU, u); maxU = math.max(maxU, u)
-					minV = math.min(minV, v); maxV = math.max(maxV, v)
-				end
-			end
-			if minU > maxU then
-				return 0, 0, 0
-			end
-			-- NDC runs -1..1 across the frame, so a span of 1.72 is 86%.
-			return math.max(maxU - minU, maxV - minV) * 0.5,
-				(minU + maxU) * 0.5, (minV + maxV) * 0.5
-		end
-
-		local extent, offU, offV = survey(camera.CFrame)
-		if extent > 0.001 then
-			-- Slide the aim so the silhouette is centred, in the camera's own
-			-- right/up axes rather than the world's.
-			local right = camera.CFrame.RightVector
-			local up = camera.CFrame.UpVector
-			cameraFocus = cameraFocus
-				+ right * (offU * cameraDistance * half * aspect)
-				+ up * (offV * cameraDistance * half)
-			cameraDistance *= extent / FILL
-			camera.CFrame = CFrame.lookAt(
-				cameraFocus + CARD.CameraOffset.Unit * cameraDistance, cameraFocus)
-		end
-
-		camera.Parent = hero
-		hero.CurrentCamera = camera
+		cameraDistance = distance
+		cameraFocus = focus
 		activeCamera = camera
 
 		-- WRITTEN ONCE. There is no loop to write it again, so the view a card
