@@ -1,5 +1,114 @@
 # Steal a Seed — Session Handoff
 
+## The Index is the Plant Almanac, with a Biome Harvest to claim — 2026-09-11 (CLAUDE)
+
+### What: the panel (`IndexUI.client.luau`, rebuilt)
+
+Built to the owner's approved mockup (`index_mockup_preview.png`), with
+`art/index/reference/target-index-reference.png` as the target and `current-index.png`
+as the panel it replaced. All colours are in `GameConfig.Almanac`.
+
+  * Header: green banner #56ED34 -> #1EA40C, a leaf tile holding a book emoji, "Plant
+    Almanac" in white with an ink outline x2, red close. Body: deep moss #172C1C ->
+    #122416 under a tiled dot texture (`art/index/almanac-dots-64.png`, drawn by
+    `tools/art/almanac_dots.py`, uploaded as `rbxassetid://125265576644859`). The
+    modal's lattice is hidden on this panel in favour of the dots.
+  * Biome tabs, 44 tall, in road order with their emoji. A tab shows a gold dot when
+    its harvest is waiting.
+  * Left, the biome card: its `GameConfig.Card.Art` scenery, "BIOME n", the name,
+    and "X / 5 Grown" (gold at 5/5; the title reads MASTERED once claimed).
+  * Middle, the shelf: the biome's five species, commonest first, on rarity
+    gradients. Common #A3E635 -> #3F6212, Uncommon #34D399 -> #064E3B, Rare #38BDF8 ->
+    #075985, Epic #E879F9 -> #701A75, Legendary #FDE047 -> #92400E. Mythic #FB7185 ->
+    #881337 is an addition: the brief named five, and Tanglemire, Emberroot and
+    Starbloom each shelve a Mythic.
+      - Grown: biome scenery, the lit 3D plant, the name in white.
+      - Not grown: "???", a silhouette and UNDISCOVERED. The silhouette is the
+        viewport's ImageColor3 at 26,34,30, so growing a plant lifts a tint and
+        rebuilds nothing.
+      - Every card carries its rarity tag.
+      - The sixth slot is Biome Mastery in a gold dashed outline, and a claim button
+        itself while the harvest is ready. A five-step progress bar sits under it.
+  * Right, the showcase for the tapped card (gold ring): a large still 3D model on a
+    moss pedestal with a Neon lime ring, a lime glow and four twinkling sparkles; the
+    name; the rarity in its colour; "Garden Yield: +$X/s" (SeedData.IncomePerSecond at
+    BaseTier, not multiplied by the x2 pass); and the Biome Harvest box with the cash
+    and Speed payouts and CLAIM / CLAIM (x/5) / CLAIMING... / CLAIMED.
+  * Footer: a sprout tile, TOTAL KINGDOM FLORA, "Discovered: X / 25 Species", and a
+    lime-to-gold bar.
+  * Below a content width of 600 the panels stack into one scrolling column, and the
+    tabs scroll sideways at 138 wide.
+  * The first open of a session goes to a biome with a harvest waiting, else the
+    furthest biome with anything grown. After that the panel remembers its tab.
+  * Rail badge: a gold "!" while any harvest is claimable, otherwise the red count of
+    species not yet grown, as before.
+  * Models are built only while the panel is open, one shelf at a time, and kept per
+    species. A card slot keeps one ViewportFrame and the models move in and out of it.
+  * A RULE REVERSED ON PURPOSE. The old Index never showed a tier on an undiscovered
+    card, because Epic names Bellchime in Greenhollow. The approved mockup shows the
+    rarity colour and word on locked cards, so they now do. The name, the scenery
+    and the plant's colours stay hidden.
+
+### What: the Biome Harvest (server)
+
+  * `BiomeData`: `MasteryCash` / `MasterySpeed` per biome. Greenhollow $25K / +1M,
+    Dustbowl $250K / +10M, Tanglemire $2.5M / +50M, Emberroot $25M / +250M,
+    Starbloom $250M / +1B. **A starting ladder, not fitted to play: tune it there.**
+  * `Shared/AlmanacData.luau` (pure): shelf order, `Progress`, `TotalProgress`,
+    `Reward`, `ClaimState` (unknown / claimed / ready / locked). The Index and the
+    server both read it.
+  * `ProfileSchema`: `Mastery = { [biomeId] = true }`, default `{}`, sanitised against
+    BiomeData. No schema bump: a save without it has claimed nothing.
+  * `PlayerDataService.RecordMastery` is set-once. `EconomyService.PayReward` is the
+    third earning path, and the x2 pass does not touch it. `TreadmillService.PayReward`
+    grants Speed and asks CarryService for WalkSpeed, as a belt tick does.
+  * `AlmanacService` (Priority 70) handles verb `GameConfig.Almanac.ClaimAction`
+    ("AlmanacClaim") on GameEvent:
+      - 0.5 s cooldown per player;
+      - validates the id against the profile the server holds;
+      - records the claim, then pays;
+      - replies `(action, biomeId, ok, reason)`.
+  * `UIKit.framePlant`: the plant card's camera solve moved to module level, so the
+    Index and GardenUI's cards share one copy. The new inputs are an optional `fill`
+    and a caller-built model named "Pedestal", which it leaves in place.
+  * `tools/tests/AlmanacClaimSpec.luau`: 75 checks.
+
+### Verified
+
+  * All ten touched scripts compile (loadstring in Studio); `rojo build` clean; all 18
+    specs pass (the 17 plus AlmanacClaimSpec 75/75).
+  * `UIKit.framePlant` changes nothing for existing cards. Cameras built through the
+    committed UIKit and the new one for seven species (cube, orb, bell, teardrop,
+    crown, supernova, lotus) matched exactly in position and look direction.
+  * Play, one client, on the owner's save (13/25 grown, no biome finished):
+      - Opened from the rail. It landed on Starbloom (4/5): five cards with models and
+        cameras, one silhouette, and the showcase built.
+      - Greenhollow tab: the biome card, the five cards (Nubkin, Petalpip, Spiretip,
+        ???, Bellchime), 4 / 5 with four lit segments, and the showcase all updated;
+        harvest $25K / +1M, CLAIM (4/5).
+      - Tapping Spiretip moved the ring and the showcase: Uncommon, +$5/s, a 39-part
+        model on the pedestal.
+      - Scrolled down, the progress bar, harvest box and footer render. The dot
+        texture shows (checked with the content hidden).
+      - Claims fired by hand on GameEvent: greenhollow -> locked, 42 -> unknown,
+        dustbowl -> locked, an immediate second -> busy. Nothing was paid, and the
+        button went back to CLAIM (4/5).
+      - Panel capped at 420 wide: stacked layout, cards 118x160, claim target
+        350x44. Back at 740, the three columns returned.
+      - The X closed it and cleared OpenPanel. No errors in the output.
+
+### Not verified, and where it differs from the mockup
+
+  * A successful claim in Play. Every biome on the owner's save is unfinished, and a
+    paid claim on that save would add real cash and Speed to it, so the paying path is
+    covered by AlmanacClaimSpec only.
+  * Touch input and a real phone. The narrow layout was forced by capping the width.
+  * The title is LuckiestGuy in capitals, like every panel title; the mockup's mixed
+    case was not adopted.
+  * The biome tabs sit inside the panel rather than floating above it as in the mockup.
+  * In Studio's short 609-pixel viewport the hotbar covers the bottom of the panel;
+    at 720 and taller the panel fits above it.
+
 ## The shop is restyled to the approved mockup — 2026-09-11 (CLAUDE)
 
 ### What

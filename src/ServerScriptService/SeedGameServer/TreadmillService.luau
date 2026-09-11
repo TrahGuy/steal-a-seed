@@ -1043,6 +1043,30 @@ function TreadmillService.Upgrade(player: Player): boolean
 end
 
 --==============================================================================
+-- A ONE-OFF GRANT
+--
+-- The Index's Biome Harvest pays Speed, and Speed is minted here, so the belt is
+-- still the one file that explains a player's score. The CALLER decides the
+-- grant is due and how big -- AlmanacService, off the profile and BiomeData --
+-- and this pays it, counts it with the belt's own grants for Snapshot, and asks
+-- CarryService to recompute WalkSpeed exactly as a belt tick does.
+--==============================================================================
+function TreadmillService.PayReward(player: Player, amount: number, reason: string): boolean
+	if player.Parent ~= Players or type(amount) ~= "number" or amount ~= amount or amount <= 0 then
+		return false
+	end
+	if PlayerDataService.AddSpeed(player, amount) == nil then
+		return false
+	end
+	granted[player] = (granted[player] or 0) + amount
+	-- CarryService owns WalkSpeed. Ask, do not write.
+	CarryService.RefreshWalkSpeed(player)
+	log(string.format("%s was granted %s Speed for %s.",
+		player.Name, GameConfig.compact(amount), reason))
+	return true
+end
+
+--==============================================================================
 -- LIFECYCLE
 --==============================================================================
 function TreadmillService.Init()

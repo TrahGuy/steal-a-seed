@@ -82,6 +82,19 @@ export type Biome = {
 	-- enough to put a biome in the game, which is how Starbloom went live
 	-- without anybody deciding it should. Turning a biome on is this line.
 	LiveInPhaseA: boolean,
+	--==========================================================================
+	-- THE BIOME HARVEST: WHAT GROWING THE WHOLE SHELF PAYS, ONCE
+	--
+	-- Paid by AlmanacService when every species of this biome is in the
+	-- player's almanac, and never twice. A ladder of tens on cash, and on Speed
+	-- a push toward the next biome's recommendation without replacing the mill
+	-- that is meant to get a player there.
+	--
+	-- A STARTING POINT, set 2026-09-11 with the Index redesign that introduced
+	-- it, not fitted to a beta. Tune here; nothing else holds these numbers.
+	--==========================================================================
+	MasteryCash: number,
+	MasterySpeed: number,
 }
 
 --==============================================================================
@@ -97,6 +110,8 @@ BiomeData.Biomes = {
 	{
 		Id = "greenhollow",
 		DisplayName = "Greenhollow",
+		MasteryCash = 25_000,
+		MasterySpeed = 1_000_000,
 		Mood = "🙂",
 		Order = 1,
 		RecommendedSpeed = 0,
@@ -140,6 +155,8 @@ BiomeData.Biomes = {
 	{
 		Id = "dustbowl",
 		DisplayName = "Dustbowl",
+		MasteryCash = 250_000,
+		MasterySpeed = 10_000_000,
 		Mood = "😐",
 		Order = 2,
 		RecommendedSpeed = 167_000_000,
@@ -164,6 +181,8 @@ BiomeData.Biomes = {
 	{
 		Id = "tanglemire",
 		DisplayName = "Tanglemire",
+		MasteryCash = 2_500_000,
+		MasterySpeed = 50_000_000,
 		Mood = "😟",
 		Order = 3,
 		RecommendedSpeed = 800_000_000,
@@ -184,6 +203,8 @@ BiomeData.Biomes = {
 	{
 		Id = "emberroot",
 		DisplayName = "Emberroot",
+		MasteryCash = 25_000_000,
+		MasterySpeed = 250_000_000,
 		Mood = "😨",
 		Order = 4,
 		RecommendedSpeed = 3_000_000_000,
@@ -199,6 +220,8 @@ BiomeData.Biomes = {
 	{
 		Id = "starbloom",
 		DisplayName = "Starbloom",
+		MasteryCash = 250_000_000,
+		MasterySpeed = 1_000_000_000,
 		Mood = "💀",
 		Order = 5,
 		RecommendedSpeed = 10_000_000_000,

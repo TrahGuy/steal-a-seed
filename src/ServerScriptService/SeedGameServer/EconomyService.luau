@@ -14,10 +14,10 @@
 -- One file. Anything that wants to pay a player asks this service to do it.
 --
 -- It said "one loop, one call" until the stall started buying bags. There are
--- TWO ways to earn now -- the payout loop below, and SellHeld -- and they are
--- both in this file for exactly the reason the rule exists: "why does this
--- player have eight million" still has one file to read, and the two answers
--- sit forty lines apart. Adding a third belongs here too.
+-- THREE ways to earn now -- the payout loop below, SellHeld, and PayReward for
+-- the Index's one-time Biome Harvest -- and they are all in this file for
+-- exactly the reason the rule exists: "why does this player have eight million"
+-- still has one file to read, and the answers sit a few dozen lines apart.
 --
 --==============================================================================
 -- WHAT EARNS: GROWN PLANTS, AND ONLY GROWN ONES
@@ -121,7 +121,8 @@ function EconomyService.RateFor(player: Player): number
 	-- This is the last line of the FAUCET, so a pass applied at this point
 	-- reaches exactly one kind of income: cash grown by plants. It does not
 	-- reach SellHeld forty lines below -- selling a bag at the stall is a sale,
-	-- not production -- and it cannot reach the other five positive AddCash
+	-- not production -- nor PayReward, whose one-off Biome Harvest is already
+	-- sized in BiomeData; and it cannot reach the other five positive AddCash
 	-- calls in the game, none of which come through here:
 	--
 	--   StoreService       a Robux cash pack, already paid for at its price
@@ -253,6 +254,26 @@ function EconomyService.SellHeld(player: Player): (number, number)
 	log(string.format("%s sold %d item(s) at the stall for %s.",
 		player.Name, sold, GameConfig.compact(total)))
 	return sold, total
+end
+
+--==============================================================================
+-- A ONE-OFF REWARD
+--
+-- The third way to earn, and in this file for the reason the other two are: the
+-- Index's Biome Harvest pays through here, so a player's cash is still explained
+-- by one file. The CALLER decides a reward is due and how much -- AlmanacService,
+-- off the profile and BiomeData -- and this only pays it and says so in the log.
+--==============================================================================
+function EconomyService.PayReward(player: Player, amount: number, reason: string): boolean
+	if player.Parent ~= Players or type(amount) ~= "number" or amount ~= amount or amount <= 0 then
+		return false
+	end
+	if PlayerDataService.AddCash(player, amount) == nil then
+		return false
+	end
+	minted[player] = (minted[player] or 0) + amount
+	log(string.format("%s was paid %s for %s.", player.Name, GameConfig.compact(amount), reason))
+	return true
 end
 
 function EconomyService.Init()

@@ -366,6 +366,29 @@ function PlayerDataService.MarkSeen(player: Player, speciesId: string): boolean
 end
 
 --==============================================================================
+-- THE BIOME HARVEST, RECORDED
+--
+-- Set-once, like MarkSeen: false for a biome already recorded, and no dirty
+-- mark in that case. AlmanacService pays ONLY when this returns true, which is
+-- what makes a double request pay once -- the second one finds the id here.
+--
+-- Whether the biome is actually finished is the caller's question, answered by
+-- AlmanacData off this same profile; this checks only that the id is a biome.
+--==============================================================================
+function PlayerDataService.RecordMastery(player: Player, biomeId: string): boolean
+	local entry = entries[player]
+	if not entry or type(biomeId) ~= "string" or not BiomeData.ById[biomeId] then
+		return false
+	end
+	if entry.profile.Mastery[biomeId] then
+		return false
+	end
+	entry.profile.Mastery[biomeId] = true
+	touch(player)
+	return true
+end
+
+--==============================================================================
 -- MARIGOLD'S SHELF
 --
 -- Shaped like MarkSeen above, and for the same three reasons: it is a set, it

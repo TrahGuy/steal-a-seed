@@ -3495,6 +3495,98 @@ function GameConfig.cashMultiplier(player: Player?): number
 	return n
 end
 
+--==============================================================================
+-- THE PLANT ALMANAC (THE INDEX)
+--
+-- The one verb the Index sends -- a claim for a biome's harvest bonus, which
+-- AlmanacService settles -- and the redesigned panel's palette, from the owner's
+-- approved botanical mockup (index_mockup_preview.png, 2026-09-11).
+--==============================================================================
+GameConfig.Almanac = {
+	ClaimAction = "AlmanacClaim",
+
+	Ink = Color3.fromRGB(16, 21, 28),
+	HeaderTop = Color3.fromRGB(86, 237, 52), -- #56ED34
+	HeaderBottom = Color3.fromRGB(30, 164, 12), -- #1EA40C
+	CloseTop = Color3.fromRGB(255, 77, 77),
+	CloseBottom = Color3.fromRGB(204, 20, 20),
+	CloseShade = Color3.fromRGB(128, 12, 12),
+	-- Deep moss, lighter at the top.
+	BodyTop = Color3.fromRGB(23, 44, 28), -- #172C1C
+	BodyBottom = Color3.fromRGB(18, 36, 22), -- #122416
+	BodyLattice = Color3.fromRGB(46, 84, 54),
+	BodyLatticeTransparency = 0.72,
+
+	-- The inner panels: the biome card's frame, the grid well, the showcase.
+	Well = Color3.fromRGB(12, 26, 16),
+	WellEdge = Color3.fromRGB(58, 104, 66),
+	Lime = Color3.fromRGB(86, 237, 52),
+	LimeDeep = Color3.fromRGB(41, 191, 24),
+	Gold = Color3.fromRGB(255, 214, 38),
+	Cream = Color3.fromRGB(242, 238, 206),
+	Muted = Color3.fromRGB(150, 176, 154),
+	Slate = Color3.fromRGB(74, 86, 80),
+	SlateDeep = Color3.fromRGB(46, 56, 50),
+
+	--==========================================================================
+	-- A CARD IS COLOURED BY ITS RARITY, GROWN OR NOT
+	--
+	-- Sunlit gradients, light at the top. The mockup names five; Mythic is the
+	-- sixth this game's shelves actually use (Gloomlotus, Pyrelotus,
+	-- Supernovus), in a rose that sits beside the Epic orchid without being it.
+	--==========================================================================
+	Rarity = {
+		Common = { Color3.fromRGB(163, 230, 53), Color3.fromRGB(63, 98, 18) }, -- #A3E635 -> #3F6212
+		Uncommon = { Color3.fromRGB(52, 211, 153), Color3.fromRGB(6, 78, 59) }, -- #34D399 -> #064E3B
+		Rare = { Color3.fromRGB(56, 189, 248), Color3.fromRGB(7, 89, 133) }, -- #38BDF8 -> #075985
+		Epic = { Color3.fromRGB(232, 121, 249), Color3.fromRGB(112, 26, 117) }, -- #E879F9 -> #701A75
+		Legendary = { Color3.fromRGB(253, 224, 71), Color3.fromRGB(146, 64, 14) }, -- #FDE047 -> #92400E
+		Mythic = { Color3.fromRGB(251, 113, 133), Color3.fromRGB(136, 19, 55) }, -- #FB7185 -> #881337
+	},
+	-- An undiscovered plant: the form, in one dark flat colour.
+	Silhouette = Color3.fromRGB(26, 34, 30),
+	-- The Speed half of a harvest, in the shop's Speed shelf blue.
+	Sky = Color3.fromRGB(94, 231, 252),
+
+	--==========================================================================
+	-- THE STUDS ON THE MOSS
+	--
+	-- One soft white dot on a transparent tile, drawn by
+	-- tools/art/almanac_dots.py into art/index/almanac-dots-64.png and uploaded.
+	-- White in the file, so its colour and strength are the two numbers below.
+	-- An empty id means the upload is missing, and the panel keeps the modal's
+	-- lattice rather than showing a wrong id.
+	--==========================================================================
+	DotTexture = "rbxassetid://125265576644859",
+	DotTile = 22,
+	DotColour = Color3.fromRGB(96, 150, 104),
+	DotTransparency = 0.6,
+
+	-- The header's book tile, a lighter leaf than the banner behind it.
+	MarkTop = Color3.fromRGB(150, 246, 118),
+	MarkBottom = Color3.fromRGB(62, 196, 40),
+	-- A biome tab that is not the one on show.
+	TabIdleTop = Color3.fromRGB(38, 66, 44),
+	TabIdleBottom = Color3.fromRGB(26, 48, 32),
+	-- The showcase pedestal: moss on a stone foot, a lime glow ring between.
+	PedestalMoss = Color3.fromRGB(74, 132, 60),
+	PedestalStone = Color3.fromRGB(70, 62, 54),
+	-- The CLAIM button's faces: lime to take, gold once taken, slate to wait.
+	LimeShade = Color3.fromRGB(24, 122, 14),
+	GoldDeep = Color3.fromRGB(214, 146, 12),
+	GoldShade = Color3.fromRGB(140, 90, 8),
+	SlateShade = Color3.fromRGB(30, 38, 34),
+
+	-- The tab strip's badges, in road order.
+	TabIcons = {
+		greenhollow = "🌱",
+		dustbowl = "🏜️",
+		tanglemire = "🍄",
+		emberroot = "🌋",
+		starbloom = "✨",
+	},
+}
+
 GameConfig.Shop = {
 	--==========================================================================
 	-- THE APPROVED RESTYLE, 2026-09-11

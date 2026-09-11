@@ -139,6 +139,18 @@ export type Profile = {
 	--==========================================================================
 	Almanac: { [string]: boolean },
 	--==========================================================================
+	-- WHICH BIOME HARVESTS HAVE BEEN PAID
+	--
+	-- A set of biome ids, written by AlmanacService the moment it pays a biome's
+	-- one-time bonus for growing every species on its shelf. A set for the
+	-- Almanac's reasons: one question ("was this one paid"), and a set cannot
+	-- hold the same claim twice.
+	--
+	-- Migrates by being ABSENT: a save from before the Biome Harvest reads nil
+	-- and lands on an empty set, which is exactly what that player has claimed.
+	--==========================================================================
+	Mastery: { [string]: boolean },
+	--==========================================================================
 	-- WHAT THEY HAVE BOUGHT OFF MARIGOLD, AND WHAT THEY HAVE OUT
 	--
 	-- A SET, like the Almanac, and for the same reason: the only question ever
@@ -202,6 +214,7 @@ function ProfileSchema.Default(): Profile
 		Plants = {},
 		Held = {},
 		Almanac = {},
+		Mastery = {},
 		Weapons = {},
 		EquippedBat = "",
 		EquippedTrap = "",
@@ -341,6 +354,15 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- "unknown ids dropped" promise true. A DataStore round trip can hand back
 	-- numeric keys, string values, or an id from a species that has since been
 	-- deleted; none of those reach the Index.
+	-- The Biome Harvest set: only `true` against a biome that still exists.
+	if type(raw.Mastery) == "table" then
+		for id, paid in pairs(raw.Mastery) do
+			if paid == true and type(id) == "string" and BiomeData.ById[id] then
+				p.Mastery[id] = true
+			end
+		end
+	end
+
 	if type(raw.Almanac) == "table" then
 		for id, seen in pairs(raw.Almanac) do
 			if seen == true and type(id) == "string" and SeedData.Get(id) then
