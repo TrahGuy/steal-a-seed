@@ -119,6 +119,13 @@ has to change with it, or the tile and the purchase prompt disagree.
 
 ### Notes
 
+  * FIXED the same day: the icon check asked `PreloadAsync` about the bare id
+    string, which answered Failure for this icon AND for the Bag's while both
+    ImageLabels had loaded -- so the frame gear was drawn over the real artwork.
+    It now preloads the ImageLabel and trusts its own `IsLoaded`, with 10 s of
+    patience. Play: the rail and title icons loaded, no fallback and no warning;
+    a label on a missing id stayed `IsLoaded = false`, so a real failure still
+    falls back to the drawn gear.
   * The first nudge was a ContextActionService binding. With a GUI object selected
     the engine's navigation took the arrow first and the binding never fired
     (measured), so it listens on UserInputService, and the slider is its own left

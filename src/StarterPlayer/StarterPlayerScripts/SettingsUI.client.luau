@@ -126,10 +126,16 @@ button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + (RAIL.WideSize.Y + RA
 -- A GEAR OUT OF FRAMES, FOR THE DAY THE UPLOAD DOES NOT LOAD
 --
 -- A bare button whose image failed is a transparent square: still pressable, and
--- invisible. So the id is asked for once, and if it does not come back both
+-- invisible. So the rail's icon is waited on once, and if it never loads both
 -- gears -- the rail's and the title bar's -- are drawn instead: four bars
 -- crossed at 45 degrees for eight teeth, a steel body and a brass hub. Six
 -- frames, no glyph, nothing that can be moderated away.
+--
+-- ASKED OF THE IMAGELABEL, NOT OF THE ID. PreloadAsync handed a bare
+-- "rbxassetid://" string answered Failure for this icon AND for the Bag's -- on
+-- the client, in Play -- while both ImageLabels reported IsLoaded and were on
+-- screen, so trusting it drew the frame gear over artwork that had loaded. The
+-- label itself is preloaded now, and its own IsLoaded decides.
 --==============================================================================
 local STEEL = Color3.fromRGB(150, 172, 190)
 local STEEL_DARK = Color3.fromRGB(88, 106, 124)
@@ -205,23 +211,26 @@ titleGear.Parent = titleBar
 modal.title.Position = UDim2.new(0, 46, 0.5, 0)
 modal.title.Size = UDim2.new(1, -98, 1, 0)
 
+-- Ten seconds for a slow connection before the artwork is given up on.
+local ICON_PATIENCE = 10
+
 task.spawn(function()
-	local fetched = Enum.AssetFetchStatus.Success
-	local ok = pcall(function()
-		ContentProvider:PreloadAsync({ RAIL.SettingsIcon },
-			function(_: string, status: Enum.AssetFetchStatus)
-				fetched = status
-			end)
-	end)
-	if ok and fetched == Enum.AssetFetchStatus.Success then
+	local railIcon = button:FindFirstChild("Icon")
+	if not (railIcon and railIcon:IsA("ImageLabel")) then
 		return
 	end
-	warn(string.format("[Seed/SettingsUI] The settings icon did not load (%s); "
-		.. "drawing the gear instead.", tostring(fetched)))
-	local railIcon = button:FindFirstChild("Icon")
-	if railIcon and railIcon:IsA("GuiObject") then
-		railIcon.Visible = false
+	pcall(function()
+		ContentProvider:PreloadAsync({ railIcon, titleGear })
+	end)
+	local deadline = os.clock() + ICON_PATIENCE
+	while not railIcon.IsLoaded and os.clock() < deadline do
+		task.wait(0.25)
 	end
+	if railIcon.IsLoaded then
+		return
+	end
+	warn("[Seed/SettingsUI] The settings icon did not load; drawing the gear instead.")
+	railIcon.Visible = false
 	drawGear(button, RAIL.IconBare - 8, 3)
 	titleGear.Image = ""
 	drawGear(titleGear, 30, 3)
