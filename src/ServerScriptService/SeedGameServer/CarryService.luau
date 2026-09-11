@@ -1476,20 +1476,46 @@ end
 -- save a player arrived with is the truth until the world has been made to match
 -- it, and an empty Backpack before that moment is not evidence of anything.
 --==============================================================================
-local heldRestored: { [Player]: boolean } = {}
+--==============================================================================
+-- AND ONLY FOR THE BACKPACK AND THE BODY THAT WERE PUT BACK
+--
+-- 9a007b6 gated the first snapshot behind the join restore, and dying still
+-- erased the bag. A death or a reset destroys the Character and the Backpack
+-- with every Tool in them, and the engine hands over a new, empty Backpack --
+-- whose ChildAdded, and the new body's CharacterAdded, both asked for a snapshot
+-- while the gate was still open. The snapshot found nothing, and SetHeld wrote
+-- nothing over the save.
+--
+-- So the gate is no longer a flag. It is ARMED for one Backpack instance and one
+-- Character instance -- the pair the last rebuild put the plants into -- and a
+-- snapshot is refused the moment either is not the one the player has now. That
+-- makes the ORDER the engine tears things down in irrelevant: a deferred sync
+-- that lands after the old body is gone, or before the new one has its Tools, is
+-- looking at a different pair and writes nothing. Only the rebuild re-arms it,
+-- after the saved plants are back.
+--==============================================================================
+type Armed = { backpack: Backpack, character: Model? }
+local armed: { [Player]: Armed } = {}
+
+local function armedFor(player: Player): boolean
+	local record = armed[player]
+	if not record then
+		return false
+	end
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	return backpack ~= nil and backpack == record.backpack
+		and player.Character == record.character
+end
 
 local function syncHeld(player: Player)
-	if not heldRestored[player] then
-		return
-	end
-	if not player:FindFirstChildOfClass("Backpack") then
+	if not armedFor(player) then
 		return
 	end
 	PlayerDataService.SetHeld(player, heldSnapshot(player))
 end
 
 function CarryService.IsHeldRestored(player: Player): boolean
-	return heldRestored[player] == true
+	return armedFor(player)
 end
 
 --==============================================================================
@@ -1525,6 +1551,10 @@ local function requestSync(player: Player)
 	end)
 end
 
+-- Forward: the watchers below start it, and it lives with the builders further
+-- down. A bare `function rebuildHeld` there would be a global.
+local rebuildHeld: (Player) -> ()
+
 local function watchHeld(player: Player)
 	local function bind(container: Instance)
 		table.insert(serviceConnections, container.ChildAdded:Connect(function()
@@ -1545,9 +1575,22 @@ local function watchHeld(player: Player)
 	if player.Character then
 		bind(player.Character)
 	end
+	--==========================================================================
+	-- A NEW BODY IS A REBUILD, NOT A SNAPSHOT
+	--
+	-- This used to ask for a snapshot, and the snapshot of a body that has just
+	-- spawned is empty. The rebuild puts the saved plants back first and takes
+	-- the snapshot itself once they are there.
+	--==========================================================================
 	table.insert(serviceConnections, player.CharacterAdded:Connect(function(character)
 		bind(character)
-		requestSync(player)
+		rebuildHeld(player)
+	end))
+	-- The old body is about to take its Tools with it. Disarm now rather than
+	-- trust anything that tries to record while it goes.
+	table.insert(serviceConnections, player.CharacterRemoving:Connect(function()
+		armed[player] = nil
+		syncPending[player] = nil
 	end))
 
 	--==========================================================================
@@ -1556,14 +1599,21 @@ local function watchHeld(player: Player)
 	-- Roblox destroys it and makes a new one, so the connections above are to an
 	-- object that will not exist after the first death. Without this, dying once
 	-- silently stops the hotbar being recorded for the rest of the session.
+	--
+	-- And a new Backpack is EMPTY: the Tools it replaces died with the old one.
+	-- Asking for a snapshot here is what erased held plants on every death, so it
+	-- is a rebuild, the same as a new body.
 	--==========================================================================
 	table.insert(serviceConnections, player.ChildAdded:Connect(function(child)
 		if child:IsA("Backpack") then
 			bind(child)
-			requestSync(player)
+			rebuildHeld(player)
 		end
 	end))
 end
+
+-- The real watchers, exposed for the spec so a respawn can be played through them.
+CarryService.WatchHeld = watchHeld
 
 --==============================================================================
 -- PUTTING THEM BACK
@@ -1640,84 +1690,145 @@ end
 -- runs out the gate simply stays CLOSED -- this session records nothing, and the
 -- bag the player joined with is still the bag in their save.
 --
--- Once per player: a second call while one is running, or after one finished,
--- is a no-op, so nothing can build the same saved plant twice.
+-- EVERY TIME THE BODY OR THE BACKPACK IS REPLACED, not once per player: the
+-- join, and every death, reset and LoadCharacter after it. A pass counts what is
+-- already in the Backpack and the hands and builds only what the save has and
+-- they do not -- so a respawn that kept its Tools builds nothing, and nothing is
+-- ever built twice. A call that lands while a pass is running asks for one more
+-- pass when it finishes, rather than a second pass alongside it.
 --==============================================================================
 CarryService.HeldRestorePatience = 600
 
-local restoring: { [Player]: boolean } = {}
+local rebuilding: { [Player]: boolean } = {}
+local rebuildAgain: { [Player]: boolean } = {}
 
-local function restoreHeld(player: Player)
-	if restoring[player] or heldRestored[player] then
-		return
+-- The same three facts heldSnapshot records, as one comparable string.
+local function heldKey(id: string, tier: number, hatched: boolean): string
+	return id .. ":" .. tostring(tier) .. ":" .. tostring(hatched)
+end
+
+-- One pass. False if it gave up or the player left; true once the Backpack and
+-- the body the player has now are armed.
+local function rebuildOnce(player: Player): boolean
+	local deadline = os.clock() + CarryService.HeldRestorePatience
+	local function gaveUp(why: string): boolean
+		if os.clock() < deadline then
+			return false
+		end
+		warn(string.format("[Seed/CarryService] %s: %s; held plants were not restored, "
+			.. "and the saved bag will not be overwritten this session.", player.Name, why))
+		return true
 	end
-	restoring[player] = true
-	task.spawn(function()
-		local deadline = os.clock() + CarryService.HeldRestorePatience
-		local function gaveUp(why: string): boolean
-			if os.clock() < deadline then
-				return false
-			end
-			warn(string.format("[Seed/CarryService] %s: %s; held plants were not restored, "
-				.. "and the saved bag will not be overwritten this session.", player.Name, why))
-			return true
-		end
 
-		while player.Parent == Players and not PlayerDataService.IsReady(player) do
-			if gaveUp("the profile never arrived") then
-				restoring[player] = nil
-				return
-			end
-			task.wait(0.25)
+	while player.Parent == Players and not PlayerDataService.IsReady(player) do
+		if gaveUp("the profile never arrived") then
+			return false
 		end
-		-- The Backpack is made by the engine shortly after the player joins, and
-		-- a Tool cannot be handed over before it exists.
-		while player.Parent == Players and not player:FindFirstChildOfClass("Backpack") do
-			if gaveUp("no Backpack appeared") then
-				restoring[player] = nil
-				return
-			end
-			task.wait(0.1)
+		task.wait(0.25)
+	end
+	-- The Backpack is made by the engine as the body spawns, and a Tool cannot
+	-- be handed over before it exists.
+	while player.Parent == Players and not player:FindFirstChildOfClass("Backpack") do
+		if gaveUp("no Backpack appeared") then
+			return false
 		end
-		local profile = PlayerDataService.Get(player)
-		if player.Parent ~= Players or not profile then
-			restoring[player] = nil
-			return
-		end
+		task.wait(0.1)
+	end
+	local profile = PlayerDataService.Get(player)
+	if player.Parent ~= Players or not profile then
+		return false
+	end
+	if armedFor(player) then
+		-- Nothing has been torn down since the last pass armed this pair.
+		return true
+	end
+	armed[player] = nil
 
-		local restored, dropped = 0, 0
-		if type(profile.Held) == "table" then
-			for _, row in ipairs(profile.Held) do
-				local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
-				local tier = if type(row) == "table" then tonumber(row.Tier) else nil
-				if species and tier and tier >= 1 then
-					if restoreOne(player, species, tier, row.Hatched == true) then
-						restored += 1
-					else
-						dropped += 1
+	--== WHAT IS ALREADY HERE, SO NOTHING IS BUILT TWICE ==--
+	local backpack = player:FindFirstChildOfClass("Backpack") :: Backpack
+	local present: { [string]: number } = {}
+	for _, container in ipairs({ backpack, player.Character }) do
+		if container then
+			for _, tool in ipairs(container:GetChildren()) do
+				if tool:IsA("Tool") then
+					local id = tool:GetAttribute("SpeciesId")
+					local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
+					if type(id) == "string" and tier then
+						local key = heldKey(id, math.floor(tier), tool:GetAttribute("Hatched") == true)
+						present[key] = (present[key] or 0) + 1
 					end
-				else
-					dropped += 1
 				end
 			end
 		end
-		if restored > 0 or dropped > 0 then
-			log(string.format("%s: restored %d held plant(s)%s.", player.Name,
-				restored,
-				if dropped > 0 then string.format(", %d could not be rebuilt", dropped) else ""))
-		end
+	end
 
-		-- The world matches the save now, so recording may begin -- and begins
-		-- with one snapshot, which also catches anything banked or bought while
-		-- the profile was still on its way.
-		restoring[player] = nil
-		heldRestored[player] = true
-		CarryService.SyncHeldNow(player)
+	local restored, kept, dropped = 0, 0, 0
+	if type(profile.Held) == "table" then
+		for _, row in ipairs(profile.Held) do
+			local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
+			local tier = if type(row) == "table" then tonumber(row.Tier) else nil
+			if species and tier and tier >= 1 then
+				local key = heldKey(species.Id, math.floor(tier), row.Hatched == true)
+				if (present[key] or 0) > 0 then
+					present[key] -= 1
+					kept += 1
+				elseif restoreOne(player, species, tier, row.Hatched == true) then
+					restored += 1
+				else
+					dropped += 1
+				end
+			else
+				dropped += 1
+			end
+		end
+	end
+	if restored > 0 or dropped > 0 then
+		log(string.format("%s: restored %d held plant(s)%s%s.", player.Name, restored,
+			if kept > 0 then string.format(", %d were still here", kept) else "",
+			if dropped > 0 then string.format(", %d could not be rebuilt", dropped) else ""))
+	end
+
+	-- The world matches the save now, so recording may begin: armed for exactly
+	-- this Backpack and this body, then one snapshot -- which also records
+	-- anything banked or bought while the pass was waiting.
+	armed[player] = { backpack = backpack, character = player.Character }
+	CarryService.SyncHeldNow(player)
+	return true
+end
+
+rebuildHeld = function(player: Player)
+	if rebuilding[player] then
+		rebuildAgain[player] = true
+		return
+	end
+	rebuilding[player] = true
+	task.spawn(function()
+		repeat
+			rebuildAgain[player] = nil
+			local done = rebuildOnce(player)
+		until not done or not rebuildAgain[player]
+		rebuilding[player] = nil
 	end)
 end
 
--- The join path, exposed for the spec. Safe to call again: it runs once.
-CarryService.RestoreHeld = restoreHeld
+-- The join path and the respawn path are the same call. Exposed for the spec.
+CarryService.RestoreHeld = rebuildHeld
+
+--==============================================================================
+-- STOP RECORDING BEFORE SOMETHING REPLACES THE BODY
+--
+-- NestService calls this through the carry bridge right before LoadCharacter,
+-- which is the one place in the game that swaps a body on purpose. A last
+-- snapshot first, while every Tool still exists; then nothing is recorded until
+-- the rebuild after the swap has put the plants back and re-armed.
+--==============================================================================
+function CarryService.FreezeHeld(player: Player)
+	if armedFor(player) then
+		CarryService.SyncHeldNow(player)
+	end
+	armed[player] = nil
+	syncPending[player] = nil
+end
 
 function CarryService.Init()
 	running = false
@@ -1753,14 +1864,16 @@ function CarryService.Start()
 		-- than by replaying a number it captured before the throw -- which is
 		-- what froze players who were caught while a trap held them at zero.
 		RefreshWalkSpeed = CarryService.RefreshWalkSpeed,
+		-- So NestService's LoadCharacter cannot record the empty Backpack it makes.
+		FreezeHeld = CarryService.FreezeHeld,
 	})
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		restoreHeld(player)
+		rebuildHeld(player)
 		watchHeld(player)
 	end
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(function(player)
-		restoreHeld(player)
+		rebuildHeld(player)
 		watchHeld(player)
 	end))
 
@@ -1786,8 +1899,9 @@ function CarryService.Start()
 		carried[player] = nil
 		-- The gate closes with the session. PlayerDataService writes the last
 		-- snapshot that was allowed; nothing after this may add to it.
-		heldRestored[player] = nil
-		restoring[player] = nil
+		armed[player] = nil
+		rebuilding[player] = nil
+		rebuildAgain[player] = nil
 		syncPending[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do

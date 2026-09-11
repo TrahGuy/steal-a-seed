@@ -183,6 +183,8 @@ type CarryBridge = {
 	ResolveGuardianCatch: (Player, boolean) -> (string, any),
 	SpawnLoose: (string, number, CFrame, string?) -> boolean,
 	RefreshWalkSpeed: ((Player) -> ())?,
+	-- Stops held-plant recording before a body swap. See the LoadCharacter below.
+	FreezeHeld: ((Player) -> ())?,
 }
 
 type CombatBridge = {
@@ -1169,6 +1171,14 @@ local function throwPlayer(nest: Nest, player: Player)
 		warn(string.format(
 			"[Seed/NestService] %s lost its HumanoidRootPart to the throw; respawning.",
 			player.Name))
+		-- The new body comes with a new, empty Backpack, and the held plants in the
+		-- old one go with it. CarryService takes a last snapshot and stops
+		-- recording until its rebuild has put them back, so the swap cannot be
+		-- saved as the player owning nothing.
+		local bridge = carryBridge
+		if bridge and bridge.FreezeHeld then
+			pcall(bridge.FreezeHeld, player)
+		end
 		pcall(function()
 			player:LoadCharacter()
 		end)

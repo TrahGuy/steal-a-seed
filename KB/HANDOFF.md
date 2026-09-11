@@ -1,5 +1,77 @@
 # Steal a Seed — Session Handoff
 
+## Held plants survive death, reset and LoadCharacter; the plot teleport works — FIXED 2026-09-11 (CLAUDE)
+
+### Respawn wiped the bag (P0)
+
+After `9a007b6`, dying still erased held plants. A death, reset or `LoadCharacter`
+destroys the Character and the Backpack with every Tool in them, and the engine
+hands over a new, empty Backpack. Its `ChildAdded`, and the new body's
+`CharacterAdded`, both called `requestSync` while the gate was still open, so the
+snapshot found nothing and `SetHeld` wrote nothing over the save.
+
+### Fix (`CarryService.luau`, `NestService.luau`)
+
+  * The gate is ARMED for one Backpack instance and one Character instance
+    (`armed[player]`) -- the pair the last rebuild put the plants into. `syncHeld`
+    refuses whenever either differs from what the player has now, so the order
+    the engine tears things down in, and signal deferral, no longer matter.
+  * `rebuildHeld` replaces `restoreHeld` and runs on join AND on every new
+    Backpack and every new body. It counts the plants already in the Backpack and
+    the hands (by id, tier, hatched) and builds only the saved rows that are
+    missing -- nothing is built twice. A call during a pass asks for one more pass.
+  * `CharacterRemoving` disarms. `CarryService.FreezeHeld` (a last snapshot, then
+    disarm) is on the carry bridge, and NestService calls it right before its own
+    `LoadCharacter`.
+  * Consumption while alive -- planting, selling, ClearBag -- records as before,
+    so a plant sold before a death does not come back after it.
+  * Seams: `CarryService.WatchHeld`, `RestoreHeld` (now the rebuild), `FreezeHeld`,
+    and `IsHeldRestored` (armed for the current pair).
+
+### Plot teleport (`DebugService.luau`)
+
+`Teleport {where = "plot"}` passed the Player to `PlotService.SpawnCFrameFor(plot:
+Model)` and threw `GetPivot is not a valid member of Player`, so it never moved
+anyone. It now resolves `PlotService.PlotOf(player)` first, and answers
+"Teleport: no plot" when there is none. `DebugService.RunAction(player, action,
+payload)` runs a handler without the remote, for specs (server-only).
+
+### Verified
+
+  * `HeldRestoreSpec` 31/31 -- the five join scenarios plus respawns played
+    through the real watchers with real signals and real instances: the engine's
+    order with a plant in hand; the new Backpack announced first; CharacterRemoving
+    never heard; Tools that survive (no duplicates); partial survival; a sold plant
+    not coming back; the FreezeHeld path; dying during the join load. A stray sync
+    after every teardown step never wrote fewer rows.
+  * `DebugTeleportSpec` 8/8, against the real `SpawnCFrameFor`.
+  * All 14 specs pass; changed files compile through loadstring; `git diff
+    --check` and `rojo build` clean.
+  * Play, one client, with three test plants given through the real builders
+    (two pods in the bag, a hatched Nubkin in hand):
+      - reset (`Health = 0`): respawned after 3.5 s with a new body and a new
+        Backpack; all three back as new Tools; log `restored 3 held plant(s)`.
+      - `LoadCharacter()` while holding one: new body and Backpack; all three
+        back; no old instances left; the same log line.
+      - the test plants were then removed: 0 plants left, both weapons intact.
+        Read back from the DataStore after Play stopped: current profile Held 0,
+        Plants 2, lock released; the newest version (04:27:48 UTC, the leave
+        save) also Held 0 -- the owner's save is exactly as it was before the test.
+      - DebugCommand `Teleport plot` from the client: "at your plot", moved 129.8
+        studs onto the owner's own Plot_01 spawn pad (horizontal offset 0.00).
+
+### Not verified, and notes
+
+  * NestService's own `LoadCharacter` (a thrown body that lost its root) was not
+    reproduced live; its FreezeHeld call is covered by the spec, and the direct
+    `LoadCharacter` test covers the guard without it.
+  * A rebuilt HATCHED plant comes back equipped, because `restoreOne` uses
+    `GiveHatched`, which equips when the hands are free. That is pre-existing and
+    also happens on join.
+  * A store purchase that lands in the old Backpack in the instant before a
+    respawn could still be lost. Pre-existing; not addressed here.
+  * Two players were not tested.
+
 ## Held plants were overwritten when a profile loaded late — FIXED 2026-09-11 (CLAUDE)
 
 ### What was lost, and the evidence
