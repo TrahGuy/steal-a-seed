@@ -314,7 +314,7 @@ type Card = {
 	-- Held so a SOON tile can recolour its plate without a second gradient.
 	plateTint: UIGradient,
 	capsule: Frame,
-	token: Frame,
+	token: ImageLabel,
 	price: TextLabel,
 }
 
@@ -452,38 +452,33 @@ local function buildCard(parent: Instance, order: number, palette: any, withTitl
 	row.Parent = capsule
 
 	--==========================================================================
-	-- THE ROBUX MARK IS A DRAWN TOKEN, NOT A GLYPH
+	-- THE ROBUX MARK IS THE CLIENT'S OWN TEXTURE
 	--
-	-- The real icon is a font character that renders as a blank box wherever the
-	-- font does not carry it, and this HUD has been bitten by missing glyphs. An
-	-- ink square with a white centre reads as the mark at fourteen pixels, needs
-	-- no upload, and cannot come out as tofu.
+	-- It was an ink square with a white pip, drawn from frames: the real mark is
+	-- a font character that renders as a blank box wherever the font does not
+	-- carry it, and a square was the safe stand-in. It read as a box, not as
+	-- Robux.
 	--
-	-- NOT ROTATED. A rotated child escapes ClipsDescendants, and this panel
-	-- scrolls.
+	-- The tilted hexagon ships inside every Roblox client as
+	-- rbxasset://textures/ui/common/robux@3x.png -- no upload, no moderation, no
+	-- glyph, loaded with the client rather than fetched -- and ImageColor3 tints
+	-- it: ink on a live capsule, the SOON grey on a slate one (see markSoon).
+	--
+	-- NOT ROTATED. The tilt is in the picture; a rotated child escapes
+	-- ClipsDescendants, and this panel scrolls.
 	--==========================================================================
-	local token = Instance.new("Frame")
+	local token = Instance.new("ImageLabel")
 	token.Name = "Token"
 	token.LayoutOrder = 1
-	token.Size = UDim2.fromOffset(14, 14)
-	token.BackgroundColor3 = INK
+	token.Size = UDim2.fromOffset(16, 16)
+	token.BackgroundTransparency = 1
 	token.BorderSizePixel = 0
+	token.Image = "rbxasset://textures/ui/common/robux@3x.png"
+	token.ImageColor3 = INK
+	token.ScaleType = Enum.ScaleType.Fit
 	token.Active = false
 	token.ZIndex = 8
 	token.Parent = capsule
-	corner(token, 4)
-
-	local pip = Instance.new("Frame")
-	pip.Name = "Pip"
-	pip.AnchorPoint = Vector2.new(0.5, 0.5)
-	pip.Position = UDim2.fromScale(0.5, 0.5)
-	pip.Size = UDim2.fromOffset(6, 6)
-	pip.BackgroundColor3 = SHOP.Capsule
-	pip.BorderSizePixel = 0
-	pip.Active = false
-	pip.ZIndex = 9
-	pip.Parent = token
-	corner(pip, 2)
 
 	-- Dark on white needs no outline: an ink stroke round ink type only blurs it.
 	local price = Instance.new("TextLabel")
@@ -530,7 +525,9 @@ end
 local function markSoon(card: Card)
 	card.plateTint.Color = ColorSequence.new(SHOP.SoonTop, SHOP.SoonBottom)
 	card.capsule.BackgroundColor3 = SHOP.SoonCapsule
-	card.token.Visible = false
+	-- The mark stays, in the same grey as the word: a price is coming, and the
+	-- button still reads as a Robux purchase rather than a free one.
+	card.token.ImageColor3 = SHOP.SoonText
 	card.price.Text = "SOON"
 	card.price.TextColor3 = SHOP.SoonText
 end

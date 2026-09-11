@@ -1,5 +1,42 @@
 # Steal a Seed — Session Handoff
 
+## The shop's price capsules carry the real Robux mark — 2026-09-11 (CLAUDE)
+
+### What
+
+  * `ShopUI.client.luau`: the capsule's `Token` is now an `ImageLabel` showing the
+    client's built-in `rbxasset://textures/ui/common/robux@3x.png`:
+      - 16 x 16, ScaleType Fit, no background;
+      - LayoutOrder 1, before the price at 2.
+    It replaces an ink rounded square with a white `Pip` frame, which read as a
+    box rather than the tilted hexagon.
+  * **Tint:** ImageColor3 is INK on the live white capsules and `SHOP.SoonText`
+    on SOON buttons. The brief named `SHOP.SoonCapsuleText`, which does not exist;
+    `SoonText` is the grey the SOON word already uses.
+  * **SOON buttons** now show the grey mark beside the word. They used to hide
+    the token; the brief gave the mark a SOON colour, so it shows. Put
+    `card.token.Visible = false` back in `markSoon` to hide it again.
+  * **No asset id:** the texture ships in every installed client version checked
+    (`content/textures/ui/common/robux@3x.png`, 1,408 bytes, a white mark on
+    transparency), so there is nothing to upload and nothing to moderate.
+
+### Verified
+
+  * ShopUI compiles; `rojo build` clean; all 18 specs pass.
+  * Play, shop opened from the rail:
+      - all 15 capsules carry the ImageLabel — 12 live, tinted ink, and 3 SOON,
+        tinted grey — at 16 x 16, Fit, LayoutOrder 1 before the price's 2;
+      - no Pip frames remain;
+      - IsLoaded read true on all 15 once the list had been scrolled through;
+        an image reports loaded when it is first drawn.
+  * Screenshots: the hexagon beside 79, 29, 79, 149, 179 and 279, and grey
+    beside SOON on the three pod tiles.
+
+### Not verified
+
+  * A phone or any client other than Studio on Windows. The `rbxasset://` path is
+    the client's own content folder, but only this one was run.
+
 ## The hotbar is restyled to Botanical Slate & Ink — 2026-09-11 (CLAUDE)
 
 ### What
