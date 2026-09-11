@@ -1,5 +1,46 @@
 # Steal a Seed — Session Handoff
 
+## Taking a pod puts the held plant away — FIXED 2026-09-11 (CLAUDE)
+
+Holding a plant while taking a pod drew both at once: the raid pod in both arms
+and the plant Tool through it. Only the pod may be in the hands during a carry.
+
+### Fix (`CarryService.luau`, `LoadoutUI.client.luau`)
+
+  * `TryTake`, once the pod is attached, moves every plant Tool (a Tool with a
+    `SpeciesId`) from the Character to the Backpack -- `CarryService.PutPlantsAway`.
+    Bats and traps stay where they are.
+  * While a pod is carried, a plant Tool that lands in the Character is put back a
+    frame later (a `ChildAdded` watch in the per-body watcher; seam
+    `CarryService.WatchBody`).
+  * The hotbar refuses a plant while `CarryingSpecies` is set: Denied cue and no
+    equip, so the player never watches it bounce.
+
+### Verified
+
+  * `CarryHandsSpec` 16/16 -- the real TryTake, Drop, SpawnLoose and body watcher
+    with a stand-in player: put away on take, an equip while carrying bounced, a
+    bat untouched, plants equip again after Drop, two plants and a bat, no Backpack.
+  * Play, one client, on the road at z = -205 with a debug nubkin t1 pod:
+      - holding Nubkin (6 kg), take: carrying, the raid pod in both arms, the
+        plant in the Backpack, no plant Tool in the hands.
+      - `Humanoid:EquipTool(plant)` while carrying: back in the Backpack within
+        0.1 s and still there at 1.0 s; the carry intact.
+      - hotbar keys 3 and 4 (both plants) while carrying: no plant in the hands,
+        both in the Backpack, still carrying, and the Denied cue built. Key 3 with
+        empty arms, earlier in the same session, unequipped the plant in hand --
+        so the keys were reaching the game.
+      - after `DropCarry`, an equipped plant stays equipped.
+  * A take INSIDE TheField banks at once (the red line is already behind you), so
+    the first attempt, at the plot, put a real test pod ("???", nubkin t1) in the
+    owner's bag. It was destroyed in the same session. The save read back after
+    the Play sessions: Held 2 (nubkin t6 and t1, both hatched), Plants 2, lock
+    released.
+
+### Not verified
+
+  * Two players: what another client sees of the hands.
+
 ## Held plants survive death, reset and LoadCharacter; the plot teleport works — FIXED 2026-09-11 (CLAUDE)
 
 ### Respawn wiped the bag (P0)

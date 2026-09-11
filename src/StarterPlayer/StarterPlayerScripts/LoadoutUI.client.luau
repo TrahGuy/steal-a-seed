@@ -469,11 +469,24 @@ local function holdTool(tool: Tool?)
 	if not humanoid then
 		return
 	end
-	SoundKit.play("CardClick")
 	if tool == nil or tool.Parent == character then
+		SoundKit.play("CardClick")
 		humanoid:UnequipTools()
 		return
 	end
+	--==========================================================================
+	-- NOT A PLANT WHILE A POD IS IN BOTH ARMS
+	--
+	-- A plant rides in the same two-handed grip as a raid pod, so equipping one
+	-- over a carry drew the plant through the shell. CarryService puts it straight
+	-- back into the Backpack anyway; refusing here means the player never watches
+	-- it bounce. Bats are untouched -- that grip is a different one.
+	--==========================================================================
+	if tool:GetAttribute("SpeciesId") ~= nil and player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
+		SoundKit.play("Denied")
+		return
+	end
+	SoundKit.play("CardClick")
 	humanoid:EquipTool(tool)
 end
 

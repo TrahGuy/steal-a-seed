@@ -471,6 +471,47 @@ local function refuseTake(player: Player, pod: Model, code: string): boolean
 	return false
 end
 
+--==============================================================================
+-- A POD IN BOTH ARMS PUTS THE PLANT AWAY
+--
+-- A held plant rides in front of the torso in the same two-handed grip a raid
+-- pod uses, so taking a pod while holding one drew both: the shell, and a plant
+-- through it. The hatch already knew this -- "two channels, one pair of hands"
+-- -- and refuses to equip a creature onto a carry. Taking a pod did not.
+--
+-- So a take moves every PLANT Tool out of the hands and into the Backpack. The
+-- plant is not dropped, sold or lost; it is put away, exactly where the hotbar
+-- would have put it. And while the pod is carried, a plant arriving in the hands
+-- from anywhere -- the hotbar, the number row, a modified client -- is put back
+-- a frame later.
+--
+-- PLANTS ONLY. A bat is a one-hand grip beside the body, and whether a carrier
+-- may swing one is a combat rule this does not get to change.
+--==============================================================================
+local function isPlantTool(child: Instance): boolean
+	return child:IsA("Tool") and type(child:GetAttribute("SpeciesId")) == "string"
+end
+
+local function putPlantsAway(player: Player): number
+	local character = player.Character
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not (character and backpack) then
+		return 0
+	end
+	local moved = 0
+	for _, child in ipairs(character:GetChildren()) do
+		if isPlantTool(child) then
+			-- Reparenting IS the unequip: the engine drops the grip, and the
+			-- Tool's own Unequipped handler cuts the CarryWeld (see giveTool).
+			child.Parent = backpack
+			moved += 1
+		end
+	end
+	return moved
+end
+
+CarryService.PutPlantsAway = putPlantsAway
+
 function CarryService.TryTake(player: Player, pod: Model): boolean
 	if player.Parent ~= Players then
 		return refuseTake(player, pod, "NO_PLAYER")
@@ -669,6 +710,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		return false
 	end
 
+	-- Only the pod in both arms: a plant that was being held goes to the Backpack.
+	putPlantsAway(player)
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
 	--==========================================================================
@@ -1389,6 +1432,19 @@ local function onCharacterAdded(player: Player, character: Model)
 		CarryService.Drop(player,
 			if root and root:IsA("BasePart") then root.Position else nil)
 	end))
+
+	-- WHILE A POD IS CARRIED, A PLANT THAT ARRIVES IN THE HANDS GOES BACK. After a
+	-- frame, so the equip that brought it has finished moving it first -- the
+	-- Backpack it came from is still the right place for it. See putPlantsAway.
+	table.insert(conns, character.ChildAdded:Connect(function(child)
+		if carried[player] and isPlantTool(child) then
+			task.defer(function()
+				if carried[player] and child.Parent == character then
+					putPlantsAway(player)
+				end
+			end)
+		end
+	end))
 end
 
 local function watch(player: Player)
@@ -1400,6 +1456,9 @@ local function watch(player: Player)
 		onCharacterAdded(player, player.Character)
 	end
 end
+
+-- The per-body watchers, exposed for the spec.
+CarryService.WatchBody = onCharacterAdded
 
 --==============================================================================
 -- THE HOTBAR SURVIVES LOGGING OUT
