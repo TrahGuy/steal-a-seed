@@ -289,10 +289,14 @@ ACTIONS.Teleport = function(player, payload)
 	end
 	local where = payload.where
 	if where == "plot" then
-		local cf = PlotService.SpawnCFrameFor(player)
-		if not cf then
+		-- SpawnCFrameFor takes the PLOT. Handing it the player threw "GetPivot is
+		-- not a valid member of Player", so this action never moved anyone. PlotOf
+		-- is the same lookup PlotService uses to place a new body.
+		local plot = PlotService.PlotOf(player)
+		if not plot then
 			return "Teleport: no plot"
 		end
+		local cf = PlotService.SpawnCFrameFor(plot)
 		root.CFrame = cf + Vector3.new(0, 4, 0)
 		return "at your plot"
 	end
@@ -438,6 +442,16 @@ ACTIONS.Snapshot = function(player, _payload)
 end
 
 --==============================================================================
+-- The handlers without the remote, for specs: no gate and no reply. Server-only,
+-- so nothing a client sends can reach it.
+function DebugService.RunAction(player: Player, action: string, payload: { [string]: any }?): string?
+	local handler = ACTIONS[action]
+	if not handler then
+		return nil
+	end
+	return handler(player, payload or {})
+end
+
 function DebugService.Init()
 end
 
