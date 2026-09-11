@@ -1,5 +1,109 @@
 # Steal a Seed — Session Handoff
 
+## Confiscating guardians leave 40% of pods behind, for good — 2026-09-11 (CLAUDE)
+
+Brief: in Tanglemire, Emberroot and Starbloom a catch used to confiscate the pod
+every time. Now the first confirmed catch of a pod rolls once: 40% the guardian
+leaves it behind permanently, 60% the old confiscation / carry-home / deposit.
+Greenhollow and Dustbowl are untouched (no confiscate profile, so their catch
+returns before any roll).
+
+### State transition
+
+`GuardianCatch.Resolve` decides (pure); `CarryService.ResolveGuardianCatch`
+applies it; NestService's `confiscateFrom` is the only caller, through the
+carry bridge (which now carries `ResolveGuardianCatch` instead of `Confiscate`).
+
+```
+guardian already hauling   -> hauling      victim's pod not read, rolled or marked
+nothing carried            -> none         plain throw
+pod GuardianAbandoned      -> abandoned    NO roll; plain throw drops it again
+roll <  LeaveBehindChance  -> left         pod marked for good; plain throw drops it
+roll >= LeaveBehindChance  -> confiscated  unchanged haul path
+```
+
+One non-yielding call reads, rolls, marks or takes in a single resumption, so
+two same-frame contacts cannot both roll or both take. `left`/`abandoned` return
+false, so the unchanged throw sets PlatformStand and the ragdoll watcher makes
+the one canonical `CarryService.Drop` -> one loose pod carrying the flag, and the
+guardian walks home empty-handed. (NestService checks `nest.haul` before calling,
+so `hauling` exists for the API and the spec.)
+
+### Probability boundary
+
+`GameConfig.Parent.Confiscate.LeaveBehindChance = 0.40`, asserted a number in
+0..1. Server `Random:NextNumber()` in [0, 1); leave iff `roll < chance` (strict):
+0.3999 leaves, 0.40 confiscates. `confiscateProfile` now returns tables only, so
+that number can never be read as a biome profile.
+
+### Attribute contract
+
+`GameConfig.Attributes.GuardianAbandoned` (`"GuardianAbandoned"`): on the POD,
+`true` or absent, never on a player. Unrelated to `keep` (lifetime).
+
+  * Held record `guardianAbandoned`, carried like `fromNest`/`reservedFor`; TryTake
+    reads it off the loose pod before destroying it.
+  * Carried model: set on take and on `left` (inspection only).
+  * Loose pod: `spawnLoose(..., abandoned)`; Drop (ragdoll and bat) and the
+    attach-failure respawn pass it on; `CarryService.SpawnLoose(..., keep?, abandoned?)`.
+  * Never on nest pods or deposited hauls, so a pod carried home and stolen
+    again is a new attempt. Not on banked Tools: dropped at banking by design.
+  * Abandoned pods still expire at 45 s and are cleared at dusk (WorldCycleService
+    destroys every `SeedPod` regardless of attributes).
+
+Hooks: `ResolveGuardianCatch(player, hauling, roll?)`;
+`SetGuardianRollOverride(n | nil)`, [0, 1) only; DebugService
+`ForceGuardianRoll {value = n}`, and `{}` clears it (Studio/owner gate).
+
+### Verified
+
+  * `GuardianConfiscateSpec` 88/88, Edit, fresh-require. Real TryTake /
+    ResolveGuardianCatch / Drop / SpawnLoose with stand-in players on a fixture
+    floor. Covers: the boundary; one counted draw per pod; a hauling guardian
+    neither draws nor marks; leave -> exactly one flagged loose pod; re-pick by a
+    second carrier keeps the flag and provokes the origin nest every time; catches
+    at 0 / 0.3999 / 0.40 / 0.9999 on it all `abandoned`; a bat-style drop keeps the
+    flag; confiscation leaves no loose pod; a deposited pod rolls afresh;
+    same-frame double contact; an empty-handed catch; the override; a seeded
+    20000-draw rate within 0.015 of 0.40.
+  * The other ten specs pass unchanged (TutorialPod 263, Speed 332, StarbloomLimb 71,
+    Cycle 31, BatSwing 93, BatClearance 939, Weapon 107, Plot 65, MillSign 8,
+    Tutorial 93). The five changed modules are identical to disk in Studio and
+    compile. `git diff --check` and `rojo build` are clean.
+  * Play, ONE client, Tanglemire; a server sampler on guardian attributes plus
+    the server log:
+      - forced 0.1: take -> chase at 69 -> `keeps a 3 tier Bogbonnet: the guardian
+        left it behind for good` / `left ... (left)`; exactly one loose pod
+        (`GuardianAbandoned=true`, `FromNestId=Nest_tanglemire_01`); `Hauling`
+        never set; guardian returning -> asleep.
+      - re-take: carried model flagged; chase at 74 (+5 rage; seen 3 times);
+        recatch logs `(abandoned)` with no new roll; one flagged loose pod
+        again; guardian home empty-handed.
+      - abandoned loose pod expired at +45.0 s (3 times).
+      - re-take, then run to the plot: exactly one Tool `???` (crookreed, 1 tier,
+        not hatched, no flag); BankedCount 0 -> 1; no loose pod.
+      - forced 0.9: `confiscated` / `took a 4 tier bogbonnet off`; no loose pod;
+        `Hauling=right`; `returned ... to Nest_tanglemire_01 (arrived)`; ring +1.
+
+### Not verified
+
+Two real players (only the spec's stand-in carriers). Emberroot and Starbloom in
+Play (same call; profile check only). A real bat hit on an abandoned carrier
+(the spec uses the same Drop). Dusk with an abandoned pod on the ground (read in
+code only). The unforced live 40/60 split.
+
+### Found, not fixed
+
+DebugService `Teleport {where = "plot"}` throws `GetPivot is not a valid member
+of Player`: it passes the Player to `PlotService.SpawnCFrameFor(plot: Model)`.
+This predates this change.
+
+### Files
+
+`GuardianCatch.luau` (new), `CarryService.luau`, `NestService.luau`,
+`GameConfig.luau`, `DebugService.luau`, `tools/tests/GuardianConfiscateSpec.luau`
+(new).
+
 ## The placement disc follows the second bed — 2026-09-11 (CLAUDE)
 
 Owner report: the placement circle would not go onto the second soil.

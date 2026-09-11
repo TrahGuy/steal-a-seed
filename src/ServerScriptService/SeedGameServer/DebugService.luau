@@ -359,6 +359,27 @@ ACTIONS.WakeNearest = function(player, _payload)
 end
 
 --==============================================================================
+-- FORCE THE GUARDIAN LEAVE-BEHIND ROLL
+--
+-- Play verification of both branches without waiting on chance. A number in
+-- [0, 1) forces every confiscating catch's roll -- below LeaveBehindChance
+-- leaves the pod, at or above it confiscates -- and no value hands the roll
+-- back to the server's own draw. A pod already left is never rolled either way.
+--==============================================================================
+ACTIONS.ForceGuardianRoll = function(_player, payload)
+	if payload.value == nil then
+		CarryService.SetGuardianRollOverride(nil)
+		return "guardian roll: back to random"
+	end
+	local value = tonumber(payload.value)
+	if value == nil or not CarryService.SetGuardianRollOverride(value) then
+		return "ForceGuardianRoll: value must be a number in [0, 1)"
+	end
+	return string.format("guardian roll forced to %s (leaves below %.2f)",
+		tostring(value), GameConfig.Parent.Confiscate.LeaveBehindChance)
+end
+
+--==============================================================================
 -- THE BAG
 --==============================================================================
 ACTIONS.ClearBag = function(player, _payload)

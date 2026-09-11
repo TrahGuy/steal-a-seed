@@ -50,6 +50,7 @@ local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+local GuardianCatch = require(script.Parent:WaitForChild("GuardianCatch"))
 
 local ATTR = GameConfig.Attributes
 local SAVE = GameConfig.Save
@@ -77,6 +78,16 @@ export type Held = {
 	-- who fumbles their one pod watches a stranger walk off with it.
 	--==========================================================================
 	reservedFor: number?,
+	--==========================================================================
+	-- A CONFISCATING GUARDIAN ALREADY CHOSE TO LEAVE THIS POD BEHIND
+	--
+	-- Permanent, and the POD's rather than the player's: carried through every
+	-- drop, bat knock, re-take and change of hands exactly like `fromNest`, so
+	-- no confiscating guardian takes it and none rolls it again. Mirrored onto
+	-- the carried model and the loose pod as ATTR.GuardianAbandoned. Not carried
+	-- past banking, where the pod stops being on the road at all.
+	--==========================================================================
+	guardianAbandoned: boolean?,
 }
 
 local carried: { [Player]: Held } = {}
@@ -361,7 +372,8 @@ end
 -- be a way to launder a 9,000 kg cube into a 2 kg one by dropping it, and the
 -- player who picked it up would be robbed by the physics rather than by anyone.
 local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
-	parent: Instance, fromNest: string?, reservedFor: number?, keep: boolean?): Model
+	parent: Instance, fromNest: string?, reservedFor: number?, keep: boolean?,
+	abandoned: boolean?): Model
 	local pod = CreatureModel.BuildPod(species, tier, at, parent)
 	-- Loot, explicitly. This is the whole point of a loose pod.
 	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
@@ -382,6 +394,10 @@ local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
 		-- which would look for a slot this pod no longer occupies. It only says
 		-- WHICH PARENT TO ANNOY.
 		pod:SetAttribute("FromNestId", fromNest)
+	end
+	-- Nothing to do with `keep`, which is lifetime. This is who may take it home.
+	if abandoned then
+		pod:SetAttribute(ATTR.GuardianAbandoned, true)
 	end
 	for _, d in ipairs(pod:GetDescendants()) do
 		if d:IsA("BasePart") then
@@ -585,6 +601,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- Read with the others, above the take, for the reason stated there: the
 	-- pod and its attributes are about to be destroyed.
 	local reservedFor = tonumber(pod:GetAttribute(RESERVED_FOR))
+	-- Only ever on a loose pod. A nest pod is always a fresh attempt.
+	local abandoned = pod:GetAttribute(ATTR.GuardianAbandoned) == true
 
 	local species: SeedData.Species?
 	if pod:GetAttribute("NestId") then
@@ -623,12 +641,16 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
+		if abandoned then
+			model:SetAttribute(ATTR.GuardianAbandoned, true)
+		end
 		carried[player] = {
 			species = taken,
 			tier = takenTier,
 			model = model,
 			fromNest = fromNest,
 			reservedFor = reservedFor,
+			guardianAbandoned = abandoned,
 		}
 	end)
 
@@ -641,7 +663,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 		if map then
 			spawnLoose(taken, takenTier,
-				CFrame.new(anchor.Position + Vector3.new(0, 1, 0)), map)
+				CFrame.new(anchor.Position + Vector3.new(0, 1, 0)), map,
+				nil, nil, nil, abandoned)
 		end
 		return false
 	end
@@ -701,7 +724,7 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 		-- stays that way; a dropped RESERVED one keeps its owner, so the run
 		-- back for it is a recovery rather than a race.
 		spawnLoose(held.species, held.tier, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
-			map, held.fromNest, held.reservedFor)
+			map, held.fromNest, held.reservedFor, nil, held.guardianAbandoned)
 	end
 
 	publish(player)
@@ -1184,6 +1207,64 @@ function CarryService.Confiscate(player: Player): Held?
 end
 
 --==============================================================================
+-- A CONFISCATING GUARDIAN'S CATCH, RESOLVED IN ONE RESUMPTION
+--
+-- GuardianCatch decides; this applies the decision to the one pod concerned.
+-- NOTHING HERE YIELDS, so the read of `carried[player]`, the roll, the mark and
+-- the take all happen before any other thread runs. Two guardians reaching the
+-- same carrier in the same frame therefore cannot both roll or both take:
+--
+--   first "confiscated" -> hand emptied -> second sees "none", throws only
+--   first "left"        -> pod marked   -> second sees "abandoned", no roll
+--
+-- On "left" and "abandoned" the pod stays in the victim's hands ON PURPOSE. The
+-- guardian's throw sets PlatformStand, and the watcher in onCharacterAdded turns
+-- that into the one canonical Drop, which makes the one loose pod and carries
+-- the flag onto it. Nothing here drops, so nothing here can drop twice.
+--
+-- `hauling` is asked first and returns before the pod is even read: a guardian
+-- whose hands are full can never roll or mark somebody else's pod.
+--
+-- `roll` is for specs. Play tests force it through SetGuardianRollOverride,
+-- which DebugService's ForceGuardianRoll reaches.
+--==============================================================================
+local catchRandom = Random.new()
+local rollOverride: number? = nil
+
+-- Forces every roll until cleared with nil. Refuses anything outside [0, 1).
+function CarryService.SetGuardianRollOverride(value: number?): boolean
+	if value == nil then
+		rollOverride = nil
+		return true
+	end
+	if type(value) ~= "number" or value ~= value or value < 0 or value >= 1 then
+		return false
+	end
+	rollOverride = value
+	return true
+end
+
+function CarryService.ResolveGuardianCatch(player: Player, hauling: boolean,
+	roll: number?): (string, Held?)
+	local held = carried[player]
+	local outcome = GuardianCatch.Resolve(held, hauling == true, function(): number
+		return roll or rollOverride or catchRandom:NextNumber()
+	end, GameConfig.Parent.Confiscate.LeaveBehindChance)
+
+	if outcome == GuardianCatch.Confiscated then
+		return outcome, CarryService.Confiscate(player)
+	end
+	if outcome == GuardianCatch.Left and held then
+		if held.model and held.model.Parent then
+			held.model:SetAttribute(ATTR.GuardianAbandoned, true)
+		end
+		log(string.format("%s keeps a %d tier %s: the guardian left it behind for good.",
+			player.Name, held.tier, held.species.Name))
+	end
+	return outcome, nil
+end
+
+--==============================================================================
 -- PUTTING ONE BACK ON THE GROUND, FROM OUTSIDE
 --
 -- The recovery path for a haul that cannot be deposited in a ring -- the nest
@@ -1193,13 +1274,13 @@ end
 -- one to exist.
 --==============================================================================
 function CarryService.SpawnLoose(speciesId: string, tier: number, at: CFrame,
-	fromNest: string?, reservedFor: number?, keep: boolean?): Model?
+	fromNest: string?, reservedFor: number?, keep: boolean?, abandoned: boolean?): Model?
 	local species = SeedData.Get(speciesId)
 	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 	if not (species and map) then
 		return nil
 	end
-	return spawnLoose(species, tier, at, map, fromNest, reservedFor, keep)
+	return spawnLoose(species, tier, at, map, fromNest, reservedFor, keep, abandoned)
 end
 
 -- Who a pod belongs to, or nil for the ordinary kind everybody may take.
@@ -1602,7 +1683,8 @@ function CarryService.Start()
 	-- does not happen -- the catch falls through to the throw it always did.
 	--==========================================================================
 	NestService.SetCarryBridge({
-		Confiscate = CarryService.Confiscate,
+		-- The whole catch in one call that does not yield: roll, mark, or take.
+		ResolveGuardianCatch = CarryService.ResolveGuardianCatch,
 		SpawnLoose = CarryService.SpawnLoose,
 		-- So a guardian's throw can hand movement back by RECOMPUTING it rather
 		-- than by replaying a number it captured before the throw -- which is

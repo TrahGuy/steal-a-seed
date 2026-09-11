@@ -178,7 +178,9 @@ local running = false
 -- number, only by asking the file that owns the number.
 --==============================================================================
 type CarryBridge = {
-	Confiscate: (Player) -> any,
+	-- (victim, guardianAlreadyHauling) -> (outcome, held?). The roll, the mark
+	-- or the take, in one call that does not yield. See GuardianCatch.
+	ResolveGuardianCatch: (Player, boolean) -> (string, any),
 	SpawnLoose: (string, number, CFrame, string?) -> boolean,
 	RefreshWalkSpeed: ((Player) -> ())?,
 }
@@ -1476,11 +1478,11 @@ end
 -- TAKING IT OFF THE PLAYER, ONCE
 --
 -- Returns whether there is now something to walk home with. Everything that
--- makes this safe is upstream of it: `Confiscate` does not yield, so the read
--- and the clear of that player's slot happen in one resumption. Two guardians
--- reaching the same person in the same frame cannot both come away holding
--- something -- the second sees an empty hand and throws them exactly as
--- Greenhollow's would.
+-- makes this safe is upstream of it: `ResolveGuardianCatch` does not yield, so
+-- the read, the roll, the mark and the clear of that player's slot happen in
+-- one resumption. Two guardians reaching the same person in the same frame
+-- cannot both come away holding something -- the second sees an empty hand, or
+-- a pod the first already left, and throws them exactly as Greenhollow's would.
 --
 -- The record is set BEFORE the weld is attempted, so a rig with a missing seam
 -- costs the pod its picture and not its journey home.
@@ -1496,7 +1498,24 @@ local function confiscateFrom(nest: Nest, victim: Player): boolean
 	if not bridge then
 		return false
 	end
-	local held = bridge.Confiscate(victim)
+	--==========================================================================
+	-- ROLL, MARK OR TAKE
+	--
+	-- A pod no guardian has left yet is rolled once, at
+	-- GameConfig.Parent.Confiscate.LeaveBehindChance. On a leave -- or on a pod
+	-- some guardian already left -- it stays in the victim's hands and `false`
+	-- sends this catch down the plain throw, whose ragdoll drops it through
+	-- CarryService.Drop with the flag still on, and the guardian goes home
+	-- empty-handed. `nest.haul` is nil by the guard above, so "hauling" cannot
+	-- come back from here.
+	--==========================================================================
+	local outcome, held = bridge.ResolveGuardianCatch(victim, false)
+	if outcome ~= "confiscated" then
+		if outcome == "left" or outcome == "abandoned" then
+			log(string.format("%s left %s's pod behind (%s).", nest.id, victim.Name, outcome))
+		end
+		return false
+	end
 	if type(held) ~= "table" or not held.species or type(held.tier) ~= "number" then
 		return false
 	end

@@ -539,6 +539,10 @@ GameConfig.Attributes = {
 	-- the wrong one.
 	CarryingSpecies = "CarryingSpecies",
 	CarryingKg = "CarryingKg",
+	-- On a POD (the carried model and the loose pod): a confiscating guardian
+	-- chose to leave it behind, so no confiscating guardian will ever take it.
+	-- The pod's, never a player's. See GuardianCatch.
+	GuardianAbandoned = "GuardianAbandoned",
 	--==========================================================================
 	-- WHICH LEFT-RAIL PANEL IS OPEN, IF ANY
 	--
@@ -1973,6 +1977,16 @@ GameConfig.Parent = {
 	-- allowed to change.
 	--======================================================================
 	Confiscate = {
+		--==================================================================
+		-- HOW OFTEN A CATCH LEAVES THE POD BEHIND INSTEAD
+		--
+		-- Rolled ONCE per pod, server-side, on its first confirmed catch by
+		-- one of these three. On a leave the pod is marked GuardianAbandoned
+		-- for good: every later catch still throws the carrier, and none
+		-- takes the pod or rolls again. Strict boundary: leave iff
+		-- roll < this, with roll in [0, 1). See GuardianCatch.
+		--==================================================================
+		LeaveBehindChance = 0.40,
 		tanglemire = { Seam = "RightHand", Side = 0.35, Steady = "right",
 			AwayWeight = 0.45, RoadWeight = 1.00 },
 		emberroot = { Seam = "FistR", Side = 0.30, Steady = "right",
@@ -2013,7 +2027,16 @@ function GameConfig.confiscateProfile(biomeId: any): any
 	if type(biomeId) ~= "string" then
 		return nil
 	end
-	return GameConfig.Parent.Confiscate[biomeId]
+	-- Profiles only. The table also holds LeaveBehindChance, a number, and no
+	-- id may resolve to it.
+	local profile = GameConfig.Parent.Confiscate[biomeId]
+	return if type(profile) == "table" then profile else nil
+end
+
+do
+	local chance = GameConfig.Parent.Confiscate.LeaveBehindChance
+	assert(type(chance) == "number" and chance == chance and chance >= 0 and chance <= 1,
+		"GameConfig.Parent.Confiscate.LeaveBehindChance must be a number in 0..1")
 end
 
 --==============================================================================
