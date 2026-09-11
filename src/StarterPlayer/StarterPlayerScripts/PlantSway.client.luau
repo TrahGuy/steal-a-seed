@@ -450,7 +450,10 @@ local function forget(instance: Instance)
 	-- Before anything else: a plant picked up mid-pulse must not leave four lit
 	-- segments hanging over the empty cell. Forget returns them to the pool.
 	PlantAura.Forget(entry.aura)
-	if entry.model.Parent then
+	-- Not once the PrimaryPart has gone. Its parts streamed out, and pivoting a
+	-- model with nothing to pivot on would shift whatever is left of it by a
+	-- stale WorldPivot.
+	if entry.model.Parent and entry.model.PrimaryPart then
 		pcall(function()
 			entry.model:PivotTo(entry.rest)
 		end)
@@ -467,19 +470,100 @@ local function forget(instance: Instance)
 	end
 end
 
+--==============================================================================
+-- A PLANT THAT HAS NOT STREAMED IN YET IS WATCHED, NOT GIVEN UP ON
+--
+-- This place runs StreamingEnabled. A plant on a plot out of range reaches this
+-- client as an EMPTY Model -- the container, its tag and its attributes -- and
+-- its parts follow only once the player comes near, which can be a minute later
+-- or never. Until then PrimaryPart is nil. ParentAnim once drew nothing for a
+-- whole session by reading it once; the fix for that here waited five seconds
+-- and then gave up just the same, so every garden that streamed in late stood
+-- frozen for the rest of the session. Measured in Play: a plant whose parts
+-- arrived after that window never moved at all.
+--
+-- So a tagged model is watched for as long as it is tagged and in the game.
+-- Its PrimaryPart ARRIVING builds the sway. Its PrimaryPart LEAVING -- the parts
+-- streamed back out -- forgets it, so the next arrival measures the parts that
+-- are there then instead of animating eyes and lids that have gone. A property
+-- signal per model, not a poll: a far plot full of waiting plants costs nothing
+-- until something arrives.
+--==============================================================================
+local watching: { [Model]: { RBXScriptConnection } } = {}
+local building: { [Model]: boolean } = {}
+
+-- The tag or the model is gone: drop the sway, and the watch with it.
+local function release(instance: Instance)
+	forget(instance)
+	local model = instance :: Model
+	local conns = watching[model]
+	if conns then
+		watching[model] = nil
+		for _, c in ipairs(conns) do
+			c:Disconnect()
+		end
+	end
+end
+
+--==============================================================================
+-- ONE MODEL CAN ARRIVE IN MORE THAN ONE BATCH
+--
+-- PrimaryPart turning up says a model has started to stream in, not that it has
+-- finished, and the build below measures the parts exactly once. So they are
+-- counted until two counts a beat apart agree, for at most ten beats. A plant
+-- planted in front of the player agrees on the first recount.
+--==============================================================================
+local SETTLE_BEAT = 0.15
+local SETTLE_BEATS = 10
+
+local function settle(model: Model)
+	local last = -1
+	for _ = 1, SETTLE_BEATS do
+		local count = 0
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				count += 1
+			end
+		end
+		if count == last or not model.Parent then
+			return
+		end
+		last = count
+		task.wait(SETTLE_BEAT)
+	end
+end
+
 local function remember(instance: Instance)
-	if not instance:IsA("Model") or index[instance :: Model] then
+	if not instance:IsA("Model") then
 		return
 	end
 	local model = instance :: Model
+	if not watching[model] then
+		watching[model] = {
+			model:GetPropertyChangedSignal("PrimaryPart"):Connect(function()
+				if model.PrimaryPart then
+					remember(model)
+				else
+					forget(model)
+				end
+			end),
+			model.AncestryChanged:Connect(function()
+				if not model:IsDescendantOf(game) then
+					release(model)
+				end
+			end),
+		}
+	end
+	if index[model] or building[model] or not (model.Parent and model.PrimaryPart) then
+		return
+	end
+	building[model] = true
 	task.spawn(function()
-		-- The model can be tagged before its parts have replicated, which is
-		-- when PrimaryPart is still nil. ParentAnim drew nothing for a whole
-		-- session by reading it once and giving up.
-		local deadline = os.clock() + 5
-		while not model.PrimaryPart and model.Parent and os.clock() < deadline do
-			task.wait(0.1)
-		end
+		settle(model)
+		-- Cleared before the build rather than after it: nothing below yields,
+		-- so the build finishes in this resumption and every early return in it
+		-- leaves the model free to be tried again on its next arrival.
+		building[model] = nil
 		if not (model.Parent and model.PrimaryPart) then
 			return
 		end
@@ -1340,7 +1424,7 @@ for _, instance in ipairs(CollectionService:GetTagged(PLANTED)) do
 	remember(instance)
 end
 table.insert(connections, CollectionService:GetInstanceAddedSignal(PLANTED):Connect(remember))
-table.insert(connections, CollectionService:GetInstanceRemovedSignal(PLANTED):Connect(forget))
+table.insert(connections, CollectionService:GetInstanceRemovedSignal(PLANTED):Connect(release))
 
 -- The existing reduced-effects control, not a new one: the same
 -- `SeedAfterimageQuality` attribute SpeedFX already reads, with the same touch
@@ -1398,7 +1482,7 @@ table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 		end
 		if not entry.model.Parent then
 			-- Destroyed without the tag signal arriving first.
-			forget(entry.model)
+			release(entry.model)
 		elseif entry.hatching then
 			-- Already done above, and applying twice in a frame just costs a
 			-- PivotTo.
@@ -1422,6 +1506,12 @@ script.Destroying:Connect(function()
 		c:Disconnect()
 	end
 	table.clear(connections)
+	for _, conns in pairs(watching) do
+		for _, c in ipairs(conns) do
+			c:Disconnect()
+		end
+	end
+	table.clear(watching)
 	for _, entry in ipairs(list) do
 		if entry.model.Parent then
 			pcall(function()

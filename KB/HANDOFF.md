@@ -1,5 +1,47 @@
 # Steal a Seed — Session Handoff
 
+## Plants that stream in late sway; a plant that streams out is measured again — FIXED 2026-09-11 (CLAUDE)
+
+This place runs StreamingEnabled. A plant on a plot outside streaming range
+reaches a client as an empty Model -- container, tag and attributes, no parts,
+PrimaryPart nil -- and its parts follow only when the player comes near.
+`PlantSway.remember` waited five seconds for the PrimaryPart and then abandoned
+the model for the rest of the session, so any garden that streamed in late
+stood frozen.
+
+### Fix (`PlantSway.client.luau`)
+
+  * No deadline. Each Planted model is watched for as long as it is tagged and in
+    the game. Its `PrimaryPart` arriving builds the sway, once the part count has
+    settled (at most ten 0.15 s beats). Its `PrimaryPart` leaving forgets it, so
+    the next arrival measures the parts that are there rather than animating
+    references to parts that left. Property signals, no polling.
+  * `release` (tag removed, or the model leaving the game) drops the sway and the
+    watch together. `forget` no longer pivots a model that has no PrimaryPart.
+  * The watchers are disconnected with everything else when the script re-runs.
+
+### Verified
+
+  * Play, one client, with a clone of the owner's grown Nubkin tagged Planted
+    2,600 studs off the map on an anchored platform. The client held the empty
+    container (PrimaryPart nil, 0 parts) until the player went there.
+      - BEFORE the change, teleported to it over a minute after the tag: the
+        parts streamed in within 0.1 s and the plant never moved -- 0.000 studs
+        and 0.00 degrees of pivot change over 3 s.
+      - AFTER, the same test 84 s after the tag: it swayed (25.6 degrees of pivot
+        change) with its pupils, lids, leaves and stem animating.
+  * A clone near the player had all 33 parts moved to ServerStorage and back:
+    still animating afterwards, eyes included. That is not a real stream-out --
+    measured, the client kept the very same Part instances -- so the stream-out
+    branch is covered by reading, not by a live test.
+  * All specs pass. PlantSway itself has no spec; it is a LocalScript.
+
+### Not verified
+
+  * A real stream-OUT and back in: StreamOutBehavior cannot be read or set from
+    a script here, so it could not be forced.
+  * Two players watching one late-streamed garden.
+
 ## Taking a pod puts the held plant away — FIXED 2026-09-11 (CLAUDE)
 
 Holding a plant while taking a pod drew both at once: the raid pod in both arms
