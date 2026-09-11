@@ -3195,9 +3195,9 @@ GameConfig.Panel = {
 -- the button refuses. Fill an id in and that tile becomes live with no other
 -- change anywhere.
 --
--- WIRED 2026-09-11 from the owner's Creator Dashboard: cash1-5, speed1, speed2,
--- speed5, speed6 and the x2 Money pass are live. speed3, speed4 and the three
--- pods are still 0 and read SOON. The tile prices are the owner's list.
+-- WIRED 2026-09-11 from the owner's Creator Dashboard: all five cash packs, all
+-- six speed packs and the x2 Money pass are live. Only the three pods are still
+-- 0 and read SOON. The tile prices are the owner's list.
 -- GetProductInfo, asked from the owner's own account in Studio, returned about
 -- 0.4x of them for every product (cash1 8 against 19, speed6 319 against 799);
 -- that was taken to be regional pricing, and the owner chose the list.
@@ -3413,8 +3413,8 @@ GameConfig.Store = {
 		Speed = {
 			{ key = "speed1", label = "+150K SPEED", robux = 29, product = 3712094350, kind = "speed", amount = 150e3 },
 			{ key = "speed2", label = "+1M SPEED", robux = 79, product = 3712094432, kind = "speed", amount = 1e6 },
-			{ key = "speed3", label = "+10M SPEED", robux = 279, product = 0, kind = "speed", amount = 10e6 },
-			{ key = "speed4", label = "+50M SPEED", robux = 599, product = 0, kind = "speed", amount = 50e6 },
+			{ key = "speed3", label = "+10M SPEED", robux = 149, product = 3712091968, kind = "speed", amount = 10e6 },
+			{ key = "speed4", label = "+50M SPEED", robux = 299, product = 3712092016, kind = "speed", amount = 50e6 },
 			{ key = "speed5", label = "+500M SPEED", robux = 599, product = 3712092058, kind = "speed", amount = 500e6 },
 			{ key = "speed6", label = "+1B SPEED", robux = 799, product = 3712092103, kind = "speed", amount = 1e9 },
 		},
