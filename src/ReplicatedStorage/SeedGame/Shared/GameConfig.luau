@@ -3041,10 +3041,11 @@ GameConfig.Rail = {
 	-- of the 512px exports. They draw at 28 and pop to 30; 128 covers a 3x phone
 	-- with headroom at a sixteenth of the memory, which is rule 8.
 	--
-	-- THE DRAWN HELPERS ARE STILL LIVE. UIKit.cartIcon, bookIcon and sproutIcon
-	-- each appear twice -- once on the rail button and once in that panel's modal
-	-- TITLE BAR -- and only the rail half is replaced here. Deleting them would
-	-- take the title bars with them.
+	-- THE DRAWN HELPERS ARE STILL LIVE. UIKit.bookIcon and sproutIcon each appear
+	-- twice -- once on the rail button and once in that panel's modal TITLE BAR --
+	-- and only the rail half is replaced here. Deleting them would take the title
+	-- bars with them. UIKit.cartIcon lost its title bar in the 2026-09-11 shop
+	-- restyle, whose green header carries no icon; it is unused but kept.
 	--==========================================================================
 	ShopIcon = "rbxassetid://90931969678136",
 	IndexIcon = "rbxassetid://126806966970007",
@@ -3255,52 +3256,45 @@ GameConfig.Store = {
 	--==========================================================================
 	Sections = {
 		--======================================================================
-		-- THESE ARE SAMPLED OFF THE REFERENCE, NOT PICKED BY EYE
+		-- A SHELF OWNS ITS COLOURS
 		--
-		-- The first pass guessed them and every tile came out chalky. Clustering
-		-- the saturated pixels of shop ui 1/2/3 says the reference runs the RED
-		-- CHANNEL AT ZERO down both the cyan and the green ramps -- (0,240,224)
-		-- to (0,96,224) on speed, (0,240,16) to (0,160,0) on cash. The earlier
-		-- values started at 112 and 126 red, which is exactly the amount of grey
-		-- that made them read as washed out next to the reference.
+		-- `colour` is the heading over the shelf; `top` and `bottom` are its
+		-- tiles' gradient. From the owner's approved mockup of 2026-09-11: sky
+		-- blue for speed, grass green for cash, warm gold for passes. Every tile
+		-- wears the same ink keyline and the same lime button whatever its shelf.
 		--
-		-- `rim` stays a light tint rather than a sampled value: it is the bright
-		-- edge that separates one tile from the next, and it has to lift off the
-		-- top of the ramp it borders.
+		-- The bright `rim` and the per-shelf `accent` went with the old tile: the
+		-- keyline replaced the rim, and an amount's colour now comes from the
+		-- size of the pack (GameConfig.Shop.AmountLow / AmountHigh), not from the
+		-- shelf it is on.
 		--======================================================================
 		--======================================================================
-		-- PASSES SITS AT THE TOP, AND IS THE ONE SHELF THAT IS NOT A GRID
+		-- PASSES SITS AT THE TOP
 		--
-		-- `layout = "banner"` tells ShopUI to draw one wide 3:2 card instead of
-		-- a row of tiles. A Game Pass is a permanent account entitlement rather
-		-- than one of a ladder of amounts, so it does not belong in a rank of
-		-- interchangeable tiles -- and putting it first is the point of it.
-		--
-		-- The gradient fields are still here because the SOON pill and the
-		-- heading read off them, even though the banner supplies its own art.
+		-- `layout = "pass"` tells ShopUI these rows are Game Passes: each tile
+		-- shows the pass's card art from `Cards`, and its button prompts a pass
+		-- purchase rather than a Developer Product. A permanent entitlement goes
+		-- first; that is the point of it.
 		--======================================================================
-		{ id = "Passes", heading = "PASSES", layout = "banner",
+		{ id = "Passes", heading = "PASSES", layout = "pass",
 			colour = Color3.fromRGB(255, 214, 64),
-			top = Color3.fromRGB(0, 186, 72), bottom = Color3.fromRGB(0, 108, 40),
-			rim = Color3.fromRGB(255, 206, 64), accent = Color3.fromRGB(255, 226, 120) },
+			top = Color3.fromRGB(255, 232, 117), bottom = Color3.fromRGB(202, 110, 8) },
 		{ id = "Speed", heading = "SPEED",
 			colour = Color3.fromRGB(64, 226, 250),
-			top = Color3.fromRGB(0, 242, 236), bottom = Color3.fromRGB(0, 104, 224),
-			rim = Color3.fromRGB(128, 255, 250), accent = Color3.fromRGB(126, 250, 128) },
+			top = Color3.fromRGB(94, 231, 252), bottom = Color3.fromRGB(8, 126, 196) },
 		{ id = "Cash", heading = "CASH",
 			colour = Color3.fromRGB(86, 232, 46),
-			top = Color3.fromRGB(0, 240, 20), bottom = Color3.fromRGB(0, 156, 0),
-			rim = Color3.fromRGB(140, 255, 120), accent = Color3.fromRGB(255, 255, 255) },
+			top = Color3.fromRGB(118, 245, 86), bottom = Color3.fromRGB(24, 138, 16) },
 		--======================================================================
 		-- "???" IS THE HEADING THE OWNER ASKED FOR
 		--
 		-- It was PREMIUM PODS. The shelf, its three items and their prices are
-		-- unchanged -- only what the header prints.
+		-- unchanged -- only what the header prints. The approved mockup gives it
+		-- no colour of its own, so its tiles keep their gold.
 		--======================================================================
 		{ id = "Pods", heading = "???",
 			colour = Color3.fromRGB(252, 220, 96),
-			top = Color3.fromRGB(255, 238, 130), bottom = Color3.fromRGB(238, 170, 20),
-			rim = Color3.fromRGB(255, 246, 180), accent = Color3.fromRGB(255, 255, 255) },
+			top = Color3.fromRGB(255, 238, 130), bottom = Color3.fromRGB(238, 170, 20) },
 		--======================================================================
 		-- PLANTS IS GONE, NOT HIDDEN
 		--
@@ -3419,11 +3413,13 @@ GameConfig.Store = {
 			{ key = "speed6", label = "+1B SPEED", robux = 799, product = 3712092103, kind = "speed", amount = 1e9 },
 		},
 		Cash = {
-			{ key = "cash1", label = "$24,000", robux = 19, product = 3712092213, kind = "cash", amount = 24e3 },
-			{ key = "cash2", label = "$200,000", robux = 39, product = 3712092272, kind = "cash", amount = 200e3 },
-			{ key = "cash3", label = "$800,000", robux = 89, product = 3712092458, kind = "cash", amount = 800e3 },
-			{ key = "cash4", label = "$4,000,000", robux = 179, product = 3712092533, kind = "cash", amount = 4e6 },
-			{ key = "cash5", label = "$8,000,000", robux = 279, product = 3712092621, kind = "cash", amount = 8e6 },
+			-- Amount and noun, like the speed rows, so the tile prints the amount in
+			-- colour and CASH in white. They were bare figures ("$24,000").
+			{ key = "cash1", label = "$24K CASH", robux = 19, product = 3712092213, kind = "cash", amount = 24e3 },
+			{ key = "cash2", label = "$200K CASH", robux = 39, product = 3712092272, kind = "cash", amount = 200e3 },
+			{ key = "cash3", label = "$800K CASH", robux = 89, product = 3712092458, kind = "cash", amount = 800e3 },
+			{ key = "cash4", label = "$4M CASH", robux = 179, product = 3712092533, kind = "cash", amount = 4e6 },
+			{ key = "cash5", label = "$8M CASH", robux = 279, product = 3712092621, kind = "cash", amount = 8e6 },
 		},
 		--======================================================================
 		-- Species and tier are BOTH named, so nothing about the outcome is a
@@ -3500,34 +3496,66 @@ function GameConfig.cashMultiplier(player: Player?): number
 end
 
 GameConfig.Shop = {
-	Panel = Color3.fromRGB(26, 28, 41),
-	PanelEdge = Color3.fromRGB(48, 50, 61),
-	Outline = Color3.fromRGB(0, 0, 0),
-	CardTop = Color3.fromRGB(108, 176, 84),
-	CardBottom = Color3.fromRGB(56, 112, 52),
-	CardBorder = Color3.fromRGB(34, 76, 36),
-	SoldTop = Color3.fromRGB(88, 94, 108),
-	SoldBottom = Color3.fromRGB(50, 54, 66),
+	--==========================================================================
+	-- THE APPROVED RESTYLE, 2026-09-11
+	--
+	-- From the owner's approved mockup (shop_mockup_preview.png), with
+	-- art/shop/reference/target-shop-reference.png as the look it is after: a
+	-- green header over a charcoal slate panel, so the coloured tiles are the
+	-- brightest thing in the shop. The tiles' own gradients are per shelf, in
+	-- Store.Sections.
+	--
+	-- INK is the one dark: every keyline, every text outline, and the price on
+	-- its white capsule. A black with a little blue in it rather than 0,0,0,
+	-- which is what the mockup draws and what keeps an outline on charcoal from
+	-- reading as a hole.
+	--==========================================================================
+	Ink = Color3.fromRGB(16, 21, 28),
+
+	HeaderTop = Color3.fromRGB(78, 227, 44), -- #4EE32C
+	HeaderBottom = Color3.fromRGB(37, 166, 17), -- #25A611
+	CloseTop = Color3.fromRGB(255, 77, 77), -- #FF4D4D
+	CloseBottom = Color3.fromRGB(204, 20, 20), -- #CC1414
+	CloseShade = Color3.fromRGB(128, 12, 12),
+
+	BodyTop = Color3.fromRGB(38, 44, 56), -- #262C38
+	BodyBottom = Color3.fromRGB(24, 29, 38), -- #181D26
+	-- A lighter slate held well back: texture sits behind the tiles and never
+	-- competes with them.
+	BodyLattice = Color3.fromRGB(74, 84, 102),
+	BodyLatticeTransparency = 0.7,
+	ScrollBar = Color3.fromRGB(96, 106, 124),
+
+	--==========================================================================
+	-- THE BUY BUTTON IS LIME ON EVERY SHELF
+	--
+	-- A lime plate with a white capsule holding the Robux mark and the price.
+	-- It is the BUY colour, not the shelf's -- the same on sky blue and on grass
+	-- green -- which is what makes it read as the button rather than as
+	-- decoration. SOON is the same shape in slate, with a dark capsule.
+	--==========================================================================
+	PillTop = Color3.fromRGB(86, 237, 52), -- #56ED34
+	PillBottom = Color3.fromRGB(41, 191, 24), -- #29BF18
+	Capsule = Color3.fromRGB(255, 255, 255),
+	SoonTop = Color3.fromRGB(126, 135, 150), -- #7E8796
+	SoonBottom = Color3.fromRGB(89, 97, 110), -- #59616E
+	SoonCapsule = Color3.fromRGB(47, 53, 66), -- #2F3542
+	SoonText = Color3.fromRGB(170, 178, 192),
+
+	--==========================================================================
+	-- AN AMOUNT'S COLOUR SAYS HOW BIG THE PACK IS
+	--
+	-- Neon green under 50M, neon gold from 50M up, with the noun beside it white.
+	-- Keyed on the row's own `amount`, so a new pack lands on the right side of
+	-- the line with no second list to keep in step.
+	--==========================================================================
+	AmountLow = Color3.fromRGB(54, 244, 42), -- #36F42A
+	AmountHigh = Color3.fromRGB(255, 214, 38), -- #FFD626
+	AmountHighFrom = 50e6,
+
+	-- Marigold's weapon stall reads these two; the Robux shop no longer does.
 	Buy = Color3.fromRGB(250, 190, 46),
 	BuyShade = Color3.fromRGB(186, 130, 20),
-	--==========================================================================
-	-- THE PRICE PILL IS GREEN ON EVERY SHELF
-	--
-	-- In the reference it is the same green on the cyan speed tiles and on the
-	-- green cash ones -- it is the BUY colour, not the shelf's, and keeping it
-	-- constant is what makes it read as the button rather than as decoration.
-	--==========================================================================
-	-- Sampled at (32, 241, 0) on the speed sheet, tempered slightly so the white
-	-- price on top of it still has somewhere to sit.
-	Pill = Color3.fromRGB(38, 220, 10),
-	PillShade = Color3.fromRGB(16, 140, 0),
-	PillEdge = Color3.fromRGB(150, 252, 96),
-	Close = Color3.fromRGB(255, 0, 0),
-	Title = Color3.fromRGB(255, 255, 255),
-	-- One colour per section, so a long shop reads as a list of shelves rather
-	-- than one wall.
-	Heading = Color3.fromRGB(250, 214, 108),
-	Locked = Color3.fromRGB(120, 124, 140),
 }
 
 --==============================================================================

@@ -2712,12 +2712,46 @@ end
 -- The shell is inset by the outline thickness because a CanvasGroup renders to a
 -- texture its own size, and a stroke on its edge would be clipped by it.
 --==============================================================================
+--==============================================================================
+-- A THEME, FOR A PANEL THAT IS NOT THE HOUSE SOIL
+--
+-- Every field is optional and falls back to GameConfig.Panel, so a panel that
+-- passes no theme builds exactly as it always has. The shop passes one: a
+-- charcoal shell, a green header banner and a brighter close.
+--
+-- `headerTop` and `headerBottom` together add a coloured banner behind the title
+-- bar; with either one missing there is no banner and the title sits on the
+-- shell as before.
+--==============================================================================
+export type ModalTheme = {
+	fill: Color3?,
+	shade: Color3?,
+	outline: Color3?,
+	lattice: Color3?,
+	latticeTransparency: number?,
+	-- The shell sits at ZIndex 1 and the lattice builds at 0, so in a Global
+	-- ZIndexBehavior ScreenGui the lattice draws UNDER the shell and is never
+	-- seen (measured in the shop: invisible at 0, a clear lattice once lifted).
+	-- A theme that wants its texture on screen lifts it here; nil keeps 0.
+	latticeZIndex: number?,
+	headerTop: Color3?,
+	headerBottom: Color3?,
+	headerRule: Color3?,
+	titleStroke: Color3?,
+	titleStrokeThickness: number?,
+	closeTop: Color3?,
+	closeBottom: Color3?,
+	closeShade: Color3?,
+	closeRadius: number?,
+}
+
 export type ModalOptions = {
 	name: string,
 	title: string,
 	maxWidth: number?,
 	maxHeight: number?,
 	titleColour: Color3?,
+	theme: ModalTheme?,
 }
 
 export type Modal = {
@@ -2739,6 +2773,10 @@ local FADE = 0.16
 
 function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	local outline = RAIL.OutlineThickness
+	local theme: ModalTheme = options.theme or {}
+	local fill = theme.fill or PANEL.Fill
+	local shade = theme.shade or PANEL.Shade
+	local keyline = theme.outline or PANEL.Outline
 
 	-- A TextButton rather than a Frame: the dimmer has to CONSUME the click that
 	-- closes it, or the tap goes through to the world behind and plants a seed.
@@ -2782,7 +2820,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- Overwritten by UIKit.gradient below, which needs the surface white to
 	-- multiply against. Set anyway so the shell is never momentarily the
 	-- default grey if the gradient is ever dropped.
-	shell.BackgroundColor3 = PANEL.Fill
+	shell.BackgroundColor3 = fill
 	shell.BorderSizePixel = 0
 	--==========================================================================
 	-- THIS ALONE DID NOT WORK, AND HERE IS WHY
@@ -2804,8 +2842,8 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	shell.Active = true
 	shell.Parent = group
 	UIKit.corner(shell, 16)
-	UIKit.stroke(shell, PANEL.Outline, outline)
-	UIKit.gradient(shell, PANEL.Fill, PANEL.Shade)
+	UIKit.stroke(shell, keyline, outline)
+	UIKit.gradient(shell, fill, shade)
 
 	--==========================================================================
 	-- THE SAME LATTICE AS THE RAIL, AND YOU CAN ACTUALLY SEE IT
@@ -2826,10 +2864,67 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	UIKit.lattice(shell, {
 		spacing = PANEL.LatticeSpacing,
 		thickness = 2,
-		colour = PANEL.Lattice,
-		transparency = PANEL.LatticeTransparency,
+		colour = theme.lattice or PANEL.Lattice,
+		transparency = theme.latticeTransparency or PANEL.LatticeTransparency,
 		inset = 6,
+		zIndex = theme.latticeZIndex,
 	})
+
+	--==========================================================================
+	-- THE HEADER BANNER, WHEN A THEME ASKS FOR ONE
+	--
+	-- A coloured band across the top of the shell, behind the title bar and as
+	-- tall as everything above the body. Its top corners are the panel's own;
+	-- the bottom ones are squared off by a foot painted in the gradient's last
+	-- colour, which is why that colour holds flat through the bottom third. A
+	-- rule in the keyline colour closes it off from the body.
+	--
+	-- Not Active and not a button, so a press on it still lands on the click
+	-- blocker and never closes the panel.
+	--==========================================================================
+	local HEADER_HEIGHT = 58
+	local headerTop, headerBottom = theme.headerTop, theme.headerBottom
+	if headerTop and headerBottom then
+		local banner = Instance.new("Frame")
+		banner.Name = "HeaderBanner"
+		banner.Size = UDim2.new(1, 0, 0, HEADER_HEIGHT)
+		banner.BackgroundColor3 = WHITE
+		banner.BorderSizePixel = 0
+		banner.Active = false
+		banner.ZIndex = 2
+		banner.Parent = shell
+		UIKit.corner(banner, 16)
+		local tint = Instance.new("UIGradient")
+		tint.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, headerTop),
+			ColorSequenceKeypoint.new(0.7, headerBottom),
+			ColorSequenceKeypoint.new(1, headerBottom),
+		})
+		tint.Rotation = 90
+		tint.Parent = banner
+
+		local foot = Instance.new("Frame")
+		foot.Name = "Foot"
+		foot.AnchorPoint = Vector2.new(0, 1)
+		foot.Position = UDim2.fromScale(0, 1)
+		foot.Size = UDim2.new(1, 0, 0, 16)
+		foot.BackgroundColor3 = headerBottom
+		foot.BorderSizePixel = 0
+		foot.Active = false
+		foot.ZIndex = 2
+		foot.Parent = banner
+
+		local rule = Instance.new("Frame")
+		rule.Name = "Rule"
+		rule.AnchorPoint = Vector2.new(0, 1)
+		rule.Position = UDim2.fromScale(0, 1)
+		rule.Size = UDim2.new(1, 0, 0, 3)
+		rule.BackgroundColor3 = theme.headerRule or keyline
+		rule.BorderSizePixel = 0
+		rule.Active = false
+		rule.ZIndex = 3
+		rule.Parent = banner
+	end
 
 	local titleBar = Instance.new("Frame")
 	titleBar.Name = "TitleBar"
@@ -2909,7 +3004,14 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	layoutHeader()
 
 	local title = UIKit.outlined(titleBar, "Title", 26,
-		options.titleColour or PANEL.Title, 3)
+		options.titleColour or PANEL.Title, theme.titleStrokeThickness or 3)
+	local titleStroke = theme.titleStroke
+	if titleStroke then
+		local titleLine = title:FindFirstChildOfClass("UIStroke")
+		if titleLine then
+			titleLine.Color = titleStroke
+		end
+	end
 	title.AnchorPoint = Vector2.new(0, 0.5)
 	title.Position = UDim2.new(0, 0, 0.5, 0)
 	title.Size = UDim2.new(1, -52, 1, 0)
@@ -3011,20 +3113,21 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- Not Active: it must not eat the press on its way to the button.
 	closePlate.Active = false
 	closePlate.Parent = close
-	UIKit.corner(closePlate, 10)
-	UIKit.stroke(closePlate, PANEL.Outline, outline)
-	UIKit.gradient(closePlate, PANEL.CloseTop, PANEL.CloseBottom)
+	UIKit.corner(closePlate, theme.closeRadius or 10)
+	UIKit.stroke(closePlate, keyline, outline)
+	UIKit.gradient(closePlate, theme.closeTop or PANEL.CloseTop,
+		theme.closeBottom or PANEL.CloseBottom)
 
 	local closeShade = Instance.new("Frame")
 	closeShade.Name = "Shade"
 	closeShade.AnchorPoint = Vector2.new(0.5, 1)
 	closeShade.Position = UDim2.new(0.5, 0, 1, 0)
 	closeShade.Size = UDim2.new(1, 0, 0, 5)
-	closeShade.BackgroundColor3 = PANEL.CloseShade
+	closeShade.BackgroundColor3 = theme.closeShade or PANEL.CloseShade
 	closeShade.BorderSizePixel = 0
 	closeShade.Active = false
 	closeShade.Parent = closePlate
-	UIKit.corner(closeShade, 10)
+	UIKit.corner(closeShade, theme.closeRadius or 10)
 
 	local closeMark = UIKit.outlined(closePlate, "Mark", 22, WHITE, 2.5)
 	closeMark.Size = UDim2.fromScale(1, 1)
@@ -3032,6 +3135,12 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- plate including the shade it stands on.
 	closeMark.Position = UDim2.new(0, 0, 0, -2)
 	closeMark.Text = "X"
+	if theme.outline then
+		local markLine = closeMark:FindFirstChildOfClass("UIStroke")
+		if markLine then
+			markLine.Color = keyline
+		end
+	end
 
 	--==========================================================================
 	-- AND THE PLATE FOLLOWS THE BUTTON'S ZIndex

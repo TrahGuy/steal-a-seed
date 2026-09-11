@@ -1,5 +1,69 @@
 # Steal a Seed — Session Handoff
 
+## The shop is restyled to the approved mockup — 2026-09-11 (CLAUDE)
+
+### What
+
+  * `ShopUI.client.luau` rebuilt to the owner's approved mockup
+    (`shop_mockup_preview.png`), with `art/shop/reference/target-shop-reference.png`
+    as the target and `current-shop.png` as the panel it replaced:
+      - header: green banner (#4EE32C -> #25A611), "Shop" in white with an ink
+        outline (16,21,28 x2.5), red close (#FF4D4D -> #CC1414) with an ink keyline.
+      - body: charcoal slate (#262C38 -> #181D26) under a faint slate lattice.
+      - tiles: per-shelf gradients -- speed #5EE7FC -> #087EC4, cash #76F556 ->
+        #188A10, passes #FFE875 -> #CA6E08; the pods keep their gold -- inside an
+        ink keyline x3.
+      - type: the amount #36F42A under 50M and #FFD626 from 50M up (pods, which have
+        no amount, read gold); the noun white; ink outline x2.
+      - buy: a transparent 44px target around a 36px lime plate (#56ED34 -> #29BF18,
+        ink x2.5) holding a white capsule (radius 12) with a drawn Robux token and
+        the price in ink. SOON: slate plate (#7E8796 -> #59616E), #2F3542 capsule,
+        grey text.
+      - the pass tile shows its commissioned card art on gold with the same button,
+        and no title line -- the art carries its own name.
+  * `UIKit.modal` takes an optional `theme` (`ModalTheme`): shell fill, shade and
+    outline, lattice colour, transparency and ZIndex, a header banner, the title
+    stroke, and close colours and radius. Every field falls back to
+    GameConfig.Panel, and only the shop passes one.
+  * `GameConfig.Shop` is the new palette (Buy / BuyShade kept for Marigold's
+    stall). `Store.Sections` carry the new tile gradients -- `rim` and `accent` are
+    gone -- and the pass shelf is `layout = "pass"`. Cash labels now read
+    "$24K CASH" ... "$8M CASH", so a cash tile prints an amount and a noun.
+  * The two reference images are committed under `art/shop/reference/`.
+
+### Found: every panel's lattice was hidden
+
+`UIKit.lattice` builds at ZIndex 0 under a shell at ZIndex 1, and these ScreenGuis
+are `ZIndexBehavior.Global`, so the diamond lattice never drew on any panel. In
+Play, lifting the shop's lines to 2 made a clear lattice appear. Only the shop's is
+lifted (`theme.latticeZIndex = 1`, level with the shell). Index, Garden, the Bag,
+Settings and Marigold's stall still bury theirs; showing it there would change
+panels nobody asked to change.
+
+### Verified
+
+  * Compiles; `rojo build` clean; all 17 specs pass.
+  * Play, one client, opened with a click on the rail button:
+      - read back: banner, shell, keyline, title, close and scrollbar colours as
+        above; 12 live tiles with lime plates and white capsules and 3 SOON tiles
+        (the pods) in slate; every amount colour and white noun as specified; close
+        44x44; every buy target 172x44 around a 172x36 plate.
+      - hover on the pass tile: scale 1.07, keyline 3 -> 4.25, lifted above the
+        other tiles; back to 1.00 and 3 when the pointer left.
+      - the X closed it. The lattice showed at 0.7 transparency.
+      - the other five panels unchanged: soil shells, no banner, lattice at 0.
+  * Screenshots compared with the mockup: header, charcoal body, tiles, capsules,
+    SOON buttons.
+
+### Not verified, and where it differs from the mockup
+
+  * The touch pop: MCP has no touch input; the pop was driven with the mouse.
+  * The title stays LuckiestGuy, the face every panel title uses, which draws "Shop"
+    in capitals. The mockup's rounded mixed-case face was not adopted.
+  * No dot texture or radial glow inside the tiles: linear gradients only, since
+    rotated frames must not go inside a scrolling card.
+  * `UIKit.cartIcon` has no consumer any more; it is kept.
+
 ## The shop sells: eleven Developer Products and the x2 Money pass are wired — 2026-09-11 (CLAUDE)
 
 ### What (`GameConfig.Store.Items`)
