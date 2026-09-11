@@ -322,8 +322,24 @@ local function promptFor(model: Instance): ProximityPrompt?
 	if not CollectionService:HasTag(model, GameConfig.Tags.Planted) then
 		return nil
 	end
-	local handle = model.PrimaryPart
-	local prompt = if handle then handle:FindFirstChild(PICKUP_PROMPT) else nil
+	--==========================================================================
+	-- THE PROMPT IS NOT IN THE MODEL ANY MORE
+	--
+	-- It hangs off a server-owned anchor that follows the plant's authoritative
+	-- wander position (see PlantService), kept in plot/Runtime/PickupAnchors and
+	-- named by placement id. Looked up in MY plot only, so ownership stays
+	-- structural: a neighbour's plant never resolves a prompt here.
+	--==========================================================================
+	local id = model:GetAttribute("PlacementId")
+	local plot = myPlot()
+	local runtime = if plot then plot:FindFirstChild(GameConfig.Plot.RuntimeFolderName) else nil
+	local anchors = if runtime
+		then runtime:FindFirstChild(GameConfig.Plot.PickupAnchorsFolderName)
+		else nil
+	local anchor = if anchors and type(id) == "number"
+		then anchors:FindFirstChild(tostring(id))
+		else nil
+	local prompt = if anchor then anchor:FindFirstChild(PICKUP_PROMPT) else nil
 	if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
 		return prompt
 	end

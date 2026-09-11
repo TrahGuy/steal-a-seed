@@ -1,5 +1,109 @@
 # Steal a Seed — Session Handoff
 
+## The pickup prompt rides the plant's authoritative position — 2026-09-11 (CLAUDE)
+
+Fixes the defect recorded in the entry below: desktop `E` was silently refused
+on any grown plant that had wandered, because the server never moves plant parts
+and the `PickupPrompt` hung off the model's PrimaryPart at the planting spot.
+
+### The authoritative-position contract
+
+  * **Truth** is `wanderWorld(plot, currentOffset(entry, Workspace:GetServerTimeNow()))`
+    — the same point every leg is published from and every client draws.
+  * **The prompt** hangs off ONE invisible anchor Part per grown plant, at
+    `plot/Runtime/PickupAnchors/<placementId>`, OUTSIDE the model. Transparency 1,
+    Anchored, CanCollide/CanTouch/CanQuery false, CastShadow false, 0.2³.
+  * **Updated** by `trackAnchors` on PlantService's existing 0.5 s tick, right
+    after `stepWander`; skipped under 0.05 studs of movement, so a resting garden
+    writes nothing. No new loop, no Heartbeat.
+  * **Height** rides `anchorLift` = PrimaryPart height above the ground point at
+    attach time, so the prompt sits where it always did.
+  * **Lifecycle**: created in `attachPickup`; dropped by `render`, `hatch`,
+    `pickUp`, `OnReleased`, `Init`, and a restore that replaces a table;
+    re-seated after `RebaseTo`; `sweepAnchors` destroys any child not held by a
+    live entry after restore and rebase. `Runtime` survives a resize (MapService
+    keep list) and is emptied on release (PlotService.clearPlot).
+  * **Client lookup** (`PlantPickUI.promptFor`): my plot → Runtime → PickupAnchors
+    → `<PlacementId>` → `PickupPrompt`. Ownership stays structural.
+  * **Untouched**: creature parts (still `CanQuery = false`), part counts, the
+    model bounding box, client `PivotTo`, `PickUpById` (no distance check — the
+    Garden panel uses it from anywhere), every other prompt.
+
+### Measured, desktop, on real wandering plants
+
+```
+anchor vs authoritative point   walking 0.09 | rest 0.13 | mid-stride 1.40
+                                end of stride 0.06 (0.26 s after arrival)
+                                max over ~100 s of sampling 2.20 studs
+visible plant vs anchor         client, 40 s: max 2.23 | mean 0.70 | walking 0.88
+model                           44 parts, 0 queryable, 0 prompts inside
+bat-style ray through
+  plant + anchor                first hit the Rail beyond -- unobstructed
+bounding box                    stable 4.8 x 9.4 x 5.0 across the walk
+```
+
+Error is one tick of travel (TickSeconds 0.5 × WanderSpeed ≤ 2.6 studs/s plus
+scheduling), under 9% of the 26-stud range.
+
+```
+nubkin walked 40.6 studs from where it was planted
+  E beside the VISIBLE plant     SERVER Triggered PickupPrompt, one
+                                 "picked up" log, its anchor removed
+bellchime 42-50 studs from its planting spot
+  E standing ON that spot        no billboard, no trigger, still planted
+```
+
+Resize (debug SetPlotTier 5 → 1 → 5): shrink relocated one plant; after each
+step 2 anchors / 2 plants / 0 orphans, 0 queryable parts, anchors within 0.39 and
+0.98 studs of authoritative. Rejoin (Play restart): 2 plants restored, 2 anchors,
+0 orphans, within 2.05 / 2.63 studs.
+
+Other desktop prompts, all `E`, all server-confirmed: Marigold, sell board, mill
+(Treadmill01), hatch (a planted pod after its 28.5 s), nest Take (then the
+guardian threw the player, as normal).
+
+### Mobile, emulated phone 735 × 413
+
+```
+drag starting ON the plant      no selection, no highlight
+tap the plant (hands empty)     selected: button "BELLCHIME", one highlight,
+                                NOT picked up
+PICK UP button                  PROCESSED; one "picked up a 2 tier Bellchime",
+                                its anchor gone, 0 orphans
+floating touch panels           0 near the plant
+```
+
+A tap while a plant Tool was in hand was correctly ignored by PlantPickUI and
+went to PlantPlace (server logged `placement refused: OUT_OF_RANGE`) — the
+existing "stand down while placing" contract, not a defect.
+
+### Test rig note
+
+Grown plants wander fast enough to outrun a read → tap round trip. For the mobile
+tap the CLIENT's picture was parked on the anchor's ground point (degenerate leg,
+re-asserted on `WanderT1`); the server kept walking the real plant and
+eligibility still read the anchor. No parking was used for any desktop or anchor
+measurement.
+
+### Remaining risks
+
+  * **The desktop billboard steps** with the anchor every 0.5 s rather than gliding
+    with the plant — at most ~1.3 studs per step on the lightest tier.
+  * **Another player** was not tested with a second client. Guards: the prompt's
+    `Triggered` → `pickUp` owner check; `PickUpById` looks only in the caller's
+    plot; PlantPickUI resolves prompts only in its own plot.
+  * **No physical phone**; mobile is the Studio emulator.
+
+### Validation
+
+Ten specs pass; `rojo build` clean; `git diff --check` clean; PlantService,
+GameConfig and PlantPickUI compile; client and server console free of errors.
+
+### Files
+
+`PlantService.luau`, `GameConfig.luau` (`Plot.PickupAnchorsFolderName`),
+`PlantPickUI.client.luau` (prompt lookup only).
+
 ## A grown plant is tapped, then picked up by a button — 2026-09-10 (CLAUDE)
 
 On touch, the one-step pickup is gone. Tap your own grown plant and it is

@@ -167,6 +167,10 @@ GameConfig.Plot = {
 	TreadmillName = "Treadmill",
 	SpawnPadName = "SpawnPad",
 	RuntimeFolderName = "Runtime",
+	-- Under Runtime: one invisible part per grown plant, named by placement id,
+	-- carrying its PickupPrompt at the server's authoritative wander position.
+	-- The client resolves a plant's prompt through here. See PlantService.
+	PickupAnchorsFolderName = "PickupAnchors",
 	PlantsFolderName = "Plants",
 
 	-- THE GAP IN THE FRONT FENCE.

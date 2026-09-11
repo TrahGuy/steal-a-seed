@@ -127,6 +127,10 @@ type Planted = {
 	-- Seeded off the placement id, so a garden restored on join does not send
 	-- every creature off on the same tick.
 	rng: Random?,
+	-- The invisible part the PickupPrompt hangs off, and how far above the
+	-- walking point it rides. See "THE PROMPT RIDES WHERE THE PLANT IS".
+	anchor: BasePart?,
+	anchorLift: number?,
 }
 
 -- plot -> placementId -> Planted
@@ -451,6 +455,85 @@ end
 -- render() hangs the pick-up prompt on anything grown, and the prompt builders
 -- need render() to have run. One forward declaration breaks the knot, rather
 -- than shuffling three functions into an order that reads worse than it works.
+--==============================================================================
+-- THE PROMPT RIDES WHERE THE PLANT IS, NOT WHERE IT WAS PLANTED
+--
+-- MEASURED: a grown plant is walked by every CLIENT from four wander attributes,
+-- and the server never moves its parts. The PickupPrompt used to hang off the
+-- model's PrimaryPart, so on the server it stayed at the planting spot while the
+-- plant walked away -- 7.5 studs from the player on screen, 63.0 studs on the
+-- server, against a 26-stud prompt. The engine validates a trigger from the
+-- server's copy, so desktop E was refused in silence once a plant had moved.
+--
+-- So the prompt hangs off ONE small invisible part per grown plant, kept OUTSIDE
+-- the model and moved by the server on its existing tick to the same
+-- `wanderWorld(currentOffset())` point the leg is authored from. Nothing else
+-- moves: creature parts are not replicated, not made queryable, and the model's
+-- bounding box, part count and client PivotTo are untouched. Outside the model
+-- because PlantSway pivots the whole model every frame and would carry a child
+-- anchor along a second time.
+--
+-- WHERE THEY LIVE: plot/Runtime/PickupAnchors, one part per placement id. Runtime
+-- survives a plot resize (MapService's keep list) and is emptied when a plot is
+-- released (PlotService.clearPlot), so the folder can never outlive the garden.
+--==============================================================================
+local function anchorsFolder(plot: Model): Instance
+	local runtime = plot:FindFirstChild(PLOT.RuntimeFolderName)
+	if not runtime then
+		runtime = Instance.new("Folder")
+		runtime.Name = PLOT.RuntimeFolderName
+		runtime.Parent = plot
+	end
+	local folder = runtime:FindFirstChild(PLOT.PickupAnchorsFolderName)
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = PLOT.PickupAnchorsFolderName
+		folder.Parent = runtime
+	end
+	return folder
+end
+
+-- Destroys the anchor, and the PickupPrompt with it. Also forgets the prompt
+-- reference, which every caller was already clearing by hand.
+local function dropAnchor(entry: Planted)
+	local anchor = entry.anchor
+	entry.anchor = nil
+	entry.anchorLift = nil
+	entry.prompt = nil
+	if anchor and anchor.Parent then
+		anchor:Destroy()
+	end
+end
+
+--==============================================================================
+-- NO ANCHOR WITHOUT A LIVING OWNER
+--
+-- Every anchor in the folder must be the exact instance a live grown entry is
+-- holding. Anything else -- a restore that replaced a table, a rebuild that
+-- raced a pickup -- is destroyed here, so repeated rebuilds cannot accumulate.
+--==============================================================================
+local function sweepAnchors(plot: Model)
+	local runtime = plot:FindFirstChild(PLOT.RuntimeFolderName)
+	local folder = runtime and runtime:FindFirstChild(PLOT.PickupAnchorsFolderName)
+	if not folder then
+		return
+	end
+	local live: { [Instance]: boolean } = {}
+	for _, entry in pairs(growing[plot] or {}) do
+		if entry.anchor then
+			live[entry.anchor] = true
+		end
+	end
+	for _, child in ipairs(folder:GetChildren()) do
+		if not live[child] then
+			child:Destroy()
+		end
+	end
+end
+
+-- Defined with the wander, which is where currentOffset and wanderWorld live.
+local placeAnchor: (Planted, number) -> ()
+
 local attachPickup: (Planted) -> ()
 -- Same knot as attachPickup: render() destroys the model a leg was published
 -- on, and stopWander is defined with the rest of the wander further down.
@@ -473,7 +556,7 @@ local function render(entry: Planted)
 		entry.model:Destroy()
 	end
 	entry.model = nil
-	entry.prompt = nil
+	dropAnchor(entry)
 	local soil = soilOf(entry.plot)
 	if not soil then
 		return
@@ -658,8 +741,41 @@ function attachPickup(entry: Planted)
 	prompt.HoldDuration = PICKUP_HOLD
 	prompt.MaxActivationDistance = PLANT_RANGE
 	prompt.RequiresLineOfSight = false
-	prompt.Parent = handle
+
+	--==========================================================================
+	-- ITS OWN ANCHOR, NOT THE MODEL'S HANDLE
+	--
+	-- Every property that could make it matter is off: invisible, anchored, no
+	-- collision, no touch, no query -- so bats, placement rays and PlantPickUI's
+	-- box test all go straight through it -- and no shadow. It rides at the
+	-- handle's height above the walking point, so the prompt sits where it
+	-- always did relative to the plant.
+	--==========================================================================
+	local soil = soilOf(entry.plot)
+	local groundY = if soil then topOf(soil, entry.offset).Position.Y else handle.Position.Y
+	local anchor = Instance.new("Part")
+	anchor.Name = tostring(entry.id)
+	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+	anchor.Transparency = 1
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanTouch = false
+	anchor.CanQuery = false
+	anchor.CastShadow = false
+	anchor.Locked = true
+	anchor:SetAttribute("PlacementId", entry.id)
+	anchor.CFrame = CFrame.new(handle.Position)
+	local folder = anchorsFolder(entry.plot)
+	local stale = folder:FindFirstChild(anchor.Name)
+	if stale then
+		stale:Destroy()
+	end
+	anchor.Parent = folder
+	prompt.Parent = anchor
+	entry.anchor = anchor
+	entry.anchorLift = handle.Position.Y - groundY
 	entry.prompt = prompt
+	placeAnchor(entry, Workspace:GetServerTimeNow())
 	table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
 		pickUp(player, entry)
 	end))
@@ -778,7 +894,7 @@ function hatch(player: Player, entry: Planted): boolean
 	byPlot[entry.id] = nil
 	local model = entry.model
 	entry.model = nil
-	entry.prompt = nil
+	dropAnchor(entry)
 	if model and model.Parent then
 		burst(model)
 	end
@@ -829,7 +945,7 @@ function pickUp(player: Player, entry: Planted): boolean
 	byPlot[entry.id] = nil
 	local model = entry.model
 	entry.model = nil
-	entry.prompt = nil
+	dropAnchor(entry)
 	if model and model.Parent then
 		lift(model)
 	end
@@ -1047,6 +1163,10 @@ local function restore(player: Player, plot: Model)
 			return
 		end
 		local legacy = slotOffsets(plot)
+		-- A plot restored twice must not leave the first garden's anchors behind.
+		for _, old in pairs(growing[plot] or {}) do
+			dropAnchor(old)
+		end
 		local byPlot = {}
 		growing[plot] = byPlot
 		nextId[plot] = 0
@@ -1182,6 +1302,7 @@ local function restore(player: Player, plot: Model)
 		-- Write back, so anything dropped stops being carried forever and any
 		-- migrated position is saved in the new shape.
 		persist(plot)
+		sweepAnchors(plot)
 	end)
 end
 
@@ -1231,6 +1352,42 @@ local function wanderWorld(plot: Model, offset: Vector3): Vector3?
 		return nil
 	end
 	return topOf(main, offset).Position
+end
+
+--==============================================================================
+-- THE ANCHOR, AT THE AUTHORITATIVE POINT
+--
+-- The same currentOffset() and wanderWorld() the leg is published from, so the
+-- prompt's range check measures from where every client is drawing the plant,
+-- give or take one tick of travel (TickSeconds 0.5 x WanderSpeed <= 2.6 studs/s,
+-- so under 1.3 studs against a 26-stud range).
+--
+-- Skipped when it would move less than a twentieth of a stud, so a resting
+-- garden writes nothing at all.
+--==============================================================================
+local ANCHOR_EPSILON = 0.05
+
+function placeAnchor(entry: Planted, srvNow: number)
+	local anchor = entry.anchor
+	if not (anchor and anchor.Parent) then
+		return
+	end
+	local world = wanderWorld(entry.plot, currentOffset(entry, srvNow))
+	if not world then
+		return
+	end
+	local at = world + Vector3.new(0, entry.anchorLift or 0, 0)
+	if (at - anchor.Position).Magnitude >= ANCHOR_EPSILON then
+		anchor.CFrame = CFrame.new(at)
+	end
+end
+
+local function trackAnchors(byPlot: { [number]: Planted }, srvNow: number)
+	for _, entry in pairs(byPlot) do
+		if entry.anchor then
+			placeAnchor(entry, srvNow)
+		end
+	end
 end
 
 --==============================================================================
@@ -1550,7 +1707,10 @@ function PlantService.RebaseTo(plot: Model, captured: { [number]: Vector3 }): nu
 		else
 			stopWander(entry)
 		end
+		-- The soil moved; the prompt goes where the record now says the plant is.
+		placeAnchor(entry, parkNow)
 	end
+	sweepAnchors(plot)
 	if rebased > 0 then
 		persist(plot)
 	end
@@ -1586,6 +1746,7 @@ function PlantService.Init()
 			if entry.model and entry.model.Parent then
 				entry.model:Destroy()
 			end
+			dropAnchor(entry)
 		end
 		growing[plot] = nil
 	end
@@ -1598,7 +1759,11 @@ function PlantService.Start()
 	end)
 	PlotService.OnReleased(function(_player, plot)
 		-- PlotService clears the Plants folder itself right after this; all that
-		-- is needed here is to stop tracking what was in it.
+		-- is needed here is to stop tracking what was in it. The anchors are
+		-- dropped explicitly rather than trusted to that clear.
+		for _, entry in pairs(growing[plot] or {}) do
+			dropAnchor(entry)
+		end
 		growing[plot] = nil
 		nextId[plot] = nil
 		carried[plot] = nil
@@ -1710,6 +1875,8 @@ function PlantService.Start()
 					end
 					-- The garden takes a step. Pods are skipped inside.
 					stepWander(plot, byPlot, srvNow)
+					-- And every pickup prompt follows it, on this same tick.
+					trackAnchors(byPlot, srvNow)
 				end
 			end
 		end
