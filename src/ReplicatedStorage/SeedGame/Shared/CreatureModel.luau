@@ -352,9 +352,8 @@ end
 -- authored on its own terms.
 --
 -- So it is answered by GEOMETRY: the biggest solid part whose box contains the
--- eye, and failing that the nearest solid part. Transparent things are skipped
--- or Gloomlotus would hand back its aura shell, which is not a head and is not
--- the colour of one.
+-- eye, and failing that the nearest solid part. Transparent things are skipped,
+-- so a see-through aura shell is never taken for a head or for its colour.
 --==============================================================================
 local FACEY = { "Eye", "Pupil", "Lid", "Cheek", "Smile", "Glint" }
 local function mireHeadColor(model: Model, eye: BasePart): Color3?
@@ -390,123 +389,74 @@ local function mireHeadColor(model: Model, eye: BasePart): Color3?
 end
 
 --==============================================================================
--- GLOOMLOTUS GETS THE AURA ITS SHEET ALREADY PROMISES
+-- GLOOMLOTUS'S WILL-O'-WISP
 --
--- SeedData describes this species as carrying "a Neon halo, a Glass dew jewel,
--- two emitters and a Highlight, and that budget is the rarity". It had the halo
--- and the jewel and NEITHER of the other two -- a Mythic that built exactly as
--- much moving detail as a Common Nubkin: none.
+-- Since 2026-09-11 Gloomlotus is the Walking Mangrove Stilt Titan, and its light
+-- lives in one place: the Neon jewel floating in its lotus. A PartSpec can only
+-- become a BasePart, so the jewel's light and its motes are retrofitted after
+-- the replay -- exactly what retrofitMireEye below does for this biome's slit
+-- eye, and for the same reason.
 --
--- WHY IT WENT MISSING, WHICH IS ARCHITECTURAL RATHER THAN AN OVERSIGHT.
--- Emberroot and Starbloom build their Mythics in CODE -- `pyrelotus(parent, at)`
--- makes Attachments, ParticleEmitters and a PointLight as it goes. Tanglemire is
--- a DATA table of PartSpecs replayed by replayPart, and a PartSpec can only ever
--- become a BasePart. There was no way to say "emitter" in the format the
--- approved geometry is stored in, so the two that were designed never shipped.
+--   WispGlow    a PointLight inside the jewel: turquoise, Brightness 2.2, Range
+--               14 at the drawn size. Range grows with the plant (the engine
+--               stops it at 60), so a Colossal lights the roots it stands on.
+--   WispMotes   one emitter, sparkles_main at 16 a second: spore motes and wisp
+--               mist rising out of the cup. Its attachment is turned back to the
+--               world, because the gem stands on a corner and its own Top points
+--               off sideways. LightInfluence 0 and LightEmission 1 -- this is the
+--               dim biome, and a rarity tell that needs good light is no tell.
 --
--- So it is retrofitted after the replay, which is exactly what retrofitMireEye
--- below already does for this biome's slit eye, and for the same reason.
---
--- TWO EMITTERS, AS SPECIFIED, and they do different jobs -- one at a high rate
--- just reads as fog:
---
---   Haze   slow, wide and long-lived, hanging around the crown rather than
---          rising off it. Heavy drag so it hovers. This is the glow that says
---          Mythic from across the plot.
---   Motes  small, bright, sparse pinpricks drifting up through the haze. They
---          stay small on purpose so they never merge into the haze -- the
---          layering is what reads as radiating rather than as smoke.
---
--- LightInfluence 0 and LightEmission 1 on both, which is what keeps them bright
--- under Tanglemire's dark ambient. A rarity tell that only works in good light
--- is not a rarity tell, and this is the dim biome.
---
--- The Highlight is the third thing the sheet names: a rim on the crown alone,
--- not the whole plant, so the silhouette lifts off the mire without the model
--- turning into a lamp. Roblox stops rendering past about 31 Highlights at once;
--- a 0.22% roll will not reach that, and the alternative -- a fourth emitter --
--- is what the sheet explicitly did not ask for.
---
--- COST is about 40 live particles, an eighth of what Pyrelotus spends, because
--- this plant is half its size and its aura hangs rather than churns.
+-- It replaced the old lotus's aura -- a haze and a mote emitter hung on a Neon
+-- halo shell, and a Highlight rimming its crown -- along with the geometry that
+-- aura hung on. One light and one emitter is what the rebuild asked for.
 --==============================================================================
-local function retrofitGloomAura(model: Model, sp: SeedData.Species, hs: number)
-	-- The Neon shell is the aura's own geometry, so it is where the aura hangs.
-	local shell = model:FindFirstChild("Aura_HaloShell", true)
-	local crown = model:FindFirstChild("Premium_CrownHalo", true)
-	local host = shell or crown
-	if not (host and host:IsA("BasePart")) then
-		-- No approved aura geometry: this species is not the one this is for.
+local function retrofitGloomAura(model: Model, hs: number)
+	local jewel = model:FindFirstChild("WispJewel")
+	if not (jewel and jewel:IsA("BasePart")) then
+		-- No wisp jewel: this species is not the one this is for.
 		return
 	end
+	local wisp = Color3.fromRGB(80, 245, 215)
 
-	local glow = sp.Body
-	local pale = sp.Crown
+	local glow = Instance.new("PointLight")
+	glow.Name = "WispGlow"
+	glow.Color = wisp
+	glow.Brightness = 2.2
+	glow.Range = 14 * hs
+	glow.Shadows = false
+	glow.Parent = jewel
 
 	local att = Instance.new("Attachment")
-	att.Name = "AuraAttachment"
-	att.Parent = host
-
-	local haze = Instance.new("ParticleEmitter")
-	haze.Name = "AuraHaze"
-	haze.Color = ColorSequence.new(glow, pale)
-	haze.LightInfluence = 0
-	haze.LightEmission = 1
-	haze.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.25 * hs),
-		NumberSequenceKeypoint.new(0.4, 1.05 * hs),
-		NumberSequenceKeypoint.new(1, 0.35 * hs),
-	})
-	haze.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.35, 0.72),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	haze.Lifetime = NumberRange.new(1.8, 3.0)
-	haze.Rate = 9
-	haze.Speed = NumberRange.new(0.15 * hs, 0.5 * hs)
-	haze.Drag = 3.2
-	haze.Rotation = NumberRange.new(-30, 30)
-	haze.RotSpeed = NumberRange.new(-14, 14)
-	haze.Acceleration = Vector3.new(0, 0.25 * hs, 0)
-	haze.EmissionDirection = Enum.NormalId.Top
-	haze.SpreadAngle = Vector2.new(180, 180)
-	haze.Parent = att
+	att.Name = "WispAttachment"
+	att.CFrame = jewel.CFrame:ToObjectSpace(CFrame.new(jewel.Position))
+	att.Parent = jewel
 
 	local motes = Instance.new("ParticleEmitter")
-	motes.Name = "AuraMotes"
-	motes.Color = ColorSequence.new(pale)
-	motes.LightInfluence = 0
+	motes.Name = "WispMotes"
+	motes.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	motes.Color = ColorSequence.new(wisp, Color3.fromRGB(196, 255, 238))
 	motes.LightEmission = 1
+	motes.LightInfluence = 0
 	motes.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
-		NumberSequenceKeypoint.new(0.25, 0.16 * hs),
+		NumberSequenceKeypoint.new(0, 0.08 * hs),
+		NumberSequenceKeypoint.new(0.3, 0.42 * hs),
 		NumberSequenceKeypoint.new(1, 0),
 	})
 	motes.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.25),
-		NumberSequenceKeypoint.new(0.8, 0.4),
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.6, 0.6),
 		NumberSequenceKeypoint.new(1, 1),
 	})
-	motes.Lifetime = NumberRange.new(1.4, 2.4)
-	motes.Rate = 7
-	motes.Speed = NumberRange.new(0.5 * hs, 1.2 * hs)
-	motes.Drag = 1.1
-	motes.Acceleration = Vector3.new(0, 0.6 * hs, 0)
+	motes.Lifetime = NumberRange.new(1.6, 3.0)
+	motes.Rate = 16
+	motes.Speed = NumberRange.new(0.3 * hs, 0.9 * hs)
+	motes.Drag = 1.4
+	motes.Acceleration = Vector3.new(0, 0.5 * hs, 0)
 	motes.EmissionDirection = Enum.NormalId.Top
-	motes.SpreadAngle = Vector2.new(70, 70)
+	motes.SpreadAngle = Vector2.new(55, 55)
+	motes.Rotation = NumberRange.new(0, 360)
+	motes.RotSpeed = NumberRange.new(-40, 40)
 	motes.Parent = att
-
-	local rim = Instance.new("Highlight")
-	rim.Name = "AuraRim"
-	rim.FillTransparency = 1
-	rim.OutlineColor = glow
-	rim.OutlineTransparency = 0.45
-	rim.DepthMode = Enum.HighlightDepthMode.Occluded
-	-- The crown only. A rim around the whole plant outlines the peat hummock and
-	-- the mud clods too, which reads as a selection box rather than as an aura.
-	rim.Adornee = crown or host
-	rim.Parent = model
 end
 
 local function retrofitMireEye(model: Model, skin: Color3)
@@ -1218,8 +1168,8 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 			-- biome's eye is a slit, and the shared face builder is never
 			-- reached from here to give it one.
 			retrofitMireEye(model, sp.Body)
-			-- Answers immediately for the four species with no aura geometry.
-			retrofitGloomAura(model, sp, hs)
+			-- Answers immediately for the four species with no wisp jewel.
+			retrofitGloomAura(model, hs)
 			return finish()
 		end
 		-- No approved geometry for this id. Falling through would build a

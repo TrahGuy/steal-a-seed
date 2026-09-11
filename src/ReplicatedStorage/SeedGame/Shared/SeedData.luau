@@ -478,9 +478,12 @@ SeedData.Species = {
 	{
 		Id = "gloomlotus", Name = "Gloomlotus", Rarity = "Mythic", Biome = "tanglemire",
 		Height = 6.82, Form = "lotus",
-		-- The first Mythic form in the game. It is the only plant carrying a
-		-- Neon halo, a Glass dew jewel, two emitters and a Highlight, and that
-		-- budget is the rarity: nothing below Mythic gets an aura.
+		-- The first Mythic form in the game, and since 2026-09-11 a walking
+		-- mangrove stilt titan. It is the only plant in its biome that carries
+		-- its own light -- a Neon wisp jewel with a PointLight and a spore
+		-- emitter -- and that budget is the rarity: nothing below Mythic gets
+		-- one. Its colours live in TanglemireForms; Body, Crown and Accent
+		-- below reach none of its parts.
 		Body = Color3.fromRGB(146, 232, 204),
 		Crown = Color3.fromRGB(188, 224, 108),
 		Accent = Color3.fromRGB(92, 172, 154),
