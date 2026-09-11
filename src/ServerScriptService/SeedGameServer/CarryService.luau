@@ -1462,11 +1462,34 @@ end
 -- nothing, and writing it would destroy whatever they were carrying. So it is
 -- not written, and the last thing that WAS true stands.
 --==============================================================================
+--==============================================================================
+-- NOTHING IS RECORDED UNTIL WHAT WAS SAVED HAS BEEN PUT BACK
+--
+-- This lost a real bag. 2026-09-11: a Studio session's profile claim landed
+-- 38 s after the server started. restoreHeld gave up at its old 20 s cap
+-- WITHOUT A WORD, so nine saved plants were never rebuilt -- and the next thing
+-- that touched the Backpack took a snapshot of it, found no plants, and SetHeld
+-- wrote that empty list over the save. The DataStore still had all nine in the
+-- version before; the live profile had none.
+--
+-- So a snapshot is refused outright until this player's restore has run. The
+-- save a player arrived with is the truth until the world has been made to match
+-- it, and an empty Backpack before that moment is not evidence of anything.
+--==============================================================================
+local heldRestored: { [Player]: boolean } = {}
+
 local function syncHeld(player: Player)
+	if not heldRestored[player] then
+		return
+	end
 	if not player:FindFirstChildOfClass("Backpack") then
 		return
 	end
 	PlayerDataService.SetHeld(player, heldSnapshot(player))
+end
+
+function CarryService.IsHeldRestored(player: Player): boolean
+	return heldRestored[player] == true
 end
 
 --==============================================================================
@@ -1604,48 +1627,78 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 	return ok
 end
 
+--==============================================================================
+-- WAIT FOR THE PROFILE AS LONG AS THE PLAYER IS HERE
+--
+-- The save is a DataStore round trip, and it is not always a second or two: it
+-- was measured at 38 s in Studio, and a throttled live server can be slower.
+-- The old 20 s cap ended the wait silently while the player was still in the
+-- game, which is what let an empty snapshot overwrite their bag (see above).
+--
+-- The wait now lasts while the player stays. `HeldRestorePatience` is a backstop
+-- against a thread that could otherwise spin for a whole session; if it ever
+-- runs out the gate simply stays CLOSED -- this session records nothing, and the
+-- bag the player joined with is still the bag in their save.
+--
+-- Once per player: a second call while one is running, or after one finished,
+-- is a no-op, so nothing can build the same saved plant twice.
+--==============================================================================
+CarryService.HeldRestorePatience = 600
+
+local restoring: { [Player]: boolean } = {}
+
 local function restoreHeld(player: Player)
+	if restoring[player] or heldRestored[player] then
+		return
+	end
+	restoring[player] = true
 	task.spawn(function()
-		--======================================================================
-		-- WAIT FOR THE PROFILE, THE SAME WAY THE BED DOES
-		--
-		-- The save is a DataStore round trip and this runs off PlayerAdded, so
-		-- there is nothing to restore for a second or two. PlantService has the
-		-- identical wait for the identical reason; a deadline rather than a bare
-		-- loop so a load that never finishes does not leave a thread spinning.
-		--======================================================================
-		local deadline = os.clock() + 20
-		while not PlayerDataService.IsReady(player) and os.clock() < deadline do
+		local deadline = os.clock() + CarryService.HeldRestorePatience
+		local function gaveUp(why: string): boolean
+			if os.clock() < deadline then
+				return false
+			end
+			warn(string.format("[Seed/CarryService] %s: %s; held plants were not restored, "
+				.. "and the saved bag will not be overwritten this session.", player.Name, why))
+			return true
+		end
+
+		while player.Parent == Players and not PlayerDataService.IsReady(player) do
+			if gaveUp("the profile never arrived") then
+				restoring[player] = nil
+				return
+			end
 			task.wait(0.25)
-		end
-		if player.Parent ~= Players then
-			return
-		end
-		local profile = PlayerDataService.Get(player)
-		if not profile or type(profile.Held) ~= "table" then
-			return
 		end
 		-- The Backpack is made by the engine shortly after the player joins, and
 		-- a Tool cannot be handed over before it exists.
-		if not player:FindFirstChildOfClass("Backpack") then
-			player:WaitForChild("Backpack", 10)
+		while player.Parent == Players and not player:FindFirstChildOfClass("Backpack") do
+			if gaveUp("no Backpack appeared") then
+				restoring[player] = nil
+				return
+			end
+			task.wait(0.1)
 		end
-		if player.Parent ~= Players then
+		local profile = PlayerDataService.Get(player)
+		if player.Parent ~= Players or not profile then
+			restoring[player] = nil
 			return
 		end
 
 		local restored, dropped = 0, 0
-		for _, row in ipairs(profile.Held) do
-			local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
-			local tier = if type(row) == "table" then tonumber(row.Tier) else nil
-			if species and tier and tier >= 1 then
-				if restoreOne(player, species, tier, row.Hatched == true) then
-					restored += 1
+		if type(profile.Held) == "table" then
+			for _, row in ipairs(profile.Held) do
+				local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
+				local tier = if type(row) == "table" then tonumber(row.Tier) else nil
+				if species and tier and tier >= 1 then
+					if restoreOne(player, species, tier, row.Hatched == true) then
+						restored += 1
+					else
+						dropped += 1
+					end
 				else
 					dropped += 1
 				end
-			else
-				dropped += 1
 			end
 		end
 		if restored > 0 or dropped > 0 then
@@ -1653,8 +1706,18 @@ local function restoreHeld(player: Player)
 				restored,
 				if dropped > 0 then string.format(", %d could not be rebuilt", dropped) else ""))
 		end
+
+		-- The world matches the save now, so recording may begin -- and begins
+		-- with one snapshot, which also catches anything banked or bought while
+		-- the profile was still on its way.
+		restoring[player] = nil
+		heldRestored[player] = true
+		CarryService.SyncHeldNow(player)
 	end)
 end
+
+-- The join path, exposed for the spec. Safe to call again: it runs once.
+CarryService.RestoreHeld = restoreHeld
 
 function CarryService.Init()
 	running = false
@@ -1721,6 +1784,11 @@ function CarryService.Start()
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player)
 		forget(player)
 		carried[player] = nil
+		-- The gate closes with the session. PlayerDataService writes the last
+		-- snapshot that was allowed; nothing after this may add to it.
+		heldRestored[player] = nil
+		restoring[player] = nil
+		syncPending[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do
 		watch(player)

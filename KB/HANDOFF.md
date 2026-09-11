@@ -1,5 +1,70 @@
 # Steal a Seed — Session Handoff
 
+## Held plants were overwritten when a profile loaded late — FIXED 2026-09-11 (CLAUDE)
+
+### What was lost, and the evidence
+
+Found while verifying the Bag. The owner's bag held nine plants at the start of
+the session (nubkin t1 x5, t5 x2, t3 x1, novaorb t4); every later Play session
+loaded none. The owner confirmed they did not sell or plant them. Read-only
+DataStore version history (`StealASeed_v1`, key `p_<userId>`):
+
+```
+02:48:10 UTC  Held 9  Plants 2  Cash 3,427,039,827   release save, end of the pre-change inspection
+03:35:30 UTC  Held 0  Plants 2  Cash 3,433,356,351   a later session's claim
+```
+
+The next session logged `loaded (ok): cash 3427039827` -- exactly the 02:48 value
+-- and `PlantService: restored 2 plant(s)`, but no CarryService "restored held
+plant(s)" line. In a later session the first profile write landed 38 s after the
+server started.
+
+### Cause
+
+`CarryService.restoreHeld` waited at most 20 s for the profile, then returned
+without a word. PlantService waits 30 s, which is why the garden came back and the
+bag did not. When the profile did arrive, the next Backpack change (the bat and
+trap Tools are handed out on load) ran `syncHeld`, which snapshotted a Backpack
+with no plants in it, and `SetHeld` wrote `{}` over the save. Pre-existing; the
+Bag change did not touch this path.
+
+### Fix (`CarryService.luau`)
+
+  * `syncHeld` refuses to write until that player's restore has run (the
+    `heldRestored` gate).
+  * `restoreHeld` waits for the profile and for a Backpack as long as the player
+    stays. `CarryService.HeldRestorePatience` (600 s) is only a backstop, and if
+    it ever runs out the gate stays closed, so that session cannot overwrite the
+    saved bag.
+  * Once per player. It opens the gate with one snapshot, which also records
+    anything banked or bought while the profile was loading. The gate is cleared
+    on leave.
+  * Exposed for the spec: `CarryService.RestoreHeld`, `CarryService.IsHeldRestored`.
+
+### Verified
+
+`HeldRestoreSpec` 12/12 -- the real CarryService with PlayerDataService's timing
+stubbed and real Backpacks: a slow load with the Backpack changing wrote nothing,
+then rebuilt all nine and every write carried nine rows; patience running out
+left the gate closed and the save untouched; a repeated call built nothing twice;
+an empty save opened the gate and the next banked plant was recorded; a player
+leaving mid-load got no restore and no write. All 13 specs pass; compile, `git
+diff --check`, `rojo build` clean.
+
+Live smoke, one Play session with the gate in place: booted normally, `loaded
+(ok)`, `PlantService: restored 2 plant(s)`, the equipped bat and trap handed out,
+and no CarryService warning or error. That load was fast (the profile was in
+before the player was seen), so it did not exercise the late-load case -- the
+spec is what covers that.
+
+### Not done
+
+  * The owner chose NOT to restore the nine plants. They are still in the
+    02:48:10 UTC DataStore version if that changes.
+  * The live race was not reproduced: the owner's saved bag is now empty, and
+    nothing was written to it to stage one.
+  * Respawn behaviour is unchanged and was not investigated here.
+
 ## The Bag: lighter cards, a plant information panel, and room for the hotbar — 2026-09-11 (CLAUDE)
 
 Brief: polish the existing Bag and add a compact information panel for the
