@@ -3587,6 +3587,69 @@ GameConfig.Almanac = {
 	},
 }
 
+--==============================================================================
+-- THE HOTBAR: BOTANICAL SLATE & INK
+--
+-- Option A of the owner's hotbar exploration, approved 2026-09-11
+-- (art/hotbar/reference/approved-hotbar-mockup.png). The strip was the last
+-- surface on the HUD still in translucent soil browns under the Shop's and the
+-- Almanac's charcoal slate, so it takes their plate, ink keyline and lattice.
+--
+-- LoadoutUI reads the colours and the sizes. PlantPickUI reads the sizes too,
+-- so its PICK UP button stays clear of the strip whatever height it is.
+--==============================================================================
+GameConfig.Hotbar = {
+	Ink = Color3.fromRGB(16, 21, 28), -- #10151C
+	PlateTop = Color3.fromRGB(24, 32, 43), -- #18202B
+	PlateBottom = Color3.fromRGB(18, 23, 31), -- #12171F
+	-- The shop's slate lattice, faint.
+	Lattice = Color3.fromRGB(74, 84, 102),
+	LatticeTransparency = 0.8,
+	-- The tray the slots sit in: the same slate a step lighter, and a little of
+	-- the world showing through it.
+	TrayTop = Color3.fromRGB(34, 41, 53),
+	TrayBottom = Color3.fromRGB(22, 27, 36),
+	TrayTransparency = 0.12,
+
+	-- The slot in your hands: a lime keyline (#4EE32C -> #29BF18), a soft ring
+	-- outside it, and a small scale up.
+	LitTop = Color3.fromRGB(78, 227, 44), -- #4EE32C
+	LitBottom = Color3.fromRGB(41, 191, 24), -- #29BF18
+	HeldScale = 1.06,
+	HoverScale = 1.04,
+	PressScale = 0.95,
+	-- A slot the player put something in: a light slate keyline.
+	Assigned = Color3.fromRGB(122, 134, 156),
+
+	-- The keycap: an ink pill with a cream numeral, lime while the slot is held.
+	Numeral = Color3.fromRGB(242, 238, 206),
+	NumeralLit = Color3.fromRGB(134, 239, 92),
+	KeyEdge = Color3.fromRGB(58, 68, 84),
+	Caption = Color3.fromRGB(242, 238, 206),
+	CaptionBacking = 0.25,
+	-- An empty slot: a dashed outline and a plus.
+	Ghost = Color3.fromRGB(98, 110, 130),
+
+	-- The category word in a slot's top-right corner, keyed by what the Tool is.
+	Tags = {
+		bat = { text = "BAT", colour = Color3.fromRGB(255, 191, 36) }, -- amber #FFBF24
+		trap = { text = "TRAP", colour = Color3.fromRGB(251, 146, 60) }, -- orange #FB923C
+		plant = { text = "SEED", colour = Color3.fromRGB(52, 211, 153) }, -- emerald #34D399
+	},
+
+	-- Gui pixels. A slot is 64 wide, the touch floor this strip has always kept,
+	-- and 80 tall so a name gets two lines under the item instead of an ellipsis.
+	SlotWidth = 64,
+	SlotHeight = 80,
+	Gap = 6,
+	TrayPad = 6,
+	BottomGap = 10,
+	ChipWidth = 52,
+	-- The Bag chip is dropped below this viewport width, where a five-slot tray
+	-- needs the room.
+	ChipMinViewport = 560,
+}
+
 GameConfig.Shop = {
 	--==========================================================================
 	-- THE APPROVED RESTYLE, 2026-09-11

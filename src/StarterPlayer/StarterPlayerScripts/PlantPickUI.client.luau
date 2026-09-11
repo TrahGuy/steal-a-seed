@@ -145,8 +145,9 @@ end
 -- THE BUTTON
 --
 -- A real TextButton in a real ScreenGui, sitting clear ABOVE the hotbar rather
--- than over it: the hotbar is 74 tall with a 12 gap under it, so 94 puts this
--- one's underside eight pixels above the top slot edge. Nothing overlaps, so
+-- than over it: eight pixels above the strip's top edge, which is its bottom gap
+-- plus its height, both read off GameConfig.Hotbar so restyling the strip moves
+-- this with it (it was a typed 94 for a 74-tall strip). Nothing overlaps, so
 -- nothing steals a hotbar tap -- which matters because the hotbar is where the
 -- plant is going.
 --
@@ -154,7 +155,8 @@ end
 -- below every panel (32+) so an open bag covers it -- though opening a panel
 -- clears the selection anyway, so that is a belt on top of braces.
 --==============================================================================
-local HOTBAR_CLEARANCE = 94
+local HOT = GameConfig.Hotbar
+local HOTBAR_CLEARANCE = HOT.BottomGap + HOT.SlotHeight + HOT.TrayPad * 2 + 8
 local BUTTON_HEIGHT = 46
 
 local layer = Instance.new("ScreenGui")

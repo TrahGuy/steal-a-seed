@@ -1,5 +1,109 @@
 # Steal a Seed — Session Handoff
 
+## The hotbar is restyled to Botanical Slate & Ink — 2026-09-11 (CLAUDE)
+
+### What
+
+Option A of the owner's hotbar exploration
+(`art/hotbar/reference/approved-hotbar-mockup.png`), replacing the strip in
+`current-hotbar.png`. Every colour and size is in the new `GameConfig.Hotbar`;
+the code is `LoadoutUI.client.luau`'s THE HOTBAR section and the draw loop at the
+end of `refreshHotbar`.
+
+  * **Tray:** the `Hotbar` frame itself — slate #222935 -> #161B24 at 0.12, a
+    2.5 px ink keyline, 6 px padding. Its height (92) is written into Size,
+    which the Bag's layout reads to stop 8 px above it.
+  * **Slot:** 64 x 80 (was 64 x 68). A charcoal slate plate #18202B -> #12171F in
+    a 2.5 px ink #10151C keyline, with the slate lattice on it (level with the
+    plate, spacing 12, transparency 0.8).
+  * **In hand:**
+      - a 3 px lime keyline, #4EE32C -> #29BF18, drawn by a UIGradient on the
+        UIStroke;
+      - a soft lime ring outside it and a lime keycap numeral;
+      - a 1.06 scale eased in over 0.14 s.
+  * **Amber:** the amber held ring is gone from the strip. The BAT/TRAP side slots
+    still use amber (`PICKED`), not changed here.
+  * **Assigned by the player:** a light slate keyline (122,134,156), where the
+    soil edge colour used to be.
+  * **Keycap:** an ink pill top left with a shadow a step under it, cream
+    numeral, 0 on the tenth slot.
+  * **Category tag:** top right. BAT amber #FFBF24, TRAP orange #FB923C, SEED
+    emerald #34D399 (any plant, pod or hatched).
+  * **Name:** an ink caption strip, wrapped to two lines and scaled from 10 down
+    to 7 px, so "Rootwood Bat" and "Bramblejaw Trap" read whole. The label still
+    carries the Tool's full name, which TutorialUI matches.
+  * **Empty slot:** a ghost — no plate, keyline, lattice or caption; a dashed
+    outline and a plus. The dashes are frames, since a UIStroke has no dash
+    pattern, built the first time a slot is empty. It is the same button, so it
+    is still a drop target and pressing it still unequips.
+  * **Collapse:**
+      - Bag shut: every slot up to the last one in use, plus one ghost, so the
+        keycaps never skip; nothing past that.
+      - Bag open: every live slot.
+      - A lease still inside its grace period counts as in use, so a respawn does
+        not fold the strip.
+  * **Bag chip:** the mockup's last cell, "BAG filled/slots". It opens and closes
+    the Bag, and is hidden below a 560 px viewport.
+  * **Hover and press:** `UIKit.cardPop` on the plate — 1.04 hover, 0.95 touch
+    press, silent.
+  * **Structure:**
+      - each slot is `SlotN` (laid out, shown or hidden) -> `Wrap` (held scale)
+        -> `Face` (the TextButton plate, hover and press scale);
+      - slots stay direct children of `Hotbar`, so TutorialUI's lookup is
+        unchanged.
+  * **Drag lift:** a drag now lifts the strip's whole subtree by 56 and puts
+    every layer back. It used to raise only the frame and each button, which
+    under a painted tray would have drawn the tray over the slots.
+  * **Drop flash:** the flash now holds the keyline until its own redraw. The
+    redraw every drop requests used to repaint the keyline one frame later.
+  * **PICK UP:** `PlantPickUI` computes its clearance from `GameConfig.Hotbar`
+    (110 now). It was a typed 94 for the 74-tall strip.
+  * **Locals:** LoadoutUI's chunk is at 182 of Luau's 200 top-level locals. The
+    restyle added four names (`HOT`, `dashOutline`, `liftStrip`, `chip`) and keeps
+    the rest inside functions and do-blocks — see the banner before adding more.
+  * The two reference images are committed under `art/hotbar/reference/`.
+
+### Verified
+
+  * Compiles; `rojo build` clean; all 18 specs pass.
+  * Play, one client, desktop 1171 x 609 (10 active slots), the owner's save
+    (Rootwood Bat, Bramblejaw Trap, two Nubkins):
+      - **At rest:** tray 414 x 92; slots 1-4 filled, ghost 5, BAG 4/10.
+        "Rootwood Bat" and "Bramblejaw Trap" wrap to two lines (TextFits true),
+        "Nubkin" takes one. BAT/TRAP/SEED in their colours; keycaps 1-5.
+      - **Equips:** slots 1, 2 and 4 clicked in turn (bat, trap, plant). Each lit
+        lime x3 with the ring, a lime numeral and held scale 1.06; the rest went
+        back to ink x2.5 at 1.00. The slot under the pointer sat at hover 1.04.
+      - **Cooldown:** a fake local `ReadyAt` on the bat drew the shade 0.96 ->
+        0.66 -> 0.35 over its 1.10 s, at ZIndex 6 — under the model's viewport (7)
+        and the caption (8). Cleared, it went back to 0.
+      - **Bag open:** the chip opened the Bag; the strip grew to all ten slots
+        (5-10 ghosts, 764 wide) with the Bag 8 px above it.
+      - **Drag:** a Nubkin card dragged from Plants to slot 7.
+          - Mid-drag the ghost label read NUBKIN -> HOTBAR and the strip was
+            lifted: frame 60, face 61, caption 64.
+          - After the drop, slot 7 held it with the slate ring and "2x CLICK", and
+            the Bag showed one Nubkin. The strip was back at 4.
+      - **Bag closed:** closing it from the chip folded the strip to slots 1-8;
+        the assigned slot 7 kept its place.
+      - **Double-click return:** two activations 0.217 s apart sent the plant
+        back, and the strip folded to 1-4 plus a ghost.
+      - **Tutorial lookup:** TutorialUI's lookup, run against the new strip,
+        found the Nubkin slot (64 x 80).
+      - No errors in the output.
+
+### Not verified
+
+  * The five-slot phone layout, and the chip hiding below 560 px: not emulated
+    this pass.
+  * A touch press: MCP drives a mouse.
+  * PICK UP on screen: no plant was selected, so its layer stayed disabled. The
+    clearance was checked from the constants (8 px above the tray).
+  * A real swing's cooldown: a fake local `ReadyAt` was used.
+  * Through MCP, two clicks with a 110 ms wait between them land outside the
+    0.30 s double window (equip, then unequip). Two clicks with no wait land at
+    0.217 s and return the slot.
+
 ## The Index is the Plant Almanac, with a Biome Harvest to claim — 2026-09-11 (CLAUDE)
 
 ### What: the panel (`IndexUI.client.luau`, rebuilt)
