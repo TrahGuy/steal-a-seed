@@ -63,6 +63,14 @@ type Entry = {
 
 local entries: { [Player]: Entry } = {}
 local replicateDirty: { [Player]: boolean } = {}
+
+-- The player-list columns, per player. See THE PLAYER LIST.
+type Stats = {
+	folder: Folder,
+	speed: StringValue,
+	cash: StringValue,
+}
+local stats: { [Player]: Stats } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 local profileUpdated: RemoteEvent? = nil
 local profileReady: RemoteEvent? = nil
@@ -152,6 +160,7 @@ function PlayerDataService.AddCash(player: Player, amount: number): number?
 	end
 	entry.profile.Cash = math.clamp(entry.profile.Cash + amount, 0, SAVE.MaxCash)
 	touch(player)
+	PlayerDataService.PublishStats(player)
 	return entry.profile.Cash
 end
 
@@ -163,6 +172,7 @@ function PlayerDataService.AddSpeed(player: Player, amount: number): number?
 	entry.profile.Speed = math.clamp(entry.profile.Speed + amount, 0, SAVE.MaxSpeedScore)
 	touch(player)
 	PlayerDataService.PublishSpeedTier(player)
+	PlayerDataService.PublishStats(player)
 	--==========================================================================
 	-- THE GUIDE'S TWO SPEED MILESTONES, RECORDED WHERE THE SPEED ACTUALLY MOVES
 	--
@@ -208,6 +218,78 @@ function PlayerDataService.PublishSpeedTier(player: Player)
 	local tier = GameConfig.speedVisualTierFor(entry.profile.Speed)
 	if player:GetAttribute(GameConfig.Attributes.SpeedVisualTier) ~= tier then
 		player:SetAttribute(GameConfig.Attributes.SpeedVisualTier, tier)
+	end
+end
+
+--==============================================================================
+-- THE PLAYER LIST
+--
+-- Roblox draws a column for each value in a Folder named `leaderstats` on the
+-- Player. Two here: Speed, then Cash -- in that order because the list lays its
+-- columns out in the order the values arrive.
+--
+-- STRINGS, spelled by GameConfig.compact exactly as the corner HUD spells them.
+-- A save runs to 1e15, and a number value would print every digit of that into
+-- a column a few characters wide.
+--
+-- WRITTEN WHEN THE SPELLING CHANGES, not when the number does. AddCash runs every
+-- second for every player with a garden, each StringValue write replicates to
+-- every client in the server, and at 3.43B the spelled value moves once per ten
+-- million. So the new string is compared and an unchanged one is skipped.
+--
+-- Published from AddCash and AddSpeed, which own the two numbers, and built on
+-- load. Anything that moved Cash or Speed without them would already be a change
+-- that never saves, so there is no third path to cover.
+--==============================================================================
+local LEADERSTATS = "leaderstats"
+
+local function spellStats(mounted: Stats, profile: Profile)
+	local speed = GameConfig.compact(profile.Speed)
+	if mounted.speed.Value ~= speed then
+		mounted.speed.Value = speed
+	end
+	local cash = "$" .. GameConfig.compact(profile.Cash)
+	if mounted.cash.Value ~= cash then
+		mounted.cash.Value = cash
+	end
+end
+
+-- Built, filled, THEN parented, so the list's first sight of the folder already
+-- carries both numbers. An older folder on the holder goes first: a re-run must
+-- never leave anybody with two sets of columns. It takes the holder rather than
+-- a Player so a spec can mount it on a stand-in.
+function PlayerDataService.MountStats(holder: Instance, profile: Profile): Stats
+	local old = holder:FindFirstChild(LEADERSTATS)
+	if old then
+		old:Destroy()
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = LEADERSTATS
+	local speed = Instance.new("StringValue")
+	speed.Name = "Speed"
+	speed.Parent = folder
+	local cash = Instance.new("StringValue")
+	cash.Name = "Cash"
+	cash.Parent = folder
+	local mounted: Stats = { folder = folder, speed = speed, cash = cash }
+	spellStats(mounted, profile)
+	folder.Parent = holder
+	return mounted
+end
+
+function PlayerDataService.PublishStats(player: Player)
+	local entry = entries[player]
+	local mounted = stats[player]
+	if entry and mounted then
+		spellStats(mounted, entry.profile)
+	end
+end
+
+local function dropStats(player: Player)
+	local mounted = stats[player]
+	stats[player] = nil
+	if mounted then
+		mounted.folder:Destroy()
 	end
 end
 
@@ -541,6 +623,8 @@ local function onPlayerAdded(player: Player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 		end))
+		-- The player-list columns, off the profile that just loaded.
+		stats[player] = PlayerDataService.MountStats(player, profile)
 
 		if not persistent then
 			warn(string.format(
@@ -592,8 +676,19 @@ local function onPlayerRemoving(player: Player)
 	end
 	entries[player] = nil
 	replicateDirty[player] = nil
+	dropStats(player)
 	SaveService.Forget(player.UserId)
 end
+
+--==============================================================================
+-- THE TWO HANDLERS START CONNECTS, BY NAME
+--
+-- So a spec can drive a whole join -- the load, the profile, the columns -- and a
+-- whole leave against a stand-in player with SaveService stubbed. Server-only,
+-- like everything else in this file.
+--==============================================================================
+PlayerDataService.Join = onPlayerAdded
+PlayerDataService.Leave = onPlayerRemoving
 
 --==============================================================================
 -- LIFECYCLE
@@ -605,6 +700,10 @@ function PlayerDataService.Init()
 	table.clear(serviceConnections)
 	table.clear(entries)
 	table.clear(replicateDirty)
+	for _, mounted in pairs(stats) do
+		mounted.folder:Destroy()
+	end
+	table.clear(stats)
 	shuttingDown = false
 end
 

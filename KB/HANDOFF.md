@@ -1,5 +1,41 @@
 # Steal a Seed — Session Handoff
 
+## The player list shows Speed and Cash — ADDED 2026-09-11 (CLAUDE)
+
+### What (`PlayerDataService.luau`)
+
+  * On profile load every Player gets a `leaderstats` Folder holding two
+    StringValues, in this order: `Speed` = `GameConfig.compact(profile.Speed)` and
+    `Cash` = `"$" .. GameConfig.compact(profile.Cash)`. It is built and filled
+    before it is parented, and it replaces any older folder, so a re-run never
+    doubles the columns.
+  * `AddCash` and `AddSpeed` republish through `PlayerDataService.PublishStats`,
+    which writes a value only when its spelling changes -- an unchanged string is
+    never written, so nothing replicates for it.
+  * Leaving destroys the folder and forgets it; `Init` clears any it holds.
+  * A temporary profile (DataStores unreachable) shows its numbers too. A player
+    who leaves during the load, or is kicked by a failed one, gets no columns.
+  * Seams for the spec: `MountStats(holder, profile)`, `PublishStats(player)`,
+    and `Join` / `Leave`, the two handlers Start connects.
+
+### Verified
+
+  * `LeaderstatsSpec` 28/28 -- the real join and leave handlers and the real
+    AddCash / AddSpeed, with SaveService and PlotService stubbed and a stand-in
+    player: order and spelling (1.25T, $3.43B), AddCash to $3.44B, a gain too
+    small to respell writes nothing, AddSpeed to 1.26T, a clamp to $0, NaN
+    refused, no columns without a profile, a temporary profile, a mid-load leave,
+    a failed load, the folder destroyed on leave, a stale folder replaced.
+  * Play, one client: after load `leaderstats` held Speed = 107B then Cash =
+    $3.44B, matching the loaded profile and the corner HUD. A debug AddCash of +1B
+    and then -1B moved Cash to $4.44B and back to $3.44B with exactly two Changed
+    events. The save read back afterwards carries no trace of the +1B; Cash is up
+    only by the plants' own income.
+
+### Not verified
+
+  * How Roblox's player list orders string columns, and a second player.
+
 ## Plants that stream in late sway; a plant that streams out is measured again — FIXED 2026-09-11 (CLAUDE)
 
 This place runs StreamingEnabled. A plant on a plot outside streaming range
