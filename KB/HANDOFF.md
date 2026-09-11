@@ -1,5 +1,51 @@
 # Steal a Seed — Session Handoff
 
+## The shop sells: nine Developer Products and the x2 Money pass are wired — 2026-09-11 (CLAUDE)
+
+### What (`GameConfig.Store.Items`)
+
+  * `x2money`: `pass = 1975418369`, `robux = 79`.
+  * Cash: cash1 3712092213 @ 19, cash2 3712092272 @ 39, cash3 3712092458 @ 89,
+    cash4 3712092533 @ 179, cash5 3712092621 @ 279.
+  * Speed: speed1 3712094350 @ 29, speed2 3712094432 @ 79, speed5 3712092058 @ 599,
+    speed6 3712092103 @ 799.
+  * speed3 (279), speed4 (599) and pod1-3 stay at `product = 0` and read SOON.
+  * The Store header comment and the pass comment now say what is live, and that
+    `robux` is only what a tile prints -- Roblox charges the Dashboard price.
+
+### Prices: the owner's list, not what the lookup returned
+
+`MarketplaceService:GetProductInfo`, run in Studio on the owner's account, confirmed
+every id exists, is for sale and is the item its row sells -- "Pocket Cash ($24K)"
+for cash1, "Speed Nova (+1B Speed)" for speed6, "Permanent 2× Earn" for the pass.
+But for every product it returned about 0.4x of the brief's price:
+
+    cash1 8 / 19    cash2 19 / 39    cash3 39 / 89    cash4 75 / 179    cash5 115 / 279
+    speed1 12 / 29  speed2 35 / 79   speed5 239 / 599  speed6 319 / 799
+
+That was taken to be regional pricing on the owner's account, and the owner chose
+the brief's prices for the tiles. The brief gave the pass no price; GetProductInfo
+returned 79 and the owner chose 79. If a Dashboard price changes, the number here
+has to change with it, or the tile and the purchase prompt disagree.
+
+### Verified
+
+  * Fresh-required in Edit: 10 live ids (9 products and the pass), 5 at 0, no
+    duplicates; StoreService indexed 9 live / 5 pending with no DUPLICATE warning,
+    and PassService read the pass id.
+  * Play boot: `StoreService Ready. 9 product(s) live, 5 still waiting for an id.`
+    and `PassService Ready. 1 live pass(es), 0 pending`, with no DUPLICATE warning,
+    and ShopUI no longer warns that nothing is for sale. The shop showed 10 prices
+    (79; 29, 79, 599, 799; 19, 39, 89, 179, 279) and 5 SOON pills.
+  * The owner's account owns x2money (`PassService: nicnicniccoal owns "x2money"`,
+    CashMultiplier 2), so the owner's own plant income is doubled from here on.
+  * All 17 specs pass; `rojo build` is clean.
+
+### Not verified
+
+  * A purchase. No prompt was opened and nothing was bought, so ProcessReceipt has
+    not handled a real product yet.
+
 ## Settings: music, sound effects and reduced effects — ADDED 2026-09-11 (CLAUDE)
 
 ### What

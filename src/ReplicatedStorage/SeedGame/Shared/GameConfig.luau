@@ -3187,13 +3187,20 @@ GameConfig.Panel = {
 -- difference with no reason behind it.
 --
 --==============================================================================
--- EVERY `product` IS 0, AND THAT IS THE POINT
+-- A `product` OF 0 MEANS "NOT CREATED YET"
 --
 -- A Developer Product id can only be created in the Creator Dashboard, and an id
 -- typed in from memory is an id that silently sells the wrong thing. Zero means
 -- "not created yet": the shelf still draws the tile, the tile reads SOON, and
 -- the button refuses. Fill an id in and that tile becomes live with no other
 -- change anywhere.
+--
+-- WIRED 2026-09-11 from the owner's Creator Dashboard: cash1-5, speed1, speed2,
+-- speed5, speed6 and the x2 Money pass are live. speed3, speed4 and the three
+-- pods are still 0 and read SOON. The tile prices are the owner's list.
+-- GetProductInfo, asked from the owner's own account in Studio, returned about
+-- 0.4x of them for every product (cash1 8 against 19, speed6 319 against 799);
+-- that was taken to be regional pricing, and the owner chose the list.
 --
 -- StoreService asserts at boot that no two entries share a non-zero id, because
 -- a copy-pasted id is the one mistake here that charges for one thing and grants
@@ -3218,8 +3225,12 @@ GameConfig.Panel = {
 -- The speed and cash ladders are the reference shots' shape. They have NOT been
 -- fitted to this economy -- a tier-1 mill trains at 20/sec, so +150K is about
 -- two hours of it, and the owner's own save is past 2B on both counters. Expect
--- to move these once there is a beta to watch. The Robux prices are likewise
--- the reference's and are the owner's to set.
+-- to move these once there is a beta to watch. The Robux prices on the live rows
+-- are the owner's own; the SOON rows still carry the reference's.
+--
+-- `robux` IS ONLY WHAT THE TILE PRINTS. Roblox charges whatever the Dashboard
+-- says, so a price changed there has to be changed here too, or the tile and
+-- the purchase prompt will disagree.
 --==============================================================================
 export type StoreItem = {
 	key: string,
@@ -3388,28 +3399,31 @@ GameConfig.Store = {
 		-- what was sold -- and it is applied to the FAUCET ONLY: not to bag
 		-- sales, not to Robux cash packs, not to refunds, not to admin grants.
 		--
-		-- pass = 0 and robux = 0 are the owner's "not decided yet". Both must be
-		-- filled in before this can sell, and until then the card reads SOON and
-		-- the button refuses.
+		-- pass = 0 is "not created yet": the card reads SOON and the button
+		-- refuses. The card goes live on a real pass id ALONE and then prints
+		-- `robux`, so the two are filled in together -- a live card with robux
+		-- still at 0 would advertise the pass as free. Wired 2026-09-11 with the
+		-- owner's pass, printed at 79: the price Roblox returned for it on the
+		-- owner's account, and the owner's choice.
 		--======================================================================
 		Passes = {
-			{ key = "x2money", label = "\u{00D7}2 MONEY", robux = 0, pass = 0,
+			{ key = "x2money", label = "\u{00D7}2 MONEY", robux = 79, pass = 1975418369,
 				kind = "pass", multiplier = 2 },
 		},
 		Speed = {
-			{ key = "speed1", label = "+150K SPEED", robux = 35, product = 0, kind = "speed", amount = 150e3 },
-			{ key = "speed2", label = "+1M SPEED", robux = 99, product = 0, kind = "speed", amount = 1e6 },
+			{ key = "speed1", label = "+150K SPEED", robux = 29, product = 3712094350, kind = "speed", amount = 150e3 },
+			{ key = "speed2", label = "+1M SPEED", robux = 79, product = 3712094432, kind = "speed", amount = 1e6 },
 			{ key = "speed3", label = "+10M SPEED", robux = 279, product = 0, kind = "speed", amount = 10e6 },
 			{ key = "speed4", label = "+50M SPEED", robux = 599, product = 0, kind = "speed", amount = 50e6 },
-			{ key = "speed5", label = "+500M SPEED", robux = 799, product = 0, kind = "speed", amount = 500e6 },
-			{ key = "speed6", label = "+1B SPEED", robux = 1199, product = 0, kind = "speed", amount = 1e9 },
+			{ key = "speed5", label = "+500M SPEED", robux = 599, product = 3712092058, kind = "speed", amount = 500e6 },
+			{ key = "speed6", label = "+1B SPEED", robux = 799, product = 3712092103, kind = "speed", amount = 1e9 },
 		},
 		Cash = {
-			{ key = "cash1", label = "$24,000", robux = 19, product = 0, kind = "cash", amount = 24e3 },
-			{ key = "cash2", label = "$200,000", robux = 39, product = 0, kind = "cash", amount = 200e3 },
-			{ key = "cash3", label = "$800,000", robux = 99, product = 0, kind = "cash", amount = 800e3 },
-			{ key = "cash4", label = "$4,000,000", robux = 199, product = 0, kind = "cash", amount = 4e6 },
-			{ key = "cash5", label = "$8,000,000", robux = 319, product = 0, kind = "cash", amount = 8e6 },
+			{ key = "cash1", label = "$24,000", robux = 19, product = 3712092213, kind = "cash", amount = 24e3 },
+			{ key = "cash2", label = "$200,000", robux = 39, product = 3712092272, kind = "cash", amount = 200e3 },
+			{ key = "cash3", label = "$800,000", robux = 89, product = 3712092458, kind = "cash", amount = 800e3 },
+			{ key = "cash4", label = "$4,000,000", robux = 179, product = 3712092533, kind = "cash", amount = 4e6 },
+			{ key = "cash5", label = "$8,000,000", robux = 279, product = 3712092621, kind = "cash", amount = 8e6 },
 		},
 		--======================================================================
 		-- Species and tier are BOTH named, so nothing about the outcome is a
