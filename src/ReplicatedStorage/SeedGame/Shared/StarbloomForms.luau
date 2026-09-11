@@ -8,25 +8,20 @@
 -- THE PART BUDGET, HONESTLY. The art bible band is 25-40 per grown plant.
 --
 --     novaorb 30    cosmospire 37    voidpetal 39    astralhorn 37
---     supernovus 70
+--     supernovus 81
 --
--- Four sit inside it. Supernovus does not and never did -- it was already 46 for
--- its eyes and its crown, a documented exception -- and rebuilding its feet has
--- taken it to 70.
---
--- SIX LEGS IS WHAT MAKES THAT EXPENSIVE. The ankle, sole, heel and two toes each
--- foot needs come to thirty parts before the thighs are counted, and there is no
--- cheaper way to make a hexapod titan stand on something than to build it six
--- feet. It is the one number in this file worth arguing about; the leg block
--- below says what every part is doing, and dropping the separate heel would
--- bring it to 64 at the cost of the counterweight the silhouette leans on.
+-- Four sit inside it. Supernovus does not and never did: the Mythic is a
+-- documented exception. It was 46 for its eyes and crown, 70 once its six legs
+-- got real feet, and it is 81 as the Cosmic Star Colossus -- inside the 70-85 the
+-- owner set for that rebuild on 2026-09-11. Its builder's banner says what every
+-- part is for.
 --
 -- Species:
 --   1. Novaorb     (Rare)       - 4.60 studs - Rotund alien toad-biped with shoulder leaf fronds & orbiting motes
 --   2. Cosmospire  (Rare)       - 7.40 studs - Tall 4-legged stilt mantis with dorsal spire & crystal leaf wings
 --   3. Voidpetal   (Epic)       - 5.60 studs - Prowling void panther predator with 6-petal orchid neck mane & leaf tails
 --   4. Astralhorn  (Legendary)  - 6.90 studs - Heavy 4-legged armored stag-beast with spine fronds & crystal antlers
---   5. Supernovus  (Mythic)     - 8.20 studs - Hexapod cosmic dragon titan with dorsal galaxy lotus, alien leaves & orbital ring
+--   5. Supernovus  (Mythic)     - 8.20 studs - Armored cosmic star colossus: obsidian mantles & pulsar geodes, crescent tusks, 4 pillar legs & a galaxy halo
 --==============================================================================
 
 local StarbloomForms = {}
@@ -233,8 +228,8 @@ end
 --
 -- WITHIN the family each species gets a different KIND of eye rather than a
 -- recolour, so the difference survives being seen small and from across a plot.
--- The Mythic is the exception that proves the rule: it is the only one lit from
--- inside, which is what makes it read hot against four cold ones.
+-- The Mythic's is the exception that proves the rule: the only eye that is a
+-- slit of cyan light under a brow rather than a mark on a dark ball.
 --==============================================================================
 --==============================================================================
 -- THE EYE GOES ON THE SURFACE, AND THAT IS A MEASUREMENT, NOT A FEELING
@@ -288,21 +283,17 @@ local function voidEye(m: Instance, tag: string, eyeCF: CFrame, dia: number,
 			cf = eyeCF * CFrame.new(0, 0, -dia * 0.36),
 			color = C.StarIvory, parent = m, material = Enum.Material.Neon, smooth = true })
 
-	elseif style == "pulsar" then
-		-- THE ONLY EYE IN THE BIOME LIT FROM INSIDE. A gold core plus a smaller
-		-- ember set off-centre. Both are Pupils, so the rig swings the pair
-		-- together and the ember cannot collapse onto the core as it tracks.
-		mk({ name = tag .. "Eye", size = Vector3.new(dia * 1.06, dia * 1.06, dia * 1.06),
-			cf = eyeCF, color = VOID_SCLERA, parent = m,
-			shape = Enum.PartType.Ball, smooth = true })
-		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.34, dia * 0.34, dia * 0.34),
-			cf = eyeCF * CFrame.new(0, 0, -dia * 0.40),
-			color = C.PulsarGold, parent = m,
-			shape = Enum.PartType.Ball, material = Enum.Material.Neon, smooth = true })
-		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 0.15, dia * 0.15, dia * 0.15),
-			cf = eyeCF * CFrame.new(dia * 0.22, dia * 0.18, -dia * 0.38),
-			color = C.NebulaCyanGlow, parent = m,
-			shape = Enum.PartType.Ball, material = Enum.Material.Neon, smooth = true })
+	elseif style == "titan" then
+		-- A SLIT OF LIGHT UNDER A BROW. The colossus's eye is a narrow cyan cut,
+		-- the only line of light in a family of marks on dark balls, and a line
+		-- still reads across a plot where a pinprick is gone. Block sclera,
+		-- because a Ball renders as a sphere of its smallest axis and can never
+		-- be a slit. `eyeCF` carries the roll that angles the pair into a frown.
+		mk({ name = tag .. "Eye", size = Vector3.new(dia * 1.30, dia * 0.46, dia * 0.60),
+			cf = eyeCF, color = VOID_SCLERA, parent = m, smooth = true })
+		mk({ name = tag .. "Pupil", size = Vector3.new(dia * 1.06, dia * 0.16, dia * 0.14),
+			cf = eyeCF * CFrame.new(0, 0, -dia * 0.30),
+			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon, smooth = true })
 
 	else -- "placid"
 		-- The widest, softest eye of the five, and the lid rides low on it. It
@@ -322,8 +313,10 @@ local function voidEye(m: Instance, tag: string, eyeCF: CFrame, dia: number,
 	-- of it is outside, and a lid tucked near the skin closes BEHIND that
 	-- hemisphere and covers nothing. `droop` is how far down it rests, so a
 	-- lower one reads sleepy.
+	-- The slit is wider than the eye it replaced, so its lid is too: a blink
+	-- that left the two ends of a line of light showing would not be a blink.
 	mk({ name = tag .. "Lid",
-		size = Vector3.new(dia * 1.24, dia * LID_H, dia * 0.62),
+		size = Vector3.new(dia * (if style == "titan" then 1.44 else 1.24), dia * LID_H, dia * 0.62),
 		cf = eyeCF * CFrame.new(0, dia * (0.5 + LID_H * 0.5 + (droop or 0.10)), -dia * 0.30),
 		color = lidColor, parent = m, smooth = true })
 end
@@ -956,290 +949,464 @@ local function buildAstralhorn(parent: Instance, baseCF: CFrame): Model
 end
 
 --==============================================================================
--- 5. SUPERNOVUS (Mythic, 8.20 studs) -- 69 parts (+ 1 Base = 70), 36 of them limb
+-- 5. SUPERNOVUS (Mythic, 8.20 studs) -- THE COSMIC STAR COLOSSUS
+--    80 parts (+ 1 Base = 81): limbs 22, head 18, halo 13, armour 13, tusks 8,
+--    fissures 4, leaves 2. Two emitters and three lights.
+--
+-- Rebuilt 2026-09-11 from the owner's choice of three concepts:
+-- art/creatures/supernovus/reference/supernovus-option2-colossus.jpg, compared
+-- in supernovus-lineup-comparison.png. It replaces the hexapod dragon.
+--
+-- ONE SENTENCE. A low, broad obsidian colossus on four pillar legs, whose glowing
+-- crescent tusks and overhead galaxy halo announce the Mythic while cyan fissures
+-- leak starlight from under its armour.
+--
+-- THREE MASSES, in the order the eye takes them:
+--
+--   dominant    the carapace and its two shoulder mantles: one wide, arched,
+--               stepped armour mass with a pulsar geode set in each mantle
+--   supporting  four short pillar legs, the front pair broader
+--   signature   the tusks -- ivory at the root, cyan light at the tip -- curving
+--               out, down and up in a crescent either side of the snout
+--
+-- WHAT WAS TAKEN FROM THE PICTURE. Observed: the flared mantles and gold gems,
+-- a studded brow crest between two swept horns, cyan eye slits, the crescent
+-- tusks, three claws a foot, cyan cracks in dark armour, a tilted galaxy disk
+-- overhead. Inferred, because a front view never shows it: a lower rump behind
+-- the shoulders.
+--
+-- AND WHAT WAS NOT: the hero shot's width. Drawn to its proportions the tusks
+-- span about 1.4 times the creature's height, and Supernovus already overran the
+-- 48-stud plot at Colossal. The crescent is pulled in so the whole silhouette,
+-- tusk tips and mantles included, stays inside the old model's 7.06 studs.
+--
+-- STILL A PLANT. Two alien leaves sweep back off the rump and swing as it walks,
+-- and the halo is its bloom.
+--
+-- COLOUR IN ZONES. Void black on the body and skull. Indigo and midnight slate
+-- on the mantles, brow, snout and legs -- a value step up, so the armour still
+-- separates from the body in greyscale. Amethyst on the claws, horn tips and
+-- leaves. The light is kept to the tusks, the eye slits, the fissures, the halo
+-- and the two gold geodes.
+--
+-- MOTION IS PlantSway's, BY NAME. The legs trot on diagonals, the two parts
+-- named Leaf swing, and the slit eyes track and blink. The halo rides the body
+-- and does not spin: nothing in PlantSway spins a part, and one species is not
+-- worth a new per-frame channel.
 --==============================================================================
 local function buildSupernovus(parent: Instance, baseCF: CFrame): Model
 	local m = Instance.new("Model")
 	m.Name = "Supernovus"
 	m.Parent = parent
 
-	--==========================================================================
-	-- SIX LEGS, AND SIX FEET THAT ACTUALLY CARRY THEM
-	--
-	-- WHAT WAS WRONG. Each leg was one thigh and a flat slab, and the slab was
-	-- positioned from the plant's origin rather than from the leg, so the thigh
-	-- stopped in mid-air above it. Measured at authored scale, the daylight
-	-- between the two ran 0.0376 studs at the rear pair, 0.1493 at the front and
-	-- 0.3474 at the middle -- a titan hovering over six loose tiles, and at
-	-- Colossal, where the height scale is 50x, between 1.9 and 17.4 studs of
-	-- open air under a creature that is meant to be standing on them.
-	--
-	-- It was invisible in the RIG as well. PlantSway finds limb parts by an
-	-- anatomy vocabulary -- Thigh, Shin, Hock, Foot, Toe and the rest -- and
-	-- "TitanClaw" is in none of it, so the six pads were never leg parts at all.
-	-- PlantSway says so itself: "a single-part leg (Supernovus is thighs and
-	-- nothing else)". The thighs stepped; the feet stayed where they were.
-	--
-	-- WHAT IT IS NOW, PER LEG: the thigh, an ankle, a sole, a heel and two
-	-- unequal toes. Every one of them carries a word the rig knows, so the whole
-	-- foot swings with the leg it belongs to.
-	--
-	-- THE THIGH IS EXTENDED, NOT MOVED. Its top is exactly where it was -- that
-	-- is the creature's height and its stance -- and only the lower end grows, by
-	-- however much it takes to put its cut face INSIDE the sole. That distance is
-	-- computed from the box's own rotated corner reach rather than typed in,
-	-- because the six legs sit at three pitches and two rolls and a single number
-	-- would bury one and strand another.
-	--
-	-- THE FEET STAND SLIGHTLY OUT OF LINE WITH THE HIPS, deliberately and twice
-	-- over. It reads as a planted hexapod stance -- front feet ahead, rear feet
-	-- behind -- and it is also what keeps each foot in its own rig cluster:
-	-- PlantSway hangs every limb part on the nearest hip in plan view, and with
-	-- 1.7 studs between neighbouring hips a foot placed straight under its own
-	-- thigh puts its HEEL nearer the next leg along. Measured before the offset,
-	-- the front heel came out 1.07:1 toward the middle leg -- the wrong side, and
-	-- the middle leg walks in antiphase, so the foot would have torn off the leg
-	-- every stride.
-	--==========================================================================
-	for _, leg in ipairs({
-		{ name = "FrontLeft",  x = -1.8, z = -1.6, pitch = rad(-18), roll = rad(-15),
-			size = 1.1, yaw = rad( 16), reach = -0.45, heel = 1.00,
-			toes = { { len = 1.00, w = 1.00, yaw = rad( 26) },
-				{ len = 0.84, w = 0.86, yaw = rad(-19) } } },
-		{ name = "FrontRight", x =  1.8, z = -1.6, pitch = rad(-18), roll = rad( 15),
-			size = 1.1, yaw = rad(-14), reach = -0.45, heel = 0.94,
-			toes = { { len = 0.96, w = 0.94, yaw = rad(-28) },
-				{ len = 0.88, w = 0.90, yaw = rad( 16) } } },
-		{ name = "MidLeft",    x = -2.0, z =  0.1, pitch = rad(  0), roll = rad(-20),
-			size = 1.0, yaw = rad( 19), reach =  0.00, heel = 0.96,
-			toes = { { len = 0.92, w = 0.96, yaw = rad( 30) },
-				{ len = 0.80, w = 0.82, yaw = rad(-16) } } },
-		{ name = "MidRight",   x =  2.0, z =  0.1, pitch = rad(  0), roll = rad( 20),
-			size = 1.0, yaw = rad(-21), reach =  0.00, heel = 1.02,
-			toes = { { len = 0.86, w = 0.88, yaw = rad(-24) },
-				{ len = 0.94, w = 0.98, yaw = rad( 21) } } },
-		{ name = "RearLeft",   x = -1.8, z =  1.8, pitch = rad( 20), roll = rad(-15),
-			size = 1.2, yaw = rad( 15), reach =  0.55, heel = 1.06,
-			toes = { { len = 0.90, w = 1.02, yaw = rad( 23) },
-				{ len = 1.02, w = 0.90, yaw = rad(-25) } } },
-		{ name = "RearRight",  x =  1.8, z =  1.8, pitch = rad( 20), roll = rad( 15),
-			size = 1.2, yaw = rad(-17), reach =  0.55, heel = 0.98,
-			toes = { { len = 1.00, w = 0.94, yaw = rad(-20) },
-				{ len = 0.86, w = 1.00, yaw = rad( 27) } } },
-	}) do
-		local s = leg.size
-		local legCF = baseCF * CFrame.new(leg.x, 1.8, leg.z)
-			* CFrame.Angles(leg.pitch, 0, leg.roll)
-		local rot = legCF - legCF.Position
-		-- Deliberately the SHALLOWEST and NARROWEST mass in the foot. It began as
-		-- a 1.34 x 0.42 x 1.20 brick with toes thinner than itself, and the whole
-		-- thing read as one flat rectangular pad -- the exact shape this rebuild
-		-- exists to stop being. Pulled in to 1.22 x 0.34 x 1.14 with 0.50-deep
-		-- toes standing proud of it, the outline that reaches the ground is
-		-- knuckles and a heel rather than a tile.
-		local padSize = Vector3.new(1.22 * s, 0.34 * s, 1.14 * s)
+	-- A tapering point. The wedge's full end sits on `from` and it narrows to an
+	-- edge `len` studs along from's own +Y; `t` is the thickness that tapers
+	-- away, laid along from's +Z, which is the inside of a curve for a tusk.
+	local function spike(name: string, from: CFrame, len: number, w: number, t: number,
+		colour: Color3, material: Enum.Material?): BasePart
+		return mk({ name = name, size = Vector3.new(w, t, len),
+			cf = from * CFrame.new(0, len * 0.5, 0) * CFrame.Angles(rad(90), 0, 0),
+			color = colour, parent = m, wedge = true, material = material, smooth = true })
+	end
 
-		-- How far this thigh must grow to put its lowest corner inside the sole.
-		-- `groundLift` is the box's reach below its own centre, and lengthening
-		-- by `ext` drops that corner by exactly `ext` times the leg's own
-		-- up-vector -- the centre falls half of it and the half-extent takes the
-		-- other half.
-		local plainSize = Vector3.new(0.9 * s, 1.7 * s, 1.0 * s)
-		local lowest = 1.8 - groundLift(plainSize, rot)
-		local ext = math.max((lowest - padSize.Y * 0.55) / rot.UpVector.Y, 0.10)
-		mk({ name = leg.name .. "_TitanThigh",
-			size = Vector3.new(0.9 * s, 1.7 * s + ext, 1.0 * s),
-			cf = legCF * CFrame.new(0, -ext * 0.5, 0),
+	--==========================================================================
+	-- FOUR PILLAR LEGS, AND THE NAMES ARE THE RIG
+	--
+	-- Every limb part carries a word from PlantSway's anatomy vocabulary --
+	-- Thigh, Hock, Foot, Toe -- so the whole leg swings about one hip as the
+	-- plant walks. Nothing else on the creature may carry one of those words;
+	-- StarbloomLimbSpec reads the vocabulary out of PlantSway and fails on a
+	-- stray.
+	--
+	-- Per leg, top to bottom, each mass wider than the one above it:
+	--
+	--   thigh   from inside the carapace down past the ankle. `shaft` overruns
+	--           both joints, so no pose can open a seam at either end
+	--   hock    the ankle collar, at a fixed height
+	--   pad     level and flat on the plane: leg, collar, foot
+	--   toes    claws off the pad's front edge, their undersides on the plane.
+	--           Three on a front foot and two on a rear one, and one front claw
+	--           a side is short
+	--
+	-- The front pair is broader and stands out under the mantles; the rear pair
+	-- is narrower and stands a little behind its hips, the counterweight. Each
+	-- leg splays a few degrees and its pad follows the ANKLE, not the hip, so the
+	-- foot is under its own leg in plan view -- which is also how PlantSway
+	-- decides which leg a foot belongs to.
+	--
+	-- THE ANKLE SITS LOW BECAUSE THE RIG SAYS SO. PlantSway takes limb parts
+	-- whose centres lie in the upper 45% of the limb band as hip anchors, and
+	-- only a Thigh may be one. The collar's centre at 0.68 is well under a hip
+	-- line near 1.0.
+	--==========================================================================
+	local ANKLE_Y = 0.68
+	local CLAW_H = 0.42
+	for _, leg in ipairs({
+		{ name = "FrontLeft", x = -1.72, z = -1.25, hipY = 2.50,
+			pitch = rad(5), roll = rad(-7), yaw = rad(9), reach = -0.08,
+			thigh = Vector2.new(1.24, 1.32), hock = Vector3.new(1.46, 0.72, 1.50),
+			pad = Vector3.new(1.62, 0.40, 1.66),
+			toes = {
+				{ x = -0.50, len = 0.66, w = 0.44, yaw = rad(20) },
+				{ x = 0.02, len = 0.78, w = 0.48, yaw = rad(3) },
+				{ x = 0.50, len = 0.50, w = 0.40, yaw = rad(-17) },
+			} },
+		{ name = "FrontRight", x = 1.72, z = -1.25, hipY = 2.50,
+			pitch = rad(5), roll = rad(7), yaw = rad(-8), reach = -0.08,
+			thigh = Vector2.new(1.24, 1.32), hock = Vector3.new(1.46, 0.72, 1.50),
+			pad = Vector3.new(1.62, 0.40, 1.66),
+			toes = {
+				{ x = -0.50, len = 0.52, w = 0.40, yaw = rad(17) },
+				{ x = -0.02, len = 0.76, w = 0.48, yaw = rad(-2) },
+				{ x = 0.50, len = 0.66, w = 0.44, yaw = rad(-21) },
+			} },
+		{ name = "RearLeft", x = -1.58, z = 1.55, hipY = 2.35,
+			pitch = rad(-5), roll = rad(-6), yaw = rad(7), reach = 0.10,
+			thigh = Vector2.new(1.12, 1.20), hock = Vector3.new(1.30, 0.72, 1.36),
+			pad = Vector3.new(1.46, 0.38, 1.50),
+			toes = {
+				{ x = -0.30, len = 0.62, w = 0.46, yaw = rad(12) },
+				{ x = 0.30, len = 0.56, w = 0.42, yaw = rad(-10) },
+			} },
+		{ name = "RearRight", x = 1.58, z = 1.55, hipY = 2.35,
+			pitch = rad(-5), roll = rad(6), yaw = rad(-6), reach = 0.10,
+			thigh = Vector2.new(1.12, 1.20), hock = Vector3.new(1.30, 0.72, 1.36),
+			pad = Vector3.new(1.46, 0.38, 1.50),
+			toes = {
+				{ x = -0.30, len = 0.58, w = 0.44, yaw = rad(10) },
+				{ x = 0.30, len = 0.62, w = 0.46, yaw = rad(-13) },
+			} },
+	}) do
+		local hipCF = baseCF * CFrame.new(leg.x, leg.hipY, leg.z)
+			* CFrame.Angles(leg.pitch, 0, leg.roll)
+		local rot = hipCF - hipCF.Position
+		-- The ankle is a fixed height off the plane, so the distance to it along
+		-- the leg's own tilted axis is the vertical drop over that axis's rise.
+		local drop = (leg.hipY - ANKLE_Y) / rot.UpVector.Y
+		shaft(leg.name .. "_TitanThigh", hipCF, drop, 0.45, 0.30,
+			leg.thigh.X, leg.thigh.Y, C.MidnightSlate, m)
+
+		-- The collar turns with the foot and leans half as far as the leg, so the
+		-- limb comes toward level instead of stopping dead on the pad.
+		local ankle = baseCF:ToObjectSpace(hipCF * CFrame.new(0, -drop, 0)).Position
+		mk({ name = leg.name .. "_TitanHock", size = leg.hock,
+			cf = baseCF * CFrame.new(ankle.X, ANKLE_Y, ankle.Z)
+				* CFrame.Angles(0, leg.yaw, leg.roll * 0.5),
 			color = C.VoidBlack, parent = m })
 
-		-- The plant's own level frame, at this leg's foot. Turned, never tipped.
-		local legEnd = baseCF:ToObjectSpace(legCF
-			* CFrame.new(0, -(0.85 * s + ext), 0)).Position
-		local footCF = baseCF * CFrame.new(legEnd.X, 0, legEnd.Z + leg.reach)
+		-- Turned, never tipped: its whole underside is meant to be on the plane.
+		local padCF = baseCF * CFrame.new(ankle.X, 0, ankle.Z + leg.reach)
 			* CFrame.Angles(0, leg.yaw, 0)
+		mk({ name = leg.name .. "_TitanFootPad", size = leg.pad,
+			cf = padCF * CFrame.new(0, leg.pad.Y * 0.5, 0),
+			color = C.Indigo, parent = m })
 
-		--======================================================================
-		-- THE SOLE, FLAT AND FULL ON THE GROUND
+		-- Each claw's thick end is buried 0.24 inside the pad's front edge and it
+		-- tapers forward to a point. 0.17 measured only 0.03 of overlap at
+		-- Colossal, where girth spreads the claws away from a pad that does not
+		-- grow with them.
 		--
-		-- No pitch and no roll on this one part, on purpose. Everything else in
-		-- the foot is lifted by its own rotated corner reach so its lowest point
-		-- touches the plane; the sole is the one mass whose whole underside is
-		-- meant to be down there, and a degree of tilt would stand it on an edge.
-		--======================================================================
-		mk({ name = leg.name .. "_TitanFootPad", size = padSize,
-			cf = footCF * CFrame.new(0, padSize.Y * 0.5, -0.10 * s),
-			color = C.MidnightSlate, parent = m })
-
-		--======================================================================
-		-- THE ANKLE IS A COLLAR, AND IT IS A BLOCK ON PURPOSE
-		--
-		-- The first cut made it a WedgePart with its deep end facing backward,
-		-- reasoning that a wedge is by definition a taper. On screen it was a
-		-- shark fin: a wedge is full height along one edge only, so all of its
-		-- mass stacked up behind the leg and the taper ran out to a blade over
-		-- the toes. Nothing about it read as an ankle.
-		--
-		-- A block does, because the taper that matters here is the one BETWEEN
-		-- the three masses: the thigh is 0.90 x 1.00 across, this is 1.10 x 1.14,
-		-- and the sole below flares to 1.34 x 1.20. Leg, collar, foot. It does
-		-- not need to hide the thigh's cut end either -- the thigh is extended
-		-- until that face is inside the SOLE, well below this.
-		--
-		-- It leans with the leg at half the roll, so it turns the limb toward
-		-- level instead of stopping it dead.
-		--======================================================================
-		local hockTop = legEnd.Y + 0.34 * s
-		local hockBot = padSize.Y * 0.40
-		mk({ name = leg.name .. "_TitanHock",
-			size = Vector3.new(1.10 * s, math.max(hockTop - hockBot, 0.32 * s), 1.14 * s),
-			cf = baseCF * CFrame.new(legEnd.X, (hockTop + hockBot) * 0.5, legEnd.Z)
-				* CFrame.Angles(0, leg.yaw, leg.roll * 0.5),
-			color = C.AmethystDark, parent = m })
-
-		--======================================================================
-		-- THE HEEL, AND TWO TOES THAT DO NOT MATCH
-		--
-		-- The heel is the counterweight: taller than the sole, set behind the
-		-- ankle, tapering away to the rear. The toes taper the other way, from
-		-- inside the sole out to a point on the ground. Lengths, widths and splay
-		-- are per foot and written down rather than rolled -- two servers have to
-		-- build the same creature, and "the third one looked wrong" has to be
-		-- able to mean something.
-		--======================================================================
-		local heelSize = Vector3.new(1.00 * s, 0.56 * s, 0.70 * s * leg.heel)
-		mk({ name = leg.name .. "_TitanFootHeel", size = heelSize,
-			cf = footCF * CFrame.new(0.06 * s, heelSize.Y * 0.5, 0.40 * s)
-				* CFrame.Angles(0, math.pi, 0),
-			color = C.VoidBlack, parent = m, wedge = true })
-
-		-- TALONS, NOT FLIPPERS. The first cut ran them 0.40 wide and 0.38 tall
-		-- over 0.86 of length and they came out as thin flat flaps off the front
-		-- of a slab. Broader, taller and shorter reads as a toe carrying weight,
-		-- and standing them PROUD of the sole -- 0.46 against its 0.36 -- turns
-		-- the front of the foot into knuckles instead of an edge.
+		-- Amethyst on an indigo pad is two value steps: Voidpetal's claws sit one
+		-- step off their pads and vanish across a plot. The palest lavender was
+		-- tried first and pulled the eye down to the feet, away from the tusks.
 		for ti, toe in ipairs(leg.toes) do
-			local toeSize = Vector3.new(0.58 * s * toe.w, 0.50 * s, 0.92 * s * toe.len)
+			local toeSize = Vector3.new(toe.w, CLAW_H, toe.len + 0.48)
 			mk({ name = leg.name .. "_TitanToe" .. ti, size = toeSize,
-				cf = footCF * CFrame.Angles(0, toe.yaw, 0)
-					* CFrame.new(0, toeSize.Y * 0.5, -0.60 * s),
-				color = C.MidnightSlate, parent = m, wedge = true })
+				cf = padCF * CFrame.new(toe.x, CLAW_H * 0.5, -leg.pad.Z * 0.5 + 0.24)
+					* CFrame.Angles(0, toe.yaw, 0) * CFrame.new(0, 0, -toeSize.Z * 0.5),
+				color = C.Amethyst, parent = m, wedge = true })
 		end
 	end
 
-	-- Titan Carapace, Dragon Neck & Skull (8 parts)
-	local bodyCF = baseCF * CFrame.new(0, 2.8, 0)
-	mk({ name = "TitanCarapace", size = Vector3.new(3.8, 2.6, 4.4), cf = bodyCF,
+	--==========================================================================
+	-- THE CARAPACE: ONE ARCHED MASS FROM FIVE PIECES
+	--
+	-- Never one box. The main shell tips up toward the shoulders, the rump drops
+	-- lower and narrower behind it, a studded hump rises between the mantles
+	-- and a spine ridge runs the arch back down. The chest plate leans back under
+	-- the head and is the back wall of the mouth.
+	--==========================================================================
+	local carapaceCF = baseCF * CFrame.new(0, 3.25, 0.05) * CFrame.Angles(rad(4), 0, 0)
+	mk({ name = "TitanCarapace", size = Vector3.new(3.70, 2.60, 4.00), cf = carapaceCF,
 		color = C.VoidBlack, parent = m })
-	local neckCF = bodyCF * CFrame.new(0, 0.8, -2.4) * CFrame.Angles(rad(-20), 0, 0)
-	mk({ name = "DragonNeck", size = Vector3.new(1.8, 1.8, 2.0), cf = neckCF,
-		color = C.MidnightSlate, parent = m })
-	local skullCF = neckCF * CFrame.new(0, 0.9, -1.1) * CFrame.Angles(rad(15), 0, 0)
-	mk({ name = "DragonSkull", size = Vector3.new(2.2, 1.6, 2.4), cf = skullCF,
+	mk({ name = "RearCarapace", size = Vector3.new(3.30, 2.10, 1.90),
+		cf = baseCF * CFrame.new(0, 2.95, 1.95) * CFrame.Angles(rad(10), 0, 0),
 		color = C.VoidBlack, parent = m })
-	mk({ name = "RoaringJaw", size = Vector3.new(1.8, 0.7, 1.8), cf = skullCF * CFrame.new(0, -0.85, -0.4) * CFrame.Angles(rad(22), 0, 0),
+	mk({ name = "ShoulderHump", size = Vector3.new(2.60, 0.90, 2.30),
+		cf = baseCF * CFrame.new(0, 4.95, -0.45) * CFrame.Angles(rad(4), math.pi, 0),
+		color = C.MidnightSlate, parent = m, wedge = true })
+	mk({ name = "SpineRidge", size = Vector3.new(1.30, 0.60, 2.40),
+		cf = baseCF * CFrame.new(0, 4.35, 1.45) * CFrame.Angles(rad(10), math.pi, 0),
+		color = C.MidnightSlate, parent = m, wedge = true })
+	local chestCF = baseCF * CFrame.new(0, 2.60, -2.05) * CFrame.Angles(rad(12), 0, 0)
+	mk({ name = "ChestPlate", size = Vector3.new(2.40, 1.70, 0.80), cf = chestCF,
 		color = C.MidnightSlate, parent = m })
-	mk({ name = "MawCore", size = Vector3.new(1.1, 1.1, 1.1), cf = skullCF * CFrame.new(0, -0.4, -0.5),
-		color = C.StarIvory, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-	-- Eyes: pulsar. The only lit-from-inside eye in the biome, and the reason
-	-- the Mythic reads hot against four cold ones. It is also why this species
-	-- sits at 46 parts against a 25-40 band -- a deliberate exception, the same
-	-- one Suncrown already carries.
-	for side = -1, 1, 2 do
-		local tag = if side < 0 then "Left" else "Right"
-		-- The skull is 2.4 deep. At -1.0 the eye sat a fifth of a stud INSIDE
-		-- it and the whole face was a blank black box.
-		voidEye(m, tag, skullCF * CFrame.new(side * 0.75, 0.2, -1.20), 0.50,
-			"pulsar", C.VoidBlack)
-	end
-	mk({ name = "BrowHorn", size = Vector3.new(0.65, 1.8, 0.55), cf = skullCF * CFrame.new(0, 1.0, 0.2) * CFrame.Angles(rad(-25), 0, 0),
-		color = C.AmethystPale, parent = m, wedge = true })
 
-	-- 4 Giant Alien Leaves (direct children named "Leaf")
-	for _, frond in ipairs({
-		{ x = -2.1, z = -0.8, pitch = rad(-25), roll = rad(-40) },
-		{ x =  2.1, z = -0.8, pitch = rad(-25), roll = rad( 40) },
-		{ x = -2.1, z =  1.2, pitch = rad( 25), roll = rad(-45) },
-		{ x =  2.1, z =  1.2, pitch = rad( 25), roll = rad( 45) },
-	}) do
-		local fCF = bodyCF * CFrame.new(frond.x, 1.2, frond.z) * CFrame.Angles(frond.pitch, 0, frond.roll)
-		mk({ name = "Leaf", size = Vector3.new(0.85, 3.2, 0.35), cf = fCF,
+	--==========================================================================
+	-- THE FISSURES
+	--
+	-- Thin cyan cuts centred ON the armour surface, so half of each stands proud
+	-- and half is inside: light leaking out of a crack rather than a stripe
+	-- painted over one. One run along each flank, unequal in length; the other
+	-- two leak down the mantles from under their geodes.
+	--
+	-- They were a V on the chest plate first. The head and the tusks stand in
+	-- front of the chest from every camera that matters, so nobody saw it.
+	--==========================================================================
+	for s = -1, 1, 2 do
+		mk({ name = "FlankSeam", size = Vector3.new(0.10, 0.14, if s < 0 then 2.60 else 2.35),
+			cf = carapaceCF * CFrame.new(s * 1.85, if s < 0 then -0.30 else -0.18, 0.55)
+				* CFrame.Angles(rad(-8), 0, 0),
+			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
+	end
+
+	--==========================================================================
+	-- THE SHOULDER MANTLES AND THEIR PULSAR GEODES
+	--
+	-- A tall plate over each front leg, its top leaning in and its skirt flaring
+	-- out, with a steeper flare along the bottom edge. The negative space between
+	-- the mantle and the head is part of the silhouette; do not fill it.
+	--
+	-- The geode is a diamond: a dark socket turned 45 degrees and half set into
+	-- the plate's outer face, and a tilted gold Neon facet standing proud of it.
+	-- Each carries a small light -- two of the three this creature has.
+	--==========================================================================
+	for s = -1, 1, 2 do
+		local mantleCF = baseCF * CFrame.new(s * 2.10, 3.95, -1.05)
+			* CFrame.Angles(0, rad(-s * 18), rad(s * 18))
+		mk({ name = "ShoulderMantle", size = Vector3.new(1.30, 1.95, 2.40), cf = mantleCF,
+			color = C.Indigo, parent = m })
+		mk({ name = "MantleFlare", size = Vector3.new(1.30, 0.36, 2.30),
+			cf = baseCF * CFrame.new(s * 2.54, 3.02, -1.02)
+				* CFrame.Angles(0, rad(-s * 18), rad(s * 40)),
+			color = C.MidnightSlate, parent = m })
+
+		-- A frame on the mantle's FRONT face, which the 18-degree turn aims out as
+		-- well as forward: where the picture puts the gem, and where the front and
+		-- three-quarter cameras can see it. It sat on the outer face first and
+		-- showed only from the side.
+		local faceCF = mantleCF * CFrame.new(s * 0.12, 0.30, -1.20)
+		mk({ name = "GeodeSocket", size = Vector3.new(0.86, 0.86, 0.30),
+			cf = faceCF * CFrame.Angles(0, 0, math.pi * 0.25),
+			color = C.VoidBlack, parent = m })
+		local geode = mk({ name = "PulsarGeode", size = Vector3.new(0.62, 0.62, 0.40),
+			cf = faceCF * CFrame.new(0, 0, -0.10) * CFrame.Angles(rad(18), rad(18), math.pi * 0.25),
+			color = C.PulsarGold, parent = m, material = Enum.Material.Neon })
+		local glow = Instance.new("PointLight")
+		glow.Name = "GeodeGlow"
+		glow.Color = C.PulsarGold
+		glow.Brightness = 1.4
+		glow.Range = 6
+		glow.Shadows = false
+		glow.Parent = geode
+
+		-- The crack the geode leaks into, running down the plate beneath it.
+		mk({ name = "MantleSeam", size = Vector3.new(0.12, 0.95, 0.10),
+			cf = faceCF * CFrame.new(-s * 0.10, -0.82, 0) * CFrame.Angles(0, 0, rad(s * 14)),
+			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
+	end
+
+	--==========================================================================
+	-- THE SKULL, AND A MOUTH THAT IS A HOLE
+	--
+	-- A heavy brow plate overhangs the skull front and shades the eye slits; a
+	-- studded crest rises from it toward the back. The snout ridge comes down
+	-- from under the brow and juts forward, the cheek plates angle back either
+	-- side of it, and the lower jaw hangs a little open beneath them.
+	--
+	-- THE MOUTH IS NEGATIVE SPACE, NOT A PLATE. Between the cheeks, under the
+	-- snout and over the jaw there is nothing, for about a stud of depth back to
+	-- the chest plate; the stellar core hangs inside that recess, behind the lip
+	-- line, so the opening changes the outline from the side and glows from
+	-- within at the front.
+	--==========================================================================
+	local headCF = baseCF * CFrame.new(0, 3.90, -2.45) * CFrame.Angles(rad(-6), 0, 0)
+	mk({ name = "TitanSkull", size = Vector3.new(1.85, 1.50, 1.90),
+		cf = headCF * CFrame.new(0, 0.35, 0.10), color = C.VoidBlack, parent = m })
+	mk({ name = "BrowPlate", size = Vector3.new(2.25, 0.50, 1.15),
+		cf = headCF * CFrame.new(0, 0.95, -0.55) * CFrame.Angles(rad(-10), 0, 0),
+		color = C.Indigo, parent = m })
+	mk({ name = "BrowCrest", size = Vector3.new(0.90, 0.75, 1.90),
+		cf = headCF * CFrame.new(0, 1.45, 0.05), color = C.MidnightSlate, parent = m, wedge = true })
+	mk({ name = "SnoutRidge", size = Vector3.new(0.62, 1.10, 0.70),
+		cf = headCF * CFrame.new(0, 0.05, -1.00) * CFrame.Angles(rad(16), 0, 0),
+		color = C.Indigo, parent = m })
+	for s = -1, 1, 2 do
+		mk({ name = "CheekPlate", size = Vector3.new(0.72, 0.95, 1.30),
+			cf = headCF * CFrame.new(s * 0.74, -0.55, -0.72) * CFrame.Angles(0, rad(-s * 14), rad(s * 6)),
+			color = C.MidnightSlate, parent = m })
+	end
+	mk({ name = "LowerJaw", size = Vector3.new(1.50, 0.50, 1.35),
+		cf = headCF * CFrame.new(0, -1.18, -0.60) * CFrame.Angles(rad(-6), 0, 0),
+		color = C.MidnightSlate, parent = m })
+	mk({ name = "StellarCore", size = Vector3.new(0.52, 0.52, 0.52),
+		cf = headCF * CFrame.new(0, -0.72, -0.55), color = C.NebulaCyan, parent = m,
+		shape = Enum.PartType.Ball, material = Enum.Material.Neon })
+
+	-- The slits sit ON the skull's front face (its centre is 0.85 in front of
+	-- headCF) and roll inward-down into a frown under the brow.
+	for s = -1, 1, 2 do
+		local tag = if s < 0 then "Left" else "Right"
+		voidEye(m, tag, headCF * CFrame.new(s * 0.50, 0.22, -0.86) * CFrame.Angles(0, 0, rad(s * 14)),
+			0.46, "titan", C.VoidBlack)
+	end
+
+	--==========================================================================
+	-- THE CROWN HORNS
+	--
+	-- Out, then up, from the brow plate's shoulders: a dark block leaning out 32
+	-- degrees and a tapering amethyst tip that turns back up, the right one a
+	-- little longer. Two upright blocks read as ears from the front. They stop
+	-- clear under the halo.
+	--==========================================================================
+	for s = -1, 1, 2 do
+		local hornCF = headCF * CFrame.new(s * 0.82, 1.20, -0.30)
+			* CFrame.Angles(rad(24), 0, rad(-s * 32))
+		mk({ name = "CrownHorn", size = Vector3.new(0.50, 1.15, 0.54),
+			cf = hornCF * CFrame.new(0, 0.42, 0), color = C.VoidBlack, parent = m })
+		spike("CrownHornTip", hornCF * CFrame.new(0, 0.92, 0) * CFrame.Angles(rad(22), 0, rad(s * 16)),
+			if s > 0 then 1.05 else 0.95, 0.40, 0.46, C.AmethystDark)
+	end
+
+	--==========================================================================
+	-- THE CRESCENT TUSKS
+	--
+	-- Each is a chain: three tapering segments and a wedge tip. The chain starts
+	-- inside the cheek plate heading out and down, and every joint turns the next
+	-- segment 40 degrees further up about the same bend axis -- out and down,
+	-- out, out and up, up -- so the four pieces trace one crescent. Segments
+	-- overrun their joints by 0.15 either side, which covers the outside of each
+	-- bend.
+	--
+	-- WHY NOT FOUR WEDGES. A wedge tapers all the way to an edge, so a chain of
+	-- them either steps where each new wedge starts full height or thins to a
+	-- needle by the third. The tusk in the picture is thick for most of its
+	-- length and sharpens only at the end, which is blocks and one wedge.
+	--
+	-- Ivory where it grows out of the head, turning to cyan light toward the tip.
+	--==========================================================================
+	for s = -1, 1, 2 do
+		local out = Vector3.new(s * 0.944, 0, -0.330)
+		local up = Vector3.new(0, 1, 0)
+		local bend = out:Cross(up).Unit
+		local start = out * math.cos(rad(-30)) + up * math.sin(rad(-30))
+		-- A frame whose +Y runs along the tusk and whose X is the bend axis, so
+		-- CFrame.Angles about X turns the next segment within the crescent.
+		local joint = baseCF * CFrame.new(s * 0.95, 3.10, -3.05)
+			* CFrame.fromMatrix(Vector3.zero, bend, start)
+		for _, seg in ipairs({
+			{ name = "TuskRoot", len = 0.95, w = 0.50, t = 0.62, colour = C.StarIvory,
+				material = Enum.Material.SmoothPlastic },
+			{ name = "TuskMid", len = 0.90, w = 0.44, t = 0.54, colour = C.StarIvory,
+				material = Enum.Material.Neon },
+			{ name = "TuskArc", len = 1.00, w = 0.38, t = 0.46, colour = C.NebulaCyanGlow,
+				material = Enum.Material.Neon },
+		}) do
+			mk({ name = seg.name, size = Vector3.new(seg.w, seg.len + 0.30, seg.t),
+				cf = joint * CFrame.new(0, seg.len * 0.5, 0), color = seg.colour, parent = m,
+				material = seg.material, smooth = true })
+			joint = joint * CFrame.new(0, seg.len, 0) * CFrame.Angles(rad(40), 0, 0)
+		end
+		spike("TuskTip", joint * CFrame.new(0, -0.12, 0), 1.30, 0.32, 0.40,
+			C.NebulaCyan, Enum.Material.Neon)
+	end
+
+	-- Two alien leaves off the rump, the plant in the colossus. Named "Leaf" so
+	-- PlantSway swings them; the two sides are told apart by their X.
+	for s = -1, 1, 2 do
+		mk({ name = "Leaf", size = Vector3.new(0.62, 2.30, 0.24),
+			cf = baseCF * CFrame.new(s * 1.30, 4.25, 2.05)
+				* CFrame.Angles(rad(42), rad(s * 12), rad(-s * 30)),
 			color = C.AmethystPale, parent = m, wedge = true })
 	end
 
-	-- Dorsal Galaxy Lotus: Stem + 3 Outer Petals + 3 Inner Petals (7 parts)
-	local lotusBaseCF = bodyCF * CFrame.new(0, 1.4, 0.2)
-	mk({ name = "LotusStem", size = Vector3.new(1.6, 1.4, 1.6), cf = lotusBaseCF,
-		color = C.AmethystDark, parent = m, shape = Enum.PartType.Cylinder })
-	local flowerCF = lotusBaseCF * CFrame.new(0, 1.2, 0)
-	for i = 1, 3 do
-		local a = rad(i * 120)
-		local pCF = flowerCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.4, 1.5) * CFrame.Angles(rad(38), 0, 0)
-		mk({ name = "OuterPetal", size = Vector3.new(1.2, 2.2, 0.28), cf = pCF,
-			color = C.MidnightSlate, parent = m, wedge = true })
+	--==========================================================================
+	-- THE GALAXY HALO
+	--
+	-- A tilted ring of eight Neon arcs, cyan and orchid by turns, around four
+	-- shorter spiral arms in gold and violet and a white heart. It floats clear
+	-- over the crown and tilts its near edge down, so a camera above and in
+	-- front -- the Garden's, the Almanac's -- sees its face rather than its rim.
+	--==========================================================================
+	local haloCF = baseCF * CFrame.new(0, 7.95, -0.90) * CFrame.Angles(rad(-26), rad(18), rad(8))
+	local RING = 1.90
+	for i = 0, 7 do
+		mk({ name = "HaloArc",
+			size = Vector3.new(2 * RING * math.tan(math.pi / 8) + 0.14, 0.12, 0.24),
+			cf = haloCF * CFrame.Angles(0, i * math.pi / 4, 0) * CFrame.new(0, 0, -RING),
+			color = if i % 2 == 0 then C.NebulaCyan else C.OrchidPurple, parent = m,
+			material = Enum.Material.Neon })
 	end
-	for i = 1, 3 do
-		local a = rad(i * 120 + 60)
-		local pCF = flowerCF * CFrame.Angles(0, a, 0) * CFrame.new(0, 0.9, 0.95) * CFrame.Angles(rad(25), 0, 0)
-		mk({ name = "InnerPetal", size = Vector3.new(1.0, 1.9, 0.22), cf = pCF,
-			color = C.PulsarGold, parent = m, wedge = true })
+	for i = 0, 3 do
+		mk({ name = "GalaxyArm", size = Vector3.new(1.15, 0.10, 0.16),
+			cf = haloCF * CFrame.Angles(0, i * math.pi / 2 + rad(20), 0)
+				* CFrame.new(0, 0.02, -1.02) * CFrame.Angles(0, rad(24), 0),
+			color = if i % 2 == 0 then C.PulsarGold else C.StarlightViolet, parent = m,
+			material = Enum.Material.Neon })
 	end
-
-	-- Tilted 3-Segment Orbital Ring (3 parts) + 1 Comet Satellite (1 part) = 4 parts
-	local ringTilt = flowerCF * CFrame.new(0, 1.4, 0) * CFrame.Angles(rad(22), rad(35), 0)
-	for i = 1, 3 do
-		local a = rad(i * 120)
-		local arcCF = ringTilt * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, 2.2)
-		mk({ name = "OrbitalArc", size = Vector3.new(2.8, 0.2, 0.3), cf = arcCF,
-			color = C.NebulaCyan, parent = m, material = Enum.Material.Neon })
-	end
-	local satCF = ringTilt * CFrame.Angles(0, rad(45), 0) * CFrame.new(0, 0, 2.6)
-	mk({ name = "CometSatellite", size = Vector3.new(0.65, 0.65, 0.65), cf = satCF,
-		color = C.PulsarGold, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-
-	-- Central Supernova Pulsar Core (1 part) + Crown Flares (3 parts) = 4 parts
-	local core = mk({ name = "SupernovaCore", size = Vector3.new(2.0, 2.0, 2.0), cf = flowerCF * CFrame.new(0, 1.4, 0),
+	local heart = mk({ name = "GalaxyHeart", size = Vector3.new(0.52, 0.52, 0.52), cf = haloCF,
 		color = C.StarIvory, parent = m, shape = Enum.PartType.Ball, material = Enum.Material.Neon })
-	local flareCF = flowerCF * CFrame.new(0, 2.8, 0)
-	mk({ name = "CrownFlareMain", size = Vector3.new(0.55, 1.6, 0.55), cf = flareCF,
-		color = C.PulsarGold, parent = m, shape = Enum.PartType.Cylinder, material = Enum.Material.Neon })
-	for side = -1, 1, 2 do
-		local fCF = flareCF * CFrame.Angles(0, rad(side * 90), 0) * CFrame.new(0, 0.4, 0.45) * CFrame.Angles(rad(25), 0, 0)
-		mk({ name = "CrownSpike", size = Vector3.new(0.35, 1.2, 0.25), cf = fCF,
-			color = C.StarIvory, parent = m, wedge = true, material = Enum.Material.Neon })
-	end
 
+	--==========================================================================
+	-- THE AURA, AT THE HEART OF THE HALO
+	--
+	-- The third light, and the only two emitters: slow starlight sparkles that
+	-- drift round the halo, and a thin radial burst of gold stardust. About
+	-- thirty live particles together, fewer than the one emitter this replaced.
+	-- Both ignore scene lighting, so the rarity reads in the dim biome.
+	--==========================================================================
 	local light = Instance.new("PointLight")
+	light.Name = "StarlightGlow"
 	light.Color = C.NebulaCyanGlow
-	light.Brightness = 3.0
+	light.Brightness = 2.5
 	light.Range = 16
-	light.Parent = core
+	light.Shadows = false
+	light.Parent = heart
 
-	-- Sparks Attachment
-	local att = Instance.new("Attachment")
-	att.Name = "SupernovaSparks"
-	att.Position = Vector3.new(0, 1.0, 0)
-	att.Parent = core
-	local p = Instance.new("ParticleEmitter")
-	p.Name = "PulsarFlairs"
-	p.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	p.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, C.PulsarGold),
+	local aura = Instance.new("Attachment")
+	aura.Name = "StarlightAura"
+	aura.Parent = heart
+
+	local sparkles = Instance.new("ParticleEmitter")
+	sparkles.Name = "StarlightSparkles"
+	sparkles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	sparkles.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, C.NebulaCyanGlow),
 		ColorSequenceKeypoint.new(0.5, C.StarIvory),
-		ColorSequenceKeypoint.new(1, C.NebulaCyan),
+		ColorSequenceKeypoint.new(1, C.OrchidPurple),
 	})
-	p.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.2),
-		NumberSequenceKeypoint.new(0.4, 0.6),
+	sparkles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.10),
+		NumberSequenceKeypoint.new(0.35, 0.42),
 		NumberSequenceKeypoint.new(1, 0),
 	})
-	p.Transparency = NumberSequence.new(0.1, 1)
-	p.Lifetime = NumberRange.new(1.4, 2.8)
-	p.Rate = 24
-	p.Speed = NumberRange.new(1.5, 3.0)
-	p.SpreadAngle = Vector2.new(180, 180)
-	p.LightEmission = 1
-	p.LightInfluence = 0
-	p.Parent = att
+	sparkles.Transparency = NumberSequence.new(0.15, 1)
+	sparkles.Lifetime = NumberRange.new(1.2, 2.4)
+	sparkles.Rate = 14
+	sparkles.Speed = NumberRange.new(0.4, 1.3)
+	sparkles.SpreadAngle = Vector2.new(180, 180)
+	sparkles.LightEmission = 1
+	sparkles.LightInfluence = 0
+	sparkles.Parent = aura
+
+	local flairs = Instance.new("ParticleEmitter")
+	flairs.Name = "StardustFlairs"
+	flairs.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	flairs.Color = ColorSequence.new(C.PulsarGold, C.StarIvory)
+	flairs.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.05),
+		NumberSequenceKeypoint.new(0.3, 0.22),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	flairs.Transparency = NumberSequence.new(0.25, 1)
+	flairs.Lifetime = NumberRange.new(0.7, 1.3)
+	flairs.Rate = 5
+	flairs.Speed = NumberRange.new(2.2, 3.4)
+	flairs.Drag = 2.5
+	flairs.SpreadAngle = Vector2.new(180, 180)
+	flairs.LightEmission = 1
+	flairs.LightInfluence = 0
+	flairs.Parent = aura
 
 	return m
 end

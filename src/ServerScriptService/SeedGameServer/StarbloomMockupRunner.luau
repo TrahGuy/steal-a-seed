@@ -242,7 +242,7 @@ local DESCRIPTIONS = {
 	cosmospire = "Tall 4-legged stilt mantis predator with raptor skull, eye slits, dorsal needle spire & crystal leaf wings.",
 	voidpetal = "Prowling void panther predator with 4 feline limbs, 6-petal orchid neck mane, glowing maw & twin leaf tails.",
 	astralhorn = "Armored stag-dragon behemoth with 4 heavy pillar legs, beast skull, spine leaf fronds & crystal antlers.",
-	supernovus = "Hexapod cosmic dragon titan with 6 walking legs, roaring cosmic maw, dorsal galaxy lotus, giant leaves & orbital ring.",
+	supernovus = "Armored cosmic star colossus on 4 pillar legs, with obsidian mantles & pulsar geodes, glowing crescent tusks, slit eyes & a galaxy halo.",
 }
 
 local function makePart(props: {

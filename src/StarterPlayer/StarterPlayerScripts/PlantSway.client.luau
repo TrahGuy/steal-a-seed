@@ -731,7 +731,7 @@ local function remember(instance: Instance)
 			-- side in any name, and Cosmospire has four of each. But every part
 			-- of one leg sits in the same place in plan view, so clustering the
 			-- matched parts by their X/Z offset recovers the legs whatever they
-			-- are called -- two for a biped, four for Astralhorn, six for
+			-- are called -- two for a biped, four for Astralhorn and for
 			-- Supernovus. It also means a species that renames a part keeps
 			-- working as long as the word is still in there.
 			--

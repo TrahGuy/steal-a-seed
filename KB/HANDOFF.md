@@ -1,5 +1,206 @@
 # Steal a Seed — Session Handoff
 
+## Supernovus is rebuilt as the Cosmic Star Colossus — 2026-09-11 (CLAUDE)
+
+### What
+
+The Mythic's six-legged hexapod dragon is gone. In its place is the concept the
+owner picked,
+`art/creatures/supernovus/reference/supernovus-option2-colossus.jpg`; option 1
+and the lineup comparison are committed beside it.
+
+The code is `buildSupernovus` in `StarbloomForms.luau`. Its banner covers:
+  * the one-sentence brief and the three masses;
+  * what was taken from the picture and what was not;
+  * the colour zones and the budget.
+
+It was built to the brief and to the three skills the brief named:
+`organic-roblox-form`, `seed-premium-creature-art` and `plant-art-bible`.
+
+  * **Dominant mass:**
+      - a studded VoidBlack `TitanCarapace` and a lower `RearCarapace`;
+      - MidnightSlate `ShoulderHump` and `SpineRidge` wedges, and a
+        `ChestPlate`;
+      - a cyan Neon `FlankSeam` cut into each flank, the two unequal.
+  * **Shoulder mantles:** Indigo, turned out 18 degrees, each with a slate
+    `MantleFlare`. On each mantle's front face:
+      - a PulsarGold Neon `PulsarGeode` in a VoidBlack `GeodeSocket`, lit by a
+        `GeodeGlow` PointLight (Brightness 1.4, Range 6);
+      - a cyan `MantleSeam` crack running down from under it.
+  * **Head:**
+      - `TitanSkull` under an Indigo `BrowPlate` and a slate `BrowCrest`;
+      - a `SnoutRidge`, two `CheekPlate`s and an underhung `LowerJaw` frame a
+        real mouth cavity, with a cyan Neon `StellarCore` ball inside it;
+      - the eyes use a new `voidEye` style, `"titan"`: a cyan Neon slit under a
+        lid. It replaces `"pulsar"`, which only the hexapod used.
+  * **Horns:** two VoidBlack `CrownHorn`s lean out 32 degrees, and their
+    AmethystDark wedge tips turn back up. The right horn is the longer.
+  * **Tusks:** a four-segment crescent that turns 40 degrees at each joint:
+      - `TuskRoot`, StarIvory;
+      - `TuskMid`, StarIvory Neon;
+      - `TuskArc`, NebulaCyanGlow Neon;
+      - `TuskTip`, a NebulaCyan Neon wedge.
+    The first three are tapering blocks that overrun each joint by 0.15; only
+    the tip is a wedge. A chain of wedges either steps at every joint or thins
+    to a needle by the third segment, and the tusk in the picture stays thick
+    until the end. `colossal-titan-sculpting` (below) asks for all wedges.
+  * **Legs:** four pillar legs, named for PlantSway's rig. Each takes a
+    `FrontLeft_` / `FrontRight_` / `RearLeft_` / `RearRight_` prefix and has:
+      - a `TitanThigh`;
+      - a `TitanHock`, the ankle collar, at a fixed height of 0.68;
+      - a `TitanFootPad`, level on the ground;
+      - Amethyst wedge claws, `TitanToe1-3`: three on a front foot (one of them
+        short), two on a rear foot.
+    The front pair is broader. Each leg splays a few degrees, and its pad sits
+    under the ankle rather than the hip.
+  * **Still a plant:** two AmethystPale `Leaf` wedges sweep back off the rump,
+    and PlantSway swings them as arms when it walks. The halo stands in for a
+    bloom.
+  * **Galaxy halo:** 7.95 studs above the base, tilted (-26, 18, 8) degrees so
+    its face reads from the front. It rides the body and does not spin.
+      - 8 `HaloArc`s, alternating NebulaCyan and OrchidPurple Neon;
+      - 4 `GalaxyArm`s, in PulsarGold and StarlightViolet;
+      - a StarIvory Neon `GalaxyHeart` holding the `StarlightGlow` PointLight
+        (NebulaCyanGlow, Brightness 2.5, Range 16);
+      - one attachment, `StarlightAura`, with two emitters: `StarlightSparkles`
+        (`sparkles_main.dds`, rate 14) and `StardustFlairs` (radial, rate 5,
+        drag 2.5).
+  * **Budget:** 80 parts plus Base, so 81:
+      - limbs 22, head 18, halo 13, armour 13, tusks 8, fissures 4, leaves 2;
+      - 28 of them Neon;
+      - 3 lights and 2 emitters.
+    The header's budget line now reads `supernovus 81`, inside the owner's range
+    of 70-85.
+  * **Height unchanged:**
+      - `AuthoredHeight` and SeedData's `Height` both stay 8.20. That is the
+        frame, and the silhouette stands above it: the hexapod topped out at
+        9.20, and this one tops out at 8.86, at the halo;
+      - at hs 1 it is 6.98 wide x 8.86 tall x 7.16 deep, against the hexapod's
+        7.06 x 9.20 x 8.26.
+  * **Tests and tools:**
+      - `StarbloomLimbSpec`: the supernovus entry is now four legs;
+      - its chain: hip (thigh to carapace), ankle (thigh to hock, hock to pad,
+        thigh to pad), toes (pad to each claw); ground contact is checked on
+        the pads and claws;
+      - `StarbloomMockupRunner`: the description line;
+      - `PlantSway`: one comment ("four for Astralhorn and for Supernovus").
+
+### Deviations and owner calls
+
+  * **Narrower than the picture.** In the concept the tusks span about 1.4x
+    the creature's height. The crescent is pulled in so the whole silhouette
+    stays inside the hexapod's 7.06 width.
+  * **Colossal still overruns the plot.**
+      - Plot_01's `Ground` is 48.0 x 96.2.
+      - At Colossal the box is 58.41 x 59.74 and the feet span 54.96 x 49.69.
+      - The hexapod's feet spanned 58.0 x 47.6.
+    It is 3.0 narrower in X and 2.1 deeper in Z. Not solved here.
+  * **The placement disc does not match it.** PlantPlace uses one formula for
+    every species, `FrameHeight x 0.46 x Girth x 1.5`.
+      - Tiny to Giant: the body is wider than the disc (4.64 against 6.98 at
+        Tiny).
+      - Titan: about even.
+      - Colossal: the disc is wider (62.35 against 58.41).
+    Unchanged.
+  * **Three lights.** The brief asked for a light in each geode as well as the
+    central one.
+      - `.agents/skills/colossal-titan-sculpting/` appeared untracked in the
+        checkout today, and the brief did not name it.
+      - It caps a behemoth at one PointLight and one emitter attachment.
+      - The emitters and the 81 parts fit its limits; the three lights do not.
+  * **Feet dip while walking.** PlantSway swings each leg rigidly about its
+    hip, so a claw or a heel edge sinks into the ground mid-stride. The worst
+    measured in Play was 0.374 (below). Astralhorn and Voidpetal ship with the
+    same dip.
+  * **Not committed:**
+      - `.agents/skills/colossal-titan-sculpting/`;
+      - `.agents/skills/primitive-organic-sculpting/`;
+      - `.agents/skills/seed-premium-creature-art/references/cosmic-mammoth-reference.png`.
+    They are not this task's work.
+
+### Verified
+
+  * `rojo build` clean. All 18 specs pass; `StarbloomLimbSpec` passes 71 of 71:
+      - four hips and two gait phases;
+      - only thighs act as hips, and no leg part is left unmatched;
+      - worst margin 2.11:1;
+      - worst joint gap -0.0935 (ankle); deepest overlap -0.874 (hip, Tiny);
+        claws at Colossal -0.0997;
+      - feet exactly on the ground at every tier.
+  * **Edit screenshots:**
+      - first build: front, three-quarter, side, silhouette, Colossal, from a
+        distance;
+      - second build: front, three-quarter, side, silhouette, mid-gait;
+      - final: front.
+    The first review:
+      - moved the geodes onto the mantles' front faces and the chest seams onto
+        the mantles;
+      - tilted the halo toward the camera;
+      - swept the horns out and made the claws amethyst;
+      - turned the core cyan.
+    The second pulled the mantles in and raised the halo, for a width of 6.98
+    and 0.25 of air between the horns and the halo.
+  * **Play, the Almanac** (Index from the rail, Starbloom shelf):
+      - card 5 is Supernovus, with its selection ring on;
+      - the showcase reads Supernovus / Mythic / +$28/s;
+      - the stage model is 84 parts: the 81 plus the three-disc moss pedestal;
+      - it has 4 thighs, 2 emitters and 3 lights.
+  * **Play, in the world:** built with `CreatureModel.Build` on TheField beside
+    Plot_01, at Tiny and at Mega.
+      - both are 81 parts (28 Neon), with 3 lights and 2 emitters;
+      - their boxes measure 6.98 x 8.86 x 7.16 and 19.24 x 23.48 x 19.72;
+      - seated the way CreatureModel seats a plant (the Base slab's underside on
+        the soil), all four soles measured 0.0000 above the ground.
+    Screenshots of the Tiny:
+      - a close three-quarter view;
+      - the feet side-on, from 1.15 studs up;
+      - a view from 66 studs across the field.
+    Also a three-quarter view of the Mega. In daylight:
+      - the tusks bloom from white into cyan;
+      - the halo, the geodes and the eye slits glow;
+      - from 66 studs away, the halo, horns and tusks still pick it out.
+  * **Every tier**, built in Play off the ground through the game's own path:
+
+    | Tier | Frame | Box w x h x d | Across feet | Placement disc |
+    |---|---|---|---|---|
+    | Tiny | 8.20 | 6.98 x 8.86 x 7.16 | 6.54 x 5.99 | 4.64 |
+    | Big | 11.32 | 9.76 x 12.23 x 10.01 | 9.15 x 8.36 | 7.03 |
+    | Huge | 15.58 | 13.60 x 16.83 x 13.95 | 12.76 x 11.64 | 10.54 |
+    | Mega | 21.73 | 19.24 x 23.48 x 19.72 | 18.06 x 16.45 | 16.04 |
+    | Giant | 30.34 | 27.28 x 32.78 x 27.94 | 25.62 x 23.29 | 24.49 |
+    | Titan | 41.82 | 38.34 x 45.19 x 39.24 | 36.04 x 32.68 | 37.51 |
+    | Colossal | 62.32 | 58.41 x 67.34 x 59.74 | 54.96 x 49.69 | 62.35 |
+
+    At every tier:
+      - 81 parts;
+      - the silhouette is 1.081x the frame;
+      - the lowest point is 0.0000 (-0.0001 at Titan and Colossal).
+  * **Play, a PlantSway walk.** The Tiny was tagged `Planted` with a
+    PlacementId, then given one leg of 16 studs over 8 s, by setting the
+    `Wander*` attributes on the client, which is where PlantSway reads them.
+      - it covered 16.29 of the 16.21 studs;
+      - all four legs swung;
+      - over 120 walking frames, each leg's lowest point ranged over: FrontLeft
+        -0.190..+0.277, FrontRight -0.374..+0.230, RearLeft -0.232..+0.332,
+        RearRight -0.356..+0.250;
+      - the carapace centre rode 3.215..3.569 above the ground (3.25 at rest);
+      - standing still, the idle lean put a sole corner 0.05-0.11 below the
+        ground.
+    The mockup runner's static full-stride pose had predicted -0.53. The worst
+    live dip was -0.374, with the body rising up to 0.32 on each step. The
+    mid-stride screenshot shows the legs apart and the body in one piece.
+  * **Console:** clean throughout. The tagged stand-in raised nothing in
+    PlantUI, GardenUI, CashPop or PlantSway.
+  * **Left behind:** nothing. The Edit preview folder is deleted, and every Play
+    model went away when Play stopped.
+
+### Not verified
+
+  * A Supernovus planted from a real save, walking on PlantService's own legs.
+    The owner's garden has none, and planting one would change the save.
+  * Night: the three PointLights against a dark field.
+  * A phone, or more than one client.
+
 ## The shop's price capsules carry the real Robux mark — 2026-09-11 (CLAUDE)
 
 ### What

@@ -2,7 +2,8 @@
 --==============================================================================
 -- Steal a Seed :: StarbloomLimbSpec
 --
--- Cosmospire's limbs, Voidpetal's legs and Supernovus's feet, MEASURED. Every
+-- Cosmospire's limbs, Voidpetal's and Astralhorn's legs, and the four pillar legs
+-- of the Supernovus colossus, MEASURED. Every
 -- number here is one a reviewer can check; nothing here is a
 -- judgement about whether the art looks right, which only an eye can make.
 --
@@ -319,6 +320,9 @@ local SPEC = {
 		legs = 4,
 		ground = { "Hoof", "Toe" },
 	},
+	-- The Cosmic Star Colossus (2026-09-11): four pillar legs, thigh -> ankle
+	-- collar -> pad -> claws. Three claws on a front foot and two on a rear one;
+	-- a chain entry whose part a leg does not have is skipped for that leg.
 	supernovus = {
 		body = "TitanCarapace",
 		chain = {
@@ -326,12 +330,12 @@ local SPEC = {
 			{ "ankle", "TitanThigh", "TitanHock" },
 			{ "ankle", "TitanHock", "TitanFootPad" },
 			{ "ankle", "TitanThigh", "TitanFootPad" },
-			{ "foot", "TitanFootPad", "TitanFootHeel" },
 			{ "toes", "TitanFootPad", "TitanToe1" },
 			{ "toes", "TitanFootPad", "TitanToe2" },
+			{ "toes", "TitanFootPad", "TitanToe3" },
 		},
-		legs = 6,
-		ground = { "TitanFootPad", "TitanFootHeel", "TitanToe1", "TitanToe2" },
+		legs = 4,
+		ground = { "TitanFootPad", "TitanToe1", "TitanToe2", "TitanToe3" },
 	},
 }
 
