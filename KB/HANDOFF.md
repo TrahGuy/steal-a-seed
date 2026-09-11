@@ -1,5 +1,80 @@
 # Steal a Seed — Session Handoff
 
+## Settings: music, sound effects and reduced effects — ADDED 2026-09-11 (CLAUDE)
+
+### What
+
+  * `SettingsUI.client.luau`: a bare gear on the LEFT rail under Shop (12, 124,
+    50 x 50) opening a centred `UIKit.modal` with three rows -- MUSIC and SOUND FX,
+    each a slider and an ON/OFF, and REDUCED FX, an ON/OFF. Every target is at
+    least 44 px: slider bands 44 tall, toggles 64 x 44, the modal's close 44. It
+    joins the OpenPanel handshake. A keyboard or gamepad nudges a selected slider
+    by 10%.
+  * Icon: `art/ui/rail-icons/settings-128.png`, uploaded as
+    `rbxassetid://104265736892158`, is `GameConfig.Rail.SettingsIcon`. If it ever
+    fails to load, SettingsUI draws a gear out of frames instead.
+  * `SoundKit`: a per-bus player level and mute (`setLevel`, `level`), multiplied
+    into the bus rather than written over it. The Music bus's three writers --
+    Music.client's join fade (`fadeMusic`), the chase duck and the panel -- all aim
+    at `SoundKit.musicLevel()`; a level written straight onto the group would have
+    been undone by the next chase.
+  * SOUND FX moves Chase, UI and World together. Server one-shots from
+    `SoundKit.emit` are tagged `SeedServerCue` with their bus and unbaked volume,
+    and each client routes them through its own bus (`routeServerCue`, bound in
+    `SoundKit.preload`). AlertUI's four alarm Sounds now ride the Chase bus; they
+    were on no bus at all.
+  * REDUCED FX writes `SeedAfterimageQuality = "Off"`. Switching it back restores
+    the value that was there, or the device default ("Reduced" on a phone, "Full"
+    otherwise). Not "High", as the brief suggested: SpeedFX and PlantAura accept
+    only Full / Reduced / Off and ignore anything else, so "High" would have left
+    every effect off until a rejoin.
+  * Nothing is saved: the settings last for the session. No remote, no profile
+    field.
+
+### Verified
+
+  * `SoundLevelSpec` 28/28 -- levels, mutes, clamps, the Music target through the
+    fade and the duck (checked by where the tween aims, because TweenService does
+    not advance in Edit), server-cue routing, and emit's server-side tagging.
+  * Play, one client:
+      - the gear loaded (`IsLoaded`) at (12, 124); in that slot nothing else is on
+        screen but the alarm's transparent vignette frame.
+      - open: rows 52 tall, toggles 64 x 44, slider bands 195 x 44, close 44 x 44.
+      - the music toggle unmuted a muted bed (0 -> 0.32); dragging its slider to a
+        quarter gave 0.080 and "25%".
+      - SOUND FX at 50% set Chase, UI and World to 0.5; its toggle took all three
+        to 0 and back to 0.5 without touching the music.
+      - REDUCED FX: attribute "Off" and SpeedFX removed its streak trails from the
+        character; pressed again, "Full" and the trails were back.
+      - with the Music slider selected, Left gave 90% (0.288) and Right twice
+        100%, the selection staying on the slider.
+      - the Index button closed Settings (OpenPanel "Index"); the X closed it.
+      - a server `emit` of ChaseStep reached the client tagged and was routed to
+        SeedWorld at its base 0.5; the alarm's Sounds were on SeedChase.
+  * Screenshot checked: the gear under Shop, and the panel's title gear, close
+    and three rows.
+  * The save read back after the three Play sessions: Held 2, Plants 2, lock
+    released.
+
+### Notes
+
+  * The first nudge was a ContextActionService binding. With a GUI object selected
+    the engine's navigation took the arrow first and the binding never fired
+    (measured), so it listens on UserInputService, and the slider is its own left
+    and right neighbour.
+  * The Edit datamodel's SoundService already held a `SeedWorld` SoundGroup when
+    this session started. Edit reports IsClient true, so any spec that reaches a
+    SoundKit bus builds one there. Harmless -- clients reuse it by name.
+    SoundLevelSpec removes only what it creates.
+  * The music was found muted once during the Play test, with nothing in this
+    code that mutes on its own; the cursor was moving between test steps, so it
+    was most likely set by hand in the same session.
+
+### Not verified
+
+  * A real touch device, and hearing the levels (MCP cannot listen).
+  * Two players; the buses are client-local by design.
+
 ## The player list shows Speed and Cash — ADDED 2026-09-11 (CLAUDE)
 
 ### What (`PlayerDataService.luau`)

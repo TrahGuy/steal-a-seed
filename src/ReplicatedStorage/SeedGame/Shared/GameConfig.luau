@@ -757,6 +757,10 @@ GameConfig.Tags = {
 	-- animate and so a placement check can find the others without a spatial
 	-- query on parts that are deliberately CanQuery = false.
 	Trap = "Trap",
+	-- A one-shot SoundKit.emit played by the SERVER. A server-made Sound cannot
+	-- name a client-local SoundGroup, so it is tagged instead and each client
+	-- routes it through its own bus, where the settings panel's levels are.
+	ServerCue = "SeedServerCue",
 }
 
 --==============================================================================
@@ -3064,6 +3068,16 @@ GameConfig.Rail = {
 	--==========================================================================
 	GardenIcon = "rbxassetid://106268245303506",
 	BagIcon = "rbxassetid://135554729755251",
+	--==========================================================================
+	-- SETTINGS, THE FIFTH, BARE LIKE GARDEN AND THE BAG
+	--
+	-- Uploaded from art/ui/rail-icons/settings-128.png, the same 128px reduction
+	-- as the other four. It sits on the LEFT rail under Shop, because the right
+	-- rail's third row is where the Bag's equipment column starts. SettingsUI
+	-- draws a gear out of frames if this id ever fails to load, so a moderated
+	-- upload costs the artwork and never the button.
+	--==========================================================================
+	SettingsIcon = "rbxassetid://104265736892158",
 }
 
 --==============================================================================

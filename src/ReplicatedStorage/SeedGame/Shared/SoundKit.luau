@@ -59,10 +59,13 @@
 --
 -- The cost is stated rather than hidden: a Sound created on the server cannot
 -- reference a client-local SoundGroup, so `emit` bakes the bus level into the
--- Sound's own Volume instead. Both paths land on the same number. The day there
--- is a real slider, the World bus needs the group AND this multiply.
+-- Sound's own Volume instead. Both paths land on the same number. Now that the
+-- settings panel has sliders, the server's Sound is also tagged with its bus and
+-- its unbaked level, and every client puts it through its own group -- see
+-- routeServerCue.
 --==============================================================================
 
+local CollectionService = game:GetService("CollectionService")
 local ContentProvider = game:GetService("ContentProvider")
 local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
@@ -102,6 +105,35 @@ local GROUP_NAMES: { [string]: string } = {
 	World = "SeedWorld",
 }
 
+-- Stamped on a one-shot the SERVER plays, so each client can put it through its
+-- own bus. See routeServerCue.
+local BUS_ATTRIBUTE = "SeedBus"
+local BASE_VOLUME_ATTRIBUTE = "SeedBaseVolume"
+
+--==============================================================================
+-- THE PLAYER'S OWN LEVELS
+--
+-- The settings panel's sliders and mutes land here, as a factor on top of the
+-- mixer: 0 to 1 per bus, and a mute that keeps the level underneath it.
+--
+-- A FACTOR, NOT A WRITE TO THE GROUP. The Music bus already has two writers --
+-- Music.client's fade and the chase duck -- and a level written straight onto
+-- the group would last until the next chase ended and faded the bed back up over
+-- somebody who had muted it. Every writer multiplies this in instead, so there
+-- is one target and three ways of arriving at it.
+--
+-- Client-local, like the groups, and for the session only: nothing here saves.
+--==============================================================================
+local userLevel: { [string]: number } = { Music = 1, Chase = 1, UI = 1, World = 1 }
+local userMuted: { [string]: boolean } = {}
+
+local function factor(kind: string): number
+	if userMuted[kind] then
+		return 0
+	end
+	return userLevel[kind] or 1
+end
+
 --==============================================================================
 -- THE BUSES
 --
@@ -136,7 +168,7 @@ function SoundKit.group(kind: string): SoundGroup?
 		-- A bed that starts at full level on the loading screen is the first
 		-- thing a player mutes. The other three have nothing to fade in from.
 		--======================================================================
-		group.Volume = if kind == "Music" then 0 else (MIXER[kind] or 1)
+		group.Volume = if kind == "Music" then 0 else (MIXER[kind] or 1) * factor(kind)
 		group.Parent = SoundService
 	end
 	groups[kind] = group
@@ -348,6 +380,11 @@ function SoundKit.emit(name: string, at: BasePart, options: PlayOptions?): Sound
 		-- through, so the bus level is baked in and both paths land on the same
 		-- number.
 		sound.Volume = (opts.volume or cue.volume or 0.5) * (MIXER[bus] or 1)
+		-- And named, so each client can take the baked level back off and put
+		-- the Sound through its own bus, where the player's settings are.
+		sound:SetAttribute(BUS_ATTRIBUTE, bus)
+		sound:SetAttribute(BASE_VOLUME_ATTRIBUTE, opts.volume or cue.volume or 0.5)
+		CollectionService:AddTag(sound, GameConfig.Tags.ServerCue)
 	end
 
 	sound.Parent = at
@@ -396,19 +433,53 @@ end
 --==============================================================================
 local ducked = false
 
+--==============================================================================
+-- WHERE THE MUSIC BUS IS MEANT TO BE
+--
+-- The configured bed, times the player's level, ducked while a chase runs. The
+-- join fade, the duck and the settings panel all aim at this, and all three move
+-- the bus through moveMusic, which cancels whichever of them was still moving
+-- it. Two tweens on one property is a bus that lands wherever the last one to
+-- finish happened to be heading.
+--==============================================================================
+function SoundKit.musicLevel(): number
+	local full = MUSIC.Volume * (MIXER.Music or 1) * factor("Music")
+	return if ducked then full * SFX.MusicDuck else full
+end
+
+local musicTween: Tween? = nil
+
+local function moveMusic(seconds: number, style: Enum.EasingStyle)
+	local group = SoundKit.group("Music")
+	if not group then
+		return
+	end
+	if musicTween then
+		musicTween:Cancel()
+		musicTween = nil
+	end
+	local want = SoundKit.musicLevel()
+	if seconds <= 0 then
+		group.Volume = want
+		return
+	end
+	local tween = TweenService:Create(group, TweenInfo.new(seconds, style,
+		Enum.EasingDirection.Out), { Volume = want })
+	musicTween = tween
+	tween:Play()
+end
+
+-- The join fade, from silence up to wherever the bus is meant to be.
+function SoundKit.fadeMusic(seconds: number)
+	moveMusic(seconds, Enum.EasingStyle.Linear)
+end
+
 local function duckMusic(on: boolean)
 	if ducked == on then
 		return
 	end
 	ducked = on
-	local group = SoundKit.group("Music")
-	if not group then
-		return
-	end
-	local full = MUSIC.Volume * (MIXER.Music or 1)
-	local want = if on then full * SFX.MusicDuck else full
-	TweenService:Create(group, TweenInfo.new(SFX.DuckSeconds, Enum.EasingStyle.Quad,
-		Enum.EasingDirection.Out), { Volume = want }):Play()
+	moveMusic(SFX.DuckSeconds, Enum.EasingStyle.Quad)
 end
 
 function SoundKit.chase(on: boolean)
@@ -427,6 +498,68 @@ function SoundKit.chase(on: boolean)
 		duckMusic(false)
 	end
 end
+
+--==============================================================================
+-- THE SETTINGS PANEL'S HALF
+--
+-- A nil `level` leaves the level alone and a nil `muted` leaves the mute alone,
+-- so a slider and a mute button each say only what they changed. Clamped here
+-- rather than by the caller: this is the last stop before a bus, and a slider
+-- dragged past its end must not make a bus louder than the mix was built at.
+--
+-- INSTANT, NOT TWEENED. A slider being dragged is already its own fade, and a
+-- tween per drag event would trail the thumb the whole way along the track.
+--==============================================================================
+function SoundKit.setLevel(kind: string, level: number?, muted: boolean?)
+	if not GROUP_NAMES[kind] then
+		return
+	end
+	if type(level) == "number" and level == level then
+		userLevel[kind] = math.clamp(level, 0, 1)
+	end
+	if type(muted) == "boolean" then
+		userMuted[kind] = muted
+	end
+	if kind == "Music" then
+		moveMusic(0, Enum.EasingStyle.Linear)
+		return
+	end
+	local group = SoundKit.group(kind)
+	if group then
+		group.Volume = (MIXER[kind] or 1) * factor(kind)
+	end
+end
+
+function SoundKit.level(kind: string): (number, boolean)
+	return userLevel[kind] or 1, userMuted[kind] == true
+end
+
+--==============================================================================
+-- A ONE-SHOT THE SERVER PLAYED, THROUGH THIS CLIENT'S BUS
+--
+-- emit on the server bakes the mixer into the Sound and tags it with its bus and
+-- its unbaked level. Each client that receives it puts that level back and routes
+-- it through its own group, so a player who turned sound effects down stops
+-- hearing a parent's grab and a pod coming free along with everything else. The
+-- writes are local: nobody else's copy of the Sound moves.
+--==============================================================================
+function SoundKit.routeServerCue(sound: Instance)
+	if not sound:IsA("Sound") then
+		return
+	end
+	local bus = sound:GetAttribute(BUS_ATTRIBUTE)
+	local group = if type(bus) == "string" then SoundKit.group(bus) else nil
+	if not group then
+		return
+	end
+	local base = sound:GetAttribute(BASE_VOLUME_ATTRIBUTE)
+	if type(base) == "number" then
+		sound.Volume = base
+	end
+	sound.SoundGroup = group
+end
+
+local serverCuesBound = false
 
 --==============================================================================
 -- PRELOAD
@@ -451,6 +584,17 @@ function SoundKit.preload()
 	--==========================================================================
 	for kind in pairs(GROUP_NAMES) do
 		SoundKit.group(kind)
+	end
+
+	-- Server one-shots, from the first frame: any already playing, then every
+	-- one after. Once per client, even if the script that calls this re-runs.
+	if not serverCuesBound then
+		serverCuesBound = true
+		for _, sound in ipairs(CollectionService:GetTagged(GameConfig.Tags.ServerCue)) do
+			SoundKit.routeServerCue(sound)
+		end
+		CollectionService:GetInstanceAddedSignal(GameConfig.Tags.ServerCue)
+			:Connect(SoundKit.routeServerCue)
 	end
 
 	task.spawn(function()

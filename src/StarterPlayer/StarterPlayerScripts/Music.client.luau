@@ -41,7 +41,6 @@
 local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
-local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -171,8 +170,11 @@ end
 
 sound:Play()
 
-TweenService:Create(group, TweenInfo.new(MUSIC.FadeSeconds,
-	Enum.EasingStyle.Linear), { Volume = MUSIC.Volume }):Play()
+-- Through SoundKit rather than a tween of its own. The chase duck and the
+-- settings panel move this bus too, and all three have to aim at one number:
+-- the configured bed times the level the player chose. A private tween here
+-- would fade up to the configured bed over a player who had muted it.
+SoundKit.fadeMusic(MUSIC.FadeSeconds)
 
 --==============================================================================
 -- DID IT ACTUALLY LOAD

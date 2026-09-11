@@ -67,6 +67,10 @@ local function makeSound(id: string, volume: number, pitch: number): Sound
 	s.SoundId = id
 	s.Volume = volume
 	s.PlaybackSpeed = pitch
+	-- On the Chase bus, so the settings panel's sound-effects level reaches the
+	-- alarm too. These four were the only 2D sounds riding no bus at all, which
+	-- made them the only ones a muted player would still hear.
+	s.SoundGroup = SoundKit.group("Chase")
 	-- SoundService, not the character: a 2D alert should not get quieter when
 	-- the camera swings, and it must survive the character being ragdolled.
 	s.Parent = SoundService
