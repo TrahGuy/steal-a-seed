@@ -1,5 +1,45 @@
 # Steal a Seed — Session Handoff
 
+## The placement disc follows the second bed — 2026-09-11 (CLAUDE)
+
+Owner report: the placement circle would not go onto the second soil.
+
+### Cause
+
+`PlantPlace.soilPoint()` knew only the main `Soil` part. From Level 3 a plot has
+a second Planter-tagged bed, `SoilSide`, and:
+
+  * a ray landing on the side bed's rows/clods was accepted, but the disc was then
+    clamped into the MAIN bed's rectangle, so it sat pinned on the main bed's rim;
+  * a ray landing on the bare `SoilSide` slab was rejected (not named `Soil`, not in
+    `BED_PARTS`), so no disc and no click was even sent.
+
+The server was always right: `PlaceAt` picks the bed with `bedsOf` + `pickBed`.
+
+### Fix
+
+`PlantPlace` now mirrors those two helpers for the preview: accept a hit on any
+Planter-tagged part of the plot (or a `BED_PARTS` descendant), and clamp the disc
+into whichever bed the server's nearest-clamped-point rule picks. The client still
+sends only the raw point; the server still decides.
+
+### Verified, desktop
+
+```
+hover over SoilSide centre   disc visible, inside SoilSide at local (0.1, 0.0)
+click there                  "planted a 1 tier Nubkin", on SoilSide,
+                             0.0 studs from the hovered disc
+hover over main Soil         disc inside Soil, 0.05 studs from the aimed point
+```
+
+Ten specs pass; `rojo build` and `git diff --check` clean; PlantPlace compiles;
+console free of errors. Not checked on the emulated phone, where the disc tracks
+the last touch through the same `soilPoint()`.
+
+### Files
+
+`PlantPlace.client.luau`.
+
 ## The pickup prompt rides the plant's authoritative position — 2026-09-11 (CLAUDE)
 
 Fixes the defect recorded in the entry below: desktop `E` was silently refused

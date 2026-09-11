@@ -117,6 +117,53 @@ local BED_PARTS: { [string]: boolean } = {
 	BedWalk = true,
 }
 
+--==============================================================================
+-- EVERY BED, AND WHICH ONE A POINT BELONGS TO -- THE SERVER'S RULE, MIRRORED
+--
+-- From Level 3 a plot has a second bed. This used to know only `Soil`, so the
+-- disc was clamped into the MAIN bed's rectangle wherever the cursor was: aim at
+-- the side bed and the circle sat pinned on the main bed's rim. Worse, the side
+-- slab is not named Soil, so a click on its bare surface was dropped here and
+-- never reached the server at all.
+--
+-- The server already decides with `bedsOf` + `pickBed` in PlantService: every
+-- Planter-tagged child of the plot, main first, nearest clamped point wins.
+-- These are copies of that rule for the PREVIEW only -- the server still picks
+-- the bed from the raw point, and nothing here is sent as a claim.
+--==============================================================================
+local function bedsOf(plot: Model): { BasePart }
+	local out: { BasePart } = {}
+	local main = soilOf(plot)
+	if main then
+		table.insert(out, main)
+	end
+	for _, d in ipairs(plot:GetChildren()) do
+		if d:IsA("BasePart") and d ~= main
+			and CollectionService:HasTag(d, GameConfig.Tags.Planter) then
+			table.insert(out, d)
+		end
+	end
+	return out
+end
+
+local function pickBed(plot: Model, worldPos: Vector3): BasePart?
+	local margin = PLANTING.EdgeMarginStuds
+	local best, bestD = nil, math.huge
+	for _, bed in ipairs(bedsOf(plot)) do
+		local here = bed.CFrame:PointToObjectSpace(worldPos)
+		local halfX = math.max(bed.Size.X * 0.5 - margin, 0)
+		local halfZ = math.max(bed.Size.Z * 0.5 - margin, 0)
+		local top = bed.CFrame * CFrame.new(
+			math.clamp(here.X, -halfX, halfX), bed.Size.Y * 0.5,
+			math.clamp(here.Z, -halfZ, halfZ))
+		local d = (top.Position - worldPos).Magnitude
+		if d < bestD then
+			best, bestD = bed, d
+		end
+	end
+	return best
+end
+
 local function soilPoint(): (Vector3?, BasePart?)
 	local camera = workspace.CurrentCamera
 	local plot = myPlot()
@@ -167,12 +214,15 @@ local function soilPoint(): (Vector3?, BasePart?)
 	-- to the same plane before anything is placed.
 	--==================================================================
 	local instance = hit.Instance
-	if instance ~= soil
+	local onPlanter = instance:IsDescendantOf(plot)
+		and CollectionService:HasTag(instance, GameConfig.Tags.Planter)
+	if not onPlanter
 		and not (BED_PARTS[instance.Name] and instance:IsDescendantOf(plot))
 	then
 		return nil, soil
 	end
-	return hit.Position, soil
+	-- The bed the server will plant on, so the disc is clamped into THAT one.
+	return hit.Position, pickBed(plot, hit.Position) or soil
 end
 
 --==============================================================================
