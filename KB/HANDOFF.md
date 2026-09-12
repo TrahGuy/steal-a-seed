@@ -1,5 +1,126 @@
 # Steal a Seed — Session Handoff
 
+## Gloomlotus walks: the Root-Walker rig in PlantSway — 2026-09-12 (CLAUDE)
+
+### What
+
+`src/StarterPlayer/StarterPlayerScripts/PlantSway.client.luau` grew a second limb
+rig. The existing one is untouched — `LEG_WORDS` and `LEG_SWING` are byte for byte
+what `StarbloomLimbSpec` parses out of the Source, and every leg-walking species
+poses exactly as before.
+
+  * **Opted into by name, not by shape.** A part called `Root<Word><1..4>` or
+    `PropRoot<1..4>` joins the root of that index. The generic leg rig cannot
+    walk these: it finds a hip by clustering limb parts in the upper half of the
+    band, and an arch that rises over its own knee lands in two clusters at two
+    heights and is torn between them. A root has ONE hinge by construction.
+  * **The socket is measured, never authored.** `RootRise{i}`'s end face nearer
+    the model's axis in plan view is where the root enters the nexus, so the
+    hinge comes off the part itself and rides the height scale and the girth
+    spread. An authored 0.42 would be right at Tiny and a stud and a half out at
+    Colossal. All seven parts of a root store `rel` against that socket, so the
+    whole root turns as one piece and the buried end does not move at all.
+  * **The contact is the LONGEST arm among the seated corners, not the lowest.**
+    The generator seats `RootAnchor`, `RootKnuckle` and `PropRoot` on the same
+    plane — all three read y = -0.030 at every tier — so "the lowest corner" was
+    a three-way tie settled by the last bit of a float, and it settled
+    differently at each tier: the anchor at Tiny, the knuckle at Mega, the prop
+    at Colossal. The lever arm the whole gait scales from lurched **6.25 to 11.03
+    studs between roots of one Mega**. Ties now break on the longest arm, which
+    is the corner that reaches the soil first going down: 10.78 to 11.41 on that
+    same Mega.
+  * **The lift is derived, not written down.** `ROOT_CLEARANCE = 0.065` of the
+    plant's own height, and the angle that clears it comes back in closed form
+    from the arm, since turning by theta raises the contact by
+    `arm*sin(theta) + hang*(1 - cos(theta))`. Seven degrees is half a stud at
+    Tiny and four studs at Colossal — one written angle could not serve both.
+  * **The sweep is a ramp, not a sine.** A sine puts the planted contact back
+    where it started every half cycle, so its *average* slip over a stance is the
+    body's whole advance, at any amplitude — sliding by construction, and no
+    constant fixes it. The planted half is a straight ramp (constant backward
+    rate, the only shape that can match a constant forward one) and the airborne
+    half is the cubic joining its ends with the ramp's own slope.
+  * **The amplitude that does not slide.** The body eases across a leg on a
+    smoothstep at `6*raw*(1-raw)*legSpeed`; the contact sweeps back at
+    `4*lever*amp*strideHz*moveT`, and `moveT` is `4*raw*(1-raw)`. Setting them
+    equal, the raw cancels — so `amp = 1.5*legSpeed / (4*lever*strideHz)` holds at
+    every instant of a leg, not merely in the middle of one.
+  * **`ROOT_STRIDE` is 20 degrees, not the brief's 11.** It is a ceiling on that
+    amplitude, not the step. A Tiny crosses 2.054 studs a second on a 6.83 stud
+    frame and needs **18 degrees** to stand its step still; a Colossal needs 1.0.
+    At 11 the small tiers scuffed forward against the cap. Lower it to 11 for a
+    smaller-looking step and the slip comes back, which is the whole trade.
+  * **The pose steers by HEIGHT, which is what stops the bobbing.** Not a clamp:
+    the contact is driven to `airborne * rise * moveT` above the plane, by Newton
+    on the gap over the arm, in both directions, at most twice and almost always
+    once. The body rolls 3.5 degrees across a step and a diagonal pair has one
+    root on each side of that roll, so measured open loop the root the roll
+    lifted cleared 0.107 of the plant's height while its own diagonal partner
+    cleared 0.045 — one gait reading as two. Held by height, the roll, the bob
+    and the lean are all just things the step absorbs.
+  * **Downward only while a leg runs.** A standing plant is still only lifted OUT
+    of the soil and never pressed into it, which is the one correction it ever
+    needed, and `moveT` fading to zero means no step begins or ends with a snap.
+  * **One writer per part.** A name can satisfy both rigs — `RootFoot1` carries a
+    leg word AND a root index — so root-claimed parts are removed from
+    `entry.legs` at registration. Two rigs writing one part every slice is a part
+    that flickers.
+
+### Measured
+
+Three Gloomlotus spawned on the field and walked at `SeedData.WanderSpeed` for
+their tier (2.054 / 0.895 / 0.548 studs a second), sampled per RenderStepped over
+30 seconds — 1607 frames each. Clearance is divided by the `moveT` envelope, so a
+peak landing off the middle of a leg still reports what the rig asked for.
+
+| Tier | Height | Arms | Dip | Clearance | Want | Stance slip | Seam |
+|---|---|---|---|---|---|---|---|
+| 1 Tiny | 6.83 | 3.96 – 4.06 | -0.0019 | 0.444 – 0.448 (**0.0650 – 0.0655 h**) | 0.444 | 6 – 12% | 0.00001 |
+| 4 Mega | 18.07 | 10.78 – 11.41 | -0.0020 | 1.177 – 1.184 (**0.0651 – 0.0655 h**) | 1.175 | 1 – 17% | 0.00002 |
+| 7 Colossal | 51.83 | 32.57 – 34.49 | -0.0020 | 3.378 – 3.396 (**0.0652 – 0.0655 h**) | 3.369 | 3 – 23% | 0.00003 |
+
+  * **Dip -0.0020 is `ROOT_DIP_EPSILON` itself.** The correction stops the moment
+    it is inside the band, so the steady state rides the bottom of it. Two
+    thousandths of a stud. Shrink the epsilon for a harder zero and pay for it in
+    part writes.
+  * **Diagonals: `corr(1,3)` and `corr(2,4)` are 1.0000 at Mega and Colossal**
+    (0.9429 for one Tiny pair, which is the sampler tracking that root's prop
+    rather than its knuckle, not the rig), and `corr(1,2)` is -0.60. Instantaneous
+    knuckle heights read `1:+0.89 2:+0.77 3:+0.89 4:+0.77` — the pairs move as
+    pairs.
+  * **Stance slip** is the planted contact's drift along the walk over one
+    stance, against the body's advance over the same frames: 0.013 to 0.19 studs,
+    typically under 6%. Root 1 is the worst at every tier because the
+    roll correction drags radially, and a root's radial direction has a fore-aft
+    component whose SIGN flips front to back — it cancels for root 3 and adds for
+    root 1.
+  * **Seam: 0.00001 to 0.00003 studs** between `RootRise`'s buried end and
+    `RootNexus`, and 0.00000 to 0.00001 between each moss cap and its arch, over
+    all 1607 frames. Nothing tears.
+
+### The sideways arc is geometry, not a bug
+
+A planted contact swings 0.20 of the plant's height sideways at Tiny, 0.06 at
+Mega, 0.014 at Colossal. **This cannot be tuned out.** A rigid root hinged at the
+nexus puts its contact on a sphere around that hinge; holding the contact's height
+fixed confines it to a horizontal circle centred on the hinge, and moving along
+that circle is tangential — for roots at 40/132/222/316 degrees the tangent is
+`cot(bearing)` sideways for every stud forward, so lateral and fore-aft travel are
+forced to roughly 1:1. Pitch cannot help: it is the only thing that changes height,
+so a planted foot has none of it to spare. The only lever is the stride length,
+and no-slip sets that. A later pass wanting less sideways travel must either give
+the root a knee or accept forward sliding.
+
+### Verified
+
+  * `rojo build` clean.
+  * All 18 specs, 0 threw, 0 FAIL tokens. **StarbloomLimbSpec 71 passed, 0
+    failed**, still parsing `LEG_WORDS` and `LEG_SWING 21.0` out of the Source.
+  * Play on the live place: measurements above, plus the owner's own planted
+    Gloomlotus walking under the server's wander. Plot_01 still holds its 9
+    plants and 1 gloomlotus; every test model was spawned into a workspace folder
+    and destroyed, and nothing was written to the owner's save.
+
 ## The AI-generated Suncrown mesh is imported, measured and set beside Suncrown — 2026-09-11 (CLAUDE)
 
 ### What

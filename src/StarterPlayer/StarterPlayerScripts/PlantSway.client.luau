@@ -228,6 +228,45 @@ local BOB_FRACTION = 0.035
 local BOB_CEILING = 0.35
 local ROLL_AMP = math.rad(3.5)
 
+--==============================================================================
+-- THE ROOT WALKER, WHICH IS NOT A LEG
+--
+-- Gloomlotus stands on four arched mangrove roots and the rig above cannot walk
+-- them: it finds a hip by clustering the leg parts in the upper half of the limb
+-- band, and an arch that rises over its own knee lands in two clusters and is
+-- torn between them. A root is opted into BY NAME instead, and turns as one
+-- piece about the socket where it meets the nexus. Nothing above reads these
+-- numbers and nothing below reads LEG_SWING.
+--
+-- TWO OF THESE FOUR ARE CEILINGS, NOT SETTINGS. How far a root steps and how
+-- high it lifts are both MEASURED per root, from the walk speed and from the
+-- plant's own height, because the same angle means something different on an
+-- arm four studs long and an arm thirty-four studs long. What is written here
+-- is the most either may reach.
+--
+--   ROOT_STRIDE  the most a root may sweep fore and aft about the socket's
+--                upright. The sweep actually taken is the one that holds the
+--                planted contact still against the ground -- see the pose.
+--                Twenty degrees because a Tiny crosses 2.6 studs a second on a
+--                6.9 stud frame, and standing that step still needs eighteen;
+--                past this the plant is outrunning its own roots and scuffs,
+--                which is the honest reading of moving that fast.
+--   ROOT_LIFT    the most a swinging root may pitch UP. Rectified where it is
+--                used: there is nothing under the soil to swing into.
+--   ROOT_CLEARANCE  how far a swinging root clears the soil, as a fraction of
+--                the plant's own height. One number for every tier: a Colossal
+--                lifting the same third of a stud as a Tiny is a plant wading.
+--   ROOT_CLAMP   the most the ground clamp may move a root either way, so a
+--                hard lean can tip the body without folding a root up over its
+--                own arch or pressing one through the soil.
+--==============================================================================
+local ROOT_STRIDE = math.rad(20)
+local ROOT_LIFT = math.rad(7)
+local ROOT_CLEARANCE = 0.065
+local ROOT_CLAMP = math.rad(14)
+-- Under this, a correction is not worth seven part writes.
+local ROOT_DIP_EPSILON = 0.002
+
 -- Roughly how often each plant is refreshed. The set is walked in slices to
 -- hit this, whatever the frame rate and however many plants there are. A pod
 -- that is actively hatching is exempt -- see the Heartbeat.
@@ -379,6 +418,13 @@ type Sway = {
 	-- One entry per LEG PART, already resolved to the hip it hangs from and its
 	-- own place on that hip, so a swing is one multiply per part per slice.
 	legs: { { part: BasePart, hip: CFrame, rel: CFrame, phase: number } },
+	-- THE ROOT WALKER: one entry per ROOT, not per part. `socket` is the hinge
+	-- where that root meets the nexus, in the model's frame; `contact` is that
+	-- root's lowest ground point in the socket's frame, and `reach` is how far
+	-- out it stands, which is what turns a dip in studs into an angle.
+	roots: { { socket: CFrame, sign: number, phase: number, reach: number,
+		lift: number, lever: number, rise: number, contact: Vector3, posed: boolean,
+		parts: { { part: BasePart, rel: CFrame } } } },
 	-- The gaze rig, resolved once. `ref` is a face-aligned frame the aim is
 	-- measured in; `eyeOffset` and `radius` are set only on the Pupil rig.
 	gaze: {
@@ -660,6 +706,7 @@ local function remember(instance: Instance)
 			bob = math.min(headHeight * BOB_FRACTION, BOB_CEILING),
 			leaves = {},
 			legs = {},
+			roots = {},
 			-- Off the placement id, so no two plants in a bed are looking the
 			-- same way at the same moment.
 			lookPhase = (tonumber(model:GetAttribute("PlacementId")) or 0) * 1.7,
@@ -884,6 +931,200 @@ local function remember(instance: Instance)
 								phase = h.phase,
 							})
 						end
+					end
+				end
+			end
+
+			--==========================================================
+			-- RESOLVE THE ROOT WALKER
+			--
+			-- OPTED INTO BY NAME. Any part called Root<Word><1..4> or
+			-- PropRoot<1..4> joins the root of that index, and every part
+			-- of one root turns as a single piece. RootNexus carries no
+			-- index and stays with the body, which is right: it is the
+			-- thing the roots hinge inside.
+			--
+			-- WHY NOT THE RIG ABOVE. That one finds a hip by taking the leg
+			-- parts in the upper half of the limb band and clustering them
+			-- in plan view. An arched root rises over its own knee, so its
+			-- parts land in two clusters at two heights and the root is
+			-- torn in half between them. A root has ONE hinge by
+			-- construction, and it is the socket rather than a guess.
+			--
+			-- THE SOCKET IS MEASURED, NOT WRITTEN DOWN. RootRise's inner end
+			-- is where the root enters the nexus, so the hinge comes off the
+			-- part itself: the end face nearer the model's axis in plan
+			-- view. That measurement holds at every tier -- the height scale
+			-- and the girth spread move the part and the socket moves with
+			-- it -- where an authored 0.42 would be right at Tiny and a stud
+			-- and a half out at Colossal.
+			--==========================================================
+			local byRoot: { [number]: { { part: BasePart, cf: CFrame } } } = {}
+			local rises: { [number]: { part: BasePart, cf: CFrame } } = {}
+			for _, d in ipairs(model:GetChildren()) do
+				if d:IsA("BasePart") then
+					local slot = tonumber(string.match(d.Name, "^Root%a*(%d)$")
+						or string.match(d.Name, "^PropRoot(%d)$"))
+					if slot and slot >= 1 and slot <= 4 then
+						local it = { part = d, cf = inverse * d.CFrame }
+						local bucket = byRoot[slot]
+						if bucket then
+							table.insert(bucket, it)
+						else
+							byRoot[slot] = { it }
+						end
+						if string.match(d.Name, "^RootRise%d$") then
+							rises[slot] = it
+						end
+					end
+				end
+			end
+
+			for slot, parts in pairs(byRoot) do
+				local rise = rises[slot]
+				-- No rise, no socket, no root: a stray indexed part is left
+				-- to the body rather than hinged about a guess.
+				if rise then
+					-- A beam's length runs along its own Z, so its two end
+					-- faces are the candidates and the inner one is the
+					-- socket.
+					local half = rise.part.Size.Z * 0.5
+					local ahead = (rise.cf * CFrame.new(0, 0, half)).Position
+					local behind = (rise.cf * CFrame.new(0, 0, -half)).Position
+					local socketPos = if Vector3.new(ahead.X, 0, ahead.Z).Magnitude
+						<= Vector3.new(behind.X, 0, behind.Z).Magnitude then ahead else behind
+					local flat = Vector3.new(socketPos.X, 0, socketPos.Z)
+					if flat.Magnitude > 1e-3 then
+						local socket = CFrame.lookAt(socketPos, socketPos + flat.Unit, Vector3.yAxis)
+						local invSocket = socket:Inverse()
+						local resolved = {}
+						-- Corners this close to the lowest one are all standing
+						-- on the same soil, and the tie between them is broken
+						-- below rather than by float noise.
+						local seatTol = math.max(entry.headHeight * 0.005, 0.01)
+						local contact, drop, bestArm = nil, math.huge, 0
+						for _, it in ipairs(parts) do
+							table.insert(resolved, { part = it.part, rel = invSocket * it.cf })
+							--==========================================
+							-- WHAT ACTUALLY TOUCHES THE SOIL
+							--
+							-- The anchor beam, its knuckle and the prop
+							-- root. The arch and the moss cap ride two
+							-- studs up, and clamping to those would hold
+							-- the whole root in the air.
+							--
+							-- AND ALL THREE ARE SEATED ON THE SAME PLANE,
+							-- so "the lowest corner" is a three way tie
+							-- settled by the last bit of a float. Measured
+							-- across the tiers it settled differently at
+							-- each one -- the anchor at Tiny, the knuckle
+							-- at Mega, the prop at Colossal -- and the arm
+							-- the whole gait is scaled from lurched from
+							-- 6.3 studs to 11.0 between neighbours that
+							-- should differ by nothing but size. Break the
+							-- tie on the LONGEST arm: that corner swings
+							-- furthest for a given angle, so it reaches
+							-- the soil first going down and clears it last
+							-- coming up, and holding it right holds the
+							-- other two right.
+							--==========================================
+							if string.match(it.part.Name, "^RootAnchor%d$")
+								or string.match(it.part.Name, "^RootKnuckle%d$")
+								or string.match(it.part.Name, "^PropRoot%d$") then
+								local h = it.part.Size * 0.5
+								for sx = -1, 1, 2 do
+									for sy = -1, 1, 2 do
+										for sz = -1, 1, 2 do
+											local corner = (it.cf * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
+											local arm = math.abs((invSocket * corner).Z)
+											if corner.Y < drop - seatTol
+												or (corner.Y < drop + seatTol and arm > bestArm) then
+												drop = math.min(drop, corner.Y)
+												bestArm, contact = arm, corner
+											end
+										end
+									end
+								end
+							end
+						end
+						if contact then
+							local seated = invSocket * contact
+							--==================================================
+							-- THE LIFT IS MEASURED TOO
+							--
+							-- ROOT_CLEARANCE is a fraction of the plant's own
+							-- height, and the angle that clears it depends on
+							-- the arm: seven degrees is half a stud at Tiny and
+							-- four studs at Colossal, so one written angle
+							-- cannot serve both. Turning a root up by theta
+							-- raises its contact by
+							--     arm * sin(theta) + hang * (1 - cos(theta))
+							-- and that is hang + R * sin(theta - atan2(hang, arm))
+							-- with R the hypotenuse, so the angle comes back in
+							-- closed form instead of by iterating for it.
+							--==================================================
+							local arm = math.max(math.abs(seated.Z), 0.25)
+							local hang = math.max(-seated.Y, 0.01)
+							local hyp = math.sqrt(arm * arm + hang * hang)
+							local wanted = entry.headHeight * ROOT_CLEARANCE
+							local lift = math.clamp(math.atan2(hang, arm)
+								+ math.asin(math.clamp((wanted - hang) / hyp, -1, 1)),
+								0, ROOT_LIFT)
+							table.insert(entry.roots, {
+								socket = socket,
+								-- +1 swings this root's contact toward the
+								-- model's front, which is -Z. A positive yaw
+								-- carries the far end along the socket's -X,
+								-- so the sign follows the tangent's Z.
+								sign = if socket.RightVector.Z > 0 then 1 else -1,
+								-- Diagonals: 1 with 3, 2 with 4.
+								phase = if slot % 2 == 1 then 0 else math.pi,
+								contact = seated,
+								-- How far the contact stands out from the
+								-- hinge. Turning the root by one radian
+								-- lifts the contact by about this much,
+								-- which is what makes the clamp one step.
+								reach = arm,
+								-- The angle that clears ROOT_CLEARANCE with
+								-- this arm, once, at this tier. Only the
+								-- opening guess and the ceiling: what the
+								-- pose actually holds to is the height.
+								lift = lift,
+								-- That clearance in studs, which is the
+								-- thing the pose steers by.
+								rise = wanted,
+								-- How far the contact travels ALONG THE WALK
+								-- per radian of yaw. A root faces out of the
+								-- plant rather than along its path, so only
+								-- the part of the sweep that lies fore and
+								-- aft counts, and that is the tangent's Z.
+								lever = math.max(arm * math.abs(socket.RightVector.Z), 0.05),
+								posed = false,
+								parts = resolved,
+							})
+						end
+					end
+				end
+			end
+
+			--==========================================================
+			-- ONE WRITER PER PART
+			--
+			-- A name can satisfy both rigs -- "RootFoot1" carries a leg
+			-- word AND a root index -- and two rigs writing one part every
+			-- slice is a part that flickers between two poses. The root rig
+			-- wins: it is the specific one, and it was opted into by name.
+			--==========================================================
+			if #entry.roots > 0 then
+				local claimed: { [BasePart]: boolean } = {}
+				for _, root in ipairs(entry.roots) do
+					for _, it in ipairs(root.parts) do
+						claimed[it.part] = true
+					end
+				end
+				for i = #entry.legs, 1, -1 do
+					if claimed[entry.legs[i].part] then
+						table.remove(entry.legs, i)
 					end
 				end
 			end
@@ -1114,6 +1355,9 @@ local function apply(entry: Sway, now: number)
 	-- owns any more.
 	--==========================================================================
 	local base = entry.anchor
+	-- The plane the roots stand on: the anchor's, and while a leg runs it is
+	-- the leg's own points, which are on the ground too.
+	local groundY = entry.anchor.Position.Y
 	local moveT = 0
 	local from, to = entry.from, entry.to
 	if not entry.pod then
@@ -1177,6 +1421,7 @@ local function apply(entry: Sway, now: number)
 		-- starting and stopping at full speed like a dragged icon.
 		local eased = raw * raw * (3 - 2 * raw)
 		local pos = from:Lerp(to, eased)
+		groundY = pos.Y
 		-- Zero at both ends of a leg and one in the middle, so the bob, the roll
 		-- and the arms all fade in and out with the step. Nothing snaps on the
 		-- frame a leg begins or ends, and a standing plant is perfectly still
@@ -1302,6 +1547,119 @@ local function apply(entry: Sway, now: number)
 		for _, leg in ipairs(entry.legs) do
 			local a = math.sin(phase + leg.phase) * LEG_SWING * moveT
 			leg.part.CFrame = target * leg.hip * CFrame.Angles(a, 0, 0) * leg.rel
+		end
+	end
+
+	--==========================================================================
+	-- AND THE ROOTS, WHICH WALK
+	--
+	-- Outside the moveT guard above, because a root has a second job while the
+	-- plant is standing: the idle lean tips the body a couple of degrees, and
+	-- the roots on the low side would stand IN the soil rather than on it. Those
+	-- are lifted back to the plane; a root needing neither a step nor a lift is
+	-- left exactly where PivotTo put it.
+	--
+	-- ONE ROOT, ONE HINGE. Every part of a root turns about its own socket, so
+	-- the arch keeps its shape, the moss cap and the prop root ride along, and
+	-- the end buried in the nexus does not move at all. No seam can open.
+	--==========================================================================
+	if #entry.roots > 0 then
+		local rootPhase = now * entry.strideHz * math.pi * 2
+		--======================================================================
+		-- WHY THE SWEEP IS NOT A SINE
+		--
+		-- A sine puts the planted contact back where it started every half
+		-- cycle, so however hard it pushes back it must also come forward again
+		-- by the same amount while it is still on the ground: its AVERAGE slip
+		-- over a stance is the body's whole advance, at any amplitude. That is
+		-- sliding by construction, and no constant fixes it.
+		--
+		-- So the planted half is a straight ramp instead -- constant backward
+		-- rate, which is the one shape that can match a constant forward one --
+		-- and the airborne half is the cubic that joins its two ends with the
+		-- ramp's own slope, so the contact leaves and lands without a corner.
+		--
+		--   sweep(s) =  1 - 4s                       s < 0.5, planted
+		--   sweep(s) = -8t^3 + 12t^2 - 2t - 1        t = 2s - 1, airborne
+		--
+		-- THE AMPLITUDE THAT DOES NOT SLIDE. Both sides of the match are known
+		-- here. The body eases across its leg on a smoothstep, so it travels at
+		-- 6*raw*(1-raw)*legSpeed; the contact sweeps back at
+		-- 4*lever*amp*strideHz*moveT, and moveT is 4*raw*(1-raw). Setting them
+		-- equal, the raw cancels -- which is the whole point, since it holds at
+		-- every instant of a leg and not merely in the middle of one:
+		--
+		--   amp = 1.5 * legSpeed / (4 * lever * strideHz)
+		--======================================================================
+		for _, root in ipairs(entry.roots) do
+			local s = ((rootPhase + root.phase) % (math.pi * 2)) / (math.pi * 2)
+			local sweep, airborne
+			if s < 0.5 then
+				sweep, airborne = 1 - 4 * s, 0
+			else
+				local t = s * 2 - 1
+				sweep = ((-8 * t + 12) * t - 2) * t - 1
+				airborne = math.sin(t * math.pi)
+			end
+			local amp = math.min(ROOT_STRIDE,
+				0.375 * entry.legSpeed / (root.lever * entry.strideHz))
+			local yaw = sweep * amp * root.sign * moveT
+			-- Rectified by construction: the planted half of the cycle has
+			-- nothing under the soil to swing into, so it does not lift at all.
+			local pitch = airborne * root.lift * moveT
+			local socket = target * root.socket
+			local posed = socket * CFrame.Angles(pitch, yaw, 0)
+			-- Where the contact SHOULD be: flat on the plane through the whole
+			-- planted half, and arcing to its clearance at the top of the swing.
+			-- Fading with moveT, so a step eases in and out of the ground rather
+			-- than snapping onto it, and a standing plant asks for nothing.
+			local want = airborne * root.rise * moveT
+			--==================================================================
+			-- THE SOIL IS THE FLOOR, AND IT IS NOT NEGOTIABLE
+			--
+			-- Newton, on the gap between where the contact IS and where it
+			-- should be: that gap over how far the contact stands out from the
+			-- hinge IS the angle that closes it, to first order. The pitch above
+			-- is already the right answer to within whatever the body is doing,
+			-- so the step only ever has that much to absorb.
+			--
+			-- TWICE AT THE MOST, and the second one almost never runs. One step
+			-- leaves the second order behind, which is nothing at a lean and
+			-- a third of a stud on the frame a leg is re-stamped under a Tiny
+			-- and everything moves at once. The loop leaves the moment it is
+			-- inside the epsilon, so the common frame still costs exactly one.
+			--
+			-- STEERING BY HEIGHT RATHER THAN BY ANGLE is what stops the bobbing,
+			-- and it is not the same thing as clamping. The body rolls three and
+			-- a half degrees across a step, and a diagonal pair has one root on
+			-- each side of that roll: measured open loop, the root the roll
+			-- lifts cleared 0.107 of the plant's height while its own diagonal
+			-- partner cleared 0.045, one gait read as two. Hold the HEIGHT and
+			-- the question does not arise -- the roll, the bob and the lean are
+			-- all just things the step absorbs, and every root of every tier
+			-- clears the same fraction of its own body.
+			--
+			-- Downward only while a leg runs. A standing plant is still only
+			-- lifted OUT of the soil and never pressed into it, which is the
+			-- one correction it has ever needed.
+			--==================================================================
+			for _ = 1, 2 do
+				local off = want - ((posed * root.contact).Y - groundY)
+				if off > ROOT_DIP_EPSILON or (off < -ROOT_DIP_EPSILON and moveT > 0) then
+					pitch = math.clamp(pitch + off / root.reach, -ROOT_CLAMP, root.lift + ROOT_CLAMP)
+					posed = socket * CFrame.Angles(pitch, yaw, 0)
+				else
+					break
+				end
+			end
+			-- The last write of a leg leaves a root a fraction of a degree off
+			-- rest, so one more write puts it back and the rest are skipped.
+			if pitch ~= 0 or yaw ~= 0 or root.posed then
+				root.posed = pitch ~= 0 or yaw ~= 0
+				for _, it in ipairs(root.parts) do
+					it.part.CFrame = posed * it.rel
+				end
+			end
 		end
 	end
 
