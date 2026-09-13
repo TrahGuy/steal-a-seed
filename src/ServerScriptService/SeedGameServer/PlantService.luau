@@ -717,10 +717,12 @@ end
 -- is stolen and nothing is revealed, the thing simply comes back to your hands.
 --
 -- The owner check is server-side and it is the only thing standing between a
--- neighbour and your garden. The prompt itself is drawn for anybody who walks
--- close enough -- a ProximityPrompt has no per-player visibility -- so a
--- stranger can see a Pick Up on your plant and get nothing for holding it.
--- Worth fixing in PromptUI one day; not worth trusting the client over.
+-- neighbour and your garden. `pickUp` re-tests it on every route in.
+--
+-- NOBODY HOLDS THIS PROMPT ANY MORE, and that is deliberate -- see THE PROMPT IS
+-- DISARMED below. It is kept because it is still the one place the pickup RANGE
+-- lives, and because the client reads that number off it rather than keeping a
+-- second copy in step with this file.
 --==============================================================================
 function attachPickup(entry: Planted)
 	local model = entry.model
@@ -734,10 +736,36 @@ function attachPickup(entry: Planted)
 	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.ActionText = "Pick Up"
 	prompt.ObjectText = ""
-	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	--==========================================================================
+	-- THE PROMPT IS DISARMED, AND IT IS DISARMED HERE
+	--
+	-- Picking a plant up is a two-step gesture now -- select it, then press the
+	-- button or E -- and PlantPickUI owns both steps and asks through
+	-- PickUpAction. This prompt is no longer an input at all; it is a range
+	-- oracle and an anchor.
+	--
+	-- STYLE = CUSTOM ONLY STOPS THE DRAWING. The engine still listens on three
+	-- separate routes -- KeyboardKeyCode, GamepadKeyCode and ClickablePrompt --
+	-- and with HoldDuration at zero any one of them lifts the plant on the press
+	-- that starts the gesture. That is exactly the bug the two-step exists to
+	-- kill, and with no billboard drawn any more there is nothing on screen to
+	-- warn about it either.
+	--
+	-- IT HAS TO BE THE SERVER THAT DOES IT. The first attempt turned these off
+	-- from the client, on PromptShown, and it does not hold: the engine's own
+	-- click handling runs before a release gesture can be judged, and Triggered
+	-- fires here on the server regardless of what a client did to its own copy
+	-- of the properties. Set at construction, the disarm is authoritative and
+	-- replicates to everybody.
+	--==========================================================================
+	prompt.KeyboardKeyCode = Enum.KeyCode.Unknown
+	prompt.GamepadKeyCode = Enum.KeyCode.Unknown
+	prompt.ClickablePrompt = false
 	-- PickupHoldSeconds, not HatchHoldSeconds: this borrowed the hatch's number
 	-- because it was the only one in reach, and the two actions are not the same
-	-- -- see the note on both in GameConfig.Planting.
+	-- -- see the note on both in GameConfig.Planting. Inert while the prompt is
+	-- disarmed, and kept so re-arming it is one line rather than an archaeology
+	-- exercise.
 	prompt.HoldDuration = PICKUP_HOLD
 	prompt.MaxActivationDistance = PLANT_RANGE
 	prompt.RequiresLineOfSight = false
@@ -776,9 +804,19 @@ function attachPickup(entry: Planted)
 	entry.anchorLift = handle.Position.Y - groundY
 	entry.prompt = prompt
 	placeAnchor(entry, Workspace:GetServerTimeNow())
-	table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
-		pickUp(player, entry)
-	end))
+	--==========================================================================
+	-- AND NOTHING LISTENS TO Triggered
+	--
+	-- A disarmed prompt cannot fire it, so a handler here would be a dead branch
+	-- that reads like a live one -- and the reason it was removed is worth more
+	-- than the branch was: while it existed, the engine's click handler reached
+	-- it directly and picked plants up with no selection, no outline and no
+	-- button, on the press rather than the release.
+	--
+	-- Every pickup now arrives through PickUpAction -> PickUpById, which is the
+	-- route the Garden panel has always used and the only one this service needs
+	-- to guard.
+	--==========================================================================
 end
 
 --==============================================================================
@@ -959,8 +997,10 @@ end
 --==============================================================================
 -- THE SAME PICKUP, ASKED FOR BY NAME
 --
--- The prompt in the world hands `pickUp` an entry it already had. A panel has
--- only an id, so this is the lookup -- and the lookup is itself a check.
+-- THIS IS NOW THE ONLY WAY IN. The prompt used to hand `pickUp` an entry it
+-- already had; it is disarmed and hands over nothing, so every pickup in the
+-- game -- the Garden panel's, the button's, E's -- arrives here with an id and
+-- goes through this lookup, and the lookup is itself a check.
 --
 -- IT LOOKS IN THE CALLER'S OWN PLOT AND NOWHERE ELSE. `growing` is keyed by
 -- plot, so asking for a neighbour's placement id finds nothing: their plants

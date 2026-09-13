@@ -760,41 +760,24 @@ UserInputService.InputBegan:Connect(function(input: InputObject, processed: bool
 end)
 
 --==============================================================================
--- THE KEY THAT IS NOT THERE
+-- THE KEY THAT IS NOT THERE, AND WHY IT IS NOT TAKEN AWAY HERE
 --
--- The prompt is Style = Custom and nobody draws it any more, but CUSTOM ONLY
--- STOPS THE DRAWING. The engine still listens, on three separate routes: a
--- KeyboardKeyCode fires on that key, a GamepadKeyCode on that button, and
--- ClickablePrompt on a plain mouse click anywhere on the prompt. With the
--- billboard gone that is the worst thing in the file -- a destructive action
--- with nothing on screen to say so, which is strictly worse than the floating
--- prompt this replaced.
+-- The prompt is Style = Custom and nobody draws it, but CUSTOM ONLY STOPS THE
+-- DRAWING. The engine still listens on three routes -- KeyboardKeyCode,
+-- GamepadKeyCode and ClickablePrompt -- and with HoldDuration 0 any of them
+-- lifts the plant on the press that starts the gesture, with no outline and no
+-- button in between. That is the whole thing this file exists to prevent.
 --
--- ALL THREE, AND THE CLICK IS THE ONE THAT BITES. Taking the two key codes away
--- and leaving ClickablePrompt looks finished and is not: the prompt has
--- HoldDuration 0, so the very click meant to SELECT the plant instead picked it
--- up on the spot, with no outline and no button in between. Measured in Play --
--- it took two plants out of the bed before the cause was found, and the engine
--- had already marked the click handled, so nothing downstream even ran.
+-- ALL THREE ARE TURNED OFF ON THE SERVER, at construction, in PlantService's
+-- attachPickup. This file tried it first from the client on PromptShown and it
+-- DOES NOT HOLD: the engine's own click handling runs before a release gesture
+-- can be judged, and Triggered fires on the server regardless of what a client
+-- did to its own copy of the properties. A local write is not a disarm.
 --
--- So the keys are taken away LOCALLY, on the client that would have pressed
--- them. `Enabled` is deliberately not touched: it is what `promptFor` filters
--- on, what the selection watches, and what the server owns -- switching it off
--- here would clear every selection the instant it was made. The prompt keeps
--- its range, its enabled state and its server backing, and simply stops being
--- something a keypress can reach.
---
--- Done on PromptShown because that is the only moment it matters: the engine
--- will not accept input for a prompt it has not shown, and it shows one exactly
--- when the player comes into range of it.
+-- What this file still relies on the prompt for is unchanged: its
+-- MaxActivationDistance is the one copy of the pickup range, and `Enabled` is
+-- what promptFor filters on and what a selection watches.
 --==============================================================================
-ProximityPromptService.PromptShown:Connect(function(prompt)
-	if prompt.Name == PICKUP_PROMPT then
-		prompt.KeyboardKeyCode = Enum.KeyCode.Unknown
-		prompt.GamepadKeyCode = Enum.KeyCode.Unknown
-		prompt.ClickablePrompt = false
-	end
-end)
 
 --==============================================================================
 -- AND EVERYTHING THAT ENDS A SELECTION WITHOUT A TAP

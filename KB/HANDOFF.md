@@ -25,15 +25,40 @@ so the two-step is now the only way a plant is lifted anywhere:
     the layout stopped being touch; there is no other affordance to fall back to
     now, so a tablet docked to a keyboard keeps its selection.
 
-#### THE KEY THAT IS NOT THERE, which is the whole of the risk
+#### The key that is not there, and why the SERVER has to take it away
 
 `Style = Custom` stops the engine DRAWING a prompt. It does not stop the engine
 LISTENING, and it listens on three separate routes: `KeyboardKeyCode`,
 `GamepadKeyCode`, and `ClickablePrompt`. With the billboard gone, every one of
 those is a destructive action with nothing on screen to say so -- strictly worse
-than the floating prompt this replaces. So all three are taken away locally, on
-`PromptShown`, which is the only moment they matter (the engine will not accept
-input for a prompt it has not shown).
+than the floating prompt this replaces.
+
+All three are turned off in **`PlantService.attachPickup`, at construction**,
+where the disarm is authoritative and replicates to everybody. The
+`PickupPrompt`'s `Triggered` handler is removed with it: a disarmed prompt cannot
+fire it, and every pickup now arrives through `PickUpAction` -> `PickUpById`,
+the route the Garden panel has always used. `Enabled` is deliberately untouched
+-- it is what `promptFor` filters on, what a selection watches, and the one copy
+of the pickup range.
+
+**Doing it from the client does not hold, and that cost two rounds.** The first
+attempt set the same three properties on `PromptShown` in `PlantPickUI`. A local
+write is not a disarm: the engine's own click handling runs before a release
+gesture can be judged, and `prompt.Triggered` fires on the SERVER regardless of
+what a client did to its own copy. The measured symptom was that the very click
+meant to SELECT a plant picked it up instead -- no outline, no button, on the
+press rather than the release -- and the engine had already marked the click
+handled, so nothing downstream even ran. It emptied a bed in Play before the
+cause was found.
+
+Verified after the server fix: the prompt is born
+`kbd=None pad=None clickable=false enabled=true`, and five clicks on a planted
+Supernovus selected it every time and lifted it none.
+
+Note the scope: only `PickupPrompt` is disarmed. `HatchPrompt`, `TakePrompt`,
+`SellPrompt`, `UpgradePrompt` and `MarigoldShopPrompt` keep `E` and their
+`Triggered` handlers, because those are real held prompts a player walks up to
+and means to press.
 
 `Enabled` is deliberately NOT touched: it is what `promptFor` filters on, what
 the selection watches, and what the server owns. The prompt keeps its range, its
