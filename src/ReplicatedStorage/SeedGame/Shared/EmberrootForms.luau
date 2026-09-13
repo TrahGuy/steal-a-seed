@@ -197,11 +197,6 @@ local PALETTES: { [string]: Palette } = {
 	-- jaw disappeared into the head. The HUE is unchanged, which is what carries
 	-- the "only cool-dark" reading; only the value is lifted, to about 44, so the
 	-- face is legible at the range a player actually walks past it.
-	pyrelotus = {
-		stem = Color3.fromRGB(66, 38, 66), stemPale = Color3.fromRGB(96, 62, 94),
-		bulb = Color3.fromRGB(52, 32, 56), brow = Color3.fromRGB(66, 38, 66),
-		crack = Color3.fromRGB(255, 128, 148),
-	},
 }
 
 --==============================================================================
@@ -412,13 +407,6 @@ local ROOTS: { [string]: { RootSpec } } = {
 	-- PYRELOTUS: five directions, and the whole point is that they are NOT five
 	-- petals. One dominant, two supporting it at unequal angles, two short and
 	-- broken -- an opened lotus that has burnt unevenly.
-	pyrelotus = {
-		{ yaw = 14,   reach = 2.18, segs = 3, w = 0.34, t = 0.21, taper = 0.26, lift = 0.12, drift = 20,  seed = 191 },
-		{ yaw = 86,   reach = 1.66, segs = 2, w = 0.29, t = 0.19, taper = 0.28, lift = 0.09, drift = -24, seed = 199 },
-		{ yaw = 296,  reach = 1.58, segs = 2, w = 0.28, t = 0.18, taper = 0.26, lift = 0.14, drift = 26,  seed = 211 },
-		{ yaw = 168,  reach = 1.06, segs = 2, w = 0.24, t = 0.16, taper = 0.30, lift = 0.05, drift = -32, seed = 223, broken = true },
-		{ yaw = 236,  reach = 0.92, segs = 2, w = 0.22, t = 0.15, taper = 0.32, lift = 0.07, drift = 18,  seed = 227, broken = true },
-	},
 }
 
 --==============================================================================
@@ -650,10 +638,6 @@ local HEADS: { [string]: HeadSpec } = {
 	-- PYRELOTUS: the premium head. Volcanic petal planes layered AROUND a carved
 	-- face, leaning one way and no two the same -- a bloom growing off a skull,
 	-- never a flower set on top of one.
-	pyrelotus = { long = 0.96, tall = 0.94, browDrop = 0.02, browTilt = 4,
-		jawJut = 0.12, jawSquare = 0.25, mouthW = 0.40, mouthH = 0.18,
-		cornerLift = 1, heavySide = 1, chipYaw = 154, crestSplit = 0,
-		petals = 4, seed = 397 },
 }
 
 local function face(m: Model, head: CFrame, wide: number, throat: Color3,
@@ -1097,327 +1081,640 @@ end
 -- The rarity is the budget: nothing below Mythic gets a light, a halo and an
 -- emitter, and nothing else gets an enclosing form at all.
 --==============================================================================
+--==============================================================================
+-- PYRELOTUS, THE OBSIDIAN FIRE-DRAKE LOTUS
+--
+-- The only species in this file that is DATA rather than a walked construction,
+-- and the reason is that it stopped being a plant. The other four are a stem, a
+-- root knot and a face; this one is a low quadruped drake with four legs a
+-- walker has to find by name, and geometry like that is authored against a
+-- reference and measured, not grown from a cursor.
+--
+-- Authored in tools/art/pyrelotus_drake.luau against
+-- art/creatures/pyrelotus/reference/pyrelotus-concept1-fire-drake.jpg, and
+-- lifted here part for part. Change the tool, re-run its serialize(), paste the
+-- result over the table -- never the other way round.
+--
+-- WRITTEN AT SCALE 1. EmberrootForms.Build grows everything below afterwards,
+-- the aura included, so these are the Tiny numbers and hs is applied once on the
+-- way out.
+--
+-- What replaced what: a 43-part stem carrying a three-rib birdcage around a
+-- bead, three particle emitters and a halo. It is now 63 parts, one light and
+-- one emitter, and the bead has become a molten core sunk in a crater on the
+-- drake's back.
+--==============================================================================
+type PartSpec = {
+	name: string,
+	shape: string,
+	size: Vector3,
+	cf: CFrame,
+	color: Color3,
+	material: Enum.Material,
+	-- Studded unless this says otherwise. Only the twelve glowing parts turn
+	-- them off: neon takes its light from the material, and a studded neon face
+	-- reads as a dirty one.
+	studs: boolean?,
+}
+
+local PYRE_SHAPES: { [string]: Enum.PartType } = {
+	Block = Enum.PartType.Block,
+	Ball = Enum.PartType.Ball,
+	Cylinder = Enum.PartType.Cylinder,
+}
+
+local PYRELOTUS: { PartSpec } = {
+	{
+		name = "FrontLeft_Thigh",
+		shape = "Block",
+		size = Vector3.new(0.72, 1.1, 0.86),
+		cf = CFrame.new(-0.94, 1.52, -1.06, 0.970662, -0.084922, 0.224951, 0.071311, 0.995136, 0.067969, -0.229629, -0.049933, 0.971997),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontLeft_Shin",
+		shape = "Block",
+		size = Vector3.new(0.6, 0.94, 0.7),
+		cf = CFrame.new(-0.99, 0.76, -1.12, 0.97437, 0, 0.224951, 0.00942, 0.999123, -0.040802, -0.224754, 0.041876, 0.973515),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontLeft_Foot",
+		shape = "Block",
+		size = Vector3.new(0.82, 0.34, 1.02),
+		cf = CFrame.new(-1.01, 0.17, -1.26, 0.97437, 0, 0.224951, 0, 1, 0, -0.224951, 0, 0.97437),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontLeft_ToeClaw1",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(-1.2725, 0.134962, -1.84, 0.967231, -0.006138, 0.253824, 0, 0.999708, 0.024174, -0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontLeft_ToeClaw2",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(-0.7475, 0.134962, -1.84, 0.967231, 0.006138, -0.253824, 0, 0.999708, 0.024174, 0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontRight_Thigh",
+		shape = "Block",
+		size = Vector3.new(0.72, 1.1, 0.86),
+		cf = CFrame.new(0.94, 1.52, -1.06, 0.970662, 0.084922, -0.224951, -0.071311, 0.995136, 0.067969, 0.229629, -0.049933, 0.971997),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontRight_Shin",
+		shape = "Block",
+		size = Vector3.new(0.6, 0.94, 0.7),
+		cf = CFrame.new(0.99, 0.76, -1.12, 0.97437, 0, -0.224951, -0.00942, 0.999123, -0.040802, 0.224754, 0.041876, 0.973515),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontRight_Foot",
+		shape = "Block",
+		size = Vector3.new(0.82, 0.34, 1.02),
+		cf = CFrame.new(1.01, 0.17, -1.26, 0.97437, 0, -0.224951, 0, 1, 0, 0.224951, 0, 0.97437),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontRight_ToeClaw1",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(0.7475, 0.134962, -1.84, 0.967231, -0.006138, 0.253824, 0, 0.999708, 0.024174, -0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FrontRight_ToeClaw2",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(1.2725, 0.134962, -1.84, 0.967231, 0.006138, -0.253824, 0, 0.999708, 0.024174, 0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearLeft_Thigh",
+		shape = "Block",
+		size = Vector3.new(0.72, 1.1, 0.86),
+		cf = CFrame.new(-0.99, 1.52, 1.32, 0.9865, -0.086308, 0.139173, 0.103402, 0.987291, -0.120683, -0.126988, 0.133445, 0.982887),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearLeft_Shin",
+		shape = "Block",
+		size = Vector3.new(0.6, 0.94, 0.7),
+		cf = CFrame.new(-1.04, 0.76, 1.4, 0.990268, 0, 0.139173, -0.010193, 0.997314, 0.072525, -0.138799, -0.073238, 0.987609),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearLeft_Foot",
+		shape = "Block",
+		size = Vector3.new(0.82, 0.34, 1.02),
+		cf = CFrame.new(-1.06, 0.17, 1.48, 0.990268, 0, 0.139173, 0, 1, 0, -0.139173, 0, 0.990268),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearLeft_ToeClaw1",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(-1.3225, 0.134962, 0.9, 0.967231, -0.006138, 0.253824, 0, 0.999708, 0.024174, -0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearLeft_ToeClaw2",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(-0.7975, 0.134962, 0.9, 0.967231, 0.006138, -0.253824, 0, 0.999708, 0.024174, 0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearRight_Thigh",
+		shape = "Block",
+		size = Vector3.new(0.72, 1.1, 0.86),
+		cf = CFrame.new(0.99, 1.52, 1.32, 0.9865, 0.086308, -0.139173, -0.103402, 0.987291, -0.120683, 0.126988, 0.133445, 0.982887),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearRight_Shin",
+		shape = "Block",
+		size = Vector3.new(0.6, 0.94, 0.7),
+		cf = CFrame.new(1.04, 0.76, 1.4, 0.990268, 0, -0.139173, 0.010193, 0.997314, 0.072525, 0.138799, -0.073238, 0.987609),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearRight_Foot",
+		shape = "Block",
+		size = Vector3.new(0.82, 0.34, 1.02),
+		cf = CFrame.new(1.06, 0.17, 1.48, 0.990268, 0, -0.139173, 0, 1, 0, 0.139173, 0, 0.990268),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearRight_ToeClaw1",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(0.7975, 0.134962, 0.9, 0.967231, -0.006138, 0.253824, 0, 0.999708, 0.024174, -0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RearRight_ToeClaw2",
+		shape = "Wedge",
+		size = Vector3.new(0.24, 0.26, 0.413673),
+		cf = CFrame.new(1.3225, 0.134962, 0.9, 0.967231, 0.006138, -0.253824, 0, 0.999708, 0.024174, 0.253898, -0.023382, 0.966948),
+		color = Color3.fromRGB(168, 146, 128),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "TorsoLower",
+		shape = "Block",
+		size = Vector3.new(1.72, 1.22, 1.36),
+		cf = CFrame.new(0, 1.88, 1.3, 1, 0, 0, 0, 0.994522, -0.104528, 0, 0.104528, 0.994522),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "TorsoMid",
+		shape = "Block",
+		size = Vector3.new(1.86, 1.28, 1.9),
+		cf = CFrame.new(0, 2.06, 0.22, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "TorsoUpper",
+		shape = "Block",
+		size = Vector3.new(1.74, 1.06, 1.62),
+		cf = CFrame.new(0, 2.44, -0.86, 1, 0, 0, 0, 0.987688, 0.156434, 0, -0.156434, 0.987688),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "Belly",
+		shape = "Block",
+		size = Vector3.new(1.5, 0.72, 2.1),
+		cf = CFrame.new(0, 1.36, 0.3, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "MantleL",
+		shape = "Block",
+		size = Vector3.new(0.54, 1.02, 1.66),
+		cf = CFrame.new(-0.96, 2.42, -0.42, 0.913545, 0.406737, 0, -0.404509, 0.908541, 0.104528, 0.042516, -0.095491, 0.994522),
+		color = Color3.fromRGB(88, 62, 98),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "MantleR",
+		shape = "Block",
+		size = Vector3.new(0.54, 1.02, 1.66),
+		cf = CFrame.new(0.96, 2.42, -0.42, 0.913545, -0.406737, 0, 0.404509, 0.908541, 0.104528, -0.042516, -0.095491, 0.994522),
+		color = Color3.fromRGB(88, 62, 98),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "MagmaSeam1",
+		shape = "Block",
+		size = Vector3.new(0.12, 0.12, 1.66),
+		cf = CFrame.new(-0.99, 1.78, 0.24, 0.94874, -0.308264, -0.069756, 0.309017, 0.951057, 0, 0.066342, -0.021556, 0.997564),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "MagmaSeam2",
+		shape = "Block",
+		size = Vector3.new(0.11, 0.11, 1.44),
+		cf = CFrame.new(0.99, 1.72, 0.46, 0.966603, 0.241001, 0.087156, -0.241922, 0.970296, 0, -0.084567, -0.021085, 0.996195),
+		color = Color3.fromRGB(255, 90, 30),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "MagmaSeam3",
+		shape = "Block",
+		size = Vector3.new(0.1, 0.1, 0.92),
+		cf = CFrame.new(-0.94, 1.86, 1.34, 0.736369, -0.617887, 0.275637, 0.642788, 0.766044, 0, -0.21115, 0.177176, 0.961262),
+		color = Color3.fromRGB(255, 90, 30),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "MagmaSeam4",
+		shape = "Block",
+		size = Vector3.new(0.1, 0.1, 0.84),
+		cf = CFrame.new(0.96, 1.8, 1.4, 0.784986, 0.570325, -0.241922, -0.587785, 0.809017, 0, 0.195719, 0.142198, 0.970296),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "MagmaSeam5",
+		shape = "Block",
+		size = Vector3.new(0.13, 0.13, 1.26),
+		cf = CFrame.new(0, 2.5, 1.3, 0, -1, 0, 1, 0, 0, 0, 0, 1),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "MagmaSeam6",
+		shape = "Block",
+		size = Vector3.new(0.11, 0.11, 1),
+		cf = CFrame.new(-0.32, 2.86, -1.4, 0.259014, -0.903291, 0.34202, 0.961262, 0.275637, 0, -0.094274, 0.328771, 0.939693),
+		color = Color3.fromRGB(255, 128, 148),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "CalderaRimL",
+		shape = "Block",
+		size = Vector3.new(1.86, 0.34, 1.12),
+		cf = CFrame.new(0, 3.3, -0.34, 0.992546, 0, -0.121869, 0.027415, 0.97437, 0.223274, 0.118746, -0.224951, 0.967107),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "CalderaRimR",
+		shape = "Block",
+		size = Vector3.new(1.86, 0.34, 1.12),
+		cf = CFrame.new(0, 3.3, 0.54, 0.992546, 0, 0.121869, -0.027415, 0.97437, 0.223274, -0.118746, -0.224951, 0.967107),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal1",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.846505),
+		cf = CFrame.new(-0.04851, 3.580134, 1.489153, -0.999391, 0.009486, 0.033586, 0, 0.962352, -0.271806, -0.034899, -0.27164, -0.961766),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal2",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.794505),
+		cf = CFrame.new(1.049046, 3.485667, 1.011922, -0.656059, -0.097963, -0.748325, 0, 0.99154, -0.129802, 0.75471, -0.085158, -0.650509),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal3",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.926185),
+		cf = CFrame.new(1.39, 3.8, 0.1, 0, -0.389993, -0.920818, 0, 0.920818, -0.389993, 1, 0, 0),
+		color = Color3.fromRGB(88, 62, 98),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal4",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.871069),
+		cf = CFrame.new(0.893475, 3.79853, -0.964802, 0.766044, -0.202357, -0.610104, 0, 0.949154, -0.314812, 0.642788, 0.24116, 0.727094),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal5",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 2.03226),
+		cf = CFrame.new(0.04851, 4.019866, -1.289153, 0.999391, -0.017159, -0.03039, 0, 0.870786, -0.491663, 0.034899, 0.491363, 0.870255),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal6",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.864821),
+		cf = CFrame.new(-1.016582, 3.78004, -0.847978, 0.681998, 0.22278, 0.696597, 0, 0.952476, -0.304613, -0.731354, 0.207745, 0.649587),
+		color = Color3.fromRGB(88, 62, 98),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal7",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.932779),
+		cf = CFrame.new(-1.386614, 3.815346, 0.003039, 0.069756, 0.396673, 0.915306, 0, 0.917541, -0.397641, -0.997564, 0.027738, 0.064004),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "OuterPetal8",
+		shape = "Block",
+		size = Vector3.new(1.06, 0.2, 1.792253),
+		cf = CFrame.new(-0.947978, 3.469102, 1.116582, -0.731354, 0.081443, 0.677118, 0, 0.992844, -0.119419, -0.681998, -0.087337, -0.72612),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "InnerPetal1",
+		shape = "Wedge",
+		size = Vector3.new(0.2, 0.98, 2.705452),
+		cf = CFrame.new(0.349793, 4.89, 0.730346, 0.40636, -0.911732, -0.060136, -0.043015, 0.046653, -0.997985, 0.9127, 0.408128, -0.02026),
+		color = Color3.fromRGB(255, 90, 30),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "InnerPetal2",
+		shape = "Wedge",
+		size = Vector3.new(0.2, 0.98, 2.725445),
+		cf = CFrame.new(0.797378, 4.89, -0.158479, -0.919391, -0.369057, -0.136078, 0.12938, 0.042965, -0.990664, 0.371458, -0.928413, 0.008247),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "InnerPetal3",
+		shape = "Wedge",
+		size = Vector3.new(0.2, 0.98, 2.704051),
+		cf = CFrame.new(-0.294137, 4.89, -0.548388, -0.341787, 0.938415, 0.050594, -0.036928, 0.040384, -0.998502, -0.939052, -0.343143, 0.020851),
+		color = Color3.fromRGB(255, 90, 30),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "InnerPetal4",
+		shape = "Wedge",
+		size = Vector3.new(0.2, 0.98, 2.725445),
+		cf = CFrame.new(-0.797378, 4.89, 0.358479, 0.919391, 0.369057, 0.136078, 0.12938, 0.042965, -0.990664, -0.371458, 0.928413, -0.008247),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "FlameCollar",
+		shape = "Cylinder",
+		size = Vector3.new(0.22, 1.4, 1.4),
+		cf = CFrame.new(0, 3.56, 0.1, 0, -1, 0, 0.97437, 0, 0.224951, -0.224951, 0, 0.97437),
+		color = Color3.fromRGB(255, 90, 30),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "MoltenCore",
+		shape = "Ball",
+		size = Vector3.new(1, 1, 1),
+		cf = CFrame.new(0, 4.04, 0.06, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+		color = Color3.fromRGB(255, 160, 48),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "HeadBase",
+		shape = "Block",
+		size = Vector3.new(1.24, 1.04, 1.26),
+		cf = CFrame.new(0, 2.22, -2.02, 1, 0, 0, 0, 0.994522, 0.104528, 0, -0.104528, 0.994522),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "BrowPlate",
+		shape = "Block",
+		size = Vector3.new(1.28, 0.38, 0.84),
+		cf = CFrame.new(0, 2.72, -2.28, 1, 0, 0, 0, 0.970296, -0.241922, 0, 0.241922, 0.970296),
+		color = Color3.fromRGB(88, 62, 98),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "Snout",
+		shape = "Block",
+		size = Vector3.new(0.92, 0.48, 0.96),
+		cf = CFrame.new(0, 2.28, -2.96, 1, 0, 0, 0, 0.996195, -0.087156, 0, 0.087156, 0.996195),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "JawLower",
+		shape = "Block",
+		size = Vector3.new(0.72, 0.3, 0.86),
+		cf = CFrame.new(0, 1.82, -2.86, 1, 0, 0, 0, 0.97437, 0.224951, 0, -0.224951, 0.97437),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "MawGlow",
+		shape = "Block",
+		size = Vector3.new(0.6, 0.3, 0.66),
+		cf = CFrame.new(0, 2.05, -2.76, 1, 0, 0, 0, 0.997564, 0.069756, 0, -0.069756, 0.997564),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "LeftHorn",
+		shape = "Wedge",
+		size = Vector3.new(0.3, 0.56, 1.992285),
+		cf = CFrame.new(-0.75, 3.13, -1.01, -0.933939, 0.17582, 0.3112, 0, 0.870653, -0.491897, -0.357433, -0.459402, -0.813137),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "RightHorn",
+		shape = "Wedge",
+		size = Vector3.new(0.3, 0.56, 1.992285),
+		cf = CFrame.new(0.75, 3.13, -1.01, -0.933939, -0.17582, -0.3112, 0, 0.870653, -0.491897, 0.357433, -0.459402, -0.813137),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "Eye",
+		shape = "Ball",
+		size = Vector3.new(0.34, 0.34, 0.34),
+		cf = CFrame.new(0, 2.42, -2.54, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "Pupil",
+		shape = "Block",
+		size = Vector3.new(0.09, 0.2, 0.09),
+		cf = CFrame.new(0, 2.42, -2.67, 1, 0, 0, 0, 1, 0, 0, 0, 1),
+		color = Color3.fromRGB(255, 128, 148),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+	{
+		name = "Tail1",
+		shape = "Block",
+		size = Vector3.new(0.76, 0.76, 1.227524),
+		cf = CFrame.new(0.03, 2.47, 2.13, -0.99535, -0.070052, -0.066114, 0, 0.686369, -0.727253, 0.096324, -0.723872, -0.683177),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "Tail2",
+		shape = "Block",
+		size = Vector3.new(0.58, 0.58, 0.856322),
+		cf = CFrame.new(0.1, 2.92, 2.71, -0.989203, -0.058981, -0.134156, 0, 0.915435, -0.402467, 0.146549, -0.398122, -0.905551),
+		color = Color3.fromRGB(52, 32, 56),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "Tail3",
+		shape = "Block",
+		size = Vector3.new(0.42, 0.42, 0.707543),
+		cf = CFrame.new(0.18, 2.92, 3.2, -0.98387, 0.084589, -0.157622, 0, 0.881134, 0.472867, 0.178885, 0.465239, -0.866921),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "TailSpike1",
+		shape = "Wedge",
+		size = Vector3.new(0.2, 0.3, 0.677938),
+		cf = CFrame.new(0.01, 3.3, 2.54, -0.894427, 0.422187, 0.147506, 0, 0.329834, -0.944039, -0.447213, -0.844374, -0.295013),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "TailSpike2",
+		shape = "Wedge",
+		size = Vector3.new(0.18, 0.26, 0.602992),
+		cf = CFrame.new(0.2, 3.45, 3.1, -0.894427, -0.400494, -0.199007, 0, 0.444995, -0.895533, 0.447213, -0.80099, -0.398015),
+		color = Color3.fromRGB(38, 24, 42),
+		material = Enum.Material.Plastic,
+	},
+	{
+		name = "TailFlame",
+		shape = "Wedge",
+		size = Vector3.new(0.22, 0.38, 0.851822),
+		cf = CFrame.new(0.25, 3.2, 3.69, -0.987763, -0.139151, -0.070437, 0, 0.451629, -0.892206, 0.155963, -0.881288, -0.446103),
+		color = Color3.fromRGB(255, 140, 96),
+		material = Enum.Material.Neon,
+		studs = false,
+	},
+}
+
 local function pyrelotus(parent: Instance, at: CFrame): Model
-	local m = Instance.new("Model"); m.Name = "Pyrelotus"; m.Parent = parent
-	local pal = PALETTES.pyrelotus
-	local b = body(m, at, 0.94, 8, pal, ROOTS.pyrelotus, 191)
-	face(m, b.head, 0.92, C.LotusCore, pal, "pyrelotus")
+	local m = Instance.new("Model")
+	m.Name = "Pyrelotus"
+	m.Parent = parent
 
-	--== THE CAGE MOUTH ==--
-	-- A flared collar the ribs spring from, so they look grown rather than
-	-- planted in the top of the stem.
-	mk({ name = "CageMouth", size = Vector3.new(1.34, 0.30, 1.28),
-		cf = at * CFrame.new(0.02, 3.06, 0.04) * CFrame.Angles(rad(-5), rad(11), 0),
-		color = C.Cinder, parent = m })
-
-	--==========================================================================
-	-- THREE RIBS, WALKED RATHER THAN PLACED
-	--
-	-- The first attempt positioned each segment by its own height and radius,
-	-- which guaranteed nothing about whether one met the next -- and they did
-	-- not. It read as a sunburst of loose blocks.
-	--
-	-- Each rib is now walked with a CURSOR. A segment is laid along the cursor's
-	-- own forward axis, then the cursor advances the whole segment length and
-	-- turns inward. Built that way an arc cannot come apart, because every
-	-- segment starts exactly where the last one finished.
-	--
-	-- Three ribs, not four or six: the anti-overgeometry rule warns against
-	-- rings of identical parts, and three is the fewest that still encloses. The
-	-- bearings are uneven and each rib closes by a different amount, so the cage
-	-- is lopsided the way a grown thing is.
-	--==========================================================================
-	local ribs = {
-		{ bearing = -34, close = 1.00, tint = C.LotusDeep },
-		{ bearing = 78, close = 0.88, tint = C.Lotus },
-		{ bearing = 196, close = 0.94, tint = C.LotusDeep },
-	}
-	-- length, how far to turn inward AFTER it, thickness
-	local segments = {
-		{ 1.05, 30, 0.30 },
-		{ 0.95, 34, 0.26 },
-		{ 0.80, 38, 0.22 },
-	}
-	for i, rib in ipairs(ribs) do
-		-- Start at the collar rim, already leaning out a little so the cage
-		-- flares before it closes.
-		local cursor = at * CFrame.new(0.02, 3.16, 0.04)
-			* CFrame.Angles(0, rad(rib.bearing), 0)
-			* CFrame.new(0, 0, -0.62 * rib.close)
-			* CFrame.Angles(rad(-16), 0, 0)
-		for k, sg in ipairs(segments) do
-			local len = (sg[1] :: number) * rib.close
-			local turn = sg[2] :: number
-			local thick = sg[3] :: number
-			-- Laid along the cursor's LOCAL Y, centred half a length along it.
-			mk({ name = string.format("Rib%d_%d", i, k),
-				size = Vector3.new(thick, len, thick * 1.35),
-				cf = cursor * CFrame.new(0, len * 0.5, 0),
-				color = rib.tint, parent = m })
-			-- Advance the full length, then turn inward for the next segment.
-			cursor = cursor * CFrame.new(0, len, 0) * CFrame.Angles(rad(turn), 0, 0)
-		end
+	for _, s in ipairs(PYRELOTUS) do
+		mk({
+			name = s.name,
+			size = s.size,
+			cf = at * s.cf,
+			color = s.color,
+			material = s.material,
+			shape = PYRE_SHAPES[s.shape],
+			wedge = s.shape == "Wedge",
+			smooth = s.studs == false,
+			parent = m,
+		})
 	end
 
-	--== THE CROWN KNOT ==--
-	-- Where the three ribs nearly meet. Offset from the axis so the cage does
-	-- not close symmetrically, which would read as machined.
-	mk({ name = "CageKnot", size = Vector3.new(0.38, 0.30, 0.36),
-		cf = at * CFrame.new(0.12, 5.18, -0.06) * CFrame.Angles(rad(12), rad(24), rad(-8)),
-		color = C.Cinder, parent = m })
-
 	--==========================================================================
-	-- THE SIGNATURE: THE CORE, HUNG IN THE HOLLOW
-	--==========================================================================
-	local core = mk({ name = "Core", size = Vector3.new(0.54, 0.54, 0.54),
-		cf = at * CFrame.new(0.04, 4.10, -0.02), color = C.CoreEmber,
-		material = Enum.Material.Neon, shape = Enum.PartType.Ball,
-		smooth = true, parent = m })
-	mk({ name = "Halo", size = Vector3.new(1.42, 0.08, 1.42),
-		cf = at * CFrame.new(0.04, 4.10, -0.02) * CFrame.Angles(rad(9), 0, rad(90)),
-		color = C.Lotus, material = Enum.Material.Neon,
-		shape = Enum.PartType.Cylinder, smooth = true, parent = m })
-	--==========================================================================
-	-- WHAT THE MYTHIC SPENDS ITS EXTRA PARTS ON
+	-- ONE LIGHT AND ONE EMITTER, BOTH ON THE CORE
 	--
-	-- This species runs over the 25-40 band on purpose. Every addition below is
-	-- held to the same test the rest of the model is -- change the silhouette,
-	-- explain anatomy, make a colour region, carry an animation seam, or be a
-	-- close-range focal detail -- and anything that failed it was cut.
+	-- The birdcage carried three emitters and owned roughly half this species'
+	-- whole particle budget. One of each is what the rebuild asked for, and both
+	-- hang on the molten core, which is the thing the light is meant to be
+	-- coming out of.
 	--
-	-- The cost is real: a bed of twelve at this count is over 570 parts, where
-	-- twelve Cinderpaws is 456. It is affordable because a Mythic is a 0.2%
-	-- roll, so a plot will almost never hold two.
+	-- No hs here: Build multiplies Range, and the emitter's Size, Speed and
+	-- Acceleration, on its way out.
 	--==========================================================================
+	local core = m:FindFirstChild("MoltenCore")
+	if core and core:IsA("BasePart") then
+		local glow = Instance.new("PointLight")
+		glow.Name = "PyreGlow"
+		glow.Color = Color3.fromRGB(255, 150, 50)
+		glow.Brightness = 2.6
+		glow.Range = 16
+		glow.Shadows = false
+		glow.Parent = core
 
-	--== COLLAR PETALS: a colour region where there was a bare plate ==--
-	local collar = { { -18, 0.62 }, { 104, 0.54 }, { 226, 0.58 } }
-	for i, cp in ipairs(collar) do
-		mk({ name = "Collar" .. i,
-			size = Vector3.new(cp[2] :: number, 0.12, 0.54),
-			cf = at * CFrame.new(0.02, 3.02, 0.04)
-				* CFrame.Angles(0, rad(cp[1] :: number), 0)
-				* CFrame.new(0, 0.02, -0.62)
-				* CFrame.Angles(rad(-22), 0, rad((i % 2 == 0) and 8 or -7)),
-			color = C.Lotus, parent = m })
+		local att = Instance.new("Attachment")
+		att.Name = "PyreAttachment"
+		att.Parent = core
+
+		local motes = Instance.new("ParticleEmitter")
+		motes.Name = "PyreMotes"
+		motes.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		motes.Color = ColorSequence.new(Color3.fromRGB(255, 168, 72),
+			Color3.fromRGB(255, 128, 148))
+		motes.LightEmission = 1
+		motes.LightInfluence = 0
+		motes.Size = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.10),
+			NumberSequenceKeypoint.new(0.3, 0.34),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		motes.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2),
+			NumberSequenceKeypoint.new(0.6, 0.55),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		motes.Lifetime = NumberRange.new(1.2, 2.4)
+		motes.Rate = 16
+		motes.Speed = NumberRange.new(0.7, 1.8)
+		motes.Drag = 1.1
+		motes.Acceleration = Vector3.new(0, 1.4, 0)
+		motes.EmissionDirection = Enum.NormalId.Top
+		motes.SpreadAngle = Vector2.new(40, 40)
+		motes.Rotation = NumberRange.new(0, 360)
+		motes.RotSpeed = NumberRange.new(-45, 45)
+		motes.Parent = att
 	end
 
-	--== ORBIT MOTES: three beads hung inside the cage ==--
-	-- Different radii, heights and bearings, so they read as caught in the
-	-- updraught rather than as a bracelet. Each is its own animation seam.
-	local motes = { { 34, 0.52, 3.72 }, { 158, 0.66, 4.34 }, { 268, 0.44, 4.02 } }
-	for i, mo in ipairs(motes) do
-		mk({ name = "Mote" .. i, size = Vector3.new(0.16, 0.16, 0.16),
-			cf = at * CFrame.Angles(0, rad(mo[1] :: number), 0)
-				* CFrame.new(0, mo[3] :: number, -(mo[2] :: number)),
-			color = C.EmberPale, material = Enum.Material.Neon,
-			shape = Enum.PartType.Ball, smooth = true, parent = m })
-	end
-
-	--== HUNG SEEDS: two, uneven, breaking the arc outline ==--
-	mk({ name = "HungSeed1", size = Vector3.new(0.19, 0.26, 0.19),
-		cf = at * CFrame.new(-0.74, 4.02, -0.34) * CFrame.Angles(rad(9), 0, rad(-12)),
-		color = C.LotusDeep, parent = m })
-	mk({ name = "HungSeed2", size = Vector3.new(0.15, 0.21, 0.15),
-		cf = at * CFrame.new(0.58, 4.62, 0.42) * CFrame.Angles(rad(-7), 0, rad(10)),
-		color = C.LotusDeep, parent = m })
-
-	--==========================================================================
-	-- THE AURA -- WHAT MAKES IT READ AS MYTHIC BEFORE YOU READ THE WORD
-	--
-	-- Everything here is Attachments and ParticleEmitters, so it costs the part
-	-- budget NOTHING. That matters: the model is already over the band on
-	-- geometry, and this is the one way left to add presence without adding to
-	-- that number.
-	--
-	-- Three emitters, because one at a high rate just looks like smoke. They work
-	-- at different speeds and different heights, and the eye reads the layering
-	-- as "this thing is radiating" rather than "this thing is on fire":
-	--
-	--   Motes   a slow churn filling the cage hollow. NOT a column: the first
-	--           tuning gave these 4 studs/s and 3.2 of upward acceleration and
-	--           they shot eight studs clear of the plant, which read as a smoke
-	--           plume -- a thing on fire, colliding with Kilnhusk's furnace and
-	--           Emberquill's torch. Dragged and barely accelerated, they stay in
-	--           the hollow and the cage looks FULL instead of venting.
-	--   Aura    a slow, wide, near-still haze hanging AROUND and ABOVE the crown.
-	--           Long lifetime and heavy drag, so it hangs rather than rises. This
-	--           is the halo you see from across the plot.
-	--   Sparks  small, bright, quick pinpricks in every direction. Punctuation on
-	--           top of the haze, so the aura glitters instead of sitting flat.
-	--   Crown   a hovering cloud of DISTINCT dots above the cage. The other three
-	--           blur into one glow at any distance, which is the right read for
-	--           a halo but means you never actually count particles. These are
-	--           kept small and slow on purpose: small enough that they never
-	--           merge, slow enough that they hang there and can be counted.
-	--
-	-- All three run LightInfluence = 0 and LightEmission = 1, which is what keeps
-	-- them bright at night and under the biome's dark ambient -- the whole point
-	-- of a rarity tell is that it survives bad lighting.
-	--
-	-- COST: about 220 live particles per plant. That is affordable only because a
-	-- Mythic is a 0.2% roll and a plot will almost never hold two. If it ever
-	-- does need trimming, Aura.Rate is the dial -- it owns roughly half the total
-	-- and it is the cheapest to thin without losing the read.
-	--==========================================================================
-	local light = Instance.new("PointLight")
-	light.Name = "CoreGlow"
-	light.Color = C.Ember
-	-- Wider than it is bright: this should wash the ground around the plant
-	-- rather than blow out the core, which is what the old 2.2 was doing.
-	light.Brightness = 1.45
-	light.Range = 16
-	light.Shadows = false
-	light.Parent = core
-
-	--== MOTES: the rising column ==--
-	local att = Instance.new("Attachment")
-	att.Name = "CoreAttachment"
-	att.Parent = core
-	local em = Instance.new("ParticleEmitter")
-	em.Name = "Motes"
-	em.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, C.LotusCore),
-		ColorSequenceKeypoint.new(0.45, C.EmberPale),
-		ColorSequenceKeypoint.new(1, C.Ember),
-	})
-	-- Grows just after birth, so the column has a waist rather than being a
-	-- uniform stream of identical dots.
-	em.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.10),
-		NumberSequenceKeypoint.new(0.3, 0.40),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	em.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.15),
-		NumberSequenceKeypoint.new(0.7, 0.35),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	em.Lifetime = NumberRange.new(1.0, 1.7)
-	em.Rate = 38
-	-- Slow and heavily dragged, so they hang in the cage instead of venting.
-	em.Speed = NumberRange.new(0.4, 1.1)
-	em.Drag = 2.4
-	em.SpreadAngle = Vector2.new(55, 55)
-	em.Acceleration = Vector3.new(0, 0.7, 0)
-	em.EmissionDirection = Enum.NormalId.Top
-	em.Rotation = NumberRange.new(0, 360)
-	em.RotSpeed = NumberRange.new(-40, 40)
-	em.LightEmission = 1
-	em.LightInfluence = 0
-	em.Parent = att
-
-	--== AURA: the slow haze that hangs above the crown ==--
-	-- The core is an unrotated ball, so an offset on ITS attachment is a clean
-	-- world-space offset -- putting this above the cage knot without inheriting
-	-- the knot's tilt.
-	local auraAtt = Instance.new("Attachment")
-	auraAtt.Name = "AuraAttachment"
-	auraAtt.Position = Vector3.new(0, 0.95, 0)
-	auraAtt.Parent = core
-	local aura = Instance.new("ParticleEmitter")
-	aura.Name = "Aura"
-	aura.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, C.EmberPale),
-		ColorSequenceKeypoint.new(0.5, C.Ember),
-		ColorSequenceKeypoint.new(1, C.LotusDeep),
-	})
-	aura.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
-		NumberSequenceKeypoint.new(0.25, 1.05),
-		NumberSequenceKeypoint.new(1, 0.20),
-	})
-	-- Fades in AND out, so nothing ever pops into or out of existence.
-	aura.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.2, 0.30),
-		NumberSequenceKeypoint.new(0.8, 0.44),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	aura.Lifetime = NumberRange.new(2.0, 3.2)
-	aura.Rate = 34
-	-- Dragged to a near stop with NO upward pull at all. Any acceleration here
-	-- and the haze drifts off the plant and becomes a second, weaker plume; at
-	-- zero it sits on the crown like a worn halo, which is the whole point.
-	aura.Speed = NumberRange.new(0.15, 0.55)
-	aura.Drag = 3.4
-	aura.Acceleration = Vector3.new(0, 0, 0)
-	aura.SpreadAngle = Vector2.new(180, 180)
-	aura.Rotation = NumberRange.new(0, 360)
-	aura.RotSpeed = NumberRange.new(-22, 22)
-	aura.LightEmission = 1
-	aura.LightInfluence = 0
-	-- Pushed behind the geometry so the cage ribs stay crisp through the haze.
-	aura.ZOffset = -0.6
-	aura.Parent = auraAtt
-
-	--== SPARKS: the glitter on top ==--
-	local sparkAtt = Instance.new("Attachment")
-	sparkAtt.Name = "SparkAttachment"
-	sparkAtt.Position = Vector3.new(0, 0.85, 0)
-	sparkAtt.Parent = core
-	local sparks = Instance.new("ParticleEmitter")
-	sparks.Name = "Sparks"
-	sparks.Color = ColorSequence.new(C.Glint, C.EmberPale)
-	sparks.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.14),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	sparks.Transparency = NumberSequence.new(0.1, 1)
-	sparks.Lifetime = NumberRange.new(0.7, 1.3)
-	sparks.Rate = 16
-	-- Fast off the mark but dragged hard, so each spark darts a short way and
-	-- stops -- a shell of glitter around the crown rather than a fountain.
-	sparks.Speed = NumberRange.new(1.4, 2.8)
-	sparks.Drag = 3.6
-	sparks.SpreadAngle = Vector2.new(180, 180)
-	sparks.Acceleration = Vector3.new(0, 0.25, 0)
-	sparks.LightEmission = 1
-	sparks.LightInfluence = 0
-	sparks.Parent = sparkAtt
-
-	--== CROWN: the cloud of separate motes hanging over the plant ==--
-	-- Sits just clear of the tallest geometry (the model is 5.77 tall and the
-	-- core is at 4.10, so +1.9 puts this at about 6.0) -- above the plant, which
-	-- is the point, but close enough that it still reads as belonging to it.
-	local crownAtt = Instance.new("Attachment")
-	crownAtt.Name = "CrownAttachment"
-	crownAtt.Position = Vector3.new(0, 1.90, 0)
-	crownAtt.Parent = core
-	local crown = Instance.new("ParticleEmitter")
-	crown.Name = "Crown"
-	crown.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, C.LotusCore),
-		ColorSequenceKeypoint.new(0.6, C.EmberPale),
-		ColorSequenceKeypoint.new(1, C.Ember),
-	})
-	-- Deliberately SMALL and near-constant. A mote that swells is a mote that
-	-- merges with its neighbours, and then this is just more haze.
-	crown.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.04),
-		NumberSequenceKeypoint.new(0.15, 0.19),
-		NumberSequenceKeypoint.new(0.85, 0.17),
-		NumberSequenceKeypoint.new(1, 0),
-	})
-	crown.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(0.15, 0.08),
-		NumberSequenceKeypoint.new(0.85, 0.12),
-		NumberSequenceKeypoint.new(1, 1),
-	})
-	crown.Lifetime = NumberRange.new(2.2, 3.6)
-	crown.Rate = 24
-	crown.Speed = NumberRange.new(0.35, 1.10)
-	-- Enough drag to stop them dispersing, a whisper of lift so the cloud
-	-- breathes upward instead of sitting dead still.
-	crown.Drag = 2.2
-	crown.Acceleration = Vector3.new(0, 0.30, 0)
-	crown.SpreadAngle = Vector2.new(180, 180)
-	crown.Rotation = NumberRange.new(0, 360)
-	crown.RotSpeed = NumberRange.new(-30, 30)
-	crown.LightEmission = 1
-	crown.LightInfluence = 0
-	crown.Parent = crownAtt
 	return m
 end
 
@@ -1433,7 +1730,7 @@ EmberrootForms.AuthoredHeight = {
 	cinderpaw = 3.474,
 	slagbloom = 3.736,
 	kilnhusk = 5.196,
-	pyrelotus = 5.775,
+	pyrelotus = 6.274,
 	emberquill = 5.994,
 } :: { [string]: number }
 

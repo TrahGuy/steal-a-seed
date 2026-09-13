@@ -1,5 +1,134 @@
 # Steal a Seed — Session Handoff
 
+## Pyrelotus is rebuilt as the Obsidian Fire-Drake Lotus — 2026-09-13 (CLAUDE)
+
+### What
+
+Pyrelotus was a 43-part stem carrying a three-rib birdcage around a bead, with
+three particle emitters and a halo. It is now a 63-part low-slung quadruped
+obsidian drake with a volcanic lotus caldera blossoming off its spine, built from
+concept 1, `art/creatures/pyrelotus/reference/pyrelotus-concept1-fire-drake.jpg`.
+
+  * **`tools/art/pyrelotus_drake.luau`** is where the geometry is reasoned about
+    -- the same `{ specs, build, effects, measure, serialize }` contract as
+    `gloomlotus_titan.luau` and `suncrown_golem.luau`.
+  * **`EmberrootForms.luau` now holds Pyrelotus as DATA**, a `PYRELOTUS` PartSpec
+    table plus a nine-line builder that replays it through the file's own `mk`.
+    It is the only one of the five that is a table rather than a walked
+    construction, and the reason is that it stopped being a plant: the other four
+    are a stem, a root knot and a face, where this one is a drake with four legs
+    a walker has to find by name.
+  * **`AuthoredHeight.pyrelotus` is 5.775 -> 6.274**, which is the measured
+    silhouette of the new mockup. That number is not a dial: `hs` is
+    `FrameHeight / AuthoredHeight`, so getting it wrong renders the species at
+    the wrong size against its four siblings.
+  * **The birdcage builder is gone** -- 323 lines -- and with it the three table
+    entries only it reached: `PALETTES.pyrelotus`, `ROOTS.pyrelotus` and its face
+    tuning. The new drake has feet, not ground roots, so none of it had a reader
+    left.
+  * **Three emitters became one.** The old aura owned roughly half this species'
+    whole particle budget. `PyreGlow` (2.6 bright, range 16) and `PyreMotes`
+    (sparkles_main, rate 16) both hang on `MoltenCore`.
+
+### The 63 parts
+
+| Group | n | Parts |
+|---|---|---|
+| Legs | 20 | `Front/Rear` x `Left/Right` x (`_Thigh`, `_Shin`, `_Foot`, `_ToeClaw1..2`) |
+| Carapace | 6 | `TorsoLower/Mid/Upper`, `Belly`, `MantleL/R` |
+| Fissures | 6 | `MagmaSeam1..6`, neon, each proud of the plate it splits |
+| Caldera | 14 | `CalderaRimL/R`, `OuterPetal1..8` (obsidian slabs), `InnerPetal1..4` (flame) |
+| Core | 2 | `MoltenCore` (neon ball), `FlameCollar` |
+| Head | 9 | `HeadBase`, `BrowPlate`, `Snout`, `JawLower`, `MawGlow`, `Left/RightHorn`, `Eye`, `Pupil` |
+| Tail | 6 | `Tail1..3`, `TailSpike1..2`, `TailFlame` |
+
+12 of the 63 are Neon and all 12 are smooth-surfaced; the other 51 are studded
+Plastic.
+
+### Measured
+
+Built through `CreatureModel.Build` in Play, not from the tool:
+
+| Tier | Frame | Built | Base Y | W x D | Glow range |
+|---|---|---|---|---|---|
+| 1 Tiny | 7.20 | **7.2001 (100.00%)** | **-0.0001** | 5.35 x 8.63 | 18.4 |
+| 4 Mega | 19.08 | **19.0801 (100.00%)** | **-0.0001** | 14.59 x 23.87 | 48.7 |
+| 7 Colossal | 54.72 | **54.7202 (100.00%)** | **-0.0001** | 43.65 x 72.75 | 120.0 |
+
+64 parts in the built model: the 63 specs plus the shared invisible `Base`.
+Range is `16 * hs` and the emitter's size, speed and acceleration scale with it,
+because `EmberrootForms.Build` applies `hs` to all of that on its way out.
+
+Walking at each tier's own `SeedData.WanderSpeed`, 1150 sampled frames per tier:
+
+| Tier | corr(FL,RR) | corr(FR,RL) | corr(FL,FR) | Worst foot dip |
+|---|---|---|---|---|
+| 1 | **+1.000** | **+1.000** | -1.000 | -0.196 = **-2.68%** of height |
+| 4 | **+1.000** | **+1.000** | -1.000 | -0.435 = **-2.27%** |
+| 7 | **+1.000** | **+1.000** | -1.000 | -1.700 = **-3.10%** |
+| supernovus t4 (untouched baseline) | - | - | - | **-6.70%** |
+
+  * **The diagonal trot is exact.** PlantSway clusters the twenty leg-word parts
+    into four hips by plan position and phases them
+    `pi * ((rank + (x < 0 and 0 or 1)) % 2)`, which puts front-left with
+    rear-right against front-right with rear-left. Measured, the two diagonals
+    move together to 1.000 and the two across-pairs oppose to -1.000.
+  * **Gaze**: with a player standing in front of the Tiny, the pupil travelled
+    0.086 studs in X over 500 frames.
+  * **Foot dip is the shared rig**, not this model: the leg rig swings a whole
+    leg rigidly about one hip with no ankle while the body bobs and rolls, so
+    every leg-walker's feet pass below the plane. The talons are kept short and
+    tucked back under the hip for that reason, and the drake sits at less than
+    half the dip of a species nobody has touched.
+
+### Four departures from the brief
+
+  * **Twenty leg parts, not sixteen.** The brief's own two lines disagree: it
+    budgets 16 for four legs and then describes thigh + shin + footpad + three
+    claws, which is 24. Thigh, shin, pad and TWO talons is 20 and keeps the total
+    at 63, inside the 58-64 band.
+  * **The claws are named `_ToeClaw`, not `Claw`.** "Claw" carries no word in
+    PlantSway's LEG_WORDS, so a part called that is not part of any leg: the rig
+    would swing the leg away and leave its claws standing in the soil. "Toe" is
+    in the vocabulary and the name still says what the part is.
+  * **The eight outer petals are blocks, not tapered wedges.** The concept's
+    obsidian petals are flat angular plates with cut ends; built as wedges they
+    come to points and the flower reads as a crown of thorns, which is what the
+    first two passes of it were. The four flame petals stay wedges -- fire does
+    taper.
+  * **The horns are one part each** rather than the 3-5 wedge chain the
+    sculpting skill asks for, because the brief budgets two parts for the pair.
+    The tail IS a genuine three-segment chain, walked so each segment starts
+    where the last finished.
+
+### One thing to know about its size
+
+This is a quadruped, so its long axis is Z, and depth is the dimension that runs
+away with the tier curve: a Colossal is 8.7x the mockup and girth spreads
+horizontal offsets on top of that. The first build measured **83.78 studs deep**
+at Colossal -- nearly twice the longest thing the game ships and half again its
+own planting cell. The mockup's arc was tucked in rather than the creature
+shrunk, which brought it to **72.75**. It is still the longest creature in the
+game at Colossal; a Mythic is a 0.2% roll, so a plot will almost never hold two,
+but a bed of one beside other Colossals will overlap them.
+
+### Verified
+
+  * `rojo build` clean.
+  * All 18 specs, 0 threw, 0 FAIL tokens -- including **PlantInfoSpec's 350 grown
+    combinations**, which is what proves the other four Emberroot species still
+    build after their shared tables lost three entries, and **StarbloomLimbSpec
+    71/0**.
+  * No part of the model floats: every one of the 63 boxes touches another to
+    within 0.02 studs, checked by rotated-corner AABB.
+  * Play: the three tiers above, spawned on the field, walked, measured and
+    destroyed afterwards. Nothing was written to the owner's save -- the test
+    models were built into a workspace folder and never went through
+    PlantService, and Plot_01 held 0 pyrelotus throughout.
+  * Screenshots: `Pyrelotus_Quarter_v4` and `Pyrelotus_Side_v4` are the Edit
+    preview at scale 1 on a slate slab; `Pyrelotus_InGame_Trot` is all three
+    tiers walking the field under game lighting.
+
 ## Suncrown is rebuilt as the Solar Cactus Golem — 2026-09-13 (CLAUDE)
 
 ### What
