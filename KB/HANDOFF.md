@@ -1,5 +1,66 @@
 # Steal a Seed — Session Handoff
 
+## Clicking a plant actually selects it now — 2026-09-13 (CLAUDE)
+
+Playtesting the click-to-pick change found clicks being silently dropped. Four
+causes in `PlantPickUI.plantUnder` and its input path, all fixed.
+
+  * **The plot fenced its own plants off.** The occlusion raycast excluded only
+    the character, so in third person the ray hit the bed's own `Rail`,
+    `BedFrame` or `BedWalk` on the way to the plant and the click was thrown away
+    as "behind something". `myPlot()` joins the character in the filter. The rest
+    of the world still occludes -- walk behind a mill and you cannot click
+    through it.
+  * **Selecting and picking up are now two different reaches.** Selection was
+    gated on the prompt's own 26 studs, but a grown plant WANDERS a bed wider
+    than that, so a plant you were plainly looking at did nothing at all -- no
+    outline, no button, no reason given. A click now selects out to
+    `SELECT_RANGE` = 60 and the BUTTON carries the news: inside 26 it offers
+    `[E] PICK UP`, outside it says `TOO FAR` and `press()` refuses. Being wrong
+    about a selection costs nothing, which is the same asymmetry the two-step is
+    built on, and "walk closer" is something a player can act on where silence is
+    not.
+  * **The hitbox is padded by a stud all round.** A bell flower is mostly air and
+    a tapered leaf is a knife edge in plan view; asking for the true bounding box
+    is asking the player to hit a petal.
+  * **A plant in your hands no longer swallows the click.** It used to stand down
+    at InputBegan on the grounds that PlantPlace owns a tap while a plant is
+    held. That is right for a tap on the SOIL and wrong for a tap on a grown
+    plant, and the question needs the landing point to answer -- so the decision
+    moved to the release, after `plantUnder` has run. Nothing under the pointer
+    and a plant in hand still yields to PlantPlace.
+
+`refreshReach()` runs on selection and again every `RANGE_POLL`, so walking into
+reach turns the verb on under the player's feet with no second click, and the
+poll now clears a selection only past `SELECT_RANGE`.
+
+### Measured in Play, one planted Supernovus
+
+| Standing at | Result |
+|---|---|
+| **40 studs** (past pickup range) | selected, outlined, button reads **`TOO FAR`** |
+| walked in to **11** | button reads **`[E] PICK UP`**, no second click |
+| walked back out to **44** | **`TOO FAR`** again |
+| **75** (past select range) | selection cleared |
+| `TOO FAR` + two E presses | nothing taken, selection intact, 2 plants still in the bed |
+| clear ground | deselects cleanly |
+
+### A trap for whoever tests this next
+
+`InputObject.Position` is BELOW-INSET space and pairs with `ScreenPointToRay`;
+`GetMouseLocation()` is window space and pairs with `ViewportPointToRay`. The
+inset measured 58 pixels here. Both pairs are correct and the shipped code uses
+the first -- but a test harness that computes its target pixel with
+`WorldToViewportPoint` and then injects a click at that coordinate is 58 pixels
+low. That reads exactly like "clicking the plant does nothing", and it cost an
+hour before the two conventions were separated: at 7 studs the plant fills the
+screen and the error is invisible, at 40 it misses entirely. Aim with
+`WorldToScreenPoint`.
+
+### Verified
+
+  * `rojo build` clean; all 18 specs, 0 threw, 0 FAIL.
+
 ## Click/tap-to-pick everywhere, and Bellchime gets a bell — 2026-09-13 (CLAUDE)
 
 Two changes, unrelated except that the second was found while testing the first.

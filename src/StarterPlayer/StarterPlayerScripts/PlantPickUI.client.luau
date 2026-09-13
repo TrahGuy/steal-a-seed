@@ -302,6 +302,55 @@ local function inRange(prompt: ProximityPrompt): boolean
 	return (handle.Position - root.Position).Magnitude <= prompt.MaxActivationDistance
 end
 
+--==============================================================================
+-- AND STILL CLOSE ENOUGH TO POINT AT, WHICH IS A DIFFERENT QUESTION
+--
+-- SELECTING AND PICKING UP ARE NOT THE SAME REACH. Pickup is the prompt's own 26
+-- studs and the server honours it. Selection was using that same number and it
+-- made the feature look broken: a grown plant WANDERS its bed, the bed is bigger
+-- than 26 studs across, and a plant you are plainly looking at and clicking on
+-- simply did nothing -- no outline, no button, no reason given. A click that
+-- lands on a plant has to answer.
+--
+-- So a click selects out to SELECT_RANGE and the BUTTON carries the bad news:
+-- inside 26 it offers the verb, outside it says TOO FAR and refuses. Being wrong
+-- about a selection costs nothing -- that asymmetry is the whole reason the
+-- two-step exists -- and "walk closer" is a thing a player can act on where
+-- silence is not.
+--==============================================================================
+local SELECT_RANGE = 60
+
+local function inSelectRange(prompt: ProximityPrompt): boolean
+	local handle = prompt.Parent
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not (handle and handle:IsA("BasePart") and root and root:IsA("BasePart")) then
+		return false
+	end
+	return (handle.Position - root.Position).Magnitude <= SELECT_RANGE
+end
+
+--==============================================================================
+-- WHAT THE BUTTON SAYS RIGHT NOW
+--
+-- Called on selection and again every RANGE_POLL, so walking into reach turns
+-- the verb on under the player's feet without them having to re-click.
+--==============================================================================
+local READY_WORD = if KEYBOARD then "[E] PICK UP" else "PICK UP"
+local TOO_FAR_WORD = "TOO FAR"
+local MUTED = Color3.fromRGB(198, 190, 172)
+
+local function refreshReach(): boolean
+	local current = selected
+	if not current then
+		return false
+	end
+	local close = inRange(current.prompt)
+	label.Text = if close then READY_WORD else TOO_FAR_WORD
+	label.TextColor3 = if close then CREAM else MUTED
+	return close
+end
+
 local function myPlot(): Model?
 	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Plot)) do
 		if instance:IsA("Model")
@@ -450,11 +499,26 @@ local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 	local ray = camera:ScreenPointToRay(at.X, at.Y)
 	local origin, dir = ray.Origin, ray.Direction.Unit
 
+	--==========================================================================
+	-- THE PLOT IS NOT AN OCCLUDER OF ITS OWN PLANTS
+	--
+	-- This filtered out the character and nothing else, so in third person the
+	-- ray hit the bed's own rail, frame or walkway on the way to the plant and
+	-- every one of those clicks was thrown away as "behind something". The fence
+	-- round your garden is not a thing your garden hides behind. The rest of the
+	-- world still occludes: walk behind a mill and you cannot click through it.
+	--==========================================================================
+	local ignore = {}
+	if player.Character then
+		table.insert(ignore, player.Character)
+	end
+	local mine = myPlot()
+	if mine then
+		table.insert(ignore, mine)
+	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = if player.Character
-		then { player.Character }
-		else {}
+	params.FilterDescendantsInstances = ignore
 	local solid = Workspace:Raycast(origin, dir * 600, params)
 	local reach = if solid then (solid.Position - origin).Magnitude else 600
 
@@ -468,10 +532,13 @@ local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 		-- later when the range watcher catches up -- which reads as the tap
 		-- being flaky rather than as the plant being too far away. Eligibility
 		-- is asked once, here, and answered the same way the watcher answers it.
-		if prompt and inRange(prompt) then
+		if prompt and inSelectRange(prompt) then
 			local model = child :: Model
 			local boxCF, boxSize = model:GetBoundingBox()
-			local t = rayHitsBox(origin, dir, boxCF, boxSize)
+			-- A stud of slack all round. A bell flower is mostly air and a
+			-- tapered leaf is a knife edge in plan view; asking a player to hit
+			-- the true box is asking them to hit a petal.
+			local t = rayHitsBox(origin, dir, boxCF, boxSize + Vector3.new(2, 2, 2))
 			if t and t <= reach and t < bestAt then
 				bestAt = t
 				bestModel = model
@@ -520,6 +587,7 @@ local function select(model: Model, prompt: ProximityPrompt)
 	made.Parent = model
 
 	caption.Text = string.upper(shown)
+	refreshReach()
 	layer.Enabled = true
 	SoundKit.play("CardClick")
 
@@ -556,10 +624,15 @@ local function select(model: Model, prompt: ProximityPrompt)
 			if mine ~= generation then
 				return
 			end
-			if not (prompt.Parent and prompt.Enabled and inRange(prompt)) then
+			if not (prompt.Parent and prompt.Enabled and inSelectRange(prompt)) then
 				clearSelection()
 				return
 			end
+			-- Still selected, so say whether it can be taken from here. This is
+			-- the only thing that turns TOO FAR back into the verb, and it has
+			-- to run on the poll rather than on a click: the player walks into
+			-- reach, the plant does not.
+			refreshReach()
 		end
 	end)
 end
@@ -616,6 +689,18 @@ end
 local function press()
 	local current = selected
 	if not current then
+		return
+	end
+	--==========================================================================
+	-- AND IT HAS TO BE IN REACH, NOT MERELY SELECTED
+	--
+	-- The selection is deliberately the more generous of the two ranges, so this
+	-- is where the pickup range is actually enforced on the client. The server
+	-- enforces it again -- PickUpById re-tests everything -- but a button that
+	-- fires a request it knows will be refused is a button that looks broken.
+	--==========================================================================
+	if not refreshReach() then
+		SoundKit.play("CardClick")
 		return
 	end
 	local now = os.clock()
@@ -687,9 +772,19 @@ do
 			pending = nil
 			return
 		end
-		if processed or holdingAPlant() then
+		if processed then
 			return
 		end
+		--======================================================================
+		-- HOLDING A PLANT IS NO LONGER A REASON TO IGNORE THE PRESS
+		--
+		-- It used to stand down here, at BEGIN, on the grounds that PlantPlace
+		-- owns a tap while a plant is in hand. That is right for a tap on the
+		-- SOIL and wrong for a tap on a grown plant, which can only mean one
+		-- thing. The question needs the landing point to answer, and the landing
+		-- point is not known until the finger lifts -- so the press is recorded
+		-- either way and the decision moves to the release below.
+		--======================================================================
 		pending = {
 			input = input,
 			at = Vector2.new(input.Position.X, input.Position.Y),
@@ -710,9 +805,8 @@ do
 		if os.clock() - waiting.began > TAP_SECONDS then
 			return
 		end
-		-- Asked again at release: a plant Tool equipped mid-gesture, or a pod
-		-- picked up, and this tap is no longer about selecting anything.
-		if holdingAPlant() or player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
+		-- A pod in both arms is not a gesture about the bed at all.
+		if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
 			clearSelection()
 			return
 		end
@@ -725,6 +819,16 @@ do
 		-- thumb happened to stop.
 		--======================================================================
 		local model, prompt = plantUnder(waiting.at)
+		--======================================================================
+		-- AND HERE IS WHERE PlantPlace GETS ITS TAP BACK
+		--
+		-- Nothing under the pointer and a plant in hand: the player is putting
+		-- that plant down and this file has no business in it. A grown plant
+		-- under the pointer means the opposite, whatever is in their hands.
+		--======================================================================
+		if not model and holdingAPlant() then
+			return
+		end
 		if model and prompt then
 			local current = selected
 			if current and current.model == model then
@@ -827,7 +931,7 @@ ProximityPromptService.PromptHidden:Connect(function(prompt)
 	if not (current and current.prompt == prompt) then
 		return
 	end
-	if not (prompt.Parent and prompt.Enabled and inRange(prompt)) then
+	if not (prompt.Parent and prompt.Enabled and inSelectRange(prompt)) then
 		clearSelection()
 	end
 end)
