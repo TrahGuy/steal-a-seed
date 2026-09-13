@@ -1,5 +1,124 @@
 # Steal a Seed — Session Handoff
 
+## Click/tap-to-pick everywhere, and Bellchime gets a bell — 2026-09-13 (CLAUDE)
+
+Two changes, unrelated except that the second was found while testing the first.
+
+### 1. The floating pickup prompt is gone on every device
+
+`PlantPickUI` already did select-then-press, gated to touch; `PromptUI` already
+skipped drawing `PickupPrompt`, gated to the same flag. Both gates are removed,
+so the two-step is now the only way a plant is lifted anywhere:
+
+  1. tap or click the plant -> SELECTED and outlined. Nothing is taken.
+  2. press PICK UP, or E -> now it is taken.
+
+  * **One gesture reader, two pointers.** `Touch` and `MouseButton1` run the
+    identical slop-and-duration test on the identical path, decided on release,
+    because holding the left button and dragging is how the camera turns -- a
+    mouse press that has just landed is no more decided than a touch is.
+  * **E is guarded by `selected`, not by range.** An unselected plant has no
+    affordance on screen, so E must do nothing; a selected one is already known
+    to be in range because the watcher clears it the moment it is not. The button
+    reads `[E] PICK UP` when a keyboard is present and `PICK UP` when not.
+  * **The `TouchEnabled` watcher is gone.** It used to clear the selection when
+    the layout stopped being touch; there is no other affordance to fall back to
+    now, so a tablet docked to a keyboard keeps its selection.
+
+#### THE KEY THAT IS NOT THERE, which is the whole of the risk
+
+`Style = Custom` stops the engine DRAWING a prompt. It does not stop the engine
+LISTENING, and it listens on three separate routes: `KeyboardKeyCode`,
+`GamepadKeyCode`, and `ClickablePrompt`. With the billboard gone, every one of
+those is a destructive action with nothing on screen to say so -- strictly worse
+than the floating prompt this replaces. So all three are taken away locally, on
+`PromptShown`, which is the only moment they matter (the engine will not accept
+input for a prompt it has not shown).
+
+`Enabled` is deliberately NOT touched: it is what `promptFor` filters on, what
+the selection watches, and what the server owns. The prompt keeps its range, its
+enabled state and its server backing, and stops being something an input can
+reach.
+
+**Taking only the two key codes looked finished and was not**, and this is worth
+recording because the measurement is unambiguous: with `ClickablePrompt` still
+true and `HoldDuration` 0, the very click meant to SELECT a plant picked it up
+instead -- no outline, no button, and the engine had already marked the click
+handled so nothing downstream even ran. It emptied a bed in Play before the cause
+was found. See "What this cost" below.
+
+### 2. Bellchime is rebuilt as the porcelain dusk-chime
+
+**It had no flower.** Bellchime carries `Form = "bell"`, and CreatureModel's head
+chain has no `"bell"` arm -- cube, orb, teardrop, mushroom, husk, pad, whorl,
+cup, and then it ends. So the Epic of the starter biome fell straight through and
+shipped as **26 parts with no bloom at all**: a bare stem, seven soil clods, four
+leaves and a face, standing **4.78 studs against a 6.20 frame**. Not the 43-part
+model the brief remembered.
+
+It is now 46 parts, authored in `tools/art/bellchime_bloom.luau` against
+`art/creatures/bellchime/reference/bellchime-concept-porcelain-chime.jpg` and
+kept in a new `GreenhollowForms.luau`, asked by species id so the biome's other
+four -- which have head branches that match -- still come off the shared builder.
+
+| Group | n | Parts |
+|---|---|---|
+| Stem | 8 | `StemBase`, `StemMid`, `StemArch1..3`, `Collar`, `Sprout1..2` |
+| Calyx | 3 | `Sepal1..3` |
+| Corolla | 13 | `BellCap`, `BellPanel1..6`, `RimPetal1..6` |
+| Clapper | 3 | `BellThroat`, `PearlStem`, `Pearl` |
+| Face | 6 | `FaceOrb`, `Left/RightEye`, `Left/RightPupil`, `Smile` |
+| Leaves | 5 | `Leaf` x2, `LeafLow1..3` |
+| Chime buds | 8 | `BudStalk/Body/Tip/Bell` x2 |
+
+Two names are load-bearing: the two sweeping leaves are `Leaf`, the only name
+PlantSway swings as an arm, and `Left/RightEye` + `Left/RightPupil` are what its
+gaze rig pairs by prefix. **Nothing carries a LEG_WORD**, which is correct -- this
+one sways, it does not walk.
+
+### Measured, through CreatureModel in Play
+
+| Tier | Frame | Built | Base Y | W x D | Glow range | Leaf swing | Opposition |
+|---|---|---|---|---|---|---|---|
+| 1 | 6.20 | **6.2000 (100.00%)** | **+0.0000** | 3.44 x 4.83 | 12.0 | 19.0 deg | **-1.000** |
+| 4 | 16.43 | **16.4301 (100.00%)** | **+0.0000** | 9.35 x 13.30 | 31.7 | 18.9 deg | **-1.000** |
+| 7 | 47.12 | **47.1202 (100.00%)** | **+0.0000** | 27.79 x 40.30 | 90.9 | 18.9 deg | **-1.000** |
+
+47 parts built: the 46 specs plus the shared invisible `Base`. Both neon parts
+smooth. Gaze measured with a player standing in front of the Tiny: the left pupil
+travelled 0.046 studs in X over 400 frames.
+
+  * **The motes fall.** Every other aura in the game rises -- embers, sparks,
+    sun. This one drifts DOWN out of the bell at `Acceleration.Y` -0.55 / -1.45 /
+    -4.17 by tier, which is the one cue that says the light is hanging above you.
+  * **The Dustbowl contract, not the Emberroot one.** Greenhollow is replayed
+    through `replayPart`, which scales geometry only, so `retrofitChimeAura`
+    writes `Range = 12 * hs`. Emberroot is the reverse -- its `Build` grows the
+    light afterwards, so Pyrelotus writes `Range = 16` bare. Getting these the
+    wrong way round gives a Colossal either no light or hs squared of it.
+  * No part floats: every one of the 46 boxes touches another within 0.02 studs.
+
+### What this cost, and what to do about it
+
+The `ClickablePrompt` defect emptied Plot_01 during testing. **Nothing is lost --
+every plant went to the bag, which is where a pickup is supposed to put it** --
+but the bed is empty and the bag is full (10/10 shown in the hotbar, 19 plant
+tools in total). They need replanting by hand; the original layout was not
+recorded, so it cannot be restored automatically.
+
+### Verified
+
+  * `rojo build` clean.
+  * All 18 specs, 0 threw, 0 FAIL -- including **PlantInfoSpec's 350 grown
+    combinations**, which is what proves the other four Greenhollow species still
+    build, and **StarbloomLimbSpec 71/0**.
+  * Play, desktop mouse: no pickup billboard anywhere in PlayerGui or workspace;
+    a click selects with outline, button and plant name and takes nothing; E with
+    a selection picks up; the prompt reads `kbd=None pad=None clickable=false
+    enabled=true` once shown; a click on the HUD is correctly ignored.
+  * Screenshots: `Bellchime_Quarter_v3` is the Edit preview at scale 1 on grass;
+    `Bellchime_InGame` is the Mega under game lighting with the pearl lit.
+
 ## Pyrelotus is rebuilt as the Obsidian Fire-Drake Lotus — 2026-09-13 (CLAUDE)
 
 ### What

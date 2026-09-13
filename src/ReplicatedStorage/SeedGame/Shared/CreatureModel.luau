@@ -49,6 +49,7 @@ local TanglemireForms = require(Shared:WaitForChild("TanglemireForms"))
 local EmberrootForms = require(Shared:WaitForChild("EmberrootForms"))
 local StarbloomForms = require(Shared:WaitForChild("StarbloomForms"))
 local DustbowlForms = require(Shared:WaitForChild("DustbowlForms"))
+local GreenhollowForms = require(Shared:WaitForChild("GreenhollowForms"))
 
 local CreatureModel = {}
 
@@ -519,6 +520,65 @@ local function retrofitSolarAura(model: Model, hs: number)
 	motes.SpreadAngle = Vector2.new(45, 45)
 	motes.Rotation = NumberRange.new(0, 360)
 	motes.RotSpeed = NumberRange.new(-50, 50)
+	motes.Parent = att
+end
+
+--==============================================================================
+-- BELLCHIME'S CHIME
+--
+-- One light and one emitter on the pearl, and the motes FALL. Every other aura
+-- in the game rises -- embers off a furnace, sparks off a wisp, sun off a core --
+-- and this one drifts down out of the bell, which is the one cue that says the
+-- light is hanging above you rather than burning in front of you.
+--
+-- Soft numbers throughout. This is the Epic of the STARTER biome: it has to read
+-- as special beside four commons without out-glowing a Mythic three biomes
+-- along.
+--==============================================================================
+local function retrofitChimeAura(model: Model, hs: number)
+	local pearl = model:FindFirstChild("Pearl")
+	if not (pearl and pearl:IsA("BasePart")) then
+		-- No pearl: this species is not the one this is for.
+		return
+	end
+
+	local glow = Instance.new("PointLight")
+	glow.Name = "ChimeGlow"
+	glow.Color = Color3.fromRGB(255, 220, 164)
+	glow.Brightness = 1.6
+	glow.Range = 12 * hs
+	glow.Shadows = false
+	glow.Parent = pearl
+
+	local att = Instance.new("Attachment")
+	att.Name = "ChimeAttachment"
+	att.Parent = pearl
+
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "ChimeMotes"
+	motes.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	motes.Color = ColorSequence.new(Color3.fromRGB(255, 236, 190), Color3.fromRGB(240, 150, 168))
+	motes.LightEmission = 1
+	motes.LightInfluence = 0
+	motes.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.05 * hs),
+		NumberSequenceKeypoint.new(0.35, 0.20 * hs),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	motes.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.35),
+		NumberSequenceKeypoint.new(0.5, 0.5),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	motes.Lifetime = NumberRange.new(1.8, 3.2)
+	motes.Rate = 10
+	motes.Speed = NumberRange.new(0.15 * hs, 0.5 * hs)
+	motes.Drag = 2.2
+	motes.Acceleration = Vector3.new(0, -0.55 * hs, 0)
+	motes.EmissionDirection = Enum.NormalId.Bottom
+	motes.SpreadAngle = Vector2.new(38, 38)
+	motes.Rotation = NumberRange.new(0, 360)
+	motes.RotSpeed = NumberRange.new(-30, 30)
 	motes.Parent = att
 end
 
@@ -1235,6 +1295,26 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 	-- refused. The day the other four are rebuilt this can become a biome gate
 	-- like its neighbours.
 	--==========================================================================
+	--==========================================================================
+	-- GREENHOLLOW ANSWERS THE SAME WAY, AND FOR A SHARPER REASON
+	--
+	-- Bellchime carried Form = "bell" and the head chain below has no "bell" arm,
+	-- so it fell through the whole thing and shipped with no flower: a stem, seven
+	-- clods, four leaves and a face. It answers here now, before any of that.
+	--==========================================================================
+	local greenSpecs = GreenhollowForms.Plants[sp.Id]
+	if greenSpecs then
+		local hs = H / GreenhollowForms.PreviewHeight[sp.Id]
+		local gs = girthSpread(G)
+		for _, spec in ipairs(greenSpecs) do
+			replayPart(spec, cf, hs, gs, spec.color or sp.Body, model)
+		end
+		-- No addFace: this one has its own, hung under the bell where the concept
+		-- puts it, with the eye names the gaze rig pairs by prefix.
+		retrofitChimeAura(model, hs)
+		return finish()
+	end
+
 	local dustSpecs = DustbowlForms.Plants[sp.Id]
 	if dustSpecs then
 		local hs = H / DustbowlForms.PreviewHeight[sp.Id]
