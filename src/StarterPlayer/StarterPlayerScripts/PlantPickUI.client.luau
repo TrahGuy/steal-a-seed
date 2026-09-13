@@ -1,6 +1,6 @@
 --!strict
 --==============================================================================
--- PICKING YOUR OWN PLANT BACK UP, ON A TOUCHSCREEN
+-- PICKING YOUR OWN PLANT BACK UP, ON EVERY DEVICE
 --
 -- WHY THIS EXISTS AT ALL, because the obvious answer was tried and shipped and
 -- the owner found it on a real phone.
@@ -32,8 +32,17 @@
 -- lets step 1 be a guess about a fingertip at all. Step 2 is a real button in a
 -- real ScreenGui with its own rectangle, so being wrong about it is impossible.
 --
--- DESKTOP IS UNTOUCHED. It keeps the floating prompt and E, because a mouse
--- cursor is not ambiguous and there was never a problem there.
+-- IT IS EVERY DEVICE NOW. Desktop kept the floating prompt for a while on the
+-- grounds that a mouse cursor is not ambiguous, and that is true about WHERE the
+-- cursor points -- but not about whether the player meant to spend the plant. A
+-- left-drag is also how the camera turns, so the same gesture collision exists
+-- with a mouse; and E is the key every other prompt in the game answers to, so
+-- walking past a bed with a finger resting on it lifted plants nobody chose.
+--
+-- The two steps are the same two on all three input methods, which is the point:
+--
+--   1. tap, or click, the plant   -> SELECTED and outlined. Nothing is taken.
+--   2. press PICK UP, or E        -> now it is taken.
 --
 --==============================================================================
 -- WHAT THIS DOES NOT DO
@@ -73,20 +82,20 @@ local BLACK = Color3.fromRGB(0, 0, 0)
 local LIME = Color3.fromRGB(150, 220, 96)
 
 --==============================================================================
--- TOUCH, AND THE SAME WORD PromptUI USES
+-- ONE NAME, AND NOBODY ELSE DRAWS IT
 --
--- PromptUI stops drawing the pickup panel when `UserInputService.TouchEnabled`,
--- and this starts working on exactly the same condition, so the two are
--- complementary by construction: there is no device where both draw an
--- affordance and none where neither does. Deriving "mobile" twice from two
--- different rules is how you get a gap.
+-- PromptUI never draws the pickup panel now, on any device, and this file always
+-- does -- so the two are complementary by construction with no condition to keep
+-- in step at all. Both sides key off the same string, PickupPrompt, which is the
+-- name PlantService gives the one prompt this is about. There is no device where
+-- both draw an affordance and none where neither does.
 --
 -- The hotbar's own 10-or-5 decision is a DIFFERENT question -- it is about how
 -- much width a strip needs -- and is deliberately not reused here. A desktop
 -- with a touchscreen gets ten slots and this button, which is correct: it can
 -- touch, so it needs a touch-safe way to pick a plant, and E still works.
 --==============================================================================
-local TOUCH = UserInputService.TouchEnabled
+local KEYBOARD = UserInputService.KeyboardEnabled
 local PICKUP_PROMPT = "PickupPrompt"
 
 --==============================================================================
@@ -200,7 +209,9 @@ local label = UIKit.outlined(button, "Word", 15, CREAM, 2)
 label.AnchorPoint = Vector2.new(0.5, 0)
 label.Position = UDim2.new(0.5, 0, 0, 5)
 label.Size = UDim2.new(1, -12, 0, 17)
-label.Text = "PICK UP"
+-- The key is named on the button rather than on a billboard, which is the only
+-- place it is ever true: E does nothing until something is selected.
+label.Text = if KEYBOARD then "[E] PICK UP" else "PICK UP"
 label.ZIndex = 8
 
 -- The plant's own name under the verb, so a player with two plants in reach can
@@ -640,6 +651,11 @@ button.Activated:Connect(press)
 -- swing -- so nothing is decided until the finger lifts and the question can be
 -- answered honestly.
 --
+-- A LEFT MOUSE BUTTON IS THE SAME QUESTION. Holding it and dragging is how the
+-- camera turns, so a press that has just landed is no more decided than a touch
+-- is, and it runs the identical slop-and-duration test on the identical path.
+-- One gesture reader, two kinds of pointer.
+--
 -- `processed` at BEGIN is what keeps the thumbstick, the jump button, the
 -- hotbar, the rail and every open panel out of this: the engine has already
 -- given that touch to a GUI, and a touch spoken for is not aimed at the world.
@@ -657,9 +673,13 @@ type Pending = {
 
 local pending: Pending? = nil
 
-if TOUCH then
+local function isPointer(kind: Enum.UserInputType): boolean
+	return kind == Enum.UserInputType.Touch or kind == Enum.UserInputType.MouseButton1
+end
+
+do
 	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if input.UserInputType ~= Enum.UserInputType.Touch then
+		if not isPointer(input.UserInputType) then
 			return
 		end
 		if pending then
@@ -723,6 +743,60 @@ if TOUCH then
 end
 
 --==============================================================================
+-- E, WHICH ONLY MEANS ANYTHING ONCE SOMETHING IS SELECTED
+--
+-- The same second step as the button, on the key the button names. Guarded by
+-- `selected` rather than by range: an unselected plant has no affordance on
+-- screen, so E must do nothing at all -- and a selected one is already known to
+-- be in range, because the watcher clears it the moment it is not.
+--==============================================================================
+UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+	if processed or input.KeyCode ~= Enum.KeyCode.E then
+		return
+	end
+	if selected then
+		press()
+	end
+end)
+
+--==============================================================================
+-- THE KEY THAT IS NOT THERE
+--
+-- The prompt is Style = Custom and nobody draws it any more, but CUSTOM ONLY
+-- STOPS THE DRAWING. The engine still listens, on three separate routes: a
+-- KeyboardKeyCode fires on that key, a GamepadKeyCode on that button, and
+-- ClickablePrompt on a plain mouse click anywhere on the prompt. With the
+-- billboard gone that is the worst thing in the file -- a destructive action
+-- with nothing on screen to say so, which is strictly worse than the floating
+-- prompt this replaced.
+--
+-- ALL THREE, AND THE CLICK IS THE ONE THAT BITES. Taking the two key codes away
+-- and leaving ClickablePrompt looks finished and is not: the prompt has
+-- HoldDuration 0, so the very click meant to SELECT the plant instead picked it
+-- up on the spot, with no outline and no button in between. Measured in Play --
+-- it took two plants out of the bed before the cause was found, and the engine
+-- had already marked the click handled, so nothing downstream even ran.
+--
+-- So the keys are taken away LOCALLY, on the client that would have pressed
+-- them. `Enabled` is deliberately not touched: it is what `promptFor` filters
+-- on, what the selection watches, and what the server owns -- switching it off
+-- here would clear every selection the instant it was made. The prompt keeps
+-- its range, its enabled state and its server backing, and simply stops being
+-- something a keypress can reach.
+--
+-- Done on PromptShown because that is the only moment it matters: the engine
+-- will not accept input for a prompt it has not shown, and it shows one exactly
+-- when the player comes into range of it.
+--==============================================================================
+ProximityPromptService.PromptShown:Connect(function(prompt)
+	if prompt.Name == PICKUP_PROMPT then
+		prompt.KeyboardKeyCode = Enum.KeyCode.Unknown
+		prompt.GamepadKeyCode = Enum.KeyCode.Unknown
+		prompt.ClickablePrompt = false
+	end
+end)
+
+--==============================================================================
 -- AND EVERYTHING THAT ENDS A SELECTION WITHOUT A TAP
 --
 -- Connected once, for the session. Each of these takes the player out of the
@@ -739,8 +813,10 @@ end
 --                     no attribute for it
 --   died, respawned   the character and everything hanging off it
 --   placing a plant   a Tool with a SpeciesId reached the hands
---   touch went away   the layout is a desktop now and this affordance is not
---                     wanted; PromptUI's panel comes back in the same breath
+--
+-- What is NOT in that list any more: touch going away. This affordance is the
+-- only one there is now, so a tablet docked to a keyboard keeps its selection
+-- instead of having it taken away by a layout change.
 --==============================================================================
 --==============================================================================
 -- OUT OF RANGE, AND ONLY ACTUALLY OUT OF RANGE
@@ -784,12 +860,6 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 	end
 end)
 player:GetAttributeChangedSignal(ATTR.Trapped):Connect(clearSelection)
-
-UserInputService:GetPropertyChangedSignal("TouchEnabled"):Connect(function()
-	if not UserInputService.TouchEnabled then
-		clearSelection()
-	end
-end)
 
 local humanoidConn: RBXScriptConnection? = nil
 local toolConn: RBXScriptConnection? = nil

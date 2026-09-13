@@ -247,7 +247,7 @@ local function carrying(): boolean
 end
 
 --==============================================================================
--- ONE PROMPT THAT TOUCH DOES NOT DRAW, AND WHY IT IS THIS ONE
+-- ONE PROMPT THIS FILE NEVER DRAWS, AND WHY IT IS THIS ONE
 --
 -- Every prompt in the game is Style = Custom and drawn here, and on touch the
 -- panel IS the button -- which is exactly right for the five prompts a player
@@ -262,14 +262,21 @@ end
 -- action that has already happened. Widening the movement threshold only makes
 -- the panel harder to press on purpose; moving it only moves the collision.
 --
--- The verb was wrong, not the geometry. On touch a plant is now SELECTED by a
--- tap and picked up by a separate button, so the destructive step is never the
--- first half of an ambiguous gesture -- see PlantPickUI, which owns that and
--- drives THIS prompt to do the actual work.
+-- The verb was wrong, not the geometry. A plant is now SELECTED by a tap or a
+-- click and picked up by a separate button, so the destructive step is never the
+-- first half of an ambiguous gesture -- see PlantPickUI, which owns that.
 --
--- SO NOTHING IS DRAWN FOR IT HERE, on touch only. The prompt itself stays,
--- enabled and server-backed, because desktop still presses E on it and the
--- server still validates every trigger through it.
+-- AND IT IS EVERY DEVICE NOW, not only touch. A mouse cursor is unambiguous
+-- about WHERE it is pointing, which is why desktop kept the billboard for a
+-- while, but it is not unambiguous about whether the player meant to spend the
+-- plant: a left-drag is also how the camera turns, and E is a key people press
+-- for every other prompt in the game. One affordance on all three input methods
+-- is also one thing to reason about instead of two.
+--
+-- SO NOTHING IS DRAWN FOR IT HERE, on any device. The prompt itself stays --
+-- enabled, server-backed, and still the one place MaxActivationDistance lives --
+-- but PlantPickUI takes its keys away locally so the engine cannot fire it
+-- behind an invisible affordance. See THE KEY THAT IS NOT THERE in that file.
 --
 -- Named rather than inferred: PlantService creates exactly one prompt with this
 -- name, the same way `reservedForSomebodyElse` above reads one attribute by
@@ -281,7 +288,7 @@ local DRAWN_BY_SOMEBODY_ELSE: { [string]: boolean } = {
 }
 
 local function ownedByAnotherUI(prompt: ProximityPrompt): boolean
-	return TOUCH and DRAWN_BY_SOMEBODY_ELSE[prompt.Name] == true
+	return DRAWN_BY_SOMEBODY_ELSE[prompt.Name] == true
 end
 
 --==============================================================================
