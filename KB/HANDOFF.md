@@ -1,5 +1,131 @@
 # Steal a Seed — Session Handoff
 
+## Suncrown is rebuilt as the Solar Cactus Golem — 2026-09-13 (CLAUDE)
+
+### What
+
+Suncrown was a flat stick stem carrying a nine-blade turkey-fan head and a pair
+of sunglasses, about 25 parts out of the shared form chain in `CreatureModel`.
+It is now a 63-part hulking bipedal desert golem built from concept 2,
+`art/creatures/suncrown/reference/suncrown-concept2-solar-golem.jpg`.
+
+  * **`tools/art/suncrown_golem.luau`** is where the geometry is reasoned about.
+    Same contract as `gloomlotus_titan.luau` -- `{ specs, build, effects,
+    measure, serialize }`, authored in its own studs with the ground at Y = 0
+    and the front toward -Z, loaded in Edit over the 8731 file server. Change
+    the tool, re-run `serialize()`, paste the result into `DustbowlForms`; never
+    the other way round.
+  * **`src/ReplicatedStorage/SeedGame/Shared/DustbowlForms.luau`** is new, and
+    holds those 63 specs plus `PreviewHeight.suncrown = 6.9419`. It is asked by
+    SPECIES ID, not by biome, because Dustbowl is half converted: the other four
+    species still come off the shared stem-and-footing builder and an id with no
+    entry has to fall through to it rather than be refused the way a Tanglemire
+    id would be.
+  * **The nine-ray crown builder is gone**, both halves of it: the empty
+    `Form == "crown"` footing clause and the 313-line head clause. Suncrown was
+    the only species with that form, so once it returns early the whole thing
+    was unreachable. `CreatureModel` is 332 lines shorter.
+  * **`replayPart` and `wedge()` now honour a `studs` field** on a PartSpec, and
+    `TanglemireForms.PartSpec` gained it as an optional. Only the eight glowing
+    parts set it false: neon takes its light from the material, and a studded
+    neon face reads as a dirty one.
+  * **`retrofitSolarAura`** hangs one PointLight (`SolarGlow`, 2.4 bright,
+    16 x hs range, no shadows) and one emitter (`SolarMotes`, sparkles_main,
+    rate 14) on `SolarCore`, on a world-aligned attachment so the embers rise off
+    the top of the world and not off a diamond standing on its corner.
+
+### The 63 parts
+
+| Group | n | Parts |
+|---|---|---|
+| Legs | 8 | `Left/RightThigh`, `Left/RightShin`, `Left/RightKneeGuard`, `Left/RightFoot` |
+| Talons | 4 | `Left/RightToe1..2`, seated flat |
+| Tail | 2 | `TailBase`, `TailTip`, two segments turning ~30 deg at the joint |
+| Carapace | 8 | `TorsoLower/Mid/Upper`, `Belly`, `ShoulderLobeL/R` (barrel cactus balls), `RibLobeL/R` |
+| Crust | 4 | `SandstoneMantleL/R`, `ChestCrustL/R` |
+| Furnace | 4 | `SolarCore` (neon diamond), `CoreBack`, `CoreRimL/R` (lintel and sill) |
+| Arms | 14 | `Leaf` x2 (biceps), `Left/RightForearm`, `Left/RightElbowThorn1..2`, `Left/RightHand`, `Left/RightClaw1..2` |
+| Mask | 5 | `HeadBase`, `BrowPlate`, `JawCrust`, `Eye`, `Pupil` |
+| Crown | 14 | `CrownRay1..8` (long), `InnerRay1..6` (short) |
+
+The names are the rigging contract. Thigh / Shin / Knee / Foot / Toe are
+`LEG_WORDS`, so PlantSway clusters them into two hips and strides them in
+opposition. The two biceps are called `Leaf` because that is the ONLY name
+PlantSway swings as an arm -- and it swings a Leaf about its own centre, so the
+one segment that can carry it is one whose ends are both buried, which the bicep
+is (up inside the barrel shoulder, down inside the forearm). `Eye` and `Pupil`
+are what the gaze rig matches by suffix.
+
+### Measured
+
+Built through `CreatureModel.Build` in Play, not from the tool:
+
+| Tier | Frame | Built | Base Y | W x D | Neon | Glow range |
+|---|---|---|---|---|---|---|
+| 1 Tiny | 6.51 | **6.5101 (100.00%)** | **+0.0000** | 4.06 x 3.33 | 8, all smooth | 15.0 |
+| 4 Mega | 17.25 | **17.2516 (100.00%)** | **+0.0000** | 11.19 x 9.16 | 8, all smooth | 39.8 |
+| 7 Colossal | 49.48 | **49.4763 (100.00%)** | **+0.0000** | 34.00 x 27.67 | 8, all smooth | 114.0 |
+
+64 parts in the built model: the 63 specs plus the shared invisible `Base`.
+
+Walking, each at its own `SeedData.WanderSpeed`, ~1030 sampled frames per tier:
+
+| Tier | Stride corr(L,R) | Arms | Arm opposition | Worst foot dip |
+|---|---|---|---|---|
+| 1 | **-0.998** | 19.0 deg | **-1.000** | -0.174 = **-2.64%** of height |
+| 4 | **-0.999** | 19.0 deg | **-1.000** | -0.500 = **-2.89%** |
+| 7 | **-0.999** | 19.0 deg | **-1.000** | -1.965 = **-3.97%** |
+| supernovus t4 (untouched baseline) | -1.000 | 19.0 deg | -1.000 | -1.575 = **-6.70%** |
+
+  * **Gaze**: with a player standing in front of the Tiny, the pupil travelled
+    0.149 studs in X and 0.084 in Y across 400 frames. The rig has it.
+  * **The dip is the shared rig, and Suncrown is now the better half of it.**
+    PlantSway swings a whole leg rigidly about one hip with no ankle, and the
+    body bobs and rolls under it, so every leg-walker's feet pass below the soil
+    plane. The first build of this golem dug 5.9% at Colossal because its talons
+    reached 1.32 studs forward of the hip and girth spreads horizontal offsets
+    without lengthening the drop, which turns the leg swing into a scoop.
+    Cropping the talon and pulling the sole back under the hip halved the lever
+    and took it to 3.97%, against 6.70% for a species nobody has touched. Going
+    to a true zero means porting the Root-Walker's height law (see the Gloomlotus
+    entry) onto the generic leg rig -- a change to a rig every legged species
+    shares, and not something to bundle into an art commit.
+
+### Two departures from the brief, both deliberate
+
+  * **The palette is hue-rotated, not the values it names.** `#858032` and
+    `#6A6828` are olive with R above G -- a YELLOW olive -- and against `#9E8062`
+    sandstone that is 54 apart in RGB, with the two meeting at every joint on the
+    creature. Built in those exact values the golem came out as one flat
+    butter-yellow silhouette with no readable anatomy. Holding the same value and
+    turning the hue -- G above R for the flesh at 118/132/54 and 88/102/44, a
+    cooler paler rock at 176/156/132 and 120/96/76 -- takes the nearest pair to
+    100 apart and the cactus reads as cactus. The three species colours out of
+    SeedData (Body, Crown, Accent) and the solar amber are untouched.
+  * **The crown spends nothing on the arc it cannot show.** The brief's 8 long
+    plus 6 short is kept exactly, but they are spread over the visible 280
+    degrees rather than the full circle: a blade pointing straight down from the
+    hub ends up inside the chest, and an even ring put three of the fourteen
+    there. Rolled and re-spaced, a blade lands every 20 degrees across the whole
+    sweep -- long, short, long, short -- and the bottom 80 degrees is the neck,
+    which the body fills. The blades are also 0.88 wide at the root, wider than
+    the arc each owns at the hub, so they overlap into a rosette and only come
+    apart as they taper. Narrow spokes at the same length read as a punk fringe,
+    which is what the first two passes of this crown were.
+
+### Verified
+
+  * `rojo build` clean.
+  * All 18 specs, 0 threw, 0 FAIL tokens -- including **PlantInfoSpec's 350
+    grown combinations**, which is what proves every species still builds after
+    332 lines came out of the form chain, and **StarbloomLimbSpec 71/0**.
+  * Play: the three tiers above, spawned on the field, walked, measured, and
+    destroyed afterwards. Plot_01 still holds its 9 plants and nothing was
+    written to the owner's save.
+  * Screenshots: `Suncrown_Front_v5` and `Suncrown_Quarter_v4` are the Edit
+    preview at hs = 1 on a sand slab; `Suncrown_Golem_InGame` is the Mega walking
+    the field under game lighting.
+
 ## Gloomlotus walks: the Root-Walker rig in PlantSway — 2026-09-12 (CLAUDE)
 
 ### What

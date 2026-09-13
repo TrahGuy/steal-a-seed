@@ -56,6 +56,11 @@ export type PartSpec = {
 	material: Enum.Material,
 	transparency: number?,
 	reflectance: number?,
+	-- Studded unless this says otherwise, which is what every part in THIS file
+	-- wants. It is here because the replay player is shared: Dustbowl's golem
+	-- turns studs off on its eight neon parts, and the player cannot read a
+	-- field the type does not have.
+	studs: boolean?,
 }
 
 local TanglemireForms = {}
