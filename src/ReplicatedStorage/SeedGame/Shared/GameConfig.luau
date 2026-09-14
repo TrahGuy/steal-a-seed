@@ -3584,57 +3584,114 @@ GameConfig.Almanac = {
 -- surface on the HUD still in translucent soil browns under the Shop's and the
 -- Almanac's charcoal slate, so it takes their plate, ink keyline and lattice.
 --
--- LoadoutUI reads the colours and the sizes. PlantPickUI reads the sizes too,
--- so its PICK UP button stays clear of the strip whatever height it is.
+--==============================================================================
+-- V2, 2026-09-14: art/hotbar/reference/target-hotbar-v2.png
+--
+-- The same slate and ink, re-proportioned around the item. The tray carries
+-- the texture and the cards go calm and darker than it; the preview is framed
+-- to the silhouette instead of the bounding box; a round number badge and ONE
+-- information chip sit in the top corners; the name gets real type; the Tool in
+-- the hands is warm amber-green, lifted, with an IN HAND strip; the Bag is its
+-- own cell after a small gap. Only LoadoutUI reads this block.
 --==============================================================================
 GameConfig.Hotbar = {
 	Ink = Color3.fromRGB(16, 21, 28), -- #10151C
-	PlateTop = Color3.fromRGB(24, 32, 43), -- #18202B
-	PlateBottom = Color3.fromRGB(18, 23, 31), -- #12171F
-	-- The shop's slate lattice, faint.
-	Lattice = Color3.fromRGB(74, 84, 102),
-	LatticeTransparency = 0.8,
-	-- The tray the slots sit in: the same slate a step lighter, and a little of
-	-- the world showing through it.
-	TrayTop = Color3.fromRGB(34, 41, 53),
-	TrayBottom = Color3.fromRGB(22, 27, 36),
-	TrayTransparency = 0.12,
+	-- The card: calmer and darker than the tray it sits in, and no lattice on it.
+	PlateTop = Color3.fromRGB(21, 27, 36), -- #151B24
+	PlateBottom = Color3.fromRGB(15, 19, 26), -- #0F131A
+	-- The shop's slate lattice, faint, on the TRAY only.
+	Lattice = Color3.fromRGB(88, 100, 120),
+	LatticeTransparency = 0.86,
+	LatticeSpacing = 14,
+	-- The tray the cards sit in: the same slate a step lighter, a strong ink
+	-- border, a faint inner rim, and a little of the world showing through.
+	TrayTop = Color3.fromRGB(40, 48, 61), -- #28303D
+	TrayBottom = Color3.fromRGB(25, 30, 40), -- #191E28
+	TrayTransparency = 0.08,
+	TrayBorder = 3,
+	Rim = Color3.fromRGB(96, 110, 132),
+	RimTransparency = 0.62,
 
-	-- The slot in your hands: a lime keyline (#4EE32C -> #29BF18), a soft ring
-	-- outside it, and a small scale up.
-	LitTop = Color3.fromRGB(78, 227, 44), -- #4EE32C
-	LitBottom = Color3.fromRGB(41, 191, 24), -- #29BF18
-	HeldScale = 1.06,
-	HoverScale = 1.04,
-	PressScale = 0.95,
+	-- The Tool in your hands: a warm amber-to-green keyline, a brighter face, a
+	-- soft glow outside it, a small lift and an IN HAND strip.
+	LitTop = Color3.fromRGB(255, 200, 64), -- #FFC840 warm amber
+	LitBottom = Color3.fromRGB(126, 214, 72), -- #7ED648 botanical green
+	LitThickness = 3.5,
+	LitPlateTop = Color3.fromRGB(46, 58, 44),
+	LitPlateBottom = Color3.fromRGB(29, 38, 30),
+	InHandText = Color3.fromRGB(16, 21, 28),
+	HeldLift = 4,
+	-- The cooldown shade's transparency. It rose from 0.45 with the darker card:
+	-- at 0.45 a bat that cannot swing was barely a shade off one that can.
+	CooldownShade = 0.25,
+	-- The preview's ambient light. A step brighter than the Bag's card light,
+	-- because several species are authored in near-black and the card behind
+	-- them is darker than any Bag card.
+	PreviewAmbient = Color3.fromRGB(160, 164, 180),
+	-- Under a mouse: a little bigger, a little higher, a brighter edge.
+	HoverScale = 1.05,
+	HoverLift = 2,
+	HoverRim = Color3.fromRGB(196, 206, 222),
+	HoverRimTransparency = 0.45,
+	-- Under a thumb: a brief sink, released as soon as it becomes a drag.
+	PressScale = 0.98,
 	-- A slot the player put something in: a light slate keyline.
 	Assigned = Color3.fromRGB(122, 134, 156),
 
-	-- The keycap: an ink pill with a cream numeral, lime while the slot is held.
+	-- The number badge: an ink circle with a cream numeral, amber while held.
 	Numeral = Color3.fromRGB(242, 238, 206),
-	NumeralLit = Color3.fromRGB(134, 239, 92),
-	KeyEdge = Color3.fromRGB(58, 68, 84),
+	NumeralLit = Color3.fromRGB(255, 208, 92),
+	KeyEdge = Color3.fromRGB(70, 82, 100),
 	Caption = Color3.fromRGB(242, 238, 206),
-	CaptionBacking = 0.25,
 	-- An empty slot: a dashed outline and a plus.
 	Ghost = Color3.fromRGB(98, 110, 130),
 
-	-- The category word in a slot's top-right corner, keyed by what the Tool is.
+	-- The information chip. Bats, traps and pods say what they are; a hatched
+	-- plant says its SIZE, edged in its form's rarity colour (GameConfig
+	-- .RarityColor). A pod's edge is neutral: its rarity is part of the reveal.
 	Tags = {
 		bat = { text = "BAT", colour = Color3.fromRGB(255, 191, 36) }, -- amber #FFBF24
 		trap = { text = "TRAP", colour = Color3.fromRGB(251, 146, 60) }, -- orange #FB923C
-		plant = { text = "SEED", colour = Color3.fromRGB(52, 211, 153) }, -- emerald #34D399
+		pod = { text = "POD", colour = Color3.fromRGB(170, 182, 198) }, -- quiet slate
 	},
 
-	-- Gui pixels. A slot is 64 wide, the touch floor this strip has always kept,
-	-- and 80 tall so a name gets two lines under the item instead of an ellipsis.
+	-- The Bag cell's count: green while a slot is free, a calm amber when full.
+	CountOpen = Color3.fromRGB(126, 214, 72),
+	CountFull = Color3.fromRGB(255, 196, 76),
+
+	-- Gui pixels. A card stays 64 wide, the touch floor this strip has always
+	-- kept, and 92 tall: a badge row, a 48-pixel preview and a name. The whole
+	-- strip is 764 wide with ten cards and the Bag, exactly the width it was.
 	SlotWidth = 64,
-	SlotHeight = 80,
-	Gap = 6,
+	SlotHeight = 92,
+	Gap = 5,
 	TrayPad = 6,
 	BottomGap = 10,
+	-- The Bag cell, and the extra space before it.
 	ChipWidth = 52,
-	-- The Bag chip is dropped below this viewport width, where a five-slot tray
+	BagGap = 5,
+	-- The card's inside, top to bottom. The preview starts under the chip, so a
+	-- tall silhouette never passes behind a corner.
+	BadgeSize = 16,
+	PreviewTop = 18,
+	PreviewHeight = 48,
+	PreviewInset = 3,
+	-- The silhouette's limiting axis spans this much of the preview's glass.
+	PreviewFit = 0.97,
+	-- Tall enough for two lines at 10 px, so "Rootwood Bat" wraps rather than
+	-- shrinking to one line at 9. Its foot and the IN HAND strip's top edge,
+	-- stroke included, are a pixel apart.
+	NameTop = 64,
+	NameHeight = 21,
+	NameMax = 12,
+	NameMin = 7,
+	-- The chip may reach this far left and still clear the number badge.
+	ChipHeight = 13,
+	ChipMaxWidth = 42,
+	ChipTextMax = 9,
+	ChipTextMin = 6,
+	InHandHeight = 10,
+	-- The Bag cell is dropped below this viewport width, where a five-slot tray
 	-- needs the room.
 	ChipMinViewport = 560,
 }

@@ -819,6 +819,11 @@ export type CardPopOptions = {
 	glowRest: number?,
 	glowHover: number?,
 	sound: boolean?,
+	-- Pixels the target rises under a hovering mouse, on top of the scale. The
+	-- target's Position is tweened from where it stood when the pop was made,
+	-- so it must be an element whose parent is NOT a layout -- the hotbar lifts
+	-- the plate inside its cell, and the cell never moves. nil lifts nothing.
+	lift: number?,
 }
 
 export type CardPop = {
@@ -842,6 +847,9 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 	local pressedAt: Vector3? = nil
 	local scaleTween: Tween? = nil
 	local glowTween: Tween? = nil
+	local liftTween: Tween? = nil
+	local lift = opts.lift
+	local restPosition = target.Position
 	local conns: { RBXScriptConnection } = {}
 
 	local function apply(instant: boolean?)
@@ -861,6 +869,24 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 				Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Scale = goal })
 			scaleTween = tween
 			tween:Play()
+		end
+		-- The lift is motion too, so reduced effects keep it at rest, and a
+		-- press sinks rather than rises.
+		if lift then
+			local rise = if hovered and not pressed and not motionOff() then lift else 0
+			local want = restPosition + UDim2.fromOffset(0, -rise)
+			if liftTween then
+				liftTween:Cancel()
+				liftTween = nil
+			end
+			if instant then
+				target.Position = want
+			elseif target.Position ~= want then
+				local tween = TweenService:Create(target, TweenInfo.new(seconds,
+					Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = want })
+				liftTween = tween
+				tween:Play()
+			end
 		end
 		if glow then
 			local want = if hovered or pressed then glowHover else glowRest
@@ -935,6 +961,10 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 		if glowTween then
 			glowTween:Cancel()
 			glowTween = nil
+		end
+		if liftTween then
+			liftTween:Cancel()
+			liftTween = nil
 		end
 	end
 	table.insert(conns, target.Destroying:Connect(destroy))
@@ -2608,16 +2638,112 @@ end
 --   plant  a pod or a grown creature. Upright, framed a little looser because a
 --          Colossal is four hundred studs of silhouette and a Tiny is three.
 --==============================================================================
-function UIKit.frameItem(hero: ViewportFrame, model: Model, kind: string): Camera
+--==============================================================================
+-- AND, WHEN ASKED, AS CLOSE AS THE SILHOUETTE ALLOWS
+--
+-- frameViewport stands the camera off the bounding box's DIAGONAL, and the box
+-- includes the invisible Base plate every creature carries at its feet -- two
+-- margins stacked, which is right for a shop card with room to breathe and why
+-- a hotbar slot drew its item at about a third of the card.
+--
+-- With `fit`, the same pose and the same viewing direction are kept and only
+-- the distance and aim are corrected: every corner of every DRAWN part is
+-- projected through the lens, the aim slides to the silhouette's centre, and
+-- the distance scales until the limiting axis spans exactly `fit` of the glass.
+-- Twice, because at card distances perspective moves the answer a little
+-- between passes. The whole silhouette is inside the frame by construction,
+-- not by a margin somebody picked.
+--
+-- `aspect` is the glass's width over height, for a viewport that has not been
+-- laid out yet and still reports a zero AbsoluteSize.
+--==============================================================================
+local function fitToSilhouette(hero: ViewportFrame, camera: Camera, model: Model,
+	fit: number, aspectHint: number?)
+	-- Not drawnBounds: that one excludes the plant card's Pedestal by asking
+	-- `IsDescendantOf(Pedestal or model)`, which on a model with no pedestal is
+	-- every part, and it would return nothing at all here.
+	local lo = Vector3.new(math.huge, math.huge, math.huge)
+	local hi = -lo
+	local points: { Vector3 } = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 then
+			local h = d.Size * 0.5
+			for sx = -1, 1, 2 do
+				for sy = -1, 1, 2 do
+					for sz = -1, 1, 2 do
+						local q = (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
+						points[#points + 1] = q
+						lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
+						hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
+					end
+				end
+			end
+		end
+	end
+	if #points == 0 then
+		return
+	end
+	local half = math.tan(math.rad(camera.FieldOfView * 0.5))
+	local box = hero.AbsoluteSize
+	local aspect = if box.X > 0 and box.Y > 0 then box.X / box.Y else (aspectHint or 1)
+	local look = camera.CFrame.LookVector
+	local focus = ((lo :: Vector3) + (hi :: Vector3)) * 0.5
+	local distance = -camera.CFrame:PointToObjectSpace(focus).Z
+	if distance < 0.01 then
+		return
+	end
+
+	local function survey(cf: CFrame): (number, number, number)
+		local minU, maxU = math.huge, -math.huge
+		local minV, maxV = math.huge, -math.huge
+		for _, corner in ipairs(points) do
+			local rel = cf:PointToObjectSpace(corner)
+			if rel.Z < -0.01 then
+				local u = rel.X / (-rel.Z * half * aspect)
+				local v = rel.Y / (-rel.Z * half)
+				minU = math.min(minU, u); maxU = math.max(maxU, u)
+				minV = math.min(minV, v); maxV = math.max(maxV, v)
+			end
+		end
+		if minU > maxU then
+			return 0, 0, 0
+		end
+		return math.max(maxU - minU, maxV - minV) * 0.5,
+			(minU + maxU) * 0.5, (minV + maxV) * 0.5
+	end
+
+	local cf = CFrame.lookAt(focus - look * distance, focus)
+	for _ = 1, 2 do
+		local extent, offU, offV = survey(cf)
+		if extent <= 0.001 then
+			break
+		end
+		focus = focus
+			+ cf.RightVector * (offU * distance * half * aspect)
+			+ cf.UpVector * (offV * distance * half)
+		distance *= extent / fit
+		cf = CFrame.lookAt(focus - look * distance, focus)
+	end
+	camera.CFrame = cf
+end
+
+function UIKit.frameItem(hero: ViewportFrame, model: Model, kind: string,
+	fit: number?, aspectHint: number?): Camera
+	local camera
 	if kind == "trap" then
 		model:PivotTo(CFrame.new())
-		return UIKit.frameViewport(hero, model, Vector3.new(0.45, 0.62, -1), 1.02)
+		camera = UIKit.frameViewport(hero, model, Vector3.new(0.45, 0.62, -1), 1.02)
 	elseif kind == "plant" then
 		model:PivotTo(CFrame.new())
-		return UIKit.frameViewport(hero, model, Vector3.new(0.62, 0.30, -1), 1.06)
+		camera = UIKit.frameViewport(hero, model, Vector3.new(0.62, 0.30, -1), 1.06)
+	else
+		model:PivotTo(CFrame.Angles(0, 0, math.rad(-34)))
+		camera = UIKit.frameViewport(hero, model, Vector3.new(0.55, 0.22, -1), 0.96)
 	end
-	model:PivotTo(CFrame.Angles(0, 0, math.rad(-34)))
-	return UIKit.frameViewport(hero, model, Vector3.new(0.55, 0.22, -1), 0.96)
+	if fit then
+		fitToSilhouette(hero, camera, model, fit, aspectHint)
+	end
+	return camera
 end
 
 --==============================================================================
@@ -2645,6 +2771,9 @@ export type ItemPreviewOptions = {
 	-- A whisper of shade behind the item so a pale bat survives a pale sky.
 	-- 1 is fully transparent; the default is nearly so.
 	scrim: number?,
+	-- Frame the drawn silhouette to this fraction of the glass instead of the
+	-- default margins -- see UIKit.frameItem. nil keeps the shop's framing.
+	fit: number?,
 }
 
 export type ItemPreview = {
@@ -2710,7 +2839,13 @@ function UIKit.itemPreview(parent: Instance, options: ItemPreviewOptions?): Item
 		end
 		local ok, model = pcall(build, hero)
 		if ok and model then
-			pcall(UIKit.frameItem, hero, model, kind or "bat")
+			-- The aspect a laid-out holder will have, for the first frame after it
+			-- is built, when AbsoluteSize can still read zero.
+			local size = holder.Size
+			local aspectHint = if size.Y.Offset > 0 and size.X.Scale == 0 and size.Y.Scale == 0
+				then size.X.Offset / size.Y.Offset
+				else nil
+			pcall(UIKit.frameItem, hero, model, kind or "bat", opts.fit, aspectHint)
 		end
 	end
 

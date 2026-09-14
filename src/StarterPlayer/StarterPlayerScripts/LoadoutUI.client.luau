@@ -152,7 +152,7 @@ local READY_AT = "ReadyAt"
 -- It was ten, then five, and both were right for one machine and wrong for the
 -- other. Ten is what the NUMBER ROW can address, which is a keyboard's reason
 -- and worth having when there is a keyboard. Five is what a THUMB can cross
--- without looking: ten 64-pixel slots come to 694 px of strip, which on a
+-- without looking: ten 64-pixel slots come to 685 px of strip, which on a
 -- 735-pixel phone is the whole screen width and leaves a player poking at
 -- targets the size of a fingernail.
 --
@@ -163,7 +163,7 @@ local READY_AT = "ReadyAt"
 -- hit without looking. Five real slots beat ten unusable ones.
 --
 -- BOTH CONDITIONS, not either. A keyboard alone is not enough: a narrow window
--- on a desktop still cannot show 694 px of strip without eating the screen. A
+-- on a desktop still cannot show 685 px of strip without eating the screen. A
 -- wide viewport alone is not enough either -- a tablet has the width and no
 -- number row, so slots 6-10 would be reachable only by touch, which is exactly
 -- the fingernail problem. Anything that is not both gets five.
@@ -172,8 +172,8 @@ local DESKTOP_SLOTS = 10
 local MOBILE_SLOTS = 5
 local MAX_SLOTS = DESKTOP_SLOTS
 
--- 10 x 64 + 9 x 6 = 694 px of slots, 764 with the tray's padding and the Bag
--- chip. Below this the strip is most of the window, so five is the better
+-- 10 x 64 + 9 x 5 = 685 px of slots, 764 with the tray's padding and the Bag
+-- cell. Below this the strip is most of the window, so five is the better
 -- answer even with a keyboard attached.
 local DESKTOP_MIN_WIDTH = 900
 
@@ -1667,34 +1667,39 @@ end
 -- is missing from this.
 --
 --==============================================================================
--- BOTANICAL SLATE & INK (Option A, approved 2026-09-11)
+-- BOTANICAL SLATE & INK, V2 (art/hotbar/reference/target-hotbar-v2.png)
 --
--- art/hotbar/reference/approved-hotbar-mockup.png, replacing the translucent
--- mud-brown strip in current-hotbar.png. Every colour and size is in
--- GameConfig.Hotbar:
+-- The 2026-09-11 slate restyle, re-proportioned around the item. Every colour
+-- and size is in GameConfig.Hotbar:
 --
---   the tray   slate in an ink keyline, padded around the slots
---   a slot     a charcoal slate plate (#18202B -> #12171F) in a 2.5 px ink
---              keyline, with the faint slate lattice showing on it
---   in hand    a lime keyline (#4EE32C -> #29BF18), a soft lime ring outside it
---              and a 1.06 scale, eased
---   corners    an ink keycap with the number, top left; BAT, TRAP or SEED in
---              amber, orange or emerald, top right
---   the name   on an ink caption strip, wrapped to two lines and shrunk to fit
---              instead of cut off with "..."
+--   the tray   slate with a strong ink border, a faint inner rim, and the only
+--              diamond lattice on the strip
+--   a card     calm dark slate in an ink keyline -- darker than the tray, so the
+--              item is the brightest thing in it
+--   corners    a round ink number badge top left; ONE information chip top right
+--   preview    the real Tool's model, framed to its drawn silhouette rather than
+--              its bounding box, and never turned
+--   the name   two centred lines at most, outlined, shrunk before it is cut
+--   in hand    a warm amber-to-green keyline, a brighter face, a glow, a small
+--              lift and an IN HAND strip
 --   empty      a dashed outline and a plus, with no plate
+--   the Bag    its own cell, after a small gap
 --
--- THE FRAME NAMED Hotbar IS THE TRAY, and the slots stay its direct children.
+-- THE FRAME NAMED Hotbar IS THE STRIP, and the slots stay its direct children.
 -- Two other readers depend on that shape: TutorialUI finds a plant's slot by
 -- walking exactly those children for a label carrying the Tool's name, and the
 -- Bag's layout stops above this frame by reading its Size -- so the height is
 -- written into Size and never left to AutomaticSize.
 --
--- NEW TOP-LEVEL NAMES ARE RATIONED. This chunk already declares 178 locals at
--- the top level and Luau refuses a function with more than 200, which fails the
--- whole script before anything is drawn. The restyle adds four -- HOT,
--- dashOutline, liftStrip and chip -- and keeps everything else inside the
--- functions and do-blocks that use it.
+-- THAT IS ALSO WHY THE TRAY IS NOT PAINTED ON IT. The strip's UIListLayout lays
+-- out every GuiObject child, so a lattice or a rim inside it would be laid out
+-- as a slot. The painted tray is `HotbarTray`, a sibling directly behind the
+-- strip that follows its size.
+--
+-- NEW TOP-LEVEL NAMES ARE RATIONED. This chunk declares 182 locals at the top
+-- level and Luau refuses a function with more than 200, which fails the whole
+-- script before anything is drawn. V2 adds none: the tray is built in a
+-- do-block, and everything a card needs lives in its HotSlot record.
 --==============================================================================
 local HOT = GameConfig.Hotbar
 
@@ -1704,13 +1709,10 @@ hotbar.AnchorPoint = Vector2.new(0.5, 1)
 hotbar.Position = UDim2.new(0.5, 0, 1, -HOT.BottomGap)
 hotbar.Size = UDim2.fromOffset(10, HOT.SlotHeight + HOT.TrayPad * 2)
 hotbar.AutomaticSize = Enum.AutomaticSize.X
-hotbar.BackgroundTransparency = HOT.TrayTransparency
+hotbar.BackgroundTransparency = 1
 hotbar.BorderSizePixel = 0
 hotbar.ZIndex = 4
 hotbar.Parent = gui
-UIKit.corner(hotbar, 16)
-UIKit.stroke(hotbar, HOT.Ink, 2.5)
-UIKit.gradient(hotbar, HOT.TrayTop, HOT.TrayBottom)
 
 do
 	local pad = Instance.new("UIPadding")
@@ -1719,6 +1721,62 @@ do
 	pad.PaddingTop = UDim.new(0, HOT.TrayPad)
 	pad.PaddingBottom = UDim.new(0, HOT.TrayPad)
 	pad.Parent = hotbar
+
+	--==========================================================================
+	-- THE TRAY
+	--
+	-- Behind the strip at one ZIndex lower, the same anchor and position, and
+	-- resized whenever the strip's own width changes -- a slot folding away, a
+	-- phone's five, the Bag opening. The lattice rebuilds itself on that resize.
+	--==========================================================================
+	local tray = Instance.new("Frame")
+	tray.Name = "HotbarTray"
+	tray.AnchorPoint = hotbar.AnchorPoint
+	tray.Position = hotbar.Position
+	tray.Size = UDim2.fromOffset(10, HOT.SlotHeight + HOT.TrayPad * 2)
+	tray.BackgroundTransparency = HOT.TrayTransparency
+	tray.BorderSizePixel = 0
+	tray.ZIndex = 3
+	tray.Parent = gui
+	UIKit.corner(tray, 18)
+	UIKit.stroke(tray, HOT.Ink, HOT.TrayBorder)
+	UIKit.gradient(tray, HOT.TrayTop, HOT.TrayBottom)
+	UIKit.lattice(tray, {
+		spacing = HOT.LatticeSpacing,
+		thickness = 2,
+		colour = HOT.Lattice,
+		transparency = HOT.LatticeTransparency,
+		inset = 7,
+		zIndex = 3,
+	})
+
+	-- The inner rim: a hairline a few pixels inside the border.
+	local rim = Instance.new("Frame")
+	rim.Name = "Rim"
+	rim.AnchorPoint = Vector2.new(0.5, 0.5)
+	rim.Position = UDim2.fromScale(0.5, 0.5)
+	rim.Size = UDim2.new(1, -6, 1, -6)
+	rim.BackgroundTransparency = 1
+	rim.BorderSizePixel = 0
+	rim.ZIndex = 3
+	rim.Parent = tray
+	UIKit.corner(rim, 15)
+	UIKit.stroke(rim, HOT.Rim, 1, HOT.RimTransparency)
+
+	-- In the strip's OWN units, not AbsoluteSize's: a UIScale anywhere above
+	-- both frames would otherwise be applied to the tray twice -- measured, a
+	-- 1.5x layer drew a 1719-wide tray behind a 1146-wide strip. The strip's
+	-- height is a fixed offset, so its absolute height says what the scale is.
+	local function follow()
+		local size = hotbar.AbsoluteSize
+		local height = hotbar.Size.Y.Offset
+		local scale = if height > 0 and size.Y > 0 then size.Y / height else 1
+		tray.Size = UDim2.fromOffset(size.X / scale, height)
+		tray.Visible = hotbar.Visible
+	end
+	hotbar:GetPropertyChangedSignal("AbsoluteSize"):Connect(follow)
+	hotbar:GetPropertyChangedSignal("Visible"):Connect(follow)
+	follow()
 end
 
 local hotbarLayout = Instance.new("UIListLayout")
@@ -1739,20 +1797,32 @@ type HotSlot = {
 	stroke: UIStroke,
 	tool: Tool?,
 	item: WeaponData.Item?,
-	-- The slate restyle's parts. `holder` is what the list lays out and what is
-	-- shown or hidden; `button` is the plate, and the only thing a press lands on.
+	-- `holder` is what the list lays out and what is shown or hidden; `wrap`
+	-- carries the in-hand lift; `button` is the plate, the only thing a press
+	-- lands on, and carries the hover lift and scale.
 	holder: Frame,
-	heldScale: UIScale,
+	wrap: Frame,
 	pop: UIKit.CardPop,
 	ringTint: UIGradient,
+	-- The plate's own gradient, brightened while the slot is in your hands.
+	plate: UIGradient,
 	aura: Frame,
-	lattice: Frame,
 	keycap: Frame,
+	-- The information chip: its frame, its word and its edge.
+	chip: Frame,
 	tag: TextLabel,
-	caption: Frame,
+	chipEdge: UIStroke,
+	inHand: Frame,
 	ghost: Frame?,
-	-- Whether the held scale is up, so a redraw only tweens on a change.
+	-- Whether the in-hand look is up, so a redraw only changes it on a change.
 	lit: boolean,
+	-- The in-hand lift's target offset and the tween moving toward it.
+	liftGoal: number,
+	liftTween: Tween?,
+	-- What the chip and the name were last fitted for, so a redraw measures text
+	-- only when the text changes.
+	tagText: string,
+	nameText: string,
 	-- os.clock() until which a drop's flash owns the keyline.
 	flashUntil: number,
 }
@@ -1802,14 +1872,15 @@ local function acquireHotSlot(index: number): HotSlot
 	end
 
 	--==========================================================================
-	-- THREE LAYERS, SO NOTHING THAT SCALES MOVES ITS NEIGHBOURS
+	-- THREE LAYERS, SO NOTHING THAT MOVES MOVES ITS NEIGHBOURS
 	--
 	--   holder   the list's cell: a fixed size, laid out, shown or hidden
-	--   wrap     centred in it, carrying the held scale
-	--   button   the plate, carrying the hover and press scale
+	--   wrap     centred in it, carrying the in-hand LIFT
+	--   button   the plate, carrying the hover lift and the hover and press scale
 	--
-	-- A UIScale on the list's own child changes the size the list lays out, so a
-	-- held slot would shove the whole strip sideways every time the hands changed.
+	-- A UIScale or a Position on the list's own child would change what the list
+	-- lays out, so a held or hovered card would shove the whole strip sideways.
+	-- Everything that moves lives a layer in.
 	--==========================================================================
 	local holder = Instance.new("Frame")
 	holder.Name = "Slot" .. index
@@ -1829,23 +1900,21 @@ local function acquireHotSlot(index: number): HotSlot
 	wrap.BorderSizePixel = 0
 	wrap.ZIndex = 4
 	wrap.Parent = holder
-	local heldScale = Instance.new("UIScale")
-	heldScale.Parent = wrap
 
-	-- The soft ring outside the keyline while the slot is in your hands.
+	-- The warm glow outside the keyline while the slot is in your hands.
 	local aura = Instance.new("Frame")
 	aura.Name = "Aura"
 	aura.AnchorPoint = Vector2.new(0.5, 0.5)
 	aura.Position = UDim2.fromScale(0.5, 0.5)
 	aura.Size = UDim2.new(1, 8, 1, 8)
 	aura.BackgroundColor3 = HOT.LitTop
-	aura.BackgroundTransparency = 0.82
+	aura.BackgroundTransparency = 0.78
 	aura.BorderSizePixel = 0
 	aura.Visible = false
 	aura.ZIndex = 4
 	aura.Parent = wrap
 	UIKit.corner(aura, 16)
-	UIKit.stroke(aura, HOT.LitTop, 2, 0.45)
+	UIKit.stroke(aura, HOT.LitTop, 2, 0.35)
 
 	local button = Instance.new("TextButton")
 	button.Name = "Face"
@@ -1858,11 +1927,11 @@ local function acquireHotSlot(index: number): HotSlot
 	button.ZIndex = 5
 	button.Parent = wrap
 	UIKit.corner(button, 12)
-	UIKit.gradient(button, HOT.PlateTop, HOT.PlateBottom)
+	local plate = UIKit.gradient(button, HOT.PlateTop, HOT.PlateBottom)
 	local stroke = UIKit.stroke(button, HOT.Ink, 2.5)
 
 	--==========================================================================
-	-- THE LIME IS A GRADIENT ON THE KEYLINE ITSELF
+	-- THE WARM KEYLINE IS A GRADIENT ON THE KEYLINE ITSELF
 	--
 	-- A UIGradient under a UIStroke colours the stroke, multiplied by the
 	-- stroke's own Color -- so a held slot sets that to white and enables this,
@@ -1874,16 +1943,20 @@ local function acquireHotSlot(index: number): HotSlot
 	ringTint.Enabled = false
 	ringTint.Parent = stroke
 
-	-- Level with the plate, which draws it on the plate: the lattice's own default
-	-- of 0 is buried under whatever it is laid on, as the shop found.
-	local lattice = UIKit.lattice(button, {
-		spacing = 12,
-		thickness = 2,
-		colour = HOT.Lattice,
-		transparency = HOT.LatticeTransparency,
-		inset = 4,
-		zIndex = 5,
-	})
+	-- The hover edge. A GuiObject draws one UIStroke, and the keyline already
+	-- owns this one, so the brighter edge is a hairline on its own inset frame
+	-- that is invisible until a mouse is over the card.
+	local rim = Instance.new("Frame")
+	rim.Name = "Rim"
+	rim.AnchorPoint = Vector2.new(0.5, 0.5)
+	rim.Position = UDim2.fromScale(0.5, 0.5)
+	rim.Size = UDim2.new(1, -4, 1, -4)
+	rim.BackgroundTransparency = 1
+	rim.BorderSizePixel = 0
+	rim.ZIndex = 5
+	rim.Parent = button
+	UIKit.corner(rim, 10)
+	local rimStroke = UIKit.stroke(rim, HOT.HoverRim, 1.5, 1)
 
 	--==========================================================================
 	-- THE COOLDOWN, DRAWN UNDER THE ITEM
@@ -1891,8 +1964,9 @@ local function acquireHotSlot(index: number): HotSlot
 	-- A dark shade rising from the bottom of the slot, so a bat that cannot
 	-- swing yet is dimmed from the feet up. Under the preview rather than over
 	-- it, because a player checking a cooldown is also checking WHICH weapon
-	-- they are about to swing. Level with the preview's frame and built before
-	-- it, so the model -- a layer above both -- stays on top.
+	-- they are about to swing. Dark and rising, so it never reads as the warm
+	-- in-hand ring, and the two can be on one card at once. HOT.CooldownShade
+	-- is how dark: the card is nearly ink already, so the shade has to be deep.
 	--==========================================================================
 	local cooldown = Instance.new("Frame")
 	cooldown.Name = "Cooldown"
@@ -1900,47 +1974,49 @@ local function acquireHotSlot(index: number): HotSlot
 	cooldown.Position = UDim2.fromScale(0, 1)
 	cooldown.Size = UDim2.fromScale(1, 0)
 	cooldown.BackgroundColor3 = BLACK
-	cooldown.BackgroundTransparency = 0.45
+	cooldown.BackgroundTransparency = HOT.CooldownShade
 	cooldown.BorderSizePixel = 0
 	cooldown.ZIndex = 6
 	cooldown.Parent = button
 	UIKit.corner(cooldown, 12)
 
+	--==========================================================================
+	-- THE PREVIEW: THE REAL TOOL, AS CLOSE AS ITS SILHOUETTE ALLOWS
+	--
+	-- The same UIKit.itemPreview and the same builders as before -- WeaponModel
+	-- for a bat or a trap, CreatureModel for a pod or a creature -- with `fit`,
+	-- which frames the drawn parts to HOT.PreviewFit of the glass instead of
+	-- leaving the bounding box's margins. Built once per key, never turned.
+	--==========================================================================
 	local preview = UIKit.itemPreview(button, {
 		name = "Preview",
-		size = UDim2.new(1, -8, 0, 42),
-		position = UDim2.fromOffset(4, 12),
+		size = UDim2.fromOffset(HOT.SlotWidth - HOT.PreviewInset * 2, HOT.PreviewHeight),
+		position = UDim2.fromOffset(HOT.PreviewInset, HOT.PreviewTop),
 		scrim = 1,
+		fit = HOT.PreviewFit,
 	})
+	preview.hero.Ambient = HOT.PreviewAmbient
 
 	--==========================================================================
-	-- THE KEYCAP
+	-- THE NUMBER BADGE
 	--
-	-- An ink pill with the number on it and a shadow a step below, so it reads
-	-- as a key rather than as a label. The tenth slot's cap says 0, because that
-	-- is the key.
+	-- A small ink circle top left, cream numeral, amber while the slot is in
+	-- your hands. The tenth slot says 0, because that is the key.
 	--==========================================================================
-	local keyShadow = Instance.new("Frame")
-	keyShadow.Name = "KeyShadow"
-	keyShadow.Position = UDim2.fromOffset(4, 6)
-	keyShadow.Size = UDim2.fromOffset(16, 16)
-	keyShadow.BackgroundColor3 = BLACK
-	keyShadow.BackgroundTransparency = 0.45
-	keyShadow.BorderSizePixel = 0
-	keyShadow.ZIndex = 8
-	keyShadow.Parent = button
-	UIKit.corner(keyShadow, 5)
-
 	local keycap = Instance.new("Frame")
 	keycap.Name = "Keycap"
-	keycap.Position = UDim2.fromOffset(4, 4)
-	keycap.Size = UDim2.fromOffset(16, 16)
+	keycap.Position = UDim2.fromOffset(3, 3)
+	keycap.Size = UDim2.fromOffset(HOT.BadgeSize, HOT.BadgeSize)
 	keycap.BackgroundColor3 = HOT.Ink
 	keycap.BorderSizePixel = 0
 	keycap.ZIndex = 8
 	keycap.Parent = button
-	UIKit.corner(keycap, 5)
-	UIKit.stroke(keycap, HOT.KeyEdge, 1)
+	do
+		local round = Instance.new("UICorner")
+		round.CornerRadius = UDim.new(0.5, 0)
+		round.Parent = keycap
+	end
+	UIKit.stroke(keycap, HOT.KeyEdge, 1.5)
 
 	local keyLabel = Instance.new("TextLabel")
 	keyLabel.Name = "Key"
@@ -1952,56 +2028,95 @@ local function acquireHotSlot(index: number): HotSlot
 	keyLabel.ZIndex = 9
 	keyLabel.Parent = keycap
 
-	-- What the thing IS, in its category's colour: BAT, TRAP or SEED.
+	--==========================================================================
+	-- THE INFORMATION CHIP
+	--
+	-- One compact word top right, chosen in refreshHotbar from what the Tool
+	-- actually carries: BAT, TRAP, POD, or a grown plant's size. The frame
+	-- takes the edge, because a UIStroke on a TextLabel outlines the letters;
+	-- its width is measured to the word, shrunk before it is ever cut.
+	--==========================================================================
+	local chipFrame = Instance.new("Frame")
+	chipFrame.Name = "Chip"
+	chipFrame.AnchorPoint = Vector2.new(1, 0)
+	chipFrame.Position = UDim2.new(1, -3, 0, 4)
+	chipFrame.Size = UDim2.fromOffset(28, HOT.ChipHeight)
+	chipFrame.BackgroundColor3 = HOT.Ink
+	chipFrame.BackgroundTransparency = 0.08
+	chipFrame.BorderSizePixel = 0
+	chipFrame.Visible = false
+	chipFrame.ZIndex = 8
+	chipFrame.Parent = button
+	UIKit.corner(chipFrame, 5)
+	local chipEdge = UIKit.stroke(chipFrame, HOT.Caption, 1.25)
+
 	local tag = Instance.new("TextLabel")
 	tag.Name = "Category"
-	tag.AnchorPoint = Vector2.new(1, 0)
-	tag.Position = UDim2.new(1, -5, 0, 5)
-	tag.Size = UDim2.fromOffset(36, 12)
+	tag.Size = UDim2.fromScale(1, 1)
 	tag.BackgroundTransparency = 1
 	tag.Font = Enum.Font.FredokaOne
-	tag.TextSize = 9
-	tag.TextXAlignment = Enum.TextXAlignment.Right
+	tag.TextSize = HOT.ChipTextMax
+	tag.TextColor3 = HOT.Caption
 	tag.Text = ""
 	tag.ZIndex = 9
-	tag.Parent = button
-	UIKit.stroke(tag, HOT.Ink, 1.5)
+	tag.Parent = chipFrame
 
 	--==========================================================================
-	-- THE NAME GETS TWO LINES, NOT AN ELLIPSIS
+	-- THE NAME
 	--
-	-- It was one line of 10 px truncated at the end, so "Rootwood Bat" read
-	-- "Rootwood..." and "Bramblejaw Trap" read "Brambleja...". On an ink strip
-	-- now, wrapped, and scaled down to 7 px before anything is cut -- the longest
-	-- names in the game fit whole at 64 px.
+	-- The hotbar's own FredokaOne with an ink outline, centred, up to two lines.
+	-- refreshHotbar picks the largest size that fits and only truncates at the
+	-- smallest. The label always carries the Tool's WHOLE name: TutorialUI
+	-- finds a plant's slot by reading it.
 	--==========================================================================
-	local caption = Instance.new("Frame")
-	caption.Name = "Caption"
-	caption.AnchorPoint = Vector2.new(0.5, 1)
-	caption.Position = UDim2.new(0.5, 0, 1, -3)
-	caption.Size = UDim2.new(1, -6, 0, 22)
-	caption.BackgroundColor3 = HOT.Ink
-	caption.BackgroundTransparency = HOT.CaptionBacking
-	caption.BorderSizePixel = 0
-	caption.ZIndex = 8
-	caption.Parent = button
-	UIKit.corner(caption, 8)
-
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "Name"
-	nameLabel.Position = UDim2.fromOffset(2, 1)
-	nameLabel.Size = UDim2.new(1, -4, 1, -2)
+	nameLabel.AnchorPoint = Vector2.new(0.5, 0)
+	nameLabel.Position = UDim2.new(0.5, 0, 0, HOT.NameTop)
+	nameLabel.Size = UDim2.fromOffset(HOT.SlotWidth - 6, HOT.NameHeight)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Font = Enum.Font.FredokaOne
+	nameLabel.TextSize = HOT.NameMax
 	nameLabel.TextColor3 = HOT.Caption
 	nameLabel.TextWrapped = true
-	nameLabel.TextScaled = true
+	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
+	nameLabel.Text = ""
 	nameLabel.ZIndex = 9
-	nameLabel.Parent = caption
-	local nameFit = Instance.new("UITextSizeConstraint")
-	nameFit.MaxTextSize = 10
-	nameFit.MinTextSize = 7
-	nameFit.Parent = nameLabel
+	nameLabel.Parent = button
+	UIKit.stroke(nameLabel, HOT.Ink, 1.5)
+
+	--==========================================================================
+	-- IN HAND
+	--
+	-- A compact warm strip centred on the card's bottom edge, so it never sits
+	-- on the name: measured, a two-line name at 10 px ends a pixel above the
+	-- strip's stroke. Lifted, the strip stays inside the tray's rim; at rest
+	-- (reduced effects) its stroke meets the tray's own ink border.
+	--==========================================================================
+	local inHand = Instance.new("Frame")
+	inHand.Name = "InHand"
+	inHand.AnchorPoint = Vector2.new(0.5, 0.5)
+	inHand.Position = UDim2.fromScale(0.5, 1)
+	inHand.Size = UDim2.fromOffset(HOT.SlotWidth - 14, HOT.InHandHeight)
+	inHand.BorderSizePixel = 0
+	inHand.Visible = false
+	inHand.ZIndex = 10
+	inHand.Parent = button
+	UIKit.corner(inHand, 6)
+	UIKit.gradient(inHand, HOT.LitTop, HOT.LitBottom)
+	UIKit.stroke(inHand, HOT.Ink, 1.5)
+	do
+		local word = Instance.new("TextLabel")
+		word.Name = "Word"
+		word.Size = UDim2.fromScale(1, 1)
+		word.BackgroundTransparency = 1
+		word.Font = Enum.Font.FredokaOne
+		word.TextSize = 9
+		word.TextColor3 = HOT.InHandText
+		word.Text = "IN HAND"
+		word.ZIndex = 11
+		word.Parent = inHand
+	end
 
 	--==========================================================================
 	-- THE RETURN HINT
@@ -2014,7 +2129,7 @@ local function acquireHotSlot(index: number): HotSlot
 	local hintLabel = Instance.new("TextLabel")
 	hintLabel.Name = "Hint"
 	hintLabel.AnchorPoint = Vector2.new(0.5, 1)
-	hintLabel.Position = UDim2.new(0.5, 0, 1, -27)
+	hintLabel.Position = UDim2.new(0.5, 0, 0, HOT.NameTop - 1)
 	hintLabel.Size = UDim2.fromOffset(52, 13)
 	hintLabel.BackgroundColor3 = HOT.Ink
 	hintLabel.BackgroundTransparency = 0.15
@@ -2024,18 +2139,28 @@ local function acquireHotSlot(index: number): HotSlot
 	hintLabel.TextColor3 = HOT.Numeral
 	hintLabel.Text = if UserInputService.KeyboardEnabled then "2x CLICK" else "2x TAP"
 	hintLabel.Visible = false
-	hintLabel.ZIndex = 9
+	hintLabel.ZIndex = 10
 	hintLabel.Parent = button
 	UIKit.corner(hintLabel, 4)
 
-	-- Hover and press, the Bag cards' pop at the strip's smaller scale. Silent: a
-	-- pointer crosses the strip on its way to the world far more often than it
-	-- means to pick anything, and the press already clicks when it equips.
+	--==========================================================================
+	-- HOVER AND PRESS
+	--
+	-- The shared UIKit.cardPop: under a mouse 1.05, two pixels up and a brighter
+	-- edge over 0.12 s; under a thumb a brief 0.98 that lets go the moment the
+	-- touch becomes a drag. Silent -- a pointer crosses the strip on its way to
+	-- the world far more often than it means to pick anything. UIScale and the
+	-- plate's own Position, so the list never sees a change.
+	--==========================================================================
 	local pressScale = Instance.new("UIScale")
 	pressScale.Parent = button
 	local pop = UIKit.cardPop(button, pressScale, {
 		hoverScale = HOT.HoverScale,
 		pressScale = HOT.PressScale,
+		glow = rimStroke,
+		glowRest = 1,
+		glowHover = HOT.HoverRimTransparency,
+		lift = HOT.HoverLift,
 		sound = false,
 	})
 
@@ -2050,16 +2175,22 @@ local function acquireHotSlot(index: number): HotSlot
 		tool = nil,
 		item = nil,
 		holder = holder,
-		heldScale = heldScale,
+		wrap = wrap,
 		pop = pop,
 		ringTint = ringTint,
+		plate = plate,
 		aura = aura,
-		lattice = lattice,
 		keycap = keycap,
+		chip = chipFrame,
 		tag = tag,
-		caption = caption,
+		chipEdge = chipEdge,
+		inHand = inHand,
 		ghost = nil,
 		lit = false,
+		liftGoal = 0,
+		liftTween = nil,
+		tagText = "",
+		nameText = "",
 		flashUntil = 0,
 	}
 
@@ -2139,11 +2270,10 @@ end
 --
 -- The drag used to raise this frame to 60 and each slot's button to 61, and left
 -- everything inside them at their own numbers. Under Global ZIndexBehavior that
--- moved two layers of a dozen -- and with the tray now painted on the Hotbar
--- frame itself, raising the frame alone would draw the tray OVER its own slots.
--- So the whole subtree moves by one offset and every layer goes back to exactly
--- the number it had. Anything built while the strip is up was built at its
--- resting number, and is left there.
+-- moved two layers of a dozen. So the whole subtree moves by one offset -- the
+-- strip's and the painted tray's behind it, together -- and every layer goes
+-- back to exactly the number it had. Anything built while the strip is up was
+-- built at its resting number, and is left there.
 --==============================================================================
 local liftStrip: (boolean) -> ()
 do
@@ -2157,12 +2287,19 @@ do
 		lifted = want
 		if want then
 			table.clear(resting)
-			resting[hotbar] = hotbar.ZIndex
-			hotbar.ZIndex += LIFT
-			for _, d in ipairs(hotbar:GetDescendants()) do
-				if d:IsA("GuiObject") then
-					resting[d] = d.ZIndex
-					d.ZIndex += LIFT
+			-- The painted tray is a sibling behind the strip (see THE TRAY), so it
+			-- rises with it or the cards would float over a Bag with no tray.
+			local tray = gui:FindFirstChild("HotbarTray")
+			for _, root in ipairs({ hotbar, tray }) do
+				if root and root:IsA("GuiObject") then
+					resting[root] = root.ZIndex
+					root.ZIndex += LIFT
+					for _, d in ipairs(root:GetDescendants()) do
+						if d:IsA("GuiObject") then
+							resting[d] = d.ZIndex
+							d.ZIndex += LIFT
+						end
+					end
 				end
 			end
 		else
@@ -2177,19 +2314,44 @@ do
 end
 
 --==============================================================================
--- THE BAG CHIP
+-- THE BAG CELL
 --
--- The mockup's last cell: how many slots are holding something out of how many
--- there are, and a door into the Bag from where the player is already looking.
--- The rail button stays the Bag's home and this is a shortcut, dropped below
--- HOT.ChipMinViewport where a five-slot tray needs the width. Its press is wired
--- beside the rail button's, where setOpen exists.
+-- The last cell on the strip, after a small gap: the approved Bag icon, BAG,
+-- and how many slots are holding something out of how many there are -- green
+-- while there is room, a calm amber when there is not. Full is not an error, so
+-- it is never red. A door into the Bag from where the player is already looking;
+-- the rail button stays the Bag's home. Dropped below HOT.ChipMinViewport, where
+-- a five-slot tray needs the width. Its press is wired beside the rail
+-- button's, where setOpen exists.
 --==============================================================================
-local chip: { holder: Frame, button: TextButton, count: TextLabel }
+local chip: { holder: Frame, spacer: Frame, button: TextButton, count: TextLabel,
+	countEdge: UIStroke }
 do
+	-- The gap before the Bag: the list's own padding either side of a thin
+	-- divider, so the cell reads as a separate button without a second tray.
+	local spacer = Instance.new("Frame")
+	spacer.Name = "BagGap"
+	spacer.LayoutOrder = MAX_SLOTS + 1
+	spacer.Size = UDim2.fromOffset(HOT.BagGap, HOT.SlotHeight)
+	spacer.BackgroundTransparency = 1
+	spacer.BorderSizePixel = 0
+	spacer.ZIndex = 4
+	spacer.Parent = hotbar
+	local divider = Instance.new("Frame")
+	divider.Name = "Divider"
+	divider.AnchorPoint = Vector2.new(0.5, 0.5)
+	divider.Position = UDim2.fromScale(0.5, 0.5)
+	divider.Size = UDim2.new(0, 2, 0.6, 0)
+	divider.BackgroundColor3 = HOT.Rim
+	divider.BackgroundTransparency = 0.5
+	divider.BorderSizePixel = 0
+	divider.ZIndex = 4
+	divider.Parent = spacer
+	UIKit.corner(divider, 1)
+
 	local holder = Instance.new("Frame")
 	holder.Name = "BagChip"
-	holder.LayoutOrder = MAX_SLOTS + 1
+	holder.LayoutOrder = MAX_SLOTS + 2
 	holder.Size = UDim2.fromOffset(HOT.ChipWidth, HOT.SlotHeight)
 	holder.BackgroundTransparency = 1
 	holder.BorderSizePixel = 0
@@ -2210,42 +2372,83 @@ do
 	UIKit.gradient(face, HOT.PlateTop, HOT.PlateBottom)
 	UIKit.stroke(face, HOT.Ink, 2.5)
 	UIKit.clicks(face)
+
+	local rim = Instance.new("Frame")
+	rim.Name = "Rim"
+	rim.AnchorPoint = Vector2.new(0.5, 0.5)
+	rim.Position = UDim2.fromScale(0.5, 0.5)
+	rim.Size = UDim2.new(1, -4, 1, -4)
+	rim.BackgroundTransparency = 1
+	rim.BorderSizePixel = 0
+	rim.ZIndex = 5
+	rim.Parent = face
+	UIKit.corner(rim, 10)
+	local rimStroke = UIKit.stroke(rim, HOT.HoverRim, 1.5, 1)
+
 	local press = Instance.new("UIScale")
 	press.Parent = face
 	UIKit.cardPop(face, press, {
 		hoverScale = HOT.HoverScale,
 		pressScale = HOT.PressScale,
+		glow = rimStroke,
+		glowRest = 1,
+		glowHover = HOT.HoverRimTransparency,
+		lift = HOT.HoverLift,
 		sound = false,
 	})
+
+	-- The rail's own approved Bag artwork, so the two doors look like one.
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.new(0.5, 0, 0, 9)
+	icon.Size = UDim2.fromOffset(34, 34)
+	icon.BackgroundTransparency = 1
+	icon.Image = RAIL.BagIcon
+	icon.ScaleType = Enum.ScaleType.Fit
+	icon.ZIndex = 8
+	icon.Parent = face
 
 	local word = Instance.new("TextLabel")
 	word.Name = "Word"
 	word.AnchorPoint = Vector2.new(0.5, 0)
-	word.Position = UDim2.new(0.5, 0, 0, 22)
-	word.Size = UDim2.new(1, -6, 0, 14)
+	word.Position = UDim2.new(0.5, 0, 0, 46)
+	word.Size = UDim2.new(1, -6, 0, 16)
 	word.BackgroundTransparency = 1
 	word.Font = Enum.Font.FredokaOne
-	word.TextSize = 11
+	word.TextSize = 14
 	word.TextColor3 = HOT.Numeral
 	word.Text = "BAG"
 	word.ZIndex = 9
 	word.Parent = face
+	UIKit.stroke(word, HOT.Ink, 1.5)
+
+	local pill = Instance.new("Frame")
+	pill.Name = "CountPill"
+	pill.AnchorPoint = Vector2.new(0.5, 0)
+	pill.Position = UDim2.new(0.5, 0, 0, 66)
+	pill.Size = UDim2.new(1, -10, 0, 18)
+	pill.BackgroundColor3 = HOT.Ink
+	pill.BackgroundTransparency = 0.05
+	pill.BorderSizePixel = 0
+	pill.ZIndex = 8
+	pill.Parent = face
+	UIKit.corner(pill, 9)
+	local countEdge = UIKit.stroke(pill, HOT.CountOpen, 1.5)
 
 	local count = Instance.new("TextLabel")
 	count.Name = "Count"
-	count.AnchorPoint = Vector2.new(0.5, 0)
-	count.Position = UDim2.new(0.5, 0, 0, 38)
-	count.Size = UDim2.new(1, -6, 0, 18)
+	count.Size = UDim2.fromScale(1, 1)
 	count.BackgroundTransparency = 1
 	count.Font = Enum.Font.FredokaOne
-	count.TextSize = 14
-	count.TextColor3 = HOT.LitTop
+	count.TextSize = 13
+	count.TextColor3 = HOT.CountOpen
 	count.Text = ""
 	count.ZIndex = 9
-	count.Parent = face
-	UIKit.stroke(count, HOT.Ink, 1.5)
+	count.Parent = pill
 
-	chip = { holder = holder, button = face, count = count }
+	chip = { holder = holder, spacer = spacer, button = face, count = count,
+		countEdge = countEdge }
 end
 
 --==============================================================================
@@ -2469,15 +2672,123 @@ local function refreshHotbar()
 			if data then
 				filled += 1
 				slot.preview.setModel(data.key, builderFor(data), previewKind(data))
-				-- The whole name, always: TutorialUI finds a plant's slot by it.
-				slot.name.Text = data.label
-				local tag = HOT.Tags[data.kind]
-				slot.tag.Text = if tag then tag.text else string.upper(data.kind)
-				slot.tag.TextColor3 = if tag then tag.colour else HOT.Caption
+
+				--==============================================================
+				-- THE NAME: THE WHOLE OF IT, AS LARGE AS TWO LINES ALLOW
+				--
+				-- The label always carries the full Tool name -- TutorialUI finds
+				-- a plant's slot by it. The size is the largest that fits the box
+				-- on at most two wrapped lines; an ellipsis only at the smallest.
+				-- Measured when the name changes, never on an ordinary redraw.
+				--==============================================================
+				if slot.nameText ~= data.label then
+					slot.nameText = data.label
+					slot.name.Text = data.label
+					-- A size fits when every WORD fits the width on its own line --
+					-- otherwise the engine breaks it mid-word ("Brambleja / w Trap"),
+					-- measured -- and the wrapped whole is at most two lines tall.
+					local width = HOT.SlotWidth - 6
+					local chosen, fits, wordsFit = HOT.NameMin, false, true
+					for size = HOT.NameMax, HOT.NameMin, -1 do
+						wordsFit = true
+						for word in string.gmatch(data.label, "%S+") do
+							if TextService:GetTextSize(word, size, Enum.Font.FredokaOne,
+								Vector2.new(1000, 1000)).X > width then
+								wordsFit = false
+								break
+							end
+						end
+						local tall = TextService:GetTextSize(data.label, size,
+							Enum.Font.FredokaOne, Vector2.new(width, 1000)).Y
+						if wordsFit and tall <= math.min(HOT.NameHeight, size * 2 + 0.5) then
+							chosen, fits = size, true
+							break
+						end
+					end
+					-- The last resort, at the smallest size: the box shrinks to two
+					-- lines so the second one ends in an ellipsis, or to ONE line
+					-- when a single word is wider than the card, because wrapping
+					-- would cut that word in half instead. Measured on
+					-- "Thornwhorl Lanterncap Gloomlotus" (three lines at 7 px
+					-- before this) and "Supernovusmaximus" ("Supernovusmaxi / mus").
+					local lines = if fits or wordsFit then 2 else 1
+					local tall = if fits then HOT.NameHeight else lines * HOT.NameMin
+					slot.name.TextSize = chosen
+					slot.name.TextWrapped = lines == 2
+					slot.name.TextTruncate = if fits then Enum.TextTruncate.None
+						else Enum.TextTruncate.AtEnd
+					slot.name.Size = UDim2.fromOffset(width, tall)
+					slot.name.Position = UDim2.new(0.5, 0, 0,
+						HOT.NameTop + (HOT.NameHeight - tall) / 2)
+				end
+
+				--==============================================================
+				-- THE CHIP COMES OFF THE TOOL, NEVER OFF A GUESS
+				--
+				--   bat, trap    what WeaponData says the item is
+				--   unhatched    POD, on a neutral edge. CarryService names a
+				--                banked pod ??? because the species is the
+				--                hatch's reveal, and rarity would name it through
+				--                the back door (Epic in Greenhollow is Bellchime)
+				--   hatched      its real SIZE off the tier it carries, edged in
+				--                its form's rarity colour -- the Index's word
+				--
+				-- A hatched plant whose tier is missing or out of range shows no
+				-- chip at all rather than a size nobody measured.
+				--==============================================================
+				local chipText: string? = nil
+				local chipColour = HOT.Caption
+				if data.kind == "plant" then
+					if data.tool:GetAttribute("Hatched") ~= true then
+						chipText = HOT.Tags.pod.text
+						chipColour = HOT.Tags.pod.colour
+					else
+						local species = SeedData.Get(tostring(data.tool:GetAttribute("SpeciesId")))
+						local tier = tonumber(data.tool:GetAttribute(ATTR.CarryingKg))
+						if species and tier and tier == tier
+							and tier >= 1 and tier <= SeedData.TierCount then
+							chipText = string.upper(SeedData.TierName(math.floor(tier)))
+							chipColour = GameConfig.RarityColor[species.Rarity] or HOT.Caption
+						end
+					end
+				else
+					local fixed = HOT.Tags[data.kind]
+					chipText = if fixed then fixed.text else string.upper(data.kind)
+					chipColour = if fixed then fixed.colour else HOT.Caption
+				end
+				if chipText then
+					if slot.tagText ~= chipText then
+						slot.tagText = chipText
+						slot.tag.Text = chipText
+						local roomy = HOT.ChipMaxWidth - 6
+						local size, width = HOT.ChipTextMin, roomy
+						for s = HOT.ChipTextMax, HOT.ChipTextMin, -1 do
+							width = TextService:GetTextSize(chipText, s, Enum.Font.FredokaOne,
+								Vector2.new(400, 40)).X
+							size = s
+							if width <= roomy then
+								break
+							end
+						end
+						slot.tag.TextSize = size
+						slot.tag.TextTruncate = if width <= roomy then Enum.TextTruncate.None
+							else Enum.TextTruncate.AtEnd
+						slot.chip.Size = UDim2.fromOffset(
+							math.min(HOT.ChipMaxWidth, math.max(20, math.ceil(width) + 8)), HOT.ChipHeight)
+					end
+					-- The edge carries the colour; the word takes it lifted toward
+					-- cream so a deep Epic still reads on ink.
+					slot.chipEdge.Color = chipColour
+					slot.tag.TextColor3 = chipColour:Lerp(HOT.Caption, 0.35)
+				end
+				slot.chip.Visible = chipText ~= nil
 			else
 				slot.preview.setModel("empty:" .. i, nil, "plant")
 				slot.name.Text = ""
+				slot.nameText = ""
 				slot.tag.Text = ""
+				slot.tagText = ""
+				slot.chip.Visible = false
 			end
 			--==================================================================
 			-- THE HINT IS SHOWN ONLY WHERE IT APPLIES
@@ -2494,16 +2805,14 @@ local function refreshHotbar()
 			--==================================================================
 			-- AN EMPTY SLOT IS A GHOST
 			--
-			-- No plate, no keyline, no lattice, no caption: a dashed outline, a
-			-- faded keycap and a plus. It is still the same button, so it is still
-			-- a drop target and still unequips when pressed. The dashes are built
+			-- No plate, no keyline, no chip, no name: a dashed outline, a faded
+			-- badge and a plus. It is still the same button, so it is still a
+			-- drop target and still unequips when pressed. The dashes are built
 			-- the first time a slot is empty and kept.
 			--==================================================================
 			local empty = data == nil
 			slot.button.BackgroundTransparency = if empty then 1 else 0
-			slot.lattice.Visible = not empty
-			slot.caption.Visible = not empty
-			slot.tag.Visible = not empty
+			slot.name.Visible = not empty
 			slot.keycap.BackgroundTransparency = if empty then 0.35 else 0
 			if empty and not slot.ghost then
 				local ghost = Instance.new("Frame")
@@ -2517,7 +2826,7 @@ local function refreshHotbar()
 				local plus = Instance.new("TextLabel")
 				plus.Name = "Plus"
 				plus.AnchorPoint = Vector2.new(0.5, 0.5)
-				plus.Position = UDim2.fromScale(0.5, 0.56)
+				plus.Position = UDim2.fromScale(0.5, 0.5)
 				plus.Size = UDim2.fromOffset(24, 24)
 				plus.BackgroundTransparency = 1
 				plus.Font = Enum.Font.FredokaOne
@@ -2534,12 +2843,14 @@ local function refreshHotbar()
 			end
 
 			--==================================================================
-			-- THREE FACTS, THREE RINGS, AND THEY MUST NOT COLLIDE
+			-- IN HAND MEANS THE CHARACTER IS HOLDING THIS EXACT TOOL
 			--
-			-- Lime says "this is in your hands" and outranks the rest, because it
-			-- is the one that changes second to second: the lime keyline, the soft
-			-- ring outside it, a lime numeral and the 1.06 scale. Light slate says
-			-- "you put this here". Ink is a slot doing nothing in particular.
+			-- Not "equipped into a loadout slot": a bat and a trap are both
+			-- equipped all the time and only the one in the hands is lit. Warm
+			-- amber-green keyline, a brighter face, the glow, the IN HAND strip
+			-- and a small lift -- and it outranks the other two rings, because it
+			-- is the one that changes second to second. Light slate says "you put
+			-- this here". Ink is a slot doing nothing in particular.
 			--
 			-- A drop's flash owns the keyline until its own redraw; see flashSlot.
 			--==================================================================
@@ -2549,22 +2860,63 @@ local function refreshHotbar()
 				slot.stroke.Color = if isHeld then WHITE
 					elseif record and not empty then HOT.Assigned
 					else HOT.Ink
-				slot.stroke.Thickness = if isHeld then 3 else 2.5
+				slot.stroke.Thickness = if isHeld then HOT.LitThickness else 2.5
 				slot.stroke.Transparency = if empty then 1 else 0
 			end
 			slot.aura.Visible = isHeld
+			slot.inHand.Visible = isHeld
 			slot.key.TextColor3 = if isHeld then HOT.NumeralLit else HOT.Numeral
 			if slot.lit ~= isHeld then
 				slot.lit = isHeld
-				TweenService:Create(slot.heldScale, TweenInfo.new(0.14, Enum.EasingStyle.Quad,
-					Enum.EasingDirection.Out), { Scale = if isHeld then HOT.HeldScale else 1 }):Play()
+				slot.plate.Color = if isHeld
+					then ColorSequence.new(HOT.LitPlateTop, HOT.LitPlateBottom)
+					else ColorSequence.new(HOT.PlateTop, HOT.PlateBottom)
+			end
+
+			--==================================================================
+			-- THE LIFT, AND REDUCED EFFECTS
+			--
+			-- `SeedAfterimageQuality = "Off"` is the setting SpeedFX, PlantAura
+			-- and UIKit.cardPop already obey: cards stay at rest, and the lit
+			-- keyline, face and strip still say which one is in the hands. One
+			-- tween, cancelled before the next, and only when the goal changes.
+			--==================================================================
+			local still = player:GetAttribute("SeedAfterimageQuality") == "Off"
+			local goal = if isHeld and not still then -HOT.HeldLift else 0
+			if slot.liftGoal ~= goal or (still and slot.wrap.Position.Y.Offset ~= goal) then
+				slot.liftGoal = goal
+				local running = slot.liftTween
+				if running then
+					running:Cancel()
+					slot.liftTween = nil
+				end
+				local want = UDim2.new(0.5, 0, 0.5, goal)
+				if still then
+					slot.wrap.Position = want
+				else
+					local tween = TweenService:Create(slot.wrap, TweenInfo.new(0.14,
+						Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = want })
+					slot.liftTween = tween
+					tween:Play()
+				end
 			end
 		end
 	end
 
+	--==========================================================================
+	-- THE BAG CELL'S COUNT
+	--
+	-- Slots holding something out of the slots there are. Green while one is
+	-- free, a calm amber when the strip is full -- full is a fact, not a fault.
+	--==========================================================================
 	chip.count.Text = string.format("%d/%d", filled, activeSlots)
+	local countColour = if filled >= activeSlots then HOT.CountFull else HOT.CountOpen
+	chip.count.TextColor3 = countColour
+	chip.countEdge.Color = countColour
 	local camera = Workspace.CurrentCamera
-	chip.holder.Visible = camera ~= nil and camera.ViewportSize.X >= HOT.ChipMinViewport
+	local roomForBag = camera ~= nil and camera.ViewportSize.X >= HOT.ChipMinViewport
+	chip.holder.Visible = roomForBag
+	chip.spacer.Visible = roomForBag
 end
 
 local function refreshSide()
@@ -3845,7 +4197,13 @@ RunService.Heartbeat:Connect(function()
 	end
 end)
 
---== The held Tool changing is a redraw: it is what the lime ring shows. ==--
+-- Reduced effects puts a lifted in-hand card back at rest, now rather than at
+-- the next time the hands change.
+player:GetAttributeChangedSignal("SeedAfterimageQuality"):Connect(function()
+	redraw()
+end)
+
+--== The held Tool changing is a redraw: it is what the warm ring shows. ==--
 task.spawn(function()
 	local lastHeld: Tool? = nil
 	while true do

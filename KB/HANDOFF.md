@@ -1,5 +1,184 @@
 # Steal a Seed — Session Handoff
 
+## Hotbar V2 — 2026-09-14 (CLAUDE)  (APPROVED BY THE OWNER, COMMITTED)
+
+The hotbar is rebuilt natively to the layout of
+`art/hotbar/reference/target-hotbar-v2.png`. The image is a layout reference
+only: nothing was cut from it, uploaded or shown in game, and every card draws
+the real Tool through the existing WeaponModel and CreatureModel builders.
+
+  * **Tray:** dark slate, centred at the bottom, a 3-px ink border, a faint
+    inner rim and the slate lattice. It is a sibling Frame, `HotbarTray`, because
+    UIListLayout lays out every GuiObject child of `Hotbar`. TutorialUI still
+    finds the slots as direct children of `Hotbar`, and the Name label still
+    carries the whole Tool name.
+  * **Cards:** 64x92, darker than the tray. Each has a round number badge (the
+    tenth says 0) and ONE chip top right. The preview is fitted to the drawn
+    silhouette, static, with one per key and no loop. The name uses FredokaOne
+    with an ink outline, on up to two centred lines.
+  * **Chips** are read off the Tool, never guessed:
+      - a weapon shows BAT or TRAP;
+      - an unhatched Tool shows POD on a neutral slate edge;
+      - a hatched plant shows its real size word (`SeedData.TierName` of
+        `CarryingKg`), edged in `GameConfig.RarityColor` of its species;
+      - a hatched plant with a missing or out-of-range tier shows no chip.
+  * **???:** CarryService names a banked pod `???`. The card shows that name,
+    the pod preview it always had and a POD chip. SpeciesId, rarity and size are
+    never read for it.
+  * **In hand** means the Tool is parented to the Character:
+      - an amber-to-green keyline at 3.5 px and a brighter face;
+      - a soft glow and an amber numeral;
+      - a 4-px lift, tweened once per change;
+      - a compact IN HAND strip on the card's bottom edge.
+    Nothing is lit while nothing is held.
+  * **Bag cell:** at the right end after a 5-px gap and a divider. It uses the
+    rail's approved Bag icon, the word BAG, and slots-used/slots-live: green
+    while a slot is free, calm amber when full. It is 52x92 and opens the same
+    Bag as the rail button.
+  * **Hover and press** use UIKit.cardPop:
+      - mouse: 1.05 scale, a 2-px lift and a brighter rim over 0.12 s;
+      - touch: 0.98, released after 10 px of travel;
+      - UIScale plus the plate's own Position, so the list never reflows;
+      - `SeedAfterimageQuality = "Off"` keeps everything at rest.
+
+### Files
+
+  * `src/StarterPlayer/StarterPlayerScripts/LoadoutUI.client.luau`: the strip's
+    look. No new top-level locals: state is on HotSlot or inside do-blocks, since
+    the chunk sits at 182 of Luau's 200.
+      - New connections, each made once: the tray follows the strip's
+        AbsoluteSize and Visible, and one attribute listener redraws when the
+        reduced-effects setting changes.
+      - No new loops, RenderStepped or remotes.
+      - Assignment, reconcile, the number row and the cooldown tick are
+        untouched. The drag's only change is that `liftStrip` raises the tray
+        with the strip.
+  * `src/ReplicatedStorage/SeedGame/Shared/GameConfig.luau`: `GameConfig.Hotbar`
+    holds the V2 palette and sizes. The plant tag "SEED" is gone.
+  * `src/ReplicatedStorage/SeedGame/Shared/UIKit.luau` has two optional
+    extensions; nil keeps every existing caller exactly as it was:
+      - `cardPop` gains `lift`;
+      - `frameItem`/`itemPreview` gain `fit`, which projects every drawn part's
+        corners through the lens and scales the camera distance until the
+        limiting axis spans `fit` of the glass.
+
+### Measured in Play (MCP, Studio window resized to the target view)
+
+| view (gui px) | slots | tray | cards | Bag |
+|---|---|---|---|---|
+| 1169x609 | 10 (1-9, 0) | 764x104 at x 202.5-966.5, y 495-599 | 64x92, pitch 69 | 52x92, 10/10 |
+| 1000x609 | 10 | 764x104 at x 118-882 | 64x92 | 52x92 |
+| 735x413 | 5 | 419x104 at x 158-577, y 299-403 | 64x92 | 52x92, 5/5 |
+
+The old strip was 764x92 and 414x92 at five slots. The width is unchanged and
+the strip is 12 px taller.
+
+**Preview size:** measured by projecting every drawn part's corners, over ten
+cards with a bat, a trap, a pod and seven creatures. Before, the item covered a
+mean of 34% of the card's width, 34% of its height and 11% of its area (64x80
+card). After, it covers 57% W, 50% H and 28% area of a 64x92 card, with the
+larger axis at 59%. That is about 2.9x the pixel area. Tall items fill 46 of
+the glass's 48 px and wide ones 56 of 58. **0 clipped.**
+
+### Behaviour verified in Play
+
+  * **Full desktop:** ten slots numbered 1-9 and 0.
+      - Key 7 lit slot 7, then key 0 moved IN HAND to slot 10 (the tenth). Key 2
+        held the trap. Key 1 cannot be injected (see Not verified).
+      - Duplicates are separate cards: Novaorb x2 and Nubkin x3, one per Tool.
+      - Every size chip TINY to COLOSSAL was seen, COLOSSAL at 7 px.
+  * **Hover:** slot 5 went to scale 1.05, lift -2 and rim 1 -> 0.45. Slots 4 and
+    6 did not move a pixel. Moving to slot 4 put slot 5 back to 1.0 / 0 / 1.
+  * **Cooldown:** a bat with ReadyAt +90 s reads as a black card (shade 1.00),
+    and a held trap at +10 s shows the shade rising under the lit face. The
+    shade is now `HOT.CooldownShade` 0.25: at the old 0.45 it was barely visible
+    on the darker card.
+  * **Two-line names with IN HAND:** "Bramblejaw Trap" at 10 px ends at y 581.5
+    and the strip's stroke starts at 582.5. "Trap" used to lose its descender
+    under the strip.
+  * **Long names:**
+      - "Thornwhorl Lanterncap Gloomlotus" now takes two lines at 7 px with an
+        ellipsis; before, it was three lines.
+      - "Supernovusmaximus" now takes one line at 7 px with an ellipsis; before,
+        it was cut in half.
+      - Every real name is unchanged.
+  * **Drag:** Slagbloom from the Bag onto slot 8 assigned it. The ghost read
+    "SLAGBLOOM -> HOTBAR", the strip sat at ZIndex 60 during the drag and 4
+    after, and the Plants tab went 9 -> 8.
+      - Dragging slot 8 onto the open Bag returned it.
+      - A double-click on the assigned slot returned it and unequipped it.
+      - No ghost label was left behind.
+  * **Bag cell:** a click opened the Bag and another shut it. At 735x413 the Bag
+    panel ends at y 290, above the tray's top at 299.
+  * **Breakpoint, live:** 1000 -> 880 gave 5 slots, 5/5 and a 419-px tray, and
+    the slot-8 assignment was released to the Bag (Plants 8 -> 9). 880 -> 1000
+    gave 10 slots and 10/10, with no restore, as defined. There were 11 Tools
+    before and after, no duplicates, SeedLoadout x1 and HotbarTray x1.
+  * **Reduced effects (`Off`):** hover stays at 1.000 with no lift, the rim
+    still brightens, and the held card rests at 0. Clearing the setting lifted
+    it to -4 again.
+  * **Pod carry with a plant in hand** was SIMULATED on the client with
+    `CarryingSpecies` plus UnequipTools, not a real nest take. IN HAND cleared,
+    a plant card click was refused while carrying, and the bat card still
+    equipped.
+  * **Death:** server Health 0. The strip rebuilt from the real Tools (bat,
+    trap, ???, Nubkin, one ghost, 4/10), with SeedLoadout x1, HotbarTray x1,
+    BagButton x1 and no duplicate strip children.
+  * **Partial:** four items and one dashed ghost with a faded badge; the tray's
+    lattice shows through the ghost.
+  * **Console:** clean in every session. The one error line came from a probe
+    script's own typo.
+
+### Checks
+
+  * **19/19 specs pass** (PlantGlowSpec 39/39 included), 0 threw.
+  * All three files compile through `loadstring`. Each ran for real: UIKit and
+    GameConfig through LoadoutUI's requires in Play, GameConfig through the spec
+    runner's fresh require.
+  * `git diff --check` is clean and `rojo build` succeeds.
+
+### The Cash HUD
+
+In the 1000-px Studio test window, the centred tray's rectangle reached over
+`CashUI`'s bottom-left block. The old strip had the same width. The owner
+reviewed V2 and confirmed that it does not overlap the Cash HUD, so nothing was
+changed for it. The 1000-px reading is kept here only as a measurement.
+
+### Not verified
+
+  * **The Device Simulator.** Selecting Test > Device Simulator from automation
+    produced no emulation: Play still reported TouchEnabled false. So the
+    735x413 view was a desktop window at that size, which takes the same
+    five-slot path through the width rule. Not seen:
+      - the touch press (cardPop's press is Touch-only);
+      - the "2x TAP" wording;
+      - the thumbstick and jump button beside the strip.
+    By Roblox's small-screen layout the jump button sits at x 640-710, right of
+    the tray's 577. The dynamic-thumbstick zone (the left 40%) overlaps the
+    tray's left 136 px as it always has, and a touch that lands on a card is
+    the card's.
+  * **A zero-item player.** The owner's real bat and trap cannot be removed
+    without touching real Tools. The code path draws one ghost and 0/N.
+  * **A real nest take** (see the simulated carry above), a physical phone, and
+    key 1 through VirtualInput. Key 1 is refused as a CoreGui binding, so slot 1
+    was checked by click.
+
+### Testing traps
+
+  * **Mouse coordinates:** `user_mouse_input` x/y are GUI coordinates, below the
+    58-px inset. `GetMouseLocation` reports viewport coordinates.
+  * **Window size:** Studio's panel layout changes between Play sessions (a
+    docked plugin panel came and went), so read ViewportSize after every resize.
+
+### Approval and commit
+
+The owner approved V2 visually. The commit carries only
+`LoadoutUI.client.luau`, `GameConfig.luau`, `UIKit.luau`, this section,
+`art/hotbar/reference/target-hotbar-v2.png` and
+`output/imagegen/hotbar/target-hotbar-v2.prompt.md`. The deleted `thumbnail1`,
+the other thumbnails, `AI mesh generated/`, the skill folders and the
+cosmic-mammoth reference are unrelated work and were left out.
+
 ## Plant glow is night-only — 2026-09-14 (CLAUDE)  (APPROVED BY THE OWNER, COMMITTED)
 
 A garden of several large glowing plants washed out to white at midday: every
