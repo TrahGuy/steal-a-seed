@@ -1,5 +1,61 @@
 # Steal a Seed — Session Handoff
 
+## Picking up is back to simple, and planting was blocked by the fence — 2026-09-14 (CLAUDE)
+
+The owner reported that the click-to-pick work had made the game worse: plants
+took many clicks to place and the camera would not move. What they want is only
+this -- no pickup prompt; click a planted plant and it is outlined, with a small
+PICK UP button above it; press the button to take it.
+
+### `PlantPickUI` is rewritten to exactly that (880 lines -> 519)
+
+  * Click or tap a grown plant in your own bed: a lime outline, and a small
+    `PICK UP` button in a BillboardGui floating above the plant. Press it and the
+    plant comes back to your hands through `PickUpAction`.
+  * **Gone:** the bottom-of-screen button, the `[E]` key, `TOO FAR`, the
+    two-range reach logic.
+  * **While a plant Tool is held, this file ignores input completely**, checked
+    at the press before it looks at anything. The previous version moved that
+    check to the release so a click on a grown plant could select it mid-plant;
+    that is the change the owner felt as planting breaking.
+  * Only a clean click counts (10 px, 0.5 s) and input is never marked handled,
+    so camera drags are untouched.
+  * The server's `PickupPrompt` still exists, invisible and disarmed. The client
+    uses it only as the marker that a plant is grown and yours. Removing the
+    instance outright would touch `entry.prompt`, which PlantService also uses
+    for the HatchPrompt state -- not worth that risk for an object nobody sees.
+
+### `PlantPlace` could not see the bed through its own fence
+
+MEASURED, standing at the edge of the bed with the default camera behind the
+character: sweeping the screen with `PlantPlace.soilPoint`'s own raycast landed on
+**Rail 168 times, BedFrame 24, Post 9, and the bed 0 times.** Its filter ignored
+the character and the plants but not the plot's own fence, so a click only placed
+a plant when it happened to find a gap between two rails -- "it takes many
+clicks". It now ignores every direct child of the player's plot that is not a bed
+part (the plot is flat; under a hundred children). Same spot afterwards: **139
+screen positions land on the bed.** The rest of the world still blocks the ray.
+
+### What could NOT be verified from here, stated plainly
+
+  * **A real click end to end.** Injected mouse clicks in this Studio session
+    arrived with `gameProcessedEvent = true` regardless of state -- no tool
+    held, no GUI under the cursor, no clickable prompt in range, tool activation
+    switched off -- so both PlantPlace and PlantPickUI correctly ignored them.
+    That flag says nothing about a real mouse. The pieces were verified
+    separately: the ray now resolves to `SoilRow`, and the server accepts a
+    placement.
+  * **The camera.** A synthetic right-drag reached the game unprocessed and the
+    camera module engaged (`MouseBehavior` went to `LockCurrentPosition`), but
+    synthetic moves carry zero delta, so nothing rotated. Nothing in any shipped
+    client script touches the camera. The live camera read `Custom`, FOV 70,
+    subject the humanoid. The Studio EDIT camera had been left at FOV 34 by
+    preview screenshots and was reset to 70.
+
+The owner needs to confirm both by hand.
+
+  * All 18 specs pass.
+
 ## Clicking a plant actually selects it now — 2026-09-13 (CLAUDE)
 
 Playtesting the click-to-pick change found clicks being silently dropped. Four

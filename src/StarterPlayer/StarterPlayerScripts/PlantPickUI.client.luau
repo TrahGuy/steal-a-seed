@@ -1,63 +1,43 @@
 --!strict
 --==============================================================================
--- PICKING YOUR OWN PLANT BACK UP, ON EVERY DEVICE
+-- PICKING YOUR OWN PLANT BACK UP
 --
--- WHY THIS EXISTS AT ALL, because the obvious answer was tried and shipped and
--- the owner found it on a real phone.
+-- Click, or tap, a grown plant in your own bed. It is outlined, and a small
+-- PICK UP button floats above it. Press the button and the plant comes back to
+-- your hands. That is the whole feature.
 --
--- A grown plant carries a `PickupPrompt` with a hold of ZERO -- taking your own
--- plant off your own bed should not need a hold, and that is still the right
--- call. But a zero-hold prompt fires on the touch that STARTS a gesture, and on
--- a phone the gesture that starts near a plant is usually the camera. So a thumb
--- coming down to look around lifted the plant instead, and the player had to
--- plant it again. Cancelling on movement cannot help: by the time a finger has
--- moved far enough to be called a drag, the pickup already happened.
---
--- Three things that do NOT fix it, for whoever is tempted:
---
---   a bigger movement threshold   makes the button harder to press on purpose
---                                 and still fires before the finger moves
---   another offset                the alignment is already exact -- 526a049
---                                 measured it and the owner approved it
---   a global delay before acting  makes every prompt in the game feel broken to
---                                 fix one of them
---
--- THE VERB WAS WRONG, NOT THE GEOMETRY. A destructive action must not be the
--- first half of an ambiguous gesture. So on touch it takes two deliberate steps:
---
---   1. tap the plant          -> it is SELECTED, and outlined. Nothing is taken.
---   2. press the PICK UP button -> now it is taken.
---
--- Step 1 is harmless, so being wrong about it costs nothing -- which is what
--- lets step 1 be a guess about a fingertip at all. Step 2 is a real button in a
--- real ScreenGui with its own rectangle, so being wrong about it is impossible.
---
--- IT IS EVERY DEVICE NOW. Desktop kept the floating prompt for a while on the
--- grounds that a mouse cursor is not ambiguous, and that is true about WHERE the
--- cursor points -- but not about whether the player meant to spend the plant. A
--- left-drag is also how the camera turns, so the same gesture collision exists
--- with a mouse; and E is the key every other prompt in the game answers to, so
--- walking past a bed with a finger resting on it lifted plants nobody chose.
---
--- The two steps are the same two on all three input methods, which is the point:
---
---   1. tap, or click, the plant   -> SELECTED and outlined. Nothing is taken.
---   2. press PICK UP, or E        -> now it is taken.
+-- There is no floating proximity prompt, no key, and no button pinned to the
+-- bottom of the screen. The button lives over the plant it belongs to, so there
+-- is never any doubt which plant it will take.
 --
 --==============================================================================
--- WHAT THIS DOES NOT DO
+-- WHAT THIS FILE MUST NEVER DO, BECAUSE AN EARLIER VERSION OF IT DID
 --
--- It does not pick anything up, decide who owns anything, or keep a list of what
--- anybody has. It asks the server, using the verb the Garden panel has always
--- used, and the server decides. This file owns a highlight and a button.
+--   GET IN THE WAY OF PLANTING. While a plant Tool is in your hands, PlantPlace
+--   owns every click -- it plants on the press. This file ignores input
+--   completely in that state, before it even looks at where the click landed.
+--   An earlier version tried to be clever and select plants under the pointer
+--   while planting; it turned putting a plant down into several clicks.
 --
--- IT WAS SUPPOSED TO PRESS THE PROMPT, and that is worth recording because the
--- reason it cannot is a real defect in something else -- see THE PROMPT CANNOT BE
--- PRESSED, below.
+--   GET IN THE WAY OF THE CAMERA. Only a clean click counts: a press and a
+--   release in nearly the same place, quickly. A drag is the camera and is left
+--   alone. And input is never marked handled here, so nothing downstream ever
+--   loses a press to this file.
+--
+--==============================================================================
+-- WHAT IT DOES NOT DO
+--
+-- It does not pick anything up or decide who owns anything. It asks the server
+-- with PickUpAction -- the same verb the Garden panel has always used -- and
+-- PlantService.PickUpById re-tests ownership, growth and the bag itself.
+--
+-- The server's PickupPrompt still exists on each grown plant, invisible and
+-- disarmed (see PlantService.attachPickup). This file uses it only as the marker
+-- that a plant is grown and yours, which is exactly the fact the server set it
+-- up to mean.
 --==============================================================================
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -81,202 +61,104 @@ local CREAM = Color3.fromRGB(242, 238, 206)
 local BLACK = Color3.fromRGB(0, 0, 0)
 local LIME = Color3.fromRGB(150, 220, 96)
 
---==============================================================================
--- ONE NAME, AND NOBODY ELSE DRAWS IT
---
--- PromptUI never draws the pickup panel now, on any device, and this file always
--- does -- so the two are complementary by construction with no condition to keep
--- in step at all. Both sides key off the same string, PickupPrompt, which is the
--- name PlantService gives the one prompt this is about. There is no device where
--- both draw an affordance and none where neither does.
---
--- The hotbar's own 10-or-5 decision is a DIFFERENT question -- it is about how
--- much width a strip needs -- and is deliberately not reused here. A desktop
--- with a touchscreen gets ten slots and this button, which is correct: it can
--- touch, so it needs a touch-safe way to pick a plant, and E still works.
---==============================================================================
-local KEYBOARD = UserInputService.KeyboardEnabled
 local PICKUP_PROMPT = "PickupPrompt"
 
---==============================================================================
--- TAP, OR CAMERA
---
--- Ten pixels and half a second. Deliberately SMALL, because this is not the
--- thing standing between the player and a mistake -- the button is. If a tap is
--- misread as a drag the player taps again; if a drag is misread as a tap they get
--- an outline they did not ask for and no plant is harmed. That asymmetry is the
--- whole reason the two-step exists, and it is why these numbers can stay tight
--- instead of creeping upward the way a one-step threshold has to.
---
--- The duration cap is what stops a slow camera swing that happens to return to
--- where it started from reading as a tap.
---==============================================================================
+-- A clean click: ten pixels and half a second. Anything that moves further or
+-- lasts longer is a camera drag and is none of this file's business.
 local TAP_SLOP = 10
 local TAP_SECONDS = 0.5
 
--- Long enough that a double-press cannot ask twice, short enough to be invisible
--- to somebody who genuinely wants a second plant. The server refuses the second
--- ask anyway -- `byPlot[id] ~= entry` once it is gone -- so this is politeness
--- about the wire rather than the guard itself.
+-- How far away a plant can still be clicked. Generous, because a grown plant
+-- wanders its bed and a player looking straight at one expects the click to
+-- answer.
+local SELECT_RANGE = 60
+
+-- Long enough that a double press cannot ask twice.
 local PRESS_DEBOUNCE = 0.4
 
---==============================================================================
--- ONE HIGHLIGHT FOR THE WHOLE GAME
---
--- Created once and reparented, never one per plant: a bed holds twenty and
--- twenty permanent Highlight instances is twenty things to leak. Parent is the
--- adornee -- a Highlight with no Adornee outlines whatever it is parented to --
--- so clearing the selection is `Parent = nil` and the instance survives for the
--- next one.
---
--- Occluded, NOT AlwaysOnTop. A plant you can see through the fence is a plant
--- you would try to tap through the fence.
---==============================================================================
-local highlight: Highlight? = nil
-
-local function theHighlight(): Highlight
-	local made = highlight
-	if made then
-		return made
-	end
-	made = Instance.new("Highlight")
-	made.Name = "SeedPlantPick"
-	made.DepthMode = Enum.HighlightDepthMode.Occluded
-	made.FillColor = LIME
-	made.FillTransparency = 0.86
-	made.OutlineColor = LIME
-	made.OutlineTransparency = 0
-	highlight = made
-	return made
-end
+-- How often a selection checks that its plant is still there and still near.
+local POLL_SECONDS = 1 / 3
 
 --==============================================================================
--- THE BUTTON
+-- THE OUTLINE
 --
--- A real TextButton in a real ScreenGui, sitting clear ABOVE the hotbar rather
--- than over it: eight pixels above the strip's top edge, which is its bottom gap
--- plus its height, both read off GameConfig.Hotbar so restyling the strip moves
--- this with it (it was a typed 94 for a 74-tall strip). Nothing overlaps, so
--- nothing steals a hotbar tap -- which matters because the hotbar is where the
--- plant is going.
---
--- DisplayOrder 31 is one above SeedLoadout so the strip cannot draw over it, and
--- below every panel (32+) so an open bag covers it -- though opening a panel
--- clears the selection anyway, so that is a belt on top of braces.
+-- One Highlight for the whole game, reparented to whichever plant is selected.
+-- Occluded rather than AlwaysOnTop, so a plant hidden behind something is not
+-- lit up through it.
 --==============================================================================
-local HOT = GameConfig.Hotbar
-local HOTBAR_CLEARANCE = HOT.BottomGap + HOT.SlotHeight + HOT.TrayPad * 2 + 8
-local BUTTON_HEIGHT = 46
+local highlight = Instance.new("Highlight")
+highlight.Name = "SeedPlantPick"
+highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+highlight.FillTransparency = 1
+highlight.OutlineColor = LIME
+highlight.OutlineTransparency = 0
 
-local layer = Instance.new("ScreenGui")
-layer.Name = "SeedPlantPick"
-layer.ResetOnSpawn = false
-layer.DisplayOrder = 31
-layer.Enabled = false
-layer.Parent = playerGui
+--==============================================================================
+-- THE BUTTON ABOVE THE PLANT
+--
+-- A BillboardGui in PlayerGui, adorned to the selected plant's base and lifted
+-- above its top in WORLD space, so it stays straight up however the plant sways
+-- and follows it as it wanders. Pixel-sized rather than stud-sized, so it is the
+-- same small button whether the plant is a Tiny or a Colossal.
+--
+-- It must live in PlayerGui, not in the workspace: a button on a billboard only
+-- receives clicks from there.
+--==============================================================================
+local billboard = Instance.new("BillboardGui")
+billboard.Name = "SeedPlantPickButton"
+billboard.AlwaysOnTop = true
+billboard.Active = true
+billboard.LightInfluence = 0
+billboard.MaxDistance = 250
+billboard.ResetOnSpawn = false
+billboard.Size = UDim2.fromOffset(112, 40)
+billboard.Enabled = false
+billboard.Parent = playerGui
 
 local button = Instance.new("TextButton")
 button.Name = "PickUp"
-button.AnchorPoint = Vector2.new(0.5, 1)
-button.Position = UDim2.new(0.5, 0, 1, -HOTBAR_CLEARANCE)
--- 44 x 44 is the floor Roblox asks for and the one the close X was raised to in
--- 00b0142. This is wider than tall because it carries words, never narrower.
-button.Size = UDim2.fromOffset(168, BUTTON_HEIGHT)
+button.Size = UDim2.fromScale(1, 1)
 button.AutoButtonColor = false
 button.BorderSizePixel = 0
+button.BackgroundTransparency = 0.12
 button.Text = ""
-button.BackgroundTransparency = 0.18
-button.ZIndex = 5
-button.Parent = layer
-UIKit.corner(button, 12)
+button.Parent = billboard
+UIKit.corner(button, 10)
 UIKit.gradient(button, PANEL.Fill, PANEL.Shade)
 UIKit.stroke(button, BLACK, 2.5)
-UIKit.clicks(button)
 
--- A second, brighter keyline inside the black one: the house edge stays black on
--- every surface in this game, so "this is live" is said by the ring inside it.
 local ring = Instance.new("Frame")
 ring.Name = "Ring"
 ring.Position = UDim2.fromOffset(3, 3)
 ring.Size = UDim2.new(1, -6, 1, -6)
 ring.BackgroundTransparency = 1
-ring.ZIndex = 6
 ring.Parent = button
-UIKit.corner(ring, 10)
+UIKit.corner(ring, 8)
 UIKit.stroke(ring, LIME, 1.5)
 
-local label = UIKit.outlined(button, "Word", 15, CREAM, 2)
-label.AnchorPoint = Vector2.new(0.5, 0)
-label.Position = UDim2.new(0.5, 0, 0, 5)
-label.Size = UDim2.new(1, -12, 0, 17)
--- The key is named on the button rather than on a billboard, which is the only
--- place it is ever true: E does nothing until something is selected.
-label.Text = if KEYBOARD then "[E] PICK UP" else "PICK UP"
-label.ZIndex = 8
-
--- The plant's own name under the verb, so a player with two plants in reach can
--- see WHICH one they are about to lift. Truncated rather than wrapped: this is a
--- 46-pixel button and a second line would push the verb off it.
-local caption = Instance.new("TextLabel")
-caption.Name = "Which"
-caption.AnchorPoint = Vector2.new(0.5, 1)
-caption.Position = UDim2.new(0.5, 0, 1, -4)
-caption.Size = UDim2.new(1, -12, 0, 14)
-caption.BackgroundTransparency = 1
-caption.Font = Enum.Font.FredokaOne
-caption.TextSize = 11
-caption.TextColor3 = PANEL.Edge
-caption.TextTruncate = Enum.TextTruncate.AtEnd
-caption.Text = ""
-caption.ZIndex = 8
-caption.Parent = button
+local label = UIKit.outlined(button, "Word", 16, CREAM, 2)
+label.Size = UDim2.fromScale(1, 1)
+label.Text = "PICK UP"
 
 --==============================================================================
--- WHAT IS SELECTED, AND EVERYTHING WATCHING IT
+-- WHAT IS SELECTED
 --
--- `watching` holds the connections that belong to THIS selection -- the model
--- going away, the prompt being switched off -- and is emptied every time the
--- selection is cleared. The global watchers further down are connected once and
--- live for the session; mixing the two is how a per-selection connection becomes
--- a per-selection leak.
+-- `watching` holds the connections that belong to THIS selection and is emptied
+-- every time it is cleared. `generation` stops a poll started for an old
+-- selection the moment a new one begins.
 --==============================================================================
 type Selection = {
 	model: Model,
 	prompt: ProximityPrompt,
-	label: string,
 }
 
 local selected: Selection? = nil
 local watching: { RBXScriptConnection } = {}
+local generation = 0
 local pressedAt = 0
 
--- Bumped by every clear and every select, so a watcher started for one selection
--- stops the moment it is no longer the current one. Cheaper and more certain than
--- trying to cancel a coroutine.
-local generation = 0
-
 --==============================================================================
--- HOW OFTEN A SELECTION LOOKS AT ITS OWN DISTANCE
---
--- A THIRD OF A SECOND, and only while something is selected -- the loop exits on
--- the next tick after the selection goes. So a player standing in their garden
--- with nothing selected pays nothing, which is the repo rule, and this is one
--- coroutine for the whole game rather than anything per plant or per frame.
---
--- It exists because PromptHidden cannot quite close the gap on its own: it fires
--- on a TRANSITION, so if a prompt is already hidden for its own reasons when the
--- player wanders off, no further hide arrives and the button would sit there
--- offering something out of reach.
---==============================================================================
-local RANGE_POLL = 1 / 3
-
---==============================================================================
--- WHAT IS IN YOUR HANDS
---
--- Same test PlantPlace uses, and that is the point: while a plant Tool is held,
--- PlantPlace owns the tap -- a touch is aimed at the SOIL, to put the thing
--- down. Selecting a different plant in the middle of placing one is not
--- something anybody means, so this stands down entirely rather than racing it.
+-- SMALL QUESTIONS
 --==============================================================================
 local function holdingAPlant(): boolean
 	local character = player.Character
@@ -284,114 +166,22 @@ local function holdingAPlant(): boolean
 	return tool ~= nil and type(tool:GetAttribute("SpeciesId")) == "string"
 end
 
---==============================================================================
--- STILL CLOSE ENOUGH TO PICK IT UP
---
--- Asked of the PROMPT, so the distance lives in exactly one place -- the same
--- MaxActivationDistance the engine uses to show it and the server honours when it
--- triggers. A second copy of that number here would be a second thing to keep in
--- step with PlantService.
---==============================================================================
-local function inRange(prompt: ProximityPrompt): boolean
-	local handle = prompt.Parent
-	local character = player.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not (handle and handle:IsA("BasePart") and root and root:IsA("BasePart")) then
-		return false
-	end
-	return (handle.Position - root.Position).Magnitude <= prompt.MaxActivationDistance
-end
-
---==============================================================================
--- AND STILL CLOSE ENOUGH TO POINT AT, WHICH IS A DIFFERENT QUESTION
---
--- SELECTING AND PICKING UP ARE NOT THE SAME REACH. Pickup is the prompt's own 26
--- studs and the server honours it. Selection was using that same number and it
--- made the feature look broken: a grown plant WANDERS its bed, the bed is bigger
--- than 26 studs across, and a plant you are plainly looking at and clicking on
--- simply did nothing -- no outline, no button, no reason given. A click that
--- lands on a plant has to answer.
---
--- So a click selects out to SELECT_RANGE and the BUTTON carries the bad news:
--- inside 26 it offers the verb, outside it says TOO FAR and refuses. Being wrong
--- about a selection costs nothing -- that asymmetry is the whole reason the
--- two-step exists -- and "walk closer" is a thing a player can act on where
--- silence is not.
---==============================================================================
-local SELECT_RANGE = 60
-
-local function inSelectRange(prompt: ProximityPrompt): boolean
-	local handle = prompt.Parent
-	local character = player.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not (handle and handle:IsA("BasePart") and root and root:IsA("BasePart")) then
-		return false
-	end
-	return (handle.Position - root.Position).Magnitude <= SELECT_RANGE
-end
-
---==============================================================================
--- WHAT THE BUTTON SAYS RIGHT NOW
---
--- Called on selection and again every RANGE_POLL, so walking into reach turns
--- the verb on under the player's feet without them having to re-click.
---==============================================================================
-local READY_WORD = if KEYBOARD then "[E] PICK UP" else "PICK UP"
-local TOO_FAR_WORD = "TOO FAR"
-local MUTED = Color3.fromRGB(198, 190, 172)
-
-local function refreshReach(): boolean
-	local current = selected
-	if not current then
-		return false
-	end
-	local close = inRange(current.prompt)
-	label.Text = if close then READY_WORD else TOO_FAR_WORD
-	label.TextColor3 = if close then CREAM else MUTED
-	return close
-end
-
 local function myPlot(): Model?
 	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Plot)) do
-		if instance:IsA("Model")
-			and instance:GetAttribute(ATTR.OwnerUserId) == player.UserId then
+		if instance:IsA("Model") and instance:GetAttribute(ATTR.OwnerUserId) == player.UserId then
 			return instance
 		end
 	end
 	return nil
 end
 
---==============================================================================
--- IS THIS PLANT MINE, GROWN, AND OFFERING ITSELF
---
--- OWNERSHIP IS STRUCTURAL HERE, not a comparison: a plant is eligible only if it
--- is inside MY plot's Plants folder, and a neighbour's plants are in a folder
--- this never looks in. That is the same shape as the server's own guard -- it
--- indexes `growing` by plot, so asking for somebody else's placement id finds
--- nothing -- and it means a stranger's plant produces no selection and therefore
--- no button, rather than a button that fails.
---
--- The PROMPT is the availability test. It exists only on a grown plant
--- (`attachPickup` runs at STAGE_GROWN), it is destroyed with the model, and it
--- carries its own Enabled -- so "can this be picked up right now" is one
--- question asked of the object that will answer it, rather than three
--- reimplemented conditions that can drift from the server's.
---==============================================================================
+-- The disarmed server prompt for a plant, if that plant is grown and in MY
+-- plot. Looked up by placement id under my own plot, so a neighbour's plant
+-- never resolves.
 local function promptFor(model: Instance): ProximityPrompt?
-	if not model:IsA("Model") then
+	if not (model:IsA("Model") and CollectionService:HasTag(model, GameConfig.Tags.Planted)) then
 		return nil
 	end
-	if not CollectionService:HasTag(model, GameConfig.Tags.Planted) then
-		return nil
-	end
-	--==========================================================================
-	-- THE PROMPT IS NOT IN THE MODEL ANY MORE
-	--
-	-- It hangs off a server-owned anchor that follows the plant's authoritative
-	-- wander position (see PlantService), kept in plot/Runtime/PickupAnchors and
-	-- named by placement id. Looked up in MY plot only, so ownership stays
-	-- structural: a neighbour's plant never resolves a prompt here.
-	--==========================================================================
 	local id = model:GetAttribute("PlacementId")
 	local plot = myPlot()
 	local runtime = if plot then plot:FindFirstChild(GameConfig.Plot.RuntimeFolderName) else nil
@@ -408,33 +198,29 @@ local function promptFor(model: Instance): ProximityPrompt?
 	return nil
 end
 
-local function myPlantsFolder(): Instance?
-	local plot = myPlot()
-	return if plot then plot:FindFirstChild(GameConfig.Plot.PlantsFolderName) else nil
+local function distanceTo(model: Model): number
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not (root and root:IsA("BasePart")) then
+		return math.huge
+	end
+	return (model:GetPivot().Position - root.Position).Magnitude
 end
 
 --==============================================================================
--- RAY VERSUS THE PLANT'S REAL BOX
+-- WHICH PLANT IS UNDER THE POINTER
 --
--- WHY NOT Workspace:Raycast, which would be the obvious way. Every creature part
--- in this game is CanQuery = false, and that is not an oversight -- it is
--- invariant 1, and CombatService leans on it: "a wall stops a bat, a pod does
--- not". A raycast finds only genuinely solid things, which is exactly the set
--- that should block a swing. Turning plant parts queryable to make them
--- tappable would start blocking bat swings on the far side of a garden, so the
--- ray tests the model's own bounding box instead and the invariant is untouched.
+-- Plants are CanQuery = false, so a raycast passes straight through them. The
+-- ray is tested against each plant's own bounding box instead, padded by a stud
+-- all round so a click near a petal still counts.
 --
--- This is a real ray against real geometry, not an estimated screen rectangle --
--- the mistake 526a049 exists to correct. Measured on a live plant whose box is
--- 2.4 x 4.2 x 2.0: dead centre hits at 72.9 studs, one stud off hits, two studs
--- off misses. A box is coarser than thirty-six leaves, and for a step whose only
--- consequence is an outline that is the right trade.
+-- One ordinary raycast decides what is IN THE WAY, and it ignores the
+-- character and the player's own plot -- the fence round your garden is not a
+-- thing your garden hides behind. Anything else in the world still blocks.
 --
--- Slab method, in the box's own space, so a plant turned to face down its plot
--- is tested as the box it actually is rather than an axis-aligned guess.
+-- `at` is an InputObject position, which pairs with ScreenPointToRay.
 --==============================================================================
-local function rayHitsBox(origin: Vector3, dir: Vector3, boxCF: CFrame,
-	size: Vector3): number?
+local function rayHitsBox(origin: Vector3, dir: Vector3, boxCF: CFrame, size: Vector3): number?
 	local o = boxCF:PointToObjectSpace(origin)
 	local d = boxCF:VectorToObjectSpace(dir)
 	local half = size * 0.5
@@ -444,13 +230,12 @@ local function rayHitsBox(origin: Vector3, dir: Vector3, boxCF: CFrame,
 		local di = (d :: any)[axis] :: number
 		local hi = (half :: any)[axis] :: number
 		if math.abs(di) < 1e-7 then
-			-- Parallel to this pair of faces: either inside them forever or
-			-- outside them forever.
 			if oi < -hi or oi > hi then
 				return nil
 			end
 		else
-			local t1, t2 = (-hi - oi) / di, (hi - oi) / di
+			local t1 = (-hi - oi) / di
+			local t2 = (hi - oi) / di
 			if t1 > t2 then
 				t1, t2 = t2, t1
 			end
@@ -467,54 +252,22 @@ local function rayHitsBox(origin: Vector3, dir: Vector3, boxCF: CFrame,
 	return math.max(tmin, 0)
 end
 
---==============================================================================
--- WHICH PLANT IS UNDER THAT POINT
---
--- THE COORDINATE SPACE, MEASURED, because getting this wrong by one GUI inset is
--- the exact bug 526a049 was about and it would be silent here too -- taps would
--- land on whatever is 58 pixels above the plant.
---
---     InputObject.Position   below-inset   <- what a touch reports
---     GetMouseLocation()     window        <- 58 higher, measured, same tap
---     ScreenPointToRay       below-inset   <- round-trips to 0.0000 studs
---     ViewportPointToRay     window        <- round-trips to 0.0000 studs
---
--- The wrong pairing missed a point 12.5 studs away by 2.41 studs. So there is no
--- arithmetic here at all: the touch arrives below-inset and goes straight into
--- ScreenPointToRay, which wants below-inset. Nothing to add, nothing to get
--- wrong, no constant to drift. (PlantPlace pairs GetMouseLocation with
--- ViewportPointToRay, which is the OTHER matching pair and equally correct --
--- only the wording of its comment is inverted.)
---
--- SOLID GEOMETRY STILL WINS. One ordinary raycast for the walls and the ground,
--- and a plant farther away than that is behind something -- so you cannot tap a
--- plant through your own fence.
---==============================================================================
 local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 	local camera = Workspace.CurrentCamera
-	local plants = myPlantsFolder()
+	local plot = myPlot()
+	local plants = if plot then plot:FindFirstChild("Plants") else nil
 	if not (camera and plants) then
 		return nil, nil
 	end
 	local ray = camera:ScreenPointToRay(at.X, at.Y)
 	local origin, dir = ray.Origin, ray.Direction.Unit
 
-	--==========================================================================
-	-- THE PLOT IS NOT AN OCCLUDER OF ITS OWN PLANTS
-	--
-	-- This filtered out the character and nothing else, so in third person the
-	-- ray hit the bed's own rail, frame or walkway on the way to the plant and
-	-- every one of those clicks was thrown away as "behind something". The fence
-	-- round your garden is not a thing your garden hides behind. The rest of the
-	-- world still occludes: walk behind a mill and you cannot click through it.
-	--==========================================================================
-	local ignore = {}
+	local ignore: { Instance } = {}
 	if player.Character then
 		table.insert(ignore, player.Character)
 	end
-	local mine = myPlot()
-	if mine then
-		table.insert(ignore, mine)
+	if plot then
+		table.insert(ignore, plot)
 	end
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -527,22 +280,16 @@ local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 	local bestAt = math.huge
 	for _, child in ipairs(plants:GetChildren()) do
 		local prompt = promptFor(child)
-		-- AND CLOSE ENOUGH TO ACTUALLY TAKE IT. Without this a plant across the
-		-- bed selects, shows a button, and then un-selects a third of a second
-		-- later when the range watcher catches up -- which reads as the tap
-		-- being flaky rather than as the plant being too far away. Eligibility
-		-- is asked once, here, and answered the same way the watcher answers it.
-		if prompt and inSelectRange(prompt) then
+		if prompt then
 			local model = child :: Model
-			local boxCF, boxSize = model:GetBoundingBox()
-			-- A stud of slack all round. A bell flower is mostly air and a
-			-- tapered leaf is a knife edge in plan view; asking a player to hit
-			-- the true box is asking them to hit a petal.
-			local t = rayHitsBox(origin, dir, boxCF, boxSize + Vector3.new(2, 2, 2))
-			if t and t <= reach and t < bestAt then
-				bestAt = t
-				bestModel = model
-				bestPrompt = prompt
+			if distanceTo(model) <= SELECT_RANGE then
+				local boxCF, boxSize = model:GetBoundingBox()
+				local t = rayHitsBox(origin, dir, boxCF, boxSize + Vector3.new(2, 2, 2))
+				if t and t <= reach and t < bestAt then
+					bestAt = t
+					bestModel = model
+					bestPrompt = prompt
+				end
 			end
 		end
 	end
@@ -550,13 +297,10 @@ local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 end
 
 --==============================================================================
--- LETTING GO
+-- SELECTING AND LETTING GO
 --
--- Every route out of a selection funnels here, and there are a dozen of them --
--- the plant leaving, the player leaving, a panel opening, a pod landing in both
--- arms, the jaws closing, a death. Anything that leaves a highlight on a plant
--- nobody is looking at, or a button that would press a prompt that has gone, is
--- this function not having been called.
+-- Every way out of a selection comes through clearSelection -- the plant going
+-- away, the player walking off, a panel opening, a plant coming into the hands.
 --==============================================================================
 local function clearSelection()
 	generation += 1
@@ -565,40 +309,29 @@ local function clearSelection()
 	end
 	table.clear(watching)
 	selected = nil
-	local made = highlight
-	if made then
-		made.Parent = nil
-	end
-	layer.Enabled = false
-	caption.Text = ""
+	highlight.Parent = nil
+	billboard.Enabled = false
+	billboard.Adornee = nil
 end
 
 local function select(model: Model, prompt: ProximityPrompt)
 	clearSelection()
-	local name = model:GetAttribute("SpeciesName")
-	local shown = if type(name) == "string" and name ~= ""
-		then name
-		-- CreatureModel names the model "Creature_<species>"; the tail is the
-		-- compact name a button has room for.
-		else (model.Name:match("^Creature_(.+)$") or model.Name)
-	selected = { model = model, prompt = prompt, label = shown }
+	local base = model.PrimaryPart
+	if not base then
+		return
+	end
+	selected = { model = model, prompt = prompt }
 
-	local made = theHighlight()
-	made.Parent = model
+	highlight.Parent = model
 
-	caption.Text = string.upper(shown)
-	refreshReach()
-	layer.Enabled = true
+	-- Lifted clear of the plant's top, measured once: plants wander and sway
+	-- but they do not grow taller while you are looking at them.
+	local height = model:GetExtentsSize().Y
+	billboard.Adornee = base
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, height + 0.8, 0)
+	billboard.Enabled = true
 	SoundKit.play("CardClick")
 
-	--==========================================================================
-	-- AND THE SELECTION WATCHES ITS OWN SUBJECT
-	--
-	-- The model going away covers being picked up, sold, hatched over, replaced
-	-- by a render() rebuild, or the plot being handed to somebody else -- one
-	-- signal for every way a plant can stop being the plant that was tapped,
-	-- rather than a list of them.
-	--==========================================================================
 	table.insert(watching, model.AncestryChanged:Connect(function(_, parent)
 		if not parent then
 			clearSelection()
@@ -615,92 +348,31 @@ local function select(model: Model, prompt: ProximityPrompt)
 		end
 	end))
 
-	-- See RANGE_POLL: the belt to PromptHidden's braces, alive only as long as
-	-- this selection is the current one.
 	local mine = generation
 	task.spawn(function()
 		while mine == generation do
-			task.wait(RANGE_POLL)
+			task.wait(POLL_SECONDS)
 			if mine ~= generation then
 				return
 			end
-			if not (prompt.Parent and prompt.Enabled and inSelectRange(prompt)) then
+			if not (model.Parent and prompt.Parent and prompt.Enabled)
+				or distanceTo(model) > SELECT_RANGE then
 				clearSelection()
 				return
 			end
-			-- Still selected, so say whether it can be taken from here. This is
-			-- the only thing that turns TOO FAR back into the verb, and it has
-			-- to run on the poll rather than on a click: the player walks into
-			-- reach, the plant does not.
-			refreshReach()
 		end
 	end)
 end
 
 --==============================================================================
--- THE PROMPT CANNOT BE PRESSED, AND THAT IS NOT THIS FILE'S FAULT
+-- THE BUTTON
 --
--- The intended design was `prompt:InputHoldBegin()` / `InputHoldEnd()` -- the
--- prompt's own supported lifecycle, the identical path desktop's E takes, and the
--- pair PromptUI already uses successfully for the nest Take, Marigold and the
--- sell board. It does not work on a grown plant, and the measurements say why:
---
---     the client draws the plant   7.5 studs from the character
---     the SERVER has its Base     63.0 studs from the character  (max 26)
---
--- A GROWN PLANT IS ANIMATED BY THE CLIENT. PlantService publishes a wander leg as
--- four attributes and every client walks the model along it; the server never
--- moves the parts at all -- measured, `Base` identical for five seconds while
--- `WanderTo` pointed 65 studs away. That is a deliberate design (it is why the
--- wander costs no per-frame replication) and it is invisible until something
--- needs the two copies to agree about where the plant IS.
---
--- A ProximityPrompt needs exactly that. The client shows it, using the position
--- the client drew; the server validates the trigger, using the position the
--- server kept. Once a plant has walked, no standing position satisfies both --
--- two 26-stud spheres 63 studs apart do not overlap -- so the trigger is refused
--- in silence. Verified from both ends: the server's own PromptTriggered never
--- fired, from a button, from a bare script call, and while standing at the
--- server's copy.
---
--- THIS BREAKS DESKTOP E TOO, on any plant that has wandered off its planted spot,
--- and it did so before this file existed. It is recorded in HANDOFF as its own
--- defect because fixing it means changing how the wander replicates, which is a
--- PlantService decision and not a mobile-UI one.
---
---==============================================================================
--- SO IT ASKS THE SERVER, WITH THE VERB THAT ALREADY EXISTS
---
--- `PickUpAction` -> `PlantService.PickUpById`, which the Garden panel has used
--- since it was written. Nothing new is added: no remote, no handler, no second
--- ownership list, no widening of what a client may ask for.
---
--- WHAT THE SERVER CHECKS, none of it here: the payload must be a finite whole
--- positive number; the lookup happens in the CALLER'S OWN PLOT and nowhere else,
--- so a neighbour's placement id simply is not in the table; and `pickUp` then
--- re-tests ownership, that the entry is still the live one, that it is grown, and
--- that the bag accepted the handover. A forged or stale id finds nothing and
--- returns false.
---
--- DOUBLE PRESSES CANNOT DOUBLE UP. The debounce stops a second ask leaving, and
--- the server drops the entry from `growing` on the first one, so a second ask
--- finds nothing to give even if it arrives.
+-- The server decides. A refused pickup -- a full bag, say -- still spends the
+-- selection, so the button does not sit there inviting another press.
 --==============================================================================
 local function press()
 	local current = selected
 	if not current then
-		return
-	end
-	--==========================================================================
-	-- AND IT HAS TO BE IN REACH, NOT MERELY SELECTED
-	--
-	-- The selection is deliberately the more generous of the two ranges, so this
-	-- is where the pickup range is actually enforced on the client. The server
-	-- enforces it again -- PickUpById re-tests everything -- but a button that
-	-- fires a request it knows will be refused is a button that looks broken.
-	--==========================================================================
-	if not refreshReach() then
-		SoundKit.play("CardClick")
 		return
 	end
 	local now = os.clock()
@@ -715,40 +387,17 @@ local function press()
 	end
 	SoundKit.play("UIClick")
 	channel:FireServer(PLANTING.PickUpAction, id)
-	--==========================================================================
-	-- CLEARED ON THE WAY OUT, NOT ON THE WAY BACK
-	--
-	-- A successful pickup destroys the model, which clears this through the
-	-- watcher above. A REFUSED one does not -- a full bag, a plot handed over
-	-- mid-reach -- and leaving the button up after a refusal invites the player to
-	-- jab at it. Either way the selection has been spent, so it goes.
-	--==========================================================================
 	clearSelection()
 end
 
 button.Activated:Connect(press)
 
 --==============================================================================
--- THE TAP, DECIDED ON RELEASE
+-- THE CLICK
 --
--- ON RELEASE, and that is the entire point of this file. Nothing about a touch
--- that has just landed tells you whether it is a tap or the beginning of a camera
--- swing -- so nothing is decided until the finger lifts and the question can be
--- answered honestly.
---
--- A LEFT MOUSE BUTTON IS THE SAME QUESTION. Holding it and dragging is how the
--- camera turns, so a press that has just landed is no more decided than a touch
--- is, and it runs the identical slop-and-duration test on the identical path.
--- One gesture reader, two kinds of pointer.
---
--- `processed` at BEGIN is what keeps the thumbstick, the jump button, the
--- hotbar, the rail and every open panel out of this: the engine has already
--- given that touch to a GUI, and a touch spoken for is not aimed at the world.
--- Checked at begin rather than at end because that is where the answer is true --
--- a finger that starts on the thumbstick and slides off it is still driving.
---
--- ONE FINGER. A second touch landing while one is pending abandons the pending
--- one: two fingers on the glass is a pinch or a camera, never a tap on a plant.
+-- Decided on RELEASE, because a press that has just landed could still become a
+-- camera drag. Pressing the PICK UP button is a GUI press, arrives `processed`,
+-- and is ignored here -- the button's own Activated handles it.
 --==============================================================================
 type Pending = {
 	input: InputObject,
@@ -762,180 +411,60 @@ local function isPointer(kind: Enum.UserInputType): boolean
 	return kind == Enum.UserInputType.Touch or kind == Enum.UserInputType.MouseButton1
 end
 
-do
-	UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if not isPointer(input.UserInputType) then
-			return
-		end
-		if pending then
-			-- A second finger. Whatever this gesture is, it is not a tap.
-			pending = nil
-			return
-		end
-		if processed then
-			return
-		end
-		--======================================================================
-		-- HOLDING A PLANT IS NO LONGER A REASON TO IGNORE THE PRESS
-		--
-		-- It used to stand down here, at BEGIN, on the grounds that PlantPlace
-		-- owns a tap while a plant is in hand. That is right for a tap on the
-		-- SOIL and wrong for a tap on a grown plant, which can only mean one
-		-- thing. The question needs the landing point to answer, and the landing
-		-- point is not known until the finger lifts -- so the press is recorded
-		-- either way and the decision moves to the release below.
-		--======================================================================
-		pending = {
-			input = input,
-			at = Vector2.new(input.Position.X, input.Position.Y),
-			began = os.clock(),
-		}
-	end)
-
-	UserInputService.InputEnded:Connect(function(input: InputObject)
-		local waiting = pending
-		if not waiting or input ~= waiting.input then
-			return
-		end
-		pending = nil
-		local at = Vector2.new(input.Position.X, input.Position.Y)
-		if (at - waiting.at).Magnitude > TAP_SLOP then
-			return
-		end
-		if os.clock() - waiting.began > TAP_SECONDS then
-			return
-		end
-		-- A pod in both arms is not a gesture about the bed at all.
-		if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
-			clearSelection()
-			return
-		end
-		--======================================================================
-		-- AIMED FROM WHERE THE FINGER LANDED
-		--
-		-- The origin, not the release point. They are within TAP_SLOP of each
-		-- other by now so it barely matters, but the origin is what the player
-		-- was pointing at when they committed -- the release is just where their
-		-- thumb happened to stop.
-		--======================================================================
-		local model, prompt = plantUnder(waiting.at)
-		--======================================================================
-		-- AND HERE IS WHERE PlantPlace GETS ITS TAP BACK
-		--
-		-- Nothing under the pointer and a plant in hand: the player is putting
-		-- that plant down and this file has no business in it. A grown plant
-		-- under the pointer means the opposite, whatever is in their hands.
-		--======================================================================
-		if not model and holdingAPlant() then
-			return
-		end
-		if model and prompt then
-			local current = selected
-			if current and current.model == model then
-				-- Tapping the selected plant again is not a second selection and
-				-- is deliberately NOT a pickup: the button is the only thing that
-				-- picks up, which is the whole contract.
-				return
-			end
-			select(model, prompt)
-		else
-			-- Empty ground, a fence, somebody else's plant, or a plant with no
-			-- prompt. All the same answer.
-			clearSelection()
-		end
-	end)
-end
-
---==============================================================================
--- E, WHICH ONLY MEANS ANYTHING ONCE SOMETHING IS SELECTED
---
--- The same second step as the button, on the key the button names. Guarded by
--- `selected` rather than by range: an unselected plant has no affordance on
--- screen, so E must do nothing at all -- and a selected one is already known to
--- be in range, because the watcher clears it the moment it is not.
---==============================================================================
 UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-	if processed or input.KeyCode ~= Enum.KeyCode.E then
+	if not isPointer(input.UserInputType) then
 		return
 	end
-	if selected then
-		press()
+	if pending then
+		-- A second finger: a pinch or a camera move, never a tap on a plant.
+		pending = nil
+		return
 	end
+	-- PLANTING OWNS THIS CLICK. Checked first and checked here, at the press,
+	-- so nothing about a planting click is ever looked at by this file.
+	if processed or holdingAPlant() then
+		return
+	end
+	pending = {
+		input = input,
+		at = Vector2.new(input.Position.X, input.Position.Y),
+		began = os.clock(),
+	}
 end)
 
---==============================================================================
--- THE KEY THAT IS NOT THERE, AND WHY IT IS NOT TAKEN AWAY HERE
---
--- The prompt is Style = Custom and nobody draws it, but CUSTOM ONLY STOPS THE
--- DRAWING. The engine still listens on three routes -- KeyboardKeyCode,
--- GamepadKeyCode and ClickablePrompt -- and with HoldDuration 0 any of them
--- lifts the plant on the press that starts the gesture, with no outline and no
--- button in between. That is the whole thing this file exists to prevent.
---
--- ALL THREE ARE TURNED OFF ON THE SERVER, at construction, in PlantService's
--- attachPickup. This file tried it first from the client on PromptShown and it
--- DOES NOT HOLD: the engine's own click handling runs before a release gesture
--- can be judged, and Triggered fires on the server regardless of what a client
--- did to its own copy of the properties. A local write is not a disarm.
---
--- What this file still relies on the prompt for is unchanged: its
--- MaxActivationDistance is the one copy of the pickup range, and `Enabled` is
--- what promptFor filters on and what a selection watches.
---==============================================================================
-
---==============================================================================
--- AND EVERYTHING THAT ENDS A SELECTION WITHOUT A TAP
---
--- Connected once, for the session. Each of these takes the player out of the
--- moment entirely, and none of them is a touch event, so without them the
--- outline and the button would simply stay:
---
---   out of range      PromptHidden -- the engine already decides this, at the
---                     prompt's own MaxActivationDistance, so there is no
---                     distance loop here and no second copy of the number
---   carrying a pod    both arms are full and the bed is not the subject
---   a panel opened    the bag, the shop, the index
---   trapped           held still and being hit
---   ragdolled         thrown; ThrowFX drives it through the Humanoid, there is
---                     no attribute for it
---   died, respawned   the character and everything hanging off it
---   placing a plant   a Tool with a SpeciesId reached the hands
---
--- What is NOT in that list any more: touch going away. This affordance is the
--- only one there is now, so a tablet docked to a keyboard keeps its selection
--- instead of having it taken away by a layout change.
---==============================================================================
---==============================================================================
--- OUT OF RANGE, AND ONLY ACTUALLY OUT OF RANGE
---
--- MEASURED, and it cost a confusing hour: this used to clear on any PromptHidden
--- for the selected prompt, which read as "the engine says you cannot reach it any
--- more". It is not what PromptHidden means. The engine hides and re-shows a
--- prompt for reasons that have nothing to do with the player -- a grown plant
--- WANDERS its bed, and the pair
---
---     PromptHidden(PickupPrompt)
---     PromptShown(PickupPrompt)
---
--- arrived back to back while standing still 8.4 studs from a plant whose range is
--- 26. Every one of those took the selection and the button away, so a tap
--- selected the plant and then silently un-selected it a moment later -- which
--- looked exactly like the tap never working at all.
---
--- So a hide is a reason to ASK, and the question is the one the requirement
--- actually states: is the player outside pickup range. If they are still standing
--- next to it, the selection stands.
---==============================================================================
-ProximityPromptService.PromptHidden:Connect(function(prompt)
-	local current = selected
-	if not (current and current.prompt == prompt) then
+UserInputService.InputEnded:Connect(function(input: InputObject)
+	local waiting = pending
+	if not waiting or input ~= waiting.input then
 		return
 	end
-	if not (prompt.Parent and prompt.Enabled and inSelectRange(prompt)) then
+	pending = nil
+	local at = Vector2.new(input.Position.X, input.Position.Y)
+	if (at - waiting.at).Magnitude > TAP_SLOP then
+		return
+	end
+	if os.clock() - waiting.began > TAP_SECONDS then
+		return
+	end
+	-- A plant Tool equipped, or a pod picked up, in the middle of the click.
+	if holdingAPlant() or player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
+		clearSelection()
+		return
+	end
+	local model, prompt = plantUnder(waiting.at)
+	if model and prompt then
+		local current = selected
+		if current and current.model == model then
+			return
+		end
+		select(model, prompt)
+	else
 		clearSelection()
 	end
 end)
 
+--==============================================================================
+-- EVERYTHING ELSE THAT ENDS A SELECTION
+--==============================================================================
 player:GetAttributeChangedSignal(ATTR.CarryingSpecies):Connect(function()
 	if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
 		clearSelection()
@@ -961,6 +490,8 @@ local function watchCharacter(character: Model)
 		toolConn:Disconnect()
 		toolConn = nil
 	end
+	-- Picking a plant up to plant it ends any selection, so the outline and the
+	-- button are never showing while PlantPlace has the clicks.
 	toolConn = character.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") and type(child:GetAttribute("SpeciesId")) == "string" then
 			clearSelection()
@@ -985,7 +516,4 @@ end
 player.CharacterAdded:Connect(watchCharacter)
 player.CharacterRemoving:Connect(clearSelection)
 
---==============================================================================
--- NOTHING IS SHOWN UNTIL SOMETHING IS SELECTED
---==============================================================================
 clearSelection()
