@@ -1,5 +1,178 @@
 # Steal a Seed — Session Handoff
 
+## Plant glow is night-only — 2026-09-14 (CLAUDE)  (APPROVED BY THE OWNER, COMMITTED)
+
+A garden of several large glowing plants washed out to white at midday: every
+grown plant's PointLight is scaled with the plant (a Colossal Suncrown asks for
+Range 16 x its height scale; the engine stops it at 60), and a Colossal's
+lightning flash added more. Now a planted creature's lights, and the Colossal
+crackle, exist only during the existing Night phase.
+
+### The phase contract
+
+  * **Night means `Workspace:GetAttribute(GameConfig.Attributes.WorldPhase) ==
+    GameConfig.WorldCycle.PhaseNight`.** Anything else, including unset, is day,
+    the same reading as `GameConfig.isDay`. There is no second clock, no timer
+    and no remote, and nothing reads `Lighting.ClockTime`: WorldClock blends that
+    from 14 to 0 over three seconds, so a threshold on it would disagree with the
+    road, the carry rules and the sky about when night starts.
+  * **Scope is the production `Planted` tag and nothing wider.** Every
+    `PointLight`, `SpotLight` and `SurfaceLight` under a tagged model is switched
+    off by day and returned to its AUTHORED enabled state at night. Nest pods,
+    carried pods, bag/Almanac/shop viewports, guardians, mills, Marigold, map
+    lighting, fog, barrier and tutorial effects are never handed to the gate.
+  * **Only `Enabled` is ever written, on the client.** It does not replicate, so
+    the server sends nothing per light per phase. Brightness, Range, Color,
+    Shadows and parent are never read or written.
+  * **The authored switch is captured once per light instance**, before the gate
+    first writes, and kept as a client-local attribute `SeedGlowAuthored` on the
+    light. A light authored OFF stays off at night. A light that streams out and
+    back is a new instance and is captured fresh.
+  * **Releasing a plant drops the references and leaves the lights as they
+    are.** Both production untag paths (`burst` on a hatch, `lift` on a pickup)
+    fade the model and destroy it about 0.3 s later. Restoring on the way out
+    would flash a Colossal's light across daylit soil for that fade.
+  * **PlantAura:** by day no pulse begins. At dawn every lit pulse is ended at
+    once and its segments and flash light go back to their pools. At dusk every
+    Colossal is re-armed on its first-gap spread so a bed does not strike as one
+    wave. Gap, life, arcs, distance bands, quality, palette and the four-light
+    budget are unchanged, and Reduced/Off behave as before.
+
+### Files
+
+  * `src/ReplicatedStorage/SeedGame/Shared/PlantGlow.luau` -- NEW. The gate: no
+    connections of its own. `Watch`, `Add`, `Remove`, `Release`, `SetNight`,
+    `IsNight`, `Stats`, `Reset`.
+  * `src/ReplicatedStorage/SeedGame/Shared/PlantAura.luau` -- `SetNight(isNight,
+    now)` and `IsNight()`; `Tick` begins nothing by day.
+  * `src/StarterPlayer/StarterPlayerScripts/PlantSway.client.luau`:
+      - its existing per-model WATCH (which exists from the moment the tag
+        arrives, before any part streams in) gains `DescendantAdded` and
+        `DescendantRemoving` into PlantGlow;
+      - `release` calls `PlantGlow.Release`;
+      - ONE `WorldPhase` listener drives both effects and is applied before the
+        bed is indexed;
+      - both modules are reset at startup and in `Destroying`.
+  * `tools/tests/PlantGlowSpec.luau` -- NEW, 39 assertions.
+
+### A re-run bug found and fixed on the way
+
+Replacing PlantSway with a fresh copy in Play left **10 aura states for 5
+Colossals**: the destroyed copy's `Destroying` handler never ran, so its states
+stayed in the shared module (a pre-existing re-run leak, worse once dusk re-arms
+every state). The new copy now resets both modules at startup. Measured on the
+fixed source: two consecutive re-runs gave 5 aura states and 33/44 held lights
+(both matching the world), with **0 frames** of any plant light lit by day during
+the swaps. The real dusk that followed turned all 44 on.
+
+### Before / after, enabled plant lights
+
+Measured on the client every frame. The garden is a controlled 20-plant bed in
+unowned Plot_06 over a Level-5-sized footprint: 4 Colossal (Supernovus, Suncrown,
+Pyrelotus, Bellchime -- all aura), 7 Titan, 7 Giant, and 2 planted pods (T6, T7;
+the T7 pod carries an aura state too, because Prepare gates on tier alone).
+That is 25 lights, plus the owner's own 18-plant garden (19 lights). Built
+straight from `CreatureModel.Build` and then tagged, the same order PlantService
+uses, so no save, income or plot state was touched.
+
+| | plant lights | enabled by DAY | enabled at NIGHT |
+|---|---|---|---|
+| before (old behaviour, reproduced by forcing the gate open) | 44 | **44** | 44 |
+| after | 44 | **0** | 44 (all authored on) |
+| owner's real garden alone | 19 | 0 (was 19) | 19 |
+
+### Verified in Play
+
+  * **Five full Day -> Night -> Day cycles, twice** (once before the startup-reset
+    line existed and once on the final build):
+      - every DAY window: 0/44 lit, 0 aura flash lights, 0 lit segments, 0 bad
+        frames;
+      - every NIGHT window: 44/44 lit, 0 bad frames;
+      - every window matched on its first sampled frame;
+      - aura at night: up to 4-5 concurrent pulses, flash lights never above the
+        budget of 4;
+      - the segment pool is reused: 120 made after the first night and flat after
+        that (150 on the final run, when 5 pulses once overlapped, inside the
+        existing 18 x 6 x 5 ceiling), and all of it back in the pool every day.
+  * **Authored values:** Brightness, Range, Color, Shadows and parent of all 44
+    plant lights were unchanged after every cycle, the forced before/after views
+    and the screenshots. All 13 non-plant lights the client had streamed in kept
+    their Enabled and values exactly. The one PlayerGui light (a viewport
+    preview) was unchanged, and 0 tagged models exist under PlayerGui.
+  * **Streaming:** a Colossal Suncrown built 2,600 studs away arrived on the
+    client as an empty tagged container. When the player went to it BY DAY, its
+    light was already off on the first frame it existed (0 wrong frames). A
+    Colossal Bellchime reached AT NIGHT was on from its first frame, captured as
+    authored on. Stream-out was observed too, with no errors.
+  * **New plant by day:** off on its first frame. **New plant at night:** on from
+    its first frame.
+  * **Hatch by day:** a planted T7 pod (AuraGlow + CoreGlow) run through `burst`'s
+    exact sequence -- untag, fling, destroy -- was never lit for a frame, and its
+    references were released.
+  * **Removal / plot release:** destroying the 20-plant garden left the gate
+    holding exactly the owner's 13 lit plants and 19 lights, matching ground
+    truth, and 0 aura states.
+  * **Real transitions:** WorldCycleService's own dusk turned 44/44 on and its dawn
+    turned them off, with the aura resuming at dusk.
+  * **Movement:** 6/6 sampled owner plants still walk and 18/20 test plants sway
+    (the 2 pods have zero idle amplitude, as before). Frame time was 16.7-17.0 ms
+    both by day and at night.
+  * Console clean. The only error line was the test harness's own read of a
+    nonexistent Workspace property.
+  * `rojo build` clean; `git diff --check` clean; every changed file compiled
+    through `loadstring`, and both modules loaded through the spec runner's real
+    require path. **19/19 specs pass, 0 threw**, including StarbloomLimbSpec,
+    which parses PlantSway's source.
+
+### Comparison captures (MCP screen_capture in Play, not saved to disk)
+
+  * **20-plant stress garden, DAY, before:** soil, grass, plants and the avatar
+    all bleached pale yellow-white. The reported bug, reproduced.
+  * **Same view, DAY, after:** normal colours and readable anatomy; the avatar
+    reads clearly; brown soil and green grass. Neon accents -- the Supernovus
+    halo, cyan geodes -- stay coloured and light nothing.
+  * **Owner's real 18-plant garden, DAY:** before, the Suncrown golem bleached
+    from green to pale yellow and the bed washed out. After, green golem, brown
+    bed, readable avatar.
+  * **Owner's garden, NIGHT:** a warm lit bed with every plant distinct and the
+    avatar readable. The plot is not white.
+  * **Stress garden, NIGHT:** a strong yellow-green pool across the whole bed.
+    Plants are still distinguishable but pastel, and an avatar standing inside
+    the pool is washed out. That is 25 authored lights of up to Brightness 2.6
+    stacked in one bed at their maximum range, under WorldClock's night
+    ExposureCompensation 0.25 and the place's Bloom. **Not changed, because the
+    brief preserves authored Brightness and Range. Owner's call whether the
+    night stress case needs its own pass.**
+
+### Neon and particles: not touched, and the proof
+
+`Lighting` carries the place file's `BloomEffect` (Intensity 1, Size 24,
+Threshold 2) and `SunRays` (0.01). Neon parts bloom but cast no light onto other
+surfaces. With every plant light and every aura pulse off by day, no daytime
+wash-out remained in either garden, so no Neon part and no ParticleEmitter was
+changed. There is no remaining daylight glow source to report.
+
+### Not verified
+
+  * A physical phone or tablet, and a second client (each client gates its own
+    copy; nothing is replicated).
+  * Planting, hatching and pickup through PlantService itself, which would have
+    changed the owner's saved garden. They were reproduced with the identical
+    build-then-tag and untag-fade-destroy sequences instead.
+  * The bag and Almanac panels were not opened on screen. They were checked
+    through their lights and tags only, which the gate never reaches.
+
+### Approval and commit
+
+The owner reviewed the parked 20-plant garden (Plot_06, a Play-only
+`workspace.GlowTestGarden` that stopping Play discards) and approved. The commit
+carries only `src/ReplicatedStorage/SeedGame/Shared/PlantGlow.luau`,
+`src/ReplicatedStorage/SeedGame/Shared/PlantAura.luau`,
+`src/StarterPlayer/StarterPlayerScripts/PlantSway.client.luau`,
+`tools/tests/PlantGlowSpec.luau` and this file. The hotbar reference art,
+thumbnails, `AI mesh generated/`, the Codex image and the untracked skill folders
+are unrelated work and were left out.
+
 ## The invisible pickup prompt was eating every click inside the plot — 2026-09-14 (CLAUDE)
 
 The owner: "when im inside the plot, clicking everywhere doesnt work". That was

@@ -42,6 +42,22 @@
 -- retuned from "slight" to "noticeable" -- four at a time, client-wide, Full
 -- quality only. See the LightStuds block in the config for why that is a
 -- different proposition from the per-arc version this paragraph refuses.
+--
+--==============================================================================
+-- NIGHT ONLY
+--
+-- A strike is a flash of light, and by day it joined every plant's own glow in
+-- washing a garden out. So the crackle belongs to the night the same way
+-- PlantGlow's lights do, and is told the phase the same way: PlantSway reads
+-- `Workspace.WorldPhase` and calls SetNight. Nothing here looks at
+-- Lighting.ClockTime, which WorldClock blends over three seconds and which
+-- would disagree with the rest of the game about when night starts.
+--
+-- By day no new pulse begins. The moment night ends, every pulse still lit is
+-- ended and its segments and flash light go back to their pools. At the next
+-- dusk every Colossal is re-armed on its first-gap spread, so a bed that has
+-- been due all day does not fire as one wave the instant it gets dark. Timing,
+-- distance bands, quality, palettes and the light budget are untouched.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -298,6 +314,9 @@ local lightsOut = 0
 local folder: Folder? = nil
 local quality = "Full"
 local made = 0
+-- Unset means day, the same rule as GameConfig.isDay: nothing strikes until
+-- somebody says it is night.
+local night = false
 
 --==============================================================================
 -- REDUCED EFFECTS IS AN EXISTING SETTING, NOT A NEW ONE
@@ -625,6 +644,37 @@ function PlantAura.Forget(state: State?)
 end
 
 --==============================================================================
+-- THE PHASE
+--
+-- `now` is the same clock Tick is given, so a re-armed strike is scheduled on
+-- the timeline that will actually fire it.
+--==============================================================================
+function PlantAura.SetNight(isNight: boolean, now: number)
+	if night == isNight then
+		return
+	end
+	night = isNight
+	if not isNight then
+		-- Dawn: nothing may stay lit into the day. Every pulse ends here, now,
+		-- rather than finishing its fade on the next few frames.
+		for i = #active, 1, -1 do
+			endPulse(active[i])
+			active[i] = nil
+		end
+		return
+	end
+	-- Dusk: spread the first strike exactly as Prepare does for a bed that
+	-- streams in together.
+	for _, state in ipairs(plants) do
+		state.nextAt = now + state.rng:NextNumber(0.2, CFG.FirstGapMax)
+	end
+end
+
+function PlantAura.IsNight(): boolean
+	return night
+end
+
+--==============================================================================
 -- EVERYTHING, ONCE PER FRAME
 --
 -- Called from PlantSway's single Heartbeat. There is no connection in this file
@@ -677,6 +727,11 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 	end
 
 	--== decide what lights next ==--
+	-- By day nothing begins and nothing is rescheduled: SetNight re-arms the
+	-- whole bed at dusk, so a day costs this loop nothing at all.
+	if not night then
+		return
+	end
 	local free = budget() - #active
 	if free <= 0 then
 		--======================================================================

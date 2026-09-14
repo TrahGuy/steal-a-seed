@@ -100,6 +100,18 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 -- plant on pickup and lights a bolt in an empty patch of soil.
 --==============================================================================
 local PlantAura = require(Shared:WaitForChild("PlantAura"))
+--==============================================================================
+-- AND SO DOES THE NIGHT GLOW
+--
+-- A plant's own lights are switched off by day and restored at night, because a
+-- garden of large glowing plants stacked their PointLights into a white pool at
+-- midday. PlantGlow is the same kind of mechanism PlantAura is -- no
+-- connections of its own -- and it hangs off the same index for the same
+-- reason. It is hooked into the WATCH on each tagged model rather than the sway
+-- entry, because the watch exists from the moment the tag arrives, before any
+-- part has streamed in, so a light is caught on the frame it arrives.
+--==============================================================================
+local PlantGlow = require(Shared:WaitForChild("PlantGlow"))
 
 local PLANTED = GameConfig.Tags.Planted
 
@@ -549,6 +561,7 @@ local function release(instance: Instance)
 			c:Disconnect()
 		end
 	end
+	PlantGlow.Release(model)
 end
 
 --==============================================================================
@@ -598,7 +611,15 @@ local function remember(instance: Instance)
 					release(model)
 				end
 			end),
+			-- The night glow. A light that streams in later, or is added after
+			-- this watch began, is gated as it arrives; one that leaves is
+			-- dropped. Both calls ignore anything that is not a Light.
+			model.DescendantAdded:Connect(function(d)
+				PlantGlow.Add(model, d)
+			end),
+			model.DescendantRemoving:Connect(PlantGlow.Remove),
 		}
+		PlantGlow.Watch(model)
 	end
 	if index[model] or building[model] or not (model.Parent and model.PrimaryPart) then
 		return
@@ -1778,6 +1799,43 @@ local function apply(entry: Sway, now: number)
 	end
 end
 
+--==============================================================================
+-- DAY OR NIGHT, FROM THE ONE ATTRIBUTE THAT DECIDES IT
+--
+-- `Workspace.WorldPhase` is published by WorldCycleService and is what the road,
+-- the carry rules and WorldClock's sky already follow. Not Lighting.ClockTime:
+-- WorldClock blends that over three seconds, so a threshold on it would be a
+-- guess about where night begins inside a fade, and anything unset or unknown
+-- counts as day, exactly as GameConfig.isDay reads it.
+--
+-- ONE listener for both effects, set BEFORE the bed is indexed below, so a plant
+-- already standing in the garden is gated on the frame it is watched rather
+-- than lit for a frame and switched off at the first change.
+--==============================================================================
+local function applyPhase()
+	local isNight = Workspace:GetAttribute(GameConfig.Attributes.WorldPhase)
+		== GameConfig.WorldCycle.PhaseNight
+	PlantGlow.SetNight(isNight)
+	PlantAura.SetNight(isNight, clock)
+end
+
+--==============================================================================
+-- A NEW COPY CLEANS UP AFTER THE OLD ONE, BECAUSE THE OLD ONE MAY NOT
+--
+-- Both modules live in the client's require cache and outlive this script.
+-- MEASURED in Play: replacing this LocalScript with a fresh copy left every
+-- Colossal with TWO aura states -- 5 Colossals, 10 states -- so the old copy's
+-- Destroying handler at the bottom of this file did not get to run before its
+-- threads were stopped. Resetting here does not depend on it. Lights are not
+-- written by the reset; the watches below restore each one from its authored
+-- value, so a re-run by day stays dark.
+--==============================================================================
+PlantAura.Reset()
+PlantGlow.Reset()
+applyPhase()
+table.insert(connections,
+	Workspace:GetAttributeChangedSignal(GameConfig.Attributes.WorldPhase):Connect(applyPhase))
+
 for _, instance in ipairs(CollectionService:GetTagged(PLANTED)) do
 	remember(instance)
 end
@@ -1870,6 +1928,12 @@ script.Destroying:Connect(function()
 		end
 	end
 	table.clear(watching)
+	-- Both modules outlive this script in the require cache. When this handler
+	-- gets to run, they are emptied here; on a measured re-run it did not, which
+	-- is why the copy that replaces this one resets them again at startup (see
+	-- A NEW COPY CLEANS UP AFTER THE OLD ONE). Lights are left as they are.
+	PlantAura.Reset()
+	PlantGlow.Reset()
 	for _, entry in ipairs(list) do
 		if entry.model.Parent then
 			pcall(function()
