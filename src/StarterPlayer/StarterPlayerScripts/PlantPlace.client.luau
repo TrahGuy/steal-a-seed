@@ -187,6 +187,27 @@ local function soilPoint(): (Vector3?, BasePart?)
 	if plants then
 		table.insert(ignore, plants)
 	end
+	--==========================================================================
+	-- AND NEITHER MAY YOUR OWN FENCE
+	--
+	-- MEASURED, standing at the edge of the bed with the camera behind the
+	-- character: a sweep of the whole screen landed on Rail 168 times, BedFrame
+	-- 24, Post 9 -- and on the bed ZERO times. Every click hit the fence first,
+	-- this returned nil, and nothing reached the server, so planting took
+	-- however many clicks it took to find a gap between two rails.
+	--
+	-- So every part of THIS plot that is not the bed is ignored, and the ray
+	-- goes through the fence to the soil. The plot is flat -- posts, rails,
+	-- frames and rows are all direct children -- so this is one pass over under
+	-- a hundred children, cheap enough to do on every frame the ghost moves.
+	-- The rest of the world still blocks the ray, and so does a neighbour's plot.
+	--==========================================================================
+	for _, child in ipairs(plot:GetChildren()) do
+		if child:IsA("BasePart") and not BED_PARTS[child.Name]
+			and not CollectionService:HasTag(child, GameConfig.Tags.Planter) then
+			table.insert(ignore, child)
+		end
+	end
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
