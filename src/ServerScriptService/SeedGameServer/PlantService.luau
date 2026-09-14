@@ -107,6 +107,8 @@ type Planted = {
 	-- plant's facing with them.
 	facing: number,
 	model: Model?,
+	-- The HatchPrompt on a ready pod, and nothing else. A grown plant has no
+	-- prompt at all -- see THERE IS NO PICKUP PROMPT.
 	prompt: ProximityPrompt?,
 	--==========================================================================
 	-- WHERE IT IS WALKING, IN THE PLOT'S OWN FRAME
@@ -127,8 +129,9 @@ type Planted = {
 	-- Seeded off the placement id, so a garden restored on join does not send
 	-- every creature off on the same tick.
 	rng: Random?,
-	-- The invisible part the PickupPrompt hangs off, and how far above the
-	-- walking point it rides. See "THE PROMPT RIDES WHERE THE PLANT IS".
+	-- The invisible part that marks a grown plant as yours to pick up, and how
+	-- far above the walking point it rides. See "THE MARKER RIDES WHERE THE
+	-- PLANT IS".
 	anchor: BasePart?,
 	anchorLift: number?,
 }
@@ -147,7 +150,6 @@ local TICK = PLANTING.TickSeconds
 local PLANT_RANGE = PLANTING.RangeStuds
 local EDGE_MARGIN = PLANTING.EdgeMarginStuds
 local HATCH_HOLD = PLANTING.HatchHoldSeconds
-local PICKUP_HOLD = PLANTING.PickupHoldSeconds
 local BURST = PLANTING.BurstSeconds
 local PLACE_ACTION = PLANTING.PlaceAction
 local PICKUP_ACTION = PLANTING.PickUpAction
@@ -452,23 +454,24 @@ end
 --==============================================================================
 -- BUILDING WHAT IS IN THE GROUND
 --==============================================================================
--- render() hangs the pick-up prompt on anything grown, and the prompt builders
--- need render() to have run. One forward declaration breaks the knot, rather
+-- render() puts the pick-up marker on anything grown, and the marker builder
+-- needs render() to have run. One forward declaration breaks the knot, rather
 -- than shuffling three functions into an order that reads worse than it works.
 --==============================================================================
--- THE PROMPT RIDES WHERE THE PLANT IS, NOT WHERE IT WAS PLANTED
+-- THE MARKER RIDES WHERE THE PLANT IS, NOT WHERE IT WAS PLANTED
 --
 -- MEASURED: a grown plant is walked by every CLIENT from four wander attributes,
--- and the server never moves its parts. The PickupPrompt used to hang off the
--- model's PrimaryPart, so on the server it stayed at the planting spot while the
--- plant walked away -- 7.5 studs from the player on screen, 63.0 studs on the
--- server, against a 26-stud prompt. The engine validates a trigger from the
--- server's copy, so desktop E was refused in silence once a plant had moved.
+-- and the server never moves its parts. The pick-up prompt this part used to
+-- carry hung off the model's PrimaryPart first, so on the server it stayed at
+-- the planting spot while the plant walked away -- 7.5 studs from the player on
+-- screen, 63.0 studs on the server, against a 26-stud prompt.
 --
--- So the prompt hangs off ONE small invisible part per grown plant, kept OUTSIDE
--- the model and moved by the server on its existing tick to the same
--- `wanderWorld(currentOffset())` point the leg is authored from. Nothing else
--- moves: creature parts are not replicated, not made queryable, and the model's
+-- So there is ONE small invisible part per grown plant, kept OUTSIDE the model
+-- and moved by the server on its existing tick to the same
+-- `wanderWorld(currentOffset())` point the leg is authored from. The prompt is
+-- gone (see THERE IS NO PICKUP PROMPT); the part stays, because it is what
+-- PlantPickUI reads to know a plant is grown and yours. Nothing else moves:
+-- creature parts are not replicated, not made queryable, and the model's
 -- bounding box, part count and client PivotTo are untouched. Outside the model
 -- because PlantSway pivots the whole model every frame and would carry a child
 -- anchor along a second time.
@@ -493,8 +496,8 @@ local function anchorsFolder(plot: Model): Instance
 	return folder
 end
 
--- Destroys the anchor, and the PickupPrompt with it. Also forgets the prompt
--- reference, which every caller was already clearing by hand.
+-- Destroys the anchor. Also forgets the prompt reference -- a ready pod's
+-- HatchPrompt -- which every caller was already clearing by hand.
 local function dropAnchor(entry: Planted)
 	local anchor = entry.anchor
 	entry.anchor = nil
@@ -606,8 +609,8 @@ local function render(entry: Planted)
 			PlayerDataService.MarkSeen(owner, entry.species.Id)
 		end
 		-- A grown plant can always be taken back off your own farm, so the
-		-- prompt goes on the moment it is standing there. Declared above
-		-- because the prompt builders need render() and render() needs them.
+		-- marker goes on the moment it is standing there. Declared above
+		-- because the marker builder needs render() and render() needs it.
 		attachPickup(entry)
 	end
 end
@@ -705,7 +708,7 @@ local function attachHatchPrompt(entry: Planted)
 end
 
 --==============================================================================
--- AND THE ONE THAT TAKES IT BACK
+-- AND THE MARK THAT SAYS IT CAN COME BACK
 --
 -- A grown plant is not furniture. You put it somewhere, you change your mind,
 -- you move it -- and until now the only way to free a place in the bed was to
@@ -717,67 +720,49 @@ end
 -- is stolen and nothing is revealed, the thing simply comes back to your hands.
 --
 -- The owner check is server-side and it is the only thing standing between a
--- neighbour and your garden. `pickUp` re-tests it on every route in.
+-- neighbour and your garden. `pickUp` re-tests it on every route in, and there
+-- is exactly one route in: PickUpAction -> PickUpById, which PlantPickUI's
+-- button and the Garden panel both send.
 --
--- NOBODY HOLDS THIS PROMPT ANY MORE, and that is deliberate -- see THE PROMPT IS
--- DISARMED below. It is kept because it is still the one place the pickup RANGE
--- lives, and because the client reads that number off it rather than keeping a
--- second copy in step with this file.
+--==============================================================================
+-- THERE IS NO PICKUP PROMPT
+--
+-- There was one, hung on this part and "disarmed" by setting its keyboard and
+-- gamepad keys to KeyCode.Unknown. That did not disarm it. It armed it for the
+-- MOUSE: a mouse button's InputObject carries that same empty KeyCode, so the
+-- engine matched every mouse press against the prompt's key -- and with a zero
+-- hold, the prompt fired on the press and the press was spent.
+--
+-- MEASURED in Play, standing 8.6 studs from a grown plant: two left clicks and
+-- a right click each fired PromptTriggered on PickupPrompt and reached
+-- UserInputService with gameProcessedEvent = true. From further away than the
+-- 26-stud range the same clicks arrived unprocessed. So anywhere inside your own
+-- plot -- which is always within 26 studs of something grown -- the mouse
+-- stopped reaching the game: PlantPlace dropped every click on the soil, a
+-- hotbar slot heard the press and never the release, the PICK UP button never
+-- fired, and the right button the camera turns with arrived already handled.
+--
+-- A prompt nobody is allowed to press has no reason to exist, so the marker is
+-- now only the part. Nothing on it can take input.
 --==============================================================================
 function attachPickup(entry: Planted)
 	local model = entry.model
 	local handle = if model then model.PrimaryPart else nil
-	if not (model and handle) or entry.prompt then
+	if not (model and handle) or entry.anchor then
 		return
 	end
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Name = "PickupPrompt"
-	-- Custom, like every prompt in the game: PromptUI draws them all.
-	prompt.Style = Enum.ProximityPromptStyle.Custom
-	prompt.ActionText = "Pick Up"
-	prompt.ObjectText = ""
-	--==========================================================================
-	-- THE PROMPT IS DISARMED, AND IT IS DISARMED HERE
-	--
-	-- Picking a plant up is a two-step gesture now -- select it, then press the
-	-- button or E -- and PlantPickUI owns both steps and asks through
-	-- PickUpAction. This prompt is no longer an input at all; it is a range
-	-- oracle and an anchor.
-	--
-	-- STYLE = CUSTOM ONLY STOPS THE DRAWING. The engine still listens on three
-	-- separate routes -- KeyboardKeyCode, GamepadKeyCode and ClickablePrompt --
-	-- and with HoldDuration at zero any one of them lifts the plant on the press
-	-- that starts the gesture. That is exactly the bug the two-step exists to
-	-- kill, and with no billboard drawn any more there is nothing on screen to
-	-- warn about it either.
-	--
-	-- IT HAS TO BE THE SERVER THAT DOES IT. The first attempt turned these off
-	-- from the client, on PromptShown, and it does not hold: the engine's own
-	-- click handling runs before a release gesture can be judged, and Triggered
-	-- fires here on the server regardless of what a client did to its own copy
-	-- of the properties. Set at construction, the disarm is authoritative and
-	-- replicates to everybody.
-	--==========================================================================
-	prompt.KeyboardKeyCode = Enum.KeyCode.Unknown
-	prompt.GamepadKeyCode = Enum.KeyCode.Unknown
-	prompt.ClickablePrompt = false
-	-- PickupHoldSeconds, not HatchHoldSeconds: this borrowed the hatch's number
-	-- because it was the only one in reach, and the two actions are not the same
-	-- -- see the note on both in GameConfig.Planting. Inert while the prompt is
-	-- disarmed, and kept so re-arming it is one line rather than an archaeology
-	-- exercise.
-	prompt.HoldDuration = PICKUP_HOLD
-	prompt.MaxActivationDistance = PLANT_RANGE
-	prompt.RequiresLineOfSight = false
 
 	--==========================================================================
-	-- ITS OWN ANCHOR, NOT THE MODEL'S HANDLE
+	-- ONE INVISIBLE PART, NOT THE MODEL'S HANDLE
 	--
 	-- Every property that could make it matter is off: invisible, anchored, no
 	-- collision, no touch, no query -- so bats, placement rays and PlantPickUI's
 	-- box test all go straight through it -- and no shadow. It rides at the
-	-- handle's height above the walking point, so the prompt sits where it
-	-- always did relative to the plant.
+	-- handle's height above the walking point.
+	--
+	-- PlantPickUI looks it up by placement id under the player's OWN plot, so a
+	-- neighbour's plant never resolves and ownership on the client stays
+	-- structural. Its existence is the whole message: grown, and yours.
 	--==========================================================================
 	local soil = soilOf(entry.plot)
 	local groundY = if soil then topOf(soil, entry.offset).Position.Y else handle.Position.Y
@@ -799,24 +784,9 @@ function attachPickup(entry: Planted)
 		stale:Destroy()
 	end
 	anchor.Parent = folder
-	prompt.Parent = anchor
 	entry.anchor = anchor
 	entry.anchorLift = handle.Position.Y - groundY
-	entry.prompt = prompt
 	placeAnchor(entry, Workspace:GetServerTimeNow())
-	--==========================================================================
-	-- AND NOTHING LISTENS TO Triggered
-	--
-	-- A disarmed prompt cannot fire it, so a handler here would be a dead branch
-	-- that reads like a live one -- and the reason it was removed is worth more
-	-- than the branch was: while it existed, the engine's click handler reached
-	-- it directly and picked plants up with no selection, no outline and no
-	-- button, on the press rather than the release.
-	--
-	-- Every pickup now arrives through PickUpAction -> PickUpById, which is the
-	-- route the Garden panel has always used and the only one this service needs
-	-- to guard.
-	--==========================================================================
 end
 
 --==============================================================================
@@ -965,7 +935,7 @@ function pickUp(player: Player, entry: Planted): boolean
 		return false
 	end
 	-- Yours, and only yours. This is what stops a neighbour walking off with
-	-- your garden -- the prompt is visible to them, the action is not.
+	-- your garden -- the plant is visible to them, the action is not.
 	if PlotService.OwnerOf(entry.plot) ~= player then
 		return false
 	end
@@ -997,10 +967,10 @@ end
 --==============================================================================
 -- THE SAME PICKUP, ASKED FOR BY NAME
 --
--- THIS IS NOW THE ONLY WAY IN. The prompt used to hand `pickUp` an entry it
--- already had; it is disarmed and hands over nothing, so every pickup in the
--- game -- the Garden panel's, the button's, E's -- arrives here with an id and
--- goes through this lookup, and the lookup is itself a check.
+-- THIS IS THE ONLY WAY IN. A prompt used to hand `pickUp` an entry it already
+-- had; there is no pickup prompt any more, so every pickup in the game -- the
+-- Garden panel's and the PICK UP button's -- arrives here with an id and goes
+-- through this lookup, and the lookup is itself a check.
 --
 -- IT LOOKS IN THE CALLER'S OWN PLOT AND NOWHERE ELSE. `growing` is keyed by
 -- plot, so asking for a neighbour's placement id finds nothing: their plants
@@ -1398,9 +1368,8 @@ end
 -- THE ANCHOR, AT THE AUTHORITATIVE POINT
 --
 -- The same currentOffset() and wanderWorld() the leg is published from, so the
--- prompt's range check measures from where every client is drawing the plant,
--- give or take one tick of travel (TickSeconds 0.5 x WanderSpeed <= 2.6 studs/s,
--- so under 1.3 studs against a 26-stud range).
+-- marker stands where every client is drawing the plant, give or take one tick
+-- of travel (TickSeconds 0.5 x WanderSpeed <= 2.6 studs/s, so under 1.3 studs).
 --
 -- Skipped when it would move less than a twentieth of a stud, so a resting
 -- garden writes nothing at all.
@@ -1747,7 +1716,7 @@ function PlantService.RebaseTo(plot: Model, captured: { [number]: Vector3 }): nu
 		else
 			stopWander(entry)
 		end
-		-- The soil moved; the prompt goes where the record now says the plant is.
+		-- The soil moved; the marker goes where the record now says the plant is.
 		placeAnchor(entry, parkNow)
 	end
 	sweepAnchors(plot)
@@ -1915,7 +1884,7 @@ function PlantService.Start()
 					end
 					-- The garden takes a step. Pods are skipped inside.
 					stepWander(plot, byPlot, srvNow)
-					-- And every pickup prompt follows it, on this same tick.
+					-- And every pickup marker follows it, on this same tick.
 					trackAnchors(byPlot, srvNow)
 				end
 			end

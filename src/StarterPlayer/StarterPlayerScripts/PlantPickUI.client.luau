@@ -31,10 +31,12 @@
 -- with PickUpAction -- the same verb the Garden panel has always used -- and
 -- PlantService.PickUpById re-tests ownership, growth and the bag itself.
 --
--- The server's PickupPrompt still exists on each grown plant, invisible and
--- disarmed (see PlantService.attachPickup). This file uses it only as the marker
--- that a plant is grown and yours, which is exactly the fact the server set it
--- up to mean.
+-- What says a plant is grown and yours is an invisible part the server keeps
+-- per grown plant under your plot's Runtime/PickupAnchors, named by placement
+-- id. It is only a part. There is deliberately no ProximityPrompt on it any more:
+-- a "disarmed" one with an empty key matched every mouse press, and inside your
+-- own plot it swallowed every click -- see THERE IS NO PICKUP PROMPT in
+-- PlantService.
 --==============================================================================
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -60,8 +62,6 @@ local PLANTING = GameConfig.Plant
 local CREAM = Color3.fromRGB(242, 238, 206)
 local BLACK = Color3.fromRGB(0, 0, 0)
 local LIME = Color3.fromRGB(150, 220, 96)
-
-local PICKUP_PROMPT = "PickupPrompt"
 
 -- A clean click: ten pixels and half a second. Anything that moves further or
 -- lasts longer is a camera drag and is none of this file's business.
@@ -149,7 +149,7 @@ label.Text = "PICK UP"
 --==============================================================================
 type Selection = {
 	model: Model,
-	prompt: ProximityPrompt,
+	marker: BasePart,
 }
 
 local selected: Selection? = nil
@@ -175,10 +175,10 @@ local function myPlot(): Model?
 	return nil
 end
 
--- The disarmed server prompt for a plant, if that plant is grown and in MY
--- plot. Looked up by placement id under my own plot, so a neighbour's plant
--- never resolves.
-local function promptFor(model: Instance): ProximityPrompt?
+-- The server's marker for a plant, if that plant is grown and in MY plot.
+-- Looked up by placement id under my own plot, so a neighbour's plant never
+-- resolves.
+local function markerFor(model: Instance): BasePart?
 	if not (model:IsA("Model") and CollectionService:HasTag(model, GameConfig.Tags.Planted)) then
 		return nil
 	end
@@ -188,12 +188,11 @@ local function promptFor(model: Instance): ProximityPrompt?
 	local anchors = if runtime
 		then runtime:FindFirstChild(GameConfig.Plot.PickupAnchorsFolderName)
 		else nil
-	local anchor = if anchors and type(id) == "number"
+	local marker = if anchors and type(id) == "number"
 		then anchors:FindFirstChild(tostring(id))
 		else nil
-	local prompt = if anchor then anchor:FindFirstChild(PICKUP_PROMPT) else nil
-	if prompt and prompt:IsA("ProximityPrompt") and prompt.Enabled then
-		return prompt
+	if marker and marker:IsA("BasePart") then
+		return marker
 	end
 	return nil
 end
@@ -252,7 +251,7 @@ local function rayHitsBox(origin: Vector3, dir: Vector3, boxCF: CFrame, size: Ve
 	return math.max(tmin, 0)
 end
 
-local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
+local function plantUnder(at: Vector2): (Model?, BasePart?)
 	local camera = Workspace.CurrentCamera
 	local plot = myPlot()
 	local plants = if plot then plot:FindFirstChild("Plants") else nil
@@ -276,11 +275,11 @@ local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 	local reach = if solid then (solid.Position - origin).Magnitude else 600
 
 	local bestModel: Model? = nil
-	local bestPrompt: ProximityPrompt? = nil
+	local bestMarker: BasePart? = nil
 	local bestAt = math.huge
 	for _, child in ipairs(plants:GetChildren()) do
-		local prompt = promptFor(child)
-		if prompt then
+		local marker = markerFor(child)
+		if marker then
 			local model = child :: Model
 			if distanceTo(model) <= SELECT_RANGE then
 				local boxCF, boxSize = model:GetBoundingBox()
@@ -288,12 +287,12 @@ local function plantUnder(at: Vector2): (Model?, ProximityPrompt?)
 				if t and t <= reach and t < bestAt then
 					bestAt = t
 					bestModel = model
-					bestPrompt = prompt
+					bestMarker = marker
 				end
 			end
 		end
 	end
-	return bestModel, bestPrompt
+	return bestModel, bestMarker
 end
 
 --==============================================================================
@@ -314,13 +313,13 @@ local function clearSelection()
 	billboard.Adornee = nil
 end
 
-local function select(model: Model, prompt: ProximityPrompt)
+local function select(model: Model, marker: BasePart)
 	clearSelection()
 	local base = model.PrimaryPart
 	if not base then
 		return
 	end
-	selected = { model = model, prompt = prompt }
+	selected = { model = model, marker = marker }
 
 	highlight.Parent = model
 
@@ -337,13 +336,10 @@ local function select(model: Model, prompt: ProximityPrompt)
 			clearSelection()
 		end
 	end))
-	table.insert(watching, prompt.AncestryChanged:Connect(function(_, parent)
+	-- The server drops the marker the moment the plant stops being yours to
+	-- pick up: picked up, hatched over, or rebuilt.
+	table.insert(watching, marker.AncestryChanged:Connect(function(_, parent)
 		if not parent then
-			clearSelection()
-		end
-	end))
-	table.insert(watching, prompt:GetPropertyChangedSignal("Enabled"):Connect(function()
-		if not prompt.Enabled then
 			clearSelection()
 		end
 	end))
@@ -355,7 +351,7 @@ local function select(model: Model, prompt: ProximityPrompt)
 			if mine ~= generation then
 				return
 			end
-			if not (model.Parent and prompt.Parent and prompt.Enabled)
+			if not (model.Parent and marker.Parent)
 				or distanceTo(model) > SELECT_RANGE then
 				clearSelection()
 				return
@@ -450,13 +446,13 @@ UserInputService.InputEnded:Connect(function(input: InputObject)
 		clearSelection()
 		return
 	end
-	local model, prompt = plantUnder(waiting.at)
-	if model and prompt then
+	local model, marker = plantUnder(waiting.at)
+	if model and marker then
 		local current = selected
 		if current and current.model == model then
 			return
 		end
-		select(model, prompt)
+		select(model, marker)
 	else
 		clearSelection()
 	end

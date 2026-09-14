@@ -1,5 +1,87 @@
 # Steal a Seed — Session Handoff
 
+## The invisible pickup prompt was eating every click inside the plot — 2026-09-14 (CLAUDE)
+
+The owner: "when im inside the plot, clicking everywhere doesnt work". That was
+the whole bug, and `953050f` caused it. It "disarmed" the pickup prompt by setting
+its keyboard and gamepad keys to `KeyCode.Unknown`.
+
+### What was actually happening
+
+A mouse button's InputObject carries that same empty KeyCode (it prints as
+`Enum.KeyCode.None`). So the engine matched every mouse press against a shown
+`PickupPrompt`, and with `PickupHoldSeconds = 0` the prompt fired on the press
+and sank it. Every grown plant had one with a 26-stud range, which covers
+anywhere in your own plot.
+
+MEASURED in Play, standing 8.6 studs from a grown plant: two left clicks and a
+right click each fired `PromptTriggered` on `PickupPrompt` and reached
+`UserInputService` with `gameProcessedEvent = true`. Outside the range the same
+clicks arrived unprocessed. Everything the owner reported came from that one
+cause:
+
+  * clicking the soil with a plant in hand did nothing, because PlantPlace drops
+    processed clicks;
+  * a hotbar slot got `MouseButton1Down` and never the release, so nothing was
+    equipped (recorded on the owner's own click);
+  * six real presses on `PICK UP` did nothing;
+  * the right button, which turns the camera, arrived already handled. That is
+    the "I can't move the camera" report.
+
+The previous entry's note that injected clicks "arrived with
+gameProcessedEvent = true regardless of state ... That flag says nothing about a
+real mouse" was wrong. They were processed because a prompt was in range, and
+real clicks were being eaten the same way.
+
+### The fix: there is no pickup prompt
+
+  * `PlantService.attachPickup` builds only the invisible anchor part under
+    `Runtime/PickupAnchors/<placementId>`. No ProximityPrompt. The anchor's
+    lifecycle is unchanged: created when a plant is grown, dropped on pickup,
+    hatch or re-render, swept, and tracked on the tick. Its guard is now
+    `entry.anchor`, and `entry.prompt` now only ever means a pod's HatchPrompt.
+  * `PlantPickUI` reads the anchor part as its marker (grown, and yours) and
+    clears a selection when the anchor goes away.
+  * `PromptUI` loses its `PickupPrompt` special case, and
+    `GameConfig.Plant.PickupHoldSeconds` is gone, since nothing read it.
+  * Hatch, Take, Sell, Upgrade and Marigold prompts all keep E. None of them
+    uses an empty key.
+
+### Verified
+
+  * `rojo build` clean. All 18 specs pass, and none threw.
+  * In a fresh Play session there were zero `PickupPrompt` instances and 9
+    anchors for 9 grown plants.
+  * Standing 15 studs from a grown plant with a plant in hand: left and right
+    clicks on open ground arrived unprocessed, and no prompt fired.
+  * Hotbar slot 4 fired `Activated` and swapped Suncrown for Astralhorn. A
+    second press put it away.
+  * Clicking a Gloomlotus outlined it and showed PICK UP, and a press on PICK UP
+    reached the button. That press was released off the button with the
+    billboard switched off, so nothing was picked up; the bed still held 9
+    plants.
+  * **Not verified:** a PICK UP press through to a completed pickup, which would
+    have changed the owner's saved garden. Also not verified: the camera actually
+    rotating, because synthetic moves carry no delta. The right button now
+    arrives unprocessed, which is what the camera needs.
+
+### Open: on a tall plant the PICK UP button can be off-screen
+
+The button sits 0.8 studs above the plant's measured top. A tier-6 Gloomlotus is
+35 studs tall, and its button stayed above the top of the screen until the
+character stood about 46 studs away. Not changed here.
+
+### Testing trap: Studio has to be the foreground window
+
+MCP `user_mouse_input` into a Play session while Studio is NOT the foreground
+window arrives `processed = true` and never reaches a GuiButton; a fresh probe
+TextButton did not fire. The first click after Studio comes forward can be eaten
+too. Bring Studio to the front first: tap ALT, then call Win32
+`SetForegroundWindow` on RobloxStudioBeta's main window from PowerShell. Hand
+focus back to the terminal afterwards. With Studio in front, injected clicks
+behave like real ones. Log `UserInputService.WindowFocused` and
+`WindowFocusReleased` to see which case a test ran in.
+
 ## Picking up is back to simple, and planting was blocked by the fence — 2026-09-14 (CLAUDE)
 
 The owner reported that the click-to-pick work had made the game worse: plants

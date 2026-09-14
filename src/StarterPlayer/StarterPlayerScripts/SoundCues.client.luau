@@ -81,8 +81,8 @@ end
 --
 -- So the prompt opens a window and the Tool has to arrive inside it.
 -- PromptTriggered on the client fires for the local player only, and the prompt
--- that hatches is the only one named HatchPrompt -- Pick Up is PickupPrompt for
--- exactly this kind of reason.
+-- that hatches is the only one named HatchPrompt. Picking a plant up involves no
+-- prompt at all.
 --==============================================================================
 local revealUntil = 0
 -- Generous. It covers the server round trip, the model build and a bad frame,

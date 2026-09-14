@@ -168,8 +168,9 @@ GameConfig.Plot = {
 	SpawnPadName = "SpawnPad",
 	RuntimeFolderName = "Runtime",
 	-- Under Runtime: one invisible part per grown plant, named by placement id,
-	-- carrying its PickupPrompt at the server's authoritative wander position.
-	-- The client resolves a plant's prompt through here. See PlantService.
+	-- at the server's authoritative wander position. Its existence is what tells
+	-- PlantPickUI a plant is grown and yours. No prompt hangs on it -- see THERE
+	-- IS NO PICKUP PROMPT in PlantService.
 	PickupAnchorsFolderName = "PickupAnchors",
 	PlantsFolderName = "Plants",
 
@@ -2215,18 +2216,6 @@ GameConfig.Plant = {
 	-- Hold to hatch. Long enough that the pod visibly shakes and the hatch is a
 	-- thing you did, short enough that a full bed is not a chore.
 	HatchHoldSeconds = 1.1,
-	--==========================================================================
-	-- PICKING A PLANT BACK UP IS A TAP, NOT A HOLD
-	--
-	-- It borrowed HatchHoldSeconds, which was never a decision -- the two
-	-- actions simply shared the only number in reach. They are not the same
-	-- thing. Hatching is irreversible and wants a beat of commitment; picking
-	-- your own plant up off your own plot is undoing a placement, and a hold on
-	-- an undo is friction with nothing behind it.
-	--
-	-- Zero means the prompt fires on press. Hatch keeps its 1.1 above.
-	--==========================================================================
-	PickupHoldSeconds = 0,
 	-- How long the shell burst lasts before its pieces are gone.
 	BurstSeconds = 0.45,
 

@@ -247,51 +247,6 @@ local function carrying(): boolean
 end
 
 --==============================================================================
--- ONE PROMPT THIS FILE NEVER DRAWS, AND WHY IT IS THIS ONE
---
--- Every prompt in the game is Style = Custom and drawn here, and on touch the
--- panel IS the button -- which is exactly right for the five prompts a player
--- walks up to and means to press: a nest Take, a hatch, Marigold, a mill, the
--- sell board. Each of those is a deliberate approach to a fixed object.
---
--- A GROWN PLANT IS NOT LIKE THAT, and the owner found the reason on a phone.
--- Its hold is ZERO -- picking your own plant back up should not need a hold, and
--- that was the right call -- but a zero-hold prompt fires on the touch that
--- STARTS the gesture. So a thumb coming down near a plant to swing the camera
--- lifted the plant instead, and no amount of movement cancellation can undo an
--- action that has already happened. Widening the movement threshold only makes
--- the panel harder to press on purpose; moving it only moves the collision.
---
--- The verb was wrong, not the geometry. A plant is now SELECTED by a tap or a
--- click and picked up by a separate button, so the destructive step is never the
--- first half of an ambiguous gesture -- see PlantPickUI, which owns that.
---
--- AND IT IS EVERY DEVICE NOW, not only touch. A mouse cursor is unambiguous
--- about WHERE it is pointing, which is why desktop kept the billboard for a
--- while, but it is not unambiguous about whether the player meant to spend the
--- plant: a left-drag is also how the camera turns, and E is a key people press
--- for every other prompt in the game. One affordance on all three input methods
--- is also one thing to reason about instead of two.
---
--- SO NOTHING IS DRAWN FOR IT HERE, on any device. The prompt itself stays --
--- enabled, server-backed, and still the one place MaxActivationDistance lives --
--- but PlantPickUI takes its keys away locally so the engine cannot fire it
--- behind an invisible affordance. See THE KEY THAT IS NOT THERE in that file.
---
--- Named rather than inferred: PlantService creates exactly one prompt with this
--- name, the same way `reservedForSomebodyElse` above reads one attribute by
--- name. A structural test would have to reach into the plot tree from here to
--- learn something one string already says.
---==============================================================================
-local DRAWN_BY_SOMEBODY_ELSE: { [string]: boolean } = {
-	PickupPrompt = true,
-}
-
-local function ownedByAnotherUI(prompt: ProximityPrompt): boolean
-	return DRAWN_BY_SOMEBODY_ELSE[prompt.Name] == true
-end
-
---==============================================================================
 -- THE PANEL
 --==============================================================================
 local function build(prompt: ProximityPrompt): Panel?
@@ -442,7 +397,7 @@ local function build(prompt: ProximityPrompt): Panel?
 	--==========================================================================
 	-- UPPERCASED HERE, NOT AT THE FOUR PLACES THAT SET IT
 	--
-	-- ActionText stays "Pick Up" on the prompt, because that is what the action
+	-- ActionText stays "Hatch" on the prompt, because that is what the action
 	-- is called. How loudly it is said is this file's business -- a service
 	-- should not have to shout in its own data to be drawn correctly, and the
 	-- day somebody adds a fifth prompt they should not have to know.
@@ -461,8 +416,8 @@ local function build(prompt: ProximityPrompt): Panel?
 	--
 	-- InputBegan on the button itself, which is the native path a ScreenGui
 	-- button has always had -- no global listener, no projected rectangle, and
-	-- nothing for PickupPrompt to be routed from except a press that landed on
-	-- the words PICK UP.
+	-- nothing for a prompt to be routed from except a press that landed on the
+	-- panel's own words.
 	--
 	-- It also gives two behaviours for free that a global handler had to fake:
 	-- a touch that BEGINS outside and slides on does not start a hold, because
@@ -578,8 +533,7 @@ local function hide(prompt: ProximityPrompt)
 end
 
 local function show(prompt: ProximityPrompt)
-	if shown[prompt] or carrying() or reservedForSomebodyElse(prompt)
-		or ownedByAnotherUI(prompt) then
+	if shown[prompt] or carrying() or reservedForSomebodyElse(prompt) then
 		return
 	end
 	local entry = build(prompt)
