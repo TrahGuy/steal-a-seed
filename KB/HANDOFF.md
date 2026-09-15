@@ -1,5 +1,148 @@
 # Steal a Seed — Session Handoff
 
+## Dustbowl pods are the owner's AI meshes, with a tier ladder and auras — 2026-09-15 (CLAUDE)  (COMMITTED)
+
+**Owner request:** wire the two Rodin FBX meshes in `art/ai generated pods/` into
+`CreatureModel.BuildPod` for every Dustbowl pod. Tiers 1-5 use the closed egg and
+must differ visibly in size and finish. Tier 6 (Titan) uses the cracked egg with a
+fire aura; tier 7 (Colossal) the cracked egg, bigger, with an electric aura and the
+COLOSSAL tag. The owner gave a size table, colours, materials and particle and
+light values.
+
+### The meshes
+
+  * **Imported by the owner** with Studio's 3D Importer, which cut each FBX to the
+    20,000-triangle ceiling:
+      - tiers 1-5: `rbxassetid://122574206027033`, 19,999 triangles, 1.83x as tall
+        as wide;
+      - tiers 6-7: `rbxassetid://116363561995758`, 20,000 triangles, 1.42x.
+    Both are untextured, so colour and material apply cleanly. Ids live in
+    `GameConfig.PodMeshes` (`Mesh = 0` means not imported, and a pod then falls
+    back to the part-built urn).
+  * **The imported copies are still in Workspace**, as
+    `dustbowl pod from tier 1 to 5` and `... 6 to 7`: unanchored and 190 studs tall.
+    The game does not use them -- it builds from the ids -- so they can be deleted.
+    Left in, they drop onto the map at the hub in Play.
+  * **`PodMeshService` (new, Priority 15):**
+      - Init builds both templates with `AssetService:CreateMeshPartAsync` into
+        `ReplicatedStorage.Assets.Pods`, before NestService (40) fills a nest.
+      - ReplicatedStorage, so the client-side pod builds (bag cards, Garden panel)
+        clone the same templates.
+      - A template already placed there by hand is used as it is.
+      - Logs which templates are ready, waiting for an id, or failed; nothing
+        is fatal.
+
+### Sizes: the owner's widths, scaled evenly
+
+  * **`SeedData.PodDiameter(tier, biome)`** takes a biome now. Dustbowl reads
+    2.0 / 3.2 / 4.6 / 6.4 / 8.6 / 11.2 / 14.5 studs (1.00x to 7.25x); every other
+    biome, and a call without a biome, reads the tier sheet as before.
+    `GripForward(tier, biome)` follows.
+  * **Width, not the table's boxes.** The table's heights (2.5 ... 18.2) were
+    1.25x each width, while the meshes are 1.83x and 1.42x. Offline renders of both
+    options: forcing the boxes turned tiers 1-5 into squat domes, wider than tall.
+    So each mesh is scaled evenly to its width, keeping the concept's tall egg.
+      - Heights come out 3.66 / 5.86 / 8.42 / 11.71 / 15.74 / 15.96 / 20.66.
+      - A Titan is barely taller than a Giant (15.96 vs 15.74) but 30% wider,
+        because its egg is rounder.
+
+### Finishes and auras (CreatureModel `buildDustbowlMeshPod`)
+
+  * **Tiers 1-5, one shell, five finishes:**
+      - Tiny: SmoothPlastic, pale sand;
+      - Big: Sandstone, warm sandstone;
+      - Huge: Sandstone, terracotta;
+      - Mega: Slate, burnt sienna;
+      - Giant: Basalt, ironstone, plus a faint amber PointLight at the seam.
+  * **Titan:** Sandstone in magma clay; a neon core (255,115,20) showing through
+    the crack; `FireAura` using the client's built-in `fire_main.dds`; a
+    `FireLight` (255,130,30), brightness 2.2, range width x 2.2.
+  * **Colossal:** Sandstone in solar gold; a plasma core (200,245,255);
+    `ElectricAura` using `sparkles_main.dds`; an `ElectricLight` (140,210,255),
+    brightness 3.5, range width x 2.8; the COLOSSAL tag (MaxDistance 160) at the
+    top of the egg; `PickupSound`.
+  * **The core** is 0.70 of the width across and centred at 0.40 of the height.
+    Both numbers come from the mesh vertices: an inner cylinder 0.57 of the
+    half-width, inside a shell 0.85. It shows through the crack and never through
+    the shell.
+  * **Three departures from the brief, each after seeing it in Studio:**
+      - **Particle sizes scale with the pod** (the brief's keyframes x width / 4:
+        2.8x Titan, 3.6x Colossal). At the brief's fixed 0.4-1.6 studs, both auras
+        were specks on 11-14.5 stud eggs. Rates sit at the top of the brief's ranges
+        (25 and 30); every other particle number is the brief's.
+      - **Emitted from the egg's outline** (a surface fitted to the shell, thrown
+        outward). From the shell's volume, most particles were born inside the egg
+        and died there.
+      - **The core lights cast shadows.** With shadows off they bleached the shells:
+        the gold read as pale lemon. With shadows on, the light leaves through the
+        crack and the shell keeps its colour.
+  * **"Pulsing" light:** tag `PodPulse` plus `PulseBase`/`PulseStyle` attributes.
+    `Ambience.client` varies the Brightness locally. Fire breathes at 0.76-1.0x;
+    electric sits at 0.7x and surges up to 1.6x. Nothing replicates.
+  * **`colossalTag`** is now one builder shared by the part-built and mesh pods.
+
+### What else had to change for pods this big
+
+  * **Carry grip (CarryService `gripFor`):** a pod is lifted until its lowest point
+    is level with the carrier's feet. Centred on the chest, a 20-stud Colossal hung
+    8 studs into the ground.
+      - Short pods keep the old -0.35 drop.
+      - This also lifts the other biomes' biggest part-built pods, which used to dip
+        below the feet: a Greenhollow Colossal now rides +1.51.
+      - The grip width uses the biome, for the raid carry and the banked or restored
+        Tool (`GripReach`). CarryPose passes the carried species' biome.
+  * **Take range (`takeRangeOf`):** a prompt measures to the shell's centre, and a
+    Colossal's centre is 10 studs up. A player pressed against its side was about 11.0
+    studs away, right at the 11-stud limit. The range now grows with the pod: enough to
+    reach the centre from 3 studs off the side, never below 11. The Colossal gets
+    13.6, everything shorter keeps 11, and the server check uses the same number.
+  * **PlantPlace's placement disc and NestService's haul radius** pass the biome.
+    Dustbowl never confiscates, so its egg never rides a guardian.
+
+### Verified
+
+  * **`DustbowlPodSpec` (new, 74 assertions), run with the real mesh templates:**
+      - the width ladder, and the other biomes unchanged;
+      - each tier's MeshPart, even scale, base on its CFrame, colour and material;
+      - tiers 1-5 never repeat a colour;
+      - lights, cores inside the outline, and each aura's properties and emission
+        shape;
+      - COLOSSAL tag and pickup sound;
+      - the fallback with no template or an uncloneable one;
+      - a Greenhollow Colossal unchanged.
+    Negative controls: switching the mesh branch off fails 8; forcing the table's
+    boxes fails all 7 scale checks.
+  * **All 23 specs pass.**
+  * **Studio, with the owner's meshes:**
+      - an Edit lineup of tiers 1-7 and close-ups of Titan and Colossal, captured;
+      - in Play, templates built at boot from both ids, and Dustbowl nests
+        spawned a Titan (11.20 wide) and two Tinies (2.00);
+      - real takes of a Dustbowl Colossal (lifted +7.32, lowest point at the feet),
+        a Dustbowl Huge (+1.20) and a Greenhollow Colossal, each dropped again;
+      - the client drew the TAKE panel for a player standing beside the Colossal;
+      - both lights flickered on the client;
+      - a game-view capture shows the Colossal's electric aura beside the player.
+    All of it ran on the road, outside the safe field, so nothing banked into the
+    owner's saved hotbar. The test pods were destroyed with the session.
+
+### Not verified
+
+  * **Carrying a Colossal while running** (arms and camera view past a 20-stud egg),
+    planting and hatching a mesh pod, a bag card or Garden viewport showing one,
+    and a phone.
+  * **The fire aura over the Dustbowl canyon:** against the bright test sky it
+    read pale. LightEmission 0.85 is the brief's.
+  * **Performance:** 20,000 triangles per pod with automatic LOD; a garden full of
+    them is untested. Blender decimations to 8k and 10k triangles look the same in
+    render and can be imported instead if phones struggle.
+
+### Testing note: the Suncrown mesh
+
+Before the owner's pod meshes were in the inventory, one Play run used the Suncrown
+test mesh's id as a stand-in, to prove the id -> template -> replicated clone path.
+That was a local, uncommitted config line, reverted as soon as Play started. The
+owner does not want that asset used for this; nothing committed references it.
+
 ## Pod timer without a box, and Instant Hatch for 99 Robux — 2026-09-15 (CLAUDE)  (COMMITTED; NEEDS A PRODUCT ID)
 
 **Owner request:** make the hatching timer above pods transparent with no box, change

@@ -84,6 +84,7 @@ src/
     SaveService.luau            DataStore transport, session locking
     PlayerDataService.luau      profiles in memory, autosave, replication
     CreatureModel.luau          pods and creatures (NOT a *Service)
+    PodMeshService.luau         builds the Dustbowl pod mesh templates from GameConfig.PodMeshes
     ParentModel.luau            Greenhollow guardian + biome dispatch (NOT a *Service)
     BramblebackModel.luau       Dustbowl guardian geometry and seventh-seam rig
     NestService.luau            nests, and the parent that sleeps beside them
@@ -171,6 +172,8 @@ From the blueprint, plus what this repo has learned:
     obvious primitive. Reserve spheres for small details such as eyes, buds and joints. A carved
     mouth is real recessed negative space built from brow, cheek and jaw masses, not a dark panel
     pasted onto a round head. This does not authorize MeshParts, unions or imported geometry.
+    The one owner-approved exception (2026-09-15) is Dustbowl's pods: two imported meshes whose
+    ids live in `GameConfig.PodMeshes`, built into templates at boot by `PodMeshService`.
 
 ## Skills
 

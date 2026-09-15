@@ -58,6 +58,13 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local CARRYING_KG = GameConfig.Attributes.CarryingKg
+local CARRYING_SPECIES = GameConfig.Attributes.CarryingSpecies
+
+-- A pod's reach depends on its biome as well as its tier: Dustbowl's are wider.
+local function biomeOf(speciesId: any): string?
+	local species = if speciesId ~= nil then SeedData.Get(tostring(speciesId)) else nil
+	return if species then species.Biome else nil
+end
 
 -- How fast the pose blends in and out. A snap reads as a glitch.
 local BLEND = 9
@@ -239,7 +246,7 @@ end)
 local function carriedReach(player: Player, character: Model): number?
 	local tier = player:GetAttribute(CARRYING_KG)
 	if type(tier) == "number" then
-		return SeedData.GripForward(tier)
+		return SeedData.GripForward(tier, biomeOf(player:GetAttribute(CARRYING_SPECIES)))
 	end
 	for _, d in ipairs(character:GetChildren()) do
 		if d:IsA("Tool") then
@@ -249,7 +256,7 @@ local function carriedReach(player: Player, character: Model): number?
 			end
 			local weight = d:GetAttribute(CARRYING_KG)
 			if type(weight) == "number" then
-				return SeedData.GripForward(weight)
+				return SeedData.GripForward(weight, biomeOf(d:GetAttribute("SpeciesId")))
 			end
 		end
 	end

@@ -1296,7 +1296,10 @@ local function attachHaul(nest: Nest, haul: Haul): boolean
 		return false
 	end
 
-	local radius = SeedData.PodDiameter(haul.tier) * 0.5
+	-- With the biome, for the width a pod really has. (Only Tanglemire, Emberroot
+	-- and Starbloom confiscate today, so Dustbowl's taller mesh egg never rides a
+	-- guardian and this sphere estimate is still the right shape.)
+	local radius = SeedData.PodDiameter(haul.tier, species.Biome) * 0.5
 	local clear = tonumber(P.HaulClearance) or 0.4
 	local rootCF = nest.root.CFrame
 	local seamLocal = rootCF:ToObjectSpace(seam.CFrame).Position

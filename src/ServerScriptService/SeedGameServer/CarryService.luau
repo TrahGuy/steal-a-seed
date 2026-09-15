@@ -252,13 +252,61 @@ end
 -- ToolTip.
 --==============================================================================
 
+-- How far a HumanoidRootPart's centre stands above the floor: R15's default hip
+-- height plus half its root. Only used before a character exists to measure.
+local ROOT_STANDS = 3
+
+-- The lowest point of anything in a model, in world Y: the rotated half-extent of
+-- every part, so a raked or rolled piece counts all the way down.
+local function lowestPoint(model: Model): number
+	local lowest = math.huge
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			local cf, size = d.CFrame, d.Size
+			lowest = math.min(lowest, cf.Position.Y
+				- math.abs(cf.UpVector.Y) * size.Y * 0.5
+				- math.abs(cf.RightVector.Y) * size.X * 0.5
+				- math.abs(cf.LookVector.Y) * size.Z * 0.5)
+		end
+	end
+	return lowest
+end
+
 -- Where a pod sits relative to a HumanoidRootPart. One function, so the raid
 -- carry and the banked Tool cannot drift into two different grips.
-local function gripFor(tier: number): CFrame
+local function gripFor(model: Model, tier: number, biome: string,
+	character: Instance?): CFrame
 	-- -Z is forward in a root's frame. Offset by the pod's OWN RADIUS, because
-	-- pods are 1.3 to 10 studs across: a fixed offset either buries a heavy one
+	-- pods are 1.3 to 14.5 studs across: a fixed offset either buries a heavy one
 	-- in the ribs or leaves a light one hovering clear of the hands.
-	return CFrame.new(0, GameConfig.Carry.GripDrop, -SeedData.GripForward(tier))
+	local forward = SeedData.GripForward(tier, biome)
+
+	--==========================================================================
+	-- AND NEVER THROUGH THE FLOOR
+	--
+	-- The grip puts the pod's PRIMARY PART at chest height, which was fine while
+	-- the tallest pod stood about ten studs. A Dustbowl Colossal is a mesh egg
+	-- over twenty studs tall with its centre half way up, and centred on the
+	-- chest it hung eight studs into the ground.
+	--
+	-- So the pod is lifted until its lowest point is level with the carrier's
+	-- feet, and no further: anything short enough to ride at chest height still
+	-- does, exactly where it always did.
+	--==========================================================================
+	local drop = GameConfig.Carry.GripDrop
+	local primary = model.PrimaryPart
+	if primary then
+		local lowest = lowestPoint(model)
+		local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		local stands = if humanoid and root and root:IsA("BasePart")
+			then humanoid.HipHeight + root.Size.Y * 0.5
+			else ROOT_STANDS
+		if lowest < math.huge then
+			drop = math.max(drop, (primary.Position.Y - lowest) - stands)
+		end
+	end
+	return CFrame.new(0, drop, -forward)
 end
 
 --==============================================================================
@@ -273,11 +321,14 @@ end
 -- either buries a heavy one in the ribs or leaves a light one hovering a stud
 -- clear of the hands.
 --==============================================================================
-local function attachInFront(model: Model, root: BasePart, tier: number)
+local function attachInFront(model: Model, root: BasePart, tier: number, biome: string)
 	local primary = model.PrimaryPart
 	if not primary then
 		return
 	end
+	-- Measured while the pod is still upright and unwelded, before the loop
+	-- below starts moving parts.
+	local grip = gripFor(model, tier, biome, root.Parent)
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.Anchored = false
@@ -292,7 +343,6 @@ local function attachInFront(model: Model, root: BasePart, tier: number)
 			end
 		end
 	end
-	local grip = gripFor(tier)
 	primary.CFrame = root.CFrame * grip
 	local weld = Instance.new("Weld")
 	weld.Name = "CarryWeld"
@@ -303,6 +353,37 @@ local function attachInFront(model: Model, root: BasePart, tier: number)
 	-- NO WEIGHT TAG. The shell's colour is its weight band and its diameter is
 	-- its weight; a billboard would be the same fact a third time, floating
 	-- beside the player's head from the nest to the red line.
+end
+
+--==============================================================================
+-- A BIG POD IS REACHED FROM ITS SIDE, NOT FROM ITS MIDDLE
+--
+-- A prompt measures its range to the part it hangs on, and a pod's prompt hangs
+-- on its shell -- the shell's centre. For every pod that used to exist, standing
+-- beside the shell put a player well inside TAKE_RANGE of that centre. A
+-- Dustbowl Colossal is a mesh egg 14.5 studs wide whose centre is ten studs up:
+-- pressed against its side, a player is eleven studs from the centre, and the
+-- prompt never appeared.
+--
+-- So the range grows with the pod: far enough to reach the centre from a few
+-- studs off the shell's side at standing height, and never below TAKE_RANGE,
+-- which is what every pod short enough to have worked before still gets. The
+-- server's own distance check in TryTake uses the same number.
+--==============================================================================
+local REACH_SIDE = 3
+
+local function takeRangeOf(pod: Model): number
+	local primary = pod.PrimaryPart
+	if not primary then
+		return TAKE_RANGE
+	end
+	local lowest = lowestPoint(pod)
+	if lowest == math.huge then
+		return TAKE_RANGE
+	end
+	local radius = math.max(primary.Size.X, primary.Size.Z) * 0.5
+	local up = math.max(primary.Position.Y - lowest - ROOT_STANDS, 0)
+	return math.max(TAKE_RANGE, math.sqrt((radius + REACH_SIDE) ^ 2 + up ^ 2) + 1)
 end
 
 --==============================================================================
@@ -330,7 +411,7 @@ local function attachPrompt(pod: Model)
 	prompt.ObjectText = ""
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.HoldDuration = GameConfig.Carry.TakeHoldSeconds
-	prompt.MaxActivationDistance = TAKE_RANGE
+	prompt.MaxActivationDistance = takeRangeOf(pod)
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = primary
 
@@ -621,7 +702,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	if not (root and root:IsA("BasePart")) then
 		return refuseTake(player, pod, "NO_ROOT")
 	end
-	if (head.Position - anchor.Position).Magnitude > TAKE_RANGE + RANGE_SLACK then
+	if (head.Position - anchor.Position).Magnitude > takeRangeOf(pod) + RANGE_SLACK then
 		return refuseTake(player, pod, "OUT_OF_RANGE")
 	end
 
@@ -678,7 +759,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		-- that used to be on this line asserted away exactly the nil that was
 		-- destroying pods.
 		local model = CreatureModel.BuildPod(taken, takenTier, root.CFrame, character)
-		attachInFront(model, root, takenTier)
+		attachInFront(model, root, takenTier, taken.Biome)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
@@ -1138,14 +1219,15 @@ local function bank(player: Player): boolean
 	-- that one is welded to a head and unanchored, and a Tool wants a part named
 	-- Handle that it owns outright.
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
+	local tool = giveTool(player, pod, species, tier,
+		gripFor(pod, tier, species.Biome, character), false)
 	if not tool then
 		return false
 	end
 	-- The same number CarryPose reads off a hatched creature. A pod's reach IS
 	-- derivable from its weight, but having two ways to answer one question is
 	-- how the arms and the object drift apart.
-	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
+	tool:SetAttribute("GripReach", SeedData.GripForward(tier, species.Biome))
 
 	-- Consumed, not dropped: it is in the hotbar now, not on the floor.
 	if held.model.Parent then
@@ -1695,12 +1777,13 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 		return CarryService.GiveHatched(player, species, tier)
 	end
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
+	local tool = giveTool(player, pod, species, tier,
+		gripFor(pod, tier, species.Biome, player.Character), false)
 	if not tool then
 		return false
 	end
 	-- The same number CarryPose reads off a banked pod anywhere else.
-	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
+	tool:SetAttribute("GripReach", SeedData.GripForward(tier, species.Biome))
 	return true
 end
 

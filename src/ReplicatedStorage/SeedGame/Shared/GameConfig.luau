@@ -726,6 +726,10 @@ GameConfig.Tags = {
 	-- Neon that breathes. Slow and shallow when idle, quick and bright under
 	-- load -- which is most of how a premium mill says somebody is on it.
 	MillPulse = "MillPulse",
+	-- A pod's light that flickers: the Titan's fire and the Colossal's
+	-- lightning. Same split again -- the server builds the PointLight and tags
+	-- it, each client varies its Brightness, and nothing about it replicates.
+	PodPulse = "PodPulse",
 	MillWheel = "MillWheel",
 	MillLeaf = "MillLeaf",
 	MillSign = "MillSign",
@@ -2781,6 +2785,38 @@ function GameConfig.carryMultiplierFor(tier: number): number
 	local t = math.clamp(tier / C.TopTierValue, 0, 1) ^ C.Exponent
 	return 1 - (1 - C.MinMultiplier) * t
 end
+
+--==============================================================================
+-- POD MESHES: THE ONLY IMPORTED GEOMETRY A POD USES
+--
+-- Dustbowl's pods are two AI-generated meshes the owner commissioned and
+-- imported on 2026-09-15, from the FBX files in art/ai generated pods/. The 3D
+-- Importer cut each to its 20,000-triangle ceiling and uploaded it; a mesh can
+-- only be uploaded by a person, so the id is written down here and the server
+-- builds the MeshPart from it at boot. Nothing is placed in the place file by
+-- hand.
+--
+-- Mesh = 0 MEANS "NOT IMPORTED YET", the way a store product id of 0 does. A
+-- Dustbowl pod then falls back to the part-built urn it always was, at the new
+-- sizes, so nothing breaks while an id is missing.
+--
+-- `Path` is where the templates live: ReplicatedStorage, so a client can clone
+-- one for a bag card, and outside the SeedGame folder Rojo owns. A template the
+-- owner imported and dropped there by hand is used as it is.
+--
+-- The sizes, colours and auras are not here. Width is weight, so it is in
+-- SeedData.PodDiameter; the finish is art, so it is beside the builder in
+-- CreatureModel.
+--==============================================================================
+GameConfig.PodMeshes = {
+	Path = { "Assets", "Pods" },
+	-- The closed egg with the zig-zag seam: tiers 1 to 5. From "dustbowl pod from
+	-- tier 1 to 5.fbx"; 19,999 triangles, 1.83x as tall as it is wide.
+	Dustbowl_T1to5 = { Mesh = 122574206027033 },
+	-- The wide egg cracked open round a core: tiers 6 and 7. From "dustbowl pod
+	-- from tier 6 to 7.fbx"; 20,000 triangles, 1.42x as tall as it is wide.
+	Dustbowl_T6to7 = { Mesh = 116363561995758 },
+}
 
 --==============================================================================
 -- THE SCORE BECOMES A SPEED

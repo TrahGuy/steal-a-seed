@@ -1969,6 +1969,328 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 end
 
 --==============================================================================
+-- THE ONE LABEL A POD IS ALLOWED
+--
+-- Pods carry no species id, no form rarity and no name, because an unhatched
+-- pod exists to ask what is inside it and a label would answer that. A TIER
+-- label answers a different question -- how big, how slow, how much -- which
+-- the diameter and tier-coloured crown/seam already shout anyway. It spoils
+-- nothing, and at 0.5% of rolls it should be unmistakable when it happens.
+--
+-- One builder for both Colossal shells, the part-built one and the mesh, so the
+-- label cannot drift into two looks. `lift` is measured from the host's centre.
+--==============================================================================
+local function colossalTag(host: BasePart, lift: number, color: Color3)
+	local tag = Instance.new("BillboardGui")
+	tag.Name = "TierTag"
+	tag.Size = UDim2.new(0, 190, 0, 44)
+	tag.StudsOffsetWorldSpace = Vector3.new(0, lift, 0)
+	tag.AlwaysOnTop = true
+	--==========================================================================
+	-- BOUNDED, LIKE EVERY OTHER LABEL IN THIS GAME
+	--
+	-- AlwaysOnTop with no MaxDistance is a label that draws THROUGH the world at
+	-- ANY range: one Colossal pod in one nest put the word COLOSSAL through the
+	-- terrain, into the eyeline of every player on a 1,500 stud road, and it
+	-- followed the carrier around because the tag rides along when the pod
+	-- becomes a Tool.
+	--
+	-- AlwaysOnTop is still right -- the label has to beat the pod's own crown,
+	-- which is taller than it is. The range is what was missing. 160 is
+	-- PlantUI's number for a label on a plant, which is the same job; PromptUI
+	-- uses 250 and SpeedFX 90. This was the only billboard in the codebase that
+	-- set no range at all.
+	--==========================================================================
+	tag.MaxDistance = 160
+	tag.Parent = host
+	local text = Instance.new("TextLabel")
+	text.Size = UDim2.new(1, 0, 1, 0)
+	text.BackgroundTransparency = 1
+	text.Font = Enum.Font.GothamBlack
+	text.TextScaled = true
+	text.TextColor3 = color
+	text.TextStrokeTransparency = 0.35
+	text.Text = "COLOSSAL"
+	text.Parent = tag
+end
+
+--==============================================================================
+-- DUSTBOWL PODS ARE MESHES
+--
+-- Two AI-generated meshes the owner commissioned and imported on 2026-09-15,
+-- from the concept sheets in AI mesh generated/:
+--
+--   Dustbowl_T1to5   a closed egg with a zig-zag seam, a curled tendril and a
+--                    clay saucer, 19,999 triangles
+--   Dustbowl_T6to7   the same egg cracked wide open round a core, 20,000
+--
+-- PodMeshService builds both templates at boot from GameConfig.PodMeshes into
+-- ReplicatedStorage, and a pod is a clone of one. Rule 11 is about part-built
+-- creature art and never authorised meshes; these two are the owner's call.
+--
+-- STILL ONLY BIOME AND WEIGHT. Every Dustbowl species hatches out of the same
+-- two shells, so nothing here can give away what is inside.
+--
+-- SCALED EVENLY, TO A WIDTH. The width is SeedData.PodDiameter(tier, "dustbowl")
+-- and the height is whatever the mesh's own proportions make it. Forcing the
+-- mesh into a fixed box squashed the egg: at 2.0 x 2.5 the Tiny came out wider
+-- than it was tall. See SeedData's ladder for why width is the number that has
+-- to agree with the carry and the nest.
+--
+-- FIVE FINISHES, THEN TWO EVENTS. Tiers 1 to 5 share one shell and must never
+-- read as the same pod twice, so each one changes colour AND material, from
+-- sun-bleached smooth sand to dark basalt with an ember behind the seam. The top
+-- two change the SHAPE -- the cracked shell -- and then add a light and a field:
+-- fire for a Titan, lightning for a Colossal.
+--
+-- NO TEMPLATE, NO MESH. With no id imported yet, or before the templates have
+-- replicated to a client, this returns false and BuildPod builds the part-built
+-- urn instead, at the same width, so a pod is never missing.
+--==============================================================================
+type PodFinish = {
+	color: Color3,
+	material: Enum.Material,
+	-- The faint ember behind a Giant's seam.
+	glow: Color3?,
+	-- The neon heart showing through the top two tiers' crack.
+	core: Color3?,
+}
+
+local DUSTBOWL_POD: { [number]: PodFinish } = {
+	-- Tiny: pale sun-bleached sand, smooth -- a young, delicate egg.
+	[1] = { color = Color3.fromRGB(228, 212, 182), material = Enum.Material.SmoothPlastic },
+	-- Big: warm desert sandstone.
+	[2] = { color = Color3.fromRGB(214, 168, 108), material = Enum.Material.Sandstone },
+	-- Huge: rich baked terracotta clay.
+	[3] = { color = Color3.fromRGB(188, 110, 68), material = Enum.Material.Sandstone },
+	-- Mega: sun-baked burnt sienna, weathered.
+	[4] = { color = Color3.fromRGB(152, 78, 52), material = Enum.Material.Slate },
+	-- Giant: ancient ironstone, deep basalt, with the first light in it.
+	[5] = { color = Color3.fromRGB(116, 56, 42), material = Enum.Material.Basalt,
+		glow = Color3.fromRGB(245, 140, 40) },
+	-- Titan: molten terracotta round a burning core.
+	[6] = { color = Color3.fromRGB(175, 65, 35), material = Enum.Material.Sandstone,
+		core = Color3.fromRGB(255, 115, 20) },
+	-- Colossal: charged solar gold round a plasma core.
+	[7] = { color = Color3.fromRGB(245, 185, 55), material = Enum.Material.Sandstone,
+		core = Color3.fromRGB(200, 245, 255) },
+}
+
+-- Where things sit on a mesh pod, as fractions of its height or width, measured
+-- off the meshes' own vertices rather than eyeballed:
+--   the closed egg's seam runs round 0.38 of its height;
+--   the cracked egg's gap is centred at 0.40, round an inner cylinder 0.57 of
+--   the half-width across, inside a shell 0.85 of it -- so a core 0.70 of the
+--   width across shows through the gap and never through the shell;
+--   either egg's body ends at 0.74 of the height, under its tendril.
+local SEAM_HEIGHT = 0.38
+local GAP_HEIGHT = 0.40
+local CORE_WIDTH = 0.70
+local BODY_TOP = 0.74
+
+-- Built in by every Roblox client, so the auras need no upload.
+local FIRE_TEXTURE = "rbxasset://textures/particles/fire_main.dds"
+local SPARK_TEXTURE = "rbxasset://textures/particles/sparkles_main.dds"
+
+--==============================================================================
+-- AN AURA IS SIZED TO THE POD IT SURROUNDS
+--
+-- The brief gave each aura's particle sizes as fixed studs -- embers 0.4 to 1.2,
+-- sparks 0.6 to 1.6 -- and at those sizes on eggs 11 and 14.5 studs wide both
+-- auras were specks: in Studio the Colossal showed three sparkles and the Titan
+-- some grey dust. "Roaring" and "noticeable" is the brief too.
+--
+-- So the brief's curve is kept -- the same keyframes, the same shape of growth
+-- and decay -- and multiplied by a quarter of the pod's width: about 2.8x on a
+-- Titan and 3.6x on a Colossal. Every other number is the brief's, and both
+-- rates sit at the top of the ranges it allowed.
+--==============================================================================
+local function auraSize(width: number, keys: { { number } }): NumberSequence
+	local scale = math.max(1, width * 0.25)
+	local points = {}
+	for _, key in ipairs(keys) do
+		table.insert(points, NumberSequenceKeypoint.new(key[1], key[2] * scale))
+	end
+	return NumberSequence.new(points)
+end
+
+-- Emitted from an egg-shaped surface fitted to the shell and thrown outward, so
+-- every particle starts where it can be seen. From the shell's volume, most of
+-- them were born inside the egg and died there.
+local function fromOutline(emitter: ParticleEmitter)
+	emitter.Shape = Enum.ParticleEmitterShape.Sphere
+	emitter.ShapeStyle = Enum.ParticleEmitterShapeStyle.Surface
+	emitter.ShapeInOut = Enum.ParticleEmitterShapeInOut.Outward
+end
+
+local function podTemplate(name: string): MeshPart?
+	local node: Instance? = ReplicatedStorage
+	for _, step in ipairs(GameConfig.PodMeshes.Path) do
+		node = if node then node:FindFirstChild(step) else nil
+	end
+	local template = if node then node:FindFirstChild(name) else nil
+	return if template and template:IsA("MeshPart") then template else nil
+end
+
+-- A light the client flickers. It is still a plain light on the server; the tag
+-- and two attributes are all Ambience needs to vary it locally.
+local function pulsingLight(name: string, host: Instance, color: Color3,
+	brightness: number, range: number, style: string): PointLight
+	local light = Instance.new("PointLight")
+	light.Name = name
+	light.Color = color
+	light.Brightness = brightness
+	-- The engine stops at 60.
+	light.Range = math.min(range, 60)
+	--==========================================================================
+	-- SHADOWS ON, OR THE LIGHT PAINTS OVER THE SHELL
+	--
+	-- It sits in the core, inside the egg. With shadows off it went straight
+	-- through the shell at 2.2 and 3.5 and bleached it: in Studio the Colossal's
+	-- charged gold came out pale lemon and the Titan's molten terracotta a washed
+	-- orange. Casting shadows, the shell keeps its colour and the light leaves
+	-- the way the eye expects -- out of the crack and across the ground.
+	--==========================================================================
+	light.Shadows = true
+	light:SetAttribute("PulseBase", brightness)
+	light:SetAttribute("PulseStyle", style)
+	CollectionService:AddTag(light, GameConfig.Tags.PodPulse)
+	light.Parent = host
+	return light
+end
+
+local function buildDustbowlMeshPod(model: Model, tier: number, cf: CFrame,
+	width: number): boolean
+	local template = podTemplate(if tier >= 6 then "Dustbowl_T6to7" else "Dustbowl_T1to5")
+	if not template then
+		return false
+	end
+	-- Clone answers nil for a part marked Archivable = false. That is a template
+	-- nobody can build from, which is the same as no template.
+	local shell = template:Clone()
+	if not shell then
+		return false
+	end
+	local finish = DUSTBOWL_POD[math.clamp(tier, 1, 7)]
+	local native = template.Size
+	local size = native * (width / math.max(native.X, native.Z))
+
+	shell.Name = "Shell"
+	shell.Size = size
+	shell.CFrame = cf * CFrame.new(0, size.Y * 0.5, 0)
+	shell.Color = finish.color
+	shell.Material = finish.material
+	shell.Anchored = true
+	shell.CanCollide = false
+	shell.CanQuery = false
+	shell.CanTouch = false
+	shell.CastShadow = true
+	shell.Parent = model
+	model.PrimaryPart = shell
+
+	-- Heights on the shell, measured from its centre.
+	local function above(fraction: number): Vector3
+		return Vector3.new(0, size.Y * (fraction - 0.5), 0)
+	end
+
+	local glow = finish.glow
+	if glow then
+		-- Faint, and low: an ember behind the seam, not a lamp. Shadows off, so
+		-- it reaches the ground round the saucer through the closed shell.
+		local seam = Instance.new("Attachment")
+		seam.Name = "SeamGlow"
+		seam.Position = above(SEAM_HEIGHT)
+		seam.Parent = shell
+		local light = Instance.new("PointLight")
+		light.Name = "SeamLight"
+		light.Color = glow
+		light.Brightness = 1.2
+		light.Range = math.min(width * 1.6, 60)
+		light.Shadows = false
+		light.Parent = seam
+	end
+
+	local coreColor = finish.core
+	if coreColor then
+		local core = ball("Core", size.X * CORE_WIDTH,
+			cf * CFrame.new(0, size.Y * GAP_HEIGHT, 0), coreColor, model, false)
+		core.Material = Enum.Material.Neon
+		core.CastShadow = false
+	end
+
+	if tier == 6 then
+		--== TITAN: the crack is burning ==--
+		-- Thrown off the egg's outline and carried upward, so the flames rise off
+		-- every side of it rather than out of one vent.
+		local fire = Instance.new("ParticleEmitter")
+		fire.Name = "FireAura"
+		fire.Texture = FIRE_TEXTURE
+		fire.Color = ColorSequence.new(Color3.fromRGB(255, 180, 40), Color3.fromRGB(220, 40, 10))
+		fire.Size = auraSize(width, { { 0, 0.4 }, { 0.5, 1.2 }, { 1, 0 } })
+		fire.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.2),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		fire.Lifetime = NumberRange.new(0.8, 1.4)
+		fire.Rate = 25
+		fire.Speed = NumberRange.new(3, 7)
+		fire.Acceleration = Vector3.new(0, 8, 0)
+		fire.SpreadAngle = Vector2.new(20, 20)
+		fire.LightEmission = 0.85
+		fire.LightInfluence = 0
+		fromOutline(fire)
+		fire.Parent = shell
+
+		local heart = Instance.new("Attachment")
+		heart.Name = "CoreLight"
+		heart.Position = above(GAP_HEIGHT)
+		heart.Parent = shell
+		pulsingLight("FireLight", heart, Color3.fromRGB(255, 130, 30), 2.2, width * 2.2, "fire")
+
+	elseif tier == 7 then
+		--== COLOSSAL: the crack is live ==--
+		-- Short, fast sparks thrown out in every direction off the egg's outline,
+		-- so it crackles all over rather than sparking from a point.
+		local spark = Instance.new("ParticleEmitter")
+		spark.Name = "ElectricAura"
+		spark.Texture = SPARK_TEXTURE
+		spark.Color = ColorSequence.new(Color3.fromRGB(160, 230, 255), Color3.fromRGB(80, 140, 255))
+		spark.Size = auraSize(width, { { 0, 0.6 }, { 0.3, 1.6 }, { 1, 0 } })
+		spark.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.7, 0.3),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		spark.Lifetime = NumberRange.new(0.15, 0.35)
+		spark.Rate = 30
+		spark.Speed = NumberRange.new(4, 10)
+		spark.SpreadAngle = Vector2.new(180, 180)
+		spark.RotSpeed = NumberRange.new(-360, 360)
+		spark.Rotation = NumberRange.new(0, 360)
+		spark.LightEmission = 1
+		spark.LightInfluence = 0
+		fromOutline(spark)
+		spark.Parent = shell
+
+		local heart = Instance.new("Attachment")
+		heart.Name = "CoreLight"
+		heart.Position = above(GAP_HEIGHT)
+		heart.Parent = shell
+		pulsingLight("ElectricLight", heart, Color3.fromRGB(140, 210, 255), 3.5,
+			width * 2.8, "electric")
+
+		-- At the top of the egg, under the tendril, so it reads over the pod
+		-- without floating clear of it.
+		colossalTag(shell, size.Y * (BODY_TOP - 0.5), SeedData.ColorForTier(tier))
+		-- For CarryService and SoundCues to read. Geometry does not play sound,
+		-- and it does not decide when a pickup happened either.
+		model:SetAttribute("PickupSound", "ColossalPickup")
+	end
+
+	return true
+end
+
+--==============================================================================
 -- THE POD
 --
 -- Egg, jagged seam, curled tendril -- the pod sheet. The body says biome; its
@@ -1985,18 +2307,23 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	model:SetAttribute("Stage", CreatureModel.STAGE_POD)
 	model.Parent = parent
 
+	local biome = sp.Biome
 	-- THE CFRAME IS THE BASE, not the centre -- same contract as BuildCreature,
 	-- because two builders in one file meaning different things by the same
 	-- argument is a trap for every caller.
 	-- Size comes from weight, so the pod tells you what it will cost to carry
 	-- before you commit to the hold. See SeedData.PodDiameter.
-	local D = SeedData.PodDiameter(tier)
+	local D = SeedData.PodDiameter(tier, biome)
+
+	if biome == "dustbowl" and buildDustbowlMeshPod(model, tier, cf, D) then
+		return model
+	end
+
 	-- The shell owns the BIOME colour now. Keeping tier colour over the entire
 	-- body made five different silhouettes collapse back into the same family at
 	-- normal viewing distance. Tier still has a fixed, readable home on the
 	-- smaller crown/seam (and the Colossal label); it no longer paints the egg.
 	local color = SeedData.ColorForTier(tier)
-	local biome = sp.Biome
 	local baseCF = cf * CFrame.new(0, D * 0.5, 0)
 	local BIOME_PALETTE = {
 		dustbowl = {
@@ -2447,47 +2774,8 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 		addAura(core, if biome == "greenhollow" then color else coreColor,
 			accent, 1.0, 1.4, 2.2)
 
-		--==================================================================
-		-- THE ONE LABEL A POD IS ALLOWED
-		--
-		-- Pods carry no species id, no form rarity and no name, because an
-		-- unhatched pod exists to ask what is inside it and a label would
-		-- answer that. A TIER label answers a different question -- how big,
-		-- how slow, how much -- which the diameter and tier-coloured crown/seam
-		-- already shout anyway. It spoils nothing, and at 0.5% of rolls it should be
-		-- unmistakable when it happens.
-		--==================================================================
-		local tag = Instance.new("BillboardGui")
-		tag.Name = "TierTag"
-		tag.Size = UDim2.new(0, 190, 0, 44)
-		tag.StudsOffsetWorldSpace = Vector3.new(0, D * 0.95, 0)
-		tag.AlwaysOnTop = true
-		--==================================================================
-		-- BOUNDED, LIKE EVERY OTHER LABEL IN THIS GAME
-		--
-		-- AlwaysOnTop with no MaxDistance is a label that draws THROUGH the
-		-- world at ANY range: one Colossal pod in one nest put the word
-		-- COLOSSAL through the terrain, into the eyeline of every player on a
-		-- 1,500 stud road, and it followed the carrier around because the tag
-		-- rides along when the pod becomes a Tool.
-		--
-		-- AlwaysOnTop is still right -- the label has to beat the pod's own
-		-- crown, which is taller than it is. The range is what was missing.
-		-- 160 is PlantUI's number for a label on a plant, which is the same
-		-- job; PromptUI uses 250 and SpeedFX 90. This was the only billboard
-		-- in the codebase that set no range at all.
-		--==================================================================
-		tag.MaxDistance = 160
-		tag.Parent = shell
-		local text = Instance.new("TextLabel")
-		text.Size = UDim2.new(1, 0, 1, 0)
-		text.BackgroundTransparency = 1
-		text.Font = Enum.Font.GothamBlack
-		text.TextScaled = true
-		text.TextColor3 = color
-		text.TextStrokeTransparency = 0.35
-		text.Text = "COLOSSAL"
-		text.Parent = tag
+		-- The one label a pod is allowed; see colossalTag.
+		colossalTag(shell, D * 0.95, color)
 
 		-- For CarryService and SoundCues to read. Geometry does not play sound,
 		-- and it does not decide when a pickup happened either.
