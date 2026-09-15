@@ -1,5 +1,53 @@
 # Steal a Seed — Session Handoff
 
+## INCIDENT: the owner's garden was overwritten by a boot race — 2026-09-15 (CLAUDE)  (FIX COMMITTED; PLANTS NOT YET RESTORED)
+
+**What happened.** Commit `5a91e16` added `PodMeshService`, whose Init waited about
+1.5 s at boot for `AssetService:CreateMeshPartAsync`.
+  * ServerMain runs Init and Start inline, so the whole boot waited. A Play Solo
+    player joins inside a wait like that.
+  * `PlotService.Start` gives a plot to anyone already present, but `PlantService`,
+    `TreadmillService` and `PlotUpgradeService` subscribe to `OnAssigned` in their
+    own, later Start. Nothing replayed, so all three missed the owner's plot.
+  * **The saved garden was never restored.** No "restored N plant(s)" appeared in
+    four sessions.
+  * **The next plant action overwrote the save.** `persist` saved the empty bed
+    plus the new plants over the real garden: once in the owner's first session
+    after the change, and again in the next.
+
+**What was lost** (UTC version history, read-only; Roblox keeps about one version
+an hour):
+  * **Last good, 09:30:48:** garden Petalpip T1 (grown) and Suncrown T6 (grown);
+    held a hatched Gloomlotus T6.
+  * **The owner's session after the change:** they planted that Gloomlotus T6 and
+    added Dunebud T2, Dunebud T1 and Paddlehop T1 (all grown, per the server log).
+    None of this reached a version.
+  * **Now, 11:04:36:** garden Paddlehop T1 only; held empty.
+  * **Cash (3,248,778,868) and Speed (6,529,768,893) were not affected.**
+  * **Restore candidates:** Petalpip T1, Suncrown T6 (exact rows in the 09:30
+    version), Gloomlotus T6, Dunebud T2, Dunebud T1, Paddlehop T1. Waiting for the
+    owner's go-ahead, and it must be done with no Play session holding the profile.
+
+**Fix:**
+  * **`PlotService.OnAssigned` replays every current owner to a new listener**,
+    through the same pcall `assign()` uses. A wait anywhere in the boot can no longer
+    hide a plot from PlantService, TreadmillService or PlotUpgradeService, and a
+    normal boot replays nothing.
+  * **`PodMeshService` fetches on its own thread**, so Init returns at once and the
+    boot has its old timing. When the templates arrive it calls the new
+    `NestService.RebuildPods`, which rebuilds any Dustbowl nest pod stocked as an
+    urn in place, with the same species and tier.
+  * **Verified in Play:**
+      - the boot finished before the player joined;
+      - "Rebuilt 3 Dustbowl nest pod(s) stocked before the meshes arrived";
+      - "nicnicniccoal: restored 1 plant(s)", with the world garden matching the save.
+
+**Also seen in the history, and NOT caused by this bug** (it predates `5a91e16`):
+between 02:59:54 and 03:56:23 UTC the profile went from 4 grown plants and 17 held
+plants at Speed 113,356,827,397 to 2 T6 pods, 0 held and Speed 1,236,697,491. It
+coincides with the owner's own purchase and tutorial testing, and is still
+restorable from the 02:59:54 version if it was not intended.
+
 ## Dustbowl pods are the owner's AI meshes, with a tier ladder and auras — 2026-09-15 (CLAUDE)  (COMMITTED)
 
 **Owner request:** wire the two Rodin FBX meshes in `art/ai generated pods/` into

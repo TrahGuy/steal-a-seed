@@ -178,6 +178,33 @@ end
 
 function PlotService.OnAssigned(fn: Listener): () -> ()
 	table.insert(onAssigned, fn)
+	--==========================================================================
+	-- A LISTENER THAT ARRIVES LATE STILL HEARS ABOUT PLOTS ALREADY HANDED OUT
+	--
+	-- Start gives a plot to anybody already in the server, and PlantService,
+	-- TreadmillService and PlotUpgradeService subscribe in their own Start, which
+	-- runs after this one. Nothing used to replay, so a player who joined while
+	-- the boot was still running got a plot none of those three ever heard of.
+	--
+	-- That cost the owner their garden on 2026-09-15. PodMeshService waited
+	-- 1.5 s at boot for its meshes, the Play Solo player joined inside the wait,
+	-- PlantService never restored their saved plants, and the first thing they
+	-- planted saved the empty bed over the real one -- twice, in two sessions.
+	--
+	-- So subscribing replays every current owner, in plot order, through the same
+	-- pcall assign() uses. With nobody assigned yet -- the normal boot -- the loop
+	-- does nothing.
+	--==========================================================================
+	for _, id in ipairs(plotOrder) do
+		local owner = ownerOf[id]
+		local plot = plotsById[id]
+		if owner and plot then
+			local ok, err = pcall(fn, owner, plot)
+			if not ok then
+				warn("[Seed/PlotService] listener failed on replay: " .. tostring(err))
+			end
+		end
+	end
 	return function()
 		local i = table.find(onAssigned, fn)
 		if i then
