@@ -844,42 +844,88 @@ end
 --==============================================================================
 -- HOW A CREATURE OF THIS SIZE GETS AROUND ITS GARDEN
 --
--- Curves in the tier's `value`, for the same reason every other number here is:
--- a 2 kg Nubkin and a 10,000 kg Bellchime are one creature at opposite ends of
--- one scale, and the heavy one has to MOVE heavy without a second set of
--- constants to keep in step.
+-- A LADDER THAT CLIMBS. The bigger the creature, the further one leg carries
+-- it, because a leg is read against the body taking it: the same eight studs is
+-- a stroll for a Tiny Nubkin and a shuffle for a Colossal that stands thirty
+-- studs tall. The curve this replaced FELL with size -- 18.4 studs of reach at
+-- Tiny down to 6.7 at Colossal, on a shared six-stud minimum -- so the biggest
+-- things in the game took the smallest steps. Measured on Level 5 before the
+-- change, the median leg went 13.6 studs at Tiny to 6.6 at Colossal.
 --
---     value     reach    speed    pause      what it reads as
---         1      22.0      2.6      2.2s     skittering across the plot
---         2      20.2      2.3      2.3s     bustling
---       110      12.1      1.2      2.8s     ambling
---     1,000       8.8      0.8      3.2s     lumbering
---    10,000       6.6      0.5      3.7s     a boulder shifting its weight
+--     tier       reach   min leg   speed    median leg, L5   median leg time
+--     Tiny        11.5      6.0     2.05        9.7              4.7 s     short local walks
+--     Big         13.5      7.5     1.95       11.5              5.9 s
+--     Huge        16.0      9.0     1.85       14.0              7.6 s
+--     Mega        20.0     11.0     1.75       17.5             10.0 s     across a real part of the plot
+--     Giant       24.0     13.0     1.70       20.9             12.3 s
+--     Titan       28.0     15.0     1.65       24.5             14.8 s
+--     Colossal    32.5     17.5     1.60       28.9             18.1 s     long, heavy journeys
 --
--- REACH replaced a 6-stud radius about the planting point. That radius was the
--- whole problem: five creatures planted in a corner each pottered inside their
--- own 6-stud disc and the corner stayed a pile. A reach is how far ONE leg may
--- carry it, and the destination is chosen anywhere in the plot -- so a garden
--- spreads over a few legs instead of never.
+-- The medians are MEASURED, over thousands of simulated legs from the real
+-- PlantWander chooser on real plot geometry -- corners, fences, the gateway, the
+-- wing's junction and a crowded bed of twenty (tools/tests/PlantWanderSpec).
+-- Level 3 lands within a stud of these. Level 1 is a 39 by 26 stud bed, so a
+-- Colossal's median there is shorter, 25 studs, because the plot is.
 --
--- PAUSE IS LONGER THAN THE WALK, deliberately. A plot of twenty things all
--- permanently in motion reads as an infestation; mostly-still with something
--- always moving somewhere reads as a garden.
+-- REACH is the most one leg may carry it; MIN LEG is the least. The server
+-- throws away any direction with less straight-line room than the minimum,
+-- rather than shortening it -- see PlantWander.Choose -- so a Colossal against
+-- a fence is not handed a two-stud shuffle.
+--
+-- SPEED falls with size, but gently, and it is studs per second, not body
+-- lengths. A Colossal at 1.6 moves about a twentieth of its own height a second
+-- and a Tiny Nubkin about two thirds of its own, so the big ones still read as
+-- the heavy ones. The old ladder went down to 0.55 studs a second, which only
+-- worked because the old legs were short: carried over the new distances it
+-- would have meant fifty-second legs, a creature that looks frozen.
+--
+-- PAUSE is not part of the ladder and did not change: 2.3 s at Tiny rising to
+-- 3.7 s at Colossal, stretched 0.7-1.7x per stop by the server. A plot of twenty
+-- things never at rest reads as an infestation; a stop between walks is what
+-- keeps it reading as a garden.
 --
 -- THE SERVER IS THE ONLY CALLER. Clients derive the speed they draw from the
 -- leg they were handed -- distance over duration -- so there is no second copy
--- of these curves to fall out of step with this one.
+-- of these numbers to fall out of step with this one.
 --==============================================================================
+export type WanderRung = { reach: number, minLeg: number, speed: number }
+
+SeedData.WanderLadder = {
+	{ reach = 11.5, minLeg = 6.0, speed = 2.05 }, -- Tiny
+	{ reach = 13.5, minLeg = 7.5, speed = 1.95 }, -- Big
+	{ reach = 16.0, minLeg = 9.0, speed = 1.85 }, -- Huge
+	{ reach = 20.0, minLeg = 11.0, speed = 1.75 }, -- Mega
+	{ reach = 24.0, minLeg = 13.0, speed = 1.70 }, -- Giant
+	{ reach = 28.0, minLeg = 15.0, speed = 1.65 }, -- Titan
+	{ reach = 32.5, minLeg = 17.5, speed = 1.60 }, -- Colossal
+} :: { WanderRung }
+
+-- The shortest walk worth taking at all. When no straight line on the plot is
+-- this long -- a creature boxed into a corner by geometry alone -- it rests
+-- instead of twitching.
+SeedData.WanderStallStuds = 1.5
+
+assert(#SeedData.WanderLadder == SeedData.TierCount,
+	"SeedData.WanderLadder needs one rung per tier")
+
 local function tierValue(tier: number?): number
 	return SeedData.Tier(tier).value
 end
 
+local function wanderRung(tier: number?): WanderRung
+	return SeedData.WanderLadder[SeedData.Tier(tier).index]
+end
+
 function SeedData.WanderReach(tier: number?): number
-	return math.clamp(22.0 / (tierValue(tier) ^ 0.13), 6.0, 22.0)
+	return wanderRung(tier).reach
+end
+
+function SeedData.WanderMinLeg(tier: number?): number
+	return wanderRung(tier).minLeg
 end
 
 function SeedData.WanderSpeed(tier: number?): number
-	return math.clamp(2.6 / (tierValue(tier) ^ 0.17), 0.25, 2.6)
+	return wanderRung(tier).speed
 end
 
 function SeedData.WanderPause(tier: number?): number

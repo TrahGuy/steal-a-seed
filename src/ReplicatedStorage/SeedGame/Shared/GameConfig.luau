@@ -2192,17 +2192,24 @@ GameConfig.Plant = {
 		-- Extra room kept clear in front of the gate, so nothing loiters in the
 		-- doorway looking like it is about to leave.
 		GateMargin = 7,
-		-- Candidate destinations generated per leg. Enough that the least
+		-- Candidate destinations scored per leg. Enough that the least
 		-- crowded of them is meaningfully better than the first; small enough
-		-- that twenty plants scoring them is nothing.
-		Candidates = 6,
+		-- that twenty plants scoring them is nothing. Ten rather than the six
+		-- it was: with legs long enough to cross a plot, six measurably spread
+		-- a crowded Level 3 garden worse (twenty plants simulated: a plant
+		-- resting or headed within 8 studs of two others 10.5% of the time at
+		-- 6 candidates, 8.3% at 10).
+		Candidates = 10,
+		-- The most directions tried to find those candidates. A direction
+		-- without straight-line room for the tier's minimum leg is thrown away
+		-- rather than shortened, so this is what keeps the search bounded
+		-- against a fence. How long a leg is lives in SeedData.WanderLadder.
+		Attempts = 36,
 		-- How far apart the scorer TRIES to keep them. Bounded on purpose: a
 		-- Colossal is currently hundreds of studs tall, and scoring against its
 		-- real size would make every destination illegal at once. This is a
 		-- logical spacing, not a physical one.
 		SeparationStuds = 14,
-		-- A leg is at least this long, so a creature never twitches in place.
-		MinLegStuds = 6,
 		-- Recomputed only when a leg ends. Between legs the server does nothing
 		-- at all for that plant.
 		TickSeconds = 0.5,

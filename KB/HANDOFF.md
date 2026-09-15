@@ -1,5 +1,218 @@
 # Steal a Seed — Session Handoff
 
+## Bigger plants take longer walks — 2026-09-15 (CLAUDE)  (APPROVED BY THE OWNER, COMMITTED)
+
+The owner saw a Colossal shuffle about as far as a Tiny. Measured, it was worse
+than that: `SeedData.WanderReach` FELL with size, from 18.4 studs at Tiny to 6.7
+at Colossal, on one shared 6-stud minimum.
+  * On Level 5 the median completed leg was 12.8 studs at Tiny and 6.6 at
+    Colossal (0.52x).
+  * Clamping a destination into the plot also produced legs under 2 studs at
+    every tier.
+  * 612 of 20,042 simulated legs cut the L's missing corner or ran through the
+    gateway.
+
+### What changed
+
+  * **`SeedData.WanderLadder`**: one explicit rung per tier, and it climbs.
+    `WanderReach`, the new `WanderMinLeg`, and `WanderSpeed` read it.
+    `WanderPause` is unchanged, and `SeedData.WanderStallStuds` = 1.5.
+
+    | tier | reach | min leg | speed |
+    |---|---|---|---|
+    | Tiny | 11.5 | 6.0 | 2.05 |
+    | Big | 13.5 | 7.5 | 1.95 |
+    | Huge | 16.0 | 9.0 | 1.85 |
+    | Mega | 20.0 | 11.0 | 1.75 |
+    | Giant | 24.0 | 13.0 | 1.70 |
+    | Titan | 28.0 | 15.0 | 1.65 |
+    | Colossal | 32.5 | 17.5 | 1.60 |
+
+  * **Speed still falls with size, but gently.** The old curve reached 0.55
+    studs/s. Carried over the new distances it would have meant 50-second
+    Colossal legs, which read as frozen. At 1.6 a Colossal moves about a
+    twentieth of its own height a second; a Tiny moves about two thirds.
+  * **`PlantWander.luau` (new, not a Service)** holds the walkable region, the
+    clamp, and the destination choice. It is pure geometry with no state and
+    no Instance writes, so the spec can drive the server's exact code.
+      - **A direction is chosen first.** `Room` measures, exactly (slab
+        method), how far a straight line runs before leaving the region: main
+        rectangle plus wing, fence margin, gateway mouth.
+      - **The destination is picked on that stretch,** between the tier's
+        minimum and its reach. Every point of every leg is inside by
+        construction.
+      - **A direction without room for the minimum is thrown away, never
+        shortened.** The search is bounded: `Candidates` 10 in at most
+        `Attempts` 36 directions.
+      - **Fallbacks:** a 16-direction sweep takes the longest line on offer; a
+        line under 1.5 studs means "stay" (rest, publish nothing). A creature
+        standing outside the region is walked back to `Clamp`.
+      - **Separation scoring is unchanged:** the nearest current or reserved
+        destination, capped at `SeparationStuds` 14, plus 0.05 per stud.
+  * **`PlantService`:** `clampToPlotRegion` now calls `PlantWander.Clamp`.
+    `stepWander` calls `PlantWander.Choose` and `PlantWander.LegSeconds`, and
+    rests on "stay". `chooseDestination` is gone.
+      - Unchanged: the attributes (`WanderFrom`/`WanderTo`/`WanderT0`/
+        `WanderT1`), the 1 s tick, save-on-arrival, anchors, CaptureWorld/
+        RebaseTo parking, and the client. PlantSway is untouched.
+  * **`GameConfig.Plant.Wander`:** `MinLegStuds` removed (now per tier in
+    SeedData); `Candidates` 6 -> 10; new `Attempts` = 36.
+  * **`Clamp` is the shipped clamp, verbatim.** Checked exactly, as returned
+    Vector3s, on 4000 random points per level.
+  * **Tests:** `tools/tests/PlantWanderSpec.luau` is new. `PlotSpec`'s wander
+    section is updated: its "bigger creatures cover less ground" assertion is
+    now "more".
+
+### Before / after (median completed leg, same scenarios)
+
+Same geometry, pacing and seeds for both: 7 tiers x 10-14 start points
+(corners, fences, beside and behind the gateway, the L's inside corner, the wing)
+x 300 s, plus three beds of 20 x 900 s. Level 5 (Level 3 within about a stud):
+
+| tier | before: reach / min | before: min / median / max | before: speed, median time | after: min / median / max | after: speed, median time |
+|---|---|---|---|---|---|
+| Tiny | 18.4 / 6 | 0.0 / 12.8 / 22.3 | 2.05, 6.2 s | 6.0 / 10.3 / 11.5 | 2.05, 5.0 s |
+| Big | 14.3 / 6 | 0.0 / 11.0 / 18.1 | 1.48, 7.5 s | 7.5 / 12.2 / 13.5 | 1.95, 6.2 s |
+| Huge | 11.6 / 6 | 0.0 / 10.2 / 17.4 | 1.12, 9.1 s | 9.0 / 14.7 / 16.0 | 1.85, 7.9 s |
+| Mega | 9.7 / 6 | 0.0 / 8.8 / 12.5 | 0.90, 9.8 s | 11.0 / 18.3 / 20.0 | 1.75, 10.5 s |
+| Giant | 8.4 / 6 | 0.0 / 7.8 / 11.3 | 0.74, 10.6 s | 13.0 / 21.9 / 24.0 | 1.70, 12.9 s |
+| Titan | 7.2 / 6 | 0.0 / 7.0 / 9.4 | 0.61, 11.5 s | 15.0 / 25.1 / 28.0 | 1.65, 15.2 s |
+| Colossal | 6.7 / 6 | 0.0 / 6.6 / 7.3 | 0.55, 12.0 s | 17.5 / 30.1 / 32.5 | 1.60, 18.8 s |
+
+  * **Colossal median vs Tiny median:** before 0.52x; after 2.92x on Level 5,
+    2.95x on Level 3 and 2.65x on Level 1 (a 39 x 26 stud bed).
+  * **Legs under 2 studs:** before, hundreds at every tier; after, 0.
+  * **Route violations:** before, 612; after, 0 of 18,361 legs.
+  * **Longest single leg:** 20.3 s (a full 32.5-stud Colossal leg).
+
+### Real legs in Play, from PlantService itself
+
+  * **The owner's Level 5 garden** (4 planted), 300 s, 115 legs:
+      - Tiny x3: median 11.2 studs (8.5-11.5), 5.5 s;
+      - Titan Crookreed: median 26.8 (17.9-28.0), 16.2 s.
+  * **The comparison garden** (Novaorb, unowned Plot_02 resized to Level 5):
+      - Tiny: 11.3 studs, 5.5 s;
+      - Mega: 19.6 studs, 11.2 s;
+      - Titan: 27.1 studs, 16.4 s;
+      - Colossal: 31.5 studs, 19.7 s, so 2.8x the Tiny.
+  * **The species garden** (all at Mega): Gloomlotus, Supernovus, Suncrown,
+    Pyrelotus and Bellchime each walked medians of 19.0-19.6 studs in 11 s.
+  * **In a sparse garden** the distance bonus picks near-reach legs, so real
+    medians sit above the crowded simulation's.
+  * **Every route checked:** each leg above was sampled every 0.2 studs against
+    the region rebuilt from the plot's attributes. **0 outside.**
+
+### Containment, proved in PlantWanderSpec
+
+Real plots dressed by `MapService.ResizePlot` at Levels 1, 3 and 5; 25,865 legs
+from 10-14 start points per tier (corners, fences, beside and behind the gateway,
+the L's inside corner, just in front of the step, the wing) plus beds of 20 and
+beds at capacity. Each route passed three independent checks:
+  * sampled every 0.2 studs against a region rebuilt from GameConfig;
+  * an exact segment distance to the centre line of every Rail and Post
+    MapService built (must stay >= 4.5 studs);
+  * an exact clip against the gateway's mouth, plus the plot's own L.
+
+**0 faults.** `Room` stretches (1500 random rays per level) are inside end to
+end and end at the boundary. A creature standing in the gateway is walked back,
+then walks ordinary legs.
+
+### Gait / foot slide
+
+Net contact drift during each backward sweep, as a fraction of the body's
+advance (0 = planted; lower is better). The same rigs walked the OLD median leg
+at the old speed and the NEW median leg at the new speed, measured every frame
+on the client over 80 s:
+
+| rig | Tiny old -> new | Mega old -> new | Colossal old -> new |
+|---|---|---|---|
+| Novaorb (feet) | 0.19 -> 0.18 | 1.56 -> 0.31 | 11.0 -> 3.1 |
+| Supernovus (feet) | 0.10 -> 0.11 | 3.12 -> 1.11 | 18.3 -> 5.6 |
+| Astralhorn (feet) | 0.12 -> 0.12 | 2.36 -> 0.72 | 14.7 -> 4.4 |
+| Gloomlotus (roots) | 0.37 -> 0.37 | 0.32 -> 0.35 | 0.41 -> 0.30 |
+
+  * **Tiny is unchanged**, because its speed did not change.
+  * **Legged Mega and Colossal slide 3-5x LESS.** Stride frequency is clamped at
+    0.5 Hz for big bodies, so at 0.55 studs/s the pendulum feet out-swung the
+    body by 11-18x. PlantSway's math was not touched.
+  * **Gloomlotus's root rig holds its planted contact** at both speeds.
+
+### Anchors, distribution, cost
+
+  * **Pickup anchors** (owner's plants, 180 s, every frame): horizontal distance
+    to the drawn ground point, max 3.2 studs and mean 0.65 at Tiny; max 2.6 at
+    Titan. That is one 1-s tick of peak speed, and the Titan's bound stays under
+    the Tiny's.
+  * **Spreading out:**
+      - At capacity: nearest neighbour 13.2 / 15.3 / 12.7 studs on L1 / L3 / L5,
+        against 17.0 / 17.4 / 15.2 before. Piles of 3 inside 8 studs: 0.4% or
+        less, both before and after.
+      - In a random scatter at the same counts, piles occur 9-13% of the time.
+      - The old spread came partly from clamping destinations onto the fence
+        line: 31-62% of plants stood there, against 16-38% now.
+      - A bed of 20 on Level 3, twice its capacity, piles 8% of the time
+        (before: 1%). This is the trade for legs long enough to cross a plot.
+  * **Cost:**
+      - `PlantWander.Choose` runs once per leg: mean 35.6 microseconds on the
+        Play server (234 calls). In the Edit spec runner it averaged 87 us, and
+        its worst sample, 40 ms, was an Edit main-thread stall, not the search.
+      - No new loop, connection, remote, save field or Instance.
+      - Attribute writes are still 4 per leg, and a leg plus its pause now lasts
+        about 8 s (Tiny) to about 23 s (Colossal), so a big creature publishes
+        fewer legs than before.
+      - The client is unchanged.
+
+### Checks
+
+  * **All 20 specs pass**, 0 threw: PlantWanderSpec 65/65, PlotSpec 65/65, and
+    the other 18 as before.
+  * **Real load paths:** GameConfig, SeedData, PlantWander and PlantService ran
+    on the Play server with a clean console; both specs loaded through the
+    fresh-require runner.
+  * **`git diff --check`** is clean and **`rojo build`** succeeds.
+  * **Death:** the owner respawned and all 4 of their plants kept walking.
+
+### Not verified
+
+  * **Resize parking in Play:** the owner's plot is already Level 5 and a shrink
+    would move real plants. The parking code is unchanged, and `Clamp` is
+    proved identical to the shipped clamp.
+  * **Pick up, plant, sell and a real release/rejoin with a changed garden:**
+    each would modify the owner's save. Those paths are unchanged
+    (`stopWander`, `render`, restore). Stopping and starting Play did restore
+    the garden and resume walking.
+  * **A physical phone, a second client, and more than about 10 minutes of
+    continuous watching.**
+
+### The preview, and testing traps
+
+  * **The preview:** Novaorb at Tiny, Mega, Titan and Colossal on unowned
+    Plot_02 (resized to Level 5 for the session), natural legs from the real
+    PlantWander, camera parked above it.
+      - It exists only in the running Play session; stopping Play discards it.
+      - The harness that built it was a temporary Studio-only server script,
+        deleted from the working tree the moment Play started.
+      - The measurement plants (species garden, 24 gait rigs) were destroyed
+        after measuring.
+  * **The owner's garden** loaded as 4 planted + 17 held (19 + 2 in the previous
+    session). None of the tests touched those plants.
+  * **Studio's MCP runner has lost the Network capability since the Studio
+    restart:** no HttpService, no `require` of game modules, and no
+    `loadstring` in Play.
+      - Specs were run by syncing each file through Rojo as a `.txt` StringValue
+        in a temporary `ServerScriptService/SpecSourcesTemp` folder, then
+        loadstring'd in Edit. The folder is deleted.
+      - Play-side building needs a temporary real server script.
+
+### Approval and commit
+
+The owner watched the preview and approved. The commit carries only
+`SeedData.luau`, `GameConfig.luau`, `PlantService.luau`, the new
+`PlantWander.luau`, `tools/tests/PlantWanderSpec.luau`,
+`tools/tests/PlotSpec.luau` and this section. The deleted `thumbnail1`, the
+other thumbnails, `AI mesh generated/`, the skill folders and the cosmic-mammoth
+reference are unrelated work and were left out.
+
 ## Hotbar V2 — 2026-09-14 (CLAUDE)  (APPROVED BY THE OWNER, COMMITTED)
 
 The hotbar is rebuilt natively to the layout of

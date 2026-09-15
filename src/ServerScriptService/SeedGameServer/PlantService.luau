@@ -72,6 +72,7 @@ local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+local PlantWander = require(script.Parent:WaitForChild("PlantWander"))
 
 local PLOT = GameConfig.Plot
 
@@ -368,62 +369,18 @@ end
 --==============================================================================
 -- WHERE A CREATURE MAY WALK
 --
--- Not the beds -- the whole fenced interior, both beds and the grass between
--- them, because a garden where everything stands on the dirt and nothing ever
--- crosses the lawn is a garden nobody is living in.
+-- The whole fenced interior -- the main rectangle, the wing when the level has
+-- one, clear of the fence and out of the gateway. The shape and every rule about
+-- it live in PlantWander, which is also what picks each walk; this is the one
+-- door PlantService uses to make a point legal.
 --
--- The shape is the plot's L: the main rectangle, plus the wing when the level
--- has one. Expressed as two rectangles that SHARE an edge, so the union is
--- connected and a creature can walk from one into the other without a corridor
--- being described anywhere.
---
--- Kept clear of three things:
---   * the fence, by FenceMargin, so a body never overlaps a board;
---   * the gateway, by GateMargin, so nothing loiters in the doorway looking
---     like it is about to leave the plot;
---   * anything outside, by construction -- the region is bounded by the plot's
---     own dimensions, so no candidate can name another player's ground.
---
--- Returns the clamped PLOT-LOCAL point. Every wander destination goes through
--- here, which is what makes "stays inside the fence" a property of the code
--- rather than of the numbers that happen to be fed to it.
+-- Returns the clamped PLOT-LOCAL point. Used where a position has to BECOME
+-- legal, which today is a garden rebased onto a smaller plot. Walks are never
+-- clamped: PlantWander.Choose only ever picks a destination whose whole straight
+-- route is already inside.
 --==============================================================================
-local WANDER = PLANTING.Wander
-
 local function clampToPlotRegion(plot: Model, local_: Vector3): Vector3
-	local depth = tonumber(plot:GetAttribute("Depth"))
-		or GameConfig.plotDepthFor(GameConfig.plotRowsForTier(plot:GetAttribute("Level")))
-	local halfW = PLOT.Width * 0.5
-	local halfD = depth * 0.5
-	local m = WANDER.FenceMargin
-	local wingW = tonumber(plot:GetAttribute("WingWidth")) or 0
-	local wingZ0 = tonumber(plot:GetAttribute("WingFrontZ")) or 0
-
-	local x, z = local_.X, local_.Z
-	-- Inside the main rectangle, or inside the wing? Clamp into whichever is
-	-- nearer, then take the result -- a point in the shared edge lands in both
-	-- and either answer is the same point.
-	local mainX = math.clamp(x, -halfW + m, halfW - m)
-	local mainZ = math.clamp(z, -halfD + m, halfD - m)
-	local bx, bz = mainX, mainZ
-	if wingW > 0 then
-		local wingMinX, wingMaxX = halfW - m, halfW + wingW - m
-		local wx = math.clamp(x, wingMinX, wingMaxX)
-		local wz = math.clamp(z, wingZ0 + m, halfD - m)
-		local dMain = (Vector2.new(x, z) - Vector2.new(mainX, mainZ)).Magnitude
-		local dWing = (Vector2.new(x, z) - Vector2.new(wx, wz)).Magnitude
-		if dWing < dMain then
-			bx, bz = wx, wz
-		end
-	end
-
-	-- And out of the doorway. Only the mouth of the gate, not the whole front
-	-- edge: a creature may stand along the front fence, just not in the gap.
-	local gateHalf = PLOT.GateWidth * 0.5 + 2
-	if bz < -halfD + WANDER.GateMargin and math.abs(bx) < gateHalf then
-		bz = -halfD + WANDER.GateMargin
-	end
-	return Vector3.new(bx, 0, bz)
+	return PlantWander.Clamp(PlantWander.RegionFor(plot), local_)
 end
 
 --==============================================================================
@@ -1369,7 +1326,9 @@ end
 --
 -- The same currentOffset() and wanderWorld() the leg is published from, so the
 -- marker stands where every client is drawing the plant, give or take one tick
--- of travel (TickSeconds 0.5 x WanderSpeed <= 2.6 studs/s, so under 1.3 studs).
+-- of travel: GameConfig.Plant.TickSeconds (1 s) at the fastest walk on the
+-- ladder, a Tiny's 2.05 studs/s -- 3.1 at the middle of a leg, where the
+-- smoothstep peaks at one and a half times the average.
 --
 -- Skipped when it would move less than a twentieth of a stud, so a resting
 -- garden writes nothing at all.
@@ -1443,81 +1402,24 @@ local function parkAt(entry: Planted, atW: Vector3, srvNow: number)
 end
 
 --==============================================================================
--- PICK SOMEWHERE, PREFERRING WHEREVER NOBODY ELSE IS
---
--- Several candidates, each a leg's reach from where the creature stands, each
--- clamped into the plot region -- so an out-of-bounds candidate becomes an
--- in-bounds one rather than being thrown away, and a creature in a corner still
--- gets a full set of choices.
---
--- Scored on DISTANCE FROM EVERYONE ELSE, counting both where other plants are
--- and where they have already said they are going. Reserved destinations matter
--- as much as current positions: without them, five creatures deciding in the
--- same tick all pick the same empty corner and arrive as the pile they were
--- supposed to stop being.
---
--- The separation target is BOUNDED and logical, not physical. A Colossal is
--- currently hundreds of studs tall -- scoring against real sizes would make
--- every candidate illegal at once and the whole thing would deadlock. This
--- promises visible distribution, not non-overlap; the creatures do not collide
--- and at the top of the size curve they never will.
---==============================================================================
-local function chooseDestination(plot: Model, byPlot: { [number]: Planted },
-	entry: Planted, rng: Random): Vector3
-	local reach = SeedData.WanderReach(entry.tier)
-	local here = entry.offset
-	local best, bestScore = nil, -math.huge
-
-	for _ = 1, WANDER.Candidates do
-		-- Uniform over the disc: sqrt is what stops every candidate bunching
-		-- near the middle of the reach.
-		local a = rng:NextNumber(0, math.pi * 2)
-		local r = WANDER.MinLegStuds
-			+ (reach - WANDER.MinLegStuds) * math.sqrt(rng:NextNumber())
-		local cand = clampToPlotRegion(plot,
-			Vector3.new(here.X + math.cos(a) * r, 0, here.Z + math.sin(a) * r))
-
-		-- How lonely is it there? Nearest other plant, current or intended.
-		local nearest = math.huge
-		for id, other in pairs(byPlot) do
-			if id ~= entry.id then
-				local d = (Vector2.new(cand.X, cand.Z)
-					- Vector2.new(other.offset.X, other.offset.Z)).Magnitude
-				if d < nearest then nearest = d end
-				local claim = other.legTo
-				if claim then
-					local dc = (Vector2.new(cand.X, cand.Z)
-						- Vector2.new(claim.X, claim.Z)).Magnitude
-					if dc < nearest then nearest = dc end
-				end
-			end
-		end
-
-		-- Past the separation target there is nothing more to gain, so a
-		-- candidate 40 studs from anybody does not beat one at 15 purely for
-		-- being further out at the fence. Ties break on the trip being worth
-		-- taking at all.
-		local score = math.min(nearest, WANDER.SeparationStuds)
-			+ (cand - here).Magnitude * 0.05
-		if score > bestScore then
-			best, bestScore = cand, score
-		end
-	end
-	return best or here
-end
-
---==============================================================================
 -- ONE STEP OF THE WANDER, FOR ONE PLOT
 --
 -- Called on the service's existing tick. Between legs this does nothing at all
 -- for a plant: it looks at one number and moves on.
+--
+-- WHERE TO GO is PlantWander.Choose: a destination between the tier's minimum
+-- leg and its reach (SeedData.WanderLadder), along a straight line that stays
+-- inside the plot the whole way, preferring wherever nobody else is standing or
+-- headed. The region is read off the plot once per step, and only if some plant
+-- on it actually needs a new leg.
 --==============================================================================
 local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: number)
 	local owner = PlotService.OwnerOf(plot)
 	if not owner then
 		return
 	end
-	for id, entry in pairs(byPlot) do
+	local region: PlantWander.Region? = nil
+	for _, entry in pairs(byPlot) do
 		local model = entry.model
 		if entry.stage == CreatureModel.STAGE_GROWN and model and model.Parent then
 			local rng = entry.rng
@@ -1545,14 +1447,21 @@ local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: nu
 			end
 
 			if not entry.legEnd and srvNow >= (entry.restUntil or 0) then
-				local to = chooseDestination(plot, byPlot, entry, rng)
+				if not region then
+					region = PlantWander.RegionFor(plot)
+				end
+				local to, how = PlantWander.Choose(region :: PlantWander.Region,
+					entry.offset, entry.tier, byPlot :: any, entry.id, rng)
 				local fromW = wanderWorld(plot, entry.offset)
 				local toW = wanderWorld(plot, to)
-				if fromW and toW then
+				if how == "stay" then
+					-- Nowhere on the plot is a walk worth taking from here. Rest
+					-- again rather than publish a leg that goes nowhere.
+					entry.restUntil = srvNow + SeedData.WanderPause(entry.tier)
+				elseif fromW and toW then
 					local dist = (toW - fromW).Magnitude
-					local speed = SeedData.WanderSpeed(entry.tier)
 					local t0 = srvNow
-					local t1 = t0 + math.max(dist / math.max(speed, 0.05), 0.4)
+					local t1 = t0 + PlantWander.LegSeconds(entry.tier, dist)
 					entry.legFrom = entry.offset
 					entry.legTo = to
 					entry.legStart = t0

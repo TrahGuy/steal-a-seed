@@ -640,30 +640,36 @@ do
 		"the separation target is bounded -- a Colossal must not make every "
 		.. "destination illegal", W.SeparationStuds)
 
-	-- Heavier creatures move slower, rest longer and cover less ground.
-	local slower, longer, shorter = true, true, true
+	-- Heavier creatures move slower and rest longer -- and cover MORE ground per
+	-- leg, because a leg is read against the body taking it. The ladder used to
+	-- fall with size, which is what made a Colossal's walk a shuffle.
+	local slower, longer, further = true, true, true
 	local tbl = ""
-	local prevS, prevP, prevR = math.huge, -math.huge, math.huge
+	local prevS, prevP, prevR = math.huge, -math.huge, -math.huge
 	for tier = 1, SeedData.TierCount do
 		local sp = SeedData.WanderSpeed(tier)
 		local pa = SeedData.WanderPause(tier)
 		local re = SeedData.WanderReach(tier)
-		tbl ..= string.format(" %s:%.2f/%.1f/%.0f", SeedData.TierName(tier), sp, pa, re)
+		tbl ..= string.format(" %s:%.2f/%.1f/%.1f", SeedData.TierName(tier), sp, pa, re)
 		if sp > prevS + 1e-6 then slower = false end
 		if pa < prevP - 1e-6 then longer = false end
-		if re > prevR + 1e-6 then shorter = false end
+		if re <= prevR + 1e-6 then further = false end
 		prevS, prevP, prevR = sp, pa, re
 	end
 	check(slower, "bigger creatures walk slower", tbl)
 	check(longer, "bigger creatures rest longer", tbl)
-	check(shorter, "bigger creatures cover less ground per leg", tbl)
+	check(further, "bigger creatures cover more ground per leg", tbl)
 
-	-- A leg has to be worth taking, and shorter than the plot.
-	local reachOk = SeedData.WanderReach(1) > W.MinLegStuds
-		and SeedData.WanderReach(1) < GameConfig.Plot.Width
-	check(reachOk, "the longest leg is longer than the shortest and still fits the plot",
-		string.format("%.1f in (%.1f, %d)", SeedData.WanderReach(1),
-			W.MinLegStuds, GameConfig.Plot.Width))
+	-- A leg has to be worth taking, and still fit the plot. The detail --
+	-- routes, fences, medians -- is PlantWanderSpec's.
+	local legsOk = true
+	for tier = 1, SeedData.TierCount do
+		if SeedData.WanderMinLeg(tier) >= SeedData.WanderReach(tier) then legsOk = false end
+	end
+	check(legsOk and SeedData.WanderReach(SeedData.TierCount) < GameConfig.Plot.Width,
+		"every tier's shortest leg is shorter than its longest, and the longest still fits the plot",
+		string.format("Colossal %.1f-%.1f vs width %d", SeedData.WanderMinLeg(SeedData.TierCount),
+			SeedData.WanderReach(SeedData.TierCount), GameConfig.Plot.Width))
 end
 
 say(string.format("\n%d passed, %d failed", pass, fail))
