@@ -34,6 +34,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local GuiService = game:GetService("GuiService")
+local TextService = game:GetService("TextService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
@@ -43,7 +44,8 @@ local Workspace = game:GetService("Workspace")
 local GameConfig = require(ReplicatedStorage:WaitForChild("SeedGame")
 	:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local CARRYING = GameConfig.Attributes.CarryingSpecies
--- Set by CarryService on a beginner's reserved pod, and on nothing else.
+-- Set by CarryService on a beginner's reserved pod, and by PlantService on an
+-- Instant Hatch prompt (the garden owner's id). Nothing else sets it.
 local RESERVED_FOR = "ReservedFor"
 
 local player = Players.LocalPlayer
@@ -61,6 +63,23 @@ local ACCENT = Color3.fromRGB(142, 196, 62)
 -- See GameConfig.Labels.Prompt.
 --==============================================================================
 local PROMPT = GameConfig.Labels.Prompt
+-- The pod's HATCHING label, which a prompt can be stacked on top of.
+local POD = GameConfig.Labels.Pod
+
+--==============================================================================
+-- WHAT THE SERVER CAN ASK FOR, BY ATTRIBUTE ON THE PROMPT
+--
+-- Attributes replicate with the prompt, so none of this needs a remote.
+--
+--   Robux         the prompt sells something: the shop's price capsule goes
+--                 after the verb
+--   OverPodLabel  the prompt sits above the pod's HATCHING label rather than
+--                 on top of it
+--   ReservedFor   the prompt is offered to that UserId only (see
+--                 reservedForSomebodyElse)
+--==============================================================================
+local ROBUX = "Robux"
+local OVER_POD_LABEL = "OverPodLabel"
 
 --==============================================================================
 -- ON TOUCH, THE PANEL IS A ScreenGui BUTTON. NOT A BILLBOARD.
@@ -114,7 +133,21 @@ local TOUCH = UserInputService.TouchEnabled
 -- so it is derivable from the adornee alone and behaves under a tilted camera
 -- the way a thing standing on the object would.
 local LIFT = Vector3.new(0, 2.4, 0)
+-- The SMALLEST a panel is. It is wider only when its verb and price need it.
 local PANEL_SIZE = Vector2.new(170, 52)
+
+-- The row inside a panel, in pixels. Named because a panel's width is now summed
+-- from them instead of being fixed.
+local PAD_LEFT, PAD_RIGHT = 8, 12
+local ROW_GAP = 10
+local CAP = 34
+local VERB_MIN = 80
+-- A UIStroke is drawn outside the glyphs, and TextBounds does not count it.
+local STROKE_ROOM = 4
+local CAPSULE_HEIGHT = 26
+local CAPSULE_PAD = 8
+local CAPSULE_GAP = 4
+local TOKEN = 16
 -- A finger that travels this far has started panning the camera rather than
 -- pressing a prompt.
 local TAP_SLOP = 34
@@ -139,6 +172,17 @@ type Panel = {
 	fill: Frame,
 	cap: Frame,
 	tween: Tween?,
+	-- The laid-out size in pixels. Re-measured if a font finishes loading after
+	-- the panel was built, so the touch tracker culls the rect actually drawn.
+	size: Vector2,
+	-- Studs above the adornee the panel is centred on...
+	lift: number,
+	-- ...measured along the CAMERA's up, as a BillboardGui's StudsOffset is,
+	-- instead of the world's. Only for a prompt stacked over a billboard label,
+	-- which has to agree with that label about which way "above" is.
+	cameraLift: boolean,
+	-- ...and then this many pixels further up the screen.
+	raise: number,
 }
 
 local shown: { [ProximityPrompt]: Panel } = {}
@@ -232,8 +276,17 @@ end
 -- COURTESY, NOT ENFORCEMENT, exactly as the note at the top of this file says
 -- about the carrying check. CarryService.TryTake refuses a stranger's take
 -- whether or not this ran, and a forged trigger arrives there like any other.
+--
+-- THE SAME ATTRIBUTE ON THE PROMPT ITSELF means the same thing for one offer
+-- rather than a whole pod: Instant Hatch carries its garden owner's id, so a
+-- visitor is never shown a price for hatching somebody else's pod.
+-- PlantService.OfferInstantHatch refuses them regardless.
 --==============================================================================
 local function reservedForSomebodyElse(prompt: ProximityPrompt): boolean
+	local only = tonumber(prompt:GetAttribute(RESERVED_FOR))
+	if only ~= nil and only ~= player.UserId then
+		return true
+	end
 	local pod = prompt.Parent and prompt.Parent.Parent
 	if not (pod and pod:IsA("Model")) then
 		return false
@@ -256,6 +309,27 @@ local function build(prompt: ProximityPrompt): Panel?
 	end
 
 	--==========================================================================
+	-- WHERE THE PANEL SITS
+	--
+	-- Most prompts: LIFT studs above the part.
+	--
+	-- A prompt marked OverPodLabel -- Instant Hatch -- is drawn over a pod that
+	-- already has its HATCHING label, and would land on top of it. So it takes
+	-- the label's own anchor, the top of the model plus POD.LiftStuds along the
+	-- camera's up exactly as the label's StudsOffset is, and is raised from
+	-- there by half the label, a gap and half the panel. In PIXELS, because both
+	-- are drawn at a fixed pixel size: a gap in studs would close up as the
+	-- camera pulled back and open up as it came in.
+	--==========================================================================
+	local lift, cameraLift, raise = LIFT.Y, false, 0
+	local model = adornee.Parent
+	if prompt:GetAttribute(OVER_POD_LABEL) == true and model and model:IsA("Model") then
+		lift = GameConfig.topOfModel(model, adornee) + POD.LiftStuds
+		cameraLift = true
+		raise = POD.Height * 0.5 + PROMPT.StackGap + PANEL_SIZE.Y * 0.5
+	end
+
+	--==========================================================================
 	-- WHERE THE PANEL LIVES
 	--
 	-- On touch it is a button in the shared layer, positioned each frame by the
@@ -271,7 +345,10 @@ local function build(prompt: ProximityPrompt): Panel?
 		made.Adornee = adornee
 		made.AlwaysOnTop = true
 		made.Size = UDim2.fromOffset(PANEL_SIZE.X, PANEL_SIZE.Y)
-		made.StudsOffset = LIFT
+		made.StudsOffset = Vector3.new(0, lift, 0)
+		-- SizeOffset is a fraction of the billboard's own size, which makes it
+		-- the one billboard offset that is measured in pixels.
+		made.SizeOffset = Vector2.new(0, raise / PANEL_SIZE.Y)
 	-- MaxDistance IS MEASURED FROM THE CAMERA, while MaxActivationDistance is
 	-- measured from the CHARACTER. Setting this to activation + 4 seemed
 	-- obviously right and hid the prompt at exactly the moment it became usable:
@@ -343,8 +420,8 @@ local function build(prompt: ProximityPrompt): Panel?
 	content.Parent = panel
 
 	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, 8)
-	pad.PaddingRight = UDim.new(0, 12)
+	pad.PaddingLeft = UDim.new(0, PAD_LEFT)
+	pad.PaddingRight = UDim.new(0, PAD_RIGHT)
 	pad.PaddingTop = UDim.new(0, 8)
 	pad.PaddingBottom = UDim.new(0, 8)
 	pad.Parent = content
@@ -353,7 +430,7 @@ local function build(prompt: ProximityPrompt): Panel?
 	row.FillDirection = Enum.FillDirection.Horizontal
 	row.VerticalAlignment = Enum.VerticalAlignment.Center
 	row.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	row.Padding = UDim.new(0, 10)
+	row.Padding = UDim.new(0, ROW_GAP)
 	row.SortOrder = Enum.SortOrder.LayoutOrder
 	row.Parent = content
 
@@ -361,7 +438,7 @@ local function build(prompt: ProximityPrompt): Panel?
 	local cap = Instance.new("Frame")
 	cap.Name = "KeyCap"
 	cap.LayoutOrder = 1
-	cap.Size = UDim2.fromOffset(34, 34)
+	cap.Size = UDim2.fromOffset(CAP, CAP)
 	cap.BackgroundColor3 = PAPER
 	cap.ZIndex = 3
 	cap.Parent = content
@@ -387,7 +464,7 @@ local function build(prompt: ProximityPrompt): Panel?
 	local action = Instance.new("TextLabel")
 	action.Name = "Action"
 	action.LayoutOrder = 2
-	action.Size = UDim2.fromOffset(80, 34)
+	action.Size = UDim2.fromOffset(VERB_MIN, CAP)
 	action.BackgroundTransparency = 1
 	action.Font = PROMPT.Font
 	action.TextSize = PROMPT.VerbSize
@@ -410,6 +487,66 @@ local function build(prompt: ProximityPrompt): Panel?
 	verbEdge.Color = PROMPT.Outline
 	verbEdge.Thickness = PROMPT.OutlineThickness
 	verbEdge.Parent = action
+
+	--==========================================================================
+	-- A PROMPT THAT SELLS SOMETHING SAYS WHAT IT COSTS
+	--
+	-- Only when the server put a Robux attribute on the prompt. It is the shop's
+	-- capsule, so a price reads the same on a shelf and on a pod: white, the
+	-- client's own Robux texture tinted ink (the glyph is a blank box in most
+	-- faces -- see ShopUI), and the number in ink with no outline, because an
+	-- ink stroke round ink type only blurs it.
+	--==========================================================================
+	local robux = tonumber(prompt:GetAttribute(ROBUX))
+	local capsule: Frame? = nil
+	local amount: TextLabel? = nil
+	if robux and robux > 0 then
+		local made = Instance.new("Frame")
+		made.Name = "Price"
+		made.LayoutOrder = 3
+		made.Size = UDim2.fromOffset(CAPSULE_PAD * 2 + TOKEN, CAPSULE_HEIGHT)
+		made.BackgroundColor3 = PROMPT.Capsule
+		made.BorderSizePixel = 0
+		made.ZIndex = 3
+		made.Parent = content
+		local round = Instance.new("UICorner")
+		round.CornerRadius = UDim.new(0.5, 0)
+		round.Parent = made
+		local inner = Instance.new("UIListLayout")
+		inner.FillDirection = Enum.FillDirection.Horizontal
+		inner.VerticalAlignment = Enum.VerticalAlignment.Center
+		inner.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		inner.Padding = UDim.new(0, CAPSULE_GAP)
+		inner.SortOrder = Enum.SortOrder.LayoutOrder
+		inner.Parent = made
+
+		local token = Instance.new("ImageLabel")
+		token.Name = "Token"
+		token.LayoutOrder = 1
+		token.Size = UDim2.fromOffset(TOKEN, TOKEN)
+		token.BackgroundTransparency = 1
+		token.BorderSizePixel = 0
+		token.Image = "rbxasset://textures/ui/common/robux@3x.png"
+		token.ImageColor3 = INK
+		token.ScaleType = Enum.ScaleType.Fit
+		token.ZIndex = 4
+		token.Parent = made
+
+		local number = Instance.new("TextLabel")
+		number.Name = "Amount"
+		number.LayoutOrder = 2
+		number.Size = UDim2.fromOffset(0, CAPSULE_HEIGHT)
+		number.BackgroundTransparency = 1
+		number.Font = PROMPT.PriceFont
+		number.TextSize = PROMPT.PriceSize
+		number.TextColor3 = INK
+		number.Text = tostring(math.floor(robux))
+		number.ZIndex = 4
+		number.Parent = made
+
+		capsule = made
+		amount = number
+	end
 
 	--==========================================================================
 	-- THE PANEL TAKES ITS OWN TOUCH
@@ -457,6 +594,69 @@ local function build(prompt: ProximityPrompt): Panel?
 		end)
 	end
 
+	local entry: Panel = {
+		root = root,
+		panel = panel,
+		adornee = adornee,
+		scale = scale,
+		fill = fill,
+		cap = cap,
+		tween = nil,
+		size = PANEL_SIZE,
+		lift = lift,
+		cameraLift = cameraLift,
+		raise = raise,
+	}
+
+	--==========================================================================
+	-- AS WIDE AS WHAT IS IN IT, AND NEVER NARROWER THAN IT WAS
+	--
+	-- Every verb before Instant Hatch fitted the fixed 170: key, gap, an
+	-- 80-pixel verb. INSTANT HATCH and a price do not, and the panel clips its
+	-- children, so a fixed width would cut the words off. The width is summed
+	-- from the row instead, and a panel whose row still fits in 170 stays
+	-- exactly 170 -- every existing prompt is unchanged to the pixel.
+	--
+	-- MEASURED OFF TextBounds, AND MEASURED AGAIN WHEN IT CHANGES. A face that
+	-- has not finished loading measures as its fallback, so the first number can
+	-- be wrong; the property changes when the real face arrives, and that is
+	-- when this runs again. GetTextSize is only the guess for the very first
+	-- frame, before any layout has happened.
+	--==========================================================================
+	local function measured(label: TextLabel): number
+		local width = label.TextBounds.X
+		if width > 0 then
+			return width
+		end
+		return TextService:GetTextSize(label.Text, label.TextSize, label.Font,
+			Vector2.new(4096, 256)).X
+	end
+
+	local function fit()
+		local verbWidth = math.max(VERB_MIN, math.ceil(measured(action)) + STROKE_ROOM)
+		action.Size = UDim2.fromOffset(verbWidth, CAP)
+		local width = PAD_LEFT + CAP + ROW_GAP + verbWidth + PAD_RIGHT
+		if capsule and amount then
+			local numberWidth = math.ceil(measured(amount))
+			amount.Size = UDim2.fromOffset(numberWidth, CAPSULE_HEIGHT)
+			local capsuleWidth = CAPSULE_PAD * 2 + TOKEN + CAPSULE_GAP + numberWidth
+			capsule.Size = UDim2.fromOffset(capsuleWidth, CAPSULE_HEIGHT)
+			width += ROW_GAP + capsuleWidth
+		end
+		local size = Vector2.new(math.max(PANEL_SIZE.X, width), PANEL_SIZE.Y)
+		entry.size = size
+		if billboard then
+			billboard.Size = UDim2.fromOffset(size.X, size.Y)
+		else
+			panel.Size = UDim2.fromOffset(size.X, size.Y)
+		end
+	end
+	fit()
+	action:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+	if amount then
+		amount:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+	end
+
 	if scale then
 		scale.Scale = 0.82
 		TweenService:Create(scale, TweenInfo.new(0.16, Enum.EasingStyle.Back,
@@ -467,15 +667,7 @@ local function build(prompt: ProximityPrompt): Panel?
 			Enum.EasingDirection.Out), { Size = UDim2.fromScale(1, 1) }):Play()
 	end
 
-	return {
-		root = root,
-		panel = panel,
-		adornee = adornee,
-		scale = scale,
-		fill = fill,
-		cap = cap,
-		tween = nil,
-	}
+	return entry
 end
 
 --==============================================================================
@@ -611,20 +803,24 @@ if TOUCH then
 				entry.panel.Visible = false
 				continue
 			end
-			local at, inFront = camera:WorldToViewportPoint(adornee.Position + LIFT)
-			local half = PANEL_SIZE * 0.5
+			-- World up for an ordinary prompt; the camera's up for one stacked
+			-- over a billboard label, which is the axis that label is lifted on.
+			local up = if entry.cameraLift then camera.CFrame.UpVector else Vector3.yAxis
+			local at, inFront = camera:WorldToViewportPoint(adornee.Position + up * entry.lift)
+			local half = entry.size * 0.5
+			local centreY = at.Y - entry.raise
 			-- Behind the lens still returns an X and a Y, on the wrong side of
 			-- the screen, so `inFront` has to be the first question.
 			local onScreen = inFront
 				and at.X > -half.X and at.X < viewport.X + half.X
-				and at.Y > -half.Y and at.Y < viewport.Y + half.Y
+				and centreY > -half.Y and centreY < viewport.Y + half.Y
 			entry.panel.Visible = onScreen
 			if onScreen then
 				-- Kept clear of the topbar and the notch it stands in. A panel
 				-- drawn under either is one the finger cannot reach, and the
 				-- layer ignores the inset precisely so this is our decision
 				-- rather than a clip.
-				local y = math.max(at.Y, inset.Y + half.Y + 4)
+				local y = math.max(centreY, inset.Y + half.Y + 4)
 				entry.panel.Position = UDim2.fromOffset(math.round(at.X), math.round(y))
 			end
 		end

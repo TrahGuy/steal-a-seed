@@ -57,11 +57,12 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
+local PlantService = require(script.Parent:WaitForChild("PlantService"))
 
 local StoreService = {}
--- After PlayerDataService (20), CarryService (45) and TreadmillService (60): a
--- receipt can land in the first second of the server's life and all three have
--- to be able to answer.
+-- After PlayerDataService (20), CarryService (45), PlantService (50) and
+-- TreadmillService (60): a receipt can land in the first second of the server's
+-- life and all four have to be able to answer.
 StoreService.Priority = 66
 
 local STORE = GameConfig.Store
@@ -77,47 +78,61 @@ end
 -- Built once from the manifest and keyed on the id, because that is what a
 -- receipt carries. Entries with product = 0 are not in it at all: an
 -- uncreated product cannot be bought, so it cannot be granted either.
+--
+-- The shelves AND the products sold in the world (Store.InWorld), read as one
+-- list, so the duplicate-id check below sees every id this game sells.
 --==============================================================================
 local byProduct: { [number]: any } = {}
+
+local function allItems(): { any }
+	local list = {}
+	for _, section in ipairs(STORE.Sections) do
+		for _, item in ipairs(STORE.Items[section.id] or {}) do
+			table.insert(list, item)
+		end
+	end
+	for _, item in ipairs(STORE.InWorld or {}) do
+		table.insert(list, item)
+	end
+	return list
+end
 
 local function indexProducts(): (number, number)
 	table.clear(byProduct)
 	local live, pending = 0, 0
-	for _, section in ipairs(STORE.Sections) do
-		for _, item in ipairs(STORE.Items[section.id] or {}) do
+	for _, item in ipairs(allItems()) do
+		--======================================================================
+		-- A GAME PASS IS NOT A PRODUCT AND IS NOT COUNTED AS ONE
+		--
+		-- The pass row has no `product`, so it could never be indexed or
+		-- sold from here -- but it WOULD have been tallied as one more
+		-- pending product, and the boot line that says how many things are
+		-- waiting on an id would then name a number that does not match the
+		-- Developer Products the owner has to create. PassService owns it.
+		--======================================================================
+		if item.pass ~= nil then
+			continue
+		end
+		local id = tonumber(item.product) or 0
+		if id > 0 then
 			--==================================================================
-			-- A GAME PASS IS NOT A PRODUCT AND IS NOT COUNTED AS ONE
+			-- A DUPLICATE ID IS THE ONE MISTAKE THAT SELLS THE WRONG THING
 			--
-			-- The pass row has no `product`, so it could never be indexed or
-			-- sold from here -- but it WOULD have been tallied as one more
-			-- pending product, and the boot line that says how many things are
-			-- waiting on an id would then name a number that does not match the
-			-- Developer Products the owner has to create. PassService owns it.
+			-- Two entries sharing an id means one of them was pasted over
+			-- the other, and the player is charged for the tile they clicked
+			-- and given whichever of the two this loop reached last. Loud at
+			-- boot rather than quiet at the till.
 			--==================================================================
-			if item.pass ~= nil then
-				continue
+			if byProduct[id] then
+				warn(string.format(
+					"[Seed/StoreService] DUPLICATE product id %d on %q and %q. "
+					.. "One of them is wrong; neither is safe to sell.",
+					id, byProduct[id].key, item.key))
 			end
-			local id = tonumber(item.product) or 0
-			if id > 0 then
-				--==============================================================
-				-- A DUPLICATE ID IS THE ONE MISTAKE THAT SELLS THE WRONG THING
-				--
-				-- Two entries sharing an id means one of them was pasted over
-				-- the other, and the player is charged for the tile they clicked
-				-- and given whichever of the two this loop reached last. Loud at
-				-- boot rather than quiet at the till.
-				--==============================================================
-				if byProduct[id] then
-					warn(string.format(
-						"[Seed/StoreService] DUPLICATE product id %d on %q and %q. "
-						.. "One of them is wrong; neither is safe to sell.",
-						id, byProduct[id].key, item.key))
-				end
-				byProduct[id] = item
-				live += 1
-			else
-				pending += 1
-			end
+			byProduct[id] = item
+			live += 1
+		else
+			pending += 1
 		end
 	end
 	return live, pending
@@ -160,6 +175,17 @@ local function grant(player: Player, item: any): boolean
 			return false
 		end
 		return CarryService.GivePod(player, item.species, item.tier or 1)
+	elseif item.kind == "hatch" then
+		--======================================================================
+		-- A POD OPENED NOW, NOT A THING HANDED OVER
+		--
+		-- The receipt does not say which pod, so PlantService works that out
+		-- from the press that opened the dialog (see WHICH POD A RECEIPT
+		-- HATCHES). False when nothing could hatch -- no pod in the ground, or
+		-- no Backpack to put the creature in -- so the receipt is retried rather
+		-- than acknowledged for nothing.
+		--======================================================================
+		return PlantService.InstantHatch(player)
 	end
 	warn(string.format("[Seed/StoreService] %q has no grant for kind %q",
 		item.key, tostring(item.kind)))
@@ -303,6 +329,13 @@ function StoreService.Snapshot(): string
 		rows[#rows + 1] = string.format("  %-12s %s", section.id,
 			if #parts == 0 then "(empty)" else table.concat(parts, " "))
 	end
+	local inWorld = {}
+	for _, item in ipairs(STORE.InWorld or {}) do
+		table.insert(inWorld, string.format("%s=%s", item.key,
+			if (tonumber(item.product) or 0) > 0 then tostring(item.product) else "-"))
+	end
+	rows[#rows + 1] = string.format("  %-12s %s", "InWorld",
+		if #inWorld == 0 then "(empty)" else table.concat(inWorld, " "))
 	return table.concat(rows, "\n")
 end
 

@@ -2223,6 +2223,33 @@ GameConfig.Plant = {
 	-- Hold to hatch. Long enough that the pod visibly shakes and the hatch is a
 	-- thing you did, short enough that a full bed is not a chore.
 	HatchHoldSeconds = 1.1,
+
+	--==========================================================================
+	-- INSTANT HATCH: THE SAME HATCH, WITHOUT THE WAIT, FOR ROBUX
+	--
+	-- A second prompt on a pod that is still counting down. Pressing it asks
+	-- Roblox for the purchase; the receipt is what hatches the pod. The price
+	-- and the product id live in GameConfig.Store.InWorld with every other
+	-- Robux product.
+	--
+	-- F, NOT E. E is the free Hatch prompt on a READY pod, and prompts share a
+	-- key one at a time: on E, a growing pod beside a ready one could take the
+	-- key from it, and the player who pressed E to hatch for free would get a
+	-- purchase dialog. On F the two show side by side, each over its own pod.
+	--
+	-- No hold. The purchase dialog is already the confirmation, and a hold in
+	-- front of a dialog is two confirmations.
+	--==========================================================================
+	InstantHatch = {
+		ActionText = "Instant Hatch",
+		Key = Enum.KeyCode.F,
+		-- E's gamepad twin is the default ButtonX, so the same reasoning moves
+		-- this one to ButtonY.
+		GamepadKey = Enum.KeyCode.ButtonY,
+		-- One purchase dialog per press. A key held down, or a finger that
+		-- bounces, would otherwise ask the server to open it over and over.
+		OfferGapSeconds = 1,
+	},
 	-- How long the shell burst lasts before its pieces are gone.
 	BurstSeconds = 0.45,
 
@@ -3234,7 +3261,7 @@ export type StoreItem = {
 	label: string,
 	robux: number,
 	product: number,
-	kind: "speed" | "cash" | "pod",
+	kind: "speed" | "cash" | "pod" | "hatch",
 	amount: number?,
 	species: string?,
 	tier: number?,
@@ -3430,6 +3457,29 @@ GameConfig.Store = {
 			{ key = "pod3", label = "COLOSSAL BELLCHIME", robux = 449, product = 0,
 				kind = "pod", species = "bellchime", tier = 7 },
 		},
+	},
+
+	--==========================================================================
+	-- SOLD IN THE WORLD, NOT ON A SHELF
+	--
+	-- Developer Products that ShopUI never draws. Each one is offered by a
+	-- ProximityPrompt on the thing it acts on, because that is the only place
+	-- the offer means anything: "hatch this pod now" is not a shop tile.
+	--
+	-- StoreService indexes this list exactly like the shelves -- the same ledger,
+	-- the same duplicate-id check, the same product = 0 rule -- so a product here
+	-- is granted by the same receipt path as a Speed pack.
+	--
+	-- INSTANT HATCH. The owner asked for it on 2026-09-15 at 99 Robux. It opens
+	-- the pod the player pressed it on, clock or no clock; PlantService decides
+	-- which pod that was (see PlantService.InstantHatch). `product` is 0 until
+	-- the owner creates the Developer Product, and until then the prompt is
+	-- drawn with its price but pressing it does nothing except say why in the
+	-- server log.
+	--==========================================================================
+	InWorld = {
+		{ key = "instanthatch", label = "INSTANT HATCH", robux = 99, product = 0,
+			kind = "hatch" },
 	},
 }
 
@@ -4428,12 +4478,24 @@ GameConfig.Pops = {
 --==============================================================================
 GameConfig.Labels = {
 	--==========================================================================
-	-- THE POD: A SEED PACKET, NOT A PROGRESS BAR
+	-- THE POD: A COUNTDOWN, NOT A PROGRESS BAR
 	--
-	-- FredokaOne is the roundest face in the project -- already used on the biome
-	-- arches -- and round is what a buried seed should read as. It is warm cream
-	-- rather than paper white, which is the Crown colour every Greenhollow
-	-- creature already wears, so the label looks like it grew there.
+	-- ARCADE, since the owner asked for a new face on 2026-09-15. It was
+	-- FredokaOne, which the hotbar, the shop and the map signs all wear as well.
+	-- Candidates were drawn at the real sizes and colours over sky, fence, soil
+	-- and pods in Play:
+	--   * the thin faces (Sarpanch, Oswald, Nunito, Kalam, TitilliumWeb, Ubuntu)
+	--     washed out once the plate was gone;
+	--   * Michroma thinned out over soil;
+	--   * BuilderSansExtraBold read well but looked like the HUD.
+	-- Arcade stayed crisp on every background, is used nowhere else in the game,
+	-- and its blocky digits read as a clock in a blocky world.
+	--
+	-- One step larger than the plate's 13/18, because a label with nothing
+	-- behind it has to carry its own contrast.
+	--
+	-- The word is warm cream rather than paper white: the Crown colour every
+	-- Greenhollow creature already wears, so the label looks like it grew there.
 	--
 	--======================================================================
 	-- THE CLOCK RIPENS FROM AMBER TO GREEN
@@ -4449,15 +4511,32 @@ GameConfig.Labels = {
 	-- this label the moment the clock runs out.
 	--======================================================================
 	Pod = {
-		Font = Enum.Font.FredokaOne,
-		WordSize = 13,
-		ClockSize = 18,
+		Font = Enum.Font.Arcade,
+		WordSize = 14,
+		ClockSize = 20,
 		-- The Crown cream off the species sheet.
 		Word = Color3.fromRGB(242, 238, 206),
 		ClockYoung = Color3.fromRGB(255, 190, 90),
 		ClockReady = Color3.fromRGB(142, 214, 86),
 		Outline = Color3.fromRGB(26, 24, 30),
 		OutlineThickness = 2,
+		--======================================================================
+		-- NO PLATE BEHIND IT
+		--
+		-- The owner had the dark rounded box removed on 2026-09-15, so the words
+		-- float over the pod on their own. The outline is what keeps them
+		-- readable over sky, grass and soil, so it is the one thing here that
+		-- must not be thinned.
+		--
+		-- The box is still LAID OUT, Width by Height and centred LiftStuds above
+		-- the top of the model, because PromptUI stacks the Instant Hatch prompt
+		-- on top of it and has to know where the label ends. Height is the two
+		-- lines (WordSize + 2, ClockSize + 1) plus PlantUI's 5-pixel padding
+		-- above and below.
+		--======================================================================
+		Width = 124,
+		Height = 48,
+		LiftStuds = 1.2,
 		--======================================================================
 		-- THE STRINGS
 		--
@@ -4476,8 +4555,8 @@ GameConfig.Labels = {
 	--
 	-- DenkOne is condensed, geometric and upright -- it reads as a control
 	-- rather than as a caption, which is exactly what a prompt is. Distinct from
-	-- all four faces already in use: LuckiestGuy is money, Bangers is speed,
-	-- FredokaOne is now the pod, GothamBlack is the HUD.
+	-- the faces already in use: LuckiestGuy is money, Bangers is speed, Arcade is
+	-- the pod's countdown, GothamBlack is the HUD.
 	--
 	-- THE VERB IS UPPERCASED HERE rather than in the four places that set an
 	-- ActionText. `prompt.ActionText` stays "Pick Up" because that is what it
@@ -4493,6 +4572,18 @@ GameConfig.Labels = {
 		Outline = Color3.fromRGB(26, 24, 30),
 		OutlineThickness = 2,
 		Uppercase = true,
+		--======================================================================
+		-- A PRICE, WHEN THE PROMPT SELLS SOMETHING
+		--
+		-- A prompt with a Robux attribute gets the shop's capsule after its verb:
+		-- white, the client's own Robux mark in ink, the number in ink. It is the
+		-- capsule the shelves print, so a price looks the same everywhere.
+		--======================================================================
+		PriceFont = Enum.Font.LuckiestGuy,
+		PriceSize = 17,
+		Capsule = Color3.fromRGB(255, 255, 255),
+		-- Pixels between a pod's label and a prompt stacked above it.
+		StackGap = 4,
 	},
 }
 

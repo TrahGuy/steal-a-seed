@@ -59,6 +59,7 @@
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -111,6 +112,9 @@ type Planted = {
 	-- The HatchPrompt on a ready pod, and nothing else. A grown plant has no
 	-- prompt at all -- see THERE IS NO PICKUP PROMPT.
 	prompt: ProximityPrompt?,
+	-- The InstantHatchPrompt on a pod that is still counting down. Replaced by
+	-- `prompt` the moment the clock runs out; see INSTANT HATCH.
+	instant: ProximityPrompt?,
 	--==========================================================================
 	-- WHERE IT IS WALKING, IN THE PLOT'S OWN FRAME
 	--
@@ -154,6 +158,18 @@ local HATCH_HOLD = PLANTING.HatchHoldSeconds
 local BURST = PLANTING.BurstSeconds
 local PLACE_ACTION = PLANTING.PlaceAction
 local PICKUP_ACTION = PLANTING.PickUpAction
+local INSTANT = PLANTING.InstantHatch
+
+-- The Robux product the Instant Hatch prompt sells, off the store manifest.
+-- Found by kind rather than by key, so renaming the key cannot quietly cut the
+-- prompt off from its receipt.
+local INSTANT_ITEM: any = nil
+for _, item in ipairs(GameConfig.Store.InWorld or {}) do
+	if item.kind == "hatch" then
+		INSTANT_ITEM = item
+		break
+	end
+end
 
 local function log(message: string)
 	print("[Seed/PlantService] " .. message)
@@ -453,13 +469,16 @@ local function anchorsFolder(plot: Model): Instance
 	return folder
 end
 
--- Destroys the anchor. Also forgets the prompt reference -- a ready pod's
--- HatchPrompt -- which every caller was already clearing by hand.
+-- Destroys the anchor. Also forgets the prompt references -- a ready pod's
+-- HatchPrompt and a growing pod's InstantHatchPrompt -- which every caller was
+-- already clearing by hand. Both live on the model, so whatever is dropping the
+-- anchor is dropping them too.
 local function dropAnchor(entry: Planted)
 	local anchor = entry.anchor
 	entry.anchor = nil
 	entry.anchorLift = nil
 	entry.prompt = nil
+	entry.instant = nil
 	if anchor and anchor.Parent then
 		anchor:Destroy()
 	end
@@ -613,10 +632,16 @@ local function isReady(entry: Planted, now: number): boolean
 		and (now - entry.plantedAt) >= SeedData.GrowSeconds(entry.tier)
 end
 
-local hatch: (Player, Planted) -> boolean
+local hatch: (Player, Planted, boolean?) -> boolean
 local pickUp: (Player, Planted) -> boolean
 
 local function attachHatchPrompt(entry: Planted)
+	-- The clock has run out, so there is no wait left to pay for. The free
+	-- prompt replaces the paid one rather than standing beside it.
+	if entry.instant then
+		entry.instant:Destroy()
+		entry.instant = nil
+	end
 	local model = entry.model
 	local handle = if model then model.PrimaryPart else nil
 	if not (model and handle) or entry.prompt then
@@ -662,6 +687,173 @@ local function attachHatchPrompt(entry: Planted)
 	table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
 		hatch(player, entry)
 	end))
+end
+
+--==============================================================================
+-- INSTANT HATCH
+--
+-- A pod that is still counting down carries a second prompt: F, INSTANT HATCH,
+-- and a Robux price. Pressing it only ASKS Roblox for the purchase. Nothing
+-- happens to the pod until the receipt reaches StoreService, which calls
+-- InstantHatch below -- and that runs the same hatch() as the free prompt,
+-- without the clock.
+--
+-- THE SERVER OPENS THE DIALOG. MarketplaceService lets a server prompt a
+-- purchase on a player's screen, so there is no remote here and nothing a client
+-- can send. The press arrives as the prompt's Triggered, engine-stamped with who
+-- pressed it; everything after that is decided on this side.
+--
+--==============================================================================
+-- WHICH POD A RECEIPT HATCHES
+--
+-- A receipt names a player and a product, never a pod. So the pod is written
+-- down when the dialog opens, and the receipt reads the note back:
+--
+--   1. The pod they pressed, if it is still an unhatched pod in their own plot.
+--      That holds even if its clock ran out while the dialog was open, because
+--      that is the pod they paid for.
+--   2. Otherwise, the unhatched pod in their plot with the longest wait left.
+--      This is the no-note case: a receipt Roblox re-delivers after a rejoin.
+--   3. Otherwise nothing, and the receipt is NOT acknowledged. Roblox delivers
+--      it again later, so a purchase never lands on an empty bed and vanishes.
+--==============================================================================
+-- UserId -> the pod that player last opened the purchase dialog for. Keyed by
+-- id rather than Player, and cleared when they leave.
+local wanted: { [number]: { plot: Model, id: number } } = {}
+-- UserId -> os.clock() of the last dialog opened for them.
+local lastOffer: { [number]: number } = {}
+-- Said once per server, not once per press.
+local warnedNoProduct = false
+
+local function attachInstantPrompt(entry: Planted)
+	local model = entry.model
+	local handle = if model then model.PrimaryPart else nil
+	if not (model and handle and INSTANT_ITEM) or entry.stage ~= CreatureModel.STAGE_POD then
+		return
+	end
+	if entry.instant and entry.instant.Parent then
+		return
+	end
+
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "InstantHatchPrompt"
+	prompt.Style = Enum.ProximityPromptStyle.Custom
+	prompt.ActionText = INSTANT.ActionText
+	prompt.ObjectText = ""
+	prompt.KeyboardKeyCode = INSTANT.Key
+	prompt.GamepadKeyCode = INSTANT.GamepadKey
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = PLANT_RANGE
+	prompt.RequiresLineOfSight = false
+	-- What PromptUI prints in the capsule. Roblox charges the Dashboard's price;
+	-- this is the manifest's copy of it, exactly as a shop tile is.
+	prompt:SetAttribute("Robux", INSTANT_ITEM.robux)
+	-- Drawn above the pod's HATCHING label rather than on top of it.
+	prompt:SetAttribute("OverPodLabel", true)
+	-- Offered to the owner only. That is courtesy -- PromptUI does not draw it
+	-- for anybody else -- and OfferInstantHatch refuses a stranger either way.
+	local owner = PlotService.OwnerOf(entry.plot)
+	if owner then
+		prompt:SetAttribute("ReservedFor", owner.UserId)
+	end
+	prompt.Parent = handle
+	entry.instant = prompt
+
+	-- Not kept in serviceConnections: the connection is disconnected when the
+	-- prompt is destroyed, and every planted pod gets one of these.
+	prompt.Triggered:Connect(function(player)
+		PlantService.OfferInstantHatch(player, entry.plot, entry.id)
+	end)
+end
+
+--==============================================================================
+-- THE PRESS: CHECK, WRITE THE NOTE, OPEN THE DIALOG
+--
+-- Takes the plot as well as the id because placement ids are only unique inside
+-- a plot. Looking the id up in the PRESSER's plot would let a stranger's press
+-- on pod 3 here open a dialog for their own pod 3 at home.
+--==============================================================================
+function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId: number): boolean
+	local byPlot = growing[plot]
+	local entry = if byPlot then byPlot[placementId] else nil
+	if not entry then
+		return false
+	end
+	-- Yours. The prompt is only DRAWN for the owner, but a key press reaches it
+	-- from anybody in range, and nobody may be sold a hatch of somebody else's pod.
+	if PlotService.OwnerOf(plot) ~= player then
+		return false
+	end
+	-- A ready pod hatches for free on E. The tick swaps this prompt out within a
+	-- second of the clock running out, so this only catches a press in between.
+	if entry.stage ~= CreatureModel.STAGE_POD or isReady(entry, os.time()) then
+		return false
+	end
+	local productId = if INSTANT_ITEM then tonumber(INSTANT_ITEM.product) or 0 else 0
+	if productId <= 0 then
+		if not warnedNoProduct then
+			warnedNoProduct = true
+			warn("[Seed/PlantService] Instant Hatch was pressed, but its Developer Product "
+				.. "id is still 0. Create the product in the Creator Dashboard and fill its "
+				.. "id into GameConfig.Store.InWorld.")
+		end
+		return false
+	end
+	local now = os.clock()
+	if now - (lastOffer[player.UserId] or -math.huge) < INSTANT.OfferGapSeconds then
+		return false
+	end
+	lastOffer[player.UserId] = now
+	wanted[player.UserId] = { plot = plot, id = placementId }
+	local ok, err = pcall(function()
+		MarketplaceService:PromptProductPurchase(player, productId)
+	end)
+	if not ok then
+		warn(string.format("[Seed/PlantService] Instant Hatch dialog for %s failed: %s",
+			player.Name, tostring(err)))
+		return false
+	end
+	return true
+end
+
+--==============================================================================
+-- THE RECEIPT: HATCH THE POD THAT WAS PAID FOR
+--
+-- Called by StoreService and nothing else, only once a receipt for the Instant
+-- Hatch product has arrived. Returns whether a pod actually hatched; false leaves
+-- the receipt unacknowledged so Roblox tries again.
+--==============================================================================
+function PlantService.InstantHatch(player: Player): boolean
+	local plot = PlotService.PlotOf(player)
+	local byPlot = if plot then growing[plot] else nil
+	if not (plot and byPlot) then
+		return false
+	end
+	local note = wanted[player.UserId]
+	local entry: Planted? = if note and note.plot == plot then byPlot[note.id] else nil
+	if not (entry and entry.stage == CreatureModel.STAGE_POD) then
+		entry = nil
+		local now = os.time()
+		local longest = -math.huge
+		for _, candidate in pairs(byPlot) do
+			if candidate.stage == CreatureModel.STAGE_POD then
+				local left = SeedData.GrowSeconds(candidate.tier) - (now - candidate.plantedAt)
+				-- Ties go to the lower id, so the same bed always picks the same pod.
+				if left > longest or (left == longest and entry and candidate.id < entry.id) then
+					longest = left
+					entry = candidate
+				end
+			end
+		end
+	end
+	if not entry then
+		return false
+	end
+	if not hatch(player, entry, true) then
+		return false
+	end
+	wanted[player.UserId] = nil
+	return true
 end
 
 --==============================================================================
@@ -831,7 +1023,7 @@ end
 -- with the prompt held is enough -- and a prize that evaporates because of a
 -- frame is the worst bug this game can have.
 --==============================================================================
-function hatch(player: Player, entry: Planted): boolean
+function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	local byPlot = growing[entry.plot]
 	if not byPlot or byPlot[entry.id] ~= entry then
 		return false
@@ -841,7 +1033,17 @@ function hatch(player: Player, entry: Planted): boolean
 	if PlotService.OwnerOf(entry.plot) ~= player then
 		return false
 	end
-	if not isReady(entry, os.time()) then
+	--==========================================================================
+	-- THE CLOCK, UNLESS THE WAIT WAS BOUGHT
+	--
+	-- `early` comes from InstantHatch alone, and only once a receipt has landed.
+	-- It skips the wait and nothing else: the pod still has to be an unhatched
+	-- pod in this player's own plot.
+	--==========================================================================
+	if entry.stage ~= CreatureModel.STAGE_POD then
+		return false
+	end
+	if not early and not isReady(entry, os.time()) then
 		return false
 	end
 	if not CarryService.GiveHatched(player, entry.species, entry.tier) then
@@ -849,8 +1051,8 @@ function hatch(player: Player, entry: Planted): boolean
 	end
 	-- Said here rather than in CarryService, which also hands a Tool over for a
 	-- pickup and for a rejoin and cannot tell the three apart.
-	log(string.format("%s hatched a %d tier %s.", player.Name, entry.tier,
-		entry.species.Name))
+	log(string.format("%s %s a %d tier %s.", player.Name,
+		if early then "instantly hatched" else "hatched", entry.tier, entry.species.Name))
 
 	-- STOPS WALKING BEFORE IT LEAVES THE TABLE. The model outlives this call by
 	-- the length of a burst or a lift, and a model still carrying a leg is a
@@ -867,7 +1069,6 @@ function hatch(player: Player, entry: Planted): boolean
 	-- THE REVEAL IS THE HATCH. Until the shell breaks you do not know which
 	-- species you had, so this is the moment the Almanac learns it.
 	PlayerDataService.MarkSeen(player, entry.species.Id)
-	log(string.format("%s hatched a %d tier %s.", player.Name, entry.tier, entry.species.Name))
 	PlayerDataService.RecordTutorial(player, "hatch")
 	return true
 end
@@ -1058,6 +1259,9 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	render(entry)
 	if isReady(entry, os.time()) then
 		attachHatchPrompt(entry)
+	else
+		-- On the pod the moment it is in the ground, not a tick later.
+		attachInstantPrompt(entry)
 	end
 	persist(plot)
 	-- Consumed. Destroying the tool is what makes planting a decision rather
@@ -1250,6 +1454,8 @@ local function restore(player: Player, plot: Model)
 				render(entry)
 				if isReady(entry, now) then
 					attachHatchPrompt(entry)
+				else
+					attachInstantPrompt(entry)
 				end
 				restored += 1
 			else
@@ -1669,6 +1875,9 @@ function PlantService.Init()
 		growing[plot] = nil
 	end
 	table.clear(nextId)
+	table.clear(wanted)
+	table.clear(lastOffer)
+	warnedNoProduct = false
 end
 
 function PlantService.Start()
@@ -1686,6 +1895,13 @@ function PlantService.Start()
 		nextId[plot] = nil
 		carried[plot] = nil
 	end)
+	-- A note about which pod to hatch means nothing once its writer has gone: a
+	-- receipt for somebody who is not here is never processed (StoreService), and
+	-- one re-delivered after they rejoin falls back to their longest wait.
+	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(leaving)
+		wanted[leaving.UserId] = nil
+		lastOffer[leaving.UserId] = nil
+	end))
 
 	--==========================================================================
 	-- AN UPGRADE MOVES THE SOIL OUT FROM UNDER THE GARDEN
@@ -1787,8 +2003,15 @@ function PlantService.Start()
 					nextId[plot] = nil
 				else
 					for _, entry in pairs(byPlot) do
-						if not entry.prompt and isReady(entry, now) then
-							attachHatchPrompt(entry)
+						if isReady(entry, now) then
+							-- Also takes the Instant Hatch prompt off.
+							if not entry.prompt then
+								attachHatchPrompt(entry)
+							end
+						elseif entry.stage == CreatureModel.STAGE_POD then
+							-- Only builds when one is missing: a pod whose
+							-- model was rebuilt lost its prompt with it.
+							attachInstantPrompt(entry)
 						end
 					end
 					-- The garden takes a step. Pods are skipped inside.
@@ -1803,6 +2026,13 @@ function PlantService.Start()
 	log(string.format(
 		"Ready. Click your soil to plant; hold E on a ready pod for %.1fs to hatch it.",
 		HATCH_HOLD))
+	if not INSTANT_ITEM then
+		warn("[Seed/PlantService] GameConfig.Store.InWorld has no \"hatch\" product, "
+			.. "so no pod offers Instant Hatch.")
+	elseif (tonumber(INSTANT_ITEM.product) or 0) <= 0 then
+		log(string.format("Instant Hatch (%d Robux) is drawn on growing pods but is "
+			.. "waiting for a Developer Product id.", INSTANT_ITEM.robux))
+	end
 end
 
 --==============================================================================

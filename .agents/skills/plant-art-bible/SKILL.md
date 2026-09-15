@@ -176,6 +176,11 @@ Those billboards are born disabled and only enabled by `refresh()`, and they dro
 thing. (`GROWING` is the sprout string; PlantUI still carries it, but nothing in a bed is ever a
 sprout - see plant-authoring.)
 
+Since 2026-09-15 that label is bare outlined text in Arcade, with no plate behind it; the owner had
+the box removed. On a growing pod its owner also sees the Instant Hatch prompt (F, 99 Robux)
+stacked directly above the label. PromptUI places it from `GameConfig.Labels.Pod.Width`, `Height`
+and `LiftStuds`, so the label's size and lift change there and never as literals in PlantUI.
+
 No weight billboard anywhere. The shell is coloured by its band and sized by its weight; a label
 would be the same fact a third time, and on a creature it measured wrong.
 

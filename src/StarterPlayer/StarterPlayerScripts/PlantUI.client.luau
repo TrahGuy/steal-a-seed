@@ -1,7 +1,7 @@
 --!strict
 -- Steal a Seed :: PlantUI
 --
--- The hatch timer over anything growing in a plot.
+-- The hatch timer over anything growing in a plot: two outlined words, no box.
 --
 --==============================================================================
 -- WHY THIS EXISTS AT ALL
@@ -44,7 +44,7 @@
 --
 -- A pod or a sprout is the one case where the world genuinely has nothing to
 -- say for itself: it is a shell, it is not paying, and the only fact anybody
--- wants off it is how long is left. That is worth a plate. A grown creature is
+-- wants off it is how long is left. That is worth a label. A grown creature is
 -- already a distinct silhouette doing a visible thing.
 --
 -- No rarity word here either, at any stage. A pod is COLOURED by rarity, so the
@@ -84,19 +84,14 @@ local PLANTING = GameConfig.Plant
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- The same three colours PromptUI uses. One vocabulary, so a hatch timer and a
--- Take prompt read as belonging to the same game.
-local INK = Color3.fromRGB(26, 24, 30)
-local PAPER = Color3.fromRGB(248, 246, 240)
-local ACCENT = Color3.fromRGB(142, 196, 62)
 --==============================================================================
--- IT IS A SEED PACKET NOW, NOT THE HUD IN MINIATURE
+-- IT BELONGS TO THE POD, NOT TO THE HUD
 --
 -- The word and the clock were GothamBold and GothamBlack in paper and lime --
 -- the same type as the cash readout in the corner of the screen. Nothing about
 -- them said they belonged to the pod they were floating over. See
--- GameConfig.Labels.Pod for what they are instead, and for why the clock
--- changes colour as it runs down.
+-- GameConfig.Labels.Pod for the face they wear instead (Arcade, since
+-- 2026-09-15), and for why the clock changes colour as it runs down.
 --==============================================================================
 local POD = GameConfig.Labels.Pod
 
@@ -171,7 +166,9 @@ local function build(model: Model): Panel?
 	billboard.Name = "SeedPlant"
 	billboard.Adornee = anchor
 	billboard.AlwaysOnTop = true
-	billboard.Size = UDim2.fromOffset(124, 40)
+	-- In GameConfig rather than here, because PromptUI stacks the Instant Hatch
+	-- prompt on top of this label and has to know where it ends.
+	billboard.Size = UDim2.fromOffset(POD.Width, POD.Height)
 	--==========================================================================
 	-- A FIXED GAP ABOVE THE REAL TOP
 	--
@@ -187,7 +184,7 @@ local function build(model: Model): Panel?
 	-- to land close enough to look correct, which is why it survived.
 	--==========================================================================
 	billboard.StudsOffset = Vector3.new(0,
-		GameConfig.topOfModel(model, anchor) + 1.2, 0)
+		GameConfig.topOfModel(model, anchor) + POD.LiftStuds, 0)
 	-- Camera-relative, unlike a prompt's activation range -- the lesson
 	-- PromptUI paid for. Far enough to read a neighbour's plot from the road,
 	-- which is the whole point of showing it to people who do not own it.
@@ -205,23 +202,20 @@ local function build(model: Model): Panel?
 	billboard.Enabled = false
 	billboard.Parent = container
 
+	--==========================================================================
+	-- NO BOX
+	--
+	-- This was a dark rounded plate with a lime keyline, and the owner had it
+	-- removed on 2026-09-15: the words stand over the pod on their own. The frame
+	-- stays as the layout, fully transparent, with nothing drawn on it. Each
+	-- label's own outline is what keeps it readable over sky, grass and soil.
+	--==========================================================================
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
 	panel.Size = UDim2.fromScale(1, 1)
-	panel.BackgroundColor3 = INK
-	panel.BackgroundTransparency = 0.18
+	panel.BackgroundTransparency = 1
 	panel.BorderSizePixel = 0
 	panel.Parent = billboard
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = ACCENT
-	stroke.Thickness = 2
-	stroke.Transparency = 0.3
-	stroke.Parent = panel
 
 	local pad = Instance.new("UIPadding")
 	pad.PaddingLeft = UDim.new(0, 8)

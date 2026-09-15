@@ -12,9 +12,14 @@
 --
 -- The REAL StoreService and the REAL TreadmillService, loaded from their Source
 -- with the services around them stood in: MarketplaceService (so the receipt
--- callback can be caught and called), Players, PlayerDataService, CarryService
--- and PlotService. The stand-ins only RECORD what they are asked to do, so the
--- order of those calls is the evidence.
+-- callback can be caught and called), Players, PlayerDataService, CarryService,
+-- PlantService and PlotService. The stand-ins only RECORD what they are asked to
+-- do, so the order of those calls is the evidence.
+--
+-- StoreService sees the manifest through a copy whose Instant Hatch product has
+-- a made-up id. The real one is 0 until the owner creates the product, and a 0
+-- is never indexed, so without the copy there would be no receipt to send.
+-- InstantHatchSpec covers what PlantService does with the receipt.
 --
 -- Not here: a real purchase prompt, which only a client can open. Studio test
 -- purchases are the Play-side check.
@@ -98,6 +103,31 @@ local CarryService = {
 
 local PlotService = {}
 
+local hatchWorks = true
+local PlantService = {
+	InstantHatch = function(player)
+		record("InstantHatch", player)
+		return hatchWorks
+	end,
+}
+
+-- The manifest as StoreService sees it: the real one, except that the Instant
+-- Hatch product has an id.
+local LIVE_HATCH_ID = 990001
+local realHatch = nil
+for _, item in ipairs(GameConfig.Store.InWorld or {}) do
+	if item.kind == "hatch" then
+		realHatch = item
+	end
+end
+local liveHatch = if realHatch then table.clone(realHatch) else nil
+if liveHatch then
+	liveHatch.product = LIVE_HATCH_ID
+end
+local liveConfig = setmetatable({
+	Store = setmetatable({ InWorld = { liveHatch } }, { __index = GameConfig.Store }),
+}, { __index = GameConfig })
+
 local receiptCallback = nil
 local fakeMarket = setmetatable({}, {
 	__newindex = function(t, key, value)
@@ -120,9 +150,10 @@ function fakeGame:GetService(name)
 end
 
 -- Loads a real server module with its siblings replaced by stand-ins. Anything
--- it requires from Shared is the real thing, through the runner's fresh require.
+-- it requires from Shared is the real thing, through the runner's fresh require,
+-- unless `overrides` names that module.
 local outerRequire = require
-local function loadWith(module, siblings)
+local function loadWith(module, siblings, overrides)
 	local chunk, err = loadstring(module.Source, "=" .. module.Name)
 	assert(chunk, tostring(err))
 	local parent = {}
@@ -137,6 +168,9 @@ local function loadWith(module, siblings)
 		require = function(target)
 			if type(target) == "table" and target.__standIn ~= nil then
 				return target.__standIn
+			end
+			if overrides and typeof(target) == "Instance" and overrides[target.Name] ~= nil then
+				return overrides[target.Name]
 			end
 			return outerRequire(target)
 		end,
@@ -166,7 +200,8 @@ local ok, err = pcall(function()
 		PlayerDataService = PlayerDataService,
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
-	})
+		PlantService = PlantService,
+	}, { GameConfig = liveConfig })
 	StoreService.Init()
 	StoreService.Start()
 end)
@@ -294,6 +329,52 @@ if ok and receiptCallback then
 	saveWorks = true
 	check(unsaved == RETRY, "granted but not saved: not acknowledged, so Roblox retries",
 		tostring(unsaved))
+
+	--==========================================================================
+	-- 4. INSTANT HATCH
+	--
+	-- Sold from a prompt on the pod rather than from a shelf, and granted by the
+	-- same receipt path: PlantService opens the pod, then the ledger and the save.
+	--==========================================================================
+	say("\n-- instant hatch --")
+	check(realHatch ~= nil and realHatch.robux == 99,
+		"the manifest sells Instant Hatch in Store.InWorld at 99 Robux",
+		realHatch and realHatch.robux)
+	local onShelf = false
+	for _, section in ipairs(GameConfig.Store.Sections) do
+		for _, item in ipairs(GameConfig.Store.Items[section.id] or {}) do
+			if item.kind == "hatch" then
+				onShelf = true
+			end
+		end
+	end
+	check(not onShelf, "no shop shelf carries it, so ShopUI never draws a tile for it")
+
+	table.clear(trace)
+	local hatchDecision = buy(liveHatch, "spec-hatch")
+	local asked = indexOf("InstantHatch")
+	local saved = indexOf("Save")
+	check(hatchDecision == GRANTED and asked ~= nil and saved ~= nil and asked < saved
+		and trace[asked].args[1] == buyer and indexOf("GivePod") == nil,
+		"an Instant Hatch receipt asks PlantService to hatch for the buyer, then saves",
+		string.format("%s ask=%s save=%s", tostring(hatchDecision), tostring(asked), tostring(saved)))
+
+	table.clear(trace)
+	hatchWorks = false
+	local nothing = buy(liveHatch, "spec-hatch-empty")
+	hatchWorks = true
+	local retried = buy(liveHatch, "spec-hatch-empty")
+	local asks = 0
+	for _, t in ipairs(trace) do
+		if t.name == "InstantHatch" then asks += 1 end
+	end
+	check(nothing == RETRY and retried == GRANTED and asks == 2,
+		"nothing could hatch: not acknowledged and not remembered, so the retry still pays out",
+		string.format("%s then %s, %d ask(s)", tostring(nothing), tostring(retried), asks))
+
+	local snapshot = StoreService.Snapshot()
+	check(string.find(snapshot, "instanthatch=" .. LIVE_HATCH_ID, 1, true) ~= nil,
+		"the debug snapshot lists it with the world products", snapshot)
 end
 
 say(string.format("\nStoreSpec: %d passed, %d failed", pass, fail))

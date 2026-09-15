@@ -1,5 +1,123 @@
 # Steal a Seed — Session Handoff
 
+## Pod timer without a box, and Instant Hatch for 99 Robux — 2026-09-15 (CLAUDE)  (COMMITTED; NEEDS A PRODUCT ID)
+
+**Owner request:** make the hatching timer above pods transparent with no box, change
+its font, and add an "Instant Hatch" proximity prompt for 99 Robux.
+
+### The timer
+
+  * **No box.** PlantUI's dark rounded plate and lime keyline are gone. The panel frame
+    stays, fully transparent, as the layout; the word and the clock keep their ink
+    outlines, which now carry all the contrast.
+  * **Arcade, 14/20** (was FredokaOne 13/18, which the hotbar, shop and map signs also
+    use). Picked in Play by drawing candidates at the label's real sizes, colours and
+    outline over sky, fence, soil and pods:
+      - the thin faces (Sarpanch, Oswald, Nunito, Kalam, TitilliumWeb, Ubuntu) washed
+        out without the plate;
+      - Michroma thinned out over soil;
+      - BuilderSansExtraBold read well but looked like the HUD.
+    Arcade stayed crisp on every background and is used nowhere else. One step larger,
+    because nothing behind it helps it any more.
+  * **Its layout moved to `GameConfig.Labels.Pod`:** `Width` 124, `Height` 48 (was a
+    literal 40, too short for the larger lines), `LiftStuds` 1.2. PromptUI needs them to
+    stack a prompt above the label.
+
+### Instant Hatch
+
+  * **Manifest:** `GameConfig.Store.InWorld` = `{ key "instanthatch", label "INSTANT
+    HATCH", robux 99, product 0, kind "hatch" }`. It sits on no shelf, so ShopUI never
+    draws it.
+  * **`GameConfig.Plant.InstantHatch`:** ActionText "Instant Hatch", key **F** (gamepad
+    ButtonY), no hold, `OfferGapSeconds` 1.
+      - Not E: prompts share a key one at a time, so on E a growing pod beside a ready
+        one could take the key from the free Hatch and open a purchase dialog.
+      - No hold: the purchase dialog is already the confirmation.
+  * **PlantService:**
+      - Every growing pod (unhatched, clock still running) gets an
+        `InstantHatchPrompt` on its PrimaryPart: when planted, when restored, and from
+        the 1 s tick if it is missing. The tick swaps it for the free HatchPrompt when
+        the clock runs out.
+      - Prompt attributes: `Robux` (the capsule's number), `OverPodLabel` (stack
+        above the timer), `ReservedFor` = the garden owner's UserId.
+      - A press calls `PlantService.OfferInstantHatch(player, plot, id)`. It requires
+        the owner, an unhatched pod whose clock is still running, and a product id
+        above 0 (at 0 it warns once per server and does nothing). It opens at most one
+        dialog per second, writes a note (UserId -> plot + placement id), and calls
+        `MarketplaceService:PromptProductPurchase` from the server. **No remote.**
+      - `PlantService.InstantHatch(player)` runs on the receipt. It hatches, in order:
+          1. the noted pod, even if its clock ran out while the dialog was open;
+          2. with no note (a receipt re-delivered after a rejoin), the unhatched pod
+             with the longest wait left;
+          3. with no unhatched pod, nothing: it returns false, the receipt is not
+             acknowledged, and Roblox retries.
+      - `hatch(player, entry, early)`: `early` skips the clock and nothing else. The
+        owner and stage checks, the creature handover, MarkSeen, the "hatch" tutorial
+        step and the save are the free hatch's. The log says "instantly hatched". The
+        duplicated hatch log line is gone.
+  * **StoreService:**
+      - `Store.InWorld` is indexed with the shelves: same ledger, same duplicate-id
+        check.
+      - Kind "hatch" grants through `PlantService.InstantHatch`.
+      - Boot now reports 4 products waiting for an id: the 3 pods and this one.
+  * **PromptUI:**
+      - A prompt with a `Robux` attribute gets the shop's price capsule: white, the
+        client's robux@3x.png tinted ink, the number in LuckiestGuy 17.
+      - The panel width is summed from its row, with a minimum of 170, so every
+        existing prompt is unchanged. It is re-measured whenever a label's
+        TextBounds changes.
+      - `OverPodLabel` prompts anchor on the label's own point and are raised in
+        pixels (half the label + `StackGap` 4 + half the panel): `SizeOffset` on
+        desktop, and camera-up plus the pixel raise in the touch tracker.
+      - `ReservedFor` on the prompt itself hides it from everybody else.
+
+### Tests
+
+  * **`tools/tests/InstantHatchSpec.luau` (new, 33 assertions).** It loads the real
+    PlantService from Source with PlotService, PlayerDataService, CarryService,
+    MarketplaceService and Players stood in. A 5-row garden is restored through
+    OnAssigned into a real Level 1 plot. It covers:
+      - which prompt each pod state carries, and the prompt's properties;
+      - the tick rebuilding a destroyed prompt and swapping it out at ready;
+      - press refusals: a stranger, a ready pod, a grown creature, an unknown id,
+        product 0;
+      - one dialog for the owner, and none on a second press straight after;
+      - receipts: the pressed pod first, then the longest wait, then ready pods, then
+        nothing; a failed handover leaves the pod in place.
+  * **Negative controls:** removing the ownership check fails exactly the stranger
+    test; ignoring `early` fails the 9 receipt tests.
+  * **`StoreSpec`: 15 assertions (5 new).** The world product is listed at 99 and on no
+    shelf; its receipt calls `PlantService.InstantHatch` before Save; when nothing
+    hatches it is retried and not remembered; the snapshot lists it.
+  * **All 22 specs pass.** `git diff --check` is clean and `rojo build` succeeds.
+  * **Play:**
+      - Boot is clean: PlantService says Instant Hatch is waiting for a Developer
+        Product id, and StoreService reports 11 live, 4 waiting.
+      - A preview on unclaimed Plot_02 (4 pods, Tiny to Colossal) had labels at
+        124x48, transparent, Arcade 14/20.
+      - One F prompt shows at a time, 249x52 with the 99 capsule.
+      - `InputHoldBegin` from the client reached the server's Triggered.
+      - A Studio-window frame taken before the font change showed each panel sitting
+        just above its pod's HATCHING and clock.
+
+### Not verified
+
+  * **A real purchase:** the product does not exist yet.
+  * **A picture of the final Arcade billboard:**
+      - MCP `screen_capture` does not draw BillboardGuis.
+      - A desktop grab caught a private window. It was deleted unread and desktop
+        grabs are off.
+      - The font was judged on a ScreenGui stand-in over the real scene instead.
+  * **Touch placement** of the stacked panel on a phone.
+  * **Pressing F on a real PlantService pod in Play:** that needs a pod in the owner's
+    garden. The same path runs in InstantHatchSpec.
+
+### Owner to-do
+
+Create a Developer Product at 99 Robux in the Creator Dashboard and put its id in
+`GameConfig.Store.InWorld` (`product = <id>`), or send the id. Then a Studio test
+purchase from a growing pod should burst that pod and put the creature in your hands.
+
 ## A bought Speed pack speeds you up at once — 2026-09-15 (CLAUDE)  (COMMITTED)
 
 **Owner report:** the Speed bought in the shop only took effect after riding a
