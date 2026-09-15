@@ -56,10 +56,12 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
 
 local StoreService = {}
--- After PlayerDataService (20) and CarryService (45): a receipt can land in the
--- first second of the server's life and both have to be able to answer.
+-- After PlayerDataService (20), CarryService (45) and TreadmillService (60): a
+-- receipt can land in the first second of the server's life and all three have
+-- to be able to answer.
 StoreService.Priority = 66
 
 local STORE = GameConfig.Store
@@ -130,7 +132,18 @@ end
 --==============================================================================
 local function grant(player: Player, item: any): boolean
 	if item.kind == "speed" then
-		return PlayerDataService.AddSpeed(player, item.amount or 0) ~= nil
+		--======================================================================
+		-- THROUGH THE SPEED FAUCET, WHICH IS WHAT MAKES IT RUN FASTER NOW
+		--
+		-- This used to call PlayerDataService.AddSpeed and stop. The score went
+		-- up, but WalkSpeed is CarryService's and only recomputed when something
+		-- asks -- the belt, a take, a drop, a respawn -- so a bought pack did
+		-- nothing until the player rode a mill or stole a pod. Reported exactly
+		-- like that. PayReward is the same one-off grant the Biome Harvest uses:
+		-- it adds the score AND asks CarryService to recompute.
+		--======================================================================
+		return TreadmillService.PayReward(player, item.amount or 0,
+			string.format("the %q pack", tostring(item.key)))
 	elseif item.kind == "cash" then
 		return PlayerDataService.AddCash(player, item.amount or 0) ~= nil
 	elseif item.kind == "pod" then

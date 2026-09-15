@@ -1,5 +1,51 @@
 # Steal a Seed — Session Handoff
 
+## A bought Speed pack speeds you up at once — 2026-09-15 (CLAUDE)  (COMMITTED)
+
+**Owner report:** the Speed bought in the shop only took effect after riding a
+mill or stealing a pod.
+
+**Cause:**
+  * `StoreService.grant` called `PlayerDataService.AddSpeed` and stopped. The
+    score rose, but `WalkSpeed` is CarryService's. It is only recomputed when
+    something asks: a belt tick, a take, a drop, a respawn, a trap.
+  * The same grant also bypassed the Speed faucet rule ("Speed mints in
+    TreadmillService and nowhere else").
+  * The debug console's `SetSpeed`/`AddSpeed` had the same gap.
+
+**Fix:**
+  * A Speed pack now pays through `TreadmillService.PayReward`, the one-off
+    grant the Biome Harvest already uses. It adds the score and calls
+    `CarryService.RefreshWalkSpeed`.
+  * `DebugService`'s two speed actions now call `RefreshWalkSpeed` after
+    `AddSpeed`.
+  * The TreadmillService header comment names the real callers.
+  * Cash and pod grants are unchanged.
+
+**Tests:** `tools/tests/StoreSpec.luau` (new, 10 assertions) loads the REAL
+StoreService and TreadmillService from Source, with MarketplaceService, Players,
+PlayerDataService, CarryService and PlotService stood in, and calls the captured
+ProcessReceipt.
+  * **Speed:** all 6 Speed packs go PayReward -> AddSpeed -> RefreshWalkSpeed ->
+    Save.
+  * **Ledger:**
+      - a Cash pack leaves WalkSpeed alone;
+      - a receipt delivered twice is granted once;
+      - no profile yet, a buyer who has left, or an unknown product: not
+        processed;
+      - granted but not saved: not acknowledged.
+  * **Negative control:** the same spec against the pre-fix StoreService fails
+    the speed check on all 6 packs (`pay=nil add=1 refresh=nil`), which is the
+    reported bug.
+
+**Checks:**
+  * **All 21 specs pass.**
+  * **Play boot:** the server started clean with StoreService showing 11 products
+    live, and the new require order produced no errors.
+
+**Not verified here:** a Studio test purchase clicked through the purchase dialog.
+The owner is re-testing that.
+
 ## Bigger plants take longer walks — 2026-09-15 (CLAUDE)  (APPROVED BY THE OWNER, COMMITTED)
 
 The owner saw a Colossal shuffle about as far as a Tiny. Measured, it was worse

@@ -137,6 +137,10 @@ ACTIONS.SetSpeed = function(player, payload)
 	-- There is only AddSpeed, so a SET is a delta. Reading first also means the
 	-- clamp inside PlayerDataService still owns the ceiling.
 	PlayerDataService.AddSpeed(player, target - (tonumber(profile.Speed) or 0))
+	-- CarryService owns WalkSpeed and recomputes only when asked. Without this
+	-- the new score showed on the HUD and the legs ignored it until a mill or a
+	-- pod -- the same gap a bought Speed pack had.
+	CarryService.RefreshWalkSpeed(player)
 	local now = PlayerDataService.Get(player)
 	return string.format("Speed = %s", GameConfig.compact(now and now.Speed or 0))
 end
@@ -147,6 +151,7 @@ ACTIONS.AddSpeed = function(player, payload)
 		return "AddSpeed: not a number"
 	end
 	PlayerDataService.AddSpeed(player, delta)
+	CarryService.RefreshWalkSpeed(player)
 	local now = PlayerDataService.Get(player)
 	return string.format("Speed = %s", GameConfig.compact(now and now.Speed or 0))
 end

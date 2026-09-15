@@ -1,8 +1,10 @@
 --!strict
 -- Steal a Seed :: TreadmillService
 --
--- THE FAUCET FOR SPEED. The same shape as EconomyService is for cash: this is
--- the only thing in the game that calls PlayerDataService.AddSpeed.
+-- THE FAUCET FOR SPEED. The same shape as EconomyService is for cash: every
+-- Speed a player earns or buys goes through here -- the belt, the Biome Harvest
+-- and a Robux Speed pack, the last two by PayReward. The debug console is the
+-- one other caller of PlayerDataService.AddSpeed, and it is exempt by design.
 --
 --==============================================================================
 -- AND IT NEVER WRITES WalkSpeed
