@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Plants that are not twins, and an Overclock that costs more than its mill — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+## Plants that are not twins, and an Overclock that costs more than its mill — 2026-09-17 (CLAUDE)  (COMMITTED 8913844; AWAITING VISUAL APPROVAL)
 
 **Owner request:** give six species a small flat income bonus so same-rarity plants
 in the same biome stop earning identical money, and re-price the Overclock ladder
@@ -80,7 +80,7 @@ tier 7's 150M), and the removed-biome-gate story (a player "holding 180 million"
     F4 -> set tier 10 shows it in a second, and that is the owner's call.
   * **A purchase at the new price** (it costs $125B of their cash).
 
-## The hatch reveal: a held shell, a burst, and the real plant coming up — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+## The hatch reveal: a held shell, a burst, and the real plant coming up — 2026-09-17 (CLAUDE)  (COMMITTED 3991707; AWAITING VISUAL APPROVAL)
 
 **Owner request:** replace the 0.45 s shell fade with a species reveal, for the free
 hatch and the 99 Robux one, and never let the animation decide whether the reward
@@ -187,7 +187,7 @@ deleted from disk before this was written.
   * **A phone.** No physical device and no emulator run.
   * **Dying mid-reveal.** `CharacterRemoving` clears every live reveal; not staged.
 
-## The approved hatch ladder, and the deadline that carries it — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+## The approved hatch ladder, and the deadline that carries it — 2026-09-17 (CLAUDE)  (COMMITTED c7ee29f; AWAITING VISUAL APPROVAL)
 
 **Owner request:** 30 s / 60 s / 150 s / 360 s / 900 s / 2100 s / 4500 s, Tiny to
 Colossal, with Instant Hatch on every tier and no pod losing time to the change.
@@ -252,7 +252,7 @@ the new field.
     would close it.
   * **A real purchase.**
 
-## Dustbowl pods are procedural again — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+## Dustbowl pods are procedural again — 2026-09-17 (CLAUDE)  (COMMITTED a459536; AWAITING VISUAL APPROVAL)
 
 **Owner request:** drop the AI-mesh Dustbowl pods from `5a91e16` and restore the
 part-built pods exactly as they stood at `6c1f228`, keeping every later fix.
