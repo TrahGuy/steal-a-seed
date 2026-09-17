@@ -56,6 +56,22 @@
 -- PlantedAt is os.time(), not a countdown. A pod left overnight is ready when
 -- you come back; a countdown would have paused the moment you logged off, which
 -- turns a garden into a screensaver and quietly punishes anybody with a life.
+--
+--==============================================================================
+-- AND THE DEADLINE IS WRITTEN ONCE, NOT WORKED OUT AGAIN EVERY BOOT
+--
+-- A pod carries HatchAt: the os.time() it becomes ready, decided when it goes in
+-- the ground from SeedData.GrowSeconds and then never recomputed. It is saved
+-- with the plant, restored with it, and stamped on the model for the clock over
+-- the pod to read.
+--
+-- BECAUSE THE LADDER MOVED. The wait used to come out of a curve that topped out
+-- at five minutes; on 2026-09-17 the owner replaced it with a ladder that ends at
+-- 75 minutes. Anything that recomputed the wait on load would have added over an
+-- hour to every Colossal already in the ground -- so a saved pod with no deadline
+-- of its own is grandfathered through SeedData.LegacyGrowSeconds instead, which
+-- is the promise it was planted under, and the result is written back as its
+-- deadline. One migration, on first load, and never again.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -100,6 +116,10 @@ type Planted = {
 	offset: Vector3,
 	-- os.time(), absolute.
 	plantedAt: number,
+	-- os.time() this pod becomes ready, absolute and decided ONCE: at planting
+	-- from the ladder, or on the first load of an old save from the curve it was
+	-- planted under. Meaningless for a grown plant, which is already out.
+	hatchAt: number,
 	-- STAGE_POD (unhatched) or STAGE_GROWN (a creature you placed). Nothing in
 	-- the ground is ever a sprout any more.
 	stage: number,
@@ -169,6 +189,22 @@ for _, item in ipairs(GameConfig.Store.InWorld or {}) do
 		INSTANT_ITEM = item
 		break
 	end
+end
+
+--==============================================================================
+-- A PRICE WITH NO PRODUCT BEHIND IT IS NOT AN OFFER
+--
+-- Read live, never cached, because a spec swaps the manifest's id under this
+-- service and a cached copy would test nothing.
+--
+-- product = 0 means the owner has not created the Developer Product yet. The
+-- prompt is then not drawn AT ALL -- see attachInstantPrompt -- because a tester
+-- pressing a 99 Robux button that cannot open a dialog learns only that the game
+-- is broken. THIS IS A READINESS GATE, NOT A TIER GATE: with a real id, every
+-- growing tier from Tiny to Colossal carries the prompt at the same price.
+--==============================================================================
+local function instantProductId(): number
+	return if INSTANT_ITEM then tonumber(INSTANT_ITEM.product) or 0 else 0
 end
 
 local function log(message: string)
@@ -554,6 +590,11 @@ local function render(entry: Planted)
 	-- a chorus line, and GardenUI keys its rows on it.
 	model:SetAttribute("PlacementId", entry.id)
 	model:SetAttribute("PlantedAt", entry.plantedAt)
+	-- THE ONE NUMBER THE CLOCK OVER THE POD IS ALLOWED TO USE. PlantUI, GardenUI
+	-- and the tutorial all draw the time left as this minus now, so the panel and
+	-- the prompt can never disagree about when a pod is ready. PlantedAt stays for
+	-- identity and for the progress ring's full length.
+	model:SetAttribute("HatchAt", entry.hatchAt)
 	--==========================================================================
 	-- HATCHING, NOT LOOT
 	--
@@ -606,6 +647,9 @@ local function record(plot: Model): { any }
 			table.insert(list, {
 				SpeciesId = entry.species.Id,
 				PlantedAt = entry.plantedAt,
+				-- Saved, so a rejoin restores the same deadline rather than
+				-- starting the wait again or applying today's ladder to it.
+				HatchAt = entry.hatchAt,
 				Tier = entry.tier,
 				X = entry.offset.X,
 				Z = entry.offset.Z,
@@ -626,10 +670,12 @@ end
 
 --==============================================================================
 -- READY, AND THE PROMPT THAT SAYS SO
+--
+-- One comparison against the pod's own deadline. Nothing here reads the ladder:
+-- a pod that was planted under a different one keeps the wait it was given.
 --==============================================================================
 local function isReady(entry: Planted, now: number): boolean
-	return entry.stage == CreatureModel.STAGE_POD
-		and (now - entry.plantedAt) >= SeedData.GrowSeconds(entry.tier)
+	return entry.stage == CreatureModel.STAGE_POD and now >= entry.hatchAt
 end
 
 local hatch: (Player, Planted, boolean?) -> boolean
@@ -731,6 +777,11 @@ local function attachInstantPrompt(entry: Planted)
 	if not (model and handle and INSTANT_ITEM) or entry.stage ~= CreatureModel.STAGE_POD then
 		return
 	end
+	-- No product, no prompt: a dead button is worse than no button. Every tier is
+	-- offered once an id exists; nothing here looks at the tier.
+	if instantProductId() <= 0 then
+		return
+	end
 	if entry.instant and entry.instant.Parent then
 		return
 	end
@@ -789,7 +840,7 @@ function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId
 	if entry.stage ~= CreatureModel.STAGE_POD or isReady(entry, os.time()) then
 		return false
 	end
-	local productId = if INSTANT_ITEM then tonumber(INSTANT_ITEM.product) or 0 else 0
+	local productId = instantProductId()
 	if productId <= 0 then
 		if not warnedNoProduct then
 			warnedNoProduct = true
@@ -837,7 +888,7 @@ function PlantService.InstantHatch(player: Player): boolean
 		local longest = -math.huge
 		for _, candidate in pairs(byPlot) do
 			if candidate.stage == CreatureModel.STAGE_POD then
-				local left = SeedData.GrowSeconds(candidate.tier) - (now - candidate.plantedAt)
+				local left = candidate.hatchAt - now
 				-- Ties go to the lower id, so the same bed always picks the same pod.
 				if left > longest or (left == longest and entry and candidate.id < entry.id) then
 					longest = left
@@ -1240,13 +1291,17 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 
 	local id = (nextId[plot] or 0) + 1
 	nextId[plot] = id
+	local now = os.time()
 	local entry: Planted = {
 		plot = plot,
 		id = id,
 		species = species,
 		tier = tier,
 		offset = offset,
-		plantedAt = os.time(),
+		plantedAt = now,
+		-- The whole wait, once, off the approved ladder. A grown plant gets the
+		-- same field with the time already past, because nothing reads it.
+		hatchAt = now + (if hatched then 0 else SeedData.GrowSeconds(tier)),
 		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
 		-- Off the placement id, so consecutive plantings come out scattered.
 		-- Re-placing a plant you picked up gives it a NEW bearing, which is the
@@ -1257,7 +1312,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	}
 	byPlot[id] = entry
 	render(entry)
-	if isReady(entry, os.time()) then
+	if isReady(entry, now) then
 		attachHatchPrompt(entry)
 	else
 		-- On the pod the moment it is in the ground, not a tick later.
@@ -1380,6 +1435,23 @@ local function restore(player: Player, plot: Model)
 			end
 
 			--==============================================================
+			-- A SAVE FROM BEFORE THE LADDER HAS NO DEADLINE
+			--
+			-- Its pod was planted under the old curve, which never asked for more
+			-- than five minutes. Handing it today's ladder would add up to seventy
+			-- more to a pod somebody left in the ground last night, so the old
+			-- promise is worked out once, here, and from then on the pod carries
+			-- the deadline in its save like every new one.
+			--
+			-- A pod whose old wait is already over comes back READY, because it
+			-- was ready: the deadline is in the past and isReady says so.
+			--==============================================================
+			local deadline = if row then tonumber(row.HatchAt) else nil
+			if (not deadline or deadline <= 0) and at then
+				deadline = at + SeedData.LegacyGrowSeconds(tier)
+			end
+
+			--==============================================================
 			-- A SAVE FROM BEFORE MANUAL HATCHING HAS NO Stage
 			--
 			-- Under the old rules a plant's stage WAS its clock, so anything
@@ -1391,8 +1463,8 @@ local function restore(player: Player, plot: Model)
 			-- which is what it was.
 			--==============================================================
 			local stage = if row then tonumber(row.Stage) else nil
-			if not stage and species and at then
-				stage = if (now - at) >= SeedData.GrowSeconds(tier)
+			if not stage and species and at and deadline then
+				stage = if now >= deadline
 					then CreatureModel.STAGE_GROWN
 					else CreatureModel.STAGE_POD
 			end
@@ -1445,6 +1517,7 @@ local function restore(player: Player, plot: Model)
 					-- did, on the main bed.
 					offset = clampToPlotRegion(plot, Vector3.new(x, 0, z)),
 					plantedAt = at,
+					hatchAt = deadline or at,
 					stage = stage,
 					facing = facing or facingFor(id),
 					model = nil,
@@ -2029,9 +2102,13 @@ function PlantService.Start()
 	if not INSTANT_ITEM then
 		warn("[Seed/PlantService] GameConfig.Store.InWorld has no \"hatch\" product, "
 			.. "so no pod offers Instant Hatch.")
-	elseif (tonumber(INSTANT_ITEM.product) or 0) <= 0 then
-		log(string.format("Instant Hatch (%d Robux) is drawn on growing pods but is "
-			.. "waiting for a Developer Product id.", INSTANT_ITEM.robux))
+	elseif instantProductId() <= 0 then
+		log(string.format("Instant Hatch (%d Robux) is HIDDEN on every tier: its "
+			.. "Developer Product id is still 0. Nobody sees a dead offer.",
+			INSTANT_ITEM.robux))
+	else
+		log(string.format("Instant Hatch is live on all %d tiers at %d Robux (product %d).",
+			SeedData.TierCount, INSTANT_ITEM.robux, instantProductId()))
 	end
 end
 

@@ -247,20 +247,32 @@ local function body()
 	MapService.ResizePlot(plotModel, 1)
 
 	local now = os.time()
-	local grow1 = SeedData.GrowSeconds(1)
+	--==========================================================================
+	-- EACH ROW CARRIES ITS OWN DEADLINE
+	--
+	-- Since 2026-09-17 a pod's ready time is HatchAt, saved with the plant, and
+	-- these rows set it outright. Written this way the bed is the same bed on any
+	-- ladder: what is nearly ready, what has the longest wait and what is already
+	-- out do not move when the approved timers change. HatchTimerSpec is where the
+	-- ladder itself and the grandfathering of rows WITHOUT a deadline are tested.
+	--==========================================================================
 	-- Placement ids are handed out in row order, 1 to 5.
 	profile.Plants = {
-		-- 1: a Tiny pod two seconds in: a short wait left
-		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 2, X = -8, Z = -4, Stage = 1, Facing = 0 },
+		-- 1: a Tiny pod with most of its wait left
+		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 2, HatchAt = now + 28,
+			X = -8, Z = -4, Stage = 1, Facing = 0 },
 		-- 2: a pod whose clock ran out long ago: ready
-		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 100000, X = 0, Z = -4, Stage = 1, Facing = 0 },
-		-- 3: a heavier pod planted this second: the longest wait in the bed
-		{ SpeciesId = "petalpip", Tier = 4, PlantedAt = now, X = 8, Z = -4, Stage = 1, Facing = 0 },
+		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 100000, HatchAt = now - 99000,
+			X = 0, Z = -4, Stage = 1, Facing = 0 },
+		-- 3: a heavier pod just planted: the longest wait in the bed
+		{ SpeciesId = "petalpip", Tier = 4, PlantedAt = now, HatchAt = now + 360,
+			X = 8, Z = -4, Stage = 1, Facing = 0 },
 		-- 4: a grown creature, already placed
-		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 100000, X = -8, Z = 4, Stage = 3, Facing = 0 },
-		-- 5: a Tiny pod about two seconds from ready
-		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - math.floor(grow1) + 2, X = 8, Z = 4,
-			Stage = 1, Facing = 0 },
+		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 100000, HatchAt = now - 99000,
+			X = -8, Z = 4, Stage = 3, Facing = 0 },
+		-- 5: a Tiny pod a few seconds from ready
+		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 26, HatchAt = now + 4,
+			X = 8, Z = 4, Stage = 1, Facing = 0 },
 	}
 
 	local loadOk, loadErr = pcall(function()

@@ -292,6 +292,17 @@ function ProfileSchema.Sanitise(raw: any): Profile
 			if type(row) == "table" and type(row.SpeciesId) == "string" and SeedData.Get(row.SpeciesId) then
 				local tier = number(row.Tier, 0, 1, SeedData.TierCount)
 				local plantedAt = number(row.PlantedAt, 0, 0, MAX_TIME)
+				--======================================================
+				-- THE POD'S OWN HATCH DEADLINE, OR 0 FOR "NOT WRITTEN YET"
+				--
+				-- Added 2026-09-17 with the approved hatch ladder. A row saved
+				-- before it has no HatchAt, and 0 is what tells PlantService to
+				-- keep the old five-minute-curve promise for that pod instead of
+				-- applying today's much longer ladder to it. Forward migration
+				-- only: nothing is rewritten here, and a row that has the field
+				-- keeps its exact value.
+				--======================================================
+				local hatchAt = number(row.HatchAt, 0, 0, MAX_TIME)
 				local x = number(row.X, 0, -1000, 1000)
 				local z = number(row.Z, 0, -1000, 1000)
 				local facing = number(row.Facing, 0, -360, 360)
@@ -309,6 +320,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 					table.insert(p.Plants, {
 						SpeciesId = row.SpeciesId,
 						PlantedAt = math.floor(plantedAt),
+						HatchAt = math.floor(hatchAt),
 						Tier = math.floor(tier),
 						X = x,
 						Z = z,

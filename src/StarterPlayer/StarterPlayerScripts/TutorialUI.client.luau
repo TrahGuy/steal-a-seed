@@ -413,8 +413,11 @@ local function podIn(plot: Model): Model?
 	if folder then
 		for _, m in folder:GetChildren() do
 			if m:IsA("Model") and m:GetAttribute("Stage") == 1 then
-				local ready = (tonumber(m:GetAttribute("PlantedAt")) or os.time())
-					+ SeedData.GrowSeconds(m:GetAttribute("Tier"))
+				-- The server's stamped deadline; the ladder only as a fallback for
+				-- a model from before pods carried one.
+				local ready = tonumber(m:GetAttribute("HatchAt"))
+					or ((tonumber(m:GetAttribute("PlantedAt")) or os.time())
+						+ SeedData.GrowSeconds(m:GetAttribute("Tier")))
 				if ready < best then
 					best = ready
 					earliest = m
@@ -1149,8 +1152,9 @@ local function refresh()
 		highlight.Enabled = true
 		beaconAnchor.Position = point + Vector3.new(0, 4.6, 0)
 		beacon.Enabled = true
-		local ready = (tonumber(pod:GetAttribute("PlantedAt")) or os.time())
-			+ SeedData.GrowSeconds(pod:GetAttribute("Tier"))
+		local ready = tonumber(pod:GetAttribute("HatchAt"))
+			or ((tonumber(pod:GetAttribute("PlantedAt")) or os.time())
+				+ SeedData.GrowSeconds(pod:GetAttribute("Tier")))
 		local left = math.max(0, math.ceil(ready - os.time()))
 		if left > 0 then
 			subline.Text = "Ready in " .. left .. "s"

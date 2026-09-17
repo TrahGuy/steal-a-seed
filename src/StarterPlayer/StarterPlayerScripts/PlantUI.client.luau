@@ -126,6 +126,9 @@ type Panel = {
 	-- the two are the same species.
 	tier: number,
 	plantedAt: number,
+	-- The server's own deadline for THIS pod, off the model. The plate counts down
+	-- to it and works nothing out for itself; see WHAT IT SAYS.
+	hatchAt: number,
 	stage: number,
 	lastText: string,
 }
@@ -161,6 +164,10 @@ local function build(model: Model): Panel?
 	if not (species and tier and type(plantedAt) == "number") then
 		return nil
 	end
+	-- A pod built before the server stamped deadlines -- or a model seen in the
+	-- one frame before the attribute replicates -- falls back to the ladder.
+	local hatchAt = tonumber(model:GetAttribute("HatchAt"))
+		or (plantedAt + SeedData.GrowSeconds(tier))
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "SeedPlant"
@@ -271,6 +278,7 @@ local function build(model: Model): Panel?
 		species = species,
 		tier = tier,
 		plantedAt = plantedAt,
+		hatchAt = hatchAt,
 		stage = tonumber(model:GetAttribute("Stage")) or STAGE_POD,
 		lastText = "",
 	}
@@ -279,11 +287,14 @@ end
 --==============================================================================
 -- WHAT IT SAYS
 --
--- Recomputed from the same two numbers the server uses -- PlantedAt and the
--- hatch time for THIS POD'S WEIGHT -- rather than from anything pushed across.
--- Nothing to replicate, and it is already correct on the first frame after a
--- rejoin. Reading the species sheet instead would run a 9,000 kg pod's clock at
--- a 2 kg pod's speed and finish it four and a half minutes early.
+-- Counted down to the DEADLINE THE SERVER STAMPED ON THE POD (HatchAt), which is
+-- the same number isReady compares against -- so the plate and the prompt cannot
+-- disagree, and a pod planted under an older, shorter timer shows the wait it was
+-- actually given rather than today's.
+--
+-- The client works nothing out for itself and nothing is pushed across: the
+-- attribute replicates with the model, so the plate is right on the first frame
+-- after a rejoin.
 --
 -- ONLY AN UNHATCHED POD HAS ANYTHING TO SAY. Two things stand in a bed now and
 -- neither of the others wants a plate:
@@ -311,6 +322,8 @@ local function refresh(panel: Panel, now: number)
 	if type(pa) == "number" then
 		panel.plantedAt = pa
 	end
+	-- Re-read for the same reason Stage is: the server can restamp a pod in place.
+	panel.hatchAt = tonumber(model:GetAttribute("HatchAt")) or panel.hatchAt
 	panel.tier = tonumber(model:GetAttribute("Tier")) or panel.tier
 	if not panel.species then
 		panel.species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
@@ -333,7 +346,7 @@ local function refresh(panel: Panel, now: number)
 		hide()
 		return
 	end
-	local remaining = SeedData.GrowSeconds(panel.tier) - (now - panel.plantedAt)
+	local remaining = panel.hatchAt - now
 
 	-- Ready. The prompt takes it from here.
 	if remaining <= 0 then
@@ -363,8 +376,10 @@ local function refresh(panel: Panel, now: number)
 	-- changed, so this costs one Color3 assignment per second per pod rather
 	-- than one per frame.
 	--==========================================================================
-	local total = SeedData.GrowSeconds(panel.tier)
-	local ripeness = if total > 0 then math.clamp(1 - remaining / total, 0, 1) else 1
+	-- The pod's OWN full wait, not the ladder's: an old pod's plate has to ripen
+	-- over the wait it was planted with.
+	local total = math.max(panel.hatchAt - panel.plantedAt, 1)
+	local ripeness = math.clamp(1 - remaining / total, 0, 1)
 	panel.timer.TextColor3 = POD.ClockYoung:Lerp(POD.ClockReady, ripeness)
 
 	-- Sizes are fixed at build(); nothing here resizes anything every tick.

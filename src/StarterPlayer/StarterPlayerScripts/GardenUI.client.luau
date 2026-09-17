@@ -467,6 +467,10 @@ type Occupant = {
 	-- $900/s, which they cannot if the sheet is consulted.
 	tier: number,
 	plantedAt: number,
+	-- The server's deadline for this pod, off the model: the row counts down to it
+	-- instead of re-deriving a wait, so the row, the plate over the pod and the
+	-- prompt all agree, including for a pod planted under an older timer.
+	hatchAt: number,
 	-- STAGE_POD or STAGE_GROWN, off the model. Not derived from the clock any
 	-- more: a pod whose timer ran out an hour ago is STILL a pod until somebody
 	-- hatches it, and a creature you placed a second ago is already grown.
@@ -506,6 +510,9 @@ local function occupants(plot: Model): { Occupant }
 					species = species,
 					tier = tier,
 					plantedAt = plantedAt,
+					-- Absent only on a model from before deadlines were stamped.
+					hatchAt = tonumber(model:GetAttribute("HatchAt"))
+						or (plantedAt + SeedData.GrowSeconds(tier)),
 					stage = stage,
 					id = id,
 				})
@@ -543,7 +550,7 @@ local function stageOf(occupant: Occupant, now: number): (number, number)
 	if occupant.stage ~= STAGE_POD then
 		return STAGE_GROWN, 0
 	end
-	local remaining = SeedData.GrowSeconds(occupant.tier) - (now - occupant.plantedAt)
+	local remaining = occupant.hatchAt - now
 	if remaining > 0 then
 		return STAGE_POD, remaining
 	end
@@ -760,8 +767,10 @@ local function refresh(paint: boolean)
 					else
 						slot.setStageTheme("pod")
 						slot.setReadyPulse(false)
-						local totalSec = SeedData.GrowSeconds(occupant.tier)
-						local frac = if totalSec > 0 then math.clamp(1 - (remaining / totalSec), 0, 1) else 0
+						-- This pod's own full wait, so the bar fills over the time
+						-- it was actually planted with.
+						local totalSec = math.max(occupant.hatchAt - occupant.plantedAt, 1)
+						local frac = math.clamp(1 - (remaining / totalSec), 0, 1)
 						slot.setProgress(frac, band)
 						slot.setStatusTag("⏱ " .. clock(remaining), Color3.fromRGB(250, 205, 75))
 

@@ -1,5 +1,70 @@
 # Steal a Seed — Session Handoff
 
+## The approved hatch ladder, and the deadline that carries it — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+
+**Owner request:** 30 s / 60 s / 150 s / 360 s / 900 s / 2100 s / 4500 s, Tiny to
+Colossal, with Instant Hatch on every tier and no pod losing time to the change.
+
+### One source
+
+`SeedData.GrowSeconds` was a curve (`20 + 280 * (value / topValue) ^ 0.45`, 34 s to
+300 s). It is now a seven-entry literal, **asserted at load** -- a typo in the
+owner's numbers fails the require instead of quietly mistiming every pod. The curve
+survives as `SeedData.LegacyGrowSeconds` for one purpose only, below.
+
+### The deadline
+
+A pod now carries **`HatchAt`**: the `os.time()` it becomes ready, decided ONCE.
+
+  * Planting stamps `now + GrowSeconds(tier)`.
+  * It is saved with the plant (`ProfileSchema` validates `HatchAt`; 0 means "not
+    written yet"), restored with it, and stamped on the model.
+  * `isReady` is one comparison against it. Nothing reads the ladder again, so
+    re-cutting the ladder can never move a pod already in the ground.
+  * **Growth is still absolute time**, so it runs while the player is offline.
+
+### Grandfathering, which is why this was not a one-line change
+
+A pod saved before today has no `HatchAt`. Reading the new ladder for it would have
+added up to **70 minutes** to a Colossal left in the ground overnight. So a row with
+no deadline is given `PlantedAt + LegacyGrowSeconds(tier)` -- the promise it was
+planted under -- once, on first load, and the answer is saved. A legacy pod whose old
+wait is already over comes back READY.
+
+**Seen on the owner's own save, on load:** Paddlehop T1 `PlantedAt 1789469865` ->
+`HatchAt 1789469893.47` (the old curve's 28.47 s), Petalpip T6 -> `+233.49 s`. Both
+are grown, so the deadline changes nothing for them; the only write to the profile is
+the new field.
+
+### Instant Hatch: available on all seven, hidden without a product
+
+  * No tier gate anywhere: every growing pod from Tiny to Colossal carries the F
+    prompt at 99 Robux.
+  * **A product id of 0 now draws NO prompt at all**, on any tier, so a tester never
+    sees a dead 99 Robux button. It is a readiness gate, not a tier gate.
+  * Boot says which: `Instant Hatch is live on all 7 tiers at 99 Robux (product
+    3713212811)`, and StoreService reports `12 product(s) live, 3 still waiting`.
+
+### Measured
+
+  * **HatchTimerSpec: 38 assertions** -- the seven values exactly, the saved deadline
+    winning over the ladder, a legacy Colossal coming back ready rather than 65
+    minutes out, the migration written back once, all seven tiers offered the paid
+    hatch, and no prompt anywhere at product 0.
+  * **The clock over a pod follows the server's number:** re-stamping `HatchAt` to
+    now + 95 / 61 / 9 s printed `1:35`, `1:01`, `0:08` on the plate.
+  * Every client that draws a clock -- PlantUI, GardenUI, TutorialUI -- reads
+    `HatchAt` and falls back to the ladder only for a model built before deadlines
+    existed.
+
+### Not verified
+
+  * **Planting one pod per tier live, and offline progress across a Play restart.**
+    Both write to the owner's garden, which this session was told not to touch. The
+    arithmetic is absolute and specced; a two-minute check in the owner's own session
+    would close it.
+  * **A real purchase.**
+
 ## Dustbowl pods are procedural again — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
 
 **Owner request:** drop the AI-mesh Dustbowl pods from `5a91e16` and restore the

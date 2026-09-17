@@ -1067,25 +1067,70 @@ function SeedData.CarryMultiplier(tier: number?): number
 end
 
 --==============================================================================
--- GROWING
+-- GROWING: SEVEN NUMBERS THE OWNER WROTE DOWN, NOT A CURVE
 --
--- Also from weight, because weight is the stat. A gentle curve on purpose: the
--- heaviest thing in the game takes five minutes, not an afternoon. The wait is
--- a vulnerability window -- somebody can see what is nearly ready in your plot
--- -- and a window nobody is awake for is not a window.
+-- The owner approved this ladder on 2026-09-17, and it IS the timer. It used to
+-- be a curve off the tier's value -- 20 + 280 * (value / topValue) ^ 0.45, which
+-- ran 34 s to 300 s -- and a curve is the wrong shape for this: it is impossible
+-- to say out loud, it moves every tier whenever the value sheet is re-cut, and
+-- the whole range fit inside five minutes, so a Colossal cost no more patience
+-- than a Big.
+--
+--     1 Tiny          30 s
+--     2 Big           60 s          1m
+--     3 Huge         150 s          2m 30s
+--     4 Mega         360 s          6m
+--     5 Giant        900 s         15m
+--     6 Titan      2,100 s         35m
+--     7 Colossal   4,500 s      1h 15m
+--
+-- ABSOLUTE TIME, NOT A COUNTDOWN. PlantService turns this into a per-pod
+-- deadline once, when the pod goes in the ground, and saves that deadline; see
+-- HatchAt there. So growth continues while the player is offline, and re-cutting
+-- this ladder never moves a pod that is already planted.
+--
+-- ONE SOURCE. The server plants with this; the client draws the deadline the
+-- server stamped on the model and never re-derives it from here. Nothing else in
+-- the repository writes a hatch time.
 --==============================================================================
-local GROW_BASE = 20
-local GROW_SPAN = 280
-local GROW_EXP = 0.45
+local GROW_SECONDS = { 30, 60, 150, 360, 900, 2100, 4500 }
+
+-- ASSERTED AT LOAD, because these are the owner's numbers: a typo in them is a
+-- change to the game that nobody asked for, and it would be invisible -- every
+-- pod would simply hatch at the wrong time. A require that fails is louder than
+-- a garden that is subtly wrong.
+assert(table.concat(GROW_SECONDS, ",") == "30,60,150,360,900,2100,4500",
+	"SeedData: the approved hatch ladder has been edited. The owner set "
+		.. "30 / 60 / 150 / 360 / 900 / 2100 / 4500 on 2026-09-17.")
+assert(#GROW_SECONDS == #SeedData.Tiers,
+	"SeedData: the hatch ladder needs exactly one entry per tier.")
+for i = 2, #GROW_SECONDS do
+	assert(GROW_SECONDS[i] > GROW_SECONDS[i - 1],
+		"SeedData: the hatch ladder must rise with the tier.")
+end
 
 function SeedData.GrowSeconds(tier: number?): number
-	-- Off the tier's VALUE against the top tier's, which is exactly what the old
-	-- curve did with kg against MaxKg. Keying it to ladder POSITION instead was
-	-- the first attempt and it put a 7x cliff between the two commonest tiers --
-	-- 20 seconds for a Tiny and 145 for a Big -- because the positions are
-	-- evenly spaced and the values are not.
-	local t = (SeedData.Tier(tier).value / SeedData.Tiers[#SeedData.Tiers].value) ^ GROW_EXP
-	return GROW_BASE + GROW_SPAN * t
+	return GROW_SECONDS[SeedData.Tier(tier).index]
+end
+
+--==============================================================================
+-- AND THE CURVE THE LADDER REPLACED, WHICH OLD PODS ARE STILL OWED
+--
+-- A pod planted before 2026-09-17 was promised at most five minutes, and it was
+-- saved with nothing but the time it went in. Reading the new ladder for it would
+-- silently add over an hour to a Colossal somebody left in the ground overnight.
+--
+-- So PlantService grandfathers a saved pod that has no deadline of its own
+-- through this, and writes the result back as its deadline. NOTHING ELSE MAY
+-- CALL IT: it is the old promise, kept, and not a second timer.
+--==============================================================================
+local LEGACY_BASE = 20
+local LEGACY_SPAN = 280
+local LEGACY_EXP = 0.45
+
+function SeedData.LegacyGrowSeconds(tier: number?): number
+	local t = (SeedData.Tier(tier).value / SeedData.Tiers[#SeedData.Tiers].value) ^ LEGACY_EXP
+	return LEGACY_BASE + LEGACY_SPAN * t
 end
 
 --==============================================================================
