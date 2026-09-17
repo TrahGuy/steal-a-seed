@@ -2250,8 +2250,142 @@ GameConfig.Plant = {
 		-- bounces, would otherwise ask the server to open it over and over.
 		OfferGapSeconds = 1,
 	},
-	-- How long the shell burst lasts before its pieces are gone.
-	BurstSeconds = 0.45,
+	-- How long the shell burst lasts before its pieces are gone. 0.35 since the
+	-- reveal was built: the shell has to be out of the way before the creature
+	-- comes up, or the two read as one pile of parts. See Hatch below.
+	BurstSeconds = 0.35,
+
+	--==========================================================================
+	-- THE REVEAL: WHAT A HATCH LOOKS LIKE, AND WHAT IT IS NOT ALLOWED TO DO
+	--
+	-- Every number the hatch animation uses is here, because the animation runs
+	-- in two places -- the server bursts the shell it owns, each nearby client
+	-- draws the reveal -- and two files guessing at the same timing is how a
+	-- creature comes up through a shell that has not gone yet.
+	--
+	-- THE ANIMATION NEVER DECIDES ANYTHING. The plant is in the player's
+	-- Backpack and the garden is saved before any of this starts; if a client
+	-- never draws a frame of it, the only thing lost is the frame. See
+	-- PlantService.hatch for the order, which is not negotiable.
+	--
+	-- ONE EVENT, NOT A STREAM. The server sends one message with a server
+	-- timestamp and every nearby client animates locally off it. Nothing here is
+	-- per-frame replication.
+	--==========================================================================
+	Hatch = {
+		-- Server -> every client, on the GameEvent remote this file already owns.
+		Action = "HatchReveal",
+		-- Past this, a client ignores the message outright. A hatch on the far
+		-- side of a 1,500 stud road is not worth a model.
+		HearingStuds = 240,
+
+		-- THE HOLD, which is feedback and nothing else. The prompt's own
+		-- HatchHoldSeconds above is the authority; these only shape the rattle.
+		Hold = {
+			-- The shake starts at a tenth of its full violence and arrives there
+			-- as the hold fills, so the pod reads as being worked loose rather
+			-- than as already broken.
+			StartFactor = 0.10,
+			-- Tier-coloured light inside the shell, off the seams, over the hold.
+			GlowBrightness = 2.4,
+			GlowRange = 10,
+			-- Dust off the shell. Small: this is a promise, not the burst.
+			DustRate = 14,
+			DustCap = 26,
+		},
+
+		-- THE BURST. Compress, flash, then outward -- inside BurstSeconds.
+		Burst = {
+			-- How far in the shell is squeezed before it lets go.
+			Compress = 0.92,
+			-- The fraction of the burst spent compressing.
+			CompressShare = 0.30,
+			-- Outward travel, as a multiple of the pod's own diameter, so a Tiny
+			-- does not spray parts across somebody's bed and a Colossal does not
+			-- look like it deflated.
+			SpreadPerDiameter = 0.55,
+			Lift = 2.6,
+			FlashBrightness = 6,
+			FlashRange = 26,
+		},
+
+		-- THE CREATURE. Built by the real builder, at the real tier, then thrown
+		-- away: it cannot be touched, queried, tagged or paid.
+		Reveal = {
+			Seconds = 0.8,
+			ScaleStart = 0.65,
+			-- How far it rises out of the glow, as a multiple of its own height.
+			RiseShare = 0.22,
+			-- The forward lean it settles out of, in degrees. A turn is not
+			-- allowed: a plant that spins reads as a shop viewport, not a reveal.
+			LeanDegrees = 9,
+		},
+
+		-- THE LABEL. Species, rarity and size, and what it pays.
+		Label = {
+			Seconds = 1.5,
+			FadeSeconds = 0.45,
+			NameSize = 34,
+			LineSize = 20,
+			IncomeSize = 26,
+			Width = 300,
+			Height = 108,
+			-- How far above the creature's own head it floats, in studs.
+			Lift = 1.4,
+			NewText = "NEW DISCOVERY",
+		},
+
+		-- THE PAID PULSE. The only difference a purchase makes to the animation:
+		-- a gold ring and no hold.
+		Paid = {
+			PulseSeconds = 0.15,
+			Color = Color3.fromRGB(255, 205, 80),
+		},
+
+		--======================================================================
+		-- TIER INTENSITY: SCALE THE EFFECT, NOT THE RUNTIME
+		--
+		-- A Colossal is a bigger event than a Tiny, and it is NOT a longer one:
+		-- the timings above are shared, and only the counts and sizes below
+		-- change. Anything else turns the seventh hatch of the evening into a
+		-- wait, and the top tiers are the ones a player hatches deliberately.
+		--
+		-- CameraBump is the owner's own camera, Titan and Colossal only, in
+		-- studs, and it is off entirely under Reduced Effects.
+		--======================================================================
+		Tiers = {
+			{ rings = 1, ringScale = 1.6, particles = 18, flash = 0.6, bump = 0, lightning = false },
+			{ rings = 1, ringScale = 1.8, particles = 22, flash = 0.7, bump = 0, lightning = false },
+			{ rings = 1, ringScale = 2.1, particles = 30, flash = 0.9, bump = 0, lightning = false },
+			{ rings = 1, ringScale = 2.4, particles = 38, flash = 1.0, bump = 0, lightning = false },
+			{ rings = 1, ringScale = 2.7, particles = 48, flash = 1.2, bump = 0, lightning = false },
+			{ rings = 2, ringScale = 3.0, particles = 60, flash = 1.4, bump = 0.5, lightning = false },
+			{ rings = 2, ringScale = 3.4, particles = 74, flash = 1.7, bump = 0.9, lightning = true },
+		},
+
+		--======================================================================
+		-- SOUNDS THIS ANIMATION WOULD LIKE AND DOES NOT HAVE
+		--
+		-- The reveal fanfare is real: SFX.RevealFor picks it by the species'
+		-- rarity and SoundKit plays it. These three are named, empty, and
+		-- SILENT -- a cue name here plays that cue, an empty string plays
+		-- nothing at all.
+		--
+		-- NOTHING UNRELATED IS BORROWED FOR THEM. A pod rattle played from the
+		-- mill's belt or the parent's footstep is not a placeholder, it is a
+		-- wrong sound, and it would ship. When the owner records or buys these,
+		-- add the cue to SFX.Cues and name it here.
+		--
+		--   Rattle    a shell working loose, under the 1.1 s hold
+		--   Crack     the shell letting go, on the burst
+		--   TimeSkip  the paid pulse: a wait being skipped
+		--======================================================================
+		Sounds = {
+			Rattle = "",
+			Crack = "",
+			TimeSkip = "",
+		},
+	},
 
 	--==========================================================================
 	-- ONE VERB ON ONE EXISTING REMOTE

@@ -102,6 +102,8 @@ src/StarterPlayer/StarterPlayerScripts/
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
     PlantUI.client.luau         the hatch countdown over an unhatched pod
+    HatchFX.client.luau         the hold's glow and dust, the burst's rings, and the
+                                creature reveal -- one cosmetic event, drawn locally
     PlantPlace.client.luau      click-to-place, the ghost disc, and Put away
     PlantPickUI.client.luau     TOUCH ONLY: tap your grown plant to select it,
                                 then a real button picks it up

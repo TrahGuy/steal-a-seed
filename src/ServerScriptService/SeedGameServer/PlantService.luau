@@ -176,6 +176,7 @@ local PLANT_RANGE = PLANTING.RangeStuds
 local EDGE_MARGIN = PLANTING.EdgeMarginStuds
 local HATCH_HOLD = PLANTING.HatchHoldSeconds
 local BURST = PLANTING.BurstSeconds
+local HATCH = PLANTING.Hatch
 local PLACE_ACTION = PLANTING.PlaceAction
 local PICKUP_ACTION = PLANTING.PickUpAction
 local INSTANT = PLANTING.InstantHatch
@@ -554,6 +555,27 @@ local attachPickup: (Planted) -> ()
 -- on, and stopWander is defined with the rest of the wander further down.
 local stopWander: (Planted) -> ()
 
+--==============================================================================
+-- WHERE A PLANTED THING STANDS
+--
+-- The soil under its offset, turned to face back down its own plot, plus its own
+-- bearing. ONE definition, because render() builds the model from it and the
+-- hatch reveal has to put the creature in exactly the same place -- and the
+-- obvious shortcut, reading the pod model's pivot, is wrong twice: a pod's pivot
+-- is its shell's CENTRE rather than its base, and the shell is a cylinder that
+-- was rolled ninety degrees to stand up, so its frame's "down" points sideways.
+--==============================================================================
+local function standCF(entry: Planted): CFrame?
+	local soil = soilOf(entry.plot)
+	if not soil then
+		return nil
+	end
+	local base = topOf(soil, entry.offset)
+	return CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
+		* entry.plot:GetPivot().Rotation
+		* CFrame.Angles(0, entry.facing, 0)
+end
+
 local function render(entry: Planted)
 	--==========================================================================
 	-- A REBUILT MODEL HAS NO LEG
@@ -572,20 +594,15 @@ local function render(entry: Planted)
 	end
 	entry.model = nil
 	dropAnchor(entry)
-	local soil = soilOf(entry.plot)
-	if not soil then
+	-- The gate is the reference -- the 180 in standCF turns a plant to look back
+	-- down its own plot rather than out of the fence -- and each plant's own
+	-- bearing is added on top of it there.
+	local where = standCF(entry)
+	if not where then
 		return
 	end
-
-	-- The gate is still the reference -- the 180 turns a plant to look back down
-	-- its own plot rather than out of the fence -- and each plant's own bearing
-	-- is added on top of it. Applied LAST, so it is a turn about the plant's own
-	-- up axis whatever the plot's rotation on the ring happens to be.
-	local base = topOf(soil, entry.offset)
 	local model = CreatureModel.Build(entry.species, entry.tier, entry.stage,
-		CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
-			* entry.plot:GetPivot().Rotation
-			* CFrame.Angles(0, entry.facing, 0), plantsFolder(entry.plot))
+		where, plantsFolder(entry.plot))
 	-- IDENTITY, not position. PlantSway phases its idle off this so a bed is not
 	-- a chorus line, and GardenUI keys its rows on it.
 	model:SetAttribute("PlacementId", entry.id)
@@ -1000,29 +1017,87 @@ end
 -- before it starts flying -- otherwise the sway fights the burst for the same
 -- pivot and the pieces snap back to centre every frame.
 --==============================================================================
-local function burst(model: Model)
+--==============================================================================
+-- IT COMPRESSES BEFORE IT LETS GO
+--
+-- A shell that only flies apart reads as a deletion with extra steps. A shell
+-- that squeezes first, flashes from inside, and THEN comes apart reads as
+-- something breaking out of it -- which is the event. Three tenths of a second
+-- either way; the difference is entirely in the order.
+--
+-- SPREAD IS THE POD'S OWN DIAMETER, not a fixed 3.4 studs. That number was
+-- right for a 1.66-stud Tiny and threw a Colossal's pieces across the bed and
+-- through the fence.
+--
+-- NOTHING HERE IS PHYSICS. Every piece stays anchored and stops being queryable
+-- the moment the tag comes off, so a burst can neither push a player nor be
+-- clicked. The whole model is destroyed a frame after the burst ends.
+--==============================================================================
+local function burst(model: Model, tier: number)
 	CollectionService:RemoveTag(model, GameConfig.Tags.Planted)
+	local B = HATCH.Burst
 	local origin = model:GetPivot().Position
+	local diameter = SeedData.PodDiameter(tier)
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("ProximityPrompt") or d:IsA("BillboardGui") then
 			d:Destroy()
 		end
 	end
+
+	-- The flash lives on the shell and dies with it, so there is no light to
+	-- clean up and nothing to leak if this model is destroyed early.
+	local host = model.PrimaryPart
+	if host then
+		local flash = Instance.new("PointLight")
+		flash.Name = "HatchFlash"
+		flash.Color = SeedData.ColorForTier(tier)
+		flash.Brightness = B.FlashBrightness
+		flash.Range = B.FlashRange
+		flash.Shadows = false
+		flash.Parent = host
+		TweenService:Create(flash,
+			TweenInfo.new(BURST, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{ Brightness = 0 }):Play()
+	end
+
+	local pieces = {}
 	for _, d in ipairs(model:GetDescendants()) do
 		if d:IsA("BasePart") then
 			d.CanQuery = false
-			local away = d.Position - origin
-			-- A part sitting exactly on the pivot has no direction of its own,
-			-- so it goes straight up rather than nowhere.
-			local dir = if away.Magnitude > 0.05 then away.Unit else Vector3.new(0, 1, 0)
-			local goal = d.CFrame + (dir * 3.4 + Vector3.new(0, 2.6, 0))
-			TweenService:Create(d,
-				TweenInfo.new(BURST, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					CFrame = goal * CFrame.Angles(math.rad(55), math.rad(40), math.rad(25)),
-					Transparency = 1,
-				}):Play()
+			d.CanCollide = false
+			d.CanTouch = false
+			table.insert(pieces, d)
 		end
 	end
+
+	local squeeze = BURST * B.CompressShare
+	local fly = math.max(BURST - squeeze, 0.05)
+	for _, d in ipairs(pieces) do
+		local toward = origin + (d.Position - origin) * B.Compress
+		TweenService:Create(d,
+			TweenInfo.new(squeeze, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				CFrame = CFrame.new(toward) * (d.CFrame - d.Position),
+				Size = d.Size * B.Compress,
+			}):Play()
+	end
+
+	task.delay(squeeze, function()
+		for _, d in ipairs(pieces) do
+			if d.Parent then
+				local away = d.Position - origin
+				-- A part sitting exactly on the pivot has no direction of its
+				-- own, so it goes straight up rather than nowhere.
+				local dir = if away.Magnitude > 0.05 then away.Unit else Vector3.new(0, 1, 0)
+				local goal = d.CFrame
+					+ (dir * diameter * B.SpreadPerDiameter + Vector3.new(0, B.Lift, 0))
+				TweenService:Create(d,
+					TweenInfo.new(fly, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+						CFrame = goal * CFrame.Angles(math.rad(55), math.rad(40), math.rad(25)),
+						Transparency = 1,
+					}):Play()
+			end
+		end
+	end)
 	task.delay(BURST + 0.05, function()
 		if model.Parent then
 			model:Destroy()
@@ -1067,12 +1142,76 @@ local function lift(model: Model)
 end
 
 --==============================================================================
+-- THE REVEAL IS ANNOUNCED ONCE, AND IT OWNS NOTHING
+--
+-- One message per hatch, to every client, carrying what the reveal needs to draw
+-- itself: which species, which tier, what it pays, where the pod stood, who owns
+-- it, whether it was paid for, whether it was a first discovery, and the SERVER
+-- TIME it happened. Each nearby client animates locally from that; no CFrame is
+-- streamed and no client is asked to confirm anything.
+--
+-- SENT AFTER THE REWARD IS BANKED AND SAVED, always. Nothing below is allowed to
+-- decide whether a hatch happened -- if this message is never sent, or every
+-- client drops it, the player still has the plant and the garden is still saved.
+--
+-- OnRevealed is for the server side of the same event: SoundCues and HatchFX
+-- live on the client, but a service that wants to know a hatch happened should
+-- not have to listen to a remote it does not own. The spec uses it too.
+--==============================================================================
+local revealChannel: RemoteEvent? = nil
+local onRevealed: { (any) -> () } = {}
+local revealToken = 0
+
+function PlantService.OnRevealed(fn: (any) -> ()): () -> ()
+	table.insert(onRevealed, fn)
+	return function()
+		local i = table.find(onRevealed, fn)
+		if i then
+			table.remove(onRevealed, i)
+		end
+	end
+end
+
+local function announceReveal(payload: any)
+	for _, fn in ipairs(onRevealed) do
+		local ok, err = pcall(fn, payload)
+		if not ok then
+			warn("[Seed/PlantService] reveal listener failed: " .. tostring(err))
+		end
+	end
+	local channel = revealChannel
+	if channel then
+		-- pcall because a cosmetic message is never worth an error inside the
+		-- call that just handed somebody a plant.
+		pcall(function()
+			channel:FireAllClients(HATCH.Action, payload)
+		end)
+	end
+end
+
+--==============================================================================
 -- HATCHING
 --
 -- The creature is handed over BEFORE the pod is destroyed. The other order
 -- loses the whole raid if the player has no Backpack at that instant -- dying
 -- with the prompt held is enough -- and a prize that evaporates because of a
 -- frame is the worst bug this game can have.
+--
+--==============================================================================
+-- THE ORDER, WHICH IS NOT NEGOTIABLE
+--
+--   1. the guards          -- yours, a pod, ready or paid for
+--   2. the Tool            -- in their Backpack, and it is theirs from here
+--   3. out of the garden   -- the authoritative table, and the anchor with it
+--   4. saved               -- the profile knows before anything is drawn
+--   5. Almanac, tutorial   -- and MarkSeen says whether this was a discovery
+--   6. the payload         -- read off the pod while it still stands
+--   7. the decoration      -- the shell bursts, the clients are told
+--
+-- NOT ONE YIELD ANYWHERE IN 1 TO 6. No wait, no animation, no remote round trip
+-- and no client acknowledgement: a player who disconnects, dies or crashes at
+-- any point during step 7 keeps the plant, because the plant was already theirs
+-- before step 7 began.
 --==============================================================================
 function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	local byPlot = growing[entry.plot]
@@ -1097,7 +1236,18 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	if not early and not isReady(entry, os.time()) then
 		return false
 	end
-	if not CarryService.GiveHatched(player, entry.species, entry.tier) then
+	--==========================================================================
+	-- THE EQUIP WAITS FOR THE REVEAL, THE TOOL DOES NOT
+	--
+	-- The Tool is created and owned NOW. Putting it in their hands is held back
+	-- until the creature has finished coming up, because equipping mid-burst
+	-- replaces the reveal with a first-person view of the same plant -- and
+	-- CarryService does the waiting, with its own guards, because a hand is its
+	-- department and not this one's.
+	--==========================================================================
+	local equipAfter = BURST + HATCH.Reveal.Seconds
+		+ (if early then HATCH.Paid.PulseSeconds else 0)
+	if not CarryService.GiveHatched(player, entry.species, entry.tier, equipAfter) then
 		return false
 	end
 	-- Said here rather than in CarryService, which also hands a Tool over for a
@@ -1113,14 +1263,38 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	local model = entry.model
 	entry.model = nil
 	dropAnchor(entry)
-	if model and model.Parent then
-		burst(model)
-	end
 	persist(entry.plot)
 	-- THE REVEAL IS THE HATCH. Until the shell breaks you do not know which
-	-- species you had, so this is the moment the Almanac learns it.
-	PlayerDataService.MarkSeen(player, entry.species.Id)
+	-- species you had, so this is the moment the Almanac learns it. It answers
+	-- TRUE only the first time, which is exactly what the label needs to know.
+	local discovered = PlayerDataService.MarkSeen(player, entry.species.Id)
 	PlayerDataService.RecordTutorial(player, "hatch")
+
+	-- Everything from here is decoration. The plant is theirs and the garden is
+	-- saved; step 7 of the order above.
+	-- WHERE THE REVEAL STANDS: the same CFrame render() built the pod on, which is
+	-- the soil under it and the way it was facing. See standCF.
+	local where = standCF(entry)
+	revealToken += 1
+	announceReveal({
+		token = revealToken,
+		species = entry.species.Id,
+		tier = entry.tier,
+		rarity = entry.species.Rarity,
+		-- The same figure the garden panel and the pop print, from the same
+		-- function, so a reveal cannot advertise a rate the plant will not pay.
+		income = SeedData.IncomePerSecond(entry.species, entry.tier),
+		cf = where,
+		owner = player,
+		paid = early == true,
+		discovery = discovered,
+		-- Server time, so every client starts the same animation at the same
+		-- moment without being told each frame.
+		at = Workspace:GetServerTimeNow(),
+	})
+	if model and model.Parent then
+		burst(model, entry.tier)
+	end
 	return true
 end
 
@@ -1151,6 +1325,8 @@ function pickUp(player: Player, entry: Planted): boolean
 	if entry.stage ~= CreatureModel.STAGE_GROWN then
 		return false
 	end
+	-- Straight into their hands, as it always was: a pickup is not a reveal and
+	-- there is nothing to wait for.
 	if not CarryService.GiveHatched(player, entry.species, entry.tier) then
 		return false
 	end
@@ -2020,6 +2196,8 @@ function PlantService.Start()
 	local remotes = SeedGame:FindFirstChild("Remotes")
 	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if channel and channel:IsA("RemoteEvent") then
+		-- The same channel carries the reveal outward; see announceReveal.
+		revealChannel = channel
 		table.insert(serviceConnections, channel.OnServerEvent:Connect(
 			function(player: Player, action: any, payload: any)
 				if action == PLACE_ACTION then

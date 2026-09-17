@@ -31,7 +31,6 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -65,97 +64,23 @@ do
 end
 
 --==============================================================================
--- THE REVEAL
+-- THE REVEAL IS NOT THIS SCRIPT'S ANY MORE
 --
--- THE HATCH IS THE ONLY MOMENT THIS GAME REVEALS ANYTHING. A pod is anonymous
--- from the nest to the ground to the shell breaking -- the hotbar says ???, the
--- Garden says ???, and the pod's colour is its WEIGHT and not its species. So
--- the sound that plays when the shell opens is carrying the whole payoff of the
--- feature.
+-- It used to be armed HERE, by watching for a prompt named HatchPrompt and then
+-- listening for a hatched Tool to arrive in the Backpack inside a four-second
+-- window. That worked for the free hatch and could not work for the paid one:
+-- INSTANT HATCH ARRIVES AS A RECEIPT, with no prompt held and often no prompt on
+-- screen at all, so a 99 Robux hatch could hand over the plant in silence.
 --
--- WHY IT IS NOT SIMPLY "A HATCHED TOOL ARRIVED". Three different things put a
--- hatched Tool in the Backpack: the hatch, picking a grown plant back up, and a
--- rejoin restoring the hotbar. The last one puts SEVERAL in at once, which
--- without a guard would greet every returning player with a fanfare per plant
--- they happened to be holding when they left.
+-- The server now announces every successful hatch on the GameEvent remote, free
+-- and paid alike, and HatchFX plays the rarity fanfare off that one message --
+-- exactly once, at the pod, for everybody near enough to see the shell open. The
+-- window, the Tool watching and the guesswork are all gone with it; a Tool
+-- arriving in the Backpack is no longer a sound at all, which is also why a
+-- rejoin restoring five plants is silent.
 --
--- So the prompt opens a window and the Tool has to arrive inside it.
--- PromptTriggered on the client fires for the local player only, and the prompt
--- that hatches is the only one named HatchPrompt. Picking a plant up involves no
--- prompt at all.
+-- See GameConfig.Plant.Hatch.Action and HatchFX.client.
 --==============================================================================
-local revealUntil = 0
--- Generous. It covers the server round trip, the model build and a bad frame,
--- and the only thing a too-long window can do is let a PICK UP within four
--- seconds of a hatch borrow the fanfare -- which is a sound in the right family
--- at the wrong moment, not a wrong sound.
-local REVEAL_WINDOW = 4
-
-ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt)
-	if prompt.Name == "HatchPrompt" then
-		revealUntil = os.clock() + REVEAL_WINDOW
-	end
-end)
-
-local REVEAL_FOR: { [string]: string } = (SFX.RevealFor :: any)
-
-local function onTool(tool: Instance)
-	if not tool:IsA("Tool") or tool:GetAttribute("Hatched") ~= true then
-		return
-	end
-	if os.clock() > revealUntil then
-		return
-	end
-	revealUntil = 0
-
-	local id = tool:GetAttribute("SpeciesId")
-	local species = if type(id) == "string" then SeedData.Get(id) else nil
-	--==========================================================================
-	-- THE FORM'S RARITY, NOT THE WEIGHT BAND
-	--
-	-- Two vocabularies in this game share four words. What the hatch reveals is
-	-- the SHAPE -- which is what the Index spells and what the tooltip prints --
-	-- and not SeedData.RarityForKg, which is how heavy this particular one is
-	-- and is already legible as the colour of the shell.
-	--==========================================================================
-	local rarity = if species then species.Rarity else "Common"
-	SoundKit.play(REVEAL_FOR[rarity] or "RevealCommon")
-end
-
-local function watch(container: Instance)
-	for _, child in ipairs(container:GetChildren()) do
-		onTool(child)
-	end
-	container.ChildAdded:Connect(onTool)
-end
-
-do
-	local backpack = player:FindFirstChildOfClass("Backpack")
-	if backpack then
-		watch(backpack)
-	end
-	--==========================================================================
-	-- THE BACKPACK IS REPLACED ON EVERY RESPAWN
-	--
-	-- Not emptied -- replaced. A connection to the one that existed at join is a
-	-- connection to an instance nothing puts anything in any more, which is a
-	-- reveal that works exactly until the first time somebody dies.
-	--==========================================================================
-	player.ChildAdded:Connect(function(child: Instance)
-		if child:IsA("Backpack") then
-			watch(child)
-		end
-	end)
-	-- And a Tool goes straight to the CHARACTER when it is equipped, which is
-	-- where the hatch's own Tool lands if the player had an empty hand.
-	local function watchCharacter(character: Model)
-		watch(character)
-	end
-	if player.Character then
-		watchCharacter(player.Character)
-	end
-	player.CharacterAdded:Connect(watchCharacter)
-end
 
 --==============================================================================
 -- THE MILL SAYING NO

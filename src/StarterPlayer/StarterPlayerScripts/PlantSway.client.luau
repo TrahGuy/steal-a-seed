@@ -140,6 +140,19 @@ local STAGE_POD = 1
 -- looks like it is coming apart.
 local SHAKE_AMP = math.rad(13)
 local SHAKE_HZ = 27
+--==============================================================================
+-- AND IT ARRIVES THERE, RATHER THAN STARTING THERE
+--
+-- The rattle used to snap to full violence on the first frame of the hold, which
+-- read as a pod that was already broken and made the 1.1 s hold feel like a
+-- formality. It now starts at a tenth of the amplitude and gets there as the hold
+-- fills, so the shell reads as being worked loose by the player holding the key.
+--
+-- Both numbers are in GameConfig: the hold's length is the prompt's own
+-- HatchHoldSeconds, and the floor is Plant.Hatch.Hold.StartFactor.
+--==============================================================================
+local HATCH_HOLD = GameConfig.Plant.HatchHoldSeconds
+local SHAKE_FLOOR = GameConfig.Plant.Hatch.Hold.StartFactor
 -- How much a ready pod breathes, as a fraction of a full-grown plant's lean.
 local READY_SCALE = 0.35
 
@@ -379,6 +392,8 @@ type Sway = {
 	ready: boolean,
 	-- Somebody is holding E on it right now.
 	hatching: boolean,
+	-- os.clock() the hold began, so the rattle can ramp with it.
+	hatchStart: number,
 	-- The two attribute watches above, held so forget() can drop them. A plot
 	-- churns plants for as long as the session lasts, and a list that only ever
 	-- grows is a leak even when every connection in it is already inert.
@@ -712,6 +727,7 @@ local function remember(instance: Instance)
 			pod = stage == STAGE_POD,
 			ready = model:GetAttribute("Ready") == true,
 			hatching = model:GetAttribute("Hatching") == true,
+			hatchStart = os.clock(),
 			watches = {},
 
 			from = nil,
@@ -1284,6 +1300,9 @@ local function remember(instance: Instance)
 			table.insert(entry.watches,
 				model:GetAttributeChangedSignal("Hatching"):Connect(function()
 					entry.hatching = model:GetAttribute("Hatching") == true
+					if entry.hatching then
+						entry.hatchStart = os.clock()
+					end
 					if not entry.hatching and model.Parent then
 						-- Let go early and it settles rather than freezing
 						-- mid-rattle.
@@ -1315,13 +1334,17 @@ local function apply(entry: Sway, now: number)
 	-- might have been doing is interesting.
 	--==========================================================================
 	if entry.hatching then
-		local t = now * SHAKE_HZ
+		-- How far into the hold this is: the rattle grows with it.
+		local held = math.clamp((os.clock() - entry.hatchStart) / HATCH_HOLD, 0, 1)
+		local ramp = SHAKE_FLOOR + (1 - SHAKE_FLOOR) * held
+		local t = now * SHAKE_HZ * (0.55 + 0.45 * ramp)
 		-- Two prime-ish rates and an offset, so it rattles rather than swings.
-		local sx = SHAKE_AMP * math.sin(t)
-		local sz = SHAKE_AMP * math.sin(t * 1.41 + 1.7)
+		local sx = SHAKE_AMP * ramp * math.sin(t)
+		local sz = SHAKE_AMP * ramp * math.sin(t * 1.41 + 1.7)
 		-- A small hop on top of the rattle. Rectified, so it only ever leaves
 		-- the soil -- a pod sinking into the bed reads as a bug.
-		local hop = math.abs(math.sin(t * 0.5)) * math.min(entry.headHeight * 0.10, 0.35)
+		local hop = math.abs(math.sin(t * 0.5)) * ramp
+			* math.min(entry.headHeight * 0.10, 0.35)
 		entry.model:PivotTo(entry.anchor
 			* CFrame.new(0, hop, 0)
 			* CFrame.Angles(sx, 0, sz)

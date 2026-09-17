@@ -1023,8 +1023,20 @@ end
 -- creature is a different shape from the pod it came out of -- a Bellchime's
 -- skirt is far wider than its shell ever was.
 --==============================================================================
+--==============================================================================
+-- AND WHY IT MAY BE ASKED TO WAIT
+--
+-- `equipAfter` is the hatch's, and nothing else passes it. A hatch now plays a
+-- reveal over the pod's grave -- the real creature, coming up out of the glow --
+-- and equipping the Tool the instant it is created replaces that with the same
+-- plant held at arm's length in front of the camera. So the hatch asks for the
+-- hand a second later, and the Tool is theirs the whole time.
+--
+-- EVERY OTHER CALLER IS UNCHANGED: nil means equip now, which is what a pickup
+-- and a rejoin have always done.
+--==============================================================================
 function CarryService.GiveHatched(player: Player, species: SeedData.Species,
-	tier: number): boolean
+	tier: number, equipAfter: number?): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false
@@ -1102,12 +1114,48 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- equipping on top of it would stack two objects in the same place. The
 	-- creature still lands in the hotbar; it just waits until their hands are
 	-- their own again.
-	local character = player.Character
-	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
-	if humanoid and not CarryService.IsCarrying(player) then
+	--
+	-- AND IT IS STILL BEST-EFFORT WHEN IT WAITS. Held back for a reveal, every
+	-- one of those conditions can have changed by the time the hand is free:
+	-- they may have died, left, picked up a raid pod, opened their own hotbar and
+	-- chosen something else, or planted the thing already. Each is checked again
+	-- at the moment of the equip, and any of them simply leaves the plant in the
+	-- hotbar -- which is where the player can see it.
+	--
+	-- NOTHING IS EVER UNEQUIPPED for this. A player who chose a bat during the
+	-- reveal keeps the bat.
+	local function equipNow()
+		if tool.Parent ~= player:FindFirstChildOfClass("Backpack") then
+			return
+		end
+		local character = player.Character
+		local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+		if not humanoid or humanoid.Health <= 0 then
+			return
+		end
+		if CarryService.IsCarrying(player) then
+			return
+		end
+		-- Something else is already in their hands, and it was their choice.
+		if character:FindFirstChildOfClass("Tool") then
+			return
+		end
 		pcall(function()
 			humanoid:EquipTool(tool)
 		end)
+	end
+
+	local wait = tonumber(equipAfter) or 0
+	if wait > 0 then
+		task.delay(wait, equipNow)
+	else
+		local character = player.Character
+		local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+		if humanoid and not CarryService.IsCarrying(player) then
+			pcall(function()
+				humanoid:EquipTool(tool)
+			end)
+		end
 	end
 	--==========================================================================
 	-- NO LOG HERE. THIS FUNCTION DOES NOT KNOW WHY IT WAS CALLED.

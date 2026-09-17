@@ -1,5 +1,112 @@
 # Steal a Seed — Session Handoff
 
+## The hatch reveal: a held shell, a burst, and the real plant coming up — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+
+**Owner request:** replace the 0.45 s shell fade with a species reveal, for the free
+hatch and the 99 Robux one, and never let the animation decide whether the reward
+landed.
+
+### The order, which is the whole point
+
+`PlantService.hatch` now runs, with no yield anywhere in 1 to 6:
+
+1. the guards -- yours, a pod, ready or paid for;
+2. `CarryService.GiveHatched` creates the Tool in the Backpack;
+3. the entry leaves the authoritative table, and its anchor with it;
+4. `persist` saves the garden;
+5. `MarkSeen` (which answers TRUE only the first time -- that IS the NEW DISCOVERY
+   flag) and `RecordTutorial`;
+6. the payload is read off the pod;
+7. **then** the shell bursts and `announceReveal` tells every client.
+
+A player who disconnects, dies or crashes during 7 keeps the plant. `announceReveal`
+also fires `PlantService.OnRevealed`, which is how the spec watches a hatch without a
+remote.
+
+### What the client does with one message
+
+`HatchFX.client.luau` (new) owns the whole animation, locally, from one event with a
+server timestamp -- no CFrame is streamed:
+
+  * **The hold.** The rattle is still PlantSway's (it already moves every planted
+    model): it now RAMPS with the hold instead of snapping to full violence.
+    HatchFX adds the tier-coloured inner glow and dust, and removes them on release.
+  * **The burst** (0.35 s, server side): the shell compresses to 92%, flashes from
+    inside, then comes apart -- outward travel scaled to the pod's own diameter
+    rather than a fixed 3.4 studs, which used to throw a Colossal's pieces through
+    the fence. Client side: rings over the soil, sparks, and the Colossal's crack.
+  * **The creature** (0.8 s): the REAL `CreatureModel` build at the real tier, at
+    65% scale rising to 100% with a lean it settles out of. Every tag stripped,
+    nothing collidable, queryable, promptable or paid. Destroyed at the end.
+  * **The label** (1.5 s, then fades): species, `RARITY • TIER`, `+$N/s` from
+    `SeedData.IncomePerSecond`, plus NEW DISCOVERY, in the HUD's own LuckiestGuy and
+    outline with no plate. Legendary and above get the bounded shimmer.
+  * **Paid:** a 0.15 s gold ring and no hold. Free 1.15 s, paid 1.30 s.
+  * **Owner only:** the camera bump (Titan and Colossal), and the equip.
+
+### The equip waits, the Tool does not
+
+`CarryService.GiveHatched(player, species, tier, equipAfter)`. Only the hatch passes
+the fourth argument; a pickup and a rejoin equip immediately exactly as before. When
+it waits, the equip is re-checked at the moment it fires: the Tool is still in that
+player's Backpack, they are alive, not carrying a raid pod, and nothing else is in
+their hands. Nothing is ever unequipped for it.
+
+### The sound bug the owner spotted
+
+`SoundCues` armed the rarity fanfare by watching for a prompt named `HatchPrompt`,
+so **a 99 Robux hatch could hand the plant over in silence** -- a receipt holds no
+prompt. That whole block is gone; HatchFX plays `Sfx.RevealFor[rarity]` off the
+authoritative event, once, at the pod, for everyone near enough to see it.
+
+**Three sounds are declared and SILENT, and want assets:** `Plant.Hatch.Sounds` has
+`Rattle` (the shell working loose under the hold), `Crack` (the shell letting go) and
+`TimeSkip` (the paid pulse), all `""`. Nothing unrelated was borrowed for them. Add a
+cue to `Sfx.Cues` and name it there.
+
+### Measured in Play, with no save touched
+
+A temporary probe fired 38 fabricated reveals beside the player and counted what the
+client built. It planted nothing and wrote no profile, and both probe files were
+deleted from disk before this was written.
+
+  * **The label, verbatim on a Colossal Supernovus:** `SUPERNOVUS` /
+    `MYTHIC • COLOSSAL` / `+$66.5K/s` / `NEW DISCOVERY`. Income compaction across the
+    seven: `+$4/s`, `+$39/s`, `+$210/s`, `+$1.17K/s`, `+$5.45K/s`, `+$31.2K/s`,
+    `+$66.5K/s`. NEW DISCOVERY appeared only when the payload said so.
+  * **Tier intensity:** 1 ring for Tiny to Giant, 2 for Titan and Colossal, and 3
+    bolts on the Colossal only. A paid hatch adds its own ring.
+  * **The camera:** peak vertical nudge 0.0264 to 0.0574 studs on Titan and Colossal,
+    **0.0000 on tiers 1 to 5** and **0.0000 for a reveal whose owner was not this
+    client** -- who still saw the rings, the creature and the label.
+  * **Concurrency:** two overlapping reveals ran as 3 folders with their own models,
+    labels and lights, and cleaned up independently.
+  * **Twenty in a row, 0.18 s apart:** peaked at 17 concurrent folders / 905 parts
+    and drained 17 -> 15 -> 12 -> 9 -> 7 -> 4 -> 3 -> 0. **Final census: 0 folders,
+    0 parts, 0 lights, 0 emitters, 0 labels.** Nothing accumulates.
+  * **Reduced Effects (`SeedAfterimageQuality = "Off"`):** bolts 3 -> 1, particles
+    halved, camera peak 0.0000, and the creature and label unchanged.
+  * **The hold, on a fixture pod 700 studs up:** glow 0.34 -> 0.83 -> 1.45 -> 2.40
+    and dust 2.0 -> 4.8 -> 8.4 -> 14.0/s across the 1.1 s. Cancelled at 0.15 s,
+    0.55 s and 1.05 s: drift **0.000000** studs, tilt **0.0000 deg**, glow and dust
+    both gone.
+  * **HatchRevealSpec: 60 assertions.** All 25 specs pass, `rojo build` succeeds,
+    `git diff --check` is clean, and the Play console had no errors or warnings.
+
+### Not verified
+
+  * **A real purchase** (99 Robux of the owner's money) and **a live E-hold to
+    hatch**: both need the owner's own garden, which this session was told not to
+    modify. The paid path is driven end to end in HatchRevealSpec through the same
+    `hatch()`.
+  * **Audibly**: I cannot hear the session. No SoundKit warning appeared, and the
+    reveal has exactly one call site.
+  * **A second client** seeing the world reveal: verified from the owner's client by
+    firing a reveal owned by nobody (world reveal drawn, no camera bump), not with a
+    second player.
+  * **A phone.** No physical device and no emulator run.
+  * **Dying mid-reveal.** `CharacterRemoving` clears every live reveal; not staged.
+
 ## The approved hatch ladder, and the deadline that carries it — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
 
 **Owner request:** 30 s / 60 s / 150 s / 360 s / 900 s / 2100 s / 4500 s, Tiny to
