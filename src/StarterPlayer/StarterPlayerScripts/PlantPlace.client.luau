@@ -272,7 +272,7 @@ ghost.Parent = workspace
 -- is its head, which is the widest part of every form the builder makes.
 local function footprint(species: SeedData.Species, tier: number, hatched: boolean): number
 	if not hatched then
-		return SeedData.PodDiameter(tier, species.Biome)
+		return SeedData.PodDiameter(tier)
 	end
 	return SeedData.FrameHeight(species, tier) * 0.46 * SeedData.Girth(tier) * 1.5
 end

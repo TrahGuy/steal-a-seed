@@ -186,10 +186,12 @@ function PlotService.OnAssigned(fn: Listener): () -> ()
 	-- runs after this one. Nothing used to replay, so a player who joined while
 	-- the boot was still running got a plot none of those three ever heard of.
 	--
-	-- That cost the owner their garden on 2026-09-15. PodMeshService waited
-	-- 1.5 s at boot for its meshes, the Play Solo player joined inside the wait,
-	-- PlantService never restored their saved plants, and the first thing they
-	-- planted saved the empty bed over the real one -- twice, in two sessions.
+	-- That cost the owner their garden on 2026-09-15. A service since removed
+	-- waited 1.5 s in Init for an asset, the Play Solo player joined inside the
+	-- wait, PlantService never restored their saved plants, and the first thing
+	-- they planted saved the empty bed over the real one -- twice, in two
+	-- sessions. The service is gone; this replay is what makes sure no future
+	-- wait anywhere in the boot can hide a plot again.
 	--
 	-- So subscribing replays every current owner, in plot order, through the same
 	-- pcall assign() uses. With nobody assigned yet -- the normal boot -- the loop

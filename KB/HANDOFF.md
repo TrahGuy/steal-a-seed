@@ -1,6 +1,65 @@
 # Steal a Seed — Session Handoff
 
+## Dustbowl pods are procedural again — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+
+**Owner request:** drop the AI-mesh Dustbowl pods from `5a91e16` and restore the
+part-built pods exactly as they stood at `6c1f228`, keeping every later fix.
+
+### What was reversed
+
+Restored to their `6c1f228` contents (no other commit had touched any of them since,
+so this is exactly `5a91e16` undone, file by file): `CreatureModel.luau`,
+`SeedData.luau`, `CarryService.luau`, `NestService.luau`, `Ambience.client.luau`,
+`CarryPose.client.luau`, `PlantPlace.client.luau`, `AGENTS.md`,
+`.agents/skills/plant-art-bible/SKILL.md`. Surgically removed from `GameConfig`:
+the `PodMeshes` block and the `PodPulse` tag. **Deleted:** `PodMeshService.luau`.
+
+So there is no `CreateMeshPartAsync`, no mesh template, no mesh id, no biome width
+ladder, no mesh core, no mesh fire or electric aura, no pod-pulse client loop, no
+`NestService.RebuildPods`, and no mesh-specific carry maths (`gripFor`'s
+lowest-point lift and `takeRangeOf` are gone with the 14.5-stud pods that needed
+them). `SeedData.PodDiameter(tier)` and `GripForward(tier)` take one argument again.
+
+### What was deliberately kept
+
+  * **`PlotService.OnAssigned`'s replay from `402fee6`** -- the fix for the boot race
+    that cost the owner their garden. Its comment no longer names the deleted
+    service; the replay is unconditional and generic.
+  * Instant Hatch, the Developer Product id, the purchased-Speed refresh, hotbar V2,
+    the plant walk, night-only plant glow, the tutorial and combat: untouched.
+
+### The reference, measured through the production builder
+
+| tier | D | width | height | depth | parts |
+| --- | --- | --- | --- | --- | --- |
+| 1-5 | 1.66 / 2.59 / 3.66 / 4.87 / 6.09 | 1.1100 D | 1.2140 D | 1.2489 D | 9 |
+| 6 | 7.94 | 1.1803 D | 1.2140 D | 1.2489 D | 10 |
+| 7 | 9.04 | 1.3030 D | 1.2140 D | 1.2489 D | 10 |
+
+The first five are one shape at five sizes; the top two are wider for their crowns.
+`DustbowlPodSpec` was rewritten around this (37 assertions) and pins the ratios to
+four decimals, so a future change to pod proportions has to edit the spec too.
+
+### Verified
+
+  * **Play:** 16 pods in the world, **0 with a MeshPart**. Dustbowl nest pods measure
+    1.110 x 1.214 D, Greenhollow 1.020 x 1.462, Tanglemire 1.148 x 1.389 -- each
+    biome its own silhouette, all part-built. The boot log has **no PodMeshService
+    line and no pod-rebuild line**, and the owner's garden restored ("restored 2
+    plant(s)").
+  * **A lineup is parked at `Workspace.DustbowlPodLineup`** (Y = 621): tiers 1 to 7,
+    7 models, 65 parts, all anchored, none collidable or queryable, with a
+    `WhatThisIs` note. Delete it when the look is approved.
+  * The two giant imported pod models the owner mentioned are **not** in the place any
+    more; `ReplicatedStorage.Assets` does not exist either. Nothing was deleted from
+    disk: `art/ai generated pods/` and the FBX files are untouched.
+  * All 25 specs pass; `rojo build` succeeds; `git diff --check` is clean.
+
 ## INCIDENT: the owner's garden was overwritten by a boot race — 2026-09-15 (CLAUDE)  (FIX COMMITTED; PLANTS NOT YET RESTORED)
+
+> **2026-09-17:** `PodMeshService` has since been deleted with the mesh pods it
+> existed for. The `PlotService.OnAssigned` replay below STAYS -- it is generic, and
+> it is what makes any future boot wait harmless. See the Dustbowl reversion above.
 
 **What happened.** Commit `5a91e16` added `PodMeshService`, whose Init waited about
 1.5 s at boot for `AssetService:CreateMeshPartAsync`.

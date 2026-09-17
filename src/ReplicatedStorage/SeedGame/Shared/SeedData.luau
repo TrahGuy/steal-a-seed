@@ -1112,32 +1112,9 @@ end
 -- Ten studs is a boulder at arm's length: it fills the screen, it rides five
 -- studs in front of the chest (see GripForward), and it still does not swallow
 -- the player carrying it.
---
 --==============================================================================
--- DUSTBOWL'S PODS ARE WIDER, BY THE OWNER'S LADDER
---
--- Its pods are meshes now (see CreatureModel's Dustbowl pod), and the owner set
--- their widths on 2026-09-15 so each tier reads as a clear step up from across
--- a nest: 1.00x, 1.60x, 2.30x, 3.20x, 4.30x, 5.60x, 7.25x of a Tiny.
---
--- WIDTH, NOT HEIGHT. The mesh is scaled evenly to this width and keeps its own
--- proportions, because squeezing a tall egg into a shorter box flattens it; a
--- Dustbowl pod therefore stands about 1.8x its width (1.4x for the cracked top
--- two tiers, whose egg is rounder). Width is what the carry, the placement disc
--- and the nest ring all measure, so it is the number that has to agree
--- everywhere -- which is why it lives here and every one of them asks for it
--- with the biome.
---
--- Carry cost is untouched: CarryMultiplier still keys off the tier's value.
---==============================================================================
-local POD_WIDTHS: { [string]: { number } } = {
-	dustbowl = { 2.0, 3.2, 4.6, 6.4, 8.6, 11.2, 14.5 },
-}
-
-function SeedData.PodDiameter(tier: number?, biome: string?): number
-	local row = SeedData.Tier(tier)
-	local ladder = if biome then POD_WIDTHS[biome] else nil
-	return if ladder and ladder[row.index] then ladder[row.index] else row.pod
+function SeedData.PodDiameter(tier: number?): number
+	return SeedData.Tier(tier).pod
 end
 
 --==============================================================================
@@ -1292,11 +1269,10 @@ end
 -- How far in front of the root a pod of this weight rides. ONE definition:
 -- CarryService welds with it, CarryPose aims the arms with it. It follows the
 -- pod's DIAMETER, so a boulder is held further out than a pebble and the offset
--- is never written down twice. With the biome, because Dustbowl's pods are wider
--- than everybody else's at the same tier.
+-- is never written down twice.
 --==============================================================================
-function SeedData.GripForward(tier: number?, biome: string?): number
-	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(tier, biome) * 0.5
+function SeedData.GripForward(tier: number?): number
+	return GameConfig.Carry.GripForwardBase + SeedData.PodDiameter(tier) * 0.5
 end
 
 -- The FORM's drop tier as a colour. Kept for the Index, which lists shapes and

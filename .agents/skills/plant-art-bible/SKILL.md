@@ -103,15 +103,6 @@ it before proposing a better exponent.
 across the nest with no UI - the pod tells you what the carry will cost before you commit to the
 hold. The clamp is a rail, not a limiter.
 
-**Dustbowl pods are the exception, since 2026-09-15.** They are two imported meshes the owner
-commissioned (a closed egg for tiers 1-5, a cracked egg for 6-7), on their own width ladder:
-2.0 / 3.2 / 4.6 / 6.4 / 8.6 / 11.2 / 14.5 studs, read with `SeedData.PodDiameter(tier, "dustbowl")`.
-The mesh is scaled EVENLY to that width - never into a fixed box, which squashed the tall egg flat -
-so a Dustbowl pod stands about 1.83x its width (1.42x cracked). Tiers 1-5 differ by colour and
-material; Titan adds a molten core, fire aura and flickering warm light; Colossal a plasma core,
-electric aura, flickering cold light and the COLOSSAL tag. Aura particle sizes scale with the pod's
-width, and the core lights cast shadows so they do not bleach the shell.
-
 ## Forms, and the shapes the engine does not have
 
 Block, Ball, Cylinder and Wedge only. Roblox has no cone, no egg, no dome:

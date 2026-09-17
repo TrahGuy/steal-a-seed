@@ -1296,10 +1296,7 @@ local function attachHaul(nest: Nest, haul: Haul): boolean
 		return false
 	end
 
-	-- With the biome, for the width a pod really has. (Only Tanglemire, Emberroot
-	-- and Starbloom confiscate today, so Dustbowl's taller mesh egg never rides a
-	-- guardian and this sphere estimate is still the right shape.)
-	local radius = SeedData.PodDiameter(haul.tier, species.Biome) * 0.5
+	local radius = SeedData.PodDiameter(haul.tier) * 0.5
 	local clear = tonumber(P.HaulClearance) or 0.4
 	local rootCF = nest.root.CFrame
 	local seamLocal = rootCF:ToObjectSpace(seam.CFrame).Position
@@ -2056,37 +2053,6 @@ end
 -- the difference matters at the one moment the game is deciding whether players
 -- are allowed back in.
 --==============================================================================
---==============================================================================
--- REBUILDING WHAT IS ALREADY STANDING, WITH THE SAME ROLL
---
--- PodMeshService fetches Dustbowl's mesh templates in the background, because a
--- boot that waits on an asset is a boot a player can join in the middle of (see
--- PlotService.OnAssigned for what that cost). Nests stock at Start, so on a cold
--- server the first Dustbowl pods can be built before their mesh has arrived and
--- come out as part-built urns. When it arrives, this rebuilds exactly the pods
--- the predicate names, in place: same slot, same species, same tier -- the roll
--- a player may already have seen does not change.
---==============================================================================
-function NestService.RebuildPods(needsRebuild: (Model) -> boolean): number
-	local rebuilt = 0
-	for _, nest in ipairs(nests) do
-		for index = 1, nest.biome.PodsPerNest do
-			local pod = nest.pods[index]
-			if pod and pod.Parent and needsRebuild(pod) then
-				local species = SeedData.Get(tostring(pod:GetAttribute("SpeciesId")))
-				local tier = tonumber(pod:GetAttribute("Tier"))
-				if species and tier then
-					pod:Destroy()
-					nest.pods[index] = nil
-					placePod(nest, index, species, tier)
-					rebuilt += 1
-				end
-			end
-		end
-	end
-	return rebuilt
-end
-
 function NestService.StockAll(): (number, number)
 	local built, wanted = 0, 0
 	for _, nest in ipairs(nests) do
