@@ -191,7 +191,7 @@ test mesh's id as a stand-in, to prove the id -> template -> replicated clone pa
 That was a local, uncommitted config line, reverted as soon as Play started. The
 owner does not want that asset used for this; nothing committed references it.
 
-## Pod timer without a box, and Instant Hatch for 99 Robux — 2026-09-15 (CLAUDE)  (COMMITTED; NEEDS A PRODUCT ID)
+## Pod timer without a box, and Instant Hatch for 99 Robux — 2026-09-15 (CLAUDE)  (COMMITTED; THE PRODUCT ID LANDED 2026-09-17)
 
 **Owner request:** make the hatching timer above pods transparent with no box, change
 its font, and add an "Instant Hatch" proximity prompt for 99 Robux.
@@ -303,11 +303,21 @@ its font, and add an "Instant Hatch" proximity prompt for 99 Robux.
   * **Pressing F on a real PlantService pod in Play:** that needs a pod in the owner's
     garden. The same path runs in InstantHatchSpec.
 
-### Owner to-do
+### The product id — 2026-09-17
 
-Create a Developer Product at 99 Robux in the Creator Dashboard and put its id in
-`GameConfig.Store.InWorld` (`product = <id>`), or send the id. Then a Studio test
-purchase from a growing pod should burst that pod and put the creature in your hands.
+The owner created the product and sent its id, **3713212811**. It is in
+`GameConfig.Store.InWorld` now, so pressing F on a growing pod opens a real purchase
+dialog and the receipt bursts that pod.
+
+  * `MarketplaceService:GetProductInfo(3713212811, Enum.InfoType.Product)`, read from the
+    Play server, answers name "Instant Hatch", `IsForSale = true`, created 2026-09-17
+    01:17 UTC, price **39**. 39 is the ~0.4x regional reading this account gets for a 99
+    Robux product (see the GetProductInfo memory), so 99 stays the label price.
+  * `StoreSpec` and `InstantHatchSpec` both swap in their own id, so neither spec depends
+    on this number; their comments were corrected to say so.
+  * **Still not verified:** a real Studio test purchase, which needs a growing pod in the
+    owner's own garden. The boot log should now read 12 live products, 3 waiting (the
+    three giant-pod tiles are still at 0).
 
 ## A bought Speed pack speeds you up at once — 2026-09-15 (CLAUDE)  (COMMITTED)
 

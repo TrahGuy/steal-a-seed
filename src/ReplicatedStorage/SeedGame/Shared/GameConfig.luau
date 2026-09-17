@@ -3508,13 +3508,13 @@ GameConfig.Store = {
 	--
 	-- INSTANT HATCH. The owner asked for it on 2026-09-15 at 99 Robux. It opens
 	-- the pod the player pressed it on, clock or no clock; PlantService decides
-	-- which pod that was (see PlantService.InstantHatch). `product` is 0 until
-	-- the owner creates the Developer Product, and until then the prompt is
-	-- drawn with its price but pressing it does nothing except say why in the
-	-- server log.
+	-- which pod that was (see PlantService.InstantHatch). The owner created the
+	-- Developer Product on 2026-09-17 and gave its id, 3713212811, so the prompt
+	-- now charges. A product id of 0 would still be legal: the prompt draws with
+	-- its price and a press only says why in the server log.
 	--==========================================================================
 	InWorld = {
-		{ key = "instanthatch", label = "INSTANT HATCH", robux = 99, product = 0,
+		{ key = "instanthatch", label = "INSTANT HATCH", robux = 99, product = 3713212811,
 			kind = "hatch" },
 	},
 }

@@ -17,8 +17,8 @@
 -- read or written; the stand-ins record what they are asked.
 --
 -- PlantService sees the manifest through a copy whose Instant Hatch product has
--- a made-up id, because the real one is 0 until the owner creates it. The spec
--- sets the copy back to 0 once, to prove a 0 sells nothing.
+-- a made-up id, so the spec never depends on the live id (3713212811) staying
+-- what it is. The spec sets the copy back to 0 once, to prove a 0 sells nothing.
 --
 -- Not here: a real purchase dialog and receipt (a Studio test purchase, once the
 -- id exists), StoreService's ledger (StoreSpec), and how PromptUI draws the

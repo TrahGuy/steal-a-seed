@@ -17,8 +17,8 @@
 -- do, so the order of those calls is the evidence.
 --
 -- StoreService sees the manifest through a copy whose Instant Hatch product has
--- a made-up id. The real one is 0 until the owner creates the product, and a 0
--- is never indexed, so without the copy there would be no receipt to send.
+-- a made-up id, so the spec never depends on the live id (3713212811) staying
+-- what it is, and still covers the rule that a product id of 0 is never indexed.
 -- InstantHatchSpec covers what PlantService does with the receipt.
 --
 -- Not here: a real purchase prompt, which only a client can open. Studio test
@@ -112,7 +112,7 @@ local PlantService = {
 }
 
 -- The manifest as StoreService sees it: the real one, except that the Instant
--- Hatch product has an id.
+-- Hatch product carries a spec id instead of the live one.
 local LIVE_HATCH_ID = 990001
 local realHatch = nil
 for _, item in ipairs(GameConfig.Store.InWorld or {}) do
