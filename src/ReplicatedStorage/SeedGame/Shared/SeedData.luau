@@ -159,6 +159,31 @@ export type Species = {
 	-- it and have no species to ask.
 	Stem: Color3,
 	Soil: Color3,
+	--==========================================================================
+	-- A FLAT PER-SECOND BONUS, FOR THE ONES THAT WOULD OTHERWISE BE TWINS
+	--
+	-- Income is the size tier scaled by rarity and by biome depth, and that made
+	-- every species in the same biome AT THE SAME RARITY earn exactly the same:
+	-- Nubkin and Petalpip both $4/s, Novaorb and Cosmospire both $8/s. Two
+	-- different plants with two different silhouettes paying one number reads as
+	-- a placeholder, and a player comparing them has nothing to compare.
+	--
+	-- So six species carry a small flat bonus, approved by the owner on
+	-- 2026-09-17, ADDED AFTER the rounding and multiplied by nothing:
+	--
+	--     Petalpip, Paddlehop, Crookreed, Emberquill, Novaorb   +$1/s
+	--     Cosmospire                                            +$2/s
+	--
+	-- FLAT AT EVERY TIER ON PURPOSE. A bonus that scaled with the tier would be
+	-- a second rarity ladder, and at Colossal it would swamp the one the rarity
+	-- multiplier already draws. A dollar is a nudge at Tiny and a rounding error
+	-- at Colossal, which is exactly the job: it separates two twins at the size
+	-- where a player is choosing between them.
+	--
+	-- Absent means zero. Validated at require -- finite, whole, not negative --
+	-- and the x2 Earn pass still doubles the TOTAL once, further down the
+	-- economy, exactly as it always did.
+	IncomeBonus: number?,
 }
 
 local LEAF = Color3.fromRGB(86, 150, 66)
@@ -319,6 +344,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "petalpip", Name = "Petalpip", Rarity = "Common", Biome = "greenhollow",
+		IncomeBonus = 1,
 		Height = 4.65, Form = "orb",
 		-- Lifted off Nubkin's green toward yellow. Same family, sunlit.
 		Body = Color3.fromRGB(206, 224, 132),
@@ -383,6 +409,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "paddlehop", Name = "Paddlehop", Rarity = "Uncommon", Biome = "dustbowl",
+		IncomeBonus = 1,
 		Height = 4.65, Form = "pad",
 		-- Two Uncommons in one biome have to be told apart at a glance, so the
 		-- MASS carries the difference: Dunebud is sand-and-rust, this is
@@ -450,6 +477,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "crookreed", Name = "Crookreed", Rarity = "Rare", Biome = "tanglemire",
+		IncomeBonus = 1,
 		Height = 6.18, Form = "reed",
 		-- The second Rare, and the only one whose dominant mass is BROWN. Two
 		-- Rares in one biome is a first, so they had to be told apart by
@@ -499,6 +527,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "emberquill", Name = "Emberquill", Rarity = "Rare", Biome = "emberroot",
+		IncomeBonus = 1,
 		Height = 7.47, Form = "quill",
 		-- The second Rare, and the tallest plant in the game. Two Rares in a
 		-- biome is Tanglemire's precedent, and the same rule applies: they are
@@ -555,6 +584,7 @@ SeedData.Species = {
 	--==========================================================================
 	{
 		Id = "novaorb", Name = "Novaorb", Rarity = "Rare", Biome = "starbloom",
+		IncomeBonus = 1,
 		Height = 4.60, Form = "orb",
 		Body = Color3.fromRGB(39, 37, 82),
 		Crown = Color3.fromRGB(158, 128, 255),
@@ -563,6 +593,7 @@ SeedData.Species = {
 	},
 	{
 		Id = "cosmospire", Name = "Cosmospire", Rarity = "Rare", Biome = "starbloom",
+		IncomeBonus = 2,
 		Height = 7.40, Form = "spire",
 		Body = Color3.fromRGB(24, 18, 46),
 		Crown = Color3.fromRGB(180, 150, 255),
@@ -1000,6 +1031,22 @@ for _, species in ipairs(SeedData.Species) do
 	assert(SeedData.BiomeMultiplier[species.Biome] ~= nil,
 		string.format("species %q sits in biome %q, which has no income multiplier",
 			species.Id, species.Biome))
+	--======================================================================
+	-- A BONUS IS A WHOLE NUMBER OF DOLLARS, OR THE FILE DOES NOT LOAD
+	--
+	-- It is added to a figure the client and the server both round to a whole
+	-- number and then print. A fraction would show up as two different readouts
+	-- of the same plant; a negative would make a species pay less than its own
+	-- rarity says; a NaN would poison every sum the garden panel adds it into.
+	--======================================================================
+	local bonus = (species :: any).IncomeBonus
+	if bonus ~= nil then
+		assert(type(bonus) == "number" and bonus == bonus and bonus ~= math.huge
+				and bonus >= 0 and math.floor(bonus) == bonus,
+			string.format("species %q has an IncomeBonus of %s: it must be a whole, "
+				.. "finite, non-negative number of dollars per second",
+				species.Id, tostring(bonus)))
+	end
 	byId[species.Id] = species
 	local list = byBiome[species.Biome]
 	if not list then
@@ -1024,13 +1071,18 @@ end
 -- WHAT IT IS WORTH, AND WHAT IT COSTS
 --
 -- ONE CALCULATION, AND EVERY CALLER USES IT. EconomyService pays from this, the
--- garden panel and the world pop display it, and the stall prices from it. A
--- second copy anywhere is a readout that can disagree with the payout, and the
--- player believes the readout.
+-- garden panel and the world pop display it, the hatch reveal prints it, and the
+-- stall prices from it. A second copy anywhere is a readout that can disagree
+-- with the payout, and the player believes the readout.
 --
 -- THE SPECIES IS THE ARGUMENT NOW, not the tier alone. Rarity and biome both
 -- come off it and neither can be recovered from a number -- and every caller
 -- already had a species in hand, so nothing needed new plumbing to find one.
+--
+-- THREE THINGS DECIDE IT, NOT TWO: the size tier, the species' rarity, the depth
+-- of its biome -- and then a flat per-species bonus, added after the rounding,
+-- which is what stops two plants of the same rarity in the same biome being
+-- worth the identical number. See IncomeBonus on the Species type.
 --
 -- AN UNKNOWN SPECIES PAYS THE BASE RATE. Not zero, which would stop a plant
 -- that is visibly standing in the ground from paying and look like the tick had
@@ -1056,10 +1108,27 @@ local function factorsFor(species: Species?): (number, number)
 	return rarity or 1, biome or 1
 end
 
+-- Whatever this species adds on top, flat, or zero. Guarded the same way
+-- factorsFor is: a legacy caller passing a tier number must land on 0 rather
+-- than throw inside the pay loop.
+local function bonusFor(species: Species?): number
+	if type(species) ~= "table" then
+		return 0
+	end
+	local bonus = (species :: any).IncomeBonus
+	if type(bonus) ~= "number" or bonus ~= bonus or bonus < 0 or bonus == math.huge then
+		return 0
+	end
+	return math.floor(bonus)
+end
+
 function SeedData.IncomePerSecond(species: Species?, tier: number?): number
 	local base = SeedData.Tier(tier).value * GameConfig.Carry.CashPerValue
 	local rarity, biome = factorsFor(species)
-	return math.floor(base * rarity * biome + 0.5)
+	-- AFTER the rounding, and multiplied by nothing: the bonus is the same dollar
+	-- at Tiny and at Colossal. The x2 Earn pass doubles the total later, in the
+	-- economy, and never here.
+	return math.floor(base * rarity * biome + 0.5) + bonusFor(species)
 end
 
 function SeedData.CarryMultiplier(tier: number?): number

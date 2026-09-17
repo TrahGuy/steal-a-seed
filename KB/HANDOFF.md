@@ -1,5 +1,85 @@
 # Steal a Seed — Session Handoff
 
+## Plants that are not twins, and an Overclock that costs more than its mill — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
+
+**Owner request:** give six species a small flat income bonus so same-rarity plants
+in the same biome stop earning identical money, and re-price the Overclock ladder
+from $3M-$4.5B to $125B-$850B.
+
+### Files changed
+
+  * `src/ReplicatedStorage/SeedGame/Shared/SeedData.luau` -- the optional
+    `IncomeBonus` field on the Species type, six rows carrying it, the require-time
+    validation, and `IncomePerSecond` adding it after the rounding.
+  * `src/ReplicatedStorage/SeedGame/Shared/GameConfig.luau` -- the ten Overclock
+    prices, the assert block under the Mill table, and four stale balance comments.
+  * `tools/tests/BalanceSpec.luau` -- new, 34 assertions.
+
+Nothing else was touched: no rarity weight, no biome multiplier, no tier value, no
+hatch time, no plant size or movement, no mill speed, no Training Rush, no Rebirth,
+and not the x2 Earn pass.
+
+### The bonus, and where it is added
+
+```
+income = floor(tierValue * CashPerValue * rarity * biome + 0.5) + IncomeBonus
+```
+
+`IncomeBonus` is optional, defaults to 0, and is validated at require: a whole,
+finite, non-negative number of dollars, or the file refuses to load. The six:
+**Petalpip, Paddlehop, Crookreed, Emberquill, Novaorb +$1**; **Cosmospire +$2**.
+
+**FLAT AT EVERY TIER.** It is not multiplied by tier, rarity, biome or the pass.
+Measured: a Colossal Cosmospire earns 19,952 against Novaorb's 19,951 -- one dollar
+apart on a 19,950 base, exactly as at Tiny where they are $10 and $9.
+
+`SellPrice` is derived (`income x SellSeconds`), so a bonused plant is worth 30x the
+bonus more at the stall: Petalpip Tiny sells for $150 against Nubkin's $120.
+
+All 25 approved Tiny rates verified: 4/5/5/6/8 Greenhollow, 6/7/7/9/13 Dustbowl,
+7/8/10/14/24 Tanglemire, 8/9/10/16/26 Emberroot, 9/10/11/17/28 Starbloom.
+
+### The Overclock ladder
+
+125B / 150B / 180B / 220B / 270B / 330B / 400B / 500B / 650B / 850B -- cumulative
+**$3.675T**. Tier 10 stays at exactly **$100B**, the multiplier stays **2x per
+level** (1x to 1024x, 400M/s to 410B/s on a tier-10 mill), and MaxLevel stays 10.
+
+Two require-time asserts now defend the shape, because the old ladder broke both:
+every price must be **above the tier-10 mill's cost**, and the prices must **rise**.
+The old list started at $3M against a $100B machine -- the whole endgame was change.
+
+Stale comments rewritten: the "priced off the garden" block (it still claimed
+80-150K/sec gardens and 1.62B cumulative), the price-comparable paragraph (142M vs
+tier 7's 150M), and the removed-biome-gate story (a player "holding 180 million").
+
+### Verified
+
+  * **BalanceSpec: 34 assertions**, covering all ten of the owner's verification
+    points: the 25-row table, the six bonuses exactly and nobody else, the formula
+    recomputed independently for all 175 species-tier combinations, flatness at
+    Colossal, sell price, the x2 pass doubling once, tier 10 at $100B, the ten
+    prices, above-the-mill and strictly-increasing, and the 2^level rates.
+  * **All 26 specs pass** -- including PlantInfoSpec (45, 350 grown combinations),
+    SpeedSpec (332) and MillSignSpec, none of which needed changing.
+  * **`rojo build` succeeds; `git diff --check` is clean.** Both changed modules
+    load through the fresh-require harness with the new asserts in place.
+  * **Play, read-only on the owner's own garden** (nothing planted, nothing saved):
+    the world pops read **dunebud T1 +$12** and **paddlehop T1 +$14** side by side
+    -- same tier, same rarity, same biome, one dollar apart, doubled by their x2
+    pass -- with petalpip T6 at +$10.4K (5,201 x 2) and bellchime T4 at +$2.12K.
+    The faucet's own rate measured ~12.5K/s against those four plants.
+  * **The mill sign's text** is `"$" .. GameConfig.compact(cost)`, which the spec
+    pins as `$125B` ... `$850B`.
+
+### Not verified
+
+  * **The live mill sign showing $125B.** It only draws an overclock price for a
+    player who has finished the tier ladder, and the owner's mill is tier 5 --
+    getting there means writing to their profile, which this session did not do.
+    F4 -> set tier 10 shows it in a second, and that is the owner's call.
+  * **A purchase at the new price** (it costs $125B of their cash).
+
 ## The hatch reveal: a held shell, a burst, and the real plant coming up — 2026-09-17 (CLAUDE)  (COMMITTED; AWAITING VISUAL APPROVAL)
 
 **Owner request:** replace the 0.45 s shell fade with a species reveal, for the free

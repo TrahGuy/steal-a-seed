@@ -2709,11 +2709,10 @@ GameConfig.Mill = {
 	-- 409.6 billion a second -- the cap in about forty minutes, which is what an
 	-- endgame ceiling should cost.
 	--
-	-- It also makes the two ladders PRICE-COMPARABLE rather than one dominating.
-	-- Cumulative overclock to level 5 is 142M and turns a Glasshouse into
-	-- 1.6M/sec; tier 7 costs 150M and pays 2M/sec. Near enough that buying
-	-- either is defensible. At four per level the same 142M bought 51.2M/sec and
-	-- the tier ladder was strictly the wrong purchase at every price.
+	-- It also keeps the ladder worth climbing to the end rather than finishing in
+	-- one purchase. Two per level means each overclock doubles the rate for about
+	-- 1.2x the previous price; at four per level a single level outran every price
+	-- on the list and the rest were decoration.
 	--
 	--     level  0    400M / sec         level  6   25.6B / sec
 	--     level  1    800M / sec         level  7   51.2B / sec
@@ -2732,30 +2731,45 @@ GameConfig.Mill = {
 	-- price is the whole of the requirement.
 	--
 	-- It went because it made the upgrade board REFUSE MONEY. A player standing
-	-- at the sign holding 180 million was being told to go and do something
-	-- else, and a board that sends you away is not doing the job an upgrade
-	-- board exists for. Robux is the second currency this ladder will take,
-	-- when it takes one. A biome is not a currency.
+	-- at the sign holding the exact price of the next level was being told to go
+	-- and do something else, and a board that sends you away is not doing the job
+	-- an upgrade board exists for. Robux is the second currency this ladder will
+	-- take, when it takes one. A biome is not a currency.
 	--
 	-- The pacing that gate was doing is already in the Costs below, which climb
 	-- faster than the rates they buy -- see the note under this one.
 	--
 	--==========================================================================
-	-- THE COSTS ARE PRICED OFF THE GARDEN, NOT OFF EACH OTHER
+	-- EVERY OVERCLOCK COSTS MORE THAN THE MILL IT RUNS ON
 	--
-	-- Cash comes from grown plants: a size-tier base rate scaled by the species'
-	-- rarity and by how deep its biome sits, so a plot is worth the sum of what
-	-- is standing in it. See SeedData.IncomePerSecond -- the figures below were
-	-- sized against the older tier-only rate and a curated deep-biome bed now
-	-- earns rather more than the 80-150K/sec they assume.
+	-- Re-priced by the owner on 2026-09-17. The old ladder ran 3M to 4.5B, which
+	-- was sized when a garden earned 80-150K/sec -- and it left the FIRST
+	-- overclock at 3M against a tier-10 mill at 100B, so the whole endgame ladder
+	-- was loose change beside the machine it upgraded. A player who could afford
+	-- the last mill could buy all ten overclocks thirty thousand times over.
 	--
-	-- Sized so CASH AND SCORE ARRIVE TOGETHER rather than one waiting on the
-	-- other. Cumulative to level 8 -- the last one the five biomes need -- is
-	-- 1.62B, which is about three hours at 150K/sec; the score side from zero to
-	-- Starbloom at the matching rates is about 3.1 hours. Neither is the wall.
+	-- The floor is now the tier-10 mill's own price. Level 1 is 1.25x it, and the
+	-- ladder climbs to 850B:
 	--
-	-- Levels 9 and 10 are past the last gate and priced as endgame: 6.5B more,
-	-- against a garden that cannot exceed 300K/sec.
+	--     1   125B      6   330B
+	--     2   150B      7   400B
+	--     3   180B      8   500B
+	--     4   220B      9   650B
+	--     5   270B     10   850B
+	--
+	-- Cumulative, all ten: 3.675T -- which is the point. Cash comes from grown
+	-- plants (a size-tier base rate scaled by the species' rarity, by how deep
+	-- its biome sits, and by that species' own flat bonus -- see
+	-- SeedData.IncomePerSecond), so this ladder is paced against a mature garden
+	-- and the Robux cash packs rather than against the first hour.
+	--
+	-- THE SHAPE IS GENTLE ON PURPOSE: about 1.2x per level at the bottom easing
+	-- to 1.3x at the top, so no single step is a wall. The RATE each level buys
+	-- DOUBLES, so every purchase is better value than the one before it.
+	--
+	-- Asserted below the Mill table: strictly increasing, and every rung above
+	-- the tier-10 cost. Those two rules are the balance decision; the exact
+	-- numbers are the owner's.
 	--
 	-- BALANCE, so this is the exception Rule 7 already carries for the tier
 	-- ladder directly above it -- the two are one price list and splitting them
@@ -2767,18 +2781,20 @@ GameConfig.Mill = {
 		-- the tier ladder, not chosen on its own.
 		Multiplier = 2,
 		MaxLevel = 10,
-		-- Level N costs Costs[N], and that is the entire requirement.
+		-- Level N costs Costs[N], and that is the entire requirement. Approved by
+		-- the owner on 2026-09-17; see the note above this table for why they all
+		-- start above the tier-10 mill.
 		Costs = {
-			3_000_000,
-			7_000_000,
-			16_000_000,
-			36_000_000,
-			80_000_000,
-			180_000_000,
-			400_000_000,
-			900_000_000,
-			2_000_000_000,
-			4_500_000_000,
+			125_000_000_000,
+			150_000_000_000,
+			180_000_000_000,
+			220_000_000_000,
+			270_000_000_000,
+			330_000_000_000,
+			400_000_000_000,
+			500_000_000_000,
+			650_000_000_000,
+			850_000_000_000,
 		},
 		-- Shown on the mill sign in place of the tier name once the tier ladder
 		-- is finished.
@@ -2863,6 +2879,34 @@ GameConfig.Mill = {
 --==============================================================================
 assert(GameConfig.Treadmill.SpeedPerSecond == GameConfig.Mill.Tiers[1].speed,
 	"GameConfig.Treadmill.SpeedPerSecond must equal GameConfig.Mill.Tiers[1].speed")
+
+--==============================================================================
+-- AND AN OVERCLOCK IS NEVER CHEAPER THAN THE MILL IT RUNS ON
+--
+-- Two rules, both balance decisions rather than typo guards, and the ladder this
+-- replaced broke both: an overclock may not cost less than the tier-10 mill, and
+-- the prices must climb. A cheap rung in here is the endgame handed out as
+-- change, and it is invisible -- everything still works, it is just free.
+--==============================================================================
+do
+	local O = GameConfig.Mill.Overclock
+	local topMill = GameConfig.Mill.Tiers[#GameConfig.Mill.Tiers].cost
+	assert(#O.Costs == O.MaxLevel,
+		"GameConfig.Mill.Overclock needs exactly MaxLevel prices")
+	for level, cost in ipairs(O.Costs) do
+		assert(type(cost) == "number" and cost == cost and cost > 0
+				and math.floor(cost) == cost,
+			string.format("Overclock %d has a price that is not a whole number", level))
+		assert(cost > topMill,
+			string.format("Overclock %d costs %d, which is not more than the tier-%d "
+				.. "mill at %d", level, cost, #GameConfig.Mill.Tiers, topMill))
+		if level > 1 then
+			assert(cost > O.Costs[level - 1],
+				string.format("Overclock %d costs %d, which is not more than Overclock "
+					.. "%d at %d", level, cost, level - 1, O.Costs[level - 1]))
+		end
+	end
+end
 
 
 function GameConfig.parentThrowStudsFor(biomeOrder: number): number
