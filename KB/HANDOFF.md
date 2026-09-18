@@ -1,5 +1,170 @@
 # Steal a Seed — Session Handoff
 
+## The countdown you can see from beside a Colossal, and a PICK UP you can reach — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** the planted-pod hatch countdown could not be seen reliably on a
+phone; and a Titan or Colossal plant's pickup interaction sat so deep in or so far
+above the creature that the player had to zoom the camera out to find it.
+
+### What was actually wrong -- measured off the production builder
+
+**One cause, three symptoms: everything was placed ABOVE THE OBJECT'S TOP.** Right
+for something you look down at; off the screen for something you stand beside and
+look up at.
+
+    pod timer centre, studs above the soil     Tiny 3.63    Colossal 15.62
+    PICK UP button, studs above the soil       Colossal Nubkin 36.6
+                                               Colossal Bellchime 48.0
+                                               Colossal Supernovus 68.2 (footprint r 41.8)
+
+* **The timer on a phone.** A BillboardGui cannot be kept on the screen. A phone's
+  landscape viewport is about half a desktop window's height, so a tall pod's
+  timer left the top of it for a player standing beside it -- projected from the
+  live camera pose at the default 12.5 zoom onto an 844 x 390 phone, a Titan's timer
+  sat at y=34 and a Colossal's at y=-29, under a 47 px topbar or off the glass.
+* **The Instant Hatch button went first.** PromptUI stacks it ~76 px above the timer,
+  and its touch tracker CULLS a panel whose centre is above the screen -- it only
+  ever clamped one that was partly on it.
+* **After one death, every timer was gone.** Found in Play: PlantUI kept all its
+  billboards in a plain Folder in PlayerGui; a respawn's PlayerGui reset deletes a
+  Folder; `panels` still held the dead billboards, so the once-a-second sweep rebuilt
+  nothing. 14 planted pods, 0 billboards, for the rest of the session. **This hit
+  desktop too**, and a player dies a lot in this game.
+* **Not the font, and not the lighting.** Arcade 14/20 is unchanged. A new
+  BillboardGui defaults to LightInfluence 0, measured, so night never dimmed it.
+* **The PICK UP button** floated `height + 0.8` above the plant's base. There is
+  **no pickup E-prompt** to move -- it was removed deliberately (a keyless prompt
+  ate every mouse click in the plot; see THERE IS NO PICKUP PROMPT in PlantService),
+  and pickup on desktop AND touch is PlantPickUI's click/tap-to-select plus a
+  separate PICK UP button. The brief's "desktop E-prompt" is that button; it was not
+  brought back.
+
+### The contract: one shared module, `ReachPoint` (new, pure, no instances)
+
+Three LocalScripts must agree to the pixel -- PlantUI draws the timer, PromptUI the
+prompt stacked on it, PlantPickUI the button -- so the arithmetic lives in one place
+they all call with plain values, and ReachPointSpec drives every branch of it.
+
+* **`podLabelLift`** -- the old height, or `GameConfig.Labels.Pod.MaxAboveSoil`
+  (6.6) above the soil, whichever is LOWER. Measured on Nubkin and Dunebud pods at
+  every tier: Tiny, Big and Huge keep their height to the thousandth (the highest,
+  a Huge Nubkin, 6.55); Mega and up come down to 6.6 -- within a third of a stud of
+  where the free Hatch prompt appears on a Colossal (6.92). Used by PlantUI AND by
+  PromptUI's OverPodLabel stacking, on desktop and touch.
+* **`stack`** -- on touch, the timer and the prompt above it are clamped back onto
+  the screen AS ONE GROUP: the whole pair comes down below the topbar or up off the
+  bottom, keeping its stacked distance, so neither is culled for being tall and they
+  can never land on each other.
+* **`pickupPoint`** + **`bearing`** -- a plant whose head is within reach
+  (`height + 0.8 <= 4.5` above the soil) keeps the button exactly where it was.
+  Anything taller gets it at its footprint's edge on the player's side
+  (`GameConfig.Plant.Reach`): 4.5 studs up, 1 stud outside the edge, never beyond a
+  player standing inside the footprint (1.5 in front of them instead), clamped
+  inside the bed's own soil rectangle so it cannot sit on a fence, the road or a
+  neighbour's plot. The side is dead-banded 20 degrees.
+
+### What changed, file by file
+
+* `ReachPoint.luau` (new) -- the above.
+* `GameConfig` -- `Labels.Pod.MaxAboveSoil = 6.6`, `Labels.Pod.ScreenMargin = 6`,
+  `Labels.Prompt.PanelHeight = 52` (was a literal in PromptUI), and `Plant.Reach`.
+* `PlantUI` -- capped height on every device; on touch the timer is a label in its
+  own IgnoreGuiInset layer (DisplayOrder 14, under PromptUI's 15), placed through
+  `ReachPoint.stack`. **The one Heartbeat is now the one BindToRenderStep** (camera
+  + 1, re-run safe via UnbindFromRenderStep), because on touch it also places the
+  timers and a label placed before the camera moves trails the pod. On a desktop the
+  per-frame half does nothing. Touch placement skips pods that have nothing to say,
+  are behind the camera or beyond the 160-stud display range, and writes a position
+  only when the pixel changes. Hides on the server's `Ready` flag the instant it
+  lands -- the free Hatch prompt rides 2.4 studs above the same anchor, and the two
+  1 Hz clocks could overlap them for up to a second. **Billboards now stand in
+  PlayerGui directly with ResetOnSpawn off** -- the respawn fix.
+* `PromptUI` -- OverPodLabel prompts use `podLabelLift`; on touch they are placed by
+  `ReachPoint.stack` (world up, matching the projected timer) instead of lift,
+  raise, cull and topbar clamp. Every other prompt is untouched.
+* `PlantPickUI` -- the button is aimed by `pickupPoint` at selection, then re-aimed
+  on the selection's existing 1/3 s poll with a 0.25 s tween of
+  StudsOffsetWorldSpace. Nothing per frame; the engine carries the billboard with
+  the walking plant because it is still adorned to the plant's base. **The two-step
+  touch rule is untouched**: tap selects (10 px / 0.5 s), a drag is the camera,
+  planting owns every click while a plant is in hand, PICK UP is a separate button
+  that sends one debounced request, and only a plant under your own plot's
+  PickupAnchors resolves.
+* The server is untouched. PickUpById has no range test (the Garden panel picks up
+  from anywhere by design) and re-tests ownership, growth and the bag; the client's
+  SELECT_RANGE of 60 from the plant is unchanged.
+
+### Measurements
+
+**Timer, studs above the soil (live desktop billboard) and y on an 844 x 390 phone
+with a 47 px topbar, projected from the live camera pose at three zooms** (old ->
+new; OFF = under the topbar or off the glass; `a->b` = moved by the group clamp):
+
+| tier | height | zoom 8 | zoom 12.5 | zoom 30 |
+| --- | --- | --- | --- | --- |
+| T1 Tiny | 3.63 -> 3.63 | 218 -> 224 | 211 -> 214 | 202 -> 203 |
+| T3 Huge | 6.55 -> 6.55 | 127 -> 121->133 | 150 -> 149 | 176 -> 176 |
+| T5 Giant | 10.10 -> 6.60 | **7 OFF** -> 120->133 | 73 -> 148 | 143 -> 176 |
+| T6 Titan | 12.81 -> 6.60 | **-53 OFF** -> 153 | **34 OFF** -> 169 | 127 -> 184 |
+| T7 Colossal | 15.62 -> 6.60 | **-152 OFF** -> 153 | **-29 OFF** -> 169 | 101 -> 184 |
+
+Timer: Arcade, word 14 px, clock 20 px, 2 px outline, box 124 x 48 -- unchanged; no
+plate, no background; nothing but HATCHING and m:ss.
+
+**PICK UP, player 6 studs outside each plant's edge, default zoom:**
+
+| plant | was | now | from the plant's centre | from the player | phone y was -> now |
+| --- | --- | --- | --- | --- | --- |
+| Nubkin Tiny | 4.2 up, centred | same | 0.1 | 6.9 | 209 -> 209 |
+| Nubkin Titan | 23.2 up | 4.5 up, at the edge | 8.6 | 5.0 | **-464** -> 216 |
+| Nubkin Colossal | 36.6 up | 4.5 up, at the edge | 13.6 | 5.0 | **-2311** -> 228 |
+| Bellchime Colossal (47 tall) | 48.0 up | 4.5 up, soil-clamped | 13.9 | 6.0 | behind the camera -> 188 |
+| Supernovus Colossal (67 tall, r 41.8) | 68.2 up | 4.5 up, soil-clamped | 22.0 | 15.3 | behind the camera -> 243 |
+
+All inside the owner's 34 x 35 soil. Two Colossals 28 studs apart: buttons 16.3
+apart, neither inside the other's footprint. Walking straight through a Titan's
+centreline over 61 steps: the button changed sides twice, never oscillating.
+
+### Verified
+
+* **Specs: 32, 3,149 assertions, 0 failures**, including **ReachPointSpec (new, 44)**:
+  the box arithmetic on rolled and turned boxes; all 14 production pods' timer
+  heights; ~8,000 stack anchors swept past every edge of a phone, a narrow phone and
+  a desktop with zero overlaps, zero order inversions and zero escapes from the
+  safe area; the dead band; every PICK UP rule on 15 production plants; and, by
+  source, the per-frame budget (PlantUI one binding, PlantPickUI none, PromptUI
+  one), the respawn fix, and every touch safety rule above.
+* **Play, desktop:** the live billboards carry the new heights (T1 3.63 ... T7 6.60);
+  **the respawn fix -- three fixture timers survived a death, still on and still
+  counting, `1:22` -> `1:20`, ResetOnSpawn off**; one billboard per planted model
+  (5 for 5, and a cloned pod 5 -> 6 -> 5).
+* All five changed files compile fresh; `rojo build` succeeds; `git diff --check`
+  clean; every probe and temp folder deleted.
+
+### Not verified, and why
+
+* **The touch layer drawing on a device or the emulator.** Studio's emulator is not
+  reachable from MCP (`StudioDeviceEmulatorService` answers nil) and Play Solo on
+  this desktop has TouchEnabled false, so the touch timer and the touch stack have
+  NOT been drawn live. Their positions above are the production functions fed the
+  live camera pose, projected onto a phone viewport -- the same vertical field of
+  view, so the same normalised position -- not a screenshot of a phone.
+* **A real click or tap on a plant.** MCP input needs Studio in the foreground and
+  the owner uses this PC during runs, so no selection was injected; the PICK UP
+  placement was measured by calling the same function PlantPickUI calls, on
+  production-built plants, with the live camera.
+* **Live free Hatch + Instant Hatch together on every tier, day and night, a walking
+  plant mid-selection, plot resize, pickup and replant, streaming.** Needs pods of
+  every tier in a real plot (the owner's save) or the emulator.
+* **A physical phone.** None was used.
+
+### A probe artefact, recorded so nobody chases it
+
+Mid-verification a census showed TWO timer billboards per fixture pod. It was the
+probe: Studio held two copies of the probe LocalScript, so each run built every
+fixture twice. PlantUI's build ran once per model (instrumented and removed), one
+billboard each.
+
 ## The biome is a word now, and nothing sits above the money — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** the biome-entry notice shows only the biome's name -- small,

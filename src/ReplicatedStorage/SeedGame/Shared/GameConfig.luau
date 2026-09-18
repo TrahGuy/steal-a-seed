@@ -2479,6 +2479,47 @@ GameConfig.Plant = {
 	-- nothing and keeps the validation in one place.
 	--==========================================================================
 	PickUpAction = "PickUp",
+
+	--==========================================================================
+	-- WHERE THE PICK UP BUTTON STANDS
+	--
+	-- It used to float `height + 0.8` above the plant's base. Measured off the
+	-- production builder on 2026-09-18 that is 4.2 studs for a Tiny Nubkin and
+	-- 68.2 for a Colossal Supernovus, whose footprint reaches 41.8 studs from its
+	-- centre -- a button nobody standing beside the plant can see without
+	-- zooming the camera right out.
+	--
+	-- Now a plant short enough to have its head within reach keeps the button
+	-- just above it, exactly as before. Anything taller gets it at the edge of
+	-- its footprint that faces the player, at a person's height:
+	--
+	--   InteractHeight   studs above the soil for a tall plant's button, and
+	--                    the test for "short": height + 0.8 at or under it
+	--   EdgeMargin       studs outside the footprint edge, so it is in front of
+	--                    the body rather than on it
+	--   StandOff         never closer to the plant than this in front of the
+	--                    player -- a player standing INSIDE a huge footprint gets
+	--                    it just ahead of them, never behind them
+	--   DeadbandDegrees  how far the player's bearing must move before the
+	--                    button follows, so crossing the centreline does not
+	--                    flick it from one side to the other
+	--   SoilInset        studs it keeps inside the bed's edge; it never leaves
+	--                    the soil for a fence, the road or the next plot
+	--   TweenSeconds     how long it glides when it moves, which is the
+	--                    selection's own poll -- no per-frame work
+	--
+	-- Client presentation only. The server never sees this point: PickUpById
+	-- re-tests ownership, growth and the bag against the placement id, and the
+	-- click range is PlantPickUI's SELECT_RANGE from the plant, unchanged.
+	--==========================================================================
+	Reach = {
+		InteractHeight = 4.5,
+		EdgeMargin = 1.0,
+		StandOff = 1.5,
+		DeadbandDegrees = 20,
+		SoilInset = 1.0,
+		TweenSeconds = 0.25,
+	},
 }
 
 GameConfig.Treadmill = {
@@ -5158,6 +5199,29 @@ GameConfig.Labels = {
 		Height = 48,
 		LiftStuds = 1.2,
 		--======================================================================
+		-- NEVER HIGHER THAN A PERSON CAN SEE FROM BESIDE IT
+		--
+		-- LiftStuds above the model's top was right for a pod you look DOWN at
+		-- and wrong for one you look UP at. Measured off the production builder
+		-- on 2026-09-18, a nubkin pod's label centre sat 3.6 studs above the soil
+		-- at Tiny and 15.6 at Colossal -- off the top of a phone's screen for a
+		-- player standing next to it, with the Instant Hatch button stacked
+		-- another ~76 pixels above that and culled first.
+		--
+		-- So the centre is capped this many studs above the SOIL. Measured on a
+		-- Nubkin and a Dunebud pod at every tier, Tiny, Big and Huge land under
+		-- it (the highest, a Huge Nubkin, at 6.55) and keep exactly the height
+		-- they had; Mega and up are held at 6.6, which is just above a
+		-- character's eye line and within a third of a stud of where the free
+		-- Hatch prompt appears when the clock runs out (6.9 on a Colossal), so the
+		-- timer and the prompt that replaces it live in the same place. See
+		-- ReachPoint.podLabelLift and ReachPointSpec.
+		--======================================================================
+		MaxAboveSoil = 6.6,
+		-- Pixels a touch-drawn timer and its stacked prompt keep from the edge of
+		-- the screen when they are clamped back onto it. See ReachPoint.stack.
+		ScreenMargin = 6,
+		--======================================================================
 		-- THE STRINGS
 		--
 		-- Growing is unreachable today: PlantService rebuilds a plant at every
@@ -5204,6 +5268,12 @@ GameConfig.Labels = {
 		Capsule = Color3.fromRGB(255, 255, 255),
 		-- Pixels between a pod's label and a prompt stacked above it.
 		StackGap = 4,
+		-- A prompt panel's height in pixels. Its width grows with its verb and
+		-- price; its height never does. Here rather than as a literal in
+		-- PromptUI because PlantUI has to reserve exactly this much room above a
+		-- pod's timer on touch, where the two are clamped onto the screen as one
+		-- group -- see ReachPoint.stack.
+		PanelHeight = 52,
 	},
 }
 

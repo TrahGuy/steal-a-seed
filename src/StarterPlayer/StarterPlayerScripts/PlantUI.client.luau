@@ -71,13 +71,17 @@
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local ReachPoint = require(Shared:WaitForChild("ReachPoint"))
 
 local PLANTING = GameConfig.Plant
 
@@ -94,6 +98,44 @@ local playerGui = player:WaitForChild("PlayerGui")
 -- 2026-09-15), and for why the clock changes colour as it runs down.
 --==============================================================================
 local POD = GameConfig.Labels.Pod
+local PROMPT = GameConfig.Labels.Prompt
+
+--==============================================================================
+-- ON A TOUCH SCREEN THE TIMER IS DRAWN, NOT BILLBOARDED
+--
+-- MEASURED on 2026-09-18: a nubkin pod's label sat 3.6 studs above the soil at
+-- Tiny and 15.6 at Colossal, as a BillboardGui -- and a billboard cannot be kept
+-- on the screen. On a phone, whose landscape viewport is about half the height
+-- of a desktop window, a tall pod's timer left the top of the screen for a
+-- player standing beside it, and the Instant Hatch button PromptUI stacks above
+-- it left first: PromptUI's tracker culls a panel whose centre goes above the
+-- screen, and only ever clamped one that was partly on it.
+--
+-- Two changes, one per cause:
+--
+--   * THE HEIGHT IS CAPPED, on every device, at POD.MaxAboveSoil. Tiny, Big and
+--     Huge keep exactly the height they had; the tall pods come down to eye
+--     level. See ReachPoint.podLabelLift.
+--   * ON TOUCH THE TIMER IS A LABEL IN A SCREEN LAYER, projected from the pod
+--     once a frame and clamped onto the screen TOGETHER WITH the prompt above
+--     it, through the same ReachPoint.stack PromptUI calls -- so they come down
+--     together and can never land on each other.
+--
+-- A desktop keeps the billboard: it was never unreadable there, and a billboard
+-- is positioned by the engine for free.
+--==============================================================================
+local TOUCH = UserInputService.TouchEnabled
+
+-- The label's own range, measured from the camera -- the billboard's
+-- MaxDistance. On touch it is also where the per-frame placement stops caring.
+local DISPLAY_RANGE = 160
+
+local LABEL_SIZE = Vector2.new(POD.Width, POD.Height)
+-- The room reserved above the timer for a stacked prompt. Width does not matter
+-- to the timer -- each clamps its own width -- only the height does.
+local PROMPT_SLOT = Vector2.new(POD.Width, PROMPT.PanelHeight)
+
+local BIND = "SeedPlantUI"
 
 -- The only two things that stand in a bed. There is no sprout any more: nothing
 -- grows in the ground, it hatches in your hands.
@@ -101,23 +143,86 @@ local STAGE_POD = 1
 local STAGE_GROWN = 3
 
 --==============================================================================
--- ONE CONTAINER, DESTROYED FIRST
+-- NO CONTAINER: EACH BILLBOARD STANDS IN PlayerGui ON ITS OWN, AND SURVIVES A DEATH
 --
--- So a re-run of this script cannot leave a second set of billboards behind --
--- the same re-run rule the server files follow.
+-- They used to live in a Folder here, and that Folder was the reason the
+-- countdown vanished. MEASURED in Play on 2026-09-18: a respawn resets
+-- PlayerGui, the reset deletes a plain Folder -- it has no ResetOnSpawn to say
+-- otherwise -- and every billboard inside went with it. Nothing noticed:
+-- `panels` still held the dead billboards, the once-a-second sweep saw a panel
+-- for every pod and rebuilt none, and after ONE death the player had no timer
+-- on any pod for the rest of the session. 14 planted pods, 0 billboards.
+--
+-- A BillboardGui is a LayerCollector and carries ResetOnSpawn itself, so each
+-- one now sits directly in PlayerGui with it off -- the arrangement
+-- PlantPickUI's PICK UP billboard has always had, and which survives.
+--
+-- RE-RUN SAFE: a new run removes every billboard of this name the last run left
+-- behind, and the Folder too if a copy from before this change is still there.
 --==============================================================================
-local existing = playerGui:FindFirstChild("SeedPlantUI")
-if existing then
-	existing:Destroy()
+local BILLBOARD_NAME = "SeedPlant"
+do
+	local legacy = playerGui:FindFirstChild("SeedPlantUI")
+	if legacy then
+		legacy:Destroy()
+	end
+	for _, child in ipairs(playerGui:GetChildren()) do
+		if child:IsA("BillboardGui") and child.Name == BILLBOARD_NAME then
+			child:Destroy()
+		end
+	end
 end
 
-local container = Instance.new("Folder")
-container.Name = "SeedPlantUI"
-container.Parent = playerGui
+-- Unbound before anything else is, so a re-run replaces the update instead of
+-- adding a second one beside it.
+pcall(function()
+	RunService:UnbindFromRenderStep(BIND)
+end)
+
+--==============================================================================
+-- THE TOUCH LAYER
+--
+-- IgnoreGuiInset, like PromptUI's layer, so positions come straight out of
+-- WorldToViewportPoint in window space with no inset arithmetic. DisplayOrder
+-- 14 -- one under PromptUI's 15 -- so if a timer and a prompt ever touch, the
+-- thing the finger presses is on top.
+--==============================================================================
+local touchLayer: ScreenGui? = nil
+do
+	local stale = playerGui:FindFirstChild("SeedPlantUITouch")
+	if stale then
+		stale:Destroy()
+	end
+	if TOUCH then
+		local made = Instance.new("ScreenGui")
+		made.Name = "SeedPlantUITouch"
+		made.ResetOnSpawn = false
+		made.IgnoreGuiInset = true
+		made.DisplayOrder = 14
+		made.Parent = playerGui
+		touchLayer = made
+	end
+end
 
 type Panel = {
 	model: Model,
-	billboard: BillboardGui,
+	-- The desktop draws a billboard; a touch screen draws `frame` in its layer.
+	-- Exactly one of the two exists for any panel.
+	billboard: BillboardGui?,
+	frame: Frame?,
+	-- The pod's anchor part, and how far above it the label's centre sits.
+	anchor: BasePart,
+	lift: number,
+	-- Whether the label has something to say right now. On a desktop this IS
+	-- billboard.Enabled; on touch the frame is only drawn while this is true
+	-- AND the pod is on the screen and in range.
+	showing: boolean,
+	-- Last pixel position written on touch, so a pod that is not moving on the
+	-- screen does not allocate a new UDim2 every frame.
+	lastX: number,
+	lastY: number,
+	-- The server's Ready flag, heard the moment it lands -- see refresh.
+	readyConn: RBXScriptConnection?,
 	word: TextLabel,
 	timer: TextLabel,
 	species: SeedData.Species?,
@@ -169,15 +274,8 @@ local function build(model: Model): Panel?
 	local hatchAt = tonumber(model:GetAttribute("HatchAt"))
 		or (plantedAt + SeedData.GrowSeconds(tier))
 
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "SeedPlant"
-	billboard.Adornee = anchor
-	billboard.AlwaysOnTop = true
-	-- In GameConfig rather than here, because PromptUI stacks the Instant Hatch
-	-- prompt on top of this label and has to know where it ends.
-	billboard.Size = UDim2.fromOffset(POD.Width, POD.Height)
 	--==========================================================================
-	-- A FIXED GAP ABOVE THE REAL TOP
+	-- A FIXED GAP ABOVE THE REAL TOP -- UNDER A CEILING
 	--
 	-- Measured off the MODEL, not the anchor: PrimaryPart is the pod shell at one
 	-- stage and the creature's base plate at the next, so a fixed offset would sit on top of
@@ -189,40 +287,82 @@ local function build(model: Model): Panel?
 	-- Bellchime's name plate 3.56 studs up on a plant 6.19 studs tall: buried in
 	-- its own head, on the most valuable species in the biome. A Nubkin happened
 	-- to land close enough to look correct, which is why it survived.
-	--==========================================================================
-	billboard.StudsOffset = Vector3.new(0,
-		GameConfig.topOfModel(model, anchor) + POD.LiftStuds, 0)
-	-- Camera-relative, unlike a prompt's activation range -- the lesson
-	-- PromptUI paid for. Far enough to read a neighbour's plot from the road,
-	-- which is the whole point of showing it to people who do not own it.
-	billboard.MaxDistance = 160
-	--==========================================================================
-	-- BORN OFF, TURNED ON BY refresh()
 	--
-	-- A BillboardGui defaults to Enabled and both labels are built empty. So
-	-- anything that stopped refresh() from running -- it threw once, on a
-	-- signature change, and every plant in the game wore a blank dark rectangle
-	-- for a session -- left a plate that was never written to and never switched
-	-- off. Starting off means a plate is only ever visible because something
-	-- actually put text in it.
+	-- THE CEILING, since 2026-09-18: never more than POD.MaxAboveSoil above the
+	-- soil, which is where a player standing beside a Titan or a Colossal can
+	-- actually see it. The soil is the box's lowest point, which ReachPoint reads
+	-- off every axis, so the rolled pivot above cannot fool it. PromptUI asks the
+	-- same function for the prompt it stacks above this, so the two agree.
 	--==========================================================================
-	billboard.Enabled = false
-	billboard.Parent = container
+	local boxCF, boxSize = model:GetBoundingBox()
+	local lift = ReachPoint.podLabelLift(GameConfig.topOfModel(model, anchor),
+		anchor.Position.Y - ReachPoint.lowestY(boxCF, boxSize), POD.LiftStuds, POD.MaxAboveSoil)
 
-	--==========================================================================
-	-- NO BOX
-	--
-	-- This was a dark rounded plate with a lime keyline, and the owner had it
-	-- removed on 2026-09-15: the words stand over the pod on their own. The frame
-	-- stays as the layout, fully transparent, with nothing drawn on it. Each
-	-- label's own outline is what keeps it readable over sky, grass and soil.
-	--==========================================================================
-	local panel = Instance.new("Frame")
-	panel.Name = "Panel"
-	panel.Size = UDim2.fromScale(1, 1)
-	panel.BackgroundTransparency = 1
-	panel.BorderSizePixel = 0
-	panel.Parent = billboard
+	local billboard: BillboardGui? = nil
+	local panel: Frame
+	if not TOUCH then
+		local made = Instance.new("BillboardGui")
+		made.Name = BILLBOARD_NAME
+		made.Adornee = anchor
+		made.AlwaysOnTop = true
+		-- In GameConfig rather than here, because PromptUI stacks the Instant
+		-- Hatch prompt on top of this label and has to know where it ends.
+		made.Size = UDim2.fromOffset(POD.Width, POD.Height)
+		made.StudsOffset = Vector3.new(0, lift, 0)
+		-- Camera-relative, unlike a prompt's activation range -- the lesson
+		-- PromptUI paid for. Far enough to read a neighbour's plot from the road,
+		-- which is the whole point of showing it to people who do not own it.
+		made.MaxDistance = DISPLAY_RANGE
+		--======================================================================
+		-- BORN OFF, TURNED ON BY refresh()
+		--
+		-- A BillboardGui defaults to Enabled and both labels are built empty. So
+		-- anything that stopped refresh() from running -- it threw once, on a
+		-- signature change, and every plant in the game wore a blank dark
+		-- rectangle for a session -- left a plate that was never written to and
+		-- never switched off. Starting off means a plate is only ever visible
+		-- because something actually put text in it.
+		--======================================================================
+		made.Enabled = false
+		-- Not reset by a respawn -- see NO CONTAINER above.
+		made.ResetOnSpawn = false
+		made.Parent = playerGui
+		billboard = made
+
+		--======================================================================
+		-- NO BOX
+		--
+		-- This was a dark rounded plate with a lime keyline, and the owner had
+		-- it removed on 2026-09-15: the words stand over the pod on their own.
+		-- The frame stays as the layout, fully transparent, with nothing drawn on
+		-- it. Each label's own outline is what keeps it readable over sky, grass
+		-- and soil.
+		--======================================================================
+		panel = Instance.new("Frame")
+		panel.Name = "Panel"
+		panel.Size = UDim2.fromScale(1, 1)
+		panel.BackgroundTransparency = 1
+		panel.BorderSizePixel = 0
+		panel.Parent = made
+	else
+		--======================================================================
+		-- THE SAME TWO WORDS, IN THE TOUCH LAYER
+		--
+		-- Same size, same face, same outline, same transparent layout frame --
+		-- only the thing that positions it is different. Born invisible and off
+		-- the screen, and placed only by the frame update once it has something
+		-- to say and somewhere on the screen to say it.
+		--======================================================================
+		panel = Instance.new("Frame")
+		panel.Name = "SeedPlantTimer"
+		panel.AnchorPoint = Vector2.new(0.5, 0.5)
+		panel.Size = UDim2.fromOffset(POD.Width, POD.Height)
+		panel.Position = UDim2.fromOffset(-1000, -1000)
+		panel.BackgroundTransparency = 1
+		panel.BorderSizePixel = 0
+		panel.Visible = false
+		panel.Parent = touchLayer
+	end
 
 	local pad = Instance.new("UIPadding")
 	pad.PaddingLeft = UDim.new(0, 8)
@@ -273,6 +413,13 @@ local function build(model: Model): Panel?
 	return {
 		model = model,
 		billboard = billboard,
+		frame = if billboard then nil else panel,
+		anchor = anchor,
+		lift = lift,
+		showing = false,
+		lastX = -1,
+		lastY = -1,
+		readyConn = nil,
 		word = word,
 		timer = timer,
 		species = species,
@@ -334,8 +481,14 @@ local function refresh(panel: Panel, now: number)
 		return
 	end
 	local function hide()
-		if panel.billboard.Enabled then
-			panel.billboard.Enabled = false
+		if panel.showing then
+			panel.showing = false
+			if panel.billboard then
+				panel.billboard.Enabled = false
+			end
+			if panel.frame then
+				panel.frame.Visible = false
+			end
 			-- Cleared so a plate that is somehow shown again repaints from
 			-- scratch rather than trusting a stale key.
 			panel.lastText = ""
@@ -348,8 +501,17 @@ local function refresh(panel: Panel, now: number)
 	end
 	local remaining = panel.hatchAt - now
 
-	-- Ready. The prompt takes it from here.
-	if remaining <= 0 then
+	--==========================================================================
+	-- READY. THE PROMPT TAKES IT FROM HERE -- AND THE SERVER SAYS WHEN.
+	--
+	-- The clock running out on THIS machine's tick and the server attaching its
+	-- Hatch prompt on ITS tick are a second apart at worst, and for that second a
+	-- timer reading 0:01 stood in the same spot as the prompt replacing it --
+	-- the free Hatch prompt rides 2.4 studs above the same anchor. PlantService
+	-- sets Ready on the model at the instant it attaches the prompt, so that is
+	-- heard as well: whichever arrives first takes the timer down.
+	--==========================================================================
+	if remaining <= 0 or model:GetAttribute("Ready") == true then
 		hide()
 		return
 	end
@@ -357,7 +519,7 @@ local function refresh(panel: Panel, now: number)
 	local word, timer = POD.Hatching, clock(remaining)
 
 	local key = word .. "\0" .. timer
-	if key == panel.lastText and panel.billboard.Enabled then
+	if key == panel.lastText and panel.showing then
 		return
 	end
 	panel.lastText = key
@@ -382,8 +544,12 @@ local function refresh(panel: Panel, now: number)
 	local ripeness = math.clamp(1 - remaining / total, 0, 1)
 	panel.timer.TextColor3 = POD.ClockYoung:Lerp(POD.ClockReady, ripeness)
 
-	-- Sizes are fixed at build(); nothing here resizes anything every tick.
-	panel.billboard.Enabled = true
+	-- Sizes are fixed at build(); nothing here resizes anything every tick. On
+	-- touch the frame is drawn by the frame update, which reads `showing`.
+	panel.showing = true
+	if panel.billboard then
+		panel.billboard.Enabled = true
+	end
 end
 
 --==============================================================================
@@ -427,6 +593,11 @@ local function add(instance: Instance)
 		local panel = build(model)
 		if panel then
 			panels[model] = panel
+			-- One attribute listener per pod -- an event, not a loop -- so the
+			-- timer is gone the instant the server says Ready.
+			panel.readyConn = model:GetAttributeChangedSignal("Ready"):Connect(function()
+				refresh(panel, serverNow())
+			end)
 			refresh(panel, serverNow())
 		end
 	end)
@@ -435,7 +606,15 @@ end
 local function remove(instance: Instance)
 	local panel = panels[instance :: Model]
 	if panel then
-		panel.billboard:Destroy()
+		if panel.readyConn then
+			panel.readyConn:Disconnect()
+		end
+		if panel.billboard then
+			panel.billboard:Destroy()
+		end
+		if panel.frame then
+			panel.frame:Destroy()
+		end
 		panels[instance :: Model] = nil
 	end
 end
@@ -447,41 +626,92 @@ CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Planted):Connect(add)
 CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.Planted):Connect(remove)
 
 --==============================================================================
--- THE TICK
+-- ON TOUCH, WHERE EACH TIMER GOES THIS FRAME
 --
--- Once a second, which is all a m:ss clock can show. Heartbeat with an
--- accumulator rather than a task.wait loop so it cannot drift, and the work is
--- skipped entirely by refresh() when the text has not changed -- which for a
--- grown plant is every tick, forever.
+-- Only a pod that has something to say, is in front of the camera and is within
+-- the label's own range costs anything; the rest are hidden once and skipped.
+-- The anchor projects along WORLD up -- the same axis PromptUI uses for the
+-- prompt it stacks above this on touch -- and both go through ReachPoint.stack
+-- with the same sizes, so the clamp that brings a tall pod's timer back onto the
+-- screen brings its prompt down with it.
+--==============================================================================
+local function placeOnTouch(camera: Camera)
+	local viewport = camera.ViewportSize
+	local topInset = GuiService:GetGuiInset().Y
+	local eye = camera.CFrame.Position
+	for _, panel in pairs(panels) do
+		local frame = panel.frame
+		if not frame then
+			continue
+		end
+		local drawn = false
+		if panel.showing and panel.anchor.Parent then
+			local world = panel.anchor.Position + Vector3.yAxis * panel.lift
+			if (world - eye).Magnitude <= DISPLAY_RANGE then
+				local at, inFront = camera:WorldToViewportPoint(world)
+				if inFront then
+					local centre = ReachPoint.stack(Vector2.new(at.X, at.Y), viewport, topInset,
+						LABEL_SIZE, PROMPT_SLOT, PROMPT.StackGap, POD.ScreenMargin)
+					local x, y = math.round(centre.X), math.round(centre.Y)
+					if x ~= panel.lastX or y ~= panel.lastY then
+						panel.lastX, panel.lastY = x, y
+						frame.Position = UDim2.fromOffset(x, y)
+					end
+					drawn = true
+				end
+			end
+		end
+		if frame.Visible ~= drawn then
+			frame.Visible = drawn
+		end
+	end
+end
+
+--==============================================================================
+-- THE TICK, AND THE ONE PLACE ANYTHING HERE RUNS EVERY FRAME
 --
--- The sweep below rides the same second. GetInstanceRemovedSignal and
--- GetInstanceAddedSignal only fire for changes this client saw, and a model
--- tagged during the join handshake can land before the listener does -- so the
--- tagged set is reconciled once a second rather than trusted to have been
--- announced. It is a table walk over plants already in the bed; nothing is
--- rebuilt for a model that already has a panel.
+-- Once a second for the words, which is all a m:ss clock can show, off an
+-- accumulator so it cannot drift; refresh() skips the work entirely when the
+-- text has not changed. The sweep below rides the same second.
+-- GetInstanceRemovedSignal and GetInstanceAddedSignal only fire for changes this
+-- client saw, and a model tagged during the join handshake can land before the
+-- listener does -- so the tagged set is reconciled once a second rather than
+-- trusted to have been announced. It is a table walk over plants already in the
+-- bed; nothing is rebuilt for a model that already has a panel.
+--
+-- ONE BINDING FOR EVERY POD, as it always was one Heartbeat. It is a render step
+-- now, bound just after the camera, because on touch it also places the timers,
+-- and a label placed before the camera moves trails the pod it belongs to
+-- whenever the player turns -- the lesson PromptUI paid for with its own
+-- tracker. On a desktop the per-frame half does nothing at all.
 --==============================================================================
 local since = 0
-RunService.Heartbeat:Connect(function(dt)
+RunService:BindToRenderStep(BIND, Enum.RenderPriority.Camera.Value + 1, function(dt: number)
 	since += dt
-	if since < PLANTING.TickSeconds then
-		return
-	end
-	since = 0
-	local now = serverNow()
+	if since >= PLANTING.TickSeconds then
+		since = 0
+		local now = serverNow()
 
-	-- Periodically sweep any tagged models that might have missed initial signal
-	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Planted)) do
-		if instance:IsA("Model") and not panels[instance] then
-			add(instance)
+		-- Periodically sweep any tagged models that might have missed initial signal
+		for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Planted)) do
+			if instance:IsA("Model") and not panels[instance] then
+				add(instance)
+			end
+		end
+
+		for model, panel in pairs(panels) do
+			if not model.Parent then
+				remove(model)
+			else
+				refresh(panel, now)
+			end
 		end
 	end
 
-	for model, panel in pairs(panels) do
-		if not model.Parent then
-			remove(model)
-		else
-			refresh(panel, now)
+	if TOUCH then
+		local camera = Workspace.CurrentCamera
+		if camera then
+			placeOnTouch(camera)
 		end
 	end
 end)

@@ -41,6 +41,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -49,6 +50,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local ReachPoint = require(Shared:WaitForChild("ReachPoint"))
 
 local Remotes = SeedGame:WaitForChild("Remotes")
 local channel = Remotes:WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
@@ -58,6 +60,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local ATTR = GameConfig.Attributes
 local PANEL = GameConfig.Panel
 local PLANTING = GameConfig.Plant
+local REACH = PLANTING.Reach
 
 local CREAM = Color3.fromRGB(242, 238, 206)
 local BLACK = Color3.fromRGB(0, 0, 0)
@@ -94,12 +97,20 @@ highlight.OutlineColor = LIME
 highlight.OutlineTransparency = 0
 
 --==============================================================================
--- THE BUTTON ABOVE THE PLANT
+-- THE BUTTON BESIDE THE PLANT
 --
--- A BillboardGui in PlayerGui, adorned to the selected plant's base and lifted
--- above its top in WORLD space, so it stays straight up however the plant sways
--- and follows it as it wanders. Pixel-sized rather than stud-sized, so it is the
--- same small button whether the plant is a Tiny or a Colossal.
+-- A BillboardGui in PlayerGui, adorned to the selected plant's base and offset
+-- in WORLD space, so it stays upright however the plant sways and is carried
+-- along as it wanders. Pixel-sized rather than stud-sized, so it is the same
+-- small button whether the plant is a Tiny or a Colossal.
+--
+-- WHERE, since 2026-09-18: a plant whose head is within reach keeps the button
+-- just over it, exactly as before; anything taller gets it at the edge of its
+-- footprint facing the player, at a person's height, inside the bed. It used to
+-- go over the top of EVERY plant, which put a Colossal Supernovus's button 68
+-- studs in the air -- see ReachPoint and GameConfig.Plant.Reach. The offset is
+-- re-aimed on the selection's own poll and glides between aims; nothing here
+-- runs per frame, and the engine carries the billboard with the plant.
 --
 -- It must live in PlayerGui, not in the workspace: a button on a billboard only
 -- receives clicks from there.
@@ -156,6 +167,10 @@ local selected: Selection? = nil
 local watching: { RBXScriptConnection } = {}
 local generation = 0
 local pressedAt = 0
+-- Which side of the selected plant the button is on, and the glide moving it
+-- there. Both belong to one selection and are cleared with it.
+local aim: Vector3? = nil
+local glide: Tween? = nil
 
 --==============================================================================
 -- SMALL QUESTIONS
@@ -311,6 +326,65 @@ local function clearSelection()
 	highlight.Parent = nil
 	billboard.Enabled = false
 	billboard.Adornee = nil
+	aim = nil
+	if glide then
+		glide:Cancel()
+		glide = nil
+	end
+end
+
+--==============================================================================
+-- AIMING THE BUTTON
+--
+-- The plant's own box -- measured now, because it walks and turns -- the
+-- player's position, and the bed. The bearing is dead-banded so the button does
+-- not jump sides as the player crosses the plant's centreline; with no character
+-- it falls back to the camera, and with neither it keeps the side it had.
+--
+-- `immediate` places it outright, for the moment of selection; every later aim
+-- glides, which is what keeps a 3 Hz re-aim from looking like a 3 Hz twitch.
+--==============================================================================
+local function mySoil(): BasePart?
+	local plot = myPlot()
+	local soil = if plot then plot:FindFirstChild(GameConfig.Plot.PlanterName) else nil
+	return if soil and soil:IsA("BasePart") then soil else nil
+end
+
+local function aimButton(model: Model, base: BasePart, height: number, immediate: boolean)
+	local boxCF, boxSize = model:GetBoundingBox()
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local playerAt = if root and root:IsA("BasePart") then root.Position else nil
+	local want = if playerAt then ReachPoint.toward(boxCF.Position, playerAt) else nil
+	if want == nil then
+		local camera = Workspace.CurrentCamera
+		want = if camera then ReachPoint.toward(boxCF.Position, camera.CFrame.Position) else nil
+	end
+	local side = ReachPoint.bearing(aim, want, REACH.DeadbandDegrees)
+		or Vector3.new(0, 0, 1)
+	aim = side
+
+	local soil = mySoil()
+	local point = ReachPoint.pickupPoint(boxCF, boxSize, height, base.Position, playerAt,
+		side, if soil then soil.CFrame else nil, if soil then soil.Size else nil, REACH)
+	local offset = point - base.Position
+
+	if glide then
+		glide:Cancel()
+		glide = nil
+	end
+	if immediate then
+		billboard.StudsOffsetWorldSpace = offset
+		return
+	end
+	if (offset - billboard.StudsOffsetWorldSpace).Magnitude < 0.05 then
+		return
+	end
+	local tween = TweenService:Create(billboard,
+		TweenInfo.new(REACH.TweenSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{ StudsOffsetWorldSpace = offset })
+	glide = tween
+	tween:Play()
 end
 
 local function select(model: Model, marker: BasePart)
@@ -323,11 +397,11 @@ local function select(model: Model, marker: BasePart)
 
 	highlight.Parent = model
 
-	-- Lifted clear of the plant's top, measured once: plants wander and sway
-	-- but they do not grow taller while you are looking at them.
+	-- Height measured once: plants wander and sway but they do not grow taller
+	-- while you are looking at them. Their box IS re-measured on every aim.
 	local height = model:GetExtentsSize().Y
 	billboard.Adornee = base
-	billboard.StudsOffsetWorldSpace = Vector3.new(0, height + 0.8, 0)
+	aimButton(model, base, height, true)
 	billboard.Enabled = true
 	SoundKit.play("CardClick")
 
@@ -355,6 +429,11 @@ local function select(model: Model, marker: BasePart)
 				or distanceTo(model) > SELECT_RANGE then
 				clearSelection()
 				return
+			end
+			-- The same poll that checks the plant is still there re-aims the
+			-- button at the player -- no second loop, nothing per frame.
+			if base.Parent then
+				aimButton(model, base, height, false)
 			end
 		end
 	end)

@@ -43,6 +43,10 @@ local Workspace = game:GetService("Workspace")
 -- drift onto two spellings of the same fact.
 local GameConfig = require(ReplicatedStorage:WaitForChild("SeedGame")
 	:WaitForChild("Shared"):WaitForChild("GameConfig"))
+-- Where a pod's timer sits, and how it and a prompt stacked above it are kept on
+-- a touch screen together. PlantUI asks the same module; see ReachPoint.
+local ReachPoint = require(ReplicatedStorage:WaitForChild("SeedGame")
+	:WaitForChild("Shared"):WaitForChild("ReachPoint"))
 local CARRYING = GameConfig.Attributes.CarryingSpecies
 -- Set by CarryService on a beginner's reserved pod, and by PlantService on an
 -- Instant Hatch prompt (the garden owner's id). Nothing else sets it.
@@ -134,7 +138,11 @@ local TOUCH = UserInputService.TouchEnabled
 -- the way a thing standing on the object would.
 local LIFT = Vector3.new(0, 2.4, 0)
 -- The SMALLEST a panel is. It is wider only when its verb and price need it.
-local PANEL_SIZE = Vector2.new(170, 52)
+-- The height is config, not a literal: PlantUI reserves exactly this much room
+-- above a pod's timer on touch.
+local PANEL_SIZE = Vector2.new(170, PROMPT.PanelHeight)
+-- The pod label's own box, which a stacked prompt is clamped together with.
+local POD_SIZE = Vector2.new(POD.Width, POD.Height)
 
 -- The row inside a panel, in pixels. Named because a panel's width is now summed
 -- from them instead of being fixed.
@@ -183,6 +191,10 @@ type Panel = {
 	cameraLift: boolean,
 	-- ...and then this many pixels further up the screen.
 	raise: number,
+	-- On touch, a prompt stacked over a pod's timer is placed by ReachPoint.stack
+	-- -- the call PlantUI makes for the timer itself -- rather than by the
+	-- ordinary lift, cull and topbar clamp. See the tracker.
+	stacked: boolean,
 }
 
 local shown: { [ProximityPrompt]: Panel } = {}
@@ -321,12 +333,27 @@ local function build(prompt: ProximityPrompt): Panel?
 	-- are drawn at a fixed pixel size: a gap in studs would close up as the
 	-- camera pulled back and open up as it came in.
 	--==========================================================================
-	local lift, cameraLift, raise = LIFT.Y, false, 0
+	local lift, cameraLift, raise, stacked = LIFT.Y, false, 0, false
 	local model = adornee.Parent
 	if prompt:GetAttribute(OVER_POD_LABEL) == true and model and model:IsA("Model") then
-		lift = GameConfig.topOfModel(model, adornee) + POD.LiftStuds
-		cameraLift = true
+		--======================================================================
+		-- THE LABEL'S HEIGHT, AS THE LABEL WORKS IT OUT
+		--
+		-- Through ReachPoint.podLabelLift, with the same inputs PlantUI gives it,
+		-- so the two can never disagree about where the timer is -- including
+		-- the ceiling that since 2026-09-18 keeps a Titan's or a Colossal's timer
+		-- at eye level instead of 12 to 15 studs up.
+		--
+		-- On a desktop both are billboards lifted along the camera's up, as
+		-- ever. On touch the timer is projected along WORLD up, so this is too,
+		-- and it is placed by ReachPoint.stack rather than by lift and raise.
+		--======================================================================
+		local boxCF, boxSize = model:GetBoundingBox()
+		lift = ReachPoint.podLabelLift(GameConfig.topOfModel(model, adornee),
+			adornee.Position.Y - ReachPoint.lowestY(boxCF, boxSize), POD.LiftStuds, POD.MaxAboveSoil)
+		cameraLift = not TOUCH
 		raise = POD.Height * 0.5 + PROMPT.StackGap + PANEL_SIZE.Y * 0.5
+		stacked = TOUCH
 	end
 
 	--==========================================================================
@@ -606,6 +633,7 @@ local function build(prompt: ProximityPrompt): Panel?
 		lift = lift,
 		cameraLift = cameraLift,
 		raise = raise,
+		stacked = stacked,
 	}
 
 	--==========================================================================
@@ -801,6 +829,30 @@ if TOUCH then
 			local adornee = entry.adornee
 			if not (adornee and adornee.Parent) then
 				entry.panel.Visible = false
+				continue
+			end
+			--==================================================================
+			-- STACKED OVER A POD'S TIMER: PLACED AS ONE GROUP WITH IT
+			--
+			-- This used to be the ordinary path with a camera-up lift and a
+			-- raise, and it was the half that failed first on a phone: a tall
+			-- pod put the panel's centre above the screen, and a panel whose
+			-- centre is above the screen is culled below. Now the timer's own
+			-- anchor goes through ReachPoint.stack -- exactly the call PlantUI
+			-- makes to place the timer -- and this takes the prompt's half of
+			-- the answer. The clamp moves both together, so neither is culled
+			-- for being too tall and neither can land on the other.
+			--==================================================================
+			if entry.stacked then
+				local at, inFront = camera:WorldToViewportPoint(
+					adornee.Position + Vector3.yAxis * entry.lift)
+				entry.panel.Visible = inFront
+				if inFront then
+					local _, promptAt = ReachPoint.stack(Vector2.new(at.X, at.Y), viewport,
+						inset.Y, POD_SIZE, entry.size, PROMPT.StackGap, POD.ScreenMargin)
+					entry.panel.Position = UDim2.fromOffset(math.round(promptAt.X),
+						math.round(promptAt.Y))
+				end
 				continue
 			end
 			-- World up for an ordinary prompt; the camera's up for one stacked
