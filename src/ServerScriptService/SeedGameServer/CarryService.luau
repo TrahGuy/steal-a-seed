@@ -105,8 +105,9 @@ local running = false
 --
 -- The numbers now live in GameConfig.Carry because the CLIENT needs them too,
 -- to aim the arms at the pod. Same values, one home.
--- A pod on the ground is fair game for anybody, and vanishes if nobody comes.
-local LOOSE_LIFETIME = 45
+-- A pod on the ground is fair game for anybody, and stands until the night sweeps
+-- it -- see spawnLoose for why the forty-five second lifetime that used to be
+-- here is gone.
 -- The attribute naming a pod's owner. Read by TryTake, by TutorialPodService and
 -- by the beginner guide's arrow trail.
 local RESERVED_FOR = "ReservedFor"
@@ -441,21 +442,26 @@ local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
 	end
 	attachPrompt(pod)
 	--==========================================================================
-	-- A RESERVATION DOES NOT ROT ON THE GROUND
+	-- A POD ON THE ROAD STANDS UNTIL NIGHT, AND NOT A SECOND LESS
 	--
-	-- Loose pods expire so the road does not fill with litter. A pod standing in
-	-- the nest waiting for the one beginner it belongs to is not litter, and 45
-	-- seconds is not long enough to walk there -- so `keep` skips the timer.
-	-- TutorialPodService takes it away instead, at dusk or when it stops being
-	-- needed.
+	-- Every loose pod used to destroy itself forty-five seconds after it landed,
+	-- so that the road did not fill with litter. The owner rejected that on
+	-- 2026-09-17, and they are right: forty-five seconds is shorter than the walk
+	-- from a deep nest, so a pod dropped by a bat hit, a guardian's confiscation
+	-- or a player's own hands could be GONE before its owner got back to it --
+	-- and a prize that evaporates while you run toward it is the worst kind of
+	-- loss in this game, because nobody took it from you.
+	--
+	-- THE COLLECTOR IS THE NIGHT. WorldCycleService.toNight already sweeps every
+	-- pod tagged SeedPod off the map at dusk -- see clearLoosePods -- so the road
+	-- is empty again once per cycle, and it is empty for a reason a player can
+	-- see rather than on a timer nobody can.
+	--
+	-- `keep` is what a reserved beginner's pod passes, and it no longer has a
+	-- timer to skip. It stays in the signature because TutorialPodService reads
+	-- the same flag for its own bookkeeping and the argument order is shared with
+	-- `abandoned`; nothing here branches on it any more.
 	--==========================================================================
-	if not keep then
-		task.delay(LOOSE_LIFETIME, function()
-			if pod.Parent then
-				pod:Destroy()
-			end
-		end)
-	end
 	return pod
 end
 

@@ -332,31 +332,31 @@ do
 		"a Titan's shell is mixed toward its tier, and a Colossal's further")
 	check(crownOk, "every tier puts its own colour somewhere on the pod", detail)
 
-	local labels, colossal, namesSpecies = 0, nil, false
+	--==========================================================================
+	-- NOT ONE WORD ON ANY OF THE SEVEN
+	--
+	-- The Colossal used to wear the word COLOSSAL over its crown -- the single
+	-- exception to "a pod says nothing about itself". The owner had it removed on
+	-- 2026-09-17, so the rule has no exception left, and this is the assertion
+	-- that keeps it that way: no billboard, no text, on any tier.
+	--==========================================================================
+	local labels, words = 0, {}
 	for tier = 1, 7 do
 		for _, d in ipairs(pods[tier]:GetDescendants()) do
-			if d:IsA("BillboardGui") then
+			if d:IsA("BillboardGui") or d:IsA("SurfaceGui") then
 				labels += 1
-				if tier == 7 then
-					colossal = d
-				end
+				table.insert(words, string.format("T%d %s", tier, d.Name))
 			end
-			if d:IsA("TextLabel") then
-				local text = d.Text:lower()
-				if text:find("dunebud") or text:find("uncommon") then
-					namesSpecies = true
-				end
+			if d:IsA("TextLabel") and d.Text ~= "" then
+				table.insert(words, string.format("T%d %q", tier, d.Text))
 			end
 		end
 	end
-	check(labels == 1 and colossal ~= nil, "exactly one pod in seven carries a label", labels)
-	check(not namesSpecies, "and no label names the species or its rarity")
-	local text = colossal and colossal:FindFirstChildWhichIsA("TextLabel")
-	check(text ~= nil and text.Text == "COLOSSAL" and colossal.MaxDistance == 160,
-		"the one label says COLOSSAL, bounded to 160 studs")
+	check(labels == 0, "no pod carries a label of any kind", table.concat(words, ", "))
+	check(#words == 0, "and no pod carries any text at all", table.concat(words, ", "))
 	check(pods[7]:GetAttribute("PickupSound") == "ColossalPickup"
 			and pods[6]:GetAttribute("PickupSound") == nil,
-		"only the Colossal asks for its own pickup sound")
+		"the Colossal still asks for its own pickup sound, which is not a label")
 end
 
 --==============================================================================

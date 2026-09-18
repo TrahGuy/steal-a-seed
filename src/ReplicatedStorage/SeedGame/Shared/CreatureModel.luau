@@ -2448,47 +2448,22 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 			accent, 1.0, 1.4, 2.2)
 
 		--==================================================================
-		-- THE ONE LABEL A POD IS ALLOWED
+		-- A POD CARRIES NO WORDS AT ALL
 		--
-		-- Pods carry no species id, no form rarity and no name, because an
-		-- unhatched pod exists to ask what is inside it and a label would
-		-- answer that. A TIER label answers a different question -- how big,
-		-- how slow, how much -- which the diameter and tier-coloured crown/seam
-		-- already shout anyway. It spoils nothing, and at 0.5% of rolls it should be
-		-- unmistakable when it happens.
-		--==================================================================
-		local tag = Instance.new("BillboardGui")
-		tag.Name = "TierTag"
-		tag.Size = UDim2.new(0, 190, 0, 44)
-		tag.StudsOffsetWorldSpace = Vector3.new(0, D * 0.95, 0)
-		tag.AlwaysOnTop = true
-		--==================================================================
-		-- BOUNDED, LIKE EVERY OTHER LABEL IN THIS GAME
+		-- There used to be one exception: a Colossal wore the word COLOSSAL on a
+		-- BillboardGui over its crown. The owner had it removed on 2026-09-17,
+		-- and the reason it goes is the reason every other pod never had one --
+		-- a pod is a QUESTION, and a label on it is an answer printed on the
+		-- front of the envelope.
 		--
-		-- AlwaysOnTop with no MaxDistance is a label that draws THROUGH the
-		-- world at ANY range: one Colossal pod in one nest put the word
-		-- COLOSSAL through the terrain, into the eyeline of every player on a
-		-- 1,500 stud road, and it followed the carrier around because the tag
-		-- rides along when the pod becomes a Tool.
+		-- Nothing is lost that the pod was not already saying louder: a Colossal
+		-- is the widest shell in the game, its crown is lifted clear of the
+		-- shell, its core burns through the gap, and it is the only pod with an
+		-- aura. A player who cannot tell has not looked at it.
 		--
-		-- AlwaysOnTop is still right -- the label has to beat the pod's own
-		-- crown, which is taller than it is. The range is what was missing.
-		-- 160 is PlantUI's number for a label on a plant, which is the same
-		-- job; PromptUI uses 250 and SpeedFX 90. This was the only billboard
-		-- in the codebase that set no range at all.
+		-- DO NOT PUT IT BACK as a smaller label, a tooltip or a prompt line. The
+		-- rule is the whole category: no species, no rarity, no tier, no name.
 		--==================================================================
-		tag.MaxDistance = 160
-		tag.Parent = shell
-		local text = Instance.new("TextLabel")
-		text.Size = UDim2.new(1, 0, 1, 0)
-		text.BackgroundTransparency = 1
-		text.Font = Enum.Font.GothamBlack
-		text.TextScaled = true
-		text.TextColor3 = color
-		text.TextStrokeTransparency = 0.35
-		text.Text = "COLOSSAL"
-		text.Parent = tag
-
 		-- For CarryService and SoundCues to read. Geometry does not play sound,
 		-- and it does not decide when a pickup happened either.
 		model:SetAttribute("PickupSound", "ColossalPickup")

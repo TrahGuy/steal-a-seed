@@ -1,5 +1,78 @@
 # Steal a Seed — Session Handoff
 
+## No word on a pod, and a pod that waits for the night — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** "remove the colossal text above the pod, and i noticed the pods is
+still despawning, they should remain until night reset".
+
+### The word
+
+`CreatureModel.BuildPod` hung a `TierTag` BillboardGui over a tier-7 shell reading
+COLOSSAL -- the single exception to "a pod says nothing about itself", added when the
+0.5% tier shipped. It is gone, and the rule now has no exception: no species, no
+rarity, no tier, no name, on any pod in any biome.
+
+Nothing was lost that the shell was not already saying louder. A Colossal is the widest
+pod in the game, its crown stands clear of the shell, its core burns through the gap and
+it is the only pod with an aura.
+
+**What stays, because it is not a word:** `model:SetAttribute("PickupSound",
+"ColossalPickup")`, which is how CarryService and SoundCues know a Colossal was picked
+up. `DustbowlPodSpec` now asserts the absence -- no billboard and no text on any of the
+seven -- and asserts that the attribute survived it.
+
+### The despawn
+
+`CarryService.spawnLoose` scheduled `task.delay(LOOSE_LIFETIME, ...)` on every loose pod
+it made, and `LOOSE_LIFETIME` was 45 seconds. That is shorter than the walk back from a
+deep nest, so a pod dropped by a bat hit, by a guardian's confiscation or by a player's
+own hands could be GONE before its owner reached it -- a prize that evaporates while you
+run toward it, with nobody to blame for taking it.
+
+Removed: the `task.delay`, the `if not keep then` that gated it, the constant, and the
+line of prose that promised a pod "vanishes if nobody comes".
+
+**THE COLLECTOR IS THE NIGHT.** `WorldCycleService.toNight` already calls
+`clearLoosePods()`, which destroys every model tagged `SeedPod`, so the road still
+empties once per cycle -- for a reason a player can see, rather than on a timer nobody
+can. `keep` stays in `spawnLoose`'s signature (TutorialPodService reads the same flag and
+the argument order is shared with `abandoned`), but nothing branches on it any more.
+
+**Every remaining way a pod dies** is a consumption or a handoff, not a clock: taken from
+a nest (CarryService:699), dropped and re-formed (799), handed to a Backpack that is not
+there (850), turned into a Tool (931), hotbarred (1241), and the two forfeit paths (1296,
+1439); plus NestService's restock and confiscation, TutorialPodService retiring a
+reserved pod, and the night sweep. `grep task.delay` over the whole server matches
+nothing that destroys anything.
+
+### Verified
+
+  * **The label, behaviourally, in Edit off the current source:** all 25 species x 7
+    tiers = **175 pods built, 0 GUI objects of any class, 0 characters of text**, and
+    `PickupSound` present on tier 7 only (`nil` on 1-6).
+  * **No timed destroy is left on the server** -- the grep above.
+  * **Eight specs, 577 assertions, every one green,** fresh-required off the tree:
+    DustbowlPodSpec 36, CarryHandsSpec 16, HeldRestoreSpec 31, GuardianConfiscateSpec 88,
+    CycleSpec 31, TutorialPodSpec 263, TrapSystemSpec 67, PlantInfoSpec 45. The four that
+    know what happens to a pod after it lands -- carry, held-restore, confiscation and the
+    day/night cycle -- are the ones that had to stay green with the timer gone, and did.
+  * `rojo build` succeeds; `git diff --check` is clean.
+
+### A note for the next session: MCP cannot fetch, so it can hand-apply
+
+This Studio session was restarted mid-task and its Rojo plugin came back disconnected, so
+neither the two edits nor `SpecSourcesTemp` reached it, and `execute_luau` has no Network
+capability to fetch them itself (`HttpService:GetAsync` fails with "lacking capability
+Network" -- the localhost-runner trick works from the COMMAND BAR only). What did work:
+writing `.Source` from MCP and then proving the result, by comparing byte counts and
+per-100-line checksums against the files on disk. It found a stale line Studio still had
+that no eyeball would have caught. All 22 scripts this work touches were confirmed
+identical to disk that way before anything was run.
+
+### Not verified
+  * **A pod left on the road all the way to dusk, in Play.** The timer's absence is
+    proven statically; the sweep that replaces it is the same one CycleSpec covers.
+
 ## Five traps, and a switch that says you are walking — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** turn the one Bramblejaw into five permanent trap unlocks, one per
