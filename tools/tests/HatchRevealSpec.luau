@@ -29,6 +29,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local Server = ServerScriptService:WaitForChild("SeedGameServer")
 local PlantWander = require(Server:WaitForChild("PlantWander"))
@@ -105,18 +106,36 @@ do
 	check(HATCH.HearingStuds > 0 and HATCH.HearingStuds <= 300,
 		"and a range past which a client ignores it", HATCH.HearingStuds)
 
-	-- The three sounds this animation would like and does not have. They are
-	-- named and SILENT: naming them is the ask, and an empty string plays nothing.
-	local silent = {}
+	--==========================================================================
+	-- THE THREE SOUNDS, WHICH ARRIVED ON 2026-09-17
+	--
+	-- This used to assert they were EMPTY STRINGS -- the animation named three
+	-- cues it did not have, and naming them was the ask. The owner uploaded all
+	-- three that evening and they were wired the same night, so the assertion
+	-- has to move with the game: the names are still the contract, and what
+	-- changed is that each one now resolves to a row.
+	--
+	-- BLANKING ONE IS STILL HOW YOU TURN IT OFF, which is why the loop below
+	-- accepts an empty string and only fails a name that is not a cue: a row
+	-- pulled by moderation must make the reveal quieter, never broken.
+	--==========================================================================
+	local names, broken = {}, {}
 	for name, cue in pairs(HATCH.Sounds) do
-		if cue == "" then
-			table.insert(silent, name)
+		table.insert(names, name)
+		if cue ~= "" and SoundKit.cue(cue) == nil then
+			table.insert(broken, string.format("%s -> %s", name, tostring(cue)))
 		end
 	end
-	table.sort(silent)
-	check(#silent == 3 and table.concat(silent, ",") == "Crack,Rattle,TimeSkip",
-		"the rattle, the crack and the time-skip are declared and silent",
-		table.concat(silent, ","))
+	table.sort(names)
+	check(#names == 3 and table.concat(names, ",") == "Crack,Rattle,TimeSkip",
+		"the rattle, the crack and the time-skip are the three the reveal names",
+		table.concat(names, ","))
+	check(#broken == 0,
+		"and every one of them that is named resolves to a cue that exists",
+		table.concat(broken, ", "))
+	check(HATCH.Sounds.Rattle == "HatchRattle" and HATCH.Sounds.Crack == "HatchCrack"
+			and HATCH.Sounds.TimeSkip == "HatchTimeSkip",
+		"which since 2026-09-17 are the owner's own recordings")
 	check(GameConfig.Sfx.RevealFor.Mythic ~= nil and GameConfig.Sfx.RevealFor.Common ~= nil,
 		"while the rarity fanfare, which does exist, is mapped for every rarity")
 end

@@ -1,5 +1,204 @@
 # Steal a Seed — Session Handoff
 
+## BETA-READINESS AUDIT — 2026-09-17 (CLAUDE)  (VERDICT: READY FOR CLOSED BETA AFTER ONE DASHBOARD FIX)
+
+**Scope:** the whole game as the working tree stands tonight, including the five
+traps, Walk Mode, the guardian voices, the pod lifetime change and both audio
+passes. Nothing was committed, staged, reverted or stashed; every other agent's
+work is untouched.
+
+### Verdict
+
+**Ready for a small closed beta once MaxPlayers is set to six.** No P0 was found
+in the code. One P0 is a place SETTING the owner has to change in Studio's Game
+Settings, and one P1 is a HUD layout collision that is measured, harmless to
+input, and a design call rather than a bug to patch.
+
+### P0 — blockers
+
+  1. **`Players.MaxPlayers` is 60 and there are six plots.** Read live from the
+     open place: `players: 1 of MaxPlayers 60`. **The game already says so at
+     boot** -- `[Seed] Players.MaxPlayers is 60 but there are only 6 plots.
+     Joiner 7 onwards gets no plot. Set it to 6 in Game Settings -> Places.`
+     The code does NOT break: `PlotService` runs a join-ordered queue, spawns the
+     unplotted on an overflow pad, keeps loading their profile, and hands a lease
+     to the head of the queue when one frees. But a beta where 54 of 60 joiners
+     cannot plant is not a beta. **Manual, owner-only:** Game Settings -> Places
+     -> Max Players = 6, then publish. It is a place property, not a repo file,
+     and this audit did not touch the owner's place.
+
+### P1 — fix before beta
+
+  2. **The cash/speed HUD and the hotbar strip overlap on narrow viewports.**
+     MEASURED, live, twice: at 1037 x 714 they clear each other; at 933 x 714 the
+     painted cash content ends at x=352 and the hotbar begins at x=326 --
+     **26 px of overlap** across `SeedCash/Corner` and `SeedLoadout/Hotbar`.
+     Both are fixed pixels: the cash panel is 340 x 108 anchored bottom-left at
+     x=12 with no touch branch at all, and the strip is bottom-CENTRED at 281 px
+     for three slots, +69 px per extra slot. So they collide whenever
+     `(viewportWidth - stripWidth) / 2 < 352`:
+
+         3 slots  (281 px)  ->  overlaps below  985 px
+         5 slots  (419 px)  ->  overlaps below 1123 px  (mobile default)
+        10 slots  (764 px)  ->  overlaps below 1468 px  (desktop full strip)
+
+     A 1366 x 768 laptop with a full strip overlaps by 51 px; a landscape phone
+     at ~896 px with five slots overlaps by ~114 px, which is most of the money
+     readout. **Nothing becomes unclickable** -- `SeedLoadout` is DisplayOrder 30
+     over `SeedCash` at 20, and the cash frame is transparent and not Active, so
+     the hotbar simply draws on top of the numbers.
+
+     **Not fixed here.** Which one yields -- the cash panel moving up, the strip
+     losing its centring, or both scaling -- is a layout decision on an approved
+     design, and the brief says report those rather than change them.
+
+### P2 — can beta with it
+
+  3. **A weapon purchase still borrows the mill's sound.**
+     `WeaponShopService:298` emits `MillUpgrade` when Marigold sells something.
+     It is the LAST borrowed cue in the game; every other stand-in was replaced
+     tonight. One row and one line whenever a till sound exists for it.
+  4. **Shop tiles print the owner's Robux numbers, not the viewer's.**
+     `GetProductInfo` on this account returns 12 / 39 R$ where the manifest says
+     29 / 99 (the x2 pass matches exactly at 79). That is regional pricing, it
+     was understood and accepted in an earlier session, and the tiles are the
+     owner's chosen numbers -- but a player in another region can be charged a
+     different number from the one on the card.
+  5. **Every new cue is wired and unheard.** 45 cue rows, zero blank ids, zero
+     names played that are not rows -- but no human has listened to the twenty-six
+     added today in context. Levels most likely to want an ear:
+     `TrapSpringDunesnap` 1.56, `PodDrop` 1.16, `ChaseBed` 0.62, the two wakes at
+     0.70 across 170 studs.
+  6. **One 100 ms server hitch** in the second boot's six-second sample, during
+     character spawn and garden restore; the first boot's worst frame was 21 ms.
+     Single player, in Studio, which is not a profiling environment.
+  7. **1,743-1,751 GuiObjects across 19 ScreenGuis at idle.** Not a problem on
+     this machine; worth a look on a real phone.
+
+### Stale expectations found (the brief's, not the repo's)
+
+The audit brief asked for three things that the source no longer does, all
+because the owner supplied the assets hours earlier:
+
+  * "The three hatch sounds remain silent until real asset IDs are supplied" --
+    they are wired (`HatchRattle`, `HatchCrack`, `HatchTimeSkip`) and resolve.
+  * "Emberroot and Starbloom have no unique wake and should remain silent" --
+    both have their own wake, and both fired live in Play tonight.
+  * The "known candidates for later audio work" list is now wired end to end,
+    except weapon purchase (P2 above).
+
+`HatchRevealSpec` was still asserting the OLD intent -- that the three hatch cues
+are empty strings -- and failed for that reason. **That assertion was updated**
+(the only file this audit changed): it now checks the three names are the ones
+the reveal declares, that each resolves, and that blanking one is still how you
+turn it off. 59+1 became 62 passed.
+
+### Verified, with the evidence
+
+  * **31 specs, 3,105 assertions, 0 failures**, fresh-required off the current
+    source in Edit. Totals: AlmanacClaim 75, Balance 34, BatClearance 939,
+    BatSwing 93, CarryHands 16, Cycle 31, DebugTeleport 8, DustbowlPod 36,
+    GuardianConfiscate 88, HatchReveal 62, HatchTimer 38, HeldRestore 31,
+    InstantHatch 33, Leaderstats 28, MillSign 8, MusicBed 28, ParentVoice 119,
+    PlantGlow 39, PlantInfo 45, PlantWander 65, Plot 65, SfxWiring 202,
+    SoundLevel 28, Speed 332, StarbloomLimb 71, Store 15, TrapSystem 67,
+    TutorialPod 263, Tutorial 93, WalkMode 30, Weapon 123.
+  * **Two clean boots, no errors.** Console across both: 22 services ready, no
+    error, no warning, no infinite yield, no repeated line. The owner's profile
+    loaded both times (`cash 780747976041, speed 284994091347177`) and
+    `restored 4 plant(s)`.
+  * **Restart safety.** Boot 1: 2,682 parts / 46 billboards / 501 joints /
+    30 prompts / 16 pods / 5 parents / 6 plots. Boot 2 after a stop:
+    2,683 parts (the one loose pod the probe spawned) and every other number
+    identical; one SeedMap, five nest folders, no duplicate anything. Client:
+    1,751 then 1,743 GuiObjects.
+  * **Loose pods stand until the night, LIVE.** A pod made through the real
+    `CarryService.SpawnLoose` was alive at 50 s and at 70 s, on both boots. The
+    45-second timer is gone and the night sweep is the only collector.
+  * **Streaming, all five biomes.** Walked the character to every guardian in one
+    pass: all five streamed in and were dressed with exactly one of each sound --
+    Dustbowl with `SeedLoop_ParentSleepDustbowl` and no looping step, the other
+    four with the generic pair. No duplicates from re-streaming.
+  * **Walk Mode, through the real remote, twice.** 143.46 -> ON 16.00 -> a client
+    that forged the attribute locally still 16.00 -> OFF 143.46. Both runs
+    restored the owner's original value (off) and the console logged both.
+  * **Every product id resolves and is on sale.** All twelve Developer Products
+    and the Game Pass answered `GetProductInfo`: "Permanent 2× Earn" as a
+    GAME PASS at R$79, six speed packs, five cash packs and Instant Hatch, every
+    one `IsForSale = true`. The three `???` pod tiles are `product = 0`, are not
+    indexed by StoreService, and the shop refuses the click with a Denied rather
+    than prompting.
+  * **Receipts are idempotent and fail safe.** `StoreService.processReceipt`:
+    ledger check first, `NotProcessedYet` for a missing player, an unloaded
+    profile, an unknown product id or a grant that could not land, and
+    `PurchaseGranted` only after the save succeeds. Ledger capped at 32 receipts.
+  * **One faucet.** `EconomyService` is the only place the x2 pass multiplies, by
+    construction and by comment; every other `AddCash` is a paid pack, a refund
+    or the gated debug console.
+  * **Purchases are server-authoritative.** `WeaponShopService.TryBuy` looks the
+    item up by id, reads the price from data, checks cash, deducts, grants, and
+    refunds if the grant fails, behind a re-entrancy guard.
+  * **Saves.** Session lock claimed inside `UpdateAsync`, locks expire, load
+    retries a locked profile, save retries with backoff, `BindToClose` and
+    `PlayerRemoving` both write, autosave staggered.
+  * **Data.** Six species carry the approved bonus and no others (+1 Petalpip,
+    Paddlehop, Crookreed, Emberquill, Novaorb; +2 Cosmospire), flat at all seven
+    tiers. Mill tier 10 is $100B; Overclock is exactly 125/150/180/220/270/330/
+    400/500/650/850 B. The hatch ladder is 30/60/150/360/900/2100/4500 behind a
+    load-time assert. Guardian leave-behind is 0.40.
+  * **Audio coverage.** 45 rows, 0 blank ids; 88 scripts scanned, 17 literal cue
+    names played, 0 orphans; every other row is reached through ParentVoices,
+    TrapSpecs.SpringCue, RevealFor, Hatch.Sounds, the pod's PickupSound attribute
+    or a documented fallback.
+  * **One loop per object.** 22 per-frame connections across 20 client scripts,
+    one each except HatchFX (3) and Ambience (2). No per-card RenderStepped.
+  * **Rojo is pinned** to `114075467877655`; `rojo build` succeeds;
+    `git diff --check` is clean.
+
+### NOT verified, and why
+
+  * **Every two-player behaviour.** MCP can start Play Solo and nothing else, so
+    no bat hit landed on a victim, no trap caught anybody, no ragdoll recovery
+    was watched, and the historical trap-then-guardian regression was not run.
+    TrapSystemSpec drives the real service with stand-in players on a controlled
+    clock; that is a fixture, not a multiplayer test. **This is the single
+    largest gap in this audit.**
+  * **The new-player core loop end to end.** The only profile available is the
+    owner's, which is long past the tutorial, and wiping or faking it was out of
+    bounds. Tutorial logic is specced (TutorialSpec 93, TutorialPodSpec 263) and
+    the service reports ready at boot; no fresh player walked the route.
+  * **Mobile.** No device and no emulator: Studio's emulator restarts Play and
+    cannot be driven over MCP. The hotbar's 5/10 rule was computed from measured
+    inputs (KeyboardEnabled true, width 1037 >= 900 -> 10), not observed on a
+    phone, and the P1 above is arithmetic off measured geometry.
+  * **Six-player stress.** Not runnable from here. The 60 fps / 16.7 ms average
+    above is one player on an otherwise idle server with empty plots.
+  * **A hatch, a sale, a purchase or a plot upgrade performed for real.** All of
+    them write the owner's profile.
+  * **Whether any of it SOUNDS right.** No human has listened.
+
+### Files changed by this audit
+
+  * `tools/tests/HatchRevealSpec.luau` -- the stale hatch-sound assertion, above.
+  * `KB/HANDOFF.md` -- this entry.
+
+Two temporary probes (`ZZAuditProbe.server.luau`, `ZZAuditClient.client.luau`) and
+`src/ServerScriptService/SpecSourcesTemp/` were created, used and deleted; Studio
+confirms all three are gone. Nothing else was added, and `thumbnail1` stays
+deleted-in-tree exactly as it was found.
+
+### Manual owner checklist
+
+  1. **Game Settings -> Places -> Max Players = 6**, then publish. (P0)
+  2. Creator Dashboard: confirm the twelve products and the pass are the ones
+     intended, at the intended prices, and that nothing is off-sale.
+  3. A real phone: the HUD collision above, the PICK UP button, prompt taps, and
+     whether 1,700 GuiObjects is comfortable.
+  4. Listen to the twenty-six new cues in context, especially the four levels
+     named in P2.
+  5. Final visual approval of everything still uncommitted -- traps, Walk Mode,
+     guardian voices, the pod lifetime, and both audio passes.
+
 ## A bed for the night, and a chase worth running from — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** "also wire those 2" -- the two music beds found while wiring the
