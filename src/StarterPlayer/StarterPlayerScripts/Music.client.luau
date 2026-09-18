@@ -41,6 +41,8 @@
 local ContentProvider = game:GetService("ContentProvider")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -48,6 +50,8 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local MUSIC = GameConfig.Music
+local ATTR = GameConfig.Attributes
+local CYCLE = GameConfig.WorldCycle
 local TRACK_NAME = "SeedMusicTrack"
 
 --==============================================================================
@@ -80,12 +84,26 @@ end
 -- an empty string in it would set a SoundId that resolves to nothing, which
 -- plays no sound and reports no problem.
 --==============================================================================
-local tracks: { string } = {}
-for _, id in ipairs(MUSIC.Tracks) do
-	if type(id) == "string" and id ~= "" then
-		table.insert(tracks, id)
+local function usable(list: { string }?): { string }
+	local out: { string } = {}
+	for _, id in ipairs(list or {}) do
+		if type(id) == "string" and id ~= "" then
+			table.insert(out, id)
+		end
 	end
+	return out
 end
+
+local tracks: { string } = usable(MUSIC.Tracks)
+--==============================================================================
+-- AND A SECOND LIST, FOR THE SIXTY SECONDS THE ROAD IS SHUT
+--
+-- Empty is a state here too, and a different one from the day list being empty:
+-- no night ids means the day bed keeps playing after dusk, which is what this
+-- game did until tonight. So it is not warned about and not reported -- there is
+-- nothing wrong with a world that has one bed.
+--==============================================================================
+local nightTracks: { string } = usable((MUSIC :: any).NightTracks)
 
 if #tracks == 0 then
 	warn("[Seed/Music] No ids in GameConfig.Music.Tracks, so there is no music. "
@@ -121,8 +139,6 @@ sound.Volume = 1
 -- frame and you can hear it. With more than one, Looped has to be off or
 -- `Ended` never fires and the second track never gets a turn.
 --==============================================================================
-sound.Looped = #tracks == 1
-sound.SoundId = tracks[1]
 sound.Parent = SoundService
 
 --==============================================================================
@@ -157,18 +173,101 @@ sound.Parent = SoundService
 -- unnoticed until the second id was pasted in.
 --==============================================================================
 local index = 1
+local current: { string } = tracks
 
-if not sound.Looped then
-	sound.Ended:Connect(function()
-		index = index % #tracks + 1
-		sound:Stop()
-		sound.SoundId = tracks[index]
-		sound.TimePosition = 0
-		sound:Play()
+--==============================================================================
+-- WHICH LIST THE WORLD IS ASKING FOR
+--
+-- Workspace.WorldPhase is the one authoritative answer to "is it night" -- the
+-- server writes it at dusk and at dawn and it replicates on its own, which is
+-- the same signal PlantGlow, PlantSway, WorldClock and the tutorial already read.
+-- No remote, no clock of this script's own, and nothing to drift.
+--==============================================================================
+local function listFor(): { string }
+	if #nightTracks > 0
+		and Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then
+		return nightTracks
+	end
+	return tracks
+end
+
+--==============================================================================
+-- ONE PLACE THAT CHANGES WHAT IS PLAYING
+--
+-- Stop, change, rewind, play -- in that order, for the reason written above: a
+-- new SoundId inherits the old playhead and Play() does not rewind, and getting
+-- that wrong is what made the two-track playlist eat itself.
+--
+-- `Looped` is set from the list being started rather than once at the top,
+-- because the two lists are different lengths: the night bed is one track and
+-- loops itself in the engine, the day bed is two and takes turns. It was a
+-- constant when there was only one list.
+--==============================================================================
+local function playTrack(list: { string }, at: number)
+	current = list
+	index = at
+	sound:Stop()
+	sound.Looped = #list == 1
+	sound.SoundId = list[at]
+	sound.TimePosition = 0
+	sound:Play()
+end
+
+--==============================================================================
+-- Ended IS CONNECTED UNCONDITIONALLY NOW
+--
+-- It used to be skipped when there was one track, because a Looped sound never
+-- raises it. That is still true -- but which list is playing can change at dusk,
+-- so a connection made once at startup has to be able to serve the OTHER list
+-- later. Connecting it costs nothing on a looping track: the event does not fire.
+--==============================================================================
+sound.Ended:Connect(function()
+	playTrack(current, index % #current + 1)
+end)
+
+playTrack(listFor(), 1)
+
+--==============================================================================
+-- DUSK AND DAWN, AS A CROSSFADE THE SKY IS ALREADY DOING
+--
+-- On the SOUND'S OWN Volume and not on the bus. The bus is the mixer: the chase
+-- duck moves it, the settings slider moves it, and SoundKit.fadeMusic aims it at
+-- the player's chosen level. A fade written here that touched the group would
+-- fight all three and would end by restoring a level the player had turned down.
+-- The Sound underneath it is this script's to move.
+--
+-- HALF OUT, SWAP, HALF IN, so the change of track lands in the quiet in the
+-- middle rather than under the outgoing piece. The token is what stops two dusks
+-- in quick succession -- a re-sync, or an admin flipping the phase -- from
+-- leaving a fade-in scheduled for a track that is no longer the one playing.
+--==============================================================================
+local swap = 0
+
+local function fadeSound(to: number, seconds: number)
+	TweenService:Create(sound, TweenInfo.new(seconds, Enum.EasingStyle.Sine), {
+		Volume = to,
+	}):Play()
+end
+
+local function applyPhase()
+	local want = listFor()
+	if want == current then
+		return
+	end
+	swap += 1
+	local token = swap
+	local half = math.max(0.15, (tonumber((MUSIC :: any).PhaseFadeSeconds) or 3.0) * 0.5)
+	fadeSound(0, half)
+	task.delay(half, function()
+		if swap ~= token or not sound.Parent then
+			return
+		end
+		playTrack(want, 1)
+		fadeSound(1, half)
 	end)
 end
 
-sound:Play()
+Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(applyPhase)
 
 -- Through SoundKit rather than a tween of its own. The chase duck and the
 -- settings panel move this bus too, and all three have to aim at one number:

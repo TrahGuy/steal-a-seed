@@ -4262,12 +4262,24 @@ GameConfig.Card = {
 --
 --     BGM1   133940553394248     sfx/Garden at First Light.m4a
 --     BGM2    70722559996799     sfx/Garden at First Light_1.m4a
+--     NIGHT  115368148164882     sfx/Night Background Music.mp3
 --
--- TWO TAKES OF ONE PIECE. Played in order and wrapped at the end, so the bed
--- runs about three and a quarter minutes before it repeats itself. One id here
--- would loop that one track forever instead; the list decides, not the code.
+-- TWO TAKES OF ONE PIECE, BY DAY. Played in order and wrapped at the end, so the
+-- bed runs about three and a quarter minutes before it repeats itself. One id in
+-- a list would loop that one track forever instead; the list decides, not the
+-- code.
 --
--- Nothing about the player picks a track. It is a bed, not a cue.
+-- AND ONE PIECE AT NIGHT. NightTracks is the same kind of list and works the same
+-- way -- Music.client reads Workspace.WorldPhase and crossfades between the two
+-- -- but it is nearly three minutes long against a night that lasts sixty
+-- seconds, so in practice it plays its own first minute and is faded out at dawn.
+-- That is the right shape for it: a night is a scene, not a loop.
+--
+-- AN EMPTY NightTracks IS NOT SILENCE. The day bed simply keeps playing, which is
+-- exactly what the game did before this list existed.
+--
+-- Nothing about the PLAYER picks a track. The world does, and only at dusk and
+-- dawn. It is still a bed, not a cue.
 --
 -- NOT BALANCE, so Rule 7 is intact: names and structure, the same way
 -- GameConfig.Rail carried the rail's image ids for as long as it had any.
@@ -4276,6 +4288,11 @@ GameConfig.Music = {
 	Tracks = {
 		"rbxassetid://133940553394248",  -- BGM1
 		"rbxassetid://70722559996799",   -- BGM2
+	},
+
+	-- 2:58 of it, against a sixty-second night. Uploaded 2026-09-17.
+	NightTracks = {
+		"rbxassetid://115368148164882",  -- Night Background Music
 	},
 
 	--==========================================================================
@@ -4292,6 +4309,19 @@ GameConfig.Music = {
 	-- Faded up at join rather than slammed on. A track that starts at full
 	-- level on the loading screen is the first thing a player mutes.
 	FadeSeconds = 2.5,
+
+	--==========================================================================
+	-- AND THE SAME THREE SECONDS THE SKY TAKES
+	--
+	-- Deliberately WorldCycle.Night.FadeSeconds, by value: the lighting crossfade
+	-- and the bed crossfade are one event to a player standing in the road at
+	-- dusk, and two durations that drift apart would make the world change twice.
+	--
+	-- Half of it fades the old bed out and half brings the new one in, so the
+	-- swap itself happens at the darkest moment rather than over the top of the
+	-- track that is leaving.
+	--==========================================================================
+	PhaseFadeSeconds = 3.0,
 }
 
 --==============================================================================
@@ -4558,19 +4588,32 @@ GameConfig.Sfx = {
 		-- Peaks at 11%, the quietest upload of the fourteen. Designed 0.50.
 		Banked = { id = "rbxassetid://90673825356478", volume = 4.37, group = "UI" },
 		--==================================================================
-		-- THE BASE BED, NOT THE SECOND TIER
+		-- THE CHASE BED, RE-RECORDED 2026-09-17
 		--
-		-- There are two chase beds now. This is the original 5.56s loop --
-		-- the one written to run for a whole way home. `CHASE BED, SECOND
-		-- TIER` (110892791280400, 4.00s) is the more frantic one and has
-		-- nowhere to go yet: escalating needs a state that says a chase is
-		-- WORSE than usual, and this game does not have one. When it does --
-		-- an expensive pod, or a third theft from the same nest -- that id is
-		-- what it escalates to.
+		-- This was 86935894428393, a 5.56 second loop recovered out of the
+		-- account's inventory after its local file was deleted -- the oldest
+		-- asset in this table and the only one nobody had ever measured. It is
+		-- now `Chase Background Music`: 74.4 seconds of written chase rather
+		-- than six seconds going round.
+		--
+		-- STILL LOOPED, AND THAT STILL MATTERS MORE THAN THE LENGTH. A chase
+		-- is over in seconds; what a player hears is the first ten of this,
+		-- from the top, every time -- SoundKit restarts a 2D cue rather than
+		-- stacking it. The loop only ever matters to somebody who has been
+		-- chased for a minute and a quarter, and they have earned a seam.
+		--
+		-- Peaks at 65%, so the designed 0.40 is 0.62 of gain. THIS IS THE
+		-- NUMBER MOST LIKELY TO WANT AN EAR: the old bed's level was never
+		-- measured against anything, so 0.40 was a judgement about a file
+		-- nobody has the source of any more.
+		--
+		-- `CHASE BED, SECOND TIER` (110892791280400, 4.00s) is still the
+		-- escalation and still has nowhere to go: that needs a state saying a
+		-- chase is WORSE than usual, and this game does not have one.
 		--==================================================================
 		ChaseBed = {
-			id = "rbxassetid://86935894428393",
-			volume = 0.40, looped = true, group = "Chase",
+			id = "rbxassetid://97007444825023",
+			volume = 0.62, looped = true, group = "Chase",
 		},
 
 		--======================================================================

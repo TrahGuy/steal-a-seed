@@ -1,5 +1,98 @@
 # Steal a Seed — Session Handoff
 
+## A bed for the night, and a chase worth running from — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** "also wire those 2" -- the two music beds found while wiring the
+eighteen cues below.
+
+### The chase bed was a judgement call, and here it is
+
+`Chase Background Music` (74.4s) **replaces** the old `ChaseBed`
+(86935894428393), which was a 5.56 second loop recovered out of the account's
+inventory after its local file was deleted -- the oldest asset in the table and
+the only one nobody had ever measured. The new file is a written chase rather
+than six seconds going round, and its name says bed rather than tier.
+
+`CHASE BED, SECOND TIER` (110892791280400, 4.00s) is untouched and still has
+nowhere to go: escalating needs a state that says a chase is WORSE than usual,
+and this game still does not have one.
+
+**If that reading is wrong it is one id and one number to put back** -- the row
+carries both the old id and the reasoning.
+
+Still looped, because that matters more than the length: a chase is over in
+seconds, so what a player actually hears is the first ten of this from the top
+every time, and the loop only ever reaches somebody who has been chased for a
+minute and a quarter. Peaks at 65%, so the designed 0.40 becomes 0.62 of gain --
+**the number most likely to want an ear**, because the level it inherits was a
+judgement about a file nobody has the source of any more.
+
+### The night bed needed the client to learn about dusk
+
+`Music.client` played `GameConfig.Music.Tracks` in order and knew nothing about
+the clock -- "nothing about the player picks a track; it is a bed, not a cue". It
+now reads **`Workspace.WorldPhase`**, which is the same one authoritative signal
+PlantGlow, PlantSway, WorldClock and the tutorial already read, and crossfades
+between two lists:
+
+    Tracks       the two Garden at First Light takes, in turn      (day)
+    NightTracks  Night Background Music, 2:58 of it                (night)
+
+**Three things this had to get right, and they are the three the spec asserts:**
+
+  * **An empty `NightTracks` is not silence.** No night ids means the day bed
+    keeps playing after dusk, which is exactly what the game did before the list
+    existed.
+  * **The crossfade moves the SOUND, never the bus.** The music group is the
+    mixer: the chase duck moves it, the settings slider moves it, and
+    `SoundKit.fadeMusic` aims it at the level the player chose. A fade written
+    onto the group would fight all three and end by restoring a level somebody had
+    turned down.
+  * **`Looped` is per list, not a constant.** It used to be `#tracks == 1`, set
+    once, because there was one list. The night list is one track and loops in the
+    engine; the day list is two and takes turns. `Ended` is now connected
+    unconditionally for the same reason -- the connection made at startup has to
+    serve the other list after dusk.
+
+Half the fade takes the old bed out, half brings the new one in, so the swap lands
+in the quiet in the middle. `PhaseFadeSeconds = 3.0` is `WorldCycle.Night.FadeSeconds`
+**by value and asserted as such**: the sky and the bed are one event to anybody
+standing in the road at dusk, and two durations would make the world change twice.
+
+Note the shape of it -- 2:58 of night bed against a 60-second night. It plays its
+own first minute and is faded out at dawn, which is the right shape for a scene.
+
+### Verified
+
+  * **MusicBedSpec (new, 28), SfxWiringSpec 202, SoundLevelSpec 28, CycleSpec 31,
+    ParentVoiceSpec 119 -- all green.** MusicBedSpec checks both lists, that no
+    track is in both (dusk always changes something), the fade coupling to the
+    lighting, the chase row against all three chase ids, and -- by source -- the
+    three failures above.
+  * **Both ids load in Studio at exactly their file's length:** 177.96s and 74.40s.
+  * **Play, the dusk itself.** `Workspace.WorldPhase` is client-readable, so the
+    probe wrote it locally (a client write replicates nowhere and the server's own
+    value is untouched) and watched the bed:
+
+        day          133940553394248  looped=false  vol 1.00
+        night        115368148164882  looped=true   vol 1.00  pos 2.5  <- from the top
+        back to day  133940553394248  looped=false  vol 1.00
+
+    Both crossfades completed, `Looped` flipped with the list, and the swap rewound
+    rather than inheriting the old playhead -- the bug that once made the two-track
+    playlist eat itself.
+  * **Play, the chase bed:** `97007444825023`, playing, looped, 0.62, on the
+    `SeedChase` bus -- so muting the music still does not mute the monster.
+  * `rojo build` succeeds; `git diff --check` clean; probe and temp specs deleted.
+
+### Not verified
+
+  * **A real dusk.** The switch was driven through the attribute the client reads,
+    which is the whole of its input, but nobody has stood in the road at 420
+    seconds and listened to the sky and the bed turn together.
+  * **The two beds against each other, and the chase over both.** Levels are the
+    house method -- designed over measured peak -- and the mix is the owner's ears.
+
 ## Eighteen more cues, and nothing in the game is waiting on a recording — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** "i imported another 18 sfx, wire them".
