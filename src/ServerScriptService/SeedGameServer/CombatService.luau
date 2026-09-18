@@ -183,6 +183,11 @@ type Trap = {
 	base: BasePart,
 	at: Vector3,
 	placedAt: number,
+	-- The arming SOUND has been played. Not "is armed", which is a
+	-- comparison against the clock the tick already makes -- this is the
+	-- edge, because the tick passes through that branch every frame for the
+	-- rest of the trap's life and one of those frames is the interesting one.
+	armed: boolean,
 	sprung: boolean,
 }
 local traps: { [Player]: Trap } = {}
@@ -1135,15 +1140,23 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 	tool:SetAttribute(SWING_AT, Workspace:GetServerTimeNow())
 	playSwing(player, body, item)
 	--==========================================================================
-	-- NO SWING AUDIO, AND THAT IS DELIBERATE RATHER THAN MISSING
+	-- THE WHOOSH, WHICH WAS THE ONE CUE AWAY
 	--
-	-- GameConfig.Sfx has eighteen cues and not one of them is a whoosh. Reaching
-	-- for the nearest -- a footstep, a pod pickup -- would put a wrong sound on
-	-- the most repeated action in the feature, and a wrong sound is worse than
-	-- silence because it cannot be un-learned. The IMPACT uses "Grab", which is
-	-- literally the sound of something being struck in this game. A whoosh is
-	-- one cue away whenever somebody records one.
+	-- This block used to say there was no swing audio, and that borrowing a
+	-- footstep for it would be a wrong sound rather than a placeholder. The
+	-- recording arrived on 2026-09-17, so the swing plays HERE, on the wind-up,
+	-- beside the tell that is published a few lines above for the same reason:
+	-- a coil nobody can see or hear is not a wind-up, it is lag.
+	--
+	-- ON THE HANDLE, so it comes from the bat rather than from the middle of the
+	-- swinger, and unconditionally -- a swing that misses still cost a cooldown
+	-- and still made a noise. The IMPACT is a different cue, played below and
+	-- only when something was actually struck.
 	--==========================================================================
+	local swungHandle = tool:FindFirstChild("Handle")
+	if swungHandle and swungHandle:IsA("BasePart") then
+		SoundKit.emit("BatSwing", swungHandle)
+	end
 
 	task.spawn(function()
 		if item.Windup > 0 then
@@ -1183,7 +1196,10 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 		tool:SetAttribute(HIT_AT, Workspace:GetServerTimeNow())
 		local handle = tool:FindFirstChild("Handle")
 		if handle and handle:IsA("BasePart") then
-			SoundKit.emit("Grab", handle)
+			-- Was Grab -- the parent's hand closing on somebody -- which was the
+			-- closest thing in the table to wood landing on a person. It has its
+			-- own recording now, and it carries further than the swing does.
+			SoundKit.emit("BatImpact", handle)
 		end
 
 		local names = {}
@@ -1423,9 +1439,12 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		base = model.PrimaryPart :: BasePart,
 		at = landing,
 		placedAt = clock,
+		armed = false,
 		sprung = false,
 	}
-	SoundKit.emit("TakePod", model.PrimaryPart :: BasePart)
+	-- It used to borrow TakePod, which is a shell coming free of a nest and not
+	-- a thing being set down on a road. There is a recording now.
+	SoundKit.emit("TrapPlace", model.PrimaryPart :: BasePart)
 	log(string.format("%s set a %s at %.0f, %.0f, %.0f (%s, arms in %.1fs).",
 		player.Name, item.Name, landing.X, landing.Y, landing.Z,
 		spec.Effect, spec.ArmSeconds))
@@ -1462,6 +1481,24 @@ local function stepTraps(clock: number)
 		end
 		if not trap.sprung then
 			WeaponModel.SetTrapArming(trap.model, 1)
+			if not trap.armed then
+				--==========================================================
+				-- LIVE, SAID ONCE
+				--
+				-- The first tick past ArmSeconds and never again: this
+				-- branch runs every frame until the trap springs or expires,
+				-- so without the flag the arming tick would be a sixty-hertz
+				-- buzz for twenty seconds.
+				--
+				-- Heard from 50 studs, the shortest range of any cue in the
+				-- game. A trap announcing itself across the road would hand
+				-- away the ambush; announcing itself to somebody already
+				-- standing over it is the warning they earned by being close
+				-- enough to see it.
+				--==========================================================
+				trap.armed = true
+				SoundKit.emit("TrapArmed", trap.base)
+			end
 		end
 		if age > spec.ExpireSeconds then
 			removeTrap(owner, "expired")
@@ -1495,7 +1532,10 @@ local function stepTraps(clock: number)
 						and delta.Y >= -2 and delta.Y <= spec.TriggerHeight then
 						trap.sprung = true
 						WeaponModel.SpringTrap(trap.model)
-						SoundKit.emit("Grab", trap.base)
+						-- Its own, named in its own spec. Jaws, a plate, a
+						-- snare, a mine and an anchor do not sound alike, and
+						-- until tonight all five shared the parent's Grab.
+						SoundKit.emit(spec.SpringCue or "Grab", trap.base)
 						applyTrapEffect(trap, victim, body)
 						log(string.format("%s's %s caught %s (%s).",
 							owner.Name, trap.item.Name, victim.Name, spec.Effect))

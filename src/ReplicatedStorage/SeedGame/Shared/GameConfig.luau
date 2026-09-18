@@ -2432,26 +2432,24 @@ GameConfig.Plant = {
 		},
 
 		--======================================================================
-		-- SOUNDS THIS ANIMATION WOULD LIKE AND DOES NOT HAVE
+		-- THE SOUNDS THIS ANIMATION ASKED FOR, AND HAS HAD SINCE 2026-09-17
 		--
-		-- The reveal fanfare is real: SFX.RevealFor picks it by the species'
-		-- rarity and SoundKit plays it. These three are named, empty, and
-		-- SILENT -- a cue name here plays that cue, an empty string plays
-		-- nothing at all.
-		--
-		-- NOTHING UNRELATED IS BORROWED FOR THEM. A pod rattle played from the
-		-- mill's belt or the parent's footstep is not a placeholder, it is a
-		-- wrong sound, and it would ship. When the owner records or buys these,
-		-- add the cue to SFX.Cues and name it here.
+		-- They were named, empty and silent from the day the reveal was built --
+		-- an empty string plays nothing at all, deliberately, because a pod
+		-- rattle played from the mill's belt is not a placeholder, it is a wrong
+		-- sound, and it would have shipped.
 		--
 		--   Rattle    a shell working loose, under the 1.1 s hold
 		--   Crack     the shell letting go, on the burst
 		--   TimeSkip  the paid pulse: a wait being skipped
+		--
+		-- Blanking any of these three is still how you turn one off, and the
+		-- three call sites in HatchFX still check both the string and the row.
 		--======================================================================
 		Sounds = {
-			Rattle = "",
-			Crack = "",
-			TimeSkip = "",
+			Rattle = "HatchRattle",
+			Crack = "HatchCrack",
+			TimeSkip = "HatchTimeSkip",
 		},
 	},
 
@@ -4381,9 +4379,9 @@ GameConfig.Sfx = {
 	--   CardClick         CARD CLICK.wav
 	--   Denied            NOT ENOUGH CASH.wav
 	--   PanelOpen         PANEL OPEN.wav
-	--   PanelClose        PANEL OPEN.wav again -- the same asset, pitched up 6%
-	--                     and cut a third shorter. The reverse was never
-	--                     recorded; this is a stand-in, not the answer.
+	--   PanelClose        PANEL CLOSE.wav -- its own recording since 2026-09-17.
+	--                     It used to be PANEL OPEN pitched up 6% and cut short,
+	--                     which was always a stand-in rather than an answer.
 	--   CashTick          CASH TICK.wav
 	--   Banked            BANKED -- A POD MADE IT HOME.wav
 	--   ChaseBed          Chase bed (Loop) -- the ORIGINAL upload, recovered.
@@ -4414,6 +4412,28 @@ GameConfig.Sfx = {
 	-- "biome 1" is GREENHOLLOW -- the mossy brute in ParentModel, which is the only
 	-- parent without a name of its own. Brambleback is Dustbowl's and Miremaw is
 	-- Tanglemire's. Which creature hears which is ParentVoices, under the cues.
+	--
+	-- AND THE EIGHTEEN FROM LATER THE SAME DAY, which finish the job: every moment
+	-- this file had written down as "silent, waiting for a recording" now has one.
+	--
+	--   TrapPlace              TRAP PLACEMENT.wav
+	--   TrapArmed              TRAP ARMED.wav
+	--   TrapSpringBramblejaw   BRAMBLEJAW ACTIVATION.wav
+	--   TrapSpringDunesnap     DUNESNAP ACTIVATION.wav
+	--   TrapSpringMirecoil     MIRECOIL ACTIVATION.wav
+	--   TrapSpringCinderburst  CINDERBURST ACTIVATION.wav
+	--   TrapSpringStarlock     STARLOCK ACTIVATION.wav
+	--   BatSwing               BAT SWING.wav
+	--   BatImpact              BAT IMPACT.wav
+	--   PodDrop                POD DROP.wav
+	--   ColossalPickup         COLOSSAL POD PICKUP.wav
+	--   HatchRattle            HATCH RATTLE.mp3 -- the only MP3 in the folder
+	--   HatchCrack             HATCH CRACK.wav
+	--   HatchTimeSkip          INSTANT HATCH TIME SKIP.wav
+	--   ParentWakeEmberroot    EMBERROOT GUARDIAN WAK.wav
+	--   ParentWakeStarbloom    STARBLOOM GUARDIAN WAKE.wav
+	--   SellAll                SELL ALL CASH.wav
+	--   PanelClose             PANEL CLOSE.wav -- AT LAST. See the row.
 	--
 	-- TakePod, Grab, Throw and ChaseStep have no local WAV -- those five files
 	-- were deleted. THE UPLOADED ASSETS WERE NOT, and all five still load, so
@@ -4508,9 +4528,22 @@ GameConfig.Sfx = {
 		-- different sound. It is a stand-in. A reversed upload of its own is
 		-- still the right answer.
 		--==================================================================
+		--==================================================================
+		-- THE CLOSE IS NOT THE OPEN PLAYED BACKWARDS, OR SHARPER
+		--
+		-- This row used to be PANEL OPEN's id with pitch = 1.06 and a third cut
+		-- off, because there was no close to play. It has its own recording now:
+		-- 0.88s, 40ms of lead-in, the latch at 0.54, done by 0.66. The pitch
+		-- shift is gone with it -- a cue that is its own sound does not need to
+		-- be disguised as a different one.
+		--
+		-- Peaks at 34%, which is the quietest file in the folder. Designed 0.28,
+		-- the level the stand-in was mixed to, so nothing about how loud the UI
+		-- feels changes today.
+		--==================================================================
 		PanelClose = {
-			id = "rbxassetid://131340288435165",
-			volume = 0.28, pitch = 1.06, start = 0.27, clip = 0.34, group = "UI",
+			id = "rbxassetid://98956134010999",
+			volume = 0.82, start = 0.02, clip = 0.72, group = "UI",
 		},
 		-- 130ms late, then a 540ms decay that would ring under a counter
 		-- ticking three times a second. Designed 0.15.
@@ -4659,6 +4692,18 @@ GameConfig.Sfx = {
 			id = "rbxassetid://102762735296089",
 			volume = 0.70, clip = 1.55, range = 170, group = "World",
 		},
+		-- The last two, recorded the same day this table was written and wired
+		-- the same evening. Every guardian in the game now answers being robbed.
+		-- Emberroot peaks at 86%, so 0.70 designed is 0.82; content ends at 1.20.
+		ParentWakeEmberroot = {
+			id = "rbxassetid://80131277872397",
+			volume = 0.82, clip = 1.25, range = 170, group = "World",
+		},
+		-- Starbloom's is one second long and all of it is in the first 0.64.
+		ParentWakeStarbloom = {
+			id = "rbxassetid://138701632491162",
+			volume = 0.70, clip = 0.70, range = 170, group = "World",
+		},
 
 		-- ONE STEP, NOT A GAIT. The file is called chasegait and it is 1.00s with a
 		-- single stomp inside the first 0.44 -- so looped = false, and SoundCues
@@ -4675,6 +4720,143 @@ GameConfig.Sfx = {
 		ParentSleepDustbowl = {
 			id = "rbxassetid://89288684316602",
 			volume = 0.45, range = 70, looped = true, group = "World",
+		},
+
+		--======================================================================
+		-- THE TRAPS
+		--
+		-- Three moments, and they are three different questions a player asks:
+		-- WHERE (it went down), WHEN (it is live), and WHO (just stepped in it).
+		-- The first two are shared by all five traps because they are the same
+		-- action; the spring is per trap, named in the trap's own spec beside its
+		-- radius and its cooldown -- see WeaponData.TrapSpecs.SpringCue.
+		--
+		-- Deliberately short ranges on the first two. A trap being placed is
+		-- information a nearby player is entitled to, and a trap being placed on
+		-- the far side of the road is not.
+		--======================================================================
+		-- Two thuds, 0.02 and 0.64: set down, then latched. Both kept.
+		TrapPlace = {
+			id = "rbxassetid://73333240019513",
+			volume = 0.45, clip = 0.85, range = 60, group = "World",
+		},
+		-- The tick that says it is live. Content ends at 0.74.
+		TrapArmed = {
+			id = "rbxassetid://85062135388466",
+			volume = 0.40, clip = 0.80, range = 50, group = "World",
+		},
+		-- The jaw: 140ms of creak, the snap at 0.80, ring-out to 1.28.
+		TrapSpringBramblejaw = {
+			id = "rbxassetid://113454656665508",
+			volume = 0.70, start = 0.10, clip = 1.25, range = 90, group = "World",
+		},
+		-- The plate. One second, and the whole event is over by 0.44. It is also
+		-- the quietest of the five -- peaks at 45% -- so it carries the most gain.
+		TrapSpringDunesnap = {
+			id = "rbxassetid://135633126454821",
+			volume = 1.56, start = 0.02, clip = 0.50, range = 90, group = "World",
+		},
+		-- The snare: a coil at 0.18 and the catch at 0.84.
+		TrapSpringMirecoil = {
+			id = "rbxassetid://94258758905177",
+			volume = 0.70, clip = 1.50, range = 90, group = "World",
+		},
+		-- The mine, and the only one that is an explosion: louder, and heard from
+		-- further, because it is also the only trap that knocks a pod loose.
+		TrapSpringCinderburst = {
+			id = "rbxassetid://74420052751382",
+			volume = 0.80, clip = 1.55, range = 120, group = "World",
+		},
+		-- The anchor. NO WINDOW: this one never goes quiet -- its noise floor is
+		-- -20 dB where every other file in the folder is below -63 -- because it
+		-- is a sustained hum with the lock at 1.12 and 1.32 inside it. Clipping
+		-- it would cut a held note off mid-ring. It runs its own two seconds,
+		-- which is under the three the pull-and-slow lasts.
+		TrapSpringStarlock = {
+			id = "rbxassetid://94296728955633",
+			volume = 0.70, range = 100, group = "World",
+		},
+
+		--======================================================================
+		-- THE BAT
+		--
+		-- The swing plays on the WIND-UP and the impact only if something is
+		-- struck, which is the pair the animation already draws: the coil is
+		-- published to every client before the hit is resolved, so a victim who
+		-- hears the whoosh has the same warning the tell gives them.
+		--======================================================================
+		-- 320ms of silence, then the whoosh. Peaks at 65%.
+		BatSwing = {
+			id = "rbxassetid://127465264913354",
+			volume = 0.62, start = 0.28, clip = 0.50, range = 60, group = "World",
+		},
+		-- 280ms, all of it impact, at full scale. Carries further than the swing
+		-- because the person who got hit is not always the person who swung.
+		BatImpact = {
+			id = "rbxassetid://120499284760036",
+			volume = 0.75, clip = 0.40, range = 110, group = "World",
+		},
+
+		--======================================================================
+		-- THE POD ITSELF
+		--
+		-- TakePod is the shell coming free in your hands. These two are the other
+		-- half of the same object's life: hitting the ground, and being a
+		-- COLOSSAL coming free, which is a 0.5% roll and deserves its own noise.
+		--======================================================================
+		-- Two impacts, 0.06 and 0.46 -- landing and settling. Peaks at 43%.
+		PodDrop = {
+			id = "rbxassetid://119713147046244",
+			volume = 1.16, start = 0.02, clip = 0.90, range = 90, group = "World",
+		},
+		-- FOUR SECONDS of file with 0.60 of sound in it. Named by the pod itself:
+		-- CreatureModel stamps PickupSound = "ColossalPickup" on tier 7 and the
+		-- take reads it, which is the attribute that has been sitting there unread
+		-- since the tier shipped.
+		ColossalPickup = {
+			id = "rbxassetid://130996586864709",
+			volume = 0.92, clip = 0.70, range = 140, group = "World",
+		},
+
+		--======================================================================
+		-- THE HATCH
+		--
+		-- The three GameConfig.Plant.Hatch.Sounds has been naming as empty
+		-- strings since the reveal was built. They are filled in down there; the
+		-- rows are here.
+		--======================================================================
+		-- Under the 1.1s hold. The quietest thing in the batch at 40%, which is
+		-- right for a shell working against itself, and the reason it carries
+		-- 1.01 of gain. Content is 0.02 to 0.58; the rest of the hold is quiet on
+		-- purpose, so the crack lands on silence.
+		HatchRattle = {
+			id = "rbxassetid://113736151394399",
+			volume = 1.01, clip = 0.62, range = 70, group = "World",
+		},
+		-- The shell letting go: four cracks between 0.02 and 0.94, all of them
+		-- part of one sound rather than four takes of it, so none is cut.
+		HatchCrack = {
+			id = "rbxassetid://125982914448542",
+			volume = 0.60, clip = 1.10, range = 90, group = "World",
+		},
+		-- The paid pulse, and the only cue in this group that is NOT positional:
+		-- it is a receipt for something you bought, it plays on your screen, and
+		-- nobody else in the world has any business hearing it.
+		HatchTimeSkip = {
+			id = "rbxassetid://77501647710630",
+			volume = 0.45, clip = 1.45, group = "UI",
+		},
+
+		--======================================================================
+		-- THE TILL
+		--
+		-- SellService has been emitting MillUpgrade for this with a comment
+		-- inviting the swap. This is the swap. Peaks at 45%, and it is the
+		-- shortest render in the folder at 0.88s.
+		--======================================================================
+		SellAll = {
+			id = "rbxassetid://70521588661081",
+			volume = 1.24, clip = 0.78, range = 80, group = "World",
 		},
 	},
 
@@ -4713,6 +4895,11 @@ GameConfig.Sfx = {
 			Wake = "ParentWakeDustbowl",
 		},
 		tanglemire = { Wake = "ParentWakeTanglemire", Hit = "ParentHitTanglemire" },
+	-- Recorded hours after the first six, so these two are no longer the
+	-- silent ones. They still swing the generic claw and breathe the generic
+	-- breath -- only the roar is theirs.
+	emberroot = { Wake = "ParentWakeEmberroot" },
+	starbloom = { Wake = "ParentWakeStarbloom" },
 	},
 
 	--==========================================================================

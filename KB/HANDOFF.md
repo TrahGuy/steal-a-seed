@@ -1,5 +1,110 @@
 # Steal a Seed — Session Handoff
 
+## Eighteen more cues, and nothing in the game is waiting on a recording — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** "i imported another 18 sfx, wire them".
+
+### What they were
+
+Eighteen audio assets uploaded between 19:28 and 19:49, all eighteen with a local
+file still in `sfx/` (seventeen WAV, one MP3 -- `HATCH RATTLE`), and **every id
+loads in Studio with a TimeLength equal to its file to the hundredth of a
+second**, which is what proves the pairing rather than the names suggesting it.
+
+They land almost exactly on the moments this codebase had already written down as
+waiting: three empty strings in `Plant.Hatch.Sounds`, a `PickupSound` attribute
+stamped on every Colossal and read by nobody, a comment in `CombatService` saying
+there was no whoosh and that borrowing one would be worse than silence, a comment
+in `SellService` inviting a till sound, and a `PanelClose` that was `PanelOpen`
+pitched up 6%.
+
+| cue | moment | was |
+| --- | --- | --- |
+| TrapPlace | a trap set down | TakePod |
+| TrapArmed | it goes live, once | nothing |
+| TrapSpring x5 | each trap catching somebody | the guardian's Grab, all five |
+| BatSwing | the wind-up | nothing |
+| BatImpact | wood landing on a person | the guardian's Grab |
+| PodDrop | a pod hitting the road | nothing |
+| ColossalPickup | a Colossal coming free | the ordinary shell |
+| HatchRattle / HatchCrack | the hold, the burst | nothing |
+| HatchTimeSkip | the paid pulse | nothing |
+| ParentWakeEmberroot / Starbloom | the last two guardians waking | nothing |
+| SellAll | a bag sold at the board | MillUpgrade |
+| PanelClose | a panel closing | PanelOpen, pitched up |
+
+### Measured, not guessed
+
+Peaks run from 34% (`PANEL CLOSE`) to full scale, so nine rows carry gain and nine
+do not, and every window is a measurement: `BAT SWING` is 320ms of silence then a
+whoosh; `COLOSSAL POD PICKUP` is a four-second file with 0.60 of sound in it;
+`HATCH CRACK` is four cracks between 0.02 and 0.94 that are one sound rather than
+four takes, so none is cut. **`TrapSpringStarlock` is the only row with no
+window** -- its noise floor is -20 dB where every other file sits below -63,
+because it is a sustained hum with the lock inside it, and clipping it would cut a
+held note off mid-ring.
+
+### Where the pointers live
+
+  * **Each trap names its own spring** in its own spec -- `TrapSpecs.SpringCue`,
+    beside its radius and its cooldown, because "what does a Cinderburst do"
+    should be one row to read. `WeaponData` **refuses to load** if a trap names a
+    cue that is not in the table, so a typo is a boot failure rather than a trap
+    that springs in silence.
+  * **The arming tick is an EDGE** (`trap.armed`), not a state. The branch it sits
+    in runs every frame for the trap's whole life; without the flag it would be a
+    sixty-hertz buzz for twenty seconds.
+  * **The Colossal names its own pickup** through the attribute `CreatureModel`
+    has always stamped. CarryService reads it beside the other attributes it has
+    to read *before* the pod is destroyed, and falls back to the ordinary shell if
+    the row is missing.
+  * **The pod's thud is in `spawnLoose`**, which every way of putting a pod on the
+    ground already goes through -- a drop, a bat hit, a confiscation, a haul that
+    could not be re-shelved, the beginner's reserved pod. One line, no path
+    forgotten.
+
+### Verified
+
+  * **Specs: SfxWiringSpec (new, 202), ParentVoiceSpec 119, SoundLevelSpec 28,
+    WeaponSpec 123, TrapSystemSpec 67, GuardianConfiscateSpec 88, CarryHandsSpec
+    16 -- all green.** SfxWiringSpec checks each id, that every window ends inside
+    its own asset, the bus and range per row, that no two rows share an asset,
+    that all five traps name their own spring and no two share one, that the
+    hatch's three pointers resolve, that both ends of the Colossal attribute
+    agree -- and, by source, that **none of the six borrowed sounds outlived its
+    replacement**, which is the failure that would otherwise be invisible because
+    the moment is not silent, it is wrong.
+  * **Play, real Tools:** a swing of the Comet Bat with nothing in range played
+    `SeedCue_BatSwing`; setting the Bramblejaw played `SeedCue_TrapPlace`, and
+    `SeedCue_TrapArmed` **exactly once**, 1.0s later, which is its ArmSeconds.
+  * **Play, the last two guardians:** teleported to Emberroot and to Starbloom and
+    provoked each nest -- `ParentWakeEmberroot` then `ParentWakeStarbloom`, each
+    followed 1.8s later by `ParentHit` and `Throw`. That also proves the **Default
+    Hit fall-through** live: neither creature has a hit of its own, and both swing
+    the generic claw.
+  * `rojo build` succeeds; `git diff --check` clean; probe script and temp spec
+    folder deleted.
+
+### Not verified
+
+  * **The four other trap springs, BatImpact, and every trap EFFECT** -- all need a
+    second player, because a trap cannot catch its owner and a bat cannot hit one.
+    The dispatch is the same line for all five.
+  * **PodDrop, ColossalPickup, the hatch trio, SellAll, PanelClose** -- each needs a
+    state Play Solo does not hand you in a minute: a pod in hand, a 0.5% roll, a
+    hatch that is due, a full bag, a panel. All are spec-asserted at both ends.
+  * **Whether they sound right, and whether they sound right TOGETHER.** Nine of
+    these rows carry gain; the ones most likely to want another pass are
+    `TrapSpringDunesnap` (1.56, the quietest trap render) and `PodDrop` (1.16),
+    which now fires on every drop in the game.
+
+### Two more files, which were beds rather than cues
+
+`sfx/Night Background Music.mp3` (115368148164882) and
+`sfx/Chase Background Music.mp3` (97007444825023) were rendered and uploaded at
+19:58 and 20:00, after the eighteen. The owner asked for both the same evening --
+see the entry above this one.
+
 ## The monster has a voice now — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** "wire the new sfx i added".

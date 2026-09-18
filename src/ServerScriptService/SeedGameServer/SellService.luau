@@ -226,10 +226,10 @@ local function attachPrompt(model: Model)
 	table.insert(connections, prompt.Triggered:Connect(function(player)
 		local sold, paid = EconomyService.SellHeld(player)
 		if sold > 0 then
-			-- The game's existing "that transaction worked" cue. The stall pass
-			-- can swap it for a till sound when one is wired; an unwired asset
-			-- id would be silence with extra steps.
-			SoundKit.emit("MillUpgrade", board)
+			-- The till, recorded 2026-09-17. This was MillUpgrade -- the game's
+			-- existing "that transaction worked" cue -- carrying a note that
+			-- invited the swap the moment a real one existed. This is the swap.
+			SoundKit.emit("SellAll", board)
 		end
 		log(string.format("%s pressed sell-all: %d item(s), %s",
 			player.Name, sold, GameConfig.compact(paid)))

@@ -442,6 +442,22 @@ local function spawnLoose(species: SeedData.Species, tier: number, at: CFrame,
 	end
 	attachPrompt(pod)
 	--==========================================================================
+	-- IT LANDS, AND THE ROAD HEARS IT LAND
+	--
+	-- Every way a pod reaches the ground comes through here -- a carrier's own
+	-- drop, a bat hit, a guardian's confiscation, a haul that could not go back
+	-- in its ring, the beginner's reserved pod -- so the thud is one line rather
+	-- than five, and no path can be forgotten.
+	--
+	-- On the POD, not on whoever dropped it: the sound belongs to the object
+	-- that hit the dirt, and a player thrown off a ledge is somewhere else by
+	-- the time it plays.
+	--==========================================================================
+	local landed = pod.PrimaryPart
+	if landed then
+		SoundKit.emit("PodDrop", landed)
+	end
+	--==========================================================================
 	-- A POD ON THE ROAD STANDS UNTIL NIGHT, AND NOT A SECOND LESS
 	--
 	-- Every loose pod used to destroy itself forty-five seconds after it landed,
@@ -683,6 +699,18 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- Read with the others, above the take, for the reason stated there: the
 	-- pod and its attributes are about to be destroyed.
 	local reservedFor = tonumber(pod:GetAttribute(RESERVED_FOR))
+	--==========================================================================
+	-- A POD THAT ASKS FOR ITS OWN PICKUP SOUND
+	--
+	-- CreatureModel stamps PickupSound on a pod whose coming-free is an event in
+	-- itself. Today that is the COLOSSAL and nothing else -- a 0.5% roll -- and
+	-- the attribute has sat on those pods UNREAD since the tier shipped, because
+	-- there was no recording to point it at.
+	--
+	-- Read here with the rest, for the reason given above them: this attribute
+	-- dies with the pod a few lines down, and the sound plays after that.
+	--==========================================================================
+	local pickupCue = pod:GetAttribute("PickupSound")
 	-- Only ever on a loose pod. A nest pod is always a fresh attempt.
 	local abandoned = pod:GetAttribute(ATTR.GuardianAbandoned) == true
 
@@ -769,7 +797,12 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	--==========================================================================
 	local thiefRoot = character:FindFirstChild("HumanoidRootPart")
 	if thiefRoot and thiefRoot:IsA("BasePart") then
-		SoundKit.emit("TakePod", thiefRoot)
+		-- The pod's own cue if it named one AND that row exists, the ordinary
+		-- shell otherwise. A pod naming a cue nobody wired sounds like every
+		-- other pod, which is exactly what it did yesterday.
+		SoundKit.emit(if type(pickupCue) == "string" and SoundKit.has(pickupCue)
+			then pickupCue
+			else "TakePod", thiefRoot)
 	end
 	PlayerDataService.RecordTutorial(player, "steal")
 	return true

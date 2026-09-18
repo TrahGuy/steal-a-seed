@@ -896,6 +896,10 @@ export type TrapSpec = {
 	Status: string?,
 	-- The one line the shop card leads with.
 	EffectText: string,
+	-- The cue GameConfig.Sfx plays when this trap goes off. A pointer, not an
+	-- id: the sound lives in the sound table with every other sound, and the
+	-- load-time check below refuses a name that is not a row there.
+	SpringCue: string,
 }
 
 WeaponData.TrapSpecs = {
@@ -921,6 +925,7 @@ WeaponData.TrapSpecs = {
 		Model = "jaw",
 		Status = "root",
 		EffectText = "ROOT",
+		SpringCue = "TrapSpringBramblejaw",
 	},
 	--==========================================================================
 	-- DUNESNAP: THE SAND GOES OUT FROM UNDER YOU
@@ -949,6 +954,7 @@ WeaponData.TrapSpecs = {
 		DropsPod = false,
 		Model = "plate",
 		EffectText = "TRIP",
+		SpringCue = "TrapSpringDunesnap",
 	},
 	--==========================================================================
 	-- MIRECOIL: THE ROAD TURNS TO WADING
@@ -977,6 +983,7 @@ WeaponData.TrapSpecs = {
 		Model = "pool",
 		Status = "slow",
 		EffectText = "SLOW 35%",
+		SpringCue = "TrapSpringMirecoil",
 	},
 	--==========================================================================
 	-- CINDERBURST: THE POD COMES OFF FIRST
@@ -1006,6 +1013,7 @@ WeaponData.TrapSpecs = {
 		DropsPod = true,
 		Model = "mine",
 		EffectText = "BLAST/DROP",
+		SpringCue = "TrapSpringCinderburst",
 	},
 	--==========================================================================
 	-- STARLOCK: IT BRINGS THEM BACK TO YOU
@@ -1034,6 +1042,7 @@ WeaponData.TrapSpecs = {
 		Model = "anchor",
 		Status = "slow",
 		EffectText = "PULL/SLOW",
+		SpringCue = "TrapSpringStarlock",
 	},
 } :: { [string]: TrapSpec }
 
@@ -1343,6 +1352,19 @@ do
 		assert(MODELS[s.Model], string.format(
 			"trap %s asks for model %q, which WeaponModel cannot build",
 			item.Id, tostring(s.Model)))
+		--==================================================================
+		-- AND EACH ONE NAMES THE SOUND IT MAKES WHEN IT GOES OFF
+		--
+		-- Beside the radius and the cooldown rather than in a table of its
+		-- own, because "what does a Cinderburst do" should be one row to
+		-- read. The CUE lives in GameConfig.Sfx like every other sound; this
+		-- is the pointer, and it is checked here so that a typo is a refusal
+		-- to load rather than a trap that springs in silence.
+		--==================================================================
+		assert(type(s.SpringCue) == "string"
+		and (GameConfig.Sfx.Cues :: any)[s.SpringCue] ~= nil, string.format(
+			"trap %s names spring cue %q, which is not a row in GameConfig.Sfx.Cues",
+			item.Id, tostring(s.SpringCue)))
 
 		for field, value in pairs({
 			ArmSeconds = s.ArmSeconds,
