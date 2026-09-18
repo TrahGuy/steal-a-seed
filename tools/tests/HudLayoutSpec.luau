@@ -347,6 +347,170 @@ check(wide.cash.w == 300 and #HudLayout.problems(wide) == 0,
 	table.concat(HudLayout.problems(wide), "; "))
 
 --==============================================================================
+-- 5b. THE BAG PANEL
+--
+-- Found by the owner 2026-09-18 on an emulated iPhone 11: equipment cards cut
+-- off under the Bag's header. Measured on the owner's 801 x 392 phone, the grid
+-- was 128 px tall and a card row 158 + 16, so no card could ever show whole.
+-- HudLayout.bag is the arithmetic LoadoutUI applies; this drives it at every
+-- screen the owner listed and pins the desktop to what shipped.
+--==============================================================================
+say("-- the bag --")
+local BAGC = CFG.Bag
+local OUTLINE = RAIL.OutlineThickness
+
+-- The shipped layoutBag's panel arithmetic, verbatim, as the desktop oracle.
+local function shippedBag(safe, hotTop, sideWidth)
+	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
+	local leftEdge = RAIL.Inset + RAIL.WideSize.X + 8
+	local rightEdge = safe.X - RAIL.Inset - sideWidth - 8
+	local top, bottom = 8, hotTop - 8
+	if rightEdge - leftEdge < 420 then
+		leftEdge = 8
+		top = railBottom + 8
+	end
+	local height = math.max(160, math.min(600, bottom - top))
+	local half = safe.X * 0.5
+	local symmetric = 2 * math.min(half - leftEdge, rightEdge - half)
+	local width, centreX
+	if symmetric >= 600 or symmetric >= rightEdge - leftEdge - 40 then
+		width = math.max(240, math.min(780, symmetric))
+		centreX = half
+	else
+		width = math.max(240, math.min(780, rightEdge - leftEdge))
+		centreX = (leftEdge + rightEdge) * 0.5
+	end
+	return math.floor(centreX), math.floor(top + (bottom - top) * 0.5),
+		math.floor(width), math.floor(height)
+end
+
+for _, size in ipairs({ Vector2.new(1169, 609), Vector2.new(1280, 720), Vector2.new(1366, 768),
+	Vector2.new(1920, 1080), Vector2.new(1000, 609) }) do
+	local L = HudLayout.solve(screen(size.X, size.Y))
+	local tag = string.format("%dx%d desktop", size.X, size.Y)
+	local same = true
+	for _, plants in ipairs({ false, true }) do
+		local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = L.touch,
+			plants = plants, sideWidth = 64 })
+		local cx, cy, w, h = shippedBag(L.safe, L.hotbar.y, 64)
+		same = same and not L.compact and not bag.horizontal and bag.rows == 0
+			and bag.centre.X == cx and bag.centre.Y == cy and bag.panel.w == w and bag.panel.h == h
+			and bag.card == BAGC.Card
+	end
+	local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = false, plants = false, sideWidth = 64 })
+	check(same, tag .. ": the Bag is exactly the shipped panel, the 104x158 card and the vertical grid",
+		string.format("centre %d,%d size %dx%d", bag.centre.X, bag.centre.Y, bag.panel.w, bag.panel.h))
+	check(bag.panel.y + bag.panel.h + 8 <= L.hotbar.y,
+		tag .. ": and it still stops 8 px above the ten-slot strip, which stays", r2s(bag.panel))
+end
+
+-- The header rule UIKit.modal applies: the title bar pads clear of the rail
+-- band it shares rows with, and the close button moves in with it.
+local titleWidth = TextService:GetTextSize("Bag", 26, Enum.Font.LuckiestGuy, Vector2.new(1000, 100)).X
+local function header(L, bag)
+	local shell = rect(bag.panel.x + OUTLINE, bag.panel.y + OUTLINE,
+		bag.panel.w - OUTLINE * 2, bag.panel.h - OUTLINE * 2)
+	local bar = rect(shell.x + 12, shell.y + 10, shell.w - 24, 40)
+	local padLeft, padRight = 0, 0
+	if bar.y + bar.h > L.railTop and bar.y < L.railBottom then
+		padLeft = math.max(0, math.floor(L.railRight + 8 - bar.x))
+		padRight = math.max(0, math.floor(bar.x + bar.w - (L.rightLeft - 8)))
+	end
+	local titleRect = rect(bar.x + padLeft, bar.y, titleWidth, bar.h)
+	local close = rect(bar.x + bar.w - padRight - 44, bar.y + bar.h / 2 - 22, 44, 44)
+	local tabs
+	if bag.compactHeader then
+		local reserve = math.max(72, math.ceil(titleWidth) + padLeft + 16)
+		tabs = rect(shell.x + 12 + reserve, shell.y + 13, shell.w - (24 + reserve + 52 + padRight), 34)
+	else
+		tabs = rect(shell.x + 12, shell.y + 58, shell.w - 24, 34)
+	end
+	return shell, titleRect, tabs, close
+end
+
+-- The longest names the game ships, in the compact name box at 12 pt: two
+-- lines at most, which is what fitName checks before it would truncate.
+local LONG_NAMES = { "SUNFLOWER BONKER", "BRAMBLEJAW TRAP", "CINDERBURST MINE", "CINDERCRACK BAT",
+	"STARLOCK ANCHOR", "MIREWOOD PADDLE", "THORNWHORL", "GLOOMLOTUS", "ASTRALHORN" }
+local namesFit = true
+for _, name in ipairs(LONG_NAMES) do
+	local at14 = TextService:GetTextSize(name, 14, Enum.Font.LuckiestGuy,
+		Vector2.new(BAGC.CardCompact.X - 14, 1000))
+	namesFit = namesFit and at14.Y <= 32
+end
+check(namesFit, "every long shipped name is two lines at 14 pt in the compact card's 98 x 32 name box")
+local pillWord = TextService:GetTextSize("TAP TO EQUIP", 15, Enum.Font.FredokaOne, Vector2.new(400, 40)).X
+check(BAGC.ActionH >= 44 and pillWord <= BAGC.CardCompact.X - 12,
+	"the compact action button is the whole 44 px strip and TAP TO EQUIP fits it at 15 pt", pillWord)
+check(84 + 32 <= 120 and 120 + BAGC.ActionH <= BAGC.CardCompact.Y - 4,
+	"inside a 112x170 card the name (84-116) and the button (120-164) never touch")
+
+local BAG_CASES = {
+	{ tag = "iPhone 11 896x414", input = screen(896, 414, { touch = true }) },
+	{ tag = "iPhone 11 896x414 notched", input = screen(896, 414, { touch = true, left = 48, right = 48, bottom = 21 }) },
+	{ tag = "iPhone 16 Pro Max 956x440", input = screen(956, 440, { touch = true }) },
+	{ tag = "Galaxy S22 Ultra 772x360", input = screen(772, 360, { touch = true }) },
+	{ tag = "VGA 640x480", input = screen(640, 480, { touch = true }) },
+	{ tag = "the owner's 801x392", input = screen(801, 392, { touch = true }) },
+}
+for _, case in ipairs(BAG_CASES) do
+	local L = HudLayout.solve(case.input)
+	local sw, sh = L.safe.X, L.safe.Y
+	for _, plants in ipairs({ false, true }) do
+		local tab = if plants then "Plants" else "Equipment"
+		local tag = case.tag .. " " .. tab
+		local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = L.touch,
+			plants = plants, sideWidth = 64 })
+		local p = bag.panel
+		check(p.x >= 8 and p.y >= 8 and p.x + p.w <= sw - 8 and p.y + p.h <= sh - 8
+				and p.x + p.w + 8 <= L.equipment.x,
+			tag .. ": the panel is inside the safe area and clear of BAT/TRAP", r2s(p))
+		check(p.y + p.h > L.hotbar.y,
+			tag .. ": it runs over where the hidden strip was -- no strip-shaped hole", r2s(p))
+		-- whole rows only, centred in the tray: nothing cut at the top or bottom
+		local rowsTall = bag.rows * bag.card.Y + (bag.rows - 1) * BAGC.CardGap
+		local slack = bag.tray.h - BAGC.PadY * 2 - rowsTall
+		local cardTop = bag.tray.y + BAGC.PadY + slack / 2
+		check(bag.horizontal and bag.rows >= 1 and slack >= 0 and bag.card == BAGC.CardCompact,
+			tag .. ": sideways, in whole 112x170 rows that fit the tray", string.format(
+				"tray %s rows %d slack %.1f", r2s(bag.tray), bag.rows, slack))
+		local _, title, tabs, close = header(L, bag)
+		local headerBottom = tabs.y + tabs.h
+		check(cardTop >= headerBottom + 8 and bag.tray.y >= headerBottom + 8,
+			tag .. ": the first card starts below the header and tabs with room to spare",
+			string.format("header ends %.1f, tray %.1f, card %.1f", headerBottom, bag.tray.y, cardTop))
+		check(cardTop + rowsTall <= bag.tray.y + bag.tray.h - BAGC.PadY,
+			tag .. ": and the last row ends inside the tray", cardTop + rowsTall)
+		-- title, tabs and close apart, and none under a rail button. 4 px, not
+		-- 8: the two-row header's 44 px close target has always stood 6 px
+		-- above its tab row, by design, and apart is the requirement.
+		local clear = HudLayout.gap(title, tabs) >= 4 and HudLayout.gap(tabs, close) >= 4
+			and HudLayout.gap(title, close) >= 4 and tabs.w / 2 >= 120
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			if g.name == "rail" or g.name == "garden+bag" then
+				clear = clear and HudLayout.gap(title, g.rect) >= 0 and HudLayout.gap(tabs, g.rect) >= 0
+					and HudLayout.gap(close, g.rect) >= 0
+			end
+		end
+		check(clear, tag .. ": title, both tabs and the close button stand apart and clear of the rail rows",
+			string.format("title %s tabs %s close %s", r2s(title), r2s(tabs), r2s(close)))
+		local shown = (bag.tray.w - BAGC.PadX * 2 + BAGC.CardGap) / (bag.card.X + BAGC.CardGap)
+		say(string.format("    %s: panel %s  %s header  tray %s  %d row(s), %.1f cards across, card top %.1f",
+			tag, r2s(p), if bag.compactHeader then "one-row" else "two-row", r2s(bag.tray),
+			bag.rows, shown, cardTop))
+	end
+end
+
+-- A small desktop window is compact without touch: the strip stays, so the Bag
+-- still stops above it.
+do
+	local L = HudLayout.solve(screen(860, 700, { touch = false }))
+	local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = L.touch, plants = false, sideWidth = 64 })
+	check(L.compact and not L.touch and bag.panel.y + bag.panel.h + 8 <= L.hotbar.y and bag.rows >= 1,
+		"a small desktop window keeps its strip, and the Bag stops above it", r2s(bag.panel))
+end
+
+--==============================================================================
 -- 6. THE WIRING, READ FROM THE SOURCE
 --==============================================================================
 say("-- the owners --")
@@ -428,6 +592,20 @@ for _, name in ipairs({ "IndexUI", "GardenUI", "SettingsUI", "ShopUI", "Marigold
 		string.format("%s's panel draws over the hotbar and under the rail", name),
 		string.format("%s vs hotbar %s, rail %s", tostring(order), tostring(hotbarOrder), tostring(railOrder)))
 end
+
+check(loadout:find("hotbar.Visible = not (bagOpen and not lifted and layout ~= nil and layout.touch)", 1, true) ~= nil
+		and loadout:find("	bagOpen = want\n	showStrip()", 1, true) ~= nil,
+	"on touch the strip hides while the Bag is open, shows while a card is in the air, and returns on close")
+check(loadout:find("stripHidden = layout.touch", 1, true) ~= nil,
+	"and the Bag grows into its space on exactly that condition")
+check(loadout:find("HudLayout.bag(layout,", 1, true) ~= nil
+		and select(2, loadout:gsub("grid.CanvasPosition = Vector2.zero", "")) >= 3,
+	"LoadoutUI places the Bag from HudLayout.bag and resets the scroll on a tab switch, a side slot and a new direction")
+check(loadout:find("padRight), 0, 34)", 1, true) ~= nil,
+	"the one-row tabs stop short of the close button wherever the header has moved it")
+check(select(2, loadout:gsub('Instance.new%("ScrollingFrame"%)', "")) == 1
+		and select(2, loadout:gsub('Instance.new%("UIGridLayout"%)', "")) == 2,
+	"still one Bag grid and one info grid -- nothing rebuilt")
 
 local kit = Shared:FindFirstChild("UIKit").Source
 check(kit:find("function UIKit.railShape", 1, true) and kit:find("function UIKit.railBadge", 1, true)

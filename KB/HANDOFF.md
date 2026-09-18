@@ -1,5 +1,130 @@
 # Steal a Seed — Session Handoff
 
+## The Bag on a phone: whole cards, a real button, and the strip steps aside — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** on an iPhone 11 (~896x414) the Bag's equipment cards were cut off
+under its header, the open Bag fought the hotbar, card names and buttons were small
+for a thumb, and the Bag did not use the phone's space.
+
+### Root cause -- measured live on the owner's emulated 801 x 392 phone
+
+The panel stopped 8 px above the hotbar, and its header took 70 px of what was left,
+so the card grid was **128 px tall** (150 on an 896 x 414) -- and one card row is
+**158 + 16 px**. A VERTICAL scroller shorter than one row can never show a whole
+card: at the top of the scroll the action button was cut off by the tray's bottom
+edge, and scrolled down to reach it, the preview went up under the header. Nothing
+was mis-ordered in ZIndex and nothing clipped wrongly -- the space was one card
+short, every time.
+
+### What changed
+
+* **`HudLayout.bag`** (new, pure) -- the Bag panel's arithmetic, moved out of
+  LoadoutUI so a spec can drive it at every screen size. The desktop branch is the
+  shipped `layoutBag` arithmetic, verbatim, and HudLayoutSpec compares it against a
+  verbatim copy of the old code at 1169x609, 1280x720, 1366x768, 1920x1080 and
+  1000x609. Compact adds three things:
+    - on touch the panel runs to the safe area's bottom edge (the strip is hidden);
+    - the grid scrolls SIDEWAYS in as many whole rows as fit, centred in the tray --
+      never a part row, so nothing is ever cut at the top or the bottom;
+    - a compact card is **112 x 170**: name box 98 x 32 at 12-14 pt (every shipped
+      name is two lines at 14 pt; the longest word, THORNWHORL, is 96 px), and the
+      action button fills the whole **100 x 44** strip at 15 pt instead of a 24 px pill.
+  An odd-height panel is centred on the exact half so it starts on the 8 px margin.
+* **`HudLayout.Config.Bag`** -- LoadoutUI's Bag numbers, one copy; LoadoutUI reads
+  them back (its `GRID_PAD`, `INFO_SIDE_MIN/MAX`, `EDGE_GAP`, `COMPACT_BELOW` locals
+  are gone: 188 top-level locals, was 189).
+* **`LoadoutUI`**
+    - `layoutBag` applies `HudLayout.bag`; `shapeGrid` flips the grid between the
+      desktop vertical scroller and the sideways one (ScrollingDirection,
+      AutomaticCanvasSize, FillDirection, FillDirectionMaxCells, alignment,
+      CellSize) and resets CanvasPosition when the direction changes; `shapeCard`
+      re-lays the SAME card instances (name box, text sizes, action strip);
+      `fitName`/`fitPill` know the compact sizes.
+    - **`showStrip`**: on touch the strip's `Visible` is false while the Bag is open,
+      true again the moment it closes -- only Visible; every slot, assignment, Tool
+      reference and what is in the hand are untouched. It comes back while a card is
+      being DRAGGED out of the Bag (it is the drop target) and steps aside when the
+      card lands. The drop still resolves with the strip hidden: slot positions were
+      measured identical hidden and shown. Desktop never hides it.
+    - The one-row header's tab row now also stops short of the close button's
+      header pad (27-31 px on a phone); it used to run the Plants tab under the
+      moved close button. It relays when the header pads change.
+* **`TutorialUI`** -- the hotbar pointer hides while the strip is hidden.
+
+### Measurements (HudLayoutSpec; safe-area px, 58 px topbar, touch)
+
+| screen | panel | header | tray (Equipment / Plants) | rows | cards across | card top |
+| --- | --- | --- | --- | --- | --- | --- |
+| iPhone 11 896x414 | 80,8 736x340 | one-row | 95,69 706x264 / 460x264 | 1 | 5.7 / 3.7 | 116 |
+| iPhone 11 notched (800x335 safe) | 80,8 640x319 | one-row | 610x243 / 393x243 | 1 | 4.9 / 3.1 | 105.5 |
+| iPhone 16 Pro Max 956x440 | 88,8 780x366 | one-row | 750x290 / 504x290 | 1 | 6.1 / 4.0 | 129 |
+| Galaxy S22 Ultra 772x360 | 80,8 612x286 | one-row | 582x210 / 375x210 | 1 | 4.7 / 3.0 | 89 |
+| VGA 640x480 | 8,8 552x406 | two-row | 522x288 / 328x288 | 1 | 4.2 / 2.6 | 170 |
+| owner's 801x392 | 79.5,8 641x318 | one-row | 611x242 / 394x242 | 1 | 4.9 / 3.1 | 105 |
+| desktop 1169x609 | shipped: centre 584,218, 780x421 | two-row | vertical grid, 104x158 | -- | -- | -- |
+
+Every compact case: panel inside the safe area's 8 px margin and 8 px clear of
+BAT/TRAP; the first card starts >= 8 px below the tabs; the row ends inside the
+tray; title, both tabs and the close button apart and clear of the rail rows. The
+10-slot desktop strip and the desktop Bag are unchanged at every desktop size.
+
+**Live, emulated 801 x 392 Play (the only size reachable -- see below):**
+
+    panel (79.5,8 641x318); hotbar + tray Visible=false while open
+    title 233.5..; tabs 299.5-459.5 and 463.5-623.5 (160 each); close 635.5-679.5
+    Equipment: 4 cards 112x170, y 36..206 of a 242 px tray (36 clear top AND bottom)
+    Plants: tray 394 + info column 207; 5 cards, canvas 620 -- start: first card
+      x 10..122; far end: last card x 272..384 of 394 (10 px padding); y 36..206
+    buttons 100x44 at 15 pt; names TextFits true, two lines at most
+    every tab, the close button and every card's action are the top touch target
+
+### Verified
+
+* **Specs: 33, 3,535 assertions, 0 failures** (HudLayoutSpec 386, +96: the Bag
+  section and the panel-over-hotbar check). Every changed file compiles; `rojo
+  build` succeeds; `git diff --check` clean; the temp spec folder is deleted.
+* **Play, emulated 801x392, real (injected) taps -- which arrive as Touch:**
+    - the Bag button opened it; the strip hid in the same frame;
+    - Equipment -> Plants -> Equipment: the scroll reset each time (a 44 px scroll
+      went back to 0), the info column came and went;
+    - **equip from the Bag**: Rootwood Bat went EQUIPPED with its ring and the BAT
+      side slot changed; Comet Bat was then re-equipped the same way (restored);
+    - the close button closed it; the strip came back in the same frame with the same
+      five cells;
+    - **six more open/close cycles**: identical hotbar, PlayerGui 4269 -> 4269
+      descendants, SeedLoadout 1122 -> 1122, rail 78 -> 78, grid children 7 -> 7, no
+      duplicate ScreenGui, memory 74.2 -> 70.0 MB;
+    - Output: no error or warning from any script.
+* Screenshots taken of both tabs (MCP screen_capture, Studio viewport only).
+
+### Not verified, and why
+
+* **The other four phones and the desktop LIVE.** Studio's device emulator is set to
+  the owner's 801x392 phone and MCP cannot change it; every Play here is that phone.
+  Their numbers above are the production arithmetic (HudLayout.bag), not screenshots.
+  The desktop is proven equal to the shipped code by the spec, not by a desktop Play.
+* **A real touch drag.** Injected input reaches the emulator as a TWO-finger gesture
+  -- every tap arrives with a second touch mirrored through the screen centre at
+  (801 - x, 297 - y) -- and the drag handler follows whichever finger moves or lifts
+  first, so an injected drag is not a faithful one. Not run. What was checked: the
+  strip's slot positions are identical hidden and shown, so a drop resolves.
+* **Finger scrolling** (the ends were checked by setting CanvasPosition), desktop
+  hover and the number keys live, a physical phone (none used).
+
+### Two things the owner should know
+
+* **A test tap planted a Nubkin.** Before the mirrored second touch was understood,
+  one landed in the world while the Nubkin was in hand, and the server logged
+  "nicnicniccoal planted a 4 tier Nubkin." It is in Plot_01 -- the normal plant
+  action; nothing was lost, and a PICK UP puts it back in the Bag. Every later tap
+  was chosen so its mirror landed on the panel's ClickBlocker, with nothing held.
+  (At that Play's load the server restored 6 HELD plants and logged no planted-garden
+  restore; the Nubkin is the only planted model in Plot_01 now.)
+* **On touch, a hotbar slot cannot be dragged INTO the Bag while it is open** -- the
+  strip is hidden. Returning is still the double-tap on the slot, which works with
+  the Bag shut. Assigning by dragging a card OUT of the Bag works: the strip shows for
+  the drag.
+
 ## One HUD contract for every screen, and a phone that is not a small desktop — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** fix the mobile HUD across common landscape phones and small

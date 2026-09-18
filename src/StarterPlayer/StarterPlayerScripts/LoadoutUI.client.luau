@@ -129,19 +129,19 @@ local INCOME = Color3.fromRGB(142, 220, 68)
 -- The information column sits beside the grid while there is room for two
 -- columns of cards and a readable panel, and drops under the grid as a lower
 -- sheet when there is not (a portrait phone).
+--
+-- ON A PHONE -- HudLayout's compact mode -- the card is 112 x 170 and the grid
+-- runs sideways in whole rows; see layoutBag. The numbers live in
+-- HudLayout.Config.Bag, where the arithmetic that places the panel lives, so a
+-- spec can drive it at every screen size. These are read back from there.
 --==============================================================================
-local CARD_W, CARD_H = 104, 158
-local CARD_GAP = 10
-local GRID_PAD = 10
-local ACTION_H = 44
-local INFO_GAP = 10
-local INFO_SIDE_MIN, INFO_SIDE_MAX = 184, 236
-local INFO_SHEET_H = 118
-local EDGE_GAP = 8
-local PANEL_MAX_W, PANEL_MAX_H = 780, 600
--- Below this the tabs share the title's row, which buys a short phone a whole
--- card row of height.
-local COMPACT_BELOW = 380
+local BAG = HudLayout.Config.Bag
+local CARD_W, CARD_H = BAG.Card.X, BAG.Card.Y
+local CARD_GAP = BAG.CardGap
+local ACTION_H = BAG.ActionH
+local INFO_GAP = BAG.InfoGap
+local INFO_SHEET_H = BAG.InfoSheetH
+local PANEL_MAX_W, PANEL_MAX_H = BAG.MaxW, BAG.MaxH
 -- How far a press may travel and still be a tap. A scroll or a camera drag moves
 -- further than this before it lifts, and must never select or equip anything.
 local TAP_SLOP = 10
@@ -1216,7 +1216,17 @@ local TextService = game:GetService("TextService")
 -- The pill hugs its words. Measured with TextService rather than off the label's
 -- own TextBounds, because the label now lives INSIDE the pill and a box sized off
 -- its own contents is a loop.
+-- Whether the cards are drawn at the compact size. Set by layoutBag, off
+-- HudLayout's mode; read by everything below that sizes a card's insides.
+local bagCompact = false
+
 local function fitPill(card: Card, text: string)
+	-- On a phone the button IS the strip: the whole 44 px, edge to edge, instead
+	-- of a 24 px pill floating inside an invisible target.
+	if bagCompact then
+		card.statePill.Size = UDim2.new(1, -4, 1, 0)
+		return
+	end
 	local size = TextService:GetTextSize(text, 11, Enum.Font.FredokaOne, Vector2.new(400, 40))
 	card.statePill.Size = UDim2.fromOffset(math.ceil(size.X) + 22, 24)
 end
@@ -1235,15 +1245,45 @@ local NAME_BOX = Vector2.new(CARD_W - 14, 1000)
 local function fitName(card: Card, text: string)
 	local label = card.name
 	label.Text = text
-	local need = TextService:GetTextSize(text, 9, Enum.Font.LuckiestGuy, NAME_BOX)
-	if need.Y > 26 then
+	-- Compact: a 98 x 32 box, 12 to 14 pt. Every name the game ships wraps to two
+	-- lines at 14 pt there (the longest word, THORNWHORL, is 96 px), so the
+	-- ellipsis stays what it was -- the answer for a name nobody has written yet.
+	local floor = if bagCompact then 12 else 9
+	local box = if bagCompact then Vector2.new(BAG.CardCompact.X - 14, 1000) else NAME_BOX
+	local need = TextService:GetTextSize(text, floor, Enum.Font.LuckiestGuy, box)
+	if need.Y > (if bagCompact then 32 else 26) then
 		label.TextScaled = false
-		label.TextSize = 10
+		label.TextSize = if bagCompact then 12 else 10
 		label.TextTruncate = Enum.TextTruncate.AtEnd
 	else
 		label.TextTruncate = Enum.TextTruncate.None
 		label.TextScaled = true
 	end
+end
+
+--==============================================================================
+-- ONE CARD, TWO SIZES
+--
+-- The grid's CellSize is the card's size; this is everything inside it that is
+-- not a fraction of it. Desktop: the name 26 tall at 9-12 pt, the action strip
+-- at 110 with its 24 px pill. Compact: the name 32 tall at 12-14 pt, the strip
+-- at 120 with the button filling all 44 px and its word at 15 pt. The same
+-- instances either way, so a relayout never duplicates a card or a connection.
+--==============================================================================
+local function shapeCard(card: Card)
+	card.name.Size = UDim2.new(1, -14, 0, if bagCompact then 32 else 26)
+	local fit = card.name:FindFirstChildOfClass("UITextSizeConstraint")
+	if fit then
+		fit.MaxTextSize = if bagCompact then 14 else 12
+		fit.MinTextSize = if bagCompact then 12 else 9
+	end
+	local action = card.statePill.Parent
+	if action and action:IsA("GuiObject") then
+		action.Position = UDim2.new(0, 4, 0, if bagCompact then 120 else 110)
+	end
+	card.state.TextSize = if bagCompact then 15 else 11
+	fitName(card, card.name.Text)
+	fitPill(card, card.state.Text)
 end
 
 local function acquireCard(index: number): Card
@@ -1611,6 +1651,9 @@ local function acquireCard(index: number): Card
 		end
 	end)
 
+	if bagCompact then
+		shapeCard(card)
+	end
 	cardPool[index] = card
 	return card
 end
@@ -2301,6 +2344,21 @@ end
 -- built at its resting number, and is left there.
 --==============================================================================
 local liftStrip: (boolean) -> ()
+--==============================================================================
+-- ON TOUCH, THE STRIP STEPS ASIDE WHILE THE BAG IS OPEN
+--
+-- On a phone the Bag needs the strip's height: HudLayout runs the panel down to
+-- the safe area's bottom edge on exactly this condition (`layout.touch`), so
+-- there is no strip-shaped hole left behind. Only Visible changes -- the slots,
+-- their assignments, what is in the hand and every Tool reference are the same
+-- objects throughout, and closing the Bag shows the same strip again at once.
+--
+-- It comes back for one thing: a card lifted out of the Bag. The strip is the
+-- drop target, so while a card is in the air it shows, lifted over the Bag as
+-- it always was, and steps aside again when the card lands. A desktop never
+-- hides it at all.
+--==============================================================================
+local showStrip: () -> ()
 do
 	local LIFT = 56
 	local resting: { [GuiObject]: number } = {}
@@ -2335,6 +2393,12 @@ do
 			end
 			table.clear(resting)
 		end
+		showStrip()
+	end
+
+	showStrip = function()
+		local layout = hud
+		hotbar.Visible = not (bagOpen and not lifted and layout ~= nil and layout.touch)
 	end
 end
 
@@ -3300,116 +3364,124 @@ end
 --==============================================================================
 local groupLimit = modal.group:FindFirstChildOfClass("UISizeConstraint")
 if groupLimit then
-	groupLimit.MinSize = Vector2.new(240, 160)
+	groupLimit.MinSize = Vector2.new(BAG.MinW, BAG.MinH)
 end
 local titlePad = modal.title.Parent and modal.title.Parent:FindFirstChildOfClass("UIPadding")
 
-layoutBag = function()
-	local screen = gui.AbsoluteSize
-	if screen.X < 100 or screen.Y < 100 then
-		return
+do
+	--==========================================================================
+	-- THE GRID: DOWNWARD ON A DESKTOP, SIDEWAYS IN WHOLE ROWS ON A PHONE
+	--
+	-- A vertical scroller shorter than one card row is what clipped the phone's
+	-- cards: whichever way it was scrolled, part of every card was under the
+	-- header or past the tray's bottom edge. Sideways, the rows are only ever
+	-- whole -- HudLayout counts how many fit the tray's height, at least one --
+	-- and they sit centred in it, so nothing can be cut at the top or bottom.
+	-- A part card at the right edge is what says "there is more this way".
+	--
+	-- The scroll goes back to the start whenever the direction changes, as it
+	-- already does on a tab switch and when a side slot opens the Bag.
+	--==========================================================================
+	local sideways: boolean? = nil
+
+	local function shapeGrid(bag: HudLayout.Bag)
+		gridLayout.FillDirectionMaxCells = if bag.horizontal then bag.rows else 0
+		if sideways == bag.horizontal then
+			return
+		end
+		sideways = bag.horizontal
+		bagCompact = bag.horizontal
+		grid.CanvasPosition = Vector2.zero
+		grid.ScrollingDirection = if bag.horizontal
+			then Enum.ScrollingDirection.X
+			else Enum.ScrollingDirection.Y
+		grid.AutomaticCanvasSize = if bag.horizontal
+			then Enum.AutomaticSize.X
+			else Enum.AutomaticSize.Y
+		gridLayout.FillDirection = if bag.horizontal
+			then Enum.FillDirection.Vertical
+			else Enum.FillDirection.Horizontal
+		gridLayout.HorizontalAlignment = if bag.horizontal
+			then Enum.HorizontalAlignment.Left
+			else Enum.HorizontalAlignment.Center
+		gridLayout.VerticalAlignment = if bag.horizontal
+			then Enum.VerticalAlignment.Center
+			else Enum.VerticalAlignment.Top
+		gridLayout.CellSize = UDim2.fromOffset(bag.card.X, bag.card.Y)
+		for _, card in pairs(cardPool) do
+			shapeCard(card)
+		end
 	end
-	local hotTop = screen.Y + hotbar.Position.Y.Offset - hotbar.Size.Y.Offset
-	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
-	local leftEdge = RAIL.Inset + RAIL.WideSize.X + EDGE_GAP
-	local rightEdge = screen.X - RAIL.Inset - side.Size.X.Offset - EDGE_GAP
-	local top = EDGE_GAP
-	local bottom = hotTop - EDGE_GAP
-	local layout = hud
-	if layout and layout.compact then
+
+	layoutBag = function()
+		local screen = gui.AbsoluteSize
+		if screen.X < 100 or screen.Y < 100 then
+			return
+		end
+		local layout = hud or HudLayout.solve(HudLayout.measure(gui))
+		local bag = HudLayout.bag(layout, {
+			hotTop = screen.Y + hotbar.Position.Y.Offset - hotbar.Size.Y.Offset,
+			stripHidden = layout.touch,
+			plants = activeTab == "plants",
+			sideWidth = side.Size.X.Offset,
+		})
+		modal.group.AnchorPoint = Vector2.new(0.5, 0.5)
+		modal.group.Position = UDim2.fromOffset(bag.centre.X, bag.centre.Y)
+		modal.group.Size = UDim2.fromOffset(bag.panel.w, bag.panel.h)
+
 		--======================================================================
-		-- THE COMPACT RAIL IS TWO SHORT ROWS, NOT TWO COLUMNS
+		-- A SHORT SCREEN PUTS THE TABS ON THE TITLE'S ROW
 		--
-		-- So there is no band between them to fit into. The panel takes the
-		-- width up to the BAT/TRAP column and the height down to the strip, and
-		-- the two rows stand over its top corners -- which is the header's to
-		-- step round, and UIKit.modal pads the title and the close button clear
-		-- of exactly those rows.
+		-- On a landscape phone a title row plus a tab row under it left less
+		-- than one card row of grid. Beside the title they cost nothing: "BAG"
+		-- is three letters. They stop short of the close button wherever the
+		-- header has stepped it in from a rail button, not only at its resting
+		-- 52 px -- on a phone the Bag button's row pushes it 27-31 px further
+		-- in, which is where the Plants tab used to run under it.
 		--======================================================================
-		leftEdge = EDGE_GAP
-		rightEdge = layout.equipment.x - EDGE_GAP
-	elseif rightEdge - leftEdge < 420 then
-		leftEdge = EDGE_GAP
-		top = railBottom + EDGE_GAP
-	end
+		if bag.compactHeader then
+			local padLeft = if titlePad then titlePad.PaddingLeft.Offset else 0
+			local padRight = if titlePad then titlePad.PaddingRight.Offset else 0
+			local reserve = math.max(72, math.ceil(modal.title.TextBounds.X) + padLeft + 16)
+			tabRow.Position = UDim2.fromOffset(12 + reserve, 13)
+			tabRow.Size = UDim2.new(1, -(24 + reserve + 52 + padRight), 0, 34)
+			modal.body.Position = UDim2.fromOffset(12, BAG.BodyTopCompact)
+			modal.body.Size = UDim2.new(1, -24, 1, -BAG.BodyTrimCompact)
+		else
+			tabRow.Position = UDim2.fromOffset(12, 58)
+			tabRow.Size = UDim2.new(1, -24, 0, 34)
+			modal.body.Position = UDim2.fromOffset(12, BAG.BodyTop)
+			modal.body.Size = UDim2.new(1, -24, 1, -BAG.BodyTrim)
+		end
 
-	local height = math.max(160, math.min(PANEL_MAX_H, bottom - top))
-	--==========================================================================
-	-- CENTRED ON THE SCREEN WHEN THAT STILL LEAVES A REAL PANEL
-	--
-	-- The rails are not symmetric -- 130 px on the left, 64 on the right -- so
-	-- the middle of the free band is not the middle of the screen, and the first
-	-- measurement put the panel 33 px right of the hotbar under it. A panel
-	-- centred on the screen is kept whenever it clears both rails at a useful
-	-- width; a phone, which needs every pixel, takes the whole band instead.
-	--==========================================================================
-	local half = screen.X * 0.5
-	local symmetric = 2 * math.min(half - leftEdge, rightEdge - half)
-	local width, centreX
-	if symmetric >= 600 or symmetric >= rightEdge - leftEdge - 40 then
-		width = math.max(240, math.min(PANEL_MAX_W, symmetric))
-		centreX = half
-	else
-		width = math.max(240, math.min(PANEL_MAX_W, rightEdge - leftEdge))
-		centreX = (leftEdge + rightEdge) * 0.5
-	end
-	local centreY = top + (bottom - top) * 0.5
-	modal.group.AnchorPoint = Vector2.new(0.5, 0.5)
-	modal.group.Position = UDim2.fromOffset(math.floor(centreX), math.floor(centreY))
-	modal.group.Size = UDim2.fromOffset(math.floor(width), math.floor(height))
+		--======================================================================
+		-- BESIDE THE GRID, OR UNDER IT
+		--
+		-- Beside it while two columns of cards and the narrowest readable panel
+		-- both fit; under it, as a lower sheet, when they do not. Plants only --
+		-- the equipment tab gives its tray the whole body.
+		--======================================================================
+		local infoRect = bag.infoRect
+		if bag.info == "none" or not infoRect then
+			tray.Size = UDim2.fromScale(1, 1)
+			info.Visible = false
+		elseif bag.info == "sheet" then
+			tray.Size = UDim2.new(1, 0, 1, -(INFO_SHEET_H + INFO_GAP))
+			info.AnchorPoint = Vector2.new(0, 1)
+			info.Position = UDim2.fromScale(0, 1)
+			info.Size = UDim2.new(1, 0, 0, INFO_SHEET_H)
+			layoutInfo("sheet")
+			info.Visible = true
+		else
+			tray.Size = UDim2.new(1, -(infoRect.w + INFO_GAP), 1, 0)
+			info.AnchorPoint = Vector2.new(1, 0)
+			info.Position = UDim2.fromScale(1, 0)
+			info.Size = UDim2.new(0, infoRect.w, 1, 0)
+			layoutInfo(bag.info)
+			info.Visible = true
+		end
 
-	--==========================================================================
-	-- A SHORT SCREEN PUTS THE TABS ON THE TITLE'S ROW
-	--
-	-- On a landscape phone the whole panel is ~250 px tall, and a title row plus
-	-- a tab row under it left less than one card row of grid. Beside the title
-	-- they cost nothing: "BAG" is three letters.
-	--==========================================================================
-	local outline = RAIL.OutlineThickness
-	local shellH = height - outline * 2
-	local compact = shellH < COMPACT_BELOW
-	if compact then
-		local padLeft = if titlePad then titlePad.PaddingLeft.Offset else 0
-		local reserve = math.max(72, math.ceil(modal.title.TextBounds.X) + padLeft + 16)
-		tabRow.Position = UDim2.fromOffset(12 + reserve, 13)
-		tabRow.Size = UDim2.new(1, -(24 + reserve + 52), 0, 34)
-		modal.body.Position = UDim2.fromOffset(12, 58)
-		modal.body.Size = UDim2.new(1, -24, 1, -70)
-	else
-		tabRow.Position = UDim2.fromOffset(12, 58)
-		tabRow.Size = UDim2.new(1, -24, 0, 34)
-		modal.body.Position = UDim2.fromOffset(12, 100)
-		modal.body.Size = UDim2.new(1, -24, 1, -112)
-	end
-
-	--==========================================================================
-	-- BESIDE THE GRID, OR UNDER IT
-	--
-	-- Beside it while two columns of cards and the narrowest readable panel
-	-- both fit; under it, as a lower sheet, when they do not. Plants only -- the
-	-- equipment tab gives its tray the whole body.
-	--==========================================================================
-	local bodyW = width - outline * 2 - 24
-	local bodyH = shellH - (if compact then 70 else 112)
-	local twoColumns = CARD_W * 2 + CARD_GAP + GRID_PAD * 2
-	if activeTab ~= "plants" then
-		tray.Size = UDim2.fromScale(1, 1)
-		info.Visible = false
-	elseif bodyW >= twoColumns + INFO_GAP + INFO_SIDE_MIN then
-		local infoW = math.clamp(math.floor(bodyW * 0.34), INFO_SIDE_MIN, INFO_SIDE_MAX)
-		tray.Size = UDim2.new(1, -(infoW + INFO_GAP), 1, 0)
-		info.AnchorPoint = Vector2.new(1, 0)
-		info.Position = UDim2.fromScale(1, 0)
-		info.Size = UDim2.new(0, infoW, 1, 0)
-		layoutInfo(if bodyH < 240 then "compact" else "side")
-		info.Visible = true
-	else
-		tray.Size = UDim2.new(1, 0, 1, -(INFO_SHEET_H + INFO_GAP))
-		info.AnchorPoint = Vector2.new(0, 1)
-		info.Position = UDim2.fromScale(0, 1)
-		info.Size = UDim2.new(1, 0, 0, INFO_SHEET_H)
-		layoutInfo("sheet")
-		info.Visible = true
+		shapeGrid(bag)
 	end
 end
 
@@ -4001,6 +4073,7 @@ local function layoutHud()
 	if count == activeSlots and chipWas ~= nil and chipWas ~= layout.chip then
 		redraw()
 	end
+	showStrip()
 	layoutBag()
 end
 
@@ -4065,6 +4138,7 @@ local function setOpen(want: boolean)
 	end
 	open = want
 	bagOpen = want
+	showStrip()
 	if not want then
 		-- The cards a drag was started from are about to go away.
 		cancelDrag()
@@ -4176,6 +4250,12 @@ end)
 -- how much of its row the compact tabs may take.
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutBag)
 modal.title:GetPropertyChangedSignal("TextBounds"):Connect(layoutBag)
+-- UIKit.modal pads the title bar clear of the rail AFTER the panel moves, so the
+-- compact tab row, which is fitted between those pads, follows them.
+if titlePad then
+	titlePad:GetPropertyChangedSignal("PaddingLeft"):Connect(layoutBag)
+	titlePad:GetPropertyChangedSignal("PaddingRight"):Connect(layoutBag)
+end
 
 -- The Bag's close button gets the same small press as its other controls. The
 -- plate is centre-anchored, so it scales in place; the 44 px target never moves.

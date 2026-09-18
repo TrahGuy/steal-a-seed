@@ -195,6 +195,45 @@ local CONFIG = {
 	-- gap minus the badge's 2.5 px stroke leaves this much before it would
 	-- touch the next button.
 	BadgeHang = 2,
+	--==========================================================================
+	-- THE BAG PANEL
+	--
+	-- LoadoutUI's own numbers, moved here so the arithmetic that places the
+	-- panel can be driven by a spec at every screen size. LoadoutUI reads them
+	-- back from here; there is one copy.
+	--==========================================================================
+	Bag = {
+		EdgeGap = 8,
+		MaxW = 780,
+		MaxH = 600,
+		MinW = 240,
+		MinH = 160,
+		-- A shell shorter than this puts the tabs on the title's row.
+		CompactBelow = 380,
+		-- Where the body starts inside the shell, and what the header and the
+		-- bottom margin take from its height, with the tabs on the title's row
+		-- and on their own row.
+		BodyTopCompact = 58,
+		BodyTop = 100,
+		BodyTrimCompact = 70,
+		BodyTrim = 112,
+		-- The desktop card and the compact one. Compact is 8 px wider and 12
+		-- taller: a name box every shipped name fits in two lines of 14 pt, and
+		-- an action button that is the whole 44 px strip rather than a 24 px
+		-- pill inside it.
+		Card = Vector2.new(104, 158),
+		CardCompact = Vector2.new(112, 170),
+		CardGap = 10,
+		GridPad = 10,
+		-- The grid's own UIPadding: left/right, top/bottom.
+		PadX = 10,
+		PadY = 8,
+		ActionH = 44,
+		InfoGap = 10,
+		InfoSideMin = 184,
+		InfoSideMax = 236,
+		InfoSheetH = 118,
+	},
 }
 HudLayout.Config = CONFIG
 
@@ -699,6 +738,141 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number)
 		return (lo + hi) / 2 - centre, top
 	end
 	return 0, L.railBottom + G
+end
+
+--==============================================================================
+-- THE BAG PANEL
+--
+-- The desktop branch is LoadoutUI's layoutBag arithmetic, moved here unchanged:
+-- the panel fits between the rails and above the hotbar, centred on the screen
+-- when that still leaves a real panel.
+--
+-- COMPACT, measured 2026-09-18 on the owner's emulated 801 x 392 phone: the
+-- panel stopped above the strip, so after its header the grid was 128 px tall
+-- -- and a card row is 158 + 16. No card could ever be shown whole: at the top
+-- of the scroll its action button was cut off by the tray's bottom edge, and
+-- scrolled to reach it, its preview went up under the header. So on a phone:
+--
+--   * the strip is hidden while the Bag is open (touch only), and the panel
+--     runs down to the safe area's bottom edge instead of stopping above it;
+--   * the grid scrolls SIDEWAYS, in as many whole rows as fit -- never a part
+--     row, so nothing is ever clipped at the top or the bottom;
+--   * a card is the compact 112 x 170, with a full 44 px action button.
+--
+-- `stripHidden` is the first of those: LoadoutUI passes `layout.touch`, and
+-- hides the strip on exactly the same condition.
+--==============================================================================
+export type BagInput = {
+	-- The strip's top edge in safe space, from its own Position and Size.
+	hotTop: number,
+	stripHidden: boolean,
+	-- The Plants tab, which has the information column beside or under the grid.
+	plants: boolean,
+	-- The BAT/TRAP frame's width, which the desktop panel stops short of.
+	sideWidth: number,
+}
+
+export type Bag = {
+	panel: Rect,
+	-- The group is centre-anchored; this is the offset LoadoutUI writes.
+	centre: Vector2,
+	compactHeader: boolean,
+	body: Rect,
+	tray: Rect,
+	-- "none", "side", "compact" (a short side column) or "sheet".
+	info: string,
+	infoRect: Rect?,
+	horizontal: boolean,
+	-- Whole rows of cards in a sideways grid; 0 for the desktop's vertical one.
+	rows: number,
+	card: Vector2,
+}
+
+function HudLayout.bag(L: Layout, input: BagInput): Bag
+	local B = CONFIG.Bag
+	local sw, sh = L.safe.X, L.safe.Y
+	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
+	local leftEdge = RAIL.Inset + RAIL.WideSize.X + B.EdgeGap
+	local rightEdge = sw - RAIL.Inset - input.sideWidth - B.EdgeGap
+	local top = B.EdgeGap
+	local bottom = input.hotTop - B.EdgeGap
+	if L.compact then
+		-- The compact rail is two short rows, not two columns: the panel takes
+		-- the width up to BAT/TRAP, and the rows stand over its top corners,
+		-- which UIKit.modal's header pads its title and close button clear of.
+		leftEdge = B.EdgeGap
+		rightEdge = L.equipment.x - B.EdgeGap
+		if input.stripHidden then
+			bottom = sh - B.EdgeGap
+		end
+	elseif rightEdge - leftEdge < 420 then
+		leftEdge = B.EdgeGap
+		top = railBottom + B.EdgeGap
+	end
+
+	local height = math.max(B.MinH, math.min(B.MaxH, bottom - top))
+	local half = sw * 0.5
+	local symmetric = 2 * math.min(half - leftEdge, rightEdge - half)
+	local width, centreX
+	if symmetric >= 600 or symmetric >= rightEdge - leftEdge - 40 then
+		width = math.max(B.MinW, math.min(B.MaxW, symmetric))
+		centreX = half
+	else
+		width = math.max(B.MinW, math.min(B.MaxW, rightEdge - leftEdge))
+		centreX = (leftEdge + rightEdge) * 0.5
+	end
+	local centreY = top + (bottom - top) * 0.5
+	local centre = Vector2.new(math.floor(centreX), math.floor(centreY))
+	width, height = math.floor(width), math.floor(height)
+	if L.compact then
+		-- Centred on the exact half, so a panel of odd height still starts ON
+		-- the 8 px margin rather than half a pixel inside it. The desktop keeps
+		-- the floor it always had.
+		centre = Vector2.new(centre.X, top + height / 2)
+	end
+	local panel = rect(centre.X - width / 2, centre.Y - height / 2, width, height)
+
+	local outline = RAIL.OutlineThickness
+	local shellW, shellH = width - outline * 2, height - outline * 2
+	local compactHeader = shellH < B.CompactBelow
+	local bodyTop = if compactHeader then B.BodyTopCompact else B.BodyTop
+	local bodyW = shellW - 24
+	local bodyH = shellH - (if compactHeader then B.BodyTrimCompact else B.BodyTrim)
+	local body = rect(panel.x + outline + 12, panel.y + outline + bodyTop, bodyW, bodyH)
+
+	local card = if L.compact then B.CardCompact else B.Card
+	local twoColumns = card.X * 2 + B.CardGap + B.GridPad * 2
+	local tray, info, infoRect = body, "none", nil
+	if not input.plants then
+		tray = body
+	elseif bodyW >= twoColumns + B.InfoGap + B.InfoSideMin then
+		local infoW = math.clamp(math.floor(bodyW * 0.34), B.InfoSideMin, B.InfoSideMax)
+		tray = rect(body.x, body.y, bodyW - infoW - B.InfoGap, bodyH)
+		infoRect = rect(body.x + bodyW - infoW, body.y, infoW, bodyH)
+		info = if bodyH < 240 then "compact" else "side"
+	else
+		tray = rect(body.x, body.y, bodyW, bodyH - B.InfoSheetH - B.InfoGap)
+		infoRect = rect(body.x, body.y + bodyH - B.InfoSheetH, bodyW, B.InfoSheetH)
+		info = "sheet"
+	end
+
+	local rows = 0
+	if L.compact then
+		rows = math.max(1, math.floor((tray.h - B.PadY * 2 + B.CardGap) / (card.Y + B.CardGap)))
+	end
+
+	return {
+		panel = panel,
+		centre = centre,
+		compactHeader = compactHeader,
+		body = body,
+		tray = tray,
+		info = info,
+		infoRect = infoRect,
+		horizontal = L.compact,
+		rows = rows,
+		card = card,
+	}
 end
 
 --==============================================================================

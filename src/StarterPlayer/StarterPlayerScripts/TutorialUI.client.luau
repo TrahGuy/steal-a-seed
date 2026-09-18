@@ -652,6 +652,11 @@ local function hotbarSlotFor(tool: Tool?): GuiObject?
 	if not (hotbar and hotbar:IsA("GuiObject")) then
 		return nil
 	end
+	-- On a phone the strip steps aside while the Bag is open; a pointer aimed
+	-- at where it would be would point into the Bag.
+	if not hotbar.Visible then
+		return nil
+	end
 	if tool then
 		local want = string.upper(tool.Name)
 		for _, slot in hotbar:GetChildren() do
