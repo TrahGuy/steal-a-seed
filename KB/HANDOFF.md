@@ -1,5 +1,195 @@
 # Steal a Seed — Session Handoff
 
+## One HUD contract for every screen, and a phone that is not a small desktop — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** fix the mobile HUD across common landscape phones and small
+screens -- no overlaps, clipping or oversized controls -- without redesigning
+gameplay or rebuilding the hotbar; the desktop unchanged; five slots on mobile.
+
+### What was actually wrong -- measured live in the owner's emulated 801 x 392 session
+
+    cash block vs hotbar          overlapping 68 px
+    WALK MODE vs cash block       overlapping 10 px
+    thumbstick ring               drawn over the cash block
+    jump button                   under the BAT/TRAP column
+    left rail                     64% of the safe height (214 of 334 px)
+    hotbar                        TEN slots on a 956-wide emulated phone -- Studio's
+                                  emulator reports a keyboard, and the old rule was
+                                  "keyboard AND 900 px wide"
+
+All of it one cause: the desktop geometry, written inline in nine scripts, applied
+unchanged to a screen a third of the size with Roblox's own touch controls on it.
+
+### The contract: one shared module, `HudLayout` (new, pure, no instances)
+
+Nine scripts own a piece of the HUD and none owns the others, so each asks
+`HudLayout.solve(HudLayout.measure(itsOwnScreenGui))` and applies ITS OWN part of
+the answer to ITS OWN instances. HudLayout builds, finds, moves and keeps nothing,
+and runs on no clock; `measure` only reads the ScreenGui's size, TouchEnabled,
+KeyboardEnabled, the viewport, GuiService.TopbarInset and the gui inset. Owners ask
+again only when their ScreenGui's AbsoluteSize changes (viewport, inset, notch and
+rotation all land there), plus TopbarInset for the clock and TouchEnabled /
+KeyboardEnabled for LoadoutUI. No remote, no loop, no second source of state.
+
+* **DESKTOP** = not touch, safe width >= 900, and the old arrangement actually fits
+  (nothing overlapping, every gap >= 8). It is the old geometry TO THE PIXEL -- the
+  spec rebuilds every old inline UDim2 from GameConfig and compares. The one thing
+  that can move: on a window narrower than 1268 px the cash block stands 8 px above
+  the hotbar instead of beside it (it used to overlap the 10-slot strip there).
+  Ten slots with a keyboard; five without (a console, as before).
+* **COMPACT** = any touch screen, or any window the desktop arrangement does not fit.
+  Decided by safe size and touch, never a device name.
+    - top left: Index, Shop, Settings, WALK MODE -- one row of 50 x 50, 6 px apart,
+      8 px in. Index/Shop keep their slab, colours and icon (the word is dropped);
+      Settings stands on a slate plate (the Walk Mode switch's colours) so it reads
+      as part of the row; WALK MODE is a two-state square: WALK / MODE over the
+      OFF / ON 16 pill. Badges tuck 2 px past the corner instead of hanging half off
+      (half off would leave the glass and cover the next button).
+    - top right: Garden and the Bag in one row, the Bag in the corner.
+    - right edge: BAT over TRAP, 8 px above the jump button's reservation, 8 px
+      under the top row; slots shrink to 66 px tall only on the 302-px-tall screen.
+    - bottom: the hotbar -- five 64-px slots + the Bag cell, 419 px -- centred,
+      slid the least it must to stay 8 px clear of the stick and the jump button.
+    - bottom left: cash/speed/x2 at FULL SIZE, 12 px in, standing 8 px above the
+      thumbstick and, where they would meet, above the hotbar's top line. Placed by
+      a 232-px reservation ("$9.99Qa" + the x2 card), so it never hops when a
+      balance gains a digit; CashUI measures the real group and re-places only if
+      it ever outgrows that (nothing under the save cap does).
+    - the clock: unchanged look; capped no wider than the topbar's free span allows
+      while centred, 8 px from the Roblox buttons (a 640-wide phone gets 208 px
+      and TextScaled shrinks the words); below 170 px it slides instead.
+    - the tutorial banner: under the top rows, between the cash block and BAT/TRAP
+      where they share its band (off centre rather than squeezed), lines capped at
+      their old sizes and scaled down only when narrower than their words.
+    - the biome notice: centred where it clears both top rows by 8 px (every name,
+      every listed phone), slid between them where it only fits off centre, dropped
+      under them where it fits neither.
+* **Touch controls are modelled from the PlayerModule's formulas**, both stick modes
+  at once (the player chooses in the Roblox menu), reserved whenever the screen is
+  touch. Measured live, they match exactly: jump (706,244) 70x70, ring (29,241) 74x74.
+
+### What changed, file by file
+
+* `Shared/HudLayout.luau` (new) -- the above, plus `place` (a rect as a UDim2 from
+  the edge its anchor is on, so desktop answers ARE the old UDim2s), `groups`,
+  `problems`, `badges`, `notice`, `touchZones`, `hotbarWidth`.
+* `Shared/UIKit.luau` -- requires HudLayout; `railShape` (wide <-> square: size,
+  icon, word) and `railBadge` (hanging <-> tucked) for owners to call; the modal
+  header now steps clear of the compact rows' footprint as well as the columns'.
+* `IndexUI`, `ShopUI`, `GardenUI` -- `placeButton()` from HudLayout; Index's and
+  Garden's badges via `railBadge`.
+* `SettingsUI` -- same, plus the compact-only plate; the drawn-gear fallback follows
+  the icon size.
+* `WalkModeUI` (untracked since 2026-09-17, edited in place) -- `placeSwitch()` re-lays
+  the same slab/label/pill for either shape; its hook on the shared rail layer is
+  dropped when the switch is destroyed.
+* `LoadoutUI` -- `layoutHud()` places the Bag button, BAT/TRAP and the strip, and
+  reads the slot count (`wantedSlots`) and the Bag cell's visibility off the same
+  answer; the painted tray follows the strip's Position; the Bag panel in compact
+  takes the width up to BAT/TRAP and lets the header step round the top rows. The
+  camera-ViewportSize watcher is replaced by the ScreenGui's AbsoluteSize. 189 of
+  200 top-level locals (was 187).
+* `CashUI` -- `groupWidth()` + `placeCorner()`; nothing inside the block moved.
+* `WorldClock` -- `placePlate()`: the ceiling on UISizeConstraint + centre offset.
+* `TutorialUI` -- `placeBanner()` + UITextSizeConstraints (34/19/15), TextScaled in
+  compact only.
+* `BiomeGuideUI` -- `placeNotice()`.
+* `tools/tests/HudLayoutSpec.luau` (new, 290 assertions).
+* `AGENTS.md` -- HudLayout and ReachPoint in the file map; rule 12 (the HUD is placed
+  by HudLayout).
+
+### Measurements (safe-area px; groups include the compact badges)
+
+From HudLayoutSpec, a 58-px topbar, touch controls modelled; every listed viewport
+is compact with five slots and a minimum gap of exactly 8.0 px:
+
+| viewport | safe | rail row | Garden+Bag | BAT/TRAP | hotbar (5+Bag) | cash block | tightest pair |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 640x480 | 640x422 | 8,3.5 218x54.5 | 521.5,3.5 110.5x54.5 | 568,180 64x144 | 111,308 419x104 | 12,190 232x110 | BAT/TRAP-jump 8 |
+| 772x360 | 772x302 | 8,3.5 218x54.5 | 653.5,3.5 | 700,66 64x138 | 176.5,188 | 12,70 | Bag row-BAT/TRAP 8 |
+| 874x402 | 874x344 | same | 755.5,3.5 | 802,102 64x144 | 227.5,230 | 12,112 | BAT/TRAP-jump 8 |
+| 896x414 | 896x356 | same | 777.5,3.5 | 824,114 | 238.5,242 | 12,124 | BAT/TRAP-jump 8 |
+| 956x440 | 956x382 | same | 837.5,3.5 | 884,140 | 268.5,268 | 12,171 | BAT/TRAP-jump 8 |
+| 1000x609 | 1000x551 | same | 881.5,3.5 | 928,189 | 290.5,437 | 12,223 | BAT/TRAP-jump 8 |
+| 874x402 notched | 750x323 | same | 631.5,3.5 | 678,81 | 165.5,209 | 12,91 | BAT/TRAP-jump 8 |
+| 956x440 notched | 832x361 | same | 713.5,3.5 | 760,119 | 206.5,247 | 12,129 | BAT/TRAP-jump 8 |
+| 896x414 notched | 800x335 | same | 681.5,3.5 | 728,93 | 190.5,221 | 12,103 | BAT/TRAP-jump 8 |
+
+Desktop 1280x720 through 2560x1440: every group at its old UDim2, ten slots, clock
+at its old width. A 1000x609 desktop window keeps the column rail and ten slots and
+lifts the cash block above the strip.
+
+**Live, emulated 801 x 392 Play (Studio's emulator was still on the owner's phone):**
+
+    Index (8,8 50x50)  Shop (64,8)  Settings (120,8)  WALK MODE (176,8)   -- one row
+    Garden (687,8)  Bag (743,8)                                          -- one row
+    BAT (729,92 64x68)  TRAP (729,168 64x68)   8.0 px above the jump button
+    hotbar (260,220 281x104) = 3 cells today, centred at 400.5; tray follows it
+    cash root (12,102) -- "$" outline at x 9; group bottom 212, hotbar top 220
+    clock (224..576 on the window) -- 16 px clear of the Roblox buttons at 208
+    tutorial banner (252,66 469x84), skip (411,150)
+    Bag panel header padded L139 R26 -- title and close clear of both top rows
+    visual groups: min gap between groups 34 px; BAT/TRAP-jump 8; cash-ring 29
+
+### Verified
+
+* **Specs: 33, 3,439 assertions, 0 failures** (33 -- first reported as 34, a miscount), including **HudLayoutSpec (new, 290)**:
+  the desktop UDim2s, sizes and clock at five desktop sizes; every listed phone
+  emulated (keyboard on) and real (keyboard off), three notched iPhones and the
+  owner's 801x392 -- compact, five slots, rail row even and 44+, badges on the
+  glass, hotbar five 64-px slots within 8 px of centre and clear of both thumbs,
+  cash full size above the stick with the "$" 8+ px in, BAT/TRAP above the jump,
+  clock centred and clear of the Roblox buttons, banner and skip touching nothing,
+  every biome name centred and clear; slot count constant across every phone; and,
+  by source, every owner asks HudLayout, re-asks only on AbsoluteSize, and added no
+  per-frame hook, ScreenGui or remote.
+* **Play, emulated 801x392:** the numbers above; all 13 buttons (four rail, Garden,
+  Bag, BAT, TRAP, x2, three hotbar cells, the Bag cell) are the topmost touch target
+  at their own centre (GetGuiObjectsAtPosition); WALK/MODE 30x22 in a 46x24 box,
+  "OFF" 20 px and "ON  16" 32 px in a 42-px pill; Settings' plate on and gear 36;
+  **a respawn left exactly one of every HUD element and no duplicate ScreenGui**, at
+  the same positions; Output clean; the server logged "restored 6 plant(s)".
+* Every changed file compiles in Studio; `rojo build` succeeds; `git diff --check`
+  clean; the temp spec folder is deleted.
+
+### Not verified, and why
+
+* **Desktop live.** Studio's emulator is still set to the owner's phone and MCP cannot
+  switch it, so every Play session here is the 801x392 phone. Desktop is proven by the
+  spec (every old UDim2 reproduced) and by the code path, not by a desktop Play.
+* **Taps.** No input was injected (Studio must be foreground and the owner uses this
+  PC); the hit test proves each button is on top at its centre, not that it fired.
+* **The other listed viewports live**, a full five-slot strip live (the save holds two
+  hotbar items), WALK MODE ON live (it is the server's attribute on the real profile),
+  Reduced Effects toggled live, a live resize and a Rojo re-run mid-Play.
+* **A physical phone.** None was used. The emulator does not model notches; the
+  notched rows above are arithmetic with Apple's landscape insets.
+
+### Follow-up: the almanac under the hotbar (owner report, same day)
+
+The almanac's ScreenGui and the hotbar's were BOTH DisplayOrder 30, so the engine
+was free to draw the strip over the open panel -- and did. A panel is 82% of the
+screen tall; measured in the owner's emulated Play, the Index panel reached 79 px
+below the hotbar's top, Garden 79, Settings 63 (the Shop 79 too, but at 32 it was
+already on top). **Index, Garden and Settings now sit at 31**: above the hotbar
+(30), below the Shop (32), Marigold (34) and the rail (40), so an open panel and
+its dimmer cover the strip the way the Shop always has. The Bag stays in the
+hotbar's own ScreenGui and keeps fitting itself above the strip, because the strip
+is its drop target. HudLayoutSpec now checks every panel's order against the
+hotbar's and the rail's. Applied live to the owner's running session as a
+preview; the spec rerun is pending until Studio is back in Edit (it was in Play).
+
+### Trade-offs to know about
+
+* A touch-screen laptop now gets the compact layout and five slots (its touch controls
+  can appear any time). A desktop window crossing into compact still gives slots 6-10
+  back to the bag -- applySlotCount's shipped rule; a phone resizing or rotating stays
+  five and loses nothing.
+* The desktop Index badge still hangs 3.5 px up into the topbar band, as it always has.
+* World-anchored touch prompts (PromptUI) and the tutorial's one-off celebration and
+  pointer are not HUD groups and were not re-laid; a prompt at the very top-left of
+  the view can still pass under the compact row.
+
 ## The countdown you can see from beside a Colossal, and a PICK UP you can reach — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** the planted-pod hatch countdown could not be seen reliably on a

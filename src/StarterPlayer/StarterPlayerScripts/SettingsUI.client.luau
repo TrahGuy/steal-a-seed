@@ -44,6 +44,7 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -102,7 +103,11 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedSettings"
 gui.ResetOnSpawn = false
-gui.DisplayOrder = 30
+-- ONE ABOVE THE HOTBAR'S 30. Level with it, the engine was free to draw the strip
+-- over the open panel, and did: the panel is 82% of the screen tall, so on a
+-- landscape phone or a 720-px window its bottom sits behind the hotbar. Above
+-- it, the panel and its dimmer cover the strip as the Shop (32) always has.
+gui.DisplayOrder = 31
 gui.Parent = playerGui
 
 --==============================================================================
@@ -121,6 +126,57 @@ local button = UIKit.railButton(playerGui, {
 	bare = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + (RAIL.WideSize.Y + RAIL.Gap) * 2)
+
+--==============================================================================
+-- IN THE COMPACT ROW IT STANDS ON A PLATE
+--
+-- Bare works on a desktop, where the gear is the third row of a column under
+-- two wide slabs. In the compact top row it would be a loose gear between the
+-- Shop's slab and WALK MODE's -- a gap with an icon in it -- so there it stands
+-- on a slab in the Walk Mode switch's slate: the same 50 x 50, radius, outline
+-- and lattice as its neighbours, with the gear at 36 so the plate shows round
+-- it. The plate is a Frame and not Active, so every press still lands on the
+-- button it always did, and the hover pop scales the two together.
+--==============================================================================
+local SLATE_FACE = Color3.fromRGB(46, 52, 62)
+local SLATE_SHADE = Color3.fromRGB(28, 32, 40)
+local COMPACT_GEAR = 36
+
+local plate = Instance.new("Frame")
+plate.Name = "Plate"
+plate.Size = UDim2.fromScale(1, 1)
+plate.BackgroundColor3 = SLATE_FACE
+plate.BorderSizePixel = 0
+plate.Visible = false
+plate.Parent = button
+UIKit.corner(plate, RAIL.Radius)
+UIKit.stroke(plate, RAIL.Outline, RAIL.OutlineThickness)
+UIKit.gradient(plate, SLATE_FACE, SLATE_SHADE)
+UIKit.lattice(plate, {
+	spacing = 18,
+	thickness = 2,
+	transparency = 0.86,
+	inset = math.max(3, math.floor(RAIL.Radius * 0.35)),
+})
+
+-- Third on the rail, from HudLayout. See IndexUI's placeButton.
+local function placeButton()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	local iconSize = if layout.compact then COMPACT_GEAR else RAIL.IconBare
+	UIKit.railShape(button, Vector2.new(layout.settings.w, layout.settings.h), iconSize)
+	button.Position = HudLayout.place(layout.settings, Vector2.zero, layout.safe)
+	plate.Visible = layout.compact
+	-- The drawn stand-in, if the artwork never loaded, follows the same size.
+	local drawn = button:FindFirstChild("GearDrawn")
+	if drawn and drawn:IsA("GuiObject") then
+		drawn.Size = UDim2.fromOffset(iconSize - 8, iconSize - 8)
+	end
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
+placeButton()
 
 --==============================================================================
 -- A GEAR OUT OF FRAMES, FOR THE DAY THE UPLOAD DOES NOT LOAD
@@ -231,7 +287,7 @@ task.spawn(function()
 	end
 	warn("[Seed/SettingsUI] The settings icon did not load; drawing the gear instead.")
 	railIcon.Visible = false
-	drawGear(button, RAIL.IconBare - 8, 3)
+	drawGear(button, railIcon.Size.X.Offset - 8, 3)
 	titleGear.Image = ""
 	drawGear(titleGear, 30, 3)
 end)

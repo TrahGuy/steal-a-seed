@@ -70,6 +70,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -129,6 +130,31 @@ local edge = label:FindFirstChildOfClass("UIStroke")
 assert(edge, "UIKit.outlined always gives its label a stroke")
 local outline = edge :: UIStroke
 outline.Transparency = 1
+
+--==============================================================================
+-- CLEAR OF THE TOP ROWS
+--
+-- 50 px from the top of the window is level with the rail on a 58 px topbar,
+-- so the word is asked of HudLayout like everything else up there: centred
+-- wherever it clears both top groups by 8 px -- every desktop, and every
+-- biome name on every listed phone -- slid between them where it only fits
+-- off centre, and dropped under them where it fits neither. Placed when the
+-- word changes width and when the screen changes shape.
+--==============================================================================
+local function placeNotice()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local input = HudLayout.measure(gui)
+	local layout = HudLayout.solve(input)
+	local inset = input.insetTop or 0
+	local width = label.AbsoluteSize.X + OUTLINE * 2
+	local dx, top = HudLayout.notice(layout, width, HEIGHT, TOP - inset)
+	label.Position = UDim2.new(0.5, math.round(dx), 0, top + inset)
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeNotice)
+label:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeNotice)
+placeNotice()
 
 local token = 0
 local running: { Tween } = {}

@@ -73,6 +73,8 @@ src/
     Shared/SeedData.luau        Greenhollow + Dustbowl species, and what they earn
     Shared/BiomeData.luau       the five biomes and where they sit on the road
     Shared/UIKit.luau           the modal, the slab, the lattice and one camera framer
+    Shared/HudLayout.luau       where every HUD group sits, desktop or compact -- numbers only
+    Shared/ReachPoint.luau      pod timer, stacked prompt and PICK UP placement -- numbers only
     Shared/WeaponData.luau      Marigold's shelf: six bats, one trap, prices and combat
     Shared/WeaponModel.luau     their geometry -- Tool, shop viewport and world trap
     Remotes/                    created at runtime by ServerMain
@@ -173,6 +175,11 @@ From the blueprint, plus what this repo has learned:
     obvious primitive. Reserve spheres for small details such as eyes, buds and joints. A carved
     mouth is real recessed negative space built from brow, cheek and jaw masses, not a dark panel
     pasted onto a round head. This does not authorize MeshParts, unions or imported geometry.
+12. **The HUD is placed by `HudLayout`.** Every permanent group's rect comes from
+    `HudLayout.solve`, applied by the script that owns it and asked again only when its ScreenGui's
+    size changes. A new HUD element gets its rect there first, and `HudLayoutSpec` proves it
+    clears every other group and Roblox's touch controls on each listed phone. The desktop answer
+    is the shipped layout, pixel for pixel.
 
 ## Skills
 

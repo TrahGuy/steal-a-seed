@@ -52,6 +52,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local RAIL = GameConfig.Rail
 local WALK = GameConfig.WalkMode
@@ -120,6 +121,54 @@ state.Size = UDim2.new(1, 0, 1, 0)
 state.Text = WALK.OffText
 state.ZIndex = 7
 
+--==============================================================================
+-- TWO SHAPES, ONE SWITCH
+--
+-- A desktop keeps the 130 x 46 slab under Settings. HudLayout's compact top
+-- row makes it a 50 x 50 square like its three neighbours, and it still says
+-- both halves of what it is: WALK over MODE in two short lines, and under them
+-- the pill -- OFF, or ON 16 -- which is the state and is never decoration. The
+-- same slab, label and pill are re-laid rather than rebuilt, so the colour and
+-- the words paint() gives them carry straight across a relayout.
+--
+-- The rail layer is shared and outlives this script, so the connection to it
+-- is dropped when this switch is: a re-run's new switch brings its own.
+--==============================================================================
+local STACKED_LABEL = (string.gsub(WALK.Label, " ", "\n"))
+
+local function placeSwitch()
+	if layer.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(layer))
+	local r = layout.walk
+	slab.Size = UDim2.fromOffset(r.w, r.h)
+	slab.Position = HudLayout.place(r, Vector2.zero, layout.safe)
+	if layout.compact then
+		label.Text = STACKED_LABEL
+		label.TextSize = 11
+		label.TextXAlignment = Enum.TextXAlignment.Center
+		label.Position = UDim2.fromOffset(2, 3)
+		label.Size = UDim2.new(1, -4, 0, 24)
+		pill.Position = UDim2.new(0, 4, 0, 29)
+		pill.Size = UDim2.new(1, -8, 0, 17)
+		state.TextSize = 11
+	else
+		label.Text = WALK.Label
+		label.TextSize = 13
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Position = UDim2.fromOffset(10, 4)
+		label.Size = UDim2.new(1, -20, 0, 18)
+		pill.Position = UDim2.new(0, 10, 0, 24)
+		pill.Size = UDim2.new(1, -20, 0, 16)
+		state.TextSize = 12
+	end
+end
+local relayout = layer:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSwitch)
+slab.Destroying:Once(function()
+	relayout:Disconnect()
+end)
+placeSwitch()
 
 --==============================================================================
 -- WHAT THE SERVER SAYS, DRAWN

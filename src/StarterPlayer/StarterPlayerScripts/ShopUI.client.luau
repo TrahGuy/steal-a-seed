@@ -51,6 +51,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 
 local player = Players.LocalPlayer
@@ -141,6 +142,19 @@ local button = UIKit.railButton(playerGui, {
 	wide = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
+
+-- Second on the rail, from HudLayout: under Index on a desktop, beside it in
+-- the compact top row -- square, the cart alone. See IndexUI's placeButton.
+local function placeButton()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	UIKit.railShape(button, Vector2.new(layout.shop.w, layout.shop.h))
+	button.Position = HudLayout.place(layout.shop, Vector2.zero, layout.safe)
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
+placeButton()
 
 --==============================================================================
 -- THE PANEL

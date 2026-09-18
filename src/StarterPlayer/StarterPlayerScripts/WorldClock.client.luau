@@ -45,9 +45,11 @@ local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
+local GuiService = game:GetService("GuiService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -128,6 +130,41 @@ local textEdge = Instance.new("UIStroke")
 textEdge.Color = INK
 textEdge.Thickness = 2
 textEdge.Parent = text
+
+--==============================================================================
+-- CENTRED, AND NEVER UNDER A ROBLOX BUTTON
+--
+-- The plate above is the whole look and is not touched: same scale, same
+-- 190-360 band, same 34 px, same text. What HudLayout adds is a ceiling -- no
+-- wider than the topbar's free span allows while staying centred, 8 px clear
+-- of the Roblox buttons on both sides -- so on a narrow phone the plate gets
+-- a little narrower and TextScaled takes the words down with it. Below 170 px
+-- it stops shrinking and slides the least it can instead.
+--
+-- On every desktop and every listed phone the ceiling is above the plate's own
+-- width and this changes nothing. Asked again on a resize or when the topbar
+-- changes shape; never per frame.
+--==============================================================================
+local function placePlate()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local input = HudLayout.measure(gui)
+	local layout = HudLayout.solve(input)
+	local r, viewport = layout.clock, input.viewport
+	if not (r and viewport) then
+		return
+	end
+	cap.MaxSize = Vector2.new(math.min(360, r.w), 40)
+	cap.MinSize = Vector2.new(math.min(190, r.w), 28)
+	plate.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - viewport.X / 2), 0, 8)
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placePlate)
+local topbarWatch = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placePlate)
+gui.Destroying:Once(function()
+	topbarWatch:Disconnect()
+end)
+placePlate()
 
 --==============================================================================
 -- THE THREE THINGS IT CAN SAY

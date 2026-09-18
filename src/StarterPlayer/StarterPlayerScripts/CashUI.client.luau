@@ -72,6 +72,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -418,6 +419,51 @@ end
 placeBuff()
 
 --==============================================================================
+-- WHERE THE BLOCK SITS: ONE MEASURED GROUP, MOVED, NEVER SHRUNK
+--
+-- The shoe, both numbers and the x2 card are one group, and HudLayout places
+-- the group -- this script only measures it and applies the answer to `root`.
+-- Nothing inside the block moves relative to anything else, so the easing, the
+-- colours, the formatting and the card's place off the cash text are exactly
+-- what they were.
+--
+--   desktop   the bottom-left corner, 12 in and 10 up, as it always was --
+--             unless a narrow window leaves no room beside the hotbar, when
+--             the whole block stands 8 px above the strip instead
+--   phone     8 px above the thumbstick's resting ring, and above the
+--             hotbar's top line wherever it would otherwise meet the strip
+--
+-- THE WIDTH IS A RESERVATION, NOT THE NUMBER. HudLayout places the block by
+-- the widest it can get -- "$9.99Qa" with the card beside it, 230 px -- so a
+-- balance gaining a digit never makes the block hop. What is measured here is
+-- the group's real width, and it only matters if it ever outgrows that
+-- reservation, which no value under the save cap does.
+--==============================================================================
+local function groupWidth(): number
+	-- The outline is 3 px on the cash line and 2 on the speed line, and it
+	-- draws outside TextBounds; the card is placed off the text by placeBuff.
+	local cashRight = math.ceil(amount.TextBounds.X) + 3
+	if buff.Visible then
+		cashRight = math.max(cashRight, buff.Position.X.Offset + BUFF_SIZE)
+	end
+	return math.max(cashRight, SPEED_X + math.ceil(speed.TextBounds.X) + 2)
+end
+
+local placedFor = 0
+
+local function placeCorner()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui, groupWidth()))
+	placedFor = layout.cash.w
+	root.Position = HudLayout.place(layout.cashRoot, root.AnchorPoint, layout.safe)
+end
+
+table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeCorner))
+placeCorner()
+
+--==============================================================================
 -- SHOWN ONLY TO SOMEBODY WHO OWNS IT
 --
 -- GameConfig.cashMultiplier answers 1 for a missing, malformed or below-1
@@ -593,6 +639,10 @@ RunService.RenderStepped:Connect(function(dt)
 		if buff.Visible then
 			placeBuff()
 		end
+		-- And the block is placed again only if it outgrew its reservation.
+		if groupWidth() > placedFor then
+			placeCorner()
+		end
 		tickCount += 1
 		if tickCount % 3 == 0 then
 			SoundKit.play("CashTick")
@@ -612,6 +662,9 @@ RunService.RenderStepped:Connect(function(dt)
 		local stext = GameConfig.compact(speedShown)
 		if speed.Text ~= stext then
 			speed.Text = stext
+			if groupWidth() > placedFor then
+				placeCorner()
+			end
 		end
 	end
 end)

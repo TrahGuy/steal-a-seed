@@ -66,6 +66,7 @@ local AlmanacData = require(Shared:WaitForChild("AlmanacData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -206,7 +207,11 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedIndex"
 gui.ResetOnSpawn = false
-gui.DisplayOrder = 30
+-- ONE ABOVE THE HOTBAR'S 30. Level with it, the engine was free to draw the strip
+-- over the open panel, and did: the panel is 82% of the screen tall, so on a
+-- landscape phone or a 720-px window its bottom sits behind the hotbar. Above
+-- it, the panel and its dimmer cover the strip as the Shop (32) always has.
+gui.DisplayOrder = 31
 gui.Parent = playerGui
 
 --==============================================================================
@@ -226,6 +231,28 @@ local button = UIKit.railButton(playerGui, {
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
 
 local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
+
+--==============================================================================
+-- WHERE IT SITS IS ASKED OF HudLayout AND APPLIED HERE
+--
+-- The top of the left rail on a desktop, exactly where it always was. On a
+-- phone -- any touch screen, or a window the desktop rail does not fit -- the
+-- first square of the compact top row: the book alone, and the badge tucked
+-- into its corner so the row can sit 8 px under the topbar without pushing it
+-- off the glass. Asked again only when this ScreenGui's size changes, which is
+-- every viewport, inset and rotation change and nothing else.
+--==============================================================================
+local function placeButton()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	UIKit.railShape(button, Vector2.new(layout.index.w, layout.index.h))
+	button.Position = HudLayout.place(layout.index, Vector2.zero, layout.safe)
+	UIKit.railBadge(badge, layout.compact, "right")
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
+placeButton()
 
 --==============================================================================
 -- THE PANEL

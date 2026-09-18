@@ -91,6 +91,9 @@ end
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local SoundKit = require(script.Parent:WaitForChild("SoundKit"))
+-- Where the rail is on this screen, for the modal header that steps clear of it
+-- and for the compact badge. Numbers only; it requires nothing but GameConfig.
+local HudLayout = require(script.Parent:WaitForChild("HudLayout"))
 
 local UIKit = {}
 
@@ -1048,6 +1051,64 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	hoverPop(button)
 
 	return button
+end
+
+--==============================================================================
+-- ONE RAIL BUTTON, TWO SHAPES
+--
+-- HudLayout decides which and where; the owner applies it, through this. A wide
+-- button carries its word and keeps its icon at the left, where railIcon put
+-- it. A square one -- every button in the compact top row -- drops the word and
+-- centres the icon. Nothing is rebuilt: the slab's lattice follows its own
+-- size, and the badge, the hover pop and the click are the same instances in
+-- both shapes, so a relayout cannot duplicate any of them.
+--
+-- `iconSize` is for the bare Settings gear, which fills its button on the
+-- desktop and sits on a plate in compact.
+--==============================================================================
+function UIKit.railShape(button: GuiObject, size: Vector2, iconSize: number?)
+	button.Size = UDim2.fromOffset(size.X, size.Y)
+	local wide = size.X > size.Y
+	local icon = button:FindFirstChild("Icon")
+	if icon and icon:IsA("GuiObject") then
+		if wide then
+			icon.AnchorPoint = Vector2.new(0, 0.5)
+			icon.Position = UDim2.new(0, 10, 0.5, 0)
+		else
+			icon.AnchorPoint = Vector2.new(0.5, 0.5)
+			icon.Position = UDim2.fromScale(0.5, 0.5)
+		end
+		if iconSize then
+			icon.Size = UDim2.fromOffset(iconSize, iconSize)
+		end
+	end
+	local label = button:FindFirstChild("Label")
+	if label and label:IsA("GuiObject") then
+		label.Visible = wide
+	end
+end
+
+--==============================================================================
+-- THE BADGE, HANGING OR TUCKED
+--
+-- Half off the corner is the desktop look and stays it. The compact rows sit
+-- 8 px under the topbar with 6 px between buttons, and a badge hung half off
+-- would reach 13 px past both -- up out of the safe area and over the next
+-- button -- so there it hangs HudLayout.Config.BadgeHang past the corner
+-- instead: on the glass, clear of its neighbour, on the corner a player reads.
+-- `side` is the corner it belongs to: Index's is its right, Garden's its left.
+--==============================================================================
+function UIKit.railBadge(badge: GuiObject, compact: boolean, side: string)
+	local right = side == "right"
+	local edge = if right then 1 else 0
+	if compact then
+		local hang = HudLayout.Config.BadgeHang
+		badge.AnchorPoint = Vector2.new(edge, 0)
+		badge.Position = UDim2.new(edge, if right then hang else -hang, 0, -hang)
+	else
+		badge.AnchorPoint = Vector2.new(0.5, 0.5)
+		badge.Position = UDim2.new(edge, 0, 0, 0)
+	end
 end
 
 --==============================================================================
@@ -3100,7 +3161,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	--==========================================================================
 	-- THE HEADER STEPS CLEAR OF THE RAIL
 	--
-	-- The rail sits at DisplayOrder 40 against a panel's 30, deliberately: the
+	-- The rail sits at DisplayOrder 40 against a panel's 31-34, deliberately: the
 	-- Index and Shop buttons stay pressable while a panel is open, which is what
 	-- lets a player move between panels without closing one first.
 	--
@@ -3120,10 +3181,12 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- meets the Garden and Bag buttons -- the same fix moves it in, because it
 	-- is anchored to this bar's right edge.
 	--
-	-- COMPUTED FROM GameConfig.Rail, not from the rail's instances. This module
-	-- is required by the rail as well as by every panel, and reaching across to
-	-- another ScreenGui to measure it would make a panel depend on the rail
-	-- having been built first.
+	-- COMPUTED, not measured off the rail's instances. This module is required
+	-- by the rail as well as by every panel, and reaching across to another
+	-- ScreenGui to measure it would make a panel depend on the rail having been
+	-- built first. On a desktop it is the same GameConfig.Rail arithmetic it
+	-- always was; in HudLayout's compact mode the rail is the two top rows, and
+	-- the footprint is theirs.
 	--
 	-- IT ONLY APPLIES WHERE THEY ACTUALLY MEET. The vertical test is what keeps
 	-- the desktop untouched: a centred panel on a tall screen has its header
@@ -3141,9 +3204,19 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		end
 		local viewportX = camera.ViewportSize.X
 		-- The rail's own footprint, in the same gui space AbsolutePosition uses.
+		local railTop = RAIL.Inset
 		local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
 		local railLeftEdge = RAIL.Inset + RAIL.WideSize.X
 		local railRightEdge = viewportX - RAIL.Inset - RAIL.SquareSize.X
+		if gui.AbsoluteSize.X > 0 then
+			local layout = HudLayout.solve(HudLayout.measure(gui))
+			if layout.compact then
+				railTop = layout.railTop
+				railBottom = layout.railBottom
+				railLeftEdge = layout.railRight
+				railRightEdge = layout.rightLeft
+			end
+		end
 
 		-- UIPadding insets a frame's CHILDREN, never the frame, so these read
 		-- the same whatever this function last set.
@@ -3152,7 +3225,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		local top, bottom = at.Y, at.Y + size.Y
 
 		local padLeft, padRight = 0, 0
-		if bottom > RAIL.Inset and top < railBottom then
+		if bottom > railTop and top < railBottom then
 			padLeft = math.max(0, (railLeftEdge + HEADER_GAP) - left)
 			padRight = math.max(0, right - (railRightEdge - HEADER_GAP))
 		end

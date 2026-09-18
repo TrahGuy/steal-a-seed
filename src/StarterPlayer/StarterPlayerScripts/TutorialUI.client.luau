@@ -37,6 +37,7 @@ local Data = require(Shared:WaitForChild("TutorialData"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -171,6 +172,43 @@ resume.Size = UDim2.fromOffset(150, 26)
 resume.Visible = false
 resume.Parent = gui
 UIKit.stroke(resume, BLACK, 2.5)
+
+--==============================================================================
+-- WHERE THE BANNER SITS, AND HOW IT KEEPS ITS WORDS
+--
+-- On a desktop: 560 wide, 84 px down, centred, exactly as before. On a phone
+-- that is the middle of a 300-px-tall safe area, where the cash block and the
+-- BAT/TRAP column both stand -- so HudLayout puts it under the top rows and
+-- between whichever of those share its band, off centre rather than squeezed.
+-- Skip stays under it and GUIDE on top of it, wherever that is.
+--
+-- The three lines scale down only in that mode, and only when the banner is
+-- narrower than their words: each is capped at the size it was drawn at, so
+-- a line that fits is drawn exactly as before.
+--==============================================================================
+local BANNER_LINES = { { instruction, 34 }, { subline, 19 }, { counter, 15 } }
+for _, line in ipairs(BANNER_LINES) do
+	local cap = Instance.new("UITextSizeConstraint")
+	cap.MaxTextSize = line[2]
+	cap.Parent = line[1]
+end
+
+local function placeBanner()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	local top = Vector2.new(0.5, 0)
+	banner.Size = UDim2.fromOffset(layout.banner.w, layout.banner.h)
+	banner.Position = HudLayout.place(layout.banner, top, layout.safe)
+	skip.Position = HudLayout.place(layout.skip, top, layout.safe)
+	resume.Position = UDim2.new(0.5, banner.Position.X.Offset, 0, layout.banner.y)
+	for _, line in ipairs(BANNER_LINES) do
+		line[1].TextScaled = layout.compact
+	end
+end
+table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner))
+placeBanner()
 
 --==============================================================================
 -- THE UI POINTER

@@ -58,6 +58,9 @@ local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local WeaponData = require(Shared:WaitForChild("WeaponData"))
 local WeaponModel = require(Shared:WaitForChild("WeaponModel"))
 local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
+-- Where the strip, the Bag button and BAT/TRAP sit on this screen, and how many
+-- slots it gets. Numbers only; see layoutHud at the bottom of this file.
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -167,6 +170,13 @@ local READY_AT = "ReadyAt"
 -- wide viewport alone is not enough either -- a tablet has the width and no
 -- number row, so slots 6-10 would be reachable only by touch, which is exactly
 -- the fingernail problem. Anything that is not both gets five.
+--
+-- SINCE 2026-09-18 THE ANSWER IS HudLayout's, read off the same layout that
+-- places the strip: ten only in its desktop mode, with a keyboard, and five on
+-- ANY touch screen. That last part is new and it is the point -- Studio's
+-- emulator reports a keyboard, so a 956-wide emulated phone was getting ten.
+-- The rule below is only the stand-in for the moment before the ScreenGui has
+-- a size, and it answers five for anything with a touch screen.
 --==============================================================================
 local DESKTOP_SLOTS = 10
 local MOBILE_SLOTS = 5
@@ -182,10 +192,19 @@ local DESKTOP_MIN_WIDTH = 900
 -- two is the overflow the mobile path has to keep reachable.
 local activeSlots = MOBILE_SLOTS
 
+-- HudLayout's last answer for this screen. nil until the ScreenGui below has a
+-- size; layoutHud keeps it current.
+local hud: HudLayout.Layout? = nil
+
 local function wantedSlots(): number
+	local layout = hud
+	if layout then
+		return layout.slots
+	end
 	local camera = Workspace.CurrentCamera
 	local width = if camera then camera.ViewportSize.X else 0
-	if UserInputService.KeyboardEnabled and width >= DESKTOP_MIN_WIDTH then
+	if UserInputService.KeyboardEnabled and not UserInputService.TouchEnabled
+		and width >= DESKTOP_MIN_WIDTH then
 		return DESKTOP_SLOTS
 	end
 	return MOBILE_SLOTS
@@ -220,8 +239,10 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedLoadout"
 gui.ResetOnSpawn = false
--- Below the rail (40) and the shop panel (34) so a modal covers the hotbar
--- rather than the hotbar poking through it.
+-- Below the rail (40) and every panel -- Index, Garden and Settings at 31, the
+-- Shop at 32, Marigold at 34 -- so a modal covers the hotbar rather than the
+-- hotbar poking through it. The Bag is the one panel in THIS ScreenGui, and it
+-- fits itself above the strip instead, because the strip is its drop target.
 gui.DisplayOrder = 30
 gui.Parent = playerGui
 
@@ -1767,14 +1788,18 @@ do
 	-- both frames would otherwise be applied to the tray twice -- measured, a
 	-- 1.5x layer drew a 1719-wide tray behind a 1146-wide strip. The strip's
 	-- height is a fixed offset, so its absolute height says what the scale is.
+	--
+	-- And its Position, since HudLayout can slide the strip clear of a thumb.
 	local function follow()
 		local size = hotbar.AbsoluteSize
 		local height = hotbar.Size.Y.Offset
 		local scale = if height > 0 and size.Y > 0 then size.Y / height else 1
 		tray.Size = UDim2.fromOffset(size.X / scale, height)
+		tray.Position = hotbar.Position
 		tray.Visible = hotbar.Visible
 	end
 	hotbar:GetPropertyChangedSignal("AbsoluteSize"):Connect(follow)
+	hotbar:GetPropertyChangedSignal("Position"):Connect(follow)
 	hotbar:GetPropertyChangedSignal("Visible"):Connect(follow)
 	follow()
 end
@@ -2913,8 +2938,12 @@ local function refreshHotbar()
 	local countColour = if filled >= activeSlots then HOT.CountFull else HOT.CountOpen
 	chip.count.TextColor3 = countColour
 	chip.countEdge.Color = countColour
+	-- HudLayout's call: on a desktop the old width rule, on a phone whether the
+	-- cell still fits between the thumbstick and the jump button.
+	local layout = hud
 	local camera = Workspace.CurrentCamera
-	local roomForBag = camera ~= nil and camera.ViewportSize.X >= HOT.ChipMinViewport
+	local roomForBag = if layout then layout.chip
+		else camera ~= nil and camera.ViewportSize.X >= HOT.ChipMinViewport
 	chip.holder.Visible = roomForBag
 	chip.spacer.Visible = roomForBag
 end
@@ -3286,7 +3315,20 @@ layoutBag = function()
 	local rightEdge = screen.X - RAIL.Inset - side.Size.X.Offset - EDGE_GAP
 	local top = EDGE_GAP
 	local bottom = hotTop - EDGE_GAP
-	if rightEdge - leftEdge < 420 then
+	local layout = hud
+	if layout and layout.compact then
+		--======================================================================
+		-- THE COMPACT RAIL IS TWO SHORT ROWS, NOT TWO COLUMNS
+		--
+		-- So there is no band between them to fit into. The panel takes the
+		-- width up to the BAT/TRAP column and the height down to the strip, and
+		-- the two rows stand over its top corners -- which is the header's to
+		-- step round, and UIKit.modal pads the title and the close button clear
+		-- of exactly those rows.
+		--======================================================================
+		leftEdge = EDGE_GAP
+		rightEdge = layout.equipment.x - EDGE_GAP
+	elseif rightEdge - leftEdge < 420 then
 		leftEdge = EDGE_GAP
 		top = railBottom + EDGE_GAP
 	end
@@ -3916,24 +3958,58 @@ local function applySlotCount()
 	redraw()
 end
 
-applySlotCount()
-
-local function watchViewport()
-	local camera = Workspace.CurrentCamera
-	if camera then
-		camera:GetPropertyChangedSignal("ViewportSize"):Connect(applySlotCount)
+--==============================================================================
+-- WHERE THE STRIP, THE BAG BUTTON AND BAT/TRAP SIT -- AND HOW MANY SLOTS
+--
+-- One question to HudLayout and one answer, applied to the four things this
+-- script owns on the HUD, with the slot count read off the same answer -- so
+-- the count and the shape can never disagree. The desktop answer is the old
+-- geometry to the pixel. The compact one is a phone's: five slots centred
+-- between the thumbstick and the jump button, the Bag in the top-right corner,
+-- and BAT over TRAP against the right edge, 8 px above the jump button.
+--
+-- Asked when this ScreenGui's size changes -- the viewport, the inset and a
+-- rotation all land there, which is why this no longer follows the camera --
+-- and when a keyboard or a touch screen comes or goes. Never per frame.
+--
+-- Rotating or resizing a phone keeps it compact, so the count stays five and
+-- no assignment moves. Only a desktop window crossing into compact takes 6-10
+-- away, and applySlotCount's rule for that is unchanged.
+--==============================================================================
+local function layoutHud()
+	if gui.AbsoluteSize.X <= 0 then
+		return
 	end
-end
-watchViewport()
--- A new Camera is a new signal: the old connection is on an instance the engine
--- has stopped using, and without this the strip would freeze at whatever count
--- was right for the camera that has gone.
-Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-	watchViewport()
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	local chipWas = if hud then hud.chip else nil
+	hud = layout
+	bagButton.Position = HudLayout.place(layout.bag, bagButton.AnchorPoint, layout.safe)
+	side.Position = HudLayout.place(layout.equipment, side.AnchorPoint, layout.safe)
+	-- 152 on a desktop, which is the frame it always had: 8 px of it under TRAP.
+	side.Size = UDim2.fromOffset(layout.equipment.w,
+		if layout.compact then layout.equipment.h else layout.equipment.h + 8)
+	for i, category in ipairs({ "bat", "trap" }) do
+		local slot = sideSlots[category]
+		slot.button.Position = UDim2.fromOffset(0, (i - 1) * (layout.equipSlot + layout.equipGap))
+		slot.button.Size = UDim2.fromOffset(layout.equipment.w, layout.equipSlot)
+	end
+	hotbar.Position = HudLayout.place(layout.hotbar, hotbar.AnchorPoint, layout.safe)
+	local count = activeSlots
 	applySlotCount()
-end)
-UserInputService:GetPropertyChangedSignal("KeyboardEnabled"):Connect(applySlotCount)
-UserInputService:GetPropertyChangedSignal("TouchEnabled"):Connect(applySlotCount)
+	-- applySlotCount redraws when the count changed; the Bag cell's visibility
+	-- is drawn by the same redraw, so a change to it alone asks for one too.
+	if count == activeSlots and chipWas ~= nil and chipWas ~= layout.chip then
+		redraw()
+	end
+	layoutBag()
+end
+
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutHud)
+UserInputService:GetPropertyChangedSignal("KeyboardEnabled"):Connect(layoutHud)
+UserInputService:GetPropertyChangedSignal("TouchEnabled"):Connect(layoutHud)
+layoutHud()
+-- Before the ScreenGui has a size there is still a count to settle on.
+applySlotCount()
 
 --==============================================================================
 -- AND THE REST OF THE WAYS A DRAG STOPS MATTERING

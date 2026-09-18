@@ -66,6 +66,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -124,7 +125,11 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedGarden"
 gui.ResetOnSpawn = false
-gui.DisplayOrder = 30
+-- ONE ABOVE THE HOTBAR'S 30. Level with it, the engine was free to draw the strip
+-- over the open panel, and did: the panel is 82% of the screen tall, so on a
+-- landscape phone or a 720-px window its bottom sits behind the hotbar. Above
+-- it, the panel and its dimmer cover the strip as the Shop (32) always has.
+gui.DisplayOrder = 31
 gui.Parent = playerGui
 
 local function corner(parent: Instance, radius: number)
@@ -181,6 +186,25 @@ button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
 --==============================================================================
 local badge, badgeLabel = UIKit.badge(button, RAIL.Badge)
 badge.Position = UDim2.new(0, 0, 0, 0)
+
+--==============================================================================
+-- WHERE IT SITS IS ASKED OF HudLayout AND APPLIED HERE
+--
+-- Top right on a desktop, as it always was. In the compact top row it is the
+-- inner of the two right-hand squares, the Bag in the corner beside it, and
+-- the badge tucked into its left corner rather than hung half off it -- the
+-- row sits 8 px under the topbar, and half a badge would leave the glass.
+--==============================================================================
+local function placeButton()
+	if gui.AbsoluteSize.X <= 0 then
+		return
+	end
+	local layout = HudLayout.solve(HudLayout.measure(gui))
+	button.Position = HudLayout.place(layout.garden, button.AnchorPoint, layout.safe)
+	UIKit.railBadge(badge, layout.compact, "left")
+end
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
+placeButton()
 
 --==============================================================================
 -- THE PANEL
