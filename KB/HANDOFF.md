@@ -1,5 +1,144 @@
 # Steal a Seed — Session Handoff
 
+## The biome is a word now, and nothing sits above the money — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** the biome-entry notice shows only the biome's name -- small,
+bare outlined text, briefly, then a fade -- and the status text above the Cash and
+Speed readout is removed and its space reclaimed.
+
+### 1. The biome notice: `BiomeGuideUI.client.luau` (rewritten)
+
+**Before:** a card 0.72 of the viewport wide, clamped 220..520 px, 84 px tall -- a
+gradient plate, an accent stripe, the name with the biome's mood beside it, a
+RECOMMENDED SPEED line and an ADVISORY ONLY footnote -- sliding in from above.
+
+**Now:** one `TextLabel` named `BiomeName` and nothing else in `SeedBiomeGuide`.
+
+| property | value |
+| --- | --- |
+| text | `string.upper(biome.DisplayName)` and nothing else |
+| face | LuckiestGuy 24, white, through `UIKit.outlined` -- the Cash/Speed readout's own helper |
+| outline | black UIStroke, 1.5 px (the Speed line is 2 on 39 px text, so this is the same proportion) |
+| background | none; no Frame, plate, card or stroke box |
+| box | AutomaticSize X, so the box IS the word: 123 x 30 (DUSTBOWL) to 166 x 30 (GREENHOLLOW) |
+| position | top-centre, 50 px from the top of the window (IgnoreGuiInset); painted 53..77 |
+| timing | fade in 0.25 s, hold 1.6 s, fade out 0.7 s -- 2.55 s total |
+| size vs before | ~11% of the old card's area at 933 px (166 x 30 against 520 x 84) |
+
+**The band it sits in:** world clock plate 8..42 (absolute), THIS 50..80, tutorial
+banner from inset + 84 (142 on this 58 px desktop topbar), the RUN! alarm centred at
+32% of the height and never above ~146. Measured at 933 x 714: clock 8..42, name
+53..77, alarm word from 171 -- no overlap. It is centred and at most 166 px wide, so
+nothing in either top corner is anywhere near it on any width.
+
+**No loop.** TweenService and one `task.delay` per arrival, exactly as the card had.
+One token, so a newer arrival owns the label and an older timer stands down; the
+same name arriving while it is up (a player on a boundary) reads as one notice held
+slightly longer, because fading in to the opacity it already has changes nothing.
+
+### Greenhollow is announced now -- the one server change
+
+`BiomeGateService` never sent Greenhollow: `step` fired only for `order > 1`, and
+`tellClient` dropped any biome whose `RecommendedSpeed` was 0 -- both because the
+card's whole job was a Speed recommendation and the starter biome has none. The
+brief lists GREENHOLLOW and asks for all five, so both filters went: `order >= 1`,
+and no RecommendedSpeed check. **The detection itself is untouched** -- the same
+0.1 s server poll of road order, the same "send only when the order CHANGES, by day"
+debounce, the same first-observation rule. Order 0 is the field and still sends
+nothing. Revert is one character if Greenhollow should stay silent.
+
+**Consequence worth knowing: the tutorial no longer steps aside.** TutorialUI hides
+its own banner while `SeedBiomeGuide` holds a visible `Frame`, because the old card
+and the banner shared the top of the screen. There is no Frame now, so a beginner's
+instructions stay up while the name goes by -- which matters more now that
+Greenhollow, where the tutorial sends them, is announced. TutorialUI itself was not
+edited; its check simply finds nothing.
+
+### 2. The Cash/Speed HUD: `CashUI.client.luau`
+
+**What was removed:** the `Progress` label -- the rotating status line (NEXT TRAIL,
+NEXT BIOME, WALKSPEED, TRAINING RUSH, RUSH SPENT) that hung 2 px above the Speed
+line -- and everything that existed only to feed it: the three rotation builders,
+`progressText`, the rotation clock, the 4 Hz rebuild at the end of the RenderStepped
+handler, `RUSH_TEXT`, and the `BiomeData` and `ATTR` requires nothing else read.
+170 lines out, 32 in.
+
+**What was kept, byte for byte in behaviour:** the shoe, both numbers, their easing
+and their updates, the CashTick, the x2 buff card, its message and its click, and
+the ProfileUpdated / ProfileReady data flow. The one RenderStepped handler that was
+already there stays, minus the lines that fed the removed label. The buff message's
+colour constant was renamed `SECONDARY_TEXT` because `PROGRESS_TEXT` named a thing
+that no longer exists; same value.
+
+**Compacted:** the block was 340 wide only because the status line was. It is now
+`SPEED_X + SPEED_W` = 316 -- the widest thing left is the Speed label's box -- and
+108 tall as before. Nothing inside it moved.
+
+**Measured in Play at 933 x 714:**
+
+    Corner frame      x 12..328   y 538..646   (316 x 108; was 340 x 108)
+    painted content   x 12..183   y 541..644   top gap inside the frame: 3 px
+    removed line      used to paint x 16..352 at y 518..536, above the frame
+    children          Amount BuffMessage MoneyBuff Shoe Speed   -- no Progress
+
+**The hotbar collision from the audit mostly goes with it.** The audit's P1 was
+painted cash content ending at x=352, so the bottom-centre hotbar collided whenever
+`(width - strip) / 2 < 352`. The widest string `compact()` can print for any balance
+is `$98.9M` (150 px at 47); with the x2 card after it the painted edge tops out at
+**x=218**, and without the card at 176 (the Speed line's widest, `9.89M`, 108 px).
+
+| hotbar | before (352) | now, worst case (218) | now, today's `$781B` (187) |
+| --- | ---: | ---: | ---: |
+| 3 slots, 281 px | below 985 | below 717 | below 655 |
+| 5 slots, 419 px (mobile) | below 1123 | below 855 | below 793 |
+| 10 slots, 764 px | below 1468 | below 1200 | below 1138 |
+
+So a 1366 laptop with a full strip, and a 896 px landscape phone, no longer collide
+at all; an 844 px phone collides by at most ~5 px, and only for a balance whose
+compact string is as wide as `$98.9M` while the pass card is showing. Computed from
+measured geometry -- see the gaps below.
+
+### Verified
+
+  * **Play, the real path, five biomes:** GREENHOLLOW, DUSTBOWL, TANGLEMIRE,
+    EMBERROOT, STARBLOOM -- the exact text on screen each time, LuckiestGuy 24 with a
+    1.5 px stroke, and `SeedBiomeGuide` holding exactly one child, the label.
+  * **Standing 6 s inside Greenhollow: 0 further arrivals.** Leaving to the field and
+    walking back in showed GREENHOLLOW again.
+  * **After the last fade:** label invisible at alpha 1.00, one child, one
+    `SeedBiomeGuide` in PlayerGui.
+  * **Respawn** (the character killed and rebuilt) and **a re-run of both scripts**
+    (each LocalScript disabled and re-enabled): one `SeedCash`, one `SeedBiomeGuide`,
+    both readouts correct, the x2 card still showing.
+  * **Cash still flows:** 7 ProfileUpdated packets in 6 s, cash +$76,325, and the
+    label reading `$781B` -- correct, because a three-significant-figure readout does
+    not move at that balance for $76K. Speed reads `285T` for 284,994,091,347,177.
+  * **The x2 card** shows, 10 px after the cash text (x 141..187 against a text end
+    of 131).
+  * **Console:** clean across boot, respawn and both re-runs.
+  * **Specs: 31, 3,105 assertions, 0 failures** (TutorialSpec 93 and TutorialPodSpec
+    263 included, since the tutorial points at `SeedCash/Corner/Speed`, whose names
+    are unchanged). All three changed files compile fresh in Studio; `rojo build`
+    succeeds; `git diff --check` is clean.
+
+### Not verified
+
+  * **Mobile emulator and wide desktop.** One viewport was measured, 933 x 714
+    (narrow desktop, 58 px topbar). Studio's emulator restarts Play and cannot be
+    driven over MCP, so every other width above is arithmetic off the measured
+    geometry. Nothing was checked against the on-screen joystick and jump button
+    beyond the fact that neither piece of this change is in a bottom corner it was
+    not already in.
+  * **Tapping the x2 card.** Its visibility and position were measured; the click
+    path is unchanged code, but no click was injected.
+  * **A walking entry.** The tour teleported the character. One artefact of that:
+    jumping 1,300 studs from Starbloom to the field made the server observe two
+    intermediate positions and send EMBERROOT then GREENHOLLOW on the way out --
+    existing detection behaviour on a teleport (the old card would have done the same
+    for Emberroot), not something a walking player can produce.
+  * **The Training Rush readout is gone with the line.** Rush itself is untouched and
+    TreadmillService still publishes it; nothing on this HUD reports it any more.
+
 ## BETA-READINESS AUDIT — 2026-09-17 (CLAUDE)  (VERDICT: READY FOR CLOSED BETA AFTER ONE DASHBOARD FIX)
 
 **Scope:** the whole game as the working tree stands tonight, including the five

@@ -5,7 +5,7 @@
 -- recommendations for the chase ahead, not locks. This service does three
 -- related jobs from one authoritative road-position poll:
 --
---   1. tell a client when it enters a non-starter biome;
+--   1. tell a client which biome it has just entered, so it can show the name;
 --   2. preserve the player's permanent Speed milestone for mill progression;
 --   3. enforce the separate rule that the entire road closes at night.
 --
@@ -88,9 +88,17 @@ local function publishMilestone(player: Player, profile: PlayerDataService.Profi
 	end
 end
 
+--==============================================================================
+-- EVERY BIOME HAS A NAME, INCLUDING THE FIRST ONE
+--
+-- This used to skip Greenhollow, because what the client drew was a RECOMMENDED
+-- SPEED card and the starter biome recommends nothing. Since 2026-09-18 the
+-- client draws the biome's name and nothing else, and Greenhollow has a name like
+-- any other -- so the filter went with the card. See BiomeGuideUI.
+--==============================================================================
 local function tellClient(player: Player, order: number)
 	local biome = BiomeData.Biomes[order]
-	if not biome or biome.RecommendedSpeed <= 0 or not recommendationRemote then
+	if not biome or not recommendationRemote then
 		return
 	end
 
@@ -141,7 +149,10 @@ local function step(player: Player, now: number)
 	if not night then
 		-- The first observation also counts. This makes a test teleport or a
 		-- respawn inside Dustbowl receive the same guidance as walking across it.
-		if order > 1 and order ~= previous then
+		-- Order 1 is Greenhollow and counts now too; order 0 is the field, which
+		-- is not a biome and has nothing to announce. The CHANGE test is the
+		-- whole debounce and is exactly what it was.
+		if order >= 1 and order ~= previous then
 			tellClient(player, order)
 		end
 		return
