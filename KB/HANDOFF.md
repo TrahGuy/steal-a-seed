@@ -1,5 +1,164 @@
 # Steal a Seed — Session Handoff
 
+## Five traps, and a switch that says you are walking — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** turn the one Bramblejaw into five permanent trap unlocks, one per
+biome, without a second combat controller or a second inventory; and add a compact
+Walk Mode switch under the Settings gear.
+
+### The seven things this traced first
+
+  * **Trap ownership and equipment** is already generic: the profile keeps a
+    `Weapons` set plus `EquippedBat` and `EquippedTrap`, sanitised BY CATEGORY, and
+    `WeaponShopService.refreshTools` builds exactly the Tools those two slots name
+    and destroys everything else. Four new traps needed **no schema change** and
+    cannot duplicate a Tool.
+  * **Placement validation** lives in `CombatService.tryPlace`: cooldown, one trap
+    per owner, a body that is not held/flying/platform-standing, the safe field, a
+    downward ray for solid ground within `MaxDropStuds`, a slope test, the nest
+    clearance and a separation ring against other traps.
+  * **Movement authority** is `CarryService.RefreshWalkSpeed` -- the only writer of
+    WalkSpeed in the game. It reads attributes (`Trapped`, `MillMounted`) and
+    recomputes; it never captures a speed to put back.
+  * **Ragdoll token ownership** is `flying[victim] = token`, minted per launch,
+    quoted back by the victim's client, and released only by the launch that owns
+    it (`WeaponData.AcceptsAck`).
+  * **The guardian release bridge** is `NestService.SetCombatBridge{ ReleaseTrap }`,
+    handed down because CombatService (70) requires NestService (40).
+  * **Pod-drop ordering** is `CarryService.Drop` BEFORE the launch, at the feet the
+    victim is still standing on, and it is idempotent.
+  * **The Settings button** is `UIKit.railButton` at the left rail's third row:
+    `Inset + (WideSize.Y + Gap) * 2`, in the shared rail layer that sits above every
+    panel dimmer.
+
+### The data, and where each trap's numbers live
+
+`WeaponData.Trap` now holds ONLY the shared placement and safety rules -- immunity,
+the two clearances, the drop and slope limits, the separation scale.
+`WeaponData.TrapSpecs`, keyed by item id, holds everything that makes a trap itself,
+and `CombatService` dispatches on `spec.Effect`:
+
+| trap | biome | price | effect | arm | cooldown | duration | trigger | drops pod |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | --- |
+| Bramblejaw Trap | Greenhollow | $150K | root, WalkSpeed 0 | 1.0s | 15s | 2.0s | 4.0 / 4.5 | no |
+| Dunesnap Plate | Dustbowl | $750K | trip, ragdoll | 0.8s | 16s | 1.1s | 4.4 / 4.5 | no |
+| Mirecoil Snare | Tanglemire | $3.5M | slow to 35% | 1.2s | 19s | 4.0s | 4.6 / 4.5 | no |
+| Cinderburst Mine | Emberroot | $15M | drop + blast | 1.4s | 25s | 1.4s | 4.2 / 4.5 | **yes** |
+| Starlock Anchor | Starbloom | $60M | pull 8 + slow 40% | 1.5s | 30s | 3.0s | 4.2 / 4.5 | no |
+
+Expiries: 20 / 24 / 26 / 26 / 28 seconds. Jump locks: the whole root, 0, the first
+second, 0, the first 0.6s. Launches: Dunesnap 7 studs/s at 0.30 lift with a 1.1s
+limp floor; Cinderburst 16 at 0.85 with 1.4 -- both under the Rootwood's 25, which
+is **asserted at require**, along with every spec being present, every effect being
+one a service implements, every multiplier being inside 0..1, and every cooldown
+outlasting its own effect plus the four seconds of immunity.
+
+**The Bramblejaw's numbers are unchanged, by value**, and WeaponSpec asserts each one
+individually: that section is the proof the refactor changed no behaviour.
+
+### State precedence, which is the whole of the movement work
+
+`RefreshWalkSpeed` now answers to five things in this order:
+
+    rooted (Trapped)      -> 0, and nothing below is consulted
+    mounted (MillMounted) -> 0, same
+    otherwise             -> walkSpeedFor(Speed) x carry multiplier
+                             x TrapSlow fraction (if any)
+                             then min(_, 16) if WalkMode is on
+
+`TrapSlow` is a FRACTION, not a speed: a snare leaves a billionaire at 31 and a
+beginner at 7, and nothing anywhere captures a WalkSpeed to restore. Walk Mode is
+`min`, never `max` -- a player already under 16 is never sped up, and a beginner
+(who walks at exactly 16) sees no change at all.
+
+### Cleanup rules
+
+One `Hold` record per player covers both kinds (root and slow) and `releaseHold`
+clears all four attributes -- `Trapped`, `TrapSlow`, `TrappedKind`, `TrappedUntil` --
+re-enables jumping and recomputes the speed, whatever the reason. Every exit routes
+through it: the tick's expiry, a bat hit, the guardian bridge, `Died`,
+`CharacterRemoving`, the tick's body-identity backstop, the owner leaving, and a
+service restart. A trap launch and a trap pull each release an existing restraint
+BEFORE they begin. The pull is a single obstruction-checked `PivotTo` and builds no
+constraint, so there is nothing that can outlive a death, a respawn, streaming or a
+restart.
+
+### What was added, and what it replaced
+
+  * `WeaponData`: four items, `TrapSpecs`, `TrapSpec()`, per-trap `StatLines`
+    (EFFECT / DURATION / ARMS IN / COOLDOWN -- and no POWER or REACH on a trap), and
+    the load-time validation above.
+  * `WeaponModel`: four carried shapes and four world models -- a cracked sandstone
+    plate, a mud pool ringed with vine, a basalt mine with glowing seams, a violet
+    anchor with a twelve-bar ring and inward particles -- plus `SetTrapArming` and
+    `SpringTrap`, which dispatch on an attribute the builder stamps. Only the jaw
+    animates per frame; the others write their armed look once, guarded by an
+    attribute, so the shared tick stays free.
+  * `CombatService`: `knockBack` became `launch(victim, body, dir, opts)` with the
+    bat as one caller and traps as the other; `holdPlayer` takes a spec and builds
+    either kind; `applyTrapEffect` is the one door for five effects; placement and
+    the tick read the per-trap spec; `nearProtectedGround` now also refuses a trap
+    within 14 studs of anything tagged Plot, PlotSpawn, Planter, PlantSlot,
+    Treadmill, MillSign, PlotSign or BiomeGate. **Still one Heartbeat.**
+  * `CarryService`: the trap fraction and the walk cap, and the Walk Mode verb on the
+    GameEvent remote it already had.
+  * `ProfileSchema` / `PlayerDataService`: `WalkMode`, defaulting false, sanitised to
+    a boolean, published as a read-only attribute on load, on respawn and on toggle.
+  * `WalkModeUI.client.luau` (new): a 130x46 slab under Settings at (12, 180) with
+    the word and an ON/OFF pill. It sends the opposite of the SERVER's value and
+    draws the server's answer; it never writes the attribute itself.
+  * `TrapUI`: the countdown keys off `TrappedUntil` rather than `Trapped`, and reads
+    `TrappedKind` -- red TRAPPED for a root, amber SLOWED for a slow.
+  * `MarigoldShopUI`: the stat row divides by the number of chips, so a trap's four
+    fit where a bat's three did.
+  * `LoadoutUI`: the hotbar cooldown bar drains over the trap's OWN cooldown.
+  * Specs: `TrapSystemSpec` (new, 67), `WalkModeSpec` (new, 30), `WeaponSpec`
+    updated for the five-trap shelf (123).
+
+### Verified
+
+  * **Automated: 28 specs, every one green.** TrapSystemSpec drives the real service
+    on a controllable clock (`os.clock` stood in, the Heartbeat captured), with
+    stand-in players carrying real Humanoids: placement and refusal, one trap per
+    owner, owner immunity, jump-over clearance, one victim per trap, no stacking, a
+    trap refused inside another's ring, release on time, the four-second immunity
+    and the catch that follows it, the snare's fraction and its one-second jump
+    lock, the guardian bridge, the Cinderburst dropping exactly one pod and creating
+    none when there is none, the Starlock stopping at a wall, expiry on each trap's
+    own clock, a body going away, and an owner leaving. WalkModeSpec drives
+    `RefreshWalkSpeed` against a real Humanoid for the cap, the floor, the
+    recompute, the precedence, the untouched Speed score, the profile migration and
+    the no-duplicate-Tool rule.
+  * **Play, real Tool: the Bramblejaw.** Equipped from the Backpack and fired with
+    `Tool:Activate()` -- the same event a click raises. Placement inside the safe
+    field was refused (0 traps); on the road it placed, stamped a 14.3s cooldown of
+    15, refused a second press while one was down, and did not catch its owner
+    standing on it.
+  * **Play, walk switch: end to end.** The switch drew at **130x46 at (12, 180)**
+    reading OFF; the remote turned it on and WalkSpeed went **143.46 -> 16.00** with
+    the label reading "ON  16"; off returned it to **143.46**, recomputed; and a
+    client that set the attribute locally changed nothing at all.
+  * `rojo build` succeeds and `git diff --check` is clean.
+
+### Not verified
+
+  * **THE FOUR NEW TRAPS THROUGH THEIR OWN TOOL.** `WeaponShopService.HeldItem`
+    re-checks ownership, so a Tool for a trap the player does not own correctly does
+    nothing -- and granting ownership writes the owner's save, which this session was
+    told not to do. They were driven through `CombatService.RequestPlace`, one hop
+    short of the Tool, and that hop is shared with the Bramblejaw. **Buy them at
+    Marigold's and the hop is closed in thirty seconds.**
+  * **Every trap EFFECT on a victim, in Play.** A trap cannot catch its owner, and
+    Play Solo has one player. The effects are specced deterministically; the live
+    two-player pass is the owner's to run (Test -> Start Server + 1 player), and it
+    is the only way to call the multiplayer behaviour verified.
+  * **The shop cards, visually.** The data is asserted (four chips, no bat stats) and
+    the layout arithmetic is fixed, but the panel opens from Marigold's prompt, which
+    needs a player standing at her counter.
+  * **A six-player stress test**, a physical phone, and the mobile emulator.
+  * **Screenshots of the five models** are in the lineup parked in Workspace; the
+    world measurements are in the log above.
+
 ## Plants that are not twins, and an Overclock that costs more than its mill — 2026-09-17 (CLAUDE)  (COMMITTED 8913844; AWAITING VISUAL APPROVAL)
 
 **Owner request:** give six species a small flat income bonus so same-rarity plants

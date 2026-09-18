@@ -165,8 +165,20 @@ local flying: { [Player]: string } = {}
 local acked: { [Player]: string } = {}
 local launchSeq = 0
 
+--==============================================================================
+-- A TRAP ON THE GROUND REMEMBERS WHICH TRAP IT IS
+--
+-- `item` and `spec` are carried on the record rather than looked up per tick, and
+-- that is not a saving: the item a trap was placed with is the item it stays,
+-- even if its owner sells it, swaps it or is holding something else when it
+-- fires. A trap that read the owner's CURRENT loadout at the moment it sprung
+-- would be a Bramblejaw that turns into a Starlock because somebody changed
+-- weapons while walking away from it.
+--==============================================================================
 type Trap = {
 	owner: Player,
+	item: WeaponData.Item,
+	spec: WeaponData.TrapSpec,
 	model: Model,
 	base: BasePart,
 	at: Vector3,
@@ -188,12 +200,34 @@ local traps: { [Player]: Trap } = {}
 -- `token` rises forever, so every restraint in a session is distinguishable
 -- from every other one even on the same character.
 --==============================================================================
+--==============================================================================
+-- AND A RESTRAINT KNOWS WHAT KIND OF RESTRAINT IT IS
+--
+-- Two kinds now, and one record for both:
+--
+--   root   the Bramblejaw. WalkSpeed 0 and no jump for the whole hold.
+--   slow   Mirecoil and Starlock. A FRACTION of their own speed, and jumping
+--          back after `jumpUntil` while the slow runs on.
+--
+-- ONE TABLE, ONE TICK, ONE RELEASE. The alternative -- a second table for slows
+-- -- is how a player ends up rooted by one and slowed by another with two
+-- cleanup paths that each think they are the only one. Everything that can end a
+-- restraint (expiry, a bat, a guardian, death, respawn, a service restart)
+-- already goes through releaseHold, and it now clears both kinds.
+--==============================================================================
 type Hold = {
 	player: Player,
 	character: Model,
 	humanoid: Humanoid,
 	token: number,
+	-- "root" or "slow".
+	kind: string,
+	-- 0 for a root; the fraction of their own speed for a slow.
+	multiplier: number,
 	until_: number,
+	-- When jumping comes back, which for a root is when the hold ends and for a
+	-- slow is a second in. Nil once it has been handed back.
+	jumpUntil: number?,
 	conns: { RBXScriptConnection },
 }
 local holds: { [Player]: Hold } = {}
@@ -431,8 +465,18 @@ local function releaseHold(player: Player, why: string, token: number?): boolean
 	end
 	table.clear(hold.conns)
 
+	--==========================================================================
+	-- EVERY ATTRIBUTE A RESTRAINT CAN HAVE SET, CLEARED HERE
+	--
+	-- All four, unconditionally, whatever kind this was. A release that cleared
+	-- only the ones its own kind sets would leave a slow's fraction on a player
+	-- who was rooted a moment later -- and the fraction is what CarryService
+	-- multiplies by, so the leftover would be permanent and invisible.
+	--==========================================================================
 	player:SetAttribute(ATTR.Trapped, nil)
 	player:SetAttribute(ATTR.TrappedUntil, nil)
+	player:SetAttribute(ATTR.TrappedKind, nil)
+	player:SetAttribute(ATTR.TrapSlow, nil)
 	if hold.humanoid.Parent then
 		pcall(function()
 			hold.humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
@@ -457,10 +501,25 @@ local function releaseHold(player: Player, why: string, token: number?): boolean
 	return true
 end
 
-local function holdPlayer(player: Player, body: Body)
+--==============================================================================
+-- PUT A RESTRAINT ON SOMEBODY
+--
+-- The spec says which kind, how long, how much of their speed they keep and how
+-- long their jump is gone. Everything else -- the token, the identity, the two
+-- ways a body can go away, the recompute -- is the same for both kinds, which is
+-- why there is one of these and not two.
+--
+-- REFUSES TO STACK. A player who is already held is left alone: the trap that
+-- caught them is the trap that has them, and a second effect landing on top
+-- would be two timers racing to release one player. The tick and the trigger
+-- both check, so this is the third guard on the same rule.
+--==============================================================================
+local function holdPlayer(player: Player, body: Body, spec: WeaponData.TrapSpec)
 	if holds[player] then
 		return
 	end
+	local rooted = spec.Effect == "root"
+	local multiplier = if rooted then 0 else (spec.MoveMultiplier or 1)
 	nextToken += 1
 	local token = nextToken
 	local hold: Hold = {
@@ -468,12 +527,32 @@ local function holdPlayer(player: Player, body: Body)
 		character = body.character,
 		humanoid = body.humanoid,
 		token = token,
-		until_ = now() + T.HoldSeconds,
+		kind = if rooted then "root" else "slow",
+		multiplier = multiplier,
+		until_ = now() + spec.EffectSeconds,
+		jumpUntil = if spec.JumpLockSeconds > 0
+			then now() + spec.JumpLockSeconds
+			else nil,
 		conns = {},
 	}
 	holds[player] = hold
 
-	player:SetAttribute(ATTR.Trapped, true)
+	--==========================================================================
+	-- WHAT THE MOVEMENT AUTHORITY IS TOLD
+	--
+	-- A ROOT sets `Trapped`, which CarryService reads as zero -- unchanged, and
+	-- the Bramblejaw's behaviour depends on it being exactly that.
+	--
+	-- A SLOW sets `TrapSlow` to a FRACTION instead, which CarryService multiplies
+	-- its computed speed by. Not `Trapped`: a slowed player can walk, and the two
+	-- facts must not share one attribute.
+	--==========================================================================
+	if rooted then
+		player:SetAttribute(ATTR.Trapped, true)
+	else
+		player:SetAttribute(ATTR.TrapSlow, multiplier)
+	end
+	player:SetAttribute(ATTR.TrappedKind, spec.Status or hold.kind)
 	--==========================================================================
 	-- AND WHEN IT ENDS, FOR THE CLIENTS TO COUNT DOWN FROM
 	--
@@ -482,11 +561,23 @@ local function holdPlayer(player: Player, body: Body)
 	-- the instant a bat or a guardian ends the hold early rather than running to
 	-- zero on a timer nobody is honouring any more.
 	--==========================================================================
-	player:SetAttribute(ATTR.TrappedUntil, Workspace:GetServerTimeNow() + T.HoldSeconds)
-	pcall(function()
-		body.humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-	end)
-	body.humanoid.Jump = false
+	player:SetAttribute(ATTR.TrappedUntil,
+		Workspace:GetServerTimeNow() + spec.EffectSeconds)
+	--==========================================================================
+	-- AND THE JUMP, FOR AS LONG AS THIS TRAP TAKES IT
+	--
+	-- A root takes it for the whole hold; a snare takes it for the first second
+	-- and hands it back while the slow runs on, because the answer to mud should
+	-- not be "hop". Only set here, only cleared in releaseHold and in the tick --
+	-- never in RefreshWalkSpeed, which runs on every carry event and would
+	-- eventually be the thing that re-enabled it underneath somebody's hold.
+	--==========================================================================
+	if hold.jumpUntil then
+		pcall(function()
+			body.humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+		end)
+		body.humanoid.Jump = false
+	end
 	CarryService.RefreshWalkSpeed(player)
 
 	--==========================================================================
@@ -518,7 +609,34 @@ end
 -- by the owner's next update. That was measured the hard way in NestService and
 -- there is no reason to relearn it here.
 --==============================================================================
-local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponData.Item)
+--==============================================================================
+-- ONE LAUNCH, TWO CALLERS
+--
+-- This was knockBack(victim, body, dir, item) and read its speed and lift off the
+-- bat that swung. Two traps launch as well now -- a Dunesnap trip and a
+-- Cinderburst blast -- and they are not items with a Power column, so what the
+-- launch needs is the NUMBERS rather than the weapon.
+--
+-- EVERYTHING ELSE IS UNCHANGED AND SHARED, which is the point of doing it this
+-- way instead of writing a second launcher for traps: one token per launch, the
+-- pod off first, one RagdollOn, one remote, one backstop, one restore, one
+-- post-recovery immunity. A trap cannot get any of that subtly wrong, because it
+-- does not implement any of it.
+--==============================================================================
+type Launch = {
+	speed: number,
+	lift: number,
+	-- The floor on how long the victim sees themselves down. Nil takes the bat's.
+	minLimp: number?,
+	-- Whether a carried pod comes off first. A bat always takes it; a trap says.
+	dropPod: boolean,
+	-- For the log on both ends: "bat" or "trap".
+	kind: string,
+	-- What did this, for this side's log only.
+	why: string,
+}
+
+local function launch(victim: Player, body: Body, dir: Vector3, opts: Launch)
 	if flying[victim] then
 		return
 	end
@@ -560,7 +678,7 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 	--==========================================================================
 	local stood = body.root.Position
 	local dropped = false
-	if CarryService.IsCarrying(victim) then
+	if opts.dropPod and CarryService.IsCarrying(victim) then
 		local ok, result = pcall(CarryService.Drop, victim, stood)
 		if ok then
 			dropped = result == true
@@ -570,7 +688,7 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 	end
 
 	local loosened = NestService.RagdollOn(body.character)
-	local speed = WeaponData.LaunchSpeed(item)
+	local speed = opts.speed
 
 	local rem = resolveThrowRemote()
 	if rem then
@@ -620,8 +738,24 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 			-- it is a floor on how long the victim SEES themselves down, so it
 			-- should start when their machine starts drawing it.
 			--==============================================================
-			rem:FireClient(victim, dir, speed, item.Lift, C.ClearStuds, 0,
-				WeaponData.BatThrowStyle(token, Workspace:GetServerTimeNow()))
+			--==============================================================
+			-- THE SAME STYLE TABLE, WITH THE TWO THINGS A TRAP DIFFERS BY
+			--
+			-- `kind` is a label the client logs and nothing branches on -- the
+			-- branch that matters is `emergency`, which is present either way, so
+			-- a trap launch goes down the tested bat path rather than the legacy
+			-- gravity-cancelling one.
+			--
+			-- `minLimp` is the floor a trap may shorten: a Dunesnap trip is 1.1s
+			-- on the floor by design, and holding it to a bat's 1.4 would make the
+			-- cheap plate feel like the expensive mine.
+			--==============================================================
+			local style = WeaponData.BatThrowStyle(token, Workspace:GetServerTimeNow())
+			style.kind = opts.kind
+			if opts.minLimp then
+				style.minLimp = opts.minLimp
+			end
+			rem:FireClient(victim, dir, speed, opts.lift, C.ClearStuds, 0, style)
 		end)
 	end
 
@@ -705,6 +839,9 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 		if body.humanoid.Parent then
 			body.humanoid.PlatformStand = false
 		end
+		if dropped then
+			log(string.format("%s dropped a pod to %s.", victim.Name, opts.why))
+		end
 		-- Recomputed, never restored. The player may have dropped a pod on the
 		-- way down, which changes what their speed should be.
 		CarryService.RefreshWalkSpeed(victim)
@@ -731,6 +868,166 @@ local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponD
 		immuneUntil[victim] = math.max(immuneUntil[victim] or 0,
 			now() + C.VictimPostRecoverySeconds)
 	end)
+end
+
+--==============================================================================
+-- A BAT HIT, WHICH IS THE LAUNCH IT ALWAYS WAS
+--
+-- The numbers come off the item exactly as they did: Power through the ladder for
+-- the horizontal, the item's own Lift for the vertical, and a bat always takes the
+-- pod. Nothing about a swing changed.
+--==============================================================================
+local function knockBack(victim: Player, body: Body, dir: Vector3, item: WeaponData.Item)
+	launch(victim, body, dir, {
+		speed = WeaponData.LaunchSpeed(item),
+		lift = item.Lift,
+		dropPod = true,
+		kind = "bat",
+		why = item.Name,
+	})
+end
+
+--==============================================================================
+-- THE PULL, AND WHY IT IS NOT A CONSTRAINT
+--
+-- One move of up to `PullStuds` toward the anchor, and the move is a POSITION
+-- WRITE rather than a force. Three reasons, in the order they matter:
+--
+--   IT CANNOT PASS THROUGH ANYTHING. The distance is decided by a raycast from
+--   the victim's own root toward the trap, and if that ray hits a wall, a fence, a
+--   gate or a rock, the pull stops a stud and a half short of it. A force cannot
+--   promise that -- it can only pull, and the solver decides what happens when the
+--   body meets a corner at speed.
+--
+--   NOTHING SURVIVES IT. An AlignPosition or a rope strong enough to drag a player
+--   is an instance parented into their character, and four of the five ways a
+--   character ends -- death, respawn, streaming, a service restart -- are ways
+--   that instance becomes a permanent restraint nobody owns. This writes one
+--   CFrame and is finished.
+--
+--   IT IS BOUNDED BY CONSTRUCTION. Eight studs, once, and the spec asserts the
+--   number is under a dozen. There is no path where a pull becomes a teleport
+--   across the map, because the only number involved is the one in the table.
+--
+-- The victim keeps their camera, their facing and their control. They arrive
+-- slowed, which is the Starlock's actual weapon; the yank is what puts them back
+-- inside somebody's bat range.
+--==============================================================================
+local PULL_STOP_SHORT = 1.5
+
+local function pullToward(victim: Player, body: Body, target: Vector3, studs: number): number
+	local from = body.root.Position
+	local delta = Vector3.new(target.X - from.X, 0, target.Z - from.Z)
+	local flat = delta.Magnitude
+	if flat < 0.5 then
+		return 0
+	end
+	local dir = delta.Unit
+	local want = math.min(studs, flat)
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { body.character }
+	params.IgnoreWater = true
+	local hit = Workspace:Raycast(from, dir * want, params)
+	local travel = want
+	if hit then
+		-- Stop at the last safe position. `hit.Distance` is where the wall is, so
+		-- the body goes to just short of it -- and if it is already closer than
+		-- that, nothing moves at all.
+		travel = math.max(0, hit.Distance - PULL_STOP_SHORT)
+	end
+	if travel < 0.5 then
+		return 0
+	end
+	--==========================================================================
+	-- AND THE BODY IS MOVED, NOT THE ROOT ALONE
+	--
+	-- PivotTo on the character keeps the whole assembly together and keeps the
+	-- victim's own facing: a MoveTo would walk them there and a root-only write
+	-- would leave their limbs behind for a frame.
+	--==========================================================================
+	local ok = pcall(function()
+		body.character:PivotTo(body.character:GetPivot() + dir * travel)
+	end)
+	return if ok then travel else 0
+end
+
+--==============================================================================
+-- WHAT A TRAP DOES TO WHOEVER STEPPED ON IT
+--
+-- FIVE EFFECTS, ONE DOOR. The tick finds the victim and calls this; this reads
+-- the spec and does exactly what it says. Adding a sixth trap is a row in
+-- WeaponData and a branch here, and nothing else in the service moves.
+--
+-- THE ORDER INSIDE A TRIGGER IS FIXED, and every one of these steps is here
+-- because of a rule in the brief:
+--
+--   1. the immunity is set FIRST, from the effect's own length, so no second
+--      trap and no bat can land inside this one;
+--   2. any restraint already on the victim is released before a launch begins --
+--      a rooted player who is then blasted must not be launched at WalkSpeed 0
+--      with their jump disabled;
+--   3. the pod comes off, inside `launch`, through CarryService.Drop and nothing
+--      else, and only for the trap whose spec says so;
+--   4. and then the effect itself.
+--==============================================================================
+local function applyTrapEffect(trap: Trap, victim: Player, body: Body)
+	local spec = trap.spec
+	--==========================================================================
+	-- IMMUNITY FROM THE TRIGGER, NOT FROM THE RELEASE
+	--
+	-- Set here so it covers the effect AND the four seconds after it, which is
+	-- what stops two owners standing two traps side by side. releaseHold extends
+	-- it again when a restraint ends, so a root that is cut short by a bat still
+	-- leaves its four seconds behind.
+	--==========================================================================
+	immuneUntil[victim] = math.max(immuneUntil[victim] or 0,
+		now() + spec.EffectSeconds + T.ImmunitySeconds)
+
+	if spec.Effect == "root" or spec.Effect == "slow" then
+		holdPlayer(victim, body, spec)
+		return
+	end
+
+	--==========================================================================
+	-- A LAUNCH RELEASES WHATEVER WAS HOLDING THEM FIRST
+	--
+	-- The same handshake a bat and a guardian use, and for the same reason: a
+	-- launch on a body that is pinned at zero with no jump is a launch that ends
+	-- with a player sliding upright at the wrong speed.
+	--==========================================================================
+	if spec.Effect == "trip" or spec.Effect == "blast" then
+		releaseHold(victim, "a trap launched them")
+		local away = body.root.Position - trap.at
+		local flat = Vector3.new(away.X, 0, away.Z)
+		-- Backward, which means away from the trap they stepped on. A player who
+		-- managed to stand exactly on the middle of it goes the way they face.
+		local dir = if flat.Magnitude > 0.25
+			then flat.Unit
+			else body.root.CFrame.LookVector
+		launch(victim, body, dir, {
+			speed = spec.LaunchSpeed or 0,
+			lift = spec.LaunchLift or 0,
+			minLimp = spec.LaunchMinLimp,
+			dropPod = spec.DropsPod,
+			kind = "trap",
+			why = trap.item.Name,
+		})
+		return
+	end
+
+	if spec.Effect == "pull" then
+		releaseHold(victim, "a trap pulled them")
+		local travelled = pullToward(victim, body, trap.at, spec.PullStuds or 0)
+		holdPlayer(victim, body, spec)
+		log(string.format("%s was pulled %.1f studs by %s.",
+			victim.Name, travelled, trap.item.Name))
+		return
+	end
+
+	warn(string.format("[Seed/CombatService] %s has effect %q, which nothing implements",
+		trap.item.Id, tostring(spec.Effect)))
 end
 
 --==============================================================================
@@ -946,19 +1243,64 @@ end
 -- cast is straight down from the player's own root, and if it finds nothing
 -- within a few studs they are in mid-air and the placement is refused.
 --==============================================================================
+--==============================================================================
+-- GROUND A TRAP MAY NOT SIT ON
+--
+-- Two lists, two distances, one sweep.
+--
+--   THE NEST LIST, unchanged at 16 studs: a pod or a nest marker. A trap on the
+--   one tile everybody has to stand on to take a pod is not a play, it is a tax.
+--
+--   THE FURNITURE LIST, at 14: everything tagged that a player is REQUIRED to
+--   walk up to. Plots and their soil, the plot spawn pad, planters and plant
+--   slots -- which is where hatching happens -- treadmills, the two signs and the
+--   biome gates. Most of these already stand inside the safe field, which
+--   CombatService refuses wholesale; this is what covers the ones that do not, and
+--   what keeps covering them if the map ever moves.
+--
+-- SPAWN, MARIGOLD'S SHOP AND THE SELL BOARD are the safe field. They are not
+-- tagged, they have never been tagged, and the rectangle is a better guarantee
+-- than a tag would be: there is no position inside the hub where a trap is legal.
+--
+-- FLAT DISTANCE, like the trigger: a trap under a bridge is not beside the thing
+-- on top of it.
+--==============================================================================
+local PROTECTED_TAGS = {
+	GameConfig.Tags.Plot,
+	GameConfig.Tags.PlotSpawn,
+	GameConfig.Tags.Planter,
+	GameConfig.Tags.PlantSlot,
+	GameConfig.Tags.Treadmill,
+	GameConfig.Tags.MillSign,
+	GameConfig.Tags.PlotSign,
+	GameConfig.Tags.BiomeGate,
+}
+
+local function tooCloseToTagged(at: Vector3, tag: string, clearance: number): boolean
+	local flatAt = Vector3.new(at.X, 0, at.Z)
+	for _, thing in ipairs(CollectionService:GetTagged(tag)) do
+		local pivot: Vector3? = nil
+		if thing:IsA("BasePart") then
+			pivot = thing.Position
+		elseif thing:IsA("Model") then
+			pivot = thing:GetPivot().Position
+		end
+		if pivot and (Vector3.new(pivot.X, 0, pivot.Z) - flatAt).Magnitude < clearance then
+			return true
+		end
+	end
+	return false
+end
+
 local function nearProtectedGround(at: Vector3): boolean
 	for _, tag in ipairs({ GameConfig.Tags.SeedPod, GameConfig.Tags.NestSite }) do
-		for _, thing in ipairs(CollectionService:GetTagged(tag)) do
-			local pivot: Vector3? = nil
-			if thing:IsA("BasePart") then
-				pivot = thing.Position
-			elseif thing:IsA("Model") then
-				pivot = thing:GetPivot().Position
-			end
-			if pivot and (Vector3.new(pivot.X, 0, pivot.Z)
-				- Vector3.new(at.X, 0, at.Z)).Magnitude < T.NestClearanceStuds then
-				return true
-			end
+		if tooCloseToTagged(at, tag, T.NestClearanceStuds) then
+			return true
+		end
+	end
+	for _, tag in ipairs(PROTECTED_TAGS) do
+		if tooCloseToTagged(at, tag, T.ProtectedClearanceStuds) then
+			return true
 		end
 	end
 	return false
@@ -978,6 +1320,20 @@ end
 
 local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 	local clock = now()
+	--==========================================================================
+	-- WHICH TRAP IS THIS, AND DOES THIS FILE KNOW IT
+	--
+	-- Read first, because every check below it is one of this trap's own numbers.
+	-- An item with no spec is refused outright rather than falling back to
+	-- somebody else's timings -- a trap nobody has described should do nothing.
+	--==========================================================================
+	local spec = WeaponData.TrapSpec(item)
+	if not spec then
+		warn(string.format("[Seed/CombatService] %s has no trap spec; placement refused",
+			tostring(item.Id)))
+		deny(player)
+		return
+	end
 	if (placeReadyAt[player] or 0) > clock then
 		deny(player)
 		return
@@ -1024,9 +1380,19 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		deny(player)
 		return
 	end
+	--==========================================================================
+	-- AND NOT ON TOP OF SOMEBODY ELSE'S TRAP
+	--
+	-- Measured against the WIDER of the two triggers, so a small plate cannot be
+	-- tucked inside a snare's radius. Two effects on one step is the thing every
+	-- stacking rule in this file exists to prevent, and this is where it is
+	-- cheapest to prevent it.
+	--==========================================================================
 	for _, other in pairs(traps) do
+		local reach = math.max(spec.TriggerRadius, other.spec.TriggerRadius)
+			* T.SeparationRadiusScale
 		if (Vector3.new(other.at.X, 0, other.at.Z)
-			- Vector3.new(landing.X, 0, landing.Z)).Magnitude < T.TriggerRadius * 2 then
+			- Vector3.new(landing.X, 0, landing.Z)).Magnitude < reach then
 			deny(player)
 			return
 		end
@@ -1039,8 +1405,9 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 	-- there for its full twenty cost the same fifteen. Timing it from the SPRING
 	-- would reward a lucky placement with a faster next one.
 	--==========================================================================
-	placeReadyAt[player] = clock + T.PlaceCooldownSeconds
-	tool:SetAttribute(READY_AT, Workspace:GetServerTimeNow() + T.PlaceCooldownSeconds)
+	placeReadyAt[player] = clock + spec.PlaceCooldownSeconds
+	tool:SetAttribute(READY_AT,
+		Workspace:GetServerTimeNow() + spec.PlaceCooldownSeconds)
 
 	local map = MapService.GetMap() or Workspace
 	local cf = CFrame.new(landing + Vector3.new(0, 0.06, 0))
@@ -1050,6 +1417,8 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 
 	traps[player] = {
 		owner = player,
+		item = item,
+		spec = spec,
 		model = model,
 		base = model.PrimaryPart :: BasePart,
 		at = landing,
@@ -1057,8 +1426,9 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		sprung = false,
 	}
 	SoundKit.emit("TakePod", model.PrimaryPart :: BasePart)
-	log(string.format("%s set a trap at %.0f, %.0f, %.0f.",
-		player.Name, landing.X, landing.Y, landing.Z))
+	log(string.format("%s set a %s at %.0f, %.0f, %.0f (%s, arms in %.1fs).",
+		player.Name, item.Name, landing.X, landing.Y, landing.Z,
+		spec.Effect, spec.ArmSeconds))
 end
 
 --==============================================================================
@@ -1081,15 +1451,19 @@ local function stepTraps(clock: number)
 			removeTrap(owner, "the owner or the model went away")
 			continue
 		end
+		local spec = trap.spec
 		local age = clock - trap.placedAt
-		if age < T.ArmSeconds then
-			WeaponModel.SetTrapJaw(trap.model, age / T.ArmSeconds)
+		if age < spec.ArmSeconds then
+			-- Arming. The jaw really does open a little further every frame; every
+			-- other trap writes its armed look once and this call is free. See
+			-- WeaponModel.SetTrapArming.
+			WeaponModel.SetTrapArming(trap.model, age / spec.ArmSeconds)
 			continue
 		end
 		if not trap.sprung then
-			WeaponModel.SetTrapJaw(trap.model, 1)
+			WeaponModel.SetTrapArming(trap.model, 1)
 		end
-		if age > T.ExpireSeconds then
+		if age > spec.ExpireSeconds then
 			removeTrap(owner, "expired")
 			continue
 		end
@@ -1114,14 +1488,17 @@ local function stepTraps(clock: number)
 					local delta = body.root.Position - trap.at
 					local flat = Vector3.new(delta.X, 0, delta.Z)
 					-- FLAT, plus a ceiling. Jumping over a trap clears it, which
-					-- is the counterplay a visible trap is entitled to.
-					if flat.Magnitude <= T.TriggerRadius
-						and delta.Y >= -2 and delta.Y <= T.TriggerHeight then
+					-- is the counterplay a visible trap is entitled to -- and it
+					-- is each trap's OWN radius and ceiling, because a snare is a
+					-- wider pool than a mine is a plate.
+					if flat.Magnitude <= spec.TriggerRadius
+						and delta.Y >= -2 and delta.Y <= spec.TriggerHeight then
 						trap.sprung = true
-						WeaponModel.SetTrapJaw(trap.model, 0.10)
+						WeaponModel.SpringTrap(trap.model)
 						SoundKit.emit("Grab", trap.base)
-						holdPlayer(victim, body)
-						log(string.format("%s's trap caught %s.", owner.Name, victim.Name))
+						applyTrapEffect(trap, victim, body)
+						log(string.format("%s's %s caught %s (%s).",
+							owner.Name, trap.item.Name, victim.Name, spec.Effect))
 						-- ONE TRAP, ONE CATCH. It is destroyed on the next tick
 						-- by the branch below rather than here, so the shut jaws
 						-- are on screen for a moment before it goes.
@@ -1153,6 +1530,22 @@ local function stepHolds(clock: number)
 			releaseHold(player, "the body went away")
 		elseif clock >= hold.until_ then
 			releaseHold(player, "time")
+		elseif hold.jumpUntil and clock >= hold.jumpUntil then
+			--==============================================================
+			-- THE JUMP COMES BACK BEFORE THE SLOW DOES
+			--
+			-- A snare takes it for one second of four. Handed back HERE rather
+			-- than on a task.delay, because a delay is a callback that can fire
+			-- after the hold it belonged to has ended -- and re-enabling jumping
+			-- under somebody else's root is exactly the bug the token rules in
+			-- this file exist to stop. Cleared so it happens once.
+			--==============================================================
+			hold.jumpUntil = nil
+			if hold.humanoid.Parent then
+				pcall(function()
+					hold.humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+				end)
+			end
 		end
 	end
 end
@@ -1384,10 +1777,47 @@ function CombatService.Start()
 		stepTraps(clock)
 	end)
 
+	local bats, trapList = 0, {}
+	for _, item in ipairs(WeaponData.Items) do
+		if item.Category == "bat" then
+			bats += 1
+		elseif item.Category == "trap" then
+			local spec = WeaponData.TrapSpec(item)
+			table.insert(trapList, string.format("%s (%s %.1fs)", item.Name,
+				if spec then spec.Effect else "?",
+				if spec then spec.EffectSeconds else 0))
+		end
+	end
 	log(string.format(
-		"Ready. %d bat(s) and the Bramblejaw; hits are knockback only, %.1fs of " ..
-		"immunity after one, and traps hold for %.0fs.",
-		#WeaponData.Items - 1, C.HitImmunitySeconds, T.HoldSeconds))
+		"Ready. %d bat(s) and %d trap(s): %s. Hits are knockback only, %.1fs of " ..
+		"immunity after one, and %.1fs after any trap effect.",
+		bats, #trapList, table.concat(trapList, ", "), C.HitImmunitySeconds,
+		T.ImmunitySeconds))
+end
+
+--==============================================================================
+-- THE TWO THINGS ONLY THE ENGINE CAN NORMALLY ASK FOR
+--
+-- `Tool.Activated` is the entire client contribution to this service, and it
+-- cannot be raised from a script -- not from a spec, not from the debug console,
+-- not from anywhere. That makes the two verbs behind it unreachable to any test:
+-- a spec can build a trap, a victim and a floor, and then has no way to ask for
+-- the placement it wants to check.
+--
+-- So the two handlers are exposed by name. They are NOT a second entry point:
+-- they are the same local functions the Activated connections call, with the same
+-- guards, in the same order, and they are server-only -- this module is never
+-- required by a client and no remote reaches them.
+--
+-- What a spec gets from this is the whole of the trap system under test: place,
+-- arm, catch, hold, expire, cool down and clean up, on a controllable clock.
+--==============================================================================
+function CombatService.RequestPlace(player: Player, item: WeaponData.Item, tool: Tool)
+	tryPlace(player, item, tool)
+end
+
+function CombatService.RequestSwing(player: Player, item: WeaponData.Item, tool: Tool)
+	trySwing(player, item, tool)
 end
 
 function CombatService.Snapshot(): string
@@ -1403,6 +1833,17 @@ function CombatService.Snapshot(): string
 	end
 	table.insert(lines, string.format("  %d trap(s) down, %d player(s) held",
 		trapCount, heldCount))
+	for owner, trap in pairs(traps) do
+		table.insert(lines, string.format("    %s: %s, %s, %.1fs old%s",
+			owner.Name, trap.item.Name, trap.spec.Effect, clock - trap.placedAt,
+			if trap.sprung then ", sprung" else ""))
+	end
+	for player, hold in pairs(holds) do
+		table.insert(lines, string.format("    %s: %s at x%.2f, %.1fs left%s",
+			player.Name, hold.kind, hold.multiplier,
+			math.max(0, hold.until_ - clock),
+			if hold.jumpUntil then ", jump locked" else ""))
+	end
 	for _, player in ipairs(Players:GetPlayers()) do
 		local item = WeaponShopService.HeldItem(player)
 		table.insert(lines, string.format(

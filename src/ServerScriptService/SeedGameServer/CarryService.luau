@@ -222,7 +222,42 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	end
 	local profile = PlayerDataService.Get(player)
 	local base = GameConfig.walkSpeedFor(if profile then profile.Speed else 0)
-	humanoid.WalkSpeed = base * multiplier
+	local speed = base * multiplier
+
+	--==========================================================================
+	-- A TRAP THAT SLOWS RATHER THAN STOPS
+	--
+	-- A FRACTION of what they would otherwise be doing, multiplied in here at the
+	-- end, for the same reason `Trapped` is an attribute and not a captured
+	-- number: CombatService sets it, asks for a recompute, clears it, and asks
+	-- again. Nothing is stored and nothing is put back, so a player who picks up a
+	-- pod, steps onto a mill or turns Walk Mode on WHILE slowed gets the right
+	-- answer at every one of those moments rather than a stale one at the end.
+	--
+	-- Guarded to 0..1. A trap may slow a player and may never speed one up, and
+	-- the assert that enforces it lives in WeaponData -- this is the belt.
+	--==========================================================================
+	local slow = tonumber(player:GetAttribute(GameConfig.Attributes.TrapSlow))
+	if slow and slow == slow and slow >= 0 and slow < 1 then
+		speed *= slow
+	end
+
+	--==========================================================================
+	-- AND WALK MODE IS A CEILING, THE LAST THING APPLIED
+	--
+	-- min(speed, 16). LAST, so it caps the product of everything above it -- the
+	-- Speed score, the weight, a snare -- and MIN, so it can only ever take speed
+	-- away. A player at 12 because they are carrying a Titan pod stays at 12 when
+	-- they ask to walk; a player at 90 becomes 16; and turning it off recomputes
+	-- from here rather than restoring a number somebody wrote down.
+	--
+	-- The stronger states above have already returned by this line: rooted and
+	-- mounted are zero, and zero is not something a walk cap has an opinion about.
+	--==========================================================================
+	if player:GetAttribute(GameConfig.Attributes.WalkMode) == true then
+		speed = math.min(speed, GameConfig.WalkMode.CapStuds)
+	end
+	humanoid.WalkSpeed = speed
 end
 
 --==============================================================================
@@ -1974,6 +2009,55 @@ function CarryService.Start()
 		-- So NestService's LoadCharacter cannot record the empty Backpack it makes.
 		FreezeHeld = CarryService.FreezeHeld,
 	})
+
+	--==========================================================================
+	-- THE WALK MODE SWITCH, ON THE REMOTE THIS GAME ALREADY HAS
+	--
+	-- It lands HERE and not in a settings service because this is the file that
+	-- owns WalkSpeed: the switch is one more input to RefreshWalkSpeed, and the
+	-- service that applies a movement rule should be the service that hears the
+	-- request for it.
+	--
+	-- NO NEW REMOTE. GameEvent already carries the Garden's UNEQUIP, the plant
+	-- click, the mill upgrade and the plot upgrade, and it is a RemoteEvent that
+	-- takes a verb and a payload. One more verb is not a new surface.
+	--
+	-- RULE 4. The sender is engine-stamped; the payload came off the wire. It has
+	-- to be a boolean before it is anything else, and PlayerDataService.SetWalkMode
+	-- checks the type again on its own side -- a client may ask, and may not
+	-- describe the state it is in.
+	--
+	-- THE CLIENT IS NOT THE TRUTH. This writes the profile, the profile stamps the
+	-- attribute, and the HUD draws the attribute. A client that sets the attribute
+	-- locally changes its own label for one frame and nothing about its speed,
+	-- because the speed is computed on this side from the profile.
+	--==========================================================================
+	do
+		local remotes = SeedGame:FindFirstChild("Remotes")
+		local channel = if remotes
+			then remotes:FindFirstChild(GameConfig.Remotes.GameEvent)
+			else nil
+		if channel and channel:IsA("RemoteEvent") then
+			table.insert(serviceConnections, channel.OnServerEvent:Connect(
+				function(player: Player, action: any, payload: any)
+					if action ~= GameConfig.WalkMode.Action then
+						return
+					end
+					if type(payload) ~= "boolean" then
+						return
+					end
+					if PlayerDataService.SetWalkMode(player, payload) then
+						-- Recomputed immediately, from the truth of right now: a
+						-- player who turns it off mid-carry, mid-snare or on a belt
+						-- gets the speed those states say they should have, not one
+						-- captured before the switch was flipped.
+						CarryService.RefreshWalkSpeed(player)
+						log(string.format("%s set walk mode %s.", player.Name,
+							if payload then "on" else "off"))
+					end
+				end))
+		end
+	end
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		rebuildHeld(player)

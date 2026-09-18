@@ -51,7 +51,14 @@ end
 --==============================================================================
 say("\n-- the shelf --")
 
-check(#WeaponData.Items == 7, "seven items", #WeaponData.Items)
+--==============================================================================
+-- ELEVEN ITEMS SINCE 2026-09-17: SIX BATS AND FIVE TRAPS
+--
+-- Marigold's shelf was six bats and the Bramblejaw. It is one trap per biome now,
+-- and the count is asserted rather than described so that a sixth trap has to come
+-- with a decision about this line.
+--==============================================================================
+check(#WeaponData.Items == 11, "eleven items", #WeaponData.Items)
 
 local bats, traps = 0, 0
 local ids = {}
@@ -61,7 +68,7 @@ for i, item in ipairs(WeaponData.Items) do
 	if item.Order ~= i then orderOk = false end
 	ids[item.Id] = (ids[item.Id] or 0) + 1
 end
-check(bats == 6 and traps == 1, "six bats and one trap",
+check(bats == 6 and traps == 5, "six bats and five traps",
 	string.format("%d / %d", bats, traps))
 check(orderOk, "Order matches shelf position")
 
@@ -416,32 +423,50 @@ do
 end
 
 --==============================================================================
--- 5. THE TRAP'S OWN NUMBERS, AS THE BRIEF FIXES THEM
+-- 5. THE BRAMBLEJAW'S OWN NUMBERS, AS THE BRIEF FIXED THEM
+--
+-- These moved on 2026-09-17: what used to be "the trap" is now one row of
+-- WeaponData.TrapSpecs, because there are five traps and they share nothing but
+-- the placement rules. This section still asks the SAME questions of the
+-- Bramblejaw, by value, which is what makes it the check that the refactor changed
+-- no behaviour. TrapSystemSpec covers the other four and the shared rules.
 --==============================================================================
-say("\n-- the trap --")
+say("\n-- the Bramblejaw --")
 
 local T = WeaponData.Trap
-check(T.ArmSeconds == 1.0, "arms in one second", T.ArmSeconds)
-check(T.HoldSeconds == 2.0, "holds for two seconds", T.HoldSeconds)
+local jaw = WeaponData.TrapSpec("bramblejaw_trap")
+check(jaw ~= nil, "the Bramblejaw has a specification of its own")
+check(jaw.ArmSeconds == 1.0, "arms in one second", jaw.ArmSeconds)
+check(jaw.EffectSeconds == 2.0, "holds for two seconds", jaw.EffectSeconds)
+check(jaw.Effect == "root" and jaw.MoveMultiplier == 0,
+	"and the hold is a complete root, not a slow")
 check(T.ImmunitySeconds == 4.0, "four seconds of immunity after release", T.ImmunitySeconds)
-check(T.ExpireSeconds == 20, "expires after twenty seconds", T.ExpireSeconds)
-check(T.PlaceCooldownSeconds == 15, "fifteen-second placement cooldown",
-	T.PlaceCooldownSeconds)
-check(T.ExpireSeconds > T.ArmSeconds + T.HoldSeconds,
+check(jaw.ExpireSeconds == 20, "expires after twenty seconds", jaw.ExpireSeconds)
+check(jaw.PlaceCooldownSeconds == 15, "fifteen-second placement cooldown",
+	jaw.PlaceCooldownSeconds)
+check(jaw.TriggerRadius == 4.0 and jaw.TriggerHeight == 4.5,
+	"the same trigger size it always had",
+	string.format("%.1f / %.1f", jaw.TriggerRadius, jaw.TriggerHeight))
+check(jaw.ExpireSeconds > jaw.ArmSeconds + jaw.EffectSeconds,
 	"a trap outlives its own arming and hold")
-check(T.PlaceCooldownSeconds >= T.HoldSeconds + T.ImmunitySeconds,
+check(jaw.PlaceCooldownSeconds >= jaw.EffectSeconds + T.ImmunitySeconds,
 	"the cooldown outlasts a full catch, so one owner cannot re-trap a victim",
-	string.format("%.0f >= %.0f", T.PlaceCooldownSeconds,
-		T.HoldSeconds + T.ImmunitySeconds))
+	string.format("%.0f >= %.0f", jaw.PlaceCooldownSeconds,
+		jaw.EffectSeconds + T.ImmunitySeconds))
 
 local lines = WeaponData.StatLines(trap)
 local said = ""
 for _, l in ipairs(lines) do
 	said ..= string.format(" %s=%s", l.label, l.value)
 end
-check(#lines == 3 and string.find(said, "2s", 1, true) ~= nil
+check(#lines == 4 and string.find(said, "ROOT", 1, true) ~= nil
+	and string.find(said, "2.0s", 1, true) ~= nil
 	and string.find(said, "15s", 1, true) ~= nil,
-	"the card states the two-second hold and the fifteen-second cooldown", said)
+	"the card states the effect, the two-second hold and the fifteen-second cooldown",
+	said)
+check(string.find(said, "POWER", 1, true) == nil
+	and string.find(said, "REACH", 1, true) == nil,
+	"and no bat stat appears on a trap card", said)
 
 --==============================================================================
 -- 6. THE GEOMETRY

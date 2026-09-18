@@ -664,6 +664,74 @@ GameConfig.Attributes = {
 	-- GetServerTimeNow is the same value on both.
 	--==========================================================================
 	TrappedUntil = "TrappedUntil",
+	--==========================================================================
+	-- WHICH KIND OF TRAP HAS THEM, SO THE COUNTDOWN CAN SAY SO
+	--
+	-- "root" or "slow". A rooted player is standing still and the label over them
+	-- is red; a slowed one is still walking, still steering and still able to
+	-- swing, and a red TRAPPED over their head would be a lie that reads as a bug.
+	--
+	-- Written beside TrappedUntil and cleared with it, so there is no state where
+	-- a countdown exists without a word to put in front of it.
+	--==========================================================================
+	TrappedKind = "TrappedKind",
+	--==========================================================================
+	-- HOW MUCH OF THEIR OWN SPEED A TRAP IS LEAVING THEM
+	--
+	-- A FRACTION, not a speed: 0.35 means "whatever you would be doing, do 35% of
+	-- it". CarryService multiplies its computed speed by this, so a slow applies
+	-- to a billionaire sprinting at 90 and to a beginner at 20 in the same
+	-- proportion, and nothing anywhere captures a WalkSpeed to put back.
+	--
+	-- Absent means no slow. The root uses `Trapped` instead, which is zero rather
+	-- than a fraction, because a root is not a slow of 0% -- it also takes their
+	-- jump, and those two facts should not share one number.
+	--==========================================================================
+	TrapSlow = "TrapSlow",
+	--==========================================================================
+	-- WALK MODE, AS THE SERVER SEES IT
+	--
+	-- The player asked to walk. It is stamped here by the server -- from the
+	-- profile, on join, and on every toggle -- and the HUD renders THIS rather
+	-- than what it last clicked, because a client-set attribute is a client
+	-- claiming a movement state and this game does not let it.
+	--
+	-- Read-only to every client. TreadmillService, the guardians, the bats and the
+	-- traps never look at it: it is a CAP applied at the end of CarryService's
+	-- calculation, so it cannot change what anybody earns or how hard anything
+	-- hits.
+	--==========================================================================
+	WalkMode = "WalkMode",
+}
+
+--==============================================================================
+-- WALK MODE
+--
+-- A switch under the Settings gear that caps ordinary movement at Roblox's own
+-- walking speed. It exists because this game's Speed score reaches the hundreds:
+-- a player who wants to line a plant up, read a sign, or walk beside somebody
+-- cannot do any of it at 90 studs a second, and the answer to that should not be
+-- "spend your Speed".
+--
+-- min(computed, 16), AND NEVER max. A player slower than 16 -- carrying a
+-- Colossal pod, wading through a Mirecoil, new to the game -- is not sped up by
+-- asking to walk. That is the whole of the rule, and CarryService applies it as
+-- the last line of the one function that owns WalkSpeed.
+--
+-- IT IS NOT A SETTING IN THE SETTINGS PANEL. It is a movement control, it is
+-- toggled mid-stride, and burying it two clicks deep would make it useless for
+-- the thing it is for.
+--==============================================================================
+GameConfig.WalkMode = {
+	-- Roblox's default. Not a number this game invented, which is the point: it is
+	-- the speed every other experience walks at.
+	CapStuds = 16,
+	-- The verb the HUD sends on the GameEvent remote it already owns, and the
+	-- words it prints.
+	Action = "WalkMode",
+	Label = "WALK MODE",
+	OnText = "ON",
+	OffText = "OFF",
 }
 
 GameConfig.Tags = {

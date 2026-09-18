@@ -126,6 +126,53 @@ function PlayerDataService.RecordTutorial(player: Player, milestone: string): bo
 	return true
 end
 
+--==============================================================================
+-- WALK MODE: THE PROFILE IS THE TRUTH, THE ATTRIBUTE IS THE COPY
+--
+-- Two writes, in this order: the profile, then the replicated attribute. The HUD
+-- renders the attribute, so a client that lies to itself about the switch is a
+-- client that disagrees with its own screen for one frame and then does not.
+--
+-- PUBLISHED SEPARATELY from the setter because it also has to happen on LOAD,
+-- where nobody toggled anything -- see the profile-ready path in Start. An
+-- unpublished profile field would be a saved preference the HUD never showed.
+--
+-- IT DOES NOT TOUCH WalkSpeed. CarryService owns that and reads this attribute at
+-- the end of its own calculation; asking it to recompute is the caller's job, and
+-- the caller is the one service that knows whether a character exists yet.
+--==============================================================================
+function PlayerDataService.PublishWalkMode(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local on = entry.profile.WalkMode == true
+	if player:GetAttribute(GameConfig.Attributes.WalkMode) ~= on then
+		player:SetAttribute(GameConfig.Attributes.WalkMode, on)
+	end
+end
+
+function PlayerDataService.SetWalkMode(player: Player, on: any): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players or type(on) ~= "boolean" then
+		return false
+	end
+	if entry.profile.WalkMode == on then
+		-- Nothing changed, so nothing is saved and nothing is replicated. A held
+		-- button or a double tap costs one comparison.
+		return false
+	end
+	entry.profile.WalkMode = on
+	touch(player)
+	PlayerDataService.PublishWalkMode(player)
+	return true
+end
+
+function PlayerDataService.WalkModeOf(player: Player): boolean
+	local entry = entries[player]
+	return entry ~= nil and entry.profile.WalkMode == true
+end
+
 function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
 	local entry = entries[player]
 	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
@@ -643,8 +690,13 @@ local function onPlayerAdded(player: Player)
 		-- any question about which of the two happened first.
 		--======================================================================
 		PlayerDataService.PublishSpeedTier(player)
+		-- AND THE SAVED WALK MODE, at the same moment and for the same reason: the
+		-- HUD renders the attribute, so a player who left with the switch on has to
+		-- find it on when they come back rather than after touching it.
+		PlayerDataService.PublishWalkMode(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
+			PlayerDataService.PublishWalkMode(player)
 		end))
 		-- The player-list columns, off the profile that just loaded.
 		stats[player] = PlayerDataService.MountStats(player, profile)

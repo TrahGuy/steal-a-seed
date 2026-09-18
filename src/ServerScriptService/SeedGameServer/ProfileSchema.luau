@@ -183,6 +183,16 @@ export type Profile = {
 	Weapons: { [string]: boolean },
 	EquippedBat: string,
 	EquippedTrap: string,
+	--==========================================================================
+	-- WALK MODE, WHICH IS A PREFERENCE AND THEREFORE SAVED
+	--
+	-- A player who asked to walk asked to walk, and having to ask again on every
+	-- rejoin would make the switch a toy. It is the first stored SETTING in this
+	-- profile -- sound levels live on the client, quality lives on an attribute --
+	-- so it is added the way every other field here was: default false, sanitised
+	-- to a boolean, and absent in an old save means OFF.
+	--==========================================================================
+	WalkMode: boolean,
 	CreatedAt: number,
 	LastSeen: number,
 }
@@ -218,6 +228,7 @@ function ProfileSchema.Default(): Profile
 		Weapons = {},
 		EquippedBat = "",
 		EquippedTrap = "",
+		WalkMode = false,
 		CreatedAt = now,
 		LastSeen = now,
 	}
@@ -423,6 +434,10 @@ function ProfileSchema.Sanitise(raw: any): Profile
 
 	p.EquippedBat = slot(raw.EquippedBat, "bat")
 	p.EquippedTrap = slot(raw.EquippedTrap, "trap")
+	-- FORWARD MIGRATION, the same shape as every other field: a save written
+	-- before Walk Mode existed has no key here, `raw.WalkMode` is nil, and nil is
+	-- not true -- so an old profile loads with it off and nothing is rewritten.
+	p.WalkMode = raw.WalkMode == true
 
 	--==========================================================================
 	-- THE ONE-SLOT SAVE, SORTED INTO THE RIGHT DRAWER

@@ -460,13 +460,21 @@ type Card = {
 
 local cards: { Card } = {}
 
-local function statChip(parent: GuiObject, index: number, line: WeaponData.StatLine): Frame
+local function statChip(parent: GuiObject, index: number, count: number,
+	line: WeaponData.StatLine): Frame
 	local chip = Instance.new("Frame")
 	chip.Name = "Stat" .. index
-	-- FRACTIONAL, so three of them can never add up to more than the row they
-	-- are in. A fixed pixel width is how a stat row overflows on a phone.
-	chip.Position = UDim2.fromScale((index - 1) / 3, 0)
-	chip.Size = UDim2.new(1 / 3, -5, 1, 0)
+	--==========================================================================
+	-- FRACTIONAL, AND OVER HOWEVER MANY THERE ARE
+	--
+	-- A fixed pixel width is how a stat row overflows on a phone, and a fixed
+	-- THIRD is how a trap's fourth chip fell off the end of the card: a bat prints
+	-- power, reach and cooldown, and a trap prints effect, duration, arm and
+	-- cooldown -- which is four. The row divides by what it was given.
+	--==========================================================================
+	local share = 1 / math.max(count, 1)
+	chip.Position = UDim2.fromScale((index - 1) * share, 0)
+	chip.Size = UDim2.new(share, -5, 1, 0)
 	chip.BackgroundColor3 = PANEL.Shade
 	chip.BackgroundTransparency = 0.15
 	chip.BorderSizePixel = 0
@@ -680,8 +688,9 @@ local function buildCard(item: WeaponData.Item): Card
 	stats.ClipsDescendants = true
 	stats.ZIndex = 6
 	stats.Parent = fill
-	for i, line in ipairs(WeaponData.StatLines(item)) do
-		statChip(stats, i, line)
+	local statLines = WeaponData.StatLines(item)
+	for i, line in ipairs(statLines) do
+		statChip(stats, i, #statLines, line)
 	end
 
 	--== PRICE AND BUTTON ==--

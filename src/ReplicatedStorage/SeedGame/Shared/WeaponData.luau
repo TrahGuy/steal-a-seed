@@ -405,6 +405,115 @@ WeaponData.Items = {
 			Glow = Color3.fromRGB(226, 240, 132),
 		},
 	},
+	--==========================================================================
+	-- AND FOUR MORE TRAPS, ONE PER BIOME PAST GREENHOLLOW
+	--
+	-- Approved by the owner on 2026-09-17. The shelf is a ladder in PRICE and in
+	-- CONSEQUENCE, not in raw stopping power: a Bramblejaw still holds you dead
+	-- still, which is the strongest effect in the list, and the expensive ones buy
+	-- a DIFFERENT answer to somebody running past you with a pod -- a trip, a
+	-- crawl, the pod itself knocked out of their arms, or being dragged back.
+	--
+	-- Every gameplay number lives in WeaponData.TrapSpecs below, keyed by the same
+	-- id. These rows are the SHOP: name, price, blurb, palette, and the zeroed
+	-- swing columns a trap shares with the Bramblejaw so one card shape fits all.
+	--==========================================================================
+	{
+		Id = "dunesnap_trap",
+		Name = "Dunesnap Plate",
+		Category = "trap",
+		Order = 8,
+		Price = 750000,
+		Blurb = "A cracked sandstone plate. Stand on it and the sand goes out from under you.",
+		Badge = "TRAP",
+		Reach = 0,
+		Power = 0,
+		Lift = 0,
+		Yaw = 0,
+		Windup = 0,
+		Recovery = 0,
+		Cooldown = 0,
+		Palette = {
+			Wood = Color3.fromRGB(196, 162, 112),
+			Bind = Color3.fromRGB(152, 118, 78),
+			Accent = Color3.fromRGB(232, 206, 150),
+			Card = Color3.fromRGB(74, 58, 38),
+			CardEdge = Color3.fromRGB(166, 132, 84),
+			Glow = Color3.fromRGB(246, 226, 170),
+		},
+	},
+	{
+		Id = "mirecoil_trap",
+		Name = "Mirecoil Snare",
+		Category = "trap",
+		Order = 9,
+		Price = 3500000,
+		Blurb = "A shallow mud pool ringed with live vine. They tighten, and the road turns to wading.",
+		Badge = "TRAP",
+		Reach = 0,
+		Power = 0,
+		Lift = 0,
+		Yaw = 0,
+		Windup = 0,
+		Recovery = 0,
+		Cooldown = 0,
+		Palette = {
+			Wood = Color3.fromRGB(58, 52, 40),
+			Bind = Color3.fromRGB(66, 92, 58),
+			Accent = Color3.fromRGB(124, 166, 96),
+			Card = Color3.fromRGB(34, 42, 32),
+			CardEdge = Color3.fromRGB(96, 126, 78),
+			Glow = Color3.fromRGB(168, 222, 136),
+		},
+	},
+	{
+		Id = "cinderburst_trap",
+		Name = "Cinderburst Mine",
+		Category = "trap",
+		Order = 10,
+		Price = 15000000,
+		Blurb = "Volcanic plate, glowing seams. It takes the pod out of their arms and them off their feet.",
+		Badge = "TRAP",
+		Reach = 0,
+		Power = 0,
+		Lift = 0,
+		Yaw = 0,
+		Windup = 0,
+		Recovery = 0,
+		Cooldown = 0,
+		Palette = {
+			Wood = Color3.fromRGB(44, 38, 38),
+			Bind = Color3.fromRGB(86, 50, 36),
+			Accent = Color3.fromRGB(255, 112, 42),
+			Card = Color3.fromRGB(40, 26, 24),
+			CardEdge = Color3.fromRGB(140, 66, 40),
+			Glow = Color3.fromRGB(255, 150, 60),
+		},
+	},
+	{
+		Id = "starlock_trap",
+		Name = "Starlock Anchor",
+		Category = "trap",
+		Order = 11,
+		Price = 60000000,
+		Blurb = "A cosmic anchor on a violet base. It pulls the thief back to it, then lets them crawl away.",
+		Badge = "TRAP",
+		Reach = 0,
+		Power = 0,
+		Lift = 0,
+		Yaw = 0,
+		Windup = 0,
+		Recovery = 0,
+		Cooldown = 0,
+		Palette = {
+			Wood = Color3.fromRGB(52, 42, 86),
+			Bind = Color3.fromRGB(92, 74, 150),
+			Accent = Color3.fromRGB(168, 140, 255),
+			Card = Color3.fromRGB(32, 28, 58),
+			CardEdge = Color3.fromRGB(110, 92, 180),
+			Glow = Color3.fromRGB(198, 224, 255),
+		},
+	},
 } :: { Item }
 
 --==============================================================================
@@ -679,37 +788,270 @@ WeaponData.Combat = {
 }
 
 --==============================================================================
--- THE TRAP
+-- WHAT IS TRUE OF EVERY TRAP, WHATEVER IT DOES
 --
--- Every number the brief fixes, in one table, so the card and the service read
--- the same second.
+-- PLACEMENT AND SAFETY ONLY. This table used to carry the Bramblejaw's timings
+-- as well -- arm, hold, expiry, cooldown, trigger size -- and CombatService read
+-- them for "the trap". With five traps that is exactly the shape that cannot
+-- work: one of them holds you still for two seconds and another drags you nine
+-- studs and lets you crawl, and they do not share a single duration.
+--
+-- So the timings moved to TrapSpecs, keyed by item id, and what is left here is
+-- the part no trap may disagree about: where one may be set, how far from the
+-- things a player has to be able to stand on, and how long you are safe after
+-- one has had you.
 --==============================================================================
 WeaponData.Trap = {
-	-- Placed shut, opens over a second, and only bites once it is open.
-	ArmSeconds = 1.0,
-	-- How long a caught player is held. Two seconds is short enough that it is
-	-- an interruption rather than a death sentence, and long enough that
-	-- somebody with a bat can cross the gap and use it.
-	HoldSeconds = 2.0,
-	-- After release, and after any bat hit. Nothing can catch you during it.
+	-- After ANY trap effect ends, and after any bat hit. Nothing can catch you
+	-- during it, which is what stops a corridor of traps being a corridor.
 	ImmunitySeconds = 4.0,
-	-- An untriggered trap gives up rather than littering the road forever.
-	ExpireSeconds = 20,
-	-- From the moment it is PLACED, not from when it fires -- so a trap that
-	-- catches somebody instantly and one that expires unused cost the same.
-	PlaceCooldownSeconds = 15,
-	-- How close a foot has to be, measured flat, plus how far above the jaws it
-	-- may be. Flat because a player jumping over a trap should clear it.
-	TriggerRadius = 4.0,
-	TriggerHeight = 4.5,
 	-- Refused this close to a pod or a nest marker. A trap sitting on the one
 	-- tile everybody has to stand on to take a pod is not a play, it is a tax.
 	NestClearanceStuds = 16,
+	--==========================================================================
+	-- AND THIS CLOSE TO ANYTHING A PLAYER HAS TO WALK ONTO
+	--
+	-- The safe field already covers the hub, the stall, the spawn, Marigold and
+	-- every plot with its mill and its soil -- CombatService refuses the whole
+	-- rectangle. This is the belt to that braces: the tagged furniture a player
+	-- is REQUIRED to approach, wherever it ends up standing. A trap on the tile
+	-- in front of a biome gate or a plot sign is not an ambush, it is a toll.
+	--==========================================================================
+	ProtectedClearanceStuds = 14,
 	-- The ground has to be solid, level enough to stand on, and directly under
 	-- the player -- no placing through a floor, off a ledge or in mid-air.
 	MaxDropStuds = 6,
 	MaxSlopeDot = 0.62,
+	-- Two traps may not overlap: a new one is refused within this many times the
+	-- trigger radius of one already down. Stacking two effects on one step is the
+	-- thing every rule below is written to prevent.
+	SeparationRadiusScale = 2,
 }
+
+--==============================================================================
+-- THE FIVE TRAPS, AND EVERY NUMBER THAT MAKES THEM DIFFERENT
+--
+-- ONE SPECIFICATION PER ITEM ID, and CombatService dispatches on `Effect`. The
+-- alternative -- five branches threaded through the service -- was the thing the
+-- brief refused, and rightly: the service already owns the ragdoll handshake,
+-- the restraint, the placement validation and the cleanup, and none of those
+-- five copies would stay in step.
+--
+-- EFFECTS, and what each one costs the victim:
+--
+--   root   WalkSpeed 0 and no jump, for a fixed time. The Bramblejaw, unchanged.
+--   trip   a short ragdoll with almost no push. You are down, not thrown.
+--   slow   a movement MULTIPLIER for a time, with jumping locked for the first
+--          second only. You can still steer, still swing, still fight.
+--   blast  the carried pod comes off, then a launch down the bat pipeline --
+--          weaker than the weakest bat, and backward rather than up.
+--   pull   one yank toward the trap, obstruction-checked, then a slow.
+--
+-- WHY THE DURATIONS CLIMB WITH PRICE AND THE STOPPING POWER DOES NOT: a root is
+-- the harshest thing that can happen to somebody carrying a Colossal pod, and it
+-- is the cheapest trap on the shelf. What the money buys is reach into the rest
+-- of the fight -- a pod on the floor, a body dragged back to you, four seconds of
+-- wading -- and a longer window in which to use it.
+--==============================================================================
+export type TrapSpec = {
+	Effect: string,
+	-- Opens, glows, heats up. It only bites once it is armed, which is the second
+	-- a player gets to walk away.
+	ArmSeconds: number,
+	-- How long an untriggered trap sits there before it gives up.
+	ExpireSeconds: number,
+	-- From the moment it is PLACED, not from when it fires.
+	PlaceCooldownSeconds: number,
+	-- How close a foot has to be, measured FLAT, plus how far above the trap it
+	-- may be. Flat because jumping over a trap has to clear it.
+	TriggerRadius: number,
+	TriggerHeight: number,
+	-- How long the effect lasts on the victim. For a launch it is how long they
+	-- are counted as being in it, which is what the immunity is measured from.
+	EffectSeconds: number,
+	-- Movement as a FRACTION of whatever the victim's speed would otherwise be.
+	-- 0 for a root. nil for anything that does not touch movement.
+	MoveMultiplier: number?,
+	-- Jumping is disabled for this long, from the trigger. A root locks it for
+	-- the whole hold; a slow locks the first second so the answer to mud is not
+	-- "hop out of it", and then hands it back while the slow runs on.
+	JumpLockSeconds: number,
+	-- Launch numbers, for `trip` and `blast` only. Horizontal studs per second
+	-- and the vertical share of it, exactly as a bat's Power and Lift resolve --
+	-- see LaunchSpeed. MinLimp is the floor on how long the victim sees
+	-- themselves down.
+	LaunchSpeed: number?,
+	LaunchLift: number?,
+	LaunchMinLimp: number?,
+	-- Pull numbers, for `pull` only.
+	PullStuds: number?,
+	-- Whether the victim's carried pod is dropped, through CarryService.Drop and
+	-- nothing else.
+	DropsPod: boolean,
+	-- Which geometry WeaponModel builds, and how it poses while arming.
+	Model: string,
+	-- What the countdown over the victim says, and in which colour. "root" is the
+	-- red TRAPPED label the Bramblejaw has always had; "slow" is amber, and says
+	-- SLOWED, because a player who can still move needs to know that.
+	Status: string?,
+	-- The one line the shop card leads with.
+	EffectText: string,
+}
+
+WeaponData.TrapSpecs = {
+	--==========================================================================
+	-- THE BRAMBLEJAW, UNCHANGED
+	--
+	-- Every number here is the number this trap has always had. It is written
+	-- down per-trap now instead of as "the trap", and that is the whole of the
+	-- change: 1.0 to arm, 2.0 held, 20 to expire, 15 to place again, 4.0 flat and
+	-- 4.5 up. Anything different would be a balance change nobody asked for.
+	--==========================================================================
+	bramblejaw_trap = {
+		Effect = "root",
+		ArmSeconds = 1.0,
+		ExpireSeconds = 20,
+		PlaceCooldownSeconds = 15,
+		TriggerRadius = 4.0,
+		TriggerHeight = 4.5,
+		EffectSeconds = 2.0,
+		MoveMultiplier = 0,
+		JumpLockSeconds = 2.0,
+		DropsPod = false,
+		Model = "jaw",
+		Status = "root",
+		EffectText = "ROOT",
+	},
+	--==========================================================================
+	-- DUNESNAP: THE SAND GOES OUT FROM UNDER YOU
+	--
+	-- A trip, not a throw. The launch numbers are deliberately tiny -- 7 studs a
+	-- second with barely any lift -- because what this trap sells is the 1.1
+	-- seconds on the floor, and a plate that flung people would be a cheap
+	-- Cinderburst. It does NOT take the pod: a thief who trips over a plate gets
+	-- up still holding it, which is what keeps this the entry-level answer.
+	--==========================================================================
+	dunesnap_trap = {
+		Effect = "trip",
+		ArmSeconds = 0.8,
+		ExpireSeconds = 24,
+		PlaceCooldownSeconds = 16,
+		TriggerRadius = 4.4,
+		TriggerHeight = 4.5,
+		-- The window the victim is counted as being in the trip, which is what
+		-- the four seconds of immunity is measured from. The ragdoll itself ends
+		-- when the body reports landing, exactly as a bat's does.
+		EffectSeconds = 1.1,
+		JumpLockSeconds = 0,
+		LaunchSpeed = 7,
+		LaunchLift = 0.30,
+		LaunchMinLimp = 1.1,
+		DropsPod = false,
+		Model = "plate",
+		EffectText = "TRIP",
+	},
+	--==========================================================================
+	-- MIRECOIL: THE ROAD TURNS TO WADING
+	--
+	-- 35% of whatever they would otherwise be doing, for four seconds, and the
+	-- multiplier is the point: it is a fraction of the SPEED THEY HAVE, so a
+	-- billionaire sprinting past at 90 is cut to 31 and a beginner at 20 is cut
+	-- to 7. A flat number would be a nerf to the rich and a root to everybody
+	-- else.
+	--
+	-- JUMP LOCKED FOR ONE SECOND, NOT FOUR. Long enough that the first instinct
+	-- -- hop out of it -- does not work; short enough that a player who is being
+	-- chased through mud still has their best move back while it matters.
+	--==========================================================================
+	mirecoil_trap = {
+		Effect = "slow",
+		ArmSeconds = 1.2,
+		ExpireSeconds = 26,
+		PlaceCooldownSeconds = 19,
+		TriggerRadius = 4.6,
+		TriggerHeight = 4.5,
+		EffectSeconds = 4.0,
+		MoveMultiplier = 0.35,
+		JumpLockSeconds = 1.0,
+		DropsPod = false,
+		Model = "pool",
+		Status = "slow",
+		EffectText = "SLOW 35%",
+	},
+	--==========================================================================
+	-- CINDERBURST: THE POD COMES OFF FIRST
+	--
+	-- The only trap that touches a carry, and the order is not negotiable: the
+	-- pod is dropped through CarryService.Drop at the feet they are still
+	-- standing on, and only then does the launch begin. Backward and up, down the
+	-- same handshake a bat uses -- one token, one ragdoll, one backstop.
+	--
+	-- WEAKER THAN THE ROOTWOOD, which is asserted at load below. The cheapest bat
+	-- launches at 25 studs a second; this is 16 with more of it turned upward, so
+	-- the victim goes over rather than away. A trap that out-flung the weakest bat
+	-- would make the bat pointless at a fortieth of the price.
+	--==========================================================================
+	cinderburst_trap = {
+		Effect = "blast",
+		ArmSeconds = 1.4,
+		ExpireSeconds = 26,
+		PlaceCooldownSeconds = 25,
+		TriggerRadius = 4.2,
+		TriggerHeight = 4.5,
+		EffectSeconds = 1.4,
+		JumpLockSeconds = 0,
+		LaunchSpeed = 16,
+		LaunchLift = 0.85,
+		LaunchMinLimp = 1.4,
+		DropsPod = true,
+		Model = "mine",
+		EffectText = "BLAST/DROP",
+	},
+	--==========================================================================
+	-- STARLOCK: IT BRINGS THEM BACK TO YOU
+	--
+	-- One yank of up to eight studs toward the anchor, then 40% for three
+	-- seconds. The pull is a SINGLE obstruction-checked move and not a
+	-- constraint: an AlignPosition strong enough to drag a player is a thing that
+	-- can survive a death, a respawn, a streaming-out or a service restart, and
+	-- four of those five are how a permanent restraint becomes a permanent bug.
+	--
+	-- It does not take the pod. Dragging somebody back into the fight WITH their
+	-- pod is the point -- the owner wanted a chance to hit them, not the loot.
+	--==========================================================================
+	starlock_trap = {
+		Effect = "pull",
+		ArmSeconds = 1.5,
+		ExpireSeconds = 28,
+		PlaceCooldownSeconds = 30,
+		TriggerRadius = 4.2,
+		TriggerHeight = 4.5,
+		EffectSeconds = 3.0,
+		MoveMultiplier = 0.40,
+		JumpLockSeconds = 0.6,
+		PullStuds = 8,
+		DropsPod = false,
+		Model = "anchor",
+		Status = "slow",
+		EffectText = "PULL/SLOW",
+	},
+} :: { [string]: TrapSpec }
+
+--==============================================================================
+-- THE ONE WAY TO ASK WHAT A TRAP DOES
+--
+-- Takes an item or an id, so a caller with either does not have to convert. Nil
+-- for anything that is not a trap this file ships, which is what lets
+-- CombatService refuse an unknown trap rather than fall back to somebody else's
+-- numbers.
+--==============================================================================
+function WeaponData.TrapSpec(itemOrId: any): TrapSpec?
+	local id = if type(itemOrId) == "table" then (itemOrId :: any).Id else itemOrId
+	if type(id) ~= "string" then
+		return nil
+	end
+	return (WeaponData.TrapSpecs :: any)[id]
+end
 
 --==============================================================================
 -- LOOKUP
@@ -872,11 +1214,24 @@ export type StatLine = { label: string, value: string }
 
 function WeaponData.StatLines(item: Item): { StatLine }
 	if item.Category == "trap" then
-		local T = WeaponData.Trap
+		--======================================================================
+		-- FOUR ROWS FOR A TRAP, AND NOT ONE OF THEM IS A BAT'S
+		--
+		-- A trap has no power and no reach, and printing either would be the card
+		-- lying about what it sells. What a buyer actually compares is WHAT it
+		-- does, HOW LONG for, how long they have to wait for it to arm, and how
+		-- long until they can set another -- in that order, because the first two
+		-- are the purchase and the last two are the cost of using it.
+		--======================================================================
+		local spec = WeaponData.TrapSpec(item)
+		if not spec then
+			return {}
+		end
 		return {
-			{ label = "HOLDS", value = string.format("%.0fs", T.HoldSeconds) },
-			{ label = "ARMS IN", value = string.format("%.0fs", T.ArmSeconds) },
-			{ label = "COOLDOWN", value = string.format("%.0fs", T.PlaceCooldownSeconds) },
+			{ label = "EFFECT", value = spec.EffectText },
+			{ label = "DURATION", value = string.format("%.1fs", spec.EffectSeconds) },
+			{ label = "ARMS IN", value = string.format("%.1fs", spec.ArmSeconds) },
+			{ label = "COOLDOWN", value = string.format("%.0fs", spec.PlaceCooldownSeconds) },
 		}
 	end
 	return {
@@ -951,6 +1306,128 @@ assert(WeaponData.Combat.HitImmunitySeconds > fastestCooldown, string.format(
 assert(WeaponData.Combat.VictimPostRecoverySeconds > 0,
 	"a victim with no post-recovery window can be knocked down on the frame " ..
 	"they stand up")
+
+--==============================================================================
+-- AND EVERY TRAP HAS TO BE A TRAP
+--
+-- Five specifications, one per trap on the shelf, and every one of them is read
+-- by a service that cannot check them: CombatService dispatches on `Effect` and
+-- applies whatever numbers it finds. A missing spec, an effect nobody
+-- implements, a multiplier of 1.4 or a launch that out-flings the cheapest bat
+-- would all be invisible until somebody stepped on it in a live raid.
+--
+-- REFUSED AT REQUIRE, so a bad trap is a server that does not boot rather than a
+-- fight that does not make sense.
+--==============================================================================
+do
+	local EFFECTS = { root = true, trip = true, slow = true, blast = true, pull = true }
+	local MODELS = { jaw = true, plate = true, pool = true, mine = true, anchor = true }
+	local weakestBat = math.huge
+	local trapCount = 0
+	for _, item in ipairs(WeaponData.Items) do
+		if item.Category == "bat" then
+			weakestBat = math.min(weakestBat, WeaponData.LaunchSpeed(item))
+		end
+	end
+
+	for _, item in ipairs(WeaponData.Items) do
+		if item.Category ~= "trap" then
+			continue
+		end
+		trapCount += 1
+		local spec = WeaponData.TrapSpec(item)
+		assert(spec, string.format("trap %s has no entry in WeaponData.TrapSpecs", item.Id))
+		local s = spec :: TrapSpec
+		assert(EFFECTS[s.Effect], string.format(
+			"trap %s has effect %q, which no service implements", item.Id, tostring(s.Effect)))
+		assert(MODELS[s.Model], string.format(
+			"trap %s asks for model %q, which WeaponModel cannot build",
+			item.Id, tostring(s.Model)))
+
+		for field, value in pairs({
+			ArmSeconds = s.ArmSeconds,
+			ExpireSeconds = s.ExpireSeconds,
+			PlaceCooldownSeconds = s.PlaceCooldownSeconds,
+			TriggerRadius = s.TriggerRadius,
+			TriggerHeight = s.TriggerHeight,
+			EffectSeconds = s.EffectSeconds,
+		}) do
+			assert(type(value) == "number" and value == value and value > 0
+				and value < math.huge, string.format(
+				"trap %s has %s = %s, which is not a positive finite number",
+				item.Id, field, tostring(value)))
+		end
+
+		--======================================================================
+		-- ARMING MUST FIT INSIDE THE TRAP'S OWN LIFE
+		--
+		-- A trap that took longer to arm than it lasts would sit there, never
+		-- bite, and expire -- a purchase that does nothing, with no error.
+		--======================================================================
+		assert(s.ArmSeconds < s.ExpireSeconds, string.format(
+			"trap %s arms in %.1fs but expires after %.1fs", item.Id,
+			s.ArmSeconds, s.ExpireSeconds))
+		--======================================================================
+		-- AND THE EFFECT MUST END BEFORE THE NEXT TRAP CAN BE SET
+		--
+		-- Cooldown longer than effect plus immunity is what stops one owner
+		-- keeping one victim permanently under a trap effect. It is the single
+		-- most important number in this table and the least visible.
+		--======================================================================
+		assert(s.PlaceCooldownSeconds > s.EffectSeconds + WeaponData.Trap.ImmunitySeconds,
+			string.format(
+			"trap %s: a %.0fs cooldown does not outlast its own %.1fs effect plus " ..
+			"%.1fs of immunity, so one owner could hold one victim forever",
+			item.Id, s.PlaceCooldownSeconds, s.EffectSeconds,
+			WeaponData.Trap.ImmunitySeconds))
+		assert(s.JumpLockSeconds >= 0 and s.JumpLockSeconds <= s.EffectSeconds,
+			string.format(
+			"trap %s locks jumping for %.1fs, which is outside its own %.1fs effect",
+			item.Id, s.JumpLockSeconds, s.EffectSeconds))
+
+		if s.MoveMultiplier ~= nil then
+			assert(s.MoveMultiplier >= 0 and s.MoveMultiplier <= 1, string.format(
+				"trap %s has a movement multiplier of %s: a trap may slow or stop a " ..
+				"player and may never speed one up", item.Id, tostring(s.MoveMultiplier)))
+		end
+		if s.Effect == "slow" or s.Effect == "pull" then
+			assert(s.MoveMultiplier ~= nil and s.MoveMultiplier > 0, string.format(
+				"trap %s slows without a multiplier", item.Id))
+			assert(s.Status == "slow", string.format(
+				"trap %s slows but does not label itself as a slow, so the victim " ..
+				"would read a root's countdown", item.Id))
+		end
+		if s.Effect == "root" then
+			assert(s.MoveMultiplier == 0 and s.Status == "root", string.format(
+				"trap %s roots without stopping the player", item.Id))
+		end
+		if s.Effect == "trip" or s.Effect == "blast" then
+			assert(type(s.LaunchSpeed) == "number" and (s.LaunchSpeed :: number) > 0
+				and type(s.LaunchLift) == "number", string.format(
+				"trap %s launches without launch numbers", item.Id))
+			--==================================================================
+			-- NO TRAP OUT-FLINGS THE CHEAPEST BAT
+			--
+			-- The bat ladder is the thing a player buys for knockback, and a
+			-- $750K plate that threw further than a $5K bat would make the whole
+			-- shelf above it decoration.
+			--==================================================================
+			assert((s.LaunchSpeed :: number) < weakestBat, string.format(
+				"trap %s launches at %.1f, which is not under the cheapest bat's %.1f",
+				item.Id, s.LaunchSpeed, weakestBat))
+		end
+		if s.Effect == "pull" then
+			assert(type(s.PullStuds) == "number" and (s.PullStuds :: number) > 0
+				and (s.PullStuds :: number) <= 12, string.format(
+				"trap %s pulls %s studs; over a dozen is a teleport",
+				item.Id, tostring(s.PullStuds)))
+		end
+		assert(type(s.DropsPod) == "boolean", item.Id .. " does not say whether it drops a pod")
+		assert(#WeaponData.StatLines(item) > 0, item.Id .. " has no shop stats")
+	end
+	assert(trapCount == 5, string.format(
+		"the approved shelf has five traps, one per biome; this file has %d", trapCount))
+end
 
 --==============================================================================
 -- THE ORDER OF THE DURATIONS IS THE CONTRACT

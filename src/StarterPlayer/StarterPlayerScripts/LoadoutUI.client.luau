@@ -4182,9 +4182,18 @@ RunService.Heartbeat:Connect(function()
 	for _, slot in ipairs(hotSlots) do
 		if slot.button.Visible and slot.tool and slot.item then
 			local readyAt = tonumber(slot.tool:GetAttribute(READY_AT))
-			local total = if slot.item.Category == "trap"
-				then WeaponData.Trap.PlaceCooldownSeconds
-				else slot.item.Cooldown
+			--==========================================================
+			-- THE TRAP'S OWN COOLDOWN, NOT "THE TRAP'S"
+			--
+			-- Five traps, five cooldowns, from 15 seconds to 30. The bar drains
+			-- over the one this slot's item actually has, so a Starlock does not
+			-- draw a Bramblejaw's clock.
+			--==========================================================
+			local total = slot.item.Cooldown
+			if slot.item.Category == "trap" then
+				local spec = WeaponData.TrapSpec(slot.item)
+				total = if spec then spec.PlaceCooldownSeconds else 0
+			end
 			local left = if readyAt then readyAt - now else 0
 			if left > 0 and total > 0 then
 				slot.cooldown.Size = UDim2.fromScale(1, math.min(1, left / total))

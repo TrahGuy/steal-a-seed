@@ -47,6 +47,21 @@ local ATTR = GameConfig.Attributes
 -- decided to look.
 local RED = Color3.fromRGB(255, 64, 58)
 local OUTLINE = Color3.fromRGB(48, 6, 6)
+--==============================================================================
+-- AND AMBER, FOR THE TRAPS THAT ONLY SLOW YOU
+--
+-- Four of the five traps on Marigold's shelf do not root anybody: a Mirecoil
+-- leaves them wading and a Starlock drags them back and then lets them crawl. A
+-- red TRAPPED over a player who is still walking, still steering and still able
+-- to swing would be the label lying about the state -- so a slow says SLOWED, in
+-- amber, and the two are told apart at a glance across a fight.
+--
+-- The KIND comes off the victim as an attribute, written by CombatService beside
+-- the deadline and cleared with it. This file decides nothing about it.
+--==============================================================================
+local AMBER = Color3.fromRGB(255, 186, 72)
+local AMBER_OUTLINE = Color3.fromRGB(58, 32, 2)
+local WORDS = { root = "TRAPPED", slow = "SLOWED" }
 
 local LABEL_NAME = "SeedTrapCountdown"
 -- Above the head and above whatever name label the platform is drawing there:
@@ -133,11 +148,27 @@ local function step()
 	local any = false
 	for player, entry in pairs(shown) do
 		local endsAt = tonumber(player:GetAttribute(ATTR.TrappedUntil))
-		local held = player:GetAttribute(ATTR.Trapped) == true
-		if not held or not endsAt or not entry.billboard.Parent
+		--==================================================================
+		-- THE DEADLINE IS WHAT MAKES A LABEL, NOT THE ROOT
+		--
+		-- This read `Trapped == true`, which is the ROOT's attribute -- so a
+		-- slowed player had a deadline and no countdown. The deadline is the one
+		-- thing every trap effect writes, and the kind beside it is what the word
+		-- and the colour come from.
+		--==================================================================
+		local kind = player:GetAttribute(ATTR.TrappedKind)
+		local word = WORDS[if type(kind) == "string" then kind else "root"]
+		if not endsAt or not word or not entry.billboard.Parent
 			or not entry.adorn.Parent then
 			clear(player)
 		else
+			if kind == "slow" then
+				entry.text.TextColor3 = AMBER
+				local stroke = entry.text:FindFirstChildOfClass("UIStroke")
+				if stroke then
+					stroke.Color = AMBER_OUTLINE
+				end
+			end
 			local left = endsAt - now
 			if left <= 0 then
 				--==============================================================
@@ -148,9 +179,9 @@ local function step()
 				-- round trip away; counting into negatives in the gap would be
 				-- the client inventing state the server has not confirmed.
 				--==============================================================
-				entry.text.Text = "TRAPPED 0.0s"
+				entry.text.Text = word .. " 0.0s"
 			else
-				entry.text.Text = string.format("TRAPPED %.1fs", left)
+				entry.text.Text = string.format("%s %.1fs", word, left)
 			end
 			any = true
 		end
@@ -162,9 +193,8 @@ local function step()
 end
 
 local function refresh(player: Player)
-	local held = player:GetAttribute(ATTR.Trapped) == true
 	local endsAt = tonumber(player:GetAttribute(ATTR.TrappedUntil))
-	if not held or not endsAt then
+	if not endsAt then
 		clear(player)
 		return
 	end
