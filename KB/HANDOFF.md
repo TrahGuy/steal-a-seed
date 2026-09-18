@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## The Bag on a phone: whole cards, a real button, and the strip steps aside — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## The Bag on a phone: whole cards, a real button, and the strip steps aside — 2026-09-18 (CLAUDE)  (COMMITTED f4ab312, APPROVED 2026-09-18)
 
 **Owner request:** on an iPhone 11 (~896x414) the Bag's equipment cards were cut off
 under its header, the open Bag fought the hotbar, card names and buttons were small
@@ -125,7 +125,7 @@ tray; title, both tabs and the close button apart and clear of the rail rows. Th
   the Bag shut. Assigning by dragging a card OUT of the Bag works: the strip shows for
   the drag.
 
-## One HUD contract for every screen, and a phone that is not a small desktop — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## One HUD contract for every screen, and a phone that is not a small desktop — 2026-09-18 (CLAUDE)  (COMMITTED 93ec109, APPROVED 2026-09-18)
 
 **Owner request:** fix the mobile HUD across common landscape phones and small
 screens -- no overlaps, clipping or oversized controls -- without redesigning
@@ -315,7 +315,7 @@ preview; the spec rerun is pending until Studio is back in Edit (it was in Play)
   pointer are not HUD groups and were not re-laid; a prompt at the very top-left of
   the view can still pass under the compact row.
 
-## The countdown you can see from beside a Colossal, and a PICK UP you can reach — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## The countdown you can see from beside a Colossal, and a PICK UP you can reach — 2026-09-18 (CLAUDE)  (COMMITTED 1f99d6f, APPROVED 2026-09-18)
 
 **Owner request:** the planted-pod hatch countdown could not be seen reliably on a
 phone; and a Titan or Colossal plant's pickup interaction sat so deep in or so far
@@ -480,7 +480,7 @@ probe: Studio held two copies of the probe LocalScript, so each run built every
 fixture twice. PlantUI's build ran once per model (instrumented and removed), one
 billboard each.
 
-## The biome is a word now, and nothing sits above the money — 2026-09-18 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## The biome is a word now, and nothing sits above the money — 2026-09-18 (CLAUDE)  (COMMITTED b81ba97, APPROVED 2026-09-18)
 
 **Owner request:** the biome-entry notice shows only the biome's name -- small,
 bare outlined text, briefly, then a fade -- and the status text above the Cash and
@@ -619,7 +619,7 @@ measured geometry -- see the gaps below.
   * **The Training Rush readout is gone with the line.** Rush itself is untouched and
     TreadmillService still publishes it; nothing on this HUD reports it any more.
 
-## BETA-READINESS AUDIT — 2026-09-17 (CLAUDE)  (VERDICT: READY FOR CLOSED BETA AFTER ONE DASHBOARD FIX)
+## BETA-READINESS AUDIT — 2026-09-17 (CLAUDE)  (VERDICT: READY FOR CLOSED BETA AFTER ONE DASHBOARD FIX)  (COMMITTED 850ec1a)
 
 **Scope:** the whole game as the working tree stands tonight, including the five
 traps, Walk Mode, the guardian voices, the pod lifetime change and both audio
@@ -818,7 +818,7 @@ deleted-in-tree exactly as it was found.
   5. Final visual approval of everything still uncommitted -- traps, Walk Mode,
      guardian voices, the pod lifetime, and both audio passes.
 
-## A bed for the night, and a chase worth running from — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## A bed for the night, and a chase worth running from — 2026-09-17 (CLAUDE)  (COMMITTED 13a81b1, APPROVED 2026-09-18)
 
 **Owner request:** "also wire those 2" -- the two music beds found while wiring the
 eighteen cues below.
@@ -911,7 +911,7 @@ own first minute and is faded out at dawn, which is the right shape for a scene.
   * **The two beds against each other, and the chase over both.** Levels are the
     house method -- designed over measured peak -- and the mix is the owner's ears.
 
-## Eighteen more cues, and nothing in the game is waiting on a recording — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## Eighteen more cues, and nothing in the game is waiting on a recording — 2026-09-17 (CLAUDE)  (COMMITTED 5cd9534, APPROVED 2026-09-18)
 
 **Owner request:** "i imported another 18 sfx, wire them".
 
@@ -1016,7 +1016,7 @@ held note off mid-ring.
 19:58 and 20:00, after the eighteen. The owner asked for both the same evening --
 see the entry above this one.
 
-## The monster has a voice now — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## The monster has a voice now — 2026-09-17 (CLAUDE)  (COMMITTED 1cce11d, APPROVED 2026-09-18)
 
 **Owner request:** "wire the new sfx i added".
 
@@ -1135,7 +1135,7 @@ The `task.defer` history in that comment is preserved; it is still the wrong too
     has no default wake on purpose, so they are quiet rather than wearing another
     creature's voice.
 
-## No word on a pod, and a pod that waits for the night — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## No word on a pod, and a pod that waits for the night — 2026-09-17 (CLAUDE)  (COMMITTED e022a09, APPROVED 2026-09-18)
 
 **Owner request:** "remove the colossal text above the pod, and i noticed the pods is
 still despawning, they should remain until night reset".
@@ -1208,7 +1208,7 @@ identical to disk that way before anything was run.
   * **A pod left on the road all the way to dusk, in Play.** The timer's absence is
     proven statically; the sweep that replaces it is the same one CycleSpec covers.
 
-## Five traps, and a switch that says you are walking — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+## Five traps, and a switch that says you are walking — 2026-09-17 (CLAUDE)  (COMMITTED 716c68d, APPROVED 2026-09-18)
 
 **Owner request:** turn the one Bramblejaw into five permanent trap unlocks, one per
 biome, without a second combat controller or a second inventory; and add a compact
