@@ -523,6 +523,35 @@ local function provoke(nest: Nest, thief: Player)
 	-- WAKE, ON A DELAY. The delay is the head start, and it is the whole skill
 	-- of a raid.
 	if nest.state == "asleep" then
+		--==================================================================
+		-- THE ROAR, WHICH IS THE ONLY WARNING A THIEF GETS
+		--
+		-- Before 2026-09-17 a parent woke in silence: the head start was 1.2
+		-- seconds of a monster standing up behind you with nothing to hear,
+		-- and a raider facing away learned about it when it arrived. The
+		-- sound does not change the rules -- the delay, the speed and the
+		-- rage are all exactly as they were -- it just says out loud what
+		-- already happened.
+		--
+		-- HERE, AND NOT AT THE Asleep FLIP. There are two ways out of this
+		-- branch and only one of them clears Asleep in this tick; the other
+		-- clears it 1.2 seconds later in the tick's waking -> chasing step.
+		-- Both are the same event to a player, so the roar goes where the
+		-- event is: the moment the nest was robbed. It is also why this sits
+		-- above the branch rather than in each side of it.
+		--
+		-- ONE PER WAKE. `provoke` is called on every theft, but a nest that
+		-- is already chasing, returning or hauling never enters this branch,
+		-- so a second pod out of the same nest does not roar again.
+		--
+		-- Server-side, like every other one-shot tied to a moment the server
+		-- owns: one Sound at the nest that everybody in earshot hears at the
+		-- same instant, instead of a remote to each of them. See SoundKit.
+		--==================================================================
+		local roar = SoundKit.parentCue(nest.biome.Id, "Wake")
+		if roar then
+			SoundKit.emit(roar, nest.root)
+		end
 		if qualifiesForHeadStart(nest, thief) then
 			nest.state = "waking"
 			nest.stateUntil = os.clock() + P.WakeDelaySeconds
@@ -859,7 +888,15 @@ local function throwPlayer(nest: Nest, player: Player)
 		end
 	end
 
-	SoundKit.emit("Grab", nest.root)
+	--==========================================================================
+	-- THE SWING THAT LANDS, IN THIS BIOME'S VOICE
+	--
+	-- `Grab` is still the fallback and still the right sound for a hand closing
+	-- on somebody, but Greenhollow and Tanglemire have a recording of their own
+	-- now and every other biome gets the claw swipe. One line, because the
+	-- choosing is data -- see GameConfig.Sfx.ParentVoices.
+	--==========================================================================
+	SoundKit.emit(SoundKit.parentCue(nest.biome.Id, "Hit") or "Grab", nest.root)
 
 	humanoid.PlatformStand = true
 	task.wait()

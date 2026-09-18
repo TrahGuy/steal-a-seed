@@ -1,5 +1,124 @@
 # Steal a Seed — Session Handoff
 
+## The monster has a voice now — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
+
+**Owner request:** "wire the new sfx i added".
+
+### What was found, before anything was wired
+
+Eight audio assets in the account's inventory with no row in `GameConfig.Sfx.Cues`
+and, in the same order, the eight newest uploads. Each one matches a WAV still in
+`sfx/` from 2026-08-27, and every id **loads in Studio with a TimeLength equal to
+its WAV to the hundredth of a second** -- which is what proves the id/file pairing
+rather than the filename suggesting it.
+
+They are the first sounds in this game that belong to ONE CREATURE rather than to
+the game, and "biome 1" in three of the names is GREENHOLLOW -- the mossy brute in
+`ParentModel`, the only parent without a name of its own.
+
+### Measured, not guessed
+
+Same treatment the other fourteen cues got, `sfx/` WAV by WAV:
+
+| cue | file | peak | window | why |
+| --- | --- | ---: | --- | --- |
+| ParentHit | Attack Claw Swipe & Jaw Snap | 100% | 0.12 +1.00 | 140ms of air, claw at 0.18 |
+| ParentHitGreenhollow | attack hit biome 1 | 100% | +0.80 | second take at 0.92, cut |
+| ParentHitTanglemire | attack hit miremaw | 100% | +1.20 | second take at 1.34, cut |
+| ParentWakeGreenhollow | biome 1 aggro trigger | 100% | +1.40 | content ends 1.32 |
+| ParentWakeDustbowl | brambleback aggro wake up | 100% | +1.60 | content ends 1.52 |
+| ParentWakeTanglemire | miremaw aggro trigger | 100% | +1.55 | content ends 1.46 |
+| ParentStepDustbowl | brambleback heavy stomp chasegait | 66% | +0.55 | ONE stomp, not a gait |
+| ParentSleepDustbowl | brambleback sleeping | 78% | none | the gap IS the next breath |
+
+Levels are the designed ones divided by the measured peak, so the two quiet files
+carry gain (0.76 and 0.45) and the six at full scale do not. Two of the renders
+hold a SECOND TAKE of their own hit a beat later, which would have played as an
+echo nobody recorded; `clip` cuts both.
+
+### Four roles, one table, no branches
+
+`GameConfig.Sfx.ParentVoices` is keyed by the parent's **BiomeId** -- not Species,
+because only the named four carry Species and Greenhollow's brute is the one
+creature with both a hit and a roar. Four roles: `Sleep`, `Step`, `Wake`, `Hit`.
+A missing role falls through to `Default`, and a missing default is silence:
+
+    greenhollow  Wake + Hit of its own; generic sleep and step
+    dustbowl     Sleep + Step + Wake of its own; the generic claw for its hit
+    tanglemire   Wake + Hit of its own; generic sleep and step
+    emberroot    everything generic, and no roar -- nobody has recorded one
+    starbloom    the same
+
+`SoundKit.parentCue(biomeId, role)` does the falling back and returns a CUE NAME,
+so a caller hands it straight to `play`/`emit`/`attach` and gets that row's window,
+bus and range. Every step is decided by `cueOf`, so a role pointing at a blank id
+behaves exactly like a missing role.
+
+**THE WAKE IS A NEW MOMENT.** Before today a parent woke in silence: the head start
+was 1.2 seconds of a monster standing up behind you with nothing to hear. The roar
+goes in `provoke`, above the branch, because the two ways out of it flip `Asleep`
+1.2 seconds apart and they are the same event to a player. It fires once per wake --
+a nest already chasing never re-enters that branch -- and it changes no rule.
+
+### Also wired: UIClick, which four call sites have been asking for
+
+`LoadoutUI` (slot returned, assigned, swapped) and `PlantPickUI` (pick a plant) all
+call `SoundKit.play("UIClick")` and **there has never been a row called that**, so
+four presses have been silent since they were written -- silently, because
+`SoundKit.report` only lists rows whose id is blank and a row that does not exist
+has no id to be blank. It is now a pointer at the card click, same window; when a
+hotbar click of its own is recorded, that row takes the id. **One line, easy to
+drop if it is not wanted.**
+
+### A bug this turned up in Play: streaming parents were never dressed
+
+`SoundCues.track` waited ten seconds for `HumanoidRootPart` and then gave up
+forever. This place has **StreamingEnabled**, so a parent further away than the
+streaming radius at join arrives as a TAGGED MODEL WITH NO PARTS -- Starbloom's was
+exactly that in the running session -- and walking all the way to it would not have
+fixed it, for the rest of that session, with nothing logged. It is now one
+`ChildAdded` connection per tagged parent, held for as long as the tag is, so a body
+arriving late gets dressed and a body that streams out and back gets dressed again.
+The `task.defer` history in that comment is preserved; it is still the wrong tool.
+
+### Verified
+
+  * **Specs: ParentVoiceSpec (new, 118), SoundLevelSpec 28, CycleSpec 31,
+    GuardianConfiscateSpec 88, TrapSystemSpec 67 -- all green.** ParentVoiceSpec
+    asserts each id, that every window ends inside its own asset, the loop/one-shot
+    split, 22 biome-and-role resolutions including the fall-throughs and the
+    no-biome case, and -- the check that would have caught UIClick -- that **every
+    literal cue name played anywhere in the game is a row in the table**.
+  * **Play, the client: the Brambleback breathes its own breath.** Dustbowl's parent
+    wears `SeedLoop_ParentSleepDustbowl` (playing, 0.45) and NO looping step;
+    Greenhollow's and Tanglemire's wear the generic `ParentSleep` + `ChaseStep`
+    exactly as before.
+  * **Play, the streaming fix, as a fixture:** a parent tagged with its body arriving
+    TWELVE seconds later was dressed; destroying and re-adding the body dressed it
+    again.
+  * **Play, the per-stride stomp:** 36 studs walked produced **12 emits of
+    `SeedCue_ParentStepDustbowl`** and no loop -- a branch that existed for a year
+    and had never run, because ChaseStep is a looping recording.
+  * **Play, a real raid, through DebugService's WakeNearest (the same `provoke` a
+    theft takes):** `+0.3s SeedCue_ParentWakeGreenhollow vol=0.70`, then
+    `+2.2s SeedCue_ParentHitGreenhollow vol=0.75` and `+2.2s SeedCue_Throw vol=0.85`,
+    all on `Parent_greenhollow`. The roar, the swing and the launch, in order, in
+    that biome's own voice.
+  * `rojo build` succeeds; `git diff --check` clean. The probe LocalScript and the
+    temporary spec folder are both deleted.
+
+### Not verified
+
+  * **Whether they sound RIGHT.** Every number above is a measurement; the mix is the
+    owner's ears. The levels most likely to be wrong are the two wakes at 0.70/170
+    studs, which are deliberately the loudest and furthest-carrying cues any parent has.
+  * **Dustbowl's and Tanglemire's roars and Miremaw's hit, live.** The probe provokes
+    the NEAREST nest and the player spawns in Greenhollow. Same one line of code,
+    same table, and both are asserted in the spec.
+  * **Emberroot and Starbloom still do not roar.** There is no recording; the table
+    has no default wake on purpose, so they are quiet rather than wearing another
+    creature's voice.
+
 ## No word on a pod, and a pod that waits for the night — 2026-09-17 (CLAUDE)  (UNCOMMITTED, FOR APPROVAL)
 
 **Owner request:** "remove the colossal text above the pod, and i noticed the pods is

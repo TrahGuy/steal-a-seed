@@ -97,6 +97,9 @@ export type Cue = {
 -- rather than a cast at every call site.
 local CUES: { [string]: Cue } = (SFX.Cues :: any)
 local MIXER: { [string]: number } = (SFX.Mixer :: any)
+-- Which creature makes which noise. Two levels of string keys and a
+-- fallback row, so the same cast applies.
+local VOICES: { [string]: { [string]: string } } = (SFX.ParentVoices :: any)
 
 local GROUP_NAMES: { [string]: string } = {
 	Music = "SeedMusic",
@@ -193,6 +196,34 @@ SoundKit.cue = cueOf
 
 function SoundKit.has(name: string): boolean
 	return cueOf(name) ~= nil
+end
+
+--==============================================================================
+-- WHOSE VOICE, FOR A CUE THAT BELONGS TO ONE CREATURE
+--
+-- Four roles -- Sleep, Step, Wake, Hit -- resolved against the parent's biome
+-- and then against Default, and the answer is a CUE NAME rather than a Cue, so
+-- a caller can hand it straight to play, emit or attach and get the windowing,
+-- the bus and the range that row asked for.
+--
+-- A NAME THAT DOES NOT RESOLVE IS nil, NOT A GUESS. Every step of the way it is
+-- cueOf that decides -- so a role pointing at a row with a blank id falls
+-- through to Default exactly as a missing role does, and a blank Default is
+-- silence. That is the same property the whole table rests on, one level up: a
+-- creature with no roar makes no noise when it wakes, and nothing anywhere has
+-- to check for that.
+--==============================================================================
+function SoundKit.parentCue(biomeId: string?, role: string): string?
+	local row = if typeof(biomeId) == "string" then VOICES[biomeId] else nil
+	local named = if row then row[role] else nil
+	if named and cueOf(named) then
+		return named
+	end
+	local shared = if VOICES.Default then VOICES.Default[role] else nil
+	if shared and cueOf(shared) then
+		return shared
+	end
+	return nil
 end
 
 --==============================================================================

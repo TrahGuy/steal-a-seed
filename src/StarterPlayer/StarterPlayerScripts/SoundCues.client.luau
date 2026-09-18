@@ -138,18 +138,25 @@ type Voice = {
 	root: BasePart,
 	sleep: Sound?,
 	step: Sound?,
+	-- The cue the per-stride branch fires. Held because it is a different row
+	-- for a Brambleback than for Greenhollow's brute, and the Heartbeat below
+	-- must not have to work that out sixty times a second.
+	stepName: string?,
 	stepLooped: boolean,
 	walked: number,
 	at: Vector3,
 }
 
 local voices: { [Model]: Voice } = {}
--- Models being waited on. Without it, a tag that fires twice starts two waiters
--- on the same parent and it ends up wearing two of each Sound.
-local pending: { [Model]: boolean } = {}
+--==============================================================================
+-- ONE WATCHER PER PARENT, FOR AS LONG AS IT IS TAGGED
+--
+-- Not a flag saying "somebody is waiting": a live connection that dresses the
+-- parent EVERY time its body turns up. Which is more than once -- see below.
+--==============================================================================
+local watching: { [Model]: RBXScriptConnection } = {}
 
 local function untrack(model: Model)
-	pending[model] = nil
 	local voice = voices[model]
 	if voice then
 		if voice.sleep then
@@ -162,7 +169,65 @@ local function untrack(model: Model)
 	end
 end
 
-local function track(instance: Instance)
+--==============================================================================
+-- A PARENT CAN ARRIVE TWICE, AND THE SECOND TIME IS THE ONE THAT WAS MISSED
+--
+-- Two facts, and the second one was found in Play on 2026-09-17 with a
+-- StreamingEnabled place open:
+--
+--   1. THE TAG REACHES A CLIENT BEFORE THE RIG DOES. The parent is 74 to 122
+--      parts and they replicate over several frames, so GetInstanceAddedSignal
+--      fires on a Model that is still nearly empty.
+--
+--   2. WITH STREAMING, THE BODY COMES AND GOES FOR THE WHOLE SESSION. The
+--      tagged Model stays; its parts are sent when you get near and taken back
+--      when you leave. Four of the five parents in the running place had their
+--      rigs; Starbloom's was an EMPTY MODEL with the tag on it, and walking to
+--      Starbloom would not have fixed it.
+--
+-- The version this replaces waited ten seconds for HumanoidRootPart and then
+-- gave up forever, which answers (1) and gets (2) exactly backwards: a parent
+-- more than a streaming radius away at join was silent for that client for the
+-- rest of the session, no matter how close they later stood to it. Nothing
+-- errored and nothing warned -- a monster that breathes at some players and not
+-- at others looks like a sound that "doesn't always play".
+--
+-- A CONNECTION, NOT A DEADLINE. It costs one connection per tagged parent --
+-- five in this game -- it fires only when a child is added to a parent Model,
+-- and it re-dresses on every re-stream, because the Sounds went out with the
+-- root part they were parented to and the Heartbeat below has already dropped
+-- the voice by then.
+--
+-- AND NOT task.defer, WHICH WAS THE FIRST VERSION AND THREW. Deferring and
+-- calling itself again looks like "try again next frame" and is not:
+-- task.defer resumes LATER IN THE SAME CYCLE, so it re-ran eighty times inside
+-- one frame, never yielding long enough for a part to arrive, and died with
+-- "Maximum re-entrancy depth (80) exceeded calling task.defer".
+--==============================================================================
+local track: (Instance) -> ()
+
+local function watchFor(model: Model)
+	if watching[model] then
+		return
+	end
+	watching[model] = model.ChildAdded:Connect(function(child)
+		if child.Name == "HumanoidRootPart" and child:IsA("BasePart") then
+			track(model)
+		end
+	end)
+end
+
+-- The tag is gone, or the model is. Everything this client built for it goes.
+local function forget(model: Model)
+	local watcher = watching[model]
+	if watcher then
+		watcher:Disconnect()
+		watching[model] = nil
+	end
+	untrack(model)
+end
+
+function track(instance: Instance)
 	if not instance:IsA("Model") then
 		return
 	end
@@ -170,41 +235,11 @@ local function track(instance: Instance)
 	if voices[model] then
 		return
 	end
+	-- Before the early return as well as after it: a parent with no body yet is
+	-- exactly the one that needs watching.
+	watchFor(model)
 	local rootInstance = model:FindFirstChild("HumanoidRootPart")
 	if not (rootInstance and rootInstance:IsA("BasePart")) then
-		--======================================================================
-		-- WaitForChild, NOT task.defer. MEASURED, AND IT THREW.
-		--
-		-- The tag reaches a client BEFORE the rig does -- the parent is 87 parts
-		-- and they replicate over several frames, so GetInstanceAddedSignal
-		-- fires on a Model that is still nearly empty.
-		--
-		-- The first version of this deferred and called itself again, which
-		-- looks like "try again next frame" and is not. task.defer resumes
-		-- LATER IN THE SAME CYCLE, so it re-ran eighty times inside one frame,
-		-- never yielding long enough for a single part to arrive, and died:
-		--
-		--     Maximum re-entrancy depth (80) exceeded calling task.defer
-		--       Script 'SoundCues', Line 248 - function track
-		--
-		-- Which left the sleeping parent silent on any client that saw it
-		-- appear, and only on those -- a nest present at join was fine, so this
-		-- would have looked intermittent.
-		--
-		-- WaitForChild actually yields, so one waiter costs one thread and ends
-		-- either when the part arrives or after ten seconds.
-		--======================================================================
-		if pending[model] then
-			return
-		end
-		pending[model] = true
-		task.spawn(function()
-			local found = model:WaitForChild("HumanoidRootPart", 10)
-			pending[model] = nil
-			if found and found:IsA("BasePart") and model.Parent and not voices[model] then
-				track(model)
-			end
-		end)
 		return
 	end
 	local root = rootInstance :: BasePart
@@ -223,13 +258,33 @@ local function track(instance: Instance)
 		end
 	end
 
-	local stepCue = SoundKit.cue("ChaseStep")
+	--==========================================================================
+	-- THE BIOME CHOOSES THE VOICE
+	--
+	-- A Brambleback breathes like a Brambleback and lands like two tons of it;
+	-- Greenhollow's brute does neither. GameConfig.Sfx.ParentVoices holds which
+	-- creature gets which row and SoundKit.parentCue does the falling back, so
+	-- this reads one attribute and is told a cue name -- or nil, which is a
+	-- parent that makes no sound rather than a bug.
+	--
+	-- BiomeId IS ALREADY HERE. Every builder sets it before it parents the
+	-- model, so it replicates with the model rather than after it -- unlike the
+	-- root part, which this function already had to wait for. If it were ever
+	-- missing the worst case is the generic voice, not silence.
+	--==========================================================================
+	local biome = model:GetAttribute("BiomeId")
+	local biomeId = if typeof(biome) == "string" then biome else nil
+	local sleepName = SoundKit.parentCue(biomeId, "Sleep")
+	local stepName = SoundKit.parentCue(biomeId, "Step")
+	local stepCue = if stepName then SoundKit.cue(stepName) else nil
+	local loopedStep = stepCue ~= nil and stepCue.looped == true
 	local voice: Voice = {
 		model = model,
 		root = root,
-		sleep = SoundKit.attach("ParentSleep", root),
-		step = if stepCue and stepCue.looped then SoundKit.attach("ChaseStep", root) else nil,
-		stepLooped = stepCue ~= nil and stepCue.looped == true,
+		sleep = if sleepName then SoundKit.attach(sleepName, root) else nil,
+		step = if stepName and loopedStep then SoundKit.attach(stepName, root) else nil,
+		stepName = stepName,
+		stepLooped = loopedStep,
 		walked = 0,
 		at = root.Position,
 	}
@@ -242,7 +297,7 @@ end
 CollectionService:GetInstanceAddedSignal(TAG):Connect(track)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(function(instance)
 	if instance:IsA("Model") then
-		untrack(instance)
+		forget(instance :: Model)
 	end
 end)
 
@@ -252,6 +307,9 @@ RunService.Heartbeat:Connect(function()
 	end
 	for model, voice in pairs(voices) do
 		if not voice.root.Parent then
+			-- untrack, not forget: the body streamed out or was destroyed, and
+			-- either way the watcher stays so that a body arriving again gets
+			-- dressed again.
 			untrack(model)
 		else
 			-- Written by NestService and replicated. Not-false rather than true:
@@ -273,9 +331,9 @@ RunService.Heartbeat:Connect(function()
 				end
 			elseif awake then
 				voice.walked += moved
-				if voice.walked >= STUDS_PER_STEP then
+				if voice.walked >= STUDS_PER_STEP and voice.stepName then
 					voice.walked = 0
-					SoundKit.emit("ChaseStep", voice.root)
+					SoundKit.emit(voice.stepName, voice.root)
 				end
 			else
 				voice.walked = 0

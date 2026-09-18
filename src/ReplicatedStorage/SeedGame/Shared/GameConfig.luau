@@ -4399,6 +4399,22 @@ GameConfig.Sfx = {
 	--   ParentSleep       parent sleep sound.wav -- uploaded, and the only row
 	--                     below that already has its id.
 	--
+	-- AND THE EIGHT THE OWNER ADDED ON 2026-09-17, which are the first cues in this
+	-- game that belong to ONE CREATURE rather than to the game:
+	--
+	--   ParentHit              Attack Claw Swipe & Jaw Snap.wav
+	--   ParentHitGreenhollow   attack hit biome 1.wav
+	--   ParentHitTanglemire    attack hit miremaw.wav
+	--   ParentWakeGreenhollow  biome 1 aggro trigger.wav
+	--   ParentWakeDustbowl     brambleback aggro wake up.wav
+	--   ParentWakeTanglemire   miremaw aggro trigger.wav
+	--   ParentStepDustbowl     brambleback heavy stomp chasegait.wav
+	--   ParentSleepDustbowl    brambleback sleeping.wav
+	--
+	-- "biome 1" is GREENHOLLOW -- the mossy brute in ParentModel, which is the only
+	-- parent without a name of its own. Brambleback is Dustbowl's and Miremaw is
+	-- Tanglemire's. Which creature hears which is ParentVoices, under the cues.
+	--
 	-- TakePod, Grab, Throw and ChaseStep have no local WAV -- those five files
 	-- were deleted. THE UPLOADED ASSETS WERE NOT, and all five still load, so
 	-- they are wired from the account's own audio inventory rather than left
@@ -4450,6 +4466,28 @@ GameConfig.Sfx = {
 		},
 		-- 140ms of dead air before the click. Designed 0.30.
 		CardClick = {
+			id = "rbxassetid://113610810828248",
+			volume = 0.30, start = 0.12, clip = 0.20, jitter = 0.04, group = "UI",
+		},
+		--==================================================================
+		-- THE SAME CLICK, UNDER THE NAME FOUR CALL SITES ALREADY USE
+		--
+		-- LoadoutUI asks for "UIClick" when a slot is returned, assigned or
+		-- swapped, and PlantPickUI asks for it when you choose a plant to pick
+		-- up. THERE HAS NEVER BEEN A ROW CALLED THAT, so all four have been
+		-- silent since they were written -- and silently silent, because
+		-- SoundKit.report only lists rows whose id is blank and a row that does
+		-- not exist has no id to be blank. Each of those four presses already
+		-- flashes the slot it acted on, so the sound was the half that was
+		-- missing rather than the half that was wanted.
+		--
+		-- A POINTER AT CardClick, not a second recording: it is the same event
+		-- -- a press that did something -- and no click of the hotbar's own has
+		-- been recorded. When one is, this row takes the new id and nothing
+		-- else has to change. Its window is CardClick's because it is the same
+		-- asset, dead air and all.
+		--==================================================================
+		UIClick = {
 			id = "rbxassetid://113610810828248",
 			volume = 0.30, start = 0.12, clip = 0.20, jitter = 0.04, group = "UI",
 		},
@@ -4569,6 +4607,112 @@ GameConfig.Sfx = {
 			id = "rbxassetid://81143161269823",
 			volume = 0.47, range = 70, looped = true, group = "World",
 		},
+
+		--======================================================================
+		-- ONE CREATURE'S VOICE IS NOT ANOTHER'S
+		--
+		-- Everything above this line is a sound the GAME makes. These are sounds a
+		-- PARTICULAR MONSTER makes, which is a different kind of row: the
+		-- Brambleback's stomp is two tons landing on sand and Greenhollow's brute
+		-- does not have one. So they are named for the biome that owns them, and
+		-- ParentVoices below says who gets what -- a biome with no row of its own
+		-- keeps the generic sound it has today, which is why Emberroot and
+		-- Starbloom are absent here rather than silent in the game.
+		--
+		-- MEASURED OFF THE WAVs IN sfx/, the same way the fourteen above were, and
+		-- these eight came back in better shape: only two need gain and only the
+		-- claw swipe opens with dead air. What they DO need is CLIPPING. Four are
+		-- two- and three-second renders holding one usable hit, and two of them
+		-- hold a SECOND TAKE of that hit a beat later, which would otherwise play
+		-- as an echo nobody recorded.
+		--======================================================================
+		-- The generic attack, for any parent with no hit of its own. 3.00s holding
+		-- one swipe: 140ms of air, the claw at 0.18, over by 1.04. Peaks at 100%.
+		ParentHit = {
+			id = "rbxassetid://135685020427303",
+			volume = 0.75, start = 0.12, clip = 1.00, range = 140, group = "World",
+		},
+		-- Greenhollow's brute. Hits at 0.04, and AGAIN at 0.92 -- second take, cut.
+		ParentHitGreenhollow = {
+			id = "rbxassetid://76475963669343",
+			volume = 0.75, clip = 0.80, range = 140, group = "World",
+		},
+		-- Miremaw. Hits at 0.02, second take at 1.34, cut the same way.
+		ParentHitTanglemire = {
+			id = "rbxassetid://89258109602305",
+			volume = 0.75, clip = 1.20, range = 140, group = "World",
+		},
+
+		-- THE WAKE, which is the loudest thing any of them do and the furthest
+		-- carrying: it is the one sound in this game that means RUN, and it has to
+		-- reach whoever is still standing at the nest. Content ends at 1.32, 1.52
+		-- and 1.46; everything after that in each render is air.
+		ParentWakeGreenhollow = {
+			id = "rbxassetid://124160507544069",
+			volume = 0.70, clip = 1.40, range = 170, group = "World",
+		},
+		ParentWakeDustbowl = {
+			id = "rbxassetid://132556773572810",
+			volume = 0.70, clip = 1.60, range = 170, group = "World",
+		},
+		ParentWakeTanglemire = {
+			id = "rbxassetid://102762735296089",
+			volume = 0.70, clip = 1.55, range = 170, group = "World",
+		},
+
+		-- ONE STEP, NOT A GAIT. The file is called chasegait and it is 1.00s with a
+		-- single stomp inside the first 0.44 -- so looped = false, and SoundCues
+		-- fires it once per stride COVERED, which is the branch that was written
+		-- for exactly this case and has never run. Peaks at 66%: 0.50 designed,
+		-- ChaseStep's level, is 0.76 of gain.
+		ParentStepDustbowl = {
+			id = "rbxassetid://126905642164896",
+			volume = 0.76, clip = 0.55, range = 110, looped = false, group = "World",
+		},
+		-- A breath a second, looped. NO WINDOW: the silence after the breath is the
+		-- gap between breaths, and clipping it would make the Brambleback pant.
+		-- Peaks at 78%, so 0.35 designed -- ParentSleep's level -- is 0.45.
+		ParentSleepDustbowl = {
+			id = "rbxassetid://89288684316602",
+			volume = 0.45, range = 70, looped = true, group = "World",
+		},
+	},
+
+	--==========================================================================
+	-- WHICH CREATURE MAKES WHICH NOISE
+	--
+	-- Keyed by the parent model's BiomeId attribute, which every builder sets
+	-- BEFORE it parents the model -- so it replicates with the model and a client
+	-- never sees a parent whose biome it does not know yet.
+	--
+	-- FOUR ROLES, AND A ROW MAY FILL ANY OF THEM:
+	--
+	--   Sleep   the loop it breathes while it is asleep beside its nest
+	--   Step    one footfall, or a running loop if that is what was recorded
+	--   Wake    the roar the moment somebody robs it. THIS IS A NEW MOMENT --
+	--           nothing made a sound when a parent woke up before 2026-09-17
+	--   Hit     the swing that lands, at the instant it takes your pod
+	--
+	-- A MISSING ROLE FALLS THROUGH TO Default, and a missing Default is silence.
+	-- That is how three recordings for two creatures light up four biomes without
+	-- a branch anywhere: Emberroot's Forgemaw and Starbloom's Astralmaw keep the
+	-- generic sleep, the generic step and the generic swipe, and neither of them
+	-- roars, because nobody has recorded them roaring. The day somebody does, it
+	-- is one line here.
+	--
+	-- NOT Species. Every parent carries BiomeId; only the named four carry Species,
+	-- so keying on it would leave Greenhollow's brute -- the one creature that has
+	-- both a hit AND a roar -- unable to find either.
+	--==========================================================================
+	ParentVoices = {
+		Default = { Sleep = "ParentSleep", Step = "ChaseStep", Hit = "ParentHit" },
+		greenhollow = { Wake = "ParentWakeGreenhollow", Hit = "ParentHitGreenhollow" },
+		dustbowl = {
+			Sleep = "ParentSleepDustbowl",
+			Step = "ParentStepDustbowl",
+			Wake = "ParentWakeDustbowl",
+		},
+		tanglemire = { Wake = "ParentWakeTanglemire", Hit = "ParentHitTanglemire" },
 	},
 
 	--==========================================================================
