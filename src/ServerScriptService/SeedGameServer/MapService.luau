@@ -35,6 +35,7 @@ local BiomeData = require(Shared:WaitForChild("BiomeData"))
 -- try to start it -- MapService calls it during its own build.
 local MapDecor = require(script.Parent:WaitForChild("MapDecor"))
 local HubFairy = require(script.Parent:WaitForChild("HubFairy"))
+local WeatherTeaser = require(Shared:WaitForChild("WeatherTeaser"))
 
 local MapService = {}
 -- First. Every other service reads the world this builds.
@@ -1713,6 +1714,7 @@ function MapService.Init()
 	--== FIELD DRESSING ==--
 	-- After the plots, so the beds are placed around them rather than under.
 	MapDecor.dressField(props)
+	WeatherTeaser.Build(props)
 
 	--== THE ROAD'S SHUTTER ==--
 	-- After the props, so it is the last thing at the mouth and nothing dressed
