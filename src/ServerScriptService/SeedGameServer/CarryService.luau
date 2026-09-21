@@ -40,6 +40,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -51,6 +52,7 @@ local NestService = require(script.Parent:WaitForChild("NestService"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local GuardianCatch = require(script.Parent:WaitForChild("GuardianCatch"))
+local CarryGuard = require(script.Parent:WaitForChild("CarryGuard"))
 
 local ATTR = GameConfig.Attributes
 local SAVE = GameConfig.Save
@@ -91,6 +93,11 @@ export type Held = {
 }
 
 local carried: { [Player]: Held } = {}
+-- Every carrier's travel budget; see CarryGuard and checkCarrier.
+local guards: { [Player]: CarryGuard.State } = {}
+-- When each player's last carry ended, for CarryGuard.SlackCooldownSeconds.
+local guardEnded: { [Player]: number } = {}
+local lastGuardWarn: { [Player]: number } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 local perPlayer: { [Player]: { RBXScriptConnection } } = {}
 local prompted: { [Model]: true } = {}
@@ -779,6 +786,11 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		return false
 	end
 
+	-- The travel budget starts HERE, at the nest, not at the next check: a carrier
+	-- who teleports in the same frame as the take is measured from where they
+	-- took it. No slack if they were carrying moments ago. See CarryGuard.
+	guards[player] = CarryGuard.new(root.Position,
+		os.clock() - (guardEnded[player] or -math.huge) < CarryGuard.SlackCooldownSeconds)
 	-- Only the pod in both arms: a plant that was being held goes to the Backpack.
 	putPlantsAway(player)
 	publish(player)
@@ -2024,6 +2036,71 @@ function CarryService.Init()
 	table.clear(prompted)
 end
 
+--==============================================================================
+-- THE CARRY GUARD, APPLIED
+--
+-- CarryGuard holds the rule: a pod cannot travel faster than its carrier's own
+-- server-set WalkSpeed allows. This applies it every frame to every carrier,
+-- and once more right before a pod is banked, so a teleport into the safe zone
+-- is caught even if it landed between two frames of the check.
+--
+-- THE CORRECTION IS TO PUT THEM BACK, NOT TO PUNISH. The carrier is moved to
+-- the last place the server saw them honestly, still holding the pod, with no
+-- saved travel (CarryGuard.reset). An exploiter gains nothing and can try
+-- forever; an honest player whose connection stalled longer than
+-- CarryGuard.CapSeconds loses a few steps, not a pod. The one server move this can undo is PlotService placing a queued
+-- carrier on a newly freed plot -- which would otherwise bank the pod for free,
+-- so putting them back on the road is the right answer there too.
+--
+-- Returns false when it had to put the carrier back.
+--==============================================================================
+local function checkCarrier(player: Player, dt: number): boolean
+	if not carried[player] then
+		if guards[player] then
+			guards[player] = nil
+			guardEnded[player] = os.clock()
+		end
+		return true
+	end
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if not (character and root and root:IsA("BasePart") and humanoid) then
+		return true
+	end
+	local state = guards[player]
+	if not state then
+		guards[player] = CarryGuard.new(root.Position)
+		return true
+	end
+	local ok, moved = CarryGuard.step(state, root.Position, humanoid.WalkSpeed, dt)
+	if ok then
+		return true
+	end
+	local back = state.at
+	local body = character :: Model
+	local part = root :: BasePart
+	pcall(function()
+		body:PivotTo(CFrame.new(back) * part.CFrame.Rotation)
+		part.AssemblyLinearVelocity = Vector3.zero
+	end)
+	CarryGuard.reset(state, back)
+	-- Named in the server log, at most every five seconds per player, so the
+	-- owner can see who is trying without an exploiter flooding the console.
+	local now = os.clock()
+	if now - (lastGuardWarn[player] or -math.huge) >= 5 then
+		lastGuardWarn[player] = now
+		warn(string.format(
+			"[Seed/CarryService] %s moved %.0f studs while carrying, more than WalkSpeed %.0f "
+				.. "allows; put back where the server last saw them.",
+			player.Name, moved, humanoid.WalkSpeed))
+	end
+	return false
+end
+
+-- Exposed for the spec and for a Studio probe; nothing else calls it.
+CarryService.CheckCarrier = checkCarrier
+
 function CarryService.Start()
 	--==========================================================================
 	-- THE SEAM POINTS THIS WAY BECAUSE THE REQUIRE DOES
@@ -2127,6 +2204,9 @@ function CarryService.Start()
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player)
 		forget(player)
 		carried[player] = nil
+		guards[player] = nil
+		guardEnded[player] = nil
+		lastGuardWarn[player] = nil
 		-- The gate closes with the session. PlayerDataService writes the last
 		-- snapshot that was allowed; nothing after this may add to it.
 		armed[player] = nil
@@ -2144,17 +2224,35 @@ function CarryService.Start()
 	-- frames without ever touching, and the safe zone is a REGION rather than a
 	-- part.
 	running = true
+	-- Every carrier, every frame. Six players at most, a handful of vector maths
+	-- each; carriers who stopped carrying drop out of the table here.
+	table.insert(serviceConnections, RunService.Heartbeat:Connect(function(dt: number)
+		for player in pairs(carried) do
+			checkCarrier(player, dt)
+		end
+		for player in pairs(guards) do
+			if not carried[player] then
+				guards[player] = nil
+				guardEnded[player] = os.clock()
+			end
+		end
+	end))
 	task.spawn(function()
 		while running do
 			task.wait(SAFE_CHECK_SECONDS)
 			for player in pairs(carried) do
-				local character = player.Character
-				local root = character and character:FindFirstChild("HumanoidRootPart")
-				if root and root:IsA("BasePart")
-					and MapService.IsInSafeZone(root.Position) then
-					local ok, err = pcall(bank, player)
-					if not ok then
-						warn("[Seed/CarryService] banking failed: " .. tostring(err))
+				-- The guard first, with no new travel: a carrier who arrived
+				-- faster than they can run is put back on the road, and the
+				-- position below is then the corrected one.
+				if checkCarrier(player, 0) then
+					local character = player.Character
+					local root = character and character:FindFirstChild("HumanoidRootPart")
+					if root and root:IsA("BasePart")
+						and MapService.IsInSafeZone(root.Position) then
+						local ok, err = pcall(bank, player)
+						if not ok then
+							warn("[Seed/CarryService] banking failed: " .. tostring(err))
+						end
 					end
 				end
 			end
