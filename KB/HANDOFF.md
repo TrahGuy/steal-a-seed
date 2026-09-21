@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Guardian ragdoll restored: the body decides, and a thrown-out body lands limp — 2026-09-21 (CLAUDE)
+## Guardian ragdoll restored: the body decides, and a thrown-out body lands limp — 2026-09-21 (CLAUDE)  (COMMITTED 2226fd8)
 
 **Owner request:** "it seems the ragdoll when hit by a guardian is gone, can you
 restore it"
