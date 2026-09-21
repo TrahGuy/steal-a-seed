@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Phones open in landscape: StarterGui.ScreenOrientation = LandscapeSensor — 2026-09-21 (CLAUDE)
+## Phones open in landscape: StarterGui.ScreenOrientation = LandscapeSensor — 2026-09-21 (CLAUDE)  (COMMITTED 2729205)
 
 **Owner report:** "tested it on my realme 8 pro, i need to turn on auto rotate to
 play it landscape, it still on portrait default"
