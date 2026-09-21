@@ -1,43 +1,9 @@
 --!strict
--- Steal a Seed :: DebugService
---
---==============================================================================
--- THE DEVELOPER CONSOLE
---
--- Sets Speed, mints Cash, spawns pods, moves the player, restocks nests. In a
--- game whose whole progression is Speed and Cash, that is every exploit in the
--- book behind one RemoteEvent -- so THE GATE IS THE FEATURE, and it is the
--- first thing in this file for that reason.
---
--- Allowed: Studio (a private session by definition), the place owner on a live
--- server, and anybody explicitly listed in GameConfig.Debug.UserIds. The check
--- runs HERE, on the server, before the payload is read. The client hides the
--- panel from everybody else, but hiding a panel is a courtesy and a rule
--- enforced only on the client is not a rule.
---
---==============================================================================
--- IT IS EXEMPT FROM RULE 6, OUT LOUD
---
--- Cash mints in EconomyService and nowhere else. This file mints cash, and that
--- is a deliberate exception rather than an oversight: a debug console is not
--- part of the economy, it is a way to stand outside it. The exception is safe
--- only because it CANNOT RUN FOR A PLAYER -- which is the same sentence as the
--- gate above, and the reason that gate is not negotiable.
---
--- If the gate is ever loosened, this becomes a second faucet and Rule 6 is gone.
---
---==============================================================================
--- EVERY ARGUMENT IS A LIE UNTIL CHECKED
---
--- Rule 4. The sender is engine-stamped and can be trusted; nothing else can.
--- Each handler validates its own payload -- a number that is actually a number,
--- a species that actually exists, a weight inside the real range -- because
--- "only I can call it" is an argument that stops being true the moment somebody
--- adds a UserId.
---==============================================================================
+-- Studio-only server diagnostics. The beta has no debug panel, shortcut or
+-- DebugCommand remote. RunAction is retained for isolated Edit specs and trusted
+-- Studio command-bar checks; published servers refuse it before any handler runs.
 
 local CollectionService = game:GetService("CollectionService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -60,36 +26,9 @@ local DebugService = {}
 -- Last, so everything it drives is already up.
 DebugService.Priority = 90
 
-local connections: { RBXScriptConnection } = {}
-
 local function log(message: string)
 	print("[Seed/DebugService] " .. message)
 end
-
---==============================================================================
--- THE GATE
---==============================================================================
-local function isAllowed(player: Player): boolean
-	if not GameConfig.Debug.Enabled then
-		return false
-	end
-	if RunService:IsStudio() then
-		return true
-	end
-	-- A group-owned place has a CreatorId that is the GROUP, so this matches
-	-- nobody there. That is what UserIds is for.
-	if game.CreatorType == Enum.CreatorType.User and player.UserId == game.CreatorId then
-		return true
-	end
-	for _, id in ipairs(GameConfig.Debug.UserIds) do
-		if player.UserId == id then
-			return true
-		end
-	end
-	return false
-end
-
-DebugService.IsAllowed = isAllowed
 
 --==============================================================================
 -- SMALL VALIDATORS, USED BY EVERY HANDLER
@@ -447,9 +386,11 @@ ACTIONS.Snapshot = function(player, _payload)
 end
 
 --==============================================================================
--- The handlers without the remote, for specs: no gate and no reply. Server-only,
--- so nothing a client sends can reach it.
+-- No client entry point. Even server-side callers may run these only in Studio.
 function DebugService.RunAction(player: Player, action: string, payload: { [string]: any }?): string?
+	if not RunService:IsStudio() then
+		return nil
+	end
 	local handler = ACTIONS[action]
 	if not handler then
 		return nil
@@ -460,65 +401,11 @@ end
 function DebugService.Init()
 end
 
+-- Kept for the existing service lifecycle; neither method wires a remote.
 function DebugService.Start()
-	local seedGame = ReplicatedStorage:WaitForChild("SeedGame")
-	local remotes = seedGame:WaitForChild("Remotes")
-	local channel = remotes:FindFirstChild(GameConfig.Remotes.DebugCommand)
-	if not (channel and channel:IsA("RemoteEvent")) then
-		warn("[Seed/DebugService] no DebugCommand remote; console is off")
-		return
-	end
-
-	table.insert(connections, (channel :: RemoteEvent).OnServerEvent:Connect(
-		function(player: Player, action: any, payload: any)
-			--==================================================================
-			-- THE GATE, BEFORE THE PAYLOAD IS EVEN LOOKED AT
-			--==================================================================
-			if not isAllowed(player) then
-				-- Logged, because an unauthorised call is either a bug in the
-				-- client gate or somebody probing the remote, and both are
-				-- things to know about.
-				warn(string.format(
-					"[Seed/DebugService] REFUSED debug command from %s (%d)",
-					player.Name, player.UserId))
-				return
-			end
-			if type(action) ~= "string" then
-				return
-			end
-			local handler = ACTIONS[action]
-			if not handler then
-				log(string.format("%s asked for unknown action %q", player.Name, action))
-				return
-			end
-			local safePayload: { [string]: any } = if type(payload) == "table"
-				then payload
-				else {}
-			local ok, result = pcall(handler, player, safePayload)
-			if not ok then
-				warn(string.format("[Seed/DebugService] %s failed: %s", action, tostring(result)))
-				;(channel :: RemoteEvent):FireClient(player, action, "failed: " .. tostring(result))
-				return
-			end
-			log(string.format("%s: %s -> %s", player.Name, action, tostring(result)))
-			;(channel :: RemoteEvent):FireClient(player, action, tostring(result))
-		end))
-
-	log(string.format("Ready. %d action(s); Studio and the place owner only.",
-		(function()
-			local n = 0
-			for _ in pairs(ACTIONS) do
-				n += 1
-			end
-			return n
-		end)()))
 end
 
 function DebugService.Stop()
-	for _, c in ipairs(connections) do
-		c:Disconnect()
-	end
-	table.clear(connections)
 end
 
 return DebugService

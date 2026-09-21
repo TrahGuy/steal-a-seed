@@ -94,7 +94,7 @@ src/
     EconomyService.luau         THE FAUCET -- grown plants pay kg/sec, nothing else mints
     TreadmillService.luau       THE FAUCET for Speed -- stand on your own mill
     SellService.luau            the sell-all board beside the stall
-    DebugService.luau           F4 console, gated to Studio and the place owner
+    DebugService.luau           Studio-only server test helpers; no UI or remote
     WeaponShopService.luau      Marigold's counter: buying, equipping, and the one Tool
     CombatService.luau          what a bat and a trap DO -- knockback, restraint, cleanup
 src/StarterPlayer/StarterPlayerScripts/
