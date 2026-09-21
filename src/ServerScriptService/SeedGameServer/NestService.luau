@@ -789,15 +789,101 @@ local THROW_TIMEOUT = 6
 -- respawned at their plot. The older "lost its HumanoidRootPart" report is the
 -- same fall with the root, its own assembly while limp, reaching -500 first.
 --
--- Below this height nothing can be landed on, so the throw is over: the body is
--- set down at the biome's own gate, alive, as "thrown out" should look.
+--==============================================================================
+-- THE BODY IS WHAT FELL, NOT THE BOX. AND IT FALLS BACK IN LIMP.
+--
+-- The first version of this watched `root.Position.Y` and, below VOID_Y, ended
+-- the throw and stood the player up at the gate. Reported 2026-09-21 as "the
+-- ragdoll when hit by a guardian is gone", and it had taken it away twice:
+--
+--   the box     the root is invisible and, while limp, an assembly of its own
+--               that shares the launch but not the bounces: the rig has no
+--               NoCollisionConstraint between it and the LowerTorso, and the
+--               disabled Root joint was the only thing holding it. Measured on
+--               Emberroot: the body hit the wall and lay on the road, the box
+--               sailed over the wall 161 studs away and dropped under VOID_Y,
+--               and a player lying on the road was stood up at the gate.
+--   the body    when it really had left (Tanglemire, Starbloom), standing it up
+--               the instant it crossed VOID_Y replaced the landing with a
+--               teleport. The limp fall was the last ragdoll a deep-biome hit
+--               had, and that went too.
+--
+-- So the VISIBLE body decides -- the torso, the part ThrowFX lands and stands
+-- up -- and each escape gets its own answer:
+--
+--   the box alone   goes back over the body, moving with it. The throw goes on;
+--                   ThrowFX seats it at the stand-up as it always has, and it
+--                   never reaches -500 to take the character with it.
+--   the body        goes back ABOVE the road at the biome's gate, still limp,
+--                   and lands there. ThrowFX is still waiting for a landing, so
+--                   it settles and stands up on the road like any other throw.
+--
+-- Standing up at the gate is what is left only if the body keeps leaving:
+-- after MAX_SET_DOWNS the throw ends the way the first version ended it.
 --==============================================================================
 local VOID_Y = -40
+-- Height over the road the limp body is put back at: a short fall, so it lands
+-- and settles as a ragdoll instead of appearing already lying down.
+local SET_DOWN_DROP = 8
+-- And a slide toward home, studs a second. Dropped dead still, a body settles
+-- the instant it lands -- measured: on the road for 0.35 s and straight up,
+-- where a throw that stays in the lane lay there 0.65 to 1.6 s while it
+-- skidded. With this slide: 0.6 to 0.7 s.
+local SET_DOWN_SLIDE = 40
+-- How much longer the throw waits for the victim's answer after a set-down.
+-- ThrowFX gives up five seconds into the flight, and a body leaves the world
+-- about two seconds in (measured 2.1 to 2.5), so the landing fits inside both.
+local SET_DOWN_GRACE = 3
+local MAX_SET_DOWNS = 2
 -- How far out of the parent to move the victim before their limbs start
 -- colliding. Contact happens INSIDE a collidable torso, and switching a body
 -- to collidable while it overlaps another one either wedges it there or has
 -- the solver fling it. Cheaper to step out of the way first.
 local CLEAR_STUDS = 5
+
+-- What the player watches land: UpperTorso on R15, Torso on R6, and the root
+-- only for a rig that has neither.
+local function visibleBody(character: Model, root: BasePart): BasePart
+	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
+	return if torso and torso:IsA("BasePart") then torso else root
+end
+
+-- The road just outside the gate of the nest's own biome, at floor height on
+-- the road's axis. The nest's Z if the lane has no Gate part.
+local function gateSpot(nest: Nest): Vector3
+	local map = Workspace:FindFirstChild(GameConfig.Map.FolderName)
+	local lanes = map and map:FindFirstChild(GameConfig.Map.LanesFolderName)
+	local lane = lanes and lanes:FindFirstChild(nest.biome.Id)
+	local gate = lane and lane:FindFirstChild("Gate")
+	local z = if gate and gate:IsA("BasePart") then gate.Position.Z + 10 else nest.root.Position.Z
+	return Vector3.new(0, 0, z)
+end
+
+-- The box alone, back over the body it belongs to and moving with it. Over,
+-- not inside: it collides with the LowerTorso, and a box put back inside one is
+-- a box the solver throws out again.
+local function bringRootBack(root: BasePart, body: BasePart)
+	root.CFrame = CFrame.new(body.Position + Vector3.new(0, 3, 0))
+	root.AssemblyLinearVelocity = body.AssemblyLinearVelocity
+	root.AssemblyAngularVelocity = Vector3.zero
+end
+
+-- The whole limp body, by one transform so every socket stays where it was, to
+-- SET_DOWN_DROP over `at`, turned the way it was falling. Its fall is traded for
+-- SET_DOWN_SLIDE toward home (+Z, as the road runs), so it lands skidding; the
+-- box goes back over it.
+local function setDownLimp(character: Model, body: BasePart, root: BasePart, at: Vector3)
+	local target = CFrame.new(at + Vector3.new(0, SET_DOWN_DROP, 0)) * body.CFrame.Rotation
+	character:PivotTo(target * body.CFrame:Inverse() * character:GetPivot())
+	local slide = Vector3.new(0, 0, SET_DOWN_SLIDE)
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.AssemblyLinearVelocity = slide
+			part.AssemblyAngularVelocity = Vector3.zero
+		end
+	end
+	bringRootBack(root, body)
+end
 
 -- Victims currently mid-throw, and the flag their client sets by answering.
 local throwDone: { [Player]: boolean } = {}
@@ -982,7 +1068,8 @@ local function throwPlayer(nest: Nest, player: Player)
 		end
 	end
 
-	-- Set inside the wait below when the body drops under VOID_Y; read after restore().
+	-- Set inside the wait below when the body is still leaving the world after
+	-- MAX_SET_DOWNS; read after restore().
 	local fellOut = false
 	local ok, err = pcall(function()
 
@@ -1185,6 +1272,7 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- is an optimisation on top of it.
 	--==========================================================================
 	local deadline = os.clock() + THROW_TIMEOUT
+	local setDowns = 0
 	while os.clock() < deadline do
 		if throwDone[player] then
 			break
@@ -1192,9 +1280,21 @@ local function throwPlayer(nest: Nest, player: Player)
 		if player.Parent ~= Players or not root.Parent or humanoid.Health <= 0 then
 			break
 		end
-		if root.Position.Y < VOID_Y then
-			fellOut = true
-			break
+		-- See VOID_Y: the torso decides whether the BODY left; the box on its own
+		-- is only brought back.
+		local body = visibleBody(character, root)
+		if body.Position.Y < VOID_Y then
+			if setDowns >= MAX_SET_DOWNS then
+				fellOut = true
+				break
+			end
+			setDowns += 1
+			setDownLimp(character, body, root, gateSpot(nest))
+			deadline = math.max(deadline, os.clock() + SET_DOWN_GRACE)
+			log(string.format("%s was thrown out of the world by %s; put back on the road at the %s gate, still limp.",
+				player.Name, nest.id, nest.biome.Id))
+		elseif root.Position.Y < VOID_Y then
+			bringRootBack(root, body)
 		end
 		task.wait(0.1)
 	end
@@ -1208,24 +1308,19 @@ local function throwPlayer(nest: Nest, player: Player)
 	end
 
 	--==========================================================================
-	-- SET DOWN AT THE GATE, NOT DESTROYED AT -500
+	-- STOOD UP AT THE GATE, NOT DESTROYED AT -500 -- THE LAST RESORT
 	--
-	-- See VOID_Y. Joints and collisions are back (restore ran above), so the
-	-- body is whole again; it is placed on the road just outside the biome it
-	-- was thrown from, facing home, and stopped. The client's own stand-up runs
-	-- against wherever the torso is when it settles, which is now here.
+	-- See VOID_Y. Only a body that left the world again after MAX_SET_DOWNS
+	-- limp set-downs gets here. Joints and collisions are back (restore ran
+	-- above), so the body is whole again; it is placed on the road just outside
+	-- the biome it was thrown from, facing home, and stopped.
 	--==========================================================================
 	if fellOut then
 		local body = player.Character
 		local hum = body and body:FindFirstChildOfClass("Humanoid")
 		local r = body and body:FindFirstChild("HumanoidRootPart")
 		if body and hum and hum.Health > 0 and r and r:IsA("BasePart") then
-			local map = Workspace:FindFirstChild(GameConfig.Map.FolderName)
-			local lanes = map and map:FindFirstChild(GameConfig.Map.LanesFolderName)
-			local lane = lanes and lanes:FindFirstChild(nest.biome.Id)
-			local gate = lane and lane:FindFirstChild("Gate")
-			local z = if gate and gate:IsA("BasePart") then gate.Position.Z + 10 else nest.root.Position.Z
-			local at = Vector3.new(0, 6, z)
+			local at = gateSpot(nest) + Vector3.new(0, 6, 0)
 			body:PivotTo(CFrame.lookAt(at, at + Vector3.zAxis))
 			for _, part in ipairs(body:GetDescendants()) do
 				if part:IsA("BasePart") then
@@ -1234,8 +1329,8 @@ local function throwPlayer(nest: Nest, player: Player)
 				end
 			end
 			warn(string.format(
-				"[Seed/NestService] %s was thrown out of the world by %s (root below %d); set down at the %s gate.",
-				player.Name, nest.id, VOID_Y, nest.biome.Id))
+				"[Seed/NestService] %s, thrown by %s, left the world again after %d set-downs; stood up at the %s gate.",
+				player.Name, nest.id, MAX_SET_DOWNS, nest.biome.Id))
 		end
 	end
 

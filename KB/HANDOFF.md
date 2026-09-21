@@ -1,5 +1,67 @@
 # Steal a Seed — Session Handoff
 
+## Guardian ragdoll restored: the body decides, and a thrown-out body lands limp — 2026-09-21 (CLAUDE)
+
+**Owner request:** "it seems the ragdoll when hit by a guardian is gone, can you
+restore it"
+
+### Cause: the out-of-world guard from eef25da
+
+It read `root.Position.Y`. While limp the HumanoidRootPart is an assembly of its
+own: the rig has NoCollisionConstraints root/UpperTorso and root/Head but not
+root/LowerTorso, and the disabled Root AnimationConstraint was its only link, so
+it shares the launch but not the bounces. It took the ragdoll away twice:
+
+* Emberroot, measured: the body hit the wall and lay on the road, the root
+  sailed over the wall 161 studs away and dropped under -40, and the player was
+  stood up at the gate 0.3 s into the landing.
+* Tanglemire and Starbloom: the body itself clears the 46-stud walls (peaks 54
+  and 75). Standing it up at the gate the moment it crossed -40 replaced the
+  landing with a teleport. Before eef25da it fell to -500 and respawned.
+
+Greenhollow and Dustbowl throws stay in the lane and were never affected. The
+rig in Studio is unchanged: R15, AnimationConstraint x15, BallSocket x14.
+
+### Fix (NestService only; ThrowFX unchanged)
+
+* The torso decides (UpperTorso/Torso; the root only for a rig with neither).
+* Root alone under -40: put 3 studs over the torso with the torso's velocity.
+  The throw goes on.
+* Body under -40: moved whole by one transform to 8 studs over the road at the
+  biome's Gate (+10 z), sliding 40 studs/s toward home, still limp; the throw
+  waits 3 s more. ThrowFX lands, settles and stands up there as usual. After 2
+  set-downs the old stand-up at the gate is the last resort.
+
+### Verified (Studio Play; throwaway store `StealASeed_ragdoll_20260921`, key removed, name reverted)
+
+| biome | before the fix | after |
+| --- | --- | --- |
+| Greenhollow | limp, flew ~200 studs, lay, stood at 3.0 s | lay 0.8 s, limp 2.6 s |
+| Dustbowl | wall bounce, lay, limp 3.35 s | lay 0.65 s, limp 2.5 s |
+| Tanglemire | over the wall, stood up at the gate at 2.1 s | in the lane both runs, lay 1.25-1.6 s |
+| Emberroot | body on the road, root over the wall, stood up at the gate at 2.2 s | in the lane (limp 4.7 s, root 232 studs off, never lost); over the wall: put back limp at the gate, lay 0.6 s, stood 1.3 s later |
+| Starbloom | over the wall, stood up at the gate at 2.1 s | twice: put back limp, skidded ~20 studs, fell over, lay 0.7 s, stood 1.2 s later, hp 100, joints back |
+
+* Root rescue forced: root dropped to y -70 mid-throw, back 3.2 studs over the
+  torso within 0.06 s, still limp; landed and stood up at 3.25 s, no set-down.
+* Client log: "put back on the road at the starbloom gate, still limp", then
+  "settled after 3.23s", "stood up at -1.3, 3.0, -1340.5", "down for 4.29s".
+* 40 specs, 0 failures. No errors in the Play log.
+
+### Not verified
+
+A live server or a phone: the set-down is the server writing CFrames on a
+client-owned limp body, and Studio has no latency. A victim holding a bat or trap
+(the test profile had none). Harness note: a server teleport of a CARRIER trips
+CarryGuard, by design; take and stand still instead.
+
+### Open (the owner's call)
+
+* Deep-biome throws still clear the walls whenever they have a sideways
+  component. Lower the lift or raise the walls if they should land in the lane.
+* One Dustbowl test threw the victim deeper into the biome (z -711 to -800). The
+  victim was standing beside the nest, not escaping; direction logic unchanged.
+
 ## Portrait on the owner's phone — 2026-09-21 (CLAUDE)  (NO CODE CHANGE)
 
 **Owner:** sent a portrait screenshot, "tested on my actual phone".
