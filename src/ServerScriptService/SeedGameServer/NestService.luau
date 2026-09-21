@@ -776,6 +776,23 @@ NestService.RagdollOff = ragdollOff
 -- happens when it never does -- a body wedged in geometry, a client that left,
 -- a client that simply does not answer. A character must always come back.
 local THROW_TIMEOUT = 6
+
+--==============================================================================
+-- THE FLOOR OF THE WORLD, FOR A BODY THAT HAS LEFT IT
+--
+-- Every lane floor sits at Y = 0 and the road is a 140-stud corridor between
+-- 46-stud walls. A profiled throw (Astralmaw: 300 studs a second, lift 0.55)
+-- peaks near 75 studs, so any throw with a sideways component clears the wall
+-- and comes down where there is no floor at all. Measured in the 2026-09-19
+-- audit: the whole ragdoll crossed ground level 290 studs off the lane, fell
+-- to FallenPartsDestroyHeight (-500), was destroyed, and the player died and
+-- respawned at their plot. The older "lost its HumanoidRootPart" report is the
+-- same fall with the root, its own assembly while limp, reaching -500 first.
+--
+-- Below this height nothing can be landed on, so the throw is over: the body is
+-- set down at the biome's own gate, alive, as "thrown out" should look.
+--==============================================================================
+local VOID_Y = -40
 -- How far out of the parent to move the victim before their limbs start
 -- colliding. Contact happens INSIDE a collidable torso, and switching a body
 -- to collidable while it overlaps another one either wedges it there or has
@@ -965,6 +982,8 @@ local function throwPlayer(nest: Nest, player: Player)
 		end
 	end
 
+	-- Set inside the wait below when the body drops under VOID_Y; read after restore().
+	local fellOut = false
 	local ok, err = pcall(function()
 
 	--==========================================================================
@@ -1173,6 +1192,10 @@ local function throwPlayer(nest: Nest, player: Player)
 		if player.Parent ~= Players or not root.Parent or humanoid.Health <= 0 then
 			break
 		end
+		if root.Position.Y < VOID_Y then
+			fellOut = true
+			break
+		end
 		task.wait(0.1)
 	end
 	throwDone[player] = nil
@@ -1182,6 +1205,38 @@ local function throwPlayer(nest: Nest, player: Player)
 	restore()
 	if not ok then
 		warn("[Seed/NestService] throw failed after the grab: " .. tostring(err))
+	end
+
+	--==========================================================================
+	-- SET DOWN AT THE GATE, NOT DESTROYED AT -500
+	--
+	-- See VOID_Y. Joints and collisions are back (restore ran above), so the
+	-- body is whole again; it is placed on the road just outside the biome it
+	-- was thrown from, facing home, and stopped. The client's own stand-up runs
+	-- against wherever the torso is when it settles, which is now here.
+	--==========================================================================
+	if fellOut then
+		local body = player.Character
+		local hum = body and body:FindFirstChildOfClass("Humanoid")
+		local r = body and body:FindFirstChild("HumanoidRootPart")
+		if body and hum and hum.Health > 0 and r and r:IsA("BasePart") then
+			local map = Workspace:FindFirstChild(GameConfig.Map.FolderName)
+			local lanes = map and map:FindFirstChild(GameConfig.Map.LanesFolderName)
+			local lane = lanes and lanes:FindFirstChild(nest.biome.Id)
+			local gate = lane and lane:FindFirstChild("Gate")
+			local z = if gate and gate:IsA("BasePart") then gate.Position.Z + 10 else nest.root.Position.Z
+			local at = Vector3.new(0, 6, z)
+			body:PivotTo(CFrame.lookAt(at, at + Vector3.zAxis))
+			for _, part in ipairs(body:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.AssemblyLinearVelocity = Vector3.zero
+					part.AssemblyAngularVelocity = Vector3.zero
+				end
+			end
+			warn(string.format(
+				"[Seed/NestService] %s was thrown out of the world by %s (root below %d); set down at the %s gate.",
+				player.Name, nest.id, VOID_Y, nest.biome.Id))
+		end
 	end
 
 	--==========================================================================
