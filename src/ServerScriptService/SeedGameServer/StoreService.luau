@@ -236,8 +236,24 @@ local function processReceipt(info: any): Enum.ProductPurchaseDecision
 
 	local purchaseId = tostring(info.PurchaseId)
 	if alreadyHonoured(profile, purchaseId) then
-		-- A retry of something already given. Acknowledge it so Roblox stops.
-		return GRANTED
+		--======================================================================
+		-- A RETRY OF SOMETHING ALREADY GIVEN, ACKNOWLEDGED ONLY ONCE IT IS ON DISK
+		--
+		-- The ledger entry lives in memory from the moment `remember` runs, so
+		-- it is found here whether or not the save below it ever wrote. It used
+		-- to answer GRANTED outright, which acknowledged a purchase that was
+		-- granted into a temporary profile (DataStores unreachable, every write
+		-- refused) or whose save had failed: paid for, gone with the server.
+		-- Found in the 2026-09-19 audit. Now the retry is what gets the ledger
+		-- written; until that succeeds Roblox keeps re-delivering, and nothing
+		-- is granted twice because the entry is already here.
+		--======================================================================
+		if PlayerDataService.Save(player) then
+			return GRANTED
+		end
+		warn(string.format("[Seed/StoreService] %s: receipt %s granted earlier but still not saved; "
+			.. "not acknowledging", player.Name, purchaseId))
+		return RETRY
 	end
 
 	local item = byProduct[info.ProductId]

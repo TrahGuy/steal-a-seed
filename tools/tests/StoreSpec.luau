@@ -331,6 +331,29 @@ if ok and receiptCallback then
 		tostring(unsaved))
 
 	--==========================================================================
+	-- THE RETRY OF AN UNSAVED GRANT
+	--
+	-- `remember` put the id in the in-memory ledger before the save failed, so
+	-- the re-delivered receipt finds it there. That alone used to answer
+	-- GRANTED (2026-09-19 audit): a purchase acknowledged that was never on
+	-- disk. The retry is acknowledged only once a save succeeds, and the grant
+	-- itself is never repeated.
+	--==========================================================================
+	table.clear(trace)
+	saveWorks = false
+	local stillUnsaved = buy(speedItems[1], "spec-unsaved")
+	saveWorks = true
+	local savedNow = buy(speedItems[1], "spec-unsaved")
+	local regrants = 0
+	for _, t in ipairs(trace) do
+		if t.name == "AddSpeed" then regrants += 1 end
+	end
+	check(stillUnsaved == RETRY and savedNow == GRANTED and regrants == 0
+		and indexOf("Save") ~= nil,
+		"a retry of an unsaved grant is not acknowledged until the save succeeds, and grants nothing again",
+		string.format("%s then %s, %d regrant(s)", tostring(stillUnsaved), tostring(savedNow), regrants))
+
+	--==========================================================================
 	-- 4. INSTANT HATCH
 	--
 	-- Sold from a prompt on the pod rather than from a shelf, and granted by the
