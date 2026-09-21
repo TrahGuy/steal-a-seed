@@ -1,5 +1,42 @@
 # Steal a Seed — Session Handoff
 
+## Portrait on the owner's phone — 2026-09-21 (CLAUDE)  (NO CODE CHANGE)
+
+**Owner:** sent a portrait screenshot, "tested on my actual phone".
+
+The screenshot is the compact layout working as designed: Index, Shop,
+Settings and WALK MODE in one row top left, Garden and the Bag top right, cash
+and speed left, BAT over TRAP right, the five-slot strip lifted above both
+thumb controls, the clock clear of the Roblox buttons, nothing overlapping.
+
+Portrait exists because `StarterGui.ScreenOrientation` is `Sensor` (Roblox's
+default is LandscapeSensor; no script sets it). `HudLayoutSpec` lists only
+landscape phones, so nothing guards portrait.
+
+### The solver at portrait sizes (Edit, read-only; Studio's HudLayout matched disk, 34,439 bytes)
+
+Safe area modelled as the phone's width by its height less the 58-px topbar
+and the phone's own top and bottom insets; touch, no keyboard.
+
+| width | e.g. | result |
+| --- | --- | --- |
+| 375, 384, 390, 393, 402, 412 | iPhone SE 2/3, iPhone 12-16 and 16 Pro, Pixel | fits; smallest gap 8 px (BAT/TRAP over the strip) |
+| 440 | iPhone 16 Pro Max | fits, and the Bag chip joins the strip |
+| 360 | many Samsung Galaxy phones | one problem: the strip (352 px) has 344 px inside the 8-px margins, so it sits 4 px from each edge; nothing overlaps |
+| 320 | iPhone SE 1st gen / 5s | broken: Garden+Bag overlap WALK MODE by 24.5 px, the strip runs 16 px past both edges, cash and BAT/TRAP 4 px apart |
+
+In portrait the Bag panel resolves to `info = "sheet"` with one sideways row of
+cards (302 x 484 at 390 wide).
+
+### Open (the owner's call)
+
+* Add portrait phones to HudLayoutSpec (no visual change) once 360 is decided.
+* 360 wide: keep the 4-px edge, or narrow the strip on narrow portrait screens
+  (a look change).
+* Or go back to landscape only (`LandscapeSensor`), which removes both cases.
+* Not yet seen in portrait on a real phone: Shop, Index, Garden, Settings, the
+  Bag, the SELL ONE panel, the offline claim card.
+
 ## Offline earnings: a night-to-morning claim card — 2026-09-21 (CLAUDE)  (COMMITTED e4518be, APPROVED 2026-09-21)
 
 **Owner request:** "make the players earn offline, when they afk for 20mins or
