@@ -257,6 +257,97 @@ function EconomyService.SellHeld(player: Player): (number, number)
 end
 
 --==============================================================================
+-- THE STALL BUYS ONE PLANT
+--
+-- The fourth way to earn, and the careful version of the second: the plant in
+-- the player's HANDS, priced by the same SeedData.SellPrice and paid by the same
+-- AddCash, so "why does this player have eight million" still has one file to
+-- read. SellService owns the board, the prompt and the confirmation; this owns
+-- what a plant is worth and the moment it stops being theirs.
+--
+-- STRICTER THAN SELL ALL, ON PURPOSE. SellHeld takes every Tool that names a
+-- species, hatched or not, from both containers. This takes ONE Tool, and only:
+--
+--     held      in the Character, not the Backpack. Equipping MOVES a Tool, so
+--               "in your hands" is a parent check and nothing looser.
+--     grown     Hatched. An unhatched pod is a bet whose result the player has
+--               not seen, and the stall does not buy bets one at a time.
+--     a plant   SpeciesId names a species and the tier is real. A bat or a trap
+--               has neither and is refused before a price is even asked.
+--
+-- The pod welded on from a raid is a Model, never a Tool, and CarryService puts
+-- every plant Tool away while one is carried -- so a carrier holds nothing this
+-- can price. IsCarrying is checked anyway: two rules that agree are cheaper
+-- than one that is assumed.
+--
+-- QUOTE AND SALE ARE TWO CALLS. The quote decides nothing and touches nothing;
+-- it is what the confirmation shows. The sale re-runs every check on the SAME
+-- INSTANCE -- the one the quote was made for, never "whatever is in the hands
+-- now" -- and if they still hold, destroys it, re-snapshots the bag and pays,
+-- with no yield anywhere between the last check and the last write. A second
+-- request for the same Tool, from a double tap or from SELL ALL landing first,
+-- finds it already gone and is refused rather than paid.
+--
+-- THE PASS DOES NOT TOUCH THIS. SellPrice is thirty seconds of the BASE rate;
+-- the x2 multiplier lives in RateFor, on income, and the quote never sees it.
+--==============================================================================
+export type OneQuote = {
+	species: SeedData.Species,
+	tier: number,
+	price: number,
+}
+
+function EconomyService.QuoteOne(player: Player, tool: Instance?): (OneQuote?, string)
+	if player.Parent ~= Players then
+		return nil, "NO_PLAYER"
+	end
+	local character = player.Character
+	if not character then
+		return nil, "NO_CHARACTER"
+	end
+	if CarryService.IsCarrying(player) then
+		return nil, "CARRYING"
+	end
+	if not (tool and tool:IsA("Tool")) then
+		return nil, "NOTHING_HELD"
+	end
+	if tool.Parent ~= character then
+		return nil, "NOT_HELD"
+	end
+	local id = tool:GetAttribute("SpeciesId")
+	local species = if type(id) == "string" then SeedData.Get(id) else nil
+	local tier = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
+	if not (species and tier and tier >= 1) then
+		return nil, "NOT_A_PLANT"
+	end
+	if tool:GetAttribute("Hatched") ~= true then
+		return nil, "UNHATCHED"
+	end
+	local whole = math.floor(tier)
+	return {
+		species = species,
+		tier = whole,
+		price = SeedData.SellPrice(species, whole),
+	}, ""
+end
+
+function EconomyService.SellOne(player: Player, tool: Instance?): (OneQuote?, string)
+	local quote, reason = EconomyService.QuoteOne(player, tool)
+	if not quote then
+		return nil, reason
+	end
+	-- NO YIELD FROM HERE TO THE PAYMENT. Destroyed first, paid after -- the
+	-- order SellHeld settled on, for the reason its banner gives.
+	local held = tool :: Instance
+	held:Destroy()
+	CarryService.SyncHeldNow(player)
+	PlayerDataService.AddCash(player, quote.price)
+	log(string.format("%s sold one %s (tier %d) at the stall for %s.",
+		player.Name, quote.species.Name, quote.tier, GameConfig.compact(quote.price)))
+	return quote, ""
+end
+
+--==============================================================================
 -- A ONE-OFF REWARD
 --
 -- The third way to earn, and in this file for the reason the other two are: the

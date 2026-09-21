@@ -521,6 +521,44 @@ GameConfig.Weapon = {
 	CloseDistance = 26,
 }
 
+--==============================================================================
+-- SELL ONE: THE OTHER BOARD, AND WHAT CROSSES THE WIRE FOR IT
+--
+-- Two verbs on GameEvent, the same discipline as the counter above. Server ->
+-- client carries a `phase`: "quote" with a token, the species, the tier and the
+-- SERVER'S price; "refused" with the one line to show; "sold" with the name and
+-- what was paid. Client -> server answers a quote with its token and a yes or
+-- a no, and nothing else -- not a price, not a species, not which Tool. The
+-- server captured the exact Tool when it made the quote, prices that same Tool
+-- again when the answer comes, and a token can only name the quote it was
+-- minted for.
+--==============================================================================
+GameConfig.SellOne = {
+	PromptText = "Sell One",
+	-- Zero, like Marigold's shop prompt above and for the same reason: this
+	-- only OPENS a confirmation, and the confirmation is the deliberate step.
+	-- SELL ALL keeps its 1.1s hold because one press there is the whole sale.
+	PromptHold = 0,
+	PromptDistance = 12,
+	-- How far from the board the player may stand when they answer. A little
+	-- more than the prompt reaches, so a step back while reading the panel is
+	-- not a refusal; nowhere near a walk to the road.
+	ReachStuds = 18,
+	-- A quote nobody answers is forgotten after this long.
+	QuoteSeconds = 45,
+	ServerAction = "SellOne",
+	ClientAction = "SellOneReply",
+	-- Empty hands, a bat, a trap, an unhatched pod, a raid pod on the back:
+	-- everything that is not a grown plant in the hands gets the one line that
+	-- says what would work.
+	EmptyHandsText = "Hold a grown plant to sell it.",
+	-- The plant left the hands, or was sold another way, between the quote and
+	-- the answer. Nothing else is ever put in its place.
+	ChangedText = "That plant is no longer in your hands.",
+	TooFarText = "Stand at the SELL ONE sign to sell.",
+	ExpiredText = "That offer expired. Press the sign again.",
+}
+
 GameConfig.Attributes = {
 	PlotId = "PlotId",
 	OwnerUserId = "OwnerUserId",
