@@ -1,5 +1,74 @@
 # Steal a Seed — Session Handoff
 
+## Offline earnings: a night-to-morning claim card — 2026-09-21 (CLAUDE)  (COMMITTED e4518be, APPROVED 2026-09-21)
+
+**Owner request:** "make the players earn offline, when they afk for 20mins or
+more there will be a pop up ui for them to claim their earnings, dont make a
+generic looking ui."
+
+### The rule (numbers in `SeedData.Offline`)
+
+Away at least 20 minutes (measured from the profile's LastSeen, i.e. the last
+save of the previous session): every GROWN plant saved in the ground pays 50%
+of its normal IncomePerSecond for the time away, up to 8 hours credited.
+Pods pay nothing, as online. The x2 pass applies at payment. An unclaimed
+claim carries over and the carried total stays capped at 8 hours. Players AFK
+in-game keep earning at the full online rate; once Roblox disconnects them, the
+offline clock takes over.
+
+### How
+
+* `OfflineEarnings.luau` (new, pure): `garden(plants)` and `accrue(profile,
+  now)` -- records a claim on the profile, never touches cash.
+* `PlayerDataService`: accrues at load for a saved ("ok") profile, before the
+  entry exists to be written; publishes the claim as six server-set player
+  attributes (`GameConfig.OfflineEarnings.Attributes`); `TakeOffline` reads and
+  zeroes it in one resumption.
+* `ProfileSchema`: `OfflineCash` (before the pass), `OfflineSeconds`,
+  `OfflineAway`; migrate by being absent, clamped to MaxCash and 8 h.
+* `EconomyService.ClaimOffline` pays through AddCash (cash cap), one take per
+  claim; claim verb `OfflineClaim` on GameEvent carries nothing, answer
+  `OfflineClaimed { paid }`. The pass reaches income only through `withPass`,
+  shared by RateFor and the claim (BalanceSpec counts one application).
+* `OfflineUI.client.luau` (new): a night-themed UIKit modal, no close button.
+  Night sky with twinkling stars and a cratered moon, the player's real best
+  plant (CreatureModel in a ViewportFrame) asleep in moonlight with drifting
+  "Zzz", "Your N plants kept growing for 2h 14m" (or "grew for the max 8h (you
+  were gone 1d 6h)"), the amount counting up, chips (50% SPEED, x2 PASS, 8H MAX),
+  a gold-haloed CLAIM button with a coin. Claim = sunrise: dawn sky, moon sets,
+  sun rises, plant lit by day, coins fly to the wallet, "CLAIMED!". Reduced FX
+  shows it still. Short-sky layout and a UIScale keep CLAIM >= 44 px on phones.
+  `ClaimPressed` (BindableEvent) runs the button's own handler for Play tests.
+
+### Verified
+
+* OfflineEarningsSpec 26/26; full suite 40 specs, 0 failures, 4178 pass markers.
+* Live, throwaway store `StealASeed_offline_20260921` (key removed, name
+  reverted; the owner's store never opened), garden of Bellchime T7, Toadcap T5,
+  Nubkin T3 (21,615/s base):
+
+| scenario | result |
+| --- | --- |
+| away 134 min | card opened 2 s after join: +$174M (87,043,605 x2), 3 plants, 2h 14m, Bellchime portrait |
+| claim | wallet +$174,087,210 exactly; attributes cleared; server log "claimed 174M" |
+| rejoin at once | no card |
+| away 30 h | "grew for the max 8h (you were gone 1d 6h)", +$623M, 8H MAX chip |
+| CLAIM via the button's handler | sunrise captured, "CLAIMED!", wallet 179M -> 802M |
+| after leaving | saved OfflineCash/Seconds/Away all 0, cash kept, lock released |
+
+### Not verified
+
+A physical phone (the compact layout was reasoned from the modal's sizing, not
+seen), and a real mouse click on CLAIM (the button's handler ran via
+ClaimPressed; the click dispatch is the engine's).
+
+### Commit set (e4518be)
+
+`OfflineEarnings.luau`, `OfflineUI.client.luau`, `OfflineEarningsSpec.luau`,
+`SeedData.luau`, `GameConfig.luau`, `ProfileSchema.luau`,
+`PlayerDataService.luau`, `EconomyService.luau`, this section. The two "EARNS
+OFFLINE" thumbnails in output/imagegen are now true.
+
 ## Everything committed and pushed — 2026-09-21 (CLAUDE)
 
 **Owner request:** "commit and push everything", after the release check listed
