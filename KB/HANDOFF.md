@@ -1,5 +1,65 @@
 # Steal a Seed — Session Handoff
 
+## Beta recheck and debug panel removed — 2026-09-21 (CODEX)
+
+**Verdict: controlled-beta candidate, not cleared for public launch.** Owner asked
+for a current readiness check and removal of the debug panel. The code change is
+commit `727ebcb` (Remove debug panel and remote; restrict diagnostics to Studio).
+
+Push status: **local only**. Auto-review blocked uploading to origin because its
+visibility/upload authorization was not confirmed. Ask the owner before retrying.
+The temporary loopback test-file server was stopped; Rojo was left running.
+
+### Changed and verified
+
+- Deleted DebugUI.client.luau (panel and F4 binding); removed GameConfig.Debug
+  and the DebugCommand entry, so bootstrap no longer creates the remote.
+- DebugService has no remote listener or owner/allowlist exception. RunAction
+  remains only as a server-side Studio helper and returns before handlers on
+  published servers. Start/Stop are inert; existing diagnostic specs still work.
+- New DebugReleaseSpec: 34/34, including all 17 actual actions refused with
+  IsStudio=false using the real module, and the Studio helper still reachable.
+- Followed the project's luau-conventions/server-authority rules: removing the
+  visual panel also removes its client command surface; no second controller.
+- Studio Edit, place 114075467877655, was confirmed by the owner for checks.
+  Rojo is serving the correct pinned project at 34872. DebugUI is absent there;
+  all 14 changed production files compared byte-exact against current disk.
+- Fresh full suite: **37 specs, all passing** (including StoreSpec 16/16,
+  TutorialPodSpec 263, SellOneSpec 61/61, DebugTeleportSpec 8/8). This validates
+  the working tree including the PRE-EXISTING UNCOMMITTED release work, not just
+  the debug-removal commit. All 90 synced game scripts compile with loadstring.
+  Rojo build succeeded: build/BetaReadiness-20260921.rbxlx. Diff check clean.
+
+### Still open — independently checked today
+
+1. **Release configuration:** Studio Players.MaxPlayers is still **60**; config
+   has 6 plots / desired 6 players. Owner must set and confirm the published
+   place limit at 6. A seventh join is not proof of overflow in a six-player
+   server; that server should already be full.
+2. **Beginner protection:** TutorialPodService counts a grant on placement;
+   night clears standing pods, and WorldCycleService destroys loose SeedPods.
+   There is no refund; eligibility ends after 3 grants. Thus three unclaimed
+   night sweeps can exhaust the reserved-pod protection. Ordinary nest pods
+   remain a route forward, so this is lost onboarding protection, not proof
+   every affected player is permanently stuck. Not changed in this scope.
+3. **Place-only test content:** DustbowlPodLineup (84 descendants), TrapLineup
+   (134), WalkModeSpecFixture (4) still exist and are archivable. No source
+   build removes them from the owner's saved place. Left intact; remove before
+   publish, after backing up any desired reference displays.
+4. Art, eight plant rebuilds, SELL ONE, and the prior receipt/guardian audit
+   fixes remain uncommitted. Only this task's debug code and audit notes are
+   committed. Do not mistake origin/main alone for the full candidate tested.
+
+### Limits and next release checks
+
+No Play session started or stopped, no profile loaded/reset, no real purchase,
+no public settings changed and nothing published. Studio remains in Edit.
+Specs use fixtures/stand-ins; passing them does not establish physical-phone,
+two-client PvP/trap/guardian contention, purchase/rejoin, or six-full-plot soak
+coverage. Those hands-on checks from the earlier audit remain necessary.
+The earlier SELL ONE death-panel and debug-teleport treadmill issues were not
+reproduced today; they are prior findings, not newly verified failures.
+
 ## The Bag on a phone: whole cards, a real button, and the strip steps aside — 2026-09-18 (CLAUDE)  (COMMITTED f4ab312, APPROVED 2026-09-18)
 
 **Owner request:** on an iPhone 11 (~896x414) the Bag's equipment cards were cut off
