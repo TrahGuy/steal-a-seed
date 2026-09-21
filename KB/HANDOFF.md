@@ -1,5 +1,29 @@
 # Steal a Seed — Session Handoff
 
+## Phones open in landscape: StarterGui.ScreenOrientation = LandscapeSensor — 2026-09-21 (CLAUDE)
+
+**Owner report:** "tested it on my realme 8 pro, i need to turn on auto rotate to
+play it landscape, it still on portrait default"
+
+The place had `StarterGui.ScreenOrientation = Sensor`, which follows the phone:
+with auto-rotate off that is the phone's locked portrait. It is now
+`LandscapeSensor`, Roblox's default: always landscape, and the sensor only picks
+which way up.
+
+* Declared in `default.project.json`: a StarterGui node carrying only that
+  property, with `$ignoreUnknownInstances` (StarterGui has no children).
+  `rojo build` writes token 2, which is LandscapeSensor.
+* The running Rojo server did not apply the project-file edit (watched 8 s), so
+  the same value was set in the open Studio place by hand. A Rojo restart
+  applies the identical value from the file.
+* No script sets ScreenOrientation.
+* This settles the portrait entry below: phones can no longer be in portrait,
+  so its 360-wide and 320-wide cases are gone, and HudLayoutSpec's landscape
+  phone list now matches what ships.
+
+Not verified: on a phone. It needs a publish, and Studio Play on desktop
+ignores orientation.
+
 ## Guardian ragdoll restored: the body decides, and a thrown-out body lands limp — 2026-09-21 (CLAUDE)  (COMMITTED 2226fd8)
 
 **Owner request:** "it seems the ragdoll when hit by a guardian is gone, can you
@@ -62,7 +86,7 @@ CarryGuard, by design; take and stand still instead.
 * One Dustbowl test threw the victim deeper into the biome (z -711 to -800). The
   victim was standing beside the nest, not escaping; direction logic unchanged.
 
-## Portrait on the owner's phone — 2026-09-21 (CLAUDE)  (NO CODE CHANGE)
+## Portrait on the owner's phone — 2026-09-21 (CLAUDE)  (NO CODE CHANGE; SETTLED: landscape only, see the entry above)
 
 **Owner:** sent a portrait screenshot, "tested on my actual phone".
 
