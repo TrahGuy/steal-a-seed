@@ -1315,6 +1315,24 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		return finish()
 	end
 
+	--==========================================================================
+	-- AND THE OTHER FOUR GREENHOLLOW SPECIES ARE AUTHORED BUILDERS -- 2026-09-18
+	--
+	-- Nubkin, Petalpip, Spiretip and Toadcap come out of GreenhollowForms.Build,
+	-- conformed to the frame by the same hs the bell uses and spread by the same
+	-- girth curve. The builder says where its face goes and addFace puts the
+	-- biome's doe face there, so the eyes, lids, cheeks and smile are the
+	-- shared ones and the gaze rig finds them by the names it already knows.
+	--==========================================================================
+	local greenAuthored = GreenhollowForms.AuthoredHeight[sp.Id]
+	if greenAuthored and greenAuthored > 0 then
+		local face = GreenhollowForms.Build(model, sp.Id, cf, H / greenAuthored, girthSpread(G), sp)
+		if face then
+			addFace(model, face.cf, face.width, face.front, sp.Biome, face.skin)
+		end
+		return finish()
+	end
+
 	local dustSpecs = DustbowlForms.Plants[sp.Id]
 	if dustSpecs then
 		local hs = H / DustbowlForms.PreviewHeight[sp.Id]
@@ -1326,6 +1344,22 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		-- carved socket with a single amber eye at the bottom of it, not a
 		-- sticker pair and a smile.
 		retrofitSolarAura(model, hs)
+		return finish()
+	end
+
+	--==========================================================================
+	-- AND THE OTHER FOUR DUSTBOWL SPECIES ARE AUTHORED BUILDERS -- 2026-09-18
+	--
+	-- Dunebud, Paddlehop, Thornwhorl and Raincup come out of DustbowlForms.Build
+	-- on the same hs and girth curve as Suncrown; the builder points at its face
+	-- surface and addFace puts the biome's squint there.
+	--==========================================================================
+	local dustAuthored = DustbowlForms.AuthoredHeight[sp.Id]
+	if dustAuthored and dustAuthored > 0 then
+		local face = DustbowlForms.Build(model, sp.Id, cf, H / dustAuthored, girthSpread(G), sp)
+		if face then
+			addFace(model, face.cf, face.width, face.front, sp.Biome, face.skin)
+		end
 		return finish()
 	end
 

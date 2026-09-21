@@ -48,7 +48,13 @@ export type PartSpec = {
 	studs: boolean?,
 }
 
+local PlantSculpt = require(script.Parent:WaitForChild("PlantSculpt"))
+local SeedData = require(script.Parent:WaitForChild("SeedData"))
+
 local GreenhollowForms = {}
+
+local rad = math.rad
+local V3 = Vector3.new
 
 --==============================================================================
 -- What the mockup WAS, in its own studs, from its lowest leaf tip to the top of
@@ -449,5 +455,390 @@ GreenhollowForms.Plants = {
 		},
 	},
 } :: { [string]: { PartSpec } }
+
+--==============================================================================
+-- THE OTHER FOUR, AUTHORED AS BUILDERS -- 2026-09-18
+--
+-- Nubkin, Petalpip, Spiretip and Toadcap were rebuilt from the approved sheet
+-- `art/creatures/greenhollow/reference/greenhollow-design-proposals.png` (the
+-- owner's concept render) and, unlike the bell above, they are written as
+-- builders rather than as serialized tables: four species of thirty-odd parts
+-- each is a thousand lines of twelve-component CFrames that nobody can review,
+-- where a builder says WHY a part is where it is. EmberrootForms and
+-- StarbloomForms already work this way. The bell is untouched.
+--
+-- Authored in MOCKUP SPACE -- ground at Y = 0, front toward -Z, roughly the
+-- Tiny frame's own studs -- and placed by PlantSculpt through replayPart's
+-- arithmetic, so hs = FrameHeight / AuthoredHeight lands every one exactly on
+-- its SeedData frame at every tier, as the bell and Suncrown already do.
+--
+-- WHAT IS SHARED, AND WHY. Every one of the four stands on two stubby root
+-- feet in the biome's soil brown with a green ankle, and every face is
+-- CreatureModel.addFace's doe face on a surface the builder points at. The
+-- feet are the family; the mass above them is the species.
+--
+-- THE NAMES ARE THE RIG. PlantSway swings direct children called `Leaf` as
+-- arms, about their own centres, so an arm is ONE blade with its shoulder end
+-- buried in the body. Thigh / Foot / Toe are LEG_WORDS: it clusters them into a
+-- hip per side and strides each leg rigidly about the top of its thigh, which
+-- is why every thigh is an upright block whose top is inside the body. Toadcap
+-- opts into the ROOT walker instead -- `RootRise<n>` hinged at its socket,
+-- `RootAnchor<n>` held to the soil -- because its legs splay sideways from
+-- under the cap, and a sideways leg swung about a hip lifts rather than steps.
+-- Nothing here carries both vocabularies.
+--
+-- COLOURS COME OFF THE SPECIES ROW, never eyeballed: Body, Crown, Accent, and
+-- the biome's shared Leaf, Stem and Soil. Where the sheet shows a shade the row
+-- does not carry it is a Lerp of two that it does.
+--==============================================================================
+
+-- A stubby root foot: an upright thigh buried into the body, a sole on the
+-- soil, two splayed toes. `hip` is where the thigh's top sits (inside the body),
+-- `sole` the centre of the foot's ground contact.
+local function rootFoot(k: PlantSculpt.Kit, prefix: string, side: number, hip: Vector3,
+	sole: Vector3, thighW: number, footW: number, footL: number, thighColor: Color3,
+	footColor: Color3, yawDeg: number, toes: number?)
+	local footH = footW * 0.48
+	local thighH = hip.Y - footH * 0.55
+	k.block(prefix .. "Thigh", V3(thighW, thighH, thighW),
+		CFrame.new((hip.X + sole.X) * 0.5, footH * 0.55 + thighH * 0.5, (hip.Z + sole.Z) * 0.5)
+			* CFrame.Angles(0, 0, side * rad(-3)),
+		thighColor)
+	local footCF = CFrame.new(sole + V3(0, footH * 0.5, 0)) * CFrame.Angles(0, rad(yawDeg), 0)
+	k.block(prefix .. "Foot", V3(footW, footH, footL), footCF, footColor)
+	-- Two toes off the front edge, splayed; a third, longer one between them
+	-- on the branching feet. Their soles sit exactly on the foot's.
+	local spread = if toes == 3 then { -0.32, 0.32, 0 } else { -0.30, 0.30 }
+	for i, dx in ipairs(spread) do
+		local long = if i == 3 then 0.56 else 0.42
+		k.wedge(prefix .. "Toe", V3(footW * 0.34, footH * 0.82, footL * long),
+			footCF * CFrame.new(dx * footW, -footH * 0.09, -footL * (0.36 + long * 0.5))
+				* CFrame.Angles(0, (if i == 1 then 1 elseif i == 2 then -1 else 0) * rad(11), 0),
+			footColor)
+	end
+end
+
+-- A symmetric petal or leaf: two mirrored fins sharing one spine, so it comes
+-- to a point on its centre line rather than off to one side. `halfW` is each
+-- half's width at the root.
+local function petal(k: PlantSculpt.Kit, name: string, root: Vector3, tip: Vector3,
+	halfW: number, thick: number, normal: Vector3, color: Color3)
+	k.fin(name, root, tip, halfW, thick, normal, 1, color)
+	k.fin(name, root, tip, halfW, thick, normal, -1, color)
+end
+
+-- One root of the ROOT WALKER: a rise from the socket under the body to a knee,
+-- a knuckle from the knee down to the anchor, the anchor on the soil, two toes.
+-- PlantSway hinges all five about the rise's inner end and steers the anchor's
+-- lowest corner to the ground plane, so the whole leg stays a leg.
+local function rootLeg(k: PlantSculpt.Kit, slot: number, socket: Vector3, knee: Vector3,
+	anchor: Vector3, legW: number, footW: number, footL: number, legColor: Color3,
+	footColor: Color3)
+	local n = tostring(slot)
+	local footH = footW * 0.46
+	k.beam("RootRise" .. n, socket, knee, legW, legW * 0.9, legColor, nil, legW * 0.3)
+	k.beam("RootKnuckle" .. n, knee, anchor + V3(0, footH * 0.7, 0), legW * 0.88, legW * 0.8,
+		legColor, nil, legW * 0.25)
+	-- The foot points the way the leg reaches.
+	local out = Vector3.new(anchor.X - socket.X, 0, anchor.Z - socket.Z)
+	local footCF = PlantSculpt.look(anchor + V3(0, footH * 0.5, 0),
+		anchor + V3(0, footH * 0.5, 0) + out.Unit)
+	k.block("RootAnchor" .. n, V3(footW, footH, footL), footCF, footColor)
+	for i, dx in ipairs({ -0.30, 0.30 }) do
+		k.wedge("RootToe" .. (if i == 1 then "A" else "B") .. n,
+			V3(footW * 0.36, footH * 0.82, footL * 0.44),
+			footCF * CFrame.new(dx * footW, -footH * 0.09, -footL * 0.66)
+				* CFrame.Angles(0, (if i == 1 then 1 else -1) * rad(12), 0),
+			footColor)
+	end
+end
+
+--==============================================================================
+-- NUBKIN -- the starter mascot, squarer than the sheet on purpose
+--
+-- One sentence: a compact sprout creature whose whole body is a soft-cornered
+-- cube, two nubs at its top corners, a two-leaf sprout, short leaf arms and
+-- two root feet -- friendly and simple. The cube is the silhouette; what stops
+-- it being a die is that the outer contour is five overlapping masses (body,
+-- cap, two flanks, chin) and a proud cream face plate, not one box.
+--
+-- The sheet is slightly rounder than this; the owner asked for the production
+-- silhouette a little squarer without losing the sculpted look, so the flanks
+-- and cap keep their corners and only the chin and the nubs are tipped.
+--==============================================================================
+local function nubkin(k: PlantSculpt.Kit, sp: SeedData.Species): PlantSculpt.Face
+	local BODY, CROWN, CREAM = sp.Body, sp.Crown, sp.Accent
+	local LEAF, STEM, SOIL = sp.Leaf, sp.Stem, sp.Soil
+	local FLANK = BODY:Lerp(LEAF, 0.30)
+
+	for _, side in ipairs({ -1, 1 }) do
+		local pre = if side < 0 then "Left" else "Right"
+		rootFoot(k, pre, side, V3(side * 0.56, 1.02, -0.02), V3(side * 0.60, 0, -0.10),
+			0.46, 0.66, 0.86, LEAF, SOIL, side * -9)
+	end
+
+	-- THE BODY: five masses that read as one soft cube.
+	k.block("Body", V3(2.30, 2.20, 2.04), CFrame.new(0, 1.86, 0.02), BODY)
+	k.block("Cap", V3(2.44, 0.36, 2.18), CFrame.new(0, 2.98, 0) * CFrame.Angles(0, 0, rad(1.5)), CROWN)
+	for _, side in ipairs({ -1, 1 }) do
+		k.block("Flank", V3(0.34, 1.66, 1.62),
+			CFrame.new(side * 1.18, 1.72, 0.08) * CFrame.Angles(0, side * rad(6), side * rad(-3)),
+			FLANK)
+	end
+	-- The cream lower face is a MASS, not a plate: it wraps under the chin and
+	-- stands a hair proud of the green, so the body reads as green over cream
+	-- rather than as a box with a card on it.
+	k.block("Chin", V3(1.78, 0.60, 1.02), CFrame.new(0, 0.92, -0.62) * CFrame.Angles(rad(-14), 0, 0), CREAM)
+	k.block("FacePlate", V3(1.96, 1.58, 0.46), CFrame.new(0, 1.62, -0.90), CREAM)
+	k.block("Brow", V3(1.90, 0.30, 0.34), CFrame.new(0, 2.50, -1.06) * CFrame.Angles(rad(-8), 0, 0), CROWN)
+	for _, side in ipairs({ -1, 1 }) do
+		k.block("Nub", V3(0.46, 0.44, 0.46),
+			CFrame.new(side * 1.0, 3.06, -0.58) * CFrame.Angles(0, side * rad(8), side * rad(-10)),
+			BODY)
+	end
+
+	-- THE SPROUT: a stem and two leaves, tiny on purpose -- this is the Common.
+	k.rod("SproutStem", V3(0.06, 3.10, -0.02), V3(0.08, 3.62, -0.06), 0.16, STEM)
+	k.blade("SproutLeaf", V3(0.02, 3.52, -0.04), V3(-0.62, 4.02, -0.14), 0.36, 0.15, V3(0, 1, 0), LEAF)
+	k.blade("SproutLeaf", V3(0.10, 3.58, -0.02), V3(0.62, 3.96, 0.06), 0.32, 0.14, V3(0, 1, 0), LEAF)
+
+	-- THE ARMS: one blade each, shoulder buried in the flank.
+	for _, side in ipairs({ -1, 1 }) do
+		k.blade("Leaf", V3(side * 1.02, 1.92, -0.16), V3(side * 1.78, 1.04, -0.60),
+			0.64, 0.22, V3(side * 0.45, 0.9, -0.25), LEAF)
+	end
+
+	return k.face(CFrame.new(0, 1.66, -0.90), 1.74, 0.23, CREAM)
+end
+
+--==============================================================================
+-- PETALPIP -- a bud that flowers
+--
+-- One sentence: a pale yellow-green egg of a body wrapped in four leaf sepals,
+-- a ring of seven cream petals cupped BEHIND and around its face with a coral
+-- centre on top, folded leaf arms and two root feet -- cheerful, compact. The
+-- flower grows out of the head: the petals root on the skull's upper half and
+-- the sepals root under the belly, so the character is the stem of its own
+-- bloom rather than a ball with a decoration on it. No petal stands in the
+-- front 44 degrees, which is what keeps the face open.
+--==============================================================================
+local function petalpip(k: PlantSculpt.Kit, sp: SeedData.Species): PlantSculpt.Face
+	local BODY, CROWN, CORAL = sp.Body, sp.Crown, sp.Accent
+	local LEAF, SOIL = sp.Leaf, sp.Soil
+
+	for _, side in ipairs({ -1, 1 }) do
+		local pre = if side < 0 then "Left" else "Right"
+		rootFoot(k, pre, side, V3(side * 0.50, 1.15, 0), V3(side * 0.56, 0, -0.06),
+			0.40, 0.60, 0.80, LEAF, SOIL, side * -8)
+	end
+
+	-- THE EGG: two overlapping rounds, the upper one the head.
+	k.ball("Belly", 1.90, CFrame.new(0, 1.75, 0), BODY)
+	k.ball("Head", 1.72, CFrame.new(0, 2.95, -0.05), BODY)
+
+	-- FOUR SEPALS wrap the belly from underneath and lean out.
+	for i, yaw in ipairs({ 45, 135, 225, 315 }) do
+		local a = rad(yaw)
+		local sx, cz = math.sin(a), math.cos(a)
+		k.fin("Sepal", V3(sx * 0.55, 0.95, cz * 0.55), V3(sx * 1.12, 2.15, cz * 1.12),
+			0.76, 0.16, V3(sx, 0.15, cz), if i % 2 == 0 then 1 else -1, LEAF)
+	end
+
+	-- FIVE BROAD PETALS cupped round the back and sides of the head, none in
+	-- the front cone, none the same height. Each is a mirrored pair, so it is
+	-- a pointed oval and not a spike.
+	-- Yaw runs (sin a, cos a): 0 is the BACK (+Z) and 180 is the front (-Z),
+	-- so the tallest petal stands behind the head and none stands over the face.
+	local PETALS = {
+		-- yaw, tip height, half width, reach
+		{ 128, 3.88, 0.50, 1.36 }, { 232, 3.94, 0.48, 1.34 }, { 302, 4.26, 0.56, 1.40 },
+		{ 4, 4.44, 0.60, 1.42 }, { 66, 4.24, 0.56, 1.40 },
+	}
+	for _, pt in ipairs(PETALS) do
+		local a = rad(pt[1])
+		local sx, cz = math.sin(a), math.cos(a)
+		petal(k, "Petal", V3(sx * 0.50, 3.16, cz * 0.50 - 0.05), V3(sx * pt[4], pt[2], cz * pt[4] - 0.05),
+			pt[3], 0.15, V3(sx, 0.30, cz), CROWN)
+	end
+	k.ball("FlowerCentre", 0.58, CFrame.new(0, 3.96, 0.02), CORAL)
+	k.ball("FlowerCentre", 0.34, CFrame.new(0.14, 4.18, 0.10), CORAL)
+
+	-- THE ARMS: folded leaves off the belly's shoulders.
+	for _, side in ipairs({ -1, 1 }) do
+		k.blade("Leaf", V3(side * 0.82, 2.08, -0.18), V3(side * 1.46, 1.22, -0.56),
+			0.52, 0.20, V3(side * 0.5, 0.85, -0.25), LEAF)
+	end
+
+	return k.face(CFrame.new(0, 2.95, -0.05), 1.50, 0.80, BODY)
+end
+
+--==============================================================================
+-- SPIRETIP -- the narrow one
+--
+-- One sentence: a tall, slender, deep-green shoot whose body is a column
+-- wrapped in seven overlapping leaf husks, a cream spire leaning back off the
+-- top, four cream thorns on the seams, folded leaf arms and branching root
+-- feet -- alert but friendly. The column is what keeps the silhouette a spire:
+-- every husk narrows upward and hugs it, nothing stands out sideways but the
+-- arms, and the face sits high in the V between the two upper husks.
+--==============================================================================
+local function spiretip(k: PlantSculpt.Kit, sp: SeedData.Species): PlantSculpt.Face
+	local BODY, CROWN, THORN = sp.Body, sp.Crown, sp.Accent
+	local LEAF, SOIL = sp.Leaf, sp.Soil
+	local HUSK = BODY:Lerp(LEAF, 0.35)
+	local HUSK_DEEP = BODY:Lerp(Color3.new(0, 0, 0), 0.18)
+
+	for _, side in ipairs({ -1, 1 }) do
+		local pre = if side < 0 then "Left" else "Right"
+		rootFoot(k, pre, side, V3(side * 0.42, 1.20, 0), V3(side * 0.50, 0, -0.05),
+			0.36, 0.56, 0.86, LEAF, SOIL, side * -10, 3)
+	end
+
+	-- THE COLUMN the husks wrap.
+	k.disc("Core", 1.25, 3.30, CFrame.new(0, 2.55, 0), BODY)
+
+	-- FIVE BROAD HUSKS. Two big lower ones wrap the column from the back round
+	-- to the front, where their tips cross; one closes the back; the upper
+	-- pair rise past the face with their straight edges framing it. Broad and
+	-- few is what keeps this a shoot and not a suit of scales.
+	for _, side in ipairs({ -1, 1 }) do
+		k.fin("Husk", V3(side * 0.66, 0.80, 0.30), V3(side * 0.28, 3.24, -0.52),
+			1.40, 0.20, V3(side, 0, -0.35), -side, HUSK_DEEP)
+		k.fin("Husk", V3(side * 0.56, 2.55, -0.14), V3(side * 0.50, 4.42, -0.36),
+			0.86, 0.18, V3(side, 0, -0.3), side, HUSK)
+	end
+	k.fin("Husk", V3(0.05, 0.90, 0.62), V3(0, 3.42, 0.50), 1.10, 0.20, V3(0, 0, 1), 1, HUSK)
+
+	-- THE SPIRE: a collar, then three courses narrowing to the point, leaning
+	-- back twelve degrees off the top of the column.
+	k.disc("Collar", 1.36, 0.26, CFrame.new(0, 4.12, 0.02), CROWN)
+	k.chain("Spire", { V3(0, 4.05, 0.05), V3(0, 4.62, 0.12), V3(0, 5.12, 0.22), V3(0, 5.56, 0.34) },
+		0.62, 0.62, 0.56, CROWN)
+
+	-- FOUR THORNS on the seams, not on every edge.
+	local THORNS = {
+		{ V3(-0.58, 1.72, -0.34), V3(-0.98, 1.98, -0.56) },
+		{ V3(0.60, 2.36, -0.30), V3(1.00, 2.66, -0.44) },
+		{ V3(-0.54, 3.28, -0.36), V3(-0.90, 3.62, -0.54) },
+		{ V3(0.36, 3.86, -0.48), V3(0.62, 4.30, -0.74) },
+	}
+	for _, t in ipairs(THORNS) do
+		k.blade("Thorn", t[1], t[2], 0.22, 0.18, V3(0, 1, 0), THORN)
+	end
+
+	-- THE ARMS: folded down along the husks, close in.
+	for _, side in ipairs({ -1, 1 }) do
+		k.blade("Leaf", V3(side * 0.58, 2.42, -0.30), V3(side * 0.74, 1.60, -0.68),
+			0.46, 0.20, V3(side * 0.5, 0.8, -0.35), LEAF)
+	end
+
+	return k.face(CFrame.new(0, 3.42, 0), 1.24, 0.60, BODY)
+end
+
+--==============================================================================
+-- TOADCAP -- the cap is the creature
+--
+-- One sentence: a low, broad, coral-red mushroom cap, asymmetric and patched
+-- with cream, sheltering a warm-cream face and body that stand on four splayed
+-- root legs, with two fern curls off the back -- squat and stable. Three
+-- rounds make the cap (a brim, the dome, a lobe pushed front-left), a pale
+-- disc and five ribs make its underside, and the body is tucked under it so
+-- the eye reads cap first and creature second, which is the sheet.
+--
+-- ROOT WALKER, not the leg rig: the legs splay sideways from under the cap,
+-- and a sideways leg swung about a hip lifts rather than steps. Slots 1 and 3
+-- are the front-left and back-right pair, 2 and 4 the other diagonal, which is
+-- the trot PlantSway phases by parity.
+--==============================================================================
+local function toadcap(k: PlantSculpt.Kit, sp: SeedData.Species): PlantSculpt.Face
+	local BODY, CAP, PALE = sp.Body, sp.Crown, sp.Accent
+	local LEAF, SOIL = sp.Leaf, sp.Soil
+	local GILL = PALE:Lerp(SOIL, 0.18)
+
+	-- THE LEGS: front pair reach forward-out, back pair back-out.
+	local LEGS = {
+		-- slot, sx, sz
+		{ 1, -1, -1 }, { 2, 1, -1 }, { 3, 1, 1 }, { 4, -1, 1 },
+	}
+	for _, leg in ipairs(LEGS) do
+		local slot, sx, sz = leg[1], leg[2], leg[3]
+		rootLeg(k, slot,
+			V3(sx * 0.42, 1.00, sz * 0.30),
+			V3(sx * 0.96, 0.60, sz * 0.72),
+			V3(sx * 1.16, 0, sz * 0.92),
+			0.36, 0.58, 0.72, LEAF, SOIL)
+	end
+
+	-- THE BODY under the cap.
+	k.block("Belly", V3(1.60, 1.00, 1.40), CFrame.new(0, 1.18, 0.10), BODY)
+	k.ball("Head", 2.00, CFrame.new(0, 1.85, -0.10), BODY)
+
+	-- THE CAP: brim, dome, lobe; then the pale underside and its ribs.
+	k.disc("CapBrim", 4.40, 0.70, CFrame.new(0, 3.05, 0.10) * CFrame.Angles(rad(2), 0, rad(-2)), CAP)
+	k.ball("CapDome", 3.30, CFrame.new(0.10, 3.55, 0.30), CAP)
+	k.ball("CapLobe", 2.20, CFrame.new(-0.95, 3.48, -0.40), CAP)
+	k.disc("Gills", 4.00, 0.30, CFrame.new(0, 2.62, 0.10), GILL)
+	for _, yaw in ipairs({ 15, 80, 150, 225, 300 }) do
+		local a = rad(yaw)
+		k.block("GillRib", V3(0.14, 0.24, 1.70),
+			CFrame.new(math.sin(a) * 1.02, 2.50, 0.10 + math.cos(a) * 1.02) * CFrame.Angles(0, a, 0),
+			PALE)
+	end
+	-- Cream patches, lying on the dome.
+	local SPOTS = {
+		-- centre of the round they lie on, direction, diameter
+		{ V3(0.10, 3.55, 0.30), V3(0.45, 0.85, 0.28), 0.72 },
+		{ V3(0.10, 3.55, 0.30), V3(-0.62, 0.55, 0.56), 0.56 },
+		{ V3(0.10, 3.55, 0.30), V3(0.30, 0.42, -0.86), 0.50 },
+		{ V3(-0.95, 3.48, -0.40), V3(-0.55, 0.78, -0.30), 0.46 },
+	}
+	for _, spot in ipairs(SPOTS) do
+		local c, dir, d = spot[1] :: Vector3, (spot[2] :: Vector3).Unit, spot[3] :: number
+		local r = if c.X < 0 then 1.10 else 1.65
+		local pos = c + dir * (r - 0.04)
+		k.coin("Spot", d, 0.16, PlantSculpt.look(pos, pos + dir), PALE)
+	end
+
+	-- TWO FERN CURLS off the back of the cap.
+	k.chain("Curl", { V3(0.45, 3.90, 1.30), V3(0.58, 4.70, 1.58), V3(0.48, 5.36, 1.26), V3(0.26, 5.46, 0.86) },
+		0.30, 0.26, 0.80, LEAF)
+	k.chain("Curl", { V3(-0.36, 3.86, 1.36), V3(-0.52, 4.56, 1.52), V3(-0.58, 5.02, 1.14) },
+		0.26, 0.22, 0.82, LEAF)
+
+	return k.face(CFrame.new(0, 1.85, -0.10), 1.44, 0.92, BODY)
+end
+
+--==============================================================================
+-- THE TABLE THE PLAYER ASKS
+--
+-- AuthoredHeight is what each builder MEASURES in its own studs, lowest corner
+-- to highest, at hs = gs = 1 -- checked by PlantFormsSpec, so a builder that
+-- grows cannot quietly shrink its species. CreatureModel divides the frame by
+-- it, exactly as it does for the replayed bell.
+--==============================================================================
+GreenhollowForms.AuthoredHeight = {
+	nubkin = 4.08,
+	petalpip = 4.48,
+	spiretip = 5.67,
+	toadcap = 5.56,
+} :: { [string]: number }
+
+local BUILDERS: { [string]: (PlantSculpt.Kit, SeedData.Species) -> PlantSculpt.Face? } = {
+	nubkin = nubkin,
+	petalpip = petalpip,
+	spiretip = spiretip,
+	toadcap = toadcap,
+}
+
+-- Builds an authored species into `model` about `at` (the BASE, where it meets
+-- the ground). Returns where its face goes, or nil for an id with no builder.
+function GreenhollowForms.Build(model: Model, id: string, at: CFrame, hs: number,
+	gs: number, sp: SeedData.Species): PlantSculpt.Face?
+	local builder = BUILDERS[id]
+	if not builder then
+		return nil
+	end
+	return builder(PlantSculpt.new(model, at, hs, gs), sp)
+end
 
 return GreenhollowForms
