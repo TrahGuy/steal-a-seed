@@ -14,10 +14,12 @@
 -- One file. Anything that wants to pay a player asks this service to do it.
 --
 -- It said "one loop, one call" until the stall started buying bags. There are
--- THREE ways to earn now -- the payout loop below, SellHeld, and PayReward for
--- the Index's one-time Biome Harvest -- and they are all in this file for
--- exactly the reason the rule exists: "why does this player have eight million"
--- still has one file to read, and the answers sit a few dozen lines apart.
+-- FOUR ways to earn now -- the payout loop below, the stall (SellHeld and
+-- SellOne), PayReward for the Index's one-time Biome Harvest, and ClaimOffline
+-- for a garden that earned while its owner was away -- and they are all in this
+-- file for exactly the reason the rule exists: "why does this player have eight
+-- million" still has one file to read, and the answers sit a few dozen lines
+-- apart.
 --
 --==============================================================================
 -- WHAT EARNS: GROWN PLANTS, AND ONLY GROWN ONES
@@ -46,12 +48,15 @@
 -- so nobody is paid for time before their plants existed.
 --
 --==============================================================================
--- NO OFFLINE PAYOUT THIS PASS, DELIBERATELY
+-- OFFLINE, AS A CLAIM RATHER THAN A PAYOUT
 --
--- Growth uses an absolute os.time() and keeps running while you are away; CASH
--- does not. Those are different promises and this one is deferred on purpose --
--- an offline faucet needs a claim flow, a cap, and an anti-abuse story, and
--- none of that belongs in the pass that first makes the number move.
+-- Growth uses an absolute os.time() and keeps running while you are away. Cash
+-- now does too, but never silently: it was deferred until it had the three
+-- things an offline faucet needs, and it has them. A CLAIM FLOW -- the absence
+-- is credited to the profile at load (OfflineEarnings) and paid here only when
+-- the player presses CLAIM. A CAP -- SeedData.Offline, at most eight hours at
+-- half speed, and only after twenty minutes away. An ANTI-ABUSE STORY -- the
+-- server's own LastSeen and os.time(), no client input, one take per claim.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -86,6 +91,16 @@ local function log(message: string)
 end
 
 --==============================================================================
+-- THE PASS, APPLIED IN ONE PLACE
+--
+-- Income online and income claimed after an absence are the same income, so the
+-- x2 pass reaches both through this and nothing else. BalanceSpec counts it.
+--==============================================================================
+local function withPass(player: Player, amount: number): number
+	return amount * PassService.CashMultiplier(player)
+end
+
+--==============================================================================
 -- WHAT ONE PLAYER IS OWED PER SECOND
 --
 -- Public because the HUD will want to show it, and because a rate anybody can
@@ -116,10 +131,12 @@ function EconomyService.RateFor(player: Player): number
 	end
 
 	--==========================================================================
-	-- THE x2 MONEY PASS MULTIPLIES HERE, AND ONLY HERE
+	-- THE x2 MONEY PASS MULTIPLIES HERE -- AND IN THE OFFLINE CLAIM, WHICH IS THE
+	-- SAME INCOME -- THROUGH withPass, AND NOWHERE ELSE
 	--
 	-- This is the last line of the FAUCET, so a pass applied at this point
-	-- reaches exactly one kind of income: cash grown by plants. It does not
+	-- reaches exactly one kind of income: cash grown by plants, whether the
+	-- owner was here for it or claims it after an absence. It does not
 	-- reach SellHeld forty lines below -- selling a bag at the stall is a sale,
 	-- not production -- nor PayReward, whose one-off Biome Harvest is already
 	-- sized in BiomeData; and it cannot reach the other five positive AddCash
@@ -142,7 +159,7 @@ function EconomyService.RateFor(player: Player): number
 	-- Each term is already whole -- IncomePerSecond rounds per plant -- so an
 	-- integer multiplier keeps the sum whole.
 	--==========================================================================
-	return rate * PassService.CashMultiplier(player)
+	return withPass(player, rate)
 end
 
 --==============================================================================
@@ -367,6 +384,39 @@ function EconomyService.PayReward(player: Player, amount: number, reason: string
 	return true
 end
 
+--==============================================================================
+-- THE OFFLINE CLAIM, PAID
+--
+-- The garden's time away was worked out when the profile loaded (see
+-- OfflineEarnings) and is waiting on the profile as a claim. This takes it --
+-- once: PlayerDataService zeroes it in the same resumption it reads it -- and
+-- pays it through the same AddCash every other coin goes through, so the cash
+-- cap applies. The x2 pass is applied HERE, at payment, as it is to income
+-- online; a pass bought while the card is open counts.
+--
+-- Returns what was paid, or nil and why not.
+--==============================================================================
+function EconomyService.ClaimOffline(player: Player): (number?, string)
+	if player.Parent ~= Players then
+		return nil, "GONE"
+	end
+	if not PlayerDataService.IsReady(player) then
+		return nil, "NOT_READY"
+	end
+	local cash, seconds = PlayerDataService.TakeOffline(player)
+	if not cash then
+		return nil, "NOTHING"
+	end
+	local paid = math.floor(withPass(player, cash))
+	if PlayerDataService.AddCash(player, paid) == nil then
+		return nil, "NOT_PAID"
+	end
+	minted[player] = (minted[player] or 0) + paid
+	log(string.format("%s claimed %s of offline earnings (%.0f min credited).",
+		player.Name, GameConfig.compact(paid), seconds / 60))
+	return paid, "OK"
+end
+
 function EconomyService.Init()
 	running = false
 	for _, c in ipairs(serviceConnections) do
@@ -379,6 +429,34 @@ end
 
 function EconomyService.Start()
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(forget))
+	--==========================================================================
+	-- THE CLAIM VERB, ON THE REMOTE THE GAME ALREADY HAS
+	--
+	-- Carries nothing and needs nothing: what is owed is on the server's own
+	-- copy of the profile. Anything else in the payload is ignored. The answer
+	-- names the amount actually paid, pass included, so the card can show the
+	-- number the wallet really moved by.
+	--==========================================================================
+	local OFFLINE = GameConfig.OfflineEarnings
+	local remotes = ReplicatedStorage:WaitForChild("SeedGame"):FindFirstChild("Remotes")
+	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if channel and channel:IsA("RemoteEvent") then
+		local remote = channel :: RemoteEvent
+		table.insert(serviceConnections, remote.OnServerEvent:Connect(
+			function(player: Player, action: any)
+				if action ~= OFFLINE.ClaimAction then
+					return
+				end
+				local paid, reason = EconomyService.ClaimOffline(player)
+				if player.Parent == Players then
+					pcall(function()
+						remote:FireClient(player, OFFLINE.ReplyAction, { paid = paid or 0, reason = reason })
+					end)
+				end
+			end))
+	else
+		warn("[Seed/EconomyService] No GameEvent remote; offline earnings cannot be claimed.")
+	end
 
 	running = true
 	task.spawn(function()

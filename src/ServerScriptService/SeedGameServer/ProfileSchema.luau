@@ -195,6 +195,12 @@ export type Profile = {
 	WalkMode: boolean,
 	CreatedAt: number,
 	LastSeen: number,
+	-- An unclaimed offline claim (see OfflineEarnings): cash before the x2
+	-- pass, seconds credited toward SeedData.Offline.MaxCreditSeconds, and
+	-- seconds actually away. All zero once claimed.
+	OfflineCash: number,
+	OfflineSeconds: number,
+	OfflineAway: number,
 }
 
 -- Year 2100, as a sanity ceiling on stored timestamps. A clock-skewed or
@@ -231,6 +237,9 @@ function ProfileSchema.Default(): Profile
 		WalkMode = false,
 		CreatedAt = now,
 		LastSeen = now,
+		OfflineCash = 0,
+		OfflineSeconds = 0,
+		OfflineAway = 0,
 	}
 end
 
@@ -297,6 +306,17 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		number(raw.HighestBiomeOrder, 1, 1, #BiomeData.Biomes))
 	p.CreatedAt = math.floor(number(raw.CreatedAt, p.CreatedAt, 0, MAX_TIME))
 	p.LastSeen = math.floor(number(raw.LastSeen, p.LastSeen, 0, MAX_TIME))
+	--==========================================================================
+	-- THE UNCLAIMED OFFLINE CLAIM MIGRATES BY BEING ABSENT
+	--
+	-- A save from before offline earnings has none of these and reads 0: no
+	-- claim waiting, which is exactly its state. Clamped like every other
+	-- number here, so a corrupt row can neither mint more than the cash cap nor
+	-- claim to have banked more than a night of credit.
+	--==========================================================================
+	p.OfflineCash = math.floor(number(raw.OfflineCash, 0, 0, SAVE.MaxCash))
+	p.OfflineSeconds = math.floor(number(raw.OfflineSeconds, 0, 0, SeedData.Offline.MaxCreditSeconds))
+	p.OfflineAway = math.floor(number(raw.OfflineAway, 0, 0, MAX_TIME))
 
 	if type(raw.Plants) == "table" then
 		for _, row in ipairs(raw.Plants) do

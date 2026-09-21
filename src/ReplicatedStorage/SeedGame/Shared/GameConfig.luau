@@ -559,6 +559,32 @@ GameConfig.SellOne = {
 	ExpiredText = "That offer expired. Press the sign again.",
 }
 
+--==============================================================================
+-- OFFLINE EARNINGS: THE CLAIM, BY NAME
+--
+-- Names and words only; the numbers are SeedData.Offline. The pending claim is
+-- published as player attributes -- server-set, so a client can read them and
+-- cannot change them -- and the client asks to be paid with one verb on
+-- GameEvent that carries nothing. The server answers with the amount it paid.
+--==============================================================================
+GameConfig.OfflineEarnings = {
+	ClaimAction = "OfflineClaim",
+	ReplyAction = "OfflineClaimed",
+	Attributes = {
+		-- The pending claim before the x2 pass; the pass is applied on payment.
+		Cash = "OfflineCash",
+		-- Seconds actually credited (capped) and seconds actually away.
+		Seconds = "OfflineSeconds",
+		Away = "OfflineAway",
+		-- The garden that earned it: how many grown plants, and the best one.
+		Grown = "OfflineGrown",
+		Best = "OfflineBest",
+		BestTier = "OfflineBestTier",
+	},
+	Title = "WHILE YOU WERE AWAY",
+	ClaimText = "CLAIM",
+}
+
 GameConfig.Attributes = {
 	PlotId = "PlotId",
 	OwnerUserId = "OwnerUserId",

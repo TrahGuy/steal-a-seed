@@ -973,6 +973,32 @@ function SeedData.SellPrice(species: Species?, tier: number?): number
 	return SeedData.IncomePerSecond(species, tier) * SeedData.SellSeconds
 end
 
+--==============================================================================
+-- WHAT A GARDEN EARNS WHILE ITS OWNER IS AWAY
+--
+-- Balance, so it lives here. A player who has been gone at least MinAwaySeconds
+-- comes back to a claim: every GROWN plant they left in the ground pays
+-- Efficiency of its normal IncomePerSecond for the time they were gone, up to
+-- MaxCreditSeconds in total. Pods earn nothing until hatched by hand, online or
+-- off. The x2 pass applies when the claim is paid, exactly as it does online.
+--
+--   MinAwaySeconds    20 minutes: a server hop or a crash-and-rejoin is not
+--                     "away", and it is also the time Roblox takes to
+--                     disconnect an idle player.
+--   MaxCreditSeconds  8 hours, the same horizon the mill's training charge
+--                     refills over; a week away cannot buy more than a night.
+--   Efficiency        half: time in the game is always worth more than time out
+--                     of it, or nobody would run the road.
+--
+-- OfflineEarnings (server) does the arithmetic; OfflineUI only reads these to
+-- say them.
+--==============================================================================
+SeedData.Offline = {
+	MinAwaySeconds = 20 * 60,
+	MaxCreditSeconds = 8 * 3600,
+	Efficiency = 0.5,
+}
+
 function SeedData.RollKg(rng: Random): number
 	-- GONE. Kept only as a loud failure for anything still asking for weight,
 	-- because silently returning a number would let a caller keep working with

@@ -38,6 +38,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local SaveService = require(script.Parent:WaitForChild("SaveService"))
 local ProfileSchema = require(script.Parent:WaitForChild("ProfileSchema"))
+local OfflineEarnings = require(script.Parent:WaitForChild("OfflineEarnings"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
@@ -603,6 +604,59 @@ end
 --==============================================================================
 local REPLICATE_INTERVAL = 0.25
 
+--==============================================================================
+-- THE OFFLINE CLAIM, ON THE PLAYER
+--
+-- Published as attributes so the claim card can read it whenever its script
+-- happens to start, before or after the profile lands; server-set, so a client
+-- can read it and cannot write it. Cleared the moment the claim is taken.
+--==============================================================================
+local OFFLINE_ATTR = GameConfig.OfflineEarnings.Attributes
+
+function PlayerDataService.PublishOffline(player: Player)
+	local entry = entries[player]
+	local profile = if entry then entry.profile else nil
+	if not (profile and profile.OfflineCash > 0) then
+		for _, name in pairs(OFFLINE_ATTR) do
+			player:SetAttribute(name, nil)
+		end
+		return
+	end
+	local garden = OfflineEarnings.garden(profile.Plants)
+	player:SetAttribute(OFFLINE_ATTR.Seconds, profile.OfflineSeconds)
+	player:SetAttribute(OFFLINE_ATTR.Away, profile.OfflineAway)
+	player:SetAttribute(OFFLINE_ATTR.Grown, garden.grown)
+	player:SetAttribute(OFFLINE_ATTR.Best, garden.best)
+	player:SetAttribute(OFFLINE_ATTR.BestTier, garden.bestTier)
+	-- Last, so a client watching Cash sees the rest already in place.
+	player:SetAttribute(OFFLINE_ATTR.Cash, profile.OfflineCash)
+end
+
+--==============================================================================
+-- TAKE THE CLAIM, ONCE
+--
+-- Read and zeroed in one resumption, with no yield between: a second claim in
+-- the same frame, or a spammed remote, finds nothing. EconomyService is the
+-- only caller and the only thing that turns what this returns into cash.
+--==============================================================================
+function PlayerDataService.TakeOffline(player: Player): (number?, number, number)
+	local entry = entries[player]
+	if not entry then
+		return nil, 0, 0
+	end
+	local profile = entry.profile
+	local cash, seconds, away = profile.OfflineCash, profile.OfflineSeconds, profile.OfflineAway
+	if not (cash > 0) then
+		return nil, 0, 0
+	end
+	profile.OfflineCash = 0
+	profile.OfflineSeconds = 0
+	profile.OfflineAway = 0
+	touch(player)
+	PlayerDataService.PublishOffline(player)
+	return cash, seconds, away
+end
+
 local function pushProfile(player: Player)
 	local entry = entries[player]
 	local remote = profileUpdated
@@ -673,12 +727,32 @@ local function onPlayerAdded(player: Player)
 		local persistent = status == "ok" or status == "new"
 		local profile = ProfileSchema.Sanitise(raw)
 
+		--======================================================================
+		-- THE ABSENCE IS CREDITED HERE, AND ONLY HERE
+		--
+		-- LastSeen is when the last session was saved, and the first write of
+		-- this session overwrites it -- so this is the one moment it still says
+		-- how long they were gone. A saved profile only ("ok"): a new one has no
+		-- garden, and a temporary one cannot keep what it is given. Nothing is
+		-- paid here; OfflineEarnings records a claim and EconomyService pays it.
+		--======================================================================
+		local offlineAdded, offlineCredited = 0, 0
+		if status == "ok" then
+			offlineAdded, offlineCredited = OfflineEarnings.accrue(profile, os.time())
+		end
+
 		entries[player] = {
 			profile = profile,
 			persistent = persistent,
-			dirty = status == "new",
+			dirty = status == "new" or offlineAdded > 0,
 			loadedAt = os.clock(),
 		}
+		PlayerDataService.PublishOffline(player)
+		if offlineAdded > 0 then
+			log(string.format("%s was away %.0f min: garden credited %s for %.0f min (claim now %s).",
+				player.Name, profile.OfflineAway / 60, GameConfig.compact(offlineAdded),
+				offlineCredited / 60, GameConfig.compact(profile.OfflineCash)))
+		end
 		--======================================================================
 		-- THE TIER IS RIGHT FROM THE FIRST FRAME, AND STAYS RIGHT
 		--
