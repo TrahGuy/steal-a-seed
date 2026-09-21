@@ -225,8 +225,13 @@ BiomeData.Biomes = {
 		Mood = "💀",
 		Order = 5,
 		RecommendedSpeed = 10_000_000_000,
-		GroundColor = Color3.fromRGB(30, 24, 60),
-		WallColor = Color3.fromRGB(20, 16, 42),
+		-- Lifted from (30,24,60) / (20,16,42) on 2026-09-18 with the environment
+		-- art pass: the approved sheet's Starbloom is an indigo garden under a
+		-- dusk sky, and on the old near-black floor nothing built for it could be
+		-- seen from the road. Still the darkest biome, and Brightness still keeps
+		-- its segment glow.
+		GroundColor = Color3.fromRGB(58, 42, 112),
+		WallColor = Color3.fromRGB(40, 28, 84),
 		AccentColor = Color3.fromRGB(158, 128, 255),
 		Brightness = 0.3,
 		Nests = 1,

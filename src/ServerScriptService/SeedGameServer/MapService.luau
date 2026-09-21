@@ -885,13 +885,18 @@ local function buildSegment(biome: BiomeData.Biome, parent: Instance): Model
 
 	--== WALLS ==--
 	for _, side in ipairs({ -1, 1 }) do
-		build({
+		local wall = build({
 			name = side < 0 and "WallLeft" or "WallRight",
 			size = Vector3.new(wallT, wallH, L),
 			cframe = CFrame.new(side * (W * 0.5 + wallT * 0.5), Y + wallH * 0.5, midZ),
 			color = biome.WallColor,
 			parent = model,
 		})
+		-- Studs on the face the player sees, not only the top edge 46 studs up.
+		-- The walls are the largest surfaces in every screenshot of the road, and
+		-- the 2026-09-18 art pass is a studded world; a SurfaceType costs nothing.
+		wall.LeftSurface = Enum.SurfaceType.Studs
+		wall.RightSurface = Enum.SurfaceType.Studs
 	end
 
 	--== THE FAR WALL ==--
