@@ -1,5 +1,197 @@
 # Steal a Seed — Session Handoff
 
+## Everything committed and pushed — 2026-09-21 (CLAUDE)
+
+**Owner request:** "commit and push everything", after the release check listed
+the uncommitted passes. That approves all of them. Pushed to origin/main
+(github.com/TrahGuy/steal-a-seed, a PUBLIC repo) together with Codex's two
+local commits, 727ebcb and 4435b2f.
+
+| commit | what |
+| --- | --- |
+| e05330c | environment art: MapDecor, wall studs, Starbloom colours, MapDecorSpec |
+| 9a00bac | eight plants rebuilt, PlantSculpt, PlantFormsSpec (Dunebud knot fix included) |
+| ddda095 | SELL ONE board, panel, quote/answer, SellOneSpec |
+| b703cab | purchases acknowledged only once saved, StoreSpec |
+| eef25da | thrown players set down at the biome gate instead of the void |
+| ff0f3de | weather teaser screen, WeatherTeaserSpec |
+| c01fe26 | carry guard, CarryGuardSpec |
+| 692d863 | sfx source audio |
+| 16be381 | art sources: AI pod FBX, icon and rail mockups, Suncrown mesh tests |
+| a37a3c7 | thumbnails and generated key art; `thumbnail1` renamed to `thumbnail1.png` |
+| b67e4be | skills colossal-titan-sculpting and primitive-organic-sculpting, plus a reference image |
+
+MapService was committed in two steps, so e05330c holds only the wall studs
+and ff0f3de only the teaser's two lines. The two new skills are not yet in the
+AGENTS.md skills table and have no `.claude/skills` pointers. Their reference
+image is a screenshot of another Roblox game's creature, now public with the
+rest of the repo.
+
+Still the owner's before public release: the Maturity & Compliance
+questionnaire, confirming "/6" on the first live server, and a private test
+with five friends. See the release check above.
+
+## Carry guard: a pod cannot travel faster than its carrier may run — 2026-09-21 (CLAUDE)  (COMMITTED c01fe26, APPROVED 2026-09-21)
+
+**Owner request:** fix "nothing stops a teleporting or speed-hacking exploiter"
+from the release check. Also asked why Studio shows Max Players 60 when the
+Creator Dashboard was set to 6 weeks ago, and reported the game is renamed
+Podnappers.
+
+### The hole
+
+A character is simulated on its owner's machine, so its position reaches the
+server as a claim. CarryService banked a pod whenever the carrier stood in the
+safe zone, checked every 0.2 s, and never asked how they got there: teleport
+from any nest to your plot and the pod banks, guardian and road skipped.
+
+### The fix
+
+* `SeedGameServer/CarryGuard.luau` (new, pure, no requires): a travel BUDGET
+  that fills at the carrier's server-set WalkSpeed x1.35 and is spent by
+  horizontal distance moved. 24 studs of slack at the take, at most 4 s of
+  travel saved (network stalls), none refilled by a correction, none at a take
+  within 10 s of the player's last carry.
+* `CarryService.luau`: the budget starts at the take (from the take position),
+  every carrier is checked every Heartbeat, and once more right before banking.
+  Overdrawn = put back to the last position the server accepted, still holding
+  the pod, with nothing saved; one rate-limited warn per player per 5 s names
+  them in the server log. No public API changed; `CarryService.CheckCarrier` is
+  exposed for probes.
+* Server moves that keep the pod were inventoried and fit the slack: a
+  Starlock pull (8 studs, asserted <= 12) and a Dunesnap trip (7 studs/s for
+  about 1.1 s). Bats, blasts, guardian throws and nightfall end the carry
+  before moving the body. WalkSpeed is written only by the server, so the rate
+  is trustworthy. The one server move the guard undoes is PlotService placing a
+  queued carrier on a freed plot -- which would otherwise bank the pod for
+  free.
+
+### Verified
+
+* CarryGuardSpec 27/27 (honest runs at WalkSpeed 9.6 and 150, 4 Hz updates,
+  30% over speed, 3 s stall passes, 8 s stall capped, Starbloom-to-plot
+  teleport, a teleport seen as 10 studs a frame gains <= the slack, double
+  speed caught in < 5 s, a hacker running through every correction nets 37
+  studs in 20 s where the hack would cover 2,000, trap pull and trip pass,
+  falling ignored, NaN, re-take cooldown, and a text check that CarryService
+  still calls the guard at the take, every frame and before banking). Full
+  suite 39 specs, 0 failures, 4126 pass markers.
+* Live Play on a throwaway store (`StealASeed_guard_20260921`, key removed,
+  name reverted; the owner's store never opened), two loose pods 70 studs past
+  the red line:
+
+| scenario | result |
+| --- | --- |
+| teleport into the safe zone | not banked, still carrying, put back 36 studs from the take (the slack) |
+| honest walk home at WalkSpeed 16 | banked normally |
+| client WalkSpeed 120 | banked after 3.06 s = 21.6 studs/s, the 1.35x cap, never 120 |
+
+  The server-side trace showed WalkSpeed 16 throughout: a client's own
+  WalkSpeed does not replicate. The server sees a client teleport as roughly
+  10 studs a frame of motion, not one jump.
+
+### Max Players 60 in Studio vs 6 on the dashboard
+
+Studio's `Players.MaxPlayers` read 60 in Edit and in Play; the boot warning in
+ServerMain reads that same value. Studio's copy lives with the place and the
+dashboard does not update it; live servers are sized by the dashboard. The
+public games API returns zeros for this universe (10744596516) because it is
+not public, so the live value could not be read from here. To confirm: after
+publishing, join a live server and check the F9 server log for the boot
+warning, or the server list for "/6". Setting Max Players in Studio's Game
+Settings -> Places should bring Studio's copy in line.
+
+### Rename
+
+Podnappers is set on the dashboard; nothing player-facing in code names the
+game. Keep `GameConfig.Save.StoreName = "StealASeed_v1"` -- renaming the store
+resets every player's progress.
+
+### Harness note
+
+A runtime Script that calls `CarryService.SpawnLoose` owns the Take prompt
+connection that call makes; destroying the Script disconnects it and the pod
+can never be taken. Keep the spawning script alive for the whole test.
+
+### Commit set
+
+`CarryGuard.luau`, `CarryService.luau`, `tools/tests/CarryGuardSpec.luau`, this
+section.
+
+## Weather teaser screen beside the road mouth — 2026-09-21 (CLAUDE, finishing CODEX's start)  (COMMITTED ff0f3de, APPROVED 2026-09-21)
+
+**Owner request:** "a board at the side of the biome entrance, about update soon,
+update is about weather update, but make it black so users will get curious, its
+a screen board that plays." Codex built the first version and ran out of usage
+mid-check; the owner asked Claude to finish it.
+
+### What it is
+
+A 7-part black screen board (feet, posts, housing, trim, screen; nothing
+collides, touches or is queryable) with one 960x540 SurfaceGui: SOMETHING IS
+COMING / UPDATE SOON / a storm cloud in near-black silhouette with "???" on it /
+rain / THE SKY IS CHANGING... / a loading bar and a slow scan line. Twice a
+14 s loop a lightning double-flicker lights the cloud, shows a bolt and lifts the
+whole screen for about 0.4 s -- the beat that makes it read as a screen that
+PLAYS from the path. No video asset, sound, light, remote or weather gameplay.
+
+* `Shared/WeatherTeaser.luau` -- placement, build, bind, and one pure `Paint`
+  (every property a function of wrapped server time, so every client shows the
+  same frame and the loop is seamless; `StrikeAt(t)` is the storm clock).
+* `WeatherTeaser.client.luau` (Codex, unchanged) -- paints at 15 Hz, only while
+  the screen is within `Reach`, in front of the camera and on screen; Reduced FX
+  ("Off" on `SeedAfterimageQuality`) paints the still card once and stops.
+* `MapService.luau` -- one require and `WeatherTeaser.Build(props)` after the
+  field dressing (the other MapService hunk, wall studs, belongs to the
+  2026-09-18 environment pass).
+
+### What changed from Codex's version, and why
+
+1. **Moved to the LEFT of the road mouth.** Codex's spot (x +104) failed its own
+   spec: at level 3+ a plot grows a 40-stud wing, Plot_06's points at the mouth
+   and reaches z -164 at level 5, and its rail ran 14.7 studs into the board
+   (exact footprint test). Plot_01's wing grows away from the mouth, so the
+   mirrored spot (-104, 0, -148), facing the field, keeps 25.2 studs from a
+   level-5 Plot_01, 11.5 outside the night shutter, 7.6 behind the red line and
+   70 from the nearest field decor.
+2. **Motion sized to be seen.** Codex's rain was 2 px wide (0.05 studs), the
+   scan line 91% transparent and the cloud drift 10 px; from the path the screen
+   read as a still. Rain is now 16 slanted 4x24 px streaks falling 90 px/s
+   (seamless: 21 falls a loop), drift 24 px, bar 6 px, and the lightning beat
+   above. Text a size up; the unreadable 15 px footer removed.
+3. **Reach 180 -> 260**, so the flicker is seen from the hub and near plots.
+
+### Verified
+
+* WeatherTeaserSpec 31/31: pure decoration, outside the road and shutter on
+  either side, behind the red line, >= 8 studs from every plot at MAX level,
+  bolt exactly while a strike is lit, lightning < 10% of frames, visible motion,
+  deterministic and seamless loop, Reduced FX still. Full suite 38 specs, 0
+  failures, 4099 pass markers (MapDecorSpec 93/93).
+* Live Play on a throwaway store (`StealASeed_teaser_20260921`, loaded as new,
+  key RemoveAsync'd, name reverted -- the owner's store was never opened): the
+  client binds the tagged board; one 14.5 s loop gave 48 cloud positions, 51
+  rain positions, 4 flickers, bolt on 5% of frames; Reduced FX held perfectly
+  still with no flash; looking away paints nothing. `Paint` costs 39 us, about
+  0.6 ms of Lua a second. Map 3,237 parts (+7).
+* Captures: close-up dark frame, close-up flash frame, player's-eye from the
+  path, and a wide shot with the Greenhollow gate.
+
+### Not verified
+
+* Frame rate: Studio was not the foreground window and renders an idle
+  viewport at a flat 15 fps (66.7 ms), so frame-time numbers from this session
+  mean nothing; the Lua cost above is the measurement.
+* A phone, the night look (LightInfluence 0 should glow), two clients side by
+  side.
+
+### Commit set once approved
+
+`Shared/WeatherTeaser.luau`, `StarterPlayerScripts/WeatherTeaser.client.luau`,
+`tools/tests/WeatherTeaserSpec.luau`, the two teaser lines of `MapService.luau`
+(stage that hunk alone -- the file also carries the unapproved wall studs), and
+this section.
+
 ## Beta recheck and debug panel removed — 2026-09-21 (CODEX)
 
 **Verdict: controlled-beta candidate, not cleared for public launch.** Owner asked
@@ -59,6 +251,628 @@ two-client PvP/trap/guardian contention, purchase/rejoin, or six-full-plot soak
 coverage. Those hands-on checks from the earlier audit remain necessary.
 The earlier SELL ONE death-panel and debug-teleport treadmill issues were not
 reproduced today; they are prior findings, not newly verified failures.
+
+## Beta-readiness audit: two High fixes, one cosmetic fix, and the list that is left — 2026-09-19 (CLAUDE)  (FIXES COMMITTED b703cab, eef25da; knot in 9a00bac)
+
+**Owner request:** audit the beta candidate for lost progress, purchases, onboarding,
+combat/guardian/trap, mobile UI, performance and cosmetics; run the existing checks
+first; fix confirmed bugs with the smallest change and a regression test; deliver a
+verdict with owner tests and a pre-publish checklist; disposable profiles only; do
+not publish, spend Robux, change public settings or touch the owner's real save.
+
+### Release candidate tested
+
+HEAD `1774217` on master plus the three uncommitted passes above (environment art,
+eight plants, SELL ONE) plus this audit's fixes. Studio on "Steal a Seed"
+(place 114075467877655) through Rojo on port 34872; every edited file was checked
+in Studio by reading its Source and compiling it with loadstring in Edit.
+
+Studio's DataStore access is on, so Play loads a REAL profile. Every Play session
+of this audit ran with `GameConfig.Save.StoreName` temporarily set to
+`StealASeed_audit_20260919`; the profile loaded as `(new)`, the owner's
+`StealASeed_v1` store was never opened, the name is reverted (git diff on
+GameConfig is the SELL ONE block only) and the audit key `p_4119740186` was
+RemoveAsync'd from the audit store afterwards.
+
+### Existing checks first
+
+36 specs in Edit: two failures before the fixes (PlantFormsSpec, Dunebud knot),
+none after. Final run: 36 specs, 0 failures, 4034 pass markers, 56.5 s.
+
+### Fixed (each with repro, cause, fix, test, re-run)
+
+1. **A paid product could be acknowledged without ever being saved** (High,
+   `StoreService.luau`). Repro: profile that cannot write (DataStores unreachable,
+   or a failed save); `grant` and `remember` run in memory, `Save` fails, RETRY is
+   returned; Roblox re-delivers, `alreadyHonoured` finds the id in the in-memory
+   ledger and answers GRANTED. Fix: a remembered receipt is acknowledged only once
+   `PlayerDataService.Save` succeeds; otherwise RETRY (nothing is granted twice
+   because the entry is already there). Test: StoreSpec "a retry of an unsaved
+   grant is not acknowledged until the save succeeds, and grants nothing again"
+   (16/16).
+2. **A Starbloom throw sent the whole body out of the world** (High,
+   `NestService.luau`). This is the "lost its HumanoidRootPart" report. Measured
+   live with a 0.1 s sampler: Astralmaw throws at 300 studs/s, lift 0.55 (the
+   client applied 342 studs/s); the ragdoll peaked at 75 studs, the lane walls
+   are 46, the direction had a sideways component (0.53 X / 0.85 Z), the torso
+   crossed ground level 290 studs off a 140-stud-wide lane, fell to -488 and the
+   character was destroyed at FallenPartsDestroyHeight (-500), died and
+   respawned at the plot 7.4 s after the grab. Decorations were not involved;
+   the root travelled with the torso (max 21 studs apart). Fix: `VOID_Y = -40`;
+   when the thrown root drops below it the throw ends, `restore()` runs, and the
+   body is set down at the biome's own Gate on the road axis, stopped, facing
+   home. Re-test: same throw, root reached -28, body set down at (0, 6, -1360),
+   the client's own stand-up ran there ("stood up at 0, 3, -1360"), alive at
+   100 health, walk 26, no respawn, held plants and weapons intact, pod
+   confiscated and returned to the nest as before. No spec can throw a body in
+   Edit; the live re-test is the evidence. Every profiled throw with any
+   sideways component will still leave the lane; the guard only makes the
+   landing survivable. Lowering the throw or raising the walls is the owner's
+   call.
+3. **Dunebud's knot floated 0.63 studs at Colossal** (cosmetic, in this session's
+   own uncommitted plant work). The knot rested on husk tips that move outward
+   with girth. Fix: seated on the bud (y 3.35), AuthoredHeight 3.68.
+   PlantFormsSpec 388/388.
+
+### Verified live on the disposable profile (desktop viewport 933x714)
+
+* Fresh player: train to 1,610 Speed on the treadmill, reserved Nubkin pod
+  placed, TAKE through the real prompt (0.7 s hold), guardian confiscation path
+  untouched, banked by crossing the red line (BankedCount 1, Held row saved),
+  planted by the client's PlantAt (HatchAt = planted + 30 s), Instant Hatch
+  prompt drawn as "F / INSTANT HATCH / 99" until ready, HATCH through the real
+  prompt (1.1 s, Hatching attribute during the hold), reveal event, grown Tool
+  equipped, Almanac marked. Tutorial `Done` ended with all six steps.
+* Persistence: stop/start Play reloaded `(ok)` with cash, speed, 5 plant rows
+  (4 Colossal + 1 pod, the pod ready), 1 held row, both weapons, tutorial and
+  the x2 pass (CashMultiplier 2 re-attributed). Death rebuilt the hotbar from
+  Held (2 Nubkin + pod). Two "restored 1 held plant(s)" lines on one join are
+  two rebuild passes, not two Tools (counted: one).
+* Economy: income 139,650/s expected (base 69,825 x pass 2) vs 141,142/s
+  observed over 3 s; sale prices ignore the pass; AddCash/AddSpeed refuse NaN;
+  ProfileSchema clamps every number and drops unknown ids.
+* Purchases (no Robux spent): 12 live products, 3 pod products at id 0 shown
+  as SOON by design; pass 1975418369 live; UserOwnsGamePassAsync cached with a
+  90 s recheck for non-owners; receipts idempotent (StoreSpec).
+* Sounds: all 44 ids in GameConfig preload with 0 fetch failures.
+* Traps: refused in the safe zone, placed on the Greenhollow floor, 14 s
+  cooldown, owner immune by code (`victim ~= owner`).
+* Performance: 60 fps both empty (3,052 parts) and with four Colossal plants
+  plus a pod on one plot (3,925 parts, plot 245; client p99 19.0 ms, server
+  heartbeat avg 16.7 ms, memory unchanged at 2.06 GB Studio total, instances
+  155 MB). Single plot only; six full plots not measured.
+* HUD layout solver: no problems at any tested viewport in touch mode (5 slots,
+  compact) or desktop (10 slots).
+
+### Open
+
+* **Blocker for public play:** `Players.MaxPlayers` is 60 against 6 plots.
+  ServerMain warns at boot; PlotService queues joiners 7+ on the overflow pad.
+  Set Max Players to 6 in Game Settings before publishing.
+* Medium: the reserved beginner pod is a loose pod, so nightfall removes it and
+  the grant (1 of 3) is spent. Seen live: grant 1 vanished at the first night
+  before the test character reached it, grant 2 was placed at dawn.
+* Low: SELL ONE panel stays open over a dead body until the respawn (the Tool
+  is still in the corpse); the server forgets the quote on CharacterRemoving.
+* Low: a treadmill mount ends only on jump or death; a mounted body moved by
+  a teleport keeps WalkSpeed 0 and MillMounted until it jumps. Only the debug
+  Teleport reaches that.
+* Place-file content not built from source, to remove before publish:
+  `Workspace.DustbowlPodLineup` (84 descendants), `Workspace.TrapLineup` (134),
+  `Workspace.WalkModeSpecFixture` (4).
+* `thumbnail1` (tracked since 2026-09-07) is deleted in the working tree; not by
+  this audit; left alone.
+
+### Not tested
+
+Multi-client combat, PvP traps on a victim, guardian-versus-two-thieves; mobile
+visuals (no device emulator available to the MCP, the solver was checked
+numerically only); a real product purchase; a soak beyond ten minutes or six
+populated plots; throws in the other four biomes (60 to 195 studs, expected to
+stay inside the lane, not measured).
+
+### Files changed by the audit
+
+`StoreService.luau`, `tools/tests/StoreSpec.luau`, `NestService.luau`,
+`DustbowlForms.luau` (knot + AuthoredHeight), this file. Left uncommitted with
+the three passes above; commit the audit fixes separately from the art.
+
+## SELL ONE: a second board at the stall that buys the plant in your hands — 2026-09-19 (CLAUDE)  (COMMITTED ddda095, APPROVED 2026-09-21)
+
+**Owner request:** a "SELL ONE" sign on the opposite side of Marigold's shop from
+SELL ALL, same design language, placed off the shop's own layout, selling exactly
+the ONE grown plant the player is holding after a confirmation that shows the
+name, rarity, size, income and the exact server-calculated payout; refuse bats,
+traps, unhatched pods, carried pods, planted creatures and anything not the
+sender's; never substitute another copy; no double sale under rapid clicks or a
+SELL ALL race; existing prompt, remote, inventory, cash-cap and sound paths.
+
+### Where it went, and why there
+
+* **`SellService.luau`** builds both boards now. `build(stall, name, side, ...)`
+  is the SELL ALL builder with the end of the stall as a parameter: SELL ALL
+  at `stall.CFrame * (-15.5, 0, -3)` exactly as before, SELL ONE at `+15.5` --
+  the mirror through the stall's own frame, so the two move together if the
+  stall ever does. Measured in the live map: SELL ALL stands at world
+  (15.5, 7.3, 20.0), SELL ONE at (-15.5, 7.3, 20.0); each has the same crate 6
+  studs away and nothing else within a 7 x 9 x 7 box; Marigold is 20 studs
+  from it, her prompt reaches 11; no other prompt or spawn within 14; the
+  nearest field decor is 197 studs off; the road mouth is 190 studs the other
+  way. Same post, foot, board, coin, GothamBlack title, GothamMedium subtitle,
+  both faces lettered: "SELL ONE / the plant in your hands · 30s of income".
+* **The prompt** is `SellOnePrompt`, Custom style so PromptUI draws it, `E`,
+  `HoldDuration 0` (Marigold's shop prompt's rule: it only OPENS a
+  confirmation, and the confirmation is the deliberate step; SELL ALL keeps its
+  1.1 s hold because one press there is the whole sale), 12 studs.
+* **`EconomyService.QuoteOne` / `SellOne`** sit beside `SellHeld` -- Rule 6, cash
+  mints in one file. Same `SeedData.SellPrice` (30 s of the BASE rate; the x2
+  pass multiplies `RateFor`, never this), same `PlayerDataService.AddCash`
+  (which clamps at `MaxCash`), same `CarryService.SyncHeldNow` to re-snapshot
+  the bag. Stricter than SELL ALL: the Tool must be in the CHARACTER (held, not
+  bagged), `Hatched`, and name a species with a real tier; `IsCarrying` refuses
+  a raid carrier outright. Destroy, re-sync, pay, no yield between.
+* **The confirmation is a quote and an answer on GameEvent**, two verbs in
+  `GameConfig.SellOne`: server -> client `SellOne` with a `phase` ("quote",
+  "refused", "sold"), client -> server `SellOneReply` with `{ token, accept }`
+  and nothing else. The server captures the exact Tool instance when the prompt
+  fires, keys it by a token, and on the answer re-checks the token, a 45 s
+  expiry, reach (18 studs of the board), that the SAME instance is still in
+  the Character, then sells it. The pending quote is forgotten BEFORE any of
+  that, so a second answer with the same token finds nothing; it is also
+  forgotten on death, on leaving, on a no, and replaced by the next press.
+* **`SellUI.client.luau`** (new) draws the panel with `UIKit.modal` (its dimmer
+  is a TextButton, so nothing behind it is tapped), the Settings toggle's button
+  recipe (44+ px, outlined LuckiestGuy, plate, foot, pop), name / "RARITY •
+  SIZE" in their colours / "Earning +$N/s right now" from `PlantInfo.Describe`
+  with the pass multiplier (the Bag's rule) / "Sell this Nubkin for $120?"
+  with the server's price and thousands separators / CANCEL and SELL. It
+  watches the held Tool while open and cancels itself if the Tool leaves the
+  hands or the character dies; SELL disarms on its first press; a brief line
+  ("Hold a grown plant to sell it.", "Sold Nubkin for $120") sits in the biome
+  name's HudLayout slot. DisplayOrder 36: above the Bag (30) and the shop (34),
+  below the alarm (50).
+
+### Files
+
+`GameConfig.luau` (+`GameConfig.SellOne`), `EconomyService.luau` (+QuoteOne,
++SellOne), `SellService.luau` (both boards, the quote/answer, forget on
+death/leave), `SellUI.client.luau` (new), `tools/tests/SellOneSpec.luau` (new).
+SELL ALL's builder, prompt, hold, price and `SellHeld` are unchanged; PromptUI,
+LoadoutUI, CarryService, PlayerDataService untouched.
+
+### Verified (live, disposable profile on the audit store, desktop 933x714)
+
+* Both boards stand at (±15.5, 7.3, 20): SELL ALL on the left end of the stall,
+  SELL ONE on the right, seen together in one capture from the road side; the
+  prompt reads `SellOnePrompt`, E, hold 0, 12 studs, drawn by PromptUI.
+* The panel for a held Tiny Nubkin read NUBKIN / COMMON • TINY / "Earning +$8/s
+  right now" (4/s base x the owner's x2 pass, the Bag's rule) / "Sell this
+  Nubkin for $120?" / CANCEL and SELL at 165 x 46 px, over a full-screen dimmer
+  button. Captured.
+* Three identical Tiny Nubkins in the bag, one in hand: SELL sold exactly one
+  for exactly 120 (4/s x 30 s, no x2), Held went 3 -> 2, the notice read "Sold
+  Nubkin for $120", the pending quote was nil. Two accepts sent back to back
+  with the same token paid once.
+* Refused with "Hold a grown plant to sell it." and no panel: empty hands
+  (NOTHING_HELD), an unhatched pod Tool (UNHATCHED), a Rootwood Bat
+  (NOT_A_PLANT). Refused after a quote: standing 48 studs away (TOO_FAR,
+  "Stand at the SELL ONE sign to sell."), answering 84 s later (EXPIRED,
+  "That offer expired. Press the sign again."), each closing the panel with the
+  notice and leaving the plant. A no is logged as declined and sells nothing;
+  an accept after a no finds no quote.
+* SELL ALL with a quote open: SELL ALL sold three items for 360, the panel
+  closed itself as the Tool left the hands, the later accept sold nothing and
+  paid nothing.
+* Death with the panel open: after the respawn the old token found nothing, the
+  hotbar came back from Held (two Nubkins and the pod).
+* SellOneSpec 61/61; full suite 36 specs, 0 failures.
+
+### Not verified
+
+* A phone: no device emulator was available to the MCP, so no touch capture;
+  the panel's dimmer and 44+ px buttons follow the Settings recipe that was
+  approved on a phone on 2026-09-18.
+* A second player's Tool (not owned) and a pod carried to the sign: spec only.
+  A raid carrier is banked at the red line before it can reach the stall.
+* The SELL button's own press was not injected; the reply it sends was sent
+  directly and the server path from there is what was tested.
+* Cosmetic: the panel stays open over a dead body until the respawn.
+
+### Approval and commit
+
+Uncommitted and unpushed, alongside the environment art pass and the eight
+plant rebuilds below (three separate commit sets). To look: press Play, walk to
+the stall -- SELL ONE stands off the right end -- hold a grown plant and press
+E on it. Commit set once approved: the five files above and this section.
+
+## Eight plants rebuilt from the concept sheets: Greenhollow's four and Dustbowl's four — 2026-09-18 (CLAUDE)  (COMMITTED 9a00bac, APPROVED 2026-09-21)
+
+**Owner request:** rebuild Nubkin, Petalpip, Spiretip, Toadcap, Dunebud, Paddlehop,
+Thornwhorl and Raincup as grown plants from the two approved concept sheets
+(Greenhollow and Dustbowl design proposals), inside the existing builders, with a
+walk, gaze and blink that fit the new anatomy; preserve Bellchime, Suncrown, every
+other biome, all data, economy, pods, guardians and scenery; leave it uncommitted.
+
+### What was true before (confirmed, not remembered)
+
+The eight still came off CreatureModel's legacy shared construction -- seven soil
+clods or four root feet, a stem, four leaves, a per-form head branch (cube / orb /
+teardrop / mushroom / husk / pad / whorl / cup) and addFace -- while Bellchime
+replayed `GreenhollowForms.Plants` and Suncrown `DustbowlForms.Plants`. Measured at
+tier 1 / 4 / 7 in Edit before any edit (Base plate included):
+
+| species | parts | Tiny | Mega | Colossal (frame) |
+|---|---|---|---|---|
+| nubkin | 33 | 3.23 | 9.92 | 34.4 (28.3) |
+| petalpip | 36 | 4.15 | 12.80 | 44.5 (35.3) |
+| spiretip | 36 | 5.91 | 17.80 | 60.4 (37.7) |
+| toadcap | 43 | 6.19 | 19.54 | 69.7 (42.4) |
+| dunebud | 33 | 2.94 | 8.81 | 29.7 (30.6) |
+| paddlehop | 39 | 5.20 | 16.43 | 58.6 (35.3) |
+| thornwhorl | 37 | 5.24 | 16.35 | 57.6 (40.0) |
+| raincup | 42 | 5.67 | 17.77 | 63.3 (44.8) |
+
+The legacy heads scaled with girth as well as height, so a Colossal Toadcap stood
+70 studs on a 42-stud frame -- taller than the biome's Epic. Bellchime and Suncrown,
+the two authored species, land exactly on their frame at every tier.
+
+### Files changed (the whole diff for this task)
+
+* **`src/ReplicatedStorage/SeedGame/Shared/PlantSculpt.luau`** -- NEW, 244 lines.
+  The sculpting kit the authored builders share: `block / ball / disc / coin / rod /
+  wedge / blade / fin / beam / chain / face`, every part placed through
+  replayPart's arithmetic (positions by hs and gs, sizes by hs, rotations kept),
+  studs on all six faces unless `smooth`, every part a direct child of the model.
+  Not a plant system: CreatureModel still owns every creature.
+* **`src/ReplicatedStorage/SeedGame/Shared/GreenhollowForms.luau`** -- +390 lines:
+  `rootFoot`, `petal`, `rootLeg`, the four builders, `AuthoredHeight` and `Build`.
+  The Bellchime table is untouched.
+* **`src/ReplicatedStorage/SeedGame/Shared/DustbowlForms.luau`** -- +400 lines:
+  the same helpers plus `limb` and `slab`, the four builders, `AuthoredHeight` and
+  `Build`. The Suncrown table is untouched.
+* **`src/ReplicatedStorage/SeedGame/Shared/CreatureModel.luau`** -- +34 lines: after
+  each biome's replay branch, an `AuthoredHeight[id]` branch that calls
+  `Forms.Build(model, id, cf, H / authored, girthSpread(G), sp)` and hands the
+  returned face frame to the shared `addFace`. Nothing else moved. The legacy head
+  chain below is now unreachable for Greenhollow and Dustbowl and is left in place
+  for a separate cleanup after approval.
+* **`tools/tests/PlantFormsSpec.luau`** -- NEW, 388 checks (below).
+
+Untouched: SeedData (ids, names, rarity, Height, colours, income, tiers, hatch
+times, wander ladder), PlantService, PlantSway, CarryService, PlantPlace,
+PlantPickUI, UIKit, every UI script, every other biome, pods, guardians, scenery.
+
+### The rules the skills contributed
+
+* **plant-art-bible** -- every colour is the species row's Body / Crown / Accent
+  or the biome's Leaf / Stem / Soil (a shade the row lacks is a Lerp of two it
+  has); studs on everything but the face and the wet things; the face is the
+  shared `addFace` (doe for Greenhollow with two catchlights, squint for Dustbowl,
+  lids, cheeks, three-bar smile); decorations are literal tables; the part budget
+  is counted and asserted. Its kilogram-era text was resolved against the tier
+  code: `Height` is what a species SHIPS at, and hs = Frame / AuthoredHeight puts
+  every one of the eight exactly on its frame, as the bell and Suncrown already do.
+* **organic-roblox-form** -- one sentence and three masses per species, written
+  above each builder; no untouched primitive is a body (Nubkin's cube is five
+  overlapping masses and a cream muzzle, Petalpip's egg is two rounds in four
+  sepals); controlled asymmetry (unequal petals, blades and husks, an offset cap
+  lobe); movement decided first (which parts are Leaf arms, which rig the feet
+  use); the anti-overgeometry review cut Spiretip from seven husks to five,
+  Petalpip and Raincup from seven spikes to five broad petals, Dunebud's second knot.
+* **primitive-organic-sculpting** -- chained taper for the spire, the fern curls
+  and Raincup's stalk; hidden seams (thighs buried into bodies, beams overrun
+  into their neighbours, root knuckles inside anchors); tactile studs.
+* **plant-authoring** -- no SeedData row changed; the form switch is the one
+  integration point; `Base` is still the PrimaryPart at the ground.
+* **luau-conventions** -- `--!strict`, no new service, numbers in the Forms modules,
+  deterministic geometry, no per-frame work, Rojo build as the syntax gate.
+* **character-animation / character-rigging** -- read before naming a part.
+  PlantSway is the one animator and nothing here adds a loop: arms are single
+  `Leaf` blades with the shoulder buried (it swings them about their own centre),
+  legs are `Thigh / Shin / Foot / Toe` blocks whose thigh top is the hip, and the
+  two splay-legged species opt into the ROOT walker (`RootRise<n>`, `RootKnuckle<n>`,
+  `RootAnchor<n>`, `RootToeA/B<n>`) because a sideways leg swung about a hip lifts
+  instead of stepping. Eyes are `Left/RightEye` + `Pupil` + `Lid`, so the pupil rig
+  and the blink find them unchanged.
+
+### The eight, as built (parts include Base and the face)
+
+| species | parts | rig | the one sentence |
+|---|---|---|---|
+| Nubkin | 36 | legs, 2 Leaf | a soft-cornered green cube with two nubs, a two-leaf sprout, a cream muzzle, leaf arms and stubby root feet -- squarer than the sheet on request |
+| Petalpip | 42 | legs, 2 Leaf | a yellow-green egg in four leaf sepals, five broad cream petals cupped behind and beside the face, a coral centre on top |
+| Spiretip | 40 | legs, 2 Leaf | a slender deep-green column wrapped in five broad husks, a cream stepped spire leaning back, four thorns on seams, three-toed feet |
+| Toadcap | 54 | roots x4 | a broad coral cap (brim, dome, front-left lobe) with cream patches and a pale gilled underside over a cream face, two fern curls, four splayed root legs |
+| Dunebud | 48 | legs, 2 Leaf | a cream bud inside five kite-shaped rust husks and two front fins, one peeled plate, folded husk hands, tan root feet |
+| Paddlehop | 40 | legs (thigh+shin), 2 Leaf | one flat sage pad with an olive rim, a bud off its top corner carrying the single coral bloom, side pads for arms, five thorns, bent tan legs |
+| Thornwhorl | 50 | roots x4 | a sandy face before a hub, five unequal rust blades sweeping a counter-clockwise spiral that curls forward, pale hooks, four wide-braced roots |
+| Raincup | 44 | legs, 2 Leaf | a blue bowl on a curved stalk, five broad petals short in front and tall behind round a yellow floor, one caught droplet, two leaves, three-toed feet |
+
+Budget proposed before building: 48 parts for the Commons and Uncommons, 56 for
+the Rares and the Epic, all under Bellchime's 47 / Suncrown's 64 neighbourhood.
+Result 36 / 42 / 40 / 54 / 48 / 40 / 50 / 44 against 33 / 36 / 36 / 43 / 33 / 39 /
+37 / 42 -- 354 for the eight against 299 (+18%). The increases pay for feet that
+walk (four to ten leg parts a species where the old builds had none), broad
+overlapping masses instead of a stem and a ball, and the root walker's five parts a
+leg on the two quadrupeds.
+
+### Heights now (Edit, tier 1 / 4 / 7)
+
+Every one stands on its SeedData frame within 1.5% at all seven tiers: Nubkin
+3.72 / 9.86 / 28.3, Petalpip 4.65 / 12.3 / 35.3, Spiretip 4.96 / 13.1 / 37.7, Toadcap
+5.58 / 14.8 / 42.4, Dunebud 4.03 / 10.7 / 30.6, Paddlehop 4.65 / 12.3 / 35.3,
+Thornwhorl 5.27 / 14.0 / 40.0, Raincup 5.89 / 15.6 / 44.8. **This is the biggest
+visible change beyond the art:** Tiny Dunebud grows from 2.9 to 4.0, Tiny Spiretip
+shrinks from 5.9 to 5.0, and the four Colossals that overshot their frames come
+down (Toadcap 70 to 42, Spiretip 60 to 38, Raincup 63 to 45, Paddlehop 59 to 35),
+which is the envelope the tier ladder documents (the tallest Colossals at 47-50)
+and where Bellchime and Suncrown already stand. The ladder itself is untouched.
+
+### Verified
+
+**Static / Edit**
+
+* **PlantFormsSpec: 388 passed, 0 failed.** Per species: AuthoredHeight equals the
+  hs = 1 mockup within 0.5%; at all seven tiers Base is the invisible PrimaryPart
+  at the ground, the drawn plant stands on the ground and on its frame, everything
+  anchored and non-colliding, no lights / emitters / scripts / sub-models, the same
+  part count; determinism (two builds, identical signatures); Leaf count; one eye,
+  a pupil and a lid per side, eyes on the front and mirrored; leg species: a thigh
+  and foot per side, toes, only the thighs above PlantSway's hip line, every Left
+  part at -X, hips further apart than hipNear; root species: no Thigh, four
+  rises and anchors, sockets off the axis with a fore-and-aft lever, anchors on the
+  soil; nothing floats at Tiny or Colossal (exact oriented-box gap, 0.05); studs on
+  the body, smooth on the face and the droplet; Bellchime 47 and Suncrown 64 parts;
+  all 25 species build. It caught two real defects on the way (toes 0.06 clear of
+  the foot at Colossal; a Thornwhorl blade through the ground) and both were fixed.
+* **Full suite: 35 specs, 0 failures**, including PlantInfoSpec's 350 combinations,
+  ReachPointSpec (pickup points measured on the new Nubkin at Colossal, 44/44),
+  StarbloomLimbSpec, PlantGlowSpec, HudLayoutSpec.
+* `rojo build` OK; `git diff --check` clean.
+* Renders (Edit, camera moved by script): the eight at Mega in a row with the
+  legacy Mega row behind them, front-three-quarter close-ups of each, front views of
+  Dunebud and Petalpip, and a Tiny / Titan / Colossal lineup of Nubkin, Toadcap and
+  Raincup. The lineup is left in Edit as `Workspace.ZZPlantLineup` (Archivable =
+  false, so it cannot reach the .rbxl) for the owner to walk round; delete the
+  folder when done.
+
+**Play (Studio Play Solo, desktop, one client, 2026-09-18)** -- eight fixtures built
+by the production `CreatureModel.Build` at tier 2 on UNOWNED Plot_02 (Claimed =
+false), tagged Planted so PlantSway drove them, walked on a scripted 6-stud leg and
+destroyed afterwards; the owner's Plot_01 and profile were never touched (boot and
+end both read `restored 3 plant(s)` / `4 held plant(s)`).
+
+* **Walk:** all eight covered their leg (5.4-6.1 studs). Foot dip below the soil
+  1.0-3.4% of body height (Toadcap 1.2%, Thornwhorl 1.0% on the root walker;
+  Suncrown's approved rig measures 2.6-4.0%). Worst seam between thigh and foot,
+  shin, rise, knuckle and anchor: **0.000** on every species. Leg swing 20.2-20.9
+  degrees (LEG_SWING 21), leaf swing 18.5-18.9 (SWING_AMP 19), zero on the two with
+  no arms. A full attachment survey at mid-stride found nothing loose.
+* **Gaze and blink:** with the character standing in front, every species' pupils
+  travelled (0.013-0.138 studs) while the eyeballs stayed put -- the pupil rig, on
+  all eight. Lids exist per side for the blink (the spec pins them).
+* **Carried:** the owner's own Dunebud Tool, restored at join by CarryService, is
+  the new 48-part build, held by its Base 1.35 studs below the root, upright (up.Y
+  1.000), drawn 2.97 x 4.03 x 2.69. No extra Tool or model appeared.
+* **Hatch reveal:** a fabricated `HatchReveal` (toadcap, tier 3) fired by a
+  temporary server Script built `Creature_toadcap` with 54 parts, CapBrim and
+  Gills, 0 tags, 0 lights, 0 prompts, and the reveal folder cleaned itself up 2.1 s
+  later. The Script self-destructed.
+* **UI framers:** all eight framed by `UIKit.framePlant` at BaseTier project fully
+  inside the glass, spanning 0.80-0.86 of its height; the Play capture shows the
+  new Dunebud, Paddlehop and Petalpip on the owner's hotbar cards.
+* **Console:** no error or warning for the whole session, fixtures included.
+
+### Deviations from the sheets, and why
+
+* Nubkin is squarer than the render, as asked.
+* Every face is the biome's shared addFace, not the sheet's individual expression
+  (Paddlehop's open mouth is the shared smile; Dustbowl keeps its squint).
+* Petal, husk and blade counts are lower than the renders (5 petals, 5 husks, 5
+  blades, 4-5 thorns, 4 cap patches) -- broad overlapping masses instead of many
+  small ones, per the anti-overgeometry review and the part budget.
+* Thornwhorl's blades are two straight courses and a hook rather than a smooth
+  curve; Raincup's throat is a disc and a ball; Dunebud's husks are kites of two
+  triangles. All primitives, no meshes or unions.
+* The Colossal heights of four species came down to the frame (see Heights).
+
+### Not verified -- read before approving
+
+* **No live pickup, planting or real hatch** of a rebuilt species: each writes the
+  owner's garden. PICK UP anchors on `Base` (unchanged) and ReachPointSpec measures
+  the new Nubkin; the reveal was driven by a fabricated event.
+* **The Index, Garden and Bag panels were not opened** (their buttons need a real
+  click, which needs Studio's focus); the framer was measured numerically instead
+  and the hotbar cards were seen live.
+* No physical phone, no multiplayer, no frame-time measurement.
+* Reduced effects: the eight carry no light, emitter or aura, so there is nothing
+  for the toggle to reduce; the Colossal aura (PlantAura) was not observed live --
+  its NEVER list excludes the face names these builders use.
+* Colossal in the world: built and measured in Edit (42-45 studs), not walked in a
+  real bed.
+
+### Approval and commit
+
+Uncommitted and unpushed. To look: `Workspace.ZZPlantLineup` in Edit (Mega row at
+z = 380, legacy row behind it at z = 420, the scale lineup at z = 620), or press
+Play and open the Bag. Commit set once approved: `PlantSculpt.luau`,
+`GreenhollowForms.luau`, `DustbowlForms.luau`, `CreatureModel.luau`,
+`tools/tests/PlantFormsSpec.luau` and this section -- separate from the
+environment art pass above, which is also awaiting approval.
+
+## Environment art pass: five biomes, five cradles, studs everywhere — 2026-09-18 (CLAUDE)  (COMMITTED e05330c, APPROVED 2026-09-21)
+
+**Owner request:** redesign the environmental art of all five biomes to the approved
+concept sheet -- a richer, distinctive, visibly studded Roblox world with better
+trees, rocks, flowers, grass, moss, alien flora and a biome-specific nest cradle at
+each nest -- through the existing MapService / MapDecor / NestService pipeline,
+preserving the road, the biome order and widths, the safe boundary, every nest,
+pod and guardian and all collision. Leave it uncommitted for visual approval.
+
+### Baseline (Edit, desktop Studio, 2026-09-18, before any edit)
+
+`Workspace.SeedMap` was **1,680 parts, 4 lights** (the field's), of which decor was
+**658 parts** across the five biomes and `FieldDecor` **183**; **0** studded decor
+faces (floors were already studded on top). The old props were small blocks (trees
+~10 studs under 46-stud walls) and the nests had nothing round them but
+NestService's own platform.
+
+### Files changed (the whole diff)
+
+* **`src/ServerScriptService/SeedGameServer/MapDecor.luau`** -- rewritten (~900
+  lines). A sculpting vocabulary (`chain`, `aim`, `radial`, `flatWedge`, `blade`,
+  `column`, `disc`, `jitter`), one palette per biome, ~30 prop builders, a seeded
+  `scatter` with band rules, `NESTS[biome]` cradle builders, and a self-check that
+  measures the racing line by vertical extent and prints
+  `[Seed/MapDecor] <biome> dressed: N parts.`
+* **`src/ServerScriptService/SeedGameServer/MapService.luau`** -- the walls' Left and
+  Right faces (the faces the road sees) are `SurfaceType.Studs`. Nothing else.
+* **`src/ReplicatedStorage/SeedGame/Shared/BiomeData.luau`** -- Starbloom's
+  `GroundColor` 58,42,112 and `WallColor` 40,28,84 (were 30,24,60 / 20,16,42): the
+  old near-black floor swallowed every prop, day and night.
+* **`tools/tests/MapDecorSpec.luau`** -- new, 93 checks (below).
+
+NestService, CarryService, TutorialPodService, GameConfig and the pod/guardian
+builders are untouched, so pod spawn positions, orientation, counts and prompts are
+the shipped ones.
+
+### The rules the skills contributed
+
+* **organic-roblox-form** -- every prop starts as one sentence and three masses
+  (an oak is trunk, crown, roots; a mangrove is stilts, trunk, canopy); primitives
+  are sculpture, not decoration; colour is built in zones (each palette has a
+  dark/base/light for bark and for leaf); the anti-overgeometry review is what set
+  the budgets and the "no giant bounding volumes" rule.
+* **plant-art-bible** -- the biome is what is shared (one `GH/DB/TM/EM/SB` palette
+  each, shared by scatter, cradle and wall growth); the part budget is counted
+  (560 a biome, 2,400 the road, 520 the field, all asserted); nothing is placed by
+  hand (every prop comes from `Random.new(seedFor(biome.Id))`); "nothing hangs over
+  a grown plant" became "nothing hangs over the pod ring" (RING_CLEAR 24.5, rim at
+  26.5, T7 shells reach 22).
+* **luau-conventions** -- the map is code and nests are Play-only; decor is
+  Anchored, CanCollide/CanTouch/CanQuery false, no scripts, no per-prop loops, no
+  Light per flower; numbers live in one place (`MAP`, `RIM`, `ARC`, `FLANK`);
+  syntax checked by `rojo build`; nothing committed without approval.
+* **primitive-organic-sculpting** -- chained wedge curvature (`chain`: tapered
+  blocks along Y with 8% overlap and a per-segment bend, for roots, stilts, arms and
+  charred limbs); fissure veins and energy seams (the neon seams between basalt
+  columns, the ember tips); anatomical tapering with hidden seams; controlled
+  asymmetry (`jitter` on every placement, 3-7 degrees on petals and slabs); tactile
+  stud surfaces (Studs on all six faces of every major mass: trunks, crowns, rocks,
+  slabs, roots, hedges).
+
+### The five cradles (all built by MapDecor round `BiomeData.NestCFrames`)
+
+Shared frame: `arc(site, a, r, y)` on the WALL side of the site (+Z), rim radius
+**26.5**, arc +/-70 degrees, flanking tufts at +/-74 degrees and 29.5 out, a
+bedding disc 42 wide and 0.16 thick under the ring. The front (road side) is empty
+14 either side of the axis for 40 studs -- the guardian's way out -- and Greenhollow
+keeps the tutorial's reserved-pod spots (24 out along +Z, 26-degree spread) clear.
+
+* **Greenhollow -- root-woven stump cradle:** two woven root courses (7.4 x 3.0 low,
+  7.2 x 2.6 high, alternating tilt), a studded stump at 24 degrees with three roots
+  aimed sideways and back (100/180/255 degrees -- never at the ring), ferns at the
+  flanks and one at -30 degrees.
+* **Dustbowl -- broken-clay sun basin:** a sand disc, eight tilted clay slabs
+  (2.0-3.6 tall, 7-8.6 wide), three clay cracks at 14 out, three sandstone backing
+  slabs (16 / 12.6 / 8.4 wide) and dry grass at the flanks.
+* **Tanglemire -- oval root cradle:** 10 + 9 root courses (6.8 x 2.6 / 6.4 x 2.2),
+  four lily leaves outside the rim (5.6-8 wide), broad leaves at the flanks; the
+  central route stays dry -- pools are at the verges only.
+* **Emberroot -- fractured basalt caldera:** a dark disc, nine basalt slabs
+  (2.2-4.2 tall), three thin neon seams between slabs and one vertical amber seam
+  in the three backing columns; no lava, no Lights.
+* **Starbloom -- petal crescent:** two plinths, six petal slabs (9.5-14 tall,
+  leaning 18 degrees OUTWARD over the plinths, never over the pods), three sepals
+  aimed inward-up, a lavender seed bed, two cyan pearls on the middle petals -- the
+  only glow.
+
+### Counts (Edit, desktop Studio, 2026-09-18)
+
+| | before | after |
+|---|---|---|
+| `SeedMap` parts | 1,680 | 3,230 |
+| decor parts (5 biomes) | 658 | 1,926 (GH 512, DB 264, TM 435, EM 358, SB 357) |
+| `FieldDecor` parts | 183 | 465 |
+| Lights under `SeedMap` | 4 | 4 |
+| studded decor masses | 0 | 840 |
+| full map build | -- | 0.35-0.42 s |
+
+Play total (with plots, mills, guardians, pods): 3,998 parts, 12 lights -- none of
+the 8 extra lights is decor (mills and guardians). Zero self-check warnings.
+
+### Verification
+
+**Play** (Studio Play Solo, desktop, viewport 933 x 714, the owner's account, one
+player, ~25 minutes on 2026-09-18):
+
+* Boot clean: no error or warning in the console for the whole session.
+* Traverse mouth to Starbloom end and back: fast (walkspeed 143) 12.8 s each way,
+  min 55.5 / max 160 studs/s, 0 stalls; walking (16) Greenhollow in 19.4 s, min 9.5
+  studs/s, 0 stalls.
+* A raid at every nest from the real ProximityPrompt (`InputHoldBegin/End` inside
+  TAKE_RANGE): every take succeeded; every guardian woke in 0.8-1.3 s, ran 65-81
+  studs out through its cradle's open front, threw the character and was back at
+  its home in 5.2-7.3 s (within 1.0 stud; Starbloom 2.3, asleep again). Three
+  CarryService outcomes were hit: pod dropped loose on the road (Greenhollow,
+  Dustbowl), confiscated and returned to the nest "(arrived)" (Tanglemire,
+  Starbloom), left behind for good (Emberroot). No pod ended under a cradle.
+* A night->day cycle ran in the middle: night removed 13 nest and 3 loose pods and
+  reset 5 parents; day restocked 16 of 16 over the new cradles without a complaint.
+* Starbloom's 300 studs/s throw cost the character its HumanoidRootPart and
+  NestService respawned it (its own "lost its HumanoidRootPart to the throw" path).
+  Decor cannot collide, touch or be queried, so it is not what the root hit; the
+  throw at that speed is worth a look on its own.
+* Streaming: `StreamingEnabled` is on; the Starbloom guardian was not on the client
+  until the character came within range, and decor sits in each segment's own
+  folder and streams with it. Radius and memory were not measured.
+
+**Static / Edit:**
+
+* `MapDecorSpec` 93/93: every part anchored and non-colliding, no Lights, no
+  scripts, budgets, the racing line (|X| < 14) empty of anything over 1 stud of
+  vertical extent, nothing beyond the wall face, each cradle wholly on the wall side
+  with the exit lane and the reserved-pod spots clear, deterministic rebuilds (each
+  biome built twice, signatures equal), the field's ring clear.
+* Full suite: **34 specs, 0 failures** (4,166 pass markers), 52 s, fresh-require
+  against disk through a temporary `SpecSourcesTemp` folder (deleted after).
+* `rojo build` OK; `git diff --check` clean.
+* Captures (Edit, camera moved by script, Studio never focused): five road views at
+  player height, five nest close-ups with fixture guardians and the right pod
+  species (`ZZNestFixture`, Archivable=false, destroyed after), two transitions,
+  the field, and night views with the WorldCycle night values written to Lighting
+  (no washout; only seams, ember tips and pearls glow).
+* Rerun: `MapService.Init` run 5+ times in Edit leaves one `SeedMap`, identical
+  counts. Not exercised in Play, where Init would destroy the live nests.
+
+**Not done / limits -- read before approving:**
+
+* **No mobile-viewport capture.** The Play session ran at 933 x 714 with the device
+  emulator off; the emulator is not reachable from the MCP datamodel
+  (`StudioDeviceEmulatorService` is nil there) and switching it by hand takes
+  Studio's focus, which the owner asked me not to do. The HUD (`HudLayout`) is
+  untouched, so the phone layout approved this morning is unchanged.
+* No physical phone, no multiplayer, no frame-time measurement on any device.
+* Reduced-effects: decor has no ParticleEmitters, Beams, Lights or scripts, so the
+  toggle has nothing to reduce; the toggle itself was not exercised.
+* The night captures are Edit with night values applied by script, not a Play
+  night (a Play night did run during the raids; no capture was taken then).
+* The owner's saved plants, inventory, cash, speed and tutorial state were not
+  touched: the raids used the public nests only and every pod was lost, returned
+  or dropped; nothing was planted or banked.
+
+**Simplifications against the concept sheet:** no crystals, no mushrooms, no vines
+across the road, Tanglemire pools at the verges only, Emberroot glow limited to
+three seams per cracked outcrop plus ember tips, Starbloom glow limited to cup
+pearls and two crescent pearls; water is a Glass disc, not a surface.
+
+### Approval and commit
+
+Uncommitted and unpushed. To look: open the place, let SeedMapBuilder rebuild (or
+press Play) and walk the road; F4 opens the debug UI with teleports. Commit set
+once approved: `MapDecor.luau`, `MapService.luau`, `BiomeData.luau`,
+`tools/tests/MapDecorSpec.luau` and this section -- nothing else in the working
+tree belongs to this pass.
 
 ## The Bag on a phone: whole cards, a real button, and the strip steps aside — 2026-09-18 (CLAUDE)  (COMMITTED f4ab312, APPROVED 2026-09-18)
 
