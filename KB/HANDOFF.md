@@ -1,5 +1,151 @@
 # Steal a Seed — Session Handoff
 
+## Art redesign preview: five pod families + Novaorb / Cosmospire / Astralhorn — 2026-09-22 (CLAUDE)  (PREVIEW ONLY — awaiting owner approval; nothing in production changed)
+
+**Task:** rebuild the visual designs of the five biome pod families and the
+three Starbloom plants as a Studio preview for visual approval. No species,
+rarity, income, timer, save, tier multiplier, guardian, ragdoll, carry, pod
+ownership, tutorial or HUD change. Production dispatch untouched:
+`CreatureModel.BuildPod` / `BuildCreature` / `StarbloomForms` are not edited
+and nothing requires the new module.
+
+### Files (two, both new, committed)
+
+* `src/ReplicatedStorage/SeedGame/Shared/RedesignForms.luau` — the proposed
+  builders, isolated. `RedesignForms.BuildPod(sp, tier, cf, parent)` keeps
+  the production pod contract (Shell = PrimaryPart, `cf` = base, attributes
+  SpeciesId/Rarity/Tier/Stage, plus `Redesign=true`); the Titan/Colossal
+  effects, tints, Core, CoreGlow, aura and `PickupSound` are the shipped ones
+  moved over unchanged. `RedesignForms.Build(model, id, at, hs, gs)` keeps the
+  `StarbloomForms.Build` contract; `RedesignForms.AuthoredHeight` is set from
+  measured builds so each proposed plant stands as tall as the shipped one at
+  every tier (4.82 / 9.71 / 8.88).
+* `src/ServerScriptService/SeedGameServer/ArtRedesignMockupRunner.luau` — the
+  stage. Command Bar, Edit mode:
+  `local R = require(game.ServerScriptService.SeedGameServer.ArtRedesignMockupRunner)`
+  then `R.Build()` (prints the measurement report), `R.Simulate(true)` /
+  `R.Pose(0.25)` (walk / freeze the Tiny, Mega and crowding rows),
+  `R.Effects(false)`, `R.Night(true)` (saves and restores `Lighting.ClockTime`),
+  `R.Clear()`. Folder `workspace.ArtRedesignPreview`, Archivable=false,
+  attribute PreviewOnly; only the floor collides; no tags, prompts, remotes,
+  saves. Every Build starts with Clear. RedesignForms is required from a
+  throwaway clone (`RedesignFormsPreview`, deleted by Clear) because the
+  Edit-mode require cache would otherwise keep the first body Rojo synced.
+
+### Stage layout (ORIGIN -1300, 200, -900; off the map, floor 320 x 520)
+
+* Pods, x pitch 24 (Greenhollow, Dustbowl, Tanglemire, Emberroot, Starbloom):
+  rows z+0 OLD Tiny, +16 NEW Tiny, +34 NEW Mega, +60 NEW Colossal, +92 OLD
+  Colossal. Contexts at z+124 per family: avatar holding the NEW Huge pod at
+  the real grip (`GripDrop`, `SeedData.GripForward`), NEW Giant on a 0.16-stud
+  bedding disc, NEW Big on a soil cell, NEW Colossal inside a ring of the haul
+  clearance (D/2 + 0.4).
+* Plants at z+200: rows OLD Tiny, NEW Tiny (+24), NEW Mega (+52), NEW Colossal
+  (+100), each on the real 16 x 13.7 cell with a 5.2-stud avatar; crowding row
+  at z+360: proposed Big between shipped Voidpetal and Supernovus on cell
+  pitch; a hotbar board (11 cards, 54 x 76, `UIKit.itemPreview` 50 x 42 fit
+  0.97) beside the plant rows at x-42.
+
+### The designs, in one line each
+
+* Greenhollow "Wrapped Sprout": woody brown seed with a pale-green upper
+  half, three tapered green husks wrapped one way and folding over the top,
+  cream overlap seam, one four-rod curling shoot. No belt.
+* Dustbowl "Sunbaked Seed": dark round clod with six unequal sandstone plates
+  leaning in over it (three tapered), a low off-centre cap, two dry leaf tips,
+  pale husk edges, the deepest crack in the tier colour. No saucer.
+* Tanglemire "Mire Lantern": drooping peat teardrop with an uneven shoulder,
+  four branching root rods with real gaps, turquoise inner shell in three
+  gaps, moss on one shoulder, one bent stalk.
+* Emberroot "Cinder Heart": charred lower body, red inner seed, seven charcoal
+  bark plates leaning to meet it, two bud tips, three neon fissures — the only
+  lit parts.
+* Starbloom "Eclipse Seed": tilted two-ball dark seed, three tapered violet
+  crescents (one raised) with lavender inner edges, one neon cyan seam. No
+  orbiting debris.
+* Novaorb "Moonbulb Prowler": forward-leaning pear bulb (two balls, rear mass,
+  belly plate), four overlapping sepals, a recessed face under a petal hood
+  with cheeks and jaw, four short root legs (`FL/FR/BL/BR_Thigh` + `_Foot`),
+  one two-part rear Leaf. 1 PointLight on the face plate.
+* Cosmospire "Crescent Reedwalker": the proven Femur/Knee/Tibia/StiltClaw
+  legs, thorax + abdomen + collar, a three-rod S stalk, small mantis-eyed
+  skull with mandible, two unequal bracts over a recessed neon seed chamber
+  (the one light), three Leaf blades on the stalk.
+* Astralhorn "Mooncrest Stag": four legs (`_Thigh`, `_Shin`, `_Hoof`, `_Toe`;
+  front pair reaches forward, rear pair hocked back), chest / rear body /
+  belly / withers, three bark plates, two-segment curved neck, skull with a
+  recessed muzzle and lower jaw, deep-set eyes, two unequal three-segment
+  antlers + tine, four shoulder Leaf petals. 1 PointLight on the skull.
+
+### Measured (from the built parts, not from comments)
+
+Pods — parts at Tiny / Colossal, width x height in D at Tiny, lowest corner
+above base, furthest part from the axis at Colossal (haul clearance 4.92):
+
+| family | OLD parts | NEW parts | OLD w x h | NEW w x h (Colossal w) | NEW lowest | radial OLD -> NEW |
+| --- | --- | --- | --- | --- | --- | --- |
+| Greenhollow | 7 / 8 | 15 / 17 | 1.02 x 1.46 | 1.03 x 1.38 (1.16) | +0.02..+0.09 | 6.52 -> 5.30 |
+| Dustbowl | 9 / 10 | 14 / 16 | 1.21 x 1.11 | 1.05 x 1.00 (1.18) | +0.02..+0.09 | 5.97 -> 5.88 |
+| Tanglemire | 13 / 14 | 20 / 22 | 1.15 x 1.39 | 0.84 x 1.30 (0.95) | +0.02..+0.09 | 5.34 -> 5.20 |
+| Emberroot | 21 / 22 | 15 / 17 | 1.18 x 1.20 | 1.03 x 1.09 (1.18) | +0.03..+0.18 | 7.39 -> 5.50 |
+| Starbloom | 21 / 23 | 13 / 15 | 1.14 x 1.57 | 0.92 x 1.12 (1.05) | +0.10..+0.38 | 5.98 -> 5.20 |
+
+Effects per pod are identical old/new: Tiny–Huge none; Titan 1 emitter + 1
+light; Colossal 1 emitter + 2 lights (Core + aura). Mega adds seam depth 1.35
+and plate separation 0.035 D, Titan/Colossal separation 0.075 D, seam depth 1.8
+and an inner seam, all inside the widths above (every NEW Colossal is
+narrower than the shipped one, so nest, carry and haul footprints are not
+widened).
+
+Plants — BaseParts incl. the invisible Base, wedges/balls, lights, emitters,
+direct `Leaf` children, PlantSway hips found by the mirrored rig and the
+worst leg-to-hip assignment margin; Tiny height / width / depth:
+
+| plant | OLD | NEW |
+| --- | --- | --- |
+| Novaorb | 30 (7 w, 8 b), 1 light, 0 em, 4 Leaf, 2 hips (3.66:1); 4.0 / 3.4 / 3.0 | 30 (11 w, 6 b), 1 light, 0 em, 2 Leaf, 4 hips (1.67:1); 4.0 / 3.3 / 3.4 |
+| Cosmospire | 37 (9 w, 1 b), 1 light, 0 em, 4 Leaf, 4 hips (1.31:1); 7.6 / 3.2 / 4.7 | 38 (11 w, 0 b), 1 light, 0 em, 3 Leaf, 4 hips (1.31:1); 8.0 / 2.5 / 3.5 |
+| Astralhorn | 37 (12 w, 2 b), 1 light, 0 em, 4 Leaf, 4 hips (1.68:1); 7.3 / 4.2 / 4.9 | 47 (13 w, 2 b), 1 light, 0 em, 4 Leaf, 4 hips (2.79:1); 7.3 / 3.1 / 5.3 |
+
+Through the production scaling path (FrameHeight / Girth -> hs, gs): Mega
+heights 10.6 / 21.3 / 19.3, Colossal 30.4 / 61.1 / 55.3; lowest corner 0.000
+at every tier; hips and margins unchanged by tier. No new emitter, no new
+light, no per-plant loop (the walk is the runner's own generation-guarded
+Heartbeat, gone with Clear).
+
+### Inspection done (captures via MCP screen_capture, Edit mode)
+
+Front, side and three-quarter at Mega for every family; Colossal old-vs-new
+side by side per family; gameplay-distance rows; effects off; midnight;
+held / bedding context; plants old-vs-new at Tiny, proposed at Mega
+three-quarter, Colossal row, crowding row posed mid-stride (`Pose(0.25)`).
+Fixed on the way: `BulbHaunch` renamed (`Haunch` is a PlantSway leg word and
+collapsed the rig to one hip); Astralhorn rear toes were equidistant from both
+hips (margin 1.04) — legs re-raked; Greenhollow/Emberroot seams dipped below
+the base at Titan seam depth; the runner measured rotated balls by their box
+corners; flat husk slabs on four families read as crates and were replaced
+by tapered plates leaning in; Emberroot bark leaned so far in it vanished
+inside the inner seed.
+
+### Not verified / known limits
+
+* The hotbar card board's ViewportFrames are built (11 cards, models framed,
+  cameras set) but screen_capture does not draw ViewportFrame or BillboardGui
+  content, so the cards and every stage label are unseen by me — the owner's
+  eyes in Studio are the check.
+* Starbloom Mega: the raised crescent's lavender inner edge stands off the
+  seed rather than lying on it — a visible flaw to fix if the direction is
+  approved. Tanglemire's two crown plates read as one dark block at distance.
+* Walking is the preview's poser (StarbloomMockupRunner.RigOf / PoseLegs,
+  which mirror PlantSway's leg rig, plus the Leaf rule) — not PlantSway on a
+  client. Not run in Play with the real client; not planted, carried or
+  hauled through CarryService / NestService (the held pose is a static grip;
+  the haul ring is a drawn clearance).
+* Mobile hotbar not captured. No spec touched (no shared helper edited);
+  `rojo build` passes (3,711,495 bytes).
+* Left built in Studio at the end of the session (non-archivable; the
+  RedesignFormsPreview clone in Shared belongs to it and Clear removes it).
+
 ## Guardian ragdoll on published servers: the limp body stays its player's — 2026-09-22 (CLAUDE)  (COMMITTED cd5512e; LIVE ACCEPTANCE PENDING: needs a publish)
 
 **Owner report:** ragdoll works in Studio but not normally in the published
