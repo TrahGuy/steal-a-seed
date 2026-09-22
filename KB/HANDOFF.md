@@ -1,5 +1,244 @@
 # Steal a Seed — Session Handoff
 
+## Guardian ragdoll on published servers: the limp body stays its player's — 2026-09-22 (CLAUDE)  (COMMITTED; LIVE ACCEPTANCE PENDING: needs a publish)
+
+**Owner report:** ragdoll works in Studio but not normally in the published
+game -- guardian contact knocks the player down or launches them, and the
+loose-limbed ragdoll does not consistently appear. Two earlier "fixed" entries
+below were Studio-only; this is the first diagnosis made from live evidence.
+
+### What runs live (established, not assumed)
+
+* Universe 10744596516 "Podnappers 🌱", root place 114075467877655,
+  `MorphToR15`. **Live version v966**, published from this PC's Studio at
+  2026-09-22 05:19:57 UTC (Studio log `...T023109Z_Studio_57B82_last.log`);
+  the reopened Studio loaded v966 too.
+* v966 = the working tree at that moment: every `src/` file was last written
+  by 04:58:22 UTC and Rojo was connected until the publish. So it carried the
+  UNCOMMITTED "really limp" ragdoll changes below AND the uncommitted mobile HUD
+  work. Its store is `StealASeed_v1`: a HUD test had the store swapped in Edit
+  until 05:08:47 and it was reverted (byte-identical to disk) before 05:19.
+* Live rig: AnimationConstraint, not Motor6D. The owner's v966 session on this
+  PC (Player log `...T112059Z_Player_EEB64_last.log`, 12:05 UTC) printed
+  "15/15 constraints off, rig split into 16 loose assemblies, 0 joints still
+  gripping". The Motor6D hypothesis is ruled out for this experience.
+
+### The measured Studio/live difference
+
+Every guardian throw in every log on this PC:
+
+| | live (17 throws, v94x-v966) | Studio (61 throws) |
+| --- | --- | --- |
+| settled after | median 1.62 s; 15 of 17 at the earliest the rule allows | median 3.1-3.6 s, never under 2.2 |
+| root to torso at settle | median 126-304 studs (min 27) | median 18-46 (min 0) |
+
+Live, the visible body stopped almost where it was hit while the invisible
+root flew the whole launch -- with every joint loose.
+
+### Confirmed cause: the loose body was simulated by the server
+
+* Measured in Studio on the server, the frame the constraints go off: the
+  HumanoidRootPart stays the victim's, and all fifteen new body assemblies
+  start out **server-owned** (auto). Studio hands them back to the victim
+  within 0.06 s; the live logs show a published server does not, and by then
+  the root it judges proximity by has flown away. So ThrowFX's launch, spin and
+  limb kicks went to parts the victim did not own.
+* Reproduced in Studio by forcing that state (body server-owned at the split):
+  body travel 54 studs instead of 210, settled 1.75 s, root 140 studs off the
+  torso -- the live numbers. `ReceiveAge` on the victim read 0.05-0.10 on the
+  torso and head (0.000 when the victim owns them).
+
+**Why Studio missed it:** Studio's loopback reassigns the split assemblies to
+the victim in a frame or two, so every Studio check (constraints, friction,
+limb angles, landing) passed; none of them asked who was simulating the body.
+
+### Fix (commit below)
+
+* `NestService.luau`: `ragdollOn` pins every body part to the victim with
+  `SetNetworkOwner(player)` -- MANUAL, because a part that is only theirs by
+  automatic assignment is exactly what a live server takes back -- and holds
+  the pin for up to 0.5 s (two clean frames end it; a warn only if it never
+  holds). `ragdollOff` restores automatic ownership after the joints. Shared by
+  guardians, bats and traps. This is not the forbidden `SetNetworkOwner(nil)`:
+  it keeps the body WITH its player.
+* Hit identity: each guardian throw mints a token (`g<n>@<t>`), sends it in the
+  launch's style table (no `emergency`, so ThrowFX's guardian path is
+  unchanged), and ends only on an answer quoting it (`ThrowAnswerMatches`).
+  Before, any message on the remote ended the throw -- including a bat's. The
+  duplicate answer handler in `Start()` is gone; `Init()` resets the connection
+  flag so a re-run reconnects.
+* Overlap: a guardian does not throw a body that is already limp (a bat's or a
+  trap's knockdown) or already being thrown (`IsRagdolled`, claim by token).
+  Before, the second `ragdollOn` took an empty record and the first system's
+  restore re-enabled the joints mid-launch.
+* `RagdollGate.luau`: detects the rig. A rig with no AnimationConstraints
+  (Motor6D or none) is `supported = false` and never "ready" (it was ready at
+  once, zero of zero); the wait returns immediately for it.
+* `ThrowFX.client.luau` (diagnostics in existing lines, no names): place version
+  at startup, the hit token, the rig kind, `body simulated here` / `BODY
+  SIMULATED ELSEWHERE (ReceiveAge ...)` after the launch, and `body travelled N
+  studs` at settle.
+* `GuardianRagdollSpec` 59 checks (was 34): Motor6D and joint-less rigs never
+  ready and not waited on; the limp register; answer identity (stale,
+  duplicate, bat, bare, no claim); source checks for the pin, the token, the
+  overlap refusal, one handler, and no server takeover. Mutations: the pin
+  removed fails 1, the old gate + any-answer handler fail 4.
+
+### Verified (Studio Play, owner's avatar, throwaway stores removed, store reverted)
+
+Rig: AnimationConstraint x15, BallSocket x14 (friction 420.6), Attachment x55,
+NoCollision x19, Motor6D x0 -- the live rig.
+
+| test (real guardian contact) | result |
+| --- | --- |
+| all five biomes | pinned 16/16 all flight; body 202-572 studs; settled 3.0-4.7 s; "body simulated here" |
+| server grabs the body at the split | pin reclaimed it by +0.06 s; 251 studs |
+| carrying a pod, Tanglemire | confiscated; thrown 391 studs; leave-behind forced: "left it behind for good", 372 studs |
+| stale, bare, numeric and bat answers at +0.5 s | ignored; joints back only on the real answer (3.05 s) |
+| duplicate answer at +7 s | no effect |
+| guardian reaches a body limp from a knockdown | came to 4.5 studs, no launch, went home asleep |
+| death 0.6 s in | throw ended, register cleared; new body 15/15 on, friction 420.6, auto, walk 16, jump 50, camera on the new Humanoid |
+| 200 ms replication lag, Emberroot | simulated here, 260 studs, settled 3.62 s |
+| client never answers | backstop restored at 6.02 s, everything back |
+| after every throw | ownership back to auto, census identical, 4 colliding parts, nothing accumulated |
+| Starbloom out of the world | "put back on the road at the starbloom gate, still limp" |
+
+41 specs pass (GuardianRagdollSpec 59, WeaponSpec 123, TrapSystemSpec 67,
+GuardianConfiscateSpec 88); every changed file compiles; `rojo build` and `git
+diff --check` clean; client console clean, server only the known MaxPlayers
+note.
+
+### Not verified
+
+* **A published server.** Repair implemented and Studio verified; live Roblox
+  acceptance pending.
+* Multiplayer observer: MCP starts Play Solo only.
+* Bat and trap knockdowns in Play (you cannot hit yourself solo); they share
+  the pinned `RagdollOn`, and WeaponSpec/TrapSystemSpec pass.
+* A phone client.
+
+### Owner's live test
+
+Publish, join on the PC, get hit by two or three guardians (a second player
+watching is worth it). The Player log (`%LOCALAPPDATA%\Roblox\logs\*Player*_last.log`)
+should show `listening on ThrowVictim (place version 967` or later, and per hit
+`hit g<n>@...`, `... | body simulated here`, and `settled after` well over 2 s
+with `body travelled` in the hundreds -- NOT 1.6 s with the root 100+ studs off.
+`BODY SIMULATED ELSEWHERE` would mean the pin is being refused live.
+
+## Guardian ragdoll, really limp this time: joint friction, articulated flight, gated launch — 2026-09-22 (CLAUDE)  (SHIPPED LIVE IN v966, COMMITTED WITH THE ENTRY ABOVE; SUPERSEDED: its "confirmed cause" was not the live defect)
+
+> **Superseded 2026-09-22.** Published as v966 and tested live by the owner: the
+> joints did come loose (15/15 off, friction 0, limbs bent 178°) and the body
+> still did not throw -- the server was simulating it. The friction, gate and
+> articulation below are kept and still correct; the live cause and fix are in
+> the entry above. The "Verified" section is Studio-only.
+
+**Owner report (published server):** "The guardian successfully hits and knocks
+the player away/down, but the visible character does not ragdoll. The body
+remains rigid instead of the limbs becoming loose during the throw and landing."
+This overrides 2226fd8's Studio conclusion.
+
+### Confirmed cause (measured frame by frame on the victim's client in Studio)
+
+* **The joints kept their friction.** The engine builds the R15 rig's 14
+  BallSocketConstraints with MaxFrictionTorque: hips 14.7, elbows 18.3,
+  shoulders 18.8, wrists 28.8, knees 35.1, neck 40.9, waist 43.7, ankles 52.3
+  (plus anatomical limits, which are fine). With every AnimationConstraint off
+  and the rig in 16 assemblies, the friction held each limb where it was.
+* **Nothing moved the limbs relative to each other.** The legacy hold rewrote
+  EVERY part to the same velocity each frame for 0.35 s (which cancels any
+  rotation), and the guardian's integer spin draw can be zero. Before, on a real
+  Dustbowl hit: shoulder/hip/waist/neck angles frozen at `34,10,65,61,22,13,19,14`
+  and torso up at 0.70 from 0.065 s to 1.08 s; limbs only bent on the landing
+  impact.
+* **The guardian launch was never gated.** Only bats waited for RagdollGate's
+  proof. Studio's uniform replication lag (tested 0/100/200 ms) always delivers
+  the constraints with the remote (gate 0.001 s), so the race itself was not
+  reproduced; it is now guarded.
+
+**Why Studio "passed" before:** the landing impact beats the friction, so a
+limp landing was visible; earlier checks measured the torso, velocity and
+constraint state, never limb angles in flight.
+
+**Live evidence, owner's PC Player log 2026-09-22 02:38 UTC (place
+114075467877655):** four guardian hits all "settled after 1.61-1.62s" (the
+earliest the guardian settle rule allows, so the body was still by 1.25 s),
+stand-ups 26-84 studs from the nest, root 27-302 studs from the torso, the
+root separated so the AnimationConstraint rig IS used live. The early stop was
+NOT reproduced in Studio; the next live log will say more (see below).
+
+### Fix (4 files)
+
+* `NestService.luau`: `slackenJoints` zeroes every ball socket's friction in
+  the same frame as `ragdollOn` (guardian throw only), captured into the same
+  `Loosened` record as constraints and collisions (`frictions`); `ragdollOff`
+  restores the exact values once and clears the list. Bats and traps call
+  ragdollOn/Off and get an empty list. `NestService.SlackenJoints` exposed for
+  the spec.
+* `RagdollGate.luau` (new, shared): the limp rule moved out of ThrowFX. Limp =
+  every AnimationConstraint off AND the torso apart from the root AND from every
+  limb (the old torso-vs-root test passed a rig that only let go of Root);
+  optional `needFree` also requires zero joint friction. `await` is bounded,
+  cancellable and clock-injectable.
+* `ThrowFX.client.luau`: every launch waits on RagdollGate (0.4 s max; a
+  guardian also waits for the friction; Studio-only warn on timeout). A guardian
+  launch is ARTICULATED: one guaranteed-topple spin (8-12 rad/s, the bat's
+  formula) applied as a rigid rotation about the body's centre of mass, plus a
+  random 15-22 studs/s push per limb, with the pushes' net removed so the centre
+  leaves at exactly the configured launch. The legacy hold holds the CENTRE (one
+  shift per frame), keeping each part's relative motion; the clean guard does the
+  same for an articulated body. A body that comes loose late is articulated then
+  (`lateLimp`); one that never does is logged as never having come loose. Bats
+  keep their launch, spin and guard. Also fixed (pre-existing): a respawn
+  mid-throw now gives back the saved zoom range and camera mode (a death 0.6 s
+  into a throw had left CameraMinZoomDistance at 12 for the session).
+* `tools/tests/GuardianRagdollSpec.luau` (new, 34 checks): the rule on a real
+  hand-built AnimationConstraint/BallSocket rig (Edit maintains assemblies), the
+  wait on a fake clock (never ready before the rig comes apart; honest timeout;
+  cancel; friction), the shipped RagdollOn/SlackenJoints/RagdollOff round trip,
+  and ThrowFX's launch-after-gate order. The order checks all FAIL on HEAD's
+  ThrowFX and pass on the fix.
+
+### Verified (Studio Play, throwaway store `StealASeed_ragdoll2_20260922`, key removed, name reverted, lag reset to 0)
+
+* After, same Dustbowl hit: friction 0 on arrival; torso 0.98 -> -1.00 by 0.49 s
+  and round again; left shoulder 6 -> 57 -> 136 -> 165 deg, right 6 -> 122 in
+  flight; big flop on landing, ~2 s lying, stand-up 3.6 s; 318 studs (old code
+  267-343, the arc is unchanged).
+* All five guardians, standing: 2-8 of 8 joints swung 20+ deg in the first second
+  (largest 59-178), torso past fallen on every hit. Also: carrying a pod (dropped
+  loose), Tanglemire leave-behind (abandoned pod) and catching it again, beside a
+  wall, Starbloom edge (put back limp at the gate, stood at 0,3,-1338), running
+  away (88 studs, caught mid-run), running toward, jumping (hit in Freefall 9.3
+  studs up), two hits back to back, death 0.6 s in (clean respawn: 15/15
+  constraints, friction 420.6, walk 16, jump 50, zoom 0.5).
+* Every hit: 15/15 constraints toggled exactly twice, all 14 sockets back to
+  their exact friction, collisions back to the original, WalkSpeed/JumpPower
+  back, camera subject Humanoid, zoom 0.5..128, instance census unchanged, no
+  Tool or pod gained or lost. Latency 0 / 100 / 200 ms: gate 0.001 s every time.
+* 41 specs, 0 failures (WeaponSpec 123, TrapSystemSpec 67, GuardianRagdollSpec
+  34). Rojo build OK, `git diff --check` clean, client console clean.
+
+### Not verified
+
+* A published server (the fix is unpublished) -- the owner's test is the
+  acceptance.
+* A second client watching (MCP can only start Play Solo; needs Test > Clients
+  and Servers > 2 players), and bat/trap hits in Play (you cannot hit yourself
+  solo; covered by WeaponSpec/TrapSystemSpec and an unchanged bat path).
+* Studio cannot deliver the constraints AFTER the remote; the gate covers it.
+
+### Owner's live test
+
+Publish, play the published game on this PC, get hit by two or three guardians.
+Look for the limbs swinging and the body tumbling in the air. The Roblox Player
+log (`%LOCALAPPDATA%\Roblox\logs\*Player*_last.log`) records per hit:
+`ragdoll ready after ...: 15/15 constraints off, rig split into 16 loose
+assemblies, 0 joints still gripping`, then `held the launch velocity for 0.35s
+-- limbs bent up to N deg against the torso`, then `settled after X s` --
+healthy live values are N well above 20 and X around 2.5-5 s, not 1.61.
+
 ## Phones open in landscape: StarterGui.ScreenOrientation = LandscapeSensor — 2026-09-21 (CLAUDE)  (COMMITTED 2729205)
 
 **Owner report:** "tested it on my realme 8 pro, i need to turn on auto rotate to
@@ -24,7 +263,7 @@ which way up.
 Not verified: on a phone. It needs a publish, and Studio Play on desktop
 ignores orientation.
 
-## Guardian ragdoll restored: the body decides, and a thrown-out body lands limp — 2026-09-21 (CLAUDE)  (COMMITTED 2226fd8)
+## Guardian ragdoll restored: the body decides, and a thrown-out body lands limp — 2026-09-21 (CLAUDE)  (COMMITTED 2226fd8; "restored" was Studio-only -- live stayed broken until the 2026-09-22 ownership fix above)
 
 **Owner request:** "it seems the ragdoll when hit by a guardian is gone, can you
 restore it"

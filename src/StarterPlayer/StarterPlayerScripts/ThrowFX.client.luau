@@ -95,6 +95,7 @@ local RunService = game:GetService("RunService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local RagdollGate = require(SeedGame:WaitForChild("Shared"):WaitForChild("RagdollGate"))
 
 local player = Players.LocalPlayer
 
@@ -133,14 +134,15 @@ local JOINTS_BACK_TIMEOUT = 1.5
 -- its standing pose: one rigid assembly, posed, upright. It slid. It did not
 -- fall, it did not tumble, and the clock then stood it up.
 --
--- WHY THE GUARDIAN NEVER SHOWED THIS. Its legacy branch re-writes the velocity
--- every frame for 0.35 seconds, so by the time the constraints arrive it is
--- still being pushed and goes limp mid-flight; and its settle is a second
--- longer again. The guardian was absorbing the race, not avoiding it.
+-- THE GUARDIAN WAS ASSUMED TO ABSORB IT. Its legacy branch re-writes the
+-- velocity every frame for 0.35 seconds, and the theory was that the body went
+-- limp mid-flight on its own. That was never measured on a real server, and a
+-- repeated velocity write proves nothing about the joints; a published-server
+-- guardian hit on 2026-09-22 flew the body rigid.
 --
--- So a bat waits -- briefly, and on evidence rather than on a sleep. Measured
--- in a real session and printed on every hit, because if this ever starts
--- timing out the symptom is exactly the one that was rejected.
+-- So EVERY launch waits -- briefly, and on evidence rather than on a sleep
+-- (RagdollGate). Printed on every hit, because if this ever starts timing out
+-- the symptom is exactly the one that was rejected.
 local RAGDOLL_READY_TIMEOUT = 0.4
 
 --==============================================================================
@@ -279,42 +281,183 @@ end
 --==============================================================================
 -- IS THIS RIG ACTUALLY LIMP YET, ON THIS MACHINE?
 --
--- Two questions, and the second one is the one that matters.
---
--- THE PROPERTY: every AnimationConstraint disabled. That is what the server
--- did, and it is what has to arrive here.
---
--- THE PHYSICAL TRUTH: the rig has come APART into separate assemblies. This
--- file's own banner measured it -- a posed R15 is one assembly, and the moment
--- the fifteen constraints go off it is sixteen, one part each. So a torso whose
--- AssemblyRootPart is still the HumanoidRootPart is a torso that is still being
--- held in the standing pose, whatever any property says.
---
--- Both are checked because they can disagree in the frame between: the property
--- can be through while the physics assembly has not yet been rebuilt, and
--- throwing on that frame is throwing a rigid body.
+-- RagdollGate answers, for every launch. The rule used to live here as
+-- `ragdollState` and was asked by the bat path only; see RagdollGate for what
+-- counts as limp and why the old torso-versus-root test was not enough.
 --==============================================================================
-local function ragdollState(character: Model): (boolean, number, number, boolean)
-	local total, off = 0, 0
+
+--==============================================================================
+-- A LIMP BODY THROWN AS ONE PIECE IS STILL A MANNEQUIN
+--
+-- Measured 2026-09-22 on a real Dustbowl guardian hit, frame by frame on the
+-- victim's machine: sixteen loose assemblies from 0.02 s, every constraint off,
+-- the Humanoid in Physics -- and the shoulder, hip, waist and neck angles FROZEN
+-- at the same eight numbers from 0.065 s to 1.08 s while the torso held one
+-- tilt. Loose joints and nothing moving them: every part had been given the
+-- same velocity and no spin that survived, and a free-falling body whose parts
+-- all move alike keeps its shape. The legacy hold made it certain, rewriting
+-- every part to the same vector every frame for 0.35 s, which cancels any
+-- rotation the body had. The owner, on a published server: "The body remains
+-- rigid instead of the limbs becoming loose."
+--
+-- So a guardian launch is ARTICULATED: one spin applied to the whole body as a
+-- rigid rotation about its centre of mass (each part gets the velocity that
+-- rotation gives it there), plus each limb its own small push -- and the pushes'
+-- net is taken back out, so the centre of mass leaves at exactly the
+-- configured launch and the arc, the distance and the speed are untouched.
+--
+-- And the hold holds the CENTRE, not the parts: each frame the whole body is
+-- shifted by one vector so its mass-weighted velocity is the launch again, as
+-- the old hold's was, while every part keeps its motion relative to the rest.
+-- Same path through the air; the limbs are free to move along it.
+--
+-- A bat does not take any of this. Its launch, spin and guard are unchanged.
+--==============================================================================
+-- Studs a second, each limb its own random direction, 70-100% of this. 16 left
+-- one Emberroot throw with only two of eight joints swinging 20 degrees in its
+-- first second (measured); 22 keeps every limb visibly moving on the fastest.
+local LIMB_KICK = 22
+local LIMB_KICK_MIN = 0.7
+local KICKED_LIMBS: { [string]: boolean } = {
+	Head = true,
+	LeftUpperArm = true, LeftLowerArm = true, LeftHand = true,
+	RightUpperArm = true, RightLowerArm = true, RightHand = true,
+	LeftUpperLeg = true, LeftLowerLeg = true, LeftFoot = true,
+	RightUpperLeg = true, RightLowerLeg = true, RightFoot = true,
+}
+-- The four joints whose bend says whether the limbs moved, for the one log line
+-- per throw that reports it.
+local LIMB_JOINTS = { "LeftShoulder", "RightShoulder", "LeftHip", "RightHip" }
+local kickRandom = Random.new()
+
+-- Every assembly of the visible body, by its root part: the torso, each limb,
+-- the head with its accessories. The HumanoidRootPart's own assembly is left
+-- out; it is an invisible box and gets the launch itself.
+local function bodyAssemblies(character: Model, root: BasePart?): { BasePart }
+	local out: { BasePart } = {}
+	local seen: { [BasePart]: boolean } = {}
+	local skip = if root then root.AssemblyRootPart else nil
 	for _, d in ipairs(character:GetDescendants()) do
-		if d:IsA("AnimationConstraint") then
-			total += 1
-			if not d.Enabled then
-				off += 1
+		if d:IsA("BasePart") then
+			local r = d.AssemblyRootPart
+			if r and r ~= skip and not seen[r] then
+				seen[r] = true
+				table.insert(out, r)
 			end
 		end
 	end
-	local root = character:FindFirstChild("HumanoidRootPart")
-	local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso")
-	local split = false
-	if root and root:IsA("BasePart") and torso and torso:IsA("BasePart") then
-		split = torso.AssemblyRootPart ~= root.AssemblyRootPart
+	return out
+end
+
+local function massCentre(assemblies: { BasePart }): (Vector3, Vector3, number)
+	local mass, at, vel = 0, Vector3.zero, Vector3.zero
+	for _, a in ipairs(assemblies) do
+		local m = a.AssemblyMass
+		mass += m
+		at += a.AssemblyCenterOfMass * m
+		vel += a.AssemblyLinearVelocity * m
 	end
-	-- A rig with no AnimationConstraints at all is a classic Motor6D one, which
-	-- ragdollOn deliberately leaves jointed -- it tumbles rigidly and that is
-	-- the documented behaviour, so there is nothing here to wait for.
-	local ready = (total == 0) or (off >= total and split)
-	return ready, off, total, split
+	if mass <= 0 then
+		return Vector3.zero, Vector3.zero, 0
+	end
+	return at / mass, vel / mass, mass
+end
+
+local function articulate(assemblies: { BasePart }, root: BasePart?, launch: Vector3, spin: Vector3)
+	local centre, _, mass = massCentre(assemblies)
+	if mass <= 0 then
+		return
+	end
+	local wanted: { Vector3 } = {}
+	local net = Vector3.zero
+	for i, a in ipairs(assemblies) do
+		local v = launch + spin:Cross(a.AssemblyCenterOfMass - centre)
+		if KICKED_LIMBS[a.Name] then
+			v += kickRandom:NextUnitVector() * LIMB_KICK * (LIMB_KICK_MIN + kickRandom:NextNumber() * (1 - LIMB_KICK_MIN))
+		end
+		wanted[i] = v
+		net += v * a.AssemblyMass
+	end
+	-- The spin adds nothing to the centre's velocity; the pushes do, a little.
+	local drift = net / mass - launch
+	for i, a in ipairs(assemblies) do
+		a.AssemblyLinearVelocity = wanted[i] - drift
+		a.AssemblyAngularVelocity = spin
+	end
+	if root then
+		root.AssemblyLinearVelocity = launch
+		root.AssemblyAngularVelocity = Vector3.zero
+	end
+end
+
+-- One shift for the whole body: its mass-weighted velocity becomes `want`, every
+-- part keeping its motion relative to the rest. The box rides with the centre.
+local function holdCentre(assemblies: { BasePart }, root: BasePart?, want: Vector3)
+	local _, vel, mass = massCentre(assemblies)
+	if mass <= 0 then
+		return
+	end
+	local shift = want - vel
+	for _, a in ipairs(assemblies) do
+		a.AssemblyLinearVelocity += shift
+	end
+	if root then
+		root.AssemblyLinearVelocity = want
+	end
+end
+
+--==============================================================================
+-- IS THIS MACHINE THE ONE MOVING THE BODY?
+--
+-- The live defect of 2026-09-22 in one question. A limp body is fifteen loose
+-- assemblies, and a published server left them owned by ITSELF: every launch
+-- and limb kick this file wrote went to parts it did not own, the body dropped
+-- where it was hit, and the invisible root flew on alone. NestService now pins
+-- them to the victim; this is how a log proves it did.
+--
+-- `ReceiveAge` is how long ago this machine last heard about a part from
+-- somewhere else: 0 for a part it simulates, and measured at 0.05 - 0.10 s on a
+-- torso the server was simulating. Read once per throw, after the launch.
+--==============================================================================
+local REMOTE_AGE = 0.02
+
+local function ownershipNote(character: Model): string
+	local torso = torsoOf(character)
+	local head = character:FindFirstChild("Head")
+	if not (torso and head and head:IsA("BasePart")) then
+		return ""
+	end
+	local age = math.max(torso.ReceiveAge, head.ReceiveAge)
+	if age <= REMOTE_AGE then
+		return " | body simulated here"
+	end
+	return string.format(" | BODY SIMULATED ELSEWHERE (ReceiveAge torso %.2f, head %.2f)",
+		torso.ReceiveAge, head.ReceiveAge)
+end
+
+-- Each limb joint's bend, as the rotation between its two attachments.
+local function limbPose(character: Model): { [string]: CFrame }
+	local pose: { [string]: CFrame } = {}
+	for _, name in ipairs(LIMB_JOINTS) do
+		local joint = character:FindFirstChild(name, true)
+		if joint and joint:IsA("AnimationConstraint") and joint.Attachment0 and joint.Attachment1 then
+			pose[name] = joint.Attachment0.WorldCFrame.Rotation:ToObjectSpace(joint.Attachment1.WorldCFrame.Rotation)
+		end
+	end
+	return pose
+end
+
+-- The most any limb joint has bent since `before`, in degrees.
+local function limbMotion(character: Model, before: { [string]: CFrame }): number
+	local most = 0
+	for name, now in pairs(limbPose(character)) do
+		local was = before[name]
+		if was then
+			local _, angle = was:ToObjectSpace(now):ToAxisAngle()
+			most = math.max(most, math.deg(math.abs(angle)))
+		end
+	end
+	return most
 end
 
 --==============================================================================
@@ -638,7 +781,7 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 	local flat = Vector3.new(dir.X, 0, dir.Z)
 	local unit = if flat.Magnitude > 0 then flat.Unit else Vector3.new(0, 0, 1)
 	local impulse = unit * speed + Vector3.new(0, speed * lift, 0)
-	say(string.format("HIT received: %s dir %s speed %.1f lift %.2f clear %.1f%s",
+	say(string.format("HIT received: %s dir %s speed %.1f lift %.2f clear %.1f%s%s",
 		if styleTable and type(styleTable.kind) == "string"
 			then tostring(styleTable.kind)
 			else "guardian",
@@ -648,7 +791,8 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			then string.format(" | floor %.2fs, ground hold %.2fs, emergency %.2fs",
 				if minStandAt then minStandAt - hitAt else 0,
 				groundHold, emergencyAt - hitAt)
-			else ""))
+			else "",
+		if token then " | hit " .. token else ""))
 
 	task.spawn(function()
 		local character = player.Character
@@ -676,36 +820,54 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		-- nothing orders, and the event usually wins. Launching there throws a
 		-- rigid standing avatar, which is what the owner saw and rejected.
 		--
-		-- BAT ONLY, DELIBERATELY. A guardian is not gated, because a guardian
-		-- was never broken: its 0.35s velocity hold keeps pushing the body until
-		-- long after the constraints arrive, so it goes limp mid-flight on its
-		-- own. Adding a wait there would change tuning that is signed off, to
-		-- fix a problem it does not have.
+		-- EVERY LAUNCH, A GUARDIAN'S TOO. This used to be bat-only, on the
+		-- theory that a guardian's 0.35 s velocity hold absorbed the race by
+		-- pushing the body until the constraints arrived. A velocity write is
+		-- not evidence that a joint came loose, and the owner's published-
+		-- server test showed a guardian hit that knocked the player away with
+		-- the body rigid. On a healthy hit this waits nothing: measured, the
+		-- constraints arrive with the remote and the rig is loose a frame later.
 		--
-		-- ON TIMEOUT IT LAUNCHES ANYWAY, and that is safe rather than a
-		-- compromise: the constraints are already on their way -- the server set
-		-- them before it sent this -- so the body goes limp a moment into the
-		-- flight, exactly as a guardian's does. Recovery waits for a real
-		-- landing regardless, so a late limp still produces a real fall. The
-		-- wait makes the hit TIGHTER; the landing loop is what makes it CORRECT.
+		-- ON TIMEOUT IT LAUNCHES ANYWAY -- the server has committed, the pod is
+		-- dropped and the walk speed taken, and a victim who does not move reads
+		-- as a missed hit -- but it keeps asking, and a guardian body that comes
+		-- loose late is articulated at that moment (see `lateLimp` below). One
+		-- that never does is reported as never having gone limp, never as a
+		-- ragdoll.
 		--==================================================================
 		local readyAfter = 0
-		if isBat then
-			local waitUntil = os.clock() + RAGDOLL_READY_TIMEOUT
-			local ready, off, total, split = ragdollState(character)
-			while not ready and os.clock() < waitUntil do
-				if superseded() then
-					return
-				end
-				RunService.Heartbeat:Wait()
-				ready, off, total, split = ragdollState(character)
+		local limp = true
+		do
+			-- A guardian also waits for the joints' friction to arrive at zero
+			-- (RagdollGate's `needFree`); a bat's knockdown keeps its friction.
+			local s, _, gone = RagdollGate.await(character, RAGDOLL_READY_TIMEOUT,
+				function()
+					RunService.Heartbeat:Wait()
+				end, os.clock, superseded, not isBat)
+			if gone then
+				return
 			end
 			readyAfter = os.clock() - hitAt
-			say(string.format(
-				"ragdoll ready after %.3fs: %d/%d constraints off, rig %s%s",
-				readyAfter, off, total,
-				if split then "split into loose assemblies" else "STILL ONE ASSEMBLY",
-				if ready then "" else "  <- TIMED OUT, launching a body that is not limp yet"))
+			limp = s.ready
+			if not s.supported then
+				-- A rig ragdollOn cannot loosen. It flies whole, and says so.
+				say(string.format(
+					"UNSUPPORTED %s rig (%d Motor6D, %d AnimationConstraint): launched whole -- this is not a ragdoll",
+					s.rig, s.motors, s.total))
+			else
+				say(string.format(
+					"ragdoll ready after %.3fs: %d/%d constraints off, rig %s%s%s",
+					readyAfter, s.off, s.total,
+					if s.split then string.format("split into %d loose assemblies", s.assemblies)
+						else string.format("STILL HELD TOGETHER (%d assemblies)", s.assemblies),
+					if isBat then "" else string.format(", %d joints still gripping", s.gripping),
+					if s.ready then "" else "  <- TIMED OUT, launching a body that is not limp yet"))
+			end
+			if not s.ready and RunService:IsStudio() then
+				warn(string.format("[Seed/ThrowFX] the rig was not limp %.2fs after the hit " ..
+					"(%d/%d constraints off, %d assemblies, %d joints gripping); launching anyway.",
+					readyAfter, s.off, s.total, s.assemblies, s.gripping))
+			end
 		end
 
 		--== 2. GET OUT OF THE PARENT -- THE WHOLE BODY, NOT THE ROOT ==--
@@ -713,6 +875,10 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		character:PivotTo(character:GetPivot() + unit * step + Vector3.new(0, stepUp, 0))
 		say(string.format("stepped %.1f studs clear (+%.1f up) along %s",
 			step, stepUp, tostring(unit)))
+		-- Where the visible body left from, for the one number that tells a real
+		-- throw from a body that dropped where it stood: how far it got.
+		local startTorso = torsoOf(character)
+		local launchedFrom: Vector3? = if startTorso then startTorso.Position else nil
 
 		--======================================================================
 		-- 3. THE CAMERA COMES OUT WITH US
@@ -802,26 +968,78 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		--==================================================================
 		-- THE SPIN THAT PUTS THEM ON THE FLOOR
 		--
-		-- See the TOPPLE_MIN banner: the guardian's integer draw can be zero on
-		-- both tipping axes, and a bat has no lift to spare when it is.
+		-- A random direction with a guaranteed magnitude, for a guardian as for
+		-- a bat. See the TOPPLE_MIN banner for why, and A LIMP BODY THROWN AS
+		-- ONE PIECE for why the guardian's integer draw -- which can come out
+		-- zero on both tipping axes -- went too. Angular velocity does not move
+		-- the body, so the launch is untouched.
 		--==================================================================
-		local tumble
-		if isBat then
-			local axis = math.random() * math.pi * 2
-			local tip = TOPPLE_MIN + math.random() * (TOPPLE_MAX - TOPPLE_MIN)
-			tumble = Vector3.new(
-				math.cos(axis) * tip,
-				math.random(-3, 3),
-				math.sin(axis) * tip) * tumbleScale
-		else
-			tumble = Vector3.new(math.random(-6, 6), math.random(-3, 3),
-				math.random(-6, 6)) * tumbleScale
-		end
+		local axis = math.random() * math.pi * 2
+		local tip = TOPPLE_MIN + math.random() * (TOPPLE_MAX - TOPPLE_MIN)
+		local tumble = Vector3.new(
+			math.cos(axis) * tip,
+			math.random(-3, 3),
+			math.sin(axis) * tip) * tumbleScale
 		local holdFor = if type(hold) == "number" and hold == hold and hold >= 0
 			then hold
 			else LEGACY_HOLD
 
-		if holdFor > 0 then
+		--==================================================================
+		-- A GUARDIAN'S BODY GOES AS SIXTEEN PIECES, OR AS ONE UNTIL IT CAN
+		--
+		-- Proven loose by the gate: articulated now. Not yet (the gate timed
+		-- out): launched as the one piece it still is, and articulated by
+		-- `lateLimp` the frame RagdollGate sees it come apart, from whatever
+		-- velocity it has by then -- so the path is the one it was already on.
+		--==================================================================
+		local body: { BasePart } = {}
+		local poseAtLaunch: { [string]: CFrame } = {}
+		local articulated = false
+		local function lateLimp()
+			if articulated or isBat or superseded() then
+				return
+			end
+			if not RagdollGate.state(character, true).ready then
+				return
+			end
+			local r = rootOf()
+			local loose = bodyAssemblies(character, r)
+			if #loose == 0 then
+				-- Nothing apart from the box to articulate.
+				return
+			end
+			body = loose
+			local _, going = massCentre(body)
+			articulate(body, r, going, tumble)
+			poseAtLaunch = limbPose(character)
+			articulated = true
+			say(string.format("went limp %.2fs after the hit; articulated from there", os.clock() - hitAt))
+		end
+		local function motionNote(): string
+			if isBat then
+				return ""
+			end
+			if not articulated then
+				return " -- the rig had not come loose"
+			end
+			local t = torsoOf(character)
+			return string.format(" -- limbs bent up to %.0f deg against the torso, torso up %.2f",
+				limbMotion(character, poseAtLaunch), if t then t.CFrame.UpVector.Y else 1)
+		end
+
+		-- A classic Motor6D rig is never ready (RagdollGate: unsupported) and is
+		-- still one assembly with its root, so it takes the old write below and
+		-- tumbles rigidly -- logged as UNSUPPORTED above, never as a ragdoll.
+		if not isBat and limp then
+			body = bodyAssemblies(character, rootOf())
+		end
+		if #body > 0 then
+			poseAtLaunch = limbPose(character)
+			articulate(body, rootOf(), impulse, tumble)
+			articulated = true
+			say(string.format("articulated launch across %d assemblies: centre %s (%.1f studs/sec), spin %.1f rad/s",
+				#body, tostring(impulse), impulse.Magnitude, tumble.Magnitude))
+		elseif holdFor > 0 then
 			for _, part in ipairs(parts) do
 				part:ApplyImpulse(impulse * part.AssemblyMass)
 				part.AssemblyLinearVelocity = impulse
@@ -859,19 +1077,27 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		end
 
 		if holdFor > 0 then
-			-- The tested path, unchanged: hold the velocity outright.
+			-- The same 0.35 s and the same path, but the CENTRE is held, not
+			-- every part: see A LIMP BODY THROWN AS ONE PIECE. A body that has
+			-- not come loose yet is one assembly, and gets the old write.
 			local holdUntil = os.clock() + holdFor
 			while os.clock() < holdUntil do
 				if superseded() then
 					return
 				end
 				humanoid.PlatformStand = true
-				for _, part in ipairs(bodyParts()) do
-					part.AssemblyLinearVelocity = impulse
+				if articulated then
+					holdCentre(body, rootOf(), impulse)
+				else
+					for _, part in ipairs(bodyParts()) do
+						part.AssemblyLinearVelocity = impulse
+					end
+					lateLimp()
 				end
 				RunService.Heartbeat:Wait()
 			end
-			say(string.format("held the launch velocity for %.2fs", holdFor))
+			say(string.format("held the launch velocity for %.2fs%s%s", holdFor, motionNote(),
+				ownershipNote(character)))
 		else
 			--==============================================================
 			-- ONE IMPULSE. The watch below restores it only if the state
@@ -946,17 +1172,25 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 					if (have - want).Magnitude > want.Magnitude * OFF_ARC_BY then
 						-- Every part again: they are separate assemblies, and a
 						-- torso left behind is the 373-stud separation above.
-						for _, part in ipairs(bodyParts()) do
-							part.AssemblyLinearVelocity = want
+						-- An articulated guardian body is put back by its CENTRE,
+						-- so the correction does not freeze its limbs in place.
+						if articulated then
+							holdCentre(body, r, want)
+						else
+							for _, part in ipairs(bodyParts()) do
+								part.AssemblyLinearVelocity = want
+							end
 						end
 						restored += 1
 					end
 				end
+				lateLimp()
 				RunService.Heartbeat:Wait()
 			end
-			say(string.format("one impulse; put back on the arc %d time(s) in %.2fs%s",
+			say(string.format("one impulse; put back on the arc %d time(s) in %.2fs%s%s%s",
 				restored, CLEAN_GUARD,
-				if struck then " (guard released early: hit something)" else ""))
+				if struck then " (guard released early: hit something)" else "", motionNote(),
+				ownershipNote(character)))
 		end
 
 		--======================================================================
@@ -1086,7 +1320,9 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 					end
 				end
 			else
-				-- The guardian test, unchanged.
+				-- The guardian test, unchanged -- and a body that came loose late
+				-- is articulated the step it does.
+				lateLimp()
 				if os.clock() >= standNoEarlierThan then
 					if bodySpeed < SETTLE_SPEED then
 						settledFor += SETTLE_STEP
@@ -1149,8 +1385,17 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 					os.clock() - hitAt, tostring(touchedAt ~= nil), lowestUp))
 			end
 		else
-			say(string.format("settled after %.2fs%s", os.clock() - hitAt,
-				if emergency then " (forced: hit the give-up)" else ""))
+			local settledTorso = torsoOf(character)
+			say(string.format("settled after %.2fs%s%s%s", os.clock() - hitAt,
+				if emergency then " (forced: hit the give-up)" else "",
+				if articulated then "" else " -- the rig NEVER came loose",
+				if launchedFrom and settledTorso
+					then string.format(" | body travelled %.0f studs", (settledTorso.Position - launchedFrom).Magnitude)
+					else ""))
+			if not articulated and RunService:IsStudio() then
+				warn("[Seed/ThrowFX] a guardian throw ended without the rig ever coming loose; " ..
+					"that was a rigid tumble, not a ragdoll.")
+			end
 		end
 
 		--======================================================================
@@ -1362,7 +1607,9 @@ if remotes then
 	if found and found:IsA("RemoteEvent") then
 		remote = found
 		found.OnClientEvent:Connect(onThrown)
-		say("listening on " .. GameConfig.Remotes.ThrowVictim)
+		-- The place version is what tells a live log which build it came from.
+		say(string.format("listening on %s (place version %d)",
+			GameConfig.Remotes.ThrowVictim, game.PlaceVersion))
 	else
 		warn("[Seed/ThrowFX] No ThrowVictim remote; the parent's hit will not throw.")
 	end
@@ -1382,12 +1629,20 @@ player.CharacterAdded:Connect(function(character)
 	-- character it had captured -- which is now a destroyed model it would go on
 	-- pivoting, pinning and standing up for another second and a half.
 	--
-	-- `pristine` goes with it. A player who died mid-tumble has a camera the
-	-- engine has already rebuilt around their new character, and handing them
-	-- the old body's zoom floor is a setting they never chose.
+	-- `pristine` goes with it -- but GIVEN BACK first. The engine points the
+	-- camera at the new Humanoid by itself, but the zoom range and the camera
+	-- mode are the PLAYER's, and they survive a respawn: measured 2026-09-22, a
+	-- death 0.6 s into a guardian throw left CameraMinZoomDistance at the
+	-- throw's 12-stud floor for the rest of the session, no first person.
 	--==========================================================================
 	generation += 1
 	throwing = false
+	local kept = pristine
+	if kept then
+		player.CameraMinZoomDistance = kept.min
+		player.CameraMaxZoomDistance = kept.max
+		player.CameraMode = kept.mode
+	end
 	pristine = nil
 	restOffset = nil
 	unbindVisible()

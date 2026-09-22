@@ -707,10 +707,85 @@ type Loosened = {
 	constraints: { AnimationConstraint },
 	motors: { Motor6D },
 	collides: { { part: BasePart, was: boolean } },
+	-- Ball sockets whose joint friction a guardian throw let go of; empty for
+	-- everything else. See slackenJoints.
+	frictions: { { socket: BallSocketConstraint, was: number } },
+	-- THE VICTIM SIMULATES THEIR OWN LIMP BODY; see pinOwnership. The player it
+	-- was pinned to, each part's automatic-ownership flag from before, and
+	-- whether the pin is still being held. Empty for a character no player owns.
+	owner: Player?,
+	autos: { { part: BasePart, auto: boolean } },
+	pinning: boolean,
+	character: Model,
 }
 
+--==============================================================================
+-- THE VICTIM SIMULATES THEIR OWN LIMP BODY, BY NAME RATHER THAN BY LUCK
+--
+-- The live defect that survived every Studio pass, found 2026-09-22 by putting
+-- the published servers' logs next to Studio's:
+--
+--                              live (17 throws)      Studio (61 throws)
+--     settled after            median 1.62 s         median 3.1 - 3.6 s
+--                              15 of 17 at the       never under 2.2 s
+--                              earliest possible
+--     root to torso at settle  median 126 - 304      median 18 - 46 studs
+--
+-- On a published server the visible body stopped almost where it was hit while
+-- the invisible root flew the whole launch -- on v966 as on v949, with every
+-- constraint off and the friction at zero. The rig WAS limp. It was not being
+-- simulated by the machine that threw it.
+--
+-- Measured in Studio, on the server, at the frame the constraints go off: the
+-- HumanoidRootPart stays the victim's, and every one of the fifteen new body
+-- assemblies starts out owned by the SERVER. Studio hands them back to the
+-- victim 0.06 s later. A published server leaves the body with itself -- and
+-- by the time it would look again, the root it judges "near the player" by is a
+-- hundred studs away. So the victim's launch, spin and limb kicks were written
+-- to parts it did not own, and the server dropped the body where it stood.
+-- Forcing exactly that in Studio reproduced the live numbers: 54 studs of
+-- travel instead of 210, settled at 1.75 s, root 140 studs off the torso.
+--
+-- So the victim is made the owner, explicitly, of every part of the body the
+-- moment the joints let go -- and re-asserted for PIN_WINDOW, because the split
+-- into assemblies and the engine's first assignment land within a frame or two
+-- of this call. Pinned in Studio: 232 studs of travel, settled at 3.0 s.
+--
+-- THIS IS THE OPPOSITE OF WHAT THE BANNER ABOVE FORBIDS. That was taking the
+-- body AWAY from its player with SetNetworkOwner(nil); this makes sure the
+-- player keeps it. ragdollOff gives the parts back to automatic ownership once
+-- the joints are on again -- a whole character is its player's either way.
+--==============================================================================
+local PIN_WINDOW = 0.5
+
+-- Every loose part of the body onto `player`, MANUALLY: a part that is theirs
+-- only by automatic assignment is exactly what a published server takes back
+-- once the root has flown off. How many were not pinned yet.
+local function pinOwnership(character: Model, player: Player): number
+	local moved = 0
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("BasePart") and not d.Anchored then
+			local okOwner, owner = pcall(d.GetNetworkOwner, d)
+			local okAuto, auto = pcall(d.GetNetworkOwnershipAuto, d)
+			if not (okOwner and owner == player and okAuto and auto == false) then
+				pcall(d.SetNetworkOwner, d, player)
+				moved += 1
+			end
+		end
+	end
+	return moved
+end
+
+-- Which characters are limp right now, and the record that will stand them back
+-- up. A guardian does not throw a body that something else is already
+-- throwing: the second ragdollOn would find every constraint already off and
+-- take an EMPTY record, and the first one's restore would switch the joints
+-- back on in the middle of the second launch.
+local ragdolled: { [Model]: Loosened } = {}
+
 local function ragdollOn(character: Model): Loosened
-	local out: Loosened = { constraints = {}, motors = {}, collides = {} }
+	local out: Loosened = { constraints = {}, motors = {}, collides = {}, frictions = {},
+		owner = nil, autos = {}, pinning = false, character = character }
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("AnimationConstraint") then
 			if d.Enabled then
@@ -740,10 +815,90 @@ local function ragdollOn(character: Model): Loosened
 		end
 	end
 
+	-- The body stays its player's to simulate: see THE VICTIM SIMULATES THEIR
+	-- OWN LIMP BODY. Captured, pinned now, and held for PIN_WINDOW.
+	local player = Players:GetPlayerFromCharacter(character)
+	if player then
+		out.owner = player
+		out.pinning = true
+		for _, d in ipairs(character:GetDescendants()) do
+			if d:IsA("BasePart") and not d.Anchored then
+				local ok, auto = pcall(d.GetNetworkOwnershipAuto, d)
+				table.insert(out.autos, { part = d, auto = ok and auto == true })
+			end
+		end
+		pinOwnership(character, player)
+		task.spawn(function()
+			local deadline = os.clock() + PIN_WINDOW
+			local steady = 0
+			while out.pinning and os.clock() < deadline and character.Parent do
+				task.wait()
+				if not out.pinning then
+					return
+				end
+				-- Two clean frames in a row: the split has happened and every new
+				-- assembly came out the victim's.
+				if pinOwnership(character, player) == 0 then
+					steady += 1
+					if steady >= 2 then
+						return
+					end
+				else
+					steady = 0
+				end
+			end
+			if out.pinning and character.Parent then
+				-- Bounded, and only when something is wrong: a body the engine keeps
+				-- taking back is the live defect coming back.
+				warn(string.format("[Seed/NestService] a ragdolled body did not stay with its player for %.1fs; " ..
+					"its limbs may be simulated elsewhere.", PIN_WINDOW))
+			end
+		end)
+	end
+
+	ragdolled[character] = out
 	return out
 end
 
+--==============================================================================
+-- LOOSE MEANS LOOSE: THE JOINTS' OWN FRICTION, LET GO FOR A GUARDIAN'S THROW
+--
+-- Switching the AnimationConstraints off leaves the BallSocketConstraints, and
+-- the engine builds those WITH FRICTION. Read off the rig 2026-09-22:
+--
+--     hips 14.7   elbows 18.3   shoulders 18.8   wrists 28.8   knees 35.1
+--     neck 40.9   waist 43.7    ankles 52.3        (MaxFrictionTorque)
+--
+-- on limbs a fraction of a unit of mass each. So a rig with every constraint
+-- off and sixteen loose assemblies still held each limb at whatever angle it
+-- had: measured frame by frame on the victim, the joint angles sat on the same
+-- eight numbers for a second of flight, and only the landing -- an impact big
+-- enough to beat the friction -- bent anything. That is the owner's report from
+-- a published server: "the body remains rigid instead of the limbs becoming
+-- loose during the throw and landing."
+--
+-- For the throw it goes to LIMP_JOINT_FRICTION. The sockets' anatomical limits
+-- stay exactly as the engine made them, so a knee still only bends one way.
+-- Captured per socket into the same record the constraints and collisions go
+-- in, and put back by ragdollOff with them -- once, on every exit restore()
+-- covers.
+--
+-- A GUARDIAN THROW ONLY. CombatService's bat knockdown and the traps use the
+-- same ragdollOn and get an empty list here, so their joints are as they were.
+--==============================================================================
+local LIMP_JOINT_FRICTION = 0
+
+local function slackenJoints(loosened: Loosened, character: Model)
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("BallSocketConstraint") and d.MaxFrictionTorque > LIMP_JOINT_FRICTION then
+			table.insert(loosened.frictions, { socket = d, was = d.MaxFrictionTorque })
+			d.MaxFrictionTorque = LIMP_JOINT_FRICTION
+		end
+	end
+end
+
 local function ragdollOff(loosened: Loosened)
+	loosened.pinning = false
 	for _, c in ipairs(loosened.constraints) do
 		if c.Parent then
 			c.Enabled = true
@@ -754,6 +909,30 @@ local function ragdollOff(loosened: Loosened)
 			entry.part.CanCollide = entry.was
 		end
 	end
+	for _, entry in ipairs(loosened.frictions) do
+		if entry.socket.Parent then
+			entry.socket.MaxFrictionTorque = entry.was
+		end
+	end
+	-- After the joints, so the parts go back to automatic ownership as the one
+	-- assembly they are again. A part that was pinned before this ragdoll -- by
+	-- anything -- keeps its pin.
+	for _, entry in ipairs(loosened.autos) do
+		if entry.auto and entry.part.Parent then
+			pcall(entry.part.SetNetworkOwnershipAuto, entry.part)
+		end
+	end
+	-- Once: a second ragdollOff on the same record has nothing to give back.
+	table.clear(loosened.frictions)
+	table.clear(loosened.autos)
+	if ragdolled[loosened.character] == loosened then
+		ragdolled[loosened.character] = nil
+	end
+end
+
+-- Whether a ragdoll that ragdollOn started is still holding this character.
+local function isRagdolled(character: Model): boolean
+	return ragdolled[character] ~= nil
 end
 
 --==============================================================================
@@ -771,6 +950,9 @@ end
 --==============================================================================
 NestService.RagdollOn = ragdollOn
 NestService.RagdollOff = ragdollOff
+NestService.IsRagdolled = isRagdolled
+-- Exposed for GuardianRagdollSpec; the guardian throw below is the only caller.
+NestService.SlackenJoints = slackenJoints
 
 -- The backstop. The victim's client reports when it has stopped; this is what
 -- happens when it never does -- a body wedged in geometry, a client that left,
@@ -889,6 +1071,34 @@ end
 local throwDone: { [Player]: boolean } = {}
 
 --==============================================================================
+-- WHICH THROW AN ANSWER BELONGS TO
+--
+-- The answer used to carry nothing, so ANY "I have stopped" on this remote
+-- ended the throw -- including a bat's, which comes down the same remote with
+-- CombatService's own token. Each guardian throw now mints one, sends it with
+-- the launch, and ends only on an answer that quotes it back; ThrowFX already
+-- quotes whatever token a launch carried. The value is also the claim: set
+-- before anything else happens, it is what keeps a second guardian off a body
+-- this one is already throwing.
+--==============================================================================
+local throwToken: { [Player]: string } = {}
+local throwSeq = 0
+
+-- Whether an answer ends the throw it arrived for: one is waiting (`pending` is
+-- false, not nil and not already true) and the answer quotes ITS token. A
+-- stale token, a duplicate after the first, a bat's and a bare one all fail.
+local function throwAnswerMatches(pending: boolean?, expected: string?, token: any): boolean
+	return pending == false and type(token) == "string" and expected ~= nil and token == expected
+end
+NestService.ThrowAnswerMatches = throwAnswerMatches
+
+local function acceptThrowAnswer(player: Player, token: any)
+	if throwAnswerMatches(throwDone[player], throwToken[player], token) then
+		throwDone[player] = true
+	end
+end
+
+--==============================================================================
 -- THE GRAB
 --
 -- Spawned rather than run in the tick, because it holds for the better part of
@@ -910,11 +1120,7 @@ local function resolveThrowRemote(): RemoteEvent?
 		throwRemote = found
 		if not throwRemoteConnected then
 			throwRemoteConnected = true
-			table.insert(serviceConnections, found.OnServerEvent:Connect(function(player)
-				if throwDone[player] == false then
-					throwDone[player] = true
-				end
-			end))
+			table.insert(serviceConnections, found.OnServerEvent:Connect(acceptThrowAnswer))
 		end
 		return found
 	end
@@ -925,8 +1131,30 @@ local function throwPlayer(nest: Nest, player: Player)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and root and root:IsA("BasePart")) then
+	if not (character and humanoid and root and root:IsA("BasePart")) then
 		return
+	end
+
+	--==========================================================================
+	-- ONE THROW AT A TIME, AND NEVER A LIMP BODY
+	--
+	-- A victim already limp -- mid another guardian's throw, or a bat's or a
+	-- trap's knockback -- is not thrown again. The second ragdollOn would take
+	-- an empty record (every constraint is already off) and the first
+	-- system's restore would switch the joints back on in the middle of this
+	-- launch: a rigid body in the air. Nothing has happened yet, so the hit
+	-- simply does not land and the guardian goes home.
+	--==========================================================================
+	if isRagdolled(character) or throwToken[player] ~= nil then
+		return
+	end
+	throwSeq += 1
+	local token = string.format("g%d@%.2f", throwSeq, os.clock())
+	throwToken[player] = token
+	local function unclaim()
+		if throwToken[player] == token then
+			throwToken[player] = nil
+		end
 	end
 
 	--==========================================================================
@@ -980,13 +1208,16 @@ local function throwPlayer(nest: Nest, player: Player)
 		-- Everything that could have changed while it was coiling.
 		if player.Parent ~= Players or humanoid.Health <= 0 or not root.Parent
 			or character.Parent == nil then
+			unclaim()
 			return
 		end
 		if MapService.IsInSafeZone(root.Position) then
+			unclaim()
 			return
 		end
 		if (root.Position - nest.root.Position).Magnitude > P.GrabStuds * 4 then
 			-- They got out of reach during the wind-up. The swing misses.
+			unclaim()
 			return
 		end
 	end
@@ -1208,7 +1439,11 @@ local function throwPlayer(nest: Nest, player: Player)
 		end
 	end
 
-	loosened = ragdollOn(character)
+	local limp = ragdollOn(character)
+	-- In the same frame as the constraints, so the client sees both arrive
+	-- together; see LOOSE MEANS LOOSE.
+	slackenJoints(limp, character)
+	loosened = limp
 	-- nest.parent, not nest.model: the Nest type has no 'model' field, so this
 	-- indexed nil and threw -- AFTER the ragdoll and BEFORE the FireClient that
 	-- does the actual throwing. The victim went limp and was never flung.
@@ -1232,8 +1467,13 @@ local function throwPlayer(nest: Nest, player: Player)
 			-- velocity. Omitted for the four unprofiled parents, which leaves
 			-- them on the value ThrowFX has always used; zero for a profiled
 			-- one, which asks for a single impulse and a real ballistic arc.
+			--
+			-- The sixth carries this throw's token (WHICH THROW AN ANSWER
+			-- BELONGS TO) and nothing else a guardian did not already have:
+			-- ThrowFX keys every bat difference off `emergency`, which a
+			-- guardian never sends, so the flight is untouched.
 			rem:FireClient(player, dir, speed, k, CLEAR_STUDS,
-				if prof then 0 else nil)
+				if prof then 0 else nil, { token = token, kind = "guardian" })
 		end)
 	end
 	if not sent then
@@ -1303,6 +1543,10 @@ local function throwPlayer(nest: Nest, player: Player)
 	end)
 
 	restore()
+	-- An error inside the pcall skips its own last line, so the answer flag is
+	-- cleared here as well; the claim goes with it.
+	throwDone[player] = nil
+	unclaim()
 	if not ok then
 		warn("[Seed/NestService] throw failed after the grab: " .. tostring(err))
 	end
@@ -2002,7 +2246,11 @@ local function step(nest: Nest, now: number)
 					local ok, err = pcall(throwPlayer, nest, victim)
 					if not ok then
 						warn("[Seed/NestService] throw failed: " .. tostring(err))
-						-- Never leave somebody ragdolled because the throw broke.
+						-- Never leave somebody ragdolled because the throw broke,
+						-- and never leave them claimed by a throw that is not
+						-- running: nothing else would ever let them be thrown again.
+						throwToken[victim] = nil
+						throwDone[victim] = nil
 						local character = victim.Character
 						local humanoid = character
 							and character:FindFirstChildOfClass("Humanoid")
@@ -2265,6 +2513,10 @@ function NestService.Init()
 		c:Disconnect()
 	end
 	table.clear(serviceConnections)
+	-- The answer handler went with those connections; the next resolve connects
+	-- a fresh one.
+	throwRemote = nil
+	throwRemoteConnected = false
 	-- Rule 10. Sweep samples belong to a chase that no longer exists.
 	table.clear(lastTargetAt)
 	for _, nest in ipairs(nests) do
@@ -2285,22 +2537,19 @@ function NestService.Start()
 	-- THE VICTIM'S ANSWER
 	--
 	-- Rule 4: the sender is engine-stamped and cannot be forged, but everything
-	-- else off the wire is a lie until checked. There are no arguments to check
-	-- here -- the message IS "I stopped" -- so the check is that this player is
-	-- actually mid-throw. A client shouting it at any other time is ignored.
+	-- else off the wire is a lie until checked. The one argument is the throw's
+	-- token (acceptThrowAnswer): an answer ends only the throw it names, so a
+	-- stale one, a duplicate or a bat's is ignored, and so is a client shouting
+	-- it at any other time.
 	--
 	-- The worst a victim can do by lying is end their own ragdoll early, which
 	-- is a punishment they are shortening for themselves; the timeout still
 	-- bounds it either way.
+	--
+	-- resolveThrowRemote connects the handler, once. This used to connect a
+	-- second copy of it here as well.
 	--==========================================================================
-	local remote = resolveThrowRemote()
-	if remote then
-		table.insert(serviceConnections, remote.OnServerEvent:Connect(function(player)
-			if throwDone[player] == false then
-				throwDone[player] = true
-			end
-		end))
-	else
+	if not resolveThrowRemote() then
 		warn("[Seed/NestService] No ThrowVictim remote. Throws will run to their timeout.")
 	end
 
