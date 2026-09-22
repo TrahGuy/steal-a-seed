@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Guardian ragdoll on published servers: the limp body stays its player's — 2026-09-22 (CLAUDE)  (COMMITTED; LIVE ACCEPTANCE PENDING: needs a publish)
+## Guardian ragdoll on published servers: the limp body stays its player's — 2026-09-22 (CLAUDE)  (COMMITTED cd5512e; LIVE ACCEPTANCE PENDING: needs a publish)
 
 **Owner report:** ragdoll works in Studio but not normally in the published
 game -- guardian contact knocks the player down or launches them, and the
