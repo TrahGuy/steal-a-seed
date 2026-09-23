@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Detached plant parts: gardens streamed part by part — 2026-09-23 (CLAUDE)  (COMMITTED — see the commit below; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
+## Detached plant parts: gardens streamed part by part — 2026-09-23 (CLAUDE)  (COMMITTED 9445b0a; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
 
 **Owner report:** floating pale crown/petal pieces and detached facial features
 beside the garden (screenshot). In the screenshot the pale pieces are a
