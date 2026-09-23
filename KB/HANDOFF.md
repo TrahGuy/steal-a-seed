@@ -100,6 +100,13 @@ byte-exact):
   grouped identically; persistence restored after.
 * No drift: plants that never left still had rest stamps equal to the authored
   build after minutes of walking.
+* Stopping (a second Play run, store `StealASeed_audit_stop`, key deleted
+  after): 3-4 walk -> stop cycles per plant at Big, and at Titan for Novaorb.
+  Legs swing to 21 deg while walking; standing, legs sit within 0.54-0.82 deg
+  and leaves within 0.49-0.72 deg of rest. PlantSway stops rewriting a limb once
+  the stride fades below 2% and works in 20 Hz slices, so a standing plant keeps
+  the last sub-degree of its stride; the next walk recomputes from the rest
+  record, so it never accumulates (rest stamps unchanged across the window).
 * Rebuilds: 9 pick-up / replant cycles (Novaorb x5, Cosmospire x2, Astralhorn
   x2). The client saw each old model removed before the new one arrived, each
   new one stamped with one light, never a duplicate, no leftover aura parts.
