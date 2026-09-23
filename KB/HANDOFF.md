@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Starbloom plant redesigns integrated: Novaorb, Cosmospire, Astralhorn — 2026-09-23 (CLAUDE)  (COMMITTED — see the commit below; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
+## Starbloom plant redesigns integrated: Novaorb, Cosmospire, Astralhorn — 2026-09-23 (CLAUDE)  (COMMITTED 3b1d1fc; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
 
 **Owner decision, 2026-09-23:** approved ONLY the three Starbloom plant redesigns
 from preview commit fba9ed0 — Novaorb "Moonbulb Prowler", Cosmospire "Crescent
