@@ -1,5 +1,111 @@
 # Steal a Seed — Session Handoff
 
+## Mobile HUD redesign: the phone's two sidebars — 2026-09-23 (CLAUDE)  (COMMITTED, see `git log` for "phone's two sidebars"; STUDIO-VERIFIED ON A FORCED-TOUCH VIEWPORT; REAL PHONE SIZES AND TAP FLOWS PENDING THE OWNER)
+
+**Owner brief:** implement the approved mockup
+`Steal an Artifact/output/imagegen/podnappers-mobile-sidebar-mockup-v2.png` on
+mobile only -- a collapsible left sidebar (Index, the illustrated Shop,
+Settings; Walk Mode still reachable), Garden and the Bag top right with the
+existing x2 indicator moved immediately left of them, a right sidebar with
+separate BATS and TRAPS buttons that each open a chooser of the player's real
+items, and a belt of pods and plants only. Desktop and non-touch unchanged;
+HudLayout the source of truth; no second controller.
+
+**This commit also carries the 2026-09-22 compact belt and cash block** (entry
+below), which had been awaiting approval: the approved mockup is drawn on it and
+the sidebar layout wears its faces.
+
+### What changed
+
+* `HudLayout.luau` -- a third arrangement, **sidebars**, for any touch screen
+  (`solve`: touch -> sidebars; otherwise desktop if it fits, else compact).
+  Only TouchEnabled makes a phone; a narrow desktop window stays compact, as
+  before. New answer fields `sidebar`, `dock`, `handle`, `handleShut`, `boost`,
+  `chooser`, `equipPad`; `CONFIG.Dock/Side/Chooser/BoostGap`. The belt and
+  banner arithmetic moved into `beltBetween` / `bannerIn`, which compact now
+  calls -- its answers are unchanged (the spec's compact and desktop checks all
+  pass). Geometry: the dock is 58 wide at (8, 8), three 50 x 50 tiles (pad 4,
+  gap 5), tiles shrink toward 44 only on a screen too short for three; the
+  handle is a 44 x 44 press on the dock's edge level with Shop, and on the safe
+  edge (x 0) when shut; Walk Mode is the compact 50 x 50 switch beside the
+  dock; the top-right row is x2 / Garden / Bag; BATS over TRAPS is a 64-wide
+  panel of two 56 x 60 tiles standing on the jump reservation (the old column's
+  rule), tiles shrinking toward 48 on short phones; the chooser shows up to
+  three 76 x 96 cards out of the sidebar's left side, never past the screen's
+  middle, and clears the belt, jump and top row; cash stays in its compact face
+  **under the dock where the safe height allows and beside it where it does
+  not** -- every listed phone under ~350 px of safe height (772x360, 801x392,
+  874x402, 896x414 and the notched cases) has the dock, a 78-px block and the
+  thumbstick reservation in one column otherwise.
+* `UIKit.luau` -- `railDock` (one shared, transparent, layer-sized Frame in
+  `SeedRail`, found not rebuilt); `railButton` finds its previous copy
+  recursively (it may stand in the dock); `railShape(button, size, iconSize,
+  tile)` has a third shape, the dock tile: a plate of its own colours over the
+  button's face, the icon on top and the word under it, all hidden again off a
+  phone so the button is exactly what it was.
+* `RailDrawerUI.client.luau` (new) -- owns only the dock's panel, its handle
+  and open/shut (attribute `Open` on the dock frame). Shutting slides the frame
+  off the left edge and hides it. **While OpenPanel names a centre panel the
+  dock and handle are hidden** (the rail layer draws over panels, and a 176-px
+  column would cover their left edge); they come back as they were.
+* `IndexUI`, `ShopUI`, `SettingsUI` -- on a phone each shapes its own button as
+  a tile (INDEX / emerald SHOP with a lime edge / SETTINGS) and parents it into
+  the dock; elsewhere back into the layer. Settings' compact plate stands down
+  under the tile.
+* `LoadoutUI.client.luau` -- on a phone the BAT/TRAP column is the right
+  sidebar (panel, slate tiles, BATS/TRAPS, the belt chip's amber/orange edges,
+  white while its chooser is open, amber while in hand, a cooldown shade drained
+  in the existing per-frame pass). A tile opens **the chooser**: every owned bat
+  or trap off the profile, EQUIP / EQUIPPED / IN HAND. EQUIP sends the existing
+  `equipRequest` (the Bag's and Marigold's verb) and then holds the new Tool
+  when it lands (`chooser.settle`, 4-s window); EQUIPPED holds it; IN HAND puts
+  it away -- on a phone the weapons have no belt card, so choosing one is
+  choosing to hold it. It closes on any choice, its chevron spine, a tap outside
+  it and the sidebar (UserInputService, so the tap still reaches the world),
+  the Bag or any centre panel opening, the character going, and leaving phone
+  mode. **On a phone the belt auto-fills with pods and plants only**
+  (`plantsOnly`); weapons are never assignable, so nothing else changes. The
+  chooser adds one top-level local (`chooser`, a table): the chunk is at 185 of
+  200.
+* `CashUI.client.luau` -- on a phone the one x2 card (`MoneyBuff`) is reparented
+  to the top-right row at HudLayout's `boost`, 50 x 50, its message hung under
+  it; everywhere else it goes back beside the cash text. Same instance, same
+  attribute, same sentence.
+* `GameConfig.Rail` -- dock and tile colours. `tools/tests/HudLayoutSpec.luau`
+  -- 618 checks (was 472): every phone case's dock column, handle open and
+  shut, Walk Mode, the x2 button, badges, cash under/beside, the x2 message,
+  the right sidebar, the chooser clear of everything; non-touch answers carry
+  none of it; a portrait and a landscape tablet fit; the wiring (owners, one
+  equip verb, one x2 card, belt filter, chooser close paths). The notice's
+  "cannot stay centred" case moved to a non-touch window and a phone sized off
+  the measured name: a 560 x 320 phone now has room to keep it centred.
+
+### Verified
+
+* All 42 specs pass through the fresh-require runner (HudLayoutSpec 618/0,
+  TrapSystem 67/0, the rest unchanged). Every changed file compiles; Studio
+  matched disk byte for byte (hashes) before the run. `rojo build` clean.
+* Play, throwaway store `StealASeed_sidebar_20260923` (key removed, name
+  reverted, GameConfig back to 278,662 bytes / hash 26736585): desktop
+  1037-wide viewport shows the shipped layout (column rail, BAT/TRAP column,
+  weapons on the ten-slot belt, x2 beside the cash). Forced touch
+  (`HudLayout.measure` patched on the client, 933 x 656 safe): the dock with
+  INDEX (badge) / SHOP / SETTINGS and its handle, Walk Mode beside it, x2 /
+  Garden / Bag, BATS/TRAPS showing the equipped models, belt = pod, Bellchime,
+  Nubkin + Bag 3/5 -- no weapon cards. Every control is the first button under
+  its own centre. An equip through WeaponShopService (Rootwood) updated the
+  BATS tile; a death and respawn kept the tiles and the plants-only belt; a
+  rejoin restored the loadout and plants. Client and server consoles clean.
+
+### NOT verified -- needs the owner
+
+* **Real phone sizes**: the device emulator was off and MCP cannot switch it;
+  the phone geometry is HudLayoutSpec's arithmetic for 16 phone cases.
+* **Every tap flow**: opening the choosers, EQUIP / hold / put away by tap,
+  outside-tap close, the dock handle. MCP cannot inject input without bringing
+  Studio to the foreground, which was not done while the owner used the PC.
+* A physical phone, and the look of the tiles at phone scale.
+
 ## Starbloom plant redesigns integrated: Novaorb, Cosmospire, Astralhorn — 2026-09-23 (CLAUDE)  (COMMITTED 3b1d1fc; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
 
 **Owner decision, 2026-09-23:** approved ONLY the three Starbloom plant redesigns
@@ -653,6 +759,107 @@ should show `listening on ThrowVictim (place version 967` or later, and per hit
 `hit g<n>@...`, `... | body simulated here`, and `settled after` well over 2 s
 with `body travelled` in the hundreds -- NOT 1.6 s with the root 100+ studs off.
 `BODY SIMULATED ELSEWHERE` would mean the pin is being refused live.
+
+## Compact mobile hotbar and cash block — 2026-09-22 (CLAUDE)  (COMMITTED 2026-09-23 with the mobile HUD redesign above, whose approved mockup is drawn on it)
+
+**Owner brief:** on landscape phones the five-card hotbar with its Bag cell, and
+the cash/speed block, take too much of the screen. Wanted: a compact
+quick-access belt and a compact cash block, desktop pixel-identical, HudLayout
+still the single source of truth.
+
+### What changed (5 files, all uncommitted, separate from the ragdoll work below)
+
+* `GameConfig.luau`: `GameConfig.Hotbar` gets named keys for what used to be
+  LoadoutUI literals (CardCorner 12, CardStroke 2.5, AuraPad 8, BadgeText 11,
+  ChipTop 4, NameLines 2, BagIcon 34, BagWord true, TrayCorner 18, ...), every
+  value the shipped one, and a `Compact` block with only what the belt changes:
+  54 x 76 cards, 4-px gap and padding, 2-px tray border, 14-px badge, 42-px
+  preview, one-line names (11..8 px, then an ellipsis), no IN HAND strip, a
+  50-px Bag cell with no word. Five cards and the Bag cell: 355 x 84.
+* `HudLayout.luau`: `hotMetrics(compact)` lays `Compact` over a copy of
+  `GameConfig.Hotbar` once (a desktop gets the original table itself);
+  `hotbarWidth/hotbarHeight` take the compact flag; `CashStyle` has two faces,
+  `CASH_DESKTOP` (CashUI's shipped numbers) and `CASH_COMPACT` (root 190 x 72,
+  speed 27 / cash 35 px, shoe x0.64 = 32 x 24, x2 card 36 in a 44-px press
+  area, message at 13 px above the block, reserve 180, drop 6). Every answer
+  now carries `hot` and `cashStyle`; `compact()` places the belt and the block
+  from them. `CashReserve/CashRoot/CashDrop` stay as aliases of the desktop face.
+* `LoadoutUI.client.luau`: `HOT` is the answer's `hot`; `layoutHud` swaps it on a
+  change of face and calls the new `restyleHotbar` (the one new top-level local:
+  189 of 200), which rewrites what was already built -- strip padding and gap,
+  tray corner/border/rim, the Bag cell, every card's sizes and corners -- and
+  marks names and chips for re-fitting and drops ghost dashes for the redraw.
+  Name fitting honours `NameLines`; IN HAND shows only where `InHandHeight > 0`;
+  keyline and flash thickness come from `CardStroke`.
+* `CashUI.client.luau`: sizes come from `layout.cashStyle` via `applyStyle`
+  (called at build and on a change of face, then the block is placed again);
+  the shoe is scaled by a UIScale; the x2 card's press lands on a transparent
+  `Hit` child (`BuffHit` square, 46 = the card on a desktop); it also re-asks on
+  TouchEnabled/KeyboardEnabled. Instance names unchanged (TutorialUI reads
+  `SeedCash/Corner/Speed`).
+* `HudLayoutSpec.luau` (472 checks): desktop faces pinned to the shipped
+  literals; every phone case now requires the compact belt and face, plus
+  FOOTPRINT LIMITS: strip <= 360 x 88 and <= 14% of the safe area, cash root
+  <= 220 x 78 with its reservation <= 7%, both together <= 20%; the brief's
+  bands; 44-px presses; no collisions inside a compact card; every chip word
+  (BAT..COLOSSAL) fits the compact chip; `Compact` has no key the desktop
+  table lacks; CashUI never decides from TouchEnabled. A mutant HudLayout that
+  hands phones the old faces fails 64 of these.
+
+### Measured
+
+Play, same session and profile, compact, 5/5, x2 on, "$781B" / "299T":
+
+| | before (HEAD) | after |
+|---|---|---|
+| belt | 419 x 104 | 355 x 84 |
+| card / Bag cell | 64 x 92 / 52 x 92 | 54 x 76 / 50 x 76 |
+| cash root | 316 x 108 | 190 x 72 |
+| speed / cash text | 39 / 47 | 27 / 35 |
+| x2 card / press | 46 / 46 | 36 / 44 |
+| belt to thumbstick / jump zone | 103 / 139 | 135 / 171 |
+
+On the owner's 801 x 392 session (safe 801 x 334, spec arithmetic) the belt and
+the cash root go from 29.0% of the screen to 16.3%; on a 772 x 360 phone from
+33.3% to 18.7%.
+
+**Desktop is property-identical.** In one Play session HEAD's LoadoutUI and
+CashUI were run against the new ones and every instance of the strip, the tray
+and the cash block dumped (absolute position and size, colours, strokes,
+corners, text, sizes): 139 instances with an empty belt, 536 with a full one,
+514 with a full one plus the x2 card and a real balance -- zero differences.
+The only additions are `Shoe/UIScale` (scale 1) and the transparent
+`MoneyBuff/Hit` (46 x 46, same place as the card).
+
+### Verified / not verified
+
+* All 41 specs pass (4,316 assertions); every changed file compiles; `rojo
+  build` clean; `git diff --check` clean; Play consoles clean.
+* Compact in Play: full, partial (2/5) and empty (0/5, ghost dashes laid out at
+  54 x 76) belts; held card (keyline 3, lift 3, glow, no strip); cooldown shade;
+  pod, bat, trap and hatched plant chips including COLOSSAL; "Bramblejaw Trap"
+  at 8 px with an ellipsis; x2 on and off; "$0", "$781B", "$1Qa"; the card
+  follows the measured text; a tap on the press area's corner reaches `Hit`.
+* **NOT on a phone or in the device emulator.** The emulator was off and MCP
+  cannot switch it, so compact was forced in Play by a temporary LocalScript
+  that made `HudLayout.measure` report touch (desktop-sized viewport, so the
+  large-screen control zones). Phone-sized positions are covered by the spec.
+* **Bag open/close and the drag reveal were not exercised live:** opening the
+  Bag needs a real click and Studio was minimised; that code is unchanged.
+* Leak cycles: 20 desktop<->compact round trips: instance counts identical at
+  every phase, no BaseParts growth. The Gui memory tag grows ~1.4 MB per round
+  trip -- **identically with HEAD's scripts** (pre-existing; part of it is the
+  tray lattice being rebuilt, most of the rest is elsewhere in LoadoutUI's mode
+  flip). It needs a desktop window crossing the compact threshold; a phone
+  never changes mode. Left alone as out of scope.
+* A first version rebuilt every preview model on a change of face (0.45 MB of
+  parts per round trip); removed -- the two glasses are 1.5% apart in shape and
+  the 0.97 fit keeps the old framing inside the new one.
+
+### To look at it
+
+Studio: Device Emulator on a landscape phone, then Play (Play uses the real
+save store unless you swap it). Nothing was published.
 
 ## Guardian ragdoll, really limp this time: joint friction, articulated flight, gated launch — 2026-09-22 (CLAUDE)  (SHIPPED LIVE IN v966, COMMITTED WITH THE ENTRY ABOVE; SUPERSEDED: its "confirmed cause" was not the live defect)
 

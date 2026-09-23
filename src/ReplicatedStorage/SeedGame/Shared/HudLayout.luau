@@ -7,11 +7,14 @@
 --==============================================================================
 -- WHY THIS IS ONE MODULE AND NOTHING BUT NUMBERS
 --
--- The HUD has nine owners and none of them owns the others:
+-- The HUD has ten owners and none of them owns the others:
 --
 --   IndexUI, ShopUI, SettingsUI, WalkModeUI    the left rail
+--   RailDrawerUI                               on a phone, the dock the first
+--                                              three stand in, and its handle
 --   GardenUI, LoadoutUI                        Garden and the Bag, the BAT/TRAP
---                                              column and the hotbar
+--                                              column (and its chooser) and the
+--                                              hotbar
 --   CashUI                                     cash, speed and the x2 card
 --   WorldClock                                 the clock
 --   TutorialUI, BiomeGuideUI                   the two that come and go
@@ -38,7 +41,7 @@
 -- the size with two thumbs' worth of Roblox controls on it.
 --
 --==============================================================================
--- TWO LAYOUTS, AND THE DESKTOP ONE IS WHAT ALREADY SHIPPED
+-- THREE LAYOUTS, AND THE DESKTOP ONE IS WHAT ALREADY SHIPPED
 --
 -- DESKTOP is the old geometry to the pixel -- the same numbers the owners used
 -- to write inline, now read from here. It is used when the screen is not touch
@@ -47,10 +50,13 @@
 -- which rises above the hotbar when a narrow window leaves no room beside it --
 -- on a window 1268 px or wider it never does.
 --
--- COMPACT is everything else: any touch screen, and any window the desktop
--- arrangement does not fit. Decided by the safe size and by touch, never by a
--- device name, so a phone, a tablet, the emulator and a desktop window dragged
--- small all get the same rules.
+-- COMPACT is a window the desktop arrangement does not fit and that has no
+-- touch screen: a desktop window dragged small. Decided by the safe size, never
+-- by a device name.
+--
+-- SIDEBARS is every TOUCH screen -- a phone, a tablet, the emulator -- and is
+-- the approved mobile redesign of 2026-09-23 (THE PHONE'S SIDEBARS, below). A
+-- narrow window is never a phone: only TouchEnabled makes one.
 --
 --   top left      Index, Shop, Settings, Walk Mode: one row of 50 x 50 buttons
 --   top right     Garden and the Bag: one row, the Bag in the corner
@@ -58,9 +64,15 @@
 --   bottom        the hotbar, five slots, centred between the two thumbs
 --   bottom left   cash and speed, above the thumbstick and the hotbar line
 --
--- Five slots in compact, ten on a desktop with a keyboard. The count changes
--- only when the MODE does, so resizing or rotating a phone never takes a slot
--- away from anybody.
+-- The hotbar and the cash block also change FACE in compact and in sidebars: a
+-- smaller belt (GameConfig.Hotbar.Compact, read through hotMetrics) and a
+-- smaller cash block (CASH_COMPACT). Every answer carries its mode's numbers as
+-- `hot` and `cashStyle`, so the two owners draw from the same answer that
+-- placed them.
+--
+-- Five slots in compact and sidebars, ten on a desktop with a keyboard. The
+-- count changes only when the MODE does, so resizing or rotating a phone never
+-- takes a slot away from anybody.
 --
 --==============================================================================
 -- THE ROBLOX CONTROLS ARE MODELLED, NOT MEASURED LIVE
@@ -151,6 +163,140 @@ export type Layout = {
 
 	-- WINDOW space, unlike everything above.
 	clock: Rect?,
+
+	-- The hotbar card's numbers for this mode: GameConfig.Hotbar itself on a
+	-- desktop, the same table with its Compact block laid over it in compact.
+	-- LoadoutUI draws the strip from this and nothing else. See hotMetrics.
+	hot: any,
+	-- The cash block's face for this mode; see CONFIG.CashStyle.
+	cashStyle: CashStyle,
+
+	-- THE PHONE'S SIDEBARS (see below). False, and the five rects nil, on a
+	-- desktop and in compact, whose answers are exactly what they were.
+	sidebar: boolean,
+	-- The dock Index, Shop and Settings stand in; `index`, `shop` and `settings`
+	-- are its three tiles.
+	dock: Rect?,
+	-- The dock's handle as the square a press lands on: on the dock's edge while
+	-- it is open, on the safe area's edge while it is shut.
+	handle: Rect?,
+	handleShut: Rect?,
+	-- The x2 card, as a button on the top-right row.
+	boost: Rect?,
+	-- The BATS / TRAPS chooser at its widest. Its right edge is fixed; a player
+	-- with fewer items gets a narrower one, still inside this.
+	chooser: Rect?,
+	-- The right sidebar's padding round its two tiles; 0 for the old column.
+	equipPad: number,
+}
+
+--==============================================================================
+-- THE CASH BLOCK'S TWO FACES
+--
+-- Desktop is CashUI's shipped numbers, moved here unchanged so the spec can
+-- hold them to the pixel and so there is one copy: the 316 x 108 root, speed at
+-- 39 and cash at 47 in LuckiestGuy, the 50 x 38 shoe, the 46-px x2 card 10 px
+-- off the text.
+--
+-- COMPACT, asked for by the owner 2026-09-22 on a landscape phone: the block was
+-- competing with the rail and covering a corner of the world. The same shoe,
+-- numbers, colours and x2 card, smaller and closer together -- cash at 35 and
+-- speed at 27, the shoe at 0.64, a 36-px card inside a 44-px touch area, thinner
+-- outlines, and 2 px between the two lines instead of 13. Reserved by the
+-- widest balance the formatter can print, "$9.99Qa": 129 px at 35, the card
+-- 8 px after it and 36 wide, and its touch area 4 px past that -- 177, kept
+-- as 180. The touch area reaches 4 px past the card on every side, which is
+-- what `Drop` covers below the root.
+--==============================================================================
+export type CashStyle = {
+	-- The root frame: the block's own size, anchored at its bottom-left.
+	Root: Vector2,
+	-- The width HudLayout places the block by, so a longer balance never moves it.
+	Reserve: number,
+	-- How far below the root the group reaches: the x2 card, or its touch area.
+	Drop: number,
+	SpeedSize: number,
+	CashSize: number,
+	-- The speed line's box: its left edge (after the shoe), width and bottom.
+	SpeedX: number,
+	SpeedW: number,
+	SpeedBottom: number,
+	CashW: number,
+	SpeedStroke: number,
+	CashStroke: number,
+	-- The shoe is drawn at 50 x 38 and scaled; its bottom edge in the root.
+	ShoeScale: number,
+	ShoeBottom: number,
+	-- The x2 card as drawn, the touch area around it, its gap off the cash text,
+	-- its leftmost place while the text is still a dash, and its hang.
+	BuffSize: number,
+	BuffHit: number,
+	BuffGap: number,
+	BuffMinX: number,
+	BuffDrop: number,
+	-- The card's message line, and how far above the root's bottom edge it ends.
+	TipSize: number,
+	TipLift: number,
+	BuffCorner: number,
+}
+
+local CASH_DESKTOP: CashStyle = {
+	-- The widest the block can be: "$9.99Qa" is 174 px of 47-px LuckiestGuy, the
+	-- x2 card starts 10 px after it and is 46 wide, which is 230. A realistic
+	-- "$9.99M" is 205. Measured with TextService 2026-09-18.
+	Root = Vector2.new(316, 108),
+	Reserve = 232,
+	-- The x2 card hangs 2 px under the root.
+	Drop = 2,
+	SpeedSize = 39,
+	CashSize = 47,
+	SpeedX = 56,
+	SpeedW = 260,
+	SpeedBottom = 44,
+	CashW = 300,
+	SpeedStroke = 2,
+	CashStroke = 3,
+	ShoeScale = 1,
+	ShoeBottom = 44,
+	BuffSize = GameConfig.Pass.BuffSize or 46,
+	BuffHit = GameConfig.Pass.BuffSize or 46,
+	BuffGap = 10,
+	BuffMinX = 120,
+	BuffDrop = 2,
+	TipSize = 15,
+	-- The card's height and 4 px, less its 2-px hang: the line sits just above it.
+	TipLift = 48,
+	BuffCorner = 10,
+}
+
+local CASH_COMPACT: CashStyle = {
+	-- Speed's box (31) over cash's (39) with 2 px between them; 36 in from the
+	-- shoe, like the desktop's 56 is from its larger one.
+	Root = Vector2.new(190, 72),
+	Reserve = 180,
+	-- The touch area's 4 px past the card's 2-px hang.
+	Drop = 6,
+	SpeedSize = 27,
+	CashSize = 35,
+	SpeedX = 36,
+	SpeedW = 154,
+	SpeedBottom = 31,
+	CashW = 190,
+	SpeedStroke = 1.5,
+	CashStroke = 2,
+	-- 32 x 24: the 50 x 38 shoe at 0.64, its foot level with the speed line's.
+	ShoeScale = 0.64,
+	ShoeBottom = 29,
+	BuffSize = 36,
+	BuffHit = 44,
+	BuffGap = 8,
+	BuffMinX = 90,
+	BuffDrop = 2,
+	TipSize = 13,
+	-- Above the whole block, 2 px over the speed line: between the two lines,
+	-- where the desktop puts it, there is no room at this size.
+	TipLift = 74,
+	BuffCorner = 8,
 }
 
 local CONFIG = {
@@ -163,13 +309,12 @@ local CONFIG = {
 	DesktopSlots = 10,
 	MobileSlots = 5,
 	WalkHeight = 46,
-	-- The widest the cash block can be: "$9.99Qa" is 174 px of 47-px
-	-- LuckiestGuy, the x2 card starts 10 px after it and is 46 wide, which is
-	-- 230. A realistic "$9.99M" is 205. Measured with TextService 2026-09-18.
-	CashReserve = 232,
-	CashRoot = Vector2.new(316, 108),
-	-- The x2 card hangs 2 px under the root.
-	CashDrop = 2,
+	-- The cash block's two faces (see THE CASH BLOCK'S TWO FACES), and the
+	-- desktop one's three placing numbers under the names they always had.
+	CashStyle = { Desktop = CASH_DESKTOP, Compact = CASH_COMPACT },
+	CashReserve = CASH_DESKTOP.Reserve,
+	CashRoot = CASH_DESKTOP.Root,
+	CashDrop = CASH_DESKTOP.Drop,
 	-- The root's left edge in both modes. The cash line's 3 px outline draws
 	-- outside it, so 12 is what keeps the "$" 9 px off the safe edge -- measured
 	-- live at 5 px when compact used the plain 8 px margin.
@@ -195,6 +340,46 @@ local CONFIG = {
 	-- gap minus the badge's 2.5 px stroke leaves this much before it would
 	-- touch the next button.
 	BadgeHang = 2,
+	--==========================================================================
+	-- THE PHONE'S SIDEBARS
+	--
+	-- The dock's tiles are 50 x 50 like every rail square, the icon over a
+	-- 10-px word, and give up height to 44 -- the touch floor -- only on a
+	-- screen too short for three. The handle is drawn 18 x 34 on the dock's
+	-- edge and pressed on a 44 x 44 square that reaches right from it, never
+	-- back over a tile. BATS and TRAPS are 56 x 60, because the equipped
+	-- item's model needs the room a book icon does not, and give up height to
+	-- 48 on a short phone, never width. The chooser shows three 76 x 96 cards
+	-- at most and scrolls past that.
+	--==========================================================================
+	Dock = {
+		Tile = Vector2.new(50, 50),
+		MinTile = 44,
+		Pad = 4,
+		Gap = 5,
+		Icon = 28,
+		Label = 10,
+		Handle = Vector2.new(18, 34),
+		Hit = 44,
+	},
+	Side = {
+		Tile = Vector2.new(56, 60),
+		MinTile = 48,
+		Pad = 4,
+		Gap = 6,
+	},
+	Chooser = {
+		Card = Vector2.new(76, 96),
+		Cards = 3,
+		Gap = 6,
+		Pad = 8,
+		Title = 20,
+		-- The strip down its right edge, toward the sidebar, carrying the
+		-- chevron that closes it.
+		Spine = 22,
+	},
+	-- Between the x2 button and Garden: room for Garden's tucked badge.
+	BoostGap = 8,
 	--==========================================================================
 	-- THE BAG PANEL
 	--
@@ -276,17 +461,43 @@ function HudLayout.place(r: Rect, anchor: Vector2, safe: Vector2): UDim2
 		anchor.Y, math.round(py - safe.Y * anchor.Y))
 end
 
-function HudLayout.hotbarWidth(slots: number, chip: boolean): number
-	local width = HOT.TrayPad * 2 + slots * HOT.SlotWidth + (slots - 1) * HOT.Gap
+--==============================================================================
+-- THE HOTBAR'S NUMBERS IN EACH MODE
+--
+-- GameConfig.Hotbar is the desktop card, and its Compact block names only what
+-- the compact belt changes. Laid over a copy once, so a reader always gets ONE
+-- table with every key -- the colours too -- and a desktop gets the original
+-- itself, which is what keeps its strip the one that shipped.
+--==============================================================================
+local compactHot: any = nil
+
+function HudLayout.hotMetrics(compact: boolean?): any
+	if not compact then
+		return HOT
+	end
+	if not compactHot then
+		local merged: any = table.clone(HOT)
+		for key, value in pairs(HOT.Compact :: any) do
+			merged[key] = value
+		end
+		compactHot = merged
+	end
+	return compactHot
+end
+
+function HudLayout.hotbarWidth(slots: number, chip: boolean, compact: boolean?): number
+	local H = HudLayout.hotMetrics(compact)
+	local width = H.TrayPad * 2 + slots * H.SlotWidth + (slots - 1) * H.Gap
 	if chip then
 		-- The list's padding either side of the BagGap spacer, then the cell.
-		width += HOT.Gap + HOT.BagGap + HOT.Gap + HOT.ChipWidth
+		width += H.Gap + H.BagGap + H.Gap + H.ChipWidth
 	end
 	return width
 end
 
-function HudLayout.hotbarHeight(): number
-	return HOT.SlotHeight + HOT.TrayPad * 2
+function HudLayout.hotbarHeight(compact: boolean?): number
+	local H = HudLayout.hotMetrics(compact)
+	return H.SlotHeight + H.TrayPad * 2
 end
 
 -- The thumbstick (both modes, as one zone) and the jump button.
@@ -368,14 +579,15 @@ local function desktop(input: Input): Layout
 	local hotbar = rect(sw / 2 - width / 2, sh - HOT.BottomGap - height, width, height)
 
 	-- Beside the hotbar where the whole reservation fits; above it where not.
-	local cw = math.max(CONFIG.CashReserve, input.cashWidth or 0)
+	local style = CASH_DESKTOP
+	local cw = math.max(style.Reserve, input.cashWidth or 0)
 	local cx = CONFIG.CashLeft
 	local rootBottom = sh - HOT.BottomGap
 	if cx + cw + G > hotbar.x then
-		rootBottom = hotbar.y - G - CONFIG.CashDrop
+		rootBottom = hotbar.y - G - style.Drop
 	end
-	local cashRoot = rect(cx, rootBottom - CONFIG.CashRoot.Y, CONFIG.CashRoot.X, CONFIG.CashRoot.Y)
-	local cash = rect(cx, cashRoot.y, cw, CONFIG.CashRoot.Y + CONFIG.CashDrop)
+	local cashRoot = rect(cx, rootBottom - style.Root.Y, style.Root.X, style.Root.Y)
+	local cash = rect(cx, cashRoot.y, cw, style.Root.Y + style.Drop)
 
 	local banner = rect(sw / 2 - CONFIG.BannerSize.X / 2, CONFIG.BannerTop,
 		CONFIG.BannerSize.X, CONFIG.BannerSize.Y)
@@ -410,9 +622,94 @@ local function desktop(input: Input): Layout
 		banner = banner,
 		skip = skip,
 		clock = nil,
+		hot = HOT,
+		cashStyle = style,
+		sidebar = false,
+		dock = nil,
+		handle = nil,
+		handleShut = nil,
+		boost = nil,
+		chooser = nil,
+		equipPad = 0,
 	}
 	L.clock = clockRect(input, L)
 	return L
+end
+
+--==============================================================================
+-- THE HOTBAR: CENTRED BETWEEN THE THUMBS
+--
+-- At the bottom edge, centred on the screen unless that puts it within 8 px
+-- of the stick or the jump button, in which case it slides the least it
+-- has to. It is the compact belt (GameConfig.Hotbar.Compact): five slots
+-- and the Bag cell are 355 x 84, where the desktop's cards made 419 x 104.
+-- Where even that will not go between the two controls the cell is
+-- dropped, and where five bare slots will not either the strip is lifted
+-- clear of both. Compact and sidebars place it the same way.
+--==============================================================================
+local function beltBetween(input: Input, thumb: Rect?, jump: Rect?): (Rect, boolean, boolean)
+	local sw, sh = input.safe.X, input.safe.Y
+	local M, G = CONFIG.Margin, CONFIG.Gap
+	local slots = CONFIG.MobileSlots
+	local height = HudLayout.hotbarHeight(true)
+	local bottom = sh - HOT.BottomGap
+	local lo, hi = M, sw - M
+	if thumb and jump then
+		lo, hi = thumb.x + thumb.w + G, jump.x - G
+	end
+	local chip = true
+	local width = HudLayout.hotbarWidth(slots, true, true)
+	if width > hi - lo then
+		chip = false
+		width = HudLayout.hotbarWidth(slots, false, true)
+	end
+	if width > hi - lo and thumb and jump then
+		bottom = math.min(thumb.y, jump.y) - G
+		lo, hi = M, sw - M
+		chip = HudLayout.hotbarWidth(slots, true, true) <= hi - lo
+		width = HudLayout.hotbarWidth(slots, chip, true)
+	end
+	local centre = sw / 2
+	local fits = true
+	if width <= hi - lo then
+		centre = math.clamp(centre, lo + width / 2, hi - width / 2)
+	else
+		fits = false
+	end
+	return rect(centre - width / 2, bottom - height, width, height), chip, fits
+end
+
+--==============================================================================
+-- THE TUTORIAL BANNER: UNDER THE ROWS, BETWEEN WHATEVER SHARES ITS BAND
+--
+-- 560 wide where it can be, narrower where the cash block or the BAT/TRAP
+-- column stands in its band, and slid off centre rather than squeezed
+-- symmetrically -- the words are what it is for, and TutorialUI scales
+-- them down only when the banner is narrower than they are.
+--==============================================================================
+local function bannerIn(sw: number, railBottom: number, beside: { Rect }): (Rect, Rect)
+	local M, G = CONFIG.Margin, CONFIG.Gap
+	local bannerHeight = CONFIG.BannerSize.Y + CONFIG.SkipSize.Y
+	local band = rect(0, railBottom + G, sw, bannerHeight)
+	local blo, bhi = M, sw - M
+	for _, other in ipairs(beside) do
+		if sharesRows(band, other, G) then
+			if other.x + other.w / 2 < sw / 2 then
+				blo = math.max(blo, other.x + other.w + G)
+			else
+				bhi = math.min(bhi, other.x - G)
+			end
+		end
+	end
+	local bannerWidth = math.max(CONFIG.SkipSize.X, math.min(CONFIG.BannerSize.X, bhi - blo))
+	local bannerCentre = sw / 2
+	if bannerWidth <= bhi - blo then
+		bannerCentre = math.clamp(bannerCentre, blo + bannerWidth / 2, bhi - bannerWidth / 2)
+	end
+	local banner = rect(bannerCentre - bannerWidth / 2, band.y, bannerWidth, CONFIG.BannerSize.Y)
+	local skip = rect(bannerCentre - CONFIG.SkipSize.X / 2, band.y + CONFIG.BannerSize.Y,
+		CONFIG.SkipSize.X, CONFIG.SkipSize.Y)
+	return banner, skip
 end
 
 --==============================================================================
@@ -445,41 +742,12 @@ local function compact(input: Input): Layout
 		thumb, jump = HudLayout.touchZones(input.safe)
 	end
 
-	--==========================================================================
-	-- THE HOTBAR: CENTRED BETWEEN THE THUMBS
-	--
-	-- At the bottom edge, centred on the screen unless that puts it within 8 px
-	-- of the stick or the jump button, in which case it slides the least it
-	-- has to. Five slots and the Bag cell are 419 px; where even that will not
-	-- go between the two controls the cell is dropped, and where five bare
-	-- slots will not either the strip is lifted clear of both.
-	--==========================================================================
+	-- THE HOTBAR: see beltBetween.
 	local slots = CONFIG.MobileSlots
-	local height = HudLayout.hotbarHeight()
-	local bottom = sh - HOT.BottomGap
-	local lo, hi = M, sw - M
-	if thumb and jump then
-		lo, hi = thumb.x + thumb.w + G, jump.x - G
-	end
-	local chip = true
-	local width = HudLayout.hotbarWidth(slots, true)
-	if width > hi - lo then
-		chip = false
-		width = HudLayout.hotbarWidth(slots, false)
-	end
-	if width > hi - lo and thumb and jump then
-		bottom = math.min(thumb.y, jump.y) - G
-		lo, hi = M, sw - M
-		chip = HudLayout.hotbarWidth(slots, true) <= hi - lo
-		width = HudLayout.hotbarWidth(slots, chip)
-	end
-	local centre = sw / 2
-	if width <= hi - lo then
-		centre = math.clamp(centre, lo + width / 2, hi - width / 2)
-	else
+	local hotbar, chip, stripFits = beltBetween(input, thumb, jump)
+	if not stripFits then
 		fits = false
 	end
-	local hotbar = rect(centre - width / 2, bottom - height, width, height)
 
 	--==========================================================================
 	-- BAT AND TRAP: LOWER RIGHT, STANDING ON THE JUMP BUTTON
@@ -511,15 +779,18 @@ local function compact(input: Input): Layout
 	--==========================================================================
 	-- CASH AND SPEED: BOTTOM LEFT, ABOVE EVERYTHING THAT IS ALSO BOTTOM LEFT
 	--
-	-- At full size, always -- the block moves, it never shrinks. On touch it
+	-- In its compact face (CASH_COMPACT), 190 x 72 where the desktop's is
+	-- 316 x 108 -- and then it moves, it never shrinks any further. On touch it
 	-- stands above the thumbstick and, where it would meet the hotbar, above
 	-- the hotbar's top line too; decided from the reservation rather than the
 	-- number on it, so it does not hop when a balance gets a digit longer.
-	-- Without a touch screen it keeps its desktop corner whenever the
-	-- reservation fits beside the strip.
+	-- Without a touch screen it keeps the desktop's bottom line whenever the
+	-- reservation fits beside the strip. `limit` is the GROUP's bottom -- the
+	-- x2 card's touch area -- which is 6 px under the root.
 	--==========================================================================
-	local cw = math.max(CONFIG.CashReserve, input.cashWidth or 0)
-	local ch = CONFIG.CashRoot.Y + CONFIG.CashDrop
+	local style = CASH_COMPACT
+	local cw = math.max(style.Reserve, input.cashWidth or 0)
+	local ch = style.Root.Y + style.Drop
 	local cx = CONFIG.CashLeft
 	local limit = sh - HOT.BottomGap + CONFIG.CashDrop
 	if thumb then
@@ -532,20 +803,9 @@ local function compact(input: Input): Layout
 	if cash.y < railBottom + G then
 		fits = false
 	end
-	local cashRoot = rect(cx, limit - CONFIG.CashDrop - CONFIG.CashRoot.Y,
-		CONFIG.CashRoot.X, CONFIG.CashRoot.Y)
+	local cashRoot = rect(cx, limit - style.Drop - style.Root.Y, style.Root.X, style.Root.Y)
 
-	--==========================================================================
-	-- THE TUTORIAL BANNER: UNDER THE ROWS, BETWEEN WHATEVER SHARES ITS BAND
-	--
-	-- 560 wide where it can be, narrower where the cash block or the BAT/TRAP
-	-- column stands in its band, and slid off centre rather than squeezed
-	-- symmetrically -- the words are what it is for, and TutorialUI scales
-	-- them down only when the banner is narrower than they are.
-	--==========================================================================
-	local bannerHeight = CONFIG.BannerSize.Y + CONFIG.SkipSize.Y
-	local band = rect(0, railBottom + G, sw, bannerHeight)
-	local blo, bhi = M, sw - M
+	-- THE TUTORIAL BANNER: see bannerIn.
 	local beside: { Rect } = { cash, equipment }
 	if thumb then
 		table.insert(beside, thumb)
@@ -553,23 +813,7 @@ local function compact(input: Input): Layout
 	if jump then
 		table.insert(beside, jump)
 	end
-	for _, other in ipairs(beside) do
-		if sharesRows(band, other, G) then
-			if other.x + other.w / 2 < sw / 2 then
-				blo = math.max(blo, other.x + other.w + G)
-			else
-				bhi = math.min(bhi, other.x - G)
-			end
-		end
-	end
-	local bannerWidth = math.max(CONFIG.SkipSize.X, math.min(CONFIG.BannerSize.X, bhi - blo))
-	local bannerCentre = sw / 2
-	if bannerWidth <= bhi - blo then
-		bannerCentre = math.clamp(bannerCentre, blo + bannerWidth / 2, bhi - bannerWidth / 2)
-	end
-	local banner = rect(bannerCentre - bannerWidth / 2, band.y, bannerWidth, CONFIG.BannerSize.Y)
-	local skip = rect(bannerCentre - CONFIG.SkipSize.X / 2, band.y + CONFIG.BannerSize.Y,
-		CONFIG.SkipSize.X, CONFIG.SkipSize.Y)
+	local banner, skip = bannerIn(sw, railBottom, beside)
 
 	local L: Layout = {
 		compact = true,
@@ -599,6 +843,220 @@ local function compact(input: Input): Layout
 		banner = banner,
 		skip = skip,
 		clock = nil,
+		hot = HudLayout.hotMetrics(true),
+		cashStyle = style,
+		sidebar = false,
+		dock = nil,
+		handle = nil,
+		handleShut = nil,
+		boost = nil,
+		chooser = nil,
+		equipPad = 0,
+	}
+	L.clock = clockRect(input, L)
+	L.fits = L.fits and #HudLayout.problems(L) == 0
+	return L
+end
+
+--==============================================================================
+-- THE PHONE'S SIDEBARS
+--
+-- The owner's approved mockup, 2026-09-23 (Steal an Artifact/output/imagegen/
+-- podnappers-mobile-sidebar-mockup-v2.png), on any TOUCH screen:
+--
+--   left edge     THE DOCK: Index, Shop and Settings as tiles, the icon over
+--                 its word, in one slim panel with a handle on its edge that
+--                 shuts it. Reserved open or shut, so shutting it moves nothing
+--                 else; RailDrawerUI hides it while a centre panel is open.
+--   beside it     Walk Mode, the compact 50 x 50 switch, on the top row.
+--   top right     the x2 card as a button, then Garden, the Bag in the corner.
+--   right edge    BATS over TRAPS in a panel that matches the dock, standing
+--                 on the jump button's reservation as the old column did. Each
+--                 opens THE CHOOSER leftward, toward the middle and no further.
+--   bottom        the belt, five slots, pods and plants only: the weapons live
+--                 on the right sidebar now.
+--   bottom left   cash and speed in the compact face, under the dock where the
+--                 screen is tall enough and beside it where it is not -- on a
+--                 phone under ~350 px of safe height the dock, a 78-px block
+--                 and the thumbstick's reservation cannot share one column.
+--==============================================================================
+local function sidebars(input: Input): Layout
+	local sw, sh = input.safe.X, input.safe.Y
+	local M, G = CONFIG.Margin, CONFIG.Gap
+	local B, g = RAIL.SquareSize.X, RAIL.Gap
+	local D, S, C = CONFIG.Dock, CONFIG.Side, CONFIG.Chooser
+	local fits = true
+	local thumb, jump = HudLayout.touchZones(input.safe)
+
+	--==========================================================================
+	-- THE DOCK, AND WHAT STANDS BESIDE IT
+	--
+	-- Three tiles, 8 px clear of the thumbstick's reservation; on a screen too
+	-- short for 50-px tiles they give up height, never below the touch floor.
+	-- The handle's press reaches right from the dock's edge, level with the
+	-- Shop tile. Walk Mode and a cash block beside the dock stand clear of
+	-- Index's badge, which hangs a few pixels past the dock's edge.
+	--==========================================================================
+	local tileW = D.Tile.X
+	local tileH = math.min(D.Tile.Y,
+		math.floor((thumb.y - G - M - D.Pad * 2 - D.Gap * 2) / 3))
+	if tileH < D.MinTile then
+		fits = false
+		tileH = D.MinTile
+	end
+	local dock = rect(M, M, tileW + D.Pad * 2, tileH * 3 + D.Gap * 2 + D.Pad * 2)
+	local function tile(i: number): Rect
+		return rect(dock.x + D.Pad, dock.y + D.Pad + (i - 1) * (tileH + D.Gap), tileW, tileH)
+	end
+	local index, shop, settings = tile(1), tile(2), tile(3)
+	local handleY = math.floor(shop.y + shop.h / 2 - D.Hit / 2)
+	local handle = rect(dock.x + dock.w, handleY, D.Hit, D.Hit)
+	local handleShut = rect(0, handleY, D.Hit, D.Hit)
+	local badgeReach = index.x + index.w + CONFIG.BadgeHang + 2.5
+	local dockRight = math.ceil(math.max(dock.x + dock.w, badgeReach))
+	local walk = rect(dockRight + G, M, B, B)
+
+	--==========================================================================
+	-- THE TOP-RIGHT ROW: x2, GARDEN, THE BAG IN THE CORNER
+	--==========================================================================
+	local bag = rect(sw - M - B, M, B, B)
+	local garden = rect(bag.x - g - B, M, B, B)
+	local boost = rect(garden.x - CONFIG.BoostGap - B, M, B, B)
+	local railBottom = M + B
+
+	-- THE BELT: see beltBetween.
+	local hotbar, chip, stripFits = beltBetween(input, thumb, jump)
+	if not stripFits then
+		fits = false
+	end
+
+	--==========================================================================
+	-- BATS OVER TRAPS
+	--
+	-- The old column's rule -- against the right edge, 8 px above the jump
+	-- reservation and 8 px under the top row -- with the panel's padding round
+	-- two 56 x 60 tiles. Short of room, the tiles lose height, never below 48.
+	--==========================================================================
+	local panelW = S.Tile.X + S.Pad * 2
+	local ex = sw - M - panelW
+	local top = railBottom + G
+	local floor = jump.y - G
+	if hotbar.x + hotbar.w + G > ex then
+		floor = math.min(floor, hotbar.y - G)
+	end
+	local equipSlot = math.min(S.Tile.Y, math.floor((floor - top - S.Pad * 2 - S.Gap) / 2))
+	if equipSlot < S.MinTile then
+		fits = false
+		equipSlot = S.MinTile
+	end
+	local stack = equipSlot * 2 + S.Gap + S.Pad * 2
+	local equipment = rect(ex, floor - stack, panelW, stack)
+
+	--==========================================================================
+	-- THE CHOOSER, AT ITS WIDEST
+	--
+	-- Out of the sidebar's left side, 8 px off it, and never past the middle of
+	-- the screen, where the player's own character stands. As tall as a title
+	-- and one row of cards; level with the sidebar where it can be, lifted clear
+	-- of the belt and the jump button where it cannot, and never over the top
+	-- row. Wider than its cards need only on paper: LoadoutUI draws it the width
+	-- of what the player owns, from the same right edge.
+	--==========================================================================
+	local chooserH = C.Pad * 2 + C.Title + C.Card.Y
+	local chooserRight = equipment.x - G
+	local chooserW = C.Pad + C.Cards * C.Card.X + (C.Cards - 1) * C.Gap + C.Spine
+	chooserW = math.min(chooserW, chooserRight - (sw / 2 + G))
+	local oneCard = C.Pad + C.Card.X + C.Spine
+	if chooserW < oneCard then
+		fits = false
+		chooserW = oneCard
+	end
+	local chooserX = chooserRight - chooserW
+	local lowest = sh - M
+	for _, other in ipairs({ hotbar, jump, thumb }) do
+		if other.x < chooserRight + G and other.x + other.w + G > chooserX then
+			lowest = math.min(lowest, other.y - G)
+		end
+	end
+	local chooserY = math.floor(equipment.y + equipment.h / 2 - chooserH / 2)
+	chooserY = math.clamp(chooserY, top, math.max(top, lowest - chooserH))
+	if chooserY + chooserH > lowest then
+		fits = false
+	end
+	local chooser = rect(chooserX, chooserY, chooserW, chooserH)
+
+	--==========================================================================
+	-- CASH AND SPEED: UNDER THE DOCK, OR BESIDE IT
+	--
+	-- The compact face, and compact's rule for its bottom line: above the
+	-- thumbstick, and above the belt wherever the two would share columns. At
+	-- the left edge when that leaves it 8 px under the dock; otherwise beside
+	-- the dock, 8 px clear of its handle. It carries no x2 card here -- that is
+	-- the button on the top row -- so it has nothing a thumb can press.
+	--==========================================================================
+	local style = CASH_COMPACT
+	local cw = math.max(style.Reserve, input.cashWidth or 0)
+	local ch = style.Root.Y + style.Drop
+	local function bottomLine(cx: number): number
+		local limit = math.min(sh - HOT.BottomGap + CONFIG.CashDrop, thumb.y - G)
+		if hotbar.x < cx + cw + G and hotbar.x + hotbar.w + G > cx then
+			limit = math.min(limit, hotbar.y - G)
+		end
+		return limit
+	end
+	local cx = CONFIG.CashLeft
+	local limit = bottomLine(cx)
+	if limit - ch < dock.y + dock.h + G then
+		cx = dockRight + G
+		limit = bottomLine(cx)
+		if limit - ch < math.max(walk.y + walk.h, handle.y + handle.h) + G then
+			fits = false
+		end
+	end
+	local cash = rect(cx, limit - ch, cw, ch)
+	local cashRoot = rect(cx, limit - style.Drop - style.Root.Y, style.Root.X, style.Root.Y)
+
+	-- THE TUTORIAL BANNER: see bannerIn. The dock and its handle stand in its
+	-- band too, open or shut.
+	local banner, skip = bannerIn(sw, railBottom, { cash, equipment, thumb, jump, dock, handle })
+
+	local L: Layout = {
+		compact = true,
+		slots = CONFIG.MobileSlots,
+		safe = input.safe,
+		touch = input.touch,
+		fits = fits,
+		index = index,
+		shop = shop,
+		settings = settings,
+		walk = walk,
+		garden = garden,
+		bag = bag,
+		railTop = M,
+		railBottom = railBottom,
+		railRight = walk.x + walk.w,
+		rightLeft = boost.x,
+		equipment = equipment,
+		equipSlot = equipSlot,
+		equipGap = S.Gap,
+		hotbar = hotbar,
+		chip = chip,
+		cash = cash,
+		cashRoot = cashRoot,
+		thumb = thumb,
+		jump = jump,
+		banner = banner,
+		skip = skip,
+		clock = nil,
+		hot = HudLayout.hotMetrics(true),
+		cashStyle = style,
+		sidebar = true,
+		dock = dock,
+		handle = handle,
+		handleShut = handleShut,
+		boost = boost,
+		chooser = chooser,
+		equipPad = S.Pad,
 	}
 	L.clock = clockRect(input, L)
 	L.fits = L.fits and #HudLayout.problems(L) == 0
@@ -631,6 +1089,31 @@ function HudLayout.badges(L: Layout): (Rect, Rect)
 end
 
 function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
+	--==========================================================================
+	-- ON A PHONE, "rail" IS THE TOP-LEFT ROW THAT STAYS: WALK MODE
+	--
+	-- The dock is its own group, and its handle another -- a bounding box round
+	-- the two would swallow Walk Mode, which stands beside the dock and above
+	-- the handle. The x2 button joins Garden and the Bag in their row.
+	--==========================================================================
+	local dock, handle, boost = L.dock, L.handle, L.boost
+	if L.sidebar and dock and handle and boost then
+		local right = HudLayout.union(HudLayout.union(boost, L.garden), L.bag)
+		if withBadges then
+			local indexBadge, gardenBadge = HudLayout.badges(L)
+			dock = HudLayout.union(dock, indexBadge)
+			right = HudLayout.union(right, gardenBadge)
+		end
+		return {
+			{ name = "rail", rect = L.walk },
+			{ name = "dock", rect = dock },
+			{ name = "handle", rect = handle },
+			{ name = "garden+bag", rect = right },
+			{ name = "equipment", rect = L.equipment },
+			{ name = "hotbar", rect = L.hotbar },
+			{ name = "cash", rect = L.cash },
+		}
+	end
 	local rail = HudLayout.union(HudLayout.union(L.index, L.shop),
 		HudLayout.union(L.settings, L.walk))
 	local right = HudLayout.union(L.garden, L.bag)
@@ -670,10 +1153,48 @@ function HudLayout.problems(L: Layout): { string }
 	local groups = HudLayout.groups(L, true)
 	for i = 1, #groups do
 		for j = i + 1, #groups do
+			-- The handle is ON the dock's edge; those two are meant to touch.
+			local pair = groups[i].name .. "/" .. groups[j].name
 			local apart = HudLayout.gap(groups[i].rect, groups[j].rect)
-			if apart < G then
+			if apart < G and pair ~= "dock/handle" then
 				table.insert(found, string.format("%s and %s are %.1f px apart",
 					groups[i].name, groups[j].name, apart))
+			end
+		end
+	end
+	--==========================================================================
+	-- THE TWO THINGS THAT ARE NOT ALWAYS THERE
+	--
+	-- The chooser, open, has to clear every group and both thumbs as if it
+	-- were one, and stay inside the margin. The shut handle stands where the
+	-- dock was, so it only has to clear the rest, and may sit on the safe
+	-- area's own edge -- it is a tab pulled out of it.
+	--==========================================================================
+	local transient: { Group } = {}
+	if L.chooser then
+		table.insert(transient, { name = "chooser", rect = L.chooser })
+	end
+	if L.handleShut then
+		table.insert(transient, { name = "shut handle", rect = L.handleShut })
+	end
+	for _, extra in ipairs(transient) do
+		local r = extra.rect
+		local edge = if extra.name == "chooser" then M else 0
+		if r.x < edge or r.y < M or r.x + r.w > sw - M or r.y + r.h > sh - M then
+			table.insert(found, extra.name .. " is not inside the safe area's margin")
+		end
+		for _, group in ipairs(groups) do
+			local exempt = extra.name == "shut handle"
+				and (group.name == "dock" or group.name == "handle")
+			local apart = HudLayout.gap(r, group.rect)
+			if apart < G and not exempt then
+				table.insert(found, string.format("%s and %s are %.1f px apart",
+					extra.name, group.name, apart))
+			end
+		end
+		for _, zone in ipairs({ L.thumb, L.jump }) do
+			if zone and HudLayout.gap(r, zone) < G then
+				table.insert(found, extra.name .. " is within 8 px of a touch control")
 			end
 		end
 	end
@@ -700,7 +1221,10 @@ end
 -- THE ANSWER
 --==============================================================================
 function HudLayout.solve(input: Input): Layout
-	if not input.touch and input.safe.X >= CONFIG.DesktopMinWidth then
+	if input.touch then
+		return sidebars(input)
+	end
+	if input.safe.X >= CONFIG.DesktopMinWidth then
 		local L = desktop(input)
 		if #HudLayout.problems(L) == 0 then
 			return L

@@ -3419,6 +3419,27 @@ GameConfig.Rail = {
 	-- upload costs the artwork and never the button.
 	--==========================================================================
 	SettingsIcon = "rbxassetid://104265736892158",
+
+	--==========================================================================
+	-- THE PHONE'S TWO SIDEBARS (touch only; HudLayout, THE PHONE'S SIDEBARS)
+	--
+	-- The owner's approved mockup, 2026-09-23: a slim dark translucent panel
+	-- with a teal edge down each side, dark slate tiles in it, and a thin
+	-- coloured edge on each tile rather than a painted face. The Shop's tile is
+	-- the one in colour -- emerald, lime-edged, under the stall artwork --
+	-- because it is the one the owner wants found. BATS and TRAPS take the
+	-- hotbar chip's amber and orange as their edges.
+	--==========================================================================
+	DockFill = Color3.fromRGB(18, 26, 36),
+	DockEdge = Color3.fromRGB(74, 178, 172),
+	DockHandle = Color3.fromRGB(242, 238, 206),
+	TileTop = Color3.fromRGB(46, 56, 72),
+	TileBottom = Color3.fromRGB(26, 32, 44),
+	IndexEdge = Color3.fromRGB(120, 190, 245),
+	SettingsEdge = Color3.fromRGB(176, 188, 204),
+	ShopTileTop = Color3.fromRGB(52, 140, 76),
+	ShopTileBottom = Color3.fromRGB(20, 82, 46),
+	ShopEdge = Color3.fromRGB(162, 236, 96),
 }
 
 --==============================================================================
@@ -4068,6 +4089,101 @@ GameConfig.Hotbar = {
 	-- The Bag cell is dropped below this viewport width, where a five-slot tray
 	-- needs the room.
 	ChipMinViewport = 560,
+
+	--==========================================================================
+	-- THE SAME CARD'S OTHER NUMBERS, NAMED
+	--
+	-- These were literals inside LoadoutUI. They are here because the compact
+	-- belt below changes them, and a number one presentation changes has to be
+	-- somewhere both can read. Every value is the one that shipped, so the
+	-- desktop draws exactly as it did.
+	--==========================================================================
+	CardCorner = 12,
+	CardStroke = 2.5,
+	-- The in-hand glow's reach outside the card, and its corner.
+	AuraPad = 8,
+	AuraCorner = 16,
+	BadgeInset = 3,
+	BadgeText = 11,
+	ChipTop = 4,
+	-- Two wrapped lines, or one with an ellipsis.
+	NameLines = 2,
+	HintWidth = 52,
+	HintHeight = 13,
+	GhostPlus = 22,
+	BagIcon = 34,
+	BagIconTop = 9,
+	BagWord = true,
+	BagPillTop = 66,
+	TrayCorner = 18,
+	-- The faint inner rim is this much smaller than the tray: half of it each side.
+	TrayRim = 6,
+
+	--==========================================================================
+	-- THE COMPACT BELT: A PHONE, OR ANY WINDOW HudLayout CALLS COMPACT
+	--
+	-- Found by the owner 2026-09-22 on a landscape phone: the five cards and
+	-- the Bag cell were 419 x 104 of the bottom of the screen, a strip of full
+	-- inventory cards where a quick-access belt was wanted. The same five slots,
+	-- the same preview, number, chip, name, cooldown and in-hand look, the same
+	-- dark frame -- re-proportioned around the item, with the bulk taken out:
+	--
+	--   card        54 x 76 against 64 x 92; still well over the 44-px touch
+	--               floor, which the card itself is, so there is no hit
+	--               extension to catch a camera drag beside it
+	--   tray        84 tall against 104: 4 px of padding, a 2-px border
+	--   IN HAND     no strip; the warm keyline, the glow and the lift say it
+	--   the name    one line, and an ellipsis for the long ones
+	--   the chip    9 px words like the desktop's; the badge and the chip share
+	--               the top row, so the chip stops where the badge ends
+	--   the Bag     50 wide, the icon and the count; the word BAG went
+	--
+	-- Five cards and the Bag cell: 355 x 84. HudLayout reads these through
+	-- hotMetrics, which lays this table over the one above, so a key missing
+	-- here is the desktop's.
+	--==========================================================================
+	Compact = {
+		SlotWidth = 54,
+		SlotHeight = 76,
+		Gap = 4,
+		TrayPad = 4,
+		TrayBorder = 2,
+		TrayCorner = 14,
+		TrayRim = 4,
+		ChipWidth = 50,
+		BagGap = 3,
+		BadgeSize = 14,
+		BadgeText = 10,
+		PreviewTop = 16,
+		PreviewHeight = 42,
+		PreviewInset = 2,
+		NameTop = 59,
+		NameHeight = 14,
+		NameMax = 11,
+		NameMin = 8,
+		NameLines = 1,
+		ChipTop = 3,
+		ChipHeight = 12,
+		-- From the badge's edge (3 + 14) to 3 px short of the card's: 34. Every
+		-- chip word fits it at 9 px except COLOSSAL, which fits at 6.
+		ChipMaxWidth = 34,
+		ChipTextMax = 9,
+		ChipTextMin = 6,
+		InHandHeight = 0,
+		HeldLift = 3,
+		LitThickness = 3,
+		CardStroke = 2,
+		CardCorner = 10,
+		AuraPad = 6,
+		AuraCorner = 13,
+		HintWidth = 46,
+		HintHeight = 12,
+		GhostPlus = 18,
+		BagIcon = 30,
+		BagIconTop = 11,
+		BagWord = false,
+		BagPillTop = 47,
+	},
 }
 
 GameConfig.Shop = {

@@ -1669,7 +1669,20 @@ end
 -- grid the player already knows rather than a second chooser to learn.
 --==============================================================================
 local sideSlots: { [string]: { button: TextButton, preview: UIKit.ItemPreview,
-	label: TextLabel, stroke: UIStroke } } = {}
+	label: TextLabel, stroke: UIStroke, tint: UIGradient, cool: Frame } } = {}
+
+--==============================================================================
+-- ON A TOUCH SCREEN THIS COLUMN IS THE RIGHT SIDEBAR
+--
+-- The approved mobile redesign (HudLayout, THE PHONE'S SIDEBARS): BATS over
+-- TRAPS on slate tiles in a panel that matches the dock, the equipped item's
+-- model in each, and a press that opens a small CHOOSER beside it instead of
+-- the Bag. The same two buttons, re-dressed by layoutHud and refreshSide; the
+-- chooser is built further down, where the Bag's own controls are, and this
+-- table is the one name it adds at the top level of a chunk rationed to 200.
+-- The belt shows pods and plants only there, because the weapons live here.
+--==============================================================================
+local chooser: any = {}
 
 local side = Instance.new("Frame")
 side.Name = "Equipment"
@@ -1680,6 +1693,11 @@ side.Size = UDim2.fromOffset(64, 152)
 side.BackgroundTransparency = 1
 side.ZIndex = 4
 side.Parent = gui
+-- The sidebar's panel: the dock's fill and teal edge, drawn only on a touch
+-- screen (layoutHud); transparent and edgeless everywhere else, as it was.
+side.BackgroundColor3 = RAIL.DockFill
+UIKit.corner(side, 14)
+UIKit.stroke(side, RAIL.DockEdge, 1.5, 0.15).Enabled = false
 
 for i, category in ipairs({ "bat", "trap" }) do
 	local button = Instance.new("TextButton")
@@ -1718,8 +1736,27 @@ for i, category in ipairs({ "bat", "trap" }) do
 	label.ZIndex = 8
 	label.Parent = button
 
+	-- The sidebar's slate face, off until a touch screen asks for it; the
+	-- column's own brown is the button's colour underneath. And the cooldown,
+	-- which the belt's weapon cards drew until the weapons left the belt.
+	local tint = UIKit.gradient(button, RAIL.TileTop, RAIL.TileBottom)
+	tint.Enabled = false
+	button.BackgroundColor3 = PANEL.Shade
+	local cool = Instance.new("Frame")
+	cool.Name = "Cooldown"
+	cool.AnchorPoint = Vector2.new(0, 1)
+	cool.Position = UDim2.fromScale(0, 1)
+	cool.Size = UDim2.fromScale(1, 0)
+	cool.BackgroundColor3 = BLACK
+	cool.BackgroundTransparency = GameConfig.Hotbar.CooldownShade
+	cool.BorderSizePixel = 0
+	cool.Active = false
+	cool.ZIndex = 7
+	cool.Parent = button
+	UIKit.corner(cool, 12)
+
 	sideSlots[category] = { button = button, preview = preview,
-		label = label, stroke = stroke }
+		label = label, stroke = stroke, tint = tint, cool = cool }
 end
 
 --==============================================================================
@@ -1763,9 +1800,18 @@ end
 -- NEW TOP-LEVEL NAMES ARE RATIONED. This chunk declares 182 locals at the top
 -- level and Luau refuses a function with more than 200, which fails the whole
 -- script before anything is drawn. V2 adds none: the tray is built in a
--- do-block, and everything a card needs lives in its HotSlot record.
+-- do-block, and everything a card needs lives in its HotSlot record. The
+-- compact belt adds one, restyleHotbar.
+--
+-- TWO FACES. HOT is the card's numbers for the mode the screen is in: this
+-- GameConfig.Hotbar itself on a desktop, and on a phone HudLayout's compact belt
+-- -- the same table with GameConfig.Hotbar.Compact laid over it: 54 x 76 cards,
+-- one-line names, no IN HAND strip, a 50-px Bag cell without its word. It comes
+-- in HudLayout's answer, layoutHud swaps it when the answer changes face, and
+-- restyleHotbar rewrites what was already built. The desktop never swaps, so its
+-- strip is the one that shipped.
 --==============================================================================
-local HOT = GameConfig.Hotbar
+local HOT: any = GameConfig.Hotbar
 
 local hotbar = Instance.new("Frame")
 hotbar.Name = "Hotbar"
@@ -1802,7 +1848,7 @@ do
 	tray.BorderSizePixel = 0
 	tray.ZIndex = 3
 	tray.Parent = gui
-	UIKit.corner(tray, 18)
+	UIKit.corner(tray, HOT.TrayCorner)
 	UIKit.stroke(tray, HOT.Ink, HOT.TrayBorder)
 	UIKit.gradient(tray, HOT.TrayTop, HOT.TrayBottom)
 	UIKit.lattice(tray, {
@@ -1819,12 +1865,12 @@ do
 	rim.Name = "Rim"
 	rim.AnchorPoint = Vector2.new(0.5, 0.5)
 	rim.Position = UDim2.fromScale(0.5, 0.5)
-	rim.Size = UDim2.new(1, -6, 1, -6)
+	rim.Size = UDim2.new(1, -HOT.TrayRim, 1, -HOT.TrayRim)
 	rim.BackgroundTransparency = 1
 	rim.BorderSizePixel = 0
 	rim.ZIndex = 3
 	rim.Parent = tray
-	UIKit.corner(rim, 15)
+	UIKit.corner(rim, HOT.TrayCorner - HOT.TrayRim / 2)
 	UIKit.stroke(rim, HOT.Rim, 1, HOT.RimTransparency)
 
 	-- In the strip's OWN units, not AbsoluteSize's: a UIScale anywhere above
@@ -1893,6 +1939,11 @@ type HotSlot = {
 	nameText: string,
 	-- os.clock() until which a drop's flash owns the keyline.
 	flashUntil: number,
+	-- The rounded corners a change of face rewrites; see restyleHotbar.
+	auraCorner: UICorner,
+	faceCorner: UICorner,
+	rimCorner: UICorner,
+	coolCorner: UICorner,
 }
 
 local hotSlots: { HotSlot } = {}
@@ -1974,14 +2025,14 @@ local function acquireHotSlot(index: number): HotSlot
 	aura.Name = "Aura"
 	aura.AnchorPoint = Vector2.new(0.5, 0.5)
 	aura.Position = UDim2.fromScale(0.5, 0.5)
-	aura.Size = UDim2.new(1, 8, 1, 8)
+	aura.Size = UDim2.new(1, HOT.AuraPad, 1, HOT.AuraPad)
 	aura.BackgroundColor3 = HOT.LitTop
 	aura.BackgroundTransparency = 0.78
 	aura.BorderSizePixel = 0
 	aura.Visible = false
 	aura.ZIndex = 4
 	aura.Parent = wrap
-	UIKit.corner(aura, 16)
+	local auraCorner = UIKit.corner(aura, HOT.AuraCorner)
 	UIKit.stroke(aura, HOT.LitTop, 2, 0.35)
 
 	local button = Instance.new("TextButton")
@@ -1994,9 +2045,9 @@ local function acquireHotSlot(index: number): HotSlot
 	button.Text = ""
 	button.ZIndex = 5
 	button.Parent = wrap
-	UIKit.corner(button, 12)
+	local faceCorner = UIKit.corner(button, HOT.CardCorner)
 	local plate = UIKit.gradient(button, HOT.PlateTop, HOT.PlateBottom)
-	local stroke = UIKit.stroke(button, HOT.Ink, 2.5)
+	local stroke = UIKit.stroke(button, HOT.Ink, HOT.CardStroke)
 
 	--==========================================================================
 	-- THE WARM KEYLINE IS A GRADIENT ON THE KEYLINE ITSELF
@@ -2023,7 +2074,7 @@ local function acquireHotSlot(index: number): HotSlot
 	rim.BorderSizePixel = 0
 	rim.ZIndex = 5
 	rim.Parent = button
-	UIKit.corner(rim, 10)
+	local rimCorner = UIKit.corner(rim, HOT.CardCorner - 2)
 	local rimStroke = UIKit.stroke(rim, HOT.HoverRim, 1.5, 1)
 
 	--==========================================================================
@@ -2046,7 +2097,7 @@ local function acquireHotSlot(index: number): HotSlot
 	cooldown.BorderSizePixel = 0
 	cooldown.ZIndex = 6
 	cooldown.Parent = button
-	UIKit.corner(cooldown, 12)
+	local coolCorner = UIKit.corner(cooldown, HOT.CardCorner)
 
 	--==========================================================================
 	-- THE PREVIEW: THE REAL TOOL, AS CLOSE AS ITS SILHOUETTE ALLOWS
@@ -2073,7 +2124,7 @@ local function acquireHotSlot(index: number): HotSlot
 	--==========================================================================
 	local keycap = Instance.new("Frame")
 	keycap.Name = "Keycap"
-	keycap.Position = UDim2.fromOffset(3, 3)
+	keycap.Position = UDim2.fromOffset(HOT.BadgeInset, HOT.BadgeInset)
 	keycap.Size = UDim2.fromOffset(HOT.BadgeSize, HOT.BadgeSize)
 	keycap.BackgroundColor3 = HOT.Ink
 	keycap.BorderSizePixel = 0
@@ -2091,7 +2142,7 @@ local function acquireHotSlot(index: number): HotSlot
 	keyLabel.Size = UDim2.fromScale(1, 1)
 	keyLabel.BackgroundTransparency = 1
 	keyLabel.Font = Enum.Font.FredokaOne
-	keyLabel.TextSize = 11
+	keyLabel.TextSize = HOT.BadgeText
 	keyLabel.TextColor3 = HOT.Numeral
 	keyLabel.ZIndex = 9
 	keyLabel.Parent = keycap
@@ -2107,7 +2158,7 @@ local function acquireHotSlot(index: number): HotSlot
 	local chipFrame = Instance.new("Frame")
 	chipFrame.Name = "Chip"
 	chipFrame.AnchorPoint = Vector2.new(1, 0)
-	chipFrame.Position = UDim2.new(1, -3, 0, 4)
+	chipFrame.Position = UDim2.new(1, -3, 0, HOT.ChipTop)
 	chipFrame.Size = UDim2.fromOffset(28, HOT.ChipHeight)
 	chipFrame.BackgroundColor3 = HOT.Ink
 	chipFrame.BackgroundTransparency = 0.08
@@ -2132,10 +2183,11 @@ local function acquireHotSlot(index: number): HotSlot
 	--==========================================================================
 	-- THE NAME
 	--
-	-- The hotbar's own FredokaOne with an ink outline, centred, up to two lines.
-	-- refreshHotbar picks the largest size that fits and only truncates at the
-	-- smallest. The label always carries the Tool's WHOLE name: TutorialUI
-	-- finds a plant's slot by reading it.
+	-- The hotbar's own FredokaOne with an ink outline, centred, up to two lines
+	-- (HOT.NameLines: one in the compact belt, ending in an ellipsis when it
+	-- has to). refreshHotbar picks the largest size that fits and only
+	-- truncates at the smallest. The label always carries the Tool's WHOLE
+	-- name: TutorialUI finds a plant's slot by reading it.
 	--==========================================================================
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "Name"
@@ -2159,7 +2211,8 @@ local function acquireHotSlot(index: number): HotSlot
 	-- A compact warm strip centred on the card's bottom edge, so it never sits
 	-- on the name: measured, a two-line name at 10 px ends a pixel above the
 	-- strip's stroke. Lifted, the strip stays inside the tray's rim; at rest
-	-- (reduced effects) its stroke meets the tray's own ink border.
+	-- (reduced effects) its stroke meets the tray's own ink border. The compact
+	-- belt has none (InHandHeight 0): its keyline, glow and lift say it alone.
 	--==========================================================================
 	local inHand = Instance.new("Frame")
 	inHand.Name = "InHand"
@@ -2198,7 +2251,7 @@ local function acquireHotSlot(index: number): HotSlot
 	hintLabel.Name = "Hint"
 	hintLabel.AnchorPoint = Vector2.new(0.5, 1)
 	hintLabel.Position = UDim2.new(0.5, 0, 0, HOT.NameTop - 1)
-	hintLabel.Size = UDim2.fromOffset(52, 13)
+	hintLabel.Size = UDim2.fromOffset(HOT.HintWidth, HOT.HintHeight)
 	hintLabel.BackgroundColor3 = HOT.Ink
 	hintLabel.BackgroundTransparency = 0.15
 	hintLabel.BorderSizePixel = 0
@@ -2260,6 +2313,10 @@ local function acquireHotSlot(index: number): HotSlot
 		tagText = "",
 		nameText = "",
 		flashUntil = 0,
+		auraCorner = auraCorner,
+		faceCorner = faceCorner,
+		rimCorner = rimCorner,
+		coolCorner = coolCorner,
 	}
 
 	--==========================================================================
@@ -2414,7 +2471,8 @@ end
 -- button's, where setOpen exists.
 --==============================================================================
 local chip: { holder: Frame, spacer: Frame, button: TextButton, count: TextLabel,
-	countEdge: UIStroke }
+	countEdge: UIStroke, faceCorner: UICorner, faceStroke: UIStroke, rimCorner: UICorner,
+	icon: ImageLabel, word: TextLabel, pill: Frame }
 do
 	-- The gap before the Bag: the list's own padding either side of a thin
 	-- divider, so the cell reads as a separate button without a second tray.
@@ -2457,9 +2515,9 @@ do
 	face.Text = ""
 	face.ZIndex = 5
 	face.Parent = holder
-	UIKit.corner(face, 12)
+	local faceCorner = UIKit.corner(face, HOT.CardCorner)
 	UIKit.gradient(face, HOT.PlateTop, HOT.PlateBottom)
-	UIKit.stroke(face, HOT.Ink, 2.5)
+	local faceStroke = UIKit.stroke(face, HOT.Ink, HOT.CardStroke)
 	UIKit.clicks(face)
 
 	local rim = Instance.new("Frame")
@@ -2471,7 +2529,7 @@ do
 	rim.BorderSizePixel = 0
 	rim.ZIndex = 5
 	rim.Parent = face
-	UIKit.corner(rim, 10)
+	local rimCorner = UIKit.corner(rim, HOT.CardCorner - 2)
 	local rimStroke = UIKit.stroke(rim, HOT.HoverRim, 1.5, 1)
 
 	local press = Instance.new("UIScale")
@@ -2490,8 +2548,8 @@ do
 	local icon = Instance.new("ImageLabel")
 	icon.Name = "Icon"
 	icon.AnchorPoint = Vector2.new(0.5, 0)
-	icon.Position = UDim2.new(0.5, 0, 0, 9)
-	icon.Size = UDim2.fromOffset(34, 34)
+	icon.Position = UDim2.new(0.5, 0, 0, HOT.BagIconTop)
+	icon.Size = UDim2.fromOffset(HOT.BagIcon, HOT.BagIcon)
 	icon.BackgroundTransparency = 1
 	icon.Image = RAIL.BagIcon
 	icon.ScaleType = Enum.ScaleType.Fit
@@ -2508,6 +2566,7 @@ do
 	word.TextSize = 14
 	word.TextColor3 = HOT.Numeral
 	word.Text = "BAG"
+	word.Visible = HOT.BagWord
 	word.ZIndex = 9
 	word.Parent = face
 	UIKit.stroke(word, HOT.Ink, 1.5)
@@ -2515,7 +2574,7 @@ do
 	local pill = Instance.new("Frame")
 	pill.Name = "CountPill"
 	pill.AnchorPoint = Vector2.new(0.5, 0)
-	pill.Position = UDim2.new(0.5, 0, 0, 66)
+	pill.Position = UDim2.new(0.5, 0, 0, HOT.BagPillTop)
 	pill.Size = UDim2.new(1, -10, 0, 18)
 	pill.BackgroundColor3 = HOT.Ink
 	pill.BackgroundTransparency = 0.05
@@ -2537,7 +2596,97 @@ do
 	count.Parent = pill
 
 	chip = { holder = holder, spacer = spacer, button = face, count = count,
-		countEdge = countEdge }
+		countEdge = countEdge, faceCorner = faceCorner, faceStroke = faceStroke,
+		rimCorner = rimCorner, icon = icon, word = word, pill = pill }
+end
+
+--==============================================================================
+-- A CHANGE OF FACE
+--
+-- HudLayout's answer carries the card's numbers as `hot`, and layoutHud swaps
+-- HOT for them when the mode changes -- a phone's compact belt, or a desktop
+-- window crossing into compact and back. Everything already built from the old
+-- numbers is rewritten here: the strip's padding and gap, the tray, the Bag
+-- cell and every card made so far. A card made later reads HOT as it is built.
+--
+-- What a card SAYS -- its name, chip, ring and lift -- is refreshHotbar's, so
+-- the name and the chip are only marked for fitting again, and the ghost's
+-- dashes, laid out for the old card, are dropped for the next redraw to lay out
+-- afresh. The preview keeps its model and its framing: the two glasses are
+-- 58 x 48 and 50 x 42, 1.5% apart in shape, and a silhouette fitted to 0.97 of
+-- one still sits inside the other. Rebuilding every model on each change of
+-- face was measured at 0.45 MB of parts a round trip, for nothing a player
+-- could see. Called from layoutHud and nowhere else; nothing here runs per frame.
+--==============================================================================
+local function restyleHotbar()
+	hotbar.Size = UDim2.fromOffset(10, HOT.SlotHeight + HOT.TrayPad * 2)
+	hotbarLayout.Padding = UDim.new(0, HOT.Gap)
+	local pad = hotbar:FindFirstChildOfClass("UIPadding")
+	if pad then
+		pad.PaddingLeft = UDim.new(0, HOT.TrayPad)
+		pad.PaddingRight = UDim.new(0, HOT.TrayPad)
+		pad.PaddingTop = UDim.new(0, HOT.TrayPad)
+		pad.PaddingBottom = UDim.new(0, HOT.TrayPad)
+	end
+	-- The tray follows the strip's size by itself (see THE TRAY); its corner,
+	-- border and rim are what change.
+	local tray = gui:FindFirstChild("HotbarTray")
+	if tray then
+		local round = tray:FindFirstChildOfClass("UICorner")
+		if round then
+			round.CornerRadius = UDim.new(0, HOT.TrayCorner)
+		end
+		local border = tray:FindFirstChildOfClass("UIStroke")
+		if border then
+			border.Thickness = HOT.TrayBorder
+		end
+		local rim = tray:FindFirstChild("Rim")
+		if rim and rim:IsA("GuiObject") then
+			rim.Size = UDim2.new(1, -HOT.TrayRim, 1, -HOT.TrayRim)
+			local rimRound = rim:FindFirstChildOfClass("UICorner")
+			if rimRound then
+				rimRound.CornerRadius = UDim.new(0, HOT.TrayCorner - HOT.TrayRim / 2)
+			end
+		end
+	end
+
+	chip.spacer.Size = UDim2.fromOffset(HOT.BagGap, HOT.SlotHeight)
+	chip.holder.Size = UDim2.fromOffset(HOT.ChipWidth, HOT.SlotHeight)
+	chip.faceCorner.CornerRadius = UDim.new(0, HOT.CardCorner)
+	chip.faceStroke.Thickness = HOT.CardStroke
+	chip.rimCorner.CornerRadius = UDim.new(0, HOT.CardCorner - 2)
+	chip.icon.Position = UDim2.new(0.5, 0, 0, HOT.BagIconTop)
+	chip.icon.Size = UDim2.fromOffset(HOT.BagIcon, HOT.BagIcon)
+	chip.word.Visible = HOT.BagWord
+	chip.pill.Position = UDim2.new(0.5, 0, 0, HOT.BagPillTop)
+
+	for _, slot in pairs(hotSlots) do
+		slot.holder.Size = UDim2.fromOffset(HOT.SlotWidth, HOT.SlotHeight)
+		slot.aura.Size = UDim2.new(1, HOT.AuraPad, 1, HOT.AuraPad)
+		slot.auraCorner.CornerRadius = UDim.new(0, HOT.AuraCorner)
+		slot.faceCorner.CornerRadius = UDim.new(0, HOT.CardCorner)
+		slot.rimCorner.CornerRadius = UDim.new(0, HOT.CardCorner - 2)
+		slot.coolCorner.CornerRadius = UDim.new(0, HOT.CardCorner)
+		slot.preview.holder.Size = UDim2.fromOffset(
+			HOT.SlotWidth - HOT.PreviewInset * 2, HOT.PreviewHeight)
+		slot.preview.holder.Position = UDim2.fromOffset(HOT.PreviewInset, HOT.PreviewTop)
+		slot.keycap.Position = UDim2.fromOffset(HOT.BadgeInset, HOT.BadgeInset)
+		slot.keycap.Size = UDim2.fromOffset(HOT.BadgeSize, HOT.BadgeSize)
+		slot.key.TextSize = HOT.BadgeText
+		slot.chip.Position = UDim2.new(1, -3, 0, HOT.ChipTop)
+		slot.name.Position = UDim2.new(0.5, 0, 0, HOT.NameTop)
+		slot.name.Size = UDim2.fromOffset(HOT.SlotWidth - 6, HOT.NameHeight)
+		slot.inHand.Size = UDim2.fromOffset(HOT.SlotWidth - 14, HOT.InHandHeight)
+		slot.hint.Position = UDim2.new(0.5, 0, 0, HOT.NameTop - 1)
+		slot.hint.Size = UDim2.fromOffset(HOT.HintWidth, HOT.HintHeight)
+		slot.nameText = ""
+		slot.tagText = ""
+		local ghost = slot.ghost
+		if ghost then
+			ghost:Destroy()
+			slot.ghost = nil
+		end
+	end
 end
 
 --==============================================================================
@@ -2691,10 +2840,21 @@ local function refreshHotbar()
 		end
 	end
 
+	--==========================================================================
+	-- ON A PHONE THE BELT IS PODS AND PLANTS ONLY
+	--
+	-- The equipped bat and trap live on the right sidebar there (see the
+	-- chooser), so they are skipped here rather than drawn twice. They are
+	-- still Tools in the Backpack, still equipped, still swung and placed; the
+	-- belt just does not offer them. A weapon can never be ASSIGNED to a slot
+	-- (HOTBAR_ASSIGNABLE), so the auto-fill is the only way one arrives here.
+	--==========================================================================
+	local plantsOnly = hud ~= nil and hud.sidebar
 	local nextFree = 1
 	for i = 1, activeSlots do
 		if not placed[i] and not assigned[i] then
-			while nextFree <= #liveSlots and taken[nextFree] do
+			while nextFree <= #liveSlots and (taken[nextFree]
+				or (plantsOnly and liveSlots[nextFree].item ~= nil)) do
 				nextFree += 1
 			end
 			if nextFree <= #liveSlots then
@@ -2789,7 +2949,7 @@ local function refreshHotbar()
 						end
 						local tall = TextService:GetTextSize(data.label, size,
 							Enum.Font.FredokaOne, Vector2.new(width, 1000)).Y
-						if wordsFit and tall <= math.min(HOT.NameHeight, size * 2 + 0.5) then
+						if wordsFit and tall <= math.min(HOT.NameHeight, size * HOT.NameLines + 0.5) then
 							chosen, fits = size, true
 							break
 						end
@@ -2800,7 +2960,8 @@ local function refreshHotbar()
 					-- would cut that word in half instead. Measured on
 					-- "Thornwhorl Lanterncap Gloomlotus" (three lines at 7 px
 					-- before this) and "Supernovusmaximus" ("Supernovusmaxi / mus").
-					local lines = if fits or wordsFit then 2 else 1
+					-- The compact belt's names are always one line.
+					local lines = if (fits or wordsFit) and HOT.NameLines > 1 then 2 else 1
 					local tall = if fits then HOT.NameHeight else lines * HOT.NameMin
 					slot.name.TextSize = chosen
 					slot.name.TextWrapped = lines == 2
@@ -2916,10 +3077,10 @@ local function refreshHotbar()
 				plus.Name = "Plus"
 				plus.AnchorPoint = Vector2.new(0.5, 0.5)
 				plus.Position = UDim2.fromScale(0.5, 0.5)
-				plus.Size = UDim2.fromOffset(24, 24)
+				plus.Size = UDim2.fromOffset(HOT.GhostPlus + 2, HOT.GhostPlus + 2)
 				plus.BackgroundTransparency = 1
 				plus.Font = Enum.Font.FredokaOne
-				plus.TextSize = 22
+				plus.TextSize = HOT.GhostPlus
 				plus.TextColor3 = HOT.Ghost
 				plus.Text = "+"
 				plus.ZIndex = 8
@@ -2949,11 +3110,11 @@ local function refreshHotbar()
 				slot.stroke.Color = if isHeld then WHITE
 					elseif record and not empty then HOT.Assigned
 					else HOT.Ink
-				slot.stroke.Thickness = if isHeld then HOT.LitThickness else 2.5
+				slot.stroke.Thickness = if isHeld then HOT.LitThickness else HOT.CardStroke
 				slot.stroke.Transparency = if empty then 1 else 0
 			end
 			slot.aura.Visible = isHeld
-			slot.inHand.Visible = isHeld
+			slot.inHand.Visible = isHeld and HOT.InHandHeight > 0
 			slot.key.TextColor3 = if isHeld then HOT.NumeralLit else HOT.Numeral
 			if slot.lit ~= isHeld then
 				slot.lit = isHeld
@@ -3013,6 +3174,7 @@ local function refreshHotbar()
 end
 
 local function refreshSide()
+	local docked = hud ~= nil and hud.sidebar
 	for _, category in ipairs({ "bat", "trap" }) do
 		local ui = sideSlots[category]
 		local id = loadout[category]
@@ -3026,13 +3188,15 @@ local function refreshSide()
 		-- it already says which weapon; this says which slot, and the two
 		-- together are the whole readout.
 		--======================================================================
-		ui.label.Text = string.upper(category)
+		-- On a phone the tile names the whole shelf -- it opens a chooser of
+		-- every one owned -- and its edge wears the belt chip's colour.
+		ui.label.Text = if docked then string.upper(category) .. "S" else string.upper(category)
 		if item then
 			ui.preview.setModel("w:" .. item.Id, function(parent)
 				return WeaponModel.BuildPreview(item, parent)
 			end, item.Category)
 			ui.label.TextColor3 = CREAM
-			ui.stroke.Color = PANEL.Edge
+			ui.stroke.Color = if docked then HOT.Tags[category].colour else PANEL.Edge
 		else
 			ui.preview.setModel("empty:" .. category, nil, category)
 			ui.label.TextColor3 = MUTED
@@ -3050,9 +3214,19 @@ local function refreshSide()
 		if item and heldItem and heldItem.Id == item.Id then
 			ui.stroke.Color = PICKED
 			ui.stroke.Thickness = 3
+		elseif docked and chooser.category == category then
+			-- Its chooser is open beside it.
+			ui.stroke.Color = WHITE
+			ui.stroke.Thickness = 2.5
 		else
 			ui.stroke.Thickness = 2.5
 		end
+	end
+	-- The chooser draws from the same two sources on the same redraw, and a
+	-- weapon it just equipped goes into the hands once its Tool is here.
+	if chooser.settle then
+		chooser.settle()
+		chooser.paint()
 	end
 end
 
@@ -3575,8 +3749,8 @@ local function flashSlot(index: number, colour: Color3)
 	slot.ringTint.Enabled = false
 	slot.stroke.Transparency = 0
 	slot.stroke.Color = colour
-	slot.stroke.Thickness = 4
-	TweenService:Create(slot.stroke, TweenInfo.new(0.30), { Thickness = 2.5 }):Play()
+	slot.stroke.Thickness = HOT.CardStroke + 1.5
+	TweenService:Create(slot.stroke, TweenInfo.new(0.30), { Thickness = HOT.CardStroke }):Play()
 	task.delay(0.32, function()
 		if hotSlots[index] == slot then
 			slot.flashUntil = 0
@@ -4036,9 +4210,11 @@ end
 -- One question to HudLayout and one answer, applied to the four things this
 -- script owns on the HUD, with the slot count read off the same answer -- so
 -- the count and the shape can never disagree. The desktop answer is the old
--- geometry to the pixel. The compact one is a phone's: five slots centred
--- between the thumbstick and the jump button, the Bag in the top-right corner,
--- and BAT over TRAP against the right edge, 8 px above the jump button.
+-- geometry to the pixel. The compact one is a phone's: five slots of the
+-- compact belt centred between the thumbstick and the jump button, the Bag in
+-- the top-right corner, and BAT over TRAP against the right edge, 8 px above
+-- the jump button. The answer's `hot` says which cards to draw, and a change
+-- of it is a change of face (restyleHotbar).
 --
 -- Asked when this ScreenGui's size changes -- the viewport, the inset and a
 -- rotation all land there, which is why this no longer follows the camera --
@@ -4054,23 +4230,50 @@ local function layoutHud()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local chipWas = if hud then hud.chip else nil
+	local dockedWas = if hud then hud.sidebar else nil
 	hud = layout
+	local restyled = layout.hot ~= HOT
+	if restyled then
+		HOT = layout.hot
+		restyleHotbar()
+	end
 	bagButton.Position = HudLayout.place(layout.bag, bagButton.AnchorPoint, layout.safe)
 	side.Position = HudLayout.place(layout.equipment, side.AnchorPoint, layout.safe)
 	-- 152 on a desktop, which is the frame it always had: 8 px of it under TRAP.
 	side.Size = UDim2.fromOffset(layout.equipment.w,
 		if layout.compact then layout.equipment.h else layout.equipment.h + 8)
+	-- On a phone the column is the right sidebar: its panel shows, and the two
+	-- tiles stand inside its padding on the dock's slate. `equipPad` is 0 and
+	-- everything else as it was on a desktop and in compact.
+	local pad = layout.equipPad
+	side.BackgroundTransparency = if layout.sidebar then 0.2 else 1
+	local sideEdge = side:FindFirstChildOfClass("UIStroke")
+	if sideEdge then
+		sideEdge.Enabled = layout.sidebar
+	end
 	for i, category in ipairs({ "bat", "trap" }) do
 		local slot = sideSlots[category]
-		slot.button.Position = UDim2.fromOffset(0, (i - 1) * (layout.equipSlot + layout.equipGap))
-		slot.button.Size = UDim2.fromOffset(layout.equipment.w, layout.equipSlot)
+		slot.button.Position = UDim2.fromOffset(pad, pad + (i - 1) * (layout.equipSlot + layout.equipGap))
+		slot.button.Size = UDim2.fromOffset(layout.equipment.w - pad * 2, layout.equipSlot)
+		slot.tint.Enabled = layout.sidebar
+		slot.button.BackgroundColor3 = if layout.sidebar then WHITE else PANEL.Shade
+		slot.button.BackgroundTransparency = if layout.sidebar then 0.05 else 0.25
+		if not layout.sidebar then
+			slot.cool.Size = UDim2.fromScale(1, 0)
+		end
+	end
+	if chooser.place then
+		chooser.place(layout)
 	end
 	hotbar.Position = HudLayout.place(layout.hotbar, hotbar.AnchorPoint, layout.safe)
 	local count = activeSlots
 	applySlotCount()
 	-- applySlotCount redraws when the count changed; the Bag cell's visibility
-	-- is drawn by the same redraw, so a change to it alone asks for one too.
-	if count == activeSlots and chipWas ~= nil and chipWas ~= layout.chip then
+	-- and a new face's names, chips and ghosts are drawn by the same redraw, so
+	-- a change to either alone asks for one too -- and so does the belt giving
+	-- up, or taking back, the weapons as the screen becomes a phone or stops.
+	if count == activeSlots and (restyled or (chipWas ~= nil and chipWas ~= layout.chip)
+		or (dockedWas ~= nil and dockedWas ~= layout.sidebar)) then
 		redraw()
 	end
 	showStrip()
@@ -4268,15 +4471,388 @@ do
 	end
 end
 
---== A SIDE SLOT OPENS THE BAG ON ITS OWN TAB ==--
+--== A SIDE SLOT OPENS THE BAG ON ITS OWN TAB -- OR, ON A PHONE, ITS CHOOSER ==--
 for _, category in ipairs({ "bat", "trap" }) do
 	sideSlots[category].button.Activated:Connect(function()
+		local layout = hud
+		if layout and layout.sidebar then
+			chooser.toggle(category)
+			return
+		end
 		activeTab = "equipment"
 		grid.CanvasPosition = Vector2.zero
 		setOpen(true)
 		refreshBag()
 	end)
 end
+
+--==============================================================================
+-- THE CHOOSER
+--
+-- On a touch screen BATS and TRAPS each open a small panel out of the right
+-- sidebar's left side: every bat, or every trap, the player OWNS -- off the
+-- profile, exactly the Bag's equipment tab -- and which one is equipped and
+-- which one is in their hands. A card is one press:
+--
+--   EQUIP      into the slot through the one equip verb there is (the same
+--              equipRequest the Bag and Marigold send, which WeaponShopService
+--              validates), and into the hands the moment the server's new Tool
+--              arrives. On a phone a weapon has no card on the belt, so choosing
+--              one is choosing to hold it.
+--   EQUIPPED   out of the Backpack and into the hands, as its belt card did.
+--   IN HAND    put away.
+--
+-- Any press closes it, and so does a tap outside it and the sidebar, the Bag
+-- or any centre panel opening, the character going, and the screen stopping
+-- being a phone. It is drawn from the profile and the live Tools on every
+-- redraw and keeps no copy of either.
+--
+-- NOTHING HERE DECIDES ANYTHING. The slot and ownership are the server's; the
+-- hands are Humanoid:EquipTool on a Tool the server made, which CombatService
+-- reads again on every swing and every placement.
+--
+-- Built inside a function, because this chunk is rationed to 200 names at the
+-- top level and a do-block's names count against it while it runs.
+--==============================================================================
+chooser.category = nil
+chooser.pending = nil
+chooser.cards = {}
+
+chooser.build = function()
+	local C = HudLayout.Config.Chooser
+	local frame = Instance.new("Frame")
+	frame.Name = "Chooser"
+	frame.AnchorPoint = Vector2.new(1, 0)
+	frame.BackgroundTransparency = 0.06
+	frame.BorderSizePixel = 0
+	frame.Visible = false
+	frame.ZIndex = 4
+	frame.Parent = gui
+	UIKit.corner(frame, 14)
+	UIKit.stroke(frame, RAIL.DockEdge, 1.5, 0.15)
+	UIKit.gradient(frame, RAIL.TileTop, RAIL.DockFill)
+
+	local title = UIKit.outlined(frame, "Title", 15, CREAM, 2)
+	title.Position = UDim2.fromOffset(C.Pad, C.Pad - 3)
+	title.Size = UDim2.new(1, -(C.Pad + C.Spine), 0, C.Title)
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.ZIndex = 8
+
+	-- One row of cards, sideways; past three it scrolls, and the part card at
+	-- the edge is what says so.
+	local row = Instance.new("ScrollingFrame")
+	row.Name = "Cards"
+	row.Position = UDim2.fromOffset(C.Pad, C.Pad + C.Title)
+	row.Size = UDim2.new(1, -(C.Pad + C.Spine), 0, C.Card.Y)
+	row.BackgroundTransparency = 1
+	row.BorderSizePixel = 0
+	row.CanvasSize = UDim2.new()
+	row.AutomaticCanvasSize = Enum.AutomaticSize.X
+	row.ScrollingDirection = Enum.ScrollingDirection.X
+	row.ScrollBarThickness = 0
+	row.ElasticBehavior = Enum.ElasticBehavior.Always
+	row.ZIndex = 5
+	row.Parent = frame
+	local list = Instance.new("UIListLayout")
+	list.FillDirection = Enum.FillDirection.Horizontal
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.VerticalAlignment = Enum.VerticalAlignment.Center
+	list.Padding = UDim.new(0, C.Gap)
+	list.Parent = row
+
+	local empty = UIKit.outlined(frame, "Empty", 12, MUTED, 1.5)
+	empty.Font = Enum.Font.FredokaOne
+	empty.Position = row.Position
+	empty.Size = row.Size
+	empty.TextWrapped = true
+	empty.Visible = false
+	empty.ZIndex = 8
+
+	-- The chevron down the edge toward the sidebar, which says "this shuts
+	-- that way" and does.
+	local spine = Instance.new("TextButton")
+	spine.Name = "Close"
+	spine.AnchorPoint = Vector2.new(1, 0)
+	spine.Position = UDim2.fromScale(1, 0)
+	spine.Size = UDim2.new(0, C.Spine, 1, 0)
+	spine.BackgroundTransparency = 1
+	spine.BorderSizePixel = 0
+	spine.AutoButtonColor = false
+	spine.Text = ""
+	spine.ZIndex = 6
+	spine.Parent = frame
+	UIKit.clicks(spine)
+	local mark = UIKit.outlined(spine, "Chevron", 16, RAIL.DockHandle, 1.5)
+	mark.Font = Enum.Font.FredokaOne
+	mark.Size = UDim2.fromScale(1, 1)
+	mark.Text = ">"
+	mark.ZIndex = 7
+	spine.Activated:Connect(function()
+		chooser.close()
+	end)
+
+	chooser.frame = frame
+	chooser.title = title
+	chooser.row = row
+	chooser.empty = empty
+end
+
+-- A card, made the first time there are that many to show and kept.
+chooser.card = function(i: number): any
+	local made = chooser.cards[i]
+	if made then
+		return made
+	end
+	local C = HudLayout.Config.Chooser
+	local button = Instance.new("TextButton")
+	button.Name = "Card" .. i
+	button.Size = UDim2.fromOffset(C.Card.X, C.Card.Y)
+	button.BorderSizePixel = 0
+	button.AutoButtonColor = false
+	button.Text = ""
+	button.LayoutOrder = i
+	button.ZIndex = 5
+	button.Parent = chooser.row
+	UIKit.corner(button, 10)
+	local edge = UIKit.stroke(button, BLACK, 2)
+	local tint = UIKit.gradient(button, RAIL.TileTop, RAIL.TileBottom)
+
+	local preview = UIKit.itemPreview(button, {
+		name = "Preview",
+		size = UDim2.new(1, -8, 0, 44),
+		position = UDim2.fromOffset(4, 4),
+		scrim = 1,
+	})
+
+	-- Two lines at most, shrunk to fit before it is cut: "Cindercrack Bat" is
+	-- the one that has to be read to tell two bats apart.
+	local name = Instance.new("TextLabel")
+	name.Name = "Name"
+	name.Position = UDim2.fromOffset(3, 49)
+	name.Size = UDim2.new(1, -6, 0, 23)
+	name.BackgroundTransparency = 1
+	name.Font = Enum.Font.FredokaOne
+	name.TextColor3 = CREAM
+	name.TextScaled = true
+	name.TextWrapped = true
+	name.ZIndex = 8
+	name.Parent = button
+	UIKit.stroke(name, BLACK, 1.5, 0.2)
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 11
+	fit.MinTextSize = 7
+	fit.Parent = name
+
+	local pill = Instance.new("Frame")
+	pill.Name = "State"
+	pill.AnchorPoint = Vector2.new(0.5, 1)
+	pill.Position = UDim2.new(0.5, 0, 1, -4)
+	pill.Size = UDim2.new(1, -8, 0, 18)
+	pill.BorderSizePixel = 0
+	pill.Active = false
+	pill.ZIndex = 7
+	pill.Parent = button
+	UIKit.corner(pill, 9)
+	local pillTint = UIKit.gradient(pill, PILL_ON_TOP, PILL_ON_BOTTOM)
+	local word = UIKit.outlined(pill, "Text", 11, WHITE, 1.5)
+	word.Font = Enum.Font.FredokaOne
+	word.Size = UDim2.fromScale(1, 1)
+	word.ZIndex = 8
+
+	local card = { button = button, edge = edge, tint = tint, preview = preview,
+		name = name, pillTint = pillTint, word = word, item = nil }
+	button.Activated:Connect(function()
+		local item = card.item
+		if item then
+			chooser.choose(item)
+		end
+	end)
+	chooser.cards[i] = card
+	return card
+end
+
+chooser.paint = function()
+	local category = chooser.category
+	local frame = chooser.frame
+	if not (category and frame) then
+		return
+	end
+	local C = HudLayout.Config.Chooser
+	-- The mockup's EQUIP blue: a button that is not yet anything.
+	local equipTop, equipBottom = Color3.fromRGB(70, 138, 240), Color3.fromRGB(38, 92, 196)
+	chooser.title.Text = if category == "bat" then "CHOOSE BAT" else "CHOOSE TRAP"
+	local held = heldTool()
+	local heldItem = if held then WeaponData.Get(held:GetAttribute(ITEM_ATTR)) else nil
+	local shown = 0
+	for _, item in ipairs(WeaponData.Items) do
+		if item.Category == category and owned[item.Id] then
+			shown += 1
+			local card = chooser.card(shown)
+			card.item = item
+			card.button.Visible = true
+			card.preview.setModel("w:" .. item.Id, function(parent)
+				return WeaponModel.BuildPreview(item, parent)
+			end, item.Category)
+			card.name.Text = item.Name
+			local equipped = loadout[category] == item.Id
+			local inHand = equipped and heldItem ~= nil and heldItem.Id == item.Id
+			card.word.Text = if inHand then "IN HAND" elseif equipped then "EQUIPPED" else "EQUIP"
+			card.pillTint.Color = if inHand then ColorSequence.new(PICKED, Color3.fromRGB(214, 160, 52))
+				elseif equipped then ColorSequence.new(PILL_ON_TOP, PILL_ON_BOTTOM)
+				else ColorSequence.new(equipTop, equipBottom)
+			card.tint.Color = if equipped then ColorSequence.new(LIT_TOP, LIT_BOTTOM)
+				else ColorSequence.new(RAIL.TileTop, RAIL.TileBottom)
+			card.edge.Color = if inHand then PICKED elseif equipped then PILL_ON_TOP else BLACK
+			card.edge.Thickness = if inHand then 3 else 2
+		end
+	end
+	for i = shown + 1, #chooser.cards do
+		local spare = chooser.cards[i]
+		spare.button.Visible = false
+		spare.item = nil
+	end
+	chooser.empty.Visible = shown == 0
+	chooser.empty.Text = if category == "bat"
+		then "No bats yet.\nMarigold sells them at her stall."
+		else "No traps yet.\nMarigold sells them at her stall."
+
+	-- As wide as what it shows, from the same right edge, never wider than
+	-- HudLayout's; an empty one keeps room for its sentence.
+	local layout = hud
+	local most = if layout and layout.chooser then layout.chooser else nil
+	if most then
+		local cards = if shown == 0 then 2 else shown
+		local want = C.Pad + cards * C.Card.X + (cards - 1) * C.Gap + C.Spine
+		frame.Size = UDim2.fromOffset(math.min(most.w, want), most.h)
+	end
+end
+
+chooser.place = function(layout: HudLayout.Layout?)
+	local frame = chooser.frame
+	if not frame then
+		return
+	end
+	local most = if layout and layout.sidebar then layout.chooser else nil
+	if not (layout and most) then
+		chooser.close()
+		return
+	end
+	frame.Position = HudLayout.place(most, Vector2.new(1, 0), layout.safe)
+	chooser.paint()
+end
+
+chooser.open = function(category: string)
+	if not chooser.frame then
+		return
+	end
+	-- The Bag and the chooser are two ways to the same shelf; one at a time.
+	if open then
+		setOpen(false)
+	end
+	chooser.category = category
+	chooser.row.CanvasPosition = Vector2.zero
+	chooser.frame.Visible = true
+	chooser.place(hud)
+	refreshSide()
+end
+
+chooser.close = function()
+	if chooser.category == nil then
+		return
+	end
+	chooser.category = nil
+	if chooser.frame then
+		chooser.frame.Visible = false
+	end
+	refreshSide()
+end
+
+chooser.toggle = function(category: string)
+	if chooser.category == category then
+		chooser.close()
+	else
+		chooser.open(category)
+	end
+end
+
+chooser.choose = function(item: WeaponData.Item)
+	chooser.close()
+	if loadout[item.Category] == item.Id then
+		-- Already in the slot: its Tool into the hands, or out of them.
+		for _, slot in ipairs(liveSlots) do
+			if slot.item and slot.item.Id == item.Id then
+				holdTool(slot.tool)
+				redraw()
+				return
+			end
+		end
+		return
+	end
+	-- Into the slot, and into the hands once the server's Tool is here (settle).
+	chooser.pending = { id = item.Id, before = os.clock() + 4 }
+	SoundKit.play("CardClick")
+	equipRequest(item)
+end
+
+-- A weapon equipped from the chooser goes into the hands when its Tool lands,
+-- once, and not at all if the server said no and no Tool ever comes.
+chooser.settle = function()
+	local want = chooser.pending
+	if not want then
+		return
+	end
+	if os.clock() > want.before then
+		chooser.pending = nil
+		return
+	end
+	for _, slot in ipairs(liveSlots) do
+		if slot.item and slot.item.Id == want.id then
+			chooser.pending = nil
+			if slot.tool.Parent ~= player.Character then
+				holdTool(slot.tool)
+			end
+			return
+		end
+	end
+end
+
+chooser.build()
+chooser.place(hud)
+
+--==============================================================================
+-- WHAT SHUTS IT, BESIDES A CHOICE AND ITS OWN CHEVRON
+--
+-- A tap outside it and the sidebar, read off UserInputService so the tap still
+-- reaches whatever it was for -- the world, the jump button, the belt -- rather
+-- than being swallowed by an invisible layer over the screen. The Bag or any
+-- centre panel opening. The character going.
+--==============================================================================
+UserInputService.InputBegan:Connect(function(input: InputObject)
+	if chooser.category == nil then
+		return
+	end
+	local kind = input.UserInputType
+	if kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	local point = Vector2.new(input.Position.X, input.Position.Y)
+	for _, keep in ipairs({ chooser.frame, side }) do
+		local at, size = keep.AbsolutePosition, keep.AbsoluteSize
+		if point.X >= at.X and point.X <= at.X + size.X
+			and point.Y >= at.Y and point.Y <= at.Y + size.Y then
+			return
+		end
+	end
+	chooser.close()
+end)
+player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
+	if player:GetAttribute(ATTR.OpenPanel) ~= nil then
+		chooser.close()
+	end
+end)
+player.CharacterRemoving:Connect(function()
+	chooser.close()
+end)
 
 --==============================================================================
 -- THE NUMBER ROW
@@ -4358,6 +4934,36 @@ RunService.Heartbeat:Connect(function()
 			end
 		elseif slot.cooldown.Size.Y.Scale ~= 0 then
 			slot.cooldown.Size = UDim2.fromScale(1, 0)
+		end
+	end
+	--==========================================================================
+	-- AND ON A PHONE, THE SIDEBAR'S TWO TILES
+	--
+	-- The weapons left the belt there, and their cooldown came with them: the
+	-- same drain, off the equipped Tool's own ReadyAt and its own cooldown, in
+	-- this same pass. Nothing is allocated for it.
+	--==========================================================================
+	local layout = hud
+	if layout and layout.sidebar then
+		for category, ui in pairs(sideSlots) do
+			local left, total = 0, 0
+			for _, live in ipairs(liveSlots) do
+				local item = live.item
+				if item and item.Category == category then
+					total = item.Cooldown
+					if category == "trap" then
+						local spec = WeaponData.TrapSpec(item)
+						total = if spec then spec.PlaceCooldownSeconds else 0
+					end
+					local readyAt = tonumber(live.tool:GetAttribute(READY_AT))
+					left = if readyAt then readyAt - now else 0
+					break
+				end
+			end
+			local share = if left > 0 and total > 0 then math.min(1, left / total) else 0
+			if ui.cool.Size.Y.Scale ~= share then
+				ui.cool.Size = UDim2.fromScale(1, share)
+			end
 		end
 	end
 end)

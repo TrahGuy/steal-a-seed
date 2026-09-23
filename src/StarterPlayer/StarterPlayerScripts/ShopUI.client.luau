@@ -145,12 +145,19 @@ button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAI
 
 -- Second on the rail, from HudLayout: under Index on a desktop, beside it in
 -- the compact top row -- square, the cart alone. See IndexUI's placeButton.
+-- On a touch screen, the dock's middle tile and the one in colour: the stall
+-- artwork on emerald with a lime edge, which is the approved mockup's premium
+-- Shop button.
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
-	UIKit.railShape(button, Vector2.new(layout.shop.w, layout.shop.h))
+	UIKit.railShape(button, Vector2.new(layout.shop.w, layout.shop.h), nil,
+		if layout.sidebar
+			then { label = "SHOP", top = RAIL.ShopTileTop, bottom = RAIL.ShopTileBottom, edge = RAIL.ShopEdge }
+			else nil)
+	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.shop, Vector2.zero, layout.safe)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)

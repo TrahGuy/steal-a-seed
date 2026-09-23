@@ -654,6 +654,39 @@ function UIKit.railLayer(playerGui: Instance): ScreenGui
 end
 
 --==============================================================================
+-- THE PHONE'S DOCK: ONE SHARED FRAME IN THE RAIL LAYER
+--
+-- On a touch screen Index, Shop and Settings stand in a dock down the left edge
+-- that shuts (HudLayout, THE PHONE'S SIDEBARS). Each of the three still builds,
+-- shapes, places and answers its own button; on a phone it parents that button
+-- into this frame, and RailDrawerUI slides the frame -- so the three move as one
+-- without anybody moving anybody else's button.
+--
+-- The layer's full size and transparent, so a position in it is a position in
+-- the layer. Not Active: it takes no input of its own. Found rather than
+-- rebuilt, like the layer, so a script that re-runs never takes its neighbours'
+-- buttons down with it. Visible until RailDrawerUI says otherwise, so a phone
+-- whose drawer script never ran still has all three buttons.
+--==============================================================================
+local RAIL_DOCK = "Dock"
+
+function UIKit.railDock(playerGui: Instance): Frame
+	local layer = UIKit.railLayer(playerGui)
+	local existing = layer:FindFirstChild(RAIL_DOCK)
+	if existing and existing:IsA("Frame") then
+		return existing
+	end
+	local dock = Instance.new("Frame")
+	dock.Name = RAIL_DOCK
+	dock.Size = UDim2.fromScale(1, 1)
+	dock.BackgroundTransparency = 1
+	dock.BorderSizePixel = 0
+	dock.Active = false
+	dock.Parent = layer
+	return dock
+end
+
+--==============================================================================
 -- THE UPLOADED ICON
 --
 -- An ImageLabel, and deliberately NOT a button. The slab underneath is still the
@@ -980,7 +1013,8 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	local size = if wide then RAIL.WideSize else RAIL.SquareSize
 
 	local layer = UIKit.railLayer(playerGui)
-	local previous = layer:FindFirstChild(options.name)
+	-- Recursive: on a phone the previous button may be standing in the dock.
+	local previous = layer:FindFirstChild(options.name, true)
 	if previous then
 		previous:Destroy()
 	end
@@ -1065,9 +1099,92 @@ end
 --
 -- `iconSize` is for the bare Settings gear, which fills its button on the
 -- desktop and sits on a plate in compact.
+--
+-- A THIRD SHAPE ON A PHONE: THE DOCK'S TILE. `tile` puts a plate of its own
+-- colours over the button's face -- slate for Index and Settings, emerald for
+-- the Shop -- the icon at its top and the word under it. The plate and the
+-- word are children made the first time and only hidden after, so a slab keeps
+-- its face, lattice and outline untouched underneath, and a screen that stops
+-- being touch gets back exactly the button it had.
 --==============================================================================
-function UIKit.railShape(button: GuiObject, size: Vector2, iconSize: number?)
+export type RailTile = {
+	-- The word under the icon.
+	label: string,
+	-- The plate, top to bottom, and its thin edge.
+	top: Color3,
+	bottom: Color3,
+	edge: Color3,
+}
+
+function UIKit.railShape(button: GuiObject, size: Vector2, iconSize: number?, tile: RailTile?)
 	button.Size = UDim2.fromOffset(size.X, size.Y)
+	local plate = button:FindFirstChild("Tile")
+	local word = button:FindFirstChild("TileLabel")
+	if tile then
+		local DOCK = HudLayout.Config.Dock
+		if not (plate and plate:IsA("Frame")) then
+			local made = Instance.new("Frame")
+			made.Name = "Tile"
+			made.Size = UDim2.fromScale(1, 1)
+			made.BorderSizePixel = 0
+			made.Active = false
+			made.ZIndex = 2
+			made.Parent = button
+			UIKit.corner(made, RAIL.Radius)
+			UIKit.stroke(made, tile.edge, 1.5)
+			UIKit.gradient(made, tile.top, tile.bottom)
+			plate = made
+		end
+		if not (word and word:IsA("TextLabel")) then
+			local made = UIKit.outlined(button, "TileLabel", DOCK.Label, WHITE, 1.5)
+			made.Font = Enum.Font.FredokaOne
+			made.AnchorPoint = Vector2.new(0.5, 1)
+			made.Position = UDim2.new(0.5, 0, 1, -3)
+			made.Size = UDim2.new(1, -4, 0, DOCK.Label + 2)
+			made.TextScaled = true
+			made.ZIndex = 3
+			local fit = Instance.new("UITextSizeConstraint")
+			fit.MaxTextSize = DOCK.Label
+			fit.MinTextSize = 7
+			fit.Parent = made
+			word = made
+		end
+		local tilePlate = plate :: Frame
+		local tileWord = word :: TextLabel
+		tilePlate.Visible = true
+		local stroke = tilePlate:FindFirstChildOfClass("UIStroke")
+		if stroke then
+			stroke.Color = tile.edge
+		end
+		local tint = tilePlate:FindFirstChildOfClass("UIGradient")
+		if tint then
+			tint.Color = ColorSequence.new(tile.top, tile.bottom)
+		end
+		tileWord.Text = tile.label
+		tileWord.Visible = true
+		local tileIcon = button:FindFirstChild("Icon")
+		if tileIcon and tileIcon:IsA("GuiObject") then
+			-- Remembered once, so the icon goes back to its own size after.
+			if button:GetAttribute("RailIconSize") == nil then
+				button:SetAttribute("RailIconSize", tileIcon.Size.X.Offset)
+			end
+			local side = math.min(DOCK.Icon, size.Y - DOCK.Label - 12)
+			tileIcon.AnchorPoint = Vector2.new(0.5, 0)
+			tileIcon.Position = UDim2.new(0.5, 0, 0, 4)
+			tileIcon.Size = UDim2.fromOffset(side, side)
+		end
+		local own = button:FindFirstChild("Label")
+		if own and own:IsA("GuiObject") then
+			own.Visible = false
+		end
+		return
+	end
+	if plate and plate:IsA("GuiObject") then
+		plate.Visible = false
+	end
+	if word and word:IsA("GuiObject") then
+		word.Visible = false
+	end
 	local wide = size.X > size.Y
 	local icon = button:FindFirstChild("Icon")
 	if icon and icon:IsA("GuiObject") then
@@ -1078,8 +1195,9 @@ function UIKit.railShape(button: GuiObject, size: Vector2, iconSize: number?)
 			icon.AnchorPoint = Vector2.new(0.5, 0.5)
 			icon.Position = UDim2.fromScale(0.5, 0.5)
 		end
-		if iconSize then
-			icon.Size = UDim2.fromOffset(iconSize, iconSize)
+		local rest = iconSize or tonumber(button:GetAttribute("RailIconSize"))
+		if rest then
+			icon.Size = UDim2.fromOffset(rest, rest)
 		end
 	end
 	local label = button:FindFirstChild("Label")

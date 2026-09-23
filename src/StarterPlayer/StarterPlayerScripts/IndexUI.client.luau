@@ -241,13 +241,21 @@ local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
 -- into its corner so the row can sit 8 px under the topbar without pushing it
 -- off the glass. Asked again only when this ScreenGui's size changes, which is
 -- every viewport, inset and rotation change and nothing else.
+--
+-- ON A TOUCH SCREEN it is the top tile of the dock (HudLayout, THE PHONE'S
+-- SIDEBARS): the book over the word on a slate plate, standing in the frame
+-- RailDrawerUI slides, still this script's button and this script's badge.
 --==============================================================================
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
-	UIKit.railShape(button, Vector2.new(layout.index.w, layout.index.h))
+	UIKit.railShape(button, Vector2.new(layout.index.w, layout.index.h), nil,
+		if layout.sidebar
+			then { label = "INDEX", top = RAIL.TileTop, bottom = RAIL.TileBottom, edge = RAIL.IndexEdge }
+			else nil)
+	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.index, Vector2.zero, layout.safe)
 	UIKit.railBadge(badge, layout.compact, "right")
 end

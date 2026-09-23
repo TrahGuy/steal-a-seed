@@ -67,6 +67,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local TextService = game:GetService("TextService")
+local UserInputService = game:GetService("UserInputService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -85,8 +86,17 @@ local BADGE_GOLD = Color3.fromRGB(255, 216, 0)
 local SHOE_LIGHT = Color3.fromRGB(223, 242, 252)
 local WHITE = Color3.fromRGB(255, 255, 255)
 
-local SPEED_SIZE = 39
-local CASH_SIZE = 47
+--==============================================================================
+-- TWO FACES, ONE BLOCK
+--
+-- Every size here comes from HudLayout's CashStyle for the mode the screen is
+-- in. The desktop face is what always shipped, to the pixel -- 39 and 47 above
+-- are its two sizes -- and the compact face is the same block at the size a
+-- landscape phone can afford (see THE CASH BLOCK'S TWO FACES in HudLayout). The
+-- face comes with the same answer that places the block, and is drawn by
+-- applyStyle below; nothing in this script decides what a phone is.
+--==============================================================================
+local style: HudLayout.CashStyle = HudLayout.Config.CashStyle.Desktop
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -123,10 +133,11 @@ gui.Destroying:Once(function()
 	table.clear(connections)
 end)
 
-local function corner(parent: Instance, radius: number)
+local function corner(parent: Instance, radius: number): UICorner
 	local c = Instance.new("UICorner")
 	c.CornerRadius = UDim.new(0, radius)
 	c.Parent = parent
+	return c
 end
 
 --==============================================================================
@@ -140,16 +151,14 @@ end
 -- gone; the widest thing left is the Speed label's box, 56 in from the shoe and
 -- 260 across, so the block is 316. The cash box (300) and the buff card, which
 -- is placed off the cash text and never reaches that far, both sit inside it.
--- Nothing moved: the shoe, the numbers and the card are where they were.
+-- Nothing moved: the shoe, the numbers and the card are where they were. (The
+-- compact face keeps the same rule at its own sizes: 36 + 154 = 190.)
 --==============================================================================
-local SPEED_X = 56
-local SPEED_W = 260
-
 local root = Instance.new("Frame")
 root.Name = "Corner"
 root.AnchorPoint = Vector2.new(0, 1)
 root.Position = UDim2.new(0, 12, 1, -10)
-root.Size = UDim2.fromOffset(SPEED_X + SPEED_W, 108)
+root.Size = UDim2.fromOffset(style.Root.X, style.Root.Y)
 root.BackgroundTransparency = 1
 root.Parent = gui
 
@@ -166,10 +175,16 @@ root.Parent = gui
 local shoe = Instance.new("Frame")
 shoe.Name = "Shoe"
 shoe.AnchorPoint = Vector2.new(0, 1)
-shoe.Position = UDim2.new(0, 0, 0, 44)
+shoe.Position = UDim2.new(0, 0, 0, style.ShoeBottom)
 shoe.Size = UDim2.fromOffset(50, 38)
 shoe.BackgroundTransparency = 1
 shoe.Parent = root
+
+-- Drawn once at 50 x 38 and scaled as one piece about its bottom-left corner,
+-- so the compact face's shoe is this same drawing and never a second one.
+local shoeScale = Instance.new("UIScale")
+shoeScale.Scale = style.ShoeScale
+shoeScale.Parent = shoe
 
 local sole = Instance.new("Frame")
 sole.Name = "Sole"
@@ -242,7 +257,7 @@ end
 -- THE NUMBERS
 --==============================================================================
 local function outlined(name: string, size: number, colour: Color3,
-	thickness: number): TextLabel
+	thickness: number): (TextLabel, UIStroke)
 	local label = Instance.new("TextLabel")
 	label.Name = name
 	label.BackgroundTransparency = 1
@@ -260,18 +275,18 @@ local function outlined(name: string, size: number, colour: Color3,
 	edge.Color = OUTLINE
 	edge.Thickness = thickness
 	edge.Parent = label
-	return label
+	return label, edge
 end
 
-local speed = outlined("Speed", SPEED_SIZE, SPEED_BLUE, 2)
+local speed, speedEdge = outlined("Speed", style.SpeedSize, SPEED_BLUE, style.SpeedStroke)
 speed.AnchorPoint = Vector2.new(0, 1)
-speed.Position = UDim2.new(0, SPEED_X, 0, 44)
-speed.Size = UDim2.fromOffset(SPEED_W, SPEED_SIZE + 4)
+speed.Position = UDim2.new(0, style.SpeedX, 0, style.SpeedBottom)
+speed.Size = UDim2.fromOffset(style.SpeedW, style.SpeedSize + 4)
 
-local amount = outlined("Amount", CASH_SIZE, CASH_GREEN, 3)
+local amount, amountEdge = outlined("Amount", style.CashSize, CASH_GREEN, style.CashStroke)
 amount.AnchorPoint = Vector2.new(0, 1)
 amount.Position = UDim2.new(0, 0, 1, 0)
-amount.Size = UDim2.fromOffset(300, CASH_SIZE + 4)
+amount.Size = UDim2.fromOffset(style.CashW, style.CashSize + 4)
 
 --==============================================================================
 -- THE LINE THAT USED TO SIT ABOVE THIS BLOCK IS GONE
@@ -310,20 +325,22 @@ local SECONDARY_TEXT = Color3.fromRGB(226, 238, 250)
 -- float away from it. It is placed off the label's measured TextBounds every
 -- time the text changes, which is the only thing here that is responsive -- the
 -- shoe, the speed line and the cash line do not move at all.
+--
+-- ON A TOUCH SCREEN it is not beside the cash line at all: it stands on the
+-- top-right row, left of Garden and the Bag, the same card reparented there by
+-- placeCorner (the approved mobile redesign, 2026-09-23).
 --==============================================================================
 local PASS = GameConfig.Pass
-local BUFF_SIZE = PASS.BuffSize or 46
 local BUFF_EMERALD = Color3.fromRGB(12, 58, 34)
 local BUFF_GOLD = Color3.fromRGB(238, 190, 62)
-local BUFF_GAP = 10
 
 local buff = Instance.new("TextButton")
 buff.Name = "MoneyBuff"
 buff.AnchorPoint = Vector2.new(0, 1)
 -- Two pixels under the cash label's bottom edge, which puts it just below the
 -- text baseline rather than centred on it.
-buff.Position = UDim2.new(0, 140, 1, 2)
-buff.Size = UDim2.fromOffset(BUFF_SIZE, BUFF_SIZE)
+buff.Position = UDim2.new(0, 140, 1, style.BuffDrop)
+buff.Size = UDim2.fromOffset(style.BuffSize, style.BuffSize)
 buff.BackgroundColor3 = BUFF_EMERALD
 buff.BackgroundTransparency = 0.08
 buff.BorderSizePixel = 0
@@ -332,7 +349,7 @@ buff.Text = ""
 buff.Visible = false
 buff.ZIndex = 4
 buff.Parent = root
-corner(buff, 10)
+local buffCorner = corner(buff, style.BuffCorner)
 
 do
 	local edge = Instance.new("UIStroke")
@@ -340,6 +357,28 @@ do
 	edge.Thickness = 1.5
 	edge.Parent = buff
 end
+
+--==============================================================================
+-- THE PRESS LANDS ON A SQUARE AT LEAST AS BIG AS A THUMB
+--
+-- A transparent button centred on the card and `BuffHit` square: 44 around a
+-- card drawn at 36 in the compact face, which is the touch floor, and exactly
+-- the card on a desktop, where both are the same 46 -- so a click there lands
+-- where it always did. Above the card and the icon, so it takes every press;
+-- the card under it is only the picture. A child of the card, so it is shown,
+-- hidden and moved with it and never needs placing on its own.
+--==============================================================================
+local buffHit = Instance.new("TextButton")
+buffHit.Name = "Hit"
+buffHit.AnchorPoint = Vector2.new(0.5, 0.5)
+buffHit.Position = UDim2.fromScale(0.5, 0.5)
+buffHit.Size = UDim2.fromOffset(style.BuffHit, style.BuffHit)
+buffHit.BackgroundTransparency = 1
+buffHit.BorderSizePixel = 0
+buffHit.AutoButtonColor = false
+buffHit.Text = ""
+buffHit.ZIndex = 6
+buffHit.Parent = buff
 
 local buffIcon = Instance.new("ImageLabel")
 buffIcon.Name = "Icon"
@@ -359,18 +398,19 @@ buffIcon.Parent = buff
 --
 -- GothamMedium 15 on a 2px black outline with no plate -- the treatment this HUD
 -- has always used for secondary text (the status line that used to sit above the
--- block was the same), so a second style is not invented for one sentence.
+-- block was the same), so a second style is not invented for one sentence. 13
+-- in the compact face.
 --
--- Its width is measured ONCE. The string never changes, so measuring it per
--- click would be a TextService call on every tap for an answer that cannot
--- differ.
+-- Its width is measured when the face changes and at no other time. The string
+-- never changes, so measuring it per click would be a TextService call on every
+-- tap for an answer that cannot differ.
 --==============================================================================
 local BUFF_TEXT = PASS.BuffMessage or "Earn x2 money permanently."
 local tip = Instance.new("TextLabel")
 tip.Name = "BuffMessage"
 tip.BackgroundTransparency = 1
 tip.Font = Enum.Font.GothamMedium
-tip.TextSize = 15
+tip.TextSize = style.TipSize
 tip.TextColor3 = SECONDARY_TEXT
 tip.TextXAlignment = Enum.TextXAlignment.Left
 tip.TextYAlignment = Enum.TextYAlignment.Center
@@ -386,9 +426,11 @@ tipEdge.Color = OUTLINE
 tipEdge.Thickness = 2
 tipEdge.Parent = tip
 
-local TIP_WIDTH = TextService:GetTextSize(
-	BUFF_TEXT, tip.TextSize, tip.Font, Vector2.new(1000, 100)).X + 4
-tip.Size = UDim2.fromOffset(math.ceil(TIP_WIDTH), 18)
+local tipWidth = 0
+
+-- Where the card stands on a phone: HudLayout's `boost`, the top-right row's
+-- first button. nil everywhere else, where it rides beside the cash text.
+local boostAt: HudLayout.Rect? = nil
 
 --==============================================================================
 -- WHERE THE CARD SITS
@@ -398,25 +440,60 @@ tip.Size = UDim2.fromOffset(math.ceil(TIP_WIDTH), 18)
 -- for the first frames, before the server has said anything and the label is
 -- still a dash.
 --==============================================================================
-local BUFF_MIN_X = 120
-
 local function placeBuff()
+	if boostAt then
+		-- Standing on the top-right row, where placeCorner put it; a longer
+		-- balance moves nothing there.
+		return
+	end
 	local textWidth = math.max(amount.TextBounds.X, 0)
-	local x = math.max(BUFF_MIN_X, math.floor(textWidth) + BUFF_GAP)
-	buff.Position = UDim2.new(0, x, 1, 2)
+	local x = math.max(style.BuffMinX, math.floor(textWidth) + style.BuffGap)
+	buff.Position = UDim2.new(0, x, 1, style.BuffDrop)
 
 	--==========================================================================
 	-- The message follows the card, but is not allowed to leave the HUD's own
 	-- footprint. On a narrow phone the sentence is wider than the gap between
 	-- the card and the right edge, and a line that runs off the screen is a line
 	-- nobody can read -- so it slides left until it fits and stays directly
-	-- above the icon whenever there is room.
+	-- above the icon whenever there is room. Measured against the block's own
+	-- width in its own units, which is what the offsets are in.
 	--==========================================================================
-	local limit = math.max(0, root.AbsoluteSize.X - TIP_WIDTH)
-	tip.Position = UDim2.new(0, math.clamp(x, 0, limit), 1, 2 - BUFF_SIZE - 4)
+	local limit = math.max(0, root.Size.X.Offset - tipWidth)
+	tip.Position = UDim2.new(0, math.clamp(x, 0, limit), 1, -style.TipLift)
 end
 
-placeBuff()
+--==============================================================================
+-- DRAWING A FACE
+--
+-- Every size that differs between the two faces, written in one place. Called
+-- once as the block is built and again only when HudLayout's answer changes
+-- face -- a desktop window dragged into compact, or back -- never per frame.
+-- Positions inside the block are written here too, so a face is complete
+-- whichever order it arrives in.
+--==============================================================================
+local function applyStyle(want: HudLayout.CashStyle)
+	style = want
+	root.Size = UDim2.fromOffset(want.Root.X, want.Root.Y)
+	shoe.Position = UDim2.new(0, 0, 0, want.ShoeBottom)
+	shoeScale.Scale = want.ShoeScale
+	speed.TextSize = want.SpeedSize
+	speed.Position = UDim2.new(0, want.SpeedX, 0, want.SpeedBottom)
+	speed.Size = UDim2.fromOffset(want.SpeedW, want.SpeedSize + 4)
+	speedEdge.Thickness = want.SpeedStroke
+	amount.TextSize = want.CashSize
+	amount.Size = UDim2.fromOffset(want.CashW, want.CashSize + 4)
+	amountEdge.Thickness = want.CashStroke
+	buff.Size = UDim2.fromOffset(want.BuffSize, want.BuffSize)
+	buffCorner.CornerRadius = UDim.new(0, want.BuffCorner)
+	buffHit.Size = UDim2.fromOffset(want.BuffHit, want.BuffHit)
+	tip.TextSize = want.TipSize
+	tipWidth = TextService:GetTextSize(
+		BUFF_TEXT, want.TipSize, tip.Font, Vector2.new(1000, 100)).X + 4
+	tip.Size = UDim2.fromOffset(math.ceil(tipWidth), want.TipSize + 3)
+	placeBuff()
+end
+
+applyStyle(style)
 
 --==============================================================================
 -- WHERE THE BLOCK SITS: ONE MEASURED GROUP, MOVED, NEVER SHRUNK
@@ -431,22 +508,27 @@ placeBuff()
 --             unless a narrow window leaves no room beside the hotbar, when
 --             the whole block stands 8 px above the strip instead
 --   phone     8 px above the thumbstick's resting ring, and above the
---             hotbar's top line wherever it would otherwise meet the strip
+--             hotbar's top line wherever it would otherwise meet the strip,
+--             in the compact face
 --
 -- THE WIDTH IS A RESERVATION, NOT THE NUMBER. HudLayout places the block by
--- the widest it can get -- "$9.99Qa" with the card beside it, 230 px -- so a
--- balance gaining a digit never makes the block hop. What is measured here is
--- the group's real width, and it only matters if it ever outgrows that
--- reservation, which no value under the save cap does.
+-- the widest it can get -- "$9.99Qa" with the card beside it, 230 px on a
+-- desktop and 180 in compact -- so a balance gaining a digit never makes the
+-- block hop. What is measured here is the group's real width, and it only
+-- matters if it ever outgrows that reservation, which no value under the save
+-- cap does.
 --==============================================================================
 local function groupWidth(): number
-	-- The outline is 3 px on the cash line and 2 on the speed line, and it
-	-- draws outside TextBounds; the card is placed off the text by placeBuff.
-	local cashRight = math.ceil(amount.TextBounds.X) + 3
-	if buff.Visible then
-		cashRight = math.max(cashRight, buff.Position.X.Offset + BUFF_SIZE)
+	-- The outline (3 px on a desktop's cash line, 2 on its speed line) draws
+	-- outside TextBounds; the card is placed off the text by placeBuff, and its
+	-- touch area reaches past it by half the difference.
+	local cashRight = math.ceil(amount.TextBounds.X) + math.ceil(style.CashStroke)
+	if buff.Visible and buff.Parent == root then
+		cashRight = math.max(cashRight,
+			buff.Position.X.Offset + (style.BuffSize + style.BuffHit) / 2)
 	end
-	return math.max(cashRight, SPEED_X + math.ceil(speed.TextBounds.X) + 2)
+	return math.max(cashRight,
+		style.SpeedX + math.ceil(speed.TextBounds.X) + math.ceil(style.SpeedStroke))
 end
 
 local placedFor = 0
@@ -456,11 +538,63 @@ local function placeCorner()
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui, groupWidth()))
+	if layout.cashStyle ~= style then
+		-- A new face is a new width, and the width is what the block is placed
+		-- by, so the question is asked again about the block as it now is.
+		applyStyle(layout.cashStyle)
+		layout = HudLayout.solve(HudLayout.measure(gui, groupWidth()))
+		if layout.cashStyle ~= style then
+			applyStyle(layout.cashStyle)
+		end
+	end
 	placedFor = layout.cash.w
 	root.Position = HudLayout.place(layout.cashRoot, root.AnchorPoint, layout.safe)
+
+	--==========================================================================
+	-- ON A PHONE THE x2 CARD IS A BUTTON ON THE TOP-RIGHT ROW
+	--
+	-- The approved mobile redesign moves it off the cash line to the left of
+	-- Garden and the Bag (HudLayout's `boost`). It is the SAME card -- the one
+	-- instance, shown on the same attribute, saying the same sentence on a
+	-- press -- reparented and resized to the row's 50 x 50, with its message
+	-- hung under it, right-aligned to it so it stays on the glass. Everywhere
+	-- else it goes back beside the cash text exactly as it was.
+	--==========================================================================
+	local at = if layout.sidebar then layout.boost else nil
+	boostAt = at
+	if at then
+		buff.Parent = gui
+		buff.AnchorPoint = Vector2.new(1, 0)
+		buff.Position = HudLayout.place(at, buff.AnchorPoint, layout.safe)
+		buff.Size = UDim2.fromOffset(at.w, at.h)
+		buffHit.Size = UDim2.fromOffset(math.max(at.w, style.BuffHit), math.max(at.h, style.BuffHit))
+		buffCorner.CornerRadius = UDim.new(0, GameConfig.Rail.Radius)
+		tip.Parent = gui
+		tip.AnchorPoint = Vector2.new(1, 0)
+		tip.TextXAlignment = Enum.TextXAlignment.Right
+		local width, height = tip.Size.X.Offset, tip.Size.Y.Offset
+		tip.Position = HudLayout.place(HudLayout.rect(at.x + at.w - width, at.y + at.h + 6, width, height),
+			tip.AnchorPoint, layout.safe)
+	elseif buff.Parent ~= root then
+		buff.Parent = root
+		buff.AnchorPoint = Vector2.new(0, 1)
+		buff.Size = UDim2.fromOffset(style.BuffSize, style.BuffSize)
+		buffHit.Size = UDim2.fromOffset(style.BuffHit, style.BuffHit)
+		buffCorner.CornerRadius = UDim.new(0, style.BuffCorner)
+		tip.Parent = root
+		tip.AnchorPoint = Vector2.new(0, 1)
+		tip.TextXAlignment = Enum.TextXAlignment.Left
+		placeBuff()
+	end
 end
 
 table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeCorner))
+-- The same two facts LoadoutUI re-asks on: a touch screen or a keyboard coming
+-- or going changes the answer without changing the size.
+table.insert(connections, UserInputService:GetPropertyChangedSignal("TouchEnabled")
+	:Connect(placeCorner))
+table.insert(connections, UserInputService:GetPropertyChangedSignal("KeyboardEnabled")
+	:Connect(placeCorner))
 placeCorner()
 
 --==============================================================================
@@ -496,6 +630,9 @@ local function refreshBuff()
 		hideMessage(true)
 	else
 		placeBuff()
+		if groupWidth() > placedFor then
+			placeCorner()
+		end
 	end
 end
 
@@ -509,7 +646,7 @@ end
 --==============================================================================
 local FADE = PASS.BuffFade or 0.25
 
-table.insert(connections, buff.Activated:Connect(function()
+table.insert(connections, buffHit.Activated:Connect(function()
 	hideMessage(false)
 	local mine = hideToken
 

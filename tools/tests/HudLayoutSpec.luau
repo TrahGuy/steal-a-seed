@@ -34,11 +34,14 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local RAIL = GameConfig.Rail
 local HOT = GameConfig.Hotbar
 local CFG = HudLayout.Config
 local rect = HudLayout.rect
+-- The compact belt, as every compact answer carries it.
+local COMPACT_HOT = HudLayout.hotMetrics(true)
 
 local pass, fails = 0, {}
 local out = {}
@@ -122,6 +125,11 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 		and udimEq(HudLayout.place(L.banner, Vector2.new(0.5, 0), L.safe), OLD.banner)
 		and udimEq(HudLayout.place(L.skip, Vector2.new(0.5, 0), L.safe), OLD.skip)
 	check(same, tag .. ": desktop, ten slots, and every group at the UDim2 it always had")
+	check(L.hot == HOT and L.cashStyle == CFG.CashStyle.Desktop
+			and L.hotbar.w == 764 and L.hotbar.h == 104
+			and L.cashRoot.w == 316 and L.cashRoot.h == 108 and L.cash.h == 110,
+		tag .. ": the shipped faces -- GameConfig.Hotbar itself, the 764 x 104 strip, the 316 x 108 cash block",
+		r2s(L.hotbar) .. " " .. r2s(L.cashRoot))
 	check(L.index.w == W.X and L.walk.w == W.X and L.walk.h == 46 and L.settings.w == S.X
 			and L.equipSlot == 68 and L.equipGap == 8 and L.banner.w == 560,
 		tag .. ": the same sizes too -- 130-wide slabs, a 130x46 switch, 64x68 BAT/TRAP, a 560 banner")
@@ -134,8 +142,57 @@ end
 
 -- A console has no keyboard: the desktop arrangement with five slots, as before.
 local console = HudLayout.solve(screen(1920, 1080, { keyboard = false }))
-check(not console.compact and console.slots == 5,
-	"no keyboard and no touch keeps the desktop arrangement and five slots, as before")
+check(not console.compact and console.slots == 5 and console.hot == HOT
+		and console.cashStyle == CFG.CashStyle.Desktop,
+	"no keyboard and no touch keeps the desktop arrangement, its faces and five slots, as before")
+
+--==============================================================================
+-- THE DESKTOP FACES ARE THE NUMBERS THAT SHIPPED
+--
+-- The card's and the cash block's sizes were literals inside LoadoutUI and
+-- CashUI until 2026-09-22, when the compact faces needed them named. Every one
+-- is pinned here to the value it had as a literal, so the desktop strip and
+-- the desktop cash block are drawn exactly as they were.
+--==============================================================================
+local SHIPPED_HOT = {
+	SlotWidth = 64, SlotHeight = 92, Gap = 5, TrayPad = 6, TrayBorder = 3, BottomGap = 10,
+	ChipWidth = 52, BagGap = 5, BadgeSize = 16, PreviewTop = 18, PreviewHeight = 48,
+	PreviewInset = 3, NameTop = 64, NameHeight = 21, NameMax = 12, NameMin = 7, ChipHeight = 13,
+	ChipMaxWidth = 42, ChipTextMax = 9, ChipTextMin = 6, InHandHeight = 10, HeldLift = 4,
+	LitThickness = 3.5, CardCorner = 12, CardStroke = 2.5, AuraPad = 8, AuraCorner = 16,
+	BadgeInset = 3, BadgeText = 11, ChipTop = 4, NameLines = 2, HintWidth = 52, HintHeight = 13,
+	GhostPlus = 22, BagIcon = 34, BagIconTop = 9, BagWord = true, BagPillTop = 66,
+	TrayCorner = 18, TrayRim = 6,
+}
+local hotDiff = {}
+for key, want in pairs(SHIPPED_HOT) do
+	if HOT[key] ~= want then
+		table.insert(hotDiff, key .. " = " .. tostring(HOT[key]))
+	end
+end
+check(#hotDiff == 0 and HudLayout.hotMetrics(false) == HOT
+		and HudLayout.hotbarWidth(10, true) == 764 and HudLayout.hotbarHeight() == 104,
+	"the desktop card's numbers are the ones that shipped, read from GameConfig.Hotbar itself",
+	table.concat(hotDiff, ", "))
+
+local SHIPPED_CASH = {
+	Reserve = 232, Drop = 2, SpeedSize = 39, CashSize = 47, SpeedX = 56, SpeedW = 260,
+	SpeedBottom = 44, CashW = 300, SpeedStroke = 2, CashStroke = 3, ShoeScale = 1, ShoeBottom = 44,
+	BuffSize = 46, BuffHit = 46, BuffGap = 10, BuffMinX = 120, BuffDrop = 2, TipSize = 15,
+	-- The message's old `2 - BUFF_SIZE - 4` off the root's bottom edge.
+	TipLift = 48, BuffCorner = 10,
+}
+local DESK = CFG.CashStyle.Desktop
+local cashDiff = {}
+for key, want in pairs(SHIPPED_CASH) do
+	if DESK[key] ~= want then
+		table.insert(cashDiff, key .. " = " .. tostring(DESK[key]))
+	end
+end
+check(#cashDiff == 0 and DESK.Root == Vector2.new(316, 108) and CFG.CashRoot == DESK.Root
+		and CFG.CashReserve == DESK.Reserve and CFG.CashDrop == DESK.Drop,
+	"the desktop cash face is CashUI's shipped numbers: 316 x 108, 39 and 47, the 46-px card 10 px off the text",
+	table.concat(cashDiff, ", "))
 
 -- A narrow desktop window: the old overlap is the cash block beside the strip.
 local narrow = HudLayout.solve(screen(1000, 609))
@@ -194,31 +251,64 @@ for _, case in ipairs(cases) do
 		tag .. ": compact, five slots, every group clear by 8 px and inside the margin",
 		table.concat(problems, "; "))
 
-	-- the rail row
-	local cells = { L.index, L.shop, L.settings, L.walk }
-	local even = true
-	for i, c in ipairs(cells) do
-		even = even and c.w == cells[1].w and c.h == cells[1].h and c.w >= 44 and c.h >= 44
-			and c.y == CFG.Margin
+	-- the rail: on a touch screen, the dock's column and Walk Mode beside it
+	check(L.sidebar and L.dock ~= nil and L.handle ~= nil and L.handleShut ~= nil
+			and L.boost ~= nil and L.chooser ~= nil,
+		tag .. ": a touch screen gets the sidebars -- the dock, its handle, the x2 button and the chooser")
+	local D = CFG.Dock
+	local dock = L.dock
+	local tiles = { L.index, L.shop, L.settings }
+	local column = dock ~= nil
+	for i, c in ipairs(tiles) do
+		column = column and c.w == tiles[1].w and c.h == tiles[1].h and c.w >= 44 and c.h >= 44
+			and c.x == dock.x + D.Pad and c.x + c.w == dock.x + dock.w - D.Pad
 		if i > 1 then
-			even = even and c.x - (cells[i - 1].x + cells[i - 1].w) == RAIL.Gap
+			column = column and c.y - (tiles[i - 1].y + tiles[i - 1].h) == D.Gap
 		end
 	end
-	check(even, tag .. ": Index, Shop, Settings and WALK MODE in one row, same size, same gap, 44+")
+	column = column and L.index.y == dock.y + D.Pad
+		and L.settings.y + L.settings.h == dock.y + dock.h - D.Pad
+		and dock.x == CFG.Margin and dock.y == CFG.Margin
+	check(column, tag .. ": Index, Shop and Settings stand in one column in the dock, same size, 44+",
+		dock and r2s(dock))
+	check(dock ~= nil and dock.y + dock.h + 8 <= L.thumb.y,
+		tag .. ": the dock ends 8 px above the thumbstick", dock and (L.thumb.y - dock.y - dock.h))
+	check(L.walk.w >= 44 and L.walk.h >= 44 and L.walk.y == CFG.Margin
+			and L.walk.x >= dock.x + dock.w + 8,
+		tag .. ": WALK MODE stands on the top row beside the dock, where the dock shutting never moves it",
+		r2s(L.walk))
 	check(L.garden.w >= 44 and L.bag.w >= 44 and L.garden.y == L.bag.y
 			and L.bag.x + L.bag.w == sw - CFG.Margin,
 		tag .. ": Garden and the Bag in one row, the Bag in the corner")
+	local boost = L.boost
+	check(boost ~= nil and boost.y == L.garden.y and boost.w == L.garden.w and boost.h == L.garden.h
+			and boost.x + boost.w + CFG.BoostGap == L.garden.x,
+		tag .. ": the x2 button stands immediately left of Garden, the same size, on the same row",
+		boost and r2s(boost))
 	local indexBadge, gardenBadge = HudLayout.badges(L)
-	check(indexBadge.y >= 0 and gardenBadge.y >= 0 and indexBadge.x + indexBadge.w < L.shop.x,
-		tag .. ": both badges on the glass, and Index's clear of Shop",
-		r2s(indexBadge))
+	check(indexBadge.y >= 0 and gardenBadge.y >= 0 and indexBadge.y + indexBadge.h < L.shop.y
+			and HudLayout.gap(indexBadge, L.walk) >= 8 and HudLayout.gap(gardenBadge, boost) > 0,
+		tag .. ": both badges on the glass, Index's clear of Shop and WALK MODE, Garden's clear of x2",
+		r2s(indexBadge) .. " " .. r2s(gardenBadge))
+
+	-- the handle: a 44 x 44 press on the dock's edge, level with Shop; shut, on
+	-- the safe area's edge at the same height
+	local handle, shut = L.handle, L.handleShut
+	local shopMid = L.shop.y + L.shop.h / 2
+	check(handle.w >= 44 and handle.h >= 44 and handle.x == dock.x + dock.w
+			and math.abs(handle.y + handle.h / 2 - shopMid) <= 1
+			and shut.x == 0 and shut.y == handle.y and shut.w == handle.w,
+		tag .. ": the dock's handle is a 44 x 44 press on its edge, level with Shop, and on the safe edge when shut",
+		r2s(handle) .. " / " .. r2s(shut))
 
 	-- the hotbar
 	local thumb, jump = L.thumb, L.jump
 	check(thumb ~= nil and jump ~= nil, tag .. ": the thumbstick and jump button are reserved")
-	check(L.hotbar.w == HudLayout.hotbarWidth(5, L.chip) and HOT.SlotWidth >= 44
+	check(L.hot == COMPACT_HOT and L.hotbar.w == HudLayout.hotbarWidth(5, L.chip, true)
+			and L.hotbar.h == HudLayout.hotbarHeight(true)
+			and L.hot.SlotWidth >= 44 and L.hot.SlotHeight >= 44
 			and L.hotbar.y + L.hotbar.h == sh - HOT.BottomGap,
-		tag .. ": the strip is five 64-px slots on the bottom edge", r2s(L.hotbar))
+		tag .. ": the strip is the compact belt, five 54 x 76 slots on the bottom edge", r2s(L.hotbar))
 	check(math.abs((L.hotbar.x + L.hotbar.w / 2) - sw / 2) <= 8,
 		tag .. ": and within 8 px of the middle",
 		(L.hotbar.x + L.hotbar.w / 2) - sw / 2)
@@ -227,20 +317,82 @@ for _, case in ipairs(cases) do
 		string.format("%.1f / %.1f", HudLayout.gap(L.hotbar, thumb), HudLayout.gap(L.hotbar, jump)))
 
 	-- cash
-	check(L.cash.w >= CFG.CashReserve and L.cash.h == 110
+	local face = L.cashStyle
+	check(face == CFG.CashStyle.Compact and L.cash.w >= face.Reserve
+			and L.cash.h == face.Root.Y + face.Drop
+			and L.cashRoot.w == face.Root.X and L.cashRoot.h == face.Root.Y
 			and L.cash.y + L.cash.h + 8 <= thumb.y,
-		tag .. ": the cash block is full size and stands above the thumbstick", r2s(L.cash))
-	-- The cash line's 3 px outline draws left of the root: measured live, the
-	-- "$" reached x = 5 when the root sat on the plain 8 px margin.
+		tag .. ": the cash block wears its compact face and stands above the thumbstick", r2s(L.cash))
+	-- The cash line's outline draws left of the root: measured live, the "$"
+	-- reached x = 5 when the root sat on the plain 8 px margin. 3 px is the
+	-- desktop's outline, the thicker of the two.
 	check(L.cash.x - 3 >= CFG.Margin,
 		tag .. ": and the first character's outline is still 8 px inside the safe edge", L.cash.x - 3)
+	-- Under the dock where the screen is tall enough, beside it where not.
+	local under = L.cash.x == CFG.CashLeft and L.cash.y >= dock.y + dock.h + 8
+	local beside = L.cash.x >= dock.x + dock.w + 8
+	check(under or beside,
+		tag .. ": cash and speed stand under the dock, or beside it where the column is too short",
+		r2s(L.cash))
+	-- The x2 card is the button on the top row now; its message hangs under it,
+	-- right-aligned to it, on the glass and off the right sidebar.
+	local tipW = TextService:GetTextSize(GameConfig.Pass.BuffMessage, face.TipSize,
+		Enum.Font.GothamMedium, Vector2.new(1000, 100)).X + 4
+	local tip = rect(boost.x + boost.w - tipW, boost.y + boost.h + 6, tipW, face.TipSize + 3)
+	check(tip.x >= 0 and tip.y + tip.h <= sh and HudLayout.gap(tip, L.equipment) >= 0,
+		tag .. ": the x2 card's message, under its button, stays inside the safe area and off BATS/TRAPS",
+		r2s(tip))
 
-	-- BAT/TRAP
+	--======================================================================
+	-- THE FOOTPRINT
+	--
+	-- What the owner asked for on 2026-09-22, as limits: on the smallest
+	-- listed safe area (772 x 302) the desktop's cards and cash block took
+	-- 419 x 104 and 232 x 110 -- 18.7% and 10.9% of the screen, 29.6%
+	-- between them. The compact faces take 12.8% and 6.0%, and may not grow
+	-- back past these bounds without this failing.
+	--======================================================================
+	local safeArea = sw * sh
+	local hotShare = L.hotbar.w * L.hotbar.h / safeArea
+	local cashShare = L.cash.w * L.cash.h / safeArea
+	check(L.hotbar.w <= 360 and L.hotbar.h <= 88 and hotShare <= 0.14,
+		tag .. ": the strip is at most 360 x 88 and 14% of the safe area",
+		string.format("%s = %.1f%%", r2s(L.hotbar), hotShare * 100))
+	check(L.cashRoot.w <= 220 and L.cashRoot.h <= 78 and cashShare <= 0.07,
+		tag .. ": the cash block is at most 220 x 78 and its reservation 7% of the safe area",
+		string.format("%s = %.1f%%", r2s(L.cash), cashShare * 100))
+	check(hotShare + cashShare <= 0.20,
+		tag .. ": the two together cover at most a fifth of the screen",
+		string.format("%.1f%%", (hotShare + cashShare) * 100))
+
+	-- BATS/TRAPS: the right sidebar
+	local S = CFG.Side
+	local tileW = L.equipment.w - L.equipPad * 2
 	check(L.equipment.x + L.equipment.w == sw - CFG.Margin
 			and L.equipment.y + L.equipment.h + 8 <= jump.y
-			and L.equipment.y >= L.railBottom + 8 and L.equipSlot >= 52,
-		tag .. ": BAT over TRAP against the right edge, above the jump button",
-		r2s(L.equipment) .. " slot " .. L.equipSlot)
+			and L.equipment.y >= L.railBottom + 8 and L.equipSlot >= S.MinTile
+			and tileW >= 44 and L.equipPad == S.Pad
+			and L.equipment.h == L.equipSlot * 2 + L.equipGap + L.equipPad * 2,
+		tag .. ": BATS over TRAPS in the right sidebar, against the edge, above the jump button, 44+",
+		r2s(L.equipment) .. " tile " .. tileW .. "x" .. L.equipSlot)
+
+	-- the chooser, at its widest: out of the sidebar's left side toward the
+	-- middle and no further, one card at the least, a title and a row tall
+	local C = CFG.Chooser
+	local chooser = L.chooser
+	check(chooser.x + chooser.w + 8 == L.equipment.x and chooser.x >= sw / 2 + 8
+			and chooser.w >= C.Pad + C.Card.X + C.Spine
+			and chooser.h == C.Pad * 2 + C.Title + C.Card.Y,
+		tag .. ": the chooser opens leftward from the sidebar, never past the middle, at least one card wide",
+		r2s(chooser))
+	local clearOfChooser = HudLayout.gap(chooser, L.hotbar) >= 8 and HudLayout.gap(chooser, jump) >= 8
+		and HudLayout.gap(chooser, thumb) >= 8 and HudLayout.gap(chooser, L.cash) >= 8
+		and chooser.y >= L.railBottom + 8
+	for _, group in ipairs(HudLayout.groups(L, true)) do
+		clearOfChooser = clearOfChooser and HudLayout.gap(chooser, group.rect) >= 8
+	end
+	check(clearOfChooser,
+		tag .. ": open, it covers none of the belt, cash, the top rows, the thumbs or the sidebars", r2s(chooser))
 
 	-- the clock
 	local clock = L.clock
@@ -268,10 +420,13 @@ for _, case in ipairs(cases) do
 	local least, pair = math.huge, ""
 	for i = 1, #groups do
 		for j = i + 1, #groups do
-			if not (groups[i].name == "thumb" and groups[j].name == "jump") then
+			-- The thumbs are one control each side, and the handle is on the
+			-- dock's edge by design; neither pair is a gap.
+			local names = groups[i].name .. "/" .. groups[j].name
+			if names ~= "thumb/jump" and names ~= "dock/handle" then
 				local apart = HudLayout.gap(groups[i].rect, groups[j].rect)
 				if apart < least then
-					least, pair = apart, groups[i].name .. "/" .. groups[j].name
+					least, pair = apart, names
 				end
 			end
 		end
@@ -281,10 +436,109 @@ for _, case in ipairs(cases) do
 	for _, group in ipairs(groups) do
 		table.insert(line, group.name .. r2s(group.rect))
 	end
-	say(string.format("    %s  safe %dx%d  min gap %.1f (%s)", tag, sw, sh, least, pair))
+	say(string.format("    %s  safe %dx%d  min gap %.1f (%s)  strip %.1f%%  cash %.1f%%",
+		tag, sw, sh, least, pair, hotShare * 100, cashShare * 100))
 	say("      " .. table.concat(line, " "))
 end
 check(worstGap >= 8, "the smallest gap on any listed phone is at least 8 px", worstGap)
+
+--==============================================================================
+-- 2b. THE COMPACT FACES THEMSELVES
+--
+-- The belt and the cash block a phone gets, held to the owner's brief of
+-- 2026-09-22 and to the geometry inside them: nothing in a card meets anything
+-- else, every press is a thumb's size, and every word that can appear fits.
+--==============================================================================
+say("-- the compact faces --")
+local C = COMPACT_HOT
+local tray = HudLayout.hotbarHeight(true)
+check(C.SlotWidth >= 52 and C.SlotWidth <= 56 and C.SlotHeight >= 72 and C.SlotHeight <= 78
+		and tray >= 82 and tray <= 88 and C.Gap >= 3 and C.Gap <= 4
+		and C.BadgeSize >= 13 and C.BadgeSize <= 15 and C.PreviewHeight >= 40 and C.PreviewHeight <= 44
+		and C.ChipTextMax >= 9 and C.ChipTextMax <= 10 and C.ChipWidth >= 48 and C.ChipWidth <= 52,
+	"the compact belt is in the brief's bands: 52-56 x 72-78 cards, an 82-88 tray, 3-4 gaps, a 13-15 badge, a 40-44 preview, 9-10 px chip words, a 48-52 Bag cell",
+	string.format("%dx%d tray %d gap %d badge %d preview %d chip %d bag %d", C.SlotWidth, C.SlotHeight,
+		tray, C.Gap, C.BadgeSize, C.PreviewHeight, C.ChipTextMax, C.ChipWidth))
+check(C.NameLines == 1 and C.InHandHeight == 0 and C.BagWord == false,
+	"one-line names, no IN HAND strip, and a Bag cell without its word")
+check(C.SlotWidth >= 44 and C.SlotHeight >= 44 and C.ChipWidth >= 44 and C.SlotHeight >= 44
+		and CFG.CashStyle.Compact.BuffHit >= 44,
+	"every compact press is at least 44 x 44: a card, the Bag cell, and the x2 card's touch area")
+check(C.PreviewTop + C.PreviewHeight <= C.NameTop and C.NameTop + C.NameHeight <= C.SlotHeight - 2
+		and C.BadgeInset + C.BadgeSize <= C.SlotWidth - 3 - C.ChipMaxWidth
+		and C.BagIconTop + C.BagIcon <= C.BagPillTop and C.BagPillTop + 18 <= C.SlotHeight - 3,
+	"inside a compact card nothing meets: preview over name, badge beside chip, icon over count")
+
+-- Every word the chip can carry, at the smallest size refreshHotbar will use.
+local chipWords = { HOT.Tags.bat.text, HOT.Tags.trap.text, HOT.Tags.pod.text }
+for i = 1, SeedData.TierCount do
+	table.insert(chipWords, string.upper(SeedData.TierName(i)))
+end
+local chipRoom = C.ChipMaxWidth - 6
+local chipCut = {}
+for _, word in ipairs(chipWords) do
+	local width = TextService:GetTextSize(word, C.ChipTextMin, Enum.Font.FredokaOne, Vector2.new(400, 40)).X
+	if width > chipRoom then
+		table.insert(chipCut, string.format("%s %.0f", word, width))
+	end
+end
+check(#chipCut == 0, string.format("all %d chip words fit the compact chip without an ellipsis", #chipWords),
+	table.concat(chipCut, ", "))
+
+-- The compact belt is ONE table every compact answer shares, with every key the
+-- desktop card has -- the colours too -- and no key the desktop lacks.
+local a = HudLayout.solve(screen(801, 392, { touch = true })).hot
+local b = HudLayout.solve(screen(956, 440, { touch = true, keyboard = false })).hot
+check(a == b and a == COMPACT_HOT and a ~= HOT,
+	"every compact answer carries the same belt table, so an owner redraws only on a change of face")
+local missing, unknown = {}, {}
+for key in pairs(HOT) do
+	if COMPACT_HOT[key] == nil then
+		table.insert(missing, key)
+	end
+end
+for key in pairs(HOT.Compact) do
+	if HOT[key] == nil then
+		table.insert(unknown, key)
+	end
+end
+check(#missing == 0, "the belt has every key the desktop card has", table.concat(missing, ", "))
+check(#unknown == 0, "and the Compact block names no key the desktop card lacks, where a typo would be ignored",
+	table.concat(unknown, ", "))
+
+-- The compact cash face.
+local CC = CFG.CashStyle.Compact
+check(CC.Root.X >= 190 and CC.Root.X <= 220 and CC.Root.Y >= 68 and CC.Root.Y <= 78
+		and CC.SpeedSize >= 25 and CC.SpeedSize <= 29 and CC.CashSize >= 33 and CC.CashSize <= 37
+		and 50 * CC.ShoeScale >= 30 and 50 * CC.ShoeScale <= 34
+		and CC.BuffSize >= 34 and CC.BuffSize <= 40 and CC.BuffHit >= 44,
+	"the compact cash face is in the brief's bands: 190-220 x 68-78, speed 25-29, cash 33-37, a 30-34 shoe, a 34-40 card in a 44+ touch area")
+local reserveOk = true
+local reserveNote = {}
+for _, face in ipairs({ DESK, CC }) do
+	local widest = TextService:GetTextSize("$9.99Qa", face.CashSize, Enum.Font.LuckiestGuy,
+		Vector2.new(4000, 200)).X
+	local reach = math.floor(widest) + face.BuffGap + (face.BuffSize + face.BuffHit) / 2
+	reserveOk = reserveOk and reach <= face.Reserve
+	table.insert(reserveNote, string.format("%.0f of %d", reach, face.Reserve))
+end
+check(reserveOk, "in both faces the reservation holds the widest balance with the card and its touch area",
+	table.concat(reserveNote, ", "))
+local facesOk = true
+for _, face in ipairs({ DESK, CC }) do
+	facesOk = facesOk
+		and face.SpeedBottom <= face.Root.Y - (face.CashSize + 4)
+		and face.ShoeBottom - 38 * face.ShoeScale >= 0 and 50 * face.ShoeScale <= face.SpeedX
+		and face.SpeedX + face.SpeedW <= face.Root.X and face.CashW <= face.Root.X
+		and face.BuffDrop + (face.BuffHit - face.BuffSize) / 2 <= face.Drop
+end
+check(facesOk, "in both faces the speed line ends above the cash line, the shoe stays in the block, and the card's touch area is inside the reserved group")
+
+-- A desktop window dragged into compact wears the compact faces too: the face
+-- is the layout's, never TouchEnabled's.
+local dragged = HudLayout.solve(screen(860, 700, { touch = false }))
+check(dragged.compact and dragged.hot == COMPACT_HOT and dragged.cashStyle == CC,
+	"a desktop window dragged into compact wears the compact faces -- decided by the layout, not by touch")
 
 -- Rotating and resizing a phone never changes its slot count.
 local counts = {}
@@ -323,10 +577,25 @@ for _, case in ipairs(cases) do
 end
 check(centred, "the widest name stays centred at its old height on every listed phone")
 check(clear, "and clears both top rows by 8 px on all of them")
-local tiny = HudLayout.solve(screen(560, 320, { touch = true }))
-local dx = HudLayout.notice(tiny, widest, 30, 50 - TOPBAR)
-check(dx ~= 0 or select(2, HudLayout.notice(tiny, widest, 30, 50 - TOPBAR)) ~= 50 - TOPBAR,
-	"where it cannot stay centred between the rows it moves rather than overlap them")
+-- A top band too narrow for the widest name: a small desktop window's compact
+-- rows, and a phone just too narrow for it -- sized off the measured name, so
+-- centring it is impossible and sliding it between the rows is not. (A 560 x
+-- 320 PHONE is no longer such a case: its top-left row is only Walk Mode now,
+-- and the name stays centred.)
+local squeezed = math.floor(widest + 336)
+for _, input in ipairs({ screen(560, 320, { touch = false }), screen(squeezed, 400, { touch = true }) }) do
+	local tiny = HudLayout.solve(input)
+	local dx, top = HudLayout.notice(tiny, widest, 30, 50 - TOPBAR)
+	local box = rect(tiny.safe.X / 2 + dx - widest / 2, top, widest, 30)
+	local apart = true
+	for _, group in ipairs(HudLayout.groups(tiny, true)) do
+		apart = apart and HudLayout.gap(box, group.rect) >= 8
+	end
+	check((dx ~= 0 or top ~= 50 - TOPBAR) and apart,
+		string.format("%dx%d%s: where it cannot stay centred between the rows it moves rather than overlap them",
+			input.viewport.X, input.viewport.Y, if input.touch then " phone" else " window"),
+		string.format("dx %.1f top %.1f", dx, top))
+end
 
 --==============================================================================
 -- 4. THE CLOCK ON A SCREEN WHERE THE TOPBAR BITES
@@ -527,8 +796,10 @@ check(not layoutSource:find("Instance.new", 1, true) and not layoutSource:find("
 -- Per-frame hooks, counted before this change; none may be added.
 local FRAME_HOOKS = {
 	CashUI = 2, IndexUI = 0, ShopUI = 0, SettingsUI = 0, WalkModeUI = 1, GardenUI = 1,
-	LoadoutUI = 2, WorldClock = 1, TutorialUI = 1, BiomeGuideUI = 0,
+	LoadoutUI = 2, WorldClock = 1, TutorialUI = 1, BiomeGuideUI = 0, RailDrawerUI = 0,
 }
+-- The two owners that draw into the shared rail layer and make no ScreenGui.
+local LAYER_ONLY = { WalkModeUI = true, RailDrawerUI = true }
 local function count(text, needle)
 	local n, at = 0, 1
 	while true do
@@ -550,7 +821,7 @@ for name, hooks in pairs(FRAME_HOOKS) do
 	check(found == hooks, name .. " has no new per-frame hook", found)
 	check(src ~= nil and src:find('GetPropertyChangedSignal("AbsoluteSize"):Connect(', 1, true) ~= nil,
 		name .. " asks again only when a ScreenGui's size changes")
-	check(src ~= nil and count(src, 'Instance.new("ScreenGui")') == (if name == "WalkModeUI" then 0 else 1)
+	check(src ~= nil and count(src, 'Instance.new("ScreenGui")') == (if LAYER_ONLY[name] then 0 else 1)
 			and not src:find('Instance.new("RemoteEvent")', 1, true),
 		name .. " made no second ScreenGui and no remote")
 end
@@ -567,12 +838,33 @@ check(walk:find("STACKED_LABEL", 1, true) and walk:find("WALK.OnText", 1, true)
 		and walk:find("WALK.OffText", 1, true) and walk:find("relayout:Disconnect()", 1, true),
 	"the compact switch still says WALK MODE and ON or OFF, and drops its hook on the shared layer with itself")
 local settings = sourceOf("SettingsUI") or ""
-check(settings:find("plate.Visible = layout.compact", 1, true) ~= nil,
-	"Settings stands on a plate in the compact row, and only there")
+check(settings:find("plate.Visible = layout.compact and not layout.sidebar", 1, true) ~= nil,
+	"Settings stands on a plate in the compact row, and only there -- on a phone the dock's tile replaces it")
 local cash = sourceOf("CashUI") or ""
 check(cash:find("HudLayout.measure(gui, groupWidth())", 1, true) ~= nil
 		and cash:find("if groupWidth() > placedFor then", 1, true) ~= nil,
 	"the cash block is measured as one group and placed again only if it outgrows its reservation")
+
+-- The two faces are drawn from the answer that places them, by the owners that
+-- already existed: one strip, one cash block, no second controller.
+check(cash:find("applyStyle(layout.cashStyle)", 1, true) ~= nil
+		and not cash:find("UserInputService.TouchEnabled", 1, true)
+		and cash:find("math.floor(textWidth) + style.BuffGap", 1, true) ~= nil
+		and cash:find("buffHit.Activated:Connect(", 1, true) ~= nil,
+	"CashUI takes its face from HudLayout's answer, never from TouchEnabled, places the x2 card off the measured cash text, and takes the press on the full touch area")
+check(loadout:find("local restyled = layout.hot ~= HOT", 1, true) ~= nil
+		and count(loadout, "restyleHotbar()") == 2,
+	"LoadoutUI takes its cards from the same answer, and restyles only from layoutHud")
+local owners = 0
+local strips = 0
+for _, s in ipairs(scripts:GetChildren()) do
+	if s:IsA("LuaSourceContainer") then
+		owners += count(s.Source, 'gui.Name = "SeedCash"')
+		strips += count(s.Source, 'hotbar.Name = "Hotbar"')
+	end
+end
+check(owners == 1 and strips == 1, "still one cash block and one hotbar in the whole client",
+	string.format("%d cash, %d hotbar", owners, strips))
 --==============================================================================
 -- EVERY PANEL DRAWS OVER THE HOTBAR
 --
@@ -603,14 +895,80 @@ check(loadout:find("HudLayout.bag(layout,", 1, true) ~= nil
 	"LoadoutUI places the Bag from HudLayout.bag and resets the scroll on a tab switch, a side slot and a new direction")
 check(loadout:find("padRight), 0, 34)", 1, true) ~= nil,
 	"the one-row tabs stop short of the close button wherever the header has moved it")
-check(select(2, loadout:gsub('Instance.new%("ScrollingFrame"%)', "")) == 1
+check(select(2, loadout:gsub('Instance.new%("ScrollingFrame"%)', "")) == 2
 		and select(2, loadout:gsub('Instance.new%("UIGridLayout"%)', "")) == 2,
-	"still one Bag grid and one info grid -- nothing rebuilt")
+	"still one Bag grid and one info grid, and the chooser's one row -- nothing rebuilt")
 
 local kit = Shared:FindFirstChild("UIKit").Source
 check(kit:find("function UIKit.railShape", 1, true) and kit:find("function UIKit.railBadge", 1, true)
 		and kit:find("if layout.compact then", 1, true),
 	"UIKit reshapes a rail button for its owner and steps modal headers clear of the compact rows")
+
+--==============================================================================
+-- 7. THE PHONE'S SIDEBARS, WIRED
+--
+-- The approved mobile redesign of 2026-09-23, read from the owners that draw
+-- it: every control still has exactly the owner it had, the dock is a frame
+-- they stand in rather than a controller, the belt drops the weapons on a phone
+-- only, and the chooser equips through the verb that already existed.
+--==============================================================================
+say("-- the sidebars, wired --")
+
+-- Only a touch screen is a phone. Every non-touch answer carries none of it.
+local plain = true
+for _, input in ipairs({ screen(1920, 1080), screen(1000, 609), screen(860, 700, { touch = false }),
+	screen(700, 400, { touch = false }), screen(1920, 1080, { keyboard = false }) }) do
+	local L = HudLayout.solve(input)
+	plain = plain and not L.sidebar and L.dock == nil and L.handle == nil and L.handleShut == nil
+		and L.boost == nil and L.chooser == nil and L.equipPad == 0
+end
+check(plain, "no desktop, console or narrow non-touch window gets a dock, an x2 button or a chooser")
+check(HudLayout.solve(screen(700, 400, { touch = false })).compact,
+	"a 700 x 400 desktop window is compact, and still not a phone")
+-- A portrait tablet and a small landscape phone still fit.
+for _, case in ipairs({
+	{ "768x1024 portrait tablet", screen(768, 1024, { touch = true, keyboard = false }) },
+	{ "1366x1024 landscape tablet", screen(1366, 1024, { touch = true, keyboard = false }) },
+}) do
+	local L = HudLayout.solve(case[2])
+	local problems = HudLayout.problems(L)
+	check(L.sidebar and L.fits and #problems == 0, case[1] .. ": the sidebars fit, clean",
+		table.concat(problems, "; "))
+end
+
+for _, name in ipairs({ "IndexUI", "ShopUI", "SettingsUI" }) do
+	local src = sourceOf(name) or ""
+	check(src:find("if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)", 1, true) ~= nil
+			and src:find("UIKit.railShape(button,", 1, true) ~= nil
+			and count(src, "UIKit.railButton(") == 1,
+		name .. " still owns its one rail button, and on a phone stands it in the dock as a tile")
+end
+local drawer = sourceOf("RailDrawerUI") or ""
+check(drawer:find("UIKit.railDock(playerGui)", 1, true) ~= nil
+		and drawer:find("player:GetAttribute(ATTR.OpenPanel) ~= nil", 1, true) ~= nil
+		and drawer:find("layout.handleShut", 1, true) ~= nil
+		and not drawer:find("IndexButton", 1, true) and not drawer:find("ShopButton", 1, true)
+		and not drawer:find("SettingsButton", 1, true),
+	"RailDrawerUI owns the dock's panel, handle and open/shut, steps aside for a panel, and touches no tile")
+check(kit:find("function UIKit.railDock", 1, true) ~= nil
+		and kit:find("layer:FindFirstChild(options.name, true)", 1, true) ~= nil,
+	"the dock is one shared frame, and a re-run rail button finds its old self inside it")
+
+check(loadout:find("or (plantsOnly and liveSlots[nextFree].item ~= nil)", 1, true) ~= nil
+		and loadout:find("local plantsOnly = hud ~= nil and hud.sidebar", 1, true) ~= nil,
+	"on a phone the belt fills with pods and plants only -- the weapons are not drawn twice")
+check(loadout:find("chooser.toggle(category)", 1, true) ~= nil
+		and loadout:find("equipRequest(item)", 1, true) ~= nil
+		and count(loadout, "FireServer(W.EquipAction") == 2
+		and loadout:find("if item.Category == category and owned[item.Id] then", 1, true) ~= nil,
+	"BATS and TRAPS open a chooser of what the profile says is owned, which equips through the one equip verb")
+check(loadout:find("UserInputService.InputBegan:Connect(", 1, true) ~= nil
+		and loadout:find("chooser.close()", 1, true) ~= nil
+		and loadout:find("player.CharacterRemoving:Connect(function()\n\tchooser.close()", 1, true) ~= nil,
+	"the chooser shuts on an outside tap (without swallowing it), a panel opening and the character going")
+check(count(cash, 'buff.Name = "MoneyBuff"') == 1 and cash:find("local at = if layout.sidebar then layout.boost else nil", 1, true) ~= nil
+		and cash:find("buff.Parent = root", 1, true) ~= nil,
+	"one x2 card: on a phone it stands on the top-right row, elsewhere it goes back beside the cash")
 
 end)
 

@@ -73,7 +73,8 @@ src/
     Shared/SeedData.luau        Greenhollow + Dustbowl species, and what they earn
     Shared/BiomeData.luau       the five biomes and where they sit on the road
     Shared/UIKit.luau           the modal, the slab, the lattice and one camera framer
-    Shared/HudLayout.luau       where every HUD group sits, desktop or compact -- numbers only
+    Shared/HudLayout.luau       where every HUD group sits -- desktop, compact, or a touch
+                                screen's two sidebars -- numbers only
     Shared/ReachPoint.luau      pod timer, stacked prompt and PICK UP placement -- numbers only
     Shared/WeaponData.luau      Marigold's shelf: six bats, one trap, prices and combat
     Shared/WeaponModel.luau     their geometry -- Tool, shop viewport and world trap
@@ -121,7 +122,10 @@ src/StarterPlayer/StarterPlayerScripts/
     MarigoldShopUI.client.luau  Marigold's Garden Goods -- opened by her prompt
     WeaponFX.client.luau        how a bat is HELD and SWUNG -- poses the right
                                 arm, and the impact burst
-    LoadoutUI.client.luau       the bag, the two equipment slots, and the hotbar
+    LoadoutUI.client.luau       the bag, the two equipment slots, and the hotbar; on a
+                                touch screen the slots are the right sidebar and its chooser
+    RailDrawerUI.client.luau    TOUCH ONLY: the left dock's panel and handle, which
+                                Index, Shop and Settings each stand their own tile in
     TrapUI.client.luau          the red countdown over a trapped player
 ```
 

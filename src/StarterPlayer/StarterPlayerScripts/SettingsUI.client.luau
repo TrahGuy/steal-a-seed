@@ -159,20 +159,30 @@ UIKit.lattice(plate, {
 	inset = math.max(3, math.floor(RAIL.Radius * 0.35)),
 })
 
--- Third on the rail, from HudLayout. See IndexUI's placeButton.
+-- Third on the rail, from HudLayout. See IndexUI's placeButton. On a touch
+-- screen, the dock's bottom tile: the gear over the word on the slate tile
+-- UIKit.railShape lays over it, so this plate stands down there.
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local iconSize = if layout.compact then COMPACT_GEAR else RAIL.IconBare
-	UIKit.railShape(button, Vector2.new(layout.settings.w, layout.settings.h), iconSize)
+	UIKit.railShape(button, Vector2.new(layout.settings.w, layout.settings.h), iconSize,
+		if layout.sidebar
+			then { label = "SETTINGS", top = RAIL.TileTop, bottom = RAIL.TileBottom, edge = RAIL.SettingsEdge }
+			else nil)
+	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.settings, Vector2.zero, layout.safe)
-	plate.Visible = layout.compact
-	-- The drawn stand-in, if the artwork never loaded, follows the same size.
+	plate.Visible = layout.compact and not layout.sidebar
+	-- The drawn stand-in, if the artwork never loaded, follows the same size --
+	-- and on a tile, the icon's place above the word.
 	local drawn = button:FindFirstChild("GearDrawn")
 	if drawn and drawn:IsA("GuiObject") then
-		drawn.Size = UDim2.fromOffset(iconSize - 8, iconSize - 8)
+		local side = if layout.sidebar then HudLayout.Config.Dock.Icon else iconSize - 8
+		drawn.Size = UDim2.fromOffset(side, side)
+		drawn.AnchorPoint = if layout.sidebar then Vector2.new(0.5, 0) else Vector2.new(0.5, 0.5)
+		drawn.Position = if layout.sidebar then UDim2.new(0.5, 0, 0, 4) else UDim2.fromScale(0.5, 0.5)
 	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
