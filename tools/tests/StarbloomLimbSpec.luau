@@ -2,10 +2,14 @@
 --==============================================================================
 -- Steal a Seed :: StarbloomLimbSpec
 --
--- Cosmospire's limbs, Voidpetal's and Astralhorn's legs, and the four pillar legs
--- of the Supernovus colossus, MEASURED. Every
--- number here is one a reviewer can check; nothing here is a
--- judgement about whether the art looks right, which only an eye can make.
+-- The legs of all five Starbloom creatures -- the Moonbulb Prowler's four root
+-- legs (Novaorb), the Crescent Reedwalker's four stilts (Cosmospire),
+-- Voidpetal's cat legs, the Mooncrest Stag's four jointed legs (Astralhorn) and
+-- the four pillar legs of the Supernovus colossus -- MEASURED, and everything
+-- else PlantSway moves on them: every Leaf and every eye must stay on the body
+-- in every pose it draws. Every number here is one a reviewer can check;
+-- nothing here is a judgement about whether the art looks right, which only an
+-- eye can make.
 --
 --   python -m http.server 8731            (from the repo root)
 --
@@ -34,6 +38,11 @@
 --    clustering below is a copy of PlantSway's and has to be kept in step with
 --    it; there is an assertion at the end that fails if the two files stop
 --    agreeing about what a leg word is.
+--
+-- AND A BALL IS A SPHERE. The engine draws a Ball as a sphere of its smallest
+-- axis, so a leg sunk into a round bulb is measured against the sphere, never
+-- against the box around it -- the box would report a joint the eye can see
+-- is open.
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -84,6 +93,12 @@ do
 end
 local LEG_SWING = math.rad(tonumber(string.match(sway.Source,
 	"local LEG_SWING = math%.rad%((%d+%.?%d*)%)")) or 21)
+-- The arm swing every "Leaf" takes about its own centre, and how far an eye
+-- turns in its socket: the other two things PlantSway moves on these bodies.
+local SWING_AMP = math.rad(assert(tonumber(string.match(sway.Source,
+	"local SWING_AMP = math%.rad%((%d+%.?%d*)%)")), "could not find SWING_AMP in PlantSway"))
+local GAZE_MAX = math.rad(assert(tonumber(string.match(sway.Source,
+	"local GAZE_MAX = math%.rad%((%d+%.?%d*)%)")), "could not find GAZE_MAX in PlantSway"))
 
 --==============================================================================
 -- EXACT DISTANCE BETWEEN TWO ORIENTED BOXES
@@ -121,8 +136,51 @@ local function obbGap(pa: BasePart, ca: CFrame, pb: BasePart, cb: CFrame): numbe
 	return best
 end
 
--- The lowest corner of a box, in world Y.
+--==============================================================================
+-- AND A BALL IS A SPHERE
+--
+-- The engine draws a Ball as a sphere of its SMALLEST axis, so the box around it
+-- is not the part. Against a sphere the distance is the centre's distance to
+-- the other box, less the radius -- signed the same way obbGap is, negative
+-- inside.
+--==============================================================================
+local function isBall(p: BasePart): boolean
+	return p:IsA("Part") and p.Shape == Enum.PartType.Ball
+end
+
+local function radiusOf(p: BasePart): number
+	return math.min(p.Size.X, p.Size.Y, p.Size.Z) * 0.5
+end
+
+local function pointBoxGap(pt: Vector3, part: BasePart, cf: CFrame): number
+	local l = cf:PointToObjectSpace(pt)
+	local h = part.Size * 0.5
+	local q = Vector3.new(math.clamp(l.X, -h.X, h.X), math.clamp(l.Y, -h.Y, h.Y),
+		math.clamp(l.Z, -h.Z, h.Z))
+	local outside = (l - q).Magnitude
+	if outside > 0 then
+		return outside
+	end
+	return -math.min(h.X - math.abs(l.X), h.Y - math.abs(l.Y), h.Z - math.abs(l.Z))
+end
+
+local function partGap(pa: BasePart, ca: CFrame, pb: BasePart, cb: CFrame): number
+	if isBall(pa) and isBall(pb) then
+		return (ca.Position - cb.Position).Magnitude - radiusOf(pa) - radiusOf(pb)
+	elseif isBall(pa) then
+		return pointBoxGap(ca.Position, pb, cb) - radiusOf(pa)
+	elseif isBall(pb) then
+		return pointBoxGap(cb.Position, pa, ca) - radiusOf(pb)
+	end
+	return obbGap(pa, ca, pb, cb)
+end
+
+-- The lowest point of a part, in world Y: a box by its corners, a ball by its
+-- radius.
 local function lowestY(part: BasePart, cf: CFrame): number
+	if isBall(part) then
+		return cf.Position.Y - radiusOf(part)
+	end
 	local h = part.Size * 0.5
 	local a = axesOf(cf)
 	return cf.Position.Y - (math.abs(a[1].Y) * h.X + math.abs(a[2].Y) * h.Y
@@ -285,48 +343,81 @@ local function posed(model: Model, rig, a: number, yaw: number): { [BasePart]: C
 end
 
 --==============================================================================
--- THE TWO SPECIES, AND THE CHAINS THAT HAVE TO STAY SHUT
+-- THE FIVE SPECIES, AND THE CHAINS THAT HAVE TO STAY SHUT
+--
+-- `body` lists the masses a leg may sink its top into -- exact part names --
+-- and a chain link to BODY is shut if the leg is inside ANY of them: the
+-- Mooncrest Stag's front thighs sit in its chest and its rear ones in the rear
+-- body, so no single part is "the" body. `parts`, `lights` and `emitters` pin
+-- the approved build and its effect budget at every tier.
 --==============================================================================
+local BODY = "<body>"
+
 local SPEC = {
-	cosmospire = {
-		body = "Thorax",
+	-- The Moonbulb Prowler (approved 2026-09-23): four short root legs, a thigh
+	-- sunk in the bulb and a foot under it.
+	novaorb = {
+		body = { "BulbLower", "BulbRear", "BellyPlate" },
 		chain = {
-			{ "shoulder", "Femur", "Thorax" },
+			{ "hip", "Thigh", BODY },
+			{ "ankle", "Thigh", "Foot" },
+		},
+		legs = 4,
+		ground = { "Foot" },
+		parts = 30, lights = 1, emitters = 0,
+	},
+	-- The Crescent Reedwalker (approved 2026-09-23) kept the stilt chain.
+	cosmospire = {
+		body = { "Thorax" },
+		chain = {
+			{ "shoulder", "Femur", BODY },
 			{ "knee", "Femur", "Knee" },
 			{ "knee", "Knee", "Tibia" },
 			{ "ankle", "Tibia", "StiltClaw" },
 		},
 		legs = 4,
 		ground = { "StiltClaw" },
+		parts = 38, lights = 1, emitters = 0,
 	},
 	voidpetal = {
-		body = "SpineTorso",
+		body = { "SpineTorso" },
 		chain = {
-			{ "shoulder", "Haunch", "SpineTorso" },
+			{ "shoulder", "Haunch", BODY },
 			{ "knee", "Haunch", "Shin" },
 			{ "ankle", "Shin", "Paw" },
 			{ "toes", "Paw", "Toe" },
 		},
 		legs = 4,
 		ground = { "Paw", "Toe" },
+		parts = 39, lights = 1, emitters = 0,
+		-- KNOWN, NOT FIXED: the top petal of the six-petal mane touches only the
+		-- two petals beside it and stands 0.058 authored studs off the skull
+		-- (measured 2026-09-23, when section 7 first ran). Voidpetal was outside
+		-- that day's approved redesign, so it is reported rather than moved. One
+		-- loose part is tolerated here; a second fails.
+		knownLoose = 1,
 	},
+	-- The Mooncrest Stag (approved 2026-09-23): thigh -> shin -> hoof -> toe,
+	-- the shin counter-bent under the hip.
 	astralhorn = {
-		body = "CarapaceTorso",
+		body = { "Chest", "RearBody", "Belly" },
 		chain = {
-			{ "hip", "PillarThigh", "CarapaceTorso" },
-			{ "ankle", "PillarThigh", "Hoof" },
+			{ "hip", "Thigh", BODY },
+			{ "knee", "Thigh", "Shin" },
+			{ "ankle", "Shin", "Hoof" },
 			{ "toes", "Hoof", "Toe" },
 		},
 		legs = 4,
 		ground = { "Hoof", "Toe" },
+		parts = 47, lights = 1, emitters = 0,
 	},
 	-- The Cosmic Star Colossus (2026-09-11): four pillar legs, thigh -> ankle
 	-- collar -> pad -> claws. Three claws on a front foot and two on a rear one;
 	-- a chain entry whose part a leg does not have is skipped for that leg.
 	supernovus = {
-		body = "TitanCarapace",
+		body = { "TitanCarapace" },
 		chain = {
-			{ "hip", "TitanThigh", "TitanCarapace" },
+			{ "hip", "TitanThigh", BODY },
 			{ "ankle", "TitanThigh", "TitanHock" },
 			{ "ankle", "TitanHock", "TitanFootPad" },
 			{ "ankle", "TitanThigh", "TitanFootPad" },
@@ -336,8 +427,21 @@ local SPEC = {
 		},
 		legs = 4,
 		ground = { "TitanFootPad", "TitanToe1", "TitanToe2", "TitanToe3" },
+		parts = 81, lights = 3, emitters = 2,
 	},
 }
+
+-- The named body masses of one built model, by exact name.
+local function bodiesOf(model: Model, spec): { BasePart }
+	local list = {}
+	for _, name in ipairs(spec.body) do
+		local p = model:FindFirstChild(name)
+		if p and p:IsA("BasePart") then
+			table.insert(list, p)
+		end
+	end
+	return list
+end
 
 local TIERS = { 1, 4, 6, 7 }
 
@@ -356,15 +460,6 @@ local function findIn(items, word: string): BasePart?
 	for _, it in ipairs(items) do
 		if string.find(it.part.Name, word) then
 			return it.part
-		end
-	end
-	return nil
-end
-
-local function partNamed(model: Model, word: string): BasePart?
-	for _, d in ipairs(model:GetChildren()) do
-		if d:IsA("BasePart") and string.find(d.Name, word) then
-			return d
 		end
 	end
 	return nil
@@ -512,7 +607,11 @@ for id, spec in pairs(SPEC) do
 		local hs = SeedData.FrameHeight(SeedData.Get(id), tier)
 			/ (require(Shared:WaitForChild("StarbloomForms")).AuthoredHeight[id])
 
-		local body = partNamed(model, spec.body)
+		local bodies = bodiesOf(model, spec)
+		if tier == TIERS[1] then
+			check(#bodies == #spec.body, string.format("%s: every named body mass exists", id),
+				string.format("%d of %d", #bodies, #spec.body))
+		end
 		local worstByLabel = {}
 		local deepestByLabel = {}
 
@@ -522,9 +621,20 @@ for id, spec in pairs(SPEC) do
 				for _, c in ipairs(spec.chain) do
 					local label, an, bn = c[1], c[2], c[3]
 					local a = findIn(h.items, an)
-					local b = findIn(h.items, bn) or (if bn == spec.body then body else nil)
-					if a and b and a ~= b then
-						local g = obbGap(a, at[a], b, at[b])
+					local g: number? = nil
+					if a and bn == BODY then
+						-- Shut if the leg is inside ANY of the body masses.
+						for _, b in ipairs(bodies) do
+							local gb = partGap(a, at[a], b, at[b])
+							g = if g == nil then gb else math.min(g, gb)
+						end
+					elseif a then
+						local b = findIn(h.items, bn)
+						if b and a ~= b then
+							g = partGap(a, at[a], b, at[b])
+						end
+					end
+					if g ~= nil then
 						-- Reported in AUTHORED studs so tiers compare.
 						local gg = g / hs
 						worstByLabel[label] = math.max(worstByLabel[label] or -math.huge, gg)
@@ -607,6 +717,24 @@ for id, spec in pairs(SPEC) do
 			string.format("%s @%s: nothing reaches below it", id, SeedData.TierName(tier)),
 			string.format("%+.6f at %s", lowestAny, lowestAnyName))
 		local _ = baseY
+
+		-- How far a sole's heel or toe tips below the plane at the ends of the
+		-- stride. PlantSway swings a whole leg rigidly about its hip, so a flat
+		-- sole turned LEG_SWING drives one corner down into the soil. Reported,
+		-- not failed: it is the rig's, shared by every legged species.
+		local hsGround = SeedData.FrameHeight(SeedData.Get(id), tier)
+			/ (require(Shared:WaitForChild("StarbloomForms")).AuthoredHeight[id])
+		local dip = 0
+		for _, a in ipairs({ LEG_SWING, -LEG_SWING }) do
+			local at = posed(model, entry.rig, a, 0)
+			for _, h in ipairs(entry.rig.hips) do
+				for _, it in ipairs(h.items) do
+					dip = math.min(dip, lowestY(it.part, at[it.part]))
+				end
+			end
+		end
+		say(string.format("   %-11s %-8s stride dip %+.3f authored (%+.2f studs) at the ends of the swing",
+			id, SeedData.TierName(tier), dip / hsGround, dip))
 	end
 end
 
@@ -649,7 +777,30 @@ for id, spec in pairs(SPEC) do
 	check(model.PrimaryPart ~= nil and model.PrimaryPart.Name == "Base",
 		string.format("%s: PrimaryPart is still Base", id),
 		model.PrimaryPart and model.PrimaryPart.Name or "NONE")
-	local _ = spec
+
+	-- The approved build and its effect budget, at every tier: the same parts,
+	-- one light apiece (the Mythic's three), and no emitter a design did not
+	-- ask for. PlantGlow keeps every one of those lights dark by day.
+	local counts = {}
+	local countsOk = true
+	for _, tier in ipairs(TIERS) do
+		local n, l, e = 0, 0, 0
+		for _, d in ipairs(rigs[id][tier].model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				n += 1
+			elseif d:IsA("Light") then
+				l += 1
+			elseif d:IsA("ParticleEmitter") or d:IsA("Beam") or d:IsA("Trail") then
+				e += 1
+			end
+		end
+		table.insert(counts, string.format("T%d %d/%d/%d", tier, n, l, e))
+		if n ~= spec.parts or l ~= spec.lights or e ~= spec.emitters then
+			countsOk = false
+		end
+	end
+	check(countsOk, string.format("%s: %d parts, %d light(s), %d emitter(s) at every tier", id,
+		spec.parts, spec.lights, spec.emitters), table.concat(counts, "  "))
 end
 
 --==============================================================================
@@ -683,19 +834,213 @@ for id in pairs(SPEC) do
 end
 
 --==============================================================================
--- 7. THE ONE THAT WAS NOT TOUCHED
+-- 7. NOTHING ELSE COMES AWAY
+--
+-- The legs are one of three things PlantSway moves. Every direct child named
+-- "Leaf" swings about its own centre as an arm, and every pupil orbits the
+-- centre of its eye (the eyeball itself stays put). Everything else -- brows,
+-- cheeks, jaws, crowns, bracts, antlers, the eyeballs -- rides the body's one
+-- PivotTo and cannot leave it. So each thing that moves is held to what it
+-- touched at rest:
+--
+--   a leg (every part on one hip)    to the body it sinks into
+--   a Leaf                           to the body it grows from
+--   a pupil                          to its eye
+--
+-- "Body" is every part no rig claims. A leg that touches only another leg, or a
+-- leaf that touches only another leaf, is attached to nothing that holds still,
+-- and fails. Measured through a whole stride, in a turn and at both ends of the
+-- gaze, at Tiny, Mega and Colossal.
+--
+-- The lids are the one moving part excused: a lid sits proud of its eye by
+-- design and sweeps over it to blink, and the girth spread lifts it a little
+-- further off at the big tiers.
+--
+-- AND ONLY THE FACE IS A FACE. A name ending Eye, Pupil, Lid or Glint joins the
+-- gaze rig and a name like Root<Word><n> joins the root walker; a decoration
+-- carrying one would be dragged about as a feature it is not.
 --==============================================================================
 say("")
-say("-- untouched --")
-for _, id in ipairs({ "novaorb" }) do
-	local model = build(id, 1)
-	local n = 0
-	for _, d in ipairs(model:GetDescendants()) do
-		if d:IsA("BasePart") then
-			n += 1
+say("-- everything else stays on --")
+local TOUCH = 0.01 -- authored studs
+
+-- Who moves each part: "leg<i>", "leaf<j>", "gaze<k>" (an eye and its pupils),
+-- "lid", or nil for the body.
+local function motionRig(model: Model, rig)
+	local role = {}
+	for hi, h in ipairs(rig.hips) do
+		for _, it in ipairs(h.items) do
+			role[it.part] = "leg" .. hi
 		end
 	end
-	say(string.format("   %-11s %d parts", id, n))
+	local inv = rig.pivot:Inverse()
+	local leaves = {}
+	for _, d in ipairs(model:GetChildren()) do
+		if d:IsA("BasePart") and d.Name == "Leaf" then
+			local off = inv * d.CFrame
+			table.insert(leaves, { part = d, offset = off, sign = if off.Position.X < 0 then -1 else 1 })
+			role[d] = "leaf" .. #leaves
+		end
+	end
+	local eyes, pupils = {}, {}
+	for _, d in ipairs(model:GetChildren()) do
+		if d:IsA("BasePart") then
+			if d.Name:sub(-5) == "Pupil" then
+				table.insert(pupils, d)
+			elseif d.Name:sub(-3) == "Eye" then
+				table.insert(eyes, d)
+			elseif d.Name:sub(-3) == "Lid" then
+				role[d] = "lid"
+			end
+		end
+	end
+	-- The eyeball itself never moves -- PlantSway turns only what rides on it --
+	-- so it is body, and its pupils orbit its centre.
+	local gaze = {}
+	for k, e in ipairs(eyes) do
+		for _, p in ipairs(pupils) do
+			if p.Name:sub(1, -6) == e.Name:sub(1, -4) then
+				role[p] = "gaze" .. k
+				table.insert(gaze, { part = p, eye = e, localCF = e.CFrame:ToObjectSpace(p.CFrame) })
+			end
+		end
+	end
+	return role, leaves, gaze
+end
+
+-- Every part at one moment -- stride phase, turn, gaze -- composed from rest the
+-- way PlantSway composes it: legs about their hip, leaves about their own
+-- centre, pupils about the centre of their eye.
+local function posedAll(model: Model, rig, leaves, gaze, phase: number, yaw: number,
+	gy: number, gp: number): { [BasePart]: CFrame }
+	local target = rig.pivot * CFrame.Angles(0, yaw, 0)
+	local pinv = rig.pivot:Inverse()
+	local at = {}
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			at[d] = target * (pinv * d.CFrame)
+		end
+	end
+	local swing = math.sin(phase) * SWING_AMP
+	for _, lf in ipairs(leaves) do
+		at[lf.part] = target * lf.offset * CFrame.Angles(swing * lf.sign, 0, 0)
+	end
+	for _, h in ipairs(rig.hips) do
+		local a = math.sin(phase + h.phase) * LEG_SWING
+		for _, it in ipairs(h.items) do
+			at[it.part] = target * h.frame * CFrame.Angles(a, 0, 0) * it.rel
+		end
+	end
+	local turn = CFrame.Angles(gp, gy, 0)
+	for _, g in ipairs(gaze) do
+		at[g.part] = target * (pinv * g.eye.CFrame) * turn * g.localCF
+	end
+	return at
+end
+
+local FULL_POSES = {}
+for k = 0, 7 do
+	table.insert(FULL_POSES, { string.format("stride %d/8", k), k * math.pi / 4, 0, 0, 0 })
+end
+table.insert(FULL_POSES, { "turn", math.pi / 2, math.rad(37), 0, 0 })
+-- Tracking a player clamps yaw and pitch to GAZE_MAX each, so the corners are
+-- the extremes the client can reach.
+table.insert(FULL_POSES, { "gaze up-left", 0, 0, GAZE_MAX, GAZE_MAX })
+table.insert(FULL_POSES, { "gaze down-right", 0, 0, -GAZE_MAX, -GAZE_MAX })
+table.insert(FULL_POSES, { "gaze up-right", 0, 0, -GAZE_MAX, GAZE_MAX })
+table.insert(FULL_POSES, { "gaze down-left", 0, 0, GAZE_MAX, -GAZE_MAX })
+
+for id in pairs(SPEC) do
+	for _, tier in ipairs({ 1, 4, 7 }) do
+		local entry = rigs[id][tier]
+		local model, rig = entry.model, entry.rig
+		local hs = SeedData.FrameHeight(SeedData.Get(id), tier)
+			/ (require(Shared:WaitForChild("StarbloomForms")).AuthoredHeight[id])
+		local role, leaves, gaze = motionRig(model, rig)
+		local parts = {}
+		for _, d in ipairs(model:GetChildren()) do
+			if d:IsA("BasePart") and d.Name ~= "Base" and role[d] ~= "lid" then
+				table.insert(parts, d)
+			end
+		end
+		-- Each moving group, and every body part it touches at rest.
+		local anchors = {}
+		for i = 1, #parts do
+			for j = i + 1, #parts do
+				local a, b = parts[i], parts[j]
+				local ra, rb = role[a], role[b]
+				if (ra == nil) ~= (rb == nil)
+					and partGap(a, a.CFrame, b, b.CFrame) <= TOUCH * hs then
+					local moving = if ra then a else b
+					local still = if ra then b else a
+					local g = role[moving]
+					anchors[g] = anchors[g] or {}
+					table.insert(anchors[g], { moving, still })
+				end
+			end
+		end
+		local groups = {}
+		for _, r in pairs(role) do
+			if r ~= "lid" then
+				groups[r] = true
+			end
+		end
+		local poses = {}
+		for pi, pose in ipairs(FULL_POSES) do
+			poses[pi] = posedAll(model, rig, leaves, gaze, pose[2], pose[3], pose[4], pose[5])
+		end
+		local unanchored, detached = {}, {}
+		local worst, worstWhere = -math.huge, "none"
+		for g in pairs(groups) do
+			local list = anchors[g]
+			if not list then
+				table.insert(unanchored, g)
+			else
+				for pi, pose in ipairs(FULL_POSES) do
+					local at = poses[pi]
+					local best = math.huge
+					for _, pair in ipairs(list) do
+						best = math.min(best, partGap(pair[1], at[pair[1]], pair[2], at[pair[2]]))
+					end
+					local bestA = best / hs
+					if bestA > worst then
+						worst, worstWhere = bestA, g .. " at " .. pose[1]
+					end
+					if bestA > TOUCH then
+						table.insert(detached, string.format("%s at %s %+.3f", g, pose[1], bestA))
+						break
+					end
+				end
+			end
+		end
+		table.sort(unanchored)
+		table.sort(detached)
+		local known = SPEC[id].knownLoose or 0
+		check(#unanchored <= known, string.format("%s @%s: every leg, Leaf and pupil touches the body at rest%s",
+			id, SeedData.TierName(tier), if known > 0 then string.format(" (%d known exception)", known) else ""),
+			if #unanchored > 0 then table.concat(unanchored, ",") else nil)
+		check(#detached == 0, string.format("%s @%s: none of them leaves it in any pose", id,
+			SeedData.TierName(tier)), if #detached > 0 then table.concat(detached, "; ")
+			else string.format("closest to leaving %+.3f authored, %s", worst, worstWhere))
+	end
+
+	-- Only the face is a face, and nothing opts into the root walker.
+	local stray = {}
+	for _, d in ipairs(rigs[id][1].model:GetChildren()) do
+		if d:IsA("BasePart") then
+			local n = d.Name
+			local faceWord = n:sub(-3) == "Eye" or n:sub(-5) == "Pupil" or n:sub(-3) == "Lid"
+				or n:sub(-5) == "Glint"
+			if faceWord and not (string.match(n, "^Left") or string.match(n, "^Right")) then
+				table.insert(stray, n)
+			end
+			if string.match(n, "^Root%a*%d$") or string.match(n, "^PropRoot%d$") then
+				table.insert(stray, n)
+			end
+		end
+	end
+	check(#stray == 0, string.format("%s: only the Left/Right eyes carry face words, and nothing is a root", id),
+		if #stray > 0 then table.concat(stray, ",") else nil)
 end
 
 scratch:Destroy()

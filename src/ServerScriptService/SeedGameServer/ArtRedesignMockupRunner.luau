@@ -2,9 +2,13 @@
 --==============================================================================
 -- Steal a Seed :: ArtRedesignMockupRunner   (PREVIEW ONLY)
 --
--- Stands the proposed pod families and the proposed Novaorb, Cosmospire and
--- Astralhorn (RedesignForms) beside the production models (CreatureModel) for
--- the owner to judge. Nothing here touches live data, tags, prompts or saves.
+-- Stands the five proposed pod families (RedesignForms -- NOT approved, kept
+-- for a later review) beside the production pods (CreatureModel) for the owner
+-- to judge. Below them, Novaorb, Cosmospire and Astralhorn at Tiny, Mega and
+-- Colossal: those three redesigns were approved on 2026-09-23 and are now the
+-- production builds, so the plant rows come straight from CreatureModel -- there
+-- is no "old" or "proposed" plant any more, only the live one to inspect.
+-- Nothing here touches live data, tags, prompts or saves.
 --
 -- Same shape as PlantSizeMockupRunner: a module nothing calls, invoked from
 -- the Command Bar in Edit --
@@ -149,43 +153,16 @@ local function floor(centre: Vector3, sx: number, sz: number, parent: Instance)
 end
 
 --==============================================================================
--- BUILDING ONE THING, OLD OR PROPOSED
+-- BUILDING ONE THING
 --
--- A proposed plant gets exactly what CreatureModel.BuildCreature gives a
--- Starbloom species: the invisible Base plate as PrimaryPart, the four
--- attributes, the frame height for its tier and the damped girth spread. The
--- girth formula is CreatureModel's own, copied so the preview scales as the
--- production path would.
+-- A plant is always the production build: the three approved redesigns live in
+-- StarbloomForms now, and every plant on this stage comes through the same
+-- CreatureModel.Build a garden uses. A pod is production unless `proposed`.
 --==============================================================================
-local GIRTH_REF = SeedData.Girth(SeedData.BaseTier)
-local function girthSpread(G: number): number
-	return 1 + 0.16 * (G - GIRTH_REF) / GIRTH_REF
-end
-
-local function buildPlant(id: string, tier: number, at: CFrame, parent: Instance, proposed: boolean): Model
+local function buildPlant(id: string, tier: number, at: CFrame, parent: Instance): Model
 	local sp = SeedData.Get(id)
 	assert(sp, "unknown species " .. id)
-	if not proposed then
-		return CreatureModel.Build(sp, tier, CreatureModel.STAGE_GROWN, at, parent)
-	end
-	local model = Instance.new("Model")
-	model.Name = "Creature_" .. id
-	model:SetAttribute("SpeciesId", id)
-	model:SetAttribute("Rarity", sp.Rarity)
-	model:SetAttribute("Tier", tier)
-	model:SetAttribute("Stage", CreatureModel.STAGE_GROWN)
-	model:SetAttribute("Redesign", true)
-	model.Parent = parent
-	local H = SeedData.FrameHeight(sp, tier)
-	local G = SeedData.Girth(tier)
-	local stemW = H * 0.13 * G
-	local base = part("Base", Vector3.new(stemW * 1.2, 0.06, stemW * 1.2), at * CFrame.new(0, 0.03, 0),
-		sp.Soil, model, 1)
-	local authored = RedesignForms.AuthoredHeight[id]
-	assert(authored, "no proposed builder for " .. id)
-	RedesignForms.Build(model, id, at, H / authored, girthSpread(G))
-	model.PrimaryPart = base
-	return model
+	return CreatureModel.Build(sp, tier, CreatureModel.STAGE_GROWN, at, parent)
 end
 
 local function speciesOf(biome: string): SeedData.Species
@@ -434,9 +411,10 @@ end
 --==============================================================================
 -- THE HOTBAR CARD BOARD
 --
--- Eleven compact hotbar cards (54 x 76, the 50 x 42 preview glass) drawn on a
+-- Thirteen compact hotbar cards (54 x 76, the 50 x 42 preview glass) drawn on a
 -- board through UIKit.itemPreview, the same viewport and framing the real
--- hotbar uses. Old plants above, proposed plants below, the proposed pods last.
+-- hotbar uses: the three live plants, then the production pods, then the
+-- proposed pods beneath them.
 --==============================================================================
 local function cardBoard(at: CFrame, parent: Instance)
 	local COLS, ROWS = 5, 3
@@ -487,19 +465,19 @@ local function cardBoard(at: CFrame, parent: Instance)
 
 	for i, id in ipairs(PLANTS) do
 		local sp = SeedData.Get(id) :: SeedData.Species
-		card(i, 1, "OLD " .. sp.Name, function(p)
-			return CreatureModel.Build(sp, 1, CreatureModel.STAGE_GROWN, CFrame.new(), p)
-		end, "plant", INK_OLD)
-		card(i, 2, "NEW " .. sp.Name, function(p)
-			return buildPlant(id, 1, CFrame.new(), p, true)
-		end, "plant", INK_NEW)
+		card(i, 1, sp.Name, function(p)
+			return buildPlant(id, 1, CFrame.new(), p)
+		end, "plant", INK)
 	end
 	for i, biome in ipairs(BIOMES) do
+		card(i, 2, "LIVE " .. biome .. " pod", function(p)
+			return buildPod(biome, 1, CFrame.new(), p, false)
+		end, "plant", INK_OLD)
 		card(i, 3, "NEW " .. biome .. " pod", function(p)
 			return buildPod(biome, 1, CFrame.new(), p, true)
 		end, "plant", INK_NEW)
 	end
-	label("HOTBAR CARDS (54 x 76) -- old plants / proposed plants / proposed pods",
+	label("HOTBAR CARDS (54 x 76) -- approved plants (live) / production pods / proposed pods",
 		at * CFrame.new(0, canvasH / 24 + 2, 0), parent, INK, 30)
 end
 
@@ -518,7 +496,7 @@ function ArtRedesignMockupRunner.Build(): (Folder, string)
 	root.Parent = workspace
 
 	floor(ORIGIN + Vector3.new(70, 0, 190), 320, 520, root)
-	label("ART REDESIGN PREVIEW -- PREVIEW ONLY, awaiting owner approval. Left: OLD (shipped). Right/below: PROPOSED.",
+	label("POD REDESIGN PREVIEW -- the pods are PREVIEW ONLY and NOT approved (OLD = shipped, NEW = proposed). The plants below are the approved, live builds.",
 		CFrame.new(ORIGIN + Vector3.new(50, 26, -20)), root, INK, 60)
 
 	local report: { string } = {}
@@ -599,29 +577,27 @@ function ArtRedesignMockupRunner.Build(): (Folder, string)
 	--==========================================================================
 	local PLANT_Z = 200
 	local PLANT_PITCH = 30
-	label("PLANTS: OLD row, then PROPOSED at Tiny, Mega and Colossal. Tiny and Mega rows walk: R.Simulate(true) / R.Pose(0.25)",
-		CFrame.new(ORIGIN + Vector3.new(30, 12, PLANT_Z - 14)), root, INK_NEW, 56)
-	say("-- PLANTS --")
+	label("PLANTS (approved, live): Tiny, Mega and Colossal. Tiny and Mega rows walk: R.Simulate(true) / R.Pose(0.25)",
+		CFrame.new(ORIGIN + Vector3.new(30, 12, PLANT_Z - 14)), root, INK, 56)
+	say("-- PLANTS (production builds) --")
 	local plantRows = {
-		{ z = 0, tier = 1, proposed = false, tag = "OLD  Tiny", pitch = PLANT_PITCH, walk = true },
-		{ z = 24, tier = 1, proposed = true, tag = "NEW  Tiny", pitch = PLANT_PITCH, walk = true },
-		{ z = 52, tier = 4, proposed = true, tag = "NEW  Mega", pitch = PLANT_PITCH + 6, walk = true },
-		{ z = 100, tier = 7, proposed = true, tag = "NEW  Colossal", pitch = 64, walk = false },
+		{ z = 0, tier = 1, tag = "Tiny", pitch = PLANT_PITCH, walk = true },
+		{ z = 28, tier = 4, tag = "Mega", pitch = PLANT_PITCH + 6, walk = true },
+		{ z = 76, tier = 7, tag = "Colossal", pitch = 64, walk = false },
 	}
 	for _, row in ipairs(plantRows) do
-		local ink = if row.proposed then INK_NEW else INK_OLD
-		label(row.tag, CFrame.new(ORIGIN + Vector3.new(-22, 4, PLANT_Z + row.z)), root, ink, 16)
+		label(row.tag, CFrame.new(ORIGIN + Vector3.new(-22, 4, PLANT_Z + row.z)), root, INK, 16)
 		for i, id in ipairs(PLANTS) do
 			local at = CFrame.new(ORIGIN + Vector3.new((i - 1) * row.pitch, 0, PLANT_Z + row.z))
 			local group = Instance.new("Model")
-			group.Name = string.format("Plant_%s_%s_T%d", if row.proposed then "NEW" else "OLD", id, row.tier)
+			group.Name = string.format("Plant_%s_T%d", id, row.tier)
 			group.Parent = root
 			cell(at, group, Color3.fromRGB(120, 110, 96), CELL_X, CELL_Z)
 			if row.tier <= 4 then
 				avatar(at * CFrame.new(-CELL_X * 0.5 - 2.5, 0, 0), group)
 			end
-			local m = buildPlant(id, row.tier, at, group, row.proposed)
-			say(plantLine(string.format("%s %s T%d", if row.proposed then "NEW" else "OLD", id, row.tier), m, at))
+			local m = buildPlant(id, row.tier, at, group)
+			say(plantLine(string.format("%s T%d", id, row.tier), m, at))
 			if row.walk then
 				registerWalker(m)
 			end
@@ -631,20 +607,20 @@ function ArtRedesignMockupRunner.Build(): (Folder, string)
 		end
 	end
 
-	-- Crowding: the proposed three at Big on the real cell pitch, with their
-	-- Starbloom neighbours between them at Tiny.
+	-- Crowding: the three at Big on the real cell pitch, with their Starbloom
+	-- neighbours between them at Tiny.
 	local CROWD_Z = PLANT_Z + 160
-	label("CROWDING: proposed (Big) between shipped Voidpetal and Supernovus (Tiny), on the real 16 x 13.7 cell",
-		CFrame.new(ORIGIN + Vector3.new(30, 8, CROWD_Z - 12)), root, INK_NEW, 50)
-	local crowd = { { "novaorb", true }, { "voidpetal", false }, { "cosmospire", true }, { "supernovus", false }, { "astralhorn", true } }
+	label("CROWDING: the three (Big) between Voidpetal and Supernovus (Tiny), on the real 16 x 13.7 cell",
+		CFrame.new(ORIGIN + Vector3.new(30, 8, CROWD_Z - 12)), root, INK, 50)
+	local crowd = { { "novaorb", 2 }, { "voidpetal", 1 }, { "cosmospire", 2 }, { "supernovus", 1 }, { "astralhorn", 2 } }
 	for i, entry in ipairs(crowd) do
-		local id, proposed = entry[1] :: string, entry[2] :: boolean
+		local id, tier = entry[1] :: string, entry[2] :: number
 		local at = CFrame.new(ORIGIN + Vector3.new((i - 1) * CELL_X, 0, CROWD_Z))
 		local group = Instance.new("Model")
 		group.Name = "Crowd_" .. id
 		group.Parent = root
 		cell(at, group, Color3.fromRGB(90, 80, 70), CELL_X, CELL_Z)
-		local m = buildPlant(id, if proposed then 2 else 1, at, group, proposed)
+		local m = buildPlant(id, tier, at, group)
 		registerWalker(m)
 	end
 	avatar(CFrame.new(ORIGIN + Vector3.new(-14, 0, CROWD_Z)), root)

@@ -1,5 +1,156 @@
 # Steal a Seed — Session Handoff
 
+## Starbloom plant redesigns integrated: Novaorb, Cosmospire, Astralhorn — 2026-09-23 (CLAUDE)  (COMMITTED — see the commit below; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
+
+**Owner decision, 2026-09-23:** approved ONLY the three Starbloom plant redesigns
+from preview commit fba9ed0 — Novaorb "Moonbulb Prowler", Cosmospire "Crescent
+Reedwalker", Astralhorn "Mooncrest Stag". **The five pod redesigns are NOT
+approved.** Production pods are unchanged; the proposed pods stay preview-only
+in `RedesignForms` for a later review.
+
+**Nothing had to be restored.** No broader integration existed: no builder file
+had changed since fba9ed0 (`git log` / `git diff fba9ed0 HEAD` checked), so there
+was no pod change to roll back.
+
+### What changed (four files)
+
+* `StarbloomForms.luau` — the production path (`CreatureModel.BuildCreature` ->
+  `StarbloomForms.Build`). `buildNovaorb` / `buildCosmospire` /
+  `buildAstralhorn` are now the approved builders, code-identical to
+  `RedesignForms` at fba9ed0 (compared with comments and whitespace stripped).
+  Added the `plate` / `slab` / `rod` helpers and three palette entries
+  (IndigoBark, Lavender, Ivory). The "placid" void eye — Novaorb's alone — takes
+  the approved focused cyan pupil. `AuthoredHeight` is the approved preview's:
+  novaorb 4.82, cosmospire 9.71, astralhorn 8.88. Voidpetal and Supernovus are
+  byte-identical.
+* `RedesignForms.luau` — pods only: its plant builders, `AuthoredHeight` and
+  `Build` are gone (they live in StarbloomForms now). Its header says the pods
+  are NOT approved and that no production module may require it. The pod code
+  is byte-identical.
+* `ArtRedesignMockupRunner.luau` — the plant rows (Tiny, Mega, Colossal,
+  crowding) come from the production `CreatureModel.Build`; the card board shows
+  live plants / production pods / proposed pods. Pod rows unchanged.
+* `tools/tests/StarbloomLimbSpec.luau` — Novaorb and the Mooncrest Stag in the
+  leg chains (a leg may sink into any of a list of body masses), balls measured
+  as spheres, part / light / emitter pins at every tier, a stride-dip report,
+  and a new section 7: every leg group, Leaf and pupil stays touching the body
+  through 8 stride phases, a turn and 4 gaze extremes at Tiny / Mega / Colossal;
+  only Left/Right parts carry face words; nothing opts into the root walker.
+
+No change to SeedData, CreatureModel, PlantService, PlantSway, the economy, the
+save or GameConfig. Species ids, names, rarity, income, ownership, the tier
+ladder and the save schema are untouched; a saved plant simply rebuilds with the
+new look when its garden loads (verified below).
+
+### Verified
+
+**Fingerprints** — every part's class, name, shape, size, frame relative to the
+base, colour, material, surfaces and flags, plus lights, emitters and
+attachments, hashed per model:
+
+* production pods, 25 species x 7 tiers: identical before and after (175/175);
+* grown plants: the other 22 species identical at all 7 tiers (Voidpetal and
+  Supernovus included); only the three redesigns changed;
+* the three production builds == the approved preview (RedesignForms at
+  fba9ed0) at all 7 tiers, part for part (Base excluded — the preview built its
+  own);
+* proposed pods (`RedesignForms.BuildPod`): identical before and after the plant
+  code was removed.
+
+**Measured on the production build** (identical to the approved preview): parts
+incl. Base 30 / 38 / 47 at every tier; one PointLight each (FacePlate /
+SeedChamber / Skull) and no emitters; Leaf 2 / 3 / 4; Tiny h x w x d
+4.0 x 3.3 x 3.4 / 8.0 x 2.5 x 3.5 / 7.3 x 3.1 x 5.3; Mega heights 10.6 / 21.3 /
+19.3; Colossal 30.4 / 61.1 / 55.3; lowest point 0.000; four hips each, worst
+leg-part margin 1.67 / 1.31 / 2.79.
+
+Against the retired designs (as approved; reported, not changed): Cosmospire is
+6.5% taller at every tier (8.04 against 7.55 at Tiny); Novaorb and Astralhorn
+are within 1%. Astralhorn's 47 parts are over the art bible's 25-40 band — a
+documented exception in the StarbloomForms header, as Supernovus is.
+
+**Specs:** full suite 42/42, no failure (StarbloomLimbSpec 133, PlantFormsSpec
+388, PlantStreamingSpec 12, HeldRestoreSpec 51, HatchRevealSpec 62,
+PlantGlowSpec 39, HudLayoutSpec 472, ...). Mutation checks on the new spec
+sections: a leg word on a body part (BulbHaunch) -> 7 fail; Astralhorn's upper
+petals moved off the body -> 3 fail; Novaorb's thighs pulled out of the bulb ->
+4 fail; a face word on the jaw -> 1 fail; StarbloomForms restored byte-exact.
+`rojo build` OK (3,697,060 bytes); `git diff --check` clean; the four changed
+files compile.
+
+**Studio Play**, disposable store `StealASeed_audit_starbloom` (its key deleted
+afterwards; the owner's `StealASeed_v1` never touched; GameConfig restored
+byte-exact):
+
+* Garden: all seven tiers of each species planted through
+  `PlantService.PlaceAt`, beside Voidpetal, Supernovus, Nubkin, Bellchime,
+  Toadcap and Cinderpaw (plot level 5, 20 of 20).
+* The real PlantSway, measured black-box from the client: every part carries
+  its `SwayRestOffset` stamp, and the rigid groups it actually moves are
+  exactly four legs (Novaorb `FL/FR/BL/BR_Thigh` + `_Foot`; Cosmospire
+  Femur + Knee + Tibia + StiltClaw x4; Astralhorn `_Thigh` + `_Shin` + `_Hoof` +
+  `_Toe` x4), each Leaf alone, each pupil alone (orbiting its eye) and the lid
+  pair. Everything else — cheeks, jaw, brow, face plate, sepals, bracts, seed
+  chamber, antlers, bark plates, the eyeballs — moved 0 (within 0.05 deg and
+  0.001 stud) relative to the body while walking and turning (74-360 deg of
+  facing), Tiny to Colossal. Legs swing to ~21 deg.
+* Streaming: the visitor path (`RemovePersistentPlayer`) plus a trip to
+  Starbloom — models left WHOLE (never partial) and all 18 came back in 3.1 s;
+  re-streamed parts were re-stamped at the authored pose (within 5e-4) and
+  grouped identically; persistence restored after.
+* No drift: plants that never left still had rest stamps equal to the authored
+  build after minutes of walking.
+* Rebuilds: 9 pick-up / replant cycles (Novaorb x5, Cosmospire x2, Astralhorn
+  x2). The client saw each old model removed before the new one arrived, each
+  new one stamped with one light, never a duplicate, no leftover aura parts.
+* Held: a picked-up Tiny Novaorb in hand — 30 parts welded to the Base handle,
+  none anchored, rigid (4e-6 stud) while walking.
+* Day / night: all lights off by day (0 of 17), on at night at authored
+  brightness (1.2 / 1.6 / 1.5), off again the next day.
+* Hatch: a Tiny pod of each, 30 s, then the HatchPrompt held (never Instant
+  Hatch). Each reveal built the new design (Cosmospire 38 parts with BractLong,
+  SeedChamber, Stalk2; Astralhorn 47, captured at its final frame); the hatched
+  plant arrives in hand; reveal folders cleaned up; the Almanac lists all three.
+* Save round trip: Play stopped (leave save) and restarted on the same
+  throwaway store — 20 plants and 10 held rows restored, every redesigned plant
+  rebuilt with the new geometry.
+* Ground: at rest every sole is on the plane at every tier. Walking, PlantSway
+  swings a whole leg rigidly by 21 deg, so a flat sole's corner tips below the
+  plane at the ends of the stride — the rig's, shared by every legged species.
+  Tiny / Colossal, in studs: Novaorb -0.25 / -2.02 (retired design -0.24 /
+  -1.99), Astralhorn -0.23 / -1.99 (retired -0.35 / -2.90), Cosmospire -0.01 /
+  -0.12 (retired -0.02 / -0.17); Voidpetal -0.27 / -2.29 and Supernovus -0.53 /
+  -4.50 for comparison. No worse than what shipped.
+* UI framing: the desktop hotbar live, and a board built from the real
+  `UIKit.itemPreview` at the phone card (54 x 76, glass 50 x 42), the desktop
+  card, and `UIKit.framePlant` at the Index card (fill 0.8) and stage (0.6):
+  all three framed, nothing clipped. Cosmospire reads thin in the phone glass —
+  its approved width is 0.3 of its height. Index, Garden and Bag all frame by
+  drawn bounds, with no per-species numbers.
+* Captures: Tiny, Mega and Colossal rows on the Edit stage; the garden by day
+  and night; the plant in hand; the reveal still.
+
+### Not verified / limits
+
+* **Live Roblox: not published.** Owner check after a publish: the garden's
+  Novaorb / Cosmospire / Astralhorn show the new designs and walk whole; one
+  look from a second player's side (visitor view).
+* The Index, Garden and Bag panels were not opened live: opening one needs a
+  real click, which needs Studio in the foreground. Their framing code was run
+  directly (above); the owner's eyes on the open panels are the last check. The
+  phone card was checked at phone size on desktop, not on a phone.
+* Two real players: not tested (Play Solo; the visitor path was simulated).
+* **Voidpetal, not touched:** the top petal of its six-petal mane touches only
+  the petals beside it and stands 0.058 authored studs (~0.44 at Colossal) off
+  the skull. Found by the new spec section, recorded there as one known
+  exception, not fixed — outside this approval. Worth an owner look.
+* Lids on every Starbloom species hover up to 0.036 authored studs above their
+  eye at Mega and up (the girth spread moves parts apart without growing them)
+  — family behaviour that predates this change.
+* The pod redesigns remain preview-only and NOT approved. `RedesignForms` is
+  required by nothing in production; `ArtRedesignMockupRunner` is its one
+  caller.
+
 ## Held plants lost to the void: a snapshot may add, only a transaction removes — 2026-09-23 (CLAUDE)  (COMMITTED 3295ae0; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
 
 **Owner report:** equip an owned plant, jump off the map, die and respawn --
@@ -224,7 +375,7 @@ T1/T3/T4/T7, Toadcap T1/T4/T6/T7, Bellchime T2, Dunebud T2.
   free one; in Studio that opens a test-purchase dialog at most (nothing is
   charged) and nothing was confirmed.
 
-## Art redesign preview: five pod families + Novaorb / Cosmospire / Astralhorn — 2026-09-22 (CLAUDE)  (PREVIEW ONLY — awaiting owner approval; nothing in production changed)
+## Art redesign preview: five pod families + Novaorb / Cosmospire / Astralhorn — 2026-09-22 (CLAUDE)  (DECIDED 2026-09-23: the three plants APPROVED and integrated — see the entry above; the five pods NOT approved, still preview-only)
 
 **Task:** rebuild the visual designs of the five biome pod families and the
 three Starbloom plants as a Studio preview for visual approval. No species,
