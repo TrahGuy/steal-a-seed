@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Mobile HUD redesign: the phone's two sidebars — 2026-09-23 (CLAUDE)  (COMMITTED, see `git log` for "phone's two sidebars"; STUDIO-VERIFIED ON A FORCED-TOUCH VIEWPORT; REAL PHONE SIZES AND TAP FLOWS PENDING THE OWNER)
+## Mobile HUD redesign: the phone's two sidebars — 2026-09-23 (CLAUDE)  (COMMITTED 96443fb; STUDIO-VERIFIED ON A FORCED-TOUCH VIEWPORT; REAL PHONE SIZES AND TAP FLOWS PENDING THE OWNER)
 
 **Owner brief:** implement the approved mockup
 `Steal an Artifact/output/imagegen/podnappers-mobile-sidebar-mockup-v2.png` on
