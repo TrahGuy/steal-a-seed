@@ -607,6 +607,45 @@ local function settle(model: Model)
 	end
 end
 
+--==============================================================================
+-- THE REST POSE LIVES ON THE PARTS, NOT IN THIS SCRIPT
+--
+-- The build below measures a plant ONCE -- leaf offsets, hips, sockets, eye
+-- frames, lid drops, eye sizes -- and animates it from that record forever. It
+-- is only right if the plant is AT REST when it is measured, and a fresh copy of
+-- this script is not handed a plant at rest: it inherits whatever pose the last
+-- copy drew. MEASURED 2026-09-23: five re-runs left standing plants with their
+-- legs and roots bent 11 to 17% of their own height, each copy baking the last
+-- one's stride into its idea of rest.
+--
+-- So the first registration that sees a part writes its rest offset from the
+-- pivot, and its rest size, ON THE PART -- client-only attributes, which outlive
+-- this script and never replicate. Every later registration puts each part back
+-- on that record before anything is measured. A plant streams whole
+-- (PlantService.render), so the first registration is the frame the part
+-- arrived from the server, which is exactly the authored pose.
+--==============================================================================
+local REST_OFFSET = "SwayRestOffset"
+local REST_SIZE = "SwayRestSize"
+
+local function restoreRest(model: Model)
+	local pivot = model:GetPivot()
+	local inverse = pivot:Inverse()
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			local offset = d:GetAttribute(REST_OFFSET)
+			local size = d:GetAttribute(REST_SIZE)
+			if typeof(offset) == "CFrame" and typeof(size) == "Vector3" then
+				d.CFrame = pivot * offset
+				d.Size = size
+			else
+				d:SetAttribute(REST_OFFSET, inverse * d.CFrame)
+				d:SetAttribute(REST_SIZE, d.Size)
+			end
+		end
+	end
+end
+
 local function remember(instance: Instance)
 	if not instance:IsA("Model") then
 		return
@@ -657,6 +696,8 @@ local function remember(instance: Instance)
 		if not species then
 			return
 		end
+		-- Before a single measurement: see THE REST POSE LIVES ON THE PARTS.
+		restoreRest(model)
 
 		-- THIS plant's weight, off the model. Two Nubkins in the same bed can be
 		-- 4 kg and 900 kg now, and a heavy one has to sway like a heavy one --

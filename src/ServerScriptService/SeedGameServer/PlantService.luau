@@ -603,6 +603,38 @@ local function render(entry: Planted)
 	end
 	local model = CreatureModel.Build(entry.species, entry.tier, entry.stage,
 		where, plantsFolder(entry.plot))
+	local owner = PlotService.OwnerOf(entry.plot)
+	--==========================================================================
+	-- IT STREAMS AS ONE THING, AND ITS OWNER NEVER LOSES IT
+	--
+	-- MEASURED 2026-09-23, Play with StreamingEnabled: a garden taken out of range
+	-- (a run to Starbloom) and back came home with whole clusters of parts 4 to
+	-- 65 studs from their plants -- a Toadcap's cap over the fence, a Nubkin's
+	-- body standing apart from its face, a Petalpip's six petals in the air.
+	--
+	-- The engine default streams a model PART BY PART. The server never moves
+	-- these parts (see THE MARKER RIDES WHERE THE PLANT IS), so every part that
+	-- comes back arrives at the spot this line built it on, while PlantSway has
+	-- walked the plant somewhere else and moves it by the RELATIVE PivotTo that
+	-- keeps whatever offset each part already has. Two shapes, both logged:
+	-- parts that left and returned while the Base stayed (the model is never
+	-- re-measured), and a Base that left and returned while other parts stayed
+	-- (the model is re-measured from half a server pose and half a walked one).
+	-- Either way the offset is frozen in for the rest of the session.
+	--
+	-- PlantSway's contract is that a plant arrives and leaves WHOLE -- the Base
+	-- arriving builds the walk, the Base leaving forgets it -- and this makes the
+	-- engine keep it. For every other player the model is Atomic, all of it or
+	-- none of it; for the owner it is persistent, because GardenUI reads the
+	-- garden off these models and an Atomic garden would go blank on a raid.
+	--
+	-- Only a real Player can be persistent; the specs' stand-in owners are
+	-- tables, and those plots still get the Atomic half.
+	--==========================================================================
+	model.ModelStreamingMode = Enum.ModelStreamingMode.PersistentPerPlayer
+	if typeof(owner) == "Instance" and owner:IsA("Player") then
+		model:AddPersistentPlayer(owner)
+	end
 	-- IDENTITY, not position. PlantSway phases its idle off this so a bed is not
 	-- a chorus line, and GardenUI keys its rows on it.
 	model:SetAttribute("PlacementId", entry.id)
@@ -638,7 +670,6 @@ local function render(entry: Planted)
 	-- save that was already finished when the player left.
 	--==========================================================================
 	if entry.stage == CreatureModel.STAGE_GROWN then
-		local owner = PlotService.OwnerOf(entry.plot)
 		if owner then
 			PlayerDataService.MarkSeen(owner, entry.species.Id)
 		end

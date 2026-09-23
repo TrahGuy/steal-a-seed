@@ -1,5 +1,121 @@
 # Steal a Seed — Session Handoff
 
+## Detached plant parts: gardens streamed part by part — 2026-09-23 (CLAUDE)  (COMMITTED — see the commit below; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
+
+**Owner report:** floating pale crown/petal pieces and detached facial features
+beside the garden (screenshot). In the screenshot the pale pieces are a
+Petalpip's `Petal` fins and `FlowerCentre`, and the white cube with a face on
+the fence corner is a Nubkin's `FacePlate` / `Chin` / `Brow` with its face.
+
+### What was broken (reproduced in Studio Play with real streaming)
+
+* Disposable store `StealASeed_audit_sway` (GameConfig swapped in Studio only,
+  reverted byte-exact afterwards, key removed). Ten, then twenty grown plants
+  planted through the real `CarryService.GiveHatched` + `PlantService.PlaceAt`
+  on the test player's own Level 5 plot. The owner's real save was never read
+  or written.
+* A run to Starbloom (1,500 studs) and back. At Starbloom the client streamed
+  the garden out **part by part**: 423 parts fell to 214 while 6-7 of 10 models
+  kept their Base. Home again, four plants had clusters 4.6-65.4 studs off their
+  bodies (Toadcap T6: Belly, Head, CapBrim, CapDome, Gills 65 studs, outside the
+  fence; Nubkin T7: Body, Cap, Flank 47; Nubkin T4: 39; Spiretip T3: Core,
+  Collar, Spire1, 3 Husks 4.6). A second trip on freshly replanted models: 5 of
+  10 (Bellchime 7 parts 40 studs, Petalpip T2 six Petals + Sepals + Belly +
+  Head 25-29, Nubkin T7 28, Nubkin T1 12, Nubkin T4 an arm `Leaf` 7.6).
+* Every detached part was inside its own live, tagged, server-built model in
+  `Plot_01/Plants` -- not an orphan, a Tool, a preview or a hatch effect -- a
+  rigid part (or a rig part the rig had lost track of) whose transform from the
+  Base was off by the distance the plant had walked.
+* Steady state is clean: 15 s of walking, every non-animated part of all ten
+  exactly on its rest offset (0.000). No misclassification, drift or double
+  root transform in the animation itself.
+
+### Cause (confirmed)
+
+1. Plant models used the engine default (non-atomic) `ModelStreamingMode`.
+2. The server never moves a planted creature's parts; every client walks it
+   from the wander attributes. Measured: server Base 34-41 studs from the
+   client's.
+3. PlantSway registers a plant when its Base arrives and then moves it with a
+   RELATIVE `PivotTo`, which keeps whatever offset each part already has. The
+   part-level stream log showed both shapes:
+   * parts left and came back while the Base stayed (Nubkin T7, 7 parts): they
+     returned at the server's spot and were carried along at that offset;
+   * the Base left and came back while other parts stayed: the plant was
+     re-measured from half a server pose and half a walked one -- the parts that
+     never left equal the parts detached (Bellchime 7, Nubkin T1 12, Nubkin T4
+     1, Petalpip T2 11).
+4. Secondary, found on the "repeated script rebuilds" check: a fresh copy of
+   PlantSway takes the pose the previous copy left as its rest. Five re-runs
+   left standing plants with legs, toes and roots bent 11-17% of their height
+   (186 part names off rest by more than 2%). Only re-runs trigger it -- the
+   live client runs PlantSway once -- but it breaks the re-run-safe rule.
+
+### Fix
+
+* `PlantService.render` (the single place a world plant is built, grown or
+  pod): `ModelStreamingMode = PersistentPerPlayer` and `AddPersistentPlayer`
+  for the plot owner. Everyone else streams each plant Atomically -- all of it
+  or none of it; the owner never streams their own garden out, because GardenUI
+  reads the garden off these models and an Atomic garden would go blank on a
+  raid. A stand-in (non-Player) owner in the specs is skipped.
+* `PlantSway.client.luau`: `restoreRest(model)` before the build measures
+  anything. The first registration writes each part's rest offset from the
+  pivot and its rest size on the part as client-only attributes
+  (`SwayRestOffset`, `SwayRestSize`); every later registration puts the part
+  back on that record first. No new loop, controller, scanner or per-frame
+  work.
+* `tools/tests/PlantStreamingSpec.luau` (12 checks): PlantService, fresh-loaded
+  against stand-ins, restores grown plants and a pod and every model is
+  PersistentPerPlayer; PlantSway's `restoreRest`, lifted from its Source and run
+  on real builds (Nubkin, Petalpip, Spiretip, Toadcap, Bellchime, Dunebud,
+  Astralhorn at Tiny/Mega/Colossal), comes back to the authored pose after five
+  walk-and-pose cycles (worst 0.00006 studs, 0.0000 deg, size x1.0000) and when
+  only the Base returns at the server's pose (0.00004). Mutation check: with the
+  mode reverted to Default and the restore disabled, 3 of the 12 fail (4.0
+  studs / 38 deg / eye size x0.0024; 88 studs); both scripts restored
+  byte-exact afterwards.
+
+### Verified after the fix (Studio Play, disposable store, 20 plants)
+
+Garden: Nubkin T1/T2/T4/T7, Petalpip T1/T1/T2/T2/T4/T5/T7, Spiretip
+T1/T3/T4/T7, Toadcap T1/T4/T6/T7, Bellchime T2, Dunebud T2.
+
+* **Owner:** four Starbloom round trips -- the whole garden stayed resident
+  (867 of 867, later 873 of 873 parts), worst non-animated gap 0.000 at every
+  sample, walking and standing, turns included.
+* **Visitor** (owner removed from the persistent list): 6-7 models left whole
+  and came back whole in one batch with their Base (e.g. Toadcap T4: -54 at
+  12.0 s, +54 at 41.5 s); no model was ever partial; home 0.000.
+* **Lifecycle:** restore from the disposable save on join (twice), new grown
+  plants through PlaceAt, a Spiretip T7 picked up with 11.5 s of its leg left
+  and replanted, a pod planted -> free HatchPrompt held -> burst, reveal and
+  pod gone, hatched Petalpip planted: every model PersistentPerPlayer with the
+  owner, 0 detached parts, no loose parts or stray models. Pod rattle and hatch
+  on the final build as well.
+* **Re-runs:** five PlantSway replacements -- standing legs 0.2% of height
+  (was 11-17%), non-animated parts 0.000, one copy running.
+* Screenshots taken in Play before (a Toadcap cap over the fence, a Nubkin body
+  apart from its face) and after (whole plants from the same camera, Colossal
+  three-quarters), shown in the session.
+* Specs: the full suite, 42 of 42, 0 failures (41 existing + the new one),
+  run in Edit from the synced sources. `rojo build` OK; diff --check clean.
+
+### Not verified / limits
+
+* **Live Roblox: not published.** Existing servers keep the old behaviour, and
+  a session that already has detached parts keeps them until the models are
+  rebuilt (rejoin). Owner test after a publish: plant a few plants, run to
+  Starbloom and back twice, look at the garden from the fence.
+* Multiplayer: not available through MCP (Play Solo only). The visitor path
+  was exercised by removing the owner from the persistent list.
+* The owner's garden now stays loaded on the owner's device wherever they are
+  (a full Level 5 garden is about 1,000 parts) and PlantSway keeps animating it
+  on a raid. Not measured on a phone.
+* My harness pressed the paid Instant Hatch prompt once while looking for the
+  free one; in Studio that opens a test-purchase dialog at most (nothing is
+  charged) and nothing was confirmed.
+
 ## Art redesign preview: five pod families + Novaorb / Cosmospire / Astralhorn — 2026-09-22 (CLAUDE)  (PREVIEW ONLY — awaiting owner approval; nothing in production changed)
 
 **Task:** rebuild the visual designs of the five biome pod families and the
