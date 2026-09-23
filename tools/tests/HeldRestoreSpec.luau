@@ -10,6 +10,11 @@
 --   RESPAWN  a death, reset or LoadCharacter destroys the Backpack and the body
 --            with their Tools; the new empty Backpack and the new body both asked
 --            for a snapshot while the gate was open, and saved nothing.
+--   VOID     (2026-09-23) falling off the map, the engine removes the plant Tool
+--            in hand while the body is still the armed one; the watcher's own
+--            sync recorded the bag without it. A snapshot may now only ADD, and
+--            SyncHeldNow with the Tools a transaction destroyed is the only
+--            thing that removes -- exactly those (sections 14-23).
 --
 -- Edit mode:
 --
@@ -28,6 +33,7 @@ local Players = game:GetService("Players")
 local Server = game:GetService("ServerScriptService").SeedGameServer
 local CarryService = require(Server.CarryService)
 local PlayerDataService = require(Server.PlayerDataService)
+local SeedData = require(game:GetService("ReplicatedStorage").SeedGame.Shared.SeedData)
 
 local pass = 0
 local fails: { string } = {}
@@ -386,7 +392,7 @@ local ok, err = pcall(function()
 		local p, pack, body = spawnWith("SoldOne", -211, NINE)
 		local sold = pack:FindFirstChildWhichIsA("Tool") :: Tool
 		sold:Destroy()
-		CarryService.SyncHeldNow(p)
+		CarryService.SyncHeldNow(p, { sold })
 		check(#profiles[p].Held == #NINE - 1, "alive: selling one records eight")
 		step(p, function() p._fire.characterRemoving:Fire(body) end)
 		step(p, function()
@@ -449,6 +455,250 @@ local ok, err = pcall(function()
 		task.wait(1.0)
 		check(plantsIn(newPack) == #NINE and CarryService.IsHeldRestored(p) and smallestWrite("DiesWhileLoading") == #NINE,
 			("load + death: nine built once, into the new Backpack (%d)"):format(plantsIn(newPack)))
+	end
+
+	--==========================================================================
+	-- THE VOID (2026-09-23)
+	--
+	-- Falling past FallenPartsDestroyHeight, the engine removes the equipped
+	-- plant Tool from a body that is still the armed one -- measured in Play 20 ms
+	-- before Humanoid.Died and 3.6 s before CharacterRemoving. Between the two
+	-- only the REAL watchers run: the body's ChildRemoved and its deferred sync.
+	-- No SyncHeldNow is called there -- that call now means a sale.
+	--==========================================================================
+	local function countKey(container: Instance?, id: string, tier: number, hatched: boolean): number
+		local n = 0
+		if container then
+			for _, t in ipairs(container:GetChildren()) do
+				if t:IsA("Tool") and t:GetAttribute("SpeciesId") == id
+					and math.floor(tonumber(t:GetAttribute("CarryingKg")) or 0) == tier
+					and (t:GetAttribute("Hatched") == true) == hatched then
+					n += 1
+				end
+			end
+		end
+		return n
+	end
+
+	-- Equip one plant (the pick, or the first), then let the void destroy it.
+	local function voidTheHeld(p: any, pack: Backpack, body: Model, pick: ((Tool) -> boolean)?): Tool?
+		local chosen: Tool? = nil
+		for _, t in ipairs(pack:GetChildren()) do
+			if t:IsA("Tool") and t:GetAttribute("SpeciesId") and (not pick or pick(t)) then
+				chosen = t
+				break
+			end
+		end
+		if not chosen then
+			return nil
+		end
+		chosen.Parent = body
+		task.wait(0.1)
+		chosen:Destroy()
+		-- The deferred ChildRemoved sync lands here, still armed.
+		task.wait(0.15)
+		return chosen
+	end
+
+	-- The death that follows, in the engine's order. Returns the new pair.
+	local function respawnAfter(p: any, pack: Backpack, body: Model): (Backpack, Model)
+		step(p, function() p._fire.characterRemoving:Fire(body) end)
+		step(p, function()
+			p.Character = nil
+			body:Destroy()
+		end)
+		step(p, function() pack:Destroy() end)
+		local newPack = newBackpack(p, false)
+		step(p, function() p._fire.childAdded:Fire(newPack) end)
+		local newBodyModel = newBody(p, false)
+		step(p, function() p._fire.characterAdded:Fire(newBodyModel) end)
+		task.wait(0.6)
+		return newPack, newBodyModel
+	end
+
+	local function toolsOwned(pack: Backpack, body: Model?): number
+		return plantsIn(pack) + plantsIn(body)
+	end
+
+	--== 14. THE VOID TAKES THE PLANT IN HAND, BEFORE THE BODY IS REMOVED =======
+	do
+		local p, pack, body = spawnWith("FellHolding", -214, NINE)
+		local mark = #writes
+		local lost = voidTheHeld(p, pack, body, function(t)
+			return t:GetAttribute("SpeciesId") == "novaorb"
+		end)
+		check(lost ~= nil and CarryService.IsHeldRestored(p),
+			"void: the novaorb in hand is gone while the body is still the armed one")
+		check(#profiles[p].Held == #NINE and smallestWrite("FellHolding", mark) >= #NINE,
+			("void: the record still lists nine and no write in the gap carried fewer (%d rows, smallest %s)"):format(
+				#profiles[p].Held, tostring(smallestWrite("FellHolding", mark))))
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(toolsOwned(newPack, newBodyModel) == #NINE
+				and countKey(newPack, "novaorb", 4, true) + countKey(newBodyModel, "novaorb", 4, true) == 1,
+			("void: all nine are back after the respawn, the novaorb exactly once (%d)"):format(
+				toolsOwned(newPack, newBodyModel)))
+		check(#profiles[p].Held == #NINE and smallestWrite("FellHolding", mark) >= #NINE,
+			"void: the save still lists nine, and no write through the whole death was smaller")
+	end
+
+	--== 15. ONE OF FIVE IDENTICAL COPIES ======================================
+	do
+		local p, pack, body = spawnWith("FellWithTwin", -215, NINE)
+		voidTheHeld(p, pack, body, function(t)
+			return t:GetAttribute("SpeciesId") == "nubkin" and t:GetAttribute("CarryingKg") == 1
+		end)
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(countKey(newPack, "nubkin", 1, true) + countKey(newBodyModel, "nubkin", 1, true) == 5
+				and toolsOwned(newPack, newBodyModel) == #NINE,
+			("identical copies: all five tier-1 nubkins come back, each once (%d)"):format(
+				countKey(newPack, "nubkin", 1, true) + countKey(newBodyModel, "nubkin", 1, true)))
+	end
+
+	--== 16. FIVE TIMES OVER, NOTHING ACCUMULATES ==============================
+	do
+		local p, pack, body = spawnWith("FellFiveTimes", -216, NINE)
+		local mark = #writes
+		local always, twins = true, true
+		for _ = 1, 5 do
+			voidTheHeld(p, pack, body, nil)
+			local newPack, newBodyModel = respawnAfter(p, pack, body)
+			if toolsOwned(newPack, newBodyModel) ~= #NINE then
+				always = false
+			end
+			if countKey(newPack, "nubkin", 1, true) + countKey(newBodyModel, "nubkin", 1, true) ~= 5 then
+				twins = false
+			end
+			pack, body = newPack, newBodyModel
+		end
+		check(always and twins and #profiles[p].Held == #NINE and smallestWrite("FellFiveTimes", mark) >= #NINE,
+			"void x5: nine every time, five identical nubkins every time, no write ever smaller")
+	end
+
+	--== 17. SOLD, THEN INTO THE VOID ==========================================
+	do
+		local p, pack, body = spawnWith("SoldThenFell", -217, NINE)
+		local sold = pack:FindFirstChildWhichIsA("Tool") :: Tool
+		sold:Destroy()
+		CarryService.SyncHeldNow(p, { sold })
+		check(#profiles[p].Held == #NINE - 1, "sale then void: the sale records eight")
+		voidTheHeld(p, pack, body, nil)
+		check(#profiles[p].Held == #NINE - 1, "sale then void: the void takes nothing more off")
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(toolsOwned(newPack, newBodyModel) == #NINE - 1,
+			("sale then void: eight come back -- not the sold one, yes the held one (%d)"):format(
+				toolsOwned(newPack, newBodyModel)))
+	end
+
+	--== 18. PLANTED FROM THE HAND, THEN DEAD AT ONCE ==========================
+	do
+		local p, pack, body = spawnWith("PlantedThenFell", -218, NINE)
+		local planted = pack:FindFirstChildWhichIsA("Tool") :: Tool
+		planted.Parent = body
+		task.wait(0.1)
+		-- PlantService.PlaceAt: the equipped Tool is consumed, then recorded.
+		planted:Destroy()
+		CarryService.SyncHeldNow(p, { planted })
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(#profiles[p].Held == #NINE - 1 and toolsOwned(newPack, newBodyModel) == #NINE - 1,
+			("planted then dead: the planted one is not in the bag again (%d)"):format(
+				toolsOwned(newPack, newBodyModel)))
+	end
+
+	--== 19. A HATCH GRANT, THEN INTO THE VOID =================================
+	do
+		local p, pack, body = spawnWith("HatchedThenFell", -219, NINE)
+		CarryService.GiveHatched(p, SeedData.Get("petalpip") :: any, 5)
+		task.wait(0.15)
+		check(#profiles[p].Held == #NINE + 1, "hatch then void: the grant is recorded (ten)")
+		voidTheHeld(p, pack, body, function(t)
+			return t:GetAttribute("SpeciesId") == "petalpip"
+		end)
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(#profiles[p].Held == #NINE + 1 and toolsOwned(newPack, newBodyModel) == #NINE + 1
+				and countKey(newPack, "petalpip", 5, true) + countKey(newBodyModel, "petalpip", 5, true) == 1,
+			("hatch then void: ten come back, the new petalpip once (%d)"):format(toolsOwned(newPack, newBodyModel)))
+	end
+
+	--== 20. FreezeHeld AFTER THE VOID ALREADY TOOK IT =========================
+	-- NestService reloads a thrown body that fell off the map; by then the plant
+	-- in its hands may be gone. The last snapshot must not record the gap.
+	do
+		local p, pack, body = spawnWith("ThrownIntoVoid", -220, NINE)
+		local held = pack:FindFirstChildWhichIsA("Tool") :: Tool
+		held.Parent = body
+		task.wait(0.1)
+		held:Destroy()
+		CarryService.FreezeHeld(p)
+		check(#profiles[p].Held == #NINE and not CarryService.IsHeldRestored(p),
+			"freeze after the void: the last snapshot keeps all nine, then disarms")
+		step(p, function()
+			p.Character = nil
+			body:Destroy()
+		end)
+		step(p, function() pack:Destroy() end)
+		local newPack = newBackpack(p, false)
+		step(p, function() p._fire.childAdded:Fire(newPack) end)
+		local newBodyModel = newBody(p, false)
+		step(p, function() p._fire.characterAdded:Fire(newBodyModel) end)
+		task.wait(0.6)
+		check(toolsOwned(newPack, newBodyModel) == #NINE,
+			("freeze after the void: nine come back (%d)"):format(toolsOwned(newPack, newBodyModel)))
+	end
+
+	--== 21. A DELIBERATE CLEAR IS STILL A CLEAR ===============================
+	do
+		local p, pack, body = spawnWith("ClearedBag", -221, NINE)
+		local DebugService = require(Server.DebugService)
+		DebugService.RunAction(p, "ClearBag", {})
+		check(#profiles[p].Held == 0 and plantsIn(pack) == 0, "ClearBag: the record empties with the bag")
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(toolsOwned(newPack, newBodyModel) == 0, "ClearBag: nothing is rebuilt after a respawn")
+	end
+
+	--== 22. A SALE THAT LANDS WHILE THE VOID STILL HAS THE HELD PLANT ==========
+	-- The first cut of this fix let a transaction replace the record with a
+	-- snapshot: a sale in the gap took the void's plant off with the sold one.
+	do
+		local p, pack, body = spawnWith("SoldInTheGap", -222, NINE)
+		voidTheHeld(p, pack, body, function(t)
+			return t:GetAttribute("SpeciesId") == "novaorb"
+		end)
+		local sold = pack:FindFirstChildWhichIsA("Tool") :: Tool
+		sold:Destroy()
+		CarryService.SyncHeldNow(p, { sold })
+		check(#profiles[p].Held == #NINE - 1,
+			("sale in the gap: only the sold plant comes off (%d rows)"):format(#profiles[p].Held))
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(toolsOwned(newPack, newBodyModel) == #NINE - 1
+				and countKey(newPack, "novaorb", 4, true) + countKey(newBodyModel, "novaorb", 4, true) == 1,
+			("sale in the gap: eight come back, the void's novaorb among them (%d)"):format(
+				toolsOwned(newPack, newBodyModel)))
+	end
+
+	--== 23. A SALE WHILE DISARMED STILL COMES OFF =============================
+	-- Mid-respawn the pair is disarmed; a transaction that lands then must still
+	-- be recorded, or the rebuild would hand the sold plant back.
+	do
+		local p, pack, body = spawnWith("SoldDisarmed", -223, NINE)
+		p._fire.characterRemoving:Fire(body)
+		task.wait(0.05)
+		local sold = pack:FindFirstChildWhichIsA("Tool") :: Tool
+		sold:Destroy()
+		CarryService.SyncHeldNow(p, { sold })
+		check(not CarryService.IsHeldRestored(p) and #profiles[p].Held == #NINE - 1,
+			"disarmed sale: the record still loses the sold plant")
+		step(p, function()
+			p.Character = nil
+			body:Destroy()
+		end)
+		step(p, function() pack:Destroy() end)
+		local newPack = newBackpack(p, false)
+		step(p, function() p._fire.childAdded:Fire(newPack) end)
+		local newBodyModel = newBody(p, false)
+		step(p, function() p._fire.characterAdded:Fire(newBodyModel) end)
+		task.wait(0.6)
+		check(toolsOwned(newPack, newBodyModel) == #NINE - 1,
+			("disarmed sale: eight come back, not nine (%d)"):format(toolsOwned(newPack, newBodyModel)))
 	end
 end)
 

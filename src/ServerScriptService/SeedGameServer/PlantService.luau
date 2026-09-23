@@ -1527,9 +1527,10 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 	end
 	persist(plot)
 	-- Consumed. Destroying the tool is what makes planting a decision rather
-	-- than a duplication bug.
+	-- than a duplication bug -- and naming it to SyncHeldNow is what takes it,
+	-- and only it, off the saved bag.
 	tool:Destroy()
-	CarryService.SyncHeldNow(player)
+	CarryService.SyncHeldNow(player, { tool })
 	PlayerDataService.RecordTutorial(player, if hatched then "plant" else "place")
 
 	if hatched then

@@ -229,8 +229,10 @@ end
 -- refusal there leaves the bag already gone, which is why the amount is
 -- computed from what was actually removed rather than from what was found.
 --
--- The save follows for free: CarryService watches both containers for
--- ChildRemoved and re-snapshots the hotbar at the end of the frame.
+-- The save is the SyncHeldNow below, and it is not optional: it is the one call
+-- that may take a plant off the held record. CarryService's own watchers only
+-- ever ADD, because a Tool vanishing looks the same whether it was sold here or
+-- lost to the void.
 --==============================================================================
 function EconomyService.SellHeld(player: Player): (number, number)
 	if player.Parent ~= Players then
@@ -238,6 +240,7 @@ function EconomyService.SellHeld(player: Player): (number, number)
 	end
 
 	local sold, total = 0, 0
+	local gone: { Instance } = {}
 	local function take(container: Instance?)
 		if not container then
 			return
@@ -254,13 +257,14 @@ function EconomyService.SellHeld(player: Player): (number, number)
 					total += SeedData.SellPrice(species, tier)
 					sold += 1
 					tool:Destroy()
+					table.insert(gone, tool)
 				end
 			end
 		end
 	end
 	take(player:FindFirstChildOfClass("Backpack"))
 	take(player.Character)
-	CarryService.SyncHeldNow(player)
+	CarryService.SyncHeldNow(player, gone)
 
 	if sold == 0 then
 		return 0, 0
@@ -357,7 +361,7 @@ function EconomyService.SellOne(player: Player, tool: Instance?): (OneQuote?, st
 	-- order SellHeld settled on, for the reason its banner gives.
 	local held = tool :: Instance
 	held:Destroy()
-	CarryService.SyncHeldNow(player)
+	CarryService.SyncHeldNow(player, { held })
 	PlayerDataService.AddCash(player, quote.price)
 	log(string.format("%s sold one %s (tier %d) at the stall for %s.",
 		player.Name, quote.species.Name, quote.tier, GameConfig.compact(quote.price)))

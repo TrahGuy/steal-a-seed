@@ -1607,6 +1607,24 @@ CarryService.WatchBody = onCharacterAdded
 -- three are the whole of it. Save them and a restored Tool is not a copy of what
 -- was lost, it is the same object rebuilt from its own definition.
 --==============================================================================
+-- The row a plant Tool is saved as, or nil for anything that is not one (a bat,
+-- a trap). Still readable off a Tool that has just been destroyed.
+local function rowOf(tool: Instance): { any }?
+	if not tool:IsA("Tool") then
+		return nil
+	end
+	local id = tool:GetAttribute("SpeciesId")
+	local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
+	if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
+		return {
+			Id = id,
+			Tier = math.floor(tier),
+			Hatched = tool:GetAttribute("Hatched") == true,
+		}
+	end
+	return nil
+end
+
 local function heldSnapshot(player: Player): { any }
 	local rows = {}
 
@@ -1623,16 +1641,9 @@ local function heldSnapshot(player: Player): { any }
 			return
 		end
 		for _, tool in ipairs(container:GetChildren()) do
-			if tool:IsA("Tool") and #rows < SAVE.MaxHeld then
-				local id = tool:GetAttribute("SpeciesId")
-				local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
-				if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
-					table.insert(rows, {
-						Id = id,
-						Tier = math.floor(tier),
-						Hatched = tool:GetAttribute("Hatched") == true,
-					})
-				end
+			local row = rowOf(tool)
+			if row and #rows < SAVE.MaxHeld then
+				table.insert(rows, row)
 			end
 		end
 	end
@@ -1700,11 +1711,92 @@ local function armedFor(player: Player): boolean
 		and player.Character == record.character
 end
 
-local function syncHeld(player: Player)
+--==============================================================================
+-- A SNAPSHOT MAY ADD TO THE RECORD. ONLY A TRANSACTION MAY TAKE FROM IT.
+--
+-- MEASURED 2026-09-23, Play: a player holding a Petalpip jumped off the map. At
+-- -500 the engine removed the plant Tool from the still-living body -- 20 ms
+-- BEFORE Humanoid.Died and 3.6 s before CharacterRemoving -- and this file's
+-- own ChildRemoved sync, still armed for that body, recorded a bag without it.
+-- The respawn rebuild then put back exactly what the record said, which no
+-- longer had the plant in it. Owned, saved, gone.
+--
+-- A snapshot cannot tell a Tool that was SOLD from one the void ate: both are
+-- simply not there. So a snapshot may only ADD -- a banked pod, a bought one, a
+-- hatch, a pickup -- and never remove. The record shrinks one way: SyncHeldNow
+-- with the Tools a transaction has just destroyed (planting, SELL ALL, SELL ONE,
+-- the Studio ClearBag), and it removes exactly one row for each of THOSE --
+-- never "whatever is missing", or a sale made while the void still had a plant
+-- would take that plant off too. Anything that merely saw a Tool disappear --
+-- the void, a body torn down, a deferred sync out of an old Backpack -- can no
+-- longer cost a plant, and the respawn rebuild builds what the record has and
+-- the containers lack, exactly once.
+--
+-- Rows are counted per (species, tier, hatched): two identical plants are two
+-- rows, and the merge keeps whichever count is larger, saved or live.
+--==============================================================================
+local function heldKey(id: string, tier: number, hatched: boolean): string
+	return id .. ":" .. tostring(tier) .. ":" .. tostring(hatched)
+end
+
+local function mergeHeld(saved: { any }?, live: { any }): { any }
+	local merged = {}
+	local owed: { [string]: number } = {}
+	if type(saved) == "table" then
+		for _, row in ipairs(saved) do
+			if type(row) == "table" and #merged < SAVE.MaxHeld then
+				table.insert(merged, row)
+				local key = heldKey(tostring(row.Id), math.floor(tonumber(row.Tier) or 0), row.Hatched == true)
+				owed[key] = (owed[key] or 0) + 1
+			end
+		end
+	end
+	for _, row in ipairs(live) do
+		local key = heldKey(row.Id, row.Tier, row.Hatched)
+		if (owed[key] or 0) > 0 then
+			owed[key] -= 1
+		elseif #merged < SAVE.MaxHeld then
+			table.insert(merged, row)
+		end
+	end
+	return merged
+end
+
+local function syncHeld(player: Player, consumed: { Instance }?)
+	local profile = PlayerDataService.Get(player)
+	local saved = if profile then profile.Held else nil
+	--==========================================================================
+	-- WHAT A TRANSACTION CONSUMED COMES OFF, ARMED OR NOT
+	--
+	-- A sale or a planting has already happened by the time this runs; skipping
+	-- the record because a respawn happens to be under way would let the rebuild
+	-- hand the sold plant back.
+	--==========================================================================
+	if consumed and #consumed > 0 and type(saved) == "table" then
+		local kept = table.clone(saved)
+		for _, tool in ipairs(consumed) do
+			local row = rowOf(tool)
+			if row then
+				local key = heldKey(row.Id, row.Tier, row.Hatched)
+				for i, r in ipairs(kept) do
+					if type(r) == "table"
+						and heldKey(tostring(r.Id), math.floor(tonumber(r.Tier) or 0), r.Hatched == true) == key then
+						table.remove(kept, i)
+						break
+					end
+				end
+			end
+		end
+		saved = kept
+		if not armedFor(player) then
+			PlayerDataService.SetHeld(player, kept)
+			return
+		end
+	end
 	if not armedFor(player) then
 		return
 	end
-	PlayerDataService.SetHeld(player, heldSnapshot(player))
+	PlayerDataService.SetHeld(player, mergeHeld(saved, heldSnapshot(player)))
 end
 
 function CarryService.IsHeldRestored(player: Player): boolean
@@ -1726,9 +1818,18 @@ end
 --==============================================================================
 local syncPending: { [Player]: boolean } = {}
 
-function CarryService.SyncHeldNow(player: Player)
+-- THE ONE CALL THAT MAY SHRINK THE RECORD, and only by `consumed`: the plant
+-- Tools the calling transaction has just destroyed (see A SNAPSHOT MAY ADD).
+-- Called without them it only catches the record up, adding.
+function CarryService.SyncHeldNow(player: Player, consumed: { Instance }?)
 	syncPending[player] = nil
-	syncHeld(player)
+	syncHeld(player, consumed)
+end
+
+-- Catch the record up with the hands, now. Adds; never removes.
+local function recordHeld(player: Player)
+	syncPending[player] = nil
+	syncHeld(player, nil)
 end
 
 local function requestSync(player: Player)
@@ -1739,7 +1840,7 @@ local function requestSync(player: Player)
 	task.defer(function()
 		if syncPending[player] then
 			syncPending[player] = nil
-			syncHeld(player)
+			syncHeld(player, nil)
 		end
 	end)
 end
@@ -1863,9 +1964,9 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 	local ok = restoreOne(player, species,
 		math.clamp(math.floor(n), 1, SeedData.TierCount), false)
 	if ok then
-		-- The hotbar is the source of truth for Held; tell the profile what it
-		-- now holds rather than waiting for the next sync to notice.
-		CarryService.SyncHeldNow(player)
+		-- Recorded now rather than when the next sync notices. Adding only: a
+		-- purchase is never the moment anything leaves the bag.
+		recordHeld(player)
 	end
 	return ok
 end
@@ -1894,11 +1995,6 @@ CarryService.HeldRestorePatience = 600
 
 local rebuilding: { [Player]: boolean } = {}
 local rebuildAgain: { [Player]: boolean } = {}
-
--- The same three facts heldSnapshot records, as one comparable string.
-local function heldKey(id: string, tier: number, hatched: boolean): string
-	return id .. ":" .. tostring(tier) .. ":" .. tostring(hatched)
-end
 
 -- One pass. False if it gave up or the player left; true once the Backpack and
 -- the body the player has now are armed.
@@ -1985,7 +2081,7 @@ local function rebuildOnce(player: Player): boolean
 	-- this Backpack and this body, then one snapshot -- which also records
 	-- anything banked or bought while the pass was waiting.
 	armed[player] = { backpack = backpack, character = player.Character }
-	CarryService.SyncHeldNow(player)
+	recordHeld(player)
 	return true
 end
 
@@ -2012,12 +2108,14 @@ CarryService.RestoreHeld = rebuildHeld
 --
 -- NestService calls this through the carry bridge right before LoadCharacter,
 -- which is the one place in the game that swaps a body on purpose. A last
--- snapshot first, while every Tool still exists; then nothing is recorded until
--- the rebuild after the swap has put the plants back and re-armed.
+-- snapshot first; then nothing is recorded until the rebuild after the swap has
+-- put the plants back and re-armed. That snapshot ADDS only: the body being
+-- replaced is often one that fell off the map, and the void may already have
+-- taken the plant in its hands.
 --==============================================================================
 function CarryService.FreezeHeld(player: Player)
 	if armedFor(player) then
-		CarryService.SyncHeldNow(player)
+		recordHeld(player)
 	end
 	armed[player] = nil
 	syncPending[player] = nil

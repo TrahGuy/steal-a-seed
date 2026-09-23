@@ -332,6 +332,7 @@ end
 --==============================================================================
 ACTIONS.ClearBag = function(player, _payload)
 	local n = 0
+	local gone: { Instance } = {}
 	local function strip(container: Instance?)
 		if not container then
 			return
@@ -339,12 +340,16 @@ ACTIONS.ClearBag = function(player, _payload)
 		for _, tool in ipairs(container:GetChildren()) do
 			if tool:IsA("Tool") then
 				tool:Destroy()
+				table.insert(gone, tool)
 				n += 1
 			end
 		end
 	end
 	strip(player:FindFirstChildOfClass("Backpack"))
 	strip(player.Character)
+	-- A deliberate clear is a transaction: name what it destroyed, or the record
+	-- keeps the plants (a Tool merely vanishing no longer removes anything).
+	CarryService.SyncHeldNow(player, gone)
 	return string.format("cleared %d item(s)", n)
 end
 

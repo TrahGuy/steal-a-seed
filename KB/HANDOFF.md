@@ -1,5 +1,113 @@
 # Steal a Seed — Session Handoff
 
+## Held plants lost to the void: a snapshot may add, only a transaction removes — 2026-09-23 (CLAUDE)  (COMMITTED — see the commit below; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
+
+**Owner report:** equip an owned plant, jump off the map, die and respawn --
+the held plant is gone.
+
+### Cause (reproduced in Studio Play, disposable store `StealASeed_audit_void`)
+
+* The bag's authoritative record is `profile.Held` (rows `{Id, Tier,
+  Hatched}`, cap 24), written by CarryService as a SNAPSHOT of the plant Tools
+  in the Backpack and the Character, on every ChildAdded/ChildRemoved of
+  either, while the pair is "armed" (the Backpack and body the last rebuild
+  used). Only CharacterRemoving disarms. A respawn rebuilds whatever rows the
+  containers lack.
+* Falling past FallenPartsDestroyHeight (-500) the engine removes the plant
+  Tool in hand from a body that is still alive and still armed. Measured on
+  the server: the Petalpip Tool left the body (parent nil) at 55.03 s, the
+  deferred sync at `CarryService:1707` wrote `SetHeld 4 -> 3` in the same
+  frame, Humanoid.Died fired at 55.05 s, CharacterRemoving at 58.65 s. A second
+  run caught the Tool leaving at Humanoid health 1.02. The rebuild then
+  restored the already-shortened list: 3 Tools, no Petalpip; the leave save
+  persisted `Held 3` to the DataStore.
+* A normal reset or health-to-zero death does NOT lose the plant (the Tool
+  stays in the dead body until CharacterRemoving disarms) -- measured before
+  the fix: no shrink, all back. The void is different only because the engine
+  destroys the Tool before the body is replaced.
+* So authoritative ownership itself was deleted, and saved. Weapons were never
+  affected: WeaponShopService rebuilds them from the profile.
+
+### Fix (`CarryService.luau` + the three callers)
+
+* **A snapshot may only ADD.** Every event-driven sync (and the rebuild's, the
+  purchase's and FreezeHeld's) merges the live snapshot into the record per
+  (species, tier, hatched) count, keeping the larger -- it records a banked,
+  bought, hatched or picked-up plant and can never remove one.
+* **Only a transaction removes, and only what it consumed.**
+  `CarryService.SyncHeldNow(player, consumed)` takes the Tools the caller has
+  just destroyed and removes exactly one row per Tool -- even while disarmed,
+  so a sale can never be undone by a rebuild. Callers: `PlantService.PlaceAt`
+  (`{ tool }`), `EconomyService.SellHeld` (every sold Tool),
+  `EconomyService.SellOne` (`{ held }`), and the Studio `DebugService.ClearBag`
+  (which relied on the old snapshot and now names what it cleared). The first
+  cut replaced the record with a snapshot on a transaction; the spec caught
+  that a sale landing while the void still had the held plant would take that
+  plant off too.
+* `FreezeHeld` (NestService, before LoadCharacter of a thrown body that fell)
+  now adds only, so a plant the void already took is kept.
+* Stolen world pods, confiscation, drops, sale prices, planting and hatch
+  rewards: untouched. LoadoutUI untouched (see limits).
+
+### Verified (Studio Play, disposable profile; the owner's save never written)
+
+Bag: Nubkin T3 x2 (identical), Petalpip T5, Bellchime T2, a banked Toadcap T2
+pod, Rootwood Bat, Bramblejaw Trap. Every row: server `Held`, plant Tools,
+weapons, hotbar strip and Bag chip before / right after the respawn / 2.5 s
+later.
+
+* 1 hotbar-equip Petalpip -> void: Tool gone +1.33 s, respawn +4.98 s; Held 5
+  throughout; 5 plant Tools + both weapons back; hotbar and Bag 7/10 unchanged.
+* 2 Bag-equip Bellchime -> void: same (the Bag card, a hotbar click and the
+  number keys all end in LoadoutUI `holdTool` -> `Humanoid:EquipTool`).
+* 3 one of two identical Nubkins -> void: exactly two Nubkins back.
+* 13 the banked pod in hand -> void: back as a pod.
+* 7 five void deaths in a row (Petalpip, Nubkin, Bellchime, Nubkin, pod):
+  5 rows and 5 plant Tools every time, weapons every time, nothing doubled.
+* 5 reset (Health = 0) and 6 damage to zero, each holding a plant: all back.
+* 10 a `PlayerDataService.Save` forced in the gap (Tool gone, body the same):
+  the DataStore read back `Held 5` with the lost plant in it.
+* 9 left inside the gap (Play stopped 1.4 s after the void took Bellchime):
+  the leave save wrote `Held 4` with Bellchime; 8 the rejoin rebuilt 4 plant
+  Tools and both weapons.
+* 11 the restored Petalpip equipped, planted (Held 5 -> 4, one in the garden),
+  picked up (-> 5), sold with SELL ONE (+49,530, exactly its price, once;
+  -> 4). Then a void death: the sold Petalpip did not come back.
+* Plant then dead in the same frame: garden +1, Held -1, not in the bag.
+  Hatch grant (equip held for the reveal) then dead at once: Held +1, the new
+  Petalpip back once; the delayed equip never touched the old body.
+  SELL ALL then dead: 4 sold for 56,670 (expected 56,670, paid once), Held 0,
+  nothing rebuilt.
+* 14 a stolen nest pod carried into the void: the carry ended through the
+  existing Died -> Drop at +0.92 s; nothing was banked (Held 0, no plant Tool).
+  An earlier attempt was caught by the Greenhollow guardian first, which
+  dropped the pod on the road as before.
+* `HeldRestoreSpec` 51/51 (31 + 20 new: the void with the body still armed,
+  identical copies, five cycles, sale / planting / hatch before a void, a
+  sale in the gap, a sale while disarmed, FreezeHeld after the void, ClearBag).
+  Mutation checks: event syncs replacing the record again -> 12 fail; sales
+  not removing what they consumed -> 12 fail (duplication). Full suite 42/42,
+  0 failures. `rojo build` OK; diff --check clean.
+
+### Not verified / limits
+
+* **Live Roblox: not published.** Owner test after a publish: hold a plant,
+  jump off the map, respawn -- it is back in the Bag (a hatched one may come
+  back in hand: the rebuild equips hatched plants, pre-existing).
+* A hotbar slot the player ASSIGNED by drag keeps a 5 s lease for its Tool
+  (LoadoutUI `ASSIGN_GRACE`). In the void the Tool leaves at the fall and comes
+  back about 3.7 s later (RespawnTime 3), inside the lease, so the slot should
+  re-bind; not verified with a real drag (MCP cannot drive one). Auto-filled
+  slots and the Bag were verified.
+* Two players: not tested (Play Solo only).
+* **The owner's already-lost plant is not recovered.** Read-only look at the
+  owner's `StealASeed_v1` history (40 newest versions, back to 2026-09-14):
+  rows leave the bag many times, and the old code wrote a sale, a planting and
+  a void loss identically, so the records cannot say which removal was the
+  void. With the species, size and rough time from the owner, an older version
+  can be found and the plant restored deliberately; nothing was granted or
+  edited.
+
 ## Detached plant parts: gardens streamed part by part — 2026-09-23 (CLAUDE)  (COMMITTED 9445b0a; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
 
 **Owner report:** floating pale crown/petal pieces and detached facial features
