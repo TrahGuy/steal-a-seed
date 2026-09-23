@@ -1,6 +1,6 @@
 # Steal a Seed — Session Handoff
 
-## Held plants lost to the void: a snapshot may add, only a transaction removes — 2026-09-23 (CLAUDE)  (COMMITTED — see the commit below; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
+## Held plants lost to the void: a snapshot may add, only a transaction removes — 2026-09-23 (CLAUDE)  (COMMITTED 3295ae0; STUDIO-VERIFIED, LIVE VERIFICATION PENDING a publish)
 
 **Owner report:** equip an owned plant, jump off the map, die and respawn --
 the held plant is gone.
