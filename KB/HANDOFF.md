@@ -22,8 +22,8 @@
 - None of this has been seen on a live server from this PC: no Podnappers session has been played
   here since v986. The owner tested guardian throws on a phone in live v992 and confirmed the
   ragdoll fix by eye. That is one phone, not every device (see the ragdoll entry, 9).
-- **The free sacrifice pedestal (2026-09-28) is on `wip` only.** It is in no published build. See
-  its entry below.
+- **The free sacrifice pedestal (2026-09-28) is on `wip` only** (`5e43b18`). It is in no published
+  build. See its entry below.
 
 ### The publishes
 
@@ -194,7 +194,7 @@ What else each build carried:
 - Why the grant reached only the chime.
 - What v984 to v986 held. Those rows in the baseline table below are still "probably".
 
-## The free sacrifice pedestal — 2026-09-28 (CLAUDE, finishing CODEX's draft)  (COMMITTED ON BRANCH `wip` WITH THIS ENTRY AND PUSHED; NOT ON `main`; NOT PUBLISHED; ALL 56 SPECS PASS; PLAY-TESTED ON THE TEST STORE AT DESKTOP SIZE; NOT SEEN IN THE PHONE EMULATOR, WITH A CONTROLLER, WITH A SECOND PLAYER OR ON A LIVE SERVER; AWAITING THE OWNER'S REVIEW)
+## The free sacrifice pedestal — 2026-09-28 (CLAUDE, finishing CODEX's draft)  (COMMITTED 5e43b18 ON BRANCH `wip` AND PUSHED; NOT ON `main`; NOT PUBLISHED; ALL 56 SPECS PASS; PLAY-TESTED ON THE TEST STORE AT DESKTOP SIZE; NOT SEEN IN THE PHONE EMULATOR, WITH A CONTROLLER, WITH A SECOND PLAYER OR ON A LIVE SERVER; AWAITING THE OWNER'S REVIEW)
 
 **What it is.** A pedestal on the hub deck. A player holding **one banked, unhatched pod of their
 own** presses its prompt, is shown what will be consumed, and answers KEEP POD or SACRIFICE. On a
