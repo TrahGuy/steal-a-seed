@@ -97,6 +97,8 @@ gui.Name = "SeedBiomeGuide"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.DisplayOrder = 45
+-- Drawn bigger on a TV (HudLayout's TEN-FOOT PROFILE); nothing changes elsewhere.
+UIKit.tenFoot(gui)
 gui.Parent = playerGui
 
 local TEXT_SIZE = 24
@@ -148,7 +150,8 @@ local function placeNotice()
 	local input = HudLayout.measure(gui)
 	local layout = HudLayout.solve(input)
 	local inset = input.insetTop or 0
-	local width = label.AbsoluteSize.X + OUTLINE * 2
+	-- Real pixels / the gui's TV scale = the Offsets HudLayout answers in (1 off a TV).
+	local width = label.AbsoluteSize.X / UIKit.scaleOf(gui) + OUTLINE * 2
 	local dx, top = HudLayout.notice(layout, width, HEIGHT, TOP - inset)
 	label.Position = UDim2.new(0.5, math.round(dx), 0, top + inset)
 end

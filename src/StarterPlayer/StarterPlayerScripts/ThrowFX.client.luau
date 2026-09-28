@@ -435,6 +435,138 @@ local function ownershipNote(character: Model): string
 		torso.ReceiveAge, head.ReceiveAge)
 end
 
+--==============================================================================
+-- WHAT MOVED WHILE THE BODY WAS MEANT TO BE LYING STILL
+--
+-- A diagnostic, and only that: it reads, it never writes. Found 2026-09-26 in
+-- the owner's live recording and Player log: on a published server every
+-- guardian throw ran to the give-up, and the camera -- which follows the Head
+-- -- swung about 0.6 studs at 4.3 Hz over a body that was otherwise still.
+-- Every Studio throw settled naturally, including that exact throw at the same
+-- Oak with a carried pod, 100 ms of lag and a 12 fps client. So the answer has
+-- to come from a live log: which part kept moving, whether it moved against
+-- the torso or with it, which machine simulated it, what the head was inside,
+-- and what the humanoid was doing -- over the last second before the stand-up.
+--==============================================================================
+local REST_SAMPLES = 16
+
+local restProbe = {}
+
+function restProbe.sample(character: Model, samples: { any })
+	local head = character:FindFirstChild("Head")
+	local torso = torsoOf(character)
+	local pelvis = character:FindFirstChild("LowerTorso")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not (head and head:IsA("BasePart") and torso) then
+		return
+	end
+	table.insert(samples, {
+		t = os.clock(),
+		head = head.AssemblyLinearVelocity.Magnitude,
+		torso = torso.AssemblyLinearVelocity.Magnitude,
+		pelvis = if pelvis and pelvis:IsA("BasePart") then pelvis.AssemblyLinearVelocity.Magnitude else 0,
+		neck = torso.CFrame:PointToObjectSpace(head.Position),
+		headAge = head.ReceiveAge,
+		torsoAge = torso.ReceiveAge,
+		state = if humanoid then humanoid:GetState().Name else "?",
+	})
+	if #samples > REST_SAMPLES then
+		table.remove(samples, 1)
+	end
+end
+
+function restProbe.report(character: Model, samples: { any }, forced: boolean)
+	local n = #samples
+	if n < 2 then
+		return
+	end
+	local head = character:FindFirstChild("Head")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local sums: { [string]: number } = { head = 0, torso = 0, pelvis = 0 }
+	local peaks: { [string]: number } = { head = 0, torso = 0, pelvis = 0 }
+	local lo: Vector3, hi: Vector3 = samples[1].neck, samples[1].neck
+	local headAge, torsoAge = 0, 0
+	local states: { string } = {}
+	for _, s in ipairs(samples) do
+		for key in pairs(sums) do
+			sums[key] += s[key]
+			peaks[key] = math.max(peaks[key], s[key])
+		end
+		lo, hi = lo:Min(s.neck), hi:Max(s.neck)
+		headAge = math.max(headAge, s.headAge)
+		torsoAge = math.max(torsoAge, s.torsoAge)
+		if not table.find(states, s.state) then
+			table.insert(states, s.state)
+		end
+	end
+	-- What the head is lying in. Decor is CanQuery = false and never shows up
+	-- here, which is itself worth knowing; the floor and the body do.
+	local inside: { string } = {}
+	if head and head:IsA("BasePart") then
+		local ok, parts = pcall(function()
+			return workspace:GetPartsInPart(head)
+		end)
+		if ok then
+			for _, p in ipairs(parts) do
+				if #inside < 4 then
+					table.insert(inside, p.Name)
+				end
+			end
+		end
+	end
+	local camera = workspace.CurrentCamera
+	say(string.format(
+		"rest check, last %.1fs: speed head %.1f avg / %.1f max, torso %.1f / %.1f, pelvis %.1f / %.1f"
+			.. " | head against torso moved %.2f studs | ReceiveAge head %.2f torso %.2f"
+			.. " | humanoid %s, PlatformStand %s | head CanCollide %s, overlapping %s | camera on %s, %.1f away",
+		samples[n].t - samples[1].t, sums.head / n, peaks.head, sums.torso / n, peaks.torso,
+		sums.pelvis / n, peaks.pelvis, (hi - lo).Magnitude, headAge, torsoAge,
+		table.concat(states, "+"), tostring(humanoid and humanoid.PlatformStand),
+		tostring(head and head:IsA("BasePart") and head.CanCollide),
+		if #inside > 0 then table.concat(inside, ", ") else "nothing",
+		tostring(camera and camera.CameraSubject and camera.CameraSubject.Name),
+		if camera and head and head:IsA("BasePart") then (camera.CFrame.Position - head.Position).Magnitude else -1))
+	-- What can MOVE a head over a body at rest without touching it: a joint
+	-- still driving it (an AnimationConstraint back on, the animator's tracks)
+	-- or a neck socket that no longer holds it. v986 showed the head circling
+	-- the neck's limit at 4.25 Hz while Studio -- even with the head made
+	-- non-colliding like live -- settled, so these are the open questions.
+	local driving: { string } = {}
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("AnimationConstraint") and d.Enabled then
+			table.insert(driving, d.Name)
+		end
+	end
+	local neck = if head then head:FindFirstChild("NeckBallSocket") else nil
+	local tracks: { string } = {}
+	local animator = if humanoid then humanoid:FindFirstChildOfClass("Animator") else nil
+	if animator then
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			if #tracks < 4 then
+				table.insert(tracks, string.format("%s w%.2f", track.Name, track.WeightCurrent))
+			end
+		end
+	end
+	say(string.format("rest rig: joint constraints still on: %s | neck socket %s | animator tracks: %s",
+		if #driving > 0 then table.concat(driving, ", ") else "none",
+		if neck and neck:IsA("BallSocketConstraint")
+			then string.format("friction %.1f, limits %s %.0f deg, twist %s, restitution %.2f, on %s",
+				neck.MaxFrictionTorque, tostring(neck.LimitsEnabled), neck.UpperAngle,
+				tostring(neck.TwistLimitsEnabled), neck.Restitution, tostring(neck.Enabled))
+			else "MISSING",
+		if #tracks > 0 then table.concat(tracks, ", ") else "none"))
+	if forced then
+		-- The give-up: the per-sample series, so the period and which way the
+		-- head went can be read straight off the Player log.
+		local trace: { string } = {}
+		for _, s in ipairs(samples) do
+			table.insert(trace, string.format("%.2f %.1f (%.2f %.2f %.2f)",
+				s.t - samples[1].t, s.head, s.neck.X, s.neck.Y, s.neck.Z))
+		end
+		say("rest trace (s, head speed, head in torso space): " .. table.concat(trace, " | "))
+	end
+end
+
 -- Each limb joint's bend, as the rotation between its two attachments.
 local function limbPose(character: Model): { [string]: CFrame }
 	local pose: { [string]: CFrame } = {}
@@ -1266,6 +1398,8 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		local lowestUp = 1
 		local landedSpeed = -1
 		local slid = false
+		-- See WHAT MOVED WHILE THE BODY WAS MEANT TO BE LYING STILL.
+		local rest: { any } = {}
 
 		while true do
 			if superseded() then
@@ -1323,6 +1457,7 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				-- The guardian test, unchanged -- and a body that came loose late
 				-- is articulated the step it does.
 				lateLimp()
+				pcall(restProbe.sample, character, rest)
 				if os.clock() >= standNoEarlierThan then
 					if bodySpeed < SETTLE_SPEED then
 						settledFor += SETTLE_STEP
@@ -1392,6 +1527,7 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				if launchedFrom and settledTorso
 					then string.format(" | body travelled %.0f studs", (settledTorso.Position - launchedFrom).Magnitude)
 					else ""))
+			pcall(restProbe.report, character, rest, emergency)
 			if not articulated and RunService:IsStudio() then
 				warn("[Seed/ThrowFX] a guardian throw ended without the rig ever coming loose; " ..
 					"that was a rigid tumble, not a ragdoll.")

@@ -29,6 +29,7 @@ local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -87,6 +88,8 @@ gui.Name = "SeedBeginnerGuide"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.DisplayOrder = 30 -- menus and the raid alarm still take priority
+-- Drawn bigger on a TV (HudLayout's TEN-FOOT PROFILE); nothing changes elsewhere.
+UIKit.tenFoot(gui)
 gui.Parent = playerGui
 
 local connections: { RBXScriptConnection } = {}
@@ -132,6 +135,12 @@ banner.Position = UDim2.new(.5, 0, 0, 84)
 banner.Size = UDim2.fromOffset(560, 84)
 banner.Visible = false
 banner.Parent = gui
+-- HudLayout's `tutorialScale` (placeBanner): 1, except on a phone, where the
+-- whole banner -- lines, outlines and spacing together -- is drawn smaller.
+local bannerScale = Instance.new("UIScale")
+bannerScale.Parent = banner
+-- The same scale for the pointer and the celebration, kept from the last layout.
+local tutorialScale = 1
 
 local instruction = outlined(banner, "Line", 34, CREAM, 3)
 instruction.Size = UDim2.new(1, 0, 0, 42)
@@ -185,6 +194,15 @@ UIKit.stroke(resume, BLACK, 2.5)
 -- The three lines scale down only in that mode, and only when the banner is
 -- narrower than their words: each is capped at the size it was drawn at, so
 -- a line that fits is drawn exactly as before.
+--
+-- ON A PHONE THE WORDS ARE SMALLER (owner, 2026-09-24): HudLayout hands a
+-- banner already at `tutorialScale` and this frame is laid out at 1 inside it
+-- and scaled down by that much, so the lines keep their proportions and caps
+-- and are simply drawn smaller. The pointer and the celebration follow the same
+-- number. The skip line and GUIDE are buttons and keep their size.
+--
+-- Placed again when the topbar's free span changes, as WorldClock is: the
+-- banner stands under the teleport button, which stands under the clock.
 --==============================================================================
 local BANNER_LINES = { { instruction, 34 }, { subline, 19 }, { counter, 15 } }
 for _, line in ipairs(BANNER_LINES) do
@@ -199,7 +217,9 @@ local function placeBanner()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local top = Vector2.new(0.5, 0)
-	banner.Size = UDim2.fromOffset(layout.banner.w, layout.banner.h)
+	tutorialScale = layout.tutorialScale
+	bannerScale.Scale = tutorialScale
+	banner.Size = UDim2.fromOffset(layout.banner.w / tutorialScale, layout.banner.h / tutorialScale)
 	banner.Position = HudLayout.place(layout.banner, top, layout.safe)
 	skip.Position = HudLayout.place(layout.skip, top, layout.safe)
 	resume.Position = UDim2.new(0.5, banner.Position.X.Offset, 0, layout.banner.y)
@@ -208,6 +228,7 @@ local function placeBanner()
 	end
 end
 table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner))
+table.insert(connections, GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placeBanner))
 placeBanner()
 
 --==============================================================================
@@ -225,6 +246,9 @@ pointer.Size = UDim2.fromOffset(230, 46)
 pointer.Visible = false
 pointer.ZIndex = 5
 pointer.Parent = gui
+-- Drawn at `tutorialScale` from its top-left corner (pointAt).
+local pointerScale = Instance.new("UIScale")
+pointerScale.Parent = pointer
 local pointerArrow = outlined(pointer, "Arrow", 30, GOLD, 3)
 pointerArrow.Size = UDim2.fromOffset(34, 46)
 pointerArrow.Text = "\u{25B6}" -- solid right-pointing triangle; renders in this font
@@ -261,6 +285,32 @@ smallLine.Position = UDim2.fromOffset(0, 68)
 smallLine.Size = UDim2.new(1, 0, 0, 34)
 smallLine.Text = "You hatched your first plant!"
 smallLine.ZIndex = 9
+
+--==============================================================================
+-- HOW FAR DOWN THE GUIDE'S WORDS REACH (2026-09-27)
+--
+-- In the HUD's own units (HudLayout's safe space): the skip line while the
+-- banner is up, the celebration's foot while it plays, nil when neither.
+-- BonusChestUI stands its boost row under it -- the chest only opens after the
+-- guide, but the reward wheel can hand a new player a boost in the middle of it.
+--==============================================================================
+local function publishReach()
+	local reach: number? = nil
+	if banner.Visible then
+		local layout = HudLayout.solve(HudLayout.measure(gui))
+		reach = layout.skip.y + layout.skip.h
+	end
+	if party.Visible then
+		-- Centred at 34% of the gui, 150 tall at its full scale (celebrate).
+		local foot = (gui.AbsoluteSize.Y / UIKit.scaleOf(gui)) * 0.34 + 75 * tutorialScale
+		reach = math.max(reach or 0, foot)
+	end
+	player:SetAttribute(ATTR.TutorialReach, reach)
+end
+table.insert(connections, banner:GetPropertyChangedSignal("Visible"):Connect(publishReach))
+table.insert(connections, party:GetPropertyChangedSignal("Visible"):Connect(publishReach))
+table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(publishReach))
+publishReach()
 
 --==============================================================================
 -- WORLD OBJECTS
@@ -679,7 +729,10 @@ local function pointAt(target: GuiObject?, text: string)
 		pointer.Visible = false
 		return
 	end
-	local pos, size = target.AbsolutePosition, target.AbsoluteSize
+	-- Real pixels / this gui's TV scale = the Offsets the pointer is placed in
+	-- (1 off a TV).
+	local k = UIKit.scaleOf(gui)
+	local pos, size = target.AbsolutePosition / k, target.AbsoluteSize / k
 	--==========================================================================
 	-- MEASURE THE GLYPHS, NOT THE BOX
 	--
@@ -689,7 +742,7 @@ local function pointAt(target: GuiObject?, text: string)
 	-- at. TextBounds is what is actually on screen.
 	--==========================================================================
 	if target:IsA("TextLabel") and target.TextBounds.X > 4 then
-		local glyphs = math.min(size.X, target.TextBounds.X + 6)
+		local glyphs = math.min(size.X, target.TextBounds.X / k + 6)
 		if target.TextXAlignment == Enum.TextXAlignment.Left then
 			size = Vector2.new(glyphs, size.Y)
 		elseif target.TextXAlignment == Enum.TextXAlignment.Right then
@@ -701,11 +754,16 @@ local function pointAt(target: GuiObject?, text: string)
 		end
 	end
 	local camera = workspace.CurrentCamera
-	local screen = if camera then camera.ViewportSize else Vector2.new(1280, 720)
-	local midY = pos.Y + size.Y * 0.5 - 23
-	local left = pos.X - pointer.AbsoluteSize.X - 6
+	local screen = (if camera then camera.ViewportSize else Vector2.new(1280, 720)) / k
+	-- Drawn at `tutorialScale` from its top-left corner: its 230 x 46 and every
+	-- offset measured off it shrink with it. The words inside are laid out at 1.
+	local s = tutorialScale
+	pointerScale.Scale = s
+	local drawn = pointer.Size.X.Offset * s
+	local midY = pos.Y + size.Y * 0.5 - pointer.Size.Y.Offset * s / 2
+	local left = pos.X - drawn - 6
 	if left < 8 then
-		pointer.Position = UDim2.fromOffset(math.min(pos.X + size.X + 6, screen.X - 236), midY)
+		pointer.Position = UDim2.fromOffset(math.min(pos.X + size.X + 6, screen.X - drawn - 6), midY)
 		pointerArrow.Text = "\u{25C0}"
 		pointerArrow.Position = UDim2.fromOffset(0, 0)
 		pointerText.Position = UDim2.fromOffset(36, 0)
@@ -775,11 +833,14 @@ local function celebrate()
 	end
 	celebrated = true
 	party.Visible = true
-	partyScale.Scale = 0.2
+	-- Every step of the pop is a fraction of `tutorialScale`: 1, or a phone's
+	-- smaller size (placeBanner).
+	local full = tutorialScale
+	partyScale.Scale = 0.2 * full
 	-- Overshoot then settle: Back/Out is the pop, and it is a tween rather than
 	-- a per-frame loop so it costs nothing after it finishes.
 	TweenService:Create(partyScale, TweenInfo.new(0.55, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Scale = 1 }):Play()
+		{ Scale = full }):Play()
 	confetti()
 	if SoundKit.has("RevealLegendary") then
 		SoundKit.play("RevealLegendary")
@@ -789,7 +850,7 @@ local function celebrate()
 			return
 		end
 		local out = TweenService:Create(partyScale,
-			TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.1 })
+			TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Scale = 0.1 * full })
 		out:Play()
 		out.Completed:Wait()
 		party.Visible = false

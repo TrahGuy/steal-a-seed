@@ -245,6 +245,16 @@ local ok, err = pcall(function()
 		PlayerDataService = PlayerDataService,
 		CarryService = CarryService,
 		PassService = PassService,
+		-- The Bonus Chest's income boost and the launch analytics (2026-09-27),
+		-- neutral here: this spec checks a sale, not a boost or a report.
+		BonusChestService = {
+			Multiplier = function()
+				return 1
+			end,
+		},
+		Metrics = {
+			income = function() end,
+		},
 	})
 	SellService = loadWith(Server.SellService, {
 		EconomyService = EconomyService,
@@ -466,6 +476,128 @@ check(s1 ~= nil and s2 == nil, "selling the same instance twice sells once", why
 check(count("AddCash") == 1 and count("SyncHeldNow") == 1, "one payment, one re-sync")
 local nothing, whyNothing = EconomyService.SellOne(seller, nil)
 check(nothing == nil and whyNothing == "NOTHING_HELD", "nothing in hand is NOTHING_HELD", whyNothing)
+
+--==============================================================================
+-- 9. SELL ALL: A QUOTE, THEN AN ANSWER (2026-09-24)
+--
+-- It used to sell on the hold. Now the hold is a quote -- the plant and pod
+-- counts and the payout, off the same rule and prices SellHeld uses -- and
+-- only a yes for EXACTLY that bag sells it.
+--==============================================================================
+say("\n-- SELL ALL, confirmed --")
+local ALL = GameConfig.SellAll
+check(type(EconomyService.QuoteHeld) == "function" and type(SellService.QuoteAll) == "function"
+		and type(SellService.ConfirmAll) == "function",
+	"EconomyService offers QuoteHeld and SellService QuoteAll / ConfirmAll")
+local function quoteAll(now)
+	return SellService.QuoteAll(seller, board, now)
+end
+local function confirmAll(payload, now)
+	return SellService.ConfirmAll(seller, payload, now)
+end
+table.clear(trace)
+clearHands()
+cash = 0
+root.CFrame = NEAR
+
+r = quoteAll(200)
+check(r.phase == "refused" and r.reason == "EMPTY" and r.text == ALL.EmptyText
+		and SellService.PendingAllFor(seller) == nil,
+	"an empty bag: refused with its line, and nothing on the table", r.text)
+weaponTool("Rootwood Bat", backpack)
+r = quoteAll(200)
+check(r.phase == "refused" and r.reason == "EMPTY", "a bag holding only a bat has nothing the stall buys", r.reason)
+clearHands()
+
+local pod1 = plantTool("nubkin", 2, false, backpack)
+local pod2 = plantTool("toadcap", 1, false, backpack)
+local grown = plantTool("spiretip", 2, true, backpack)
+local inHand = plantTool("petalpip", 1, true, character)
+local bat = weaponTool("Rootwood Bat", backpack)
+local expect = SeedData.SellPrice(SeedData.Get("nubkin"), 2) + SeedData.SellPrice(SeedData.Get("toadcap"), 1)
+	+ SeedData.SellPrice(SeedData.Get("spiretip"), 2) + SeedData.SellPrice(SeedData.Get("petalpip"), 1)
+r = quoteAll(200)
+check(r.phase == "quoteAll" and r.plants == 2 and r.pods == 2,
+	"counted: 2 plants (bag and hands) and 2 unhatched pods -- the bat not at all",
+	string.format("%s plants %s pods %s", tostring(r.phase), tostring(r.plants), tostring(r.pods)))
+check(r.total == expect, "the payout is the sum of exactly the prices SellHeld pays", r.total)
+check(count("AddCash") == 0 and pod1.Parent == backpack and inHand.Parent == character,
+	"and quoting sold nothing")
+check(type(r.token) == "number" and SellService.PendingAllFor(seller) == r.token,
+	"with a token that is the SELL ALL quote on the table")
+
+local oneQuote = quote(200)
+check(oneQuote.phase == "quote" and SellService.PendingAllFor(seller) == nil,
+	"one quote per player: a SELL ONE quote drops the SELL ALL quote")
+check(confirmAll({ token = r.token, accept = true }, 201) == nil and count("AddCash") == 0,
+	"so the dropped SELL ALL token sells nothing")
+r = quoteAll(200)
+check(SellService.PendingFor(seller) == nil and SellService.PendingAllFor(seller) == r.token,
+	"and a SELL ALL quote drops the SELL ONE quote")
+
+for _, bad in ipairs({ "yes", { token = "1", accept = true }, { token = 0 / 0, accept = true },
+	{ token = 1.5, accept = true }, { token = -1, accept = true } }) do
+	check(confirmAll(bad, 201) == nil, "a malformed SELL ALL answer is dropped: "
+		.. tostring(if type(bad) == "table" then tostring(bad.token) else bad))
+end
+check(SellService.PendingAllFor(seller) == r.token, "and the live quote survives them")
+
+local allNo = confirmAll({ token = r.token, accept = false }, 201)
+check(allNo ~= nil and allNo.phase == "cancelled" and SellService.PendingAllFor(seller) == nil,
+	"a no is a cancel, and forgets the quote")
+check(count("AddCash") == 0 and pod1.Parent == backpack and grown.Parent == backpack and inHand.Parent == character,
+	"and sells nothing: every Tool kept, nothing paid")
+
+r = quoteAll(200)
+local allLate = confirmAll({ token = r.token, accept = true }, 200 + SELL.QuoteSeconds + 1)
+check(allLate ~= nil and allLate.reason == "EXPIRED" and count("AddCash") == 0,
+	"a yes after QuoteSeconds is refused as expired, nothing sold", allLate and allLate.reason)
+
+r = quoteAll(200)
+root.CFrame = FAR
+local allFar = confirmAll({ token = r.token, accept = true }, 201)
+check(allFar ~= nil and allFar.reason == "TOO_FAR" and allFar.text == ALL.TooFarText and count("AddCash") == 0,
+	"a yes from beyond reach of the board is refused, nothing sold", allFar and allFar.reason)
+root.CFrame = NEAR
+
+r = quoteAll(200)
+local extra = plantTool("dunebud", 1, true, backpack)
+local grew = confirmAll({ token = r.token, accept = true }, 201)
+check(grew ~= nil and grew.reason == "CHANGED" and grew.text == ALL.ChangedText and extra.Parent == backpack
+		and count("AddCash") == 0,
+	"a bag that GAINED a plant after the count is refused -- nothing sold that was not shown")
+extra:Destroy()
+
+r = quoteAll(200)
+grown.Parent = scratch
+local shrank = confirmAll({ token = r.token, accept = true }, 201)
+check(shrank ~= nil and shrank.reason == "CHANGED" and count("AddCash") == 0,
+	"a bag that LOST a counted plant is refused")
+grown.Parent = backpack
+
+r = quoteAll(200)
+pod1:SetAttribute(GameConfig.Attributes.CarryingKg, 3)
+local reweighed = confirmAll({ token = r.token, accept = true }, 201)
+check(reweighed ~= nil and reweighed.reason == "CHANGED" and count("AddCash") == 0,
+	"a counted Tool whose worth changed is refused -- the payout shown is the payout paid")
+pod1:SetAttribute(GameConfig.Attributes.CarryingKg, 2)
+
+table.clear(trace)
+cash = 500
+r = quoteAll(200)
+local soldAll = confirmAll({ token = r.token, accept = true }, 201)
+check(soldAll ~= nil and soldAll.phase == "soldAll" and soldAll.sold == 4 and soldAll.paid == expect,
+	"a yes for the counted bag sells it: 4 items, exactly the quoted payout",
+	soldAll and string.format("%s %s %s", tostring(soldAll.phase), tostring(soldAll.sold), tostring(soldAll.paid)))
+check(pod1.Parent == nil and pod2.Parent == nil and grown.Parent == nil and inHand.Parent == nil,
+	"every counted Tool is gone, hands included")
+check(bat.Parent == backpack, "the bat stays in the bag")
+check(count("AddCash") == 1 and lastArgs("AddCash")[2] == expect and cash == 500 + expect,
+	"paid once, exactly the quote, onto the cash the player had", cash)
+check(count("SyncHeldNow") == 1 and count("Sound") == 1 and lastArgs("Sound")[1] == "SellAll",
+	"one bag re-sync, one till")
+check(confirmAll({ token = r.token, accept = true }, 201) == nil and count("AddCash") == 1,
+	"the same yes again pays nothing")
 
 scratch:Destroy()
 

@@ -340,6 +340,17 @@ local ok, err = pcall(function()
 		allOff = allOff and not c.Enabled
 	end
 	check(allOff, "RagdollOn switches every constraint off")
+	-- 2026-09-26: with the Root joint off the HumanoidRootPart was a free, colliding
+	-- box; a knockdown into a fence stopped the body and the root flew 110 studs on,
+	-- taking a bat victim's camera with it. It rides the pelvis now, and does not
+	-- collide, for as long as the body is limp.
+	local rigRoot = rig:FindFirstChild("HumanoidRootPart") :: BasePart
+	local rigPelvis = rig:FindFirstChild("LowerTorso") :: BasePart
+	local weld = rigRoot:FindFirstChild("SeedRagdollRootWeld")
+	check(weld ~= nil and weld:IsA("WeldConstraint") and (weld :: WeldConstraint).Part0 == rigRoot
+			and (weld :: WeldConstraint).Part1 == rigPelvis and record.rootWeld == weld
+			and not rigRoot.CanCollide,
+		"while limp the root is welded to the pelvis and does not collide -- it cannot leave the body")
 	check(NestService.IsRagdolled(rig), "and registers the rig as limp, so no second throw starts on it")
 	-- No Player owns this rig, so there is nobody to pin it to: the record says
 	-- so rather than pinning to nothing.
@@ -376,6 +387,8 @@ local ok, err = pcall(function()
 		sameCollide = sameCollide and p.CanCollide == was
 	end
 	check(sameCollide, "and every part's collision as it was")
+	check(rigRoot:FindFirstChild("SeedRagdollRootWeld") == nil and record.rootWeld == nil,
+		"and the root's weld is gone, so the Root joint alone holds it again")
 
 	-- Once: something else changes a socket afterwards, and a second restore on
 	-- the same record must not overwrite it with the old value.

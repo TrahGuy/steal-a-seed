@@ -124,6 +124,8 @@ local modal = UIKit.modal(gui, {
 	maxWidth = 520,
 	maxHeight = 640,
 })
+-- This gui holds only the panel, so it takes the player's menu size whole.
+UIKit.menuGui(gui)
 
 --==============================================================================
 -- THE HEADER
@@ -377,7 +379,8 @@ cashLabel.ZIndex = 6
 -- a tab that is actually on the screen.
 --==============================================================================
 local function sizeFilters()
-	local rowW = filterRow.AbsoluteSize.X
+	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
+	local rowW = filterRow.AbsoluteSize.X / UIKit.scaleOf(gui)
 	if rowW <= 0 then
 		return
 	end
@@ -784,7 +787,8 @@ end
 -- rebuild.
 --==============================================================================
 local function relayout()
-	local width = list.AbsoluteSize.X - 10
+	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
+	local width = list.AbsoluteSize.X / UIKit.scaleOf(gui) - 10
 	if width <= 0 then
 		return
 	end
@@ -908,7 +912,8 @@ end
 local function paint()
 	local keep = list.CanvasPosition
 
-	cashLabel.Text = "$" .. GameConfig.compact(cash)
+	-- The balance, spelled as the corner HUD spells it.
+	cashLabel.Text = "$" .. GameConfig.money(cash)
 
 	for _, tab in ipairs(TABS) do
 		local b = tabButtons[tab.id]
@@ -1022,7 +1027,7 @@ local function receive(profile: any)
 		end
 		cash = profile.Cash
 		-- The header number itself does have to move every time.
-		cashLabel.Text = "$" .. GameConfig.compact(cash)
+		cashLabel.Text = "$" .. GameConfig.money(cash)
 	end
 	if not heard then
 		heard = true

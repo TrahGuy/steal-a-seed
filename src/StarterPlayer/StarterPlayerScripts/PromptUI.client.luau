@@ -47,6 +47,16 @@ local GameConfig = require(ReplicatedStorage:WaitForChild("SeedGame")
 -- a touch screen together. PlantUI asks the same module; see ReachPoint.
 local ReachPoint = require(ReplicatedStorage:WaitForChild("SeedGame")
 	:WaitForChild("Shared"):WaitForChild("ReachPoint"))
+-- Whether the last thing pressed was a controller, and the short name of its
+-- buttons -- the key cap reads both. See capText.
+local PadInput = require(ReplicatedStorage:WaitForChild("SeedGame")
+	:WaitForChild("Shared"):WaitForChild("PadInput"))
+-- What the product a prompt sells costs THIS player (see the price capsule).
+local RobuxPrice = require(ReplicatedStorage:WaitForChild("SeedGame")
+	:WaitForChild("Shared"):WaitForChild("RobuxPrice"))
+-- Whether the screen is a TV, and how much bigger it draws (see TEN-FOOT below).
+local HudLayout = require(ReplicatedStorage:WaitForChild("SeedGame")
+	:WaitForChild("Shared"):WaitForChild("HudLayout"))
 local CARRYING = GameConfig.Attributes.CarryingSpecies
 -- Set by CarryService on a beginner's reserved pod, and by PlantService on an
 -- Instant Hatch prompt (the garden owner's id). Nothing else sets it.
@@ -76,13 +86,17 @@ local POD = GameConfig.Labels.Pod
 -- Attributes replicate with the prompt, so none of this needs a remote.
 --
 --   Robux         the prompt sells something: the shop's price capsule goes
---                 after the verb
+--                 after the verb. The value is the manifest's list price and
+--                 is NOT drawn -- see RobuxProduct.
+--   RobuxProduct  the developer product it sells; the capsule shows what
+--                 Roblox says THIS player would pay for it (RobuxPrice)
 --   OverPodLabel  the prompt sits above the pod's HATCHING label rather than
 --                 on top of it
 --   ReservedFor   the prompt is offered to that UserId only (see
 --                 reservedForSomebodyElse)
 --==============================================================================
 local ROBUX = "Robux"
+local ROBUX_PRODUCT = "RobuxProduct"
 local OVER_POD_LABEL = "OverPodLabel"
 
 --==============================================================================
@@ -191,6 +205,8 @@ type Panel = {
 	cameraLift: boolean,
 	-- ...and then this many pixels further up the screen.
 	raise: number,
+	-- Stops the price capsule following RobuxPrice once the panel is gone.
+	unwatch: (() -> ())?,
 	-- On touch, a prompt stacked over a pod's timer is placed by ReachPoint.stack
 	-- -- the call PlantUI makes for the timer itself -- rather than by the
 	-- ordinary lift, cull and topbar clamp. See the tracker.
@@ -312,6 +328,27 @@ local function carrying(): boolean
 end
 
 --==============================================================================
+-- THE KEY CAP SAYS THE BUTTON THAT WORKS
+--
+-- The bound key, not a hardcoded letter: rebinding the prompt should not leave
+-- the UI lying about which key does it. That held for the keyboard and not for
+-- a controller -- the cap printed KeyboardKeyCode everywhere that was not a
+-- phone, so on an Xbox every prompt said E, a key the Xbox does not have, while
+-- the hold it wanted was X (Instant Hatch: Y). On a controller the cap now
+-- prints the prompt's own GamepadKeyCode, and flips back and forth with the
+-- input in hand (see the PadInput.Changed hook at the bottom).
+--==============================================================================
+local function capText(prompt: ProximityPrompt): string
+	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+		return "TAP"
+	end
+	if PadInput.active() then
+		return PadInput.short(prompt.GamepadKeyCode)
+	end
+	return prompt.KeyboardKeyCode.Name
+end
+
+--==============================================================================
 -- THE PANEL
 --==============================================================================
 local function build(prompt: ProximityPrompt): Panel?
@@ -366,16 +403,44 @@ local function build(prompt: ProximityPrompt): Panel?
 	local root: Instance
 	local scale: UIScale? = nil
 	local billboard: BillboardGui? = nil
+	--==========================================================================
+	-- TEN-FOOT: THE BILLBOARD IS DRAWN BIGGER ON A TV
+	--
+	-- A prompt is what a controller player reads from the sofa -- the X, the
+	-- verb, the price -- so on a TV (HudLayout's TEN-FOOT PROFILE) its billboard
+	-- is the HUD's scale times the size, with a TenFoot UIScale inside so the
+	-- panel is laid out in the same logical pixels as everywhere else. The pod
+	-- label it can stand over is not scaled, so a stacked prompt's raise is the
+	-- label's half at 1 plus the gap and its own half at the scale. 1 -- the
+	-- billboard exactly as it was -- on every desktop.
+	--==========================================================================
+	local tv = 1
+	if not TOUCH and HudLayout.isTenFoot() then
+		local camera = Workspace.CurrentCamera
+		if camera then
+			tv = HudLayout.tenFootScale(camera.ViewportSize)
+		end
+	end
 	if not TOUCH then
 		local made = Instance.new("BillboardGui")
 		made.Name = "SeedPrompt"
 		made.Adornee = adornee
 		made.AlwaysOnTop = true
-		made.Size = UDim2.fromOffset(PANEL_SIZE.X, PANEL_SIZE.Y)
+		made.Size = UDim2.fromOffset(PANEL_SIZE.X * tv, PANEL_SIZE.Y * tv)
 		made.StudsOffset = Vector3.new(0, lift, 0)
 		-- SizeOffset is a fraction of the billboard's own size, which makes it
 		-- the one billboard offset that is measured in pixels.
 		made.SizeOffset = Vector2.new(0, raise / PANEL_SIZE.Y)
+		if tv ~= 1 then
+			local bigger = Instance.new("UIScale")
+			bigger.Name = HudLayout.TenFootName
+			bigger.Scale = tv
+			bigger.Parent = made
+			if raise ~= 0 then
+				local physical = POD.Height * 0.5 + (PROMPT.StackGap + PANEL_SIZE.Y * 0.5) * tv
+				made.SizeOffset = Vector2.new(0, physical / (PANEL_SIZE.Y * tv))
+			end
+		end
 	-- MaxDistance IS MEASURED FROM THE CAMERA, while MaxActivationDistance is
 	-- measured from the CHARACTER. Setting this to activation + 4 seemed
 	-- obviously right and hid the prompt at exactly the moment it became usable:
@@ -474,17 +539,14 @@ local function build(prompt: ProximityPrompt): Panel?
 	capCorner.Parent = cap
 
 	local key = Instance.new("TextLabel")
+	key.Name = "Key"
 	key.Size = UDim2.fromScale(1, 1)
 	key.BackgroundTransparency = 1
 	key.Font = PROMPT.Font
 	key.TextSize = PROMPT.KeySize
 	key.TextColor3 = PROMPT.Key
 	key.ZIndex = 4
-	-- The bound key, not a hardcoded letter: rebinding the prompt should not
-	-- leave the UI lying about which key does it.
-	key.Text = if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-		then "TAP"
-		else prompt.KeyboardKeyCode.Name
+	key.Text = capText(prompt)
 	key.Parent = cap
 
 	--== THE VERB ==--
@@ -523,8 +585,15 @@ local function build(prompt: ProximityPrompt): Panel?
 	-- client's own Robux texture tinted ink (the glyph is a blank box in most
 	-- faces -- see ShopUI), and the number in ink with no outline, because an
 	-- ink stroke round ink type only blurs it.
+	--
+	-- THE NUMBER IS THIS PLAYER'S. Roblox prices developer products by region,
+	-- so the attribute's manifest price (99) is not what every player pays. The
+	-- capsule shows what RobuxPrice hears from Roblox for the RobuxProduct id --
+	-- three dots until then -- and disappears rather than guess when Roblox has
+	-- no answer. The purchase prompt quotes the real price either way.
 	--==========================================================================
 	local robux = tonumber(prompt:GetAttribute(ROBUX))
+	local productId = tonumber(prompt:GetAttribute(ROBUX_PRODUCT))
 	local capsule: Frame? = nil
 	local amount: TextLabel? = nil
 	if robux and robux > 0 then
@@ -567,7 +636,8 @@ local function build(prompt: ProximityPrompt): Panel?
 		number.Font = PROMPT.PriceFont
 		number.TextSize = PROMPT.PriceSize
 		number.TextColor3 = INK
-		number.Text = tostring(math.floor(robux))
+		-- Until RobuxPrice answers (below): never the manifest's number.
+		number.Text = "..."
 		number.ZIndex = 4
 		number.Parent = made
 
@@ -634,6 +704,7 @@ local function build(prompt: ProximityPrompt): Panel?
 		cameraLift = cameraLift,
 		raise = raise,
 		stacked = stacked,
+		unwatch = nil,
 	}
 
 	--==========================================================================
@@ -652,7 +723,8 @@ local function build(prompt: ProximityPrompt): Panel?
 	-- frame, before any layout has happened.
 	--==========================================================================
 	local function measured(label: TextLabel): number
-		local width = label.TextBounds.X
+		-- Real pixels / the TV scale = the Offsets this lays out in (1 off a TV).
+		local width = label.TextBounds.X / tv
 		if width > 0 then
 			return width
 		end
@@ -664,7 +736,7 @@ local function build(prompt: ProximityPrompt): Panel?
 		local verbWidth = math.max(VERB_MIN, math.ceil(measured(action)) + STROKE_ROOM)
 		action.Size = UDim2.fromOffset(verbWidth, CAP)
 		local width = PAD_LEFT + CAP + ROW_GAP + verbWidth + PAD_RIGHT
-		if capsule and amount then
+		if capsule and amount and capsule.Visible then
 			local numberWidth = math.ceil(measured(amount))
 			amount.Size = UDim2.fromOffset(numberWidth, CAPSULE_HEIGHT)
 			local capsuleWidth = CAPSULE_PAD * 2 + TOKEN + CAPSULE_GAP + numberWidth
@@ -674,7 +746,7 @@ local function build(prompt: ProximityPrompt): Panel?
 		local size = Vector2.new(math.max(PANEL_SIZE.X, width), PANEL_SIZE.Y)
 		entry.size = size
 		if billboard then
-			billboard.Size = UDim2.fromOffset(size.X, size.Y)
+			billboard.Size = UDim2.fromOffset(size.X * tv, size.Y * tv)
 		else
 			panel.Size = UDim2.fromOffset(size.X, size.Y)
 		end
@@ -683,6 +755,30 @@ local function build(prompt: ProximityPrompt): Panel?
 	action:GetPropertyChangedSignal("TextBounds"):Connect(fit)
 	if amount then
 		amount:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+	end
+
+	-- The capsule's number, from Roblox for this player. No product id, or no
+	-- answer, and the capsule goes rather than show a number that may be wrong.
+	local shownCapsule, shownAmount = capsule, amount
+	if shownCapsule and shownAmount then
+		if productId and productId > 0 then
+			entry.unwatch = RobuxPrice.watch("product", productId,
+				function(state: RobuxPrice.State, price: number?)
+					if state == "ready" and price then
+						shownAmount.Text = RobuxPrice.format(price)
+						shownCapsule.Visible = true
+					elseif state == "loading" then
+						shownAmount.Text = "..."
+						shownCapsule.Visible = true
+					else
+						shownCapsule.Visible = false
+					end
+					fit()
+				end)
+		else
+			shownCapsule.Visible = false
+			fit()
+		end
 	end
 
 	if scale then
@@ -730,6 +826,11 @@ local function hide(prompt: ProximityPrompt)
 	end
 	if not entry then
 		return
+	end
+	local unwatch = entry.unwatch
+	if unwatch then
+		entry.unwatch = nil
+		unwatch()
 	end
 	if entry.tween then
 		entry.tween:Cancel()
@@ -950,6 +1051,17 @@ player:GetAttributeChangedSignal(CARRYING):Connect(function()
 	if carrying() then
 		for prompt in pairs(shown) do
 			hide(prompt)
+		end
+	end
+end)
+
+-- Putting the controller down for the mouse (or picking it up) re-labels every
+-- prompt already on screen, not just the next one to appear.
+PadInput.Changed:Connect(function()
+	for prompt, entry in pairs(shown) do
+		local key = entry.cap:FindFirstChild("Key")
+		if key and key:IsA("TextLabel") then
+			key.Text = capText(prompt)
 		end
 	end
 end)

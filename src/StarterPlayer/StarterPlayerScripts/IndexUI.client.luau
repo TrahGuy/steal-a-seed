@@ -217,16 +217,13 @@ gui.Parent = playerGui
 --==============================================================================
 -- THE BUTTON
 --
--- Blue slab, a book, and the word. All three are instances -- the crop that used
--- to carry them baked the label into a PNG and clipped its own border.
+-- The owner's approved artwork (2026-09-24): the purple book and the word in
+-- one square picture, its rim static -- only the Shop's turns. The picture
+-- carries its own outline, face and label, so nothing of ours is drawn with it.
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "IndexButton",
-	icon = RAIL.IndexIcon,
-	face = RAIL.IndexFace,
-	shade = RAIL.IndexShade,
-	label = "Index",
-	wide = true,
+	art = RAIL.IndexArt,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset)
 
@@ -243,18 +240,16 @@ local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
 -- every viewport, inset and rotation change and nothing else.
 --
 -- ON A TOUCH SCREEN it is the top tile of the dock (HudLayout, THE PHONE'S
--- SIDEBARS): the book over the word on a slate plate, standing in the frame
--- RailDrawerUI slides, still this script's button and this script's badge.
+-- SIDEBARS), standing in the frame RailDrawerUI slides, still this script's
+-- button and this script's badge. The artwork is its own tile there too, so no
+-- slate plate or word goes over it.
 --==============================================================================
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
-	UIKit.railShape(button, Vector2.new(layout.index.w, layout.index.h), nil,
-		if layout.sidebar
-			then { label = "INDEX", top = RAIL.TileTop, bottom = RAIL.TileBottom, edge = RAIL.IndexEdge }
-			else nil)
+	UIKit.railShape(button, Vector2.new(layout.index.w, layout.index.h))
 	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.index, Vector2.zero, layout.safe)
 	UIKit.railBadge(badge, layout.compact, "right")
@@ -292,6 +287,8 @@ local modal = UIKit.modal(gui, {
 		closeRadius = 8,
 	},
 })
+-- This gui holds only the panel, so it takes the player's menu size whole.
+UIKit.menuGui(gui)
 
 local titleBar = modal.title.Parent :: Frame
 modal.title.TextSize = 28
@@ -1137,7 +1134,8 @@ local function layoutShowcase(width: number, wide: boolean): number
 end
 
 local function relayout()
-	local width = math.floor(scroll.AbsoluteSize.X) - SCROLL_GUTTER
+	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
+	local width = math.floor(scroll.AbsoluteSize.X / UIKit.scaleOf(gui)) - SCROLL_GUTTER
 	if width < 200 then
 		return
 	end
@@ -1518,9 +1516,12 @@ local function revealTab()
 		return
 	end
 	local canvasX = tabScroll.CanvasPosition.X
-	local left = tab.button.AbsolutePosition.X - tabScroll.AbsolutePosition.X + canvasX
-	local right = left + tab.button.AbsoluteSize.X
-	local view = tabScroll.AbsoluteSize.X
+	-- CanvasPosition is in the gui's own units; the pixels read beside it are
+	-- that times its TV scale (1 off a TV).
+	local k = UIKit.scaleOf(gui)
+	local left = (tab.button.AbsolutePosition.X - tabScroll.AbsolutePosition.X) / k + canvasX
+	local right = left + tab.button.AbsoluteSize.X / k
+	local view = tabScroll.AbsoluteSize.X / k
 	if left < canvasX then
 		canvasX = left
 	elseif right > canvasX + view then

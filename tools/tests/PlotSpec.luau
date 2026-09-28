@@ -444,6 +444,37 @@ do
 		--== the previous owner, at Level 4 ==--
 		MapService.ResizePlot(plot, 4)
 
+		-- 2026-09-26: the 0.6 gap between a run's two boards read to the Humanoid as
+		-- ladder rungs -- walking into the fence looped Climbing > Running > Freefall.
+		-- Every run's gap is shut FLUSH to the body (a recessed filler still climbed)
+		-- and left open to the eye.
+		do
+			local rails, gaps = {}, {}
+			for _, d in ipairs(plot:GetChildren()) do
+				if d:IsA("BasePart") and d.Name == "Rail" then
+					table.insert(rails, d)
+				elseif d:IsA("BasePart") and d.Name == "RailGap" then
+					table.insert(gaps, d)
+				end
+			end
+			local filled = #rails > 0 and #gaps * 2 == #rails
+			for _, g in ipairs(gaps) do
+				local lower, upper
+				for _, r in ipairs(rails) do
+					local flat = Vector3.new(r.Position.X - g.Position.X, 0, r.Position.Z - g.Position.Z).Magnitude
+					if flat < 1e-3 and r.Size == Vector3.new(g.Size.X, r.Size.Y, g.Size.Z) then
+						if r.Position.Y < g.Position.Y then lower = r else upper = r end
+					end
+				end
+				filled = filled and lower ~= nil and upper ~= nil
+					and math.abs((lower.Position.Y + lower.Size.Y * 0.5) - (g.Position.Y - g.Size.Y * 0.5)) < 1e-3
+					and math.abs((upper.Position.Y - upper.Size.Y * 0.5) - (g.Position.Y + g.Size.Y * 0.5)) < 1e-3
+					and g.CanCollide and g.Transparency == 1
+			end
+			check(filled, "every fence run's board gap is filled flush, invisible and solid -- no ladder to climb",
+				string.format("%d rails, %d gaps", #rails, #gaps))
+		end
+
 		local function gate()
 			local cf = plot:GetAttribute("PlotCF")
 			return (cf * CFrame.new(0, 0, -plot:GetAttribute("Depth") * 0.5)).Position

@@ -516,6 +516,31 @@ local function body()
 		check(fx ~= nil and not fx:find("CameraType", 1, true)
 				and not fx:find("Scriptable", 1, true),
 			"and never takes the camera")
+
+		-- THE RARE REVEAL'S ACCENT (2026-09-27): the owner's RARE PLANT REVEAL
+		-- ACCENT, for the rarities RevealAccentFor names -- Rare, and no other --
+		-- on the creature's appearance, once per hatch token.
+		local SFX = GameConfig.Sfx
+		local named = {}
+		for rarity, cue in pairs(SFX.RevealAccentFor or {}) do
+			table.insert(named, rarity .. "=" .. tostring(cue))
+		end
+		table.sort(named)
+		check(#named == 1 and SFX.RevealAccentFor.Rare == "RevealAccentRare",
+			"the accent is named for Rare reveals only -- not every hatch, not a wider band",
+			table.concat(named, ", "))
+		check(SFX.Cues.RevealAccentRare ~= nil and SFX.Cues.RevealAccentRare.id == "rbxassetid://75401177703541",
+			"and plays the owner's uploaded accent")
+		check(SFX.Cues.RevealAccentRare ~= nil and SFX.Cues.RevealRare ~= nil
+				and SFX.Cues.RevealAccentRare.id ~= SFX.Cues.RevealRare.id,
+			"on top of the Rare fanfare, which is unchanged")
+		local builtAt = fx and fx:find("CreatureModel.Build(species, tier, CreatureModel.STAGE_GROWN", 1, true)
+		local accentAt = fx and fx:find("local accent = REVEAL_ACCENT[species.Rarity]", 1, true)
+		check(builtAt ~= nil and accentAt ~= nil and accentAt > builtAt,
+			"it sounds when the creature is built and rises -- the reveal, not the hatch timer or the burst")
+		check(fx ~= nil and fx:find("(token == 0 or not accented[token])", 1, true) ~= nil
+				and fx:find("accented[token] = true", 1, true) ~= nil,
+			"and at most once for one hatch, however often its reveal arrives")
 	end
 end
 

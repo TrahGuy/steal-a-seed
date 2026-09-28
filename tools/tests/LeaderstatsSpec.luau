@@ -2,8 +2,9 @@
 --==============================================================================
 -- Steal a Seed :: LeaderstatsSpec
 --
--- The player list's two columns -- Speed, then Cash -- spelled by
--- GameConfig.compact and kept in step with the profile. Edit mode:
+-- The player list's two columns -- Speed, then Cash -- Speed spelled by
+-- GameConfig.compact, Cash by GameConfig.money (whole dollars below 100K), and
+-- both kept in step with the profile. Edit mode:
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
@@ -141,8 +142,11 @@ local ok, err = pcall(function()
 			"exactly two values, Speed first")
 	end
 	check(valueOf(speed) == "1.25T", "Speed reads 1.25T (got " .. valueOf(speed) .. ")")
-	check(valueOf(cash) == "$3.43B", "Cash reads $3.43B (got " .. valueOf(cash) .. ")")
+	-- GameConfig.money since 2026-09-24: rounded DOWN, so 3,427,039,827 is
+	-- $3.42B -- never a dollar the player does not have.
+	check(valueOf(cash) == "$3.42B", "Cash reads $3.42B (got " .. valueOf(cash) .. ")")
 	check(valueOf(speed) == GameConfig.compact(1.25e12), "Speed is GameConfig.compact of the profile")
+	check(valueOf(cash) == "$" .. GameConfig.money(3427039827), "Cash is GameConfig.money of the profile")
 
 	--== 2. ADDCASH AND ADDSPEED KEEP THEM IN STEP =============================
 	local writes = 0
@@ -152,12 +156,12 @@ local ok, err = pcall(function()
 		end)
 	end
 	check(data.AddCash(p1, 10000000) == 3437039827, "AddCash returns the new balance")
-	check(valueOf(cash) == "$3.44B", "Cash follows AddCash to $3.44B (got " .. valueOf(cash) .. ")")
+	check(valueOf(cash) == "$3.43B", "Cash follows AddCash to $3.43B (got " .. valueOf(cash) .. ")")
 	task.wait()
 	local afterMove = writes
 	data.AddCash(p1, 1)
 	task.wait()
-	check(valueOf(cash) == "$3.44B" and writes == afterMove and afterMove > 0,
+	check(valueOf(cash) == "$3.43B" and writes == afterMove and afterMove > 0,
 		"a gain too small to change the spelling does not rewrite the value")
 	data.AddSpeed(p1, 1e10)
 	check(valueOf(speed) == "1.26T", "Speed follows AddSpeed to 1.26T (got " .. valueOf(speed) .. ")")
@@ -177,7 +181,7 @@ local ok, err = pcall(function()
 	data.Join(p3)
 	local _, speed3, cash3 = columns(h3)
 	local profile3 = data.Get(p3)
-	check(profile3 ~= nil and valueOf(cash3) == "$" .. GameConfig.compact(profile3.Cash),
+	check(profile3 ~= nil and valueOf(cash3) == "$" .. GameConfig.money(profile3.Cash),
 		"a temporary profile mounts Cash too")
 	check(profile3 ~= nil and valueOf(speed3) == GameConfig.compact(profile3.Speed),
 		"and Speed")
@@ -223,8 +227,8 @@ local ok, err = pcall(function()
 		end
 	end
 	check(count == 1 and stale.Parent == nil, "an older leaderstats folder is replaced, not added to")
-	check(mounted.speed.Value == "110" and mounted.cash.Value == "$1.5K",
-		"a fresh mount reads 110 and $1.5K")
+	check(mounted.speed.Value == "110" and mounted.cash.Value == "$1,500",
+		"a fresh mount reads 110 and $1,500 (whole dollars below 100K)")
 end)
 
 saves.Load = real.Load

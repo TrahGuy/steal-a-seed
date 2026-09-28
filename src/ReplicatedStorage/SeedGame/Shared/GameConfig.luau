@@ -174,6 +174,89 @@ GameConfig.Plot = {
 	PickupAnchorsFolderName = "PickupAnchors",
 	PlantsFolderName = "Plants",
 
+	--==========================================================================
+	-- HOW LONG A NEWLY ASSIGNED PLOT WAITS FOR ITS OWNER'S SAVE
+	--
+	-- A plot is handed out on join; the garden and the mill it should show come
+	-- off a profile that is a DataStore round trip behind -- measured at 38 s in
+	-- Studio, and a throttled server is slower. PlantService waited 30 s and
+	-- TreadmillService 20, then gave up silently: the garden was never put back
+	-- and the first planting SAVED THAT EMPTY BED over the real one.
+	--
+	-- Now both wait for as long as the player stays, and this is only the
+	-- backstop against a thread that would otherwise spin all session -- the
+	-- same 600 s CarryService gives the held plants. If it ever runs out the bed
+	-- stays shut: nothing is planted or saved over a garden that never arrived.
+	--==========================================================================
+	RestorePatienceSeconds = 600,
+
+	--==========================================================================
+	-- WHO HOLDS A PLOT: THE OWNER'S BADGE, HIGH OVER THE GATE
+	--
+	-- Replaced the low YOUR BASE / name plate on 2026-09-26 at the owner's
+	-- request: the owner's Roblox headshot in a round frame with their username
+	-- under it, floating well above the entrance where it names the plot from
+	-- the approach without covering the gate, the bed or anybody walking in. The
+	-- viewer's own plot wears an accent ring instead of a sentence.
+	--
+	-- SIZED IN STUDS, CLAMPED BY PlotOwnerLabels. Between NearStuds and FarStuds
+	-- it shrinks with distance like any sign; nearer, it stops growing, and
+	-- farther, it stops shrinking -- readable from the hub, never a wall of face
+	-- at the gate. MaxDistance hides it past that, so the far side of the hub is
+	-- not a row of heads. (BillboardGui's own DistanceLowerLimit/UpperLimit were
+	-- tried first and MEASURED to do nothing to the drawn size, 2026-09-26: a
+	-- stud badge ran 408 px at 8 studs to 22 px at 150 with both set.)
+	--
+	-- Its foot is HeightStuds - TallStuds/2 = 13.4 studs up: over the gateposts
+	-- (5.8), a jump (7.2) and the camera's usual height walking in.
+	--==========================================================================
+	OwnerBadge = {
+		HeightStuds = 17,
+		WidthStuds = 6.4,
+		TallStuds = 7.2,
+		NearStuds = 28,
+		FarStuds = 110,
+		MaxDistance = 160,
+		-- The round frame's share of the badge's height; the name takes the rest.
+		FaceShare = 0.78,
+		-- The ring, as a share of the face's diameter, so it scales with it.
+		RingShare = 0.07,
+		RingMine = Color3.fromRGB(142, 214, 86),
+		RingTheirs = Color3.fromRGB(255, 255, 255),
+		-- Behind the headshot while it loads, and the whole face if it never does.
+		Fill = Color3.fromRGB(58, 44, 34),
+		Name = Color3.fromRGB(255, 255, 255),
+	},
+	-- What a free plot keeps: one small word at the gate, no badge.
+	UnclaimedTag = {
+		HeightStuds = 8.5,
+		WidthStuds = 5,
+		TallStuds = 1.1,
+		MaxDistance = 90,
+		Colour = Color3.fromRGB(200, 200, 206),
+	},
+	--==========================================================================
+	-- THE GARDEN'S NUMBERS, ON A PLAQUE OUTSIDE THE ENTRANCE
+	--
+	-- Plants and income, split off the badge (owner, 2026-09-26): a compact
+	-- board on a short post just outside the fence, mirroring the upgrade board
+	-- across the gate -- it stands at +OffsetX where that one stands at -OffsetX,
+	-- the same Standoff out, so the gate is framed by the two and the opening
+	-- between them (GateWidth) stays clear. Local, non-colliding and not
+	-- queryable: signage cannot catch a runner or a planting click.
+	--==========================================================================
+	StatsSign = {
+		OffsetX = 11.12,
+		Standoff = 1.6,
+		GroundY = 0,
+		PostHeight = 3.4,
+		BoardSize = Vector3.new(5.6, 2.5, 0.35),
+		MaxDistance = 90,
+		Plants = Color3.fromRGB(242, 238, 206),
+		Income = Color3.fromRGB(255, 214, 92),
+		Muted = Color3.fromRGB(206, 188, 160),
+	},
+
 	-- THE GAP IN THE FRONT FENCE.
 	--
 	-- The fence encloses all four sides, and without this there was no way IN --
@@ -214,6 +297,19 @@ GameConfig.Plot = {
 	},
 
 	SpawnHeightOffset = 4,
+
+	--==========================================================================
+	-- TELEPORT TO PLOT (PlotService.TeleportHome), 2026-09-23
+	--
+	-- The verb the HUD button sends on GameEvent, with NOTHING after it: no plot
+	-- id and no destination, because the server takes both from who asked. The
+	-- cooldown is the server's and starts at a teleport that happened, so a
+	-- mashed button moves you once. The ground check reaches this far below the
+	-- spawn point, so a plot caught mid-rebuild refuses rather than drops you.
+	--==========================================================================
+	TeleportAction = "TeleportToPlot",
+	TeleportCooldownSeconds = 3,
+	TeleportGroundProbe = 24,
 
 	--==========================================================================
 	-- THE BED
@@ -560,6 +656,24 @@ GameConfig.SellOne = {
 }
 
 --==============================================================================
+-- SELL ALL: THE SAME QUOTE-THEN-ANSWER, FOR THE WHOLE BAG
+--
+-- It used to sell on the prompt: a 1.1s hold and the bag was gone, with the
+-- count and the payout only in the server log. Now the hold asks for a quote --
+-- how many plants, how many pods, and what they pay -- and nothing is sold
+-- until the player says yes to exactly that. It rides SELL ONE's channel and
+-- its reach, expiry and token rules (SellService); these are its own words.
+--==============================================================================
+GameConfig.SellAll = {
+	-- Nothing in the bag or the hands that the stall buys.
+	EmptyText = "Nothing in your bag to sell.",
+	-- The bag gained, lost or changed something between the quote and the yes.
+	-- Nothing is sold; the player presses the sign again for a fresh count.
+	ChangedText = "Your bag changed. Press SELL ALL again.",
+	TooFarText = "Stand at the SELL ALL sign to sell.",
+}
+
+--==============================================================================
 -- OFFLINE EARNINGS: THE CLAIM, BY NAME
 --
 -- Names and words only; the numbers are SeedData.Offline. The pending claim is
@@ -622,6 +736,13 @@ GameConfig.Attributes = {
 	-- looking at a shop price is the point of having two rails.
 	--==========================================================================
 	OpenPanel = "OpenPanel",
+	-- On the local player, set by TutorialUI (on the client, like OpenPanel):
+	-- how far down the screen the guide's own words reach right now -- its
+	-- banner's skip line, or the first-hatch celebration's foot -- in the HUD's
+	-- units (HudLayout's safe space); nil when neither is up. BonusChestUI
+	-- stands its boost row under it: the chest opens only after the guide, but
+	-- the reward wheel (2026-09-27) can hand a new player a boost in the middle.
+	TutorialReach = "TutorialReach",
 	-- Bumped every time a pod is banked at the red line. A COUNTER rather than a
 	-- flag, because two banks in a row have to be two events -- setting a flag
 	-- true twice changes nothing and the second one would go unnoticed. The
@@ -629,7 +750,14 @@ GameConfig.Attributes = {
 	-- the client's side otherwise look identical: CarryingSpecies goes nil.
 	BankedCount = "BankedCount",
 	SeedInstanceId = "SeedInstanceId",
+	-- On the PLAYER, written by BiomeGateService's road poll with
+	-- MapService.IsInSafeZone (true in the field). Read-only presentation: the
+	-- TELEPORT TO PLOT button shows off it, and the server tests the position
+	-- itself on every request.
 	InSafeZone = "InSafeZone",
+	-- On the PLAYER: the id of the plot PlotService leased them, nil while they
+	-- have none (queued, or leaving). Presentation only, like the above.
+	OwnPlotId = "OwnPlotId",
 	-- Set while the owner is standing on their own mill and earning. On the
 	-- PLAYER, so it replicates to everybody for free -- which is what lets each
 	-- client play the run cycle on somebody else's character without a remote.
@@ -656,6 +784,52 @@ GameConfig.Attributes = {
 	-- anyway -- but so that every client can see who is training without a remote.
 	--==========================================================================
 	MillMounted = "MillMounted",
+	--==========================================================================
+	-- HOW MANY GUARDIANS ARE RUNNING AT THIS PLAYER RIGHT NOW
+	--
+	-- On the PLAYER, written by NestService's tick only when it changes: nil
+	-- while nobody is, else the number of guardians in the chasing state with
+	-- this player as their target. Waking, throwing, hauling and walking home do
+	-- not count -- none of those is a pursuit.
+	--
+	-- One number per player rather than a target on every guardian, so the
+	-- client never needs to SEE a guardian to know it is being chased: the one
+	-- behind you can be streamed out, and the chase bed must not stop because
+	-- of it. Read by AlertUI. Presentation only.
+	--==========================================================================
+	PursuedBy = "PursuedBy",
+	--==========================================================================
+	-- HOW MANY GUARDIANS ARE WAKING UP TO COME AFTER THIS PLAYER
+	--
+	-- The same shape as PursuedBy, for the state before it: nil while nobody
+	-- is, else the number of guardians in their wake delay with this player as
+	-- their target. Written by NestService on the theft itself and every tick
+	-- after, only when it changes. It drops back to nil the tick the delay ends,
+	-- which is also the tick PursuedBy counts them -- so AlertUI goes from
+	-- "WAKING -- RUN!" to "CHASED!" on the guardian's own state change, never
+	-- on the carry. Presentation only.
+	--==========================================================================
+	WakingBy = "WakingBy",
+	--==========================================================================
+	-- WHAT A GARDEN HOLDS AND EARNS, ON ITS PLOT, FOR THE GATE SIGN
+	--
+	-- On the plot Model. Written by EconomyService's pay tick, only when a value
+	-- changes, and cleared by PlotService the moment the lease ends. nil means
+	-- "not known" -- nobody owns it, or the owner's garden is not back in the
+	-- ground yet -- and never stands in for zero.
+	--
+	--   GardenGrown   grown plants standing in the bed
+	--   GardenPods    pods still hatching; with GardenGrown, what Capacity counts
+	--   GardenIncome  what the owner is paid per second right now: the RateFor the
+	--                 same tick pays, so every active boost is already inside it
+	--   GardenBoost   the boost multiplier inside that number; nil at x1
+	--
+	-- Presentation only. The capacity check and the payout never read them.
+	--==========================================================================
+	GardenGrown = "GardenGrown",
+	GardenPods = "GardenPods",
+	GardenIncome = "GardenIncome",
+	GardenBoost = "GardenBoost",
 	--==========================================================================
 	-- HOW FAST THIS PLAYER LOOKS, TO EVERY OTHER CLIENT
 	--
@@ -766,6 +940,9 @@ GameConfig.Attributes = {
 	-- hits.
 	--==========================================================================
 	WalkMode = "WalkMode",
+	-- The saved GameConfig.MenuSize option id, stamped from the profile the way
+	-- WalkMode is. Read by every menu (UIKit.menuScale).
+	MenuSize = "MenuSize",
 }
 
 --==============================================================================
@@ -797,6 +974,56 @@ GameConfig.WalkMode = {
 	OnText = "ON",
 	OffText = "OFF",
 }
+
+--==============================================================================
+-- MENU SIZE: A READING PREFERENCE, SAVED LIKE WALK MODE (2026-09-26)
+--
+-- How big the menus are drawn -- panels, their text and their controls -- for a
+-- player who finds them small. Chosen, never guessed: a screen's resolution says
+-- nothing about how big the glass is or how far away the player sits, so the
+-- default is today's size and the player picks a larger one in Settings.
+--
+-- Saved the way Walk Mode is: a profile field, this verb on the GameEvent remote
+-- the HUD already owns, and an attribute the server stamps from the profile. No
+-- second remote and no second store.
+--
+-- MODEST, AND ALWAYS INSIDE THE SCREEN. Each menu takes the smaller of the
+-- chosen size and what fits the usable screen (UIKit.menuScale), so LARGER on a
+-- short phone is as large as that phone allows and never a panel off its edges.
+-- The HUD itself -- the rail, the hotbar, cash and speed -- is never scaled:
+-- its owner-approved positions stay exactly where they are.
+--==============================================================================
+GameConfig.MenuSize = {
+	Action = "MenuSize",
+	Label = "MENU SIZE",
+	Default = "normal",
+	Options = {
+		{ Id = "normal", Label = "NORMAL", Scale = 1 },
+		{ Id = "large", Label = "LARGE", Scale = 1.15 },
+		{ Id = "larger", Label = "LARGER", Scale = 1.3 },
+	},
+}
+
+-- The scale an option id stands for, or nil for anything that is not one.
+function GameConfig.menuSizeScale(id: any): number?
+	for _, option in ipairs(GameConfig.MenuSize.Options) do
+		if option.Id == id then
+			return option.Scale
+		end
+	end
+	return nil
+end
+
+-- The option after `id`, round again after the last; unknown ids start over.
+function GameConfig.nextMenuSize(id: any): string
+	local options = GameConfig.MenuSize.Options
+	for i, option in ipairs(options) do
+		if option.Id == id then
+			return options[i % #options + 1].Id
+		end
+	end
+	return options[1].Id
+end
 
 GameConfig.Tags = {
 	Plot = "Plot",
@@ -1048,12 +1275,20 @@ GameConfig.Speed = {
 -- a hoarded nest is not a way to start tomorrow ahead.
 --
 --     420s day     five pods for up to six players, then nothing until dawn
---      60s night   the road is shut and the world is reset
+--      15s night   the road is shut and the world is reset
 --      45s warning enough to decide whether to go in or turn round
 --
--- SEVEN MINUTES IS THE NUMBER TO TUNE. It is the whole supply curve: five pods
--- per eight-minute cycle across the whole server. Shorten the day and the road
--- gets busier; lengthen it and the nest sits empty longer.
+-- SEVEN MINUTES IS THE NUMBER TO TUNE. It is the whole supply curve: the batch
+-- per seven-and-a-quarter-minute cycle across the whole server. Shorten the day
+-- and the road gets busier; lengthen it and the nest sits empty longer.
+--
+-- THE NIGHT WAS 60 SECONDS UNTIL 2026-09-23, when the owner cut it to 15: a
+-- minute of shut road was a minute of waiting. Everything a night does still
+-- happens at its two edges and none of it waits on the night's length -- the
+-- dusk teardown runs before the night's wait begins, and the dawn batch is
+-- built and counted before Day is published (WorldCycleService) -- so a
+-- shorter night is a shorter wait and nothing else. The lighting and music
+-- crossfades are 3 s, a fifth of it; CycleSpec holds them under a quarter.
 --
 --==============================================================================
 -- THE PHASE IS AN ATTRIBUTE ON THE WORKSPACE, NOT A REMOTE
@@ -1075,7 +1310,7 @@ GameConfig.Speed = {
 --==============================================================================
 GameConfig.WorldCycle = {
 	DaySeconds = 420,
-	NightSeconds = 60,
+	NightSeconds = 15,
 	-- How long before dusk the HUD starts saying so.
 	WarnSeconds = 45,
 
@@ -1128,7 +1363,7 @@ GameConfig.WorldCycle = {
 		-- AND IT IS A SCREEN, NOT A SLAB
 		--
 		-- It was a flat dark-blue wall, and a flat dark-blue wall at 164 by 60
-		-- studs is not read as "the road is shut for a minute", it is read as
+		-- studs is not read as "the road is shut for a moment", it is read as
 		-- the world having run out. Nothing on it said what had happened or how
 		-- long it would last, so the only way to know either was the one-line
 		-- HUD clock at the top of the screen -- which a player walking INTO the
@@ -2568,7 +2803,8 @@ GameConfig.Treadmill = {
 	--
 	-- At the 12/sec this started as, that entire ladder was TWELVE MINUTES, and
 	-- a progression game whose progression is over before the first session is
-	-- not a progression game. Dropped to 2 and left there.
+	-- not a progression game. It was dropped to 2 then; the ten-step mill below
+	-- (THE MILL, IN TEN STEPS) later re-priced tier 1 at 20, which is what it is.
 	--
 	-- The number is low because it is a BASE. Upgrades and Rebirth multiply it,
 	-- which is where the actual pacing will come from -- and it is much easier
@@ -3280,6 +3516,92 @@ function GameConfig.trainingRushMultiplier(rampSeconds: number): number
 	return 1 + (T.PeakMultiplier - 1) * t
 end
 
+--==============================================================================
+-- A TICK THE CHARGE RAN OUT IN IS ONLY PARTLY BOOSTED
+--
+-- The mill pays a whole tick, `dt` seconds, at one multiplier. When the charge
+-- runs dry partway through, only `spend` of those seconds were boosted and the
+-- rest were ordinary training -- but the tick was paid at the boosted rate for
+-- all of it, so the last tick of every charge over-paid. This is that tick's
+-- honest multiplier: boosted seconds at `boosted`, the remainder at 1x.
+-- Anything but a partial tick comes back as `boosted` exactly.
+--==============================================================================
+function GameConfig.trainingRushBlend(boosted: number, spend: number, dt: number): number
+	if not (dt > 0) or spend >= dt then
+		return boosted
+	end
+	local s = math.max(0, spend)
+	return (s * boosted + (dt - s)) / dt
+end
+
+--==============================================================================
+-- IS THIS CHANGE IN THE BALANCE A LUMP, OR MORE OF THE SAME
+--
+-- For CashUI's tick (GameConfig.Sfx.CashTicks). `routine` is the running size
+-- of recent changes -- plant income, mostly -- and nil until there is one. A
+-- change more than LumpFactor times it is a lump: a sale, a reward, a purchase.
+-- The routine size moves a quarter of the way toward EVERY change, lumps
+-- included, so a garden whose income jumps is only a lump once, and the next
+-- second of the new income is routine again.
+--==============================================================================
+function GameConfig.cashStepIsLump(step: number, routine: number?): boolean
+	local r = routine
+	return r ~= nil and r > 0 and math.abs(step) > r * GameConfig.Sfx.CashTicks.LumpFactor
+end
+
+function GameConfig.cashRoutineStep(routine: number?, step: number): number
+	local s = math.abs(step)
+	return if routine then routine + (s - routine) * 0.25 else s
+end
+
+--==============================================================================
+-- WHAT A PLOT'S BADGE SHOWS, TO WHOM
+--
+-- `ownerUserId` is the plot's OwnerUserId attribute -- PlotService's word, the
+-- only source of truth for who holds a plot -- and 0 or nil is nobody.
+-- Returns which of three badges it is ("free", "mine", "theirs") and the name
+-- printed under the face: the owner's USERNAME (their Player's, else the plot's
+-- stamped OwnerName), never their display name, and nothing for a free plot.
+--==============================================================================
+function GameConfig.plotBadgeFor(ownerUserId: number?, viewerUserId: number,
+	username: string?): (string, string)
+	if type(ownerUserId) ~= "number" or ownerUserId <= 0 then
+		return "free", ""
+	end
+	local name = if type(username) == "string" then username else ""
+	return (if ownerUserId == viewerUserId then "mine" else "theirs"), name
+end
+
+-- The owner's headshot, by id. An rbxthumb:// content id the engine fetches and
+-- caches itself: nothing yields, and nothing about it comes over a remote.
+function GameConfig.avatarHeadshot(userId: number): string
+	return string.format("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150", math.floor(userId))
+end
+
+--==============================================================================
+-- THE PLAQUE'S TWO LINES
+--
+-- Out of what EconomyService published (GameConfig.Attributes.GardenGrown and
+-- friends) and the plot's Capacity. nil when there is nothing true to say yet --
+-- a plot nobody holds, or an owner whose garden is still being restored -- so
+-- the plaque stands blank rather than printing a 0/10 that was never so.
+-- Counts only: a pod is "hatching", never what is inside it.
+--==============================================================================
+function GameConfig.plotStatsText(grown: any, pods: any, capacity: any, income: any,
+	boost: any): (string?, string?, string?, string?)
+	if type(grown) ~= "number" or type(pods) ~= "number" or type(income) ~= "number" then
+		return nil, nil, nil, nil
+	end
+	local cap = tonumber(capacity) or 0
+	local plants = string.format("PLANTS %d/%d", grown + pods, math.max(0, math.floor(cap)))
+	local hatching = if pods > 0 then string.format("%d hatching", pods) else ""
+	local earning = "$" .. GameConfig.compact(income) .. "/s"
+	local boosted = if type(boost) == "number" and boost > 1
+		then string.format("with x%s boost", tostring(boost))
+		else ""
+	return plants, hatching, earning, boosted
+end
+
 function GameConfig.speedVisualTierFor(speedScore: number): number
 	local tiers = GameConfig.Afterimage.Tiers
 	if type(speedScore) ~= "number" or speedScore ~= speedScore or speedScore <= 0 then
@@ -3387,8 +3709,60 @@ GameConfig.Rail = {
 	-- bars with them. UIKit.cartIcon lost its title bar in the 2026-09-11 shop
 	-- restyle, whose green header carries no icon; it is unused but kept.
 	--==========================================================================
+	-- Superseded on the rail by ShopArt and IndexArt below (2026-09-24); kept so
+	-- going back is a one-line change.
 	ShopIcon = "rbxassetid://90931969678136",
 	IndexIcon = "rbxassetid://126806966970007",
+	--==========================================================================
+	-- INDEX AND SHOP: THE OWNER'S APPROVED BUTTON ARTWORK (2026-09-24)
+	--
+	-- Each is a whole button in one square picture -- the thick black outline,
+	-- the rim, the face, the cart or the book, and the word -- so these two are
+	-- ART buttons now (UIKit.railButton `art`): no slab, icon or label of ours
+	-- around it, square at every size, never stretched.
+	--
+	-- Uploaded from art/ui/rail-buttons/<name>-256.png, 256-px reductions of
+	-- the 512 exports: the buttons draw at 50 px, which is 150 on a 3x phone and
+	-- 135 on a 4K TV, so 128 would soften and 512 would be four times the memory.
+	--
+	-- The Shop's is shop-base.svg: the approved shop.svg with its static rim
+	-- stroke taken out and that band CUT to transparent, so the rainbow
+	-- UIKit.rainbowRim turns behind the picture shows through the band and
+	-- nowhere else. The Index keeps the approved static rim.
+	--==========================================================================
+	ShopArt = "rbxassetid://100314547854118",
+	IndexArt = "rbxassetid://107928181966123",
+	--==========================================================================
+	-- THE SHOP'S RAINBOW RIM
+	--
+	-- Geometry in the artwork's own 256 units (shop-base.svg). The band is the
+	-- 7-unit stroke round the panel rect (20, 43, 216 x 192, rx 14); the frame
+	-- behind the picture is that band's outer edge grown by 2.5 on every side,
+	-- still inside the opaque black outline, so the frame's own edge and corners
+	-- never show. Same corner centres as the band, radius 17.5 + 2.5.
+	--
+	-- Speed and colours are the owner's reference clip, measured: every point on
+	-- the band swings red -> purple -> red, the two sides in opposite phase, one
+	-- whole turn in 120 frames at 30 fps -- a rainbow gradient rotating at 90
+	-- degrees a second. Red, yellow, green, cyan, blue and purple, evenly spaced.
+	--==========================================================================
+	Rim = {
+		Art = 256,
+		X = 14,
+		Y = 37,
+		W = 228,
+		H = 204,
+		Radius = 20,
+		Speed = 90,
+		Colours = {
+			Color3.fromRGB(255, 56, 56),
+			Color3.fromRGB(255, 222, 48),
+			Color3.fromRGB(86, 232, 72),
+			Color3.fromRGB(48, 224, 255),
+			Color3.fromRGB(56, 112, 255),
+			Color3.fromRGB(184, 72, 255),
+		},
+	},
 	--==========================================================================
 	-- GARDEN AND THE BAG ARE FILLED AGAIN, BECAUSE THEY LOST THEIR PLATE
 	--
@@ -3759,10 +4133,18 @@ GameConfig.Store = {
 		-- `robux`, so the two are filled in together -- a live card with robux
 		-- still at 0 would advertise the pass as free. Wired 2026-09-11 with the
 		-- owner's pass, printed at 79: the price Roblox returned for it on the
-		-- owner's account, and the owner's choice.
+		-- owner's account.
+		--
+		-- 79 WAS THE OWNER'S REGIONAL PRICE, NOT THE PASS'S. That account reads
+		-- about 0.4x of list on every product (Instant Hatch 39 against 99, the
+		-- speed packs the same), and every other tile prints list. An Xbox tester
+		-- saw 79 on the card and 199 in Roblox's prompt, which charges list.
+		-- Corrected 2026-09-24 to 199, read from the public product-info API
+		-- (PriceInRobux 199, "Permanent 2x Earn", for sale) -- the Dashboard price
+		-- itself was not changed and nothing was bought.
 		--======================================================================
 		Passes = {
-			{ key = "x2money", label = "\u{00D7}2 MONEY", robux = 79, pass = 1975418369,
+			{ key = "x2money", label = "\u{00D7}2 MONEY", robux = 199, pass = 1975418369,
 				kind = "pass", multiplier = 2 },
 		},
 		Speed = {
@@ -3877,6 +4259,194 @@ function GameConfig.cashMultiplier(player: Player?): number
 		return 1
 	end
 	return n
+end
+
+--==============================================================================
+-- LAUNCH ANALYTICS (2026-09-27): WHAT Metrics MAY SEND, AND FOR WHOM
+--
+-- Measurement only. Nothing here changes a rule, a reward or a price; the
+-- server module SeedGameServer/Metrics reads it, and KB/ANALYTICS.md says what
+-- every event means and where to read it.
+--==============================================================================
+GameConfig.Metrics = {
+	-- The switch for every custom event and funnel step. Off: nothing is sent,
+	-- nothing is counted, and gameplay is exactly the same.
+	Enabled = true,
+	-- THE NEW-PLAYER COHORT: a save first written on or after this moment
+	-- (os.time, 2026-09-27 00:00 UTC). A returning player -- any save older
+	-- than this, even one whose guide is unfinished -- never enters the
+	-- onboarding funnel, so it cannot be restarted or falsely completed.
+	CohortSince = 1790467200,
+	-- The two admin accounts' own play stays out of every report.
+	ExcludeStaff = true,
+	-- ...unless this is on, and then their actions send ONE event instead,
+	-- MetricsValidation, naming what would have been sent -- so the pipeline can
+	-- be watched arriving in Creator Hub's View Events without adding a single
+	-- count to a real report. Off for launch.
+	StaffValidation = false,
+	-- Per server: at most this many analytics calls a minute. Roblox allows
+	-- 120 + 20 x players; the game sends a handful per raid, so this is a ceiling
+	-- for a bug, not a budget anybody should meet.
+	PerMinute = 60,
+	-- SPEED BANDS against the biome's BiomeData.RecommendedSpeed: under 80% is
+	-- "below", 80% to under 125% "near", 125% and up "above". A biome that
+	-- recommends nothing (Greenhollow) is "none".
+	BelowShare = 0.80,
+	AboveShare = 1.25,
+	-- The Floating Garden's run events (ObbyRun funnel, ObbyCheckpoint,
+	-- ObbyRunEnded). On since the course was built and verified, 2026-09-27;
+	-- with GameConfig.Obby.Enabled off there is no run to report anyway.
+	Obby = true,
+}
+
+--==============================================================================
+-- THE FLOATING GARDEN OBBY (2026-09-27): ITS ONE SWITCH
+--
+-- Everything else about the course -- where it floats, what it pays, how fast
+-- you move on it -- is in Shared/ObbyData. `Enabled = false` switches the whole
+-- thing off on the server: no course is built, no entrance, nobody can start,
+-- and ObbyUI finds nothing to draw. Nothing else has to be touched.
+--==============================================================================
+GameConfig.Obby = {
+	Enabled = true,
+}
+
+--==============================================================================
+-- THE BONUS CHEST (2026-09-27 launch pass)
+--
+-- A free chest in the safe hub. The owner's launch configuration, kept in one
+-- block so the feature has one switch and one place to read:
+--
+--   * the first claim opens when the guide is finished (TutorialData.IsComplete);
+--   * after a claim the next one opens CooldownSeconds later;
+--   * each claim grants ONE reward below, weighted equally -- a 50/50 that the
+--     chest shows before anybody claims;
+--   * a reward runs for BoostSeconds and never stacks: a claim REPLACES, it
+--     does not add time (and the cooldown outlasts the boost anyway);
+--   * the cooldown and the expiry are absolute server times, os.time(), saved
+--     on the profile -- so they keep elapsing while the player is away, and a
+--     rejoin can neither reset one nor extend the other.
+--
+-- No movement-speed reward, no Robux, no rerolls, no streaks, no paid skips.
+--
+-- `Enabled = false` SWITCHES THE WHOLE THING OFF on the server: no chest is
+-- built, every claim is refused, and a boost already saved on a profile stops
+-- paying (see bonusChestMultiplier). Nothing else has to be touched.
+--
+-- WHERE EACH REWARD LANDS, AND NOWHERE ELSE
+--
+--   income    EconomyService.RateFor -- passive plant income, the same number
+--             the x2 pass multiplies, so the two MULTIPLY: x2 becomes x2.5.
+--             Not sales, not Robux cash packs, not the offline claim, not a
+--             Biome Harvest: none of those come through RateFor.
+--   training  TreadmillService's payout -- Speed earned on the belt, after the
+--             rush. Not purchases, not admin grants, not WalkSpeed directly.
+--==============================================================================
+GameConfig.BonusChest = {
+	Enabled = true,
+	CooldownSeconds = 600,
+	BoostSeconds = 120,
+	Rewards = {
+		{ Id = "income", Multiplier = 1.25, Weight = 1,
+			Title = "+25% PLANT INCOME", Detail = "passive plant income" },
+		{ Id = "training", Multiplier = 1.25, Weight = 1,
+			Title = "+25% TRAINING", Detail = "Speed earned on your treadmill" },
+	},
+	-- The answer to a claim, on the existing GameEvent remote. The claim itself
+	-- is the chest's ProximityPrompt, settled on the server: no client verb.
+	ReplyAction = "BonusChestResult",
+	Attributes = {
+		-- True once the guide is finished (and the chest is on at all).
+		Unlocked = "ChestUnlocked",
+		-- os.time() at which the next claim opens.
+		NextAt = "ChestNextAt",
+		-- The running reward's Id, and the os.time() it ends; nil when none.
+		Boost = "ChestBoost",
+		EndsAt = "ChestBoostEndsAt",
+	},
+	FolderName = "SeedBonusChest",
+	-- On the hub deck's west side, facing its centre (-90 turns the chest's
+	-- front from -Z to +X). Chosen from a top-down survey in Play, 2026-09-27:
+	-- about 15 studs clear of both the Plot 2 -> stall and the Plot 1 -> stall
+	-- walks, and over 20 from the stall's own prompts (Marigold, Sell All,
+	-- Sell One), so no two prompts share the ground. Y is the deck's surface.
+	Position = Vector3.new(-40, 0.5, -6),
+	FacingDegrees = -90,
+	PromptDistance = 10,
+	PromptHoldSeconds = 0.35,
+}
+
+function GameConfig.bonusChestReward(id: any): any
+	if type(id) ~= "string" then
+		return nil
+	end
+	for _, reward in ipairs(GameConfig.BonusChest.Rewards) do
+		if reward.Id == id then
+			return reward
+		end
+	end
+	return nil
+end
+
+--==============================================================================
+-- WHAT A SAVED BOOST IS WORTH TO ONE KIND OF EARNING, AT ONE MOMENT
+--
+-- The reward's Multiplier while `now` is before `endsAt` and the boost is of
+-- this `kind`; exactly 1 otherwise -- and always 1 with the chest switched off.
+-- Pure, so the server's faucets and the client's displays ask the same question
+-- and a spec can ask it without a world.
+--==============================================================================
+function GameConfig.bonusChestMultiplier(boostId: any, endsAt: any, now: number, kind: string): number
+	if not GameConfig.BonusChest.Enabled or boostId ~= kind then
+		return 1
+	end
+	local reward = GameConfig.bonusChestReward(boostId)
+	local ends = tonumber(endsAt)
+	if not reward or not ends or ends ~= ends or now >= ends then
+		return 1
+	end
+	return reward.Multiplier
+end
+
+-- Display only, like cashMultiplier: the chest's INCOME boost this player is
+-- running, off the attributes the server publishes and the server's clock.
+function GameConfig.chestIncomeBoost(player: Player?): number
+	if not player then
+		return 1
+	end
+	local A = GameConfig.BonusChest.Attributes
+	return GameConfig.bonusChestMultiplier(player:GetAttribute(A.Boost), player:GetAttribute(A.EndsAt),
+		workspace:GetServerTimeNow(), "income")
+end
+
+--==============================================================================
+-- WHAT THIS PLAYER'S PASSIVE INCOME IS MULTIPLIED BY, FOR A DISPLAY
+--
+-- The pass times the chest -- exactly what EconomyService.RateFor pays. Every
+-- display of what a player EARNS per second uses this. The offline claim card
+-- keeps cashMultiplier alone, because the chest never reaches offline income.
+--==============================================================================
+function GameConfig.incomeMultiplier(player: Player?): number
+	return GameConfig.cashMultiplier(player) * GameConfig.chestIncomeBoost(player)
+end
+
+-- Checked on load, like the Speed anchors: a boost that outlived the cooldown
+-- would let two stack, and a reward with a bad weight would skew the 50/50 the
+-- chest promises.
+do
+	local C = GameConfig.BonusChest
+	assert(C.CooldownSeconds > 0 and C.BoostSeconds > 0, "BonusChest times must be positive")
+	assert(C.CooldownSeconds >= C.BoostSeconds,
+		"a Bonus Chest boost must end before the next claim opens -- boosts never stack")
+	assert(#C.Rewards >= 1, "the Bonus Chest needs at least one reward")
+	local seen: { [string]: boolean } = {}
+	for _, reward in ipairs(C.Rewards) do
+		assert(type(reward.Id) == "string" and not seen[reward.Id], "Bonus Chest reward ids must be unique")
+		seen[reward.Id] = true
+		assert(type(reward.Weight) == "number" and reward.Weight > 0, "Bonus Chest weights must be positive")
+		assert(type(reward.Multiplier) == "number" and reward.Multiplier >= 1,
+			"a Bonus Chest reward must not reduce anything")
+	end
 end
 
 --==============================================================================
@@ -4460,8 +5030,8 @@ GameConfig.Card = {
 --
 -- AND ONE PIECE AT NIGHT. NightTracks is the same kind of list and works the same
 -- way -- Music.client reads Workspace.WorldPhase and crossfades between the two
--- -- but it is nearly three minutes long against a night that lasts sixty
--- seconds, so in practice it plays its own first minute and is faded out at dawn.
+-- -- but it is nearly three minutes long against a night that lasts fifteen
+-- seconds, so in practice it plays its own opening and is faded out at dawn.
 -- That is the right shape for it: a night is a scene, not a loop.
 --
 -- AN EMPTY NightTracks IS NOT SILENCE. The day bed simply keeps playing, which is
@@ -4479,7 +5049,7 @@ GameConfig.Music = {
 		"rbxassetid://70722559996799",   -- BGM2
 	},
 
-	-- 2:58 of it, against a sixty-second night. Uploaded 2026-09-17.
+	-- 2:58 of it, against a fifteen-second night. Uploaded 2026-09-17.
 	NightTracks = {
 		"rbxassetid://115368148164882",  -- Night Background Music
 	},
@@ -4584,6 +5154,46 @@ GameConfig.Sfx = {
 	--==========================================================================
 	MusicDuck = 0.34,
 	DuckSeconds = 0.6,
+
+	--==========================================================================
+	-- THE CHASE BED FOLLOWS THE PURSUIT, AND LEAVES GENTLY
+	--
+	-- Hold: how long nobody may be chasing before the bed lets go. Long enough
+	-- to ride a retarget, a guardian's throw ending while another is still
+	-- running, or a chase that picks straight back up; short enough that
+	-- reaching the red line still sounds like the moment it is.
+	--
+	-- FadeIn is short, because a pursuit starting should land -- but not zero,
+	-- so the roar that started it is not stepped on by a hard downbeat. FadeOut
+	-- is the escape: the bed goes under while the garden bed comes back up over
+	-- the same length, so the two cross rather than one leaving a hole.
+	--==========================================================================
+	ChaseHoldSeconds = 1.0,
+	ChaseFadeInSeconds = 0.4,
+	ChaseFadeOutSeconds = 1.8,
+
+	--==========================================================================
+	-- THE MONEY TICK IS A COUNT, NOT A METRONOME
+	--
+	-- CashUI ticks while its readout eases to a new balance. Plant income moves
+	-- the balance every second for a whole session, and the tick used to sound
+	-- on every third printed change -- about once a second at $4/s, ten times
+	-- a second at $100/s, for ever. Reported as irritating on 2026-09-26.
+	--
+	-- A ROUTINE step -- no bigger than LumpFactor times the recent ones, which
+	-- is what plant income looks like -- ticks at most once every
+	-- RoutineSeconds, at RoutineVolume of the cue's level. A LUMP -- a sale, a
+	-- reward, a purchase -- is counted in with the tick it always had, never
+	-- faster than one per CountSeconds. The balance is never touched: this
+	-- only decides when the tick sounds. The player's SOUND FX level applies to
+	-- both, through the UI bus.
+	--==========================================================================
+	CashTicks = {
+		RoutineSeconds = 2.5,
+		RoutineVolume = 0.5,
+		CountSeconds = 0.12,
+		LumpFactor = 4,
+	},
 
 	--==========================================================================
 	-- WHICH FILE IN sfx/ BECOMES WHICH ROW
@@ -4771,6 +5381,47 @@ GameConfig.Sfx = {
 			volume = 0.23, start = 0.13, clip = 0.16, jitter = 0.03, group = "UI",
 		},
 
+		--==================================================================
+		-- THE NOTICES (2026-09-27): Notice.Styles names these, and nothing
+		-- else does. The owner's dedicated recordings. Blocked, warning and
+		-- info are uploads of the CrazyCozy Games group (744756221), which
+		-- also owns Podnappers, so they load here with no step (Studio load
+		-- test, 2026-09-27). SUCCESS was replaced the same day by the owner's
+		-- "success new" (123803156310043), which is on the owner's OWN account:
+		-- it plays nothing in Podnappers until the owner grants the experience
+		-- (universe 10744596516) permission to use it -- see KB/HANDOFF.md.
+		--
+		-- THEIR OWN ROWS, NOT Denied's. A blocked notice used to sound Denied;
+		-- that cue stays exactly as it is for the shop, the Bag, the Index and
+		-- the mill, which refuse things with no notice at all.
+		--
+		-- 48 kHz. Levels by 100 ms loudness against what already ships
+		-- (Banked, a pod home, is -16.5 dB; Denied -18.0; a panel opening
+		-- -18.7): blocked, success and warning at about -21, info a quiet
+		-- accent at -25 -- under every gameplay moment.
+		--   Action Blocked   0.48 s, file -17.2 dB, peak -3.8      -> 0.65
+		--   success new      1.28 s, file -13.6 dB, peak -3.1: a chime that
+		--                    decays to silence by 1.0 s, so there is no
+		--                    window -- the whole of it plays        -> 0.43
+		--   Warning          0.48 s, file -21.2; still sounding at -24 dB
+		--                    when the render stops, so it fades over its
+		--                    last 80 ms rather than being cut        -> 1.08
+		--   Information      0.48 s, file -18.4, a sharp ping (peak -2.7) -> 0.47
+		--==================================================================
+		NoticeBlocked = { id = "rbxassetid://129733199607968", volume = 0.65, group = "UI" },
+		NoticeSuccess = { id = "rbxassetid://123803156310043", volume = 0.43, group = "UI" },
+		NoticeWarning = {
+			id = "rbxassetid://122434285599993",
+			volume = 1.08, clip = 0.48, fadeOut = 0.08, group = "UI",
+		},
+		NoticeInfo = { id = "rbxassetid://80357294905654", volume = 0.47, group = "UI" },
+
+		-- THE RARE REVEAL'S ACCENT: the owner's RARE PLANT REVEAL ACCENT, uploaded
+		-- to the same group. Played with the creature, not the timer (HatchFX),
+		-- for the rarities RevealAccentFor names and no others. 1.00 s, a bright
+		-- sparkle (10 kHz); -26 dB here, two under the Rare fanfare it sits on.
+		RevealAccentRare = { id = "rbxassetid://75401177703541", volume = 0.55, group = "UI" },
+
 		--======================================================================
 		-- THE RUN
 		--======================================================================
@@ -4955,6 +5606,64 @@ GameConfig.Sfx = {
 		},
 
 		--======================================================================
+		-- THE 2026-09-24 GUARDIAN RECORDINGS (wired 2026-09-27)
+		--
+		-- Seven renders in sfx/: two sleeps, four walks home and Astralmaw's
+		-- rage. Uploaded by the owner on 2026-09-27 and the ids pasted the same
+		-- day, each checked to be the upload of the file its row describes
+		-- (asset name, type Audio, creator). Never an id that is not.
+		--
+		-- THE OWNER'S ACCOUNT OWNS THESE, NOT THE CrazyCozy Games GROUP THAT
+		-- OWNS PODNAPPERS -- so until the experience (universe 10744596516) is
+		-- granted each one, Roblox refuses to load them here ("The experience
+		-- doesn't have access permission", Studio 2026-09-27). And a row with an
+		-- id is chosen by its id, not by whether it loads: parentCue stops
+		-- falling through to the generic sleep and to Starbloom's old wake the
+		-- moment these are pasted, so an ungranted upload is SILENCE where there
+		-- used to be a sound. Grant, then publish (KB/HANDOFF.md).
+		--
+		-- MEASURED OFF THE WAVs, levels set against the sounds already shipping
+		-- (400 ms loudness): the sleeps at the generic sleep's -25 dB, the walks
+		-- home at -16 (under every wake roar), the rage at -9 -- between
+		-- Starbloom's old wake (-10.8) and the Brambleback's (-7.6), peaking at
+		-- -2.7 dB, so it lands hard without clipping or burying the chase.
+		--======================================================================
+		-- 4.80 s: a breath that the render starts in the MIDDLE of (the first
+		-- sample is at -0.18 -- a click on every loop), a clean breath from 1.6
+		-- s, and silence from 3.4. So the loop is the region 1.4 -> 4.8: one
+		-- whole breath out of silence and the pause after it, round and round.
+		ParentSleepEmberroot = {
+			id = "rbxassetid://136756415808327",
+			volume = 0.26, range = 70, looped = true, loopStart = 1.4, loopEnd = 4.8, group = "World",
+		},
+		-- 4.80 s of one slow low hum, silence to silence (first and last samples
+		-- 0.000 and 0.001): it loops as it is.
+		ParentSleepStarbloom = {
+			id = "rbxassetid://131278197709092",
+			volume = 0.28, range = 70, looped = true, group = "World",
+		},
+		-- THE WALK HOME: a one-shot when a guardian gives up and turns for its
+		-- nest (GameConfig.Sfx.ReturnCueAt). All four are short vocal renders
+		-- with an onset and a decay -- none is a loop, and none has the long
+		-- settle a lie-down would -- so they belong to the moment it turns.
+		-- Dustbowl: a grunt, 0.8 s of digital silence, then a stomp at 1.5 s.
+		ParentReturnDustbowl = { id = "rbxassetid://92575459486923", volume = 0.81, range = 120, group = "World" },
+		-- Tanglemire: one second of sound and silence after it.
+		ParentReturnTanglemire = { id = "rbxassetid://93033126566750", volume = 1.97, clip = 1.1, range = 120, group = "World" },
+		-- Emberroot: a loud start decaying over a second and a half.
+		ParentReturnEmberroot = { id = "rbxassetid://116190097842912", volume = 0.46, range = 120, group = "World" },
+		-- Starbloom: a quiet 2.76 s shimmer (the quietest file of the four,
+		-- hence the gain) that is still at -35 dB when the render stops.
+		ParentReturnStarbloom = { id = "rbxassetid://100144774034643", volume = 2.79, range = 120, group = "World" },
+		-- ASTRALMAW'S RAGE, which REPLACES Starbloom's one-second wake as its
+		-- roar (ParentVoices.starbloom.Wake lists it first) -- never both. The
+		-- render holds ONE whole roar, 0 to 3.2 s, near-silence by 3.9 (-46 dB),
+		-- then a SECOND TAKE that the render cuts off mid-roar at 6.0. So the
+		-- window is 3.9 s: the whole roar, not the two seconds the old wake had,
+		-- and not the half of a second one. Nothing in the chase waits for it.
+		ParentRageStarbloom = { id = "rbxassetid://121932932319379", volume = 0.73, clip = 3.9, range = 190, group = "World" },
+
+		--======================================================================
 		-- THE TRAPS
 		--
 		-- Three moments, and they are three different questions a player asks:
@@ -5125,13 +5834,43 @@ GameConfig.Sfx = {
 			Sleep = "ParentSleepDustbowl",
 			Step = "ParentStepDustbowl",
 			Wake = "ParentWakeDustbowl",
+			Return = "ParentReturnDustbowl",
 		},
-		tanglemire = { Wake = "ParentWakeTanglemire", Hit = "ParentHitTanglemire" },
-	-- Recorded hours after the first six, so these two are no longer the
-	-- silent ones. They still swing the generic claw and breathe the generic
-	-- breath -- only the roar is theirs.
-	emberroot = { Wake = "ParentWakeEmberroot" },
-	starbloom = { Wake = "ParentWakeStarbloom" },
+		tanglemire = {
+			Wake = "ParentWakeTanglemire",
+			Hit = "ParentHitTanglemire",
+			Return = "ParentReturnTanglemire",
+		},
+		-- Recorded hours after the first six, so these two are no longer the
+		-- silent ones. They still swing the generic claw; since 2026-09-27 each
+		-- has its own sleep and walk home as well (blank either id again and it
+		-- falls through to the generic sleep, or to no walk-home sound).
+		emberroot = {
+			Wake = "ParentWakeEmberroot",
+			Sleep = "ParentSleepEmberroot",
+			Return = "ParentReturnEmberroot",
+		},
+		-- A LIST IS AN ORDER OF PREFERENCE (SoundKit.parentCue): Astralmaw's
+		-- rage is its roar while it has an id (since 2026-09-27), and the old
+		-- one-second wake whenever it has not -- never both.
+		starbloom = {
+			Wake = { "ParentRageStarbloom", "ParentWakeStarbloom" },
+			Sleep = "ParentSleepStarbloom",
+			Return = "ParentReturnStarbloom",
+		},
+	},
+
+	-- When a guardian's walk-home cue plays: "leave", the moment it gives up and
+	-- turns for the nest, or "arrive", the moment it lies back down. "leave" by
+	-- the recordings (2026-09-27): short vocal one-shots, none shaped like a
+	-- settle. One word to move them.
+	ReturnCueAt = "leave",
+
+	-- THE ACCENT ON A REVEAL, by the same FORM rarity as RevealFor below: only
+	-- the rarities named here, so recording another is a line in this table and
+	-- nothing plays for a rarity nobody named.
+	RevealAccentFor = {
+		Rare = "RevealAccentRare",
 	},
 
 	--==========================================================================
@@ -5534,6 +6273,70 @@ function GameConfig.compact(n: number): string
 end
 
 --==============================================================================
+-- A BALANCE IS SPELLED DIFFERENTLY FROM A PRICE: GameConfig.money
+--
+-- compact() is right for prices, rates and Speed, and wrong for the one number
+-- a player watches climb. Between 1K and 100K it trimmed its zeros, so the
+-- corner read $2K, then $2.01K, then $2.1K -- whole, two decimals, one decimal
+-- -- as the same cash came in (reported by an Xbox tester). And it rounds to
+-- the NEAREST, so $9,999 read "$10K", the same text as a 10K price the player
+-- could not yet pay.
+--
+-- So a balance has its own rule, one precision at every size, never rounded up:
+--
+--     under 100,000    whole dollars, commas      0   7   999   1,000   99,999
+--     100,000 and up   three significant digits,  100K   123K   1.50M   12.3M
+--                      zeros KEPT, rounded down   999K (not 1.00M)   1.00Qa
+--
+-- Rounded DOWN, so the corner never shows a dollar the player does not have --
+-- the same rule every "can I afford this" check applies to the raw number.
+-- Zeros KEPT, so the text only changes width when a digit or a unit is gained.
+-- Only how the number is SPELLED: balances are stored unrounded, as before.
+--==============================================================================
+local function groupThousands(whole: number): string
+	local digits = string.format("%d", whole)
+	local head = #digits % 3
+	local parts: { string } = {}
+	if head > 0 then
+		table.insert(parts, string.sub(digits, 1, head))
+	end
+	for i = head + 1, #digits, 3 do
+		table.insert(parts, string.sub(digits, i, i + 2))
+	end
+	return table.concat(parts, ",")
+end
+
+-- floor(x * 10^places) / 10^places, with the float fuzz that makes 1.23 * 100
+-- come out as 122.9999... taken off first.
+local function floorTo(x: number, places: number): number
+	local f = 10 ^ places
+	return math.floor(x * f + 1e-7) / f
+end
+
+function GameConfig.money(n: number): string
+	if type(n) ~= "number" or n ~= n then
+		return "0"
+	end
+	local sign = if n < 0 then "-" else ""
+	local v = math.abs(n)
+	if v == math.huge then
+		return sign .. GameConfig.money(GameConfig.Save.MaxCash)
+	end
+	if v < 100e3 then
+		return sign .. groupThousands(math.floor(v))
+	end
+	for _, unit in ipairs(COMPACT_UNITS) do
+		local divisor = unit[1] :: number
+		if v >= divisor then
+			local scaled = v / divisor
+			local places = if scaled < 10 then 2 elseif scaled < 100 then 1 else 0
+			return sign .. string.format("%." .. places .. "f", floorTo(scaled, places)) .. (unit[2] :: string)
+		end
+	end
+	return sign .. groupThousands(math.floor(v))
+end
+
+--==============================================================================
 -- HOW HIGH A PLANT ACTUALLY REACHES
 --
 -- Model:GetBoundingBox() REPORTS IN THE PIVOT'S FRAME, and a creature pivots on
@@ -5588,6 +6391,22 @@ GameConfig.Save = {
 	MinWriteGap = 7,
 	RetryAttempts = 4,
 	RetryBackoff = 1,
+
+	--==========================================================================
+	-- THE STUDIO TEST STORE, AND WHY IT IS NOT A SECOND StoreName
+	--
+	-- Automated Play tests never load a real save (AGENTS.md). Pointing
+	-- Studio's copy of THIS file at a throwaway name was undone by any save of
+	-- the file or any Rojo reconnect, and on 2026-09-26 that sent a Play test
+	-- into the owner's real save. So SaveService takes a test store from a
+	-- StringValue in ServerStorage instead -- a service default.project.json
+	-- does not map, so no sync can touch it -- and only in Studio; a live
+	-- server never looks. A marker whose value does not match the pattern
+	-- refuses EVERY store rather than falling back to the real one.
+	-- tools/studio/store_guard.luau checks these same two values.
+	--==========================================================================
+	TestStoreMarker = "SeedTestStore",
+	TestStorePattern = "^Seed%a*Test_[%w_]+$",
 
 	--==========================================================================
 	-- THE CEILINGS, AND WHY THEY ARE HERE RATHER THAN IN A BALANCE FILE

@@ -57,9 +57,11 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local ActionRefusal = require(SeedGame:WaitForChild("Shared"):WaitForChild("ActionRefusal"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 
 local PLOT = GameConfig.Plot
@@ -174,6 +176,155 @@ function PlotService.SpawnCFrameFor(plot: Model): CFrame
 		return pad.CFrame + lift
 	end
 	return plot:GetPivot() + lift
+end
+
+--==============================================================================
+-- TELEPORT TO PLOT
+--
+-- The HUD button's one verb, and it carries NOTHING: the player is the
+-- engine-stamped sender, the plot is this service's own lease on them, and the
+-- destination is SpawnCFrameFor -- the point a respawn already uses. A client
+-- cannot name a plot, a position or another player, because nothing it sends
+-- is read.
+--
+-- Every press is checked again here, whatever the button was showing. In
+-- order, each refusal returning a code for the toast, or nil where it is not a
+-- player's action to be told about:
+--
+--   gone, dead or mid-respawn   nil -- a stale body, not a request
+--   no plot                     TELEPORT_NO_PLOT: queued behind a full server
+--   outside the Safe Zone       TELEPORT_OUTSIDE: MapService.IsInSafeZone, the
+--                               game's one test, on the server's own position
+--   a raided pod in the arms    CARRYING_POD: the red line banks a pod, and a
+--                               teleport must never be a way round the run
+--                               home -- CarryService's replicated flag, read here
+--                               because CarryService sits above this service
+--   trapped or knocked down     TELEPORT_STUNNED: a hold or a ragdoll is not a
+--                               moment to leave from
+--   inside the cooldown         TELEPORT_COOLDOWN: 3 s from the last teleport
+--                               that happened, so a mashed button moves you once
+--   nothing to stand on         TELEPORT_BLOCKED: a spawn outside the field, or
+--                               with no collidable floor under it, refuses
+--                               rather than drops you
+--
+-- Then PivotTo, exactly as placeCharacter does, with the momentum taken off.
+-- Everything the player holds -- the Tool in their hand, the Backpack, their
+-- plants in the ground -- stays theirs and stays put; nothing is handed to or
+-- taken from anybody, by day or by night.
+--==============================================================================
+local lastTeleport: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+function PlotService.TeleportHome(player: Player): (boolean, string?)
+	if player.Parent ~= Players then
+		return false, nil
+	end
+	local character = player.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	local rootInstance = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not (character and character.Parent and humanoid and humanoid.Health > 0
+		and rootInstance and rootInstance:IsA("BasePart")) then
+		return false, nil
+	end
+	local root = rootInstance :: BasePart
+	local plot = PlotService.PlotOf(player)
+	if not plot then
+		return false, "TELEPORT_NO_PLOT"
+	end
+	if not MapService.IsInSafeZone(root.Position) then
+		return false, "TELEPORT_OUTSIDE"
+	end
+	if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
+		return false, "CARRYING_POD"
+	end
+	if player:GetAttribute(ATTR.Trapped) == true or humanoid.PlatformStand then
+		return false, "TELEPORT_STUNNED"
+	end
+	local now = os.clock()
+	if now - (lastTeleport[player] or -math.huge) < PLOT.TeleportCooldownSeconds then
+		return false, "TELEPORT_COOLDOWN"
+	end
+
+	-- The destination is the player's own plot's spawn point, and it has to be
+	-- somewhere real: finite, inside the field, and over ground.
+	local target = PlotService.SpawnCFrameFor(plot)
+	local at = target.Position
+	if at ~= at or at.Magnitude > 1e5 or not MapService.IsInSafeZone(at) then
+		return false, "TELEPORT_BLOCKED"
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	-- GROUND IS WHAT A BODY CAN STAND ON. The spawn pad itself is a
+	-- non-collidable marker (MapService builds it CanCollide = false) that a
+	-- default ray would still hit; this makes the probe find the floor under it.
+	params.RespectCanCollide = true
+	if not Workspace:Raycast(at, Vector3.new(0, -PLOT.TeleportGroundProbe, 0), params) then
+		return false, "TELEPORT_BLOCKED"
+	end
+
+	lastTeleport[player] = now
+	character:PivotTo(target)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+	log(string.format("%s teleported to %s.", player.Name, plot.Name))
+	return true, nil
+end
+
+--==============================================================================
+-- A TELEPORT TO A PLACE THE SERVER NAMES: the OBBY button (2026-09-27)
+--
+-- TELEPORT TO PLOT's rules, in its order, less the plot: alive, standing in
+-- the Safe Zone, no raided pod in hand, not trapped or knocked down -- and ONE
+-- cooldown shared with it (lastTeleport), so the two buttons can never be
+-- alternated to move faster than either allows. Only from the Safe Zone, so it
+-- can never shortcut a run home from a biome.
+--
+-- `target` is never a client's: ObbyService passes the course entrance's own
+-- landing frame. `blocked` is the refusal for a landing with nothing to stand
+-- on, which names the destination rather than the plot.
+--==============================================================================
+function PlotService.TeleportTo(player: Player, target: CFrame, blocked: string): (boolean, string?)
+	if player.Parent ~= Players then
+		return false, nil
+	end
+	local character = player.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	local rootInstance = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if not (character and character.Parent and humanoid and humanoid.Health > 0
+		and rootInstance and rootInstance:IsA("BasePart")) then
+		return false, nil
+	end
+	local root = rootInstance :: BasePart
+	if not MapService.IsInSafeZone(root.Position) then
+		return false, "TELEPORT_OUTSIDE"
+	end
+	if player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
+		return false, "CARRYING_POD"
+	end
+	if player:GetAttribute(ATTR.Trapped) == true or humanoid.PlatformStand then
+		return false, "TELEPORT_STUNNED"
+	end
+	local now = os.clock()
+	if now - (lastTeleport[player] or -math.huge) < PLOT.TeleportCooldownSeconds then
+		return false, "TELEPORT_COOLDOWN"
+	end
+	local at = target.Position
+	if at ~= at or at.Magnitude > 1e5 or not MapService.IsInSafeZone(at) then
+		return false, blocked
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character }
+	params.RespectCanCollide = true
+	if not Workspace:Raycast(at, Vector3.new(0, -PLOT.TeleportGroundProbe, 0), params) then
+		return false, blocked
+	end
+	lastTeleport[player] = now
+	character:PivotTo(target)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+	log(string.format("%s teleported to (%.0f, %.0f, %.0f).", player.Name, at.X, at.Y, at.Z))
+	return true, nil
 end
 
 function PlotService.OnAssigned(fn: Listener): () -> ()
@@ -471,6 +622,13 @@ local function clearPlot(plot: Model)
 	plot:SetAttribute(ATTR.OwnerUserId, 0)
 	plot:SetAttribute(ATTR.OwnerName, "")
 	plot:SetAttribute(ATTR.Claimed, false)
+	-- The gate sign's numbers go with the owner, in the same breath: the next
+	-- owner must never see the last one's garden, even for the one tick before
+	-- EconomyService writes theirs. See GameConfig.Attributes.GardenGrown.
+	plot:SetAttribute(ATTR.GardenGrown, nil)
+	plot:SetAttribute(ATTR.GardenPods, nil)
+	plot:SetAttribute(ATTR.GardenIncome, nil)
+	plot:SetAttribute(ATTR.GardenBoost, nil)
 end
 
 local function assign(player: Player, id: number)
@@ -503,6 +661,9 @@ local function assign(player: Player, id: number)
 	plot:SetAttribute(ATTR.OwnerUserId, player.UserId)
 	plot:SetAttribute(ATTR.OwnerName, player.Name)
 	plot:SetAttribute(ATTR.Claimed, true)
+	-- And on the player, which is always replicated to them even when the plot
+	-- has not streamed in: the TELEPORT TO PLOT button shows off it.
+	player:SetAttribute(ATTR.OwnPlotId, id)
 
 	local pad = plot:FindFirstChild(PLOT.SpawnPadName)
 	if pad and pad:IsA("SpawnLocation") then
@@ -584,6 +745,7 @@ local function release(player: Player)
 
 	plotOf[player] = nil
 	ownerOf[id] = nil
+	player:SetAttribute(ATTR.OwnPlotId, nil)
 
 	local plot = plotsById[id]
 	if plot then
@@ -676,6 +838,28 @@ function PlotService.Start()
 		plotAssignedRemote = remote
 	else
 		warn("[Seed/PlotService] No PlotAssigned remote. Clients will not be told their plot.")
+	end
+
+	--==========================================================================
+	-- THE TELEPORT BUTTON'S VERB
+	--
+	-- Rule 4: the sender is engine-stamped; nothing after the verb is read, so
+	-- there is nothing to validate and nothing a client can aim. A refusal the
+	-- player can act on goes back as a toast (ActionRefusal).
+	--==========================================================================
+	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if channel and channel:IsA("RemoteEvent") then
+		table.insert(serviceConnections, channel.OnServerEvent:Connect(function(player: Player, action: any)
+			if action ~= PLOT.TeleportAction then
+				return
+			end
+			local moved, code = PlotService.TeleportHome(player)
+			if not moved and code then
+				ActionRefusal.send(player, code)
+			end
+		end))
+	else
+		warn("[Seed/PlotService] No GameEvent remote. TELEPORT TO PLOT will do nothing.")
 	end
 
 	--== FIND THE PLOTS ==--

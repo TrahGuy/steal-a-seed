@@ -1431,4 +1431,58 @@ function MapDecor.dressField(parent: Instance)
 	end)
 end
 
+--==============================================================================
+-- THE VOCABULARY, LENT OUT (2026-09-27)
+--
+-- The Floating Garden (ObbyDecor) dresses its islands with the same approved
+-- props and the same four sculpting moves, so the course is visibly the same
+-- world as the road. Read-only: nothing here changes what the map builds, and
+-- every prop still comes out with rule 1's ghostly flags -- decoration never
+-- collides, is never queried and is never touched.
+--==============================================================================
+MapDecor.Kit = {
+	piece = piece,
+	group = group,
+	chain = chain,
+	aim = aim,
+	radial = radial,
+	flatWedge = flatWedge,
+	blade = blade,
+	column = column,
+	disc = disc,
+	jitter = jitter,
+	seedFor = seedFor,
+	Opts = {
+		STUDDED = STUDDED,
+		SMOOTH = SMOOTH,
+		NEON = NEON,
+		BALL_SMOOTH = BALL_SMOOTH,
+		BALL_NEON = BALL_NEON,
+		CYL_SMOOTH = CYL_SMOOTH,
+		CYL_STUDDED = CYL_STUDDED,
+		WATER = WATER,
+	},
+}
+
+MapDecor.Props = {
+	oak = oak,
+	shrub = shrub,
+	boulder = boulder,
+	daisyCluster = daisyCluster,
+	coralBells = coralBells,
+	fern = fern,
+	grassTuft = grassTuft,
+	fallenLog = fallenLog,
+	mangrove = mangrove,
+	orchidPair = orchidPair,
+	broadLeaves = broadLeaves,
+	pool = pool,
+	fanTree = fanTree,
+	cupStalks = cupStalks,
+	spiralFern = spiralFern,
+	ribbonGrass = ribbonGrass,
+}
+
+MapDecor.Palettes = { GH = GH, DB = DB, TM = TM, EM = EM, SB = SB }
+
 return MapDecor

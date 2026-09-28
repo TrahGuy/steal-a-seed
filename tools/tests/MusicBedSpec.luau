@@ -26,7 +26,7 @@
 --      two-track day bed never advances and the one-track night bed never repeats.
 --
 -- Not here: whether the beds SOUND right together, and the crossfade itself,
--- which needs a dusk (Play, and a sixty-second night every seven minutes).
+-- which needs a dusk (Play, and a fifteen-second night every seven minutes).
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

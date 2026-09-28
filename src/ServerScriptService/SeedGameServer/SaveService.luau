@@ -43,6 +43,8 @@
 
 local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local ServerStorage = game:GetService("ServerStorage")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
@@ -85,12 +87,69 @@ local function isPermanent(err: string): boolean
 		or string.find(e, "publish", 1, true) ~= nil
 end
 
+--==============================================================================
+-- WHICH STORE, AND THE STUDIO TEST STORE THAT NO SYNC CAN UNDO
+--
+-- Automated Play tests never load a real save (AGENTS.md). The first way of
+-- doing that pointed Studio's copy of GameConfig at a throwaway name, and any
+-- save of GameConfig.luau or any Rojo reconnect quietly put the real name
+-- back -- on 2026-09-26 a Play test loaded the owner's real save that way.
+--
+-- So the switch is a StringValue in ServerStorage, named by
+-- SAVE.TestStoreMarker. default.project.json does not map ServerStorage, so
+-- Rojo never writes there, and a sync cannot take the switch away. Three
+-- rules, all of them one-directional:
+--
+--   * Only in Studio. A live server never looks, whatever the place holds.
+--   * The value must match SAVE.TestStorePattern (Seed...Test_...).
+--   * A marker that names anything else refuses EVERY store. It never falls
+--     back to the real one: "saves are off" is a safe failure, "saves went to
+--     the owner's account" is not.
+--
+-- Resolved once per server, so a marker added or removed mid-session cannot
+-- move a running server between stores.
+--==============================================================================
+local resolvedStore = false
+local storeName: string? = nil
+local storeNote = ""
+
+local function resolveStoreName(): string?
+	if resolvedStore then
+		return storeName
+	end
+	resolvedStore = true
+	storeName, storeNote = SAVE.StoreName, ""
+	if RunService:IsStudio() then
+		local marker = ServerStorage:FindFirstChild(SAVE.TestStoreMarker)
+		if marker then
+			local value = if marker:IsA("StringValue") then marker.Value else ""
+			if string.find(value, SAVE.TestStorePattern) ~= nil then
+				storeName = value
+				storeNote = " (STUDIO TEST STORE, from ServerStorage." .. SAVE.TestStoreMarker .. ")"
+			else
+				storeName = nil
+				storeNote = " -- REFUSED: ServerStorage." .. SAVE.TestStoreMarker
+					.. " names no test store, so no store is opened"
+				available = false
+				warn(string.format("[Seed/SaveService] ServerStorage.%s is %q, which is not a test store name. "
+					.. "Saves are OFF for this session; the real store was not opened.",
+					SAVE.TestStoreMarker, value))
+			end
+		end
+	end
+	return storeName
+end
+
 local function getStore(): DataStore?
 	if store then
 		return store
 	end
+	local name = resolveStoreName()
+	if not name then
+		return nil
+	end
 	local ok, result = pcall(function()
-		return DataStoreService:GetDataStore(SAVE.StoreName)
+		return DataStoreService:GetDataStore(name)
 	end)
 	if ok and result then
 		store = result
@@ -272,12 +331,17 @@ end
 function SaveService.Init()
 	store = nil
 	available = nil
+	resolvedStore = false
+	storeName, storeNote = nil, ""
 	table.clear(lastWrite)
 end
 
 function SaveService.Start()
-	log(string.format("Ready. Store %q, schema v%d, autosave %ds, lock %ds.",
-		SAVE.StoreName, SAVE.CurrentVersion, SAVE.AutosaveSeconds, SAVE.SessionLockSeconds))
+	-- The first thing an automated test reads after pressing Play: the store
+	-- this server will actually open, and where that name came from.
+	local name = resolveStoreName()
+	log(string.format("Ready. Store %q%s, schema v%d, autosave %ds, lock %ds.",
+		name or "NONE", storeNote, SAVE.CurrentVersion, SAVE.AutosaveSeconds, SAVE.SessionLockSeconds))
 end
 
 return SaveService

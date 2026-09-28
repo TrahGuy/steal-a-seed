@@ -121,4 +121,118 @@ function PlantInfo.Backdrop(speciesId: any, hatched: boolean): string?
 	return GameConfig.Card.Art[speciesId]
 end
 
+--==============================================================================
+-- THE SORTS THE BAG AND THE GARDEN OFFER (2026-09-26)
+--
+-- One comparator for both lists, so "income, highest first" cannot mean two
+-- different things in two menus -- and it lives HERE because the rule that
+-- matters most in it is this file's: an unhatched pod stays ???. A pod has no
+-- income, rarity or name a sort is allowed to read, so under every sort the
+-- pods follow the grown plants, among themselves in the caller's stable order.
+-- Nothing about the species inside a shell can be read off where it lands.
+--
+-- "default" is the caller's own order, returned untouched: choosing a sort is
+-- the only thing that changes what a player is used to.
+--
+-- EVERY TIE FALLS TO THE CALLER'S STABLE ID -- a PlacementId in the Garden, the
+-- order the Bag first saw each Tool -- so two equal plants never trade places
+-- between one repaint and the next, and a selection can follow its plant.
+-- The numbers are the ones already used everywhere else: IncomePerSecond, the
+-- faucet's own rate with no multiplier (a sort compares plants, not wallets),
+-- and GameConfig.RarityTier, the one rarity order.
+--==============================================================================
+PlantInfo.SortModes = { "default", "incomeHigh", "incomeLow", "rarity", "name" }
+
+-- What the Sort button says under its word SORT. Plain words: the arrow glyphs
+-- that would say "descending" are a tofu risk in these fonts.
+PlantInfo.SortLabels = {
+	default = "DEFAULT",
+	incomeHigh = "INCOME HIGH",
+	incomeLow = "INCOME LOW",
+	rarity = "RAREST",
+	name = "NAME A-Z",
+} :: { [string]: string }
+
+function PlantInfo.NextSort(mode: string): string
+	local modes = PlantInfo.SortModes
+	local at = table.find(modes, mode) or 1
+	return modes[at % #modes + 1]
+end
+
+-- What a caller says about one entry. `hatched` false means a pod, whatever
+-- species id the caller happens to know for it.
+export type SortKey = {
+	speciesId: any,
+	tier: any,
+	hatched: boolean,
+	id: number,
+}
+
+type Ranked = {
+	known: boolean,
+	income: number,
+	rarity: number,
+	name: string,
+	id: number,
+}
+
+local function ranked(key: SortKey): Ranked
+	local species = if key.hatched and type(key.speciesId) == "string"
+		then SeedData.Get(key.speciesId)
+		else nil
+	if not species then
+		return { known = false, income = 0, rarity = 0, name = "", id = key.id }
+	end
+	local known = species :: SeedData.Species
+	return {
+		known = true,
+		income = SeedData.IncomePerSecond(known, SeedData.Tier(tonumber(key.tier)).index),
+		rarity = GameConfig.RarityTier[known.Rarity] or 0,
+		name = string.lower(known.Name),
+		id = key.id,
+	}
+end
+
+-- Sorts `list` in place under `mode` and returns it. `keyOf` reads each entry.
+function PlantInfo.Sort<T>(list: { T }, mode: string, keyOf: (T) -> SortKey): { T }
+	if mode == "default" or not table.find(PlantInfo.SortModes, mode) then
+		return list
+	end
+	local rank: { [any]: Ranked } = {}
+	for _, entry in ipairs(list) do
+		rank[entry] = ranked(keyOf(entry))
+	end
+	table.sort(list, function(a: T, b: T): boolean
+		local ra, rb = rank[a], rank[b]
+		if ra.known ~= rb.known then
+			return ra.known
+		end
+		if ra.known then
+			if mode == "incomeHigh" and ra.income ~= rb.income then
+				return ra.income > rb.income
+			elseif mode == "incomeLow" and ra.income ~= rb.income then
+				return ra.income < rb.income
+			elseif mode == "rarity" and ra.rarity ~= rb.rarity then
+				return ra.rarity > rb.rarity
+			elseif mode == "name" and ra.name ~= rb.name then
+				return ra.name < rb.name
+			end
+		end
+		return ra.id < rb.id
+	end)
+	return list
+end
+
+-- A card's base income, for the Bag's thumbnails: the plant's own rate with
+-- its permanent factors (tier, rarity, biome, flat bonus -- IncomePerSecond
+-- is all of them) and no boost of any kind. nil for a pod, which has none
+-- anybody may be told yet.
+function PlantInfo.BaseIncome(speciesId: any, tier: any, hatched: boolean): number?
+	local species = if hatched and type(speciesId) == "string" then SeedData.Get(speciesId) else nil
+	if not species then
+		return nil
+	end
+	return SeedData.IncomePerSecond(species :: SeedData.Species, SeedData.Tier(tonumber(tier)).index)
+end
+
 return PlantInfo

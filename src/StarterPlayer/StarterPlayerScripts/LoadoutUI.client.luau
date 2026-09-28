@@ -244,6 +244,9 @@ gui.ResetOnSpawn = false
 -- hotbar poking through it. The Bag is the one panel in THIS ScreenGui, and it
 -- fits itself above the strip instead, because the strip is its drop target.
 gui.DisplayOrder = 30
+-- Drawn bigger on a TV (HudLayout's TEN-FOOT PROFILE) -- before anything is laid
+-- out in it; the Bag's UIKit.modal asks again and finds it done.
+UIKit.tenFoot(gui)
 gui.Parent = playerGui
 
 --==============================================================================
@@ -506,7 +509,11 @@ local function holdTool(tool: Tool?)
 	-- it bounce. Bats are untouched -- that grip is a different one.
 	--==========================================================================
 	if tool:GetAttribute("SpeciesId") ~= nil and player:GetAttribute(ATTR.CarryingSpecies) ~= nil then
-		SoundKit.play("Denied")
+		-- Said, not just buzzed: the toast names the rule and plays the denial
+		-- with it (ActionToastUI), once however often the card is pressed. The
+		-- reason is the server's own replicated CarryingSpecies, not a guess.
+		-- Required here rather than at the top: this chunk's names are rationed.
+		require(Shared:WaitForChild("ActionRefusal")).raise("CARRYING_POD")
 		return
 	end
 	SoundKit.play("CardClick")
@@ -563,6 +570,25 @@ local TABS = {
 	{ id = "plants", label = "Plants" },
 }
 local activeTab = "equipment"
+--==============================================================================
+-- THE PLANTS TAB'S SORT, AND THE NOTE OVER ITS CARDS (2026-09-26)
+--
+-- One table, because this file is a handful of names short of Luau's 200.
+--   mode     which PlantInfo sort the plant cards are in. "default" is the order
+--            scanTools has always produced, untouched until a player chooses.
+--   button   the Sort button at the right end of the tab row, Plants tab only.
+--   note     the one line over the cards saying what their $/s is.
+--   watched  Tools whose data this file listens to, so a card repaints if a
+--            Tool's species, size or hatched state ever changes under it.
+-- The sort orders the CARDS and nothing else: scanTools and liveSlots -- what
+-- the hotbar fills and re-binds from -- keep their own order, and no Tool moves.
+--==============================================================================
+local bagSort: {
+	mode: string,
+	button: UIKit.CycleButton?,
+	note: TextLabel?,
+	watched: { [Tool]: boolean },
+} = { mode = "default", button = nil, note = nil, watched = setmetatable({}, { __mode = "k" }) :: any }
 local tabButtons: { [string]: TextButton } = {}
 local tabTints: { [string]: UIGradient } = {}
 local tabShades: { [string]: Frame } = {}
@@ -578,6 +604,15 @@ tabRow.BackgroundTransparency = 1
 tabRow.ZIndex = 4
 tabRow.Parent = modal.shell
 
+-- The tabs take the row less the Sort button's own width at its right end
+-- (HudLayout's Bag.SortW), so each is still 120+ wide on the narrowest phone.
+local tabsArea = Instance.new("Frame")
+tabsArea.Name = "TabsArea"
+tabsArea.Size = UDim2.new(1, -(BAG.SortW + BAG.SortGap), 1, 0)
+tabsArea.BackgroundTransparency = 1
+tabsArea.ZIndex = 4
+tabsArea.Parent = tabRow
+
 for i, tab in ipairs(TABS) do
 	local b = Instance.new("TextButton")
 	b.Name = "Tab" .. tab.id
@@ -592,7 +627,7 @@ for i, tab in ipairs(TABS) do
 	b.Text = ""
 	b.ZIndex = 5
 	UIKit.clicks(b)
-	b.Parent = tabRow
+	b.Parent = tabsArea
 	UIKit.corner(b, 9)
 	UIKit.stroke(b, BLACK, 2)
 
@@ -656,6 +691,17 @@ for i, tab in ipairs(TABS) do
 	tabButtons[tab.id] = b
 	tabTints[tab.id] = tabTint
 	tabShades[tab.id] = tabShade
+end
+
+do
+	-- Pressing it is wired below, with the tabs, once refreshBag exists.
+	local sort = UIKit.cycleButton(tabRow, "SORT", 5)
+	sort.button.AnchorPoint = Vector2.new(1, 0.5)
+	sort.button.Position = UDim2.fromScale(1, 0.5)
+	sort.button.Size = UDim2.new(0, BAG.SortW, 1, 0)
+	sort.button.Visible = false
+	sort.set(PlantInfo.SortLabels[bagSort.mode])
+	bagSort.button = sort
 end
 
 modal.body.Position = UDim2.fromOffset(12, 100)
@@ -785,6 +831,37 @@ emptyLabel.Size = UDim2.new(1, -40, 0, 60)
 emptyLabel.TextWrapped = true
 emptyLabel.Visible = false
 emptyLabel.ZIndex = 5
+
+do
+	--==========================================================================
+	-- SAID ONCE, OVER THE CARDS: WHAT THEIR $/s IS
+	--
+	-- Each grown plant's card carries its income, and it is the BASE rate --
+	-- the plant's own, with its permanent factors and no boost -- where the
+	-- panel beside it and the Garden print what the player is actually paid,
+	-- pass included. Without this line a pass owner sees two numbers for one
+	-- plant and reads a bug. The grid starts under it (layoutBag), and
+	-- HudLayout counts it out of the tray before it counts whole rows.
+	--==========================================================================
+	local note = Instance.new("TextLabel")
+	note.Name = "IncomeNote"
+	note.BackgroundTransparency = 1
+	note.Position = UDim2.fromOffset(12, 3)
+	note.Size = UDim2.new(1, -24, 0, BAG.NoteH - 4)
+	note.Font = Enum.Font.FredokaOne
+	note.TextColor3 = MUTED
+	note.TextXAlignment = Enum.TextXAlignment.Left
+	note.TextScaled = true
+	note.Text = "$/s on a card is its base income, before boosts"
+	note.Visible = false
+	note.ZIndex = 5
+	note.Parent = tray
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 12
+	fit.MinTextSize = 8
+	fit.Parent = note
+	bagSort.note = note
+end
 
 --==============================================================================
 -- THE INFORMATION PANEL
@@ -1174,6 +1251,8 @@ type Card = {
 	selectRing: Frame,
 	pop: UIKit.CardPop,
 	actionPop: UIKit.CardPop,
+	-- A grown plant's base $/s, in the preview well's bottom corner.
+	income: TextLabel,
 }
 
 --==============================================================================
@@ -1448,6 +1527,37 @@ local function acquireCard(index: number): Card
 	UIKit.stroke(selectRing, PICKED, 3)
 
 	--==========================================================================
+	-- ITS BASE INCOME, IN THE WELL'S CORNER
+	--
+	-- Inside the preview well, bottom right: clear of the name under the well,
+	-- the action strip under that, and both rings, which run round the card's
+	-- edge outside the well. Hugs its figure; hidden for pods, which have no
+	-- income anybody may be told yet, and for weapons.
+	--==========================================================================
+	local income = Instance.new("TextLabel")
+	income.Name = "Income"
+	income.AnchorPoint = Vector2.new(1, 1)
+	income.Position = UDim2.new(1, -10, 0, 79)
+	income.Size = UDim2.fromOffset(0, 18)
+	income.AutomaticSize = Enum.AutomaticSize.X
+	income.BackgroundColor3 = BLACK
+	income.BackgroundTransparency = 0.35
+	income.BorderSizePixel = 0
+	income.Font = Enum.Font.FredokaOne
+	income.TextSize = 12
+	income.TextColor3 = INCOME
+	income.Text = ""
+	income.Visible = false
+	income.Active = false
+	income.ZIndex = 8
+	income.Parent = face
+	UIKit.corner(income, 7)
+	local incomePad = Instance.new("UIPadding")
+	incomePad.PaddingLeft = UDim.new(0, 6)
+	incomePad.PaddingRight = UDim.new(0, 6)
+	incomePad.Parent = income
+
+	--==========================================================================
 	-- THE NAME SHRINKS RATHER THAN WRAPPING BADLY
 	--
 	-- "CINDERCRACK BAT" and "BRAMBLEJAW TRAP" are two lines at 12pt on a 104px
@@ -1543,6 +1653,7 @@ local function acquireCard(index: number): Card
 		statePillTint = statePillTint,
 		stroke = stroke,
 		selectRing = selectRing,
+		income = income,
 		pop = UIKit.cardPop(button, popScale, {
 			hoverScale = 1.05,
 			pressScale = 0.98,
@@ -3272,7 +3383,7 @@ local function paintInfo()
 	end
 	local details = PlantInfo.Describe(tool:GetAttribute("SpeciesId"),
 		tool:GetAttribute(ATTR.CarryingKg), tool:GetAttribute("Hatched") == true,
-		GameConfig.cashMultiplier(player))
+		GameConfig.incomeMultiplier(player))
 	local character = player.Character
 	local status = PlantInfo.Status(character ~= nil and tool.Parent == character,
 		hotbarSlotOf(tool))
@@ -3321,6 +3432,13 @@ local function refreshBag()
 			weaponCount += 1
 		end
 	end
+	-- The reward wheel's Bloomrunner Trail shares the equipment shelf (below).
+	-- Required here, not at the top: that chunk is rationed to 200 locals.
+	local WheelData = require(Shared:WaitForChild("WheelData"))
+	local trailOwned = player:GetAttribute(WheelData.Attributes.TrailOwned) == true
+	if trailOwned then
+		weaponCount += 1
+	end
 	for _, slot in ipairs(liveSlots) do
 		if slot.kind == "plant" and not claimed[slot.tool] then
 			plantCount += 1
@@ -3358,6 +3476,33 @@ local function refreshBag()
 	--== WHAT THIS TAB SHOWS ==--
 	local rows: { Row } = {}
 	local held = heldTool()
+	local sortButton = bagSort.button
+	if sortButton then
+		sortButton.button.Visible = activeTab == "plants"
+	end
+	--==========================================================================
+	-- THE PAD'S FOCUS STAYS ON THE PLANT IT WAS ON
+	--
+	-- Cards are pooled by position, so a re-sort -- a new order chosen, or a
+	-- plant arriving in the middle of one -- would leave the focus ring on the
+	-- same slot showing a different plant. Noted here by the Tool it was on and
+	-- put back on that Tool's new card below.
+	--==========================================================================
+	local focusTool: Tool? = nil
+	local focusOnAction = false
+	do
+		local focus = game:GetService("GuiService").SelectedObject
+		if focus then
+			for i, card in pairs(cardPool) do
+				local row = cardRows[i]
+				if row and (focus == card.button or focus == card.statePill.Parent) then
+					focusTool = row.tool
+					focusOnAction = focus ~= card.button
+					break
+				end
+			end
+		end
+	end
 
 	if activeTab == "equipment" then
 		--======================================================================
@@ -3385,6 +3530,67 @@ local function refreshBag()
 					canHotbar = false,
 				})
 			end
+		end
+		--======================================================================
+		-- THE BLOOMRUNNER TRAIL (2026-09-27)
+		--
+		-- The reward wheel's rarest prize, worn or taken off here: this shelf is
+		-- where everything a player owns and wears already lives. Read off the
+		-- attributes WheelService publishes from the saved profile, so it is
+		-- here after a rejoin exactly as it was left. Its row carries a stand-in
+		-- item whose Category is "trail"; equipRequest sends WheelService one
+		-- boolean for it, and WheelService checks ownership itself.
+		--======================================================================
+		if trailOwned then
+			local trail = WheelData.Trail
+			local worn = player:GetAttribute(WheelData.Attributes.Trail) == trail.Id
+			table.insert(rows, {
+				key = "c:" .. trail.Id,
+				label = trail.Name,
+				kind = "trail",
+				-- A ribbon running mint to gold to leaf, and four petals: the trail
+				-- as TrailFX draws it behind a runner, in parts for the viewport.
+				build = function(parent: Instance): Model?
+					local model = Instance.new("Model")
+					model.Name = "BloomrunnerPreview"
+					local shades = { trail.Leaf, trail.Mint, trail.Mint:Lerp(trail.Gold, 0.5), trail.Gold,
+						trail.Gold:Lerp(trail.Mint, 0.4), trail.Mint }
+					local pieces: { { Vector3 | CFrame | Color3 } } = {}
+					for i, colour in ipairs(shades) do
+						local t = i * 0.9
+						table.insert(pieces, { Vector3.new(0.95, 0.56 - math.abs(i - 3.5) * 0.06, 0.08),
+							CFrame.new((i - 3.5) * 0.9, math.sin(t) * 0.45, 0) * CFrame.Angles(0, 0, math.cos(t) * 0.45),
+							colour })
+					end
+					for i, at in ipairs({ Vector3.new(-2.2, 0.9, 0.2), Vector3.new(-0.6, -0.85, 0.1),
+						Vector3.new(1.1, 0.95, -0.1), Vector3.new(2.5, -0.5, 0.2) }) do
+						table.insert(pieces, { Vector3.new(0.42, 0.22, 0.06),
+							CFrame.new(at) * CFrame.Angles(0, 0, math.rad(30 * i)),
+							if i % 2 == 0 then trail.Gold else trail.Mint })
+					end
+					for i, p in ipairs(pieces) do
+						local part = Instance.new("Part")
+						part.Name = "Piece" .. i
+						part.Anchored = true
+						part.CanCollide = false
+						part.CanQuery = false
+						part.CanTouch = false
+						part.CastShadow = false
+						part.Material = Enum.Material.SmoothPlastic
+						part.Size = p[1] :: Vector3
+						part.CFrame = p[2] :: CFrame
+						part.Color = p[3] :: Color3
+						part.Parent = model
+					end
+					model.Parent = parent
+					return model
+				end,
+				state = if worn then "WEARING" else "TAP TO WEAR",
+				lit = worn,
+				item = ({ Id = trail.Id, Category = "trail", Name = trail.Name } :: any),
+				tool = nil,
+				canHotbar = false,
+			})
 		end
 	else
 		--======================================================================
@@ -3418,6 +3624,22 @@ local function refreshBag()
 				})
 			end
 		end
+		--======================================================================
+		-- THE CHOSEN ORDER, IF ONE HAS BEEN CHOSEN
+		--
+		-- PlantInfo.Sort, the Garden's own comparator: pods after grown plants
+		-- under every order, never ranked by what is inside them. Ties fall to
+		-- the order this script first saw each Tool -- the one stable identity a
+		-- Tool has, and one that says nothing about its species.
+		--======================================================================
+		PlantInfo.Sort(rows, bagSort.mode, function(row: Row): PlantInfo.SortKey
+			return {
+				speciesId = row.speciesId,
+				tier = row.tier,
+				hatched = row.hatched == true,
+				id = if row.tool then toolOrder[row.tool] or 0 else 0,
+			}
+		end)
 	end
 
 	--==========================================================================
@@ -3480,6 +3702,13 @@ local function refreshBag()
 			end
 
 			fitName(card, row.label)
+			-- Its base income, grown plants only (PlantInfo.BaseIncome is nil for
+			-- a pod and for anything that is not a plant).
+			local base = if row.kind == "plant"
+				then PlantInfo.BaseIncome(row.speciesId, row.tier, row.hatched == true)
+				else nil
+			card.income.Visible = base ~= nil
+			card.income.Text = if base then "$" .. GameConfig.compact(base) .. "/s" else ""
 			-- A plant's name wears its size band, the way the Garden prints it.
 			card.name.TextColor3 = if row.kind == "plant" and row.tier
 				then SeedData.ColorForTier(row.tier)
@@ -3506,6 +3735,21 @@ local function refreshBag()
 				shade.BackgroundColor3 = if row.lit
 					then Color3.fromRGB(52, 118, 34)
 					else Color3.fromRGB(44, 30, 22)
+			end
+		end
+	end
+
+	-- Put the pad's focus back on the plant it was on (see focusTool above).
+	if focusTool then
+		for i, row in pairs(cardRows) do
+			if row.tool == focusTool then
+				local card = cardPool[i]
+				local target = if focusOnAction then card.statePill.Parent else card.button
+				local GuiService = game:GetService("GuiService")
+				if target and target:IsA("GuiObject") and GuiService.SelectedObject ~= target then
+					GuiService.SelectedObject = target
+				end
+				break
 			end
 		end
 	end
@@ -3588,7 +3832,9 @@ do
 	end
 
 	layoutBag = function()
-		local screen = gui.AbsoluteSize
+		-- In the gui's own units (its pixels / its TV scale, 1 off a TV), which
+		-- is what the strip's Offsets and HudLayout's answer are in.
+		local screen = gui.AbsoluteSize / UIKit.scaleOf(gui)
 		if screen.X < 100 or screen.Y < 100 then
 			return
 		end
@@ -3598,10 +3844,20 @@ do
 			stripHidden = layout.touch,
 			plants = activeTab == "plants",
 			sideWidth = side.Size.X.Offset,
+			scale = UIKit.menuScale(),
 		})
 		modal.group.AnchorPoint = Vector2.new(0.5, 0.5)
 		modal.group.Position = UDim2.fromOffset(bag.centre.X, bag.centre.Y)
-		modal.group.Size = UDim2.fromOffset(bag.panel.w, bag.panel.h)
+		--======================================================================
+		-- THE PLAYER'S MENU SIZE, ON THIS PANEL ONLY
+		--
+		-- This gui is also the hotbar's, and the hotbar's place is the owner's,
+		-- so the size goes on the panel: drawn bag.scale times larger and sized
+		-- that many times smaller, it keeps exactly the footprint HudLayout gave
+		-- it -- the free space between the rails and above the strip.
+		--======================================================================
+		modal.group.Size = UDim2.fromOffset(bag.panel.w / bag.scale, bag.panel.h / bag.scale)
+		modal.setUserScale(bag.scale)
 
 		--======================================================================
 		-- A SHORT SCREEN PUTS THE TABS ON THE TITLE'S ROW
@@ -3616,7 +3872,8 @@ do
 		if bag.compactHeader then
 			local padLeft = if titlePad then titlePad.PaddingLeft.Offset else 0
 			local padRight = if titlePad then titlePad.PaddingRight.Offset else 0
-			local reserve = math.max(72, math.ceil(modal.title.TextBounds.X) + padLeft + 16)
+			local reserve = math.max(72,
+				math.ceil(modal.title.TextBounds.X / (UIKit.scaleOf(gui) * bag.scale)) + padLeft + 16)
 			tabRow.Position = UDim2.fromOffset(12 + reserve, 13)
 			tabRow.Size = UDim2.new(1, -(24 + reserve + 52 + padRight), 0, 34)
 			modal.body.Position = UDim2.fromOffset(12, BAG.BodyTopCompact)
@@ -3635,6 +3892,14 @@ do
 		-- both fit; under it, as a lower sheet, when they do not. Plants only --
 		-- the equipment tab gives its tray the whole body.
 		--======================================================================
+		-- The Plants tab's note strip sits over the grid, inside the tray.
+		grid.Position = UDim2.fromOffset(0, bag.note)
+		grid.Size = UDim2.new(1, 0, 1, -bag.note)
+		local note = bagSort.note
+		if note then
+			note.Visible = bag.note > 0
+		end
+
 		local infoRect = bag.infoRect
 		if bag.info == "none" or not infoRect then
 			tray.Size = UDim2.fromScale(1, 1)
@@ -4010,6 +4275,14 @@ equipRequest = function(item: WeaponData.Item)
 		SoundKit.play("Denied")
 		return
 	end
+	-- The Bloomrunner Trail's stand-in (refreshBag): wear it if it is off, take
+	-- it off if it is on. WheelService refuses it to anybody who does not own it.
+	if (item :: any).Category == "trail" then
+		local WheelData = require(Shared:WaitForChild("WheelData"))
+		channel:FireServer(WheelData.Actions.Equip,
+			player:GetAttribute(WheelData.Attributes.Trail) ~= WheelData.Trail.Id)
+		return
+	end
 	if not owned[item.Id] then
 		SoundKit.play("Denied")
 		return
@@ -4074,6 +4347,14 @@ if remotes then
 	end
 end
 
+-- The Bloomrunner Trail's row follows WheelService's two attributes: won, and worn.
+do
+	local WheelData = require(Shared:WaitForChild("WheelData"))
+	for _, name in ipairs({ WheelData.Attributes.TrailOwned, WheelData.Attributes.Trail }) do
+		player:GetAttributeChangedSignal(name):Connect(redraw)
+	end
+end
+
 --==============================================================================
 -- WATCHING THE CONTAINERS
 --
@@ -4084,8 +4365,33 @@ end
 --==============================================================================
 local containerConns: { RBXScriptConnection } = {}
 
+--==============================================================================
+-- A TOOL THAT CHANGES WHAT IT IS REPAINTS ITS CARD
+--
+-- Species, size and hatched are stamped when a Tool is made and, today, never
+-- change after -- but the card's name, art and income all come from them, so a
+-- change must not leave a card describing what the Tool used to be. Once per
+-- Tool, however often it moves between the Backpack and the hands.
+--==============================================================================
+local function watchTools(container: Instance)
+	for _, child in ipairs(container:GetChildren()) do
+		if child:IsA("Tool") and not bagSort.watched[child] then
+			bagSort.watched[child] = true
+			child.AttributeChanged:Connect(function(name: string)
+				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched" then
+					redraw()
+				end
+			end)
+		end
+	end
+end
+
 local function watchContainer(container: Instance)
-	table.insert(containerConns, container.ChildAdded:Connect(redraw))
+	watchTools(container)
+	table.insert(containerConns, container.ChildAdded:Connect(function()
+		watchTools(container)
+		redraw()
+	end))
 	--==========================================================================
 	-- A TOOL LEAVING IS ONLY SOMETIMES A TOOL GOING
 	--
@@ -4398,6 +4704,25 @@ for _, tab in ipairs(TABS) do
 end
 
 --==============================================================================
+-- SORT: ONE PRESS, THE NEXT ORDER
+--
+-- Default, income high, income low, rarest, name -- and round again. It orders
+-- the cards and nothing else; the selection is a Tool, so it stays on its plant
+-- wherever that plant lands, and refreshBag keeps the pad's focus on it too.
+-- The scroll is left where it is: the player is looking at the list.
+--==============================================================================
+do
+	local sort = bagSort.button
+	if sort then
+		sort.button.Activated:Connect(function()
+			bagSort.mode = PlantInfo.NextSort(bagSort.mode)
+			sort.set(PlantInfo.SortLabels[bagSort.mode])
+			refreshBag()
+		end)
+	end
+end
+
+--==============================================================================
 -- THE REST OF THE SELECTION CONTRACT
 --
 -- A tap on EMPTY tray clears it. Empty means no card under the release, and a
@@ -4443,15 +4768,20 @@ grid.InputEnded:Connect(function(input)
 end)
 
 -- The x2 pass can land while the panel is open, and the income line carries it.
-player:GetAttributeChangedSignal(GameConfig.Pass.MultiplierAttribute):Connect(function()
-	if selectedTool then
-		paintInfo()
-	end
-end)
+-- So can a Bonus Chest income boost starting or running out.
+for _, attribute in ipairs({ GameConfig.Pass.MultiplierAttribute, GameConfig.BonusChest.Attributes.Boost,
+	GameConfig.BonusChest.Attributes.EndsAt }) do
+	player:GetAttributeChangedSignal(attribute):Connect(function()
+		if selectedTool then
+			paintInfo()
+		end
+	end)
+end
 
 -- The screen changing shape moves the Bag, and the title's measured width is
 -- how much of its row the compact tabs may take.
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutBag)
+UIKit.onMenuSize(layoutBag)
 modal.title:GetPropertyChangedSignal("TextBounds"):Connect(layoutBag)
 -- UIKit.modal pads the title bar clear of the rail AFTER the panel moves, so the
 -- compact tab row, which is fitted between those pads, follows them.
@@ -4897,6 +5227,64 @@ ContextActionService:BindAction("SeedHotbarKeys", function(_, state, input)
 	end
 	return Enum.ContextActionResult.Pass
 end, false, table.unpack(KEYS))
+
+--==============================================================================
+-- LB AND RB: THE NUMBER ROW, FOR A CONTROLLER
+--
+-- Turning the CoreGui Backpack off took its bumpers with it, exactly as it took
+-- the number keys, and only the keys were put back -- so a controller had no way
+-- at all to change what was in the player's hands. These walk the SAME strip
+-- the number row reads, in its on-screen order: the next or previous slot that
+-- actually holds something, wrapping at either end, equipped the moment it is
+-- reached.
+--
+-- ONE STEP PER PRESS. Bound on Begin only, so a held bumper does not spin the
+-- strip. A slot already in the hands is not toggled off when it is the only
+-- thing on the strip -- a bumper walks, it never puts away.
+--
+-- NOTHING WHILE A PANEL IS UP. A bumper pressed with the Shop, the Bag or any
+-- other centre panel open must not swap the tool behind it; PadInput answers
+-- "is a panel open" for every panel, including the ones not on OpenPanel.
+--
+-- In a do-block because this chunk's local names are rationed.
+--==============================================================================
+do
+	local PadInput = require(Shared:WaitForChild("PadInput"))
+
+	local function occupiedSlots(): { number }
+		local out: { number } = {}
+		for i = 1, activeSlots do
+			local slot = hotSlots[i]
+			if slot and slot.button.Visible and slot.tool and slot.tool.Parent then
+				table.insert(out, i)
+			end
+		end
+		return out
+	end
+
+	ContextActionService:BindAction("SeedHotbarCycle", function(_, state, input)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if PadInput.panelOpen() then
+			return Enum.ContextActionResult.Pass
+		end
+		local held = heldTool()
+		-- From the slot in the hands, or from just outside either end when the
+		-- hands are empty (or hold something the strip is not showing).
+		local target = PadInput.nextSlot(occupiedSlots(), if held then hotbarSlotOf(held) else nil,
+			if input.KeyCode == Enum.KeyCode.ButtonR1 then 1 else -1)
+		if not target then
+			return Enum.ContextActionResult.Sink
+		end
+		local slot = hotSlots[target]
+		if slot and slot.tool and slot.tool ~= held then
+			holdTool(slot.tool)
+			redraw()
+		end
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1)
+end
 
 --==============================================================================
 -- THE COOLDOWN TICK

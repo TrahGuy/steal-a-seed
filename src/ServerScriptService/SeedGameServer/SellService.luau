@@ -5,8 +5,10 @@
 -- TWO BOARDS AT MARIGOLD'S STALL
 --
 -- SELL ALL, off the left end of the stall: one sign, one prompt, one held press,
--- and everything in the bag becomes cash. SELL ONE, off the right end: one sign,
--- one tap, and a confirmation for the ONE plant in the player's hands. The money
+-- and a confirmation for the whole bag -- how many plants, how many pods, what
+-- they pay -- before anything becomes cash (since 2026-09-24; it used to sell
+-- on the hold). SELL ONE, off the right end: one sign, one tap, and a
+-- confirmation for the ONE plant in the player's hands. The money
 -- itself is not minted here -- EconomyService.SellHeld and EconomyService.SellOne
 -- do that, because Rule 6 says cash mints in one file and a stall is not an
 -- exception to it. This service owns the FURNITURE, the prompts and the server
@@ -107,6 +109,26 @@ type Pending = {
 local pending: { [Player]: Pending } = {}
 local nextToken = 0
 local channel: RemoteEvent? = nil
+
+--==============================================================================
+-- THE SELL ALL QUOTE ON THE TABLE, PER PLAYER
+--
+-- `tools` is the exact set of Tool instances the count and the payout were
+-- made from; the sale goes ahead only if the bag still holds exactly those and
+-- they still pay exactly `total`. A second table rather than a field on
+-- Pending, so SELL ONE's quote keeps the shape its own code and spec rely on --
+-- but still ONE QUOTE PER PLAYER: making either quote drops the other.
+--==============================================================================
+type PendingAll = {
+	token: number,
+	tools: { [Tool]: boolean },
+	count: number,
+	total: number,
+	board: BasePart,
+	expires: number,
+}
+local pendingAll: { [Player]: PendingAll } = {}
+local SELL_ALL = GameConfig.SellAll
 
 local function log(message: string)
 	print("[Seed/SellService] " .. message)
@@ -273,16 +295,19 @@ local function attachPrompt(model: Model)
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = board
 
+	--==========================================================================
+	-- THE HOLD ASKS FOR A QUOTE; THE SALE WAITS FOR A YES
+	--
+	-- It used to sell right here, on the hold. Now the hold is the request and
+	-- the panel is the decision: how many plants, how many pods, what they pay,
+	-- and nothing sold until the player says yes to exactly that
+	-- (SellService.QuoteAll / ConfirmAll below).
+	--==========================================================================
 	table.insert(connections, prompt.Triggered:Connect(function(player)
-		local sold, paid = EconomyService.SellHeld(player)
-		if sold > 0 then
-			-- The till, recorded 2026-09-17. This was MillUpgrade -- the game's
-			-- existing "that transaction worked" cue -- carrying a note that
-			-- invited the swap the moment a real one existed. This is the swap.
-			SoundKit.emit("SellAll", board)
+		local c = channel
+		if c then
+			c:FireClient(player, SELL_ONE.ServerAction, SellService.QuoteAll(player, board))
 		end
-		log(string.format("%s pressed sell-all: %d item(s), %s",
-			player.Name, sold, GameConfig.compact(paid)))
 	end))
 end
 
@@ -298,6 +323,7 @@ end
 
 local function forget(player: Player)
 	pending[player] = nil
+	pendingAll[player] = nil
 end
 
 -- The Tool in the player's hands, if any. A Character holds one Tool at a time
@@ -331,6 +357,8 @@ end
 --==============================================================================
 function SellService.QuoteOne(player: Player, board: BasePart, now: number?): { [string]: any }
 	pending[player] = nil
+	-- One quote per player, whichever board made it.
+	pendingAll[player] = nil
 	local tool = heldTool(player)
 	local quote, reason = EconomyService.QuoteOne(player, tool)
 	if not quote then
@@ -436,6 +464,123 @@ function SellService.PendingFor(player: Player): number?
 	return if p then p.token else nil
 end
 
+--==============================================================================
+-- SELL ALL: THE QUOTE
+--
+-- Called when the SELL ALL hold completes. Counts what the stall would buy --
+-- EconomyService.QuoteHeld, the same rule and the same prices the sale uses --
+-- and returns the payload the client is told: "quoteAll" with a token, the
+-- plant and pod counts and the payout, or "refused" when there is nothing to
+-- sell. Any older quote this player had, from either board, is dropped first.
+--
+-- The payout is the sum. It says what the whole bag pays, not what any one
+-- unhatched pod is worth -- the bag's own cards still read ??? for a pod.
+--==============================================================================
+function SellService.QuoteAll(player: Player, board: BasePart, now: number?): { [string]: any }
+	pending[player] = nil
+	pendingAll[player] = nil
+	local quote = EconomyService.QuoteHeld(player)
+	if #quote.tools == 0 then
+		log(string.format("%s pressed sell-all with nothing to sell", player.Name))
+		return { phase = "refused", text = SELL_ALL.EmptyText, reason = "EMPTY" }
+	end
+	nextToken += 1
+	local set: { [Tool]: boolean } = {}
+	for _, tool in ipairs(quote.tools) do
+		set[tool] = true
+	end
+	pendingAll[player] = {
+		token = nextToken,
+		tools = set,
+		count = #quote.tools,
+		total = quote.total,
+		board = board,
+		expires = (now or os.clock()) + SELL_ONE.QuoteSeconds,
+	}
+	log(string.format("%s was quoted %s for %d plant(s) and %d pod(s), token %d",
+		player.Name, GameConfig.compact(quote.total), quote.plants, quote.pods, nextToken))
+	return {
+		phase = "quoteAll",
+		token = nextToken,
+		plants = quote.plants,
+		pods = quote.pods,
+		total = quote.total,
+	}
+end
+
+--==============================================================================
+-- SELL ALL: THE ANSWER
+--
+-- Same shape as ConfirmOne, and the same first move: the quote is FORGOTTEN
+-- before anything is checked, so a double press or a replayed yes finds
+-- nothing. Then: a no sells nothing; a yes must be in time, from the board,
+-- and for EXACTLY the bag that was counted -- the same Tool instances, no more
+-- and no fewer, still paying the same total. Anything else is "your bag
+-- changed" and nothing is sold; the player presses the sign again for a fresh
+-- count. Between the last check and the sale nothing yields, so the bag that
+-- was checked is the bag that is sold.
+--==============================================================================
+function SellService.ConfirmAll(player: Player, payload: any, now: number?): { [string]: any }?
+	if type(payload) ~= "table" then
+		return nil
+	end
+	local token = validToken(payload.token)
+	if not token then
+		return nil
+	end
+	local p = pendingAll[player]
+	if not p or p.token ~= token then
+		return nil
+	end
+	pendingAll[player] = nil
+
+	if payload.accept ~= true then
+		log(string.format("%s declined the sell-all quote, token %d", player.Name, token))
+		return { phase = "cancelled", token = token }
+	end
+	if (now or os.clock()) > p.expires then
+		return { phase = "refused", token = token, text = SELL_ONE.ExpiredText, reason = "EXPIRED" }
+	end
+
+	local character = player.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local board = p.board
+	if not (root and root:IsA("BasePart") and board.Parent ~= nil
+		and (root.Position - board.Position).Magnitude <= SELL_ONE.ReachStuds) then
+		return { phase = "refused", token = token, text = SELL_ALL.TooFarText, reason = "TOO_FAR" }
+	end
+
+	local now_ = EconomyService.QuoteHeld(player)
+	local same = #now_.tools == p.count and now_.total == p.total
+	if same then
+		for _, tool in ipairs(now_.tools) do
+			if not p.tools[tool] then
+				same = false
+				break
+			end
+		end
+	end
+	if not same then
+		return { phase = "refused", token = token, text = SELL_ALL.ChangedText, reason = "CHANGED" }
+	end
+
+	local sold, paid = EconomyService.SellHeld(player)
+	if sold == 0 then
+		return { phase = "refused", token = token, text = SELL_ALL.ChangedText, reason = "CHANGED" }
+	end
+	-- The till, recorded 2026-09-17: the same cue SELL ONE rings.
+	SoundKit.emit("SellAll", board)
+	log(string.format("%s sold all: %d item(s) for %s, token %d",
+		player.Name, sold, GameConfig.compact(paid), token))
+	return { phase = "soldAll", token = token, sold = sold, paid = paid }
+end
+
+-- For a test that wants to look: the token of this player's SELL ALL quote.
+function SellService.PendingAllFor(player: Player): number?
+	local p = pendingAll[player]
+	return if p then p.token else nil
+end
+
 function SellService.Forget(player: Player)
 	forget(player)
 end
@@ -477,6 +622,7 @@ function SellService.Init()
 		end
 	end
 	table.clear(pending)
+	table.clear(pendingAll)
 end
 
 function SellService.Start()
@@ -511,7 +657,10 @@ function SellService.Start()
 				if action ~= SELL_ONE.ClientAction then
 					return
 				end
+				-- The token names the quote, and only one of the two tables can
+				-- hold it: SELL ONE's, else SELL ALL's.
 				local result = SellService.ConfirmOne(player, payload)
+					or SellService.ConfirmAll(player, payload)
 				if result and result.phase ~= "cancelled" then
 					tell(player, result)
 				end
@@ -553,6 +702,7 @@ function SellService.Stop()
 	end
 	table.clear(playerConns)
 	table.clear(pending)
+	table.clear(pendingAll)
 	channel = nil
 end
 

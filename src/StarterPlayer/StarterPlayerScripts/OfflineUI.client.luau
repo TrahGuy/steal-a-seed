@@ -187,6 +187,8 @@ local modal = UIKit.modal(gui, {
 	maxHeight = 480,
 	theme = NIGHT_THEME,
 })
+-- This gui also flies the coins to the cash, so the menu size goes on the panel.
+modal.followMenuSize()
 modal.close.Visible = false
 
 local column = Instance.new("Frame")
@@ -464,7 +466,10 @@ UIKit.cardPop(claim, claimScale, { hoverScale = 1.04, pressScale = 0.95, sound =
 -- FITTING THE CARD TO THE SCREEN
 --==============================================================================
 local function fit()
-	local bodyW, bodyH = modal.body.AbsoluteSize.X, modal.body.AbsoluteSize.Y
+	-- In the panel's own units: its pixels / its TV scale / the menu size it is
+	-- drawn at (both 1 on a desktop at the default size).
+	local k = UIKit.scaleOf(gui) * modal.userScale()
+	local bodyW, bodyH = modal.body.AbsoluteSize.X / k, modal.body.AbsoluteSize.Y / k
 	if bodyW <= 0 or bodyH <= 0 then
 		return
 	end
@@ -696,11 +701,13 @@ local function walletPoint(): Vector2
 	if ok and typeof(point) == "Vector2" then
 		return point
 	end
-	return Vector2.new(90, gui.AbsoluteSize.Y - 130)
+	return Vector2.new(90, gui.AbsoluteSize.Y / UIKit.scaleOf(gui) - 130)
 end
 
 local function coinsToWallet()
-	local from = amount.AbsolutePosition + amount.AbsoluteSize * 0.5 - gui.AbsolutePosition
+	-- The coins fly in Offsets: real pixels / the gui's TV scale (1 off a TV).
+	local from = (amount.AbsolutePosition + amount.AbsoluteSize * 0.5 - gui.AbsolutePosition)
+		/ UIKit.scaleOf(gui)
 	local to = walletPoint()
 	for i = 1, 12 do
 		local c = coin(gui, 24, 60)

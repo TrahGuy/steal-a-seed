@@ -76,6 +76,17 @@ export type Biome = {
 	-- escalation, so coming back to the same nest is still worse each time.
 	--==========================================================================
 	GuardianChaseSpeed: number?,
+	--==========================================================================
+	-- THE HEAD START FOR A THIEF BELOW THE RECOMMENDATION
+	--
+	-- Absent everywhere but Dustbowl, and absent is the shipped rule: a thief
+	-- below RecommendedSpeed wakes this biome's guardian with NO delay. True
+	-- gives that thief the normal Parent.WakeDelaySeconds -- the roar, the
+	-- "WAKING" warning and the head start -- but only for a pod taken out of a
+	-- SLEEPING nest. Never from a guardian already awake, and never for a
+	-- dropped pod picked back up. See NestService.qualifiesForHeadStart.
+	--==========================================================================
+	HeadStartBelowRecommended: boolean?,
 	-- NestService reads this. It is the SECOND of two gates -- the first is
 	-- whether the biome has any species at all -- and it exists because the
 	-- first one opens by itself: dropping five species rows into SeedData is
@@ -160,6 +171,21 @@ BiomeData.Biomes = {
 		Mood = "😐",
 		Order = 2,
 		RecommendedSpeed = 167_000_000,
+		--======================================================================
+		-- THE SECOND BIOME GIVES EVERY THIEF THE HEAD START
+		--
+		-- Michael's report, 2026-09-27 launch pass: Greenhollow is easy and
+		-- Dustbowl is a wall, so players trained instead of playing. Measured
+		-- (a 50 Hz run of the real chase rules: 540 studs home, the lightest
+		-- pod, first theft): EVERY thief below 167M was caught within 0.2
+		-- seconds, 1-2% of the way home, because a sleeping guardian skipped its
+		-- wake delay for them. With the delay they are caught at 1.4-3.4 s,
+		-- 4-26% of the way: still a loss, but a raid rather than an ambush.
+		--
+		-- Only the delay. The guardian's speed, the under-speed margin and rage
+		-- are untouched, so earning Speed still buys what it bought.
+		--======================================================================
+		HeadStartBelowRecommended = true,
 		GroundColor = Color3.fromRGB(226, 198, 138),
 		WallColor = Color3.fromRGB(186, 142, 92),
 		AccentColor = Color3.fromRGB(212, 158, 78),

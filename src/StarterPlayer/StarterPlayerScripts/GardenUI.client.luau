@@ -56,6 +56,7 @@
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -67,6 +68,9 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- A ready pod's card names the hatch button, and on a controller that is X.
+local PadInput = require(Shared:WaitForChild("PadInput"))
+local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -219,6 +223,8 @@ local modal = UIKit.modal(gui, {
 	maxWidth = MAX_WIDTH,
 	maxHeight = MAX_HEIGHT,
 })
+-- This gui holds only the panel, so it takes the player's menu size whole.
+UIKit.menuGui(gui)
 
 local titleBar = modal.title.Parent :: Frame
 UIKit.sproutIcon(titleBar, 30, SeedData.Stem, SeedData.Leaf).Position =
@@ -227,6 +233,35 @@ modal.title.Position = UDim2.new(0, 46, 0.5, 0)
 modal.title.Size = UDim2.new(1, -98, 1, 0)
 
 local header = modal.title
+
+--==============================================================================
+-- SORT, IN THE TITLE BAR (2026-09-26)
+--
+-- Left of the close button, where it costs the list no height: on a landscape
+-- phone a row across the top of the panel would have left less than one card
+-- row showing. Out of the body, so a pad still opens on the first card, and one
+-- press up from the first row reaches it. The title gives it the room: it
+-- shrinks to fit rather than running under the button on a narrow panel.
+--
+-- One press, the next order -- PlantInfo's, the same sort the Bag offers. It
+-- orders the cards and nothing else: nothing in the bed moves, and empty slots
+-- stay after every plant.
+--==============================================================================
+local SORT_W = 104
+local gardenSort = "default"
+local sortButton = UIKit.cycleButton(modal.title.Parent :: Frame, "SORT", 4)
+sortButton.button.AnchorPoint = Vector2.new(1, 0.5)
+sortButton.button.Position = UDim2.new(1, -52, 0.5, 0)
+sortButton.button.Size = UDim2.fromOffset(SORT_W, 36)
+sortButton.set(PlantInfo.SortLabels[gardenSort])
+header.Size = UDim2.new(1, -(98 + SORT_W + 8), 1, 0)
+header.TextScaled = true
+do
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 26
+	fit.MinTextSize = 12
+	fit.Parent = header
+end
 
 local FOOTER_HEIGHT = 32
 
@@ -246,7 +281,25 @@ list.ScrollBarImageColor3 = GameConfig.Panel.Edge
 list.CanvasSize = UDim2.new()
 list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 list.ZIndex = 3
+-- The cards are what a pad lands on, never the list around them: a selected
+-- ScrollingFrame puts the ring round the whole bed, and the Index's almanac is
+-- set the same way for the same reason.
+list.Selectable = false
 list.Parent = clip
+
+--==============================================================================
+-- ROOM FOR THE RING ABOVE THE FIRST ROW AND BELOW THE LAST
+--
+-- PadFocus draws its gold ring up to 9 px outside the control it marks (on a
+-- TV; 7 elsewhere), and the list clips at its own edge. Flush, the first row's
+-- ring lost its top and the last row's PICK UP lost its bottom -- on the one
+-- row where you most need to see which of the two has the focus.
+--==============================================================================
+local EDGE_PAD = 10
+local listPad = Instance.new("UIPadding")
+listPad.PaddingTop = UDim.new(0, EDGE_PAD)
+listPad.PaddingBottom = UDim.new(0, EDGE_PAD)
+listPad.Parent = list
 
 local grid = Instance.new("UIGridLayout")
 grid.FillDirection = Enum.FillDirection.Horizontal
@@ -267,9 +320,14 @@ grid.Parent = list
 local GUTTER = 8
 local CARD_ASPECT = 1.30
 local shownSlots = 0
+-- The grid as last laid out, kept so a card's place on the canvas can be worked
+-- out by arithmetic -- see cellSpan.
+local columnsNow = 2
+local cellHeightNow = 0
 
 local function relayout()
-	local width = list.AbsoluteSize.X
+	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
+	local width = list.AbsoluteSize.X / UIKit.scaleOf(gui)
 	if width <= 0 then
 		return
 	end
@@ -278,29 +336,57 @@ local function relayout()
 	local cellHeight = math.floor(cell * CARD_ASPECT)
 	grid.CellSize = UDim2.fromOffset(cell, cellHeight)
 	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
+	columnsNow = columns
+	cellHeightNow = cellHeight
 
 	local rows = math.max(1, math.ceil(math.max(shownSlots, 1) / columns))
-	modal.fitContent(rows * cellHeight + (rows - 1) * GUTTER + FOOTER_HEIGHT)
+	modal.fitContent(rows * cellHeight + (rows - 1) * GUTTER + 2 * EDGE_PAD + FOOTER_HEIGHT)
 end
 
 --==============================================================================
--- FORWARD DECLARED, BECAUSE THE SCROLL HANDLER IS ABOVE THE SELECTION
+-- WHERE A CARD IS ON THE CANVAS, AND WHAT THE LIST SHOWS
 --
--- The layout is built before the cards are, so this connection exists a couple
--- of hundred lines before `clearSelection` does. A `local function` declared
--- later is not in scope here -- the name compiles to a global, which is nil,
--- and the only symptom is a scroll that quietly fails to drop the selection
--- while an error goes to the log. Same shape of bug PlantService documents on
--- `attachPickup`, and the same fix.
+-- Worked out from the grid rather than read off AbsolutePosition: the reveal
+-- below writes CanvasPosition and then asks again in the same breath, and a
+-- child's AbsolutePosition is not promised to have caught up with that write.
+-- The grid's own arithmetic has nothing to catch up with. All of it in the
+-- gui's own units, as CanvasPosition is.
 --==============================================================================
-local clearSelection: () -> ()
+local function cellSpan(index: number): (number, number)
+	local row = (index - 1) // columnsNow
+	local top = EDGE_PAD + row * (cellHeightNow + GUTTER)
+	return top, top + cellHeightNow
+end
+
+local function viewHeight(): number
+	return list.AbsoluteSize.Y / UIKit.scaleOf(gui)
+end
+
+local function canvasHeight(): number
+	local rows = math.max(1, math.ceil(math.max(shownSlots, 1) / columnsNow))
+	return rows * cellHeightNow + (rows - 1) * GUTTER + 2 * EDGE_PAD
+end
+
+-- The whole card -- its PICK UP included, and the ring's margin round both --
+-- scrolled into the window, the least distance that does it.
+local function reveal(index: number)
+	if cellHeightNow <= 0 then
+		return
+	end
+	local top, bottom = cellSpan(index)
+	local now = list.CanvasPosition.Y
+	local want = UIKit.scrollToShow(now, viewHeight(), top - EDGE_PAD, bottom + EDGE_PAD,
+		canvasHeight())
+	if math.abs(want - now) > 0.5 then
+		list.CanvasPosition = Vector2.new(list.CanvasPosition.X, want)
+	end
+end
 
 list:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
--- Scrolling away from a selected card drops it: a button that has slid half out
--- of the list is a button nobody meant to be aiming at.
-list:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-	clearSelection()
-end)
+-- The scroll handler is further down, under the selection it tests: a closure
+-- up here would name locals that are not declared yet, and those compile to
+-- globals, which are nil. Same shape of bug PlantService documents on
+-- `attachPickup`.
 
 --==============================================================================
 -- THE FOOTER IS A NUMBER, NOT A BUTTON
@@ -381,29 +467,96 @@ local pool: { Slot } = {}
 --
 -- SELECTING IS NOT DOING. A click selects; only the button underneath acts.
 -- Anything that would make the selection stale -- another card, the dimmer, a
--- scroll, the panel closing, or the slot's own contents changing -- drops it.
+-- scroll that takes its PICK UP out of sight, the panel closing, or the slot's
+-- own contents changing -- drops it.
+--
+-- A CARD THAT OFFERS NOTHING IS NOT SELECTED. It was, and its button came up
+-- anyway: blank on a card that had never held a plant, and on a pooled card
+-- that had, still saying the PICK UP it said last -- a live-looking button
+-- whose handler then ignored it. Pressing a pod or an empty hole now only
+-- drops whatever else was selected.
 --==============================================================================
 local selectedId: number? = nil
 local selectedSlot: Slot? = nil
+local selectedIndex: number? = nil
 
-function clearSelection()
-	if selectedSlot then
-		selectedSlot.setSelected(false)
+-- Which card a control belongs to -- its body or its PICK UP -- by index.
+local slotIndexOf: { [GuiObject]: number } = {}
+
+--==============================================================================
+-- THE PAD'S FOCUS STAYS IN THE CARD IT WAS IN
+--
+-- Hide the control that has the selection and the engine re-homes it at once,
+-- onto whatever selectable is nearest (PadFocus, THE ENGINE MOVES THE SELECTION
+-- FIRST) -- from a PICK UP just pressed, that can be a card two rows away. So
+-- the focus is handed to the card's own body BEFORE its button hides: after a
+-- pick-up it stays where the plant was, and the next plant slides in under it.
+--==============================================================================
+local function clearSelection()
+	local slot = selectedSlot
+	if slot then
+		if GuiService.SelectedObject == slot.action then
+			GuiService.SelectedObject = slot.button
+		end
+		slot.button.NextSelectionDown = nil
+		slot.action.NextSelectionUp = nil
+		slot.setSelected(false)
 	end
 	selectedSlot = nil
 	selectedId = nil
+	selectedIndex = nil
 end
 
-local function selectSlot(slot: Slot, placementId: number?)
-	if selectedSlot == slot then
+local function selectSlot(slot: Slot, placementId: number?, index: number)
+	if selectedSlot == slot or not placementId then
 		clearSelection()
 		return
 	end
 	clearSelection()
 	selectedSlot = slot
 	selectedId = placementId
-	slot.setSelected(true, if placementId then "PICK UP" else nil)
+	selectedIndex = index
+	slot.setSelected(true, "PICK UP")
+	-- Down from the card is its own PICK UP and up from that is the card, not
+	-- whichever neighbour the engine happens to measure as nearer.
+	slot.button.NextSelectionDown = slot.action
+	slot.action.NextSelectionUp = slot.button
+	-- The button is the card's bottom strip, and on the lowest row that strip
+	-- can be under the list's edge -- so the card comes up whole, for a tap as
+	-- much as for a pad.
+	reveal(index)
 end
+
+--==============================================================================
+-- A SCROLL DROPS THE SELECTION ONLY WHEN IT TAKES THE BUTTON AWAY
+--
+-- This dropped it on ANY scroll: "a button that has slid half out of the list
+-- is a button nobody meant to be aiming at". Right about a scroll away, and
+-- exactly wrong about a scroll toward. On the lowest row the PICK UP sits under
+-- the list's edge, so moving a pad's focus onto it makes the engine scroll to
+-- it; the scroll dropped the selection, the button hid, and the engine threw
+-- the focus somewhere else. Reported from a console on 2026-09-26: the bottom
+-- row's plants could not be picked up at all.
+--
+-- So it is tested rather than assumed. The selection goes when its PICK UP is
+-- no longer wholly in the window -- and never while the pad's focus is on that
+-- card or its button, because then whatever scrolled was bringing it in.
+--==============================================================================
+list:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+	local index = selectedIndex
+	if not (selectedSlot and index) then
+		return
+	end
+	local focus = GuiService.SelectedObject
+	if focus and slotIndexOf[focus] == index then
+		return
+	end
+	local _, bottom = cellSpan(index)
+	if not UIKit.spanShown(list.CanvasPosition.Y, viewHeight(),
+		bottom - GameConfig.Card.ActionHeight, bottom) then
+		clearSelection()
+	end
+end)
 
 --==============================================================================
 -- WHAT A CARD IS OFFERING, IF ANYTHING
@@ -412,6 +565,9 @@ end
 -- be picked up -- an empty hole, a pod, somebody's missing plot.
 --==============================================================================
 local offers: { [number]: number? } = {}
+-- Every card's plant, pods included, by PlacementId: what the pad's focus is
+-- kept on when the order changes under it (see refresh).
+local shownIds: { [number]: number? } = {}
 
 local function buildSlot(index: number): Slot
 	local slot = UIKit.plantCard(list, {
@@ -421,10 +577,12 @@ local function buildSlot(index: number): Slot
 		subSize = 12,
 	})
 	pool[index] = slot
+	slotIndexOf[slot.button] = index
+	slotIndexOf[slot.action] = index
 
 	slot.button.Activated:Connect(function()
 		local placementId = offers[index]
-		selectSlot(slot, placementId)
+		selectSlot(slot, placementId, index)
 	end)
 
 	slot.action.Activated:Connect(function()
@@ -615,6 +773,18 @@ end
 local open = false
 
 local function setSlotCount(n: number)
+	-- A card about to hide gives up the selection and the pad's focus first --
+	-- hidden with it, the engine would throw the focus to whatever is nearest.
+	-- The last card that stays takes the focus. (An over-full migrated garden
+	-- shrinks by one row when its last plant is picked up.)
+	if selectedIndex and selectedIndex > n then
+		clearSelection()
+	end
+	local focus = GuiService.SelectedObject
+	local focusIndex = if focus then slotIndexOf[focus] else nil
+	if focusIndex and focusIndex > n and n >= 1 then
+		GuiService.SelectedObject = slotAt(n).button
+	end
 	for i = 1, math.max(n, shownSlots) do
 		local slot = pool[i]
 		if i <= n then
@@ -660,6 +830,25 @@ local function refresh(paint: boolean)
 
 	local here = occupants(plot)
 	local capacity = capacityOf(plot)
+	-- The chosen order, if one has been chosen. Pods count as unhatched however
+	-- ripe: a sort never reads the species inside one. Ties fall to PlacementId.
+	PlantInfo.Sort(here, gardenSort, function(o: Occupant): PlantInfo.SortKey
+		return { speciesId = o.species.Id, tier = o.tier, hatched = o.stage ~= STAGE_POD, id = o.id }
+	end)
+
+	--==========================================================================
+	-- THE PAD'S FOCUS STAYS ON ITS PLANT
+	--
+	-- Cards are pooled by position, so when the order changes -- a new sort, a
+	-- hatch or a pick-up inside one -- the focus ring would otherwise stay on the
+	-- slot and land on a different plant. Noted by PlacementId here, put back on
+	-- that plant's new card once the paint is done.
+	--==========================================================================
+	local focusObject = GuiService.SelectedObject
+	local focusIndex = if focusObject then slotIndexOf[focusObject] else nil
+	local focusId = if focusIndex then shownIds[focusIndex] else nil
+	local focusOnAction = focusIndex ~= nil and pool[focusIndex] ~= nil
+		and focusObject == pool[focusIndex].action
 
 	--==========================================================================
 	-- EVERY PLANT GETS A ROW, EVEN THE ONES THAT DO NOT FIT
@@ -691,7 +880,8 @@ local function refresh(paint: boolean)
 	-- Read once per paint rather than per slot, so all ten rows and the footer
 	-- can never disagree with each other.
 	--==========================================================================
-	local mult = GameConfig.cashMultiplier(player)
+	-- The pass times a running Bonus Chest income boost -- what RateFor pays.
+	local mult = GameConfig.incomeMultiplier(player)
 
 	if paint then
 		setSlotCount(rows)
@@ -699,6 +889,7 @@ local function refresh(paint: boolean)
 
 	for index = 1, rows do
 		local occupant = here[index]
+		shownIds[index] = if occupant then occupant.id else nil
 		if occupant then
 			planted += 1
 			local stage, remaining = stageOf(occupant, now)
@@ -786,7 +977,11 @@ local function refresh(paint: boolean)
 						slot.name.Text = "Ready to Hatch"
 						slot.name.TextColor3 = band
 						slot.setSubPill(false)
-						slot.sub.Text = "HOLD [E] IN FIELD"
+						-- The hatch prompt's own keys (PlantService): E, and the
+						-- default X on a pad -- an Xbox has no E to hold.
+						slot.sub.Text = if PadInput.active()
+							then "HOLD [" .. PadInput.short(Enum.KeyCode.ButtonX) .. "] IN FIELD"
+							else "HOLD [E] IN FIELD"
 						slot.sub.TextColor3 = ACCENT
 					else
 						slot.setStageTheme("pod")
@@ -828,16 +1023,41 @@ local function refresh(paint: boolean)
 	-- the selection is re-tested against what the bed actually holds on every
 	-- repaint -- so the button can never outlive the plant it would act on.
 	--==========================================================================
+	--==========================================================================
+	-- ...AND A SELECTION THAT MOVED GOES WITH ITS PLANT
+	--
+	-- The plant can be somewhere else in the list now: a new sort, a hatch that
+	-- re-ranked it, a pick-up above it. It used to stay on the SLOT, showing a
+	-- different plant under the ring and a PICK UP that refused. Now it follows
+	-- the plant to its new card, and so does the pad's focus if it was on it.
+	--==========================================================================
 	if paint and selectedId then
-		local stillThere = false
-		for _, id in pairs(offers) do
+		local foundAt: number? = nil
+		for index, id in pairs(offers) do
 			if id == selectedId then
-				stillThere = true
+				foundAt = index
 				break
 			end
 		end
-		if not stillThere then
+		if not foundAt then
 			clearSelection()
+		elseif foundAt ~= selectedIndex then
+			local id = selectedId
+			clearSelection()
+			selectSlot(slotAt(foundAt), id, foundAt)
+		end
+	end
+	if paint and focusId then
+		for index, id in pairs(shownIds) do
+			if id == focusId then
+				if index ~= focusIndex then
+					local slot = slotAt(index)
+					GuiService.SelectedObject = if focusOnAction and selectedSlot == slot
+						then slot.action
+						else slot.button
+				end
+				break
+			end
 		end
 	end
 
@@ -933,13 +1153,18 @@ end
 -- to work in testing, which is the worst way for a race to behave.
 --
 -- Nothing is lost. A selection is dropped by the things that actually make it
--- stale -- the same card again, another card, an empty one, a scroll, the panel
--- closing, or the plant no longer being there -- and the dimmer closes the
--- panel, which is already one of those.
+-- stale -- the same card again, another card, an empty one, a scroll that
+-- takes its button out of sight, the panel closing, or the plant no longer
+-- being there -- and the dimmer closes the panel, which is already one of those.
 --==============================================================================
 
 button.Activated:Connect(function()
 	setOpen(not open)
+end)
+sortButton.button.Activated:Connect(function()
+	gardenSort = PlantInfo.NextSort(gardenSort)
+	sortButton.set(PlantInfo.SortLabels[gardenSort])
+	refresh(open)
 end)
 modal.close.Activated:Connect(function()
 	setOpen(false)
@@ -952,6 +1177,24 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 	local holder = player:GetAttribute(ATTR.OpenPanel)
 	if open and holder ~= PANEL_NAME then
 		setOpen(false)
+	end
+end)
+
+--==============================================================================
+-- WHERE THE PAD'S FOCUS GOES, THE LIST FOLLOWS
+--
+-- The engine scrolls a list only as far as the control it has just selected:
+-- land on a card and its bottom strip -- where PICK UP comes up -- can still be
+-- under the edge. So a card that takes the focus comes up whole, and the
+-- button it is about to offer is already in sight. This panel's cards only,
+-- and only while it is open; a mouse never sets SelectedObject, so this is the
+-- pad's path alone.
+--==============================================================================
+GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+	local focus = GuiService.SelectedObject
+	local index = if focus then slotIndexOf[focus] else nil
+	if open and index then
+		reveal(index)
 	end
 end)
 

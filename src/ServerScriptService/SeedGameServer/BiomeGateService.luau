@@ -22,6 +22,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
+local MapService = require(script.Parent:WaitForChild("MapService"))
 
 local BiomeGateService = {}
 BiomeGateService.Priority = 25
@@ -127,17 +128,36 @@ local function ejectForNight(player: Player, root: BasePart, now: number)
 	end
 end
 
+--==============================================================================
+-- IN THE SAFE ZONE, PUBLISHED FOR THE HUD
+--
+-- The same poll, the game's one test (MapService.IsInSafeZone), written onto
+-- the player only when it changes. It is what the TELEPORT TO PLOT button shows
+-- off -- within a tenth of a second of stepping onto the road -- and it decides
+-- nothing: the teleport tests the position again itself. False for a body that
+-- is dead or not there, whether or not the profile has loaded yet.
+--==============================================================================
+local function publishSafe(player: Player, safe: boolean)
+	if player:GetAttribute(ATTR.InSafeZone) ~= safe then
+		player:SetAttribute(ATTR.InSafeZone, safe)
+	end
+end
+
 local function step(player: Player, now: number)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local rootInstance = character and character:FindFirstChild("HumanoidRootPart")
+	local alive = humanoid ~= nil and humanoid.Health > 0
+		and rootInstance ~= nil and rootInstance:IsA("BasePart")
+	publishSafe(player, alive and MapService.IsInSafeZone((rootInstance :: BasePart).Position))
+
 	local profile = PlayerDataService.Get(player)
 	if not profile then
 		return
 	end
 	publishMilestone(player, profile)
 
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local rootInstance = character and character:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and humanoid.Health > 0 and rootInstance and rootInstance:IsA("BasePart")) then
+	if not alive then
 		return
 	end
 	local root = rootInstance :: BasePart

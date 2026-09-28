@@ -42,6 +42,11 @@ local OfflineEarnings = require(script.Parent:WaitForChild("OfflineEarnings"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
+-- Launch analytics: told what already happened, never asked anything.
+local Metrics = require(script.Parent:WaitForChild("Metrics"))
+-- The external new-player traffic feed (off by default): loaded and called
+-- inside pcall, so a broken logger can never stop a join or a save.
+local trafficLogLoaded, TrafficLog = pcall(require, script.Parent:WaitForChild("TrafficLogService"))
 
 local SAVE = GameConfig.Save
 
@@ -60,9 +65,28 @@ type Entry = {
 	persistent: boolean,
 	dirty: boolean,
 	loadedAt: number,
+	-- Set while the leave save is in flight. The autosave passes it by: a
+	-- second, lock-KEEPING write racing the lock-RELEASING one could land last
+	-- and hold the player out of their next server for two minutes.
+	leaving: boolean?,
 }
 
 local entries: { [Player]: Entry } = {}
+--==============================================================================
+-- A REJOIN WAITS FOR THE LEAVE SAVE IT WOULD OTHERWISE RACE
+--
+-- UserId -> leave saves in flight on THIS server. The session lock cannot tell
+-- a rejoin to the same server apart from the session that just ended -- same
+-- JobId -- so a quick leave-and-back could load the save as it stood BEFORE
+-- the leave save landed, and the next write of the new session would put that
+-- older copy back over it. Found reading the leave path on 2026-09-26; a rejoin
+-- now waits (LEAVE_SAVE_WAIT seconds at most) for this server's own write.
+--==============================================================================
+local leavingSaves: { [number]: number } = {}
+local LEAVE_SAVE_WAIT = 30
+-- UserId -> a write for them is in flight on this server (see write()).
+local writing: { [number]: boolean } = {}
+local WRITE_WAIT = 30
 local replicateDirty: { [Player]: boolean } = {}
 
 -- The player-list columns, per player. See THE PLAYER LIST.
@@ -124,6 +148,8 @@ function PlayerDataService.RecordTutorial(player: Player, milestone: string): bo
 	if not entry or player.Parent ~= Players then return false end
 	if not TutorialData.Record(entry.profile.Tutorial, milestone) then return false end
 	touch(player)
+	-- The first time ever, and only then: Record said so.
+	Metrics.milestone(player, milestone, entry.profile.Tutorial)
 	return true
 end
 
@@ -174,11 +200,103 @@ function PlayerDataService.WalkModeOf(player: Player): boolean
 	return entry ~= nil and entry.profile.WalkMode == true
 end
 
+--==============================================================================
+-- MENU SIZE: THE SECOND SAVED SETTING, THE SAME THREE MOVES AS WALK MODE
+--
+-- The profile holds it, this stamps the attribute every menu reads, and the one
+-- GameEvent verb in Start changes it. Anything that is not a GameConfig.MenuSize
+-- option is refused here -- the attribute is presentation, but the profile is
+-- the save, and junk in it would outlive the client that sent it.
+--==============================================================================
+function PlayerDataService.PublishMenuSize(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local id = (entry.profile :: any).MenuSize
+	if GameConfig.menuSizeScale(id) == nil then
+		id = GameConfig.MenuSize.Default
+	end
+	if player:GetAttribute(GameConfig.Attributes.MenuSize) ~= id then
+		player:SetAttribute(GameConfig.Attributes.MenuSize, id)
+	end
+end
+
+function PlayerDataService.SetMenuSize(player: Player, id: any): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players or GameConfig.menuSizeScale(id) == nil then
+		return false
+	end
+	local profile = entry.profile :: any
+	if profile.MenuSize == id then
+		return false
+	end
+	profile.MenuSize = id
+	touch(player)
+	PlayerDataService.PublishMenuSize(player)
+	return true
+end
+
+function PlayerDataService.MenuSizeOf(player: Player): string
+	local entry = entries[player]
+	local id = entry and (entry.profile :: any).MenuSize
+	return if GameConfig.menuSizeScale(id) ~= nil then id else GameConfig.MenuSize.Default
+end
+
+--==============================================================================
+-- THE BONUS CHEST'S THREE FIELDS, WRITTEN TOGETHER
+--
+-- BonusChestService is the only caller: a claim writes all three at once, and
+-- a claim whose save failed writes back exactly what was there before. The
+-- service owns the rules; this owns the storage, the same split as AddCash.
+--
+-- No player.Parent test, unlike the setters above, and that is deliberate: a
+-- claim's save can be in flight when the player leaves, and the leave save
+-- waits for it (see write). If that save failed, the rollback has to land
+-- BEFORE the leave save writes -- so it must still be allowed while leaving.
+--==============================================================================
+function PlayerDataService.SetChest(player: Player, nextAt: number, boost: string, endsAt: number): boolean
+	local entry = entries[player]
+	if not entry or type(boost) ~= "string"
+		or type(nextAt) ~= "number" or nextAt ~= nextAt
+		or type(endsAt) ~= "number" or endsAt ~= endsAt then
+		return false
+	end
+	local profile = entry.profile
+	profile.ChestNextAt = math.floor(nextAt)
+	profile.ChestBoost = boost
+	profile.ChestBoostEndsAt = math.floor(endsAt)
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- THE WHEEL'S FIELDS, CHANGED TOGETHER (2026-09-27)
+--
+-- A spin moves a balance AND records its prize in one step, and a completion
+-- moves the daily window AND a balance in one; WheelService does each inside
+-- `change`, synchronously, so no other thread can see half of it. `change`
+-- returns whether it changed anything; only then is the profile marked for
+-- saving and sent to its owner.
+--==============================================================================
+function PlayerDataService.UpdateWheel(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		return true
+	end
+	return false
+end
+
 function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
 	local entry = entries[player]
 	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
 	if not TutorialData.SetSkipped(entry.profile.Tutorial, skipped) then return false end
 	touch(player)
+	Metrics.tutorialSkipped(player, skipped)
 	return true
 end
 
@@ -296,7 +414,11 @@ local function spellStats(mounted: Stats, profile: Profile)
 	if mounted.speed.Value ~= speed then
 		mounted.speed.Value = speed
 	end
-	local cash = "$" .. GameConfig.compact(profile.Cash)
+	-- Spelled exactly as the corner HUD spells it (GameConfig.money): whole
+	-- dollars below 100K, so early on this does change about once a second for
+	-- an earning player -- one short string to six clients, still skipped
+	-- whenever the spelling has not moved.
+	local cash = "$" .. GameConfig.money(profile.Cash)
 	if mounted.cash.Value ~= cash then
 		mounted.cash.Value = cash
 	end
@@ -657,6 +779,64 @@ function PlayerDataService.TakeOffline(player: Player): (number?, number, number
 	return cash, seconds, away
 end
 
+--==============================================================================
+-- BACK TO A FRESH ACCOUNT: AdminService's RESET PLAYER PROGRESS
+--
+-- IN PLACE. The profile table is emptied and refilled from ProfileSchema.Default
+-- rather than swapped for a new one, so every service still holding it -- and
+-- the autosave, which writes this very table -- sees the reset and nothing else.
+-- There is no second copy left anywhere that could write the old progress back.
+--
+-- KEPT: Receipts, the record that stops a Robux purchase being granted a second
+-- time; CreatedAt, when this save first existed; WalkMode, a setting rather than
+-- progress. Game passes are not in the profile at all -- PassService asks
+-- Roblox -- so nothing here can touch them. Everything else is the schema's
+-- default, HighestBiomeOrder included: the one deliberate exception to "nothing
+-- in the game lowers it".
+--
+-- NOT SAVED HERE. The caller clears the world first, so no Tool or plant can be
+-- recorded back into the fresh profile, and saves last -- and reports success
+-- only if that save lands.
+--==============================================================================
+function PlayerDataService.ResetProgress(player: Player): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then
+		return false
+	end
+	local profile = entry.profile :: any
+	local keep = {
+		Receipts = table.clone(profile.Receipts or {}),
+		CreatedAt = profile.CreatedAt,
+		WalkMode = profile.WalkMode == true,
+		MenuSize = if GameConfig.menuSizeScale(profile.MenuSize) ~= nil
+			then profile.MenuSize
+			else GameConfig.MenuSize.Default,
+		-- Not progress (2026-09-27): spins somebody bought, prizes the wheel
+		-- still owes, and the cosmetics they won and wear.
+		WheelBought = profile.WheelBought or 0,
+		WheelPending = table.clone(profile.WheelPending or {}),
+		Cosmetics = table.clone(profile.Cosmetics or {}),
+		EquippedTrail = profile.EquippedTrail or "",
+	}
+	local fresh = ProfileSchema.Default() :: any
+	table.clear(profile)
+	for key, value in pairs(fresh) do
+		profile[key] = value
+	end
+	for key, value in pairs(keep) do
+		profile[key] = value
+	end
+	touch(player)
+	PlayerDataService.PublishStats(player)
+	PlayerDataService.PublishSpeedTier(player)
+	PlayerDataService.PublishWalkMode(player)
+	PlayerDataService.PublishMenuSize(player)
+	PlayerDataService.PublishOffline(player)
+	log(string.format("%s's progress was reset in memory (%d receipt(s) kept).", player.Name,
+		#keep.Receipts))
+	return true
+end
+
 local function pushProfile(player: Player)
 	local entry = entries[player]
 	local remote = profileUpdated
@@ -683,8 +863,31 @@ local function write(player: Player, release: boolean, reason: string): boolean
 		return false
 	end
 
+	--==========================================================================
+	-- ONE WRITE PER PLAYER AT A TIME, SO THE RELEASE LANDS LAST
+	--
+	-- Reproduced 2026-09-26 on a throwaway profile: an autosave that started
+	-- 0.3 s before the player left was still in flight when the leave save
+	-- began, and it COMMITTED AFTER it -- the record ended up locked by the very
+	-- session that had just released it. In Studio that lock names the same
+	-- empty JobId and does nothing; on a live server it would hold the player
+	-- out of their next server for two minutes. So a write waits for the one
+	-- already in flight for the same player, and the release is the last word.
+	--==========================================================================
+	local userId = player.UserId
+	local waitUntil = os.clock() + WRITE_WAIT
+	while writing[userId] and os.clock() < waitUntil do
+		task.wait(0.1)
+	end
+	writing[userId] = true
 	entry.profile.LastSeen = os.time()
-	local ok = SaveService.Save(player.UserId, entry.profile, release)
+	local called, saved = pcall(SaveService.Save, userId, entry.profile, release)
+	writing[userId] = nil
+	local ok = called and saved == true
+	if not called then
+		warn(string.format("[Seed/PlayerDataService] %s: %s save threw: %s", player.Name, reason,
+			tostring(saved)))
+	end
 	if ok then
 		entry.dirty = false
 	else
@@ -709,6 +912,13 @@ local function onPlayerAdded(player: Player)
 	-- Yields on the DataStore, so it runs off the signal thread: a slow load
 	-- must not hold up anything else that cares about PlayerAdded.
 	task.spawn(function()
+		-- This server may still be writing the session they just left. Load
+		-- after it lands, or the load reads the save from before it.
+		local waitUntil = os.clock() + LEAVE_SAVE_WAIT
+		while leavingSaves[player.UserId] and player.Parent == Players
+			and os.clock() < waitUntil do
+			task.wait(0.1)
+		end
 		local status, raw = SaveService.Load(player.UserId)
 
 		-- They can leave during a fifteen-second load.
@@ -747,6 +957,14 @@ local function onPlayerAdded(player: Player)
 			dirty = status == "new" or offlineAdded > 0,
 			loadedAt = os.clock(),
 		}
+		-- A brand-new save ("new") in the new-player cohort opens the onboarding
+		-- funnel; a returning or temporary profile never does (Metrics).
+		Metrics.profileReady(player, profile, status == "new", persistent)
+		-- The same verdict for the external feed: only a "new", persistent save
+		-- is a new player there (TrafficLogService; staff and Studio never are).
+		if trafficLogLoaded then
+			pcall((TrafficLog :: any).classified, player, status == "new", persistent)
+		end
 		PlayerDataService.PublishOffline(player)
 		if offlineAdded > 0 then
 			log(string.format("%s was away %.0f min: garden credited %s for %.0f min (claim now %s).",
@@ -768,9 +986,13 @@ local function onPlayerAdded(player: Player)
 		-- HUD renders the attribute, so a player who left with the switch on has to
 		-- find it on when they come back rather than after touching it.
 		PlayerDataService.PublishWalkMode(player)
+		-- And the saved menu size, so the first menu opened is already the size
+		-- the player chose.
+		PlayerDataService.PublishMenuSize(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 			PlayerDataService.PublishWalkMode(player)
+			PlayerDataService.PublishMenuSize(player)
 		end))
 		-- The player-list columns, off the profile that just loaded.
 		stats[player] = PlayerDataService.MountStats(player, profile)
@@ -821,7 +1043,19 @@ local function onPlayerRemoving(player: Player)
 		-- Unconditional, not "if dirty": the last seconds of a session are
 		-- exactly the ones worth not losing, and this releases the session lock
 		-- so the player's next server does not have to wait it out.
-		write(player, true, "leave")
+		--
+		-- Marked first, so the autosave stays off this entry while it yields
+		-- and a rejoin to this server waits for it (see leavingSaves).
+		local userId = player.UserId
+		entry.leaving = true
+		leavingSaves[userId] = (leavingSaves[userId] or 0) + 1
+		local ok, err = pcall(write, player, true, "leave")
+		if not ok then
+			warn(string.format("[Seed/PlayerDataService] %s: leave save threw: %s",
+				player.Name, tostring(err)))
+		end
+		local left = (leavingSaves[userId] or 1) - 1
+		leavingSaves[userId] = if left > 0 then left else nil
 	end
 	entries[player] = nil
 	replicateDirty[player] = nil
@@ -849,6 +1083,8 @@ function PlayerDataService.Init()
 	table.clear(serviceConnections)
 	table.clear(entries)
 	table.clear(replicateDirty)
+	table.clear(leavingSaves)
+	table.clear(writing)
 	for _, mounted in pairs(stats) do
 		mounted.folder:Destroy()
 	end
@@ -866,6 +1102,27 @@ function PlayerDataService.Start()
 	end
 	if not profileUpdated then
 		warn("[Seed/PlayerDataService] No ProfileUpdated remote. Clients will see nothing.")
+	end
+
+	--==========================================================================
+	-- THE MENU SIZE VERB, ON THE REMOTE THE HUD ALREADY OWNS
+	--
+	-- One string payload, checked against the options before it is written; the
+	-- sender is the engine's. Here rather than beside Walk Mode's verb in
+	-- CarryService because nothing but the profile is involved: no speed to
+	-- recompute, only a setting to keep.
+	--==========================================================================
+	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if channel and channel:IsA("RemoteEvent") then
+		table.insert(serviceConnections, channel.OnServerEvent:Connect(
+			function(player: Player, action: any, payload: any)
+				if action ~= GameConfig.MenuSize.Action or type(payload) ~= "string" then
+					return
+				end
+				if PlayerDataService.SetMenuSize(player, payload) then
+					log(string.format("%s set menu size %s.", player.Name, payload))
+				end
+			end))
 	end
 
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(onPlayerAdded))
@@ -893,7 +1150,7 @@ function PlayerDataService.Start()
 		while not shuttingDown do
 			task.wait(SAVE.AutosaveSeconds / math.max(1, GameConfig.MaxPlayers))
 			for player, entry in pairs(entries) do
-				if entry.dirty and entry.persistent
+				if entry.dirty and entry.persistent and not entry.leaving
 					and not SaveService.RecentlyWritten(player.UserId) then
 					write(player, false, "autosave")
 					break

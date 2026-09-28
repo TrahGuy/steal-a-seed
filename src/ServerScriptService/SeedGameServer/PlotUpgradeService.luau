@@ -271,12 +271,32 @@ local function plotWithId(plotId: number): Model?
 	return nil
 end
 
-local function paintSign(sign: Instance)
-	local plotId = tonumber(sign:GetAttribute(GameConfig.Attributes.PlotId))
-	local board, prompt = boardOf(sign)
-	if not (plotId and board) then
-		return
-	end
+--==============================================================================
+-- GREEN WHEN THE OWNER CAN PAY FOR IT, RED WHEN THEY CANNOT
+--
+-- The Buy plate used to be red for every step that was for sale, whatever the
+-- owner had -- a tester with the cash in hand read red as "can't afford" and
+-- walked away from an upgrade they could buy. It now answers the question the
+-- colour is read as: green at cash >= price, the exact opposite of TryUpgrade's
+-- `profile.Cash < step.cost` refusal, on the raw balance (cash is fractional;
+-- the rounded "$25K" of the player list is not something to compare with).
+-- Grey is still MAX, and an empty plot's board stays red -- nobody's cash is
+-- behind it.
+--==============================================================================
+local BUY_AFFORDABLE = Color3.fromRGB(72, 170, 66)
+local BUY_SHORT = Color3.fromRGB(214, 78, 66)
+local BUY_MAX = Color3.fromRGB(96, 100, 108)
+
+type SignState = {
+	player: Player?,
+	level: number,
+	step: Step,
+	sellable: boolean,
+	affordable: boolean,
+	key: string,
+}
+
+local function stateOf(plotId: number): SignState
 	local plot = plotWithId(plotId)
 	local player = if plot then PlotService.OwnerOf(plot) else nil
 
@@ -293,8 +313,34 @@ local function paintSign(sign: Instance)
 	local step: Step = if player then PlotUpgradeService.NextStepFor(player)
 		elseif level < #TIERS then { kind = "next", level = level + 1, cost = TIERS[level + 1].cost }
 		else { kind = "max", level = level, cost = 0 }
-
 	local sellable = step.kind ~= "max"
+	local profile = if player then PlayerDataService.Get(player) else nil
+	local cash = if profile then tonumber(profile.Cash) or 0 else 0
+	local affordable = sellable and profile ~= nil and cash >= step.cost
+	return {
+		player = player,
+		level = level,
+		step = step,
+		sellable = sellable,
+		affordable = affordable,
+		key = string.format("%s|%d|%s|%d|%s", if player then tostring(player.UserId) else "-",
+			level, step.kind, step.level, tostring(affordable)),
+	}
+end
+
+-- What each board was last painted with, so the watcher repaints only a board
+-- whose owner, level, step or affordability has actually changed.
+local paintedKey: { [Instance]: string } = setmetatable({}, { __mode = "k" }) :: any
+
+local function paintSign(sign: Instance)
+	local plotId = tonumber(sign:GetAttribute(GameConfig.Attributes.PlotId))
+	local board, prompt = boardOf(sign)
+	if not (plotId and board) then
+		return
+	end
+	local state = stateOf(plotId)
+	paintedKey[sign] = state.key
+	local level, step, sellable = state.level, state.step, state.sellable
 	local stepText = if sellable
 		then string.format("LEVEL %d  >  LEVEL %d", level, step.level)
 		else string.format("LEVEL %d", level)
@@ -304,8 +350,9 @@ local function paintSign(sign: Instance)
 			GameConfig.plotCapacityForTier(step.level))
 		else string.format("%d SLOTS", GameConfig.plotCapacityForTier(level))
 	local priceText = if sellable then "$" .. GameConfig.compact(step.cost) else "MAX"
-	local buyColour = if sellable then Color3.fromRGB(214, 78, 66)
-		else Color3.fromRGB(96, 100, 108)
+	local buyColour = if not sellable then BUY_MAX
+		elseif state.affordable then BUY_AFFORDABLE
+		else BUY_SHORT
 
 	for _, face in ipairs(board:GetChildren()) do
 		if face:IsA("SurfaceGui") then
@@ -343,7 +390,43 @@ end
 
 PlotUpgradeService.RepaintSigns = repaintAll
 
+--==============================================================================
+-- A BOARD FOLLOWS ITS OWNER'S CASH
+--
+-- Cash moves in more places than this service sees -- a plant's income every
+-- second, a bat bought at Marigold's, a mill upgrade, a Robux pack, a progress
+-- reset that writes the profile directly -- and a board that repainted only on
+-- its own upgrade stayed red long after the owner could pay. So it is WATCHED:
+-- four times a second each board's state is worked out again (owner, level,
+-- next step, affordable) and the board is repainted only when that differs
+-- from what it was painted with. Six boards, a table lookup each, and a quarter
+-- of a second is "immediately" to somebody walking up to it.
+--==============================================================================
+local WATCH_EVERY = 0.25
+local watchGeneration = 0
+
+local function watchBoards()
+	watchGeneration += 1
+	local mine = watchGeneration
+	task.spawn(function()
+		while watchGeneration == mine do
+			task.wait(WATCH_EVERY)
+			if watchGeneration ~= mine then
+				return
+			end
+			for _, sign in ipairs(CollectionService:GetTagged(GameConfig.Tags.PlotSign)) do
+				local plotId = tonumber(sign:GetAttribute(GameConfig.Attributes.PlotId))
+				if plotId and stateOf(plotId).key ~= paintedKey[sign] then
+					paintSign(sign)
+				end
+			end
+		end
+	end)
+end
+
 function PlotUpgradeService.Init()
+	-- A re-run must not leave the old watcher painting beside the new one.
+	watchGeneration += 1
 	for _, c in ipairs(serviceConnections) do
 		c:Disconnect()
 	end
@@ -441,6 +524,10 @@ function PlotUpgradeService.Start()
 			-- their level. Deferred so the release has actually happened.
 			task.defer(repaintAll)
 		end))
+
+	-- Income, spending and upgrades turn a board green or red within a quarter
+	-- of a second. See A BOARD FOLLOWS ITS OWNER'S CASH.
+	watchBoards()
 end
 
 function PlotUpgradeService.Snapshot(): string

@@ -219,6 +219,22 @@ function Tutorial.Current(progress: Progress): (number, number)
 	return first, count
 end
 
+--==============================================================================
+-- IS THE GUIDE FINISHED
+--
+-- Every step recorded, and nothing else. Skipping HIDES the guide -- see
+-- PodEligible for why it surrenders nothing -- so it does not finish it either,
+-- and Skipped is not consulted. The Bonus Chest opens at this point.
+--==============================================================================
+function Tutorial.IsComplete(progress: Progress): boolean
+	for _, step in Tutorial.Steps do
+		if progress.Done[step.Id] ~= true then
+			return false
+		end
+	end
+	return true
+end
+
 function Tutorial.SetSkipped(progress: Progress, skipped: boolean): boolean
 	if progress.Skipped == skipped then
 		return false

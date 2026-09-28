@@ -74,6 +74,8 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- Only for its TV scale (UIKit.tenFoot / UIKit.scaleOf).
+local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -111,6 +113,8 @@ gui.Name = "SeedCash"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.DisplayOrder = 20
+-- Drawn bigger on a TV (HudLayout's TEN-FOOT PROFILE); nothing changes elsewhere.
+UIKit.tenFoot(gui)
 gui.Parent = playerGui
 
 --==============================================================================
@@ -440,13 +444,45 @@ local boostAt: HudLayout.Rect? = nil
 -- for the first frames, before the server has said anything and the label is
 -- still a dash.
 --==============================================================================
+--==============================================================================
+-- A STEADY WIDTH, NOT THE LIVE ONE
+--
+-- The balance is spelled in whole dollars below 100K, so its text changes with
+-- every payout, and LuckiestGuy's digits are not all one width: a card placed
+-- off TextBounds shuffled a pixel or two every second. It is placed off the
+-- same string with every digit swapped for the widest one, which changes only
+-- when a digit, a comma or a unit is actually gained.
+--==============================================================================
+local widestDigit: string? = nil
+
+local function steadyWidth(): number
+	if amount.Text == "" or amount.Text == "—" then
+		-- TextBounds is real pixels; on a TV that is the gui's scale times the
+		-- Offsets it is compared with (UIKit.scaleOf is 1 elsewhere).
+		return math.max(amount.TextBounds.X / UIKit.scaleOf(gui), 0)
+	end
+	if widestDigit == nil then
+		local best, bestWidth = "0", -1
+		for d = 0, 9 do
+			local width = TextService:GetTextSize(tostring(d), amount.TextSize, amount.Font,
+				Vector2.new(1000, 1000)).X
+			if width > bestWidth then
+				best, bestWidth = tostring(d), width
+			end
+		end
+		widestDigit = best
+	end
+	local template = (string.gsub(amount.Text, "%d", widestDigit :: string))
+	return TextService:GetTextSize(template, amount.TextSize, amount.Font, Vector2.new(10000, 1000)).X
+end
+
 local function placeBuff()
 	if boostAt then
 		-- Standing on the top-right row, where placeCorner put it; a longer
 		-- balance moves nothing there.
 		return
 	end
-	local textWidth = math.max(amount.TextBounds.X, 0)
+	local textWidth = math.max(steadyWidth(), 0)
 	local x = math.max(style.BuffMinX, math.floor(textWidth) + style.BuffGap)
 	buff.Position = UDim2.new(0, x, 1, style.BuffDrop)
 
@@ -522,13 +558,13 @@ local function groupWidth(): number
 	-- The outline (3 px on a desktop's cash line, 2 on its speed line) draws
 	-- outside TextBounds; the card is placed off the text by placeBuff, and its
 	-- touch area reaches past it by half the difference.
-	local cashRight = math.ceil(amount.TextBounds.X) + math.ceil(style.CashStroke)
+	local cashRight = math.ceil(steadyWidth()) + math.ceil(style.CashStroke)
 	if buff.Visible and buff.Parent == root then
 		cashRight = math.max(cashRight,
 			buff.Position.X.Offset + (style.BuffSize + style.BuffHit) / 2)
 	end
 	return math.max(cashRight,
-		style.SpeedX + math.ceil(speed.TextBounds.X) + math.ceil(style.SpeedStroke))
+		style.SpeedX + math.ceil(speed.TextBounds.X / UIKit.scaleOf(gui)) + math.ceil(style.SpeedStroke))
 end
 
 local placedFor = 0
@@ -573,7 +609,10 @@ local function placeCorner()
 		tip.AnchorPoint = Vector2.new(1, 0)
 		tip.TextXAlignment = Enum.TextXAlignment.Right
 		local width, height = tip.Size.X.Offset, tip.Size.Y.Offset
-		tip.Position = HudLayout.place(HudLayout.rect(at.x + at.w - width, at.y + at.h + 6, width, height),
+		-- Under the TELEPORT TO PLOT button's line too, which on a narrow
+		-- phone reaches under this row's left end.
+		local below = math.max(at.y + at.h, layout.teleport.y + layout.teleport.h)
+		tip.Position = HudLayout.place(HudLayout.rect(at.x + at.w - width, below + 6, width, height),
 			tip.AnchorPoint, layout.safe)
 	elseif buff.Parent ~= root then
 		buff.Parent = root
@@ -701,18 +740,35 @@ refreshBuff()
 local target: number? = nil
 local shown = 0
 --==============================================================================
--- THE TICK IS EVERY THIRD STEP OF THE READOUT, NOT EVERY FRAME
+-- THE TICK COUNTS A LUMP IN, AND ONLY MURMURS ABOUT INCOME
 --
 -- The number eases toward the truth on RenderStepped, so a tick per frame would
 -- be sixty ticks a second for as long as a bank is being counted in -- a buzz,
--- not a counter. Every third CHANGE of the printed text is roughly a tick per
--- two frames while the gap is wide and nothing at all once it lands, which is
--- the shape of the thing being described.
+-- not a counter. It was every third CHANGE of the printed text, which was right
+-- for a sale landing and wrong for everything else: plant income changes the
+-- text every second of a session, so an early garden ticked about once a
+-- second and a $100/s one ten times a second, for ever. Reported as irritating
+-- on 2026-09-26.
+--
+-- So each change of the balance is sorted as it arrives (GameConfig.
+-- cashStepIsLump). A LUMP -- a sale, a reward, a purchase -- is counted in with
+-- a tick per printed change, as before, but never faster than CountSeconds. A
+-- ROUTINE change ticks at most once every RoutineSeconds, at RoutineVolume:
+-- still there, so income is heard to be arriving, no longer a metronome. Both
+-- through the UI bus, so the SOUND FX setting applies as it always did. The
+-- balance itself is untouched -- this only decides when the tick sounds.
 --
 -- Deliberately NOT wired to CashPop's +$N. Every grown plant pays once a second
 -- and a garden of twelve would be twelve ticks a second forever.
 --==============================================================================
-local tickCount = 0
+local TICKS = GameConfig.Sfx.CashTicks
+local ROUTINE_TICK = {
+	volume = (GameConfig.Sfx.Cues.CashTick.volume or 0.5) * TICKS.RoutineVolume,
+}
+local lastTickAt = -math.huge
+-- The running size of an ordinary change, and whether a lump is being counted.
+local routineStep: number? = nil
+local counting = false
 local speedTarget: number? = nil
 local speedShown = 0
 
@@ -724,6 +780,14 @@ local function receive(profile: any)
 		-- First word from the server: land on it rather than counting up from
 		-- zero, or a returning player watches their whole balance tick in.
 		shown = profile.Cash
+	else
+		local step = profile.Cash - (target :: number)
+		if step ~= 0 then
+			if GameConfig.cashStepIsLump(step, routineStep) then
+				counting = true
+			end
+			routineStep = GameConfig.cashRoutineStep(routineStep, step)
+		end
 	end
 	target = profile.Cash
 	if type(profile.Speed) == "number" then
@@ -762,12 +826,15 @@ RunService.RenderStepped:Connect(function(dt)
 	-- and the last fraction of a cash unit is snapped so the label cannot sit
 	-- forever one short of the truth.
 	local gap = want - shown
-	if math.abs(gap) < 0.5 then
+	local landed = math.abs(gap) < 0.5
+	if landed then
 		shown = want
 	else
 		shown += gap * math.min(1, dt * 6)
 	end
-	local text = "$" .. GameConfig.compact(shown)
+	-- GameConfig.money, not compact: one precision at every size and never
+	-- rounded up (see A BALANCE IS SPELLED DIFFERENTLY FROM A PRICE).
+	local text = "$" .. GameConfig.money(shown)
 	if amount.Text ~= text then
 		amount.Text = text
 		-- The card sits off the end of this string, so it moves when the string
@@ -780,10 +847,16 @@ RunService.RenderStepped:Connect(function(dt)
 		if groupWidth() > placedFor then
 			placeCorner()
 		end
-		tickCount += 1
-		if tickCount % 3 == 0 then
-			SoundKit.play("CashTick")
+		local now = os.clock()
+		if now - lastTickAt >= (if counting then TICKS.CountSeconds else TICKS.RoutineSeconds) then
+			lastTickAt = now
+			SoundKit.play("CashTick", if counting then nil else ROUTINE_TICK)
 		end
+	end
+	-- A lump is counted until the readout lands on it; after that, whatever
+	-- arrives is routine again unless it is a lump of its own.
+	if landed then
+		counting = false
 	end
 
 	local wantSpeed = speedTarget

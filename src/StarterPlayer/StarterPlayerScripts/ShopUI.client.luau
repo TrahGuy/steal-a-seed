@@ -53,6 +53,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -130,33 +131,29 @@ end
 --==============================================================================
 -- THE RAIL BUTTON
 --
--- Green slab, a cart, and the word, positioned off the Index slab's real height
--- rather than a typed 68, so the two cannot drift apart when either is resized.
+-- The owner's approved artwork (2026-09-24): the blue cart and the word in one
+-- square picture, with the rainbow turning in its rim (UIKit.rainbowRim) --
+-- the one rail button that moves, because it is the one the owner wants found.
+-- Positioned off the Index button's real height rather than a typed 68, so the
+-- two cannot drift apart when either is resized.
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "ShopButton",
-	icon = RAIL.ShopIcon,
-	face = RAIL.ShopFace,
-	shade = RAIL.ShopShade,
-	label = "Shop",
-	wide = true,
+	art = RAIL.ShopArt,
+	rim = true,
 })
 button.Position = UDim2.new(0, RAIL.Inset, 0, RAIL.Inset + RAIL.WideSize.Y + RAIL.Gap)
 
 -- Second on the rail, from HudLayout: under Index on a desktop, beside it in
--- the compact top row -- square, the cart alone. See IndexUI's placeButton.
--- On a touch screen, the dock's middle tile and the one in colour: the stall
--- artwork on emerald with a lime edge, which is the approved mockup's premium
--- Shop button.
+-- the compact top row, the dock's middle tile on a touch screen -- a 50 x 50
+-- square in all three, the artwork and nothing else. It is its own tile, so no
+-- dock plate or word goes over it.
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
-	UIKit.railShape(button, Vector2.new(layout.shop.w, layout.shop.h), nil,
-		if layout.sidebar
-			then { label = "SHOP", top = RAIL.ShopTileTop, bottom = RAIL.ShopTileBottom, edge = RAIL.ShopEdge }
-			else nil)
+	UIKit.railShape(button, Vector2.new(layout.shop.w, layout.shop.h))
 	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.shop, Vector2.zero, layout.safe)
 end
@@ -200,6 +197,8 @@ local modal = UIKit.modal(gui, {
 		closeRadius = 8,
 	},
 })
+-- This gui holds only the panel, so it takes the player's menu size whole.
+UIKit.menuGui(gui)
 modal.title.TextSize = 30
 
 local close = modal.close
@@ -272,8 +271,9 @@ local BOTTOM = 2
 local shelves: { UIGridLayout } = {}
 
 local function relayout()
-	-- The padded width, less the scrollbar that draws over the right edge.
-	local width = body.AbsoluteSize.X - EDGE * 2 - body.ScrollBarThickness
+	-- The padded width, less the scrollbar that draws over the right edge -- in
+	-- the gui's own units (its pixels / its TV scale, 1 off a TV).
+	local width = body.AbsoluteSize.X / UIKit.scaleOf(gui) - EDGE * 2 - body.ScrollBarThickness
 	if width <= 0 then
 		return
 	end
@@ -288,7 +288,9 @@ end
 -- Height the panel to whatever the shelves add up to. Read off the layout rather
 -- than counted here, because a sum written twice is a sum that disagrees.
 local function fit()
-	modal.fitContent(bodyList.AbsoluteContentSize.Y + 14)
+	-- AbsoluteContentSize is drawn pixels; fitContent works in the gui's own
+	-- units, which a TV or a larger menu size makes scaleOf times smaller.
+	modal.fitContent(bodyList.AbsoluteContentSize.Y / UIKit.scaleOf(gui) + 14)
 end
 
 --==============================================================================
@@ -554,6 +556,40 @@ local function markSoon(card: Card)
 end
 
 --==============================================================================
+-- THE PRICE IS THIS PLAYER'S, OR IT IS NOT SHOWN
+--
+-- The tile used to print the manifest's `robux`, and Roblox prices by region:
+-- the x2 MONEY tile said 79 -- what the owner's account is offered -- to a tester
+-- whose purchase prompt then said 199. So a live tile asks Roblox, through
+-- RobuxPrice, what THIS player would pay, and until it knows it shows three dots
+-- beside the Robux mark rather than any number. If Roblox never answers, the
+-- capsule says BUY and shows no price at all; OFF SALE if Roblox says so. The
+-- button works in every state: the purchase prompt is the authority, and it
+-- quotes the real price itself.
+--==============================================================================
+local PRICE_LOADING = "..."
+local PRICE_UNKNOWN = "BUY"
+local PRICE_OFF_SALE = "OFF SALE"
+
+local function showPrice(card: Card, kind: RobuxPrice.Kind, id: number)
+	RobuxPrice.watch(kind, id, function(state: RobuxPrice.State, price: number?)
+		if state == "ready" and price then
+			card.price.Text = RobuxPrice.format(price)
+			card.token.Visible = true
+		elseif state == "loading" then
+			card.price.Text = PRICE_LOADING
+			card.token.Visible = true
+		elseif state == "offsale" then
+			card.price.Text = PRICE_OFF_SALE
+			card.token.Visible = false
+		else
+			card.price.Text = PRICE_UNKNOWN
+			card.token.Visible = false
+		end
+	end)
+end
+
+--==============================================================================
 -- THE ICONS ARE UPLOADED
 --
 -- Real ids in GameConfig.Store.Icons, keyed by the item's own `key`. A tile whose
@@ -697,7 +733,7 @@ for _, spec in ipairs(STORE.Sections) do
 			local live = passId > 0
 			if live then
 				liveCount += 1
-				card.price.Text = tostring(item.robux)
+				showPrice(card, "pass", passId)
 			else
 				soonCount += 1
 				markSoon(card)
@@ -729,7 +765,7 @@ for _, spec in ipairs(STORE.Sections) do
 			local live = productId > 0
 			if live then
 				liveCount += 1
-				card.price.Text = tostring(item.robux)
+				showPrice(card, "product", productId)
 			else
 				soonCount += 1
 				markSoon(card)
@@ -790,6 +826,8 @@ local function setOpen(want: boolean)
 	open = want
 	if want then
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
+		-- A price that failed at join, or has gone stale, is asked for again.
+		RobuxPrice.refresh()
 	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
 		player:SetAttribute(ATTR.OpenPanel, nil)
 	end

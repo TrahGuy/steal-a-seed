@@ -59,6 +59,7 @@ local ParentModel = require(script.Parent:WaitForChild("ParentModel"))
 -- No cycle: PlayerDataService requires GameConfig, SaveService, ProfileSchema
 -- and BiomeData, and none of those has ever heard of a nest.
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+local Metrics = require(script.Parent:WaitForChild("Metrics"))
 -- No cycle: MapService knows nothing about nests, it only leaves the markers.
 local MapService = require(script.Parent:WaitForChild("MapService"))
 
@@ -483,8 +484,15 @@ end
 -- The score is the SERVER'S. Not a replicated attribute, not an afterimage
 -- tier, not anything the client has touched -- those are all things a client
 -- can be made to say.
+--
+-- AND DUSTBOWL GIVES IT TO EVERY THIEF WHO TAKES FROM THE NEST (2026-09-27).
+-- A biome with HeadStartBelowRecommended gives the same delay to a thief below
+-- its recommendation -- but only when `fromNest` says this is a pod taken out
+-- of the nest itself. A dropped pod picked back up (NestService.Provoke) is
+-- never a fresh theft, so it never earns a fresh head start, and a guardian
+-- already awake never reaches this function at all. See BiomeData.
 --==============================================================================
-local function qualifiesForHeadStart(nest: Nest, thief: Player): boolean
+local function qualifiesForHeadStart(nest: Nest, thief: Player, fromNest: boolean): boolean
 	local recommended = nest.biome.RecommendedSpeed
 	if type(recommended) ~= "number" or recommended ~= recommended or recommended <= 0 then
 		return true
@@ -493,7 +501,10 @@ local function qualifiesForHeadStart(nest: Nest, thief: Player): boolean
 	if score == nil or score ~= score then
 		return true
 	end
-	return score >= recommended
+	if score >= recommended then
+		return true
+	end
+	return fromNest and (nest.biome :: any).HeadStartBelowRecommended == true
 end
 
 --==============================================================================
@@ -515,7 +526,14 @@ end
 -- `confiscateFrom` sees its hands are full -- so you keep yours, and the throw
 -- knocks it out of them onto the road exactly as Greenhollow's would.
 --==============================================================================
-local function provoke(nest: Nest, thief: Player)
+-- Defined with the lifecycle, below. Declared here so a theft can publish the
+-- wake the moment it happens instead of up to a tick later: the "WAKING" warning
+-- is only worth anything inside the delay it is warning about.
+local publishPursuit: () -> ()
+
+-- `fromNest` is true only for a pod taken out of the nest itself (TakePod); a
+-- dropped pod picked back up arrives through NestService.Provoke with false.
+local function provoke(nest: Nest, thief: Player, fromNest: boolean)
 	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
 	-- second attempt has to be harder than the first.
@@ -552,7 +570,7 @@ local function provoke(nest: Nest, thief: Player)
 		if roar then
 			SoundKit.emit(roar, nest.root)
 		end
-		if qualifiesForHeadStart(nest, thief) then
+		if qualifiesForHeadStart(nest, thief, fromNest) then
 			nest.state = "waking"
 			nest.stateUntil = os.clock() + P.WakeDelaySeconds
 		else
@@ -606,6 +624,9 @@ local function provoke(nest: Nest, thief: Player)
 		-- state change, which might never come.
 		setWalk(nest, chaseSpeedFor(nest, os.clock()))
 	end
+	-- WakingBy / PursuedBy on the thief, now. pcall for the same reason the tick
+	-- wraps it: a warning must never be the thing that breaks a theft.
+	pcall(publishPursuit)
 end
 
 --==============================================================================
@@ -633,7 +654,7 @@ function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 			-- Empty for the rest of the day. Nothing schedules it back.
 			nest.pods[slot] = nil
 			pod:Destroy()
-			provoke(nest, thief)
+			provoke(nest, thief, true)
 			return SeedData.Get(speciesId)
 		end
 	end
@@ -717,6 +738,9 @@ type Loosened = {
 	autos: { { part: BasePart, auto: boolean } },
 	pinning: boolean,
 	character: Model,
+	-- Holds the HumanoidRootPart to the LowerTorso while the Root joint is off;
+	-- see THE ROOT RIDES WITH THE PELVIS.
+	rootWeld: WeldConstraint?,
 }
 
 --==============================================================================
@@ -782,10 +806,45 @@ end
 -- take an EMPTY record, and the first one's restore would switch the joints
 -- back on in the middle of the second launch.
 local ragdolled: { [Model]: Loosened } = {}
+-- The weld ragdollOn hangs on the root; see THE ROOT RIDES WITH THE PELVIS.
+local ROOT_WELD = "SeedRagdollRootWeld"
 
 local function ragdollOn(character: Model): Loosened
 	local out: Loosened = { constraints = {}, motors = {}, collides = {}, frictions = {},
-		owner = nil, autos = {}, pinning = false, character = character }
+		owner = nil, autos = {}, pinning = false, character = character, rootWeld = nil }
+
+	--==========================================================================
+	-- THE ROOT RIDES WITH THE PELVIS
+	--
+	-- The Root joint is an AnimationConstraint like the rest, and switching it
+	-- off below turned the HumanoidRootPart into a free, colliding 2 x 2 x 1
+	-- box -- a quarter of the body's mass, with no NoCollision against the
+	-- LowerTorso. Measured in Play on 2026-09-26: a bat knockdown backed into a
+	-- plot fence stopped the BODY at the rails while the root flew on 110 studs
+	-- towards the hub; the camera, which follows the root on a bat hit, went
+	-- with it, and snapped 115 studs back at recovery. The player's position,
+	-- as the server reads it, went with it too.
+	--
+	-- So the root is welded to the pelvis for as long as the body is limp, and
+	-- stops colliding: every joint still lets go, every limb still flops and
+	-- RagdollGate still sees the rig come apart -- the root simply cannot leave
+	-- the body it belongs to. Made before the joints go, so it holds the pose
+	-- they stood in; ragdollOff takes it away before they come back.
+	--==========================================================================
+	local root = character:FindFirstChild("HumanoidRootPart")
+	local pelvis = character:FindFirstChild("LowerTorso")
+	if root and root:IsA("BasePart") and pelvis and pelvis:IsA("BasePart")
+		and not root:FindFirstChild(ROOT_WELD) then
+		local weld = Instance.new("WeldConstraint")
+		weld.Name = ROOT_WELD
+		weld.Part0 = root
+		weld.Part1 = pelvis
+		weld.Parent = root
+		out.rootWeld = weld
+		table.insert(out.collides, { part = root, was = root.CanCollide })
+		root.CanCollide = false
+	end
+
 	for _, d in ipairs(character:GetDescendants()) do
 		if d:IsA("AnimationConstraint") then
 			if d.Enabled then
@@ -899,6 +958,11 @@ end
 
 local function ragdollOff(loosened: Loosened)
 	loosened.pinning = false
+	-- Before the joints: the Root joint takes the root back, not the weld.
+	if loosened.rootWeld then
+		loosened.rootWeld:Destroy()
+		loosened.rootWeld = nil
+	end
 	for _, c in ipairs(loosened.constraints) do
 		if c.Parent then
 			c.Enabled = true
@@ -1231,6 +1295,9 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- choosing is data -- see GameConfig.Sfx.ParentVoices.
 	--==========================================================================
 	SoundKit.emit(SoundKit.parentCue(nest.biome.Id, "Hit") or "Grab", nest.root)
+	-- Launch analytics: the swing landed, so the carrier's raid (if one is open)
+	-- ends as captured here -- before the throw's ragdoll drops the pod.
+	Metrics.guardianCaught(player)
 
 	humanoid.PlatformStand = true
 	task.wait()
@@ -2442,14 +2509,15 @@ end
 -- Put back at its ORIGIN rather than walked there: a parent halfway down the
 -- road when the lights go out would spend the night pathing home past a barrier
 -- it cannot cross, and a player standing in the field would watch a monster
--- jog at the wall for a minute.
+-- jog at the wall all night.
 --
 -- Rage is cleared outright here, which is the one place that happens. It
 -- normally FADES on a timer -- see GameConfig.Parent.RageForgetSeconds -- so
--- that coming back for the pod you dropped is not free. A night is long enough
--- that the fade would have finished anyway, and carrying yesterday's grudge
--- into a freshly stocked nest would punish the player who is first through the
--- gate at dawn for something that happened to somebody else.
+-- that coming back for the pod you dropped is not free. That fade is 45 s and
+-- the night is 15 (since 2026-09-23), so without this line it would NOT have
+-- finished by dawn -- and carrying yesterday's grudge into a freshly stocked
+-- nest would punish the player who is first through the gate for something
+-- that happened to somebody else.
 --==============================================================================
 function NestService.ResetParents(): number
 	local reset = 0
@@ -2507,8 +2575,59 @@ end
 --==============================================================================
 -- LIFECYCLE
 --==============================================================================
+--==============================================================================
+-- WHO IS BEING CHASED, ON THE PLAYER
+--
+-- Counted after every nest has stepped, so the number is this tick's truth and
+-- not a guardian's state from before its own step changed it. See
+-- GameConfig.Attributes.PursuedBy for why it is a count on the player and not a
+-- target on each guardian.
+--
+-- CHASING AND NOT BUSY. A busy nest is mid-throw: the catch has happened, and
+-- the chase bed ending on the catch is the point. Waking is the head start --
+-- the roar and the alarm own that second -- and hauling or walking home is a
+-- guardian that has stopped being after anybody.
+--
+-- Written only on a change, like ParentState: most ticks write nothing.
+--
+-- AND WHO IS ABOUT TO BE (2026-09-27): WakingBy counts the guardians still in
+-- their wake delay with this player as the target -- the head start AlertUI
+-- calls "WAKING -- RUN!". Same rules, same tick, and the theft itself publishes
+-- too (see provoke), so the warning starts with the delay rather than a tick
+-- into it. A guardian leaves this count the same tick it joins PursuedBy.
+--==============================================================================
+publishPursuit = function()
+	local chasing: { [Player]: number } = {}
+	local waking: { [Player]: number } = {}
+	for _, nest in ipairs(nests) do
+		local target = nest.target
+		if target and not nest.busy then
+			if nest.state == "chasing" then
+				chasing[target] = (chasing[target] or 0) + 1
+			elseif nest.state == "waking" then
+				waking[target] = (waking[target] or 0) + 1
+			end
+		end
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		local count = chasing[player]
+		if player:GetAttribute(GameConfig.Attributes.PursuedBy) ~= count then
+			player:SetAttribute(GameConfig.Attributes.PursuedBy, count)
+		end
+		local wakes = waking[player]
+		if player:GetAttribute(GameConfig.Attributes.WakingBy) ~= wakes then
+			player:SetAttribute(GameConfig.Attributes.WakingBy, wakes)
+		end
+	end
+end
+
 function NestService.Init()
 	running = false
+	-- Nobody is chased by a nest table that is about to be emptied.
+	for _, player in ipairs(Players:GetPlayers()) do
+		player:SetAttribute(GameConfig.Attributes.PursuedBy, nil)
+		player:SetAttribute(GameConfig.Attributes.WakingBy, nil)
+	end
 	for _, c in ipairs(serviceConnections) do
 		c:Disconnect()
 	end
@@ -2618,6 +2737,10 @@ function NestService.Start()
 					warn("[Seed/NestService] " .. nest.id .. ": " .. tostring(err))
 				end
 			end
+			local ok, err = pcall(publishPursuit)
+			if not ok then
+				warn("[Seed/NestService] pursuit: " .. tostring(err))
+			end
 		end
 	end)
 
@@ -2682,10 +2805,13 @@ end
 -- up again. There is no slot to clear and nothing to destroy, only a parent to
 -- annoy.
 --==============================================================================
+-- Not a theft from the nest: a dropped pod picked back up (CarryService) or a
+-- Studio test poke (DebugService). It wakes and angers the guardian exactly as
+-- before, and never grants a below-recommendation head start.
 function NestService.Provoke(nestId: string, thief: Player): boolean
 	for _, nest in ipairs(nests) do
 		if nest.id == nestId then
-			provoke(nest, thief)
+			provoke(nest, thief, false)
 			return true
 		end
 	end

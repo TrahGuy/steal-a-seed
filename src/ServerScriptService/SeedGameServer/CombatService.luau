@@ -77,12 +77,26 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local WeaponData = require(Shared:WaitForChild("WeaponData"))
 local WeaponModel = require(Shared:WaitForChild("WeaponModel"))
+local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
+local ObbyData = require(Shared:WaitForChild("ObbyData"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local WeaponShopService = require(script.Parent:WaitForChild("WeaponShopService"))
 
 local CombatService = {}
+
+--==============================================================================
+-- A RUN ON THE FLOATING GARDEN IS NOBODY'S TARGET
+--
+-- The course floats outside the Safe Zone, so the field's test says nothing
+-- about it; this is the course's own. A player ObbyService has put on the
+-- course can neither be struck nor strike, and cannot set a trap there --
+-- "no PvP during an authorized run", from both ends, like the field.
+--==============================================================================
+local function onCourse(player: Player): boolean
+	return player:GetAttribute(ObbyData.Attributes.Course) == true
+end
 
 -- After WeaponShopService (62), which hands out the Tools this reacts to, and
 -- after CarryService (45) and NestService (40), whose speed and ragdoll it uses.
@@ -264,7 +278,21 @@ local function bodyOf(player: Player): Body?
 	return { character = character, humanoid = humanoid, root = root }
 end
 
-local function deny(player: Player)
+--==============================================================================
+-- A REFUSAL, WITH ITS REASON WHEN THE PLAYER CAN ACT ON ONE
+--
+-- Every caller has already refused; `code` only captions it. With a code from
+-- ActionRefusal.Text the refusal goes out as that line, and the client's toast
+-- plays the denial along with it -- the bare WeaponDenied would only play the
+-- same sound a second time. Without one it is the bare denial it always was: a
+-- trap with no spec, a body mid-respawn, no floor underfoot, one trap already
+-- down.
+--==============================================================================
+local function deny(player: Player, code: string?)
+	if code then
+		ActionRefusal.send(player, code)
+		return
+	end
 	local ch = channel
 	if not ch then
 		return
@@ -1064,20 +1092,34 @@ local function lineIsClear(from: BasePart, to: BasePart): boolean
 	return hit == nil
 end
 
-local function targetsFor(swinger: Player, from: Body, item: WeaponData.Item): { { player: Player, body: Body } }
+--==============================================================================
+-- WHO THIS SWING STRIKES, AND WHETHER THE SAFE ZONE SPARED ANYBODY
+--
+-- The second answer is only ever a caption. `spared` is true when somebody the
+-- swing reached -- in reach, in the arc, at the right height, with a clear line
+-- -- was withheld because they, or the swinger (`swingerSafe`), stand in the
+-- field. It says nothing about a miss or a wall, because neither of those spared
+-- anybody. Who is struck is exactly the old test: the geometry, then the field,
+-- then the line; the line is now also cast for a target in the field, which
+-- only decides the caption.
+--==============================================================================
+local function targetsFor(swinger: Player, from: Body, item: WeaponData.Item,
+	swingerSafe: boolean): ({ { player: Player, body: Body } }, boolean)
 	local out = {}
+	local spared = false
 	local origin = from.root.Position
 	local look = from.root.CFrame.LookVector
 	local flatLook = Vector3.new(look.X, 0, look.Z)
 	if flatLook.Magnitude < 0.01 then
-		return out
+		return out, false
 	end
 	flatLook = flatLook.Unit
 	local cosLimit = math.cos(math.rad(C.ArcDegrees))
 	local clock = now()
 
 	for _, other in ipairs(Players:GetPlayers()) do
-		if other ~= swinger and (immuneUntil[other] or 0) <= clock and not flying[other] then
+		if other ~= swinger and (immuneUntil[other] or 0) <= clock and not flying[other]
+			and not onCourse(other) then
 			local body = bodyOf(other)
 			if body and not body.humanoid.PlatformStand then
 				local delta = body.root.Position - origin
@@ -1085,17 +1127,23 @@ local function targetsFor(swinger: Player, from: Body, item: WeaponData.Item): {
 				if flat.Magnitude <= item.Reach
 					and math.abs(delta.Y) <= C.HeightTolerance
 					and flat.Magnitude > 0.01
-					and flat.Unit:Dot(flatLook) >= cosLimit
+					and flat.Unit:Dot(flatLook) >= cosLimit then
 					-- SAFE IS SAFE. A player standing in the field cannot be
-					-- hit, whatever the geometry says.
-					and not MapService.IsInSafeZone(body.root.Position)
-					and lineIsClear(from.root, body.root) then
-					table.insert(out, { player = other, body = body })
+					-- hit, whatever the geometry says -- and neither can anybody
+					-- be hit FROM it.
+					local safe = swingerSafe or MapService.IsInSafeZone(body.root.Position)
+					if lineIsClear(from.root, body.root) then
+						if safe then
+							spared = true
+						else
+							table.insert(out, { player = other, body = body })
+						end
+					end
 				end
 			end
 		end
 	end
-	return out
+	return out, spared
 end
 
 --==============================================================================
@@ -1175,7 +1223,7 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 			return
 		end
 		local live = bodyOf(player)
-		if not live or live.humanoid.PlatformStand or holds[player] then
+		if not live or live.humanoid.PlatformStand or holds[player] or onCourse(player) then
 			return
 		end
 		if tool.Parent ~= live.character then
@@ -1184,12 +1232,15 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 			stopSwing(player)
 			return
 		end
-		if MapService.IsInSafeZone(live.root.Position) then
-			return
-		end
-
-		local hits = targetsFor(player, live, item)
-		if #hits == 0 then
+		local inField = MapService.IsInSafeZone(live.root.Position)
+		local hits, spared = targetsFor(player, live, item, inField)
+		if inField or #hits == 0 then
+			-- Nothing struck. Said out loud only when the Safe Zone is why: a
+			-- miss and a wall stay as silent as they always were.
+			local code = ActionRefusal.forSwing(#hits, spared)
+			if code then
+				deny(player, code)
+			end
 			return
 		end
 
@@ -1350,8 +1401,12 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		deny(player)
 		return
 	end
+	if onCourse(player) then
+		deny(player, "TRAP_OBBY")
+		return
+	end
 	if (placeReadyAt[player] or 0) > clock then
-		deny(player)
+		deny(player, "TRAP_COOLDOWN")
 		return
 	end
 	if traps[player] then
@@ -1367,7 +1422,7 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		return
 	end
 	if MapService.IsInSafeZone(body.root.Position) then
-		deny(player)
+		deny(player, "TRAP_SAFE_ZONE")
 		return
 	end
 
@@ -1392,7 +1447,13 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		deny(player)
 		return
 	end
-	if MapService.IsInSafeZone(landing) or nearProtectedGround(landing) then
+	-- One test that was an `or`, split only so each half can say its own thing:
+	-- the field first, exactly as the `or` evaluated it, and both still refuse.
+	if MapService.IsInSafeZone(landing) then
+		deny(player, "TRAP_SAFE_ZONE")
+		return
+	end
+	if nearProtectedGround(landing) then
 		deny(player)
 		return
 	end
@@ -1858,6 +1919,12 @@ end
 
 function CombatService.RequestSwing(player: Player, item: WeaponData.Item, tool: Tool)
 	trySwing(player, item, tool)
+end
+
+-- AdminService's Reset Player Progress: the trap a player has down goes with the
+-- rest of what they had out in the world. The same removal a trap's expiry uses.
+function CombatService.ClearTrap(player: Player)
+	removeTrap(player, "progress reset")
 end
 
 function CombatService.Snapshot(): string

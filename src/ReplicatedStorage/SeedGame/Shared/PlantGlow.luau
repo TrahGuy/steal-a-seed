@@ -14,8 +14,9 @@
 -- plants and anybody standing in the bed out to white.
 --
 -- Night is where that light belongs. WorldClock drops the world to a blue night
--- for sixty seconds every eight minutes, and a garden of lit creatures is the
--- spectacle of it. So the lights are switched off by day and restored at dusk.
+-- for fifteen seconds every seven and a quarter minutes, and a garden of lit
+-- creatures is the spectacle of it. So the lights are switched off by day and
+-- restored at dusk.
 -- Nothing else about a plant changes: Neon accents stay Neon, emitters keep
 -- emitting, colour and anatomy read exactly as authored.
 --

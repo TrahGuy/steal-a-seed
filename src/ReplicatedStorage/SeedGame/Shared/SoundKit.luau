@@ -90,6 +90,13 @@ export type Cue = {
 	-- A WINDOW INTO THE ASSET. See below.
 	start: number?,
 	clip: number?,
+	-- The last seconds of the window, faded rather than cut: a render that is
+	-- still sounding where its window (or the file) ends. 2D plays only.
+	fadeOut: number?,
+	-- A LOOP THAT IS NOT THE WHOLE FILE (attach): the Sound's playback and loop
+	-- regions, so a render that opens mid-breath loops its clean breath only.
+	loopStart: number?,
+	loopEnd: number?,
 }
 
 -- A dynamic string key into a table of literals is not something strict mode
@@ -99,7 +106,8 @@ local CUES: { [string]: Cue } = (SFX.Cues :: any)
 local MIXER: { [string]: number } = (SFX.Mixer :: any)
 -- Which creature makes which noise. Two levels of string keys and a
 -- fallback row, so the same cast applies.
-local VOICES: { [string]: { [string]: string } } = (SFX.ParentVoices :: any)
+-- A role is a cue name, or a list of names in order of preference.
+local VOICES: { [string]: { [string]: any } } = (SFX.ParentVoices :: any)
 
 local GROUP_NAMES: { [string]: string } = {
 	Music = "SeedMusic",
@@ -212,16 +220,72 @@ end
 -- silence. That is the same property the whole table rests on, one level up: a
 -- creature with no roar makes no noise when it wakes, and nothing anywhere has
 -- to check for that.
+--
+-- A ROLE CAN BE A LIST (2026-09-27): names in order of preference, the first
+-- that resolves wins. Astralmaw's Wake is { its rage, its old wake } -- the rage
+-- while it has an id, the old roar until then; one roar either way.
 --==============================================================================
+local function firstPlayable(named: any): string?
+	if type(named) == "string" then
+		return if cueOf(named) then named else nil
+	end
+	if type(named) == "table" then
+		for _, name in ipairs(named) do
+			if type(name) == "string" and cueOf(name) then
+				return name
+			end
+		end
+	end
+	return nil
+end
+
 function SoundKit.parentCue(biomeId: string?, role: string): string?
 	local row = if typeof(biomeId) == "string" then VOICES[biomeId] else nil
-	local named = if row then row[role] else nil
-	if named and cueOf(named) then
-		return named
+	local own = firstPlayable(if row then row[role] else nil)
+	if own then
+		return own
 	end
-	local shared = if VOICES.Default then VOICES.Default[role] else nil
-	if shared and cueOf(shared) then
-		return shared
+	return firstPlayable(if VOICES.Default then VOICES.Default[role] else nil)
+end
+
+--==============================================================================
+-- THE WALK HOME'S ONE-SHOT: WHAT A STATE CHANGE DOES TO IT (2026-09-27)
+--
+-- A guardian's ParentState (NestService, replicated) moving from `old` to `new`
+-- says "play" (start its Return cue), "fade" (take down one still sounding) or
+-- nil. `at` is GameConfig.Sfx.ReturnCueAt: "leave" plays as it gives up and
+-- turns for home, "arrive" as it lies down.
+--
+--   first sight of a guardian (old nil)     nothing -- it did not just happen
+--   chasing/waking -> returning/hauling     play (leave)
+--   returning <-> hauling                   nothing: one walk home, one cue
+--   returning/hauling -> asleep             play (arrive), else fade
+--   anything -> chasing/waking              fade: a fresh chase cuts it off
+--   anything else -> asleep                 fade
+--
+-- Pure, so SoundCueSpec drives every row without a guardian.
+--==============================================================================
+local HOMEWARD: { [string]: boolean } = { returning = true, hauling = true }
+local HUNTING: { [string]: boolean } = { chasing = true, waking = true }
+
+function SoundKit.returnCueStep(old: string?, new: string, at: string): string?
+	if old == nil or old == new then
+		return nil
+	end
+	if HOMEWARD[new] then
+		if HUNTING[old] and at ~= "arrive" then
+			return "play"
+		end
+		return nil
+	end
+	if HUNTING[new] then
+		return "fade"
+	end
+	if new == "asleep" then
+		if HOMEWARD[old] and at == "arrive" then
+			return "play"
+		end
+		return "fade"
 	end
 	return nil
 end
@@ -276,6 +340,9 @@ end
 -- and leave a tail on the flat ones.
 --==============================================================================
 local windowToken: { [string]: number } = {}
+-- A keyed cue's fade still running when it plays again is cancelled, so the
+-- new play is not pulled down by the old one's last 80 ms.
+local windowFade: { [string]: Tween } = {}
 
 local function window(sound: Sound, cue: Cue, key: string?)
 	if cue.start and cue.start > 0 then
@@ -286,9 +353,24 @@ local function window(sound: Sound, cue: Cue, key: string?)
 		return
 	end
 	local seconds = clip / math.max(0.05, sound.PlaybackSpeed)
+	-- A FADE, NOT A CUT, where the row asks for one (fadeOut): the level goes
+	-- to nothing over the window's last seconds and then it stops. The next
+	-- play sets the level again (play and emit both write Volume first).
+	local fade = cue.fadeOut
+	local fadeFor = if type(fade) == "number" and fade > 0
+		then math.min(fade, clip) / math.max(0.05, sound.PlaybackSpeed)
+		else 0
 	if key == nil then
 		-- A one-shot emitted into the world owns its Sound outright, so there is
 		-- nothing for a later play to interrupt.
+		if fadeFor > 0 then
+			task.delay(seconds - fadeFor, function()
+				if sound.Parent then
+					TweenService:Create(sound, TweenInfo.new(fadeFor, Enum.EasingStyle.Quad,
+						Enum.EasingDirection.In), { Volume = 0 }):Play()
+				end
+			end)
+		end
 		task.delay(seconds, function()
 			if sound.Parent then
 				sound:Stop()
@@ -298,6 +380,21 @@ local function window(sound: Sound, cue: Cue, key: string?)
 	end
 	local token = (windowToken[key] or 0) + 1
 	windowToken[key] = token
+	local running = windowFade[key]
+	if running then
+		running:Cancel()
+		windowFade[key] = nil
+	end
+	if fadeFor > 0 then
+		task.delay(seconds - fadeFor, function()
+			if windowToken[key] == token and sound.Parent then
+				local tween = TweenService:Create(sound, TweenInfo.new(fadeFor, Enum.EasingStyle.Quad,
+					Enum.EasingDirection.In), { Volume = 0 })
+				windowFade[key] = tween
+				tween:Play()
+			end
+		end)
+	end
 	task.delay(seconds, function()
 		if windowToken[key] == token and sound.Parent then
 			sound:Stop()
@@ -442,7 +539,19 @@ function SoundKit.attach(name: string, to: BasePart): Sound?
 	sound.SoundId = cue.id
 	sound.Volume = cue.volume or 0.5
 	sound.PlaybackSpeed = cue.pitch or 1
-	sound.Looped = true
+	-- A loop unless the row says otherwise (every attached row was a loop
+	-- until the walk-home one-shots, 2026-09-27).
+	sound.Looped = cue.looped ~= false
+	-- Only the clean part of a render, round and round (loopStart/loopEnd).
+	-- Through pcall: an engine without playback regions loops the whole file.
+	local a, b = cue.loopStart, cue.loopEnd
+	if type(a) == "number" and type(b) == "number" and b > a then
+		pcall(function()
+			sound.PlaybackRegionsEnabled = true
+			sound.PlaybackRegion = NumberRange.new(a, b)
+			sound.LoopRegion = NumberRange.new(a, b)
+		end)
+	end
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMaxDistance = cue.range or 120
 	sound.RollOffMinDistance = math.max(6, (cue.range or 120) * 0.25)
@@ -505,28 +614,88 @@ function SoundKit.fadeMusic(seconds: number)
 	moveMusic(seconds, Enum.EasingStyle.Linear)
 end
 
-local function duckMusic(on: boolean)
+local function duckMusic(on: boolean, seconds: number)
 	if ducked == on then
 		return
 	end
 	ducked = on
-	moveMusic(SFX.DuckSeconds, Enum.EasingStyle.Quad)
+	moveMusic(seconds, Enum.EasingStyle.Quad)
+end
+
+--==============================================================================
+-- THE BED LEAVES BY FADING, AND A CHASE THAT RESUMES KEEPS ITS PLACE
+--
+-- It used to stop dead: the escape was a hard cut to the garden bed, which is
+-- the player hearing the SYSTEM switch tracks rather than the danger passing.
+--
+-- `chaseFade` is the one tween allowed on the bed's own Volume, and every call
+-- bumps `chaseToken`. A fade-out that finishes stops the track only if nothing
+-- has called since it began, so a pursuit that lands during the tail keeps the
+-- music instead of being cut off by the chase before it.
+--
+-- A RESUME NEVER CALLS PLAY. Play restarts a looped bed from its first bar, so
+-- a guardian picking the chase straight back up would restart the song; the
+-- one still sounding is brought back up where it is instead. The Sound's own
+-- Volume is what fades, never the Chase bus -- the bus is the player's SOUND FX
+-- level, and a fade that wrote it would overwrite their setting.
+--==============================================================================
+local chaseToken = 0
+local chaseFade: Tween? = nil
+
+local function fadeBed(sound: Sound, to: number, seconds: number): Tween?
+	if chaseFade then
+		chaseFade:Cancel()
+		chaseFade = nil
+	end
+	if seconds <= 0 then
+		sound.Volume = to
+		return nil
+	end
+	local tween = TweenService:Create(sound, TweenInfo.new(seconds, Enum.EasingStyle.Linear), {
+		Volume = to,
+	})
+	chaseFade = tween
+	tween:Play()
+	return tween
 end
 
 function SoundKit.chase(on: boolean)
 	if not RunService:IsClient() then
 		return
 	end
+	chaseToken += 1
+	local bed = flat.ChaseBed
+	local sounding = bed ~= nil and bed.Parent ~= nil and bed.IsPlaying
 	if on then
-		if SoundKit.play("ChaseBed") then
+		local cue = cueOf("ChaseBed")
+		local full = if cue then cue.volume or 0.5 else 0.5
+		if sounding then
+			fadeBed(bed :: Sound, full, SFX.ChaseFadeInSeconds)
+			duckMusic(true, SFX.DuckSeconds)
+			return
+		end
+		local sound = SoundKit.play("ChaseBed", { volume = 0 })
+		if sound then
+			fadeBed(sound, full, SFX.ChaseFadeInSeconds)
 			-- Only duck if there is actually a chase bed to duck FOR. With no id
 			-- recorded, ducking would just make the game quieter during a raid
 			-- and put nothing in the hole.
-			duckMusic(true)
+			duckMusic(true, SFX.DuckSeconds)
 		end
 	else
-		SoundKit.stop("ChaseBed")
-		duckMusic(false)
+		local tween = if sounding then fadeBed(bed :: Sound, 0, SFX.ChaseFadeOutSeconds) else nil
+		if tween then
+			local token = chaseToken
+			tween.Completed:Connect(function(state: Enum.PlaybackState)
+				if state == Enum.PlaybackState.Completed and token == chaseToken then
+					SoundKit.stop("ChaseBed")
+				end
+			end)
+		else
+			SoundKit.stop("ChaseBed")
+		end
+		-- Back up over the same length the bed goes down over: a cross, not a gap.
+		duckMusic(false, SFX.ChaseFadeOutSeconds)
 	end
 end
 

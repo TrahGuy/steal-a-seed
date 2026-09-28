@@ -38,6 +38,8 @@ local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeDat
 -- dropped rather than carried forever.
 local WeaponData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WeaponData"))
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
+-- So a saved wheel prize or cosmetic can be checked against the real list.
+local WheelData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WheelData"))
 local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
@@ -193,6 +195,10 @@ export type Profile = {
 	-- to a boolean, and absent in an old save means OFF.
 	--==========================================================================
 	WalkMode: boolean,
+	-- MENU SIZE, the second stored setting, added the same way (2026-09-26): a
+	-- GameConfig.MenuSize option id, default "normal", and anything that is not
+	-- an option -- an old save with no key included -- reads as "normal".
+	MenuSize: string,
 	CreatedAt: number,
 	LastSeen: number,
 	-- An unclaimed offline claim (see OfflineEarnings): cash before the x2
@@ -201,6 +207,62 @@ export type Profile = {
 	OfflineCash: number,
 	OfflineSeconds: number,
 	OfflineAway: number,
+	--==========================================================================
+	-- THE BONUS CHEST (2026-09-27): when the next claim opens, and the one
+	-- boost the last claim left running. Absolute os.time() seconds, so both
+	-- keep elapsing while the player is away and a rejoin can neither reset
+	-- the cooldown nor extend the boost. ChestBoost is a GameConfig.BonusChest
+	-- reward Id, or "" for none. All three are written together, by one claim,
+	-- and saved before the claim is confirmed (BonusChestService). An old save
+	-- has no keys and reads 0 / "" / 0: ready once the guide is done, nothing
+	-- running.
+	--==========================================================================
+	ChestNextAt: number,
+	ChestBoost: string,
+	ChestBoostEndsAt: number,
+	--==========================================================================
+	-- THE OBBY REWARD WHEEL (2026-09-27; WheelService, numbers in WheelData)
+	--
+	--   WheelEarned / WheelBought  unused spins, by where they came from, kept
+	--                              apart so a bought spin is always known as one
+	--   WheelDayAt / WheelDayCount the open earning window: the os.time() it
+	--                              opened (the first spin-earning completion) and
+	--                              the spins it has earned; 0 / 0 is none open
+	--   WheelRuns                  the last few obby completion ids credited, so
+	--                              no completion is ever credited twice
+	--   WheelPending               prizes rolled and recorded but not delivered:
+	--                              SAVED before a spin is confirmed, delivered
+	--                              right after, and delivered again on the next
+	--                              join if a crash came between (or once there is
+	--                              bag space, for a pod)
+	--   WheelSeq                   a counter for spin ids
+	--   Cosmetics / EquippedTrail  owned cosmetic ids and the trail worn ("")
+	--
+	-- All migrate by being absent: an old save has no spins, no window, nothing
+	-- pending and no cosmetics -- exactly its state.
+	--==========================================================================
+	WheelEarned: number,
+	WheelBought: number,
+	WheelDayAt: number,
+	WheelDayCount: number,
+	WheelRuns: { string },
+	WheelPending: { WheelPrize },
+	WheelSeq: number,
+	Cosmetics: { [string]: boolean },
+	EquippedTrail: string,
+}
+
+-- One prize the wheel has rolled: which spin (Id), what was rolled and what is
+-- paid (Rolled and Prize differ only when an owned trail pays its swap), the
+-- species a pod prize hatches into ("" otherwise), which balance paid for it,
+-- and when.
+export type WheelPrize = {
+	Id: string,
+	Rolled: string,
+	Prize: string,
+	Species: string,
+	Source: string,
+	At: number,
 }
 
 -- Year 2100, as a sanity ceiling on stored timestamps. A clock-skewed or
@@ -235,11 +297,24 @@ function ProfileSchema.Default(): Profile
 		EquippedBat = "",
 		EquippedTrap = "",
 		WalkMode = false,
+		MenuSize = GameConfig.MenuSize.Default,
 		CreatedAt = now,
 		LastSeen = now,
 		OfflineCash = 0,
 		OfflineSeconds = 0,
 		OfflineAway = 0,
+		ChestNextAt = 0,
+		ChestBoost = "",
+		ChestBoostEndsAt = 0,
+		WheelEarned = 0,
+		WheelBought = 0,
+		WheelDayAt = 0,
+		WheelDayCount = 0,
+		WheelRuns = {},
+		WheelPending = {},
+		WheelSeq = 0,
+		Cosmetics = {},
+		EquippedTrail = "",
 	}
 end
 
@@ -317,6 +392,90 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.OfflineCash = math.floor(number(raw.OfflineCash, 0, 0, SAVE.MaxCash))
 	p.OfflineSeconds = math.floor(number(raw.OfflineSeconds, 0, 0, SeedData.Offline.MaxCreditSeconds))
 	p.OfflineAway = math.floor(number(raw.OfflineAway, 0, 0, MAX_TIME))
+	--==========================================================================
+	-- THE BONUS CHEST MIGRATES BY BEING ABSENT, AND IS BOUNDED BY NOW
+	--
+	-- An old save reads 0 / "" / 0 -- ready, nothing running. A value no claim
+	-- could have written is pulled back to the most one could: never more than
+	-- one cooldown or one boost from this moment, so a corrupt or clock-skewed
+	-- row can neither lock the chest for a century nor run a boost for one. An
+	-- unknown reward id reads as no boost at all.
+	--==========================================================================
+	local chest = GameConfig.BonusChest
+	local now = os.time()
+	p.ChestNextAt = math.floor(number(raw.ChestNextAt, 0, 0, now + chest.CooldownSeconds))
+	if GameConfig.bonusChestReward(raw.ChestBoost) ~= nil then
+		p.ChestBoost = raw.ChestBoost
+		p.ChestBoostEndsAt = math.floor(number(raw.ChestBoostEndsAt, 0, 0, now + chest.BoostSeconds))
+	end
+
+	--==========================================================================
+	-- THE WHEEL, BOUNDED BY WHAT WheelService COULD HAVE WRITTEN
+	--
+	-- Balances are whole and capped far above any real player; a window cannot
+	-- have opened in the future (so no skewed clock can stretch one), and its
+	-- count is within the daily limit. A pending prize is kept only if every
+	-- part of it names something real -- a prize, and for a pod a species from
+	-- that prize's own pool -- because it is paid out on the next join, and a
+	-- mangled row must not pay anything it could not have won.
+	--==========================================================================
+	p.WheelEarned = math.floor(number(raw.WheelEarned, 0, 0, WheelData.MaxEarnedHeld))
+	p.WheelBought = math.floor(number(raw.WheelBought, 0, 0, WheelData.MaxBoughtHeld))
+	p.WheelDayAt = math.floor(number(raw.WheelDayAt, 0, 0, now))
+	p.WheelDayCount = if p.WheelDayAt > 0
+		then math.floor(number(raw.WheelDayCount, 0, 0, WheelData.Daily.Limit))
+		else 0
+	p.WheelSeq = math.floor(number(raw.WheelSeq, 0, 0, 1e12))
+	if type(raw.WheelRuns) == "table" then
+		for _, id in ipairs(raw.WheelRuns) do
+			if type(id) == "string" and #id > 0 and #id <= 64 and #p.WheelRuns < WheelData.RememberRuns then
+				table.insert(p.WheelRuns, id)
+			end
+		end
+	end
+	if type(raw.WheelPending) == "table" then
+		for _, row in ipairs(raw.WheelPending) do
+			if #p.WheelPending >= WheelData.MaxPending then
+				break
+			end
+			if type(row) == "table" and type(row.Id) == "string" and #row.Id > 0 and #row.Id <= 64 then
+				local prize = WheelData.ById[if type(row.Prize) == "string" then row.Prize else ""]
+				local rolled = WheelData.ById[if type(row.Rolled) == "string" then row.Rolled else ""]
+				local source = row.Source
+				local species = if type(row.Species) == "string" then row.Species else ""
+				local speciesOk = true
+				if prize and prize.kind == "pod" then
+					speciesOk = false
+					for _, id in ipairs(WheelData.Pools[prize.pool or ""] or {}) do
+						if id == species then
+							speciesOk = true
+						end
+					end
+				else
+					species = ""
+				end
+				-- What was paid is what was rolled, or the trail's own replacement.
+				local consistent = prize ~= nil and rolled ~= nil
+					and (prize == rolled or (rolled.kind == "trail" and rolled.swap == prize.id))
+				if consistent and prize and rolled and speciesOk and (source == "earned" or source == "bought") then
+					table.insert(p.WheelPending, {
+						Id = row.Id,
+						Rolled = rolled.id,
+						Prize = prize.id,
+						Species = species,
+						Source = source,
+						At = math.floor(number(row.At, now, 0, MAX_TIME)),
+					})
+				end
+			end
+		end
+	end
+	if type(raw.Cosmetics) == "table" and raw.Cosmetics[WheelData.Trail.Id] == true then
+		p.Cosmetics[WheelData.Trail.Id] = true
+	end
+	p.EquippedTrail = if raw.EquippedTrail == WheelData.Trail.Id and p.Cosmetics[WheelData.Trail.Id]
+		then WheelData.Trail.Id
+		else ""
 
 	if type(raw.Plants) == "table" then
 		for _, row in ipairs(raw.Plants) do
@@ -458,6 +617,11 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- before Walk Mode existed has no key here, `raw.WalkMode` is nil, and nil is
 	-- not true -- so an old profile loads with it off and nothing is rewritten.
 	p.WalkMode = raw.WalkMode == true
+	-- The same forward migration for the menu size: no key, or no such option,
+	-- is the default size, and nothing is rewritten until the player chooses.
+	p.MenuSize = if GameConfig.menuSizeScale(raw.MenuSize) ~= nil
+		then raw.MenuSize
+		else GameConfig.MenuSize.Default
 
 	--==========================================================================
 	-- THE ONE-SLOT SAVE, SORTED INTO THE RIGHT DRAWER

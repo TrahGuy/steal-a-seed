@@ -157,6 +157,12 @@ check(sleep ~= nil and CUES.ParentSleep ~= nil
 --==============================================================================
 say("\n-- the fall-through --")
 
+-- Rows that exist with a blank id because their recording is waiting for an
+-- upload. A row here plays nothing and replaces nothing until its id is pasted
+-- in; this list is the only place a blank row is allowed. Empty since the seven
+-- 2026-09-24 recordings were uploaded and wired, 2026-09-27.
+local PENDING = {}
+
 local EXPECTED = {
 	-- biome, role, cue name or false for "nothing"
 	{ "greenhollow", "Wake", "ParentWakeGreenhollow" },
@@ -179,12 +185,22 @@ local EXPECTED = {
 	-- kept every generic sound; the owner then recorded both roars. They still
 	-- breathe the generic breath, walk the generic step and swing the generic
 	-- claw -- only the wake is theirs, which is the whole point of the table.
-	{ "emberroot", "Sleep", "ParentSleep" },
+	--
+	-- 2026-09-27: each also has its own sleep and walk home, and Astralmaw its
+	-- rage, uploaded and wired that day -- so the generic breath is no longer
+	-- theirs, and Astralmaw's one roar is the rage, not its old wake as well.
+	{ "emberroot", "Sleep", "ParentSleepEmberroot" },
 	{ "emberroot", "Step", "ChaseStep" },
 	{ "emberroot", "Hit", "ParentHit" },
 	{ "emberroot", "Wake", "ParentWakeEmberroot" },
-	{ "starbloom", "Sleep", "ParentSleep" },
-	{ "starbloom", "Wake", "ParentWakeStarbloom" },
+	{ "emberroot", "Return", "ParentReturnEmberroot" },
+	{ "starbloom", "Sleep", "ParentSleepStarbloom" },
+	{ "starbloom", "Wake", "ParentRageStarbloom" },
+	{ "starbloom", "Return", "ParentReturnStarbloom" },
+	{ "dustbowl", "Return", "ParentReturnDustbowl" },
+	{ "tanglemire", "Return", "ParentReturnTanglemire" },
+	-- Greenhollow's brute has no walk-home recording: it goes home in silence.
+	{ "greenhollow", "Return", false },
 
 	-- A biome that does not exist, and a parent whose attribute never arrived.
 	{ "not_a_biome", "Hit", "ParentHit" },
@@ -213,23 +229,42 @@ end
 --==============================================================================
 say("\n-- every name in the table is a row --")
 
-local ROLES = { Sleep = true, Step = true, Wake = true, Hit = true }
+local ROLES = { Sleep = true, Step = true, Wake = true, Hit = true, Return = true }
 local bad = {}
 local rows = 0
 for biome, voice in pairs(VOICES) do
-	for role, name in pairs(voice) do
+	for role, entry in pairs(voice) do
 		rows += 1
 		if not ROLES[role] then
 			table.insert(bad, string.format("%s has role %q, which nothing reads", biome, role))
 		end
-		if SoundKit.cue(name) == nil then
-			table.insert(bad, string.format("%s.%s -> %s, which is not a playable row",
-				biome, role, name))
+		-- A role is a name or a list of names in order of preference (2026-09-27).
+		local names = if type(entry) == "table" then entry else { entry }
+		local playable = 0
+		for _, name in ipairs(names) do
+			if type(name) ~= "string" or CUES[name] == nil then
+				table.insert(bad, string.format("%s.%s -> %s, which is not a row", biome, role, tostring(name)))
+			elseif SoundKit.cue(name) ~= nil then
+				playable += 1
+			elseif not PENDING[name] then
+				table.insert(bad, string.format("%s.%s -> %s, a blank row nobody is waiting on",
+					biome, role, name))
+			end
+		end
+		if type(entry) == "table" and playable == 0 then
+			table.insert(bad, string.format("%s.%s lists no playable cue at all", biome, role))
 		end
 	end
 end
-check(#bad == 0, string.format("all %d entries name a playable cue", rows),
+check(#bad == 0, string.format("all %d entries name rows; blank ones only where an upload is pending", rows),
 	table.concat(bad, "; "))
+local stray = {}
+for name in pairs(PENDING) do
+	if CUES[name] == nil then
+		table.insert(stray, name)
+	end
+end
+check(#stray == 0, "every pending recording has its row waiting", table.concat(stray, ", "))
 check(VOICES.Default ~= nil and VOICES.Default.Wake == nil,
 	"there is no default roar -- a creature nobody has recorded stays quiet")
 
@@ -359,6 +394,164 @@ check(cues ~= nil and cues:find('WaitForChild("HumanoidRootPart", 10)', 1, true)
 check(cues ~= nil and cues:find("local watching", 1, true) ~= nil
 		and cues:find("local pending", 1, true) == nil,
 	"one live connection per tagged parent, in place of the waiting flag")
+
+--==============================================================================
+-- 7. A ONE-SHOT STEP IS A FOOTFALL, ONE AT A TIME (reported 2026-09-26)
+--
+-- The Brambleback -- Dustbowl, the second guardian, and the only one whose
+-- step is a one-shot -- stomped every 2.2 studs, three and a half times per
+-- real footfall, and at chase speed that was a fresh overlapping Sound nearly
+-- every frame. The spacing now comes from ParentAnim's own stride, a voice
+-- waits between stomps, and the stomp still ringing is cut when the next lands
+-- or the parent sleeps. Source-level: hearing it takes a live raid.
+--==============================================================================
+say("\n-- one-shot steps --")
+local anim = sourceOf(scripts and scripts:FindFirstChild("ParentAnim"))
+local swing = anim and tonumber(anim:match("local SWING_PER_STUD = ([%d%.]+)"))
+local perStep = cues and cues:match("local STUDS_PER_STEP = math%.pi / ([%d%.]+)")
+check(swing ~= nil and perStep ~= nil and tonumber(perStep) == swing,
+	"a step is every pi / SWING_PER_STUD studs -- one footfall of ParentAnim's stride",
+	string.format("SWING_PER_STUD %s, step divisor %s", tostring(swing), tostring(perStep)))
+check(swing ~= nil and math.pi / swing > 7,
+	"which is ~7.85 studs, not the 2.2 that stomped three times a footfall",
+	swing and string.format("%.2f", math.pi / swing) or "?")
+local minStep = cues and tonumber(cues:match("local MIN_STEP_SECONDS = ([%d%.]+)"))
+local stepCue = GameConfig.Sfx.Cues.ParentStepDustbowl
+check(minStep ~= nil and minStep >= 0.2 and 1 / minStep <= 5,
+	"a voice stomps at most five times a second, however fast the chase", minStep)
+check(stepCue ~= nil and stepCue.looped == false,
+	"Dustbowl's step is still the one-shot the recording is")
+check(cues ~= nil and cues:find("voice.stomp = SoundKit.emit(voice.stepName, voice.root)", 1, true) ~= nil
+		and cues:find("hush(voice)\n\t\t\t\t\tvoice.stomp = SoundKit.emit(", 1, true) ~= nil,
+	"and the stomp still ringing is cut when the next lands -- never two from one parent")
+check(cues ~= nil and cues:find("voice.walked = 0\n\t\t\t\thush(voice)", 1, true) ~= nil
+		and cues:find("if voice then\n\t\thush(voice)", 1, true) ~= nil,
+	"asleep, streamed out or forgotten, a parent's stomp stops there")
+check(cues ~= nil and cues:find("local moved = math.sqrt(dx * dx + dz * dz)", 1, true) ~= nil,
+	"ground covered is measured flat, as the stride is")
+
+--==============================================================================
+-- 8. THE 2026-09-24 RECORDINGS: SLEEPS, WALKS HOME AND ASTRALMAW'S RAGE
+--    (rows 2026-09-27, uploaded and wired the same day)
+--
+-- The rules are pure (SoundKit.returnCueStep) and the rows are data, so both are
+-- checked here; hearing them takes the experience's permission on each upload
+-- (see GameConfig) and a live raid.
+--==============================================================================
+say("\n-- sleeps, walks home and the rage --")
+local STEP_TABLE = {
+	-- old, new, at, want
+	{ nil, "returning", "leave", nil },
+	{ "chasing", "returning", "leave", "play" },
+	{ "chasing", "hauling", "leave", "play" },
+	{ "waking", "returning", "leave", "play" },
+	{ "returning", "hauling", "leave", nil },
+	{ "hauling", "returning", "leave", nil },
+	{ "returning", "chasing", "leave", "fade" },
+	{ "hauling", "waking", "leave", "fade" },
+	{ "returning", "asleep", "leave", "fade" },
+	{ "returning", "asleep", "arrive", "play" },
+	{ "hauling", "asleep", "arrive", "play" },
+	{ "chasing", "returning", "arrive", nil },
+	{ "chasing", "asleep", "leave", "fade" },
+	{ "asleep", "waking", "leave", "fade" },
+	{ "returning", "returning", "leave", nil },
+}
+local wrongSteps = {}
+for _, row in ipairs(STEP_TABLE) do
+	local got = SoundKit.returnCueStep(row[1], row[2], row[3])
+	if got ~= row[4] then
+		table.insert(wrongSteps, string.format("%s->%s (%s): %s", tostring(row[1]), row[2], row[3], tostring(got)))
+	end
+end
+check(#wrongSteps == 0, "one walk-home cue per trip: played as it turns for home, never again on a "
+	.. "walk becoming a haul, cut off by a fresh chase or a lie-down, and never on first sight",
+	table.concat(wrongSteps, "; "))
+check(GameConfig.Sfx.ReturnCueAt == "leave" or GameConfig.Sfx.ReturnCueAt == "arrive",
+	"the moment it plays is one word in the config", GameConfig.Sfx.ReturnCueAt)
+check(cues ~= nil and cues:find('returnName = SoundKit.parentCue(biomeId, "Return")', 1, true) ~= nil
+		and cues:find("SoundKit.returnCueStep(voice.state, state, RETURN_AT)", 1, true) ~= nil
+		and cues:find("if typeof(state) == \"string\" and state ~= voice.state then", 1, true) ~= nil,
+	"SoundCues asks for the biome's walk home and decides on a state CHANGE only")
+check(cues ~= nil and cues:find("quietBack(voice, 0)\n\t\tif voice.sleep then", 1, true) ~= nil,
+	"streamed out or forgotten, a walk-home cue stops with its parent")
+check(cues ~= nil and cues:find("voice.sleepFade = fadeAway(sleep, SLEEP_FADE_SECONDS)", 1, true) ~= nil
+		and cues:find("sleep.Playing = not awake", 1, true) == nil,
+	"waking lets the breath die away rather than cutting it, and it is no longer toggled every frame")
+
+-- The rage REPLACES the old wake: listed first, and only one of them is a roar.
+local starWake = VOICES.starbloom and VOICES.starbloom.Wake
+check(type(starWake) == "table" and starWake[1] == "ParentRageStarbloom" and starWake[2] == "ParentWakeStarbloom",
+	"Astralmaw's roar is its rage when it has one, the old wake until then -- never both")
+local rage = CUES.ParentRageStarbloom
+check(rage ~= nil and rage.clip ~= nil and rage.clip >= 3.5 and rage.clip <= 4,
+	"the rage keeps its whole first roar (to 3.9 s) and drops the cut-off second take", rage and rage.clip)
+check(rage ~= nil and (rage.group or "World") == "World" and (rage.range or 0) >= 170,
+	"and carries at least as far as every other roar", rage and rage.range)
+local ember = CUES.ParentSleepEmberroot
+check(ember ~= nil and ember.looped == true and ember.loopStart == 1.4 and ember.loopEnd == 4.8,
+	"Emberroot's breathing loops its clean breath only (1.4 to 4.8 s), not the render's cut-off first one")
+local star = CUES.ParentSleepStarbloom
+check(star ~= nil and star.looped == true and star.loopStart == nil and (star.range or 0) <= 80,
+	"Starbloom's hum loops as it is, close by, like every other sleep")
+local shortRange = true
+for _, name in ipairs({ "ParentSleepEmberroot", "ParentSleepStarbloom" }) do
+	local cue = CUES[name]
+	if not cue or (cue.range or 999) > (CUES.ParentSleep.range or 70) then
+		shortRange = false
+	end
+end
+check(shortRange, "no sleeping guardian carries further than the generic breath: the map is not filled")
+for _, name in ipairs({ "ParentReturnDustbowl", "ParentReturnTanglemire", "ParentReturnEmberroot", "ParentReturnStarbloom" }) do
+	local cue = CUES[name]
+	check(cue ~= nil and cue.looped ~= true and (cue.group or "World") == "World"
+			and (cue.range or 0) >= 60 and (cue.range or 0) <= 170,
+		name .. " is a positional one-shot with a guardian's range")
+end
+
+--==============================================================================
+-- 9. THE SEVEN UPLOADS, AND THE ASSET EACH ONE NAMES (2026-09-27)
+--
+-- As in section 1: the id is written here as well as in GameConfig, so pointing
+-- a guardian at a different upload is a deliberate change in two places, and no
+-- two rows may share one -- a paste into the wrong row is a Starbloom that
+-- breathes Emberroot's breath with no error anywhere. Seconds are the WAVs' in
+-- sfx/; the assets' own TimeLength could not be read on 2026-09-27, because the
+-- experience had not been granted them yet.
+--==============================================================================
+say("\n-- the seven uploads --")
+local UPLOADS = {
+	{ "ParentSleepEmberroot", "136756415808327", 4.80 },
+	{ "ParentSleepStarbloom", "131278197709092", 4.80 },
+	{ "ParentReturnStarbloom", "100144774034643", 2.76 },
+	{ "ParentReturnEmberroot", "116190097842912", 2.00 },
+	{ "ParentReturnTanglemire", "93033126566750", 2.28 },
+	{ "ParentReturnDustbowl", "92575459486923", 2.28 },
+	{ "ParentRageStarbloom", "121932932319379", 6.00 },
+}
+local rowsById = {}
+for name, cue in pairs(CUES) do
+	if type(cue.id) == "string" and cue.id ~= "" then
+		rowsById[cue.id] = rowsById[cue.id] or {}
+		table.insert(rowsById[cue.id], name)
+	end
+end
+for _, row in ipairs(UPLOADS) do
+	local name, id, seconds = row[1], row[2], row[3]
+	local cue = CUES[name]
+	check(cue ~= nil and cue.id == "rbxassetid://" .. id and SoundKit.cue(name) ~= nil,
+		name .. " plays its own upload, " .. id, cue and cue.id)
+	local sharing = if cue then rowsById[cue.id] else nil
+	check(sharing ~= nil and #sharing == 1, name .. "'s id is no other row's",
+		sharing and table.concat(sharing, ", "))
+	if cue then
+		local ends = math.max((cue.start or 0) + (cue.clip or 0), cue.loopEnd or 0)
+		check(ends <= seconds + 0.001,
+			string.format("%s's window ends inside its %.2f s (%.2f)", name, seconds, ends))
+		check(type(cue.volume) == "number" and cue.volume > 0 and cue.volume <= 10,
+			name .. " has a level the engine takes", cue.volume)
+	end
+end
 
 if #fails > 0 then
 	return ("ParentVoiceSpec: %d passed, %d FAILED\n  %s"):format(pass, #fails,

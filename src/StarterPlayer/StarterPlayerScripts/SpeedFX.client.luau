@@ -180,6 +180,29 @@ for i = 1, POOL_SIZE do
 	pool[i] = billboard
 end
 
+--==============================================================================
+-- THE RUSH SAYS SO
+--
+-- A charged visit pays the mill's base rate times up to 4 (GameConfig.Mill.
+-- Training), and with no word for it a level-1 mill pops +20, then +80, under
+-- a sign that says 20/s -- which is how it was reported on 2026-09-26. The
+-- multiplier the server actually paid on is published as TrainingRush
+-- (TreadmillService, publishRush), before the Speed it paid reaches this
+-- script, so the tag names the multiplier of the amount it sits beside. One
+-- decimal at most; nothing at all when there is no rush.
+--==============================================================================
+local function rushTag(): string
+	local rush = player:GetAttribute(GameConfig.Attributes.TrainingRush)
+	if type(rush) ~= "number" or rush <= 1 then
+		return ""
+	end
+	local tenths = math.floor(rush * 10 + 0.5) / 10
+	if tenths == math.floor(tenths) then
+		return string.format(" x%d", math.floor(tenths))
+	end
+	return string.format(" x%.1f", tenths)
+end
+
 local function pop(amount: number)
 	local character = player.Character
 	local head = character and character:FindFirstChild("Head")
@@ -203,7 +226,7 @@ local function pop(amount: number)
 	--
 	-- Still floored to at least 1, so a fractional tick never pops "+0".
 	--==========================================================================
-	label.Text = "+" .. GameConfig.compact(math.max(1, math.floor(amount + 0.5)))
+	label.Text = "+" .. GameConfig.compact(math.max(1, math.floor(amount + 0.5))) .. rushTag()
 	label.TextTransparency = 0
 	local stroke = label:FindFirstChildOfClass("UIStroke")
 	if stroke then

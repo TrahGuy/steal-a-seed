@@ -111,6 +111,19 @@ local PlantService = {
 	end,
 }
 
+-- The reward wheel's bought spins (2026-09-27). False stands for a profile that
+-- cannot take them now (WheelService refuses past MaxBoughtHeld).
+local grantWorks = true
+local WheelService = {
+	GrantBought = function(player, quantity)
+		record("GrantBought", player, quantity)
+		if grantWorks then
+			profile.WheelBought = (profile.WheelBought or 0) + quantity
+		end
+		return grantWorks
+	end,
+}
+
 -- The manifest as StoreService sees it: the real one, except that the Instant
 -- Hatch product carries a spec id instead of the live one.
 local LIVE_HATCH_ID = 990001
@@ -189,6 +202,13 @@ local ok, err = pcall(function()
 		PlotService = PlotService,
 		PlayerDataService = PlayerDataService,
 		CarryService = CarryService,
+		-- The Bonus Chest's training boost (2026-09-27), neutral here: this spec
+		-- checks the store's payouts, not a boost.
+		BonusChestService = {
+			Multiplier = function()
+				return 1
+			end,
+		},
 	})
 	-- Watch the faucet being used, without replacing what it does.
 	local realPayReward = TreadmillService.PayReward
@@ -201,6 +221,7 @@ local ok, err = pcall(function()
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
 		PlantService = PlantService,
+		WheelService = WheelService,
 	}, { GameConfig = liveConfig })
 	StoreService.Init()
 	StoreService.Start()
@@ -398,6 +419,82 @@ if ok and receiptCallback then
 	local snapshot = StoreService.Snapshot()
 	check(string.find(snapshot, "instanthatch=" .. LIVE_HATCH_ID, 1, true) ~= nil,
 		"the debug snapshot lists it with the world products", snapshot)
+
+	--==========================================================================
+	-- 5. THE REWARD WHEEL'S SPIN PACK (2026-09-27): OFF UNTIL THE OWNER SETS IT UP
+	--
+	-- As shipped, WheelData.Product is disabled with no id and no pack size, so
+	-- no receipt can ever name it. A second copy of StoreService then sees a
+	-- WheelData whose product is filled in and switched on -- a spec id, never a
+	-- real one -- to prove the path the owner will turn on: the spins land
+	-- through WheelService.GrantBought, once per receipt, recoverably.
+	--==========================================================================
+	say("\n-- the wheel's spin pack --")
+	local WheelData = require(Shared:WaitForChild("WheelData"))
+	local product = WheelData.Product
+	check(product.Enabled == false and product.ProductId == 0 and product.Quantity == 0,
+		"as shipped the spin pack is disabled, with no product id and no pack size")
+	check(string.find(snapshot, "wheelspins=OFF", 1, true) ~= nil, "and the snapshot says it is off", snapshot)
+	local SPEC_SPINS = 990002
+	table.clear(trace)
+	local stray = receiptCallback({ PlayerId = buyer.UserId, ProductId = SPEC_SPINS,
+		PurchaseId = "spec-spins-off", CurrencySpent = 1 })
+	check(stray == RETRY and indexOf("GrantBought") == nil,
+		"so a receipt naming an id it was never given grants no spins", tostring(stray))
+
+	local wheelOn = setmetatable({ Product = { Enabled = true, ProductId = SPEC_SPINS, Quantity = 3 } },
+		{ __index = WheelData })
+	local onOk, OnStore = pcall(loadWith, Server.StoreService, {
+		PlayerDataService = PlayerDataService,
+		CarryService = CarryService,
+		TreadmillService = TreadmillService,
+		PlantService = PlantService,
+		WheelService = WheelService,
+	}, { GameConfig = liveConfig, WheelData = wheelOn })
+	check(onOk, "a copy that sees a configured, enabled pack loads", if onOk then nil else OnStore)
+	if onOk then
+		OnStore.Init()
+		OnStore.Start()
+		local pack = { product = SPEC_SPINS, robux = 1 }
+		local function grants()
+			local n = 0
+			for _, t in ipairs(trace) do
+				if t.name == "GrantBought" then
+					n += 1
+				end
+			end
+			return n
+		end
+		local base = profile.WheelBought or 0
+		table.clear(trace)
+		local first = buy(pack, "spec-spins-1")
+		local g, s = indexOf("GrantBought"), indexOf("Save")
+		check(first == GRANTED and g ~= nil and s ~= nil and g < s and trace[g].args[2] == 3
+			and profile.WheelBought == base + 3,
+			"a spin-pack receipt grants its pack size through WheelService.GrantBought, then saves", tostring(first))
+		table.clear(trace)
+		local repeated = buy(pack, "spec-spins-1")
+		check(repeated == GRANTED and grants() == 0 and profile.WheelBought == base + 3,
+			"the same receipt again is acknowledged and grants nothing more", tostring(repeated))
+		table.clear(trace)
+		grantWorks = false
+		local refused = buy(pack, "spec-spins-2")
+		grantWorks = true
+		local retried = buy(pack, "spec-spins-2")
+		check(refused == RETRY and retried == GRANTED and grants() == 2 and profile.WheelBought == base + 6,
+			"spins the profile cannot take now: not acknowledged, and the retry delivers them",
+			string.format("%s then %s", tostring(refused), tostring(retried)))
+		table.clear(trace)
+		saveWorks = false
+		local unsaved = buy(pack, "spec-spins-3")
+		saveWorks = true
+		local saved = buy(pack, "spec-spins-3")
+		check(unsaved == RETRY and saved == GRANTED and grants() == 1 and profile.WheelBought == base + 9,
+			"granted but not saved: retried until it saves, and never granted twice",
+			string.format("%s then %s, %d grant(s)", tostring(unsaved), tostring(saved), grants()))
+		check(string.find(OnStore.Snapshot(), "wheelspins=" .. SPEC_SPINS .. " x3", 1, true) ~= nil,
+			"and its snapshot names the pack", OnStore.Snapshot())
+	end
 end
 
 say(string.format("\nStoreSpec: %d passed, %d failed", pass, fail))

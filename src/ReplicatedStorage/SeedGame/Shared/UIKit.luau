@@ -405,6 +405,12 @@ function UIKit.lattice(parent: GuiObject, options: LatticeOptions?): Frame
 	-- the tween to settle costs one rebuild instead of ten, and the panel is
 	-- still faded out for most of it.
 	--==========================================================================
+	-- The chords are Offsets, so the surface is measured in its gui's own units:
+	-- on a TV (UIKit.tenFoot) AbsoluteSize is that many times bigger. 1 elsewhere.
+	local function surface(): Vector2
+		return parent.AbsoluteSize / HudLayout.scaleOf(parent)
+	end
+
 	local pending = false
 	local function request()
 		if pending then
@@ -413,7 +419,7 @@ function UIKit.lattice(parent: GuiObject, options: LatticeOptions?): Frame
 		pending = true
 		task.delay(0.12, function()
 			pending = false
-			local size = parent.AbsoluteSize
+			local size = surface()
 			if math.abs(size.X - builtFor.X) < 2 and math.abs(size.Y - builtFor.Y) < 2 then
 				return
 			end
@@ -425,7 +431,7 @@ function UIKit.lattice(parent: GuiObject, options: LatticeOptions?): Frame
 	-- A fixed-size button already knows its pixels; a panel inside a layout does
 	-- not, and waits for the signal.
 	if parent.AbsoluteSize.X > 0 and parent.AbsoluteSize.Y > 0 then
-		build(parent.AbsoluteSize)
+		build(surface())
 	end
 
 	return holder
@@ -607,16 +613,22 @@ end
 --==============================================================================
 export type RailOptions = {
 	name: string,
-	icon: string,
+	-- Slab and bare buttons. An art button's picture carries its own.
+	icon: string?,
 	-- Slab buttons only. A bare button has no plate to paint.
 	face: Color3?,
 	shade: Color3?,
 	label: string?,
 	wide: boolean?,
 	-- `bare` drops the slab entirely: the artwork IS the button, no background
-	-- and no rounded square. Index and Shop are slabs; Garden and the Bag are
-	-- bare.
+	-- and no rounded square. Garden and the Bag are bare.
 	bare: boolean?,
+	-- `art` is a whole button in one square picture -- outline, face, icon and
+	-- word -- drawn square at any size with nothing of ours round it. Index and
+	-- Shop are art buttons (2026-09-24). `rim` turns the rainbow behind a
+	-- picture whose rim band was cut out for it: the Shop's.
+	art: string?,
+	rim: boolean?,
 }
 
 --==============================================================================
@@ -638,6 +650,226 @@ export type RailOptions = {
 --==============================================================================
 local RAIL_LAYER = "SeedRail"
 
+--==============================================================================
+-- ON A TV, OUR SCREENS ARE DRAWN BIGGER
+--
+-- HudLayout's TEN-FOOT PROFILE, applied: a gui that opts in with UIKit.tenFoot
+-- gets a UIScale named TenFoot when Roblox says the screen is a TV, at the
+-- magnification HudLayout.tenFootScale gives the window -- and nothing at all
+-- anywhere else, so a desktop's or a phone's instance tree is exactly what it
+-- was. HudLayout.measure sees the UIScale and answers that gui's owner in the
+-- gui's logical units.
+--
+-- Opted in: the rail layer (below), every UIKit.modal, and each HUD owner's
+-- own ScreenGui. Not: the RUN alarm (drawn in fractions of the screen already)
+-- and the world-anchored pops, which are not laid out on the screen.
+--==============================================================================
+local tenFootGuis: { [LayerCollector]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local tenFootWatch: RBXScriptConnection? = nil
+
+--==============================================================================
+-- THE PLAYER'S MENU SIZE (2026-09-26)
+--
+-- GameConfig.MenuSize, saved on the profile and stamped on the player as the
+-- MenuSize attribute; `pendingMenuSize` is Settings' own choice, shown at once
+-- while the server writes it down. Two ways it reaches a menu:
+--
+--   A MENU'S OWN GUI   (UIKit.menuGui) -- a ScreenGui that holds only a panel.
+--                      The size is folded into that gui's one UIScale with the
+--                      TV scale, so every existing "divide by the gui's scale"
+--                      read in the menu stays right with no change. HudLayout
+--                      only calls a gui a TV when the engine says it is one, so
+--                      the rail and the HUD are placed exactly as before.
+--   A PANEL IN A HUD GUI  (the Bag) -- scaled on its own panel, through
+--                      modal.setUserScale, sized by HudLayout.bag.
+--
+-- EITHER WAY IT FITS. menuScaleFor takes the smaller of the chosen size and
+-- what the usable screen allows the menu's minimum panel, so a larger choice on
+-- a short phone is as large as that phone allows and no panel leaves the glass.
+-- At the default size nothing is made at all.
+--==============================================================================
+local menuGuis: { [LayerCollector]: Vector2 } = setmetatable({}, { __mode = "k" }) :: any
+local pendingMenuSize: string? = nil
+local menuSizeListeners: { () -> () } = {}
+local menuSizeWatched = false
+
+-- The chosen option id: Settings' pending choice, else the saved attribute.
+function UIKit.menuSizeId(): string
+	local id: any = pendingMenuSize
+	if id == nil then
+		local player = Players.LocalPlayer
+		id = if player then player:GetAttribute(GameConfig.Attributes.MenuSize) else nil
+	end
+	return if GameConfig.menuSizeScale(id) ~= nil then id else GameConfig.MenuSize.Default
+end
+
+-- The chosen scale, before any screen has had its say.
+function UIKit.menuScale(): number
+	return GameConfig.menuSizeScale(UIKit.menuSizeId()) or 1
+end
+
+-- What `gui` may actually be drawn at: the chosen scale, no more than keeps its
+-- minimum panel inside 90% x 86% of the screen -- the same fractions UIKit.modal
+-- sizes panels by -- in the gui's own TV units (`k`). Never below 1.
+function UIKit.menuScaleFor(gui: LayerCollector, k: number): number
+	local need = menuGuis[gui]
+	local want = UIKit.menuScale()
+	if not need or want <= 1 then
+		return 1
+	end
+	local size = gui.AbsoluteSize
+	if size.X <= 0 or size.Y <= 0 then
+		return 1
+	end
+	local fitW = (size.X / k) * 0.9 / need.X
+	local fitH = (size.Y / k) * 0.86 / need.Y
+	return math.max(1, math.min(want, fitW, fitH))
+end
+
+local function applyTenFoot(gui: LayerCollector)
+	local camera = Workspace.CurrentCamera
+	local existing = gui:FindFirstChild(HudLayout.TenFootName)
+	local k = 1
+	if not (camera and HudLayout.isTenFoot()) then
+		-- Off a TV: no UIScale at all, unless this is a menu's own gui and the
+		-- player has chosen bigger menus.
+		k = 1
+	else
+		k = HudLayout.tenFootScale((camera :: Camera).ViewportSize)
+	end
+	local want = k * UIKit.menuScaleFor(gui, k)
+	if want == 1 then
+		if existing then
+			existing:Destroy()
+		end
+		return
+	end
+	local scale: UIScale
+	if existing and existing:IsA("UIScale") then
+		scale = existing
+	else
+		scale = Instance.new("UIScale")
+		scale.Name = HudLayout.TenFootName
+		scale.Parent = gui
+	end
+	scale.Scale = want
+end
+
+local function menuSizeChanged()
+	for gui in pairs(menuGuis) do
+		if gui.Parent then
+			applyTenFoot(gui)
+		end
+	end
+	for _, fn in ipairs(menuSizeListeners) do
+		task.spawn(fn)
+	end
+end
+
+local function watchMenuSize()
+	if menuSizeWatched then
+		return
+	end
+	local player = Players.LocalPlayer
+	if not player then
+		return
+	end
+	menuSizeWatched = true
+	player:GetAttributeChangedSignal(GameConfig.Attributes.MenuSize):Connect(function()
+		-- The server has written it down; its word replaces the pending one.
+		pendingMenuSize = nil
+		menuSizeChanged()
+	end)
+end
+
+-- Settings' choice, applied now; the caller sends it to the server to be saved.
+function UIKit.setMenuSize(id: string)
+	if GameConfig.menuSizeScale(id) == nil or UIKit.menuSizeId() == id then
+		return
+	end
+	pendingMenuSize = id
+	watchMenuSize()
+	menuSizeChanged()
+end
+
+-- For a panel that scales itself (the Bag): called whenever the size changes.
+function UIKit.onMenuSize(fn: () -> ())
+	watchMenuSize()
+	table.insert(menuSizeListeners, fn)
+end
+
+-- Marks `gui` as holding only a menu, whose minimum panel is `need` (the modal's
+-- own minimum unless a menu cannot scroll and needs more). Call after tenFoot.
+function UIKit.menuGui(gui: LayerCollector, need: Vector2?)
+	menuGuis[gui] = need or Vector2.new(248, 240)
+	watchMenuSize()
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		applyTenFoot(gui)
+	end)
+	applyTenFoot(gui)
+end
+
+-- Every opted-in gui again: on a new window size, and for a harness that has
+-- just set HudLayout.tenFootOverride.
+function UIKit.refreshTenFoot()
+	for gui in pairs(tenFootGuis) do
+		if gui.Parent then
+			applyTenFoot(gui)
+		end
+	end
+end
+
+function UIKit.tenFoot(gui: LayerCollector)
+	tenFootGuis[gui] = true
+	applyTenFoot(gui)
+	if not tenFootWatch and HudLayout.isTenFoot() then
+		local camera = Workspace.CurrentCamera
+		if camera then
+			tenFootWatch = camera:GetPropertyChangedSignal("ViewportSize"):Connect(UIKit.refreshTenFoot)
+		end
+	end
+end
+
+-- What an AbsoluteSize / AbsolutePosition / TextBounds read inside `object`'s
+-- gui is divided by to become an Offset: its TenFoot scale, or 1.
+function UIKit.scaleOf(object: Instance?): number
+	return HudLayout.scaleOf(object)
+end
+
+--==============================================================================
+-- THE LEAST SCROLL THAT SHOWS A SPAN
+--
+-- One axis of a list that scrolls: a window `view` long whose near edge is at
+-- `canvas`, on a canvas `total` long, and a span [lo, hi] of it that has to be
+-- seen. Returns where the near edge goes -- where it already is when the span
+-- shows, else moved the least distance that shows it. Every number in one
+-- space: the gui's own units, which is what CanvasPosition is in.
+--
+-- A SPAN LONGER THAN THE WINDOW SHOWS ITS FAR END. The Garden asks this for a
+-- whole card, whose one control -- PICK UP -- is the card's bottom strip, and
+-- on a landscape phone a card can be taller than the list. Showing the top
+-- would scroll the button the reveal was for back out of reach.
+--==============================================================================
+function UIKit.scrollToShow(canvas: number, view: number, lo: number, hi: number,
+	total: number): number
+	local want = canvas
+	if lo < want then
+		want = lo
+	end
+	if hi > want + view then
+		want = hi - view
+	end
+	return math.clamp(want, 0, math.max(0, total - view))
+end
+
+-- Whether [lo, hi] lies wholly inside the window, to within `slack` (1 unit
+-- unless given: a canvas lands on fractions).
+function UIKit.spanShown(canvas: number, view: number, lo: number, hi: number,
+	slack: number?): boolean
+	local s = slack or 1
+	return lo >= canvas - s and hi <= canvas + view + s
+end
+
 function UIKit.railLayer(playerGui: Instance): ScreenGui
 	local existing = playerGui:FindFirstChild(RAIL_LAYER)
 	if existing and existing:IsA("ScreenGui") then
@@ -649,6 +881,7 @@ function UIKit.railLayer(playerGui: Instance): ScreenGui
 	-- Above every panel dimmer, below SeedAlert's RUN vignette at 50 -- an alarm
 	-- outranks a menu.
 	layer.DisplayOrder = 40
+	UIKit.tenFoot(layer)
 	layer.Parent = playerGui
 	return layer
 end
@@ -1008,6 +1241,135 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 	return { reset = reset, destroy = destroy }
 end
 
+--==============================================================================
+-- THE SHOP'S RAINBOW RIM
+--
+-- The owner's reference clip: a narrow band of rainbow inside the thick black
+-- outline, red, yellow, green, cyan, blue and purple ACROSS the button at once,
+-- and the whole spread turning -- measured at one turn every 4 s. Each point on
+-- the band swings red -> purple -> red and the two sides move in opposite
+-- phase, which is exactly a rainbow UIGradient being rotated.
+--
+-- NOT A SECOND FRAME ON TOP. The Shop's picture was re-exported with its static
+-- rim band CUT OUT (art/ui/rail-buttons/shop-base.svg), so this is a plain
+-- rounded frame BEHIND the picture: the black outline and the face cover it
+-- everywhere but the band, and the cart and the word, which cross the band, sit
+-- on top of it exactly as they sat on the old rim. Nothing flashes and nothing
+-- else moves; no glow, no halo -- the colours are bright enough on the black.
+--
+-- ONE NUMBER A FRAME, AND ONLY WHILE IT CAN BE SEEN. The spin writes Rotation
+-- off the clock on one RenderStepped connection -- nothing allocated -- made
+-- while the button is on screen (its gui enabled, every frame up the chain
+-- visible, not slid off the edge, which is how the phone's dock shuts) and
+-- dropped the moment it is not. `SeedAfterimageQuality = "Off"` holds it still,
+-- colours and all, as it does the hover pop. Destroying the box (a re-run's
+-- railButton destroys the old button) drops every connection, so a re-run never
+-- leaves a second loop behind.
+--==============================================================================
+function UIKit.rainbowRim(box: GuiObject): Frame
+	local RIM = RAIL.Rim
+	local rim = Instance.new("Frame")
+	rim.Name = "Rim"
+	rim.Position = UDim2.fromScale(RIM.X / RIM.Art, RIM.Y / RIM.Art)
+	rim.Size = UDim2.fromScale(RIM.W / RIM.Art, RIM.H / RIM.Art)
+	rim.BackgroundColor3 = WHITE
+	rim.BorderSizePixel = 0
+	rim.Active = false
+	rim.ZIndex = 3
+	rim.Parent = box
+	-- A corner's scale is of the frame's shorter side.
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(RIM.Radius / math.min(RIM.W, RIM.H), 0)
+	corner.Parent = rim
+
+	local keys = {}
+	local count = #RIM.Colours
+	for i, colour in ipairs(RIM.Colours) do
+		table.insert(keys, ColorSequenceKeypoint.new((i - 1) / (count - 1), colour))
+	end
+	local gradient = Instance.new("UIGradient")
+	gradient.Color = ColorSequence.new(keys)
+	gradient.Parent = rim
+
+	local spin: RBXScriptConnection? = nil
+	local watch: { RBXScriptConnection } = {}
+	local player = Players.LocalPlayer
+
+	local function step()
+		gradient.Rotation = (os.clock() * RIM.Speed) % 360
+	end
+
+	local function onScreen(): boolean
+		local gui = box:FindFirstAncestorWhichIsA("LayerCollector")
+		if not (gui and gui.Enabled) then
+			return false
+		end
+		local node: Instance? = box
+		while node and node ~= gui do
+			if node:IsA("GuiObject") and not node.Visible then
+				return false
+			end
+			node = node.Parent
+		end
+		local at, size, screen = box.AbsolutePosition, box.AbsoluteSize, gui.AbsoluteSize
+		return size.X > 0 and at.X + size.X > 0 and at.Y + size.Y > 0
+			and at.X < screen.X and at.Y < screen.Y
+	end
+
+	local function refresh()
+		local run = onScreen() and not motionOff()
+		if run and not spin then
+			spin = RunService.RenderStepped:Connect(step)
+		elseif not run and spin then
+			spin:Disconnect()
+			spin = nil
+		end
+	end
+
+	-- Every frame up to the gui, rebuilt only when the button moves between the
+	-- rail and the phone's dock.
+	local function rewatch()
+		for _, connection in ipairs(watch) do
+			connection:Disconnect()
+		end
+		table.clear(watch)
+		local node: Instance? = box
+		while node do
+			if node:IsA("GuiObject") then
+				table.insert(watch, node:GetPropertyChangedSignal("Visible"):Connect(refresh))
+			elseif node:IsA("LayerCollector") then
+				table.insert(watch, node:GetPropertyChangedSignal("Enabled"):Connect(refresh))
+				break
+			end
+			node = node.Parent
+		end
+		refresh()
+	end
+
+	box:GetPropertyChangedSignal("AbsolutePosition"):Connect(refresh)
+	box:GetPropertyChangedSignal("AbsoluteSize"):Connect(refresh)
+	box.AncestryChanged:Connect(rewatch)
+	local setting = if player
+		then player:GetAttributeChangedSignal("SeedAfterimageQuality"):Connect(refresh)
+		else nil
+	box.Destroying:Connect(function()
+		if spin then
+			spin:Disconnect()
+			spin = nil
+		end
+		for _, connection in ipairs(watch) do
+			connection:Disconnect()
+		end
+		table.clear(watch)
+		if setting then
+			setting:Disconnect()
+		end
+	end)
+	step()
+	rewatch()
+	return rim
+end
+
 function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButton
 	local wide = options.wide ~= false
 	local size = if wide then RAIL.WideSize else RAIL.SquareSize
@@ -1020,26 +1382,31 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	end
 
 	--==========================================================================
-	-- TWO KINDS OF BUTTON, ONE BUILDER
+	-- THREE KINDS OF BUTTON, ONE BUILDER
 	--
 	-- A SLAB is the original: a coloured face, a gradient, a lattice, a rounded
 	-- corner and a black outline, with the icon riding on it and a word beside
-	-- it. Index and Shop are these.
+	-- it.
 	--
 	-- A BARE button has none of that. The artwork is the button -- no background,
 	-- not inside a square -- so it is a transparent ImageButton and the icon
 	-- fills the whole footprint. Garden and the Bag are these.
 	--
-	-- SAME FOOTPRINT EITHER WAY. 130x50 and 50x50 as they have always been, so
-	-- all four sit where they were and a bare button's touch target is no smaller
-	-- than the plate it replaced. An icon is already easier to miss than a slab;
-	-- shrinking the target with it would be two regressions for one change.
+	-- An ART button is bare too, but its picture is a WHOLE button -- outline,
+	-- face, icon and word in one square image -- so nothing of ours is drawn with
+	-- it: no icon, no label, no plate. Index and Shop are these (2026-09-24).
+	--
+	-- SAME FOOTPRINT EVERY WAY. 130x50 and 50x50 as they have always been, so
+	-- the buttons sit where they were and a bare button's touch target is no
+	-- smaller than the plate it replaced. An icon is already easier to miss than
+	-- a slab; shrinking the target with it would be two regressions for one
+	-- change.
 	--
 	-- UIKit.slab carries its own UIKit.clicks, so only the bare branch has to ask
 	-- for the click cue.
 	--==========================================================================
 	local button: ImageButton
-	if options.bare then
+	if options.bare or options.art then
 		button = Instance.new("ImageButton")
 		button.Size = UDim2.fromOffset(size.X, size.Y)
 		button.BackgroundTransparency = 1
@@ -1059,8 +1426,53 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 	end
 	button.Name = options.name
 
+	if options.art then
+		--======================================================================
+		-- THE PICTURE, IN A SQUARE THAT STAYS SQUARE
+		--
+		-- The layout hands this button a 50 x 50 square nearly everywhere, but a
+		-- short phone's dock gives its tiles 44 of height. The box is the largest
+		-- square that fits, centred, so the artwork is never stretched; the rim,
+		-- when there is one, is placed in the same box so it always meets the
+		-- picture's band exactly. Neither takes input: the button does.
+		--======================================================================
+		local box = Instance.new("Frame")
+		box.Name = "ArtBox"
+		box.AnchorPoint = Vector2.new(0.5, 0.5)
+		box.Position = UDim2.fromScale(0.5, 0.5)
+		box.Size = UDim2.fromScale(1, 1)
+		box.BackgroundTransparency = 1
+		box.BorderSizePixel = 0
+		box.Active = false
+		box.ZIndex = 2
+		box.Parent = button
+		local square = Instance.new("UIAspectRatioConstraint")
+		square.AspectRatio = 1
+		square.Parent = box
+
+		local art = Instance.new("ImageLabel")
+		art.Name = "Art"
+		art.Size = UDim2.fromScale(1, 1)
+		art.BackgroundTransparency = 1
+		art.BorderSizePixel = 0
+		art.Image = options.art
+		art.ScaleType = Enum.ScaleType.Fit
+		art.Active = false
+		art.ZIndex = 4
+		art.Parent = box
+
+		if options.rim then
+			UIKit.rainbowRim(box)
+		end
+
+		hoverPop(button)
+		return button
+	end
+
 	local iconSize = if options.bare then RAIL.IconBare else RAIL.IconSize
-	UIKit.railIcon(button, options.icon, iconSize)
+	if options.icon then
+		UIKit.railIcon(button, options.icon, iconSize)
+	end
 
 	if options.label then
 		--======================================================================
@@ -1120,7 +1532,8 @@ function UIKit.railShape(button: GuiObject, size: Vector2, iconSize: number?, ti
 	button.Size = UDim2.fromOffset(size.X, size.Y)
 	local plate = button:FindFirstChild("Tile")
 	local word = button:FindFirstChild("TileLabel")
-	if tile then
+	-- An art button's picture is its own tile: never a plate or a word over it.
+	if tile and not button:FindFirstChild("ArtBox") then
 		local DOCK = HudLayout.Config.Dock
 		if not (plate and plate:IsA("Frame")) then
 			local made = Instance.new("Frame")
@@ -2475,7 +2888,9 @@ function UIKit.plantCard(parent: Instance, options: PlantCardOptions): PlantCard
 	local subPillEdge = UIKit.stroke(subPill, WHITE, 1, 0.82)
 
 	local function fitSubPill()
-		subPill.Size = UDim2.fromOffset(math.ceil(sub.TextBounds.X) + 16, 17)
+		-- TextBounds is drawn pixels; the Offset is in the gui's own units, which
+		-- a TV or a larger menu size makes scaleOf times smaller.
+		subPill.Size = UDim2.fromOffset(math.ceil(sub.TextBounds.X / UIKit.scaleOf(sub)) + 16, 17)
 	end
 	sub:GetPropertyChangedSignal("TextBounds"):Connect(fitSubPill)
 
@@ -3108,12 +3523,21 @@ export type Modal = {
 	-- sized for twelve garden rows is two thirds empty, and empty is what a
 	-- broken panel looks like.
 	fitContent: (number) -> (),
+	-- The player's menu size on THIS panel, for one that cannot take it on its
+	-- gui (see UIKit.menuGui). The caller keeps the footprint.
+	setUserScale: (number) -> (),
+	-- What the panel is drawn at on its own: 1 unless setUserScale said more.
+	userScale: () -> number,
+	-- For a panel sharing its gui with HUD: take the menu size on the panel.
+	followMenuSize: () -> (),
 }
 
 local DIM = 0.45
 local FADE = 0.16
 
 function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
+	-- Every centre panel is drawn bigger on a TV (see UIKit.tenFoot).
+	UIKit.tenFoot(gui)
 	local outline = RAIL.OutlineThickness
 	local theme: ModalTheme = options.theme or {}
 	local fill = theme.fill or PANEL.Fill
@@ -3132,6 +3556,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	dimmer.Text = ""
 	dimmer.Visible = false
 	dimmer.ZIndex = 1
+	-- Tapping it closes the panel; selecting it with a controller would put a
+	-- selection frame round the whole screen. B closes the panel instead.
+	dimmer.Selectable = false
 	dimmer.Parent = gui
 
 	local group = Instance.new("CanvasGroup")
@@ -3153,6 +3580,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	local scale = Instance.new("UIScale")
 	scale.Scale = 1
 	scale.Parent = group
+	-- The player's menu size when it is carried on this panel rather than on its
+	-- gui (setUserScale, below). Declared here: the header's padding reads it.
+	local userScale = 1
 
 	local shell = Instance.new("Frame")
 	shell.Name = "Shell"
@@ -3320,7 +3750,14 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		if not camera then
 			return
 		end
-		local viewportX = camera.ViewportSize.X
+		-- In RAIL units: on a TV the rail is drawn `k` times larger (UIKit.tenFoot),
+		-- 1 everywhere else -- and never the menu size, which the rail does not
+		-- take. The title bar is read in those units below; the padding it needs
+		-- is handed back in the panel's own, which a larger menu size makes
+		-- `menu` times larger again.
+		local k = if HudLayout.isTenFoot() then HudLayout.tenFootScale(camera.ViewportSize) else 1
+		local menu = math.max(1, HudLayout.scaleOf(gui) / k) * userScale
+		local viewportX = camera.ViewportSize.X / k
 		-- The rail's own footprint, in the same gui space AbsolutePosition uses.
 		local railTop = RAIL.Inset
 		local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
@@ -3328,7 +3765,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		local railRightEdge = viewportX - RAIL.Inset - RAIL.SquareSize.X
 		if gui.AbsoluteSize.X > 0 then
 			local layout = HudLayout.solve(HudLayout.measure(gui))
-			if layout.compact then
+			-- A TV's rail stands inside the title-safe frame, so it is read off
+			-- the answer too.
+			if layout.compact or layout.frame ~= nil then
 				railTop = layout.railTop
 				railBottom = layout.railBottom
 				railLeftEdge = layout.railRight
@@ -3338,7 +3777,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 
 		-- UIPadding insets a frame's CHILDREN, never the frame, so these read
 		-- the same whatever this function last set.
-		local at, size = titleBar.AbsolutePosition, titleBar.AbsoluteSize
+		local at, size = titleBar.AbsolutePosition / k, titleBar.AbsoluteSize / k
 		local left, right = at.X, at.X + size.X
 		local top, bottom = at.Y, at.Y + size.Y
 
@@ -3347,8 +3786,8 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 			padLeft = math.max(0, (railLeftEdge + HEADER_GAP) - left)
 			padRight = math.max(0, right - (railRightEdge - HEADER_GAP))
 		end
-		headerPad.PaddingLeft = UDim.new(0, math.floor(padLeft))
-		headerPad.PaddingRight = UDim.new(0, math.floor(padRight))
+		headerPad.PaddingLeft = UDim.new(0, math.floor(padLeft / menu))
+		headerPad.PaddingRight = UDim.new(0, math.floor(padRight / menu))
 	end
 
 	-- The panel moves for three reasons -- opening, the viewport changing, and
@@ -3399,6 +3838,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	blocker.AutoButtonColor = false
 	blocker.Text = ""
 	blocker.ZIndex = 2
+	-- A button only so it can swallow a stray tap; never somewhere a controller's
+	-- selection should land (an invisible frame the size of the panel).
+	blocker.Selectable = false
 	blocker.Parent = shell
 
 	--==========================================================================
@@ -3524,6 +3966,31 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 
 	local open = false
 
+	--==========================================================================
+	-- A PANEL THAT TAKES THE MENU SIZE ITSELF
+	--
+	-- The Bag lives in the hotbar's gui, so the size cannot go on the gui: it
+	-- goes on this panel's own UIScale, the one the open and close pop through,
+	-- and the caller sizes the panel `userScale` times smaller so it keeps its
+	-- footprint (HudLayout.bag). 1 for every other panel, which is exactly the
+	-- pop they always had.
+	--==========================================================================
+	local scaleTween: Tween? = nil
+	local function setUserScale(s: number)
+		if s ~= s or s <= 0 or s == userScale then
+			return
+		end
+		userScale = s
+		if open then
+			if scaleTween then
+				scaleTween:Cancel()
+				scaleTween = nil
+			end
+			scale.Scale = s
+		end
+		layoutHeader()
+	end
+
 	local function setOpen(want: boolean)
 		if open == want then
 			return
@@ -3538,18 +4005,20 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 			dimmer.Visible = true
 			dimmer.BackgroundTransparency = 1
 			group.GroupTransparency = 1
-			scale.Scale = 0.92
+			scale.Scale = 0.92 * userScale
 			TweenService:Create(dimmer, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
 				Enum.EasingDirection.Out), { BackgroundTransparency = DIM }):Play()
 			TweenService:Create(group, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
 				Enum.EasingDirection.Out), { GroupTransparency = 0 }):Play()
-			TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Back,
-				Enum.EasingDirection.Out), { Scale = 1 }):Play()
+			scaleTween = TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Back,
+				Enum.EasingDirection.Out), { Scale = userScale })
+			scaleTween:Play()
 		else
 			TweenService:Create(dimmer, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
 				Enum.EasingDirection.In), { BackgroundTransparency = 1 }):Play()
-			TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
-				Enum.EasingDirection.In), { Scale = 0.92 }):Play()
+			scaleTween = TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
+				Enum.EasingDirection.In), { Scale = 0.92 * userScale })
+			scaleTween:Play()
 			local fade = TweenService:Create(group, TweenInfo.new(FADE,
 				Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 				{ GroupTransparency = 1 })
@@ -3563,14 +4032,19 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		end
 	end
 
+	local lastContent: number? = nil
 	local function fitContent(contentHeight: number)
-		local screen = gui.AbsoluteSize.Y
+		lastContent = contentHeight
+		-- The gui's own units, which on a TV are its pixels / its TenFoot scale.
+		local screen = gui.AbsoluteSize.Y / HudLayout.scaleOf(gui)
 		if screen <= 0 then
 			return
 		end
 		-- Never taller than the screen allows, never taller than the cap, never
-		-- shorter than a title bar and a row.
-		local ceiling = math.min(limit.MaxSize.Y, math.floor(screen * 0.86))
+		-- shorter than a title bar and a row. A panel drawn at a menu size of its
+		-- own (followMenuSize) is sized that many times smaller, so it is still
+		-- no taller than the screen allows once it is drawn.
+		local ceiling = math.min(limit.MaxSize.Y, math.floor(screen * 0.86 / userScale))
 		--======================================================================
 		-- THE FLOOR GIVES WAY, IT DOES NOT WIN
 		--
@@ -3588,7 +4062,43 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		-- ceiling rather than the call blowing up and abandoning the layout.
 		--======================================================================
 		local want = math.clamp(contentHeight + 82, math.min(240, ceiling), ceiling)
-		group.Size = UDim2.new(0.9, 0, 0, want)
+		group.Size = UDim2.new(0.9 / userScale, 0, 0, want)
+	end
+
+	--==========================================================================
+	-- A PANEL IN A GUI IT SHARES FOLLOWS THE MENU SIZE ON ITSELF
+	--
+	-- Sell and the offline card share their guis with pieces of HUD -- the sale
+	-- notice, the coins that fly to the cash -- so the size goes on the panel:
+	-- the largest of the chosen size that keeps its minimum inside 90% x 86% of
+	-- the screen, with its fractional size divided by it so it stays inside the
+	-- glass once drawn. Re-applied when the size or the screen changes.
+	--==========================================================================
+	local following = false
+	local function applyFollow()
+		local k = HudLayout.scaleOf(gui)
+		local size = gui.AbsoluteSize
+		if size.X <= 0 or size.Y <= 0 then
+			return
+		end
+		local s = math.max(1, math.min(UIKit.menuScale(),
+			(size.X / k) * 0.9 / limit.MinSize.X, (size.Y / k) * 0.86 / limit.MinSize.Y))
+		setUserScale(s)
+		local content = lastContent
+		if content then
+			fitContent(content)
+		else
+			group.Size = UDim2.fromScale(0.9 / s, 0.82 / s)
+		end
+	end
+	local function followMenuSize()
+		if following then
+			return
+		end
+		following = true
+		UIKit.onMenuSize(applyFollow)
+		gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(applyFollow)
+		applyFollow()
 	end
 
 	return {
@@ -3600,6 +4110,11 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		close = close,
 		setOpen = setOpen,
 		fitContent = fitContent,
+		setUserScale = setUserScale,
+		userScale = function(): number
+			return userScale
+		end,
+		followMenuSize = followMenuSize,
 	}
 end
 
@@ -3633,6 +4148,86 @@ function UIKit.badge(parent: GuiObject, colour: Color3): (Frame, TextLabel)
 	count.ZIndex = 7
 
 	return badge, count
+end
+
+--==============================================================================
+-- THE CYCLE BUTTON: ONE PRESS, THE NEXT CHOICE (2026-09-26)
+--
+-- The Garden's and the Bag's SORT and Settings' MENU SIZE, drawn once here so
+-- they cannot drift apart.
+--
+-- A CYCLE, NOT A DROPDOWN. Both panels are CanvasGroups, and a list dropped past
+-- a CanvasGroup's edge is clipped by it; a cycle is also the one control a
+-- mouse, a thumb and a pad all press the same way. It reads as a button in the
+-- panel's own language -- the Bag tabs' gradient, keyline and shade bar -- with
+-- its caption (SORT, MENU SIZE) over the choice it is showing, so it says what
+-- it is AND where it is. Plain words throughout: no arrow glyphs, which these
+-- fonts may draw as boxes. The caller sizes and places it and says what each
+-- press does.
+--==============================================================================
+export type CycleButton = {
+	button: TextButton,
+	set: (label: string) -> (),
+}
+
+function UIKit.cycleButton(parent: Instance, captionText: string, zIndex: number?): CycleButton
+	local z = zIndex or 5
+	local b = Instance.new("TextButton")
+	b.Name = string.gsub(captionText, "%s", "")
+	b.BorderSizePixel = 0
+	b.AutoButtonColor = false
+	b.Text = ""
+	b.ZIndex = z
+	UIKit.clicks(b)
+	b.Parent = parent
+	UIKit.corner(b, 9)
+	UIKit.stroke(b, BLACK, 2)
+	UIKit.gradient(b, PANEL.Fill, PANEL.Shade)
+
+	local shade = Instance.new("Frame")
+	shade.Name = "Shade"
+	shade.AnchorPoint = Vector2.new(0.5, 1)
+	shade.Position = UDim2.new(0.5, 0, 1, 0)
+	shade.Size = UDim2.new(1, 0, 0, 4)
+	shade.BackgroundColor3 = Color3.fromRGB(26, 17, 13)
+	shade.BorderSizePixel = 0
+	shade.Active = false
+	shade.ZIndex = z
+	shade.Parent = b
+	UIKit.corner(shade, 9)
+
+	local caption = Instance.new("TextLabel")
+	caption.Name = "Caption"
+	caption.BackgroundTransparency = 1
+	caption.Position = UDim2.fromOffset(0, 3)
+	caption.Size = UDim2.new(1, 0, 0, 11)
+	caption.Font = Enum.Font.FredokaOne
+	caption.TextSize = 10
+	caption.TextColor3 = Color3.fromRGB(198, 176, 152)
+	caption.Text = captionText
+	caption.ZIndex = z + 1
+	caption.Parent = b
+
+	local value = UIKit.outlined(b, "Value", 14, Color3.fromRGB(242, 238, 206), 1.5)
+	value.Position = UDim2.new(0, 5, 0, 13)
+	value.Size = UDim2.new(1, -10, 1, -18)
+	value.TextScaled = true
+	value.ZIndex = z + 1
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 14
+	fit.MinTextSize = 8
+	fit.Parent = value
+
+	local pop = Instance.new("UIScale")
+	pop.Parent = b
+	UIKit.cardPop(b, pop, { hoverScale = 1.04, pressScale = 0.96, sound = false })
+
+	return {
+		button = b,
+		set = function(label: string)
+			value.Text = label
+		end,
+	}
 end
 
 return UIKit

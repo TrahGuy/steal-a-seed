@@ -49,6 +49,7 @@ local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local MillModel = require(Shared:WaitForChild("MillModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local BonusChestService = require(script.Parent:WaitForChild("BonusChestService"))
 
 local MILL = GameConfig.Treadmill
 local LADDER = GameConfig.Mill
@@ -170,11 +171,18 @@ local function consumeRush(player: Player, dt: number, now: number): number
 		charge -= spend
 		local before = r
 		r = math.min(TRAIN.RampSeconds, r + spend)
-		multiplier = GameConfig.trainingRushMultiplier((before + r) * 0.5)
+		-- Boosted for `spend` of this tick's `dt` only: the tick the charge
+		-- runs out in pays the rest of itself at 1x. It used to pay all of it
+		-- boosted, so the last tick of every charge over-paid.
+		multiplier = GameConfig.trainingRushBlend(
+			GameConfig.trainingRushMultiplier((before + r) * 0.5), spend, dt)
 	else
-		-- Spent. The mill keeps paying its base rate, and the climb unwinds
-		-- rather than snapping off, so the fall-off is something the player
-		-- watches happen instead of something that has already happened.
+		-- Spent. The mill pays its base rate from this tick on: the payout drops
+		-- straight back to 1x, which is the 80-then-20 a level-1 player sees at
+		-- the end of a charge. (This comment used to say the fall-off was
+		-- gradual. It never was.) What unwinds gradually is the RAMP, so a
+		-- charge restored soon after resumes partway up the climb rather than
+		-- from the bottom.
 		r = math.max(0, r - dt * TRAIN.RampDecayPerSecond)
 	end
 	ramp[player] = r
@@ -278,6 +286,9 @@ local mountConns: { [Player]: { RBXScriptConnection } } = {}
 local mountBlocked: { [Player]: boolean } = {}
 local running = false
 local serviceConnections: { RBXScriptConnection } = {}
+-- PlotService.OnReleased hands back an unsubscribe function, not a connection,
+-- so it is kept apart from the connections Init disconnects.
+local releaseHook: (() -> ())? = nil
 
 local function log(message: string)
 	print("[Seed/TreadmillService] " .. message)
@@ -601,13 +612,18 @@ local function payEveryone()
 					--==========================================================
 					-- THE RATE IS A PRODUCT, AND THE RUSH IS ITS LAST TERM
 					--
-					--     tier x Multiplier^overclock x rebirth x rush
+					--     tier x Multiplier^overclock x rebirth x rush x chest
 					--
 					-- Charge is spent for `dt` whether or not the payout lands,
 					-- because the time was spent standing on the belt either way.
+					--
+					-- The chest is the Bonus Chest's training reward (2026-09-27),
+					-- 1 unless one is running. HERE because this is the only line
+					-- that mints Speed from the belt: purchases, admin grants and
+					-- WalkSpeed never pass it.
 					--==========================================================
 					local rush = consumeRush(player, dt, now)
-					local paid = rate * rush * dt
+					local paid = rate * rush * BonusChestService.Multiplier(player, "training") * dt
 					if PlayerDataService.AddSpeed(player, paid) then
 						granted[player] = (granted[player] or 0) + paid
 						-- CarryService owns WalkSpeed. Ask, do not write.
@@ -731,6 +747,38 @@ local function ownerOfPlotId(plotId: number): Player?
 	return nil
 end
 
+--==============================================================================
+-- CAN THE OWNER PAY FOR THE NEXT STEP, AND WHAT WAS THE BOARD LAST PAINTED AS
+--
+-- Green at cash >= the step's price -- the exact opposite of Upgrade's
+-- `Cash < cost` refusal, on the raw (fractional) balance. The key is everything
+-- the Buy plate's colour depends on, so the watcher below repaints a board only
+-- when one of those has actually changed.
+--==============================================================================
+local millSignKey: { [number]: string } = {}
+-- Bumped by Init and by each Start; the board watcher runs only while it holds
+-- the newest value.
+local millWatch = 0
+
+local function millStateOf(plotId: number, tier: number): (string, boolean)
+	local player = ownerOfPlotId(plotId)
+	local step = if player then TreadmillService.NextStepFor(player) else nil
+	local next_ = LADDER.Tiers[tier + 1]
+	local cost: number? = if step and step.cost then step.cost
+		elseif next_ then next_.cost
+		else nil
+	local sellable = if step then step.kind ~= "max" else next_ ~= nil
+	local profile = if player then PlayerDataService.Get(player) else nil
+	local affordable = sellable and profile ~= nil and cost ~= nil
+		and (tonumber(profile.Cash) or 0) >= (cost :: number)
+	local key = string.format("%s|%d|%s|%s|%s",
+		if player then tostring(player.UserId) else "-", tier,
+		if step then step.kind else "-",
+		if step and step.level then tostring(step.level) else "-",
+		tostring(affordable))
+	return key, affordable
+end
+
 local function refreshSign(plotId: number, tier: number)
 	local sign = signFor(plotId)
 	if not sign then
@@ -798,14 +846,23 @@ local function refreshSign(plotId: number, tier: number)
 			else string.format("LEVEL %d", tier)
 	end
 
+	--==========================================================================
+	-- "BASE", BECAUSE BOTH NUMBERS ARE BASE RATES
+	--
+	-- The line is "what you have > what the upgrade gives", both before the
+	-- training rush. Unlabelled, "20/s > 100/s" was read as "this mill pays
+	-- 100" by a level-1 player who was watching +20, then +80 a second pop off
+	-- their head -- the base, then the base at the rush's x4 (reported
+	-- 2026-09-26). The pop now names the rush; this names the base.
+	--==========================================================================
 	local rateText: string
 	if stepInfo and stepInfo.kind == "overclock" then
 		local after = GameConfig.trainingRateFor(tier, (stepInfo.level :: number),
 			if player then PlayerDataService.Get(player) else nil)
-		rateText = string.format("%s/s  >  %s/s",
+		rateText = string.format("BASE %s/s  >  %s/s",
 			GameConfig.compact(liveRate), GameConfig.compact(after))
 	elseif next_ then
-		rateText = string.format("%s/s  >  %s/s",
+		rateText = string.format("BASE %s/s  >  %s/s",
 			GameConfig.compact(liveRate), GameConfig.compact(next_.speed))
 	else
 		rateText = string.format("%s  ·  %s/s",
@@ -822,9 +879,18 @@ local function refreshSign(plotId: number, tier: number)
 	end
 
 	local sellable = if stepInfo then stepInfo.kind ~= "max" else next_ ~= nil
-	local buyColour = if sellable
-		then Color3.fromRGB(214, 78, 66)
-		else Color3.fromRGB(96, 100, 108)
+	--==========================================================================
+	-- GREEN WHEN THE OWNER CAN PAY FOR IT
+	--
+	-- The same answer the plot board gives, for the same reason: red on every
+	-- step for sale read as "can't afford" to a player who could. The watcher
+	-- in Start repaints the board as the owner's cash moves.
+	--==========================================================================
+	local key, affordable = millStateOf(plotId, tier)
+	millSignKey[plotId] = key
+	local buyColour = if not sellable then Color3.fromRGB(96, 100, 108)
+		elseif affordable then Color3.fromRGB(72, 170, 66)
+		else Color3.fromRGB(214, 78, 66)
 
 	for _, face in ipairs(faces) do
 		local step = face:FindFirstChild("Step") :: TextLabel?
@@ -960,10 +1026,10 @@ function TreadmillService.Upgrade(player: Player): boolean
 	-- ONE INTERACTION, TWO LADDERS
 	--
 	-- The prompt on the sign does not change and neither does the verb. Past
-	-- tier seven the same hold buys an OVERCLOCK instead, because a second
-	-- control for "make my mill better" is a second thing to find, explain and
-	-- fail to notice -- and the player's question at the sign is the same
-	-- question either side of tier seven.
+	-- the top tier (ten, since the ladder was re-cut) the same hold buys an
+	-- OVERCLOCK instead, because a second control for "make my mill better" is
+	-- a second thing to find, explain and fail to notice -- and the player's
+	-- question at the sign is the same question either side of the top tier.
 	--
 	-- The tier branch below is unchanged. Everything above it is new.
 	--==========================================================================
@@ -1073,6 +1139,12 @@ end
 --==============================================================================
 function TreadmillService.Init()
 	running = false
+	millWatch += 1
+	table.clear(millSignKey)
+	if releaseHook then
+		releaseHook()
+		releaseHook = nil
+	end
 	for _, c in ipairs(serviceConnections) do
 		c:Disconnect()
 	end
@@ -1158,25 +1230,69 @@ function TreadmillService.Start()
 		-- answered "tier 1" -- so a player who owned a Heartroot rejoined to a
 		-- Compost Walk, and the sign offered to sell them level 2 again.
 		--
-		-- Same wait, same deadline and same reason as the one PlantService uses
-		-- before it restores a bed.
+		-- Same wait and same reason as the one PlantService uses before it
+		-- restores a bed: for as long as the player stays, because a save has
+		-- been measured at 38 s and a 20 s deadline left a returning tier-6
+		-- player on a starting mill for the whole session.
+		--
+		-- AND BY WHAT IS STANDING THERE, not only by what the owner is. The old
+		-- test rebuilt only for an owner above the starting tier, so a tier-1
+		-- owner kept whatever mill the plot already had -- including one a
+		-- previous owner left behind.
 		--======================================================================
 		task.spawn(function()
-			local deadline = os.clock() + 20
-			while not PlayerDataService.IsReady(player) and os.clock() < deadline do
+			local deadline = os.clock() + GameConfig.Plot.RestorePatienceSeconds
+			while player.Parent == Players and not PlayerDataService.IsReady(player)
+				and os.clock() < deadline do
 				task.wait(0.25)
 			end
 			if player.Parent ~= Players or PlotService.OwnerOf(plot) ~= player then
 				return
 			end
 			local tier = TreadmillService.TierOf(player)
-			if tier ~= LADDER.StartingTier then
+			local mill = millModelFor(plotId)
+			if tier ~= LADDER.StartingTier
+				or (mill ~= nil and mill:GetAttribute("MillTier") ~= LADDER.StartingTier) then
 				TreadmillService.Rebuild(plot, tier)
 			else
 				refreshSign(plotId, tier)
 			end
 		end)
 	end))
+
+	--==========================================================================
+	-- A RELEASED PLOT GETS THE STARTING MILL BACK
+	--
+	-- The mill and its sign stand in the plots folder, beside the plot rather
+	-- than in it, so PlotService's release -- which empties the plot and shrinks
+	-- it to level 1 -- never touched them. An owner who left with a tier-6 mill
+	-- left it standing on an "empty" plot beside a sign repainted to LEVEL 1,
+	-- the next tier-1 owner inherited it, and one who left mid-run left the belt
+	-- spinning. Reported 2026-09-26 as the base not resetting when its owner
+	-- left.
+	--
+	-- Inside the release and synchronous, so it cannot land on a plot somebody
+	-- else has been handed since; and safe to run twice -- a mill already at the
+	-- starting tier is only told to idle and repaint. The owner's own mill is in
+	-- their profile and comes back with them, on whichever plot they get.
+	--==========================================================================
+	releaseHook = PlotService.OnReleased(function(player, plot)
+		local plotId = plot:GetAttribute(ATTR.PlotId)
+		if type(plotId) ~= "number" then
+			return
+		end
+		TreadmillService.Unmount(player)
+		local mill = millModelFor(plotId)
+		if mill and mill:GetAttribute("MillTier") ~= LADDER.StartingTier then
+			TreadmillService.Rebuild(plot, LADDER.StartingTier)
+		else
+			local belt = beltFor(plotId)
+			if belt then
+				setBeltSpeed(belt, false, LADDER.StartingTier)
+			end
+			refreshSign(plotId, LADDER.StartingTier)
+		end
+	end)
 
 	--==========================================================================
 	-- THE SIGN IS THE PRIMARY WAY IN
@@ -1256,6 +1372,34 @@ function TreadmillService.Start()
 			local ok, err = pcall(payEveryone)
 			if not ok then
 				warn("[Seed/TreadmillService] pay tick failed: " .. tostring(err))
+			end
+		end
+	end)
+
+	--==========================================================================
+	-- A BOARD FOLLOWS ITS OWNER'S CASH
+	--
+	-- The mill's twin of PlotUpgradeService's watcher: income, a purchase or an
+	-- upgrade anywhere turns this board green or red within a quarter of a
+	-- second, repainting only a board whose owner, tier, step or affordability
+	-- changed. Its own generation, so a re-run never leaves two of these.
+	--==========================================================================
+	millWatch += 1
+	local watching = millWatch
+	task.spawn(function()
+		while millWatch == watching do
+			task.wait(0.25)
+			if millWatch ~= watching then
+				return
+			end
+			for _, sign in ipairs(CollectionService:GetTagged(GameConfig.Tags.MillSign)) do
+				local plotId = sign:GetAttribute(ATTR.PlotId)
+				if type(plotId) == "number" then
+					local tier = tierOnPlot(plotId)
+					if (millStateOf(plotId, tier)) ~= millSignKey[plotId] then
+						refreshSign(plotId, tier)
+					end
+				end
 			end
 		end
 	end)

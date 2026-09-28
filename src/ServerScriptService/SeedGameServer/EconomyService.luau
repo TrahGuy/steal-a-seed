@@ -70,6 +70,8 @@ local PlantService = require(script.Parent:WaitForChild("PlantService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local PassService = require(script.Parent:WaitForChild("PassService"))
+local BonusChestService = require(script.Parent:WaitForChild("BonusChestService"))
+local Metrics = require(script.Parent:WaitForChild("Metrics"))
 
 local EconomyService = {}
 -- After PlantService (50): this reads what PlantService is growing.
@@ -158,8 +160,53 @@ function EconomyService.RateFor(player: Player): number
 	--
 	-- Each term is already whole -- IncomePerSecond rounds per plant -- so an
 	-- integer multiplier keeps the sum whole.
+	--
+	-- AND THE BONUS CHEST'S INCOME REWARD, HERE AND ONLY HERE (2026-09-27).
+	-- Passive plant income is exactly this function's answer, so this is the
+	-- one place the chest can reach it -- and none of the things above that
+	-- the pass stays out of: sales, cash packs, refunds, the offline claim (it
+	-- calls withPass directly), a Biome Harvest. It MULTIPLIES the pass: x2
+	-- becomes x2.5. 1 whenever no saved income boost is running, which is
+	-- nearly always, so the sum is whole again the moment it ends.
 	--==========================================================================
-	return withPass(player, rate)
+	return withPass(player, rate) * BonusChestService.Multiplier(player, "income")
+end
+
+--==============================================================================
+-- THE GATE SIGN'S NUMBERS
+--
+-- Published from the tick, with the rate the tick is about to pay, so the sign
+-- can never show an income the wallet is not receiving: same call, same second.
+-- Every change the sign has to follow -- planting, a hatch, a pickup, a plot
+-- upgrade, a pass bought, a new owner -- reaches it within one tick without a
+-- hook in any of the services that cause them. Only written when a value
+-- changes, so a quiet garden replicates nothing.
+--
+-- The boost is withPass on one coin: the multiplier this rate carries, without
+-- a second read of the pass (BalanceSpec counts those). Sales and one-off
+-- payouts are not here because they are not in RateFor.
+--
+-- Nothing until the owner's saved garden is back in the ground: "0/10" over a
+-- bed about to hold eight is a number that was never true. PlotService clears
+-- all four when the lease ends; nothing here needs to.
+--==============================================================================
+local function publishGarden(player: Player, rate: number)
+	local plot = PlotService.PlotOf(player)
+	if not plot or PlotService.OwnerOf(plot) ~= player or not PlantService.GardenRestored(plot) then
+		return
+	end
+	local grown = #PlantService.GrownIn(plot)
+	-- The same product RateFor pays: the pass, times a running chest boost.
+	local boost = withPass(player, 1) * BonusChestService.Multiplier(player, "income")
+	local function put(name: string, value: number?)
+		if plot:GetAttribute(name) ~= value then
+			plot:SetAttribute(name, value)
+		end
+	end
+	put(GameConfig.Attributes.GardenGrown, grown)
+	put(GameConfig.Attributes.GardenPods, math.max(0, PlantService.CountIn(plot) - grown))
+	put(GameConfig.Attributes.GardenIncome, rate)
+	put(GameConfig.Attributes.GardenBoost, if boost > 1 then boost else nil)
 end
 
 --==============================================================================
@@ -171,6 +218,8 @@ local function payEveryone()
 		-- Only while they are in the server. GetPlayers is that check; there is
 		-- no queue of absent players to pay.
 		if PlayerDataService.IsReady(player) then
+			local rate = EconomyService.RateFor(player)
+			publishGarden(player, rate)
 			local since = lastPaid[player]
 			lastPaid[player] = now
 			if since then
@@ -178,13 +227,15 @@ local function payEveryone()
 				-- A player who has just arrived, or whose clock was reset,
 				-- gets no lump sum.
 				if dt > 0 and dt < 30 then
-					local rate = EconomyService.RateFor(player)
 					if rate > 0 then
 						local amount = rate * dt
 						-- THE ONLY POSITIVE AddCash IN THE GAME.
 						if PlayerDataService.AddCash(player, amount) then
 							minted[player] = (minted[player] or 0) + amount
 							PlayerDataService.RecordTutorial(player, "earn")
+							-- Launch analytics: the onboarding funnel's last step,
+							-- once, in the session of the first hatch (Metrics).
+							Metrics.income(player)
 						end
 					end
 				end
@@ -234,6 +285,76 @@ end
 -- ever ADD, because a Tool vanishing looks the same whether it was sold here or
 -- lost to the void.
 --==============================================================================
+--==============================================================================
+-- WHAT THE STALL BUYS, AND FOR HOW MUCH -- ONE RULE FOR THE QUOTE AND THE SALE
+--
+-- A Tool with a real SpeciesId and a CarryingKg of at least 1: a banked pod or
+-- a hatched creature, in the Backpack or the hands. Bats, traps and a raid pod
+-- (a welded Model, not a Tool) are not; neither is anything in the garden.
+-- SELL ALL's quote and SELL ALL's sale both ask this, so they cannot disagree
+-- about what counts or what it pays.
+--==============================================================================
+local function stallPrice(tool: Instance): number?
+	if not tool:IsA("Tool") then
+		return nil
+	end
+	local id = tool:GetAttribute("SpeciesId")
+	local tier = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
+	-- The species was already being looked up to validate the tool; it is also
+	-- what prices it, so a Mythic out of Starbloom sells for what it was worth
+	-- standing up.
+	local species = if type(id) == "string" then SeedData.Get(id) else nil
+	if species and tier and tier >= 1 then
+		return SeedData.SellPrice(species, tier)
+	end
+	return nil
+end
+
+-- Listed one by one rather than as `{ backpack, character }`: ipairs stops at a
+-- nil, so a player mid-respawn with no Backpack would lose the hands too.
+local function stallContainers(player: Player): { Instance }
+	local out: { Instance } = {}
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if backpack then
+		table.insert(out, backpack)
+	end
+	if player.Character then
+		table.insert(out, player.Character)
+	end
+	return out
+end
+
+export type HeldQuote = {
+	tools: { Tool },
+	total: number,
+	pods: number,
+	plants: number,
+}
+
+-- Everything SellHeld would sell right now and what it would pay, without
+-- selling anything. `pods` are unhatched, `plants` are hatched.
+function EconomyService.QuoteHeld(player: Player): HeldQuote
+	local quote: HeldQuote = { tools = {}, total = 0, pods = 0, plants = 0 }
+	if player.Parent ~= Players then
+		return quote
+	end
+	for _, container in ipairs(stallContainers(player)) do
+		for _, tool in ipairs(container:GetChildren()) do
+			local price = stallPrice(tool)
+			if price then
+				table.insert(quote.tools, tool :: Tool)
+				quote.total += price
+				if tool:GetAttribute("Hatched") == true then
+					quote.plants += 1
+				else
+					quote.pods += 1
+				end
+			end
+		end
+	end
+	return quote
+end
+
 function EconomyService.SellHeld(player: Player): (number, number)
 	if player.Parent ~= Players then
 		return 0, 0
@@ -246,19 +367,12 @@ function EconomyService.SellHeld(player: Player): (number, number)
 			return
 		end
 		for _, tool in ipairs(container:GetChildren()) do
-			if tool:IsA("Tool") then
-				local id = tool:GetAttribute("SpeciesId")
-				local tier = tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
-				-- The species was already being looked up to validate the tool;
-				-- it is now also what prices it, so a Mythic out of Starbloom
-				-- sells for what it was worth standing up.
-				local species = if type(id) == "string" then SeedData.Get(id) else nil
-				if species and tier and tier >= 1 then
-					total += SeedData.SellPrice(species, tier)
-					sold += 1
-					tool:Destroy()
-					table.insert(gone, tool)
-				end
+			local price = stallPrice(tool)
+			if price then
+				total += price
+				sold += 1
+				tool:Destroy()
+				table.insert(gone, tool)
 			end
 		end
 	end

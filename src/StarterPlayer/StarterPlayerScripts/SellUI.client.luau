@@ -26,11 +26,25 @@
 -- covers the screen, so a tap anywhere but the two buttons is consumed and
 -- never reaches the world, the held Tool or the plot behind the panel -- the
 -- same reason the Bag's dimmer is a button.
+--
+--==============================================================================
+-- AND SELL ALL, IN THE SAME PANEL
+--
+-- Since 2026-09-24 the SELL ALL hold asks for a quote too ("quoteAll"): how
+-- many plants and pods the stall would buy and the whole payout, with the same
+-- token, the same yes/no and the same server re-check (SellService.ConfirmAll)
+-- -- nothing is sold on a no, on the close button, on a tap outside or on B.
+-- The panel is retitled for it and reset for SELL ONE.
+--
+-- ON A CONTROLLER, CANCEL IS WHERE THE SELECTION STARTS (PadFirst), and B is a
+-- no: this is the one panel where the first button pressed should be the safe
+-- one.
 --==============================================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local ContextActionService = game:GetService("ContextActionService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -107,6 +121,8 @@ local modal = UIKit.modal(gui, {
 	maxWidth = PANEL_W,
 	maxHeight = 340,
 })
+-- This gui also carries the sale notice, so the menu size goes on the panel.
+modal.followMenuSize()
 
 local rows = Instance.new("Frame")
 rows.Name = "Rows"
@@ -231,6 +247,16 @@ end
 local cancelButton = makeButton("Cancel", "CANCEL", NO_FACE, NO_SHADE, NO_FOOT, 0)
 local sellButton = makeButton("Sell", "SELL", YES_FACE, YES_SHADE, YES_FOOT, 1)
 
+-- Where a controller's selection starts when this opens (PadFocus reads it):
+-- the safe answer, not the sale.
+local padFirst = Instance.new("ObjectValue")
+padFirst.Name = "PadFirst"
+padFirst.Value = cancelButton.button
+padFirst.Parent = modal.shell
+
+local ONE_TITLE = modal.title.Text
+local BACK_ACTION = "SeedSellBack"
+
 --==============================================================================
 -- THE BRIEF LINE
 --==============================================================================
@@ -254,7 +280,8 @@ local function placeNotice()
 	local input = HudLayout.measure(gui)
 	local solved = HudLayout.solve(input)
 	local inset = input.insetTop or 0
-	local width = notice.AbsoluteSize.X + NOTICE_OUTLINE * 2
+	-- Real pixels / the gui's TV scale = the Offsets HudLayout answers in (1 off a TV).
+	local width = notice.AbsoluteSize.X / UIKit.scaleOf(gui) + NOTICE_OUTLINE * 2
 	local dx, top = HudLayout.notice(solved, width, NOTICE_H, NOTICE_TOP - inset)
 	notice.Position = UDim2.new(0.5, math.round(dx), 0, top + inset)
 end
@@ -349,6 +376,7 @@ local function close()
 	awaiting = false
 	answerGeneration += 1
 	armSell(true)
+	ContextActionService:UnbindAction(BACK_ACTION)
 	modal.setOpen(false)
 end
 
@@ -368,6 +396,22 @@ local function cancel()
 	close()
 end
 
+-- B is a no, on either question, bound only while one is up. Above PadFocus's
+-- generic panel close, because this panel is not on the OpenPanel mutex.
+local function bindBack()
+	ContextActionService:BindActionAtPriority(BACK_ACTION, function(_, state: Enum.UserInputState)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		cancel()
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.ContextActionPriority.High.Value, Enum.KeyCode.ButtonB)
+end
+
+local function plural(n: number, word: string): string
+	return string.format("%d %s%s", n, word, if n == 1 then "" else "S")
+end
+
 local function show(payload: { [string]: any })
 	local token = tonumber(payload.token)
 	local speciesId = payload.speciesId
@@ -379,8 +423,10 @@ local function show(payload: { [string]: any })
 	end
 	-- A fresh quote replaces whatever was open, the same way the server's did.
 	close()
+	modal.title.Text = ONE_TITLE
+	sellButton.label.Text = "SELL"
 
-	local info = PlantInfo.Describe(speciesId, tier, true, GameConfig.cashMultiplier(player))
+	local info = PlantInfo.Describe(speciesId, tier, true, GameConfig.incomeMultiplier(player))
 	nameLabel.Text = string.upper(info.title)
 	metaLabel.Text = string.format('<font color="%s">%s</font>  •  <font color="%s">%s</font>',
 		hex(info.rarityColour), string.upper(info.rarity),
@@ -413,6 +459,50 @@ local function show(payload: { [string]: any })
 
 	modal.setOpen(true)
 	modal.fitContent(CONTENT_H)
+	bindBack()
+end
+
+--==============================================================================
+-- THE SELL ALL QUESTION
+--
+-- The server's count and its sum, and what stays behind -- nothing more. The
+-- bag is not watched item by item here: the server sells only the exact bag it
+-- counted, and a bag that changed while this was up is refused with its own
+-- line, so a yes can never sell something the player was not shown.
+--==============================================================================
+local function showAll(payload: { [string]: any })
+	local token = tonumber(payload.token)
+	local plants = math.max(0, math.floor(tonumber(payload.plants) or 0))
+	local pods = math.max(0, math.floor(tonumber(payload.pods) or 0))
+	local total = tonumber(payload.total)
+	if not (token and total) or plants + pods == 0 then
+		return
+	end
+	close()
+	modal.title.Text = "SELL ALL"
+	sellButton.label.Text = "SELL ALL"
+
+	local parts: { string } = {}
+	if plants > 0 then
+		table.insert(parts, plural(plants, "PLANT"))
+	end
+	if pods > 0 then
+		table.insert(parts, plural(pods, "POD"))
+	end
+	nameLabel.Text = "YOUR WHOLE BAG"
+	metaLabel.Text = table.concat(parts, "  •  ")
+	incomeLabel.Text = "Garden plants, bats and traps are kept."
+	question.Text = string.format("Sell %s for $%s?",
+		if plants + pods == 1 then "it" else "all " .. (plants + pods), withCommas(total))
+
+	openToken = token
+	table.insert(watches, player.CharacterRemoving:Connect(function()
+		close()
+	end))
+
+	modal.setOpen(true)
+	modal.fitContent(CONTENT_H)
+	bindBack()
 end
 
 sellButton.button.Activated:Connect(function()
@@ -444,6 +534,13 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 	local phase = payload.phase
 	if phase == "quote" then
 		show(payload)
+	elseif phase == "quoteAll" then
+		showAll(payload)
+	elseif phase == "soldAll" then
+		close()
+		local sold = math.max(0, math.floor(tonumber(payload.sold) or 0))
+		local paid = tonumber(payload.paid) or 0
+		say(string.format("Sold %s for $%s", plural(sold, "ITEM"):lower(), withCommas(paid)))
 	elseif phase == "refused" then
 		if openToken then
 			close()

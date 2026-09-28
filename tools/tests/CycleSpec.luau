@@ -22,6 +22,11 @@
 -- The one thing worth saying about coverage: the value of these is that they
 -- fail when somebody retunes the day and forgets the warning is measured against
 -- it, or removes a species and leaves a nest expecting pods.
+--
+-- One exception, section 8: the admin console's forced night and day. WHEN the
+-- loop wakes after one, and how many times the nests are restocked, is that
+-- file's logic alone, so it is run through WorldCycleService's real source with
+-- stand-ins for the world, on a day of a second or so.
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -55,7 +60,8 @@ local CYCLE = GameConfig.WorldCycle
 --==============================================================================
 section("the cycle")
 ok("the day is 420 seconds", CYCLE.DaySeconds == 420, tostring(CYCLE.DaySeconds))
-ok("the night is 60 seconds", CYCLE.NightSeconds == 60, tostring(CYCLE.NightSeconds))
+-- 60 until 2026-09-23, when the owner cut it to 15.
+ok("the night is 15 seconds", CYCLE.NightSeconds == 15, tostring(CYCLE.NightSeconds))
 ok("the warning is 45 seconds", CYCLE.WarnSeconds == 45, tostring(CYCLE.WarnSeconds))
 ok("the warning fits inside the day", CYCLE.WarnSeconds < CYCLE.DaySeconds)
 ok("the night is shorter than the day", CYCLE.NightSeconds < CYCLE.DaySeconds)
@@ -235,6 +241,336 @@ do
 	table.insert(lines, string.format(
 		"  brightness %.1f -> %.1f, ambient blue %d, over %.1fs",
 		2.4, N.Brightness, N.Ambient.B * 255, N.FadeSeconds))
+end
+
+--==============================================================================
+-- 7. A FIFTEEN-SECOND NIGHT STILL DOES ALL OF ITS WORK
+--
+-- The night was cut from 60 s to 15 on 2026-09-23. What has to stay true is
+-- that nothing a night does waits on how long it is: every step happens at an
+-- edge, in an order that closes a race, and every fade finishes well inside it.
+-- The order is read from WorldCycleService's own source, because it is the
+-- whole correctness argument and a reordering would pass every other check.
+--==============================================================================
+section("a fifteen-second night")
+do
+	local N = CYCLE.Night
+	local MUSIC = GameConfig.Music :: any
+	ok("the sky's fade is under a quarter of the night", N.FadeSeconds < CYCLE.NightSeconds * 0.25,
+		string.format("%.1fs of %ds", N.FadeSeconds, CYCLE.NightSeconds))
+	ok("so is the music's crossfade",
+		(tonumber(MUSIC.PhaseFadeSeconds) or 3) < CYCLE.NightSeconds * 0.25,
+		tostring(MUSIC.PhaseFadeSeconds))
+	ok("the wall's last-seconds colour starts inside the night",
+		CYCLE.Barrier.Screen.SoonSeconds < CYCLE.NightSeconds,
+		tostring(CYCLE.Barrier.Screen.SoonSeconds))
+	ok("the road poll runs many times a night",
+		GameConfig.Gate.PollSeconds * 20 <= CYCLE.NightSeconds, tostring(GameConfig.Gate.PollSeconds))
+
+	local Server = game:GetService("ServerScriptService"):WaitForChild("SeedGameServer")
+	local source = (Server:WaitForChild("WorldCycleService") :: ModuleScript).Source
+	local function order(body: string, steps: { string }): boolean
+		local at = 0
+		for _, step in ipairs(steps) do
+			local found = string.find(body, step, at + 1, true)
+			if not found then
+				return false
+			end
+			at = found
+		end
+		return true
+	end
+	local dusk = string.match(source, "local function toNight%(%)(.-)\nend") or ""
+	local dawn = string.match(source, "local function toDay%(%)(.-)\nend") or ""
+	ok("dusk: the phase, then the wall, then the people, then the world",
+		order(dusk, { "publish(CYCLE.PhaseNight", "SetNightBarrier(true)", "ejectEveryone()",
+			"ClearForNight()", "clearLoosePods()", "ResetParents()" }))
+	ok("dawn: the batch is built while it is still night, then Day, then the wall opens",
+		order(dawn, { "StockAll()", "publish(CYCLE.PhaseDay", "SetNightBarrier(false)" }))
+	ok("the deadline is published with the phase, in one frame",
+		order(source, { "Workspace:SetAttribute(ATTR.WorldPhaseEndsAt",
+			"Workspace:SetAttribute(ATTR.WorldPhase," }))
+	ok("the loop sleeps out the phase in one wait and never counts on the server",
+		string.find(source, "task.wait(left)", 1, true) ~= nil
+			and not string.find(source, "Heartbeat:Connect", 1, true)
+			and not string.find(source, "RenderStepped", 1, true))
+
+	local scripts = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
+	local clock = (scripts:WaitForChild("WorldClock") :: LocalScript).Source
+	ok("the HUD clock holds a phase whose deadline has not arrived yet, and the reverse",
+		string.find(clock, "if not settled(phase, endsAt, now) then", 1, true) ~= nil
+			and string.find(clock, "(phase ~= lastPhase) ~= (endsAt ~= lastEndsAt)", 1, true) ~= nil)
+	ok("and a joiner at night is lit for night on their first frame",
+		string.find(clock, "applyLight(if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0)",
+			1, true) ~= nil)
+	table.insert(lines, string.format("  %ds night: %.1fs sky fade, %.1fs music crossfade, the wall turns amber at %ds",
+		CYCLE.NightSeconds, N.FadeSeconds, tonumber(MUSIC.PhaseFadeSeconds) or 3,
+		CYCLE.Barrier.Screen.SoonSeconds))
+end
+
+--==============================================================================
+-- 8. A FORCED NIGHT OR DAY IS THE NORMAL ONE, AND THE CYCLE CARRIES ON
+--
+-- The admin console's Start Night and Start Day, through WorldCycleService's
+-- REAL source, loaded here with a thawed copy of the config whose day and night
+-- last a second or so, and with stand-ins for what a transition does to the
+-- world that write down what they were asked: the nests (clear, parents,
+-- restock), the barrier and the road's sweep. Under test is what only that file
+-- owns -- which transition runs, how often, in what order, and when the loop
+-- wakes next. Nothing in the place is touched: the loose-pod sweep is pointed
+-- at a tag only this section's own part carries, and the three phase
+-- attributes it writes on the Workspace are put back as they were.
+--==============================================================================
+section("a forced night or day")
+do
+	local CollectionService = game:GetService("CollectionService")
+	local ServerStorage = game:GetService("ServerStorage")
+	local Workspace = game:GetService("Workspace")
+	local ATTR = GameConfig.Attributes
+	local configScript = Shared:WaitForChild("GameConfig")
+	local moduleScript = game:GetService("ServerScriptService"):WaitForChild("SeedGameServer")
+		:WaitForChild("WorldCycleService") :: ModuleScript
+
+	local function thaw(value: any): any
+		if type(value) ~= "table" then
+			return value
+		end
+		local copy = {}
+		for k, v in pairs(value) do
+			copy[k] = thaw(v)
+		end
+		return copy
+	end
+	local config = thaw(GameConfig)
+	local LOOSE_TAG = "CycleSpecLoosePod"
+	config.Tags.SeedPod = LOOSE_TAG
+	local C = config.WorldCycle
+
+	local trail: { { what: string, at: number } } = {}
+	local slowStock, brokenStock = false, false
+	local function mark(what: string)
+		table.insert(trail, { what = what, at = os.clock() })
+	end
+	local function count(what: string): number
+		local n = 0
+		for _, entry in ipairs(trail) do
+			if entry.what == what then
+				n += 1
+			end
+		end
+		return n
+	end
+	local function inOrder(steps: { string }): boolean
+		local at = 0
+		for _, step in ipairs(steps) do
+			local found: number? = nil
+			for i = at + 1, #trail do
+				if trail[i].what == step then
+					found = i
+					break
+				end
+			end
+			if not found then
+				return false
+			end
+			at = found
+		end
+		return true
+	end
+
+	local standIns: { [string]: any } = {
+		MapService = {
+			SetNightBarrier = function(closed: boolean)
+				mark(if closed then "Shut" else "Open")
+			end,
+			GetNightBarrier = function()
+				return nil
+			end,
+		},
+		NestService = {
+			ClearForNight = function()
+				mark("Clear")
+				return 5
+			end,
+			ResetParents = function()
+				mark("Parents")
+				return 1
+			end,
+			StockAll = function()
+				if brokenStock then
+					error("CycleSpec: a restock that throws")
+				end
+				mark("Stock")
+				if slowStock then
+					-- A restock that takes a moment: the window a second press lands in.
+					task.wait(0.3)
+				end
+				return 5, 5
+			end,
+			PodCount = function()
+				return 5, 5
+			end,
+			NestCount = function()
+				return 1
+			end,
+		},
+		CarryService = {
+			IsCarrying = function()
+				return false
+			end,
+		},
+		BiomeGateService = {
+			OrderAt = function()
+				return 0
+			end,
+			SweepNow = function()
+				mark("Sweep")
+				return 0
+			end,
+		},
+	}
+	local function standInRequire(target: Instance): any
+		if target == configScript then
+			return config
+		end
+		local standIn = standIns[target.Name]
+		assert(standIn ~= nil, "WorldCycleService asked for " .. target:GetFullName() .. ", which has no stand-in")
+		return standIn
+	end
+	local chunk, loadErr = loadstring(moduleScript.Source, "=WorldCycleService")
+	assert(chunk, tostring(loadErr))
+	setfenv(chunk, setmetatable({ script = moduleScript, require = standInRequire }, { __index = getfenv(1) }))
+	local W: any = chunk()
+
+	local names = { ATTR.WorldPhase, ATTR.WorldPhaseEndsAt, ATTR.WorldCycleIndex }
+	local before: { any } = {}
+	for i, name in ipairs(names) do
+		before[i] = Workspace:GetAttribute(name)
+	end
+	local fixture = Instance.new("Folder")
+	fixture.Name = "CycleSpecFixture"
+	fixture.Archivable = false
+	fixture.Parent = ServerStorage
+
+	local ran, err = pcall(function()
+		--== the phase already running: nothing ==--
+		C.DaySeconds, C.NightSeconds = 4, 0.8
+		W.Init()
+		W.Start()
+		table.clear(trail)
+		local startIndex = W.CycleIndex()
+		local done, why = W.StartDay()
+		ok("Start Day by day changes nothing: ALREADY_DAY, no restock",
+			done == false and why == "ALREADY_DAY" and #trail == 0 and W.IsDay(), tostring(why))
+
+		--== a forced night is the normal night ==--
+		local pod = Instance.new("Part")
+		pod.Name = "LoosePod"
+		pod.Parent = fixture
+		CollectionService:AddTag(pod, LOOSE_TAG)
+		local forcedAt = os.clock()
+		done, why = W.StartNight()
+		ok("Start Night by day starts the night",
+			done == true and why == "OK" and Workspace:GetAttribute(ATTR.WorldPhase) == C.PhaseNight, tostring(why))
+		ok("the normal dusk, in its order: the wall, the road, the nests, the parents",
+			#trail == 4 and inOrder({ "Shut", "Sweep", "Clear", "Parents" }))
+		ok("and the pods lying loose are gone", pod.Parent == nil)
+		local left = W.SecondsLeft()
+		ok("the night's deadline is the configured night, not what was left of the day",
+			left > C.NightSeconds - 0.25 and left <= C.NightSeconds, string.format("%.2fs", left))
+		done, why = W.StartNight()
+		ok("Start Night by night changes nothing: ALREADY_NIGHT",
+			done == false and why == "ALREADY_NIGHT" and count("Clear") == 1, tostring(why))
+
+		--== and the cycle carries on from it ==--
+		-- Expected: dawn at 0.8 s, dusk at 2.3, dawn at 3.1, the next dusk at 4.6.
+		-- The loop left asleep on the OLD 4-second day wakes at 4.0 and must go.
+		C.DaySeconds = 1.5
+		task.wait(4.3)
+		local edges: { { what: string, at: number } } = {}
+		local shown: { string } = {}
+		for _, entry in ipairs(trail) do
+			if entry.what == "Clear" or entry.what == "Stock" then
+				table.insert(edges, { what = entry.what, at = entry.at - forcedAt })
+				table.insert(shown, string.format("%s@%.2f", entry.what, entry.at - forcedAt))
+			end
+		end
+		local seen = table.concat(shown, " ")
+		local function gap(i: number): number
+			return if edges[i] and edges[i - 1] then edges[i].at - edges[i - 1].at else -1
+		end
+		ok("the forced night ended by itself after its own 0.8 s -- the old day still had 4 s",
+			edges[2] ~= nil and edges[2].what == "Stock" and gap(2) >= 0.7 and gap(2) < 1.4, seen)
+		ok("then the cycle carried on at the configured lengths: a 1.5 s day, a 0.8 s night",
+			edges[3] ~= nil and edges[3].what == "Clear" and gap(3) >= 1.4 and gap(3) < 2.1
+				and edges[4] ~= nil and edges[4].what == "Stock" and gap(4) >= 0.7 and gap(4) < 1.4, seen)
+		ok("and the loop asleep on the old day's deadline woke at 4 s and did nothing", #edges == 4, seen)
+		ok("exactly one restock per new day",
+			count("Stock") == 2 and W.CycleIndex() == startIndex + 2,
+			string.format("%d restock(s), %d dawn(s)", count("Stock"), W.CycleIndex() - startIndex))
+
+		--== a forced dawn restocks once, and a second press does not ==--
+		C.DaySeconds, C.NightSeconds = 30, 30
+		W.Init()
+		W.Start()
+		W.StartNight()
+		table.clear(trail)
+		local nightIndex = W.CycleIndex()
+		slowStock = true
+		local first: any = nil
+		task.spawn(function()
+			first = table.pack(W.StartDay())
+		end)
+		-- That press is inside its restock now, waiting there on purpose.
+		local again, whyAgain = W.StartDay()
+		local dusk, whyDusk = W.StartNight()
+		ok("a second press while the dawn is still restocking is refused as BUSY -- either button",
+			again == false and whyAgain == "BUSY" and dusk == false and whyDusk == "BUSY",
+			tostring(whyAgain) .. " / " .. tostring(whyDusk))
+		task.wait(0.6)
+		slowStock = false
+		ok("the first press made the day, restocked: 5 of 5",
+			first ~= nil and first[1] == true and first[2] == "OK" and first[3] == 5 and first[4] == 5 and W.IsDay(),
+			first and tostring(first[2]))
+		ok("one restock, then Day, then the wall opens",
+			count("Stock") == 1 and W.CycleIndex() == nightIndex + 1 and inOrder({ "Stock", "Open" }),
+			string.format("%d restock(s)", count("Stock")))
+		done, why = W.StartDay()
+		ok("pressed again by day, it restocks nothing: ALREADY_DAY",
+			done == false and why == "ALREADY_DAY" and count("Stock") == 1, tostring(why))
+		left = W.SecondsLeft()
+		ok("and the forced day is a whole configured day", left > C.DaySeconds - 1 and left <= C.DaySeconds,
+			string.format("%.1fs", left))
+
+		--== a dawn that throws: said so, and the cycle still turns ==--
+		C.DaySeconds, C.NightSeconds = 30, 0.6
+		W.Init()
+		W.Start()
+		W.StartNight()
+		table.clear(trail)
+		brokenStock = true
+		done, why = W.StartDay()
+		brokenStock = false
+		left = W.SecondsLeft()
+		ok("a dawn that throws is reported FAILED, never OK", done == false and why == "FAILED", tostring(why))
+		ok("and the night it left behind still has a deadline", not W.IsDay() and left > 0.35 and left <= 0.6,
+			string.format("%.2fs", left))
+		task.wait(1)
+		ok("which the restarted loop keeps: the next dawn came by itself",
+			W.IsDay() and count("Stock") == 1, string.format("%d restock(s)", count("Stock")))
+	end)
+
+	-- Every loop this started wakes, finds it is not the newest, and goes.
+	W.Init()
+	for i, name in ipairs(names) do
+		Workspace:SetAttribute(name, before[i])
+	end
+	fixture:Destroy()
+	if not ran then
+		ok("the forced-change tests ran to the end", false, tostring(err))
+	end
+	table.insert(lines, "  forced changes, on a 0.8 s night and a 1.5 s day here (the game's are "
+		.. CYCLE.NightSeconds .. " s and " .. CYCLE.DaySeconds .. " s)")
 end
 
 --==============================================================================

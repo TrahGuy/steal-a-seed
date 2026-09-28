@@ -337,6 +337,9 @@ local function body()
 			"it carries the price, the owner's id and the stack-over-label flag for PromptUI",
 			string.format("%s %s %s", tostring(instant:GetAttribute("Robux")),
 				tostring(instant:GetAttribute("ReservedFor")), tostring(instant:GetAttribute("OverPodLabel"))))
+		check(instant:GetAttribute("RobuxProduct") == LIVE_ID,
+			"and the product id, so PromptUI can ask Roblox what THIS player pays (regional pricing)",
+			tostring(instant:GetAttribute("RobuxProduct")))
 	end
 
 	--==========================================================================

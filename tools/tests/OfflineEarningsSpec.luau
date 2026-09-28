@@ -189,9 +189,20 @@ local ok, err = pcall(function()
 		end
 		return game:GetService(name)
 	end
+	-- EconomyService also asks for the Bonus Chest (2026-09-27: its income
+	-- boost) and the launch analytics; neutral stand-ins, so this spec checks
+	-- exactly what it checked before -- a claim, not a boost or a report.
 	local siblings = {
 		PlotService = {}, PlantService = {}, PlayerDataService = PlayerDataService,
 		CarryService = {}, PassService = PassService,
+		BonusChestService = {
+			Multiplier = function()
+				return 1
+			end,
+		},
+		Metrics = {
+			income = function() end,
+		},
 	}
 	local module = Server:WaitForChild("EconomyService")
 	local chunk, loadErr = loadstring(module.Source, "=EconomyService")

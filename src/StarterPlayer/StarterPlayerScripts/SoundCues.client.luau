@@ -33,6 +33,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -122,7 +123,7 @@ end)
 -- Both are supported, because which one was recorded is a fact about a WAV file
 -- and not a fact about this game. `looped = true` in the cue table hangs a
 -- looping Sound on the parent and lets it run; `looped = false` retriggers a
--- single step every couple of studs COVERED.
+-- single step at every footfall -- every STUDS_PER_STEP COVERED, below.
 --
 -- Distance and not wall-clock, which is the same rule ParentAnim's stride uses
 -- and for the same reason: a clock-driven step slides its feet when the parent
@@ -130,8 +131,25 @@ end)
 -- the ground at any speed, and the parent's speed rises with every theft.
 --==============================================================================
 local TAG = GameConfig.Tags.NestParent
--- ParentAnim swings a whole stride every ~4 studs, so half that is a step.
-local STUDS_PER_STEP = 2.2
+--==============================================================================
+-- A STEP IS A FOOTFALL, AND THE FOOTFALLS ARE PARENTANIM'S
+--
+-- This was 2.2 studs, off a note saying ParentAnim "swings a whole stride every
+-- ~4 studs". It does not: it advances the stride by SWING_PER_STUD = 0.40
+-- radians a stud, a whole two-footed cycle every 2*pi/0.40 = 15.7 studs -- so
+-- a footfall every 7.85. At 2.2 the Brambleback, Dustbowl's guardian and the
+-- only one with a one-shot step (the rest loop ChaseStep), stomped three and a
+-- half times per footfall, and at its chase speed that was a stomp nearly
+-- every frame: dozens a second, each a fresh 0.55-second Sound on top of the
+-- last. Reported 2026-09-26 as the second guardian's audio "rapid-firing".
+--
+-- AND NEVER FASTER THAN A FOOT CAN LAND. Past about 31 studs a second even the
+-- real stride is more footfalls than a two-ton stomp can be heard as, so one
+-- voice waits MIN_STEP_SECONDS between stomps and a stomp still ringing is cut
+-- when the next lands: one at a time per parent, however long the chase.
+--==============================================================================
+local STUDS_PER_STEP = math.pi / 0.40
+local MIN_STEP_SECONDS = 0.25
 
 type Voice = {
 	model: Model,
@@ -139,13 +157,71 @@ type Voice = {
 	sleep: Sound?,
 	step: Sound?,
 	-- The cue the per-stride branch fires. Held because it is a different row
-	-- for a Brambleback than for Greenhollow's brute, and the Heartbeat below
-	-- must not have to work that out sixty times a second.
+	-- for a Brambleback than for Greenhollow's brute, and the loop below must
+	-- not have to work that out sixty times a second.
 	stepName: string?,
 	stepLooped: boolean,
 	walked: number,
 	at: Vector3,
+	-- The one-shot step still sounding, if any, and when it was started.
+	stomp: Sound?,
+	steppedAt: number,
+	-- THE BREATHING, AS SHOWN (2026-09-27): nil until first seen, so a parent
+	-- dressed mid-sleep or mid-chase starts in the right state without a fade.
+	-- `sleepVolume` is the row's level, put back each time it lies down.
+	sleeping: boolean?,
+	sleepVolume: number,
+	sleepFade: Tween?,
+	-- THE WALK HOME: the last ParentState seen, the Return cue its biome has
+	-- (nil while that row has no id), and the one-shot still sounding.
+	state: string?,
+	returnName: string?,
+	back: Sound?,
 }
+
+-- How long a breath takes to die away when the parent wakes, and a walk-home
+-- cue when something cuts it off.
+local SLEEP_FADE_SECONDS = 0.35
+local RETURN_FADE_SECONDS = 0.25
+local RETURN_AT = if SFX.ReturnCueAt == "arrive" then "arrive" else "leave"
+
+-- Takes a sound down over `seconds` and stops it; 0 stops it at once.
+local function fadeAway(sound: Sound, seconds: number): Tween?
+	if not sound.Parent then
+		return nil
+	end
+	if seconds <= 0 or not sound.IsPlaying then
+		sound:Stop()
+		return nil
+	end
+	local tween = TweenService:Create(sound, TweenInfo.new(seconds, Enum.EasingStyle.Quad,
+		Enum.EasingDirection.In), { Volume = 0 })
+	tween.Completed:Once(function(state: Enum.PlaybackState)
+		if state == Enum.PlaybackState.Completed and sound.Parent then
+			sound:Stop()
+		end
+	end)
+	tween:Play()
+	return tween
+end
+
+local function quietBack(voice: Voice, seconds: number)
+	local back = voice.back
+	voice.back = nil
+	if back then
+		fadeAway(back, seconds)
+	end
+end
+
+-- A stomp still ringing when its parent sleeps, streams out or is forgotten
+-- stops there rather than playing out its clip.
+local function hush(voice: Voice)
+	local stomp = voice.stomp
+	voice.stomp = nil
+	if stomp and stomp.Parent then
+		stomp:Stop()
+	end
+end
 
 local voices: { [Model]: Voice } = {}
 --==============================================================================
@@ -159,6 +235,8 @@ local watching: { [Model]: RBXScriptConnection } = {}
 local function untrack(model: Model)
 	local voice = voices[model]
 	if voice then
+		hush(voice)
+		quietBack(voice, 0)
 		if voice.sleep then
 			voice.sleep:Destroy()
 		end
@@ -278,15 +356,24 @@ function track(instance: Instance)
 	local stepName = SoundKit.parentCue(biomeId, "Step")
 	local stepCue = if stepName then SoundKit.cue(stepName) else nil
 	local loopedStep = stepCue ~= nil and stepCue.looped == true
+	local sleepSound = if sleepName then SoundKit.attach(sleepName, root) else nil
 	local voice: Voice = {
 		model = model,
 		root = root,
-		sleep = if sleepName then SoundKit.attach(sleepName, root) else nil,
+		sleep = sleepSound,
 		step = if stepName and loopedStep then SoundKit.attach(stepName, root) else nil,
 		stepName = stepName,
 		stepLooped = loopedStep,
 		walked = 0,
 		at = root.Position,
+		stomp = nil,
+		steppedAt = 0,
+		sleeping = nil,
+		sleepVolume = if sleepSound then sleepSound.Volume else 0,
+		sleepFade = nil,
+		state = nil,
+		returnName = SoundKit.parentCue(biomeId, "Return"),
+		back = nil,
 	}
 	voices[model] = voice
 end
@@ -317,12 +404,64 @@ RunService.Heartbeat:Connect(function()
 			-- never been robbed, which is asleep.
 			local awake = model:GetAttribute("Asleep") == false
 
-			if voice.sleep then
-				voice.sleep.Playing = not awake
+			--==================================================================
+			-- THE BREATHING, ON THE CHANGE ONLY (2026-09-27). It used to be set
+			-- every frame (Playing = not awake), which paused a breath mid-sound
+			-- and resumed it wherever it stopped. Now: lying down starts the loop
+			-- from its top at its own level; waking lets the breath die away over
+			-- a third of a second and stops it. A parent seen for the first time
+			-- just takes the state it is in, with no fade.
+			--==================================================================
+			-- ASLEEP MEANS ParentState "asleep", where the guardian publishes one:
+			-- `Asleep` only turns false when the chase begins, so keyed on it the
+			-- breath went on for the whole second-long wake, under the roar
+			-- (measured 2026-09-27). The steps below still use `awake` -- a
+			-- guardian rising in place must not start its running loop.
+			local shownState = model:GetAttribute("ParentState")
+			local sleepingNow = if typeof(shownState) == "string"
+				then shownState == "asleep"
+				else not awake
+			local sleep = voice.sleep
+			if sleep and voice.sleeping ~= sleepingNow then
+				local first = voice.sleeping == nil
+				voice.sleeping = sleepingNow
+				local fading = voice.sleepFade
+				if fading then
+					fading:Cancel()
+					voice.sleepFade = nil
+				end
+				if sleepingNow then
+					sleep.Volume = voice.sleepVolume
+					sleep:Play()
+				elseif first then
+					sleep:Stop()
+				else
+					voice.sleepFade = fadeAway(sleep, SLEEP_FADE_SECONDS)
+				end
 			end
 
+			--==================================================================
+			-- THE WALK HOME (2026-09-27): one cue per trip, on the state change
+			-- SoundKit.returnCueStep names -- never per step, never again when a
+			-- walk becomes a haul, cut off by a fresh chase or a lie-down.
+			--==================================================================
+			local state = model:GetAttribute("ParentState")
+			if typeof(state) == "string" and state ~= voice.state then
+				local verdict = SoundKit.returnCueStep(voice.state, state, RETURN_AT)
+				voice.state = state
+				if verdict == "play" and voice.returnName then
+					quietBack(voice, 0)
+					voice.back = SoundKit.emit(voice.returnName, voice.root)
+				elseif verdict == "fade" then
+					quietBack(voice, RETURN_FADE_SECONDS)
+				end
+			end
+
+			-- Ground covered, measured flat as ParentAnim measures its stride: a
+			-- lurch or a hop is not a footfall.
 			local here = voice.root.Position
-			local moved = (here - voice.at).Magnitude
+			local dx, dz = here.X - voice.at.X, here.Z - voice.at.Z
+			local moved = math.sqrt(dx * dx + dz * dz)
 			voice.at = here
 
 			if voice.stepLooped then
@@ -331,12 +470,17 @@ RunService.Heartbeat:Connect(function()
 				end
 			elseif awake then
 				voice.walked += moved
-				if voice.walked >= STUDS_PER_STEP and voice.stepName then
+				local now = os.clock()
+				if voice.walked >= STUDS_PER_STEP and voice.stepName
+					and now - voice.steppedAt >= MIN_STEP_SECONDS then
 					voice.walked = 0
-					SoundKit.emit(voice.stepName, voice.root)
+					voice.steppedAt = now
+					hush(voice)
+					voice.stomp = SoundKit.emit(voice.stepName, voice.root)
 				end
 			else
 				voice.walked = 0
+				hush(voice)
 			end
 		end
 	end

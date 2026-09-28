@@ -296,7 +296,7 @@ local function pop(entry: Tracked)
 	-- figure, so a x2 Money owner watching a pop is watching what they got.
 	label.Text = "+$" .. GameConfig.compact(
 		SeedData.IncomePerSecond(entry.species, entry.tier)
-			* GameConfig.cashMultiplier(player))
+			* GameConfig.incomeMultiplier(player))
 	label.TextTransparency = 0
 	if stroke then
 		stroke.Transparency = 0

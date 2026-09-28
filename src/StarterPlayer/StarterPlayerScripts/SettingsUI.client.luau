@@ -22,9 +22,15 @@
 --                Never "High": no reader knows that word, so writing it would
 --                leave every effect switched off until a rejoin.
 --
--- NO REMOTE AND NO SAVE. All three are this client's own business, and none is
--- kept -- a rejoin starts from the defaults. Keeping them would need a profile
--- field and a remote, and this panel adds neither.
+-- NO REMOTE AND NO SAVE for those three. All are this client's own business, and
+-- none is kept -- a rejoin starts from the defaults.
+--
+-- MENU SIZE IS THE EXCEPTION, AND IS SAVED THE WAY WALK MODE IS (2026-09-26): a
+-- reading preference a player should set once, so it goes to the profile through
+-- the GameEvent verb the HUD already sends (GameConfig.MenuSize) -- no new remote
+-- and no new store -- and every menu reads it back off the player (UIKit). It
+-- sits in the title bar rather than a fourth row: the rows deliberately do not
+-- scroll, and on the shortest landscape phone a fourth would not fit.
 --
 --==============================================================================
 -- 44 PIXELS, EVERY TARGET
@@ -262,6 +268,9 @@ local modal = UIKit.modal(gui, {
 	maxWidth = MAX_WIDTH,
 	maxHeight = MAX_HEIGHT,
 })
+-- This gui holds only the panel, so it takes the player's menu size whole --
+-- clamped so all three rows still fit, since they do not scroll.
+UIKit.menuGui(gui, Vector2.new(248, ROW_H * 3 + ROW_GAP * 2 + 82))
 
 local titleBar = modal.title.Parent :: Frame
 local titleGear = Instance.new("ImageLabel")
@@ -276,6 +285,61 @@ titleGear.ZIndex = 3
 titleGear.Parent = titleBar
 modal.title.Position = UDim2.new(0, 46, 0.5, 0)
 modal.title.Size = UDim2.new(1, -98, 1, 0)
+
+--==============================================================================
+-- MENU SIZE, IN THE TITLE BAR
+--
+-- One press, the next size: NORMAL (today's), LARGE, LARGER, round again. It
+-- is applied the moment it is pressed and saved by the server; each menu then
+-- draws at the chosen size or at the largest its screen allows, whichever is
+-- smaller, and the HUD never moves.
+--==============================================================================
+local SIZE_W = 104
+local sizeButton = UIKit.cycleButton(titleBar, "MENU SIZE", 4)
+sizeButton.button.AnchorPoint = Vector2.new(1, 0.5)
+sizeButton.button.Position = UDim2.new(1, -52, 0.5, 0)
+sizeButton.button.Size = UDim2.fromOffset(SIZE_W, 36)
+modal.title.Size = UDim2.new(1, -(98 + SIZE_W + 8), 1, 0)
+modal.title.TextScaled = true
+do
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 26
+	fit.MinTextSize = 12
+	fit.Parent = modal.title
+end
+
+local function sizeLabel(): string
+	local id = UIKit.menuSizeId()
+	for _, option in ipairs(GameConfig.MenuSize.Options) do
+		if option.Id == id then
+			return option.Label
+		end
+	end
+	return GameConfig.MenuSize.Options[1].Label
+end
+sizeButton.set(sizeLabel())
+UIKit.onMenuSize(function()
+	sizeButton.set(sizeLabel())
+end)
+
+local gameEvent: RemoteEvent? = nil
+task.spawn(function()
+	local remotes = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Remotes", 20)
+	local channel = remotes and remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20)
+	if channel and channel:IsA("RemoteEvent") then
+		gameEvent = channel
+	end
+end)
+
+sizeButton.button.Activated:Connect(function()
+	local id = GameConfig.nextMenuSize(UIKit.menuSizeId())
+	UIKit.setMenuSize(id)
+	sizeButton.set(sizeLabel())
+	local channel = gameEvent
+	if channel then
+		channel:FireServer(GameConfig.MenuSize.Action, id)
+	end
+end)
 
 -- Ten seconds for a slow connection before the artwork is given up on.
 local ICON_PATIENCE = 10
@@ -708,7 +772,8 @@ player:GetAttributeChangedSignal(QUALITY):Connect(paintReduced)
 -- have had.
 --==============================================================================
 local function relayout()
-	local width = rowsFrame.AbsoluteSize.X
+	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
+	local width = rowsFrame.AbsoluteSize.X / UIKit.scaleOf(gui)
 	if width <= 0 then
 		return
 	end

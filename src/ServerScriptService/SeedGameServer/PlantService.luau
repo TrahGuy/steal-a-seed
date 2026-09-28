@@ -86,6 +86,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
@@ -164,6 +165,17 @@ type Planted = {
 -- plot -> placementId -> Planted
 local growing: { [Model]: { [number]: Planted } } = {}
 local nextId: { [Model]: number } = {}
+--==============================================================================
+-- A BED IS NOT SAVED UNTIL ITS GARDEN HAS BEEN PUT BACK
+--
+-- plot -> the owner whose saved garden restore() has put into it. Until that
+-- is true, persist() writes nothing and PlaceAt plants nothing: a bed nobody
+-- has restored yet is not "an empty garden", it is a garden that has not
+-- arrived, and saving it would erase the real one -- which is how the owner's
+-- garden was lost on 2026-09-15, and what a 38 s load past restore's old 30 s
+-- deadline would have done again. Cleared when the plot is released.
+--==============================================================================
+local restoredFor: { [Model]: Player } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 local running = false
 
@@ -227,6 +239,10 @@ end
 -- and no change to what is or is not allowed. The only difference is that the
 -- server now says which guard fired.
 --
+-- TWO OF THEM NOW REACH THE PLAYER TOO (2026-09-23): out of reach and a full
+-- plot, the two a player can fix, go back as a toast from the click's handler
+-- in Start. The log line below is unchanged and still covers all of them.
+--
 -- RATE LIMITED PER PLAYER AND CODE. Placing is a click, and a player who cannot
 -- plant will click ten times: ten identical lines a second buries the one line
 -- that matters. The table has weak keys so a player who leaves is collected
@@ -245,8 +261,10 @@ local function heldSpeciesId(player: Player): string
 end
 
 -- Always returns false, so each guard reads `return refuse(...)` and cannot
--- accidentally start allowing what it used to refuse.
-local function refuse(player: Player, code: string): boolean
+-- accidentally start allowing what it used to refuse. The code rides back out
+-- beside it, so the click's handler can tell the player the two reasons that
+-- are theirs to fix (ActionRefusal.fromPlacement) and say nothing about the rest.
+local function refuse(player: Player, code: string): (boolean, string)
 	local now = os.clock()
 	local seen = lastRefusal[player]
 	if not seen then
@@ -258,7 +276,7 @@ local function refuse(player: Player, code: string): boolean
 		log(string.format("%s placement refused: %s (species %s)",
 			player.Name, code, heldSpeciesId(player)))
 	end
-	return false
+	return false, code
 end
 
 --==============================================================================
@@ -711,7 +729,8 @@ end
 
 local function persist(plot: Model)
 	local owner = PlotService.OwnerOf(plot)
-	if owner then
+	-- Only once this owner's garden is in the bed -- see restoredFor.
+	if owner and restoredFor[plot] == owner then
 		PlayerDataService.SetPlants(owner, record(plot))
 	end
 end
@@ -844,9 +863,11 @@ local function attachInstantPrompt(entry: Planted)
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = PLANT_RANGE
 	prompt.RequiresLineOfSight = false
-	-- What PromptUI prints in the capsule. Roblox charges the Dashboard's price;
-	-- this is the manifest's copy of it, exactly as a shop tile is.
+	-- That the prompt sells something, at the manifest's list price. PromptUI does
+	-- NOT print this number: Roblox prices products by region, so the capsule
+	-- shows what Roblox tells the client this player pays for RobuxProduct.
 	prompt:SetAttribute("Robux", INSTANT_ITEM.robux)
+	prompt:SetAttribute("RobuxProduct", instantProductId())
 	-- Drawn above the pod's HATCHING label rather than on top of it.
 	prompt:SetAttribute("OverPodLabel", true)
 	-- Offered to the owner only. That is courtesy -- PromptUI does not draw it
@@ -1421,7 +1442,7 @@ end
 -- which goes in the ground and starts a clock, and a hatched creature, which
 -- goes in the ground already earning. The Tool says which.
 --==============================================================================
-function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
+function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, string?)
 	local plot = PlotService.PlotOf(player)
 	if not plot then
 		-- A player whose profile has not finished loading has no plot either,
@@ -1429,6 +1450,12 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 		-- is upstream of it. Same refusal either way; different thing to fix.
 		local code = if PlayerDataService.IsReady(player) then "NO_PLOT" else "NO_PROFILE"
 		return refuse(player, code)
+	end
+	-- A plot whose saved garden is still on its way: planting here would be
+	-- saved as the whole garden. The same refusal as no profile, because that is
+	-- what it is waiting for.
+	if restoredFor[plot] ~= player then
+		return refuse(player, "NO_PROFILE")
 	end
 	local soil = soilOf(plot)
 	if not soil then
@@ -1539,7 +1566,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): boolean
 		log(string.format("%s buried a %d tier %s pod (%.0fs until it can be hatched).",
 			player.Name, tier, species.Name, SeedData.GrowSeconds(tier)))
 	end
-	return true
+	return true, nil
 end
 
 --==============================================================================
@@ -1579,15 +1606,24 @@ end
 
 local function restore(player: Player, plot: Model)
 	task.spawn(function()
-		local deadline = os.clock() + 30
-		while not PlayerDataService.IsReady(player) and os.clock() < deadline do
+		-- For as long as they stay (GameConfig.Plot.RestorePatienceSeconds is
+		-- the backstop). This gave up after 30 s, and a save has been measured
+		-- at 38: the garden was then never put back, and restoredFor is what
+		-- now stops the next planting saving that empty bed over it.
+		local deadline = os.clock() + GameConfig.Plot.RestorePatienceSeconds
+		while player.Parent == Players and not PlayerDataService.IsReady(player)
+			and os.clock() < deadline do
 			task.wait(0.25)
 		end
 		local profile = PlayerDataService.Get(player)
 		if not profile or player.Parent ~= Players then
+			if player.Parent == Players then
+				warn(string.format("[Seed/PlantService] %s: the saved garden never arrived; "
+					.. "their bed stays shut this session rather than be saved empty.", player.Name))
+			end
 			return
 		end
-		-- Still theirs? Thirty seconds is long enough to have been reassigned.
+		-- Still theirs? A long wait is long enough to have been reassigned.
 		if PlotService.PlotOf(player) ~= plot then
 			return
 		end
@@ -1753,11 +1789,20 @@ local function restore(player: Player, plot: Model)
 				if over > 0 then string.format(" -- %d over the level's capacity of %d, kept",
 					over, cap) else ""))
 		end
+		-- The garden is in. From here the bed is this owner's to save and plant.
+		restoredFor[plot] = player
 		-- Write back, so anything dropped stops being carried forever and any
 		-- migrated position is saved in the new shape.
 		persist(plot)
 		sweepAnchors(plot)
 	end)
+end
+
+-- Whether a plot's owner has had their saved garden put back into it -- the
+-- gate persist() and PlaceAt wait on. For specs and the leave/rejoin checks.
+function PlantService.GardenRestored(plot: Model): boolean
+	local owner = PlotService.OwnerOf(plot)
+	return owner ~= nil and restoredFor[plot] == owner
 end
 
 --==============================================================================
@@ -2138,6 +2183,40 @@ function PlantService.CountIn(plot: Model): number
 end
 
 --==============================================================================
+-- A PROGRESS RESET: THE BED EMPTIED, AND NOTHING SAVED OUT OF IT
+--
+-- AdminService's Reset Player Progress. Everything standing on this plot goes --
+-- models, anchors, the tracking, a pending Instant Hatch note -- the way a
+-- released lease clears it, and NOTHING is persisted on the way out: the
+-- profile is being reset, and writing the old garden into it is the one thing
+-- this must not do. Any later persist of this plot finds an empty bed.
+--==============================================================================
+function PlantService.ClearGarden(player: Player, plot: Model): number
+	local cleared = 0
+	for _, entry in pairs(growing[plot] or {}) do
+		if entry.model and entry.model.Parent then
+			entry.model:Destroy()
+		end
+		dropAnchor(entry)
+		cleared += 1
+	end
+	growing[plot] = nil
+	nextId[plot] = nil
+	carried[plot] = nil
+	local folder = plot:FindFirstChild(PLOT.PlantsFolderName)
+	if folder then
+		for _, child in ipairs(folder:GetChildren()) do
+			child:Destroy()
+		end
+	end
+	wanted[player.UserId] = nil
+	lastOffer[player.UserId] = nil
+	log(string.format("%s's garden was cleared for a progress reset (%d plant(s)).", player.Name,
+		cleared))
+	return cleared
+end
+
+--==============================================================================
 -- LIFECYCLE
 --==============================================================================
 function PlantService.Init()
@@ -2156,6 +2235,7 @@ function PlantService.Init()
 		growing[plot] = nil
 	end
 	table.clear(nextId)
+	table.clear(restoredFor)
 	table.clear(wanted)
 	table.clear(lastOffer)
 	warnedNoProduct = false
@@ -2175,6 +2255,8 @@ function PlantService.Start()
 		growing[plot] = nil
 		nextId[plot] = nil
 		carried[plot] = nil
+		-- Shut until the next owner's garden is in.
+		restoredFor[plot] = nil
 	end)
 	-- A note about which pod to hatch means nothing once its writer has gone: a
 	-- receipt for somebody who is not here is never processed (StoreService), and
@@ -2242,7 +2324,32 @@ function PlantService.Start()
 					if payload ~= payload or payload.Magnitude > 1e6 then
 						return
 					end
-					PlantService.PlaceAt(player, payload)
+					-- Refused or not is PlaceAt's to decide, and it already has.
+					-- Out of reach and a full plot are said to the player; every
+					-- other guard is internal and stays as silent as it was.
+					local placed, code = PlantService.PlaceAt(player, payload)
+					if not placed then
+						local reason = ActionRefusal.fromPlacement(code)
+						-- A FULL PLOT SAYS WHAT CAN STILL MAKE ROOM (2026-09-27):
+						-- only a grown plant can be picked up (pickUp), and only a
+						-- plot below its top level can be upgraded. Same refusal,
+						-- same moment; this only picks which next step to name.
+						local plot = if reason == "PLOT_FULL" then PlotService.PlotOf(player) else nil
+						if plot then
+							local hasGrown = false
+							for _, entry in pairs(growing[plot] or {}) do
+								if entry.stage == CreatureModel.STAGE_GROWN then
+									hasGrown = true
+									break
+								end
+							end
+							reason = ActionRefusal.plotFull(
+								PlotService.LevelOf(plot) < #GameConfig.PlotTiers, hasGrown)
+						end
+						if reason then
+							ActionRefusal.send(player, reason)
+						end
+					end
 				elseif action == PICKUP_ACTION then
 					--==========================================================
 					-- AN ID IS A CLAIM TOO

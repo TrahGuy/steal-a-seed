@@ -74,6 +74,10 @@ local LABEL = HATCH.Label
 local PAID = HATCH.Paid
 local SOUNDS = HATCH.Sounds
 local REVEAL_FOR: { [string]: string } = (GameConfig.Sfx.RevealFor :: any)
+-- The accent a few rarities add, and the hatches that have already had theirs,
+-- by the server's token (a plain number; a session sees a few hundred hatches).
+local REVEAL_ACCENT: { [string]: string } = (GameConfig.Sfx.RevealAccentFor :: any) or {}
+local accented: { [number]: boolean } = {}
 
 -- Reduced Effects. The same attribute SpeedFX, PlantAura and UIKit already read,
 -- so one setting covers the whole game.
@@ -576,6 +580,21 @@ local function playReveal(payload: any)
 		if not primary then
 			finish(job)
 			return
+		end
+
+		--======================================================================
+		-- THE RARE ACCENT (2026-09-27): with the CREATURE, not the timer. The
+		-- fanfare above marks the burst; this marks the thing it revealed, the
+		-- moment it is built and starts to rise. Only for the form rarities
+		-- GameConfig.Sfx.RevealAccentFor names, and once per hatch however
+		-- often its reveal arrives.
+		--======================================================================
+		local accent = REVEAL_ACCENT[species.Rarity]
+		if accent and (token == 0 or not accented[token]) and SoundKit.has(accent) then
+			if token ~= 0 then
+				accented[token] = true
+			end
+			SoundKit.emit(accent, flashPart)
 		end
 
 		local rest = creature:GetPivot()

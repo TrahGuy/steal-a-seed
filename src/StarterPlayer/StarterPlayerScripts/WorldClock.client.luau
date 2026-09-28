@@ -50,6 +50,8 @@ local GuiService = game:GetService("GuiService")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- Only for its TV scale (UIKit.tenFoot).
+local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -81,6 +83,8 @@ gui.Name = "SeedWorldClock"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.DisplayOrder = 30
+-- Drawn bigger on a TV (HudLayout's TEN-FOOT PROFILE); nothing changes elsewhere.
+UIKit.tenFoot(gui)
 gui.Parent = playerGui
 
 --==============================================================================
@@ -157,7 +161,9 @@ local function placePlate()
 	end
 	cap.MaxSize = Vector2.new(math.min(360, r.w), 40)
 	cap.MinSize = Vector2.new(math.min(190, r.w), 28)
-	plate.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - viewport.X / 2), 0, 8)
+	-- r.y is GameConfig's 8 everywhere but a TV, whose clock row comes down to
+	-- the title-safe edge.
+	plate.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - viewport.X / 2), 0, r.y)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placePlate)
 local topbarWatch = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placePlate)
@@ -171,7 +177,7 @@ placePlate()
 --
 --     DAY • 06:59                 the ordinary case
 --     BIOMES CLOSE IN 00:45       the last 45 seconds of the day
---     NIGHT • PODS RETURN IN 00:59
+--     NIGHT • PODS RETURN IN 00:14  the whole (fifteen-second) night
 --
 -- The warning is a different SENTENCE and a different colour, not a colour
 -- change alone -- a player who is colourblind or looking at their plot rather
@@ -253,6 +259,40 @@ end
 local lastText = ""
 local lastColour = PAPER
 
+--==============================================================================
+-- A PHASE AND ITS DEADLINE ARE TWO ATTRIBUTES, AND THEY MOVE TOGETHER
+--
+-- WorldCycleService writes both in one server frame, and they land together.
+-- If one ever arrived a frame before the other, a boundary would be drawn as
+-- the old phase with the new phase's time -- "BIOMES CLOSE IN 00:15" at the
+-- start of a night, "NIGHT * PODS RETURN IN 07:00" at dawn -- which with a
+-- fifteen-second night would happen eight times as often as it used to.
+--
+-- So a pair in which exactly ONE half has moved, at a boundary (the deadline
+-- this readout last drew was already due), is held: the last words stay up
+-- until the other half lands, for half a second at most. A player joining
+-- mid-phase has nothing to compare against and is drawn at once.
+--==============================================================================
+local seenPhase: string? = nil
+local seenEndsAt: number? = nil
+local heldSince: number? = nil
+
+local function settled(phase: string, endsAt: number, now: number): boolean
+	local lastPhase, lastEndsAt = seenPhase, seenEndsAt
+	if lastPhase ~= nil and lastEndsAt ~= nil
+		and (phase ~= lastPhase) ~= (endsAt ~= lastEndsAt)
+		and lastEndsAt - now <= 0.5 then
+		local since = heldSince or os.clock()
+		heldSince = since
+		if os.clock() - since < 0.5 then
+			return false
+		end
+	end
+	heldSince = nil
+	seenPhase, seenEndsAt = phase, endsAt
+	return true
+end
+
 local function draw()
 	local phase = Workspace:GetAttribute(ATTR.WorldPhase)
 	local endsAt = Workspace:GetAttribute(ATTR.WorldPhaseEndsAt)
@@ -264,9 +304,14 @@ local function draw()
 		drawBigTimer(nil, 0)
 		return
 	end
+	local now = Workspace:GetServerTimeNow()
+	if not settled(phase, endsAt, now) then
+		-- Half a pair: the last words, and the wall's, stay as they were.
+		return
+	end
 	plate.Visible = true
 
-	local left = math.max(0, endsAt - Workspace:GetServerTimeNow())
+	local left = math.max(0, endsAt - now)
 	drawBigTimer(phase, left)
 	local wording: string
 	local colour: Color3

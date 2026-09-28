@@ -7,7 +7,7 @@
 --==============================================================================
 -- WHY THIS IS ONE MODULE AND NOTHING BUT NUMBERS
 --
--- The HUD has ten owners and none of them owns the others:
+-- The HUD has fourteen owners and none of them owns the others:
 --
 --   IndexUI, ShopUI, SettingsUI, WalkModeUI    the left rail
 --   RailDrawerUI                               on a phone, the dock the first
@@ -18,6 +18,10 @@
 --   CashUI                                     cash, speed and the x2 card
 --   WorldClock                                 the clock
 --   TutorialUI, BiomeGuideUI                   the two that come and go
+--   ActionToastUI, PlotTeleportUI              the refusal toast and TELEPORT
+--                                              TO PLOT
+--   AdminConsoleUI                             the ADMIN button, for the two
+--                                              accounts AdminService allows
 --
 -- They have to agree to the pixel without talking to each other, so each asks
 -- this module the same question with the same facts -- how big the safe area
@@ -25,8 +29,10 @@
 -- ITS OWN part of the answer to ITS OWN instances. Nothing here builds, finds,
 -- moves or keeps an instance, and nothing here runs on a clock: an owner asks
 -- again when its ScreenGui's AbsoluteSize changes, which is the viewport, the
--- inset and the notch all at once. Same pattern as ReachPoint, for the same
--- reason, and it is what lets HudLayoutSpec drive every branch without Play.
+-- inset and the notch all at once -- and one placed round the clock also when
+-- GuiService.TopbarInset does, which that size does not show. Same pattern as
+-- ReachPoint, for the same reason, and it is what lets HudLayoutSpec drive
+-- every branch without Play.
 --
 --==============================================================================
 -- WHAT STARTED IT, 2026-09-18, THE OWNER'S EMULATED 801 x 392 PHONE
@@ -62,11 +68,12 @@
 --   top right     Garden and the Bag: one row, the Bag in the corner
 --   right edge    BAT over TRAP, standing on the jump button's reservation
 --   bottom        the hotbar, five slots, centred between the two thumbs
---   bottom left   cash and speed, above the thumbstick and the hotbar line
+--   bottom left   cash and speed, above the thumbstick and the hotbar line (in
+--                 sidebars: in the corner itself, on the thumbstick's ring)
 --
 -- The hotbar and the cash block also change FACE in compact and in sidebars: a
 -- smaller belt (GameConfig.Hotbar.Compact, read through hotMetrics) and a
--- smaller cash block (CASH_COMPACT). Every answer carries its mode's numbers as
+-- smaller cash block (CASH_COMPACT, and CASH_PHONE in sidebars). Every answer carries its mode's numbers as
 -- `hot` and `cashStyle`, so the two owners draw from the same answer that
 -- placed them.
 --
@@ -105,6 +112,17 @@ local HudLayout = {}
 
 export type Rect = { x: number, y: number, w: number, h: number }
 
+-- The title-safe margins of a TV, in the logical units of a scaled gui: how far
+-- in from each edge of the safe area a group may start, and how far the
+-- window-space things at the top (the clock, the notice band) come down.
+export type TenFootInput = {
+	left: number,
+	top: number,
+	right: number,
+	bottom: number,
+	lift: number,
+}
+
 export type Input = {
 	-- AbsoluteSize of a HUD ScreenGui with IgnoreGuiInset = false: below the
 	-- topbar and inside the notch. Every owner has one.
@@ -119,6 +137,12 @@ export type Input = {
 	viewport: Vector2?,
 	topbar: Rect?,
 	insetTop: number?,
+	-- ON A TV ONLY (see THE TEN-FOOT PROFILE): the title-safe margins. nil
+	-- everywhere else, which is every desktop and every phone.
+	tv: TenFootInput?,
+	-- How far the clock, the notice band and the tutorial banner come down --
+	-- set for the inner solve of a TV answer, nil otherwise.
+	lift: number?,
 }
 
 export type Layout = {
@@ -160,6 +184,10 @@ export type Layout = {
 	-- The tutorial's instruction banner and the skip line under it.
 	banner: Rect,
 	skip: Rect,
+	-- How large TutorialUI draws its words -- the banner's lines, the pointer and
+	-- the celebration: 1, except on a phone (THE TUTORIAL BANNER). `banner` is
+	-- already the drawn size; the skip line is never scaled.
+	tutorialScale: number,
 
 	-- WINDOW space, unlike everything above.
 	clock: Rect?,
@@ -188,6 +216,29 @@ export type Layout = {
 	chooser: Rect?,
 	-- The right sidebar's padding round its two tiles; 0 for the old column.
 	equipPad: number,
+
+	-- TWO SMALL THINGS THAT COME AND GO, in every mode (see TOAST AND TELEPORT).
+	-- A refused action's one-line toast, just above the belt: ActionToastUI.
+	toast: Rect,
+	-- TELEPORT TO PLOT, top centre under the notice band: PlotTeleportUI. The
+	-- rect is the button's touch area; `teleportScale` is how large its plate is
+	-- DRAWN inside it -- 1, except on a phone (TELEPORT TO PLOT ON A PHONE).
+	teleport: Rect,
+	teleportScale: number,
+	-- The OBBY button right beside it (ObbyButtonUI), its plate drawn at
+	-- `teleportScale` too; `obbyWide` where there is room for its icon as well as
+	-- its word. An empty rect where neither side has room: it then stays hidden.
+	obby: Rect,
+	obbyWide: boolean,
+
+	-- The two-account ADMIN button, in WINDOW space like `clock`: in the topbar
+	-- beside the clock (see THE ADMIN BUTTON). nil without a clock to stand by.
+	admin: Rect?,
+
+	-- A TV's title-safe canvas in safe space, which every group above sits
+	-- inside, and how far the window-space row came down. Both nil off a TV.
+	frame: Rect?,
+	lift: number?,
 }
 
 --==============================================================================
@@ -299,6 +350,47 @@ local CASH_COMPACT: CashStyle = {
 	BuffCorner = 8,
 }
 
+--==============================================================================
+-- THE PHONE'S FACE: COMPACT, 15% SMALLER (owner, 2026-09-24)
+--
+-- Asked for on the 735 x 413 emulated phone, with the block moved down into the
+-- bottom-left corner (sidebars, CASH AND SPEED). Every size of the compact face
+-- that draws the two lines and the shoe, at 0.85 and rounded: speed at 23 and
+-- cash at 30, the shoe at 0.544, 2 px between the lines as before -- 27 + 2 +
+-- 34 = 63 tall. Speed stays over cash; colours, icons and formatting are
+-- CashUI's, untouched.
+--
+-- The x2 card never rides the cash line on a phone -- it is the top-right row's
+-- button there -- so the card's and its message's numbers are compact's own,
+-- and the button looks exactly as it did. For the same reason the reservation
+-- is the widest balance alone: "$9.99Qa" is compact's 129 px at 30/35, 111,
+-- and its outline -- kept as 120. The block reaches 2 px under its root for the
+-- cash line's outline, and nothing else hangs below it.
+--==============================================================================
+local CASH_PHONE: CashStyle = {
+	Root = Vector2.new(162, 63),
+	Reserve = 120,
+	Drop = 2,
+	SpeedSize = 23,
+	CashSize = 30,
+	SpeedX = 31,
+	SpeedW = 131,
+	SpeedBottom = 27,
+	CashW = 162,
+	SpeedStroke = 1.3,
+	CashStroke = 1.7,
+	ShoeScale = 0.544,
+	ShoeBottom = 25,
+	BuffSize = CASH_COMPACT.BuffSize,
+	BuffHit = CASH_COMPACT.BuffHit,
+	BuffGap = CASH_COMPACT.BuffGap,
+	BuffMinX = CASH_COMPACT.BuffMinX,
+	BuffDrop = CASH_COMPACT.BuffDrop,
+	TipSize = CASH_COMPACT.TipSize,
+	TipLift = CASH_COMPACT.TipLift,
+	BuffCorner = CASH_COMPACT.BuffCorner,
+}
+
 local CONFIG = {
 	-- Compact keeps every group this far inside the safe area, and this far
 	-- from every other group.
@@ -311,7 +403,7 @@ local CONFIG = {
 	WalkHeight = 46,
 	-- The cash block's two faces (see THE CASH BLOCK'S TWO FACES), and the
 	-- desktop one's three placing numbers under the names they always had.
-	CashStyle = { Desktop = CASH_DESKTOP, Compact = CASH_COMPACT },
+	CashStyle = { Desktop = CASH_DESKTOP, Compact = CASH_COMPACT, Phone = CASH_PHONE },
 	CashReserve = CASH_DESKTOP.Reserve,
 	CashRoot = CASH_DESKTOP.Root,
 	CashDrop = CASH_DESKTOP.Drop,
@@ -327,6 +419,9 @@ local CONFIG = {
 	BannerSize = Vector2.new(560, 84),
 	BannerTop = 84,
 	SkipSize = Vector2.new(150, 20),
+	-- On a phone the tutorial's words -- the banner, the pointer and the
+	-- celebration -- are drawn at this (owner, 2026-09-24; THE TUTORIAL BANNER).
+	TutorialPhoneScale = 0.75,
 	ClockTop = 8,
 	ClockHeight = 34,
 	ClockScale = 0.44,
@@ -381,6 +476,39 @@ local CONFIG = {
 	-- Between the x2 button and Garden: room for Garden's tucked badge.
 	BoostGap = 8,
 	--==========================================================================
+	-- TOAST AND TELEPORT
+	--
+	-- THE TOAST is one line just above the belt, up to 340 wide, narrowed
+	-- round anything that shares its rows and never under 200 -- below that it
+	-- is lifted clear instead. It is drawn UNDER prompts, hatch timers, the belt
+	-- and every panel (ActionToastUI's DisplayOrder), so where a world prompt
+	-- happens to pass behind it, the prompt wins.
+	--
+	-- THE TELEPORT BUTTON sits under the NOTICE BAND -- the biome name and the
+	-- sale line, drawn by BiomeGuideUI and SellUI at window y 50 to 80 -- centred
+	-- under the clock, 44 tall for a thumb. On a 58-px topbar that is safe
+	-- y 30. Where it shares rows with the top buttons it stays between them, and
+	-- the tutorial banner, a dropped notice and the chooser all keep 8 px off it.
+	--==========================================================================
+	-- 52 tall since 2026-09-27: one notice -- a headline and a one-line next
+	-- step (ActionToastUI) -- rather than the old one-line pill. Older notices
+	-- stand above it; see THE NOTICE STACK.
+	Toast = { Width = 340, Height = 52, MinWidth = 200 },
+	-- On a phone it stands right under the clock instead, the plate drawn at
+	-- PhoneScale inside the same 196 x 44 touch area (TELEPORT TO PLOT ON A PHONE).
+	Teleport = { Size = Vector2.new(196, 44), PhoneScale = 0.75 },
+	-- THE OBBY BUTTON beside it (2026-09-27; see obbyBeside): TELEPORT's height,
+	-- as wide as its icon and word -- or the word alone where only that fits.
+	Obby = { Size = Vector2.new(124, 44), Narrow = 64 },
+	NoticeTop = 50,
+	NoticeHeight = 30,
+	-- THE STATUS COLUMN (2026-09-27; see statusRows): the chase warning's line
+	-- and the boost row, tall enough for StatusText's desktop sizes -- 26 with
+	-- its icon is 32, 17 with its clock is 23 -- which a phone draws smaller.
+	Status = { Height = 32, BoostHeight = 26 },
+	-- The ADMIN button: the clock's height, one short word wide.
+	Admin = { Size = Vector2.new(64, 34) },
+	--==========================================================================
 	-- THE BAG PANEL
 	--
 	-- LoadoutUI's own numbers, moved here so the arithmetic that places the
@@ -418,9 +546,98 @@ local CONFIG = {
 		InfoSideMin = 184,
 		InfoSideMax = 236,
 		InfoSheetH = 118,
+		-- The Plants tab's one-line note over its cards ("$/s is base income"),
+		-- and the Sort button that stands at the right end of the tab row. The
+		-- note is counted out of the tray before whole rows are, so a phone's
+		-- one row of cards still fits whole under it; the button is counted out
+		-- of the tab row, which is why each tab is still 120 wide at 341.
+		NoteH = 18,
+		SortW = 92,
+		SortGap = 6,
+	},
+	--==========================================================================
+	-- THE TEN-FOOT PROFILE (see below): the logical canvas a TV's title-safe
+	-- area is shown as, and the share of each edge a TV may crop.
+	--==========================================================================
+	TenFoot = {
+		Canvas = Vector2.new(1280, 720),
+		SafeEdge = 0.05,
+		MinScale = 1,
+		MaxScale = 3,
 	},
 }
 HudLayout.Config = CONFIG
+
+--==============================================================================
+-- THE TEN-FOOT PROFILE: THE DESKTOP LAYOUT, BIGGER, INSIDE THE TITLE-SAFE AREA
+--
+-- Approved by the owner 2026-09-24 after an Xbox tester (Michael) found the HUD
+-- and the panels too small to read from a sofa. Only where Roblox says the
+-- screen is a TV (GuiService:IsTenFootInterface) -- every desktop and every
+-- phone answers exactly as it did.
+--
+-- NOT A REDESIGN. A TV gets the same arrangement a desktop gets, magnified:
+--
+--   * Each of the game's ScreenGuis carries a UIScale named TenFoot (UIKit
+--     puts it there), which makes the gui lay its children out on a LOGICAL
+--     canvas of window / scale and draw them that much bigger. The scale is
+--     the one that shows the TV's title-safe area as a 1280 x 720 canvas --
+--     1.35 at 1080p -- and never below 1.
+--   * measure() hands a scaled gui's owner that logical size, so every rect
+--     below is in logical pixels and every owner's UDim2 means what it says.
+--   * solve() lays the ordinary answer out on the title-safe canvas -- 5% in
+--     from each edge of the window, the share a TV may crop -- and moves it
+--     there. The clock, the notice band under it and the tutorial banner come
+--     down with the title-safe top edge (`lift`).
+--
+-- WHAT A SCALED GUI MUST NOT DO is turn an AbsoluteSize, AbsolutePosition or
+-- TextBounds -- which are real pixels -- into an Offset without dividing by
+-- scaleOf(). Every place that does was found and does (2026-09-24 audit).
+--==============================================================================
+local TEN_FOOT = "TenFoot"
+HudLayout.TenFootName = TEN_FOOT
+
+-- For a harness: nil asks the engine, true or false decides.
+HudLayout.tenFootOverride = nil :: boolean?
+
+function HudLayout.isTenFoot(): boolean
+	local forced = HudLayout.tenFootOverride
+	if forced ~= nil then
+		return forced
+	end
+	local ok, tv = pcall(function()
+		return game:GetService("GuiService"):IsTenFootInterface()
+	end)
+	return ok and tv == true
+end
+
+-- The magnification that shows a window's title-safe area as the canvas.
+function HudLayout.tenFootScale(viewport: Vector2): number
+	local T = CONFIG.TenFoot
+	local usable = viewport * (1 - 2 * T.SafeEdge)
+	local scale = math.min(usable.X / T.Canvas.X, usable.Y / T.Canvas.Y)
+	if scale ~= scale then
+		return T.MinScale
+	end
+	return math.clamp(scale, T.MinScale, T.MaxScale)
+end
+
+-- The TenFoot scale of the ScreenGui (or BillboardGui) `object` is drawn in,
+-- or 1 -- what an AbsoluteSize read there has to be divided by to become an
+-- Offset. Reads; never creates.
+function HudLayout.scaleOf(object: Instance?): number
+	local node = object
+	while node and not node:IsA("LayerCollector") do
+		node = node.Parent
+	end
+	if node then
+		local scale = node:FindFirstChild(TEN_FOOT)
+		if scale and scale:IsA("UIScale") and scale.Scale > 0 then
+			return scale.Scale
+		end
+	end
+	return 1
+end
 
 local function rect(x: number, y: number, w: number, h: number): Rect
 	return { x = x, y = y, w = w, h = h }
@@ -536,7 +753,9 @@ local function clockRect(input: Input, L: Layout): Rect?
 		lo, hi = bar.x + CONFIG.Margin, bar.x + bar.w - CONFIG.Margin
 	end
 	local insetTop = input.insetTop or 0
-	if CONFIG.ClockTop + CONFIG.ClockHeight + CONFIG.Gap > insetTop + L.railTop then
+	-- On a TV the row comes down to the title-safe top edge; 0 everywhere else.
+	local top = CONFIG.ClockTop + (input.lift or 0)
+	if top + CONFIG.ClockHeight + CONFIG.Gap > insetTop + L.railTop then
 		local originX = (vx - L.safe.X) / 2
 		lo = math.max(lo, originX + L.railRight + CONFIG.Gap)
 		hi = math.min(hi, originX + L.rightLeft - CONFIG.Gap)
@@ -551,7 +770,245 @@ local function clockRect(input: Input, L: Layout): Rect?
 			end
 		end
 	end
-	return rect(centre - width / 2, CONFIG.ClockTop, width, CONFIG.ClockHeight)
+	return rect(centre - width / 2, top, width, CONFIG.ClockHeight)
+end
+
+--==============================================================================
+-- THE TOAST: ONE LINE ABOVE THE BELT
+--
+-- Centred on the belt, 8 px over it, and as wide as 340 allows between
+-- whatever shares its rows -- the cash block, the BAT/TRAP column, the thumbs.
+-- Where that leaves less than 200 it is lifted above the lowest thing it met
+-- and tried again, so a short phone gets a line higher up rather than a sliver.
+--==============================================================================
+local function toastAbove(sw: number, hotbar: Rect, beside: { Rect }): Rect
+	local T, M, G = CONFIG.Toast, CONFIG.Margin, CONFIG.Gap
+	local centre = hotbar.x + hotbar.w / 2
+	local bottom = hotbar.y - G
+	local lo, hi = M, sw - M
+	for _ = 1, 3 do
+		local band = rect(0, bottom - T.Height, sw, T.Height)
+		local ceiling = bottom
+		lo, hi = M, sw - M
+		for _, other in ipairs(beside) do
+			if sharesRows(band, other, G) then
+				if other.x + other.w / 2 < centre then
+					lo = math.max(lo, other.x + other.w + G)
+				else
+					hi = math.min(hi, other.x - G)
+				end
+				ceiling = math.min(ceiling, other.y - G)
+			end
+		end
+		if hi - lo >= T.MinWidth then
+			break
+		end
+		bottom = ceiling
+	end
+	local width = math.max(0, math.min(T.Width, hi - lo))
+	local x = math.clamp(centre - width / 2, lo, math.max(lo, hi - width))
+	return rect(x, bottom - T.Height, width, T.Height)
+end
+
+--==============================================================================
+-- THE TELEPORT BUTTON: UNDER THE NOTICE BAND, CENTRED UNDER THE CLOCK
+--
+-- `rows` are the top buttons that may share its band; it stays 8 px inside
+-- them. `clock` is the clock's rect in window space, when there is a window to
+-- measure, so a clock slid off centre by the topbar takes the button with it.
+--==============================================================================
+--==============================================================================
+-- TELEPORT TO PLOT ON A PHONE (owner, 2026-09-24, twice)
+--
+-- Drawn at PhoneScale -- 0.75: plate, icon, word and padding, by UIScale --
+-- inside the same 196 x 44 touch area, so a thumb has exactly the target it
+-- had. And it comes right up to the clock: the DRAWN plate 8 px under it. That
+-- puts the top of the button up in the topbar, under the clock, which is only
+-- allowed inside the topbar's free span (GuiService.TopbarInset, the part Roblox
+-- leaves to the game) -- nowhere near Roblox's own buttons. Where the free span
+-- is too narrow to hold it, it waits under the topbar instead, at the safe
+-- area's own 8 px margin, as the first pass had it.
+--
+-- The ADMIN button, beside the clock or hung under it on a window too narrow
+-- for either side, keeps 8 px off the whole touch area; the button drops under
+-- it where it would not. The notice band it used to wait under goes beneath it
+-- (HudLayout.notice). Still centred on the clock and still between the top
+-- rows; which screens show it, and what a press does, are not touched.
+--==============================================================================
+local function teleportUnder(input: Input, clock: Rect?, rows: { Rect }, phone: boolean?, admin: Rect?): Rect
+	local T, M, G = CONFIG.Teleport, CONFIG.Margin, CONFIG.Gap
+	local sw = input.safe.X
+	local insetTop = input.insetTop or 0
+	local w, h = T.Size.X, T.Size.Y
+	local viewport = input.viewport
+	-- Where the safe area starts across the window: the notched phones' side
+	-- insets are equal, so it is centred.
+	local originX = if viewport then (viewport.X - sw) / 2 else 0
+	local centre = sw / 2
+	if clock and viewport then
+		centre = clock.x + clock.w / 2 - originX
+	end
+	-- Centred under the clock, and 8 px inside the top rows that share its band.
+	local function at(y: number): Rect
+		local band = rect(0, y, sw, h)
+		local lo, hi = M, sw - M
+		for _, other in ipairs(rows) do
+			if sharesRows(band, other, G) then
+				if other.x + other.w / 2 < centre then
+					lo = math.max(lo, other.x + other.w + G)
+				else
+					hi = math.min(hi, other.x - G)
+				end
+			end
+		end
+		local c = math.clamp(centre, lo + w / 2, math.max(lo + w / 2, hi - w / 2))
+		return rect(c - w / 2, y, w, h)
+	end
+	if not phone then
+		local noticeTop = CONFIG.NoticeTop + (input.lift or 0)
+		return at(math.max(M, noticeTop + CONFIG.NoticeHeight - insetTop + G))
+	end
+
+	-- The clock's height never depends on the window, so it is known even
+	-- before the camera is: an owner laid out that early still gets this.
+	local clockBottom = if clock then clock.y + clock.h
+		else CONFIG.ClockTop + (input.lift or 0) + CONFIG.ClockHeight
+	-- The plate is drawn this far inside the touch area, top and bottom.
+	local inset = h * (1 - T.PhoneScale) / 2
+	-- ADMIN in safe space; it is in window space like the clock.
+	local a = if admin then rect(admin.x - originX, admin.y - insetTop, admin.w, admin.h) else nil
+	local function underAdmin(r: Rect): Rect
+		if a and HudLayout.gap(a, r) < G then
+			return at(math.max(r.y, a.y + a.h + G))
+		end
+		return r
+	end
+	local r = underAdmin(at(math.ceil(clockBottom + G - inset) - insetTop))
+	if r.y < 0 then
+		local bar = input.topbar
+		local free = bar ~= nil and bar.w > 0
+			and r.x + originX >= bar.x + M and r.x + r.w + originX <= bar.x + bar.w - M
+		if not free then
+			r = underAdmin(at(M))
+		end
+	end
+	return r
+end
+
+--==============================================================================
+-- THE ADMIN BUTTON: IN THE TOPBAR, BESIDE THE CLOCK
+--
+-- Two accounts ever see it (AdminService), so it takes room nobody else's HUD
+-- uses and moves nothing: no group is placed around it, and every other answer
+-- is the same with or without it. WINDOW space, like the clock, level with it
+-- and as tall: right of the clock inside the topbar's free span, left of it
+-- where the right is too narrow. Every listed desktop and phone has room on the
+-- right. On a window too narrow for either side it hangs just under the clock,
+-- in the notice band, which only ever carries passing text.
+--==============================================================================
+local function adminBeside(input: Input, clock: Rect?): Rect?
+	if not clock then
+		return nil
+	end
+	local A, M, G = CONFIG.Admin, CONFIG.Margin, CONFIG.Gap
+	local w, h = A.Size.X, A.Size.Y
+	local y = clock.y + (clock.h - h) / 2
+	local lo, hi = M, math.huge
+	local bar, viewport = input.topbar, input.viewport
+	if bar and bar.w > 0 then
+		lo, hi = bar.x + M, bar.x + bar.w - M
+	elseif viewport then
+		hi = viewport.X - M
+	end
+	local right = clock.x + clock.w + G
+	if right + w <= hi then
+		return rect(right, y, w, h)
+	end
+	local left = clock.x - G - w
+	if left >= lo then
+		return rect(left, y, w, h)
+	end
+	return rect(clock.x + clock.w / 2 - w / 2, clock.y + clock.h + 4, w, h)
+end
+HudLayout.adminBeside = adminBeside
+
+--==============================================================================
+-- THE OBBY BUTTON: RIGHT BESIDE TELEPORT TO PLOT (2026-09-27)
+--
+-- ObbyButtonUI's touch area. TELEPORT's own row and height, 8 px off it, its
+-- plate drawn at TELEPORT's scale -- so on a phone it is up under the clock
+-- with it -- on TELEPORT's right where that clears everything, else on its
+-- left; with its icon where the room allows, the word alone where only that
+-- fits. Up in the topbar only inside the free span, TELEPORT's own rule, and
+-- 8 px off the ADMIN button's reservation. Where neither side has room for even
+-- the word the answer is an empty rect and the button stays hidden: a shortcut
+-- is not worth covering anything for. HudLayoutSpec finds it beside TELEPORT on
+-- every listed screen.
+--
+-- Nothing is placed around it. The chase warning shares TELEPORT's slot
+-- (statusRows) and can run wider than it, but never while this shows: the
+-- button is for the Safe Zone only, and AlertUI stands the warning down there.
+--==============================================================================
+local function obbyBeside(input: Input, L: Layout): (Rect, boolean)
+	local O, M, G = CONFIG.Obby, CONFIG.Margin, CONFIG.Gap
+	local t = L.teleport
+	local sw = input.safe.X
+	local insetTop = input.insetTop or 0
+	local viewport = input.viewport
+	local originX = if viewport then (viewport.X - sw) / 2 else 0
+	local others: { Rect } = { L.toast, L.banner, L.skip }
+	for _, g in ipairs(HudLayout.groups(L, true)) do
+		table.insert(others, g.rect)
+	end
+	local indexBadge, gardenBadge = HudLayout.badges(L)
+	table.insert(others, indexBadge)
+	table.insert(others, gardenBadge)
+	for _, maybe in ipairs({ { L.thumb }, { L.jump }, { L.chooser } }) do
+		local r = maybe[1]
+		if r then
+			table.insert(others, r)
+		end
+	end
+	local admin = L.admin
+	if admin then
+		table.insert(others, rect(admin.x - originX, admin.y - insetTop, admin.w, admin.h))
+	end
+	local function clear(r: Rect): boolean
+		if r.x < M or r.x + r.w > sw - M then
+			return false
+		end
+		if r.y < 0 then
+			local bar = input.topbar
+			if not (bar and bar.w > 0 and r.x + originX >= bar.x + M and r.x + r.w + originX <= bar.x + bar.w - M) then
+				return false
+			end
+		end
+		for _, other in ipairs(others) do
+			if HudLayout.gap(r, other) < G then
+				return false
+			end
+		end
+		return true
+	end
+	if t.w > 0 then
+		-- TELEPORT's own row first; then, where TELEPORT stands up in the topbar
+		-- and the topbar has no room beside it (a small phone: the free span
+		-- ends on one side, the x2 button and ADMIN take the other), just under
+		-- the topbar at the margin -- the row TELEPORT itself drops to when its
+		-- own span is too narrow. HudLayout.notice steps round it there.
+		local rows = if t.y < M then { t.y, M } else { t.y }
+		for _, y in ipairs(rows) do
+			for _, width in ipairs({ O.Size.X, O.Narrow }) do
+				for _, x in ipairs({ t.x + t.w + G, t.x - G - width }) do
+					local r = rect(x, y, width, t.h)
+					if clear(r) then
+						return r, width == O.Size.X
+					end
+				end
+			end
+		end
+	end
+	return rect(0, 0, 0, 0), false
 end
 
 --==============================================================================
@@ -563,8 +1020,10 @@ local function desktop(input: Input): Layout
 	local wide, square = RAIL.WideSize, RAIL.SquareSize
 	local row = wide.Y + RAIL.Gap
 
-	local index = rect(I, I, wide.X, wide.Y)
-	local shop = rect(I, I + row, wide.X, wide.Y)
+	-- Index and Shop are the owner's square artwork (2026-09-24): 50 x 50 where
+	-- the 130 x 50 slabs stood, the same height, so nothing under them moves.
+	local index = rect(I, I, square.X, square.Y)
+	local shop = rect(I, I + row, square.X, square.Y)
 	local settings = rect(I, I + row * 2, square.X, square.Y)
 	local walk = rect(I, I + row * 3, wide.X, CONFIG.WalkHeight)
 	local garden = rect(sw - I - square.X, I, square.X, square.Y)
@@ -621,6 +1080,7 @@ local function desktop(input: Input): Layout
 		jump = nil,
 		banner = banner,
 		skip = skip,
+		tutorialScale = 1,
 		clock = nil,
 		hot = HOT,
 		cashStyle = style,
@@ -631,8 +1091,30 @@ local function desktop(input: Input): Layout
 		boost = nil,
 		chooser = nil,
 		equipPad = 0,
+		toast = rect(0, 0, 0, 0),
+		teleport = rect(0, 0, 0, 0),
+		teleportScale = 1,
+		obby = rect(0, 0, 0, 0),
+		obbyWide = false,
+		admin = nil,
 	}
 	L.clock = clockRect(input, L)
+	L.admin = adminBeside(input, L.clock)
+	-- Placed round the shipped geometry; nothing above moves for them.
+	L.teleport = teleportUnder(input, L.clock, {
+		HudLayout.union(HudLayout.union(index, shop), HudLayout.union(settings, walk)),
+		HudLayout.union(garden, bag), equipment,
+	})
+	L.toast = toastAbove(sw, hotbar, { cash, equipment })
+	-- ON A TV ONLY: the notice band and TELEPORT TO PLOT under it came down
+	-- (`lift`), so the tutorial banner keeps 8 px under the button, as compact's
+	-- always has. The desktop's 84 is not touched.
+	if input.lift then
+		local top = math.max(banner.y, L.teleport.y + L.teleport.h + G)
+		L.banner = rect(banner.x, top, banner.w, banner.h)
+		L.skip = rect(skip.x, top + CONFIG.BannerSize.Y, skip.w, skip.h)
+	end
+	L.obby, L.obbyWide = obbyBeside(input, L)
 	return L
 end
 
@@ -686,10 +1168,17 @@ end
 -- column stands in its band, and slid off centre rather than squeezed
 -- symmetrically -- the words are what it is for, and TutorialUI scales
 -- them down only when the banner is narrower than they are.
+--
+-- ON A PHONE the words were too big for the screen (owner, 2026-09-24): the
+-- banner is `scale` (TutorialPhoneScale) of its size -- 420 x 63 at most --
+-- and TutorialUI draws its lines, the pointer and the celebration at the same
+-- scale (`tutorialScale`). The skip line under it keeps its size: it is a
+-- button, and 20 px is already the least a finger gets.
 --==============================================================================
-local function bannerIn(sw: number, railBottom: number, beside: { Rect }): (Rect, Rect)
+local function bannerIn(sw: number, railBottom: number, beside: { Rect }, scale: number?): (Rect, Rect)
 	local M, G = CONFIG.Margin, CONFIG.Gap
-	local bannerHeight = CONFIG.BannerSize.Y + CONFIG.SkipSize.Y
+	local size = CONFIG.BannerSize * (scale or 1)
+	local bannerHeight = size.Y + CONFIG.SkipSize.Y
 	local band = rect(0, railBottom + G, sw, bannerHeight)
 	local blo, bhi = M, sw - M
 	for _, other in ipairs(beside) do
@@ -701,13 +1190,13 @@ local function bannerIn(sw: number, railBottom: number, beside: { Rect }): (Rect
 			end
 		end
 	end
-	local bannerWidth = math.max(CONFIG.SkipSize.X, math.min(CONFIG.BannerSize.X, bhi - blo))
+	local bannerWidth = math.max(CONFIG.SkipSize.X, math.min(size.X, bhi - blo))
 	local bannerCentre = sw / 2
 	if bannerWidth <= bhi - blo then
 		bannerCentre = math.clamp(bannerCentre, blo + bannerWidth / 2, bhi - bannerWidth / 2)
 	end
-	local banner = rect(bannerCentre - bannerWidth / 2, band.y, bannerWidth, CONFIG.BannerSize.Y)
-	local skip = rect(bannerCentre - CONFIG.SkipSize.X / 2, band.y + CONFIG.BannerSize.Y,
+	local banner = rect(bannerCentre - bannerWidth / 2, band.y, bannerWidth, size.Y)
+	local skip = rect(bannerCentre - CONFIG.SkipSize.X / 2, band.y + size.Y,
 		CONFIG.SkipSize.X, CONFIG.SkipSize.Y)
 	return banner, skip
 end
@@ -842,6 +1331,7 @@ local function compact(input: Input): Layout
 		jump = jump,
 		banner = banner,
 		skip = skip,
+		tutorialScale = 1,
 		clock = nil,
 		hot = HudLayout.hotMetrics(true),
 		cashStyle = style,
@@ -852,9 +1342,24 @@ local function compact(input: Input): Layout
 		boost = nil,
 		chooser = nil,
 		equipPad = 0,
+		toast = rect(0, 0, 0, 0),
+		teleport = rect(0, 0, 0, 0),
+		teleportScale = 1,
+		obby = rect(0, 0, 0, 0),
+		obbyWide = false,
+		admin = nil,
 	}
 	L.clock = clockRect(input, L)
+	L.admin = adminBeside(input, L.clock)
+	L.teleport = teleportUnder(input, L.clock, {
+		HudLayout.union(HudLayout.union(index, shop), HudLayout.union(settings, walk)),
+		HudLayout.union(garden, bag),
+	})
+	-- The tutorial banner keeps 8 px under the teleport button as well as the rows.
+	L.banner, L.skip = bannerIn(sw, math.max(railBottom, L.teleport.y + L.teleport.h), beside)
+	L.toast = toastAbove(sw, hotbar, beside)
 	L.fits = L.fits and #HudLayout.problems(L) == 0
+	L.obby, L.obbyWide = obbyBeside(input, L)
 	return L
 end
 
@@ -875,10 +1380,10 @@ end
 --                 opens THE CHOOSER leftward, toward the middle and no further.
 --   bottom        the belt, five slots, pods and plants only: the weapons live
 --                 on the right sidebar now.
---   bottom left   cash and speed in the compact face, under the dock where the
---                 screen is tall enough and beside it where it is not -- on a
---                 phone under ~350 px of safe height the dock, a 78-px block
---                 and the thumbstick's reservation cannot share one column.
+--   bottom left   cash and speed in the phone's face (compact at 0.85), in the
+--                 very corner, 12 in and 10 up, on the thumbstick's resting
+--                 ring by the owner's approval (2026-09-24); over the belt only
+--                 where the corner would meet it.
 --==============================================================================
 local function sidebars(input: Input): Layout
 	local sw, sh = input.safe.X, input.safe.Y
@@ -962,19 +1467,30 @@ local function sidebars(input: Input): Layout
 	-- row. Wider than its cards need only on paper: LoadoutUI draws it the width
 	-- of what the player owns, from the same right edge.
 	--==========================================================================
+	--==========================================================================
+	-- THE CLOCK, AND THE TELEPORT BUTTON UNDER IT
+	--
+	-- Worked out here rather than at the end, because the chooser keeps clear
+	-- of the button. The clock only needs the rows' band from the answer.
+	--==========================================================================
+	local clock = clockRect(input, {
+		safe = input.safe, railTop = M, railBottom = railBottom,
+		railRight = walk.x + walk.w, rightLeft = boost.x,
+	} :: any)
+	local admin = adminBeside(input, clock)
+	local teleport = teleportUnder(input, clock, {
+		rect(dock.x, dock.y, dockRight - dock.x, dock.h), handle, walk,
+		HudLayout.union(HudLayout.union(boost, garden), bag),
+	}, true, admin)
+
 	local chooserH = C.Pad * 2 + C.Title + C.Card.Y
 	local chooserRight = equipment.x - G
-	local chooserW = C.Pad + C.Cards * C.Card.X + (C.Cards - 1) * C.Gap + C.Spine
-	chooserW = math.min(chooserW, chooserRight - (sw / 2 + G))
+	local widest = C.Pad + C.Cards * C.Card.X + (C.Cards - 1) * C.Gap + C.Spine
 	local oneCard = C.Pad + C.Card.X + C.Spine
-	if chooserW < oneCard then
-		fits = false
-		chooserW = oneCard
-	end
-	local chooserX = chooserRight - chooserW
+	local leftmost = chooserRight - math.min(widest, chooserRight - (sw / 2 + G))
 	local lowest = sh - M
 	for _, other in ipairs({ hotbar, jump, thumb }) do
-		if other.x < chooserRight + G and other.x + other.w + G > chooserX then
+		if other.x < chooserRight + G and other.x + other.w + G > leftmost then
 			lowest = math.min(lowest, other.y - G)
 		end
 	end
@@ -983,42 +1499,57 @@ local function sidebars(input: Input): Layout
 	if chooserY + chooserH > lowest then
 		fits = false
 	end
-	local chooser = rect(chooserX, chooserY, chooserW, chooserH)
+	-- Sharing rows with the teleport button, it keeps 8 px to the button's right.
+	if chooserY < teleport.y + teleport.h + G then
+		leftmost = math.max(leftmost, teleport.x + teleport.w + G)
+	end
+	local chooserW = chooserRight - leftmost
+	if chooserW < oneCard then
+		fits = false
+		chooserW = oneCard
+	end
+	local chooser = rect(chooserRight - chooserW, chooserY, chooserW, chooserH)
 
 	--==========================================================================
-	-- CASH AND SPEED: UNDER THE DOCK, OR BESIDE IT
+	-- CASH AND SPEED: THE BOTTOM-LEFT CORNER (owner, 2026-09-24)
 	--
-	-- The compact face, and compact's rule for its bottom line: above the
-	-- thumbstick, and above the belt wherever the two would share columns. At
-	-- the left edge when that leaves it 8 px under the dock; otherwise beside
-	-- the dock, 8 px clear of its handle. It carries no x2 card here -- that is
-	-- the button on the top row -- so it has nothing a thumb can press.
+	-- The phone's face (CASH_PHONE, compact at 0.85) in the very corner of the
+	-- safe area: 12 in and 10 up, as the desktop's block stands and level with
+	-- the belt's own bottom edge. That is ON TOP OF the thumbstick's resting
+	-- ring, which the owner approved in so many words: the joystick keeps its
+	-- place and its behaviour, and the block takes no input (CashUI), so a thumb
+	-- landing on it lands on the stick. It used to stand 8 px over the ring, or
+	-- beside the dock where the dock left no room -- floating mid-screen on a
+	-- 735 x 413 phone.
+	--
+	-- The belt is still kept clear: where the corner would come within 8 px of
+	-- it, the block stands 8 px over the belt's top line instead. The dock is
+	-- reserved above the thumbstick's zone, so the corner never reaches it. It
+	-- carries no x2 card here -- that is the button on the top row -- so it has
+	-- nothing a thumb can press.
 	--==========================================================================
-	local style = CASH_COMPACT
+	local style = CASH_PHONE
 	local cw = math.max(style.Reserve, input.cashWidth or 0)
 	local ch = style.Root.Y + style.Drop
-	local function bottomLine(cx: number): number
-		local limit = math.min(sh - HOT.BottomGap + CONFIG.CashDrop, thumb.y - G)
-		if hotbar.x < cx + cw + G and hotbar.x + hotbar.w + G > cx then
-			limit = math.min(limit, hotbar.y - G)
-		end
-		return limit
-	end
 	local cx = CONFIG.CashLeft
-	local limit = bottomLine(cx)
-	if limit - ch < dock.y + dock.h + G then
-		cx = dockRight + G
-		limit = bottomLine(cx)
-		if limit - ch < math.max(walk.y + walk.h, handle.y + handle.h) + G then
-			fits = false
-		end
+	local rootBottom = sh - HOT.BottomGap
+	if HudLayout.gap(rect(cx, rootBottom - style.Root.Y, cw, ch), hotbar) < G then
+		rootBottom = hotbar.y - G - style.Drop
 	end
-	local cash = rect(cx, limit - ch, cw, ch)
-	local cashRoot = rect(cx, limit - style.Drop - style.Root.Y, style.Root.X, style.Root.Y)
+	local cash = rect(cx, rootBottom - style.Root.Y, cw, ch)
+	local cashRoot = rect(cx, rootBottom - style.Root.Y, style.Root.X, style.Root.Y)
+	if cash.y < dock.y + dock.h + G then
+		fits = false
+	end
 
-	-- THE TUTORIAL BANNER: see bannerIn. The dock and its handle stand in its
-	-- band too, open or shut.
-	local banner, skip = bannerIn(sw, railBottom, { cash, equipment, thumb, jump, dock, handle })
+	-- THE TUTORIAL BANNER: see bannerIn -- at the phone's scale. The dock and its
+	-- handle stand in its band too, open or shut. It keeps 8 px under the
+	-- teleport button AND under the notice band beneath the button
+	-- (HudLayout.notice), so a biome name going by -- Greenhollow, where the
+	-- tutorial sends a beginner -- never lands on the instructions.
+	local noticeBottom = teleport.y + teleport.h + G + CONFIG.NoticeHeight
+	local banner, skip = bannerIn(sw, math.max(railBottom, noticeBottom),
+		{ cash, equipment, thumb, jump, dock, handle }, CONFIG.TutorialPhoneScale)
 
 	local L: Layout = {
 		compact = true,
@@ -1047,6 +1578,7 @@ local function sidebars(input: Input): Layout
 		jump = jump,
 		banner = banner,
 		skip = skip,
+		tutorialScale = CONFIG.TutorialPhoneScale,
 		clock = nil,
 		hot = HudLayout.hotMetrics(true),
 		cashStyle = style,
@@ -1057,9 +1589,16 @@ local function sidebars(input: Input): Layout
 		boost = boost,
 		chooser = chooser,
 		equipPad = S.Pad,
+		toast = toastAbove(sw, hotbar, { cash, equipment, thumb, jump }),
+		teleport = teleport,
+		teleportScale = CONFIG.Teleport.PhoneScale,
+		obby = rect(0, 0, 0, 0),
+		obbyWide = false,
+		admin = admin,
 	}
-	L.clock = clockRect(input, L)
+	L.clock = clock
 	L.fits = L.fits and #HudLayout.problems(L) == 0
+	L.obby, L.obbyWide = obbyBeside(input, L)
 	return L
 end
 
@@ -1207,8 +1746,13 @@ function HudLayout.problems(L: Layout): { string }
 	end
 	for _, zone in ipairs(zones) do
 		for _, group in ipairs(groups) do
+			-- The one approved overlap (owner, 2026-09-24): a phone's cash block in
+			-- the bottom-left corner, on the thumbstick's ring. It takes no input,
+			-- so the stick still gets every touch. The jump button, and every
+			-- other group, still keep 8 px clear.
+			local approved = L.sidebar and group.name == "cash" and zone == L.thumb
 			local apart = HudLayout.gap(zone, group.rect)
-			if apart < G then
+			if apart < G and not approved then
 				table.insert(found, string.format("%s is %.1f px from a touch control",
 					group.name, apart))
 			end
@@ -1218,9 +1762,76 @@ function HudLayout.problems(L: Layout): { string }
 end
 
 --==============================================================================
+-- THE TEN-FOOT ANSWER
+--
+-- The ordinary answer for the title-safe canvas, moved onto it. The canvas
+-- starts `tv.top` below the safe area, so the inner solve is told the topbar is
+-- that much deeper -- which keeps every window-space conversion inside it (the
+-- clock's, the teleport button's) exact -- and `lift` brings the clock row down
+-- to the title-safe top edge. The margins are equal left and right, so the
+-- clock stays on the window's centre line. Window-space rects (the clock, the
+-- ADMIN button) are not moved; everything in safe space is.
+--==============================================================================
+local function shifted(r: Rect, dx: number, dy: number): Rect
+	return rect(r.x + dx, r.y + dy, r.w, r.h)
+end
+
+local function shiftedMaybe(r: Rect?, dx: number, dy: number): Rect?
+	return if r then shifted(r, dx, dy) else nil
+end
+
+local function tenFoot(input: Input, tv: TenFootInput): Layout
+	local inner: Input = table.clone(input)
+	inner.tv = nil
+	inner.safe = Vector2.new(math.max(0, input.safe.X - tv.left - tv.right),
+		math.max(0, input.safe.Y - tv.top - tv.bottom))
+	inner.insetTop = (input.insetTop or 0) + tv.top
+	inner.lift = tv.lift
+	local L = HudLayout.solve(inner)
+	local dx, dy = tv.left, tv.top
+	L.index = shifted(L.index, dx, dy)
+	L.shop = shifted(L.shop, dx, dy)
+	L.settings = shifted(L.settings, dx, dy)
+	L.walk = shifted(L.walk, dx, dy)
+	L.garden = shifted(L.garden, dx, dy)
+	L.bag = shifted(L.bag, dx, dy)
+	L.equipment = shifted(L.equipment, dx, dy)
+	L.hotbar = shifted(L.hotbar, dx, dy)
+	L.cash = shifted(L.cash, dx, dy)
+	L.cashRoot = shifted(L.cashRoot, dx, dy)
+	L.thumb = shiftedMaybe(L.thumb, dx, dy)
+	L.jump = shiftedMaybe(L.jump, dx, dy)
+	L.banner = shifted(L.banner, dx, dy)
+	L.skip = shifted(L.skip, dx, dy)
+	L.dock = shiftedMaybe(L.dock, dx, dy)
+	L.handle = shiftedMaybe(L.handle, dx, dy)
+	L.handleShut = shiftedMaybe(L.handleShut, dx, dy)
+	L.boost = shiftedMaybe(L.boost, dx, dy)
+	L.chooser = shiftedMaybe(L.chooser, dx, dy)
+	L.toast = shifted(L.toast, dx, dy)
+	L.teleport = shifted(L.teleport, dx, dy)
+	-- An empty rect (no room for the button) stays empty.
+	if L.obby.w > 0 then
+		L.obby = shifted(L.obby, dx, dy)
+	end
+	L.railTop += dy
+	L.railBottom += dy
+	L.railRight += dx
+	L.rightLeft += dx
+	L.safe = input.safe
+	L.frame = rect(dx, dy, inner.safe.X, inner.safe.Y)
+	L.lift = tv.lift
+	return L
+end
+
+--==============================================================================
 -- THE ANSWER
 --==============================================================================
 function HudLayout.solve(input: Input): Layout
+	local tv = input.tv
+	if tv then
+		return tenFoot(input, tv)
+	end
 	if input.touch then
 		return sidebars(input)
 	end
@@ -1231,6 +1842,57 @@ function HudLayout.solve(input: Input): Layout
 		end
 	end
 	return compact(input)
+end
+
+--==============================================================================
+-- THE NOTICE STACK (2026-09-27)
+--
+-- ActionToastUI's notices stand on the toast rect, newest at the bottom and
+-- older ones above it. `one` is one notice's height with the gap under it and
+-- `most` how many the screen may show at once. The stack grows up only while
+-- it stays 8 px clear of every group and both thumbs, and never into the middle
+-- band -- `middle` (the window's centre, in safe space) plus MiddleBand, where
+-- the controller's reticle and its reason line sit. Always at least one.
+--
+-- Returns the whole area the stack may take and how many notices fit in it.
+-- HudLayoutSpec holds that area clear on every listed screen.
+--==============================================================================
+HudLayout.MiddleBand = 48
+
+function HudLayout.noticeStack(L: Layout, one: number, most: number, middle: number): (Rect, number)
+	local t = L.toast
+	local bottom = t.y + t.h
+	local others: { Rect } = {}
+	for _, g in ipairs(HudLayout.groups(L, true)) do
+		table.insert(others, g.rect)
+	end
+	if L.thumb then
+		table.insert(others, L.thumb)
+	end
+	if L.jump then
+		table.insert(others, L.jump)
+	end
+	local count = 1
+	for n = 2, math.max(1, most) do
+		local top = bottom - t.h - (n - 1) * one
+		if top < middle + HudLayout.MiddleBand then
+			break
+		end
+		local area = rect(t.x, top, t.w, bottom - top)
+		local clear = true
+		for _, other in ipairs(others) do
+			if HudLayout.gap(area, other) < CONFIG.Gap then
+				clear = false
+				break
+			end
+		end
+		if not clear then
+			break
+		end
+		count = n
+	end
+	local top = bottom - t.h - (count - 1) * one
+	return rect(t.x, top, t.w, bottom - top), count
 end
 
 --==============================================================================
@@ -1246,7 +1908,28 @@ end
 --==============================================================================
 function HudLayout.notice(L: Layout, width: number, height: number, top: number): (number, number)
 	local G = CONFIG.Gap
-	if top + height + G <= L.railTop or top >= L.railBottom + G then
+	-- A TV brings the band down with the clock above it; 0 everywhere else.
+	top += L.lift or 0
+	-- On a phone the teleport button stands right under the clock, in this
+	-- band (TELEPORT TO PLOT ON A PHONE): a notice that would share its rows
+	-- stands 8 px under it instead, and is placed round the top rows from there
+	-- like any other. The tutorial banner keeps 8 px under that spot (sidebars),
+	-- so a beginner keeps their instructions up while a name goes by.
+	--
+	-- ON EVERY SCREEN SINCE 2026-09-27. The biome name and the sale line end 8 px
+	-- above the button on a desktop, so this never touches them there. (The
+	-- chase warning and the boost timer used to be asked for here too, at
+	-- window y 84 and 114, and this rule stood both under the button -- into
+	-- the same spot. They have rows of their own now: see statusRows.)
+	local teleport = L.teleport
+	if top < teleport.y + teleport.h + G and top + height + G > teleport.y then
+		top = teleport.y + teleport.h + G
+	end
+	-- The OBBY button, where a small phone stands it under the topbar beside
+	-- TELEPORT (obbyBeside): inside the rows' band, and stepped round like them.
+	local obby = L.obby
+	local obbyInRows = obby.w > 0 and top < obby.y + obby.h + G and top + height + G > obby.y
+	if (top + height + G <= L.railTop or top >= L.railBottom + G) and not obbyInRows then
 		return 0, top
 	end
 	local centre = L.safe.X / 2
@@ -1255,13 +1938,100 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number)
 	local indexBadge, gardenBadge = HudLayout.badges(L)
 	local lo = math.max(L.railRight, indexBadge.x + indexBadge.w) + G
 	local hi = math.min(L.rightLeft, gardenBadge.x) - G
+	if obbyInRows then
+		if obby.x + obby.w / 2 < centre then
+			lo = math.max(lo, obby.x + obby.w + G)
+		else
+			hi = math.min(hi, obby.x - G)
+		end
+	end
 	if width / 2 <= math.min(centre - lo, hi - centre) then
 		return 0, top
 	end
 	if width <= hi - lo then
 		return (lo + hi) / 2 - centre, top
 	end
-	return 0, L.railBottom + G
+	-- Dropped under the rows, and under the teleport and OBBY buttons where lower.
+	return 0, math.max(L.railBottom, L.teleport.y + L.teleport.h, if obby.w > 0 then obby.y + obby.h else 0) + G
+end
+
+--==============================================================================
+-- THE STATUS COLUMN (2026-09-27)
+--
+-- Where the lasting indicators stand -- the chase warning, the running boosts,
+-- the obby's run line -- as the owner asked in one brief: the warning centred
+-- under the clock, the boosts in their own row under it, the biome name allowed
+-- for, and nothing moving when a chase starts or ends. Three bands, worked out
+-- from rects this module already places, so they follow the clock and the
+-- topbar exactly as those do:
+--
+--   status   the chase warning (AlertUI), IN the TELEPORT TO PLOT slot and on
+--            its centre. The button shows only in the Safe Zone and a guardian
+--            only chases outside it, so the slot is empty whenever the warning
+--            is up; AlertUI also stands the line down inside the Safe Zone,
+--            which covers the second a chase takes to let go at the red line.
+--            Right under the clock on a phone, under the notice band on a
+--            desktop.
+--   notice   the notice band (HudLayout.notice at NoticeTop): the biome name
+--            and the sale line, unchanged -- and on the Floating Garden, where
+--            RETURN TO PLOT has the teleport slot and no biome is announced (the
+--            whole course is in the field's order), the obby's run line.
+--   boosts   the running boosts (BonusChestUI): one compact row under whichever
+--            of the teleport slot and the notice band is lower -- the same place
+--            with or without a chase, a biome name or the button, so a timer
+--            never jumps. The tutorial banner starts in this band on some
+--            screens, never at the same time: the chest opens when the guide
+--            is done.
+--
+-- Safe space, like every rect here; `insetTop` is the owner's measure of the
+-- topbar (HudLayout.measure). Each rect is a band on the clock's centre -- x and
+-- w are the teleport slot's -- and an owner centres its own content in it with
+-- centreIn. HudLayoutSpec holds all three clear of every group and of each
+-- other on every listed screen.
+--==============================================================================
+function HudLayout.statusRows(L: Layout, insetTop: number): (Rect, Rect, Rect)
+	local S, G = CONFIG.Status, CONFIG.Gap
+	local t = L.teleport
+	local status = rect(t.x, t.y + (t.h - S.Height) / 2, t.w, S.Height)
+	local _, noticeTop = HudLayout.notice(L, 0, CONFIG.NoticeHeight, CONFIG.NoticeTop - insetTop)
+	local notice = rect(t.x, noticeTop, t.w, CONFIG.NoticeHeight)
+	local top = math.max(t.y + t.h, noticeTop + CONFIG.NoticeHeight) + G
+	local boosts = rect(t.x, top, t.w, S.BoostHeight)
+	return status, notice, boosts
+end
+
+--==============================================================================
+-- A LINE `width` WIDE, CENTRED IN A BAND, BETWEEN WHATEVER SHARES ITS ROWS
+--
+-- On the band's middle -- the clock's -- wherever that clears every group and
+-- both badges by 8 px; slid between them where it only fits off centre; and
+-- never wider than the room there is. HudLayoutSpec keeps the room from running
+-- out on every listed screen for the longest words these lines carry.
+--==============================================================================
+function HudLayout.centreIn(L: Layout, band: Rect, width: number): Rect
+	local G, M = CONFIG.Gap, CONFIG.Margin
+	local centre = band.x + band.w / 2
+	local lo, hi = M, L.safe.X - M
+	local row = rect(0, band.y, L.safe.X, band.h)
+	local others: { Rect } = {}
+	for _, g in ipairs(HudLayout.groups(L, true)) do
+		table.insert(others, g.rect)
+	end
+	local indexBadge, gardenBadge = HudLayout.badges(L)
+	table.insert(others, indexBadge)
+	table.insert(others, gardenBadge)
+	for _, other in ipairs(others) do
+		if sharesRows(row, other, G) then
+			if other.x + other.w / 2 < centre then
+				lo = math.max(lo, other.x + other.w + G)
+			else
+				hi = math.min(hi, other.x - G)
+			end
+		end
+	end
+	local w = math.min(width, math.max(0, hi - lo))
+	local x = math.clamp(centre - w / 2, lo, math.max(lo, hi - w))
+	return rect(x, band.y, w, band.h)
 end
 
 --==============================================================================
@@ -1294,6 +2064,8 @@ export type BagInput = {
 	plants: boolean,
 	-- The BAT/TRAP frame's width, which the desktop panel stops short of.
 	sideWidth: number,
+	-- The player's chosen menu size (UIKit.menuScale); nil or 1 is today's.
+	scale: number?,
 }
 
 export type Bag = {
@@ -1310,22 +2082,36 @@ export type Bag = {
 	-- Whole rows of cards in a sideways grid; 0 for the desktop's vertical one.
 	rows: number,
 	card: Vector2,
+	-- Height of the Plants tab's note strip at the top of the tray; 0 elsewhere.
+	note: number,
+	-- The menu size the panel is actually drawn at: the chosen one, or less if
+	-- that would not fit. The group is sized panel / scale and drawn `scale`
+	-- times larger, so `panel` stays its footprint on screen; `body`, `tray`,
+	-- `infoRect` and `rows` describe the panel at that smaller logical size.
+	scale: number,
 }
 
 function HudLayout.bag(L: Layout, input: BagInput): Bag
 	local B = CONFIG.Bag
 	local sw, sh = L.safe.X, L.safe.Y
+	-- On a TV the panel is placed on the title-safe canvas and moved onto it,
+	-- like every group; off a TV the offset is 0 and nothing changes.
+	local ox, oy = 0, 0
+	local frame = L.frame
+	if frame then
+		ox, oy, sw, sh = frame.x, frame.y, frame.w, frame.h
+	end
 	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
 	local leftEdge = RAIL.Inset + RAIL.WideSize.X + B.EdgeGap
 	local rightEdge = sw - RAIL.Inset - input.sideWidth - B.EdgeGap
 	local top = B.EdgeGap
-	local bottom = input.hotTop - B.EdgeGap
+	local bottom = input.hotTop - oy - B.EdgeGap
 	if L.compact then
 		-- The compact rail is two short rows, not two columns: the panel takes
 		-- the width up to BAT/TRAP, and the rows stand over its top corners,
 		-- which UIKit.modal's header pads its title and close button clear of.
 		leftEdge = B.EdgeGap
-		rightEdge = L.equipment.x - B.EdgeGap
+		rightEdge = L.equipment.x - ox - B.EdgeGap
 		if input.stripHidden then
 			bottom = sh - B.EdgeGap
 		end
@@ -1355,34 +2141,89 @@ function HudLayout.bag(L: Layout, input: BagInput): Bag
 		centre = Vector2.new(centre.X, top + height / 2)
 	end
 	local panel = rect(centre.X - width / 2, centre.Y - height / 2, width, height)
-
-	local outline = RAIL.OutlineThickness
-	local shellW, shellH = width - outline * 2, height - outline * 2
-	local compactHeader = shellH < B.CompactBelow
-	local bodyTop = if compactHeader then B.BodyTopCompact else B.BodyTop
-	local bodyW = shellW - 24
-	local bodyH = shellH - (if compactHeader then B.BodyTrimCompact else B.BodyTrim)
-	local body = rect(panel.x + outline + 12, panel.y + outline + bodyTop, bodyW, bodyH)
-
 	local card = if L.compact then B.CardCompact else B.Card
-	local twoColumns = card.X * 2 + B.CardGap + B.GridPad * 2
-	local tray, info, infoRect = body, "none", nil
-	if not input.plants then
-		tray = body
-	elseif bodyW >= twoColumns + B.InfoGap + B.InfoSideMin then
-		local infoW = math.clamp(math.floor(bodyW * 0.34), B.InfoSideMin, B.InfoSideMax)
-		tray = rect(body.x, body.y, bodyW - infoW - B.InfoGap, bodyH)
-		infoRect = rect(body.x + bodyW - infoW, body.y, infoW, bodyH)
-		info = if bodyH < 240 then "compact" else "side"
-	else
-		tray = rect(body.x, body.y, bodyW, bodyH - B.InfoSheetH - B.InfoGap)
-		infoRect = rect(body.x, body.y + bodyH - B.InfoSheetH, bodyW, B.InfoSheetH)
-		info = "sheet"
+	-- The note over the plant cards comes out of the tray's height first.
+	local note = if input.plants then B.NoteH else 0
+
+	--==========================================================================
+	-- EVERYTHING INSIDE, AT A MENU SIZE
+	--
+	-- `s` is the player's menu size: the panel keeps its footprint and is drawn
+	-- `s` times larger, so its insides are laid out for a panel `s` times
+	-- smaller, centred where the real one is. At 1 this is exactly the layout
+	-- it always was.
+	--==========================================================================
+	type Inner = {
+		compactHeader: boolean, body: Rect, tray: Rect, info: string, infoRect: Rect?,
+		rows: number, fits: boolean,
+	}
+	local function inner(s: number): Inner
+		local w, h = width / s, height / s
+		local px, py = centre.X - w / 2, centre.Y - h / 2
+		if s == 1 then
+			px, py = panel.x, panel.y
+		end
+		local outline = RAIL.OutlineThickness
+		local shellW, shellH = w - outline * 2, h - outline * 2
+		local compactHeader = shellH < B.CompactBelow
+		local bodyTop = if compactHeader then B.BodyTopCompact else B.BodyTop
+		local bodyW = shellW - 24
+		local bodyH = shellH - (if compactHeader then B.BodyTrimCompact else B.BodyTrim)
+		local body = rect(px + outline + 12, py + outline + bodyTop, bodyW, bodyH)
+
+		local twoColumns = card.X * 2 + B.CardGap + B.GridPad * 2
+		local tray, info, infoRect = body, "none", nil
+		if not input.plants then
+			tray = body
+		elseif bodyW >= twoColumns + B.InfoGap + B.InfoSideMin then
+			local infoW = math.clamp(math.floor(bodyW * 0.34), B.InfoSideMin, B.InfoSideMax)
+			tray = rect(body.x, body.y, bodyW - infoW - B.InfoGap, bodyH)
+			infoRect = rect(body.x + bodyW - infoW, body.y, infoW, bodyH)
+			info = if bodyH < 240 then "compact" else "side"
+		else
+			tray = rect(body.x, body.y, bodyW, bodyH - B.InfoSheetH - B.InfoGap)
+			infoRect = rect(body.x, body.y + bodyH - B.InfoSheetH, bodyW, B.InfoSheetH)
+			info = "sheet"
+		end
+
+		local rows = 0
+		if L.compact then
+			rows = math.max(1, math.floor((tray.h - note - B.PadY * 2 + B.CardGap) / (card.Y + B.CardGap)))
+		end
+		-- A whole card, under the note, inside the tray's padding.
+		local fits = tray.h - note - B.PadY * 2 >= card.Y
+		return {
+			compactHeader = compactHeader, body = body, tray = tray, info = info,
+			infoRect = infoRect, rows = rows, fits = fits,
+		}
 	end
 
-	local rows = 0
-	if L.compact then
-		rows = math.max(1, math.floor((tray.h - B.PadY * 2 + B.CardGap) / (card.Y + B.CardGap)))
+	--==========================================================================
+	-- AS LARGE AS CHOSEN, NO LARGER THAN FITS
+	--
+	-- Never smaller than the panel's minimum at its logical size, and never so
+	-- large that a whole row of cards stops fitting under the note: stepped
+	-- down until it does, and never below today's size.
+	--==========================================================================
+	local scale = 1
+	local chosen = input.scale
+	if type(chosen) == "number" and chosen == chosen and chosen > 1 then
+		scale = math.min(chosen, width / B.MinW, height / B.MinH)
+		while scale > 1 and not inner(scale).fits do
+			scale = math.max(1, scale - 0.05)
+		end
+		scale = math.max(1, scale)
+	end
+	local it = inner(scale)
+	local compactHeader, body, tray, info, infoRect, rows =
+		it.compactHeader, it.body, it.tray, it.info, it.infoRect, it.rows
+
+	if frame then
+		panel = shifted(panel, ox, oy)
+		centre = Vector2.new(centre.X + ox, centre.Y + oy)
+		body = shifted(body, ox, oy)
+		tray = shifted(tray, ox, oy)
+		infoRect = shiftedMaybe(infoRect, ox, oy)
 	end
 
 	return {
@@ -1396,6 +2237,8 @@ function HudLayout.bag(L: Layout, input: BagInput): Bag
 		horizontal = L.compact,
 		rows = rows,
 		card = card,
+		note = note,
+		scale = scale,
 	}
 end
 
@@ -1417,7 +2260,7 @@ function HudLayout.measure(gui: ScreenGui, cashWidth: number?): Input
 		size = Vector2.new(size.X, math.max(0, size.Y - insetTop))
 	end
 	local bar = GuiService.TopbarInset
-	return {
+	local input: Input = {
 		safe = size,
 		touch = UserInputService.TouchEnabled,
 		keyboard = UserInputService.KeyboardEnabled,
@@ -1426,6 +2269,53 @@ function HudLayout.measure(gui: ScreenGui, cashWidth: number?): Input
 		topbar = rect(bar.Min.X, bar.Min.Y, bar.Width, bar.Height),
 		insetTop = insetTop,
 	}
+	-- A gui UIKit has scaled for a TV answers in its own logical units; every
+	-- other gui -- every desktop, every phone -- gets `input` untouched. ON A TV
+	-- ONLY: a menu's own gui also carries that UIScale when the player chose a
+	-- larger menu size (UIKit.menuGui), and the rail and the HUD placed from it
+	-- must not take that for a television.
+	local marker = gui:FindFirstChild(TEN_FOOT)
+	if marker and marker:IsA("UIScale") and HudLayout.isTenFoot() then
+		return HudLayout.tenFootInput(input)
+	end
+	return input
+end
+
+--==============================================================================
+-- THE FACTS, AS A GUI SCALED FOR A TV SEES THEM
+--
+-- Its children live on a canvas `scale` times smaller than the window, so every
+-- fact is handed over in those units, with the title-safe margins: 5% of the
+-- window in from each side and the bottom, and from the top less whatever the
+-- topbar already takes. The scale is worked out from the window rather than
+-- read off the UIScale, so an owner that relays out before UIKit has updated it
+-- for a new window still gets the right answer. Pure, so HudLayoutSpec can
+-- drive a TV it does not have.
+--==============================================================================
+function HudLayout.tenFootInput(input: Input): Input
+	local view = input.viewport
+	if not (view and view.X > 0 and view.Y > 0) then
+		return input
+	end
+	local k = HudLayout.tenFootScale(view)
+	local edge = CONFIG.TenFoot.SafeEdge
+	local marginX, marginY = view.X * edge, view.Y * edge
+	local insetTop = input.insetTop or 0
+	local bar = input.topbar
+	local out: Input = table.clone(input)
+	out.safe = input.safe / k
+	out.viewport = view / k
+	out.topbar = if bar then rect(bar.x / k, bar.y / k, bar.w / k, bar.h / k) else nil
+	out.insetTop = insetTop / k
+	out.tv = {
+		left = marginX / k,
+		right = marginX / k,
+		-- The safe area already starts insetTop down the window.
+		top = math.max(0, marginY - insetTop) / k,
+		bottom = marginY / k,
+		lift = math.max(0, marginY / k - CONFIG.ClockTop),
+	}
+	return out
 end
 
 return HudLayout

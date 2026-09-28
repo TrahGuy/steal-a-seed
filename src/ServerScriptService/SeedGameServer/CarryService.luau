@@ -48,9 +48,12 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
+local ObbyData = require(Shared:WaitForChild("ObbyData"))
 local NestService = require(script.Parent:WaitForChild("NestService"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
+local Metrics = require(script.Parent:WaitForChild("Metrics"))
 local GuardianCatch = require(script.Parent:WaitForChild("GuardianCatch"))
 local CarryGuard = require(script.Parent:WaitForChild("CarryGuard"))
 
@@ -226,6 +229,21 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	end
 	if player:GetAttribute(GameConfig.Attributes.MillMounted) == true then
 		humanoid.WalkSpeed = 0
+		return
+	end
+	--==========================================================================
+	-- ON THE FLOATING GARDEN, EVERYBODY RUNS AT THE COURSE'S SPEED
+	--
+	-- A run tests the course, not the treadmill, so its gaps are cut for one
+	-- fixed speed (ObbyData). The same shape as the two states above: ObbyService
+	-- sets an attribute and asks; this answers from it; clearing it and asking
+	-- again recomputes the earned speed from the profile -- nothing was stored,
+	-- so nothing stale can be put back. Weight and Walk Mode do not apply up
+	-- there: nobody can carry a raided pod onto the course, and a walk cap would
+	-- make the jumps impossible.
+	--==========================================================================
+	if player:GetAttribute(ObbyData.Attributes.Course) == true then
+		humanoid.WalkSpeed = ObbyData.WalkSpeed
 		return
 	end
 	local profile = PlayerDataService.Get(player)
@@ -601,7 +619,12 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- THE SERVER IS THE AUTHORITY. The client hides the prompt while you are
 	-- carrying, and this refuses anyway: hiding a prompt is a courtesy, not a
 	-- rule, and a rule enforced only on the client is not a rule.
+	--
+	-- Hidden is not gone, though: the engine still answers the prompt's key, so
+	-- a player who presses E at a nest with a pod already in their arms lands
+	-- here having genuinely tried. They are told why; the refusal is unchanged.
 	if carried[player] then
+		ActionRefusal.send(player, "CARRYING_POD")
 		return refuseTake(player, pod, "ALREADY_CARRYING")
 	end
 	if not pod.Parent then
@@ -721,6 +744,9 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- Only ever on a loose pod. A nest pod is always a fresh attempt.
 	local abandoned = pod:GetAttribute(ATTR.GuardianAbandoned) == true
 
+	-- A NEST theft (not a dropped pod picked back up) is what starts a raid for
+	-- the launch analytics; read now, before the pod is gone.
+	local nestTheft = pod:GetAttribute("NestId") ~= nil
 	local species: SeedData.Species?
 	if pod:GetAttribute("NestId") then
 		-- Nest-owned: NestService decides, because taking one is what wakes the
@@ -817,6 +843,10 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 			else "TakePod", thiefRoot)
 	end
 	PlayerDataService.RecordTutorial(player, "steal")
+	if nestTheft then
+		local profile = PlayerDataService.Get(player)
+		Metrics.raidStarted(player, taken.Biome, if profile then profile.Speed else 0)
+	end
 	return true
 end
 
@@ -1295,6 +1325,7 @@ local function bank(player: Player): boolean
 		(player:GetAttribute(ATTR.BankedCount) or 0) + 1)
 	log(string.format("%s banked a %s (%d tier).", player.Name, species.Name, tier))
 	PlayerDataService.RecordTutorial(player, "bank")
+	Metrics.raidEnded(player, "banked")
 	return true
 end
 
@@ -1345,13 +1376,16 @@ local function takeAway(player: Player): Held?
 	return held
 end
 
-function CarryService.ForfeitCarry(player: Player): (string?, number)
+function CarryService.ForfeitCarry(player: Player, why: string?): (string?, number)
 	local held = takeAway(player)
 	if not held then
 		return nil, 0
 	end
-	log(string.format("%s forfeited a %d tier %s: caught inside a biome at nightfall.",
-		player.Name, held.tier, held.species.Name))
+	log(string.format("%s forfeited a %d tier %s: %s.", player.Name, held.tier, held.species.Name,
+		why or "caught inside a biome at nightfall"))
+	-- Nightfall is the forfeit with no reason given; anything else (an admin
+	-- progress reset) is "other".
+	Metrics.raidEnded(player, if why == nil then "night" else "other")
 	return held.species.Id, held.tier
 end
 
@@ -1380,6 +1414,7 @@ function CarryService.Confiscate(player: Player): Held?
 	end
 	log(string.format("%s lost a %d tier %s: confiscated by a guardian.",
 		player.Name, held.tier, held.species.Name))
+	Metrics.raidEnded(player, "captured")
 	return held
 end
 
@@ -1485,6 +1520,7 @@ function CarryService.Consume(player: Player): SeedData.Species?
 	end
 	publish(player)
 	CarryService.RefreshWalkSpeed(player)
+	Metrics.raidEnded(player, "other")
 	return held.species
 end
 
@@ -1556,15 +1592,21 @@ local function onCharacterAdded(player: Player, character: Model)
 	table.insert(conns, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
 		if humanoid.PlatformStand then
 			local root = character:FindFirstChild("HumanoidRootPart")
-			CarryService.Drop(player,
-				if root and root:IsA("BasePart") then root.Position else nil)
+			if CarryService.Drop(player,
+				if root and root:IsA("BasePart") then root.Position else nil) then
+				-- A guardian's catch ended the raid a moment ago (NestService);
+				-- anything else that knocks a carrier flat is "knocked".
+				Metrics.raidEnded(player, "knocked")
+			end
 		end
 	end))
 
 	table.insert(conns, humanoid.Died:Connect(function()
 		local root = character:FindFirstChild("HumanoidRootPart")
-		CarryService.Drop(player,
-			if root and root:IsA("BasePart") then root.Position else nil)
+		if CarryService.Drop(player,
+			if root and root:IsA("BasePart") then root.Position else nil) then
+			Metrics.raidEnded(player, "died")
+		end
 	end))
 
 	-- WHILE A POD IS CARRIED, A PLANT THAT ARRIVES IN THE HANDS GOES BACK. After a

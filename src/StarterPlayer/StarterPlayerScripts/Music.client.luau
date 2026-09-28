@@ -96,7 +96,7 @@ end
 
 local tracks: { string } = usable(MUSIC.Tracks)
 --==============================================================================
--- AND A SECOND LIST, FOR THE SIXTY SECONDS THE ROAD IS SHUT
+-- AND A SECOND LIST, FOR THE FIFTEEN SECONDS THE ROAD IS SHUT
 --
 -- Empty is a state here too, and a different one from the day list being empty:
 -- no night ids means the day bed keeps playing after dusk, which is what this

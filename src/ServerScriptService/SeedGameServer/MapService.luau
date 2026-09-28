@@ -331,6 +331,38 @@ function dressPlot(model: Model, cf: CFrame, level: number)
 			})
 		end
 
+		--======================================================================
+		-- THE GAP IS SHUT TO THE BODY, NOT TO THE EYE
+		--
+		-- Reported 2026-09-26: players catch on the fences. Measured in Play at
+		-- WalkSpeed 16: walking into a run put the Humanoid into Climbing >
+		-- Running > Freefall and back, over and over, bobbing up to 2.5 studs
+		-- for as long as it pushed, and a player who bumped the fence and then
+		-- pressed jump went over a climb first. The 0.6 gap between the two
+		-- boards reads to the Humanoid as the rungs of a ladder. Filled flush,
+		-- the same pushes stopped dead at the boards with no climb at all; filled
+		-- 0.3 short of each face, they still climbed -- so this is flush.
+		--
+		-- INVISIBLE, because the two boards and the line between them are the
+		-- look. It adds no height and shuts nothing a body could pass before --
+		-- nothing gets through a 0.6 slot -- so the jump and the boundary are
+		-- exactly what they were. Transparent, so the camera never hides behind
+		-- it either.
+		--======================================================================
+		local gapLow = BOARDS[1][1] + BOARDS[1][2] * 0.5
+		local gapHigh = BOARDS[2][1] - BOARDS[2][2] * 0.5
+		build({
+			name = "RailGap",
+			size = alongX and Vector3.new(length, gapHigh - gapLow, FENCE_THICK)
+				or Vector3.new(FENCE_THICK, gapHigh - gapLow, length),
+			cframe = cf * (alongX and CFrame.new(mid, (gapLow + gapHigh) * 0.5, fixed)
+				or CFrame.new(fixed, (gapLow + gapHigh) * 0.5, mid)),
+			color = FENCE,
+			transparency = 1,
+			studs = false,
+			parent = model,
+		})
+
 		-- Roughly one post per bed row, which is what gives the sketch its
 		-- rhythm. Minimum two so a short segment still has an end at each end.
 		local postCount = math.max(2, math.floor(length / 11) + 1)

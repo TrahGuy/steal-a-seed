@@ -354,6 +354,76 @@ do
 end
 
 --==============================================================================
+-- 6b. THE TRAINING RUSH, TICK BY TICK (reported 2026-09-26)
+--
+-- A level-1 mill "showed 20/sec, then 81/sec, while the sign said 100". All
+-- three are the rules as written: 20 is tier 1's base, a charged visit climbs
+-- to 4x of it over RampSeconds (80, or 81 on a tick a hair over a second), and
+-- 100 is tier 2's base on the upgrade sign. What was wrong was one tick: the
+-- tick a charge ran out in was paid boosted for all of it.
+--
+-- The walk below is TreadmillService's consumeRush arithmetic for a fresh,
+-- full charge on 1-second ticks. The literals are the contract.
+--==============================================================================
+section("training rush")
+do
+	local T = GameConfig.Mill.Training
+	local base = GameConfig.trainingRateFor(1, 0, nil)
+	ok("tier 1's base is 20/s", base == 20, tostring(base))
+	ok("tier 2's base -- the sign's other number -- is 100/s",
+		GameConfig.trainingRateFor(2, 0, nil) == 100)
+	ok("the rush peaks at 4x after 30 s of charge and a full charge is 90 s",
+		T.PeakMultiplier == 4 and T.RampSeconds == 30 and T.MaxChargeSeconds == 90)
+
+	local paid: { number } = {}
+	local r, charge = 0, T.MaxChargeSeconds
+	for tick = 1, 95 do
+		local dt = 1
+		local mult = 1
+		if charge > 0 then
+			local spend = math.min(charge, dt)
+			charge -= spend
+			local before = r
+			r = math.min(T.RampSeconds, r + spend)
+			mult = GameConfig.trainingRushBlend(
+				GameConfig.trainingRushMultiplier((before + r) * 0.5), spend, dt)
+		else
+			r = math.max(0, r - dt * T.RampDecayPerSecond)
+		end
+		paid[tick] = base * mult * dt
+	end
+	ok("tick 1 of a charged visit pays 21", near(paid[1], 21, 1e-6), tostring(paid[1]))
+	ok("the climb is 19 + 2k: tick 10 pays 39", near(paid[10], 39, 1e-6), tostring(paid[10]))
+	ok("tick 30 pays 79", near(paid[30], 79, 1e-6), tostring(paid[30]))
+	ok("then 80 a second on the plateau", near(paid[31], 80, 1e-6) and near(paid[90], 80, 1e-6),
+		string.format("%s / %s", tostring(paid[31]), tostring(paid[90])))
+	ok("and 20 the tick the charge is gone", near(paid[91], 20, 1e-6), tostring(paid[91]))
+	ok("a 1.00625 s tick on the plateau is the reported 81",
+		math.floor(80 * 1.00625 + 0.5) == 81)
+
+	ok("a whole boosted tick keeps its multiplier", GameConfig.trainingRushBlend(4, 1, 1) == 4)
+	ok("a tick with no charge left in it is 1x", GameConfig.trainingRushBlend(4, 0, 1) == 1)
+	ok("a tick the charge ran out 0.3 s into pays 0.3 s boosted and 0.7 s at 1x",
+		near(GameConfig.trainingRushBlend(4, 0.3, 1), 1.9, 1e-9),
+		tostring(GameConfig.trainingRushBlend(4, 0.3, 1)))
+	ok("-- which at level 1 is 38, not the 80 it used to pay",
+		near(base * GameConfig.trainingRushBlend(4, 0.3, 1), 38, 1e-9))
+	ok("a zero or broken dt is left alone", GameConfig.trainingRushBlend(4, 0, 0) == 4)
+
+	local treadmill = ServerScriptService:WaitForChild("SeedGameServer"):FindFirstChild("TreadmillService")
+	local src = if treadmill then (treadmill :: any).Source else ""
+	ok("consumeRush pays the partial tick through trainingRushBlend",
+		string.find(src, "multiplier = GameConfig.trainingRushBlend(", 1, true) ~= nil)
+	ok("and the upgrade sign labels both of its rates as BASE",
+		select(2, string.gsub(src, 'string.format%("BASE %%s/s  >  %%s/s"', "")) == 2)
+	local speedFX = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
+		:FindFirstChild("SpeedFX")
+	local fx = if speedFX then (speedFX :: any).Source else ""
+	ok("the +Speed pop names the rush it was paid at",
+		string.find(fx, "GameConfig.compact(math.max(1, math.floor(amount + 0.5))) .. rushTag()", 1, true) ~= nil)
+end
+
+--==============================================================================
 -- 7. THE GATE MATH
 --
 -- BiomeGateService is a server module and is exercised live in the playtest.

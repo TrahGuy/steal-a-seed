@@ -53,11 +53,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local WheelData = require(Shared:WaitForChild("WheelData"))
 
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
 local PlantService = require(script.Parent:WaitForChild("PlantService"))
+local WheelService = require(script.Parent:WaitForChild("WheelService"))
 
 local StoreService = {}
 -- After PlayerDataService (20), CarryService (45), PlantService (50) and
@@ -135,6 +137,28 @@ local function indexProducts(): (number, number)
 			pending += 1
 		end
 	end
+	--==========================================================================
+	-- THE REWARD WHEEL'S SPIN PACK (WheelData.Product, 2026-09-27)
+	--
+	-- Indexed only once the owner has created the product, filled in its id and
+	-- pack size, AND switched it on -- until then no receipt can ever name it,
+	-- so nothing can be bought or granted. A spin is a paid random item: see the
+	-- wheel entry in KB/HANDOFF.md for what has to be true before Enabled.
+	--==========================================================================
+	local spins = WheelData.Product
+	if spins.Enabled and spins.ProductId > 0 and spins.Quantity > 0 then
+		if byProduct[spins.ProductId] then
+			warn(string.format("[Seed/StoreService] DUPLICATE product id %d on the wheel's spin pack and %q.",
+				spins.ProductId, byProduct[spins.ProductId].key))
+		end
+		byProduct[spins.ProductId] = {
+			key = "wheelspins",
+			kind = "spins",
+			amount = spins.Quantity,
+			product = spins.ProductId,
+		}
+		live += 1
+	end
 	return live, pending
 end
 
@@ -186,6 +210,16 @@ local function grant(player: Player, item: any): boolean
 		-- than acknowledged for nothing.
 		--======================================================================
 		return PlantService.InstantHatch(player)
+	elseif item.kind == "spins" then
+		--======================================================================
+		-- PURCHASED WHEEL SPINS, INTO THEIR OWN BALANCE
+		--
+		-- Counted apart from earned spins (WheelBought), never against the
+		-- daily earning allowance. The spins land here; the prize of a spin is
+		-- rolled only when the player spends one, at the wheel. False when the
+		-- profile cannot take them, so the receipt is retried.
+		--======================================================================
+		return WheelService.GrantBought(player, item.amount or 0)
 	end
 	warn(string.format("[Seed/StoreService] %q has no grant for kind %q",
 		item.key, tostring(item.kind)))
@@ -352,6 +386,11 @@ function StoreService.Snapshot(): string
 	end
 	rows[#rows + 1] = string.format("  %-12s %s", "InWorld",
 		if #inWorld == 0 then "(empty)" else table.concat(inWorld, " "))
+	local spins = WheelData.Product
+	rows[#rows + 1] = string.format("  %-12s %s", "Wheel",
+		if spins.Enabled and spins.ProductId > 0 and spins.Quantity > 0
+			then string.format("wheelspins=%d x%d", spins.ProductId, spins.Quantity)
+			else "wheelspins=OFF (no product configured)")
 	return table.concat(rows, "\n")
 end
 
