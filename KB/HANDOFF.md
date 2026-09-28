@@ -20,7 +20,8 @@
   - **Emberroot's and Starbloom's guardians sleep without their breathing**;
   - the four walk-home cues don't play (they are new, so nothing was lost there).
 - None of this has been seen on a live server from this PC: no Podnappers session has been played
-  here since v986. The owner tested guardian throws on a phone after v992 (see the ragdoll entry).
+  here since v986. The owner tested guardian throws on a phone in live v992 and confirmed the
+  ragdoll fix by eye. That is one phone, not every device (see the ragdoll entry, 9).
 
 ### The publishes
 
@@ -191,14 +192,18 @@ What else each build carried:
 - Why the grant reached only the chime.
 - What v984 to v986 held. Those rows in the baseline table below are still "probably".
 
-## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN: NOT CLOSED, BECAUSE NOTHING WAS PUBLISHED AFTER 9b91b5d; THE FIX (4080d46) IS LIVE IN v992 AND THE OWNER'S PHONE TEST LOOKED RIGHT BY EYE; COMMITTED ON BRANCH `wip` ONLY, NOT ON `main`; ALL 55 SPECS PASS)
+## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (OWNER-CONFIRMED FIXED ON A PHONE IN LIVE v992, BY EYE; NOT CHECKED ON A PC, A CONSOLE, ANOTHER PHONE OR WITH A SECOND PLAYER; THE FIX IS 4080d46; COMMITTED ON BRANCH `wip` ONLY, NOT ON `main`; ALL 55 SPECS PASS)
 
-**Status.** The fix is written and tested in Studio. At the owner's request it is committed on the
-branch `wip` (made from `main` at `ad103a9`) as **`4080d46`**, and only `wip` was pushed. A later
-commit on the same branch, `9b91b5d`, makes `NestService.SpecThrow` Studio-only (see 3). `main` has
-neither. **The owner published v992, which carries `4080d46` but not `9b91b5d`** (see 8).
-**The bug stays OPEN:** the agreed condition for closing it is a publish after `9b91b5d`, and there
-is none. Guardian throws only; bat and trap knockdowns are untouched.
+**Status: OWNER-CONFIRMED FIXED on a phone in live v992** (recorded 2026-09-28; the record is in 9).
+- The owner took guardian throws on a real phone on the live v992 server and reported, by eye,
+  that the throw and the landing looked right.
+- **That is all of the live evidence:** one phone, one observer, no log. It was not checked on a
+  PC, a console, a tablet or a second phone, and not with a second player.
+- The fix is committed on the branch `wip` (made from `main` at `ad103a9`) as **`4080d46`**, and
+  only `wip` was pushed. **v992 carries `4080d46`** (see 8).
+- A later commit on the same branch, `9b91b5d`, makes `NestService.SpecThrow` Studio-only (see 3).
+  v992 does not carry it, and it changes nothing a player can reach. `main` has neither commit.
+- Guardian throws only; bat and trap knockdowns are untouched.
 
 **The Fable rebuild of the pods and plants has NOT started.** The owner asked for it, then sent
 this task in its place. Nothing of it exists; it waits for the owner's word.
@@ -349,7 +354,8 @@ Camera jitter is studs per frame while the torso and pelvis lay still, before th
 - **Cleanup:** replication lag back to 0, no ZZ objects, Studio's scripts match disk byte for byte.
   SoundService holds 21 stopped `SeedCue_ChaseBed` sounds from spec runs (one per full-suite run);
   harmless, not deleted.
-- **NOT verified:**
+- **NOT verified by this work** (what has happened since is in 8 and 9: the owner published v992
+  and confirmed the fix on a phone):
   - A published server. Nothing here was published.
   - A real phone, or any second player: a real bat or trap hit, and what other players see.
   - What drives the live head, if anything besides the missing friction does.
@@ -365,15 +371,17 @@ Camera jitter is studs per frame while the torso and pelvis lay still, before th
 
 ### 7. Owner next
 
-1. Review the branch `wip` (4 files and this handoff). Say when to merge it into `main`.
-2. After the next publish, take one Greenhollow throw and one Starbloom throw on the live server,
-   then tell me. I'll read these lines from the Player log on this PC:
+The owner has confirmed the fix on a phone (see 9), so neither step below holds it up.
+
+1. Say when to merge the branch `wip` into `main` (4 files and this handoff).
+2. **Optional, for a logged check on a PC:** take one Greenhollow throw and one Starbloom throw on
+   the live server from this PC, then tell me. I'll read these lines from the Player log:
    - `settled after` without "forced" on the Greenhollow throw;
    - `landing: torso down … | neck friction back …s later (40.9)`;
    - `rest check … camera on UpperTorso … moved … studs/sec`;
    - `rest rig`, read live for the first time;
    - a `rest trace`, only if the head still moved over a still body.
-3. The issue closes when that log shows it gone. Until then it is open.
+3. Until somebody does, none of those lines has been read from a live server.
 
 ### 8. Published in v992, and the owner's phone test (2026-09-28)
 
@@ -387,15 +395,51 @@ Camera jitter is studs per frame while the torso and pelvis lay still, before th
     run the same fix as the `wip` head.
   - v992 also carries the traffic logger, disabled.
 - **No publish after `9b91b5d`** in the Studio logs on this PC, up to 08:30 UTC.
-- **The owner's test:** guardian throws on a real phone, after v992. **"Throw and landing looked
-  right."** Owner-reported, on a phone, by eye. The build wasn't recorded; v992 is the latest.
-- **Why it is not closed:** the owner set the condition, a publish after `9b91b5d` was synced into
-  Studio, and it isn't met. **The owner decides** whether v992 counts, or whether to publish again.
-- **Still untested, whatever is decided:**
-  - a Player log of a live throw on a PC, with its `landing:`, `rest check` and `rest rig` lines
-    (a phone keeps no log this PC can read);
-  - a second player's bat or trap hit on a live server;
-  - Starbloom standing up mid-skid at the unchanged 5 s ceiling, which is left for the owner.
+- **The owner's test:** guardian throws on a real phone, on live v992. **"Throw and landing looked
+  right."** Owner-reported, by eye. The owner named the build as v992; a phone keeps no log this PC
+  can read, so nothing here confirms or contradicts it.
+- **How it came to be recorded as fixed:** the closing condition first agreed was a publish after
+  `9b91b5d` was synced into Studio, and no such publish exists. On 2026-09-28 the owner decided the
+  phone test on v992 stands, and asked for the record in 9. v992's throws run the same fix as the
+  `wip` head (see above), so the publish that was waited for would have changed nothing a player
+  can reach.
+- **Still untested:** see 9.
+
+### 9. Owner-confirmed fixed on a phone in live v992 (recorded 2026-09-28)
+
+**The record.**
+
+| | |
+| --- | --- |
+| Result | "Throw and landing looked right": the head bob and the camera shake were not seen |
+| Who | The owner |
+| Device | One real phone |
+| Build | Live v992 (published 2026-09-28 08:02:27 UTC), which carries the fix `4080d46` |
+| How | By eye, while playing. No log, no recording, no measurement |
+| Source | Owner-reported. Nothing on this PC confirms or contradicts it |
+
+**What it establishes, and what it doesn't.**
+- On that phone, on v992, the owner no longer sees the fault after a guardian throw.
+- **It was not checked on any other device:** no PC, no console or TV, no tablet, no second phone.
+  Nothing here says the fix holds on those; nothing says it doesn't.
+- Which guardians threw, and how many throws were taken, were not reported.
+- The fix doesn't depend on the device: the neck's friction is written by the server, and the
+  camera and settle rules are the same client code everywhere. That is a reason to expect the same
+  result elsewhere. It is not a test of it.
+
+**Still untested:**
+- **A Player log of a live throw on a PC**, with its `landing:`, `rest check` and `rest rig` lines.
+  The `rest rig` line has never been read from a live server.
+- **A second player:** a real bat or trap hit on a live server, and what other players see of a
+  throw. Bat and trap knockdowns were left untouched, and were only tested in Studio with the
+  server's part played by a test host.
+- **Starbloom standing up mid-skid** at the unchanged 5 s ceiling. Left for the owner (see 6).
+- **The landing report's round trip on a live connection.** In Studio with 0.25 s of lag each way
+  the neck's friction arrived just after the stand-up (see 4); what a phone on mobile data does was
+  not measured.
+- **Why the live head doesn't collide** while Studio's does, and whether anything else moves it.
+
+**If it comes back** on any device, reopen this entry. Step 2 in 7 is how to get a log of it.
 
 ### Correction to the baseline entry below: publishes after v986
 
@@ -415,7 +459,7 @@ Studio logs on this PC do**:
 - **Which build carried what is now established:** see "What is live" at the top of this file.
 - No Podnappers Player session exists on this PC after v986's, so nothing has been seen live since.
 
-## Baseline before the pod and plant visual rebuild — 2026-09-28 (CLAUDE)  (COMMITTED AND PUSHED TO origin/main; NOTHING PUBLISHED TO ROBLOX BY THIS TASK; TRAFFIC LOGGER STILL DISABLED; RAGDOLL HEAD SHAKE STILL OPEN)
+## Baseline before the pod and plant visual rebuild — 2026-09-28 (CLAUDE)  (COMMITTED AND PUSHED TO origin/main; NOTHING PUBLISHED TO ROBLOX BY THIS TASK; TRAFFIC LOGGER STILL DISABLED; RAGDOLL HEAD SHAKE OPEN AT THIS BASELINE, SINCE OWNER-CONFIRMED FIXED ON A PHONE IN v992: SEE THE RAGDOLL ENTRY ABOVE)
 
 **Why.** The owner asked for everything finished to be reviewed, committed and pushed as the
 baseline before a planned visual rebuild of the older pods and plants with Fable. **The rebuild
@@ -451,7 +495,7 @@ Every entry below that says UNCOMMITTED or UNPUSHED is now in those commits. The
 | Controller, shop price, TV scaling, Index/Shop art, phone HUD (09-24) | yes | Studio, specs. Controller only via the emulator (owner-reported) | probably, in v984–v986 | physical Xbox, a TV, a real phone |
 | Michael's reports and the verification pass (09-26) | yes | Studio Play, specs | probably, in v984–v986 | — |
 | Usability/audio pass, plot badges, phone camera (09-26) | yes | Studio | probably, in v984–v986 | badge approval |
-| **Ragdoll head shake (09-26/27)** | diagnostics (ThrowFX `rest check` / `rest rig` lines); **a fix since 2026-09-28, on branch `wip` only** | Studio; one live capture on v986; the owner on a phone after v992, by eye: throw and landing looked right | diagnostics: v986 (`rest check`), and v987 on (`rest rig`). **The fix: v992** (`4080d46`; not the `9b91b5d` guard) | **OPEN:** nothing was published after `9b91b5d`, the agreed condition for closing it. The owner decides. See the ragdoll entry above |
+| **Ragdoll head shake (09-26/27)** | diagnostics (ThrowFX `rest check` / `rest rig` lines); **a fix since 2026-09-28, on branch `wip` only** | Studio; one live capture on v986; the owner on a phone after v992, by eye: throw and landing looked right | diagnostics: v986 (`rest check`), and v987 on (`rest rig`). **The fix: v992** (`4080d46`; not the `9b91b5d` guard) | **Owner-confirmed fixed on a phone in live v992**, by eye (recorded 2026-09-28). Not checked on a PC, a console, another phone or with a second player; no live log read. See the ragdoll entry above, 9 |
 | Launch pass: Bonus Chest, Dustbowl head start, warnings, notices, audio, Metrics (09-27) | yes | specs, test-store Play | **v987 on** (confirmed). Final Bonus Chest and the obby/wheel Metrics events: v989 on | its "NOT DONE" list. Metrics' live delivery is unverified |
 | Guardian sounds (09-27) | wired | specs; 2026-09-28 load tests and one Play session with the group's copies | **v988 on** (confirmed), with the OLD ids. Not in v987 | **Fixed on `wip`:** the group's re-uploads replace the seven, and all load and play in Studio. **Live stays silent until the next publish:** two guardians sleep and one wakes in silence. The grant alone did not fix it |
 | Floating Garden obby (09-27) | yes | ObbySpec, test-store Play | **v987 on** (confirmed), first version. OBBY button and earned spins: v989 on | the owner's checks in its entry |
@@ -1715,7 +1759,7 @@ Everything else is described below with its evidence. The ragdoll shake from the
 Everything is uncommitted and unpushed. Nothing was published. The owner's real save was never
 touched.
 
-## Ragdoll camera shake, reopened from the owner's live recording — 2026-09-26 late night (CLAUDE)  (ISSUE STILL OPEN; UNCOMMITTED, UNPUSHED, NOT PUBLISHED)
+## Ragdoll camera shake, reopened from the owner's live recording — 2026-09-26 late night (CLAUDE)  (OPEN WHEN WRITTEN; SINCE FIXED IN 4080d46 AND OWNER-CONFIRMED ON A PHONE IN LIVE v992, 2026-09-28: SEE THE RAGDOLL ENTRY NEAR THE TOP; UNCOMMITTED, UNPUSHED, NOT PUBLISHED WHEN WRITTEN)
 
 > **2026-09-28:** reproduced in Studio with nothing driving the head, and a fix is on the branch
 > `wip`. See the entry at the top of this file. Still open until a live throw shows it gone.
