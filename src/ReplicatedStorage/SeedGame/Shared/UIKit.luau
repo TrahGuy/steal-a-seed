@@ -3530,10 +3530,16 @@ export type Modal = {
 	userScale: () -> number,
 	-- For a panel sharing its gui with HUD: take the menu size on the panel.
 	followMenuSize: () -> (),
+	-- How tall content may be on this screen before fitContent has to cut the
+	-- panel short. For a panel that can lay itself out smaller instead.
+	contentRoom: () -> number,
 }
 
 local DIM = 0.45
 local FADE = 0.16
+-- What the shell puts round a panel's content: the title bar, the body's own
+-- margins and the outline. fitContent adds it; contentRoom takes it off.
+local MODAL_CHROME = 82
 
 function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- Every centre panel is drawn bigger on a TV (see UIKit.tenFoot).
@@ -4061,8 +4067,26 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		-- resolve, it is the screen winning. So the minimum bends down to the
 		-- ceiling rather than the call blowing up and abandoning the layout.
 		--======================================================================
-		local want = math.clamp(contentHeight + 82, math.min(240, ceiling), ceiling)
+		local want = math.clamp(contentHeight + MODAL_CHROME, math.min(240, ceiling), ceiling)
 		group.Size = UDim2.new(0.9 / userScale, 0, 0, want)
+	end
+
+	--==========================================================================
+	-- HOW MUCH CONTENT FITS, FOR A PANEL THAT CAN BE LAID OUT SMALLER
+	--
+	-- fitContent stops a panel at the ceiling whatever it holds, and a panel
+	-- with more rows than that is cut off at the bottom -- on the shortest
+	-- phones, a safe height of 302, the ceiling is 259 and the room 177. A
+	-- confirmation cannot scroll its buttons out of sight, so it asks this
+	-- first and picks the layout that fits. The same ceiling as fitContent's,
+	-- in the same units; huge before the screen has a size.
+	--==========================================================================
+	local function contentRoom(): number
+		local screen = gui.AbsoluteSize.Y / HudLayout.scaleOf(gui)
+		if screen <= 0 then
+			return math.huge
+		end
+		return math.min(limit.MaxSize.Y, math.floor(screen * 0.86 / userScale)) - MODAL_CHROME
 	end
 
 	--==========================================================================
@@ -4115,6 +4139,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 			return userScale
 		end,
 		followMenuSize = followMenuSize,
+		contentRoom = contentRoom,
 	}
 end
 

@@ -965,6 +965,47 @@ end
 
 SeedData.SellSeconds = 30
 
+--==============================================================================
+-- THE SACRIFICE PEDESTAL (2026-09-28; SacrificeService)
+--
+-- One banked, unhatched pod buys a short burst of ONLINE garden income. Any
+-- pod, of any size: the price is the pod and the prize does not depend on it.
+-- The cooldown starts with the sacrifice, so the boost runs inside it and the
+-- pedestal is back 135 s after the boost ends. No paid levels, no products.
+--
+-- WHAT THESE THREE NUMBERS ADD UP TO. Used at every chance the boost is up a
+-- quarter of the time, which is +12.5% garden income on average, for one pod
+-- every three minutes. One sacrifice is worth 22.5 s of the WHOLE garden's
+-- income; the same pod sold is worth 30 s of ITS OWN plant's
+-- (SeedData.SellSeconds). So past the first couple of plants a small pod is
+-- worth more on the pedestal than at the stall, and the gap grows with the
+-- garden. That is the design as asked for -- a use for pods nobody wants to
+-- grow -- and it is the number to look at first if the stall stops being used.
+--==============================================================================
+SeedData.Sacrifice = {
+	Multiplier = 1.5,
+	DurationSeconds = 45,
+	CooldownSeconds = 180,
+}
+-- Checked on load, like the chest's: a boost that outlived its cooldown would
+-- let a second sacrifice land on top of the first.
+assert(SeedData.Sacrifice.Multiplier > 1, "the sacrifice must raise income")
+assert(SeedData.Sacrifice.DurationSeconds > 0 and SeedData.Sacrifice.CooldownSeconds > 0,
+	"the sacrifice's times must be positive")
+assert(SeedData.Sacrifice.CooldownSeconds >= SeedData.Sacrifice.DurationSeconds,
+	"a sacrifice's boost must end before the pedestal is ready again")
+
+-- What a saved sacrifice is worth to garden income at one moment: the
+-- multiplier while `now` is before `endsAt`, exactly 1 otherwise. Pure, so the
+-- faucet, the attributes and a spec all ask the same question.
+function SeedData.sacrificeMultiplier(endsAt: any, now: number): number
+	local ends = tonumber(endsAt)
+	if not ends or ends ~= ends or now >= ends then
+		return 1
+	end
+	return SeedData.Sacrifice.Multiplier
+end
+
 function SeedData.SellPrice(species: Species?, tier: number?): number
 	-- Exactly SellSeconds of what the same plant pays standing up, and it takes
 	-- the same species so the two can never drift apart. Income is already a

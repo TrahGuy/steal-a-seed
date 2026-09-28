@@ -674,6 +674,121 @@ GameConfig.SellAll = {
 }
 
 --==============================================================================
+-- THE SACRIFICE PEDESTAL: PLACE, NAMES AND VERBS (2026-09-28)
+--
+-- The numbers -- how much, how long, how often -- are SeedData.Sacrifice. The
+-- rules are SacrificeService's. These are where it stands, what its replicated
+-- fields are called and the two verbs it uses on the GameEvent remote.
+--==============================================================================
+GameConfig.Sacrifice = {
+	Enabled = true,
+	FolderName = "SeedSacrificePedestal",
+	--==========================================================================
+	-- WHERE IT STANDS (surveyed in Play, 2026-09-28)
+	--
+	-- On the hub deck's south-south-east rim, between the stall and the road.
+	-- 160 turns its front from -Z to face the deck's centre; its back, which
+	-- carries the same sign, faces the road a raider walks home along.
+	--
+	-- The draft stood it at (-29, 29), 16 studs from the SELL ONE board, whose
+	-- prompt reaches 12 -- so the two prompts could both be in range, and no
+	-- spot on the deck's north or west clears SELL ONE, Marigold, the wheel and
+	-- the chest together. Here:
+	--
+	--   * the nearest prompt is SELL ALL's, 58 studs away, and no prompt's
+	--     reach added to this one's comes within 35 studs of meeting;
+	--   * nothing but the deck stands within 40 studs;
+	--   * every straight walk between a plot's spawn pad, the stall, the
+	--     wheel, the chest and the road passes 7 studs clear or more;
+	--   * its foot is 5 studs inside the deck's edge (the deck is a disc 92
+	--     across). Y is the deck's surface.
+	--==========================================================================
+	Position = Vector3.new(14, 0.9, -38),
+	FacingDegrees = 160,
+	PromptDistance = 10,
+	-- Held a moment, like the chest's.
+	PromptHoldSeconds = 0.35,
+	-- How far from the pedestal a quote may be asked for or answered. Wider than
+	-- the prompt, so a player who stepped back to read the panel is still there.
+	ReachStuds = 16,
+	-- A quote nobody answers is forgotten after this long: SELL ONE's 45, so
+	-- the game's two "are you sure" panels give the same time to read them.
+	QuoteSeconds = 45,
+	ServerAction = "SacrificeResult",
+	ClientAction = "SacrificeReply",
+	Attributes = {
+		-- os.time() the pedestal is ready again for this player; 0 if never used.
+		NextAt = "SacrificeNextAt",
+		-- The os.time() the running boost ends, and what it multiplies garden
+		-- income by; both nil when none is running.
+		EndsAt = "SacrificeEndsAt",
+		Multiplier = "SacrificeMultiplier",
+	},
+	--==========================================================================
+	-- WHAT THE PLAYER IS TOLD, BY REASON
+	--
+	-- SacrificeService names why it refused; these are the words SacrificeUI
+	-- puts up: a headline, and under it the next step that works for that
+	-- reason. Here, not in the client script, so HudLayoutSpec can measure every
+	-- one against the notice's width on every listed phone.
+	--
+	-- COOLDOWN has no next step written down: the client fills in the time left
+	-- (sacrificeReadyIn). A reason that is not here -- a body mid-respawn, the
+	-- pedestal switched off -- is not something a player did, and says nothing.
+	-- NOT_A_POD and NOT_OWNED share a line: either way, what works is a pod out
+	-- of the Bag.
+	--==========================================================================
+	Notices = {
+		COOLDOWN = { title = "PEDESTAL RECHARGING" },
+		NOTHING_HELD = { title = "NO POD IN HAND", detail = "Hold an unhatched pod from your Bag." },
+		NOT_A_POD = { title = "NOT A POD", detail = "Hold an unhatched pod from your Bag." },
+		NOT_OWNED = { title = "NOT A POD", detail = "Hold an unhatched pod from your Bag." },
+		HATCHED = { title = "PODS ONLY", detail = "A grown plant can't be sacrificed." },
+		CARRYING = { title = "BANK IT FIRST", detail = "Carry that pod past the red line." },
+		NO_GARDEN = { title = "NOTHING TO BOOST", detail = "Grow a plant on your plot first." },
+		TOO_FAR = { title = "TOO FAR AWAY", detail = "Stand beside the pedestal." },
+		EXPIRED = { title = "OFFER EXPIRED", detail = "Press the pedestal again." },
+		CHANGED = { title = "POD NOT IN HAND", detail = "Nothing was taken. Press the pedestal again." },
+		NOT_SAVED = { title = "PEDESTAL CLOSED", detail = "Saving is off here, so nothing was taken." },
+		NOT_READY = { title = "STILL LOADING", detail = "Try again in a moment." },
+		BAG_NOT_READY = { title = "STILL LOADING", detail = "Try again in a moment." },
+		FAILED = { title = "NOTHING TAKEN", detail = "The pedestal couldn't start. Try again." },
+	},
+	SuccessTitle = "POD SACRIFICED",
+}
+
+-- The boost row's words, in one place: BonusChestUI draws them and
+-- HudLayoutSpec measures them against every listed phone.
+function GameConfig.sacrificeBoostTitle(multiplier: number): string
+	return string.format("+%d%% GARDEN INCOME", math.floor((multiplier - 1) * 100 + 0.5))
+end
+
+-- A length of time in the pedestal's panel and notices: "45 seconds",
+-- "3 minutes", "2 min 30 s" -- whatever SeedData says, said plainly.
+function GameConfig.sacrificeSpan(seconds: number): string
+	local s = math.max(0, math.floor(seconds + 0.5))
+	if s < 60 then
+		return string.format("%d second%s", s, if s == 1 then "" else "s")
+	end
+	if s % 60 == 0 then
+		return string.format("%d minute%s", s // 60, if s == 60 then "" else "s")
+	end
+	return string.format("%d min %d s", s // 60, s % 60)
+end
+
+-- What one pod buys, as the panel offers it and the success notice confirms it.
+function GameConfig.sacrificeOffer(multiplier: number, seconds: number): string
+	return string.format("+%d%% garden income for %s", math.floor((multiplier - 1) * 100 + 0.5),
+		GameConfig.sacrificeSpan(seconds))
+end
+
+-- The COOLDOWN notice's next step: the time left, as the sign counts it.
+function GameConfig.sacrificeReadyIn(seconds: number): string
+	local s = math.max(0, math.ceil(seconds))
+	return string.format("Ready in %d:%02d.", s // 60, s % 60)
+end
+
+--==============================================================================
 -- OFFLINE EARNINGS: THE CLAIM, BY NAME
 --
 -- Names and words only; the numbers are SeedData.Offline. The pending claim is
@@ -4419,15 +4534,34 @@ function GameConfig.chestIncomeBoost(player: Player?): number
 		workspace:GetServerTimeNow(), "income")
 end
 
+-- Display-only mirror of the server's saved sacrifice boost. The server
+-- publishes the multiplier and absolute expiry, so no balance number is
+-- duplicated in GameConfig and the client never grants itself income.
+function GameConfig.sacrificeIncomeBoost(player: Player?): number
+	if not player or not GameConfig.Sacrifice.Enabled then
+		return 1
+	end
+	local A = GameConfig.Sacrifice.Attributes
+	local endsAt = tonumber(player:GetAttribute(A.EndsAt))
+	local multiplier = tonumber(player:GetAttribute(A.Multiplier))
+	if not endsAt or not multiplier or multiplier <= 1
+		or workspace:GetServerTimeNow() >= endsAt then
+		return 1
+	end
+	return multiplier
+end
+
 --==============================================================================
 -- WHAT THIS PLAYER'S PASSIVE INCOME IS MULTIPLIED BY, FOR A DISPLAY
 --
--- The pass times the chest -- exactly what EconomyService.RateFor pays. Every
--- display of what a player EARNS per second uses this. The offline claim card
--- keeps cashMultiplier alone, because the chest never reaches offline income.
+-- The pass times the sum of active temporary income bonuses -- exactly what
+-- EconomyService.RateFor pays. The offline card keeps cashMultiplier alone.
 --==============================================================================
 function GameConfig.incomeMultiplier(player: Player?): number
-	return GameConfig.cashMultiplier(player) * GameConfig.chestIncomeBoost(player)
+	-- Temporary income bonuses add their percentages before the pass. A chest
+	-- +25% and a sacrifice +50% therefore mean +75%, never a hidden compound.
+	return GameConfig.cashMultiplier(player)
+		* (GameConfig.chestIncomeBoost(player) + GameConfig.sacrificeIncomeBoost(player) - 1)
 end
 
 -- Checked on load, like the Speed anchors: a boost that outlived the cooldown

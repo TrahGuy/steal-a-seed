@@ -190,12 +190,18 @@ local ok, err = pcall(function()
 		return game:GetService(name)
 	end
 	-- EconomyService also asks for the Bonus Chest (2026-09-27: its income
-	-- boost) and the launch analytics; neutral stand-ins, so this spec checks
-	-- exactly what it checked before -- a claim, not a boost or a report.
+	-- boost), the sacrifice pedestal (2026-09-28: the same) and the launch
+	-- analytics; neutral stand-ins, so this spec checks exactly what it checked
+	-- before -- a claim, not a boost or a report.
 	local siblings = {
 		PlotService = {}, PlantService = {}, PlayerDataService = PlayerDataService,
 		CarryService = {}, PassService = PassService,
 		BonusChestService = {
+			Multiplier = function()
+				return 1
+			end,
+		},
+		SacrificeService = {
 			Multiplier = function()
 				return 1
 			end,

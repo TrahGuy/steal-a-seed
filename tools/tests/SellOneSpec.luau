@@ -252,6 +252,13 @@ local ok, err = pcall(function()
 				return 1
 			end,
 		},
+		-- The sacrifice pedestal's income boost (2026-09-28), neutral for the
+		-- same reason. SacrificeSpec checks that a sale never carries it.
+		SacrificeService = {
+			Multiplier = function()
+				return 1
+			end,
+		},
 		Metrics = {
 			income = function() end,
 		},

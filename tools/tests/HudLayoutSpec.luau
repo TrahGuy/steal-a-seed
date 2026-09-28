@@ -1091,6 +1091,29 @@ for code, line in pairs(ActionRefusal.Notices) do
 		table.insert(detailLines, { code = code, text = line.detail })
 	end
 end
+-- The sacrifice pedestal's notices (2026-09-28) go up through the same renderer
+-- and are held to the same two rules: every refusal it can name, its COOLDOWN
+-- with the longest time it can show, and the success with what it bought.
+do
+	local SACRIFICE = GameConfig.Sacrifice
+	local lines = {}
+	for code, line in pairs(SACRIFICE.Notices) do
+		table.insert(lines, { code = "pedestal " .. code, title = line.title, detail = line.detail })
+	end
+	table.insert(lines, { code = "pedestal COOLDOWN's time", title = SACRIFICE.Notices.COOLDOWN.title,
+		detail = GameConfig.sacrificeReadyIn(SeedData.Sacrifice.CooldownSeconds) })
+	table.insert(lines, { code = "pedestal success", title = SACRIFICE.SuccessTitle,
+		detail = GameConfig.sacrificeOffer(SeedData.Sacrifice.Multiplier, SeedData.Sacrifice.DurationSeconds) .. "." })
+	for _, line in ipairs(lines) do
+		local width = TextService:GetTextSize(line.title, 16, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X + 20 + 8
+		if width > longestHead then
+			longestHead, longestTitle = width, line.title
+		end
+		if line.detail then
+			table.insert(detailLines, { code = line.code, text = line.detail })
+		end
+	end
+end
 local teleportWords = TextService:GetTextSize("TELEPORT TO PLOT", 10, Enum.Font.LuckiestGuy,
 	Vector2.new(4000, 100)).X
 local noticeBottom = CFG.NoticeTop + CFG.NoticeHeight - TOPBAR
@@ -1495,8 +1518,15 @@ local function boostW(title, clock)
 	return lineSize({ name = "B", parent = holder, size = S.boost, tint = Color3.new(1, 1, 1), icon = "boost",
 		detailSize = S.boostClock, detailFont = StatusText.ClockFont }, title, clock).X
 end
--- Both rewards at once with a long clock, and one with an hour on it.
-local twoBoosts = boostW("+25% PLANT INCOME", "59:59") + 18 + boostW("+25% TRAINING", "59:59")
+-- Two at once with a long clock, and one with an hour on it. The pair is the
+-- wider of both chest rewards and -- since the sacrifice pedestal (2026-09-28),
+-- whose boost stands in the same row -- the chest's widest reward beside the
+-- pedestal's line. Its title is read from GameConfig, so the words measured
+-- are the words drawn.
+local pedestalTitle = GameConfig.sacrificeBoostTitle(SeedData.Sacrifice.Multiplier)
+local chestPair = boostW("+25% PLANT INCOME", "59:59") + 18 + boostW("+25% TRAINING", "59:59")
+local pedestalPair = boostW("+25% PLANT INCOME", "59:59") + 18 + boostW(pedestalTitle, "59:59")
+local twoBoosts = math.max(chestPair, pedestalPair)
 local longBoost = boostW("+25% PLANT INCOME", "1:02:03")
 local runW = 0
 for _, stage in ipairs(ObbyData.Stages) do

@@ -71,6 +71,7 @@ local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local PassService = require(script.Parent:WaitForChild("PassService"))
 local BonusChestService = require(script.Parent:WaitForChild("BonusChestService"))
+local SacrificeService = require(script.Parent:WaitForChild("SacrificeService"))
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 
 local EconomyService = {}
@@ -100,6 +101,19 @@ end
 --==============================================================================
 local function withPass(player: Player, amount: number): number
 	return amount * PassService.CashMultiplier(player)
+end
+
+--==============================================================================
+-- THE TEMPORARY BOOSTS, ADDED TOGETHER IN ONE PLACE
+--
+-- Each service answers a multiplier -- 1.25, 1.5, or 1 when nothing of its own
+-- is running -- and the PERCENTAGES add: a chest's +25% beside a sacrifice's
+-- +50% is +75%, not the +87.5% a product of the two would hide. Written once,
+-- so what RateFor pays and what the garden sign says cannot come apart, and
+-- GameConfig.incomeMultiplier is the same sum for every client display.
+--==============================================================================
+local function temporaryBoost(player: Player): number
+	return BonusChestService.Multiplier(player, "income") + SacrificeService.Multiplier(player) - 1
 end
 
 --==============================================================================
@@ -161,15 +175,19 @@ function EconomyService.RateFor(player: Player): number
 	-- Each term is already whole -- IncomePerSecond rounds per plant -- so an
 	-- integer multiplier keeps the sum whole.
 	--
-	-- AND THE BONUS CHEST'S INCOME REWARD, HERE AND ONLY HERE (2026-09-27).
+	-- AND THE TEMPORARY INCOME BOOSTS, HERE AND ONLY HERE: the Bonus Chest's
+	-- income reward (2026-09-27) and the sacrifice pedestal's (2026-09-28).
 	-- Passive plant income is exactly this function's answer, so this is the
-	-- one place the chest can reach it -- and none of the things above that
-	-- the pass stays out of: sales, cash packs, refunds, the offline claim (it
-	-- calls withPass directly), a Biome Harvest. It MULTIPLIES the pass: x2
-	-- becomes x2.5. 1 whenever no saved income boost is running, which is
-	-- nearly always, so the sum is whole again the moment it ends.
+	-- one place either can reach it -- and none of the things above that the
+	-- pass stays out of: sales, cash packs, refunds, the offline claim (it
+	-- calls withPass directly), a Biome Harvest, a wheel prize.
+	--
+	-- THE TWO ADD, AND THE PASS MULTIPLIES THEIR SUM (temporaryBoost). +25% and
+	-- +50% are +75%: x1.75, and x3.5 under the pass. 1 whenever neither is
+	-- running, which is nearly always, so the sum is whole again the moment
+	-- they end.
 	--==========================================================================
-	return withPass(player, rate) * BonusChestService.Multiplier(player, "income")
+	return withPass(player, rate) * temporaryBoost(player)
 end
 
 --==============================================================================
@@ -196,8 +214,8 @@ local function publishGarden(player: Player, rate: number)
 		return
 	end
 	local grown = #PlantService.GrownIn(plot)
-	-- The same product RateFor pays: the pass, times a running chest boost.
-	local boost = withPass(player, 1) * BonusChestService.Multiplier(player, "income")
+	-- The same product RateFor pays: the pass, times the boosts running now.
+	local boost = withPass(player, 1) * temporaryBoost(player)
 	local function put(name: string, value: number?)
 		if plot:GetAttribute(name) ~= value then
 			plot:SetAttribute(name, value)

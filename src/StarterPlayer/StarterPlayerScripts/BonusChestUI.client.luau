@@ -22,6 +22,11 @@
 --                boost band under the clock's column, so it keeps clear of every
 --                HUD control and of the chase warning above it.
 --
+-- THE ROW IS ALSO THE SACRIFICE PEDESTAL'S (2026-09-28). Its boost stands in the
+-- same band beside the chest's, so the two are laid out by one owner and can
+-- never be placed on top of each other. That is why this script keeps running
+-- with the chest switched off: the row still has the pedestal to serve.
+--
 -- DRAWN FROM THE ATTRIBUTES, NOT THE REPLY. If the server's answer is lost the
 -- attributes still arrive, and the row and sign show the reward anyway.
 --==============================================================================
@@ -44,10 +49,6 @@ local ATTR = CHEST.Attributes
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
-
-if not CHEST.Enabled then
-	return
-end
 
 local GOLD = Color3.fromRGB(255, 214, 92)
 local CREAM = Color3.fromRGB(242, 238, 206)
@@ -220,7 +221,9 @@ gui.Parent = playerGui
 --==============================================================================
 local CASH_GREEN = Color3.fromRGB(38, 255, 0)
 local SPEED_BLUE = Color3.fromRGB(25, 144, 255)
-local BOOST_TINT: { [string]: Color3 } = { income = CASH_GREEN, training = SPEED_BLUE }
+-- The pedestal's boost raises the same number the chest's income reward does.
+local BOOST_TINT: { [string]: Color3 } = { income = CASH_GREEN, training = SPEED_BLUE,
+	sacrifice = CASH_GREEN }
 -- Between two boosts in the row, at the desktop size.
 local BOOST_GAP = 18
 
@@ -354,6 +357,24 @@ local function paint()
 			placeBoosts()
 		end
 	end
+	-- The sacrifice pedestal's boost (2026-09-28), in the same row: its own
+	-- line and its own clock beside the chest's, because the two end at
+	-- different times. Drawn from the attributes SacrificeService publishes,
+	-- like the chest's, so it is right after a rejoin with no reply to wait for.
+	local sacrifice = GameConfig.sacrificeIncomeBoost(player)
+	local sacrificeEnds = tonumber(player:GetAttribute(GameConfig.Sacrifice.Attributes.EndsAt)) or 0
+	if sacrifice > 1 and now < sacrificeEnds then
+		running.sacrifice = true
+		local e = entryFor("sacrifice")
+		local before = e.line.size()
+		e.line.set(GameConfig.sacrificeBoostTitle(sacrifice), StatusText.clock(sacrificeEnds - now))
+		if not e.line.isShown() then
+			e.line.show()
+			placeBoosts()
+		elseif e.line.size() ~= before then
+			placeBoosts()
+		end
+	end
 	for id, e in pairs(entries) do
 		if not running[id] then
 			e.line.hide()
@@ -364,15 +385,17 @@ end
 --==============================================================================
 -- THE CHEST, WHICH IS PERSISTENT UNDER STREAMING BUT STILL ARRIVES LATE
 --==============================================================================
-task.spawn(function()
-	local folder = Workspace:WaitForChild(CHEST.FolderName, math.huge)
-	local chest = folder:WaitForChild("BonusChest", math.huge)
-	if chest and chest:IsA("Model") then
-		chest:WaitForChild("Body", 10)
-		built = build(chest)
-		paint()
-	end
-end)
+if CHEST.Enabled then
+	task.spawn(function()
+		local folder = Workspace:WaitForChild(CHEST.FolderName, math.huge)
+		local chest = folder:WaitForChild("BonusChest", math.huge)
+		if chest and chest:IsA("Model") then
+			chest:WaitForChild("Body", 10)
+			built = build(chest)
+			paint()
+		end
+	end)
+end
 
 ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, who: Player)
 	local b = built
@@ -418,6 +441,9 @@ if channel:IsA("RemoteEvent") then
 end
 
 for _, name in pairs(ATTR) do
+	player:GetAttributeChangedSignal(name):Connect(paint)
+end
+for _, name in pairs(GameConfig.Sacrifice.Attributes) do
 	player:GetAttributeChangedSignal(name):Connect(paint)
 end
 task.spawn(function()

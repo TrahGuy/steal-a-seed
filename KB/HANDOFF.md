@@ -22,6 +22,8 @@
 - None of this has been seen on a live server from this PC: no Podnappers session has been played
   here since v986. The owner tested guardian throws on a phone in live v992 and confirmed the
   ragdoll fix by eye. That is one phone, not every device (see the ragdoll entry, 9).
+- **The free sacrifice pedestal (2026-09-28) is on `wip` only.** It is in no published build. See
+  its entry below.
 
 ### The publishes
 
@@ -191,6 +193,225 @@ What else each build carried:
 - Which build the owner's phone test ran on. v992 is the latest publish.
 - Why the grant reached only the chime.
 - What v984 to v986 held. Those rows in the baseline table below are still "probably".
+
+## The free sacrifice pedestal — 2026-09-28 (CLAUDE, finishing CODEX's draft)  (COMMITTED ON BRANCH `wip` WITH THIS ENTRY AND PUSHED; NOT ON `main`; NOT PUBLISHED; ALL 56 SPECS PASS; PLAY-TESTED ON THE TEST STORE AT DESKTOP SIZE; NOT SEEN IN THE PHONE EMULATOR, WITH A CONTROLLER, WITH A SECOND PLAYER OR ON A LIVE SERVER; AWAITING THE OWNER'S REVIEW)
+
+**What it is.** A pedestal on the hub deck. A player holding **one banked, unhatched pod of their
+own** presses its prompt, is shown what will be consumed, and answers KEEP POD or SACRIFICE. On a
+yes the pod is destroyed and their **online garden income is +50% for 45 seconds**. The pedestal
+then recharges for **3 minutes**, per player. It is free: no product, no Robux, no paid upgrade, no
+guardian luck (all out of scope, and absent from the code — SacrificeSpec checks).
+
+Codex's draft had passed an Edit-mode syntax check only. It was audited, repaired and then tested.
+
+### 1. The rules the server enforces (`SacrificeService`)
+
+- **A quote, then a yes** (SELL ONE's shape). The prompt asks for a quote; nothing is taken until
+  the player answers that quote's token with `accept = true`. Every rule is checked again at the
+  answer, against the same Tool instance the quote was made for.
+- **Nothing off the wire is believed.** The prompt carries no arguments; an answer carries a token
+  and a yes. The pod, its size, the player's place and the clock are read on the server.
+- **One quote per player.** A new press replaces it. It is forgotten on any answer before anything
+  else happens, on a death, when the body leaves, when a new body arrives, on leaving the game, and
+  after `QuoteSeconds` (45, SELL ONE's number; the draft had 30).
+- **Refused, by reason code** (the words are `GameConfig.Sacrifice.Notices`):
+
+  | Code | When |
+  | --- | --- |
+  | `NOTHING_HELD` | empty hands; a pod in the Bag only is not chosen for the player |
+  | `NOT_A_POD` | a bat, a trap, an unknown species, a tier that is not a whole number 1 to 7 |
+  | `HATCHED` | a grown plant |
+  | `NOT_OWNED` | a pod Tool the saved bag has no row for |
+  | `CARRYING` | a raided pod in the arms: loot not yet banked |
+  | `TOO_FAR` | more than 16 studs from the bowl, at the quote and at the answer |
+  | `COOLDOWN` | the pedestal is recharging; the answer carries `nextAt` |
+  | `NO_GARDEN` | no plot of their own, or nothing grown on it: the pod would buy nothing |
+  | `NOT_SAVED` | a temporary profile (DataStores unreachable) |
+  | `NOT_READY` / `BAG_NOT_READY` | the profile, or the saved bag, is not back yet |
+  | `EXPIRED` / `CHANGED` | the quote ran out; the pod left the hands, was swapped or changed size |
+  | `FAILED` | a step inside the exchange failed; everything was put back |
+  | `GONE` / `DISABLED` | a dead or missing body; the pedestal switched off. No notice for these |
+
+- **Someone else's pod cannot be offered at all.** Only a Tool in the presser's own hands is looked
+  at, and a raided pod is a welded Model, never a Tool. `NOT_OWNED` is the second lock.
+- **The pod's contents stay hidden.** The quote and the answer name the pod's **size** only; the
+  server's log line names the player and the size. The panel draws the shell with the builder the
+  hotbar already uses, and calls it UNHATCHED POD.
+
+### 2. The order of the exchange, and what a failed save does
+
+In one resumption, with no yield:
+
+1. The cooldown and the boost's expiry are written to the profile (`PlayerDataService.SetSacrifice`).
+   If that refuses, nothing else has been touched: `FAILED`.
+2. The pod is taken **out of the hands** (not yet destroyed), and its one row comes off the saved bag
+   through `CarryService.SyncHeldNow` — the only call that may shrink that record.
+3. The saved bag is **counted**. One pod fewer: the Tool is destroyed and the attributes are
+   published. Anything else: the clock is put back to what it was, the pod goes back into the hands,
+   and the answer is `FAILED`. A sync that throws falls back to taking the row off directly.
+
+The draft destroyed the Tool first and ignored every return value.
+
+- **The clock and the bag are in the same profile**, so they reach the DataStore in one write or in
+  none. The pedestal does **not** save by itself (SELL ONE's rule, not the Bonus Chest's: the chest
+  saves first because its claim costs nothing).
+- **A failed save, or a crash before the next save, undoes all of it together:** the player rejoins
+  holding the pod, with no cooldown, no boost, and without the cash the boost earned. Nothing is
+  consumed unfairly and nothing is had for free. Play-tested (section 6).
+- **A respawn does not bring the pod back**, end the boost or reset the cooldown.
+
+### 3. What the boost reaches, and how it combines
+
+- It reaches **`EconomyService.RateFor` only**: passive plant income while the player is in the
+  server, and the gate sign's numbers. `EconomyService` is the only server script that names the
+  pedestal.
+- It does **not** reach a sale (SELL ONE, SELL ALL), the offline claim, a wheel prize, a Biome
+  Harvest, a cash pack or a refund.
+- **With the Bonus Chest's +25% income reward the percentages add**, and the x2 pass multiplies
+  their sum: +25% and +50% are x1.75, x3.5 under the pass (`temporaryBoost`, written once). The
+  chest's training reward adds nothing to income, and the pedestal adds nothing to training.
+- Every client display uses `GameConfig.incomeMultiplier`, the same sum off the published
+  attributes.
+- **Times are wall-clock** (`os.time()`), like the chest's. Both keep running while the player is
+  away; a rejoin finds what is left. `ProfileSchema.Sanitise` cuts either time to at most one
+  cooldown / one boost from now, so a clock-skewed save cannot lock the pedestal or pay for longer.
+
+### 4. Where it stands (moved from the draft's spot)
+
+- **Now: (14, 0.9, -38), facing 160°** — the deck's south-south-east rim, between the stall and the
+  road. `GameConfig.Sacrifice.Position` / `FacingDegrees`.
+- **Why it moved.** The draft's (-29, 29) stood **16.2 studs from the SELL ONE board**, whose prompt
+  reaches 12 against the pedestal's 10: the two prompts could both be in range. No spot on the
+  deck's north or west clears SELL ONE, Marigold, the wheel and the chest together.
+- **Surveyed in Play at the new spot:** it stands on the deck (top at y 0.900); nothing but the
+  deck within 40 studs; the nearest prompt is SELL ALL's, 58.0 studs away.
+- **Computed from positions measured in Play** (six spawn pads, the stall's three prompts, the
+  wheel, the chest, the road mouth, the obby entrance): every straight walk between them passes
+  7 studs clear or more. The chest's mirror image on the east rim was the other candidate; it sits
+  1.6 studs off the Plot 6 to SELL ALL walk.
+- **Two signs, front and back**, so it reads from the hub and from the road. Outlined, self-lit,
+  drawn to 90 studs. The third line is each player's own: READY, or READY IN m:ss.
+- **The owner may prefer another spot.** It is two numbers in GameConfig; SacrificeSpec fails if a
+  new spot leaves the deck or shares ground with a prompt.
+
+### 5. Files
+
+| File | Change |
+| --- | --- |
+| `SeedGameServer/SacrificeService.luau` | new (Priority 64): the rules above, the pedestal, the 1 s attribute publish |
+| `StarterPlayerScripts/SacrificeUI.client.luau` | new: the confirmation, the signs' own line, the prompt, the notices |
+| `Shared/SeedData.luau` | `SeedData.Sacrifice` (1.5, 45 s, 180 s), three load-time asserts, `sacrificeMultiplier` |
+| `Shared/GameConfig.luau` | `GameConfig.Sacrifice` (place, names, verbs, notice words), `sacrificeBoostTitle`, `sacrificeSpan`, `sacrificeOffer`, `sacrificeReadyIn`, `sacrificeIncomeBoost`; `incomeMultiplier` adds the two boosts |
+| `SeedGameServer/EconomyService.luau` | `temporaryBoost`, used by `RateFor` and the gate sign |
+| `SeedGameServer/PlayerDataService.luau` | `SetSacrifice` |
+| `SeedGameServer/ProfileSchema.luau` | `SacrificeNextAt`, `SacrificeEndsAt`: type, default, validator |
+| `StarterPlayerScripts/BonusChestUI.client.luau` | the boost row draws the pedestal's line too; the script keeps running with the chest off |
+| `Shared/UIKit.luau` | **additive:** `modal.contentRoom()`, and the 82 of chrome named `MODAL_CHROME` |
+| `tools/tests/SacrificeSpec.luau` | new, 281 checks |
+| `tools/tests/HudLayoutSpec.luau` | measures the pedestal's boost line and its notices |
+| `tools/tests/SellOneSpec.luau`, `OfflineEarningsSpec.luau` | a neutral stand-in for the new sibling |
+| `AGENTS.md`, this file | the map, this entry |
+
+`UIKit.luau` is shared by every panel. Nothing existing in it changed size or behaviour.
+
+### 6. Tested
+
+**Specs (Studio Edit, fresh source):**
+- `SacrificeSpec` **281 passed, 0 failed.** It runs the real SacrificeService, CarryService,
+  PlayerDataService, ProfileSchema, BonusChestService and EconomyService, with only the DataStore
+  transport, the garden and the pass stood in. It covers the valid sacrifice and its order, every
+  refusal, malformed and replayed answers, two quotes, expiry of the quote, the boost and the
+  cooldown, SELL ALL landing first, the three failures inside the exchange, save and rejoin, a
+  failing save, the saved fields' bounds, death and respawn, the income sums, the faucet ticking,
+  and the wiring.
+- **The whole suite: 56 specs, all ran to the end, 0 failures.** Counts are unchanged from the
+  run before this work except SacrificeSpec (new).
+- **29 planted bugs, 29 caught.** Each was put into Studio's copy of a module (never disk), the
+  spec run, and the source restored and compared: cooldown ignored, a replayable quote, boosts
+  multiplying, the boost reaching the offline claim / a sale / a one-off reward, no reach check, a
+  grown plant or an unowned pod accepted, the pod destroyed before its row is counted, a rejoin
+  restarting the boost or clearing the cooldown, and 16 more. One survived the first run (a death
+  keeping the quote); the spec was tightened and catches it.
+
+**Studio Play, seven sessions, every one on the throwaway store `SeedTest_20260928`**
+(`test_store_on`, `store_guard` SAFE before each start, the save line read STUDIO TEST STORE each
+time, `test_store_off` at the end: 1 key removed, marker removed). `StealASeed_v1` was never opened.
+Desktop viewport, 1148 x 589 and 1251 x 589, keyboard and mouse. Real clicks on the panel's buttons.
+
+| Checked | Result |
+| --- | --- |
+| A real sacrifice | saved bag 6 rows to 5; the twin pod kept; next +178 s, ends +43 s; attributes published |
+| Income | `RateFor` 15,992 to 23,988; cash measured at 24,209/s during and 16,248/s after (ratio 1.49) |
+| With the chest's income reward | `RateFor` 27,986 = 7,996 x 2 x 1.75; gate sign boost 3.5 |
+| The boost row | "+50% GARDEN INCOME 0:40"; beside the chest's line, 18 px apart; meets nothing else drawn |
+| The boost ending | row gone, attributes cleared, sign "READY IN 2:00", prompt off |
+| An answer after about 50 s | `EXPIRED`, nothing taken |
+| The same token twice more, and seven malformed answers | nothing changed |
+| A grown plant; empty hands | "PODS ONLY"; "NO POD IN HAND"; both notices fit |
+| Death with the panel open | the quote was gone at the death; the old yes, sent after respawn, took nothing |
+| Rejoin 25 s after leaving | both pods still gone; cooldown 144 s to 118 s; the expired boost not extended |
+| Rejoin 16 s after a sacrifice | boost row back by itself at 0:25; income still x1.5; pod still gone |
+| **Every save failing** | after rejoining: the pod back in the bag (6 rows), no cooldown, no boost, the session's cash gone |
+| KEEP POD, X | closed, a no sent, the pod kept |
+
+**Phone and controller, as far as this PC allows:**
+- **The device emulator was off and a session cannot switch it on**, so no phone-sized viewport
+  was seen. What stands in for it:
+  - HudLayoutSpec places the boost row with the pedestal's line beside the chest's (494 px at
+    desktop size) on all 24 listed screens, 8 px clear of every group and off the middle; and
+    measures every pedestal notice on every listed screen.
+  - **The confirmation has two row sizes.** At full size its content asks for 206 px; UIKit.modal
+    gives 177 on the shortest listed phone (772 x 360) and 158 at the largest menu size, where the
+    buttons would have been cut by the panel's own edge. The closer size asks for 154, with buttons
+    still 44 tall. SacrificeSpec does the arithmetic for every listed screen at every menu size.
+  - In Play, with the panel capped at a 772 x 360 phone's 259 px, it opened 380 x 240 with every
+    row inside it (capture 02).
+- **Controller: harness only, not an emulator or a pad.** With `PadInput.active` forced, the panel
+  opened with **KEEP POD selected**, B bound to the panel's own "no" (priority 3000, above the
+  generic panel close) and unbound again on close. **No button was pressed**: input cannot be
+  injected on this PC.
+
+Captures (untracked, not committed): `output/sacrifice-pedestal/01` to `09`.
+
+**Cleanup:** Studio is in Edit; its 129 scripts match disk byte for byte; no ZZ objects; the
+test-store marker is gone. SoundService holds 25 stopped `SeedCue_ChaseBed` sounds, the known
+residue of full-suite runs; not deleted.
+
+### 7. For the owner to decide
+
+1. **The 3-minute cooldown: kept, and it looks right.** At full use it is 25% uptime, +12.5%
+   average online garden income, for one pod every three minutes.
+   - One sacrifice is worth 22.5 seconds of the **whole garden's** income (doubled by the pass). A
+     sale is worth 30 seconds of **that one pod's plant** (never doubled). So with two or more
+     plants growing, a small pod is worth more on the pedestal than at the stall.
+   - **Any pod buys the same boost.** Players will feed it their smallest pods and never a good
+     one. If a bigger pod should buy more, that is a design change; nothing here does it.
+   - Shorter than about 2 minutes would make it a chore to keep up; longer than 5 would make a
+     45-second boost feel rare. 3 sits between.
+2. **"GARDEN INCOME" beside "PLANT INCOME".** The pedestal uses the owner's words; the chest's line
+   says PLANT INCOME. Side by side in the boost row they read as two different things, and they
+   are the same number. One line to change either (`GameConfig.sacrificeBoostTitle`, or the
+   chest reward's `Title`).
+3. **The new position** (section 4).
+4. **`QuoteSeconds` is 45**, SELL ONE's, where the draft had 30.
+
+### 8. Not done, and risks
+
+- **Not seen on a phone-sized screen, with a controller, with a second player or on a live
+  server.** The first two need the owner: switch the device emulator to a phone before Play, and
+  the Xbox Controller Emulator or a pad.
+- **`TOO_FAR` and `CARRYING` ran in the spec only.** A prompt out of range cannot be pressed from
+  a session, and a raid was not staged.
+- **One save attempt answered HTTP 500** during the Play tests; SaveService's retry wrote it and
+  the rejoin showed the saved state. DataStore weather, not this feature.
+- **A restored grown plant is put straight into the hands** on every spawn (`GiveHatched` equips
+  unless asked to wait). A player who walks to the pedestal after respawning gets PODS ONLY until
+  they pick a pod. Existing behaviour, unchanged.
+- **SELL ONE's panel asks for 214 px of content against the same room** (177 on the shortest
+  phone), so its buttons sit against, or past, the panel's bottom edge there. Not changed here, and
+  not seen on a phone; worth a look.
+- Studio holds one script that is not on disk, `ServerScriptService.EmberrootApprovalRunner`. It
+  was there before this work and was left alone.
 
 ## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (OWNER-CONFIRMED FIXED ON A PHONE IN LIVE v992, BY EYE; NOT CHECKED ON A PC, A CONSOLE, ANOTHER PHONE OR WITH A SECOND PLAYER; THE FIX IS 4080d46; COMMITTED ON BRANCH `wip` ONLY, NOT ON `main`; ALL 55 SPECS PASS)
 

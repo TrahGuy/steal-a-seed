@@ -221,6 +221,18 @@ export type Profile = {
 	ChestBoost: string,
 	ChestBoostEndsAt: number,
 	--==========================================================================
+	-- THE SACRIFICE PEDESTAL (2026-09-28; SacrificeService, numbers in
+	-- SeedData.Sacrifice): when the pedestal is ready again, and when the boost
+	-- the last sacrifice bought runs out. Absolute os.time() seconds, like the
+	-- chest's, so both keep elapsing while the player is away and a rejoin can
+	-- neither reset the cooldown nor extend the boost. Written together by one
+	-- sacrifice, in the same resumption that takes the pod's row off Held --
+	-- so they reach the save with the pod's removal, or not at all. An old save
+	-- has neither key and reads 0 / 0: ready, nothing running.
+	--==========================================================================
+	SacrificeNextAt: number,
+	SacrificeEndsAt: number,
+	--==========================================================================
 	-- THE OBBY REWARD WHEEL (2026-09-27; WheelService, numbers in WheelData)
 	--
 	--   WheelEarned / WheelBought  unused spins, by where they came from, kept
@@ -306,6 +318,8 @@ function ProfileSchema.Default(): Profile
 		ChestNextAt = 0,
 		ChestBoost = "",
 		ChestBoostEndsAt = 0,
+		SacrificeNextAt = 0,
+		SacrificeEndsAt = 0,
 		WheelEarned = 0,
 		WheelBought = 0,
 		WheelDayAt = 0,
@@ -408,6 +422,19 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		p.ChestBoost = raw.ChestBoost
 		p.ChestBoostEndsAt = math.floor(number(raw.ChestBoostEndsAt, 0, 0, now + chest.BoostSeconds))
 	end
+
+	--==========================================================================
+	-- THE SACRIFICE PEDESTAL, BY THE SAME TWO RULES
+	--
+	-- An old save has neither key and reads 0 / 0: ready, nothing running. And
+	-- neither time may lie further ahead than one sacrifice made this second
+	-- could have put it -- one cooldown, one boost -- so a clock-skewed row
+	-- cannot lock the pedestal or pay its boost for longer than the game ever
+	-- would. A time in the past is kept as it is: it only says "over".
+	--==========================================================================
+	local sacrifice = SeedData.Sacrifice
+	p.SacrificeNextAt = math.floor(number(raw.SacrificeNextAt, 0, 0, now + sacrifice.CooldownSeconds))
+	p.SacrificeEndsAt = math.floor(number(raw.SacrificeEndsAt, 0, 0, now + sacrifice.DurationSeconds))
 
 	--==========================================================================
 	-- THE WHEEL, BOUNDED BY WHAT WheelService COULD HAVE WRITTEN

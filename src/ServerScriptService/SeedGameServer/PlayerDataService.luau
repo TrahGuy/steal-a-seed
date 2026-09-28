@@ -270,6 +270,20 @@ function PlayerDataService.SetChest(player: Player, nextAt: number, boost: strin
 	return true
 end
 
+-- The pedestal spends a pod and starts its clock in one synchronous server
+-- transaction. The service owns eligibility; this setter owns persistence.
+function PlayerDataService.SetSacrifice(player: Player, nextAt: number, endsAt: number): boolean
+	local entry = entries[player]
+	if not entry or type(nextAt) ~= "number" or nextAt ~= nextAt
+		or type(endsAt) ~= "number" or endsAt ~= endsAt then
+		return false
+	end
+	entry.profile.SacrificeNextAt = math.floor(nextAt)
+	entry.profile.SacrificeEndsAt = math.floor(endsAt)
+	touch(player)
+	return true
+end
+
 --==============================================================================
 -- THE WHEEL'S FIELDS, CHANGED TOGETHER (2026-09-27)
 --

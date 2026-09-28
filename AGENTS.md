@@ -150,6 +150,9 @@ src/
     WeaponShopService.luau      Marigold's counter: buying, equipping, and the one Tool
     CombatService.luau          what a bat and a trap DO -- knockback, restraint, cleanup
     BonusChestService.luau      the free Bonus Chest in the hub: claims, cooldown, boosts
+    SacrificeService.luau       the free sacrifice pedestal in the hub: one banked, unhatched
+                                pod out of the hands for a short boost to ONLINE garden income;
+                                quote, then yes; numbers in SeedData.Sacrifice
     Metrics.luau                launch analytics, measurement only (NOT a *Service);
                                 what it sends and why: KB/ANALYTICS.md
     TrafficLogService.luau      the external new-player feed to a webhook secret (Make ->
@@ -194,7 +197,10 @@ src/StarterPlayer/StarterPlayerScripts/
     TrapUI.client.luau          the red countdown over a trapped player
     ActionToastUI.client.luau   draws every short notification (Notice): refusals, successes,
                                 warnings, information -- text-led, stacked above the belt
-    BonusChestUI.client.luau    the chest's sign, prompt and boost timer
+    BonusChestUI.client.luau    the chest's sign, prompt and boost timer -- and the boost row,
+                                which also draws the sacrifice pedestal's line
+    SacrificeUI.client.luau     the pedestal's confirmation (the pod, what it buys, KEEP POD /
+                                SACRIFICE), its two signs' own line and its prompt
     PlotTeleportUI.client.luau  TELEPORT TO PLOT under the clock, alive and in the Safe Zone
     ObbyUI.client.luau          the obby's moving platforms (from server time), crumbles and
                                 spring throws under your own feet, the run pill and RETURN TO PLOT
