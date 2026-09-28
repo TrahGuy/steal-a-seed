@@ -400,8 +400,9 @@ residue of full-suite runs; not deleted.
 - **Not seen on a phone-sized screen, with a controller, with a second player or on a live
   server.** The first two need the owner: switch the device emulator to a phone before Play, and
   the Xbox Controller Emulator or a pad.
-- **`TOO_FAR` and `CARRYING` ran in the spec only.** A prompt out of range cannot be pressed from
-  a session, and a raid was not staged.
+- **The server's `COOLDOWN`, `TOO_FAR` and `CARRYING` refusals ran in the spec only.** In Play the
+  prompt was off for the whole cooldown, as designed, and two forced presses of it never reached
+  the server; a prompt out of range cannot be pressed from a session; a raid was not staged.
 - **One save attempt answered HTTP 500** during the Play tests; SaveService's retry wrote it and
   the rejoin showed the saved state. DataStore weather, not this feature.
 - **A restored grown plant is put straight into the hands** on every spawn (`GiveHatched` equips
