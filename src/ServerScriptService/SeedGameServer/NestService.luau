@@ -46,6 +46,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
@@ -1271,10 +1272,17 @@ end
 -- token, the waiting flag, the limp record -- and closes them when it is given
 -- no token. Server-only: no client can require this module and no remote
 -- reaches either name.
+--
+-- AND `SpecThrow` IS STUDIO-ONLY. It writes a throw's books directly, so on a
+-- live server it returns before writing anything: nothing there can open,
+-- close or overwrite a real throw through it, whatever calls it.
 --==============================================================================
 NestService.AcceptThrowAnswer = acceptThrowAnswer
 
 function NestService.SpecThrow(player: any, token: string?, limp: Loosened?)
+	if not RunService:IsStudio() then
+		return
+	end
 	throwToken[player] = token
 	throwDone[player] = if token then false else nil
 	throwLimp[player] = if token then limp else nil

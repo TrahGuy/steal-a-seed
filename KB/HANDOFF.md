@@ -128,9 +128,10 @@ What else each build carried:
 ## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN UNTIL A LIVE THROW SHOWS IT GONE; COMMITTED 4080d46 AND PUSHED ON BRANCH `wip` ONLY, NOT ON `main`; NOT PUBLISHED; ALL 55 SPECS PASS; PLAY-TESTED ON THE THROWAWAY STORE ONLY)
 
 **Status.** The fix is written and tested in Studio. At the owner's request it is committed on the
-branch `wip` (made from `main` at `ad103a9`) as **`4080d46`**, and only `wip` was pushed. `main`
-doesn't have it, and nothing was published. **The bug stays OPEN** until a guardian throw on a published server shows it
-gone. Guardian throws only; bat and trap knockdowns are untouched.
+branch `wip` (made from `main` at `ad103a9`) as **`4080d46`**, and only `wip` was pushed. A later
+commit on the same branch makes `NestService.SpecThrow` Studio-only (see 3). `main` has neither,
+and nothing was published. **The bug stays OPEN** until a guardian throw on a published server
+shows it gone. Guardian throws only; bat and trap knockdowns are untouched.
 
 **The Fable rebuild of the pods and plants has NOT started.** The owner asked for it, then sent
 this task in its place. Nothing of it exists; it waits for the owner's word.
@@ -178,9 +179,9 @@ Greenhollow throws on the unchanged code gave:
 | File | Lines | Change |
 | --- | --- | --- |
 | `Shared/RagdollGate.luau` | 8–10, 168–248 | New shared rules: `Landed` (the report's second word), `restSpeed` (the faster of torso and pelvis, never the head), `cameraPart` (the torso; the root, then the head, only for a body with no torso), `neckSocket` (the socket with an end on the Head). `state` and `await` are untouched |
-| `NestService.luau` | 58–59, 961–1005, 1067, 1207–1280, 1632–1633, 1732–1734 | `stiffenNeck` writes the neck socket's captured friction back (the value `slackenJoints` saved, out of the same record). The throw-answer handler takes a second word: `"landed"` gives the neck its friction back, once, and never ends a throw. `AcceptThrowAnswer` and `SpecThrow` expose the handler to the spec. `ragdollOff` still restores every joint |
+| `NestService.luau` | 49, 59–60, 962–1006, 1068, 1208–1288, 1640–1641, 1740–1742 | `stiffenNeck` writes the neck socket's captured friction back (the value `slackenJoints` saved, out of the same record). The throw-answer handler takes a second word: `"landed"` gives the neck its friction back, once, and never ends a throw. `AcceptThrowAnswer` and `SpecThrow` expose the handler to the spec; **`SpecThrow` returns without writing anything unless `RunService:IsStudio()`**. `ragdollOff` still restores every joint |
 | `ThrowFX.client.luau` | 450–589 (diagnostics), 793, 1098–1136 (camera), 1449–1484 and 1524–1559 (settle and landing), 1629–1637 (log) | The camera follows `RagdollGate.cameraPart` (UpperTorso). A guardian's settle is judged on `RagdollGate.restSpeed`. When the torso is down it sends the landing report. It never writes a joint's friction |
-| `tools/tests/GuardianRagdollSpec.luau` | 32, 57–79, 494–737 | 57 new checks: 118 in all |
+| `tools/tests/GuardianRagdollSpec.luau` | 32, 57–79, 494–750 | 59 new checks: 120 in all. Two of them read the source and pin `SpecThrow`'s Studio guard |
 
 **The landing report is validated on the server** (`acceptThrowAnswer`, spec-driven through
 `NestService.AcceptThrowAnswer`):
@@ -268,8 +269,10 @@ Camera jitter is studs per frame while the torso and pelvis lay still, before th
 
 ### 5. Tested, and not
 
-- **Specs:** GuardianRagdollSpec 118 passed, 0 failed (61 before). All 55 specs pass through
-  ZZSpecRun in Studio Edit, run again on the committed code.
+- **Specs:** GuardianRagdollSpec 120 passed, 0 failed (61 before). All 55 specs pass through
+  ZZSpecRun in Studio Edit, run again after the `SpecThrow` guard.
+- **The guard was not Play-tested again:** no game code calls `SpecThrow` (only the spec does), so
+  it changes nothing a player can reach.
 - **Play:** throwaway store only. `store_guard` said `SAFE SeedTest_20260928` before all three
   Play starts and the save line read `STUDIO TEST STORE`. `test_store_off` removed the 1 key and
   the marker each time. `StealASeed_v1` was never opened.
@@ -277,8 +280,8 @@ Camera jitter is studs per frame while the torso and pelvis lay still, before th
   at 2.36 s and 2.37 s, neck friction back 0.08 s after the report, camera 0.004 and 0.005 studs a
   frame, everything restored, walk 23.9 studs and jump 7.31.
 - **Cleanup:** replication lag back to 0, no ZZ objects, Studio's scripts match disk byte for byte.
-  SoundService holds 19 stopped `SeedCue_ChaseBed` sounds from spec runs (one more than this
-  morning); harmless, not deleted.
+  SoundService holds 21 stopped `SeedCue_ChaseBed` sounds from spec runs (one per full-suite run);
+  harmless, not deleted.
 - **NOT verified:**
   - A published server. Nothing here was published.
   - A real phone, or any second player: a real bat or trap hit, and what other players see.

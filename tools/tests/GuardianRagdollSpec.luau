@@ -633,6 +633,19 @@ local ok, err = pcall(function()
 	other:Destroy()
 	setAll(rig, true)
 
+	-- SpecThrow writes a throw's books directly, so on a live server it must do
+	-- nothing. Edit mode is always Studio, so the guard is read off the source.
+	local seamAt = string.find(code, "function NestService.SpecThrow(", 1, true) or 0
+	local seamEnd = if seamAt > 0 then string.find(code, "\nend\n", seamAt, true) or 0 else 0
+	local seam = if seamEnd > seamAt then string.sub(code, seamAt, seamEnd) else ""
+	local guardAt = string.find(seam, "if not RunService:IsStudio() then", 1, true)
+	local leaveAt = if guardAt then string.find(seam, "return", guardAt, true) else nil
+	local writeAt = string.find(seam, "throwToken[player] =", 1, true)
+	check(guardAt ~= nil and leaveAt ~= nil and writeAt ~= nil and leaveAt < writeAt,
+		"SpecThrow returns before writing anything unless it runs in Studio")
+	check(string.find(code, "\nlocal RunService = game:GetService(\"RunService\")\n", 1, true) ~= nil,
+		"and the RunService it asks is the engine's own")
+
 	-- The rest rule, on a rig that has really come apart.
 	setAll(rig, false)
 	task.wait()
