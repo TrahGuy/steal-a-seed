@@ -346,7 +346,9 @@ do
 	local WANT = {
 		NoticeBlocked = "rbxassetid://129733199607968",
 		-- "success new", 2026-09-27; it replaced 100270581576092 on this row only.
-		NoticeSuccess = "rbxassetid://123803156310043",
+		-- The CrazyCozy Games group's copy since 2026-09-28: the first one
+		-- (123803156310043) was on the owner's own account.
+		NoticeSuccess = "rbxassetid://104123841960377",
 		NoticeWarning = "rbxassetid://122434285599993",
 		NoticeInfo = "rbxassetid://80357294905654",
 	}

@@ -1,22 +1,24 @@
 # Steal a Seed — Session Handoff
 
-## What is live: builds v987 to v992, and seven guardian sounds that still don't load — 2026-09-28 (CLAUDE)  (READ FROM LOGS AND STUDIO EDIT LOAD TESTS; NO CODE CHANGED; NOTHING PUBLISHED BY AN AGENT; COMMITTED ON BRANCH `wip`, NOT ON `main`)
+## What is live: builds v987 to v992, and the eight sounds (fixed on `wip` by the group's re-uploads; live after the next publish) — 2026-09-28 (CLAUDE)  (READ FROM LOGS, STUDIO EDIT LOAD TESTS AND ONE PLAY SESSION; THE SOUND FIX IS ON BRANCH `wip`, NOT ON `main`; NOTHING PUBLISHED BY AN AGENT)
 
 **In short.**
 - The latest publish is **v992** (2026-09-28 16:02 local). It carries everything built up to the
   ragdoll fix (`4080d46`), and the traffic logger **disabled**. It does **not** carry `9b91b5d`, the
   Studio-only guard on `SpecThrow`: that reached Studio 4 minutes after the publish.
-- **The owner granted Podnappers the eight account-owned sounds (reported 2026-09-28). Seven still
-  don't load.**
-  - Re-tested twice in Studio Edit, at about 08:24 and 08:26 UTC.
-  - The success chime now loads, at 1.28 s.
-  - The seven guardian sounds still get "The experience doesn't have access permission".
-- Their ids have been live since v988, so on live servers, by the same permission rule:
-  - success notices play their chime again (inferred from the Edit test);
+- **The eight sounds: FIXED IN THE CODE, NOT YET LIVE.**
+  - The owner's grant (2026-09-28) reached only the success chime.
+  - The owner then **re-uploaded all 13 sound files under CrazyCozy Games**, the group that owns
+    Podnappers, so no grant is needed.
+  - GameConfig now names the group's copies for the eight rows, **on branch `wip`**. All eight load
+    at their files' exact lengths, and every one of the 56 cue ids loads.
+  - In a Play session, the guardians' sleeps, Starbloom's roar and its walk-home cue all played.
+    See "Re-uploaded by the group" below.
+- **Live is unchanged until the next publish.** v988 to v992 name the old ids, so on live servers:
+  - success notices play their chime (the grant made that one old id usable; inferred);
   - **Starbloom's guardian wakes without its roar**;
   - **Emberroot's and Starbloom's guardians sleep without their breathing**;
   - the four walk-home cues don't play (they are new, so nothing was lost there).
-  - Every other sound loads: 49 of the 56 ids.
 - None of this has been seen on a live server from this PC: no Podnappers session has been played
   here since v986. The owner tested guardian throws on a phone after v992 (see the ragdoll entry).
 
@@ -129,19 +131,57 @@ What else each build carried:
   and "User is not authorized to access Asset": the same message as before the grant.
 - **Whole table:** of the 56 distinct sound ids in `GameConfig.Sfx.Cues`, 49 now load and these seven
   don't.
-- **THE SOUND BLOCKER IS NOT RESOLVED.** Only one of the eight took. Most likely the grant reached
-  only the chime. Check that Podnappers' Permissions page lists all eight ids and that the change
-  was saved, then re-run this test.
+- The grant alone did NOT resolve the blocker: only one of the eight took. The re-uploads below did.
 
 - **Why a failing id silences the old sound:** SoundKit picks the first cue that HAS an id, not the
   first that loads.
 - **Not affected:** Greenhollow's guardian; every guardian's hit and step; the wakes of Dustbowl,
   Tanglemire and Emberroot; Dustbowl's sleep.
-- **The fix is the owner's grant,** not code: the steps are in "Guardian sounds wired" below. It is
-  permanent once given, so no agent does it. Nothing needs publishing afterwards: the ids are
-  already live.
-- **Re-check after the grant:** the same Edit load test should give lengths 1.28, 6.00, 4.80, 4.80,
-  2.76, 2.00, 2.28 and 2.28 s in the table's order. Done 2026-09-28: 1 of 8 (above).
+
+### Re-uploaded by the group, 2026-09-28: all eight load (on branch `wip`, NOT YET PUBLISHED)
+
+- **The re-uploads.** The owner re-uploaded all 13 files in `sfx/` under **CrazyCozy Games**
+  (group 744756221), the owner of Podnappers.
+  - Roblox's public asset API confirms each is type Audio, created by that group, with the file's name.
+  - Their Creator Hub sizes match the WAVs.
+- **The change** (on branch `wip`; not on `main`, not published):
+  - `GameConfig.Sfx.Cues`: the eight rows swap to the group's copies. Nothing else in a row changed:
+    level, window, loop, range and bus are the same. The two ownership comments now say group uploads.
+  - `ParentVoiceSpec` pins the seven new guardian ids, plus a new check that no row names one of the
+    eight own-account ids again (176 passed).
+  - `NoticeSpec` pins the new chime (101 passed).
+  - All 55 specs pass.
+- **Left alone:** the other five re-uploads (success, Information, Warning, Action Blocked, Rare Plant
+  Reveal Accent). Their rows already use group uploads that load, and the new copies load too
+  (0.48 s ×4 and 1.00 s). Swapping them would change nothing.
+
+| Cue | Old id (owner's account) | New id (group) | Expected | Studio Edit load test |
+| --- | --- | --- | --- | --- |
+| `NoticeSuccess` | 123803156310043 | 104123841960377 | 1.28 s | **PASS**, 1.28 s |
+| `ParentRageStarbloom` | 121932932319379 | 108747837024365 | 6.00 s | **PASS**, 6.00 s |
+| `ParentSleepStarbloom` | 131278197709092 | 120712332842926 | 4.80 s | **PASS**, 4.80 s |
+| `ParentSleepEmberroot` | 136756415808327 | 140647760739270 | 4.80 s | **PASS**, 4.80 s |
+| `ParentReturnStarbloom` | 100144774034643 | 139199037963607 | 2.76 s | **PASS**, 2.76 s |
+| `ParentReturnEmberroot` | 116190097842912 | 76853063080329 | 2.00 s | **PASS**, 2.00 s |
+| `ParentReturnTanglemire` | 93033126566750 | 95499040809968 | 2.28 s | **PASS**, 2.28 s |
+| `ParentReturnDustbowl` | 92575459486923 | 107688968177239 | 2.28 s | **PASS**, 2.28 s |
+
+- **Whole table:** all 56 distinct cue ids in `GameConfig.Sfx.Cues` now load.
+- **In Play** (throwaway store; `store_guard` SAFE; save line `STUDIO TEST STORE`; `test_store_off`
+  after):
+  - the boot no longer prints "cue(s) have an id that did not load", and no asset-permission line
+    appears (the previous session had "8 cue(s)");
+  - beside each sleeping guardian, the Emberroot and Starbloom sleep loops were loaded, playing and
+    advancing about 1 s per second;
+  - a Starbloom provoke played its rage (loaded in 0.5 s, reached 3.42 s, stopping at its 3.9 s
+    window);
+  - then its walk-home cue (reached 1.25 s, then faded as the guardian lay down beside its nest, as
+    designed).
+  - Not exercised in Play: the other three walk-home cues and the chime. Their ids load at the right
+    lengths.
+- **THE SOUND BLOCKER IS RESOLVED IN THE CODE (all eight load), BUT NOT LIVE.** A new id needs a
+  publish, unlike a grant: until the owner publishes a build with these ids, live guardians stay
+  silent as described at the top.
 
 ### Not established
 
@@ -413,9 +453,9 @@ Every entry below that says UNCOMMITTED or UNPUSHED is now in those commits. The
 | Usability/audio pass, plot badges, phone camera (09-26) | yes | Studio | probably, in v984–v986 | badge approval |
 | **Ragdoll head shake (09-26/27)** | diagnostics (ThrowFX `rest check` / `rest rig` lines); **a fix since 2026-09-28, on branch `wip` only** | Studio; one live capture on v986; the owner on a phone after v992, by eye: throw and landing looked right | diagnostics: v986 (`rest check`), and v987 on (`rest rig`). **The fix: v992** (`4080d46`; not the `9b91b5d` guard) | **OPEN:** nothing was published after `9b91b5d`, the agreed condition for closing it. The owner decides. See the ragdoll entry above |
 | Launch pass: Bonus Chest, Dustbowl head start, warnings, notices, audio, Metrics (09-27) | yes | specs, test-store Play | **v987 on** (confirmed). Final Bonus Chest and the obby/wheel Metrics events: v989 on | its "NOT DONE" list. Metrics' live delivery is unverified |
-| Guardian sounds (09-27) | wired | specs | **v988 on** (confirmed). Not in v987 | **The seven still don't load, even after the owner's grant (re-tested 2026-09-28), and they are live:** two guardians sleep and one wakes in silence. Blocker NOT resolved |
+| Guardian sounds (09-27) | wired | specs; 2026-09-28 load tests and one Play session with the group's copies | **v988 on** (confirmed), with the OLD ids. Not in v987 | **Fixed on `wip`:** the group's re-uploads replace the seven, and all load and play in Studio. **Live stays silent until the next publish:** two guardians sleep and one wakes in silence. The grant alone did not fix it |
 | Floating Garden obby (09-27) | yes | ObbySpec, test-store Play | **v987 on** (confirmed), first version. OBBY button and earned spins: v989 on | the owner's checks in its entry |
-| Status text and the success chime (09-27) | yes | specs, Play in phone emulation | **v988 on** (confirmed). Not in v987 | the owner's approval of the captures. **The new chime loads since the owner's grant** (Studio Edit re-test 2026-09-28, 1.28 s); silent live before it |
+| Status text and the success chime (09-27) | yes | specs, Play in phone emulation | **v988 on** (confirmed). Not in v987 | the owner's approval of the captures. **The chime loads live since the owner's grant** (Studio Edit re-test 2026-09-28, 1.28 s); silent live before it. On `wip` the row names the group's copy, 104123841960377 |
 | Reward wheel and the rebuilt panel (09-27/28) | yes | WheelSpec, Play on desktop and iPhone 14 emulation | wheel: **v989 on** (confirmed). Rebuilt panel: partly in v990, **final in v991** (confirmed) | the owner's review. Paid spins are disabled. No real device tested |
 | Traffic logger (09-28) | yes, **disabled** | TrafficLogSpec 98/98, test-store Play | **v992, disabled** (confirmed: `Enabled = false`, no secret, HTTP requests off); never connected | Michael's URL, the owner's setup and the live check (KB/TRAFFIC_LOG.md) |
 
@@ -1009,9 +1049,11 @@ ends:
 
 > **2026-09-28:**
 > - Published since v988, before any grant.
-> - After the owner's grant, a Studio Edit re-test shows the success chime loading, but **these
->   seven still do not load**. The blocker is not resolved.
-> - See "What is live" at the top of this file.
+> - The owner's grant reached only the success chime, so these seven still did not load.
+> - **The owner re-uploaded them under CrazyCozy Games.** The rows now name the group's copies (on
+>   branch `wip`): all eight load and play in Studio. The blocker is resolved in the code, and
+>   **live after the next publish**.
+> - The ids in the tables below are the OLD ones. See "What is live" at the top of this file.
 
 The owner uploaded the seven guardian renders and gave their IDs. Nothing was uploaded, and no
 permission was granted, from this session.

@@ -510,25 +510,47 @@ for _, name in ipairs({ "ParentReturnDustbowl", "ParentReturnTanglemire", "Paren
 end
 
 --==============================================================================
--- 9. THE SEVEN UPLOADS, AND THE ASSET EACH ONE NAMES (2026-09-27)
+-- 9. THE SEVEN UPLOADS, AND THE ASSET EACH ONE NAMES (2026-09-27; the group's
+--    copies since 2026-09-28)
 --
 -- As in section 1: the id is written here as well as in GameConfig, so pointing
 -- a guardian at a different upload is a deliberate change in two places, and no
 -- two rows may share one -- a paste into the wrong row is a Starbloom that
 -- breathes Emberroot's breath with no error anywhere. Seconds are the WAVs' in
--- sfx/; the assets' own TimeLength could not be read on 2026-09-27, because the
--- experience had not been granted them yet.
+-- sfx/, and the CrazyCozy Games group's uploads loaded in Podnappers at exactly
+-- these lengths (Studio Edit load test, 2026-09-28).
 --==============================================================================
 say("\n-- the seven uploads --")
 local UPLOADS = {
-	{ "ParentSleepEmberroot", "136756415808327", 4.80 },
-	{ "ParentSleepStarbloom", "131278197709092", 4.80 },
-	{ "ParentReturnStarbloom", "100144774034643", 2.76 },
-	{ "ParentReturnEmberroot", "116190097842912", 2.00 },
-	{ "ParentReturnTanglemire", "93033126566750", 2.28 },
-	{ "ParentReturnDustbowl", "92575459486923", 2.28 },
-	{ "ParentRageStarbloom", "121932932319379", 6.00 },
+	{ "ParentSleepEmberroot", "140647760739270", 4.80 },
+	{ "ParentSleepStarbloom", "120712332842926", 4.80 },
+	{ "ParentReturnStarbloom", "139199037963607", 2.76 },
+	{ "ParentReturnEmberroot", "76853063080329", 2.00 },
+	{ "ParentReturnTanglemire", "95499040809968", 2.28 },
+	{ "ParentReturnDustbowl", "107688968177239", 2.28 },
+	{ "ParentRageStarbloom", "108747837024365", 6.00 },
 }
+-- The first uploads, on the owner's own account: Podnappers may not use them
+-- (refused even after a grant, 2026-09-28), and a row that names one plays
+-- SILENCE where a sound used to be. No row may go back to one.
+local UNUSABLE = {
+	"136756415808327", "131278197709092", "100144774034643", "116190097842912",
+	"93033126566750", "92575459486923", "121932932319379", "123803156310043",
+}
+do
+	local back = {}
+	for name, cue in pairs(CUES) do
+		if type(cue) == "table" then
+			for _, id in ipairs(UNUSABLE) do
+				if tostring(cue.id) == "rbxassetid://" .. id then
+					table.insert(back, name .. " -> " .. id)
+				end
+			end
+		end
+	end
+	check(#back == 0, "no cue row names one of the eight own-account uploads Podnappers cannot use",
+		table.concat(back, ", "))
+end
 local rowsById = {}
 for name, cue in pairs(CUES) do
 	if type(cue.id) == "string" and cue.id ~= "" then

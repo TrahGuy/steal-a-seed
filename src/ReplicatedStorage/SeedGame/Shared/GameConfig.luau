@@ -5386,10 +5386,10 @@ GameConfig.Sfx = {
 		-- else does. The owner's dedicated recordings. Blocked, warning and
 		-- info are uploads of the CrazyCozy Games group (744756221), which
 		-- also owns Podnappers, so they load here with no step (Studio load
-		-- test, 2026-09-27). SUCCESS was replaced the same day by the owner's
-		-- "success new" (123803156310043), which is on the owner's OWN account:
-		-- it plays nothing in Podnappers until the owner grants the experience
-		-- (universe 10744596516) permission to use it -- see KB/HANDOFF.md.
+		-- test, 2026-09-27). SUCCESS is the owner's "success new", and it is a
+		-- group upload too since 2026-09-28 (104123841960377): the first copy
+		-- (123803156310043) was on the owner's own account, which Podnappers
+		-- may not use without a grant. Studio load test 2026-09-28: 1.28 s.
 		--
 		-- THEIR OWN ROWS, NOT Denied's. A blocked notice used to sound Denied;
 		-- that cue stays exactly as it is for the shop, the Bag, the Index and
@@ -5409,7 +5409,7 @@ GameConfig.Sfx = {
 		--   Information      0.48 s, file -18.4, a sharp ping (peak -2.7) -> 0.47
 		--==================================================================
 		NoticeBlocked = { id = "rbxassetid://129733199607968", volume = 0.65, group = "UI" },
-		NoticeSuccess = { id = "rbxassetid://123803156310043", volume = 0.43, group = "UI" },
+		NoticeSuccess = { id = "rbxassetid://104123841960377", volume = 0.43, group = "UI" },
 		NoticeWarning = {
 			id = "rbxassetid://122434285599993",
 			volume = 1.08, clip = 0.48, fadeOut = 0.08, group = "UI",
@@ -5609,18 +5609,21 @@ GameConfig.Sfx = {
 		-- THE 2026-09-24 GUARDIAN RECORDINGS (wired 2026-09-27)
 		--
 		-- Seven renders in sfx/: two sleeps, four walks home and Astralmaw's
-		-- rage. Uploaded by the owner on 2026-09-27 and the ids pasted the same
-		-- day, each checked to be the upload of the file its row describes
-		-- (asset name, type Audio, creator). Never an id that is not.
+		-- rage. Each id is checked to be the upload of the file its row
+		-- describes (asset name, type Audio, creator). Never an id that is not.
 		--
-		-- THE OWNER'S ACCOUNT OWNS THESE, NOT THE CrazyCozy Games GROUP THAT
-		-- OWNS PODNAPPERS -- so until the experience (universe 10744596516) is
-		-- granted each one, Roblox refuses to load them here ("The experience
-		-- doesn't have access permission", Studio 2026-09-27). And a row with an
-		-- id is chosen by its id, not by whether it loads: parentCue stops
-		-- falling through to the generic sleep and to Starbloom's old wake the
-		-- moment these are pasted, so an ungranted upload is SILENCE where there
-		-- used to be a sound. Grant, then publish (KB/HANDOFF.md).
+		-- UPLOADS OF THE CrazyCozy Games GROUP (744756221), WHICH OWNS
+		-- PODNAPPERS, since 2026-09-28. The first uploads (2026-09-27) were on
+		-- the owner's own account, and Podnappers may not use those: Roblox
+		-- refused them ("The experience doesn't have access permission"), even
+		-- after a grant. The group copies load with no step: Studio load test
+		-- 2026-09-28, each at its file's length.
+		--
+		-- A row with an id is chosen by its id, not by whether it loads:
+		-- parentCue stops falling through to the generic sleep and to
+		-- Starbloom's old wake the moment an id is pasted, so an upload this
+		-- game cannot use is SILENCE where there used to be a sound. Load-test
+		-- an id in Podnappers before it goes here (KB/HANDOFF.md).
 		--
 		-- MEASURED OFF THE WAVs, levels set against the sounds already shipping
 		-- (400 ms loudness): the sleeps at the generic sleep's -25 dB, the walks
@@ -5633,13 +5636,13 @@ GameConfig.Sfx = {
 		-- s, and silence from 3.4. So the loop is the region 1.4 -> 4.8: one
 		-- whole breath out of silence and the pause after it, round and round.
 		ParentSleepEmberroot = {
-			id = "rbxassetid://136756415808327",
+			id = "rbxassetid://140647760739270",
 			volume = 0.26, range = 70, looped = true, loopStart = 1.4, loopEnd = 4.8, group = "World",
 		},
 		-- 4.80 s of one slow low hum, silence to silence (first and last samples
 		-- 0.000 and 0.001): it loops as it is.
 		ParentSleepStarbloom = {
-			id = "rbxassetid://131278197709092",
+			id = "rbxassetid://120712332842926",
 			volume = 0.28, range = 70, looped = true, group = "World",
 		},
 		-- THE WALK HOME: a one-shot when a guardian gives up and turns for its
@@ -5647,21 +5650,21 @@ GameConfig.Sfx = {
 		-- with an onset and a decay -- none is a loop, and none has the long
 		-- settle a lie-down would -- so they belong to the moment it turns.
 		-- Dustbowl: a grunt, 0.8 s of digital silence, then a stomp at 1.5 s.
-		ParentReturnDustbowl = { id = "rbxassetid://92575459486923", volume = 0.81, range = 120, group = "World" },
+		ParentReturnDustbowl = { id = "rbxassetid://107688968177239", volume = 0.81, range = 120, group = "World" },
 		-- Tanglemire: one second of sound and silence after it.
-		ParentReturnTanglemire = { id = "rbxassetid://93033126566750", volume = 1.97, clip = 1.1, range = 120, group = "World" },
+		ParentReturnTanglemire = { id = "rbxassetid://95499040809968", volume = 1.97, clip = 1.1, range = 120, group = "World" },
 		-- Emberroot: a loud start decaying over a second and a half.
-		ParentReturnEmberroot = { id = "rbxassetid://116190097842912", volume = 0.46, range = 120, group = "World" },
+		ParentReturnEmberroot = { id = "rbxassetid://76853063080329", volume = 0.46, range = 120, group = "World" },
 		-- Starbloom: a quiet 2.76 s shimmer (the quietest file of the four,
 		-- hence the gain) that is still at -35 dB when the render stops.
-		ParentReturnStarbloom = { id = "rbxassetid://100144774034643", volume = 2.79, range = 120, group = "World" },
+		ParentReturnStarbloom = { id = "rbxassetid://139199037963607", volume = 2.79, range = 120, group = "World" },
 		-- ASTRALMAW'S RAGE, which REPLACES Starbloom's one-second wake as its
 		-- roar (ParentVoices.starbloom.Wake lists it first) -- never both. The
 		-- render holds ONE whole roar, 0 to 3.2 s, near-silence by 3.9 (-46 dB),
 		-- then a SECOND TAKE that the render cuts off mid-roar at 6.0. So the
 		-- window is 3.9 s: the whole roar, not the two seconds the old wake had,
 		-- and not the half of a second one. Nothing in the chase waits for it.
-		ParentRageStarbloom = { id = "rbxassetid://121932932319379", volume = 0.73, clip = 3.9, range = 190, group = "World" },
+		ParentRageStarbloom = { id = "rbxassetid://108747837024365", volume = 0.73, clip = 3.9, range = 190, group = "World" },
 
 		--======================================================================
 		-- THE TRAPS
