@@ -62,6 +62,37 @@ git push origin main
 One logical change per commit. Never stage unrelated work already present in the shared checkout.
 If another agent has an in-progress edit, leave it unstaged and call it out in the handoff.
 
+## Automated Play tests never load a real save
+
+An agent-driven Play session (MCP `start_stop_play`, a runtime harness, any Play-based check) runs
+against a throwaway DataStore. It never runs against `GameConfig.Save.StoreName`, which is
+`StealASeed_v1`, the owner's and the players' saves.
+
+1. **Turn the test store on, in Studio Edit:** run
+   [tools/studio/test_store_on.luau](tools/studio/test_store_on.luau).
+   - It sets the StringValue `ServerStorage.SeedTestStore` to a throwaway name, `SeedTest_<UTC date>`.
+   - SaveService opens that store instead of the real one, but only in Studio. A live server never
+     looks, and a marker that names anything else turns saves off rather than falling back.
+   - `default.project.json` does not map ServerStorage, so no Rojo sync or reconnect can undo it.
+     Editing GameConfig is safe.
+2. **Run [tools/studio/store_guard.luau](tools/studio/store_guard.luau) in Edit immediately before
+   EVERY Play start.**
+   - It answers `SAFE` only when three things hold: the marker names a throwaway, Studio's SaveService
+     reads the marker, and Studio's GameConfig names the same marker and pattern.
+   - Start only on `SAFE`. On `UNSAFE`, fix what it names; never start Play anyway.
+3. **Check the first save line after the start.** It must read
+   `[Seed/SaveService] Ready. Store "<throwaway>" (STUDIO TEST STORE, ...)`. If it reads anything else,
+   stop Play at once, keep the console log, and tell the owner.
+4. **Finish clean:** run [tools/studio/test_store_off.luau](tools/studio/test_store_off.luau).
+   - It deletes the throwaway store's keys, only when the name is a throwaway, and removes the marker.
+   - Without this, the owner's own Studio playtests keep using the test store.
+
+Never open, read, write or delete keys in the real store from a test or a tool.
+
+This section exists because of 2026-09-26. The first method edited Studio's copy of GameConfig, a GameConfig
+comment edit made Rojo put the real name back, and a Play test loaded the owner's real save. See
+KB/HANDOFF.md.
+
 ## Structure
 
 ```
@@ -78,11 +109,28 @@ src/
     Shared/ReachPoint.luau      pod timer, stacked prompt and PICK UP placement -- numbers only
     Shared/WeaponData.luau      Marigold's shelf: six bats, one trap, prices and combat
     Shared/WeaponModel.luau     their geometry -- Tool, shop viewport and world trap
+    Shared/ActionRefusal.luau   the headline and next step a refused action shows -- the
+                                server names a reason, it never decides one
+    Shared/Notice.luau          every short notification's kinds, rules, timing and sounds;
+                                ActionToastUI is its one renderer (post via Notice.post)
+    Shared/StatusText.luau      the text-led line every lasting indicator is drawn with (chase
+                                warning, boost row, obby run line) and the notices' icons;
+                                placed by HudLayout.statusRows -- no plates, no pills
+    Shared/ObbyData.luau        the Floating Garden obby: every position, timing, reward and
+                                attribute name -- numbers only (switch: GameConfig.Obby)
+    Shared/WheelData.luau       the obby reward wheel: twelve prizes, weights, pools, the daily
+                                allowance, the (disabled) spin pack, every outcome's exact odds;
+                                display-only: rarity words, short names, the drawn wheel's
+                                readable sectors, each pod's species odds -- numbers only
+                                (switch: WheelData.Enabled)
+    Shared/WheelDraw.luau       the wheel's face in frames (the owner's approved mockup) --
+                                readable sectors, icons, upright words, studded rim, rainbow
+                                trail, SPIN hub -- for the panel and the world wheel alike
     Remotes/                    created at runtime by ServerMain
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
     MapService.luau             builds the whole map, and the lighting, from code
-    PlotService.luau            who owns which plot, and puts them on it
+    PlotService.luau            who owns which plot, puts them on it, and TELEPORT TO PLOT
     ProfileSchema.luau          what a profile is, and the validator (NOT a *Service)
     SaveService.luau            DataStore transport, session locking
     PlayerDataService.luau      profiles in memory, autosave, replication
@@ -96,8 +144,25 @@ src/
     TreadmillService.luau       THE FAUCET for Speed -- stand on your own mill
     SellService.luau            the sell-all board beside the stall
     DebugService.luau           Studio-only server test helpers; no UI or remote
+    AdminService/               the dev console for two allowlisted UserIds, live servers
+      init.luau                   every request checked here; grants, progress reset, night/day
+      AdminConsoleUI.client.luau  its panel -- cloned ONLY into an admin's PlayerGui, never shipped
     WeaponShopService.luau      Marigold's counter: buying, equipping, and the one Tool
     CombatService.luau          what a bat and a trap DO -- knockback, restraint, cleanup
+    BonusChestService.luau      the free Bonus Chest in the hub: claims, cooldown, boosts
+    Metrics.luau                launch analytics, measurement only (NOT a *Service);
+                                what it sends and why: KB/ANALYTICS.md
+    TrafficLogService.luau      the external new-player feed to a webhook secret (Make ->
+                                Sheet); DISABLED, server-only: KB/TRAFFIC_LOG.md
+    TrafficLogConfig.luau       its switch, secret NAME and campaign allowlist (NOT a *Service)
+    ObbyService.luau            the Floating Garden: starts, 10 Hz gate/fall/validation tick,
+                                the one PayReward per real run, every exit putting movement back
+    ObbyCourse.luau             builds the course's walkable parts from ObbyData (NOT a *Service)
+    ObbyDecor.luau              the course's art, from MapDecor.Kit/Props (NOT a *Service)
+    WheelService.luau           the reward wheel: spins earned (5 per 24h window, from the obby),
+                                spins bought (disabled product), every spin rolled, recorded,
+                                SAVED, then paid through the existing faucets; owed prizes
+    WheelModel.luau             the wheel standing behind Marigold's stall (NOT a *Service)
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
     Music.client.luau           the background bed; ids in GameConfig.Music
@@ -127,6 +192,17 @@ src/StarterPlayer/StarterPlayerScripts/
     RailDrawerUI.client.luau    TOUCH ONLY: the left dock's panel and handle, which
                                 Index, Shop and Settings each stand their own tile in
     TrapUI.client.luau          the red countdown over a trapped player
+    ActionToastUI.client.luau   draws every short notification (Notice): refusals, successes,
+                                warnings, information -- text-led, stacked above the belt
+    BonusChestUI.client.luau    the chest's sign, prompt and boost timer
+    PlotTeleportUI.client.luau  TELEPORT TO PLOT under the clock, alive and in the Safe Zone
+    ObbyUI.client.luau          the obby's moving platforms (from server time), crumbles and
+                                spring throws under your own feet, the run pill and RETURN TO PLOT
+    ObbyButtonUI.client.luau    OBBY beside TELEPORT TO PLOT: to the obby's entrance, Safe Zone only
+    WheelUI.client.luau         the reward wheel's panel (scrim, wheel, SPIN hub, Reward info with
+                                species cards, owed prizes) and this player's copy of the world
+                                wheel's face
+    TrailFX.client.luau         the Bloomrunner Trail behind whoever wears it (cosmetic only)
 ```
 
 **Phase A and the HUD are complete**, and Dustbowl is live production content. Tanglemire comes only
@@ -187,7 +263,7 @@ From the blueprint, plus what this repo has learned:
 
 ## Skills
 
-Eight canonical project skills live under `.agents/skills/`. Every agent reads these same files;
+The canonical project skills live under `.agents/skills/`. Every agent reads these same files;
 provider-specific skill directories are compatibility pointers, never separate copies. The
 reasoning stays in the Luau files and KB/HANDOFF.
 
@@ -201,6 +277,7 @@ reasoning stays in the Luau files and KB/HANDOFF.
 | [seed-premium-creature-art](.agents/skills/seed-premium-creature-art/SKILL.md) | designing or reviewing premium/Divine/Secret plants and pods from references: carved faces, connected limbs, layered surfaces, controlled effects and approval evidence |
 | [character-rigging](.agents/skills/character-rigging/SKILL.md) | converting an approved moving character into a production Motor6D/weld rig, or changing roots, sockets, colliders or physics assembly |
 | [character-animation](.agents/skills/character-animation/SKILL.md) | adding or changing procedural character motion, sleep/wake blends, gait, secondary motion or animation ownership |
+| [blender-assisted-creature-art](.agents/skills/blender-assisted-creature-art/SKILL.md) | using Blender to study, block out and review a creature: design brief, plain-then-colour renders, Route A part translation with its fidelity report; Route B (custom mesh) only after the owner approves a named asset |
 
 ## Toolchain
 

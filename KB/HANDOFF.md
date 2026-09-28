@@ -1,6 +1,2953 @@
 # Steal a Seed — Session Handoff
 
-## Mobile HUD redesign: the phone's two sidebars — 2026-09-23 (CLAUDE)  (COMMITTED 96443fb; STUDIO-VERIFIED ON A FORCED-TOUCH VIEWPORT; REAL PHONE SIZES AND TAP FLOWS PENDING THE OWNER)
+## Baseline before the pod and plant visual rebuild — 2026-09-28 (CLAUDE)  (COMMITTED AND PUSHED TO origin/main; NOTHING PUBLISHED TO ROBLOX BY THIS TASK; TRAFFIC LOGGER STILL DISABLED; RAGDOLL HEAD SHAKE STILL OPEN)
+
+**Why.** The owner asked for everything finished to be reviewed, committed and pushed as the
+baseline before a planned visual rebuild of the older pods and plants with Fable. **The rebuild
+has NOT started.** No model, art or gameplay was changed for this entry.
+
+**Commits** (repo `TrahGuy/steal-a-seed`, which is PUBLIC; branch `main`):
+
+| Commit | What |
+| --- | --- |
+| `96443fb`, `dffa262` | The phone sidebars and their handoff note. Committed 2026-09-23 but never pushed until now. |
+| `e7e755e` | All game code and specs from 2026-09-23 to 09-28: 103 files under `src/`, `tools/tests/` and `tools/studio/`. |
+| `db97a58` | Their source assets: 13 supplied WAVs, the Index/Shop rail-button art (SVG masters and renders), three game thumbnails, the plot-badge approval capture. |
+| `013d767` | The `blender-assisted-creature-art` skill (2026-09-25). |
+| this entry's commit | AGENTS.md, this handoff, `KB/ANALYTICS.md`, `KB/TRAFFIC_LOG.md`. |
+
+Every entry below that says UNCOMMITTED or UNPUSHED is now in those commits. Their other status words
+(approval, testing, open issues) still stand as written.
+
+**Verified for this baseline:**
+- All 55 specs ran in Studio Edit through ZZSpecRun on the committed tree. 0 failed, none threw.
+- Play was smoke-tested on the throwaway store earlier the same day: `store_guard SAFE
+  SeedTest_20260928`, the Ready line said STUDIO TEST STORE, and 27 services came online.
+  `test_store_off` removed the 1 test key and the marker.
+- The real store `StealASeed_v1` is still `GameConfig.Save.StoreName` and was never opened.
+- A scan of every committed change found no credential, webhook URL or token.
+
+**What is implemented, tested, published and open:**
+
+| Work (entry below) | Implemented | Tested | Published to Roblox | Open |
+| --- | --- | --- | --- | --- |
+| Toasts, 15 s night, TELEPORT TO PLOT (09-23) | yes | Studio | probably, in v984–v986 | the owner's visual approval |
+| Admin console (09-24) | yes | Studio, AdminSpec | probably, in v984–v986 | the owner's review |
+| Controller, shop price, TV scaling, Index/Shop art, phone HUD (09-24) | yes | Studio, specs. Controller only via the emulator (owner-reported) | probably, in v984–v986 | physical Xbox, a TV, a real phone |
+| Michael's reports and the verification pass (09-26) | yes | Studio Play, specs | probably, in v984–v986 | — |
+| Usability/audio pass, plot badges, phone camera (09-26) | yes | Studio | probably, in v984–v986 | badge approval |
+| **Ragdoll head shake (09-26/27)** | **diagnostics only** (ThrowFX `rest check` / `rest rig` lines) | Studio baseline; one live capture on v986 | the diagnostic build, v986 | **OPEN: the cause is not confirmed and no fix is applied.** It needs a live Greenhollow and Starbloom throw on the next publish |
+| Launch pass: Bonus Chest, Dustbowl head start, warnings, notices, audio, Metrics (09-27) | yes | specs, test-store Play | no publish recorded | its "NOT DONE" list. Metrics' live delivery is unverified |
+| Guardian sounds (09-27) | wired | specs | no publish recorded | seven sounds load only after the owner's group permission grant. Don't publish before it |
+| Floating Garden obby (09-27) | yes | ObbySpec, test-store Play | no publish recorded | the owner's checks in its entry |
+| Status text and the success chime (09-27) | yes | specs, Play in phone emulation | no publish recorded | the owner's approval of the captures |
+| Reward wheel and the rebuilt panel (09-27/28) | yes | WheelSpec, Play on desktop and iPhone 14 emulation | no publish recorded | the owner's review. Paid spins are disabled. No real device tested |
+| Traffic logger (09-28) | yes, **disabled** | TrafficLogSpec 98/98, test-store Play | no publish recorded; never connected | Michael's URL, the owner's setup and the live check (KB/TRAFFIC_LOG.md) |
+
+**What "published" means here:**
+- This handoff records publishes v984–v986 from this PC around 2026-09-26. The last was the
+  owner's diagnostic build, v986.
+- Those builds carried the Studio tree of the time, so the 09-23 to 09-26 work was probably live in
+  them. That is inferred, not checked.
+- No later publish is recorded. This session published nothing and could not read the live version.
+
+**What GitHub does NOT hold** (don't treat it as a complete art backup):
+- **Pods and plants are code:** `CreatureModel`, `RedesignForms`, `SeedData`, `PlantSculpt` and the
+  guardian `*Model.luau` modules build them from parts, so the current look IS in git. To roll the
+  Fable rebuild back, check out this baseline.
+  - The five redesigned pod families were never approved and remain preview-only
+    (`ArtRedesignMockupRunner`).
+- **Uploaded Roblox assets** (about 114 image and sound ids in GameConfig) live on Roblox. Git holds
+  the sources in `art/`, `sfx/` and `AI mesh generated/`. One-to-one coverage has NOT been checked.
+- **The Studio place file** has content no Rojo path maps:
+  - Lighting's Sky, Atmosphere and effects, and settings such as `Lighting.Technology`.
+  - `ServerStorage.SeedBatSwing`: rebuild it with `tools/animation/build_swing.luau`.
+  - `ReplicatedStorage.__heads`: one `Creature_cinderpaw` model.
+  - `ServerScriptService.EmberrootApprovalRunner`.
+  - Workspace `SeedMap`: rebuilt by the SeedMapBuilder plugin from code.
+  - **Take a File → Save to File copy of the place before the rebuild.** `.rbxl` is git-ignored, so
+    keep it outside the repo.
+- **Test residue in Studio:** about 18 stopped `SeedCue_ChaseBed` Sounds in SoundService.
+  UsabilityAudioSpec leaves one per Edit run, because every fresh-required SoundKit makes its own.
+  They are harmless and safe to delete in Explorer before a publish. Not deleted here.
+- **Left out of git on purpose:**
+  - `output/`: about 480 generated files — previews, captures, mockup renders and comparisons,
+    audio previews, 385 notice-preview frames and videos, and 16 image-gen renders and prompts.
+  - The ignored `build/*.rbxlx` (2026-09-21 Rojo builds), `build_test.rbxl` and
+    `tools/blender/out/`.
+- **Outside the repo:**
+  - `D:\KAPE\emberroot-approved\`: the 2026-08-28 Emberroot drafts.
+  - The wheel mockup `D:\YT niche\content 16\Podnappers Spin Wheel Mockup.html`.
+
+**Public repo, so note:** the admin allowlist (two Roblox UserIds and usernames) and the owner's
+Windows user name in a few local paths are now public. Neither is a credential; the admin console
+checks the UserId on the server.
+
+## External new-player traffic logger — 2026-09-28 (CLAUDE)  (BUILT AND MOCK-TESTED; DISABLED; NEVER CONNECTED; COMMITTED e7e755e AND PUSHED; NOT PUBLISHED; ALL 55 SPECS PASS)
+
+This is a server-only feed of two events, `new_player_joined` and `new_player_session_ended`, for
+Michael's Make.com webhook, which writes to a shared Google Sheet. Owner setup, the payload contract,
+receiver rules, what it cannot count, the test report and the pending live check are all in
+**[TRAFFIC_LOG.md](TRAFFIC_LOG.md)**.
+
+- **Files:**
+  - `SeedGameServer/TrafficLogService.luau` (new, Priority 15);
+  - `SeedGameServer/TrafficLogConfig.luau` (new, server-only settings, NOT a *Service);
+  - `tools/tests/TrafficLogSpec.luau` (new, 98 checks);
+  - `PlayerDataService.luau`: one pcall'd require and one pcall'd call right after
+    `Metrics.profileReady`, with the same verdict (`status == "new"`, `persistent`). Nothing else in
+    PDS changed; the other work in it is untouched;
+  - `KB/TRAFFIC_LOG.md` (new), `KB/ANALYTICS.md` (a pointer and section 8), and `AGENTS.md` (the
+    map).
+- **Off by default.** `TrafficLogConfig.Enabled = false`. The URL lives only in an experience secret
+  (`PodnappersTrafficWebhook`, not yet created) and is read with `HttpService:GetSecret`. It is never
+  in GameConfig, a client, a remote, a doc or a log. HTTP requests are still off. No request has ever
+  been sent, and no Make, Sheets or Creator Hub setting was touched.
+- **Who counts:**
+  - A new player is a `"new"` persistent profile that isn't staff (AdminService's allowlist) and
+    isn't in Studio.
+  - The session starts at PlayerAdded; the join is sent at the profile verdict; the ending is sent at
+    PlayerRemoving or BindToClose, once.
+  - Anyone who leaves before the verdict is missed. The doc says so, so the feed is never quoted as
+    every connection attempt.
+- **Payload:** `schemaVersion` 1, `eventType`, `eventId`, `sessionId` (random),
+  `occurredAtUtc`, `sessionStartedAtUtc`, `placeVersion`, `campaignTag` (allowlisted launch data or
+  `unknown`), and `sessionDurationSeconds` on the ending. No name, UserId or account age.
+- **Delivery:**
+  - a queue of 64, at most 2 requests in flight, and 5 tries with 2/4/8/16 s jittered backoff
+    (Retry-After is honoured, capped at 60 s);
+  - 2xx is delivered; 408, 429, 5xx and no response retry; any other 4xx is dropped;
+  - HTTP off or a missing secret halts that server;
+  - a 4 s best-effort flush on close, and rate-limited warnings made of fixed words only;
+  - no DataStore writes.
+- **Tested:**
+  - TrafficLogSpec 98/98, and the whole suite of 55 specs passes (MetricsSpec 57/57 unchanged).
+  - Play smoke test on the test store: `store_guard SAFE SeedTest_20260928`, the Ready line said
+    STUDIO TEST STORE, the boot printed `external traffic feed off`, and the profile loaded normally.
+    `test_store_off` removed the 1 key and the marker.
+  - The real store was never opened.
+- **Waiting on:**
+  - Michael's webhook URL and campaign tags.
+  - The owner's go-ahead to create the secret, allow HTTP requests, set `Enabled = true` and
+    publish.
+  - Then the live check in TRAFFIC_LOG.md: a never-played, non-admin account joins and leaves, and
+    Michael sees one paired join and ending.
+
+## The wheel panel rebuilt to the owner's approved mockup — 2026-09-27/28 (CLAUDE)  (DONE, AWAITING THE OWNER'S REVIEW; UNCOMMITTED, UNPUSHED, NOT PUBLISHED; ALL 54 SPECS PASS; STUDIO PLAY ON THE TEST STORE AT DESKTOP SIZE AND IN IPHONE 14 EMULATION; NO REAL-DEVICE OR LIVE-SERVER TEST)
+
+Mockup: `D:\YT niche\content 16\Podnappers Spin Wheel Mockup.html` (three 844×390 screens: Spin
+ready, No spins, Reward info). Approved plan: `C:\Users\Maykel\.claude\plans\stateful-drifting-floyd.md`.
+**UI only** — WheelService, weights, odds, pools, the daily allowance, rewards and the disabled product
+are unchanged. It replaces the panel described in the entry below (that entry's server, save, OBBY
+button and trail notes still hold).
+
+- **Files:** `WheelUI.client.luau` (rewritten), `WheelDraw.luau` (rewritten face), `WheelData.luau`
+  (display-only additions), `tools/tests/WheelSpec.luau` (+9 checks: 105), `HudLayoutSpec.luau` (the
+  WheelUI wiring entry). Backups of the pre-rebuild WheelUI/WheelDraw/specs:
+  scratchpad `wheel_backup_pre_mockup/`.
+- **WheelData, display only:** `short`, `rarity` (strictly by odds: Common $5K/+1K Speed · Uncommon Pod ·
+  Rare $20K/Income/Training · Epic +10K Speed/Rare Pod · Legendary Jackpot/Titan/Colossal · Mythic
+  trail), `note`, `rainbow`; the mockup's sector colours; `DisplayOrder`, `DisplayFloor = 12`,
+  `displaySectors()` (readable sizes: 12° + 0.0216°/weight, rarer never bigger), `displayLanding()`
+  (the spin rests inside the rolled prize's DRAWN sector at the server's own `within`), `poolOdds()`.
+- **The panel:** its own gui at DisplayOrder 48 (over the rail 40, biome banner 45, boost row 46; under
+  the alarm 50), IgnoreGuiInset, Sibling ZIndex. `RewardWheelDimmer` scrim + `Shell` (PadInput/PadFocus
+  contract) + `PadFirst`. Wheel as large as fits (296 on an 844×390 phone, capped 520); gold pin
+  pointer; hub = SPIN button (green "SPIN ×N" / grey "0 SPINS", not pressable at 0); round "?" and X
+  (48 px+) flanking the top, stepping inward clear of Roblox's topbar buttons. Line under the
+  wheel: win (6 s, rarity-coloured, rainbow for the trail), refusal (4 s), owed + CLAIM, "Beat the obby
+  to earn a spin" / "Daily spins earned. Resets in …". Reward info sheet: wood header, 12 rows in two
+  columns by odds (rarity colours = `GameConfig.RarityColor`, dark outlines), trail row rainbow + glow +
+  gold border, Colossal note, pod rows open one card grid at a time (`UIKit.plantCard`, Almanac
+  silhouettes, Colossal always "?"; one model per species kept and moved), footer allowance + countdown
+  + Skip checkbox. One RenderStepped for rainbows only while open (none with SeedAfterimageQuality
+  Off); sign drift now 10 Hz only within 150 studs, 1 Hz otherwise.
+- **World face:** same WheelDraw face; its hub is green with NO words, because WheelModel's physical
+  gold `HubCap` (1.9 studs) stands in front of the face's middle.
+- **The owner's decisions at the grid checkpoint (2026-09-28):** Epic WORDS (row names, rarity words,
+  card name/pill text, the win line) use the mockup's light purple `#d49bff`; the game's Epic stays on
+  card borders and pill edges. 12 readable slices, the game fonts, the blunter pin and the plain green
+  world hub: approved.
+- **Changed after the checkpoint (phone pass):**
+  - The gui is laid out in the DEVICE SAFE AREA (IgnoreGuiInset gives DeviceSafeInsets), so the scrim
+    left the notch strips and home bar undimmed (Studio iPhone 14: screen 799×359, safe 705×338). A
+    second, empty gui `SeedWheelEdges` (ScreenInsets None) measures the whole screen; `reachEdges`
+    stretches the scrim to it and keeps the `Shell` in the safe area.
+  - "?" and X step INWARD to clear Roblox's topbar group (TopbarInset left group ends at 208 of 705)
+    and stay at the top flanking the pointer; only if that would touch the rim do they go beside it.
+  - Reward info on a short screen: the header (46) and footer (44) tighten and each row is drawn
+    smaller as a whole (a `Fit` UIScale per row, 28–34 of 34), so all twelve rows show without a
+    scroll (29 px rows on the emulated phone; 34 fits a real iPhone 14's 369-tall safe area).
+  - The sheet's 42 margin is measured from the SCREEN edge (8 inside the safe area behind a notch):
+    689 wide on the emulated phone, desktop unchanged. The header's back button still steps right of
+    Roblox's topbar group.
+  - A grid taller than the list scrolls to its own row, not its end; the Colossal note is 12 px.
+- **Verified — Studio Play on the throwaway test store (SeedTest_20260927), NOT a device:**
+  - Desktop (1251×714, 1148×714): 0 spins, 1 spin, animated spin ($20,000 paid, +25% Income), Skip
+    spin (trail), Reward info, all four pod grids, a live Almanac update re-tinting open cards,
+    selecting an off-screen card scrolls the list (programmatic selection; no gamepad was used).
+  - iPhone 14 emulation (the owner switched it on; taps sent as Touch, corrected +47 x for the
+    emulator's notch inset — see the gotchas): 0 spins, 1 spin, a TOUCH spin (+1,000 Speed paid),
+    animated spin (+10,000 Speed, Epic purple win line), Skip spin (trail, rainbow win line),
+    Reward info with all 12 rows, Pod/Rare/Colossal grids scrolling, Skip checkbox, owed Titan with
+    CLAIM, CLAIM on a full bag ("Make room in your bag, then press CLAIM."), the owed pod delivered
+    by WheelService's own 3 s loop once room appeared, the world wheel's face.
+  - All 54 specs pass on the final code (WheelSpec 105, HudLayoutSpec 1093).
+  - Captures: `output/wheel-ui/desktop_*.png`, `phone_*.png`, `world_wheel_face.png`; the mockup's
+    screens rendered by headless Chrome in `output/wheel-ui/mockup/`; side by side in
+    `output/wheel-ui/compare/`. The desktop captures predate the Epic text colour and the phone-only
+    layout fixes (neither changes the desktop layout).
+- **Not matched / open (for the owner):**
+  - The ADMIN pill (admin console, DisplayOrder 60, allowlisted accounts only) draws over the panel,
+    as it does over every panel. Players never see it. Fixing it means hiding it from the admin
+    console or raising the wheel above the RUN alarm (50) — both outside "UI untouched".
+  - The trail's SLICE has no outer glow (the mockup's CSS drop-shadow); its star has the halo.
+  - Frame-drawn icons approximate the SVGs (pod = rounded pill, bolt = two bars); LuckiestGuy /
+    Gotham instead of Lilita One / Fredoka (approved); pin tip 90° (approved).
+  - The live game's HUD shows through the scrim, dimmed; the mockup's background is empty.
+  - The phone's safe area makes the wheel 252 of the 359-tall screen (the mockup's 296 of 390).
+- **Gotchas found:** WheelUI sits at ~168 top-level locals (Luau caps a chunk at 200; group new ones in
+  tables). `screen_capture` in background Studio can return a frame 1–2 s old — read state with
+  execute_luau as well. The wheel's ProximityPrompt is clickable: a scripted click on a hidden panel
+  control can hit the world prompt and REOPEN the panel. `AbsolutePosition` in an IgnoreGuiInset gui
+  still reads 58 px above the screen position. In the device emulator, MCP taps land 47 px left (the
+  notch inset): send the control's AbsolutePosition centre + 47 in x (scratchpad `tap.sh`).
+  `camera.ViewportSize` reports the SAFE area (705×338), not the screen.
+
+## The obby reward wheel — 2026-09-27 (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED; ALL 54 SPECS PASS; PLAY-VERIFIED ON THE TEST STORE AT DESKTOP SIZE; NO DEVICE, MULTIPLAYER OR LIVE-SERVER TEST; PAID SPINS DISABLED)
+
+The owner's brief replaced every earlier wheel prompt. Visual direction:
+`D:\KAPE\output\imagegen\podnappers-obby-wheel-mockup-v1.png`. Nothing here is launch balance.
+
+### What exists now
+
+- **The wheel in the world** (`WheelModel`, built by `WheelService.Start`): on the hub deck's centre line,
+  14 studs behind Marigold's stall, facing north, at (0, 0.9, 38).
+  - Clear of the overflow spawn (38 studs), her wander box and prompt (hers ends at z 33.7, this one
+    starts at 35), both sell boards (24) and every plot-to-stall walk (~21); 8 inside the deck's edge.
+  - Stone platform, eight flower beds, wooden post and braces, a two-sided wooden wheel with a gold band,
+    gold pointer, vine-wrapped trellis arch.
+  - **Sign:** BillboardGui "SPIN THE WHEEL!" in LuckiestGuy with a dark 2.5 outline and a six-colour
+    rainbow drifting one pass per 14 s. 15×2.8 studs, MaxDistance 150, not AlwaysOnTop. Set on the arch
+    at y≈24, high enough to clear the stall's awning.
+  - One prompt, "Spin / Reward Wheel", distance 9, opens the panel.
+  - Each client draws the face (`WheelDraw`, a SurfaceGui per side) and turns its own copy only for its
+    own spins, so nobody's spin shows on anybody else's wheel.
+- **The panel** (`WheelUI`, OBBY REWARDS). The mockup rebuilt in frames on the house modal:
+  - **Wheel:** twelve sectors at their exact share of the circle, payouts printed where a sector can hold
+    them, and a gold pointer.
+  - **Controls:** "N SPINS READY", SPIN, Skip animation.
+  - **Allowance lines:** "Obby spins earned: X/5 · resets in Hh Mm" and what the next completion earns.
+    After the cap: "Daily spins earned! Complete the obby for +[amount] Speed." On desktop the
+    challenge route's figure follows in brackets.
+  - **Trail showcase:** the emerald Bloomrunner Trail panel with its 0.4% chance. For an owner it shows
+    YOU OWN IT and says the slice pays the jackpot instead.
+  - **SMALL SLICES:** the four slivers named beside their colours.
+  - **REWARD DETAILS:** a separate, scrollable list of every final outcome at its exact odds, including
+    each pod species and size, and the owner's trail replacement.
+  - **Owed prizes:** an "N prizes waiting for room in your bag" row with CLAIM.
+  - **A phone arrangement, not a smaller desktop:** below a 300-tall body it becomes three columns
+    (wheel | controls | information) at 13–24 px text.
+  - **Controller:** SPIN is selected on open, BACK on the details view.
+  - **Back:** Escape, Backspace or B closes the details first, then the panel.
+  - **Closing:** the panel also shuts on walking 26 studs away, death, or the Roblox menu, and follows
+    the OpenPanel one-panel rule.
+  - Its dimmer and click blocker keep input from reaching the world.
+- **The OBBY button** (`ObbyButtonUI`, HudLayout `obby`):
+  - **Placement:** TELEPORT TO PLOT's row and height, 8 px off it, drawn at its scale. It sits right of
+    TELEPORT (left where the right is taken), icon and word on desktop, the word alone on phones. On
+    640×480 and 700×400 phones it stands just under the topbar, because the topbar has no room.
+  - **Style:** the Index tile's slate with a sky-blue rim, so it never reads as part of TELEPORT.
+  - **Shown:** only while alive, in the Safe Zone and not on the course. D-pad Right presses it.
+  - **Server** (`ObbyService.TeleportToEntrance` → new `PlotService.TeleportTo`):
+    - TELEPORT TO PLOT's own checks, in its order, and ONE shared cooldown;
+    - never during a chase, or from the course;
+    - the landing is the arch's own entrance frame (240, 3, −24): no checkpoint, no progress, no reward.
+- **The trail** (`TrailFX`):
+  - a mint-to-gold petal ribbon at leg height, plus gold sparkles, only while its wearer runs;
+  - SpeedFX's rules: REDUCED FX draws the ribbon only, OFF draws nothing;
+  - not drawn past 120 studs, or on a teleport frame;
+  - rebuilt per body and cleaned on death, respawn, removal and leaving;
+  - cosmetic only, no gameplay effect;
+  - worn or taken off from **the Bag's Equipment tab** (a Bloomrunner Trail card, WEARING / TAP TO
+    WEAR).
+- **Saved** (ProfileSchema; new fields migrate by being absent):
+  - `WheelEarned` / `WheelBought`;
+  - `WheelDayAt` / `WheelDayCount`;
+  - `WheelRuns` (the last 12 credited completion ids);
+  - `WheelPending` (owed prizes);
+  - `WheelSeq`, `Cosmetics`, `EquippedTrail`.
+  - An admin progress reset keeps bought spins, owed prizes and the trail.
+
+### The test values (NOT launch balance; all in `WheelData.Rewards`)
+
+Weights are whole numbers out of 10,000. Sectors run clockwise from the pointer in this order.
+
+| # | Prize | Pays exactly | Weight | Odds |
+| --- | --- | --- | --- | --- |
+| 1 | `cash_small` | $5,000 | 2200 | 22% |
+| 2 | `speed_small` | +1,000 Speed | 2000 | 20% |
+| 3 | `pod_common` | Big pod, Common/Uncommon species | 1300 | 13% (2.6% per species) |
+| 4 | `boost_income` | +25% plant income, 2 min | 950 | 9.5% |
+| 5 | `cash_medium` | $20,000 | 1000 | 10% |
+| 6 | `speed_large` | +10,000 Speed | 700 | 7% |
+| 7 | `pod_rare` | Big pod, **Rare** species | 500 | 5% (0.625% per species) |
+| 8 | `boost_training` | +25% training, 2 min | 850 | 8.5% |
+| 9 | `pod_titan` | **Titan** pod (tier 6), Common/Uncommon | 150 | 1.5% (0.3% each) |
+| 10 | `cash_jackpot` | $75,000 | 250 | 2.5% |
+| 11 | `pod_colossal` | **Colossal** pod (tier 7), Common/Uncommon | 60 | 0.6% (0.12% each) |
+| 12 | `trail` | Bloomrunner Trail (owners: $75,000 instead) | 40 | 0.4% |
+
+- **Pools:**
+  - common = nubkin, petalpip, spiretip, dunebud, paddlehop;
+  - rare = toadcap, thornwhorl, bogbonnet, crookreed, cinderpaw, emberquill, novaorb, cosmospire.
+- **Rules WheelSpec pins:** Colossal is rarer than Titan, and the trail is the rarest prize.
+- **Per spin on average:**
+  - $4,975 cash ($5,275 for a trail owner) and 900 Speed;
+  - a pod 20.1% of the time, a boost 18%, the trail 0.4% (about 250 spins, roughly 50 days at five a
+    day).
+- **Faucets and the chest's boost rules:**
+  - cash goes through `EconomyService.PayReward` (no ×2 pass or boost multiplier); Speed through
+    `TreadmillService.PayReward`;
+  - boosts are the Bonus Chest's own, through `BonusChestService.GrantBoost`, so a new one replaces a
+    running one.
+
+### The daily allowance
+
+- Up to **5 spins earned per 24-hour window**. The window opens at the first spin earned
+  (`os.time()`, server) and runs whether or not the player is online.
+- While the window has room, a paid obby run (either route, the existing validation untouched) earns
+  one spin **instead of** its Speed. After 5, runs pay their Speed exactly as before.
+- At or after the window's end, the next completion opens a new window.
+- Rejoining or changing servers restarts nothing: the window lives on the profile.
+- A closed window never takes unused spins. Spending never refills the allowance. Bought spins never
+  touch it.
+- **Duplicates:** every run carries a GUID. `AwardCompletion` is one synchronous step, so a repeated
+  finish, a retry or two completions at once can never credit twice or exceed five. A profile that
+  isn't saving is paid the Speed, never a spin it could lose.
+
+### Titan and Colossal pods: no save-format or hatch change
+
+Size is already a saved integer tier, rolled once and never re-rolled. The wheel calls the existing
+`CarryService.GivePod(player, species, tier)`; the species is chosen server-side from the prize's pool,
+never sent to the client, and revealed at the normal hatch.
+
+### Paid spins: DISABLED and UNCONFIGURED
+
+- As shipped: `WheelData.Product = { Enabled = false, ProductId = 0, Quantity = 0 }`.
+  - There is no BUY button and no purchase prompt anywhere.
+  - StoreService does not index the pack; its snapshot says `wheelspins=OFF`.
+- **Already wired, for when it is switched on:**
+  - the existing central receipt handler grants packs through `WheelService.GrantBought` (duplicate-safe
+    ledger; not acknowledged until saved);
+  - spending a bought spin needs the player's yes on a question naming it (never a silent switch);
+    earned spins go first;
+  - it also needs PolicyService's `ArePaidRandomItemsRestricted == false`, and a failed or incomplete
+    check counts as "may not";
+  - the free, earned path never depends on either.
+- **Setup steps, after the owner supplies the product:**
+  1. Owner: create the Developer Product in Creator Dashboard (name, price, pack size), and send its id and
+     pack size.
+  2. Owner: approve the disclosure (the REWARD DETAILS list as it stands, plus any pre-purchase copy), and
+     change the experience questionnaire's **paid random items** answer to Yes (it is "No" today;
+     GameConfig ~3939).
+  3. Code: in `WheelData.Product` set `ProductId`, `Quantity`, then `Enabled = true`.
+  4. Code: build the BUY button. It shows only while `WheelPaidAllowed` is true, shows the details before
+     the prompt, and opens `MarketplaceService:PromptProductPurchase`. It never grants anything itself;
+     the receipt does.
+  5. Tests: update the as-shipped tripwires (WheelSpec §1, StoreSpec §5 "disabled, no id, no pack
+     size"). Then run a Studio test purchase: one grant per receipt, the retry recovered, a restricted
+     account sees no BUY and cannot spend.
+  6. Publish only on the owner's approval.
+
+### Other changes made along the way
+
+- **ObbyService:** hands every paid run to `WheelService.AwardCompletion` instead of paying Speed itself.
+  The answer carries `spin`/`limit`.
+- **ObbyUI:**
+  - the entrance board says "+1 WHEEL SPIN / Spins earned today: X/5", or "DAILY SPINS EARNED!" and
+    the Speed. The Start prompt says "Reward: 1 Wheel Spin" or the Speed;
+  - the finish board and notice say what the run actually paid.
+- **HudLayout:** the `obby` rect. `HudLayout.notice` steps the biome name round it where a small phone
+  stands it under the topbar.
+- **Boost row vs the tutorial:** a new overlap found in Play, because the wheel can grant a boost
+  mid-guide.
+  - TutorialUI publishes `TutorialReach`: how far down its banner and skip line, or the first-hatch
+    celebration, reach.
+  - BonusChestUI stands the boost row 8 below that.
+- **Hardening:**
+  - `WheelService.Start` no longer waits on the remotes (the "never yield in Start" rule);
+  - an error mid-spin releases the lock and says the prize is owed;
+  - ProfileSchema drops an owed row whose paid prize is not the rolled one or the trail's
+    replacement.
+- **Analytics:** `WheelSpinEarned` and `WheelSpun` (KB/ANALYTICS.md §2 "Reward wheel").
+- **Spec seams (Studio-only, no remote):** `WheelService.useClock`, `DebugForce`, `useReply`.
+
+### Tested — and how
+
+- **Automated (Edit, fresh-require), all 54 specs pass:**
+  - WheelSpec 96 (new):
+    - weights, sectors, all 10,000 picks, landing points, outcomes adding to 100%, exact percent
+      strings;
+    - save sanitising;
+    - the window with a turned clock: the boundary second, three days offline, a second server from
+      the saved profile, duplicate ids, simultaneous completions, spending, bought spins;
+    - all twelve prizes through their own faucets;
+    - swap, full bag, owed and CLAIM, failed save, BUSY, error mid-spin, forged payloads;
+    - equip;
+    - PolicyService allowed / restricted / failing;
+    - the panel's source (no BUY, one word per spin).
+  - ObbySpec 69 (+ spin-vs-Speed and the OBBY button's server rules);
+  - PlotTeleportSpec 49 (+ `TeleportTo`: shared cooldown, carrying, trapped, ragdoll, dead, outside,
+    bad landings);
+  - StoreSpec 25 (+ the disabled pack, and a mocked configured pack: grant once, retry recovery,
+    refused grant);
+  - HudLayoutSpec 1093 (+ the OBBY rect on every listed screen and TV).
+- **Studio Play on `SeedTest_20260927`** (three sessions; each Ready line said STUDIO TEST STORE). The
+  viewport was **937×587, desktop, not touch**.
+  - Five live completions earned 1..5, the sixth paid +1,800 Speed, a repeated id paid nothing.
+  - Real E press at the prompt; real SPIN clicks. The wheel stopped on the forced sector every time,
+    and the world wheel turned locally:
+    - Titan: "Guaranteed Titan size…";
+    - trail (with Skip animation);
+    - +25% training (the boost row showed it);
+    - the owned trail paid +$75,000, "TRAIL SLICE!";
+    - Colossal with a 24/24 bag: owed, then CLAIM delivered it once the bag had room.
+  - The trail ribbon streamed while running; the Bag's Equipment card turned it off and on.
+  - **OBBY:** landed at (240, 3, −24) with no run started; "CARRYING A POD" and "TELEPORT RECHARGING"
+    refusals seen live.
+  - **Rejoin:**
+    - the window kept counting (85,851 → 85,522 s left);
+    - trail owned and worn, effect rebuilt;
+    - $75,000 kept;
+    - "restored 2 held plant(s)": the Titan (t6) and Colossal (t7) pods.
+  - **Size chain:**
+    - Titan pod planted as tier 6, Instant-Hatched Titan-sized ("TITAN Dunebud"), replanted as tier 6,
+      picked up as tier 6;
+    - Colossal planted as tier 7, hatched "COLOSSAL Nubkin".
+  - **Panel:**
+    - details view (every species line);
+    - Backspace: details first, then the panel;
+    - forced pad mode: SPIN selected on open, BACK on the details.
+  - **Phone arrangement:** checked by shrinking the live panel to a phone's 634×240. The two lines that
+    wrapped past two lines were shortened (your sentence kept whole).
+  - **Tutorial reach:** the boost row stood under the tutorial's skip line (y 198 vs its 188). The
+    reach reader was driven by hand once the guide was finished.
+- **Captures:** `output/wheel/` (world wheel, panel, spin result, trail, owed, details, OBBY, phone
+  arrangement, hatch reveals).
+- **NOT tested:**
+  - a real phone or the device emulator (MCP cannot switch it; the viewport was desktop);
+  - a physical controller (only forced pad mode);
+  - two players at once (MCP runs Play Solo only);
+  - a live server;
+  - the sign itself (MCP captures skip BillboardGuis; its properties and drift were read live);
+  - the tutorial's celebration overlap (reproduced only by hand);
+  - any purchase.
+  - **Sounds:** the wheel reuses CardHover (tick), CardClick, RevealAccentRare and the notice cues;
+    their asset permissions were not re-checked here. NoticeSuccess (123803156310043) is still
+    user-owned and needs the owner's grant (entry below).
+
+### Open decisions for the owner
+
+1. **Balance.** A spin replaces a run's Speed, and the obby pays 1.8K Speed on a tier-1 mill but ~4.5M
+   on tier 5. For tier-3+ players the first five runs a day are worth far less as spins. Options: scale
+   the prizes to the player, let the player choose, or keep the Speed and add the spin.
+2. **The values above** (all test values), and the trail's 0.4%.
+3. **Rare pod pools.** Greenhollow and Dustbowl each have one Rare species, and a pod's shell hints its
+   biome.
+4. **Paid spins:** the product, price, pack size, disclosure and questionnaire (steps above).
+5. **Hand checks still owed:** the emulated phone (panel, OBBY button beside TELEPORT), a controller, two
+   players spinning at once, and the sign from the spawn.
+
+## Status indicators as text, not pills; the new success chime — 2026-09-27 (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED; ALL 53 SPECS PASS; PLAY-VERIFIED ON THE TEST STORE IN PHONE EMULATION; AWAITING THE OWNER'S APPROVAL OF THE CAPTURES)
+
+Two owner briefs:
+- the chase/boost HUD fix, widened mid-task to **every** game-owned pill-style notification and status
+  indicator;
+- replacing the success notice's sound.
+
+### The inventory, and what was converted
+
+Every one of the 38 client scripts and the shared UI modules was read (element by element, with line
+numbers) for plated notifications and status indicators.
+
+- **Converted (the only three plated indicators in scope):**
+  - AlertUI's chase warning (`DangerPill` → `ChaseStatus`);
+  - BonusChestUI's boost timer (`BoostPill` → one `Boost_<id>` line per running boost);
+  - ObbyUI's run pill (`RunPill` → `RunLine`).
+- **Already text-led, left as they are:**
+  - the notices (ActionToastUI);
+  - the biome name, the sale line and the tutorial banner (with its Skip);
+  - the big RUN/CHASED/SAFE word, the cash/speed readouts and the x2 tip line;
+  - the +$ and +Speed pops, the trap and pod-timer labels, the hatch reveal;
+  - the controller reticle's reason line, and the plot owner names and plaques.
+- **Ambiguous: listed for the owner and NOT changed** (each is a badge on a button, a tag inside a menu
+  or modal, or a world billboard):
+  1. the x2 Money card beside cash (a button; a rail tile on phones);
+  2. the red count badges on Index and Garden;
+  3. the Garden card tags (weight, +$/s, rarity, READY!, timer);
+  4. the Index panel's Ready dot and Harvested box;
+  5. LoadoutUI's small plates:
+     - the Bag tab counts, the card +$/s tag;
+     - the belt's filled/slots count on the Bag button;
+     - the hotbar's IN HAND and "2x TAP" hints;
+     - the chooser's IN HAND/EQUIPPED state pill;
+  6. Marigold's cash pill and card badges (STARTER, FAST, TRAP…);
+  7. the offline-earnings modal's chips;
+  8. WALK MODE's OFF/ON state inside the toggle;
+  9. the controller keycap fallback beside PLANT;
+  10. the plot owner's avatar ring billboard;
+  11. the chest's wooden sign (its text is already plate-less).
+- Out of scope, per the brief: buttons, inventory slots, menus and the day/night bar.
+
+### The look (the approved notice style, shared)
+
+- **`Shared/StatusText.luau` (new)** is the one component, built from the notices' own recipe:
+  - type in its own colour, LuckiestGuy with `Notice.Outline` at 2 px;
+  - an optional frame-drawn icon from the notices' family;
+  - an optional smaller warm-white second part, monospaced for clocks.
+- No plate, no capsule, no border, and nothing Active or Selectable (checked in Play: 0 of 18–23
+  descendants).
+- **Motion:**
+  - in on the notices' 0.26 s rise and settle, quint-out, no overshoot;
+  - a 1.04 nudge when WAKING turns to CHASED;
+  - out on the 0.32 s fade;
+  - a countdown only changes its digits;
+  - REDUCED FX / reduced motion keep only the fades.
+- **Sizes:** built at the desktop size and drawn smaller on compact and touch screens (the notices'
+  SMALL ratio).
+- **The icons moved** from ActionToastUI to `StatusText.icon`, unchanged, so notices and indicators draw
+  one family. The only new glyph is "boost" (an up-arrow).
+- **Colours:**
+  - **Chase:** warm red (255,84,64), with the warning ◇!.
+  - **Boosts:** the stat they raise, in the Cash and Speed readout's own colours:
+    - PLANT INCOME cash green (38,255,0);
+    - TRAINING speed blue (25,144,255);
+    - the time left in warm white.
+  - **Obby:** the stage name in its stage's accent, the clock in warm white.
+
+### Where (HudLayout.statusRows, HudLayoutSpec-proved)
+
+Three fixed bands under the clock, the same whatever else is up, so nothing moves when a chase starts or
+ends:
+
+| Window y | Desktop (1280×720 to 2560×1440) | Phone (705×338 to 801×392, touch) |
+| --- | --- | --- |
+| clock (day/night bar) | 8–42 | 8–42 |
+| biome name / sale line / **obby run line** | 50–80 | 97–127 |
+| **chase warning** (in the TELEPORT TO PLOT slot) | 94–126 (slot 88–132) | 51–83 (slot 45–89) |
+| **boost row** | 140–166 | 135–161 |
+
+- **Why the teleport slot:** the button only shows in the Safe Zone, and a chase only happens outside
+  it. The warning stands down the instant the player enters the Safe Zone (a same-frame hide), so it
+  never sits on the button.
+  - Found in Play: the fade left it over the button for 0.3 s. Fixed and re-measured: no overlap.
+- **The obby's run line** takes the notice band, since RETURN TO PLOT has the teleport slot there. No
+  biome is ever announced on the course: its lowest world Z is −146, and biomes start at −170.
+- **The boost row:**
+  - takes any number of boosts side by side, centred (the chest grants one at a time);
+  - takes clocks past an hour (1:02:05);
+  - shares its band with the tutorial banner on some screens. It was assumed never to be up with it,
+    since the chest unlocks after the guide. **Superseded 2026-09-27:** the reward wheel can grant a
+    boost mid-guide, so the row now stands under the guide's words (`TutorialReach`; wheel entry above).
+- **The big RUN word** now stands under the column wherever 32% of the height would reach into it
+  (phones). On a desktop it does not move.
+- **Unchanged:** cash/speed, the inventory, the sidebars, TELEPORT TO PLOT, the biome name, the tutorial
+  banner and the notices. HudLayoutSpec's desktop-to-the-pixel checks still pass.
+
+### Verified
+
+- **Specs:**
+  - all 53 pass (fresh-require runner, Edit);
+  - HudLayoutSpec 1042: 6 old pill checks replaced by 6 new ones;
+    - the new section drives **24 screens** with StatusText's real lines at their longest words:
+      - the warning at 221 px;
+      - two boosts at 441;
+      - one boost with an hour on it at 245;
+      - the obby run line at 343.
+    - Each fits whole, clears every group and badge by 8 px, stacks without overlapping, stays inside
+      the topbar's free span when it stands there, and keeps off the screen's middle;
+  - NoticeSpec 101;
+  - ParentVoiceSpec 175.
+- **Studio Play on `SeedTest_20260927`** (Ready line said STUDIO TEST STORE):
+  - Studio was in the owner's phone emulation: **705×338, touch**.
+  - A client sampler logged every indicator's on-screen rect every 0.1 s for about 60 s.
+  - **Combined state:** the clock, WAKING—RUN! then CHASED!, GREENHOLLOW, and +25% TRAINING with its
+    countdown. **No overlap between any two**, the big word included.
+  - **Safe Zone:** TELEPORT TO PLOT plus +25% PLANT INCOME 1:02:05.
+  - **Obby:** RETURN TO PLOT, SUNPETAL MEADOWS 0:02.9 (running), the boost row and the SPEED CHALLENGE
+    notice.
+  - **Two boosts at once:** stood side by side while one ended, then the row closed up.
+  - **Timer-animation spam: none.** The boost lines moved only on entrance and exit while their clocks
+    ticked for 18 s and more.
+- **Captures (actual Play, phone emulation):**
+  - `output/hud-status/phone_combined.png`: the combined state;
+  - `phone_safe_zone.png`;
+  - `phone_obby.png`.
+
+### NOT verified
+
+- **Desktop captures:**
+  - Studio is left in phone emulation, and MCP cannot switch the device emulator.
+  - Desktop positions are HudLayoutSpec's arithmetic and the table above, not a screenshot.
+  - Switch the emulator off and re-run the capture.
+- A physical phone, a controller, a TV (the warning and the boost row aren't ten-foot scaled, the same
+  as the pills were), and two players.
+
+### The success notice's sound (owner, same day)
+
+- **`NoticeSuccess` → `rbxassetid://123803156310043`** ("success new", Audio). Checked by the public
+  asset API.
+  - Volume **0.43**, on the UI bus (the player's SOUND FX level). No start offset, no window, no fade: the
+    1.28 s chime decays to silence by itself and plays whole.
+  - Level: the file measures −13.6 dB (100 ms loudness, peak −3.1). 0.43 lands it at the notices' −21
+    dB, as the old 0.48 s render did at 1.40.
+  - Only this row changed. NoticeSpec checks no other row plays the new or the old upload; the old
+    100270581576092 was used by this row only.
+  - Throttling is unchanged: 0.3 s between notice sounds, 0.9 s per kind, and the same key refreshes
+    silently. In Play, three success posts at 0, 0.4 and 1.3 s gave **two** sounds.
+- **Permission: BLOCKED ON THE OWNER.**
+  - The asset is on the owner's **own account**, and Podnappers is **group-owned**.
+  - Studio refuses it: "The experience doesn't have access permission to use asset id 123803156310043".
+    The old group-owned one loads (0.48 s).
+  - Until granted, a success notice shows but is **silent**.
+  - Grant it with the seven guardian sounds: the ID list in the entry below now includes it.
+- **Playback: NOT verified.** The asset cannot load before the grant. What ran was the lifecycle with the
+  new ID:
+  - the right Sound, level, bus and throttle;
+  - no window stops it.
+
+  `IsPlaying` on an unloaded asset proves nothing about sound.
+
+### Files (all uncommitted)
+
+- **New:** `Shared/StatusText.luau`.
+- **Changed:**
+  - `Shared/HudLayout.luau`: `statusRows`, `centreIn`, `CONFIG.Status`, and a comment in `notice`;
+  - `AlertUI`, `BonusChestUI`, `ObbyUI`, `ActionToastUI` (icons only);
+  - `GameConfig` (NoticeSuccess and its comment);
+  - `tools/tests/HudLayoutSpec`, `NoticeSpec`.
+- **Evidence:** `output/hud-status/`.
+
+## Guardian sounds wired — 2026-09-27 (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED; CONFIGURED AND SPECCED; THE SEVEN NEW SOUNDS DO NOT LOAD IN PODNAPPERS UNTIL THE OWNER GRANTS PERMISSION — DO NOT PUBLISH BEFORE THAT)
+
+The owner uploaded the seven guardian renders and gave their IDs. Nothing was uploaded, and no
+permission was granted, from this session.
+
+### Configuration (done)
+
+`GameConfig.Sfx.Cues`: the seven blank rows now carry the owner's IDs. Every other field (level,
+range, window, loop region) is unchanged, and no other sound changed.
+
+| Row | Asset | File in `sfx/` | Plays |
+| --- | --- | --- | --- |
+| `ParentSleepEmberroot` | 136756415808327 | EMBERROOT — SLEEP (4.80 s) | loop of the clean breath, 1.4–4.8 s |
+| `ParentSleepStarbloom` | 131278197709092 | STARBLOOM — SLEEP (4.80 s) | whole-file loop |
+| `ParentReturnStarbloom` | 100144774034643 | STARBLOOM — RETURN TO NEST (2.76 s) | one-shot as it turns for home |
+| `ParentReturnEmberroot` | 116190097842912 | EMBERROOT — RETURN TO NEST (2.00 s) | same |
+| `ParentReturnTanglemire` | 93033126566750 | TANGLEMIRE — RETURN TO NEST (2.28 s) | same, 1.1 s window (silence after 1.0 s) |
+| `ParentReturnDustbowl` | 92575459486923 | DUSTBOWL — RETURN TO NEST (2.28 s) | same |
+| `ParentRageStarbloom` | 121932932319379 | STARBLOOM GUARDIAN — ASTRALMAW RAGE (6.00 s) | Astralmaw's wake roar, **replacing** its old wake, 3.9 s window |
+
+- **Each ID was checked against its file** through the public asset API: type Audio, the asset name
+  matches the file, and the creator is the owner's account (user 4119740186).
+- **The rage window stays 3.9 s.** The render's envelope was re-measured:
+  - one whole roar from 0 to 3.1 s, down to −48 dB by 3.9 s;
+  - then a **second take** from 4.1 s that the render cuts off mid-roar at 6.0 s, still at −14 dB.
+
+  3.9 s keeps all of the first roar and drops only the cut-off second one. Playing the full 6 s would
+  be a doubled roar that ends in a hard cut.
+- **Files:**
+  - `Shared/GameConfig.luau`: the seven IDs, the header comment (ownership and the grant) and two
+    `ParentVoices` comments;
+  - `tools/tests/ParentVoiceSpec.luau`: the pending list is emptied, the seven roles are pinned to the
+    new rows, and new section 9 pins each exact ID, forbids two rows sharing one, and keeps each
+    window inside its WAV.
+- **Specs (Edit, fresh source), all green:**
+
+  | Spec | Passed | Failed |
+  | --- | --- | --- |
+  | ParentVoiceSpec | 175 | 0 |
+  | SfxWiringSpec | 202 | 0 |
+  | SoundLevelSpec | 28 | 0 |
+  | UsabilityAudioSpec | 117 | 0 |
+  | NoticeSpec | 99 | 0 |
+  | HatchRevealSpec | 67 | 0 |
+  | MusicBedSpec | 28 | 0 |
+
+### Permissions (checked 2026-09-27)
+
+- **Podnappers is GROUP-owned.** Place 114075467877655 and universe 10744596516 belong to CrazyCozy
+  Games (group 744756221). The public place-asset details say so, and so do Studio's
+  `game.CreatorType` / `CreatorId`.
+  - Earlier entries called it "user-owned". That was wrong, and it is corrected below and in
+    `KB/ANALYTICS.md`.
+- **The five notice/reveal sounds** (129733199607968, 100270581576092, 122434285599993,
+  80357294905654, 75401177703541) are owned by the same group.
+  - They loaded in a Studio Edit load test inside Podnappers: 0.48 s ×4 and 1.00 s.
+  - **No owner action needed.** The earlier "group permission" blocker was based on the wrong
+    ownership and is withdrawn.
+- **The seven new sounds are owned by the owner's account, not the group, and Podnappers may not use
+  them yet.**
+  - Studio Edit and Play both refuse them: "The experience doesn't have access permission to use asset
+    id …" and "User is not authorized to access Asset".
+  - The game's own check prints `7 cue(s) have an id that did not load` and names exactly these seven
+    rows.
+- **OWNER ACTION (one time, and permanent: Roblox can't revoke a game's access once granted).** Do
+  this from the account that owns the sounds, which needs *Edit experiences* in CrazyCozy Games. Either:
+  - **Game level, all seven at once:**
+    1. Creator Dashboard → Podnappers → Configure → Permissions.
+    2. In **Enter asset IDs**, paste
+       `136756415808327, 131278197709092, 100144774034643, 116190097842912, 93033126566750, 92575459486923, 121932932319379, 123803156310043`.
+       The last one is the new success chime (entry above), which needs the same grant.
+    3. Click **Add**, then **Save Changes**.
+  - **Or per asset:**
+    1. Creator Dashboard, with your own account selected → Development Items → Audio → the sound.
+    2. Permissions → Experiences → **Add experiences**.
+    3. Enter `10744596516` → **Add** → **Done**.
+  - Studio's Output also offers **"Click to share access"** on each of these lines when Podnappers is
+    open.
+- **Until then, publishing this change makes the game quieter, not louder.** A row with an ID is chosen
+  whether or not it loads:
+  - Astralmaw would roar in silence, because the rage replaces its old wake;
+  - Forgemaw and Astralmaw would sleep in silence, because they lose the generic breath;
+  - the walks home stay silent, as they are today.
+
+  So: **grant first, then publish.**
+
+### Playback (Studio Play Solo on `SeedTest_20260927`; NOT live-server playback)
+
+- **The audio itself never loaded,** so nothing was heard and the asset lengths couldn't be compared
+  with the WAVs.
+- **What ran was the real lifecycle with the new IDs.**
+  - The server provoked each guardian through `NestService.Provoke`.
+  - The player stepped into the Safe Zone to end each chase.
+  - A client sampler logged every Sound on each guardian every frame.
+  - Results:
+    - **Sleep (Astralmaw, Forgemaw):**
+      - each builds its own loop (Forgemaw with its 1.40–4.80 region) on the SeedWorld bus, range
+        18–70;
+      - on waking it fades from its level to 0 in about 0.35 s and stops;
+      - on lying down it restarts at full level.
+      - Tanglemire and Dustbowl keep their existing sleeps.
+    - **Rage:**
+      - exactly **one** roar per wake (the old wake never also played);
+      - routed to the player's SeedWorld bus, range 48–190;
+      - still playing at 3.8 s, stopped by 4.1 s, cleaned up after 12 s;
+      - a second provoke during the walk home made **no** second roar.
+      - The other four wakes are unchanged.
+    - **Return:**
+      - **one** cue per trip, on the turn for home;
+      - over a 353-stud, 6.9 s walk home only the one cue played; on Dustbowl the per-footfall stomp
+        fired 7 times in its walk while the return cue fired once;
+      - a fresh chase **interrupted** it: faded over 0.25 s and stopped, and the next trip got a new
+        cue;
+      - lying down fades a cue that is still sounding;
+      - Tanglemire's stopped at its 1.1 s window;
+      - every one is removed after 12 s.
+- **Not verified:**
+  - audible playback and the assets' real lengths (after the grant);
+  - stream-out cleanup in Play: Astralmaw never streamed out, even 1,556 studs away for 45 s. The
+    `untrack` path is covered by ParentVoiceSpec at source level, and every Sound is parented to the
+    guardian's own root part;
+  - live servers;
+  - more than one player.
+- **Re-check after the grant:**
+  - A Studio Edit load of the seven should give `IsLoaded` with lengths 4.80, 4.80, 2.76, 2.00, 2.28,
+    2.28 and 6.00 s.
+  - Then one Play raid per guardian on the test store.
+  - Then a live check after publishing: the console should no longer print "did not load".
+- Isolation:
+  - `test_store_on`, the guard said SAFE, and the Ready line said `STUDIO TEST STORE`;
+  - `test_store_off` removed the one throwaway key;
+  - no ZZ helpers are left in Studio.
+
+## The Floating Garden speed-reward obby — 2026-09-27 (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED; ALL 53 SPECS PASS; BUILT, ART-PASSED AND PLAY-TESTED ON THE TEST STORE; OWNER CHECKS BELOW)
+
+All five passes of the brief are done. Every Play run used the throwaway store
+`SeedTest_20260926` (Ready line `STUDIO TEST STORE`), and the real save was never opened.
+
+### Where it is, and how you get on
+
+- **The entrance** is on the field's right edge at (246, 0, −24), inside the Safe Zone. It has:
+  - a vine arch with flowers;
+  - a wooden SPEED CHALLENGE sign;
+  - a YOUR REWARD board showing the server's own number for that player;
+  - a petal trail rising toward the islands.
+- **To start:** hold E / tap the Start prompt under the arch (hold 0.3 s). It is a custom prompt, so
+  PromptUI draws it.
+- **The islands** begin 70 studs out and 30 up (first island top at (330, 30, −20)) and run east to
+  X ≈ 1046.
+  - Past X = 270 there is only sky. No fully upgraded plot reaches it, and the road (−Z beyond 170) is
+    untouched.
+  - Nobody can walk or jump onto the course: the prompt is the only way in.
+  - Same server, no new place.
+- **The switch:** `GameConfig.Obby.Enabled = false` builds nothing and refuses every start, and ObbyUI
+  finds nothing to draw.
+
+### The course (all numbers in `Shared/ObbyData.luau`, positions relative to its Origin)
+
+| # | Stage | Obstacle | Look |
+| --- | --- | --- | --- |
+| 1 | Sunpetal Meadows | 5 broad leaves, gaps 6, rising 1 each | A flower arch framing the first leap (focal); cream sun blooms, daisies, a shade oak |
+| 2 | Lilywater Gardens | 4 lily pads drifting ±7 across the route, 5 s sway | A turquoise pond with lotus, reeds and cattails, mossy boulders, a thin waterfall |
+| — | **Checkpoint 1** | rest island | A flower totem and lantern, lotus, a boulder |
+| 3 | Twisting Root Grove | 4 root walkways, then two turning logs (18 × 7, 16°/s) | Two grove trunks on floating clods with crowns high to the side; hanging vines, ferns, root curls, pale dapples of light |
+| 4 | Mushroom Springs | 3 spring caps (flat, teal, white ring and spots) throwing you island to island | Coral, orange and pink dome mushrooms; oversized leaves; coral bells |
+| — | **Checkpoint 2** | the rest island, with the split | A giant coral mushroom (landmark); twilight flowers mark the south (challenge), amber blooms the east (main) |
+| 5 | Autumn Drift | 7 falling leaves (0.8 s warning: shake and wither, gone 3 s) | An autumn tree, fallen petals, hanging roots, a slow drift of amber leaves |
+| 6 | Bloomheart Summit | a drifting pad and two falling leaves | The Bloomheart (a flower taller than the pavilion, facing back down the course, heart softly glowing); beds of every stage's flowers; the pavilion with Replay / Return |
+| A | Challenge: Moonleaf Sway | 8 narrower (6 × 6) leaves on a quick 3.4 s sway across the route, each an eighth of a sway behind the last | Twilight palette, fan tree, spiral fern, fireflies |
+| B | Challenge: Starroot Spiral | two fast turning logs (14 × 5, 32°/s, meeting every 5.6 s) and 6 falling leaves (0.55 s warning), then 7 stones back to the summit -- three drifting | Jagged floating spires that bob gently, glowing flower pearls, fireflies |
+
+- **Checkpoint rules:**
+  - The "CHALLENGE ROUTE — EXTRA SPEED" sign stands at the split.
+  - Walking back from twilight A to the rest island and taking Autumn Drift is allowed, and pays the
+    main reward.
+  - The challenge pays only after both twilight stages and the finish.
+- **What you stand on never looks like what you don't:**
+  - Every walk surface is studded plastic in the stage's pad colour.
+  - Every decoration is CanCollide / CanQuery / CanTouch false (MapDecor's rule 1).
+  - Decorative mushrooms are domes; springs are flat teal caps.
+  - Fallen autumn petals are tiny and flush, nothing like the floating leaves.
+- **Art sources:** `ObbyDecor` uses MapDecor's approved props and sculpting moves. MapDecor now exports
+  them as `MapDecor.Kit`, `MapDecor.Props` and `MapDecor.Palettes`, read-only, and MapDecorSpec still
+  passes.
+  - The island rims are solid, flush turf lobes, so the outline is a lawn, not a coin.
+  - The undersides are clusters of rotated rock with roots.
+- **Glow is used in three places only:** the twilight pearls, the checkpoint lanterns and the
+  Bloomheart's heart. Global Lighting is untouched.
+
+### Rules, as built
+
+- **Start is refused, with the line that says what to do,** while:
+  - chased or a guardian is waking (`OBBY_CHASED`: "STILL BEING CHASED / Wait for the chase to end.");
+  - carrying a raided pod (`CARRYING_POD`);
+  - trapped or knocked down / ragdolled (`OBBY_STUNNED`).
+  - A start asked from away from the arch, dead, or within `ReplaySeconds` (3 s) says nothing.
+- **Movement on the course is fixed:** WalkSpeed 24 (in `CarryService.RefreshWalkSpeed`, the only
+  WalkSpeed writer) and JumpHeight 7.5.
+  - Carry weight and Walk Mode don't apply up there.
+  - Earned Speed is never written.
+  - **Every exit restores:** attributes cleared, JumpHeight back to `StarterPlayer`'s, WalkSpeed
+    recomputed from the profile. This covers Return, the Exit button, death / new body, leaving and a
+    service rerun.
+- **Tools** go back to the Backpack at the start (`UnequipTools`). The inventory and hotbar assignments
+  are untouched.
+- **Falls:** below the last checkpoint's floor − 26 studs, the server puts the player back on that
+  checkpoint.
+  - Never a death, so nothing is lost.
+  - A fall on the twilight route resets it to the rest island.
+- **No PvP on a run:** CombatService spares runners from every swing, stops their swings, and refuses
+  their traps (`TRAP_OBBY`: "NO TRAPS HERE / Traps don't work on the course."). Guardians can't reach
+  the course.
+- **Server validation, 10 Hz:**
+  - gates in order, both checkpoints, and the challenge's two gates in order;
+  - the finish inside the pavilion;
+  - no faster than `MinRunSeconds` (24 s);
+  - no tick in which the body moved further than 140 studs/s + 24.
+  - A teleport is flagged, as I saw live: "moved 57 studs in 0.12 s". A flagged or too-fast run
+    finishes but is not paid ("RUN NOT COUNTED / Replay to try again.").
+- **Paid once per run:**
+  - `run.paid` is set before the single `TreadmillService.PayReward`, the existing Speed faucet.
+  - Standing in the pavilion, a duplicate prompt or a second tick pays nothing.
+  - Saved like belt Speed: with the profile, on SaveService's schedule and on leave.
+- **HUD** (ObbyUI):
+  - **RETURN TO PLOT** sits exactly in TELEPORT TO PLOT's slot and style (that button is hidden off the
+    field), with D-pad Up while it shows.
+  - A pill with the stage name and a live clock sits where the chase warning goes (a runner can't be
+    chased).
+- **Notices:**
+  - SPEED CHALLENGE (info) at the start;
+  - CHECKPOINT (success);
+  - CHALLENGE ROUTE (info);
+  - BACK TO CHECKPOINT (quiet);
+  - COURSE / CHALLENGE COMPLETE with "+X Speed in m:ss.s" and a small petal burst (success);
+  - RUN NOT COUNTED (warning).
+- **Platforms:**
+  - Every client moves its own copy from `workspace:GetServerTimeNow()`: 20 pieces (16 drifting pads, 4 logs),
+    one CFrame write each, in PreSimulation with the matching velocity. The six twilight spires bob gently.
+  - TELEPORT TO PLOT hides itself while its player is on the course, so the two never share the slot
+    in the moment between Start and landing.
+  - Moving pieces are Atomic models.
+  - Crumbles and springs react only under the local player's feet.
+
+### Rewards: the proposal (`ObbyData.Reward`, configurable)
+
+- **Basis:** `TreadmillService.RateOf` at the start. That is the belt's 1× rate for the mill tier,
+  overclock and rebirth.
+  - Snapshot, so a mid-run upgrade changes nothing.
+  - The Bonus Chest's training boost is never in it; only the belt's own tick applies that.
+- **Main route:** 90 s of basis. **Challenge:** +60 s.
+  - A full rush is about 315 base-seconds for 90 s on the belt, and recharges in 180 s off it.
+  - A 60–75 s run pays 90, a bit better than walking the belt at 1× and far short of a rush, while the
+    rush refills.
+  - So the course is worth doing between rushes, never instead of training.
+- **Examples:**
+  - tier-1 mill (20/s): 1.8K, or 3K with the challenge;
+  - tier 5 (50,000/s): 4.5M / 7.5M.
+- There is no paid skip, no leaderboard, and no replay cooldown beyond 3 s.
+
+### Measured (Play, test store)
+
+- **Physics bot:** a runtime LocalScript driving the real Humanoid (`Move` + `ChangeState(Jumping)`),
+  perfect inputs.
+  - **Main route:** 0 falls, 32.7–33.4 s from the start island (server clock 37.8–38.9 s, including the
+    stream-in before it started).
+  - **Challenge route, final:** 0 falls, 41.6 s (server 46.4 s).
+  - Paid exactly once each time: +1.8K main, +3K challenge (tier-1 basis 20/s).
+- **"Careful human" bot:**
+  - **Final model:** lands 1.8 studs inside every edge, reacts 0.25 s late to moving targets, settles
+    0.3 s on steady landings, and leads its jumps against a moving floor's drift.
+    - **Main route:** 43.5 s (server 47.9 s).
+    - **Challenge route:** 63.5 s (server 67.8 s), so the twilight route adds **~20 s** for it.
+  - **Harsher first model** (settling even on shaking leaves, no drift lead): main route 52.6 s.
+  - **Estimate for a real clean run:**
+    - main route roughly **55–75 s**, at the low end of the brief's 60–90;
+    - twilight route about **25–35 s** more, since a person's judging time on 14 moving targets is
+      what a bot can't model.
+  - **This needs the owner's own runs to confirm.**
+    - If clean main runs come in under 60 s, add leaves or pads in ObbyData, or slow the lily pads'
+      5 s sway.
+    - Both routes are data only.
+- **Found and fixed by testing:**
+  - The two Root Grove logs (opposite spins, 90° apart) never met: no log-to-log jump existed. They
+    are scissors now.
+  - At 16 × 5 the careful bot couldn't make the log hop in 20 s. They are 18 × 7 and slower now.
+  - A spring's throw written while the Humanoid was still Running was cut from 93 to 52 studs/s by its
+    ground controller, and passed *under* the next island. Now the cap makes it jump, and the solved
+    throw is written on the first airborne frame; it lands within 1.2 studs of its target.
+  - Twilight A's leaves a third of a sway apart and the rotating take-off onto the first twilight leaf
+    left windows the bot often couldn't find in 20 s.
+    - At 5 × 5 or 6 × 6 with a fifth of a sway between neighbours, the careful bot never found a hop.
+    - Now: 6 × 6, amplitude 6, an eighth of a sway apart, the first leaf closer, logs at 32°/s, and the
+      twilight leaf chain evenly spaced (12.6–13 studs; one gap had become 15.5).
+  - The twilight route then came out only ~10 s longer than the main one. The brief asks for about 30,
+    so twilight A has 8 leaves (was 5) and the return to the summit has 7 stones, three of them
+    drifting (was 5 static).
+  - `MinRunSeconds` went from 30 to 24, because 30 sat inside a skilled run.
+- **Real input:** holding E at the arch started a run through the real ProximityPrompt. The Exit verb
+  (as the button sends it), Return, death and leaving each ended the run. After each, the test
+  profile's own 38.8 / 7.2 came back (death: at the plot).
+- **Night:** readable. Night doesn't eject runners, because the course counts as field in
+  `BiomeGateService.OrderAt`.
+- **Size:** 1,591 parts for the course and its art, about 27% of the Workspace's parts.
+  - The breakdown: Sunpetal 263, Lilywater 164, Root Grove 182, Mushroom 284, Autumn 85, Summit 196,
+    twilight A 110, twilight B 144, entrance 97, finish 63.
+  - Plus 3 lights and 5 particle emitters (low rates).
+  - Moving pieces are Atomic under streaming; everything else streams per part.
+  - The course is 300–1,000 studs from the hub, so a player on the field doesn't hold most of it.
+
+### Screenshots (actual Play captures, `output/obby/`)
+
+- **Overview:** `pass2_overview_a.png` (blockout) and `final_overview.png` (final).
+- **Entrance:** `art10_entrance.png`.
+- **Stages:** `art1_sunpetal.png`, `art2_lilywater.png`, `art3_rootgrove.png`, `art4_mushroom.png`,
+  `art6_autumn.png`, `art7_summit.png`.
+- **Route split:** `art5_split.png`.
+- **Challenge:** `art8_challengeA.png` and `art9_challengeB.png`.
+- **Finish:** `final_finish.png`, with the Bloomheart, the result board "COURSE COMPLETE / 0:47.9 /
+  +1.8K SPEED", RETURN TO PLOT and the FINISHED pill. `pass2_finish.png` is the blockout.
+- **Undersides:** `art11_undersides.png`.
+- **Night:** `night1_sunpetal.png`, `night2_split.png` and `night3_summit.png`.
+- The HUD pill in most captures reads SUNPETAL MEADOWS because the character was teleported for the
+  camera, not run.
+
+### Specs
+
+- **ObbySpec (new, 56):** the real ObbyService against stand-ins, on a clock the spec steps. It covers:
+  - every refusal;
+  - start attributes and movement;
+  - gate order;
+  - checkpoints and falls;
+  - too-fast and teleport runs paying nothing;
+  - paid once, snapshot basis, challenge pay, changing your mind;
+  - a twilight fall resetting;
+  - every exit restoring movement;
+  - the preview;
+  - the off switch.
+- **MetricsSpec:** its "obby ships off" check now pins "on, behind its own switch".
+- **Suite:** all 53 pass on the final build, run through ZZSpecRun in Edit (copies deleted after).
+
+### Analytics
+
+`GameConfig.Metrics.Obby = true` now. Its calls fire at `ObbyService`'s validated moments, and
+KB/ANALYTICS.md says where. Checklist item 3 is filled in.
+
+### Owner checks (still to do)
+
+1. **Play it yourself.**
+   - Your clean main-route time (target 60–90 s) and whether twilight A/B feel hard but fair.
+   - Tune in ObbyData if not.
+2. **Phone:**
+   - touch jumping on the leaves;
+   - the camera past the grove trunks;
+   - RETURN TO PLOT and the pill under the clock.
+   - The device emulator can't be switched from here.
+3. **Controller:** D-pad Up exits; the Start / Replay / Return prompts.
+4. **Two players at once:**
+   - Another runner's crumbling leaf is theirs alone (by design), and platforms agree across clients.
+   - A non-runner with a bat can't touch a runner.
+   - MCP only drives Play Solo.
+5. **Phone performance:** 1,591 parts and 20 moving pieces are fine on this desktop. Phone frame time
+   is not measured.
+6. **Sounds:** the springs and falling leaves are silent, since there is no approved sound for them.
+   Only the notice sounds play. Say if you want a spring / crumble sound (upload or reuse).
+
+### Files
+
+- **New:**
+  - `Shared/ObbyData.luau`;
+  - `SeedGameServer/ObbyService.luau`, `ObbyCourse.luau` and `ObbyDecor.luau`;
+  - `StarterPlayerScripts/ObbyUI.client.luau`;
+  - `tools/tests/ObbySpec.luau`.
+- **Edited:**
+  - **GameConfig:** the `Obby` switch; `Metrics.Obby` on; the Metrics block moved above the chest's
+    comment it had split.
+  - **ActionRefusal:** `OBBY_CHASED`, `OBBY_STUNNED` and `TRAP_OBBY`.
+  - **CarryService:** the course's speed.
+  - **CombatService:** protection.
+  - **MapDecor:** read-only exports.
+  - **PlotTeleportUI:** hidden while on the course.
+  - **MetricsSpec:** its obby check.
+  - **Docs:** KB/ANALYTICS.md and AGENTS.md.
+- **End of session:**
+  - `test_store_off` ran: 1 throwaway key removed, 0 left, marker removed.
+  - The ZZSpecRun copies were deleted.
+  - No ZZ harness objects are left in Studio.
+  - Studio matches disk (117 scripts).
+
+## Launch pass: Bonus Chest, Dustbowl head start, guardian warnings, notices, supplied audio, analytics — 2026-09-27 (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED; ALL 51 SPECS PASS; SEE "NOT DONE" BEFORE SHIPPING)
+
+Five owner briefs landed during one session: the launch bundle, the Floating Garden obby, the
+notification upgrade, the supplied audio, and launch analytics. **The obby is its own entry above.**
+Everything else is described below with its evidence. The ragdoll shake from the entry below is
+**still open**, with no fix applied.
+
+### Test isolation: every Play run today stayed on a throwaway store
+
+- `SaveService` uses a store named by the StringValue `ServerStorage.SeedTestStore`, and only in
+  Studio.
+  - ServerStorage isn't mapped by Rojo, so no sync or reconnect can undo it (the 2026-09-26 failure
+    mode).
+  - A marker naming anything that isn't a throwaway turns saves off.
+- The procedure is in AGENTS.md:
+  - `tools/studio/test_store_on.luau`;
+  - `store_guard.luau` before every Play start;
+  - check the Ready line;
+  - `test_store_off.luau` at the end.
+- Every Play start today printed `Ready. Store "SeedTest_20260926" (STUDIO TEST STORE, ...)`. The real
+  store was never opened.
+
+### 1. Dustbowl: the head start for under-speed thieves
+
+- **Change:** `BiomeData` Dustbowl `HeadStartBelowRecommended = true`.
+- `NestService.qualifiesForHeadStart` gives a thief below 167M Speed the normal
+  `WakeDelaySeconds` (1.2 s): the roar, the "WAKING—RUN!" warning and the head start.
+- It applies only to a pod taken from a **sleeping** nest. It never applies to an already-awake
+  guardian or to a dropped pod picked back up (`provoke(nest, thief, fromNest)`).
+- Guardian speed, margins, rage, ramps and every other biome are unchanged.
+- **Evidence, from a 50 Hz simulation of the real chase rules** (540 studs home, lightest pod, first
+  theft):
+  - Before: every thief under 167M was caught within 0.2 s, 1–2% of the way home.
+  - After: caught at 1.4–3.4 s, 4–26% of the way. Still a loss, but a raid rather than an ambush.
+  - Unchanged: 167M caught at 30%; 250M at 40%; 400M at 60%; 600M at 95%; 800M and up escape.
+  - These are simulation outcomes, not probabilities.
+- **Verified in Play** (test store, real `CarryService.TryTake`, the thief running home by client
+  `MoveTo`, 545 studs):
+
+  | Theft | Speed | Head start | Outcome |
+  | --- | --- | --- | --- |
+  | Sleeping | 50M (below) | `WakingBy` at the theft, chase at 1.33 s | Caught at 3.03 s, 20% home (again: 3.08 s, 20%) |
+  | Sleeping | 167M (near) | Same | Caught at 5.27 s, 39% home |
+  | Sleeping | 800M (above) | Same | **Banked** at 10.5 s |
+  | Awake (the guardian walking home) | 50M | **None**: `PursuedBy` at once, `WakingBy` never set | Immediate chase, as the brief requires |
+
+  - A dropped pod picked back up takes the same no-delay path (`Provoke` with `fromNest = false`).
+    That is by code, not a separate Play run.
+- **Balance numbers: not changed.**
+  - Nothing in this data points to an acceleration wall. The guardian reaches full speed at once, and
+    the outcome follows its top speed against the carrier's.
+  - At the 167M recommendation the carrier is still slower than the guardian, which runs its margin
+    above that walk speed. So even a "near" thief is caught about 40% of the way home, and escape
+    starts at roughly 700M.
+  - That is how every biome's margin works, not a Dustbowl wall. Changing it is a design decision
+    (margins, or what "recommended" promises), not a small ramp tweak, so it is left to the owner.
+  - The one Dustbowl-specific wall, an instant catch below the recommendation, is fixed.
+
+### 2. Guardian warnings: state, not carry
+
+- `NestService.publishPursuit` counts, per target, the not-busy guardians that are chasing
+  (`PursuedBy`) and the ones still waking (`WakingBy`).
+- The theft publishes both immediately.
+- AlertUI's danger pill reads them:
+  - "WAKING—RUN!" while waking;
+  - "CHASED!" while chased;
+  - clears `ChaseHoldSeconds` after both reach 0.
+- One guardian ending never clears another, because the counts add.
+- Carrying alone no longer triggers anything.
+- Chase music is unchanged.
+- **Placement fix:** `HudLayout.notice` now moves any notice that meets TELEPORT TO PLOT below it on
+  every screen, not only phones.
+  - Found in today's captures: the chest's boost pill (window y 114) sat on the button (88–132) for the
+    whole two-minute boost.
+  - The biome name and sale line are untouched. `HudLayoutSpec` checks both.
+- **Verified in Play** (the client's own pill sampled every 0.1 s through a real 50M Dustbowl raid):
+  - "WAKING—RUN!" at the theft;
+  - "CHASED!" at +1.2 s;
+  - held 1.0 s after the catch, then hidden;
+  - at window y 140, under the TELEPORT TO PLOT row.
+- The server counts were also traced through the 167M and 800M raids. They cleared on crossing the
+  red line and on a catch.
+- **Not verified:** two guardians on one thief at once (the counts add by construction; UsabilityAudioSpec
+  pins it), and genuine multiplayer. MCP only starts Play Solo; a Studio local server with several
+  clients isn't drivable from here.
+
+### 3. Bonus Chest
+
+- **Placement:** a chest in the hub at (−40, 0.5, −6), with a sign showing READY or the countdown and
+  both outcomes at 50% each.
+- **Claims:**
+  - The first claim needs the guide finished. After that, one claim per 600 s.
+  - The reward is +25% passive plant income **or** +25% treadmill Speed gain, for 120 s.
+  - It multiplies with the pass: ×2 becomes ×2.5.
+- **Scope:**
+  - Income: `EconomyService.RateFor` / garden only.
+  - Training: `TreadmillService` treadmill pay only.
+  - No sales, offline or cash products.
+- **Persistence:**
+  - `ChestNextAt`, `ChestBoost` and `ChestBoostEndsAt` are saved on the profile; old saves load 0/""/0.
+  - The claim saves first and confirms only if the save succeeded. Otherwise it rolls back exactly.
+  - Claims are serialised (BUSY).
+  - The switch is `GameConfig.BonusChest.Enabled`.
+- **Answers are notices now:**
+  - The result card was replaced by the shared notices (section 4).
+  - The reward is a success notice. The refusal reasons are blocked notices with true next steps.
+- **Verified in Play on the test store (disposable profile):**
+  - Unlock after the guide.
+  - An income claim moved RateFor from 15,992 to 19,990: ×1.2500, and with the pass ×2.5 in total.
+  - A repeat claim returned COOLDOWN, and same-frame claims returned OK + BUSY.
+  - A refused or throwing save gave SAVE_FAILED with an exact rollback.
+  - Training ×1.25 with income ×1.
+  - Expiry landed on the exact second.
+  - The boost survived death.
+  - Rejoin kept the cooldown on absolute time (161 s → 119 s after 42 s away) and gave no second grant.
+  - A **real client prompt press** gave one claim, with the sign, notice and pill updated.
+  - A forced press while hidden, and junk GameEvent payloads, changed nothing.
+- **Not verified:**
+  - the Enabled=false path in Play (GameConfig is frozen at runtime);
+  - an actual treadmill payout ratio (only the multiplier);
+  - phone and controller;
+  - HUD overlap on phone sizes beyond HudLayoutSpec.
+
+### 4. Notifications: transparent, text-led (AWAITING THE OWNER'S APPROVAL before wider migration)
+
+- **One component, extended from the existing refusal toast rather than a second system:**
+  - `Shared/Notice.luau` holds the kinds, the rules, the timing and the renderer slot.
+  - `ActionToastUI` is the one renderer.
+  - `ActionRefusal` now carries a headline and a true next step per code.
+- **Look:** no plate. A LuckiestGuy headline in the kind's tint with a dark outline, a warm-white
+  GothamBold next-step line, and a frame-drawn icon: ⊘ blocked, ✓ success, ◇! warning, ⓘ info. Meaning
+  never rests on colour alone.
+- **Motion:**
+  - 0.26 s quint-out rise and settle, no overshoot.
+  - Held for its reading time; 0.32 s fade out.
+  - A repeat only nudges.
+  - REDUCED FX (and Roblox's reduced motion, where the engine exposes it) keeps only the fades.
+- **Rules (`Notice.step`):**
+  - The same key refreshes silently.
+  - Different notices stack: 3 on desktop, 2 on small screens. The one due to leave first makes room.
+  - Nothing is queued or late; `stillTrue` can take a notice down early.
+  - Sounds are throttled: 0.3 s between any two, 0.9 s per kind.
+- **Placement:** `HudLayout.toast`, now 52 tall, plus `HudLayout.noticeStack`. The stack stays clear
+  of every group, both thumbs and the controller reticle's middle band. `HudLayoutSpec` proves this on
+  every listed screen.
+- **Input:** nothing in it is Active or Selectable.
+- **GARDEN FULL next steps are true to the plot** (`ActionRefusal.plotFull`, server and controller
+  reticle):
+  - pick up a plant **or** upgrade;
+  - pick up only (top level);
+  - upgrade only (nothing grown yet);
+  - wait until one has grown.
+- **Bugs found by filming and fixed:**
+  - A notice drawn on the poster's thread froze invisible when that script died. It is now drawn in
+    the renderer's own script, and only an id crosses the event.
+  - The rules and the renderer used different clocks and lifetimes, so a repeat could draw a
+    duplicate. The on-screen notice is now authoritative.
+  - A newcomer overlapped a sliding or evicted notice. It now waits for them.
+- **Evidence** is in `output/notice-preview/`, all in-game on the test store:
+  - five stills: real GARDEN FULL, a real chest press, demo warning and info, a long line and a
+    mashed button, and night;
+  - `notice_preview_realtime.mp4`, filmed at 30× slow motion from the real renderer and rebuilt at
+    true speed, with the owner's dedicated sounds mixed at their configured levels;
+  - a quarter-speed video and a contact sheet.
+  - Mashing 20 refusals gave one notice and one sound.
+- **Intentionally retained as they are:**
+  - the RUN word pop (a state moment);
+  - ~~the chase danger pill and the chest boost pill~~: converted to text on 2026-09-27 (top entry);
+  - the biome name banner (the owner cut it to the name on 2026-09-18);
+  - the hatch reveal, offline claim, +$ and +Speed pops, tutorial banner, clock, trap labels and the
+    controller reticle's reason line.
+- **Still to migrate once approved:**
+  - SellUI's sold/refusal lines;
+  - the silent or Denied-only refusals: shop, mill, equip, walk mode, plot upgrade;
+  - CashUI's x2 tip.
+
+### 5. The supplied audio (owner's sfx/ files)
+
+| File | Asset | Mapped to | Status |
+| --- | --- | --- | --- |
+| Action Blocked.wav | 129733199607968 (group) | `NoticeBlocked`: blocked notices. `Denied` stays for everything else | Configured. Loaded (0.48 s) and played in Studio Play. Not heard by me |
+| success.wav | 100270581576092 (group) | `NoticeSuccess` | Same |
+| Warning.wav | 122434285599993 (group) | `NoticeWarning`, with an 80 ms fade because the render ends at −24 dB | Same |
+| Information.wav | 80357294905654 (group) | `NoticeInfo` | Same |
+| RARE PLANT REVEAL ACCENT.wav | 75401177703541 (group) | `RevealAccentRare`, played with the creature's appearance, for **Rare** forms only (`RevealAccentFor`), once per hatch token | Configured. A synthetic reveal event in Play gave Rare: 1 accent, Common: none, the duplicate token: still 1 |
+| EMBERROOT — SLEEP.wav | 136756415808327 (owner's account) | `ParentSleepEmberroot`, looping the clean breath 1.4–4.8 s | Wired 2026-09-27; **needs the permission grant** (entry at the top) |
+| STARBLOOM — SLEEP.wav | 131278197709092 (owner's account) | `ParentSleepStarbloom`, loops whole | Same |
+| DUSTBOWL / TANGLEMIRE / EMBERROOT / STARBLOOM — RETURN TO NEST.wav | 92575459486923 / 93033126566750 / 116190097842912 / 100144774034643 (owner's account) | `ParentReturn<Biome>`: one-shot as the guardian gives up and turns home (`Sfx.ReturnCueAt = "leave"`) | Same |
+| STARBLOOM GUARDIAN — ASTRALMAW RAGE.wav | 121932932319379 (owner's account) | `ParentRageStarbloom`, which **replaces** Starbloom's wake roar (a preference list) with a 3.9 s window: the whole first roar, without the cut-off second take | Same |
+
+- **Levels** were measured off the WAVs against the shipping mix:
+  - notices about −21 dB and info −25, under the banking moment's −16.5;
+  - sleeps −25; returns −16; rage −9 (peak −2.7).
+- **Blockers for the owner** (updated 2026-09-27, see the entry at the top):
+  1. ~~Upload the seven files~~: done by the owner, and the IDs are wired. What remains is to **grant
+     Podnappers (universe 10744596516) permission** on those seven account-owned sounds. The exact
+     steps are in the top entry.
+  2. ~~Group permission for the five~~: withdrawn. Podnappers is **group-owned** by CrazyCozy Games,
+     the same owner as those five sounds. That line wrongly called it user-owned. All five loaded in
+     a Studio load test inside Podnappers.
+- **Behaviour changes for every guardian:**
+  - The sleep loop now follows `ParentState == "asleep"`.
+  - On waking it fades over 0.35 s. Before, it kept breathing under the roar for the whole wake,
+    measured in Play.
+  - On lying down it restarts from the top.
+  - Verified in Play on the Greenhollow guardian: silent 0.38 s after the wake began, and back at full
+    level on the reset.
+- **Return-cue rules** (`SoundKit.returnCueStep`, pure and specced):
+  - one per trip home, and never again on a walk↔haul change;
+  - faded by a fresh chase or by lying down;
+  - stopped when the guardian streams out or is removed.
+- `SoundKit` gains:
+  - preference lists in `ParentVoices`;
+  - `loopStart`/`loopEnd` (playback regions);
+  - `looped = false` for attached one-shots;
+  - `fadeOut` windows.
+
+### 6. Launch analytics
+
+- **Where:** `SeedGameServer/Metrics.luau` (measurement only), `GameConfig.Metrics`, and
+  **`KB/ANALYTICS.md`**, which covers every event, trigger, field, exclusion, report location, limit,
+  the off switch and the launch checklist.
+- **What:**
+  - an onboarding funnel of six steps, with order enforced against the saved guide record so a skipped
+    step is never credited, a cohort of saves created on or after 2026-09-27, and no new profile writes;
+  - a `GuardianRaid` recurring funnel plus `GuardianRaidEnded` (biome, speed band, outcome, seconds);
+  - guide step, completed and skipped events;
+  - `BonusChestClaimed`, for confirmed grants only;
+  - obby hooks: **on** since the Floating Garden entry at the top (`Metrics.Obby = true`, called by
+    ObbyService). They were written inactive here.
+- **Exclusions:** Studio is a dry run, so test profiles never send. Staff are excluded, with an
+  optional `MetricsValidation` mode. Temporary profiles are excluded.
+- **Verified:** `MetricsSpec` passes 57/57 against a mock sink, including source pins proving every
+  hook sits after its success point.
+- **NOT verified:** live delivery. It needs a publish and Creator Hub's **View Events**; the procedure
+  is in `KB/ANALYTICS.md` §4.
+- **Michael (corrected 2026-09-27):** his "View analytics for experiences" is a group-role permission,
+  and Podnappers is **group-owned** by CrazyCozy Games (group 744756221). So it does reach this
+  experience, provided his role in that group has the permission. The earlier "user-owned, so it
+  likely does not reach it" was wrong. See `KB/ANALYTICS.md` §1.
+
+### Specs
+
+- **All 51 pass**, through the ZZSpecRun fresh-require runner in Edit.
+- **New:**
+  - NoticeSpec 99;
+  - MetricsSpec 57.
+- **Updated:**
+  - ActionRefusalSpec 70;
+  - HudLayoutSpec 1042;
+  - ParentVoiceSpec 147, now requiring every blank row to be on a named PENDING list;
+  - HatchRevealSpec 67;
+  - ControllerSpec 69.
+- **Stale stand-in sibling lists fixed** after the chest's new requires:
+  - OfflineEarningsSpec 26;
+  - StoreSpec 16;
+  - SellOneSpec 90.
+
+### NOT DONE (in order of what blocks a launch)
+
+1. **The Floating Garden obby:** built and Play-tested; see its own entry at the top (owner checks there).
+2. Genuine multiplayer checks: warnings with two thieves, chest claims from two players, notices for
+   two players. Studio MCP only drives Play Solo.
+3. Notification migration after the owner approves the preview. Update 2026-09-27: the three plated
+   status indicators are now text (top entry). Eleven ambiguous plated elements are listed there for
+   the owner's decision.
+4. ~~The seven audio uploads~~: uploaded and wired. Still needed: the owner's **permission grant**
+   for the seven (top entry). The five group-owned ones need nothing.
+5. Phone and controller checks for the new UI. The device emulator can't be switched from here.
+6. The ragdoll shake: still open (entry below).
+
+Everything is uncommitted and unpushed. Nothing was published. The owner's real save was never
+touched.
+
+## Ragdoll camera shake, reopened from the owner's live recording — 2026-09-26 late night (CLAUDE)  (ISSUE STILL OPEN; UNCOMMITTED, UNPUSHED, NOT PUBLISHED)
+
+### Update 2026-09-27: live capture on v986 (the owner published the diagnostic and played)
+
+**Source:** the Player log `0.740.0.7400927_20260926T144301Z_Player_086BA_last.log`, place version 986, one session with four guardian throws. The owner's report: "biome-1 throws me a short distance, my head bobs while ragdolled, the camera follows it; when Starbloom hits me I seem to stand up immediately."
+
+| throw | speed | result | rest check (last ~1.2 s) |
+| --- | --- | --- | --- |
+| Greenhollow | 114.4 | forced give-up 5.41 s | head 7.1 avg / 10.4 max, torso 0.8 / 1.7, pelvis 1.5 / 3.2 |
+| Starbloom (Astralmaw) | 300 | forced give-up 5.33 s | head 74.5, torso 72.0 avg / 108.7 max: **still skidding** |
+| 151.3 guardian ×2 (landed in Greenhollow, so most likely Dustbowl's) | 151.3 | forced 5.45 s and 5.43 s | head 7.1–7.7 / 10.3, torso 0.8 / 1.3–1.4 |
+
+**Every throw showed the same state:**
+- ReceiveAge 0 (the client simulated the body);
+- humanoid in Physics;
+- camera on the Head;
+- **head CanCollide false**. Studio's head collides.
+
+**1. What the head does.**
+- In the three slower throws the head circles the neck's limit: in torso space X swings ±0.42 at about 4.25 Hz, the same amplitude every time, with Y 1.12–1.31. The torso stays nearly still.
+- That matches the video's 4.3 Hz.
+- The head's speed was above the 3.5 settle threshold in 11 of 12 samples. So **the head motion itself keeps resetting the rest check**, and every knockdown ran to the 5 s give-up (about 6.5 s down).
+
+**What sustains it: narrowed, not yet confirmed.**
+- **Head-floor contact:** ruled out. The live head doesn't collide.
+- **Recovery updates:** ruled out. Nothing writes to the body while it rests; the settle loop and the probe only read.
+- **Ownership:** ruled out (ReceiveAge 0).
+- **Humanoid state:** ruled out (Physics).
+- **The neck socket:** a necessary condition. Guardian throws set its friction to 0 (NestService `slackenJoints`), so nothing damps the head.
+- **Not sufficient on its own.** In Studio, with the head held non-colliding the way live reports it, the same Greenhollow throw still settled naturally at 2.95 s. A steady, full-amplitude 4.25 Hz circle also looks driven, not like a swing dying away.
+- **Left to test:** animation interference, or a live-only joint behaviour.
+- ThrowFX now prints a **`rest rig`** line with each guardian throw: which joint constraints are still on, the neck socket's friction, limits and restitution, and the animator's playing tracks.
+- Studio baseline for that line: none on; friction 0, limits true 45°, twist true, restitution 0; tracks Animation1 w1.00 ×2, WalkAnim w0, RunAnim w0.
+
+**2. The camera following it.** ThrowFX sets CameraSubject to the Head for guardian throws (live: "subject Humanoid -> Head"), so the head's motion is the camera's motion. Deliberately not changed: moving the camera off the head would hide the fault, not fix it.
+
+**3. Recovery timing.** Guardian throws send no style, so every guardian gets the same ceiling: `GIVE_UP_AFTER = 5` s from flight start. Starbloom does not recover early.
+- Its 300 studs/s launch (1.7 s of air, per GameConfig) is followed by a long skid.
+- The 5 s ceiling ran out while the body was still moving at 55–110 studs/s, so ThrowFX zeroed it and stood it up mid-skid. It never reached rest.
+- The slower guardians reached rest and were held down by the bobbing head until the same ceiling.
+- Both look like "ragdoll timing", for opposite reasons.
+
+**Fix: not applied.** The owner asked for the confirmed cause, and the driver isn't confirmed yet.
+- If the `rest rig` line shows a joint constraint or a track driving the neck: keep that off during the ragdoll.
+- If it shows nothing driving it: restore the neck's own friction (the value `slackenJoints` zeroed) once the torso is down. Flight and landing stay loose.
+- Starbloom's early stand-up is a separate ceiling question for the owner. Letting it lie after the skid means a longer ceiling for that throw on both client and server (`THROW_TIMEOUT = 6`).
+
+**Owner next:**
+- After the next publish (your call), do one Greenhollow throw and one Starbloom throw, then tell me.
+- I'll read `rest check`, `rest rig` and `rest trace` from the Player log.
+
+**Brief (owner):**
+- The recording, `Recording 2026-09-26 224031.mp4` (10.7 s), shows the shake live after the recent publish.
+- Verify the affected server's version against the published build.
+- Reproduce this exact throw and landing in isolation, including a real client/server test.
+- Separate tumbling, landing physics and camera.
+- Fix only a confirmed cause. Keep scenery boundaries, the knockdown length and the root fix.
+- Keep the issue open if it can't be reproduced or verified.
+- Supersedes "Ragdoll camera shake on the ground: NOT REPRODUCED" below.
+
+**Version: the affected server ran the published build.**
+- Studio log: "Published new changes ... Add publish notes to v985" at 22:32:48.
+- Player log: joined at 22:33:26, and ThrowFX printed "listening on ThrowVictim (place version 985)".
+- The earlier 20:49 session ran v984.
+
+**The recording is the 22:34:02 throw "g2".**
+- Direction (0, 0, 1), speed 114.4, launch (0, 51.5, 114.4), spin 10.5.
+- Stood up at (−40.8, 3.0, −187.4), 2.4 studs from a Greenhollow Oak's root. The other two throws landed on open field.
+- Timeline in the video:
+  - 3.8 s: hit;
+  - 4.1–5.2 s: flight through the Oak crown and a shrub;
+  - 5.5–5.8 s: lands inside the roots;
+  - 6.1–9.2 s: grounded shake;
+  - 9.2 s: stands, 5.45 s after the hit.
+
+**What the video measures (ffmpeg frames and phase correlation, `rec/` in the session scratchpad):**
+- The grounded shake is a steady 4.3 Hz oscillation (period 0.23 s) of the camera's position, about ±0.6 studs sideways.
+- Near roots and grass shift 12–29 px per frame while the far road shifts 1–2 px, in phase. That parallax means the camera translates rather than turns.
+- The legs and cape stay still relative to the roots.
+- The camera follows the Head during a guardian throw (live log: "subject Humanoid -> Head"). So **the Head moves about 1.2 studs peak to peak, 4.3 times a second, over a body that is otherwise still**.
+
+**Live logs: every live guardian throw failed to settle.**
+- All five (v984 ×2, v985 ×3) printed "settled after 5.43–5.45s (forced: hit the give-up)".
+- That includes g1 and g3, which landed on open field with no decor within 17 studs. So the landing spot isn't the cause.
+- The give-up is what makes every live knockdown 5.45 s long.
+- No live throw since the 2026-09-22 ownership pin is on record as settling naturally.
+
+**The scenery is non-physical.**
+- Every Oak root, trunk, branch and crown, plus shrubs and boulders, has CanCollide, CanQuery and CanTouch all false. No collisions with the tree are possible, and the body lay on the Floor.
+- The default camera's obstruction handling (Zoom) only reacts to collidable parts, so it never moved the camera in or out. In the Studio reproduction the camera-to-focus distance stayed at exactly 12.50 for every frame.
+- Instead the camera flies through the decor: inside it in 52 of 201 knockdown frames, and viewing through it in 105. Tested by geometry, point-in-box and segment-against-box, because decor is invisible to raycasts and spatial queries.
+- That is the "foliage repeatedly obstructs the camera" in 4.1–5.2 s. It is the standard camera behaviour with non-collidable scenery, and separate from the grounded shake.
+
+**Studio reproduction.** Throwaway store via `tools/studio/store_guard.luau`, disposable profile, the real guardian chase and catch, server ragdoll, and ThrowVictim to the real client.
+- Every run landed 5.8–6 studs from the live spot, beside the same Oak:
+  1. Provoke with no pod: settled naturally at 3.12 s.
+  2. A real steal (`CarryService.TryTake`, pod carried and dropped on the hit) with 100 ms replication lag: 3.08 s.
+  3. Steal plus lag with the client loaded to about 12 fps. This even reproduced live g2's "state now PlatformStanding" readback: 3.05 s.
+- In every run the head and torso read 0.00 at rest, the humanoid stayed in Physics, and every part was client-simulated (ReceiveAge 0).
+- Forcing the Head to the server moved **every** body part to the server. Ownership covers the whole constraint-linked ragdoll, so a head/torso ownership split cannot happen. That run still settled, at 4.63 s.
+
+**Ruled out:**
+- tree, root or foliage collisions;
+- the camera's obstruction handling changing distance;
+- the landing location;
+- the carried pod;
+- 100 ms lag;
+- a low client frame rate;
+- the humanoid state;
+- a head/torso ownership split;
+- server-only game code (the only Studio branches are in DebugService and save handling).
+
+**Not ruled out (live-only, not reproducible here):**
+- the live engine build (Player 0.740.0.7400927 vs Studio 0.740.19.7400931) and its physics flags;
+- real network jitter and loss;
+- live-server behaviour.
+
+**The mechanism, emulated.** A test-only driver swinging just the Head at 4.3 Hz, ±0.6 studs, reproduced the live log exactly: "settled after 5.38s (forced: hit the give-up)", head 6.1 avg / 10.8 max against torso 0.4 / 1.2. So one thing explains both symptoms: the camera shake (the camera is on the Head) and the 5.45 s knockdown (the settle rule needs the Head still). **What drives the Head live is not known.**
+
+**Change (diagnostic only; no behaviour change):**
+- ThrowFX `restProbe` samples the last ~1.3 s before the stand-up on a guardian throw. It is read-only.
+- After "settled after" it prints one `rest check` line:
+  - head, torso and pelvis speeds;
+  - how far the head moved against the torso;
+  - ReceiveAge of the head and torso (who simulated them);
+  - humanoid state and PlatformStand;
+  - head CanCollide and what the head overlaps;
+  - camera subject and distance.
+- On a give-up it also prints a `rest trace` of the per-sample head speed and head-in-torso position.
+- Both branches were verified in Studio.
+- It was pushed into Studio by hand, because Rojo is still off; 108 of 108 scripts match disk.
+- Unchanged: physics, camera, knockdown length, scenery, the root fix.
+
+**Next (owner):**
+- The next time you publish (your call), take one guardian throw live and tell me. I'll read the two lines from the Player log on this PC.
+- How to read the outcome:
+  - **ReceiveAge above 0.02:** something else simulated the body, so the fix is in ownership.
+  - **Humanoid not in Physics:** the fix is the humanoid state.
+  - **The head overlapping something unexpected:** the fix is that contact.
+  - **Head moving against a still torso at ReceiveAge 0 in Physics:** local neck dynamics. The fix is neck friction once the body is down; guardian throws set it to 0 today.
+- **Foliage (a decision for you):** leave it, or fade decor between the camera and the character during a throw, locally and restored after. Decor is invisible to raycasts, so fading needs its own lookup. Making crowns collidable would change gameplay and is not recommended.
+
+**Cleanup:**
+- replication lag back to 0;
+- store swap reverted, throwaway keys 0;
+- no ZZ objects in Edit;
+- 108/108 scripts match.
+
+**Files:** `src/StarterPlayer/StarterPlayerScripts/ThrowFX.client.luau` (the diagnostic).
+
+## Usability and audio pass, plot badges, ragdoll shake, phone camera — 2026-09-26 night (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED)
+
+**Brief (owner), in three messages:**
+- **Five improvements:**
+  1. Garden and Bag sorting.
+  2. Base income on Bag thumbnails.
+  3. The plot's plants and income.
+  4. A UI size setting.
+  5. Chase music that follows real pursuit.
+- **Follow-ups:**
+  - Replace the gate plate with a floating avatar badge, and move the numbers to a compact sign outside the entrance.
+  - Investigate the ragdoll camera shake on the ground.
+  - Investigate slow camera rotation on phones.
+- **Rules:**
+  - Disposable profiles only.
+  - No progression, guardian, hatch-capacity or monetization changes.
+  - Uncommitted, unpushed, unpublished.
+- **Deferred, untouched:** stage-2 balance pass, new biome, bonus chest, duplicate fusion, separate hatch capacity, steal-probability display, paid luck.
+
+### INCIDENT, RESOLVED: one Play test ran against the owner's REAL save (22:05, about 20 s)
+
+**Cause.**
+- A comment edit to GameConfig.luau made Rojo re-sync the file, which overwrote the Studio-only throwaway `StoreName`.
+- The next source-match check said "0 differ". That was the warning sign: with the swap in place, GameConfig differs by +13 bytes.
+- Play was started anyway, and was stopped at 22:06 as soon as the store line was seen.
+
+**Log of that session (store `StealASeed_v1`, account 4119740186):**
+- The profile loaded normally: cash 767,878,058; speed 202,130,405,881; plot tier 1; "restored 2 plant(s)".
+- "away 68 min: garden credited 14.6M" was logged, then "claimed 29.2M of offline earnings" (x2 pass).
+- Claude's only calls in that session were Play start and Play stop. The owner confirmed that the CLAIM press was theirs.
+- The plot was released on stop. The leave save presumably wrote the profile back with the claim, a few seconds of income, LastSeen, and the new `MenuSize = "normal"` field.
+- Nothing appears lost or reset.
+
+**Owner's decision (2026-09-26): keep it.**
+- The 29.2M payout stays. There is no rollback and no change of any kind to the real save.
+- The 29.2M is about what the next join would have offered anyway. The one difference is that the 8-hour offline cap now counts from 22:06.
+- The real store has not been opened since, and must not be.
+
+**Prevention, kept permanently at the owner's request:**
+- **The guard:** `tools/studio/store_guard.luau` is read-only and is run in Edit before every automated Play start. It answers SAFE only when GameConfig has exactly one StoreName and that name is a throwaway (`Seed…Test_…`).
+  - Tested offline on 12 cases, including the real 274 KB GameConfig.
+  - Tested in Studio: "UNSAFE StealASeed_v1 is not a throwaway store".
+- **The procedure:** AGENTS.md, "Automated Play tests never load a real save", makes it every agent's procedure: swap, guard, check the save line, re-swap after any GameConfig save or reconnect, finish clean.
+- **Memory:** `rojo-reconnect-reverts-store-swap` was updated.
+
+### What changed
+
+**1. Chase music follows pursuit, not carrying.**
+- The asset is verified: ChaseBed `rbxassetid://97007444825023` loads (AssetFetchStatus Success, 74.40 s). No new audio was used or requested.
+- **NestService, `publishPursuit`:** runs after every tick and publishes `PursuedBy` on the Player. It counts guardians that are chasing and not busy. Waking, throwing, hauling and walking home do not count. It is written only on a change, and cleared on Init.
+- **AlertUI, `onPursuitChanged`:** the single caller, with a 1.0 s hold that any change cancels. The RUN word, vignette and alarm stay on the carry.
+- **`SoundKit.chase`:**
+  - fades in over 0.4 s;
+  - fades out over 1.8 s, with the garden bed crossing back up over the same 1.8 s;
+  - a fade-out stops the track only if nothing called since (token);
+  - a resume during the fade brings the SAME track back up and never calls Play again.
+- Only the Sound's own Volume is faded, never the Chase bus, so SOUND FX still governs it. The garden bed ducks as before, and MUSIC muting still applies to the bed.
+- **GameConfig:** `Attributes.PursuedBy`, `Sfx.ChaseHoldSeconds` / `ChaseFadeInSeconds` / `ChaseFadeOutSeconds`.
+
+**2. Sorting (Garden and Bag).**
+- **The sort itself:** `PlantInfo.Sort` / `SortModes` / `SortLabels` / `NextSort`, one pod-safe comparator.
+  - Orders: DEFAULT, INCOME HIGH, INCOME LOW, RAREST, NAME A-Z.
+  - Pods always follow grown plants, in stable-id order. They are never ranked by species, rarity or income.
+  - Ties go by stable id: PlacementId in the Garden, first-seen Tool order in the Bag.
+  - DEFAULT is the old order, untouched.
+- **The button:** `UIKit.cycleButton(parent, caption)`, a plain-word cycle button in the panels' own style. No arrow glyphs (tofu risk).
+- **Garden:**
+  - SORT sits in the title bar, left of the close button, so it costs no list height; the title shrinks to fit.
+  - The selection and the pad focus follow their plant when the order changes.
+  - This also fixes the pre-existing bug where the ring stayed on the slot after a pick-up above it.
+  - Empty slots stay last.
+- **Bag (LoadoutUI):**
+  - SORT sits at the right end of the tab row, Plants tab only. The tabs are still 120+ px each at 341 px (HudLayout `Bag.SortW` / `SortGap`).
+  - Only the cards are sorted. `scanTools` / `liveSlots`, which the hotbar fills and re-binds from, keep their order, so no Tool moves.
+  - The selection is a Tool, so it follows. The pad focus is re-pointed at its Tool after a re-sort.
+  - LoadoutUI gained 3 top-level locals (about 193 of 200).
+
+**3. Base income on Bag thumbnails.**
+- `PlantInfo.BaseIncome` is `SeedData.IncomePerSecond`: tier, rarity, biome and flat bonus, with no pass or boost. It is nil for pods.
+- It shows as a "$X/s" pill in the preview well's bottom-right corner, clear of the name, the action strip and both rings.
+- A one-line note over the cards reads "$/s on a card is its base income, before boosts" (HudLayout `Bag.NoteH`; the rows are counted under it).
+- Cards repaint if a Tool's SpeciesId, CarryingKg or Hatched attribute ever changes.
+
+**4. Plot identity (the owner's follow-up replaced the first "sign" version).**
+- **Server:**
+  - `EconomyService.publishGarden` runs in the pay tick with the rate the tick pays (`RateFor`, pass included).
+  - It publishes `GardenGrown`, `GardenPods`, `GardenIncome` and `GardenBoost` on the plot, written only on change.
+  - Nothing is published before `GardenRestored`.
+  - `PlotService.clearPlot` clears all four with the owner.
+  - `PassService.CashMultiplier` is still read exactly once (BalanceSpec).
+- **The badge (`PlotOwnerLabels`, rewritten):**
+  - the owner's headshot (`rbxthumb://type=AvatarHeadShot`) in a round frame, with the username (not the display name) under it;
+  - a green accent ring on your own plot;
+  - 17 studs over the gate, so its foot is 13.4 studs up;
+  - failures and loading show the initial;
+  - a token stops a late load from showing a previous owner;
+  - loaded/failed results are cached.
+- **The size clamp, one cheap pass after the camera:**
+  - it holds its size nearer than 28 studs, shrinks like a sign from 28 to 110, and holds its size beyond 110;
+  - it is hidden past 160.
+  - BillboardGui's DistanceLowerLimit/UpperLimit were MEASURED to do nothing to the drawn size, so they are not used.
+- **Unclaimed plots:** one small "Unclaimed" word, with the same clamp; MaxDistance 90.
+- **The plaque:**
+  - It stands just outside the fence at +11.12, mirroring the plot-upgrade board across the gate, with 1.8 studs of clearance from the opening.
+  - It is lettered on both faces: PLANTS X/Y, "N hatching", "$X/s" and "with xN boost".
+  - Its parts are local, non-colliding and non-queryable, and it is hidden until the numbers exist.
+- The old plate and `GameConfig.plotLabelText` are removed.
+- **GameConfig:** `Plot.OwnerBadge` / `UnclaimedTag` / `StatsSign`, `plotBadgeFor`, `avatarHeadshot`, `plotStatsText`.
+
+**5. Menu size (Settings > MENU SIZE: NORMAL / LARGE 1.15 / LARGER 1.3).**
+- **Saved the Walk Mode way:**
+  - `ProfileSchema.MenuSize` (old saves read "normal");
+  - `PlayerDataService.SetMenuSize` / `PublishMenuSize` / `MenuSizeOf`;
+  - one GameEvent verb;
+  - the `MenuSize` Player attribute;
+  - kept through ResetProgress.
+- No new remote or store.
+- **The Settings button:** in the title bar. A fourth row would clip on the 772×360 phone, and the rows deliberately don't scroll.
+- **Menu-only guis** (Settings, Garden, Index, Shop, Marigold): `UIKit.menuGui` folds the size into the gui's one UIScale with the TV scale.
+  - It is clamped so the menu's minimum panel stays within 90% × 86% of the screen; Settings passes its non-scrolling height.
+  - `HudLayout.measure` treats a gui as a TV only when `isTenFoot()`, so the rail and HUD are placed exactly as before.
+  - The modal header's rail padding is computed in rail units.
+- **Guis shared with HUD:**
+  - The Bag (`HudLayout.bag` scale): the panel keeps its footprint and draws its contents larger. It is clamped so a whole card row still fits: 1.10 at LARGER on the owner's 801×392 phone.
+  - Sell and Offline: `modal.followMenuSize`.
+- **Latent TV-scale bugs fixed on the way:** ShopUI's content fit and the plant-card pill now divide by the gui's scale.
+- At the default size nothing is created.
+
+### Verification
+
+**Live in Play Solo, on the throwaway store with a disposable profile** (desktop viewport 960×714; real MCP mouse clicks unless noted):
+- **Chase:** a real guardian chase started the bed (fade-in to 0.62), ducked the garden bed to 0.109, held 1.0 s after the catch, faded, stopped, and brought the garden bed back to 0.320. A second guardian starting mid-fade brought the SAME track back (TimePosition continued 1.96 → 2.56, no restart). The second catch faded out cleanly. The server's PursuedBy changed chasing → nil at the catch.
+- **Plot numbers:** Grown 6, Pods 2, Capacity 10, Income 15992 with Boost 2. That equals an independent sum over the planted models: 7996 base × 2.
+- **Badge and plaque:**
+  - Your plot: badge on, green ring, username, headshot loaded, initial hidden. Plaque at gate-local (11.1, 0, −1.6) reading "PLANTS 8/10 · 2 hatching · $16K/s · with x2 boost", with collide and query off.
+  - The five free plots: only "Unclaimed", no plaque.
+  - Measured clamp: 117×131 px from 8 to 28 studs, then 93 → 30 px, holding 30×33 to 150 studs, hidden at 170.
+- **Approval image:** `KB/plot-badge-desktop-2026-09-26.png`. The plaque is real. The badge is a clone of its real frames placed at the billboard's projected position and measured size, because MCP captures skip BillboardGuis.
+- **Garden sort:** all five orders were correct against the tags. Both pods stayed after the grown plants, in id order; the empties stayed last.
+  - A selected plant's PICK UP moved with it, from slot 3 to slot 4.
+  - The pad focus (GuiService.SelectedObject) followed its plant, from slot 5 to slot 4.
+- **Bag sort (14 plants):** all orders were correct; the five pods came last with no income pill; the hotbar's 10 slots were identical after every press. The selection ring followed its plant from card 3 to card 7. The Sort button and note appear on the Plants tab only. Income pills matched the base rates (e.g. Nubkin t4 $530/s, Toadcap t5 $2.48K/s).
+- **Menu size:**
+  - LARGE put 1.15 on the five menu guis and LARGER put 1.3 (Settings 572×330, Index 795 px wide, Shop 806×563, all on screen).
+  - The rail buttons and the cash counter stayed at identical pixels.
+  - The Bag drew at 1.15 on its own panel inside the same 660×526 footprint.
+  - NORMAL removed everything.
+  - The choice saved to the throwaway store and was restored on rejoin (menus at 1.15 on join).
+
+**Ragdoll, 10 knockdowns sampled every frame:**
+- **Variants:** guardian throws ×3 (one with the phone-default Follow camera); bat hits on flat ground ×2, into the lane wall, into the plot fence, and on a temporary 20° ramp; holding a plant; and two hits back to back.
+- **Result:** see the ragdoll subsection below. The shake was not reproduced.
+
+**Simulated or code-only:**
+- The Follow-camera replay of a recorded head path.
+- The Bag scale on phone sizes (HudLayout arithmetic).
+- TV-scale combination (specs only).
+- The pod-safety and wiring pins (UsabilityAudioSpec).
+
+**Not verified:**
+- a real phone or the device emulator;
+- a TV;
+- a physical controller (focus was driven by setting GuiService.SelectedObject; B/back cannot be sent);
+- two clients (another player's badge and plaque, reassignment to a second player);
+- a published server.
+
+**Specs:**
+- All 50 ran with 0 failures: 49 existing plus the new **UsabilityAudioSpec** (120 checks).
+- Updated: PlotReleaseSpec (42), HudLayoutSpec (961), AdminSpec (80, keeps MenuSize).
+- They ran through ZZSpecRun, since deleted.
+
+**Cleanup:**
+- The store swap is reverted.
+- The throwaway key is deleted (0 left).
+- ZZSpecRun is removed, and no ZZ helpers remain in Edit.
+- Studio matches disk on all 108 scripts.
+
+### Ragdoll camera shake on the ground: NOT REPRODUCED, and no code changed for it
+
+**What was measured:** a client sampler recorded every frame after the camera update, from the hit to 2 s after standing. It captured:
+- camera, subject and focus;
+- the positions and velocities of the head, both torsos and the root;
+- ground gap, assembly count and humanoid state.
+
+It also recorded the rig's facts: 19 NoCollisionConstraints, 14 sockets with limits and zero friction on a guardian throw, and all 15 AnimationConstraints off.
+
+**What happens in every variant:**
+- a landing jolt of 0.1 s or less;
+- a smooth slide (0.5–2 s, longest on the slope);
+- then the whole body at exactly 0.00 studs/s until the stand-up.
+
+**Other findings:**
+- The root stays welded 0.81–0.82 studs from the pelvis.
+- The camera follows its subject rigidly (Head for guardians, root for bats) with no per-frame writers fighting the body; WeaponFX and CarryPose release during a ragdoll.
+- Camera zoom, subject and mode were restored after all ten.
+- A plant held in the hand has 54 parts, none collidable, all massless.
+
+**Not the cause here:**
+- unstable body physics at rest;
+- a vibrating camera subject;
+- conflicting recovery updates.
+
+**Remaining suspects this PC cannot show:**
+- a phone's lower physics/frame rate;
+- a published server's ownership or latency at the stand-up;
+- a particular avatar or accessory, or specific prop geometry.
+
+**Needed:** a short recording of the shake, noting:
+- the device;
+- the hit type (guardian, bat or trap) and where it happened;
+- whether a plant was in hand;
+- the camera mode (Roblox settings: Classic or Follow).
+
+### Phone camera: no game-specific defect found; needs one physical-phone comparison
+
+**Camera code:**
+- The camera is Roblox's stock PlayerModule. It is the current version, under StarterPlayer, with a Client-context loader and InputAction-based CameraInput.
+- The game has no camera or sensitivity code of its own.
+
+**Touch behaviour:**
+- On touch, the default camera mode maps to **Follow**. That camera turns toward where the character moves, which can feel like resistance while running and turning. The same is true in any game that leaves `DevTouchCameraMovementMode` on UserChoice.
+- The stock module scales mouse, trackpad and gamepad by the Roblox sensitivity setting, but not touch.
+
+**What could get in the way:**
+- HUD controls on the camera side cover 24% of it on the owner's 801×392 layout (bounding boxes; 21–28% across the three phone sizes): the hotbar strip, the Garden/Bag row and BAT/TRAP.
+- A drag that starts on them doesn't turn the camera. That reads as "sometimes doesn't turn", not "turns slowly".
+- There are no invisible full-screen touch catchers.
+
+**After a ragdoll:** zoom, subject and mode restore; verified after all ten knockdowns.
+
+**Not changed:** sensitivity and camera mode were left alone. An option would be `DevTouchCameraMovementMode = Classic`, which is the owner's call.
+
+### Owner checks (one list)
+
+The real-save incident is decided (keep, no rollback), so it is no longer on this list.
+
+1. **Approve the badge and plaque look** from `KB/plot-badge-desktop-2026-09-26.png`. For the short-landscape phone shot, set Test > Device to a landscape phone and tell me; MCP cannot switch the emulator.
+2. **Ragdoll:** recording received 2026-09-26. See "Ragdoll camera shake, reopened" at the top; it's still open, pending one live throw with the new diagnostic.
+3. **Phone camera:** on the same phone, drag one finger across the right half of the screen once, then do the same drag in another Roblox game. Note:
+   - how far each turns;
+   - whether it felt slow, stuttered, or sometimes didn't turn;
+   - Roblox Settings > Camera Mode (Default/Follow or Classic).
+4. **On a phone and a controller:**
+   - MENU SIZE LARGE and LARGER in Settings;
+   - SORT in the Garden and the Bag, including B/back and focus after a re-sort;
+   - the Bag's income pills.
+5. **Two players:** check each other's badge and plaque, and that a left plot shows only "Unclaimed".
+
+### Known limitations
+
+- **Bag ties.** They use the order the client first saw each Tool: no per-item id exists, since saved Held rows are `{Id, Tier, Hatched}`. This is stable in a session and re-seen in restore order after a respawn.
+- **Bag DEFAULT order.** Unchanged as instructed. It already ranks pods by an internal key that starts with the species id, so same-species pods sit together. The new sorts never do this. Changing DEFAULT is an owner decision.
+- **Timing.** The plaque's numbers update within the 1 s pay tick, not instantly. The plaque text is small beyond about 40 studs (SurfaceGui MaxDistance 90).
+- **Menu size limits.** The Bag at LARGER is capped to fit one card row on short phones. The HUD (rail, hotbar, cash, speed, toasts) is never scaled, by design.
+
+**Files:**
+- `src/ReplicatedStorage/SeedGame/Shared/`: GameConfig, SoundKit, PlantInfo, UIKit, HudLayout.
+- `src/ServerScriptService/SeedGameServer/`: NestService, EconomyService, PlotService, PlayerDataService, ProfileSchema.
+- `src/StarterPlayer/StarterPlayerScripts/`: AlertUI, PlotOwnerLabels, GardenUI, LoadoutUI, SettingsUI, IndexUI, ShopUI, MarigoldShopUI, SellUI, OfflineUI.
+- `tools/tests/`: UsabilityAudioSpec (new), PlotReleaseSpec, HudLayoutSpec, AdminSpec.
+- `KB/plot-badge-desktop-2026-09-26.png`.
+- The store safeguard:
+  - `tools/studio/store_guard.luau` (new);
+  - `AGENTS.md`, new section "Automated Play tests never load a real save". Its other uncommitted edits were already there and are left as found.
+- The rest of `git status` (98 entries before this pass) is earlier uncommitted work, left as found.
+
+## Michael's reports, verification pass — 2026-09-26 evening (CLAUDE)  (UNCOMMITTED AND UNPUSHED; VERIFIED IN STUDIO PLAY SOLO + ALL 49 SPECS; TWO MORE FIXES FOUND AND MADE)
+
+**Brief (owner):**
+- Verify the earlier fixes first.
+- Run the new regression specs and the relevant existing suites.
+- Put the save and plot lifecycle first, on disposable profiles.
+- Check the other items in real gameplay.
+- Reproduce and fix the ragdoll and the fence.
+- Keep the treadmill boost as it is.
+- Separate what is verified from what is untested.
+- No commit, push or publish.
+
+**Setup:**
+- 8.2 of 15.9 GB of memory was free.
+- Rojo was restarted on 34872 and serves "Steal a Seed", pinned to place 114075467877655.
+- The session's own Roblox_Studio MCP had a stale, empty tool list. The StudioMCP hub (127.0.0.1:13469) was healthy, so Studio was driven through a scratchpad stdio client (`studio_mcp.py`); see memory `studio-mcp-stale-tool-list`.
+- Before any test, Studio's copy of all ten edited scripts was checked against disk: identical by byte hash. SpeedFX is CRLF on disk and LF in Studio; its content is identical.
+
+**Specs:**
+- All 49 ran to the end, with 0 failures and none throwing, run twice (before and after the two new fixes).
+- New or extended checks:
+  - ControllerSpec 69;
+  - SpeedSpec 349 assertions;
+  - ParentVoiceSpec 126;
+  - CashFormatSpec 26;
+  - ActionRefusalSpec 69;
+  - PlotReleaseSpec 33;
+  - GuardianRagdollSpec 61;
+  - PlotSpec 66.
+- They ran through ZZSpecRun, which has since been deleted.
+
+**Lifecycle, on a throwaway store:**
+- The store was `SeedLifecycleTest_20260926`, key `p_4119740186`, swapped into Studio only.
+- A harness Script logged every Load, Save and SetPlants. It was built to kick everyone if the live store was not the throwaway one.
+
+| Case | Result |
+|---|---|
+| Slow load (a foreign lock lapsing at 46 s) | Plot assigned at 0.9 s, bed shut. At 32 s a planting attempt got NO_PROFILE, the pod stayed in hand, and nothing was written. At 46.5 s the load came through and restored 3 plants, plot level 2 and a tier-3 mill; the one write carried all 3 plants. |
+| Leave after restore (kick) | Plot back to Unclaimed, owner 0, level 1, 0 plants. Mill back to tier 1 from 3, belt idle. The leave save wrote 3 plants and mill 3. |
+| Rejoin (new session) | Restored in 3.7 s: 3 plants, level 2, mill 3. |
+| Leave during restoration (stop at 22 s, still locked) | No save and no SetPlants. The record is unchanged down to the cash; the foreign lock is intact. |
+| Failed load (lock never lapses) | "Could not load your save… your progress is safe" kick. Plot released, nothing written, record unchanged. |
+| Leave while a save is in flight | **NEW DEFECT, FIXED.** The old code left the record LOCKED by the session that had just released it: an autosave in flight committed after the release. `PlayerDataService.write` now does one write per player at a time. Re-tested with a 2-second slowed save: the release save waited for it (it started at 11.52 s, when that save returned) and the record ended unlocked. |
+
+- The store was restored afterwards: StoreName is `StealASeed_v1`, and GameConfig matches disk exactly (293,277 bytes, hash 198928736).
+- The throwaway key was deleted; 0 keys are left.
+- The real store was never opened.
+
+**Gameplay, in Play Solo (the owner's account on a throwaway profile, desktop 960x714, no emulator, no controller):**
+- **Plot labels:**
+  - "YOUR BASE" in green over our gate at 10 studs;
+  - "Unclaimed" over the other five;
+  - all six plates built, including at 200 studs.
+- **Money ticker:**
+  - Plant income printed 735 changes in 25 s. It ticked 10 times, about every 2.5 s, at 0.115. The old rule would have ticked about 245 times.
+  - A $50K lump played 23 ticks in 3.07 s, 0.13 s apart, at full 0.23.
+  - The balance was exact.
+- **Treadmill, level 1, full charge:**
+  - The pop climbed `+21 x1.1`, `+23 x1.2` … `+79 x3.9`, held `+81 x4` (Michael's 81), then the partial tick showed `+67 x3.3` and dropped to `+20`.
+  - The sign reads `BASE 20/s > 100/s`, using 174 of 360 px.
+- **Garden:**
+  - Keyboard arrows and Return drove GuiService's selection engine, the same one a D-pad drives.
+  - Focusing the half-hidden row 3 scrolled the list to 136, exactly the spec's number.
+  - Return selected the card, and its PICK UP showed fully in view (414–442 of 452).
+  - Down put the focus on PICK UP and the selection held. Return picked the plant up into the hands, and the focus stayed on that card.
+  - Mouse: clicking the visible edge of a half-hidden card scrolled it fully into view with PICK UP showing. The wheel scrolled, and scrolling the button out of view cleared the selection.
+- **Guardian audio (Dustbowl Brambleback), three wake-chase-return cycles:**
+  - 14, 13 and 14 steps over 198, 183 and 185 studs, never more than 1 sound at once.
+  - The old 2.2-stud rule would have given about 90 overlapping stomps per cycle.
+- **Fence: CONFIRMED and FIXED.** The cause was not height.
+  - The two boards' 0.6 gap read as ladder rungs. Walking into the fence looped Climbing > Running > Freefall, bobbing up to 2.5 studs; bump-then-jump climbed first.
+  - Filled flush (test part), there was no climbing. Recessed 0.3 per face, it still climbed.
+  - Fix: `MapService.fenceRun` adds an invisible, collidable, flush "RailGap" per run. Height, look and boundary are unchanged.
+  - Re-tested at WalkSpeed 16 and 20.2, with empty hands and holding a plant, in both directions on 4 runs. Walk-ins stop dead with 0 climbing frames; bump-jumps cross in 1.10–1.30 s. Before the fix, 32 of 32 timed jumps crossed; many land on the rail top and step off.
+- **Ragdoll: camera fault CONFIRMED and FIXED.** Head vibration was NOT reproduced.
+  - Guardian throws (camera on the Head) and bat-style knockdowns on flat ground were clean: the settled camera moved 0.003–0.010 studs a frame.
+  - Knocked back into the plot fence (bat path replicated in a command Script), the body stopped at the rails while the free, colliding HumanoidRootPart flew 110 studs on. The camera went with it (a bat hit follows the root), then snapped 115 studs back at recovery.
+  - Fix: `NestService.ragdollOn` welds the root to the LowerTorso and makes it non-colliding while limp. `ragdollOff` removes the weld first. RagdollGate is unchanged, since every joint still lets go.
+  - Re-tested: into the fence, the root stays within 0.2–0.5 studs of the body and the settled camera is still. A guardian throw: identical arc and recovery. Two knockdowns back to back: clean. After recovery the character walks, jumps, has all 15 joints back on and no weld.
+
+**Files this pass:**
+- PlayerDataService (write serialization);
+- MapService (RailGap);
+- NestService (root weld);
+- specs PlotReleaseSpec, GuardianRagdollSpec and PlotSpec.
+
+**Still NOT verified:**
+- Two real clients (Studio's multi-client server has no MCP), so none of the following:
+  - a plot handed to player B;
+  - B's display name and @username on the plate;
+  - a quick rejoin to the SAME server (the leavingSaves wait);
+  - someone watching another player's ragdoll.
+- Any physical controller or the Controller Emulator. B/back could not be sent at all: MCP delivers gamepad buttons as keyboard.
+- Phones or touch.
+- Real bat and trap hits (the bat launch was replicated server-side in Play Solo).
+- Slopes.
+- A published server.
+
+**Owner checks (short):**
+1. Studio **Test > Clients and Servers**, 2 players, with Player1/Player2 as the disposable accounts:
+   - Player1 upgrades the mill and plants, then leaves. The plate reads Unclaimed, the mill is starting tier and the belt is idle.
+   - Player2 takes the plot and inherits nothing.
+   - Player1 rejoins and gets the garden and mill back.
+   - Each sees the other's name over their gate.
+2. Xbox or the Controller Emulator on the Garden with 7+ plants: go to the bottom row, press A, D-pad down, A. Also check that B closes the panel.
+3. On a phone, drag-scroll the Garden and tap a half-hidden card.
+4. Two players: a bat hit near a fence, watched by the other.
+5. Design: the owner's old note rejected invisible colliders ABOVE the fence. RailGap sits INSIDE the slot and blocks nothing new; say if you would rather have a visible filled plank.
+
+## Michael's eight Podnappers reports — 2026-09-26 (CLAUDE)  (UNCOMMITTED AND UNPUSHED; CODE-VERIFIED ONLY -- THE STUDIO MCP WAS DISCONNECTED FOR THE WHOLE TASK, SO NO SPEC, PLAY TEST OR CLIENT CHECK HAS RUN YET)
+
+**Brief (owner):**
+- Verify each report before fixing it, and tell confirmed bugs apart from balance questions and subjective feedback.
+- Disposable test data only, never the owner's save. No ResetProgress and no deletion of saved data.
+- No general refactor.
+- Leave everything uncommitted, unpushed and unpublished.
+
+**Verification state:**
+- The Studio MCP exposed no tools from the start of this task, so every check below is a code reading, a local syntax compile, or a local arithmetic replay.
+- The syntax compiles used `luau-compile.exe` from the official Luau release, downloaded into the session scratchpad, not the repo.
+- None of the specs named here has been run in Studio.
+- No store swap was made and no ZZSpecRun folder was created, so there is nothing to restore.
+
+### Per item
+
+1. **Second guardian's audio rapid-firing: CONFIRMED defect.**
+   - Dustbowl's Brambleback is the only guardian with a one-shot step (`ParentStepDustbowl`); the others loop ChaseStep.
+   - SoundCues fired it every 2.2 studs of 3-D root movement, from a stale note ("a whole stride every ~4 studs"). ParentAnim's `SWING_PER_STUD = 0.40` actually gives a footfall every 7.85 studs.
+   - At chase speed that was a new 0.55 s positional Sound nearly every frame, stacked on the ones before it.
+   - Fix (`SoundCues.client.luau`):
+     - steps every `pi / 0.40` studs of FLAT ground;
+     - at most one per `MIN_STEP_SECONDS` (0.25);
+     - the ringing stomp is cut when the next lands (one per parent at a time);
+     - a stomp is hushed on sleep, stream-out and untrack.
+   - Volume is untouched and ChaseStep's loop is unchanged.
+   - Spec: ParentVoiceSpec section 7.
+2. **Ragdoll head vibrates and the camera shakes: NOT YET REPRODUCED, and no code changed.** Leading suspects, read from code:
+   - ThrowFX points the camera at the HEAD for a guardian throw.
+   - `slackenJoints` sets every socket's friction to 0, the neck included.
+   - The Head still collides: the R15 rig has Head CanCollide true at rest, and `ragdollOn` only skips forcing it on, although its own comment ("NOT THE HEAD") says a colliding head is exactly what wedges a ragdoll.
+
+   Which of these is the vibration needs a frame sample in Play. See the owner checks.
+3. **Garden bottom-row Pick Up unreachable on console: CONFIRMED defect.**
+   - Cause: GardenUI dropped the selection on ANY CanvasPosition change. Reaching the clipped PICK UP made the engine scroll, the scroll deselected the card, the button hid, and the engine threw the focus elsewhere.
+   - Fix (`GardenUI.client.luau`, plus pure `UIKit.scrollToShow` and `UIKit.spanShown`):
+     - a scroll drops the selection only when the PICK UP leaves the window, and never while the pad's focus is on that card;
+     - a card that takes pad focus, or is selected by any input, scrolls into view whole (the bottom wins when a card is taller than the window);
+     - down from a selected card goes to its own PICK UP;
+     - after a pick-up the focus stays on the same card, and a shrinking list hands the focus to the last card;
+     - `list.Selectable = false` and a 10 px top/bottom pad for the focus ring.
+   - Also fixed: a pod or empty card no longer shows a dead, stale "PICK UP" when pressed.
+   - B/back is untouched (PadFocus).
+   - Spec: ControllerSpec section 7.
+4. **Level-1 mill 20/s, then 81/s, sign said 100: RULES AS WRITTEN, misleading wording, plus one small defect.**
+   - 20 is tier 1's base. A charged visit climbs 19+2k per tick to 4x, which is 80 (81 on a tick of at least 1.00625 s). 100 is tier 2's base on the UPGRADE sign.
+   - Defect fixed: the tick a charge ran out in was paid boosted for all of its `dt`. This is now `GameConfig.trainingRushBlend`.
+   - Wording: the sign reads `BASE 20/s > 100/s`, and the +Speed pop names the rush (`+80 x4`).
+   - Stale comments corrected: TS "past tier seven", GC "dropped to 2", and the false "gradual fall-off" note.
+   - No rate or curve changed.
+   - Spec: SpeedSpec 6b.
+   - OPEN (owner): the payout drops from 4x to 1x in one tick when the charge runs out. The old comment claimed a gradual fall-off that never existed. Your call whether it should be gradual.
+5. **Players catch on fences: NOT YET REPRODUCED, and no code changed.**
+   - The only collidable fence is the plot fence: rails 1.6 thick with a 5.0 flat top, and posts 5.8 (0.8 above the rails, every 11-17.5 studs).
+   - Suspects: the posts' top 0.8 and the 1.6-wide ledge a short hop lands on.
+   - The smallest fix candidates are posts non-colliding above the rails (the rails already overlap at every post, so the boundary stays shut) or lower posts. Pick after a reproduction.
+6. **Missing home and plot-owner indicators: CONFIRMED missing.** There was none; OwnerName had zero readers.
+   - New `PlotOwnerLabels.client.luau`, a nameplate over each gate:
+     - YOUR BASE on yours;
+     - display name over @username on others';
+     - Unclaimed on free plots.
+   - It reads PlotService's `OwnerUserId` and repaints on every owner-attribute change.
+   - Placement: 10 studs up from PlotCF/Depth, with a local Attachment in Terrain as its anchor (streaming-safe).
+   - It is not always-on-top, not selectable and has no remote.
+   - Tunables: `GameConfig.Plot.OwnerLabel`. Pure helper: `GameConfig.plotLabelText`.
+   - This follows the old "if ever wanted, it goes over the gate" note in MapService, and reverses "there will not be one" (below) at the owner's request.
+7. **Money ticker irritating: POLISH, no duplicate trigger.**
+   - CashUI ticked every third printed change. Plant income changes the text every second: about 12 ticks per 10 s at $4/s, 96 at $100/s and 180 at $10K/s (replayed).
+   - Now each balance change is sorted as it arrives (`GameConfig.cashStepIsLump`):
+     - routine income ticks at most every 2.5 s at 50% volume;
+     - a lump (sale, reward, purchase) is counted in as before, capped at one tick per 0.12 s.
+   - Settings still apply through the UI bus, and the balance is untouched.
+   - Tunables: `GameConfig.Sfx.CashTicks`. Spec: CashFormatSpec section 5.
+   - Before/after preview WAVs, rendered from `sfx/CASH TICK.wav` with the real cue window: `output/audio-preview/cash-tick_*_before-then-after.wav` (10 s old, 1.5 s gap, 10 s new).
+8. **Base not reset when its owner leaves: CONFIRMED partly.**
+   - The plot itself was already cleared, released and shrunk on leave, and the saved garden cannot be overwritten by that cleanup.
+   - Gap 1, the MILL: it lives beside the plot. It was never reset, so an upgraded mill and a spinning belt stayed on the "empty" plot, and a tier-1 newcomer inherited the mill. Fixed: a TreadmillService `OnReleased` hook puts the starting mill back with the belt idle and the sign repainted. It is synchronous and idempotent.
+   - Gap 1, the assign path: it now rebuilds from the `MillTier` actually standing there.
+   - Gap 2, the RESTORE: PlantService gave up after 30 s (a save has been measured at 38 s) and nothing stopped the next planting saving that empty bed over the real garden.
+     - Now restore waits while the player stays (`GameConfig.Plot.RestorePatienceSeconds` = 600 backstop, as CarryService).
+     - `persist` and `PlaceAt` are gated on `restoredFor[plot] == owner`, which is cleared on release.
+     - The mill's assign wait is the same.
+   - Gap 3, the LEAVE SAVE:
+     - a rejoin to the SAME server (same JobId, so no lock) could load the save from before the in-flight leave save;
+     - the autosave could race the leave save and re-lock the profile.
+
+     `PlayerDataService` now makes a rejoin wait up to 30 s for this server's leave save, and the autosave skips an entry that is leaving.
+   - Specs: the new PlotReleaseSpec and ActionRefusalSpec (a bed whose garden has not arrived refuses and saves nothing).
+
+### Files
+
+- **Edited:** GardenUI, SoundCues, SpeedFX, CashUI, UIKit, GameConfig, TreadmillService, PlantService, PlayerDataService.
+- **New:** PlotOwnerLabels.client.luau.
+- **Specs:**
+  - ControllerSpec 7;
+  - SpeedSpec 6b;
+  - ParentVoiceSpec 7;
+  - CashFormatSpec 5;
+  - ActionRefusalSpec: planting stand-ins now hand the plot over, so restore runs;
+  - new PlotReleaseSpec.
+- The other work already uncommitted in these files is preserved.
+
+### Owner checks, batched (all still to do)
+
+1. **Specs, via ZZSpecRun:** ControllerSpec, SpeedSpec, ParentVoiceSpec, CashFormatSpec, ActionRefusalSpec, PlotReleaseSpec, HudLayoutSpec, HatchRevealSpec, HatchTimerSpec, InstantHatchSpec and PlantStreamingSpec. The last four are included because restore is now gated.
+2. **Xbox or the Controller Emulator:** open Garden with 7+ plants. D-pad to the bottom row, press A, then D-pad down to PICK UP and press A. The plant should come up and the focus should stay on that card. Then B closes the panel.
+3. **Dustbowl raid, listening:** stomps at a stride's pace, never a buzz, and silent once it sleeps.
+4. **Mill at level 1:**
+   - watch `+21 x1.1` climb to `+80 x4`, then `+20`;
+   - the sign should read `BASE 20/s > 100/s`.
+5. **Two clients:**
+   - A with an upgraded mill and plants leaves. The plot reads Unclaimed, shows the starting mill and has an idle belt.
+   - B takes it with nothing inherited.
+   - A rejoins and gets their garden and mill back.
+6. **Ragdoll and fence:** reproduce with MCP frame sampling first, then choose the fix.
+
+---
+
+## New skill: blender-assisted-creature-art — 2026-09-25 (CLAUDE)  (UNCOMMITTED AND UNPUSHED; SKILL, SCRIPTS AND DOCS ONLY -- NO GAME CODE, ASSET, STUDIO MODEL, .BLEND OR SAVE CHANGED)
+
+**Brief (owner):** a reusable, validated skill for creating and refining stylized creatures with
+Blender -- reference analysis and design briefs, modelling decisions, visual review, Roblox
+delivery constraints, rigging-aware geometry and performance validation -- with two explicit
+routes: A, Blender-assisted primitive production that keeps the approved Luau-built geometry, and
+B, a genuine custom-mesh pipeline for future explicitly approved assets. Do not silently change the
+"Blender is a preview" policy; flag unsupported claims about the reference creatures; install
+nothing; smoke-test in isolation; no redesign, upload, import, publish, commit or push.
+
+### What was added
+
+- **`.agents/skills/blender-assisted-creature-art/`** (canonical): `SKILL.md` (111 lines: the
+  authorization boundaries, the 12-step workflow with the blockout STOP, scripts, evidence rules),
+  nine references (reference analysis, design brief, shape construction, Blender techniques, visual
+  review, Route A, Route B, game contracts and budgets, the Blender environment) and eight scripts
+  with a README: `review_renders.py`, `silhouette_compare.py`, `partspec_bridge.py`, `mesh_audit.py`,
+  `export_roundtrip.py`, `selftest_blockout.py`, `validate_skill.py`, `bca_lib.py`.
+- **`.claude/skills/blender-assisted-creature-art/SKILL.md`**: the usual pointer (same name and
+  description, a relative link, "no independent rules"); `validate_skill.py` proves it resolves.
+- **AGENTS.md**: one Skills-table row; "Eight canonical project skills" became "The canonical
+  project skills" (ten folders already existed).
+
+### The authorization boundaries the skill states
+
+Production geometry stays Luau part builds (AGENTS rule 11, blender-to-roblox, DustbowlPodSpec).
+Blender work is study, review and Route A translation by default; an offline mesh study authorizes
+nothing. **Route B needs the owner's explicit approval naming the asset and the route, recorded in
+this file before any production import, upload, spec change or pipeline change.** No AI mesh
+generation in place of Blender unless asked; install nothing; a blockout STOP for owner approval on
+any new creature or substantial redesign.
+
+### Verified
+
+- **Environment:** Blender 5.2.0 LTS at `C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`,
+  **not on PATH**; Workbench, EEVEE and Cycles render headless; FBX/glTF/OBJ exporters and
+  `io_scene_fbx.parse_fbx` present; no 3D-Print Toolbox, no Blender MCP add-on. 5.x API changes
+  recorded in the skill (auto smooth, `use_nodes` ignored, compositor moved, no EEVEE bloom).
+- **Roblox part geometry, measured in Studio** with raycasts on scratch parts in a transient,
+  non-archivable WorldModel in ServerStorage (not Rojo-managed), destroyed in the same call: Ball =
+  smallest axis; Cylinder along X with diameter min(Y, Z); Wedge full height at +Z, knife edge -Z;
+  CornerWedge apex over (+X, -Z). Nothing else in Studio was touched.
+- **Smoke test** (`D:\KAPE\output\blender-creature-skill\smoke-test\`, an original throwaway
+  creature, "Burrowbud"), all eight steps passing on the final scripts in 84 s:
+  - review sheets (plain, silhouette, colour) for the study and its 26-part Route A translation --
+    all inspected; the first plain sheet exposed a real bug (a second collection z-fighting through
+    the study), fixed;
+  - fidelity: IoU 0.86 / 0.84 / 0.83 / 0.89 (front, right, 3/4, top); yet the translation read as
+    stacked primitives and lost the carved mouth -- the skill now says IoU is coverage, not appeal;
+  - audit: found a real zero-length edge from the Boolean mouth cut, unwelded curve caps and a
+    self-intersecting solidified leaf;
+  - export: FBX (forward Z, up Y, scale studs/100, bake space) and OBJ store studs 1:1 with the front
+    at -Z and the right at +X; glTF faces +Z; the FBX exporter's default `axis_forward="-Z"` turns a
+    -Y-facing creature to face +Z;
+  - part-list round trip: 26 parts, positions and sizes exact, rotations within 1e-5.
+- `validate_skill.py`: 110/110 (frontmatter, every link, the pointer, scripts compile, no
+  `__pycache__`).
+- The reference video (57.5 s) was studied frame by frame at 1 fps; observations, inferences and
+  transferable principles are in `references/reference-analysis.md`.
+
+### Not verified
+
+Any Roblox import: the calibration file (`smoke-test\calibration\calibration.fbx`) still has to be
+imported once into a scratch place to settle how the 3D Importer reads scale and axes.
+SurfaceAppearance, skinned meshes, the Studio-to-Blender part dump snippet, and any phone or live
+measurement. The existing `tools/blender` scripts were read, not run.
+
+### Flagged for the owner (nothing changed in those files)
+
+- `primitive-organic-sculpting` section 1 states the reference creature is "100% built from Roblox
+  native primitive parts"; footage cannot show that.
+- `colossal-titan-sculpting` section 4's "PlantSway rig naming convention" is not PlantSway's real
+  contract, and its section 5 budgets are not measured. Neither it nor `primitive-organic-sculpting`
+  has a `.claude` pointer or an AGENTS.md row.
+- `blender-to-roblox`: `blender` is not on PATH; its "Roblox (x, y, z) -> Blender (x, z, y)" is a
+  mirror (the proper rotation is (-x, z, y)); `parent_biome1.py` exports with the FBX default axes,
+  which turn a -Y-facing creature to face +Z.
+- `plant-art-bible`'s kg curves and 25-40 part band are historical (PlantFormsSpec now budgets 48/56).
+
+## Phone HUD: Cash/Speed in the corner, a smaller TELEPORT TO PLOT under the clock, smaller tutorial words — 2026-09-24 (CLAUDE)  (UNCOMMITTED, UNPUSHED AND UNPUBLISHED FOR THE OWNER'S APPROVAL; VERIFIED IN STUDIO'S DEVICE EMULATOR AT 800 x 360 (GALAXY A06) AND, FOR THE FIRST PASS, 735 x 413; NOT SEEN ON A REAL PHONE)
+
+**Brief (owner, three messages):** (1) through HudLayout, phones only: Cash and Speed
+bottom-left with a small safe margin, Speed over Cash, colours/icons/format kept,
+~15% smaller; TELEPORT TO PLOT ~15% smaller and a little higher, centred under the
+clock, clear of the topbar and ADMIN, touch target, safe-zone rule, validation,
+cooldown and controller unchanged; desktop/console, Garden, Bag, x2 and equipment
+untouched; verify in real phone emulation at the screenshot's size and a smaller
+one, joystick shown, sidebar open and shut, short and long values; uncommitted, real
+save untouched. (2) The Cash/Speed block LITERALLY in the bottom-left corner --
+overlap with the joystick explicitly approved, joystick unchanged, the block must
+not take touches. (3) From an 800 x 360 screenshot: "put the teleport to plot button
+higher, and smaller, tutorial text looks large too".
+
+### What changed (HudLayout, PlotTeleportUI, TutorialUI, HudLayoutSpec; CashUI, BiomeGuideUI and SellUI are byte-identical to before)
+
+* **Cash/Speed, phones (`sidebars`)**: a new face, `CASH_PHONE` = compact x 0.85
+  (Speed 23, Cash 30, shoe 0.544, root 162 x 63; the x2/tip numbers untouched), in
+  the corner of the safe area, 12 in and 10 up -- level with the belt's bottom, ON the
+  thumbstick's resting ring (owner-approved); it rises 8 px over the belt only where
+  the corner would meet it. `problems()` exempts exactly cash/thumbstick on phones;
+  the jump button and every other pair still keep 8 px. The block holds only Frames
+  and TextLabels (none Active), so touches go through to the stick.
+* **TELEPORT TO PLOT, phones**: the plate (icon, word, padding) is drawn at
+  `teleportScale` = `Teleport.PhoneScale` **0.75** (147 x 33) by a UIScale inside the
+  unchanged 196 x 44 touch area; PlotTeleportUI's button is now a transparent hit area
+  holding that `Plate` (desktop pixel-identical, scale 1). The DRAWN plate stands 8 px
+  under the clock, so the top of the touch area is up in the topbar's free span
+  (`GuiService.TopbarInset`), never near Roblox's buttons; where the free span cannot
+  hold it, it waits at the safe margin. ADMIN keeps 8 px off the whole touch area
+  (the button drops under an ADMIN hung under the clock). At 800 x 360: touch area
+  window y 45-89, plate 50.5-83.5, clock bottom 42.
+* **The stale button in the owner's screenshot (22 px low)**: PlotTeleportUI placed
+  itself only on AbsoluteSize changes; at the first layout the topbar's free span was
+  still narrow, ADMIN hung under the clock and the button waited under it for the
+  session. It now also re-places on `TopbarInset` changes, as WorldClock does, and so
+  does TutorialUI's banner.
+* **Tutorial words, phones**: `tutorialScale` = `TutorialPhoneScale` **0.75** in the
+  layout answer (1 everywhere else). `bannerIn` hands a banner already at that size
+  (420 x 63 at most, was 560 x 84); TutorialUI lays the banner out at 1 and draws it
+  through a UIScale -- line 34 -> 25.5 px, sub 19 -> 14, counter 15 -> 11 -- the
+  pointer the same (230 x 46 -> 172.5 x 34.5, text 22 -> 16.5, its offsets scaled in
+  `pointAt`), the celebration pops to 0.75. The skip line and GUIDE are buttons and
+  keep their size.
+* **Biome name / sale line vs the tutorial, phones**: the first pass pushed a notice
+  under the teleport button straight onto the banner's first line (the design is that
+  a beginner keeps the instructions up while "GREENHOLLOW" goes by). Now the notice
+  stands 8 px under the teleport's touch area and the banner 8 px under the notice
+  band (at 800 x 360: notice window y 97-127, banner from 135).
+* **HudLayoutSpec 949** (from 880): the teleport rule per screen (plate 8-9 px under
+  the clock, in the free span, ADMIN 8 px off, the free-span and hung-ADMIN
+  fallbacks), the notice-to-banner gap on every phone, the tutorial scale on every
+  screen (1 off phones), and the TutorialUI/PlotTeleportUI wiring.
+
+### Verified (Studio device emulator, Samsung Galaxy A06 800 x 360 -> viewport 704-705 x 338; throwaway stores `StealASeed_hud5_20260924` / `_hud6_`, one key each, removed -- 0 live keys; GameConfig back to `StealASeed_v1`, 286,829 bytes / hash 710922590, byte-exact with disk)
+
+* Specs, fresh-require in Edit: HudLayout 949/0, PlotTeleport 40, Controller 51,
+  Tutorial 93, TutorialPod 263. The three edited scripts synced byte-exact and compile.
+* Live rects match the layout: teleport (254.5,-13) 196 x 44, plate 147 x 33 at 0.75;
+  banner (142.5,77) 420 x 63; pointer 172.5 x 34.5 centred on the Speed "0"; cash root
+  (12,207) 162 x 63.
+* **A touch at GUI (352,-4) -- window y 54, inside the topbar band -- fired the
+  button's Activated and the server teleported the player** (PlotService log). The
+  alarm's `SeedAlert.Top` frame over the top 57 px is transparent and not Active.
+* Earlier pass at 735 x 413: a press on the cash block over the stick moved the
+  character 6.46 studs and stopped on release.
+* Captures shown to the owner (MCP screen_capture): BEFORE (the pre-round HudLayout,
+  PlotTeleportUI and TutorialUI swapped in, then restored and sha1-verified) and AFTER
+  at 800 x 360 -- short and long values ($1.00Qa, the most a save can hold, and 140T),
+  dock open and shut, the joystick ring shown, tutorial steps 1-3 with the pointer,
+  and the biome name between the button and the banner.
+
+### Open, for the owner
+
+* The new teleport and tutorial sizes were seen at 800 x 360 only; the first pass was
+  also seen at 735 x 413. The emulator is the owner's to switch.
+* The celebration's 0.75 pop is wired and spec-checked, not seen live (it needs a
+  tutorial completed in-session).
+* The touch area stays 196 x 44 round a 147 x 33 plate: a tap up to 24 px beside the
+  plate still teleports. A tighter hit area (147 x 44) is a small change if wanted:
+  HudLayout's phone rect plus a fixed 196 x 44 plate size in PlotTeleportUI.
+* A notice too wide to fit between the top rows on a phone still drops to the rows'
+  bottom, where it can meet the tutorial banner -- every biome name fits on every
+  listed phone; a very long sale line on a narrow phone could.
+* MCP mouse in this emulator frame lands 47 px LEFT of the x sent (y exact, GUI
+  space) -- instance_path clicks too (one opened the Shop instead of the dock handle).
+  Calibrate with an InputBegan logger first.
+
+## Index and Shop: the approved button artwork, and the Shop's rainbow rim — 2026-09-24 (CLAUDE)  (UNCOMMITTED, UNPUSHED AND UNPUBLISHED FOR THE OWNER'S APPROVAL; STUDIO-VERIFIED ON DESKTOP AND ON A FORCED PHONE LAYOUT; NOT SEEN ON A REAL PHONE, XBOX OR TV)
+
+**Brief (owner):** both HUD buttons use the new approved artwork
+(`D:\KAPE\output\ui-icons-v1`: blue cart + "Shop", purple book + "Index", SVG
+masters beside them) -- the supplied art, square, never stretched, no duplicate
+labels or old backgrounds, placement and responsive layout kept with only the
+sizing the art needs, clicks, badges and mouse/touch/controller kept. ONLY the
+Shop's outline animates, matching the owner's clip: a narrow bright rainbow band
+inside the thick black outline, red/yellow/green/cyan/blue/purple at once,
+travelling round in a seamless loop, glow subtle and crisp, nothing flashing and
+nothing else moving; the artwork's own static border replaced cleanly from the
+editable source, not a second frame stacked on it. Index static. Controller focus
+distinct from the decoration; a light client animation with cleanup, no duplicate
+loops, paused while hidden; the Shop and Index windows not redesigned. Verify
+desktop and phone, opening each window, controller selection, clipping, stretch and
+badges; report an upload blocker rather than substitute; leave it uncommitted,
+unpushed and unpublished; screenshots and a recording for approval.
+
+### What changed
+
+* **Artwork: `art/ui/rail-buttons/`** (README there). The masters copied verbatim;
+  `shop-base.svg` = `shop.svg` with the static `#rim` stroke removed and that band
+  masked to transparent -- everything else byte-identical, and the cart and the word
+  still draw over the band as they did over the old rim. Rendered with the Codex
+  runtime's Node + sharp (`render.cjs`), which re-renders both approved SVGs
+  pixel-identical to the approved PNGs, so the derived Shop base differs from the
+  approved art only inside the band. 256-px copies uploaded through the recorded
+  path (localhost server -> MCP `upload_image`): **ShopArt 100314547854118,
+  IndexArt 107928181966123** in `GameConfig.Rail`. `ShopIcon`/`IndexIcon` kept,
+  marked superseded.
+* **`UIKit.railButton` `art` (+ `rim`)**: a transparent ImageButton with the picture
+  in a square `ArtBox` (UIAspectRatioConstraint), so it is never stretched -- a short
+  phone's 50 x 44 tile gets a 44 x 44 picture, centred. No icon, label or slab; the
+  hover pop, click cue and selectability are the same as every rail button.
+  `railShape` never lays a dock plate or word over an art button.
+* **`UIKit.rainbowRim`**: a rounded frame BEHIND the picture (`GameConfig.Rail.Rim`,
+  the band's outer edge grown by 2.5 SVG units, still under the black outline), a
+  rainbow UIGradient rotated at 90 degrees a second. Measured off the owner's clip:
+  every point on the band swings red -> purple -> red, opposite sides in anti-phase,
+  one turn per 120 frames at 30 fps -- a rotating linear gradient. One RenderStepped
+  connection writing one number, connected only while the button is on screen (gui
+  enabled, every ancestor visible, not slid off) and motion is allowed
+  (`SeedAfterimageQuality` Off holds it still); Destroying drops every connection.
+  No glow layer: the colours on the black read bright enough.
+* **HudLayout desktop**: Index and Shop 50 x 50 at the same x and y (were the 130 x 50
+  slabs); same height, so Settings, Walk Mode and everything else stay put. Compact
+  and phone were already 50-px squares.
+* **ShopUI / IndexUI** build art buttons and pass no dock tile (the art is the tile);
+  the Index badge is unchanged.
+* **HudLayoutSpec**: the desktop size check follows the squares; three new checks
+  (the art wiring and Shop-only rim, the ids and rim constants, one spin connection
+  gated on visibility and motion) -- 863.
+
+### Verified in Studio (throwaway store `StealASeed_art4_20260924`, its one key removed after; GameConfig restored)
+
+* **Desktop** (a 917 x 714 window): Index at (12,12), Shop at (12,68), both 50 x 50,
+  both images loaded; the rim turning at 90 degrees a second; Settings and Walk Mode
+  unmoved. Close-ups by scaling the live rail layer 3.2x: the band shows several
+  colours at once and they move between frames.
+* **Each window opened by a click** on the new buttons (MCP mouse), on desktop and on
+  the phone dock: Shop and Index open, unchanged.
+* **Phone layout, FORCED** (touch patched into `HudLayout.measure` at the desktop
+  window -- a session cannot switch the device emulator): Index and Shop stand in
+  the dock as 50 x 50 art tiles with no plate or word; Settings' tile unchanged.
+* **Paused while hidden**: dock shut -> the rim stops; reopened -> it runs; the Shop
+  opened on the phone (the dock steps aside) -> stopped; closed -> running. On
+  desktop it keeps turning with the Shop window open, because the rail stays visible
+  above panel dimmers.
+* **Controller focus**: the gold PadFocus ring draws round the Shop square, outside
+  the black outline, distinct from the rim -- selection set through
+  `GuiService.SelectedObject`, a visual check, not controller input.
+* No clipping (the cart handle and the book's corner overflow inside the square), no
+  stretching (ArtBox 1:1).
+* **All 48 specs pass**: HudLayout 863, Controller 51, CashFormat 14, the rest at
+  their counts.
+* **Approval files** (offline renders of the exact uploaded PNGs and rim settings, not
+  screen recordings): `D:\KAPE\output\ui-icons-v1-approval\` -- `rail-buttons-preview.png`
+  (both buttons at 1x/2x/3x on dark and light), `shop-rim-loop.mp4` / `.gif` (one
+  seamless 4-s turn).
+
+### Open, for the owner
+
+* **The Index badge sits on the artwork's corner**: hanging half off it on desktop,
+  tucked inside it on a phone, where it covers the book's top-right corner (not the
+  word). Placement unchanged; hanging it further out would move Walk Mode beside the
+  dock (HudLayout's `badgeReach`).
+* At 50 px the rim band is about 1.4 px -- the approved art's 7-of-256 band. A wider
+  band is one number in `shop-base.svg` plus `Rail.Rim`, re-rendered and re-uploaded.
+* Not seen: a real phone (device emulator), a physical Xbox or a TV (the rail layer's
+  TenFoot scale applies there).
+* **GameConfig is now 286,829 bytes / hash 710922590** -- the throwaway-store swap's
+  "back to the real config" check uses these values from now on.
+
+## Shop price, TV scaling and the owner's controller test — 2026-09-24 (CLAUDE)  (UNCOMMITTED AND UNPUSHED FOR THE OWNER'S REVIEW; CONTROLLER: OWNER-REPORTED WITH STUDIO'S XBOX CONTROLLER EMULATOR -- NOT A PHYSICAL XBOX; THE TEN-FOOT LAYOUT HAS NOT BEEN SEEN ON A TV)
+
+**Brief (owner):** (1) verify the x2 MONEY price fix -- check the pass id, show
+the price Roblox gives the current player (runtime pricing), handle loading and
+failure without a misleading fallback, keep the purchase prompt authoritative,
+change no product settings, make no purchases; (2) console UI scaling,
+approved -- text, controls and the selection readable from a sofa with safe
+screen margins, desktop and phone layouts preserved, Shop / Index / Settings /
+Garden / Bag / Sell / HUD, no broader redesign; (3) controller testing with the
+owner pressing the buttons (disposable profile, live input log) -- forced pad
+mode, binding inspection and automated checks are not controller testing,
+physical Xbox/TV stays pending, AnyDesk and input restrictions untouched; (4)
+regression tests, the real datastore configuration restored, only the test
+data created removed. Not Place Best; no publish, commit, push or shutdown; no
+real save touched. This entry supersedes the "NOT CONTROLLER-EMULATOR-TESTED"
+status of the controller entry below.
+
+### 1. x2 MONEY shows what Roblox charges this player
+
+* The pass is **1975418369**, "Permanent 2× Earn", a Game Pass owned by the
+  group **CrazyCozy Games** -- Roblox's public product API (list PriceInRobux
+  199, IsForSale true), the same group as the place.
+* `Shared/RobuxPrice.luau` (new): asks
+  `MarketplaceService:GetProductInfoAsync(id, Enum.InfoType.GamePass/Product)`
+  on the client, per player -- Roblox's documented route for regional pricing
+  (Creator Hub, "Regional pricing") -- and answers loading / ready (whole
+  Robux) / offsale / failed. Retries at 2, 5 and 15 s; a price older than ten
+  minutes is asked again when the Shop opens; a failed refresh keeps the last
+  good price. The deprecated `GetProductInfo` only if the async method is
+  missing.
+* `ShopUI`: every Robux tile, pass and product, prints RobuxPrice's answer --
+  "..." while loading, the player's price, "OFF SALE", or "BUY" with no number
+  when Roblox could not be asked. The manifest's `robux` numbers are no longer
+  shown anywhere. The buy button opens the same purchase prompt as before, and
+  that prompt is what charges.
+* `PromptUI` + `PlantService`: the Instant Hatch capsule reads its product id
+  from a new `RobuxProduct` prompt attribute and prints RobuxPrice's answer;
+  the capsule stays hidden until there is a price.
+* Live, Studio Play on the owner's account: the x2 MONEY tile read **79** --
+  what Roblox returns for that account against the 199 list price (regional
+  pricing, as the owner's account has always been shown) -- and every product
+  tile its own runtime price.
+* Specs: RobuxPriceSpec (new) 17; CashFormatSpec section 4 rewritten for ShopUI
+  14; InstantHatchSpec +1 (the prompt carries the live product id) 34.
+
+### 2. The ten-foot (TV) profile
+
+* Only where `GuiService:IsTenFootInterface()` says so. `HudLayout` solves the
+  desktop layout on a 1280×720 logical canvas inside a 5% title-safe margin and
+  draws it at `clamp(min(0.9W/1280, 0.9H/720), 1, 3)` -- 1.35 at 1080p, 2.7 at
+  4K. The clock, notices and teleport button sit inside the safe frame; the
+  banner moves under the teleport button on a TV only.
+* `UIKit.tenFoot(gui)` gives an opted-in gui a `UIScale` named `TenFoot` on a
+  TV and nothing anywhere else. Opted in: the rail layer, every
+  `UIKit.modal`, CashUI, WorldClock, ActionToastUI, PlotTeleportUI,
+  BiomeGuideUI, TutorialUI, the placement reticle, LoadoutUI. Every
+  AbsoluteSize / AbsolutePosition / TextBounds read that becomes an Offset is
+  divided by the gui's scale (`UIKit.scaleOf`) -- UIKit (lattice, modal header,
+  fitContent), LoadoutUI, SellUI, OfflineUI, IndexUI, SettingsUI, GardenUI,
+  MarigoldShopUI, TutorialUI, CashUI, BiomeGuideUI, ShopUI. Prompt billboards
+  scale by the same factor on a TV (never on touch). The gold selection ring is
+  6 px standing 9 px out on a TV, 4 and 7 elsewhere.
+* Off a TV nothing is created and every divide is by exactly 1.
+  **Regression, measured:** the authored layout of all 18 ScreenGuis, old code
+  against new, same window (1037×714), same profile -- identical at rest, with
+  the Index open, with the Bag open, under forced touch and back on desktop.
+  The only differences found were a mouse hover and hotbar ghost slots built at
+  load, both shown to be session history, not code. Shop, Settings, Garden and
+  Sell open: identical. Live, a new-code session creates no `TenFoot` UIScale.
+* HudLayoutSpec section 9 (1920×1080 with and without the topbar inset and
+  with a keyboard, 3840×2160, 1280×720; desktop and phone carry no frame):
+  860/860.
+* **Not seen:** the TV result itself. No TV, no console and no 1080p
+  ten-foot window was available; the ten-foot path is checked by spec only.
+  Judge it on the Xbox.
+
+### 3. Controller: tested by the owner with Studio's Xbox Controller Emulator
+
+* **Found while preparing, fixed:** `PlotTeleportUI` bound D-pad Up to TELEPORT
+  TO PLOT whenever the button shows (the Safe Zone) and never looked at the UI,
+  so a D-pad Up meant for the selection could teleport the player home instead.
+  It now passes the press on while a panel is open or the selection is on the
+  HUD -- PlantPlace's rule. ControllerSpec +1: 51.
+* Session: disposable store `StealASeed_tv3_20260924`, a live input log in
+  Studio's Output (`[PADLOG]`), every button pressed by the owner through the
+  emulator (Gamepad1 events). Nothing forced, no input injected.
+* **Read in the log (the owner's first batch):** 28 LB/RB presses, one item
+  change each, wrapping both ways; the right stick turned the camera and the
+  reticle switched between valid, "Aim at your garden bed." and, once, "Move
+  closer to your plot."; RT planted a grown Bellchime (plot 3 -> 4); A jumped
+  with no panel open. RT also raises the plant Tool's own `Activated`, which
+  nothing listens to for plants (CombatService binds weapons only).
+* **My setup error:** the mid-row empty slot I built for that batch (Petalpip
+  assigned to slot 6) was already gone when the owner started -- LoadoutUI
+  gives slots 6-10 back to the bag whenever the window narrows (by design,
+  ~line 4205), most likely the Studio layout changing; unproven, the log did not
+  record the window then. Rebuilt inside slots 1-5 (1 bat, 2 pod, 3 pod,
+  4 empty, 5 Petalpip) and checked stable after a real Bag close.
+* **Owner-reported, in their words "everything worked fine":** the remaining
+  controls -- the mid-row skip, panel focus / navigation kept inside / A and B,
+  panel input never reaching the world (D-pad Up in the Safe Zone included),
+  the admin console's focus and B, invalid placements, B putting the plant
+  away, and all of it after a respawn. I did not read the log for that part:
+  the Play session had ended and Studio had been reopened before I could.
+* **Physical Xbox and a TV: still pending.**
+
+### 4. Cleanup and checks
+
+* All 48 specs ran to the end with 0 FAIL lines (fresh-require loader in Studio
+  Edit, copies byte-exact): HudLayout 860, Controller 51, RobuxPrice 17,
+  CashFormat 14, InstantHatch 34, PlotTeleport 40, Admin 78, SellOne 90,
+  Leaderstats 29, and the rest at their usual counts (BatClearance 939/939,
+  Speed 332, PlantForms 388, TutorialPod 263, SfxWiring 202, ...).
+* The throwaway store's only key (`p_4119740186`) removed: 0 live keys.
+  GameConfig is `StealASeed_v1`, 284,397 bytes / hash 1045848910, on disk and in
+  Studio. Nothing in this work read or wrote the real store.
+  `src/ServerScriptService/ZZSpecRun` deleted; the runtime harnesses lived only
+  in Play sessions.
+* Rojo (port 34872) was stopped once by Claude Code during a low-memory spike
+  and restarted on the owner's request (4.9 GB free and the port free first).
+  On reconnect it pushed disk's real GameConfig over Studio's throwaway copy.
+* Left in Studio, NOT from this work, for the owner to decide:
+  `ServerScriptService.EmberrootApprovalRunner` (the Emberroot approval-preview
+  builder) and `ReplicatedStorage.__heads` (one `Creature_cinderpaw` model).
+  Neither is on disk nor in this handoff before now; Rojo's
+  `$ignoreUnknownInstances` keeps them.
+
+### Gotchas found
+
+* MCP `user_mouse_input` clicks do not change
+  `UserInputService:GetLastInputType()`, so PadInput stays in pad mode after
+  them (a panel opened by an MCP click gets a pad selection). Harness artifact,
+  not a bug: a real mouse does change it.
+* A Studio-only StoreName swap does not survive a Rojo reconnect. Check the
+  store name before every Play start.
+* Hotbar test gaps belong in slots 1-5.
+
+### Files (all uncommitted)
+
+New: `ReplicatedStorage/SeedGame/Shared/RobuxPrice.luau`,
+`tools/tests/RobuxPriceSpec.luau`. Changed: ShopUI, PromptUI, PlantService,
+HudLayout, UIKit, CashUI, WorldClock, ActionToastUI, PlotTeleportUI,
+BiomeGuideUI, TutorialUI, PlantPlace, LoadoutUI, SellUI, OfflineUI, IndexUI,
+SettingsUI, GardenUI, MarigoldShopUI, PadFocus; tools/tests HudLayoutSpec,
+CashFormatSpec, InstantHatchSpec, ControllerSpec. Place Best: not started, as
+asked.
+
+## Controller support and Michael's Xbox list — 2026-09-24 (CLAUDE)  (UNCOMMITTED AND UNPUSHED FOR THE OWNER'S REVIEW; STUDIO-VERIFIED WITH A HARNESS AND REAL MOUSE CLICKS; NOT CONTROLLER-EMULATOR-TESTED -- OS input injection is dropped on this PC; PHYSICAL XBOX PENDING)
+
+**Brief (behaviour approved by the owner, no further design approval needed):**
+LB/RB cycle the occupied hotbar slots (skip empty, wrap, equip, one step per
+press, nothing while a panel is open); planting pods and placing grown plants
+aim from the centre of the camera at the player's plot, with a reticle and a
+placement preview, right stick is the camera; RT confirms, B puts the item away
+through the existing equip flow; an invalid aim says why; server validation,
+plot ownership, occupied space, inventory identity and hatch data untouched;
+a panel opened on a controller gets the selection inside it, the D-pad stays
+usable, B backs out, focus is restored; one press never hits both the UI and the
+world; mouse and touch unchanged; the admin console is out of scope. Plus
+Michael's nine reports, each verified before fixing. This supersedes the "not
+implemented" findings of the Controller Emulator entry below.
+
+### What was built
+
+* **`Shared/PadInput.luau` (new).** One answer to "is a controller in hand":
+  sticky -- a gamepad press turns it on, a mouse or a touch turns it off, the
+  keyboard changes nothing (Studio's emulator is driven FROM a keyboard). "Is a
+  panel open": every UIKit dimmer followed as it arrives (not scanned per frame)
+  plus the OpenPanel mutex, with a `PanelChanged` signal. Button glyphs
+  (`GetImageForKeyCode`) and short names (A, B, X, Y, LB, RB, LT, RT...), and
+  `nextSlot` -- the pure bumper walk ControllerSpec checks on all 1,023 strips.
+* **`LoadoutUI`:** `SeedHotbarCycle` on ButtonL1/ButtonR1 -- the previous/next
+  OCCUPIED slot, wrapping, equipped through `holdTool` (the number row's own
+  path); Begin only, so one press is one step; `Pass` while any panel is open.
+  New code sits in a `do` block (the file is near the 200-local limit).
+* **`PlantPlace`:** on a controller the placement ray comes from the viewport
+  centre. A reticle (ring and dot, window space, exactly on that centre) with a
+  reason line and hint chips -- `RT PLANT`, `B PUT AWAY`, Xbox glyphs with a
+  text fallback. RT (`SeedPadPlant`, priority High, above the engine's
+  RT-activates-the-tool) fires the SAME `PlaceAction` a click fires, so every
+  server rule applies unchanged; B (`SeedPadPutAway`, Medium) calls the same
+  `unequip` as Q and the phone button. The reticle's reasons mirror PlaceAt's
+  order: "Move closer to your plot." and "Your plot is full." (ActionRefusal's
+  own words), plus "Aim at your garden bed." and "That's not your plot."; an
+  invalid aim turns the reticle red and dims the RT chip, and RT then raises the
+  same refusal toast instead of sending. With a panel open OR the selection out
+  on the HUD, the reticle and preview hide and RT/B are unbound -- those presses
+  are the UI's. The mouse/touch click path is unchanged.
+* **`PadFocus.client.luau` (new):** for every UIKit modal except the admin
+  console (`OWN_FOCUS`, which runs its own focus): the panel's Shell becomes a
+  SelectionGroup that stops at every edge; opened on a controller, the selection
+  moves in after the A that opened it is released -- to the panel's `PadFirst`
+  ObjectValue if it names one, else the first CONTROL (button or text box) in
+  reading order in the body, else a list, else the close button. B
+  (`SeedPanelBack`, 2500) closes a mutex panel by clearing OpenPanel. On close the
+  selection goes back to what had it (the rail button), including when the engine
+  has already moved it (see Gotchas). With no panel up, B clears a selection left
+  on the HUD, so the stick and the reticle are the world's again (never while
+  the admin console is open -- that B is its own). A thick gold selection ring with an ink
+  keyline replaces the engine's thin frame (`PlayerGui.SelectionImageObject`); it
+  only appears when something is selected, so phones never see it.
+* **`UIKit.modal`:** the full-screen dimmer and the ClickBlocker are
+  `Selectable = false` (they were catching D-pad focus).
+* **`SellUI`:** `PadFirst` = CANCEL, B = cancel (High, 3000).
+* **`PromptUI`:** the key cap printed `KeyboardKeyCode` on every non-touch
+  device, so an Xbox saw "E" on every prompt while the hold it wanted was X. It
+  now prints the prompt's own `GamepadKeyCode` on a controller (X; Y on Instant
+  Hatch) and re-labels shown prompts when the input changes. **`GardenUI`:** a
+  ready pod's card says "HOLD [X] IN FIELD" on a controller.
+* **B's order:** admin console / Sell / Marigold (3000) > any mutex panel's close
+  (2500) > putting the plant away (2000).
+
+### Michael's list -- verdicts
+
+**Already fixed before this session:** none of the nine.
+
+**Confirmed and fixed**
+
+1. **Plot upgrade button stays red with enough cash -- CONFIRMED.** The board
+   was red for every step on sale and repainted only on its own upgrade. FIXED
+   (`PlotUpgradeService`): green at cash >= price on the raw balance, red below,
+   grey at MAX; a 0.25 s watcher repaints a board whose owner, level, next step
+   or affordability changed. The mill board (`TreadmillService`) got the same.
+   Live, throwaway profile: garden income over $25K -> green in 0.10 s; buying
+   the upgrade -> red at the new $250K price in 0.27 s (mill board red too, cash
+   $18); +$300K -> both green in 0.27 s; spending down to $200K -> plot red, mill
+   green, 0.27 s. The mill board also flipped green on its own when income
+   crossed $10K.
+2. **LB/RB inventory navigation -- CONFIRMED missing. IMPLEMENTED** (above).
+4. **Grown plants and 5. pods cannot be placed on a controller -- CONFIRMED**
+   (click/tap only). **IMPLEMENTED** (above).
+7. **SELL ALL confirmation -- CONFIRMED** (the hold sold instantly). FIXED: the
+   hold now asks for a quote (`SellService.QuoteAll`: a token, plant and pod
+   counts and the payout, from `EconomyService.QuoteHeld`, which prices with the
+   sale's own `stallPrice`); the panel asks; `ConfirmAll` re-validates the token,
+   expiry, reach and the SAME Tool set and total before `SellHeld`; a no sells
+   nothing. Eligibility checked and unchanged: pods and grown plants in the bag
+   (hands + backpack, SpeciesId and CarryingKg >= 1); garden plants, bats and
+   traps are kept. Live: "2 PLANTS - 2 PODS ... Sell all 4 for $2,850?" ->
+   CANCEL sold nothing (server: "declined the sell-all quote"); a pod added after
+   the quote -> "Your bag changed. Press SELL ALL again.", nothing sold; confirm
+   -> "Sold 5 items for $2,970", exactly the quote; bag empty, bat and garden
+   kept. **Design note for the owner:** the payout is the bag's TOTAL, so quoting
+   with and without a ??? pod could let a player work out that pod's price band.
+8. **Shop "R0.79" vs prompt "R1.99" -- CONFIRMED.** The tile is the **x2 MONEY
+   game pass** (id 1975418369, "Permanent 2x Earn": doubles cash earnings; not a
+   speed item), priced in Robux. The tile prints the manifest copy,
+   `GameConfig.Store.Items.Passes` x2money `robux`, which said 79 -- the price the
+   owner's own account is shown (regional, about 0.4x) -- while the pass's list
+   price, the one the purchase prompt charges, is 199 (public product API:
+   PriceInRobux 199). FIXED in the manifest only (79 -> 199). No product setting
+   changed, nothing published, no Robux spent.
+9. **Cash precision below 100K -- CONFIRMED.** The old `compact` spelling
+   switched between whole and decimal (999, 1K, 1.23K, 12.3K) and rounded UP
+   ($9,999 read "10K", $99,999 read "100K"). FIXED: `GameConfig.money(n)` --
+   whole dollars with commas below 100K, three kept digits above (100K, 1.23M,
+   3.42B), never rounded up; the HUD, the player list's Cash and Marigold's
+   header use it; the x2 card is placed off a digit-stable width. Live: HUD and
+   player list $12,536 ... $99,992 -> $100K -> $1.23M.
+
+**Partly done**
+
+6. **Console UI too small.** Selection visibility FIXED (the gold ring; seen on
+   the rail, Shop, Index, Settings, Garden, Bag and Sell). General ten-foot
+   scaling NOT done: nothing calls `GuiService:IsTenFootInterface()`, and sizing
+   runs through `HudLayout.measure` / `ViewportSize` in 20 files (HudLayout,
+   UIKit, ActionToastUI, BiomeGuideUI, CashUI, GardenUI, IndexUI, LoadoutUI,
+   OfflineUI, PlantPlace, PlantUI, PlotTeleportUI, PromptUI, RailDrawerUI,
+   SellUI, SettingsUI, ShopUI, TutorialUI, WalkModeUI, WorldClock). Proposal for
+   approval: a console profile in HudLayout (the HUD's logical canvas scaled up
+   when IsTenFootInterface is true), phone profile untouched, judged on a TV.
+
+**Feature request (needs the owner's approval)**
+
+3. **"Place Best"** does not exist anywhere -- no button, action, remote, config
+   entry or KB note. Never implemented.
+
+### Testing -- what kind, honestly
+
+* **Controller Emulator: NOT TESTED.** The owner authorized real key presses;
+  the session announced them, brought Studio forward, clicked the game view once
+  and sent 26 letters -- and nothing arrived. OS-level `SendInput` is dropped
+  system-wide on this PC: it returns success, yet even the cursor does not move
+  (a +60 px relative move and an absolute move both left it in place). Same
+  integrity level as Studio, no job object, default input desktop. AnyDesk
+  (service + `--control` process) is running; its local-input blocking is the
+  likely cause, not confirmed. Not worked around. The 26 letters landed nowhere:
+  the game's input monitor logged none, all 106 synced scripts match disk (8
+  differ only by CRLF on disk) and no script tab was open.
+* **Harness-driven Play (NOT emulator input):** `PadInput.active` patched to
+  true in the live module from a runtime LocalScript; the camera held by a
+  render-step script. Verified with screenshots and an input/state monitor:
+  valid reticle (green, bright RT chip) and all four refusal lines (red, RT
+  dimmed); RT/B bound only while a plant is held and the UI has nothing;
+  unbound and hidden with a panel open and with a HUD selection; the five rail
+  panels (Shop, Index, Settings, Garden, Bag) and Sell open on their first
+  control (Shop: the x2 card's buy button; Index: the Greenhollow tab; Settings:
+  the Music slider; Garden: the first card; Bag: the first item; Sell: CANCEL)
+  and give focus back to their rail button on close; respawn drops the reticle
+  and bindings and restores them when a plant is held again; prompt cap "E" with
+  the mouse, "X" in pad mode.
+* **Real mouse clicks (MCP) and the real hold prompt:** SELL ALL cancel /
+  changed bag / confirm; planting a grown Bellchime, two pods and a grown
+  Petalpip by clicking the bed until the plot was 7/7.
+* **Not tested by any means:** a real LB/RB/RT/B/A/D-pad press (one step per
+  bumper press, the release-A wait, B's ladder, the admin console's own
+  `selectIfPad` and B back-stepping, B stepping off the HUD), the right stick
+  during placement, the Garden label live (spec only), physical Xbox, TV
+  readability.
+* Disposable profile only: throwaway store `StealASeed_ctrl2_20260924` (its key
+  removed afterwards), GameConfig back to 284,397 / 1045848910 (`StealASeed_v1`),
+  no leftovers in the place. The owner's real-profile Studio session had been
+  stopped with their go-ahead; the Roblox Player they had open was not touched.
+
+### Checks
+
+All 47 specs pass, none threw: ControllerSpec 50 (new; 49 in the full-suite run, the 50th check added with the last PadFocus change and run on its own), CashFormatSpec 12
+(new), SellOneSpec 90 (new SELL ALL section), LeaderstatsSpec 29, AdminSpec 78,
+HudLayoutSpec 816, SfxWiringSpec 202, SpeedSpec 332, PlantFormsSpec 388,
+TutorialPodSpec 263, BatClearanceSpec 939/939, and the rest at their usual counts.
+
+### Gotchas found
+
+* The engine re-homes `GuiService.SelectedObject` the moment the selected
+  control is hidden -- in the same frame, before the panel's close reaches any
+  script. Closing the Shop put it on hotbar slot 2 / WALK MODE / TELEPORT TO
+  PLOT, and a naive "restore unless something else took it" stood aside.
+  PadFocus tells them apart by the OLD selection: off screen = the engine.
+* A ScrollingFrame is Selectable and sits above its own first card in reading
+  order; the first "control" pass has to skip it.
+* MCP `user_mouse_input` x/y are below the top-bar inset: y = viewport y - 58.
+* MCP `execute_luau` resets the client camera to Custom after every call ("The
+  execute_luau changed camera type"); hold a camera from a runtime script.
+
+### Files (all uncommitted)
+
+New: `ReplicatedStorage/SeedGame/Shared/PadInput.luau`,
+`StarterPlayerScripts/PadFocus.client.luau`, `tools/tests/ControllerSpec.luau`,
+`tools/tests/CashFormatSpec.luau`. Changed: LoadoutUI, PlantPlace, UIKit, SellUI,
+PromptUI, GardenUI, CashUI, MarigoldShopUI, SellService, EconomyService,
+PlotUpgradeService, TreadmillService, PlayerDataService (player-list cash),
+GameConfig (x2money 199, `money`, `SellAll` texts), tools/tests SellOneSpec,
+LeaderstatsSpec, AdminSpec.
+
+### Xbox retest checklist for Michael
+
+1. Hold two pods and two grown plants. LB/RB: one press = one slot, empty slots
+   skipped, wraps at both ends, the item is in your hands.
+2. Pod in hand, aim at your bed (right stick): green ring + disc, RT plants it.
+   Same with a grown plant.
+3. Aim at grass, at a neighbour's plot, from too far, and with a full plot: red
+   ring with the matching line; RT does not plant.
+4. B with a plant in hand: it goes back to the hotbar, nothing lost.
+5. Every prompt shows X (Instant Hatch: Y), not E.
+6. Open Shop, Index, Settings, Garden, Bag from the rail: the gold ring starts
+   on the first item, the D-pad stays inside, B closes, the ring returns to the
+   rail button; press B again to get the reticle back.
+7. With a panel open: LB/RB, RT and B do nothing to the world.
+8. Plot and mill boards turn green the moment you can afford them, red after
+   buying.
+9. SELL ALL: counts and price shown; CANCEL (and B) sells nothing; SELL ALL
+   sells exactly that.
+10. Cash reads whole dollars below $100K; the x2 MONEY tile says 199.
+11. Die or reset with a plant in hand: the reticle works again after respawn.
+12. From the sofa: can you read the HUD and panels? Can you always see the gold
+    ring?
+
+## Controller Emulator check — 2026-09-24 (CLAUDE)  (INCOMPLETE: real emulator input could not be sent from the session; no code changed)
+
+The owner enabled Studio's Controller Emulator (Xbox). The game saw it (Play:
+`GamepadEnabled` true, `Gamepad1` connected). But **no emulated button press
+reached the game from this session**: MCP `user_keyboard_input` injects below
+the emulator, so its keys -- letters, arrows, even `ButtonA` / `ButtonR1` --
+arrive as `UserInputType.Keyboard` (`ButtonA` on a selected ADMIN button did
+nothing). The emulator maps only REAL keystrokes typed into the focused Studio
+viewport; sending those (Studio forward + OS-level key presses) was refused by
+the session's permission check. The emulator's key map is a built-in widget
+that is not readable from PluginGuiService.
+
+What WAS checked (throwaway store `StealASeed_ctrltest_20260924`, removed;
+GameConfig back to 280,332 / 309731817), from the live client and the source:
+
+* **LB/RB inventory: not implemented.** `LoadoutUI` turns the CoreGui Backpack
+  off (`GetCoreGuiEnabled(Backpack)` false in Play) and re-binds only the number
+  row (`SeedHotbarKeys`: One-Zero); nothing binds ButtonL1/ButtonR1 -- the live
+  `GetAllBoundActionInfo` lists EmotesMenuToggle, ScrollSelectedElement,
+  SeedTeleportToPlot (DPadUp), SeedHotbarKeys, EnableKeyboardUINavigation.
+  Hotbar slots ARE Selectable, so a controller can pick one by D-pad + A.
+* **Planting / pod placement on a controller: no path.** `PlantPlace` plants
+  only on MouseButton1 / Touch and aims the preview disc at
+  `GetMouseLocation()`; no gamepad cursor (`GamepadCursorEnabled` false), no R2 /
+  A binding. "Put away" is Q only (bound while something is held). There is no
+  separate confirm / cancel step in planting on any device.
+* **D-pad + visible selection:** 19 Selectable controls on screen (rail
+  buttons, hotbar slots 1-5, Bag chip, equipment bat/trap, TELEPORT TO PLOT,
+  WalkMode switch, ADMIN, MoneyBuff, the prompt panel). The engine's white
+  selection frame is drawn on a hotbar slot and on ADMIN (captures taken with
+  the selection set through GuiService, not by input).
+* **A / B:** A is the engine's. B is bound only by the admin console (while
+  open) and Marigold's shop (Escape / Backspace / ButtonB); the Index, Shop,
+  Garden, Settings, Sell and Offline panels have no B of their own.
+* **Automatic focus on open:** only the admin console moves the selection into
+  a panel (`selectIfPad`, gamepad-only); no other panel sets `SelectedObject`.
+
+Still to run with real emulated (or physical) input: every item above as a
+press, the admin console's `selectIfPad` and B back-stepping. Physical Xbox
+afterwards: on-screen keyboard, TV readability.
+
+## Developer admin console: grants, Reset Player Progress, Start Night / Start Day — 2026-09-24 (CLAUDE)  (UNCOMMITTED AND UNPUSHED FOR THE OWNER'S REVIEW; STUDIO-VERIFIED; SITS ON THE UNCOMMITTED TOAST AND NIGHT/TELEPORT WORK BELOW)
+
+**Owner brief (three messages):** a small console for Teambarnze825 and
+nicnicniccoal only -- Add Money, Add Speed, a target dropdown of players in the
+server (default: yourself), an amount box, a clear result line; server-side
+allowlist of verified numeric UserIds, every request re-validated, rate-limited,
+logged; PC, mobile and Xbox; nobody else gets any UI. Corrected: "Reset
+Character" means **Reset Player Progress** -- the target's saved progress back to
+a fresh account (schema defaults), purchases/receipts kept, a confirmation that
+shows the exact username and makes the admin type it, success only once the
+save lands. Then: **Start Night** and **End Night / Start Day** for the whole
+server through WorldCycleService's normal transitions, the cycle resuming on the
+configured durations, "Already night." / "Already day.", the phase shown. Test
+on disposable profiles only; leave everything uncommitted and unpushed.
+
+**Verified UserIds** (users.roblox.com, name -> id POST and id -> name GET, both
+exact): **Teambarnze825 = 11607308004** (created 2026-09-01), **nicnicniccoal =
+4119740186** (created 2022-12-08; also the Studio account --
+`StudioService:GetUserId()` in this session). Nothing else authorises: no name,
+display name, group rank or attribute is read.
+
+### What changed
+
+* `AdminService/init.luau` (new ModuleScript folder, Priority 95). Allowlist and
+  limits live here, not in GameConfig (every client reads GameConfig).
+  `Handle(sender, action, targetId, amount, confirmName)` checks, in order:
+  UserId on the list (else "Not authorized.", a warn at most once a minute per
+  sender) -> one request a second per admin -> one of five actions -> Start
+  Night / Start Day go straight to WorldCycleService -> otherwise a positive
+  whole UserId of a player in THIS server -> profile loaded -> whole number
+  1..1e12 (NaN, infinities, strings, fractions refused) or, for a reset, the
+  typed username (case-insensitive, trimmed). Cash and Speed go through
+  `EconomyService.PayReward` / `TreadmillService.PayReward`; the amount added is
+  read back off the profile, so a capped grant says what landed. Every success is
+  logged (`[Seed/AdminService] <ISO time> admin <id> -> target <id> | the whole
+  server  <action>  amount ...`) and the last 50 kept for `Audit()`. The remote is
+  a RemoteFunction inside the admin's own gui, pcall-wrapped.
+* **Reset Player Progress**: refused unless the profile is SAVING
+  (`IsPersistent`); one per target at a time; in one resumption: off the mill,
+  carry forfeited ("an admin progress reset"), trap lifted, garden cleared
+  (`PlantService.ClearGarden`, new), every Tool in Backpack and hands destroyed,
+  then `PlayerDataService.ResetProgress` (new: the profile table reset IN PLACE
+  from `ProfileSchema.Default()`, keeping `Receipts`, `CreatedAt`, `WalkMode`;
+  republishes stats), hotbar record synced, plot level / mill / weapons /
+  WalkSpeed rebuilt, **saved**, new character. Game passes are Roblox's, never in
+  the profile, so nothing to keep or regrant. A failed save is a failure message
+  ("SAVE DID NOT LAND"), never success. `CombatService.ClearTrap` (new),
+  `CarryService.ForfeitCarry(player, why?)` (reason now optional).
+* **Start Night / Start Day**: `WorldCycleService.StartNight()` /
+  `StartDay()` (new) run the SAME `toNight` / `toDay` the loop runs (phase,
+  barrier, ejection + carry forfeits, pod clear, guardian reset, dawn restock,
+  the published deadline the clock, music and lighting read), under a
+  `transitioning` lock (a second request mid-transition gets BUSY), and then
+  start a fresh loop on the new deadline -- the old loop wakes at its stale
+  deadline, finds a newer generation and leaves. The phase already running is
+  refused (ALREADY_NIGHT / ALREADY_DAY), so Start Day by day restocks nothing. A
+  transition that throws republishes a deadline and still restarts the loop.
+  `ForcePhaseNow` now calls these, so **a forced night now lasts NightSeconds**
+  (it used to last the rest of the day). `toDay` returns built, wanted.
+* `AdminService/AdminConsoleUI.client.luau` (new LocalScript, a child of the
+  server module, so it never replicates): cloned with the remote into a
+  `SeedAdmin` ScreenGui (ResetOnSpawn off, DisplayOrder 60) in an admin's
+  PlayerGui only. An ADMIN button in the topbar beside the clock
+  (`HudLayout` `admin` rect, all three modes; falls under the clock when the
+  topbar is too narrow); UIKit.modal panel: TARGET (players in the server,
+  yourself first), AMOUNT, ADD MONEY / ADD SPEED, RESET PLAYER PROGRESS (its own
+  page: username + UserId, what is erased and kept, TYPE <NAME> TO CONFIRM, the
+  button locked until it matches), then a rule, "WHOLE SERVER: DAY AND NIGHT FOR
+  EVERYONE HERE" in gold, "NOW: DAY • 06:59 LEFT" (redrawn on each phase change
+  and every second while open), START NIGHT / START DAY; the server's reply on a
+  status line under every page. Every control Selectable; B steps back (bound
+  only while open); pages scroll on short screens.
+* Specs: `AdminSpec.luau` (new, 78 checks), `CycleSpec` section 8 (18 new, 59
+  total -- the real WorldCycleService source on a thawed config with a 0.8-s
+  night and 1.5-s day, stand-ins for the world), `HudLayoutSpec` admin checks
+  (816 total). `AGENTS.md` structure lines.
+
+### Verified
+
+* All 45 specs pass, none threw (AdminSpec 77/77, CycleSpec 59, HudLayoutSpec
+  816, DebugReleaseSpec 34, ...). Changed files compile; Studio matched disk byte
+  for byte. `rojo build` clean. Mutation checks on CycleSpec: without the loop
+  restart 5 checks fail ("Clear@0.00 Stock@4.01" -- the forced night lasted the
+  old day); without the lock 4 fail ("2 restock(s)").
+* Play, throwaway store `StealASeed_admintest_20260924`, seeded with a rich
+  disposable profile ($5M, 7M Speed, a grown plant, two bag plants, a bat, tier-2
+  plot and mill, tutorial skipped, receipt `admintest-receipt-1`). Key removed
+  afterwards; StoreName reverted, GameConfig back to 280,332 bytes / 309731817.
+  * Console given to the admin only; ADMIN at x 707-771 in the topbar, 8.5 px
+    right of the clock, the top hit at its centre (desktop and forced touch --
+    captures of both, panel open).
+  * Through the real RemoteFunction: +$1,000,000 and +1,000,000 Speed (player
+    list and HUD cash moved); 0, -5, 1.5, "1000", 1e13, inf, NaN, nil refused;
+    UserId 1 and a string id refused; "Kick" and the old "ResetCharacter"
+    unknown; two presses at once -> second "Too fast."; wrong / missing typed
+    name refused with nothing changed. Cap, through the live faucet: "Added $34
+    ... the cash limit stopped the rest of $1,000", then "already at the cash
+    limit".
+  * Forged: 4 non-listed senders (id 1; id 5551 named nicnicniccoal; -1; the id
+    as a string) x 5 actions = 20/20 "Not authorized.", nothing moved, and
+    `ProvideConsole` gives them nothing.
+  * Reset (typed "  NICNICNICCOAL "): "reset to a fresh account and saved (1
+    plant(s) and 3 item(s) removed)"; new body, empty bag, $0 / 0, WalkSpeed 16,
+    console kept, x2 pass still honoured. Live profile AND the DataStore key:
+    schema defaults (plot 1, mill 1, no plants/held/almanac/weapons, tutorial
+    reset) with the receipt and CreatedAt kept; re-read 2 minutes later, after the
+    autosave window, still fresh.
+  * Day/night, logged by a server probe wrapping the live `NestService.StockAll`:
+    Start Day by day -> "Already day."; Start Night -> night, 15.0 s deadline,
+    barrier shut, 16 -> 0 pods, 5 guardians reset, the player on the Greenhollow
+    road moved into the field, lighting 2.4 -> 1.1 and the night bed within 3.7 s,
+    console "NOW: NIGHT • 00:14 LEFT"; again -> "Already night."; natural dawn
+    15.06 s later (the boot day still had ~200 s), 16/16, 420-s day; forced night
+    -> forced day "restocked (16 of 16 pods). Night in 7:00."; at once -> "Too
+    fast."; again -> "Already day.". The boot loop's old deadline passed with no
+    transition; the next dusk came by itself 420.0 s after the forced dawn and
+    the dawn 15.03 s after that. **Three restocks for three new days.**
+
+### UI verified with real input (same day, owner's follow-up)
+
+Second pass, every step a REAL injected click / tap / key on the actual console
+(`user_mouse_input` / `user_keyboard_input`, which reached GuiButtons with Studio
+behind the owner's other windows), logged by a client monitor (every input,
+`Activated`, panel open/close, status line, and the phase label against the
+attributes). Throwaway store `StealASeed_adminui_20260924`, key removed, StoreName
+reverted (GameConfig 280,332 bytes / 309731817 again).
+
+* **Bug found and fixed:** on the owner's emulated phone (735 x 413, touch) the
+  panel stood 472 px tall -- title and X off the top of the screen, the status
+  line off the bottom -- because `fitContent` was called once at startup against
+  the screen size THEN. `AdminConsoleUI` now re-fits on every screen size change
+  and on every open (`fitPanel`); after the fix the panel is 380 x 355 on that
+  phone, the X is the top hit at its centre, the form scrolls (233 px window, 350
+  content), the status line stays on screen. AdminSpec gained a check (78 now)
+  that fails with the wiring removed (mutation-tested).
+* **Countdown:** blank before the first open; every open -- by click, by touch,
+  by Enter on a selection, after 3-5 s closed, after a night that started while
+  the panel was shut -- drew the correct "NOW: … mm:ss LEFT" in the same frame
+  as the open, then ticked once a second in step with the attributes; a natural
+  dawn redrew the open panel. A probe overwriting the label every frame counted
+  exactly 5 writes in 5 s after five rapid open/close presses (one timer) and 0
+  in 4 s while closed.
+* **Desktop (933 x 714), by click:** open; close by X, by ADMIN again, by the
+  dimmer; CHANGE -> list ("nicnicniccoal (you)") -> row -> "Target: …"; amount
+  typed with real keys ("abc" -> refused; End + Backspace x3; "1,000,000") ->
+  ADD MONEY / ADD SPEED -> "Added …", HUD moved; an immediate second press ->
+  "Too fast."; RESET PLAYER PROGRESS -> confirmation with username, UserId, what
+  goes and stays; the locked button pressed with nothing and with "nicnic" typed
+  sends nothing; CANCEL -> "Reset cancelled. Nothing changed."; typed
+  "NicNicNicCoal" -> unlocked -> "reset to a fresh account and saved (1 plant(s)
+  and 3 item(s) removed)", respawn, panel stays open; START DAY by day ->
+  "Already day."; START NIGHT -> label NIGHT 00:14 at once; again -> "Already
+  night."; START DAY -> "restocked (16 of 16 pods)", label 06:59; again ->
+  "Already day.".
+* **Phone (owner's emulator, 735 x 413, touch), by tap, after the fix:** the same
+  set -- open, countdown, CHANGE / row, amount typed + ADD MONEY ("Added
+  $250,000"), wheel-scroll to the world buttons, START NIGHT / "Already night." /
+  START DAY / "Already day.", the confirmation scrolled, RESET PROGRESS -> saved,
+  close by X and by tapping outside. No mirrored second touch on this device.
+* **Controller path, as far as Studio allows:** injected gamepad keys arrive as
+  Keyboard input (no gamepad is connected), so only ButtonSelect reaches the
+  engine's UI selection -- and it selected the ADMIN button first. Keyboard UI
+  navigation (arrows + Enter, the same selection engine a D-pad drives): every
+  control is reached in order (ADMIN -> X -> Target -> Amount -> ADD MONEY ->
+  RESET -> START NIGHT -> START DAY), the selection never leaves the console for
+  the HUD behind it, Enter activates ADMIN, Target, the list row, RESET, CANCEL,
+  START NIGHT, START DAY and X; closing clears the selection. B is bound to
+  ButtonB at priority 3000 only while the panel is open (`GetBoundActionInfo`).
+
+### NOT verified -- needs the owner
+
+* **Physical Xbox (or a real controller):** a real D-pad / A / B, the
+  `selectIfPad` moves (Target on open, the first row, the typed box -- they only
+  run when the last input was a gamepad), B stepping back list -> form ->
+  closed, the Xbox on-screen keyboard for the amount and the typed username, TV
+  safe area and 10-foot readability.
+* **Other phones and a real device:** tested on one emulated phone (735 x 413);
+  other sizes rest on HudLayoutSpec (the ADMIN button) and the panel now being
+  sized from the live screen (0.86 of its height). A finger drag to scroll, the
+  phone's own keyboard, notches / safe areas.
+* Two players / both admins: another player as the target, a target leaving
+  mid-request, two admins pressing Start Day together -- spec-verified with
+  stand-ins and a slow restock, not in Play. A carried pod forfeited by a reset,
+  a guardian awake at dusk.
+* A published server (not published, as instructed). The reset keeps
+  `SAVE.MaxHeld` (24) as it was.
+
+## Night cut to 15 s, and TELEPORT TO PLOT — 2026-09-23 (CLAUDE)  (UNCOMMITTED, AWAITING THE OWNER'S VISUAL APPROVAL; STUDIO-VERIFIED; BUILT ON THE UNCOMMITTED TOAST WORK BELOW)
+
+**Owner brief:** night from 60 s to 15 s (day 420 s and the 45 s dusk warning
+unchanged), with the whole dusk-to-dawn sequence audited and the countdown never
+showing a wrong phase; and a TELEPORT TO PLOT button under the day/night timer,
+shown only while alive, holding a plot and in the Safe Zone, that the server
+re-checks on every press (the game's own Safe Zone test, `SpawnCFrameFor` of the
+sender's own plot, a short cooldown, a toast when refused). Do not publish.
+
+**Uncommitted on purpose.** The teleport's refusal lines live in
+`ActionRefusal`, which belongs to the toast work below, and the owner asked for
+that to stay uncommitted for visual approval. Commit the two together (toasts
+first) once approved.
+
+### What changed
+
+* **Night.** `GameConfig.WorldCycle.NightSeconds = 15`; the WorldCycle block
+  records the 60 -> 15 history. Comments that assumed a minute of night now say
+  fifteen seconds (`WorldCycleService`, `NestService.ResetParents`,
+  `Music.client`, `PlantGlow`, `WorldClock`, `MusicBedSpec`). `WorldClock`
+  gained `settled()`: at a boundary, if exactly one of WorldPhase /
+  WorldPhaseEndsAt has moved it keeps the last words for up to 0.5 s, so a
+  half-replicated pair can never draw "BIOMES CLOSE IN 00:15" or "NIGHT ...
+  07:00". `CycleSpec` section 7 (41 assertions): fades and the music crossfade
+  are a fraction of the night, EndsAt is published before Phase, the loop sleeps
+  in one `task.wait(left)`, the night-join light line.
+* **Teleport, server.** `PlotService.TeleportHome(player)` takes nothing from the
+  client: guard order gone / dead / stale body (silent), no plot
+  (TELEPORT_NO_PLOT), outside the Safe Zone (`MapService.IsInSafeZone`,
+  TELEPORT_OUTSIDE), a raided pod in the arms (CARRYING_POD -- no skipping the
+  run home), trapped or ragdolled (TELEPORT_STUNNED), 3-s cooldown counted from
+  the last teleport that happened (TELEPORT_COOLDOWN), then the destination must
+  be in the field and over collidable ground within 24 studs (TELEPORT_BLOCKED;
+  the probe uses `RespectCanCollide`, because the real spawn pad is a
+  non-collidable marker a default ray would call "ground"). Then `PivotTo`,
+  momentum cleared; Tools, Backpack, plants and ownership untouched. The
+  GameEvent handler reads the verb and nothing after it. `OwnPlotId` is set on
+  the player on assignment and cleared on release. `GameConfig.Plot`:
+  `TeleportAction`, `TeleportCooldownSeconds = 3`, `TeleportGroundProbe = 24`.
+* **Teleport, visibility.** `BiomeGateService` publishes the player's
+  `InSafeZone` (alive and inside the field) on its existing 0.1-s road tick, on
+  change only -- no new loop. `PlotTeleportUI.client.luau` (new) shows the
+  button when alive + `OwnPlotId` + `InSafeZone`, all event-driven (attributes,
+  Died/HealthChanged, CharacterRemoving); D-pad Up is bound only while it shows;
+  a 0.35-s local debounce; DisplayOrder 26.
+* **Placement.** `HudLayout` `teleport` rect in all three modes (`teleportUnder`):
+  196 x 44, centred under the clock, below the notice band (window 50-80), clear
+  of the rails, top row, equipment, banner and chooser; the notice, banner and
+  chooser make room for it. `CashUI` hangs the x2 message below the teleport
+  line. `HudLayoutSpec` 789 checks (every desktop, compact and phone case).
+* `tools/tests/PlotTeleportSpec.luau` (new, 40 checks): a real move onto the
+  sender's own pad, ten mashed presses refused, a refused press never extends
+  the cooldown, road vs half a stud inside the red line, no plot, dead / removed
+  / rootless body / departed player all silent, carrying / trapped / ragdolled,
+  a pad with no floor refused then accepted, a spawn outside the field refused,
+  and the handler/UI source (no payload, one FireServer). Mutation-checked:
+  without `RespectCanCollide` two checks fail.
+
+### Verified
+
+* All 44 specs pass (0 failures) through the fresh-require runner; every changed
+  file compiles; Studio matched disk byte for byte first. `rojo build -o
+  build/StealASeed.rbxlx` clean (3.8 MB).
+* Play, throwaway store `StealASeed_toastteleport_20260923` (key removed; name
+  reverted; GameConfig back to 280,332 bytes / hash 309731817):
+  * two full cycles logged on the server every frame: dusk is one frame --
+    phase + 14.99 s, barrier shut, 16 -> 0 pods, a player left on the road
+    ejected into the field; dawn 15.06 s and 15.04 s later -- 16/16 restocked,
+    barrier open, 420 s, cycle index up. The clock went "BIOMES CLOSE IN 00:00"
+    -> "NIGHT • PODS RETURN IN 00:14" and "... 00:00" -> "DAY • 06:59" with no
+    frame in between. Lighting and the night bed land in the 3-s fade.
+  * a join at night (simulated in the client: fresh WorldClock and Music started
+    from the server's daytime Lighting) shows night and the night bed at once and
+    fades back to day at dawn.
+  * the button: 196 x 44 at window y 88-132 under the clock (8-42), the first
+    input target at its centre and four edges; through the real GameEvent a
+    press 50 studs away lands on the pad; three mashed presses -> one teleport +
+    "Teleport recharging…"; on the road it hides within 0.5 s and a stale press
+    says "Teleport works only in the Safe Zone."; death hides it and the server's
+    `TeleportHome` on the dead body returns nothing (no toast); respawn brings it
+    back; it works at night. D-pad Up is bound only while it shows.
+
+### NOT verified -- needs the owner
+
+* Real phone sizes and notch safe areas (the emulator was off; MCP cannot switch
+  it). Phone placement is HudLayoutSpec arithmetic; Studio showed forced touch at
+  933 x 656.
+* A real click, tap or controller press (no input injection while the owner used
+  the PC -- hit tests and the remote path stand in). A physical phone.
+* Two players: another player's plot, two presses at once, a real join at night.
+* A guardian that is awake at dusk: both cycles had all five asleep. The reset
+  is explicit and synchronous (`NestService.ResetParents`: rage 0, asleep,
+  home), so the 15-s night does not depend on the 45-s rage fade.
+
+## Blocked-action toasts — 2026-09-23 (CLAUDE)  (UNCOMMITTED, AWAITING THE OWNER'S VISUAL APPROVAL; STUDIO-VERIFIED)
+
+**Owner brief:** one short, consistent toast when an action the player actually
+attempted is refused for a reason the server can name; never for a miss, a
+malformed request, a missing profile or a respawn; server authoritative; guard
+order and outcomes unchanged; no polling; repeats coalesce; leave uncommitted.
+
+### Lines
+
+* **Implemented (6):** "Players are protected in the Safe Zone." (a swing that
+  reached a player the Safe Zone protects -- not a miss, a wall or a cooldown),
+  "Place traps outside the Safe Zone.", "Move closer to your plot.", "Your plot
+  is full.", "Bank your pod before doing that." (a second pod while carrying,
+  and a plant put in the hands while carrying), "Trap recharging…".
+* **Not implemented (2):** "That plant belongs to another player." -- nothing
+  lets a player TRY to take a neighbour's plant (no pickup control exists and
+  none was added). "Your Bag is full" -- no transaction refuses on bag size; the
+  belt's 5/5 or 10/10 is a display. **Risk found, not changed:**
+  `GameConfig.Save.MaxHeld = 24` caps what is SAVED -- a bag of more than 24
+  plants comes back at 24 after a rejoin (the restore logs how many it dropped;
+  the player is not told).
+
+### What changed
+
+* `Shared/ActionRefusal.luau` (new): the lines by code, `fromPlacement`,
+  `forSwing`, the toast rule `step` (same line = extend silently, different line
+  = replace, one denial sound per shown line), `send` (server; drops unknown
+  codes and non-players; 0.25-s per-code quiet), `raise`/`onRaise` (client),
+  `capture` (specs only).
+* `CombatService`: `deny(player, code?)`; cooldown -> TRAP_COOLDOWN, Safe Zone
+  body or landing -> TRAP_SAFE_ZONE (the old `or` split, same order), every other
+  trap refusal silent as before; `targetsFor` also reports whether the Safe Zone
+  spared someone (the line-of-sight ray is now also cast for a target in the
+  field, only to decide the caption). `PlantService`: `refuse` returns its code,
+  `PlaceAt` returns `(placed, code)`, the click handler maps OUT_OF_RANGE and
+  BED_FULL and nothing else. `CarryService`: the ALREADY_CARRYING refusal says
+  CARRYING_POD. `LoadoutUI`: the carry rule's bare denial became
+  `raise("CARRYING_POD")`.
+* `ActionToastUI.client.luau` (new): one CanvasGroup pill, 200-340 px, 8 px
+  above the belt, narrowed around the cash block, equipment and thumbs
+  (`HudLayout.toast`), DisplayOrder 13 -- under prompts, the HUD, the belt and
+  every panel. A `task.delay` per line; no loop.
+* `tools/tests/ActionRefusalSpec.luau` (new, 67 checks): the words; the mapping;
+  the toast rule; the real CombatService (Safe Zone vs cooldown vs one-trap vs
+  protected ground vs dead body; protected target vs miss / behind / wall /
+  cooldown / swinging out of the field); the real PlaceAt (out of reach vs full
+  vs internal codes); the real CarryService giving 12 plants and 26 pods with
+  no refusal; carry and toast source. HudLayoutSpec measures every line at the
+  toast's width on every screen.
+
+### Verified
+
+* Specs as above. Play: the toast over the desktop belt and the forced-touch
+  belt, the `…` drawn by GothamBold (not a tofu box); real server refusals over
+  the wire: "Teleport recharging…", "Teleport works only in the Safe Zone.", and
+  a click on your own soil from 60 studs: "Move closer to your plot." with the
+  pod still in hand, then planted from beside it with no toast.
+
+### NOT verified -- needs the owner
+
+* A swing at a second real person, and the trap and carry lines in a live
+  session (the specs drive the real guards; Play did not).
+* Real phone sizes and a physical phone.
+
+## Mobile HUD redesign: the phone's two sidebars — 2026-09-23 (CLAUDE)  (COMMITTED 96443fb + dffa262, NOT PUSHED -- the push was refused by this session's permission check; run `git push origin main`; STUDIO-VERIFIED ON A FORCED-TOUCH VIEWPORT; REAL PHONE SIZES AND TAP FLOWS PENDING THE OWNER)
 
 **Owner brief:** implement the approved mockup
 `Steal an Artifact/output/imagegen/podnappers-mobile-sidebar-mockup-v2.png` on
