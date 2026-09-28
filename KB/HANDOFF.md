@@ -1,23 +1,28 @@
 # Steal a Seed — Session Handoff
 
-## What is live: builds v987 to v991, and eight sounds that still don't load — 2026-09-28 (CLAUDE)  (READ FROM LOGS AND A STUDIO EDIT LOAD TEST; NO CODE CHANGED; NOTHING PUBLISHED; COMMITTED ON BRANCH `wip`, NOT ON `main`)
+## What is live: builds v987 to v992, and seven guardian sounds that still don't load — 2026-09-28 (CLAUDE)  (READ FROM LOGS AND STUDIO EDIT LOAD TESTS; NO CODE CHANGED; NOTHING PUBLISHED BY AN AGENT; COMMITTED ON BRANCH `wip`, NOT ON `main`)
 
 **In short.**
-- The latest publish is **v991** (2026-09-28 00:21 local). Everything built up to the rebuilt wheel
-  panel is in it. The traffic logger and the ragdoll fix are **not**: both were written after it.
-- **The eight sounds on the owner's own account still don't load in Podnappers, and their ids have
-  been in every build since v988.** So on live servers, by the same permission rule:
-  - the **success chime is silent**;
+- The latest publish is **v992** (2026-09-28 16:02 local). It carries everything built up to the
+  ragdoll fix (`4080d46`), and the traffic logger **disabled**. It does **not** carry `9b91b5d`, the
+  Studio-only guard on `SpecThrow`: that reached Studio 4 minutes after the publish.
+- **The owner granted Podnappers the eight account-owned sounds (reported 2026-09-28). Seven still
+  don't load.**
+  - Re-tested twice in Studio Edit, at about 08:24 and 08:26 UTC.
+  - The success chime now loads, at 1.28 s.
+  - The seven guardian sounds still get "The experience doesn't have access permission".
+- Their ids have been live since v988, so on live servers, by the same permission rule:
+  - success notices play their chime again (inferred from the Edit test);
   - **Starbloom's guardian wakes without its roar**;
   - **Emberroot's and Starbloom's guardians sleep without their breathing**;
   - the four walk-home cues don't play (they are new, so nothing was lost there).
-  - Every other sound loads, the other guardian sounds included.
-- None of this has been seen on a live server. No Podnappers session has been played on this PC
-  since v986.
+  - Every other sound loads: 49 of the 56 ids.
+- None of this has been seen on a live server from this PC: no Podnappers session has been played
+  here since v986. The owner tested guardian throws on a phone after v992 (see the ragdoll entry).
 
 ### The publishes
 
-All five were made from the Studio menu ("Published new changes in Podnappers to Roblox"). No agent
+All six were made from the Studio menu ("Published new changes in Podnappers to Roblox"). No agent
 published anything.
 
 | Build | Published (UTC) | Local (UTC+8) | Studio checked against disk | Game files changed in between |
@@ -27,9 +32,13 @@ published anything.
 | v989 | 2026-09-27 11:20:30 | 09-27 19:20 | 07:55:22, 125 scripts, 0 differ | none |
 | v990 | 2026-09-27 15:29:19 | 09-27 23:29 | 15:14:51, 125 scripts, 0 differ | none |
 | v991 | 2026-09-27 16:21:18 | 09-28 00:21 | 16:11:00, 125 scripts, 0 differ | none |
+| v992 | 2026-09-28 08:02:27 | 09-28 16:02 | 07:09:46, the three ragdoll files, byte for byte | none: the last game-code edit was 06:46:19, the next 08:06:14 |
 
 - Earlier: v984 09-26 11:56:05, v985 14:32:48, v986 15:26:09 (UTC).
-- Studio was closed 16 s after v991 and reopened 2026-09-28 02:35 UTC. No publish since.
+- Studio was closed 16 s after v991 and reopened 2026-09-28 02:35 UTC. v992 is the only publish
+  since, and there was none after it up to 08:30 UTC.
+- v992's check covered the three ragdoll files only (by hash), not the whole tree. The rest of its
+  new code, the traffic logger, ran in Studio's Play and in the spec suite before it (see below).
 
 ### Where this comes from
 
@@ -47,24 +56,24 @@ published anything.
 
 **Confirmed absent** means the work's code was first written after that publish.
 
-**Inferred** is everything about the live side: that players are on v991, and that a feature behaves
+**Inferred** is everything about the live side: that players are on v992, and that a feature behaves
 live as it did in Studio. v989 is the weakest of the five: its check was 3 h 25 min before the
 publish. Nothing changed on disk and nothing ran in Studio in that time.
 
 ### What each build held
 
-| Work | v987 | v988 | v989 | v990 | v991 |
-| --- | --- | --- | --- | --- | --- |
-| Bonus Chest | first version | same | final | final | final |
-| Metrics | yes | yes | yes, with the obby and wheel events | yes | yes |
-| Obby (Floating Garden) | first version | with status text | final, with the OBBY button and earned spins | final | final |
-| Guardian sounds (7 ids) | **no** | **yes** | yes | yes | yes |
-| Success chime (new id) | **no** | **yes** | yes | yes | yes |
-| Status text | **no** | **yes** | yes | yes | yes |
-| Reward wheel | no | no | **yes**, first panel | yes | yes |
-| Rebuilt wheel panel | no | no | no | **partly**: as it stood at the card-grid checkpoint | **yes**, final |
-| Traffic logger | no | no | no | no | **no** |
-| Ragdoll fix (branch `wip`) | no | no | no | no | **no** |
+| Work | v987 | v988 | v989 | v990 | v991 | v992 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Bonus Chest | first version | same | final | final | final | final |
+| Metrics | yes | yes | yes, with the obby and wheel events | yes | yes | yes |
+| Obby (Floating Garden) | first version | with status text | final, with the OBBY button and earned spins | final | final | final |
+| Guardian sounds (7 ids) | **no** | **yes** | yes | yes | yes | yes |
+| Success chime (new id) | **no** | **yes** | yes | yes | yes | yes |
+| Status text | **no** | **yes** | yes | yes | yes | yes |
+| Reward wheel | no | no | **yes**, first panel | yes | yes | yes |
+| Rebuilt wheel panel | no | no | no | **partly**: as it stood at the card-grid checkpoint | **yes**, final | final |
+| Traffic logger | no | no | no | no | no | **yes, disabled** |
+| Ragdoll fix (branch `wip`) | no | no | no | no | no | **yes**: `4080d46`, without the `9b91b5d` guard |
 
 Every cell is **confirmed** in the sense above. The evidence for each row:
 
@@ -78,8 +87,8 @@ Every cell is **confirmed** in the sense above. The evidence for each row:
 | Status text | 09-27 05:18:24 | No log line of its own. Last edits 05:42:53 and 05:42:56, Play-tested 05:43, Studio checked against disk 05:43:31 |
 | Reward wheel | 09-27 06:07 | WheelService in every Play session's service list from 07:23. WheelSpec passed at 07:16 (96) |
 | Rebuilt wheel panel | 09-27 14:16 (rewrite 14:49) | WheelSpec passed at 14:56 (105). 17 WheelUI edits before v990, the last at 15:10:31; 21 more after it, the last at 16:03:36 |
-| Traffic logger | 09-28 03:23 | Written 11 h after v991 |
-| Ragdoll fix | 09-28 06:02 | Written 14 h after v991; on branch `wip` only |
+| Traffic logger | 09-28 03:23 | Written 11 h after v991. In v992, **disabled**: every Studio Play boot from 03:45 to 06:50 printed `external traffic feed off (TrafficLogConfig.Enabled is false)`, and TrafficLogSpec (reads Studio's source) passed at 06:50. It makes no request: no secret exists and HTTP requests are off |
+| Ragdoll fix | 09-28 06:02 | Written 14 h after v991. In v992: Studio's RagdollGate, NestService and ThrowFX matched `4080d46` byte for byte at 07:09:46, and no game file changed between the fix's last edit (06:46:19) and the publish. Not the `9b91b5d` guard: it reached Studio at 08:06:14–27, 4 minutes after v992 |
 
 What else each build carried:
 - **v987:** the rest of the launch pass (Dustbowl head start, guardian warnings, notices, supplied
@@ -92,22 +101,37 @@ What else each build carried:
 
 - **Method:** temporary Sounds in Studio Edit inside Podnappers, `ContentProvider:PreloadAsync`, then
   `IsLoaded` and `TimeLength`. Removed afterwards. No Play session, nothing changed.
-- **Result: all eight fail.** `IsLoaded` false, length 0, fetch status Failure, and Studio prints
-  "The experience doesn't have access permission to use asset id …" for each.
+- **First test (07:05 UTC, before the grant): all eight failed.** `IsLoaded` false, length 0, fetch
+  status Failure, and Studio printed "The experience doesn't have access permission to use asset id
+  …" for each.
 - **Controls:** two group-owned sounds loaded at 0.48 s (the blocked-action notice, and the old
-  success chime `100270581576092`).
-- **Whole table:** of the 56 distinct sound ids in `GameConfig.Sfx.Cues`, 48 load and these 8 don't.
+  success chime `100270581576092`), in every run.
 
-| Cue | Asset | What it means live |
-| --- | --- | --- |
-| `NoticeSuccess` | 123803156310043 | Success notices show but make no sound |
-| `ParentRageStarbloom` | 121932932319379 | Starbloom's guardian wakes in silence: the rage is chosen ahead of its old wake |
-| `ParentSleepStarbloom` | 131278197709092 | Starbloom's guardian sleeps in silence |
-| `ParentSleepEmberroot` | 136756415808327 | Emberroot's guardian sleeps in silence |
-| `ParentReturnStarbloom` | 100144774034643 | No walk-home cue (new; nothing lost) |
-| `ParentReturnEmberroot` | 116190097842912 | same |
-| `ParentReturnTanglemire` | 93033126566750 | same |
-| `ParentReturnDustbowl` | 92575459486923 | same |
+### After the owner's grant: re-test, 2026-09-28 (Studio Edit only)
+
+- **The grant:** the owner reports granting Podnappers permission for all eight account-owned sounds,
+  on 2026-09-28, between the first test (07:05 UTC) and the re-test.
+- **The re-test:** the same test, run at about 08:24 UTC and again at 08:26, a minute apart, with
+  identical results. **PASS** means it loads and its length is within 0.05 s of the file.
+
+| Cue | Asset | Expected | Result | What it means live |
+| --- | --- | --- | --- | --- |
+| `NoticeSuccess` | 123803156310043 | 1.28 s | **PASS**: loads, 1.28 s | Success notices play their chime (inferred) |
+| `ParentRageStarbloom` | 121932932319379 | 6.00 s | **FAIL**: does not load | Starbloom's guardian wakes in silence: the rage is chosen ahead of its old wake |
+| `ParentSleepStarbloom` | 131278197709092 | 4.80 s | **FAIL**: does not load | Starbloom's guardian sleeps in silence |
+| `ParentSleepEmberroot` | 136756415808327 | 4.80 s | **FAIL**: does not load | Emberroot's guardian sleeps in silence |
+| `ParentReturnStarbloom` | 100144774034643 | 2.76 s | **FAIL**: does not load | No walk-home cue (new; nothing lost) |
+| `ParentReturnEmberroot` | 116190097842912 | 2.00 s | **FAIL**: does not load | same |
+| `ParentReturnTanglemire` | 93033126566750 | 2.28 s | **FAIL**: does not load | same |
+| `ParentReturnDustbowl` | 92575459486923 | 2.28 s | **FAIL**: does not load | same |
+
+- The seven failures still say "The experience doesn't have access permission to use asset id …"
+  and "User is not authorized to access Asset": the same message as before the grant.
+- **Whole table:** of the 56 distinct sound ids in `GameConfig.Sfx.Cues`, 49 now load and these seven
+  don't.
+- **THE SOUND BLOCKER IS NOT RESOLVED.** Only one of the eight took. Most likely the grant reached
+  only the chime. Check that Podnappers' Permissions page lists all eight ids and that the change
+  was saved, then re-run this test.
 
 - **Why a failing id silences the old sound:** SoundKit picks the first cue that HAS an id, not the
   first that loads.
@@ -117,21 +141,24 @@ What else each build carried:
   permanent once given, so no agent does it. Nothing needs publishing afterwards: the ids are
   already live.
 - **Re-check after the grant:** the same Edit load test should give lengths 1.28, 6.00, 4.80, 4.80,
-  2.76, 2.00, 2.28 and 2.28 s in the table's order.
+  2.76, 2.00, 2.28 and 2.28 s in the table's order. Done 2026-09-28: 1 of 8 (above).
 
 ### Not established
 
 - What a live server actually runs and plays. One guardian throw or one success notice on a live
   server would settle it; the Player log on this PC records both.
+- Which build the owner's phone test ran on. v992 is the latest publish.
+- Why the grant reached only the chime.
 - What v984 to v986 held. Those rows in the baseline table below are still "probably".
 
-## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN UNTIL A LIVE THROW SHOWS IT GONE; COMMITTED 4080d46 AND PUSHED ON BRANCH `wip` ONLY, NOT ON `main`; NOT PUBLISHED; ALL 55 SPECS PASS; PLAY-TESTED ON THE THROWAWAY STORE ONLY)
+## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN: NOT CLOSED, BECAUSE NOTHING WAS PUBLISHED AFTER 9b91b5d; THE FIX (4080d46) IS LIVE IN v992 AND THE OWNER'S PHONE TEST LOOKED RIGHT BY EYE; COMMITTED ON BRANCH `wip` ONLY, NOT ON `main`; ALL 55 SPECS PASS)
 
 **Status.** The fix is written and tested in Studio. At the owner's request it is committed on the
 branch `wip` (made from `main` at `ad103a9`) as **`4080d46`**, and only `wip` was pushed. A later
-commit on the same branch makes `NestService.SpecThrow` Studio-only (see 3). `main` has neither,
-and nothing was published. **The bug stays OPEN** until a guardian throw on a published server
-shows it gone. Guardian throws only; bat and trap knockdowns are untouched.
+commit on the same branch, `9b91b5d`, makes `NestService.SpecThrow` Studio-only (see 3). `main` has
+neither. **The owner published v992, which carries `4080d46` but not `9b91b5d`** (see 8).
+**The bug stays OPEN:** the agreed condition for closing it is a publish after `9b91b5d`, and there
+is none. Guardian throws only; bat and trap knockdowns are untouched.
 
 **The Fable rebuild of the pods and plants has NOT started.** The owner asked for it, then sent
 this task in its place. Nothing of it exists; it waits for the owner's word.
@@ -308,6 +335,28 @@ Camera jitter is studs per frame while the torso and pelvis lay still, before th
    - a `rest trace`, only if the head still moved over a still body.
 3. The issue closes when that log shows it gone. Until then it is open.
 
+### 8. Published in v992, and the owner's phone test (2026-09-28)
+
+- **v992**, published from Studio's menu at 2026-09-28 08:02:27 UTC (16:02 local), carries the fix
+  as committed in `4080d46`:
+  - Studio's RagdollGate, NestService and ThrowFX matched `4080d46` byte for byte at 07:09:46;
+  - no game file changed between the fix's last edit (06:46:19) and the publish.
+- **It does not carry `9b91b5d`.** The `SpecThrow` guard reached disk, and through Rojo Studio, at
+  08:06:14 and 08:06:27, 4 minutes after v992.
+  - The guard changes nothing a player can reach: only the spec calls `SpecThrow`. So v992's throws
+    run the same fix as the `wip` head.
+  - v992 also carries the traffic logger, disabled.
+- **No publish after `9b91b5d`** in the Studio logs on this PC, up to 08:30 UTC.
+- **The owner's test:** guardian throws on a real phone, after v992. **"Throw and landing looked
+  right."** Owner-reported, on a phone, by eye. The build wasn't recorded; v992 is the latest.
+- **Why it is not closed:** the owner set the condition, a publish after `9b91b5d` was synced into
+  Studio, and it isn't met. **The owner decides** whether v992 counts, or whether to publish again.
+- **Still untested, whatever is decided:**
+  - a Player log of a live throw on a PC, with its `landing:`, `rest check` and `rest rig` lines
+    (a phone keeps no log this PC can read);
+  - a second player's bat or trap hit on a live server;
+  - Starbloom standing up mid-skid at the unchanged 5 s ceiling, which is left for the owner.
+
 ### Correction to the baseline entry below: publishes after v986
 
 The baseline entry said no publish after v986 was on record. The handoff had none, but **the
@@ -362,19 +411,20 @@ Every entry below that says UNCOMMITTED or UNPUSHED is now in those commits. The
 | Controller, shop price, TV scaling, Index/Shop art, phone HUD (09-24) | yes | Studio, specs. Controller only via the emulator (owner-reported) | probably, in v984–v986 | physical Xbox, a TV, a real phone |
 | Michael's reports and the verification pass (09-26) | yes | Studio Play, specs | probably, in v984–v986 | — |
 | Usability/audio pass, plot badges, phone camera (09-26) | yes | Studio | probably, in v984–v986 | badge approval |
-| **Ragdoll head shake (09-26/27)** | diagnostics (ThrowFX `rest check` / `rest rig` lines); **a fix since 2026-09-28, on branch `wip` only** | Studio; one live capture on v986 | diagnostics: v986 (`rest check`), and v987 on (`rest rig`). **The fix: NOT published** | **OPEN** until a live throw shows it gone. See the ragdoll entry above |
+| **Ragdoll head shake (09-26/27)** | diagnostics (ThrowFX `rest check` / `rest rig` lines); **a fix since 2026-09-28, on branch `wip` only** | Studio; one live capture on v986; the owner on a phone after v992, by eye: throw and landing looked right | diagnostics: v986 (`rest check`), and v987 on (`rest rig`). **The fix: v992** (`4080d46`; not the `9b91b5d` guard) | **OPEN:** nothing was published after `9b91b5d`, the agreed condition for closing it. The owner decides. See the ragdoll entry above |
 | Launch pass: Bonus Chest, Dustbowl head start, warnings, notices, audio, Metrics (09-27) | yes | specs, test-store Play | **v987 on** (confirmed). Final Bonus Chest and the obby/wheel Metrics events: v989 on | its "NOT DONE" list. Metrics' live delivery is unverified |
-| Guardian sounds (09-27) | wired | specs | **v988 on** (confirmed). Not in v987 | **The seven still don't load (tested 2026-09-28), and they are live:** two guardians sleep and one wakes in silence until the owner's grant |
+| Guardian sounds (09-27) | wired | specs | **v988 on** (confirmed). Not in v987 | **The seven still don't load, even after the owner's grant (re-tested 2026-09-28), and they are live:** two guardians sleep and one wakes in silence. Blocker NOT resolved |
 | Floating Garden obby (09-27) | yes | ObbySpec, test-store Play | **v987 on** (confirmed), first version. OBBY button and earned spins: v989 on | the owner's checks in its entry |
-| Status text and the success chime (09-27) | yes | specs, Play in phone emulation | **v988 on** (confirmed). Not in v987 | the owner's approval of the captures. **The new chime doesn't load, so success notices are silent live** until the grant |
+| Status text and the success chime (09-27) | yes | specs, Play in phone emulation | **v988 on** (confirmed). Not in v987 | the owner's approval of the captures. **The new chime loads since the owner's grant** (Studio Edit re-test 2026-09-28, 1.28 s); silent live before it |
 | Reward wheel and the rebuilt panel (09-27/28) | yes | WheelSpec, Play on desktop and iPhone 14 emulation | wheel: **v989 on** (confirmed). Rebuilt panel: partly in v990, **final in v991** (confirmed) | the owner's review. Paid spins are disabled. No real device tested |
-| Traffic logger (09-28) | yes, **disabled** | TrafficLogSpec 98/98, test-store Play | **not published** (confirmed: written after v991); never connected | Michael's URL, the owner's setup and the live check (KB/TRAFFIC_LOG.md) |
+| Traffic logger (09-28) | yes, **disabled** | TrafficLogSpec 98/98, test-store Play | **v992, disabled** (confirmed: `Enabled = false`, no secret, HTTP requests off); never connected | Michael's URL, the owner's setup and the live check (KB/TRAFFIC_LOG.md) |
 
 **What "published" means here** (revised 2026-09-28; the evidence is in "What is live" at the top):
 - **v984 to v986** (2026-09-26): the 09-23 to 09-26 rows say "probably". That is still inferred.
 - **v987 to v991** (2026-09-27): "confirmed" means Studio's scripts were checked identical to disk
   minutes before that publish, with the work's code on disk. It is not a live observation.
-- **v991 is the latest publish.** Nothing has been published since, by anyone.
+- **v992 (2026-09-28 08:02 UTC) is the latest publish.** It carries the ragdoll fix (`4080d46`)
+  and the disabled traffic logger. There was no publish after it up to 08:30 UTC.
 - No Podnappers session has been played on this PC since v986, so nothing here has been seen live.
 
 **What GitHub does NOT hold** (don't treat it as a complete art backup):
@@ -956,6 +1006,12 @@ ends:
 - **Evidence:** `output/hud-status/`.
 
 ## Guardian sounds wired — 2026-09-27 (CLAUDE)  (UNCOMMITTED, UNPUSHED, NOT PUBLISHED; CONFIGURED AND SPECCED; THE SEVEN NEW SOUNDS DO NOT LOAD IN PODNAPPERS UNTIL THE OWNER GRANTS PERMISSION — DO NOT PUBLISH BEFORE THAT)
+
+> **2026-09-28:**
+> - Published since v988, before any grant.
+> - After the owner's grant, a Studio Edit re-test shows the success chime loading, but **these
+>   seven still do not load**. The blocker is not resolved.
+> - See "What is live" at the top of this file.
 
 The owner uploaded the seven guardian renders and gave their IDs. Nothing was uploaded, and no
 permission was granted, from this session.
