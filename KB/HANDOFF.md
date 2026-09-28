@@ -1,10 +1,10 @@
 # Steal a Seed — Session Handoff
 
-## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN UNTIL A LIVE THROW SHOWS IT GONE; COMMITTED AND PUSHED ON BRANCH `wip` ONLY, NOT ON `main`; NOT PUBLISHED; ALL 55 SPECS PASS; PLAY-TESTED ON THE THROWAWAY STORE ONLY)
+## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN UNTIL A LIVE THROW SHOWS IT GONE; COMMITTED 4080d46 AND PUSHED ON BRANCH `wip` ONLY, NOT ON `main`; NOT PUBLISHED; ALL 55 SPECS PASS; PLAY-TESTED ON THE THROWAWAY STORE ONLY)
 
 **Status.** The fix is written and tested in Studio. At the owner's request it is committed on the
-branch `wip` (made from `main` at `ad103a9`) and only `wip` was pushed. `main` doesn't have it, and
-nothing was published. **The bug stays OPEN** until a guardian throw on a published server shows it
+branch `wip` (made from `main` at `ad103a9`) as **`4080d46`**, and only `wip` was pushed. `main`
+doesn't have it, and nothing was published. **The bug stays OPEN** until a guardian throw on a published server shows it
 gone. Guardian throws only; bat and trap knockdowns are untouched.
 
 **The Fable rebuild of the pods and plants has NOT started.** The owner asked for it, then sent
