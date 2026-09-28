@@ -447,8 +447,18 @@ end
 -- to come from a live log: which part kept moving, whether it moved against
 -- the torso or with it, which machine simulated it, what the head was inside,
 -- and what the humanoid was doing -- over the last second before the stand-up.
+--
+-- 2026-09-28, WITH THE FIX: a knockdown now ends a moment after the BODY stops,
+-- so the last second before the stand-up is mostly the skid. The report covers
+-- the run of samples at the end in which the torso and pelvis lay still, when
+-- there is one, and says so; it also says how fast the CAMERA moved over them,
+-- which is the symptom itself. The trace prints on a give-up, as before, and
+-- whenever the head was still moving over a body that lay still -- the one case
+-- the next live log has to show if it is still there.
 --==============================================================================
 local REST_SAMPLES = 16
+-- The fewest still samples that count as the body having lain still.
+local REST_STILL_RUN = 3
 
 local restProbe = {}
 
@@ -460,6 +470,7 @@ function restProbe.sample(character: Model, samples: { any })
 	if not (head and head:IsA("BasePart") and torso) then
 		return
 	end
+	local camera = workspace.CurrentCamera
 	table.insert(samples, {
 		t = os.clock(),
 		head = head.AssemblyLinearVelocity.Magnitude,
@@ -469,17 +480,26 @@ function restProbe.sample(character: Model, samples: { any })
 		headAge = head.ReceiveAge,
 		torsoAge = torso.ReceiveAge,
 		state = if humanoid then humanoid:GetState().Name else "?",
+		still = RagdollGate.restSpeed(character) < SETTLE_SPEED,
+		cam = if camera then camera.CFrame.Position else Vector3.zero,
 	})
 	if #samples > REST_SAMPLES then
 		table.remove(samples, 1)
 	end
 end
 
-function restProbe.report(character: Model, samples: { any }, forced: boolean)
-	local n = #samples
-	if n < 2 then
+function restProbe.report(character: Model, all: { any }, forced: boolean)
+	if #all < 2 then
 		return
 	end
+	-- The still run at the end, or every sample when the body never lay still.
+	local from = #all + 1
+	while from > 1 and all[from - 1].still do
+		from -= 1
+	end
+	local lying = #all - from + 1 >= REST_STILL_RUN
+	local samples: { any } = if lying then table.move(all, from, #all, 1, {}) else all
+	local n = #samples
 	local head = character:FindFirstChild("Head")
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local sums: { [string]: number } = { head = 0, torso = 0, pelvis = 0 }
@@ -487,7 +507,8 @@ function restProbe.report(character: Model, samples: { any }, forced: boolean)
 	local lo: Vector3, hi: Vector3 = samples[1].neck, samples[1].neck
 	local headAge, torsoAge = 0, 0
 	local states: { string } = {}
-	for _, s in ipairs(samples) do
+	local camTravel = 0
+	for index, s in ipairs(samples) do
 		for key in pairs(sums) do
 			sums[key] += s[key]
 			peaks[key] = math.max(peaks[key], s[key])
@@ -498,7 +519,11 @@ function restProbe.report(character: Model, samples: { any }, forced: boolean)
 		if not table.find(states, s.state) then
 			table.insert(states, s.state)
 		end
+		if index > 1 then
+			camTravel += (s.cam - samples[index - 1].cam).Magnitude
+		end
 	end
+	local span = samples[n].t - samples[1].t
 	-- What the head is lying in. Decor is CanQuery = false and never shows up
 	-- here, which is itself worth knowing; the floor and the body do.
 	local inside: { string } = {}
@@ -516,16 +541,19 @@ function restProbe.report(character: Model, samples: { any }, forced: boolean)
 	end
 	local camera = workspace.CurrentCamera
 	say(string.format(
-		"rest check, last %.1fs: speed head %.1f avg / %.1f max, torso %.1f / %.1f, pelvis %.1f / %.1f"
+		"rest check, last %.1fs (%s): speed head %.1f avg / %.1f max, torso %.1f / %.1f, pelvis %.1f / %.1f"
 			.. " | head against torso moved %.2f studs | ReceiveAge head %.2f torso %.2f"
-			.. " | humanoid %s, PlatformStand %s | head CanCollide %s, overlapping %s | camera on %s, %.1f away",
-		samples[n].t - samples[1].t, sums.head / n, peaks.head, sums.torso / n, peaks.torso,
+			.. " | humanoid %s, PlatformStand %s | head CanCollide %s, overlapping %s"
+			.. " | camera on %s, %.1f away, moved %.1f studs/sec",
+		span, if lying then "torso and pelvis still" else "the body never lay still",
+		sums.head / n, peaks.head, sums.torso / n, peaks.torso,
 		sums.pelvis / n, peaks.pelvis, (hi - lo).Magnitude, headAge, torsoAge,
 		table.concat(states, "+"), tostring(humanoid and humanoid.PlatformStand),
 		tostring(head and head:IsA("BasePart") and head.CanCollide),
 		if #inside > 0 then table.concat(inside, ", ") else "nothing",
 		tostring(camera and camera.CameraSubject and camera.CameraSubject.Name),
-		if camera and head and head:IsA("BasePart") then (camera.CFrame.Position - head.Position).Magnitude else -1))
+		if camera and head and head:IsA("BasePart") then (camera.CFrame.Position - head.Position).Magnitude else -1,
+		if span > 0 then camTravel / span else 0))
 	-- What can MOVE a head over a body at rest without touching it: a joint
 	-- still driving it (an AnimationConstraint back on, the animator's tracks)
 	-- or a neck socket that no longer holds it. v986 showed the head circling
@@ -555,9 +583,10 @@ function restProbe.report(character: Model, samples: { any }, forced: boolean)
 				tostring(neck.TwistLimitsEnabled), neck.Restitution, tostring(neck.Enabled))
 			else "MISSING",
 		if #tracks > 0 then table.concat(tracks, ", ") else "none"))
-	if forced then
-		-- The give-up: the per-sample series, so the period and which way the
-		-- head went can be read straight off the Player log.
+	if forced or (lying and sums.head / n >= SETTLE_SPEED) then
+		-- The give-up, or a head still moving over a body that lay still: the
+		-- per-sample series, so the period and which way the head went can be
+		-- read straight off the Player log.
 		local trace: { string } = {}
 		for _, s in ipairs(samples) do
 			table.insert(trace, string.format("%.2f %.1f (%.2f %.2f %.2f)",
@@ -761,7 +790,7 @@ export type ThrowStyle = {
 	-- Studs the body is lifted while it is stepped clear. 3 for a monster you
 	-- are standing inside; a fraction of that for a swing at arm's length.
 	up: number?,
-	-- Whether to push the camera out and put it on the head. A guardian needs
+	-- Whether to push the camera out and put it on the torso. A guardian needs
 	-- both; a bat hit ends before a camera move would finish reading as one.
 	camera: boolean?,
 	-- Scale on the random spin. 1 is the tested guardian tumble.
@@ -1066,28 +1095,45 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		end
 
 		--======================================================================
-		-- AND IT FOLLOWS THE HEAD, NOT THE HUMANOID
+		-- AND IT FOLLOWS THE TORSO: NOT THE HUMANOID, AND NOT THE HEAD
 		--
-		-- CameraSubject defaults to the Humanoid, and a Humanoid tracks its
-		-- HumanoidRootPart. That is fine on a character whose parts are welded
-		-- into one assembly; on a limp one the root flies off on its own and the
-		-- camera goes with it, watching an invisible box while the body lands
-		-- somewhere else entirely. Measured: 148 studs of separation.
+		-- NOT THE HUMANOID. CameraSubject defaults to it, and a Humanoid is
+		-- followed at its root plus an offset that turns WITH the root, so on a
+		-- tumbling body the focus swings round the box. (The root itself no
+		-- longer leaves: since 2026-09-26 ragdollOn welds it to the pelvis, and
+		-- it measured 0.80 to 0.85 studs from it for the whole of every throw.
+		-- The 148 studs that first moved the camera off the Humanoid are gone.)
 		--
-		-- The Head is a part the owner can see. Restored to the Humanoid the
-		-- moment the root is back underneath the body.
+		-- NOT THE HEAD, which is where this pointed until 2026-09-28. A limp
+		-- head is the loosest part of the body: on a published server it circled
+		-- the neck at 4.3 Hz while the body lay still, and the camera on it moved
+		-- 0.08 to 0.13 studs a frame for three seconds (see RagdollGate, THE BODY
+		-- LYING DOWN). Measured on those same frames, the torso moved 0.012 to
+		-- 0.020 and the welded root 0.008 to 0.016: a tenth of the head, and no
+		-- real difference between the two.
+		--
+		-- THE TORSO RATHER THAN THE ROOT because the published server's own log
+		-- has the pelvis -- the root rides it -- moving more than the torso at
+		-- rest: 1.2 to 1.5 studs a second against 0.8.
+		--
+		-- A BODY WITH NO TORSO is followed at its root, and one with no root at
+		-- its head: RagdollGate.cameraPart falls back in that order, so the
+		-- camera always has some part of the body to follow.
+		--
+		-- Restored to the Humanoid the moment the root is back underneath the
+		-- body.
 		--======================================================================
 		local camera = workspace.CurrentCamera
 		-- Into `pristine` with the other three, and for the same reason: a
-		-- second hit mid-tumble would capture the HEAD this file just pointed
+		-- second hit mid-tumble would capture the PART this file just pointed
 		-- the camera at, and restore the player to it permanently.
 		if camera and kept.subject == nil then
 			kept.subject = camera.CameraSubject
 		end
 		local wasSubject: Instance? = kept.subject
-		local headPart = character:FindFirstChild("Head")
-		if wantCamera and camera and headPart and headPart:IsA("BasePart") then
-			camera.CameraSubject = headPart
+		local followPart = RagdollGate.cameraPart(character)
+		if wantCamera and camera and followPart then
+			camera.CameraSubject = followPart
 		end
 		say(string.format("camera: mode %s -> %s | zoom %.1f..%.1f -> %.1f..%.1f | subject %s -> %s",
 			tostring(wasMode), tostring(player.CameraMode), wasMin, wasMax,
@@ -1400,6 +1446,11 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		local slid = false
 		-- See WHAT MOVED WHILE THE BODY WAS MEANT TO BE LYING STILL.
 		local rest: { any } = {}
+		-- A guardian's victim only: when its torso came down, and when the neck's
+		-- friction was seen back. See THE BODY IS DOWN below.
+		local downAt: number? = nil
+		local neckBackAt: number? = nil
+		local neck = if isBat then nil else RagdollGate.neckSocket(character)
 
 		while true do
 			if superseded() then
@@ -1409,12 +1460,28 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 			if not r then
 				break
 			end
+			--==================================================================
+			-- THE HEAD DOES NOT DECIDE WHETHER A GUARDIAN'S VICTIM HAS STOPPED
+			--
+			-- It did until 2026-09-28, and on a published server it never
+			-- stopped: a frictionless, non-colliding head circles the neck at
+			-- 7 studs a second over a body lying still, above SETTLE_SPEED in 11
+			-- samples of 12, so every knockdown ran to the give-up. The torso and
+			-- the pelvis are what is lying there (RagdollGate.restSpeed).
+			--
+			-- A BAT'S AND A TRAP'S ARE JUDGED AS THEY WERE, head and torso: their
+			-- joints keep their friction and their landing rule is signed off.
+			--==================================================================
 			local bodySpeed = 0
-			if head and head:IsA("BasePart") then
-				bodySpeed = math.max(bodySpeed, head.AssemblyLinearVelocity.Magnitude)
-			end
-			if torso and torso.Parent then
-				bodySpeed = math.max(bodySpeed, torso.AssemblyLinearVelocity.Magnitude)
+			if isBat then
+				if head and head:IsA("BasePart") then
+					bodySpeed = math.max(bodySpeed, head.AssemblyLinearVelocity.Magnitude)
+				end
+				if torso and torso.Parent then
+					bodySpeed = math.max(bodySpeed, torso.AssemblyLinearVelocity.Magnitude)
+				end
+			else
+				bodySpeed = RagdollGate.restSpeed(character)
 			end
 
 			if isBat then
@@ -1454,10 +1521,42 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 					end
 				end
 			else
-				-- The guardian test, unchanged -- and a body that came loose late
-				-- is articulated the step it does.
+				-- The guardian test -- and a body that came loose late is
+				-- articulated the step it does.
 				lateLimp()
 				pcall(restProbe.sample, character, rest)
+				--==============================================================
+				-- THE BODY IS DOWN: THE SERVER IS TOLD, ONCE
+				--
+				-- Down is the bat's own touchdown rule asked of the torso and the
+				-- pelvis: floor under the visible torso, and slow enough that it
+				-- is lying there rather than passing over it. The flight, the
+				-- landing and the skid all happen before this, on joints that are
+				-- still loose.
+				--
+				-- The report quotes this throw's token and RagdollGate.Landed, and
+				-- NestService gives the neck -- only the neck -- its friction back.
+				-- THIS FILE NEVER WRITES A JOINT'S FRICTION: the server took it
+				-- away and the server returns it, so the two machines cannot hold
+				-- different values. It only watches for the value to arrive, for
+				-- the log.
+				--==============================================================
+				if downAt == nil then
+					local touching = landingState(character)
+					if touching and bodySpeed < SETTLE_SPEED * 3 then
+						downAt = os.clock()
+						say(string.format(
+							"down %.2fs after the hit, at %.1f studs/sec; asked the server for the neck's friction",
+							downAt - hitAt, bodySpeed))
+						if remote and token then
+							pcall(function()
+								(remote :: RemoteEvent):FireServer(token, RagdollGate.Landed)
+							end)
+						end
+					end
+				elseif neckBackAt == nil and neck and neck.MaxFrictionTorque > 0 then
+					neckBackAt = os.clock()
+				end
 				if os.clock() >= standNoEarlierThan then
 					if bodySpeed < SETTLE_SPEED then
 						settledFor += SETTLE_STEP
@@ -1527,6 +1626,15 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 				if launchedFrom and settledTorso
 					then string.format(" | body travelled %.0f studs", (settledTorso.Position - launchedFrom).Magnitude)
 					else ""))
+			-- Whether the landing was seen, and whether the server's answer to it
+			-- reached this machine before the stand-up: see THE BODY IS DOWN.
+			say(string.format("landing: %s | neck friction %s",
+				if downAt then string.format("torso down %.2fs after the hit", downAt - hitAt)
+					else "never seen -- the torso was never slow on the ground",
+				if downAt and neckBackAt and neck
+					then string.format("back %.2fs later (%.1f)", neckBackAt - downAt, neck.MaxFrictionTorque)
+					elseif downAt then "NOT back by the stand-up"
+					else "left loose"))
 			pcall(restProbe.report, character, rest, emergency)
 			if not articulated and RunService:IsStudio() then
 				warn("[Seed/ThrowFX] a guardian throw ended without the rig ever coming loose; " ..

@@ -55,6 +55,8 @@ local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+-- Which socket is the neck, and the word a victim's landing report carries.
+local RagdollGate = require(Shared:WaitForChild("RagdollGate"))
 local ParentModel = require(script.Parent:WaitForChild("ParentModel"))
 -- No cycle: PlayerDataService requires GameConfig, SaveService, ProfileSchema
 -- and BiomeData, and none of those has ever heard of a nest.
@@ -956,6 +958,51 @@ local function slackenJoints(loosened: Loosened, character: Model)
 	end
 end
 
+--==============================================================================
+-- THE NECK TAKES ITS FRICTION BACK ONCE THE BODY IS DOWN
+--
+-- Loose joints are for the flight and the landing. Lying on the ground, a neck
+-- with no friction at all is what the owner recorded on a published server
+-- 2026-09-26: the head bobbing over a body that lay still, the camera going
+-- with it, and every knockdown running to ThrowFX's five-second give-up.
+-- Player log, v986, and the same in Studio 2026-09-28 once the head was made
+-- non-colliding the way the live one reports itself -- with nothing driving it:
+--
+--     the head    circles the neck's limit: +-0.42 studs in the torso's space
+--                 at 4.3 Hz, 7 studs a second, the same amplitude every turn
+--     the torso   0.8 studs a second
+--
+-- Nothing takes that motion's energy out: the socket has no friction, the head
+-- touches nothing, and sliding round a limit costs nothing. The landing starts
+-- it and the stand-up is what ended it.
+--
+-- So once the torso is down the neck -- that socket only -- gets back the
+-- friction slackenJoints took from it: the captured value, out of the same
+-- record. Every other joint stays loose until ragdollOff, which still writes
+-- all of them, the neck included, and is still what empties the record.
+--
+-- WHO WRITES IT: THE SERVER, LIKE EVERY OTHER PROPERTY OF A LIMP BODY. The
+-- victim's machine simulates the body and is the only one that knows it has
+-- landed, so it says so (acceptThrowAnswer, the landing report) and the server
+-- writes the property, which replicates to the victim the way the zero did. The
+-- victim never writes a joint's friction itself: two machines holding different
+-- values for one property is the disagreement this avoids.
+--==============================================================================
+local function stiffenNeck(loosened: Loosened): boolean
+	local neck = RagdollGate.neckSocket(loosened.character)
+	if not (neck and neck.Parent) then
+		return false
+	end
+	for _, entry in ipairs(loosened.frictions) do
+		if entry.socket == neck then
+			neck.MaxFrictionTorque = entry.was
+			return true
+		end
+	end
+	-- Not a guardian's record: a bat's and a trap's never let go of a joint.
+	return false
+end
+
 local function ragdollOff(loosened: Loosened)
 	loosened.pinning = false
 	-- Before the joints: the Root joint takes the root back, not the weld.
@@ -1017,6 +1064,7 @@ NestService.RagdollOff = ragdollOff
 NestService.IsRagdolled = isRagdolled
 -- Exposed for GuardianRagdollSpec; the guardian throw below is the only caller.
 NestService.SlackenJoints = slackenJoints
+NestService.StiffenNeck = stiffenNeck
 
 -- The backstop. The victim's client reports when it has stopped; this is what
 -- happens when it never does -- a body wedged in geometry, a client that left,
@@ -1156,10 +1204,80 @@ local function throwAnswerMatches(pending: boolean?, expected: string?, token: a
 end
 NestService.ThrowAnswerMatches = throwAnswerMatches
 
-local function acceptThrowAnswer(player: Player, token: any)
+--==============================================================================
+-- "I HAVE LANDED" IS A SECOND WORD, AND IT NEVER ENDS A THROW
+--
+-- The victim's machine is the only one that knows its body is down (see THE
+-- NECK TAKES ITS FRICTION BACK), so it reports that on the same remote, quoting
+-- the same token, with RagdollGate.Landed after it. The report that the body
+-- has STOPPED carries no second word and never has.
+--
+-- Anything with a second word is a report ABOUT the throw: it may give the neck
+-- its friction back, once, and it returns before the rule that ends a throw is
+-- even asked. So the worst a victim can do by lying is stiffen its own neck
+-- early. `throwLimp` is this throw's own record, held from the launch until its
+-- landing is reported or the throw ends, so a report can only ever reach the
+-- body THIS throw loosened.
+--==============================================================================
+local throwLimp: { [Player]: Loosened } = {}
+
+local function throwLandingMatches(pending: boolean?, expected: string?, token: any, what: any): boolean
+	return what == RagdollGate.Landed and throwAnswerMatches(pending, expected, token)
+end
+NestService.ThrowLandingMatches = throwLandingMatches
+
+--==============================================================================
+-- WHO MAY REPORT, WHEN, AND HOW OFTEN
+--
+-- Every argument but the sender came off the wire (AGENTS.md, rule 4). The
+-- sender is engine-stamped, and every lookup below is keyed on it, so:
+--
+--   from whom     only the player who was thrown. Anybody else quoting that
+--                 token is looked up under their OWN name and finds no throw.
+--   when          only while that player's own guardian throw is waiting for
+--                 its answer, and only quoting the token that throw minted.
+--   how often     once. The first landing report takes the throw's record out
+--                 of `throwLimp`; a second finds nothing to write to.
+--   otherwise     ignored, without a word and without touching anything.
+--
+-- It returns what it did -- RagdollGate.Landed, "stopped" or nil -- which the
+-- remote discards and GuardianRagdollSpec reads.
+--==============================================================================
+local function acceptThrowAnswer(player: Player, token: any, what: any): string?
+	if what ~= nil then
+		if throwLandingMatches(throwDone[player], throwToken[player], token, what) then
+			local limp = throwLimp[player]
+			throwLimp[player] = nil
+			if limp and stiffenNeck(limp) then
+				return RagdollGate.Landed
+			end
+		end
+		return nil
+	end
 	if throwAnswerMatches(throwDone[player], throwToken[player], token) then
 		throwDone[player] = true
+		return "stopped"
 	end
+	return nil
+end
+
+--==============================================================================
+-- THE HANDLER, REACHABLE BY A SPEC
+--
+-- Only the engine can raise OnServerEvent, so a spec cannot send a report: the
+-- problem CombatService has with Tool.Activated, and the same answer.
+-- `AcceptThrowAnswer` IS the function the remote is connected to. `SpecThrow`
+-- stands in for the lines of throwPlayer that open a throw's books -- the
+-- token, the waiting flag, the limp record -- and closes them when it is given
+-- no token. Server-only: no client can require this module and no remote
+-- reaches either name.
+--==============================================================================
+NestService.AcceptThrowAnswer = acceptThrowAnswer
+
+function NestService.SpecThrow(player: any, token: string?, limp: Loosened?)
+	throwToken[player] = token
+	throwDone[player] = if token then false else nil
+	throwLimp[player] = if token then limp else nil
 end
 
 --==============================================================================
@@ -1511,6 +1629,8 @@ local function throwPlayer(nest: Nest, player: Player)
 	-- together; see LOOSE MEANS LOOSE.
 	slackenJoints(limp, character)
 	loosened = limp
+	-- For the victim's landing report, which gives the neck its friction back.
+	throwLimp[player] = limp
 	-- nest.parent, not nest.model: the Nest type has no 'model' field, so this
 	-- indexed nil and threw -- AFTER the ragdoll and BEFORE the FireClient that
 	-- does the actual throwing. The victim went limp and was never flung.
@@ -1609,6 +1729,9 @@ local function throwPlayer(nest: Nest, player: Player)
 
 	end)
 
+	-- Before restore(): ragdollOff is about to empty this record, and a landing
+	-- report that arrives late must find nothing to write to.
+	throwLimp[player] = nil
 	restore()
 	-- An error inside the pcall skips its own last line, so the answer flag is
 	-- cleared here as well; the claim goes with it.

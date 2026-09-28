@@ -5,6 +5,9 @@
 -- it. ThrowFX asks before every launch -- a guardian's and a bat's alike -- and
 -- only launches a body this has seen come apart.
 --
+-- And, at the other end of a guardian's throw, what its body is at rest by and
+-- what the camera follows: see THE BODY LYING DOWN at the foot of this file.
+--
 --==============================================================================
 -- WHY THIS IS ITS OWN MODULE
 --
@@ -160,6 +163,87 @@ function RagdollGate.await(character: Model, timeout: number, step: () -> (),
 		s = RagdollGate.state(character, needFree)
 	end
 	return s, now() - started, false
+end
+
+--==============================================================================
+-- AND THE OTHER END OF A GUARDIAN'S THROW: THE BODY LYING DOWN
+--
+-- THE HEAD DOES NOT DECIDE. Found 2026-09-26 on a published server and
+-- reproduced in Studio 2026-09-28 with nothing driving it: a guardian throw
+-- leaves every joint frictionless (NestService, LOOSE MEANS LOOSE) and a live
+-- head does not collide, so after the landing the head circles the neck's limit
+-- -- 4.3 Hz, +-0.42 studs in the torso's space, 7 studs a second -- over a body
+-- that lies still, for as long as the knockdown lasts. Nothing takes that
+-- motion's energy out. ThrowFX judged rest on the head and followed the head
+-- with the camera, so every live knockdown ran to its five-second give-up with
+-- the camera shaking.
+--
+-- So a guardian's knockdown is judged on the torso and the pelvis, its camera
+-- follows the torso (the root, then the head, only for a body that has no
+-- torso), and the neck gets its own friction back once the body is down. These four are the shared words for that: ThrowFX (the victim's
+-- machine) and NestService (the server) both ask here, and GuardianRagdollSpec
+-- drives them on a real rig.
+--
+-- A BAT'S AND A TRAP'S KNOCKDOWN USE NONE OF THIS. Their joints keep their
+-- friction, they never take the camera, and their landing rule is their own.
+--==============================================================================
+
+-- The second word of a victim's report that its body has landed. The first is
+-- the throw's token, as in the report that it has stopped -- which has no
+-- second word at all.
+RagdollGate.Landed = "landed"
+
+local function partNamed(character: Model, name: string): BasePart?
+	local found = character:FindFirstChild(name)
+	return if found and found:IsA("BasePart") then found else nil
+end
+
+-- The speed a guardian's knockdown is at rest by: the faster of the torso and
+-- the pelvis. Never the head. A rig with neither is judged on its root.
+function RagdollGate.restSpeed(character: Model): number
+	local torso = partNamed(character, "UpperTorso") or partNamed(character, "Torso")
+	local pelvis = partNamed(character, "LowerTorso")
+	if not (torso or pelvis) then
+		local root = partNamed(character, "HumanoidRootPart")
+		return if root then root.AssemblyLinearVelocity.Magnitude else 0
+	end
+	local speed = 0
+	if torso then
+		speed = math.max(speed, torso.AssemblyLinearVelocity.Magnitude)
+	end
+	if pelvis then
+		speed = math.max(speed, pelvis.AssemblyLinearVelocity.Magnitude)
+	end
+	return speed
+end
+
+-- What the camera follows while a guardian's victim is limp: the torso, the
+-- part of the body that lies still (UpperTorso, or a classic rig's Torso).
+--
+-- A body with no torso is followed at its root, which rides the pelvis while
+-- limp, and one with no root either at its head -- the loosest part, and so the
+-- last resort, but a camera left on a Humanoid whose body has come apart is
+-- worse. Nil only for a character with none of them.
+function RagdollGate.cameraPart(character: Model): BasePart?
+	return partNamed(character, "UpperTorso") or partNamed(character, "Torso")
+		or partNamed(character, "HumanoidRootPart") or partNamed(character, "Head")
+end
+
+-- The ball socket that holds the head on: the one with an end on the Head.
+function RagdollGate.neckSocket(character: Model): BallSocketConstraint?
+	local head = partNamed(character, "Head")
+	if not head then
+		return nil
+	end
+	for _, d in ipairs(character:GetDescendants()) do
+		if d:IsA("BallSocketConstraint") then
+			local a0, a1 = d.Attachment0, d.Attachment1
+			if (a0 and a0.Parent == head) or (a1 and a1.Parent == head) then
+				return d
+			end
+		end
+	end
+	return nil
 end
 
 return RagdollGate

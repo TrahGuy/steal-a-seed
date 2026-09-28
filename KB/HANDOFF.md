@@ -1,5 +1,205 @@
 # Steal a Seed — Session Handoff
 
+## Ragdoll head bob and camera shake after a guardian throw: reproduced in Studio, fix on branch `wip` — 2026-09-28 (CLAUDE)  (ISSUE STILL OPEN UNTIL A LIVE THROW SHOWS IT GONE; COMMITTED AND PUSHED ON BRANCH `wip` ONLY, NOT ON `main`; NOT PUBLISHED; ALL 55 SPECS PASS; PLAY-TESTED ON THE THROWAWAY STORE ONLY)
+
+**Status.** The fix is written and tested in Studio. At the owner's request it is committed on the
+branch `wip` (made from `main` at `ad103a9`) and only `wip` was pushed. `main` doesn't have it, and
+nothing was published. **The bug stays OPEN** until a guardian throw on a published server shows it
+gone. Guardian throws only; bat and trap knockdowns are untouched.
+
+**The Fable rebuild of the pods and plants has NOT started.** The owner asked for it, then sent
+this task in its place. Nothing of it exists; it waits for the owner's word.
+
+### 1. Evidence from the Player logs (step 1)
+
+- The newest Player log with ThrowFX rest lines is still the v986 capture,
+  `0.740.0.7400927_20260926T144301Z_Player_086BA_last.log`: 4 throws, 4 `rest check`, 4 `rest trace`,
+  **0 `rest rig`** (that line was added after the capture).
+- **No newer guardian throw exists on this PC.** The four later Player logs (2026-09-27) are not
+  Podnappers sessions: they carry none of its lines.
+- So no live `rest rig` line has ever been captured. Whether a joint constraint or an animation
+  track drives the live neck is **still unread from a live server**.
+- In Studio, the `rest rig` line read the same on every throw, reproduced ones included: joint
+  constraints still on **none**, neck limits 45°, twist on, restitution 0, only the default animation
+  tracks. Nothing there drives the neck.
+
+### 2. The cause, reproduced in Studio with nothing driving the head
+
+The v986 log reports `head CanCollide false` on every live throw. Studio's head collides. With only
+that one condition emulated (a test script holding the Head non-colliding while limp), plain
+Greenhollow throws on the unchanged code gave:
+
+| Throw | Result | Rest check |
+| --- | --- | --- |
+| 1 | settled naturally, 2.32 s | — |
+| 2 | **forced give-up, 5.43 s** | head 7.1 avg / 9.9 max, torso 0.8 / 1.9, pelvis 1.4 / 2.6, head against torso 0.89 studs |
+| 3 | **forced give-up, 5.44 s** | head 7.3 / 10.3, torso 0.9 / 2.1, pelvis 1.2 / 2.6, 0.86 studs |
+| live v986, Greenhollow | forced give-up, 5.41 s | head 7.1 / 10.4, torso 0.8 / 1.7, pelvis 1.5 / 3.2, 0.87 studs |
+
+- The rest traces have the head circling the neck's limit: X ±0.42 in the torso's space at about
+  4.3 Hz (sampled every 0.08 s). Live: ±0.42 at 4.25 Hz.
+- A single sideways push on the head (16.2 studs/s, once) does the same: the head was still
+  circling 3.55 s later, when the give-up ended the knockdown.
+- **So nothing needs to drive it.** A guardian throw sets every joint's friction to 0, and a head
+  that doesn't collide touches nothing, so nothing takes the motion's energy out. The landing starts
+  it and only the stand-up ended it.
+- The earlier Studio test of the non-colliding head (2026-09-27, one throw, settled at 2.95 s) was
+  a throw like number 1 here.
+- **Not established:** why the live head doesn't collide while Studio's does, and whether anything
+  ELSE also moves the live head. The fix doesn't depend on either.
+
+### 3. What changed (on branch `wip`)
+
+| File | Lines | Change |
+| --- | --- | --- |
+| `Shared/RagdollGate.luau` | 8–10, 168–248 | New shared rules: `Landed` (the report's second word), `restSpeed` (the faster of torso and pelvis, never the head), `cameraPart` (the torso; the root, then the head, only for a body with no torso), `neckSocket` (the socket with an end on the Head). `state` and `await` are untouched |
+| `NestService.luau` | 58–59, 961–1005, 1067, 1207–1280, 1632–1633, 1732–1734 | `stiffenNeck` writes the neck socket's captured friction back (the value `slackenJoints` saved, out of the same record). The throw-answer handler takes a second word: `"landed"` gives the neck its friction back, once, and never ends a throw. `AcceptThrowAnswer` and `SpecThrow` expose the handler to the spec. `ragdollOff` still restores every joint |
+| `ThrowFX.client.luau` | 450–589 (diagnostics), 793, 1098–1136 (camera), 1449–1484 and 1524–1559 (settle and landing), 1629–1637 (log) | The camera follows `RagdollGate.cameraPart` (UpperTorso). A guardian's settle is judged on `RagdollGate.restSpeed`. When the torso is down it sends the landing report. It never writes a joint's friction |
+| `tools/tests/GuardianRagdollSpec.luau` | 32, 57–79, 494–737 | 57 new checks: 118 in all |
+
+**The landing report is validated on the server** (`acceptThrowAnswer`, spec-driven through
+`NestService.AcceptThrowAnswer`):
+- **From whom:** only the player who was thrown. Every lookup is keyed on the sender the engine
+  stamps, so anybody else quoting that token finds no throw under their own name.
+- **When:** only while that player's own guardian throw is waiting for its answer, and only quoting
+  the token that throw minted.
+- **How often:** once per throw. The first report takes the throw's record; a second writes nothing.
+- **Otherwise:** ignored. A stale token, a number, a table, another second word, another player's
+  throw and a report after the throw has ended all do nothing, and none of them ends a throw.
+
+**(a) The neck.**
+- Flight, landing and skid stay loose. "Down" is the bat's own touchdown rule asked of the torso and
+  pelvis: floor within 3 studs under the torso, and both under `SETTLE_SPEED * 3` (10.5 studs/s).
+- **Who writes it: the server only.** The victim's client detects the landing and reports it on the
+  ThrowVictim remote (the throw's token, then `"landed"`). NestService writes the property and it
+  replicates to the victim, as the zero did. The client never writes it, so the two machines can't
+  hold different values.
+- **No friction was added during flight.** It wasn't needed: see the kick row below.
+
+**(b) The camera.** UpperTorso, not the Head.
+- The root weld holds on the client: root to pelvis was constant through every throw (0.69 to 0.85
+  studs, fixed at the hit), so the old reason for leaving the Humanoid (the root flying 148 studs off)
+  no longer applies.
+- The Humanoid is still not used while limp: it is followed at the root plus an offset that turns
+  with the root.
+- Torso against welded root, measured on the same frames of the unchanged code:
+
+| Run | Camera on Head | UpperTorso | Welded root |
+| --- | --- | --- | --- |
+| Reproduced, throw 2 | 0.126 avg / 0.222 max | 0.013 / 0.056 | 0.013 / 0.035 |
+| Reproduced, throw 3 | 0.132 / 0.235 | 0.012 / 0.038 | 0.015 / 0.041 |
+| One-off kick | 0.080 / 0.138 | 0.013 / 0.040 | 0.016 / 0.046 |
+| Written-velocity driver | 0.112 / 0.304 | 0.020 / 0.060 | 0.008 / 0.034 |
+
+  Studs per frame at 60 frames a second, while the body lay still. Torso and root are a tenth of the
+  head and about equal. The torso was chosen because the live log has the pelvis (the root rides it)
+  moving more than the torso at rest: 1.2 to 1.5 studs/s against 0.8.
+- **Fallback:** a body with no UpperTorso (or classic Torso) is followed at its root, and one with
+  no root at its head. Only a character with none of the three leaves the camera where it was.
+- The restore to the Humanoid and the `kept.subject` protection for a second hit are unchanged.
+
+**(c) The settle.** Torso and pelvis, not the head. `SETTLE_SPEED` 3.5, `SETTLE_HOLD` 0.35 and
+`GIVE_UP_AFTER` 5 are unchanged, and so are `THROW_TIMEOUT` 6 and `LIMP_JOINT_FRICTION` 0.
+
+**Diagnostics kept, and made to fit the shorter knockdown.**
+- `rest check` now covers the run of samples in which the torso and pelvis lay still (it says
+  which), and adds how fast the camera moved.
+- `rest trace` prints on a give-up, as before, and also when the head was still moving over a body
+  that lay still.
+- `rest rig` is unchanged. It now shows the neck's friction back (40.9) at the stand-up.
+- Two new lines per guardian throw: `down … asked the server for the neck's friction` and
+  `landing: … | neck friction back 0.08s later (40.9)`, or `NOT back by the stand-up`.
+
+**Not changed:** knockdown ceilings, throw speeds, the root weld, scenery collisions, camera zoom
+and mode, CombatService, WeaponData, GameConfig, bat and trap ragdolls.
+
+### 4. Before and after (Studio Play, throwaway store, 58–60 frames a second)
+
+Camera jitter is studs per frame while the torso and pelvis lay still, before the stand-up.
+
+| Run | Before (ad103a9) | After |
+| --- | --- | --- |
+| Live condition (head non-colliding), 3 throws each | 2.32 s natural, **5.43 s and 5.44 s forced**. Camera 0.026, 0.126, 0.132 avg | **2.40, 2.37, 2.13 s, all natural.** Camera 0.006, 0.006, 0.003 avg (max 0.055) |
+| Written-velocity driver, 4.3 Hz ±0.6 (the 09-26 driver) | **5.38 s forced.** Camera 0.112 avg / 0.304 max | **2.35 s natural.** Camera 0.005 avg / 0.015 max. The head itself still moved 0.108: it is written every frame |
+| One-off kick, 16.2 studs/s | Head circled 3.55 s, **5.45 s forced.** Camera 0.080 / 0.138 | Head still **0.09 s** after the kick, 2.45 s natural. Camera 0.003 / 0.026 |
+| Greenhollow, normal | 2.13 s natural, 114 studs | 2.19 s natural, 119 studs. Camera 0.004 / 0.038 |
+| Starbloom, leaves the corridor and is set down at the gate | 3.47 s natural, 273 studs | 3.38 s natural, 274 studs (two more: 3.30 and 3.68 s) |
+| Starbloom down the road (the live case) | not run in Studio. Live v986: 5.33 s forced, 1,030 studs | **5.40 s forced, 1,040 studs.** Landing never reported, neck left loose |
+| Walk and jump after a throw | 23.9 studs in 1.5 s, jump 7.53 studs | 23.9 studs, jump 7.31 and 7.53 |
+
+- **Neck friction back:** the client saw it 0.08 to 0.10 s after its landing report on every throw
+  that landed. The 0.08 s is the poll step; the server's write landed 0.04 to 0.08 s after the
+  report.
+- **With 0.25 s of lag each way** (about 0.55 s for the report and its answer): the friction arrived
+  just after the stand-up was decided. The knockdown still settled naturally at 2.22 s and the
+  camera moved 0.015 avg / 0.046 max, while the head circled for the 0.4 s the body lay there.
+  So on a poor connection (b) and (c) carry the fix and (a) arrives late.
+- **Restored after every throw,** server and client: all 15 joint constraints on, every joint's
+  exact friction, every part's collision, ownership automatic, no root weld, camera subject back on
+  the Humanoid, zoom 0.5 to 128, WalkSpeed 16, JumpPower 50.
+- **Bat-style knockdowns** (rootwood and comet): settled naturally at 1.44 s and 2.65 s, camera
+  left on the Humanoid, no joint friction touched, no landing report sent. The server's part was
+  played by the test host, because a real swing needs a second player.
+
+### 5. Tested, and not
+
+- **Specs:** GuardianRagdollSpec 118 passed, 0 failed (61 before). All 55 specs pass through
+  ZZSpecRun in Studio Edit, run again on the committed code.
+- **Play:** throwaway store only. `store_guard` said `SAFE SeedTest_20260928` before all three
+  Play starts and the save line read `STUDIO TEST STORE`. `test_store_off` removed the 1 key and
+  the marker each time. `StealASeed_v1` was never opened.
+- **The committed code was Play-checked last:** two more live-condition throws settled naturally
+  at 2.36 s and 2.37 s, neck friction back 0.08 s after the report, camera 0.004 and 0.005 studs a
+  frame, everything restored, walk 23.9 studs and jump 7.31.
+- **Cleanup:** replication lag back to 0, no ZZ objects, Studio's scripts match disk byte for byte.
+  SoundService holds 19 stopped `SeedCue_ChaseBed` sounds from spec runs (one more than this
+  morning); harmless, not deleted.
+- **NOT verified:**
+  - A published server. Nothing here was published.
+  - A real phone, or any second player: a real bat or trap hit, and what other players see.
+  - What drives the live head, if anything besides the missing friction does.
+  - The real round trip of the landing report on a live connection.
+
+### 6. Left alone, for the owner
+
+- **Starbloom standing up mid-skid** is unchanged. Its throw is still moving at 30 to 100 studs/s
+  when the 5 s ceiling ends it. Letting it lie needs a longer ceiling on both sides; that is the
+  owner's decision.
+- **If the head should stop sooner on a slow connection,** the victim's client could also write the
+  neck's friction itself at the landing. Not done: it means two machines writing one property.
+
+### 7. Owner next
+
+1. Review the branch `wip` (4 files and this handoff). Say when to merge it into `main`.
+2. After the next publish, take one Greenhollow throw and one Starbloom throw on the live server,
+   then tell me. I'll read these lines from the Player log on this PC:
+   - `settled after` without "forced" on the Greenhollow throw;
+   - `landing: torso down … | neck friction back …s later (40.9)`;
+   - `rest check … camera on UpperTorso … moved … studs/sec`;
+   - `rest rig`, read live for the first time;
+   - a `rest trace`, only if the head still moved over a still body.
+3. The issue closes when that log shows it gone. Until then it is open.
+
+### Correction to the baseline entry below: publishes after v986
+
+The baseline entry said no publish after v986 was on record. The handoff had none, but **the
+Studio logs on this PC do**:
+
+| Version | Published (UTC) | Local |
+| --- | --- | --- |
+| v987 | 2026-09-27 04:33 | 09-27 12:33 |
+| v988 | 2026-09-27 05:49 | 09-27 13:49 |
+| v989 | 2026-09-27 11:20 | 09-27 19:20 |
+| v990 | 2026-09-27 15:29 | 09-27 23:29 |
+| v991 | 2026-09-27 16:21 | 09-28 00:21 |
+
+- Each is a "Published new changes in Podnappers to Roblox" from the Studio menu. No agent
+  published anything; the MCP tools can't.
+- So the live game is v991 or later, and the 09-27 work (launch pass, guardian sounds, obby, status
+  text, wheel) was most likely in Studio's tree for some of those publishes. Which version carried
+  what has not been established.
+- No Podnappers Player session exists on this PC after v986's, so nothing has been seen live since.
+
 ## Baseline before the pod and plant visual rebuild — 2026-09-28 (CLAUDE)  (COMMITTED AND PUSHED TO origin/main; NOTHING PUBLISHED TO ROBLOX BY THIS TASK; TRAFFIC LOGGER STILL DISABLED; RAGDOLL HEAD SHAKE STILL OPEN)
 
 **Why.** The owner asked for everything finished to be reviewed, committed and pushed as the
@@ -50,6 +250,9 @@ Every entry below that says UNCOMMITTED or UNPUSHED is now in those commits. The
 - Those builds carried the Studio tree of the time, so the 09-23 to 09-26 work was probably live in
   them. That is inferred, not checked.
 - No later publish is recorded. This session published nothing and could not read the live version.
+- **CORRECTED the same day: the Studio logs record v987 to v991, published 2026-09-27.** See the
+  correction at the foot of the entry above. The "no publish recorded" cells in the table are wrong
+  for the 09-27 rows: read them as "probably, in v987–v991".
 
 **What GitHub does NOT hold** (don't treat it as a complete art backup):
 - **Pods and plants are code:** `CreatureModel`, `RedesignForms`, `SeedData`, `PlantSculpt` and the
@@ -1292,6 +1495,9 @@ Everything is uncommitted and unpushed. Nothing was published. The owner's real 
 touched.
 
 ## Ragdoll camera shake, reopened from the owner's live recording — 2026-09-26 late night (CLAUDE)  (ISSUE STILL OPEN; UNCOMMITTED, UNPUSHED, NOT PUBLISHED)
+
+> **2026-09-28:** reproduced in Studio with nothing driving the head, and a fix is on the branch
+> `wip`. See the entry at the top of this file. Still open until a live throw shows it gone.
 
 ### Update 2026-09-27: live capture on v986 (the owner published the diagnostic and played)
 

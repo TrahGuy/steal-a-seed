@@ -29,7 +29,7 @@
 -- to its player (Play-verified; Edit has no Player, so this spec pins the code
 -- that does it and the bookkeeping around it).
 --
--- FIVE LAYERS, all against REAL rigs built here -- Edit mode maintains
+-- SIX LAYERS, all against REAL rigs built here -- Edit mode maintains
 -- assemblies for AnimationConstraints, so disabling one really splits the rig:
 --
 --   RULE      RagdollGate.state on that rig, including the case the old rule
@@ -54,14 +54,29 @@
 --             refusal to throw a body that is already limp, and no server
 --             takeover of the body anywhere.
 --
+-- AND THE ONE THE OWNER RECORDED 2026-09-26, reproduced in Studio 2026-09-28: a
+-- frictionless, non-colliding head circling the neck over a body that lay
+-- still, the camera on it, and every live knockdown running to the give-up.
+--
+--   LYING DOWN  the sixth layer. The neck gets its captured friction back on the
+--               victim's landing report and nothing else does; that report is
+--               taken only from the player who was thrown, only during their
+--               own waiting throw, once, and never ends it; a guardian's rest
+--               is judged on the torso and the pelvis whatever the head is
+--               doing; the camera follows the torso, then the root, then the
+--               head; the three numbers that time a knockdown are the ones
+--               they were; and none of it reaches a bat's or a trap's
+--               knockdown.
+--
 -- NOT HERE, measured in Play instead (see KB/HANDOFF.md): who owns the body in
 -- flight, the limbs actually swinging, the torso tumbling, the landing and the
--- stand-up.
+-- stand-up, and the head coming to rest once the neck grips.
 --==============================================================================
 local Workspace = game:GetService("Workspace")
 
 local Shared = game.ReplicatedStorage.SeedGame.Shared
 local RagdollGate = require(Shared.RagdollGate)
+local WeaponData = require(Shared.WeaponData)
 local NestService = require(game:GetService("ServerScriptService").SeedGameServer.NestService)
 
 local pass = 0
@@ -476,6 +491,250 @@ local ok, err = pcall(function()
 	local _, anyAnswer = string.gsub(code, "if throwDone%[player%] == false then", "")
 	check(handlers == 1 and anyAnswer == 0,
 		"one answer handler, and no path left that accepts any answer at all", handlers)
+
+	--==========================================================================
+	-- 6. LYING DOWN: THE NECK, THE REST RULE, THE CAMERA -- AND NOT A BAT'S
+	--==========================================================================
+	-- The neck, on the shipped NestService.
+	setAll(rig, true)
+	setFriction(rig, nil)
+	task.wait()
+	local was: { [BallSocketConstraint]: number } = {}
+	for _, b in ipairs(sockets(rig)) do
+		was[b] = b.MaxFrictionTorque
+	end
+	local neck = RagdollGate.neckSocket(rig) :: BallSocketConstraint
+	check(neck ~= nil and neck.Name == "NeckBallSocket",
+		"the neck is the socket with an end on the Head", if neck then neck.Name else "none")
+
+	local bat = NestService.RagdollOn(rig)
+	check(not NestService.StiffenNeck(bat) and neck.MaxFrictionTorque == was[neck] and #bat.frictions == 0,
+		"a bat's record gives the neck nothing, because nothing was taken from it")
+	NestService.RagdollOff(bat)
+
+	local limp = NestService.RagdollOn(rig)
+	NestService.SlackenJoints(limp, rig)
+	check(neck.MaxFrictionTorque == 0, "a guardian's throw lets the neck go with every other joint")
+	check(NestService.StiffenNeck(limp), "and its landing gives the neck its friction back")
+	check(neck.MaxFrictionTorque == was[neck] and was[neck] > 40,
+		"the value slackenJoints captured, exactly -- not a new number", neck.MaxFrictionTorque)
+	local othersLoose = true
+	for _, b in ipairs(sockets(rig)) do
+		if b ~= neck then
+			othersLoose = othersLoose and b.MaxFrictionTorque == 0
+		end
+	end
+	check(othersLoose, "every other joint stays loose until the stand-up")
+	check(#limp.frictions == 6, "the record still holds all six, for RagdollOff", #limp.frictions)
+	check(NestService.StiffenNeck(limp) and neck.MaxFrictionTorque == was[neck],
+		"a second landing report changes nothing")
+	NestService.RagdollOff(limp)
+	local allBack = true
+	for b, value in pairs(was) do
+		allBack = allBack and b.MaxFrictionTorque == value
+	end
+	check(allBack and #limp.frictions == 0,
+		"RagdollOff still puts back every socket's exact friction, once, the neck included")
+	check(not NestService.StiffenNeck(limp), "and a landing reported after the stand-up finds nothing to write")
+	setAll(rig, true)
+
+	-- The report: a second word, from the waiting throw only, and never the end.
+	local landing = NestService.ThrowLandingMatches
+	local word = RagdollGate.Landed
+	check(landing(false, "g7@1.00", "g7@1.00", word), "the waiting throw's own token and the word: it has landed")
+	check(not landing(false, "g7@1.00", "g6@0.50", word), "a stale token's landing is not taken")
+	check(not landing(true, "g7@1.00", "g7@1.00", word), "nor one for a throw that has already ended")
+	check(not landing(nil, "g7@1.00", "g7@1.00", word), "nor one when no throw is waiting")
+	check(not landing(false, "g7@1.00", "b3@2.00", word), "nor one quoting a bat's token")
+	check(not landing(false, "g7@1.00", "g7@1.00", "stopped") and not landing(false, "g7@1.00", "g7@1.00", true)
+			and not landing(false, "g7@1.00", "g7@1.00", nil),
+		"nor any other second word, or none")
+	local handlerAt = string.find(code, "local function acceptThrowAnswer(", 1, true) or 0
+	local handlerEnd = string.find(code, "\nend\n", handlerAt, true) or 0
+	local handler = string.sub(code, handlerAt, handlerEnd)
+	local wordAt = string.find(handler, "if what ~= nil then", 1, true) or math.huge
+	local returnAt = string.find(handler, "\n%s+return nil%s*\n%s+end%s*\n", wordAt) or math.huge
+	local endsAt = string.find(handler, "throwAnswerMatches(throwDone[player], throwToken[player], token)", 1, true) or 0
+	check(wordAt < returnAt and returnAt < endsAt,
+		"a report with a second word returns before the rule that ends a throw is asked")
+	local doneAt = string.find(handler, "throwDone[player] = true", 1, true) or 0
+	local _, dones = string.gsub(handler, "throwDone%[player%] = true", "")
+	check(dones == 1 and doneAt > endsAt,
+		"so only the report with no second word can end one", dones)
+
+	--==========================================================================
+	-- THE HANDLER ITSELF: FROM WHOM, WHEN, HOW OFTEN -- AND OTHERWISE NOTHING
+	--
+	-- `AcceptThrowAnswer` is the function the remote is connected to, and its
+	-- first argument is the sender the engine stamps. Two stand-ins here: the
+	-- player who was thrown, and somebody else in the same server.
+	--==========================================================================
+	local accept = NestService.AcceptThrowAnswer :: any
+	local thrown = Instance.new("Folder")
+	thrown.Name = "SpecThrownPlayer"
+	local other = Instance.new("Folder")
+	other.Name = "SpecOtherPlayer"
+	local otherRig = buildRig("constraints")
+	task.wait()
+	local otherNeck = RagdollGate.neckSocket(otherRig) :: BallSocketConstraint
+
+	local flying = NestService.RagdollOn(rig)
+	NestService.SlackenJoints(flying, rig)
+	check(accept(thrown, "g7@1.00", word) == nil and neck.MaxFrictionTorque == 0,
+		"with no throw on the books, a landing report is ignored")
+
+	NestService.SpecThrow(thrown, "g7@1.00", flying)
+	check(accept(other, "g7@1.00", word) == nil and neck.MaxFrictionTorque == 0,
+		"another player quoting the thrown player's token is ignored")
+	local otherFlying = NestService.RagdollOn(otherRig)
+	NestService.SlackenJoints(otherFlying, otherRig)
+	NestService.SpecThrow(other, "g8@2.00", otherFlying)
+	check(accept(other, "g7@1.00", word) == nil and neck.MaxFrictionTorque == 0
+			and otherNeck.MaxFrictionTorque == 0,
+		"even one who is mid-throw themselves: neither neck is touched")
+	check(accept(thrown, "g8@2.00", word) == nil and neck.MaxFrictionTorque == 0
+			and otherNeck.MaxFrictionTorque == 0,
+		"and the thrown player cannot report for somebody else's throw")
+	check(accept(thrown, "g6@0.50", word) == nil and accept(thrown, nil, word) == nil
+			and accept(thrown, 7, word) == nil and accept(thrown, { "g7@1.00" }, word) == nil
+			and neck.MaxFrictionTorque == 0,
+		"a stale token, none, a number or a table is ignored")
+	check(accept(thrown, "g7@1.00", "stopped") == nil and accept(thrown, "g7@1.00", true) == nil
+			and accept(thrown, "g7@1.00", 1) == nil and accept(thrown, "g7@1.00", {}) == nil
+			and neck.MaxFrictionTorque == 0,
+		"any second word but the one is ignored")
+	check(accept(thrown, "g7@1.00", word) == word and neck.MaxFrictionTorque == was[neck],
+		"the thrown player, during their own waiting throw, quoting its token: the neck grips again")
+	check(otherNeck.MaxFrictionTorque == 0, "and only their own: the other body's neck is still loose")
+	neck.MaxFrictionTorque = 0
+	check(accept(thrown, "g7@1.00", word) == nil and neck.MaxFrictionTorque == 0,
+		"once per throw: a second landing report writes nothing")
+	check(accept(thrown, "g7@1.00") == "stopped",
+		"none of those ended the throw: the report that the body has stopped still does")
+	check(accept(thrown, "g7@1.00") == nil and accept(thrown, "g7@1.00", word) == nil
+			and neck.MaxFrictionTorque == 0,
+		"and after it, neither report is taken again")
+	NestService.SpecThrow(thrown, "g9@3.00", flying)
+	check(accept(thrown, "g7@1.00", word) == nil and neck.MaxFrictionTorque == 0,
+		"the next throw does not take the last throw's token")
+	check(accept(thrown, "g9@3.00", word) == word and neck.MaxFrictionTorque == was[neck],
+		"and takes its own, once")
+	NestService.SpecThrow(thrown, nil, nil)
+	NestService.SpecThrow(other, nil, nil)
+	neck.MaxFrictionTorque = 0
+	check(accept(thrown, "g9@3.00", word) == nil and accept(other, "g8@2.00", word) == nil
+			and neck.MaxFrictionTorque == 0 and otherNeck.MaxFrictionTorque == 0,
+		"once a throw is over, a late landing report is ignored")
+	NestService.RagdollOff(flying)
+	NestService.RagdollOff(otherFlying)
+	check(neck.MaxFrictionTorque == was[neck], "and the stand-up puts the neck back whatever was reported")
+	otherRig:Destroy()
+	thrown:Destroy()
+	other:Destroy()
+	setAll(rig, true)
+
+	-- The rest rule, on a rig that has really come apart.
+	setAll(rig, false)
+	task.wait()
+	local rigHead = rig:FindFirstChild("Head") :: BasePart
+	local rigTorso = rig:FindFirstChild("UpperTorso") :: BasePart
+	local rigHips = rig:FindFirstChild("LowerTorso") :: BasePart
+	rigHead.AssemblyLinearVelocity = Vector3.new(9, 0, 0)
+	rigTorso.AssemblyLinearVelocity = Vector3.new(0, 0, 0.5)
+	rigHips.AssemblyLinearVelocity = Vector3.new(0, 1.5, 0)
+	check(rigHead.AssemblyLinearVelocity.Magnitude > 8.9, "the fixture's head is moving at 9 studs a second",
+		rigHead.AssemblyLinearVelocity.Magnitude)
+	check(math.abs(RagdollGate.restSpeed(rig) - 1.5) < 1e-3,
+		"a guardian's rest is the faster of the torso and the pelvis", RagdollGate.restSpeed(rig))
+	check(RagdollGate.restSpeed(rig) < 3.5, "so a head swinging over a still body does not hold it down")
+	rigTorso.AssemblyLinearVelocity = Vector3.new(0, 0, 6)
+	check(math.abs(RagdollGate.restSpeed(rig) - 6) < 1e-3, "and a torso that is still moving does",
+		RagdollGate.restSpeed(rig))
+	for _, p in ipairs({ rigHead, rigTorso, rigHips }) do
+		p.AssemblyLinearVelocity = Vector3.zero
+	end
+	setAll(rig, true)
+
+	-- What the camera follows.
+	check(RagdollGate.cameraPart(rig) == rigTorso and RagdollGate.cameraPart(rig) ~= rigHead,
+		"the camera follows the torso, not the head")
+	local classic = Instance.new("Model")
+	local classicHead = Instance.new("Part")
+	classicHead.Name = "Head"
+	classicHead.Parent = classic
+	local classicTorso = Instance.new("Part")
+	classicTorso.Name = "Torso"
+	classicTorso.Parent = classic
+	classic.Parent = fixture
+	check(RagdollGate.cameraPart(classic) == classicTorso, "on a classic rig too")
+	-- The fallback, in order: a body with no torso at its root, then at its head.
+	local bare = buildRig("constraints")
+	task.wait()
+	local bareRoot = bare:FindFirstChild("HumanoidRootPart") :: BasePart
+	local bareHead = bare:FindFirstChild("Head") :: BasePart;
+	(bare:FindFirstChild("UpperTorso") :: BasePart):Destroy()
+	check(RagdollGate.cameraPart(bare) == bareRoot,
+		"a body with no UpperTorso is followed at its root")
+	bareRoot:Destroy()
+	check(RagdollGate.cameraPart(bare) == bareHead,
+		"and with no root either, at its head: the last resort")
+	bareHead:Destroy()
+	check(RagdollGate.cameraPart(bare) == nil, "a character with none of the three is given nothing")
+	bare:Destroy()
+	classic:Destroy()
+
+	-- ThrowFX: where it points the camera, what it settles on, what it reports.
+	check(string.find(source, "local followPart = RagdollGate.cameraPart(character)", 1, true) ~= nil
+			and string.find(source, "camera.CameraSubject = followPart", 1, true) ~= nil,
+		"ThrowFX points the camera at the part RagdollGate names")
+	check(string.find(source, "CameraSubject = head", 1, true) == nil,
+		"and nowhere at the head")
+	check(string.find(source, "kept.subject = camera.CameraSubject", 1, true) ~= nil
+			and string.find(source, "if camera and kept.subject == nil then", 1, true) ~= nil,
+		"the player's own subject is still captured once per chain of hits, and restored from there")
+	local loopAt = string.find(source, "5. WAIT UNTIL THE BODY HAS FLOWN AND STOPPED", 1, true) or 0
+	local boxAt = string.find(source, "6. BRING THE BOX TO THE BODY", 1, true) or 0
+	local loop = if loopAt > 0 and boxAt > loopAt then string.sub(source, loopAt, boxAt) else ""
+	check(#loop > 0, "the settle loop is where it was")
+	check(string.find(loop, "else%s+bodySpeed = RagdollGate%.restSpeed%(character%)%s+end") ~= nil,
+		"a guardian's settle asks RagdollGate for the body's speed")
+	check(string.find(loop, "if isBat then%s+if head and head:IsA%(\"BasePart\"%) then%s+"
+			.. "bodySpeed = math%.max%(bodySpeed, head%.AssemblyLinearVelocity%.Magnitude%)") ~= nil,
+		"a bat's and a trap's is still judged on the head and the torso, inside its own branch")
+	local reportAt = string.find(loop, "FireServer(token, RagdollGate.Landed)", 1, true) or 0
+	local guardianAt = string.find(loop, "-- The guardian test", 1, true) or math.huge
+	local ceilingAt = string.find(loop, "AND THE CEILING IS CHECKED AFTER", 1, true) or 0
+	check(guardianAt < reportAt and reportAt < ceilingAt, "the landing is reported from the guardian's branch")
+	-- As an argument, which is where a report is made; the banner beside it
+	-- names the word too.
+	local _, reports = string.gsub(source, ", RagdollGate%.Landed%)", "")
+	check(reports == 1, "and from nowhere else", reports)
+	check(string.find(source, "MaxFrictionTorque%s*=[^=]") == nil,
+		"ThrowFX never writes a joint's friction: the server took it and the server returns it")
+	check(string.find(source, "\nlocal SETTLE_SPEED = 3.5\n", 1, true) ~= nil
+			and string.find(source, "\nlocal SETTLE_HOLD = 0.35\n", 1, true) ~= nil
+			and string.find(source, "\nlocal GIVE_UP_AFTER = 5\n", 1, true) ~= nil,
+		"the settle speed, the hold and the give-up are the numbers they were")
+	check(string.find(code, "\nlocal THROW_TIMEOUT = 6\n", 1, true) ~= nil
+			and string.find(code, "\nlocal LIMP_JOINT_FRICTION = 0\n", 1, true) ~= nil,
+		"and so are the server's backstop and the flight's joint friction")
+	check(string.find(source, "\"rest check, last", 1, true) ~= nil
+			and string.find(source, "\"rest rig: ", 1, true) ~= nil
+			and string.find(source, "\"rest trace (", 1, true) ~= nil,
+		"the rest check, rest rig and rest trace lines are still printed")
+
+	-- And a bat's or a trap's knockdown has none of it.
+	local style = WeaponData.BatThrowStyle("b1@0.00", 0)
+	check(style.camera == false and style.emergency ~= nil and style.kind == "bat",
+		"a bat's launch still takes no camera and carries its own emergency")
+	check(not WeaponData.AcceptsAck("b3@2.00", "g7@1.00") and not WeaponData.AcceptsAck(nil, "g7@1.00"),
+		"a guardian's report means nothing to the bat's handler on the same remote")
+	local combat = game:GetService("ServerScriptService").SeedGameServer.CombatService.Source
+	check(#combat > 0 and string.find(combat, "StiffenNeck", 1, true) == nil
+			and string.find(combat, "SlackenJoints", 1, true) == nil
+			and string.find(combat, "MaxFrictionTorque", 1, true) == nil
+			and string.find(combat, "RagdollGate", 1, true) == nil,
+		"and CombatService touches no joint's friction and asks RagdollGate nothing")
 end)
 
 fixture:Destroy()
