@@ -1,6 +1,85 @@
 # Steal a Seed — Session Handoff
 
-## Mobile pass: the phone's HUD, the trail on the obby, the camera after a fall — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`, NOT PUBLISHED; SEEN IN STUDIO'S PHONE EMULATION ONLY, NEVER ON A REAL PHONE)
+## Traffic feed audit, and builds v993 to v995 — 2026-09-29 (CLAUDE)  (READ-ONLY: NO CODE CHANGED, NOTHING PUBLISHED BY AN AGENT, NO REQUEST SENT TO MAKE, NO REAL SAVE OPENED)
+
+**In short.**
+- **The feed is intact and switched on in source**, and Studio holds the same bytes.
+- **Two builds have been published since the switch was turned on: v994 and v995.** Both were made
+  from Studio's own Publish command. No agent published either.
+- **v995 also carries the mobile pass** (the entry below). Rojo keeps Studio equal to the working
+  tree, so whatever is on disk is in the next publish. v994 is the last build without it.
+- **Nothing proves the feed is LIVE.** No live server's log was read and no event was seen at
+  Make. A published build is not a running server.
+
+### The publishes (read from Studio's logs, `%LOCALAPPDATA%\Roblox\logs`)
+
+| Build | Published (UTC) | Local (UTC+8) | What Studio held | How that is known |
+| --- | --- | --- | --- | --- |
+| v993 | 2026-09-28 15:16:38 | 09-28 23:16 | the feed's code, switched **off** | the switch was turned on in source at 08:41 the next morning |
+| v994 | 2026-09-29 00:55:35 | 09-29 08:55 | source at `7ce89a3`: the feed **on**, no mobile pass | inferred, see below |
+| v995 | 2026-09-29 04:18:37 | 09-29 12:18 | source at `5fb5dc3`: the feed **on**, **and the mobile pass** | measured 60 s before and 150 s after |
+
+- **v995, measured.** At 04:17 UTC the four feed files in Studio were byte-equal to disk, and at
+  04:21 all 131 scripts were, with no `ZZ` leftover and no test-store marker. Nothing in `src`
+  changed in between. Roblox's public record for the experience reads
+  `updated 2026-09-29T04:18:33Z`.
+- **v994, inferred.** Studio opened the place at 00:48:25 UTC (it loaded version 993). Rojo's
+  long-poll to `localhost:34872` was running from 00:48:45. `TrafficLogConfig.luau` was last
+  written at 00:41:42. The previous entry's check of Studio's copy was committed at 00:52:00. The
+  mobile pass began after its "before" captures at 01:58. Nobody read v994's own contents.
+- The "What is live" entry below still names v992 as the latest. It is three builds behind.
+
+### The source (branch `wip`, working tree clean for these files)
+
+| Asked | Found |
+| --- | --- |
+| The logger exists | `TrafficLogService.luau`, 632 lines, last changed in `3b48a2a` |
+| Enabled | `TrafficLogConfig.Enabled = true`, since `0aaa9dc` |
+| Each event to its own secret | `new_player_joined` to `PodnappersTrafficJoinWebhook`, `new_player_session_ended` to `PodnappersTrafficDurationWebhook`. Both are resolved before the first request. One `RequestAsync` and one `GetSecret` call site. No URL anywhere |
+| The PlayerDataService hook | Required inside `pcall`; `classified(player, status == "new", persistent)` is called inside `pcall` right after `Metrics.profileReady` |
+| New players only | Sends only when the load said `"new"` and the profile can be saved |
+| Staff | Left out through `AdminService.IsAdmin` |
+| Studio | Left out through `RunService:IsStudio()`; nothing is tracked or queued there |
+| Retries | 408, 429, 5xx and no response are retried, 5 tries at most, 2-4-8-16 s with jitter, `Retry-After` honoured to 60 s, the same bytes each time. Any other status is dropped. HTTP off or a missing secret halts sending |
+| Campaign tags | The allowlist is **empty**, so every event says `unknown` |
+
+### Studio (Edit, place 114075467877655)
+
+- The four files (`TrafficLogService`, `TrafficLogConfig`, `PlayerDataService`, `Metrics`) are
+  byte-equal to disk.
+- `HttpService.HttpEnabled` reads `true`. That is Studio's reading; the live setting was not seen.
+- No client-visible script mentions the feed.
+
+### Tests (fake sender only, Studio Edit, 04:16 UTC)
+
+- **TrafficLogSpec 101 of 101. MetricsSpec 57 of 57.**
+- The spec installs its own sender before every case and the module refuses to send in Studio, so
+  the live sender cannot run. Both also passed in the full suite (57 of 57 specs).
+
+### Still needed for a live join-and-leave check (the owner's and Michael's to do)
+
+1. **A server started after the publish.** Servers that were up before 12:18 local keep their old
+   build. Creator Hub can restart them.
+2. **The boot line.** In that server, as an admin, F9, Server: `[Seed/TrafficLog] external traffic
+   feed on.` A warning with `http-disabled` or `secret-missing` names what is missing.
+3. **A never-played, non-staff account** joins, stays about a minute and leaves. An account with a
+   save is a returning player, and both admin accounts are staff: neither sends anything.
+4. **Michael** sees one `new_player_joined` and one `new_player_session_ended` with the same
+   `sessionId`, a duration close to the visit, `placeVersion` 995 and `campaignTag` `unknown`.
+5. The same account rejoins, and nothing arrives.
+6. A quicker first look: whether Michael's join scenario has received anything since 00:55 UTC.
+
+### Proposed, NOT done (each needs the owner's word)
+
+- `KB/TRAFFIC_LOG.md` still says "No new build has been published". Two have been.
+- Campaign tags, once Michael names them: one line in `TrafficLogConfig.CampaignTags`.
+- No code defect was found, so no code fix is proposed.
+
+## Mobile pass: the phone's HUD, the trail on the obby, the camera after a fall — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; SEEN IN STUDIO'S PHONE EMULATION ONLY, NEVER ON A REAL PHONE)
+
+**PUBLISHED SINCE THIS WAS WRITTEN.** At 12:18 local on 2026-09-29, six minutes after this entry
+was committed, **v995 was published from Studio's own Publish command** with this work in it (the
+entry above). No agent published it. Every "nothing was published" below was true when written.
 
 **In short.**
 - Three fixes the owner asked for from landscape-phone screenshots, one commit each on `wip`:
