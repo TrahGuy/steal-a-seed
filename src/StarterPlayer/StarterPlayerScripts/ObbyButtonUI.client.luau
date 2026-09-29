@@ -207,6 +207,9 @@ local function request()
 	end
 	lastPress = now
 	remote:FireServer(WheelData.Actions.ObbyTeleport)
+	-- A note for this client's own ObbyCamera, which turns the camera to the
+	-- arch once if the body does land there. It never leaves this machine.
+	player:SetAttribute(ObbyData.LocalAttributes.EntranceAsked, now)
 end
 
 button.Activated:Connect(request)
