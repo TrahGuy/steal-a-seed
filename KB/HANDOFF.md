@@ -1,6 +1,184 @@
 # Steal a Seed — Session Handoff
 
-## Hatch reveal: a roll before the plant is shown, switched OFF for published servers — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY)
+## Hatch reveal, revised: a three-second roll in the world where the pod stood, switched OFF for published servers — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, IN PHONE EMULATION, ONE CLIENT)
+
+**In short.**
+- The owner corrected the first version the same day: "I do **not** want the new center-screen
+  hatch card or a 5.5-second UI roll." The card is gone. The entry below this one describes it
+  and is kept for the record only.
+- When a pod hatches, the roll now plays **in the world, at that pod's own position, for 3
+  seconds**: the shell bursts as before, dark plant shapes turn over on a disc under a floating
+  question mark, quick at first and slowing, and then the real plant rises there with its label
+  and fanfare, as it always has.
+- **Everybody within 240 studs sees the same roll.** Each screen draws it from the one message
+  the server sends, and the order of the shapes comes from that hatch's token.
+- **Nothing is opened or taken over.** No screen gui, no modal, no camera change, no input
+  bound, no change to movement, no result panel. `HatchRollSpec` reads the script for each.
+- **It ships switched off for players**: `GameConfig.Plant.Hatch.Roll.Enabled = false`.
+  `StudioPreview = true` shows it in Studio only. The working tree is safe to publish as it
+  stands.
+- **It is a picture of a decision already made, not a second roll.** Species and size were fixed
+  when the pod was made. Inside `hatch()`, with no yield, the Tool is handed over, its row is
+  written, the pod leaves the garden and the garden is saved; only then is the message sent.
+- **The immediate-save fix from the first version is kept** (`CarryService.RecordHatched`).
+- Species odds, hatch timers, pod ownership, rewards and the economy were not changed.
+- Captures for the owner: `output/hatch-reveal/` (untracked). Start with
+  `01-roll-and-reveal.gif` and `03-pod-location-close-up.png`.
+- Code and specs: `e46ebe0`. This entry and the map lines: the commit after it.
+
+### How to see it, and how to switch it on
+
+| To do this | Do this |
+| --- | --- |
+| See it in Studio | Press Play and hatch a pod. A Tiny pod is ready 30 s after planting. `StudioPreview` is on. |
+| See the game as players have it, in Studio | Set `StudioPreview = false` for that session. |
+| Switch it on for players, once approved | `GameConfig.Plant.Hatch.Roll.Enabled = true`, then publish. |
+| After switching it on | Two tripwires fail on purpose and are changed with it: "as shipped, the roll is OFF" in `HatchRollSpec` and in `HatchRevealSpec`. |
+
+### What anybody nearby sees
+
+| Seconds after the hatch | Where the pod stood |
+| --- | --- |
+| 0 to 0.2 | The shell bursts: rings, sparks, flash, crack. Unchanged. A purchase has its gold pulse first, 0.15 s. |
+| 0.2 to 3.0 | A pale disc of the pod's size colour on the soil. One dark shape standing on it, replaced by the next nine times: held 0.12 s at first, 0.61 s at the last. A white question mark floating above, turned to the viewer, riding 0.22 studs up and down. |
+| 3.0 | The shapes, the question mark and the disc go. The real plant rises in colour over 0.8 s. The rarity's fanfare sounds once, here and not at the burst. |
+| 3.8 to 5.3 | The plant stands with its label: name, size, income, NEW DISCOVERY. Unchanged. |
+| 5.3 to 5.8 | It fades. Nothing is left in the world. |
+
+- **The shapes** are the five plants of the pod's own biome, as silhouettes in the Almanac's
+  dark colour. The last one is always the plant that hatched. No shape is shown twice running.
+- **Their size** is the shell's, not the plant's: 1.3 pod diameters, between 2.6 and 9 studs.
+  A shape's size says nothing the shell had not already said.
+- **Modest on a phone.** One shape in the world at a time. A shape is built once for each
+  species and kept between rolls. No particle, light or sound belongs to the roll. At most 3
+  rolls turn shapes at once; a fourth at the same moment is a question mark and a disc alone.
+- **Reduced Effects**: the question mark stands still and the disc does not pulse.
+- **Unchanged, and older than the roll:** at the burst of a Titan or Colossal pod its owner's
+  camera is nudged for 0.35 s (off under Reduced Effects). The roll itself never touches the
+  camera.
+
+### What the owner of the pod gets, and when
+
+| Moment | State |
+| --- | --- |
+| The hatch | The plant is theirs: Tool in the Backpack, row on the record, garden saved. |
+| Until 3.0 s | The hotbar and the Bag draw that Tool as a POD called `???`. It cannot be taken in the hands. The Index keeps its silhouette and its count. |
+| From 3.0 s | The Tool is the plant everywhere. The player may hold it at once. |
+| 3.8 s | The game puts it in their hands, as it always has after the rise. |
+
+- The mask is the Tool's `RevealAt` attribute, a server time. The server takes it off. A client
+  reads it as a claim: not a number, already past, or more than 10 s off, and the plant is
+  simply shown. A mask can run out; it cannot get stuck.
+- With the roll off, no attribute is written and the hatch is the hatch v995 has.
+
+### What was retired
+
+| Retired | Where it went |
+| --- | --- |
+| `HatchRollUI.client.luau`, the card | Deleted. `HatchRollSpec` fails if a script of that name or a `SeedHatchRoll` gui comes back. |
+| The 5.5 s roll and the 2.6 s the card stayed | `Roll.Seconds = 3`. `HatchRoll` refuses to load outside 2.5 to 3.5 s. `ShowSeconds` deleted. |
+| One card at a time, the queue, the 16 s limit | `HatchRoll.schedule`, `PlantService`'s `rollBusy`, `MaxWaitSeconds`, the message's `rollAt` and `compact`: deleted. Every hatch has its own three seconds. |
+| The card's sounds | The tick on each turn and the card's own fanfare claim (`HatchRoll.claim`, `SoundedAttribute`): deleted. The roll is silent; the burst and the fanfare are the hatch's own. |
+| The card's tests | Placement on 35 screens, the queue, X and B, the card's sounds: removed from `HatchRollSpec`. |
+| The card's captures | Moved to `output/hatch-reveal/old-card-version/`, not deleted. |
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `Shared/GameConfig.luau` | `Plant.Hatch.Roll`: 3 s, 9 steps, the holds, and `World` (sizes, the bob, `MaxShapes = 3`). |
+| `Shared/HatchRoll.luau` | Rewritten: `revealAt`, `lead`, `cycle`, `holds`, `frames`, `frameAt`, and the masks (`hidden`, `sealed`, `shownHatched`, `shownName`, `sealedSpecies`, `pendingUntil`). |
+| `PlantService.luau` | `hatch()` asks `HatchRoll.revealAt(now)`. The hand is asked for at the reveal plus the rise. The message carries `at` and `revealAt`. |
+| `CarryService.luau` | Not changed by the revision. `RevealAt`, `RecordHatched` and `Sealed` are the first version's and are kept. |
+| `HatchFX.client.luau` | The roll itself: disc, shapes, question mark, one connection. The creature, label and fanfare wait for `revealAt`. |
+| `HatchRollUI.client.luau` | Deleted. |
+| `LoadoutUI.client.luau` | Not changed by the revision: the `???` mask is the first version's. |
+| `IndexUI.client.luau`, `TutorialUI.client.luau` | Comments and the guide's wait: after the reveal and the rise, not after a card. |
+| `tools/tests/HatchRollSpec.luau` | Rewritten: 167 checks. Its last section loads `HatchFX` itself and watches real rolls in the Edit workspace, on the real clock. |
+| `tools/tests/HatchDeliverySpec.luau` | 58 checks, against the real `PlantService` and `CarryService`. |
+| `tools/tests/HatchRevealSpec.luau` | The hatch with the roll OFF: 71 checks. |
+
+### Tested
+
+| What | Result |
+| --- | --- |
+| Whole suite, Studio Edit | 60 of 60 specs pass, in one full run. `NoticeSpec`, which failed once in a batch during the first version, passed. |
+| `HatchRollSpec` | 167 of 167 |
+| `HatchDeliverySpec` | 58 of 58 |
+| `HatchRevealSpec` | 71 of 71 |
+| Deliberate defects | 81 of 81 caught: 16 in delivery, 61 in the roll, the masks and the world, 4 with the roll off. Seven survived the first pass. Each was a gap in a spec, not a defect in the game, and each gap now has a check. |
+| Independent review, read-only | No defect found at any severity. It is a second reading by a model, not proof. |
+| Rojo build | Builds. `git diff --check` clean. Studio equals disk: 132 scripts, 0 differ, no `ZZ` leftovers, test-store marker absent. |
+
+**Studio Play, phone emulator 799 x 359, store `SeedTest_20260929`, three sessions, one client:**
+
+| Case | Seen |
+| --- | --- |
+| Free door (E held on a ready pod) | Nine shapes, reveal 3.00 s after the hatch, plant in the hands at 3.8 s. Hotbar `???` / POD until the reveal. |
+| Index badge | Dropped by one at the reveal, not before. |
+| First hatch of the beginner guide | CONGRATULATIONS 0.8 s after the reveal. |
+| Four hatched 0.2 s apart | Four question marks at four positions; three with shapes (the limit); shapes 9.0, 6.3 and 3.4 studs for three pod sizes; each revealed at its own 3.0 s. |
+| Respawn mid-roll | The local rolls were removed. The Tools were rebuilt still masked and unmasked at their own times. 2 plants, 2 rows. |
+| Hatch about 850 studs away | No world effect drawn. The mask ran 3 s and lifted. A fall into the void during it rebuilt the Tool still masked. |
+| Walked away mid-roll | The roll finished and cleaned up. |
+| Play stopped mid-roll, then started | The plant once ("restored 3 held plant(s)"), the pod gone from the garden. |
+| Reduced Effects | The question mark moved 0.000 studs against 0.440 normally. The shapes still turned. |
+| Output | No `[Seed/HatchFX]` warning. No `SeedHatchRoll` gui in any session. |
+
+### The capture, and what it is not
+
+| File in `output/hatch-reveal/` | What it is |
+| --- | --- |
+| `01-roll-and-reveal.gif` | 28 stills in time order, 8.2 s. **A composite**: three hatches of the same pod type, merged, because the capture tool takes one still about every 0.65 s. |
+| `02-one-hatch-nine-stills.png` | One real hatch of a Huge pod (Toadcap), whole screen, nine stills with their times. |
+| `03-pod-location-close-up.png` | The same nine stills cut to where the pod stood. |
+| `04-four-hatched-together.png` | Four pods of four sizes, mid-roll. The four hotbar pictures are the pods' own art for four biomes (`CreatureModel.BuildPod`), not the plants. |
+| `05-before.png` | The pod before the hatch. |
+
+- **It is not a video.** The capture tool takes stills. Motion between them was read from
+  the instance tree, not seen.
+- **The plant's name label is missing from the stills.** The tool skips BillboardGuis. The label
+  was read from the instance tree. The question mark is a sign in the world and is captured.
+- Small blue glints show at the shapes' feet where they cross the glowing disc.
+
+### Not run
+
+- **A second player watching somebody else's hatch.** Play Solo has one client. Every client
+  runs the same code on the same message; `HatchRollSpec` runs it as a bystander.
+- **A real phone, a desktop window, a television, a controller.**
+- **A published server.** Nothing was published by an agent.
+- **Sound by ear.** The roll adds no sound. The fanfare's move to the reveal was read from the
+  sound calls, not heard.
+- **Frame rate on a phone.** Build cost was measured in Studio on this PC: 4 to 12 ms for a
+  shape, once for each species in a session.
+
+### What is live
+
+- The Studio log shows **v996 published at 2026-09-29 09:00:51 UTC**, by the owner. That is
+  minutes after the first version was pushed, so by its time it carries the **card version,
+  switched off**, together with the immediate-save fix. Its contents were not inspected.
+- If so, live players see no roll and no card, and the card's script ships unused until the
+  next publish removes it.
+- Read again at 11:36 UTC on 2026-09-29: v996 is still the last publish in the log.
+
+### For the owner to decide
+
+| # | What | Detail |
+| --- | --- | --- |
+| 1 | Approve the look and the length | 3 s. Shapes, disc and question mark are numbers in `Plant.Hatch.Roll.World`. |
+| 2 | A respawn during the roll | The player's own screen drops every roll it was drawing; other screens carry on. The plant is shown in the hotbar at its time either way. This is how the reveal has always treated a respawn. |
+| 3 | More than three hatches at once | The fourth and later are a question mark and a disc with no shapes. `World.MaxShapes`. |
+| 4 | The saved bag's limit of 24 | Not changed here. It is the next task: refuse the hatch at 24 and leave the pod planted. |
+| 5 | A masked plant can be sold by SELL ALL | Only inside its 3 s. It is a sale, not a loss. Not changed. |
+| 6 | The wheel's odds sheet | Its species cards use the Almanac and are not held back. Not changed. |
+
+## Hatch reveal, first version: the owner's card — 2026-09-29 (CLAUDE)  (SUPERSEDED THE SAME DAY BY THE ENTRY ABOVE: THE CARD, ITS QUEUE AND ITS 5.5 s ROLL WERE RETIRED AT THE OWNER'S REQUEST IN e46ebe0; ITS TWO SERVER CHANGES AND ITS MASKS ARE KEPT; ON BRANCH `wip` AS fc9de75, NOT ON `main`)
+
+**Superseded.** The owner did not want the card or the 5.5 s roll. Read the entry above for what the
+game does now. Still true from this entry: "Two server changes that are not decoration", the
+`RevealAt` mask on the Tool, and the one switch. Everything about the card, its queue, its
+placement and its sounds is history. Item 2 of its decisions, the limit of 24, has since been
+decided by the owner: refuse the hatch and leave the pod planted (the next task).
 
 **In short.**
 - When a pod hatches, its owner now gets a card: plant silhouettes turning over behind a

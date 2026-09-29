@@ -133,14 +133,16 @@ src/
     Shared/WheelDraw.luau       the wheel's face in frames (the owner's approved mockup) --
                                 readable sectors, icons, upright words, studded rim, rainbow
                                 trail, SPIN hub -- for the panel and the world wheel alike
-    Shared/HatchRoll.luau       the suspense before a hatch is shown, as arithmetic: when a
-                                hatch's roll runs (one at a time for each player), which
-                                silhouette is up at each moment (the last is always the plant
-                                that hatched), and whether a plant's Tool is still a secret
-                                (its RevealAt attribute). It decides nothing about WHAT
-                                hatched. ONE switch, GameConfig.Plant.Hatch.Roll.Enabled -- OFF
-                                on published servers until the owner says so; StudioPreview
-                                shows it in Studio (KB/HANDOFF.md, the hatch-reveal entry)
+    Shared/HatchRoll.luau       the three seconds before a hatch is shown, as arithmetic: when
+                                a hatch's plant may be shown (every hatch has its own three
+                                seconds; nothing queues), which silhouette stands where the
+                                pod was at each moment (the last is always the plant that
+                                hatched), and whether a plant's Tool is still a secret (its
+                                RevealAt attribute). It decides nothing about WHAT hatched,
+                                and refuses to load with a roll outside 2.5 to 3.5 seconds.
+                                ONE switch, GameConfig.Plant.Hatch.Roll.Enabled -- OFF on
+                                published servers until the owner says so; StudioPreview
+                                shows it in Studio (KB/HANDOFF.md, the world-roll entry)
     Remotes/                    created at runtime by ServerMain
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
@@ -191,12 +193,15 @@ src/StarterPlayer/StarterPlayerScripts/
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
     PlantUI.client.luau         the hatch countdown over an unhatched pod
     HatchFX.client.luau         the hold's glow and dust, the burst's rings, and the
-                                creature reveal -- one cosmetic event, drawn locally; while
-                                a roll runs, a question mark where the pod stood, and nothing
-                                that names the plant until its time
-    HatchRollUI.client.luau     the owner's card for a hatch: silhouettes turning over under
-                                a question mark, then the plant -- one card at a time, never
-                                a panel (no scrim, X or B puts it away); it sends nothing
+                                creature reveal -- one cosmetic event, drawn locally. While
+                                a roll runs: IN THE WORLD, where the pod stood, for everybody
+                                who can see it -- a disc, dark plant shapes turning over
+                                (quick, then slow, one at a time) and a question mark riding
+                                above them; then the plant, its label and its fanfare. The
+                                roll itself has no screen gui, no camera, no input and no
+                                sound; at most World.MaxShapes rolls turn shapes at once.
+                                There is NO hatch card: HatchRollUI was retired 2026-09-29
+                                at the owner's request, do not bring it back
     PlantPlace.client.luau      click-to-place, the ghost disc, and Put away
     PlantPickUI.client.luau     TOUCH ONLY: tap your grown plant to select it,
                                 then a real button picks it up
