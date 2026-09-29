@@ -6,7 +6,7 @@ Written 2026-09-28. This is a small server-side feed that reports genuinely new 
 - **Settings:** `TrafficLogConfig.luau`, beside the code. Both are server-only.
 - **Proof:** `tools/tests/TrafficLogSpec.luau` (the original 98 checks plus route assertions; re-run in Studio is pending)
 
-**Status: DISABLED, pending secret setup and publication.** Michael supplied two webhook URLs on 2026-09-29, but their values are not stored in this repository. `TrafficLogConfig.Enabled = false` until both experience secrets and HTTP access are confirmed. No live delivery has been verified.
+**Status: ENABLED IN SOURCE, NOT YET LIVE.** Michael supplied two webhook URLs on 2026-09-29, and the owner approved creating both Podnappers experience secrets. Creator Hub listed both names with the restricted `hook.us2.make.com` domain after creation. Their values are not stored in this repository. `TrafficLogConfig.Enabled = true` for the next publish, but Studio's Allow HTTP Requests setting has not been checked, no new build has been published, and no live delivery has been verified.
 
 It **supplements** Roblox's own analytics (`Metrics`, [ANALYTICS.md](ANALYTICS.md)) and replaces nothing. It is measurement only: no reward, rule or save depends on it. If every request failed, the game would play exactly the same.
 
@@ -122,7 +122,7 @@ JSON, POSTed with `Content-Type: application/json`. The samples below use fake d
 
 Each webhook URL is a credential: anyone who has it can write into the Sheet. Keep the values out of code, GameConfig, docs and screenshots. The owner has supplied the URLs in chat; neither value belongs in the repository.
 
-1. **Create two experience secrets.** Podnappers is owned by the CrazyCozy Games group, so this needs someone with that permission in the group.
+1. **Two experience secrets — DONE 2026-09-29.** Podnappers is owned by the CrazyCozy Games group.
    - In Creator Hub, open **Creations → Podnappers**, then **Secrets** in the left menu, then **Create Secret**.
    - **Join secret name:** `PodnappersTrafficJoinWebhook`; value: Michael's *player joins* URL.
    - **Duration secret name:** `PodnappersTrafficDurationWebhook`; value: Michael's *player duration after they leave* URL.
@@ -132,7 +132,7 @@ Each webhook URL is a credential: anyone who has it can write into the Sheet. Ke
    - This is experience-wide; `TrafficLogService` is the only code in the game that makes requests.
    - Studio itself never sends: the feed excludes Studio by design, so no Studio local secret is needed.
 3. **Fill in the tags.** Put Michael's campaign tags in `TrafficLogConfig.CampaignTags`, for example `{ "spring_ads", "yt_short_oct" }`, and use the same strings as launch data in Ads Manager.
-4. **Turn it on.** Only after both secrets exist and HTTP is allowed, set `TrafficLogConfig.Enabled = true`. Commit and publish when authorised.
+4. **Switch — ON IN SOURCE, NOT PUBLISHED.** `TrafficLogConfig.Enabled = true`. After verifying HTTP access and the amended spec, the owner can publish.
    - Only servers started after the publish run the new code.
    - Older servers can be moved over with Creator Hub's server restart or update option for the experience.
 5. **Run the live check below.**
@@ -180,7 +180,7 @@ The join webhook receives only `new_player_joined`; the duration webhook receive
 | Isolation | 8 | Every lifecycle call returns at once while a request hangs, and a throwing sender or nonsense arguments never reach the caller. PDS calls the feed right after `Metrics.profileReady`, with the same verdict and inside `pcall`, and also requires it inside `pcall`. Metrics is untouched. The feed has no attribute, remote, DataStore, analytics or gameplay-service reference |
 | Disabled and secrets | 8 | The shipped config is off with an empty allowlist. Off makes zero requests for a full lifecycle. There is exactly one `RequestAsync` and one `GetSecret` call site. No URL is written anywhere. The settings live in ServerScriptService, not GameConfig, and no client-visible script mentions the feed |
 
-**2026-09-29 change:** join and duration now route to two named secrets. The amended spec includes route assertions, but Studio was closed when this change was made, so those new assertions and the full suite have not been re-run. Rojo built the place successfully; that does not prove Luau runtime behavior.
+**2026-09-29 change:** join and duration now route to two named secrets. Both were saved and listed in Creator Hub later that day, and the source switch was enabled. The amended spec includes route and on-switch assertions, but Studio was closed, so those new assertions and the full suite have not been re-run. Rojo built the place successfully; that does not prove Luau runtime behavior.
 
 **Full spec suite:** all 55 specs ran, and none threw or failed. MetricsSpec is 57/57 (native analytics unchanged), AdminSpec 79/79, and OfflineEarnings, Leaderstats, Tutorial and HeldRestore all pass.
 

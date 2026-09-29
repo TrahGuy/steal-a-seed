@@ -1,5 +1,11 @@
 # Steal a Seed — Session Handoff
 
+## Make webhooks: secrets created, source switch on, not live — 2026-09-29
+
+With the owner's explicit approval, created `PodnappersTrafficJoinWebhook` and `PodnappersTrafficDurationWebhook` on Podnappers' Creator Hub Secrets page. The page showed both names with the restricted `hook.us2.make.com` domain. The secret values are write-only after creation; no webhook URL was added to source, docs or logs. Existing live servers cannot use newly created secrets until a new version/server starts. No test event was sent.
+
+Changed `TrafficLogConfig.Enabled` to true for the **next** publish and amended `TrafficLogSpec` for the on-switch plus Studio-exclusion path. No game publish occurred. Studio was closed (`list_roblox_studios` returned none), so the amended spec and full suite remain unrun; the current Studio HTTP permission is also unknown. Before publishing, the owner must open Studio, check **File → Experience Settings → Security → Allow HTTP Requests**, verify Rojo has the intended `wip` source, and run the focused spec if possible. Then publish through Studio and use a never-played non-staff account to verify one join in Michael's join scenario and one matching ending in his duration scenario. The admin account is excluded. Ad joins before activation are not recoverable from this feed. Commit and push status to be recorded after verification.
+
 ## Split Make traffic webhooks — 2026-09-29 (CODE PREPARED, NOT LIVE)
 
 Michael supplied separate Make URLs for new-player joins and their session duration while ads are running. The URLs were **not** copied into the repository or sent a test event. `TrafficLogService` now routes `new_player_joined` to secret `PodnappersTrafficJoinWebhook` and `new_player_session_ended` to secret `PodnappersTrafficDurationWebhook`; it resolves both before the first send. Payload schema, new-player/staff/Studio exclusions, retries and bounded queue are unchanged. The mock sender spec now asserts that the two event types use separate routes. `KB/TRAFFIC_LOG.md`, `KB/ANALYTICS.md` and `AGENTS.md` reflect the new setup.

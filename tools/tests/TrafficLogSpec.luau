@@ -810,10 +810,10 @@ end
 check(not reachesOut, "the feed writes no attribute, remote, DataStore or analytics call, and touches no gameplay service")
 
 --==============================================================================
--- 13. DISABLED MEANS ZERO REQUESTS; THE URL STAYS SERVER-ONLY
+-- 13. AN EXPLICIT OFF SWITCH AND STUDIO SEND ZERO; URLS STAY SERVER-ONLY
 --==============================================================================
-say("\n-- disabled, and the secret --")
-check(TrafficLogConfig.Enabled == false, "the shipped TrafficLogConfig is disabled")
+say("\n-- switch, Studio and secrets --")
+check(TrafficLogConfig.Enabled == true, "the shipped TrafficLogConfig is enabled for the next publish")
 check(type(TrafficLogConfig.CampaignTags) == "table" and #TrafficLogConfig.CampaignTags == 0,
 	"and ships with an empty campaign allowlist")
 fresh({ Enabled = false })
@@ -831,13 +831,22 @@ local hd = TL.health()
 check(#calls == 0 and hd.requests == 0 and hd.queued == 0 and hd.sessions == 0 and hd.active == false,
 	"switched off: a full lifecycle for three new players makes zero requests and opens nothing", #calls)
 fresh()
-TL.configure(nil) -- the shipped config, with the fake sender and "not Studio"
+TL.configure(nil) -- shipped config, still with the fake sender
+TL.useStudio(true)
 local shipped = player(nil)
 TL.arrived(shipped)
 TL.classified(shipped, true, true)
 leave(shipped)
 TL.pump()
-check(#calls == 0 and TL.health().active == false, "the shipped config, even off Studio: zero requests", #calls)
+check(#calls == 0 and TL.health().active == false, "Studio sends zero requests even with the shipped switch on", #calls)
+TL.useStudio(false)
+local liveMock = player(nil)
+TL.arrived(liveMock)
+TL.classified(liveMock, true, true)
+leave(liveMock)
+TL.pump()
+check(#calls == 2 and routes[1] == J and routes[2] == E,
+	"the shipped switch routes both events through the fake sender off Studio", #calls)
 
 local _, requestAt = string.gsub(own, ":RequestAsync%(", "")
 local _, secretAt = string.gsub(own, ":GetSecret%(", "")

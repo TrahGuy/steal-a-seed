@@ -268,7 +268,7 @@ If nothing appears, open **Monitoring → Error Report**, which also lists event
 5. **Do session length and return visits improve after updates?** Use Engagement (session time) and
    Retention (D1 and D7). Performance can be broken down by place version.
 
-## 8. The external traffic feed (separate, disabled)
+## 8. The external traffic feed (separate, pending publish)
 
 `TrafficLogService` sends `new_player_joined` and `new_player_session_ended` to separate
 experience-secret-backed Make webhooks. Michael's scenarios will write them into a shared Google Sheet.
@@ -281,6 +281,6 @@ experience-secret-backed Make webhooks. Michael's scenarios will write them into
   `unknown`, and the elapsed connection time. No names or UserIds.
 - **It is not a count of every visit.** A new player who leaves before their profile loads is missed,
   and a lost ending means an unknown duration, not zero.
-- **Status:** `TrafficLogConfig.Enabled = false`; both supplied endpoints still need experience secrets and live verification.
+- **Status:** `TrafficLogConfig.Enabled = true` in source; both experience secrets are listed in Creator Hub, but HTTP access and live delivery remain unverified. No publish of this change yet.
 - **The rest:** setup, receiver rules, limits and the mocked test report are in
   [TRAFFIC_LOG.md](TRAFFIC_LOG.md).

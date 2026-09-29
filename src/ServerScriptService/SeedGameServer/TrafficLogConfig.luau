@@ -7,8 +7,8 @@
 -- It lives in ServerScriptService, which never replicates, so no client can
 -- read it -- unlike GameConfig, which every client downloads.
 --
--- IT HOLDS NO ENDPOINT AND NO CREDENTIAL. The webhook URL is a Roblox
--- experience secret (Creator Hub -> the experience -> Secrets), read on the
+-- IT HOLDS NO ENDPOINT AND NO CREDENTIAL. Both webhook URLs are Roblox
+-- experience secrets (Creator Hub -> the experience -> Secrets), read on the
 -- server by NAME with HttpService:GetSecret. A Secret never prints: tostring
 -- gives "Secret(<name>)", so no log line can show it either.
 --
@@ -16,10 +16,10 @@
 --==============================================================================
 
 local TrafficLogConfig = {
-	-- THE SWITCH. Off: no session is tracked, nothing is queued, and not one
-	-- HTTP request is made. Turn on only once the owner authorises the
-	-- connection (KB/TRAFFIC_LOG.md, "Going live").
-	Enabled = false,
+	-- The owner supplied both endpoints and approved creating their experience
+	-- secrets. Studio never sends; live delivery still requires HTTP enabled
+	-- and an owner publish (KB/TRAFFIC_LOG.md, "Going live").
+	Enabled = true,
 
 	-- Separate experience secrets hold the complete Make webhook URLs. Keep
 	-- their values in Creator Hub, never in this repository or a client script.
