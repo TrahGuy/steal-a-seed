@@ -6,7 +6,7 @@ Written 2026-09-28. This is a small server-side feed that reports genuinely new 
 - **Settings:** `TrafficLogConfig.luau`, beside the code. Both are server-only.
 - **Proof:** `tools/tests/TrafficLogSpec.luau` (the original 98 checks plus route assertions; re-run in Studio is pending)
 
-**Status: ENABLED IN SOURCE, NOT YET LIVE.** Michael supplied two webhook URLs on 2026-09-29, and the owner approved creating both Podnappers experience secrets. Creator Hub listed both names with the restricted `hook.us2.make.com` domain after creation. Their values are not stored in this repository. `TrafficLogConfig.Enabled = true` for the next publish, but Studio's Allow HTTP Requests setting has not been checked, no new build has been published, and no live delivery has been verified.
+**Status: ENABLED IN SOURCE, NOT YET LIVE.** Michael supplied two webhook URLs on 2026-09-29, and the owner approved creating both Podnappers experience secrets. Creator Hub listed both names with the restricted `hook.us2.make.com` domain after creation. Their values are not stored in this repository. `TrafficLogConfig.Enabled = true` and Studio Edit reported HTTP enabled. No new build has been published and no live delivery has been verified.
 
 It **supplements** Roblox's own analytics (`Metrics`, [ANALYTICS.md](ANALYTICS.md)) and replaces nothing. It is measurement only: no reward, rule or save depends on it. If every request failed, the game would play exactly the same.
 
@@ -180,7 +180,7 @@ The join webhook receives only `new_player_joined`; the duration webhook receive
 | Isolation | 8 | Every lifecycle call returns at once while a request hangs, and a throwing sender or nonsense arguments never reach the caller. PDS calls the feed right after `Metrics.profileReady`, with the same verdict and inside `pcall`, and also requires it inside `pcall`. Metrics is untouched. The feed has no attribute, remote, DataStore, analytics or gameplay-service reference |
 | Disabled and secrets | 8 | The shipped config is off with an empty allowlist. Off makes zero requests for a full lifecycle. There is exactly one `RequestAsync` and one `GetSecret` call site. No URL is written anywhere. The settings live in ServerScriptService, not GameConfig, and no client-visible script mentions the feed |
 
-**2026-09-29 change:** join and duration now route to two named secrets. Both were saved and listed in Creator Hub later that day, and the source switch was enabled. The amended spec includes route and on-switch assertions, but Studio was closed, so those new assertions and the full suite have not been re-run. Rojo built the place successfully; that does not prove Luau runtime behavior.
+**2026-09-29 change:** join and duration now route to two named secrets. Both were saved and listed in Creator Hub later that day, and the source switch was enabled. The amended spec includes route and on-switch assertions. After Studio reopened and synced from Rojo, **TrafficLogSpec passed 101/101** and **MetricsSpec passed 57/57** in Edit with a fake sender. Rojo built the place successfully. The full suite and live send remain untested.
 
 **Full spec suite:** all 55 specs ran, and none threw or failed. MetricsSpec is 57/57 (native analytics unchanged), AdminSpec 79/79, and OfflineEarnings, Leaderstats, Tutorial and HeldRestore all pass.
 

@@ -281,6 +281,6 @@ experience-secret-backed Make webhooks. Michael's scenarios will write them into
   `unknown`, and the elapsed connection time. No names or UserIds.
 - **It is not a count of every visit.** A new player who leaves before their profile loads is missed,
   and a lost ending means an unknown duration, not zero.
-- **Status:** `TrafficLogConfig.Enabled = true` in source; both experience secrets are listed in Creator Hub, but HTTP access and live delivery remain unverified. No publish of this change yet.
+- **Status:** `TrafficLogConfig.Enabled = true` in source and synced Studio; both experience secrets are listed in Creator Hub and Studio Edit reported HTTP enabled. Live delivery remains unverified; no publish of this change yet.
 - **The rest:** setup, receiver rules, limits and the mocked test report are in
   [TRAFFIC_LOG.md](TRAFFIC_LOG.md).
