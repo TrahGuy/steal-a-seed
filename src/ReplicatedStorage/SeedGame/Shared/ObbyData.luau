@@ -75,6 +75,21 @@ ObbyData.Attributes = {
 	RewardChallenge = "ObbyRewardChallenge",
 }
 
+--==============================================================================
+-- WHAT A CLIENT NOTES FOR ITSELF (2026-09-29)
+--
+-- Written by a LocalScript on its OWN copy of the player, so it never leaves
+-- that machine: the server does not see it and nothing is decided by it.
+--
+--   EntranceAsked   os.clock() when this client pressed the OBBY button
+--                   (ObbyButtonUI). ObbyCamera reads it to know the arch is
+--                   where the body may be about to land -- the server may still
+--                   refuse the press, and then nothing happens.
+--==============================================================================
+ObbyData.LocalAttributes = {
+	EntranceAsked = "ObbyEntranceAsked",
+}
+
 -- The course's folder in Workspace, and the tags on its working parts: the
 -- server's ObbyCourse stamps them, every client's ObbyUI drives them.
 ObbyData.FolderName = "SeedObby"
@@ -545,6 +560,24 @@ function ObbyData.launchVelocity(spec: any, gravity: number, feet: Vector3?): (V
 	local flight = vy / g + math.sqrt(2 * (top - to.Y) / g)
 	local flat = Vector3.new(to.X - from.X, 0, to.Z - from.Z) / flight
 	return Vector3.new(flat.X, vy, flat.Z), flight
+end
+
+--==============================================================================
+-- ON THE COURSE? (2026-09-29)
+--
+-- The one question a client asks of ANY player: is this one on the Floating
+-- Garden right now. The Course attribute and nothing else -- true from Start
+-- until Exit, Return, death or leaving, through a finished run's wait on the
+-- summit too. It is the server's, replicated, so every client gets the same
+-- answer about the same player, and nothing is remembered here: the moment the
+-- attribute goes, the answer does.
+--
+-- What reads it: SpeedFX and TrailFX, which draw no ribbon behind a runner (the
+-- camera sits behind the body, so a ribbon lies between the player's eye and the
+-- next jump), and WalkModeUI, whose switch does nothing up there.
+--==============================================================================
+function ObbyData.onCourse(who: any): boolean
+	return who ~= nil and who:GetAttribute(ObbyData.Attributes.Course) == true
 end
 
 function ObbyData.stage(id: string): Stage?

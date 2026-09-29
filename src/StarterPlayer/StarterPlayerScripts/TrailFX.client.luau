@@ -14,6 +14,8 @@
 --   * never for somebody more than RemoteMaxStuds away, never on the frame a
 --     body teleports (no streak drawn across the map), never while ragdolled,
 --     seated or standing still;
+--   * never behind a runner on the Floating Garden, where it would lie over the
+--     next jump (2026-09-29; NOT ON THE COURSE, below) -- worn all the same;
 --   * built per body, and everything goes with the body: on death, respawn,
 --     taking the trail off, leaving -- and a body that vanishes on its own is
 --     noticed by the next frame and its pieces destroyed.
@@ -29,6 +31,8 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
+-- Only for ObbyData.onCourse: not drawn behind a runner (NOT ON THE COURSE, below).
+local ObbyData = require(Shared:WaitForChild("ObbyData"))
 
 local player = Players.LocalPlayer
 local FX = GameConfig.Afterimage
@@ -49,6 +53,8 @@ type Entry = {
 	ribbon: Trail,
 	petals: ParticleEmitter,
 	lastPos: Vector3?,
+	-- Whether its wearer was on the Floating Garden last frame (NOT ON THE COURSE).
+	onCourse: boolean,
 }
 
 local tracked: { [Player]: Entry } = {}
@@ -154,6 +160,7 @@ local function track(who: Player)
 			ribbon = ribbon,
 			petals = petals,
 			lastPos = nil,
+			onCourse = false,
 		}
 	end)
 end
@@ -187,7 +194,30 @@ RunService.Heartbeat:Connect(function()
 			local teleported = entry.lastPos ~= nil and (at - entry.lastPos).Magnitude > FX.TeleportStuds
 			entry.lastPos = at
 			local near = who == player or (here ~= nil and (at - here).Magnitude <= FX.RemoteMaxStuds)
-			local want = near and not teleported and running(entry)
+			--==================================================================
+			-- NOT ON THE COURSE (2026-09-29)
+			--
+			-- A runner on the Floating Garden wears it and shows none of it: the
+			-- camera sits behind the body there, and a ribbon at leg height lies
+			-- over the next jump. Drawn again the moment the server says the run
+			-- is over (ObbyData.onCourse), by the rules above.
+			--
+			-- ONLY THE DRAWING. The SeedTrail attribute, the profile's Cosmetics
+			-- and EquippedTrail, and the Bag's WEARING card are not touched --
+			-- nothing is taken off, so nothing has to be put back on, and no way
+			-- out of the course (Return, Exit, a death, leaving and rejoining)
+			-- can leave it stuck either way. What is already in the air is
+			-- cleared on the way in.
+			--==================================================================
+			local onCourse = ObbyData.onCourse(who)
+			if onCourse ~= entry.onCourse then
+				entry.onCourse = onCourse
+				if onCourse then
+					entry.ribbon:Clear()
+					entry.petals:Clear()
+				end
+			end
+			local want = near and not onCourse and not teleported and running(entry)
 			if entry.ribbon.Enabled ~= want then
 				entry.ribbon.Enabled = want
 			end

@@ -31,6 +31,8 @@ local TweenService = game:GetService("TweenService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+-- Only for ObbyData.onCourse: no ribbon behind a runner (THE TRAIL, below).
+local ObbyData = require(SeedGame:WaitForChild("Shared"):WaitForChild("ObbyData"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -621,6 +623,9 @@ type Entry = {
 	lastPos: Vector3?,
 	width: number,
 	paintedTier: any,
+	-- Whether this player was on the Floating Garden last frame (NO RIBBON ON
+	-- THE COURSE, in the loop below).
+	onCourse: boolean,
 }
 
 local tracked: { [Player]: Entry } = {}
@@ -760,7 +765,7 @@ local function track(who: Player, character: Model)
 			trailMain = tMain, trailCore = tCore, particles = pEmit,
 			a0 = a0, a1 = a1, c0 = c0, c1 = c1, pAttach = pAttach,
 			isLocal = who == player, lastPos = nil, width = born,
-			paintedTier = nil,
+			paintedTier = nil, onCourse = false,
 		}
 	end)
 end
@@ -813,7 +818,41 @@ RunService.Heartbeat:Connect(function(dt)
 			local inRange = entry.isLocal
 				or (here ~= nil and (at - here).Magnitude <= FX.RemoteMaxStuds)
 
-			local want = tier ~= nil and not teleported and inRange and isRunning(entry)
+			--==================================================================
+			-- NO RIBBON ON THE COURSE (2026-09-29)
+			--
+			-- The owner saw "a trail appear" while running the Floating Garden.
+			-- Nothing on the course switched one on: it is this ribbon, which
+			-- any player with 1,000 Speed has whenever they move unladen -- and
+			-- up there nobody carries a pod and everybody moves at the course's
+			-- 24, so it never went out. With the camera behind the body it lay
+			-- between the player's eye and the next jump.
+			--
+			-- So a runner has none, on every client, for as long as the server
+			-- says they are on the course (ObbyData.onCourse: start, falls,
+			-- checkpoints, the wait on the summit). What is already in the air
+			-- is cleared on the way in rather than left to fade across the
+			-- first island.
+			--
+			-- ASKED EVERY FRAME, REMEMBERED NOWHERE. Nothing is switched off, so
+			-- nothing has to be switched back on: leaving by Return, the Exit
+			-- button, a death or a rejoin all end the same way, with the
+			-- attribute gone and the ribbon's ordinary rules deciding again.
+			-- The tier, the Speed that earned it and the REDUCED FX setting are
+			-- read here and never written.
+			--==================================================================
+			local onCourse = ObbyData.onCourse(who)
+			if onCourse ~= entry.onCourse then
+				entry.onCourse = onCourse
+				if onCourse then
+					entry.trailMain:Clear()
+					entry.trailCore:Clear()
+					entry.particles:Clear()
+				end
+			end
+
+			local want = tier ~= nil and not onCourse and not teleported and inRange
+				and isRunning(entry)
 			if entry.trailMain.Enabled ~= want then
 				entry.trailMain.Enabled = want
 				entry.trailCore.Enabled = want
