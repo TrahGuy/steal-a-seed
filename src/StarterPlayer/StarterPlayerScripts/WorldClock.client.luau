@@ -136,6 +136,62 @@ textEdge.Thickness = 2
 textEdge.Parent = text
 
 --==============================================================================
+-- THE CHIP: A PHONE'S CLOCK (2026-09-29)
+--
+-- The owner's report, from a landscape phone: "the DAY timer is a very wide bar
+-- across the top". The bar is 44% of the window because its longest sentence
+-- needs the room on one line. On a phone the same plate is a CHIP (HudLayout's
+-- `clockChip`, 124 px where the bar was 273 on the owner's screen) and says the
+-- same three things on two short lines -- the words over the time:
+--
+--     DAY                    BIOMES CLOSE IN        NIGHT • PODS RETURN
+--     06:59                  00:45                  00:14
+--
+-- Still a different SENTENCE for each as well as a different colour, so nothing
+-- is said by colour alone. The width never changes with the words, so nothing
+-- beside it on the row moves when the day turns. A desktop, a console and a TV
+-- keep the bar exactly as it was.
+--==============================================================================
+local chipWords = Instance.new("TextLabel")
+chipWords.Name = "Words"
+chipWords.Position = UDim2.fromOffset(5, 3)
+chipWords.Size = UDim2.new(1, -10, 0, 11)
+chipWords.BackgroundTransparency = 1
+chipWords.Font = Enum.Font.GothamBlack
+chipWords.TextScaled = true
+chipWords.TextColor3 = PAPER
+chipWords.Text = ""
+chipWords.Visible = false
+chipWords.Parent = plate
+local chipWordsCap = Instance.new("UITextSizeConstraint")
+chipWordsCap.MaxTextSize = 10
+chipWordsCap.MinTextSize = 7
+chipWordsCap.Parent = chipWords
+local chipWordsEdge = Instance.new("UIStroke")
+chipWordsEdge.Color = INK
+chipWordsEdge.Thickness = 1.5
+chipWordsEdge.Parent = chipWords
+
+local chipTime = Instance.new("TextLabel")
+chipTime.Name = "Time"
+chipTime.Position = UDim2.fromOffset(5, 14)
+chipTime.Size = UDim2.new(1, -10, 0, 18)
+chipTime.BackgroundTransparency = 1
+chipTime.Font = Enum.Font.GothamBlack
+chipTime.TextSize = 17
+chipTime.TextColor3 = PAPER
+chipTime.Text = ""
+chipTime.Visible = false
+chipTime.Parent = plate
+local chipTimeEdge = Instance.new("UIStroke")
+chipTimeEdge.Color = INK
+chipTimeEdge.Thickness = 2
+chipTimeEdge.Parent = chipTime
+
+-- Which face is up: the chip's two lines, or the bar's one.
+local chip = false
+
+--==============================================================================
 -- CENTRED, AND NEVER UNDER A ROBLOX BUTTON
 --
 -- The plate above is the whole look and is not touched: same scale, same
@@ -161,6 +217,11 @@ local function placePlate()
 	end
 	cap.MaxSize = Vector2.new(math.min(360, r.w), 40)
 	cap.MinSize = Vector2.new(math.min(190, r.w), 28)
+	-- The chip's two lines on a phone, the bar's one line everywhere else.
+	chip = layout.clockChip
+	text.Visible = not chip
+	chipWords.Visible = chip
+	chipTime.Visible = chip
 	-- r.y is GameConfig's 8 everywhere but a TV, whose clock row comes down to
 	-- the title-safe edge.
 	plate.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - viewport.X / 2), 0, r.y)
@@ -258,6 +319,9 @@ end
 
 local lastText = ""
 local lastColour = PAPER
+-- The chip's own two lines, written only when they change, like the bar's.
+local lastWords, lastTime = "", ""
+local lastChipColour = PAPER
 
 --==============================================================================
 -- A PHASE AND ITS DEADLINE ARE TWO ATTRIBUTES, AND THEY MOVE TOGETHER
@@ -315,16 +379,38 @@ local function draw()
 	drawBigTimer(phase, left)
 	local wording: string
 	local colour: Color3
+	-- The same three, as the chip says them: the words, and the time under them.
+	local words: string
 
 	if phase == CYCLE.PhaseNight then
 		wording = "NIGHT  •  PODS RETURN IN " .. clock(left)
+		words = "NIGHT • PODS RETURN"
 		colour = NIGHT_INK
 	elseif left <= CYCLE.WarnSeconds then
 		wording = "BIOMES CLOSE IN " .. clock(left)
+		words = "BIOMES CLOSE IN"
 		colour = WARN
 	else
 		wording = "DAY  •  " .. clock(left)
+		words = "DAY"
 		colour = PAPER
+	end
+
+	if chip then
+		local time = clock(left)
+		if words ~= lastWords then
+			lastWords = words
+			chipWords.Text = words
+		end
+		if time ~= lastTime then
+			lastTime = time
+			chipTime.Text = time
+		end
+		if colour ~= lastChipColour then
+			lastChipColour = colour
+			chipWords.TextColor3 = colour
+			chipTime.TextColor3 = colour
+		end
 	end
 
 	-- Written only when it changes. TextScaled re-measures on every assignment,

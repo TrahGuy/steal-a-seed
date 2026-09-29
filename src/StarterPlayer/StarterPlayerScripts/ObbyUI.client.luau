@@ -480,6 +480,46 @@ local run = StatusText.new({
 -- What the line says, painted by paintStage and paintClock below.
 local runStage, runTint, runClock = "FLOATING GARDEN", PAPER, "0:00.0"
 
+--==============================================================================
+-- ON A PHONE: THE CLOCK ALONE, UP ON THE TOP ROW (2026-09-29)
+--
+-- The owner's report, from a phone: the words under the clock stood over the
+-- obby's platforms and the player's forward view. The run line was one of
+-- them -- a stage name and a clock across the middle of the screen for the
+-- whole of a run.
+--
+-- So on a phone what LASTS is the clock, and only the clock: in the OBBY
+-- button's own slot on the clock's row (HudLayout's `run`; that button is
+-- hidden on the course), in the monospaced face so it never jiggles. The
+-- stage's NAME is said when the stage begins, as a notice that goes after a
+-- moment (announceStage, below) -- the world itself says where a runner is
+-- the rest of the time. A desktop, a console and a small window keep the
+-- line as it was.
+--==============================================================================
+local runTime = StatusText.new({
+	name = "RunClock",
+	parent = gui,
+	size = StatusText.Size.runClock,
+	tint = PAPER,
+	headFont = StatusText.ClockFont,
+})
+-- Whether this screen draws the clock alone (a phone with room on its top row).
+local clockAlone = false
+
+-- One of the two is up while a run is on: the clock alone, or the whole line.
+local function showRun(want: boolean)
+	if want and clockAlone then
+		run.hide(true)
+		runTime.show()
+	elseif want then
+		runTime.hide(true)
+		run.show()
+	else
+		run.hide()
+		runTime.hide()
+	end
+end
+
 local function placeRun()
 	if gui.AbsoluteSize.X <= 0 then
 		return
@@ -487,6 +527,22 @@ local function placeRun()
 	local input = HudLayout.measure(gui)
 	local layout = HudLayout.solve(input)
 	local inset = input.insetTop or 0
+	local slot = layout.run
+	local alone = layout.sidebar and slot.w > 0
+	if alone ~= clockAlone then
+		clockAlone = alone
+		-- The screen changed kind with a run on: the other line takes over.
+		if run.isShown() or runTime.isShown() then
+			showRun(true)
+		end
+	end
+	if clockAlone then
+		runTime.setScale(StatusText.PhoneScale.runClock)
+		local size = runTime.size()
+		runTime.frame.Position = UDim2.new(0.5, math.round(slot.x + slot.w / 2 - layout.safe.X / 2),
+			0, math.round(slot.y + (slot.h - size.Y) / 2))
+		return
+	end
 	run.setScale(if layout.compact or layout.sidebar then StatusText.SmallScale.run else 1)
 	local _, band = HudLayout.statusRows(layout, inset)
 	local size = run.size()
@@ -499,9 +555,10 @@ gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeRun)
 
 -- Words only; placed again only when the line's width changes (a new stage).
 local function paintRun()
-	local before = run.size()
+	local before, beforeTime = run.size(), runTime.size()
 	run.set(runStage, runClock, runTint)
-	if run.size() ~= before then
+	runTime.set(runClock)
+	if run.size() ~= before or runTime.size() ~= beforeTime then
 		placeRun()
 	end
 end
@@ -582,6 +639,8 @@ local function placeButton()
 	local r = layout.teleport
 	button.Position = HudLayout.place(r, button.AnchorPoint, layout.safe)
 	button.Size = UDim2.fromOffset(r.w, r.h)
+	-- The plate's own size, before its scale, as PlotTeleportUI's.
+	plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)
 	plateScale.Scale = layout.teleportScale
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
@@ -878,11 +937,9 @@ end)
 --==============================================================================
 local function refresh()
 	local want = onCourse() and alive()
-	if want then
-		run.show()
-	else
-		run.hide()
-	end
+	-- Placed first: which of the two lines this screen shows is the layout's.
+	placeRun()
+	showRun(want)
 	button.Visible = want
 	bindPad(want)
 	if want and not clockConnection then
@@ -897,16 +954,73 @@ local function refresh()
 	paintCourse()
 end
 
+--==============================================================================
+-- ON A PHONE THE STAGE IS ANNOUNCED, NOT HELD UP (2026-09-29)
+--
+-- Where the run line is the clock alone (placeRun), a stage's name is a notice
+-- as the stage begins: up for a moment in the notices' own band at the top of
+-- the screen, no sound, and gone. Only going FORWARD -- a fall that puts a
+-- runner back a stage says BACK TO CHECKPOINT and that is enough -- and never
+-- for the first stage, which SPEED CHALLENGE has just introduced.
+--==============================================================================
+-- How far along the course each stage is: the main route's stages count 1 to
+-- 6, and the two twilight stages stand between the fifth and the summit, which
+-- is where they are run.
+local STAGE_ORDER: { [string]: number } = {}
+do
+	local main, twilight = 0, 0
+	for _, stage in ipairs(ObbyData.Stages) do
+		if stage.route == "main" then
+			main += 1
+			STAGE_ORDER[stage.id] = main
+		end
+	end
+	for _, stage in ipairs(ObbyData.Stages) do
+		if stage.route ~= "main" then
+			twilight += 1
+			STAGE_ORDER[stage.id] = (main - 1) + twilight * 0.2
+		end
+	end
+end
+local announced = 0
+
+-- How long a notice the course says stays up on a phone, where it stands over
+-- the way ahead rather than over the belt; nil everywhere else (its kind's own).
+local function brief(seconds: number): number?
+	return if clockAlone then seconds else nil
+end
+
+local function announceStage()
+	local id = player:GetAttribute(OA.Stage)
+	local order = if type(id) == "string" then STAGE_ORDER[id] else nil
+	if not (order and onCourse()) then
+		return
+	end
+	if order <= announced then
+		return
+	end
+	local first = announced == 0
+	announced = order
+	local stage = ObbyData.stage(id :: string)
+	if first or not (clockAlone and stage) then
+		return
+	end
+	Notice.post({ kind = "info", title = string.upper(stage.name), key = "obby:stage", quiet = true,
+		seconds = brief(1.8) })
+end
+
 player:GetAttributeChangedSignal(OA.Course):Connect(function()
 	if onCourse() then
 		resetFalling()
 		lastResult = nil
+		announced = 0
 	end
 	refresh()
 end)
 player:GetAttributeChangedSignal(OA.Stage):Connect(function()
 	paintStage()
 	paintCourse()
+	announceStage()
 end)
 player:GetAttributeChangedSignal(OA.RewardMain):Connect(paintCourse)
 player:GetAttributeChangedSignal(OA.RewardChallenge):Connect(paintCourse)
@@ -918,6 +1032,9 @@ player:GetAttributeChangedSignal(OA.EndedAt):Connect(paintClock)
 
 player:GetAttributeChangedSignal(OA.StartedAt):Connect(function()
 	if player:GetAttribute(OA.StartedAt) ~= nil and onCourse() then
+		-- A run begun, the first or a Replay: its stages are announced afresh, and
+		-- the first of them is what this notice introduces.
+		announced = 1
 		Notice.post({
 			kind = "info",
 			title = "SPEED CHALLENGE",
@@ -932,7 +1049,7 @@ player:GetAttributeChangedSignal(OA.Checkpoint):Connect(function()
 	local at = player:GetAttribute(OA.Checkpoint)
 	if at == "cp1" or at == "cp2" then
 		Notice.post({ kind = "success", title = "CHECKPOINT", detail = "A fall brings you back here.",
-			key = "obby:checkpoint" })
+			key = "obby:checkpoint", seconds = brief(2) })
 	end
 end)
 
@@ -947,7 +1064,10 @@ local lastFalls = 0
 player:GetAttributeChangedSignal(OA.Falls):Connect(function()
 	local falls = tonumber(player:GetAttribute(OA.Falls)) or 0
 	if falls > lastFalls then
-		Notice.post({ kind = "info", title = "BACK TO CHECKPOINT", key = "obby:fall", quiet = true })
+		-- The notice a runner sees most, at the moment they most need to see the
+		-- next leaf: on a phone it is up for a second and a half.
+		Notice.post({ kind = "info", title = "BACK TO CHECKPOINT", key = "obby:fall", quiet = true,
+			seconds = brief(1.5) })
 	end
 	lastFalls = falls
 end)
@@ -960,7 +1080,7 @@ player.CharacterAdded:Connect(function(character: Model)
 	refresh()
 end)
 player.CharacterRemoving:Connect(function()
-	run.hide()
+	showRun(false)
 	button.Visible = false
 	bindPad(false)
 end)

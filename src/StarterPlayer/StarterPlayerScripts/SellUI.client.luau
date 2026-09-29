@@ -53,6 +53,8 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- Only for where the notices stand on a phone, whose band the sale line shares.
+local Notice = require(Shared:WaitForChild("Notice"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -282,11 +284,19 @@ local function placeNotice()
 	local inset = input.insetTop or 0
 	-- Real pixels / the gui's TV scale = the Offsets HudLayout answers in (1 off a TV).
 	local width = notice.AbsoluteSize.X / UIKit.scaleOf(gui) + NOTICE_OUTLINE * 2
-	local dx, top = HudLayout.notice(solved, width, NOTICE_H, NOTICE_TOP - inset)
+	-- ON A PHONE (2026-09-29) the line shares the top of the centre column with
+	-- the notices, and stands under one that is up (Notice.reach). Everywhere
+	-- else the reach is nil and the band is where it always was.
+	local dx, top = HudLayout.notice(solved, width, NOTICE_H, NOTICE_TOP - inset, Notice.reach())
 	notice.Position = UDim2.new(0.5, math.round(dx), 0, top + inset)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeNotice)
 notice:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeNotice)
+Notice.onReach(function()
+	if notice.Visible then
+		placeNotice()
+	end
+end)
 placeNotice()
 
 local noticeToken = 0

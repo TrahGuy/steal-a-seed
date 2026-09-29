@@ -39,6 +39,9 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- Only for where the notices stand on a phone, beside the guide's words.
+local Notice = require(Shared:WaitForChild("Notice"))
+local TextService = game:GetService("TextService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -127,6 +130,25 @@ local function outlined(parent: Instance, name: string, size: number,
 	return label
 end
 
+--==============================================================================
+-- THE WORDS STAND TOGETHER, SO THEY CAN STAND DOWN TOGETHER (2026-09-29)
+--
+-- The banner, Skip and GUIDE live in one full-size holder that draws nothing
+-- and takes no input. On a phone the words stand in the left column, beside
+-- the band the notices pass through at the top of the screen; while a notice is
+-- up the holder is hidden, so a notice is never written over the guide's words
+-- or they over it, and comes back the moment the notice has gone (Notice.reach).
+-- Only the words: the arrows, the highlight and the markers in the world carry
+-- on. Everywhere else the holder is always shown and changes nothing.
+--==============================================================================
+local words = Instance.new("Frame")
+words.Name = "Words"
+words.Size = UDim2.fromScale(1, 1)
+words.BackgroundTransparency = 1
+words.BorderSizePixel = 0
+words.Active = false
+words.Parent = gui
+
 local banner = Instance.new("Frame")
 banner.Name = "Instruction"
 banner.BackgroundTransparency = 1
@@ -134,7 +156,7 @@ banner.AnchorPoint = Vector2.new(.5, 0)
 banner.Position = UDim2.new(.5, 0, 0, 84)
 banner.Size = UDim2.fromOffset(560, 84)
 banner.Visible = false
-banner.Parent = gui
+banner.Parent = words
 -- HudLayout's `tutorialScale` (placeBanner): 1, except on a phone, where the
 -- whole banner -- lines, outlines and spacing together -- is drawn smaller.
 local bannerScale = Instance.new("UIScale")
@@ -164,7 +186,7 @@ skip.AnchorPoint = Vector2.new(.5, 0)
 skip.Position = UDim2.new(.5, 0, 0, 168)
 skip.Size = UDim2.fromOffset(150, 20)
 skip.Visible = false
-skip.Parent = gui
+skip.Parent = words
 UIKit.stroke(skip, BLACK, 2)
 
 local resume = Instance.new("TextButton")
@@ -179,7 +201,7 @@ resume.AnchorPoint = Vector2.new(.5, 0)
 resume.Position = UDim2.new(.5, 0, 0, 84)
 resume.Size = UDim2.fromOffset(150, 26)
 resume.Visible = false
-resume.Parent = gui
+resume.Parent = words
 UIKit.stroke(resume, BLACK, 2.5)
 
 --==============================================================================
@@ -211,6 +233,80 @@ for _, line in ipairs(BANNER_LINES) do
 	cap.Parent = line[1]
 end
 
+--==============================================================================
+-- ON A PHONE: THE LEFT COLUMN, THE WAY A QUEST LINE STANDS (2026-09-29)
+--
+-- The owner's report, from a landscape phone: the guide's words ("TAKE A POD!")
+-- were among the things filling the middle of the screen, with the player's own
+-- forward view behind them. Measured the same day in Studio's phone emulation:
+-- the banner, its step and its skip line ran from the clock's column to the
+-- character's waist, and pushed the boost row onto the belt.
+--
+-- Where HudLayout says `guide` -- a touch screen with room for it -- the same
+-- three lines stand in the left column, under WALK MODE and clear of the dock's
+-- handle, left-aligned:
+--
+--     STEP 3 / 6   Skip guide        one row: the counter, and the button
+--     TAKE A POD!                    the instruction, two lines at the most
+--     Pods return at dawn ...        the advice, two lines at the most
+--
+-- The words are WRAPPED rather than squeezed onto one line, and drawn a size
+-- smaller only when two lines will not hold them -- so a long instruction is a
+-- second line, not smaller type. Skip stands on the row ABOVE the words, so the
+-- button never moves when the words change length. Laid out at 1 inside the
+-- banner's own scale like every other size here: the sizes below are drawn at
+-- HudLayout's `tutorialScale`, 18 and 11 on a phone.
+--
+-- A desktop, a console, a TV and a small window keep the banner exactly as it
+-- was: every property this sets is put back to what it had there.
+--==============================================================================
+local GUIDE = { Line = 24, LineMin = 17, Sub = 15, SubMin = 13, Counter = 14, Gap = 3, Lines = 2 }
+local guide = false
+-- The row the counter and Skip stand on, and the block's width; at scale 1.
+local guideRow, guideWidth = 0, 0
+
+-- The size, from `size` down to `least`, at which `text` stands in `lines` lines
+-- of `width`, and how tall that is.
+local function wrappedAt(text: string, size: number, least: number, width: number, lines: number): (number, number)
+	local at = size
+	while true do
+		local one = TextService:GetTextSize("Ag", at, Enum.Font.LuckiestGuy, Vector2.new(10000, 10000)).Y
+		local all = TextService:GetTextSize(text, at, Enum.Font.LuckiestGuy, Vector2.new(width, 10000)).Y
+		if all <= one * lines + 1 or at <= least then
+			return at, math.min(all, one * lines) + 2
+		end
+		at -= 1
+	end
+end
+
+local function layoutGuide()
+	if not guide or guideWidth <= 0 then
+		return
+	end
+	local y = guideRow + GUIDE.Gap
+	for _, line in ipairs({ { instruction, GUIDE.Line, GUIDE.LineMin }, { subline, GUIDE.Sub, GUIDE.SubMin } }) do
+		local label = line[1] :: TextLabel
+		if label.Text == "" then
+			label.Size = UDim2.fromOffset(guideWidth, 0)
+			label.Position = UDim2.fromOffset(0, y)
+		else
+			local size, height = wrappedAt(label.Text, line[2] :: number, line[3] :: number, guideWidth, GUIDE.Lines)
+			label.TextSize = size
+			label.Position = UDim2.fromOffset(0, y)
+			label.Size = UDim2.fromOffset(guideWidth, height)
+			y += height + GUIDE.Gap
+		end
+	end
+end
+table.insert(connections, instruction:GetPropertyChangedSignal("Text"):Connect(layoutGuide))
+table.insert(connections, subline:GetPropertyChangedSignal("Text"):Connect(layoutGuide))
+
+-- The words stand down while a notice is up beside them (a phone only).
+local function coverWords()
+	words.Visible = not (guide and Notice.reach() ~= nil)
+end
+table.insert(connections, Notice.onReach(coverWords))
+
 local function placeBanner()
 	if gui.AbsoluteSize.X <= 0 then
 		return
@@ -222,10 +318,50 @@ local function placeBanner()
 	banner.Size = UDim2.fromOffset(layout.banner.w / tutorialScale, layout.banner.h / tutorialScale)
 	banner.Position = HudLayout.place(layout.banner, top, layout.safe)
 	skip.Position = HudLayout.place(layout.skip, top, layout.safe)
-	resume.Position = UDim2.new(0.5, banner.Position.X.Offset, 0, layout.banner.y)
-	for _, line in ipairs(BANNER_LINES) do
-		line[1].TextScaled = layout.compact
+	skip.Size = UDim2.fromOffset(layout.skip.w, layout.skip.h)
+	guide = layout.guide
+	if guide then
+		local row = HudLayout.Config.Phone.Guide.Row
+		guideRow = row / tutorialScale
+		guideWidth = layout.banner.w / tutorialScale
+		for _, label in ipairs({ instruction, subline }) do
+			label.TextScaled = false
+			label.TextWrapped = true
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.TextYAlignment = Enum.TextYAlignment.Top
+		end
+		counter.TextScaled = false
+		counter.TextSize = GUIDE.Counter
+		counter.TextXAlignment = Enum.TextXAlignment.Left
+		counter.Position = UDim2.fromOffset(0, 0)
+		counter.Size = UDim2.fromOffset(HudLayout.Config.Phone.Counter / tutorialScale, guideRow)
+		skip.TextXAlignment = Enum.TextXAlignment.Left
+		resume.AnchorPoint = Vector2.new(0, 0)
+		resume.TextXAlignment = Enum.TextXAlignment.Left
+		resume.Position = UDim2.fromOffset(layout.banner.x, layout.banner.y)
+		layoutGuide()
+	else
+		-- The banner as it always was, whatever a phone's layout last set.
+		instruction.Position = UDim2.fromOffset(0, 0)
+		instruction.Size = UDim2.new(1, 0, 0, 42)
+		subline.Position = UDim2.fromOffset(0, 42)
+		subline.Size = UDim2.new(1, 0, 0, 24)
+		counter.Position = UDim2.fromOffset(0, 64)
+		counter.Size = UDim2.new(1, 0, 0, 18)
+		for _, line in ipairs(BANNER_LINES) do
+			local label = line[1] :: TextLabel
+			label.TextSize = line[2] :: number
+			label.TextWrapped = false
+			label.TextXAlignment = Enum.TextXAlignment.Center
+			label.TextYAlignment = Enum.TextYAlignment.Center
+			label.TextScaled = layout.compact
+		end
+		skip.TextXAlignment = Enum.TextXAlignment.Center
+		resume.AnchorPoint = Vector2.new(0.5, 0)
+		resume.TextXAlignment = Enum.TextXAlignment.Center
+		resume.Position = UDim2.new(0.5, banner.Position.X.Offset, 0, layout.banner.y)
 	end
+	coverWords()
 end
 table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner))
 table.insert(connections, GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placeBanner))
@@ -296,7 +432,9 @@ smallLine.ZIndex = 9
 --==============================================================================
 local function publishReach()
 	local reach: number? = nil
-	if banner.Visible then
+	-- Not on a phone, whose words stand in the left column: nothing under the
+	-- clock has to step round them there.
+	if banner.Visible and not guide then
 		local layout = HudLayout.solve(HudLayout.measure(gui))
 		reach = layout.skip.y + layout.skip.h
 	end

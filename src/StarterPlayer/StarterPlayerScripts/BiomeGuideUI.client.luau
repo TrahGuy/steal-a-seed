@@ -71,6 +71,8 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- Only for where the notices stand on a phone, whose band the name shares.
+local Notice = require(Shared:WaitForChild("Notice"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -152,11 +154,19 @@ local function placeNotice()
 	local inset = input.insetTop or 0
 	-- Real pixels / the gui's TV scale = the Offsets HudLayout answers in (1 off a TV).
 	local width = label.AbsoluteSize.X / UIKit.scaleOf(gui) + OUTLINE * 2
-	local dx, top = HudLayout.notice(layout, width, HEIGHT, TOP - inset)
+	-- ON A PHONE (2026-09-29) the name shares the top of the centre column with
+	-- the notices, and stands under one that is up (Notice.reach) rather than on
+	-- it. Everywhere else the reach is nil and the band is where it always was.
+	local dx, top = HudLayout.notice(layout, width, HEIGHT, TOP - inset, Notice.reach())
 	label.Position = UDim2.new(0.5, math.round(dx), 0, top + inset)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeNotice)
 label:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeNotice)
+Notice.onReach(function()
+	if label.Visible then
+		placeNotice()
+	end
+end)
 placeNotice()
 
 local token = 0
@@ -187,6 +197,9 @@ local function showBiome(biomeId: string)
 	local mine = token
 	label.Text = string.upper(biome.DisplayName)
 	label.Visible = true
+	-- The same name twice is the same width, and nothing above would place it:
+	-- a notice may have come or gone since it last stood (a phone's band).
+	placeNotice()
 	fadeTo(0, FADE_IN, Enum.EasingDirection.Out)
 
 	task.delay(FADE_IN + HOLD, function()

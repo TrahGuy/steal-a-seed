@@ -178,6 +178,12 @@ end
 --==============================================================================
 StatusText.Size = { status = 26, boost = 17, boostClock = 15, run = 20, runClock = 17 }
 StatusText.SmallScale = { status = 21 / 26, boost = 15 / 17, run = 17 / 20 }
+-- A PHONE'S OWN (2026-09-29; HudLayout, THE PHONE'S TOP ROW): the boost row
+-- stands in a slim band right under the top row, so its lines are drawn at 13
+-- (their clocks at 11.5) where a small window draws them at 15; and the obby's
+-- run clock, alone in the OBBY button's slot, is 15. The chase warning keeps
+-- SmallScale's 21: a warning is read at a glance or not at all.
+StatusText.PhoneScale = { boost = 13 / 17, runClock = 15 / 17 }
 
 -- A remaining time as a clock: 0:07, 1:56, 12:04, and 1:02:03 past an hour.
 function StatusText.clock(seconds: number): string
@@ -203,6 +209,10 @@ export type Options = {
 	-- A second, smaller part after the headline -- drawn only when this is set.
 	detailSize: number?,
 	detailFont: Enum.Font?,
+	-- The headline's own face, when it is not the display face: a line that is
+	-- only a clock (a phone's run clock, ObbyUI) is monospaced from its first
+	-- digit, so it never jiggles.
+	headFont: Enum.Font?,
 	zIndex: number?,
 }
 
@@ -229,6 +239,7 @@ function StatusText.new(opts: Options): Line
 	local gap = math.max(4, math.floor(size * 0.3 + 0.5))
 	local detailSize = opts.detailSize
 	local detailFont = opts.detailFont or StatusText.DetailFont
+	local headFont = opts.headFont or StatusText.HeadFont
 	local rowH = math.max(iconSize, size + 6)
 
 	-- Anchored at its top middle: owners centre it on a HudLayout rect.
@@ -287,7 +298,7 @@ function StatusText.new(opts: Options): Line
 	head.Name = "Head"
 	head.AnchorPoint = Vector2.new(0, 0.5)
 	head.BackgroundTransparency = 1
-	head.Font = StatusText.HeadFont
+	head.Font = headFont
 	head.TextSize = size
 	head.TextColor3 = opts.tint
 	head.TextXAlignment = Enum.TextXAlignment.Left
@@ -337,7 +348,7 @@ function StatusText.new(opts: Options): Line
 		if head.Text ~= headText then
 			head.Text = headText
 		end
-		local hw = textWidth(headText, size, StatusText.HeadFont) + 4
+		local hw = textWidth(headText, size, headFont) + 4
 		head.Position = UDim2.new(0, x, 0.5, 1)
 		head.Size = UDim2.fromOffset(hw, size + 6)
 		x += hw

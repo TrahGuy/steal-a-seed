@@ -230,6 +230,32 @@ export type Layout = {
 	-- its word. An empty rect where neither side has room: it then stays hidden.
 	obby: Rect,
 	obbyWide: boolean,
+	-- The plate TELEPORT TO PLOT (and the obby's RETURN TO PLOT) draws inside
+	-- its touch area, before `teleportScale`: the touch area's own size
+	-- everywhere but a phone, whose touch area is narrower than the plate's
+	-- 196 x 44 drawn at 0.75 would suggest (THE PHONE'S TOP ROW).
+	teleportPlate: Vector2,
+
+	-- ON A PHONE ONLY (THE PHONE'S TOP ROW, THE PHONE'S CENTRE COLUMN). False,
+	-- empty or nil on a desktop, a console, a TV and a small window.
+	-- The clock is drawn as a chip: two short lines, the words over the time.
+	clockChip: boolean,
+	-- TELEPORT TO PLOT stands on the clock's row, beside it, rather than under it.
+	topRow: boolean,
+	-- The obby's run clock, in the OBBY button's slot -- that button is hidden on
+	-- the course. Empty where the slot is not on the top row.
+	run: Rect,
+	-- The top row's two ends, and the middle and the top of the column under it;
+	-- safe space.
+	rowLo: number?,
+	rowHi: number?,
+	columnCentre: number?,
+	columnTop: number?,
+	-- The notices stand at the top of the centre column and stack DOWN from it.
+	toastTop: boolean,
+	-- The guide's words stand in the left column: left-aligned and wrapped, the
+	-- step counter and Skip on a row above them.
+	guide: boolean,
 
 	-- The two-account ADMIN button, in WINDOW space like `clock`: in the topbar
 	-- beside the clock (see THE ADMIN BUTTON). nil without a clock to stand by.
@@ -508,6 +534,38 @@ local CONFIG = {
 	Status = { Height = 32, BoostHeight = 26 },
 	-- The ADMIN button: the clock's height, one short word wide.
 	Admin = { Size = Vector2.new(64, 34) },
+	--==========================================================================
+	-- THE PHONE'S TOP ROW AND WHAT STANDS UNDER IT (2026-09-29; see below)
+	--
+	-- The clock as a chip, this wide. TELEPORT TO PLOT's touch area beside it:
+	-- its plate is still Teleport.Size drawn at Teleport.PhoneScale -- 147 x 33
+	-- -- inside a touch area that is the plate and a few pixels, so the row has
+	-- room for the OBBY button too. Under the row, in the safe area: the boost
+	-- row, then the band every passing line shares (the notices, the biome name,
+	-- the sale line). The guide's words stand in the left column.
+	--==========================================================================
+	Phone = {
+		Clock = 124,
+		Touch = 156,
+		-- Below the top row's foot, in safe space: the boost row, and where the
+		-- passing lines start.
+		BoostTop = 2,
+		BoostHeight = 18,
+		NoticeTop = 24,
+		-- A passing line stands this far under whatever already stands in the band.
+		NoticeGap = 4,
+		-- The guide's words: a block this wide at most, never past this share of
+		-- the width (the character stands in the middle), and as tall as a row
+		-- for STEP and Skip, two lines of instruction and two of advice. `Clear`
+		-- is what it keeps between its right edge and the middle of the screen
+		-- wherever that still leaves the row its width: measured 2026-09-29 on a
+		-- 705-px phone, the character at the camera's resting zoom is 85 px wide
+		-- and a 200-px block's longest line ended on its shoulder.
+		Guide = { Width = 200, Reach = 0.47, Height = 90, Row = 20, Clear = 48 },
+		-- Skip, beside the step counter: a button, as tall as it always was.
+		Skip = Vector2.new(112, 20),
+		Counter = 62,
+	},
 	--==========================================================================
 	-- THE BAG PANEL
 	--
@@ -973,6 +1031,14 @@ local function obbyBeside(input: Input, L: Layout): (Rect, boolean)
 	if admin then
 		table.insert(others, rect(admin.x - originX, admin.y - insetTop, admin.w, admin.h))
 	end
+	-- The clock itself (window space, like ADMIN): on a phone TELEPORT stands
+	-- BESIDE it on its row, so "left of TELEPORT" can be the clock's own place.
+	-- Everywhere else the button's row is far under the clock and this rules
+	-- nothing out.
+	local clock = L.clock
+	if clock then
+		table.insert(others, rect(clock.x - originX, clock.y - insetTop, clock.w, clock.h))
+	end
 	local function clear(r: Rect): boolean
 		if r.x < M or r.x + r.w > sw - M then
 			return false
@@ -1096,6 +1162,12 @@ local function desktop(input: Input): Layout
 		teleportScale = 1,
 		obby = rect(0, 0, 0, 0),
 		obbyWide = false,
+		teleportPlate = CONFIG.Teleport.Size,
+		clockChip = false,
+		topRow = false,
+		run = rect(0, 0, 0, 0),
+		toastTop = false,
+		guide = false,
 		admin = nil,
 	}
 	L.clock = clockRect(input, L)
@@ -1347,6 +1419,12 @@ local function compact(input: Input): Layout
 		teleportScale = 1,
 		obby = rect(0, 0, 0, 0),
 		obbyWide = false,
+		teleportPlate = CONFIG.Teleport.Size,
+		clockChip = false,
+		topRow = false,
+		run = rect(0, 0, 0, 0),
+		toastTop = false,
+		guide = false,
 		admin = nil,
 	}
 	L.clock = clockRect(input, L)
@@ -1361,6 +1439,164 @@ local function compact(input: Input): Layout
 	L.fits = L.fits and #HudLayout.problems(L) == 0
 	L.obby, L.obbyWide = obbyBeside(input, L)
 	return L
+end
+
+--==============================================================================
+-- THE PHONE'S TOP ROW (2026-09-29)
+--
+-- The owner's report, from landscape phone screenshots: the DAY timer a very
+-- wide bar across the top, and under it a column of words -- the teleport and
+-- obby buttons, the stage, the boosts, the guide, the notices -- down the
+-- middle of the screen, over the player's own forward view. Measured the same
+-- day in Studio's phone emulation (705 x 338): with the guide and two boosts up
+-- on the course that column ran from the clock to the belt, and the boost row
+-- stood ON the belt.
+--
+-- So on a phone everything that used to stand under the clock stands BESIDE it,
+-- on one row, up in the topbar's band:
+--
+--   ADMIN | the clock, as a chip | TELEPORT TO PLOT | OBBY
+--
+--   * THE CLOCK is a chip Phone.Clock wide, on the window's centre line -- two
+--     short lines, the words over the time (WorldClock) -- where the bar took
+--     44% of the window.
+--   * TELEPORT TO PLOT is on the clock's right (its left where the right has
+--     no room), its plate the same 147 x 33 as before inside a touch area
+--     Phone.Touch wide and 44 tall. RETURN TO PLOT is the same button on the
+--     course, and the chase warning has the same slot off it (statusLine).
+--   * OBBY is on the far side of TELEPORT from the clock, with its icon where
+--     the row has the room and the word alone where it has not. On the course
+--     that slot holds the run's clock (`run`): the button is hidden there.
+--   * ADMIN, which two accounts see, takes the row's left end, else its right,
+--     and hangs under the clock only where neither has room.
+--
+-- INSIDE THE TOPBAR'S FREE SPAN, EVERY ONE OF THEM: 8 px clear of Roblox's own
+-- buttons (GuiService.TopbarInset), and inside the safe area across, which a
+-- notch narrows. Where the row cannot hold BOTH buttons the answer for both is
+-- nil and the caller stands them under the clock, as they stood before.
+--
+-- WINDOW space for the clock and ADMIN, safe space for the two buttons, as
+-- each always was.
+--==============================================================================
+type PhoneRow = {
+	clock: Rect?,
+	admin: Rect?,
+	teleport: Rect?,
+	obby: Rect?,
+	obbyWide: boolean,
+	-- The row's two ends and the clock's middle, in safe space.
+	lo: number,
+	hi: number,
+	centre: number,
+}
+
+local function phoneRow(input: Input, band: { railTop: number, railRight: number, rightLeft: number }): PhoneRow
+	local M, G = CONFIG.Margin, CONFIG.Gap
+	local P, T, O, A = CONFIG.Phone, CONFIG.Teleport, CONFIG.Obby, CONFIG.Admin
+	local sw = input.safe.X
+	local answer: PhoneRow = {
+		clock = nil, admin = nil, teleport = nil, obby = nil, obbyWide = false,
+		lo = M, hi = sw - M, centre = sw / 2,
+	}
+	local viewport = input.viewport
+	if not viewport then
+		return answer
+	end
+	local insetTop = input.insetTop or 0
+	local originX = (viewport.X - sw) / 2
+	local top = CONFIG.ClockTop + (input.lift or 0)
+	-- The buttons' touch areas are taller than the clock and centred on it.
+	local touchTop = top + (CONFIG.ClockHeight - T.Size.Y) / 2
+
+	local lo, hi = originX + M, originX + sw - M
+	local bar = input.topbar
+	if bar and bar.w > 0 then
+		lo, hi = math.max(lo, bar.x + M), math.min(hi, bar.x + bar.w - M)
+	end
+	-- A topbar too short to hold the row: it then shares the top buttons' rows
+	-- and stays between them, as the clock always has (clockRect).
+	if touchTop + T.Size.Y + G > insetTop + band.railTop then
+		lo = math.max(lo, originX + band.railRight + G)
+		hi = math.min(hi, originX + band.rightLeft - G)
+	end
+
+	local width = math.min(P.Clock, math.max(0, hi - lo))
+	local centre = viewport.X / 2
+	if hi - lo >= width then
+		centre = math.clamp(centre, lo + width / 2, hi - width / 2)
+	end
+	local clock = rect(centre - width / 2, top, width, CONFIG.ClockHeight)
+	answer.clock = clock
+	answer.lo, answer.hi, answer.centre = lo - originX, hi - originX, centre - originX
+
+	-- What stands on the row so far, in window space.
+	local taken: { Rect } = { clock }
+	local function free(x: number, w: number): boolean
+		if x < lo - 1e-6 or x + w > hi + 1e-6 then
+			return false
+		end
+		for _, other in ipairs(taken) do
+			if x < other.x + other.w + G - 1e-6 and other.x < x + w + G - 1e-6 then
+				return false
+			end
+		end
+		return true
+	end
+
+	local tx: number? = nil
+	for _, x in ipairs({ clock.x + clock.w + G, clock.x - G - P.Touch }) do
+		if tx == nil and free(x, P.Touch) then
+			tx = x
+		end
+	end
+	if tx == nil then
+		return answer
+	end
+	local slot = rect(tx, touchTop, P.Touch, T.Size.Y)
+	table.insert(taken, slot)
+
+	-- OBBY on TELEPORT's far side from the clock, and nowhere else: the chase
+	-- warning has TELEPORT's slot and runs on from it AWAY from the clock
+	-- (statusLine), over this one -- which is empty then, the button being for
+	-- the Safe Zone only. So the two slots together are the warning's room, and
+	-- they are always side by side.
+	local rightOfClock = tx > clock.x
+	local obby: Rect? = nil
+	local obbyWide = false
+	for _, w in ipairs({ O.Size.X, O.Narrow }) do
+		local x = if rightOfClock then slot.x + slot.w + G else slot.x - G - w
+		if obby == nil and free(x, w) then
+			obby = rect(x - originX, touchTop - insetTop, w, T.Size.Y)
+			obbyWide = w == O.Size.X
+			table.insert(taken, rect(x, touchTop, w, T.Size.Y))
+		end
+	end
+	-- BOTH BUTTONS OR NEITHER. A row with room for TELEPORT and none for OBBY
+	-- would leave OBBY nowhere to stand -- under the row is where ADMIN hangs
+	-- once the row is full -- and a shortcut every player had must not vanish
+	-- because Roblox's own buttons grew. Such a screen keeps the arrangement it
+	-- had: both buttons under the clock (the caller; teleportUnder, obbyBeside).
+	if obby == nil then
+		return answer
+	end
+	answer.teleport = rect(tx - originX, touchTop - insetTop, P.Touch, T.Size.Y)
+	answer.obby, answer.obbyWide = obby, obbyWide
+
+	local leftmost, rightmost = math.huge, -math.huge
+	for _, r in ipairs(taken) do
+		leftmost = math.min(leftmost, r.x)
+		rightmost = math.max(rightmost, r.x + r.w)
+	end
+	local aw, ah = A.Size.X, A.Size.Y
+	local ay = clock.y + (clock.h - ah) / 2
+	if free(leftmost - G - aw, aw) then
+		answer.admin = rect(leftmost - G - aw, ay, aw, ah)
+	elseif free(rightmost + G, aw) then
+		answer.admin = rect(rightmost + G, ay, aw, ah)
+	else
+		answer.admin = rect(clock.x + clock.w / 2 - aw / 2, clock.y + clock.h + 4, aw, ah)
+	end
+	return answer
 end
 
 --==============================================================================
@@ -1468,20 +1704,27 @@ local function sidebars(input: Input): Layout
 	-- of what the player owns, from the same right edge.
 	--==========================================================================
 	--==========================================================================
-	-- THE CLOCK, AND THE TELEPORT BUTTON UNDER IT
+	-- THE CLOCK, AND THE TELEPORT BUTTON BESIDE IT (2026-09-29)
 	--
-	-- Worked out here rather than at the end, because the chooser keeps clear
-	-- of the button. The clock only needs the rows' band from the answer.
+	-- THE PHONE'S TOP ROW, above. Worked out here rather than at the end,
+	-- because the chooser keeps clear of the button. Where the row has no room
+	-- for both buttons beside the clock -- a topbar whose free span is very
+	-- narrow -- TELEPORT stands under the clock and OBBY beside it there
+	-- (obbyBeside, below), as every phone's did before the row.
 	--==========================================================================
-	local clock = clockRect(input, {
-		safe = input.safe, railTop = M, railBottom = railBottom,
-		railRight = walk.x + walk.w, rightLeft = boost.x,
-	} :: any)
-	local admin = adminBeside(input, clock)
-	local teleport = teleportUnder(input, clock, {
-		rect(dock.x, dock.y, dockRight - dock.x, dock.h), handle, walk,
-		HudLayout.union(HudLayout.union(boost, garden), bag),
-	}, true, admin)
+	local row = phoneRow(input, { railTop = M, railRight = walk.x + walk.w, rightLeft = boost.x })
+	local clock, admin = row.clock, row.admin
+	local inRow = row.teleport ~= nil
+	local teleport: Rect
+	if row.teleport then
+		teleport = row.teleport
+	else
+		admin = adminBeside(input, clock)
+		teleport = teleportUnder(input, clock, {
+			rect(dock.x, dock.y, dockRight - dock.x, dock.h), handle, walk,
+			HudLayout.union(HudLayout.union(boost, garden), bag),
+		}, true, admin)
+	end
 
 	local chooserH = C.Pad * 2 + C.Title + C.Card.Y
 	local chooserRight = equipment.x - G
@@ -1542,14 +1785,78 @@ local function sidebars(input: Input): Layout
 		fits = false
 	end
 
-	-- THE TUTORIAL BANNER: see bannerIn -- at the phone's scale. The dock and its
-	-- handle stand in its band too, open or shut. It keeps 8 px under the
-	-- teleport button AND under the notice band beneath the button
-	-- (HudLayout.notice), so a biome name going by -- Greenhollow, where the
-	-- tutorial sends a beginner -- never lands on the instructions.
-	local noticeBottom = teleport.y + teleport.h + G + CONFIG.NoticeHeight
-	local banner, skip = bannerIn(sw, math.max(railBottom, noticeBottom),
-		{ cash, equipment, thumb, jump, dock, handle }, CONFIG.TutorialPhoneScale)
+	--==========================================================================
+	-- THE PHONE'S CENTRE COLUMN, AND THE GUIDE'S WORDS BESIDE IT (2026-09-29)
+	--
+	-- With the buttons up on the clock's row, the column under it is the safe
+	-- area's own top: `columnTop` is 0, or the foot of whatever still stands
+	-- under the clock on a phone the row could not hold (the button, an ADMIN
+	-- hung there). Two things stand in the column, and nothing else:
+	--
+	--   the boost row      Phone.BoostTop under columnTop, Phone.BoostHeight tall
+	--   the passing lines  from Phone.NoticeTop: the notices (ActionToastUI), the
+	--                      biome name and the sale line -- each there for a
+	--                      second or two and gone
+	--
+	-- THE GUIDE'S WORDS LEAVE THE MIDDLE. They were a 420-px banner under all
+	-- of that, over the player's own head for the whole of a beginner's first
+	-- minutes. They stand in the LEFT column now, the way a quest line does:
+	-- from the dock handle's right edge, under WALK MODE, left-aligned and
+	-- wrapped (TutorialUI), never past Guide.Reach of the width -- and 8 px
+	-- clear of the belt and the cash block where it shares their columns. The
+	-- step counter and Skip stand on one row above the words, so the button
+	-- never moves when the words change length.
+	--
+	-- A screen too narrow for that block keeps the banner it had, under the
+	-- passing lines' band.
+	--
+	-- A PHONE WHOSE ROW COULD NOT HOLD THE BUTTONS HAS NO COLUMN: `columnTop` is
+	-- nil and every answer that reads it (notice, statusRows, statusLine, the
+	-- toast, the guide, the run's clock) is the one that shipped before the row
+	-- -- the buttons under the clock, the lines under them, the notices over the
+	-- belt. Nothing on such a screen is new but the clock's chip.
+	--==========================================================================
+	local P = CONFIG.Phone
+	local columnTop: number? = nil
+	if inRow then
+		local top = math.max(0, teleport.y + teleport.h)
+		if admin and clock and admin.y >= clock.y + clock.h then
+			top = math.max(top, admin.y + admin.h - (input.insetTop or 0))
+		end
+		columnTop = top
+	end
+
+	local guide = false
+	local banner: Rect, skip: Rect
+	do
+		local gx = handle.x + handle.w + G
+		-- Under WALK MODE's row -- and under the passing lines' band too, where a
+		-- column that starts lower (ADMIN hung under the clock) brings that band
+		-- down to the block: a biome name going by never lands on the words.
+		local gy = math.max(railBottom, (columnTop or 0) + P.NoticeTop + CONFIG.NoticeHeight) + G
+		-- As wide as the row above the words needs at the least; Guide.Clear short
+		-- of the middle where the screen allows more than that; never past Reach.
+		local least = P.Counter + G + P.Skip.X
+		local gw = math.min(P.Guide.Width, math.floor(sw * P.Guide.Reach) - gx,
+			math.max(least, math.floor(sw / 2 - P.Guide.Clear) - gx))
+		local floorY = sh - M
+		for _, other in ipairs({ hotbar, cash, thumb, jump, equipment }) do
+			if other.x < gx + gw + G and other.x + other.w + G > gx then
+				floorY = math.min(floorY, other.y - G)
+			end
+		end
+		if columnTop and gw >= least and floorY - gy >= P.Guide.Height then
+			guide = true
+			banner = rect(gx, gy, gw, P.Guide.Height)
+			skip = rect(gx + P.Counter + G, gy, P.Skip.X, P.Skip.Y)
+		else
+			local noticeBottom = if columnTop
+				then columnTop + P.NoticeTop + CONFIG.NoticeHeight
+				else teleport.y + teleport.h + G + CONFIG.NoticeHeight
+			banner, skip = bannerIn(sw, math.max(railBottom, noticeBottom),
+				{ cash, equipment, thumb, jump, dock, handle }, CONFIG.TutorialPhoneScale)
+		end
+	end
 
 	local L: Layout = {
 		compact = true,
@@ -1594,11 +1901,51 @@ local function sidebars(input: Input): Layout
 		teleportScale = CONFIG.Teleport.PhoneScale,
 		obby = rect(0, 0, 0, 0),
 		obbyWide = false,
+		teleportPlate = CONFIG.Teleport.Size,
+		clockChip = true,
+		topRow = inRow,
+		run = rect(0, 0, 0, 0),
+		rowLo = if inRow then row.lo else nil,
+		rowHi = if inRow then row.hi else nil,
+		columnCentre = if inRow then row.centre else nil,
+		columnTop = columnTop,
+		toastTop = false,
+		guide = guide,
 		admin = admin,
 	}
 	L.clock = clock
 	L.fits = L.fits and #HudLayout.problems(L) == 0
-	L.obby, L.obbyWide = obbyBeside(input, L)
+	local beside = row.obby
+	if not (beside and columnTop) then
+		-- No row: beside TELEPORT under the clock, as it stood (obbyBeside), and
+		-- everything else as it stood with it.
+		L.obby, L.obbyWide = obbyBeside(input, L)
+		return L
+	end
+	-- On the row: the run's clock has the same slot on the course.
+	L.obby, L.obbyWide = beside, row.obbyWide
+	L.run = beside
+
+	--==========================================================================
+	-- THE NOTICES, AT THE TOP OF THE COLUMN (2026-09-29)
+	--
+	-- They stood on the belt, which on a phone is over the character's own feet
+	-- and the ground in front of them -- the owner's "large success
+	-- notifications fill much of the middle of the screen", and on the course
+	-- the very leaf a runner is about to land on. On a phone they stand at the
+	-- top of the centre column instead and stack DOWN from it (noticeStack),
+	-- between the top rows, as wide as the belt's toast ever was.
+	--
+	-- Where that band is too narrow for the narrowest notice they stay over the
+	-- belt, where they were.
+	--==========================================================================
+	local T = CONFIG.Toast
+	local band = rect(row.centre - T.Width / 2, columnTop + P.NoticeTop, T.Width, T.Height)
+	local r = HudLayout.centreIn(L, band, T.Width)
+	if r.w >= T.MinWidth then
+		L.toast = rect(r.x, band.y, r.w, T.Height)
+		L.toastTop = true
+	end
 	return L
 end
 
@@ -1872,6 +2219,35 @@ function HudLayout.noticeStack(L: Layout, one: number, most: number, middle: num
 	if L.jump then
 		table.insert(others, L.jump)
 	end
+	--==========================================================================
+	-- ON A PHONE THE STACK HANGS FROM THE TOP (2026-09-29; `toastTop`)
+	--
+	-- The newest notice at the top of the centre column and older ones under
+	-- it, growing DOWN only while the whole stack ends 8 px above the middle of
+	-- the screen -- the character's own head -- and keeps 8 px off every group.
+	-- Always at least one.
+	--==========================================================================
+	if L.toastTop then
+		local held = 1
+		for n = 2, math.max(1, most) do
+			local area = rect(t.x, t.y, t.w, n * one)
+			if area.y + area.h > middle - CONFIG.Gap then
+				break
+			end
+			local clear = true
+			for _, other in ipairs(others) do
+				if HudLayout.gap(area, other) < CONFIG.Gap then
+					clear = false
+					break
+				end
+			end
+			if not clear then
+				break
+			end
+			held = n
+		end
+		return rect(t.x, t.y, t.w, math.max(t.h, held * one)), held
+	end
 	local count = 1
 	for n = 2, math.max(1, most) do
 		local top = bottom - t.h - (n - 1) * one
@@ -1906,8 +2282,32 @@ end
 -- `top` is in safe space. Returns the x offset from the middle and the top to
 -- use, also in safe space.
 --==============================================================================
-function HudLayout.notice(L: Layout, width: number, height: number, top: number): (number, number)
+function HudLayout.notice(L: Layout, width: number, height: number, top: number, reach: number?): (number, number)
 	local G = CONFIG.Gap
+	--==========================================================================
+	-- ON A PHONE: THE TOP OF THE CENTRE COLUMN (2026-09-29)
+	--
+	-- The passing lines' band, Phone.NoticeTop under the column's top, on the
+	-- clock's centre and between the top rows. `reach` is how far down the
+	-- notices stand at this moment (the player's NoticeReach attribute, which
+	-- ActionToastUI publishes while one is up): a name arriving while a notice
+	-- is up stands under it rather than on it. `top` is not asked -- the band
+	-- is wherever the column starts.
+	--==========================================================================
+	local columnTop, columnCentre = L.columnTop, L.columnCentre
+	if L.sidebar and columnTop and columnCentre then
+		local P = CONFIG.Phone
+		local y = columnTop + P.NoticeTop
+		if type(reach) == "number" and reach == reach then
+			y = math.max(y, reach + P.NoticeGap)
+		end
+		local r = HudLayout.centreIn(L, rect(columnCentre - width / 2, y, width, height), width)
+		if r.w >= width - 0.5 then
+			return r.x + r.w / 2 - L.safe.X / 2, y
+		end
+		-- Too wide to stand between the rows: under them, as everywhere else.
+		return 0, math.max(y, L.railBottom + G)
+	end
 	-- A TV brings the band down with the clock above it; 0 everywhere else.
 	top += L.lift or 0
 	-- On a phone the teleport button stands right under the clock, in this
@@ -1993,6 +2393,24 @@ function HudLayout.statusRows(L: Layout, insetTop: number): (Rect, Rect, Rect)
 	local S, G = CONFIG.Status, CONFIG.Gap
 	local t = L.teleport
 	local status = rect(t.x, t.y + (t.h - S.Height) / 2, t.w, S.Height)
+	--==========================================================================
+	-- ON A PHONE (2026-09-29): THE SLOT IS ON THE CLOCK'S ROW, AND THE COLUMN
+	-- UNDER IT HOLDS THE BOOSTS AND THE PASSING LINES
+	--
+	-- The warning still has TELEPORT TO PLOT's slot -- which is beside the
+	-- clock now, so that is where the warning stands (statusLine). The boost
+	-- row is the first thing under the row and the passing lines' band the
+	-- second: the boosts are what lasts, so they take the place nearest the
+	-- edge of the screen. Both on the clock's centre.
+	--==========================================================================
+	local columnTop, columnCentre = L.columnTop, L.columnCentre
+	if L.sidebar and columnTop and columnCentre then
+		local P = CONFIG.Phone
+		local x = columnCentre - t.w / 2
+		return status,
+			rect(x, columnTop + P.NoticeTop, t.w, CONFIG.NoticeHeight),
+			rect(x, columnTop + P.BoostTop, t.w, P.BoostHeight)
+	end
 	local _, noticeTop = HudLayout.notice(L, 0, CONFIG.NoticeHeight, CONFIG.NoticeTop - insetTop)
 	local notice = rect(t.x, noticeTop, t.w, CONFIG.NoticeHeight)
 	local top = math.max(t.y + t.h, noticeTop + CONFIG.NoticeHeight) + G
@@ -2032,6 +2450,83 @@ function HudLayout.centreIn(L: Layout, band: Rect, width: number): Rect
 	local w = math.min(width, math.max(0, hi - lo))
 	local x = math.clamp(centre - w / 2, lo, math.max(lo, hi - w))
 	return rect(x, band.y, w, band.h)
+end
+
+--==============================================================================
+-- THE CHASE WARNING'S LINE (2026-09-29)
+--
+-- A line `width` wide in the status band. Everywhere but a phone that is
+-- centreIn: on the slot's middle, under the clock. On a phone the slot stands
+-- BESIDE the clock, and a warning wider than the slot must not grow back over
+-- the clock: it starts at the slot's own edge nearest the clock and runs away
+-- from it, as far as the row's end. The OBBY button's slot is on that side and
+-- is always empty then -- the button shows only in the Safe Zone, where the
+-- warning stands down.
+--==============================================================================
+function HudLayout.statusLine(L: Layout, insetTop: number, width: number): Rect
+	local band = HudLayout.statusRows(L, insetTop)
+	local lo, hi, centre = L.rowLo, L.rowHi, L.columnCentre
+	if not (L.topRow and lo and hi and centre) then
+		return HudLayout.centreIn(L, band, width)
+	end
+	if band.x + band.w / 2 >= centre then
+		local w = math.min(width, math.max(0, hi - band.x))
+		return rect(band.x, band.y, w, band.h)
+	end
+	local right = band.x + band.w
+	local w = math.min(width, math.max(0, right - lo))
+	return rect(right - w, band.y, w, band.h)
+end
+
+--==============================================================================
+-- THE BOOST ROW, ONE RECT A BOOST (2026-09-29)
+--
+-- `widths` are the lines standing in the row, in order, and `gap` what is kept
+-- between two of them. Side by side on the band's middle wherever they fit
+-- whole between whatever shares the band's rows -- on every desktop, which is
+-- exactly where BonusChestUI always put them. On a phone too narrow for that
+-- they stand one under another instead, each on the band's middle, the band's
+-- height apart: a second boost never runs under a top button or off the glass.
+--==============================================================================
+--
+-- Returns the rects and how much smaller the lines are to be drawn: 1, except
+-- on a phone where the row is a little too wide for the room -- two boosts on
+-- a narrow screen -- and the lines are drawn down to BoostShrink of their size
+-- to stand side by side still. Only a row too wide even for that is stacked.
+--==============================================================================
+HudLayout.BoostShrink = 0.8
+
+function HudLayout.boostRows(L: Layout, band: Rect, widths: { number }, gap: number): ({ Rect }, number)
+	local total = 0
+	for i, w in ipairs(widths) do
+		total += w + (if i > 1 then gap else 0)
+	end
+	local row = HudLayout.centreIn(L, band, total)
+	local rows: { Rect } = {}
+	local function sideBySide(from: number, k: number)
+		local x = from
+		for _, w in ipairs(widths) do
+			table.insert(rows, rect(x, row.y, w * k, row.h))
+			x += (w + gap) * k
+		end
+	end
+	if row.w >= total - 0.5 or not L.sidebar or #widths < 2 then
+		sideBySide(row.x, 1)
+		return rows, 1
+	end
+	-- The room there is, asked with a row too wide for any screen.
+	local room = HudLayout.centreIn(L, band, 1e6)
+	local k = math.floor(room.w / total * 100) / 100
+	if k >= HudLayout.BoostShrink then
+		sideBySide(room.x + (room.w - total * k) / 2, k)
+		return rows, k
+	end
+	for i, w in ipairs(widths) do
+		local line = rect(band.x, band.y + (i - 1) * (band.h + 2), band.w, band.h)
+		local r = HudLayout.centreIn(L, line, w)
+		table.insert(rows, rect(r.x, line.y, w, line.h))
+	end
+	return rows, 1
 end
 
 --==============================================================================

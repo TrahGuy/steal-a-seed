@@ -291,9 +291,12 @@ local function placeStatus()
 	local layout = HudLayout.solve(input)
 	local inset = input.insetTop or 0
 	status.setScale(if layout.compact or layout.sidebar then StatusText.SmallScale.status else 1)
-	local band, _, boosts = HudLayout.statusRows(layout, inset)
+	local _, _, boosts = HudLayout.statusRows(layout, inset)
 	local size = status.size()
-	local r = HudLayout.centreIn(layout, band, size.X)
+	-- In TELEPORT TO PLOT's slot: centred in it under the clock, or -- on a
+	-- phone, where the slot stands beside the clock -- from the slot's edge
+	-- away from the clock (HudLayout.statusLine).
+	local r = HudLayout.statusLine(layout, inset, size.X)
 	status.frame.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - layout.safe.X / 2),
 		0, math.round(r.y + (r.h - size.Y) / 2 + inset))
 	local height = gui.AbsoluteSize.Y

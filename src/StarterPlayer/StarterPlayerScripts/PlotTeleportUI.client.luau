@@ -176,6 +176,11 @@ local function place()
 	local r = layout.teleport
 	button.Position = HudLayout.place(r, button.AnchorPoint, layout.safe)
 	button.Size = UDim2.fromOffset(r.w, r.h)
+	-- The plate's own size, before its scale: the touch area's everywhere but a
+	-- phone, where the touch area beside the clock is narrower than the plate's
+	-- 196 x 44 (HudLayout, THE PHONE'S TOP ROW) and the plate is drawn the same
+	-- 147 x 33 it always was.
+	plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)
 	plateScale.Scale = layout.teleportScale
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)

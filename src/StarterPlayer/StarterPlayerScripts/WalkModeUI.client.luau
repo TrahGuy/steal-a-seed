@@ -53,6 +53,8 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- Only for ObbyData.onCourse: the switch is put away on the Floating Garden.
+local ObbyData = require(Shared:WaitForChild("ObbyData"))
 
 local RAIL = GameConfig.Rail
 local WALK = GameConfig.WalkMode
@@ -191,6 +193,32 @@ end
 
 paint()
 player:GetAttributeChangedSignal(ATTR.WalkMode):Connect(paint)
+
+--==============================================================================
+-- ON A PHONE, PUT AWAY ON THE FLOATING GARDEN (2026-09-29)
+--
+-- The course runs everybody at its own fixed speed -- "Weight and Walk Mode do
+-- not apply up there" (CarryService) -- so the switch does nothing on it, and on
+-- a phone it stood beside the way ahead doing that nothing. On a touch screen
+-- (HudLayout's sidebars) it is hidden while the server says this player is on
+-- the course and shown again the moment they are not. Only hidden: what the
+-- switch is SET to is the server's and is not touched, so a player who walks
+-- onto the course in Walk Mode walks off it in Walk Mode. A desktop, a console
+-- and a TV keep the switch where it always was, on the course too.
+--==============================================================================
+local function showSwitch()
+	local phone = false
+	if layer.AbsoluteSize.X > 0 then
+		phone = HudLayout.solve(HudLayout.measure(layer)).sidebar == true
+	end
+	slab.Visible = not (phone and ObbyData.onCourse(player))
+end
+player:GetAttributeChangedSignal(ObbyData.Attributes.Course):Connect(showSwitch)
+local reshow = layer:GetPropertyChangedSignal("AbsoluteSize"):Connect(showSwitch)
+slab.Destroying:Once(function()
+	reshow:Disconnect()
+end)
+showSwitch()
 
 --==============================================================================
 -- THE PRESS

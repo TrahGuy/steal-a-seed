@@ -237,13 +237,28 @@ local function placeBoosts()
 	local input = HudLayout.measure(gui)
 	local layout = HudLayout.solve(input)
 	local inset = input.insetTop or 0
-	local k = if layout.compact or layout.sidebar then StatusText.SmallScale.boost else 1
+	--==========================================================================
+	-- ON A PHONE: THE SLIM ROW RIGHT UNDER THE TOP ROW (2026-09-29)
+	--
+	-- The owner's report, from a phone: the boosts' names and timers stood in
+	-- the middle of the screen -- and, measured the same day with the guide up,
+	-- the row had been pushed down onto the belt. On a phone the row is the
+	-- first thing under the clock's row (HudLayout's centre column), its lines
+	-- drawn at 13 where a small window draws them at 15, and the guide's words
+	-- stand in the left column, so nothing pushes it anywhere. Everywhere else
+	-- it is where it was.
+	--==========================================================================
+	local phone = layout.sidebar and layout.columnTop ~= nil
+	local k = if phone then StatusText.PhoneScale.boost
+		elseif layout.compact or layout.sidebar then StatusText.SmallScale.boost
+		else 1
 	local _, _, band = HudLayout.statusRows(layout, inset)
 	-- 8 under the guide's own words while they are up (TutorialUI publishes how
 	-- far down they reach): the chest opens only after the guide, but the reward
-	-- wheel can hand a new player a boost in the middle of it (2026-09-27).
+	-- wheel can hand a new player a boost in the middle of it (2026-09-27). Not on
+	-- a phone, whose guide stands beside the column rather than in it.
 	local reach = player:GetAttribute(GameConfig.Attributes.TutorialReach)
-	if type(reach) == "number" and band.y < reach + 8 then
+	if not phone and type(reach) == "number" and band.y < reach + 8 then
 		band = HudLayout.rect(band.x, reach + 8, band.w, band.h)
 	end
 	-- Every line still on screen, a fading one included, so a boost that ends
@@ -258,17 +273,21 @@ local function placeBoosts()
 	table.sort(standing, function(a: Entry, b: Entry): boolean
 		return a.order < b.order
 	end)
-	local total = 0
+	local widths: { number } = {}
 	for i, e in ipairs(standing) do
-		total += e.line.size().X + (if i > 1 then BOOST_GAP * k else 0)
+		widths[i] = e.line.size().X
 	end
-	local r = HudLayout.centreIn(layout, band, total)
-	local x = r.x
-	for _, e in ipairs(standing) do
+	-- Side by side on the band's middle; on a phone too narrow for that, drawn a
+	-- little smaller, and stacked only where even that will not fit.
+	local rows, shrink = HudLayout.boostRows(layout, band, widths, BOOST_GAP * k)
+	for i, e in ipairs(standing) do
+		local r = rows[i]
+		if shrink ~= 1 then
+			e.line.setScale(k * shrink)
+		end
 		local s = e.line.size()
-		e.line.frame.Position = UDim2.new(0.5, math.round(x + s.X / 2 - layout.safe.X / 2),
+		e.line.frame.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - layout.safe.X / 2),
 			0, math.round(r.y + (r.h - s.Y) / 2 + inset))
-		x += s.X + BOOST_GAP * k
 	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBoosts)

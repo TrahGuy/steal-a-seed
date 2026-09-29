@@ -112,10 +112,33 @@ type Metrics = { head: number, headMin: number, detail: number, detailMin: numbe
 
 local FULL: Metrics = { head = 26, headMin = 18, detail = 15, detailMin = 12, icon = 24, gap = 2, between = 8 }
 local SMALL: Metrics = { head = 21, headMin = 16, detail = 13, detailMin = 11, icon = 20, gap = 1, between = 6 }
+--==============================================================================
+-- A PHONE'S NOTICES STAND AT THE TOP, AND STACK DOWN (2026-09-29)
+--
+-- The owner's report, from a phone: "large success notifications fill much of
+-- the middle of the screen", and a notice "should not linger over the character
+-- or the next jump". Over the belt is exactly that on a phone: the character's
+-- own feet, and on the obby the leaf they are about to land on.
+--
+-- So where HudLayout says `toastTop` -- every touch screen with room for it --
+-- the stack hangs from the top of the centre column, under the clock's row: the
+-- newest notice at the top, an older one under it, never past the middle of the
+-- screen. A size smaller again than a small window's (18 and 12), and the same
+-- words, colours, icons, sounds and rules. Everywhere else the stack stands on
+-- the belt, as it did.
+--==============================================================================
+local PHONE: Metrics = { head = 18, headMin = 14, detail = 12, detailMin = 11, icon = 17, gap = 1, between = 4 }
+-- What the stack keeps between its foot and the middle of the screen.
+local CONFIG_GAP = HudLayout.Config.Gap
 
 local metrics: Metrics = FULL
 local maxShown = Notice.MaxShown
 local width = 340
+-- Hanging from the top (a phone) rather than standing on the belt; where the
+-- stack's top edge is, in this gui's space; and the least depth it is allowed.
+local fromTop = false
+local stackTop = 0
+local stackDepth = 0
 
 -- REDUCED FX in Settings ("HIDES TRAILS, SPARKS & UI MOTION") is the game's
 -- own preference: the same attribute UIKit's pops, SpeedFX and OfflineUI read.
@@ -194,7 +217,7 @@ local function build(post: Notice.Post, key: string): Drawn
 	local style = Notice.Styles[post.kind]
 	local frame = Instance.new("Frame")
 	frame.Name = "Notice"
-	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.AnchorPoint = if fromTop then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
 	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
 	frame.Active = false
@@ -320,7 +343,8 @@ end
 -- THE STACK'S SLOTS: NEWEST AT THE BOTTOM
 --==============================================================================
 local function slotTween(d: Drawn, y: number, instant: boolean)
-	local goal = UDim2.new(0.5, 0, 1, -y)
+	-- Up from the belt, or down from the top of the column.
+	local goal = if fromTop then UDim2.new(0.5, 0, 0, y) else UDim2.new(0.5, 0, 1, -y)
 	if instant or reducedMotion() then
 		d.frame.Position = goal
 		return
@@ -340,6 +364,9 @@ local function restack(newest: Drawn?)
 			y += d.height + metrics.between
 		end
 	end
+	-- Where the stack's foot is, for what shares its band on a phone (Notice,
+	-- WHERE THE STACK STANDS); nothing to say where it stands on the belt.
+	Notice.setReach(if fromTop and y > 0 then stackTop + y - metrics.between else nil)
 end
 
 local function forget(d: Drawn)
@@ -500,6 +527,27 @@ local function show(post: Notice.Post)
 	end
 	local d = build(post, key)
 	table.insert(drawn, d)
+	-- Hanging from the top, the stack has a depth as well as a count: a notice
+	-- with two lines under it is taller than the one the count was worked out
+	-- for. The oldest make way until the newest fits whole. The depth is asked
+	-- NOW rather than kept from the last layout: measured 2026-09-29, the
+	-- camera's size had not settled when the gui was first placed, and a depth
+	-- kept from then was 27 px too shallow for the rest of the session.
+	if fromTop then
+		local camera = workspace.CurrentCamera
+		local middle = if camera then camera.ViewportSize.Y / 2 - GuiService:GetGuiInset().Y else 0
+		local depth = math.max(stackDepth, middle - CONFIG_GAP - stackTop)
+		local deep = d.height
+		for i = #drawn - 1, 1, -1 do
+			local older = drawn[i]
+			if not older.leaving then
+				deep += older.height + metrics.between
+				if deep > depth then
+					leave(older, Notice.EvictSeconds)
+				end
+			end
+		end
+	end
 	restack(d)
 	local still = reducedMotion()
 	d.body.Position = UDim2.new(0.5, 0, 0.5, if still then 0 else Notice.RisePixels)
@@ -549,20 +597,40 @@ local function place()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local small = layout.compact or layout.sidebar
-	metrics = if small then SMALL else FULL
+	fromTop = layout.toastTop
+	metrics = if fromTop then PHONE elseif small then SMALL else FULL
 	width = math.max(160, layout.toast.w)
 	-- The window's middle, in this gui's safe space: the reticle's band.
 	local camera = workspace.CurrentCamera
 	local middle = if camera then camera.ViewportSize.Y / 2 - GuiService:GetGuiInset().Y else 0
 	local one = metrics.head + 4 + metrics.gap + metrics.detail + 4 + metrics.between
-	local area, count = HudLayout.noticeStack(layout, one,
-		if small then Notice.MaxShownCompact else Notice.MaxShown, middle)
-	maxShown = count
-	column.Position = HudLayout.place(area, Vector2.new(0.5, 1), layout.safe)
+	local most = if small then Notice.MaxShownCompact else Notice.MaxShown
+	local area, count = HudLayout.noticeStack(layout, one, most, middle)
+	-- On the belt the stack is counted: HudLayout says how many of the tallest
+	-- notice fit. Hanging from the top it is MEASURED instead (stackDepth, in
+	-- show): two short notices -- CHECKPOINT and the next stage's name -- fit
+	-- where two of the tallest would not, and counting would have the second
+	-- put the first out the moment it arrived.
+	maxShown = if fromTop then most else count
+	-- On the belt the column stands on its bottom edge; at the top it hangs from
+	-- its top edge, and may grow down to the middle of the screen and no further.
+	local anchor = if fromTop then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
+	stackTop = area.y
+	-- The least the stack may be: one notice's own band. How much deeper it may
+	-- grow is asked when a notice arrives (show).
+	stackDepth = area.h
+	column.AnchorPoint = anchor
+	column.Position = HudLayout.place(area, anchor, layout.safe)
 	column.Size = UDim2.fromOffset(width, area.h)
+	for _, d in ipairs(drawn) do
+		d.frame.AnchorPoint = anchor
+	end
 	restack(nil)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
+-- On a phone the stack hangs under the clock's row, which moves with the
+-- topbar's free span (Roblox's own buttons coming and going).
+GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
 place()
 
 --==============================================================================

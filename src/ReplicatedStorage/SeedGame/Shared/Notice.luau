@@ -392,4 +392,49 @@ function Notice.post(post: Post)
 	event:Fire(lastId)
 end
 
+--==============================================================================
+-- WHERE THE STACK STANDS, FOR WHAT SHARES ITS BAND (2026-09-29)
+--
+-- On a phone the notices stand at the top of the centre column (HudLayout,
+-- THE PHONE'S TOP ROW), in the band the biome name and the sale line pass
+-- through, beside the column the guide's words stand in. So those three have
+-- to know how far down the notices reach at this moment: a name arriving while
+-- a notice is up stands UNDER it, and the guide's words stand down while one is
+-- up rather than be written over.
+--
+-- `reach` is the foot of the stack in the HUD's units (HudLayout's safe space),
+-- or nil -- no notice up, or a screen whose notices stand over the belt, where
+-- nothing shares their place. The renderer says it (setReach); anybody may read
+-- it (reach) and hear it change (onReach).
+--
+-- A PLACE ON THE SCREEN, AND NOTHING ELSE. What a notice SAID is still read
+-- back by nobody; this is only where it is standing. Kept here rather than as
+-- an attribute on the player so the renderer still writes nothing anywhere.
+-- Made on first use, so requiring this on the server still makes nothing.
+--==============================================================================
+local reach: number? = nil
+local reachSignal: BindableEvent? = nil
+
+function Notice.reach(): number?
+	return reach
+end
+
+function Notice.setReach(value: number?)
+	local clean = if type(value) == "number" and value == value then value else nil
+	if clean == reach then
+		return
+	end
+	reach = clean
+	local event = reachSignal
+	if event then
+		event:Fire()
+	end
+end
+
+function Notice.onReach(fn: () -> ()): RBXScriptConnection
+	local event = reachSignal or Instance.new("BindableEvent")
+	reachSignal = event
+	return event.Event:Connect(fn)
+end
+
 return Notice
