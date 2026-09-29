@@ -155,9 +155,9 @@ src/
                                 quote, then yes; numbers in SeedData.Sacrifice
     Metrics.luau                launch analytics, measurement only (NOT a *Service);
                                 what it sends and why: KB/ANALYTICS.md
-    TrafficLogService.luau      the external new-player feed to a webhook secret (Make ->
+    TrafficLogService.luau      the external new-player feed to two webhook secrets (Make ->
                                 Sheet); DISABLED, server-only: KB/TRAFFIC_LOG.md
-    TrafficLogConfig.luau       its switch, secret NAME and campaign allowlist (NOT a *Service)
+    TrafficLogConfig.luau       its switch, secret NAMES and campaign allowlist (NOT a *Service)
     ObbyService.luau            the Floating Garden: starts, 10 Hz gate/fall/validation tick,
                                 the one PayReward per real run, every exit putting movement back
     ObbyCourse.luau             builds the course's walkable parts from ObbyData (NOT a *Service)

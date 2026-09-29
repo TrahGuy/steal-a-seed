@@ -63,13 +63,15 @@ end
 -- status, { status, retryAfter } adds a Retry-After, a string is thrown as the
 -- error, and "hold" parks the request until release().
 local calls = {}
+local routes = {}
 local plan = {}
 local held = {}
 local warns = {}
 local staff = {}
 
-local function sender(body)
+local function sender(body, eventType)
 	table.insert(calls, body)
+	table.insert(routes, eventType)
 	local step = table.remove(plan, 1)
 	if step == nil then
 		return 200
@@ -102,6 +104,7 @@ end
 local function fresh(config)
 	release(200)
 	table.clear(calls)
+	table.clear(routes)
 	table.clear(plan)
 	table.clear(warns)
 	table.clear(staff)
@@ -240,6 +243,8 @@ TL.pump()
 local ends = ofType(E)
 local ending = ends[1]
 check(#calls == 2 and #ends == 1, "leaving sends exactly one ending", #calls)
+check(routes[1] == J and routes[2] == E,
+	"the join and ending use their separate webhook routes", table.concat(routes, ", "))
 check(ending and keysAre(ending, "sessionDurationSeconds"), "the ending adds only sessionDurationSeconds",
 	ending and select(2, keysAre(ending, "sessionDurationSeconds")))
 check(ending and ending.sessionId == join.sessionId and ending.eventId ~= join.eventId
@@ -840,6 +845,10 @@ check(requestAt == 1 and secretAt == 1 and not string.find(own, "PostAsync", 1, 
 	and not string.find(own, "GetAsync", 1, true), "one RequestAsync and one GetSecret: the live sender only",
 	requestAt .. "/" .. secretAt)
 local configSrc = src(Server:FindFirstChild("TrafficLogConfig"))
+check(string.find(configSrc, "PodnappersTrafficJoinWebhook", 1, true)
+	and string.find(configSrc, "PodnappersTrafficDurationWebhook", 1, true)
+	and not string.find(configSrc, "\n\tSecretName =", 1, true),
+	"the shipped config names separate join and duration secrets")
 check(#configSrc > 0 and not string.find(own, "://", 1, true) and not string.find(configSrc, "://", 1, true)
 	and not string.find(string.lower(configSrc), "make.com/", 1, true),
 	"no URL or endpoint is written into either file")

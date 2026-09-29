@@ -1,5 +1,11 @@
 # Steal a Seed — Session Handoff
 
+## Split Make traffic webhooks — 2026-09-29 (CODE PREPARED, NOT LIVE)
+
+Michael supplied separate Make URLs for new-player joins and their session duration while ads are running. The URLs were **not** copied into the repository or sent a test event. `TrafficLogService` now routes `new_player_joined` to secret `PodnappersTrafficJoinWebhook` and `new_player_session_ended` to secret `PodnappersTrafficDurationWebhook`; it resolves both before the first send. Payload schema, new-player/staff/Studio exclusions, retries and bounded queue are unchanged. The mock sender spec now asserts that the two event types use separate routes. `KB/TRAFFIC_LOG.md`, `KB/ANALYTICS.md` and `AGENTS.md` reflect the new setup.
+
+**Not active:** `TrafficLogConfig.Enabled` remains false. Creator Hub in the available browser redirected to login, so neither experience secret could be created or verified here. The owner needs to create both secrets with allowed domain `hook.us2.make.com`, ensure HTTP requests are enabled, then enable the switch and publish. This feed is not retroactive; it cannot count ad joins that happened before activation. Studio was closed, so the amended spec and full suite were not run. A Rojo build succeeded, and `git diff --check` found no whitespace errors. No Play session, real save access, webhook request or publication occurred. Follow `KB/TRAFFIC_LOG.md` for the first live check. Implementing commit to be recorded after commit/push.
+
 ## What is live: builds v987 to v992, and the eight sounds (fixed on `wip` by the group's re-uploads; live after the next publish) — 2026-09-28 (CLAUDE)  (READ FROM LOGS, STUDIO EDIT LOAD TESTS AND ONE PLAY SESSION; THE SOUND FIX IS ON BRANCH `wip`, NOT ON `main`; NOTHING PUBLISHED BY AN AGENT)
 
 **In short.**

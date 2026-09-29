@@ -270,8 +270,8 @@ If nothing appears, open **Monitoring → Error Report**, which also lists event
 
 ## 8. The external traffic feed (separate, disabled)
 
-`TrafficLogService` sends two events, `new_player_joined` and `new_player_session_ended`, to a webhook
-held in an experience secret. Michael's Make.com scenario will write them into a shared Google Sheet.
+`TrafficLogService` sends `new_player_joined` and `new_player_session_ended` to separate
+experience-secret-backed Make webhooks. Michael's scenarios will write them into a shared Google Sheet.
 
 - **Shared with Metrics:** the same verdict (`SaveService.Load` said `"new"` and the profile can be
   saved) and the same exclusions (Studio, staff, temporary and returning profiles). PlayerDataService
@@ -281,6 +281,6 @@ held in an experience secret. Michael's Make.com scenario will write them into a
   `unknown`, and the elapsed connection time. No names or UserIds.
 - **It is not a count of every visit.** A new player who leaves before their profile loads is missed,
   and a lost ending means an unknown duration, not zero.
-- **Status:** `TrafficLogConfig.Enabled = false`. No secret exists yet and HTTP requests are off.
+- **Status:** `TrafficLogConfig.Enabled = false`; both supplied endpoints still need experience secrets and live verification.
 - **The rest:** setup, receiver rules, limits and the mocked test report are in
   [TRAFFIC_LOG.md](TRAFFIC_LOG.md).

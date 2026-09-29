@@ -1,12 +1,12 @@
 # Podnappers external traffic feed
 
-Written 2026-09-28. This is a small server-side feed that reports genuinely new players to a webhook the owner configures. Michael's Make.com scenario will write the events into a shared Google Sheet.
+Written 2026-09-28. This is a small server-side feed that reports genuinely new players to two Make webhooks: one for joins and one for session endings. Michael's scenarios will write the events into a shared Google Sheet.
 
 - **Code:** `src/ServerScriptService/SeedGameServer/TrafficLogService.luau`
 - **Settings:** `TrafficLogConfig.luau`, beside the code. Both are server-only.
-- **Proof:** `tools/tests/TrafficLogSpec.luau` (98 checks)
+- **Proof:** `tools/tests/TrafficLogSpec.luau` (the original 98 checks plus route assertions; re-run in Studio is pending)
 
-**Status: DISABLED, and never connected.** `TrafficLogConfig.Enabled = false`. No secret exists yet, HTTP requests are still off for the experience, and no request has ever been sent to anyone. Nothing goes live until the owner authorises the connection (see "Owner setup").
+**Status: DISABLED, pending secret setup and publication.** Michael supplied two webhook URLs on 2026-09-29, but their values are not stored in this repository. `TrafficLogConfig.Enabled = false` until both experience secrets and HTTP access are confirmed. No live delivery has been verified.
 
 It **supplements** Roblox's own analytics (`Metrics`, [ANALYTICS.md](ANALYTICS.md)) and replaces nothing. It is measurement only: no reward, rule or save depends on it. If every request failed, the game would play exactly the same.
 
@@ -18,6 +18,8 @@ Exactly two event types, and only for a **new player**. A new player here means 
 | --- | --- | --- |
 | `new_player_joined` | PlayerDataService finishes the load and the profile qualifies, usually within seconds of joining | — |
 | `new_player_session_ended` | That same player leaves, or the server shuts down while they are connected | `sessionDurationSeconds`: whole seconds since their `PlayerAdded` |
+
+Each event goes to its own URL. Both carry the same `sessionId`, so Michael can join the two Make outputs in his Sheet.
 
 These never enter the feed:
 - **returning players**: their load said `"ok"`, so a new player's second visit is not counted;
@@ -116,33 +118,33 @@ JSON, POSTed with `Content-Type: application/json`. The samples below use fake d
 - **Later sessions of the same player are never "new",** so the feed measures first sessions only. An account whose save was erased starts again as "new".
 - Timestamps come from the server's clock and have one-second precision. The duration uses a monotonic clock and is rounded to whole seconds.
 
-## Owner setup, once Michael supplies the webhook URL
+## Owner setup for Michael's two webhooks
 
-The webhook URL is a credential: anyone who has it can write into the Sheet. Keep it out of code, GameConfig, docs, chat logs and screenshots. Don't do any of these steps until the owner authorises the connection.
+Each webhook URL is a credential: anyone who has it can write into the Sheet. Keep the values out of code, GameConfig, docs and screenshots. The owner has supplied the URLs in chat; neither value belongs in the repository.
 
-1. **Create the experience secret.** Podnappers is owned by the CrazyCozy Games group, so this needs someone with that permission in the group.
+1. **Create two experience secrets.** Podnappers is owned by the CrazyCozy Games group, so this needs someone with that permission in the group.
    - In Creator Hub, open **Creations → Podnappers**, then **Secrets** in the left menu, then **Create Secret**.
-   - **Name:** `PodnappersTrafficWebhook`, exactly as `TrafficLogConfig.SecretName` spells it.
-   - **Secret:** Michael's complete webhook URL.
-   - **Domain:** the URL's host, for example `hook.eu2.make.com` (copy it from the URL). `*.make.com` also works but is wider.
+   - **Join secret name:** `PodnappersTrafficJoinWebhook`; value: Michael's *player joins* URL.
+   - **Duration secret name:** `PodnappersTrafficDurationWebhook`; value: Michael's *player duration after they leave* URL.
+   - **Allowed domain for each:** `hook.us2.make.com` (the host of both supplied URLs).
    - The secret can only be read by server scripts through `HttpService:GetSecret`. It cannot be printed.
 2. **Allow HTTP requests.** In Studio: **File → Experience Settings → Security → Allow HTTP Requests** on, then **Save**.
    - This is experience-wide; `TrafficLogService` is the only code in the game that makes requests.
    - Studio itself never sends: the feed excludes Studio by design, so no Studio local secret is needed.
 3. **Fill in the tags.** Put Michael's campaign tags in `TrafficLogConfig.CampaignTags`, for example `{ "spring_ads", "yt_short_oct" }`, and use the same strings as launch data in Ads Manager.
-4. **Turn it on.** Set `TrafficLogConfig.Enabled = true`. Commit, then publish when authorised.
+4. **Turn it on.** Only after both secrets exist and HTTP is allowed, set `TrafficLogConfig.Enabled = true`. Commit and publish when authorised.
    - Only servers started after the publish run the new code.
    - Older servers can be moved over with Creator Hub's server restart or update option for the experience.
 5. **Run the live check below.**
 
 **To turn it off**, use any one of these:
 - set `Enabled = false` and publish;
-- delete or rename the secret (new servers then halt with `secret-missing`);
+- delete or rename either secret (new servers then halt with `secret-missing`);
 - turn HTTP requests off.
 
 ## Receiver instructions (for Michael)
 
-The webhook receives the JSON above, one event per request. It should answer `200` once the event is accepted. A `4xx` makes our side drop the event for good; a `429` or `5xx` makes it retry.
+The join webhook receives only `new_player_joined`; the duration webhook receives only `new_player_session_ended`. Each gets one JSON event per request and should answer `200` once accepted. A `4xx` makes our side drop the event for good; a `429` or `5xx` makes it retry. Both scenarios must preserve the shared `sessionId` and their distinct `eventId`s in the Sheet.
 
 1. **Deduplicate by `eventId`.** The same event can arrive twice. Before appending a row, search the events tab for that `eventId` and skip it if it's already there. In Make, a Google Sheets **Search Rows** filtered on `eventId`, then **Add a Row** only when nothing was found; or a Make Data Store keyed by `eventId`.
 2. **Keep an append-only events tab.** Give it one row per unique event, with every field as its own column. Leave `sessionDurationSeconds` blank on join rows.
@@ -156,7 +158,7 @@ The webhook receives the JSON above, one event per request. It should answer `20
 7. **Read `campaignTag` honestly.** `unknown` means no recognised tag, not organic. A tag means the join URL carried it, not a verified ad click.
 8. **Check the version.** Accept `schemaVersion` 1. Route anything else, or an unknown `eventType`, to a separate "unhandled" tab rather than dropping it.
 9. **Timestamps** are UTC strings such as `2026-10-01T14:03:07Z`. In Sheets, `=DATEVALUE(LEFT(A2,10))+TIMEVALUE(MID(A2,12,8))` turns one into a date-time (UTC).
-10. **If the URL leaks,** create a new webhook, send the new URL to the owner privately, and have them update the secret's value.
+10. **If either URL leaks,** create a replacement webhook, send it to the owner privately, and update only that route's secret value.
 
 ## Test report (mocked, 2026-09-28)
 
@@ -176,7 +178,9 @@ The webhook receives the JSON above, one event per request. It should answer `20
 | Launch data | 14 | Allowlisted tags pass, whatever their case or spacing. Unlisted, empty, non-string, 300-character and JSON values, and a throwing `GetJoinData`, all read `unknown` and are never forwarded; the join still goes. A malformed allowlist entry is ignored. The tag is read once, at arrival |
 | Time | 4 | Leaving in the same instant gives 0 s. A clock going backwards gives 0, never negative. Real stamps are ISO 8601 UTC |
 | Isolation | 8 | Every lifecycle call returns at once while a request hangs, and a throwing sender or nonsense arguments never reach the caller. PDS calls the feed right after `Metrics.profileReady`, with the same verdict and inside `pcall`, and also requires it inside `pcall`. Metrics is untouched. The feed has no attribute, remote, DataStore, analytics or gameplay-service reference |
-| Disabled and secrets | 8 | The shipped config is off with an empty allowlist. Off makes zero requests for a full lifecycle. There is exactly one `RequestAsync` and one `GetSecret`. No URL is written anywhere. The settings live in ServerScriptService, not GameConfig, and no client-visible script mentions the feed |
+| Disabled and secrets | 8 | The shipped config is off with an empty allowlist. Off makes zero requests for a full lifecycle. There is exactly one `RequestAsync` and one `GetSecret` call site. No URL is written anywhere. The settings live in ServerScriptService, not GameConfig, and no client-visible script mentions the feed |
+
+**2026-09-29 change:** join and duration now route to two named secrets. The amended spec includes route assertions, but Studio was closed when this change was made, so those new assertions and the full suite have not been re-run. Rojo built the place successfully; that does not prove Luau runtime behavior.
 
 **Full spec suite:** all 55 specs ran, and none threw or failed. MetricsSpec is 57/57 (native analytics unchanged), AdminSpec 79/79, and OfflineEarnings, Leaderstats, Tutorial and HeldRestore all pass.
 

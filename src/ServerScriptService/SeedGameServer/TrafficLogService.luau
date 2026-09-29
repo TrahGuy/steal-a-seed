@@ -3,8 +3,8 @@
 -- Steal a Seed :: TrafficLogService
 --
 -- The external new-player traffic feed (2026-09-28): two events per genuinely
--- new player, POSTed server-side to a webhook the owner configures (Michael's
--- Make.com scenario, feeding a shared Google Sheet). OFF until the owner turns
+-- new player, POSTed server-side to two webhook routes the owner configures
+-- (Michael's Make.com scenarios, feeding a shared Google Sheet). OFF until the owner turns
 -- it on (TrafficLogConfig.Enabled). KB/TRAFFIC_LOG.md is the guide: payload,
 -- owner setup, receiver rules, what it cannot count.
 --
@@ -70,9 +70,9 @@ end
 --==============================================================================
 -- SEAMS: the live pieces, and a spec's stand-ins for them
 --==============================================================================
--- A sender POSTs one JSON body and returns the HTTP status (and a Retry-After
--- in seconds, if the response had one). It throws when there was no response.
-export type Sender = (body: string) -> (number, number?)
+-- A sender POSTs one JSON body to the endpoint for its event type and returns
+-- the HTTP status (and optional Retry-After seconds). It throws on no response.
+export type Sender = (body: string, eventType: string) -> (number, number?)
 
 local senderOverride: Sender? = nil
 local staffOverride: ((any) -> boolean)? = nil
@@ -87,23 +87,29 @@ local function defaultUtc(): number
 end
 local utcMillis: () -> number = defaultUtc
 
--- THE ONLY PLACE A REQUEST IS MADE. The URL is the experience secret, fetched
--- by name and handed to RequestAsync as a Secret: it is never a string here,
--- so it cannot be printed, logged or sent anywhere else.
-local secretUrl: any = nil
+-- THE ONLY PLACE A REQUEST IS MADE. Both URLs are experience secrets, fetched
+-- by name and handed to RequestAsync as Secrets: never strings in this module.
+local secretUrls: { [string]: any } = {}
 
-local function liveSend(body: string): (number, number?)
-	if secretUrl == nil then
-		-- Any failure to get the secret is set-up, not the network: reduced to
-		-- the two words that halt this server (see failureKind).
-		local ok, secret = pcall(function(): any
-			return HttpService:GetSecret(tostring(setting("SecretName")))
-		end)
-		if not ok then
-			local text = string.lower(tostring(secret))
-			error(if string.find(text, "not enabled", 1, true) then "http not enabled" else "cannot find secret", 0)
+local function liveSend(body: string, eventType: string): (number, number?)
+	-- Resolve both before the first request. A missing duration endpoint must
+	-- not leave the receiver with joins that can never get matching endings.
+	for _, route in ipairs({ EVENTS.Joined, EVENTS.Ended }) do
+		if secretUrls[route] == nil then
+			local secretName = if route == EVENTS.Joined then "JoinSecretName" else "DurationSecretName"
+			local ok, secret = pcall(function(): any
+				return HttpService:GetSecret(tostring(setting(secretName)))
+			end)
+			if not ok then
+				local message = string.lower(tostring(secret))
+				error(if string.find(message, "not enabled", 1, true) then "http not enabled" else "cannot find secret", 0)
+			end
+			secretUrls[route] = secret
 		end
-		secretUrl = secret
+	end
+	local secretUrl = secretUrls[eventType]
+	if secretUrl == nil then
+		error("unknown traffic event route", 0)
 	end
 	local response = HttpService:RequestAsync({
 		Url = secretUrl,
@@ -232,6 +238,7 @@ end
 --==============================================================================
 type Item = {
 	eventId: string,
+	eventType: string,
 	body: string,
 	attempts: number,
 	nextAt: number,
@@ -309,7 +316,7 @@ local function attempt(item: Item)
 	item.attempts += 1
 	inFlight += 1
 	stats.requests += 1
-	local ok, status, retryAfter = pcall(senderOverride or liveSend, item.body)
+	local ok, status, retryAfter = pcall(senderOverride or liveSend, item.body, item.eventType)
 	inFlight = math.max(0, inFlight - 1)
 	item.inFlight = false
 
@@ -448,6 +455,7 @@ local function build(eventType: string, s: Session, durationSeconds: number?): I
 	end
 	return {
 		eventId = payload.eventId,
+		eventType = eventType,
 		body = HttpService:JSONEncode(payload),
 		attempts = 0,
 		nextAt = -math.huge,
@@ -617,7 +625,8 @@ function TrafficLogService.reset()
 	for key in pairs(stats) do
 		(stats :: any)[key] = 0
 	end
-	inFlight, pumping, flushing, halted, secretUrl = 0, false, false, nil, nil
+	inFlight, pumping, flushing, halted = 0, false, false, nil
+	table.clear(secretUrls)
 end
 
 return TrafficLogService

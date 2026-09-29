@@ -21,9 +21,10 @@ local TrafficLogConfig = {
 	-- connection (KB/TRAFFIC_LOG.md, "Going live").
 	Enabled = false,
 
-	-- The experience secret holding the WHOLE webhook URL (Michael's Make.com
-	-- webhook). Created by the owner in Creator Hub; never typed into code.
-	SecretName = "PodnappersTrafficWebhook",
+	-- Separate experience secrets hold the complete Make webhook URLs. Keep
+	-- their values in Creator Hub, never in this repository or a client script.
+	JoinSecretName = "PodnappersTrafficJoinWebhook",
+	DurationSecretName = "PodnappersTrafficDurationWebhook",
 
 	-- CAMPAIGN TAGS: the only launch-data values ever forwarded. A join whose
 	-- launch data (Ads Manager -> Advanced join options) is exactly one of these,
