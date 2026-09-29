@@ -19,13 +19,15 @@
 --               saying what it is and what it pays, and the rarity fanfare.
 --
 --   THE ROLL    (2026-09-29) the message says when the plant may be shown
---               (`revealAt`). Until then the soil holds a question mark and
---               nothing here names the plant: no creature, no label, and no
---               fanfare, which is chosen by rarity and would say it out loud.
---               The burst is at the hatch, as it always was; everything that
---               names the plant waits. With the roll off the wait is nought.
---               The owner's card is HatchRollUI's; this is the world's side,
---               the same for everybody who can see the pod.
+--               (`revealAt`, three seconds on). Until then the place where the
+--               pod stood turns plant silhouettes over under a floating
+--               question mark -- quickly, then slowly, the last of them the
+--               plant's own -- and nothing here names the plant: no creature,
+--               no label, and no fanfare, which is chosen by rarity and would
+--               say it out loud. The burst is at the hatch, as it always was.
+--               With the roll off the wait is nought. IT IS IN THE WORLD, for
+--               everybody who can see the pod: there is no card, no panel,
+--               and nothing over anybody's camera.
 --
 --==============================================================================
 -- IT DECIDES NOTHING
@@ -73,7 +75,7 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
--- Who sounds a rolled hatch for its owner, the card or this (HatchRoll.claim).
+-- Which silhouette stands where the pod was at each moment of a roll.
 local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 
 local PLANT = GameConfig.Plant
@@ -84,6 +86,9 @@ local REVEAL = HATCH.Reveal
 local LABEL = HATCH.Label
 local PAID = HATCH.Paid
 local ROLL = HATCH.Roll
+local WORLD = ROLL.World
+-- The Index's own near-black: what an undiscovered plant is drawn in.
+local SILHOUETTE: Color3 = GameConfig.Almanac.Silhouette
 local SOUNDS = HATCH.Sounds
 local REVEAL_FOR: { [string]: string } = (GameConfig.Sfx.RevealFor :: any)
 -- The accent a few rarities add, and the hatches that have already had theirs,
@@ -130,6 +135,83 @@ local function scrub(model: Instance)
 		elseif d:IsA("ProximityPrompt") or d:IsA("ClickDetector") or d:IsA("Humanoid") then
 			d:Destroy()
 		end
+	end
+end
+
+--==============================================================================
+-- THE SHAPES A ROLL TURNS OVER
+--
+-- A silhouette is the real plant by the real builder, made dark: every part the
+-- Index's near-black, nothing on it that shines, sparkles or casts a shadow. It
+-- is built at the smallest size and outside the world, scrubbed before it goes
+-- in, and drawn the size of the SHELL -- the plant's own size is the reveal's
+-- to show.
+--
+-- ONE IS KEPT FOR EACH SPECIES this client has shown, parked outside the world
+-- between rolls, so a second roll of the same biome builds nothing: a phone
+-- pays for a shape once. Two rolls that want the same shape at the same moment
+-- get one each, and the second is thrown away when its roll is over.
+--==============================================================================
+local parked: { [string]: Model } = {}
+-- How many rolls are turning shapes on this screen now (World.MaxShapes).
+local shaped = 0
+
+local function darken(model: Model)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Color = SILHOUETTE
+			d.Material = Enum.Material.SmoothPlastic
+			d.Reflectance = 0
+			d.CastShadow = false
+		elseif d:IsA("SpecialMesh") then
+			d.TextureId = ""
+			d.VertexColor = Vector3.new(1, 1, 1)
+		elseif d:IsA("Light") or d:IsA("ParticleEmitter") or d:IsA("Beam") or d:IsA("Trail")
+			or d:IsA("Decal") or d:IsA("Texture") or d:IsA("SurfaceAppearance")
+			or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles") or d:IsA("Highlight")
+			or d:IsA("BillboardGui") or d:IsA("SurfaceGui") then
+			d:Destroy()
+		end
+	end
+end
+
+local function takeShape(speciesId: string): Model?
+	local kept = parked[speciesId]
+	if kept then
+		parked[speciesId] = nil
+		return kept
+	end
+	local species = SeedData.Get(speciesId)
+	if not species then
+		return nil
+	end
+	local ok, model = pcall(function()
+		return CreatureModel.Build(species, SeedData.BaseTier, CreatureModel.STAGE_GROWN,
+			CFrame.new(), nil :: any)
+	end)
+	if not ok or typeof(model) ~= "Instance" then
+		return nil
+	end
+	local shape = model :: Model
+	scrub(shape)
+	darken(shape)
+	local size = shape:GetExtentsSize()
+	-- Its longest side as it was built, which is what it is scaled from.
+	shape:SetAttribute("Longest", math.max(size.X, size.Y, size.Z, 0.1))
+	shape.Name = "Shape"
+	return shape
+end
+
+local function keepShape(speciesId: string, shape: Model)
+	local ok = pcall(function()
+		shape.Parent = nil
+	end)
+	if ok and parked[speciesId] == nil then
+		parked[speciesId] = shape
+	else
+		pcall(function()
+			shape:Destroy()
+		end)
 	end
 end
 
@@ -267,9 +349,39 @@ type Reveal = {
 	folder: Folder,
 	connection: RBXScriptConnection?,
 	done: boolean,
+	-- The roll, while it runs: its one connection, what it has drawn, and the
+	-- shapes it has out of the park.
+	rolling: RBXScriptConnection?,
+	holder: Instance?,
+	shapes: { [string]: Model }?,
 }
 
 local live: { [number]: Reveal } = {}
+
+-- The roll is over, or is being thrown away: its connection goes, its shapes
+-- go back to the park, and its question mark and disc go with their folder.
+-- Safe to call twice, and with no roll at all.
+local function endRoll(job: Reveal)
+	if job.rolling then
+		job.rolling:Disconnect()
+		job.rolling = nil
+	end
+	local shapes = job.shapes
+	if shapes then
+		job.shapes = nil
+		shaped = math.max(shaped - 1, 0)
+		for speciesId, shape in pairs(shapes) do
+			keepShape(speciesId, shape)
+		end
+	end
+	local holder = job.holder
+	if holder then
+		job.holder = nil
+		if holder.Parent then
+			holder:Destroy()
+		end
+	end
+end
 
 local function finish(job: Reveal)
 	if job.done then
@@ -281,6 +393,8 @@ local function finish(job: Reveal)
 		job.connection:Disconnect()
 		job.connection = nil
 	end
+	-- Before the folder goes: a shape destroyed with it could not be kept.
+	endRoll(job)
 	if job.folder.Parent then
 		job.folder:Destroy()
 	end
@@ -470,7 +584,15 @@ local function playReveal(payload: any)
 	folder.Name = string.format("Reveal_%d", token)
 	folder.Parent = stage
 
-	local job: Reveal = { token = token, folder = folder, connection = nil, done = false }
+	local job: Reveal = {
+		token = token,
+		folder = folder,
+		connection = nil,
+		done = false,
+		rolling = nil,
+		holder = nil,
+		shapes = nil,
+	}
 	live[token] = job
 
 	-- WHERE IN THE ANIMATION WE ARE, off the server's own clock. A client that
@@ -485,17 +607,19 @@ local function playReveal(payload: any)
 	-- after the hatch, or further off than any roll could be, and there is no
 	-- wait. Nought is the hatch as it was before there was a roll.
 	--==========================================================================
-	local revealAt = tonumber(payload.revealAt)
-	local rolled = if revealAt and revealAt == revealAt then revealAt - sent else 0
+	local claimed = tonumber(payload.revealAt)
+	local rolled = if claimed and claimed == claimed then claimed - sent else 0
 	if rolled <= 0 or rolled > ROLL.MaxHideSeconds then
 		rolled = 0
 	end
+	-- The moment the plant comes up, on the clock everybody shares.
+	local revealAt = sent + rolled
 	if behind > rolled + BURST + paidLead + REVEAL.Seconds + LABEL.Seconds then
 		finish(job)
 		return
 	end
 	-- The burst is drawn by a client that was there for it. One that hears of
-	-- the hatch partway through its roll starts at the question mark.
+	-- the hatch partway through its roll starts at the silhouettes.
 	local fresh = rolled == 0 or behind <= BURST + paidLead + 0.6
 
 	--==========================================================================
@@ -579,8 +703,8 @@ local function playReveal(payload: any)
 	-- now sounds exactly like a free one.
 	--
 	-- IT NAMES THE RARITY, so with a roll it waits for the plant (below): at the
-	-- burst it would tell the owner, five seconds early, how rare the plant on
-	-- their card is. The crack is the shell's and says nothing.
+	-- burst it would tell everybody, three seconds early, how rare the plant
+	-- is. The crack is the shell's and says nothing.
 	--==========================================================================
 	local function fanfare()
 		SoundKit.emit(REVEAL_FOR[species.Rarity] or "RevealCommon", flashPart)
@@ -597,82 +721,183 @@ local function playReveal(payload: any)
 	end
 
 	--==========================================================================
-	-- THE QUESTION MARK, WHILE THE ROLL RUNS
+	-- THE ROLL, WHERE THE POD STOOD
 	--
-	-- Where the pod stood, for everybody who can see it: the tier's colour on
-	-- the soil and a question mark over it. It says a plant is coming and not
-	-- which -- the tier was already the shell's colour. Two instances and one
-	-- tween that repeats; none at all under Reduced Effects, where it is still.
+	-- For everybody who can see it, from the burst to the reveal: a disc of the
+	-- tier's colour on the soil, a dark shape standing on it that keeps turning
+	-- into another -- quickly, then slowly, the last of them the plant's own --
+	-- and a question mark riding over it. It says a plant is coming and not
+	-- which: the tier was already the shell's colour, and the shapes are the
+	-- size of the shell.
+	--
+	-- MODEST. One shape in the world at a time; a sign, a disc and one
+	-- connection, which turns the sign to the camera and rides it up and down.
+	-- No particle, no light, no sound. With more rolls on the screen than
+	-- World.MaxShapes, the later ones are a question mark with nothing turning
+	-- under it. Reduced Effects keeps the shapes and stops the riding.
+	--
+	-- IT CANNOT BE LEFT BEHIND. It ends at the reveal, in `finish`, and at the
+	-- backstop below, whichever comes first -- and `finish` is what a respawn
+	-- and a build that throws both call.
 	--==========================================================================
-	local mark: Instance? = nil
 	if rolled > 0 then
-		task.delay(math.max(paidLead + BURST - behind, 0), function()
-			if job.done or not folder.Parent then
+		local opens = sent + HatchRoll.lead(payload.paid == true)
+		task.delay(math.max(opens - Workspace:GetServerTimeNow(), 0), function()
+			if job.done or not folder.Parent or Workspace:GetServerTimeNow() >= revealAt then
 				return
 			end
 			local holder = Instance.new("Folder")
-			holder.Name = "HatchQuestion"
-			mark = holder
+			holder.Name = "HatchRoll"
+			job.holder = holder
 
-			local glow = Instance.new("Part")
-			glow.Name = "Glow"
-			glow.Shape = Enum.PartType.Cylinder
-			glow.Size = Vector3.new(0.2, diameter * 1.1, diameter * 1.1)
-			glow.CFrame = CFrame.new(cf.Position + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.rad(90))
-			glow.Anchored = true
-			glow.CanCollide = false
-			glow.CanQuery = false
-			glow.CanTouch = false
-			glow.Material = Enum.Material.Neon
-			glow.Color = color
-			glow.Transparency = 0.55
-			glow.Parent = holder
+			local disc = Instance.new("Part")
+			disc.Name = "Disc"
+			disc.Shape = Enum.PartType.Cylinder
+			disc.Size = Vector3.new(0.2, diameter * WORLD.DiscInPods, diameter * WORLD.DiscInPods)
+			disc.CFrame = CFrame.new(cf.Position + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.rad(90))
+			disc.Anchored = true
+			disc.CanCollide = false
+			disc.CanQuery = false
+			disc.CanTouch = false
+			disc.CastShadow = false
+			disc.Material = Enum.Material.Neon
+			disc.Color = color
+			disc.Transparency = 0.55
+			disc.Parent = holder
 
-			local post = Instance.new("Part")
-			post.Name = "Post"
-			post.Size = Vector3.new(0.2, 0.2, 0.2)
-			post.CFrame = cf * CFrame.new(0, diameter * 0.75 + 1.2, 0)
-			post.Anchored = true
-			post.CanCollide = false
-			post.CanQuery = false
-			post.CanTouch = false
-			post.Transparency = 1
-			post.Parent = holder
+			local shapeStuds = math.clamp(diameter * WORLD.SizeInPods, WORLD.MinStuds, WORLD.MaxStuds)
+			local markStuds = math.clamp(diameter * WORLD.MarkInPods, WORLD.MarkMinStuds, WORLD.MarkMaxStuds)
+			local markAt = cf.Position
+				+ Vector3.new(0, shapeStuds + WORLD.MarkGapStuds + markStuds * 0.5, 0)
 
-			local board = Instance.new("BillboardGui")
-			board.Name = "Question"
-			board.Adornee = post
-			board.AlwaysOnTop = true
-			board.Size = UDim2.fromOffset(84, 84)
-			board.MaxDistance = 170
-			board.Parent = post
-			local word = UIKit.outlined(board, "Mark", 72, color:Lerp(Color3.new(1, 1, 1), 0.7), 3)
+			-- A sign in the world, not a billboard over it: it stands behind whatever
+			-- stands in front of it, and is the size its distance makes it.
+			local sign = Instance.new("Part")
+			sign.Name = "Question"
+			sign.Size = Vector3.new(markStuds, markStuds, 0.05)
+			sign.CFrame = CFrame.new(markAt)
+			sign.Anchored = true
+			sign.CanCollide = false
+			sign.CanQuery = false
+			sign.CanTouch = false
+			sign.CastShadow = false
+			sign.Transparency = 1
+			sign.Parent = holder
+			local face = Instance.new("SurfaceGui")
+			face.Name = "Face"
+			face.Face = Enum.NormalId.Front
+			face.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+			face.CanvasSize = Vector2.new(128, 128)
+			face.LightInfluence = 0
+			face.MaxDistance = 170
+			face.Parent = sign
+			local word = UIKit.outlined(face, "Mark", 100, color:Lerp(Color3.new(1, 1, 1), 0.7), 4)
 			word.Size = UDim2.fromScale(1, 1)
 			word.Text = "?"
 
 			holder.Parent = folder
 			if not quiet then
-				TweenService:Create(glow,
+				TweenService:Create(disc,
 					TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 					{ Transparency = 0.8 }):Play()
+			end
+
+			-- THE SHAPES, in the order the hatch's own token gives: the same on every
+			-- screen that draws them, and ending on the plant that hatched.
+			local frames = HatchRoll.frames(species.Id, token)
+			local window = math.max(revealAt - opens, 0.1)
+			local shapes: { [string]: Model }? = nil
+			if shaped < WORLD.MaxShapes then
+				shaped += 1
+				shapes = {}
+				job.shapes = shapes
+			end
+			local standing: Model? = nil
+			local standingFrame = 0
+
+			local function stand(index: number)
+				standingFrame = index
+				local frame = frames[index]
+				if not (shapes and frame) then
+					return
+				end
+				local shape = shapes[frame.speciesId]
+				if not shape then
+					local made = takeShape(frame.speciesId)
+					if not made then
+						return
+					end
+					shapes[frame.speciesId] = made
+					made:ScaleTo(shapeStuds / (tonumber(made:GetAttribute("Longest")) or 1))
+					made:PivotTo(cf)
+					shape = made
+				end
+				if standing and standing ~= shape then
+					standing.Parent = nil
+				end
+				shape.Parent = holder
+				standing = shape
+			end
+
+			local function turn()
+				local now = Workspace:GetServerTimeNow()
+				if now >= revealAt then
+					-- The plant's own timer ends the roll; this only stops turning.
+					return
+				end
+				local index = HatchRoll.frameAt(frames, math.clamp((now - opens) / window, 0, 1))
+				if index ~= standingFrame then
+					stand(index)
+				end
+				local at = markAt
+				if not quiet then
+					at += Vector3.new(0,
+						math.sin((now - opens) / WORLD.BobSeconds * math.pi * 2) * WORLD.BobStuds, 0)
+				end
+				-- Turned to whoever is looking, about its own upright and no other way.
+				local eye = Workspace.CurrentCamera
+				local toward = if eye
+					then Vector3.new(eye.CFrame.Position.X, at.Y, eye.CFrame.Position.Z)
+					else at
+				sign.CFrame = if (toward - at).Magnitude > 0.1 then CFrame.lookAt(at, toward) else CFrame.new(at)
+			end
+
+			job.rolling = RunService.RenderStepped:Connect(function()
+				if job.done or not holder.Parent then
+					endRoll(job)
+					return
+				end
+				local ok, err = pcall(turn)
+				if not ok then
+					-- The roll is decoration: it goes, and the plant still comes.
+					warn("[Seed/HatchFX] the roll failed: " .. tostring(err))
+					endRoll(job)
+				end
+			end)
+			-- Drawn once now, so the first frame anybody sees has a shape standing and
+			-- the sign turned their way.
+			if not pcall(turn) then
+				endRoll(job)
 			end
 		end)
 	end
 
 	--==========================================================================
 	-- AND THE CREATURE
+	--
+	-- With a roll it comes up AT `revealAt`, which is the moment the hotbar and
+	-- the Bag stop calling it ???: the world shows the plant no later than
+	-- anything else does.
 	--==========================================================================
-	local startAt = rolled + paidLead + BURST * 0.55 - behind
+	local startAt = if rolled > 0
+		then revealAt - Workspace:GetServerTimeNow()
+		else paidLead + BURST * 0.55 - behind
 	task.delay(math.max(startAt, 0), function()
 		if job.done or not folder.Parent then
 			return
 		end
-		-- The roll is over: the question mark goes as the plant comes.
-		local asked = mark
-		if asked then
-			mark = nil
-			asked:Destroy()
-		end
+		-- The roll is over: the shapes and the question mark go as the plant comes.
+		endRoll(job)
 		local okBuild, model = pcall(function()
 			return CreatureModel.Build(species, tier, CreatureModel.STAGE_GROWN, cf, folder)
 		end)
@@ -696,17 +921,13 @@ local function playReveal(payload: any)
 		-- often its reveal arrives.
 		--======================================================================
 		--
-		-- WITH A ROLL (2026-09-29) the fanfare is here as well. For the plant's
-		-- OWNER their card plays both at the moment it shows the plant
-		-- (HatchRollUI), a moment before this, and has claimed the hatch by
-		-- then (HatchRoll.claim). With the card put away nothing has, and they
-		-- are played here: one or the other, never both and never neither.
+		-- WITH A ROLL (2026-09-29) the fanfare is here as well: it names the
+		-- rarity, so it sounds with the plant and not with the burst.
 		local accent = REVEAL_ACCENT[species.Rarity]
-		local cardPlays = rolled > 0 and not HatchRoll.claim(token)
-		if rolled > 0 and not cardPlays then
+		if rolled > 0 then
 			fanfare()
 		end
-		if accent and (token == 0 or not accented[token]) and SoundKit.has(accent) and not cardPlays then
+		if accent and (token == 0 or not accented[token]) and SoundKit.has(accent) then
 			if token ~= 0 then
 				accented[token] = true
 			end
@@ -787,7 +1008,8 @@ local function playReveal(payload: any)
 
 	-- THE BACKSTOP. Whatever happens above -- a build that throws, a streamed-out
 	-- part, a client that alt-tabs through the whole thing -- this folder is gone.
-	task.delay(rolled + paidLead + BURST + REVEAL.Seconds + LABEL.Seconds + LABEL.FadeSeconds + 1,
+	task.delay(math.max(rolled - behind, 0) + paidLead + BURST + REVEAL.Seconds + LABEL.Seconds
+		+ LABEL.FadeSeconds + 1,
 		function()
 			finish(job)
 		end)
@@ -817,7 +1039,8 @@ end)
 
 -- Dying mid-reveal cleans up: the plant is in the Backpack either way, and a
 -- creature left standing in a bed that nobody owns is the one thing this must
--- never leave behind.
+-- never leave behind. A roll goes the same way, question mark and all: the
+-- hotbar shows the plant when its time comes, whether or not this drew it.
 player.CharacterRemoving:Connect(function()
 	for _, job in pairs(live) do
 		finish(job)

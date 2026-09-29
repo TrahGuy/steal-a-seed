@@ -4,13 +4,15 @@
 --
 -- THE SUSPENSE BEFORE A HATCH IS SHOWN (2026-09-29), as arithmetic.
 --
--- The owner's request: "When a pod finishes hatching, show a polished animation
--- that cycles through plant silhouettes with a prominent question mark, then
--- reveals the plant actually hatched. The roll must last at least 5 seconds
--- before the final reveal. Start briskly, slow toward the end."
+-- The owner's request, as revised the same day: "when a pod hatches, show a
+-- lightweight world-space animation at that pod's exact position. For about 3
+-- seconds, quickly cycle plant silhouettes with a floating question mark, slow
+-- the cycle, then reveal the actual plant there with the existing hatch
+-- effects. Nearby players should be able to see it. Do not open a modal, cover
+-- the camera, stop movement, or add a lingering result panel."
 --
--- And the rule that came with it: "The server must determine and secure the
--- real outcome independently of the animation -- this is a visual reveal, not a
+-- And the rule that came with it: "The real plant must still be determined and
+-- safely recorded by the server before the cosmetic animation. This is not a
 -- second roll."
 --
 --==============================================================================
@@ -18,16 +20,16 @@
 --
 -- Three questions, each answered from numbers somebody else has already fixed:
 --
---   schedule   WHEN a hatch's roll runs, and when its plant may be shown. Asked
---              by the server, once, for a hatch that is about to happen. One
---              roll at a time for each player.
---   frames     WHICH silhouette is on the card at each moment. Asked by the
---              client. The last is always the plant that hatched; the others
---              are the plants of its biome in an order drawn from the hatch's
---              token -- so one hatch is one roll wherever it is drawn, and
---              drawing it twice cannot change it.
+--   revealAt   WHEN a hatch's plant may be shown. Asked by the server, once,
+--              for a hatch that is about to happen. Every hatch has its own
+--              three seconds; nothing waits for anything else.
+--   frames     WHICH silhouette stands where the pod was at each moment. Asked
+--              by every client that can see it. The last is always the plant
+--              that hatched; the others are the plants of its biome in an order
+--              drawn from the hatch's token -- so one hatch is one roll on
+--              every screen, and drawing it twice cannot change it.
 --   hidden     WHETHER a plant is still a secret. Asked by everything that
---              would otherwise name it: the hotbar, the Bag, the world.
+--              would otherwise name it: the hotbar, the Bag, the Index.
 --
 -- The species is an ARGUMENT to `frames`, never a result of it. There is no
 -- function in this file that returns a plant nobody handed it.
@@ -44,6 +46,11 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local ROLL = GameConfig.Plant.Hatch.Roll
+local BURST: number = GameConfig.Plant.BurstSeconds
+local PULSE: number = GameConfig.Plant.Hatch.Paid.PulseSeconds
+-- How far into the burst the soil is clear enough to stand something on: the
+-- moment the creature itself used to begin.
+local BURST_SHARE = 0.55
 
 local HatchRoll = {}
 
@@ -54,38 +61,26 @@ HatchRoll.Attribute = ROLL.Attribute :: string
 HatchRoll.Unknown = "???"
 
 --==============================================================================
--- THE OWNER'S FIVE SECONDS, CHECKED WHEN THIS LOADS
+-- THE OWNER'S THREE SECONDS, CHECKED WHEN THIS LOADS
 --
--- A roll shorter than five seconds is not a roll the owner asked for, so a
--- number changed to make one fails the require instead of shipping.
+-- "About 3 seconds" is between two and a half and three and a half. A number
+-- changed to make the roll something else fails the require instead of shipping.
 --==============================================================================
-assert(ROLL.MinSeconds >= 5, "HatchRoll: the roll's floor is the owner's five seconds")
-assert(ROLL.Seconds >= ROLL.MinSeconds, "HatchRoll: the roll is shorter than its own floor")
+assert(ROLL.MinSeconds >= 2.5 and ROLL.MaxSeconds <= 3.5,
+	"HatchRoll: the owner asked for about three seconds")
+assert(ROLL.Seconds >= ROLL.MinSeconds and ROLL.Seconds <= ROLL.MaxSeconds,
+	"HatchRoll: the roll is not about three seconds")
 assert(ROLL.Steps >= 3 and ROLL.Steps == math.floor(ROLL.Steps), "HatchRoll: a roll is three silhouettes or more")
 assert(ROLL.FloorHold > 0 and ROLL.FirstHold > 0 and ROLL.LastHold >= ROLL.FirstHold,
-	"HatchRoll: a roll starts brisk and ends slow, never the other way")
-assert(ROLL.ShowSeconds > 0 and ROLL.MaxWaitSeconds >= 0, "HatchRoll: the card's times are not times")
-assert(ROLL.MaxHideSeconds >= ROLL.MaxWaitSeconds + ROLL.Seconds + ROLL.ShowSeconds,
-	"HatchRoll: a plant could be shown later than it may be hidden")
+	"HatchRoll: a roll starts quick and ends slow, never the other way")
+assert(ROLL.MaxHideSeconds >= ROLL.Seconds, "HatchRoll: a plant could be shown later than it may be hidden")
 
 export type Frame = {
-	-- Seconds after the roll began that this silhouette comes up, and how long
-	-- it stays.
-	at: number,
-	hold: number,
+	-- Where in the cycle this silhouette comes up and where it gives way, from
+	-- nought (the first silhouette) to one (the reveal).
+	from: number,
+	to: number,
 	speciesId: string,
-}
-
-export type Schedule = {
-	-- Server times: the roll's first silhouette, and the plant shown. The same
-	-- moment, `now`, when the roll is switched off.
-	rollAt: number,
-	revealAt: number,
-	-- When this player's card is free for the next hatch.
-	busyUntil: number,
-	-- True when the card is too far behind to wait for: the hatch counts down on
-	-- its own and is told in a line.
-	compact: boolean,
 }
 
 --==============================================================================
@@ -93,7 +88,7 @@ export type Schedule = {
 --
 -- GameConfig.Plant.Hatch.Roll.Enabled, or its StudioPreview in Studio -- where
 -- the server and the client both answer yes, so a preview is a whole one. Off,
--- `schedule` answers "now" for everything and a hatch is the hatch it was.
+-- `revealAt` answers "now" and a hatch is the hatch it was.
 --==============================================================================
 function HatchRoll.live(): boolean
 	if ROLL.Enabled == true then
@@ -102,45 +97,68 @@ function HatchRoll.live(): boolean
 	return ROLL.StudioPreview == true and RunService:IsStudio()
 end
 
+-- From the hatch to the plant, shown.
+function HatchRoll.seconds(): number
+	return ROLL.Seconds
+end
+
+-- When a hatch that happens `now` may show its plant. The same moment when the
+-- roll is switched off.
+function HatchRoll.revealAt(now: number): number
+	if not HatchRoll.live() then
+		return now
+	end
+	return now + ROLL.Seconds
+end
+
+--==============================================================================
+-- WHEN THE SILHOUETTES TURN
+--
+-- The shell bursts first, as it always has: the silhouettes begin when the soil
+-- is clear -- where the creature used to begin -- and turn until the reveal. A
+-- purchase puts its pulse in front of the burst, so its silhouettes have that
+-- much less time and turn that much quicker; the reveal is at the same moment.
+--==============================================================================
+function HatchRoll.lead(paid: boolean?): number
+	return BURST * BURST_SHARE + (if paid == true then PULSE else 0)
+end
+
+function HatchRoll.cycle(paid: boolean?): number
+	return math.max(ROLL.Seconds - HatchRoll.lead(paid), 0.1)
+end
+
 --==============================================================================
 -- HOW LONG EACH SILHOUETTE IS HELD
 --
--- Brisk, then slow: the holds grow by one ratio from FirstHold to LastHold, and
--- are then stretched together so that they fill Seconds exactly. A hold that
--- stretching left under FloorHold is lifted to it -- which makes the roll
--- LONGER than Seconds, never shorter, and never a flicker.
+-- Quick, then slow: the holds grow by one ratio from FirstHold to LastHold, and
+-- are kept as SHARES of the cycle, so that they fill it exactly whatever its
+-- length. The shortest of them, in the shortest cycle there is, is not under
+-- FloorHold: numbers that would make a silhouette flicker do not load.
 --==============================================================================
-local heldFor: { number } = {}
+local share: { number } = {}
 do
 	local steps = ROLL.Steps
 	local ratio = ROLL.LastHold / ROLL.FirstHold
 	local total = 0
 	for i = 1, steps do
-		heldFor[i] = ROLL.FirstHold * ratio ^ ((i - 1) / (steps - 1))
-		total += heldFor[i]
+		share[i] = ROLL.FirstHold * ratio ^ ((i - 1) / (steps - 1))
+		total += share[i]
 	end
-	local stretch = ROLL.Seconds / total
 	for i = 1, steps do
-		heldFor[i] = math.max(heldFor[i] * stretch, ROLL.FloorHold)
+		share[i] /= total
 	end
 end
+assert(share[1] * HatchRoll.cycle(true) >= ROLL.FloorHold,
+	"HatchRoll: a silhouette would be held for less than the floor")
 
-function HatchRoll.holds(): { number }
-	return table.clone(heldFor)
-end
-
--- The whole roll, first silhouette to the reveal. At least Seconds.
-function HatchRoll.seconds(): number
-	local total = 0
-	for _, hold in ipairs(heldFor) do
-		total += hold
+-- The holds of one cycle, in seconds.
+function HatchRoll.holds(paid: boolean?): { number }
+	local cycle = HatchRoll.cycle(paid)
+	local holds: { number } = table.create(#share)
+	for i, part in ipairs(share) do
+		holds[i] = part * cycle
 	end
-	return math.max(total, ROLL.Seconds)
-end
-
--- From the first silhouette to the card going away.
-function HatchRoll.cardSeconds(): number
-	return HatchRoll.seconds() + ROLL.ShowSeconds
+	return holds
 end
 
 --==============================================================================
@@ -178,7 +196,7 @@ end
 --==============================================================================
 function HatchRoll.frames(actualId: string, seed: number?): { Frame }
 	local pool = HatchRoll.candidates(actualId)
-	local count = #heldFor
+	local count = #share
 	local order: { string } = table.create(count, actualId)
 	local rng = Random.new(math.floor(math.abs(tonumber(seed) or 0)) % 2147483647)
 	local bag: { string } = {}
@@ -207,50 +225,25 @@ function HatchRoll.frames(actualId: string, seed: number?): { Frame }
 	local frames: { Frame } = table.create(count)
 	local at = 0
 	for i = 1, count do
-		frames[i] = { at = at, hold = heldFor[i], speciesId = order[i] }
-		at += heldFor[i]
+		local to = if i == count then 1 else at + share[i]
+		frames[i] = { from = at, to = to, speciesId = order[i] }
+		at = to
 	end
 	return frames
 end
 
--- Which frame is up `elapsed` seconds into the roll: 1 before it starts, the
--- last one from the moment it lands.
-function HatchRoll.frameAt(frames: { Frame }, elapsed: number): number
+-- Which frame is up at `fraction` of the cycle: the first before it starts, the
+-- last from the moment it lands.
+function HatchRoll.frameAt(frames: { Frame }, fraction: number): number
 	local index = 1
 	for i, frame in ipairs(frames) do
-		if elapsed >= frame.at then
+		if fraction >= frame.from then
 			index = i
 		else
 			break
 		end
 	end
 	return index
-end
-
---==============================================================================
--- ONE ROLL AT A TIME
---
--- `busyUntil` is when this player's card is free (nil: it is free now). A hatch
--- while it is busy waits its turn -- its roll starts when the one before it has
--- been shown -- unless that is further off than MaxWaitSeconds: then it does
--- not wait for the card at all, and is told in a line when its own time comes.
---
--- Either way the plant is shown no sooner than a whole roll after the hatch.
---==============================================================================
-function HatchRoll.schedule(now: number, busyUntil: number?): Schedule
-	if not HatchRoll.live() then
-		return { rollAt = now, revealAt = now, busyUntil = now, compact = false }
-	end
-	local seconds = HatchRoll.seconds()
-	local free = tonumber(busyUntil) or now
-	if free ~= free or free < now then
-		free = now
-	end
-	if free - now > ROLL.MaxWaitSeconds then
-		return { rollAt = now, revealAt = now + seconds, busyUntil = free, compact = true }
-	end
-	local revealAt = free + seconds
-	return { rollAt = free, revealAt = revealAt, busyUntil = revealAt + ROLL.ShowSeconds, compact = false }
 end
 
 --==============================================================================
@@ -315,48 +308,6 @@ function HatchRoll.sealedSpecies(player: Player): { [string]: number }
 	read(player:FindFirstChildOfClass("Backpack"))
 	read(player.Character)
 	return found
-end
-
---==============================================================================
--- THE FANFARE, ONCE
---
--- Two things can sound a hatch for its owner: their card, at the moment it
--- shows the plant, and the world's side (HatchFX) a moment later, which is the
--- one that does it when the card was put away or never drawn. Whichever asks
--- first for a hatch's token is told yes, and whoever asks after is told no.
---
--- Kept here because this is the one module both of them have, and kept by
--- token, so that two hatches shown in the same moment cannot answer for each
--- other. It is each client's own: nothing is sent, and nothing depends on it
--- but a sound.
---==============================================================================
-local sounded: { [number]: boolean } = {}
-local soundedCount = 0
--- A server counts its hatches up from one, and only a hatch of the last half
--- minute can still be asked for: the rest are forgotten, so a long session does
--- not keep a note for every plant it ever showed.
-local KEEP = 128
-
-function HatchRoll.claim(token: any): boolean
-	local n = tonumber(token)
-	if not n or n ~= n or n == 0 then
-		-- A hatch with no token cannot be told from another: it is sounded.
-		return true
-	end
-	if sounded[n] then
-		return false
-	end
-	sounded[n] = true
-	soundedCount += 1
-	if soundedCount > KEEP * 2 then
-		for old in pairs(sounded) do
-			if old < n - KEEP then
-				sounded[old] = nil
-				soundedCount -= 1
-			end
-		end
-	end
-	return true
 end
 
 -- The moment the last of them ends, or nil when nothing is waiting.

@@ -1013,19 +1013,19 @@ local function receive(state: any)
 		-- takes the branch below and gets no fanfare for old news.
 		clearWorld()
 		--======================================================================
-		-- AFTER THE HATCH'S OWN REVEAL, NOT OVER IT (2026-09-29)
+		-- AFTER THE HATCH'S OWN REVEAL, NOT BEFORE IT (2026-09-29)
 		--
-		-- The last step is the first hatch, and a hatch now shows its plant a
-		-- few seconds after it happens (HatchRoll): the plant's Tool says until
-		-- when. The congratulations wait for that card to have been and gone,
-		-- so the two are one after the other in the middle of the screen. With
-		-- no roll running there is nothing to wait for.
+		-- The last step is the first hatch, and a hatch now shows its plant
+		-- three seconds after it happens, where the pod stood (HatchRoll): the
+		-- plant's Tool says until when. Congratulations for a plant nobody has
+		-- seen yet would be early, so they wait for the plant to have come up.
+		-- With no roll running there is nothing to wait for.
 		--======================================================================
 		local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 		local shownAt = HatchRoll.pendingUntil(player)
 		if shownAt then
 			local wait = math.max(shownAt - workspace:GetServerTimeNow(), 0)
-				+ Config.Plant.Hatch.Roll.ShowSeconds
+				+ Config.Plant.Hatch.Reveal.Seconds
 			task.delay(wait, function()
 				if alive then
 					celebrate()

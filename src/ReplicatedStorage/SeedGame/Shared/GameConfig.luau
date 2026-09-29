@@ -2793,12 +2793,14 @@ GameConfig.Plant = {
 		},
 
 		--======================================================================
-		-- THE ROLL: THE SUSPENSE BEFORE THE REVEAL (2026-09-29)
+		-- THE ROLL: WHAT WILL IT BE? (2026-09-29; in the world since the same day)
 		--
-		-- The owner's rule: when a pod hatches, its owner watches plant
-		-- silhouettes turn over behind a question mark for AT LEAST FIVE
-		-- SECONDS -- briskly at first, slowing to a stop -- and only then sees
-		-- the plant that came out.
+		-- The owner's rule: when a pod hatches, the place where it stood cycles
+		-- plant silhouettes under a floating question mark for ABOUT THREE
+		-- SECONDS -- quickly at first, slowing -- and then shows the plant that
+		-- came out, with the hatch's own effects. IN THE WORLD, where the pod was,
+		-- for everybody nearby: no card, no panel, nothing over the camera, and
+		-- nothing that stops anybody moving.
 		--
 		-- IT IS A PICTURE OF A DECISION ALREADY MADE. The species was fixed when
 		-- the pod was made, and the plant is in the Backpack and on the profile
@@ -2807,50 +2809,70 @@ GameConfig.Plant = {
 		-- pod's own biome, in an order drawn from the hatch's token, and the
 		-- last of them is the plant that hatched.
 		--
-		-- ONE AT A TIME. The server gives every hatch its own window
-		-- (HatchRoll.schedule), so two pods hatched a second apart are two rolls
-		-- one after the other and never two cards at once.
-		--
-		-- THIS DOES MAKE A HATCH LONGER, for every size alike. TIER INTENSITY
-		-- below still holds: a Colossal is a bigger event than a Tiny, never a
-		-- longer one.
+		-- EVERY HATCH HAS ITS OWN. Two pods hatched together are two rolls side
+		-- by side, each where its pod stood, each three seconds long. Nothing
+		-- waits for anything else.
 		--
 		-- THE ROLL IS TIME PUT BETWEEN THE BURST AND THE CREATURE, and nothing
 		-- else. With it off, that time is nought and a hatch is second for
-		-- second the hatch it was on 2026-09-17.
+		-- second the hatch it was on 2026-09-17. TIER INTENSITY below still
+		-- holds: a Colossal is a bigger event than a Tiny, never a longer one.
 		--======================================================================
 		Roll = {
-			-- OFF ON A PUBLISHED SERVER UNTIL THE OWNER HAS SEEN IT. The owner
-			-- asked for a Studio preview before anything is published, and
-			-- Studio's Publish ships whatever is on disk -- so the switch ships
-			-- off, and StudioPreview turns the roll on in Studio alone, for the
-			-- server and the client alike. Approved, this one line goes to true.
+			-- OFF ON A PUBLISHED SERVER UNTIL THE OWNER HAS APPROVED IT. Studio's
+			-- Publish ships whatever is on disk, so the switch ships off, and
+			-- StudioPreview turns the roll on in Studio alone, for the server and
+			-- the client alike. Approved, this one line goes to true.
 			Enabled = false,
 			StudioPreview = true,
-			-- From the first silhouette to the reveal. HatchRoll refuses to load
-			-- with this under MinSeconds.
-			Seconds = 5.5,
-			MinSeconds = 5,
-			-- The plant, known: how long the card stays once it is shown.
-			ShowSeconds = 2.6,
+			-- From the hatch to the plant, shown. ABOUT THREE SECONDS: HatchRoll
+			-- refuses to load with this outside MinSeconds and MaxSeconds.
+			Seconds = 3,
+			MinSeconds = 2.5,
+			MaxSeconds = 3.5,
 			-- How many silhouettes are shown. The last is the plant's own.
-			Steps = 12,
-			-- How long the first and the last are held: brisk, then slow. The
-			-- holds between them grow evenly and the whole is stretched to fill
-			-- Seconds exactly, so these two are a shape, not a promise.
-			FirstHold = 0.22,
-			LastHold = 0.9,
-			-- The promise: no silhouette is held for less than this, whatever the
-			-- numbers above are changed to. They turn over; they never flicker.
-			FloorHold = 0.15,
-			-- A roll waits for the one before it, but not for ever: past this the
-			-- hatch is told in a line instead of on the card.
-			MaxWaitSeconds = 16,
+			Steps = 9,
+			-- How long the first and the last are held: quick, then slow. The
+			-- holds between them grow evenly and the whole is stretched to fill the
+			-- time from the burst to the reveal, so these two are a shape.
+			FirstHold = 0.12,
+			LastHold = 0.6,
+			-- The promise: no silhouette is held for less than this. They turn
+			-- over; they never flicker. HatchRoll refuses numbers that break it.
+			FloorHold = 0.1,
 			-- A plant is never kept a secret for longer than this, whatever a
 			-- clock or a lost message does.
-			MaxHideSeconds = 45,
+			MaxHideSeconds = 10,
 			-- On the plant's Tool: the server time its plant may be shown.
 			Attribute = "RevealAt",
+			--==================================================================
+			-- WHAT IS DRAWN WHERE THE POD STOOD (HatchFX)
+			--
+			-- MODEST, for a phone: one dark shape at a time, a question mark on
+			-- one sign and a disc on the soil. No particles, no lights.
+			--==================================================================
+			World = {
+				-- A silhouette's longest side, in pod diameters and in studs: the
+				-- shapes are the size of the shell, whatever plant they are the
+				-- shape of. The size of the PLANT is the reveal's to show.
+				SizeInPods = 1.3,
+				MinStuds = 2.6,
+				MaxStuds = 9,
+				-- The question mark: how tall, and how far over the shapes.
+				MarkInPods = 0.85,
+				MarkMinStuds = 1.8,
+				MarkMaxStuds = 5,
+				MarkGapStuds = 0.4,
+				-- It rides up and down by this much, this often. Still under
+				-- Reduced Effects.
+				BobStuds = 0.22,
+				BobSeconds = 1.5,
+				-- The disc on the soil, in pod diameters.
+				DiscInPods = 1.15,
+				-- More rolls than this at once, on one screen, are a question
+				-- mark with no shapes turning under it.
+				MaxShapes = 3,
+			},
 		},
 
 		--======================================================================

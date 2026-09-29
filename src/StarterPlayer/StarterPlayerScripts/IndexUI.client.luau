@@ -1706,11 +1706,12 @@ local function receive(profile: any)
 		-- A FIRST DISCOVERY WAITS FOR ITS OWN REVEAL (2026-09-29)
 		--
 		-- The Almanac learns a species at the hatch, and the hatch shows its
-		-- plant a few seconds later (HatchRoll). A silhouette lifting here, or
-		-- the badge's count dropping, in those seconds would name the plant
-		-- before its card does -- so a species this player is still waiting to
-		-- be shown is added when its roll ends, not before. Only a species that
-		-- is NEW: one already grown stays exactly as it is.
+		-- plant three seconds later, where the pod stood (HatchRoll). A
+		-- silhouette lifting here, or the badge's count dropping, in those
+		-- seconds would name the plant before the world does -- so a species
+		-- this player is still waiting to be shown is added when its roll
+		-- ends, not before. Only a species that is NEW: one already grown stays
+		-- exactly as it is.
 		--======================================================================
 		local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 		local waiting = HatchRoll.sealedSpecies(player)

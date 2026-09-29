@@ -37,8 +37,8 @@
 -- The paid door is the one driven, as in HatchRevealSpec: a receipt is a
 -- function call, and a held prompt is the engine's. Both run the same hatch().
 --
--- Not here: the card, and what any of it looks like -- nothing in this file is
--- a client. HatchRollSpec has the roll's arithmetic and the masks.
+-- Not here: what any of it looks like -- nothing in this file is a client.
+-- HatchRollSpec has the roll's arithmetic, the masks, and the world's side.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -554,7 +554,7 @@ local function body()
 				and tool.Name == species.Name
 			ok.secret = tool ~= nil and payload ~= nil
 				and tool:GetAttribute(ROLL.Attribute) == payload.revealAt
-				and payload.revealAt - payload.at >= 5 and HatchRoll.sealed(tool)
+				and near(payload.revealAt - payload.at, seconds) and HatchRoll.sealed(tool)
 			-- The record: one row more, and the same plants as the Tools.
 			ok.row = #profile.Held == i
 				and census(profile.Held, rowKey) == census(plantsOf(p), toolKey)
@@ -605,7 +605,7 @@ local function body()
 			"and when the garden is saved without the pod, the plant is already on the record",
 			firstWrong)
 		check(same.secret == n,
-			"the Tool is a secret until the very time the message gives, five seconds on or more",
+			"the Tool is a secret until the very time the message gives, three seconds on",
 			firstWrong)
 		check(same.frames == n, "and the silhouettes that message draws end on the Tool's own plant",
 			firstWrong)
@@ -676,8 +676,8 @@ local function body()
 		p._backpack = pack
 		local after, second = receipt(p)
 		check(after == true and second ~= nil and second.species == "nubkin" and second.tier == 2
-				and second.rollAt == second.at,
-			"and it hatches when it can be, with the card free: the failure took none of its time")
+				and near(second.revealAt, second.at + seconds),
+			"and it hatches when it can be, with three seconds of its own")
 		check(#plantsOf(p) == 1 and #profile.Held == 1 and #profile.Plants == 1,
 			"one Tool, one row, one pod fewer")
 	end
@@ -693,9 +693,9 @@ local function body()
 		check(#plantsOf(p) == 1 and #profile.Held == 1, "they arrive holding a plant from before")
 		local _, first = receipt(p)
 		local _, second = receipt(p)
-		check(first ~= nil and second ~= nil and near(second.rollAt, first.revealAt + ROLL.ShowSeconds)
-				and second.compact == false,
-			"two pods hatched together are two rolls, the second after the first")
+		check(first ~= nil and second ~= nil and near(first.revealAt, first.at + seconds)
+				and near(second.revealAt, second.at + seconds) and second.revealAt - first.revealAt < 0.5,
+			"two pods hatched together are two rolls side by side, each three seconds from its own hatch")
 		check(#plantsOf(p) == 3 and #profile.Held == 3 and #profile.Plants == 0,
 			"three Tools, three rows, and an empty garden")
 
@@ -724,44 +724,54 @@ local function body()
 			stillSecret)
 		check(oldShown, "and the plant from before comes back as itself")
 
-		-- A second death inside the same roll.
-		die(p)
-		tools = plantsOf(p)
-		local twice = 0
-		for _, tool in ipairs(tools) do
-			if tool:GetAttribute(ROLL.Attribute) ~= nil and HatchRoll.sealed(tool) then
-				twice += 1
-			end
-		end
-		check(#tools == 3 and #profile.Held == 3 and twice == 2,
-			"a second death in the same roll: still three, still two secrets",
-			string.format("%d tools, %d secret", #tools, twice))
-
-		-- The first roll ends: its Tool says so, and the second does not yet.
-		local wait = first.revealAt - Workspace:GetServerTimeNow()
+		-- The rolls end: the server takes the time off both Tools.
+		local wait = math.max(first.revealAt, second.revealAt) - Workspace:GetServerTimeNow()
 		if wait > 0 then
 			task.wait(wait + 0.25)
 		end
-		local firstShown, secondSecret = false, false
+		local shown = 0
 		for _, tool in ipairs(plantsOf(p)) do
-			local id = tool:GetAttribute("SpeciesId")
-			if id == "dunebud" then
-				firstShown = tool:GetAttribute(ROLL.Attribute) == nil and not HatchRoll.sealed(tool)
-			elseif id == "petalpip" then
-				secondSecret = HatchRoll.sealed(tool)
+			if tool:GetAttribute(ROLL.Attribute) == nil and not HatchRoll.sealed(tool) then
+				shown += 1
 			end
 		end
-		check(firstShown, "when the first roll's time comes the server takes the time off its Tool")
-		check(secondSecret, "while the second, still to be shown, stays a secret")
+		check(shown == 3, "when their times come the server takes the time off the Tools it rebuilt", shown)
 		die(p)
-		local shownAfter = false
+		local shownAfter = 0
 		for _, tool in ipairs(plantsOf(p)) do
-			if tool:GetAttribute("SpeciesId") == "dunebud" then
-				shownAfter = tool:GetAttribute(ROLL.Attribute) == nil
+			if tool:GetAttribute(ROLL.Attribute) == nil then
+				shownAfter += 1
 			end
 		end
-		check(#plantsOf(p) == 3 and shownAfter,
+		check(#plantsOf(p) == 3 and shownAfter == 3,
 			"and a death after a roll is over brings its plant back shown: a secret does not come back")
+
+		-- Two deaths inside one secret, and a secret that runs out during a death.
+		local q, _, qProfile = arrive("DiesTwice", -410, {})
+		local began = Workspace:GetServerTimeNow()
+		CarryService.GiveHatched(q, SeedData.Get("novaorb"), 4, 8, began + 8, true)
+		CarryService.GiveHatched(q, SeedData.Get("raincup"), 2, 0.5, began + 0.5, true)
+		check(#plantsOf(q) == 2 and #qProfile.Held == 2, "two plants are given, each with a time of its own")
+		local function secrets()
+			local long, short = false, false
+			for _, tool in ipairs(plantsOf(q)) do
+				local id = tool:GetAttribute("SpeciesId")
+				if id == "novaorb" then
+					long = tool:GetAttribute(ROLL.Attribute) == began + 8 and HatchRoll.sealed(tool)
+				elseif id == "raincup" then
+					short = tool:GetAttribute(ROLL.Attribute) ~= nil
+				end
+			end
+			return long, short
+		end
+		die(q)
+		local long, short = secrets()
+		check(#plantsOf(q) == 2 and #qProfile.Held == 2 and long and not short,
+			"after a death the one still running is still a secret, and the one that ran out is shown")
+		die(q)
+		long, short = secrets()
+		check(#plantsOf(q) == 2 and #qProfile.Held == 2 and long and not short,
+			"and after a second death in the same roll, the same: still two plants, still one secret")
 	end
 
 	--==========================================================================
@@ -876,8 +886,9 @@ local function body()
 		check(podsIn(plot) == 1 and #profile.Plants == 1,
 			"and to a garden with one pod in it, not two")
 		local answered, next = receipt(back)
-		check(answered == true and next ~= nil and next.species == "nubkin" and next.rollAt == next.at,
-			"the next hatch is the other pod, on a card that is free")
+		check(answered == true and next ~= nil and next.species == "nubkin"
+				and near(next.revealAt, next.at + seconds),
+			"the next hatch is the other pod, with three seconds of its own")
 		local none = receipt(back)
 		check(none == false and #plantsOf(back) == 2 and #profile.Held == 2 and #profile.Plants == 0,
 			"and then there is nothing left to hatch: two plants, two rows, an empty garden",

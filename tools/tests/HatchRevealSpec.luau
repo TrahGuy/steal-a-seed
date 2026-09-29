@@ -25,8 +25,9 @@
 -- THE ROLL IS SWITCHED OFF HERE (2026-09-29), which is how it ships: this spec
 -- is the hatch as it has been since 2026-09-17, and it says that a build with
 -- GameConfig.Plant.Hatch.Roll off is that hatch to the millisecond. The roll
--- itself -- five and a half seconds between the burst and the plant -- is
--- HatchRollSpec's, and what it must never cost is HatchDeliverySpec's.
+-- itself -- three seconds between the burst and the plant, where the pod
+-- stood -- is HatchRollSpec's, and what it must never cost is
+-- HatchDeliverySpec's.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -446,11 +447,10 @@ local function body()
 			"stamped with server time, so every client starts together", payload and payload.at)
 		check(payload ~= nil and type(payload.token) == "number",
 			"and carries a token of its own, so two at once cannot be confused")
-		check(payload ~= nil and payload.rollAt == payload.at and payload.revealAt == payload.at
-				and payload.compact == false,
+		check(payload ~= nil and payload.revealAt == payload.at and payload.rollAt == nil
+				and payload.compact == nil,
 			"with the roll off, the plant may be shown at the moment of the hatch: no wait is sent",
-			payload and string.format("%s / %s / %s", tostring(payload.at), tostring(payload.rollAt),
-				tostring(payload.revealAt)))
+			payload and string.format("%s / %s", tostring(payload.at), tostring(payload.revealAt)))
 
 		-- The pod's BASE, not its middle: a creature is built from its base, and a
 		-- pivot would float every revealed plant by half an egg. Pod 2 is still in
