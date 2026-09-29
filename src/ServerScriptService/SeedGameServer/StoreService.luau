@@ -85,6 +85,8 @@ end
 -- list, so the duplicate-id check below sees every id this game sells.
 --==============================================================================
 local byProduct: { [number]: any } = {}
+-- The wheel's spin products while paid spins are switched off: id -> key.
+local wheelOff: { [number]: string } = {}
 
 local function allItems(): { any }
 	local list = {}
@@ -138,24 +140,35 @@ local function indexProducts(): (number, number)
 		end
 	end
 	--==========================================================================
-	-- THE REWARD WHEEL'S SPIN PACK (WheelData.Product, 2026-09-27)
+	-- THE REWARD WHEEL'S SPIN PRODUCTS (WheelData.Products, 2026-09-29)
 	--
-	-- Indexed only once the owner has created the product, filled in its id and
-	-- pack size, AND switched it on -- until then no receipt can ever name it,
-	-- so nothing can be bought or granted. A spin is a paid random item: see the
-	-- wheel entry in KB/HANDOFF.md for what has to be true before Enabled.
+	-- Two of them, +1 Spin and +10 Spins, each its own id and its own quantity:
+	-- the receipt's ProductId picks the row and the row says how many, so the
+	-- two can never pay each other's amount. A spin is a paid random item, so
+	-- they are indexed only while WheelData.Paid.Enabled -- off, no receipt can
+	-- grant a spin, whatever it names (KB/HANDOFF.md, the paid-spins entry).
+	--
+	-- `wheelOff` remembers the ids while they are NOT indexed, for one purpose:
+	-- a receipt that names one then is said to be exactly that in the log,
+	-- rather than "a product this build does not know".
 	--==========================================================================
-	local spins = WheelData.Product
-	if spins.Enabled and spins.ProductId > 0 and spins.Quantity > 0 then
-		if byProduct[spins.ProductId] then
-			warn(string.format("[Seed/StoreService] DUPLICATE product id %d on the wheel's spin pack and %q.",
-				spins.ProductId, byProduct[spins.ProductId].key))
+	table.clear(wheelOff)
+	for _, product in ipairs(WheelData.Products) do
+		if not WheelData.paidLive() then
+			wheelOff[product.productId] = product.key
+			continue
 		end
-		byProduct[spins.ProductId] = {
-			key = "wheelspins",
+		if byProduct[product.productId] then
+			warn(string.format("[Seed/StoreService] DUPLICATE product id %d on the wheel's %q and %q. "
+				.. "One of them is wrong; neither is safe to sell.",
+				product.productId, product.key, byProduct[product.productId].key))
+		end
+		byProduct[product.productId] = {
+			key = "wheel:" .. product.key,
 			kind = "spins",
-			amount = spins.Quantity,
-			product = spins.ProductId,
+			amount = product.spins,
+			product = product.productId,
+			robux = product.robux,
 		}
 		live += 1
 	end
@@ -217,7 +230,9 @@ local function grant(player: Player, item: any): boolean
 		-- Counted apart from earned spins (WheelBought), never against the
 		-- daily earning allowance. The spins land here; the prize of a spin is
 		-- rolled only when the player spends one, at the wheel. False when the
-		-- profile cannot take them, so the receipt is retried.
+		-- profile cannot take them or the player may not hold a paid random
+		-- item (WheelService asks PolicyService, and fails closed), so the
+		-- receipt is not acknowledged.
 		--======================================================================
 		return WheelService.GrantBought(player, item.amount or 0)
 	end
@@ -250,25 +265,13 @@ end
 --==============================================================================
 -- THE RECEIPT
 --==============================================================================
-local function processReceipt(info: any): Enum.ProductPurchaseDecision
-	local GRANTED = Enum.ProductPurchaseDecision.PurchaseGranted
-	local RETRY = Enum.ProductPurchaseDecision.NotProcessedYet
+local GRANTED = Enum.ProductPurchaseDecision.PurchaseGranted
+local RETRY = Enum.ProductPurchaseDecision.NotProcessedYet
 
-	local player = Players:GetPlayerByUserId(info.PlayerId)
-	if not player then
-		-- Gone. Roblox re-delivers when they come back, and the ledger check
-		-- above will still be the thing that stops a double grant.
-		return RETRY
-	end
+-- Receipts being decided at this moment, by purchase id (see processReceipt).
+local deciding: { [string]: boolean } = {}
 
-	local profile = PlayerDataService.Get(player)
-	if not profile then
-		-- Their save has not arrived. Granting into a profile that is about to
-		-- be replaced by the loaded one is how a purchase disappears.
-		return RETRY
-	end
-
-	local purchaseId = tostring(info.PurchaseId)
+local function decide(info: any, player: Player, profile: any, purchaseId: string): Enum.ProductPurchaseDecision
 	if alreadyHonoured(profile, purchaseId) then
 		--======================================================================
 		-- A RETRY OF SOMETHING ALREADY GIVEN, ACKNOWLEDGED ONLY ONCE IT IS ON DISK
@@ -291,6 +294,23 @@ local function processReceipt(info: any): Enum.ProductPurchaseDecision
 	end
 
 	local item = byProduct[info.ProductId]
+	if not item and wheelOff[info.ProductId] then
+		--======================================================================
+		-- A SPIN PRODUCT, WHILE PAID SPINS ARE SWITCHED OFF
+		--
+		-- The products exist in the dashboard and are on sale there, so a
+		-- receipt can name one before this build sells them: bought outside
+		-- the game, or prompted by a tampered client. NOT granted and NOT
+		-- acknowledged, like any product this build cannot honour: nothing is
+		-- given that the rules for a paid random item have not been met for,
+		-- and Roblox returns the Robux when it stops retrying.
+		--======================================================================
+		warn(string.format(
+			"[Seed/StoreService] receipt for the wheel's %q (product %s) from %s while paid spins are "
+			.. "switched off. Not granted, not acknowledged.",
+			wheelOff[info.ProductId], tostring(info.ProductId), player.Name))
+		return RETRY
+	end
 	if not item then
 		--======================================================================
 		-- A PRODUCT THIS BUILD DOES NOT KNOW
@@ -333,7 +353,50 @@ local function processReceipt(info: any): Enum.ProductPurchaseDecision
 	return GRANTED
 end
 
+local function processReceipt(info: any): Enum.ProductPurchaseDecision
+	local player = Players:GetPlayerByUserId(info.PlayerId)
+	if not player then
+		-- Gone. Roblox re-delivers when they come back, and the ledger check
+		-- will still be the thing that stops a double grant.
+		return RETRY
+	end
+
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		-- Their save has not arrived. Granting into a profile that is about to
+		-- be replaced by the loaded one is how a purchase disappears.
+		return RETRY
+	end
+
+	--==========================================================================
+	-- ONE DELIVERY OF A RECEIPT AT A TIME
+	--
+	-- The ledger entry is written AFTER the grant, and a grant can yield: a
+	-- spin asks PolicyService about a player it has no answer for yet. A
+	-- second delivery of the same receipt arriving in that gap would find no
+	-- entry and grant again. It is told "not yet" instead; the first delivery
+	-- finishes, and Roblox delivers again if it still has to.
+	--
+	-- Released whatever happens, so a grant that throws leaves the receipt
+	-- unacknowledged and retryable rather than shut out for the server's life.
+	--==========================================================================
+	local purchaseId = tostring(info.PurchaseId)
+	if deciding[purchaseId] then
+		return RETRY
+	end
+	deciding[purchaseId] = true
+	local ok, decision = pcall(decide, info, player, profile, purchaseId)
+	deciding[purchaseId] = nil
+	if not ok then
+		warn(string.format("[Seed/StoreService] %s: receipt %s failed while it was being decided (%s); "
+			.. "not acknowledging", player.Name, purchaseId, tostring(decision)))
+		return RETRY
+	end
+	return decision :: Enum.ProductPurchaseDecision
+end
+
 function StoreService.Init()
+	table.clear(deciding)
 	indexProducts()
 end
 
@@ -386,11 +449,13 @@ function StoreService.Snapshot(): string
 	end
 	rows[#rows + 1] = string.format("  %-12s %s", "InWorld",
 		if #inWorld == 0 then "(empty)" else table.concat(inWorld, " "))
-	local spins = WheelData.Product
-	rows[#rows + 1] = string.format("  %-12s %s", "Wheel",
-		if spins.Enabled and spins.ProductId > 0 and spins.Quantity > 0
-			then string.format("wheelspins=%d x%d", spins.ProductId, spins.Quantity)
-			else "wheelspins=OFF (no product configured)")
+	local wheel = {}
+	for _, product in ipairs(WheelData.Products) do
+		table.insert(wheel, string.format("%s=%d x%d", product.key, product.productId, product.spins))
+	end
+	rows[#rows + 1] = string.format("  %-12s %s%s", "Wheel",
+		if WheelData.paidLive() then "" else "OFF (WheelData.Paid.Enabled is false): ",
+		if #wheel == 0 then "(no spin products)" else table.concat(wheel, " "))
 	return table.concat(rows, "\n")
 end
 

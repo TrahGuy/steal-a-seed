@@ -63,20 +63,74 @@ WheelData.MaxPending = 10
 WheelData.RememberRuns = 12
 
 --==============================================================================
--- THE FUTURE DEVELOPER PRODUCT: DISABLED AND UNCONFIGURED
+-- PAID SPINS: TWO DEVELOPER PRODUCTS, CONFIGURED AND SWITCHED OFF (2026-09-29)
 --
--- The owner creates the product later. Until then there is no id, no pack
--- size, no price and no BUY button anywhere, and nothing can prompt a
--- purchase. To switch it on (KB/HANDOFF.md, the wheel entry, lists every step):
--- set ProductId and Quantity from the owner's product, set Enabled, and only
--- after the owner has approved the disclosures and changed the experience
--- questionnaire's paid-random-items answer.
+-- The owner created both products in Podnappers' Creator Dashboard on
+-- 2026-09-29; Roblox's own record of each (MarketplaceService, asked from
+-- Studio) names this experience's universe, 10744596516.
+--
+--   spin1    3715369823   "+1 Spin"     1 bought spin     listed at 9 Robux
+--   spin10   3715370108   "+10 Spins"   10 bought spins   listed at 85 Robux
+--
+-- A BOUGHT SPIN IS A PAID RANDOM ITEM. Roblox's rules for one (Creator Docs,
+-- "Paid random items policy guidelines"; the clarification of 2026-05-26) are
+-- what Paid.Enabled waits for, and KB/HANDOFF.md's paid-spins entry lists them:
+-- every final outcome's numerical odds shown before the purchase and before a
+-- bought spin is spent, behind a button that SAYS what it is; nothing offered
+-- to a player PolicyService restricts, or whose answer could not be had; the
+-- Content Maturity questionnaire declaring paid random items; and neither
+-- product sold outside the game.
+--
+-- `Enabled` IS THE ONE SWITCH. Off -- as shipped -- StoreService indexes
+-- neither product, so no receipt can grant a spin; WheelService opens no
+-- purchase prompt and lets no bought spin be spent; and the panel shows no way
+-- to buy. The free, earned path never reads any of this.
+--
+-- `robux` IS THE OWNER'S LIST PRICE, FOR THE RECORD ONLY. Roblox prices by
+-- region -- Studio was quoted 4 and 35 for these two -- so the panel prints
+-- what RobuxPrice hears from Roblox for THIS player and never this number.
+--
+-- `icon` is the product's own icon as Roblox reports it (IconImageAssetId): the
+-- owner's artwork, uploaded by the owner with the product.
 --==============================================================================
-WheelData.Product = {
-	Enabled = false,
-	ProductId = 0,
-	Quantity = 0,
+export type Product = {
+	key: string,
+	productId: number,
+	spins: number,
+	robux: number,
+	name: string,
+	icon: number,
 }
+
+WheelData.Paid = {
+	Enabled = false,
+	-- Seconds one player waits between two purchase prompts.
+	PromptCooldown = 2,
+}
+
+WheelData.Products = {
+	{ key = "spin1", productId = 3715369823, spins = 1, robux = 9, name = "+1 Spin", icon = 84064901294156 },
+	{ key = "spin10", productId = 3715370108, spins = 10, robux = 85, name = "+10 Spins", icon = 139551271701020 },
+} :: { Product }
+
+WheelData.ProductByKey = {} :: { [string]: Product }
+WheelData.ProductById = {} :: { [number]: Product }
+for _, product in ipairs(WheelData.Products) do
+	assert(type(product.key) == "string" and #product.key > 0 and WheelData.ProductByKey[product.key] == nil,
+		"WheelData: a spin product's key is missing or used twice")
+	assert(product.productId > 0 and product.productId == math.floor(product.productId)
+		and WheelData.ProductById[product.productId] == nil,
+		"WheelData: spin product " .. product.key .. " has no id of its own")
+	assert(product.spins >= 1 and product.spins == math.floor(product.spins),
+		"WheelData: spin product " .. product.key .. " grants no whole number of spins")
+	WheelData.ProductByKey[product.key] = product
+	WheelData.ProductById[product.productId] = product
+end
+
+-- Whether paid spins exist at all in this build: the switch, and something to sell.
+function WheelData.paidLive(): boolean
+	return WheelData.Paid.Enabled == true and #WheelData.Products > 0
+end
 
 --==============================================================================
 -- THE POOLS A POD PRIZE PICKS ITS SPECIES FROM
@@ -264,6 +318,10 @@ WheelData.Actions = {
 	Claim = "WheelClaim",
 	Equip = "TrailEquip",
 	Result = "WheelResult",
+	-- client -> server: ask for the purchase prompt of one spin product, by its
+	-- key ("spin1", "spin10"). The SERVER opens the prompt, and only for a player
+	-- it may sell to; the spins come from the receipt and nowhere else.
+	Buy = "WheelBuy",
 	-- client -> server: TELEPORT TO the obby's entrance (the OBBY button).
 	ObbyTeleport = "ObbyTeleport",
 }

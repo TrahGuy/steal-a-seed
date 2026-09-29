@@ -55,8 +55,28 @@
 -- the panel, skipping the animation or leaving changes nothing: the prize was
 -- recorded, saved and paid before the answer was sent.
 --
--- PURCHASED SPINS: never spent without being asked, and there is no BUY button
--- -- the product is not configured (WheelData.Product).
+-- PURCHASED SPINS (2026-09-29): never spent without being asked. Two products
+-- can be bought, +1 Spin and +10 Spins (WheelData.Products), and only by a
+-- player the server says may: GET SPINS and its card are shown while
+-- WheelPaidAllowed is true and at no other time -- so not at all while
+-- WheelData.Paid.Enabled is off, which is how this ships.
+--
+--   * THIS SCRIPT OPENS NO PURCHASE PROMPT AND GRANTS NOTHING. A choice sends
+--     its product's KEY; the server decides whether to open Roblox's prompt, and
+--     the spins arrive -- as a balance the server publishes -- only from the
+--     receipt.
+--   * THE PRICE IS ROBLOX'S, FOR THIS PLAYER (RobuxPrice), or no number at all:
+--     never WheelData's list price, which a regional price would contradict in
+--     the prompt.
+--   * THE ODDS ARE ONE PRESS AWAY, BEHIND A BUTTON THAT SAYS SO. Roblox's rule
+--     for a paid random item is every final outcome's odds before the purchase
+--     and before the spend, and that a bare "?" is not enough: the card to buy
+--     and the question to spend each carry REWARDS & ODDS, and the round "?"
+--     gets the word ODDS under it.
+--   * A CARD KEEPS THE CONTROLLER. While the card to buy or the question is up
+--     nothing behind it can be selected, and B shuts the card before the panel.
+--   * NOTHING IS ADDED TO THE HUD. The button and both cards live inside this
+--     panel's scrim, so the game is never covered by them.
 --
 -- THE WORLD WHEEL: WheelModel's two face panels carry the same WheelDraw face,
 -- built here, locally. The front one turns on THIS screen only while this
@@ -84,6 +104,8 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local PadInput = require(Shared:WaitForChild("PadInput"))
+-- What Roblox would charge THIS player for a spin product (the buy card).
+local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -508,6 +530,199 @@ local confirmYes = wordButton(confirm, "Yes", "USE PURCHASED", rgb(214, 150, 46)
 local confirmNo = wordButton(confirm, "No", "CANCEL", PAL.HubGrey)
 
 --==============================================================================
+-- BUYING SPINS (2026-09-29): GET SPINS, AND THE CARD IT OPENS
+--
+-- One worded button beside the wheel, shown only to a player the server says
+-- may buy (WheelPaidAllowed). It opens a card over the hub, inside the panel's
+-- own scrim -- nothing is added to the HUD, so nothing stands over the game:
+--
+--     GET SPINS
+--     [ icon  +1 SPIN   (R$) 4 ]   [ icon  +10 SPINS   (R$) 35 ]
+--     Every spin wins a random reward ...
+--     [ REWARDS & ODDS ]                               [ CLOSE ]
+--
+-- The icons are the products' own (the owner's artwork, as Roblox lists it);
+-- a choice reads perfectly well without one, should it not load. Each price is
+-- what RobuxPrice hears from Roblox for THIS player: three dots until it
+-- answers, BUY and no number if it never does, OFF SALE if Roblox says so.
+--
+-- One table, because this script is near Luau's 200 locals a chunk: its
+-- pieces, and further down the functions that place, paint and open it.
+--==============================================================================
+type ShopChoice = {
+	product: WheelData.Product,
+	button: TextButton,
+	icon: ImageLabel,
+	name: TextLabel,
+	capsule: Frame,
+	token: ImageLabel,
+	price: TextLabel,
+	onSale: boolean,
+}
+
+local shop: { [string]: any } = {
+	open = false,
+	-- Where Reward info goes back to when it was opened from a card: "shop",
+	-- "confirm" or "" (the wheel).
+	returnTo = "",
+	-- The last bought balance seen, so a purchase landing can be said out loud.
+	bought = 0,
+	button = wordButton(stage, "GetSpins", "GET SPINS", rgb(214, 150, 46)),
+	card = panel(stage, "BuySpins", C.Sheet, 14, 8),
+	choices = {} :: { ShopChoice },
+	-- The word under the round "?", where a purchase can be made: Roblox asks
+	-- that the way to the odds says what it is.
+	infoWord = WheelDraw.words(stage, "InfoWord", 12, C.White, PAL.Ink, 2, 6),
+	confirmOdds = wordButton(confirm, "Odds", "REWARDS & ODDS", C.Blue),
+}
+shop.button.Visible = false
+shop.button.ZIndex = 6
+-- ON A BIG SCREEN the wheel is big, and a button and cards made for a phone
+-- would sit small beside it. They grow with the SCREEN -- not the wheel, which
+-- is already big in a 640 x 480 window that has no room for more -- by up to a
+-- quarter from 1024 x 600, and are never smaller than they are on a phone.
+shop.grow = function(W: number, H: number): number
+	return math.clamp(math.min(W / 1024, H / 600), 1, 1.25)
+end
+for _, name in ipairs({ "button", "card", "question" }) do
+	local scale = Instance.new("UIScale")
+	scale.Name = "Grow"
+	scale.Parent = if name == "question" then confirm else shop[name]
+	shop[name .. "Scale"] = scale
+end
+shop.infoWord.Text = "ODDS"
+shop.infoWord.AnchorPoint = Vector2.new(0.5, 0)
+shop.infoWord.Visible = false
+shop.card.AnchorPoint = Vector2.new(0.5, 0.5)
+shop.card.Visible = false
+ink(shop.card, PAL.Gold, 2.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+do
+	local title = WheelDraw.words(shop.card, "Title", 20, C.White, PAL.Ink, 2, 2)
+	title.Text = "GET SPINS"
+	shop.title = title
+	local note = text(shop.card, "Note", 11, C.Note, Enum.Font.GothamBold, 2)
+	note.TextWrapped = true
+	note.TextYAlignment = Enum.TextYAlignment.Center
+	note.Text = "Every spin wins one random reward. Bought spins never expire and are not part of "
+		.. "your 5 daily obby spins."
+	-- Two lines at 11 on a phone, in a box with room for three: its first line
+	-- is 292 of the 308 it has, so another screen's scale can wrap it again.
+	-- Past three it is drawn smaller rather than run into the buttons.
+	note.TextScaled = true
+	local noteSize = Instance.new("UITextSizeConstraint")
+	noteSize.MaxTextSize = 11
+	noteSize.MinTextSize = 8
+	noteSize.Parent = note
+	ink(note, C.NameInk, 1, 0.3)
+	shop.note = note
+	shop.odds = wordButton(shop.card, "Odds", "REWARDS & ODDS", C.Blue)
+	shop.close = wordButton(shop.card, "Close", "CLOSE", PAL.HubGrey)
+
+	for i, product in ipairs(WheelData.Products) do
+		local b = blank(shop.card, "Buy_" .. product.key, 2)
+		b.Selectable = true
+		b.BackgroundTransparency = 0
+		b.BackgroundColor3 = rgb(67, 176, 79)
+		UIKit.corner(b, 10)
+		ink(b, PAL.Ink, 2).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		UIKit.clicks(b)
+		local icon = Instance.new("ImageLabel")
+		icon.Name = "Icon"
+		icon.BackgroundTransparency = 1
+		icon.BorderSizePixel = 0
+		icon.ScaleType = Enum.ScaleType.Fit
+		icon.Image = "rbxassetid://" .. product.icon
+		icon.Active = false
+		icon.ZIndex = 3
+		icon.Parent = b
+		local name = WheelDraw.words(b, "Name", 16, C.White, PAL.Ink, 2, 3)
+		name.Text = string.upper(product.name)
+		local capsule = panel(b, "Capsule", C.White, 10, 3)
+		capsule.AnchorPoint = Vector2.new(0.5, 0)
+		capsule.AutomaticSize = Enum.AutomaticSize.X
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft = UDim.new(0, 8)
+		pad.PaddingRight = UDim.new(0, 8)
+		pad.Parent = capsule
+		local row = Instance.new("UIListLayout")
+		row.FillDirection = Enum.FillDirection.Horizontal
+		row.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		row.VerticalAlignment = Enum.VerticalAlignment.Center
+		row.SortOrder = Enum.SortOrder.LayoutOrder
+		row.Padding = UDim.new(0, 4)
+		row.Parent = capsule
+		-- The Robux mark the client ships with (ShopUI's): no upload, no glyph.
+		local token = Instance.new("ImageLabel")
+		token.Name = "Token"
+		token.LayoutOrder = 1
+		token.Size = UDim2.fromOffset(14, 14)
+		token.BackgroundTransparency = 1
+		token.BorderSizePixel = 0
+		token.Image = "rbxasset://textures/ui/common/robux@3x.png"
+		token.ImageColor3 = PAL.Ink
+		token.ScaleType = Enum.ScaleType.Fit
+		token.Active = false
+		token.ZIndex = 4
+		token.Parent = capsule
+		local price = text(capsule, "Price", 15, PAL.Ink, Enum.Font.LuckiestGuy, 4)
+		price.LayoutOrder = 2
+		price.AutomaticSize = Enum.AutomaticSize.X
+		price.Size = UDim2.new(0, 0, 1, 0)
+		price.Text = "..."
+		local choice: ShopChoice = {
+			product = product,
+			button = b,
+			icon = icon,
+			name = name,
+			capsule = capsule,
+			token = token,
+			price = price,
+			onSale = true,
+		}
+		shop.choices[i] = choice
+	end
+end
+-- THIS PLAYER'S PRICE, or no number: never WheelData's list price. Roblox is
+-- asked the first time this player may buy with the panel open -- so not at
+-- all while paid spins are switched off -- and once for the whole session.
+shop.watch = function()
+	if shop.watching then
+		return
+	end
+	shop.watching = true
+	for _, choice in ipairs(shop.choices :: { ShopChoice }) do
+		RobuxPrice.watch("product", choice.product.productId, function(state: RobuxPrice.State, amount: number?)
+			choice.onSale = state ~= "offsale"
+			if state == "ready" and amount then
+				choice.price.Text = RobuxPrice.format(amount)
+				choice.token.Visible = true
+			elseif state == "loading" then
+				choice.price.Text = "..."
+				choice.token.Visible = true
+			elseif state == "offsale" then
+				choice.price.Text = "OFF SALE"
+				choice.token.Visible = false
+			else
+				choice.price.Text = "BUY"
+				choice.token.Visible = false
+			end
+			choice.button.Active = choice.onSale
+			choice.button.Selectable = choice.onSale
+			choice.button.BackgroundColor3 = if choice.onSale then rgb(67, 176, 79) else PAL.HubGrey
+		end)
+	end
+end
+-- Where a controller starts in the card: the first choice on sale, else the odds.
+shop.first = function(): GuiObject
+	for _, choice in ipairs(shop.choices :: { ShopChoice }) do
+		if choice.onSale then
+			return choice.button
+		end
+	end
+	return shop.odds
+end
+
+--==============================================================================
 -- SCREEN 3: REWARD INFO
 --==============================================================================
 -- A button, so a press anywhere on it stays on it (never the wheel or the
@@ -735,6 +950,18 @@ local function buildRow(pair: Frame, reward: WheelData.Reward, column: number): 
 	note.Text = reward.note or ""
 	note.Visible = reward.note ~= nil
 	ink(note, C.NameInk, 1, 0.3)
+	-- A pod is one of several species, each a final outcome of its own: the
+	-- row says how many and what each one's odds are before it is ever opened
+	-- (its cards then name them one by one). Read from WheelData, like every
+	-- other number here.
+	if pod then
+		local pool = WheelData.poolOdds(reward)
+		if #pool > 0 then
+			note.Text = string.format(if reward.note then "%d hidden species, %s each" else "%d species, %s each",
+				#pool, WheelData.percent(pool[1].probability))
+			note.Visible = true
+		end
+	end
 
 	local odds = WheelDraw.words(frame, "Odds", 16, C.White, PAL.Ink, 1.5, 3)
 	odds.AnchorPoint = Vector2.new(1, 0.5)
@@ -933,6 +1160,19 @@ local function paintFooter()
 end
 
 local function paint()
+	-- BUYING, and spending what was bought, are for a player the server says
+	-- may: nobody while paid spins are switched off. A card that is up when that
+	-- stops being true goes at once. Closing it paints again, so this pass ends.
+	local may = paidAllowed()
+	if shop.open and not may then
+		shop.show(false)
+		return
+	end
+	if confirm.Visible and not may then
+		shop.confirm(false)
+		return
+	end
+
 	local count = usable()
 	local busy = spinning or waiting
 	local ready = count > 0
@@ -940,10 +1180,17 @@ local function paint()
 	if hub then
 		hub.setState(if ready then "ready" else "empty", count)
 	end
+	-- A CARD OVER THE HUB -- the two to buy, or the question before a purchased
+	-- spin -- keeps the controller until it is answered: nothing behind it takes
+	-- the selection, so the D-pad cannot walk out to "?" and find no way back.
+	-- A finger or a mouse still reaches "?" and X.
+	local card = shop.open == true or confirm.Visible
+	local behind = sheetOpen or card
+
 	-- Not tappable at 0 (screen 2), nor while a spin is in the air.
 	hubButton.Active = ready and not busy
 	hubButton.AutoButtonColor = false
-	hubButton.Selectable = ready and not busy and not sheetOpen
+	hubButton.Selectable = ready and not busy and not behind
 
 	local words, colour, claim, rainbow = lineState()
 	lineText.Text = words
@@ -951,20 +1198,40 @@ local function paint()
 	lineGradient.Enabled = rainbow
 	lineText.Visible = words ~= ""
 	claimButton.Visible = claim
-	claimButton.Selectable = claim and not sheetOpen
+	claimButton.Selectable = claim and not behind
 
-	-- The controller: the hub when it can spin, "?" when it cannot.
-	padFirst.Value = if hubButton.Selectable then hubButton else infoButton.button
+	-- GET SPINS, and the word under "?" that says where the odds are: there
+	-- whenever a purchase can be made, and only then.
+	local getSpins = shop.button :: TextButton
+	getSpins.Visible = may
+	getSpins.Active = may and not busy
+	getSpins.Selectable = may and not busy and not behind
+	getSpins.BackgroundColor3 = if busy then PAL.HubGrey else rgb(214, 150, 46)
+	shop.infoWord.Visible = may
+	if may then
+		shop.watch()
+	end
+
+	-- The controller: inside the card while one is up, else the hub when it can
+	-- spin, "?" when it cannot.
 	local info, close = infoButton.button, closeButton.button
+	info.Selectable = not behind
+	close.Selectable = not behind
+	padFirst.Value = if shop.open then shop.first()
+		elseif confirm.Visible then confirmYes
+		elseif hubButton.Selectable then hubButton
+		else info
 	info.NextSelectionRight = close
 	close.NextSelectionLeft = info
 	info.NextSelectionDown = if hubButton.Selectable then hubButton elseif claim then claimButton else nil
-	close.NextSelectionDown = info.NextSelectionDown
+	close.NextSelectionDown = if getSpins.Selectable then getSpins else info.NextSelectionDown
 	hubButton.NextSelectionUp = info
 	hubButton.NextSelectionLeft = info
-	hubButton.NextSelectionRight = close
+	hubButton.NextSelectionRight = if getSpins.Selectable then getSpins else close
 	hubButton.NextSelectionDown = if claim then claimButton else nil
 	claimButton.NextSelectionUp = if hubButton.Selectable then hubButton else info
+	getSpins.NextSelectionLeft = if hubButton.Selectable then hubButton else info
+	getSpins.NextSelectionUp = close
 
 	if sheetOpen then
 		paintFooter()
@@ -1217,6 +1484,66 @@ local function topbarBand(k: number, W: number): (number, number, number)
 	return bottom, left, right
 end
 
+--==============================================================================
+-- WHERE GET SPINS AND ITS CARD STAND
+--
+-- The button beside the wheel, on its right, wherever the screen is wide
+-- enough -- every landscape phone and desktop -- and under the line below the
+-- wheel on a window too narrow for that (a phone held upright). A window with
+-- room for neither, 640 x 480, has it in the corner the wheel's circle leaves
+-- free, ABOVE the line: the line's words run the width of the screen.
+-- Thumb-sized (46 tall), and never on the wheel, the pointer, the round buttons
+-- or the line. The card is centred on the hub like the purchased-spin question,
+-- and fits a 338-tall phone whole.
+--
+-- Both are drawn `f` times their phone size (shop.grow: 1 on a phone, up to
+-- 1.25 on a desktop) by a UIScale of their own, so every number below is the
+-- phone's, and only where they stand is worked out at the size they show.
+--==============================================================================
+shop.layout = function(W: number, H: number, cx: number, cy: number, d: number, lineTop: number,
+	lineBottom: number)
+	local R = d / 2
+	local f = shop.grow(W, H)
+	local bw, bh = 132 * f, 46 * f
+	local x, y
+	if W - (cx + R) >= bw + 22 then
+		x, y = math.min(cx + R + 14 + bw / 2, W - 8 - bw / 2), cy
+	elseif H - lineBottom >= bh + 8 then
+		x, y = cx, lineBottom + 4 + bh / 2
+	else
+		x, y = W - 8 - bw / 2, lineTop - 4 - bh / 2
+	end
+	local button = shop.button :: TextButton
+	button.AnchorPoint = Vector2.new(0.5, 0.5)
+	button.Position = UDim2.fromOffset(x, y)
+	button.Size = UDim2.fromOffset(132, 46)
+	shop.buttonScale.Scale = f
+
+	local cw = math.min(336, math.floor((W - 24) / f))
+	local choiceH = 86
+	local noteH = 44
+	local ch = 40 + choiceH + 6 + noteH + 6 + 38 + 10
+	local half = ch * f / 2
+	local card = shop.card :: Frame
+	card.Position = UDim2.fromOffset(cx, math.clamp(cy, half + 4, math.max(half + 4, H - half - 4)))
+	card.Size = UDim2.fromOffset(cw, ch)
+	shop.cardScale.Scale = f
+	place(shop.title, 12, 8, cw - 24, 26)
+	local each = math.floor((cw - 24 - 10) / 2)
+	for i, choice in ipairs(shop.choices :: { ShopChoice }) do
+		place(choice.button, 12 + (i - 1) * (each + 10), 40, each, choiceH)
+		place(choice.icon, 6, 6, 46, 46)
+		place(choice.name, 54, 8, each - 58, 24)
+		choice.name.TextSize = if each < 140 then 14 else 16
+		choice.capsule.Position = UDim2.new(0.5, 0, 0, 56)
+		choice.capsule.Size = UDim2.new(0, 0, 0, 24)
+	end
+	place(shop.note, 14, 40 + choiceH + 6, cw - 28, noteH)
+	local oddsW = math.floor((cw - 24 - 10) * 0.64)
+	place(shop.odds, 12, ch - 48, oddsW, 38)
+	place(shop.close, 12 + oddsW + 10, ch - 48, cw - 24 - 10 - oddsW, 38)
+end
+
 local function layoutStage(W: number, H: number, k: number)
 	-- The mockup's phone: a 296 wheel whose top is 58 down a 390 screen, the
 	-- pointer standing 30 above it, the line in the 32 under it.
@@ -1290,13 +1617,24 @@ local function layoutStage(W: number, H: number, k: number)
 	claimWords.TextSize = math.max(13, linePx - 1)
 	place(lineRow, 8, wheelTop + d + 4, W - 16, math.max(linePx + 12, 26))
 
-	-- The purchased-spin question over the hub.
-	local cw = math.min(280, W - 32)
+	-- The purchased-spin question over the hub, and under it the way to the
+	-- odds, in words. Drawn at the card's size (shop.grow).
+	local grow = shop.grow(W, H)
+	local cw = math.min(280, math.floor((W - 32) / grow))
 	confirm.Position = UDim2.fromOffset(cx, cy)
-	confirm.Size = UDim2.fromOffset(cw, 118)
+	confirm.Size = UDim2.fromOffset(cw, 164)
+	shop.questionScale.Scale = grow
 	place(confirmText, 12, 8, cw - 24, 50)
 	place(confirmYes, 12, 66, math.floor(cw * 0.58) - 16, 40)
 	place(confirmNo, math.floor(cw * 0.58) + 4, 66, cw - math.floor(cw * 0.58) - 16, 40)
+	place(shop.confirmOdds, 12, 114, cw - 24, 38)
+
+	-- The word under "?".
+	shop.infoWord.Position = UDim2.fromOffset(cx - reach, by + bd / 2 + math.max(3, footPx))
+	shop.infoWord.Size = UDim2.fromOffset(0, 14)
+	shop.infoWord.AutomaticSize = Enum.AutomaticSize.X
+
+	shop.layout(W, H, cx, cy, d, wheelTop + d + 4, wheelTop + d + 4 + math.max(linePx + 12, 26))
 end
 
 local function layoutSheet(W: number, H: number, k: number, insetL: number, insetR: number)
@@ -1561,6 +1899,17 @@ local function setSheet(on: boolean)
 	if PadInput.active() then
 		GuiService.SelectedObject = if on then backButton.button elseif open then infoButton.button else nil
 	end
+	-- Opened from the card to buy, or from the question to spend: Back goes
+	-- back THERE, so the odds are read and the choice is still in front of them.
+	if not on and open then
+		local back = shop.returnTo
+		shop.returnTo = ""
+		if back == "shop" and paidAllowed() then
+			shop.show(true)
+		elseif back == "confirm" and paidAllowed() and num(A.Bought) > 0 then
+			shop.confirm(true)
+		end
+	end
 end
 
 --==============================================================================
@@ -1577,6 +1926,10 @@ local function bindClosers()
 		if state == Enum.UserInputState.Begin then
 			if sheetOpen then
 				setSheet(false)
+			elseif shop.open then
+				shop.show(false)
+			elseif confirm.Visible then
+				shop.confirm(false)
 			else
 				setOpen(false)
 			end
@@ -1623,10 +1976,36 @@ local function unbindClosers()
 end
 
 local function showConfirm(on: boolean)
+	if on and shop.open then
+		shop.show(false)
+	end
 	confirm.Visible = on
 	hubButton.Visible = not on
+	paint()
 	if PadInput.active() then
-		GuiService.SelectedObject = if on then confirmYes else hubButton
+		GuiService.SelectedObject = if on then confirmYes
+			elseif hubButton.Selectable then hubButton
+			else infoButton.button
+	end
+end
+shop.confirm = showConfirm
+
+-- The card to buy, over the hub. One card at a time: it shuts the question.
+shop.show = function(on: boolean)
+	if on and confirm.Visible then
+		showConfirm(false)
+	end
+	shop.open = on
+	shop.card.Visible = on
+	hubButton.Visible = not on
+	if on then
+		RobuxPrice.refresh()
+	end
+	paint()
+	if PadInput.active() then
+		GuiService.SelectedObject = if on then shop.first()
+			elseif shop.button.Selectable then shop.button
+			else infoButton.button
 	end
 end
 
@@ -1644,6 +2023,9 @@ setOpen = function(want: boolean)
 		stage.Visible = true
 		infoButton.button.Selectable = true
 		closeButton.button.Selectable = true
+		shop.open = false
+		shop.card.Visible = false
+		shop.returnTo = ""
 		showConfirm(false)
 		layout()
 		scrim.Visible = true
@@ -1674,6 +2056,9 @@ setOpen = function(want: boolean)
 		setExpanded(nil)
 		sheetOpen = false
 		sheet.Visible = false
+		shop.open = false
+		shop.card.Visible = false
+		shop.returnTo = ""
 		scrim.Visible = false
 		refreshRainbows()
 		local selected = GuiService.SelectedObject
@@ -1743,6 +2128,11 @@ local REFUSED: { [string]: { title: string, detail: string? } } = {
 	PENDING_FULL = { title = "PRIZES WAITING", detail = "Make room in your bag, then press CLAIM." },
 	NO_ROOM = { title = "BAG FULL", detail = "Make room in your bag, then press CLAIM." },
 	DISABLED = { title = "THE WHEEL IS CLOSED" },
+	-- Buying: every one of these opened no prompt and took nothing.
+	BALANCE_FULL = { title = "SPINS FULL", detail = "Use some of your spins first." },
+	PROMPT_BUSY = { title = "ONE MOMENT", detail = "A purchase is already opening." },
+	PROMPT_FAILED = { title = "PURCHASE UNAVAILABLE", detail = "It could not open. Nothing was charged." },
+	UNKNOWN_PRODUCT = { title = "PURCHASE UNAVAILABLE", detail = "Nothing was charged." },
 }
 
 local function refused(reason: string)
@@ -1792,6 +2182,67 @@ confirmYes.Activated:Connect(function()
 end)
 confirmNo.Activated:Connect(function()
 	showConfirm(false)
+end)
+
+--==============================================================================
+-- BUYING: a key to the server, and the odds in words
+--
+-- A choice sends its product's KEY and nothing else -- no id, no amount, no
+-- price. Whether a purchase prompt opens is the server's decision, and the
+-- prompt is Roblox's: nothing here knows whether the player bought. Spins that
+-- were bought arrive as the balance the server publishes (WheelSpinsBought),
+-- which is all this script ever draws.
+--==============================================================================
+do
+	local getSpins: TextButton = shop.button
+	local closeCard: TextButton = shop.close
+	local cardOdds: TextButton = shop.odds
+	local questionOdds: TextButton = shop.confirmOdds
+	getSpins.Activated:Connect(function()
+		if spinning or waiting or not paidAllowed() then
+			return
+		end
+		shop.show(not shop.open)
+	end)
+	closeCard.Activated:Connect(function()
+		shop.show(false)
+	end)
+	-- REWARDS & ODDS: Reward info, and Back returns to where it was opened.
+	cardOdds.Activated:Connect(function()
+		shop.show(false)
+		shop.returnTo = "shop"
+		setSheet(true)
+	end)
+	questionOdds.Activated:Connect(function()
+		showConfirm(false)
+		shop.returnTo = "confirm"
+		setSheet(true)
+	end)
+	for _, choice in ipairs(shop.choices :: { ShopChoice }) do
+		choice.button.Activated:Connect(function()
+			local remote = channel
+			if not remote or not paidAllowed() or not choice.onSale then
+				return
+			end
+			remote:FireServer(ACT.Buy, choice.product.key)
+		end)
+	end
+end
+
+-- A purchase that landed, said out loud: the balance went up while the panel
+-- was open. The balance is the server's; this only reads it.
+shop.bought = num(A.Bought)
+player:GetAttributeChangedSignal(A.Bought):Connect(function()
+	local now = num(A.Bought)
+	local gained = now - shop.bought
+	shop.bought = now
+	if gained > 0 and open and paidAllowed() then
+		if shop.open then
+			shop.show(false)
+		end
+		Notice.post({ kind = "success", title = if gained == 1 then "+1 SPIN" else string.format("+%d SPINS", gained),
+			detail = "Added to your spins.", key = "wheel:bought" })
+	end
 end)
 skipButton.Activated:Connect(function()
 	skip = not skip
@@ -1929,6 +2380,14 @@ task.spawn(function()
 	local remote = channel :: RemoteEvent
 	remote.OnClientEvent:Connect(function(action: any, payload: any)
 		if action ~= ACT.Result or type(payload) ~= "table" then
+			return
+		end
+		-- The answer to a request to buy: a refusal is said; a yes means
+		-- Roblox's own prompt is opening, and says nothing about a purchase.
+		if payload.buy == true then
+			if payload.ok ~= true then
+				refused(tostring(payload.reason))
+			end
 			return
 		end
 		if payload.claim == true then

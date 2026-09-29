@@ -50,14 +50,29 @@
 -- which balance to spend -- and the server decides the rest.
 --
 --==============================================================================
--- PAID SPINS: DISABLED
+-- PAID SPINS: CONFIGURED, AND OFF UNTIL WheelData.Paid.Enabled (2026-09-29)
 --
--- WheelBought exists and StoreService can fill it, but only once WheelData.
--- Product is configured and enabled, which it is not. Spending one also needs
--- PolicyService to say this player may use paid random items; a failed check
--- counts as "may not". The free, earned path never depends on either.
+-- A bought spin is a PAID RANDOM ITEM, so three things are decided here, on the
+-- server, and every one of them fails CLOSED:
+--
+--   WHO MAY   PolicyService said, of this player, ArePaidRandomItemsRestricted
+--             == false. An error, a missing field, no answer yet: "may not".
+--   BUYING    the client sends the product's KEY and nothing else; this opens
+--             the purchase prompt, and only for a player who may, whose save
+--             is loaded and can be written, and whose balance has room. The
+--             prompt grants NOTHING, open or closed or finished: spins come
+--             from StoreService's receipt, through GrantBought, which asks the
+--             same questions again -- a receipt can arrive with no prompt
+--             behind it (bought outside the game, or re-delivered on a join).
+--             Refused there, the receipt is not acknowledged and Roblox hands
+--             the Robux back when it stops retrying.
+--   SPENDING  only by the player's yes to a question that names it, earned
+--             spins first, and never for a player who may not.
+--
+-- The free, earned path never reads any of this.
 --==============================================================================
 
+local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local PolicyService = game:GetService("PolicyService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -94,6 +109,11 @@ local busy: { [Player]: boolean } = {}
 -- PolicyService's answer per player: true only when it said paid random items
 -- are allowed. Missing (not asked yet) and false read the same.
 local paidOk: { [Player]: boolean } = {}
+-- PolicyService ANSWERED for this player (either way). Missing: it has not, or
+-- every try failed -- the one case worth asking again (ensurePolicy).
+local policyKnown: { [Player]: boolean } = {}
+-- os.clock() of each player's last purchase prompt (Paid.PromptCooldown).
+local prompted: { [Player]: number } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 local channel: RemoteEvent? = nil
 local running = false
@@ -116,6 +136,8 @@ local clockFn: () -> number = os.time
 local forced: { [Player]: { prize: string, species: string? } } = {}
 -- Where an answer goes instead of the remote, while a Studio spec listens.
 local replyFn: ((Player, { [string]: any }) -> ())? = nil
+-- What opens a purchase prompt: Roblox's own, or a Studio spec's recorder.
+local promptFn: ((Player, number) -> ())? = nil
 
 local function now(): number
 	return math.floor(clockFn())
@@ -146,6 +168,15 @@ function WheelService.useReply(fn: ((Player, { [string]: any }) -> ())?): boolea
 	return true
 end
 
+-- A spec records the purchase prompts here instead of opening one. Studio only.
+function WheelService.usePrompt(fn: ((Player, number) -> ())?): boolean
+	if not RunService:IsStudio() then
+		return false
+	end
+	promptFn = fn
+	return true
+end
+
 --==============================================================================
 -- WHAT THE CLIENT SEES: attributes on the player, written only when they change
 --==============================================================================
@@ -156,10 +187,11 @@ local function put(player: Player, name: string, value: any)
 end
 
 local function productLive(): boolean
-	local product = WheelData.Product
-	return product.Enabled == true and product.ProductId > 0 and product.Quantity > 0
+	return WheelData.paidLive()
 end
 
+-- This player may buy and spend bought spins: PolicyService said so, of them,
+-- and paid spins are switched on. Anything less is "may not".
 local function paidAllowed(player: Player): boolean
 	return paidOk[player] == true and productLive()
 end
@@ -209,18 +241,44 @@ end
 --==============================================================================
 -- PAID RANDOM ITEMS: WHAT PolicyService SAYS ABOUT THIS PLAYER
 --
--- Asked once per join. Anything but a clear "not restricted" -- an error, a
--- missing field, a Studio that cannot answer -- leaves paid spins off for them.
+-- Asked on every join. Anything but a clear "not restricted" -- an error, a
+-- missing field, a Studio that cannot answer -- leaves paid spins off for them:
+-- no way to buy is shown, no prompt is opened, no bought spin is granted or
+-- spent. Returns whether PolicyService ANSWERED (either way); a call that threw
+-- is the one case asked again, a few times at the join (watch) and once more
+-- when a receipt arrives for a player it has never answered for (GrantBought).
+--
+-- ONLY AN ANSWER REPLACES AN ANSWER. Two calls can be in the air for one player
+-- -- the join's, and a receipt's -- and come back in either order. A call that
+-- failed says nothing about the player, so it leaves standing what PolicyService
+-- last really said of them: a late failure would otherwise shut a player out of
+-- spins they had just been allowed to buy. With no answer at all it stays closed.
 --==============================================================================
-local function checkPolicy(player: Player)
+local POLICY_RETRY_SECONDS = { 5, 20, 60 }
+
+local function checkPolicy(player: Player): boolean
 	local ok, info = pcall(function()
 		return PolicyService:GetPolicyInfoForPlayerAsync(player)
 	end)
 	if player.Parent ~= Players then
-		return
+		return false
 	end
-	paidOk[player] = ok and type(info) == "table" and (info :: any).ArePaidRandomItemsRestricted == false
+	if ok and type(info) == "table" then
+		paidOk[player] = (info :: any).ArePaidRandomItemsRestricted == false
+		policyKnown[player] = true
+	elseif not policyKnown[player] then
+		paidOk[player] = nil
+	end
 	publish(player)
+	return policyKnown[player] == true
+end
+
+-- For a receipt: the answer already had, or one more ask if there is none.
+local function ensurePolicy(player: Player): boolean
+	if not policyKnown[player] then
+		checkPolicy(player)
+	end
+	return paidAllowed(player)
 end
 
 --==============================================================================
@@ -493,6 +551,71 @@ local function equip(player: Player, want: any)
 end
 
 --==============================================================================
+-- BUYING (2026-09-29): THE SERVER OPENS THE PROMPT, AND GRANTS NOTHING HERE
+--
+-- The client names one of WheelData.Products by its key. Every refusal leaves
+-- everything as it was and says why. An allowed request opens Roblox's own
+-- purchase prompt, which quotes and charges this player's real price.
+--
+-- WHAT THE PLAYER DOES WITH THE PROMPT IS NOT HEARD HERE AT ALL. A prompt that
+-- closed, or finished, is not a purchase: only StoreService's receipt is, and
+-- only it calls GrantBought. Nothing in this file listens for a prompt ending.
+--==============================================================================
+-- The key is said back only when it is one of ours: whatever else a client
+-- sent -- a megabyte of it, if it likes -- is not sent back to it.
+local function refuseBuy(player: Player, reason: string, key: any)
+	local known = type(key) == "string" and #key <= 32 and WheelData.ProductByKey[key] ~= nil
+	reply(player, { ok = false, buy = true, reason = reason, key = if known then key else nil })
+end
+
+local function buy(player: Player, key: any)
+	if not WheelData.Enabled then
+		return refuseBuy(player, "DISABLED", key)
+	end
+	local product = if type(key) == "string" and #key <= 32 then WheelData.ProductByKey[key] else nil
+	if not product then
+		return refuseBuy(player, "UNKNOWN_PRODUCT", key)
+	end
+	-- Switched off, restricted, or never answered: one refusal, and no prompt.
+	if not paidAllowed(player) then
+		return refuseBuy(player, "PAID_UNAVAILABLE", key)
+	end
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		return refuseBuy(player, "NOT_READY", key)
+	end
+	-- A profile that cannot be saved cannot keep what is bought into it.
+	if not PlayerDataService.IsPersistent(player) then
+		return refuseBuy(player, "NOT_SAVED", key)
+	end
+	if profile.WheelBought + product.spins > WheelData.MaxBoughtHeld then
+		return refuseBuy(player, "BALANCE_FULL", key)
+	end
+	local at = os.clock()
+	local last = prompted[player]
+	if last and at - last < WheelData.Paid.PromptCooldown then
+		return refuseBuy(player, "PROMPT_BUSY", key)
+	end
+	prompted[player] = at
+	local open = promptFn
+	local ok, err = pcall(function()
+		if open then
+			open(player, product.productId)
+		else
+			MarketplaceService:PromptProductPurchase(player, product.productId)
+		end
+	end)
+	if not ok then
+		warn(string.format("[Seed/WheelService] the purchase prompt for %q did not open: %s", product.key,
+			tostring(err)))
+		return refuseBuy(player, "PROMPT_FAILED", key)
+	end
+	log(string.format("%s was shown the purchase prompt for %q (product %d).", player.Name, product.key,
+		product.productId))
+	reply(player, { ok = true, buy = true, key = product.key })
+end
+
+--==============================================================================
 -- EARNING, CALLED BY ObbyService ONCE PER PAID RUN
 --
 -- `runId` is the run's own id; `speed` is what the run pays in Speed when it
@@ -545,12 +668,43 @@ function WheelService.AwardCompletion(player: Player, runId: string, speed: numb
 end
 
 --==============================================================================
--- BOUGHT SPINS, CALLED BY StoreService's receipt handler (only once WheelData.
--- Product is live). Returns whether they landed; StoreService saves.
+-- BOUGHT SPINS, CALLED BY StoreService's RECEIPT HANDLER AND BY NOTHING ELSE
+--
+-- Returns whether they landed; StoreService writes the ledger and saves, and
+-- acknowledges the receipt only after that. False means "not now": the receipt
+-- is not acknowledged, Roblox delivers it again, and the ledger -- which has no
+-- entry for it -- lets that later delivery pay. Nothing is granted twice and
+-- nothing paid for is dropped.
+--
+-- THE SAME QUESTIONS AS THE PROMPT, ASKED AGAIN, because a receipt can arrive
+-- with no prompt of ours behind it: bought outside the game, re-delivered on a
+-- rejoin, or prompted by a client that was tampered with.
+--
+--   * paid spins switched off: nothing (StoreService does not even index them);
+--   * a player PolicyService restricts, or will not answer for -- asked once
+--     more here if it never has: nothing. They may not hold a paid random
+--     item, so the receipt stays unacknowledged and the Robux go back;
+--   * a profile that is not saving: nothing, rather than spins that vanish
+--     with the server;
+--   * a balance with no room for the whole pack: nothing, never part of it.
+--
+-- The daily earning allowance is not read or written: a bought spin is not an
+-- earned one.
 --==============================================================================
 function WheelService.GrantBought(player: Player, quantity: number): boolean
 	local n = math.floor(tonumber(quantity) or 0)
 	if n <= 0 or n ~= n then
+		return false
+	end
+	if not productLive() then
+		return false
+	end
+	if not ensurePolicy(player) then
+		warn(string.format("[Seed/WheelService] %s: a spin purchase arrived, and this player may not hold paid "
+			.. "random items (or PolicyService would not answer). Not granted; the receipt stays open.", player.Name))
+		return false
+	end
+	if not PlayerDataService.IsPersistent(player) then
 		return false
 	end
 	local landed = PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
@@ -561,6 +715,9 @@ function WheelService.GrantBought(player: Player, quantity: number): boolean
 		return true
 	end)
 	publish(player)
+	if landed then
+		log(string.format("%s was granted %d bought spin(s).", player.Name, n))
+	end
 	return landed
 end
 
@@ -581,6 +738,7 @@ end
 WheelService.Spin = spin
 WheelService.Claim = claim
 WheelService.Equip = equip
+WheelService.Buy = buy
 WheelService.DeliverPending = deliverPending
 WheelService.PaidAllowed = paidAllowed
 -- Asked by `watch` on every join; exported so WheelSpec can drive it against a
@@ -603,7 +761,22 @@ local function watch(player: Player, gen: number)
 		return
 	end
 	publish(player)
-	task.spawn(checkPolicy, player)
+	-- The policy answer, off this thread: asked now, and again a few times only
+	-- if PolicyService would not answer at all. Until it does, "may not".
+	task.spawn(function()
+		if checkPolicy(player) then
+			return
+		end
+		for _, pause in ipairs(POLICY_RETRY_SECONDS) do
+			task.wait(pause)
+			if not (running and gen == generation and player.Parent == Players) or policyKnown[player] then
+				return
+			end
+			if checkPolicy(player) then
+				return
+			end
+		end
+	end)
 end
 
 function WheelService.Init()
@@ -615,6 +788,9 @@ function WheelService.Init()
 	table.clear(serviceConnections)
 	table.clear(busy)
 	table.clear(forced)
+	table.clear(paidOk)
+	table.clear(policyKnown)
+	table.clear(prompted)
 	channel = nil
 end
 
@@ -645,6 +821,8 @@ function WheelService.Start()
 				claim(player)
 			elseif action == ACT.Equip then
 				equip(player, payload)
+			elseif action == ACT.Buy then
+				buy(player, payload)
 			end
 		end))
 	end
@@ -654,6 +832,8 @@ function WheelService.Start()
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player: Player)
 		busy[player] = nil
 		paidOk[player] = nil
+		policyKnown[player] = nil
+		prompted[player] = nil
 		forced[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -683,7 +863,8 @@ function WheelService.Start()
 	local at = if model then model:GetPivot().Position else Vector3.zero
 	log(string.format("Ready. The wheel stands at (%.0f, %.0f, %.0f); %d prizes, %d earned spins per %dh window%s.",
 		at.X, at.Y, at.Z, #WheelData.Rewards, DAY.Limit, DAY.WindowSeconds // 3600,
-		if productLive() then "; the spin pack is LIVE" else "; paid spins OFF (no product configured)"))
+		if productLive() then string.format("; paid spins ON (%d products)", #WheelData.Products)
+			else "; paid spins OFF (WheelData.Paid.Enabled is false)"))
 end
 
 return WheelService

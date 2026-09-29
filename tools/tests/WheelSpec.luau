@@ -23,8 +23,10 @@
 --                    faucets, the trail's swap, a full bag, a failed save, a
 --                    second request mid-spin, an error mid-spin, forged payloads,
 --                    the trail worn and taken off
---   5. paid spins    the (unconfigured) product and PolicyService's answer:
---                    never spent without both, never silently
+--   5. paid spins    the two products, switched off as shipped, and PolicyService's
+--                    answer: never bought or spent without both, never silently;
+--                    and where the panel stands GET SPINS, its card and the
+--                    question on 26 screens (its own layout code, run here)
 --
 -- Edit mode:
 --
@@ -37,9 +39,9 @@
 -- (useClock), force a prize (DebugForce) and hear the answers (useReply); none
 -- of them has a remote.
 --
--- Not here: the panel, the animation, the world wheel, the OBBY button's
--- teleport (ObbySpec, PlotTeleportSpec), a real receipt (StoreSpec), and two
--- people at once (Play).
+-- Not here: the panel drawn, the animation, the world wheel, the OBBY button's
+-- teleport (ObbySpec, PlotTeleportSpec), a receipt (StoreSpec; end to end with
+-- the real WheelService in SpinPurchaseSpec), and two people at once (Play).
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -143,8 +145,22 @@ check(income and training and B.boost_income.boost == "income" and B.boost_train
 	and B.boost_income.title:find(string.format("for %d min", chest.BoostSeconds // 60), 1, true) ~= nil,
 	"the boost prizes are the Bonus Chest's own boosts, named from its own numbers",
 	B.boost_income.label .. " / " .. B.boost_income.title)
-check(WheelData.Product.Enabled == false and WheelData.Product.ProductId == 0 and WheelData.Product.Quantity == 0,
-	"the spin pack is disabled, with no product id and no pack size")
+-- PAID SPINS AS SHIPPED (2026-09-29): both of the owner's products are named,
+-- and the switch is OFF. Turning it on is the owner's decision, after Roblox's
+-- paid-random-item requirements are met (KB/HANDOFF.md, the paid-spins entry):
+-- this check is the tripwire that change has to pass on purpose.
+check(WheelData.Paid.Enabled == false and WheelData.paidLive() == false,
+	"as shipped, paid spins are switched OFF")
+local P1, P10 = WheelData.ProductByKey.spin1, WheelData.ProductByKey.spin10
+check(#WheelData.Products == 2 and P1 ~= nil and P10 ~= nil
+		and P1.productId == 3715369823 and P1.spins == 1 and P1.robux == 9
+		and P10.productId == 3715370108 and P10.spins == 10 and P10.robux == 85
+		and WheelData.ProductById[3715369823] == P1 and WheelData.ProductById[3715370108] == P10,
+	"two spin products, the owner's: +1 Spin (3715369823) grants 1 and +10 Spins (3715370108) grants 10")
+check(WheelData.Actions.Buy == "WheelBuy" and WheelData.Paid.PromptCooldown >= 1,
+	"buying has a verb of its own, and a wait between two prompts")
+check(WheelData.MaxBoughtHeld >= 10 and WheelData.Daily.Limit == 5,
+	"a bought balance has a ceiling of its own; the daily allowance is still five EARNED spins")
 
 -- The sectors: in prize order, each exactly its share of the circle.
 local sectors = WheelData.sectors()
@@ -681,12 +697,33 @@ end
 kind = W.AwardCompletion(p1, "run-7", 1800)
 check(prof.WheelEarned == 2 and prof.WheelDayCount == 5 and kind == "speed",
 	"spending three spins gives nothing back: the window is still full and the next run pays Speed")
--- Bought spins never touch it.
-check(W.GrantBought(p1, 4) and prof.WheelBought == 4 and prof.WheelDayCount == 5,
-	"four bought spins land in their own balance and change nothing about the allowance")
-check(not W.GrantBought(p1, 0) and not W.GrantBought(p1, -3) and not W.GrantBought(p1, 0 / 0)
-	and not W.GrantBought(p1, WheelData.MaxBoughtHeld) and prof.WheelBought == 4,
+-- Bought spins never touch it. As shipped paid spins are off and nothing can be
+-- granted at all; a copy that sees them switched on grants into the SAME
+-- profile, for a player PolicyService allows.
+check(not W.GrantBought(p1, 4) and prof.WheelBought == 0,
+	"as shipped -- paid spins off -- a grant of bought spins lands nothing")
+local paidOn = setmetatable({
+	Paid = { Enabled = true, PromptCooldown = 0 },
+	paidLive = function()
+		return true
+	end,
+}, { __index = WheelData })
+local WPaid = loadWheel({ WheelData = paidOn })
+policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+WPaid.CheckPolicy(p1)
+local windowAt, windowCount, earnedBefore = prof.WheelDayAt, prof.WheelDayCount, prof.WheelEarned
+check(WPaid.GrantBought(p1, 4) and prof.WheelBought == 4 and prof.WheelDayCount == 5
+		and prof.WheelDayAt == windowAt and prof.WheelDayCount == windowCount and prof.WheelEarned == earnedBefore,
+	"four bought spins land in their own balance and change nothing about the allowance or its reset")
+check(not WPaid.GrantBought(p1, 0) and not WPaid.GrantBought(p1, -3) and not WPaid.GrantBought(p1, 0 / 0)
+	and not WPaid.GrantBought(p1, WheelData.MaxBoughtHeld) and prof.WheelBought == 4,
 	"a grant of nothing, of a negative, of not-a-number or past the cap lands nothing")
+-- And a run completed with bought spins in hand is still counted against five.
+kind = WPaid.AwardCompletion(p1, "run-7b", 1800)
+check(kind == "speed" and prof.WheelDayCount == 5 and prof.WheelBought == 4,
+	"holding bought spins earns no extra spin: the sixth run of the window still pays Speed")
+WPaid.useClock(nil)
+WPaid.useReply(nil)
 
 -- The boundary second.
 clock = opened + DAY.WindowSeconds - 1
@@ -942,11 +979,38 @@ end
 check(forgedOk, "a request naming a prize, an amount or anything else is just a spin: the server's roll decides")
 local handler = wheelSource:match("remote%.OnServerEvent:Connect%((function.-)\n\t\tend%)%)") or ""
 check(handler:find("spin(player, payload)", 1, true) ~= nil and handler:find("claim(player)", 1, true) ~= nil
-	and handler:find("equip(player, payload)", 1, true) ~= nil and not handler:find("DebugForce", 1, true)
+	and handler:find("equip(player, payload)", 1, true) ~= nil and handler:find("buy(player, payload)", 1, true) ~= nil
+	and not handler:find("DebugForce", 1, true) and not handler:find("usePrompt", 1, true)
 	and not handler:find("useClock", 1, true) and not handler:find("GrantBought", 1, true),
-	"the remote reaches spin, claim and equip only: no forcing, no clock, no spins granted")
+	"the remote reaches spin, claim, equip and buy only: no forcing, no clock, no spins granted")
+-- A PROMPT IS NOT A PURCHASE. Nothing on the server listens for a prompt ending,
+-- and the one thing that grants bought spins is called by the receipt alone.
+local grantCalls = select(2, wheelSource:gsub("GrantBought%(", ""))
+check(not wheelSource:find("PromptProductPurchaseFinished", 1, true)
+		and not wheelSource:find("PromptPurchaseFinished", 1, true)
+		and select(2, wheelSource:gsub(":PromptProductPurchase%(", "")) == 1
+		and grantCalls == 1,
+	"WheelService opens the prompt in one place, listens for no prompt ending, and never calls its own grant",
+	grantCalls)
+local storeSource = sourceOf(Server:FindFirstChild("StoreService"))
+check(storeSource ~= "" and not storeSource:find("PromptProductPurchaseFinished", 1, true)
+		and select(2, storeSource:gsub("WheelService%.GrantBought%(", "")) == 1
+		and select(2, storeSource:gsub("MarketplaceService%.ProcessReceipt = ", "")) == 1,
+	"StoreService is the grant's only caller, from the experience's one ProcessReceipt")
+local otherGrants = {}
+for _, inst in ipairs(Server:GetDescendants()) do
+	if inst:IsA("LuaSourceContainer") and inst.Name ~= "StoreService" and inst.Name ~= "WheelService" then
+		local src = sourceOf(inst)
+		if src:find("GrantBought", 1, true) or src:find("ProcessReceipt =", 1, true)
+			or src:find("PromptProductPurchaseFinished", 1, true) then
+			table.insert(otherGrants, inst.Name)
+		end
+	end
+end
+check(#otherGrants == 0, "no other server script grants bought spins, takes the receipt callback or hears a prompt end",
+	table.concat(otherGrants, ", "))
 local seamsOk = true
-for _, seam in ipairs({ "useClock", "DebugForce", "useReply" }) do
+for _, seam in ipairs({ "useClock", "DebugForce", "useReply", "usePrompt" }) do
 	local body = wheelSource:match("function WheelService%." .. seam .. "(.-)\nend\n") or ""
 	if not body:find("^%([^\n]*%)[^\n]*\n\tif not RunService:IsStudio%(%)") then
 		seamsOk = false
@@ -974,7 +1038,7 @@ bp.WheelBought = 2
 policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
 W.CheckPolicy(buyer)
 check(buyer:GetAttribute(A.PaidAllowed) == nil and not W.PaidAllowed(buyer),
-	"as shipped -- no product configured -- paid spins are off even for an eligible account")
+	"as shipped -- the switch off -- paid spins are off even for an eligible account")
 table.clear(replies)
 W.Spin(buyer, "bought")
 local refusedBought = last().reason
@@ -983,10 +1047,37 @@ check(refusedBought == "PAID_UNAVAILABLE" and last().reason == "NO_SPINS" and bp
 	"a bought spin is refused, and asking for an earned one never falls back to a bought one",
 	tostring(refusedBought) .. " / " .. tostring(last().reason))
 
-local live = setmetatable({ Product = { Enabled = true, ProductId = 990003, Quantity = 5 } }, { __index = WheelData })
+-- The same two products, switched on for a copy of the service: never the
+-- shipped switch. No wait between prompts here; the wait has its own copy below.
+local live = setmetatable({
+	Paid = { Enabled = true, PromptCooldown = 0 },
+	paidLive = function()
+		return true
+	end,
+}, { __index = WheelData })
 local liveOk, WP = pcall(loadWheel, { WheelData = live })
-check(liveOk, "a copy that sees a configured, enabled product loads", if liveOk then nil else WP)
+check(liveOk, "a copy that sees paid spins switched on loads", if liveOk then nil else WP)
 if liveOk then
+	-- Every prompt the service asks for lands here; none is ever opened.
+	local prompts = {}
+	WP.usePrompt(function(who, productId)
+		table.insert(prompts, { who = who, productId = productId })
+	end)
+	local function bought()
+		local r = last()
+		return if r.buy == true then r else {}
+	end
+
+	--==========================================================================
+	-- BEFORE PolicyService HAS ANSWERED: closed
+	--==========================================================================
+	table.clear(replies)
+	WP.Buy(buyer, "spin1")
+	check(#prompts == 0 and bought().ok == false and bought().reason == "PAID_UNAVAILABLE"
+			and buyer:GetAttribute(A.PaidAllowed) == nil and not WP.PaidAllowed(buyer),
+		"before PolicyService has answered for a player, nothing is offered and no prompt opens",
+		tostring(bought().reason))
+
 	WP.CheckPolicy(buyer)
 	check(buyer:GetAttribute(A.PaidAllowed) == true and WP.PaidAllowed(buyer),
 		"configured, and PolicyService says this account may: paid spins are allowed")
@@ -1017,14 +1108,239 @@ if liveOk then
 	WP.Spin(buyer, "earned")
 	check(last().ok == true, "while its earned spins still spin: the free path never depends on the policy")
 
+	-- A check that FAILS says nothing about the player. For one PolicyService
+	-- has never answered for, that is "may not"; so is an answer without the field.
+	local unknown = makePlayer("SpecUnknown", 5112)
+	profiles[unknown] = ProfileSchema.Default()
+	policyAnswer = { ok = false }
+	local answered = WP.CheckPolicy(unknown)
+	local failed = WP.PaidAllowed(unknown)
+	policyAnswer = { ok = true, info = {} }
+	WP.CheckPolicy(unknown)
+	check(answered == false and not failed and not WP.PaidAllowed(unknown)
+			and unknown:GetAttribute(A.PaidAllowed) == nil,
+		"a policy check that fails, or answers without the field, counts as \"may not\"")
+	-- For one it HAS answered for, only an answer replaces the answer: two
+	-- checks can be in the air at once (the join's, and a receipt's), and a
+	-- failure that comes back late must neither open the door to a restricted
+	-- player nor shut out one who was just allowed to buy.
 	policyAnswer = { ok = false }
 	WP.CheckPolicy(buyer)
-	local failed = WP.PaidAllowed(buyer)
-	policyAnswer = { ok = true, info = {} }
-	WP.CheckPolicy(buyer)
-	check(not failed and not WP.PaidAllowed(buyer) and buyer:GetAttribute(A.PaidAllowed) == nil,
-		"a policy check that fails, or answers without the field, counts as \"may not\"")
+	local stillShut = not WP.PaidAllowed(buyer) and buyer:GetAttribute(A.PaidAllowed) == nil
 	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	WP.CheckPolicy(buyer)
+	policyAnswer = { ok = false }
+	local known = WP.CheckPolicy(buyer)
+	check(stillShut and known == true and WP.PaidAllowed(buyer) and buyer:GetAttribute(A.PaidAllowed) == true,
+		"a check that fails after PolicyService has answered changes nothing: restricted stays restricted, "
+			.. "allowed stays allowed")
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = true } }
+	WP.CheckPolicy(buyer)
+	check(not WP.PaidAllowed(buyer) and buyer:GetAttribute(A.PaidAllowed) == nil,
+		"and a later ANSWER of \"restricted\" shuts the door again at once")
+
+	--==========================================================================
+	-- BUYING: the server opens the prompt, for the right product, and only for
+	-- a player it may sell to. A prompt grants nothing.
+	--==========================================================================
+	say("\n-- 5b. buying --")
+	local function promptsFor(who)
+		local n = 0
+		for _, p in ipairs(prompts) do
+			if p.who == who then
+				n += 1
+			end
+		end
+		return n
+	end
+	local shopper = makePlayer("SpecShopper", 5111)
+	profiles[shopper] = ProfileSchema.Default()
+	local sp2 = profiles[shopper]
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	WP.CheckPolicy(shopper)
+	table.clear(prompts)
+	table.clear(replies)
+	WP.Buy(shopper, "spin1")
+	local one = prompts[1]
+	WP.Buy(shopper, "spin10")
+	local ten = prompts[2]
+	check(#prompts == 2 and one.who == shopper and one.productId == 3715369823
+			and ten.who == shopper and ten.productId == 3715370108 and bought().ok == true and bought().key == "spin10",
+		"an eligible player asking for +1 Spin is shown product 3715369823, and for +10 Spins 3715370108",
+		string.format("%d prompt(s)", #prompts))
+	check(sp2.WheelBought == 0 and sp2.WheelEarned == 0 and #sp2.WheelPending == 0
+			and shopper:GetAttribute(A.Bought) == 0,
+		"and a prompt grants NOTHING: the balance is what it was, whatever the player does with the prompt")
+
+	-- What the client sends is a key, and only a key this build sells.
+	local forgedBuys = 0
+	local echoed = 0
+	for _, forged in ipairs({ 3715369823, "3715369823", "spin100", "", true, { key = "spin1" }, { spins = 1e6 },
+		"SPIN1", "spin1 ", string.rep("spin1", 20000) }) do
+		table.clear(prompts)
+		table.clear(replies)
+		WP.Buy(shopper, forged)
+		if #prompts ~= 0 or bought().ok ~= false or bought().reason ~= "UNKNOWN_PRODUCT" then
+			forgedBuys += 1
+		end
+		if bought().key ~= nil then
+			echoed += 1
+		end
+	end
+	table.clear(prompts)
+	WP.Buy(shopper, nil)
+	check(forgedBuys == 0 and #prompts == 0,
+		"a product id, a quantity, a made-up key or nothing at all opens no prompt: the key picks a row, never an amount",
+		forgedBuys)
+	check(echoed == 0, "and whatever was sent in a key's place is not sent back, however long it is", echoed)
+
+	-- Restricted, unanswered, unsaved, no profile, no room: no prompt.
+	local function refusedWith(who, key)
+		table.clear(prompts)
+		table.clear(replies)
+		WP.Buy(who, key)
+		return #prompts == 0 and bought().ok == false, tostring(bought().reason)
+	end
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = true } }
+	WP.CheckPolicy(shopper)
+	local r1, why1 = refusedWith(shopper, "spin1")
+	local r10, why10 = refusedWith(shopper, "spin10")
+	check(r1 and r10 and why1 == "PAID_UNAVAILABLE" and why10 == "PAID_UNAVAILABLE"
+			and shopper:GetAttribute(A.PaidAllowed) == nil,
+		"a player restricted from paid random items is shown no prompt for either product", why1 .. "/" .. why10)
+	policyAnswer = { ok = false }
+	WP.CheckPolicy(shopper)
+	local rFail, whyFail = refusedWith(shopper, "spin1")
+	policyAnswer = { ok = true, info = {} }
+	WP.CheckPolicy(shopper)
+	local rBlank, whyBlank = refusedWith(shopper, "spin1")
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = "false" } }
+	WP.CheckPolicy(shopper)
+	local rOdd, whyOdd = refusedWith(shopper, "spin1")
+	check(rFail and rBlank and rOdd and whyFail == "PAID_UNAVAILABLE" and whyBlank == "PAID_UNAVAILABLE"
+			and whyOdd == "PAID_UNAVAILABLE",
+		"PolicyService failing, answering without the field, or with anything but false: no prompt (fails closed)",
+		whyFail .. "/" .. whyBlank .. "/" .. whyOdd)
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	WP.CheckPolicy(shopper)
+
+	persistent[shopper] = false
+	local rTemp, whyTemp = refusedWith(shopper, "spin1")
+	persistent[shopper] = nil
+	profiles[shopper] = nil
+	local rNone, whyNone = refusedWith(shopper, "spin1")
+	profiles[shopper] = sp2
+	check(rTemp and whyTemp == "NOT_SAVED" and rNone and whyNone == "NOT_READY",
+		"a profile that is not saving, or has not loaded, is shown no prompt", whyTemp .. "/" .. whyNone)
+
+	sp2.WheelBought = WheelData.MaxBoughtHeld - 5
+	local rFull, whyFull = refusedWith(shopper, "spin10")
+	table.clear(prompts)
+	WP.Buy(shopper, "spin1")
+	check(rFull and whyFull == "BALANCE_FULL" and #prompts == 1 and prompts[1].productId == 3715369823,
+		"a balance with no room for ten is not sold ten -- and is still sold one, which fits", whyFull)
+	sp2.WheelBought = 0
+
+	-- The wait between prompts, on a copy that has one.
+	local waits = setmetatable({
+		Paid = { Enabled = true, PromptCooldown = 0.3 },
+		paidLive = function()
+			return true
+		end,
+	}, { __index = WheelData })
+	local WW = loadWheel({ WheelData = waits })
+	local waited = {}
+	WW.usePrompt(function(who, productId)
+		table.insert(waited, productId)
+	end)
+	WW.CheckPolicy(shopper)
+	table.clear(replies)
+	WW.Buy(shopper, "spin1")
+	WW.Buy(shopper, "spin10")
+	local hurried = bought().reason
+	task.wait(0.35)
+	WW.Buy(shopper, "spin10")
+	check(#waited == 2 and waited[1] == 3715369823 and waited[2] == 3715370108 and hurried == "PROMPT_BUSY",
+		"a second prompt inside the wait is refused, and one after it opens", tostring(hurried))
+	WW.usePrompt(nil)
+	WW.useClock(nil)
+	WW.useReply(nil)
+
+	-- A prompt that cannot open says so, and still grants nothing.
+	WP.usePrompt(function()
+		error("spec: the prompt could not open")
+	end)
+	table.clear(replies)
+	local survived = pcall(WP.Buy, shopper, "spin1")
+	check(survived and bought().ok == false and bought().reason == "PROMPT_FAILED" and sp2.WheelBought == 0,
+		"a prompt that fails to open is a refusal, not an error, and grants nothing", tostring(bought().reason))
+	WP.usePrompt(function(who, productId)
+		table.insert(prompts, { who = who, productId = productId })
+	end)
+
+	--==========================================================================
+	-- THE GRANT: what StoreService's receipt calls. The same questions again,
+	-- because a receipt can arrive with no prompt of ours behind it.
+	--==========================================================================
+	say("\n-- 5c. the grant a receipt asks for --")
+	local outsider = makePlayer("SpecOutsider", 5112)
+	profiles[outsider] = ProfileSchema.Default()
+	local op = profiles[outsider]
+	-- Never asked about: a receipt that arrives on the join, before `watch` got
+	-- an answer. The grant asks PolicyService itself, once.
+	table.clear(trace)
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	local landed = WP.GrantBought(outsider, 10)
+	check(landed and op.WheelBought == 10 and count("Policy") == 1 and outsider:GetAttribute(A.Bought) == 10
+			and promptsFor(outsider) == 0,
+		"a receipt with no prompt behind it (bought outside the game, or re-delivered on a join) is granted to an "
+			.. "eligible player: the grant asks PolicyService itself", count("Policy"))
+	table.clear(trace)
+	WP.GrantBought(outsider, 1)
+	check(op.WheelBought == 11 and count("Policy") == 0, "and does not ask again once it has an answer")
+
+	local barred = makePlayer("SpecBarred", 5113)
+	profiles[barred] = ProfileSchema.Default()
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = true } }
+	local barredLanded = WP.GrantBought(barred, 10)
+	check(not barredLanded and profiles[barred].WheelBought == 0 and barred:GetAttribute(A.PaidAllowed) == nil,
+		"a restricted player's receipt grants nothing: it stays unacknowledged and Roblox returns the Robux")
+	local silent = makePlayer("SpecSilent", 5114)
+	profiles[silent] = ProfileSchema.Default()
+	policyAnswer = { ok = false }
+	table.clear(trace)
+	local silentLanded = WP.GrantBought(silent, 1)
+	local askedOnce = count("Policy")
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	local later = WP.GrantBought(silent, 1)
+	check(not silentLanded and askedOnce == 1 and later and profiles[silent].WheelBought == 1,
+		"PolicyService failing at the receipt: nothing granted (closed) -- and the re-delivered receipt asks again "
+			.. "and pays once it answers")
+	persistent[outsider] = false
+	local tempLanded = WP.GrantBought(outsider, 1)
+	persistent[outsider] = nil
+	check(not tempLanded and op.WheelBought == 11,
+		"a profile that is not saving is granted nothing, rather than spins that vanish with the server")
+	op.WheelBought = WheelData.MaxBoughtHeld - 3
+	local overLanded = WP.GrantBought(outsider, 10)
+	check(not overLanded and op.WheelBought == WheelData.MaxBoughtHeld - 3,
+		"a pack the balance has no room for is not granted in part: all ten or none")
+	op.WheelBought = 11
+
+	-- Bought spins, spent: one at a time, by name, never against the allowance.
+	op.WheelEarned, op.WheelDayAt, op.WheelDayCount = 0, 0, 0
+	table.clear(replies)
+	WP.DebugForce(outsider, "cash_small")
+	WP.Spin(outsider, "bought")
+	check(last().ok == true and last().source == "bought" and op.WheelBought == 10 and op.WheelDayCount == 0
+			and op.WheelDayAt == 0,
+		"a bought spin spends one bought spin and opens no earning window")
+	local kindB, nB = WP.AwardCompletion(outsider, "run-bought-1", 1800)
+	check(kindB == "spin" and nB == 1 and op.WheelEarned == 1 and op.WheelDayCount == 1 and op.WheelBought == 10,
+		"and the first obby run of the day still earns its spin: bought spins used none of the five")
+
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	WP.usePrompt(nil)
 	WP.useClock(nil)
 	WP.useReply(nil)
 end
@@ -1036,11 +1352,277 @@ local scripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
 local ui = sourceOf(scripts and scripts:FindFirstChild("WheelUI"))
 local fires = select(2, ui:gsub("FireServer%(", ""))
 check(ui ~= "" and not ui:find("PromptProductPurchase", 1, true) and not ui:find("MarketplaceService", 1, true)
-	and not ui:upper():find("\"BUY", 1, true),
-	"the panel opens no purchase prompt and shows no BUY button")
+	and not ui:find("PromptPurchase", 1, true) and not ui:find("ProcessReceipt", 1, true),
+	"the panel opens no purchase prompt of its own and hears no purchase: the server prompts, the receipt grants")
 check(ui:find("remote:FireServer(ACT.Spin, source)", 1, true) ~= nil and ui:find("send(\"bought\")", 1, true) ~= nil
-	and ui:find("showConfirm(true)", 1, true) ~= nil and fires == 2,
-	"it sends one word to spin -- \"bought\" only from the yes of the question naming it -- and CLAIM", fires)
+	and ui:find("showConfirm(true)", 1, true) ~= nil
+	and ui:find("remote:FireServer(ACT.Buy, choice.product.key)", 1, true) ~= nil
+	and ui:find("remote:FireServer(ACT.Claim)", 1, true) ~= nil and fires == 3,
+	"it sends one word to spin -- \"bought\" only from the yes of the question naming it -- CLAIM, and to buy "
+		.. "a product's key and nothing else", fires)
+-- BUYING, IN THE PANEL (2026-09-29).
+check(ui:find("local may = paidAllowed()", 1, true) ~= nil and ui:find("getSpins.Visible = may", 1, true) ~= nil
+		and ui:find("if shop.open and not may then", 1, true) ~= nil
+		and ui:find("return player:GetAttribute(A.PaidAllowed) == true", 1, true) ~= nil
+		and ui:find("if not remote or not paidAllowed() or not choice.onSale then", 1, true) ~= nil,
+	"GET SPINS and its card are shown only while the SERVER says this player may buy, and a choice sends "
+		.. "nothing otherwise")
+check(ui:find("RobuxPrice.watch(\"product\", choice.product.productId,", 1, true) ~= nil
+		and ui:find("choice.price.Text = RobuxPrice.format(amount)", 1, true) ~= nil
+		and not ui:find(".robux", 1, true) and not ui:find("%d+ Robux") and not ui:find("R%$%s*%d"),
+	"each price is what Roblox quotes THIS player (RobuxPrice): the list price is never read and no price is typed in")
+check(select(2, ui:gsub("RobuxPrice%.watch%(", "")) == 1 and select(2, ui:gsub("shop%.watch%(%)", "")) == 1
+		and ui:find("if may then%s+shop%.watch%(%)%s+end") ~= nil
+		and ui:find("shop.watch = function()", 1, true) ~= nil,
+	"and Roblox is asked for a price only once this player may buy: never while paid spins are switched off")
+check(select(2, ui:gsub("\"REWARDS & ODDS\"", "")) == 2 and ui:find("shop.infoWord.Text = \"ODDS\"", 1, true) ~= nil
+		and ui:find("shop.returnTo = \"shop\"", 1, true) ~= nil and ui:find("shop.returnTo = \"confirm\"", 1, true) ~= nil
+		and ui:find("shop.infoWord.Visible = may", 1, true) ~= nil,
+	"the odds are one press away and the way to them is WORDED: on the card to buy, on the question before a "
+		.. "bought spin, and under the round \"?\"")
+check(ui:find("if confirm.Visible and not may then", 1, true) ~= nil
+		and ui:find("local card = shop.open == true or confirm.Visible", 1, true) ~= nil
+		and ui:find("local behind = sheetOpen or card", 1, true) ~= nil
+		and ui:find("info.Selectable = not behind", 1, true) ~= nil
+		and ui:find("close.Selectable = not behind", 1, true) ~= nil
+		and ui:find("getSpins.Selectable = may and not busy and not behind", 1, true) ~= nil
+		and ui:find("padFirst.Value = if shop.open then shop.first()", 1, true) ~= nil,
+	"a card over the hub keeps the controller inside it (nothing behind is selectable, and a controller picked up "
+		.. "starts on the card), and the question goes too when the server stops saying this player may")
+-- WHERE THE BUYING CONTROLS STAND, ON EVERY SCREEN. The panel's own layout code,
+-- cut out of its source and run over stand-ins that only record what they were
+-- given: a LocalScript cannot be required, and these are numbers, not drawing.
+do
+	local src = string.gsub(ui, "\r\n", "\n")
+	local g0 = src:find("shop.grow = function(", 1, true)
+	local g1 = g0 and src:find("\nend\n", g0, true)
+	local a = src:find("shop.layout = function(", 1, true)
+	local b = src:find("local function layoutSheet(", 1, true)
+	local maxWheel = tonumber(src:match("\nlocal MAX_WHEEL = (%d+)"))
+	local cut = g0 ~= nil and g1 ~= nil and a ~= nil and b ~= nil and a < b and maxWheel ~= nil
+	check(cut, "the panel's layout can be found in its source (shop.grow, shop.layout, layoutStage)")
+	-- What the stand-ins take for granted, so it is checked: where each piece is
+	-- held from.
+	check(ui:find("shop.card.AnchorPoint = Vector2.new(0.5, 0.5)", 1, true) ~= nil
+			and ui:find("confirm.AnchorPoint = Vector2.new(0.5, 0.5)", 1, true) ~= nil
+			and ui:find("hubButton.AnchorPoint = Vector2.new(0.5, 0.5)", 1, true) ~= nil
+			and ui:find("r.button.AnchorPoint = Vector2.new(0.5, 0.5)", 1, true) ~= nil,
+		"the card, the question, the hub and the round buttons are held by their centres")
+	local layoutStage = nil
+	if cut then
+		local prelude = table.concat({
+			"type ShopChoice = any",
+			"local env = ...",
+			"local shop, place, buildWheel, MAX_WHEEL = env.shop, env.place, env.buildWheel, env.MAX_WHEEL",
+			"local wheelHolder, wheelBlock, pin, hubFace, hubButton = env.wheelHolder, env.wheelBlock, env.pin, nil, env.hubButton",
+			"local infoButton, closeButton, topbarBand = env.infoButton, env.closeButton, env.topbarBand",
+			"local lineText, claimButton, claimWords, lineRow = env.lineText, env.claimButton, env.claimWords, env.lineRow",
+			"local confirm, confirmText, confirmYes, confirmNo = env.confirm, env.confirmText, env.confirmYes, env.confirmNo",
+			"",
+		}, "\n")
+		local chunk, err = loadstring(prelude .. string.sub(src, g0, g1 + 4) .. "\n" .. string.sub(src, a, b - 1)
+			.. "\nreturn layoutStage", "=WheelUI.layout")
+		check(chunk ~= nil, "and it compiles on its own", err)
+		if chunk then
+			local function piece(anchorX: number, anchorY: number)
+				return { AnchorPoint = Vector2.new(anchorX, anchorY), Position = UDim2.new(), Size = UDim2.new() }
+			end
+			local function round()
+				local button = piece(0.5, 0.5)
+				return { button = button, resize = function(d: number)
+					button.Size = UDim2.fromOffset(d, d)
+				end }
+			end
+			local env = {
+				MAX_WHEEL = maxWheel,
+				place = function(g, x: number, y: number, w: number, h: number)
+					g.Position = UDim2.fromOffset(x, y)
+					g.Size = UDim2.fromOffset(w, h)
+				end,
+				buildWheel = function() end,
+				wheelHolder = piece(0, 0), wheelBlock = piece(0, 0),
+				pin = { headEdge = piece(0.5, 0.5), head = piece(0.5, 0.5), tipEdge = piece(0.5, 0.5),
+					tip = piece(0.5, 0.5), dot = piece(0.5, 0.5) },
+				hubButton = piece(0.5, 0.5),
+				infoButton = round(), closeButton = round(),
+				-- Roblox's own buttons, as Studio's phone has them.
+				topbarBand = function(k: number, W: number)
+					return 58 / k, math.min(208, W * 0.3) / k, W
+				end,
+				lineText = piece(0, 0), claimButton = piece(0, 0), claimWords = piece(0, 0), lineRow = piece(0, 0),
+				confirm = piece(0.5, 0.5), confirmText = piece(0, 0), confirmYes = piece(0, 0), confirmNo = piece(0, 0),
+				shop = {
+					button = piece(0.5, 0.5), card = piece(0.5, 0.5), title = piece(0, 0), note = piece(0, 0),
+					odds = piece(0, 0), close = piece(0, 0), confirmOdds = piece(0, 0), infoWord = piece(0.5, 0),
+					buttonScale = { Scale = 1 }, cardScale = { Scale = 1 }, questionScale = { Scale = 1 },
+					choices = {},
+				},
+			}
+			for i = 1, #WheelData.Products do
+				env.shop.choices[i] = { button = piece(0, 0), icon = piece(0, 0), name = piece(0, 0),
+					capsule = piece(0.5, 0) }
+			end
+			layoutStage = chunk(env)
+
+			-- A piece's rect: its offsets at the scale it is drawn at (`s`, its
+			-- parent's), its own size times its own UIScale, held from its anchor.
+			local function rectOf(g, parent, own: number?)
+				local s, mine = parent.s, own or 1
+				local w = (g.Size.X.Offset * s + g.Size.X.Scale * parent.w) * mine
+				local h = (g.Size.Y.Offset * s + g.Size.Y.Scale * parent.h) * mine
+				return {
+					x = parent.x + g.Position.X.Offset * s + g.Position.X.Scale * parent.w - g.AnchorPoint.X * w,
+					y = parent.y + g.Position.Y.Offset * s + g.Position.Y.Scale * parent.h - g.AnchorPoint.Y * h,
+					w = w, h = h, s = s * mine,
+				}
+			end
+			local function meets(p, q): boolean
+				return p.x < q.x + q.w and q.x < p.x + p.w and p.y < q.y + q.h and q.y < p.y + p.h
+			end
+			local function within(p, q): boolean
+				return p.x >= q.x - 0.01 and p.y >= q.y - 0.01 and p.x + p.w <= q.x + q.w + 0.01
+					and p.y + p.h <= q.y + q.h + 0.01
+			end
+
+			-- Landscape and upright phones, tablets, small windows, desktops, and a
+			-- TV's canvas (1422 x 800 is 1920 x 1080 at its 1.35).
+			local SCREENS = {
+				{ 705, 338 }, { 568, 320 }, { 640, 360 }, { 667, 375 }, { 750, 369 }, { 812, 375 }, { 926, 428 },
+				{ 360, 640 }, { 390, 844 }, { 1024, 768 }, { 1180, 820 }, { 1366, 1024 }, { 560, 420 }, { 600, 480 },
+				{ 640, 480 }, { 720, 540 }, { 800, 600 }, { 1024, 600 }, { 1280, 720 }, { 1366, 768 }, { 1600, 900 },
+				{ 1920, 1080 }, { 2560, 1440 }, { 3840, 2160 }, { 1422, 800, 1.35 }, { 1422, 800, 2.7 },
+			}
+			local wrong = {}
+			local places = { right = 0, under = 0, corner = 0 }
+			local smallest, largest = math.huge, 0
+			for _, screen in ipairs(SCREENS) do
+				local W, H, k = screen[1], screen[2], screen[3] or 1
+				layoutStage(W, H, k)
+				local shop = env.shop
+				local whole = { x = 0, y = 0, w = W, h = H, s = 1 }
+				local tag = string.format("%dx%d", W, H)
+				local wheel = rectOf(env.wheelHolder, whole)
+				local cx, cy, radius = wheel.x + wheel.w / 2, wheel.y + wheel.h / 2, wheel.w / 2
+				local f = shop.buttonScale.Scale
+				local get = rectOf(shop.button, whole, f)
+				local row = rectOf(env.lineRow, whole)
+				local nearX = math.clamp(cx, get.x, get.x + get.w)
+				local nearY = math.clamp(cy, get.y, get.y + get.h)
+				if not within(get, whole) then
+					table.insert(wrong, tag .. ": GET SPINS leaves the screen")
+				end
+				if math.sqrt((nearX - cx) ^ 2 + (nearY - cy) ^ 2) < radius then
+					table.insert(wrong, tag .. ": GET SPINS is on the wheel")
+				end
+				if meets(get, row) then
+					table.insert(wrong, tag .. ": GET SPINS is in the line's row")
+				end
+				if meets(get, rectOf(env.infoButton.button, whole)) or meets(get, rectOf(env.closeButton.button, whole)) then
+					table.insert(wrong, tag .. ": GET SPINS meets a round button")
+				end
+				if get.h * k < 46 - 0.01 then
+					table.insert(wrong, tag .. ": GET SPINS is under a thumb tall")
+				end
+				smallest, largest = math.min(smallest, f), math.max(largest, f)
+				if math.abs(get.y + get.h / 2 - cy) < 0.01 and get.x > cx + radius then
+					places.right += 1
+				elseif get.y >= row.y + row.h - 0.01 then
+					places.under += 1
+				else
+					places.corner += 1
+				end
+				if shop.cardScale.Scale ~= f or shop.questionScale.Scale ~= f then
+					table.insert(wrong, tag .. ": the cards are not drawn at the button's size")
+				end
+				local card = rectOf(shop.card, whole, f)
+				local ask = rectOf(env.confirm, whole, f)
+				if not within(card, whole) then
+					table.insert(wrong, tag .. ": the card leaves the screen")
+				end
+				if not within(ask, whole) then
+					table.insert(wrong, tag .. ": the question leaves the screen")
+				end
+				local inCard = { shop.title, shop.note, shop.odds, shop.close }
+				for _, choice in ipairs(shop.choices) do
+					table.insert(inCard, choice.button)
+				end
+				local rects = {}
+				for i, g in ipairs(inCard) do
+					rects[i] = rectOf(g, card)
+					if not within(rects[i], card) or rects[i].w < 40 * f or rects[i].h < 12 * f then
+						table.insert(wrong, tag .. ": a piece of the card does not sit in it")
+					end
+				end
+				for i = 1, #rects do
+					for j = i + 1, #rects do
+						if meets(rects[i], rects[j]) then
+							table.insert(wrong, tag .. ": two pieces of the card meet")
+						end
+					end
+				end
+				for _, g in ipairs({ env.confirmText, env.confirmYes, env.confirmNo, shop.confirmOdds }) do
+					if not within(rectOf(g, ask), ask) then
+						table.insert(wrong, tag .. ": a piece of the question leaves it")
+					end
+				end
+			end
+			check(#wrong == 0, string.format("on %d screens GET SPINS is whole, a thumb tall, and never on the wheel, "
+				.. "the round buttons or the line; its card and the question stand whole with every piece inside",
+				#SCREENS), wrong[1])
+			check(places.right >= 15 and places.under == 2 and places.corner >= 1,
+				"it stands right of the wheel on every landscape phone and desktop, under the line on a phone held "
+					.. "upright, and in the free corner above the line in a small 4:3 window",
+				string.format("right %d, under %d, corner %d", places.right, places.under, places.corner))
+			layoutStage(705, 338, 1)
+			local phone = env.shop.buttonScale.Scale
+			layoutStage(1920, 1080, 1)
+			check(phone == 1 and env.shop.buttonScale.Scale == 1.25 and smallest == 1 and largest == 1.25,
+				"drawn at the phone's size on a phone and a quarter bigger on a desktop, never smaller, never more",
+				string.format("phone %s, desktop %s", tostring(phone), tostring(env.shop.buttonScale.Scale)))
+		end
+	end
+end
+check(not ui:find("SetAttribute(A.Bought", 1, true) and not ui:find("SetAttribute(A.Earned", 1, true)
+		and not ui:find("SetAttribute(A.PaidAllowed", 1, true)
+		and ui:find("player:GetAttributeChangedSignal(A.Bought):Connect(function()", 1, true) ~= nil,
+	"the panel only READS the balances and the permission the server publishes")
+check(ui:find("\"%d hidden species, %s each\" else \"%d species, %s each\"", 1, true) ~= nil
+		and ui:find("WheelData.percent(pool[1].probability)", 1, true) ~= nil,
+	"every pod row says how many species it holds and each one's odds, before it is opened")
+-- What the rows will say, from the same numbers: each pod's species add up to
+-- the pod's own odds, and all the final outcomes to exactly 100%.
+do
+	local sum, lines = 0, {}
+	for _, r in ipairs(R) do
+		local pool = WheelData.poolOdds(r)
+		if #pool > 0 then
+			local each = pool[1].probability
+			local same = true
+			for _, entry in ipairs(pool) do
+				same = same and math.abs(entry.probability - each) < 1e-12
+				sum += entry.probability
+			end
+			check(same and math.abs(each * #pool - r.weight / WheelData.TotalWeight) < 1e-12,
+				string.format("%s: %d species at %s each make its %s", r.short, #pool, WheelData.percent(each),
+					WheelData.percent(r.weight / WheelData.TotalWeight)))
+			table.insert(lines, WheelData.percent(each))
+		else
+			sum += r.weight / WheelData.TotalWeight
+		end
+	end
+	check(math.abs(sum - 1) < 1e-9, "every final outcome's odds, species by species, add to exactly 100%", sum)
+	-- For a player who owns the trail, the trail's share pays its replacement:
+	-- still every outcome, still 100%.
+	local owned, replaced = 0, 0
+	for _, o in ipairs(WheelData.outcomes(true)) do
+		owned += o.probability
+		if o.note == "replacement" then
+			replaced += 1
+		end
+	end
+	check(math.abs(owned - 1) < 1e-9 and replaced == 1,
+		"and for a trail owner too, with the trail's line saying what it pays instead", owned)
+end
 check(ui:find("WheelData.percent(reward.weight / WheelData.TotalWeight)", 1, true) ~= nil
 	and ui:find("WheelData.poolOdds(row.reward)", 1, true) ~= nil
 	and ui:find("WheelData.percent(entry.probability)", 1, true) ~= nil
