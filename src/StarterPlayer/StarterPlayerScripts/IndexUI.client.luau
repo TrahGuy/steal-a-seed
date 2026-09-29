@@ -1702,10 +1702,32 @@ local function receive(profile: any)
 	end
 	local changed = false
 	if type(profile.Almanac) == "table" then
+		--======================================================================
+		-- A FIRST DISCOVERY WAITS FOR ITS OWN REVEAL (2026-09-29)
+		--
+		-- The Almanac learns a species at the hatch, and the hatch shows its
+		-- plant a few seconds later (HatchRoll). A silhouette lifting here, or
+		-- the badge's count dropping, in those seconds would name the plant
+		-- before its card does -- so a species this player is still waiting to
+		-- be shown is added when its roll ends, not before. Only a species that
+		-- is NEW: one already grown stays exactly as it is.
+		--======================================================================
+		local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
+		local waiting = HatchRoll.sealedSpecies(player)
 		for id, value in pairs(profile.Almanac) do
 			if value == true and type(id) == "string" and not almanac[id] then
-				almanac[id] = true
-				changed = true
+				local shownAt = waiting[id]
+				if shownAt then
+					task.delay(math.max(shownAt - workspace:GetServerTimeNow(), 0) + 0.05, function()
+						if not almanac[id] then
+							almanac[id] = true
+							paint()
+						end
+					end)
+				else
+					almanac[id] = true
+					changed = true
+				end
 			end
 		end
 	end

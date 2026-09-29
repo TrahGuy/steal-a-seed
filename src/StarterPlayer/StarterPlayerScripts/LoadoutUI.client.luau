@@ -58,6 +58,9 @@ local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local WeaponData = require(Shared:WaitForChild("WeaponData"))
 local WeaponModel = require(Shared:WaitForChild("WeaponModel"))
 local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
+-- Whether a hatched plant may be named yet: while its roll runs it is drawn as
+-- the pod it came out of (2026-09-29).
+local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 -- Where the strip, the Bag button and BAT/TRAP sit on this screen, and how many
 -- slots it gets. Numbers only; see layoutHud at the bottom of this file.
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
@@ -351,13 +354,35 @@ local function classify(tool: Tool): Slot?
 		}
 	end
 	local speciesId = tool:GetAttribute("SpeciesId")
-	if type(speciesId) == "string" and SeedData.Get(speciesId) then
+	local species = if type(speciesId) == "string" then SeedData.Get(speciesId) else nil
+	if species then
 		local tier = math.floor(tonumber(tool:GetAttribute(ATTR.CarryingKg)) or 1)
+		--======================================================================
+		-- A PLANT WHOSE ROLL IS STILL RUNNING IS THE POD IT CAME OUT OF
+		--
+		-- The hatch has happened and the Tool is the player's, but its reveal is
+		-- a few seconds off (HatchRoll): until then this card is ???, a pod, and
+		-- nothing about it says which plant -- not its name, not its picture,
+		-- and not where it sorts, which is why its key carries the pod's biome
+		-- and never the species. The Tool says when that ends (RevealAt), and
+		-- the card repaints as the plant the moment it does.
+		--======================================================================
+		if HatchRoll.sealed(tool) then
+			return {
+				tool = tool,
+				kind = "plant",
+				key = string.format("p:~%s:%d:sealed", species.Biome, tier),
+				label = HatchRoll.Unknown,
+				item = nil,
+				rank = 3,
+				canHotbar = assignable(tool, "plant"),
+			}
+		end
 		local hatched = tool:GetAttribute("Hatched") == true
 		return {
 			tool = tool,
 			kind = "plant",
-			key = string.format("p:%s:%d:%s", speciesId, tier, tostring(hatched)),
+			key = string.format("p:%s:%d:%s", speciesId :: string, tier, tostring(hatched)),
 			label = tool.Name,
 			item = nil,
 			rank = 3,
@@ -392,7 +417,9 @@ local function builderFor(slot: Slot): ((Instance) -> Model?)?
 		return nil
 	end
 	local tier = math.floor(tonumber(slot.tool:GetAttribute(ATTR.CarryingKg)) or 1)
-	local hatched = slot.tool:GetAttribute("Hatched") == true
+	-- A pod, too, while its roll runs: BuildPod reads the species for its biome
+	-- and nothing else, so the picture is the shell the player just opened.
+	local hatched = HatchRoll.shownHatched(slot.tool)
 	return function(parent)
 		local model = if hatched
 			then CreatureModel.BuildCreature(species, tier,
@@ -514,6 +541,18 @@ local function holdTool(tool: Tool?)
 		-- reason is the server's own replicated CarryingSpecies, not a guess.
 		-- Required here rather than at the top: this chunk's names are rationed.
 		require(Shared:WaitForChild("ActionRefusal")).raise("CARRYING_POD")
+		return
+	end
+	--==========================================================================
+	-- NOT A PLANT WHOSE ROLL IS STILL RUNNING (2026-09-29)
+	--
+	-- In the hands it is the plant itself, at full size, for everybody to see:
+	-- the one thing its roll is keeping back. The server puts it in their hands
+	-- when the reveal is over; until then the card is pressed for nothing, and
+	-- says so with the press sound it always makes and no more.
+	--==========================================================================
+	if HatchRoll.sealed(tool) then
+		SoundKit.play("CardClick")
 		return
 	end
 	SoundKit.play("CardClick")
@@ -3100,7 +3139,9 @@ local function refreshHotbar()
 				local chipText: string? = nil
 				local chipColour = HOT.Caption
 				if data.kind == "plant" then
-					if data.tool:GetAttribute("Hatched") ~= true then
+					-- A plant mid-roll is a pod here too: its size chip is edged in
+					-- its rarity's colour, which would name it.
+					if not HatchRoll.shownHatched(data.tool) then
 						chipText = HOT.Tags.pod.text
 						chipColour = HOT.Tags.pod.colour
 					else
@@ -3382,7 +3423,7 @@ local function paintInfo()
 		return
 	end
 	local details = PlantInfo.Describe(tool:GetAttribute("SpeciesId"),
-		tool:GetAttribute(ATTR.CarryingKg), tool:GetAttribute("Hatched") == true,
+		tool:GetAttribute(ATTR.CarryingKg), HatchRoll.shownHatched(tool),
 		GameConfig.incomeMultiplier(player))
 	local character = player.Character
 	local status = PlantInfo.Status(character ~= nil and tool.Parent == character,
@@ -3620,7 +3661,9 @@ local function refreshBag()
 					canHotbar = slot.canHotbar,
 					speciesId = slot.tool:GetAttribute("SpeciesId"),
 					tier = tier,
-					hatched = slot.tool:GetAttribute("Hatched") == true,
+					-- False while its roll runs, so PlantInfo keeps its backdrop,
+					-- income and place in a sort back with a pod's.
+					hatched = HatchRoll.shownHatched(slot.tool),
 				})
 			end
 		end
@@ -4378,7 +4421,10 @@ local function watchTools(container: Instance)
 		if child:IsA("Tool") and not bagSort.watched[child] then
 			bagSort.watched[child] = true
 			child.AttributeChanged:Connect(function(name: string)
-				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched" then
+				-- RevealAt comes off the Tool when its roll is over: the card
+				-- that was ??? is the plant from that repaint on.
+				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched"
+					or name == HatchRoll.Attribute then
 					redraw()
 				end
 			end)

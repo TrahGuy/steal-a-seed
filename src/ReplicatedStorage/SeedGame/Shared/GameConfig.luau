@@ -2793,6 +2793,67 @@ GameConfig.Plant = {
 		},
 
 		--======================================================================
+		-- THE ROLL: THE SUSPENSE BEFORE THE REVEAL (2026-09-29)
+		--
+		-- The owner's rule: when a pod hatches, its owner watches plant
+		-- silhouettes turn over behind a question mark for AT LEAST FIVE
+		-- SECONDS -- briskly at first, slowing to a stop -- and only then sees
+		-- the plant that came out.
+		--
+		-- IT IS A PICTURE OF A DECISION ALREADY MADE. The species was fixed when
+		-- the pod was made, and the plant is in the Backpack and on the profile
+		-- before the first silhouette is drawn (PlantService.hatch). Nothing
+		-- here rolls, picks or decides: the silhouettes are the plants of the
+		-- pod's own biome, in an order drawn from the hatch's token, and the
+		-- last of them is the plant that hatched.
+		--
+		-- ONE AT A TIME. The server gives every hatch its own window
+		-- (HatchRoll.schedule), so two pods hatched a second apart are two rolls
+		-- one after the other and never two cards at once.
+		--
+		-- THIS DOES MAKE A HATCH LONGER, for every size alike. TIER INTENSITY
+		-- below still holds: a Colossal is a bigger event than a Tiny, never a
+		-- longer one.
+		--
+		-- THE ROLL IS TIME PUT BETWEEN THE BURST AND THE CREATURE, and nothing
+		-- else. With it off, that time is nought and a hatch is second for
+		-- second the hatch it was on 2026-09-17.
+		--======================================================================
+		Roll = {
+			-- OFF ON A PUBLISHED SERVER UNTIL THE OWNER HAS SEEN IT. The owner
+			-- asked for a Studio preview before anything is published, and
+			-- Studio's Publish ships whatever is on disk -- so the switch ships
+			-- off, and StudioPreview turns the roll on in Studio alone, for the
+			-- server and the client alike. Approved, this one line goes to true.
+			Enabled = false,
+			StudioPreview = true,
+			-- From the first silhouette to the reveal. HatchRoll refuses to load
+			-- with this under MinSeconds.
+			Seconds = 5.5,
+			MinSeconds = 5,
+			-- The plant, known: how long the card stays once it is shown.
+			ShowSeconds = 2.6,
+			-- How many silhouettes are shown. The last is the plant's own.
+			Steps = 12,
+			-- How long the first and the last are held: brisk, then slow. The
+			-- holds between them grow evenly and the whole is stretched to fill
+			-- Seconds exactly, so these two are a shape, not a promise.
+			FirstHold = 0.22,
+			LastHold = 0.9,
+			-- The promise: no silhouette is held for less than this, whatever the
+			-- numbers above are changed to. They turn over; they never flicker.
+			FloorHold = 0.15,
+			-- A roll waits for the one before it, but not for ever: past this the
+			-- hatch is told in a line instead of on the card.
+			MaxWaitSeconds = 16,
+			-- A plant is never kept a secret for longer than this, whatever a
+			-- clock or a lost message does.
+			MaxHideSeconds = 45,
+			-- On the plant's Tool: the server time its plant may be shown.
+			Attribute = "RevealAt",
+		},
+
+		--======================================================================
 		-- TIER INTENSITY: SCALE THE EFFECT, NOT THE RUNTIME
 		--
 		-- A Colossal is a bigger event than a Tiny, and it is NOT a longer one:

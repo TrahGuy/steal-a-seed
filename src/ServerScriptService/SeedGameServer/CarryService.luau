@@ -59,6 +59,10 @@ local CarryGuard = require(script.Parent:WaitForChild("CarryGuard"))
 
 local ATTR = GameConfig.Attributes
 local SAVE = GameConfig.Save
+-- On a hatched plant's Tool while its roll runs: the server time its plant may
+-- be shown (HatchRoll). Never saved: rowOf reads three attributes and this is
+-- not one of them.
+local REVEAL_AT: string = GameConfig.Plant.Hatch.Roll.Attribute
 
 local CarryService = {}
 -- After NestService (40), which owns the pods being taken.
@@ -918,7 +922,7 @@ end
 -- other part is welded to it.
 --==============================================================================
 local function giveTool(player: Player, model: Model, species: SeedData.Species,
-	tier: number, grip: CFrame, hatched: boolean): Tool?
+	tier: number, grip: CFrame, hatched: boolean, revealAt: number?): Tool?
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	local handle = model.PrimaryPart
 	if not (backpack and handle) then
@@ -985,6 +989,18 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	-- hatched creature goes in the ground already earning. PlantService reads
 	-- this to know which, and it is the only difference between them.
 	tool:SetAttribute("Hatched", hatched)
+	--==========================================================================
+	-- A HATCH'S PLANT IS A SECRET UNTIL ITS ROLL IS OVER (2026-09-29)
+	--
+	-- Stamped BEFORE the Tool is parented, so no client ever sees this Tool
+	-- without it: the hotbar and the Bag draw it as the pod it came out of
+	-- until the time written here (HatchRoll.sealed). It is the Tool's name
+	-- and species that are kept off the screen, not the Tool that is kept from
+	-- the player -- it is theirs, and on their record, from this moment.
+	--==========================================================================
+	if hatched and revealAt then
+		tool:SetAttribute(REVEAL_AT, revealAt)
+	end
 
 	handle.Name = "Handle"
 	for _, d in ipairs(model:GetDescendants()) do
@@ -1121,6 +1137,61 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 end
 
 --==============================================================================
+-- A ROLL THAT OUTLIVES THE BODY (2026-09-29)
+--
+-- A hatched plant is a secret until its roll is over, and the secret is written
+-- on its Tool. A death, a reset or a LoadCharacter destroys that Tool, and the
+-- rebuild that follows makes a new one from the record -- which would come back
+-- named, in the hotbar, while the roll it belongs to is still running.
+--
+-- So the time is kept here as well, by player, and a rebuilt plant of the same
+-- species and tier is given what is left of it.
+--
+-- IT DECIDES NOTHING ABOUT WHAT IS BUILT. That is the record's (profile.Held),
+-- and this is never saved: a time that has passed is dropped, and a player who
+-- leaves takes the whole list with them.
+--==============================================================================
+local Sealed = {}
+Sealed.byPlayer = {} :: { [Player]: { { id: string, tier: number, at: number } } }
+
+-- A hatch's plant, and the server time it may be shown.
+function Sealed.note(player: Player, id: string, tier: number, at: number)
+	local now = workspace:GetServerTimeNow()
+	local list = Sealed.byPlayer[player] or {}
+	for i = #list, 1, -1 do
+		if list[i].at <= now then
+			table.remove(list, i)
+		end
+	end
+	table.insert(list, { id = id, tier = math.floor(tier), at = at })
+	Sealed.byPlayer[player] = list
+end
+
+-- For a plant being rebuilt: the time it is still a secret until, taken off the
+-- list -- or nil, when it never was one or its time has come.
+function Sealed.take(player: Player, id: string, tier: number): number?
+	local list = Sealed.byPlayer[player]
+	if not list then
+		return nil
+	end
+	local now = workspace:GetServerTimeNow()
+	local found: number? = nil
+	for i = #list, 1, -1 do
+		local row = list[i]
+		if row.at <= now then
+			table.remove(list, i)
+		elseif found == nil and row.id == id and row.tier == math.floor(tier) then
+			found = row.at
+			table.remove(list, i)
+		end
+	end
+	if #list == 0 then
+		Sealed.byPlayer[player] = nil
+	end
+	return found
+end
+
+--==============================================================================
 -- A HATCHED CREATURE IS CARRIED, NOT LEFT IN THE GROUND
 --
 -- Hatching does not put the creature where the pod was. It hands it to you and
@@ -1150,9 +1221,17 @@ end
 --
 -- EVERY OTHER CALLER IS UNCHANGED: nil means equip now, which is what a pickup
 -- and a rejoin have always done.
+--
+-- `revealAt` is the hatch's too (2026-09-29): the server time the plant may be
+-- shown, written on the Tool until then and taken off when it comes. A pickup
+-- and a rejoin pass none, and their Tools say what they are at once. The one
+-- other caller that passes it is the rebuild after a death, for a plant whose
+-- roll was still running when its Tool went with the body (see Sealed).
+--
+-- `onRecord` is the hatch's alone: write this plant's row now (RecordHatched).
 --==============================================================================
 function CarryService.GiveHatched(player: Player, species: SeedData.Species,
-	tier: number, equipAfter: number?): boolean
+	tier: number, equipAfter: number?, revealAt: number?, onRecord: boolean?): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false
@@ -1195,9 +1274,36 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- clear of the ground rather than planted in it.
 	--==========================================================================
 	local grip = CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
-	local tool = giveTool(player, model, species, tier, grip, true)
+	-- Read as a claim, like everything that is a time: not a number, already
+	-- past, or further off than any roll runs, and there is no secret to keep.
+	local sealedUntil = tonumber(revealAt)
+	if sealedUntil then
+		local left = sealedUntil - workspace:GetServerTimeNow()
+		if left ~= left or left <= 0 or left > GameConfig.Plant.Hatch.Roll.MaxHideSeconds then
+			sealedUntil = nil
+		end
+	end
+	local tool = giveTool(player, model, species, tier, grip, true, sealedUntil)
 	if not tool then
 		return false
+	end
+	-- The secret runs out on the server's clock: the attribute comes off, which
+	-- is the change every hotbar and Bag repaints on. A Tool that has gone by
+	-- then -- planted, sold, lost with a body -- has nothing to take off.
+	if sealedUntil then
+		Sealed.note(player, species.Id, tier, sealedUntil)
+		task.delay(math.max(sealedUntil - workspace:GetServerTimeNow(), 0), function()
+			if tool.Parent and tool:GetAttribute(REVEAL_AT) ~= nil then
+				tool:SetAttribute(REVEAL_AT, nil)
+			end
+		end)
+	end
+	-- `onRecord` is the hatch's and nobody else's: this plant is new, and its
+	-- row is written now, in the same call that made its Tool. A pickup and a
+	-- rebuild pass none -- a rebuilt plant is on the record already, which is
+	-- where it was rebuilt from.
+	if onRecord == true then
+		CarryService.RecordHatched(player, species, tier)
 	end
 	--==========================================================================
 	-- THE REACH IS WRITTEN DOWN, BECAUSE CarryPose CANNOT DERIVE IT
@@ -1874,6 +1980,45 @@ local function recordHeld(player: Player)
 	syncHeld(player, nil)
 end
 
+--==============================================================================
+-- A HATCH GOES ON THE RECORD AS IT HAPPENS (2026-09-29)
+--
+-- One row for one plant, asked for by the hatch itself, before the pod leaves
+-- the garden -- so the profile never holds neither the pod nor the plant.
+--
+-- ARMED, this is the snapshot the Backpack's own watcher would take a moment
+-- later, taken now. DISARMED -- a body is being replaced, and a receipt can land
+-- at any moment of that -- no snapshot is allowed, and the hatch used to be a
+-- Tool on nobody's record: gone with the old Backpack, the pod gone with the
+-- hatch, and nothing to rebuild the plant from. So the row is added directly.
+--
+-- ADDING A ROW IS SAFE IN EVERY STATE. The merge counts rows against Tools by
+-- (species, tier, hatched): the snapshot that follows finds this Tool already
+-- has its row and adds nothing, and the rebuild after the death builds what the
+-- record has and the containers lack -- this plant, once, if its Tool went.
+--
+-- It cannot go past SAVE.MaxHeld, which limits what is saved and refuses
+-- nothing. False when the plant is not on the record after the call.
+--==============================================================================
+function CarryService.RecordHatched(player: Player, species: SeedData.Species, tier: number): boolean
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		return false
+	end
+	if armedFor(player) then
+		local before = if type(profile.Held) == "table" then #profile.Held else 0
+		recordHeld(player)
+		local after = PlayerDataService.Get(player)
+		return after ~= nil and type(after.Held) == "table" and #after.Held > before
+	end
+	local kept = if type(profile.Held) == "table" then table.clone(profile.Held) else {}
+	if #kept >= SAVE.MaxHeld then
+		return false
+	end
+	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = true })
+	return PlayerDataService.SetHeld(player, kept) == true
+end
+
 local function requestSync(player: Player)
 	if syncPending[player] then
 		return
@@ -1969,6 +2114,13 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 		return false
 	end
 	if hatched then
+		-- A plant whose roll a death interrupted is still a secret (see Sealed):
+		-- it comes back hidden, and into the hands no sooner than it may be shown.
+		local sealedUntil = Sealed.take(player, species.Id, tier)
+		if sealedUntil then
+			return CarryService.GiveHatched(player, species, tier,
+				math.max(sealedUntil - workspace:GetServerTimeNow(), 0.05), sealedUntil)
+		end
 		return CarryService.GiveHatched(player, species, tier)
 	end
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
@@ -2174,6 +2326,7 @@ function CarryService.Init()
 	end
 	table.clear(carried)
 	table.clear(prompted)
+	table.clear(Sealed.byPlayer)
 end
 
 --==============================================================================
@@ -2353,6 +2506,7 @@ function CarryService.Start()
 		rebuilding[player] = nil
 		rebuildAgain[player] = nil
 		syncPending[player] = nil
+		Sealed.byPlayer[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do
 		watch(player)

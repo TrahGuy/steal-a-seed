@@ -21,6 +21,12 @@
 --
 -- Not here: what any of it looks like (Play, and the owner's eyes), the camera
 -- bump, and the sounds (Play -- and three of them have no asset yet).
+--
+-- THE ROLL IS SWITCHED OFF HERE (2026-09-29), which is how it ships: this spec
+-- is the hatch as it has been since 2026-09-17, and it says that a build with
+-- GameConfig.Plant.Hatch.Roll off is that hatch to the millisecond. The roll
+-- itself -- five and a half seconds between the burst and the plant -- is
+-- HatchRollSpec's, and what it must never cost is HatchDeliverySpec's.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -230,8 +236,8 @@ local PlayerDataService = {
 
 local giveWorks = true
 local CarryService = {
-	GiveHatched = function(playerArg, species, tier, equipAfter)
-		record("GiveHatched", playerArg, species, tier, equipAfter)
+	GiveHatched = function(playerArg, species, tier, equipAfter, revealAt, onRecord)
+		record("GiveHatched", playerArg, species, tier, equipAfter, revealAt, onRecord)
 		return giveWorks
 	end,
 	SyncHeldNow = function() end,
@@ -292,6 +298,16 @@ local function loadWith(module, siblings, overrides)
 	return chunk()
 end
 
+-- GameConfig with the roll switched one way or the other, and no Studio preview:
+-- a spec runs in Studio, where the preview would turn the roll on by itself.
+local function rollConfig(on)
+	local roll = setmetatable({ Enabled = on, StudioPreview = false },
+		{ __index = GameConfig.Plant.Hatch.Roll })
+	local hatchConfig = setmetatable({ Roll = roll }, { __index = GameConfig.Plant.Hatch })
+	local plant = setmetatable({ Hatch = hatchConfig }, { __index = GameConfig.Plant })
+	return setmetatable({ Plant = plant }, { __index = liveConfig })
+end
+
 local PlantService = nil
 local reveals = {}
 
@@ -332,13 +348,19 @@ local function body()
 			X = 8, Z = -4, Stage = 1, Facing = 0 },
 	}
 
+	check(GameConfig.Plant.Hatch.Roll.Enabled == false,
+		"as shipped, the roll is switched OFF on a published server")
 	local loadOk, loadErr = pcall(function()
+		local rollOff = loadWith(Shared.HatchRoll, {
+			GameConfig = rollConfig(false),
+			SeedData = SeedData,
+		})
 		PlantService = loadWith(Server.PlantService, {
 			PlotService = PlotService,
 			PlayerDataService = PlayerDataService,
 			CarryService = CarryService,
 			PlantWander = PlantWander,
-		}, { GameConfig = liveConfig })
+		}, { GameConfig = liveConfig, HatchRoll = rollOff })
 		PlantService.Init()
 		PlantService.Start()
 	end)
@@ -391,6 +413,12 @@ local function body()
 				and math.abs(waitFor - (GameConfig.Plant.BurstSeconds + HATCH.Reveal.Seconds
 					+ HATCH.Paid.PulseSeconds)) < 0.001,
 			"which for a paid hatch is the pulse, the burst and the rise", waitFor)
+		check(give ~= nil and give.args[5] == nil,
+			"and with the roll off the Tool is given no time to stay a secret until",
+			give and tostring(give.args[5]))
+		check(give ~= nil and give.args[6] == true,
+			"and the same call is asked to put the plant on the player's record, before the garden is saved",
+			give and tostring(give.args[6]))
 		check(count("Reveal") == 1, "exactly one reveal was announced", count("Reveal"))
 	end
 
@@ -418,6 +446,11 @@ local function body()
 			"stamped with server time, so every client starts together", payload and payload.at)
 		check(payload ~= nil and type(payload.token) == "number",
 			"and carries a token of its own, so two at once cannot be confused")
+		check(payload ~= nil and payload.rollAt == payload.at and payload.revealAt == payload.at
+				and payload.compact == false,
+			"with the roll off, the plant may be shown at the moment of the hatch: no wait is sent",
+			payload and string.format("%s / %s / %s", tostring(payload.at), tostring(payload.rollAt),
+				tostring(payload.revealAt)))
 
 		-- The pod's BASE, not its middle: a creature is built from its base, and a
 		-- pivot would float every revealed plant by half an egg. Pod 2 is still in

@@ -18,6 +18,15 @@
 --               real creature coming up out of the glow at its real size, a label
 --               saying what it is and what it pays, and the rarity fanfare.
 --
+--   THE ROLL    (2026-09-29) the message says when the plant may be shown
+--               (`revealAt`). Until then the soil holds a question mark and
+--               nothing here names the plant: no creature, no label, and no
+--               fanfare, which is chosen by rarity and would say it out loud.
+--               The burst is at the hatch, as it always was; everything that
+--               names the plant waits. With the roll off the wait is nought.
+--               The owner's card is HatchRollUI's; this is the world's side,
+--               the same for everybody who can see the pod.
+--
 --==============================================================================
 -- IT DECIDES NOTHING
 --
@@ -64,6 +73,8 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+-- Who sounds a rolled hatch for its owner, the card or this (HatchRoll.claim).
+local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 
 local PLANT = GameConfig.Plant
 local HATCH = PLANT.Hatch
@@ -72,6 +83,7 @@ local BURST = PLANT.BurstSeconds
 local REVEAL = HATCH.Reveal
 local LABEL = HATCH.Label
 local PAID = HATCH.Paid
+local ROLL = HATCH.Roll
 local SOUNDS = HATCH.Sounds
 local REVEAL_FOR: { [string]: string } = (GameConfig.Sfx.RevealFor :: any)
 -- The accent a few rarities add, and the hatches that have already had theirs,
@@ -467,15 +479,29 @@ local function playReveal(payload: any)
 	local sent = tonumber(payload.at) or Workspace:GetServerTimeNow()
 	local behind = math.max(Workspace:GetServerTimeNow() - sent, 0)
 	local paidLead = if payload.paid == true then PAID.PulseSeconds else 0
-	if behind > BURST + paidLead + REVEAL.Seconds + LABEL.Seconds then
+	--==========================================================================
+	-- HOW LONG THE PLANT STAYS A SECRET (2026-09-29): from the hatch to
+	-- `revealAt`, the server's own two times. Read as a claim -- not a time, not
+	-- after the hatch, or further off than any roll could be, and there is no
+	-- wait. Nought is the hatch as it was before there was a roll.
+	--==========================================================================
+	local revealAt = tonumber(payload.revealAt)
+	local rolled = if revealAt and revealAt == revealAt then revealAt - sent else 0
+	if rolled <= 0 or rolled > ROLL.MaxHideSeconds then
+		rolled = 0
+	end
+	if behind > rolled + BURST + paidLead + REVEAL.Seconds + LABEL.Seconds then
 		finish(job)
 		return
 	end
+	-- The burst is drawn by a client that was there for it. One that hears of
+	-- the hatch partway through its roll starts at the question mark.
+	local fresh = rolled == 0 or behind <= BURST + paidLead + 0.6
 
 	--==========================================================================
 	-- THE PAID PULSE: the only thing a purchase changes
 	--==========================================================================
-	if payload.paid == true then
+	if payload.paid == true and fresh then
 		ring(folder, cf.Position, diameter * 1.4, PAID.Color, PAID.PulseSeconds, 0)
 		if SOUNDS.TimeSkip ~= "" and SoundKit.has(SOUNDS.TimeSkip) then
 			SoundKit.play(SOUNDS.TimeSkip)
@@ -488,7 +514,7 @@ local function playReveal(payload: any)
 	-- apart while this draws.
 	--==========================================================================
 	local ringSeconds = BURST + 0.15
-	for i = 1, intensity.rings do
+	for i = 1, if fresh then intensity.rings else 0 do
 		ring(folder, cf.Position, diameter * intensity.ringScale * (1 + (i - 1) * 0.5),
 			color, ringSeconds, paidLead + (i - 1) * 0.09)
 	end
@@ -506,7 +532,7 @@ local function playReveal(payload: any)
 
 	local flash = Instance.new("PointLight")
 	flash.Color = color
-	flash.Brightness = HATCH.Burst.FlashBrightness * intensity.flash
+	flash.Brightness = if fresh then HATCH.Burst.FlashBrightness * intensity.flash else 0
 	flash.Range = HATCH.Burst.FlashRange
 	flash.Shadows = false
 	flash.Parent = flashPart
@@ -535,9 +561,11 @@ local function playReveal(payload: any)
 	-- CAPPED BY THE TIER TABLE, which tops out at 74, and halved under Reduced
 	-- Effects. One Emit, not a rate: a burst is one event, and an emitter left
 	-- running is a leak with a nice texture.
-	sparks:Emit(math.floor(intensity.particles * (if quiet then 0.5 else 1)))
+	if fresh then
+		sparks:Emit(math.floor(intensity.particles * (if quiet then 0.5 else 1)))
+	end
 
-	if intensity.lightning then
+	if intensity.lightning and fresh then
 		task.delay(paidLead, function()
 			if not job.done then
 				lightning(folder, cf.Position, diameter * 1.8, color)
@@ -549,23 +577,101 @@ local function playReveal(payload: any)
 	-- THE FANFARE: rarity, not size. One per hatch, on the authoritative event
 	-- rather than on anybody having held a prompt -- which is why a paid hatch
 	-- now sounds exactly like a free one.
+	--
+	-- IT NAMES THE RARITY, so with a roll it waits for the plant (below): at the
+	-- burst it would tell the owner, five seconds early, how rare the plant on
+	-- their card is. The crack is the shell's and says nothing.
 	--==========================================================================
-	SoundKit.emit(REVEAL_FOR[species.Rarity] or "RevealCommon", flashPart)
-	if SOUNDS.Crack ~= "" and SoundKit.has(SOUNDS.Crack) then
+	local function fanfare()
+		SoundKit.emit(REVEAL_FOR[species.Rarity] or "RevealCommon", flashPart)
+	end
+	if rolled == 0 then
+		fanfare()
+	end
+	if fresh and SOUNDS.Crack ~= "" and SoundKit.has(SOUNDS.Crack) then
 		SoundKit.emit(SOUNDS.Crack, flashPart)
 	end
 
-	if isOwner then
+	if isOwner and fresh then
 		bump(intensity.bump)
+	end
+
+	--==========================================================================
+	-- THE QUESTION MARK, WHILE THE ROLL RUNS
+	--
+	-- Where the pod stood, for everybody who can see it: the tier's colour on
+	-- the soil and a question mark over it. It says a plant is coming and not
+	-- which -- the tier was already the shell's colour. Two instances and one
+	-- tween that repeats; none at all under Reduced Effects, where it is still.
+	--==========================================================================
+	local mark: Instance? = nil
+	if rolled > 0 then
+		task.delay(math.max(paidLead + BURST - behind, 0), function()
+			if job.done or not folder.Parent then
+				return
+			end
+			local holder = Instance.new("Folder")
+			holder.Name = "HatchQuestion"
+			mark = holder
+
+			local glow = Instance.new("Part")
+			glow.Name = "Glow"
+			glow.Shape = Enum.PartType.Cylinder
+			glow.Size = Vector3.new(0.2, diameter * 1.1, diameter * 1.1)
+			glow.CFrame = CFrame.new(cf.Position + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.rad(90))
+			glow.Anchored = true
+			glow.CanCollide = false
+			glow.CanQuery = false
+			glow.CanTouch = false
+			glow.Material = Enum.Material.Neon
+			glow.Color = color
+			glow.Transparency = 0.55
+			glow.Parent = holder
+
+			local post = Instance.new("Part")
+			post.Name = "Post"
+			post.Size = Vector3.new(0.2, 0.2, 0.2)
+			post.CFrame = cf * CFrame.new(0, diameter * 0.75 + 1.2, 0)
+			post.Anchored = true
+			post.CanCollide = false
+			post.CanQuery = false
+			post.CanTouch = false
+			post.Transparency = 1
+			post.Parent = holder
+
+			local board = Instance.new("BillboardGui")
+			board.Name = "Question"
+			board.Adornee = post
+			board.AlwaysOnTop = true
+			board.Size = UDim2.fromOffset(84, 84)
+			board.MaxDistance = 170
+			board.Parent = post
+			local word = UIKit.outlined(board, "Mark", 72, color:Lerp(Color3.new(1, 1, 1), 0.7), 3)
+			word.Size = UDim2.fromScale(1, 1)
+			word.Text = "?"
+
+			holder.Parent = folder
+			if not quiet then
+				TweenService:Create(glow,
+					TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+					{ Transparency = 0.8 }):Play()
+			end
+		end)
 	end
 
 	--==========================================================================
 	-- AND THE CREATURE
 	--==========================================================================
-	local startAt = paidLead + BURST * 0.55 - behind
+	local startAt = rolled + paidLead + BURST * 0.55 - behind
 	task.delay(math.max(startAt, 0), function()
 		if job.done or not folder.Parent then
 			return
+		end
+		-- The roll is over: the question mark goes as the plant comes.
+		local asked = mark
+		if asked then
+			mark = nil
+			asked:Destroy()
 		end
 		local okBuild, model = pcall(function()
 			return CreatureModel.Build(species, tier, CreatureModel.STAGE_GROWN, cf, folder)
@@ -589,8 +695,18 @@ local function playReveal(payload: any)
 		-- GameConfig.Sfx.RevealAccentFor names, and once per hatch however
 		-- often its reveal arrives.
 		--======================================================================
+		--
+		-- WITH A ROLL (2026-09-29) the fanfare is here as well. For the plant's
+		-- OWNER their card plays both at the moment it shows the plant
+		-- (HatchRollUI), a moment before this, and has claimed the hatch by
+		-- then (HatchRoll.claim). With the card put away nothing has, and they
+		-- are played here: one or the other, never both and never neither.
 		local accent = REVEAL_ACCENT[species.Rarity]
-		if accent and (token == 0 or not accented[token]) and SoundKit.has(accent) then
+		local cardPlays = rolled > 0 and not HatchRoll.claim(token)
+		if rolled > 0 and not cardPlays then
+			fanfare()
+		end
+		if accent and (token == 0 or not accented[token]) and SoundKit.has(accent) and not cardPlays then
 			if token ~= 0 then
 				accented[token] = true
 			end
@@ -671,7 +787,7 @@ local function playReveal(payload: any)
 
 	-- THE BACKSTOP. Whatever happens above -- a build that throws, a streamed-out
 	-- part, a client that alt-tabs through the whole thing -- this folder is gone.
-	task.delay(paidLead + BURST + REVEAL.Seconds + LABEL.Seconds + LABEL.FadeSeconds + 1,
+	task.delay(rolled + paidLead + BURST + REVEAL.Seconds + LABEL.Seconds + LABEL.FadeSeconds + 1,
 		function()
 			finish(job)
 		end)

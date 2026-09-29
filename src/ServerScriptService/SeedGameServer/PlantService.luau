@@ -87,6 +87,8 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
+-- When a hatch's roll runs and when its plant may be shown: arithmetic only.
+local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
@@ -1213,6 +1215,9 @@ end
 local revealChannel: RemoteEvent? = nil
 local onRevealed: { (any) -> () } = {}
 local revealToken = 0
+-- When each player's reveal card is next free, in server time, by UserId: a
+-- hatch while it is busy has its roll after the one before it (HatchRoll).
+local rollBusy: { [number]: number } = {}
 
 function PlantService.OnRevealed(fn: (any) -> ()): () -> ()
 	table.insert(onRevealed, fn)
@@ -1253,17 +1258,20 @@ end
 -- THE ORDER, WHICH IS NOT NEGOTIABLE
 --
 --   1. the guards          -- yours, a pod, ready or paid for
---   2. the Tool            -- in their Backpack, and it is theirs from here
+--   2. the Tool            -- in their Backpack and on their record (Held), and
+--                             it is theirs from here
 --   3. out of the garden   -- the authoritative table, and the anchor with it
 --   4. saved               -- the profile knows before anything is drawn
 --   5. Almanac, tutorial   -- and MarkSeen says whether this was a discovery
 --   6. the payload         -- read off the pod while it still stands
---   7. the decoration      -- the shell bursts, the clients are told
+--   7. the decoration      -- the shell bursts, the clients are told, and the
+--                             owner's roll runs (HatchRoll, 2026-09-29)
 --
 -- NOT ONE YIELD ANYWHERE IN 1 TO 6. No wait, no animation, no remote round trip
 -- and no client acknowledgement: a player who disconnects, dies or crashes at
 -- any point during step 7 keeps the plant, because the plant was already theirs
--- before step 7 began.
+-- before step 7 began. Step 7 is five and a half seconds longer than it was;
+-- steps 1 to 6 are not a moment longer.
 --==============================================================================
 function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	local byPlot = growing[entry.plot]
@@ -1289,19 +1297,42 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 		return false
 	end
 	--==========================================================================
+	-- THE ROLL IS GIVEN ITS TIME BEFORE ANYTHING IS HANDED OVER (2026-09-29)
+	--
+	-- When this hatch's silhouettes run and when its plant may be shown: read
+	-- off the clock and off when this player's card is next free. It decides
+	-- nothing about WHAT hatched -- `entry.species` and `entry.tier` were fixed
+	-- when the pod was made, and nothing below reads them from anywhere else.
+	--==========================================================================
+	local now = Workspace:GetServerTimeNow()
+	local plan = HatchRoll.schedule(now, rollBusy[player.UserId])
+	--==========================================================================
 	-- THE EQUIP WAITS FOR THE REVEAL, THE TOOL DOES NOT
 	--
 	-- The Tool is created and owned NOW. Putting it in their hands is held back
-	-- until the creature has finished coming up, because equipping mid-burst
-	-- replaces the reveal with a first-person view of the same plant -- and
-	-- CarryService does the waiting, with its own guards, because a hand is its
-	-- department and not this one's.
+	-- until the roll is over and the creature has finished coming up, because
+	-- a plant in the hands is the plant named -- and CarryService does the
+	-- waiting, with its own guards, because a hand is its department and not
+	-- this one's. Until `plan.revealAt` the Tool says so itself (its RevealAt
+	-- attribute), which is what keeps the hotbar and the Bag from naming it.
+	--
+	-- THE ROLL IS TIME ADDED, and nothing else: with it switched off `rolled`
+	-- is nought, no attribute is written, and the hand is asked for after
+	-- exactly the burst and the rise, as it has been since 2026-09-17.
 	--==========================================================================
-	local equipAfter = BURST + HATCH.Reveal.Seconds
+	local rolled = math.max(plan.revealAt - now, 0)
+	local equipAfter = rolled + BURST + HATCH.Reveal.Seconds
 		+ (if early then HATCH.Paid.PulseSeconds else 0)
-	if not CarryService.GiveHatched(player, entry.species, entry.tier, equipAfter) then
+	-- HANDED OVER AND PUT ON THE RECORD IN ONE CALL (the last argument), BEFORE
+	-- THE POD LEAVES THE GARDEN. The Backpack's own watcher would write the row
+	-- a moment later, after this function has returned -- and not at all while
+	-- a body is being replaced. Asked for here, the profile never holds neither
+	-- the pod nor the plant (CarryService.RecordHatched).
+	if not CarryService.GiveHatched(player, entry.species, entry.tier, equipAfter,
+		if rolled > 0 then plan.revealAt else nil, true) then
 		return false
 	end
+	rollBusy[player.UserId] = plan.busyUntil
 	-- Said here rather than in CarryService, which also hands a Tool over for a
 	-- pickup and for a rejoin and cannot tell the three apart.
 	log(string.format("%s %s a %d tier %s.", player.Name,
@@ -1342,7 +1373,14 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 		discovery = discovered,
 		-- Server time, so every client starts the same animation at the same
 		-- moment without being told each frame.
-		at = Workspace:GetServerTimeNow(),
+		at = now,
+		-- THE ROLL'S OWN TIMES (HatchRoll.schedule), in the same clock: when the
+		-- owner's silhouettes start turning, and when the plant may be shown --
+		-- to its owner on the card, and to everybody where the pod stood.
+		-- `compact` is a hatch that does not wait for the card.
+		rollAt = plan.rollAt,
+		revealAt = plan.revealAt,
+		compact = plan.compact,
 	})
 	if model and model.Parent then
 		burst(model, entry.tier)
@@ -2238,6 +2276,7 @@ function PlantService.Init()
 	table.clear(restoredFor)
 	table.clear(wanted)
 	table.clear(lastOffer)
+	table.clear(rollBusy)
 	warnedNoProduct = false
 end
 
@@ -2264,6 +2303,7 @@ function PlantService.Start()
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(leaving)
 		wanted[leaving.UserId] = nil
 		lastOffer[leaving.UserId] = nil
+		rollBusy[leaving.UserId] = nil
 	end))
 
 	--==========================================================================
