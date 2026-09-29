@@ -124,7 +124,9 @@ src/
                                 there; the camera's ONE turn after a placement, as a small state
                                 machine -- numbers only (ObbyCamera applies it)
     Shared/WheelData.luau       the obby reward wheel: twelve prizes, weights, pools, the daily
-                                allowance, the (disabled) spin pack, every outcome's exact odds;
+                                allowance, every outcome's exact odds; the two spin products
+                                (+1, +10) and their ONE switch, WheelData.Paid.Enabled -- OFF
+                                until the owner says so (KB/HANDOFF.md, the paid-spins entry);
                                 display-only: rarity words, short names, the drawn wheel's
                                 readable sectors, each pod's species odds -- numbers only
                                 (switch: WheelData.Enabled)
@@ -168,8 +170,10 @@ src/
     ObbyCourse.luau             builds the course's walkable parts from ObbyData (NOT a *Service)
     ObbyDecor.luau              the course's art, from MapDecor.Kit/Props (NOT a *Service)
     WheelService.luau           the reward wheel: spins earned (5 per 24h window, from the obby),
-                                spins bought (disabled product), every spin rolled, recorded,
-                                SAVED, then paid through the existing faucets; owed prizes
+                                every spin rolled, recorded, SAVED, then paid through the
+                                existing faucets; owed prizes. Spins bought (switched off):
+                                it alone opens the purchase prompt, the prompt grants nothing
+                                (StoreService's receipt does), and PolicyService fails closed
     WheelModel.luau             the wheel standing behind Marigold's stall (NOT a *Service)
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
@@ -219,7 +223,9 @@ src/StarterPlayer/StarterPlayerScripts/
                                 straight back -- ObbyView's arithmetic, nothing held
     WheelUI.client.luau         the reward wheel's panel (scrim, wheel, SPIN hub, Reward info with
                                 species cards, owed prizes) and this player's copy of the world
-                                wheel's face
+                                wheel's face; GET SPINS and its card, shown only while the
+                                server says this player may buy -- inside the panel, never on
+                                the HUD
     TrailFX.client.luau         the Bloomrunner Trail behind whoever wears it (cosmetic only;
                                 not drawn on the obby course, like SpeedFX's run streak)
 ```

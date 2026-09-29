@@ -1,5 +1,246 @@
 # Steal a Seed — Session Handoff
 
+## Paid spins: two products wired to the wheel, switched OFF — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; NOTHING WAS BOUGHT; NO REAL SAVE OPENED; NO REQUEST SENT TO MAKE)
+
+**In short.**
+- The owner's two developer products are wired end to end. **+1 Spin** (`3715369823`) grants
+  exactly 1 bought spin; **+10 Spins** (`3715370108`) grants exactly 10.
+- **They ship switched off**: `WheelData.Paid.Enabled = false`. As shipped there is nothing to
+  buy, no purchase prompt opens, no receipt grants a spin and no bought spin can be spent.
+- **Why off.** Two of Roblox's requirements for a paid random item are the owner's to meet, and
+  the disclosures and the first test purchase wait for the owner's word (the table below).
+  Switching on is one line, after them.
+- Odds, payouts, the five-a-day allowance and its reset were not changed. There is still one
+  `ProcessReceipt` handler. The free, obby-earned path reads none of this.
+- The mobile pass is untouched. Nothing was added to the HUD: the button and its cards live
+  inside the wheel's own panel. `HudLayoutSpec` 1,211 of 1,211.
+- **The working tree is safe to publish as it stands**, because the switch is off in source.
+  Rojo keeps Studio equal to disk, so whatever is on disk is in the owner's next publish.
+- Code and specs: `ec2fbe3`. This entry and the map lines: the commit after it.
+
+### What the owner has to do before it is switched on
+
+| # | What | Why | Status |
+| --- | --- | --- | --- |
+| 1 | Declare paid random items in the experience's Content Maturity questionnaire (Creator Hub) | Roblox's guideline: the questionnaire "accurately reflects the presence of Paid Random Items" | **Needed. Yes, the questionnaire has to be updated.** |
+| 2 | Check that neither product is offered OUTSIDE the game (the Store tab of the experience's page) | Roblox's developer-products guide: "You should not sell the following outside your game: Paid random items" | **Not verified.** Studio and the public API do not show this setting |
+| 3 | Approve the disclosures as drawn | Captures 03 to 08 in `output/paid-spins/` | Waiting for the owner |
+| 4 | Say yes to one Studio TEST purchase on the throwaway store | Roblox's real prompt and a real receipt are the only parts never exercised; a Studio purchase is a test purchase and charges nothing | Waiting for the owner |
+
+- **Both products are ON SALE in the dashboard today** (list prices 9 and 85), although no build
+  sells them. A receipt for either is refused and never acknowledged, by v995 (it does not know
+  them) and by this build (the switch is off). Roblox keeps an unacknowledged purchase in escrow
+  and retries it; that it is refunded after about three days is community-documented, not
+  something read from Roblox's own text or seen here. Taking them off sale until the switch is on
+  removes the question; the panel prints OFF SALE and disables a choice Roblox says is off sale.
+
+### The two products, as Roblox records them
+
+| | +1 Spin | +10 Spins |
+| --- | --- | --- |
+| Product id | 3715369823 | 3715370108 |
+| Universe | 10744596516 (Podnappers) | 10744596516 (Podnappers) |
+| Grants | 1 bought spin | 10 bought spins |
+| List price | 9 Robux | 85 Robux |
+| Quoted to the owner's account in Studio | 4 | 35 |
+| On sale | yes | yes |
+| Icon asset | 84064901294156 | 139551271701020 |
+| Created (UTC) | 2026-09-29 03:30:41 | 2026-09-29 03:34:18 |
+
+- Read twice: `MarketplaceService:GetProductInfo` and `GetDeveloperProductsAsync` from Studio, and
+  Roblox's public list of the experience's developer products (17 products, no sign-in).
+- **The price differs by player.** 4 and 35 are what Roblox quoted this account; the list says 9
+  and 85. The panel prints what `RobuxPrice` hears from Roblox for the player looking at it, and
+  no number at all if Roblox does not answer. It never prints `WheelData`'s list price.
+- The icons in the panel are the products' own, by asset id. The two PNGs in `output/imagegen/`
+  were not uploaded, moved or changed by me.
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `Shared/WheelData.luau` | `WheelData.Product` is gone. `WheelData.Paid = { Enabled = false, PromptCooldown = 2 }`, `WheelData.Products` (two rows), `ProductByKey`, `ProductById`, `paidLive()`, `Actions.Buy`. Asserts at load: a key and an id used once each, a whole number of spins |
+| `WheelService.luau` | `buy(player, key)`: the only place a purchase prompt opens. `GrantBought` asks every question again. The policy check fails closed, is retried at 5, 20 and 60 s, and only an answer replaces an answer. Nothing listens to `PromptProductPurchaseFinished` |
+| `StoreService.luau` | Indexes both products only while `paidLive()`. Off, a receipt naming one is refused and not acknowledged. One delivery of a receipt is decided at a time. Its boot snapshot names both and says OFF |
+| `WheelUI.client.luau` | GET SPINS beside the wheel, its card with the two choices, REWARDS & ODDS on the card and on the question before a bought spin, the word ODDS under the round "?". All of it shown only while the server's `WheelPaidAllowed` is true |
+| `tools/tests/WheelSpec.luau` | 153 checks |
+| `tools/tests/StoreSpec.luau` | 28 checks; section 5 rewritten for two products |
+| `tools/tests/SpinPurchaseSpec.luau` | **New**, 39 checks: the real StoreService and the real WheelService together, over a fake Marketplace, a fake PolicyService and a profile store with a disk that can fail |
+| `AGENTS.md` | Three map lines |
+
+### How a purchase travels
+
+1. The player opens the wheel. GET SPINS is there only if the server published
+   `WheelPaidAllowed = true` for them.
+2. A choice sends the product's **key** (`spin1`, `spin10`) and nothing else: no id, no amount, no
+   price.
+3. `WheelService.buy` refuses unless the switch is on, the key is real, PolicyService cleared
+   this player, their profile is loaded and can be saved, and the balance has room for the whole
+   pack. It allows one prompt per 2 s per player. Then it opens Roblox's prompt.
+4. **The prompt grants nothing**, whether it is bought, closed or fails.
+5. Roblox calls `ProcessReceipt`. StoreService checks the ledger, then the profile, then grants
+   through `WheelService.GrantBought`, writes the ledger entry, saves, and acknowledges **only if
+   the save worked**.
+6. The balance the server publishes goes up; the panel says `+1 SPIN` or `+10 SPINS`.
+
+`GrantBought` asks the same questions as `buy`, because a receipt can arrive with no prompt
+behind it: bought outside the game, or delivered again on a join.
+
+### Roblox's rules for a paid random item, against the build
+
+Sources: Creator Docs, "Paid random items policy guidelines"; the staff post "Clarifying
+Requirements for Paid Random Items" (2026-05-26); Creator Docs, "Developer Products". Read
+2026-09-29.
+
+| Rule | What the build does | Evidence |
+| --- | --- | --- |
+| Every possible item's odds, as numbers, before the purchase | REWARDS & ODDS on the card opens Reward info: 12 prizes, 22% down to 0.4%, adding to 100% | WheelSpec; seen on the phone emulator |
+| Each outcome inside a category has its own odds | A pod's row says "5 species, 2.6% each" and opens a card per species with its odds | WheelSpec; seen |
+| The same before a bought spin is spent | The question before a bought spin carries REWARDS & ODDS; Back returns to the question | Seen |
+| A bare "(i)" is not enough; the way to the odds needs a word | Both buttons say REWARDS & ODDS; the round "?" gets ODDS under it whenever a purchase can be made | Seen |
+| Every outcome gives something | All 12 pay. A player who owns the trail is shown "owned: pays $75,000 Jackpot instead" | Seen |
+| Nested outcomes are disclosed | A wheel pod's species and size are fixed at the spin; the hatch rolls nothing more | The wheel's entry below |
+| Honour `ArePaidRandomItemsRestricted`; hide the item from a player who may not | No GET SPINS, no card, no question; the server refuses the prompt, the grant and the spend | SpinPurchaseSpec; removing any one of the three gates fails it |
+| Fail closed | An error, a table without the field, or no answer yet all read "may not" | SpinPurchaseSpec, WheelSpec |
+| The questionnaire declares it | **The owner's, not done** | - |
+| Not sold outside the game | **The owner's to check, not verified** | - |
+
+### Tests
+
+**Specs (Studio Edit, fresh source): 58 of 58 pass.**
+
+| Spec | Checks |
+| --- | --- |
+| WheelSpec | 153 |
+| StoreSpec | 28 |
+| SpinPurchaseSpec (new) | 39 |
+| HudLayoutSpec | 1,211 |
+| RobuxPriceSpec | 17 |
+| ControllerSpec | 69 |
+| TrafficLogSpec, MetricsSpec | 101, 57 |
+
+What the owner asked to be tested, and where:
+
+| Asked | Where | Result |
+| --- | --- | --- |
+| Duplicate receipts | SpinPurchaseSpec, StoreSpec | Acknowledged, nothing more granted |
+| Interrupted grant, server lost BEFORE the save | SpinPurchaseSpec | Not on disk, delivered again on the rejoin, granted once |
+| Interrupted grant, server lost AFTER the save | SpinPurchaseSpec | The ledger came back with the profile: acknowledged, nothing more granted |
+| Save failures | SpinPurchaseSpec | Never acknowledged while the save fails; granted once |
+| Rejoining | SpinPurchaseSpec; Play | Buyer gone, then back with the save still loading: not processed until loaded. In Play, 9 bought spins were still there after a stop and a start on the test store |
+| Balance limits | SpinPurchaseSpec, WheelSpec; Play | No room for ten: no prompt for ten, no part of ten granted, one still fits. In Play at 99,995 of 100,000, +10 was refused and +1 was not |
+| Bought outside the game | SpinPurchaseSpec | Arrives as a receipt on the join: granted to an eligible player, refused for a restricted one |
+| A prompt never grants | WheelSpec, SpinPurchaseSpec; Play | Two prompts recorded in Play: balance and ledger unchanged |
+| The daily limit | WheelSpec, SpinPurchaseSpec; Play | Five earned is still the limit with nineteen bought in hand; a bought spin left the day's count at 0 |
+
+**Mutation: 22 deliberate defects, every one caught.** Each is one changed line of the real
+source, run against the spec.
+
+- 14 in the receipt and policy code: no policy gate on the grant, on the prompt, or on the
+  spend; the ledger never written; the ledger never read; the wrong quantity; acknowledged
+  without a save, the first time and on a retry; granted into a profile that cannot be saved;
+  part of a pack past the cap; indexed while off; two deliveries decided at once; the guard
+  against that never released; a late failed policy check taking the answer back.
+- 8 in the panel: the corner button on the line, grown on a phone, a card wider than the screen,
+  always right of the wheel, the round buttons selectable behind a card, the question staying
+  for a player who may not, a button under a thumb tall, cards not grown with the button.
+- "Indexed while off" is caught by StoreSpec. Against SpinPurchaseSpec it changes nothing a
+  player could see, because WheelService refuses the grant as well.
+
+**Play, Studio's phone emulation (705 x 338, touch), throwaway store `SeedTest_20260929`.**
+Paid spins were switched on **in that session's memory only**; the file said `false` throughout.
+Purchase prompts were recorded by a stand-in and never opened. Spins were granted by calling the
+grant, as a receipt would.
+
+| Seen | Result |
+| --- | --- |
+| As shipped | No GET SPINS, no ODDS word, no card, and Roblox is not asked for a price. With 9 bought spins on the profile the hub read "0 SPINS" |
+| Switched on | GET SPINS right of the wheel, 132 x 46; ODDS under "?" |
+| The card | Both icons loaded; prices 4 and 35 from Roblox; the note in two lines |
+| A choice pressed | The server recorded a prompt for 3715369823, then 3715370108. Balance and ledger unchanged |
+| REWARDS & ODDS | Reward info; Back returned to the card. Same from the question |
+| Ten granted | "+10 SPINS" notice for 2.8 s; the hub read x11 |
+| Only bought spins left | SPIN asked first. USE PURCHASED spent one: $20,000, bought 10 to 9, the day's count still 0 |
+| Switched off with the card open | The card shut itself; everything to buy went |
+| A tampered client, switch off | Seven forged buys and a bought spin: all refused, no prompt, balance unchanged. What was sent in a key's place is not sent back |
+| A tampered client, switch on | A product id instead of a key, an unknown key, a table, nothing: refused. A second buy at once: `PROMPT_BUSY` |
+
+**Other screens, by arithmetic.** Studio's emulator was on the phone and cannot be switched from
+a session. The panel's own layout code was run for 28 screen sizes over a copy of the live panel,
+and WheelSpec now runs it for 26 on every run.
+
+- GET SPINS stands right of the wheel on every landscape phone, tablet, desktop and TV; under the
+  line on a phone held upright; in the free corner above the line in a 4:3 window under 800 x 600.
+- On a big screen the button and both cards are drawn bigger, by up to a quarter: 1.2 times at
+  1280 x 720, 1.25 from 1366 x 768 up. On a phone they are the phone's size.
+- One screen failed: a 480 x 360 window, smaller than any device, where the corner button touches
+  the wheel's rim by 1.5 px. Left as it is.
+- A desktop-sized canvas (1410 x 676) was also drawn for real at half scale inside the phone
+  viewport: captures 14 to 16. Text that small wraps differently, so those show placement, not
+  type.
+
+### An independent review, and what it changed
+
+A second agent read the uncommitted change against the owner's requirements, read-only. It
+found no way to grant twice, to grant without a saved ledger entry, or to buy, grant or spend
+with the switch off or for a player PolicyService has not cleared. Three things were fixed
+before the commit, each with a check that fails without the fix:
+
+| Found | By | Fix |
+| --- | --- | --- |
+| A grant can yield (it asks PolicyService about a player with no answer yet) BEFORE the ledger entry is written. A second delivery of the same receipt in that gap would have granted again | The author, while the review ran | StoreService decides one delivery of a receipt at a time; the second is told "not yet". A grant that throws releases the receipt |
+| Two policy checks can be in the air for one player (the join's and a receipt's). One that FAILED late overwrote the answer, shutting a player out of spins just paid for until a retry | The review | Only an answer replaces an answer. With no answer at all it stays closed |
+| An unknown key was sent back to the client in the refusal, whatever its length | The review | Only one of the two real keys is ever sent back; a key over 32 characters is not looked up |
+
+All three were dormant while the switch is off. They matter on the day it is turned on.
+
+### Not run, so not claimed
+
+- **Roblox's real purchase prompt and a real receipt.** Nothing was bought, in Studio or live.
+- **That the panel's price equals the prompt's.** It is Roblox's own number for the player, but
+  no prompt was opened beside it.
+- **A restricted player in Play.** Studio's PolicyService said "not restricted"; the Player
+  Emulator's region cannot be switched from a session. Specs only.
+- **A real phone, a desktop window, a controller in the hand, a second player.**
+- **The controller's D-pad.** The selection was read with controller mode forced: the first
+  choice on the card, USE PURCHASED on the question, nothing behind a card selectable. No press
+  was made; presses cannot be sent from a session.
+
+### Found, not changed
+
+- **On an admin's phone the ADMIN button covers the top half of the wheel's "?" and of Reward
+  info's Back.** It is drawn above every panel and stands at x 219 to 283; "?" and Back stand at
+  216. A tap on Back opened the admin console instead (capture 17; closed without pressing
+  anything in it). Only the two admin accounts have the button, and it predates this work
+  (`e7e755e`). The odds can still be reached from REWARDS & ODDS.
+- **A boost won from the wheel replaces a boost that is running**, bought spin or earned. That
+  is the Bonus Chest's existing rule. For a paid spin the owner may want it said in Reward info.
+- **A restricted player who already holds bought spins sees "0 SPINS"** with no explanation. The
+  spins stay on the save and come back if PolicyService later clears the player.
+
+### To switch it on (after the owner's four steps)
+
+1. `WheelData.Paid.Enabled = true`. One line.
+2. In the same commit, the as-shipped tripwires, which fail on purpose when the switch is on:
+   WheelSpec (its three "as shipped" checks), StoreSpec section 5 and SpinPurchaseSpec
+   section 1.
+3. On the throwaway store, with the owner's yes: one Studio test purchase of each product. One
+   receipt, one grant, saved, acknowledged; the panel's price beside the prompt's.
+4. With the Player Emulator set to a restricted region: no GET SPINS, and a bought spin cannot
+   be spent.
+5. Publish on the owner's word only.
+
+### State left
+
+- Studio in Edit. Test store off: its key removed, the marker gone. 131 scripts equal to disk. No
+  `ZZ` leftovers.
+- As of 14:22 local (06:22 UTC) on 2026-09-29 the latest publish in Studio's log is v995, and its
+  second line, 04:26:16 UTC, is seven minutes before the first edit of this work. **No
+  published build contained any of this at that time.** The owner's next publish will: the
+  code is on disk, with the switch off.
+- Captures: `output/paid-spins/`, 17 files, untracked. Numbers 10 and 12 were taken before the
+  card grew 12 px for its note.
+
 ## Traffic feed audit, and builds v993 to v995 — 2026-09-29 (CLAUDE)  (READ-ONLY: NO CODE CHANGED, NOTHING PUBLISHED BY AN AGENT, NO REQUEST SENT TO MAKE, NO REAL SAVE OPENED)
 
 **In short.**
@@ -1258,6 +1499,10 @@ Size is already a saved integer tier, rolled once and never re-rolled. The wheel
 never sent to the client, and revealed at the normal hatch.
 
 ### Paid spins: DISABLED and UNCONFIGURED
+
+**SUPERSEDED 2026-09-29.** The owner created two products and they are wired, still switched
+off: see "Paid spins: two products wired to the wheel, switched OFF" at the top. What follows
+is how it stood on 2026-09-27.
 
 - As shipped: `WheelData.Product = { Enabled = false, ProductId = 0, Quantity = 0 }`.
   - There is no BUY button and no purchase prompt anywhere.
