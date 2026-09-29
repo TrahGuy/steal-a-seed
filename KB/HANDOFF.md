@@ -16,6 +16,7 @@
 - **The working tree is safe to publish as it stands**, because the switch is off in source.
 - Captures for the owner: `output/hatch-reveal/` (eight files, untracked; start with
   `00-contact-sheet.png`).
+- Code and specs: `fc9de75`. This entry and the map lines: `6d9df9f`.
 
 ### How to see it, and how to switch it on
 
