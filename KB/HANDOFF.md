@@ -1,5 +1,132 @@
 # Steal a Seed — Session Handoff
 
+## Hatch reveal: a roll before the plant is shown, switched OFF for published servers — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY)
+
+**In short.**
+- When a pod hatches, its owner now gets a card: plant silhouettes turning over behind a
+  question mark for **5.5 seconds**, brisk at first and slowing, then the plant that hatched
+  with its name, rarity, size, income and NEW DISCOVERY.
+- **It ships switched off for players**: `GameConfig.Plant.Hatch.Roll.Enabled = false`. A
+  published server hatches exactly as v995 does. `StudioPreview = true` turns the roll on **in
+  Studio only**, which is the preview the owner asked for: press Play in Studio and hatch a pod.
+- **It is a picture of a decision already made.** The species and size were fixed when the pod
+  was made. The plant is in the Backpack, on the record and out of the garden before the first
+  silhouette is drawn. The card sends nothing to the server.
+- Species odds, hatch timers, pod ownership, rewards and the economy were not changed.
+- **The working tree is safe to publish as it stands**, because the switch is off in source.
+- Captures for the owner: `output/hatch-reveal/` (eight files, untracked; start with
+  `00-contact-sheet.png`).
+
+### How to see it, and how to switch it on
+
+| To do this | Do this |
+| --- | --- |
+| See it in Studio | Press Play and hatch a pod. A Tiny pod is ready 30 s after planting. Nothing else is needed: `StudioPreview` is on. |
+| See the game as players have it, in Studio | Set `StudioPreview = false` for that session. |
+| Switch it on for players, once approved | `GameConfig.Plant.Hatch.Roll.Enabled = true`, then publish. |
+| After switching it on | Two tripwires fail on purpose and are changed with it: "as shipped, the roll is OFF" in `HatchRollSpec` and in `HatchRevealSpec`. |
+
+### What the player sees
+
+| Moment | The owner of the pod | Everybody else nearby |
+| --- | --- | --- |
+| The hatch | The shell bursts as before. The card comes up: `HATCHING...`, `???`, the size the shell already showed. | The burst, as before. |
+| The roll, 5.5 s | Twelve silhouettes of the pod's own biome, held from 0.21 s to 0.84 s. A question mark stands where the pod was. The hotbar and the Bag show a POD called `???`; it cannot be taken in the hands. The Index keeps its silhouette and its count. | The question mark where the pod was. |
+| The reveal | The silhouette's tint lifts to the plant's colours over half a second. Name, rarity and size, income, NEW DISCOVERY. The rarity's fanfare, once. Sparks for Epic and better: 8, or 12 above Epic. | The creature rises with its label and the fanfare, as before. |
+| 2.6 s later | The card goes. The plant is put in the hands, as before. | |
+
+- **No flash.** The reveal is a tint lifting, measured frame by frame: brightness 30 to 255 over
+  0.5 s, never back down. Reduced Effects: no slide between silhouettes, no sparks, 0.2 s lift.
+- **One card at a time.** The server gives each hatch its own window. Three pods hatched 0.3 s
+  apart were three cards one after another. A hatch that would wait more than 16 s for the card
+  is told in a line instead, 5.5 s after it hatched.
+- **It never holds the player.** No scrim; movement, camera and every HUD control stay live.
+  X, or B on a controller, puts the card away. What was still to be shown is then told in a
+  line at its own time. A centre panel opening puts it away too.
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `Shared/GameConfig.luau` | `Plant.Hatch.Roll`: the switch, `StudioPreview`, and the roll's numbers. |
+| `Shared/HatchRoll.luau` (new) | The arithmetic: `schedule`, `frames`, `frameAt`, `hidden`, `sealed`, `claim`. Refuses to load with a roll under 5 s. |
+| `PlantService.luau` | `hatch()` asks `HatchRoll.schedule` for the roll's times, passes `revealAt` to the Tool and to the message, and asks for the plant's row in the same call. One roll at a time per player (`rollBusy`). |
+| `CarryService.luau` | The Tool carries `RevealAt`, set before it is parented and taken off by the server at that time. `RecordHatched`: the hatch writes its own row. `Sealed`: a plant rebuilt after a death comes back still hidden. |
+| `HatchRollUI.client.luau` (new) | The owner's card. |
+| `HatchFX.client.luau` | With a roll: the question mark, and the creature, label and fanfare wait for `revealAt`. |
+| `LoadoutUI.client.luau` | A plant mid-roll is `???`, a pod picture, a POD chip, sorted as a pod, not equippable. |
+| `IndexUI.client.luau` | A first discovery is added when its roll ends. |
+| `TutorialUI.client.luau` | The first-hatch congratulations come after the card. |
+| `tools/tests/HatchRollSpec.luau` (new) | 137 checks. |
+| `tools/tests/HatchDeliverySpec.luau` (new) | 57 checks, against the real `PlantService` and `CarryService`. |
+| `tools/tests/HatchRevealSpec.luau` | Now the hatch with the roll OFF: 71 checks. |
+
+### Two server changes that are not decoration
+
+Both were found while reading the save path for this task. Both make a hatch safer with the
+roll on or off.
+
+1. **A hatch now writes its own row on the record.** Before, the row was written by the
+   Backpack's watcher a moment after `hatch()` returned, and not at all while a body was being
+   replaced. A paid hatch landing in the middle of a respawn gave a Tool that went with the old
+   Backpack, with the pod already gone and nothing to rebuild the plant from. `HatchDeliverySpec`
+   shows the loss with the old call and the plant rebuilt, once, with the new one.
+2. **The garden is saved without the pod only after the plant is on the record.** The profile
+   never holds neither of them.
+
+### Tested
+
+| What | Result |
+| --- | --- |
+| Whole suite, Studio Edit | 60 of 60 specs pass on the second full run. On the first, `NoticeSpec` failed 3 of 101 once; it passed alone twice and in its batch twice. Its files are untouched; the same flake is on record from the mobile pass. |
+| `HatchRollSpec` | 137 of 137 |
+| `HatchDeliverySpec` | 57 of 57 |
+| `HatchRevealSpec` | 71 of 71 |
+| Deliberate defects | 41 of 41 caught: 13 in delivery, 25 in the roll and the masks, 3 with the roll off. |
+| Card placement | 35 screens by arithmetic: phones with and without a notch, tablets, windows down to 640 x 480, a television. On the screen, over the hotbar, clear of the HUD columns, 0.80 to 1.25 of its size. |
+| Independent review, read-only | No loss, duplication, early naming or roll-off difference found. Two small per-session lists of hatch tokens never shrank; both now forget hatches more than 128 back. |
+| Rojo build | Builds. `git diff --check` clean. |
+
+**Studio Play, phone emulator 799 x 359, store `SeedTest_20260929`, five sessions, 31 hatches:**
+
+| Case | Seen |
+| --- | --- |
+| Free door (E held on a ready pod) | Roll 5.50 s, reveal, plant in the hands about 6.7 s after the hatch, card gone 2.6 s after the reveal. |
+| Every rarity | Common, Uncommon, Rare, Epic, Legendary, Mythic: all 25 species hatched at least once. |
+| Every size | Tiny to Colossal, all seven. |
+| Three hatched 0.3 s apart | Three cards in turn, `+2 MORE` then `+1 MORE`; each plant hidden until its own reveal. |
+| Four hatched 0.3 s apart | Three cards; the fourth told in a line 5.5 s after it hatched. |
+| X pressed mid-roll | Card gone at once; both results told in lines at their own times; B unbound. |
+| Bag opened mid-roll | Card gone; result told in a line. With the Bag already open, the new plant is a pod called `???` with no income until its time. |
+| Death mid-roll, a second roll queued | 11 plants and 11 rows after the respawn. The queued plant came back still hidden and was shown at its own time. |
+| Play stopped 2 s into a roll, then started | The plant once, shown; the pod gone from the garden; "restored 16 held plant(s)". |
+| The card broken on purpose mid-roll | Warned once, card gone, both results told in lines, plants in the hotbar on time. |
+| Reduced Effects | No slide, 0.2 s lift, no sparks. |
+| Forced controller mode | Nothing on the card selectable; B bound at priority 2600 only while the card is up. |
+| First hatch of the beginner guide | CONGRATULATIONS came up as the card went, not over it. |
+| Index badge | Dropped by one after each reveal, never before. |
+
+### Not run
+
+- **A controller's B press and a gamepad's sticks.** Input injection is dropped on this PC; the
+  binding was read, not pressed.
+- **A real phone, a desktop window and a television.** Placement is arithmetic on 35 screens.
+- **A second player watching somebody else's hatch.** Play Solo has one client. The code path
+  for them is the old one plus a wait.
+- **The world's question mark on a capture.** The capture tool skips BillboardGuis; its presence
+  was read from the instance tree.
+- **Sound levels by ear.** The turn's tick is `CardHover` (volume 0.24), eleven times in 5.5 s.
+- **A published server.** Nothing was published.
+
+### For the owner to decide
+
+| # | What | Detail |
+| --- | --- | --- |
+| 1 | Approve the look and the length | 5.5 s roll, 2.6 s shown. Both are one number each in `Plant.Hatch.Roll`. |
+| 2 | The saved bag's limit of 24 | **Older than this task, and not changed.** With 24 plants already saved, a hatch still hands over the plant but its row is not written (`Save.MaxHeld = 24` "limits what is SAVED and refuses nothing"). That plant is lost at the next death or rejoin. Measured in `HatchDeliverySpec`. Options: refuse the hatch and leave the pod in the ground, or raise the limit. |
+| 3 | A sealed plant can be sold by SELL ALL | Only if the player reaches the sell point inside the 5.5 s. It is a sale, not a loss. Not changed. |
+| 4 | The wheel's odds sheet | Its species cards use the Almanac too and are not held back. Reaching them during one's own hatch needs the wheel's panel open at the hub while a pod hatches at the plot. Not changed. |
+
 ## Paid spins: two products wired to the wheel, switched OFF — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; NOTHING WAS BOUGHT; NO REAL SAVE OPENED; NO REQUEST SENT TO MAKE)
 
 **In short.**
