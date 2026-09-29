@@ -105,7 +105,8 @@ src/
     Shared/BiomeData.luau       the five biomes and where they sit on the road
     Shared/UIKit.luau           the modal, the slab, the lattice and one camera framer
     Shared/HudLayout.luau       where every HUD group sits -- desktop, compact, or a touch
-                                screen's two sidebars -- numbers only
+                                screen's two sidebars and its top row (the clock's chip,
+                                TELEPORT, OBBY) with the column under it -- numbers only
     Shared/ReachPoint.luau      pod timer, stacked prompt and PICK UP placement -- numbers only
     Shared/WeaponData.luau      Marigold's shelf: six bats, one trap, prices and combat
     Shared/WeaponModel.luau     their geometry -- Tool, shop viewport and world trap
@@ -115,9 +116,13 @@ src/
                                 ActionToastUI is its one renderer (post via Notice.post)
     Shared/StatusText.luau      the text-led line every lasting indicator is drawn with (chase
                                 warning, boost row, obby run line) and the notices' icons;
-                                placed by HudLayout.statusRows -- no plates, no pills
+                                placed by HudLayout (statusRows, statusLine, boostRows) -- no
+                                plates, no pills; a phone's own sizes are PhoneScale
     Shared/ObbyData.luau        the Floating Garden obby: every position, timing, reward and
                                 attribute name -- numbers only (switch: GameConfig.Obby)
+    Shared/ObbyView.luau        where a runner is put down and which way the course runs from
+                                there; the camera's ONE turn after a placement, as a small state
+                                machine -- numbers only (ObbyCamera applies it)
     Shared/WheelData.luau       the obby reward wheel: twelve prizes, weights, pools, the daily
                                 allowance, the (disabled) spin pack, every outcome's exact odds;
                                 display-only: rarity words, short names, the drawn wheel's
@@ -184,7 +189,7 @@ src/StarterPlayer/StarterPlayerScripts/
     IndexUI.client.luau         LEFT rail: the almanac, ??? until you have grown it
     ShopUI.client.luau          LEFT rail: the shop panel (UI only, nothing transacts yet)
     GardenUI.client.luau        RIGHT rail: a row per plant, live clocks
-    SpeedFX.client.luau         +N pops on Speed gain, and the run streak
+    SpeedFX.client.luau         +N pops on Speed gain, and the run streak (off on the obby course)
     BiomeGuideUI.client.luau    advisory Speed banner on biome entry
     CarryPose.client.luau       both arms under the pod while carrying
     MarigoldShopUI.client.luau  Marigold's Garden Goods -- opened by her prompt
@@ -196,19 +201,27 @@ src/StarterPlayer/StarterPlayerScripts/
                                 Index, Shop and Settings each stand their own tile in
     TrapUI.client.luau          the red countdown over a trapped player
     ActionToastUI.client.luau   draws every short notification (Notice): refusals, successes,
-                                warnings, information -- text-led, stacked above the belt
+                                warnings, information -- text-led, stacked above the belt; on
+                                a phone hung from the top of the centre column instead
     BonusChestUI.client.luau    the chest's sign, prompt and boost timer -- and the boost row,
                                 which also draws the sacrifice pedestal's line
     SacrificeUI.client.luau     the pedestal's confirmation (the pod, what it buys, KEEP POD /
                                 SACRIFICE), its two signs' own line and its prompt
-    PlotTeleportUI.client.luau  TELEPORT TO PLOT under the clock, alive and in the Safe Zone
+    PlotTeleportUI.client.luau  TELEPORT TO PLOT under the clock (beside it on a phone), alive
+                                and in the Safe Zone
     ObbyUI.client.luau          the obby's moving platforms (from server time), crumbles and
-                                spring throws under your own feet, the run pill and RETURN TO PLOT
+                                spring throws under your own feet, the run line and RETURN TO
+                                PLOT; on a phone the run's clock alone, each stage's name said
+                                once as a notice
     ObbyButtonUI.client.luau    OBBY beside TELEPORT TO PLOT: to the obby's entrance, Safe Zone only
+    ObbyCamera.client.luau      turns the camera down the course ONCE when a runner is put down
+                                (the arch, the start, a checkpoint after a fall) and hands it
+                                straight back -- ObbyView's arithmetic, nothing held
     WheelUI.client.luau         the reward wheel's panel (scrim, wheel, SPIN hub, Reward info with
                                 species cards, owed prizes) and this player's copy of the world
                                 wheel's face
-    TrailFX.client.luau         the Bloomrunner Trail behind whoever wears it (cosmetic only)
+    TrailFX.client.luau         the Bloomrunner Trail behind whoever wears it (cosmetic only;
+                                not drawn on the obby course, like SpeedFX's run streak)
 ```
 
 **Phase A and the HUD are complete**, and Dustbowl is live production content. Tanglemire comes only
@@ -265,7 +278,9 @@ From the blueprint, plus what this repo has learned:
     `HudLayout.solve`, applied by the script that owns it and asked again only when its ScreenGui's
     size changes. A new HUD element gets its rect there first, and `HudLayoutSpec` proves it
     clears every other group and Roblox's touch controls on each listed phone. The desktop answer
-    is the shipped layout, pixel for pixel.
+    is the shipped layout, pixel for pixel. **On a phone nothing lasting stands in the middle of
+    the screen** (2026-09-29): what used to stand under the clock is on the clock's row or in the
+    slim column right under the topbar, and the guide's words are in the left column.
 
 ## Skills
 

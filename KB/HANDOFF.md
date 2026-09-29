@@ -1,5 +1,157 @@
 # Steal a Seed — Session Handoff
 
+## Mobile pass: the phone's HUD, the trail on the obby, the camera after a fall — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`, NOT PUBLISHED; SEEN IN STUDIO'S PHONE EMULATION ONLY, NEVER ON A REAL PHONE)
+
+**In short.**
+- Three fixes the owner asked for from landscape-phone screenshots, one commit each on `wip`:
+  `6671d0d` the trail, `ef337e6` the camera, `bcdd671` the phone's HUD.
+- Nothing was published. Obby difficulty, reward limits, the economy, saves and the traffic logger
+  were not touched. Every changed file is a client script, a shared module or a spec; no server
+  script changed.
+- Everything live was seen in **Studio's phone emulation** (a 705 x 338 viewport of a 799 x 359
+  device, touch on) on the throwaway store `SeedTest_20260929`. **No real phone, no desktop window,
+  no controller and no second player were used.** What stands on specs alone is listed below.
+- Studio was left in Edit, test store off, 131 scripts equal to disk, no `ZZ` leftovers, camera
+  modes `UserChoice` as they were.
+
+### 1. "A trail appears while I'm doing the obby" (`6671d0d`)
+
+- **Which trail.** SpeedFX's run streak (`SeedStreakMain`, `SeedStreakCore`, `SpeedParticles`). Any
+  player with 1,000 Speed has it whenever they move unladen. On the course nobody carries a pod and
+  everybody runs at 24, so it never went out. Nothing in the obby switches it on. The Bloomrunner
+  Trail (TrailFX) behaves the same when worn.
+- **The fix.** Both scripts ask `ObbyData.onCourse(player)` every frame and draw nothing while the
+  server's `ObbyCourse` attribute is true. What is in the air is cleared on the way in.
+- **Nothing is stored**, so nothing can stick: Return, Exit, a death and a rejoin all end with the
+  attribute gone. Ownership, `EquippedTrail`, the Speed tier and rewards are read, never written.
+- This applies on **every device**, not only phones.
+
+### 2. "After a fall the camera faces the opposite direction" (`ef337e6`)
+
+- **The body was already right.** Every respawn faces the next obstacle (1.4, 6.3, about 3 and 0
+  degrees off, measured). The server was not changed.
+- **The cause.** The touch camera's default is Follow. It turns to look along the way the body
+  just moved, and a fall's trip back to the checkpoint runs backward: camera yaw 93 to -90 while
+  the body faced 90.
+- **The fix.** `ObbyView` (pure) holds each landing and the course's direction from it, and a
+  state machine for one turn. `ObbyCamera` takes the camera for two frames, writes the forward
+  view before and after the engine's own camera step, and hands it back. On a Classic camera it is
+  one write. Nothing is held afterwards.
+- It runs at the arch (the OBBY button), the start, Replay, and every checkpoint after a fall.
+- **Roblox's camera scripts are engine-internal now**: they cannot be read or reached from
+  PlayerScripts, and a LocalScript cannot set `Player.DevTouchCameraMode`. A server script can, for
+  one Play session, which is how the Classic path was run live.
+
+### 3. "Mobile text obstructs gameplay" (`bcdd671`)
+
+On a touch screen whose topbar has the room -- every listed phone -- nothing that lasts stands in
+the middle of the screen any more:
+
+| Was | Is |
+| --- | --- |
+| The clock, a bar 44% of the window | A chip 124 px wide, the words over the time |
+| TELEPORT / RETURN TO PLOT and OBBY under the clock | Beside the clock on its row, in the topbar's free span |
+| The run line (stage + clock) under them all run long | The run's clock alone in OBBY's slot; each stage's name said once as a notice |
+| The boost row, pushed down onto the belt by the guide | A slim row right under the topbar, 13 px |
+| Notices over the belt, on the character's feet | Hung from the top of the centre column, never reaching the middle |
+| The guide's banner across the middle | The guide's words in the left column, wrapped, two lines each |
+| WALK MODE beside the way ahead on the course | Put away on the course (touch screens only) |
+
+- `HudLayout` has the arithmetic (`phoneRow`, the column, `statusLine`, `boostRows`); each owner
+  reads it from the layout. Rule 12 in AGENTS.md has the one-line version.
+- **A phone whose row cannot hold both buttons keeps the arrangement it had** (both buttons under
+  the clock, notices over the belt, the banner), with the chip. The row needs 360 px of free span.
+- The biome name and the sale line stand under a notice that is up, and the guide's words stand
+  down while one is, through `Notice.reach`.
+- On the course CHECKPOINT stays 2 s, BACK TO CHECKPOINT 1.5 s and a stage's name 1.8 s on a phone.
+  Everywhere else they keep their kinds' own times.
+
+### What was run
+
+| Check | Result |
+| --- | --- |
+| The whole suite, Studio Edit, fresh source | 57 of 57 specs pass |
+| `HudLayoutSpec` | 1,211 checks, 0 failed |
+| `ObbyViewSpec` (new) | 112 checks, 0 failed |
+| `NoticeSpec` | 101 of 101 alone and in the last full run. In one earlier batch of 12 specs three of its renderer hand-off checks failed once and did not repeat; the hand-off it tests was not changed (the module gained three functions after it) |
+| Desktop, console and TV against the module at HEAD | 84 screens, 8,332 answers, **0 differ** (run again on the final code) |
+| Touch screens against the module at HEAD | 6,990 swept: 4,897 get the row, 2,093 fall back. **None lost a button HEAD showed.** No new finding on a screen with the row, nor on any screen with no notch inset and the usual topbar span; of those only windows 560 and 568 px wide fall back |
+| Rojo build | succeeded |
+| `git diff --check` | clean |
+
+Seen live in the phone emulation:
+
+- **Camera (Follow):** the arch, the start, Replay; falls at the start (3, twice over), checkpoint 1
+  (2, twice over), checkpoint 2 (2, one off the twilight side) and the summit (1). Every one ended
+  at yaw 90 with the camera handed back, and forward on the stick moved the body ahead.
+- **Camera (Classic, for one session):** from a camera turned right round, the arch, the start and
+  a fall each came up facing forward. A turn made afterwards stayed for the two seconds watched.
+- **Trails:** Speed 1,500 and the Bloomrunner worn. On the course and the summit nothing drew in
+  120 frames. At home after Exit, all five pieces drew while moving. After a rejoin the pieces were
+  rebuilt and ownership was unchanged.
+- **Leaving:** Exit mid-run and a death on the course each cleared every obby attribute, hid the
+  run's clock and RETURN, and brought TELEPORT, OBBY and WALK MODE back.
+- **Together:** the guide with two boosts; a chase warning with two boosts and the guide; on the
+  course two boosts, the run's clock and two notices at once. No two overlapped.
+- **Notices:** CHECKPOINT and the next stage's name stood together (to y 87, the middle is 111). A
+  biome name arriving under a notice stood 4 px under it, and at the top again once it had gone.
+- **Night:** the chip read NIGHT - PODS RETURN over the time, and the guide's longest lines
+  wrapped to two lines each.
+- The console showed no script error in the last two sessions.
+
+Captures: `output/mobile-pass/before/` (5) and `output/mobile-pass/after/` (15), untracked.
+
+### NOT verified
+
+- **Any real phone.** Thumb reach, a real notch, the real topbar's free span with more Roblox
+  buttons than the emulator shows, and frame rate are all unseen.
+- **Any phone but the emulator's 705 x 338.** The other listed phones, 640 px wide among them,
+  stand on `HudLayoutSpec` alone.
+- **Desktop, console, TV, a controller.** By the differential and the specs only. The Classic
+  camera was run through the touch emulation, never with a mouse or a pad.
+- **A second player.** Another runner's trail, as a second client sees it, was never seen. The
+  code reads each player's own replicated attribute.
+- The clock's BIOMES CLOSE IN words (their width is measured in the spec), the sale line under a
+  notice (its wiring is in the spec), and the first-hatch celebration (unchanged) were not seen.
+
+### For the owner to decide
+
+1. The guide's words in the left column on a phone. On a 640-px phone the block ends 20 px short
+   of the middle of the screen, which is inside the character's own width.
+2. A stage's name said once and gone, where it was held up for the whole run.
+3. The boost row's size: 13 px with an 11.5 px clock. Two boosts at once on a 640-px phone are
+   drawn at 0.86 of that, about 11 px.
+4. Notices at the top on a phone, and the shorter times on the course.
+5. WALK MODE put away on the course on a touch screen.
+6. ADMIN hangs under the clock on a 640-px phone, where the row is full. That starts the column
+   22 px lower for every player on such a phone, not only the two accounts that see the button.
+7. The trail is off on the course on every device, and the camera turns once on every camera.
+
+### Seen and left alone
+
+- **After RETURN / TELEPORT TO PLOT the Follow camera looks along the trip home**, 149 degrees off
+  the body at the test plot. The brief was the obby's checkpoints and entry, so this was not
+  changed. The same turn would mend it.
+- **A fall on the twilight route faces the main route.** The respawn faces east like every other;
+  the twilight branch is about 105 degrees to the right. The server decides the facing.
+- The world's own prompts (UPGRADE, at the plot's spawn) are placed by the world and can stand on
+  the guide's step counter.
+- The red chase vignette stops at the viewport rather than the device's edge. It did before.
+- On the emulator's 705 x 280 safe area `HudLayout.problems` reports the BATS/TRAPS chooser 12 px
+  into the belt. It did before; that screen is shorter than any listed phone.
+
+### For the next agent
+
+- The harness (server and client hosts, the spec runner, both differential probes) lives in the
+  session's scratchpad, not in the repository.
+- The obby's gates count only in order: `g1`, `cp1`, `g3`, `cp2`, `g5`, `finish`.
+- An edit made while Play runs may miss the next session if Play restarts within seconds. Stop,
+  wait, confirm 0 differ, then start.
+- `NoticeSpec` forbids `SetAttribute(`, `FireServer(` and any frame hook in ActionToastUI, which is
+  why the stack's reach lives in the `Notice` module.
+- Queued by the owner after this, in order: the read-only traffic-webhook audit, the two spin
+  developer products, the hatch reveal. None was started here.
+
 ## Make webhooks: secrets created, source switch on, not live — 2026-09-29
 
 With the owner's explicit approval, created `PodnappersTrafficJoinWebhook` and `PodnappersTrafficDurationWebhook` on Podnappers' Creator Hub Secrets page. The page showed both names with the restricted `hook.us2.make.com` domain. The secret values are write-only after creation; no webhook URL was added to source, docs or logs. Existing live servers cannot use newly created secrets until a new version/server starts. No test event was sent.
