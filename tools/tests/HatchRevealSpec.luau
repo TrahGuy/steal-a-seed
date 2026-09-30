@@ -368,8 +368,9 @@ local function body()
 			X = 8, Z = -4, Stage = 1, Facing = 0 },
 	}
 
-	check(GameConfig.Plant.Hatch.Roll.Enabled == false,
-		"as shipped, the roll is switched OFF on a published server")
+	-- The tripwire, changed with the switch (the owner, 2026-09-30).
+	check(GameConfig.Plant.Hatch.Roll.Enabled == true,
+		"as shipped, the roll is switched ON on a published server")
 	local loadOk, loadErr = pcall(function()
 		local rollOff = loadWith(Shared.HatchRoll, {
 			GameConfig = rollConfig(false),

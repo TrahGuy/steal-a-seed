@@ -182,17 +182,19 @@ local function body()
 	local rollOn = rollWith({ Enabled = true, StudioPreview = false })
 	local rollOff = rollWith({ Enabled = false, StudioPreview = false })
 	do
-		check(ROLL.Enabled == false,
-			"as shipped, the roll is OFF on a published server: the owner has not approved it yet",
+		-- The tripwire, changed with the switch: the owner switched the roll on for
+		-- players on 2026-09-30.
+		check(ROLL.Enabled == true,
+			"as shipped, the roll is ON on a published server: the owner switched it on on 2026-09-30",
 			ROLL.Enabled)
 		check(ROLL.StudioPreview == true,
 			"and ON in Studio, which is where the owner asked to see it first", ROLL.StudioPreview)
 		local shipped = loadWith(Shared.HatchRoll, { GameConfig = GameConfig, SeedData = SeedData },
 			nil, published)
-		check(shipped.live() == false,
-			"so a published server with the shipped numbers has no roll")
-		check(shipped.revealAt(1000) == 1000,
-			"and gives a hatch no wait: its plant may be shown at the moment it hatches")
+		check(shipped.live() == true,
+			"so a published server with the shipped numbers rolls")
+		check(near(shipped.revealAt(1000), 1000 + ROLL.Seconds),
+			"and shows a hatched plant its three seconds after the hatch")
 		local studio = loadWith(Shared.HatchRoll, { GameConfig = GameConfig, SeedData = SeedData })
 		check(studio.live() == true, "while in Studio the same numbers give the preview")
 		check(rollOn.live() == true and rollOff.live() == false,

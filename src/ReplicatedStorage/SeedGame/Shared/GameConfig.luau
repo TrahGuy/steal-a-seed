@@ -2823,11 +2823,11 @@ GameConfig.Plant = {
 		-- holds: a Colossal is a bigger event than a Tiny, never a longer one.
 		--======================================================================
 		Roll = {
-			-- OFF ON A PUBLISHED SERVER UNTIL THE OWNER HAS APPROVED IT. Studio's
-			-- Publish ships whatever is on disk, so the switch ships off, and
-			-- StudioPreview turns the roll on in Studio alone, for the server and
-			-- the client alike. Approved, this one line goes to true.
-			Enabled = false,
+			-- ON FOR PLAYERS: the owner switched it on on 2026-09-30 ("enable the
+			-- silhouette roll now so i can publish it live"). Until then it shipped
+			-- off, and StudioPreview turned it on in Studio alone, for the server
+			-- and the client alike. False turns it off on a published server again.
+			Enabled = true,
 			StudioPreview = true,
 			-- From the hatch to the plant, shown. ABOUT THREE SECONDS: HatchRoll
 			-- refuses to load with this outside MinSeconds and MaxSeconds.
