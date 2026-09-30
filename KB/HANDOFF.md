@@ -1,6 +1,329 @@
 # Steal a Seed — Session Handoff
 
-## Hatch reveal, revised: a three-second roll in the world where the pod stood, switched OFF for published servers — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, IN PHONE EMULATION, ONE CLIENT)
+## Plant storage full: nothing is handed over that the record cannot hold — 2026-09-30 (CLAUDE)  (COMMITTED 6015de5 ON BRANCH `wip` AND PUSHED, AT THE OWNER'S REQUEST; NOT ON `main`; NOT PUBLISHED BY AN AGENT; ONE FULL SUITE ON THE FINAL CODE: 62/63, THE ONE FAILURE A KNOWN BATCH FLAKE THAT PASSES ALONE; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, MOCKED RECEIPTS; NOTHING WAS BOUGHT)
+
+**In short.**
+- **The defect.** The saved record of what a player holds takes 24 plants and pods
+  (`GameConfig.Save.MaxHeld`). Anything handed over past 24 was given as a Tool and never
+  saved. It was gone at the next death or rejoin. The doors that did it: a hatch, PICK UP, a
+  pod banked at the red line, and `GivePod` (a wheel pod prize, a paid pod product).
+- **The owner's decisions, in their words.**
+  - "refuse the hatch and leave the pod planted and ready until the player makes room."
+  - Instant Hatch with no room (option A): "the purchase should make its intended pod ready
+    immediately and persist that state. ... Acknowledge the paid receipt only after that benefit
+    is safely recorded."
+  - "picking up a grown plant and banking a pod at 24/24 must not hand over an item that cannot
+    be saved. Preserve the item in its prior safe state".
+  - "Do not truncate existing over-cap records."
+  - 2026-09-30 morning, a paid Instant Hatch that finds storage full AND its pod's wait already
+    over: "save one credit for that purchase, acknowledge the receipt only after the credit is
+    safely saved, and make sure a duplicate receipt can't add a second credit. The credit should
+    only be used when an eligible hatch actually succeeds."
+  - 2026-09-30 morning, the wheel paying an owed pod while a pod is carried home: "Wheel waits
+    its turn."
+  - 2026-09-30 afternoon: "if a paid receipt arrives and the player has **no unhatched pod**,
+    grant one saved Instant Hatch credit. Use the same safe receipt-and-credit handling as the
+    full-storage case ... Multiple separate purchases must remain separate credits. A credit is
+    spent only when it successfully hatches an eligible pod; an already-ready pod, full storage,
+    or failed hatch must not consume it."
+  - The same brief: "Ordinary player actions must respect storage capacity without losing or
+    duplicating a pod. Preserve the beginner tutorial's ability to recover. ... Do not
+    acknowledge any paid pod receipt without either a durable pod grant or a durable owed
+    reward. Keep disabled products unavailable for new purchases."
+  - 2026-09-30 evening, the review's open question, option B: "For an unresolved Instant Hatch
+    receipt, if no pod still has time left, save one Instant Hatch credit instead of hatching a
+    ready pod. Keep the existing duplicate-receipt protection: a receipt already fulfilled must
+    not grant a credit as well."
+- **Now.** Every door that hands over a plant or a pod counts the record in one place
+  (`CarryService.HeldRoom`, which keeps a carried pod's place) and refuses before anything is
+  built. `GivePod` now counts too and writes the row in the same call. **A paid Instant Hatch
+  hatches only the pod that was pressed, and only while it is still growing**; with no room it
+  makes that pod ready. Every other receipt is kept as ONE saved credit: the pressed pod already
+  ready (even with other pods still growing), the pressed pod gone, no note naming a pod (a
+  receipt delivered again after a rejoin), or no garden in the world yet. No other pod is ever
+  picked in its place, and no ready pod is hatched with a purchase. The wheel's pod prizes wait
+  while there is no room.
+- **WHERE THIS STANDS (2026-09-30, end of day).** Afternoon: the owner's second brief was built test-first: a receipt with no pod
+  it can reach keeps a credit, every pod-grant door counts the record, and the tutorial and
+  admin paths were checked. Studio Play on the throwaway store covered the credit, the
+  prompt and the notices on desktop, and the wheel's owed pod through a carry, a bank, deaths
+  and rejoins. An independent read-only review found no high-severity defect; three findings
+  were fixed with tests. **Evening: the owner chose option B** for the review's open question.
+  **Night: the owner settled the last edge, the pressed pod** (see "Decided: the pressed pod"),
+  built and checked once in Studio Play. **One full suite on the final code: 62 of 63 specs,
+  7,392 checks passed; the one failure is NoticeSpec's known batch flake** (three renderer
+  hand-off checks; alone it passed 101 of 101, twice), and the place builds. **Not run: a
+  phone-sized viewport** (Studio's device emulator was off; see "Not run").
+- **Committed and pushed to `wip` at the owner's request (2026-09-30):** `6015de5` the storage
+  limit and the purchase cases (code and specs), `0a30050` the roll switched on, and the docs
+  commit after them. Not on `main`. Studio equals disk.
+- **v999: published by the owner from this Studio at 2026-09-30 05:33 UTC (13:33 local), on
+  purpose (their words).** Its exact contents are **unknown**: the published version cannot be
+  read from here. What Studio's log shows: a HatchStorageSpec run at 05:43 UTC, ten minutes
+  later, with Rojo stopped, found this change up to the review's fixes and **without option B**;
+  option B and the pressed-pod rule reached Studio only after that. So neither is in v999.
+  Whether everything else in it matches the working tree of that moment is not verified.
+  Rolling a live version back after credits have been granted would erase them (review note 7).
+- **Later publishes by the owner:** v1000 at 07:07 UTC and v1001 at 07:37 UTC. The pressed-pod
+  rule was running in Studio from 06:47 UTC, and v1001 came four minutes after the roll's switch
+  was saved (07:33 UTC) with Rojo running. So both most likely carry the pressed-pod rule, and
+  v1001 the roll switched on. Their exact contents are not verified.
+- Species odds, hatch timers, pod ownership, rewards, the economy and the world-space reveal
+  were not changed. The roll's switch is still off. The paid pod products are still off sale.
+
+### What a player meets
+
+At 24 of 24, or with a pod in the arms holding the last place:
+
+| Door | What happens | Where the item stays | What they are told |
+| --- | --- | --- | --- |
+| Hatch, hold E on a ready pod | Refused | Pod planted and ready | `PLANT STORAGE FULL` / `24/24. Plant or sell one to make room.` |
+| Instant Hatch, the key | Refused before any purchase dialog | Pod planted, still growing | The same |
+| Instant Hatch, a receipt for the pressed pod, still growing, that arrives anyway | **That pod is made ready.** Garden written, purchase put in the ledger, profile saved, then acknowledged | Pod planted and ready. Hatches free once there is room | `PLANT STORAGE FULL` / `Your pod is ready. Make room to hatch it free.` (amber) |
+| Instant Hatch, a receipt that finds that pod's wait already over | **Kept as one saved credit** (`profile.InstantCredits`) | Nothing moves. Every growing pod's prompt reads `Free Instant Hatch`, no price | `PLANT STORAGE FULL` / `Instant Hatch saved. Your next one is free.` (amber) |
+| PICK UP a grown plant | Refused | Plant planted, still earning | `24/24. Plant or sell one to make room.` |
+| Take a pod at a nest | Refused (see "Added without being asked") | Pod at its nest, parent not woken | The same |
+| The red line, record filled on the run home | Bank refused, asked again every 0.2 s | Pod in the arms. Banked by itself once there is room | `24/24. Your pod is banked when there is room.` |
+| A wheel pod prize | **Stays owed** (`profile.WheelPending`). The wheel's 3-second pass pays it once there is room | On the profile, owed | The wheel's result says it is waiting |
+| Any other pod given (`GivePod`) | Refused: no Tool, no row | — | Nothing (the caller decides) |
+| The beginner's tutorial pod | Laid on the ground reserved for them. The take is refused like any other | On the ground, still theirs. The tutorial lays no second one | `24/24. Plant or sell one to make room.` |
+
+Whatever the storage:
+
+| Door | What happens | What they are told |
+| --- | --- | --- |
+| Instant Hatch, a receipt that finds **no unhatched pod**, or arrives **before the garden is back** | **Kept as one saved credit.** Credit and ledger entry in the same step with no yield, profile saved, then acknowledged. A duplicate delivery adds nothing. A second purchase is a second credit. A profile that can never be saved is given none (receipt left open) | `INSTANT HATCH SAVED` / `Nothing to hatch now. Your next one is free.` (blue) |
+| Instant Hatch, a receipt for the **pressed pod that became ready while the dialog was open** (the owner, 2026-09-30 night) | **Kept as one saved credit, even with other pods still growing.** That pod is not hatched with the purchase, and no other pod is picked in its place. A fulfilled receipt delivered again gives nothing more; a failed save leaves the receipt open | `INSTANT HATCH SAVED` / `Ready pods hatch free. Your next one is free.` (blue); with storage full, the storage-full credit line |
+| Instant Hatch, a receipt that **names no pod it can still hatch**: no note (delivered again after a rejoin), or the pressed pod gone, while pods still grow | **Kept as one saved credit.** No pod is picked in its place; it used to open the pod with the longest wait | `INSTANT HATCH SAVED` / `Your next Instant Hatch is free.` (blue, new: `INSTANT_CREDIT_SAVED`) |
+| Instant Hatch, a receipt that finds **every pod already ready** (option B, 2026-09-30 evening) | **Kept as one saved credit**, the same way. No ready pod is hatched: they hatch free by hand. A receipt already fulfilled (it hatched a pod) and delivered again is answered by the ledger: no credit as well. With storage full the line is the storage-full one instead | `INSTANT HATCH SAVED` / `Ready pods hatch free. Your next one is free.` (blue) |
+| Instant Hatch pressed while holding a credit | With room: the pod hatches, **no purchase dialog**, and only then is the credit taken. Full, a ready pod, no record, or a hatch refused after all: nothing happens and the credit stays | `INSTANT HATCH` / `Your saved Instant Hatch was used.` (green) |
+| A paid pod product | **Off sale** (ids 0, so StoreService never indexes one). If one is ever sold: granted only into room and written down, then acknowledged after the save. At 24, the receipt is left open and nothing is given | — |
+
+Every line is said once and then held back: 2 s for a press, 30 s for the red line. The lines
+that answer a purchase, and the one that says a credit was spent, are always said.
+
+### Decisions made inside the brief (the owner can change any)
+
+| # | What was done | Why | The alternative |
+| --- | --- | --- | --- |
+| 1 | A receipt that arrives **before the garden is in the world** keeps a credit. It does not wait to hatch a pod that is about to appear. | Roblox re-delivers an open receipt at join, which is exactly then. The old answer left it open until some later join found a pod. A credit is kept at once, and every growing pod shows the free prompt when the garden appears. | Wait for the garden, which means yielding before the ledger, or leave the receipt open. |
+| 2 | A paid pod at full storage **leaves its receipt open**. | The products are off sale, so nobody can buy one. The brief allows "a durable pod grant or a durable owed reward" and forbids acknowledging without either. | Before they are ever sold: an owed-pod queue like the wheel's. A purchase would then be kept, not held open until Roblox gives up and refunds it. |
+| 3 | **No admin gift exists**, so nothing can go past the limit. | `AdminService` offers cash, day and night, and a progress reset only. StorageDoorsSpec asserts it calls no pod or plant giver. | An admin-only gift that may exceed the limit would need its own path. |
+
+### Added without being asked: the owner can drop any of them
+
+| Addition | Why | To drop it |
+| --- | --- | --- |
+| **A take is refused at the nest when the record is full.** | A pod refused at the line stays in the arms. A carrier can plant nothing, sell no single plant and is shown no prompt, so they could neither bank it nor put it down. | Remove the block headed `NOTHING IS TAKEN THAT COULD NOT BE BANKED` in `CarryService.TryTake`. |
+| **A pod in the arms keeps its place.** `HeldRoom` counts it as one, so a hatch, a pickup, a gift or a receipt on the run home cannot take the place it was taken for. | The same. | `local kept = 0` in `CarryService.HeldRoom`. |
+| **The loader no longer stops at 24 rows.** `ProfileSchema.Sanitise` used to read the first 24 held rows and say nothing of the rest. It now keeps every valid row. | The owner's rule on over-cap records. No writer can add a row past 24, so only a record that was already longer is affected. | Put back the three lines `if #p.Held >= SAVE.MaxHeld then break end` in `ProfileSchema.luau`. |
+| `CarryService.Bank = bank` | So a spec can run the real bank. The file already exports four locals this way. | One line. |
+| **A take waits for the save to arrive** (from the review, 2026-09-30). Refused silently until the record is loaded. | A pod taken before the save arrived, into a record that then arrived full, could be neither banked nor put down. | The `if not known then return refuseTake(player, pod, "NO_RECORD") end` lines in `CarryService.TryTake`. |
+| **`PlantService.usePrompt(fn)`, Studio only** (2026-09-30 night). A Play harness answers the purchase dialog instead of opening one, so the real key can be pressed and the receipt mocked with no dialog on screen. | The pressed-pod check in Play. It mirrors `WheelService.usePrompt`, returns false outside Studio, and changes nothing else the press does. | The `promptFn` local, the function, and the three lines in `OfferInstantHatch`'s `pcall`. |
+| **A saved Instant Hatch works with the product off sale** (from the review). The free prompt shows and the press spends the credit even when the product id is 0. Nothing is sold. | Going off sale must not strand a credit that was paid for. | In `PlantService`: `attachInstantPrompt`'s `and not saved`, and the product check's place after the credit branch in `OfferInstantHatch`. |
+
+### The independent review (read-only, 2026-09-30)
+
+No high-severity finding. Every receipt path was traced: none acknowledges without a saved benefit, none grants one receipt twice, and a credit is taken only after a hatch succeeded.
+
+| # | Finding | What was done |
+| --- | --- | --- |
+| 1 | Medium: saved credits could not be used while the Instant Hatch product is off sale. | **Fixed.** HatchStorageSpec 10g. Deliberate defects restoring the old behaviour are caught. |
+| 2 | Medium, older than this task: a receipt with no note (re-delivered after a rejoin) and room, when every pod is already ready, hatches a ready pod. With storage full the same case keeps a credit. | **Done: option B, the owner's choice** (see "Decided: option B"). |
+| 3 | Low, older than this task: option A on a profile that cannot save makes the pod ready for that session only; the receipt stays open and pays again later. | Not changed. Nothing is acknowledged without a save; the session's benefit was never saved. |
+| 4 | Low: `restoreOne` is typed to answer one boolean and passed on GiveHatched's two values. | **Fixed.** A source check, and the analyzer no longer reports it. |
+| 5 | Low: a pod taken before the save arrived could stick in the arms. | **Fixed:** the take waits for the record (StorageDoorsSpec). |
+| 6 | Low, older than this task: a save racing the leave save can leave the session lock taken. | Not changed: outside this task. The receipt rules hold. |
+| 7 | Note: **publishing an older build after this one erases saved credits** (the old loader drops the field) **and cuts records longer than 24.** | Documented here. Do not roll back past this change once credits exist without a migration. |
+
+### Decided: option B (the owner, 2026-09-30 evening)
+
+The question was a receipt re-delivered with no note, when every pod is already ready and there is
+room: it hatched the pod that became ready most recently (A), or it should keep a credit (B). The
+owner chose B: "For an unresolved Instant Hatch receipt, if no pod still has time left, save one
+Instant Hatch credit instead of hatching a ready pod. Keep the existing duplicate-receipt
+protection: a receipt already fulfilled must not grant a credit as well."
+
+- **Built.** `PlantService.InstantHatch` asks first whether any pod is still counting down. With
+  none -- no unhatched pod, or every one ready -- the purchase goes to `keepForLater`, before the
+  note or the longest wait can pick a pod. The ledger in `StoreService` answers a receipt already
+  fulfilled before any of this runs, so it cannot grant a credit as well.
+- **Said.** Every pod ready and room: `INSTANT HATCH SAVED` / `Ready pods hatch free. Your next
+  one is free.` (new, `INSTANT_CREDIT_READY`, blue). Storage full: the storage-full credit line, as
+  before. No pod at all: the no-pod line, as before.
+- **Superseded the same night** for the one case option B left: the pressed pod gone ready while
+  other pods still grow. See below.
+
+### Decided: the pressed pod (the owner, 2026-09-30 night)
+
+"The purchase is for the pod the player pressed. If that pod becomes ready while the purchase
+dialog is open, save one Instant Hatch credit -- even if other pods are still growing. Do not
+use the purchase to hatch an already-ready pod or silently switch it to another pod. If the
+selected pod is gone or its target cannot be established safely, save a credit. Keep the
+approved behavior when the selected pod is still growing, including the full-storage case."
+
+- **Built.** `PlantService.InstantHatch` hatches only the pod its note names, and only if it is
+  still THAT pod and still counting down. The note now holds the planted pod itself, not just its
+  id, because ids restart when a garden is rebuilt. Everything else goes to `keepForLater`
+  before any hatch: the pod ready, the pod gone, no note, no garden. The old fallback that
+  picked the pod with the longest wait is gone. Still growing: it hatches, or with storage full
+  is made ready, both unchanged.
+- **Read as "its target cannot be established": a receipt with no note.** That is a receipt
+  Roblox delivers again after a rejoin or a crash. It now keeps a credit instead of opening the
+  pod with the longest wait.
+- **Said.** Pressed pod ready, or every pod ready: `Ready pods hatch free. Your next one is free.`
+  No pod it can name while pods grow: `Your next Instant Hatch is free.` (new,
+  `INSTANT_CREDIT_SAVED`). Storage full: the storage-full credit line. No pod at all: the no-pod
+  line.
+- **Safeguards unchanged.** The ledger in `StoreService` answers a fulfilled receipt before any of
+  this. A credit and its receipt reach the same save with no yield between, and only a landed save
+  is acknowledged; a failed one leaves the receipt open.
+
+### Remaining gaps
+
+| # | Gap | Detail |
+| --- | --- | --- |
+| 1 | ~~A purchase with nothing to give~~ **Done: a saved credit.** | Storage full with the pod ready (morning), no unhatched pod or no garden yet (afternoon), and every pod already ready (evening, option B). **Still left open, on purpose:** a receipt whose profile can never be saved, and one for a player already holding the cap of 1,000 credits. |
+| 2 | **A carrier refused at the line cannot make room.** | With a pod in the arms nothing can be planted or sold. The take refusal and the kept place close every path found in normal play: the wheel waits and a given pod is refused. Only a save that already held more than 24 rows can still fill the record on the run home. |
+| 3 | ~~The wheel counts for itself~~ **Done: the wheel waits its turn.** | `WheelService` asks `CarryService.HeldRoom` before a pod prize, and `GivePod` counts again. |
+| 4 | ~~`GivePod` is not counted~~ **Done: counted and written down, or not given.** | The wheel keeps the prize owed. A paid pod's receipt stays open. |
+| 5 | The reminder at the line | One line every 30 s for as long as they stand there (`BANK_QUIET_SECONDS`). |
+| 6 | ~~A log line reads `25/24`~~ **Tidied.** | The log names what was refused and counts the SAVED record, with a carried pod named apart. |
+
+### What changed
+
+| File | Change |
+| --- | --- |
+| `CarryService.luau` | `HeldRoom(player, own)`: the one count. `GiveHatched(..., onRecord)` refuses before building and takes the Tool back if the row cannot be written. `TryTake` refuses for room. `bank` refuses for room, writes the row in the same call (`RecordPod`), and leaves the pod in the arms. `mergeHeld` keeps every saved row. **`GivePod` counts the room first, builds the pod (`givePodTool`, shared with the rebuild), writes the row in the same call, and takes the Tool back if the row cannot be written.** |
+| `PlantService.luau` | `hatch()` and `pickUp()` pass the reason back. `HatchByHand`: the held prompt's handler, by name. `OfferInstantHatch` counts before it opens the dialog, and with a credit held hatches instead of selling, taking the credit only after the hatch succeeded. **A receipt hatches only the pod its note names -- the same planted pod, still counting down -- and keeps every other purchase as a credit (the owner, 2026-09-30 night); the note holds the pod itself.** `usePrompt(fn)`, Studio only. **`keepForLater(player, why)`: the one place a purchase becomes a credit** (a profile that saves only, no yield before the ledger, clears the note, remakes the prompts, one log line). `InstantHatch`: option A, and a credit for storage full with no wait left, **no unhatched pod, and no garden in the world yet**. `attachInstantPrompt` shows no price and `Free Instant Hatch` while a credit is held; `refreshInstantPrompts` remakes the prompts when one is granted or spent. `persisted(plot)` answers whether the garden was written. `storageFull(...)`: the log names the door. |
+| `PlayerDataService.luau` | `AddInstantCredits(player, delta)`: whole numbers, never below zero or past the cap, marks the profile for saving, answers the balance or nil. `ResetProgress` keeps credits, as it keeps bought spins. |
+| `ProfileSchema.luau` | The held list is no longer cut to 24 on load. New saved field `InstantCredits` (0 when absent, junk or negative; fractions floored; held to the cap). |
+| `WheelService.luau` | A pod prize asks `CarryService.HeldRoom`, so it never takes a carried pod's place. One comment updated. |
+| `StoreService.luau` | Comments only: what the pod grant and the hatch grant answer now. No code changed. |
+| `Shared/GameConfig.luau` | `Save.MaxInstantCredits = 1000`; `Plant.InstantHatch.SavedActionText = "Free Instant Hatch"`; the `Save.MaxHeld` comment fixed. |
+| `Shared/ActionRefusal.luau` | `STORAGE_FULL`, `STORAGE_FULL_BANK`, `STORAGE_FULL_READY` (amber), `STORAGE_FULL_CREDIT` (amber), **`INSTANT_CREDIT_NO_POD` (blue)**, **`INSTANT_CREDIT_READY` (blue, option B)**, **`INSTANT_CREDIT_SAVED` (blue, the pressed pod)**, `INSTANT_CREDIT_USED` (green). `STORAGE_FULL_PAID` is gone. A line may name its own kind. |
+| `tools/tests/HatchStorageSpec.luau` (new) | The hatch and the paid hatch on the real three services; the credit's whole life (10c-10e); **no unhatched pod and no garden yet (10f)**; **a credit with the product off sale (10g)**; **every pod already ready, and a fulfilled receipt delivered again (10h, option B)**; **the pressed pod: still growing, gone ready with a failed save and a duplicate, gone, and no note (10i)**; 10d, 11, 11b and 12 now press before a receipt, or expect a credit where none was pressed; a pod given at 24 (13); source and words. |
+| `tools/tests/StorageDoorsSpec.luau` (new) | The pickup, the take and the red line; **a pod given (8b), a paid pod through the real StoreService (8c), the beginner's reserved pod at 24 (8d)**; the admin console gives no pod. |
+| `tools/tests/InstantCreditSpec.luau` (new) | The saved field and the real `PlayerDataService` writer: cap, whole numbers, save, reset, rejoin. |
+| `WheelSpec`, `SpinPurchaseSpec` | The stand-in `CarryService` counts room as `HeldRoom` does; WheelSpec checks an owed pod waits while a pod is carried. |
+| `InstantHatchSpec`, `HatchRevealSpec`, `HatchDeliverySpec`, `ActionRefusalSpec`, `HatchRollSpec` | Brought up to date. **The pressed pod (2026-09-30 night): every receipt that should hatch is now preceded by its press.** HatchDeliverySpec and HatchRollSpec press the pod a player would pick next, with a spec-only config that has no gap between dialogs, so HatchRollSpec's four hatches in one second still happen in one second. **InstantHatchSpec's no-pod receipt now expects a credit** (and none for an unsaveable profile), and **with only ready pods left a receipt now expects a credit, with room and with storage full, where it used to expect three ready pods hatched (option B)**. HatchRevealSpec's stand-in answers the two new calls. ActionRefusalSpec: a pod given with no record is refused. |
+| `CarryHandsSpec`, `GuardianConfiscateSpec`, `HatchTimerSpec` | Their stand-ins now have a saved record with room: a take waits for the record, and the Instant Hatch key counts it before asking about the product. Their expectations are unchanged. |
+| `AGENTS.md`, this entry | Map lines for `CarryService`, `PlantService`, `ProfileSchema` and `WheelService`. |
+
+**Not this task's:** `git status` also shows deleted and new files under `game thumbnails/`, and
+the entries above this one are another agent's. Studio also holds a ModuleScript
+`ServerScriptService.EmberrootApprovalRunner` that is not on disk (another agent's preview
+tool). None of them were touched.
+
+### Tested
+
+| What | Result |
+| --- | --- |
+| **One full suite on the FINAL code (the pressed pod included), Studio Edit, 2026-09-30 night** | **62 of 63 specs, 7,392 checks passed. The one failure: NoticeSpec, 98 of 101**, its three renderer hand-off checks: the batch flake recorded on 2026-09-29. Run alone it passed 101 of 101, twice. NoticeSpec does not touch the receipt. sha256 of every file under `src` and `tools/tests` before and after: unchanged. Studio equalled disk before it (132 scripts, 0 differ). Raw output: scratchpad `store8/suite.txt.raw.txt`. |
+| The pressed pod's affected specs, final code | `HatchStorageSpec` 208, `InstantHatchSpec` 57, `HatchRevealSpec` 74, `HatchDeliverySpec` 62, `HatchRollSpec` 167, `StorageDoorsSpec` 127, `ActionRefusalSpec` 72, `HudLayoutSpec` 1211, `StoreSpec` 28, `SpinPurchaseSpec` 39. No new deliberate-defect campaign was run for it, at the owner's request. |
+| **Whole suite for option B, 2026-09-30 evening** | 63 of 63 specs, 7,377 checks, 0 failures. |
+| Option B's runs | The first full run on option B: 62 of 63. ActionRefusalSpec holds every plain line to 40 characters and the new one had 41; shortened to `Instant Hatch saved: pods are ready.`, then the run above. Before option B, the final run was 63 of 63, 7,368 checks. |
+| Earlier runs today | Before the review: 61 of 63. InstantHatchSpec and HatchRevealSpec still expected the old no-pod rule, and their stand-ins lacked the two new calls; both updated. After the review's fixes: 60 of 63. CarryHandsSpec and GuardianConfiscateSpec drive the real take with players that have no save in Edit, and HatchTimerSpec's stand-in had no `HeldRoom`; all three updated, expectations unchanged. The morning's runs: 62/62 and 63/63. |
+| Storage, credit and wheel specs in the final run | `HatchStorageSpec` 193, `StorageDoorsSpec` 127, `InstantHatchSpec` 56, `HatchRevealSpec` 72, `InstantCreditSpec` 27, `WheelSpec` 157, `SpinPurchaseSpec` 39, `StoreSpec` 28, `ActionRefusalSpec` 72, `NoticeSpec` 101, `HudLayoutSpec` 1211, `SacrificeSpec` 281, `TutorialPodSpec` 263, `AdminSpec` 79. |
+| Test-first | The old code failed the new checks for the right reasons: StorageDoorsSpec 23 and ActionRefusalSpec 2 on the old `GivePod`. Copies of the code with the old no-pod receipt failed HatchStorageSpec 7 and 3 times. After the review, copies with the old take, the old product gate and the old rebuild answer each failed their new checks. Option B: run first against the old code still in Studio, the new checks failed for the right reasons (HatchStorageSpec 8, InstantHatchSpec 3); then 193 and 56 of 56. |
+| Deliberate defects | **37 of 37 caught today**: 6 in the no-pod credit, 3 in `GivePod`, the carried pod's place against a purchase, 8 older credit defects re-pointed after the refactor, 7 for the review's fixes (the take before the save, the credit off sale, the rebuild's answer, and 3 re-pointed), and **12 for option B** (the old ready-pod hatch, a ready pod counted as waiting, the wrong line, the storage-full line dropped, and 8 re-pointed). InstantHatchSpec's 7 were re-run against its new checks: 7 of 7. |
+| Independent review, read-only | See "The independent review" above. A second reading by a model, not proof. |
+| Studio equals disk | 132 scripts, 0 differ. No `ZZ` leftovers. Test-store marker absent. `git diff --check` clean. |
+| Build check | `rojo build` builds the place (into the scratchpad, not the repo). The changed Luau files compile; top-level locals 79 (CarryService) and 97 (PlantService); the analyzer knows every global but Roblox's own, and no longer reports the rebuild's two answers. |
+
+**Studio Play, store `SeedTest_20260930`, 2026-09-30 afternoon, one client, desktop window 960 x 716 (the device emulator was off), three sessions: two rejoins. Mocked receipts through the test host, which does StoreService's ledger entry and save.**
+
+| Case | Result |
+| --- | --- |
+| Receipt with no pod in the plot | **One credit.** Ledger 1, saved, `PurchaseGranted`. Notice `INSTANT HATCH SAVED / Nothing to hatch now. Your next one is free.`: both lines fit, on screen (still `11`). Log: `kept for later (1 saved)`. |
+| The same receipt again | In the ledger already. Nothing given, no notice. |
+| A second purchase | A second credit (2). |
+| Pods planted with credits held | Every Instant Hatch prompt `Free Instant Hatch`, no price, on the server. Client drawing `F FREE INSTANT HATCH`, no price capsule, words fit, panel 221 x 52. |
+| A ready pod pressed with credits held | Refused (its Instant Hatch prompt was already swapped for the free one). Credits unchanged. |
+| A growing pod pressed with credits held | Hatched with no purchase dialog. Credit 2 to 1. The other growing pod's prompt still free. Notice fits. |
+| Storage filled to 24, a growing pod pressed | Refused with `PLANT STORAGE FULL`. Credit unchanged. |
+| A pod given at 24 | Refused: no Tool, no row. |
+| **The wheel, carried pod.** 23 saved, a pod taken on the road, a spin forced to a Rare Pod | **Owed** (`owed: no room yet`). Still owed after 7 s. |
+| Walked into the Safe Zone | The real red-line poll banked the carried pod: 24 saved. The prize still owed after 7 s. |
+| A death while owed | 24 rebuilt from the record, still owed, no prize. |
+| Rejoin while owed | Still owed. The banked pod, the credit and both receipts came back. |
+| A plant sold | **The prize arrived about 4 s later, once**: one Tool and one row. Still one after 8 s. The log names one payment. |
+| A death after delivery, then a rejoin | Still exactly one, in the bag and on the record. Nothing owed. |
+| **A death while carrying with a prize owed** (23 saved) | The carried pod dropped on the road. After respawn the owed prize arrived once. |
+| The last credit spent | The remaining pod's prompt went back to `Instant Hatch` with a price capsule: panel 249 x 52. |
+| Console | No errors. Test store off at the end, its key removed. No leftovers. Camera Fixed. |
+
+**The morning's Play (`SeedTest_20260930`) and the night before (`SeedTest_20260929`)** covered:
+the pickup, the take and the red line; a receipt at 24 making its pod ready; the credit granted
+at 24 with the pod ready; a rejoin; the credit spent. The last whole-suite runs before today's
+afternoon brief were 63/63, 7,316 checks.
+
+**Studio Play for option B, store `SeedTest_20260930` (a fresh profile), 2026-09-30 evening, one client, desktop window 960 x 716, one session. Mocked receipts through the test host, as above.**
+
+| Case | Result |
+| --- | --- |
+| Two tier-1 pods planted, both ripe (free hatch prompt only), room | A receipt **kept one credit**. Ledger 1, saved, `PurchaseGranted`. **Both ripe pods still planted, nothing hatched.** Notice `INSTANT HATCH SAVED / Ready pods hatch free. Your next one is free.`: both lines fit, on screen (still `12`). Log: `every pod already ready: kept for later (1 saved)`. |
+| The same receipt again | In the ledger already. Nothing given; still 1 credit. |
+| A growing pod planted beside the ripe ones, a new receipt | It hatched the growing pod (the plant went to the bag and the record). The ripe pods untouched, the credit untouched. |
+| That fulfilled receipt delivered again, now every pod left is ripe | In the ledger already. **No credit as well**: still 1. |
+| Storage filled to 24, only ripe pods, a new receipt | A second credit (2). Notice `PLANT STORAGE FULL / Instant Hatch saved. Your next one is free.`. Ripe pods still planted. |
+| Console | No errors. Test store off at the end, its key removed. No leftovers. Camera Fixed. |
+
+The ledger step in these Play runs is the test host's copy of StoreService's; the real
+`StoreService` ledger for this case ran in HatchStorageSpec 10h.
+
+**Studio Play for the pressed pod, store `SeedTest_20260930` (a fresh profile), 2026-09-30 night, one client, desktop window, one session. The press went through the real `OfferInstantHatch` with the dialog answered by `PlantService.usePrompt` (none opened); receipts mocked by the test host.**
+
+| Case | Result |
+| --- | --- |
+| Three pods; the dunebud, still growing, pressed; its receipt | **It hatched, and only it.** The other two untouched. `PurchaseGranted` after the save. |
+| The same receipt again | In the ledger already. Nothing more. |
+| The 60-second nubkin pressed while growing, then ripe before the receipt, the petalpip still growing | **One credit.** The ripe nubkin not hatched; the growing petalpip not picked in its place. Log: `the pod it was bought for already ready: kept for later (1 saved)`. Notice `INSTANT HATCH SAVED / Ready pods hatch free. Your next one is free.`: fits, on screen (still `13`: notice only, the 3D view came out blank). |
+| That receipt again | In the ledger already. Still 1 credit. |
+| A receipt with no press behind it, the petalpip still growing | **A second credit.** Nothing hatched. Notice `INSTANT HATCH SAVED / Your next Instant Hatch is free.`. The petalpip's prompt now reads `Free Instant Hatch`. |
+| Console | No errors. Test store off at the end, its key removed. No leftovers. Camera Fixed. |
+
+**Rojo during option B.** The Rojo server had stopped (not by this session), so the two changed
+scripts, `PlantService` and `ActionRefusal`, were copied into Studio by hand and read back byte for
+byte against the disk. Codex restarted Rojo at the owner's request at 13:47 (see its entry above).
+Studio equalled disk before the final suite and after it: 132 scripts, 0 differ.
+
+Stills: `output/plant-storage/` (untracked): `05` to `08` the night before, `09` and `10` the
+morning of 2026-09-30, `11` that afternoon, `12` that evening, `13` that night. `07` shows the notice only: Studio's
+window was covered and the 3D view came out blank. `04` is superseded. The stills show the test
+account's avatar and, faintly, its name tag: keep `output/` out of any commit.
+
+### Not run
+
+- **A phone-sized viewport in Play.** Studio's device emulator was off (960 x 716, no touch) and
+  a session cannot switch it. What was done instead, and it is not a phone test:
+  HudLayoutSpec measures every notice, the new one included, at the toast's smallest size on
+  every listed phone screen. The free prompt was measured on desktop at 221 px wide against
+  249 px for the paid prompt it replaces, and a phone draws it with the same sizing code.
+  To see it: switch the emulator to a phone (Test tab, Device) and run the prompt and notice
+  cases again. Label that emulation, not a physical phone.
+- **A real purchase.** No dialog was opened in Play and nothing was bought. Every receipt was
+  mocked; `StoreService`'s own acknowledgement lines ran in the specs.
+- **What Roblox does with an unacknowledged receipt.** Not testable without a purchase.
+- **The paid pod products in Play.** They are off sale. StorageDoorsSpec sells a spec-only pod
+  product through the real `StoreService`.
+- **A real nest** in Play: the take was of a pod laid on the ground by the test host.
+- **A real purchase dialog for the pressed pod.** In Play the dialog was answered by the
+  Studio-only hook, never opened; the note, the checks and the receipt path were the real ones.
+- **The review's three fixes in Play** (the take before the save, a credit with the product off
+  sale, the rebuild's answer): specs and deliberate defects only.
+- **A second player, a physical phone, a controller.**
+
+### To pick this up
+
+1. Read this entry. `git status`: nothing should be staged. `wip` holds `6015de5`, `0a30050` and
+   the docs commit after them.
+2. **Waiting on the owner's review** of the whole change. Option B and the pressed pod are
+   decided and built; nothing is open to decide. The owner approved the commit and push on
+   2026-09-30. The three decisions made inside the brief, and the additions, are theirs to change.
+3. `main` was not touched: merging `wip` into it is the owner's call.
+
+## Hatch reveal, revised: a three-second roll in the world where the pod stood, SWITCHED ON FOR PLAYERS 2026-09-30 (0a30050 on `wip`) — 2026-09-29 (CLAUDE)  (ON BRANCH `wip`, NOT ON `main`; NOT PUBLISHED BY AN AGENT; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, IN PHONE EMULATION, ONE CLIENT)
 
 **In short.**
 - The owner corrected the first version the same day: "I do **not** want the new center-screen
@@ -14,9 +337,15 @@
   the server sends, and the order of the shapes comes from that hatch's token.
 - **Nothing is opened or taken over.** No screen gui, no modal, no camera change, no input
   bound, no change to movement, no result panel. `HatchRollSpec` reads the script for each.
-- **It ships switched off for players**: `GameConfig.Plant.Hatch.Roll.Enabled = false`.
-  `StudioPreview = true` shows it in Studio only. The working tree is safe to publish as it
-  stands.
+- **2026-09-30: switched ON for players, at the owner's request** ("can you enable the
+  silhouette roll now so i can publish it live?"): `GameConfig.Plant.Hatch.Roll.Enabled = true`,
+  committed as `0a30050` on `wip`; the owner publishes. The two tripwires changed with it
+  (`HatchRollSpec`, `HatchRevealSpec`: "as shipped, the roll is ON"). Whole suite with it on:
+  63 of 63 specs, 7,395 checks, 0 failures; the place builds. The owner published v1001 at
+  07:37 UTC, four minutes after the switch was saved, so v1001 most likely has it on (not
+  verified).
+- **Until then it shipped switched off for players** (`Enabled = false`), with
+  `StudioPreview = true` showing it in Studio only.
 - **It is a picture of a decision already made, not a second roll.** Species and size were fixed
   when the pod was made. Inside `hatch()`, with no yield, the Tool is handed over, its row is
   written, the pod leaves the garden and the garden is saved; only then is the message sent.

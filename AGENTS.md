@@ -148,15 +148,38 @@ src/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
     MapService.luau             builds the whole map, and the lighting, from code
     PlotService.luau            who owns which plot, puts them on it, and TELEPORT TO PLOT
-    ProfileSchema.luau          what a profile is, and the validator (NOT a *Service)
+    ProfileSchema.luau          what a profile is, and the validator (NOT a *Service). It
+                                drops a held row that is not a plant and never cuts the list
+                                to Save.MaxHeld: a record saved with more comes back whole
     SaveService.luau            DataStore transport, session locking
     PlayerDataService.luau      profiles in memory, autosave, replication
     CreatureModel.luau          pods and creatures (NOT a *Service)
     ParentModel.luau            Greenhollow guardian + biome dispatch (NOT a *Service)
     BramblebackModel.luau       Dustbowl guardian geometry and seventh-seam rig
     NestService.luau            nests, and the parent that sleeps beside them
-    CarryService.luau           one pod at a time, and what it costs to carry
-    PlantService.luau           place by click, hatch by hand, pick back up
+    CarryService.luau           one pod at a time, and what it costs to carry; the saved record
+                                of what is held (profile.Held, Save.MaxHeld = 24 plants and
+                                pods) and the ONE place its room is counted, HeldRoom. A plant
+                                or a pod is handed over AND recorded, or it is neither: a
+                                hatch and a pickup (GiveHatched with onRecord), a pod at a nest
+                                (TryTake refuses it) and a pod at the red line (bank leaves it
+                                in the arms). A pod in the arms keeps its place. A pod given
+                                (GivePod: a wheel prize, a paid pod) is counted and recorded
+                                too, or not given; a rebuild is not counted. The limit stops a
+                                row being added, never cuts one off
+    PlantService.luau           place by click, hatch by hand, pick back up. A hatch or a
+                                pickup the record has no room for is REFUSED: the pod or the
+                                plant stays planted and the player is told PLANT STORAGE FULL
+                                (the owner's decisions, 2026-09-29). Instant Hatch opens no
+                                purchase dialog for a full record; a receipt that finds it
+                                full MAKES ITS POD READY instead, and is answered for only
+                                once the garden was written. A receipt opens only the pod that
+                                was pressed, while it still grows; every other receipt (that pod
+                                ready or gone, no note, no garden yet) is
+                                KEPT AS A CREDIT (profile.InstantCredits, 2026-09-30), shown as
+                                a price-less "Free Instant Hatch" and spent by the next Instant
+                                Hatch press, only once that hatch has succeeded (KB/HANDOFF.md,
+                                the plant-storage entry)
     EconomyService.luau         THE FAUCET -- grown plants pay kg/sec, nothing else mints
     TreadmillService.luau       THE FAUCET for Speed -- stand on your own mill
     SellService.luau            the sell-all board beside the stall
@@ -181,7 +204,9 @@ src/
     ObbyDecor.luau              the course's art, from MapDecor.Kit/Props (NOT a *Service)
     WheelService.luau           the reward wheel: spins earned (5 per 24h window, from the obby),
                                 every spin rolled, recorded, SAVED, then paid through the
-                                existing faucets; owed prizes. Spins bought (switched off):
+                                existing faucets; owed prizes (a pod prize waits for room as
+                                CarryService.HeldRoom counts it, so it never takes the place
+                                kept for a pod being carried home). Spins bought (switched off):
                                 it alone opens the purchase prompt, the prompt grants nothing
                                 (StoreService's receipt does), and PolicyService fails closed
     WheelModel.luau             the wheel standing behind Marigold's stall (NOT a *Service)
