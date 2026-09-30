@@ -28,16 +28,42 @@
 --       PICKUP PROMPT in PlantService); PlantPickUI answers only your own
 --       plants, and the Garden panel lists only yours. A line with no attempt to
 --       attach it to would need a control invented to trigger it.
---   "Your Bag is full."  No transaction refuses on bag size. The hotbar's 5/5 or
---       10/10 is the strip's slots, "a fact, not a fault"; GiveHatched and
---       GivePod never count. The only cap is SAVE.MaxHeld, which limits what is
---       SAVED and refuses nothing.
+--   "Your Bag is full."  Nothing refuses on the size of the BAG. The hotbar's
+--       5/5 or 10/10 is the strip's slots, "a fact, not a fault", and a rebuild
+--       is handed over without being counted.
+--
+-- WHAT IS REFUSED IS WHAT THE SAVED RECORD HAS NO ROOM FOR (2026-09-29). The
+-- record holds SAVE.MaxHeld plants and pods, and anything handed over past it
+-- used to be given and never saved -- gone at the next death or rejoin. The
+-- owner's decisions: "refuse the hatch and leave the pod planted and ready
+-- until the player makes room"; a pickup and a banked pod "must not hand over
+-- an item that cannot be saved"; a purchase of an instant hatch that finds no
+-- room makes "its intended pod ready immediately" instead; and one that finds
+-- that pod's wait already over is kept as a credit (2026-09-30), as is one
+-- that finds no unhatched pod at all. The lines:
+--
+--   STORAGE_FULL           a hatch, a pickup, or a pod at a nest: refused
+--   STORAGE_FULL_BANK      a pod at the red line: it stays in the arms
+--   STORAGE_FULL_READY     an instant hatch that was paid for: the pod is ready
+--   STORAGE_FULL_CREDIT    an instant hatch that was paid for, and no wait left
+--                          to end: saved, and the next one is free
+--   INSTANT_CREDIT_NO_POD  an instant hatch that was paid for, and no pod to
+--                          hatch: saved, and the next one is free
+--   INSTANT_CREDIT_READY   an instant hatch that was paid for, and its pod (or
+--                          every pod) already ready: saved; they hatch free
+--   INSTANT_CREDIT_SAVED   an instant hatch that was paid for, with no pod it
+--                          can be told was bought for: saved for any pod
+--   INSTANT_CREDIT_USED    that saved instant hatch, spent on a hatch
 --==============================================================================
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local Notice = require(script.Parent:WaitForChild("Notice"))
 
 local ActionRefusal = {}
+
+-- How many plants and pods the saved record holds: the number in the storage
+-- lines below.
+local MAX_HELD: number = GameConfig.Save.MaxHeld
 
 -- Server -> client, on the GameEvent remote every client already listens to,
 -- carrying one code from `Text` and nothing else.
@@ -103,6 +129,30 @@ ActionRefusal.Text = {
 	-- word for word, except a landing with no ground under it: that is the
 	-- course's entrance, not the player's plot.
 	OBBY_BLOCKED = "The obby entrance isn't ready yet.",
+
+	--==========================================================================
+	-- PLANT STORAGE (CarryService.HeldRoom), 2026-09-29
+	--
+	-- What the saved record has no room for: a hatch (the held prompt on a ready
+	-- pod, and the Instant Hatch key, which then opens no purchase), a pickup,
+	-- a pod at a nest and a pod at the red line. The number is the limit's own,
+	-- so the words cannot say one thing and the rule another.
+	-- STORAGE_FULL_READY and STORAGE_FULL_CREDIT are a receipt that found the
+	-- record full -- it filled after the purchase dialog opened, or Roblox
+	-- delivered the receipt again. INSTANT_CREDIT_NO_POD is a receipt that
+	-- found no pod to hatch (2026-09-30), INSTANT_CREDIT_READY one whose pod
+	-- (or every pod) was already ready, and INSTANT_CREDIT_SAVED one that named
+	-- no pod it can still hatch while others grow. INSTANT_CREDIT_USED is the
+	-- credit spent.
+	--==========================================================================
+	STORAGE_FULL = string.format("Plant storage full (%d/%d).", MAX_HELD, MAX_HELD),
+	STORAGE_FULL_BANK = string.format("Plant storage full (%d/%d).", MAX_HELD, MAX_HELD),
+	STORAGE_FULL_READY = "Pod ready. Make room to hatch it free.",
+	STORAGE_FULL_CREDIT = "Instant Hatch saved: next one is free.",
+	INSTANT_CREDIT_NO_POD = "Instant Hatch saved for later.",
+	INSTANT_CREDIT_READY = "Instant Hatch saved: pods are ready.",
+	INSTANT_CREDIT_SAVED = "Instant Hatch saved for any pod.",
+	INSTANT_CREDIT_USED = "Saved Instant Hatch used.",
 }
 
 --==============================================================================
@@ -125,7 +175,9 @@ ActionRefusal.Text = {
 --                       up -- PlantService.pickUp); a level still to buy
 --   PLOT_FULL_WAIT      nothing grown yet, and nothing left to buy
 --==============================================================================
-export type Line = { title: string, detail: string? }
+-- `kind` is how the notice looks and sounds (Notice.Styles). A refusal is
+-- "blocked" and needs none; a line here that is not a refusal names its own.
+export type Line = { title: string, detail: string?, kind: Notice.Kind? }
 
 ActionRefusal.Notices = {
 	SAFE_ZONE_TARGET = { title = "SAFE ZONE", detail = "Players here can't be hit." },
@@ -146,6 +198,69 @@ ActionRefusal.Notices = {
 	OBBY_STUNNED = { title = "CAN'T START YET", detail = "Wait until you can move again." },
 	TRAP_OBBY = { title = "NO TRAPS HERE", detail = "Traps don't work on the course." },
 	OBBY_BLOCKED = { title = "OBBY NOT READY" },
+	-- PLANT STORAGE FULL, 24/24: the headline is held to twenty characters like
+	-- every other, so the count leads the line under it. What makes room is what
+	-- takes a plant or a pod out of the bag: putting it in the ground, or
+	-- selling it.
+	STORAGE_FULL = {
+		title = "PLANT STORAGE FULL",
+		detail = string.format("%d/%d. Plant or sell one to make room.", MAX_HELD, MAX_HELD),
+	},
+	-- A pod at the red line: it stays in the arms, and is banked by itself the
+	-- moment there is room. It does not say "make room": with a pod in the
+	-- arms nothing can be planted or sold, so that is not theirs to do yet.
+	STORAGE_FULL_BANK = {
+		title = "PLANT STORAGE FULL",
+		detail = string.format("%d/%d. Your pod is banked when there is room.", MAX_HELD, MAX_HELD),
+	},
+	-- THE PURCHASE WAS USED: it ended the pod's wait. Not a refusal, so not red:
+	-- the player is told the storage is full AND what they now have.
+	STORAGE_FULL_READY = {
+		title = "PLANT STORAGE FULL",
+		detail = "Your pod is ready. Make room to hatch it free.",
+		kind = "warning",
+	},
+	-- THE PURCHASE WAS KEPT: there was no wait left to end, so it is saved as a
+	-- credit, and the next Instant Hatch that works costs nothing. Not a
+	-- refusal either: the player is told what their purchase became.
+	STORAGE_FULL_CREDIT = {
+		title = "PLANT STORAGE FULL",
+		detail = "Instant Hatch saved. Your next one is free.",
+		kind = "warning",
+	},
+	-- THE PURCHASE WAS KEPT, with nothing wrong: no unhatched pod for it to
+	-- open (it hatched while the dialog was open, or Roblox delivered the
+	-- receipt again before the garden was back), so it is saved as a credit.
+	-- News, not a warning.
+	INSTANT_CREDIT_NO_POD = {
+		title = "INSTANT HATCH SAVED",
+		detail = "Nothing to hatch now. Your next one is free.",
+		kind = "info",
+	},
+	-- THE PURCHASE WAS KEPT BECAUSE ITS POD WAS ALREADY READY (the pressed pod,
+	-- or every pod): a ready pod hatches free, so the purchase is saved for one
+	-- with time left, and the line says both. News, not a warning.
+	INSTANT_CREDIT_READY = {
+		title = "INSTANT HATCH SAVED",
+		detail = "Ready pods hatch free. Your next one is free.",
+		kind = "info",
+	},
+	-- THE PURCHASE WAS KEPT BECAUSE NO POD CAN BE TOLD IT WAS BOUGHT FOR (2026-09-30):
+	-- a receipt delivered again with no note, or its pod gone, while other pods
+	-- still grow. The owner's rule: never switch it to another pod. Saved, and
+	-- any growing pod's Instant Hatch is now free.
+	INSTANT_CREDIT_SAVED = {
+		title = "INSTANT HATCH SAVED",
+		detail = "Your next Instant Hatch is free.",
+		kind = "info",
+	},
+	-- The saved one, spent: said so that a hatch with no purchase dialog is not
+	-- mistaken for one that was charged.
+	INSTANT_CREDIT_USED = {
+		title = "INSTANT HATCH",
+		detail = "Your saved Instant Hatch was used.",
+		kind = "success",
+	},
 } :: { [string]: Line }
 
 -- Which full-plot code: `canUpgrade` -- the plot is below its top level;
@@ -164,7 +279,7 @@ function ActionRefusal.notice(code: string): Notice.Post?
 		return nil
 	end
 	return {
-		kind = "blocked",
+		kind = line.kind or "blocked",
 		title = line.title,
 		detail = line.detail,
 		key = "refusal:" .. code,

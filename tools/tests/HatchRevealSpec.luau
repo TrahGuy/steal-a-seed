@@ -219,6 +219,20 @@ local PlayerDataService = {
 	Get = function(playerArg)
 		return if playerArg == owner then profile else nil
 	end,
+	-- A receipt that finds nothing to hatch keeps a saved Instant Hatch
+	-- (PlantService.keepForLater, 2026-09-30), and only for a profile that
+	-- saves. The stranger here has no profile at all, so none is kept for them.
+	IsPersistent = function(playerArg)
+		return playerArg == owner
+	end,
+	AddInstantCredits = function(playerArg, delta)
+		if playerArg ~= owner then
+			return nil
+		end
+		profile.InstantCredits = (profile.InstantCredits or 0) + delta
+		record("AddInstantCredits", playerArg, delta)
+		return profile.InstantCredits
+	end,
 	SetPlants = function(playerArg, list)
 		record("SetPlants", playerArg, list)
 	end,
@@ -240,6 +254,11 @@ local CarryService = {
 	GiveHatched = function(playerArg, species, tier, equipAfter, revealAt, onRecord)
 		record("GiveHatched", playerArg, species, tier, equipAfter, revealAt, onRecord)
 		return giveWorks
+	end,
+	-- The saved record has room (2026-09-29): what a full one does to a hatch is
+	-- HatchStorageSpec's, on the real CarryService.
+	HeldRoom = function()
+		return GameConfig.Save.MaxHeld, 0, true
 	end,
 	SyncHeldNow = function() end,
 }
@@ -471,22 +490,24 @@ local function body()
 	do
 		trace = {}
 		--======================================================================
-		-- NO SECOND PRESS: ONE DIALOG PER SECOND, BY DESIGN
+		-- A SECOND PRESS, A SECOND DIALOG'S RECEIPT (2026-09-30)
 		--
-		-- OfferInstantHatch rate-limits a player to one purchase dialog a second,
-		-- so this drives the OTHER documented door instead: a receipt with no note
-		-- against it, which Roblox re-delivers after a rejoin. It takes the pod
-		-- with the longest wait left, which is pod 3 -- the Dunebud fifteen
-		-- minutes out -- and not pod 2, which is fifty seconds out.
+		-- A receipt hatches the pod that was pressed and no other (the owner's
+		-- decision); one with no note keeps a credit instead. So pod 3 -- the
+		-- Dunebud fifteen minutes out -- is pressed, once the one-dialog-a-second
+		-- limit allows it, and its receipt hatches it.
 		--======================================================================
+		task.wait(GameConfig.Plant.InstantHatch.OfferGapSeconds + 0.1)
+		check(PlantService.OfferInstantHatch(owner, plotModel, 3) == true, "(pod 3 is pressed: the note names it)")
+		trace = {}
 		check(PlantService.InstantHatch(owner),
-			"a receipt with no note hatches the pod with the longest wait left")
+			"its receipt hatches the pod that was pressed")
 		local payload = reveals[#reveals]
 		check(payload.discovery == false,
 			"the second Dunebud is not a discovery", payload.discovery)
 		check(payload.species == "dunebud" and payload.tier == 1
 				and payload.token ~= reveals[1].token,
-			"the fallback picked pod 3, and it is its own reveal with its own token",
+			"it is pod 3, and it is its own reveal with its own token",
 			string.format("%s T%s", tostring(payload.species), tostring(payload.tier)))
 		check(count("Reveal") == 1, "still one announcement per hatch", count("Reveal"))
 
@@ -497,7 +518,10 @@ local function body()
 			"and a receipt in a stranger's name hatches nothing")
 		check(count("Reveal") == 0, "so no reveal is announced", count("Reveal"))
 		check(count("GiveHatched") == 0, "and nobody is handed a plant")
+		check(count("AddInstantCredits") == 0, "and no saved Instant Hatch is kept for a player with no profile")
 
+		task.wait(GameConfig.Plant.InstantHatch.OfferGapSeconds + 0.1)
+		check(PlantService.OfferInstantHatch(owner, plotModel, 2) == true, "(pod 2 is pressed)")
 		trace = {}
 		giveWorks = false
 		check(PlantService.InstantHatch(owner) == false,

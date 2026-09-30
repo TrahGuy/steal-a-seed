@@ -113,7 +113,10 @@ end
 
 local rollConfig = setmetatable({ Enabled = true, StudioPreview = false }, { __index = ROLL })
 local hatchConfig = setmetatable({ Roll = rollConfig }, { __index = HATCH })
-local plantConfig = setmetatable({ Hatch = hatchConfig }, { __index = GameConfig.Plant })
+-- No gap between purchase dialogs, so a press can come straight before each receipt.
+local instantConfig = setmetatable({ OfferGapSeconds = 0 }, { __index = GameConfig.Plant.InstantHatch })
+local plantConfig = setmetatable({ Hatch = hatchConfig, InstantHatch = instantConfig },
+	{ __index = GameConfig.Plant })
 local SPEC_PRODUCT = 990011
 local hatchItem = { kind = "hatch", robux = 99, product = SPEC_PRODUCT }
 for _, item in ipairs(GameConfig.Store.InWorld or {}) do
@@ -408,9 +411,39 @@ local function arrive(name, userId, pods, held, profile)
 	return p, plot, profile
 end
 
--- One receipt. Answers what InstantHatch said, the announcement it made (or
--- nil), and whether it ran from start to finish without yielding.
+-- A receipt hatches the pod that was pressed and no other (the owner, 2026-09-30):
+-- one with no note keeps a credit. So each receipt here is preceded by its press,
+-- on the pod a player would press next -- of those still counting down, the one
+-- with the longest wait, ties to the lower id -- and the spec's config has no gap
+-- between dialogs, so presses can follow each other as fast as the receipts do.
+local function pressNext(p, plot)
+	local best, bestAt = nil, -math.huge
+	for _, d in ipairs(plot:GetDescendants()) do
+		-- Planted: a hatched pod stays in the plot for its reveal, untagged.
+		if d:IsA("Model") and d:GetAttribute("PlacementId") ~= nil and d:GetAttribute("Stage") == 1
+			and game:GetService("CollectionService"):HasTag(d, GameConfig.Tags.Planted)
+			and d:GetAttribute("Ready") ~= true then
+			local at = tonumber(d:GetAttribute("HatchAt")) or 0
+			local id = d:GetAttribute("PlacementId")
+			if at > bestAt or (at == bestAt and best ~= nil and id < best) then
+				best, bestAt = id, at
+			end
+		end
+	end
+	if best ~= nil then
+		PlantService.OfferInstantHatch(p, plot, best)
+	end
+	return best
+end
+
+-- One receipt, after its press. Answers what InstantHatch said, the
+-- announcement it made (or nil), and whether it ran from start to finish
+-- without yielding.
 local function receipt(p)
+	local plot = plotOf[p]
+	if plot then
+		pressNext(p, plot)
+	end
 	local before = #reveals
 	local answered, done = nil, false
 	local thread = coroutine.create(function()
@@ -938,28 +971,57 @@ local function body()
 	end
 
 	--==========================================================================
-	-- 7. THE ONE LIMIT, MEASURED (not a verdict: the owner's to decide)
+	-- 7. THE ONE LIMIT (2026-09-29: the owner has decided; this was a note)
+	--
+	-- Measured here first: with 24 plants saved, a hatch answered true, made a
+	-- Tool, and wrote no row -- a plant on nobody's record. The owner's
+	-- decision: "refuse the hatch and leave the pod planted and ready until the
+	-- player makes room". HatchStorageSpec has every side of that; here, that a
+	-- hatch whose roll would run is refused like any other, and leaves no
+	-- secret behind.
+	--
+	-- The hatch here is a paid one, and a purchase that finds no room "should
+	-- make its intended pod ready immediately" (the owner, the same day): so the
+	-- receipt is answered for, and what it is answered for is a pod made ready
+	-- -- not a plant, not an announcement, and not a roll.
 	--==========================================================================
 	say("\n-- the saved bag's limit --")
 	do
 		local full = {}
-		for _ = 1, MAX_HELD do
+		for _ = 1, MAX_HELD - 1 do
 			table.insert(full, { Id = "nubkin", Tier = 1, Hatched = true })
 		end
-		local p, _, profile = arrive("FullRecord", -409, { { id = "novaorb", tier = 4 } }, full)
+		local p, plot, profile = arrive("FullRecord", -409, { { id = "novaorb", tier = 4 } }, full)
 		task.wait(0.4)
-		local answered = receipt(p)
+		-- Pressed with room for one (a full record opens no dialog), and the record
+		-- filled while the dialog was open: a receipt for the pod that was pressed.
+		pressNext(p, plot)
+		CarryService.GivePod(p, "spiretip", 1)
+		task.wait()
+		local answered, payload, ranThrough = receipt(p)
 		local onRecord = false
 		for _, row in ipairs(profile.Held) do
 			if row.Id == "novaorb" then
 				onRecord = true
 			end
 		end
-		say(string.format("  NOTE  with %d plants already saved, a hatch answers %s, makes %d Tool(s), and "
-			.. "the record holds %d rows -- the new plant %s on it (Save.MaxHeld = %d, which by design "
-			.. "\"limits what is SAVED and refuses nothing\"; older than the roll, and reported to the owner)",
-			MAX_HELD, tostring(answered), #plantsOf(p) - MAX_HELD, #profile.Held,
-			if onRecord then "IS" else "is NOT", MAX_HELD))
+		check(answered == true and payload == nil and ranThrough,
+			"with 24 plants already saved, a paid hatch is refused: nothing hatches and nothing is announced",
+			tostring(answered))
+		check(#plantsOf(p) == MAX_HELD and #profile.Held == MAX_HELD and not onRecord,
+			"no Tool is made and no row is written: nothing is held that is not on the record",
+			string.format("%d tools, %d rows", #plantsOf(p), #profile.Held))
+		check(podsIn(plot) == 1 and #profile.Plants == 1 and profile.Plants[1].SpeciesId == "novaorb"
+				and profile.Plants[1].Stage == 1 and profile.Plants[1].HatchAt <= os.time(),
+			"the pod is still in the garden, and what the purchase did is end its wait",
+			string.format("%d pods, deadline %s", podsIn(plot), tostring(profile.Plants[1].HatchAt)))
+		local sealed = 0
+		for _, tool in ipairs(plantsOf(p)) do
+			if tool:GetAttribute(ROLL.Attribute) ~= nil then
+				sealed += 1
+			end
+		end
+		check(sealed == 0, "no plant is left called ???: a refused hatch starts no roll", sealed)
 		check(#profile.Held <= MAX_HELD, "the record never goes past its limit", #profile.Held)
 	end
 end

@@ -58,6 +58,17 @@ export type Profile = {
 	-- and the next does not exist; a list that grows forever does.
 	--==========================================================================
 	Receipts: { string },
+	--==========================================================================
+	-- SAVED INSTANT HATCHES (2026-09-30)
+	--
+	-- Instant Hatch purchases kept for later: a receipt that found the saved
+	-- record full and its pod's wait already over (PlantService.InstantHatch).
+	-- Added in the same step as that receipt's entry in Receipts above, so a
+	-- save holds both or neither; spent only by an instant hatch that has
+	-- succeeded. Kept by a progress reset, like a bought spin. An old save has
+	-- none and reads 0.
+	--==========================================================================
+	InstantCredits: number,
 	Version: number,
 	Cash: number,
 	Speed: number,
@@ -287,6 +298,7 @@ function ProfileSchema.Default(): Profile
 	return {
 		Tutorial = TutorialData.Default(),
 		Receipts = {},
+		InstantCredits = 0,
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
 		Speed = 0,
@@ -557,14 +569,17 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- from before the roll existed, or a table with a hole in it. Every row has
 	-- to name a real species and carry a sane weight or it does not come back.
 	--
-	-- Capped, because the list is rebuilt into Tools on join and an unbounded
-	-- one is an unbounded amount of work at the worst moment.
+	-- NOT CUT TO THE LIMIT (2026-09-29). This used to stop reading at
+	-- SAVE.MaxHeld rows and say nothing about the rest, so a record that held
+	-- more lost plants at the door. The owner's rule: "Do not silently delete
+	-- or truncate an existing profile that already exceeds the cap." The limit
+	-- is asked when something is ADDED (CarryService.HeldRoom), and no writer
+	-- adds a row past it; a record that already holds more comes back whole,
+	-- and is full until its owner has sold or planted it back under. What it
+	-- costs to rebuild is bounded by what was saved.
 	--==========================================================================
 	if type(raw.Held) == "table" then
 		for _, row in ipairs(raw.Held) do
-			if #p.Held >= SAVE.MaxHeld then
-				break
-			end
 			if type(row) == "table" and type(row.Id) == "string"
 				and SeedData.Get(row.Id) then
 				local tier = number(row.Tier, 0, 1, SeedData.TierCount)
@@ -789,6 +804,8 @@ function ProfileSchema.Sanitise(raw: any): Profile
 			end
 		end
 	end
+	-- Whole, never below zero, never past the cap; anything else reads 0.
+	p.InstantCredits = math.floor(number(raw.InstantCredits, 0, 0, SAVE.MaxInstantCredits))
 
 	p.Tutorial = TutorialData.Sanitise(raw.Tutorial, p)
 	-- Unknown keys are dropped by construction: everything above copies FROM

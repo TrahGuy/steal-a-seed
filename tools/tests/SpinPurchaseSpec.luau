@@ -222,6 +222,11 @@ local CarryService = {
 	IsHeldRestored = function()
 		return true
 	end,
+	-- The room CarryService counts, which the wheel asks before a pod (2026-09-30).
+	HeldRoom = function(player)
+		local count = #profiles[player].Held
+		return math.max(GameConfig.Save.MaxHeld - count, 0), count, true
+	end,
 	GivePod = function(player, species, tier)
 		record("GivePod", player, species, tier)
 		table.insert(profiles[player].Held, { Id = species, Tier = tier, Hatched = false })

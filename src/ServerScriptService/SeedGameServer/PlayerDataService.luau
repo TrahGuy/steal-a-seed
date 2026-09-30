@@ -305,6 +305,31 @@ function PlayerDataService.UpdateWheel(player: Player, change: (Profile) -> bool
 	return false
 end
 
+--==============================================================================
+-- SAVED INSTANT HATCHES (2026-09-30)
+--
+-- One credit is an Instant Hatch purchase kept for later (see PlantService.
+-- InstantHatch): `delta` is +1 for one granted and -1 for one spent. Whole
+-- numbers only, never below zero, never past SAVE.MaxInstantCredits -- a change
+-- that would break one of those is refused and changes nothing. Synchronous,
+-- like every writer here, so a receipt's credit and its ledger entry reach the
+-- same save. Answers the new balance, or nil when refused.
+--==============================================================================
+function PlayerDataService.AddInstantCredits(player: Player, delta: number): number?
+	local entry = entries[player]
+	if not entry or type(delta) ~= "number" or delta ~= delta or delta == 0
+		or delta ~= math.floor(delta) then
+		return nil
+	end
+	local balance = entry.profile.InstantCredits + delta
+	if balance < 0 or balance > SAVE.MaxInstantCredits then
+		return nil
+	end
+	entry.profile.InstantCredits = balance
+	touch(player)
+	return balance
+end
+
 function PlayerDataService.SetTutorialSkipped(player: Player, skipped: boolean): boolean
 	local entry = entries[player]
 	if not entry or player.Parent ~= Players or type(skipped) ~= "boolean" then return false end
@@ -828,6 +853,8 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		-- Not progress (2026-09-27): spins somebody bought, prizes the wheel
 		-- still owes, and the cosmetics they won and wear.
 		WheelBought = profile.WheelBought or 0,
+		-- Nor are Instant Hatches somebody bought and kept for later (2026-09-30).
+		InstantCredits = profile.InstantCredits or 0,
 		WheelPending = table.clone(profile.WheelPending or {}),
 		Cosmetics = table.clone(profile.Cosmetics or {}),
 		EquippedTrail = profile.EquippedTrail or "",

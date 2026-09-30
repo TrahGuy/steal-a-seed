@@ -229,6 +229,14 @@ local CarryService = {
 		return true
 	end,
 	SyncHeldNow = function() end,
+	-- The saved record has room (the storage limit is HatchStorageSpec's). The
+	-- Instant Hatch key counts it before it asks about the product (2026-09-30).
+	HeldRoom = function()
+		return 5, 0, true
+	end,
+	IsCarrying = function()
+		return false
+	end,
 }
 
 local fakeMarket = {}

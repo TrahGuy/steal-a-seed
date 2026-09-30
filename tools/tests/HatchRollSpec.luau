@@ -613,6 +613,13 @@ local function body()
 				return giveWorks
 			end,
 			SyncHeldNow = function() end,
+			-- The saved record has room: the Instant Hatch key counts it before a dialog.
+			HeldRoom = function()
+				return 10, 0, true
+			end,
+			IsCarrying = function()
+				return false
+			end,
 		}
 		local fakeMarket = {}
 		function fakeMarket:PromptProductPurchase() end
@@ -631,8 +638,16 @@ local function body()
 		plotModel:SetAttribute("Depth", startDepth)
 		MapService.ResizePlot(plotModel, 1)
 
-		-- Six pods, hatched in this order: a receipt with no note against it takes
-		-- the pod with the longest wait left.
+		-- No gap between purchase dialogs, so each press can come straight before
+		-- its receipt and four hatches can still land within the same second.
+		local gapless = setmetatable({
+			Plant = setmetatable({
+				InstantHatch = setmetatable({ OfferGapSeconds = 0 }, { __index = GameConfig.Plant.InstantHatch }),
+			}, { __index = GameConfig.Plant }),
+		}, { __index = GameConfig })
+		-- Six pods, pressed and hatched in this order: each receipt follows the press
+		-- on the pod with the longest wait left (a receipt hatches only the pod that
+		-- was pressed, 2026-09-30).
 		local pods = {
 			{ id = "dunebud", tier = 7 }, { id = "nubkin", tier = 2 }, { id = "novaorb", tier = 4 },
 			{ id = "petalpip", tier = 1 }, { id = "dunebud", tier = 3 }, { id = "nubkin", tier = 5 },
@@ -649,7 +664,7 @@ local function body()
 				PlayerDataService = PlayerDataService,
 				CarryService = CarryService,
 				PlantWander = PlantWander,
-			}, { HatchRoll = rollOn }, fakeGame)
+			}, { HatchRoll = rollOn, GameConfig = gapless }, fakeGame)
 			PlantService.Init()
 			PlantService.Start()
 		end)
@@ -665,6 +680,24 @@ local function body()
 		assignedFn(owner, plotModel)
 
 		local function hatchNext()
+			-- The pod is pressed first, the one with the longest wait still counting
+			-- down: a receipt hatches the pod that was pressed and no other.
+			local best, bestAt = nil, -math.huge
+			for _, d in ipairs(plotModel:GetDescendants()) do
+				-- Planted: a hatched pod stays in the plot for its reveal, untagged.
+				if d:IsA("Model") and d:GetAttribute("PlacementId") ~= nil and d:GetAttribute("Stage") == 1
+					and game:GetService("CollectionService"):HasTag(d, GameConfig.Tags.Planted)
+					and d:GetAttribute("Ready") ~= true then
+					local at = tonumber(d:GetAttribute("HatchAt")) or 0
+					local id = d:GetAttribute("PlacementId")
+					if at > bestAt or (at == bestAt and best ~= nil and id < best) then
+						best, bestAt = id, at
+					end
+				end
+			end
+			if best ~= nil then
+				PlantService.OfferInstantHatch(owner, plotModel, best)
+			end
 			trace = {}
 			local before = #reveals
 			local done = false
@@ -826,7 +859,9 @@ local function body()
 		local plant = sourceOf(Server:FindFirstChild("PlantService"))
 		check(plant ~= nil, "PlantService is there to be read")
 		if plant then
-			local from = plant:find("function hatch(player: Player, entry: Planted, early: boolean?): boolean",
+			-- By its name and arguments: what it answers has changed since (a reason
+			-- rides back beside a refusal), and may again.
+			local from = plant:find("function hatch(player: Player, entry: Planted, early: boolean?)",
 				1, true)
 			local to = from and plant:find("announceReveal({", from, true)
 			local slice = if from and to then plant:sub(from, to) else ""

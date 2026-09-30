@@ -558,6 +558,39 @@ local function refuseTake(player: Player, pod: Model, code: string): boolean
 end
 
 --==============================================================================
+-- PLANT STORAGE FULL, SAID FROM HERE (2026-09-29)
+--
+-- The two refusals this file makes for room: a pod that may not be TAKEN, and
+-- one that may not be BANKED (see HeldRoom). Said once and then left alone --
+-- a take is a held key and a bank is asked for five times a second, so each
+-- line has its own quiet time and nothing is said twice inside it. PlantService
+-- says the same line for a hatch and a pickup, by the same rule.
+--==============================================================================
+local STORAGE_QUIET_SECONDS = 2
+-- A refused bank is not something the player pressed: it is asked again every
+-- fifth of a second for as long as they stand there. One line, and a reminder
+-- no sooner than this.
+local BANK_QUIET_SECONDS = 30
+local lastStorageLine: { [Player]: { [string]: number } } =
+	setmetatable({}, { __mode = "k" }) :: any
+
+local function tellStorageFull(player: Player, code: string, quiet: number): boolean
+	local now = os.clock()
+	local seen = lastStorageLine[player]
+	if not seen then
+		seen = {}
+		lastStorageLine[player] = seen
+	end
+	if now - (seen[code] or -math.huge) < quiet then
+		return false
+	end
+	seen[code] = now
+	log(string.format("%s: refused for room (%s), plant storage full.", player.Name, code))
+	ActionRefusal.send(player, code)
+	return true
+end
+
+--==============================================================================
 -- A POD IN BOTH ARMS PUTS THE PLANT AWAY
 --
 -- A held plant rides in front of the torso in the same two-handed grip a raid
@@ -714,6 +747,35 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	end
 	if (head.Position - anchor.Position).Magnitude > TAKE_RANGE + RANGE_SLACK then
 		return refuseTake(player, pod, "OUT_OF_RANGE")
+	end
+	--==========================================================================
+	-- NOTHING IS TAKEN THAT COULD NOT BE BANKED (2026-09-29)
+	--
+	-- The owner's rule: a pod must not be handed over into a record that has no
+	-- room to save it. The refusal that enforces it is at the red line (bank),
+	-- and it is made HERE FIRST, because a pod refused at the line stays in the
+	-- arms -- and a player with a pod in their arms can plant nothing and sell
+	-- no single plant, and is shown no prompt at all. They would be carrying a
+	-- pod they can neither bank nor put down. Refused at the nest, the pod
+	-- stays where it was, and what makes room is still theirs to do.
+	--
+	-- With the refusals, above the line where the world starts changing: the
+	-- pod is untouched and its parent is not woken.
+	--
+	-- A PLAYER WHOSE SAVE HAS NOT ARRIVED IS REFUSED TOO, AND TOLD NOTHING
+	-- (2026-09-30). Until the record is here nobody knows whether the pod could
+	-- be banked, and a pod taken into a record that then arrives full could be
+	-- neither banked nor put down -- the very thing this block is for. Found in
+	-- review. It is not "full", so nothing is said; the take works the moment
+	-- the save is in.
+	--==========================================================================
+	local room, _, known = CarryService.HeldRoom(player)
+	if not known then
+		return refuseTake(player, pod, "NO_RECORD")
+	end
+	if room < 1 then
+		tellStorageFull(player, "STORAGE_FULL", STORAGE_QUIET_SECONDS)
+		return refuseTake(player, pod, "STORAGE_FULL")
 	end
 
 	--== EVERYTHING BELOW THIS LINE CHANGES THE WORLD ==--
@@ -1228,13 +1290,41 @@ end
 -- other caller that passes it is the rebuild after a death, for a plant whose
 -- roll was still running when its Tool went with the body (see Sealed).
 --
--- `onRecord` is the hatch's alone: write this plant's row now (RecordHatched).
+-- `onRecord` is the hatch's and the pickup's: write this plant's row now
+-- (RecordHatched).
+--
+--==============================================================================
+-- A PLANT IS HANDED OVER AND RECORDED, OR IT IS NEITHER (2026-09-29)
+--
+-- The owner's decisions, for a record that is full: "refuse the hatch and leave
+-- the pod planted and ready until the player makes room", and a pickup "must
+-- not hand over an item that cannot be saved. Preserve the item in its prior
+-- safe state" -- the plant stays planted.
+--
+-- So with `onRecord` the answer is no BEFORE anything is built -- no record to
+-- write on, or no room on it (HeldRoom) -- and the reason rides back beside it,
+-- for PlantService to say to the player. And when the row cannot be written
+-- after all, the Tool that was just made is taken back: nothing is left in the
+-- hands that is on nobody's record.
+--
+-- A HATCH AND A PICKUP ARE COUNTED; A REBUILD IS NOT. A rebuild passes no
+-- `onRecord` and is handed over as it always was: it is the record being put
+-- back, and refusing it would be the record losing a plant.
 --==============================================================================
 function CarryService.GiveHatched(player: Player, species: SeedData.Species,
-	tier: number, equipAfter: number?, revealAt: number?, onRecord: boolean?): boolean
+	tier: number, equipAfter: number?, revealAt: number?, onRecord: boolean?): (boolean, string?)
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
-		return false
+		return false, nil
+	end
+	if onRecord == true then
+		local room, _, known = CarryService.HeldRoom(player)
+		if not known then
+			return false, "NO_RECORD"
+		end
+		if room < 1 then
+			return false, "STORAGE_FULL"
+		end
 	end
 	local model = CreatureModel.BuildCreature(species, tier,
 		CreatureModel.STAGE_GROWN, CFrame.new(), backpack)
@@ -1285,7 +1375,19 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	end
 	local tool = giveTool(player, model, species, tier, grip, true, sealedUntil)
 	if not tool then
-		return false
+		return false, nil
+	end
+	-- `onRecord` is the hatch's and the pickup's: this plant is new to the
+	-- hands, and its row is written now, in the same call that made its Tool. A
+	-- rebuild passes none -- a rebuilt plant is on the record already, which is
+	-- where it was rebuilt from.
+	--
+	-- NOT WRITTEN, NOT GIVEN. The room was counted before the Tool was built, so
+	-- this is the write itself failing -- the profile gone in between -- and the
+	-- Tool goes back before anybody has been told a plant hatched.
+	if onRecord == true and not CarryService.RecordHatched(player, species, tier) then
+		tool:Destroy()
+		return false, "NOT_RECORDED"
 	end
 	-- The secret runs out on the server's clock: the attribute comes off, which
 	-- is the change every hotbar and Bag repaints on. A Tool that has gone by
@@ -1297,13 +1399,6 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 				tool:SetAttribute(REVEAL_AT, nil)
 			end
 		end)
-	end
-	-- `onRecord` is the hatch's and nobody else's: this plant is new, and its
-	-- row is written now, in the same call that made its Tool. A pickup and a
-	-- rebuild pass none -- a rebuilt plant is on the record already, which is
-	-- where it was rebuilt from.
-	if onRecord == true then
-		CarryService.RecordHatched(player, species, tier)
 	end
 	--==========================================================================
 	-- THE REACH IS WRITTEN DOWN, BECAUSE CarryPose CANNOT DERIVE IT
@@ -1391,7 +1486,7 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- Handing over a Tool is all this does. The caller knows what it means and
 	-- says so itself.
 	--==========================================================================
-	return true
+	return true, nil
 end
 
 local function bank(player: Player): boolean
@@ -1399,6 +1494,32 @@ local function bank(player: Player): boolean
 	local character = player.Character
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not (held and character and backpack) then
+		return false
+	end
+	--==========================================================================
+	-- NOT BANKED INTO A RECORD THAT CANNOT HOLD IT (2026-09-29)
+	--
+	-- A banked pod is a Tool, and a Tool the record has no row for is gone at
+	-- the next death or rejoin. The owner's rule: it "must not hand over an item
+	-- that cannot be saved. Preserve the item in its prior safe state" -- so the
+	-- pod STAYS IN THE ARMS, exactly as it was a step before the line, and this
+	-- is asked again a fifth of a second later for as long as they stand in the
+	-- Safe Zone. The moment there is room it is banked, with nothing pressed.
+	--
+	-- A take is refused at the nest for the same reason (TryTake), and a pod in
+	-- the arms keeps its place against a hatch, a pickup and a pod given
+	-- (HeldRoom), so this is the backstop: the record filling some other way on
+	-- the run home, such as a save that already held more than the limit.
+	--
+	-- No record yet -- the save still arriving -- is not room either: the pod
+	-- waits in the arms for it, and nothing is said.
+	--==========================================================================
+	local room, _, known = CarryService.HeldRoom(player, true)
+	if not known then
+		return false
+	end
+	if room < 1 then
+		tellStorageFull(player, "STORAGE_FULL_BANK", BANK_QUIET_SECONDS)
 		return false
 	end
 
@@ -1410,6 +1531,13 @@ local function bank(player: Player): boolean
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
 	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
 	if not tool then
+		return false
+	end
+	-- ON THE RECORD, OR NOT HANDED OVER: the row is written now, in the call
+	-- that made the Tool, and a row that cannot be written takes the Tool back
+	-- and leaves the pod in the arms.
+	if not CarryService.RecordPod(player, species, tier) then
+		tool:Destroy()
 		return false
 	end
 	-- The same number CarryPose reads off a hatched creature. A pod's reach IS
@@ -1434,6 +1562,11 @@ local function bank(player: Player): boolean
 	Metrics.raidEnded(player, "banked")
 	return true
 end
+
+-- Exposed for the spec, which cannot stand a stand-in player on the red line;
+-- nothing else calls it. The poll in Start is the only thing that banks a pod
+-- in the game, and it asks where the carrier is standing first.
+CarryService.Bank = bank
 
 --==============================================================================
 -- THE NIGHT EJECTION FORFEIT
@@ -1882,6 +2015,11 @@ end
 --
 -- Rows are counted per (species, tier, hatched): two identical plants are two
 -- rows, and the merge keeps whichever count is larger, saved or live.
+--
+-- THE LIMIT STOPS A ROW BEING ADDED. IT NEVER TAKES ONE OFF (2026-09-29). Every
+-- row already on the record is kept, however many there are: the owner's rule
+-- is that a record past the limit is not to be cut down to it, silently or
+-- otherwise. SAVE.MaxHeld is only ever asked of a row that is not there yet.
 --==============================================================================
 local function heldKey(id: string, tier: number, hatched: boolean): string
 	return id .. ":" .. tostring(tier) .. ":" .. tostring(hatched)
@@ -1892,7 +2030,7 @@ local function mergeHeld(saved: { any }?, live: { any }): { any }
 	local owed: { [string]: number } = {}
 	if type(saved) == "table" then
 		for _, row in ipairs(saved) do
-			if type(row) == "table" and #merged < SAVE.MaxHeld then
+			if type(row) == "table" then
 				table.insert(merged, row)
 				local key = heldKey(tostring(row.Id), math.floor(tonumber(row.Tier) or 0), row.Hatched == true)
 				owed[key] = (owed[key] or 0) + 1
@@ -1981,6 +2119,59 @@ local function recordHeld(player: Player)
 end
 
 --==============================================================================
+-- HOW MUCH ROOM THE RECORD HAS (2026-09-29)
+--
+-- THE ONE PLACE THE LIMIT IS COUNTED, for anything that must not hand over what
+-- it cannot record: a hatch and a pickup (GiveHatched, with `onRecord`), a pod
+-- taken at a nest (TryTake) and banked at the red line (bank), and the Instant
+-- Hatch prompt, which does not open a purchase for a hatch that would be
+-- refused (PlantService.OfferInstantHatch).
+--
+-- A POD GIVEN is counted here too (2026-09-30): GivePod, which a wheel prize
+-- and a paid pod product call, gives only into room and writes the row in the
+-- same call. The beginner's tutorial pod is not given: it is laid on the road
+-- (SpawnLoose) and taken like any other pod, so TryTake counts it.
+--
+-- WHAT IS COUNTED IS THE RECORD -- profile.Held, pods and plants alike, which is
+-- what a death or a rejoin rebuilds from -- after it has been caught up with the
+-- hands. That catch-up is the snapshot the Backpack's watcher takes at the end
+-- of every frame, taken now: it adds what is held and not yet written down, and
+-- takes nothing off. Between bodies no snapshot is allowed, and the record
+-- alone is counted: it is what the new body will be given.
+--
+-- A POD IN THE ARMS HAS ITS PLACE KEPT. It was taken with room for it (TryTake
+-- counts here), and it is on its way to the record: until it is banked or
+-- dropped it counts as one, so that nothing hatched or picked up on the run
+-- home can take the place it was taken for. `own` is that pod itself asking, at
+-- the red line: its own place is not counted against it.
+--
+-- FULL ALREADY, and nothing is caught up: a snapshot only ever adds, so it
+-- cannot make room, and a record that is asked about five times a second by a
+-- pod waiting at the line is not written five times a second to be told no.
+--
+-- Answers how many more rows fit, how many there are, and whether there is a
+-- record at all -- a player whose profile has not arrived has room for nothing,
+-- and that is not "full".
+--==============================================================================
+function CarryService.HeldRoom(player: Player, own: boolean?): (number, number, boolean)
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		return 0, 0, false
+	end
+	local kept = if carried[player] ~= nil and own ~= true then 1 else 0
+	local count = (if type(profile.Held) == "table" then #profile.Held else 0) + kept
+	if count < SAVE.MaxHeld and armedFor(player) then
+		recordHeld(player)
+		profile = PlayerDataService.Get(player)
+		if not profile then
+			return 0, 0, false
+		end
+		count = (if type(profile.Held) == "table" then #profile.Held else 0) + kept
+	end
+	return math.max(SAVE.MaxHeld - count, 0), count, true
+end
+
+--==============================================================================
 -- A HATCH GOES ON THE RECORD AS IT HAPPENS (2026-09-29)
 --
 -- One row for one plant, asked for by the hatch itself, before the pod leaves
@@ -1997,26 +2188,75 @@ end
 -- has its row and adds nothing, and the rebuild after the death builds what the
 -- record has and the containers lack -- this plant, once, if its Tool went.
 --
--- It cannot go past SAVE.MaxHeld, which limits what is saved and refuses
--- nothing. False when the plant is not on the record after the call.
+-- It cannot go past SAVE.MaxHeld. False when the plant is not on the record
+-- after the call -- and a hatch whose plant is not on the record is refused:
+-- GiveHatched counts the room first (HeldRoom) and takes the Tool back if this
+-- answers false.
+--
+-- ON THE RECORD MEANS A ROW FOR EVERY TOOL OF ITS KIND. Not "the record grew":
+-- a snapshot adds whatever is held and not written down, and the row it added
+-- need not be this plant's -- and a record that did NOT grow may have this plant
+-- on it all the same, when it holds a row whose Tool has gone (the void takes a
+-- Tool and leaves its row; see A SNAPSHOT MAY ADD). So what is asked is what
+-- the next body would be built from: as many rows of this species, size and
+-- kind as there are Tools of it, this one included.
 --==============================================================================
-function CarryService.RecordHatched(player: Player, species: SeedData.Species, tier: number): boolean
+local function toolsOfKind(player: Player, key: string): number
+	local n = 0
+	local function count(container: Instance?)
+		if not container then
+			return
+		end
+		for _, tool in ipairs(container:GetChildren()) do
+			local row = rowOf(tool)
+			if row and heldKey(row.Id, row.Tier, row.Hatched) == key then
+				n += 1
+			end
+		end
+	end
+	count(player:FindFirstChildOfClass("Backpack"))
+	count(player.Character)
+	return n
+end
+
+local function recordOne(player: Player, species: SeedData.Species, tier: number, hatched: boolean): boolean
 	local profile = PlayerDataService.Get(player)
 	if not profile then
 		return false
 	end
 	if armedFor(player) then
-		local before = if type(profile.Held) == "table" then #profile.Held else 0
 		recordHeld(player)
 		local after = PlayerDataService.Get(player)
-		return after ~= nil and type(after.Held) == "table" and #after.Held > before
+		if not (after and type(after.Held) == "table") then
+			return false
+		end
+		local key = heldKey(species.Id, math.floor(tier), hatched)
+		local rows = 0
+		for _, row in ipairs(after.Held) do
+			if type(row) == "table"
+				and heldKey(tostring(row.Id), math.floor(tonumber(row.Tier) or 0), row.Hatched == true) == key then
+				rows += 1
+			end
+		end
+		return rows >= 1 and rows >= toolsOfKind(player, key)
 	end
 	local kept = if type(profile.Held) == "table" then table.clone(profile.Held) else {}
 	if #kept >= SAVE.MaxHeld then
 		return false
 	end
-	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = true })
+	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = hatched })
 	return PlayerDataService.SetHeld(player, kept) == true
+end
+
+function CarryService.RecordHatched(player: Player, species: SeedData.Species, tier: number): boolean
+	return recordOne(player, species, tier, true)
+end
+
+-- The same, for a pod that has just been banked or given: its row is written as
+-- its Tool is made, and the bank or the gift is refused if it cannot be (see
+-- bank and GivePod).
+function CarryService.RecordPod(player: Player, species: SeedData.Species, tier: number): boolean
+	return recordOne(player, species, tier, false)
 end
 
 local function requestSync(player: Player)
@@ -2107,6 +2347,23 @@ CarryService.WatchHeld = watchHeld
 -- player and that is a moment; a rejoin is not, and forcing a 30-stud Bellchime
 -- into their hands at the spawn point is not a welcome.
 --==============================================================================
+-- A pod's Tool in the bag: the same builder, grip and reach as every other pod.
+-- Answers the Tool, or nil with nothing left behind.
+local function givePodTool(player: Player, species: SeedData.Species, tier: number): Tool?
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return nil
+	end
+	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
+	if not tool then
+		return nil
+	end
+	-- The same number CarryPose reads off a banked pod anywhere else.
+	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
+	return tool
+end
+
 local function restoreOne(player: Player, species: SeedData.Species, tier: number,
 	hatched: boolean): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
@@ -2117,34 +2374,39 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 		-- A plant whose roll a death interrupted is still a secret (see Sealed):
 		-- it comes back hidden, and into the hands no sooner than it may be shown.
 		local sealedUntil = Sealed.take(player, species.Id, tier)
+		-- One answer: GiveHatched's reason is for a hatch, not a rebuild.
+		local given: boolean
 		if sealedUntil then
-			return CarryService.GiveHatched(player, species, tier,
+			given = CarryService.GiveHatched(player, species, tier,
 				math.max(sealedUntil - workspace:GetServerTimeNow(), 0.05), sealedUntil)
+		else
+			given = CarryService.GiveHatched(player, species, tier)
 		end
-		return CarryService.GiveHatched(player, species, tier)
+		return given
 	end
-	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
-	if not tool then
-		return false
-	end
-	-- The same number CarryPose reads off a banked pod anywhere else.
-	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
-	return true
+	return givePodTool(player, species, tier) ~= nil
 end
 
 --==============================================================================
 -- A POD FROM OUTSIDE THE ROAD
 --
 -- Everything else in this file puts a pod in the hotbar because the player
--- carried it home. A purchased one has no journey behind it, so it needs a way
--- in that is not the red line -- but it must be the SAME pod when it gets there:
--- same builder, same Tool, same grip, same GripReach the pose reads. Hence a
--- wrapper over restoreOne rather than a second way to bank something.
+-- carried it home. A pod won on the wheel or bought has no journey behind it,
+-- so it needs a way in that is not the red line -- but it must be the SAME pod
+-- when it gets there: same builder, same Tool, same grip, same GripReach the
+-- pose reads (givePodTool, which a rebuild uses too).
 --
--- Returns false rather than throwing when there is no backpack -- a player can
--- be mid-respawn when a receipt lands, and StoreService has to be able to tell
--- the difference between "not now" and "done".
+-- COUNTED AND WRITTEN DOWN, OR NOT GIVEN (2026-09-30). This used to hand the pod
+-- over whatever the saved record held, and past its limit the pod had no row --
+-- gone at the next death or rejoin. The owner's rule: "Ordinary player actions
+-- must respect storage capacity without losing or duplicating a pod." So the
+-- room is counted first (HeldRoom, which keeps a place for a pod being carried
+-- home), the row is written in the same call that made the Tool (RecordPod),
+-- and a row that cannot be written takes the Tool back.
+--
+-- False for any of it, and for no backpack -- a player can be mid-respawn when
+-- a receipt lands -- so each caller can tell "not now" from "done": the wheel
+-- keeps its prize owed, and a paid pod's receipt stays open.
 --==============================================================================
 function CarryService.GivePod(player: Player, speciesId: string, tier: number): boolean
 	local species = SeedData.Get(speciesId)
@@ -2155,14 +2417,20 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 	if n == nil or n ~= n then
 		return false
 	end
-	local ok = restoreOne(player, species,
-		math.clamp(math.floor(n), 1, SeedData.TierCount), false)
-	if ok then
-		-- Recorded now rather than when the next sync notices. Adding only: a
-		-- purchase is never the moment anything leaves the bag.
-		recordHeld(player)
+	local size = math.clamp(math.floor(n), 1, SeedData.TierCount)
+	local room, _, known = CarryService.HeldRoom(player)
+	if not known or room < 1 then
+		return false
 	end
-	return ok
+	local tool = givePodTool(player, species, size)
+	if not tool then
+		return false
+	end
+	if not CarryService.RecordPod(player, species, size) then
+		tool:Destroy()
+		return false
+	end
+	return true
 end
 
 --==============================================================================

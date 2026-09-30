@@ -205,6 +205,13 @@ local function grant(player: Player, item: any): boolean
 		-- The species and the tier come off the manifest entry, not off a roll.
 		-- See the note in GameConfig.Store: a rolled pod would be a paid random
 		-- item and a different compliance position entirely.
+		--
+		-- GivePod gives only into room, and writes the pod down as it gives it
+		-- (2026-09-30). A false -- plant storage full, the row not written, no
+		-- backpack -- leaves the receipt open: a paid pod is never acknowledged
+		-- for a pod the save does not hold. The pod products are off sale (id
+		-- 0, so not indexed above and never granted); a receipt left open
+		-- until there is room is the fallback, not a design for selling them.
 		--======================================================================
 		if not SeedData.Get(tostring(item.species)) then
 			warn(string.format("[Seed/StoreService] %q names an unknown species %q",
@@ -218,9 +225,12 @@ local function grant(player: Player, item: any): boolean
 		--
 		-- The receipt does not say which pod, so PlantService works that out
 		-- from the press that opened the dialog (see WHICH POD A RECEIPT
-		-- HATCHES). False when nothing could hatch -- no pod in the ground, or
-		-- no Backpack to put the creature in -- so the receipt is retried rather
-		-- than acknowledged for nothing.
+		-- HATCHES). With no pod it can open -- none unhatched, no garden in the
+		-- world yet, or storage full with no wait left -- the purchase is kept
+		-- as a saved Instant Hatch (2026-09-30). False when nothing could be
+		-- given or kept -- no Backpack to put the creature in, a profile that
+		-- can never be saved -- so the receipt is retried rather than
+		-- acknowledged for nothing.
 		--======================================================================
 		return PlantService.InstantHatch(player)
 	elseif item.kind == "spins" then

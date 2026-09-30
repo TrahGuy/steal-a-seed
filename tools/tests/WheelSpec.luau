@@ -548,9 +548,16 @@ local TreadmillService = {
 	end,
 }
 local heldRestored = true
+-- A pod being carried home keeps a place in the saved record (2026-09-30), and
+-- CarryService.HeldRoom counts it; this stands in for one in the arms.
+local carryingPod = false
 local CarryService = {
 	IsHeldRestored = function()
 		return heldRestored
+	end,
+	HeldRoom = function(player)
+		local count = #profiles[player].Held + (if carryingPod then 1 else 0)
+		return math.max(GameConfig.Save.MaxHeld - count, 0), count, true
 	end,
 	GivePod = function(player, species, tier)
 		record("GivePod", player, species, tier)
@@ -901,6 +908,39 @@ while #pr.Held >= GameConfig.Save.MaxHeld do
 end
 local landed, left = W.DeliverPending(sp)
 check(landed == 1 and left == 0 and #pr.WheelPending == 0, "and the next delivery pass hands it over")
+
+-- A pod being carried home keeps its place (2026-09-30, the owner's decision:
+-- "Wheel waits its turn"): an owed pod does not take that place and leave the
+-- carried pod nowhere to bank. In a block of its own: the file is at Luau's
+-- limit of top-level locals.
+do
+	while #pr.Held >= GameConfig.Save.MaxHeld do
+		table.remove(pr.Held)
+	end
+	local heldBeforeCarry = #pr.Held
+	carryingPod = true
+	table.insert(pr.WheelPending, { Id = "carry-1", Rolled = "pod_common", Prize = "pod_common", Species = "nubkin",
+		Source = "earned", At = clock })
+	table.clear(trace)
+	local landedCarry, leftCarry = W.DeliverPending(sp)
+	check(heldBeforeCarry == GameConfig.Save.MaxHeld - 1 and landedCarry == 0 and leftCarry == 1
+		and count("GivePod") == 0 and #pr.Held == heldBeforeCarry,
+		"with 23 saved and a pod being carried home, an owed pod waits: the carried pod's place is not taken")
+	table.clear(replies)
+	W.Claim(sp)
+	check(last().claim == true and last().ok == false and last().reason == "NO_ROOM" and #pr.WheelPending == 1
+		and count("GivePod") == 0, "CLAIM says NO_ROOM while the pod is carried, and nothing is lost")
+	-- Banked: the carried pod's row takes the place kept for it, and the prize still waits.
+	carryingPod = false
+	table.insert(pr.Held, { Id = "petalpip", Tier = 1, Hatched = false })
+	local landedFull = W.DeliverPending(sp)
+	check(landedFull == 0 and #pr.WheelPending == 1 and count("GivePod") == 0,
+		"the pod is banked into its place, and the prize goes on waiting for room")
+	table.remove(pr.Held)
+	local landedRoom, leftRoom = W.DeliverPending(sp)
+	check(landedRoom == 1 and leftRoom == 0 and #pr.WheelPending == 0 and count("GivePod") == 1,
+		"once there is room, the next delivery pass hands it over")
+end
 
 -- Too much owed: no more spins until it is claimed.
 heldRestored = false

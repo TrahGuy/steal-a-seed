@@ -107,7 +107,14 @@ local PlotService = {
 	OnResized = function() end,
 }
 
-local profile = { Plants = {} }
+local profile = { Plants = {}, InstantCredits = 0 }
+-- Whether the garden can be written. The real SetPlants answers, and a
+-- purchase that changes a pod is only answered for on a garden that was.
+local plantsWrite = true
+-- Whether the owner's profile is one that saves (the real IsPersistent). A
+-- receipt that finds nothing to hatch keeps a saved Instant Hatch only for a
+-- profile that saves (PlantService.keepForLater, 2026-09-30).
+local persistent = true
 local PlayerDataService = {
 	IsReady = function()
 		return true
@@ -115,8 +122,23 @@ local PlayerDataService = {
 	Get = function(player)
 		return if player == owner then profile else nil
 	end,
+	IsPersistent = function(player)
+		return player == owner and persistent
+	end,
+	AddInstantCredits = function(player, delta)
+		if player ~= owner then
+			return nil
+		end
+		profile.InstantCredits += delta
+		record("AddInstantCredits", player, delta)
+		return profile.InstantCredits
+	end,
 	SetPlants = function(player, list)
+		if not plantsWrite then
+			return false
+		end
 		record("SetPlants", player, list)
+		return true
 	end,
 	MarkSeen = function(player, id)
 		record("MarkSeen", player, id)
@@ -127,13 +149,48 @@ local PlayerDataService = {
 }
 
 local giveWorks = true
+-- The saved record, as CarryService counts it (2026-09-29): how many more rows
+-- fit, and whether there is a record at all. A hatch with no room is refused
+-- with the reason beside it, as the real GiveHatched refuses.
+local storage = { room = 5, known = true }
 local CarryService = {
 	GiveHatched = function(player, species, tier)
 		record("GiveHatched", player, species, tier)
+		if not storage.known then
+			return false, "NO_RECORD"
+		end
+		if storage.room < 1 then
+			return false, "STORAGE_FULL"
+		end
 		return giveWorks
+	end,
+	HeldRoom = function(player)
+		record("HeldRoom", player)
+		local limit = GameConfig.Save.MaxHeld
+		return storage.room, limit - storage.room, storage.known
+	end,
+	-- Read by the storage-full log line. Nobody here carries a pod.
+	IsCarrying = function()
+		return false
 	end,
 	SyncHeldNow = function() end,
 }
+
+-- Every line the game says to a player, instead of the wire.
+local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
+local said = {}
+ActionRefusal.capture(function(player, code)
+	table.insert(said, { player = player, code = code })
+end)
+local function saidCount(code)
+	local n = 0
+	for _, line in ipairs(said) do
+		if line.code == code then
+			n += 1
+		end
+	end
+	return n
+end
 
 local fakeMarket = {}
 function fakeMarket:PromptProductPurchase(player, productId)
@@ -273,6 +330,10 @@ local function body()
 		-- 5: a Tiny pod a few seconds from ready
 		{ SpeciesId = "nubkin", Tier = 1, PlantedAt = now - 26, HatchAt = now + 4,
 			X = 8, Z = 4, Stage = 1, Facing = 0 },
+		-- 6: a pod with minutes to go, and less than pod 3's: the one a purchase
+		-- finds the record full for (2026-09-29)
+		{ SpeciesId = "spiretip", Tier = 2, PlantedAt = now - 50, HatchAt = now + 200,
+			X = 0, Z = 4, Stage = 1, Facing = 0 },
 	}
 
 	local loadOk, loadErr = pcall(function()
@@ -296,12 +357,12 @@ local function body()
 	--==========================================================================
 	say("\n-- prompts --")
 	local built = 0
-	for id = 1, 5 do
+	for id = 1, 6 do
 		if modelFor(id) then
 			built += 1
 		end
 	end
-	check(built == 5, "the whole garden was restored into the plot", built)
+	check(built == 6, "the whole garden was restored into the plot", built)
 
 	local i1, instant = promptsOn(modelFor(1), "InstantHatchPrompt")
 	local h1 = promptsOn(modelFor(1), "HatchPrompt")
@@ -395,12 +456,129 @@ local function body()
 		"a second press straight after opens no second dialog")
 
 	--==========================================================================
+	-- 5b. NO ROOM, NO DIALOG (2026-09-29)
+	--
+	-- The owner's rule: "prevent opening its purchase prompt when storage is
+	-- full". The count is CarryService's; the press is answered with the line.
+	--==========================================================================
+	say("\n-- press, with the record full --")
+	task.wait(INSTANT.OfferGapSeconds + 0.1)
+	table.clear(said)
+	storage.room = 0
+	check(refused(owner, 1) and count("HeldRoom") >= 1,
+		"with plant storage full, the owner's press opens no purchase dialog")
+	check(saidCount("STORAGE_FULL") == 1 and #said == 1 and said[1].player == owner,
+		"and the owner is told PLANT STORAGE FULL, once", #said)
+	check(refused(owner, 1) and refused(owner, 3) and #said == 1,
+		"pressing again, on this pod or another, says nothing more: one line, not one a press", #said)
+	check(refused(stranger, 1) and #said == 1,
+		"a stranger's press is refused for being a stranger's, and is told nothing", #said)
+	-- Room on it or not, a record that has not arrived is not one to sell into.
+	storage.known = false
+	storage.room = 3
+	check(refused(owner, 1) and #said == 1,
+		"with no record yet -- the save still arriving -- nothing is offered and nothing is said", #said)
+	storage.known = true
+	storage.room = 1
+	table.clear(trace)
+	check(PlantService.OfferInstantHatch(owner, plotModel, 1) == true
+			and count("PromptProductPurchase") == 1,
+		"with room for one, the very next press opens the dialog: a refused press used up no wait",
+		count("PromptProductPurchase"))
+	local limit = GameConfig.Save.MaxHeld
+	local note = ActionRefusal.Notices.STORAGE_FULL
+	check(note ~= nil and note.title == "PLANT STORAGE FULL"
+			and string.find(note.detail, string.format("%d/%d", limit, limit), 1, true) ~= nil
+			and ActionRefusal.Text.STORAGE_FULL == string.format("Plant storage full (%d/%d).", limit, limit),
+		"the line is PLANT STORAGE FULL with the limit's own number, and what makes room",
+		note and (note.title .. " / " .. tostring(note.detail)))
+
+	--==========================================================================
+	-- 6a. THE RECEIPT THAT FINDS THE RECORD FULL (2026-09-29)
+	--
+	-- A dialog opens for pod 6 with room for one, and the record fills before
+	-- the receipt lands. The hatch is refused like any other and the pod stays
+	-- planted; the owner's decision for what the purchase then does is "make
+	-- its intended pod ready immediately and persist that state", and answer
+	-- for the receipt "only after that benefit is safely recorded". So the
+	-- answer is true only when the garden was written with the pod's wait over.
+	-- (StoreService's ledger and its save are HatchStorageSpec's.)
+	--==========================================================================
+	say("\n-- receipt, with the record full --")
+	task.wait(INSTANT.OfferGapSeconds + 0.1)
+	check(PlantService.OfferInstantHatch(owner, plotModel, 6) == true,
+		"with room for one, a dialog opens for another growing pod (pod 6)")
+	local model6 = modelFor(6)
+	local before6 = model6 and model6:GetAttribute("HatchAt")
+	storage.room = 0
+
+	-- First with a garden that cannot be written.
+	table.clear(trace)
+	table.clear(said)
+	plantsWrite = false
+	local unwritten = PlantService.InstantHatch(owner)
+	plantsWrite = true
+	check(unwritten == false and count("GiveHatched") == 1 and last("GiveHatched").args[2].Id == "spiretip",
+		"a receipt that finds plant storage full, and a garden that cannot be written: answered false",
+		tostring(unwritten))
+	check(model6 ~= nil and CollectionService:HasTag(model6, GameConfig.Tags.Planted)
+			and promptsOn(model6, "InstantHatchPrompt") == 1 and promptsOn(model6, "HatchPrompt") == 0
+			and model6:GetAttribute("Ready") ~= true and model6:GetAttribute("HatchAt") == before6
+			and #said == 0,
+		"the pod is as it was -- planted, growing, its clock the one it had -- and nothing is said")
+
+	-- Delivered again, and the garden can be written.
+	table.clear(trace)
+	local asked6 = os.time()
+	check(PlantService.InstantHatch(owner) == true,
+		"delivered again: the pod that was paid for is made ready, and the receipt answered for")
+	check(count("GiveHatched") == 1 and last("GiveHatched").args[2].Id == "spiretip"
+			and count("MarkSeen") == 0 and count("RecordTutorial") == 0
+			and model6 ~= nil and model6.Parent ~= nil
+			and CollectionService:HasTag(model6, GameConfig.Tags.Planted),
+		"nothing is handed over, learned or counted: the hatch was refused, and the pod stays planted")
+	check(promptsOn(model6, "HatchPrompt") == 1 and promptsOn(model6, "InstantHatchPrompt") == 0
+			and model6:GetAttribute("Ready") == true,
+		"it is READY: the free Hatch replaces the paid prompt")
+	local written = last("SetPlants")
+	local row6 = nil
+	for _, row in ipairs(if written then written.args[2] else {}) do
+		if row.SpeciesId == "spiretip" then
+			row6 = row
+		end
+	end
+	check(count("SetPlants") == 1 and written ~= nil and #written.args[2] == 6 and row6 ~= nil
+			and row6.Stage == 1 and row6.HatchAt >= asked6 and row6.HatchAt <= os.time()
+			and model6:GetAttribute("HatchAt") == row6.HatchAt,
+		"the garden is written once, all six still in it, with that pod's wait over",
+		row6 and tostring(row6.HatchAt))
+	check(saidCount("STORAGE_FULL_READY") == 1 and #said == 1 and said[1].player == owner,
+		"the buyer is told: storage full, and the pod is ready to hatch free once there is room", #said)
+	check(promptsOn(modelFor(1), "InstantHatchPrompt") == 1 and promptsOn(modelFor(3), "InstantHatchPrompt") == 1
+			and promptsOn(modelFor(1), "HatchPrompt") == 0 and promptsOn(modelFor(3), "HatchPrompt") == 0,
+		"and no other pod is touched")
+	local ready = ActionRefusal.notice("STORAGE_FULL_READY")
+	check(ready ~= nil and ready.title == "PLANT STORAGE FULL" and ready.kind == "warning"
+			and string.find(string.lower(ready.detail), "ready", 1, true) ~= nil
+			and string.find(string.lower(ready.detail), "free", 1, true) ~= nil
+			and string.find(string.lower(ready.detail), "room", 1, true) ~= nil,
+		"the line says the storage is full, that the pod is ready, and that it hatches free with room",
+		ready and (ready.title .. " / " .. tostring(ready.detail)))
+
+	-- The dialog for pod 1 again, for the receipts below.
+	storage.room = 1
+	task.wait(INSTANT.OfferGapSeconds + 0.1)
+	check(PlantService.OfferInstantHatch(owner, plotModel, 1) == true,
+		"(with room for one again, the dialog for pod 1 is opened once more)")
+
+	--==========================================================================
 	-- 6. THE RECEIPT
 	--==========================================================================
 	say("\n-- receipt --")
 	table.clear(trace)
 	local model1 = modelFor(1)
-	check(PlantService.InstantHatch(owner) == true, "the receipt hatches a pod")
+	check(PlantService.InstantHatch(owner) == true,
+		"the receipt hatches a pod -- the next delivery, once there is room")
 	local given = last("GiveHatched")
 	check(given ~= nil and given.args[1] == owner and given.args[2].Id == "nubkin" and given.args[3] == 1,
 		"the pod that was pressed (pod 1) hatches, not the one with the longest wait",
@@ -415,41 +593,91 @@ local function body()
 			stillThere = true
 		end
 	end
-	check(saved ~= nil and #saved.args[2] == 4 and not stillThere,
+	check(saved ~= nil and #saved.args[2] == 5 and not stillThere,
 		"the garden is saved without it", saved and #saved.args[2])
 	local seen, tutorial = last("MarkSeen"), last("RecordTutorial")
 	check(seen ~= nil and seen.args[2] == "nubkin" and tutorial ~= nil and tutorial.args[2] == "hatch",
 		"the Almanac learns the species and the tutorial counts it as a hatch")
 
+	-- A receipt hatches the pod that was pressed and no other (the owner,
+	-- 2026-09-30): with no note it names none, so pod 3 is pressed first.
+	task.wait(INSTANT.OfferGapSeconds + 0.1)
+	check(PlantService.OfferInstantHatch(owner, plotModel, 3) == true,
+		"(the dialog for pod 3 is opened: the note names it)")
 	table.clear(trace)
 	giveWorks = false
 	check(PlantService.InstantHatch(owner) == false and modelFor(3) ~= nil
-		and count("SetPlants") == 0,
-		"nowhere to put the creature: nothing hatches and the pod stays, so the receipt is retried")
+		and count("SetPlants") == 0 and count("AddInstantCredits") == 0,
+		"nowhere to put the creature: nothing hatches, the pod stays and no credit is kept, so the receipt is retried")
 	giveWorks = true
 
 	table.clear(trace)
-	check(PlantService.InstantHatch(owner) == true, "a receipt with no note still hatches")
+	check(PlantService.InstantHatch(owner) == true, "delivered again once there is somewhere to put it, it hatches")
 	given = last("GiveHatched")
 	check(given ~= nil and given.args[2].Id == "petalpip" and given.args[3] == 4 and modelFor(3) == nil,
-		"with no note, the pod with the longest wait left hatches (pod 3)",
+		"the pod the note still names: pod 3",
 		given and string.format("%s tier %s", given.args[2].Id, tostring(given.args[3])))
 
+	--==========================================================================
+	-- ONLY READY PODS LEFT (2026-09-30, the owner's option B). This used to
+	-- hatch the one that became ready most recently. The owner's decision:
+	-- "For an unresolved Instant Hatch receipt, if no pod still has time left,
+	-- save one Instant Hatch credit instead of hatching a ready pod." The
+	-- receipt around it -- saved first, never twice -- is HatchStorageSpec's.
+	--==========================================================================
 	table.clear(trace)
-	check(PlantService.InstantHatch(owner) == true and modelFor(5) == nil and modelFor(2) ~= nil,
-		"only ready pods left: the one that was ready most recently hatches first (pod 5)")
-	check(PlantService.InstantHatch(owner) == true and modelFor(2) == nil,
-		"then the other one (pod 2)")
+	local creditsReady, readyBefore = profile.InstantCredits, saidCount("INSTANT_CREDIT_READY")
+	check(PlantService.InstantHatch(owner) == true and count("GiveHatched") == 0 and count("SetPlants") == 0
+		and modelFor(6) ~= nil and modelFor(5) ~= nil and modelFor(2) ~= nil
+		and profile.InstantCredits == creditsReady + 1 and count("AddInstantCredits") == 1,
+		"only ready pods left: none of them is hatched -- they hatch free -- and ONE saved Instant Hatch is kept",
+		profile.InstantCredits)
+	check(saidCount("INSTANT_CREDIT_READY") == readyBefore + 1, "and the buyer is told their pods are ready")
+	table.clear(trace)
+	storage.room = 0
+	local fullBefore = saidCount("STORAGE_FULL_CREDIT")
+	check(PlantService.InstantHatch(owner) == true and count("GiveHatched") == 0
+		and modelFor(6) ~= nil and profile.InstantCredits == creditsReady + 2
+		and saidCount("STORAGE_FULL_CREDIT") == fullBefore + 1,
+		"the same with plant storage full: a second purchase, a second credit, and the storage-full line")
+	storage.room = 1
 
+	-- The ready pods hatched by hand, for free, empty the bed of pods.
+	for _, id in ipairs({ 6, 5, 2 }) do
+		PlantService.HatchByHand(owner, plotModel, id)
+	end
+	check(modelFor(6) == nil and modelFor(5) == nil and modelFor(2) == nil and modelFor(4) ~= nil,
+		"(the ready pods hatch free by hand; the grown creature stays)")
+
+	--==========================================================================
+	-- NO UNHATCHED POD AT ALL (2026-09-30). This used to answer false and
+	-- leave the receipt waiting. The owner's decision: "if a paid receipt
+	-- arrives and the player has no unhatched pod, grant one saved Instant
+	-- Hatch credit." The receipt around it -- saved before it is answered for,
+	-- never twice -- is HatchStorageSpec's (10f).
+	--==========================================================================
 	table.clear(trace)
-	check(PlantService.InstantHatch(owner) == false and count("GiveHatched") == 0
-		and modelFor(4) ~= nil,
-		"no unhatched pod at all: nothing hatches, the grown creature is untouched, the receipt waits")
-	check(PlantService.InstantHatch(stranger) == false, "a player with no plot: nothing")
+	local creditsBefore, noPodBefore = profile.InstantCredits, saidCount("INSTANT_CREDIT_NO_POD")
+	check(PlantService.InstantHatch(owner) == true and count("GiveHatched") == 0
+		and modelFor(4) ~= nil and profile.InstantCredits == creditsBefore + 1
+		and count("AddInstantCredits") == 1 and count("SetPlants") == 0,
+		"no unhatched pod at all: nothing hatches, the grown creature is untouched, and ONE saved Instant "
+			.. "Hatch is kept", profile.InstantCredits)
+	check(saidCount("INSTANT_CREDIT_NO_POD") == noPodBefore + 1,
+		"and the buyer is told it is saved for later")
+	table.clear(trace)
+	persistent = false
+	check(PlantService.InstantHatch(owner) == false and profile.InstantCredits == creditsBefore + 1
+		and count("AddInstantCredits") == 0,
+		"a profile that can never be saved keeps nothing: the receipt waits")
+	persistent = true
+	check(PlantService.InstantHatch(stranger) == false and count("AddInstantCredits") == 0,
+		"a player with no plot and no saved profile: nothing")
 end
 
 -- Whatever happens inside, the plot and the service's loop do not outlive it.
 local bodyOk, bodyErr = pcall(body)
+ActionRefusal.capture(nil)
 if PlantService then
 	pcall(PlantService.Init)
 end

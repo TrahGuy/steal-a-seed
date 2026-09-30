@@ -27,6 +27,15 @@ local GameConfig = require(Shared.GameConfig)
 local Server = game:GetService("ServerScriptService").SeedGameServer
 local CarryService = require(Server.CarryService)
 
+-- THE SAVE HAS ARRIVED, WITH ROOM (2026-09-30). A take waits for the player's
+-- saved record now (CarryService.TryTake), and a stand-in player has none in
+-- Edit. What a full record does to a take is StorageDoorsSpec's; here the
+-- record is simply there. Put back before the verdict.
+local realHeldRoom = CarryService.HeldRoom
+;(CarryService :: any).HeldRoom = function()
+	return GameConfig.Save.MaxHeld, 0, true
+end
+
 local pass = 0
 local fails: { string } = {}
 local function check(ok: boolean, label: string)
@@ -211,6 +220,7 @@ if map then
 		end
 	end
 end
+;(CarryService :: any).HeldRoom = realHeldRoom
 
 if not ok then
 	table.insert(fails, "THREW: " .. tostring(err))

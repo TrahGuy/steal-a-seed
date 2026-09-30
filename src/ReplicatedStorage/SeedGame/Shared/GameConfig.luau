@@ -2692,6 +2692,10 @@ GameConfig.Plant = {
 	--==========================================================================
 	InstantHatch = {
 		ActionText = "Instant Hatch",
+		-- What the same prompt says, with no price, to a player holding a saved
+		-- Instant Hatch (2026-09-30; PlantService.InstantHatch): the press
+		-- spends the credit instead of opening a purchase.
+		SavedActionText = "Free Instant Hatch",
 		Key = Enum.KeyCode.F,
 		-- E's gamepad twin is the default ButtonX, so the same reasoning moves
 		-- this one to ButtonY.
@@ -6655,6 +6659,17 @@ GameConfig.Save = {
 	-- saves, and the autosave is every 45 seconds.
 	--==========================================================================
 	MaxReceipts = 32,
+	--==========================================================================
+	-- HOW MANY SAVED INSTANT HATCHES A PLAYER CAN HOLD (2026-09-30)
+	--
+	-- A purchase of an instant hatch that finds nothing it can do -- the saved
+	-- record full, and its pod's wait already over -- is kept as one credit
+	-- and spent by the next instant hatch that succeeds (PlantService). Nobody
+	-- reaches this; it is here so the number a save hands back is bounded like
+	-- every other one. A credit past it is not granted, and its receipt stays
+	-- open.
+	--==========================================================================
+	MaxInstantCredits = 1000,
 	MaxCash = 1e15,
 	MaxSpeedScore = 1e15,
 	--==========================================================================
@@ -6666,8 +6681,9 @@ GameConfig.Save = {
 	-- up to forty parts each is already a thousand parts built at the least
 	-- convenient moment there is.
 	--
-	-- Nothing silently truncates -- ProfileSchema stops at this number and the
-	-- restore says how many it dropped.
+	-- The limit is asked when something is ADDED (CarryService.HeldRoom): a
+	-- hatch, a pickup or a pod past it is refused. Nothing is cut to it: since
+	-- 2026-09-29 ProfileSchema keeps every saved row, however many there are.
 	--==========================================================================
 	MaxHeld = 24,
 

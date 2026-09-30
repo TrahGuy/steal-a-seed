@@ -215,7 +215,7 @@ end
 -- product = 0 means the owner has not created the Developer Product yet. The
 -- prompt is then not drawn AT ALL -- see attachInstantPrompt -- because a tester
 -- pressing a 99 Robux button that cannot open a dialog learns only that the game
--- is broken. THIS IS A READINESS GATE, NOT A TIER GATE: with a real id, every
+-- is broken. (A saved Instant Hatch is the exception: it sells nothing.) THIS IS A READINESS GATE, NOT A TIER GATE: with a real id, every
 -- growing tier from Tiny to Colossal carries the prompt at the same price.
 --==============================================================================
 local function instantProductId(): number
@@ -279,6 +279,61 @@ local function refuse(player: Player, code: string): (boolean, string)
 			player.Name, code, heldSpeciesId(player)))
 	end
 	return false, code
+end
+
+--==============================================================================
+-- PLANT STORAGE FULL (2026-09-29)
+--
+-- The owner's decision: with the saved record full, "refuse the hatch and leave
+-- the pod planted and ready until the player makes room", and say so with "a
+-- clear, non-spamming" line.
+--
+-- CarryService refuses (GiveHatched, HeldRoom); this only SAYS it, after the
+-- refusal, to the player who asked. ONE LINE PER PLAYER EVERY FEW SECONDS,
+-- whichever door it came from -- a held prompt, the Instant Hatch key, a
+-- receipt Roblox delivers again -- on top of the toast's own rule that a line
+-- already on the screen only stays up longer.
+--
+-- `code` is ActionRefusal's: STORAGE_FULL for a hatch that cost nothing, a
+-- pickup and the Instant Hatch key; STORAGE_FULL_READY for a receipt that made
+-- its pod ready instead; STORAGE_FULL_CREDIT for a receipt that found no wait
+-- left to end and was kept as a credit.
+--
+-- `always` is for the one line that is the answer to a PURCHASE: it is said
+-- whatever was said a moment ago, because somebody who has just paid is told
+-- what their money did.
+--
+-- `door` is what was refused, for the server log ("hatch refused", "pickup
+-- refused"). The log counts the SAVED record, as the limit does, and names a
+-- pod in the arms apart: that pod keeps a place without being on the record
+-- yet (CarryService.HeldRoom), so 24 saved and a pod carried reads "24/24
+-- saved, and a pod in the arms" rather than 25/24, and 23 saved and a pod
+-- carried shows why 23 is full. No door, no log line: the caller has written
+-- its own.
+--==============================================================================
+local STORAGE_QUIET_SECONDS = 2
+local lastStorageNotice: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+local function storageFull(player: Player, code: string, door: string?, always: boolean?)
+	local now = os.clock()
+	if always ~= true and now - (lastStorageNotice[player] or -math.huge) < STORAGE_QUIET_SECONDS then
+		return
+	end
+	lastStorageNotice[player] = now
+	if door then
+		local profile = PlayerDataService.Get(player)
+		local saved = if profile and type(profile.Held) == "table" then #profile.Held else 0
+		log(string.format("%s: %s, plant storage full (%d/%d saved%s).", player.Name, door, saved,
+			GameConfig.Save.MaxHeld, if CarryService.IsCarrying(player) then ", and a pod in the arms" else ""))
+	end
+	ActionRefusal.send(player, code)
+end
+
+-- How many Instant Hatches this player has saved for later (see keepForLater).
+local function creditsOf(player: Player): number
+	local profile = PlayerDataService.Get(player)
+	local n = if profile then tonumber(profile.InstantCredits) else nil
+	return if n and n > 0 then math.floor(n) else 0
 end
 
 --==============================================================================
@@ -729,12 +784,19 @@ local function record(plot: Model): { any }
 	return list
 end
 
-local function persist(plot: Model)
+-- Answers whether the garden was written: a purchase that changes a pod is not
+-- acknowledged on a garden that was not (see InstantHatch).
+local function persisted(plot: Model): boolean
 	local owner = PlotService.OwnerOf(plot)
 	-- Only once this owner's garden is in the bed -- see restoredFor.
 	if owner and restoredFor[plot] == owner then
-		PlayerDataService.SetPlants(owner, record(plot))
+		return PlayerDataService.SetPlants(owner, record(plot)) == true
 	end
+	return false
+end
+
+local function persist(plot: Model)
+	persisted(plot)
 end
 
 --==============================================================================
@@ -747,8 +809,8 @@ local function isReady(entry: Planted, now: number): boolean
 	return entry.stage == CreatureModel.STAGE_POD and now >= entry.hatchAt
 end
 
-local hatch: (Player, Planted, boolean?) -> boolean
-local pickUp: (Player, Planted) -> boolean
+local hatch: (Player, Planted, boolean?) -> (boolean, string?)
+local pickUp: (Player, Planted) -> (boolean, string?)
 
 local function attachHatchPrompt(entry: Planted)
 	-- The clock has run out, so there is no wait left to pay for. The free
@@ -800,8 +862,33 @@ local function attachHatchPrompt(entry: Planted)
 		end
 	end))
 	table.insert(serviceConnections, prompt.Triggered:Connect(function(player)
-		hatch(player, entry)
+		PlantService.HatchByHand(player, entry.plot, entry.id)
 	end))
+end
+
+--==============================================================================
+-- THE HELD PROMPT, BY NAME
+--
+-- Everything the prompt above does when its hold completes, and the only thing
+-- that calls it. It has a name so that a spec can do what the engine does -- a
+-- ProximityPrompt cannot be triggered from a script -- and it is no way round
+-- anything: hatch() makes every check it has always made, on whoever is named.
+--
+-- REFUSED FOR ROOM (2026-09-29), the pod stays as it is, planted and ready, and
+-- the player is told what makes room. Every other refusal is as silent as it
+-- was. The reason rides back beside the answer.
+--==============================================================================
+function PlantService.HatchByHand(player: Player, plot: Model, placementId: number): (boolean, string?)
+	local byPlot = growing[plot]
+	local entry = if byPlot then byPlot[placementId] else nil
+	if not entry then
+		return false, nil
+	end
+	local hatched, why = hatch(player, entry)
+	if not hatched and why == "STORAGE_FULL" then
+		storageFull(player, "STORAGE_FULL", "hatch refused")
+	end
+	return hatched, why
 end
 
 --==============================================================================
@@ -811,7 +898,8 @@ end
 -- and a Robux price. Pressing it only ASKS Roblox for the purchase. Nothing
 -- happens to the pod until the receipt reaches StoreService, which calls
 -- InstantHatch below -- and that runs the same hatch() as the free prompt,
--- without the clock.
+-- without the clock. The one exception: a player holding a saved Instant Hatch
+-- (2026-09-30) sees no price, and the press itself hatches the pod.
 --
 -- THE SERVER OPENS THE DIALOG. MarketplaceService lets a server prompt a
 -- purchase on a player's screen, so there is no remote here and nothing a client
@@ -819,26 +907,38 @@ end
 -- pressed it; everything after that is decided on this side.
 --
 --==============================================================================
--- WHICH POD A RECEIPT HATCHES
+-- WHICH POD A RECEIPT HATCHES: THE ONE THAT WAS PRESSED, OR NONE
 --
 -- A receipt names a player and a product, never a pod. So the pod is written
--- down when the dialog opens, and the receipt reads the note back:
+-- down when the dialog opens -- its plot, its id and the planted pod itself --
+-- and the receipt reads the note back. The owner's decision (2026-09-30): "the
+-- purchase is for the pod the player pressed. If that pod becomes ready while
+-- the purchase dialog is open, save one Instant Hatch credit -- even if other
+-- pods are still growing. Do not use the purchase to hatch an already-ready
+-- pod or silently switch it to another pod. If the selected pod is gone or its
+-- target cannot be established safely, save a credit."
 --
---   1. The pod they pressed, if it is still an unhatched pod in their own plot.
---      That holds even if its clock ran out while the dialog was open, because
---      that is the pod they paid for.
---   2. Otherwise, the unhatched pod in their plot with the longest wait left.
---      This is the no-note case: a receipt Roblox re-delivers after a rejoin.
---   3. Otherwise nothing, and the receipt is NOT acknowledged. Roblox delivers
---      it again later, so a purchase never lands on an empty bed and vanishes.
+--   1. The pod they pressed hatches if it is still THAT pod -- the same planted
+--      pod in their own plot, not a later one given its id after a rebuild --
+--      and it is still counting down. With plant storage full it is made
+--      ready instead (option A, unchanged).
+--   2. Anything else keeps the purchase as ONE saved Instant Hatch
+--      (keepForLater): no note (a receipt Roblox delivers again after a rejoin
+--      or a crash), no garden in the world yet, the pod gone, or its wait
+--      already over. No other pod is ever picked in its place.
 --==============================================================================
--- UserId -> the pod that player last opened the purchase dialog for. Keyed by
--- id rather than Player, and cleared when they leave.
-local wanted: { [number]: { plot: Model, id: number } } = {}
+-- UserId -> the pod that player last opened the purchase dialog for, and the
+-- Planted it was then. Keyed by id rather than Player, and cleared when they
+-- leave.
+local wanted: { [number]: { plot: Model, id: number, entry: Planted } } = {}
 -- UserId -> os.clock() of the last dialog opened for them.
 local lastOffer: { [number]: number } = {}
 -- Said once per server, not once per press.
 local warnedNoProduct = false
+-- What opens the dialog, replaced only by a Studio test (usePrompt), so a Play
+-- harness can press the real Instant Hatch key and mock the receipt without a
+-- purchase dialog on anybody's screen (2026-09-30).
+local promptFn: ((Player, number) -> ())? = nil
 
 local function attachInstantPrompt(entry: Planted)
 	local model = entry.model
@@ -848,7 +948,14 @@ local function attachInstantPrompt(entry: Planted)
 	end
 	-- No product, no prompt: a dead button is worse than no button. Every tier is
 	-- offered once an id exists; nothing here looks at the tier.
-	if instantProductId() <= 0 then
+	--
+	-- EXCEPT FOR A SAVED INSTANT HATCH (2026-09-30). An owner holding a credit
+	-- is shown the free prompt whatever the product's state: that press opens no
+	-- dialog, and a credit already paid for must not be stranded by the product
+	-- going off sale. Found in review.
+	local owner = PlotService.OwnerOf(entry.plot)
+	local saved = owner ~= nil and creditsOf(owner) > 0
+	if instantProductId() <= 0 and not saved then
 		return
 	end
 	if entry.instant and entry.instant.Parent then
@@ -865,19 +972,32 @@ local function attachInstantPrompt(entry: Planted)
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = PLANT_RANGE
 	prompt.RequiresLineOfSight = false
-	-- That the prompt sells something, at the manifest's list price. PromptUI does
-	-- NOT print this number: Roblox prices products by region, so the capsule
-	-- shows what Roblox tells the client this player pays for RobuxProduct.
-	prompt:SetAttribute("Robux", INSTANT_ITEM.robux)
-	prompt:SetAttribute("RobuxProduct", instantProductId())
-	-- Drawn above the pod's HATCHING label rather than on top of it.
-	prompt:SetAttribute("OverPodLabel", true)
 	-- Offered to the owner only. That is courtesy -- PromptUI does not draw it
 	-- for anybody else -- and OfferInstantHatch refuses a stranger either way.
-	local owner = PlotService.OwnerOf(entry.plot)
 	if owner then
 		prompt:SetAttribute("ReservedFor", owner.UserId)
 	end
+	--==========================================================================
+	-- A SAVED INSTANT HATCH SHOWS NO PRICE (2026-09-30)
+	--
+	-- An owner holding a credit (see keepForLater) is not charged by the next
+	-- press, so the prompt says so: no price capsule -- PromptUI draws one only
+	-- for a Robux attribute -- and the words for a free one. It is made again
+	-- when a credit is granted or spent (refreshInstantPrompts).
+	--==========================================================================
+	if saved then
+		prompt.ActionText = INSTANT.SavedActionText
+		prompt:SetAttribute("SavedHatch", true)
+	else
+		-- That the prompt sells something, at the manifest's list price.
+		-- PromptUI does NOT print this number: Roblox prices products by
+		-- region, so the capsule shows what Roblox tells the client this player
+		-- pays for RobuxProduct.
+		prompt:SetAttribute("Robux", INSTANT_ITEM.robux)
+		prompt:SetAttribute("RobuxProduct", instantProductId())
+	end
+	-- Drawn above the pod's HATCHING label rather than on top of it.
+	prompt:SetAttribute("OverPodLabel", true)
 	prompt.Parent = handle
 	entry.instant = prompt
 
@@ -889,12 +1009,82 @@ local function attachInstantPrompt(entry: Planted)
 end
 
 --==============================================================================
+-- EVERY INSTANT HATCH PROMPT ON A PLAYER'S PODS, MADE AGAIN (2026-09-30)
+--
+-- A credit granted or spent changes whether the prompt shows a price (above).
+-- Made again rather than edited: the engine hides the old prompt and shows the
+-- new one, so the player sees the change at once, not the next time they walk
+-- up to the pod.
+--==============================================================================
+local function refreshInstantPrompts(player: Player)
+	local plot = PlotService.PlotOf(player)
+	local byPlot = if plot then growing[plot] else nil
+	if not byPlot then
+		return
+	end
+	for _, entry in pairs(byPlot) do
+		if entry.instant then
+			entry.instant:Destroy()
+			entry.instant = nil
+			attachInstantPrompt(entry)
+		end
+	end
+end
+
+--==============================================================================
+-- A PURCHASE KEPT FOR LATER (2026-09-30)
+--
+-- A receipt that cannot hatch the pod it was bought for -- no note naming one,
+-- no garden in the world yet, that pod gone, or its wait already over (see
+-- WHICH POD A RECEIPT HATCHES) -- is
+-- kept as ONE saved Instant Hatch, a credit, which the next hatch that succeeds
+-- spends (OfferInstantHatch). The owner's decisions: "save one credit for that
+-- purchase, acknowledge the receipt only after the credit is safely saved, and
+-- make sure a duplicate receipt can't add a second credit", and for no pod at
+-- all, "grant one saved Instant Hatch credit. Use the same safe
+-- receipt-and-credit handling as the full-storage case".
+--
+-- So one credit is added with no yield before StoreService puts the purchase in
+-- its ledger -- the two reach the same save or neither does -- and StoreService
+-- acknowledges only once that save has landed. A second delivery of the same
+-- receipt is stopped by the ledger before it reaches this; a separate purchase
+-- has a receipt of its own, and a credit of its own. A profile that can never be
+-- saved is given none, as it is given no bought spin: false, and the receipt
+-- stays open. The caller says what happened; `why` is for the log.
+--==============================================================================
+local function keepForLater(player: Player, why: string): boolean
+	if not PlayerDataService.IsPersistent(player) then
+		return false
+	end
+	local held = PlayerDataService.AddInstantCredits(player, 1)
+	if held == nil then
+		return false
+	end
+	wanted[player.UserId] = nil
+	refreshInstantPrompts(player)
+	log(string.format("%s bought an instant hatch with %s: kept for later (%d saved).", player.Name, why, held))
+	return true
+end
+
+--==============================================================================
 -- THE PRESS: CHECK, WRITE THE NOTE, OPEN THE DIALOG
 --
 -- Takes the plot as well as the id because placement ids are only unique inside
 -- a plot. Looking the id up in the PRESSER's plot would let a stranger's press
 -- on pod 3 here open a dialog for their own pod 3 at home.
 --==============================================================================
+-- A Studio test answers the purchase dialog here instead of opening one; nil
+-- puts the real one back. Studio only, as WheelService.usePrompt is. It changes
+-- nothing else the press does: the checks, the note and the rate limit are the
+-- same, and a receipt is still only what StoreService is handed.
+function PlantService.usePrompt(fn: ((Player, number) -> ())?): boolean
+	if not game:GetService("RunService"):IsStudio() then
+		return false
+	end
+	promptFn = fn
+	return true
+end
+
 function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId: number): boolean
 	local byPlot = growing[plot]
 	local entry = if byPlot then byPlot[placementId] else nil
@@ -911,6 +1101,53 @@ function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId
 	if entry.stage ~= CreatureModel.STAGE_POD or isReady(entry, os.time()) then
 		return false
 	end
+	--==========================================================================
+	-- NO ROOM, NO DIALOG (2026-09-29)
+	--
+	-- A hatch into a full record is refused, so a purchase of one is not
+	-- offered: nobody is asked for Robux for something the game would then
+	-- decline to do. Counted where the hatch itself counts (HeldRoom). A player
+	-- with no record yet is not offered one either, and is told nothing: their
+	-- save is still arriving, and a receipt would not be honoured until it has.
+	--==========================================================================
+	local room, _, known = CarryService.HeldRoom(player)
+	if not known then
+		return false
+	end
+	if room < 1 then
+		storageFull(player, "STORAGE_FULL", "Instant Hatch not offered")
+		return false
+	end
+	--==========================================================================
+	-- A SAVED INSTANT HATCH IS SPENT, NOT SOLD (2026-09-30)
+	--
+	-- A player holding a credit (see keepForLater) is not asked for Robux: the
+	-- press hatches this pod now, and the credit is taken only once the hatch
+	-- has succeeded -- the owner's rule, "The credit should only be used when
+	-- an eligible hatch actually succeeds." Eligible is everything checked
+	-- above: their own pod, still counting down, a record with room. A hatch
+	-- refused after all (the record will not take the row, the pod has gone)
+	-- leaves the credit where it was. No note and no dialog: there is no
+	-- receipt to wait for -- and so no product either: a credit is spent
+	-- whatever the product's state, so going off sale strands none (found in
+	-- review, 2026-09-30). The product is asked about below, for a sale.
+	--==========================================================================
+	if creditsOf(player) > 0 then
+		local hatched = hatch(player, entry, true)
+		if not hatched then
+			return false
+		end
+		local left = PlayerDataService.AddInstantCredits(player, -1)
+		if left == nil then
+			warn(string.format("[Seed/PlantService] %s: a saved Instant Hatch hatched a pod and the credit "
+				.. "could not be taken.", player.Name))
+		end
+		refreshInstantPrompts(player)
+		log(string.format("%s spent a saved instant hatch on a %d tier pod (%s left).", player.Name,
+			entry.tier, tostring(left)))
+		ActionRefusal.send(player, "INSTANT_CREDIT_USED")
+		return true
+	end
 	local productId = instantProductId()
 	if productId <= 0 then
 		if not warnedNoProduct then
@@ -926,9 +1163,14 @@ function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId
 		return false
 	end
 	lastOffer[player.UserId] = now
-	wanted[player.UserId] = { plot = plot, id = placementId }
+	wanted[player.UserId] = { plot = plot, id = placementId, entry = entry }
 	local ok, err = pcall(function()
-		MarketplaceService:PromptProductPurchase(player, productId)
+		local open = promptFn
+		if open then
+			open(player, productId)
+		else
+			MarketplaceService:PromptProductPurchase(player, productId)
+		end
 	end)
 	if not ok then
 		warn(string.format("[Seed/PlantService] Instant Hatch dialog for %s failed: %s",
@@ -939,40 +1181,113 @@ function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId
 end
 
 --==============================================================================
--- THE RECEIPT: HATCH THE POD THAT WAS PAID FOR
+-- THE RECEIPT: THE POD THAT WAS PAID FOR, OR A CREDIT
 --
 -- Called by StoreService and nothing else, only once a receipt for the Instant
--- Hatch product has arrived. Returns whether a pod actually hatched; false leaves
--- the receipt unacknowledged so Roblox tries again.
+-- Hatch product has arrived. Returns whether the purchase was delivered -- the
+-- pressed pod hatched, or made ready (plant storage full), or the purchase kept
+-- as a credit (see WHICH POD A RECEIPT HATCHES, and keepForLater); false
+-- leaves the receipt unacknowledged so Roblox tries again. A receipt already
+-- fulfilled never gets this far: StoreService's ledger answers it first.
 --==============================================================================
 function PlantService.InstantHatch(player: Player): boolean
 	local plot = PlotService.PlotOf(player)
 	local byPlot = if plot then growing[plot] else nil
-	if not (plot and byPlot) then
-		return false
-	end
 	local note = wanted[player.UserId]
-	local entry: Planted? = if note and note.plot == plot then byPlot[note.id] else nil
-	if not (entry and entry.stage == CreatureModel.STAGE_POD) then
-		entry = nil
-		local now = os.time()
-		local longest = -math.huge
-		for _, candidate in pairs(byPlot) do
-			if candidate.stage == CreatureModel.STAGE_POD then
-				local left = candidate.hatchAt - now
-				-- Ties go to the lower id, so the same bed always picks the same pod.
-				if left > longest or (left == longest and entry and candidate.id < entry.id) then
-					longest = left
-					entry = candidate
+	local now = os.time()
+	local entry: Planted? = nil
+	if note and plot and byPlot and note.plot == plot then
+		local named = byPlot[note.id]
+		if named ~= nil and named == note.entry and named.stage == CreatureModel.STAGE_POD then
+			entry = named
+		end
+	end
+	if not entry or isReady(entry, now) then
+		--======================================================================
+		-- KEPT FOR LATER, AND SAID FOR WHAT IS IN THE GARDEN NOW
+		--
+		-- `why` is for the log. The line the player sees is picked by what they
+		-- can do next: there is no pod to hatch; storage is full, so room comes
+		-- first; a pod is ready, and hatches free; or pods are still growing,
+		-- and the saved Instant Hatch will hatch any one of them.
+		--======================================================================
+		local why = if not (plot and byPlot) then "no garden in the world yet"
+			elseif entry then "the pod it was bought for already ready"
+			elseif note then "the pod it was bought for gone"
+			else "no pod named by the purchase"
+		if not keepForLater(player, why) then
+			return false
+		end
+		local unhatched, waiting = false, false
+		if byPlot then
+			for _, candidate in pairs(byPlot) do
+				if candidate.stage == CreatureModel.STAGE_POD then
+					unhatched = true
+					if not isReady(candidate, now) then
+						waiting = true
+					end
 				end
 			end
 		end
+		if not unhatched then
+			ActionRefusal.send(player, "INSTANT_CREDIT_NO_POD")
+		elseif CarryService.HeldRoom(player) < 1 then
+			-- No door: keepForLater's line is this one's log.
+			storageFull(player, "STORAGE_FULL_CREDIT", nil, true)
+		elseif entry or not waiting then
+			ActionRefusal.send(player, "INSTANT_CREDIT_READY")
+		else
+			ActionRefusal.send(player, "INSTANT_CREDIT_SAVED")
+		end
+		return true
 	end
-	if not entry then
-		return false
-	end
-	if not hatch(player, entry, true) then
-		return false
+	local hatched, why = hatch(player, entry, true)
+	if not hatched then
+		--======================================================================
+		-- PAID FOR, AND NO ROOM: THE POD IS MADE READY INSTEAD (2026-09-29)
+		--
+		-- The dialog is not opened for a full record, so this is the record
+		-- filling AFTER it opened, or a receipt Roblox delivers again in a later
+		-- session. The hatch is refused like any other, and the pod stays
+		-- planted. The owner's decision for what the purchase then does: "the
+		-- purchase should make its intended pod ready immediately and persist
+		-- that state", the player is told "they can hatch the now-ready pod for
+		-- free after making room", and the receipt is acknowledged "only after
+		-- that benefit is safely recorded".
+		--
+		-- So the pod's wait is ended, the garden is written, and only a garden
+		-- that WAS written answers true -- StoreService then puts the purchase
+		-- in its ledger, saves, and acknowledges once the save has landed. A
+		-- garden that could not be written puts the wait back as it was and
+		-- answers false: not acknowledged, delivered again.
+		--
+		-- ONCE, HOWEVER OFTEN THE RECEIPT ARRIVES. A second delivery is stopped
+		-- by the ledger before it reaches this, and the ledger entry and the
+		-- pod's new deadline are written in the same step with no yield between
+		-- them, so no save can hold one without the other.
+		--
+		-- A pressed pod whose wait is already over never gets here: it was kept
+		-- as a credit above, with the storage-full line when storage is full.
+		--======================================================================
+		if why ~= "STORAGE_FULL" then
+			return false
+		end
+		local was = entry.hatchAt
+		entry.hatchAt = now
+		if not persisted(entry.plot) then
+			entry.hatchAt = was
+			return false
+		end
+		if entry.model then
+			entry.model:SetAttribute("HatchAt", entry.hatchAt)
+		end
+		attachHatchPrompt(entry)
+		wanted[player.UserId] = nil
+		log(string.format("%s bought an instant hatch with plant storage full: the %d tier pod is ready "
+			.. "now, and hatches free once there is room.", player.Name, entry.tier))
+		-- No door: the line above is this one's log.
+		storageFull(player, "STORAGE_FULL_READY", nil, true)
+		return true
 	end
 	wanted[player.UserId] = nil
 	return true
@@ -1271,15 +1586,15 @@ end
 -- before step 7 began. Step 7 is three seconds longer than it was; steps 1 to 6
 -- are not a moment longer.
 --==============================================================================
-function hatch(player: Player, entry: Planted, early: boolean?): boolean
+function hatch(player: Player, entry: Planted, early: boolean?): (boolean, string?)
 	local byPlot = growing[entry.plot]
 	if not byPlot or byPlot[entry.id] ~= entry then
-		return false
+		return false, nil
 	end
 	-- Yours. The prompt is drawn for anybody standing close enough, so this is
 	-- the check that actually owns the pod.
 	if PlotService.OwnerOf(entry.plot) ~= player then
-		return false
+		return false, nil
 	end
 	--==========================================================================
 	-- THE CLOCK, UNLESS THE WAIT WAS BOUGHT
@@ -1289,10 +1604,10 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	-- pod in this player's own plot.
 	--==========================================================================
 	if entry.stage ~= CreatureModel.STAGE_POD then
-		return false
+		return false, nil
 	end
 	if not early and not isReady(entry, os.time()) then
-		return false
+		return false, nil
 	end
 	--==========================================================================
 	-- THE ROLL IS GIVEN ITS TIME BEFORE ANYTHING IS HANDED OVER (2026-09-29)
@@ -1331,9 +1646,15 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	-- a moment later, after this function has returned -- and not at all while
 	-- a body is being replaced. Asked for here, the profile never holds neither
 	-- the pod nor the plant (CarryService.RecordHatched).
-	if not CarryService.GiveHatched(player, entry.species, entry.tier, equipAfter,
-		if rolled > 0 then revealAt else nil, true) then
-		return false
+	--
+	-- REFUSED WHEN THE RECORD HAS NO ROOM FOR IT (2026-09-29), before anything
+	-- is built, and the reason rides back for the caller to say: the pod is
+	-- still in the table, still in the garden, still ready, and nothing below
+	-- this line has run.
+	local given, why = CarryService.GiveHatched(player, entry.species, entry.tier, equipAfter,
+		if rolled > 0 then revealAt else nil, true)
+	if not given then
+		return false, why
 	end
 	-- Said here rather than in CarryService, which also hands a Tool over for a
 	-- pickup and for a rejoin and cannot tell the three apart.
@@ -1384,7 +1705,7 @@ function hatch(player: Player, entry: Planted, early: boolean?): boolean
 	if model and model.Parent then
 		burst(model, entry.tier)
 	end
-	return true
+	return true, nil
 end
 
 --==============================================================================
@@ -1401,23 +1722,31 @@ end
 -- The freed capacity is not bookkeeping -- it is the point. A full bed used to
 -- be permanent.
 --==============================================================================
-function pickUp(player: Player, entry: Planted): boolean
+function pickUp(player: Player, entry: Planted): (boolean, string?)
 	local byPlot = growing[entry.plot]
 	if not byPlot or byPlot[entry.id] ~= entry then
-		return false
+		return false, nil
 	end
 	-- Yours, and only yours. This is what stops a neighbour walking off with
 	-- your garden -- the plant is visible to them, the action is not.
 	if PlotService.OwnerOf(entry.plot) ~= player then
-		return false
+		return false, nil
 	end
 	if entry.stage ~= CreatureModel.STAGE_GROWN then
-		return false
+		return false, nil
 	end
 	-- Straight into their hands, as it always was: a pickup is not a reveal and
 	-- there is nothing to wait for.
-	if not CarryService.GiveHatched(player, entry.species, entry.tier) then
-		return false
+	--
+	-- HANDED OVER AND RECORDED, OR NEITHER (2026-09-29): with no room on the
+	-- saved record the plant used to leave the garden for a bag that would not
+	-- remember it, and was gone at the next death or rejoin. The owner's rule:
+	-- it "must not hand over an item that cannot be saved. Preserve the item in
+	-- its prior safe state" -- so the plant STAYS PLANTED, earning as it was,
+	-- and the reason rides back for the caller to say.
+	local given, why = CarryService.GiveHatched(player, entry.species, entry.tier, nil, nil, true)
+	if not given then
+		return false, why
 	end
 
 	-- STOPS WALKING BEFORE IT LEAVES THE TABLE. The model outlives this call by
@@ -1435,7 +1764,7 @@ function pickUp(player: Player, entry: Planted): boolean
 	log(string.format("%s picked up a %d tier %s. %d/%d in the bed.",
 		player.Name, entry.tier, entry.species.Name, countIn(entry.plot),
 		capacityOf(entry.plot)))
-	return true
+	return true, nil
 end
 
 --==============================================================================
@@ -1456,20 +1785,26 @@ end
 -- Returns false rather than erroring on every bad id. A client that sends
 -- nonsense gets nothing done, not a stack trace on the server.
 --==============================================================================
-function PlantService.PickUpById(player: Player, placementId: number): boolean
+function PlantService.PickUpById(player: Player, placementId: number): (boolean, string?)
 	local plot = PlotService.PlotOf(player)
 	if not plot then
-		return false
+		return false, nil
 	end
 	local byPlot = growing[plot]
 	if not byPlot then
-		return false
+		return false, nil
 	end
 	local entry = byPlot[placementId]
 	if not entry then
-		return false
+		return false, nil
 	end
-	return pickUp(player, entry)
+	local picked, why = pickUp(player, entry)
+	-- Refused for room: the plant stays where it stands, and the player is told
+	-- what makes room. Every other refusal is as silent as it was.
+	if not picked and why == "STORAGE_FULL" then
+		storageFull(player, "STORAGE_FULL", "pickup refused")
+	end
+	return picked, why
 end
 
 --==============================================================================

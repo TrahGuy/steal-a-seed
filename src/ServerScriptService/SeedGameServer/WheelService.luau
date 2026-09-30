@@ -100,7 +100,6 @@ local A = WheelData.Attributes
 local ACT = WheelData.Actions
 local DAY = WheelData.Daily
 local TRAIL = WheelData.Trail.Id
-local MAX_HELD = GameConfig.Save.MaxHeld
 
 type Profile = PlayerDataService.Profile
 type Prize = { Id: string, Rolled: string, Prize: string, Species: string, Source: string, At: number }
@@ -285,7 +284,7 @@ end
 -- DELIVERY: pay one owed prize, synchronously
 --
 -- Returns whether it landed. Everything called here writes the profile without
--- yielding (AddCash, AddSpeed, SetChest, GivePod's restore, the cosmetic set),
+-- yielding (AddCash, AddSpeed, SetChest, GivePod's count and row, the cosmetic set),
 -- and the caller strikes the row in the same step, so no save can ever catch a
 -- prize both paid and still owed.
 --==============================================================================
@@ -310,7 +309,17 @@ local function deliverOne(player: Player, profile: Profile, row: Prize): boolean
 	elseif prize.kind == "pod" then
 		-- Only into a bag that is really there and has room: a Tool past the
 		-- saved cap, or handed to a Backpack between bodies, would be lost.
-		if not CarryService.IsHeldRestored(player) or #profile.Held >= MAX_HELD then
+		--
+		-- THE ROOM IS CarryService's COUNT (2026-09-30), which keeps a place for
+		-- a pod being carried home. Counted here as `#profile.Held`, a prize paid
+		-- into that place left the carried pod nowhere to bank. The owner's
+		-- decision: the wheel waits its turn -- the prize stays owed, and the
+		-- next pass pays it once there is room.
+		if not CarryService.IsHeldRestored(player) then
+			return false
+		end
+		local room, _, known = CarryService.HeldRoom(player)
+		if not known or room < 1 then
 			return false
 		end
 		return CarryService.GivePod(player, row.Species, prize.tier or 1)

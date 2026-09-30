@@ -38,6 +38,15 @@ local GuardianCatch = require(Server.GuardianCatch)
 local CarryService = require(Server.CarryService)
 local NestService = require(Server.NestService)
 
+-- THE SAVE HAS ARRIVED, WITH ROOM (2026-09-30). A take waits for the player's
+-- saved record now (CarryService.TryTake), and a stand-in player has none in
+-- Edit. What a full record does to a take is StorageDoorsSpec's; here the
+-- record is simply there. Put back at the end, with Provoke.
+local realHeldRoom = CarryService.HeldRoom
+;(CarryService :: any).HeldRoom = function()
+	return GameConfig.Save.MaxHeld, 0, true
+end
+
 local ATTR = GameConfig.Attributes
 local CHANCE = GameConfig.Parent.Confiscate.LeaveBehindChance
 local ORIGIN_NEST = "Nest_tanglemire_01"
@@ -404,6 +413,7 @@ local ok, err = pcall(function()
 end)
 
 ;(NestService :: any).Provoke = realProvoke
+;(CarryService :: any).HeldRoom = realHeldRoom
 pcall(CarryService.SetGuardianRollOverride, nil)
 if map then
 	for _, d in ipairs(map:GetChildren()) do

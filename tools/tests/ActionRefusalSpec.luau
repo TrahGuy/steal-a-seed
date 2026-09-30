@@ -109,7 +109,7 @@ do
 			table.insert(long, code)
 		end
 	end
-	check(#bag == 0, "no \"Bag is full\": nothing refuses on bag size (section 8)",
+	check(#bag == 0, "no \"Bag is full\": the one refusal for room is a hatch's, and says PLANT STORAGE (section 8)",
 		table.concat(bag, ", "))
 	check(#belongs == 0,
 		"no \"That plant belongs to another player.\": nothing lets a player try to take one",
@@ -786,8 +786,15 @@ end
 -- 8. THE BAG: A FULL HOTBAR IS NOT A FULL INVENTORY
 --
 -- The belt shows ten slots on a desktop and five on a phone; that is a picture
--- of the Backpack, not a limit on it. Nothing that gives a pod or a plant counts
--- the bag -- so there is no refusal to name, and no "Bag is full".
+-- of the Backpack, not a limit on it. Nothing is refused for what is in the
+-- bag, and there is no "Bag is full".
+--
+-- WHAT IS COUNTED IS THE SAVED RECORD (2026-09-29, the owner's decisions),
+-- which holds Save.MaxHeld plants and pods: a hatch, a pickup, a pod taken and
+-- a pod banked are refused when it has no room, and the line is PLANT STORAGE
+-- FULL. HatchStorageSpec and StorageDoorsSpec have all of it; here, that the
+-- BAG is still not counted and a rebuild is not either, while a pod given now
+-- counts the record like everything else (2026-09-30).
 --==============================================================================
 local function theBag()
 	say("\n-- the bag --")
@@ -841,15 +848,17 @@ local function theBag()
 		check(plants == 12, "twelve plants in a row are all accepted -- past a full ten-slot strip",
 			plants)
 
-		local extra = GameConfig.Save.MaxHeld + 2
+		-- A pod given is counted against the saved RECORD since 2026-09-30, and
+		-- here there is no record to write on: none is handed over. (Its full
+		-- story is StorageDoorsSpec's.)
 		local pods = 0
-		for _ = 1, extra do
+		for _ = 1, 3 do
 			if CarryService.GivePod(p, "nubkin", 1) then
 				pods += 1
 			end
 		end
-		check(pods == extra,
-			"and pods past the SAVE cap too: MaxHeld limits what is saved, never what is given", pods)
+		check(pods == 0, "a pod given is counted against the saved record: with none to write on, none is given",
+			pods)
 
 		local tools = 0
 		for _, t in ipairs(backpack:GetChildren()) do
@@ -857,7 +866,20 @@ local function theBag()
 				tools += 1
 			end
 		end
-		check(tools == 12 + extra, "the bag holds every one of them", tools)
+		check(tools == 12, "the bag holds every plant it was handed, and nothing that was refused", tools)
+
+		-- A hatch and a pickup are counted (onRecord), and here there is no
+		-- record to count: refused, with the reason, and nothing added to the bag.
+		local hatched, why = CarryService.GiveHatched(p, nubkin, 1, nil, nil, true)
+		local after = 0
+		for _, t in ipairs(backpack:GetChildren()) do
+			if t:IsA("Tool") then
+				after += 1
+			end
+		end
+		check(hatched == false and why == "NO_RECORD" and after == tools,
+			"a hatch or a pickup is counted: with no record to write on it is refused, and makes no Tool",
+			tostring(hatched) .. " / " .. tostring(why))
 	end)
 	PlayerDataService.IsReady = real.IsReady
 	PlayerDataService.Get = real.Get
@@ -868,7 +890,11 @@ local function theBag()
 	local give = carrySrc and string.match(carrySrc, "function CarryService%.GiveHatched(.-)\nend\n")
 	check(give ~= nil and string.find(give, "GetChildren", 1, true) == nil
 			and string.find(give, "MaxHeld", 1, true) == nil,
-		"GiveHatched never counts the bag")
+		"GiveHatched never counts the BAG: nothing is refused for what is in it")
+	local countAt = give and string.find(give, "CarryService.HeldRoom(player)", 1, true)
+	local gateAt = give and string.find(give, "if onRecord == true then", 1, true)
+	check(countAt ~= nil and gateAt ~= nil and gateAt < countAt and countAt - gateAt < 60,
+		"it counts the saved RECORD, and only when asked to (onRecord): a rebuild is never refused")
 end
 
 --==============================================================================
@@ -887,8 +913,16 @@ local function carryingAndToast()
 			.. "\"Bank your pod before doing that.\"")
 	check(nightAt ~= nil and sendAt ~= nil and nightAt < sendAt,
 		"after the night refusal, which stays first and silent")
+	-- And one more since 2026-09-29: plant storage full, for a pod that may not
+	-- be taken or banked, said from one place that holds it to its quiet time.
 	local _, carrySends = string.gsub(carrySrc, "ActionRefusal%.send%(", "")
-	check(carrySends == 1, "and it is the only line CarryService says", carrySends)
+	local teller = string.match(carrySrc, "local function tellStorageFull(.-)\nend\n") or ""
+	local _, tellerSends = string.gsub(teller, "ActionRefusal%.send%(player, code%)", "")
+	local quietAt = string.find(teller, "< quiet then", 1, true)
+	local saidAt = string.find(teller, "ActionRefusal.send(player, code)", 1, true)
+	check(carrySends == 2 and tellerSends == 1 and quietAt ~= nil and saidAt ~= nil and quietAt < saidAt,
+		"the only other line CarryService says is plant storage full, from one place, after its quiet time",
+		carrySends)
 
 	local scripts = StarterPlayer:FindFirstChild("StarterPlayerScripts")
 	local loadout = sourceOf(scripts and scripts:FindFirstChild("LoadoutUI")) or ""
