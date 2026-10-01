@@ -125,6 +125,14 @@ src/
                                 the wheel's SignDistance), one plain colour, made per client on
                                 a local anchor: the chest's OPEN FREE CHEST! and the pedestal's
                                 SACRIFICE A POD! (words in GameConfig *.FloatingWords)
+    Shared/RewardSplash.luau    a granted reward made obvious: a brief card (icon, name, amount)
+                                near the middle, then each icon flies to its HUD destination or
+                                fades; reduced motion shows it without the flight. The Bonus
+                                Chest's claim plays it (BonusChestUI), from the server's answer only
+    Shared/StarbloomTeaser.luau "BEYOND THE STARS…" / "NEW BIOME · COMING SOON" over Starbloom's
+                                end wall, FloatingSign's look with a steady lavender glow; words
+                                in GameConfig.StarbloomTeaser. A visual teaser only (built by
+                                StarbloomTeaser.client.luau, each client's own)
     Shared/ObbyData.luau        the Floating Garden obby: every position, timing, reward and
                                 attribute name -- numbers only (switch: GameConfig.Obby)
     Shared/ObbyView.luau        where a runner is put down and which way the course runs from
@@ -288,7 +296,8 @@ src/StarterPlayer/StarterPlayerScripts/
     HatchBonusUI.client.luau    the hatch bonus's notice after the reveal and the guide's
                                 congratulations, then the once-only dismissible like reminder
     BonusChestUI.client.luau    the chest's sign, prompt and boost timer -- and the boost row,
-                                which also draws the sacrifice pedestal's line
+                                which also draws the sacrifice pedestal's line; a confirmed
+                                claim's RewardSplash, once per claim, flying to the row's line
     CommunityChestUI.client.luau  the community chest's glowing, drifting rainbow FREE (the wheel
                                 sign's drift at twice its speed) and claimed state; the
                                 step pad asks the server first, once per visit; only a

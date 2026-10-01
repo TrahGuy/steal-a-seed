@@ -1,5 +1,69 @@
 # Steal a Seed — Session Handoff
 
+## Bonus Chest reward splash, and the Starbloom teaser — 2026-10-01 (CLAUDE)  (UNCOMMITTED ON `wip`; NOT PUBLISHED BY AN AGENT — THE OWNER'S v1012 WENT OUT AT 07:37 UTC AFTER THIS WORK WAS ON DISK WITH ROJO CONNECTED, SO IT LIKELY CARRIES IT, UNPROVEN BY THE LOG; STUDIO PLAY ON THE THROWAWAY TEST STORE, DESKTOP ONLY — NO PHONE EMULATION, NO PHYSICAL PHONE)
+
+The Shop redesign is deferred: the Shop is untouched.
+
+**1. Bonus Chest reward splash** (`Shared/RewardSplash.luau`, new; `BonusChestUI`)
+- **On a claim the server confirmed, and only then.** The chest's `BonusChestResult` with `ok = true` and the
+  reward it names shows a card a little above the middle:
+  - "BONUS CHEST", then the reward's icon (the wheel's own: a coin with an arrow for income, a dumbbell for
+    training);
+  - its title ("+25% PLANT INCOME" / "+25% TRAINING");
+  - "BOOST FOR 2 MIN".
+- After 1.5 s the icon flies, in a low arc and shrinking, to that reward's line in the boost row (`Boost_<id>`'s
+  icon) and nudges it. The card fades.
+- No line on screen, or it goes mid-flight: the icon fades where it is.
+- A group lays out side by side, and each icon goes to its own destination. The chest grants one reward, so the
+  group is checked in the spec's build only.
+- **Reduced motion** (`StatusText.reducedMotion`: Roblox's setting or REDUCED FX): fade in, a 2.6 s hold, fade
+  out. No pop, no flight.
+- **Once per claim:** the answer's `nextAt` + reward is the key, so the same answer delivered again shows nothing.
+  Refusals keep their blocked notices and never splash.
+- The splash replaces the old success toast and plays the toast's own `NoticeSuccess` cue. The toast remains only
+  as the fallback if the splash cannot draw.
+- **No server file changed:** no reward, cooldown, save or balance. A boost won on the wheel shows no splash
+  (Bonus Chest only).
+- Drawn in the chest's own gui (`SeedBonusChest`, DisplayOrder 46, IgnoreGuiInset), so the flight and the row
+  share one coordinate space. Sized by `scaleFor`: 1 at 720 tall, never under 0.62 (a phone), at most 1.15, and
+  never wider than 92% of the screen.
+
+**2. Starbloom teaser** (`Shared/StarbloomTeaser.luau` + `StarbloomTeaser.client.luau`, new;
+`GameConfig.StarbloomTeaser`)
+- "BEYOND THE STARS…" in lavender #C9A7FF over "NEW BIOME · COMING SOON" in the chest's gold #FFD34D.
+- FloatingSign's look (LuckiestGuy, the 2.5 dark outline, a studs-sized billboard, so it faces whoever looks).
+- A steady glow: a copy of the headline behind it with a 6-px, 55%-clear lavender edge, plus a soft lavender
+  PointLight on the wall. Nothing animates.
+- Centred, 10 studs off the end wall's face, its middle 17 up (foot 12 up), drawn to 320 studs. Letters 6.5 and
+  3.6 studs tall.
+- Each client's own, on an anchor nothing can touch. No server, remote, teleport, prompt or biome change.
+
+**Checks.**
+- RewardSplashSpec (new) 19/19: the numbers, where an icon may land, the card, the motion rules, and the chest's
+  wiring (success only, the server's reward, once per claim, reduced motion, the row line as destination,
+  BonusChestService untouched).
+- FloatingSignSpec 36/36 (+9: the teaser).
+- NoticeSpec 101, SacrificeSpec 281, HudLayoutSpec 1,271 (they read BonusChestUI). No full suite. Rojo build OK.
+- **Play** (SeedTest_20261001, guard SAFE, desktop 856×716; the guide recorded on the throwaway profile, claims by
+  holding E at the real prompt):
+  - The claim was logged by the server; the card, centred, read BONUS CHEST / +25% PLANT INCOME / BOOST FOR 2 MIN.
+  - The icon flew 1.8 s later and ended 2.1 px from the middle of `Boost_income`'s icon. The card was gone after
+    2.5 s.
+  - The same answer re-sent: no card. A real COOLDOWN refusal: no card.
+  - Reduced motion (REDUCED FX on, a training claim): the card for 3.15 s, full size at once, no flight.
+  - Captures:
+    - the card mid-hold, with the hold lengthened in that session's memory only;
+    - the teaser from 85 studs, which reads cleanly ("…" renders), with the wall lit lavender behind it.
+  - Between claims the throwaway profile's cooldown was reset (test data).
+- **Phone: not seen.**
+  - Studio was on desktop and MCP cannot switch the emulator.
+  - The flight aims at the row line's live position, which on a phone is placed by `placeBoosts`.
+  - Computed for a 705×338 phone: card about 155×90 px, title 17 px, icon 40 px. Teaser headline about 13 px and
+    gold line about 8 px at 85 studs; about 25 px and 15 px from beside the Starbloom nest (45 studs).
+  - Within about 30 studs of the wall the 64-stud-wide headline is wider than a desktop screen.
+- **Not verified:** a real phone, phone emulation, two rewards at once on screen (the chest gives one), a live
+  server.
+
 ## Guardian stuck at the road's mouth after a hit — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE; ONE PLAYER)
 
 **The bug:** after a hit near the biome entrance, the guardian carried on outside the biome and stood against the

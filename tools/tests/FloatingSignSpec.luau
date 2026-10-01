@@ -234,6 +234,69 @@ local function body()
 			and not has(chestServer, "FloatingWords") and not has(pedestalServer, "FloatingSign")
 			and not has(pedestalServer, "FloatingWords"),
 		"each client makes its own: the servers never build these words, so nobody sees another player's")
+
+	--==========================================================================
+	-- THE STARBLOOM TEASER (2026-10-01): the same look, over the road's last wall
+	--==========================================================================
+	say("\n-- the Starbloom teaser --")
+	local BiomeData = require(Shared:WaitForChild("BiomeData"))
+	local Teaser = require(Shared:WaitForChild("StarbloomTeaser"))
+	local T = GameConfig.StarbloomTeaser
+	check(T.Text == "BEYOND THE STARS…" and T.SubText == "NEW BIOME · COMING SOON"
+			and hex(T.Colour) == "#C9A7FF" and hex(T.SubColour) == "#FFD34D",
+		"the owner's words: BEYOND THE STARS… in lavender over NEW BIOME · COMING SOON in the chest's gold",
+		hex(T.Colour) .. " / " .. hex(T.SubColour))
+	local biome = Teaser.biome()
+	local at = Teaser.placement()
+	local nearZ, farZ = 0, 0
+	if biome then
+		nearZ, farZ = BiomeData.SegmentBounds(biome)
+	end
+	check(biome ~= nil and biome.Order == #BiomeData.Biomes and at ~= nil and at.Position.X == 0
+			and math.abs(at.Position.Z - (farZ + T.OffWall)) < 1e-6 and T.OffWall >= 6
+			and at.Position.Z < nearZ and at.Position.Z > farZ,
+		"over the end wall of Starbloom, the last segment: the corridor's middle, OffWall studs off the wall's face",
+		at and tostring(at.Position))
+	local bottom = T.Above - (T.Height + T.SubHeight) / 2
+	check(T.Width / 2 < GameConfig.Map.CorridorWidth / 2 - 4 and bottom >= 10,
+		"clear of both walls, and its foot well over heads, pods and their prompts",
+		string.format("half width %.1f, foot %.1f studs up", T.Width / 2, bottom))
+	check(T.Distance >= GameConfig.Map.SegmentLength,
+		"drawn down the whole Starbloom segment, not just across the hub", T.Distance)
+	local tall, subTall = letters(T.Text, T.Width, T.Height), letters(T.SubText, T.Width, T.SubHeight)
+	check(tall >= T.Height - 0.01 and subTall >= T.SubHeight - 0.01 and tall >= 6 and subTall >= 3.5,
+		"letters about 6.5 and 3.6 studs tall: the boxes are wide enough that the height decides",
+		string.format("%.2f / %.2f", tall, subTall))
+	local made = Teaser.build(scratch)
+	local glow = made and made.gui:FindFirstChild("Glow")
+	local glowEdge = glow and glow:FindFirstChildOfClass("UIStroke")
+	local edge = made and made.words:FindFirstChildOfClass("UIStroke")
+	local light = made and made.anchor:FindFirstChildOfClass("PointLight")
+	check(made ~= nil and made.gui.Enabled and made.gui.MaxDistance == T.Distance
+			and made.words.Font == FloatingSign.Font and made.words.Text == T.Text
+			and edge ~= nil and edge.Color == FloatingSign.Outline and edge.Thickness == FloatingSign.OutlineThickness
+			and made.sub ~= nil and made.sub.Text == T.SubText and made.sub.TextColor3 == T.SubColour,
+		"drawn by FloatingSign: LuckiestGuy with the hub's dark outline, the gold line under it, up for everybody")
+	check(glow ~= nil and glow.ZIndex < made.words.ZIndex and glow.Text == T.Text and glowEdge ~= nil
+			and glowEdge.Color == T.Colour and glowEdge.Thickness == T.GlowThickness
+			and math.abs(glowEdge.Transparency - T.GlowTransparency) < 1e-4 and light ~= nil and light.Color == T.Colour
+			and not light.Shadows and not made.anchor.CanCollide and not made.anchor.CanQuery
+			and not made.anchor.CanTouch,
+		"the glow: a half-clear lavender edge behind the letters and a soft light, on an anchor nothing can touch")
+	local clientSrc = sourceOf(Scripts, "StarbloomTeaser") or ""
+	local moduleSrc = sourceOf(Shared, "StarbloomTeaser") or ""
+	local both = clientSrc .. moduleSrc
+	check(#clientSrc > 0 and #moduleSrc > 0 and not has(both, "RenderStepped") and not has(both, "Heartbeat")
+			and not has(both, "TweenService") and not has(both, "task.wait") and not has(both, "UIGradient"),
+		"steady: nothing in it moves, pulses or flashes")
+	local serverHits = 0
+	for _, s in ipairs(Server:GetDescendants()) do
+		if s:IsA("LuaSourceContainer") and has(sourceOf(s.Parent, s.Name) or "", "StarbloomTeaser") then
+			serverHits += 1
+		end
+	end
+	check(serverHits == 0 and not has(both, "Remote") and not has(both, "Teleport") and not has(both, "Prompt"),
+		"a teaser only: no server, remote, teleport or prompt has anything to do with it")
 end
 
 local ok, err = pcall(body)

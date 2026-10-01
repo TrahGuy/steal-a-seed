@@ -14,9 +14,11 @@
 --                click, a tap and a controller button. Shown only while this
 --                player can actually claim -- hiding it is a courtesy; the
 --                server refuses anything early regardless.
---   THE RESULT   a notice through the game's shared renderer (Notice,
---                ActionToastUI, 2026-09-27): the reward as a success, or why
---                nothing happened as a blocked one. One sound, the notice's.
+--   THE RESULT   a claim the server confirmed: the reward splash (RewardSplash,
+--                2026-10-01) -- the reward's icon, name and amount near the
+--                middle, then the icon flies to its line in THE ROW -- once per
+--                claim. A refusal: a blocked notice saying why (Notice,
+--                ActionToastUI). One sound either way, the notice's.
 --   THE ROW      a compact line per running reward -- its title and the time
 --                left, as text with no plate (StatusText) -- in HudLayout's
 --                boost band under the clock's column, so it keeps clear of every
@@ -43,7 +45,11 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local FloatingSign = require(Shared:WaitForChild("FloatingSign"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local Notice = require(Shared:WaitForChild("Notice"))
+local RewardSplash = require(Shared:WaitForChild("RewardSplash"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local WheelData = require(Shared:WaitForChild("WheelData"))
+local WheelDraw = require(Shared:WaitForChild("WheelDraw"))
 
 local CHEST = GameConfig.BonusChest
 local ATTR = CHEST.Attributes
@@ -458,6 +464,78 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt,
 	end
 end)
 
+--==============================================================================
+-- THE REWARD, MADE OBVIOUS (2026-10-01, the owner's ask)
+--
+-- On a claim the server confirmed, and only then: RewardSplash shows the
+-- reward it NAMED -- the wheel's own icon for that boost, its title, and how
+-- long it runs -- then flies the icon to that reward's line in THE ROW (which
+-- the attributes have put up by then) and nudges it. No line on screen, and
+-- the icon fades where it is. Reduced motion: no flight (RewardSplash).
+--
+-- ONCE PER CLAIM. A claim's answer carries its own next-claim time, which no
+-- other claim shares (they are CooldownSeconds apart), so the same answer
+-- delivered again shows nothing. The splash plays the success notice's sound;
+-- the notice itself is only what is shown if the splash cannot draw.
+--==============================================================================
+local lastClaimShown: string? = nil
+
+local function splash(reward: any): boolean
+	local id = reward.Id
+	local icon = nil
+	for _, r in ipairs(WheelData.Rewards) do
+		if r.kind == "boost" and r.boost == id then
+			icon = r
+		end
+	end
+	local minutes = CHEST.BoostSeconds / 60
+	local ok, played = pcall(RewardSplash.play, {
+		layer = gui,
+		heading = "BONUS CHEST",
+		reduced = StatusText.reducedMotion(),
+		items = {
+			{
+				draw = function(parent: Frame, px: number)
+					if icon then
+						local drawn = WheelDraw.icon(parent, icon, px)
+						drawn.box.Position = UDim2.fromScale(0.5, 0.5)
+					else
+						local glyph = StatusText.icon(parent, "boost", BOOST_TINT[id] or GOLD, px)
+						glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+						glyph.Position = UDim2.fromScale(0.5, 0.5)
+					end
+				end,
+				title = reward.Title,
+				detail = if minutes == math.floor(minutes)
+					then string.format("BOOST FOR %d MIN", minutes)
+					else "BOOST FOR " .. clock(CHEST.BoostSeconds),
+				tint = BOOST_TINT[id] or GOLD,
+				destination = function(): GuiObject?
+					local e = entries[id]
+					if not (e and e.line.isShown()) then
+						return nil
+					end
+					local mark = e.line.frame:FindFirstChild("Icon", true)
+					return if mark and mark:IsA("GuiObject") then mark else e.line.frame
+				end,
+				landed = function()
+					local e = entries[id]
+					if e then
+						e.line.nudge()
+					end
+				end,
+			},
+		},
+	})
+	if not (ok and played == true) then
+		return false
+	end
+	if SoundKit.has("NoticeSuccess") then
+		SoundKit.play("NoticeSuccess")
+	end
+	return true
+end
+
 local remotes = SeedGame:WaitForChild("Remotes")
 local channel = remotes:WaitForChild(GameConfig.Remotes.GameEvent)
 if channel:IsA("RemoteEvent") then
@@ -468,12 +546,18 @@ if channel:IsA("RemoteEvent") then
 		pending = false
 		if payload.ok == true then
 			local reward = GameConfig.bonusChestReward(payload.reward)
-			Notice.post({
-				kind = "success",
-				title = if reward then reward.Title else "BONUS CHEST",
-				detail = string.format("Bonus Chest reward for %s.", clock(CHEST.BoostSeconds)),
-				key = "chest:ok",
-			})
+			local key = string.format("%s:%s", tostring(payload.nextAt), tostring(payload.reward))
+			if key ~= lastClaimShown then
+				lastClaimShown = key
+				if not (reward and splash(reward)) then
+					Notice.post({
+						kind = "success",
+						title = if reward then reward.Title else "BONUS CHEST",
+						detail = string.format("Bonus Chest reward for %s.", clock(CHEST.BoostSeconds)),
+						key = "chest:ok",
+					})
+				end
+			end
 		else
 			local reason = tostring(payload.reason)
 			local words = REFUSED[reason]

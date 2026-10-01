@@ -4924,6 +4924,39 @@ function GameConfig.bonusChestReward(id: any): any
 end
 
 --==============================================================================
+-- THE STARBLOOM TEASER (2026-10-01, the owner's ask)
+--
+-- Words over the road's last wall, for everybody, all the time: a visual teaser
+-- only -- no date, no new biome, no door, nothing a player can do with it.
+-- Shared/StarbloomTeaser draws it in the floating words' look (FloatingSign),
+-- each client's own. Sizes in studs:
+--
+--   Width, Height, SubHeight   the two lines' boxes: letters about 6.5 and 3.6
+--                              tall, wide enough that the height decides
+--   Above, OffWall             its middle over the road, and off the wall's face
+--   Distance                   drawn from this far: the whole Starbloom segment
+--   Glow*                      a copy of the headline behind it with a wide,
+--                              half-clear lavender edge -- steady, no motion
+--   Light*                     a soft lavender light on the wall behind it
+--==============================================================================
+GameConfig.StarbloomTeaser = {
+	Text = "BEYOND THE STARS…",
+	SubText = "NEW BIOME · COMING SOON",
+	Colour = Color3.fromRGB(201, 167, 255), -- lavender #C9A7FF
+	SubColour = Color3.fromRGB(255, 211, 77), -- the FREE CHEST gold #FFD34D
+	GlowThickness = 6,
+	GlowTransparency = 0.55,
+	LightBrightness = 1.4,
+	LightRange = 26,
+	Width = 64,
+	Height = 6.5,
+	SubHeight = 3.6,
+	Above = 17,
+	OffWall = 10,
+	Distance = 320,
+}
+
+--==============================================================================
 -- WHAT A SAVED BOOST IS WORTH TO ONE KIND OF EARNING, AT ONE MOMENT
 --
 -- The reward's Multiplier while `now` is before `endsAt` and the boost is of
