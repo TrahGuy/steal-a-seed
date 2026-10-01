@@ -40,6 +40,7 @@ local Workspace = game:GetService("Workspace")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local FloatingSign = require(Shared:WaitForChild("FloatingSign"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
@@ -125,7 +126,7 @@ local function signPart(name: string, size: Vector3, colour: Color3, material: E
 end
 
 type Face = { status: TextLabel }
-type Built = { model: Model, faces: { Face }, prompt: ProximityPrompt?, glow: PointLight? }
+type Built = { model: Model, faces: { Face }, prompt: ProximityPrompt?, glow: PointLight?, words: FloatingSign.Sign }
 local built: Built? = nil
 
 local function build(chest: Model): Built
@@ -167,6 +168,23 @@ local function build(chest: Model): Built
 		end
 		table.insert(faces, { status = status })
 	end
+	--==========================================================================
+	-- THE WORDS OVER IT (2026-09-30; 2026-10-01): "FREE CHEST", floating above
+	-- the board like the wheel's sign, this player's own, with their state on
+	-- the line under it. paint() shows it unless the chest is locked to them.
+	--==========================================================================
+	local W = CHEST.FloatingWords
+	local words = FloatingSign.new({
+		name = "OpenChestWords",
+		parent = sign,
+		at = origin * CFrame.new(0, W.Above, W.Behind),
+		text = W.Text,
+		colour = W.Colour,
+		width = W.Width,
+		height = W.Height,
+		subText = W.ReadyText,
+		subHeight = W.SubHeight,
+	})
 	sign.Parent = chest
 
 	-- The chest's own prompt, found rather than made: the server owns it.
@@ -185,7 +203,7 @@ local function build(chest: Model): Built
 		light.Parent = lock
 		glow = light
 	end
-	return { model = sign, faces = faces, prompt = prompt, glow = glow }
+	return { model = sign, faces = faces, prompt = prompt, glow = glow, words = words }
 end
 
 --==============================================================================
@@ -359,6 +377,21 @@ local function paint()
 		if glow then
 			glow.Enabled = ready
 		end
+		-- Up through the cooldown too (2026-10-01), with this player's state
+		-- under it -- but never for a player the chest is locked to: READY TO
+		-- CLAIM! is the prompt's own answer, `ready`, and nothing else.
+		local W = CHEST.FloatingWords
+		local sub = b.words.sub
+		if sub then
+			if ready then
+				sub.Text, sub.TextColor3 = W.ReadyText, READY
+			elseif pending then
+				sub.Text, sub.TextColor3 = W.OpeningText, GOLD
+			else
+				sub.Text, sub.TextColor3 = W.WaitText .. clock(nextAt - now), CREAM
+			end
+		end
+		b.words.setShown(unlocked)
 	end
 
 	-- The boosts running now, by id: the chest's one today.

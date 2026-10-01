@@ -22,7 +22,10 @@
 --
 -- What it proves:
 --
---   1. as shipped    paid spins are off: no prompt, and no receipt grants
+--   1. switched off  a copy (as shipped they are ON since 2026-10-01): no
+--                    prompt, and no receipt grants
+--  1b. as shipped    ON: x5 prompted and paid for an eligible player, nothing for
+--                    a restricted one, an old receipt still paid once
 --   2. the purchase  the key picks the product, the server opens the prompt,
 --                    the prompt grants nothing, the receipt grants 1 or 10
 --   3. the ledger    a receipt delivered twice, an interrupted grant, a failed
@@ -131,6 +134,11 @@ local function makePlayer(name, userId)
 	end
 	function p:SetAttribute(key, value)
 		attrs[key] = value
+	end
+	-- No Backpack: WheelService's Spin Ticket has nowhere to go (CommunitySpec
+	-- holds the tickets).
+	function p:FindFirstChildOfClass()
+		return nil
 	end
 	inServer[userId] = p
 	return p
@@ -257,6 +265,10 @@ local PlantService = {
 	InstantHatch = function()
 		return true
 	end,
+	-- WheelService hooks the hatch reveal for the hatch bonus (2026-10-01).
+	OnRevealed = function()
+		return function() end
+	end,
 }
 
 -- PolicyService: one answer for everybody unless a player has their own.
@@ -364,6 +376,7 @@ local function boot(wheelData)
 		BonusChestService = BonusChestService,
 		Metrics = Metrics,
 		WheelModel = WheelModel,
+		PlantService = PlantService,
 	}, { WheelData = wheelData })
 	W.Init()
 	W.useReply(function(_, payload)
@@ -400,11 +413,19 @@ local paidOn = setmetatable({
 	end,
 }, { __index = WheelData })
 
+-- As shipped paid spins are ON (2026-10-01); this copy sees them switched off.
+local paidOff = setmetatable({
+	Paid = { Enabled = false, PromptCooldown = 0 },
+	paidLive = function()
+		return false
+	end,
+}, { __index = WheelData })
+
 --==============================================================================
--- 1. AS SHIPPED: OFF
+-- 1. SWITCHED OFF (A COPY)
 --==============================================================================
-say("-- 1. as shipped --")
-local okOff, WOff, SOff, offReceipt = pcall(boot, WheelData)
+say("-- 1. switched off --")
+local okOff, WOff, SOff, offReceipt = pcall(boot, paidOff)
 check(okOff and type(offReceipt) == "function", "the two real services load together, and StoreService takes the "
 	.. "receipt callback", if okOff then nil else WOff)
 if not okOff then
@@ -420,13 +441,18 @@ do
 	WOff.Buy(p, "spin10")
 	check(#prompts == 0 and why1 == "PAID_UNAVAILABLE" and last().reason == "PAID_UNAVAILABLE"
 			and p:GetAttribute(A.PaidAllowed) == nil,
-		"as shipped an ELIGIBLE player is offered nothing: no prompt for either product", tostring(why1))
+		"switched off, an ELIGIBLE player is offered nothing: no prompt for either product", tostring(why1))
 	table.clear(trace)
 	local a = receipt(offReceipt, p, ONE, "shipped-1")
 	local b = receipt(offReceipt, p, TEN, "shipped-10")
 	check(a == RETRY and b == RETRY and prof.WheelBought == 0 and #prof.Receipts == 0 and count("Save") == 0,
 		"and a receipt for either product grants nothing and is not acknowledged",
 		tostring(a) .. "/" .. tostring(b))
+	local c = receipt(offReceipt, p, WheelData.ProductByKey.spin5, "shipped-5")
+	local d = receipt(offReceipt, p, WheelData.RetiredProducts[1], "shipped-old")
+	check(c == RETRY and d == RETRY and prof.WheelBought == 0 and #prof.Receipts == 0,
+		"nor does the x5 pack's, or a retired product's: off is off for every spin product",
+		tostring(c) .. "/" .. tostring(d))
 	prof.WheelBought = 3
 	table.clear(replies)
 	WOff.Spin(p, "bought")
@@ -435,6 +461,54 @@ do
 	leave(p)
 end
 WOff.useReply(nil)
+
+--==============================================================================
+-- 1b. AS SHIPPED: ON (the owner's word, 2026-10-01)
+--
+-- The real WheelData, untouched: the x5 pack is prompted for an eligible
+-- player and its receipt grants 5; a restricted player is offered nothing and
+-- their receipt grants nothing; a retired product's receipt still pays once.
+--==============================================================================
+say("\n-- 1b. as shipped: on --")
+check(WheelData.Paid.Enabled == true and WheelData.paidLive() == true,
+	"as shipped, paid spins are switched ON (the owner's word, 2026-10-01)")
+do
+	local okShip, WShip, _, shipReceipt = pcall(boot, WheelData)
+	check(okShip and type(shipReceipt) == "function", "the two real services boot with the shipped WheelData",
+		if okShip then nil else WShip)
+	if okShip then
+		local FIVE = WheelData.ProductByKey.spin5
+		local fan, fp = join("SpecShipFan", 7201)
+		local barred, bp = join("SpecShipBarred", 7202)
+		policyFor[barred.UserId] = { ok = true, info = { ArePaidRandomItemsRestricted = true } }
+		WShip.CheckPolicy(fan)
+		WShip.CheckPolicy(barred)
+		table.clear(prompts)
+		table.clear(replies)
+		WShip.Buy(fan, "spin5")
+		WShip.Buy(barred, "spin5")
+		local barredWhy = last().reason
+		check(#prompts == 1 and prompts[1].who == fan and prompts[1].productId == 3715745407
+				and fan:GetAttribute(A.PaidAllowed) == true and barred:GetAttribute(A.PaidAllowed) == nil
+				and barredWhy == "PAID_UNAVAILABLE" and fp.WheelBought == 0,
+			"an eligible player is prompted for x5 (3715745407), and the prompt grants nothing; a restricted player "
+				.. "is prompted for nothing", tostring(barredWhy))
+		local paid = receipt(shipReceipt, fan, FIVE, "ship-5")
+		local blocked = receipt(shipReceipt, barred, FIVE, "ship-5-barred")
+		local old = receipt(shipReceipt, fan, WheelData.RetiredProducts[2], "ship-old-10")
+		local oldAgain = receipt(shipReceipt, fan, WheelData.RetiredProducts[2], "ship-old-10")
+		check(paid == GRANTED and blocked == RETRY and old == GRANTED and oldAgain == GRANTED
+				and fp.WheelBought == 15 and saved(fan).WheelBought == 15 and bp.WheelBought == 0,
+			"its receipt grants 5, saved; the restricted player's grants nothing and is not acknowledged; an old "
+				.. "+10 Spins receipt pays 10, once",
+			string.format("%s/%s/%s/%s, %d", tostring(paid), tostring(blocked), tostring(old), tostring(oldAgain),
+				fp.WheelBought))
+		policyFor[barred.UserId] = nil
+		leave(fan)
+		leave(barred)
+		WShip.useReply(nil)
+	end
+end
 
 --==============================================================================
 -- 2. THE PURCHASE, SWITCHED ON
@@ -587,6 +661,52 @@ do
 	check(okThrown and thrown == RETRY and retried == GRANTED and wp.WheelBought == 11,
 		"a grant that throws leaves its receipt open: the next delivery pays, once",
 		string.format("%s then %s, %d spins", tostring(thrown), tostring(retried), wp.WheelBought))
+end
+
+--==============================================================================
+-- 3b. THE x5 PACK, AND THE RETIRED PRODUCTS' RECEIPTS (2026-10-01)
+--
+-- Three packs on sale now; the two first products are retired but a receipt
+-- for one, already paid for, must still be honoured exactly once.
+--==============================================================================
+say("\n-- 3b. the x5 pack, and the retired products' receipts --")
+do
+	local FIVE = WheelData.ProductByKey.spin5
+	local OLD1, OLD10 = WheelData.RetiredProducts[1], WheelData.RetiredProducts[2]
+	local pack, pp = join("SpecPacks", 7100)
+	W.CheckPolicy(pack)
+	table.clear(prompts)
+	table.clear(replies)
+	W.Buy(pack, "spin5")
+	local five = receipt(deliver, pack, FIVE, "pack-5")
+	check(#prompts == 1 and prompts[1].productId == 3715745407 and five == GRANTED and pp.WheelBought == 5
+			and saved(pack).WheelBought == 5 and table.find(saved(pack).Receipts, "pack-5") ~= nil,
+		"x5: product 3715745407 is prompted, and its RECEIPT grants exactly 5, saved with its ledger entry",
+		tostring(five))
+	local fiveAgain = receipt(deliver, pack, FIVE, "pack-5")
+	check(fiveAgain == GRANTED and pp.WheelBought == 5,
+		"the x5 receipt delivered a second time: acknowledged, and nothing more granted")
+	saveWorks = false
+	local u1 = receipt(deliver, pack, FIVE, "pack-5-unsaved")
+	local u2 = receipt(deliver, pack, FIVE, "pack-5-unsaved")
+	saveWorks = true
+	local u3 = receipt(deliver, pack, FIVE, "pack-5-unsaved")
+	check(u1 == RETRY and u2 == RETRY and u3 == GRANTED and pp.WheelBought == 10 and saved(pack).WheelBought == 10,
+		"an x5 grant whose save fails stays open until a save lands -- and pays 5, once",
+		string.format("%s/%s/%s, %d", tostring(u1), tostring(u2), tostring(u3), pp.WheelBought))
+	local old1 = receipt(deliver, pack, OLD1, "old-1")
+	local old10 = receipt(deliver, pack, OLD10, "old-10")
+	local old1Again = receipt(deliver, pack, OLD1, "old-1")
+	check(old1 == GRANTED and old10 == GRANTED and old1Again == GRANTED and pp.WheelBought == 21
+			and saved(pack).WheelBought == 21,
+		"an outstanding receipt for a RETIRED product (+1 Spin 3715369823, +10 Spins 3715370108) still pays "
+			.. "exactly 1 and 10 -- once, however often it is delivered", tostring(pp.WheelBought))
+	table.clear(prompts)
+	table.clear(replies)
+	W.Buy(pack, OLD1.key)
+	check(#prompts == 0 and last().ok == false and last().reason == "UNKNOWN_PRODUCT",
+		"but a retired product cannot be asked for: no prompt", tostring(last().reason))
+	leave(pack)
 end
 
 --==============================================================================

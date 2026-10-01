@@ -237,6 +237,42 @@ function PlayerDataService.SetMenuSize(player: Player, id: any): boolean
 	return true
 end
 
+--==============================================================================
+-- THE LIKE REMINDER'S STATE (2026-10-01; GameConfig.HatchBonus)
+--
+-- The profile is the truth and the attribute the copy, as with Walk Mode:
+-- "pending", "shown", or nil before the hatch bonus is earned. Set to
+-- "pending" only by WheelService.GrantHatchBonus, in the bonus's own step;
+-- moved on to "shown" only by the client's report that it was shown, which
+-- carries nothing and grants nothing. Answers whether it changed.
+--==============================================================================
+function PlayerDataService.PublishLikeReminder(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local state = (entry.profile :: any).LikeReminder
+	local value = if state == "pending" or state == "shown" then state else nil
+	if player:GetAttribute(GameConfig.Attributes.LikeReminder) ~= value then
+		player:SetAttribute(GameConfig.Attributes.LikeReminder, value)
+	end
+end
+
+function PlayerDataService.MarkLikeReminderShown(player: Player): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then
+		return false
+	end
+	local profile = entry.profile :: any
+	if profile.LikeReminder ~= "pending" then
+		return false
+	end
+	profile.LikeReminder = "shown"
+	touch(player)
+	PlayerDataService.PublishLikeReminder(player)
+	return true
+end
+
 function PlayerDataService.MenuSizeOf(player: Player): string
 	local entry = entries[player]
 	local id = entry and (entry.profile :: any).MenuSize
@@ -855,6 +891,13 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		WheelBought = profile.WheelBought or 0,
 		-- Nor are Instant Hatches somebody bought and kept for later (2026-09-30).
 		InstantCredits = profile.InstantCredits or 0,
+		-- The one-time hatch bonus stays claimed and its like reminder keeps its
+		-- state (2026-10-01): a reset must not make the bonus claimable again.
+		HatchBonusClaimed = profile.HatchBonusClaimed == true,
+		-- And the community chest's spins stay claimed (2026-10-01).
+		CommunityClaimed = profile.CommunityClaimed == true,
+		LikeReminder = if profile.LikeReminder == "pending" or profile.LikeReminder == "shown"
+			then profile.LikeReminder else "",
 		WheelPending = table.clone(profile.WheelPending or {}),
 		Cosmetics = table.clone(profile.Cosmetics or {}),
 		EquippedTrail = profile.EquippedTrail or "",
@@ -1030,6 +1073,9 @@ local function onPlayerAdded(player: Player)
 		-- And the saved menu size, so the first menu opened is already the size
 		-- the player chose.
 		PlayerDataService.PublishMenuSize(player)
+		-- And the like reminder's state: a reminder still pending from an earlier
+		-- visit is shown at a calm moment of this one (HatchBonusUI).
+		PlayerDataService.PublishLikeReminder(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 			PlayerDataService.PublishWalkMode(player)
@@ -1157,6 +1203,15 @@ function PlayerDataService.Start()
 	if channel and channel:IsA("RemoteEvent") then
 		table.insert(serviceConnections, channel.OnServerEvent:Connect(
 			function(player: Player, action: any, payload: any)
+				-- The like reminder was shown (2026-10-01): the verb alone, read only
+				-- to move "pending" on to "shown", and saved soon after.
+				if action == GameConfig.HatchBonus.Reminder.Action then
+					if PlayerDataService.MarkLikeReminderShown(player) then
+						log(string.format("%s was shown the like reminder.", player.Name))
+						task.spawn(PlayerDataService.Save, player)
+					end
+					return
+				end
 				if action ~= GameConfig.MenuSize.Action or type(payload) ~= "string" then
 					return
 				end

@@ -246,6 +246,8 @@ table.insert(cases, { tag = "801x392 the owner's session",
 local worstGap = math.huge
 -- The phones too narrow for the guide's block to end Guide.Clear short of the middle.
 local guideNear = {}
+-- How wide each phone's row draws BIOMES and OBBY, and where ADMIN stands.
+local rowTiers = {}
 for _, case in ipairs(cases) do
 	local L = HudLayout.solve(case.input)
 	local tag = case.tag
@@ -404,14 +406,19 @@ for _, case in ipairs(cases) do
 	check(clearOfChooser,
 		tag .. ": open, it covers none of the belt, cash, the top rows, the thumbs or the sidebars", r2s(chooser))
 
-	-- the clock: on a phone a chip (2026-09-29), where it was 44% of the window
+	-- the clock: on a phone a chip (2026-09-29), where it was 44% of the window --
+	-- and since 2026-09-30 at the top row's RIGHT end, the owner's screenshot
+	-- (BIOMES | TELEPORT TO PLOT | OBBY | ADMIN | the clock). Every listed
+	-- phone's row holds the buttons.
 	local clock = L.clock
 	local bar = case.input.topbar
-	check(clock and math.abs(clock.x + clock.w / 2 - case.input.viewport.X / 2) < 0.01
+	local rowEnd = if L.rowHi then L.rowHi + (case.input.viewport.X - sw) / 2 else nil
+	check(clock and L.topRow == true and rowEnd ~= nil and math.abs(clock.x + clock.w - rowEnd) < 0.01
 			and clock.x >= bar.x + 8 and clock.x + clock.w <= bar.x + bar.w - 8
 			and clock.w == CFG.Phone.Clock and clock.h == CFG.ClockHeight and L.clockChip == true
 			and clock.w < case.input.viewport.X * 0.2,
-		tag .. ": the clock is a chip -- under a fifth of the window -- centred, 8 px clear of the Roblox buttons",
+		tag .. ": the clock is a chip -- under a fifth of the window -- at the row's right end, "
+			.. "8 px clear of the topbar's end",
 		clock and r2s(clock))
 
 	-- the tutorial banner, against everything permanent
@@ -468,19 +475,21 @@ for _, case in ipairs(cases) do
 			string.format("%.1f needed, %g there", lines, drawn))
 	end
 
-	-- THE TOP ROW (2026-09-29): the clock's chip, TELEPORT and OBBY -- and ADMIN
-	-- where the row has room for it -- side by side in the topbar's band, 8 px
-	-- apart, inside the topbar's free span and the safe area across.
+	-- THE TOP ROW (2026-09-29; in the owner's order since 2026-09-30): BIOMES,
+	-- TELEPORT and OBBY from the row's left end, 8 px after Roblox's buttons and
+	-- 8 px apart; ADMIN just left of the clock where the row has room for it; the
+	-- clock at the right end -- all in the topbar's band, inside its free span
+	-- and the safe area across.
 	do
 		local originX = (case.input.viewport.X - sw) / 2
 		local items = {
+			{ "BIOMES", L.biomes }, { "TELEPORT", L.teleport }, { "OBBY", L.obby },
 			{ "the clock", rect(clock.x - originX, clock.y - TOPBAR, clock.w, clock.h) },
-			{ "TELEPORT", L.teleport }, { "OBBY", L.obby },
 		}
 		local a = L.admin
 		local hung = a ~= nil and a.y >= clock.y + clock.h
 		if a and not hung then
-			table.insert(items, { "ADMIN", rect(a.x - originX, a.y - TOPBAR, a.w, a.h) })
+			table.insert(items, 4, { "ADMIN", rect(a.x - originX, a.y - TOPBAR, a.w, a.h) })
 		end
 		local lo, hi = L.rowLo, L.rowHi
 		local rowOk = L.topRow == true and lo ~= nil and hi ~= nil
@@ -501,8 +510,34 @@ for _, case in ipairs(cases) do
 				end
 			end
 		end
-		check(rowOk, tag .. ": the top row -- the clock, TELEPORT, OBBY" .. (if hung then "" else ", ADMIN")
-			.. " -- stands in the topbar's band, inside its free span and the safe area, 8 px apart", note)
+		-- In the owner's order: each button 8 px after the last from the row's
+		-- start; the clock ending at the row's end; ADMIN, on the row, 8 px before it.
+		local b, p, o = L.biomes, L.teleport, L.obby
+		local c = items[#items][2]
+		local ordered = rowOk and math.abs(b.x - lo) < 1e-6
+			and math.abs(p.x - (b.x + b.w + 8)) < 1e-6
+			and math.abs(o.x - (p.x + p.w + 8)) < 1e-6
+			and math.abs(c.x + c.w - hi) < 1e-6
+			and (hung or (a ~= nil and math.abs(a.x - originX + a.w + 8 - c.x) < 1e-6))
+		if not ordered then
+			rowOk = false
+			note ..= " not in the owner's order"
+		end
+		-- The two short buttons are drawn alike: icon and word, the word, or the
+		-- word a little smaller -- the widest the row holds.
+		local B, O = CFG.Biomes, CFG.Obby
+		local tier = if b.w == B.Size.X and o.w == O.Size.X and L.biomesWide and L.obbyWide then "icons and words"
+			elseif b.w == B.Narrow and o.w == O.Narrow and not L.biomesWide and not L.obbyWide then "words"
+			elseif b.w == B.Tight and o.w == O.Tight and not L.biomesWide and not L.obbyWide then "tight words"
+			else nil
+		if tier == nil then
+			rowOk = false
+			note ..= string.format(" widths %g / %g match no tier", b.w, o.w)
+		end
+		rowTiers[tag] = (tier or "?") .. (if hung then ", ADMIN hung" else ", ADMIN on the row")
+		check(rowOk, tag .. ": the top row -- BIOMES, TELEPORT, OBBY" .. (if hung then "" else ", ADMIN")
+			.. ", the clock -- stands in the owner's order in the topbar's band, inside its free span and the "
+			.. "safe area, 8 px apart", note)
 
 		-- THE VIEW. What the owner asked for: "keeps the central play area
 		-- clear". Nothing permanent stands in the middle third of the screen
@@ -517,12 +552,15 @@ for _, case in ipairs(cases) do
 			end
 		end
 		for _, zone in ipairs({ { "the thumbstick", thumb }, { "the jump button", jump },
-			{ "TELEPORT", L.teleport }, { "OBBY", L.obby } }) do
+			{ "BIOMES", L.biomes }, { "TELEPORT", L.teleport }, { "OBBY", L.obby } }) do
 			if HudLayout.gap(view, zone[2]) < 0 then
 				table.insert(inView, zone[1] .. " " .. r2s(zone[2]))
 			end
 		end
-		check(#inView == 0 and L.columnTop ~= nil and top <= 42 and view.h >= sh * 0.45,
+		-- (A hung ADMIN -- only where the row has no room for it -- starts the column
+		-- right under it, and no lower.)
+		local under = hung and a ~= nil and L.columnTop == a.y + a.h - TOPBAR
+		check(#inView == 0 and L.columnTop ~= nil and (top <= 42 or under) and view.h >= sh * 0.45,
 			tag .. ": nothing permanent stands in the middle third of the screen, from the boost row to the belt",
 			string.format("view %s: %s", r2s(view), table.concat(inView, ", ")))
 	end
@@ -557,6 +595,17 @@ for _, case in ipairs(cases) do
 	say("      " .. table.concat(line, " "))
 end
 check(worstGap >= 8, "the smallest gap on any listed phone is at least 8 px", worstGap)
+do
+	local lines = {}
+	for _, case in ipairs(cases) do
+		table.insert(lines, case.tag .. ": " .. tostring(rowTiers[case.tag]))
+	end
+	say("  (the top row's BIOMES and OBBY, by phone -- " .. table.concat(lines, "; ") .. ")")
+	-- The owner's own session is the screenshot's: the words, and ADMIN on the row.
+	check(rowTiers["801x392 the owner's session"] == "words, ADMIN on the row",
+		"the owner's session draws the row as the screenshot does: BIOMES and OBBY as words, ADMIN on the row",
+		rowTiers["801x392 the owner's session"])
+end
 say("  (the guide's block is at its least width, and nearer the middle than Guide.Clear, on: "
 	.. (if #guideNear > 0 then table.concat(guideNear, ", ") else "none") .. ")")
 do
@@ -1384,17 +1433,20 @@ for _, case in ipairs(everyScreen) do
 	local clock = L.clock
 	local viewport = case.input.viewport
 	if phone and clock then
-		-- Beside the clock, 8 px off it, the drawn plate level with it and inside
-		-- the topbar's band; up there only inside the topbar's free span; and
-		-- nothing of it under the topbar, where the player's view begins.
+		-- On the clock's row, 8 px after BIOMES (the owner's order, 2026-09-30),
+		-- the drawn plate level with the clock and inside the topbar's band; up
+		-- there only inside the topbar's free span; and nothing of it under the
+		-- topbar, where the player's view begins.
 		local c = rect(clock.x - originX, clock.y - TOPBAR, clock.w, clock.h)
 		local drawnTop, drawnBottom = p.y + inset, p.y + p.h - inset
-		local beside = math.abs(p.x - (c.x + c.w + 8)) < 1e-6 or math.abs(p.x + p.w + 8 - c.x) < 1e-6
+		local b = L.biomes
+		local beside = b.w > 0 and math.abs(p.x - (b.x + b.w + 8)) < 1e-6 and p.y == b.y
 		check(beside and HudLayout.gap(p, c) >= 8 - 1e-6 and inFreeSpan
 				and math.abs((drawnTop + drawnBottom) / 2 - (c.y + c.h / 2)) <= 0.5
 				and drawnTop >= c.y - 0.5 and drawnBottom <= c.y + c.h + 0.5 and p.y + p.h <= 0,
-			tag .. ": the phone's button stands beside the clock, 8 px off it and level with it, in the topbar's free span",
-			string.format("%s beside %s, drawn %.1f to %.1f", r2s(p), r2s(c), drawnTop, drawnBottom))
+			tag .. ": the phone's button stands on the clock's row, 8 px after BIOMES and level with the clock, "
+				.. "in the topbar's free span",
+			string.format("%s after %s, clock %s, drawn %.1f to %.1f", r2s(p), r2s(b), r2s(c), drawnTop, drawnBottom))
 	end
 	-- The ADMIN button (window space) keeps 8 px off the whole touch area.
 	local admin = L.admin
@@ -1427,8 +1479,9 @@ for _, case in ipairs(everyScreen) do
 
 	-- THE ADMIN BUTTON (two accounts only): WINDOW space, in the topbar beside
 	-- the clock, level with it, inside the free span, never on top of it. On a
-	-- phone it takes what the row has left -- its left end, else its right --
-	-- and hangs under the clock only where the row is full (hung, below).
+	-- phone it stands just left of the clock at the row's end (2026-09-30), and
+	-- hangs under the row's middle only where the row has no room for it (hung,
+	-- below).
 	local a, bar = L.admin, case.input.topbar
 	local adminOk = a ~= nil and clock ~= nil and bar ~= nil
 	local hung = false
@@ -1438,11 +1491,11 @@ for _, case in ipairs(everyScreen) do
 			and a.x >= bar.x + 8 and a.x + a.w <= bar.x + bar.w - 8
 			and (hung or HudLayout.gap(a, clock) >= 8)
 		if hung then
-			adminOk = adminOk and a.y == clock.y + clock.h + 4
-				and math.abs((a.x + a.w / 2) - (clock.x + clock.w / 2)) <= 0.5
-				-- ... and only because neither end of the row could hold it.
-				and L.rowLo + originX > math.min(clock.x, p.x + originX) - 8 - a.w
-				and L.rowHi + originX < math.max(p.x + p.w, L.obby.x + L.obby.w) + originX + 8 + a.w
+			-- Under the row's middle, 8 px under the buttons' touch areas ...
+			adminOk = adminOk and a.y == p.y + TOPBAR + p.h + 8
+				and math.abs((a.x + a.w / 2) - (L.columnCentre + originX)) <= 0.5
+				-- ... and only because the row had no room for it before the clock.
+				and clock.x - 8 - a.w - 8 < L.obby.x + L.obby.w + originX
 				-- The column under the row starts under it.
 				and L.columnTop >= a.y + a.h - TOPBAR
 		else
@@ -1454,17 +1507,36 @@ for _, case in ipairs(everyScreen) do
 		table.insert(hungAdmin, tag)
 	end
 	check(adminOk, tag .. ": the ADMIN button stands in the topbar beside the clock, level with it, 8 px clear"
-			.. (if hung then " -- or, the row being full, hangs under the clock" else ""),
+			.. (if hung then " -- or, the row being full, hangs under the row's middle" else ""),
 		if a then r2s(a) else "nil")
+	-- Hung, it keeps 8 px off the three buttons, the top rows and both badges.
+	if hung and a then
+		local ar = rect(a.x - originX, a.y - TOPBAR, a.w, a.h)
+		local apart, meets = true, ""
+		local others = { { "BIOMES", L.biomes }, { "TELEPORT", p }, { "OBBY", L.obby } }
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			table.insert(others, { g.name, g.rect })
+		end
+		local ib, gb = HudLayout.badges(L)
+		table.insert(others, { "the Index badge", ib })
+		table.insert(others, { "the Garden badge", gb })
+		for _, other in ipairs(others) do
+			if other[2].w > 0 and HudLayout.gap(ar, other[2]) < 8 - 1e-6 then
+				apart = false
+				meets ..= " meets " .. other[1]
+			end
+		end
+		check(apart, tag .. ": hung, ADMIN keeps 8 px off the three buttons, the top rows and both badges", meets)
+	end
 end
-say("  (ADMIN hangs under the clock, the row being full, on: "
+say("  (ADMIN hangs under the row, the row being full, on: "
 	.. (if #hungAdmin > 0 then table.concat(hungAdmin, ", ") else "none") .. ")")
 do
 	local only = true
 	for _, tag in ipairs(hungAdmin) do
 		only = only and string.find(tag, "640x480", 1, true) ~= nil
 	end
-	check(only, "only the 640-px-wide phones hang ADMIN under the clock; every other listed screen has it on the row",
+	check(only, "only the 640-px-wide phones hang ADMIN under the row; every other listed screen has it on the row",
 		table.concat(hungAdmin, ", "))
 end
 
@@ -1559,15 +1631,34 @@ do
 			and short.obby.y == short.teleport.y,
 		"a row with room for TELEPORT and none for OBBY is not used: OBBY stays on screen, beside TELEPORT",
 		r2s(short.teleport) .. " / " .. r2s(short.obby))
-	-- The narrowest free span that holds the row: the chip, TELEPORT and the
-	-- word OBBY, 8 px apart -- 360 px -- and one pixel less does not.
-	local need = CFG.Phone.Clock + 8 + CFG.Phone.Touch + 8 + CFG.Obby.Narrow
+	-- The narrowest free span that holds the row (2026-09-30): BIOMES, TELEPORT
+	-- and OBBY with the two words drawn tight, and the chip, 8 px apart -- 416 px,
+	-- a 640-px phone's -- and one pixel less does not.
+	local need = CFG.Biomes.Tight + 8 + CFG.Phone.Touch + 8 + CFG.Obby.Tight + 8 + CFG.Phone.Clock
 	local just = HudLayout.solve(screen(772, 360, { touch = true, barLeft = 772 - 8 - need - 8 }))
 	local less = HudLayout.solve(screen(772, 360, { touch = true, barLeft = 772 - 8 - need - 8 + 1 }))
-	check(just.topRow == true and just.obbyWide == false and just.rowHi - just.rowLo == need
-			and less.topRow == false,
-		string.format("the row needs %d px of free span: the chip, TELEPORT and the word OBBY, 8 px apart", need),
+	check(just.topRow == true and just.obbyWide == false and just.biomesWide == false
+			and just.obby.w == CFG.Obby.Tight and just.biomes.w == CFG.Biomes.Tight
+			and just.rowHi - just.rowLo == need and less.topRow == false,
+		string.format("the row needs %d px of free span: BIOMES, TELEPORT, OBBY drawn tight and the chip, 8 px apart",
+			need),
 		string.format("%s..%s / %s", tostring(just.rowLo), tostring(just.rowHi), tostring(less.topRow)))
+	-- And the words fit even drawn tight. A label's least size is a DRAWN size
+	-- (measured in Play, 2026-09-30: a label at the phone's 0.75 clipped a word
+	-- that fitted it unscaled), so the room is the plate's label area at the
+	-- phone's scale: BIOMES' less its 4 px sides at 9 px, OBBY's less 6 at 10.
+	local biomes9 = TextService:GetTextSize("BIOMES", 9, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	local obby10 = TextService:GetTextSize("OBBY", 10, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	local bRoom = (CFG.Biomes.Tight - 8) * TELE.PhoneScale
+	local oRoom = (CFG.Obby.Tight - 12) * TELE.PhoneScale
+	check(bRoom >= biomes9 and oRoom >= obby10,
+		"drawn tight at the phone's scale, BIOMES still fits its word at 9 px and OBBY at 10",
+		string.format("%.0f of %.1f, %.0f of %.1f", biomes9, bRoom, obby10, oRoom))
+	local biomesSrc0 = sourceOf("BiomesButtonUI") or ""
+	check(biomesSrc0:find("fit.MinTextSize = 9", 1, true) ~= nil
+			and biomesSrc0:find("label.Position = UDim2.new(0, 4, 0.5, 1)", 1, true) ~= nil
+			and biomesSrc0:find("label.Size = UDim2.new(1, -8, 0, 22)", 1, true) ~= nil,
+		"and BiomesButtonUI draws the word alone that way: 4 px sides, 9 px at the least")
 
 	-- ADMIN hung under a clock with no room beside it: TELEPORT keeps 8 px under it.
 	local narrow = HudLayout.solve(screen(430, 500, { touch = true, barLeft = 250 }))
@@ -1637,13 +1728,12 @@ do
 			elseif onLeft then
 				left += 1
 			end
-			-- On a phone's row it is on TELEPORT's far side from the clock, always:
-			-- the two slots together are the chase warning's room (statusLine).
+			-- On a phone's row it is on TELEPORT's right, toward ADMIN and the clock
+			-- at the row's end (the owner's order, 2026-09-30); BIOMES has the left.
 			local chip = L.clock
 			if L.topRow and chip then
-				local clockIsLeft = chip.x - originX < p.x
-				check(if clockIsLeft then onRight else onLeft,
-					tag .. ": on the row, OBBY is on TELEPORT's far side from the clock", r2s(o))
+				check(onRight and chip.x - originX > o.x + o.w,
+					tag .. ": on the row, OBBY is on TELEPORT's right, between it and the clock", r2s(o))
 			end
 			if not L.obbyWide then
 				table.insert(narrow, tag)
@@ -1656,7 +1746,8 @@ do
 				table.insert(lowered, tag)
 			end
 			local ok = sameRow and o.h == p.h and o.h >= 44 and (onRight or onLeft)
-				and o.w == (if L.obbyWide then OBBY.Size.X else OBBY.Narrow)
+				and (o.w == (if L.obbyWide then OBBY.Size.X else OBBY.Narrow)
+					or (L.topRow and not L.obbyWide and o.w == OBBY.Tight))
 				and o.x >= 8 and o.x + o.w <= sw - 8 and o.y + o.h <= sh - 8 and inFreeSpan
 			local note = r2s(o) .. " beside " .. r2s(p)
 			local others = { { "the toast", L.toast }, { "the tutorial banner", L.banner }, { "its skip line", L.skip } }
@@ -1702,30 +1793,32 @@ do
 				end
 			end
 			check(ok, tag .. ": OBBY stands on TELEPORT's row, 8 px beside it, clear of everything", note)
-			local room = if L.obbyWide then o.w - 50 else o.w - 12
-			check(room >= word, tag .. ": its word fits at 10 px" .. (if L.obbyWide then " beside its icon" else ""),
-				string.format("%.0f of %d", word, room))
+			-- The DRAWN room: a label's least size is a drawn size (2026-09-30).
+			local room = (if L.obbyWide then o.w - 50 else o.w - 12) * L.teleportScale
+			check(room >= word, tag .. ": its word fits at 10 px drawn" .. (if L.obbyWide then " beside its icon" else ""),
+				string.format("%.0f of %.1f", word, room))
 		end
 	end
 	check(#hidden == 0, "every listed screen has room for it beside TELEPORT", table.concat(hidden, ", "))
 	say(string.format("  (right of TELEPORT on %d screens, left on %d; the word alone on: %s; under the topbar on: %s)",
 		right, left, if #narrow > 0 then table.concat(narrow, ", ") else "none",
 		if #lowered > 0 then table.concat(lowered, ", ") else "none"))
-	-- The clock's left, where its right has no room: a free span that ends right
-	-- after the clock. The row is mirrored -- OBBY, TELEPORT, the clock -- and
-	-- the warning runs the other way (the status column, below).
+	-- A free span that ends early (something of Roblox's on the right): the row
+	-- keeps its order inside it -- the clock at the span's end, the buttons from
+	-- its start -- and the warning still runs LEFT from TELEPORT's right edge.
 	do
 		local input = screen(956, 440, { touch = true })
 		input.topbar = rect(40, 0, 956 / 2 + CFG.Phone.Clock / 2 + 8 - 40, TOPBAR)
 		local L = HudLayout.solve(input)
-		local c, o, p = L.clock, L.obby, L.teleport
-		check(L.topRow == true and c ~= nil and p.x + p.w + 8 == c.x and o.w > 0 and o.y == p.y
-				and o.x + o.w + 8 == p.x and o.x >= input.topbar.x + 8,
-			"where the clock's right has no room the row is mirrored: OBBY, TELEPORT, the clock",
-			r2s(o) .. " / " .. r2s(p) .. " / " .. (if c then r2s(c) else "nil"))
+		local c, o, p, b = L.clock, L.obby, L.teleport, L.biomes
+		check(L.topRow == true and c ~= nil and c.x + c.w == input.topbar.x + input.topbar.w - 8
+				and b.x == input.topbar.x + 8 and p.x == b.x + b.w + 8 and o.x == p.x + p.w + 8
+				and o.x + o.w + 8 <= c.x,
+			"where the free span ends early the row keeps its order inside it: BIOMES, TELEPORT, OBBY, the clock",
+			r2s(b) .. " / " .. r2s(p) .. " / " .. r2s(o) .. " / " .. (if c then r2s(c) else "nil"))
 		local line = HudLayout.statusLine(L, TOPBAR, 179)
 		check(line.w == 179 and line.x + line.w == p.x + p.w and line.x >= L.rowLo,
-			"and there the warning runs LEFT from the slot's edge nearest the clock", r2s(line))
+			"and there the warning runs LEFT from TELEPORT's right edge, over BIOMES' slot", r2s(line))
 	end
 	-- A screen with no room either side gets an empty rect, and the button stays hidden.
 	local tiny = HudLayout.solve(screen(330, 500, { touch = true }))
@@ -1749,6 +1842,136 @@ do
 			and not obbySrc:find("while true", 1, true) and not obbySrc:find("RenderStepped", 1, true),
 		"ObbyButtonUI: placed by HudLayout at TELEPORT's scale, sends one verb and nothing else, shows only in the "
 			.. "Safe Zone off the course, answers D-pad Right, and runs no loop")
+end
+
+--==============================================================================
+-- THE BIOMES BUTTON (2026-09-30): ON TELEPORT'S OTHER SIDE
+--
+-- The owner's one-destination button, on a phone and a desktop alike. On a
+-- phone's top row it is the row's first button (held with the row, above).
+-- Everywhere else it stands on TELEPORT's row and height, exactly 8 px off it,
+-- on the side OBBY left free -- BIOMES | TELEPORT TO PLOT | OBBY on a desktop --
+-- and on every listed screen it clears every group and badge, both thumbs, the
+-- toast, the tutorial banner, an open chooser, ADMIN, the clock, OBBY, the
+-- biome name and the boost row by 8 px, its word fitting at 10 px. A desktop
+-- moves nothing else for it (section 1 still holds to the pixel).
+--==============================================================================
+say("\n-- the BIOMES button --")
+do
+	local B = CFG.Biomes
+	local word = TextService:GetTextSize("BIOMES", 10, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	local word9 = TextService:GetTextSize("BIOMES", 9, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	local hidden, wordOnly, sides = {}, {}, { left = 0, right = 0 }
+	for _, case in ipairs(everyScreen) do
+		local L = HudLayout.solve(case.input)
+		local tag = case.tag
+		local b, p, o = L.biomes, L.teleport, L.obby
+		local sw, sh = L.safe.X, L.safe.Y
+		if b.w <= 0 then
+			table.insert(hidden, tag)
+		else
+			local originX = (case.input.viewport.X - sw) / 2
+			local bar = case.input.topbar
+			local inFreeSpan = b.y >= 0 or (bar ~= nil and b.x + originX >= bar.x + 8
+				and b.x + b.w + originX <= bar.x + bar.w - 8)
+			local onLeft = math.abs(b.x + b.w + 8 - p.x) < 1e-6
+			local onRight = math.abs(b.x - (p.x + p.w + 8)) < 1e-6
+			sides[if onLeft then "left" else "right"] += 1
+			local otherSide = o.w <= 0 or ((o.x > p.x) ~= (b.x > p.x))
+			local widthOk = b.w == (if L.biomesWide then B.Size.X else B.Narrow)
+				or (L.topRow and not L.biomesWide and b.w == B.Tight)
+			if not L.biomesWide then
+				table.insert(wordOnly, tag)
+			end
+			local ok = b.y == p.y and (onLeft or onRight) and otherSide and widthOk and b.h == p.h and b.h >= 44
+				and b.x >= 8 and b.x + b.w <= sw - 8 and b.y + b.h <= sh - 8 and inFreeSpan
+			local note = r2s(b) .. " beside " .. r2s(p) .. " / OBBY " .. r2s(o)
+			local others = { { "OBBY", o }, { "the toast", L.toast }, { "the tutorial banner", L.banner },
+				{ "its skip line", L.skip } }
+			for _, g in ipairs(HudLayout.groups(L, true)) do
+				table.insert(others, { g.name, g.rect })
+			end
+			local indexBadge, gardenBadge = HudLayout.badges(L)
+			table.insert(others, { "the Index badge", indexBadge })
+			table.insert(others, { "the Garden badge", gardenBadge })
+			for _, maybe in ipairs({ { "the thumbstick", L.thumb }, { "the jump button", L.jump },
+				{ "the chooser", L.chooser } }) do
+				if maybe[2] then
+					table.insert(others, maybe)
+				end
+			end
+			local a = L.admin
+			if a then
+				table.insert(others, { "ADMIN", rect(a.x - originX, a.y - TOPBAR, a.w, a.h) })
+			end
+			local clock = L.clock
+			if clock then
+				table.insert(others, { "the clock", rect(clock.x - originX, clock.y - TOPBAR, clock.w, clock.h) })
+			end
+			local dx, top = HudLayout.notice(L, widest, 30, 50 - TOPBAR)
+			table.insert(others, { "the biome name", rect(sw / 2 + dx - widest / 2, top, widest, 30) })
+			local _, _, boosts = HudLayout.statusRows(L, TOPBAR)
+			table.insert(others, { "the boost row", boosts })
+			for _, other in ipairs(others) do
+				local r = other[2]
+				if r.w > 0 and HudLayout.gap(b, r) < 8 - 1e-6 then
+					ok = false
+					note ..= " meets " .. other[1]
+				end
+			end
+			check(ok, tag .. ": BIOMES stands on TELEPORT's row, 8 px on OBBY's other side, clear of everything", note)
+			-- The DRAWN room (a label's least size is a drawn size): at 10 px, or 9
+			-- where the row draws it tight.
+			local room = (if L.biomesWide then b.w - 50 else b.w - 8) * L.teleportScale
+			local least = if b.w == B.Tight then word9 else word
+			check(room >= least, tag .. ": its word fits at " .. (if b.w == B.Tight then "9" else "10") .. " px drawn"
+					.. (if L.biomesWide then " beside its icon" else ""),
+				string.format("%.0f of %.1f", least, room))
+			-- A desktop's is the full button, icon and word, left of TELEPORT.
+			if not L.compact then
+				check(L.biomesWide and onLeft and b.w == B.Size.X,
+					tag .. ": on a desktop it is the full button, icon and word, on TELEPORT's left", r2s(b))
+			end
+		end
+	end
+	-- Every listed desktop and phone has it. A small desktop WINDOW under about
+	-- 840 px wide has no room beside TELEPORT and OBBY between the two top rows
+	-- (700 x 400: 10 px on the left, 45 on the right), and there it stays hidden
+	-- rather than cover anything, as OBBY would.
+	local missing = {}
+	for _, tag in ipairs(hidden) do
+		if not (tag:find(" window", 1, true) and tonumber(tag:match("^(%d+)x")) < 840) then
+			table.insert(missing, tag)
+		end
+	end
+	check(#missing == 0, "every listed desktop and phone has room for it beside TELEPORT", table.concat(missing, ", "))
+	say("  (hidden, no room beside TELEPORT, on: " .. (if #hidden > 0 then table.concat(hidden, ", ") else "none") .. ")")
+	say(string.format("  (left of TELEPORT on %d screens, right on %d; the word alone on: %s)", sides.left,
+		sides.right, if #wordOnly > 0 then table.concat(wordOnly, ", ") else "none"))
+	-- A screen with no room either side gets an empty rect, and the button stays hidden.
+	local tiny = HudLayout.solve(screen(330, 500, { touch = true }))
+	check(tiny.biomes.w == 0 or (HudLayout.gap(tiny.biomes, tiny.teleport) >= 8 - 1e-6
+			and (tiny.obby.w == 0 or HudLayout.gap(tiny.biomes, tiny.obby) >= 8 - 1e-6)),
+		"a screen too small for it beside TELEPORT leaves it out rather than on top of anything", r2s(tiny.biomes))
+
+	-- The wiring: placed by HudLayout at TELEPORT's scale, ONE verb and nothing
+	-- after it -- never a biome or a position -- the Safe Zone and the course the
+	-- server's own flags, D-pad Left, no loop.
+	local biomesSrc = sourceOf("BiomesButtonUI") or ""
+	check(biomesSrc:find("layout.biomes", 1, true) ~= nil and biomesSrc:find("layout.biomesWide", 1, true) ~= nil
+			and biomesSrc:find("plateScale.Scale = layout.teleportScale", 1, true) ~= nil
+			and biomesSrc:find("remote:FireServer(PLOT.BiomesAction)", 1, true) ~= nil
+			and select(2, biomesSrc:gsub("FireServer%(", "")) == 1
+			and biomesSrc:find("GetAttribute(ATTR.InSafeZone) == true", 1, true) ~= nil
+			and biomesSrc:find("GetAttribute(ObbyData.Attributes.Course) ~= true", 1, true) ~= nil
+			and biomesSrc:find("Enum.KeyCode.DPadLeft", 1, true) ~= nil
+			and biomesSrc:find("button.Selectable = true", 1, true) ~= nil
+			and biomesSrc:find("PadInput.panelOpen()", 1, true) ~= nil
+			and biomesSrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)', 1, true) ~= nil
+			and biomesSrc:find("UIKit.tenFoot(gui)", 1, true) ~= nil
+			and not biomesSrc:find("while true", 1, true) and not biomesSrc:find("RenderStepped", 1, true),
+		"BiomesButtonUI: placed by HudLayout at TELEPORT's scale, sends one verb and nothing else, shows only in the "
+			.. "Safe Zone off the course, answers D-pad Left and the UI's selection, and runs no loop")
 end
 
 --==============================================================================
@@ -1915,18 +2138,21 @@ for _, case in ipairs(columnCases) do
 	local middle = case.input.viewport.Y / 2 - TOPBAR
 	local w
 	if phone then
-		-- BESIDE THE CLOCK: from the slot's edge nearest the clock, away from it,
-		-- whole inside the two slots -- TELEPORT's and OBBY's, both empty while a
-		-- chase is on -- and never within 8 px of the clock or of ADMIN.
+		-- ON THE CLOCK'S ROW (the owner's order, 2026-09-30): from TELEPORT's
+		-- right edge, LEFT, whole inside the two slots -- BIOMES' and TELEPORT's,
+		-- both empty while a chase is on -- and never within 8 px of OBBY's slot,
+		-- the clock or ADMIN.
 		w = HudLayout.statusLine(L, TOPBAR, warnW * ks)
 		phoneColumns += 1
 		if w.w < warnW * ks - 0.5 then
 			bad(tag, string.format("the warning needs %d px and has %d", math.ceil(warnW * ks), math.floor(w.w)))
 		end
-		local o = L.obby
-		local slots = HudLayout.union(tp, o)
+		local slots = HudLayout.union(L.biomes, tp)
 		if w.x < slots.x - 1e-6 or w.x + w.w > slots.x + slots.w + 1e-6 then
-			bad(tag, "the warning runs past TELEPORT's and OBBY's slots " .. r2s(w) .. " / " .. r2s(slots))
+			bad(tag, "the warning runs past BIOMES' and TELEPORT's slots " .. r2s(w) .. " / " .. r2s(slots))
+		end
+		if HudLayout.gap(w, L.obby) < 8 - 1e-6 then
+			bad(tag, "the warning comes within 8 px of OBBY's slot")
 		end
 		if w.x < L.rowLo - 1e-6 or w.x + w.w > L.rowHi + 1e-6 then
 			bad(tag, "the warning leaves the row")
@@ -2021,10 +2247,14 @@ for _, case in ipairs(columnCases) do
 			bad(tag, string.format("the biome name (%g) and the toast (%g) are not in the band (%g)", nameTop,
 				L.toast.y, notice.y))
 		end
-		if tp.y + tp.h > top + 1e-6 or L.obby.y + L.obby.h > top + 1e-6 then
+		if tp.y + tp.h > top + 1e-6 or L.obby.y + L.obby.h > top + 1e-6
+			or L.biomes.y + L.biomes.h > top + 1e-6 then
 			bad(tag, "a button of the top row reaches into the column")
 		end
-		if top > 22 + 1e-6 then
+		-- 22 px down at most -- or right under ADMIN, on a phone whose row hangs it.
+		local ad = L.admin
+		local hungAt = if ad and L.clock and ad.y >= L.clock.y + L.clock.h then ad.y + ad.h - TOPBAR else nil
+		if top > (hungAt or 22) + 1e-6 then
 			bad(tag, "the column starts " .. top .. " px down")
 		end
 		-- The boosts, the band and the warning never share a row with each other.

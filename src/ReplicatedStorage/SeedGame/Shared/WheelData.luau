@@ -63,14 +63,22 @@ WheelData.MaxPending = 10
 WheelData.RememberRuns = 12
 
 --==============================================================================
--- PAID SPINS: TWO DEVELOPER PRODUCTS, CONFIGURED AND SWITCHED OFF (2026-09-29)
+-- PAID SPINS: THREE SPIN-TICKET PACKS, SWITCHED ON (2026-10-01)
 --
--- The owner created both products in Podnappers' Creator Dashboard on
--- 2026-09-29; Roblox's own record of each (MarketplaceService, asked from
--- Studio) names this experience's universe, 10744596516.
+-- The owner's packs since 2026-10-01 (Roblox's own record of each, asked from
+-- Studio, carries the owner's icon):
 --
---   spin1    3715369823   "+1 Spin"     1 bought spin     listed at 9 Robux
---   spin10   3715370108   "+10 Spins"   10 bought spins   listed at 85 Robux
+--   spin1    3715745320   "X1 Spin Ticket"     1 bought spin    listed at 19 Robux
+--   spin5    3715745407   "x5 Spin Tickets"    5 bought spins   listed at 85 Robux
+--   spin10   3715745552   "x10 Spin Tickets"   10 bought spins  listed at 180 Robux
+--
+-- No pack is called the best value: at these list prices two x5 packs cost less
+-- than one x10.
+--
+-- THE TWO FIRST PRODUCTS ARE RETIRED (RetiredProducts), disabled by the owner:
+-- 3715369823 "+1 Spin" and 3715370108 "+10 Spins" (2026-09-29). Never shown,
+-- never prompted -- but a receipt for one still pays what it always did, once,
+-- through the same ledger, so nothing bought before is lost.
 --
 -- A BOUGHT SPIN IS A PAID RANDOM ITEM. Roblox's rules for one (Creator Docs,
 -- "Paid random items policy guidelines"; the clarification of 2026-05-26) are
@@ -81,17 +89,22 @@ WheelData.RememberRuns = 12
 -- Content Maturity questionnaire declaring paid random items; and neither
 -- product sold outside the game.
 --
--- `Enabled` IS THE ONE SWITCH. Off -- as shipped -- StoreService indexes
--- neither product, so no receipt can grant a spin; WheelService opens no
--- purchase prompt and lets no bought spin be spent; and the panel shows no way
--- to buy. The free, earned path never reads any of this.
+-- `Enabled` IS THE ONE SWITCH. The owner turned it on on 2026-10-01, with paid
+-- random items declared in the Content Maturity questionnaire and sales outside
+-- the game switched off for the three packs. On, PolicyService still decides,
+-- player by player, and fails closed. Off, StoreService indexes no spin
+-- product, so no receipt can grant a spin; WheelService opens no purchase
+-- prompt and lets no bought spin be spent; and the panel shows no way to buy.
+-- The free, earned path never reads any of this.
 --
 -- `robux` IS THE OWNER'S LIST PRICE, FOR THE RECORD ONLY. Roblox prices by
--- region -- Studio was quoted 4 and 35 for these two -- so the panel prints
--- what RobuxPrice hears from Roblox for THIS player and never this number.
+-- region -- Studio was quoted 8, 35 and 75 for the three packs -- so the Shop
+-- and the wheel print what RobuxPrice hears from Roblox for THIS player and
+-- never this number.
 --
 -- `icon` is the product's own icon as Roblox reports it (IconImageAssetId): the
--- owner's artwork, uploaded by the owner with the product.
+-- owner's artwork, uploaded by the owner with the product (the x10's is the
+-- rainbow one). All three load in Podnappers (Studio preload, 2026-10-01).
 --==============================================================================
 export type Product = {
 	key: string,
@@ -103,33 +116,94 @@ export type Product = {
 }
 
 WheelData.Paid = {
-	Enabled = false,
+	Enabled = true,
 	-- Seconds one player waits between two purchase prompts.
 	PromptCooldown = 2,
 }
 
+-- What is sold, in the order the Shop and GET SPINS show it.
 WheelData.Products = {
-	{ key = "spin1", productId = 3715369823, spins = 1, robux = 9, name = "+1 Spin", icon = 84064901294156 },
-	{ key = "spin10", productId = 3715370108, spins = 10, robux = 85, name = "+10 Spins", icon = 139551271701020 },
+	{ key = "spin1", productId = 3715745320, spins = 1, robux = 19, name = "×1 Spin Ticket", icon = 74250574261417 },
+	{ key = "spin5", productId = 3715745407, spins = 5, robux = 85, name = "×5 Spin Tickets", icon = 129968452678126 },
+	{ key = "spin10", productId = 3715745552, spins = 10, robux = 180, name = "×10 Spin Tickets",
+		icon = 109596534013386 },
 } :: { Product }
 
+-- No longer sold: never shown or prompted, and no key a client can ask for.
+-- StoreService still honours a receipt for one (receiptProducts).
+WheelData.RetiredProducts = {
+	{ key = "retired1", productId = 3715369823, spins = 1, robux = 9, name = "+1 Spin", icon = 84064901294156 },
+	{ key = "retired10", productId = 3715370108, spins = 10, robux = 85, name = "+10 Spins", icon = 139551271701020 },
+} :: { Product }
+
+-- The SOLD products, by key and by id: what a client may ask for.
 WheelData.ProductByKey = {} :: { [string]: Product }
 WheelData.ProductById = {} :: { [number]: Product }
-for _, product in ipairs(WheelData.Products) do
-	assert(type(product.key) == "string" and #product.key > 0 and WheelData.ProductByKey[product.key] == nil,
-		"WheelData: a spin product's key is missing or used twice")
-	assert(product.productId > 0 and product.productId == math.floor(product.productId)
-		and WheelData.ProductById[product.productId] == nil,
-		"WheelData: spin product " .. product.key .. " has no id of its own")
-	assert(product.spins >= 1 and product.spins == math.floor(product.spins),
-		"WheelData: spin product " .. product.key .. " grants no whole number of spins")
-	WheelData.ProductByKey[product.key] = product
-	WheelData.ProductById[product.productId] = product
+do
+	local keys: { [string]: boolean } = {}
+	local ids: { [number]: boolean } = {}
+	local function admit(product: Product, sold: boolean)
+		assert(type(product.key) == "string" and #product.key > 0 and not keys[product.key],
+			"WheelData: a spin product's key is missing or used twice")
+		assert(product.productId > 0 and product.productId == math.floor(product.productId)
+			and not ids[product.productId],
+			"WheelData: spin product " .. product.key .. " has no id of its own")
+		assert(product.spins >= 1 and product.spins == math.floor(product.spins),
+			"WheelData: spin product " .. product.key .. " grants no whole number of spins")
+		keys[product.key] = true
+		ids[product.productId] = true
+		if sold then
+			WheelData.ProductByKey[product.key] = product
+			WheelData.ProductById[product.productId] = product
+		end
+	end
+	for _, product in ipairs(WheelData.Products) do
+		admit(product, true)
+	end
+	for _, product in ipairs(WheelData.RetiredProducts) do
+		admit(product, false)
+	end
+end
+
+-- Every product a receipt may name: the sold ones and the retired ones.
+function WheelData.receiptProducts(): { Product }
+	local all = table.clone(WheelData.Products)
+	for _, product in ipairs(WheelData.RetiredProducts) do
+		table.insert(all, product)
+	end
+	return all
+end
+
+--==============================================================================
+-- A STUDIO PREVIEW, NEVER A LIVE SWITCH (2026-10-01)
+--
+-- So the Shop and GET SPINS can be looked at in Studio Play without turning
+-- `Enabled` on in source -- the owner's Publish ships the working tree, and
+-- Enabled waits for the owner's own steps. In Studio, and only there, a
+-- ReplicatedStorage attribute PREVIEW_ATTRIBUTE = true counts as on, for the
+-- server and every client alike. A live server is never Studio, so there this
+-- is just Enabled. PolicyService still decides who may buy, preview or not.
+-- With Enabled on (2026-10-01) it changes nothing; it stays for the day the
+-- switch is off again.
+--==============================================================================
+WheelData.PreviewAttribute = "SeedPaidSpinsStudioPreview"
+
+-- The Shop's REWARDS & ODDS (2026-10-01): ShopUI bumps this LOCAL attribute on
+-- its own player and WheelUI opens straight to Reward info -- one sheet of odds
+-- for both places a spin is sold. Never replicated; asks for nothing.
+WheelData.OpenOddsAttribute = "WheelOpenOddsRequest"
+
+local function studioPreview(): boolean
+	local ok, on = pcall(function()
+		return game:GetService("RunService"):IsStudio()
+			and game:GetService("ReplicatedStorage"):GetAttribute(WheelData.PreviewAttribute) == true
+	end)
+	return ok and on == true
 end
 
 -- Whether paid spins exist at all in this build: the switch, and something to sell.
 function WheelData.paidLive(): boolean
-	return WheelData.Paid.Enabled == true and #WheelData.Products > 0
+	return (WheelData.Paid.Enabled == true or studioPreview()) and #WheelData.Products > 0
 end
 
 --==============================================================================
@@ -319,11 +393,16 @@ WheelData.Actions = {
 	Equip = "TrailEquip",
 	Result = "WheelResult",
 	-- client -> server: ask for the purchase prompt of one spin product, by its
-	-- key ("spin1", "spin10"). The SERVER opens the prompt, and only for a player
+	-- key ("spin1", "spin5", "spin10"; never a retired one). The SERVER opens the
+	-- prompt -- from the wheel's GET SPINS or the Shop alike -- and only for a player
 	-- it may sell to; the spins come from the receipt and nowhere else.
 	Buy = "WheelBuy",
 	-- client -> server: TELEPORT TO the obby's entrance (the OBBY button).
 	ObbyTeleport = "ObbyTeleport",
+	-- server -> client: the one-time hatch bonus was given (WheelService.
+	-- GrantHatchBonus): { label = "first" | "welcome", revealAt = server time
+	-- the hatched plant shows }. HatchBonusUI says so once the reveal is over.
+	HatchBonus = "WheelHatchBonus",
 }
 
 WheelData.FolderName = "SeedWheel"

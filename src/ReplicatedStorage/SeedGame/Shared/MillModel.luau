@@ -783,10 +783,14 @@ local function gardenPath(s: Signature)
 		end
 	end
 
-	-- Stones laid up to the step, drifting off the centreline the way laid
-	-- stones do.
+	-- Stones laid up to the step's corner from the mill's outer side, curving
+	-- the way laid stones do. They ran straight back behind the step until
+	-- 2026-09-30, out to 16.6 -- through a Level 3 or 4 plot's wing fence once
+	-- the mill moved forward (GameConfig.Mill.Place). Now nothing of them is
+	-- behind the step's own back edge (11.5), and they keep clear of the
+	-- pinwheel (x 6.9) and the deck (x 5.5).
 	for i, spot in ipairs({
-		Vector3.new(-0.4, 0, 12.2), Vector3.new(0.7, 0, 14.1), Vector3.new(-0.5, 0, 16),
+		Vector3.new(9.4, 0, 5.6), Vector3.new(8.6, 0, 7.9), Vector3.new(6.9, 0, 10.2),
 	}) do
 		cylinder({
 			name = "SteppingStone",

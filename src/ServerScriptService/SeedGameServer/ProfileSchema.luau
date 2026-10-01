@@ -69,6 +69,22 @@ export type Profile = {
 	-- none and reads 0.
 	--==========================================================================
 	InstantCredits: number,
+	--==========================================================================
+	-- THE HATCH BONUS AND THE LIKE REMINDER (2026-10-01; GameConfig.HatchBonus)
+	--
+	-- HatchBonusClaimed: the one free wheel spin a successful hatch earns has
+	-- been given. Set in the same step as WheelEarned's +1 and LikeReminder's
+	-- "pending" (WheelService.GrantHatchBonus), so a save holds the marker
+	-- with its spin or neither. LikeReminder: "" (not earned yet), "pending"
+	-- (earned, not yet shown) or "shown". Both are kept by a progress reset,
+	-- so the bonus cannot be claimed again. An old save has neither: false, "".
+	--==========================================================================
+	HatchBonusClaimed: boolean,
+	LikeReminder: string,
+	-- THE COMMUNITY CHEST'S SPINS WERE GIVEN (2026-10-01; GameConfig.Community).
+	-- Set in the same step as WheelEarned's +Spins and saved with it
+	-- (WheelService.GrantCommunity); kept by a progress reset. Old saves: false.
+	CommunityClaimed: boolean,
 	Version: number,
 	Cash: number,
 	Speed: number,
@@ -299,6 +315,9 @@ function ProfileSchema.Default(): Profile
 		Tutorial = TutorialData.Default(),
 		Receipts = {},
 		InstantCredits = 0,
+		HatchBonusClaimed = false,
+		LikeReminder = "",
+		CommunityClaimed = false,
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
 		Speed = 0,
@@ -806,6 +825,10 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	end
 	-- Whole, never below zero, never past the cap; anything else reads 0.
 	p.InstantCredits = math.floor(number(raw.InstantCredits, 0, 0, SAVE.MaxInstantCredits))
+	-- True only when saved true; the reminder only one of its three words.
+	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
+	p.LikeReminder = if raw.LikeReminder == "pending" or raw.LikeReminder == "shown" then raw.LikeReminder else ""
+	p.CommunityClaimed = raw.CommunityClaimed == true
 
 	p.Tutorial = TutorialData.Sanitise(raw.Tutorial, p)
 	-- Unknown keys are dropped by construction: everything above copies FROM

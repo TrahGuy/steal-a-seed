@@ -65,6 +65,8 @@ local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 -- No cycle: MapService knows nothing about nests, it only leaves the markers.
 local MapService = require(script.Parent:WaitForChild("MapService"))
+-- Pure: the contact sweep, the close-range lead and the thief memory.
+local GuardianPursuit = require(script.Parent:WaitForChild("GuardianPursuit"))
 
 local P = GameConfig.Parent
 
@@ -114,6 +116,26 @@ type Nest = {
 	-- somewhere. See depositHaul, which is the only way this is cleared.
 	--==========================================================================
 	haul: Haul?,
+	--==========================================================================
+	-- BOTH BODIES AT THE LAST CHASING TICK, AND WHO IS WAITING THEIR TURN
+	-- (2026-10-01; GuardianPursuit)
+	--
+	-- `sample` is the guardian and its target, taken at the same moment, so the
+	-- next tick can sweep the two of them moving together. It is the NEST's: two
+	-- guardians after one thief each keep their own. Dropped whenever the
+	-- target changes or a chase ends; a respawn, a teleport or a stale one is
+	-- refused by GuardianPursuit.sampleUsable.
+	--
+	-- `thieves` is everybody who robbed this nest while it was busy with someone
+	-- else, by when. Pruned every tick to those still eligible; the nearest is
+	-- chased when the current chase ends. Cleared when it lies down.
+	--==========================================================================
+	sample: GuardianPursuit.Sample?,
+	thieves: { [Player]: number },
+	-- How far its colliding body reaches from its root on the ground plane:
+	-- what a wall has to be cleared by on the way home. Measured once, on the
+	-- first walk home (bodyReach).
+	reach: number?,
 }
 
 --==============================================================================
@@ -140,21 +162,9 @@ type Haul = {
 local nests: { Nest } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 
---==============================================================================
--- WHERE EACH CHASED PLAYER WAS AT THE PREVIOUS TICK
---
--- The other end of the segment `distanceToSegment` sweeps, and the reason a
--- fast player cannot run THROUGH a guardian between two ticks.
---
--- Keyed by PLAYER, not by nest, and declared up here rather than beside the
--- geometry that reads it because `provoke` has to be able to clear it and
--- `provoke` runs eight hundred lines earlier. Every place that stops aiming at
--- somebody drops their sample: a stale one is a segment drawn across however
--- long the gap was, and everything it passes near counts as a hit. It also
--- outlived the claim in its old comment that a player can only be chased by one
--- parent at a time -- rob two biomes and two of them want you.
---==============================================================================
-local lastTargetAt: { [Player]: Vector3 } = {}
+-- Where each chased player was at the previous tick used to live here, keyed by
+-- player and holding the TARGET's position alone. It is `Nest.sample` now (both
+-- bodies, one moment, per nest): see GuardianPursuit.
 local running = false
 
 --==============================================================================
@@ -189,6 +199,9 @@ type CarryBridge = {
 	RefreshWalkSpeed: ((Player) -> ())?,
 	-- Stops held-plant recording before a body swap. See the LoadCharacter below.
 	FreezeHeld: ((Player) -> ())?,
+	-- Which nest the pod in this player's arms came off, or nil when they carry
+	-- nothing from any nest. Decides who is still a thief worth remembering.
+	CarriedFrom: ((Player) -> string?)?,
 }
 
 type CombatBridge = {
@@ -298,6 +311,30 @@ local function growPod(nest: Nest, index: number)
 	placePod(nest, index, species, tier)
 end
 
+--==============================================================================
+-- THE SERVER DRIVES ITS OWN GUARDIANS (2026-10-01)
+--
+-- A guardian is an unanchored Humanoid, and under automatic ownership Roblox
+-- hands its physics to the nearest player -- in a chase, the very player it is
+-- chasing. That player's client then simulates the guardian, and this file's
+-- MoveTo stops being what it does. Measured in Studio on Dustbowl's guardian
+-- (57) against a player circling it at 42: owned by the chased player it ran
+-- about 80 degrees off its orders and circled at 11-15 studs for twelve seconds
+-- without a hit; owned by the server it hit 0.13 s into the same chase. The
+-- owner was also the one deciding where the server thought the guardian stood.
+--
+-- So the server owns it: at build, and again whenever a chase starts. Called on
+-- the guardian's own root, pcall'd like every ownership call in this file -- an
+-- assembly outside the Workspace cannot be given an owner, and that must never
+-- be what breaks a nest. Player bodies are still never taken for the server.
+--==============================================================================
+local function pinToServer(nest: Nest)
+	local root = nest.root
+	if root.Parent and not root.Anchored then
+		pcall(root.SetNetworkOwner, root, nil)
+	end
+end
+
 local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 	local index = site:GetAttribute("NestIndex")
 	local folder = Instance.new("Folder")
@@ -338,10 +375,13 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		rage = 0,
 		calmSince = 0,
 		haul = nil,
+		sample = nil,
+		thieves = {},
 	}
 	for i = 1, biome.PodsPerNest do
 		growPod(nest, i)
 	end
+	pinToServer(nest)
 	return nest
 end
 
@@ -534,6 +574,48 @@ end
 -- is only worth anything inside the delay it is warning about.
 local publishPursuit: () -> ()
 
+local function targetPosition(player: Player?): Vector3?
+	if not player or player.Parent ~= Players then
+		return nil
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and root and root:IsA("BasePart") and humanoid.Health > 0) then
+		return nil
+	end
+	return root.Position
+end
+
+-- Where a player stands if a guardian may chase them at all: here, alive, and
+-- not in the Safe Zone. The same three things that end a chase in the tick.
+local function chaseable(player: Player?): Vector3?
+	local pos = targetPosition(player)
+	if not pos or MapService.IsInSafeZone(pos) then
+		return nil
+	end
+	return pos
+end
+
+-- A remembered thief is still one only while chaseable AND still carrying a pod
+-- off THIS nest. Without a carry bridge there is no way to ask, and the first
+-- three conditions decide alone.
+local function eligibleThief(nest: Nest, player: Player): Vector3?
+	local pos = chaseable(player)
+	if not pos then
+		return nil
+	end
+	local bridge = carryBridge
+	local carriedFrom = bridge and bridge.CarriedFrom
+	if carriedFrom then
+		local ok, from = pcall(carriedFrom, player)
+		if not ok or from ~= nest.id then
+			return nil
+		end
+	end
+	return pos
+end
+
 -- `fromNest` is true only for a pod taken out of the nest itself (TakePod); a
 -- dropped pod picked back up arrives through NestService.Provoke with false.
 local function provoke(nest: Nest, thief: Player, fromNest: boolean)
@@ -541,6 +623,32 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean)
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
 	-- second attempt has to be harder than the first.
 	nest.rage += 1
+	--==========================================================================
+	-- ONE CHASE AT A TIME, AND NOBODY FORGOTTEN (2026-10-01)
+	--
+	-- This used to ALWAYS re-target: the newest thief took the chase and the one
+	-- being chased walked away clean, forgotten -- and two players could swap a
+	-- guardian back and forth between them by taking turns. Now a guardian busy
+	-- with a target it can still chase keeps that target, and the new thief is
+	-- REMEMBERED: when this chase ends -- a catch, a throw, the target reaching
+	-- safety -- the nearest thief still eligible is next, before it goes home.
+	-- A theft during a throw or a walk home is remembered the same way, because
+	-- the target stays the person being thrown until the throw is over.
+	--
+	-- Rage still stacks above on every theft, remembered or not, and a chasing
+	-- guardian still speeds up for it at once.
+	--==========================================================================
+	local current = nest.target
+	if not GuardianPursuit.takesOver(current, thief, current ~= nil and chaseable(current) ~= nil) then
+		nest.thieves[thief] = os.clock()
+		if nest.state == "chasing" then
+			setWalk(nest, chaseSpeedFor(nest, os.clock()))
+		end
+		pcall(publishPursuit)
+		return
+	end
+	nest.thieves[thief] = nil
+	pinToServer(nest)
 	-- WAKE, ON A DELAY. The delay is the head start, and it is the whole skill
 	-- of a raid.
 	if nest.state == "asleep" then
@@ -605,21 +713,10 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean)
 		nest.state = "chasing"
 		nest.chaseSince = os.clock()
 	end
-	--==========================================================================
-	-- ALWAYS RE-TARGET
-	--
-	-- Stealing from a parent already chasing somebody else should make it chase
-	-- YOU, or two players could take turns feeding it a decoy. It does mean the
-	-- first thief walks away clean, which is the intended cost: rage is the tax
-	-- on the trick, and four thefts leave the nest permanently at +20 speed.
-	--
-	-- The one being dropped loses its sweep sample on the way out. Nothing else
-	-- clears it here -- the tick only clears the target it is holding -- so it
-	-- would sit there until the next nest to want them swept a segment from
-	-- wherever they were standing when this one lost interest.
-	--==========================================================================
-	if nest.target and nest.target ~= thief then
-		lastTargetAt[nest.target] = nil
+	-- Taking over: from nobody, from the same thief, or from a target that can no
+	-- longer be chased. A new target starts a new sweep.
+	if current ~= thief then
+		nest.sample = nil
 	end
 	nest.target = thief
 	if nest.state == "chasing" then
@@ -1833,38 +1930,19 @@ end
 -- ladder exists to create.
 --
 -- The fix is not a faster tick -- that is the same bug with a smaller window and
--- eight times the cost. It is to stop testing a POINT and test the SEGMENT the
--- player actually travelled: closest approach between the parent and the line
--- from where the player was to where they are now. Exact at any speed, and it is
--- one dot product.
+-- eight times the cost. It is to stop testing a POINT and sweep the tick.
+--
+-- AND BOTH BODIES MOVE (2026-10-01). The first sweep put the parent's position
+-- NOW against the player's whole path: two moments compared as one. It missed a
+-- parent and a player crossing mid-tick, and it hit a player who had left a spot
+-- before the parent got there. The sweep is of their RELATIVE motion now, from a
+-- sample of both taken at the same tick (GuardianPursuit.closestApproach).
 --==============================================================================
-local function distanceToSegment(point: Vector3, a: Vector3, b: Vector3): number
-	local ab = b - a
-	local len2 = ab:Dot(ab)
-	if len2 < 1e-6 then
-		-- Standing still: the segment is a point and this is the old test.
-		return (point - a).Magnitude
-	end
-	local t = math.clamp((point - a):Dot(ab) / len2, 0, 1)
-	return (point - (a + ab * t)).Magnitude
-end
-
 -- 150 WalkSpeed x 0.12s is 18 studs; double it so an ordinary hitch is still
 -- treated as travel and only a discontinuity is thrown away.
 local MAX_TICK_TRAVEL = 40
-
-local function targetPosition(player: Player?): Vector3?
-	if not player or player.Parent ~= Players then
-		return nil
-	end
-	local character = player.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and root and root:IsA("BasePart") and humanoid.Health > 0) then
-		return nil
-	end
-	return root.Position
-end
+-- A sample older than this is a chase that stalled or stopped, not a tick.
+local SAMPLE_MAX_AGE = 0.5
 
 --==============================================================================
 -- IT CARRIES IT WHERE IT MAKES SENSE TO CARRY IT
@@ -2181,10 +2259,11 @@ local function sleep(nest: Nest)
 		depositHaul(nest, "settled")
 	end
 	nest.state = "asleep"
-	if nest.target then
-		lastTargetAt[nest.target] = nil
-	end
+	nest.sample = nil
 	nest.target = nil
+	-- Asleep is forgetting. Anybody still remembered was chased before it got
+	-- home (the walk back takes them first), so this only drops the ineligible.
+	table.clear(nest.thieves)
 	-- Rage is NOT cleared here. It fades on a timer instead, because a parent
 	-- settles within a couple of seconds of throwing somebody while the pod it
 	-- was defending is still lying on the ground -- clearing on sleep made
@@ -2232,6 +2311,73 @@ local function goHome(nest: Nest)
 	end
 end
 
+--==============================================================================
+-- THE NEXT THIEF, BEFORE HOME (2026-10-01)
+--
+-- Asked when a chase ends and on every tick of a walk home, with or without a
+-- haul, so a thief remembered during a throw or a return is chased once that is
+-- over. Never from where the guardian may not chase: inside the Safe Zone or
+-- past the leash it walks on, keeps its memory, and asks again a tick later --
+-- the red line and the backstop end chases exactly as they did. One chase at a
+-- time, no second guardian.
+--==============================================================================
+local function canChaseFrom(nest: Nest): boolean
+	local at = nest.root.Position
+	return not MapService.IsInSafeZone(at) and (at - nest.origin).Magnitude <= P.LeashStuds
+end
+
+local function takeNextThief(nest: Nest): boolean
+	if next(nest.thieves) == nil or nest.busy or not canChaseFrom(nest) then
+		return false
+	end
+	local thief = GuardianPursuit.nextThief(nest.thieves, nest.root.Position, function(player: Player): Vector3?
+		return eligibleThief(nest, player)
+	end)
+	if not thief then
+		return false
+	end
+	nest.target = thief
+	nest.sample = nil
+	nest.state = "chasing"
+	nest.chaseSince = os.clock()
+	nest.stateUntil = 0
+	pinToServer(nest)
+	setWalk(nest, chaseSpeedFor(nest, os.clock()))
+	log(string.format("%s turns on %s, who robbed it while it was busy.", nest.id, thief.Name))
+	return true
+end
+
+-- Every end of a chase: the target goes, its sweep with it, and the walk home
+-- starts -- unless somebody remembered is next.
+local function endChase(nest: Nest)
+	nest.target = nil
+	nest.sample = nil
+	goHome(nest)
+	takeNextThief(nest)
+end
+
+-- How far the guardian's colliding body reaches from its root, flat: measured
+-- from the rig once and kept on the nest (a hauled pod is not counted -- it
+-- rides in the fist, inside this).
+local function bodyReach(nest: Nest): number
+	local known = nest.reach
+	if known then
+		return known
+	end
+	local reach = 2
+	local root = nest.root
+	for _, part in ipairs(nest.parent:GetDescendants()) do
+		if part:IsA("BasePart") and part.CanCollide then
+			local rel = root.CFrame:PointToObjectSpace(part.Position)
+			local size = part.Size
+			reach = math.max(reach, math.sqrt(rel.X * rel.X + rel.Z * rel.Z)
+				+ 0.5 * math.sqrt(size.X * size.X + size.Z * size.Z))
+		end
+	end
+	nest.reach = reach
+	return reach
+end
+
 local function walkHome(nest: Nest): boolean
 	local home = Vector3.new(nest.origin.X, nest.root.Position.Y, nest.origin.Z)
 	if (nest.root.Position - home).Magnitude < 6 then
@@ -2240,7 +2386,19 @@ local function walkHome(nest: Nest): boolean
 	if profileOf(nest) then
 		setWalk(nest, returnSpeedFor(nest))
 	end
-	nest.humanoid:MoveTo(home)
+	--==========================================================================
+	-- THROUGH THE MOUTH, NEVER INTO A WALL'S END (2026-10-01)
+	--
+	-- Inside the corridor this is the straight line it always was. From the
+	-- field -- where a guardian used to be carried by the chase's last order
+	-- (see THE HIT ENDS THE CHASE'S LAST ORDER) -- it lines up in front of the
+	-- mouth first, a body's width and a stud and a half clear of either wall,
+	-- then walks in: GuardianPursuit.routeHome.
+	--==========================================================================
+	local map = GameConfig.Map
+	local reach = bodyReach(nest)
+	nest.humanoid:MoveTo(GuardianPursuit.routeHome(nest.root.Position, home, -map.FieldFront,
+		map.CorridorWidth * 0.5 - reach - 1.5, reach + 4))
 	return false
 end
 
@@ -2268,6 +2426,14 @@ local function step(nest: Nest, now: number)
 		nest.calmSince = 0
 	end
 
+	-- Remembered thieves who reached safety, died, left or stopped carrying this
+	-- nest's pod are dropped as soon as it happens, not when their turn comes.
+	if next(nest.thieves) ~= nil then
+		GuardianPursuit.prune(nest.thieves, function(player: Player): Vector3?
+			return eligibleThief(nest, player)
+		end)
+	end
+
 	if nest.busy then
 		return
 	end
@@ -2289,8 +2455,7 @@ local function step(nest: Nest, now: number)
 		-- Safety is safety. A parent that could be kited across the red line
 		-- would make the one promise the map makes into a lie.
 		if not pos or MapService.IsInSafeZone(pos) then
-			goHome(nest)
-			nest.target = nil
+			endChase(nest)
 			return
 		end
 		--==============================================================
@@ -2304,26 +2469,25 @@ local function step(nest: Nest, now: number)
 		-- before the chaser left its own biome.
 		--==============================================================
 		if MapService.IsInSafeZone(nest.root.Position) then
-			goHome(nest)
-			nest.target = nil
+			endChase(nest)
 			return
 		end
 		-- Backstop only. See GameConfig.Parent.LeashStuds: this is two segments,
 		-- so a normal cross-biome chase never reaches it and a broken one cannot
 		-- run forever.
 		if (nest.root.Position - nest.origin).Magnitude > P.LeashStuds then
-			goHome(nest)
-			nest.target = nil
+			endChase(nest)
 			return
 		end
 		--==================================================================
 		-- CONTACT. Not a grab -- there is no hold any more, reaching the
 		-- player is the hit.
 		--
-		-- Measured against the whole path the player covered since the last
-		-- tick, flattened to the ground plane so a jump does not read as
-		-- distance. See distanceToSegment above for why the point test was
-		-- not enough.
+		-- Measured across the whole tick, with BOTH bodies moving, flattened
+		-- to the ground plane so a jump does not read as distance. See THE
+		-- GRAB IS SWEPT above, and GuardianPursuit.closestApproach. Nothing
+		-- waits on the guardian turning to face anybody: the tick that finds
+		-- contact is the tick that hits.
 		--==================================================================
 		--==================================================================
 		-- THE RAMP, RE-EVALUATED EVERY TICK -- AND ONLY FOR A PROFILE
@@ -2340,28 +2504,50 @@ local function step(nest: Nest, now: number)
 			setWalk(nest, chaseSpeedFor(nest, now))
 		end
 
-		local here = Vector3.new(pos.X, 0, pos.Z)
-		local was = lastTargetAt[nest.target :: Player] or here
 		--==============================================================
-		-- A SEGMENT THIS LONG WAS NOT ONE TICK OF RUNNING
+		-- A SAMPLE IS ONLY A SWEEP'S START IF NOTHING BROKE IN BETWEEN
 		--
 		-- The last sample can be stale -- a chase that ended and restarted,
-		-- a respawn, a throw, a gate pushing somebody back. Sweeping from
-		-- there to here would be a line across half the map, and everything
-		-- it passed near would count as a hit.
-		--
-		-- The ceiling is the furthest a capped player can cover in a tick,
-		-- with room to spare. Past it the sample is discarded and this tick
-		-- is the plain point test it always was.
+		-- a respawn, a throw, a gate pushing somebody back, a new target.
+		-- Sweeping from there to here would be a line across half the map,
+		-- and everything it passed near would count as a hit. Refused
+		-- samples (GuardianPursuit.sampleUsable) leave this tick the plain
+		-- distance between the two bodies now, as it always was.
 		--==============================================================
-		if (here - was).Magnitude > MAX_TICK_TRAVEL then
-			was = here
+		local victimNow = nest.target :: Player
+		local body = victimNow.Character
+		local parentNow = nest.root.Position
+		local last = nest.sample
+		local reach: number
+		local velocity: Vector3? = nil
+		if last and GuardianPursuit.sampleUsable(last, victimNow, body, parentNow, pos, now,
+			MAX_TICK_TRAVEL, SAMPLE_MAX_AGE) then
+			reach = GuardianPursuit.closestApproach(last.parentAt, parentNow, last.targetAt, pos)
+			velocity = GuardianPursuit.flat(pos - last.targetAt) / (now - last.at)
+		else
+			reach = GuardianPursuit.flat(pos - parentNow).Magnitude
 		end
-		lastTargetAt[nest.target :: Player] = here
-		local parentFlat = Vector3.new(nest.root.Position.X, 0, nest.root.Position.Z)
-		if distanceToSegment(parentFlat, was, here) <= P.GrabStuds then
+		nest.sample = { target = victimNow, body = body, parentAt = parentNow, targetAt = pos, at = now }
+		if reach <= P.GrabStuds then
 			local victim = nest.target
 			nest.busy = true
+			--==============================================================
+			-- THE HIT ENDS THE CHASE'S LAST ORDER (2026-10-01)
+			--
+			-- That order is a point ChaseOvershootStuds PAST the thief (AIM
+			-- PAST THEM, below), and while `busy` the tick returns before any
+			-- order is given -- so nothing replaced it, and the guardian ran on
+			-- at chase speed for the whole throw. Measured in Play: 44 to 62
+			-- studs after the hit; at the road's mouth that is out of the
+			-- corridor and into the Safe Zone, where the straight walk home
+			-- then met a wall's end face head-on and stood there for good.
+			--
+			-- It stops where it hit instead, momentum and all; the next thief
+			-- or the walk home gives the next order when the throw is over.
+			--==============================================================
+			nest.humanoid:MoveTo(nest.root.Position)
+			local drift = nest.root.AssemblyLinearVelocity
+			nest.root.AssemblyLinearVelocity = Vector3.new(0, drift.Y, 0)
 			task.spawn(function()
 				-- pcall'd because `busy` MUST be released. An error in here kills
 				-- the thread and leaves the nest busy forever -- its parent frozen
@@ -2399,7 +2585,7 @@ local function step(nest: Nest, now: number)
 					-- it at zero.
 					--
 					-- Only on a CONFIRMED catch. This runs inside the contact
-					-- branch, after `distanceToSegment` has accepted the hit, so
+					-- branch, after the contact sweep has accepted the hit, so
 					-- a miss or a chase that ends releases nothing.
 					--
 					-- The release grants the usual four seconds of trap immunity
@@ -2481,15 +2667,18 @@ local function step(nest: Nest, now: number)
 				-- is leave both alone. Holding something still makes the walk
 				-- home a different state, and an empty-handed catch that
 				-- nobody interrupted is bit-for-bit the old one.
+				--
+				-- Since 2026-10-01 a thief during the throw does not take the
+				-- target (the person being thrown is still a valid one): they
+				-- are remembered, and endChase turns on the nearest of them
+				-- here, before the walk home. The sweep sample goes either
+				-- way -- the throw moved everybody.
 				--==========================================================
-				if nest.target == victim or nest.target == nil then
-					goHome(nest)
-					nest.target = nil
-				end
-				if victim then
-					lastTargetAt[victim] = nil
-				end
+				nest.sample = nil
 				nest.busy = false
+				if nest.target == victim or nest.target == nil then
+					endChase(nest)
+				end
 			end)
 			return
 		end
@@ -2510,19 +2699,17 @@ local function step(nest: Nest, now: number)
 		-- Flattened, because a target on higher ground would otherwise tilt the
 		-- aim point into the sky or the floor and shorten the overshoot to
 		-- nothing at exactly the moment it matters.
+		--
+		-- CLOSE IN, IT AIMS WHERE THEY WILL BE (2026-10-01). Within
+		-- ChaseLeadStuds the line bends toward where the target will be when
+		-- the next order goes out, one TICK on, from this sweep's own
+		-- velocity -- an order aimed at where a strafing player WAS is a
+		-- guardian trailing round behind them. At range, and whenever the
+		-- sample was refused, it is the straight line it always was. Standing
+		-- on top of them it keeps facing forward rather than divide by zero.
 		--==============================================================
-		local here3 = nest.root.Position
-		local toTarget = Vector3.new(pos.X - here3.X, 0, pos.Z - here3.Z)
-		local heading = toTarget
-		if heading.Magnitude > 0.05 then
-			heading = heading.Unit
-		else
-			-- Standing on top of them. The grab test above has already fired in
-			-- every real case; keep facing forward rather than divide by zero.
-			local look = nest.root.CFrame.LookVector
-			local flat = Vector3.new(look.X, 0, look.Z)
-			heading = if flat.Magnitude > 0.05 then flat.Unit else Vector3.new(0, 0, -1)
-		end
+		local heading = GuardianPursuit.heading(nest.root.Position, pos, velocity, TICK,
+			P.ChaseLeadStuds, nest.root.CFrame.LookVector)
 		nest.humanoid:MoveTo(pos + heading * P.ChaseOvershootStuds)
 		return
 
@@ -2556,6 +2743,11 @@ local function step(nest: Nest, now: number)
 			nest.state = "returning"
 			return
 		end
+		-- A thief remembered during the catch or the walk is chased first, the
+		-- pod riding along exactly as it does when provoke interrupts a haul.
+		if takeNextThief(nest) then
+			return
+		end
 		-- A route that never completes must not hold a pod forever. Past the
 		-- ceiling it goes back into the ring anyway -- depositHaul does not
 		-- care where the guardian got to, and a pod in its slot is a better
@@ -2572,10 +2764,35 @@ local function step(nest: Nest, now: number)
 		return
 
 	else -- returning
+		if takeNextThief(nest) then
+			return
+		end
 		if walkHome(nest) then
 			sleep(nest)
 		end
 	end
+end
+
+--==============================================================================
+-- THE CHASE, REACHABLE BY A SPEC (2026-10-01)
+--
+-- `provoke` and one tick of `step`, on a nest record the spec builds itself, so
+-- GuardianPursuitSpec drives the real memory, the real exits and the real
+-- sweep without a map, a rig or a Play session. Studio-only, like SpecThrow:
+-- on a live server both return before touching anything.
+--==============================================================================
+function NestService.SpecProvoke(nest: any, thief: any, fromNest: boolean?)
+	if not RunService:IsStudio() then
+		return
+	end
+	provoke(nest, thief, fromNest == true)
+end
+
+function NestService.SpecStep(nest: any, now: number)
+	if not RunService:IsStudio() then
+		return
+	end
+	step(nest, now)
 end
 
 --==============================================================================
@@ -2660,10 +2877,9 @@ function NestService.ResetParents(): number
 			depositHaul(nest, "the parents were reset")
 		end
 		nest.busy = false
-		if nest.target then
-			lastTargetAt[nest.target] = nil
-		end
+		nest.sample = nil
 		nest.target = nil
+		table.clear(nest.thieves)
 		nest.rage = 0
 		nest.calmSince = 0
 		nest.state = "asleep"
@@ -2767,8 +2983,8 @@ function NestService.Init()
 	-- a fresh one.
 	throwRemote = nil
 	throwRemoteConnected = false
-	-- Rule 10. Sweep samples belong to a chase that no longer exists.
-	table.clear(lastTargetAt)
+	-- Rule 10. Sweep samples belong to a chase that no longer exists -- they
+	-- live on the nests, and the nests go here.
 	for _, nest in ipairs(nests) do
 		if nest.folder.Parent then
 			nest.folder:Destroy()
@@ -2778,9 +2994,16 @@ function NestService.Init()
 end
 
 function NestService.Start()
-	-- A player who leaves mid-chase would otherwise hold a Vector3 forever.
+	-- A player who leaves is nobody's sample and nobody's remembered thief. The
+	-- chase itself ends on the next tick, when targetPosition finds them gone.
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player: Player)
-		lastTargetAt[player] = nil
+		for _, nest in ipairs(nests) do
+			nest.thieves[player] = nil
+			local sample = nest.sample
+			if sample and sample.target == player then
+				nest.sample = nil
+			end
+		end
 	end))
 
 	--==========================================================================

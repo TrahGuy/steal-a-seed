@@ -140,20 +140,23 @@ local function indexProducts(): (number, number)
 		end
 	end
 	--==========================================================================
-	-- THE REWARD WHEEL'S SPIN PRODUCTS (WheelData.Products, 2026-09-29)
+	-- THE REWARD WHEEL'S SPIN PRODUCTS (WheelData, 2026-09-29; 2026-10-01)
 	--
-	-- Two of them, +1 Spin and +10 Spins, each its own id and its own quantity:
-	-- the receipt's ProductId picks the row and the row says how many, so the
-	-- two can never pay each other's amount. A spin is a paid random item, so
-	-- they are indexed only while WheelData.Paid.Enabled -- off, no receipt can
-	-- grant a spin, whatever it names (KB/HANDOFF.md, the paid-spins entry).
+	-- Every product a receipt may name: the three packs on sale (1, 5 and 10
+	-- spins) AND the two retired ones (+1 Spin, +10 Spins), so a purchase made
+	-- before they were disabled is still paid -- once, through the ledger below.
+	-- Each its own id and its own quantity: the receipt's ProductId picks the
+	-- row and the row says how many, so no two can pay each other's amount. A
+	-- spin is a paid random item, so they are indexed only while paid spins are
+	-- on (WheelData.paidLive) -- off, no receipt can grant a spin, whatever it
+	-- names (KB/HANDOFF.md, the paid-spins entry).
 	--
 	-- `wheelOff` remembers the ids while they are NOT indexed, for one purpose:
 	-- a receipt that names one then is said to be exactly that in the log,
 	-- rather than "a product this build does not know".
 	--==========================================================================
 	table.clear(wheelOff)
-	for _, product in ipairs(WheelData.Products) do
+	for _, product in ipairs(WheelData.receiptProducts()) do
 		if not WheelData.paidLive() then
 			wheelOff[product.productId] = product.key
 			continue
@@ -460,7 +463,7 @@ function StoreService.Snapshot(): string
 	rows[#rows + 1] = string.format("  %-12s %s", "InWorld",
 		if #inWorld == 0 then "(empty)" else table.concat(inWorld, " "))
 	local wheel = {}
-	for _, product in ipairs(WheelData.Products) do
+	for _, product in ipairs(WheelData.receiptProducts()) do
 		table.insert(wheel, string.format("%s=%d x%d", product.key, product.productId, product.spins))
 	end
 	rows[#rows + 1] = string.format("  %-12s %s%s", "Wheel",

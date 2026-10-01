@@ -50,7 +50,7 @@
 -- which balance to spend -- and the server decides the rest.
 --
 --==============================================================================
--- PAID SPINS: CONFIGURED, AND OFF UNTIL WheelData.Paid.Enabled (2026-09-29)
+-- PAID SPINS: WheelData.Paid.Enabled (2026-09-29; switched on 2026-10-01)
 --
 -- A bought spin is a PAID RANDOM ITEM, so three things are decided here, on the
 -- server, and every one of them fails CLOSED:
@@ -89,6 +89,9 @@ local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local BonusChestService = require(script.Parent:WaitForChild("BonusChestService"))
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 local WheelModel = require(script.Parent:WaitForChild("WheelModel"))
+-- For its reveal hook only (the hatch bonus). No cycle: PlantService never
+-- requires this service.
+local PlantService = require(script.Parent:WaitForChild("PlantService"))
 
 local WheelService = {}
 -- After the profiles (20), the bag, the faucets and the chest (58). Nothing
@@ -135,6 +138,8 @@ local clockFn: () -> number = os.time
 local forced: { [Player]: { prize: string, species: string? } } = {}
 -- Where an answer goes instead of the remote, while a Studio spec listens.
 local replyFn: ((Player, { [string]: any }) -> ())? = nil
+-- PlantService.OnRevealed's unsubscribe, for the hatch bonus; dropped by Init.
+local unhookReveal: (() -> ())? = nil
 -- What opens a purchase prompt: Roblox's own, or a Studio spec's recorder.
 local promptFn: ((Player, number) -> ())? = nil
 
@@ -164,6 +169,16 @@ function WheelService.useReply(fn: ((Player, { [string]: any }) -> ())?): boolea
 		return false
 	end
 	replyFn = fn
+	return true
+end
+
+-- HatchBonusSpec hears the hatch bonus's message here instead. Studio only.
+local bonusFn: ((Player, { [string]: any }) -> ())? = nil
+function WheelService.useBonusReply(fn: ((Player, { [string]: any }) -> ())?): boolean
+	if not RunService:IsStudio() then
+		return false
+	end
+	bonusFn = fn
 	return true
 end
 
@@ -199,6 +214,63 @@ local function windowOpen(profile: Profile, at: number): boolean
 	return profile.WheelDayAt > 0 and at < profile.WheelDayAt + DAY.WindowSeconds
 end
 
+--==============================================================================
+-- SPIN TICKETS (2026-10-01, the owner's brief; GameConfig.Community)
+--
+-- The EARNED balance, shown in the hotbar as ONE stacked Tool -- "Spin Ticket",
+-- TicketCount = WheelEarned. A view of the balance, never a balance of its own:
+-- earning, spending and saving all stay on WheelEarned, so a ticket cannot be
+-- spent twice, and one is used only when roll() takes an earned spin. It is
+-- not a plant (no SpeciesId), so the saved record never counts it and it takes
+-- no storage; and it is rebuilt from the balance whenever it is missing -- a
+-- death empties the Backpack -- so rejoins and respawns never lose one. Kept
+-- in step by publish(), which every change and the 3-second loop call.
+--==============================================================================
+local TICKET = "SpinTicket"
+local TICKET_COUNT = "TicketCount"
+
+local function ticketOf(player: Player): Tool?
+	for _, container in ipairs({ player:FindFirstChildOfClass("Backpack"), player.Character }) do
+		if container then
+			for _, child in ipairs(container:GetChildren()) do
+				if child:IsA("Tool") and child:GetAttribute(TICKET) == true then
+					return child
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function syncTicket(player: Player, count: number)
+	local tool = ticketOf(player)
+	if count < 1 then
+		if tool then
+			tool:Destroy()
+		end
+		return
+	end
+	if not tool then
+		local backpack = player:FindFirstChildOfClass("Backpack")
+		if not backpack then
+			return
+		end
+		local made = Instance.new("Tool")
+		made.Name = GameConfig.Community.TicketName
+		made.RequiresHandle = false
+		made.CanBeDropped = false
+		made.ToolTip = GameConfig.Community.TicketHint
+		made:SetAttribute(TICKET, true)
+		made.Parent = backpack
+		tool = made
+	end
+	local t = tool :: Tool
+	if t:GetAttribute(TICKET_COUNT) ~= count then
+		t:SetAttribute(TICKET_COUNT, count)
+	end
+end
+WheelService.TicketOf = ticketOf
+
 local function publish(player: Player)
 	if player.Parent ~= Players then
 		return
@@ -210,8 +282,10 @@ local function publish(player: Player)
 				put(player, name, nil)
 			end
 		end
+		syncTicket(player, 0)
 		return
 	end
+	syncTicket(player, profile.WheelEarned)
 	local at = now()
 	local open = windowOpen(profile, at)
 	put(player, A.Earned, profile.WheelEarned)
@@ -677,6 +751,131 @@ function WheelService.AwardCompletion(player: Player, runId: string, speed: numb
 end
 
 --==============================================================================
+-- THE HATCH BONUS (2026-10-01, the owner's brief; GameConfig.HatchBonus)
+--
+-- One free spin per player, once, for a successful hatch: PlantService's own
+-- reveal (OnRevealed, hooked in Start), which comes from a hatch that has
+-- happened and never from a refused one. `firstHatch` is that hatch's answer to
+-- "had this record ever hatched?", taken before the hatch was recorded. It
+-- picks the label and nothing else: a player who had hatched before gets the
+-- same one spin, as a welcome back.
+--
+-- ONE STEP OR NOTHING, inside UpdateWheel with no yield:
+--   * already claimed: nothing, ever again;
+--   * the earned balance full: nothing YET. It is capped on load, so a spin
+--     past the cap would vanish on the next join; the next hatch with room
+--     claims it;
+--   * otherwise the spin on the EARNED balance (the obby's daily allowance --
+--     WheelDayAt, WheelDayCount -- is not read or written), the marker, and the
+--     like reminder's "pending", together, so a save has all three or none.
+-- Two hatches in one moment are two calls in turn, and the second finds the
+-- marker. A profile that is not saving claims nothing, rather than a spin that
+-- vanishes with the server.
+--
+-- Returns the label given ("first" or "welcome"), or nil.
+--==============================================================================
+function WheelService.GrantHatchBonus(player: Player, firstHatch: boolean, revealAt: number?): string?
+	if not WheelData.Enabled or player.Parent ~= Players or not PlayerDataService.IsPersistent(player) then
+		return nil
+	end
+	local label = if firstHatch == true then "first" else "welcome"
+	local granted = PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+		if p.HatchBonusClaimed or p.WheelEarned >= WheelData.MaxEarnedHeld then
+			return false
+		end
+		p.WheelEarned += 1
+		p.HatchBonusClaimed = true
+		if p.LikeReminder ~= "pending" and p.LikeReminder ~= "shown" then
+			p.LikeReminder = "pending"
+		end
+		return true
+	end)
+	if not granted then
+		return nil
+	end
+	log(string.format("%s earned the hatch bonus (%s): one free spin.", player.Name, label))
+	task.spawn(PlayerDataService.Save, player)
+	publish(player)
+	PlayerDataService.PublishLikeReminder(player)
+	local payload = { label = label, revealAt = if type(revealAt) == "number" then revealAt else nil }
+	local hook = bonusFn
+	if hook then
+		hook(player, payload)
+	else
+		local remote = channel
+		if remote then
+			remote:FireClient(player, ACT.HatchBonus, payload)
+		end
+	end
+	return label
+end
+
+--==============================================================================
+-- THE COMMUNITY CHEST'S SPINS (2026-10-01, the owner's brief; GameConfig.Community)
+--
+-- Called by CommunityService once it has confirmed membership itself. Under
+-- this player's wheel lock, so no spin can run while the claim is in flight:
+--   * already claimed: "claimed", nothing changes;
+--   * no room on the earned balance for all of them (it is capped on load):
+--     "full", nothing changes;
+--   * otherwise WheelEarned += Spins and CommunityClaimed in ONE step, then a
+--     save. A save that fails takes both back ("save") -- never a flag without
+--     its spins or spins without their flag -- and the player may try again.
+-- Answers "granted", "claimed", "full", "save", "busy" or "unavailable".
+--==============================================================================
+function WheelService.GrantCommunity(player: Player): string
+	local n = GameConfig.Community.Spins
+	if not WheelData.Enabled or player.Parent ~= Players or not PlayerDataService.IsPersistent(player) then
+		return "unavailable"
+	end
+	if busy[player] then
+		return "busy"
+	end
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		return "unavailable"
+	end
+	if profile.CommunityClaimed then
+		return "claimed"
+	end
+	busy[player] = true
+	local outcome = "full"
+	local ok, err = pcall(function()
+		local granted = PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+			if p.CommunityClaimed or p.WheelEarned + n > WheelData.MaxEarnedHeld then
+				return false
+			end
+			p.WheelEarned += n
+			p.CommunityClaimed = true
+			return true
+		end)
+		if not granted then
+			outcome = if profile.CommunityClaimed then "claimed" else "full"
+			return
+		end
+		if PlayerDataService.Save(player) then
+			outcome = "granted"
+			log(string.format("%s claimed the community chest: %d free spins.", player.Name, n))
+		else
+			PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+				p.WheelEarned = math.max(0, p.WheelEarned - n)
+				p.CommunityClaimed = false
+				return true
+			end)
+			outcome = "save"
+			warn(string.format("[Seed/WheelService] %s's community spins did not save; taken back.", player.Name))
+		end
+	end)
+	busy[player] = nil
+	if not ok then
+		warn(string.format("[Seed/WheelService] %s's community claim stopped: %s", player.Name, tostring(err)))
+		outcome = "unavailable"
+	end
+	publish(player)
+	return outcome
+end
+
+--==============================================================================
 -- BOUGHT SPINS, CALLED BY StoreService's RECEIPT HANDLER AND BY NOTHING ELSE
 --
 -- Returns whether they landed; StoreService writes the ledger and saves, and
@@ -770,6 +969,11 @@ local function watch(player: Player, gen: number)
 		return
 	end
 	publish(player)
+	-- A new body comes with an empty Backpack: its Spin Ticket goes straight back
+	-- (SPIN TICKETS) rather than at the loop's next pass.
+	table.insert(serviceConnections, player.CharacterAdded:Connect(function()
+		task.defer(publish, player)
+	end))
 	-- The policy answer, off this thread: asked now, and again a few times only
 	-- if PolicyService would not answer at all. Until it does, "may not".
 	task.spawn(function()
@@ -801,6 +1005,11 @@ function WheelService.Init()
 	table.clear(policyKnown)
 	table.clear(prompted)
 	channel = nil
+	local unhook = unhookReveal
+	unhookReveal = nil
+	if unhook then
+		unhook()
+	end
 end
 
 function WheelService.Start()
@@ -818,6 +1027,14 @@ function WheelService.Start()
 	end
 
 	local model = WheelModel.build()
+
+	-- THE HATCH BONUS: every successful hatch, as it happens (GrantHatchBonus).
+	unhookReveal = PlantService.OnRevealed(function(reveal: any)
+		local owner = reveal and reveal.owner
+		if typeof(owner) == "Instance" and owner:IsA("Player") then
+			WheelService.GrantHatchBonus(owner, reveal.firstHatch == true, reveal.revealAt)
+		end
+	end)
 
 	running = true
 	local gen = generation

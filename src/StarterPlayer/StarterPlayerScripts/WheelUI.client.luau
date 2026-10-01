@@ -55,11 +55,12 @@
 -- the panel, skipping the animation or leaving changes nothing: the prize was
 -- recorded, saved and paid before the answer was sent.
 --
--- PURCHASED SPINS (2026-09-29): never spent without being asked. Two products
--- can be bought, +1 Spin and +10 Spins (WheelData.Products), and only by a
+-- PURCHASED SPINS (2026-09-29): never spent without being asked. Three packs
+-- can be bought since 2026-10-01, x1, x5 and x10 Spin Tickets (WheelData.Products),
+-- and only by a
 -- player the server says may: GET SPINS and its card are shown while
 -- WheelPaidAllowed is true and at no other time -- so not at all while
--- WheelData.Paid.Enabled is off, which is how this ships.
+-- WheelData.Paid.Enabled is off (it is on since 2026-10-01).
 --
 --   * THIS SCRIPT OPENS NO PURCHASE PROMPT AND GRANTS NOTHING. A choice sends
 --     its product's KEY; the server decides whether to open Roblox's prompt, and
@@ -537,10 +538,14 @@ local confirmNo = wordButton(confirm, "No", "CANCEL", PAL.HubGrey)
 -- own scrim -- nothing is added to the HUD, so nothing stands over the game:
 --
 --     GET SPINS
---     [ icon  +1 SPIN   (R$) 4 ]   [ icon  +10 SPINS   (R$) 35 ]
+--     [  icon   ]   [  icon   ]   [  icon    ]
+--     [x1 TICKET]   [x5 TICKETS]  [x10 TICKETS]
+--     [ (R$) 8  ]   [ (R$) 35 ]   [ (R$) 75  ]
 --     Every spin wins a random reward ...
 --     [ REWARDS & ODDS ]                               [ CLOSE ]
 --
+-- Three tiles since 2026-10-01 (WheelData.Products, the Shop's SPIN TICKETS
+-- shelf sells the same three the same way); none is called the best value.
 -- The icons are the products' own (the owner's artwork, as Roblox lists it);
 -- a choice reads perfectly well without one, should it not load. Each price is
 -- what RobuxPrice hears from Roblox for THIS player: three dots until it
@@ -636,7 +641,8 @@ do
 		icon.ZIndex = 3
 		icon.Parent = b
 		local name = WheelDraw.words(b, "Name", 16, C.White, PAL.Ink, 2, 3)
-		name.Text = string.upper(product.name)
+		-- Short on the tile: the artwork already says how many spins.
+		name.Text = string.format("×%d %s", product.spins, if product.spins == 1 then "TICKET" else "TICKETS")
 		local capsule = panel(b, "Capsule", C.White, 10, 3)
 		capsule.AnchorPoint = Vector2.new(0.5, 0)
 		capsule.AutomaticSize = Enum.AutomaticSize.X
@@ -1520,7 +1526,9 @@ shop.layout = function(W: number, H: number, cx: number, cy: number, d: number, 
 	shop.buttonScale.Scale = f
 
 	local cw = math.min(336, math.floor((W - 24) / f))
-	local choiceH = 86
+	-- Three tiles across, each standing up: the icon, the name under it, then
+	-- the price -- side by side they would not fit a phone's card.
+	local choiceH = 112
 	local noteH = 44
 	local ch = 40 + choiceH + 6 + noteH + 6 + 38 + 10
 	local half = ch * f / 2
@@ -1529,13 +1537,14 @@ shop.layout = function(W: number, H: number, cx: number, cy: number, d: number, 
 	card.Size = UDim2.fromOffset(cw, ch)
 	shop.cardScale.Scale = f
 	place(shop.title, 12, 8, cw - 24, 26)
-	local each = math.floor((cw - 24 - 10) / 2)
+	local count = math.max(#(shop.choices :: { ShopChoice }), 1)
+	local each = math.floor((cw - 24 - 8 * (count - 1)) / count)
 	for i, choice in ipairs(shop.choices :: { ShopChoice }) do
-		place(choice.button, 12 + (i - 1) * (each + 10), 40, each, choiceH)
-		place(choice.icon, 6, 6, 46, 46)
-		place(choice.name, 54, 8, each - 58, 24)
-		choice.name.TextSize = if each < 140 then 14 else 16
-		choice.capsule.Position = UDim2.new(0.5, 0, 0, 56)
+		place(choice.button, 12 + (i - 1) * (each + 8), 40, each, choiceH)
+		place(choice.icon, math.floor((each - 54) / 2), 4, 54, 54)
+		place(choice.name, 4, 60, each - 8, 18)
+		choice.name.TextSize = if each < 100 then 12 else 14
+		choice.capsule.Position = UDim2.new(0.5, 0, 0, 82)
 		choice.capsule.Size = UDim2.new(0, 0, 0, 24)
 	end
 	place(shop.note, 14, 40 + choiceH + 6, cw - 28, noteH)
@@ -1924,7 +1933,10 @@ local function bindClosers()
 	-- Back closes the Reward info first, then the panel. Bound only while open.
 	ContextActionService:BindActionAtPriority(BACK_ACTION, function(_, state)
 		if state == Enum.UserInputState.Begin then
-			if sheetOpen then
+			if sheetOpen and shop.fromShop then
+				-- Odds opened from the Shop: there is no wheel here to go back to.
+				setOpen(false)
+			elseif sheetOpen then
 				setSheet(false)
 			elseif shop.open then
 				shop.show(false)
@@ -1945,7 +1957,10 @@ local function bindClosers()
 			return
 		end
 		local anchor = promptAnchor
-		if anchor and anchor.Parent and (root.Position - anchor.Position).Magnitude > CLOSE_DISTANCE then
+		-- Odds opened from the Shop are read wherever the player stands; the
+		-- wheel itself still closes as they walk away from it.
+		if anchor and anchor.Parent and not shop.fromShop
+			and (root.Position - anchor.Position).Magnitude > CLOSE_DISTANCE then
 			setOpen(false)
 		end
 	end)
@@ -2054,6 +2069,7 @@ setOpen = function(want: boolean)
 		unbindClosers()
 		clockToken += 1
 		setExpanded(nil)
+		shop.fromShop = false
 		sheetOpen = false
 		sheet.Visible = false
 		shop.open = false
@@ -2081,7 +2097,12 @@ infoButton.button.Activated:Connect(function()
 	setSheet(true)
 end)
 backButton.button.Activated:Connect(function()
-	setSheet(false)
+	if shop.fromShop then
+		-- Odds opened from the Shop: Back closes them; the wheel is elsewhere.
+		setOpen(false)
+	else
+		setSheet(false)
+	end
 end)
 GuiService.MenuOpened:Connect(function()
 	setOpen(false)
@@ -2091,6 +2112,19 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 	if open and player:GetAttribute(ATTR.OpenPanel) ~= PANEL_NAME then
 		setOpen(false)
 	end
+end)
+-- The Shop's REWARDS & ODDS (2026-10-01): the panel opens straight to Reward
+-- info wherever the player stands (shop.fromShop holds the range closer off),
+-- and Back or X closes it -- the wheel is not there to go back to. Every
+-- outcome's odds, before any purchase.
+player:GetAttributeChangedSignal(WheelData.OpenOddsAttribute):Connect(function()
+	if player:GetAttribute(WheelData.OpenOddsAttribute) == nil or open then
+		return
+	end
+	shop.fromShop = true
+	setOpen(true)
+	shop.returnTo = ""
+	setSheet(true)
 end)
 
 ProximityPromptService.PromptTriggered:Connect(function(prompt: ProximityPrompt, who: Player)

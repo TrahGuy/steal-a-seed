@@ -800,6 +800,128 @@ for _, spec in ipairs(STORE.Sections) do
 	end
 end
 
+--==============================================================================
+-- SPIN TICKETS (2026-10-01): THE WHEEL'S THREE PACKS, SOLD THE WHEEL'S WAY
+--
+-- WheelData.Products -- the same three GET SPINS shows, in the same order, at
+-- the same per-player price (RobuxPrice), with the owner's artwork. A spin is a
+-- paid random item, so this is not a GameConfig.Store shelf and a tile never
+-- prompts from here:
+--
+--   * SHOWN only while the server says this player may buy
+--     (WheelData.Attributes.PaidAllowed: PolicyService answered, and paid spins
+--     are on) -- the rule GET SPINS keeps. Hidden otherwise, which is how this
+--     ships, and Roblox is not asked for a price until it first shows.
+--   * A TILE sends WheelData.Actions.Buy with its pack's key, exactly as GET
+--     SPINS does: the server asks every question again and opens Roblox's
+--     prompt, and the spins come only from the receipt (StoreService).
+--   * REWARDS & ODDS on the heading opens the wheel's Reward info: every
+--     outcome's odds, one press away, before any purchase.
+--
+-- No tile is marked the best value: two x5 packs cost less than one x10.
+--==============================================================================
+do
+	local WheelData = require(Shared:WaitForChild("WheelData"))
+	local PAID = WheelData.Attributes.PaidAllowed
+	local SPIN_SHELF = {
+		heading = "SPIN TICKETS",
+		colour = Color3.fromRGB(196, 140, 255),
+		top = Color3.fromRGB(205, 160, 255),
+		bottom = Color3.fromRGB(104, 52, 196),
+	}
+	local shelf = section(order, SPIN_SHELF.heading, SPIN_SHELF.colour)
+	local header = body:FindFirstChild(SPIN_SHELF.heading .. "Header")
+	order += 2
+
+	local oddsButton: TextButton? = nil
+	if header and header:IsA("TextLabel") then
+		local odds = Instance.new("TextButton")
+		odds.Name = "RewardsAndOdds"
+		odds.AnchorPoint = Vector2.new(1, 0.5)
+		odds.Position = UDim2.new(1, -4, 0.5, 0)
+		odds.Size = UDim2.fromOffset(150, 26)
+		odds.BackgroundColor3 = Color3.fromRGB(63, 143, 224)
+		odds.AutoButtonColor = true
+		odds.BorderSizePixel = 0
+		odds.Font = Enum.Font.LuckiestGuy
+		odds.TextSize = 14
+		odds.TextColor3 = WHITE
+		odds.Text = "REWARDS & ODDS"
+		odds.ZIndex = 5
+		odds.Parent = header
+		corner(odds, 8)
+		stroke(odds, INK, 2).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		oddsButton = odds
+	end
+
+	local remote: RemoteEvent? = nil
+	task.spawn(function()
+		local remotes = SeedGame:WaitForChild("Remotes", 20)
+		local found = if remotes then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20) else nil
+		if found and found:IsA("RemoteEvent") then
+			remote = found
+		end
+	end)
+
+	local function mayBuy(): boolean
+		return player:GetAttribute(PAID) == true
+	end
+
+	local cards: { { card: Card, product: WheelData.Product } } = {}
+	for index, product in ipairs(WheelData.Products) do
+		local card = buildCard(shelf, index, SPIN_SHELF, true)
+		local icon = Instance.new("ImageLabel")
+		icon.Name = "Icon"
+		icon.Size = UDim2.fromScale(1, 1)
+		icon.BackgroundTransparency = 1
+		icon.Image = "rbxassetid://" .. product.icon
+		icon.ScaleType = Enum.ScaleType.Fit
+		icon.ZIndex = 4
+		icon.Parent = card.art
+		card.title.Text = twoTone(string.format("×%d %s", product.spins,
+			if product.spins == 1 then "TICKET" else "TICKETS"), product.spins)
+		card.price.Text = PRICE_LOADING
+		card.buy.Activated:Connect(function()
+			local channel = remote
+			if not channel or not mayBuy() then
+				SoundKit.play("Denied")
+				return
+			end
+			-- The press cue, and the request: nothing is granted or prompted here.
+			SoundKit.play("CardClick")
+			channel:FireServer(WheelData.Actions.Buy, product.key)
+		end)
+		table.insert(cards, { card = card, product = product })
+	end
+
+	local priced = false
+	local function paint()
+		local may = mayBuy()
+		shelf.Visible = may
+		if header and header:IsA("GuiObject") then
+			header.Visible = may
+		end
+		if may and not priced then
+			priced = true
+			for _, row in ipairs(cards) do
+				showPrice(row.card, "product", row.product.productId)
+			end
+		end
+	end
+	player:GetAttributeChangedSignal(PAID):Connect(paint)
+	paint()
+
+	local odds = oddsButton
+	if odds then
+		odds.Activated:Connect(function()
+			SoundKit.play("CardClick")
+			-- The wheel's own sheet: the Shop closes as the wheel's panel opens
+			-- (the OpenPanel mutex), and Back returns to the wheel.
+			player:SetAttribute(WheelData.OpenOddsAttribute, os.clock())
+		end)
+	end
+end
+
 -- Every shelf exists now, so the cells can be measured. Bound to the body rather
 -- than fired once: a phone that turns sideways is a resize, not a rebuild.
 body:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)

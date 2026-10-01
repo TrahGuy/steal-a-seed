@@ -519,6 +519,163 @@ local function body()
 				.. "* CFrame.new(0, 3.5, 6)", 1, true) ~= nil,
 		"ObbyService asks for exactly that frame, with its own refusal")
 	check(ActionRefusal.Text.OBBY_BLOCKED ~= nil, "and that refusal has words")
+
+	--==========================================================================
+	-- 11. THE BIOMES BUTTON (2026-09-30): ONE PLACE, THE GREENHOLLOW ENTRANCE
+	--
+	-- The owner's brief: one fixed destination where the biome road begins,
+	-- chosen from the map, clear of obstacles, nests and guardians, facing down
+	-- the road; free; TELEPORT TO PLOT's rules and cooldown; the server names
+	-- the place and the client sends nothing but the verb.
+	--==========================================================================
+	say("\n-- the BIOMES button's teleport --")
+	local BiomeData = require(Shared:WaitForChild("BiomeData"))
+	check(type(PLOT.BiomesAction) == "string" and PLOT.BiomesAction ~= "" and PLOT.BiomesAction ~= PLOT.TeleportAction
+			and PLOT.BiomesAction ~= GameConfig.Plant.PlaceAction and PLOT.BiomesAction ~= ActionRefusal.Action,
+		"BIOMES is one verb of its own on GameEvent", PLOT.BiomesAction)
+	local greenhollow = nil
+	for _, biome in ipairs(BiomeData.Biomes) do
+		if biome.Id == "greenhollow" then
+			greenhollow = biome
+		end
+	end
+	local landingB = PlotService.BiomesLanding()
+	local nearZ = if greenhollow then BiomeData.SegmentBounds(greenhollow) else nil
+	check(greenhollow ~= nil and greenhollow.Order == 1 and landingB ~= nil and nearZ == -MAP.FieldFront,
+		"the destination is Greenhollow's, the first biome, whose near edge is where the road begins")
+	if landingB and nearZ then
+		local at = landingB.Position
+		check(at.X == 0 and math.abs(at.Z - (nearZ + PLOT.BiomesLandingInset)) < 1e-6
+				and PLOT.BiomesLandingInset > 0 and PLOT.BiomesLandingInset <= 15
+				and MapService.IsInSafeZone(at) and not MapService.IsInSafeZone(at + Vector3.new(0, 0, -PLOT.BiomesLandingInset - 1)),
+			"it lands on the road's centre line, a few studs inside the red line: the entrance, still the Safe Zone",
+			tostring(at))
+		check(math.abs(at.Y - (MAP.GroundY + PLOT.SpawnHeightOffset)) < 1e-6
+				and landingB.LookVector:Dot(Vector3.new(0, 0, -1)) > 0.999,
+			"at the spawn height, facing forward down the road", tostring(landingB.LookVector))
+		check(math.abs(at.X) + 10 <= MAP.CorridorWidth / 2,
+			"with the corridor's walls far to either side", string.format("half-width %g", MAP.CorridorWidth / 2))
+		-- Nothing of the rest of the road is a destination: the landing is before
+		-- Greenhollow's own nest, far from it, and before every later biome.
+		local nests = BiomeData.NestCFrames(greenhollow)
+		local nearest = math.huge
+		for _, nest in ipairs(nests) do
+			nearest = math.min(nearest, (nest.Position - at).Magnitude)
+		end
+		check(#nests >= 1 and nearest > 200,
+			"far from Greenhollow's nest and its guardian, in the segment's far corner", string.format("%.0f studs", nearest))
+		for _, biome in ipairs(BiomeData.Biomes) do
+			if biome.Order > 1 then
+				local near = BiomeData.SegmentBounds(biome)
+				if at.Z <= near then
+					check(false, "the landing is short of " .. biome.DisplayName)
+				end
+			end
+		end
+		-- THE REAL MAP, where Edit has it (MapService builds a preview in Edit):
+		-- a floor to stand on, and nothing collidable where a body will stand.
+		local mapFolder = Workspace:FindFirstChild(MAP.FolderName)
+		if mapFolder then
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances = { fixture }
+			params.RespectCanCollide = true
+			local hit = Workspace:Raycast(at, Vector3.new(0, -PLOT.TeleportGroundProbe, 0), params)
+			check(hit ~= nil and hit.Instance:IsDescendantOf(mapFolder) and math.abs(hit.Position.Y - MAP.GroundY) < 0.5,
+				"on the map in Edit: the field's floor is under the landing", hit and hit.Instance:GetFullName())
+			local overlap = OverlapParams.new()
+			overlap.FilterType = Enum.RaycastFilterType.Exclude
+			overlap.FilterDescendantsInstances = { fixture }
+			local solid = {}
+			for _, part in ipairs(Workspace:GetPartBoundsInBox(CFrame.new(at.X, MAP.GroundY + 4, at.Z),
+				Vector3.new(8, 7, 8), overlap)) do
+				if part.CanCollide and part.Name ~= "Terrain" then
+					table.insert(solid, part:GetFullName())
+				end
+			end
+			check(#solid == 0, "and nothing collidable in the 8 x 7 x 8 box a body lands in", table.concat(solid, ", "))
+		else
+			say("  (no map in this Edit session: the floor and clearance checks are Play's)")
+		end
+	end
+
+	-- The press, by TELEPORT TO PLOT's rules: from the field it lands there; the
+	-- cooldown is the one TELEPORT TO PLOT shares; the road, a raided pod, a trap
+	-- and a knock-down refuse it exactly as they refuse TELEPORT TO PLOT.
+	if landingB and Workspace:FindFirstChild(MAP.FolderName) then
+		local j = makePlayer("SpecBiomes", -410, IN_FIELD)
+		leases[j] = plotA
+		j.root.AssemblyLinearVelocity = Vector3.new(0, 0, 50)
+		local bMoved, bCode = PlotService.TeleportToBiomes(j)
+		check(bMoved == true and bCode == nil and (j.root.Position - landingB.Position).Magnitude < 0.05
+				and j.root.CFrame.LookVector:Dot(landingB.LookVector) > 0.999
+				and j.root.AssemblyLinearVelocity.Magnitude < 0.01,
+			"a press in the Safe Zone lands at the Greenhollow entrance, facing the road, momentum taken off",
+			tostring(bCode) .. " " .. tostring(j.root.Position))
+		standAt(j, IN_FIELD)
+		local b2Moved, b2Code = PlotService.TeleportToBiomes(j)
+		local homeMoved2, homeCode2 = PlotService.TeleportHome(j)
+		check(not b2Moved and b2Code == "TELEPORT_COOLDOWN" and not homeMoved2 and homeCode2 == "TELEPORT_COOLDOWN"
+				and still(j, IN_FIELD),
+			"and it shares TELEPORT TO PLOT's cooldown: neither button works again straight away",
+			tostring(b2Code) .. " / " .. tostring(homeCode2))
+
+		local k = makePlayer("SpecBiomesHeld", -411, ON_ROAD)
+		local rMoved, rCode = PlotService.TeleportToBiomes(k)
+		standAt(k, IN_FIELD)
+		k:SetAttribute(ATTR.CarryingSpecies, "nubkin")
+		local cMoved, cCode = PlotService.TeleportToBiomes(k)
+		k:SetAttribute(ATTR.CarryingSpecies, nil)
+		k:SetAttribute(ATTR.Trapped, true)
+		local tMoved, tCode = PlotService.TeleportToBiomes(k)
+		k:SetAttribute(ATTR.Trapped, nil)
+		k.humanoid.PlatformStand = true
+		local dMoved, dCode = PlotService.TeleportToBiomes(k)
+		k.humanoid.PlatformStand = false
+		k.humanoid.Health = 0
+		local xMoved, xCode = PlotService.TeleportToBiomes(k)
+		k.humanoid.Health = k.humanoid.MaxHealth
+		check(not rMoved and rCode == "TELEPORT_OUTSIDE" and not cMoved and cCode == "CARRYING_POD"
+				and not tMoved and tCode == "TELEPORT_STUNNED" and not dMoved and dCode == "TELEPORT_STUNNED"
+				and not xMoved and xCode == nil and still(k, IN_FIELD),
+			"from the road, with an unbanked raided pod, trapped, knocked down or dead: refused as TELEPORT TO PLOT is",
+			string.format("%s %s %s %s %s", tostring(rCode), tostring(cCode), tostring(tCode), tostring(dCode),
+				tostring(xCode)))
+		local freeMoved3 = PlotService.TeleportToBiomes(k)
+		check(freeMoved3 == true and (k.root.Position - landingB.Position).Magnitude < 0.05,
+			"and none of those refusals spent the cooldown")
+	else
+		say("  (no map in this Edit session: the press itself is Play's)")
+	end
+
+	-- Nothing the client sends is read: the handler passes the sender alone, and
+	-- the destination is BiomesLanding's.
+	local handlerB = plotSource and string.match(plotSource,
+		"channel%.OnServerEvent:Connect%((function%([^)]*%).-)\n\t\tend%)%)")
+	check(handlerB ~= nil and string.find(handlerB, "PlotService.TeleportToBiomes(player)", 1, true) ~= nil
+			and string.find(handlerB, "if action == PLOT.BiomesAction then", 1, true) ~= nil,
+		"the one GameEvent handler hands TeleportToBiomes the sender alone, for the verb alone")
+	check(plotSource ~= nil
+			and string.find(plotSource, "function PlotService.TeleportToBiomes(player: Player): (boolean, string?)", 1, true) ~= nil
+			and string.find(plotSource, "return PlotService.TeleportTo(player, landing, \"BIOMES_BLOCKED\")", 1, true) ~= nil
+			and string.find(plotSource, "local landing = PlotService.BiomesLanding()", 1, true) ~= nil,
+		"TeleportToBiomes takes a player and nothing else, and lands only at BiomesLanding, through TeleportTo")
+	local biomesUi = sourceOf(scripts and scripts:FindFirstChild("BiomesButtonUI"))
+	local _, biomesFires = string.gsub(biomesUi or "", "FireServer%(", "")
+	check(biomesUi ~= nil and biomesFires == 1
+			and string.find(biomesUi, "remote:FireServer(PLOT.BiomesAction)", 1, true) ~= nil,
+		"the button sends the verb and nothing else", biomesFires)
+	check(ActionRefusal.Text.BIOMES_BLOCKED ~= nil and #ActionRefusal.Text.BIOMES_BLOCKED <= 40
+			and ActionRefusal.Notices.BIOMES_BLOCKED ~= nil,
+		"and its one refusal of its own -- nothing to stand on -- has words and a notice")
+	-- No other biome is a destination: nothing in the server names another landing.
+	local others = {}
+	for _, id in ipairs({ "dustbowl", "tanglemire", "emberroot", "starbloom" }) do
+		if plotSource and string.find(plotSource, "\"" .. id .. "\"", 1, true) then
+			table.insert(others, id)
+		end
+	end
+	check(#others == 0, "and no other biome is named as a destination", table.concat(others, ", "))
 end
 
 local ok, err = pcall(body)

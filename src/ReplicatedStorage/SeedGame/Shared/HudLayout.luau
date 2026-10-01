@@ -230,6 +230,12 @@ export type Layout = {
 	-- its word. An empty rect where neither side has room: it then stays hidden.
 	obby: Rect,
 	obbyWide: boolean,
+	-- The BIOMES button (BiomesButtonUI, 2026-09-30) on TELEPORT's other side,
+	-- drawn the same way: `biomesWide` where its icon fits too, an empty rect
+	-- where no side has room (it then stays hidden). On a phone's row it is the
+	-- row's first button, right after Roblox's own.
+	biomes: Rect,
+	biomesWide: boolean,
 	-- The plate TELEPORT TO PLOT (and the obby's RETURN TO PLOT) draws inside
 	-- its touch area, before `teleportScale`: the touch area's own size
 	-- everywhere but a phone, whose touch area is narrower than the plate's
@@ -525,7 +531,13 @@ local CONFIG = {
 	Teleport = { Size = Vector2.new(196, 44), PhoneScale = 0.75 },
 	-- THE OBBY BUTTON beside it (2026-09-27; see obbyBeside): TELEPORT's height,
 	-- as wide as its icon and word -- or the word alone where only that fits.
-	Obby = { Size = Vector2.new(124, 44), Narrow = 64 },
+	-- `Tight` only on a phone's top row that has no room for `Narrow` (2026-09-30):
+	-- the word alone, a little smaller (the label scales it to fit, 10 at least),
+	-- and still wide enough for the run's clock that takes OBBY's slot.
+	Obby = { Size = Vector2.new(124, 44), Narrow = 64, Tight = 56 },
+	-- THE BIOMES BUTTON on TELEPORT's other side (2026-09-30; see biomesBeside):
+	-- the same widths, sized for its longer word (56 px of LuckiestGuy 16).
+	Biomes = { Size = Vector2.new(120, 44), Narrow = 80, Tight = 56 },
 	NoticeTop = 50,
 	NoticeHeight = 30,
 	-- THE STATUS COLUMN (2026-09-27; see statusRows): the chase warning's line
@@ -1007,14 +1019,20 @@ HudLayout.adminBeside = adminBeside
 -- (statusRows) and can run wider than it, but never while this shows: the
 -- button is for the Safe Zone only, and AlertUI stands the warning down there.
 --==============================================================================
-local function obbyBeside(input: Input, L: Layout): (Rect, boolean)
-	local O, M, G = CONFIG.Obby, CONFIG.Margin, CONFIG.Gap
-	local t = L.teleport
+-- Whether a rect beside TELEPORT clears everything it must: the safe area's
+-- margin, the topbar's free span where it is up in the topbar, every group and
+-- badge, the belt's toast and the guide's words, the touch controls, the chooser,
+-- ADMIN and the clock -- and `extra`, which BIOMES passes OBBY in.
+local function besideClear(input: Input, L: Layout, extra: { Rect }): (Rect) -> boolean
+	local M, G = CONFIG.Margin, CONFIG.Gap
 	local sw = input.safe.X
 	local insetTop = input.insetTop or 0
 	local viewport = input.viewport
 	local originX = if viewport then (viewport.X - sw) / 2 else 0
 	local others: { Rect } = { L.toast, L.banner, L.skip }
+	for _, r in ipairs(extra) do
+		table.insert(others, r)
+	end
 	for _, g in ipairs(HudLayout.groups(L, true)) do
 		table.insert(others, g.rect)
 	end
@@ -1056,6 +1074,13 @@ local function obbyBeside(input: Input, L: Layout): (Rect, boolean)
 		end
 		return true
 	end
+	return clear
+end
+
+local function obbyBeside(input: Input, L: Layout): (Rect, boolean)
+	local O, M, G = CONFIG.Obby, CONFIG.Margin, CONFIG.Gap
+	local t = L.teleport
+	local clear = besideClear(input, L, {})
 	if t.w > 0 then
 		-- TELEPORT's own row first; then, where TELEPORT stands up in the topbar
 		-- and the topbar has no room beside it (a small phone: the free span
@@ -1069,6 +1094,42 @@ local function obbyBeside(input: Input, L: Layout): (Rect, boolean)
 					local r = rect(x, y, width, t.h)
 					if clear(r) then
 						return r, width == O.Size.X
+					end
+				end
+			end
+		end
+	end
+	return rect(0, 0, 0, 0), false
+end
+
+--==============================================================================
+-- THE BIOMES BUTTON: ON TELEPORT'S OTHER SIDE (2026-09-30)
+--
+-- BiomesButtonUI's touch area, by OBBY's own rules -- TELEPORT's row and
+-- height, 8 px off it, its plate drawn at TELEPORT's scale, the icon where the
+-- room allows and the word alone where only that fits -- on the side of
+-- TELEPORT that OBBY left free, so a desktop reads BIOMES | TELEPORT TO PLOT |
+-- OBBY; beyond OBBY where that side has no room. Asked after OBBY and 8 px off
+-- it; nothing is placed around it. Where no side has room the rect is empty and
+-- the button stays hidden. A phone whose top row holds the buttons places it on
+-- the row instead (phoneRow).
+--==============================================================================
+local function biomesBeside(input: Input, L: Layout): (Rect, boolean)
+	local B, M, G = CONFIG.Biomes, CONFIG.Margin, CONFIG.Gap
+	local t, o = L.teleport, L.obby
+	local clear = besideClear(input, L, if o.w > 0 then { o } else {})
+	if t.w > 0 then
+		local rows = if t.y < M then { t.y, M } else { t.y }
+		for _, y in ipairs(rows) do
+			for _, width in ipairs({ B.Size.X, B.Narrow }) do
+				local left, right = t.x - G - width, t.x + t.w + G
+				local xs = if o.w <= 0 then { left, right }
+					elseif o.x > t.x then { left, o.x + o.w + G }
+					else { right, o.x - G - width }
+				for _, x in ipairs(xs) do
+					local r = rect(x, y, width, t.h)
+					if clear(r) then
+						return r, width == B.Size.X
 					end
 				end
 			end
@@ -1162,6 +1223,8 @@ local function desktop(input: Input): Layout
 		teleportScale = 1,
 		obby = rect(0, 0, 0, 0),
 		obbyWide = false,
+		biomes = rect(0, 0, 0, 0),
+		biomesWide = false,
 		teleportPlate = CONFIG.Teleport.Size,
 		clockChip = false,
 		topRow = false,
@@ -1187,6 +1250,7 @@ local function desktop(input: Input): Layout
 		L.skip = rect(skip.x, top + CONFIG.BannerSize.Y, skip.w, skip.h)
 	end
 	L.obby, L.obbyWide = obbyBeside(input, L)
+	L.biomes, L.biomesWide = biomesBeside(input, L)
 	return L
 end
 
@@ -1419,6 +1483,8 @@ local function compact(input: Input): Layout
 		teleportScale = 1,
 		obby = rect(0, 0, 0, 0),
 		obbyWide = false,
+		biomes = rect(0, 0, 0, 0),
+		biomesWide = false,
 		teleportPlate = CONFIG.Teleport.Size,
 		clockChip = false,
 		topRow = false,
@@ -1438,6 +1504,7 @@ local function compact(input: Input): Layout
 	L.toast = toastAbove(sw, hotbar, beside)
 	L.fits = L.fits and #HudLayout.problems(L) == 0
 	L.obby, L.obbyWide = obbyBeside(input, L)
+	L.biomes, L.biomesWide = biomesBeside(input, L)
 	return L
 end
 
@@ -1452,31 +1519,37 @@ end
 -- on the course that column ran from the clock to the belt, and the boost row
 -- stood ON the belt.
 --
--- So on a phone everything that used to stand under the clock stands BESIDE it,
--- on one row, up in the topbar's band:
+-- So on a phone everything that used to stand under the clock stands on one
+-- row, up in the topbar's band -- since 2026-09-30 in the order of the owner's
+-- edited screenshot, read on from Roblox's own buttons:
 --
---   ADMIN | the clock, as a chip | TELEPORT TO PLOT | OBBY
+--   BIOMES | TELEPORT TO PLOT | OBBY | ... | ADMIN | the clock, as a chip
 --
---   * THE CLOCK is a chip Phone.Clock wide, on the window's centre line -- two
---     short lines, the words over the time (WorldClock) -- where the bar took
+--   * THE BUTTONS start at the row's left end, 8 px after Roblox's buttons and
+--     8 px apart. TELEPORT TO PLOT's plate is the same 147 x 33 as before, in a
+--     touch area Phone.Touch wide and 44 tall; BIOMES (the owner's one-place
+--     teleport, BiomesButtonUI) and OBBY are drawn at the same scale, both with
+--     their icons where the row has the room and both the word alone where it
+--     has not. RETURN TO PLOT is TELEPORT's button on the course, and the run's
+--     clock has OBBY's slot there (`run`): the button is hidden on the course.
+--   * THE CLOCK is a chip Phone.Clock wide -- two short lines, the words over
+--     the time (WorldClock) -- at the row's RIGHT end, where the bar once took
 --     44% of the window.
---   * TELEPORT TO PLOT is on the clock's right (its left where the right has
---     no room), its plate the same 147 x 33 as before inside a touch area
---     Phone.Touch wide and 44 tall. RETURN TO PLOT is the same button on the
---     course, and the chase warning has the same slot off it (statusLine).
---   * OBBY is on the far side of TELEPORT from the clock, with its icon where
---     the row has the room and the word alone where it has not. On the course
---     that slot holds the run's clock (`run`): the button is hidden there.
---   * ADMIN, which two accounts see, takes the row's left end, else its right,
---     and hangs under the clock only where neither has room.
+--   * ADMIN, which two accounts see, stands just left of the clock, and hangs
+--     under the row's middle, 8 px below the buttons, only where the row has
+--     no room for it.
+--   * THE CENTRE COLUMN under the row keeps the window's centre line (`centre`)
+--     -- where the clock stood before 2026-09-30 -- so the boosts and the
+--     passing lines still stand in the middle.
 --
 -- INSIDE THE TOPBAR'S FREE SPAN, EVERY ONE OF THEM: 8 px clear of Roblox's own
 -- buttons (GuiService.TopbarInset), and inside the safe area across, which a
--- notch narrows. Where the row cannot hold BOTH buttons the answer for both is
--- nil and the caller stands them under the clock, as they stood before.
+-- notch narrows. Where the row cannot hold ALL THREE buttons and the clock, the
+-- answer for the three is nil, the clock stands on the centre line, and the
+-- caller stands the buttons under it, as they stood before the row.
 --
--- WINDOW space for the clock and ADMIN, safe space for the two buttons, as
--- each always was.
+-- WINDOW space for the clock and ADMIN, safe space for the buttons, as each
+-- always was.
 --==============================================================================
 type PhoneRow = {
 	clock: Rect?,
@@ -1484,7 +1557,9 @@ type PhoneRow = {
 	teleport: Rect?,
 	obby: Rect?,
 	obbyWide: boolean,
-	-- The row's two ends and the clock's middle, in safe space.
+	biomes: Rect?,
+	biomesWide: boolean,
+	-- The row's two ends and the centre column's middle, in safe space.
 	lo: number,
 	hi: number,
 	centre: number,
@@ -1492,10 +1567,11 @@ type PhoneRow = {
 
 local function phoneRow(input: Input, band: { railTop: number, railRight: number, rightLeft: number }): PhoneRow
 	local M, G = CONFIG.Margin, CONFIG.Gap
-	local P, T, O, A = CONFIG.Phone, CONFIG.Teleport, CONFIG.Obby, CONFIG.Admin
+	local P, T, O, B, A = CONFIG.Phone, CONFIG.Teleport, CONFIG.Obby, CONFIG.Biomes, CONFIG.Admin
 	local sw = input.safe.X
 	local answer: PhoneRow = {
 		clock = nil, admin = nil, teleport = nil, obby = nil, obbyWide = false,
+		biomes = nil, biomesWide = false,
 		lo = M, hi = sw - M, centre = sw / 2,
 	}
 	local viewport = input.viewport
@@ -1525,76 +1601,54 @@ local function phoneRow(input: Input, band: { railTop: number, railRight: number
 	if hi - lo >= width then
 		centre = math.clamp(centre, lo + width / 2, hi - width / 2)
 	end
-	local clock = rect(centre - width / 2, top, width, CONFIG.ClockHeight)
-	answer.clock = clock
+	-- A row that cannot hold the buttons keeps the clock on the centre line, as
+	-- it stood: the caller stands the buttons under it.
+	answer.clock = rect(centre - width / 2, top, width, CONFIG.ClockHeight)
 	answer.lo, answer.hi, answer.centre = lo - originX, hi - originX, centre - originX
 
-	-- What stands on the row so far, in window space.
-	local taken: { Rect } = { clock }
-	local function free(x: number, w: number): boolean
-		if x < lo - 1e-6 or x + w > hi + 1e-6 then
-			return false
-		end
-		for _, other in ipairs(taken) do
-			if x < other.x + other.w + G - 1e-6 and other.x < x + w + G - 1e-6 then
-				return false
-			end
-		end
-		return true
-	end
-
-	local tx: number? = nil
-	for _, x in ipairs({ clock.x + clock.w + G, clock.x - G - P.Touch }) do
-		if tx == nil and free(x, P.Touch) then
-			tx = x
-		end
-	end
-	if tx == nil then
-		return answer
-	end
-	local slot = rect(tx, touchTop, P.Touch, T.Size.Y)
-	table.insert(taken, slot)
-
-	-- OBBY on TELEPORT's far side from the clock, and nowhere else: the chase
-	-- warning has TELEPORT's slot and runs on from it AWAY from the clock
-	-- (statusLine), over this one -- which is empty then, the button being for
-	-- the Safe Zone only. So the two slots together are the warning's room, and
-	-- they are always side by side.
-	local rightOfClock = tx > clock.x
-	local obby: Rect? = nil
-	local obbyWide = false
-	for _, w in ipairs({ O.Size.X, O.Narrow }) do
-		local x = if rightOfClock then slot.x + slot.w + G else slot.x - G - w
-		if obby == nil and free(x, w) then
-			obby = rect(x - originX, touchTop - insetTop, w, T.Size.Y)
-			obbyWide = w == O.Size.X
-			table.insert(taken, rect(x, touchTop, w, T.Size.Y))
-		end
-	end
-	-- BOTH BUTTONS OR NEITHER. A row with room for TELEPORT and none for OBBY
-	-- would leave OBBY nowhere to stand -- under the row is where ADMIN hangs
-	-- once the row is full -- and a shortcut every player had must not vanish
-	-- because Roblox's own buttons grew. Such a screen keeps the arrangement it
-	-- had: both buttons under the clock (the caller; teleportUnder, obbyBeside).
-	if obby == nil then
-		return answer
-	end
-	answer.teleport = rect(tx - originX, touchTop - insetTop, P.Touch, T.Size.Y)
-	answer.obby, answer.obbyWide = obby, obbyWide
-
-	local leftmost, rightmost = math.huge, -math.huge
-	for _, r in ipairs(taken) do
-		leftmost = math.min(leftmost, r.x)
-		rightmost = math.max(rightmost, r.x + r.w)
-	end
+	-- The clock at the row's right end, and the buttons from its left end.
+	local clock = rect(hi - width, top, width, CONFIG.ClockHeight)
 	local aw, ah = A.Size.X, A.Size.Y
 	local ay = clock.y + (clock.h - ah) / 2
-	if free(leftmost - G - aw, aw) then
-		answer.admin = rect(leftmost - G - aw, ay, aw, ah)
-	elseif free(rightmost + G, aw) then
-		answer.admin = rect(rightmost + G, ay, aw, ah)
-	else
-		answer.admin = rect(clock.x + clock.w / 2 - aw / 2, clock.y + clock.h + 4, aw, ah)
+	--==========================================================================
+	-- ALL THREE BUTTONS OR NONE. A row with room for two would leave the third
+	-- nowhere to stand -- under the row is where ADMIN hangs once the row is
+	-- full -- and a shortcut every player had must not vanish because Roblox's
+	-- own buttons grew. Such a screen keeps the arrangement it had: the buttons
+	-- under the clock (the caller; teleportUnder, obbyBeside, biomesBeside).
+	--
+	-- THE WIDTHS, widest first, and ADMIN on the row before the icons: a row
+	-- with room for the words alone and ADMIN gets exactly that, as in the
+	-- owner's screenshot. Without room for ADMIN as well it hangs under the
+	-- row's middle, 8 px under the buttons' touch areas; and a row too narrow
+	-- even for the words at their size (a 640- or 667-px phone) draws them a
+	-- little smaller (`Tight`) rather than lose the row.
+	--
+	-- The three touch areas are always side by side, so the chase warning has
+	-- TELEPORT's slot and BIOMES' beside it as its room (statusLine): both are
+	-- empty then, the buttons being for the Safe Zone only.
+	--==========================================================================
+	local tiers = {
+		{ B.Size.X, O.Size.X, true }, { B.Narrow, O.Narrow, true },
+		{ B.Size.X, O.Size.X, false }, { B.Narrow, O.Narrow, false },
+		{ B.Tight, O.Tight, false },
+	}
+	for _, tier in ipairs(tiers) do
+		local bw, ow, withAdmin = tier[1], tier[2], tier[3]
+		local stop = if withAdmin then clock.x - G - aw - G else clock.x - G
+		local tx = lo + bw + G
+		local ox = tx + P.Touch + G
+		if ox + ow <= stop + 1e-6 then
+			local wide = bw == B.Size.X
+			answer.clock = clock
+			answer.biomes = rect(lo - originX, touchTop - insetTop, bw, T.Size.Y)
+			answer.teleport = rect(tx - originX, touchTop - insetTop, P.Touch, T.Size.Y)
+			answer.obby = rect(ox - originX, touchTop - insetTop, ow, T.Size.Y)
+			answer.biomesWide, answer.obbyWide = wide, wide
+			answer.admin = if withAdmin then rect(clock.x - G - aw, ay, aw, ah)
+				else rect(centre - aw / 2, touchTop + T.Size.Y + G, aw, ah)
+			return answer
+		end
 	end
 	return answer
 end
@@ -1704,13 +1758,14 @@ local function sidebars(input: Input): Layout
 	-- of what the player owns, from the same right edge.
 	--==========================================================================
 	--==========================================================================
-	-- THE CLOCK, AND THE TELEPORT BUTTON BESIDE IT (2026-09-29)
+	-- THE CLOCK, AND THE TELEPORT BUTTON ON ITS ROW (2026-09-29)
 	--
 	-- THE PHONE'S TOP ROW, above. Worked out here rather than at the end,
 	-- because the chooser keeps clear of the button. Where the row has no room
-	-- for both buttons beside the clock -- a topbar whose free span is very
-	-- narrow -- TELEPORT stands under the clock and OBBY beside it there
-	-- (obbyBeside, below), as every phone's did before the row.
+	-- for the three buttons and the clock -- a topbar whose free span is very
+	-- narrow -- TELEPORT stands under the clock with OBBY and BIOMES beside it
+	-- there (obbyBeside, biomesBeside, below), as every phone's did before the
+	-- row.
 	--==========================================================================
 	local row = phoneRow(input, { railTop = M, railRight = walk.x + walk.w, rightLeft = boost.x })
 	local clock, admin = row.clock, row.admin
@@ -1901,6 +1956,8 @@ local function sidebars(input: Input): Layout
 		teleportScale = CONFIG.Teleport.PhoneScale,
 		obby = rect(0, 0, 0, 0),
 		obbyWide = false,
+		biomes = rect(0, 0, 0, 0),
+		biomesWide = false,
 		teleportPlate = CONFIG.Teleport.Size,
 		clockChip = true,
 		topRow = inRow,
@@ -1915,15 +1972,18 @@ local function sidebars(input: Input): Layout
 	}
 	L.clock = clock
 	L.fits = L.fits and #HudLayout.problems(L) == 0
-	local beside = row.obby
-	if not (beside and columnTop) then
-		-- No row: beside TELEPORT under the clock, as it stood (obbyBeside), and
-		-- everything else as it stood with it.
+	local beside, first = row.obby, row.biomes
+	if not (beside and first and columnTop) then
+		-- No row: beside TELEPORT under the clock, as OBBY stood (obbyBeside),
+		-- BIOMES on its other side (biomesBeside), and everything else as it
+		-- stood with them.
 		L.obby, L.obbyWide = obbyBeside(input, L)
+		L.biomes, L.biomesWide = biomesBeside(input, L)
 		return L
 	end
-	-- On the row: the run's clock has the same slot on the course.
+	-- On the row: the run's clock has OBBY's slot on the course.
 	L.obby, L.obbyWide = beside, row.obbyWide
+	L.biomes, L.biomesWide = first, row.biomesWide
 	L.run = beside
 
 	--==========================================================================
@@ -2161,6 +2221,9 @@ local function tenFoot(input: Input, tv: TenFootInput): Layout
 	if L.obby.w > 0 then
 		L.obby = shifted(L.obby, dx, dy)
 	end
+	if L.biomes.w > 0 then
+		L.biomes = shifted(L.biomes, dx, dy)
+	end
 	L.railTop += dy
 	L.railBottom += dy
 	L.railRight += dx
@@ -2325,11 +2388,16 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 	if top < teleport.y + teleport.h + G and top + height + G > teleport.y then
 		top = teleport.y + teleport.h + G
 	end
-	-- The OBBY button, where a small phone stands it under the topbar beside
-	-- TELEPORT (obbyBeside): inside the rows' band, and stepped round like them.
-	local obby = L.obby
-	local obbyInRows = obby.w > 0 and top < obby.y + obby.h + G and top + height + G > obby.y
-	if (top + height + G <= L.railTop or top >= L.railBottom + G) and not obbyInRows then
+	-- The OBBY and BIOMES buttons, where a small phone stands them under the
+	-- topbar beside TELEPORT (obbyBeside, biomesBeside): inside the rows' band,
+	-- and stepped round like them.
+	local inRows: { Rect } = {}
+	for _, b in ipairs({ L.obby, L.biomes }) do
+		if b.w > 0 and top < b.y + b.h + G and top + height + G > b.y then
+			table.insert(inRows, b)
+		end
+	end
+	if (top + height + G <= L.railTop or top >= L.railBottom + G) and #inRows == 0 then
 		return 0, top
 	end
 	local centre = L.safe.X / 2
@@ -2338,11 +2406,11 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 	local indexBadge, gardenBadge = HudLayout.badges(L)
 	local lo = math.max(L.railRight, indexBadge.x + indexBadge.w) + G
 	local hi = math.min(L.rightLeft, gardenBadge.x) - G
-	if obbyInRows then
-		if obby.x + obby.w / 2 < centre then
-			lo = math.max(lo, obby.x + obby.w + G)
+	for _, b in ipairs(inRows) do
+		if b.x + b.w / 2 < centre then
+			lo = math.max(lo, b.x + b.w + G)
 		else
-			hi = math.min(hi, obby.x - G)
+			hi = math.min(hi, b.x - G)
 		end
 	end
 	if width / 2 <= math.min(centre - lo, hi - centre) then
@@ -2351,8 +2419,15 @@ function HudLayout.notice(L: Layout, width: number, height: number, top: number,
 	if width <= hi - lo then
 		return (lo + hi) / 2 - centre, top
 	end
-	-- Dropped under the rows, and under the teleport and OBBY buttons where lower.
-	return 0, math.max(L.railBottom, L.teleport.y + L.teleport.h, if obby.w > 0 then obby.y + obby.h else 0) + G
+	-- Dropped under the rows, and under the teleport, OBBY and BIOMES buttons
+	-- where lower.
+	local lowest = math.max(L.railBottom, L.teleport.y + L.teleport.h)
+	for _, b in ipairs({ L.obby, L.biomes }) do
+		if b.w > 0 then
+			lowest = math.max(lowest, b.y + b.h)
+		end
+	end
+	return 0, lowest + G
 end
 
 --==============================================================================
@@ -2457,21 +2532,18 @@ end
 --
 -- A line `width` wide in the status band. Everywhere but a phone that is
 -- centreIn: on the slot's middle, under the clock. On a phone the slot stands
--- BESIDE the clock, and a warning wider than the slot must not grow back over
--- the clock: it starts at the slot's own edge nearest the clock and runs away
--- from it, as far as the row's end. The OBBY button's slot is on that side and
--- is always empty then -- the button shows only in the Safe Zone, where the
--- warning stands down.
+-- on the clock's row, and a warning wider than the slot must not grow over
+-- OBBY's slot, ADMIN or the clock on its right: it starts at the slot's right
+-- edge and runs LEFT, as far as the row's start (2026-09-30: the clock is at
+-- the row's right end). The BIOMES button's slot is on that side and is always
+-- empty then -- the button shows only in the Safe Zone, where the warning
+-- stands down.
 --==============================================================================
 function HudLayout.statusLine(L: Layout, insetTop: number, width: number): Rect
 	local band = HudLayout.statusRows(L, insetTop)
-	local lo, hi, centre = L.rowLo, L.rowHi, L.columnCentre
-	if not (L.topRow and lo and hi and centre) then
+	local lo = L.rowLo
+	if not (L.topRow and lo) then
 		return HudLayout.centreIn(L, band, width)
-	end
-	if band.x + band.w / 2 >= centre then
-		local w = math.min(width, math.max(0, hi - band.x))
-		return rect(band.x, band.y, w, band.h)
 	end
 	local right = band.x + band.w
 	local w = math.min(width, math.max(0, right - lo))

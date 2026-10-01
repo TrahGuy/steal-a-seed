@@ -51,6 +51,7 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+local FloatingSign = require(Shared:WaitForChild("FloatingSign"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
@@ -494,6 +495,14 @@ end)
 -- One line per sign: the pedestal is lettered front and back.
 local statusLabels: { TextLabel } = {}
 local prompt: ProximityPrompt? = nil
+-- "SACRIFICE A POD!" floating over the bowl (2026-09-30): this player's own.
+local floatingWords: FloatingSign.Sign? = nil
+-- The glowing base round the foot (2026-10-01): this player's own, steady, and
+-- dimmed while their pedestal recharges. No flashing, no particles.
+local baseGlow: Part? = nil
+local baseLight: PointLight? = nil
+local EXPLAIN = GameConfig.sacrificeExplain(SeedData.Sacrifice.Multiplier, SeedData.Sacrifice.DurationSeconds)
+local LIME = CONFIG.FloatingWords.Colour
 
 paintPedestal = function()
 	local now = Workspace:GetServerTimeNow()
@@ -506,6 +515,33 @@ paintPedestal = function()
 	local p = prompt
 	if p then
 		p.Enabled = ready and openToken == nil
+	end
+	--==========================================================================
+	-- THE WORDS STAY UP (2026-10-01): the offer reads the same ready or not;
+	-- the third line says which. Ready: the one sentence of what it does, in
+	-- the boards' plain bold face. Recharging: how long, in the sign's own.
+	-- Nothing here decides anything -- the server still refuses an early press.
+	--==========================================================================
+	local w = floatingWords
+	if w then
+		local note = w.note
+		if note then
+			if ready then
+				note.Text, note.Font, note.TextColor3 = EXPLAIN, FloatingSign.NoteFont, CREAM
+			else
+				note.Text, note.Font, note.TextColor3 =
+					"RECHARGING · READY IN " .. StatusText.clock(nextAt - now), FloatingSign.Font, CREAM
+			end
+		end
+		w.setShown(true)
+	end
+	local glow = baseGlow
+	if glow then
+		glow.Transparency = if ready then 0.45 else 0.85
+	end
+	local light = baseLight
+	if light then
+		light.Enabled = ready
 	end
 end
 
@@ -523,6 +559,58 @@ task.spawn(function()
 	local bowl = model:WaitForChild("OfferingBowl", 10)
 	local found = if bowl then bowl:WaitForChild("SacrificePrompt", 10) else nil
 	prompt = if found and found:IsA("ProximityPrompt") then found else nil
+	--==========================================================================
+	-- THE WORDS OVER IT (2026-09-30): floating above the bowl like the wheel's
+	-- sign, with what it buys under them in the pedestal's own numbers -- and,
+	-- since 2026-10-01, a third line (paintPedestal fills it).
+	--==========================================================================
+	if bowl and bowl:IsA("BasePart") then
+		local W = CONFIG.FloatingWords
+		floatingWords = FloatingSign.new({
+			name = "SacrificeWords",
+			parent = model,
+			at = CFrame.new(bowl.Position + Vector3.new(0, W.Above, 0)),
+			text = W.Text,
+			colour = W.Colour,
+			width = W.Width,
+			height = W.Height,
+			subText = GameConfig.sacrificeBoostTitle(SeedData.Sacrifice.Multiplier),
+			subHeight = W.SubHeight,
+			noteText = EXPLAIN,
+			noteHeight = W.NoteHeight,
+			noteColour = CREAM,
+		})
+	end
+	--==========================================================================
+	-- THE GLOWING BASE (2026-10-01): a thin lime plate under the foot, so a rim
+	-- of light shows round it on the deck, and a soft light on the stone. Local
+	-- and inert: nothing can stand on it, touch it or hit it, and it never
+	-- moves or pulses -- paintPedestal only dims it while recharging.
+	--==========================================================================
+	local foot = model:WaitForChild("Foot", 10)
+	if foot and foot:IsA("BasePart") then
+		local plate = Instance.new("Part")
+		plate.Name = "SacrificeBaseGlow"
+		plate.Size = Vector3.new(foot.Size.X + 0.8, 0.12, foot.Size.Z + 0.8)
+		plate.CFrame = foot.CFrame * CFrame.new(0, -foot.Size.Y / 2 + 0.06, 0)
+		plate.Color = LIME
+		plate.Material = Enum.Material.Neon
+		plate.Transparency = 0.45
+		plate.Anchored = true
+		plate.CanCollide = false
+		plate.CanTouch = false
+		plate.CanQuery = false
+		plate.CastShadow = false
+		plate.Parent = model
+		baseGlow = plate
+		local light = Instance.new("PointLight")
+		light.Color = LIME
+		light.Brightness = 0.7
+		light.Range = 8
+		light.Shadows = false
+		light.Parent = plate
+		baseLight = light
+	end
 	paintPedestal()
 end)
 

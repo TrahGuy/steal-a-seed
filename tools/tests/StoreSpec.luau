@@ -216,13 +216,23 @@ local ok, err = pcall(function()
 		record("PayReward", player, amount, reason)
 		return realPayReward(player, amount, reason)
 	end
+	-- Paid spins are ON as shipped (2026-10-01). This copy sees them switched
+	-- OFF, so every other section tests the store alone and section 5 can show
+	-- what off means; section 5's second copy runs the shipped WheelData.
+	local ShippedWheelData = require(Shared:WaitForChild("WheelData"))
+	local wheelOff = setmetatable({
+		Paid = { Enabled = false, PromptCooldown = ShippedWheelData.Paid.PromptCooldown },
+		paidLive = function()
+			return false
+		end,
+	}, { __index = ShippedWheelData })
 	StoreService = loadWith(Server.StoreService, {
 		PlayerDataService = PlayerDataService,
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
 		PlantService = PlantService,
 		WheelService = WheelService,
-	}, { GameConfig = liveConfig })
+	}, { GameConfig = liveConfig, WheelData = wheelOff })
 	StoreService.Init()
 	StoreService.Start()
 end)
@@ -421,26 +431,26 @@ if ok and receiptCallback then
 		"the debug snapshot lists it with the world products", snapshot)
 
 	--==========================================================================
-	-- 5. THE REWARD WHEEL'S TWO SPIN PRODUCTS (2026-09-29): NAMED, AND OFF
+	-- 5. THE REWARD WHEEL'S SPIN PRODUCTS (2026-09-29; ON SINCE 2026-10-01)
 	--
-	-- As shipped WheelData.Paid.Enabled is false, so neither of the owner's two
-	-- products is indexed and no receipt can grant a spin -- even one that names
-	-- a real id, which can happen: the products are on sale in the dashboard.
-	-- A second copy of StoreService then sees paid spins switched on, to prove
-	-- the path the owner will turn on: each id pays its own quantity through
-	-- WheelService.GrantBought, once per receipt, recoverably. WheelService here
-	-- is a stand-in that records; SpinPurchaseSpec runs the two real services
-	-- together, PolicyService and all.
+	-- As shipped WheelData.Paid.Enabled is TRUE: the owner switched it on on
+	-- 2026-10-01. The first copy of StoreService above sees it switched OFF, so
+	-- no product is indexed and no receipt can grant a spin -- even one that
+	-- names a real id. A second copy then runs the SHIPPED WheelData: each id
+	-- pays its own quantity through WheelService.GrantBought, once per receipt,
+	-- recoverably. WheelService here is a stand-in that records;
+	-- SpinPurchaseSpec runs the two real services together, PolicyService and all.
 	--==========================================================================
 	say("\n-- the wheel's spin products --")
 	local WheelData = require(Shared:WaitForChild("WheelData"))
 	local ONE, TEN = WheelData.ProductByKey.spin1, WheelData.ProductByKey.spin10
-	check(WheelData.Paid.Enabled == false and ONE ~= nil and TEN ~= nil and ONE.spins == 1 and TEN.spins == 10,
-		"as shipped paid spins are switched off, with both products named: 1 spin and 10")
+	check(WheelData.Paid.Enabled == true and WheelData.paidLive() and ONE ~= nil and TEN ~= nil and ONE.spins == 1
+			and TEN.spins == 10,
+		"as shipped paid spins are switched ON (the owner's word, 2026-10-01), x1 granting 1 spin and x10 granting 10")
 	check(string.find(snapshot, "OFF (WheelData.Paid.Enabled is false)", 1, true) ~= nil
 			and string.find(snapshot, "spin1=" .. ONE.productId .. " x1", 1, true) ~= nil
 			and string.find(snapshot, "spin10=" .. TEN.productId .. " x10", 1, true) ~= nil,
-		"and the snapshot names both and says they are off", snapshot)
+		"the switched-off copy's snapshot names them and says they are off", snapshot)
 	local function grants()
 		local n = 0
 		for _, t in ipairs(trace) do
@@ -464,20 +474,14 @@ if ok and receiptCallback then
 			.. "remembered -- so Roblox returns the Robux",
 		string.format("%s/%s/%s, %d grant(s)", tostring(strayOne), tostring(strayTen), tostring(strayAgain), grants()))
 
-	local wheelOn = setmetatable({
-		Paid = { Enabled = true, PromptCooldown = 0 },
-		paidLive = function()
-			return true
-		end,
-	}, { __index = WheelData })
 	local onOk, OnStore = pcall(loadWith, Server.StoreService, {
 		PlayerDataService = PlayerDataService,
 		CarryService = CarryService,
 		TreadmillService = TreadmillService,
 		PlantService = PlantService,
 		WheelService = WheelService,
-	}, { GameConfig = liveConfig, WheelData = wheelOn })
-	check(onOk, "a copy that sees paid spins switched on loads", if onOk then nil else OnStore)
+	}, { GameConfig = liveConfig })
+	check(onOk, "a copy with the shipped WheelData (switched on) loads", if onOk then nil else OnStore)
 	if onOk then
 		OnStore.Init()
 		OnStore.Start()

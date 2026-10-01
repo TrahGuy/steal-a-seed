@@ -23,7 +23,8 @@
 --                    faucets, the trail's swap, a full bag, a failed save, a
 --                    second request mid-spin, an error mid-spin, forged payloads,
 --                    the trail worn and taken off
---   5. paid spins    the two products, switched off as shipped, and PolicyService's
+--   5. paid spins    the three packs, switched ON as shipped (2026-10-01) and off
+--                    on a copy, and PolicyService's
 --                    answer: never bought or spent without both, never silently;
 --                    and where the panel stands GET SPINS, its card and the
 --                    question on 26 screens (its own layout code, run here)
@@ -145,18 +146,43 @@ check(income and training and B.boost_income.boost == "income" and B.boost_train
 	and B.boost_income.title:find(string.format("for %d min", chest.BoostSeconds // 60), 1, true) ~= nil,
 	"the boost prizes are the Bonus Chest's own boosts, named from its own numbers",
 	B.boost_income.label .. " / " .. B.boost_income.title)
--- PAID SPINS AS SHIPPED (2026-09-29): both of the owner's products are named,
--- and the switch is OFF. Turning it on is the owner's decision, after Roblox's
--- paid-random-item requirements are met (KB/HANDOFF.md, the paid-spins entry):
--- this check is the tripwire that change has to pass on purpose.
-check(WheelData.Paid.Enabled == false and WheelData.paidLive() == false,
-	"as shipped, paid spins are switched OFF")
+-- PAID SPINS AS SHIPPED: switched ON by the owner on 2026-10-01, with paid
+-- random items declared in the questionnaire and sales outside the game off
+-- (KB/HANDOFF.md, the paid-spins entries). This check is the tripwire that
+-- switching it off again has to pass on purpose.
+check(WheelData.Paid.Enabled == true and WheelData.paidLive() == true,
+	"as shipped, paid spins are switched ON (the owner's word, 2026-10-01)")
+-- THE THREE SPIN-TICKET PACKS (2026-10-01), and the two first products retired.
+-- (In a block: this file is at Luau's 200 locals; P1 and P10 stay, as before.)
 local P1, P10 = WheelData.ProductByKey.spin1, WheelData.ProductByKey.spin10
-check(#WheelData.Products == 2 and P1 ~= nil and P10 ~= nil
-		and P1.productId == 3715369823 and P1.spins == 1 and P1.robux == 9
-		and P10.productId == 3715370108 and P10.spins == 10 and P10.robux == 85
-		and WheelData.ProductById[3715369823] == P1 and WheelData.ProductById[3715370108] == P10,
-	"two spin products, the owner's: +1 Spin (3715369823) grants 1 and +10 Spins (3715370108) grants 10")
+do
+local P5 = WheelData.ProductByKey.spin5
+check(#WheelData.Products == 3 and P1 ~= nil and P5 ~= nil and P10 ~= nil
+		and WheelData.Products[1] == P1 and WheelData.Products[2] == P5 and WheelData.Products[3] == P10
+		and P1.productId == 3715745320 and P1.spins == 1 and P1.robux == 19 and P1.icon == 74250574261417
+		and P5.productId == 3715745407 and P5.spins == 5 and P5.robux == 85 and P5.icon == 129968452678126
+		and P10.productId == 3715745552 and P10.spins == 10 and P10.robux == 180 and P10.icon == 109596534013386
+		and WheelData.ProductById[3715745320] == P1 and WheelData.ProductById[3715745407] == P5
+		and WheelData.ProductById[3715745552] == P10,
+	"three spin-ticket packs, the owner's: x1 (3715745320) grants 1, x5 (3715745407) 5, x10 (3715745552) 10")
+local R1, R10 = WheelData.RetiredProducts[1], WheelData.RetiredProducts[2]
+check(#WheelData.RetiredProducts == 2 and R1.productId == 3715369823 and R1.spins == 1
+		and R10.productId == 3715370108 and R10.spins == 10
+		and WheelData.ProductById[3715369823] == nil and WheelData.ProductById[3715370108] == nil
+		and WheelData.ProductByKey[R1.key] == nil and WheelData.ProductByKey[R10.key] == nil
+		and #WheelData.receiptProducts() == 5,
+	"the two first products are retired: never sold or asked for by key, still named for their receipts")
+local bestTag = false
+for _, product in ipairs(WheelData.Products) do
+	for field in pairs(product) do
+		if string.find(string.lower(tostring(field)), "best", 1, true) then
+			bestTag = true
+		end
+	end
+end
+check(not bestTag and P5.robux * 2 < P10.robux,
+	"no pack is marked the best value -- at the list prices two x5 cost less than one x10")
+end
 check(WheelData.Actions.Buy == "WheelBuy" and WheelData.Paid.PromptCooldown >= 1,
 	"buying has a verb of its own, and a wait between two prompts")
 check(WheelData.MaxBoughtHeld >= 10 and WheelData.Daily.Limit == 5,
@@ -497,6 +523,11 @@ local function makePlayer(name, userId)
 	function p:SetAttribute(key, value)
 		attrs[key] = value
 	end
+	-- No Backpack: WheelService's Spin Ticket has nowhere to go (CommunitySpec
+	-- holds the tickets).
+	function p:FindFirstChildOfClass()
+		return nil
+	end
 	return p
 end
 
@@ -585,6 +616,13 @@ local WheelModel = {
 		return nil
 	end,
 }
+-- WheelService hooks the hatch reveal for the hatch bonus (2026-10-01);
+-- HatchBonusSpec drives that. Here it hears nothing.
+local PlantService = {
+	OnRevealed = function()
+		return function() end
+	end,
+}
 local policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
 local fakePolicy = {}
 function fakePolicy:GetPolicyInfoForPlayerAsync(player)
@@ -635,6 +673,18 @@ end
 local clock = 1000000
 local replies = {}
 local function loadWheel(overrides)
+	-- Paid spins are ON as shipped (2026-10-01). A copy that names no WheelData
+	-- of its own sees them switched OFF, so the earned path is tested alone and
+	-- "off" keeps its checks; section 5 loads the shipped WheelData on purpose.
+	if overrides == nil or overrides.WheelData == nil then
+		overrides = table.clone(overrides or {})
+		overrides.WheelData = setmetatable({
+			Paid = { Enabled = false, PromptCooldown = WheelData.Paid.PromptCooldown },
+			paidLive = function()
+				return false
+			end,
+		}, { __index = WheelData })
+	end
 	local W = loadWith(Server:WaitForChild("WheelService"), {
 		PlayerDataService = PlayerDataService,
 		EconomyService = EconomyService,
@@ -643,6 +693,7 @@ local function loadWheel(overrides)
 		BonusChestService = BonusChestService,
 		Metrics = Metrics,
 		WheelModel = WheelModel,
+		PlantService = PlantService,
 	}, overrides)
 	W.Init()
 	W.useClock(function()
@@ -704,11 +755,11 @@ end
 kind = W.AwardCompletion(p1, "run-7", 1800)
 check(prof.WheelEarned == 2 and prof.WheelDayCount == 5 and kind == "speed",
 	"spending three spins gives nothing back: the window is still full and the next run pays Speed")
--- Bought spins never touch it. As shipped paid spins are off and nothing can be
--- granted at all; a copy that sees them switched on grants into the SAME
--- profile, for a player PolicyService allows.
+-- Bought spins never touch it. Switched off (this copy) nothing can be granted
+-- at all; a copy that sees them switched on grants into the SAME profile, for a
+-- player PolicyService allows.
 check(not W.GrantBought(p1, 4) and prof.WheelBought == 0,
-	"as shipped -- paid spins off -- a grant of bought spins lands nothing")
+	"switched off, a grant of bought spins lands nothing")
 local paidOn = setmetatable({
 	Paid = { Enabled = true, PromptCooldown = 0 },
 	paidLive = function()
@@ -1078,7 +1129,7 @@ bp.WheelBought = 2
 policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
 W.CheckPolicy(buyer)
 check(buyer:GetAttribute(A.PaidAllowed) == nil and not W.PaidAllowed(buyer),
-	"as shipped -- the switch off -- paid spins are off even for an eligible account")
+	"switched off (a copy), paid spins are off even for an eligible account")
 table.clear(replies)
 W.Spin(buyer, "bought")
 local refusedBought = last().reason
@@ -1087,8 +1138,40 @@ check(refusedBought == "PAID_UNAVAILABLE" and last().reason == "NO_SPINS" and bp
 	"a bought spin is refused, and asking for an earned one never falls back to a bought one",
 	tostring(refusedBought) .. " / " .. tostring(last().reason))
 
--- The same two products, switched on for a copy of the service: never the
--- shipped switch. No wait between prompts here; the wait has its own copy below.
+-- THE SHIPPED SWITCH (2026-10-01): a copy loaded with the real WheelData.
+-- PolicyService still decides: an eligible player is shown the x5 prompt, a
+-- restricted one nothing.
+do
+	local WS = loadWheel({ WheelData = WheelData })
+	local shown = {}
+	WS.usePrompt(function(who, productId)
+		table.insert(shown, { who = who, productId = productId })
+	end)
+	local fan, barredFan = makePlayer("SpecShippedFan", 5130), makePlayer("SpecShippedBarred", 5131)
+	profiles[fan] = ProfileSchema.Default()
+	profiles[barredFan] = ProfileSchema.Default()
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	WS.CheckPolicy(fan)
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = true } }
+	WS.CheckPolicy(barredFan)
+	table.clear(replies)
+	WS.Buy(fan, "spin5")
+	WS.Buy(barredFan, "spin5")
+	local barredWhy = last().reason
+	check(#shown == 1 and shown[1].who == fan and shown[1].productId == 3715745407
+			and fan:GetAttribute(A.PaidAllowed) == true and barredFan:GetAttribute(A.PaidAllowed) == nil
+			and barredWhy == "PAID_UNAVAILABLE" and profiles[fan].WheelBought == 0,
+		"as shipped, an eligible player asking for x5 is shown product 3715745407 (and granted nothing yet); "
+			.. "a restricted player is shown nothing",
+		string.format("%d prompt(s), %s", #shown, tostring(barredWhy)))
+	policyAnswer = { ok = true, info = { ArePaidRandomItemsRestricted = false } }
+	WS.usePrompt(nil)
+	WS.useClock(nil)
+	WS.useReply(nil)
+end
+
+-- The packs switched on for a copy of the service with no wait between
+-- prompts; the wait has its own copy below.
 local live = setmetatable({
 	Paid = { Enabled = true, PromptCooldown = 0 },
 	paidLive = function()
@@ -1202,11 +1285,14 @@ if liveOk then
 	table.clear(replies)
 	WP.Buy(shopper, "spin1")
 	local one = prompts[1]
+	WP.Buy(shopper, "spin5")
+	local five = prompts[2]
 	WP.Buy(shopper, "spin10")
-	local ten = prompts[2]
-	check(#prompts == 2 and one.who == shopper and one.productId == 3715369823
-			and ten.who == shopper and ten.productId == 3715370108 and bought().ok == true and bought().key == "spin10",
-		"an eligible player asking for +1 Spin is shown product 3715369823, and for +10 Spins 3715370108",
+	local ten = prompts[3]
+	check(#prompts == 3 and one.who == shopper and one.productId == 3715745320
+			and five.who == shopper and five.productId == 3715745407
+			and ten.who == shopper and ten.productId == 3715745552 and bought().ok == true and bought().key == "spin10",
+		"an eligible player asking for x1 is shown product 3715745320, for x5 3715745407, for x10 3715745552",
 		string.format("%d prompt(s)", #prompts))
 	check(sp2.WheelBought == 0 and sp2.WheelEarned == 0 and #sp2.WheelPending == 0
 			and shopper:GetAttribute(A.Bought) == 0,
@@ -1216,7 +1302,7 @@ if liveOk then
 	local forgedBuys = 0
 	local echoed = 0
 	for _, forged in ipairs({ 3715369823, "3715369823", "spin100", "", true, { key = "spin1" }, { spins = 1e6 },
-		"SPIN1", "spin1 ", string.rep("spin1", 20000) }) do
+		"SPIN1", "spin1 ", string.rep("spin1", 20000), "retired1", "retired10", 3715745320 }) do
 		table.clear(prompts)
 		table.clear(replies)
 		WP.Buy(shopper, forged)
@@ -1277,7 +1363,7 @@ if liveOk then
 	local rFull, whyFull = refusedWith(shopper, "spin10")
 	table.clear(prompts)
 	WP.Buy(shopper, "spin1")
-	check(rFull and whyFull == "BALANCE_FULL" and #prompts == 1 and prompts[1].productId == 3715369823,
+	check(rFull and whyFull == "BALANCE_FULL" and #prompts == 1 and prompts[1].productId == 3715745320,
 		"a balance with no room for ten is not sold ten -- and is still sold one, which fits", whyFull)
 	sp2.WheelBought = 0
 
@@ -1300,7 +1386,7 @@ if liveOk then
 	local hurried = bought().reason
 	task.wait(0.35)
 	WW.Buy(shopper, "spin10")
-	check(#waited == 2 and waited[1] == 3715369823 and waited[2] == 3715370108 and hurried == "PROMPT_BUSY",
+	check(#waited == 2 and waited[1] == 3715745320 and waited[2] == 3715745552 and hurried == "PROMPT_BUSY",
 		"a second prompt inside the wait is refused, and one after it opens", tostring(hurried))
 	WW.usePrompt(nil)
 	WW.useClock(nil)

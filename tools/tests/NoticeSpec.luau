@@ -313,9 +313,18 @@ do
 		"no loop and no per-frame hook")
 	check(not toast:find("SetAttribute(", 1, true) and not toast:find("FireServer(", 1, true),
 		"it tells nobody anything back")
-	check(not toast:find("TextButton", 1, true) and not toast:find("ImageButton", 1, true)
-			and not toast:find("Active = true", 1, true) and not toast:find("Selectable = true", 1, true),
-		"nothing in it can take input or a controller's selection")
+	-- One exception since 2026-10-01: the close button of a notice the poster
+	-- marked `dismissible` (the like reminder). It is the only button, made only
+	-- inside that branch; nothing else takes input or a controller's selection.
+	local branch = toast:find("if post.dismissible == true then", 1, true)
+	local made = toast:find('Instance.new("TextButton")', 1, true)
+	local _, buttons = string.gsub(toast, 'Instance%.new%("TextButton"%)', "")
+	local _, selectable = string.gsub(toast, "Selectable = true", "")
+	check(not toast:find("ImageButton", 1, true) and not toast:find("Active = true", 1, true)
+			and buttons == 1 and selectable == 1 and branch ~= nil and made ~= nil and made > branch
+			and toast:find("close.Selectable = true", 1, true) ~= nil,
+		"nothing in it can take input or a controller's selection, but a dismissible notice's close button",
+		string.format("%d buttons, %d selectable", buttons, selectable))
 	check(toast:find("GameConfig.Afterimage.QualityAttribute", 1, true) ~= nil
 			and toast:find("ReducedMotionEnabled", 1, true) ~= nil,
 		"it honours REDUCED FX and Roblox's reduced motion")

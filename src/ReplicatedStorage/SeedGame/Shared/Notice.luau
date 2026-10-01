@@ -69,6 +69,12 @@ export type Post = {
 	-- Asked before it goes up and while it is up; false takes it down at once.
 	-- For a notice about a situation that can end on its own.
 	stillTrue: (() -> boolean)?,
+	-- The player may take it down (2026-10-01, the like reminder): the renderer
+	-- draws a small close button on it -- a click, a tap or the UI's selection
+	-- -- and it may stay up to DismissibleMaxSeconds rather than MaxSeconds.
+	-- `onDismissed` runs once if the player takes it down.
+	dismissible: boolean?,
+	onDismissed: (() -> ())?,
 }
 
 export type Shown = {
@@ -120,6 +126,8 @@ Notice.Outline = Color3.fromRGB(12, 10, 16)
 Notice.ReadSecondsPerChar = 0.03
 Notice.ReadFreeChars = 24
 Notice.MaxSeconds = 5
+-- A notice the player can take down themselves may stay up this long (2026-10-01).
+Notice.DismissibleMaxSeconds = 12
 -- The entrance: a short rise and a small scale settle. The exit: a fade with a
 -- few pixels of drift. Neither bounces.
 Notice.EnterSeconds = 0.26
@@ -168,7 +176,8 @@ function Notice.holdFor(post: Post): number
 		else (if style then style.seconds else 2.6)
 	local chars = if post.detail then (utf8.len(post.detail) or #post.detail) else 0
 	local extra = math.max(0, chars - Notice.ReadFreeChars) * Notice.ReadSecondsPerChar
-	return math.min(Notice.MaxSeconds, base + extra)
+	local cap = if post.dismissible == true then Notice.DismissibleMaxSeconds else Notice.MaxSeconds
+	return math.min(cap, base + extra)
 end
 
 -- From going up to starting to leave: the entrance, then the hold.
@@ -192,6 +201,12 @@ function Notice.valid(post: any): boolean
 		return false
 	end
 	if post.detail ~= nil and type(post.detail) ~= "string" then
+		return false
+	end
+	if post.dismissible ~= nil and type(post.dismissible) ~= "boolean" then
+		return false
+	end
+	if post.onDismissed ~= nil and type(post.onDismissed) ~= "function" then
 		return false
 	end
 	local still = post.stillTrue

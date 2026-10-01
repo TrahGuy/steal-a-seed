@@ -1674,7 +1674,10 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- species you had, so this is the moment the Almanac learns it. It answers
 	-- TRUE only the first time, which is exactly what the label needs to know.
 	local discovered = PlayerDataService.MarkSeen(player, entry.species.Id)
-	PlayerDataService.RecordTutorial(player, "hatch")
+	-- TRUE only the first time this record has a hatch (the guide's hatch step;
+	-- every load re-derives it from the Almanac, the bag and the garden): what
+	-- the hatch bonus names a FIRST hatch rather than a welcome back (2026-10-01).
+	local firstHatch = PlayerDataService.RecordTutorial(player, "hatch")
 
 	-- Everything from here is decoration. The plant is theirs and the garden is
 	-- saved; step 7 of the order above.
@@ -1694,6 +1697,7 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 		owner = player,
 		paid = early == true,
 		discovery = discovered,
+		firstHatch = firstHatch == true,
 		-- Server time, so every client starts the same animation at the same
 		-- moment without being told each frame.
 		at = now,

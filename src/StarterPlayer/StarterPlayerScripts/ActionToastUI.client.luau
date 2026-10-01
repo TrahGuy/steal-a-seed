@@ -183,6 +183,9 @@ type Drawn = {
 	leaving: boolean,
 	-- Every instance whose transparency the fades move, with its resting value.
 	fades: { { target: Instance, prop: string, base: number } },
+	-- The close button of a notice the player may take down (Notice's
+	-- `dismissible`); nil on every other notice.
+	close: TextButton?,
 }
 
 local drawn: { Drawn } = {}
@@ -252,11 +255,15 @@ local function build(post: Notice.Post, key: string): Drawn
 		detailLabel = nil,
 		leaving = false,
 		fades = {},
+		close = nil,
 	}
 
-	-- The headline row: icon, a small gap, the words -- centred as one.
+	-- The headline row: icon, a small gap, the words -- centred as one. A notice
+	-- the player may dismiss keeps its close button's width clear on BOTH sides,
+	-- so the row stays centred and never runs under the button.
 	local iconSize = metrics.icon
-	local room = width - iconSize - 8
+	local closeW = if post.dismissible == true then iconSize + 6 else 0
+	local room = width - iconSize - 8 - closeW * 2
 	local hs = headSize(post.title, room)
 	local headW = math.min(room, textWidth(post.title, hs, HEAD_FONT))
 	local rowW = iconSize + 8 + headW
@@ -319,6 +326,57 @@ local function build(post: Notice.Post, key: string): Drawn
 		track(d, line, "TextTransparency")
 		track(d, lineEdge, "Transparency")
 		total += metrics.gap + bounds.Y + 2
+	end
+
+	--==========================================================================
+	-- THE CLOSE BUTTON, on a notice the player may take down (2026-10-01)
+	--
+	-- The panels' own close button, at a notice's size: a red plate with an
+	-- outlined X at the headline row's right end, inside a 44 px press that is
+	-- the button (UIKit.modal's rule: the target grows, the plate does not).
+	-- Selectable, so the UI's own selection reaches it on a controller. It fades
+	-- with the notice; show() connects the press.
+	--==========================================================================
+	if post.dismissible == true then
+		local PANEL = GameConfig.Panel
+		local close = Instance.new("TextButton")
+		close.Name = "Close"
+		close.AnchorPoint = Vector2.new(0.5, 0.5)
+		close.Position = UDim2.new(1, -closeW / 2, 0, rowH / 2)
+		close.Size = UDim2.fromOffset(44, 44)
+		close.BackgroundTransparency = 1
+		close.BorderSizePixel = 0
+		close.AutoButtonColor = false
+		close.Selectable = true
+		close.Text = ""
+		close.ZIndex = 4
+		close.Parent = body
+		UIKit.clicks(close)
+		local plate = Instance.new("Frame")
+		plate.Name = "Plate"
+		plate.AnchorPoint = Vector2.new(0.5, 0.5)
+		plate.Position = UDim2.fromScale(0.5, 0.5)
+		plate.Size = UDim2.fromOffset(iconSize, iconSize)
+		plate.BackgroundColor3 = Color3.new(1, 1, 1)
+		plate.BorderSizePixel = 0
+		plate.Active = false
+		plate.ZIndex = 4
+		plate.Parent = close
+		UIKit.corner(plate, 6)
+		local plateEdge = UIKit.stroke(plate, Notice.Outline, 1.5)
+		UIKit.gradient(plate, PANEL.CloseTop, PANEL.CloseBottom)
+		local mark = UIKit.outlined(plate, "Mark", math.max(10, math.floor(iconSize * 0.7)), Color3.new(1, 1, 1), 1.5)
+		mark.Size = UDim2.fromScale(1, 1)
+		mark.ZIndex = 5
+		mark.Text = "X"
+		track(d, plate, "BackgroundTransparency")
+		track(d, plateEdge, "Transparency")
+		track(d, mark, "TextTransparency")
+		local markEdge = mark:FindFirstChildOfClass("UIStroke")
+		if markEdge then
+			track(d, markEdge, "Transparency")
+		end
+		d.close = close
 	end
 
 	-- The icon's rings are strokes and its glyph is fills with strokes.
@@ -527,6 +585,21 @@ local function show(post: Notice.Post)
 	end
 	local d = build(post, key)
 	table.insert(drawn, d)
+	-- Taken down by the player (Notice's `dismissible`): it leaves as it would
+	-- at the end of its time, and the poster hears so, once.
+	local close = d.close
+	if close then
+		close.Activated:Connect(function()
+			if d.leaving then
+				return
+			end
+			leave(d, Notice.ExitSeconds)
+			local told = d.post.onDismissed
+			if told then
+				task.spawn(told)
+			end
+		end)
+	end
 	-- Hanging from the top, the stack has a depth as well as a count: a notice
 	-- with two lines under it is taller than the one the count was worked out
 	-- for. The oldest make way until the newest fits whole. The depth is asked

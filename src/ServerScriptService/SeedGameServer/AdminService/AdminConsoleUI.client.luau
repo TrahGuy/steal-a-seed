@@ -144,7 +144,8 @@ if blocker and blocker:IsA("GuiButton") then
 end
 modal.close.Selectable = true
 
-local CONTENT = 350
+-- The form runs to the announcement's SEND row (2026-10-01); it scrolls.
+local CONTENT = 590
 local CONFIRM_CONTENT = 332
 -- The status line lives under the pages, not in them, so what the server said
 -- is on screen whichever page is showing and however far the form is scrolled.
@@ -361,6 +362,60 @@ local startDay = pill(world, "StartDay", "START DAY", Color3.fromRGB(236, 176, 6
 startDay.AnchorPoint = Vector2.new(1, 0)
 startDay.Position = UDim2.fromScale(1, 0)
 startDay.Size = UDim2.new(0.5, -4, 1, 0)
+
+--== THE FORM: AN ANNOUNCEMENT (2026-10-01) ==--
+-- Who hears it -- THIS SERVER unless ALL SERVERS is picked, and ALL SERVERS
+-- asks once more -- the words, how many are left, and SEND. The server checks
+-- every part again: the allowlist, the length, the cooldown, the filter.
+local ANNOUNCE = GameConfig.Announce
+local announceRule = rule:Clone()
+announceRule.Position = UDim2.fromOffset(0, 362)
+announceRule.Parent = form
+local announceCaption = caption(form, "ANNOUNCEMENT TO PLAYERS", 372)
+announceCaption.TextColor3 = GOLD
+
+local scopeRow = Instance.new("Frame")
+scopeRow.Name = "Scope"
+scopeRow.BackgroundTransparency = 1
+scopeRow.Position = UDim2.fromOffset(0, 392)
+scopeRow.Size = UDim2.new(1, -8, 0, 40)
+scopeRow.ZIndex = 5
+scopeRow.Parent = form
+local SCOPE_ON_TOP, SCOPE_ON_BOTTOM = Color3.fromRGB(96, 186, 72), Color3.fromRGB(46, 120, 42)
+local SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM = Color3.fromRGB(70, 78, 96), Color3.fromRGB(44, 50, 64)
+local thisServer = pill(scopeRow, "ThisServer", "THIS SERVER", SCOPE_ON_TOP, SCOPE_ON_BOTTOM)
+thisServer.Size = UDim2.new(0.5, -4, 1, 0)
+local allServers = pill(scopeRow, "AllServers", "ALL SERVERS", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
+allServers.AnchorPoint = Vector2.new(1, 0)
+allServers.Position = UDim2.fromScale(1, 0)
+allServers.Size = UDim2.new(0.5, -4, 1, 0)
+
+local messageBox = field(form, "Message", 440, string.format("Message, up to %d characters", ANNOUNCE.MaxChars))
+messageBox.Size = UDim2.new(1, -8, 0, 72)
+messageBox.TextSize = 16
+messageBox.TextWrapped = true
+messageBox.TextXAlignment = Enum.TextXAlignment.Left
+messageBox.TextYAlignment = Enum.TextYAlignment.Top
+local counter = caption(form, "", 516)
+
+local sendRow = Instance.new("Frame")
+sendRow.Name = "SendRow"
+sendRow.BackgroundTransparency = 1
+sendRow.Position = UDim2.fromOffset(0, 538)
+sendRow.Size = UDim2.new(1, -8, 0, 44)
+sendRow.ZIndex = 5
+sendRow.Parent = form
+local sendAnnouncement = pill(sendRow, "SendAnnouncement", "SEND", Color3.fromRGB(236, 176, 60),
+	Color3.fromRGB(176, 112, 24))
+sendAnnouncement.Size = UDim2.fromScale(1, 1)
+local cancelAll = pill(sendRow, "CancelAll", "CANCEL", Color3.fromRGB(120, 128, 146), Color3.fromRGB(72, 78, 94))
+cancelAll.Size = UDim2.new(0.4, -4, 1, 0)
+cancelAll.Visible = false
+local confirmAll = pill(sendRow, "ConfirmAll", "YES, ALL SERVERS", DANGER_TOP, DANGER_BOTTOM)
+confirmAll.AnchorPoint = Vector2.new(1, 0)
+confirmAll.Position = UDim2.fromScale(1, 0)
+confirmAll.Size = UDim2.new(0.6, -4, 1, 0)
+confirmAll.Visible = false
 
 --== WHAT HAPPENED: under the pages, on every one of them ==--
 local status = Instance.new("TextLabel")
@@ -676,6 +731,100 @@ startDay.Activated:Connect(function()
 end)
 
 --==============================================================================
+-- AN ANNOUNCEMENT (2026-10-01)
+--
+-- THIS SERVER unless ALL SERVERS is picked, and ALL SERVERS goes only after
+-- YES, ALL SERVERS -- the server refuses an unconfirmed one anyway. The box
+-- keeps to MaxChars and the counter says how many are used. What the server
+-- answered is the status line: a best-effort cross-server send says so.
+--==============================================================================
+local scope = "server"
+local confirmingAll = false
+
+local function paintScope()
+	local all = scope == "all"
+	paint(thisServer, if all then SCOPE_OFF_TOP else SCOPE_ON_TOP, if all then SCOPE_OFF_BOTTOM else SCOPE_ON_BOTTOM)
+	paint(allServers, if all then SCOPE_ON_TOP else SCOPE_OFF_TOP, if all then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
+end
+
+local function setAllConfirm(want: boolean)
+	confirmingAll = want
+	sendAnnouncement.Visible = not want
+	cancelAll.Visible = want
+	confirmAll.Visible = want
+	if want then
+		setStatus("Send this to EVERY server? Press YES, ALL SERVERS to confirm.", GOLD)
+		selectIfPad(cancelAll)
+	end
+end
+
+local function paintCounter()
+	local length = utf8.len(messageBox.Text) or 0
+	if length > ANNOUNCE.MaxChars then
+		-- Kept to the limit as it is typed or pasted, cut on a character.
+		local stop = utf8.offset(messageBox.Text, ANNOUNCE.MaxChars + 1)
+		if stop then
+			messageBox.Text = string.sub(messageBox.Text, 1, stop - 1)
+			return
+		end
+	end
+	counter.Text = string.format("%d / %d", length, ANNOUNCE.MaxChars)
+	counter.TextColor3 = if length == 0 then MUTED elseif length >= ANNOUNCE.MaxChars then GOLD else WHITE
+end
+messageBox:GetPropertyChangedSignal("Text"):Connect(paintCounter)
+paintCounter()
+
+local function announce(confirmed: boolean)
+	if busy then
+		return
+	end
+	busy = true
+	setStatus(if scope == "all" then "Sending to every server…" else "Sending…", MUTED)
+	local ok, reply = pcall(function()
+		return remote:InvokeServer("Announce", scope, messageBox.Text, confirmed)
+	end)
+	busy = false
+	if not ok or type(reply) ~= "table" then
+		setStatus("Couldn't reach the server. Nothing was sent.", BAD)
+		return
+	end
+	local message = if type(reply.message) == "string" then reply.message else "No answer."
+	setStatus(message, if reply.ok == true then GOOD else BAD)
+	if reply.ok == true then
+		messageBox.Text = ""
+	end
+end
+
+thisServer.Activated:Connect(function()
+	scope = "server"
+	setAllConfirm(false)
+	paintScope()
+end)
+allServers.Activated:Connect(function()
+	scope = "all"
+	setAllConfirm(false)
+	paintScope()
+end)
+sendAnnouncement.Activated:Connect(function()
+	if scope == "all" then
+		setAllConfirm(true)
+	else
+		announce(false)
+	end
+end)
+cancelAll.Activated:Connect(function()
+	setAllConfirm(false)
+	setStatus("Not sent.", MUTED)
+	selectIfPad(sendAnnouncement)
+end)
+confirmAll.Activated:Connect(function()
+	setAllConfirm(false)
+	selectIfPad(sendAnnouncement)
+	announce(true)
+end)
+paintScope()
+
+--==============================================================================
 -- THE PHASE, AS THE CLOCK READS IT
 --
 -- The two attributes WorldCycleService publishes, read the way WorldClock
@@ -737,6 +886,10 @@ local function bindBack(want: boolean)
 		end
 		if listOpen then
 			setList(false)
+		elseif confirmingAll then
+			setAllConfirm(false)
+			setStatus("Not sent.", MUTED)
+			selectIfPad(sendAnnouncement)
 		elseif confirming then
 			setConfirm(false)
 			setStatus("Reset cancelled. Nothing changed.", MUTED)

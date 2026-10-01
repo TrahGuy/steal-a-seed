@@ -62,6 +62,7 @@ local Workspace = game:GetService("Workspace")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local ActionRefusal = require(SeedGame:WaitForChild("Shared"):WaitForChild("ActionRefusal"))
+local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 local MapService = require(script.Parent:WaitForChild("MapService"))
 
 local PLOT = GameConfig.Plot
@@ -325,6 +326,42 @@ function PlotService.TeleportTo(player: Player, target: CFrame, blocked: string)
 	root.AssemblyAngularVelocity = Vector3.zero
 	log(string.format("%s teleported to (%.0f, %.0f, %.0f).", player.Name, at.X, at.Y, at.Z))
 	return true, nil
+end
+
+--==============================================================================
+-- BIOMES: THE GREENHOLLOW ENTRANCE (2026-09-30, the owner's brief)
+--
+-- One button, one destination. The verb carries nothing, as TELEPORT TO PLOT's
+-- does, and every press goes through TeleportTo: TELEPORT TO PLOT's rules in
+-- its order -- alive, in the Safe Zone, no raided pod in the arms, not trapped
+-- or knocked down -- its ONE shared cooldown, and ground under the landing.
+--
+-- The landing is this function's and never a client's: where the road begins,
+-- Greenhollow's near edge (BiomeData.SegmentBounds), on the road's centre line
+-- (the corridor is built on x = 0), BiomesLandingInset inside the red line so
+-- it is still the Safe Zone, the spawn height up, facing down the road through
+-- the gate. No other biome is a destination: the rest of the road is walked.
+--==============================================================================
+local BIOMES_ENTRANCE = "greenhollow"
+
+function PlotService.BiomesLanding(): CFrame?
+	for _, biome in ipairs(BiomeData.Biomes) do
+		if biome.Id == BIOMES_ENTRANCE then
+			local nearZ = BiomeData.SegmentBounds(biome)
+			local at = Vector3.new(0, GameConfig.Map.GroundY + PLOT.SpawnHeightOffset,
+				nearZ + PLOT.BiomesLandingInset)
+			return CFrame.lookAt(at, at + Vector3.new(0, 0, -1))
+		end
+	end
+	return nil
+end
+
+function PlotService.TeleportToBiomes(player: Player): (boolean, string?)
+	local landing = PlotService.BiomesLanding()
+	if not landing then
+		return false, "BIOMES_BLOCKED"
+	end
+	return PlotService.TeleportTo(player, landing, "BIOMES_BLOCKED")
 end
 
 function PlotService.OnAssigned(fn: Listener): () -> ()
@@ -850,6 +887,14 @@ function PlotService.Start()
 	local channel = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if channel and channel:IsA("RemoteEvent") then
 		table.insert(serviceConnections, channel.OnServerEvent:Connect(function(player: Player, action: any)
+			-- BIOMES: the same shape, the verb alone; the server names the place.
+			if action == PLOT.BiomesAction then
+				local went, why = PlotService.TeleportToBiomes(player)
+				if not went and why then
+					ActionRefusal.send(player, why)
+				end
+				return
+			end
 			if action ~= PLOT.TeleportAction then
 				return
 			end

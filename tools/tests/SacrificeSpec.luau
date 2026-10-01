@@ -445,9 +445,17 @@ local ok, err = pcall(function()
 			table.insert(keys, k)
 		end
 		table.sort(keys)
-		check(table.concat(keys, ",") == "Attributes,ClientAction,Enabled,FacingDegrees,FolderName,Notices,Position,"
-				.. "PromptDistance,PromptHoldSeconds,QuoteSeconds,ReachStuds,ServerAction,SuccessTitle",
-			"the pedestal's config has no price, product or upgrade in it", table.concat(keys, ","))
+		-- FloatingWords (2026-09-30) is the words over the pedestal: display only.
+		local floating = {}
+		for k in pairs(CONFIG.FloatingWords or {}) do
+			table.insert(floating, k)
+		end
+		table.sort(floating)
+		check(table.concat(keys, ",") == "Attributes,ClientAction,Enabled,FacingDegrees,FloatingWords,FolderName,"
+				.. "Notices,Position,PromptDistance,PromptHoldSeconds,QuoteSeconds,ReachStuds,ServerAction,SuccessTitle"
+				and table.concat(floating, ",") == "Above,Colour,Height,NoteHeight,SubHeight,Text,Width",
+			"the pedestal's config has no price, product or upgrade in it, and its floating words only words",
+			table.concat(keys, ",") .. " / " .. table.concat(floating, ","))
 
 		-- THE WORDS. NoticeSpec's two rules for a refusal's notice, held here for
 		-- the pedestal's: HudLayoutSpec measures the same lines on every phone.

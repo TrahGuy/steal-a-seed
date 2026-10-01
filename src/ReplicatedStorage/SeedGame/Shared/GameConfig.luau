@@ -312,6 +312,26 @@ GameConfig.Plot = {
 	TeleportGroundProbe = 24,
 
 	--==========================================================================
+	-- BIOMES (PlotService.TeleportToBiomes), 2026-09-30, the owner's brief
+	--
+	-- One button, ONE destination: the GREENHOLLOW ENTRANCE, where the road
+	-- begins. The verb carries nothing, like TELEPORT TO PLOT's; the landing is
+	-- the server's (PlotService.BiomesLanding): on the road's centre line, this
+	-- many studs inside the red line -- so still the Safe Zone, which every
+	-- TeleportTo landing must be -- at the spawn height, facing down the road
+	-- through Greenhollow's gate. No other biome has a destination: the rest
+	-- of the road is walked.
+	--
+	-- Surveyed from the map 2026-09-30: nothing collidable near that spot but
+	-- the field under it and the corridor's walls 70 studs to either side; the
+	-- gate's bar is 36 up and the red line a flat decal; the nearest decor
+	-- stands 25 studs off the centre line, past the line; Greenhollow's one nest
+	-- and its pods are in the far corner, over 250 studs on.
+	--==========================================================================
+	BiomesAction = "TeleportToBiomes",
+	BiomesLandingInset = 10,
+
+	--==========================================================================
 	-- THE BED
 	--
 	-- ONE continuous bed of soil inside a raised wooden border, from the owner's
@@ -368,11 +388,13 @@ GameConfig.Plot = {
 	SideBed = {
 		-- How much wider the plot gets, on the +X local side.
 		--
-		-- WIDE RATHER THAN LONG, and that is the treadmill's doing. Measured in
-		-- Edit, every plot's mill occupies local X 24.6 to 43.8 at Z -43.4 to
-		-- -19 -- the same side as this wing, in the plot's front half. A wing
-		-- reaching forward past Z = -19 fenced the mill in: the first build of
-		-- this came out with 0.93 studs between plot and treadmill.
+		-- WIDE RATHER THAN LONG, and that is the treadmill's doing. The mill
+		-- stands on this same side, in the plot's front: since 2026-09-30 from
+		-- 0.9 to 23.6 studs behind the gate (Mill.Place). A wing reaching
+		-- forward past that fences the mill in: the first build of this came
+		-- out with 0.93 studs between plot and treadmill, and until 2026-09-30
+		-- the wing's fence on Levels 3 and 4 ran through the mill's back.
+		-- MillPlacementSpec holds every tier clear of every level's fences.
 		--
 		-- So the wing starts BEHIND the mill and takes its area back across
 		-- instead. Sideways is the direction with room -- the ring's arc grows
@@ -384,8 +406,10 @@ GameConfig.Plot = {
 		--==================================================================
 		-- THE WING'S FENCE MAY NOT REACH FORWARD OF THIS
 		--
-		-- The mill's rear face is at local Z = -19. This is that, plus room to
-		-- walk between the two, and it is what caps the row counts below.
+		-- In the LEVEL'S OWN frame, so on its own it only kept the mill clear at
+		-- Level 5, where it was measured (the plot grows back from a fixed gate
+		-- and the mill does not move). The mill's forward placement (Mill.Place)
+		-- is what keeps Levels 3 and 4 clear; MillPlacementSpec checks both.
 		--==================================================================
 		WingFrontZ = -15,
 		-- Physical soil rows per level. Nothing below Level 3 has a wing.
@@ -755,6 +779,34 @@ GameConfig.Sacrifice = {
 		FAILED = { title = "NOTHING TAKEN", detail = "The pedestal couldn't start. Try again." },
 	},
 	SuccessTitle = "POD SACRIFICED",
+	--==========================================================================
+	-- THE WORDS THAT FLOAT OVER IT (2026-09-30, the owner's ask; reworked
+	-- 2026-10-01)
+	--
+	-- Shown to every player all the time now, ready or not. Drawn like the
+	-- wheel's sign (FloatingSign), in one plain colour, with a smaller second
+	-- line of what it buys -- written from the pedestal's own numbers by
+	-- sacrificeBoostTitle, so the two cannot disagree -- and a third, the note:
+	-- sacrificeExplain's one sentence while that player's pedestal is ready, or
+	-- how long until it is while it recharges.
+	--
+	-- Width, Height, SubHeight and NoteHeight are the lines' boxes in studs
+	-- (letters 1.9 studs, just under the wheel's 2.0; the second line 1.3; the
+	-- sentence two lines of about 0.7): a quarter bigger than they were, so they
+	-- still read zoomed out. Above is the middle of all three over the offering
+	-- bowl, high enough that the box starts well above the prompt drawn over
+	-- the bowl even on a phone -- and the note, not the "+50%", is the line
+	-- nearest to it.
+	--==========================================================================
+	FloatingWords = {
+		Text = "SACRIFICE A POD!",
+		Colour = Color3.fromRGB(140, 255, 106), -- #8CFF6A
+		Width = 14.5,
+		Height = 2.6,
+		SubHeight = 1.3,
+		NoteHeight = 1.5,
+		Above = 7.8,
+	},
 }
 
 -- The boost row's words, in one place: BonusChestUI draws them and
@@ -780,6 +832,12 @@ end
 function GameConfig.sacrificeOffer(multiplier: number, seconds: number): string
 	return string.format("+%d%% garden income for %s", math.floor((multiplier - 1) * 100 + 0.5),
 		GameConfig.sacrificeSpan(seconds))
+end
+
+-- The one sentence the pedestal's floating words carry while it is ready:
+-- "Sacrifice one owned, banked pod for +50% garden income for 45 seconds."
+function GameConfig.sacrificeExplain(multiplier: number, seconds: number): string
+	return "Sacrifice one owned, banked pod for " .. GameConfig.sacrificeOffer(multiplier, seconds) .. "."
 end
 
 -- The COOLDOWN notice's next step: the time left, as the sign counts it.
@@ -1058,6 +1116,10 @@ GameConfig.Attributes = {
 	-- The saved GameConfig.MenuSize option id, stamped from the profile the way
 	-- WalkMode is. Read by every menu (UIKit.menuScale).
 	MenuSize = "MenuSize",
+	-- The like reminder's saved state, stamped from the profile the same way:
+	-- "pending" (earned with the hatch bonus, not yet shown), "shown", or nil
+	-- (GameConfig.HatchBonus). Read by HatchBonusUI.
+	LikeReminder = "LikeReminder",
 }
 
 --==============================================================================
@@ -1118,6 +1180,214 @@ GameConfig.MenuSize = {
 		{ Id = "larger", Label = "LARGER", Scale = 1.3 },
 	},
 }
+
+--==============================================================================
+-- THE HATCH BONUS AND THE LIKE REMINDER (2026-10-01, the owner's brief)
+--
+-- ONE free wheel spin per player, once, for a SUCCESSFUL hatch -- the first
+-- after this update. It is the hatch's reward and never depends on liking the
+-- game.
+--
+--   * Two names for the one bonus, and nobody gets both. A player who had
+--     never hatched gets it on that first hatch: FIRST HATCH BONUS! One whose
+--     saved progress says they had -- Tutorial.Done.hatch, read before this
+--     hatch is recorded and re-derived on every load from the Almanac, the bag
+--     and the garden -- gets it on their next: WELCOME BACK BONUS! Joining
+--     grants nothing; a refused or failed hatch grants nothing.
+--   * The spin goes on the wheel's EARNED balance (WheelService.
+--     GrantHatchBonus) and never touches the obby's daily allowance. The spin,
+--     the claimed marker and the reminder's "pending" are written in one step,
+--     so every save has all three or none. A progress reset keeps the marker
+--     and the reminder's state.
+--   * Its notice waits for the roll, the plant's reveal and the guide's
+--     congratulations (HatchBonusUI). Once it and any guide message have gone,
+--     a small notice the player can dismiss asks "Enjoying Podnappers? Leave
+--     us a like!" -- once per player, saved as shown, still pending on the
+--     next visit if they left first. Nothing detects a like, nothing is
+--     promised for one, and a pending reminder never grants another spin.
+--==============================================================================
+GameConfig.HatchBonus = {
+	FirstTitle = "FIRST HATCH BONUS!",
+	WelcomeTitle = "WELCOME BACK BONUS!",
+	Detail = "You earned 1 free wheel spin.",
+	-- After the plant's reveal and any congratulations, this much more before
+	-- the notice: they read as two moments, not one crowd.
+	BeatSeconds = 0.6,
+	Reminder = {
+		Title = "ENJOYING PODNAPPERS?",
+		Detail = "Leave us a like!",
+		-- Up this long unless dismissed sooner (Notice's `dismissible`).
+		Seconds = 10,
+		-- The client reports it shown once it has been up this long, or when it
+		-- is dismissed sooner.
+		ShownAfter = 2,
+		-- A reminder pending from an earlier visit waits at least this long after
+		-- the body arrives, and then for a calm moment: in the Safe Zone, no
+		-- panel, no guide message, no notice, no pod in the arms.
+		CalmSeconds = 20,
+		-- client -> server on GameEvent, carrying nothing: "it was shown".
+		Action = "LikeReminderShown",
+	},
+}
+
+--==============================================================================
+-- THE COMMUNITY CHEST AND SPIN TICKETS (2026-10-01, the owner's brief)
+--
+-- A second chest on the hub deck, a stride from the Bonus Chest. Standing on
+-- the glowing circle in front of it asks the server first, once per visit to
+-- the circle: the server checks membership itself (CommunityService) and, for
+-- a member who has never claimed, gives `Spins` free spins ONCE per saved
+-- profile, on the wheel's EARNED balance (WheelService.GrantCommunity), saved
+-- in the same step as the permanent claimed flag -- no dialog. Only a
+-- non-member is shown Roblox's own community-join prompt
+-- (GroupService:PromptJoinAsync, on the client); when it closes the server
+-- checks again. A cancelled prompt grants nothing; a join Roblox has not
+-- confirmed yet is asked again a few times and then left for the player to
+-- retry, as is a check Roblox would not answer.
+--
+-- SPIN TICKETS are that earned balance shown in the hotbar: one stacked Tool,
+-- "Spin Ticket" with its count, built from WheelEarned and never a balance of
+-- its own (WheelService, SPIN TICKETS). Each funds one normal spin at the wheel.
+--
+-- PLACED from a survey of the deck's walks (2026-10-01): every straight walk
+-- from a plot's spawn pad to the stall, the sell boards, the wheel, both chests,
+-- the pedestal, the road and the obby passes at least 5 studs from the chest
+-- and 7.6 from the circle, and the circle stands clear of every prompt's reach.
+-- Closer to the Bonus Chest, a walk crosses the circle and a passer-by would be
+-- shown the prompt. It faces south, toward the rim, with the circle in front.
+--==============================================================================
+GameConfig.Community = {
+	-- CrazyCozy Games, the community that owns Podnappers (the owner, 2026-10-01).
+	GroupId = 744756221,
+	Spins = 5,
+	FolderName = "SeedCommunityChest",
+	Position = Vector3.new(-30.7, 0.5, -22.3),
+	-- The chest's front is its -Z (as the Bonus Chest's): 0 faces it south.
+	FacingDegrees = 0,
+	-- The circle: this far in front of the chest, this wide, lit.
+	PadAhead = 6.5,
+	PadRadius = 3,
+	PadColour = Color3.fromRGB(120, 255, 170),
+	-- How high above the circle a body still counts as standing on it.
+	PadReach = 6,
+	-- The words over the chest (CommunityChestUI, FloatingSign).
+	Title = "FREE",
+	Sub = "JOIN COMMUNITY · 5 FREE SPINS",
+	ClaimedTitle = "CLAIMED",
+	ClaimedSub = "THANKS FOR JOINING!",
+	SignAbove = 6.4,
+	SignWidth = 9,
+	SignHeight = 2.4,
+	SignSubHeight = 0.9,
+	-- A Roblox community join can take a moment to show: asked this many times,
+	-- this far apart, before the player is told to try again.
+	VerifyTries = 3,
+	VerifyGapSeconds = 2,
+	-- One check at a time per player, and not more often than this.
+	CheckCooldownSeconds = 3,
+	-- client -> server: "check me" (nothing else). server -> client: the outcome.
+	CheckAction = "CommunityCheck",
+	ResultAction = "CommunityResult",
+	-- The player attribute the chest reads for its claimed state.
+	ClaimedAttribute = "CommunityClaimed",
+	-- The hotbar's Tool for the earned balance.
+	TicketName = "Spin Ticket",
+	TicketHint = "Use at the Spin Wheel.",
+	ClaimedNotice = { Title = "COMMUNITY REWARD CLAIMED!", Detail = "+5 Spin Tickets" },
+}
+
+--==============================================================================
+-- ANNOUNCEMENTS AND RESTART NOTICES (2026-10-01, the owner's brief)
+--
+-- What every client may know: the words' limits, the Workspace attributes the
+-- server publishes the two notices on (AnnouncementService writes them,
+-- AnnouncementUI reads them -- so a player who joins or respawns late reads
+-- the same state), and the restart notice's wording. Who may announce, the
+-- cooldown, the messaging topic and the filter live on the server
+-- (AnnouncementService, AdminService), where no client reads them.
+--
+-- Everything a notice carries is TEXT: drawn in a TextLabel with RichText off,
+-- never run, required or parsed for anything.
+--==============================================================================
+GameConfig.Announce = {
+	MaxChars = 180,
+	-- How long an admin announcement stays up.
+	ShowSeconds = 12,
+	Attributes = {
+		Id = "AnnounceId",
+		Text = "AnnounceText",
+		-- The sending admin's DisplayName, read off their Player by the server.
+		From = "AnnounceFrom",
+		-- Server time (Workspace:GetServerTimeNow) the announcement comes down.
+		Until = "AnnounceUntil",
+		RestartTitle = "RestartTitle",
+		-- Server time the restart is scheduled for.
+		RestartAt = "RestartAt",
+	},
+	-- Shown only if a broadcast somehow arrives without its sender's name.
+	Title = "ANNOUNCEMENT",
+	-- A DisplayName longer than this is not one (Roblox's are 20 at most).
+	MaxNameChars = 32,
+	-- The one short sound a new broadcast plays: the owner's own chime
+	-- (Sfx.Cues.AdminBroadcast), on the UI bus, so the player's SOUND FX
+	-- setting decides its level and mute.
+	Chime = "AdminBroadcast",
+	-- A restart's custom message is shown after this; without one, the default.
+	RestartLead = "SERVER UPDATE — ",
+	RestartDefault = "Server restarting for an update.",
+	RestartMaxChars = 80,
+}
+
+--==============================================================================
+-- THE OWNER'S "ADMIN" TITLE (2026-10-01, the owner's ask)
+--
+-- Over ONE account's head, seen by everyone: the owner's, by UserId, decided on
+-- the server (AdminService.IsOwner, OwnerTitleService) -- never by a name. This
+-- block is only how it looks. OwnerTitleService builds it on the Head of each
+-- new character; OwnerTitleUI turns its rainbow on each viewer's screen
+-- (still, for a viewer with reduced motion). Cosmetic: nothing reads it.
+--
+-- Sized in pixels like a name tag, so it reads the same near and far, and gone
+-- past MaxDistance. It stands Rise studs over the head's middle and Lift of its
+-- own heights higher still: just over Roblox's own name tag and the speed pops.
+-- TrapUI's countdown (3.4 studs up) would land on it, so a viewer's copy steps
+-- aside while that player's TrappedUntil runs (OwnerTitleUI). The first try
+-- stood it over the countdown's slot instead -- 3.4 and 1.4 -- and that was
+-- nearly 200 px over the head of a player a camera's length away.
+--==============================================================================
+GameConfig.OwnerTitle = {
+	Name = "SeedOwnerTitle",
+	Tag = "SeedOwnerTitle",
+	Text = "ADMIN",
+	Rise = 2.4,
+	Lift = 0.9,
+	Size = Vector2.new(140, 34),
+	TextSize = 30,
+	MaxDistance = 100,
+	-- One turn of the rainbow's hues, as the broadcast name and FREE drift.
+	DriftSeconds = 7,
+}
+
+-- Whether a broadcast showing now sounds its chime: once per id on this client
+-- (`heard` remembers), and never for one already up when the client started --
+-- a late joiner reads it in silence. Anything that is not an id never sounds.
+function GameConfig.announceChime(heard: { [string]: boolean }, id: any, starting: boolean): boolean
+	if type(id) ~= "string" or id == "" or heard[id] then
+		return false
+	end
+	heard[id] = true
+	return not starting
+end
+
+-- "Restarting in 05:00", and "Restarting shortly…" from zero on: the notice
+-- never says the restart has happened, because only Roblox does that.
+function GameConfig.restartCountdown(secondsLeft: number): string
+	if secondsLeft ~= secondsLeft or secondsLeft <= 0 then
+		return "Restarting shortly…"
+	end
+	local s = math.ceil(secondsLeft)
+	return string.format("Restarting in %02d:%02d", s // 60, s % 60)
+end
 
 -- The scale an option id stands for, or nil for anything that is not one.
 function GameConfig.menuSizeScale(id: any): number?
@@ -2214,6 +2484,18 @@ GameConfig.Parent = {
 	-- and stopping is precisely what it wants.
 	--==========================================================================
 	ChaseOvershootStuds = 60,
+	--==========================================================================
+	-- AND CLOSE IN, IT AIMS WHERE YOU WILL BE (2026-10-01)
+	--
+	-- The overshoot runs along the line to the target's position at the last
+	-- tick. Within this many studs that line is bent toward where the target
+	-- will be one tick later (NestService, GuardianPursuit.heading), so a player
+	-- strafing round a guardian at arm's length is not chased round in circles
+	-- by orders that are always a tick behind. The lead is one tick of the
+	-- target's own measured motion and never longer than the gap; at range, and
+	-- for anybody running straight away, the line is the same one it always was.
+	--==========================================================================
+	ChaseLeadStuds = 30,
 	-- Seconds it holds you before the throw. Long enough to read what happened.
 
 	--==========================================================================
@@ -3092,6 +3374,26 @@ GameConfig.Mill = {
 	},
 	StartingTier = 1,
 
+	--==========================================================================
+	-- WHERE EACH PLOT'S MILL STANDS (moved 2026-09-30, the owner's choice)
+	--
+	-- Beside the plot's right-hand fence, measured from the GATE, which never
+	-- moves (MapService.ResizePlot): `Side` studs out past the plot's half
+	-- width, `Behind` studs back from the gate line, `Lift` up; the plot's own
+	-- facing. GameConfig.millCFrameFor is the one formula.
+	--
+	-- It stood 11 out and 17.6 back. On a Level 3 or 4 plot the side wing's
+	-- fence, 25.4 back from the gate, then ran through the back 4.5 studs of
+	-- every tier, and tier 1's compost bin cut 0.18 into the right fence at every
+	-- level. Measured over all ten tiers (MillPlacementSpec): every tier's rear
+	-- is its step, 11.5 behind the centre (tier 2's stones now lie beside it),
+	-- and its front-most decor 11.2 ahead. So at 12.1 back the mill spans 0.9 to
+	-- 23.6 behind the gate: 1 stud short of the wing fence's front face on
+	-- Levels 3 and 4, and behind the gate line. 12 out puts tier 1's bin, the
+	-- widest thing on the plot's side below fence height, 0.8 off the fence.
+	--==========================================================================
+	Place = { Side = 12, Behind = 12.1, Lift = 0.6 },
+
 	-- What the belt creeps at with nobody on it. Not zero: a dead mill reads as
 	-- broken, and a slow drift says "this is a machine and it is waiting".
 	IdleStuds = 1.6,
@@ -3212,10 +3514,12 @@ GameConfig.Mill = {
 		--             frame, so the post meets the grass. The deck's own
 		--             underside is at -1.13, i.e. deliberately buried.
 		--
-		--   Z -12.6   is clear of EVERY tier. Swept all ten in one-stud slices:
-		--             nothing any tier builds reaches past Z -11.5, and the
-		--             widest -- tier 9's Astral ring at 14.7 studs -- stops
-		--             there too. Unchanged from the original placement.
+		--   Z -11.6   is clear of EVERY tier (MillSignSpec measures it across the
+		--             board's own span) and, with the mill at Place.Behind 12.1,
+		--             keeps the board's front face 0.3 behind the gate line.
+		--             It was -12.6 until the mill moved forward (2026-09-30);
+		--             measured then, nothing any tier builds reaches past
+		--             Z -11.2.
 		--
 		--   X -5.5    is the new part. Centred, the board stood square across
 		--             the front of your own machine. The plot is on the mill's
@@ -3225,10 +3529,10 @@ GameConfig.Mill = {
 		--             through.
 		--
 		-- The board is 9 * Scale = 6.84 wide, so at -5.5 it spans -8.92 to
-		-- -2.08. The plot fence is at -10.2: 1.28 studs of daylight. Pushing
-		-- further out would read better still and does not fit.
+		-- -2.08. The plot fence's outer face is at -11.2 (Place.Side 12): 2.28
+		-- studs of daylight.
 		--======================================================================
-		Offset = Vector3.new(-5.5, -0.6, -12.6),
+		Offset = Vector3.new(-5.5, -0.6, -11.6),
 		YawDegrees = 0,
 		--======================================================================
 		-- SLIGHTLY SMALLER
@@ -4576,6 +4880,35 @@ GameConfig.BonusChest = {
 	FacingDegrees = -90,
 	PromptDistance = 10,
 	PromptHoldSeconds = 0.35,
+	--==========================================================================
+	-- THE WORDS THAT FLOAT OVER IT (2026-09-30, the owner's ask; reworked
+	-- 2026-10-01)
+	--
+	-- "FREE CHEST" in gold, up through the cooldown as well as when it is ready,
+	-- with that player's own state under it: ReadyText when they can claim, the
+	-- time left (WaitText and the clock) while it recharges, OpeningText while
+	-- their claim is on its way. Hidden altogether while it is LOCKED (the guide
+	-- unfinished): nothing advertises a chest that player cannot open. Drawn like
+	-- the wheel's "SPIN THE WHEEL!" (FloatingSign), one plain colour. The chest
+	-- can give different rewards, so the words never call it a boost.
+	--
+	-- Width, Height and SubHeight are the lines' boxes in studs; the words come
+	-- out 1.9 studs tall, just under the wheel's 2.0, and the second line 1.
+	-- Above is the middle of both over the chest's pivot, over the board behind
+	-- it (whose rim tops out at 7.45), so the board and the prompt stay clear.
+	--==========================================================================
+	FloatingWords = {
+		Text = "FREE CHEST",
+		Colour = Color3.fromRGB(255, 211, 77), -- #FFD34D
+		Width = 11,
+		Height = 1.9,
+		SubHeight = 1,
+		Above = 9.8,
+		Behind = 2.6,
+		ReadyText = "READY TO CLAIM!",
+		WaitText = "NEXT IN ",
+		OpeningText = "OPENING...",
+	},
 }
 
 function GameConfig.bonusChestReward(id: any): any
@@ -5636,6 +5969,22 @@ GameConfig.Sfx = {
 			volume = 1.08, clip = 0.48, fadeOut = 0.08, group = "UI",
 		},
 		NoticeInfo = { id = "rbxassetid://80357294905654", volume = 0.47, group = "UI" },
+
+		--==================================================================
+		-- THE ADMIN BROADCAST'S CHIME (2026-10-01): the owner's
+		-- "adminmessagenotif", uploaded under CrazyCozy Games, so it loads with
+		-- no grant (Studio load test: Success, 0.88 s). Played once per new
+		-- broadcast by AnnouncementUI (GameConfig.Announce.Chime).
+		--
+		-- Levelled by PlaybackLoudness in Studio Play, each at Volume 1 with no
+		-- bus: this one peaks at 395 with a mean of 194 over its loud 0.4 s,
+		-- against NoticeInfo's 204 / ~80 and NoticeSuccess's 266 / 139. At 0.30
+		-- it sits where the success chime is played (0.43): peak ~118, mean
+		-- ~58 -- a little more present than the info ping, as a message from
+		-- a person should be, and no louder than a notice. No window: it
+		-- starts at once, and its last half second is its own quiet tail.
+		--==================================================================
+		AdminBroadcast = { id = "rbxassetid://119120354459025", volume = 0.30, group = "UI" },
 
 		-- THE RARE REVEAL'S ACCENT: the owner's RARE PLANT REVEAL ACCENT, uploaded
 		-- to the same group. Played with the creature, not the timer (HatchFX),
@@ -6708,6 +7057,14 @@ GameConfig.Save = {
 function GameConfig.plotDepthFor(rows: number): number
 	local P = GameConfig.Plot
 	return P.BedMargin * 2 + rows * P.RowDepth + (rows - 1) * P.RowGap
+end
+
+-- Where a plot's mill stands, from the plot's GATE frame (the gate line's
+-- middle, the plot's own facing): GameConfig.Mill.Place. The gate never moves,
+-- so neither does the mill, at any level.
+function GameConfig.millCFrameFor(gateCF: CFrame): CFrame
+	local P = GameConfig.Mill.Place
+	return gateCF * CFrame.new(GameConfig.Plot.Width * 0.5 + P.Side, P.Lift, P.Behind)
 end
 
 --==============================================================================

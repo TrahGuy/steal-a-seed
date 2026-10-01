@@ -239,8 +239,9 @@ function dressPlot(model: Model, cf: CFrame, level: number)
 	-- second code path.
 	--
 	-- `wingZ0` is where the fence steps out: far enough behind the bed's front
-	-- edge to leave grass, and always well behind the gate. Measured at Level 5
-	-- it is 13.2 studs back from the front fence; at Level 3, 25.4.
+	-- edge to leave grass, and always well behind the gate: 25.4 studs back from
+	-- the front fence on Levels 3 and 4, 37.6 on Level 5. The mill beside the
+	-- plot ends 23.6 back (GameConfig.Mill.Place).
 	--==========================================================================
 	local SIDE = PLOT.SideBed
 	local sideRows = GameConfig.plotSideRowsForTier(level)
@@ -1712,9 +1713,13 @@ function MapService.Init()
 		-- own doorway. Alongside the right-hand fence it is out of the way and
 		-- still obviously yours.
 		--
-		-- Placed off the plot's own CFrame, so it swings round with the plot and
-		-- needs no angle maths of its own.
-		buildTreadmill(id, cf * CFrame.new(PLOT.Width * 0.5 + 11, 0.6, 0), plots)
+		-- Placed off the plot's GATE (GameConfig.Mill.Place, millCFrameFor), so
+		-- it swings round with the plot, needs no angle maths of its own, and
+		-- stands in the same place at every level: the gate never moves. Moved
+		-- forward and a stud out on 2026-09-30, clear of every fence a plot of
+		-- any level builds (MillPlacementSpec).
+		local startDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(GameConfig.StartingPlotTier))
+		buildTreadmill(id, GameConfig.millCFrameFor(cf * CFrame.new(0, 0, -startDepth * 0.5)), plots)
 
 		--==================================================================
 		-- THE PLOT'S UPGRADE BOARD, BESIDE ITS GATE

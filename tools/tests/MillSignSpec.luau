@@ -148,10 +148,11 @@ check(math.abs(climbed - 2.6 * S) < 1e-3, string.format(
 -- CLEARANCE AT THE CHOSEN PLACE
 --
 -- The board is off the front-left corner. It must not end up inside the machine
--- on any tier, and it must not cross the plot fence, which stands 10.2 studs to
--- the mill's -X on every plot.
+-- on any tier, and it must not cross the plot fence, whose outer face stands
+-- Place.Side less half the fence's 1.6 thickness to the mill's -X on every plot
+-- (11.2 since the mill moved a stud out, 2026-09-30).
 --==============================================================================
-local FENCE_X = -10.2
+local FENCE_X = -(MILL.Place.Side - 0.8)
 local halfBoard = 9 * S * 0.5
 local boardMinX = SIGN.Offset.X - halfBoard
 check(boardMinX > FENCE_X, string.format(

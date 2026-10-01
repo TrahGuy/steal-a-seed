@@ -2685,6 +2685,11 @@ function CarryService.Start()
 		RefreshWalkSpeed = CarryService.RefreshWalkSpeed,
 		-- So NestService's LoadCharacter cannot record the empty Backpack it makes.
 		FreezeHeld = CarryService.FreezeHeld,
+		-- So a guardian remembers a thief only while they still carry its pod.
+		CarriedFrom = function(player: Player): string?
+			local held = carried[player]
+			return if held then held.fromNest else nil
+		end,
 	})
 
 	--==========================================================================

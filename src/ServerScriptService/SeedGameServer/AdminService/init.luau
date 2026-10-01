@@ -44,9 +44,10 @@
 --
 --   1. the sender is one of the two UserIds
 --   2. one request a second per admin, whatever it is
---   3. the action is one of the five
+--   3. the action is one of the six
 --   4. Start Night and Start Day go to WorldCycleService from here: they act
---      on the whole server and name nobody
+--      on the whole server and name nobody; Announce goes to
+--      AnnouncementService.Send (2026-10-01), which checks its own words
 --   5. otherwise the target is a UserId of a player in THIS server, now
 --   6. the target's profile has loaded
 --   7. for cash and Speed, a finite whole number from 1 to the limit; for a
@@ -74,6 +75,7 @@ local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local CombatService = require(script.Parent:WaitForChild("CombatService"))
 local WeaponShopService = require(script.Parent:WaitForChild("WeaponShopService"))
 local WorldCycleService = require(script.Parent:WaitForChild("WorldCycleService"))
+local AnnouncementService = require(script.Parent:WaitForChild("AnnouncementService"))
 
 local SAVE = GameConfig.Save
 
@@ -113,6 +115,10 @@ local ACTIONS: { [string]: boolean } = {
 	ResetPlayerProgress = true,
 	StartNight = true,
 	StartDay = true,
+	-- 2026-10-01: an announcement, to this server or every server. The checks
+	-- past this file's -- the words, the cooldown, the filter -- are
+	-- AnnouncementService.Send's; it is reached from nowhere but here.
+	Announce = true,
 }
 -- The two that act on the whole server rather than on a player: no target.
 local WHOLE_SERVER: { [string]: boolean } = {
@@ -173,6 +179,21 @@ AdminService.commas = commas
 function AdminService.IsAdmin(player: any): boolean
 	local id = userIdOf(player)
 	return id ~= nil and ALLOWED[id] ~= nil
+end
+
+--==============================================================================
+-- WHICH OF THE TWO IS THE OWNER (2026-10-01)
+--
+-- The owner's own account -- the one they play and build in Studio as -- by
+-- UserId, and only while it is on the allowlist above. Read by nothing but the
+-- cosmetic ADMIN title over their head (OwnerTitleService): both accounts keep
+-- exactly the same console and the same powers.
+--==============================================================================
+local OWNER_USER_ID = 4119740186
+
+function AdminService.IsOwner(player: any): boolean
+	local id = userIdOf(player)
+	return id ~= nil and id == OWNER_USER_ID and ALLOWED[id] ~= nil
 end
 
 -- Who is in this server by UserId. A seam: AdminSpec, which has no real
@@ -476,6 +497,15 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 	end
 	if WHOLE_SERVER[action] then
 		return changePhase(sender, action)
+	end
+	-- Announce rides the same remote with its own three words: the scope
+	-- ("server" or "all"), the message, and whether ALL SERVERS was confirmed.
+	if action == "Announce" then
+		local sent, message, shownId = AnnouncementService.Send(sender, targetId, amount, confirmName)
+		if shownId then
+			record(sender, nil, "Announce:" .. tostring(targetId) .. (if sent then "" else ":here-only"), nil, nil)
+		end
+		return { ok = sent, message = message }
 	end
 	if type(targetId) ~= "number" or targetId ~= targetId or targetId <= 0
 		or targetId ~= math.floor(targetId) then

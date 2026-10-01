@@ -330,6 +330,8 @@ local HOTBAR_ASSIGNABLE: { [string]: boolean } = {
 	plant = true,
 	bat = false,
 	trap = false,
+	-- The Spin Tickets (2026-10-01): one stacked Tool, placed like a plant.
+	ticket = true,
 }
 
 local function assignable(tool: Tool, kind: string): boolean
@@ -389,6 +391,25 @@ local function classify(tool: Tool): Slot?
 			canHotbar = assignable(tool, "plant"),
 		}
 	end
+	--==========================================================================
+	-- THE SPIN TICKETS (2026-10-01; GameConfig.Community)
+	--
+	-- One stacked Tool the server keeps equal to the wheel's earned balance
+	-- (WheelService, SPIN TICKETS); its count is on its card's chip. First in
+	-- the order, so the belt's auto-fill gives it the first free slot; where the
+	-- player has pinned every slot it is in the Bag. Never a plant: no storage.
+	--==========================================================================
+	if tool:GetAttribute("SpinTicket") == true then
+		return {
+			tool = tool,
+			kind = "ticket",
+			key = "t:spin",
+			label = tool.Name,
+			item = nil,
+			rank = 0,
+			canHotbar = assignable(tool, "ticket"),
+		}
+	end
 	return nil
 end
 
@@ -409,6 +430,31 @@ local function builderFor(slot: Slot): ((Instance) -> Model?)?
 	if weapon then
 		return function(parent)
 			return WeaponModel.BuildPreview(weapon, parent)
+		end
+	end
+	-- A Spin Ticket: a gold ticket in blocks, with the wheel's colours on its stub.
+	if slot.kind == "ticket" then
+		return function(parent)
+			local model = Instance.new("Model")
+			model.Name = "SpinTicketPreview"
+			local function block(name: string, size: Vector3, cf: CFrame, colour: Color3)
+				local p = Instance.new("Part")
+				p.Name = name
+				p.Anchored = true
+				p.Size = size
+				p.CFrame = cf
+				p.Color = colour
+				p.Material = Enum.Material.SmoothPlastic
+				p.Parent = model
+				return p
+			end
+			local body = block("Ticket", Vector3.new(3.2, 1.8, 0.2), CFrame.new(), Color3.fromRGB(255, 206, 84))
+			block("Stub", Vector3.new(0.8, 1.6, 0.24), CFrame.new(1.05, 0, 0), Color3.fromRGB(240, 120, 90))
+			block("Band", Vector3.new(1.9, 0.3, 0.24), CFrame.new(-0.45, 0.45, 0), Color3.fromRGB(90, 176, 255))
+			block("Band", Vector3.new(1.9, 0.3, 0.24), CFrame.new(-0.45, -0.45, 0), Color3.fromRGB(110, 220, 110))
+			model.PrimaryPart = body
+			model.Parent = parent
+			return model
 		end
 	end
 	local speciesId = slot.tool:GetAttribute("SpeciesId")
@@ -3153,6 +3199,10 @@ local function refreshHotbar()
 							chipColour = GameConfig.RarityColor[species.Rarity] or HOT.Caption
 						end
 					end
+				elseif data.kind == "ticket" then
+					-- The stack's count (2026-10-01): the wheel's earned balance.
+					chipText = "x" .. tostring(math.floor(tonumber(data.tool:GetAttribute("TicketCount")) or 0))
+					chipColour = Color3.fromRGB(255, 206, 84)
 				else
 					local fixed = HOT.Tags[data.kind]
 					chipText = if fixed then fixed.text else string.upper(data.kind)
@@ -3683,6 +3733,24 @@ local function refreshBag()
 				id = if row.tool then toolOrder[row.tool] or 0 else 0,
 			}
 		end)
+		-- THE SPIN TICKETS (2026-10-01), first, whenever no belt slot holds
+		-- them: so a hotbar pinned full of plants never hides them.
+		for _, slot in ipairs(liveSlots) do
+			if slot.kind == "ticket" and not claimed[slot.tool] then
+				local count = tonumber(slot.tool:GetAttribute("TicketCount")) or 0
+				table.insert(rows, 1, {
+					key = slot.key,
+					label = string.format("%s x%d", slot.label, count),
+					kind = "ticket",
+					build = builderFor(slot),
+					state = if slot.tool == held then "IN HAND" else "HOLD",
+					lit = slot.tool == held,
+					item = nil,
+					tool = slot.tool,
+					canHotbar = slot.canHotbar,
+				})
+			end
+		end
 	end
 
 	--==========================================================================
@@ -4424,7 +4492,7 @@ local function watchTools(container: Instance)
 				-- RevealAt comes off the Tool when its roll is over: the card
 				-- that was ??? is the plant from that repaint on.
 				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched"
-					or name == HatchRoll.Attribute then
+					or name == HatchRoll.Attribute or name == "TicketCount" then
 					redraw()
 				end
 			end)
