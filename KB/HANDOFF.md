@@ -1,5 +1,726 @@
 # Steal a Seed — Session Handoff
 
+## Guardian stuck at the road's mouth after a hit — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE; ONE PLAYER)
+
+**The bug:** after a hit near the biome entrance, the guardian carried on outside the biome and stood against the
+entrance wall.
+
+**The cause, measured in Play before any change.** Every biome entrance is the corridor's continuous side walls;
+the arches don't collide. The only wall that ENDS is at the road's mouth (z −170), where the field starts.
+1. **The hit never cancelled the chase's last order.**
+   - That order is a point `ChaseOvershootStuds` (60) PAST the thief.
+   - For the whole throw `busy` makes the tick return before any movement code.
+   - So the Humanoid kept running to it at full chase speed: 44–62 studs after the hit (Greenhollow 20/s,
+     Dustbowl 87/s).
+   - Near the mouth that is out of the corridor and up to 57 studs into the Safe Zone, where it then stood
+     waiting, still labelled "chasing".
+2. **The walk home was a straight `MoveTo(nest)`.**
+   - From the field beside a wall's end, that line runs into the end face head-on.
+   - Reproduced: Dustbowl's guardian, thief hugging the right wall, stood at (76.1, −168.4), 548 studs from
+     home, still "returning", 30+ s at speed 0.
+   - Other runs scraped the corner (speed dipping to 13–29) and got through by a stud or two.
+   - All guardians are small (flat collision reach 3.2–4.0), so this is geometry, not size.
+
+**The fix:**
+- **At the confirmed hit** (`step`, where `busy` is set): `MoveTo` its own position and zero the horizontal
+  velocity. It stands where it hit for the throw. The next remembered thief, or the walk home, gives the next
+  order (endChase, unchanged).
+- **`walkHome`** (also the haul's walk):
+  - It goes through `GuardianPursuit.routeHome` (pure). Inside the corridor it's the same straight line.
+  - From the field: a point in front of the mouth, a stud inside `CorridorWidth/2 − reach − 1.5`, then in, then
+    home. Reach is measured once from the rig's colliding parts (`nest.reach`).
+  - Every order but home is replaced BEFORE the guardian reaches it: a Humanoid stops ~0.5 stud short and
+    stands. The first version deadlocked a hauler 0.5 stud off a too-tight lined-up test, in Play; it was
+    fixed, and the spec now treats arriving at any order but home as a deadlock.
+- Unchanged:
+  - collisions, the contact sweep, GrabStuds, server ownership;
+  - remembered thieves, the ragdoll and confiscation;
+  - no teleports, no attack through walls.
+
+**Checks.**
+- GuardianPursuitSpec 58/58, 11 new:
+  - inside → straight;
+  - from the measured stuck spot → in front, in, home;
+  - stopping short still counts as lined up;
+  - 61 field spots × 2 nests: always home, never within reach of a wall;
+  - the old straight line from the stuck spot does hit the wall;
+  - the real NestService tick routes a returning guardian from that spot;
+  - wiring: the stop at the hit comes before the throw, and walkHome uses routeHome.
+  - An offline replay of the old 0.5-stud version over the same grid: 16 of 122 walks deadlock.
+- GuardianConfiscateSpec 88/88. GuardianRagdollSpec 120/120. No full suite.
+- **Play after the fix** (test store, guard SAFE):
+  - Dustbowl, right wall (the stuck case), and Greenhollow, left wall: the guardian moved 0.0 studs during the
+    throw, never entered the Safe Zone, and walked home and slept.
+  - A straight-line catch by the nest still hits (2.7 s into the run) and returns.
+  - **The route, with a relocation:** the harness put the guardian at (−76, −168.4) at the hit, since a natural
+    hit no longer gets there. Tanglemire went in front of the mouth → inside → home.
+    - Once it left the pod behind (the 40% roll).
+    - Once it confiscated, hauled home by the route, and logged "returned … (arrived)". The ring was full, so the
+      pod was set down at the nest: one pod out, one pod back, the thief carrying nothing.
+- Rojo build OK.
+- **Not verified:** two players (a second thief remembered during the throw); a live server; a phone.
+
+**Rojo:** the background `rojo serve` (34872) hit its time limit and stopped mid-task, and a new one was started.
+- Studio's plugin stayed on the old session.
+- The two changed modules were handed to Studio by MCP (disk bytes, checksum-checked).
+- The probe says 142/142 scripts equal disk.
+- Studio does NOT follow disk again until someone presses Connect in its Rojo panel.
+- `ServerScriptService.EmberrootApprovalRunner` is in Studio and not on disk. It is not this work's; left alone.
+
+## Paid spins SWITCHED ON — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED BY AN AGENT; NOTHING BOUGHT)
+
+**The owner's word, 2026-10-01:** questionnaire done, and sales outside the game disabled for the three packs.
+- `WheelData.Paid.Enabled = true` — the existing switch, nothing else.
+- Kept as before:
+  - PolicyService gating (fail closed);
+  - REWARDS & ODDS in both places;
+  - `RobuxPrice`'s per-player prices;
+  - retired receipts paid once.
+- Tripwires flipped on purpose. Each spec now asserts ON, and the off behaviour keeps its checks on a switched-off
+  copy:
+  - WheelSpec 160/160: `loadWheel()` defaults to an off copy; a new check is that the shipped copy prompts x5 for
+    an eligible player and nothing for a restricted one.
+  - StoreSpec 28/28: the main copy is off; section 5's second copy is the shipped WheelData.
+  - SpinPurchaseSpec 49/49: new 1b, the shipped config end to end. An x5 prompt and receipt grants 5, saved; a
+    restricted player gets no prompt and the receipt is not acknowledged; an old +10 receipt pays 10 once.
+- Also run because they load the real services: HatchBonusSpec 41, HatchStorageSpec 208, StorageDoorsSpec 127.
+  All pass.
+- **Play** on the test store (SAFE; no preview attribute):
+  - the server says "paid spins ON (3 products)";
+  - `WheelPaidAllowed` is true;
+  - the Shop's three tiles are Active and Interactable at 8 / 35 / 75 with the icons, and REWARDS & ODDS is present;
+  - the wheel's GET SPINS is visible and active, with tiles at 8 / 35 / 75;
+  - nothing was pressed or bought.
+  - The E key at the wheel did not reach the prompt this time, so the panel was opened by the odds request.
+- Rojo build OK.
+- **Never run, needs a real purchase:**
+  - Roblox's real prompt;
+  - a real receipt and its grant on a live server;
+  - the prompt's price beside the tile's;
+  - a restricted region in Play.
+- **Publishes:** v1011 (05:47 UTC) predates the switch (06:33 UTC). The owner's next publish ships it, with every
+  other uncommitted change on `wip`.
+
+## Spin Ticket packs ×1 / ×5 / ×10 replace the two first spin products — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; PAID SPINS STILL SWITCHED OFF; NOTHING BOUGHT; STUDIO PLAY ON THE THROWAWAY TEST STORE WITH A STUDIO-ONLY PREVIEW)
+
+**Products** (`WheelData.Products`, the order the Shop and GET SPINS show):
+
+| Key | Product | Spins | List price | Icon |
+| --- | --- | --- | --- | --- |
+| `spin1` | 3715745320 "X1 Spin Ticket" | 1 | 19 | 74250574261417 |
+| `spin5` | 3715745407 "x5 Spin Tickets" | 5 | 85 | 129968452678126 |
+| `spin10` | 3715745552 "x10 Spin Tickets" | 10 | 180 | 109596534013386 (rainbow) |
+
+- The icons are the products' own `IconImageAssetId`s: the owner's uploads, from their user account, and all three
+  preload in Podnappers.
+- No pack is marked best value (two ×5 cost less than one ×10).
+- Roblox quoted the owner's account 8 / 35 / 75. The UI prints `RobuxPrice`'s per-player answer, never the list
+  price.
+
+**Retired** (`WheelData.RetiredProducts`): 3715369823 "+1 Spin" (1) and 3715370108 "+10 Spins" (10).
+- Not shown, not prompted, and their keys (`retired1`, `retired10`) are refused by `WheelBuy`.
+- `StoreService` indexes `WheelData.receiptProducts()` (sold + retired), so an outstanding old receipt still pays
+  exactly 1 or 10, once, through the same ledger — only while paid spins are on, like every spin receipt.
+
+**UI.**
+- **GET SPINS:** the card now has three upright tiles (icon, "×N TICKET(S)", per-player price).
+- **Shop:** a new SPIN TICKETS shelf in the shop's own tile style, with the owner's art.
+  - Shown only while `WheelPaidAllowed`, and priced only once shown.
+  - Tiles send `WheelBuy` + key, exactly like GET SPINS; the server opens the prompt, and the receipt grants.
+  - REWARDS & ODDS on its heading opens the wheel's Reward info anywhere: `WheelData.OpenOddsAttribute`, a
+    client-local request.
+  - `shop.fromShop` holds WheelUI's range closer off, and Back closes. The first try closed at once, because the
+    wheel panel shuts away from the wheel.
+
+**Still switched off.**
+- `WheelData.Paid.Enabled = false`. The owner's four steps in the paid-spins entry below still stand.
+- **Studio-only preview:** in Studio, a ReplicatedStorage attribute `SeedPaidSpinsStudioPreview = true` makes
+  `paidLive()` true for looking. A live server is never Studio. PolicyService still decides who may buy.
+
+**Checks.**
+- WheelSpec 159/159: three packs and their ids/icons, the retired two, no best value, prompts for 1/5/10, retired
+  keys forged.
+- SpinPurchaseSpec 45/45, new:
+  - as shipped, the ×5 and retired receipts are refused;
+  - the ×5 receipt grants 5, saved with its ledger entry;
+  - a duplicate delivery grants nothing more;
+  - a failed save retries until it lands and pays once;
+  - retired receipts pay 1 and 10 once;
+  - a retired key gets no prompt.
+- StoreSpec 28/28. No full suite. Rojo build OK.
+- **Play** (test store, guard SAFE, the preview on and then off again):
+  - the Shop shelf at 8 / 35 / 75 with the art;
+  - REWARDS & ODDS opens Reward info from the plot, and Back closes it;
+  - the GET SPINS card shows the same three at the same prices;
+  - no purchase pressed.
+
+**Sales blockers.**
+- The switch is off pending the owner's steps.
+- Roblox's own record (`GetProductInfo` from Studio, 2026-10-01) still reports BOTH retired products
+  `IsForSale = true`. The owner should re-check them in Creator Hub. Their receipts stay honoured either way.
+
+## The owner's rainbow ADMIN title; broadcasts as one "Name: message" line — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY; ONE PLAYER — NO SECOND REAL CLIENT)
+
+**ADMIN title.**
+- Over the owner's head only. `AdminService.IsOwner`: UserId 4119740186, and only while it is on the allowlist.
+  - The allowlist doesn't mark the owner. The id is the owner's per the project notes, and it is the account Studio
+    plays as (the console log names it).
+  - The other admin (11607308004) and everybody else get nothing.
+- `OwnerTitleService` (server, Priority 96) builds one tagged BillboardGui on the Head of every new owner character:
+  it clears any title the body already has first, and an old title dies with its old body. Everyone receives it with
+  the character.
+- **Look:** FredokaOne "ADMIN", dark outline 3, `WheelDraw.rainbow` fill, and a 7 px half-clear rainbow glow behind
+  the letters.
+  - Pixel-sized (140×34), MaxDistance 100.
+  - It stands 2.4 studs over the head's middle plus 0.9 of its own height, over Roblox's name tag and the speed pops.
+- `OwnerTitleUI` (each client) turns the hues once per 7 s while within 100 studs. It holds them still under reduced
+  motion (`StatusText.reducedMotion`). It hides its copy while TrapUI's countdown is over that player
+  (`TrappedUntil`), since that label stands 3.4 studs up.
+- Cosmetic only: no attribute, permission, physics or gameplay touched.
+- **Play checks:**
+  - one title, on the owner;
+  - `Apply` with the other admin's UserId and a stranger whose DisplayName is "ADMIN" built nothing;
+  - after a respawn, exactly one title; two more Applies on the same body, still one;
+  - hues moving, and still with reduced motion set locally;
+  - hidden during a TrappedUntil, back after;
+  - captures at about 12 and 35 studs.
+- **Not verified:**
+  - **A real second player's view.** Studio Play has one client; another player was checked only through stand-ins.
+  - **Roblox's own name tag in a capture.** Studio's capture doesn't draw engine name tags; clearance comes from
+    geometry: the title's foot is 2.4 studs plus 14 px up, about 8 px over a name tag's top even at 100 studs.
+- AdminSpec 79/79.
+
+**Broadcast restyle** (owner's reference).
+- One centred block, "Name: message", with no panel:
+  - all FredokaOne at one size (22 desktop, 17 compact);
+  - dark outlines;
+  - the name in the wheel's rainbow (drifting, still under reduced motion) with a matching soft rainbow glow;
+  - the colon and the words white.
+- A long message flows on under the first line, left-aligned in the centred block, with its first words always
+  beside the name (measured with TextService; a word too wide for a line breaks inside itself).
+- The name is a measured box holding its glow and letters, because an auto-sized label holding a scale-sized child
+  grew under a UIScale.
+- The restart notice is unchanged. Sound, filtering, sender, auth, cooldowns and dedupe are unchanged.
+  AnnouncementSpec 46/46.
+- **Play:** short and long messages on desktop and phone-sized (canvas 1.65), every one clear of the controls.
+
+## Admin announcements and server-restart notices — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY; NOTHING PUBLISHED TO MESSAGINGSERVICE; NO REAL RESTART)
+
+**Admin broadcast.**
+- The admin console has a new ANNOUNCEMENT TO PLAYERS section under DAY/NIGHT:
+  - THIS SERVER (the default) / ALL SERVERS;
+  - a message box with a counter, kept to 180 characters;
+  - SEND. ALL SERVERS needs YES, ALL SERVERS (or CANCEL; B on a pad).
+- It rides the console's existing RemoteFunction as a sixth action, `Announce`. AdminService.Handle checks the
+  allowlist (UserId) and its one-a-second limit first; nothing else reaches `AnnouncementService.Send`.
+- **Send checks:**
+  - scope;
+  - plain text (control characters made spaces, trimmed), not empty, at most 180 characters (counted as characters,
+    not bytes);
+  - "all" must be confirmed (also checked on the server);
+  - 15 s per admin, started only by an announcement that goes out;
+  - TextService `FilterStringAsync(PublicChat)` → `GetNonChatStringForBroadcastAsync`. A failed filter, or one that
+    leaves only #s, sends NOTHING.
+- **Delivery:**
+  - Shown here at once as Workspace attributes (`AnnounceId` / `AnnounceText` / `AnnounceUntil`, 12 s).
+  - ALL SERVERS: one `MessagingService:PublishAsync("SeedAnnouncements", {id, text, sentAt, expiresAt})` with a 60 s
+    life.
+  - Every server's subscription validates the payload: types, id shape, text length, times, life ≤ 60 s, no future
+    sentAt beyond 30 s skew.
+  - It drops seen ids (its own included) and expired ones.
+  - The reply says delivery is best-effort; a failed publish says "Shown in THIS server only". The admin log records
+    `Announce:server`, `Announce:all` or `Announce:all:here-only`.
+- **Studio never publishes or subscribes** (it would reach live servers).
+
+**Restart notices.**
+- `AnnouncementService` connects `game.ServerRestartScheduled(restartTime: DateTime, source: CloseReason,
+  attributes)`.
+- The title is `attributes.message` (cleaned to one line, cut to 80 characters) after "SERVER UPDATE — "; without a
+  usable string message it is "Server restarting for an update."
+- An unusable time means now. The notice goes out as `RestartTitle` / `RestartAt` (server time) on Workspace.
+- `AnnouncementUI` shows "Restarting in mm:ss", then "Restarting shortly…" from zero.
+- No teleports, kicks or restarts were added; Roblox's restart and SaveService's save on close are untouched.
+- **Creator Hub custom payload:** `{"message": "Guardian fixes"}`.
+
+**Banner** (`AnnouncementUI`):
+- Under the top centre column: below the boost row, and below the beginner guide's lines while they are up (it
+  moves when they go).
+- As wide as HudLayout.centreIn allows.
+- Translucent plates, RichText off, nothing Active, DisplayOrder 47.
+- Late joiners and respawns read the same attributes.
+
+**Checks.**
+- New `AnnouncementSpec` 32/32 (fake publisher, stand-in filter, moved clock, fixture board): authorization (a
+  forged name too), the words, filter failure and block, cooldown, publish and here-only, duplicate / expired /
+  malformed arrivals, the restart's custom / default / control-char / long / code-looking / invalid-time cases, and
+  the countdown wording.
+- AdminSpec 79/79. No full suite. Rojo build OK.
+- **Play** (SeedTest_20261001, guard SAFE), with the console's real remote and the restart handler called as the
+  event would call it:
+  - desktop banner clear of every button;
+  - phone-sized (canvas 1.65, touch) clear of every button, with the guide and without it;
+  - late join (the UI script relaunched) shows "Restarting in 03:05";
+  - a respawn keeps it;
+  - default message at zero shows "Restarting shortly…";
+  - console ALL SERVERS → confirm → "Shown in THIS server only: … publishing is off in Studio …".
+
+**Not verified.** Real cross-server delivery (MessagingService from a live server). A real
+`ServerRestartScheduled` from Creator Hub, and what Roblox does at the restart. TextService filtering of real
+content (Studio's filter). A physical phone.
+
+**Follow-up, same day: who sent it, no panel, one chime.**
+- **Sender:**
+  - The banner's headline is the sending admin's **DisplayName**, read off the authorized Player by the server
+    (`AnnouncementService.SenderName`; username if the DisplayName is unusable). The console has no slot for a name,
+    and an extra request argument is ignored.
+  - Cross-server payloads carry `from`. An arrival without a usable one (string, 1–32 characters) is dropped.
+  - Published as `AnnounceFrom`; shown as plain text.
+- **Look:**
+  - No panel: the frame is fully transparent.
+  - The name is GothamBlack in the game's highlight gold (PadFocus's selection gold, 255/208/64) with a dark outline.
+    It has a steady glow: a copy behind it with a 6 px, 60%-clear gold edge.
+  - The words are white GothamBold with a 2 px dark outline.
+  - The restart notice keeps its plate and "SERVER UPDATE".
+- **Sound:**
+  - One `NoticeInfo` ping (the notices' own, on the UI bus, so the SOUND FX setting applies) per new broadcast id
+    (`GameConfig.announceChime`).
+  - Never twice for one id; silent for the one already up when a client starts.
+  - A duplicate delivery changes no attribute.
+- **Checks:**
+  - AnnouncementSpec 44/44 (12 new): attribution, fallback, arrivals without a name, restart unaffected, chime once,
+    silent late join, duplicate touches nothing, the cue on the UI bus.
+  - **Play** (test store, guard SAFE):
+    - the banner named the owner's account by its DisplayName, gold glow visible, no panel, readable on desktop
+      (856×716) and phone-sized (canvas 1.65), clear of every button;
+    - chime count 1 after a send plus a duplicate delivery, 2 after a second broadcast, still 2 after a late join.
+- No Rojo build this round (not asked). **Not verified:** how the ping sounds to a player (counted, not listened
+  to), and a real cross-server arrival's name.
+
+**Second follow-up, same day: the owner's own chime.**
+- The broadcast now plays `Sfx.Cues.AdminBroadcast` = rbxassetid://119120354459025 ("adminmessagenotif") at volume
+  0.30 on the UI bus (`Announce.Chime`). NoticeInfo and every other notice sound are unchanged; restart notices play
+  nothing.
+- **Owner:** CrazyCozy Games (group 744756221, the experience's own group, per the public economy API). It loaded in
+  Studio Edit and Play with no permission error: Success, 0.88 s.
+- **Level** (PlaybackLoudness, which reads BEFORE Volume): at Volume 1 it peaks 395, mean 194 over its loud 0.4 s.
+  NoticeInfo is 204 / ~80 and NoticeSuccess 266 / 139. 0.30 × that sits where NoticeSuccess plays at 0.43.
+- **Guarded Play broadcast:**
+  - one play: IsLoaded, TimeLength 0.88, TimePosition reached 0.77 s, Volume 0.30, bus SeedUI at the player's 1.00;
+  - a duplicate delivery did not replay it.
+- AnnouncementSpec 45/45.
+- **Not verified:** listened to by ear. The level is matched by measurement only; the owner should listen once.
+
+## Chest, community chest and pedestal signs: always up, with each player's state — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY; NO PHONE SEEN — PHONE SIZES COMPUTED)
+
+**What a player sees.**
+- **Bonus Chest:** gold **FREE CHEST** (#FFD34D) with this player's state under it.
+  - **READY TO CLAIM!** shows only on the prompt's own `ready` answer.
+  - Otherwise: **NEXT IN m:ss** while it recharges, or **OPENING...** while a claim is on its way.
+  - The whole sign is hidden while the chest is LOCKED (the guide unfinished), so nobody ineligible sees it
+    advertised.
+- **Community chest:**
+  - Unchanged logic: FREE plus JOIN COMMUNITY · 5 FREE SPINS before a claim; CLAIMED / THANKS FOR JOINING! after,
+    per player.
+  - FREE now **glows**: a copy behind it whose 7 px, 45%-clear edge carries the same rainbow.
+  - Its rainbow **drifts like the wheel sign's, twice as fast**: one pass in 7 s instead of 14, at 30 steps a second
+    while within draw distance.
+  - It stays still while claimed, or when the player's motion setting is Off. The step is capped, so it never jumps.
+    The subtitle and the other signs are untouched.
+- **Sacrifice pedestal:** lime **SACRIFICE A POD!** and **+50% GARDEN INCOME**, always up now and a quarter bigger
+  (letters 1.9 / 1.3 studs; box 14.5 × 5.4, 7.8 over the bowl).
+  - A third line: the explanation *"Sacrifice one owned, banked pod for +50% garden income for 45 seconds."* while
+    ready (`GameConfig.sacrificeExplain`, from SeedData's numbers).
+  - **RECHARGING · READY IN m:ss** while it recharges.
+  - A **steady lime glow** round the foot: a thin local Neon plate (5.8 × 0.12 × 5.8) plus a soft PointLight, dimmed
+    while it recharges. No flashing, no particles.
+- No eligibility, reward or server file changed. Every sign is each client's own.
+
+**Files.**
+- `Shared/FloatingSign.luau`: an optional third line (`noteText`, GothamBold, wrapped, 1.5 outline).
+- GameConfig: `BonusChest.FloatingWords` (text, sizes, ReadyText / WaitText / OpeningText) and
+  `Sacrifice.FloatingWords` (sizes, `NoteHeight`); `sacrificeExplain`.
+- `BonusChestUI`, `SacrificeUI`, `CommunityChestUI`.
+- Specs: FloatingSignSpec (updated, 27/27) and SacrificeSpec (`NoteHeight` allowed, 281/281). No full suite. Rojo
+  build OK.
+
+**Play** (SeedTest_20261001, guard SAFE, desktop 856×716).
+- **Fresh profile:**
+  - chest sign hidden (locked);
+  - community FREE glowing and moving;
+  - pedestal explanation and bright base.
+- **After the guide:** FREE CHEST / READY TO CLAIM!
+- **After a claim:** NEXT IN 9:31.
+- **Community claimed (membership forced yes):** CLAIMED, glow and rainbow off.
+- **Pedestal recharging:** RECHARGING · READY IN 2:55, base dimmed.
+  - Set on the throwaway profile with `PlayerDataService.SetSacrifice`. A real sacrifice needs a grown plant.
+- **Drift:** fill and glow moved together at 0.286 offset/s (2 per 7 s).
+- **Prompt clearance (pedestal, ready, player at the bowl, camera 22 studs):** the sign's foot sits 61 px above the
+  prompt panel's middle (half-panel 26); on a 390 px phone that is 33 px.
+  - Measured with the new sizes applied to the live sign. Studio's capture does not draw the prompt panel.
+- **Phone readability, computed** (box px × 390 / 716 at the same camera distance):
+  - pedestal headline 28 px at 22 studs, 13 px at 59 studs;
+  - community FREE 23 px at 28 studs;
+  - FREE CHEST 12 px at 44 studs.
+  - The small second lines are 6–9 px on a phone beyond about 40 studs.
+
+**Not verified.** A real phone or the device emulator (MCP cannot switch it). A real sacrifice's cooldown, a real
+community join, and the chest's OPENING... state.
+
+## Guardian chase: no more orbiting, and a second thief is not forgotten — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY; TWO-PLAYER STEALING NOT VERIFIED IN PLAY)
+
+**Why it orbited (measured, not the overshoot).** Guardians had automatic network ownership, so Roblox handed each one's
+physics to the nearest player — in a chase, the player being chased. That client then simulated the guardian.
+- **Dustbowl's guardian (57) vs a scripted player circling at 42, chased player's client owning it:**
+  - its velocity ran 80° off its MoveTo order on average;
+  - it held 11–15 studs for 12 s without a hit;
+  - same at player speed 54, with an 84° mean lag.
+- **Same guardian, server-owned:** a hit 0.13 s into the chase, with a 0° lag.
+- **Straight running (42) was caught either way:** 6.5 s client-owned, 5.9 s server-owned. At range the server already
+  owned it.
+- **The 60-stud overshoot was not the cause.** No facing step delays contact: Windup is 0, and throwPlayer has no facing
+  gate.
+
+**Why a thief was forgotten (code).** One `target` slot per nest.
+- `provoke` ALWAYS re-targeted: the newest thief took the chase, and the one being chased was dropped.
+- Every chase end did `goHome` + `target = nil`. Nothing remembered the rest.
+- The 2026-09 throw-window fix (don't overwrite a retarget made during a throw) was present and still worked, but only
+  for the one slot.
+
+**Changes.**
+- **`NestService.pinToServer`:** the server owns each guardian — `pcall(root.SetNetworkOwner, root, nil)` at build and at
+  the start of every chase. Player bodies are untouched; GuardianRagdollSpec still passes.
+- **Contact sweep:** both bodies' relative motion over the tick, from a per-nest sample of both taken at the same moment
+  (`Nest.sample`, replacing the player-keyed `lastTargetAt`).
+  - The sample is refused on a new target, a respawn (a new Character), either body moving more than 40 studs, or an
+    age over 0.5 s. A refused sample means the plain distance now.
+  - GrabStuds 7 is unchanged.
+- **Close-range lead:** within `GameConfig.Parent.ChaseLeadStuds` (30) the overshoot line bends toward where the target
+  will be one tick on.
+  - It uses the sample's own velocity, and never leads further than the gap.
+  - At range, or with no usable sample, the line is unchanged.
+- **Thief memory (`Nest.thieves`):**
+  - A theft while the guardian has a chaseable target is remembered; the chase stays put, and rage still stacks.
+  - Chase ends (safety, death or leaving, the red line, the leash, the end of a throw) go through `endChase`, which turns
+    on the nearest still-eligible thief before the walk home.
+  - The walk home and the haul also check every tick, so a theft during a throw or a return is chased once that is over.
+  - Never from inside the Safe Zone or past the leash: the guardian still gives up there and keeps its memory.
+  - Eligible means present, alive, not safe, and carrying a pod off THIS nest (new `CarriedFrom` on the carry bridge).
+    Pruned every tick, cleared on sleep and reset, and on PlayerRemoving.
+- **New pure module `GuardianPursuit.luau`:** closestApproach, sampleUsable, heading, takesOver, prune, nextThief.
+  Studio-only seams `NestService.SpecProvoke` and `SpecStep`.
+
+**Checks.**
+- New `tools/tests/GuardianPursuitSpec.luau`, 47/47:
+  - moving contact, including a mid-tick crossing the old sweep missed and a left spot it falsely hit;
+  - refused samples;
+  - steering;
+  - the memory on the real provoke and tick: remembered, not re-targeted; nearest first; no pod, death, leaving and
+    safety dropped; the red line kept; throw and return thefts; respawn; sleep clearing.
+- GuardianRagdollSpec 120/120 and GuardianConfiscateSpec 88/88. No full suite.
+- **Play** (SeedTest_20261001, guard SAFE):
+  - every guardian server-owned from boot;
+  - straight running caught 6.1 s into the chase, the same as before;
+  - circling at 12 studs (player 42) and at 10 (player 54) caught in 0.13 s;
+  - a sustained 20-stud circle at 54 caught in 0.4 s;
+  - no NestService warnings.
+- Rojo build OK.
+
+**Not verified.**
+- **Two players stealing during pursuit or return, in Play.** MCP Play has one client; covered by the spec only.
+- **Real network latency.** Studio has none.
+- **Bat-knocked drops mid-chase with two players.**
+
+## The community chest: join CrazyCozy Games for 5 Spin Tickets — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY; LIVE JOINING NOT VERIFIED)
+
+**What a player meets.**
+- A blue-lidded chest at (-30.7, 0.75, -22.3), about 19 studs from the Bonus Chest.
+  - There is no spot closer to the Bonus Chest that keeps walk clearance: the chest clears the walks by 5.2 studs and
+    the pad by 7.6.
+  - The sign above it reads a rainbow **FREE** (the wheel's six stops, LuckiestGuy with its outline), with
+    **JOIN COMMUNITY · 5 FREE SPINS** under it. A glowing green step circle sits 6.5 studs in front.
+- Stepping on the circle asks the SERVER first, once per visit; leaving the circle re-arms it (owner's follow-up,
+  2026-10-01).
+  - Member who hasn't claimed: granted there and then, no dialog.
+  - Already claimed: the client sends nothing and the chest shows CLAIMED.
+  - Non-member: the server answers "join", and only then does Roblox's own dialog open
+    (`GroupService:PromptJoinAsync(744756221)`, on the client). When it closes, the client sends "verify".
+  - Check failed: nothing granted, a brief "COULDN'T CHECK RIGHT NOW" notice, and stepping on again retries.
+- Once claimed, that player's chest reads **CLAIMED / THANKS FOR JOINING!** in gold, and their pad dims. Other players
+  still see FREE.
+
+**Granting.**
+- `CommunityService.Check(player, stage)` reads membership fresh with `GetGroupsAsync` (`IsInGroup` is cached per
+  server).
+  - The first look asks once, so a non-member's dialog opens without a wait.
+  - "verify" is honoured once per "join" sent, skips the cooldown, and asks three times two seconds apart, so a
+    delayed join still counts. A verify with no "join" behind it is a first look under the cooldown.
+  - Not a member, or cancelled, grants nothing.
+- An outage replies "retry". A per-player busy flag and a 3 s cooldown stop spam; the client shows "retry", "wait"
+  and "unavailable" as the same retry notice.
+- Existing members and returning players qualify the same way.
+- `WheelService.GrantCommunity` adds `WheelEarned += 5` and sets `CommunityClaimed = true` in one `UpdateWheel`, then
+  saves. A failed save rolls both back (outcome "save"), so the player can step on again. `ResetProgress` keeps
+  the flag.
+
+**Spin Tickets.**
+- Not a second balance. One Tool, "Spin Ticket" (attribute `SpinTicket`, `TicketCount`), is kept equal to
+  `WheelEarned` by `WheelService.publish`.
+- So obby spins and the hatch bonus show as tickets too. The wheel already spends earned spins first, one per
+  accepted spin. Bought spins and the odds are untouched.
+- It is rebuilt on every CharacterAdded and on rejoin.
+- It has no SpeciesId, so it takes no plant storage. The hotbar shows it as one stacked slot (xN), first in line;
+  the Bag lists it above the plants. A full hotbar can't lose it: the count lives in the save, not the Tool.
+- Holding it says "Use at the Spin Wheel."
+
+**Verified.**
+- `tools/tests/CommunitySpec.luau`: 25/25 checks after the check-first change. They cover:
+  - a member granted on the first look; a non-member answered "join" after one ask;
+  - the verify's cooldown bypass and its single use; cancelled, delayed and outage retry;
+  - failed-save rollback then retry; saved together, plus the Sanitise round trip; the Tool rebuilt;
+  - one ticket per accepted spin, a failed spin rolled back, bought spins kept, the cap.
+- WheelSpec and SpinPurchaseSpec were re-run after their stand-in players gained `FindFirstChildOfClass`. No full suite.
+- **Play** (test store SeedTest_20261001, guard SAFE):
+  - nothing else in the chest's box;
+  - standing, staying and leaving then returning gave no repeated prompt;
+  - the real `GetGroupsAsync` check granted the owner's test account (a member): earned 5, claimed attribute and
+    profile true, hotbar slot 1 "Spin Ticket x5", the sign read CLAIMED;
+  - a phone-sized re-layout (canvas 1.65, touch, 518x398) shows the ticket slot fitting.
+- Rojo build OK (before the check-first change; not rebuilt after it).
+- **Check-first Play** (fresh test store, guard SAFE, the owner's test account, a member):
+  - stepping on the circle sent one first look, granted, with no join dialog in CoreGui;
+  - the notice COMMUNITY REWARD CLAIMED! / +5 Spin Tickets showed for about 3 s, its labels fitting;
+  - the sign read CLAIMED, and the hotbar showed "Spin Ticket x5";
+  - stepping off and on again once claimed sent nothing and opened no dialog;
+  - test store off, no ZZ leftovers.
+
+**Not verified, until checked in a Roblox client.**
+- A non-member joining live.
+- The verify after the dialog closes.
+- Cancelling, then stepping back on.
+
+Studio's automation can't click Roblox's dialog: MCP refuses to click CoreGui.
+- The owner published v1005 (2026-09-30 18:11Z per the Studio log); its contents are unknown.
+
+## A one-time hatch bonus (one free wheel spin) and an optional like reminder — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY; NOTHING BOUGHT — HATCHES BY SAVED-CREDIT GRANTS IN STUDIO)
+
+**What a player gets.** One free wheel spin, once, for their first successful hatch after this update. It is
+the hatch's reward and never depends on liking the game.
+- **FIRST HATCH BONUS!** for a player who had never hatched; **WELCOME BACK BONUS!** for one whose saved
+  progress says they had. Both read "You earned 1 free wheel spin." They are two labels for one bonus.
+- The label is decided by `Tutorial.Done.hatch` before this hatch records it: the return value of
+  `RecordTutorial(player, "hatch")`, true only the first time. Every load re-derives it from the Almanac, the
+  bag and the garden, so a long-time player counts as existing even if they skipped the guide.
+- Joining grants nothing. A refused or failed hatch grants nothing: the bonus hangs on `PlantService.OnRevealed`,
+  which only a successful hatch fires.
+- The spin lands on the wheel's EARNED balance (`WheelEarned`). The obby's daily allowance (`WheelDayAt`,
+  `WheelDayCount`) is never read or written.
+
+**Saving.**
+- `WheelService.GrantHatchBonus` does three writes inside one `UpdateWheel` step with no yield: `WheelEarned +1`,
+  `HatchBonusClaimed = true` and `LikeReminder = "pending"`. Every save has all three or none. Two hatches at
+  once are two calls in turn; the second finds the marker.
+- With the earned balance at its cap (500, enforced on load) it claims nothing yet, so the spin can't vanish on
+  rejoin; the next hatch with room claims it. A profile that is not saving claims nothing.
+- `ProfileSchema` gains `HatchBonusClaimed` and `LikeReminder` (""/"pending"/"shown"; old saves read false/"").
+  `ResetProgress` keeps both, so the bonus can't be claimed again. The earned spins themselves reset, as all
+  progress does.
+
+**Presentation (`HatchBonusUI`, new).**
+- The server sends `WheelHatchBonus {label, revealAt}`. The client waits for the roll (`revealAt`), the plant's
+  reveal (rise 0.8 + label 1.5 + fade 0.45) and a 0.6 s beat. If the guide's congratulations are up, it waits for
+  them to go, plus a beat. Then it posts one success notice.
+- After that notice leaves, and once no guide message (congratulations, or the instruction banner for up to
+  60 s), no other notice and no panel is up, it shows "ENJOYING PODNAPPERS? / Leave us a like!". This is a
+  `dismissible` notice: a new Notice field that gives the card a close button (a 44 px press the UI selection
+  can reach) and lets it stay up to 12 s; it shows for 10.
+- It is reported shown once it has stood 2 s, or on dismissal; the server moves "pending" to "shown" and nothing
+  else.
+- A reminder still pending from an earlier visit shows about 20 s into the next one, at a calm moment: Safe
+  Zone, no pod in the arms, no panel.
+- No like detection, no "I liked it" button, nothing promised for a like.
+
+**Files.** `GameConfig` (`HatchBonus` block, `Attributes.LikeReminder`), `ProfileSchema`, `PlayerDataService`
+(publish, mark shown, the verb, reset keep), `PlantService` (passes `firstHatch` on the reveal), `WheelService`
+(`GrantHatchBonus`, the reveal hook, `useBonusReply` for specs), `WheelData.Actions.HatchBonus`, `Notice`
+(`dismissible`, `onDismissed`, `DismissibleMaxSeconds`), `ActionToastUI` (the close button), new
+`HatchBonusUI.client.luau`, new `tools/tests/HatchBonusSpec.luau` (41). WheelSpec and SpinPurchaseSpec get a
+PlantService stand-in; NoticeSpec's no-input rule now allows only a dismissible notice's close button.
+`AGENTS.md` map lines.
+
+**Tested.**
+- HatchBonusSpec 41/0, on the real PlayerDataService and WheelService. It covers: new, existing, repeated and
+  four-at-once; the allowance untouched; the cap; a non-saving profile; reset keeps; leave then rejoin with
+  pending; shown only from pending; the refused-hatch source order; the hook; the notice; the client source.
+- Also: WheelSpec 157, SpinPurchaseSpec 39, NoticeSpec 101, InstantCreditSpec 27, AdminSpec 79,
+  HatchStorageSpec 208, HatchRollSpec 167, all 0 failed.
+- ONE FULL SUITE ON THE FINAL CODE (this, the mills, BIOMES and the floating signs together): 66 of 66, none
+  failing or silent. Rojo build OK; `git diff --check` clean; Studio matched disk (135 scripts, 0 differ).
+- Studio Play, test store on, guard SAFE, STUDIO TEST STORE save line, store off after each, 0 leftovers.
+  Desktop view this time: Studio's restart left the emulator off. Hatches used a granted saved Instant Hatch
+  credit on a planted pod.
+  - **New player** (guide done but the hatch): the plant shown at hatch+3.0, congratulations from 3.8 to 7.55,
+    FIRST HATCH BONUS! at 8.23. After planting the hatchling cleared the guide's hint, the reminder came 0.3 s
+    later and was reported shown 2.15 s after that. Spins 1, obby day count 0.
+  - **Existing player:** WELCOME BACK BONUS! at reveal end + 0.6 exactly; the reminder came when the guide's
+    in-session hint expired.
+  - **Leaving early:** stopped Play 1 s after the hatch. The rejoin read back claimed + pending + 1 spin. The
+    reminder came about 20 s in and was reported shown. A further hatch gave nothing.
+- Captures: `output/hud-biomes/8-…`, `9-…`, `10-…`.
+
+**Not run.**
+- A real tap or click on the close button, and a controller's selection of it. MCP cannot inject input here;
+  the wiring is source-checked.
+- A phone viewport for these notices (the emulator was off).
+- A refused hatch in Play (spec only).
+
+## The mills moved clear of every plot fence, on every level and every tier — 2026-09-30 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED)
+
+**The defect (the owner: "the mills overlap the plot fences").** Measured by building every tier against every
+level's real fences:
+- **Levels 3 and 4:** the side wing's fence, 25.4 studs behind the gate, ran through the back 4.5 studs of all
+  ten tiers (the mill stood 6.1 to 29.1 back). `SideBed.WingFrontZ` was meant to prevent this, but it is
+  measured in each level's own frame, so it only held at Level 5.
+- **Every level:** tier 1's compost bin post cut into the right fence's rails; tier 7's root touched them.
+
+**The owner's choice, of three offered: move every mill forward.** (The others were: start the wing behind the
+mill, costing Levels 3–4 a side row and a save migration; or turn the mills sideways.)
+- `GameConfig.Mill.Place = { Side = 12, Behind = 12.1, Lift = 0.6 }` and `GameConfig.millCFrameFor(gateCF)`:
+  placed from the gate, which never moves. That is 5.5 studs forward and 1 stud out from where it stood.
+  `MapService` places every mill with it.
+- The mill now spans 0.2 to 23.6 studs behind the gate: 1 stud short of the wing fence on Levels 3–4, 14 on
+  Level 5. Tier 1's bin is 0.8 off the right fence.
+- Tier 2's three stepping stones ran 5 studs behind the step, through the wing fence; they now curve up to the
+  step's corner from the mill's outer side (`MillModel`).
+- The sign stays in front of the mill but 1 stud closer (`Sign.Offset.Z` -12.6 → -11.6). "Beside the mill", as
+  the option text said, does not fit: there are 5.6 studs between the mill and the fence for a 6.84-wide board.
+  It is 0.17 clear of the tightest tier and 2.28 off the fence; its post stands 0.2 behind the gate line.
+- **Known and printed by the spec:** on plot 6, beside the road, tier 9's outer wing feather now reaches 1.42°
+  (2.9 studs) over the edge of the road's empty arc, 14.8 studs up in open air. Nothing within 8 studs of the
+  ground enters the arc. At the old spot it was 0.18° clear; any forward move brings it in.
+- Comments corrected: `SideBed` (the mill's footprint, WingFrontZ's frame) and MapService's wing numbers
+  (Level 5 is 37.6 back, not 13.2).
+
+**Tested.**
+- New `tools/tests/MillPlacementSpec.luau` (7 checks). Real plots are grown to each level by
+  `MapService.ResizePlot`; every tier and its sign are built by `MillModel` at `millCFrameFor`; each part, grown
+  0.25, is checked with `GetPartsInPart` against the plot and both neighbours. It also checks the gate line,
+  the road arc (below 8 studs; the airborne reach is printed) and that a rebuild stays put.
+- The same spec with the old formula as a mutant fails exactly as reported (the bin post at Levels 1–2; deck,
+  belt and roller through the wing's rails and posts at Levels 3–4).
+- MillSignSpec 8/0 (its fence line now comes from `Place`); PlotSpec 66/0.
+- Full suite on this code: 65 of 65 ran. StorageDoorsSpec failed one rejoin check in the batch ("24 tools,
+  24 rows, 3 planted") and passed 127/0 alone, the next minute: a batch timing flake, not the mill. Studio
+  matched disk after Studio's overnight update (134 scripts, 0 differ). Rojo build OK; `git diff --check`
+  clean.
+- Studio Play, test store on, guard SAFE, STUDIO TEST STORE save line, store off at the end, 0 leftovers:
+  - The live mill stands 36 out, 12.1 behind the gate, spanning 0.2 to 23.6.
+  - The plot set to Levels 1, 3, 4 and 5 (debug SetPlotTier): 0 mill parts within 0.25 of the plot, and the
+    mill never moved.
+  - On the Level 4 plot, all ten tiers rebuilt live with `TreadmillService.Rebuild`: 0 touching, each rebuild in
+    the same place.
+  - Capture: `output/hud-biomes/7-mill-level4-tier2-clear-of-fences.png` (HUD hidden).
+
+**Not run:** tier 9's wing flap (a client animation) against the fence top; a physical device.
+
+## The phone's top row in the owner's order, and BIOMES: one teleport to the Greenhollow entrance — 2026-09-30 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, IN STUDIO'S 705x338 PHONE EMULATION; A DESKTOP AND A 640-PX PHONE SHOWN BY RE-LAYOUT, NOT BY THE EMULATOR)
+
+The owner's corrected brief superseded an earlier one: ONE BIOMES button to ONE place, no selector, no other
+biome. Nothing of the superseded version was ever written.
+
+**What a player sees.**
+- **Phone top row** (the owner's edited screenshot): Roblox's buttons, then BIOMES (light blue), TELEPORT TO PLOT,
+  OBBY, ADMIN, and the day clock at the row's right end. Everything else stays where it was: the dock and Walk
+  Mode, x2/Garden/Bag, BATS/TRAPS, cash and speed, the belt.
+  - Widest first: BIOMES and OBBY get icons and words where there is room, then words alone (the owner's 801x392
+    session, as in the screenshot), then slightly smaller words on a 640-px phone.
+  - ADMIN goes on the row before any icon. Where there is no room for it (705 and 640 px wide), it hangs under
+    the row's middle, 8 px below the buttons.
+  - The column under the row (boosts, notices) keeps the window's centre line.
+- **Desktop:** BIOMES | TELEPORT TO PLOT | OBBY under the clock, BIOMES with a small tree icon. Nothing else
+  moves. It hides in desktop windows under about 840 px wide, where there's no room beside TELEPORT and OBBY
+  (OBBY's rule).
+- **The press:** one teleport to (0, 4, -160). That is the road's centre line, 10 studs inside the red line
+  (still the Safe Zone), facing down the road through Greenhollow's gate. It is free and runs through
+  `PlotService.TeleportTo`: TELEPORT TO PLOT's rules, in its order, and its one shared cooldown. The client
+  sends the verb alone. Controller: D-pad Left while it shows, and the UI's own selection.
+
+**What changed.**
+- `Shared/HudLayout.luau`:
+  - `biomes`/`biomesWide` and `CONFIG.Biomes`, plus `Obby.Tight`.
+  - `phoneRow` rebuilt in the new order, with its five width steps.
+  - `biomesBeside`, which shares OBBY's clearance test through `besideClear`.
+  - `notice()` and the TV shift now step round BIOMES.
+  - `statusLine` on the row runs LEFT from TELEPORT over BIOMES' slot, never over OBBY, ADMIN or the clock.
+- New `BiomesButtonUI.client.luau`: ObbyButtonUI's pattern, sky-blue plate.
+- `GameConfig.Plot.BiomesAction` / `BiomesLandingInset`.
+- `PlotService.BiomesLanding` / `TeleportToBiomes`, and one new branch on the existing verb handler.
+- `ActionRefusal` `BIOMES_BLOCKED`. `AGENTS.md` map lines.
+- Specs: HudLayoutSpec's row, ADMIN, OBBY, warning and column checks rewritten for the new order, plus a BIOMES
+  section; PlotTeleportSpec section 11.
+
+**Tested.**
+- Specs: HudLayoutSpec 1271/0, PlotTeleportSpec 66/0, and one full suite on the code before a last label change:
+  64 of 64 specs, 0 failing or silent. HudLayoutSpec was rerun after that change. Rojo build OK.
+  `git diff --check` clean. Studio matched disk: 134 scripts, 0 differ.
+- Play, test store on, guard SAFE, STUDIO TEST STORE save line, store off at the end, 0 leftovers:
+  - The row as drawn at 705x338; BIOMES' word fits.
+  - A BIOMES press landed at (0, 3, -160) facing (0, -1), in the Safe Zone. The only collidable parts within 12
+    studs are the two floors; the nearest nest is 259 studs away (Greenhollow's).
+  - TELEPORT TO PLOT pressed straight after: TELEPORT RECHARGING, nobody moved.
+  - On the road: all three buttons hidden; a forced press was refused (CAN'T TELEPORT HERE), nobody moved.
+  - Carrying a raided pod on the road: TELEPORT_OUTSIDE, nobody moved. Stepping into the field banks the pod.
+  - A hit test shows the same non-Active frames over BIOMES as over TELEPORT TO PLOT.
+  - A 640x254 re-layout (UIScale 1.1) found BIOMES' word clipped at 56 px, because a label's least size is a
+    DRAWN size. Fixed with 4 px sides and 9 px minimum; seen fitting after.
+  - A 1410x560 desktop re-layout at half scale: placement only, since half-size text clips.
+- Captures: `output/hud-biomes/`.
+
+**Not run.**
+- A real finger or mouse tap, and D-pad Left: MCP cannot inject either here. Covered by source checks.
+- The CARRYING_POD refusal inside the Safe Zone (pods bank at the red line); covered by the spec.
+- A live desktop viewport (the emulator stayed on the phone). A physical phone.
+
+**Noticed, not touched:** Studio has `ServerScriptService.EmberrootApprovalRunner`, which is not on disk. It
+would ship with a publish from Studio.
+
+## Floating words over the Bonus Chest and the Sacrifice Pedestal — 2026-09-30 (CLAUDE)  (COMMITTED ON `wip` IN b1aeac7; NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, IN STUDIO'S TOUCH EMULATION AT 705x338)
+
+**What a player sees.** The wheel's sign style (LuckiestGuy, thick dark outline, a world billboard gone past
+150 studs), without its rainbow, and nothing else: no particles, no animation, no screen panel.
+- Over the chest's board: **OPEN FREE CHEST!** in `#FFD34D`, only while that player can claim it. Hidden while
+  it is locked (the guide not finished), while it opens (the client's own `pending`), and on cooldown.
+- Over the pedestal: **SACRIFICE A POD!** in `#8CFF6A`, with **+50% GARDEN INCOME** smaller under it (read from
+  `SeedData.Sacrifice.Multiplier` by the existing `GameConfig.sacrificeBoostTitle`), only while that player's
+  pedestal cooldown is over.
+- Per player: each client builds its own words and reads the attributes the server already publishes
+  (`ChestUnlocked`, `ChestNextAt`, `SacrificeNextAt`). No server file, reward or rule changed.
+
+**What changed.**
+- New `Shared/FloatingSign.luau`: the one builder (an invisible anchor part + a BillboardGui), style constants
+  shared with the wheel sign's values, built hidden.
+- `GameConfig.BonusChest.FloatingWords` / `GameConfig.Sacrifice.FloatingWords`: text, colour, size, height.
+  Display only.
+- `BonusChestUI` / `SacrificeUI`: build the words once, `setShown(ready)` from the `ready` they already compute.
+- New `tools/tests/FloatingSignSpec.luau` (25 checks); `SacrificeSpec` allows the new display-only key
+  (fields exactly `Above,Colour,Height,SubHeight,Text,Width`). `AGENTS.md` map line.
+
+**Tested.**
+- Specs: FloatingSignSpec 25/0, SacrificeSpec 281/0, and the chest, spin, store and income specs that read
+  GameConfig. Rojo build OK. Studio matched disk (133 scripts, none differing).
+- Studio Play, test store on, guard SAFE, the first save line said STUDIO TEST STORE, store off at the end,
+  0 leftovers:
+  - A fresh profile: the chest words hidden (locked), the pedestal words shown.
+  - Guide completed: the chest words shown. Claimed: hidden (599 s cooldown).
+  - A grown Nubkin planted, then sacrificed: the pedestal words hidden. They came back when the cooldown ended.
+  - Captures from about 22 studs: both sets of words sit clear of the touch prompts (OPEN, SACRIFICE).
+- **A limit seen in Play.** Zoomed out to about 35 studs with the prompt still up, the SACRIFICE prompt panel
+  (a fixed 52 px) covers the small "+50%" line. The prompt stays readable, because prompts draw over world
+  billboards. Raising `Sacrifice.FloatingWords.Above` by a stud would push that out to about 32 studs. That
+  was not done; it is the owner's call.
+
+**Not run.** The chest's "opening" state in Play (needs a real prompt press; covered by a source check). The
+chest coming back after its 10-minute cooldown (the same `ready` line the pedestal proved). A physical phone.
+
 ## Plant storage full: nothing is handed over that the record cannot hold — 2026-09-30 (CLAUDE)  (COMMITTED 6015de5 ON BRANCH `wip` AND PUSHED, AT THE OWNER'S REQUEST; NOT ON `main`; NOT PUBLISHED BY AN AGENT; ONE FULL SUITE ON THE FINAL CODE: 62/63, THE ONE FAILURE A KNOWN BATCH FLAKE THAT PASSES ALONE; STUDIO PLAY ON THE THROWAWAY TEST STORE ONLY, MOCKED RECEIPTS; NOTHING WAS BOUGHT)
 
 **In short.**

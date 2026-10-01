@@ -105,19 +105,26 @@ src/
     Shared/BiomeData.luau       the five biomes and where they sit on the road
     Shared/UIKit.luau           the modal, the slab, the lattice and one camera framer
     Shared/HudLayout.luau       where every HUD group sits -- desktop, compact, or a touch
-                                screen's two sidebars and its top row (the clock's chip,
-                                TELEPORT, OBBY) with the column under it -- numbers only
+                                screen's two sidebars and its top row (BIOMES, TELEPORT,
+                                OBBY, ADMIN, the clock's chip at the row's right end) with
+                                the column under it -- numbers only
     Shared/ReachPoint.luau      pod timer, stacked prompt and PICK UP placement -- numbers only
     Shared/WeaponData.luau      Marigold's shelf: six bats, one trap, prices and combat
     Shared/WeaponModel.luau     their geometry -- Tool, shop viewport and world trap
     Shared/ActionRefusal.luau   the headline and next step a refused action shows -- the
                                 server names a reason, it never decides one
     Shared/Notice.luau          every short notification's kinds, rules, timing and sounds;
-                                ActionToastUI is its one renderer (post via Notice.post)
+                                ActionToastUI is its one renderer (post via Notice.post); a
+                                `dismissible` post gets a close button (the like reminder)
     Shared/StatusText.luau      the text-led line every lasting indicator is drawn with (chase
                                 warning, boost row, obby run line) and the notices' icons;
                                 placed by HudLayout (statusRows, statusLine, boostRows) -- no
                                 plates, no pills; a phone's own sizes are PhoneScale
+    Shared/FloatingSign.luau    words floating over a hub thing, drawn like the wheel's "SPIN
+                                THE WHEEL!" (studs-sized billboard, LuckiestGuy, dark outline,
+                                the wheel's SignDistance), one plain colour, made per client on
+                                a local anchor: the chest's OPEN FREE CHEST! and the pedestal's
+                                SACRIFICE A POD! (words in GameConfig *.FloatingWords)
     Shared/ObbyData.luau        the Floating Garden obby: every position, timing, reward and
                                 attribute name -- numbers only (switch: GameConfig.Obby)
     Shared/ObbyView.luau        where a runner is put down and which way the course runs from
@@ -147,7 +154,8 @@ src/
   ServerScriptService/SeedGameServer/
     ServerMain.server.luau      bootstrap: Init() all, then Start() all
     MapService.luau             builds the whole map, and the lighting, from code
-    PlotService.luau            who owns which plot, puts them on it, and TELEPORT TO PLOT
+    PlotService.luau            who owns which plot, puts them on it, TELEPORT TO PLOT, and
+                                BIOMES' one landing (the Greenhollow entrance)
     ProfileSchema.luau          what a profile is, and the validator (NOT a *Service). It
                                 drops a held row that is not a plant and never cuts the list
                                 to Save.MaxHeld: a record saved with more comes back whole
@@ -156,7 +164,12 @@ src/
     CreatureModel.luau          pods and creatures (NOT a *Service)
     ParentModel.luau            Greenhollow guardian + biome dispatch (NOT a *Service)
     BramblebackModel.luau       Dustbowl guardian geometry and seventh-seam rig
-    NestService.luau            nests, and the parent that sleeps beside them
+    NestService.luau            nests, and the parent that sleeps beside them; the server owns
+                                every guardian's physics (pinToServer), one chase at a time,
+                                later thieves remembered and chased next
+    GuardianPursuit.luau        the chase's pure parts: the both-bodies contact sweep, the
+                                sample rules, the close-range lead, the thief memory, and the
+                                way home through the road's mouth (routeHome) (NOT a *Service)
     CarryService.luau           one pod at a time, and what it costs to carry; the saved record
                                 of what is held (profile.Held, Save.MaxHeld = 24 plants and
                                 pods) and the ONE place its room is counted, HeldRoom. A plant
@@ -185,8 +198,15 @@ src/
     SellService.luau            the sell-all board beside the stall
     DebugService.luau           Studio-only server test helpers; no UI or remote
     AdminService/               the dev console for two allowlisted UserIds, live servers
-      init.luau                   every request checked here; grants, progress reset, night/day
+      init.luau                   every request checked here; grants, progress reset, night/day,
+                                  and Announce (handed to AnnouncementService after the allowlist)
       AdminConsoleUI.client.luau  its panel -- cloned ONLY into an admin's PlayerGui, never shipped
+    AnnouncementService.luau    admin announcements (filtered, cooldown, THIS SERVER or ALL SERVERS
+                                through MessagingService, deduped, expiring; never published from
+                                Studio) and game.ServerRestartScheduled's notice, both as Workspace
+                                attributes every client reads
+    OwnerTitleService.luau      the cosmetic rainbow ADMIN title over the owner's head only
+                                (AdminService.IsOwner, by UserId), rebuilt on every character
     WeaponShopService.luau      Marigold's counter: buying, equipping, and the one Tool
     CombatService.luau          what a bat and a trap DO -- knockback, restraint, cleanup
     BonusChestService.luau      the free Bonus Chest in the hub: claims, cooldown, boosts
@@ -202,20 +222,32 @@ src/
                                 the one PayReward per real run, every exit putting movement back
     ObbyCourse.luau             builds the course's walkable parts from ObbyData (NOT a *Service)
     ObbyDecor.luau              the course's art, from MapDecor.Kit/Props (NOT a *Service)
-    WheelService.luau           the reward wheel: spins earned (5 per 24h window, from the obby),
+    WheelService.luau           the reward wheel: the one-time hatch bonus spin (GrantHatchBonus,
+                                outside the obby's allowance); spins earned (5 per 24h window, from the obby),
                                 every spin rolled, recorded, SAVED, then paid through the
                                 existing faucets; owed prizes (a pod prize waits for room as
                                 CarryService.HeldRoom counts it, so it never takes the place
                                 kept for a pod being carried home). Spins bought (switched off):
                                 it alone opens the purchase prompt, the prompt grants nothing
-                                (StoreService's receipt does), and PolicyService fails closed
+                                (StoreService's receipt does), and PolicyService fails closed.
+                                Spin Tickets: one Tool kept equal to WheelEarned (no balance of
+                                its own); GrantCommunity saves +5 and CommunityClaimed together
     WheelModel.luau             the wheel standing behind Marigold's stall (NOT a *Service)
+    CommunityService.luau       the community chest by the Bonus Chest: builds it and its step
+                                pad, checks group membership on the server BEFORE any join
+                                prompt ("join" sends a non-member to it, "verify" after), then
+                                WheelService.GrantCommunity (once per profile)
 src/StarterPlayer/StarterPlayerScripts/
     Ambience.client.luau        wings, walk cycles -- decoration only
     Music.client.luau           the background bed; ids in GameConfig.Music
     ParentAnim.client.luau      parent limbs, breath and Brambleback body pose
     PromptUI.client.luau        draws every ProximityPrompt (Style = Custom)
     AlertUI.client.luau         the RUN alarm, vignette and SAFE flash
+    AnnouncementUI.client.luau  the restart notice's countdown and an announcement ("Name: message",
+                                one centred flowing line, rainbow name), under the top centre column
+                                (under the guide's lines while they are up); no input
+    OwnerTitleUI.client.luau    turns the owner title's rainbow on this screen (still for reduced
+                                motion) and hides it while TrapUI's countdown is over that player
     PlantUI.client.luau         the hatch countdown over an unhatched pod
     HatchFX.client.luau         the hold's glow and dust, the burst's rings, and the
                                 creature reveal -- one cosmetic event, drawn locally. While
@@ -234,7 +266,9 @@ src/StarterPlayer/StarterPlayerScripts/
     CashUI.client.luau          corner HUD: cash + speed, from the ProfileUpdated remote
     CashPop.client.luau         lime +$N rising off every grown plant (cosmetic only)
     IndexUI.client.luau         LEFT rail: the almanac, ??? until you have grown it
-    ShopUI.client.luau          LEFT rail: the shop panel (UI only, nothing transacts yet)
+    ShopUI.client.luau          LEFT rail: the shop panel (UI only, nothing transacts yet); its SPIN
+                                TICKETS shelf sells WheelData.Products the wheel's way (WheelBuy,
+                                shown only while WheelPaidAllowed) with REWARDS & ODDS on its heading
     GardenUI.client.luau        RIGHT rail: a row per plant, live clocks
     SpeedFX.client.luau         +N pops on Speed gain, and the run streak (off on the obby course)
     BiomeGuideUI.client.luau    advisory Speed banner on biome entry
@@ -243,15 +277,22 @@ src/StarterPlayer/StarterPlayerScripts/
     WeaponFX.client.luau        how a bat is HELD and SWUNG -- poses the right
                                 arm, and the impact burst
     LoadoutUI.client.luau       the bag, the two equipment slots, and the hotbar; on a
-                                touch screen the slots are the right sidebar and its chooser
+                                touch screen the slots are the right sidebar and its chooser.
+                                The Spin Ticket shows as one stacked slot (xN), first in line
     RailDrawerUI.client.luau    TOUCH ONLY: the left dock's panel and handle, which
                                 Index, Shop and Settings each stand their own tile in
     TrapUI.client.luau          the red countdown over a trapped player
     ActionToastUI.client.luau   draws every short notification (Notice): refusals, successes,
                                 warnings, information -- text-led, stacked above the belt; on
                                 a phone hung from the top of the centre column instead
+    HatchBonusUI.client.luau    the hatch bonus's notice after the reveal and the guide's
+                                congratulations, then the once-only dismissible like reminder
     BonusChestUI.client.luau    the chest's sign, prompt and boost timer -- and the boost row,
                                 which also draws the sacrifice pedestal's line
+    CommunityChestUI.client.luau  the community chest's glowing, drifting rainbow FREE (the wheel
+                                sign's drift at twice its speed) and claimed state; the
+                                step pad asks the server first, once per visit; only a
+                                non-member sees GroupService:PromptJoinAsync, then a verify
     SacrificeUI.client.luau     the pedestal's confirmation (the pod, what it buys, KEEP POD /
                                 SACRIFICE), its two signs' own line and its prompt
     PlotTeleportUI.client.luau  TELEPORT TO PLOT under the clock (beside it on a phone), alive
@@ -261,6 +302,8 @@ src/StarterPlayer/StarterPlayerScripts/
                                 PLOT; on a phone the run's clock alone, each stage's name said
                                 once as a notice
     ObbyButtonUI.client.luau    OBBY beside TELEPORT TO PLOT: to the obby's entrance, Safe Zone only
+    BiomesButtonUI.client.luau  BIOMES on TELEPORT's other side: to the Greenhollow entrance
+                                only, Safe Zone only, TELEPORT TO PLOT's rules and cooldown
     ObbyCamera.client.luau      turns the camera down the course ONCE when a runner is put down
                                 (the arch, the start, a checkpoint after a fall) and hands it
                                 straight back -- ObbyView's arithmetic, nothing held
