@@ -125,6 +125,15 @@ src/
                                 the wheel's SignDistance), one plain colour, made per client on
                                 a local anchor: the chest's OPEN FREE CHEST! and the pedestal's
                                 SACRIFICE A POD! (words in GameConfig *.FloatingWords)
+    Shared/HotbarRoles.luau     pure: what each hotbar slot means (bat, trap, tickets, active
+                                plant, previous plant), the two plant shortcuts' memory (a Tool
+                                and a key, re-leased within Grace after a respawn, never replaced
+                                by an arrival), and the Bag cell's storage count
+    Shared/HotbarCard.luau      how one hotbar slot is drawn to the owner's reference: a square
+                                translucent charcoal plate, a thin light edge, a plain white number
+                                top left, a big preview, a stack count, a rarity bar, a hidden Name
+                                label for TutorialUI's pointer; lift, bump and flash (none under
+                                reduced motion). Numbers in GameConfig.Hotbar
     Shared/RewardSplash.luau    a granted reward made obvious: a brief card (icon, name, amount)
                                 near the middle, then each icon flies to its HUD destination or
                                 fades; reduced motion shows it without the flight. The Bonus
@@ -284,9 +293,15 @@ src/StarterPlayer/StarterPlayerScripts/
     MarigoldShopUI.client.luau  Marigold's Garden Goods -- opened by her prompt
     WeaponFX.client.luau        how a bat is HELD and SWUNG -- poses the right
                                 arm, and the impact burst
-    LoadoutUI.client.luau       the bag, the two equipment slots, and the hotbar; on a
-                                touch screen the slots are the right sidebar and its chooser.
-                                The Spin Ticket shows as one stacked slot (xN), first in line
+    LoadoutUI.client.luau       the bag, the two equipment slots, and the hotbar. Since 2026-10-01
+                                the slots are ROLES (HotbarRoles): 1 bat, 2 trap, 3 Spin Tickets
+                                (xN), 4 the active plant/pod, 5 the previous one (desktop only;
+                                a phone shows four + BAG). HOLD in the Bag chooses the active
+                                one; every stored plant stays listed in the Bag. The BAG cell
+                                counts plant storage (profile.Held + a carried pod) / Save.MaxHeld.
+                                Drawn by HotbarCard; the item's name pops up over the strip on an
+                                equip and under a mouse. On a touch screen BAT/TRAP also keep
+                                their sidebar tiles and chooser
     RailDrawerUI.client.luau    TOUCH ONLY: the left dock's panel and handle, which
                                 Index, Shop and Settings each stand their own tile in
     TrapUI.client.luau          the red countdown over a trapped player

@@ -173,6 +173,10 @@ export type Layout = {
 	-- The strip at its widest: every live slot and the Bag cell.
 	hotbar: Rect,
 	chip: boolean,
+	-- The item name's band just above the strip (LoadoutUI's popup, shown on
+	-- an equip and under a mouse). Notices, the cash block and the equipment
+	-- column keep clear of it as they do of the strip.
+	namePopup: Rect,
 
 	-- The cash block as a group (its reserved width), and its root frame.
 	cash: Rect,
@@ -428,10 +432,14 @@ local CONFIG = {
 	-- from every other group.
 	Margin = 8,
 	Gap = 8,
-	-- Ten 64-px slots need the width; below it a desktop window is compact.
+	-- Below this a desktop window is compact: the rail and the cash block need
+	-- the width (the five-slot strip itself is 410).
 	DesktopMinWidth = 900,
-	DesktopSlots = 10,
-	MobileSlots = 5,
+	-- The slots are ROLES (HotbarRoles, 2026-10-01): bat, trap, the Spin
+	-- Tickets, the active plant or pod, the previous one. A touch screen has
+	-- the first four; the previous-plant slot is the desktop's fifth.
+	DesktopSlots = 5,
+	MobileSlots = 4,
 	WalkHeight = 46,
 	-- The cash block's two faces (see THE CASH BLOCK'S TWO FACES), and the
 	-- desktop one's three placing numbers under the names they always had.
@@ -785,6 +793,18 @@ end
 function HudLayout.hotbarHeight(compact: boolean?): number
 	local H = HudLayout.hotMetrics(compact)
 	return H.SlotHeight + H.TrayPad * 2
+end
+
+-- The item name's band over the strip (2026-10-01): as wide as the strip,
+-- NamePopupGap above it. And the strip with that band, which is what
+-- everything placed above the hotbar keeps clear of.
+function HudLayout.namePopupOver(hotbar: Rect): Rect
+	return rect(hotbar.x, hotbar.y - HOT.NamePopupGap - HOT.NamePopupHeight, hotbar.w, HOT.NamePopupHeight)
+end
+
+function HudLayout.hotbarBand(hotbar: Rect): Rect
+	local reach = HOT.NamePopupGap + HOT.NamePopupHeight
+	return rect(hotbar.x, hotbar.y - reach, hotbar.w, hotbar.h + reach)
 end
 
 -- The thumbstick (both modes, as one zone) and the jump button.
@@ -1158,19 +1178,22 @@ local function desktop(input: Input): Layout
 	local equipment = rect(sw - I - CONFIG.EquipWidth, I + (square.Y + RAIL.Gap) * 2 + 6,
 		CONFIG.EquipWidth, CONFIG.EquipSlot * 2 + CONFIG.EquipGap)
 
-	local slots = if input.keyboard then CONFIG.DesktopSlots else CONFIG.MobileSlots
+	-- Five roles, keyboard or not: a console reaches them with LB and RB.
+	local slots = CONFIG.DesktopSlots
 	local chip = sw >= HOT.ChipMinViewport
 	local width = HudLayout.hotbarWidth(slots, chip)
 	local height = HudLayout.hotbarHeight()
 	local hotbar = rect(sw / 2 - width / 2, sh - HOT.BottomGap - height, width, height)
+	local band = HudLayout.hotbarBand(hotbar)
 
-	-- Beside the hotbar where the whole reservation fits; above it where not.
+	-- Beside the hotbar where the whole reservation fits; above it (and its
+	-- name band) where not.
 	local style = CASH_DESKTOP
 	local cw = math.max(style.Reserve, input.cashWidth or 0)
 	local cx = CONFIG.CashLeft
 	local rootBottom = sh - HOT.BottomGap
 	if cx + cw + G > hotbar.x then
-		rootBottom = hotbar.y - G - style.Drop
+		rootBottom = band.y - G - style.Drop
 	end
 	local cashRoot = rect(cx, rootBottom - style.Root.Y, style.Root.X, style.Root.Y)
 	local cash = rect(cx, cashRoot.y, cw, style.Root.Y + style.Drop)
@@ -1201,6 +1224,7 @@ local function desktop(input: Input): Layout
 		equipGap = CONFIG.EquipGap,
 		hotbar = hotbar,
 		chip = chip,
+		namePopup = HudLayout.namePopupOver(hotbar),
 		cash = cash,
 		cashRoot = cashRoot,
 		thumb = nil,
@@ -1240,7 +1264,7 @@ local function desktop(input: Input): Layout
 		HudLayout.union(HudLayout.union(index, shop), HudLayout.union(settings, walk)),
 		HudLayout.union(garden, bag), equipment,
 	})
-	L.toast = toastAbove(sw, hotbar, { cash, equipment })
+	L.toast = toastAbove(sw, band, { cash, equipment })
 	-- ON A TV ONLY: the notice band and TELEPORT TO PLOT under it came down
 	-- (`lift`), so the tutorial banner keeps 8 px under the button, as compact's
 	-- always has. The desktop's 84 is not touched.
@@ -1265,10 +1289,9 @@ end
 -- dropped, and where five bare slots will not either the strip is lifted
 -- clear of both. Compact and sidebars place it the same way.
 --==============================================================================
-local function beltBetween(input: Input, thumb: Rect?, jump: Rect?): (Rect, boolean, boolean)
+local function beltBetween(input: Input, thumb: Rect?, jump: Rect?, slots: number): (Rect, boolean, boolean)
 	local sw, sh = input.safe.X, input.safe.Y
 	local M, G = CONFIG.Margin, CONFIG.Gap
-	local slots = CONFIG.MobileSlots
 	local height = HudLayout.hotbarHeight(true)
 	local bottom = sh - HOT.BottomGap
 	local lo, hi = M, sw - M
@@ -1367,9 +1390,11 @@ local function compact(input: Input): Layout
 		thumb, jump = HudLayout.touchZones(input.safe)
 	end
 
-	-- THE HOTBAR: see beltBetween.
-	local slots = CONFIG.MobileSlots
-	local hotbar, chip, stripFits = beltBetween(input, thumb, jump)
+	-- THE HOTBAR: see beltBetween. A touch screen has four roles; a desktop
+	-- window that is merely small keeps the keyboard's five.
+	local slots = if input.touch then CONFIG.MobileSlots else CONFIG.DesktopSlots
+	local hotbar, chip, stripFits = beltBetween(input, thumb, jump, slots)
+	local band = HudLayout.hotbarBand(hotbar)
 	if not stripFits then
 		fits = false
 	end
@@ -1387,7 +1412,7 @@ local function compact(input: Input): Layout
 	local top = railBottom + G
 	local floor = if jump then jump.y - G else sh - HOT.BottomGap
 	if hotbar.x + hotbar.w + G > ex then
-		floor = math.min(floor, hotbar.y - G)
+		floor = math.min(floor, band.y - G)
 	end
 	local room = floor - top
 	local equipGap = if room >= CONFIG.EquipSlot * 2 + CONFIG.EquipGap
@@ -1422,7 +1447,7 @@ local function compact(input: Input): Layout
 		limit = math.min(limit, thumb.y - G)
 	end
 	if hotbar.x < cx + cw + G then
-		limit = math.min(limit, hotbar.y - G)
+		limit = math.min(limit, band.y - G)
 	end
 	local cash = rect(cx, limit - ch, cw, ch)
 	if cash.y < railBottom + G then
@@ -1461,6 +1486,7 @@ local function compact(input: Input): Layout
 		equipGap = equipGap,
 		hotbar = hotbar,
 		chip = chip,
+		namePopup = HudLayout.namePopupOver(hotbar),
 		cash = cash,
 		cashRoot = cashRoot,
 		thumb = thumb,
@@ -1501,7 +1527,7 @@ local function compact(input: Input): Layout
 	})
 	-- The tutorial banner keeps 8 px under the teleport button as well as the rows.
 	L.banner, L.skip = bannerIn(sw, math.max(railBottom, L.teleport.y + L.teleport.h), beside)
-	L.toast = toastAbove(sw, hotbar, beside)
+	L.toast = toastAbove(sw, band, beside)
 	L.fits = L.fits and #HudLayout.problems(L) == 0
 	L.obby, L.obbyWide = obbyBeside(input, L)
 	L.biomes, L.biomesWide = biomesBeside(input, L)
@@ -1719,8 +1745,10 @@ local function sidebars(input: Input): Layout
 	local boost = rect(garden.x - CONFIG.BoostGap - B, M, B, B)
 	local railBottom = M + B
 
-	-- THE BELT: see beltBetween.
-	local hotbar, chip, stripFits = beltBetween(input, thumb, jump)
+	-- THE BELT: see beltBetween. Four roles on a phone: the previous-plant
+	-- slot is the desktop's.
+	local hotbar, chip, stripFits = beltBetween(input, thumb, jump, CONFIG.MobileSlots)
+	local band = HudLayout.hotbarBand(hotbar)
 	if not stripFits then
 		fits = false
 	end
@@ -1737,7 +1765,7 @@ local function sidebars(input: Input): Layout
 	local top = railBottom + G
 	local floor = jump.y - G
 	if hotbar.x + hotbar.w + G > ex then
-		floor = math.min(floor, hotbar.y - G)
+		floor = math.min(floor, band.y - G)
 	end
 	local equipSlot = math.min(S.Tile.Y, math.floor((floor - top - S.Pad * 2 - S.Gap) / 2))
 	if equipSlot < S.MinTile then
@@ -1787,6 +1815,9 @@ local function sidebars(input: Input): Layout
 	local oneCard = C.Pad + C.Card.X + C.Spine
 	local leftmost = chooserRight - math.min(widest, chooserRight - (sw / 2 + G))
 	local lowest = sh - M
+	-- The strip, not its name band: the chooser is up only while a weapon is
+	-- being picked, and on the smallest phones clearing the band as well would
+	-- push it into the jump button.
 	for _, other in ipairs({ hotbar, jump, thumb }) do
 		if other.x < chooserRight + G and other.x + other.w + G > leftmost then
 			lowest = math.min(lowest, other.y - G)
@@ -1831,8 +1862,8 @@ local function sidebars(input: Input): Layout
 	local ch = style.Root.Y + style.Drop
 	local cx = CONFIG.CashLeft
 	local rootBottom = sh - HOT.BottomGap
-	if HudLayout.gap(rect(cx, rootBottom - style.Root.Y, cw, ch), hotbar) < G then
-		rootBottom = hotbar.y - G - style.Drop
+	if HudLayout.gap(rect(cx, rootBottom - style.Root.Y, cw, ch), band) < G then
+		rootBottom = band.y - G - style.Drop
 	end
 	local cash = rect(cx, rootBottom - style.Root.Y, cw, ch)
 	local cashRoot = rect(cx, rootBottom - style.Root.Y, style.Root.X, style.Root.Y)
@@ -1895,7 +1926,7 @@ local function sidebars(input: Input): Layout
 		local gw = math.min(P.Guide.Width, math.floor(sw * P.Guide.Reach) - gx,
 			math.max(least, math.floor(sw / 2 - P.Guide.Clear) - gx))
 		local floorY = sh - M
-		for _, other in ipairs({ hotbar, cash, thumb, jump, equipment }) do
+		for _, other in ipairs({ band, cash, thumb, jump, equipment }) do
 			if other.x < gx + gw + G and other.x + other.w + G > gx then
 				floorY = math.min(floorY, other.y - G)
 			end
@@ -1934,6 +1965,7 @@ local function sidebars(input: Input): Layout
 		equipGap = S.Gap,
 		hotbar = hotbar,
 		chip = chip,
+		namePopup = HudLayout.namePopupOver(hotbar),
 		cash = cash,
 		cashRoot = cashRoot,
 		thumb = thumb,
@@ -1951,7 +1983,7 @@ local function sidebars(input: Input): Layout
 		boost = boost,
 		chooser = chooser,
 		equipPad = S.Pad,
-		toast = toastAbove(sw, hotbar, { cash, equipment, thumb, jump }),
+		toast = toastAbove(sw, band, { cash, equipment, thumb, jump }),
 		teleport = teleport,
 		teleportScale = CONFIG.Teleport.PhoneScale,
 		obby = rect(0, 0, 0, 0),
@@ -2120,6 +2152,10 @@ function HudLayout.problems(L: Layout): { string }
 	if L.chooser then
 		table.insert(transient, { name = "chooser", rect = L.chooser })
 	end
+	-- The item name's band over the strip (2026-10-01): up for a second on an
+	-- equip, so not a permanent group, but nothing permanent may stand in it.
+	-- It touches the strip it belongs to, which is the one pair exempted.
+	table.insert(transient, { name = "name band", rect = L.namePopup })
 	if L.handleShut then
 		table.insert(transient, { name = "shut handle", rect = L.handleShut })
 	end
@@ -2130,8 +2166,9 @@ function HudLayout.problems(L: Layout): { string }
 			table.insert(found, extra.name .. " is not inside the safe area's margin")
 		end
 		for _, group in ipairs(groups) do
-			local exempt = extra.name == "shut handle"
-				and (group.name == "dock" or group.name == "handle")
+			local exempt = (extra.name == "shut handle"
+				and (group.name == "dock" or group.name == "handle"))
+				or (extra.name == "name band" and group.name == "hotbar")
 			local apart = HudLayout.gap(r, group.rect)
 			if apart < G and not exempt then
 				table.insert(found, string.format("%s and %s are %.1f px apart",
@@ -2204,6 +2241,7 @@ local function tenFoot(input: Input, tv: TenFootInput): Layout
 	L.bag = shifted(L.bag, dx, dy)
 	L.equipment = shifted(L.equipment, dx, dy)
 	L.hotbar = shifted(L.hotbar, dx, dy)
+	L.namePopup = shifted(L.namePopup, dx, dy)
 	L.cash = shifted(L.cash, dx, dy)
 	L.cashRoot = shifted(L.cashRoot, dx, dy)
 	L.thumb = shiftedMaybe(L.thumb, dx, dy)

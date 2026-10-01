@@ -1,6 +1,78 @@
 # Steal a Seed — Session Handoff
 
-## Bonus Chest reward splash, and the Starbloom teaser — 2026-10-01 (CLAUDE)  (UNCOMMITTED ON `wip`; NOT PUBLISHED BY AN AGENT — THE OWNER'S v1012 WENT OUT AT 07:37 UTC AFTER THIS WORK WAS ON DISK WITH ROJO CONNECTED, SO IT LIKELY CARRIES IT, UNPROVEN BY THE LOG; STUDIO PLAY ON THE THROWAWAY TEST STORE, DESKTOP ONLY — NO PHONE EMULATION, NO PHYSICAL PHONE)
+## The hotbar is five roles, to the owner's reference — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` (the hotbar commit after 5fe569e); NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE, DESKTOP ONLY — NO PHONE EMULATION, NO PHYSICAL PHONE)
+
+**Proposed and approved** (the owner, 2026-10-01): five desktop slots + BAG, four phone slots + BAG; slot 5 the
+previous plant/pod; bat and trap on the phone belt with the chooser kept; empty slots barely visible, positions and
+keys stable; the same Tool never on both plant shortcuts; arrivals never replace a chosen shortcut; the BAG counter
+is plant storage (Held rows + a carried pod, not tickets or weapons), nothing before the profile; double-tap return
+removed. The Shop is untouched.
+
+**Implemented.**
+- **Roles** (`Shared/HotbarRoles.luau`, pure): 1 bat, 2 trap, 3 Spin Tickets (xN), 4 the ACTIVE plant/pod, 5 the
+  PREVIOUS one (desktop only). An empty role is a faint empty slot in its place; nothing renumbers. The two
+  shortcuts are client memory, never saved: a Tool and a key each, re-leased by key within 5 s (a respawn), let go
+  after. Only an empty active slot auto-fills (the newest plant); with no other plant left, the previous steps up.
+  HOLD in the Bag makes a plant active and moves the old active to previous; choosing the previous one swaps them.
+  Dragging a Bag card onto slot 4 or 5 does the same; dragging slot 4 onto 5 swaps. The Bag lists every stored
+  plant, the two on the strip included.
+- **The look** (`Shared/HotbarCard.luau`, `GameConfig.Hotbar` rewritten): 64-px squares 4 apart, no tray, a
+  translucent charcoal plate (0.38) with a 1-px light-grey edge at 6-px corners, the preview 58×56 inside, a plain
+  white 12-px number top left (amber in hand), the tickets' `xN` bottom right in gold, a 2-px rarity bar at the foot
+  of a hatched plant, a hidden Name label for TutorialUI's pointer. Empty: plate 0.84, edge 0.86, number 0.55.
+  In hand: the amber→green 2-px edge, a lighter plate, a 3-px lift. BAG: a square of the same size, the Bag icon
+  over `N/24` (green; amber when full; slate "…" before the profile). Phone face: 52-px squares. Strip 410×64
+  (desktop) / 282×52 (phone).
+- **Feedback:** the item's name pops up over the strip for 1.2 s on an equip and for as long as a mouse rests on a
+  slot (HudLayout's `namePopup` band, 22 px, which notices, the cash block and BAT/TRAP keep clear of); a pop on
+  the slot on equip; an arriving plant pops and flashes its slot, or pops the BAG cell when it goes to storage (not
+  for 3 s after a spawn). Reduced motion (REDUCED FX or Roblox's setting): no lift, no pop, no fade.
+- **Kept:** `holdTool` is the only equip (its carrying and sealed-roll refusals unchanged); LB/RB cycle the
+  occupied slots; keys 1–5 (6–0 unbound); the chooser and side tiles; TutorialUI's pointer; no server file changed.
+- `HudLayout`: `DesktopSlots` 10→5, `MobileSlots` 5→4 (a non-touch compact window keeps five), `beltBetween` takes
+  the count, `Layout.namePopup`, the band used for the cash block's and the equipment column's clearance and for
+  `toastAbove`; the chooser clears the strip, not the band (on the smallest phones clearing both pushed it into the
+  jump button).
+- `LoadoutUI` is at 182 of Luau's 200 locals (was 189); the drawing and the roles left it for the two modules.
+
+**Tested.**
+- Specs: `HotbarSpec` (new) 45/45 — roles, choosing, two identical copies, a respawn's re-lease, a sold plant,
+  storage text, the card's states, the band on 7 screens, the wiring. `HudLayoutSpec` 1288/1288 (updated:
+  5/4 slots, 410×64 and the phone face, the band check, the source checks; the "tray follows the strip" and
+  "6–10 released" checks replaced). Re-run unchanged and passing: ControllerSpec 69, ActionRefusalSpec 72,
+  UsabilityAudioSpec 117, PlantInfoSpec 45, HatchRollSpec 167. Rojo build OK; 147/147 scripts in Studio equal disk.
+- **HatchRollSpec's line 815 was failing on `wip` before this work** (b1aeac7 appended `or name == "TicketCount"`
+  after the text it matches). The attribute test was reordered so the expected text is back; a genuine correction,
+  since this change rewrites that handler's neighbours.
+- **Play** (SeedTest_20261001, guard SAFE, desktop 960×716, keyboard, no touch; the throwaway profile given a bat, a
+  trap, two pods, a hatched Nubkin and 5 community tickets):
+  - the strip: bat, trap, ticket x5, a pod on 4, an empty faint 5, BAG 3/24 — captures in `output/hotbar/`;
+  - slot presses (clicks on the faces): each puts its item in hand with the lit edge and lift; the lit slot again puts
+    it away; the empty slot does nothing; the name shows under the mouse and on equip and clears;
+  - Bag HOLD on the Nubkin: slot 4 became the Nubkin (lit, with its rarity bar), the pod moved to 5, the Bag still
+    listed all three plants with IN HAND on the Nubkin;
+  - storage filled to 24: BAG 24/24 amber, the chosen shortcuts untouched by 21 arrivals; ClearBag: 0/24, slots 4
+    and 5 empty in place;
+  - a pod in both arms on the road (a nest-less loose pod): BAG 4/24; pressing slot 4 equipped nothing and the carry
+    stayed; the refusal toast was not caught by the read (timing), the refusal itself is ActionRefusalSpec's;
+  - respawn: bat, trap, ticket back, slots 4 and 5 re-leased to the two rebuilt pods, BAG 2/24;
+  - reduced motion: the lit slot's lift stayed 0 and the popup appeared with no fade.
+- **Not tested / limitations:**
+  - **Phone: no emulation was available** (MCP cannot switch Studio's device emulator) and no physical phone. The
+    four-slot belt is HudLayoutSpec arithmetic only (282×52 between the thumbstick and the jump button on every
+    listed phone).
+  - **Number keys 1–5** could not be pressed through the MCP (CoreGui-bound); their binding is spec-checked, presses
+    were made on the slot faces, which run the same `holdTool`.
+  - Controller LB/RB, a real guardian catch mid-press, the drag onto slots 4/5 and the 4↔5 swap drag: not exercised
+    in Play (spec and source only).
+  - The hover popup refreshing when the slot under a resting mouse changes was fixed after the Play session (seen
+    there as a stale "Nubkin"); it is spec-checked, not Play-checked.
+  - After ClearBag, a pod given within 5 s re-leased the old pod shortcut by key (the respawn grace): by design.
+  - Studio's 705×338 emulation is not a listed phone; its weapon chooser meets the jump button there at any belt
+    height (reported by `problems`, pre-existing by arithmetic, not verified at HEAD).
+- **Published:** nothing by an agent. v1012 was published at 07:37 UTC, before this work began (10:50 UTC).
+
+## Bonus Chest reward splash, and the Starbloom teaser — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` IN 5fe569e; NOT PUBLISHED BY AN AGENT — THE OWNER'S v1012 WENT OUT AT 07:37 UTC AFTER THIS WORK WAS ON DISK WITH ROJO CONNECTED, SO IT LIKELY CARRIES IT, UNPROVEN BY THE LOG; STUDIO PLAY ON THE THROWAWAY TEST STORE, DESKTOP ONLY — NO PHONE EMULATION, NO PHYSICAL PHONE)
 
 The Shop redesign is deferred: the Shop is untouched.
 

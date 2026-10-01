@@ -5147,199 +5147,146 @@ GameConfig.Almanac = {
 -- own cell after a small gap. Only LoadoutUI reads this block.
 --==============================================================================
 GameConfig.Hotbar = {
+	--==========================================================================
+	-- THE HOTBAR'S LOOK (2026-10-01, the owner's reference image)
+	--
+	-- A compact row of nearly square slots: a translucent charcoal plate with
+	-- small rounded corners and a thin light-grey edge, the item large in the
+	-- middle, a small white number in the top-left corner as plain text, narrow
+	-- even spacing, and no tray, no shadow and no name on the slot. The slots
+	-- are ROLES (HotbarRoles): bat, trap, Spin Tickets, the active plant or
+	-- pod, the previous one; the BAG cell is one more square at the end. Drawn
+	-- by HotbarCard; placed by HudLayout; owned by LoadoutUI.
+	--
+	-- Colours keep the slate-and-ink family: the charcoal is the Shop's slate,
+	-- the in-hand edge the warm amber-to-green keyline, the stack count the
+	-- tickets' gold, the Bag's count the chest's green and amber.
+	--==========================================================================
 	Ink = Color3.fromRGB(16, 21, 28), -- #10151C
-	-- The card: calmer and darker than the tray it sits in, and no lattice on it.
-	PlateTop = Color3.fromRGB(21, 27, 36), -- #151B24
-	PlateBottom = Color3.fromRGB(15, 19, 26), -- #0F131A
-	-- The shop's slate lattice, faint, on the TRAY only.
-	Lattice = Color3.fromRGB(88, 100, 120),
-	LatticeTransparency = 0.86,
-	LatticeSpacing = 14,
-	-- The tray the cards sit in: the same slate a step lighter, a strong ink
-	-- border, a faint inner rim, and a little of the world showing through.
-	TrayTop = Color3.fromRGB(40, 48, 61), -- #28303D
-	TrayBottom = Color3.fromRGB(25, 30, 40), -- #191E28
-	TrayTransparency = 0.08,
-	TrayBorder = 3,
-	Rim = Color3.fromRGB(96, 110, 132),
-	RimTransparency = 0.62,
+	Plate = Color3.fromRGB(34, 40, 50), -- charcoal slate #222832
+	PlateTransparency = 0.38,
+	Edge = Color3.fromRGB(176, 186, 200), -- light grey #B0BAC8
+	EdgeTransparency = 0.45,
+	CardCorner = 6,
+	CardStroke = 1,
+	-- An empty slot is barely there: the key is still in its place.
+	EmptyPlateTransparency = 0.84,
+	EmptyEdgeTransparency = 0.86,
+	EmptyNumeralTransparency = 0.55,
+	-- Under a mouse: a brighter edge, a little bigger, a little higher.
+	HoverEdgeTransparency = 0.1,
+	HoverScale = 1.04,
+	HoverLift = 2,
+	-- Under a thumb: a brief sink.
+	PressScale = 0.97,
 
-	-- The Tool in your hands: a warm amber-to-green keyline, a brighter face, a
-	-- soft glow outside it, a small lift and an IN HAND strip.
+	-- In your hands: the warm keyline, a lighter plate, an amber number, a lift.
 	LitTop = Color3.fromRGB(255, 200, 64), -- #FFC840 warm amber
 	LitBottom = Color3.fromRGB(126, 214, 72), -- #7ED648 botanical green
-	LitThickness = 3.5,
-	LitPlateTop = Color3.fromRGB(46, 58, 44),
-	LitPlateBottom = Color3.fromRGB(29, 38, 30),
-	InHandText = Color3.fromRGB(16, 21, 28),
-	HeldLift = 4,
-	-- The cooldown shade's transparency. It rose from 0.45 with the darker card:
-	-- at 0.45 a bat that cannot swing was barely a shade off one that can.
+	LitThickness = 2,
+	LitPlate = Color3.fromRGB(54, 68, 52),
+	LitPlateTransparency = 0.22,
+	HeldLift = 3,
+	-- The cooldown shade's transparency: deep, because the plate is dark.
 	CooldownShade = 0.25,
-	-- The preview's ambient light. A step brighter than the Bag's card light,
-	-- because several species are authored in near-black and the card behind
-	-- them is darker than any Bag card.
+	-- The preview's ambient light, a step brighter than the Bag's card light.
 	PreviewAmbient = Color3.fromRGB(160, 164, 180),
-	-- Under a mouse: a little bigger, a little higher, a brighter edge.
-	HoverScale = 1.05,
-	HoverLift = 2,
-	HoverRim = Color3.fromRGB(196, 206, 222),
-	HoverRimTransparency = 0.45,
-	-- Under a thumb: a brief sink, released as soon as it becomes a drag.
-	PressScale = 0.98,
-	-- A slot the player put something in: a light slate keyline.
-	Assigned = Color3.fromRGB(122, 134, 156),
 
-	-- The number badge: an ink circle with a cream numeral, amber while held.
-	Numeral = Color3.fromRGB(242, 238, 206),
+	-- The number: plain white text top left, amber while held, with a hairline
+	-- of ink so it reads over a light item.
+	Numeral = Color3.fromRGB(255, 255, 255),
 	NumeralLit = Color3.fromRGB(255, 208, 92),
-	KeyEdge = Color3.fromRGB(70, 82, 100),
-	Caption = Color3.fromRGB(242, 238, 206),
-	-- An empty slot: a dashed outline and a plus.
-	Ghost = Color3.fromRGB(98, 110, 130),
+	NumeralSize = 12,
+	NumeralInset = 4,
+	NumeralOutline = 1.2,
+	-- The stack count (the tickets' xN), bottom right, in the tickets' gold.
+	StackColour = Color3.fromRGB(255, 206, 84),
+	StackSize = 10,
+	StackInset = 3,
+	-- The rarity accent: a thin bar on the bottom edge, this share of the width,
+	-- in the form's RarityColor. A hatched plant only; a pod's rarity is the
+	-- hatch's reveal, and a weapon has none.
+	AccentHeight = 2,
+	AccentShare = 0.56,
+	AccentBottom = 3,
 
-	-- The information chip. Bats, traps and pods say what they are; a hatched
-	-- plant says its SIZE, edged in its form's rarity colour (GameConfig
-	-- .RarityColor). A pod's edge is neutral: its rarity is part of the reveal.
+	-- Feedback: a pop on equip and on an arrival, and a flash of the edge.
+	BumpScale = 1.12,
+	BumpSeconds = 0.18,
+	FlashSeconds = 0.3,
+	FlashArrived = Color3.fromRGB(150, 220, 96),
+	FlashCleared = Color3.fromRGB(226, 118, 92),
+
+	-- The side tiles' edge colours (refreshSide), and the Bag's count colours:
+	-- green while there is room, a calm amber when storage is full, slate while
+	-- the profile is still loading.
 	Tags = {
 		bat = { text = "BAT", colour = Color3.fromRGB(255, 191, 36) }, -- amber #FFBF24
 		trap = { text = "TRAP", colour = Color3.fromRGB(251, 146, 60) }, -- orange #FB923C
 		pod = { text = "POD", colour = Color3.fromRGB(170, 182, 198) }, -- quiet slate
 	},
-
-	-- The Bag cell's count: green while a slot is free, a calm amber when full.
 	CountOpen = Color3.fromRGB(126, 214, 72),
 	CountFull = Color3.fromRGB(255, 196, 76),
+	CountLoading = Color3.fromRGB(170, 182, 198),
 
-	-- Gui pixels. A card stays 64 wide, the touch floor this strip has always
-	-- kept, and 92 tall: a badge row, a 48-pixel preview and a name. The whole
-	-- strip is 764 wide with ten cards and the Bag, exactly the width it was.
+	-- Gui pixels. Square 64-px slots 4 px apart, the touch floor this strip has
+	-- always kept; no tray (TrayPad 0). Five slots and the Bag: 410 wide.
 	SlotWidth = 64,
-	SlotHeight = 92,
-	Gap = 5,
-	TrayPad = 6,
+	SlotHeight = 64,
+	Gap = 4,
+	TrayPad = 0,
 	BottomGap = 10,
-	-- The Bag cell, and the extra space before it.
-	ChipWidth = 52,
-	BagGap = 5,
-	-- The card's inside, top to bottom. The preview starts under the chip, so a
-	-- tall silhouette never passes behind a corner.
-	BadgeSize = 16,
-	PreviewTop = 18,
-	PreviewHeight = 48,
+	-- The Bag cell, and the extra space before it (the list's gap either side
+	-- of a spacer this wide).
+	ChipWidth = 64,
+	BagGap = 2,
+	-- The preview's glass: nearly the whole slot, the number over its corner.
 	PreviewInset = 3,
-	-- The silhouette's limiting axis spans this much of the preview's glass.
-	PreviewFit = 0.97,
-	-- Tall enough for two lines at 10 px, so "Rootwood Bat" wraps rather than
-	-- shrinking to one line at 9. Its foot and the IN HAND strip's top edge,
-	-- stroke included, are a pixel apart.
-	NameTop = 64,
-	NameHeight = 21,
-	NameMax = 12,
-	NameMin = 7,
-	-- The chip may reach this far left and still clear the number badge.
-	ChipHeight = 13,
-	ChipMaxWidth = 42,
-	ChipTextMax = 9,
-	ChipTextMin = 6,
-	InHandHeight = 10,
-	-- The Bag cell is dropped below this viewport width, where a five-slot tray
-	-- needs the room.
-	ChipMinViewport = 560,
-
-	--==========================================================================
-	-- THE SAME CARD'S OTHER NUMBERS, NAMED
-	--
-	-- These were literals inside LoadoutUI. They are here because the compact
-	-- belt below changes them, and a number one presentation changes has to be
-	-- somewhere both can read. Every value is the one that shipped, so the
-	-- desktop draws exactly as it did.
-	--==========================================================================
-	CardCorner = 12,
-	CardStroke = 2.5,
-	-- The in-hand glow's reach outside the card, and its corner.
-	AuraPad = 8,
-	AuraCorner = 16,
-	BadgeInset = 3,
-	BadgeText = 11,
-	ChipTop = 4,
-	-- Two wrapped lines, or one with an ellipsis.
-	NameLines = 2,
-	HintWidth = 52,
-	HintHeight = 13,
-	GhostPlus = 22,
+	PreviewTop = 4,
+	PreviewHeight = 56,
+	-- The silhouette's limiting axis spans this much of the glass.
+	PreviewFit = 0.96,
+	-- The Bag cell's icon and its count.
 	BagIcon = 34,
-	BagIconTop = 9,
-	BagWord = true,
-	BagPillTop = 66,
-	TrayCorner = 18,
-	-- The faint inner rim is this much smaller than the tray: half of it each side.
-	TrayRim = 6,
+	BagIconTop = 5,
+	BagCountTop = 43,
+	BagCountSize = 12,
+	-- The Bag cell is dropped below this viewport width.
+	ChipMinViewport = 420,
+
+	-- The item's name, briefly above the strip on an equip and under a mouse:
+	-- its band's height, its gap over the strip, its text, and how long an
+	-- equip's stays. HudLayout keeps the band clear of notices and the cash.
+	NamePopupHeight = 22,
+	NamePopupGap = 4,
+	NamePopupText = 13,
+	NamePopupSeconds = 1.2,
 
 	--==========================================================================
-	-- THE COMPACT BELT: A PHONE, OR ANY WINDOW HudLayout CALLS COMPACT
+	-- THE COMPACT BELT: A PHONE
 	--
-	-- Found by the owner 2026-09-22 on a landscape phone: the five cards and
-	-- the Bag cell were 419 x 104 of the bottom of the screen, a strip of full
-	-- inventory cards where a quick-access belt was wanted. The same five slots,
-	-- the same preview, number, chip, name, cooldown and in-hand look, the same
-	-- dark frame -- re-proportioned around the item, with the bulk taken out:
-	--
-	--   card        54 x 76 against 64 x 92; still well over the 44-px touch
-	--               floor, which the card itself is, so there is no hit
-	--               extension to catch a camera drag beside it
-	--   tray        84 tall against 104: 4 px of padding, a 2-px border
-	--   IN HAND     no strip; the warm keyline, the glow and the lift say it
-	--   the name    one line, and an ellipsis for the long ones
-	--   the chip    9 px words like the desktop's; the badge and the chip share
-	--               the top row, so the chip stops where the badge ends
-	--   the Bag     50 wide, the icon and the count; the word BAG went
-	--
-	-- Five cards and the Bag cell: 355 x 84. HudLayout reads these through
-	-- hotMetrics, which lays this table over the one above, so a key missing
-	-- here is the desktop's.
+	-- Four slots and the Bag, 52-px squares between the thumbstick and the
+	-- jump button: 284 wide. Everything else is the desktop's. HudLayout lays
+	-- this over the table above (hotMetrics), so a key missing here is the
+	-- desktop's.
 	--==========================================================================
 	Compact = {
-		SlotWidth = 54,
-		SlotHeight = 76,
-		Gap = 4,
-		TrayPad = 4,
-		TrayBorder = 2,
-		TrayCorner = 14,
-		TrayRim = 4,
-		ChipWidth = 50,
-		BagGap = 3,
-		BadgeSize = 14,
-		BadgeText = 10,
-		PreviewTop = 16,
-		PreviewHeight = 42,
+		SlotWidth = 52,
+		SlotHeight = 52,
+		ChipWidth = 52,
+		NumeralSize = 10,
+		NumeralInset = 3,
 		PreviewInset = 2,
-		NameTop = 59,
-		NameHeight = 14,
-		NameMax = 11,
-		NameMin = 8,
-		NameLines = 1,
-		ChipTop = 3,
-		ChipHeight = 12,
-		-- From the badge's edge (3 + 14) to 3 px short of the card's: 34. Every
-		-- chip word fits it at 9 px except COLOSSAL, which fits at 6.
-		ChipMaxWidth = 34,
-		ChipTextMax = 9,
-		ChipTextMin = 6,
-		InHandHeight = 0,
-		HeldLift = 3,
-		LitThickness = 3,
-		CardStroke = 2,
-		CardCorner = 10,
-		AuraPad = 6,
-		AuraCorner = 13,
-		HintWidth = 46,
-		HintHeight = 12,
-		GhostPlus = 18,
-		BagIcon = 30,
-		BagIconTop = 11,
-		BagWord = false,
-		BagPillTop = 47,
+		PreviewTop = 3,
+		PreviewHeight = 46,
+		StackSize = 9,
+		BagIcon = 28,
+		BagIconTop = 4,
+		BagCountTop = 35,
+		BagCountSize = 11,
+		HeldLift = 2,
+		HoverLift = 1,
+		NamePopupText = 12,
 	},
 }
 

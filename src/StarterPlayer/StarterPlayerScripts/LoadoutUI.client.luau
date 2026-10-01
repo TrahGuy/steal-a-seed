@@ -64,6 +64,10 @@ local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 -- Where the strip, the Bag button and BAT/TRAP sit on this screen, and how many
 -- slots it gets. Numbers only; see layoutHud at the bottom of this file.
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+-- The hotbar's roles and its two plant shortcuts (pure), and how one slot is
+-- drawn (2026-10-01). Out of this chunk, which is rationed to 200 locals.
+local HotbarRoles = require(Shared:WaitForChild("HotbarRoles"))
+local HotbarCard = require(Shared:WaitForChild("HotbarCard"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -181,14 +185,12 @@ local READY_AT = "ReadyAt"
 -- The rule below is only the stand-in for the moment before the ScreenGui has
 -- a size, and it answers five for anything with a touch screen.
 --==============================================================================
-local DESKTOP_SLOTS = 10
-local MOBILE_SLOTS = 5
+-- SINCE 2026-10-01 THE SLOTS ARE ROLES (HotbarRoles): five on a desktop, four
+-- on a phone -- HudLayout.Config's numbers, read here only for the moment
+-- before the ScreenGui has a size.
+local DESKTOP_SLOTS = HudLayout.Config.DesktopSlots
+local MOBILE_SLOTS = HudLayout.Config.MobileSlots
 local MAX_SLOTS = DESKTOP_SLOTS
-
--- 10 x 64 + 9 x 5 = 685 px of slots, 764 with the tray's padding and the Bag
--- cell. Below this the strip is most of the window, so five is the better
--- answer even with a keyboard attached.
-local DESKTOP_MIN_WIDTH = 900
 
 -- How many slots are LIVE right now. Everything reads this; nothing assumes a
 -- number. `MAX_SLOTS` is how many can ever exist, and the difference between the
@@ -204,32 +206,12 @@ local function wantedSlots(): number
 	if layout then
 		return layout.slots
 	end
-	local camera = Workspace.CurrentCamera
-	local width = if camera then camera.ViewportSize.X else 0
-	if UserInputService.KeyboardEnabled and not UserInputService.TouchEnabled
-		and width >= DESKTOP_MIN_WIDTH then
+	if not UserInputService.TouchEnabled then
 		return DESKTOP_SLOTS
 	end
 	return MOBILE_SLOTS
 end
 
---==============================================================================
--- HOW LONG TWO TAPS COUNT AS ONE GESTURE
---
--- 0.30 s, in the middle of the 0.28-0.35 band. Shorter and a thumb that has to
--- travel back to the slot misses it; longer and two deliberate weapon swaps in
--- quick succession start reading as a double.
---
--- Nothing WAITS this long. See the banner on the slot's Activated handler: the
--- first tap equips immediately and the second undoes the placement, so the
--- window costs no latency at all on the common path.
---==============================================================================
-local DOUBLE_WINDOW = 0.30
-
--- Per slot, so a tap on 2 followed by a tap on 3 is never a double. os.clock is
--- the right clock here: it is monotonic and this is a local input rhythm, not
--- anything that has to agree with the server.
-local lastTap: { [number]: number } = {}
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -304,42 +286,15 @@ type Slot = {
 }
 
 --==============================================================================
--- WHAT MAY BE ASSIGNED TO A SLOT, AND WHY A BAT MAY NOT
+-- WHAT MAY BE CHOSEN FOR A SHORTCUT, AND WHY A BAT MAY NOT
 --
--- A CATEGORY decides this, never a species name -- a rule keyed on plant names
--- would need editing every time somebody adds a seed, which is the same as not
--- having a rule.
---
--- BATS AND TRAPS ARE EXEMPT ON PURPOSE. They are not ordinary carryables: each
--- lives in its own dedicated equipment slot beside the bag, exactly one bat and
--- one trap are equipped at a time, and that pairing is the whole of the combat
--- loadout. Feeding them through the generic path would mean a bat could be
--- "assigned" to slot 4 and thereby vanish out of the equipment tab that owns it,
--- and a double-tap could "return" a weapon to a bag it never left. They still
--- APPEAR on the hotbar -- that is where you swing from -- they just are not
--- assignable, returnable or hideable by it.
---
--- A FUTURE ORDINARY ITEM OPTS IN TWO WAYS, and needs no edit here for the
--- second: add its category below, or have whatever creates the Tool set the
--- `CanAssignHotbar` attribute on it. The attribute wins, so a single odd item in
--- an otherwise-exempt category can opt in (or out) on its own.
+-- Only plants and pods: keys 4 and 5 are the two plant shortcuts (HotbarRoles),
+-- and the bat, the trap and the Spin Tickets each have a fixed slot of their
+-- own, so there is nothing to choose for them. A CATEGORY decides this, never
+-- a species name.
 --==============================================================================
-local CAN_ASSIGN_ATTR = "CanAssignHotbar"
-
-local HOTBAR_ASSIGNABLE: { [string]: boolean } = {
-	plant = true,
-	bat = false,
-	trap = false,
-	-- The Spin Tickets (2026-10-01): one stacked Tool, placed like a plant.
-	ticket = true,
-}
-
-local function assignable(tool: Tool, kind: string): boolean
-	local override = tool:GetAttribute(CAN_ASSIGN_ATTR)
-	if type(override) == "boolean" then
-		return override
-	end
-	return HOTBAR_ASSIGNABLE[kind] == true
+local function assignable(_tool: Tool, kind: string): boolean
+	return kind == "plant"
 end
 
 local function classify(tool: Tool): Slot?
@@ -1165,18 +1120,15 @@ local cancelDrag: () -> ()
 local dragMoved = false
 
 --==============================================================================
--- SENDING SOMETHING BACK TO THE BAG
+-- CHOOSING A PLANT FOR THE ACTIVE SHORTCUT
 --
--- Two gestures arrive at the same place -- a double-tap on the slot, and a drag
--- from the slot onto the open bag -- so it is one function rather than two
--- copies of the same four steps that would drift apart the first time one of
--- them was fixed.
+-- The Bag's HOLD does it, and the card handlers are built long before the
+-- strip code that defines it (with flashSlot), so a forward local.
 --==============================================================================
-local returnToBag: (number) -> ()
+local chooseShortcut: (Tool) -> ()
 
--- Whether the bag is open, read by refreshHotbar to decide if the return hint
--- is worth showing. The `open` local that owns this lives with setOpen at the
--- bottom of the file, far below the draw code that needs to know.
+-- Whether the bag is open: on touch the strip steps aside while it is. The
+-- `open` local that owns this lives with setOpen at the bottom of the file.
 local bagOpen = false
 
 -- Assigning, moving and returning all have to redraw the bag as well as the
@@ -1215,107 +1167,29 @@ local selectTool: (Tool?) -> ()
 local liveSlots: { Slot } = {}
 
 --==============================================================================
--- WHICH ONES, AND WHO DECIDES
+-- THE TWO PLANT SHORTCUTS (HotbarRoles, 2026-10-01)
 --
--- With ten slots on a wide screen the hotbar can very nearly BE the tool list.
--- With five it cannot, so something has to choose, and the player is the only
--- one who knows which plant they are about to want.
---
--- `assigned[slotIndex]` is that choice. Anything NOT assigned auto-fills the
--- gaps in the existing bat/trap/plants order, so a bag nobody has arranged
--- behaves exactly as it always did and a new pickup still turns up on the strip
--- by itself.
---
+-- Which stored plant or pod keys 4 and 5 reach. Client memory, never saved,
+-- as the arrangement before it was: each a Tool AND a key -- the exact copy,
+-- so two identical Nubkins are two items, and what to look for when the copy
+-- dies, because a respawn destroys and rebuilds every Tool. A lost copy is
+-- re-leased by key within HotbarRoles.Grace; after that the slot is let go.
 --==============================================================================
--- WHY AN ASSIGNMENT IS A TOOL *AND* A KEY, AND NOT EITHER ALONE
---
--- The old version stored only the key -- "p:<species>:<tier>:<hatched>". That
--- cannot tell two identical plants apart, and this feature now has to: assigning
--- ONE of two identical Voidpetals must hide exactly ONE of them from the bag and
--- leave the other sitting there to be assigned somewhere else. A key alone
--- either hides both or hides neither.
---
--- A Tool reference alone is no good either. A respawn DESTROYS every Tool and
--- builds new ones, so an assignment holding an instance would point at a
--- destroyed object and the player's arrangement would evaporate every death --
--- and death is frequent in a game whose whole loop is being chased.
---
--- So it holds both, and they do different jobs:
---
---   * `tool` is the CLAIM -- this exact owned copy, the one being hidden from the
---     bag. Reparenting between Backpack and Character does not disturb it,
---     because it is the same instance in either place.
---   * `key` is the LEASE -- what to look for when the claim dies. After a
---     respawn the slot re-binds to any unclaimed copy of the same thing, which
---     is what a player means when they arrange a hotbar.
---
--- If neither can be satisfied, the assignment is CLEARED: the item was sold,
--- planted, consumed or otherwise stopped being owned, and a slot holding a
--- promise nobody can keep is worse than an empty one.
---==============================================================================
-type Assign = {
-	key: string,
-	tool: Tool?,
-	-- When the claim went missing, if it has. See the grace period below.
-	lostAt: number?,
-}
+local shortcuts: HotbarRoles.State = {}
 
---==============================================================================
--- AND A LEASE OUTLIVES THE GAP WHERE ITS TOOL DOES NOT EXIST
---
--- MEASURED, and the reason this constant exists at all. The first version cleared
--- an assignment the moment its Tool could not be found, which looked right and
--- destroyed the feature: a respawn DESTROYS the Backpack and builds a new one, so
--- for a moment the player owns nothing. `redraw` is wired to ChildRemoved, so it
--- runs inside that gap, finds no Nubkin, and throws the arrangement away -- and
--- then the rebuilt Nubkins arrive to an empty hotbar.
---
--- Proved by destroying three Nubkin Tools and rebuilding three identical ones:
--- the slot came back auto-filled with a trap and every card was visible again,
--- when the whole point of keying by species is that this case survives.
---
--- So a lost claim is not a dead assignment. The lease is kept, and cleared only
--- if nothing matching has turned up after this long -- which separates the two
--- cases by the only thing that actually distinguishes them:
---
---   respawn, reparent, streaming hiccup   the key comes back within a second
---   sold, planted, consumed, given away   it never comes back
---
--- Five seconds because a respawn has to load a profile and let CarryService hand
--- back every held plant before the key can reappear, and being slightly slow to
--- release a slot costs a player nothing they can see. Being fast to release it
--- costs them their hotbar every time they die, which in this game is often.
---==============================================================================
-local ASSIGN_GRACE = 5.0
-
--- Indexed to MAX_SLOTS, not activeSlots: slots 6-10 keep their assignments while
--- a phone is only showing five, which is what lets a desktop arrangement come
--- back intact instead of being thrown away by picking up a phone.
-local assigned: { [number]: Assign } = {}
-
---==============================================================================
--- WHICH TOOLS THE BAG MUST NOT SHOW
---
--- Rebuilt by the reconcile below and read by refreshBag. Only ACTIVE slots put
--- anything in here: an item auto-filled onto the strip is still ordinary bag
--- contents and must stay visible, and an assignment parked in an inactive
--- overflow slot must stay visible too or it would be unreachable -- which is the
--- one outcome this whole design exists to prevent.
---==============================================================================
-local claimed: { [Tool]: number } = {}
-
--- Guards the grace re-check below against stacking one timer per redraw while a
--- lease is waiting -- a respawn fires several redraws in a frame.
+-- Guards the grace re-check against stacking one timer per redraw while a
+-- shortcut is waiting -- a respawn fires several redraws in a frame.
 local gracePending = false
 
-local function assignedSlotFor(tool: Tool): number?
-	for index, record in pairs(assigned) do
-		if record.tool == tool then
-			return index
-		end
-	end
-	return nil
-end
+-- Plant storage as the profile last said it: the saved rows, for the Bag
+-- cell's count (HotbarRoles.storage). nil until the profile has arrived.
+local heldRows: number? = nil
+
+-- Tools that have just arrived (watchContainer), to be answered by the next
+-- paint with a pop on their slot or on the Bag -- except for a few seconds
+-- after a spawn, when every Tool arrives at once.
+local pendingArrivals: { [Tool]: boolean } = {}
+local quietUntil = os.clock() + 3
 
 type Card = {
 	button: TextButton,
@@ -1843,6 +1717,11 @@ local function acquireCard(index: number): Card
 			equipRequest(row.item)
 		elseif row.tool then
 			selectTool(row.tool)
+			-- A plant chosen here becomes the active shortcut, key 4, before it
+			-- goes into the hands (2026-10-01).
+			if row.kind == "plant" then
+				chooseShortcut(row.tool)
+			end
 			holdTool(row.tool)
 		end
 	end)
@@ -1956,56 +1835,32 @@ for i, category in ipairs({ "bat", "trap" }) do
 end
 
 --==============================================================================
--- THE HOTBAR
+-- THE HOTBAR (2026-10-01: roles, and the owner's reference look)
 --
--- Bottom centre, one slot per live Tool, in a stable order. It replaces the
--- engine's own because it has to look like the rest of this HUD -- but it is
--- built from the same two containers the engine reads, so nothing it could show
--- is missing from this.
+-- Bottom centre: five slots on a keyboard, four on a phone, and the Bag. The
+-- slots are ROLES (HotbarRoles), so a key always means the same thing and an
+-- empty role is a faint empty slot in its place -- nothing ever renumbers or
+-- slides under a thumb:
 --
---==============================================================================
--- BOTANICAL SLATE & INK, V2 (art/hotbar/reference/target-hotbar-v2.png)
+--   1 bat   2 trap   3 Spin Tickets   4 the active plant or pod   5 the previous
 --
--- The 2026-09-11 slate restyle, re-proportioned around the item. Every colour
--- and size is in GameConfig.Hotbar:
---
---   the tray   slate with a strong ink border, a faint inner rim, and the only
---              diamond lattice on the strip
---   a card     calm dark slate in an ink keyline -- darker than the tray, so the
---              item is the brightest thing in it
---   corners    a round ink number badge top left; ONE information chip top right
---   preview    the real Tool's model, framed to its drawn silhouette rather than
---              its bounding box, and never turned
---   the name   two centred lines at most, outlined, shrunk before it is cut
---   in hand    a warm amber-to-green keyline, a brighter face, a glow, a small
---              lift and an IN HAND strip
---   empty      a dashed outline and a plus, with no plate
---   the Bag    its own cell, after a small gap
+-- The look is HotbarCard's, to the owner's reference image: square translucent
+-- charcoal slots with a thin light edge, the item large in the middle, a small
+-- white number top left, no tray, no names. Every number is GameConfig.Hotbar
+-- (HOT), the compact belt laid over it on a phone (HudLayout.hotMetrics);
+-- layoutHud swaps HOT on a change of face and restyleHotbar resizes what is
+-- already built.
 --
 -- THE FRAME NAMED Hotbar IS THE STRIP, and the slots stay its direct children.
 -- Two other readers depend on that shape: TutorialUI finds a plant's slot by
--- walking exactly those children for a label carrying the Tool's name, and the
--- Bag's layout stops above this frame by reading its Size -- so the height is
--- written into Size and never left to AutomaticSize.
+-- walking exactly those children for a label carrying the Tool's name -- the
+-- card's hidden Name label -- and the Bag's layout stops above this frame by
+-- reading its Size, so the height is written into Size and never left to
+-- AutomaticSize.
 --
--- THAT IS ALSO WHY THE TRAY IS NOT PAINTED ON IT. The strip's UIListLayout lays
--- out every GuiObject child, so a lattice or a rim inside it would be laid out
--- as a slot. The painted tray is `HotbarTray`, a sibling directly behind the
--- strip that follows its size.
---
--- NEW TOP-LEVEL NAMES ARE RATIONED. This chunk declares 182 locals at the top
--- level and Luau refuses a function with more than 200, which fails the whole
--- script before anything is drawn. V2 adds none: the tray is built in a
--- do-block, and everything a card needs lives in its HotSlot record. The
--- compact belt adds one, restyleHotbar.
---
--- TWO FACES. HOT is the card's numbers for the mode the screen is in: this
--- GameConfig.Hotbar itself on a desktop, and on a phone HudLayout's compact belt
--- -- the same table with GameConfig.Hotbar.Compact laid over it: 54 x 76 cards,
--- one-line names, no IN HAND strip, a 50-px Bag cell without its word. It comes
--- in HudLayout's answer, layoutHud swaps it when the answer changes face, and
--- restyleHotbar rewrites what was already built. The desktop never swaps, so its
--- strip is the one that shipped.
+-- NEW TOP-LEVEL NAMES ARE RATIONED: Luau refuses a chunk with more than 200
+-- locals. The slot's drawing is HotbarCard's and the roles are HotbarRoles'
+-- for exactly that reason; what is left here is wiring.
 --==============================================================================
 local HOT: any = GameConfig.Hotbar
 
@@ -2020,75 +1875,6 @@ hotbar.BorderSizePixel = 0
 hotbar.ZIndex = 4
 hotbar.Parent = gui
 
-do
-	local pad = Instance.new("UIPadding")
-	pad.PaddingLeft = UDim.new(0, HOT.TrayPad)
-	pad.PaddingRight = UDim.new(0, HOT.TrayPad)
-	pad.PaddingTop = UDim.new(0, HOT.TrayPad)
-	pad.PaddingBottom = UDim.new(0, HOT.TrayPad)
-	pad.Parent = hotbar
-
-	--==========================================================================
-	-- THE TRAY
-	--
-	-- Behind the strip at one ZIndex lower, the same anchor and position, and
-	-- resized whenever the strip's own width changes -- a slot folding away, a
-	-- phone's five, the Bag opening. The lattice rebuilds itself on that resize.
-	--==========================================================================
-	local tray = Instance.new("Frame")
-	tray.Name = "HotbarTray"
-	tray.AnchorPoint = hotbar.AnchorPoint
-	tray.Position = hotbar.Position
-	tray.Size = UDim2.fromOffset(10, HOT.SlotHeight + HOT.TrayPad * 2)
-	tray.BackgroundTransparency = HOT.TrayTransparency
-	tray.BorderSizePixel = 0
-	tray.ZIndex = 3
-	tray.Parent = gui
-	UIKit.corner(tray, HOT.TrayCorner)
-	UIKit.stroke(tray, HOT.Ink, HOT.TrayBorder)
-	UIKit.gradient(tray, HOT.TrayTop, HOT.TrayBottom)
-	UIKit.lattice(tray, {
-		spacing = HOT.LatticeSpacing,
-		thickness = 2,
-		colour = HOT.Lattice,
-		transparency = HOT.LatticeTransparency,
-		inset = 7,
-		zIndex = 3,
-	})
-
-	-- The inner rim: a hairline a few pixels inside the border.
-	local rim = Instance.new("Frame")
-	rim.Name = "Rim"
-	rim.AnchorPoint = Vector2.new(0.5, 0.5)
-	rim.Position = UDim2.fromScale(0.5, 0.5)
-	rim.Size = UDim2.new(1, -HOT.TrayRim, 1, -HOT.TrayRim)
-	rim.BackgroundTransparency = 1
-	rim.BorderSizePixel = 0
-	rim.ZIndex = 3
-	rim.Parent = tray
-	UIKit.corner(rim, HOT.TrayCorner - HOT.TrayRim / 2)
-	UIKit.stroke(rim, HOT.Rim, 1, HOT.RimTransparency)
-
-	-- In the strip's OWN units, not AbsoluteSize's: a UIScale anywhere above
-	-- both frames would otherwise be applied to the tray twice -- measured, a
-	-- 1.5x layer drew a 1719-wide tray behind a 1146-wide strip. The strip's
-	-- height is a fixed offset, so its absolute height says what the scale is.
-	--
-	-- And its Position, since HudLayout can slide the strip clear of a thumb.
-	local function follow()
-		local size = hotbar.AbsoluteSize
-		local height = hotbar.Size.Y.Offset
-		local scale = if height > 0 and size.Y > 0 then size.Y / height else 1
-		tray.Size = UDim2.fromOffset(size.X / scale, height)
-		tray.Position = hotbar.Position
-		tray.Visible = hotbar.Visible
-	end
-	hotbar:GetPropertyChangedSignal("AbsoluteSize"):Connect(follow)
-	hotbar:GetPropertyChangedSignal("Position"):Connect(follow)
-	hotbar:GetPropertyChangedSignal("Visible"):Connect(follow)
-	follow()
-end
-
 local hotbarLayout = Instance.new("UIListLayout")
 hotbarLayout.FillDirection = Enum.FillDirection.Horizontal
 hotbarLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -2097,491 +1883,110 @@ hotbarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 hotbarLayout.Padding = UDim.new(0, HOT.Gap)
 hotbarLayout.Parent = hotbar
 
+--==============================================================================
+-- THE ITEM'S NAME, ABOVE THE STRIP
+--
+-- No name sits on a slot (the reference), so the name comes up over the strip
+-- instead: for NamePopupSeconds when something goes into the hands, and for as
+-- long as a mouse rests on a slot. One label in HudLayout's namePopup band,
+-- which notices and the cash block keep clear of. Reduced motion: it appears
+-- and goes with no fade. `announce` is defined with the held-Tool poll at the
+-- bottom of the file.
+--==============================================================================
+local namePopup = UIKit.outlined(gui, "NamePopup", HOT.NamePopupText, CREAM, 1.5)
+namePopup.AnchorPoint = Vector2.new(0.5, 1)
+namePopup.Size = UDim2.fromOffset(10, HOT.NamePopupHeight)
+namePopup.AutomaticSize = Enum.AutomaticSize.X
+namePopup.Font = Enum.Font.FredokaOne
+namePopup.Visible = false
+namePopup.ZIndex = 9
+local announce: (string?, boolean) -> ()
+-- The slot a mouse is resting on, so a repaint that changes what it holds
+-- (a sale, a respawn, a choice in the Bag) changes the name shown for it.
+local hoveredSlot: number? = nil
+
 type HotSlot = {
+	card: HotbarCard.Card,
+	-- The card's parts this script reads by name, so the older readers below
+	-- (the cooldown tick, the drop test, LB/RB, TutorialUI) are unchanged.
 	button: TextButton,
-	preview: UIKit.ItemPreview,
-	key: TextLabel,
-	name: TextLabel,
-	hint: TextLabel,
+	holder: Frame,
 	cooldown: Frame,
-	stroke: UIStroke,
+	preview: UIKit.ItemPreview,
+	name: TextLabel,
+	pop: UIKit.CardPop,
 	tool: Tool?,
 	item: WeaponData.Item?,
-	-- `holder` is what the list lays out and what is shown or hidden; `wrap`
-	-- carries the in-hand lift; `button` is the plate, the only thing a press
-	-- lands on, and carries the hover lift and scale.
-	holder: Frame,
-	wrap: Frame,
-	pop: UIKit.CardPop,
-	ringTint: UIGradient,
-	-- The plate's own gradient, brightened while the slot is in your hands.
-	plate: UIGradient,
-	aura: Frame,
-	keycap: Frame,
-	-- The information chip: its frame, its word and its edge.
-	chip: Frame,
-	tag: TextLabel,
-	chipEdge: UIStroke,
-	inHand: Frame,
-	ghost: Frame?,
-	-- Whether the in-hand look is up, so a redraw only changes it on a change.
-	lit: boolean,
-	-- The in-hand lift's target offset and the tween moving toward it.
-	liftGoal: number,
-	liftTween: Tween?,
-	-- What the chip and the name were last fitted for, so a redraw measures text
-	-- only when the text changes.
-	tagText: string,
-	nameText: string,
-	-- os.clock() until which a drop's flash owns the keyline.
-	flashUntil: number,
-	-- The rounded corners a change of face rewrites; see restyleHotbar.
-	auraCorner: UICorner,
-	faceCorner: UICorner,
-	rimCorner: UICorner,
-	coolCorner: UICorner,
+	-- What the preview was last set to, so a redraw builds nothing twice.
+	shownKey: string,
 }
 
 local hotSlots: { HotSlot } = {}
-
---==============================================================================
--- A DASHED OUTLINE, BECAUSE A UIStroke HAS NO DASH PATTERN
---
--- Short frames along the four straight edges, clear of the rounded corners. Laid
--- out once at the slot's design size in offsets, so the scales that pop a slot
--- resize the dashes with it and nothing is ever rebuilt.
---==============================================================================
-local function dashOutline(parent: GuiObject, width: number, height: number,
-	colour: Color3, z: number)
-	local DASH, SPACE, THICK, CORNER = 7, 5, 2, 10
-	local function run(horizontal: boolean, fixed: number, from: number, length: number)
-		local count = math.max(1, math.floor((length + SPACE) / (DASH + SPACE)))
-		local at = from + math.floor((length - (count * DASH + (count - 1) * SPACE)) * 0.5)
-		for _ = 1, count do
-			local dash = Instance.new("Frame")
-			dash.Name = "Dash"
-			dash.BackgroundColor3 = colour
-			dash.BorderSizePixel = 0
-			dash.ZIndex = z
-			if horizontal then
-				dash.Position = UDim2.fromOffset(at, fixed)
-				dash.Size = UDim2.fromOffset(DASH, THICK)
-			else
-				dash.Position = UDim2.fromOffset(fixed, at)
-				dash.Size = UDim2.fromOffset(THICK, DASH)
-			end
-			dash.Parent = parent
-			at += DASH + SPACE
-		end
-	end
-	run(true, 0, CORNER, width - CORNER * 2)
-	run(true, height - THICK, CORNER, width - CORNER * 2)
-	run(false, 0, CORNER, height - CORNER * 2)
-	run(false, width - THICK, CORNER, height - CORNER * 2)
-end
 
 local function acquireHotSlot(index: number): HotSlot
 	local existingSlot = hotSlots[index]
 	if existingSlot then
 		return existingSlot
 	end
-
-	--==========================================================================
-	-- THREE LAYERS, SO NOTHING THAT MOVES MOVES ITS NEIGHBOURS
-	--
-	--   holder   the list's cell: a fixed size, laid out, shown or hidden
-	--   wrap     centred in it, carrying the in-hand LIFT
-	--   button   the plate, carrying the hover lift and the hover and press scale
-	--
-	-- A UIScale or a Position on the list's own child would change what the list
-	-- lays out, so a held or hovered card would shove the whole strip sideways.
-	-- Everything that moves lives a layer in.
-	--==========================================================================
-	local holder = Instance.new("Frame")
-	holder.Name = "Slot" .. index
-	holder.LayoutOrder = index
-	holder.Size = UDim2.fromOffset(HOT.SlotWidth, HOT.SlotHeight)
-	holder.BackgroundTransparency = 1
-	holder.BorderSizePixel = 0
-	holder.ZIndex = 4
-	holder.Parent = hotbar
-
-	local wrap = Instance.new("Frame")
-	wrap.Name = "Wrap"
-	wrap.AnchorPoint = Vector2.new(0.5, 0.5)
-	wrap.Position = UDim2.fromScale(0.5, 0.5)
-	wrap.Size = UDim2.fromScale(1, 1)
-	wrap.BackgroundTransparency = 1
-	wrap.BorderSizePixel = 0
-	wrap.ZIndex = 4
-	wrap.Parent = holder
-
-	-- The warm glow outside the keyline while the slot is in your hands.
-	local aura = Instance.new("Frame")
-	aura.Name = "Aura"
-	aura.AnchorPoint = Vector2.new(0.5, 0.5)
-	aura.Position = UDim2.fromScale(0.5, 0.5)
-	aura.Size = UDim2.new(1, HOT.AuraPad, 1, HOT.AuraPad)
-	aura.BackgroundColor3 = HOT.LitTop
-	aura.BackgroundTransparency = 0.78
-	aura.BorderSizePixel = 0
-	aura.Visible = false
-	aura.ZIndex = 4
-	aura.Parent = wrap
-	local auraCorner = UIKit.corner(aura, HOT.AuraCorner)
-	UIKit.stroke(aura, HOT.LitTop, 2, 0.35)
-
-	local button = Instance.new("TextButton")
-	button.Name = "Face"
-	button.AnchorPoint = Vector2.new(0.5, 0.5)
-	button.Position = UDim2.fromScale(0.5, 0.5)
-	button.Size = UDim2.fromScale(1, 1)
-	button.BorderSizePixel = 0
-	button.AutoButtonColor = false
-	button.Text = ""
-	button.ZIndex = 5
-	button.Parent = wrap
-	local faceCorner = UIKit.corner(button, HOT.CardCorner)
-	local plate = UIKit.gradient(button, HOT.PlateTop, HOT.PlateBottom)
-	local stroke = UIKit.stroke(button, HOT.Ink, HOT.CardStroke)
-
-	--==========================================================================
-	-- THE WARM KEYLINE IS A GRADIENT ON THE KEYLINE ITSELF
-	--
-	-- A UIGradient under a UIStroke colours the stroke, multiplied by the
-	-- stroke's own Color -- so a held slot sets that to white and enables this,
-	-- and every other state disables it and sets the colour it wants.
-	--==========================================================================
-	local ringTint = Instance.new("UIGradient")
-	ringTint.Color = ColorSequence.new(HOT.LitTop, HOT.LitBottom)
-	ringTint.Rotation = 90
-	ringTint.Enabled = false
-	ringTint.Parent = stroke
-
-	-- The hover edge. A GuiObject draws one UIStroke, and the keyline already
-	-- owns this one, so the brighter edge is a hairline on its own inset frame
-	-- that is invisible until a mouse is over the card.
-	local rim = Instance.new("Frame")
-	rim.Name = "Rim"
-	rim.AnchorPoint = Vector2.new(0.5, 0.5)
-	rim.Position = UDim2.fromScale(0.5, 0.5)
-	rim.Size = UDim2.new(1, -4, 1, -4)
-	rim.BackgroundTransparency = 1
-	rim.BorderSizePixel = 0
-	rim.ZIndex = 5
-	rim.Parent = button
-	local rimCorner = UIKit.corner(rim, HOT.CardCorner - 2)
-	local rimStroke = UIKit.stroke(rim, HOT.HoverRim, 1.5, 1)
-
-	--==========================================================================
-	-- THE COOLDOWN, DRAWN UNDER THE ITEM
-	--
-	-- A dark shade rising from the bottom of the slot, so a bat that cannot
-	-- swing yet is dimmed from the feet up. Under the preview rather than over
-	-- it, because a player checking a cooldown is also checking WHICH weapon
-	-- they are about to swing. Dark and rising, so it never reads as the warm
-	-- in-hand ring, and the two can be on one card at once. HOT.CooldownShade
-	-- is how dark: the card is nearly ink already, so the shade has to be deep.
-	--==========================================================================
-	local cooldown = Instance.new("Frame")
-	cooldown.Name = "Cooldown"
-	cooldown.AnchorPoint = Vector2.new(0, 1)
-	cooldown.Position = UDim2.fromScale(0, 1)
-	cooldown.Size = UDim2.fromScale(1, 0)
-	cooldown.BackgroundColor3 = BLACK
-	cooldown.BackgroundTransparency = HOT.CooldownShade
-	cooldown.BorderSizePixel = 0
-	cooldown.ZIndex = 6
-	cooldown.Parent = button
-	local coolCorner = UIKit.corner(cooldown, HOT.CardCorner)
-
-	--==========================================================================
-	-- THE PREVIEW: THE REAL TOOL, AS CLOSE AS ITS SILHOUETTE ALLOWS
-	--
-	-- The same UIKit.itemPreview and the same builders as before -- WeaponModel
-	-- for a bat or a trap, CreatureModel for a pod or a creature -- with `fit`,
-	-- which frames the drawn parts to HOT.PreviewFit of the glass instead of
-	-- leaving the bounding box's margins. Built once per key, never turned.
-	--==========================================================================
-	local preview = UIKit.itemPreview(button, {
-		name = "Preview",
-		size = UDim2.fromOffset(HOT.SlotWidth - HOT.PreviewInset * 2, HOT.PreviewHeight),
-		position = UDim2.fromOffset(HOT.PreviewInset, HOT.PreviewTop),
-		scrim = 1,
-		fit = HOT.PreviewFit,
-	})
-	preview.hero.Ambient = HOT.PreviewAmbient
-
-	--==========================================================================
-	-- THE NUMBER BADGE
-	--
-	-- A small ink circle top left, cream numeral, amber while the slot is in
-	-- your hands. The tenth slot says 0, because that is the key.
-	--==========================================================================
-	local keycap = Instance.new("Frame")
-	keycap.Name = "Keycap"
-	keycap.Position = UDim2.fromOffset(HOT.BadgeInset, HOT.BadgeInset)
-	keycap.Size = UDim2.fromOffset(HOT.BadgeSize, HOT.BadgeSize)
-	keycap.BackgroundColor3 = HOT.Ink
-	keycap.BorderSizePixel = 0
-	keycap.ZIndex = 8
-	keycap.Parent = button
-	do
-		local round = Instance.new("UICorner")
-		round.CornerRadius = UDim.new(0.5, 0)
-		round.Parent = keycap
-	end
-	UIKit.stroke(keycap, HOT.KeyEdge, 1.5)
-
-	local keyLabel = Instance.new("TextLabel")
-	keyLabel.Name = "Key"
-	keyLabel.Size = UDim2.fromScale(1, 1)
-	keyLabel.BackgroundTransparency = 1
-	keyLabel.Font = Enum.Font.FredokaOne
-	keyLabel.TextSize = HOT.BadgeText
-	keyLabel.TextColor3 = HOT.Numeral
-	keyLabel.ZIndex = 9
-	keyLabel.Parent = keycap
-
-	--==========================================================================
-	-- THE INFORMATION CHIP
-	--
-	-- One compact word top right, chosen in refreshHotbar from what the Tool
-	-- actually carries: BAT, TRAP, POD, or a grown plant's size. The frame
-	-- takes the edge, because a UIStroke on a TextLabel outlines the letters;
-	-- its width is measured to the word, shrunk before it is ever cut.
-	--==========================================================================
-	local chipFrame = Instance.new("Frame")
-	chipFrame.Name = "Chip"
-	chipFrame.AnchorPoint = Vector2.new(1, 0)
-	chipFrame.Position = UDim2.new(1, -3, 0, HOT.ChipTop)
-	chipFrame.Size = UDim2.fromOffset(28, HOT.ChipHeight)
-	chipFrame.BackgroundColor3 = HOT.Ink
-	chipFrame.BackgroundTransparency = 0.08
-	chipFrame.BorderSizePixel = 0
-	chipFrame.Visible = false
-	chipFrame.ZIndex = 8
-	chipFrame.Parent = button
-	UIKit.corner(chipFrame, 5)
-	local chipEdge = UIKit.stroke(chipFrame, HOT.Caption, 1.25)
-
-	local tag = Instance.new("TextLabel")
-	tag.Name = "Category"
-	tag.Size = UDim2.fromScale(1, 1)
-	tag.BackgroundTransparency = 1
-	tag.Font = Enum.Font.FredokaOne
-	tag.TextSize = HOT.ChipTextMax
-	tag.TextColor3 = HOT.Caption
-	tag.Text = ""
-	tag.ZIndex = 9
-	tag.Parent = chipFrame
-
-	--==========================================================================
-	-- THE NAME
-	--
-	-- The hotbar's own FredokaOne with an ink outline, centred, up to two lines
-	-- (HOT.NameLines: one in the compact belt, ending in an ellipsis when it
-	-- has to). refreshHotbar picks the largest size that fits and only
-	-- truncates at the smallest. The label always carries the Tool's WHOLE
-	-- name: TutorialUI finds a plant's slot by reading it.
-	--==========================================================================
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Name = "Name"
-	nameLabel.AnchorPoint = Vector2.new(0.5, 0)
-	nameLabel.Position = UDim2.new(0.5, 0, 0, HOT.NameTop)
-	nameLabel.Size = UDim2.fromOffset(HOT.SlotWidth - 6, HOT.NameHeight)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Font = Enum.Font.FredokaOne
-	nameLabel.TextSize = HOT.NameMax
-	nameLabel.TextColor3 = HOT.Caption
-	nameLabel.TextWrapped = true
-	nameLabel.TextYAlignment = Enum.TextYAlignment.Center
-	nameLabel.Text = ""
-	nameLabel.ZIndex = 9
-	nameLabel.Parent = button
-	UIKit.stroke(nameLabel, HOT.Ink, 1.5)
-
-	--==========================================================================
-	-- IN HAND
-	--
-	-- A compact warm strip centred on the card's bottom edge, so it never sits
-	-- on the name: measured, a two-line name at 10 px ends a pixel above the
-	-- strip's stroke. Lifted, the strip stays inside the tray's rim; at rest
-	-- (reduced effects) its stroke meets the tray's own ink border. The compact
-	-- belt has none (InHandHeight 0): its keyline, glow and lift say it alone.
-	--==========================================================================
-	local inHand = Instance.new("Frame")
-	inHand.Name = "InHand"
-	inHand.AnchorPoint = Vector2.new(0.5, 0.5)
-	inHand.Position = UDim2.fromScale(0.5, 1)
-	inHand.Size = UDim2.fromOffset(HOT.SlotWidth - 14, HOT.InHandHeight)
-	inHand.BorderSizePixel = 0
-	inHand.Visible = false
-	inHand.ZIndex = 10
-	inHand.Parent = button
-	UIKit.corner(inHand, 6)
-	UIKit.gradient(inHand, HOT.LitTop, HOT.LitBottom)
-	UIKit.stroke(inHand, HOT.Ink, 1.5)
-	do
-		local word = Instance.new("TextLabel")
-		word.Name = "Word"
-		word.Size = UDim2.fromScale(1, 1)
-		word.BackgroundTransparency = 1
-		word.Font = Enum.Font.FredokaOne
-		word.TextSize = 9
-		word.TextColor3 = HOT.InHandText
-		word.Text = "IN HAND"
-		word.ZIndex = 11
-		word.Parent = inHand
-	end
-
-	--==========================================================================
-	-- THE RETURN HINT
-	--
-	-- Just above the name, and hidden unless the bag is open on an assigned
-	-- slot. It names the gesture in the words of the device it is on: a phone has
-	-- no click and a desktop has no tap, and a hint that names the wrong one
-	-- teaches nothing.
-	--==========================================================================
-	local hintLabel = Instance.new("TextLabel")
-	hintLabel.Name = "Hint"
-	hintLabel.AnchorPoint = Vector2.new(0.5, 1)
-	hintLabel.Position = UDim2.new(0.5, 0, 0, HOT.NameTop - 1)
-	hintLabel.Size = UDim2.fromOffset(HOT.HintWidth, HOT.HintHeight)
-	hintLabel.BackgroundColor3 = HOT.Ink
-	hintLabel.BackgroundTransparency = 0.15
-	hintLabel.BorderSizePixel = 0
-	hintLabel.Font = Enum.Font.FredokaOne
-	hintLabel.TextSize = 9
-	hintLabel.TextColor3 = HOT.Numeral
-	hintLabel.Text = if UserInputService.KeyboardEnabled then "2x CLICK" else "2x TAP"
-	hintLabel.Visible = false
-	hintLabel.ZIndex = 10
-	hintLabel.Parent = button
-	UIKit.corner(hintLabel, 4)
-
-	--==========================================================================
-	-- HOVER AND PRESS
-	--
-	-- The shared UIKit.cardPop: under a mouse 1.05, two pixels up and a brighter
-	-- edge over 0.12 s; under a thumb a brief 0.98 that lets go the moment the
-	-- touch becomes a drag. Silent -- a pointer crosses the strip on its way to
-	-- the world far more often than it means to pick anything. UIScale and the
-	-- plate's own Position, so the list never sees a change.
-	--==========================================================================
-	local pressScale = Instance.new("UIScale")
-	pressScale.Parent = button
-	local pop = UIKit.cardPop(button, pressScale, {
-		hoverScale = HOT.HoverScale,
-		pressScale = HOT.PressScale,
-		glow = rimStroke,
-		glowRest = 1,
-		glowHover = HOT.HoverRimTransparency,
-		lift = HOT.HoverLift,
-		sound = false,
-	})
-
+	local card = HotbarCard.build(hotbar, index, HOT, 4)
 	local slot: HotSlot = {
-		button = button,
-		preview = preview,
-		key = keyLabel,
-		name = nameLabel,
-		hint = hintLabel,
-		cooldown = cooldown,
-		stroke = stroke,
+		card = card,
+		button = card.button,
+		holder = card.holder,
+		cooldown = card.cooldown,
+		preview = card.preview,
+		name = card.name,
+		pop = card.pop,
 		tool = nil,
 		item = nil,
-		holder = holder,
-		wrap = wrap,
-		pop = pop,
-		ringTint = ringTint,
-		plate = plate,
-		aura = aura,
-		keycap = keycap,
-		chip = chipFrame,
-		tag = tag,
-		chipEdge = chipEdge,
-		inHand = inHand,
-		ghost = nil,
-		lit = false,
-		liftGoal = 0,
-		liftTween = nil,
-		tagText = "",
-		nameText = "",
-		flashUntil = 0,
-		auraCorner = auraCorner,
-		faceCorner = faceCorner,
-		rimCorner = rimCorner,
-		coolCorner = coolCorner,
+		shownKey = "",
 	}
+	local button = card.button
 
 	--==========================================================================
-	-- A SLOT CAN ALSO BE PICKED UP
+	-- A PLANT SLOT CAN BE PICKED UP
 	--
-	-- Dragging one onto the open bag returns it, and onto another slot moves it.
-	-- Only slots carrying an ASSIGNMENT: an auto-filled slot is not something the
-	-- player put anywhere, so there is nothing to move and nothing to give back.
+	-- Only the two plant shortcuts: dragging one onto the other swaps them.
+	-- A weapon's or the tickets' slot is a fixed role and goes nowhere.
 	--==========================================================================
 	button.InputBegan:Connect(function(input)
 		if input.UserInputType ~= Enum.UserInputType.Touch
 			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 			return
 		end
-		if index > activeSlots then
+		if index > activeSlots or not slot.tool then
 			return
 		end
-		local record = assigned[index]
-		if not (record and slot.tool) then
+		local role = HotbarRoles.roleOf(index)
+		if role ~= "active" and role ~= "previous" then
 			return
 		end
 		beginDrag({ from = "hot", index = index, label = slot.name.Text }, input)
 	end)
 
-	--==========================================================================
-	-- ONE TAP EQUIPS. TWO GIVES IT BACK.
-	--
-	-- The equip is NOT delayed waiting to find out whether a second tap is
-	-- coming. Holding every tap for 300 ms to see if it becomes a double would
-	-- make the whole hotbar feel broken, and the hotbar is used mid-chase. So the
-	-- first tap equips at once and the second UNDOES the placement -- unequipping
-	-- as it goes, because leaving a returned plant in the player's hands is a
-	-- half-finished action.
-	--
-	-- Bats and traps never take this path: `canHotbar` is false for them, so a
-	-- double-tap on a weapon is two ordinary equips, which is what it looks like.
-	--==========================================================================
+	-- One press puts the slot's Tool in the hands; pressing the slot that is in
+	-- the hands puts it away (holdTool's toggle). An empty slot does nothing.
 	button.Activated:Connect(function()
-		if dragMoved then
+		if dragMoved or index > activeSlots or not slot.tool then
 			return
 		end
 		holdTool(slot.tool)
-		if index > activeSlots then
-			return
-		end
-		local record = assigned[index]
-		local tool = slot.tool
-		if not (record and tool) then
-			return
-		end
-		local data: Slot? = nil
-		for _, candidate in ipairs(liveSlots) do
-			if candidate.tool == tool then
-				data = candidate
-				break
-			end
-		end
-		if not (data and data.canHotbar) then
-			return
-		end
-		local now = os.clock()
-		local previous = lastTap[index]
-		if previous and now - previous <= DOUBLE_WINDOW then
-			lastTap[index] = nil
-			returnToBag(index)
-		else
-			lastTap[index] = now
+	end)
+
+	-- Under a mouse the name shows for as long as the pointer rests there.
+	button.MouseEnter:Connect(function()
+		hoveredSlot = index
+		if slot.tool and index <= activeSlots then
+			announce(slot.name.Text, true)
 		end
 	end)
+	button.MouseLeave:Connect(function()
+		if hoveredSlot == index then
+			hoveredSlot = nil
+		end
+		announce(nil, true)
+	end)
+
 	hotSlots[index] = slot
 	return slot
 end
@@ -2623,10 +2028,7 @@ do
 		lifted = want
 		if want then
 			table.clear(resting)
-			-- The painted tray is a sibling behind the strip (see THE TRAY), so it
-			-- rises with it or the cards would float over a Bag with no tray.
-			local tray = gui:FindFirstChild("HotbarTray")
-			for _, root in ipairs({ hotbar, tray }) do
+			for _, root in ipairs({ hotbar }) do
 				if root and root:IsA("GuiObject") then
 					resting[root] = root.ZIndex
 					root.ZIndex += LIFT
@@ -2658,20 +2060,18 @@ end
 --==============================================================================
 -- THE BAG CELL
 --
--- The last cell on the strip, after a small gap: the approved Bag icon, BAG,
--- and how many slots are holding something out of how many there are -- green
--- while there is room, a calm amber when there is not. Full is not an error, so
--- it is never red. A door into the Bag from where the player is already looking;
--- the rail button stays the Bag's home. Dropped below HOT.ChipMinViewport, where
--- a five-slot tray needs the width. Its press is wired beside the rail
--- button's, where setOpen exists.
+-- One more square after a small gap: the approved Bag icon over plant
+-- storage's count -- the saved rows plus the raid pod in both arms, out of
+-- Save.MaxHeld (HotbarRoles.storage) -- green with room, a calm amber when
+-- full, and "…" in slate until the profile has arrived. Tickets, bats and
+-- traps never count. A door into the Bag from where the player is looking;
+-- the rail button stays the Bag's home, so the Bag is reachable even with no
+-- slot drawn. Dropped below HOT.ChipMinViewport.
 --==============================================================================
 local chip: { holder: Frame, spacer: Frame, button: TextButton, count: TextLabel,
-	countEdge: UIStroke, faceCorner: UICorner, faceStroke: UIStroke, rimCorner: UICorner,
-	icon: ImageLabel, word: TextLabel, pill: Frame }
+	faceCorner: UICorner, faceStroke: UIStroke, rimCorner: UICorner, icon: ImageLabel, bump: UIScale,
+	bumpTween: Tween? }
 do
-	-- The gap before the Bag: the list's own padding either side of a thin
-	-- divider, so the cell reads as a separate button without a second tray.
 	local spacer = Instance.new("Frame")
 	spacer.Name = "BagGap"
 	spacer.LayoutOrder = MAX_SLOTS + 1
@@ -2680,17 +2080,6 @@ do
 	spacer.BorderSizePixel = 0
 	spacer.ZIndex = 4
 	spacer.Parent = hotbar
-	local divider = Instance.new("Frame")
-	divider.Name = "Divider"
-	divider.AnchorPoint = Vector2.new(0.5, 0.5)
-	divider.Position = UDim2.fromScale(0.5, 0.5)
-	divider.Size = UDim2.new(0, 2, 0.6, 0)
-	divider.BackgroundColor3 = HOT.Rim
-	divider.BackgroundTransparency = 0.5
-	divider.BorderSizePixel = 0
-	divider.ZIndex = 4
-	divider.Parent = spacer
-	UIKit.corner(divider, 1)
 
 	local holder = Instance.new("Frame")
 	holder.Name = "BagChip"
@@ -2700,33 +2089,36 @@ do
 	holder.BorderSizePixel = 0
 	holder.ZIndex = 4
 	holder.Parent = hotbar
+	local bump = Instance.new("UIScale")
+	bump.Parent = holder
 
 	local face = Instance.new("TextButton")
 	face.Name = "Face"
 	face.AnchorPoint = Vector2.new(0.5, 0.5)
 	face.Position = UDim2.fromScale(0.5, 0.5)
 	face.Size = UDim2.fromScale(1, 1)
+	face.BackgroundColor3 = HOT.Plate
+	face.BackgroundTransparency = HOT.PlateTransparency
 	face.BorderSizePixel = 0
 	face.AutoButtonColor = false
 	face.Text = ""
 	face.ZIndex = 5
 	face.Parent = holder
 	local faceCorner = UIKit.corner(face, HOT.CardCorner)
-	UIKit.gradient(face, HOT.PlateTop, HOT.PlateBottom)
-	local faceStroke = UIKit.stroke(face, HOT.Ink, HOT.CardStroke)
+	local faceStroke = UIKit.stroke(face, HOT.Edge, HOT.CardStroke, HOT.EdgeTransparency)
 	UIKit.clicks(face)
 
 	local rim = Instance.new("Frame")
 	rim.Name = "Rim"
 	rim.AnchorPoint = Vector2.new(0.5, 0.5)
 	rim.Position = UDim2.fromScale(0.5, 0.5)
-	rim.Size = UDim2.new(1, -4, 1, -4)
+	rim.Size = UDim2.new(1, -3, 1, -3)
 	rim.BackgroundTransparency = 1
 	rim.BorderSizePixel = 0
 	rim.ZIndex = 5
 	rim.Parent = face
-	local rimCorner = UIKit.corner(rim, HOT.CardCorner - 2)
-	local rimStroke = UIKit.stroke(rim, HOT.HoverRim, 1.5, 1)
+	local rimCorner = UIKit.corner(rim, math.max(1, HOT.CardCorner - 1.5))
+	local rimStroke = UIKit.stroke(rim, HOT.Edge, 1, 1)
 
 	local press = Instance.new("UIScale")
 	press.Parent = face
@@ -2735,7 +2127,7 @@ do
 		pressScale = HOT.PressScale,
 		glow = rimStroke,
 		glowRest = 1,
-		glowHover = HOT.HoverRimTransparency,
+		glowHover = HOT.HoverEdgeTransparency,
 		lift = HOT.HoverLift,
 		sound = false,
 	})
@@ -2752,48 +2144,22 @@ do
 	icon.ZIndex = 8
 	icon.Parent = face
 
-	local word = Instance.new("TextLabel")
-	word.Name = "Word"
-	word.AnchorPoint = Vector2.new(0.5, 0)
-	word.Position = UDim2.new(0.5, 0, 0, 46)
-	word.Size = UDim2.new(1, -6, 0, 16)
-	word.BackgroundTransparency = 1
-	word.Font = Enum.Font.FredokaOne
-	word.TextSize = 14
-	word.TextColor3 = HOT.Numeral
-	word.Text = "BAG"
-	word.Visible = HOT.BagWord
-	word.ZIndex = 9
-	word.Parent = face
-	UIKit.stroke(word, HOT.Ink, 1.5)
-
-	local pill = Instance.new("Frame")
-	pill.Name = "CountPill"
-	pill.AnchorPoint = Vector2.new(0.5, 0)
-	pill.Position = UDim2.new(0.5, 0, 0, HOT.BagPillTop)
-	pill.Size = UDim2.new(1, -10, 0, 18)
-	pill.BackgroundColor3 = HOT.Ink
-	pill.BackgroundTransparency = 0.05
-	pill.BorderSizePixel = 0
-	pill.ZIndex = 8
-	pill.Parent = face
-	UIKit.corner(pill, 9)
-	local countEdge = UIKit.stroke(pill, HOT.CountOpen, 1.5)
-
 	local count = Instance.new("TextLabel")
 	count.Name = "Count"
-	count.Size = UDim2.fromScale(1, 1)
+	count.AnchorPoint = Vector2.new(0.5, 0)
+	count.Position = UDim2.new(0.5, 0, 0, HOT.BagCountTop)
+	count.Size = UDim2.new(1, -4, 0, HOT.BagCountSize + 4)
 	count.BackgroundTransparency = 1
 	count.Font = Enum.Font.FredokaOne
-	count.TextSize = 13
-	count.TextColor3 = HOT.CountOpen
+	count.TextSize = HOT.BagCountSize
+	count.TextColor3 = HOT.CountLoading
 	count.Text = ""
 	count.ZIndex = 9
-	count.Parent = pill
+	count.Parent = face
+	UIKit.stroke(count, HOT.Ink, HOT.NumeralOutline)
 
-	chip = { holder = holder, spacer = spacer, button = face, count = count,
-		countEdge = countEdge, faceCorner = faceCorner, faceStroke = faceStroke,
-		rimCorner = rimCorner, icon = icon, word = word, pill = pill }
+	chip = { holder = holder, spacer = spacer, button = face, count = count, faceCorner = faceCorner,
+		faceStroke = faceStroke, rimCorner = rimCorner, icon = icon, bump = bump, bumpTween = nil }
 end
 
 --==============================================================================
@@ -2801,570 +2167,185 @@ end
 --
 -- HudLayout's answer carries the card's numbers as `hot`, and layoutHud swaps
 -- HOT for them when the mode changes -- a phone's compact belt, or a desktop
--- window crossing into compact and back. Everything already built from the old
--- numbers is rewritten here: the strip's padding and gap, the tray, the Bag
--- cell and every card made so far. A card made later reads HOT as it is built.
---
--- What a card SAYS -- its name, chip, ring and lift -- is refreshHotbar's, so
--- the name and the chip are only marked for fitting again, and the ghost's
--- dashes, laid out for the old card, are dropped for the next redraw to lay out
--- afresh. The preview keeps its model and its framing: the two glasses are
--- 58 x 48 and 50 x 42, 1.5% apart in shape, and a silhouette fitted to 0.97 of
--- one still sits inside the other. Rebuilding every model on each change of
--- face was measured at 0.45 MB of parts a round trip, for nothing a player
--- could see. Called from layoutHud and nowhere else; nothing here runs per frame.
+-- window crossing into compact and back. Everything already built from the
+-- old numbers is resized here: the strip's gap, the Bag cell, the popup and
+-- every card made so far (HotbarCard.restyle). The previews keep their models.
+-- Called from layoutHud and nowhere else; nothing here runs per frame.
 --==============================================================================
 local function restyleHotbar()
 	hotbar.Size = UDim2.fromOffset(10, HOT.SlotHeight + HOT.TrayPad * 2)
 	hotbarLayout.Padding = UDim.new(0, HOT.Gap)
-	local pad = hotbar:FindFirstChildOfClass("UIPadding")
-	if pad then
-		pad.PaddingLeft = UDim.new(0, HOT.TrayPad)
-		pad.PaddingRight = UDim.new(0, HOT.TrayPad)
-		pad.PaddingTop = UDim.new(0, HOT.TrayPad)
-		pad.PaddingBottom = UDim.new(0, HOT.TrayPad)
-	end
-	-- The tray follows the strip's size by itself (see THE TRAY); its corner,
-	-- border and rim are what change.
-	local tray = gui:FindFirstChild("HotbarTray")
-	if tray then
-		local round = tray:FindFirstChildOfClass("UICorner")
-		if round then
-			round.CornerRadius = UDim.new(0, HOT.TrayCorner)
-		end
-		local border = tray:FindFirstChildOfClass("UIStroke")
-		if border then
-			border.Thickness = HOT.TrayBorder
-		end
-		local rim = tray:FindFirstChild("Rim")
-		if rim and rim:IsA("GuiObject") then
-			rim.Size = UDim2.new(1, -HOT.TrayRim, 1, -HOT.TrayRim)
-			local rimRound = rim:FindFirstChildOfClass("UICorner")
-			if rimRound then
-				rimRound.CornerRadius = UDim.new(0, HOT.TrayCorner - HOT.TrayRim / 2)
-			end
-		end
-	end
-
 	chip.spacer.Size = UDim2.fromOffset(HOT.BagGap, HOT.SlotHeight)
 	chip.holder.Size = UDim2.fromOffset(HOT.ChipWidth, HOT.SlotHeight)
 	chip.faceCorner.CornerRadius = UDim.new(0, HOT.CardCorner)
 	chip.faceStroke.Thickness = HOT.CardStroke
-	chip.rimCorner.CornerRadius = UDim.new(0, HOT.CardCorner - 2)
+	chip.rimCorner.CornerRadius = UDim.new(0, math.max(1, HOT.CardCorner - 1.5))
 	chip.icon.Position = UDim2.new(0.5, 0, 0, HOT.BagIconTop)
 	chip.icon.Size = UDim2.fromOffset(HOT.BagIcon, HOT.BagIcon)
-	chip.word.Visible = HOT.BagWord
-	chip.pill.Position = UDim2.new(0.5, 0, 0, HOT.BagPillTop)
-
+	chip.count.Position = UDim2.new(0.5, 0, 0, HOT.BagCountTop)
+	chip.count.TextSize = HOT.BagCountSize
+	namePopup.TextSize = HOT.NamePopupText
+	namePopup.Size = UDim2.fromOffset(10, HOT.NamePopupHeight)
 	for _, slot in pairs(hotSlots) do
-		slot.holder.Size = UDim2.fromOffset(HOT.SlotWidth, HOT.SlotHeight)
-		slot.aura.Size = UDim2.new(1, HOT.AuraPad, 1, HOT.AuraPad)
-		slot.auraCorner.CornerRadius = UDim.new(0, HOT.AuraCorner)
-		slot.faceCorner.CornerRadius = UDim.new(0, HOT.CardCorner)
-		slot.rimCorner.CornerRadius = UDim.new(0, HOT.CardCorner - 2)
-		slot.coolCorner.CornerRadius = UDim.new(0, HOT.CardCorner)
-		slot.preview.holder.Size = UDim2.fromOffset(
-			HOT.SlotWidth - HOT.PreviewInset * 2, HOT.PreviewHeight)
-		slot.preview.holder.Position = UDim2.fromOffset(HOT.PreviewInset, HOT.PreviewTop)
-		slot.keycap.Position = UDim2.fromOffset(HOT.BadgeInset, HOT.BadgeInset)
-		slot.keycap.Size = UDim2.fromOffset(HOT.BadgeSize, HOT.BadgeSize)
-		slot.key.TextSize = HOT.BadgeText
-		slot.chip.Position = UDim2.new(1, -3, 0, HOT.ChipTop)
-		slot.name.Position = UDim2.new(0.5, 0, 0, HOT.NameTop)
-		slot.name.Size = UDim2.fromOffset(HOT.SlotWidth - 6, HOT.NameHeight)
-		slot.inHand.Size = UDim2.fromOffset(HOT.SlotWidth - 14, HOT.InHandHeight)
-		slot.hint.Position = UDim2.new(0.5, 0, 0, HOT.NameTop - 1)
-		slot.hint.Size = UDim2.fromOffset(HOT.HintWidth, HOT.HintHeight)
-		slot.nameText = ""
-		slot.tagText = ""
-		local ghost = slot.ghost
-		if ghost then
-			ghost:Destroy()
-			slot.ghost = nil
-		end
+		HotbarCard.restyle(slot.card, HOT)
 	end
-end
-
---==============================================================================
--- SLOT ORDER FOR RECONCILING: ACTIVE FIRST, THEN OVERFLOW
---
--- Active slots get first refusal on every Tool, both when keeping an exact claim
--- and when re-binding a lost one. That is what makes coming back to a desktop
--- safe: the five slots a phone was using keep the copies they already had, and
--- slots 6-10 pick up whatever is genuinely left over rather than stealing from
--- the slots that were visible a moment ago.
---==============================================================================
-local function reconcileOrder(): { number }
-	local order: { number } = {}
-	for i = 1, activeSlots do
-		table.insert(order, i)
-	end
-	for i = activeSlots + 1, MAX_SLOTS do
-		table.insert(order, i)
-	end
-	return order
 end
 
 --==============================================================================
 -- RECONCILIATION, ONCE PER REDRAW
 --
--- Runs against the Tools that actually exist right now, so every one of the
--- cases the brief lists falls out of the same two passes rather than needing a
--- special path each:
---
---   Tool moved Backpack <-> Character   pass 1 keeps it: same instance.
---   Respawn rebuilt every Tool          pass 1 finds nothing, pass 2 re-leases
---                                       by key.
---   Two identical copies, one assigned  `used` stops the second slot -- and the
---                                       bag -- reusing the claimed one.
---   Item planted, sold or destroyed     no instance and no key match, so the
---                                       assignment is dropped.
---   Reassigned to another slot          the drop cleared the old slot before
---                                       this ever runs.
---
--- `used` is the whole trick: a Tool bound once is off the table for every later
--- slot, so no instance can ever be shown in two places.
+-- HotbarRoles against the Tools that exist right now: the exact copies kept,
+-- lost copies re-leased by key within the grace, an empty active slot filled
+-- with the newest plant. One timer, only while something is waiting out its
+-- grace -- a task.delay rather than a loop, so a player standing in their
+-- garden pays nothing for it.
 --==============================================================================
-local function reconcile(live: { Slot })
-	table.clear(claimed)
-
-	local byTool: { [Tool]: Slot } = {}
+local function reconcile(live: { Slot }): { HotbarRoles.Live }
+	local entries: { HotbarRoles.Live } = {}
 	for _, data in ipairs(live) do
-		byTool[data.tool] = data
+		table.insert(entries, { tool = data.tool, key = data.key, kind = data.kind,
+			order = toolOrder[data.tool] or 0 })
 	end
-	local used: { [Tool]: boolean } = {}
-	local order = reconcileOrder()
-
-	local now = os.clock()
-	local waiting = false
-
-	-- Pass 1: keep the exact copy, if it is still owned and still unspoken for.
-	for _, i in ipairs(order) do
-		local record = assigned[i]
-		local tool = record and record.tool
-		if record and tool and byTool[tool] and not used[tool] then
-			used[tool] = true
-			record.lostAt = nil
-		elseif record then
-			record.tool = nil
-			if not record.lostAt then
-				record.lostAt = now
-			end
-		end
-	end
-
-	-- Pass 2: re-lease by key, or start (or run down) the grace period.
-	for _, i in ipairs(order) do
-		local record = assigned[i]
-		if record and not record.tool then
-			for _, data in ipairs(live) do
-				if not used[data.tool] and data.key == record.key and data.canHotbar then
-					used[data.tool] = true
-					record.tool = data.tool
-					record.lostAt = nil
-					break
-				end
-			end
-			if not record.tool then
-				if now - (record.lostAt or now) >= ASSIGN_GRACE then
-					-- Long enough. It is not coming back.
-					assigned[i] = nil
-				else
-					waiting = true
-				end
-			end
-		end
-	end
-
-	--==========================================================================
-	-- ONE TIMER, ONLY WHILE SOMETHING IS ACTUALLY WAITING
-	--
-	-- A lease whose grace has not run out yet needs SOMETHING to look again once
-	-- it has, or a slot reserved for an item that was sold would stay reserved
-	-- until the player next happened to pick something up. This is that look --
-	-- scheduled once per reconcile that found a waiting lease, never while the
-	-- hotbar is settled, and it is a task.delay rather than a loop so a player
-	-- standing in their garden pays nothing for it.
-	--==========================================================================
+	local waiting = HotbarRoles.reconcile(shortcuts, entries, os.clock())
 	if waiting and not gracePending then
 		gracePending = true
-		task.delay(ASSIGN_GRACE + 0.1, function()
+		task.delay(HotbarRoles.Grace + 0.1, function()
 			gracePending = false
 			redraw()
 		end)
 	end
-
-	-- And only the live ones hide anything.
-	for i = 1, activeSlots do
-		local record = assigned[i]
-		if record and record.tool then
-			claimed[record.tool] = i
-		end
-	end
+	return entries
 end
 
 --==============================================================================
--- TWO PASSES, AND THE ORDER MATTERS
+-- THE STRIP, PAINTED
 --
--- Assigned first, so the player's arrangement wins over the alphabet. Then the
--- leftovers fill whatever is still empty, in the same bat/trap/plants order the
--- strip has always used.
---
--- Auto-fill deliberately does NOT hide anything from the bag. Only an assignment
--- does that -- see the banner on `claimed`. An auto-filled plant showing in both
--- places is correct: nobody chose to put it there, and the bag is still where it
--- lives.
+-- Every live slot is drawn, empty or not, in its place: the bat, the trap,
+-- the tickets, the active plant, the previous one (HotbarRoles.entryFor). A
+-- slot past `activeSlots` -- the desktop's fifth, on a phone -- is hidden and
+-- emptied of its Tool, so no key, bumper or cooldown tick reaches it.
 --==============================================================================
 local function refreshHotbar()
 	local held = heldTool()
-	reconcile(liveSlots)
-
-	local taken: { [number]: boolean } = {}
-	local placed: { [number]: Slot } = {}
-
-	for i = 1, activeSlots do
-		local record = assigned[i]
-		local want = record and record.tool
-		if want then
-			for j, data in ipairs(liveSlots) do
-				if not taken[j] and data.tool == want then
-					taken[j] = true
-					placed[i] = data
-					break
-				end
-			end
-		end
+	local entries = reconcile(liveSlots)
+	local still = player:GetAttribute("SeedAfterimageQuality") == "Off"
+	local byTool: { [Tool]: Slot } = {}
+	for _, data in ipairs(liveSlots) do
+		byTool[data.tool] = data
 	end
-
-	--==========================================================================
-	-- ON A PHONE THE BELT IS PODS AND PLANTS ONLY
-	--
-	-- The equipped bat and trap live on the right sidebar there (see the
-	-- chooser), so they are skipped here rather than drawn twice. They are
-	-- still Tools in the Backpack, still equipped, still swung and placed; the
-	-- belt just does not offer them. A weapon can never be ASSIGNED to a slot
-	-- (HOTBAR_ASSIGNABLE), so the auto-fill is the only way one arrives here.
-	--==========================================================================
-	local plantsOnly = hud ~= nil and hud.sidebar
-	local nextFree = 1
-	for i = 1, activeSlots do
-		if not placed[i] and not assigned[i] then
-			while nextFree <= #liveSlots and (taken[nextFree]
-				or (plantsOnly and liveSlots[nextFree].item ~= nil)) do
-				nextFree += 1
-			end
-			if nextFree <= #liveSlots then
-				taken[nextFree] = true
-				placed[i] = liveSlots[nextFree]
-			end
-		end
-	end
-
-	--==========================================================================
-	-- THE USED SLOTS AND ONE MORE, UNLESS THE PLAYER IS ARRANGING
-	--
-	-- Every live slot used to be drawn, empty or not, because an empty slot is
-	-- the DROP TARGET. On a desktop that was six dead boxes across the bottom of
-	-- the screen for a player carrying a bat, a trap and two plants, and the
-	-- approved design collapses them:
-	--
-	--   drawn        every slot up to the last one in use, so the keycaps never
-	--                skip a number, and ONE ghost after it: where the next
-	--                pickup lands, and a target for a drag
-	--   hidden       everything past that
-	--   Bag open     every live slot, ghosts and all. That is when the player is
-	--                arranging, and every drag from the Bag starts with it open,
-	--                so no drop from the Bag ever loses its target.
-	--
-	-- A slot whose lease is still inside its grace counts as in use, so a respawn
-	-- does not fold the strip up and reflow it under a thumb.
-	--
-	-- Hidden slots are emptied of their tool reference, so a stale one cannot be
-	-- equipped by a number key or ticked by the cooldown loop. Past `activeSlots`
-	-- their ASSIGNMENT records survive untouched -- that is the overflow -- and a
-	-- collapsed slot has no record to keep, by the rule above.
-	--==========================================================================
-	local lastUsed = 0
-	for i = 1, activeSlots do
-		if placed[i] or assigned[i] then
-			lastUsed = i
-		end
-	end
-	local shown = if bagOpen then activeSlots else math.min(activeSlots, lastUsed + 1)
-	local filled = 0
-	local now = os.clock()
 
 	for i = 1, math.max(activeSlots, #hotSlots) do
 		local slot = hotSlots[i]
-		if i > shown then
+		if i > activeSlots then
 			if slot then
 				slot.holder.Visible = false
-				slot.button.Visible = false
 				slot.tool = nil
 				slot.item = nil
 				slot.pop.reset()
 			end
 		else
 			slot = acquireHotSlot(i)
-			local data = placed[i]
+			local entry = HotbarRoles.entryFor(shortcuts, entries, i)
+			local data: Slot? = if entry then byTool[entry.tool] else nil
 			slot.holder.Visible = true
-			slot.button.Visible = true
 			slot.tool = if data then data.tool else nil
 			slot.item = if data then data.item else nil
-			-- The tenth slot is reached by the 0 key, because that is where the
-			-- number row puts it. Labelling it "10" would name a key nobody has.
-			slot.key.Text = if i == 10 then "0" else tostring(i)
+			local empty = data == nil
+			local isHeld = data ~= nil and data.tool == held
+			local stack: string? = nil
+			local accent: Color3? = nil
+			local shownKey = if data then data.key .. "|" .. tostring(data.tool) else "empty:" .. i
 			if data then
-				filled += 1
-				slot.preview.setModel(data.key, builderFor(data), previewKind(data))
-
-				--==============================================================
-				-- THE NAME: THE WHOLE OF IT, AS LARGE AS TWO LINES ALLOW
-				--
-				-- The label always carries the full Tool name -- TutorialUI finds
-				-- a plant's slot by it. The size is the largest that fits the box
-				-- on at most two wrapped lines; an ellipsis only at the smallest.
-				-- Measured when the name changes, never on an ordinary redraw.
-				--==============================================================
-				if slot.nameText ~= data.label then
-					slot.nameText = data.label
-					slot.name.Text = data.label
-					-- A size fits when every WORD fits the width on its own line --
-					-- otherwise the engine breaks it mid-word ("Brambleja / w Trap"),
-					-- measured -- and the wrapped whole is at most two lines tall.
-					local width = HOT.SlotWidth - 6
-					local chosen, fits, wordsFit = HOT.NameMin, false, true
-					for size = HOT.NameMax, HOT.NameMin, -1 do
-						wordsFit = true
-						for word in string.gmatch(data.label, "%S+") do
-							if TextService:GetTextSize(word, size, Enum.Font.FredokaOne,
-								Vector2.new(1000, 1000)).X > width then
-								wordsFit = false
-								break
-							end
-						end
-						local tall = TextService:GetTextSize(data.label, size,
-							Enum.Font.FredokaOne, Vector2.new(width, 1000)).Y
-						if wordsFit and tall <= math.min(HOT.NameHeight, size * HOT.NameLines + 0.5) then
-							chosen, fits = size, true
-							break
-						end
-					end
-					-- The last resort, at the smallest size: the box shrinks to two
-					-- lines so the second one ends in an ellipsis, or to ONE line
-					-- when a single word is wider than the card, because wrapping
-					-- would cut that word in half instead. Measured on
-					-- "Thornwhorl Lanterncap Gloomlotus" (three lines at 7 px
-					-- before this) and "Supernovusmaximus" ("Supernovusmaxi / mus").
-					-- The compact belt's names are always one line.
-					local lines = if (fits or wordsFit) and HOT.NameLines > 1 then 2 else 1
-					local tall = if fits then HOT.NameHeight else lines * HOT.NameMin
-					slot.name.TextSize = chosen
-					slot.name.TextWrapped = lines == 2
-					slot.name.TextTruncate = if fits then Enum.TextTruncate.None
-						else Enum.TextTruncate.AtEnd
-					slot.name.Size = UDim2.fromOffset(width, tall)
-					slot.name.Position = UDim2.new(0.5, 0, 0,
-						HOT.NameTop + (HOT.NameHeight - tall) / 2)
+				if slot.shownKey ~= shownKey then
+					slot.preview.setModel(shownKey, builderFor(data), previewKind(data))
 				end
-
 				--==============================================================
-				-- THE CHIP COMES OFF THE TOOL, NEVER OFF A GUESS
+				-- THE ACCENT COMES OFF THE TOOL, NEVER OFF A GUESS
 				--
-				--   bat, trap    what WeaponData says the item is
-				--   unhatched    POD, on a neutral edge. CarryService names a
-				--                banked pod ??? because the species is the
-				--                hatch's reveal, and rarity would name it through
-				--                the back door (Epic in Greenhollow is Bellchime)
-				--   hatched      its real SIZE off the tier it carries, edged in
-				--                its form's rarity colour -- the Index's word
-				--
-				-- A hatched plant whose tier is missing or out of range shows no
-				-- chip at all rather than a size nobody measured.
+				-- A hatched plant's bar is its form's rarity colour. A pod has
+				-- none: CarryService names a banked pod ??? because the species
+				-- is the hatch's reveal, and a colour would name it through the
+				-- back door. A plant mid-roll is a pod here too.
 				--==============================================================
-				local chipText: string? = nil
-				local chipColour = HOT.Caption
 				if data.kind == "plant" then
-					-- A plant mid-roll is a pod here too: its size chip is edged in
-					-- its rarity's colour, which would name it.
 					if not HatchRoll.shownHatched(data.tool) then
-						chipText = HOT.Tags.pod.text
-						chipColour = HOT.Tags.pod.colour
+						accent = nil
 					else
 						local species = SeedData.Get(tostring(data.tool:GetAttribute("SpeciesId")))
-						local tier = tonumber(data.tool:GetAttribute(ATTR.CarryingKg))
-						if species and tier and tier == tier
-							and tier >= 1 and tier <= SeedData.TierCount then
-							chipText = string.upper(SeedData.TierName(math.floor(tier)))
-							chipColour = GameConfig.RarityColor[species.Rarity] or HOT.Caption
-						end
+						accent = if species then GameConfig.RarityColor[species.Rarity] else nil
 					end
 				elseif data.kind == "ticket" then
-					-- The stack's count (2026-10-01): the wheel's earned balance.
-					chipText = "x" .. tostring(math.floor(tonumber(data.tool:GetAttribute("TicketCount")) or 0))
-					chipColour = Color3.fromRGB(255, 206, 84)
-				else
-					local fixed = HOT.Tags[data.kind]
-					chipText = if fixed then fixed.text else string.upper(data.kind)
-					chipColour = if fixed then fixed.colour else HOT.Caption
+					-- The stack's count: the wheel's earned balance.
+					stack = "x" .. tostring(math.floor(tonumber(data.tool:GetAttribute("TicketCount")) or 0))
 				end
-				if chipText then
-					if slot.tagText ~= chipText then
-						slot.tagText = chipText
-						slot.tag.Text = chipText
-						local roomy = HOT.ChipMaxWidth - 6
-						local size, width = HOT.ChipTextMin, roomy
-						for s = HOT.ChipTextMax, HOT.ChipTextMin, -1 do
-							width = TextService:GetTextSize(chipText, s, Enum.Font.FredokaOne,
-								Vector2.new(400, 40)).X
-							size = s
-							if width <= roomy then
-								break
-							end
-						end
-						slot.tag.TextSize = size
-						slot.tag.TextTruncate = if width <= roomy then Enum.TextTruncate.None
-							else Enum.TextTruncate.AtEnd
-						slot.chip.Size = UDim2.fromOffset(
-							math.min(HOT.ChipMaxWidth, math.max(20, math.ceil(width) + 8)), HOT.ChipHeight)
-					end
-					-- The edge carries the colour; the word takes it lifted toward
-					-- cream so a deep Epic still reads on ink.
-					slot.chipEdge.Color = chipColour
-					slot.tag.TextColor3 = chipColour:Lerp(HOT.Caption, 0.35)
-				end
-				slot.chip.Visible = chipText ~= nil
-			else
-				slot.preview.setModel("empty:" .. i, nil, "plant")
-				slot.name.Text = ""
-				slot.nameText = ""
-				slot.tag.Text = ""
-				slot.tagText = ""
-				slot.chip.Visible = false
+			elseif slot.shownKey ~= shownKey then
+				slot.preview.setModel(shownKey, nil, "plant")
 			end
-			--==================================================================
-			-- THE HINT IS SHOWN ONLY WHERE IT APPLIES
-			--
-			-- Assigned, assignable, and the bag open -- which is when the player
-			-- is arranging rather than fighting. Permanent gesture text on five
-			-- slots of a combat HUD is clutter; the same text while the bag is
-			-- open is an answer to the question they are already asking.
-			--==================================================================
-			local record = assigned[i]
-			local canReturn = record ~= nil and data ~= nil and data.canHotbar
-			slot.hint.Visible = canReturn and bagOpen
-
-			--==================================================================
-			-- AN EMPTY SLOT IS A GHOST
-			--
-			-- No plate, no keyline, no chip, no name: a dashed outline, a faded
-			-- badge and a plus. It is still the same button, so it is still a
-			-- drop target and still unequips when pressed. The dashes are built
-			-- the first time a slot is empty and kept.
-			--==================================================================
-			local empty = data == nil
-			slot.button.BackgroundTransparency = if empty then 1 else 0
-			slot.name.Visible = not empty
-			slot.keycap.BackgroundTransparency = if empty then 0.35 else 0
-			if empty and not slot.ghost then
-				local ghost = Instance.new("Frame")
-				ghost.Name = "Ghost"
-				ghost.Size = UDim2.fromScale(1, 1)
-				ghost.BackgroundTransparency = 1
-				ghost.BorderSizePixel = 0
-				ghost.ZIndex = 5
-				ghost.Parent = slot.button
-				dashOutline(ghost, HOT.SlotWidth, HOT.SlotHeight, HOT.Ghost, 5)
-				local plus = Instance.new("TextLabel")
-				plus.Name = "Plus"
-				plus.AnchorPoint = Vector2.new(0.5, 0.5)
-				plus.Position = UDim2.fromScale(0.5, 0.5)
-				plus.Size = UDim2.fromOffset(HOT.GhostPlus + 2, HOT.GhostPlus + 2)
-				plus.BackgroundTransparency = 1
-				plus.Font = Enum.Font.FredokaOne
-				plus.TextSize = HOT.GhostPlus
-				plus.TextColor3 = HOT.Ghost
-				plus.Text = "+"
-				plus.ZIndex = 8
-				plus.Parent = ghost
-				slot.ghost = ghost
-			end
-			local ghost = slot.ghost
-			if ghost then
-				ghost.Visible = empty
-			end
-
-			--==================================================================
-			-- IN HAND MEANS THE CHARACTER IS HOLDING THIS EXACT TOOL
-			--
-			-- Not "equipped into a loadout slot": a bat and a trap are both
-			-- equipped all the time and only the one in the hands is lit. Warm
-			-- amber-green keyline, a brighter face, the glow, the IN HAND strip
-			-- and a small lift -- and it outranks the other two rings, because it
-			-- is the one that changes second to second. Light slate says "you put
-			-- this here". Ink is a slot doing nothing in particular.
-			--
-			-- A drop's flash owns the keyline until its own redraw; see flashSlot.
-			--==================================================================
-			local isHeld = data ~= nil and data.tool == held
-			if now >= slot.flashUntil then
-				slot.ringTint.Enabled = isHeld
-				slot.stroke.Color = if isHeld then WHITE
-					elseif record and not empty then HOT.Assigned
-					else HOT.Ink
-				slot.stroke.Thickness = if isHeld then HOT.LitThickness else HOT.CardStroke
-				slot.stroke.Transparency = if empty then 1 else 0
-			end
-			slot.aura.Visible = isHeld
-			slot.inHand.Visible = isHeld and HOT.InHandHeight > 0
-			slot.key.TextColor3 = if isHeld then HOT.NumeralLit else HOT.Numeral
-			if slot.lit ~= isHeld then
-				slot.lit = isHeld
-				slot.plate.Color = if isHeld
-					then ColorSequence.new(HOT.LitPlateTop, HOT.LitPlateBottom)
-					else ColorSequence.new(HOT.PlateTop, HOT.PlateBottom)
-			end
-
-			--==================================================================
-			-- THE LIFT, AND REDUCED EFFECTS
-			--
-			-- `SeedAfterimageQuality = "Off"` is the setting SpeedFX, PlantAura
-			-- and UIKit.cardPop already obey: cards stay at rest, and the lit
-			-- keyline, face and strip still say which one is in the hands. One
-			-- tween, cancelled before the next, and only when the goal changes.
-			--==================================================================
-			local still = player:GetAttribute("SeedAfterimageQuality") == "Off"
-			local goal = if isHeld and not still then -HOT.HeldLift else 0
-			if slot.liftGoal ~= goal or (still and slot.wrap.Position.Y.Offset ~= goal) then
-				slot.liftGoal = goal
-				local running = slot.liftTween
-				if running then
-					running:Cancel()
-					slot.liftTween = nil
-				end
-				local want = UDim2.new(0.5, 0, 0.5, goal)
-				if still then
-					slot.wrap.Position = want
-				else
-					local tween = TweenService:Create(slot.wrap, TweenInfo.new(0.14,
-						Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = want })
-					slot.liftTween = tween
-					tween:Play()
-				end
+			slot.shownKey = shownKey
+			HotbarCard.paint(slot.card, HOT, {
+				empty = empty,
+				held = isHeld,
+				number = tostring(i),
+				stack = stack,
+				accent = accent,
+				name = if data then data.label else "",
+			})
+			HotbarCard.lift(slot.card, isHeld, still, HOT)
+			-- The name under a resting mouse follows what the slot holds now.
+			if hoveredSlot == i then
+				announce(if data then data.label else nil, true)
 			end
 		end
 	end
 
 	--==========================================================================
-	-- THE BAG CELL'S COUNT
-	--
-	-- Slots holding something out of the slots there are. Green while one is
-	-- free, a calm amber when the strip is full -- full is a fact, not a fault.
+	-- ARRIVALS: a plant that landed on a slot pops and flashes there; one that
+	-- went into the Bag pops the Bag cell. Quiet after a spawn, when every
+	-- Tool is rebuilt at once. Nothing under reduced motion.
 	--==========================================================================
-	chip.count.Text = string.format("%d/%d", filled, activeSlots)
-	local countColour = if filled >= activeSlots then HOT.CountFull else HOT.CountOpen
-	chip.count.TextColor3 = countColour
-	chip.countEdge.Color = countColour
+	if next(pendingArrivals) ~= nil then
+		local quiet = os.clock() < quietUntil
+		for tool in pairs(pendingArrivals) do
+			local shown: HotSlot? = nil
+			for i = 1, activeSlots do
+				local candidate = hotSlots[i]
+				if candidate and candidate.tool == tool then
+					shown = candidate
+				end
+			end
+			if quiet then
+				-- Nothing to say: the strip is being rebuilt, not added to.
+			elseif shown then
+				HotbarCard.bump(shown.card, still, HOT)
+				local seconds = HotbarCard.flash(shown.card, HOT.FlashArrived, HOT)
+				task.delay(seconds, function()
+					shown.card.flashUntil = 0
+					redraw()
+				end)
+			elseif not still and tool:GetAttribute("SpeciesId") ~= nil then
+				local running = chip.bumpTween
+				if running then
+					running:Cancel()
+				end
+				chip.bump.Scale = HOT.BumpScale
+				local tween = TweenService:Create(chip.bump, TweenInfo.new(HOT.BumpSeconds,
+					Enum.EasingStyle.Back, Enum.EasingDirection.Out), { Scale = 1 })
+				chip.bumpTween = tween
+				tween:Play()
+			end
+		end
+		table.clear(pendingArrivals)
+	end
+
+	--==========================================================================
+	-- THE BAG CELL'S COUNT: plant storage, as the server counts it
+	--==========================================================================
+	local text, full, known = HotbarRoles.storage(heldRows,
+		player:GetAttribute(ATTR.CarryingSpecies) ~= nil, GameConfig.Save.MaxHeld)
+	chip.count.Text = text
+	chip.count.TextColor3 = if not known then HOT.CountLoading
+		elseif full then HOT.CountFull
+		else HOT.CountOpen
 	-- HudLayout's call: on a desktop the old width rule, on a phone whether the
 	-- cell still fits between the thumbstick and the jump button.
 	local layout = hud
@@ -3531,7 +2512,7 @@ local function refreshBag()
 		weaponCount += 1
 	end
 	for _, slot in ipairs(liveSlots) do
-		if slot.kind == "plant" and not claimed[slot.tool] then
+		if slot.kind == "plant" then
 			plantCount += 1
 		end
 	end
@@ -3692,12 +2673,11 @@ local function refreshBag()
 		-- shows. Plants GROWING IN A PLOT are deliberately absent: they are not
 		-- items, they are somebody's garden.
 		--
-		-- AN ASSIGNED COPY IS NOT IN THE BAG ANY MORE. `claimed` holds exactly
-		-- the Tools that active hotbar slots have taken, one entry per instance,
-		-- so owning two identical plants and assigning one hides ONE card.
+		-- EVERY STORED PLANT IS IN THE BAG, the two on the hotbar's shortcuts
+		-- included (2026-10-01): a slot points at a card, it never takes one.
 		--======================================================================
 		for _, slot in ipairs(liveSlots) do
-			if slot.kind == "plant" and not claimed[slot.tool] then
+			if slot.kind == "plant" then
 				local tier = math.floor(tonumber(slot.tool:GetAttribute(ATTR.CarryingKg)) or 1)
 				table.insert(rows, {
 					key = slot.key .. ":" .. tostring(slot.tool),
@@ -3733,10 +2713,10 @@ local function refreshBag()
 				id = if row.tool then toolOrder[row.tool] or 0 else 0,
 			}
 		end)
-		-- THE SPIN TICKETS (2026-10-01), first, whenever no belt slot holds
-		-- them: so a hotbar pinned full of plants never hides them.
+		-- THE SPIN TICKETS (2026-10-01), first: on the strip's own slot and
+		-- here too, so the Bag always lists everything.
 		for _, slot in ipairs(liveSlots) do
-			if slot.kind == "ticket" and not claimed[slot.tool] then
+			if slot.kind == "ticket" then
 				local count = tonumber(slot.tool:GetAttribute("TicketCount")) or 0
 				table.insert(rows, 1, {
 					key = slot.key,
@@ -3951,7 +2931,9 @@ do
 		end
 		local layout = hud or HudLayout.solve(HudLayout.measure(gui))
 		local bag = HudLayout.bag(layout, {
-			hotTop = screen.Y + hotbar.Position.Y.Offset - hotbar.Size.Y.Offset,
+			-- The strip's top, and the name popup's band over it (2026-10-01).
+			hotTop = screen.Y + hotbar.Position.Y.Offset - hotbar.Size.Y.Offset
+				- HOT.NamePopupGap - HOT.NamePopupHeight,
 			stripHidden = layout.touch,
 			plants = activeTab == "plants",
 			sideWidth = side.Size.X.Offset,
@@ -4064,12 +3046,6 @@ local dragGhost: TextLabel? = nil
 local dragSource: any = nil
 local dragConns: { RBXScriptConnection } = {}
 
--- Green for "that went where you put it", warm red for "that came back". Two
--- colours because the two outcomes must not be told apart by reading a label:
--- the whole point of a flash is that it is legible out of the corner of an eye.
-local FLASH_ASSIGNED = Color3.fromRGB(150, 220, 96)
-local FLASH_RETURNED = Color3.fromRGB(226, 118, 92)
-
 local function guiPoint(input: InputObject): Vector2
 	return Vector2.new(input.Position.X, input.Position.Y)
 end
@@ -4089,83 +3065,49 @@ local function slotUnder(point: Vector2): number?
 end
 
 --==============================================================================
--- AND THE BAG IS A TARGET TOO, WHEN IT IS OPEN
---
--- The grid rect rather than the whole panel, so a drop on the tab strip or the
--- close button is not read as "put this back" -- those are buttons a player may
--- well be aiming at for their own sake.
---==============================================================================
-local function overBag(point: Vector2): boolean
-	if not bagOpen then
-		return false
-	end
-	local p, sz = grid.AbsolutePosition, grid.AbsoluteSize
-	return point.X >= p.X and point.X <= p.X + sz.X
-		and point.Y >= p.Y and point.Y <= p.Y + sz.Y
-end
-
---==============================================================================
 -- THE FLASH: ONE TWEEN, NO LOOP
 --
--- A colour set at once and a thickness easing back over a third of a second,
--- then one redraw to put the real ring back. Deliberately NOT a RenderStepped
--- pulse or a per-card animation: this HUD runs on phones, the repo rule is no
--- per-frame allocation, and a flash still animating when the player looks away
--- has already done its job.
+-- HotbarCard colours the edge and eases its thickness back, then one redraw
+-- puts the real edge back. Deliberately NOT a RenderStepped pulse: this HUD
+-- runs on phones, and the repo rule is no per-frame allocation.
 --==============================================================================
 local function flashSlot(index: number, colour: Color3)
 	local slot = hotSlots[index]
 	if not slot then
 		return
 	end
-	-- The redraw every drop makes would repaint the keyline a frame later, so the
-	-- flash owns it until its own redraw below: the lime gradient steps aside,
-	-- and a ghost's hidden keyline shows for the length of the flash.
-	slot.flashUntil = os.clock() + 0.32
-	slot.ringTint.Enabled = false
-	slot.stroke.Transparency = 0
-	slot.stroke.Color = colour
-	slot.stroke.Thickness = HOT.CardStroke + 1.5
-	TweenService:Create(slot.stroke, TweenInfo.new(0.30), { Thickness = HOT.CardStroke }):Play()
-	task.delay(0.32, function()
+	local seconds = HotbarCard.flash(slot.card, colour, HOT)
+	task.delay(seconds, function()
 		if hotSlots[index] == slot then
-			slot.flashUntil = 0
+			slot.card.flashUntil = 0
 			refreshHotbar()
 		end
 	end)
 end
 
 --==============================================================================
--- GIVING A SLOT BACK
+-- CHOOSING A PLANT IN THE BAG
 --
--- Clearing the assignment IS the return: an unclaimed Tool reappears in the bag
--- on the next draw, because `claimed` is what hid it and nothing else ever did.
--- No item is moved, created or destroyed -- which is the property that keeps this
--- a presentation layer over the real owned Tools rather than a second inventory.
---
--- UNEQUIPPED ON THE WAY OUT, if it happens to be in the hands. A plant just
--- taken off the hotbar but still held is a half-finished action, and the player
--- would be left working out for themselves why their hands are full of something
--- they just put away.
+-- HOLD on a plant's card makes it the active shortcut (key 4); what was active
+-- becomes the previous (key 5). Nothing is moved, sold, cloned or dropped: the
+-- card stays in the Bag, and the slot points at it. A plant already on a slot
+-- stays where it is.
 --==============================================================================
-returnToBag = function(index: number)
-	local record = assigned[index]
-	if not record then
-		return
-	end
-	local tool = record.tool
-	assigned[index] = nil
-	lastTap[index] = nil
-	local character = player.Character
-	if tool and character and tool.Parent == character then
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			humanoid:UnequipTools()
+chooseShortcut = function(tool: Tool)
+	for _, data in ipairs(liveSlots) do
+		if data.tool == tool then
+			if not data.canHotbar or HotbarRoles.holding(shortcuts, tool) ~= nil then
+				return
+			end
+			HotbarRoles.choose(shortcuts, data.key, data.tool)
+			local activeIndex = table.find(HotbarRoles.Roles, "active")
+			if activeIndex then
+				flashSlot(activeIndex, HOT.FlashArrived)
+			end
+			redraw()
+			return
 		end
 	end
-	SoundKit.play("UIClick")
-	flashSlot(index, FLASH_RETURNED)
-	redraw()
 end
 
 --==============================================================================
@@ -4206,14 +3148,18 @@ local function endDrag(dropAt: Vector2?)
 		return
 	end
 	local target = slotUnder(dropAt)
+	if not target then
+		return
+	end
+	local role = HotbarRoles.roleOf(target)
+	if role ~= "active" and role ~= "previous" then
+		return
+	end
 
 	if source.from == "bag" then
-		if not target then
-			return
-		end
 		-- The live SLOT record, not the Row: a Row key carries the tool instance
 		-- so that two identical plants get separate cards, and what belongs in
-		-- the assignment is the current classification of that one copy.
+		-- the shortcut is the current classification of that one copy.
 		local data: Slot? = nil
 		for _, candidate in ipairs(liveSlots) do
 			if candidate.tool == source.row.tool then
@@ -4224,31 +3170,23 @@ local function endDrag(dropAt: Vector2?)
 		if not (data and data.canHotbar) then
 			return
 		end
-		local was = assignedSlotFor(data.tool)
-		if was then
-			assigned[was] = nil
+		if role == "active" then
+			HotbarRoles.choose(shortcuts, data.key, data.tool)
+		else
+			HotbarRoles.setPrevious(shortcuts, data.key, data.tool)
 		end
-		assigned[target] = { key = data.key, tool = data.tool }
 		SoundKit.play("UIClick")
-		flashSlot(target, FLASH_ASSIGNED)
+		flashSlot(target, HOT.FlashArrived)
 		redraw()
 		return
 	end
 
-	local index = source.index
-	local record = assigned[index]
-	if not record then
-		return
-	end
-	if target and target ~= index then
-		assigned[target] = record
-		assigned[index] = nil
-		lastTap[index] = nil
+	-- A plant slot dropped on the other plant slot: the two swap.
+	if target ~= source.index then
+		HotbarRoles.swap(shortcuts)
 		SoundKit.play("UIClick")
-		flashSlot(target, FLASH_ASSIGNED)
+		flashSlot(target, HOT.FlashArrived)
 		redraw()
-	elseif not target and overBag(dropAt) then
-		returnToBag(index)
 	end
 end
 
@@ -4434,6 +3372,12 @@ local function receive(profile: any)
 			changed = true
 		end
 	end
+	-- Plant storage's count, for the Bag cell: the saved rows, which the server
+	-- keeps one per stored plant or pod (CarryService, "snapshots only add").
+	if type(profile.Held) == "table" and #profile.Held ~= heldRows then
+		heldRows = #profile.Held
+		changed = true
+	end
 	if not heardProfile then
 		heardProfile = true
 		changed = true
@@ -4491,8 +3435,12 @@ local function watchTools(container: Instance)
 			child.AttributeChanged:Connect(function(name: string)
 				-- RevealAt comes off the Tool when its roll is over: the card
 				-- that was ??? is the plant from that repaint on.
-				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched"
-					or name == HatchRoll.Attribute or name == "TicketCount" then
+				if name == "TicketCount" then
+					-- The stack grew or shrank: the tickets' slot pops.
+					pendingArrivals[child] = true
+				end
+				if name == "SpeciesId" or name == ATTR.CarryingKg or name == "Hatched" or name == "TicketCount"
+					or name == HatchRoll.Attribute then
 					redraw()
 				end
 			end)
@@ -4502,8 +3450,14 @@ end
 
 local function watchContainer(container: Instance)
 	watchTools(container)
-	table.insert(containerConns, container.ChildAdded:Connect(function()
+	table.insert(containerConns, container.ChildAdded:Connect(function(child)
 		watchTools(container)
+		-- A Tool never seen before is an arrival (a plant hatched, a pod banked,
+		-- a prize given): the next paint answers it. A Tool moving between the
+		-- Backpack and the hands has an order already and is not one.
+		if child:IsA("Tool") and not toolOrder[child] then
+			pendingArrivals[child] = true
+		end
 		redraw()
 	end))
 	--==========================================================================
@@ -4552,6 +3506,8 @@ player.ChildAdded:Connect(function(child)
 end)
 player.CharacterAdded:Connect(function()
 	cancelDrag()
+	-- Every Tool is about to be rebuilt: none of them is an arrival.
+	quietUntil = os.clock() + 3
 	task.defer(rebindContainers)
 end)
 player.CharacterRemoving:Connect(cancelDrag)
@@ -4612,14 +3568,11 @@ local function applySlotCount()
 	-- an arrangement is a saved thing with an owner, and "restore it" becomes a
 	-- question with a defensible answer instead of a timing accident.
 	--==========================================================================
-	if want < activeSlots then
-		for i = want + 1, MAX_SLOTS do
-			if assigned[i] then
-				assigned[i] = nil
-				lastTap[i] = nil
-			end
-		end
-	end
+	-- SINCE 2026-10-01 nothing is released. The slots are roles: a phone's
+	-- four are the desktop's first four, and the previous-plant shortcut the
+	-- fifth would show is kept in memory while it is hidden, so a window that
+	-- widens again gets it back. The redraw hides and empties the slots past
+	-- the count; no key renumbers.
 	activeSlots = want
 	redraw()
 end
@@ -4686,6 +3639,7 @@ local function layoutHud()
 		chooser.place(layout)
 	end
 	hotbar.Position = HudLayout.place(layout.hotbar, hotbar.AnchorPoint, layout.safe)
+	namePopup.Position = HudLayout.place(layout.namePopup, namePopup.AnchorPoint, layout.safe)
 	local count = activeSlots
 	applySlotCount()
 	-- applySlotCount redraws when the count changed; the Bag cell's visibility
@@ -5305,10 +4259,10 @@ end)
 -- it. ContextActionService rather than UserInputService so a text box has
 -- priority over this and typing "1" in chat does not swap weapons.
 --==============================================================================
+-- Five keys for five roles (2026-10-01); 6 to 0 are not bound at all.
 local KEYS = {
 	Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
-	Enum.KeyCode.Five, Enum.KeyCode.Six, Enum.KeyCode.Seven, Enum.KeyCode.Eight,
-	Enum.KeyCode.Nine, Enum.KeyCode.Zero,
+	Enum.KeyCode.Five,
 }
 
 ContextActionService:BindAction("SeedHotbarKeys", function(_, state, input)
@@ -5476,7 +4430,94 @@ player:GetAttributeChangedSignal("SeedAfterimageQuality"):Connect(function()
 	redraw()
 end)
 
+--==============================================================================
+-- THE NAME POPUP (2026-10-01)
+--
+-- `announce(text, sticky)`: sticky is a mouse resting on a slot -- the name
+-- stays until the pointer leaves -- and not sticky is an equip, which stays
+-- NamePopupSeconds. Reduced motion (the game's REDUCED FX, or Roblox's own
+-- setting): no fade, it is simply there and then not.
+--==============================================================================
+do
+	local shownUntil = 0
+	local hovering: string? = nil
+	local fade: Tween? = nil
+	local edge = namePopup:FindFirstChildOfClass("UIStroke")
+
+	local function still(): boolean
+		if player:GetAttribute("SeedAfterimageQuality") == "Off" then
+			return true
+		end
+		local ok, value = pcall(function()
+			return (game:GetService("GuiService") :: any).ReducedMotionEnabled
+		end)
+		return ok and value == true
+	end
+	local function show(text: string)
+		if fade then
+			fade:Cancel()
+			fade = nil
+		end
+		namePopup.Text = text
+		namePopup.TextTransparency = 0
+		if edge then
+			edge.Transparency = 0
+		end
+		namePopup.Visible = true
+	end
+	local function hide()
+		if fade then
+			fade:Cancel()
+			fade = nil
+		end
+		if still() then
+			namePopup.Visible = false
+			return
+		end
+		local tween = TweenService:Create(namePopup, TweenInfo.new(0.2), { TextTransparency = 1 })
+		if edge then
+			TweenService:Create(edge, TweenInfo.new(0.2), { Transparency = 1 }):Play()
+		end
+		fade = tween
+		tween.Completed:Connect(function(state)
+			if state == Enum.PlaybackState.Completed then
+				namePopup.Visible = false
+			end
+		end)
+		tween:Play()
+	end
+	announce = function(text: string?, sticky: boolean)
+		if sticky then
+			hovering = text
+			if text then
+				show(text)
+			elseif os.clock() >= shownUntil then
+				hide()
+			end
+			return
+		end
+		if text == nil or text == "" then
+			return
+		end
+		show(text)
+		shownUntil = os.clock() + HOT.NamePopupSeconds
+		task.delay(HOT.NamePopupSeconds, function()
+			if os.clock() < shownUntil then
+				return
+			end
+			local over = hovering
+			if over then
+				show(over)
+			else
+				hide()
+			end
+		end)
+	end
+end
+
 --== The held Tool changing is a redraw: it is what the warm ring shows. ==--
+-- And since 2026-10-01 the feedback: the item's name over the strip, and a
+-- pop on its slot (none under reduced motion).
 task.spawn(function()
 	local lastHeld: Tool? = nil
 	while true do
@@ -5484,6 +4525,15 @@ task.spawn(function()
 		if held ~= lastHeld then
 			lastHeld = held
 			redraw()
+			if held then
+				announce(held.Name, false)
+				local still = player:GetAttribute("SeedAfterimageQuality") == "Off"
+				local at = hotbarSlotOf(held)
+				local slot = if at then hotSlots[at] else nil
+				if slot then
+					HotbarCard.bump(slot.card, still, HOT)
+				end
+			end
 		end
 		task.wait(0.15)
 	end
