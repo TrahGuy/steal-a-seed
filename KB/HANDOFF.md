@@ -1,6 +1,1590 @@
 # Steal a Seed — Session Handoff
 
-## The hotbar is five roles, to the owner's reference — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` (the hotbar commit after 5fe569e); NOT PUBLISHED; STUDIO PLAY ON THE THROWAWAY TEST STORE, DESKTOP ONLY — NO PHONE EMULATION, NO PHYSICAL PHONE)
+## The 10-01/10-02 work committed: `ebc9db8` (code) and this docs commit — the owner's v1016 — 2026-10-03 (CLAUDE)  (ON `wip`; NOT ON `main`)
+
+At the owner's "COMMIT THEM, I ALREADY PUBLISHED". The Studio log records the owner's publish of **v1016 at
+2026-10-02 15:59 UTC**. Studio had matched disk at 15:46 UTC (173 scripts, 0 differ, no ZZ leftovers, test-store marker
+absent) and no file under `src/` or `tools/` changed afterwards, so v1016 carries this code as far as the evidence
+goes (an edit made directly in Studio in those 13 minutes would not show; Podnappers Studio was closed when this was
+written). The place-level changes of that same Studio session were in the published place: the "Rain Event"
+originals' nine demo Scripts, their stand Part and `EmberrootApprovalRunner` removed; the 12 original models remain.
+- `ebc9db8` — all of `src/` and `tools/` (74 files): the Secret forms, the Rain event and its biome, the Rain models
+  and Pods 1–3, Stormstrider (2.5×, its sleep on the floor), the weather and guardian sounds, and their specs.
+- This commit — the handoff entries below, their headings now naming `ebc9db8` and v1016.
+- Left out on purpose: the other agent's (CODEX) entries still in the working file, `game thumbnails/` (with its
+  deletions), `output/`, `sfx/` and the owner's other folders.
+
+## Stormstrider's chase at 2.5× Starbloom's: implemented and verified — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; ONE SHORT GUARDED PLAY ON THE THROWAWAY STORE; ONE PLAYER, DESKTOP ONLY)
+
+The owner, after testing 1.80×: "stormstrider is still slow for me, adjust the speed to 2.5x faster than starbloom"
+(the owner's approval; this entry is the implementation and its verification).
+- **`GameConfig.Parent.Guardians.stormstrider.SpeedScale` 1.80 → 2.5** — still its own knob, applied by
+  `chaseSpeedFor` to the whole ramp, rage and shortfall: **195** at the opening, **240** at the top, the same 3.4 s
+  ramp. Nothing else of its profile, no other guardian, the player's speed and Pod 3's 0.5 carry are unchanged.
+- **Its swept catch had to keep up.** At 2.5× it covers 30–45 studs a 0.12 s tick, and `MAX_TICK_TRAVEL` (40, "double a
+  capped player's tick so only a discontinuity is thrown away") would have discarded its own ordinary ticks as
+  teleports — catches by point distance only, at 40 studs a tick. `GuardianPursuit.sampleUsable` takes an optional
+  `parentMaxTravel`; NestService passes `MAX_TICK_TRAVEL × SpeedScale` (100) for a scaled guardian. The TARGET keeps
+  40 (a thief's teleport is still refused); every unscaled guardian passes nothing and is exactly as before.
+- **Specs:** GuardianPursuitSpec 62/62 (4 new: a 44-stud guardian tick usable only with the allowance, a thief
+  teleport still refused, a guardian put-back past even the widened allowance refused, no allowance = as before),
+  RainPodsSpec 55/55 (2.5 / 195 / 240, no other SpeedScale, the allowance wired), GuardianConfiscateSpec 103/103,
+  GuardianRagdollSpec 120/120. One Rojo build, OK. Source = Studio (173 scripts, 0 differ) before and after Play.
+- **Play** (store `SeedTest_20261002`, guard SAFE, Ready line "STUDIO TEST STORE"): WalkSpeed / Astralmaw's for the same
+  player **×2.491–2.501** — 282.5 → 292.8 studs/s for the Speed-0 test profile (shortfall 30, rage 5), the body measured
+  at up to 291 studs/s; from ~445 studs away it **caught the thief in 1.64 s** (the sweep works); **0.0 studs** in the
+  second after the hit; the pod on the ground with its identity (`puddlepod_colossal`, t7, ev1), not confiscated.
+  Boundary: the thief stepped over with Stormstrider **77.7 studs away at 304 studs/s** → banked (Held 16→17); its
+  closest x **306.5** (line 270), never in the safe zone; home and asleep with no stand-still. Teardown: host deleted,
+  Studio = disk (0 ZZ), marker removed by hand (`test_store_off` cannot reach DataStores from the MCP sandbox; the
+  throwaway store keeps its test keys). No game-script error in the console.
+- **Limits:** one player, desktop; how it FEELS to a player with real Speed was not judged (their shortfall is smaller,
+  so it runs nearer 195–240 plus rage); a thief who crosses while it is closer than about one tick (35–45 studs) may see
+  it carry up to a tick past the line before it turns for home — not observed here, and no catch can happen inside the
+  safe zone (the tick checks the target's safety first). The single-strike-per-catch rule was not re-counted in this
+  session (its code is untouched since the session below counted 1 → 1 per catch).
+
+## Rain sounds wired (four ids), Stormstrider's own voice (two ids), its sleep ON the floor and its chase at 1.80× — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; ONE GUARDED PLAY ON THE THROWAWAY STORE FOR ALL THREE; ONE PLAYER, DESKTOP ONLY; PLAYBACK STATE VERIFIED, NOTHING "HEARD")
+
+Three owner requests that arrived together, sharing one guarded Play session (store `SeedTest_20261002`, guard SAFE,
+Ready line "STUDIO TEST STORE"). **Speed superseded by the entry above: 2.5× now, not 1.80×.**
+
+**The six ids — every one checked through the public economy API and load-tested in Podnappers (Studio Edit,
+PreloadAsync + IsLoaded):**
+
+| id | asset | owner | loads | wired to |
+|---|---|---|---|---|
+| `70930849303265` | Rain Event BGM, 175.57 s | CrazyCozy Games | yes | `Music.RainTracks` |
+| `138018201261517` | rain sound, 30 s | CrazyCozy Games | yes | cue `RainAmbience` |
+| `110362720818059` | thunderstorm-start lightning, 5 s | CrazyCozy Games | yes | cue `ThunderstormOpening` |
+| `79835427265580` | Lightning Sound fx, 5 s | CrazyCozy Games | yes | cues `ThunderClap` + `StormstriderStrike` |
+| `113193227101300` | STORMSTRIDER — AWAKE ANGRY, 2.88 s | CrazyCozy Games | yes | cue `StormstriderWake` |
+| `82607848172654` | STORMSTRIDER — SLEEPING, 11.88 s | CrazyCozy Games | yes | cue `StormstriderSleep` |
+
+The first BGM id the owner gave, `80056764571185`, is on the owner's OWN account and is refused in Podnappers ("User is
+not authorized to access Asset … The experience doesn't have access permission"); the owner then supplied the group
+copy `70930849303265`, which is the one wired. Nothing was granted, re-uploaded or substituted.
+
+**Levels, measured off the WAV/MP3s in `sfx/` (ffmpeg volumedetect, read only) — mean dB + 20·log10(volume):** the
+music bed (BGM -17.5 dB × 0.32) about -27 dB; the rain loop (-25.4 dB × 0.16, × 1.3 in a storm) about -41 / -39 dB,
+some 14 dB under the music; the opening (-19.7 × 0.40) about -28; a strike (-14.4 × 0.35 weather, × 0.45 catch) about
+-23 / -21 at the bolt; the growl (-11.8, a hot render × 0.35) about -21 at the guardian; the sleeping loop (-35.5, a
+quiet render × 0.45) about -42 at arm's length — a touch under the rain, well under the music. All on the World bus
+(SOUND FX) but the BGM (MUSIC); every row at speed 1 (no pitch, no jitter). Roblox's own volume is the master.
+
+**Triggers (server-authoritative state, client playback):**
+- **Rain BGM** — Music.client's ONE track Sound (`SeedMusicTrack`): `listFor` answers `RainTracks` first while the
+  server's `RainState` is "opening"/"active" (ahead of night and day), so a late joiner starts on it; it comes in over
+  `Music.RainFadeSeconds` = 4 (2 s the old bed out, 2 s the rain bed in — one Sound, so never two beds at once) and
+  goes the same way the moment the weather starts closing. A silent probe preloads the id; if it cannot load, the
+  day/night bed carries on (re-probed when an event starts).
+- **Rain loop** — Weather.client `stepAmbience`: ONE flat loop (2D: the rain is wherever the camera is) at
+  `0.16 × the rain's own fade level` (× `Weather.Audio.StormAmbience` = 1.3 in a Thunderstorm), full at once for a late
+  joiner, stopped when the level reaches 0. The old `ThunderstormBed` hook (a second, storm-only loop) is retired.
+- **Thunderstorm opening** — Weather.client `stepOpening`: once, for a new `RainEventId` with `RainMode` "thunder" this
+  client SAW start (no older than `Audio.OpeningSeconds` = 5 s); never a Rain, a late joiner, a script re-run or a
+  refused/duplicate start (those write no new id).
+- **Weather strike** — Weather.client: each scheduled bolt (`RainClouds.lightning`, unchanged) sounds ONCE where it
+  lands, SoundKit's positional one-shot on a local part under the camera (range 640), at most
+  `Audio.MaxStrikeSounds` = 2 at once, each part gone after 8 s.
+- **Catch strike** — NestService's existing single `SoundKit.emit(StormstriderStrike)` per confirmed catch of a
+  `CatchLightning` guardian (range 320); the clients' catch bolt is silent, so a catch never sounds twice. (A catch
+  ALSO plays the pre-existing generic claw `ParentHit` — `StormstriderHit` is still an empty hook — and the throw
+  sound; both unchanged.)
+- **Stormstrider's growl** — NestService's existing roar, `SoundKit.emit(parentCue("rain","Wake"))`, emitted once
+  only when a SLEEPING nest is robbed (asleep → waking/chasing); a re-chase from returning/hauling, a new target, a
+  queued thief or a contact never roars. Positional, range 220.
+- **Stormstrider's sleeping breath** — `ParentVoices.rain.Sleep = "StormstriderSleep"` (in place of the generic
+  `ParentSleep` it fell back to): SoundCues keeps ONE positional loop per guardian (range 70), playing while
+  `ParentState` is "asleep", faded over 0.35 s on waking, restarted from the top when it lies down again; a guardian
+  streamed in takes its state at once; destroyed with the guardian.
+- **SoundKit: a one-shot is for whoever was there.** Server emits are now stamped `SeedEmittedAt`; a client that
+  receives one more than `Sfx.LateCueSeconds` (1.0 s) late — a guardian streamed in mid-chase, a player who joined
+  after a roar — silences and stops ITS copy instead of replaying a past growl. Applies to every server one-shot, only
+  to late copies.
+
+**Stormstrider's floating sleep — the cause:** the authored SleepPose lowers the body by `DropStuds` = **1.32 studs**,
+but the body stands with its underside about ten studs above the paws: folding the legs never brought it down, so its
+lying silhouette hung **5.23 studs** above the floor even at its lowest breath (RainPodsSpec), and the owner's
+sleeping breath (spine 2.5° + 2°) lifted the far end of the 73-stud body another ~1.5 studs each breath.
+**The fix (`Shared/StormstriderRun`, client only):** the drop is MEASURED — the joint tree posed exactly as Step poses
+it at full sleep (C0 = rest × pose), walked from the body at 13 points through the breath, gives the lying
+silhouette's lowest visible point in the root's frame; a ray down from the root at each lie-down (stream-in, and every
+return home) gives the floor (fallback: the standing rig's lowest point, which is where HipHeight holds the paws).
+Each frame the body lowers by `lowest(breath) − floor − 0.05` through the existing RootJoint and sleep blend, so the
+contact stays planted while the rest breathes, waking lifts it gradually, and nothing is buried. The model, its size,
+joints and pose data are untouched; no other guardian changes.
+
+**Its chase:** `GameConfig.Parent.Guardians.stormstrider.SpeedScale` **1.15 → 1.80** (its own knob; no other profile
+has one): 1.80 × what Astralmaw (Starbloom's guardian) runs against the same player, over the whole ramp, rage and
+shortfall — **140.4** at the opening, **172.8** at the top, the same 3.4 s ramp. Wake delay, catch range, hitbox,
+return, throw, player speed and Pod 3's 0.5 carry are unchanged. **`NestService.routeStep`** gained one guard: a
+guardian standing BEHIND the route's first point (out on the bridge, where a chase that ran up to the line can carry it
+at twenty-odd studs a tick) walks back to that point first instead of cutting across the mouth room's rim.
+
+**Specs (Studio Edit):** RainPodsSpec **54/54** (1.80/140.4/172.8, no other SpeedScale; THE CAUSE 5.23 studs; asleep
+0.050–0.069 studs above the floor through every breath, drop 6.5–8.0; waking gradual; re-measured on a floor two studs
+higher), **RainAudioSpec 39/39** (new: ids, rows, levels, buses incl. mute behaviour, Music/Weather/NestService/
+SoundCues wiring, the growl only out of sleep, ONE sleep loop, the late guard run for real), ParentVoiceSpec
+**189/189** (rain Wake/Sleep/Hit/Step/Return, the two uploads, PENDING now only StormstriderHit), MusicBedSpec 28/28,
+SoundLevelSpec 28/28, SfxWiringSpec 202/202, RainEventSpec 88/88. Builds: two Rojo builds (after the weather/
+Stormstrider source; final after the voice rows and the hosts' removal), both OK.
+
+**The one guarded Play (gated ZZ hosts via Rojo, deleted after):**
+- Rain: BGM `70930849303265` loaded, playing, advancing 1.00 s/s at speed 1 on the Music bus; rain loop loaded,
+  playing, vol 0.159, World bus, ONE loop. Ending it: BGM 1.00→0.64→0.31→0.09→0 over 2 s, the day bed back
+  0.36→0.68→0.92→1.00 by 4.3 s; rain loop 0.159→0.133→0.099→0.067→0.035 over 2.5 s, then stopped. Music mute: MUSIC
+  bus 0, WORLD 1, rain loop on; SOUND FX mute: WORLD 0 (rain, thunder and guardian cues all ride it); both restored.
+- Thunderstorm: openings **1**; a second thunder start refused ("already raging") with no second opening (a rain start
+  was refused by the console's own one-request-a-second limit); rain loop 0.206 (×1.3), one loop; bolts **4 → 4**
+  strike sounds.
+- Stormstrider asleep, as DRAWN on the client (lowest visible part vs a floor ray, every frame): **0.050–0.072**
+  studs (298 frames) at first, **0.050–0.071** (301) after its first walk home, **0.050–0.070** (54) after the second.
+- Chase: WalkSpeed / Astralmaw's for the same player **×1.791–1.801** (Rain, 39 samples) and **×1.788–1.801** (storm,
+  carrying Pod 3) — 203→219 studs/s for the Speed-0 test profile (shortfall 30, rage 5). Both catches: moved **0.0**
+  studs in the second after the hit; pod on the ground with its species and event (drizzlet ev1, thundermaw ev2), not
+  confiscated; never in the safe zone.
+- Boundary: the thief crossed with Stormstrider **58.8 studs away at 218 studs/s** → banked (Held 15→16); its
+  closest x **280.4** (line 270), never in the safe zone; it walked home from behind the route's first point (x 280 <
+  362) with no stand-still and lay down.
+- Voice: growls **3** for 3 genuine wakes (late 0), none on the retake-while-hunting paths; catches 2 → catch sounds
+  2; the sleep loop: at most ONE, stopped on each wake, restarted on each lie-down (starts/stops paired); after each
+  event ended: guardian gone, **0** Stormstrider sounds anywhere.
+- Teardown: hosts deleted, Studio = disk (173 scripts, 0 differ, 0 Studio-only, 0 ZZ), marker removed BY HAND —
+  `test_store_off` cannot run in the MCP sandbox (no DataStoreService), so the throwaway store `SeedTest_20261002`
+  keeps its test keys (never the real store). No error from any game script in the session's console.
+
+**Not verified / limits — say so if asked:** nothing was HEARD: Studio ran in the background; IsLoaded, IsPlaying,
+advancing TimePosition, bus volumes and PlaybackLoudness (47–65 on the BGM/rain loop once Studio rendered audio, 0
+before) are playback state only. One player, desktop only, no phone, no reduced motion, no live server. The late
+guard is spec-only (no second client or late joiner in the session; whether the engine would have replayed a late
+server Sound was not observed). The rain bed is fully in about 4 s after a start (one track: old bed out 2 s, rain
+bed in 2 s) while the rain loop fades in over 2.5 s — one number (`RainFadeSeconds`) if the owner wants it quicker.
+The lie-down and wake TRANSITIONS were not checked for clipping mid-blend (full sleep and the first waking frame were).
+Pod 3's 0.5 carry was not re-measured (code untouched).
+
+## Rain-event cleanup: the originals' nine demo Scripts, their stand Part and EmberrootApprovalRunner deleted; Pod 3 approved as two creatures — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; THE DELETIONS WERE IN THE PLACE THE OWNER PUBLISHED AS v1016 (THE SAME STUDIO SESSION); NO PLAY, NO TEST SUITE)
+
+**Deleted from the open place** (Studio Edit, through MCP, each target identified by path, class AND content — source
+length + hash, or size + position — before anything was touched; MCP deletions are NOT on Studio's Undo stack, the
+backups below are the way back):
+- **Nine Scripts in `Workspace["Rain Event"]`**, every one an enabled Legacy server Script with no children:
+  `Puddlepod POD1.PuddlepodIdle` and `Puddlepod POD2.PuddlepodIdle` (4,599 chars), `Drizzlet POD1.DrizzletIdle` and
+  `Drizzlet POD 3.DrizzletIdle` (3,741), `Lotusling POD1.LotuslingIdle` and `Lotusling POD2.LotuslingIdle` (4,648),
+  `Tempestoak POD 3.TempestoakIdle` (8,243), `Thundermaw POD 3.ThundermawIdle` (6,287) and
+  `Stormstrider GUARDIAN.StormstriderRun` (12,817). Authoring/demo scripts: each animates only `script.Parent`, its
+  own display model, and StormstriderRun's own header calls `AutoRun` "a DEMO" (laps on a live server). Production
+  never needed them: the forms are `Shared/RainForms` data, the idles are ported into `SecretIdle`, the guardian's
+  run/sleep into `Shared/StormstriderRun` (driven by ParentAnim), the guardian is built by `StormstriderModel`; no
+  script source or instance in the place referenced them.
+- **`Workspace.Part`** — the only direct Workspace Part named "Part": 235×1×157 at (−73.5, 1.5, 377.5), unanchored,
+  CanCollide, grey Plastic, no children or attributes. It was the stand the originals were set out on (all twelve
+  models' bottoms at y = 2.00, its top, inside its footprint), but nothing rests on it — every creature hangs off its
+  own anchored root and the pods are fully anchored — and, unanchored with no ground below, it fell away in Play. No
+  joint, constraint, ObjectValue, PrimaryPart or script referenced it (6,940 instances scanned).
+- **`ServerScriptService.EmberrootApprovalRunner`** — a ModuleScript of 25,885 chars that was never on disk: the
+  "Emberroot Approval Preview Runner", which builds a non-archivable `Workspace.EmberrootApprovalPreview` of
+  Emberroot approval models when required (it calls `Build()` at load and defines `Build` twice). Nothing in the
+  place or the repo requires it, and the installed Studio plugins do not mention it. (An older variant is
+  `D:\KAPE\emberroot-approved\DROPPED_CinderbulbRunner.luau.bak`, not the same text.)
+
+**Retained:** the twelve original models — geometry fingerprinted before and after the delete (every part, joint,
+attachment, attribute and the pivot): identical for all twelve; the folder went 2,390 → 2,381 descendants, exactly
+the nine scripts. Their model attributes (`AutoRun`, `ProceduralIdle`, `Unit`, …) stay; nothing reads them now.
+Everything else in Workspace (SeedMap, Terrain, Camera) and `ServerScriptService.SeedGameServer` is untouched, as are
+the similarly named on-disk preview runners (`EmberrootRootMockupRunner`, `StarbloomMockupRunner`, …). No production
+code or data depended on any deleted instance, so no dependency had to be kept.
+
+**Backups (`output/`, never staged):**
+- `output/model-backups/2026-10-02-rain-cleanup/` — one `.rbxm` per deleted instance (11), the ten scripts' source as
+  `.luau`, and `manifest.json` (paths, classes, sizes, sha256, source hashes, the before/after geometry). Every file
+  was reopened in Studio (`DeserializeInstancesAsync`) and matched its live instance before the delete.
+- The nine scripts were already recoverable from `output/model-backups/2026-10-02-rain-event-originals/`: each
+  model's `.rbxm` reopens WITH its script (same length and hash as live; ten models fingerprint-identical, the two
+  Puddlepods differ only by the known `-0.0000` sign), and `generator/owner-scripts/*.luau` are byte-identical dumps.
+- To restore one: right-click its old parent in Studio › Insert from File… › the `.rbxm`.
+
+**Persisting:** the deletions exist only in the OPEN Studio place (this is not a Team Create session: no collaborators,
+no NetworkClient in Edit). They persist when the owner saves the place (File › Save to Roblox, or Save to File);
+closing Studio without saving brings all three back. A Publish would ship them along with everything else Studio holds.
+No agent saved or published the place.
+
+**Pod 3 is approved with two creatures** (owner, 2026-10-02; supersedes the three-creature requirement): Tempestoak
+$250,000/s and Thundermaw $265,000/s base income, ½ each; Divine, authored sizes, 9 h, direct reveal with no
+silhouette roll, half speed while carried unbanked — all unchanged. The executable config already held exactly this
+(`SeedData.RainPods.rainpod3.Species = { "tempestoak", "thundermaw" }`, `RollRainPod` uniform over the roster;
+RainPodsSpec checks the exact roster, both rates and a 50/50 split), so it was not rewritten. Removed: the "$280,000
+held for a third Pod 3 creature" comments in `SeedData.luau` and `RainForms/init.luau` (whose header now also records
+the scripts' deletion and names `SecretIdle`, not a non-existent "RainIdle"), and the third-creature row and open
+decision in the entry below. No odds are displayed for event pods anywhere (unlisted: no Index, wheel or pool), so
+there was no displayed-odds text to change.
+
+**Verification:** the exact deleted targets (11 of 11, each `Parent` nil afterwards); 12 models present with
+unchanged geometry and 0 scripts left in the folder; Workspace and ServerScriptService each lost only their target.
+The two edited source files are comment-only and syntax-checked (luau-compile); one Rojo build OK; Studio = disk
+(173 scripts, 0 differ, 0 Studio-only scripts under the Rojo roots, 0 ZZ leftovers, test-store marker absent), Studio
+in Edit. No spec run (no executable configuration changed), no Play session, no animation work.
+
+## Rain-event models integrated: Pods 1–3, eight creatures, Stormstrider, the Thunderstorm, the bridge's safe line — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; ONE GUARDED PLAY ON THE THROWAWAY STORE; ONE PLAYER, DESKTOP ONLY)
+
+**Superseded in part by the entries above (later 2026-10-02):** Stormstrider now chases at **2.5×** (not 1.15×)
+and sleeps ON the floor (measured drop, not the authored 1.32); the "silent hooks" have ids now (rain BGM, rain loop,
+opening, strikes, growl, sleeping breath; `ThunderstormBed` retired into the one rain loop; only `StormstriderHit`
+still waits); the Workspace demo scripts, stand Part and EmberrootApprovalRunner are deleted.
+
+**The brief:** integrate the owner's models in the Workspace folder **"Rain Event"** (the brief said "Rain Event Folder";
+the folder is named "Rain Event"): every model at its approved size, never rescaled; Pod 1/2/3 each hatching one of
+its creatures with equal odds, at fixed final unboosted rates; no silhouette roll for event pods; a Rain lays one
+batch of three pods (each slot 50/50 Pod 1 or Pod 2), a separate owner-only Thunderstorm lays one Pod 3; Stormstrider
+through the existing guardian system at 1.15× Starbloom's chase; a visible safe line at the biome's entrance; Pod 3
+carried at exactly 50 % speed; all forms placeable, walking, pick-up-able and saved. No commit, push or publish.
+
+**The mapping, recorded before integration (owner-confirmed where marked):**
+
+| Pod (model) | Rarity / size shown | Grow | Creature model → species id | $/s (final, unboosted) |
+|---|---|---|---|---|
+| Pod 1 (`pod1`) | Mythic, no size word | 10,800 s (3 h) | Puddlepod POD1 → `puddlepod` | 80,000 |
+| | | | Drizzlet POD1 → `drizzlet` | 85,000 |
+| | | | Lotusling POD1 → `lotusling` | 90,000 |
+| Pod 2 (`pod2`) | Mythic, shows **Colossal** (tier 7) | 21,600 s (6 h) | Puddlepod POD2 → `puddlepod_colossal` | 120,000 |
+| | | | **Drizzlet POD 3** → `drizzlet_colossal` (labelled POD 3; **owner confirmed it is Pod 2's**) | 135,000 |
+| | | | Lotusling POD2 → `lotusling_colossal` | 150,000 |
+| Pod 3 (`pod3`) | Divine, no size word | 32,400 s (9 h) | Tempestoak POD 3 → `tempestoak` | 250,000 |
+| | | | Thundermaw POD 3 → `thundermaw` | 265,000 |
+| | | | *(the owner's APPROVED pool is exactly these two, ½ each — 2026-10-02, see the cleanup entry above)* | — |
+| guardian | — | — | Stormstrider GUARDIAN → `stormstrider` | — |
+
+Rates follow the creature by name: Pod 1's three rise with drawn bulk (bounding volume Puddlepod 587 < Drizzlet 1,045
+< Lotusling 2,248 cubic studs) and Pod 2 keeps the same order by name; Tempestoak (89,600) < Thundermaw (107,600).
+Pod 2's three are the same creatures (same `Name`), their own ids only because form, income and growth differ.
+Income is `FixedIncome` (EconomyService applies pass/chest/sacrifice/weather once); sale = 30 s of it, as for every
+plant. Unlisted like the Secrets: no biome pool, Index shelf, hatch-roll silhouette, wheel or reward pool.
+
+**Dimensions preserved (drawn extents, studs; replayed at scale 1 at every tier — nothing scaled):** puddlepod
+8.09×9.99×7.27 · drizzlet 8.55×16.01×7.64 · lotusling 13.57×13.23×12.52 · puddlepod_colossal 28.72×35.43×25.80 ·
+drizzlet_colossal 25.72×48.15×22.97 · lotusling_colossal 30.87×30.10×28.48 · tempestoak 41.02×70.88×30.81 ·
+thundermaw 37.46×51.77×55.49 · pod1 6.86×11.68×7.19 · pod2 26.89×48.93×26.89 · pod3 37.20×68.18×37.35 ·
+Stormstrider 20.14×33.91×73.30. (Pod 2's forms are the Pod 1 forms ×3.55 / ×3.01 / ×2.28, as authored.) Four
+models stood turned 22.5° (Lotusling ×2, Tempestoak, Thundermaw) and Stormstrider was rolled −6.46° (paws 1.15 studs
+uneven): the generator re-framed them square (yaw −22.5° / the Spine1 joint's frame), proportions untouched; every
+joint agrees with its parts (spec).
+
+**Originals and backups:** the Workspace models' geometry is UNTOUCHED (still 12 in "Rain Event"; their nine demo
+Scripts were deleted later the same day — see the cleanup entry above). Verified `.rbxm` copies +
+`manifest.json` are in `output/model-backups/2026-10-02-rain-event-originals/` (10 byte-identical, the two Puddlepods
+differ by one `-0.0000`/`0.0000` sign); `generator/` there holds the read-only Studio generator, the assembler, the
+drawn-size fixer and the nine owner idle/run scripts as dumped. `output/` is never staged.
+
+**Implementation (files, all uncommitted):**
+- `Shared/RainForms/` (new): `init.luau` (the mapping table) + 12 generated data modules (parts by index, Motor6Ds and
+  Welds with C0/C1, attachments, lights, emitters, trails, billboards, Stormstrider's sleep pose). `Shared/SecretForms`
+  types gained trails/billboards/pose; `Shared/SecretModel` replays both sets (loose parts for the guardian), marks
+  each plant's authored root part `RigRoot` (see the defect below), `HasPlant`/`HasPod`/`IsRainForm`.
+- `Shared/SeedData`: species flags `Event`, `FixedGrowSeconds`, `CarrySpeedFactor` (Pod 3 0.5), `Unsized`,
+  `SkipHatchRoll`; `BiomeMultiplier.rain` (1.00, assert only); `RainSpecies`, `RainPods`, `RainBatches`
+  (`rain` 3 slots of {pod1,pod2}, `thunder` 1 slot of {pod3}), `RollRainPod`/`RollRainBatch` (server Random),
+  `RainPodOf`, `GrowSecondsFor`, `Unsized`; load-time asserts on all of it.
+- `Shared/CreatureModel`: routes both builders through SecretModel for the rain ids/pods. `Shared/PlantInfo`: a rain
+  pod reads "Rain pod"/"Thunderstorm pod" + its pod rarity, never the creature, income or price; Pod 1/3 forms unsized
+  (rarity colour), Pod 2 shows Colossal; biome label "Rain Biome". GardenUI/HatchFX/tooltip use the same rule; the
+  Garden caches a replayed pod by its POD id.
+- `PlantService`: hatch `revealAt = if entry.species.SkipHatchRoll == true then now else HatchRoll.revealAt(now)`
+  (every other pod still rolls); deadline `SeedData.GrowSecondsFor`; every replayed pod faces the gate;
+  **`PlantService.DebugReady(player)`** — Studio-only test override that ends the wait of that player's pods (the
+  production times are untouched).
+- `CarryService`: Pod 3's `CarrySpeedFactor` REPLACES the ordinary carry multiplier on the earned speed, before trap
+  and Walk Mode (the deferred tier/weight mismatch is NOT touched for other pods); `Held.eventId` + `EventId` attribute
+  through take/drop/retake; `IsLiveEventPod`, `ClearEventPods`; a live event's pods stay takeable after dusk.
+  `WorldCycleService`: dusk's loose-pod clear skips a live event's pods.
+- `NestService`: the event nest (`OpenEventNest`/`CloseEventNest`/`EventNest`) is an ordinary nest record — same tick,
+  provoke, thief queue, swept catch, throw, walk home — with a "rain" stand-in biome carrying Starbloom's
+  recommendation, no Confiscate profile (a catch throws and the pod drops by the normal loose-pod path), a route home
+  through the biome's rooms, and set-downs at the biome's entrance; excluded from StockAll/ClearForNight/ResetParents
+  and the road's counts. `chaseSpeedFor` multiplies the WHOLE ramp+rage+shortfall by the profile's `SpeedScale`.
+  Each confirmed catch with `CatchLightning` stamps `CatchStrikeAt/Time` (visual only) and emits the strike hook.
+- `GameConfig`: `Parent.Guardians.stormstrider` = Astralmaw's profile + `SpeedScale = 1.15` + `CatchLightning`
+  (opening 89.7, top 110.4, ramp 3.4 s; return/throw Astralmaw's); `Weather.Attributes.Mode` (`RainMode`), `Modes`,
+  `ThunderToast`, `Thunder` (rain 1100/320/320, clouds ×0.55 transparency, darker light, lightning every 7–15 s),
+  `EventNest` (pod ring 19, guard 70 studs at 195°, catch-strike look), `SafeLine`, `Audio`; Biome.Nest grown to radius
+  36 (30 stones, clear ring 56–94) so three 27-wide Pod 2s fit — the nest grew, never the pods. Cue rows with BLANK ids
+  (silent hooks, nothing invented or uploaded): `StormstriderWake`, `StormstriderHit` (ParentVoices.rain),
+  `StormstriderStrike`, `ThunderClap`, `ThunderstormBed`.
+- `StormstriderModel` (new, server) through `ParentModel` (`rain`): the supplied rig, loose; invisible root + RootJoint;
+  one collider (the supplied Body); Humanoid with HipHeight measured off the geometry; Atomic streaming; NestParent.
+  `Shared/StormstriderRun` (new) + `ParentAnim`: the owner's StormstriderRun ported (C0 = rest·pose): gallop from the
+  measured speed (stride lengthens past 3.2 strides/s), sleep-pose blend + DropStuds via the RootJoint, eyes/lids/dims,
+  veins, back bolt every 6.5 s, sparks, trails, snore; the catch's one bolt. Reduced motion: no sparks, faint bolt.
+- `Shared/SecretIdle`: the five owner idles ported as written (Pod 2 plays Pod 1's, distances at its size); walks for
+  every form — Tempestoak/Thundermaw biped chains with a virtual body, Puddlepod/Drizzlet feet off the base,
+  Lotusling feet off the body with the legs aimed at them; the authored root by `RigRoot`.
+- `WeatherService`: `StartWeather(mode)`/`StartRain`/`StartThunderstorm`; one event at either mode (refused while
+  opening/active/closing, never converted); the one batch laid with the shut biome (nest seam, real only while the game
+  runs); at close the unclaimed nest pods, loose event pods and Stormstrider go, carriers are evacuated (and bank at
+  the landing); `Mode` published. `RainBiome`: the grown nest + dressing, `NestSite`, and **the safe line** — the
+  road's red stripe across the deck with its outer edge exactly on `IsInSafeZone`'s x = 270 and "SAFE ZONE" on the
+  island side. `Weather.client`/`WorldClock`/`RainClouds`: the Thunderstorm look (heavier rain, thicker banks, darker
+  overcast, lightning bolts + flash on a schedule shared from the event id; no flash under reduced motion; phones keep
+  the reduced sheet). `AdminService` verb `thunder` + console **START THUNDERSTORM** (owner-only; END RAIN ends either).
+  `ActionToastUI`: the Thunderstorm's own toast.
+
+**Defect found in Play and fixed:** SecretIdle rooted a plant's joint tree at "Footing", else the FIRST jointed part in
+`GetDescendants` order. On a Play client that order is replication's: the live Tempestoak's tree started at an
+`AntlerBeam`, so its virtual body inverted and both feet flailed ±15 studs (the Edit spec, built in order, had passed).
+Fix: `SecretModel.BuildPlant` marks the authored root `RigRoot`; SecretIdle prefers it. Verified in the same Play
+session by running the fixed module from the client test host over the live, freshly placed Tempestoak (feet on the
+ground at ±5 studs, alternating planted/swing, 10 planted + 12 swung of 25 moving windows), and locked by a spec check
+that re-parents the parts in reverse and walks the rig turned on 20 Hz slices.
+
+**Focused results.** Specs (Studio Edit via `spec_direct.py`): **RainPodsSpec 46/46** (new: mapping, rates, growth,
+6,000 rain batches — Pod 1 50.4 % of 18,000 slots, all-Pod-1 762 / all-Pod-2 709, creatures a third each; 3,000
+thunder batches all one Pod 3, 1508/1492; display; roll bypass; carry rule; Stormstrider's profile; the event nest in
+Edit — 3 pods stamped, refused twice, untouched by StockAll/dusk/reset, guardian on contract at 20.14×33.91×73.30 with
+joints agreeing, taken down whole, thunder one Pod 3; every form's size, joints, walk and rest; the any-order root;
+save Sanitise+JSON round trip of all 8 forms as pods and creatures; START THUNDERSTORM). Regressions: RainEventSpec
+88/88, ParentVoiceSpec 176/176, SecretFormsSpec 106/106, SecretWalkSpec 37/37, PlantInfoSpec 45/45, SecretIncomeSpec
+24/24, HatchTimerSpec 38/38, HatchRollSpec 167/167, GuardianPursuitSpec 58/58, GuardianConfiscateSpec 103/103,
+GuardianRagdollSpec 120/120, CycleSpec PASS (60), SpeedSpec PASS (349), WalkModeSpec 30/30, TrapSystemSpec 67/67,
+PlacementCircleSpec 23/23, HudLayoutSpec 1288/1288, ControllerSpec 69/69. **AdminSpec: 87 passed, then threw** on the
+MCP sandbox's script-parenting block (it clones the console LocalScript into a fake PlayerGui) — environment, not this
+change; its remaining checks did not run. Spec edits: RainEventSpec (console height 1056, rate line by mode, and a
+STALE WorldClock check updated to the existing `kept` brightness line), SecretIncomeSpec (the unsized rule), CycleSpec
+(the CarryService stand-in's `IsLiveEventPod` + a live event pod surviving dusk), ParentVoiceSpec (two PENDING hooks).
+One Rojo build: OK.
+
+**The one guarded Play (store SeedTest_20261002, Ready line "STUDIO TEST STORE"):** owner START RAIN → 3 pods (Pod 1
+Puddlepod, Pod 2 Puddlepod t7, Pod 1 Drizzlet), all event 1, Stormstrider asleep beside the nest; rain 720/180, 556
+banks. Theft → Stormstrider woke and caught (39/42 joints animating, one catch bolt seen on the client); the pod dropped
+on the loose-pod path with its species, event and nest (not confiscated); thrown to the entrance, speed 16 restored;
+guardian home and asleep. Retake → event kept, guardian re-provoked. Carried across the painted line by walking →
+banked (Held 13→14 `puddlepod` unhatched), speed restored, guardian turned back at the boundary and walked home. Pod 2
+banked the same way (`puddlepod_colossal` t7). END RAIN while carrying the last pod → evacuated to the landing and
+banked; nest, guardian and loose pods gone; weather cleared after the fade. START THUNDERSTORM → exactly one Pod 3
+(Tempestoak, Divine), rain 1100/320, clouds mean transparency 0.26 (rain 0.41), brightness 1.49 vs 1.87, exposure
+−0.30, lightning bolts seen; a second rain or thunder start refused ("already raging"). Pod 3 carry: WalkSpeed 8.00
+of earned 16.00 = **0.5000**; caught → dropped → 16.00; retaken → 8.00; banked across the line → 16.00. Planted Pod 2
+and Pod 3 pods kept their production deadlines (21,598 s / 32,399 s left) at their supplied sizes; the Studio-only
+`DebugReady` made them ready; both hatched with NO roll (no RevealAt) while an ordinary Nubkin pod still rolled
+(RevealAt 2.5 s ahead); both creatures placed, walked 15–17 studs in 12–16 s, were picked up into the bag and placed
+again. The Thunderstorm's 600 s ran out during the walk work: nest, guardian, loose pods, clouds gone, Lighting back to
+2.4/0; the planted creatures and every bag row survived. Teardown: hosts deleted, marker removed, Studio = disk
+(173 scripts, 0 differ), no ZZ leftovers; three old non-archivable `SellOneSpecScratch` folders (SellOneSpec's own
+scratch from earlier failed runs) removed.
+
+**Not verified / limits — say so if asked:** one player only (the thief queue with two thieves, a second player taking
+a dropped pod, and the PursuedBy alarm are spec-only); desktop only (no phone or reduced-motion run on screen); no
+live server; the save round trip is spec-only (no rejoin); the Pod 1 creatures, Lotusling and Thundermaw walking were
+seen in the Edit spec only (Play saw Pod 2 Puddlepod and Tempestoak); the RigRoot fix's SERVER half (the attribute)
+is spec-verified, its CLIENT half Play-verified through the test host — the next Play with the shipped modules is the
+first end-to-end; the offline-earnings card covered the one screenshot taken, so there is no image; the five audio
+hooks are silent until ids are filled; the Thunderstorm toast text and the console's START THUNDERSTORM button were
+not pressed through the UI (the server path was, through AdminService.Handle as the owner).
+
+**Would ship on publish (owner's call; nothing touched) — SUPERSEDED by the cleanup entry above: the nine Scripts, the
+Part and the runner were deleted from the open place at the owner's request; the 12 models remain:** the Workspace folder "Rain Event" (12 models, Archivable,
+1,338 parts) with NINE enabled server Scripts — the eight creature idles and Stormstrider's StormstriderRun with
+`AutoRun = true` (it would run demo laps on a live server); a loose unanchored Workspace `Part` 235×1×157 at
+(−73.5, 1.5, 377.5); and `ServerScriptService.EmberrootApprovalRunner` (a ModuleScript not on disk; pre-existing).
+Removing or disabling them needs the owner's approval.
+
+**What is live:** this PC's Studio logs record one publish on 2026-10-02: **v1015 at 03:41 UTC** (the owner's; the log
+does not show its contents). It predates every rain file (the first, `RainBiome`, was written at 05:27 UTC), so
+neither this entry nor the two rain entries below can be in it; the uncommitted Secret-model files (on disk since
+2026-10-01 13:55 UTC) already existed then — whether Studio held them at that moment, the log does not say.
+
+**Open owner decisions:** the working pod names "Rain pod" / "Thunderstorm pod" and the biome's "Rain Biome" label;
+the five sounds; whether to keep the Workspace originals (the 12 models). Pod 3's pool is SETTLED: two creatures
+(cleanup entry above).
+
+## Rain: white billowing clouds, rain everywhere, an overcast sky through WorldClock, and the biome at the road's 140-stud width — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; SUPERSEDES THE CLOUD/FOG, LIGHT AND GEOMETRY PARTS OF THE TWO ENTRIES BELOW — ADMIN, TIMING, INCOME, TOASTS AND EVACUATION STAND; ONE GUARDED PLAY ON THE THROWAWAY STORE; ONE PLAYER, DESKTOP ONLY)
+
+**The owner's three briefs (2026-10-02):** (1) replace the flat fog walls with soft, rounded WHITE billowing cloud banks
+round the whole island (thicker round the temporary biome), a cloudy sky treatment, clouds readable at night without
+glare; rain visible across the WHOLE map (hub, plots, every biome, the road, the temporary biome), following the player,
+lightweight on mobile, right for late joiners; the reveal/closing sequence done with the clouds; nothing that shortens
+visibility. (2) the SKY AND LIGHTING must change too — overcast, cool blue-grey, softer sunlight and shadows, slightly
+lower brightness, readable, whole map, faded in, composed through WorldClock as the one lighting owner, returning to
+the CURRENT phase when the rain ends, no accumulation across events. (3) WIDEN the biome to the original biomes' usable
+corridor width throughout, keep the length, redistribute the dressing, widen the clearing with the EncounterSite centred,
+no bottleneck at the bridge, +X and clear of plots and Starbloom; update cloud/rain coverage, occupancy and cleanup.
+Minimal verification: one guarded Play, affected checks, one Rojo build.
+
+**The width, read off the map:** `Map.CorridorWidth` = **140** is a biome's floor; its walls stand OUTSIDE it (160
+wall to wall), so the usable road is 140 clear. Every Rain corridor is now `GameConfig.Map.CorridorWidth` wide under
+the road's 46-stud walls; the bridge is 60 wide (was 24) under a 76-wide gate; the rooms are the mouth r 76, the pond
+r 96, the passage's hollow r 80 and the clearing r 110 (a room must be wider than the road, and two must not overlap,
+so four rooms and three corridors replace seven and six). The route moved north so the wider walls stay 22 studs past
+the obby's course (z ≥ 22; the course reaches z 0): mouth (362,104) → pond (540,168) → hollow (720,146) → clearing
+(872,186), bends ≤ 27°. **Usable route 664 studs** from the ramp's foot to the nest (bridge 90, foot to mouth 47,
+corridors 191 + 182 + 157) against 600 for Greenhollow and Dustbowl. The nest (r 18, 18 stones, 4 roots) sits at the
+clearing's CENTRE with the EncounterSite at its own centre and an open ring of floor 36–94 studs out for the guardian.
+In Play the folder held **1,152 parts (1,023 scenery)**; budget 1,500.
+
+**Files changed (uncommitted):**
+- `Shared/GameConfig.luau` — `Weather.Clouds` (seed, spacing, heights, per-zone transparencies, the conceal/emerge/
+  thicken numbers, the bob, the day and night looks, a client part budget), `Weather.Light` reworked (brightness,
+  exposure, a day AND a night ambient pair, ShadowSoftness, SpecularScale, a ColorCorrection tint/saturation/contrast,
+  the sky's cloud layer by day and night, FadeSeconds in / FadeOutSeconds out = Thicken + Fade), `Weather.Rain`
+  (near 720 / touch 240, far 180, areas), `Weather.Biome` (the 140-wide route, the 60-wide bridge, nest at centre,
+  `ClearRing`, walls 46, budget). The old fog numbers and `Biome.Fog` are gone.
+- `Shared/RainClouds.luau` (new, pure) — every bank's place and its 6–9 overlapping balls, the per-zone transparency
+  targets by state and time, the day/night look. 73 banks, 556 balls: round the island (the road's mouth open), 20 down
+  the road above its walls, along the biome and over its wide rooms, one at the bridge.
+- `StarterPlayerScripts/Weather.client.luau` — builds its own `SeedRainClouds` from RainClouds the moment it sees the
+  rain's state (a late joiner starts at full), fades each zone from one number, bobs the banks gently (still under
+  reduced motion), swaps the look by phase; two rain sheets over the camera (near dense, far sparse and bigger; a touch
+  screen gets the near sheet at its reduced rate and no far sheet; Reduced FX none); fades the biome's parts. The
+  server builds no fog any more.
+- `StarterPlayerScripts/WorldClock.client.luau` — still the one Lighting owner: over its day/night blend, by the rain
+  number, the brightness, exposure, a cool ambient pair (night's at night), ShadowSoftness, EnvironmentSpecularScale, one
+  owned `RainTone` ColorCorrection, and one owned client-local Terrain `Clouds` layer (blended from the place's own if it
+  has one); out over 6 s with the white clouds and the biome; a late joiner starts at full; when the rain ends the live
+  phase simply comes back (no snapshot).
+- `SeedGameServer/RainBiome.luau` — the 140-wide route; the bridge opening measured off the descent's corners; corridor
+  walls only where two rooms leave room; dressing redistributed 46–64 studs off the middle (walls at 70) and round the
+  rooms' rims; studded wall faces like the road's; the nest at the centre.
+- `tools/tests/RainEventSpec.luau` — the new positions; the width, bends and rooms; the obby clear sideways; a 56-wide
+  lane down the middle, every prop ≥ 30 studs off it, the open ring round the nest; section 10: the clouds, the sky and
+  the rain.
+
+**Specs:** `RainEventSpec` **88/88** (74 before; the new ones: every corridor 140 under 46-stud walls, bridge 60/gate 76;
+the obby's course 21 studs south of the southernmost wall; floor under all 115 steps and both edges; a 56-wide lane
+clear; 1,023 scenery parts, none solid, every prop ≥ 30 off the middle; the nest at the centre, the 36–94 ring open;
+banks on every side, down the road, along the biome, at the entrance, none over the island/road/landing/mouth, the
+biome's above its walls; every ball overlapping another; 556 ≤ 800; the targets: biome hidden while opening, the
+entrance clear by the time the gate lifts, emerging over 5 s, thickening over the biome only, then all gone together;
+day plastic / night neon dimmer; the wiring of both clients; the light's fade-out equals the clouds'; no server fog).
+`CycleSpec` passes. One Rojo build to `build/StealASeed.rbxlx`.
+
+**Guarded Play** (throwaway store, Day, the console's own buttons; before: no clouds, B 2.40, shadow 0.20, sky off):
+- 420 s rain: 73 banks / 556 balls built at once (biome zone 0.12 concealing, entrance 0.77, perimeter 0.42, road
+  0.55); light B 1.87, shadow 0.70, cool ambients, exposure −0.12, tone on, sky cover 0.86 density 0.60; rain near 720
+  / far 180; **$384,600 → $480,750/s**. Open ~3 s later: biome 0.48 → 0.60 (emerged).
+- Rain and clouds at the **hub** (`C1-active-hub.png`: white banks past the plots, overcast sky, streaks), at
+  **Starbloom's end** (z −1480, `C2-active-starbloom.png`: rain, rates unchanged), in the **biome** (`C3-active-biome-
+  garden.png`: the 140-wide corridor, clouds billowing over both walls; `C4-active-nest.png`).
+- Walked the bridge → mouth → corridor → pond → hollow → the clearing's ring: floor under each leg, width 140, length
+  664.4.
+- **Night** under rain (START NIGHT): clouds Neon 132,142,166; night ambients; sky 92,100,124; clock 0; START DAY:
+  the day-rain look back exactly. The first night read darker than a clear night (B 0.86 against the night's 1.1,
+  `C5-night-rain-biome.png`), so `Light.NightBrightness` (0.97) and a lifted night ambient pair were added and a
+  second, capture-only Play re-checked it: B 1.07, ambients 66,75,105 / 77,90,127 — a rainy night no darker than a
+  clear one (`C5-night-rain-hub.png`).
+- Carried a Nubkin raid pod at the clearing; **END RAIN**: carrier on the landing at once, pod banked (Held 13 → 14);
+  closing: biome clouds thickened then every zone, the terrain and the scenery fading together while the light eased
+  back (B 2.24 → 2.40, shadow 0.36 → 0.20, tone off, sky cover 0.27 → 0, off); ~10 s after END: no clouds, no event,
+  no parts, B 2.40 / shadow 0.20 / sky off — the day's own light, not a snapshot; $384,600/s; audit
+  `Weather:start:420`, `StartNight`, `StartDay`, `Weather:end`. The closing VIEW needed a third, capture-only Play:
+  the console's panel covered the second one's captures, so the camera was held at the landing and the END sent
+  straight through `WeatherService.EndRain` (the button itself was verified in the first Play):
+  `C8-active-entrance-from-the-landing.png` (the 60-wide bridge into the cloud-topped mouth),
+  `C6-closing-clouds-from-the-landing.png` (~1.5 s after END: biome clouds 0.18 and thickening, light easing) and
+  `C7-closing-fade-from-the-landing.png` (~4 s: fading together — the throwaway profile's "WHILE YOU WERE AWAY" card
+  popped over this one); then no clouds, no event, the day's light.
+- **Studio/disk:** scripts equal to disk, 0 ZZ leftovers, marker absent, Studio in Edit (the long-standing EXTRA
+  `EmberrootApprovalRunner` is not from this work).
+
+**Not verified, and limitations:**
+- One player, desktop, Studio only. **Mobile:** the touch rates and the no-far-sheet rule are code-only (the emulator
+  was off). **Late joiners:** the start-at-full paths are code- and spec-only — nobody joined mid-event.
+- A night that STARTS during rain and a rain that ENDS at night were not played (the night was entered and left under
+  rain; the end was at day).
+- 556 client balls + 1,152 server parts are counts, not measured phone costs; the clouds bob with `Model:PivotTo` ten
+  times a second.
+- The cloud banks are plastic balls (sharp-edged spheres made soft by overlap and transparency), not volumetric; the
+  sky's cloud layer is the engine's `Clouds`, which some low-quality settings do not draw.
+- The obby's floating platforms are south of the route and 30+ up; from the mouth they show over the walls.
+- No sound; nothing on the nest; scenery walk-through; the phone layout of the chip unchanged and unchecked.
+
+**Switch and default states:** unchanged — owner-only Weather, 180 s default, `Secret.Enabled` false, paid products
+untouched, nothing natural, nothing committed, pushed or published.
+
+## Rain biome reworked: four sections, a 650-stud route, rain-soaked scenery, a visible nest — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; SUPERSEDES THE BIOME GEOMETRY IN THE ENTRY BELOW — EVERYTHING ELSE THERE STANDS; GUARDED PLAYS ON THE THROWAWAY STORE; ONE PLAYER, DESKTOP ONLY)
+
+**The owner's brief (2026-10-02):** the temporary Rain biome was too short and bare. Make the usable route about as
+long as Greenhollow and Dustbowl together, keep the entrance and the +X direction, four connected sections (entrance,
+rain garden, overgrown passage, a nest clearing near the far end), gentle bends and wider spaces, a clear route for a
+future large guardian; a rain-soaked identity with broad leaves, drooping reeds, hanging vines, ferns, mossy roots,
+pale-blue flowers, puddles, runoff, fallen branches and moss stones in deliberate clusters, the centre open — all
+NON-COLLECTIBLE; a visible empty nest platform with a stable EncounterSite anchor; every new part in the event
+container, fading and removed with it; owner-only controls, durations, +25%, the toast and the approved ending
+unchanged; necessary tests only, one Rojo build, one guarded Play, two screenshots; nothing committed or published.
+
+**Files changed (uncommitted):**
+- `Shared/GameConfig.luau` — `Weather.Biome`: `Corridor`, `Clearing` and `Bounds` are gone; in their place `Route`
+  (seven round rooms joined by corridors: (352,70) r26 → (430,84) r26 → (520,112) r50 the pond → (610,118) r26 →
+  (690,96) r24 → (770,92) r24 → (850,120) r56 the clearing; corridor widths 44 then 40; sections Entrance / Garden /
+  Passage / Nest), `Nest` (876,120, radius 14, 14 rim stones), `PanelLength`, `Height`/`Reach` (what counts as on the
+  terrain), `PartBudget` 900, the rain palette (deep greens, muted teal, slate, moss, pale blue, one cyan accent),
+  `Fog.RouteSpacing`/`RouteOffset`, `Scenery.Seed`. Landing, ramp, deck, descent, gate and the wall numbers unchanged.
+- `SeedGameServer/RainBiome.luau` — rebuilt: a disc floor under every room and a slab between the discs' chords (no
+  overlap, no gap); each corridor's walls from circle to circle; each room a ring of panels with an opening per
+  corridor (the first room's for the bridge, left bare so no pillar narrows it) and a pillar at every joint; the
+  nest (one steppable 1-stud moss disc, a bowl, stones with moss and the odd bloom, a moss bed, four roots arching
+  in) with the EncounterSite marker at its centre; scenery from MapDecor's own kit in the rain's palette (broad
+  leaves with a caught drop, reeds, vine curtains and vine arches, mossy roots, ferns, flower patches, glass
+  puddles, wall runoff, the kit's fallen logs and slate boulders, moss stones, the pond with moss pads), placed
+  literally per section and only where a wall actually is; fog banks along the route. `Contains` now follows the
+  route (within a corridor's or a room's wall, plus the bridge, within a band of height) instead of a box. New pure
+  answers for the spec: `RouteLength`, `Footprints`, `Centreline`, `Segments`, `PartCount`.
+- `tools/tests/RainEventSpec.luau` — section 6's on-terrain cases for the new shape; section 7 clears the plots and
+  the obby by the route's footprints; new 7b builds the biome in Edit and walks it.
+- Nothing else: WeatherService, the clients, the console, the economy and the toasts are as in the entry below.
+
+**The route, measured:** 649.5 studs from the ramp's foot to the nest (the bridge 90, the descent's foot to the
+first room 22, six corridors 511.6, the clearing to the nest 26) against 600 for two biomes; bends of 7–22°; the
+pond room 100 wide, the clearing 112. In Play the folder held **871 parts, 690 of them scenery** (75 before).
+
+**Specs:** `RainEventSpec` **74/74** (62 before): 6 points on the terrain and 6 off it; every room and corridor keeps
+≥ 8 studs from every plot at its top level; the obby's course stays south of the route's southernmost wall and its
+arch 40+ studs off; the route is 95–115% of two segments, six corridors bend ≤ 30° through the four sections and
+every room is wider than its corridors' walls; built in Edit: floor under all 93 steps of the centreline and both
+edges, nothing solid in a 24-wide 12-tall lane down the middle, 690 scenery parts none solid but the nest's
+platform and none tagged as a pod, every prop ≥ 9 studs off the middle, the four sections dressed, the nest a
+one-stud platform at the clearing's far side with the reserved, invisible, tagged EncounterSite at its centre, the
+clearing's west half open, all parts fade-tagged within the budget in a non-archivable folder, the entrance built
+shut. One Rojo build to `build/StealASeed.rbxlx`.
+
+**Guarded Play** (throwaway store, Day, one player with the ×2 pass, the console's own buttons):
+- A 600 s rain: $384,600/s → **$480,750/s** (×1.25 on this profile's garden) with the chip up; walked ramp → deck →
+  descent → every room → the nest at (863,120), the floor under each leg named (RoomFloor1 … RoomFloor7); fog
+  perimeter 0.59 (35 banks), biome 0.72 (19); carried a spawned Nubkin raid pod in the clearing; **END RAIN** →
+  "Rain ended…", the carrier on the landing (232,3,55) at once, pod banked (Held 12 → 13), "BACK AT THE ENTRANCE",
+  biome fog 0.31 while terrain 0.16 / scenery 0.17, then 0.91 / 0.91 together, then no event and 0 parts; $384,600/s
+  again; audit `Weather:start:600`, `Weather:end`.
+- The nest clearing looked bare in that session's capture, so its dressing was enriched (bigger nest, foliage ring,
+  rim boulders, roots and vines), the spec re-run (74/74) and a second, capture-only Play started a rain and took
+  the views below — no walk or END repeated.
+- **Captures** (`output/rain/`): **`B2-overall-from-above.png`** (the whole winding route from above, the obby in
+  the foreground) and **`B5-nest-from-above.png`** (the nest clearing) are the two; also `B1-rain-garden-from-the-
+  corridor.png`, `B4-overgrown-passage.png`, `B3-nest-clearing.png` (eye level; the player's held Petalfawn Tool
+  intrudes at the top) and `B6-overall-from-the-entrance.png`.
+- **Studio/disk:** scripts equal to disk, 0 ZZ leftovers, marker absent, Studio in Edit (the long-standing EXTRA
+  `EmberrootApprovalRunner` is not from this work).
+
+**Not verified, and limitations:**
+- One player, desktop, Studio only; no phone check (emulator off, MCP cannot switch it); no live server.
+- The fog banks read as translucent slabs from above (the existing fog design, unchanged); from inside they are haze.
+- 871 parts is a count, not a measured phone cost; the budget (900) is a spec number.
+- The obby's floating platforms show over the passage walls (they float 30+ studs up, south of the route; untouched).
+- Scenery never collides, so players and the guardian walk through it; the nest holds nothing and spawns nothing
+  (`Reserved = true`); puddles are glass discs, no water, no lights, no new particles.
+- The bridge is the one 24-wide stretch; every corridor is 40–44 clear.
+
+**Switch and default states:** unchanged from the entry below — owner-only Weather, 180 s default, `Secret.Enabled`
+false, paid products untouched, nothing natural, nothing committed, pushed or published.
+
+## Rain event and the temporary +X biome — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; OWNER-ONLY, THIS SERVER ONLY; NATURAL WEATHER AND NATURAL SECRET SPAWNING OFF; GUARDED PLAYS ON THE THROWAWAY STORE, THE LAST ON THE FINAL CODE; ONE PLAYER, DESKTOP ONLY)
+
+**The owner's brief (2026-10-02):** the approved Rain event — an admin WEATHER category (start, editable duration,
+end, status), owner-only and server-side, this server only; rain, restrained ambience, darker light and perimeter fog;
+exactly one ×1.25 factor on online planted income through the economy path, with a compact indicator above the
+hotbar; a temporary biome at +X off the -Z road (bridge, corridor, reserved encounter area, never extending Starbloom),
+a delayed toast once the entrance is ready, a safe close that evacuates only occupants; one authoritative event; no
+creatures, rewards, eggs or encounters, no night-to-dawn summon, no natural spawning, automatic weather, cross-server
+events or mutations; no commit, push, publish, paid products, webhooks, uploads or installs; verification narrowed
+later to focused specs, the directly affected regression specs, one Rojo build and one guarded Play.
+
+**Files changed (uncommitted):**
+- `Shared/GameConfig.luau`: `GameConfig.Weather` (attributes, events, 180 s default in 20..1800, toast/warning/chip
+  words, fog and light numbers, the biome's geometry and its `SeedRainBiome` container name);
+  `GameConfig.rainIncomeFactor()` from the `RainFactor` attribute, folded into `incomeMultiplier`.
+- `Shared/SeedData.luau`: `SeedData.Rain = { IncomeFactor = 1.25 }` (asserted >1 and ≤2).
+- `SeedGameServer/WeatherService.luau` (new, Priority 65): the one event (id, deadline, state opening → active →
+  closing), `StartRain`/`EndRain` with "already falling (m:ss left)" / "already ending" / "No rain is falling"
+  answers, `IncomeFactor()`, occupancy by the biome's bounds, evacuation to the next clear landing slot, finish only
+  after the fade with nobody inside and nobody moved on the last tick; seams for the clock, players, terrain, mover
+  and broadcast so the spec drives it without a world.
+- `SeedGameServer/RainBiome.luau` (new): builds the `SeedRainBiome` folder (non-archivable) — a wedge ramp from the
+  field over the hedge row, a railed deck at y 9, a descent into a walled corridor (x 330..500) and a clearing
+  (x 500..610) with an invisible reserved `EncounterSite` marker (tag `RainEncounterSite`, `Reserved = true`), a
+  gate at x 257 (`RainGate`), perimeter and biome fog banks (`RainFog`, zones), all terrain tagged `RainTerrain`;
+  `SetEntry`, `Contains`, 21 landing spots on the grass at x 232/227/222, z 55..85.
+- `SeedGameServer/EconomyService.luau`: `RateFor = withPass × temporaryBoost × WeatherService.IncomeFactor()`.
+- `SeedGameServer/CarryService.luau`: `NoteServerMove(player, at)` re-anchors CarryGuard after a server teleport.
+- `SeedGameServer/AdminService/init.luau`: the `Weather` action, `IsOwner` only ("Owner only: … Nothing changed."),
+  whole seconds 20..1800, audited as `Weather:start:<s>` / `Weather:end`; MinInterval unchanged.
+- `AdminService/AdminConsoleUI.client.luau`: WEATHER section (rain line, DURATION box defaulting to 180, START RAIN,
+  END RAIN); `CONTENT = 1004`.
+- `Shared/HudLayout.luau`: `Layout.rain` just above the hotbar's name band while a rain state exists; the toast lifted
+  over it on desktop/compact (a phone's toasts stay in the top column); `rain` in the groups.
+- `StarterPlayerScripts/WeatherUI.client.luau` (new): the chip "+25% INCOME · m:ss".
+- `StarterPlayerScripts/Weather.client.luau` (new): the rain emitter on the camera (150; 55 on touch; 0 under reduced
+  motion), fog/terrain fades by state, cleanup; no sound (no owner-designated asset — a `RainAmbience` cue is the
+  extension point).
+- `StarterPlayerScripts/WorldClock.client.luau`: composes the rain's dimming into its own blend (one Lighting owner).
+- `StarterPlayerScripts/ActionToastUI.client.luau`: the Opened / Warning / Evacuated toasts; re-places on the rain
+  attribute; a headline wider than the room at the smallest size now WRAPS onto a second line (the rain title did
+  run under its icon — fixed and re-checked, see the Play).
+- `tools/tests/RainEventSpec.luau` (new); `OfflineEarningsSpec`, `SellOneSpec`, `SacrificeSpec` got a neutral
+  `WeatherService` stand-in for EconomyService.
+
+**Specs:** `RainEventSpec` 62/62 — owner-only and malformed requests, duplicate start/end and cleanup, exactly ×1.25
+with pass, boosts and Secrets and its clean removal (offline, sale and base rates untouched), toast gating and early
+cancel, late join and expiry, occupancy/evacuation/straggler with the real mover, map clearance (nearest plot
+geometry 30.0 studs, the obby 12 studs clear and above), all 21 landing spots clear on the built map, the chip on five
+screens, wiring and `GameConfig.Secret.Enabled == false`. `NoticeSpec` 101/101 after the toast change.
+`OfflineEarningsSpec`, `SellOneSpec`, `SacrificeSpec` pass with the stand-in. `AdminSpec` 87/88 as before (its old
+console section cannot run under the Studio sandbox). One Rojo build to `build/StealASeed.rbxlx` (ignored).
+
+**Guarded Play** (throwaway store, Day, one player with the ×2 pass, every rain started and ended through the real
+console buttons by the MCP's mouse):
+- **Before:** no event, $6,600/s, brightness 2.40.
+- **Run 1, 180 s default:** "Rain started for 3:00. The biome opens in about 3 s; the +25% is on now." → opening
+  (75 parts, gate SHUT, factor 1.25 at once) → active ~3 s later with the toast once; chip "+25% INCOME · 2:57" at
+  y 527 just above the hotbar; rain 150; fog perimeter 0.59 (35 banks) / biome 0.72 (10); brightness 1.78;
+  **$8,250/s**. Walked the ramp (251, 8.3) → deck (299, 12) → corridor (343.6, 3) → (419, 3) with a Petalfawn Tool in
+  hand, then carried a raid-pod Nubkin inside. The timer ran out before the manual END was pressed (the session
+  overran): the carrier was put on the landing (232, 3, 55), the pod banked (Held 10 → 11, pod Tool in the backpack),
+  warning 1 / evacuated 1 counted, chip hidden, emitter gone, no terrain or fog, brightness 2.40, **$6,600/s**;
+  audit `Weather:start:180`.
+- **Run 2, manual END with the duration edited to 120:** "Rain started for 2:00…"; rain line STARTING → ACTIVE,
+  BIOME OPEN; a second START → "Rain is already falling (1:57 left). Nothing changed." Carried a Nubkin raid pod to
+  (343.7, 3, 70) in the corridor; END RAIN → "Rain ended. Anyone inside is back at the entrance; the biome is
+  fading." — at once at (232, 3, 55), carrying nil, Held 11 → 12 (banked), state closing, factor 1, gate SHUT, no
+  occupants, "BACK AT THE ENTRANCE" toast, biome fog thickening (0.72 → 0.32) while the perimeter fog and terrain
+  faded; a second END → "The rain is already ending and the biome is fading. Nothing more to do."; ~7 s later no
+  event, terrain absent, $6,600/s; audit `Weather:start:120`, `Weather:end`.
+- **Run 3, 30 s expiry:** toast at ~4 s with the chip at 0:27; a hatched Petalfawn Tool equipped on the deck
+  (280, 12, 70) → occupant; after expiry on the landing with the Tool still in hand, warning 2 / evacuated 3 (one
+  each per event), no event, $6,600/s; audit `Weather:start:30` (a timer leaves no end record).
+- **Toast re-check on the final code (one more 30 s run):** the title wraps onto two lines (label 310 × 40, fits),
+  the icon clear beside it; the chip and the detail line as before.
+- **Harness notes:** the duration box could not be typed through the MCP keyboard (its text went in as "112080"), so
+  the box's text was set by a test LocalScript and the real button sent it; after reopening the panel the Weather row
+  sat below the Form's view and a press there reported success while hitting nothing (the audit shows no stray
+  action) — scrolled and re-pressed.
+- **Captures** (`output/rain/`): `R0-before-east-edge.png`; `R1-active-bridge-through-fog.png` and
+  `R1-active-bridge-through-fog-toast.png` and `R2-inside-the-corridor.png` have the throwaway profile's "WHILE YOU
+  WERE AWAY" card over the middle; `R3-closing-from-the-landing.png` was taken after the fade finished (the biome
+  gone); `R4-30s-run-opening-from-the-landing.png` is the clean opening (ramp over the hedges, deck, fog banks, toast
+  over the chip — before the wrap fix); `R5-opening-toast-wrapped.png` is the final code.
+- **Studio/disk:** 157 scripts equal to disk, 0 ZZ leftovers, test-store marker absent, Studio in Edit (the
+  long-standing EXTRA `ServerScriptService.EmberrootApprovalRunner` is not from this work).
+
+**Not verified, and limitations:**
+- **Phone layout not checked:** the device emulator was off (`TouchEnabled` false) and MCP cannot switch it.
+- One player, desktop, Day only, in Studio: late joiners (state + no replayed toast), respawns inside the biome, a
+  second occupant, the owner leaving, night during rain and a live server are spec-covered or code-only, not seen.
+- The warning toast's live words were not caught (its broadcast was counted on the client each time); reduced
+  motion, the touch rain cap and the sound hook are code-only.
+- A carried raid pod BANKS when its carrier lands (the landing is inside the island's safe zone): the item is
+  preserved as a Held row and a pod Tool, but the carry itself ends. Players inside the biome are outside
+  `MapService.IsInSafeZone`.
+- The ramp crosses the hedge row at x 262..268 (MapDecor untouched); the `EncounterSite` is an invisible reserved
+  marker with nothing in it; no audio asset; the chip's clock shows its last tick while hidden.
+- Nothing committed, pushed or published.
+
+**Switch and default states:** Weather is owner-only (`AdminService.IsOwner`) and this server only; nothing starts
+it but the console; `GameConfig.Weather.DefaultSeconds = 180` (20..1800); `GameConfig.Secret.Enabled = false`
+unchanged; paid products untouched; the original-model backups untouched; the 2-stud base-circle placement rules and
+creature sizes unchanged.
+
+## Snarlbloom and Petalfawn walk and roam their plot — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; NATURAL SECRET SPAWNING STILL OFF; GUARDED PLAYS ON THE THROWAWAY STORE, THE LAST ON THE FINAL CODE; ONE PLAYER, DESKTOP ONLY)
+
+**The owner's brief (2026-10-02):**
+- Planted Secrets walk and roam on the existing PlantWander system.
+- Species-appropriate walking on their own rigs, not a slide. Steps come from distance travelled and blend with the idle and blinking.
+- One animation owner per joint.
+- The movement base stays inside the plot, and the overlap-friendly placement is kept.
+- Dimensions, overhead carry, fixed income and normal species are unchanged.
+- Roaming stops when carried, picked up or removed.
+
+**How it works (uncommitted):**
+- **Server** (`PlantService.stepWander`): Secrets are no longer held still (`NoWander` removed).
+  - They get legs from the existing chooser like any grown creature, on the Colossal rung of the walk ladder for their
+    authored size: `SeedData.WanderTierOf`, species `WanderTier` (implementation only, never shown).
+  - Every listed species walks its own tier's rung exactly as before.
+  - PlantWander keeps the whole route inside the plot.
+- **One owner per thing:**
+  - PlantSway moves and turns the whole model along each leg. For a Secret only, it draws no bob, roll or look-around
+    of its own, keeps facing the way it last walked when it stops, and turns on a damped swing (rate 2.2, at most 1.2
+    rad/s) rather than the 0.22 s snap ordinary walkers keep.
+  - SecretIdle owns every joint: the idle as before, plus the gait.
+- **The gait** (`Shared/SecretIdle.luau`):
+  - Steps are driven by the model's measured travel (its pivot's move and turn each frame), never by a clock.
+  - A foot that touches down is held at that spot in the world by a two-joint leg solve (hip pitch, plus an exact hip
+    roll sideways) while the body moves or turns above it.
+  - A lifted foot arcs to where it lands: ahead along the travel, round the turn.
+  - **Snarlbloom:** a heavy biped walk. Its weight rolls onto the standing leg, the body rises over it and dips between
+    steps, it leans in, and the leaf-blade arms swing against the legs.
+  - **Petalfawn:** a lateral-sequence four-legged walk. The neck nods, the hooves curl as they lift, and it settles 0.3
+    studs so its nearly straight legs reach.
+  - Setting off from standing starts the stride where the feet already are. Stopping, the feet take settling steps
+    home before the idle has the legs back.
+  - The blink, jaw, eyes, head, petals and tail never stop.
+- **Only a planted model walks** (the Planted tag).
+  - A picked-up Secret's Tool is its parts welded to a handle, with no rig, so nothing animates it.
+  - The planted model's tracking is dropped when the model is removed.
+
+**Specs:**
+- `SecretWalkSpec` (new): 37/37. It simulates the walk the way PlantSway draws it: a 20 Hz slice, the Colossal pace,
+  and its damped turn about the footprint's centre.
+  - Steps follow the distance: 2.24 of 2.25 strides (Snarlbloom) and 3.28 of 3.30 (Petalfawn) for 16 studs.
+  - Planted feet, Snarlbloom / Petalfawn:
+    - worst 0.08 / 0.115 studs over a whole walk including setting off;
+    - 0.001 / 0.037 through a half turn;
+    - 0.000 while stopping, two settling steps each;
+    - on the soil within 0.009 / 0.078.
+  - Feet lift 1.6 / 1.24 studs.
+  - The rest of the idle and the blinks are identical to a standing copy.
+  - An unplanted copy never steps.
+  - At rest afterwards each is the authored model to 0.00001 studs.
+  - Colossal-rung legs on Level-1 and Level-2 plots: every route inside the plot.
+- Also run once each: `SecretFormsSpec` 106, `PlacementCircleSpec` 23, `PlantWanderSpec` 65, `PlantFormsSpec` 388,
+  `PlantStreamingSpec` 12, `StarbloomLimbSpec` 133, `PlotSpec` 66.
+
+**Guarded Play** (throwaway store, Plot_01 at Level 2, a Snarlbloom planted beside the Petalfawn, Bellchime and
+Toadcap):
+- **Legs:** both Secrets were handed legs of 25-32 studs at 1.60 studs/s. The ordinary Bellchime roams on its own rung
+  at 1.70.
+- **On screen, in 6 s windows:**
+  - walking: the pivot covered 9-14 studs, feet rose 1.6-1.8 / 1.3 studs, and planted-foot drift was 0.07-0.45 (a
+    rough measure that takes in turns and starts);
+  - stopping: a settling step, then standing;
+  - idling: head moving and blinking.
+- **Pickups:** the Snarlbloom was picked up mid-walk (5.3 s left on its leg) and the Petalfawn standing. Both models
+  were gone and both plants were in the Bag; 12 items before and after; Tools equal to saved rows.
+- **World:** no SecretSpawned event, Day throughout, no platform.
+- **Captures:** `output/secret/W3-secrets-walking.png` (final code). W1 and W2 were taken on intermediate versions.
+
+**Not verified, and limitations:**
+- Seen only on desktop in Studio, one player: not on a phone, with two players, or live.
+- A Play window can show up to ~0.45 studs of drift when a turn and a start overlap. A Petalfawn hoof can stretch at
+  the edge of its nearly straight legs.
+- The first walk Play ran on two intermediate versions (feet drifted up to 5.6 studs on turns); fixed and re-verified.
+- Roaming Secrets carry their big bodies over fences and toward neighbours as they go (non-collidable, as placed).
+- Their position moves and is saved at the end of each leg, like every walker.
+
+## Placement for everything: one 2-stud base circle, overlap allowed — 2026-10-02 (CLAUDE)  (SUPERSEDES EVERY SECRET FOOTPRINT RULE IN THE ENTRIES BELOW; COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; NATURAL SECRET SPAWNING STILL OFF; ONE GUARDED PLAY ON THE THROWAWAY STORE, ONE PLAYER, DESKTOP WITH CONTROLLER MODE PATCHED ON)
+
+**The owner's rule (2026-10-02), for every pod, plant and Secret:**
+- Players may place items freely on their own plantable soil, even where the models overlap their own plants or
+  fences. A large model footprint never prevents placement.
+- Every item uses one small ground circle, about 2 studs across. The circle marks the BASE, not the model's reach,
+  and its size never depends on species, rarity, size tier or model.
+- The base stays on the owner's own soil, never on another player's plot, the road or the hub.
+- Ownership, storage limits, the item check and refusal-before-consumption are unchanged.
+- No collidable overhangs and no collision change.
+- No replacement spacing rule without asking the owner.
+
+**What changed (uncommitted):**
+- `PlantPlace.client.luau` is back to its committed version, plus the one circle.
+  - The disc is `GameConfig.Plant.BaseCircleStuds` (2), set once and never resized.
+  - It is tinted by `PlantInfo.SizeColour`: the weight band, or a Secret's rarity colour.
+  - The Secret box ghost, the green area, the snap and the client's Secret refusals are gone.
+- `PlantService.PlaceAt` has no footprint check.
+  - Its refusals are the existing seven: plot or profile, soil, character, item, reach, room. All of them come before
+    the Tool is consumed.
+  - A click is still pulled onto the sender's own bed, 1.6 studs inside the rim (`EdgeMarginStuds`). So the whole
+    circle is always on the owner's soil.
+  - `FootOffset` is no longer stamped.
+- `PlantWander.luau` is back to its committed version: walkers no longer steer around Secrets.
+- `ActionRefusal` is back to its committed version: the four `SECRET_*` refusals are gone.
+- `GameConfig`:
+  - `Secret.Footprint` is removed.
+  - `Secret.PodFacing` is kept: a planted Secret pod still faces the gate (orientation only).
+  - `Plant.BaseCircleStuds = 2` is added.
+- `SeedData`: the `Footprint`/`PodFootprint` fields, values and load asserts are removed. The measured numbers stay
+  in the entries below.
+- Retired with copies in `output/setaside/2026-10-02-secret-footprint-retired/` (README there):
+  `SecretFootprint.luau`, `SecretFootprintSpec.luau`, and the old PlantWander and PlantPlace.
+- New `tools/tests/PlacementCircleSpec.luau`. SecretFormsSpec took over the ordinary-carry arm check.
+- Collision is unchanged. Every planted part is non-collidable, checked on both Secrets and the biggest ordinary pods
+  and plants.
+
+**Specs, once each:**
+- `PlacementCircleSpec` (new): 23/23.
+- Others: `SecretFormsSpec` 106, `ControllerSpec` 69, `NoticeSpec` 101, `ActionRefusalSpec` 72, `PlantWanderSpec` 65,
+  `HudLayoutSpec` 1288, `SecretIncomeSpec` 24.
+
+**Guarded Play.** Throwaway store `SeedTest_20261002`; Plot_01 at Level 2 (7 slots, bed 34 × 35.4), because Level 1
+holds only 5. Controller mode was patched on, so PlantPlace aimed through the middle of a held camera. Placements went
+through the real `PlantAt` remote.
+
+| Step | Circle | Result |
+| --- | --- | --- |
+| crowd: Bellchime (tier-5 plant) at (−5, 3), Toadcap (tier-4 pod) at (5, −1), beside the Petalfawn already planted | 2.00 × 2.00 | planted |
+| **Greenhollow Secret pod** at (0, 1), in the crowd | 2.00 × 2.00, Secret colour | planted, facing the gate (1.0000), overlapping all three |
+| ordinary pod (Nubkin tier 1) at (2, 3), inside the Secret pod's reach | 2.00 × 2.00 | planted (the old `SECRET_NEAR` case) |
+| ordinary Colossal plant (Supernovus tier 7) at the front-left corner | 2.00 × 2.00 | planted; the model reaches ~42 studs past the bed's edge |
+| Secret plant (Snarlbloom) at the back-right corner | 2.00 × 2.00, Secret colour | planted (7/7), 13 studs past the edge; 19 overlapping model pairs |
+| aimed at the neighbour's plot | hidden | reticle "That's not your plot."; nothing sent; item kept |
+| aimed in front of the gate | hidden | reticle "Aim at your garden bed."; nothing sent; item kept |
+| forged request at the neighbour's bed, standing mid-bed | — | pulled onto the OWNER's bed rim (base 1.6 inside the soil); picked back up |
+| forged request from 48 studs away | — | refused "TOO FAR AWAY · Move closer to your plot."; item kept |
+| both pods hatched; Supernovus and Snarlbloom picked up | — | one plant per pod, pods gone; both back in the Bag, no models left |
+
+Twelve items, planted plus Bag, before and after the hatches and pickups. The plant Tools always matched the saved
+rows. No SecretSpawned event, Day throughout, no secret platform. Captures: `output/secret/P1-…crowded-L2-bed.png`,
+`P2-same-circle-under-a-secret-plant.png`.
+
+**What the owner should know:**
+- A model may now reach far past the bed. A Colossal Supernovus planted in a corner reached about 42 studs past the
+  bed's edge, over the fence. Nothing collides, but it is visible from the path and the neighbours. No spacing or
+  reach limit was added; say if one is wanted.
+- Ordinary grown plants still walk their plot as before: the Bellchime walked onto the grass inside the fence. Only
+  the base at placement is held to the soil.
+- In the harness, the reticle hid for about a second after each scripted (server-side) equip, then showed normally.
+  It was never seen with a real controller.
+- Not verified:
+  - a mouse click and a touch tap (the Play used the controller path; the click code is the committed one);
+  - Level 1;
+  - a phone, two players, a live server.
+
+## Live admin SECRET ITEMS grants, and the two Secrets' approved fixed income — 2026-10-02 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; LIVE ADMIN GRANTS ON — `AdminService.Config.SecretGrants = true`; NATURAL SPAWNING STILL OFF — `GameConfig.Secret.Enabled = false`; TWO GUARDED PLAYS ON THE THROWAWAY STORE, THE SECOND A REAL REJOIN; ONE PLAYER, DESKTOP ONLY)
+
+**The owner's decisions (2026-10-02):**
+- Authorized admins may grant the two Secrets on live servers once the owner publishes. The recipient is the sending
+  admin only. The grant extends the existing console and request path. SUMMON AT NEST is not part of it.
+- Approved fixed BASE income: Snarlbloom **$155,000/s**, Petalfawn **$189,000/s**. These are final and unboosted, never
+  multiplied again by size, rarity or biome. Existing boosts apply once: the permanent ×2 pass makes them $310,000/s and
+  $378,000/s. The Secrets keep Secret creature rarity with no size tier, at their exact authored dimensions. There is no
+  new sale price.
+
+**Income, as built:**
+- `SeedData`:
+  - The two Secret rows carry `FixedIncome` (155000 / 189000), and `IncomePerSecond` returns it at any tier.
+  - `register` asserts it is a whole, finite, positive number.
+  - No listed species has one, so normal income and sizing are unchanged.
+- `SeedData.SecretTier = 1` stays implementation-only: grow time, carry weight, the hatch glow and the sway (see below).
+  It is never shown as a size.
+- That one function feeds every path, and each applies the rate once:
+  - online pay: `EconomyService.RateFor`, then × the pass × the chest and sacrifice boosts;
+  - offline pay: `OfflineEarnings`, × 0.5, capped at 8 h, with the pass applied at the claim;
+  - the cash pop, the Garden panel, the Bag card and the hatch reveal's figure.
+- Existing copies: the rate lives on the species, not the saved row. Every Secret at any saved tier, in the Bag or
+  planted, pays it from its next load. No migration; ownership and identity are untouched.
+
+| | Snarlbloom | Petalfawn |
+| --- | --- | --- |
+| base, per second | $155,000 | $189,000 |
+| with the permanent ×2 pass | $310,000 | $378,000 |
+| sale price (SELL ONE / SELL ALL) | $4,650,000 | $5,670,000 |
+| offline, 8-hour cap, before the pass | $2,232,000,000 | $2,721,600,000 |
+| offline, 8-hour cap, with the pass | $4,464,000,000 | $5,443,200,000 |
+
+**How the sale is derived (no new price):** `SeedData.SellPrice` = `IncomePerSecond` × `SellSeconds` (30). It ignores
+the pass and is paid through `PlayerDataService.AddCash`.
+- SELL ONE (`EconomyService.QuoteOne/SellOne`) sells only the hatched plant Tool in hand.
+- SELL ALL (`QuoteHeld/SellHeld`) sells every pod and plant Tool held, each at that price, so a Secret POD sells for the
+  full plant price. That is the existing rule for every pod; it is flagged here because the numbers are now large.
+
+**Displays:**
+- `PlantInfo`:
+  - A Secret has no size word (`SizeWord` returns nil) and wears the Secret rarity colour (`SizeColour`).
+  - `Describe` gives a Secret `sized = false` and an empty size.
+  - A Secret pod is titled "Secret pod", with rarity Secret and no income until it hatches.
+- Bag card (`LoadoutUI`): the Size row is hidden and the name is coloured by rarity.
+- SELL ONE line (`SellUI`): the rarity alone.
+- Garden (`GardenUI`): no weight tag, and a Secret pod is pictured with its own model.
+- Hatch reveal (`HatchFX`): "SECRET" with no size word.
+- Tool tooltip (`CarryService`): "Secret" / "Secret pod".
+- Sacrifice pedestal (`SacrificeUI`): "???", per SacrificeSpec's existing rule.
+- Checked, no change needed:
+  - the offline claim card's portrait: a model, no word;
+  - the cash pop: rate × pass;
+  - the planted-plant label: timer only;
+  - the Index, which does not list Secrets.
+
+**Admin SECRET ITEMS:**
+- **Console** (`AdminConsoleUI`): a new section under the existing form.
+  - Controls: creature (SNARLBLOOM / PETALFAWN), item (POD / GROWN PLANT), a "RECIPIENT: <you> (YOU)" line, an EQUIP NOW
+    toggle, and GRANT TO BAG.
+  - The button reads GRANTING… and stays locked from the press to the answer.
+  - Each press sends a fresh request id. An unanswered request is resent with the same id.
+  - The answer line is green on success, gold when the grant landed but its save did not, and red when refused.
+- **Server** (`AdminService`, action `GrantSecret` on the existing `AdminRequest` remote). After the existing allowlist
+  and the one-request-a-second limit, it checks in order:
+  1. Its own switch, `Config.SecretGrants`, which is separate from natural spawning.
+  2. Exactly four typed fields.
+  3. One of the two species, as a pod or a grown plant.
+  4. The recipient is the sender.
+  5. A request id already answered gets the same answer and nothing more.
+  6. One grant at a time per admin, and a 6-second cooldown.
+  7. The profile is loaded and saving, and the Bag has room (`HeldRoom`, 24).
+  8. Exactly one item, through `CarryService.GivePod` or `GiveHatched`. These are the existing givers, which record the
+     saved row or give nothing.
+  9. EQUIP NOW only into free hands, through `CarryService.EquipIfFree` (new). It never drops or replaces a carried pod
+     or a held item; the item stays in the Bag and the answer says why. The hatch's own delayed equip now calls the same
+     function with the same checks (HatchDeliverySpec 62/62).
+  10. `PlayerDataService.Save`. The answer says "saved" only when the save landed. Otherwise: "the SAVE HAS NOT LANDED
+      yet; the autosave keeps trying."
+- Each grant is on the admin record as `GrantSecret:<species>:<pod|plant>`.
+- No nest, platform, guardian, world toast or day/night change.
+
+**Specs, once each on the final tree:**
+- `SecretIncomeSpec` (new): 24/24.
+- `AdminSpec`: 87/88. The one failure is its older console section, which places the console in a stand-in PlayerGui;
+  the assistant's sandbox now forbids that. The SECRET ITEMS checks (section 8b) all pass, including the console's
+  source check.
+- Others: `PlantInfoSpec` 45, `BalanceSpec` 34, `SellOneSpec` 90, `SacrificeSpec` 281, `HatchRevealSpec` 74,
+  `HudLayoutSpec` 1288, `HatchDeliverySpec` 62.
+
+**Mocked persistence (AdminSpec 8b, a stand-in save, not a real store):**
+- Unauthorized, forged-recipient and malformed requests grant nothing.
+- The same request grants once.
+- A second press while one is saving is refused.
+- The cooldown holds.
+- A full Bag refuses with the storage line and loses nothing.
+- EQUIP NOW on a body that cannot take it keeps the item in the Bag.
+- A save that does not land is never reported as saved.
+- A profile that is not saving is refused before anything is granted.
+- No phase change, nest or spawn switch is touched.
+
+**Real throwaway-store Play** (`SeedTest_20261002`). The test account is an allowlisted admin and owns the ×2 pass. The
+grants went through the real remote.
+
+| Step | Result |
+| --- | --- |
+| Petalfawn pod, EQUIP NOW, hands full | granted and saved; "Not equipped, kept in your Bag: your hands are already holding something." |
+| another grant at once | "Wait 5 s between Secret grants. Nothing was granted." |
+| Snarlbloom pod, then the same request id again | one pod; "Already answered, nothing more granted" |
+| Petalfawn grown plant, EQUIP NOW, hands full | granted and saved, kept in the Bag |
+| Snarlbloom grown plant, EQUIP NOW, hands free | granted, saved, "Equipped." |
+| a forged recipient (another user id) through the remote | "In this version a Secret can only be granted to yourself. Nothing was granted." |
+| saved Bag after the grants | one Held row per accepted grant, nothing more |
+| Bag readout | tooltips "Secret" / "Secret pod"; rarity Secret; no size row; +$310K/s and +$378K/s; sale $4.65M and $5.67M; pods "After it hatches" |
+| the world | 0 SecretSpawned events; still Day; 0 secret platforms |
+| the granted Snarlbloom pod | planted, hatched to a Tool, planted again: `RateFor` $310,000/s; picked up: $0 |
+| a Petalfawn planted | `RateFor` $378,000/s |
+| death | every Tool rebuilt; Held unchanged |
+| **rejoin** (Play stopped and restarted on the same store) | Held identical (5 rows); the planted Petalfawn restored; `RateFor` $378,000/s; Bag readout unchanged; no world event |
+
+Captures: `output/secret/R3-admin-grants-hotbar.png` (an equipped Petalfawn and the hotbar) and
+`R4-snarlbloom-planted.png`.
+
+**Not verified:**
+- The admin panel was not opened or captured in Play. Its layout is checked from source only, and the grants were sent
+  through the remote directly.
+- A full Bag was refused only in the mocked spec, not in Play.
+- Not tested:
+  - a save that really fails;
+  - two players or a second admin;
+  - gamepad or phone;
+  - a live server.
+- Offline earnings for a Secret are spec-checked (one hour away), not claimed in Play.
+
+**Limitations the owner may want to decide:**
+- **Economy:**
+  - A Secret POD sells through SELL ALL at the full plant price.
+  - Grant-then-sell lets an admin mint $4.65M to $5.67M every 6 seconds. That is no different in kind from the console's
+    AddMoney.
+  - A profile's first-ever hatch, a granted pod included, pays the existing one-time hatch bonus (a Spin Ticket).
+- **Internal tier 1** still shows in colour or motion only, never in words: the hatch glow's colour and strength
+  (`HatchFX`), the hatch flash (`PlantService`) and PlantSway's lean. A Secret's placement ghost is green or red, not
+  the tier colour.
+- **Other:**
+  - A Secret pod grows in 30 s (tier 1's grow time).
+  - The throwaway store's test keys were left: the sandbox has no DataStoreService.
+  - Studio carries one script not on disk, `ServerScriptService.EmberrootApprovalRunner`. It is long-standing and not
+    from this work.
+  - A Publish from this Studio ships all of the above: live grants ON, natural spawning OFF, and MapDecor's cleared
+    secret spots.
+
+**Cleanup:**
+- The two gated ZZ host files are deleted, and the test-store marker is removed.
+- The probe shows 154 scripts equal to disk and no ZZ leftovers.
+- Nothing committed, pushed or published.
+
+## Secret placement, final rules: a Secret may overlap its OWN plot's fences — built, checked and Play-verified on a Level-1 plot — 2026-10-02 (CLAUDE)  (SUPERSEDED BY "Placement for everything" ABOVE: ITS ZONES, FOOTPRINTS, SNAP AND WALKER WALLS ARE RETIRED; ONLY THE SECRET POD'S FIXED FACING AND THE CARRYPOSE FIX REMAIN)  (SUPERSEDES THE ZONE RULES OF THE TWO ENTRIES BELOW; COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; `GameConfig.Secret.Enabled` STILL FALSE; ONE GUARDED PLAY ON THE THROWAWAY STORE, ONE PLAYER, DESKTOP ONLY)
+
+**The owner's superseding decision (2026-10-02):** Secret pods may overlap or extend beyond the plot fences, and fence
+overlap must never block planting or produce a "no safe spot" refusal. The base stays on the owner's plantable soil.
+Original sizes; no resizing, plot expansion, upgrade requirement or forced special spot. Normal ownership, storage and
+placement validation stay. Checks remain only for other players' plots and essential shared walkways. The broad
+footprint survey stopped; focused checks and one guarded Play only.
+
+**What is built (uncommitted on `wip`):**
+- `Shared/SecretFootprint.luau` (new): the one check, used by `PlantService.PlaceAt` and by `PlantPlace.client.luau`.
+  - A Secret keeps 2 studs clear of OTHER players' plots (their ground at its top level, wing included; their gate,
+    spawn pad and approach; their signs; their mill) and of the shared walkways (the road and the hub).
+  - The owner's OWN fences, gate, spawn pad, signs and mill never refuse it.
+  - A Secret may not overlap anything planted, and nothing may be planted overlapping a Secret. Ordinary plants still
+    overlap each other freely.
+- Footprints are measured reach plus 0.5:
+  - A secret pod is planted at a fixed facing, its face (the narrow side) to the gate; its footprint is a box.
+  - A secret plant's footprint is a circle.
+  - An ordinary plant's is its own built model's reach, plus the pod rattle or the sway. The ghost disc's formula
+    undershoots the models (pods 1.44x, some grown plants 2.3x), so it is not used.
+- `PlantService.PlaceAt`: the check runs after the full-plot guard and BEFORE the Tool is touched. Refusals are
+  `SECRET_PATH`, `SECRET_CROWDED`, `SECRET_NEAR` and `SECRET_NO_ROOM`, each a toast (`ActionRefusal`). Planted models
+  carry `FootOffset`. Walkers keep out of a Secret's footprint (`PlantWander.Choose` blockers; one caught inside walks
+  out by the shortest way).
+- `PlantPlace.client.luau`: a rotation-locked box ghost for a secret pod and a true-size ring for a secret plant,
+  green or red. The valid area is drawn green on the bed. An aim within 2 studs of a green spot snaps to it. A Secret's
+  refusal is raised before anything is sent. An ordinary item on a plot with no Secret previews and sends exactly as
+  before.
+- `CarryPose.client.luau`: the side effect found yesterday is fixed. An ordinary carry no longer writes the elbows
+  and wrists; only the overhead pose does, blended from the animation's own pose. Spec-checked from source, not seen in
+  Play on an ordinary carry.
+- Data corrected to the measured worst case, PlantSway's whole-plant lean included (`SeedData`):
+
+  | Number | Was | Now | Why |
+  | --- | --- | --- | --- |
+  | Snarlbloom radius | 18.43 | 19.45 | a 40 s sample missed a vine tip; 20,000 moments found 19.39 |
+  | Petalfawn radius | 13.81 | 14.30 | 14.23 measured the same way |
+  | Starbloom pod box, front / back | 12.19 / 11.89 | 14.20 / 12.60 | the revealed Petalfawn idles past the old box |
+
+  The Greenhollow pod box is unchanged (18.67 / 19.76 / 28.54 / 28.54).
+
+**Level 1, every plot, empty bed, 1-stud grid (`SecretFootprintSpec`):**
+
+| Secret | Safe spots of 672 | The middle of the bed |
+| --- | --- | --- |
+| Greenhollow secret pod | 571 to 627 | allowed |
+| Starbloom secret pod | 672 | allowed |
+| Snarlbloom | 672 | allowed |
+| Petalfawn | 672 | allowed |
+
+The only refusals left on an empty Level-1 bed are a neighbour's treadmill (Plots 2 to 6) and the road (Plots 1 and
+6), both for the Greenhollow pod's outermost spots.
+
+**Specs, all passing:** `SecretFootprintSpec` (new) 120, `ActionRefusalSpec` 72, `ControllerSpec` 69,
+`HudLayoutSpec` 1288, `SecretFormsSpec` 105, `PlantWanderSpec` 65.
+
+**Guarded Play** (throwaway store `SeedTest_20261002`, Plot_01 at Level 1, the game's own functions):
+
+| Step | Planted | Saved bag (Held) |
+| --- | --- | --- |
+| start | none | none |
+| both secret pods given | none | Greenhollow pod, Starbloom pod |
+| Greenhollow pod planted in the MIDDLE of the bed, face to the gate (facing check 1.0000) | that pod | Starbloom pod |
+| Starbloom pod planted beside it: refused, `SECRET_NO_ROOM`, Tool kept in hand | that pod | Starbloom pod |
+| Greenhollow pod hatched (hatch-to-Tool) | none | Starbloom pod, Snarlbloom |
+| Snarlbloom planted mid-bed, then picked up | none | Starbloom pod, Snarlbloom |
+| Starbloom pod planted mid-bed (facing 1.0000), hatched | none | Snarlbloom, Petalfawn |
+| Petalfawn planted mid-bed, then picked up | none | Snarlbloom, Petalfawn |
+
+No item was lost or duplicated at any step. The pod models were gone after each hatch, and no parts were left after
+each pickup. The client drew 21 green strips with the Greenhollow pod in hand, and none for the Starbloom pod while the
+bed was full. Captures: `output/secret/R1-greenhollow-pod-mid-bed-L1.png`, `R2-starbloom-pod-mid-bed-L1.png`. A Spin
+Ticket and $65 also appeared; they are the game's existing first-hatch bonus and the Snarlbloom's income.
+
+**What the owner should know:**
+- One big Secret fills a Level-1 bed: while the Greenhollow pod or a Snarlbloom is planted, nothing else fits.
+- A Secret may now cover the owner's own gate, spawn pad, signs or mill. A Greenhollow pod at the front of the bed
+  reaches about 11 studs out through the gate, and a teleport home lands on the spawn pad under it.
+- An ordinary pod's 3-second hatch reveal can briefly reach into a Secret's footprint; only secret pods' reveals are
+  counted.
+- Still owner acceptance checks: the device-emulator carry framing and the two-player theft procedures.
+- A Publish from this Studio ships all of this switched off, plus MapDecor's cleared secret spot in the Greenhollow
+  and Starbloom lanes.
+
+**Tooling change found today (Studio 0.741, the assistant's sandbox):** the MCP can no longer place a script in any
+container or `require` a game module, so the old Play hosts could not run. They ran as two temporary, gated files in
+`src` (`ZZSecretHost.server.luau`, `ZZSecretClient.client.luau`: inert outside Studio and without the test-store
+marker), deleted after the Play; Studio is back to 154 scripts equal to disk with no ZZ leftovers. `test_store_off`
+cannot reach DataStoreService any more: the marker was removed by hand and the throwaway store's test keys were left.
+
+## Secret pods with fixed facing (option 2): every Level-1 plot passes; the build is designed but NOT written; paused at the owner's request — 2026-10-02 (CLAUDE)  (ITS ZONE RULES ARE SUPERSEDED BY THE ENTRY ABOVE; THE BUILD IT DESIGNED IS DONE THERE)  (NO CODE CHANGED THIS ROUND; NOTHING COMMITTED, PUSHED OR PUBLISHED; `GameConfig.Secret.Enabled` STILL FALSE)
+
+**The owner chose option 2** from the entry below, for testing. A Secret pod is planted at a fixed facing, narrow
+side to the entrance, and its oriented box is its footprint. Only the planted pod is turned; the overhead carry stays
+as approved. The preview locks the rotation, shows that box and highlights the valid positions. Client and server run
+the same check, and a refusal happens before the item is touched. Animated plants keep their measured circles, and
+ordinary placement changes only in that it may not overlap a Secret. Both the Greenhollow pod and its Snarlbloom must
+be placeable on Level-1 plots, with no automatic placement and no upgrade requirement. The hatch shake and reveal
+count where they reach past the static pod. Every plot's Level-1 geometry is checked, Plot_06 included, then one short
+guarded Play. If it still cannot fit, stop and show the conflict.
+
+**Measured this round** (Edit, scratch builds destroyed, nothing in the place changed):
+- Each secret pod planted facing the gate, measured from its base. The reach is the union of the static model, the
+  hatching rattle (PlantSway, 13° about the bottom centre, plus the hop), the burst (PlantService) and the reveal of
+  the creature (HatchFX), plus the 0.5 margin. The rattle and the reveal reach past the static pod.
+
+  | Pod | Toward the gate | Back | Left | Right |
+  | --- | --- | --- | --- | --- |
+  | Greenhollow secret pod | 19.17 | 20.26 | 29.04 | 29.04 |
+  | Starbloom secret pod | 12.69 | 12.39 | 10.84 | 10.60 |
+
+- The treadmill zone now covers all ten mill tiers and the sign: gate-frame x 21.3 to 50.7, z 0.2 to 23.6. The entry
+  below used tier 1 only. Each neighbour's wing is taken at its most forward step, gate-frame z 25.4.
+
+**Result.** Exact polygon distances on a 0.5-stud grid of the Level-1 bed, the 2-stud buffer, and the protected zones
+of the entry below with the wider treadmill. Plot_01 to Plot_06 come out the same.
+
+| Secret on a Level-1 plot | Footprint | Safe bases |
+| --- | --- | --- |
+| Greenhollow secret pod, fixed facing | the box above | 12, on the bed's back edge (z 27.6), x −15.4 to −9.9 |
+| Starbloom secret pod, fixed facing | the box above | 686 (26.6 % of the bed) |
+| Snarlbloom, hatched | circle 18.93 | 89 (3.4 %) |
+| Petalfawn, hatched | circle 14.31 | 490 (19.0 %) |
+
+- At its best base the Greenhollow pod's front edge is 8.43 studs inside the gate line, 0.43 clear of the entrance's
+  2-stud buffer. The treadmill bounds it on the right.
+- What players will meet: on Level 1 that pod's box (58 wide, 39 deep) covers the whole bed, so it needs an otherwise
+  empty bed. A hatched Snarlbloom there also leaves almost no room. Both follow from the no-overlap rule.
+- Levels 2 to 5 with fixed facing are not computed yet. The round-3 circles do not bound them, because the rattle
+  swings the pods wider than their static circles. The planned spec computes them.
+
+**Designed, ready to build:**
+1. `GameConfig.Secret.Footprint`: the 2-stud buffer, the protected zones in the gate frame, the neighbours' lots at
+   their maximum level, the road wedge and hub, and `PodFacing = math.pi`.
+2. `SeedData` secret rows: `Footprint` radii and `PodFootprint` boxes, the numbers above.
+3. A new `Shared/SecretFootprint.luau`, used by both sides: the gate frame from MapService's ring math, the zones, the
+   Secret-versus-ordinary overlap with ordinary radii measured from the built model and cached, and the valid-base
+   scan for the highlight and the "no safe spot" refusal.
+4. `PlantService.PlaceAt`: the check after BED_FULL and before the Tool is touched; secret pods planted at
+   `PodFacing`; walkers kept out of Secret footprints through `PlantWander.Choose`.
+5. `ActionRefusal`: the new codes and their texts.
+6. `PlantPlace.client.luau`: a rotation-locked box ghost for secret pods, a true-size ring for secret plants, green or
+   red, the valid area drawn as green strips, and the refusal raised before sending.
+7. `tools/tests/SecretFootprintSpec.luau`, the affected specs, then one guarded Play on a Level-1 plot.
+
+The analysis scripts lived in the session scratchpad (`secret/fp/oriented.py`, `PodHatchExtents`, `MillExtents`) and
+may be gone; the numbers above are enough to continue.
+
+**Publishing the hotbar (the owner asked, 2026-10-02).**
+- The latest publish in the Studio logs is v1012, 2026-10-01 07:37 UTC, and Roblox's public record shows no update
+  since (07:40 UTC). Every hotbar edit came after it, so the hotbar (2f01cd4) is not live.
+- Studio equals the working tree (153 scripts, 0 differ), so a Publish now ships the hotbar AND this uncommitted
+  Secret work. Switched off, most of that work is inert: guardian marks and speeds need a spawned Secret, the toast and
+  camera need a Secret carry, the debug spawner is Studio-only, and only SeedData's own lookup knows the secret species.
+- Two parts are NOT inert:
+  - `CarryPose.client.luau` writes every elbow and wrist joint each frame during ANY carry, as
+    `rest:Lerp(identity, weight * overhead)`. For an ordinary pod that is `rest`, the pose captured at spawn, so
+    ordinary carries hold the lower arms still instead of animating. Found by reading the code, not seen in Play. The
+    fix: write them only while the overhead weight is above zero, then hand them back once.
+  - `MapDecor.luau` reserves the secret spot across the road from the Greenhollow and Starbloom nests even while
+    switched off, so no prop stands there any more.
+- Options given to the owner: publish only the hotbar by setting the Secret source files aside (a git stash of those
+  paths) while Studio syncs back to 2f01cd4, then restoring them; or fix the carry pose first and publish everything
+  switched off. Publishing also saves the place, which keeps the four originals' removal.
+- **The owner chose the hotbar-only publish, and it is DONE: v1013, 2026-10-01 16:50 UTC** ("Published new changes in
+  "Podnappers 🌱""; Roblox's public record updated 16:54 UTC).
+  - Before it, all 20 Secret source files (14 modified, 6 new, every uncommitted file under `src/`) went into a git
+    stash and a byte-exact copy, `output/setaside/2026-10-02-secret-src/` with `manifest.json` (sha256 per file).
+  - Studio held exactly 2f01cd4 before AND after the publish: 147 scripts equal disk, no Secret script, no ZZ
+    leftovers, test-store marker absent. So v1013 = the hotbar commit for every Rojo script, plus the place itself
+    (the four originals' removal, and `EmberrootApprovalRunner` as before). No Secret code is live.
+  - Restored right after: the 20 files copied back and matched to the manifest, the stash checked identical and
+    dropped, Studio back to 153 scripts equal to disk. The copy in `output/setaside/` stays as a spare.
+- **THE NEXT PUBLISH FROM THIS STUDIO SHIPS THE SECRET WORK AGAIN** (switched off, but with the CarryPose and MapDecor
+  side effects above). Fix CarryPose first, or set the files aside the same way.
+
+**Studio at the pause:** Edit mode, 153 scripts equal disk, no ZZ leftovers, the test-store marker absent. One script
+in Studio is not on disk, `ServerScriptService.EmberrootApprovalRunner`; it predates this work and was left alone.
+SoundService holds 51 stopped `SeedCue_ChaseBed` sounds, the known spec-run residue, not deleted.
+
+## Secret footprint rules: STOPPED at a layout conflict — the Greenhollow secret pod has no safe spot on a Level-1 plot — 2026-10-01 (CLAUDE)  (NO CODE CHANGED THIS ROUND; NOTHING COMMITTED, PUSHED OR PUBLISHED; `GameConfig.Secret.Enabled` STILL FALSE)
+
+**The owner's rules for this round:** Secret pods/plants may not overlap existing plants or pods, and later placements
+may not intersect a placed Secret (ordinary-vs-ordinary stays free-form); cosmetic fence overhang is allowed, as
+Colossals do, but the base stays on the owner's plantable soil and the footprint never enters a neighbouring plot or an
+essential walkway; the measured animated footprint with rotation and a margin; no shrinking, no higher plot level
+required; a refused placement keeps the item exactly as it was. "If the current plots cannot support these rules at
+the original sizes, show the conflict and stop for a layout decision."
+
+**What was checked (read-only + one temporary Edit overlay, deleted).** The plot ring as built (scratchpad
+`secret/fp/geom.luau` → `geom.json`): six plots, gates fixed at radius 100, every plot's sign at gate-frame
+x −14.5..−7.7, the stats sign mirrored, the treadmill (mill) at x 25.6..44.8 / z 0.2..23.6 outside the +X fence, the
+spawn pad 6×6 just inside the gate. Protected, each with a 2-stud buffer: every OTHER plot's lot at its MAXIMUM level
+(L5 main + wing, so a later upgrade next door cannot make an old Secret intrude), every plot's entrance (the 13-stud
+gate gap, the spawn pad and a 20-stud approach), plot and stats signs, treadmills, the road wedge (149°–211°) and the
+hub. Footprints: 18.93 (Snarlbloom), 14.31 (Petalfawn), 23.83 (Greenhollow pod), 12.53 (Starbloom pod) — measured
+rotation-free animated reach + 0.5. Base anywhere on the main or side bed (PlaceAt's 1.6 inset). Script:
+`secret/fp/feasible.py`.
+
+**Result — share of the empty bed where each Secret may stand (all six plots alike except Plot_06 by the road):**
+| | L1 | L2 | L3 | L4 | L5 |
+| --- | --- | --- | --- | --- | --- |
+| Snarlbloom | 4.1 % | 30.5 % | 46.5 % (06: 41.0) | 60.9 % (53.6) | 80.9 % (75.5) |
+| Petalfawn | 23.1 % | 48.7 % | 63.2 % (57.1) | 73.1 % (67.6) | 86.1 % (83.9) |
+| Greenhollow secret pod | **0 % — CONFLICT** | 15.4 % | 29.9 % (26.8) | 48.8 % (40.8) | 72.4 % (64.0) |
+| Starbloom secret pod | 33.3 % | 56.7 % | 69.8 % (64.0) | 77.9 % (73.3) | 88.3 % (87.0) |
+
+**The conflict, exactly.** A Level-1 bed's farthest plantable point from the gate is 27.6 studs (gate frame z, at the
+back corners x = ±15.4). From there the Greenhollow pod's footprint (23.83) reaches **0.47 studs INTO the 13-stud gate
+gap** with no buffer at all, **2.47 short** of the 2-stud clearance; against the spawn pad alone it would clear by 1.08
+with no buffer and miss the 2-stud clearance by 0.92. Nothing else blocks it (signs, neighbours and the road are
+clear). Shown on Plot_01 (Edit, temporary overlay deleted): `output/secret/C01` (top-down) and `C02` (from the hub) —
+the red ring is the pod's footprint at its best Level-1 base, the orange zone the entrance, the green strip the
+Snarlbloom's only safe band on Level 1 (the back 2.6 studs of the bed, 904 of 15,655 bed points).
+- Practical weight: Greenhollow is the beginner biome and Level 1 is every new player's plot, so this is the most
+  likely place a player would try to plant the Greenhollow secret pod.
+
+**Layout decision needed (nothing built until chosen):**
+1. Narrow the protected entrance on Level 1 to the spawn pad (the teleport landing), with no buffer: the pod then fits
+   at the back corners (1.08 clear), overhanging the gate gap cosmetically. A clearance relaxation — the owner's call.
+2. Plant secret POD models at a FIXED facing (narrow side to the gate) instead of the golden-angle facing. Pods never
+   turn (PlantSway holds pods still), so the footprint becomes the oriented box: half-depth 15.9 + 0.5 toward the gate
+   instead of 23.8. Checked against the same protected zones (`secret/fp/option2.py`): 8.8 % of the Level-1 bed is then
+   safe on every plot; at the back corner the pod's front edge stops 5.2 studs short of the entrance (3.2 beyond the
+   buffer). The hatched Snarlbloom keeps its circle. A change to how secret pods face.
+3. A layout change on Level 1: move the spawn pad, deepen the Level-1 plot, or add a dedicated oversize spot — expands
+   or moves plot geometry, so the owner's to approve.
+4. A gameplay alternative: the Greenhollow secret pod is not planted as a pod (e.g. hatches elsewhere). A design change.
+
+**Ready to build once decided (designed, not written):** a shared footprint module used by PlaceAt AND the client ghost
+(true-size ring, green/red, the reason); Secret-vs-anything and anything-vs-placed-Secret circle checks with ordinary
+plants' radii measured from their built model (cached per species/tier/stage) + 0.5; the protected-zone test above;
+ordinary walkers kept out of placed Secret circles (PlantWander exclusion), since a grown plant wanders after it is
+planted; refusals checked BEFORE the Tool is touched (nothing consumed, duplicated or re-owned), with a distinct
+"no safe spot on your plot" refusal; focused spec + one guarded Play.
+
+**Backups and what keeps the Workspace cleanup.**
+- Files (untracked, local only, outside `src/`):
+  `D:\KAPE\Steal an Artifact\output\model-backups\2026-10-01-secret-originals\Snarlbloomgreenhollowsecret.rbxm`
+  (19,659 B), `…\greenhollowsecretpod.rbxm` (12,987 B), `…\starbloomsecretpod.rbxm` (7,397 B), `…\PetalfawnSe.rbxm`
+  (19,437 B), `…\manifest.json` (sha256 + fingerprints). Not in git; copy them off this PC if they must survive it.
+- The removal of the four originals is an edit to the OPEN Podnappers place (Workspace is not under Rojo; nothing on
+  disk holds it). It persists only when the place is saved from that Studio — File → Save to Roblox (a save, not a
+  publish). Closing Studio without saving brings the originals back from the last saved version. The source changes are
+  already on disk, uncommitted on `wip`.
+
+## Secret pods and plants, round 2: originals removed (backed up), footprint study, one-draw rule kept, animator fixed — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; `GameConfig.Secret.Enabled` STILL FALSE; NO PLACEMENT, LAYOUT OR CAPACITY RULE CHANGED; FOUR SHORT GUARDED PLAYS ON THE THROWAWAY TEST STORE, ONE PLAYER, DESKTOP ONLY)
+
+**1. The four originals are gone from the place, backed up first.**
+- Backups: `output/model-backups/2026-10-01-secret-originals/` (outside `src/`, untracked, never staged) —
+  `Snarlbloomgreenhollowsecret.rbxm` 19,659 B (sha256 2e923eff…), `greenhollowsecretpod.rbxm` 12,987 B (3247c61e…),
+  `starbloomsecretpod.rbxm` 7,397 B (74c4fa3c…), `PetalfawnSe.rbxm` 19,437 B (ff6e813e…), and `manifest.json` (hashes and
+  fingerprints). Written by Studio's own serializer (`SerializationService:SerializeInstancesAsync`, the .rbxm format
+  Save to File writes) through scratchpad `secret/backup/backup.py`.
+- Verified by REOPENING EACH FILE'S BYTES in Studio (`DeserializeInstancesAsync`, Studio's loader) and fingerprinting the
+  copy — every part's size/CFrame/colour/material/surfaces/flags, every Motor6D/Weld's parts and C0/C1, every script's
+  Enabled and full-source hash, lights, emitters, attachments, attributes, PrimaryPart, pivot — against the manifest AND
+  the live original: all four IDENTICAL (09c85388, f6dda938, 1e8a4038, 9d0b50c8). Counts: Snarlbloom 103 parts / 21
+  Motor6D / 81 Weld / SnarlbloomIdle 4,278 chars; Petalfawn 106 / 27 / 78 / PetalfawnIdle 3,672 chars; pods 102 and 80
+  parts, no joints, no scripts. Sizes 31.59×47.26×27.26, 11.66×38.76×24.08, 46.61×40.50×31.71, 17.01×21.45×17.01.
+- Then ONLY those four were destroyed from Workspace (618 instances; Workspace 4,825 → 4,207 descendants). NOT on Studio's
+  Undo stack (`ChangeHistoryService` would not record from the MCP context): to restore, Insert from File → the .rbxm.
+  The removal lives in the owner's open Studio session until the place is saved.
+- Confirmed in Edit and in a running Play: no model of those names, no script named SnarlbloomIdle/PetalfawnIdle, no
+  script carrying their source, no preview copy (ZZPod*, Preview_, Overhead_, Carried_, Held_, Loose_) anywhere;
+  SecretForms/SecretModel/SecretIdle intact; Studio = disk 153/153 scripts, 0 ZZ leftovers, test-store marker absent.
+
+**2. Footprint — investigated and shown, NO rule changed.**
+- Today placement is free-form by design (`PlantPlace`: "Overlap is allowed by design -- a garden is arranged, not
+  slotted"): PlaceAt checks reach (26 studs), capacity (5/7/10/15/20 per level) and nothing else; no cell, spacing or
+  occupied check exists (the `PlantSlot` grid is legacy-save only). The client ghost disc is a formula (1.66 for both
+  secret pods, 26.7/21.9 for the hatched secrets) and is never enforced.
+- Measured footprints (rotation-free radius about the planted Base, so any facing and PlantSway's ±28° look-around are
+  covered; idle swept 14–20 s): Snarlbloom 16.2 at rest, **18.4 with its idle** (the vine buds; live client 18.28 after
+  the animator fix), feet dip 0.27 below the soil mid-idle; Petalfawn 12.3 / **13.8** (crown petals); Greenhollow secret
+  pod **23.3**; Starbloom secret pod **12.0**. Proposed footprint = measured + 0.5 margin: **18.9 / 14.3 / 23.8 / 12.5**.
+- For scale, ORDINARY Colossals already exceed every plot today: Supernovus 44.7, Pyrelotus 39.5, Gloomlotus 37.2,
+  Bogbonnet 29.8, Astralhorn 29.6, Bellchime 29.2 (Tiny: 1.6–5.3). A universal no-overlap rule would hit them first.
+- The plot (48 wide; depth 35.2/47.4/59.6/71.8/96.2; main soil 34 wide; side bed from L3; the L-shaped wing from L3).
+  Largest circle inside the fence when planted on soil: **L1 16.8 · L2 22.8 · L3 23.8 · L4 26.4 · L5 30.5** studs.
+  Share of plantable soil where each footprint stands wholly inside the fence (L1…L5): Snarlbloom 0 / 6.7 / 10.0 / 19.5 /
+  27.6 %; Petalfawn 12.4 / 29.5 / 32.9 / 44.1 / 50.6 %; Greenhollow pod 0 / 0 / 0 / 2.1 / 8.2 %; Starbloom pod 28.8 / 43.7 /
+  47.7 / 56.0 / 62.2 %. Planted at its best spot, the soil left for other plants: Snarlbloom — / 1.8 / 44.0 / 58.6 / 74.1 %;
+  Greenhollow pod — / — / — / 49.7 / 62.6 %. (Script: scratchpad `secret/footprint/fit.py`.)
+- Shown on the real plot (`output/secret/F01`–`F03`, top-down, test-only rings): L1 — the Snarlbloom's ring (red) runs
+  past the fence on both sides of the largest-fitting ring (white 16.8); L2 — it fits (green) and covers the bed; L5 —
+  the Greenhollow pod at its best spot behind the step, inside the 30.5 ring.
+- Proposal for approval (nothing built): (a) a per-species footprint radius in SeedData (the four numbers above),
+  shown by the client ghost as a true-size ring; (b) PlaceAt refuses a placement whose circle overlaps any planted
+  plant's circle — choose the scope: SECRET-vs-anything only (ordinary gardens unchanged) or EVERY plant (ordinary
+  Titans/Colossals then need radii too, and big gardens hold fewer); (c) choose whether the circle must also stay inside
+  the fence: if yes, Snarlbloom needs L2+ (and fills L2), the Greenhollow pod L4+, the other two L1+, with a clear
+  refusal; if no, overhang is allowed as ordinary Colossals do today; (d) the "reserved oversize area" is then simply
+  the best-fit point per level (table above) highlighted while a secret is in hand — no layout or capacity change. Also
+  noted: a planted Snarlbloom's padded pick box (≈33.6×49.3×29.3) wins clicks over plants inside or behind it
+  (`PlantPickUI`); the Garden panel still picks them by id.
+
+**3. Confiscation — the one-draw-per-pod rule kept, now spec-guarded for secrets.** `GuardianConfiscateSpec` 3i (new,
+12 checks, 103/103 total): a loose secret pod keeps its `SecretId` in the hands (record and model) and tells the nest
+which encounter on take AND retake; caught at 0.10 → left (one draw); dropped → one loose pod, same encounter,
+abandoned; retaken by a second thief → same encounter, still abandoned; caught again at 0.99 → "abandoned", not rolled
+and not taken; dropped again → still one pod, same encounter; a fresh secret caught at 0.90 → confiscated with the
+encounter on the haul and nothing on the ground. Pursuit after a non-confiscating catch: verified in Play last round on
+the re-taken abandoned pod (chasing again at 6.9 s, caught again at 12.2 s) and this round in Greenhollow (below).
+Two identity holes closed: the rare TryTake "could not attach" fallback now puts `SecretId` on the loose pod it drops;
+a carrier who LEAVES the server now resolves the encounter (the pod goes with the character, as any pod does, and the
+platform no longer waits for dusk over an empty spot). A spec-built nest record lacks the new `marked` table —
+`SpecProvoke`/`SpecStep` now fill it (GuardianPursuitSpec 58/58).
+
+**4. Why the Starbloom chase read 121 against a proposed top of 104.** A profiled guardian's speed is
+`opening + (top − opening)·u² + rage + shortfall` (`NestService.chaseSpeedFor`), u = time since the chase began over the
+ramp. rage = 5 per theft (max 4 stacks, `Parent.RageSpeedPerTake`); shortfall = `UnderSpeedMargin` 30 × (1 − the thief's
+Speed score ÷ the biome's recommendation, clamped 0..1). The test profile is far below Starbloom's 10 B, so shortfall
+≈ 30: start 86 + 5 + 30 = **121** (measured 121), ~0.8 s in 123 (measured), top 104 + 5 + 30 = **139** (measured 139 at
+the second catch). A thief at/above the recommendation with one theft: 91 → 109. The shipped Astralmaw for the same
+thief: 113 → 131; the secret adds 8 at every point and reaches the top in 2.4 s instead of 3.4 s. Unchanged, as asked.
+Also CORRECTED: the Starbloom runs had NO wake delay — the shipped rule gives an under-recommendation thief no head
+start in that biome — so last round's "wake ~0.6 s" was wrong. Timed this round in Greenhollow (recommendation 0, so
+the delay always applies): take → `waking` → `chasing` in ~0.6–0.7 s (0.2 s sampling), walk **24** = 19 + rage 5;
+caught at 4.9 s (pod left, as every Greenhollow catch), chasing again at 6.9 s, caught again at 9.9 s, home after the
+thief was thrown clear.
+
+**5. The planted idle was not reliably running — found and fixed.** `SecretIdle.client` DROPPED a model whose PrimaryPart
+was nil; a planted plant streams in and its pivot can land after its tag, so it was dropped on arrival and never
+re-registered. Measured: the vine buds travelled 13.1–13.6 studs from the base (PlantSway's lean only) against the
+idle's 9.3–16.7; re-tagging by hand brought the idle back. Now it waits, rebuilds the tree 0.5 s after the pivot
+arrives, and watches PrimaryPart changes. Re-measured on the live client: reach 16.48 → **18.28** over 1,199 frames
+(computed 18.43). SecretFormsSpec guards it (105/105). Last round's "4. placement and movement PASS" is corrected above.
+
+**6. The SECRET sweep is a looping tween now.** Last round only SecretFormsSpec was run; the affected-spec pass this
+round found NoticeSpec, ActionRefusalSpec and HudLayoutSpec failing on the toast's RenderStepped hook ("a toast is an
+event"). It is a `TweenService` loop on the gradient's Offset (RepeatCount −1), ending with its label; Play: the offset
+moves (0.33 → −0.44), `S26`. All three specs pass.
+
+**7. `SCLERA` (separate finding, not fixed).** `CreatureModel.luau:690` passes an undefined `SCLERA` only in `addFace`'s
+"slit" branch, which `EYE_STYLE` gives to tanglemire. `addFace` is called from the Greenhollow (1351) and Dustbowl (1381)
+builders and the legacy path (2020); the tanglemire branch (1386–1408) ALWAYS returns first (replay + `retrofitMireEye`,
+which uses SCLERA_LIGHT/DARK, or an empty pivot with a warning). So the branch is unreachable; if it were reached,
+`part()` would throw assigning nil to Color. PlantFormsSpec builds every species (388/388). Recommended later: delete
+the dead branch or point it at `SCLERA_LIGHT`; untouched now.
+
+**Specs run this round (the ones that read or drive the changed code):** SecretFormsSpec 105/105, GuardianConfiscateSpec
+103/103, GuardianPursuitSpec 58/58, GuardianRagdollSpec 120/120, ParentVoiceSpec 176/176, NoticeSpec 101/101,
+ActionRefusalSpec 72/72, CarryHandsSpec 16/16, PlantFormsSpec 388/388, DustbowlPodSpec 36/36, PlantStreamingSpec 12/12,
+MapDecorSpec 93/93, CycleSpec 59 assertions PASS, SpeedSpec 349 assertions PASS, DebugReleaseSpec 34/34, HudLayoutSpec
+1288/1288.
+
+**Owner device procedures (not run — no physical device or second real client here).**
+- A. Carry framing (Studio's Device Emulator: a landscape phone, a tablet, desktop; a physical phone needs a separate
+  approved test place, since secrets cannot appear outside Studio with the switch off): Edit → run
+  `tools/studio/test_store_on.luau`; Play and confirm the Ready line says STUDIO TEST STORE (else stop). Server command
+  bar: `local D = require(game.ServerScriptService.SeedGameServer.DebugService) local p = game.Players:GetPlayers()[1]
+  D.RunAction(p, "SpawnSecret", { biome = "greenhollow" }) D.RunAction(p, "Teleport", { where = "greenhollow" })`.
+  Walk to the pod across the road (x ≈ +42), hold E. Check: the whole pod and your character visible with the default
+  camera; zoom in stops at the floor, zoom out goes further; a full 360° turn; against the corridor wall (x ≈ +64)
+  facing along the road, facing the wall and backing into it (note any push-in). Carry it over the red line: banked,
+  zoom range and centring back to yours. Repeat with `biome = "starbloom"` (dark biome). Take one and Reset Character:
+  camera normal after respawn. Take the Starbloom pod and let Astralmaw catch you: camera normal after landing.
+  Plants: `require(game.ServerScriptService.SeedGameServer.CarryService).GiveHatched(p,
+  require(game.ReplicatedStorage.SeedGame.Shared.SeedData).Get("snarlbloom"), 1, nil, nil, true)` (and "petalfawn"),
+  hold them on the plot by the fence, unequip: camera normal. Stop; run `test_store_off.luau`. Note OK/issue +
+  screenshot per step.
+- B. Two-player theft (Test → Clients and Servers → Local Server, 2 players; test store on first): spawn the Starbloom
+  secret; P1 takes it, P2 takes an ordinary pod from the same nest (P2 is remembered). `D.RunAction(p,
+  "ForceGuardianRoll", { value = 0.1 })`; let the guardian catch P1: "POD LEFT BEHIND!" over it, the pod on the road,
+  the chase goes on (record whom it turns to). P2 picks the dropped secret up; caught with `value = 0.9`: it must stay
+  "abandoned" (dropped, not confiscated — one draw per pod). For a confiscation, a fresh encounter: dusk/dawn
+  (`WorldCycleService.StartNight()` then `StartDay()`), spawn again, P1 takes, `value = 0.9`, caught: hauled home and
+  back on its spot on the same platform; P2 can take it from there. P1 leaves the game while carrying: the platform
+  goes. Banking (cross the red line): the platform goes and the Tool is in the bag. At every step: one secret pod, one
+  platform, one toast per spawn on BOTH clients and none on a return. `ForceGuardianRoll` with no value restores
+  chance; stop; `test_store_off.luau`.
+
+**Remaining blockers (owner's):** the footprint scope and fence rule (section 2); device framing and two-player runs
+(procedures A/B); `GameConfig.Secret.Enabled` stays false; nothing committed, pushed or published.
+
+## Secret pods and plants: test integration BUILT and Play-verified — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` AS ebc9db8; LIVE IN THE OWNER'S v1016; NATURAL SPAWNING SWITCHED OFF — `GameConfig.Secret.Enabled = false`; THREE GUARDED PLAYS ON THE THROWAWAY TEST STORE, ONE PLAYER, DESKTOP ONLY; THE ORIGINALS UNTOUCHED AND STILL ARCHIVABLE IN WORKSPACE)
+
+**The owner's decisions (2026-10-01):** Greenhollow secret pod → Snarlbloom, Starbloom secret pod → Petalfawn; original
+dimensions, rigs and idles preserved; the template/replayer + anchored client animation approach; routed by explicit
+species id; no wandering; the secret is an ADDITION to the ring, one 5% roll per nest at initial stocking and at each
+dawn restock; the opposite-side spot; one encounter identity through carry/drop/return; a confiscated secret returns to
+its spot; overhead carry for pods and plants; a temporary zoom floor (never a lock) restored on release/death/leave;
+guardian test values 0.6 s / 19 / 86-104-2.4; the "grudge" (marked thief) approach; Starbloom confiscation 60%; the
+Notice-system toast with italic silver SECRET and a grey sweep; secrets outside every pool, the Index and the Biome
+Harvest; the plot-overlap blocker shown, not accepted. Captures are in `output/secret/` (untracked): `S01`–`S25`.
+
+**What was built (all uncommitted).**
+- `Shared/SecretForms.luau` (160 KB, generated): the four inserted models part for part, joint for joint (Motor6Ds and
+  Welds with C0/C1 by part INDEX — names repeat), lights, emitters, attachments, attributes; plant CFrames relative to
+  the authored Base plate's ground point, pods to the bbox bottom centre; the Greenhollow pod stored yawed 180° so its
+  eyes face −Z. The generator checked the identity pose: 0 joints needed fixing, worst error 1e-5.
+- `Shared/SecretModel.luau`: replays a spec at scale 1 whatever the tier, every part anchored with collide/query/touch
+  off (the plant contract), joints parented where authored; a plant hangs off BuildCreature's invisible `Base`
+  (pinned to 6×0.06×6 — the tier-7 plate would be 81 studs and inflate every bbox); a pod gets an invisible `Shell`
+  PrimaryPart AT THE BASE (the Take prompt's 11-stud reach is measured from it). Tag `SecretRig`, attribute `SecretForm`.
+- `Shared/SecretIdle.luau` + `StarterPlayerScripts/SecretIdle.client.luau`: the two inserted idle scripts ported line
+  for line (periods, the 6 s jaw snap with spores and gullet flare, blinks, the hoof tap, the bud glow) and played on
+  the client by FORWARD KINEMATICS over the replayed joint tree on anchored parts — `Motor6D.Transform` does not
+  replicate and any Animator overwrites it (ParentAnim's banner). One RenderStepped over the `SecretRig` tag, models in
+  the Workspace only (viewport and reveal copies stay still), every 4th frame past 260 studs, a rebuild 0.5 s after a
+  streamed part arrives, a per-model phase off `PlacementId`. `ProceduralIdle=false` rests the rig once.
+- `SeedData`: `SecretSpecies` (snarlbloom, petalfawn; `Rarity = "Secret"`, `Height` 47.26 / 38.76, flags
+  `Animator = "secret"`, `Carry = "overhead"`, `NoWander`, `Pod`, `Secret`) registered in `ById` ONLY — not in
+  `Species`, so no pool, no `InBiome`, no Index shelf, no hatch-roll silhouette, no Biome Harvest, no wheel pool, and
+  every species count stays 25; `SecretByBiome`. `CreatureModel` routes `SecretForms.Plants[sp.Id]` first in
+  BuildCreature and `sp.Pod` first in BuildPod. `PlantService.stepWander` skips `NoWander`. `PlantSway` keeps the
+  whole-model lean/bob/rattle/glow for `Animator = "secret"` and resolves NO leaf/leg/root/gaze/lid rig (the names
+  Thigh, Shin, Hoof, Leaf, Eye are all in these models).
+- Carry: `GameConfig.Carry.OverheadLift = 3.0`; `CarryService.gripFor(tier, species)` / `attachInFront(…, species)` /
+  GiveHatched grip at `(0, 3.0, 0)` for `Carry = "overhead"`; `CarryPose` arms-up variant (170° lift, 8° spread,
+  elbows and wrists held straight — the ragdoll rig's AnimationConstraints) blended by species; a new
+  `SecretCarryCamera.client.luau` raises `Humanoid.CameraOffset` to the stack's middle and the ZOOM FLOOR to the fit
+  distance (ceiling raised only if below it), restores on release, death and CharacterRemoving, and publishes the
+  saved numbers as `SeedCarryCamMin/Max`, which `ThrowFX`'s pristine capture now prefers (a throw mid-carry gives
+  back the player's own zoom).
+- Nest: `NestService` encounter record (`nest.secret`: id `<nest>:secret:<n>`, pod, platform), `marked` thieves,
+  `secretSpot` (across the road, `BiomeData.Secret.SpotX = 42`, facing the road), `buildPlatform` (bedding disc radius
+  26 + heart + 10 stones on the wall-side arc, biome colours, non-collidable), `spawnSecret` (BuildPod + `SeedPod` tag
+  + `NestId` + `SecretId`, one `SecretSpawned` GameEvent to all clients), `rollSecret` at buildNest and in StockAll
+  (gated by `GameConfig.Secret.Enabled`), `TakePod`'s secret branch, `depositHaul` standing a confiscated secret back
+  on its spot, `resolveSecret` on bank/forfeit (`CarryService` → `NestService.SecretResolved`) and at dusk
+  (ClearForNight), the mark on take / re-take / a non-confiscating catch (+ `thieves` entry + `LeftBehindAt`
+  attribute), `eligibleThief` accepting a marked thief without a carry, marks cleared on safety/death/leave/leash/
+  sleep/reset/PlayerRemoving, secret speeds (`baseSpeedFor`/`chaseSpeedFor`: ChaseSpeed 19, or 86/104/2.4) and
+  wake delay 0.6 for a marked target; public `SpawnSecret`, `SecretResolved`, `SecretState`; `Provoke(nestId, thief,
+  secretId?)`. `CarryService.Held.secretId` carried through TryTake/Drop/haul; bridge `CarriedSecret`. `MapDecor`
+  claims the spot (radius 30). `DebugService` action `SpawnSecret` (Studio only). `BiomeData.Secret` on the two rows.
+- Toast: `Notice` kind `secret` (silver tint, no sound, 4 s; `KINDS` and the type); `ActionToastUI` draws the word
+  SECRET as an overlay label (GothamSSm Heavy Italic, white, 2.5-px dark stroke) with a UIGradient sweep on
+  RenderStepped (silver with a dark edge leading a white light, 1.6 s) — static silver→white under reduced motion —
+  over an invisible `<font transparency="1">SECRET</font>` span in the headline so the row centres as one; the
+  `SecretSpawned` GameEvent branch posts `SECRET POD SPAWNED IN <BIOME>!` once per spawn. `GuardianLabelUI.client.luau`
+  draws "POD LEFT BEHIND!" over the parent's head for 2.2 s from `LeftBehindAt` (outlined, no panel, no pop under
+  reduced motion).
+- `tools/tests/SecretFormsSpec.luau`: 104 checks — templates equal the originals (parts, joints, sizes, primitive
+  shapes), the rows and the exclusions (3,000 rolls per biome, candidates, shelves, 25), builds at tier 1 and 7 the
+  same authored size, Base/Shell contracts, anchored and flat, no script, the tree reaches every part, rest pose =
+  authored pose (<1e-3), a step moves it, `ProceduralIdle=false` rests it, two builds identical, the wiring. 104/104.
+
+**Verified in Play (the game's own paths, test-only hosts driving them; one player; desktop 856×716 / 1065×716):**
+| requirement | status | evidence |
+| --- | --- | --- |
+| 1. Nest spawning and platform lifecycle, no overlap | **PASS** | `S02`, `S14`, `S22`: the pod on its platform at (±42, 0.18, nest z), 12 platform parts, `GetPartsInPart` overlaps NONE in both biomes; the platform gone when the pod was banked ("no encounter") and at dusk (`StartNight` → 0 platforms), dawn restocked 16/16 with no spawn (switch off); a second `SpawnSecret` while the encounter was open was REFUSED ("the spot is taken"); the confiscated pod came back to the spot with the same id and the platform still there. |
+| 2. Overhead carry for all four | **PASS** | `S03`–`S05` (Greenhollow pod carried: bottom 2.90 above the root, 7 of 8 bbox corners on screen at the raised floor 39.2, no popper push-in against the wall), `S06`/`S18` (both pod Tools at the plot), `S10`/`S20` (both plant Tools: Snarlbloom top 50.2, Petalfawn top 40.9 above the root), the Starbloom pod carried (bottom 2.90, top 24.4). Camera restored after every bank/plant (zoom 0.5..128, offset 0). The player's own body sits under the model in these views. |
+| 3. Hatch/reveal into the confirmed plant, no duplicate, no leftover shell | **PASS** | `S08`/`S09`, `S19`: `HatchByHand` → the roll and reveal, pod models with that placement left 0, planted models 0, the hatched Tool (Snarlbloom / Petalfawn) in hand; the pairing came from the species row's `Pod`. |
+| 4. Placement and movement, cleanup | **PASS, with the footprint blocker below — CORRECTED IN ROUND 2: the idle was NOT reliably running on a planted model (the client animator dropped a rig whose pivot streamed in late); the motion read here was partly PlantSway's lean. Fixed and re-measured — see the round-2 entry above** | `S11`/`S12`, `S21`: planted at the authored size (31.6×47.3×27.3 / 11.7×38.8×24.1), tagged `Planted` + `SecretRig`; the idle moves (HeadBase/LowerLobe/Vine 0.3–3.1 studs per 0.6 s; Head/Neck/TailPetal 0.4–0.8) while PlantSway's lean moves the whole model (Footing 0.2, pivot drift 0.13) — the two coexist; `PickUpById` left 0 parts and 0 models, the Tool back. |
+| 5a. Non-confiscating catch keeps the chase | **PASS** | `S15`/`S16`, timeline (Starbloom, roll 0.1): NO wake delay at all (CORRECTED in round 2 — the test profile is below Starbloom's recommended Speed, so the shipped under-speed rule skips the delay; the 0.6 s was timed in Greenhollow instead), chase 121 (86 + rage 5 + shortfall 30), catch at 1.5 s with "POD LEFT BEHIND!" drawn, pod dropped, marked; the guardian CHASING again at 6.8 s and catching again at 12.1 s with empty hands; it let go when the thrown thief reached safety (returning at 17.4). |
+| 5b. Confiscation | **PASS on a fresh pod** | timeline (roll 0.9): catch at 1.5 s → `hauling`, home at 64, asleep at 8.1 s with `onSpot = true`, the same encounter id, marks cleared on sleep. A RE-TAKEN pod that a guardian had already left was "abandoned" (no roll) — the existing permanent leave-behind rule; see the decision below. |
+| 5c. One toast per spawn | **PASS** | `S23`–`S25`: 2 events for 2 spawns, none for the refused spawn or the return; the word SECRET italic silver with the sweep (offset moving), static under reduced motion. (The first two Plays rendered no toast: `Notice.KINDS` had four kinds and `Enum.FontWeight.Black` is not a member — `Heavy` is; both fixed, verified in the third Play.) |
+
+**NOT passed / limitations:** no phone or emulator framing (MCP cannot switch it) — the zoom floor is computed from the
+vertical FOV so landscape phones get the same height, unverified; no multi-thief or second real client; the Greenhollow
+guardian's 19 and the 0.6 s wake were exercised only through the mark on the Greenhollow take (reset before the catch)
+— the full Greenhollow chase numbers were not timed; a front-on carry view shows the model, not the player; the idle
+was verified as a line-for-line port plus the rest-pose proof, not a numeric side-by-side against the running originals.
+
+**Decisions for the owner:**
+1. **Plot footprint (blocker, shown not accepted):** `S13` — a Nubkin planted beside the Snarlbloom lands 14.9/10.8
+   studs inside its bounds (the Petalfawn: 4.7/9.0); PlaceAt's disc is a formula and never refuses. Proposal: a per-
+   species `Footprint` (studs) read by `PlantWander.Room`/PlaceAt's pick radius, with the secret species claiming a
+   dedicated oversize cell (or the plot's centre) — no capacity or rule changed until approved.
+2. **Confiscation on a re-taken secret:** today a pod any guardian left is never rolled again (`GuardianCatch`, "one
+   draw per pod"); "once per valid catch" would mean rolling each catch for secrets. Which?
+3. The originals (`Workspace.Snarlbloomgreenhollowsecret` etc.) are still archivable in Workspace and ship with the next
+   Publish — move them (ServerStorage / Save to File) on your word.
+4. Natural spawning stays OFF until you flip `GameConfig.Secret.Enabled`.
+
+**Pre-existing, not touched:** `CreatureModel.luau:690` references an unknown global `SCLERA` (luau-analyze); not in
+any secret path.
+
+## Secret pods and plants: integration PROPOSAL (superseded by the entry above) — 2026-10-01 (CLAUDE)  (NO CODE CHANGED; NOTHING COMMITTED)
+
+The owner approved the pairings (Greenhollow secret pod → Snarlbloom, Starbloom secret pod → Petalfawn), original
+dimensions, rigs and idles preserved, and asked for a test-only integration with natural spawning switched off,
+with proposals BEFORE: guardian speed/reaction numbers, any camera change, the PlantSway-vs-rig approach, and
+any carry/drop/target-validity change. Two code surveys were done (nest spawn / confiscation / guardian / toast /
+carry / camera; and builders / placement / PlantSway / HatchFX / giveTool). The proposal put to the owner, in short:
+PartSpec-style `SecretForms` tables generated from the originals (parts + Motor6Ds + Welds + effects verbatim),
+replayed by a `SecretModel` builder that CreatureModel routes `Rarity == "Secret"` to; the idle ported to a client
+animator that drives the replayed joint tree by forward kinematics on ANCHORED parts (every anchored-plant contract
+kept; PlantSway skips its name rigs for `Animator = "secret"` species, still pivots; no wander in v1); pods get an
+invisible `Shell` PrimaryPart at the BASE (the Take prompt's 11-stud reach is measured from it); overhead carry =
+a Secret grip at (0, +3.0, 0) with an arms-up CarryPose variant and a forced fit-zoom + CameraOffset while
+carrying; spawn roll once per growPod in Greenhollow/Starbloom at 5% (arithmetic: 5 slots → 22.6%/day) onto a
+mirrored spot at x = +42 with a cradle platform claimed in MapDecor; `GameConfig.Secret.Enabled = false` + a
+`SpawnSecret` debug action for tests; confiscation 60% in Starbloom is the existing rule (LeaveBehindChance 0.40),
+none in Greenhollow; a nest "grudge" keeps a thief targetable after a non-confiscating catch on a secret pod;
+"POD LEFT BEHIND!" by a parent attribute + client billboard; the toast via GameEvent "SecretSpawned" → Notice kind
+"secret" with a grayscale UIGradient sweep (static under reduced motion). Open: the SECRET reference image did not
+arrive; "in addition to" vs "instead of" the regular pod; per-slot vs per-restock roll; Almanac claim exclusion;
+the plot footprint of a 46-stud pod. Nothing is built until the owner answers.
+
+## Four hand-inserted models tested as previews: Snarlbloom, Petalfawn, two secret pods — 2026-10-01 (CLAUDE)  (NOTHING COMMITTED, PUSHED, PUBLISHED OR REGISTERED; THE ORIGINALS UNTOUCHED AND STILL ARCHIVABLE IN WORKSPACE; STUDIO EDIT + THREE SHORT PLAYS ON THE THROWAWAY TEST STORE; EVERY PREVIEW FOLDER DELETED AFTERWARDS; THE OWNER INTENDS TO INTEGRATE AFTER TESTING — PRODUCTION REPLACEMENT NOT APPROVED)
+
+**Follow-up rounds (the owner, later the same day).** The first pass below scaled copies to the tiers; the owner
+corrected that: **every model keeps its exact original dimensions** (tier/size matching is a later feature), the
+carry is an **overhead two-handed pose**, and they then named four required checks. Status of each, with the
+captures in `output/pod-preview/`:
+
+| check | status | what was actually verified |
+| --- | --- | --- |
+| 1. Pod spawning at the nest (position, ground contact, no overlap) | **starbloom pod: PASS (adapter)** · **greenhollow pod: FAIL (overlap)** · real NestService path: BLOCKED | `N01`–`N05`. A test host stood each pod clone, unscaled, on the live slot-1 base of `Nest_greenhollow_01` (ring spacing 18.8) and `Nest_starbloom_01` (32.0), measured with `GetPartsInPart`. Both: centre on the slot, ground gap 0.000. Starbloom pod (17.0 across, half-width 8.5): overlaps nothing but the live pod it would replace, clear of the walls. Greenhollow pod (46.6 across, half-width 23.3): overlaps the **sleeping guardian at the ring's centre** in both nests and spans past its neighbours' slots (18.8 apart). NestService itself was not used — it builds pods by `BuildPod(species, tier, slot)` from a species row. |
+| 2. Carrying (overhead, both hands raised, whole model above them) | **PASS as a test adapter; the gameplay camera cannot show the whole model; production path BLOCKED** | `O01`–`O08`, normal gameplay camera (Custom, default 13-stud zoom, untouched), facing away and facing the camera. The character is a ragdoll rig (AnimationConstraint joints, not Motor6D); the adapter solves the shoulder rotation in joint space and holds elbows/wrists straight every Stepped. All four: dimensions **UNCHANGED** (bbox and GetScale equal to the original), upright, centred over the root, bottom 3.02 above the root — above the hands' top (2.77) and the head (2.08) — face forward (the Greenhollow pod yawed 180° because its eyes are on +Z). At the default zoom only 1–2 of 8 bounding-box corners are on screen and the model's top is behind the camera: the captures show each model's underside filling the top of the frame. The owner asked to be shown the problem and asked before any camera change — nothing was changed; the game's own zoom limit is 128 studs. The production carry (`attachInFront` / `giveTool`) holds a pod in front of the chest and has no overhead grip or arms-up pose. |
+| 3. Hatching (intended plant, positioned, no leftover shell, no duplicate) | **BLOCKED** | Not run: the owner said to confirm the pod-to-plant pairings first (still unconfirmed), and a hatch is `PlantService.hatch` → `CarryService.GiveHatched` → `CreatureModel.Build(species…)` — there is no species row for any of the four, so no production path exists to test. Minimum change to test it is in the brief's answer below. |
+| 4. Plant movement when placed (idle works, stays connected, stops cleanly, compatible with existing animation) | **BLOCKED on the real path; standalone facts recorded** | Standalone (Play, clones): the idle runs on each model's own script, a clone animates independently of the original, every part stayed connected through 100+ frames of `PivotTo` following the player (bbox identical before/after), and destroying a clone stopped its loop with the original still moving; `ProceduralIdle=false` is the script's own stop. Not verified: placement through `PlantService.render` (needs a species row). Compatibility analysis, not a test: PlantSway registers `Planted` models and writes CFrames on **anchored** direct children named Leaf / Thigh / Shin / Foot / Hoof / Toe / Eye… — these models carry exactly those names on **unanchored, Motor6D-hung** parts driven by their own script, so two writers would fight; PlantFormsSpec's contract is a flat anchored model with no scripts, Motor6Ds, lights or emitters. Either the idle is re-expressed for PlantSway or PlantSway skips these species — an integration decision. |
+
+**Minimum production change for checks 1, 3 and 4 on the real paths (NOT done — asked):** one `SeedData` species row per
+plant (`Rarity = "Secret"` already exists in RarityWeight/Multiplier/RarityColor; `Height` from the model), a
+`CreatureModel` route for each (a Forms-table PartSpec lift of the geometry — the four are Part-only, which
+`replayPart` can replay — as a flat anchored model, i.e. without the Motor6D rig and script), a `BuildPod` branch
+for the secret-pod look (today a pod's look is per BIOME and species-anonymous until the hatch; a per-species
+pod shape names the species early — design call), and **no pool/odds entry** so nothing rolls them: the test host
+would hand the pod over with `Carry.GivePod(player, speciesId, tier)` and plant it on a plot. The pairing (inferred:
+greenhollow pod ↔ Snarlbloom, starbloom pod ↔ Petalfawn) is wired into nothing.
+
+**First pass (scaled copies — superseded for sizing, still valid for the contracts and the idle):**
+
+**The owner's brief:** test the two plants and two pods they inserted into the Podnappers Workspace as preview
+candidates — not approval to add species or replace production models. Captures are in `output/pod-preview/`
+(untracked, never staged): `01`–`14` Edit-mode views of non-archivable copies (front, side, three-quarter, the
+Tiny/Big/Colossal ladder beside a 5-stud post, the originals in place on the hub), `P02`–`P14` Play views of the
+pods in both arms, the plants held as a Tool, and the game's own Take prompt on a loose copy.
+
+**What was measured (read-only, Edit).**
+| model | parts | joints | fx | bbox (studs) | PrimaryPart | GetScale |
+| --- | --- | --- | --- | --- | --- | --- |
+| `Snarlbloomgreenhollowsecret` | 103 (Base anchored, rest Motor6D/Weld-hung) | 21 Motor6D + 81 Weld, AnimationController | 1 light, 1 emitter, `SnarlbloomIdle` | 31.6 × 47.3 × 27.3, faces −Z | Base (10 × 2 × 10), bottom on the deck | 11.09 |
+| `greenhollowsecretpod` | 102, all anchored | none | 1 light, 3 emitters, 1 attachment | 46.6 × 40.5 × 31.7, eyes on +Z | NONE | 3.52 |
+| `starbloomsecretpod` | 80, all anchored | none | 1 light | 17.0 × 21.4 × 17.0 | NONE | 3.33 |
+| `PetalfawnSe` | 106 (Base anchored) | 27 Motor6D + 78 Weld, AnimationController | 1 light, 1 emitter, `PetalfawnIdle` | 11.7 × 38.8 × 24.1, faces −Z | Base (6 × 1.2 × 6) | 6.73 |
+- Every model is flat (parts are direct children), CanCollide/CanQuery off, Plastic/SmoothPlastic/Neon (pod 1 also
+  Foil and Glass), ground contact exact (bbox bottom = deck/field, gap 0.00), no MeshParts or unions.
+- **The two idle scripts are clean**: RunService.Stepped → `Motor6D.Transform` on `script.Parent` only, a gullet
+  light/emitter burst every 6 s (Snarlbloom), a TweenService bud-colour loop (Petalfawn); no require, remotes, HTTP,
+  purchases or Players access; `ProceduralIdle=false` stops them. They run only in Play (a Workspace Script is inert
+  in Edit).
+- **Size:** both plants are exactly 7.6× a plausible Tiny height (47.3/7.6 = 6.22, 38.8/7.6 = 5.10, the Bellchime
+  and Spiretip class), i.e. authored at Colossal. The pods are 46.6 and 17.0 across against the game's pod diameters
+  1.66 (Tiny) … 9.04 (Colossal): ×0.036–0.19 and ×0.10–0.53 to fit. At Tiny their smallest parts become 0.013–0.035
+  studs — invisible detail that still costs draw and replication.
+- **Budgets:** plants 103/106 against PlantFormsSpec's 48 (leg species)/56 (root species) and the largest shipped
+  plant (Supernovus 81–86); pods 80/102 against the shipped pods' 7–10 parts and 0 effects (Titan/Colossal add 1–2
+  emitters + a light). A bed of twelve of either plant is ~1,250 parts; a nest of secret pods at 102 parts each ×
+  slots × five guardians' biomes is far past what any pod has cost.
+
+**Play, on the throwaway store (`SeedTest_20261001`, guard SAFE, Ready line STUDIO TEST STORE, switched off after).**
+- Idle: Snarlbloom 17 of 21 motors move (knees/ankles are not animated by the script), Petalfawn 19 of 27; a clone
+  animates on its own and the original keeps moving — one script per model, no shared state, no duplicate loops.
+- In both arms, through the same geometry as `CarryService.attachInFront` (invisible Shell PrimaryPart added to the
+  COPY, every part welded, `CarryWeld` at `(0, GripDrop, −GripForward(tier))`): Greenhollow pod at Colossal 9.0 × 7.9
+  × 6.2, bottom 1.3 studs below the feet, top 1.1 above the head (the game's own Colossal shell also reaches 1.9
+  below the feet); at Tiny 1.7 × 1.5 × 1.1 at the chest. Starbloom pod at Colossal 9.0 × 11.4 × 9.0, bottom 3.0
+  below the feet, top 2.8 above the head; at Tiny 1.7 × 2.1 × 1.7. No part lands inside the torso box.
+  **The Greenhollow pod's eyes are on +Z**, and attachInFront puts +Z against the chest (the game decorates −Z) —
+  its face would be hidden in the arms.
+- Held as a Tool, through the same grip as `giveTool` (Base = Handle, reach = 0.85 + half the widest extent, drop
+  −1.35): Snarlbloom Tiny 4.2 × 6.2 × 3.6, lowest point 1.5 above the feet, top 2.2 above the head; Big 5.7 × 8.6 ×
+  5.0, top 4.6 above the head; Petalfawn Tiny 1.5 × 5.1 × 3.2, Big 2.1 × 7.0 × 4.4. The rig is inert in hand (0
+  motors move while welded) and giveTool would destroy the script with the model anyway.
+- A loose copy with a Shell PrimaryPart and the `SeedPod` tag gets CarryService's real Take prompt (Take, 0.7 s,
+  range 11) and PromptUI draws it (AlwaysOnTop, so clearance is not an issue at either size). Not taken.
+
+**Verdicts.**
+- `Snarlbloomgreenhollowsecret` — **visual preview works; adaptation needed for the game.** Reads well at every
+  size, stands and idles on its own. Out of band on parts (103 vs 48–56) and on effects; the Motor6D rig + script
+  is the opposite of the plant contract (a flat anchored model moved by PlantSway through part names), so adoption
+  means a Route A PartSpec lift at a Tiny height, not this rig.
+- `PetalfawnSe` — **visual preview works; adaptation needed**, the same reasons (106 parts, Motor6D rig, script).
+- `greenhollowsecretpod` — **adaptation needed.** No PrimaryPart (TryTake refuses `NO_ANCHOR`, no prompt, no
+  Tool), 102 parts + 3 emitters against 7–10 and 0, five times the Colossal diameter, the face on the wrong side for
+  a carry. Fine as a Studio showpiece.
+- `starbloomsecretpod` — **adaptation needed.** No PrimaryPart, 80 parts, twice the Colossal diameter; taller than
+  wide (fits the game's ~13.5-stud Colossal pod height once scaled). The best-behaved of the four in the arms.
+- **Blocker for any gameplay-path test** (placement, pickup, hatch/reveal): the game never uses a Workspace model —
+  PlantService, CarryService and HatchFX each build a fresh `CreatureModel.Build/BuildPod` from a species row, so
+  exercising those paths needs a species definition and a Forms-table lift, which the brief excludes. Also a design
+  dependency: pods are per BIOME and species-anonymous until the hatch ("a banked pod is still anonymous"); a
+  per-species secret pod shape names the species before the shell opens unless it is something other than a carry
+  pod. **Stopped there.**
+
+**Untested:** phone/emulator (MCP cannot switch it); frame cost on a phone; placement, pickup, hatch and reveal on
+the real paths (see the blocker); front-on captures of the Colossal carries (the camera sat inside the 9-stud
+pod — side and three-quarter views stand in).
+
+**Pairing (inferred, NOT confirmed):** `greenhollowsecretpod` ↔ `Snarlbloomgreenhollowsecret` (Greenhollow by
+name); `starbloomsecretpod` ↔ `PetalfawnSe` (Starbloom's dark-blue/violet palette). The owner was asked.
+
+**Preserving the originals:** they are `Archivable=true` in Workspace, so Studio saves them into the place file and
+the owner's next Publish ships them — a 47-stud Snarlbloom on the hub deck, its script running on the live server.
+Recommended, not done (the brief says ask first): the owner right-clicks each → Save to File (`.rbxm`) into
+`pod reference/` or `plant-monster references/` (never staged), then moves the four into a `ServerStorage.ModelPreviews`
+folder (still saved with the place, invisible to players, scripts do not run there; neither Workspace nor
+ServerStorage is a Rojo root, so a sync cannot delete them). Setting them non-archivable would LOSE them on the
+next Studio close. The temporary `Workspace.ZZPodPreview` (non-archivable, `PreviewOnly`) was deleted at the end;
+Studio: 147/147 scripts equal disk, 0 ZZ leftovers, test-store marker absent (the pre-existing
+`ServerScriptService.EmberrootApprovalRunner` is still the one Studio-only script, not ours).
+
+## The hotbar is five roles, to the owner's reference — 2026-10-01 (CLAUDE)  (COMMITTED ON `wip` AS 2f01cd4; PUBLISHED BY THE OWNER IN v1013, 2026-10-01 16:50 UTC, WITH STUDIO HOLDING EXACTLY 2f01cd4 — SEE THE 2026-10-02 SECRET ENTRY; STUDIO PLAY ON THE THROWAWAY TEST STORE, DESKTOP ONLY — NO PHONE EMULATION, NO PHYSICAL PHONE)
 
 **Proposed and approved** (the owner, 2026-10-01): five desktop slots + BAG, four phone slots + BAG; slot 5 the
 previous plant/pod; bat and trap on the phone belt with the chooser kept; empty slots barely visible, positions and
