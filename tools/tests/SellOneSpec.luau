@@ -259,6 +259,13 @@ local ok, err = pcall(function()
 				return 1
 			end,
 		},
+		-- The Rain event's factor (2026-10-02), neutral for the same reason:
+		-- a sale is not production. RainEventSpec checks it never reaches one.
+		WeatherService = {
+			IncomeFactor = function()
+				return 1
+			end,
+		},
 		Metrics = {
 			income = function() end,
 		},

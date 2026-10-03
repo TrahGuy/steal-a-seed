@@ -50,6 +50,8 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+-- A pod's size word and colour (a Secret has neither a size nor a word here).
+local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local FloatingSign = require(Shared:WaitForChild("FloatingSign"))
 local Notice = require(Shared:WaitForChild("Notice"))
@@ -433,8 +435,14 @@ local function show(payload: { [string]: any })
 	local character = player.Character
 	local held = if character then character:FindFirstChildOfClass("Tool") else nil
 	picturePod(held, tier)
-	sizeLabel.Text = string.format('<font color="%s">%s</font>  •  ???',
-		hex(SeedData.ColorForTier(tier)), string.upper(SeedData.TierName(tier)))
+	-- A Secret pod has no size tier (2026-10-02), and this panel never names a
+	-- rarity: for it, the question alone. Every other pod reads as it did.
+	local heldId = if held then held:GetAttribute("SpeciesId") else nil
+	local sizeWord = PlantInfo.SizeWord(heldId, tier)
+	sizeLabel.Text = if sizeWord
+		then string.format('<font color="%s">%s</font>  •  ???',
+			hex(PlantInfo.SizeColour(heldId, tier)), string.upper(sizeWord))
+		else string.format('<font color="%s">???</font>', hex(PlantInfo.SizeColour(heldId, tier)))
 	offerLabel.Text = GameConfig.sacrificeOffer(multiplier, seconds)
 	warnLabel.Text = string.format("The pod is destroyed for good. The pedestal recharges for %s.",
 		GameConfig.sacrificeSpan(cooldown))

@@ -97,7 +97,32 @@ export type Held = {
 	-- past banking, where the pod stops being on the road at all.
 	--==========================================================================
 	guardianAbandoned: boolean?,
+	--==========================================================================
+	-- WHICH SECRET ENCOUNTER THIS POD IS (2026-10-01)
+	--
+	-- Set on a pod NestService spawned at a secret spot, and carried through
+	-- every drop, re-take, confiscation and return exactly like `fromNest`, so
+	-- the nest can tell the one pod of an encounter from any rebuild of it and
+	-- never raises a second platform or a second pod for it. Mirrored onto the
+	-- carried model and the loose pod as the `SecretId` attribute. Ends when the
+	-- pod leaves the road: banked, forfeited, or cleared at dusk.
+	--==========================================================================
+	secretId: string?,
+	--==========================================================================
+	-- WHICH WEATHER EVENT LAID THIS POD (2026-10-02)
+	--
+	-- Set on a pod the Rain event's nest laid (NestService's event nest, the
+	-- `EventId` attribute), and carried through every drop and re-take exactly
+	-- like `fromNest`, so the pod on the ground is still that event's: the
+	-- event's own cleanup finds it and dusk leaves it alone while the event
+	-- runs. Gone at banking, where the pod stops being on the road.
+	--==========================================================================
+	eventId: number?,
 }
+
+-- The attribute a Rain event pod carries, on the nest, in the arms and on the
+-- ground: the event's id (the value of GameConfig.Weather.Attributes.EventId).
+local EVENT_ID = "EventId"
 
 local carried: { [Player]: Held } = {}
 -- Every carrier's travel budget; see CarryGuard and checkCarrier.
@@ -158,9 +183,59 @@ function CarryService.IsCarrying(player: Player): boolean
 	return carried[player] ~= nil
 end
 
+--==============================================================================
+-- INTO FREE HANDS, OR NOT AT ALL (2026-10-02)
+--
+-- The hatch's delayed equip, as one function the admin console's EQUIP NOW asks
+-- too. Never over a raid pod (two channels, one pair of hands), never over
+-- anything already in the hands -- that was the player's choice, and nothing
+-- is ever unequipped for this -- and never on a body that is gone. A refusal
+-- leaves the Tool in the Backpack, where the hotbar and the Bag show it, and
+-- the reason rides back: NO_TOOL, NO_CHARACTER, CARRYING, HANDS_FULL or FAILED.
+--==============================================================================
+function CarryService.EquipIfFree(player: Player, tool: Tool): (boolean, string?)
+	if tool.Parent == nil or tool.Parent ~= player:FindFirstChildOfClass("Backpack") then
+		return false, "NO_TOOL"
+	end
+	local character = player.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if not (character and humanoid) or humanoid.Health <= 0 then
+		return false, "NO_CHARACTER"
+	end
+	if CarryService.IsCarrying(player) then
+		return false, "CARRYING"
+	end
+	if character:FindFirstChildOfClass("Tool") then
+		return false, "HANDS_FULL"
+	end
+	local ok = pcall(function()
+		humanoid:EquipTool(tool)
+	end)
+	if not ok or tool.Parent ~= character then
+		return false, "FAILED"
+	end
+	return true, nil
+end
+
 function CarryService.TotalKg(player: Player): number
 	local held = carried[player]
 	return if held then held.tier else 0
+end
+
+--==============================================================================
+-- A MOVE THE SERVER MADE (2026-10-02)
+--
+-- The Rain event puts a carrier back on the island when its biome closes. The
+-- travel budget would read that as a teleport and put them back on terrain
+-- that is about to go, so the mover says so here: the guard is re-anchored at
+-- the new spot with no slack, exactly as a correction leaves it. Nothing else
+-- about the carry changes -- the pod is still in their arms.
+--==============================================================================
+function CarryService.NoteServerMove(player: Player, at: Vector3)
+	local state = guards[player]
+	if state then
+		CarryGuard.reset(state, at)
+	end
 end
 
 function CarryService.RefreshWalkSpeed(player: Player)
@@ -182,7 +257,23 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	-- Written only on a real change: this runs on every carry event and every
 	-- respawn, and an unchanged attribute rewritten is replication for nothing.
 	--==========================================================================
-	local multiplier = GameConfig.carryMultiplierFor(CarryService.TotalKg(player))
+	--==========================================================================
+	-- POD 3 IS HALF SPEED, EXACTLY (the owner's rule, 2026-10-02)
+	--
+	-- An UNBANKED Thunderstorm pod in the arms -- the raid carry, never the bag
+	-- -- makes the multiplier exactly its species' CarrySpeedFactor (0.5) IN
+	-- PLACE OF the ordinary weight multiplier, never on top of it. Everything
+	-- below still applies after it as it does to everybody: a trap's slow, Walk
+	-- Mode's cap, a mill, the obby. Nothing is stored: banking, a drop, a death
+	-- or any carry ending clears `carried` and refreshes, and the earned speed
+	-- comes straight back. The ordinary multiplier is untouched for every other
+	-- pod (its tier/weight conversion is a separate, deferred question).
+	--==========================================================================
+	local held = carried[player]
+	local factor = if held then (held.species :: any).CarrySpeedFactor else nil
+	local multiplier = if type(factor) == "number" and factor > 0 and factor <= 1
+		then factor
+		else GameConfig.carryMultiplierFor(CarryService.TotalKg(player))
 	if player:GetAttribute(ATTR.CarrySpeedMultiplier) ~= multiplier then
 		player:SetAttribute(ATTR.CarrySpeedMultiplier, multiplier)
 	end
@@ -319,7 +410,13 @@ end
 
 -- Where a pod sits relative to a HumanoidRootPart. One function, so the raid
 -- carry and the banked Tool cannot drift into two different grips.
-local function gripFor(tier: number): CFrame
+local function gripFor(tier: number, species: SeedData.Species?): CFrame
+	-- A secret (SeedData Carry = "overhead") rides over the head in both hands:
+	-- its BASE a quarter-stud above the raised hands, nothing in front of the
+	-- chest. Its PrimaryPart is at its base for exactly this (SecretModel).
+	if species and (species :: any).Carry == "overhead" then
+		return CFrame.new(0, GameConfig.Carry.OverheadLift, 0)
+	end
 	-- -Z is forward in a root's frame. Offset by the pod's OWN RADIUS, because
 	-- pods are 1.3 to 10 studs across: a fixed offset either buries a heavy one
 	-- in the ribs or leaves a light one hovering clear of the hands.
@@ -338,7 +435,7 @@ end
 -- either buries a heavy one in the ribs or leaves a light one hovering a stud
 -- clear of the hands.
 --==============================================================================
-local function attachInFront(model: Model, root: BasePart, tier: number)
+local function attachInFront(model: Model, root: BasePart, tier: number, species: SeedData.Species?)
 	local primary = model.PrimaryPart
 	if not primary then
 		return
@@ -357,7 +454,7 @@ local function attachInFront(model: Model, root: BasePart, tier: number)
 			end
 		end
 	end
-	local grip = gripFor(tier)
+	local grip = gripFor(tier, species)
 	primary.CFrame = root.CFrame * grip
 	local weld = Instance.new("Weld")
 	weld.Name = "CarryWeld"
@@ -650,7 +747,11 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	-- and letting somebody scoop it at 00:00 would be a free pod for standing in
 	-- the right place rather than for making the run.
 	--==========================================================================
-	if not GameConfig.isDay() then
+	--
+	-- A RAIN EVENT'S POD IS THE ONE EXCEPTION (2026-10-02): the event runs on
+	-- the owner's clock, its biome is not the road and dusk neither closes nor
+	-- clears it, so its pods stay takeable for as long as the event lays them.
+	if not GameConfig.isDay() and not CarryService.IsLiveEventPod(pod) then
 		return refuseTake(player, pod, "NIGHT")
 	end
 	-- THE SERVER IS THE AUTHORITY. The client hides the prompt while you are
@@ -809,6 +910,12 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 	local pickupCue = pod:GetAttribute("PickupSound")
 	-- Only ever on a loose pod. A nest pod is always a fresh attempt.
 	local abandoned = pod:GetAttribute(ATTR.GuardianAbandoned) == true
+	-- A secret encounter's identity rides with its pod (see Held.secretId).
+	local secretAttr = pod:GetAttribute("SecretId")
+	local secretId: string? = if type(secretAttr) == "string" then secretAttr else nil
+	-- So does a Rain event's (Held.eventId).
+	local eventAttr = pod:GetAttribute(EVENT_ID)
+	local eventId: number? = if type(eventAttr) == "number" then eventAttr else nil
 
 	-- A NEST theft (not a dropped pod picked back up) is what starts a raid for
 	-- the launch analytics; read now, before the pod is gone.
@@ -831,7 +938,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 			-- destroyed instance happens to work today and is not something to
 			-- build on.
 			if fromNest then
-				NestService.Provoke(fromNest, player)
+				NestService.Provoke(fromNest, player, secretId)
 			end
 		end
 	end
@@ -846,12 +953,18 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		-- that used to be on this line asserted away exactly the nil that was
 		-- destroying pods.
 		local model = CreatureModel.BuildPod(taken, takenTier, root.CFrame, character)
-		attachInFront(model, root, takenTier)
+		attachInFront(model, root, takenTier, taken)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
 		if abandoned then
 			model:SetAttribute(ATTR.GuardianAbandoned, true)
+		end
+		if secretId then
+			model:SetAttribute("SecretId", secretId)
+		end
+		if eventId then
+			model:SetAttribute(EVENT_ID, eventId)
 		end
 		carried[player] = {
 			species = taken,
@@ -860,6 +973,8 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 			fromNest = fromNest,
 			reservedFor = reservedFor,
 			guardianAbandoned = abandoned,
+			secretId = secretId,
+			eventId = eventId,
 		}
 	end)
 
@@ -871,9 +986,17 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		carried[player] = nil
 		local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
 		if map then
-			spawnLoose(taken, takenTier,
+			local loose = spawnLoose(taken, takenTier,
 				CFrame.new(anchor.Position + Vector3.new(0, 1, 0)), map,
 				nil, nil, nil, abandoned)
+			-- A secret keeps its encounter on the way back to the ground, and an
+			-- event pod its event.
+			if secretId then
+				loose:SetAttribute("SecretId", secretId)
+			end
+			if eventId then
+				loose:SetAttribute(EVENT_ID, eventId)
+			end
 		end
 		return false
 	end
@@ -948,8 +1071,16 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 		-- Still theirs on the floor. A dropped ordinary pod is fair game and
 		-- stays that way; a dropped RESERVED one keeps its owner, so the run
 		-- back for it is a recovery rather than a race.
-		spawnLoose(held.species, held.tier, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
+		local loose = spawnLoose(held.species, held.tier, CFrame.new(ground + Vector3.new(0, 0.05, 0)),
 			map, held.fromNest, held.reservedFor, nil, held.guardianAbandoned)
+		-- The encounter's identity stays with the pod on the ground, and so
+		-- does the weather event that laid it.
+		if held.secretId then
+			loose:SetAttribute("SecretId", held.secretId)
+		end
+		if held.eventId then
+			loose:SetAttribute(EVENT_ID, held.eventId)
+		end
 	end
 
 	publish(player)
@@ -1040,8 +1171,18 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	-- Its weight band is still legible -- it is the colour of the shell in the
 	-- player's hands.
 	--==========================================================================
-	tool.ToolTip = if hatched
-		then string.format("%s  ·  %d tier", species.Rarity, tier)
+	-- A Secret has its rarity and no size tier (the owner's rule, 2026-10-02):
+	-- its tier is implementation-only (SeedData.SecretTier) and never shown.
+	-- A Rain pod names its POD and that pod's rarity, never the creature
+	-- inside; Pod 1 and Pod 3 have no size tier, Pod 2 shows its own.
+	local rainPod = SeedData.RainPodOf(species)
+	tool.ToolTip = if species.Secret == true
+		then (if hatched then "Secret" else "Secret pod")
+		elseif rainPod and not hatched then (if rainPod.Sized
+			then string.format("%s  ·  %s  ·  %d tier", rainPod.Name, rainPod.Rarity, tier)
+			else string.format("%s  ·  %s", rainPod.Name, rainPod.Rarity))
+		elseif hatched and SeedData.Unsized(species) then species.Rarity
+		elseif hatched then string.format("%s  ·  %d tier", species.Rarity, tier)
 		else string.format("Unhatched pod  ·  %d tier", tier)
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
@@ -1363,7 +1504,11 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- at chest level in front of you, and a 35-stud Bellchime is visibly lifted
 	-- clear of the ground rather than planted in it.
 	--==========================================================================
-	local grip = CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
+	-- A secret plant goes over the head like its pod (gripFor); every other
+	-- creature is held low in front, by its base.
+	local grip = if (species :: any).Carry == "overhead"
+		then CFrame.new(0, GameConfig.Carry.OverheadLift, 0)
+		else CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
 	-- Read as a claim, like everything that is a time: not a number, already
 	-- past, or further off than any roll runs, and there is no secret to keep.
 	local sealedUntil = tonumber(revealAt)
@@ -1441,29 +1586,17 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	--
 	-- NOTHING IS EVER UNEQUIPPED for this. A player who chose a bat during the
 	-- reveal keeps the bat.
+	-- The checks live in EquipIfFree (2026-10-02), which the admin console's
+	-- EQUIP NOW asks too: the same rules for both, unchanged here.
 	local function equipNow()
-		if tool.Parent ~= player:FindFirstChildOfClass("Backpack") then
-			return
-		end
-		local character = player.Character
-		local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
-		if not humanoid or humanoid.Health <= 0 then
-			return
-		end
-		if CarryService.IsCarrying(player) then
-			return
-		end
-		-- Something else is already in their hands, and it was their choice.
-		if character:FindFirstChildOfClass("Tool") then
-			return
-		end
-		pcall(function()
-			humanoid:EquipTool(tool)
-		end)
+		CarryService.EquipIfFree(player, tool)
 	end
 
 	local wait = tonumber(equipAfter) or 0
-	if wait > 0 then
+	if wait < 0 then
+		-- Not equipped at all: into the Bag only. The admin console's grant with
+		-- EQUIP NOW off (2026-10-02) is the only caller that asks for this.
+	elseif wait > 0 then
 		task.delay(wait, equipNow)
 	else
 		local character = player.Character
@@ -1529,7 +1662,7 @@ local function bank(player: Player): boolean
 	-- that one is welded to a head and unanchored, and a Tool wants a part named
 	-- Handle that it owns outright.
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false)
 	if not tool then
 		return false
 	end
@@ -1544,6 +1677,11 @@ local function bank(player: Player): boolean
 	-- derivable from its weight, but having two ways to answer one question is
 	-- how the arms and the object drift apart.
 	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
+	-- A secret banked is a secret encounter over: the spot and its platform
+	-- are free again (NestService).
+	if held.secretId then
+		pcall(NestService.SecretResolved, held.secretId, "banked by " .. player.Name)
+	end
 
 	-- Consumed, not dropped: it is in the hotbar now, not on the floor.
 	if held.model.Parent then
@@ -1619,6 +1757,10 @@ function CarryService.ForfeitCarry(player: Player, why: string?): (string?, numb
 	local held = takeAway(player)
 	if not held then
 		return nil, 0
+	end
+	-- A forfeited secret leaves the road for good: the encounter is over.
+	if held.secretId then
+		pcall(NestService.SecretResolved, held.secretId, "forfeited: " .. (why or "nightfall"))
 	end
 	log(string.format("%s forfeited a %d tier %s: %s.", player.Name, held.tier, held.species.Name,
 		why or "caught inside a biome at nightfall"))
@@ -1732,6 +1874,31 @@ function CarryService.SpawnLoose(speciesId: string, tier: number, at: CFrame,
 		return nil
 	end
 	return spawnLoose(species, tier, at, map, fromNest, reservedFor, keep, abandoned)
+end
+
+--==============================================================================
+-- A RAIN EVENT'S PODS ON THE GROUND (2026-10-02)
+--
+-- `IsLiveEventPod`: the pod was laid by the weather event that is running NOW
+-- (its EventId is the workspace's), which is what dusk and the dark rule ask.
+-- `ClearEventPods`: the event's own cleanup -- every loose pod of that event,
+-- wherever it lies, goes with it. A pod in somebody's ARMS is never in this set
+-- (CarriedPod, not SeedPod); the evacuation banks it at the landing first.
+--==============================================================================
+function CarryService.IsLiveEventPod(pod: Instance): boolean
+	local id = pod:GetAttribute(EVENT_ID)
+	return type(id) == "number" and id == workspace:GetAttribute(GameConfig.Weather.Attributes.EventId)
+end
+
+function CarryService.ClearEventPods(eventId: number): number
+	local removed = 0
+	for _, pod in ipairs(CollectionService:GetTagged(GameConfig.Tags.SeedPod)) do
+		if pod.Parent and pod:GetAttribute(EVENT_ID) == eventId and pod:GetAttribute("NestId") == nil then
+			pod:Destroy()
+			removed += 1
+		end
+	end
+	return removed
 end
 
 -- Who a pod belongs to, or nil for the ordinary kind everybody may take.
@@ -2355,7 +2522,7 @@ local function givePodTool(player: Player, species: SeedData.Species, tier: numb
 		return nil
 	end
 	local pod = CreatureModel.BuildPod(species, tier, CFrame.new(), backpack)
-	local tool = giveTool(player, pod, species, tier, gripFor(tier), false)
+	local tool = giveTool(player, pod, species, tier, gripFor(tier, species), false)
 	if not tool then
 		return nil
 	end
@@ -2685,6 +2852,11 @@ function CarryService.Start()
 		RefreshWalkSpeed = CarryService.RefreshWalkSpeed,
 		-- So NestService's LoadCharacter cannot record the empty Backpack it makes.
 		FreezeHeld = CarryService.FreezeHeld,
+		-- So a guardian knows a secret encounter's pod in a thief's arms.
+		CarriedSecret = function(player: Player): string?
+			local held = carried[player]
+			return if held then held.secretId else nil
+		end,
 		-- So a guardian remembers a thief only while they still carry its pod.
 		CarriedFrom = function(player: Player): string?
 			local held = carried[player]
@@ -2769,6 +2941,13 @@ function CarryService.Start()
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(watch))
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player)
 		forget(player)
+		-- A pod carried out of the server goes with the character, as it always
+		-- has. A SECRET's encounter ends with it, so its platform does not wait
+		-- for dusk over an empty spot.
+		local leaving = carried[player]
+		if leaving and leaving.secretId then
+			pcall(NestService.SecretResolved, leaving.secretId, player.Name .. " left the server carrying it")
+		end
 		carried[player] = nil
 		guards[player] = nil
 		guardEnded[player] = nil

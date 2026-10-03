@@ -143,6 +143,10 @@ export type Input = {
 	-- How far the clock, the notice band and the tutorial banner come down --
 	-- set for the inner solve of a TV answer, nil otherwise.
 	lift: number?,
+	-- THE RAIN EVENT IS PAYING (2026-10-02): measure reads it off the server's
+	-- attribute. True puts the rain chip over the strip and the toast line over
+	-- that; nil or false and the answer is exactly what it always was.
+	rain: boolean?,
 }
 
 export type Layout = {
@@ -177,6 +181,10 @@ export type Layout = {
 	-- an equip and under a mouse). Notices, the cash block and the equipment
 	-- column keep clear of it as they do of the strip.
 	namePopup: Rect,
+	-- THE RAIN CHIP (WeatherUI, 2026-10-02): "+25% INCOME · time", just over the
+	-- name band, only while the Rain event pays (Input.rain). Notices keep clear
+	-- of it: the toast line steps up over it. Nil while no rain falls.
+	rain: Rect?,
 
 	-- The cash block as a group (its reserved width), and its root frame.
 	cash: Rect,
@@ -534,6 +542,8 @@ local CONFIG = {
 	-- step (ActionToastUI) -- rather than the old one-line pill. Older notices
 	-- stand above it; see THE NOTICE STACK.
 	Toast = { Width = 340, Height = 52, MinWidth = 200 },
+	-- The rain chip's line, per mode (THE RAIN CHIP).
+	Rain = { Desktop = Vector2.new(240, 24), Compact = Vector2.new(200, 22), Phone = Vector2.new(170, 20) },
 	-- On a phone it stands right under the clock instead, the plate drawn at
 	-- PhoneScale inside the same 196 x 44 touch area (TELEPORT TO PLOT ON A PHONE).
 	Teleport = { Size = Vector2.new(196, 44), PhoneScale = 0.75 },
@@ -864,6 +874,44 @@ local function clockRect(input: Input, L: Layout): Rect?
 end
 
 --==============================================================================
+-- THE RAIN CHIP (2026-10-02)
+--
+-- "+25% INCOME · time" while the Rain event pays (WeatherUI): one small
+-- transparent line centred over the strip, just above its name band, and the
+-- toast line steps up over it so a notice never lands on it. Nil -- and nothing
+-- else moves -- while no rain falls, which is what `input.rain` says. Where
+-- something that shares its columns stands in its row (a lifted cash block in a
+-- narrow window), it steps up over that too.
+--==============================================================================
+local function rainOver(input: Input, hotbar: Rect, band: Rect, size: Vector2, beside: { Rect }?): Rect?
+	if not input.rain then
+		return nil
+	end
+	local G = CONFIG.Gap
+	local x = hotbar.x + hotbar.w / 2 - size.X / 2
+	local chip = rect(x, band.y - G - size.Y, size.X, size.Y)
+	if beside then
+		for _ = 1, 3 do
+			local lifted = false
+			for _, other in ipairs(beside) do
+				if other.w > 0 and HudLayout.gap(chip, other) < G then
+					chip = rect(x, other.y - G - size.Y, size.X, size.Y)
+					lifted = true
+				end
+			end
+			if not lifted then
+				break
+			end
+		end
+	end
+	return chip
+end
+
+local function withRain(band: Rect, rain: Rect?): Rect
+	return if rain then HudLayout.union(band, rain) else band
+end
+
+--==============================================================================
 -- THE TOAST: ONE LINE ABOVE THE BELT
 --
 -- Centred on the belt, 8 px over it, and as wide as 340 allows between
@@ -1185,6 +1233,7 @@ local function desktop(input: Input): Layout
 	local height = HudLayout.hotbarHeight()
 	local hotbar = rect(sw / 2 - width / 2, sh - HOT.BottomGap - height, width, height)
 	local band = HudLayout.hotbarBand(hotbar)
+	local rain = rainOver(input, hotbar, band, CONFIG.Rain.Desktop, nil)
 
 	-- Beside the hotbar where the whole reservation fits; above it (and its
 	-- name band) where not.
@@ -1264,7 +1313,8 @@ local function desktop(input: Input): Layout
 		HudLayout.union(HudLayout.union(index, shop), HudLayout.union(settings, walk)),
 		HudLayout.union(garden, bag), equipment,
 	})
-	L.toast = toastAbove(sw, band, { cash, equipment })
+	L.rain = rain
+	L.toast = toastAbove(sw, withRain(band, rain), { cash, equipment })
 	-- ON A TV ONLY: the notice band and TELEPORT TO PLOT under it came down
 	-- (`lift`), so the tutorial banner keeps 8 px under the button, as compact's
 	-- always has. The desktop's 84 is not touched.
@@ -1527,7 +1577,9 @@ local function compact(input: Input): Layout
 	})
 	-- The tutorial banner keeps 8 px under the teleport button as well as the rows.
 	L.banner, L.skip = bannerIn(sw, math.max(railBottom, L.teleport.y + L.teleport.h), beside)
-	L.toast = toastAbove(sw, band, beside)
+	local rain = rainOver(input, hotbar, band, CONFIG.Rain.Compact, beside)
+	L.rain = rain
+	L.toast = toastAbove(sw, withRain(band, rain), beside)
 	L.fits = L.fits and #HudLayout.problems(L) == 0
 	L.obby, L.obbyWide = obbyBeside(input, L)
 	L.biomes, L.biomesWide = biomesBeside(input, L)
@@ -2038,6 +2090,18 @@ local function sidebars(input: Input): Layout
 		L.toast = rect(r.x, band.y, r.w, T.Height)
 		L.toastTop = true
 	end
+	-- The rain chip over the belt's name band, clear of the thumbs, the cash
+	-- block and the equipment panel. The notices are in the column, not here.
+	do
+		local around: { Rect } = { L.cash, L.equipment }
+		if L.thumb then
+			table.insert(around, L.thumb)
+		end
+		if L.jump then
+			table.insert(around, L.jump)
+		end
+		L.rain = rainOver(input, L.hotbar, HudLayout.hotbarBand(L.hotbar), CONFIG.Rain.Phone, around)
+	end
 	return L
 end
 
@@ -2082,7 +2146,7 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 			dock = HudLayout.union(dock, indexBadge)
 			right = HudLayout.union(right, gardenBadge)
 		end
-		return {
+		local phoneList: { Group } = {
 			{ name = "rail", rect = L.walk },
 			{ name = "dock", rect = dock },
 			{ name = "handle", rect = handle },
@@ -2091,6 +2155,10 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 			{ name = "hotbar", rect = L.hotbar },
 			{ name = "cash", rect = L.cash },
 		}
+		if L.rain then
+			table.insert(phoneList, { name = "rain", rect = L.rain })
+		end
+		return phoneList
 	end
 	local rail = HudLayout.union(HudLayout.union(L.index, L.shop),
 		HudLayout.union(L.settings, L.walk))
@@ -2107,6 +2175,11 @@ function HudLayout.groups(L: Layout, withBadges: boolean?): { Group }
 		{ name = "hotbar", rect = L.hotbar },
 		{ name = "cash", rect = L.cash },
 	}
+	-- The rain chip, while it rains: a group of its own, so the notice stack
+	-- (noticeStack) and every clearance check keep off it.
+	if L.rain then
+		table.insert(list, { name = "rain", rect = L.rain })
+	end
 	return list
 end
 
@@ -2242,6 +2315,7 @@ local function tenFoot(input: Input, tv: TenFootInput): Layout
 	L.equipment = shifted(L.equipment, dx, dy)
 	L.hotbar = shifted(L.hotbar, dx, dy)
 	L.namePopup = shifted(L.namePopup, dx, dy)
+	L.rain = shiftedMaybe(L.rain, dx, dy)
 	L.cash = shifted(L.cash, dx, dy)
 	L.cashRoot = shifted(L.cashRoot, dx, dy)
 	L.thumb = shiftedMaybe(L.thumb, dx, dy)
@@ -2873,6 +2947,9 @@ function HudLayout.measure(gui: ScreenGui, cashWidth: number?): Input
 		viewport = if camera then camera.ViewportSize else nil,
 		topbar = rect(bar.Min.X, bar.Min.Y, bar.Width, bar.Height),
 		insetTop = insetTop,
+		-- The Rain event's own attribute (WeatherService): the chip is placed
+		-- and the toast lifted only while it rains.
+		rain = workspace:GetAttribute(GameConfig.Weather.Attributes.State) ~= nil,
 	}
 	-- A gui UIKit has scaled for a TV answers in its own logical units; every
 	-- other gui -- every desktop, every phone -- gets `input` untouched. ON A TV

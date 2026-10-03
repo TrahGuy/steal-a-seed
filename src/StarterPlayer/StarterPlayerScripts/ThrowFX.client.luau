@@ -1063,10 +1063,13 @@ local function onThrown(dir: Vector3, speed: number, lift: number, clear: number
 		-- preference and give it back to them at the end.
 		--==================================================================
 		if not pristine then
+			-- A secret carry (SecretCarryCamera) may be holding the zoom floor up
+			-- at this moment; the numbers it saved on the player are the player's
+			-- own, and those are what a throw must give back.
 			pristine = {
 				mode = player.CameraMode,
-				min = player.CameraMinZoomDistance,
-				max = player.CameraMaxZoomDistance,
+				min = tonumber(player:GetAttribute("SeedCarryCamMin")) or player.CameraMinZoomDistance,
+				max = tonumber(player:GetAttribute("SeedCarryCamMax")) or player.CameraMaxZoomDistance,
 			}
 		end
 		local kept = pristine :: Pristine

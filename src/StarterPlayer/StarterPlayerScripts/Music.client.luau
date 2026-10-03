@@ -104,6 +104,32 @@ local tracks: { string } = usable(MUSIC.Tracks)
 -- nothing wrong with a world that has one bed.
 --==============================================================================
 local nightTracks: { string } = usable((MUSIC :: any).NightTracks)
+--==============================================================================
+-- AND A THIRD, WHILE THE RAIN FALLS (2026-10-02)
+--
+-- Music.RainTracks for a Rain or a Thunderstorm -- the server's weather State
+-- "opening" or "active", the same reading Weather.client takes -- ahead of night
+-- and day. Read off the attribute, so a late joiner starts on it.
+--
+-- ONLY WHILE IT CAN PLAY. A probe preloads the id (at start, and again when an
+-- event begins after a failed answer); until it has answered the track is tried,
+-- and a no puts the day/night bed straight back. An id this experience cannot
+-- use must never turn the music into silence for the length of a storm.
+--==============================================================================
+local rainTracks: { string } = usable((MUSIC :: any).RainTracks)
+local WEATHER_STATE = GameConfig.Weather.Attributes.State
+local rainOk: boolean? = nil
+local PROBE_NAME = "SeedMusicRainProbe"
+for _, stale in ipairs(SoundService:GetChildren()) do
+	if stale.Name == PROBE_NAME then
+		stale:Destroy()
+	end
+end
+
+local function rainFalling(): boolean
+	local state = Workspace:GetAttribute(WEATHER_STATE)
+	return state == "opening" or state == "active"
+end
 
 if #tracks == 0 then
 	warn("[Seed/Music] No ids in GameConfig.Music.Tracks, so there is no music. "
@@ -184,6 +210,10 @@ local current: { string } = tracks
 -- No remote, no clock of this script's own, and nothing to drift.
 --==============================================================================
 local function listFor(): { string }
+	-- The rain first: a storm at night is still a storm.
+	if #rainTracks > 0 and rainOk ~= false and rainFalling() then
+		return rainTracks
+	end
 	if #nightTracks > 0
 		and Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then
 		return nightTracks
@@ -256,7 +286,12 @@ local function applyPhase()
 	end
 	swap += 1
 	local token = swap
-	local half = math.max(0.15, (tonumber((MUSIC :: any).PhaseFadeSeconds) or 3.0) * 0.5)
+	-- The rain's bed comes and goes over its own, gentler fade; dusk and dawn
+	-- keep the sky's.
+	local seconds = if want == rainTracks or current == rainTracks
+		then tonumber((MUSIC :: any).RainFadeSeconds) or 4.0
+		else tonumber((MUSIC :: any).PhaseFadeSeconds) or 3.0
+	local half = math.max(0.15, seconds * 0.5)
 	fadeSound(0, half)
 	task.delay(half, function()
 		if swap ~= token or not sound.Parent then
@@ -268,6 +303,43 @@ local function applyPhase()
 end
 
 Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(applyPhase)
+
+-- The rain's probe: one preload of the id, its answer kept, the bed re-chosen.
+local probing = false
+local function probeRain()
+	if #rainTracks == 0 or probing then
+		return
+	end
+	probing = true
+	task.spawn(function()
+		local probe = Instance.new("Sound")
+		probe.Name = PROBE_NAME
+		probe.SoundId = rainTracks[1]
+		probe.Volume = 0
+		probe.Parent = SoundService
+		pcall(function()
+			ContentProvider:PreloadAsync({ probe })
+		end)
+		local loaded = probe.IsLoaded
+		probe:Destroy()
+		probing = false
+		if not loaded and rainOk ~= false then
+			warn(string.format("[Seed/Music] The rain bed %s did not load, so the day/night bed plays "
+				.. "through the weather. An audio asset has to be usable by this experience AND have "
+				.. "cleared moderation.", rainTracks[1]))
+		end
+		rainOk = loaded
+		applyPhase()
+	end)
+end
+
+Workspace:GetAttributeChangedSignal(WEATHER_STATE):Connect(function()
+	if rainOk == false and rainFalling() then
+		probeRain()
+	end
+	applyPhase()
+end)
+probeRain()
 
 -- Through SoundKit rather than a tween of its own. The chase duck and the
 -- settings panel move this bus too, and all three have to aim at one number:

@@ -132,10 +132,41 @@ type Nest = {
 	--==========================================================================
 	sample: GuardianPursuit.Sample?,
 	thieves: { [Player]: number },
+	--==========================================================================
+	-- THE SECRET ENCOUNTER (2026-10-01)
+	--
+	-- `secret` is the one encounter this nest may host at a time: its id rides
+	-- on the pod through every rebuild (CarryService Held.secretId), so a drop, a
+	-- re-take, a confiscation and a return are all the same pod and never a
+	-- second platform or a second pod. Nil until the roll spawns one; nil again
+	-- when the pod leaves the road (banked, forfeited) or dusk clears it.
+	--
+	-- `marked` is who this encounter is about: a thief who took the secret, or
+	-- was caught carrying it and not relieved of it. A marked thief is chased
+	-- whether or not they still carry anything -- "abandoning the pod must not
+	-- abandon the thief" (the owner, 2026-10-01) -- until the usual exits:
+	-- safety, death, leaving, the leash, the nest lying down. The guardian runs
+	-- the biome's secret numbers (BiomeData Secret) after a marked target.
+	--==========================================================================
+	secret: Secret?,
+	marked: { [Player]: boolean },
 	-- How far its colliding body reaches from its root on the ground plane:
 	-- what a wall has to be cleared by on the way home. Measured once, on the
 	-- first walk home (bodyReach).
 	reach: number?,
+	--==========================================================================
+	-- THE RAIN EVENT'S NEST (2026-10-02; OpenEventNest). Nil on every road nest.
+	--
+	-- `event` is the weather event it was raised for: its pods carry that id
+	-- (EventId) and nothing restocks, clears or resets it but the event itself.
+	-- `route` is its walk home -- the temporary biome's rooms from the entrance
+	-- in, its own sleeping spot last -- in place of the road's mouth; `setDown`
+	-- is where a body thrown out of the world is put back, in place of a road
+	-- gate.
+	--==========================================================================
+	event: number?,
+	route: { Vector3 }?,
+	setDown: Vector3?,
 }
 
 --==============================================================================
@@ -157,6 +188,18 @@ type Haul = {
 	-- the haul -- an invisible pod still gets home.
 	model: Model?,
 	since: number,
+	-- A confiscated SECRET goes back to its spot, not into a ring slot.
+	secretId: string?,
+}
+
+type Secret = {
+	id: string,
+	speciesId: string,
+	-- The pod standing on the spot, or nil while it is in somebody's arms, on
+	-- the road or in a guardian's fist.
+	pod: Model?,
+	platform: Folder?,
+	spawnedAt: number,
 }
 
 local nests: { Nest } = {}
@@ -202,6 +245,8 @@ type CarryBridge = {
 	-- Which nest the pod in this player's arms came off, or nil when they carry
 	-- nothing from any nest. Decides who is still a thief worth remembering.
 	CarriedFrom: ((Player) -> string?)?,
+	-- Which secret encounter the pod in this player's arms belongs to, or nil.
+	CarriedSecret: ((Player) -> string?)?,
 }
 
 type CombatBridge = {
@@ -335,6 +380,199 @@ local function pinToServer(nest: Nest)
 	end
 end
 
+--==============================================================================
+-- THE SECRET POD -- 2026-10-01
+--
+-- Greenhollow and Starbloom each have one secret (SeedData.SecretByBiome): a
+-- pod the owner inserted by hand, at its authored size, standing on a dedicated
+-- spot ACROSS THE ROAD from the nest on a platform in the biome's colours. It is
+-- an ADDITION to the ring: the ring's own pods, rolls and slots are untouched.
+--
+-- ONE ROLL PER NEST, at the nest's initial stocking and at each dawn restock
+-- (StockAll), at BiomeData Secret.SpawnChance -- never per slot, per player,
+-- per frame or when a confiscated pod comes back. Skipped while the spot is
+-- occupied or the encounter unresolved, with no attempt carried over.
+--
+-- NOTHING ROLLS WHILE GameConfig.Secret.Enabled IS FALSE: the only spawn then is
+-- the Studio-only DebugService action, through NestService.SpawnSecret.
+--
+-- The platform stays until the encounter resolves -- the pod banked or
+-- forfeited (CarryService tells us), or dusk clearing the road -- including a
+-- confiscated pod walked back and stood on the spot again. Then it goes, and
+-- the ground is what it was.
+--==============================================================================
+local SECRET = GameConfig.Secret
+local secretRng = Random.new()
+local secretSerial = 0
+
+local function secretConfig(nest: Nest): BiomeData.SecretEncounter?
+	return (nest.biome :: any).Secret
+end
+
+-- The spot: across the road, SpotX from the centre line, facing the road.
+local function secretSpot(nest: Nest): CFrame
+	local cfg = secretConfig(nest)
+	local spotX = if cfg then cfg.SpotX else 42
+	local x = if nest.origin.X < 0 then spotX else -spotX
+	local at = Vector3.new(x, nest.origin.Y, nest.origin.Z)
+	return CFrame.lookAt(at, Vector3.new(0, nest.origin.Y, nest.origin.Z))
+end
+
+local function platformPart(name: string, size: Vector3, cf: CFrame, color: Color3, shape: Enum.PartType, parent: Instance): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = shape
+	part.Size = size
+	part.CFrame = cf
+	part.Color = color
+	part.Material = Enum.Material.Plastic
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Parent = parent
+	return part
+end
+
+-- A cradle in the biome's colours: a bedding disc, a lighter heart, and stones
+-- on the wall-side arc only -- nothing tall ever stands toward the racing line.
+local function buildPlatform(nest: Nest, spot: CFrame): Folder
+	local cfg = SECRET.Platform
+	local folder = Instance.new("Folder")
+	folder.Name = "SecretPlatform"
+	folder.Parent = nest.folder
+	local ground, accent, wall = nest.biome.GroundColor, nest.biome.AccentColor, nest.biome.WallColor
+	local dark = Color3.new(ground.R * 0.72, ground.G * 0.72, ground.B * 0.72)
+	local heart = Color3.new(accent.R * 0.62, accent.G * 0.62, accent.B * 0.62)
+	local at = spot.Position
+	-- A Cylinder lies along X, so it is rolled flat.
+	platformPart("Bedding", Vector3.new(cfg.Thickness, cfg.Radius * 2, cfg.Radius * 2),
+		CFrame.new(at + Vector3.new(0, cfg.Thickness * 0.5, 0)) * CFrame.Angles(0, 0, math.pi * 0.5), dark,
+		Enum.PartType.Cylinder, folder)
+	platformPart("Heart", Vector3.new(cfg.Thickness + 0.02, cfg.Radius * 1.1, cfg.Radius * 1.1),
+		CFrame.new(at + Vector3.new(0, (cfg.Thickness + 0.02) * 0.5, 0)) * CFrame.Angles(0, 0, math.pi * 0.5), heart,
+		Enum.PartType.Cylinder, folder)
+	-- Deterministic: the same nest dresses the same spot the same way.
+	local rng = Random.new(#nest.id * 31 + math.floor(math.abs(nest.origin.Z)))
+	local toWall = if at.X < 0 then -1 else 1
+	local centre = if toWall > 0 then 0 else math.pi
+	local r = cfg.Radius - 2.4
+	for i = 1, cfg.Stones do
+		local a = centre + (-1 + 2 * (i - 0.5) / cfg.Stones) * math.rad(70) + rng:NextNumber(-0.08, 0.08)
+		local size = Vector3.new(rng:NextNumber(2.4, 3.6), rng:NextNumber(1.4, 2.4), rng:NextNumber(2.2, 3.2))
+		local pos = Vector3.new(at.X + math.cos(a) * r, at.Y + size.Y * 0.45, at.Z + math.sin(a) * r)
+		platformPart("Stone", size, CFrame.new(pos) * CFrame.Angles(rng:NextNumber(-0.12, 0.12), a + rng:NextNumber(-0.4, 0.4), rng:NextNumber(-0.12, 0.12)),
+			wall, Enum.PartType.Block, folder)
+	end
+	return folder
+end
+
+-- The spawn toast: everybody in THIS server, once, on a fresh spawn only.
+local function announceSecret(nest: Nest)
+	local remotes = SeedGame:FindFirstChild("Remotes")
+	local remote = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
+	if remote and remote:IsA("RemoteEvent") then
+		pcall(function()
+			remote:FireAllClients("SecretSpawned", nest.biome.Id)
+		end)
+	end
+end
+
+-- The pod on the spot: the species' own pod (SecretForms), the loot tag, the
+-- nest's name, the encounter's id. The same route for a fresh spawn and for a
+-- confiscated pod walked back.
+local function standSecretPod(nest: Nest, secret: Secret): Model?
+	local species = SeedData.Get(secret.speciesId)
+	if not species then
+		return nil
+	end
+	local spot = secretSpot(nest)
+	-- At SeedData.SecretTier, the one weight every Secret has: the admin grant gives the same.
+	local pod = CreatureModel.BuildPod(species, SeedData.SecretTier,
+		spot * CFrame.new(0, SECRET.Platform.Thickness + 0.02, 0), nest.folder)
+	CollectionService:AddTag(pod, GameConfig.Tags.SeedPod)
+	pod:SetAttribute(GameConfig.Attributes.BiomeId, nest.biome.Id)
+	pod:SetAttribute("NestId", nest.id)
+	pod:SetAttribute("SecretId", secret.id)
+	for _, d in ipairs(pod:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CanQuery = true
+		end
+	end
+	secret.pod = pod
+	return pod
+end
+
+local function spawnSecret(nest: Nest, why: string): (boolean, string?)
+	local cfg = secretConfig(nest)
+	local speciesId = SeedData.SecretByBiome[nest.biome.Id]
+	if not (cfg and speciesId) then
+		return false, "no secret for " .. nest.biome.Id
+	end
+	if nest.secret then
+		return false, "the spot is taken"
+	end
+	secretSerial += 1
+	local secret: Secret = {
+		id = string.format("%s:secret:%d", nest.id, secretSerial),
+		speciesId = speciesId,
+		pod = nil,
+		platform = nil,
+		spawnedAt = os.clock(),
+	}
+	secret.platform = buildPlatform(nest, secretSpot(nest))
+	nest.secret = secret
+	if not standSecretPod(nest, secret) then
+		secret.platform:Destroy()
+		nest.secret = nil
+		return false, "unknown species " .. speciesId
+	end
+	announceSecret(nest)
+	log(string.format("%s spawned its secret %s (%s): %s.", nest.id, speciesId, secret.id, why))
+	return true, nil
+end
+
+-- The encounter is over: whatever is still on the spot goes, the platform goes,
+-- the ground is the road again, and nobody is marked for it any more.
+local function resolveSecret(nest: Nest, why: string)
+	local secret = nest.secret
+	if not secret then
+		return
+	end
+	nest.secret = nil
+	if secret.pod and secret.pod.Parent then
+		secret.pod:Destroy()
+	end
+	if secret.platform then
+		secret.platform:Destroy()
+	end
+	table.clear(nest.marked)
+	log(string.format("%s's secret %s is over: %s.", nest.id, secret.id, why))
+end
+
+local function rollSecret(nest: Nest, why: string)
+	if not SECRET.Enabled then
+		return
+	end
+	local cfg = secretConfig(nest)
+	if not cfg or nest.secret then
+		return
+	end
+	if secretRng:NextNumber() < cfg.SpawnChance then
+		spawnSecret(nest, why)
+	end
+end
+
+-- The biome's secret numbers, while the guardian is after a marked thief.
+local function secretPursuit(nest: Nest): BiomeData.SecretEncounter?
+	local cfg = secretConfig(nest)
+	local target = nest.target
+	if cfg and target and nest.marked[target] then
+		return cfg
+	end
+	return nil
+end
+
 local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 	local index = site:GetAttribute("NestIndex")
 	local folder = Instance.new("Folder")
@@ -377,11 +615,15 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		haul = nil,
 		sample = nil,
 		thieves = {},
+		secret = nil,
+		marked = {},
 	}
 	for i = 1, biome.PodsPerNest do
 		growPod(nest, i)
 	end
 	pinToServer(nest)
+	-- The one roll of the initial stocking.
+	rollSecret(nest, "the nest was stocked")
 	return nest
 end
 
@@ -416,6 +658,12 @@ end
 -- Base speed for the biome, scaled by how far short of it the thief is, plus
 -- whatever the nest is currently furious about.
 local function baseSpeedFor(nest: Nest): number
+	-- After a marked thief, the biome's secret chase speed (Greenhollow: 19
+	-- against its stated 15) -- under test, the owner's numbers.
+	local secret = secretPursuit(nest)
+	if secret and secret.ChaseSpeed then
+		return secret.ChaseSpeed
+	end
 	--==========================================================================
 	-- A BIOME MAY STATE ITS OWN CHASE SPEED, AND ONE DOES
 	--
@@ -477,16 +725,35 @@ local function chaseSpeedFor(nest: Nest, now: number): number
 	-- A stated chase speed wins over a species ramp too. No biome currently has
 	-- both -- Greenhollow's guardian has no profile -- but a future one adding a
 	-- profile must not silently un-do the override sitting in its own data.
-	local stated = tonumber((nest.biome :: any).GuardianChaseSpeed)
+	local secret = secretPursuit(nest)
+	local stated = if secret and secret.ChaseSpeed then secret.ChaseSpeed else tonumber((nest.biome :: any).GuardianChaseSpeed)
 	if stated and stated == stated and stated > 0 then
 		return stated + rage
 	end
 	local shortfall = GameConfig.parentWalkSpeedFor(rec, speedScoreOf(nest.target))
 		- GameConfig.parentWalkSpeedFor(rec)
 	local since = if nest.chaseSince > 0 then now - nest.chaseSince else 0
-	local u = math.clamp(since / math.max(prof.RampSeconds, 0.01), 0, 1)
-	return prof.OpeningSpeed + (prof.TopSpeed - prof.OpeningSpeed) * u * u
-		+ rage + shortfall
+	-- The secret encounter's ramp (Astralmaw: 86 / 104 / 2.4 s against the
+	-- profile's 78 / 96 / 3.4 s), under test.
+	local opening, top, ramp = prof.OpeningSpeed, prof.TopSpeed, prof.RampSeconds
+	if secret and secret.OpeningSpeed then
+		opening = secret.OpeningSpeed
+		top = secret.TopSpeed or top
+		ramp = secret.RampSeconds or ramp
+	end
+	local u = math.clamp(since / math.max(ramp, 0.01), 0, 1)
+	--==========================================================================
+	-- A SCALED GUARDIAN RUNS THE WHOLE OF THAT, SCALED (2026-10-02)
+	--
+	-- Stormstrider's profile is Astralmaw's with its own SpeedScale (2.5 since
+	-- 2026-10-02): the ramp, the rage and the shortfall it would have run
+	-- against this very player, all times that -- the owner's "x the Starbloom
+	-- guardian under equivalent player conditions". Every other profile has no
+	-- SpeedScale and is 1.
+	--==========================================================================
+	local scale = tonumber(prof.SpeedScale) or 1
+	return (opening + (top - opening) * u * u
+		+ rage + shortfall) * scale
 end
 
 local function returnSpeedFor(nest: Nest): number
@@ -603,7 +870,13 @@ end
 local function eligibleThief(nest: Nest, player: Player): Vector3?
 	local pos = chaseable(player)
 	if not pos then
+		-- Safety, death or leaving: the secret encounter lets go of them too.
+		nest.marked[player] = nil
 		return nil
+	end
+	-- A thief marked by the secret encounter is still one with empty hands.
+	if nest.marked[player] then
+		return pos
 	end
 	local bridge = carryBridge
 	local carriedFrom = bridge and bridge.CarriedFrom
@@ -618,7 +891,12 @@ end
 
 -- `fromNest` is true only for a pod taken out of the nest itself (TakePod); a
 -- dropped pod picked back up arrives through NestService.Provoke with false.
-local function provoke(nest: Nest, thief: Player, fromNest: boolean)
+local function provoke(nest: Nest, thief: Player, fromNest: boolean, secretId: string?)
+	-- Taking THIS nest's secret marks the thief for the encounter (see the Nest
+	-- type): the secret numbers, and a chase that outlives the pod in their arms.
+	if secretId and nest.secret and nest.secret.id == secretId then
+		nest.marked[thief] = true
+	end
 	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
 	-- second attempt has to be harder than the first.
@@ -683,7 +961,11 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean)
 		end
 		if qualifiesForHeadStart(nest, thief, fromNest) then
 			nest.state = "waking"
-			nest.stateUntil = os.clock() + P.WakeDelaySeconds
+			-- A marked thief gets the secret encounter's shorter delay (0.6 s
+			-- against 1.2), under test.
+			local cfg = secretConfig(nest)
+			local delay = if nest.marked[thief] and cfg then cfg.WakeDelaySeconds else P.WakeDelaySeconds
+			nest.stateUntil = os.clock() + delay
 		else
 			--==============================================================
 			-- UNDER-SPEED: THE DELAY IS WHAT IS TAKEN AWAY, NOT THE RULES
@@ -741,6 +1023,27 @@ function NestService.TakePod(pod: Model, thief: Player): SeedData.Species?
 	local nestId = pod:GetAttribute("NestId")
 	local slot = pod:GetAttribute("SlotIndex")
 	local speciesId = pod:GetAttribute("SpeciesId")
+	local secretId = pod:GetAttribute("SecretId")
+	--==========================================================================
+	-- THE SECRET POD, OFF ITS SPOT. Not a slot: the encounter record is what
+	-- says whether this pod is the one standing there, and the same frame-race
+	-- rule applies. Taking it marks the thief (provoke).
+	--==========================================================================
+	if type(nestId) == "string" and type(secretId) == "string" and type(speciesId) == "string" then
+		for _, nest in ipairs(nests) do
+			if nest.id == nestId then
+				local secret = nest.secret
+				if not (secret and secret.id == secretId and secret.pod == pod) then
+					return nil
+				end
+				secret.pod = nil
+				pod:Destroy()
+				provoke(nest, thief, true, secretId)
+				return SeedData.Get(speciesId)
+			end
+		end
+		return nil
+	end
 	if type(nestId) ~= "string" or type(slot) ~= "number" or type(speciesId) ~= "string" then
 		return nil
 	end
@@ -1243,6 +1546,11 @@ end
 -- The road just outside the gate of the nest's own biome, at floor height on
 -- the road's axis. The nest's Z if the lane has no Gate part.
 local function gateSpot(nest: Nest): Vector3
+	-- An off-road nest names its own (the Rain event's: its biome's entrance).
+	local own = nest.setDown
+	if own then
+		return own
+	end
 	local map = Workspace:FindFirstChild(GameConfig.Map.FolderName)
 	local lanes = map and map:FindFirstChild(GameConfig.Map.LanesFolderName)
 	local lane = lanes and lanes:FindFirstChild(nest.biome.Id)
@@ -2161,7 +2469,15 @@ local function depositHaul(nest: Nest, why: string): boolean
 
 	local placed = false
 	local species = SeedData.Get(haul.speciesId)
-	if species then
+	--==========================================================================
+	-- A CONFISCATED SECRET GOES BACK TO ITS SPOT, the platform still under it,
+	-- the same encounter id on it. Only if the encounter is still open; a
+	-- secret whose encounter ended meanwhile takes the ring like any pod.
+	--==========================================================================
+	local secret = home.secret
+	if species and haul.secretId and secret and secret.id == haul.secretId and not secret.pod then
+		placed = standSecretPod(home, secret) ~= nil
+	elseif species then
 		for index = 1, home.biome.PodsPerNest do
 			if not home.pods[index] then
 				placePod(home, index, species, haul.tier)
@@ -2243,6 +2559,7 @@ local function confiscateFrom(nest: Nest, victim: Player): boolean
 		fromNest = held.fromNest,
 		model = nil,
 		since = os.clock(),
+		secretId = held.secretId,
 	}
 	nest.haul = haul
 	attachHaul(nest, haul)
@@ -2264,6 +2581,7 @@ local function sleep(nest: Nest)
 	-- Asleep is forgetting. Anybody still remembered was chased before it got
 	-- home (the walk back takes them first), so this only drops the ineligible.
 	table.clear(nest.thieves)
+	table.clear(nest.marked)
 	-- Rage is NOT cleared here. It fades on a timer instead, because a parent
 	-- settles within a couple of seconds of throwing somebody while the pod it
 	-- was defending is still lying on the ground -- clearing on sleep made
@@ -2378,6 +2696,41 @@ local function bodyReach(nest: Nest): number
 	return reach
 end
 
+-- The next point along an off-road nest's route home: the far end of whichever
+-- leg of it the guardian stands nearest, or the leg after that once it has all
+-- but reached it. Rooms are wider than the corridors between them, so the line
+-- from anywhere on a leg to its far end stays on the floor.
+local function routeStep(route: { Vector3 }, at: Vector3): Vector3
+	local flat = Vector3.new(at.X, 0, at.Z)
+	local best, leg = math.huge, 1
+	for i = 1, #route - 1 do
+		local a = Vector3.new(route[i].X, 0, route[i].Z)
+		local ab = Vector3.new(route[i + 1].X, 0, route[i + 1].Z) - a
+		local t = math.clamp((flat - a):Dot(ab) / math.max(ab:Dot(ab), 1e-6), 0, 1)
+		local d = (a + ab * t - flat).Magnitude
+		if d < best then
+			best, leg = d, i
+		end
+	end
+	local goal = route[math.min(leg + 1, #route)]
+	if (Vector3.new(goal.X, 0, goal.Z) - flat).Magnitude < 12 and route[leg + 2] then
+		goal = route[leg + 2]
+	end
+	-- BEHIND THE ROUTE'S FIRST POINT (2026-10-02): out on the bridge, where a
+	-- chase that ran up to the safe line can carry a guardian (Stormstrider's,
+	-- at 2.5 x, covers thirty to forty-five studs a tick), it walks back to that point first
+	-- -- straight down the bridge it came up -- instead of cutting across the
+	-- mouth room's rim towards the first leg's far end.
+	if leg == 1 then
+		local a = Vector3.new(route[1].X, 0, route[1].Z)
+		local ab = Vector3.new(route[2].X, 0, route[2].Z) - a
+		if (flat - a):Dot(ab) < 0 and (a - flat).Magnitude > 12 then
+			goal = route[1]
+		end
+	end
+	return Vector3.new(goal.X, at.Y, goal.Z)
+end
+
 local function walkHome(nest: Nest): boolean
 	local home = Vector3.new(nest.origin.X, nest.root.Position.Y, nest.origin.Z)
 	if (nest.root.Position - home).Magnitude < 6 then
@@ -2385,6 +2738,13 @@ local function walkHome(nest: Nest): boolean
 	end
 	if profileOf(nest) then
 		setWalk(nest, returnSpeedFor(nest))
+	end
+	-- AN OFF-ROAD NEST WALKS ITS OWN ROUTE (the Rain event's, 2026-10-02): its
+	-- biome is not the road, and the road's mouth is not on its way home.
+	local route = nest.route
+	if route and #route >= 2 then
+		nest.humanoid:MoveTo(routeStep(route, nest.root.Position))
+		return false
 	end
 	--==========================================================================
 	-- THROUGH THE MOUTH, NEVER INTO A WALL'S END (2026-10-01)
@@ -2455,6 +2815,10 @@ local function step(nest: Nest, now: number)
 		-- Safety is safety. A parent that could be kited across the red line
 		-- would make the one promise the map makes into a lie.
 		if not pos or MapService.IsInSafeZone(pos) then
+			-- Home, dead or gone: the secret encounter lets go of them.
+			if nest.target then
+				nest.marked[nest.target] = nil
+			end
 			endChase(nest)
 			return
 		end
@@ -2476,6 +2840,10 @@ local function step(nest: Nest, now: number)
 		-- so a normal cross-biome chase never reaches it and a broken one cannot
 		-- run forever.
 		if (nest.root.Position - nest.origin).Magnitude > P.LeashStuds then
+			-- The leash is an exit for a marked thief too.
+			if nest.target then
+				nest.marked[nest.target] = nil
+			end
 			endChase(nest)
 			return
 		end
@@ -2520,8 +2888,14 @@ local function step(nest: Nest, now: number)
 		local last = nest.sample
 		local reach: number
 		local velocity: Vector3? = nil
+		-- A guardian built faster than any player (a profile's SpeedScale --
+		-- Stormstrider's 2.5) gets its OWN travel allowance widened by that
+		-- factor, so its ordinary ticks still sweep; the target's stays
+		-- MAX_TICK_TRAVEL, and every unscaled guardian is exactly as it was.
+		local sweepProf = profileOf(nest)
+		local parentTravel = MAX_TICK_TRAVEL * math.max(1, tonumber(sweepProf and sweepProf.SpeedScale) or 1)
 		if last and GuardianPursuit.sampleUsable(last, victimNow, body, parentNow, pos, now,
-			MAX_TICK_TRAVEL, SAMPLE_MAX_AGE) then
+			MAX_TICK_TRAVEL, SAMPLE_MAX_AGE, parentTravel) then
 			reach = GuardianPursuit.closestApproach(last.parentAt, parentNow, last.targetAt, pos)
 			velocity = GuardianPursuit.flat(pos - last.targetAt) / (now - last.at)
 		else
@@ -2531,6 +2905,22 @@ local function step(nest: Nest, now: number)
 		if reach <= P.GrabStuds then
 			local victim = nest.target
 			nest.busy = true
+			--==============================================================
+			-- ONE BOLT PER CATCH, AND ONLY TO LOOK AT (2026-10-02)
+			--
+			-- A profile with CatchLightning (Stormstrider) stamps where and when
+			-- this catch landed; every client draws one brief strike there
+			-- (ParentAnim). Nothing else: no damage, no stun, no second effect
+			-- -- the catch is the catch every guardian makes. Its sound is the
+			-- StormstriderStrike emit below, ONCE here per confirmed catch (the
+			-- clients' bolt is silent, so nothing plays it twice).
+			--==============================================================
+			local strikeProf = profileOf(nest)
+			if strikeProf and strikeProf.CatchLightning == true then
+				nest.parent:SetAttribute("CatchStrikeAt", pos)
+				nest.parent:SetAttribute("CatchStrikeTime", Workspace:GetServerTimeNow())
+				SoundKit.emit(GameConfig.Weather.Audio.StormstriderStrike, nest.root)
+			end
 			--==============================================================
 			-- THE HIT ENDS THE CHASE'S LAST ORDER (2026-10-01)
 			--
@@ -2597,11 +2987,36 @@ local function step(nest: Nest, now: number)
 						pcall(combat.ReleaseTrap, victim, "a guardian caught them")
 					end
 
+					-- Read BEFORE the confiscation, which empties the hands.
+					local carriedSecret: string? = nil
+					local bridge = carryBridge
+					if bridge and bridge.CarriedSecret then
+						local okSecret, id = pcall(bridge.CarriedSecret, victim)
+						carriedSecret = if okSecret and type(id) == "string" then id else nil
+					end
+
 					local tookOk, tookErr = pcall(confiscateFrom, nest, victim)
 					if tookOk then
 						took = tookErr :: any
 					else
 						warn("[Seed/NestService] confiscate failed: " .. tostring(tookErr))
+					end
+					--==========================================================
+					-- A CATCH THAT DID NOT TAKE THE SECRET (2026-10-01)
+					--
+					-- The throw's ragdoll drops the pod, as it always has, and
+					-- "POD LEFT BEHIND!" says so over the guardian's head. The
+					-- thief is NOT left behind: marked and remembered, so when
+					-- the throw is over endChase turns on them again with empty
+					-- hands, and the secret numbers hold until safety, death,
+					-- leaving or the leash.
+					--==========================================================
+					local secret = nest.secret
+					if carriedSecret and secret and secret.id == carriedSecret and not took then
+						nest.marked[victim] = true
+						nest.thieves[victim] = os.clock()
+						nest.parent:SetAttribute("LeftBehindAt", Workspace:GetServerTimeNow())
+						log(string.format("%s left the secret behind with %s and keeps after them.", nest.id, victim.Name))
 					end
 					if took then
 						--======================================================
@@ -2781,17 +3196,27 @@ end
 -- sweep without a map, a rig or a Play session. Studio-only, like SpecThrow:
 -- on a live server both return before touching anything.
 --==============================================================================
-function NestService.SpecProvoke(nest: any, thief: any, fromNest: boolean?)
+-- A record a spec built by hand predates the secret encounter's two fields;
+-- buildNest always makes them, so only these entry points fill them in.
+local function specRecord(nest: any)
+	if nest.marked == nil then
+		nest.marked = {}
+	end
+end
+
+function NestService.SpecProvoke(nest: any, thief: any, fromNest: boolean?, secretId: string?)
 	if not RunService:IsStudio() then
 		return
 	end
-	provoke(nest, thief, fromNest == true)
+	specRecord(nest)
+	provoke(nest, thief, fromNest == true, secretId)
 end
 
 function NestService.SpecStep(nest: any, now: number)
 	if not RunService:IsStudio() then
 		return
 	end
+	specRecord(nest)
 	step(nest, now)
 end
 
@@ -2820,6 +3245,11 @@ end
 function NestService.ClearForNight(): number
 	local removed = 0
 	for _, nest in ipairs(nests) do
+		-- A weather event's nest is the event's: it lays one batch and clears it
+		-- itself (CloseEventNest). Dusk is the road's.
+		if nest.event ~= nil then
+			continue
+		end
 		--======================================================================
 		-- A POD IN A GUARDIAN'S JAWS IS IN THE RING TOO
 		--
@@ -2847,6 +3277,12 @@ function NestService.ClearForNight(): number
 			end
 			nest.pods[slot] = nil
 		end
+		-- The secret goes with the batch: its pod, its platform, its marks. Dawn
+		-- is a fresh roll for the spot as for every slot.
+		if nest.secret then
+			resolveSecret(nest, "dusk")
+			removed += 1
+		end
 	end
 	return removed
 end
@@ -2870,6 +3306,10 @@ end
 function NestService.ResetParents(): number
 	local reset = 0
 	for _, nest in ipairs(nests) do
+		-- Not a weather event's guardian: dusk is the road's (see ClearForNight).
+		if nest.event ~= nil then
+			continue
+		end
 		-- A reset outside dusk must not eat a pod. At dusk ClearForNight has
 		-- already run and this finds nothing, so the night rule above still
 		-- decides what happens on a night.
@@ -2880,6 +3320,7 @@ function NestService.ResetParents(): number
 		nest.sample = nil
 		nest.target = nil
 		table.clear(nest.thieves)
+		table.clear(nest.marked)
 		nest.rage = 0
 		nest.calmSince = 0
 		nest.state = "asleep"
@@ -2906,6 +3347,10 @@ end
 function NestService.StockAll(): (number, number)
 	local built, wanted = 0, 0
 	for _, nest in ipairs(nests) do
+		-- Never a weather event's: ONE batch per event, nothing restocks it.
+		if nest.event ~= nil then
+			continue
+		end
 		for index = 1, nest.biome.PodsPerNest do
 			wanted += 1
 			if not nest.pods[index] then
@@ -2915,8 +3360,55 @@ function NestService.StockAll(): (number, number)
 				built += 1
 			end
 		end
+		-- The one roll of the restock, per nest, after its slots.
+		rollSecret(nest, "the dawn restock")
 	end
 	return built, wanted
+end
+
+--==============================================================================
+-- THE SECRET, FROM OUTSIDE
+--==============================================================================
+-- A spawn on demand, for the Studio-only debug action. The same spawn the roll
+-- makes, refused for the same reasons.
+function NestService.SpawnSecret(biomeId: string, why: string?): (boolean, string?)
+	for _, nest in ipairs(nests) do
+		if nest.biome.Id == biomeId then
+			return spawnSecret(nest, why or "asked for")
+		end
+	end
+	return false, "no nest in " .. tostring(biomeId)
+end
+
+-- CarryService says the pod left the road: banked into a Tool, or forfeited.
+function NestService.SecretResolved(secretId: string, why: string?): boolean
+	for _, nest in ipairs(nests) do
+		local secret = nest.secret
+		if secret and secret.id == secretId then
+			resolveSecret(nest, why or "resolved")
+			return true
+		end
+	end
+	return false
+end
+
+-- What is standing where, for a Studio probe and the spec: nil when no secret.
+function NestService.SecretState(biomeId: string): { id: string, onSpot: boolean, marked: number, platform: boolean }?
+	for _, nest in ipairs(nests) do
+		if nest.biome.Id == biomeId then
+			local secret = nest.secret
+			if not secret then
+				return nil
+			end
+			local marked = 0
+			for _ in pairs(nest.marked) do
+				marked += 1
+			end
+			return { id = secret.id, onSpot = secret.pod ~= nil and secret.pod.Parent ~= nil, marked = marked,
+				platform = secret.platform ~= nil and secret.platform.Parent ~= nil }
+		end
+	end
+	return nil
 end
 
 --==============================================================================
@@ -2999,6 +3491,7 @@ function NestService.Start()
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player: Player)
 		for _, nest in ipairs(nests) do
 			nest.thieves[player] = nil
+			nest.marked[player] = nil
 			local sample = nest.sample
 			if sample and sample.target == player then
 				nest.sample = nil
@@ -3162,10 +3655,11 @@ end
 -- Not a theft from the nest: a dropped pod picked back up (CarryService) or a
 -- Studio test poke (DebugService). It wakes and angers the guardian exactly as
 -- before, and never grants a below-recommendation head start.
-function NestService.Provoke(nestId: string, thief: Player): boolean
+function NestService.Provoke(nestId: string, thief: Player, secretId: string?): boolean
 	for _, nest in ipairs(nests) do
 		if nest.id == nestId then
-			provoke(nest, thief, false)
+			-- A dropped secret picked back up marks the thief as the take did.
+			provoke(nest, thief, false, secretId)
 			return true
 		end
 	end
@@ -3182,6 +3676,10 @@ end
 function NestService.PodCount(): (number, number)
 	local live, capacity = 0, 0
 	for _, nest in ipairs(nests) do
+		-- The road's: a weather event's nest is counted by EventNest.
+		if nest.event ~= nil then
+			continue
+		end
 		capacity += nest.biome.PodsPerNest
 		for _, pod in pairs(nest.pods) do
 			if pod and pod.Parent then
@@ -3193,7 +3691,225 @@ function NestService.PodCount(): (number, number)
 end
 
 function NestService.NestCount(): number
-	return #nests
+	local count = 0
+	for _, nest in ipairs(nests) do
+		if nest.event == nil then
+			count += 1
+		end
+	end
+	return count
+end
+
+--==============================================================================
+-- THE RAIN EVENT'S NEST (2026-10-02)
+--
+-- Raised by WeatherService when a weather event starts, at the temporary
+-- biome's nest, and taken down when it ends. It IS a nest -- the same record,
+-- the same tick, provoke, thief queue, contact sweep, throw and walk home -- so
+-- its guardian (Stormstrider, StormstriderModel through ParentModel) is the
+-- existing guardian system and not a second one. What differs is data:
+--
+--   biome    a stand-in "rain" biome carrying STARBLOOM'S recommendation (the
+--            owner's "equivalent Starbloom conditions": the same shortfall and
+--            the same no-head-start-below-it rule) and no Confiscate profile,
+--            so a catch throws and the pod drops by the ordinary loose-pod path
+--            for anybody to take; no secret.
+--   pods     ONE batch, rolled here on the server (SeedData.RollRainBatch:
+--            three slots each a coin flip between Pod 1 and Pod 2 for the
+--            rain, one Pod 3 for a thunderstorm; each pod's creature drawn
+--            when it is laid). Stamped with the event's id. Never restocked
+--            (StockAll), cleared at dusk (ClearForNight) or reset (ResetParents).
+--   layout   the pods on the grown nest platform (GameConfig.Weather.EventNest:
+--            a ring of PodRing studs, or its centre for one); the guardian
+--            asleep beside it, across the way in.
+--   home     its sleeping spot, walked to along the biome's own rooms (route);
+--            a body thrown out of the world is set down at the biome's
+--            entrance (setDown).
+--==============================================================================
+export type EventSite = {
+	-- The nest's centre at the height its pods stand on (the platform's top).
+	centre: Vector3,
+	-- The floor the guardian sleeps on.
+	floorY: number,
+	-- The walk home through the biome: room centres, entrance first. The
+	-- guardian's own spot is added last here.
+	route: { Vector3 },
+	setDown: Vector3,
+	parent: Instance,
+}
+
+local EVENT_NEST_NAME = "Nest_rain_event"
+
+local function eventBiome(pods: number): BiomeData.Biome
+	local starbloom = BiomeData.ById.starbloom
+	return {
+		Id = "rain",
+		DisplayName = GameConfig.Weather.Biome.Label,
+		Mood = "",
+		Order = if starbloom then starbloom.Order + 1 else #BiomeData.Biomes + 1,
+		RecommendedSpeed = if starbloom then starbloom.RecommendedSpeed else 0,
+		GroundColor = GameConfig.Weather.Biome.Colours.Floor,
+		WallColor = GameConfig.Weather.Biome.Colours.Wall,
+		AccentColor = GameConfig.Weather.Biome.Colours.Accent,
+		Brightness = 1,
+		Nests = 1,
+		PodsPerNest = pods,
+		RarityBonus = 1,
+		LiveInPhaseA = true,
+	} :: any
+end
+
+-- The batch for `mode` ("rain" or "thunder"), laid and guarded. Answers how
+-- many pods were laid, or 0 and why not. Refused while an event nest stands.
+function NestService.OpenEventNest(eventId: number, mode: string, site: EventSite): (number, string?)
+	for _, nest in ipairs(nests) do
+		if nest.event ~= nil then
+			return 0, "an event nest is already standing"
+		end
+	end
+	if not SeedData.RainBatches[mode] then
+		return 0, "no batch for the weather " .. tostring(mode)
+	end
+	local cfg = GameConfig.Weather.EventNest
+	local batch = SeedData.RollRainBatch(mode, Random.new())
+	local bearing = math.rad(cfg.Guard.Bearing)
+	local outward = Vector3.new(math.cos(bearing), 0, math.sin(bearing))
+	local across = Vector3.new(-outward.Z, 0, outward.X)
+	local home = Vector3.new(site.centre.X, site.floorY, site.centre.Z) + outward * cfg.Guard.Distance
+
+	local folder = Instance.new("Folder")
+	folder.Name = EVENT_NEST_NAME
+	folder.Parent = site.parent
+	local parentModel = ParentModel.Build(CFrame.lookAt(home, home + across), PARENT_HEIGHT, "rain", folder)
+	local humanoid = parentModel:FindFirstChildOfClass("Humanoid")
+	local root = parentModel.PrimaryPart
+	if not (humanoid and root) then
+		folder:Destroy()
+		return 0, "the guardian did not build"
+	end
+
+	-- The pods: a lone pod at the centre facing the way in, a batch round the
+	-- ring with one behind the centre and two either side, each facing out.
+	local slots: { CFrame } = {}
+	local count = #batch
+	for i = 1, count do
+		local at, face
+		if count == 1 then
+			at, face = site.centre, outward
+		else
+			local a = bearing + math.pi + (i - 1) / count * 2 * math.pi
+			face = Vector3.new(math.cos(a), 0, math.sin(a))
+			at = site.centre + face * cfg.PodRing
+		end
+		slots[i] = CFrame.lookAt(at, at + face)
+	end
+
+	local route = table.clone(site.route)
+	table.insert(route, home)
+	local nest: Nest = {
+		id = folder.Name,
+		biome = eventBiome(count),
+		origin = home,
+		homeCFrame = root.CFrame,
+		parent = parentModel,
+		humanoid = humanoid,
+		root = root,
+		folder = folder,
+		slots = slots,
+		pods = {},
+		state = "asleep",
+		chaseSince = 0,
+		target = nil,
+		stateUntil = 0,
+		busy = false,
+		rage = 0,
+		calmSince = 0,
+		haul = nil,
+		sample = nil,
+		thieves = {},
+		secret = nil,
+		marked = {},
+		event = eventId,
+		route = route,
+		setDown = site.setDown,
+	}
+	local laid = {}
+	for i, roll in ipairs(batch) do
+		placePod(nest, i, roll.species, roll.tier)
+		local pod = nest.pods[i]
+		if pod then
+			pod:SetAttribute("EventId", eventId)
+			pod:SetAttribute("RainPod", roll.pod)
+			table.insert(laid, roll.pod)
+		end
+	end
+	pinToServer(nest)
+	table.insert(nests, nest)
+	log(string.format("The %s event's nest is up (event %d): %d pod(s) [%s], guarded by %s.", mode, eventId,
+		#laid, table.concat(laid, ", "), tostring(parentModel:GetAttribute("Species"))))
+	return #laid, nil
+end
+
+-- Down with its event: the unclaimed pods still in the nest and the guardian
+-- go; a pod in somebody's arms is theirs to bank. `eventId` nil takes any.
+-- Answers how many pods went.
+function NestService.CloseEventNest(eventId: number?): number
+	local removed = 0
+	for i = #nests, 1, -1 do
+		local nest = nests[i]
+		if nest.event ~= nil and (eventId == nil or nest.event == eventId) then
+			for slot, pod in pairs(nest.pods) do
+				if pod and pod.Parent then
+					pod:Destroy()
+					removed += 1
+				end
+				nest.pods[slot] = nil
+			end
+			if nest.haul then
+				detachHaul(nest)
+				nest.haul = nil
+			end
+			nest.target = nil
+			nest.sample = nil
+			table.clear(nest.thieves)
+			table.clear(nest.marked)
+			if nest.folder.Parent then
+				nest.folder:Destroy()
+			end
+			table.remove(nests, i)
+			log(string.format("The event nest (event %s) is down: %d unclaimed pod(s) and its guardian went with it.",
+				tostring(nest.event), removed))
+		end
+	end
+	pcall(publishPursuit)
+	return removed
+end
+
+-- What the event nest holds, for the spec and a Studio probe; nil without one.
+function NestService.EventNest(): { id: string, event: number, state: string, rage: number, target: Player?,
+	thieves: number, origin: Vector3, pods: { { species: string, pod: string?, tier: number, model: Model } } }?
+	for _, nest in ipairs(nests) do
+		if nest.event ~= nil then
+			local pods = {}
+			for _, pod in pairs(nest.pods) do
+				if pod and pod.Parent then
+					table.insert(pods, {
+						species = tostring(pod:GetAttribute("SpeciesId")),
+						pod = pod:GetAttribute("RainPod") :: string?,
+						tier = tonumber(pod:GetAttribute("Tier")) or 0,
+						model = pod,
+					})
+				end
+			end
+			local thieves = 0
+			for _ in pairs(nest.thieves) do
+				thieves += 1
+			end
+			return { id = nest.id, event = nest.event :: number, state = nest.state, rage = nest.rage,
+				target = nest.target, thieves = thieves, origin = nest.origin, pods = pods }
+		end
+	end
+	return nil
 end
 
 function NestService.Snapshot(): string

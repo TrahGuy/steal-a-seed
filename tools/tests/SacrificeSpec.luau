@@ -1233,6 +1233,13 @@ local ok, err = pcall(function()
 			PlotService = PlotService, PlantService = PlantService, PlayerDataService = PlayerDataService,
 			CarryService = CarryService, PassService = PassService, BonusChestService = BonusChestService,
 			SacrificeService = SacrificeService, Metrics = Metrics,
+			-- The Rain event's factor (2026-10-02), neutral here; RainEventSpec
+			-- checks it multiplies the pedestal's boost rather than joining it.
+			WeatherService = {
+				IncomeFactor = function()
+					return 1
+				end,
+			},
 		}
 		local parent = {}
 		function parent:WaitForChild(name)

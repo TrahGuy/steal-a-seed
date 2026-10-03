@@ -73,9 +73,21 @@ type Side = {
 
 type Rig = {
 	sides: { Side },
+	--==========================================================================
+	-- THE ELBOWS AND WRISTS, FOR THE OVERHEAD CARRY ONLY -- 2026-10-01
+	--
+	-- A pod in front of the chest leaves the lower arms to the animation, and
+	-- this script does not touch them; a secret held OVER the head (SeedData
+	-- Carry = "overhead") needs both arms straight up, so only while that pose
+	-- has weight are these joints blended from the animator's value toward an
+	-- identity Transform. `rest` is kept for the Side shape and not used.
+	--==========================================================================
+	straight: { Side },
 	-- "constraint" | "motor6d-r15" | "motor6d-r6"
 	kind: string,
 	weight: number,
+	-- Whether the current carry is the overhead one. Blended with `weight`.
+	overhead: number,
 	--==========================================================================
 	-- WHETHER THE JOINTS HAVE ALREADY BEEN HANDED BACK
 	--
@@ -107,7 +119,18 @@ local function buildRig(character: Model): Rig?
 		end
 	end
 	if #sides == 2 then
-		return { sides = sides, kind = "constraint", weight = 0, released = true }
+		-- The lower arms, for the overhead pose: AnimationConstraints inside the
+		-- lower arm and hand parts, as the shoulders are inside the upper arms.
+		local straight: { Side } = {}
+		for _, entry in ipairs({ { "RightLowerArm", "RightElbow" }, { "LeftLowerArm", "LeftElbow" },
+			{ "RightHand", "RightWrist" }, { "LeftHand", "LeftWrist" } }) do
+			local part = character:FindFirstChild(entry[1])
+			local joint = part and part:FindFirstChild(entry[2])
+			if joint and joint:IsA("AnimationConstraint") then
+				table.insert(straight, { constraint = joint, motor = nil, rest = joint.Transform, sign = 0 })
+			end
+		end
+		return { sides = sides, straight = straight, kind = "constraint", weight = 0, overhead = 0, released = true }
 	end
 	table.clear(sides)
 
@@ -123,7 +146,16 @@ local function buildRig(character: Model): Rig?
 			end
 		end
 		if #sides == 2 then
-			return { sides = sides, kind = "motor6d-r15", weight = 0, released = true }
+			local straight: { Side } = {}
+			for _, entry in ipairs({ { "RightLowerArm", "RightElbow" }, { "LeftLowerArm", "LeftElbow" },
+				{ "RightHand", "RightWrist" }, { "LeftHand", "LeftWrist" } }) do
+				local part = character:FindFirstChild(entry[1])
+				local m = part and part:FindFirstChild(entry[2])
+				if m and m:IsA("Motor6D") then
+					table.insert(straight, { constraint = nil, motor = m, rest = m.C0, sign = 0 })
+				end
+			end
+			return { sides = sides, straight = straight, kind = "motor6d-r15", weight = 0, overhead = 0, released = true }
 		end
 	end
 	table.clear(sides)
@@ -140,10 +172,39 @@ local function buildRig(character: Model): Rig?
 			end
 		end
 		if #sides == 2 then
-			return { sides = sides, kind = "motor6d-r6", weight = 0, released = true }
+			return { sides = sides, straight = {}, kind = "motor6d-r6", weight = 0, overhead = 0, released = true }
 		end
 	end
 	return nil
+end
+
+--==============================================================================
+-- THE OVERHEAD POSE -- 2026-10-01
+--
+-- Both arms straight up and a little out, elbows and wrists held straight, for
+-- a secret pod or plant (SeedData Carry = "overhead", welded by CarryService at
+-- GameConfig.Carry.OverheadLift). 170 degrees rather than 180 so the hands sit
+-- a touch forward of the crown, under the model's base rather than behind it.
+--==============================================================================
+local OVERHEAD_LIFT = math.rad(170)
+local OVERHEAD_SPREAD = math.rad(8)
+-- Below this much overhead weight the lower arms are the animator's alone.
+local STRAIGHT_FLOOR = 0.001
+
+-- Whether what the player carries is one of the overhead species: the raid
+-- pod's species is a player attribute, a Tool's is on the Tool.
+local function carriesOverhead(player: Player, character: Model): boolean
+	local id = player:GetAttribute(GameConfig.Attributes.CarryingSpecies)
+	if type(id) ~= "string" then
+		for _, d in ipairs(character:GetChildren()) do
+			if d:IsA("Tool") then
+				id = d:GetAttribute("SpeciesId")
+				break
+			end
+		end
+	end
+	local species = if type(id) == "string" then SeedData.Get(id) else nil
+	return species ~= nil and (species :: any).Carry == "overhead"
 end
 
 --==============================================================================
@@ -274,11 +335,18 @@ RunService.Stepped:Connect(function(_, dt)
 			if rig.weight < 0.002 and want == 0 then
 				rig.weight = 0
 			end
+			-- Which pose: blended too, so a secret banked into a Tool does not
+			-- snap the arms between the two.
+			local wantOverhead = if want == 1 and carriesOverhead(player, character) then 1 else 0
+			rig.overhead += (wantOverhead - rig.overhead) * alpha
 
 			if rig.weight > 0 then
 				-- Driving again, so the joints will need handing back again.
 				rig.released = false
 				local lift, spread = anglesFor(reach)
+				local o = rig.overhead
+				lift = lift + (OVERHEAD_LIFT - lift) * o
+				spread = spread + (OVERHEAD_SPREAD - spread) * o
 				for _, side in ipairs(rig.sides) do
 					local w = rig.weight
 					local pose: CFrame
@@ -295,6 +363,31 @@ RunService.Stepped:Connect(function(_, dt)
 					elseif side.motor then
 						-- Composes UNDER the animation.
 						side.motor.C0 = side.rest * pose
+					end
+				end
+				--==============================================================
+				-- THE LOWER ARMS: NOT TOUCHED AT ALL UNLESS THE POSE IS OVERHEAD
+				--
+				-- The chest carry leaves the elbows and wrists to the animation,
+				-- exactly as before the overhead pose existed. The first version
+				-- of this loop (2026-10-01) wrote them on EVERY carry -- `rest`
+				-- when the pose was not overhead -- which pinned every carrier's
+				-- lower arms at the pose captured on spawn: the same mistake the
+				-- shoulders' hand-back note below describes.
+				--
+				-- While the overhead pose has weight, each joint is blended from
+				-- what the animator gave it THIS frame toward straight, so there
+				-- is no remembered value to restore and nothing to hand back: the
+				-- frame the weight runs out, the writes stop and the animator has
+				-- the joint, as it always did.
+				--==============================================================
+				local s = rig.weight * o
+				if s > STRAIGHT_FLOOR then
+					for _, side in ipairs(rig.straight) do
+						local joint: any = side.constraint or side.motor
+						if joint then
+							joint.Transform = (joint.Transform :: CFrame):Lerp(CFrame.identity, s)
+						end
 					end
 				end
 			elseif rig.weight == 0 and not rig.released then
@@ -338,6 +431,8 @@ RunService.Stepped:Connect(function(_, dt)
 						side.motor.C0 = side.rest
 					end
 				end
+				-- The lower arms are not handed back: they were only ever blended
+				-- from the animator's own value, never set to a remembered one.
 			end
 		end
 	end

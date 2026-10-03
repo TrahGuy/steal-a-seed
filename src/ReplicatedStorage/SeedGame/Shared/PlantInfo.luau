@@ -48,6 +48,9 @@ export type Info = {
 	rarityColour: Color3,
 	size: string,
 	sizeColour: Color3,
+	-- False for a Secret, which has no size tier: `size` is empty and a caller
+	-- shows no size row or badge at all (2026-10-02).
+	sized: boolean,
 	income: string,
 	incomePerSecond: number?,
 	sell: string?,
@@ -64,25 +67,85 @@ local function displayMultiplier(value: any): number
 	return n
 end
 
+--==============================================================================
+-- A SECRET HAS ITS RARITY AND NO SIZE TIER (the owner's rule, 2026-10-02)
+--
+-- One authored size and a fixed income (SeedData FixedIncome); the tier its
+-- Tool carries is implementation-only (SeedData.SecretTier). So every list, tag
+-- and line asks these instead of reading a tier itself: a Secret's colour is
+-- the Secret rarity colour and it has no size word at all.
+--==============================================================================
+function PlantInfo.IsSecret(speciesId: any): boolean
+	local species = if type(speciesId) == "string" then SeedData.Get(speciesId) else nil
+	return species ~= nil and species.Secret == true
+end
+
+-- The same rule for the Rain event's Pod 1 and Pod 3 forms (2026-10-02): one
+-- authored size, no size word, and their RARITY's colour where a size colour
+-- would go. Pod 2's forms are sized: they show Colossal like any Colossal.
+function PlantInfo.IsUnsized(speciesId: any): boolean
+	return SeedData.Unsized(if type(speciesId) == "string" then SeedData.Get(speciesId) else nil)
+end
+
+function PlantInfo.SizeColour(speciesId: any, tier: any): Color3
+	if PlantInfo.IsUnsized(speciesId) then
+		local species = SeedData.Get(speciesId) :: SeedData.Species
+		return GameConfig.RarityColor[species.Rarity] or QUIET
+	end
+	return SeedData.ColorForTier(tonumber(tier))
+end
+
+-- nil for a Secret, or an unsized Rain form: there is no size to name.
+function PlantInfo.SizeWord(speciesId: any, tier: any): string?
+	if PlantInfo.IsUnsized(speciesId) then
+		return nil
+	end
+	return SeedData.TierName(tonumber(tier))
+end
+
 function PlantInfo.Describe(speciesId: any, tier: any, hatched: boolean,
 	multiplier: number?): Info
 	local species = if type(speciesId) == "string" then SeedData.Get(speciesId) else nil
 	local band = SeedData.Tier(tonumber(tier))
 	local biome = if species then BiomeData.ById[species.Biome] else nil
+	local secret = species ~= nil and species.Secret == true
+	local unsized = SeedData.Unsized(species)
+	local rainPod = SeedData.RainPodOf(species)
 
 	local info: Info = {
 		title = PlantInfo.PodTitle,
 		stage = PlantInfo.PodTitle,
-		biome = if biome then biome.DisplayName else PlantInfo.Unknown,
+		-- The Rain event's temporary biome is in no BiomeData list: its working
+		-- label, rather than ???.
+		biome = if biome then biome.DisplayName
+			elseif rainPod then GameConfig.Weather.Biome.Label
+			else PlantInfo.Unknown,
 		rarity = PlantInfo.Unknown,
 		rarityColour = QUIET,
-		size = band.name,
-		sizeColour = band.color,
+		size = if unsized then "" else band.name,
+		sizeColour = if unsized then PlantInfo.SizeColour(speciesId, tier) else band.color,
+		sized = not unsized,
 		income = PlantInfo.PodIncome,
 		incomePerSecond = nil,
 		sell = nil,
 		sellValue = nil,
 	}
+	if secret and not hatched then
+		-- A Secret's pod is its own model: its look already says what it is, so
+		-- it reads Secret -- never a size, and never pretends to be ???.
+		local known = species :: SeedData.Species
+		info.title = "Secret pod"
+		info.rarity = known.Rarity
+		info.rarityColour = GameConfig.RarityColor[known.Rarity] or QUIET
+	elseif rainPod and not hatched then
+		-- A Rain pod is its own model too, and its look says only WHICH POD:
+		-- its name and rarity, shared by every creature it can hold. Which one
+		-- is inside -- and so its income and price -- stays for the hatch.
+		local pod = rainPod :: SeedData.RainPod
+		info.title = pod.Name
+		info.rarity = pod.Rarity
+		info.rarityColour = GameConfig.RarityColor[pod.Rarity] or QUIET
+	end
 	if not (hatched and species) then
 		return info
 	end

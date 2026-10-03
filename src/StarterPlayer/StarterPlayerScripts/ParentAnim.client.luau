@@ -52,6 +52,9 @@ local RunService = game:GetService("RunService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 local TanglemireForms = require(SeedGame.Shared:WaitForChild("TanglemireForms"))
+-- The Rain event's guardian (2026-10-02): the owner's StormstriderRun, ported.
+local StormstriderRun = require(SeedGame.Shared:WaitForChild("StormstriderRun"))
+local StatusText = require(SeedGame.Shared:WaitForChild("StatusText"))
 
 local TAG = GameConfig.Tags.NestParent
 
@@ -908,8 +911,53 @@ local function seamsComplete(p: Parent): boolean
 	return true
 end
 
+--==============================================================================
+-- STORMSTRIDER TAKES ITS OWN PATH, AND TAKES IT INSTEAD (2026-10-02)
+--
+-- The Rain event's guardian is the owner's supplied rig: forty-one joints of
+-- its own and no seam called Neck, so the shared contract below does not fit
+-- it -- the same rule as Miremaw and Astralmaw, one writer per Motor6D.C0.
+-- StormstriderRun plays the owner's run, sleep and strikes; this keeps it
+-- registered and hands it the speed, the Asleep and the catch's bolt. It
+-- streams atomically, so it arrives whole: it waits only for the joints.
+--==============================================================================
+local storms: { [Model]: StormstriderRun.Storm } = {}
+local stormWatch: { [Model]: RBXScriptConnection } = {}
+
+local function trackStorm(model: Model)
+	if storms[model] or stormWatch[model] then
+		return
+	end
+	local function try(): boolean
+		if storms[model] or not model.Parent then
+			return true
+		end
+		local storm = StormstriderRun.Rig(model)
+		if storm then
+			storms[model] = storm
+			return true
+		end
+		return false
+	end
+	if not try() then
+		stormWatch[model] = model.DescendantAdded:Connect(function()
+			if try() then
+				local c = stormWatch[model]
+				if c then
+					c:Disconnect()
+				end
+				stormWatch[model] = nil
+			end
+		end)
+	end
+end
+
 local function track(model: Instance)
 	if not model:IsA("Model") or parents[model] then
+		return
+	end
+	if model:GetAttribute("Species") == "stormstrider" then
+		trackStorm(model)
 		return
 	end
 
@@ -1033,6 +1081,12 @@ for _, m in ipairs(CollectionService:GetTagged(TAG)) do
 end
 CollectionService:GetInstanceAddedSignal(TAG):Connect(track)
 CollectionService:GetInstanceRemovedSignal(TAG):Connect(function(m)
+	storms[m :: Model] = nil
+	local watch = stormWatch[m :: Model]
+	if watch then
+		watch:Disconnect()
+		stormWatch[m :: Model] = nil
+	end
 	local p = parents[m :: Model]
 	if p and p.fill then
 		p.fill:Disconnect()
@@ -1095,6 +1149,44 @@ local function steadyHaul(p: Parent, model: Model)
 	local keep = if which == "jaw" then HAUL_JAW_STEADY else HAUL_STEADY
 	joint.motor.C0 = joint.rest:Lerp(joint.motor.C0, keep)
 end
+
+--==============================================================================
+-- STORMSTRIDER'S FRAME (2026-10-02): the speed off the root the way every
+-- guardian's is measured here, the server's Asleep, the player's reduced
+-- motion, and one bolt per catch (NestService's CatchStrikeAt/Time; a late
+-- joiner does not replay an old one).
+--==============================================================================
+RunService.Heartbeat:Connect(function(dt)
+	if next(storms) == nil then
+		return
+	end
+	local quiet = StatusText.reducedMotion()
+	local now = os.clock()
+	for model, storm in pairs(storms) do
+		if not (model.Parent and storm.root.Parent) then
+			storms[model] = nil
+			if model.Parent then
+				task.defer(track, model)
+			end
+			continue
+		end
+		local at = storm.root.Position
+		local moved = at - storm.lastPos
+		storm.lastPos = at
+		local posSpeed = if dt > 0.0001 then Vector3.new(moved.X, 0, moved.Z).Magnitude / dt else 0
+		local v = storm.root.AssemblyLinearVelocity
+		local speed = math.max(Vector3.new(v.X, 0, v.Z).Magnitude, posSpeed)
+		StormstriderRun.Step(storm, dt, now, speed, model:GetAttribute("Asleep") ~= false, quiet)
+		local when = model:GetAttribute("CatchStrikeTime")
+		local where = model:GetAttribute("CatchStrikeAt")
+		if type(when) == "number" and when ~= storm.struckAt then
+			storm.struckAt = when
+			if typeof(where) == "Vector3" and workspace:GetServerTimeNow() - when < 1.5 then
+				StormstriderRun.Strike(where, quiet)
+			end
+		end
+	end
+end)
 
 RunService.Heartbeat:Connect(function(dt)
 	if next(parents) == nil then

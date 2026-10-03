@@ -66,12 +66,14 @@ local TweenService = game:GetService("TweenService")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -266,8 +268,15 @@ local function build(post: Notice.Post, key: string): Drawn
 	local room = width - iconSize - 8 - closeW * 2
 	local hs = headSize(post.title, room)
 	local headW = math.min(room, textWidth(post.title, hs, HEAD_FONT))
+	-- A headline still wider than the room at the smallest size wraps onto a
+	-- second line (2026-10-02, the Rain toast's): the row grows to hold it, so
+	-- the words never run out under the icon.
+	local wrapped = textWidth(post.title, hs, HEAD_FONT) > room
+	local headH = if wrapped
+		then TextService:GetTextSize(post.title, hs, HEAD_FONT, Vector2.new(room, 10000)).Y
+		else hs
 	local rowW = iconSize + 8 + headW
-	local rowH = math.max(iconSize, hs + 4)
+	local rowH = math.max(iconSize, headH + 4)
 
 	local row = Instance.new("Frame")
 	row.Name = "Headline"
@@ -290,6 +299,7 @@ local function build(post: Notice.Post, key: string): Drawn
 	head.BackgroundTransparency = 1
 	head.Font = HEAD_FONT
 	head.TextSize = hs
+	head.TextWrapped = wrapped
 	head.TextColor3 = style.tint
 	head.TextXAlignment = Enum.TextXAlignment.Center
 	head.Text = post.title
@@ -298,6 +308,56 @@ local function build(post: Notice.Post, key: string): Drawn
 	local headEdge = UIKit.stroke(head, Notice.Outline, 2, 0.1)
 	track(d, head, "TextTransparency")
 	track(d, headEdge, "Transparency")
+
+	--==========================================================================
+	-- THE WORD "SECRET" (2026-10-01): italic, silver, a strong dark outline and a
+	-- smooth grey sweep -- on the SECRET POD SPAWNED toast only, to the owner's
+	-- reference. The headline keeps the word as INVISIBLE text so the row is
+	-- measured and centred as one; this label draws the word over it. Under
+	-- reduced motion the sweep is a still silver-to-white.
+	--==========================================================================
+	if post.kind == "secret" then
+		local word = GameConfig.Secret.Toast.Word
+		if string.sub(post.title, 1, #word) == word then
+			head.RichText = true
+			head.Text = string.format('<font transparency="1">%s</font>%s', word, string.sub(post.title, #word + 1))
+			local wordW = textWidth(word, hs, HEAD_FONT) + 4
+			local secret = Instance.new("TextLabel")
+			secret.Name = "SecretWord"
+			secret.AnchorPoint = Vector2.new(0, 0.5)
+			secret.Position = UDim2.new(0, 0, 0.5, 0)
+			secret.Size = UDim2.fromOffset(wordW, rowH)
+			secret.BackgroundTransparency = 1
+			secret.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Heavy, Enum.FontStyle.Italic)
+			secret.TextSize = hs
+			secret.TextColor3 = Color3.fromRGB(255, 255, 255)
+			secret.TextXAlignment = Enum.TextXAlignment.Left
+			secret.Text = word
+			secret.Parent = head
+			local edge = UIKit.stroke(secret, Notice.Outline, 2.5, 0)
+			track(d, secret, "TextTransparency")
+			track(d, edge, "Transparency")
+			local sweep = Instance.new("UIGradient")
+			if reducedMotion() then
+				sweep.Color = ColorSequence.new(Color3.fromRGB(196, 196, 208), Color3.fromRGB(255, 255, 255))
+			else
+				-- Silver at rest; a dark edge leading a white light crosses it.
+				sweep.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, Color3.fromRGB(186, 186, 198)),
+					ColorSequenceKeypoint.new(0.36, Color3.fromRGB(58, 58, 68)),
+					ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+					ColorSequenceKeypoint.new(0.64, Color3.fromRGB(186, 186, 198)),
+					ColorSequenceKeypoint.new(1, Color3.fromRGB(186, 186, 198)),
+				})
+				-- A looping tween, not a per-frame hook: a toast is an event, and
+				-- the tween ends with the label it moves.
+				sweep.Offset = Vector2.new(-1, 0)
+				TweenService:Create(sweep, TweenInfo.new(GameConfig.Secret.Toast.SweepSeconds,
+					Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), { Offset = Vector2.new(1, 0) }):Play()
+			end
+			sweep.Parent = secret
+		end
+	end
 
 	local total = rowH
 	if post.detail and post.detail ~= "" then
@@ -701,6 +761,9 @@ local function place()
 	restack(nil)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
+-- The rain chip (2026-10-02) stands where the toast line did and the line
+-- steps up over it: asked again as the rain starts and stops.
+game:GetService("Workspace"):GetAttributeChangedSignal(GameConfig.Weather.Attributes.State):Connect(place)
 -- On a phone the stack hangs under the clock's row, which moves with the
 -- topbar's free span (Roblox's own buttons coming and going).
 GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
@@ -724,6 +787,60 @@ task.spawn(function()
 			if post then
 				show(post)
 			end
+		elseif action == "SecretSpawned" and type(code) == "string" then
+			-- Once per actual spawn, to everyone in this server (NestService);
+			-- never on a return, a respawn or from another server.
+			local name = string.upper(code)
+			for _, biome in ipairs(BiomeData.Biomes) do
+				if biome.Id == code then
+					name = string.upper(biome.DisplayName)
+				end
+			end
+			show({
+				kind = "secret",
+				title = string.format(GameConfig.Secret.Toast.Title, name),
+				key = "secret:" .. code,
+				quiet = true,
+			})
+		--==================================================================
+		-- THE RAIN (2026-10-02; WeatherService)
+		--
+		-- Opened: once per event, to everyone here when the entrance opens --
+		-- never a late joiner, and never twice (the key is the event's id).
+		-- Warning: to those inside, before a timed end. Evacuated: to whoever
+		-- was put back at the entrance. The words are GameConfig.Weather's; the
+		-- percentage is SeedData.Rain's, the one number the faucet pays.
+		--==================================================================
+		elseif action == GameConfig.Weather.Events.Opened and type(code) == "number" then
+			local W = GameConfig.Weather
+			-- A Thunderstorm says so (2026-10-02): the same event, the same one
+			-- percentage, its own words.
+			local words = if game:GetService("Workspace"):GetAttribute(W.Attributes.Mode) == "thunder"
+				then W.ThunderToast
+				else W.Toast
+			show({
+				kind = "info",
+				title = words.Title,
+				detail = string.format(words.Detail, math.round((SeedData.Rain.IncomeFactor - 1) * 100)),
+				key = "rain:" .. tostring(code),
+			})
+		elseif action == GameConfig.Weather.Events.Warning and type(code) == "number" then
+			local W = GameConfig.Weather
+			show({
+				kind = "warning",
+				title = W.Warning.Title,
+				detail = string.format(W.Warning.Detail, math.max(1, math.floor(code))),
+				key = "rain:warning",
+			})
+		elseif action == GameConfig.Weather.Events.Evacuated then
+			local W = GameConfig.Weather
+			show({
+				kind = "info",
+				title = W.Evacuated.Title,
+				detail = W.Evacuated.Detail,
+				key = "rain:evacuated:" .. tostring(code),
+				quiet = true,
+			})
 		end
 	end)
 end)

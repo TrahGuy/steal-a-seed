@@ -4,7 +4,9 @@
 -- The developer console's client: an ADMIN button in the topbar beside the
 -- clock, and a small panel behind it -- a target, an amount, ADD MONEY, ADD
 -- SPEED and RESET PLAYER PROGRESS; the current phase with START NIGHT and START
--- DAY for the whole server; and one line saying what the server did.
+-- DAY for the whole server; an announcement; SECRET ITEMS (2026-10-02), a
+-- Secret pod or grown plant into your own bag; and one line saying what the
+-- server did.
 --
 --==============================================================================
 -- IT DOES NOT SHIP TO ANYBODY ELSE
@@ -30,6 +32,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local ContextActionService = game:GetService("ContextActionService")
@@ -144,8 +147,8 @@ if blocker and blocker:IsA("GuiButton") then
 end
 modal.close.Selectable = true
 
--- The form runs to the announcement's SEND row (2026-10-01); it scrolls.
-local CONTENT = 590
+-- The form runs to WEATHER's START THUNDERSTORM row (2026-10-02); it scrolls.
+local CONTENT = 1056
 local CONFIRM_CONTENT = 332
 -- The status line lives under the pages, not in them, so what the server said
 -- is on screen whichever page is showing and however far the form is scrolled.
@@ -416,6 +419,97 @@ confirmAll.AnchorPoint = Vector2.new(1, 0)
 confirmAll.Position = UDim2.fromScale(1, 0)
 confirmAll.Size = UDim2.new(0.6, -4, 1, 0)
 confirmAll.Visible = false
+
+--== THE FORM: SECRET ITEMS (2026-10-02) ==--
+-- A Snarlbloom or a Petalfawn, as a POD or a GROWN PLANT, into YOUR OWN bag --
+-- this version names no other recipient, and the server refuses any other.
+-- EQUIP NOW puts it in your hands only if they are free. GRANT TO BAG is locked
+-- while a grant is on its way. Every press carries its own request id, so the
+-- server never grants the same request twice.
+local secretRule = rule:Clone()
+secretRule.Position = UDim2.fromOffset(0, 594)
+secretRule.Parent = form
+local secretCaption = caption(form, "SECRET ITEMS: INTO YOUR OWN BAG", 604)
+secretCaption.TextColor3 = GOLD
+
+local function row(name: string, y: number, h: number): Frame
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.BackgroundTransparency = 1
+	f.Position = UDim2.fromOffset(0, y)
+	f.Size = UDim2.new(1, -8, 0, h)
+	f.ZIndex = 5
+	f.Parent = form
+	return f
+end
+
+local creatureRow = row("SecretCreature", 624, 40)
+local pickSnarlbloom = pill(creatureRow, "Snarlbloom", "SNARLBLOOM", SCOPE_ON_TOP, SCOPE_ON_BOTTOM)
+pickSnarlbloom.Size = UDim2.new(0.5, -4, 1, 0)
+local pickPetalfawn = pill(creatureRow, "Petalfawn", "PETALFAWN", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
+pickPetalfawn.AnchorPoint = Vector2.new(1, 0)
+pickPetalfawn.Position = UDim2.fromScale(1, 0)
+pickPetalfawn.Size = UDim2.new(0.5, -4, 1, 0)
+local creatureNote = caption(form, "", 668)
+
+local kindRow = row("SecretKind", 688, 40)
+local pickPod = pill(kindRow, "Pod", "POD", SCOPE_ON_TOP, SCOPE_ON_BOTTOM)
+pickPod.Size = UDim2.new(0.5, -4, 1, 0)
+local pickPlant = pill(kindRow, "GrownPlant", "GROWN PLANT", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
+pickPlant.AnchorPoint = Vector2.new(1, 0)
+pickPlant.Position = UDim2.fromScale(1, 0)
+pickPlant.Size = UDim2.new(0.5, -4, 1, 0)
+
+local recipientLine = caption(form, "", 734)
+recipientLine.TextWrapped = true
+recipientLine.Size = UDim2.new(1, -8, 0, 32)
+
+local grantRow = row("SecretGrant", 772, 44)
+local equipToggle = pill(grantRow, "EquipNow", "EQUIP NOW: OFF", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
+equipToggle.Size = UDim2.new(0.42, -4, 1, 0)
+local GRANT_TOP, GRANT_BOTTOM = Color3.fromRGB(236, 176, 60), Color3.fromRGB(176, 112, 24)
+local grantButton = pill(grantRow, "GrantToBag", "GRANT TO BAG", GRANT_TOP, GRANT_BOTTOM)
+grantButton.AnchorPoint = Vector2.new(1, 0)
+grantButton.Position = UDim2.fromScale(1, 0)
+grantButton.Size = UDim2.new(0.58, -4, 1, 0)
+
+--== THE FORM: WEATHER (2026-10-02) ==--
+-- Rain for THIS server, by the OWNER's account alone: the server checks the
+-- sender's UserId against its own owner identity on every request, and another
+-- admin's press is refused there. START RAIN takes the duration box, in whole
+-- seconds; END RAIN ends it early. The line between reads the server's own
+-- attributes, the way the phase line reads the clock's.
+local WEATHER = GameConfig.Weather
+local weatherRule = rule:Clone()
+weatherRule.Position = UDim2.fromOffset(0, 826)
+weatherRule.Parent = form
+local weatherCaption = caption(form, "WEATHER FOR THIS SERVER (OWNER ONLY)", 836)
+weatherCaption.TextColor3 = GOLD
+
+local rainLabel = phaseLabel:Clone()
+rainLabel.Name = "Rain"
+rainLabel.Position = UDim2.fromOffset(0, 854)
+rainLabel.Text = ""
+rainLabel.Parent = form
+
+caption(form, "DURATION (SECONDS)", 882)
+local durationBox = field(form, "RainSeconds", 900,
+	string.format("Whole seconds, %d to %d", WEATHER.MinSeconds, WEATHER.MaxSeconds))
+durationBox.Text = tostring(WEATHER.DefaultSeconds)
+
+local weatherRow = row("Weather", 952, 44)
+local startRain = pill(weatherRow, "StartRain", "START RAIN", Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170))
+startRain.Size = UDim2.new(0.5, -4, 1, 0)
+local endRain = pill(weatherRow, "EndRain", "END RAIN", Color3.fromRGB(120, 128, 146), Color3.fromRGB(72, 78, 94))
+endRain.AnchorPoint = Vector2.new(1, 0)
+endRain.Position = UDim2.fromScale(1, 0)
+endRain.Size = UDim2.new(0.5, -4, 1, 0)
+-- The Thunderstorm (2026-10-02): the same event in its heavier mode, the same
+-- duration box; END RAIN ends whichever is running.
+local thunderRow = row("Thunder", 1004, 44)
+local startThunder = pill(thunderRow, "StartThunder", "START THUNDERSTORM", Color3.fromRGB(128, 104, 214),
+	Color3.fromRGB(70, 52, 146))
+startThunder.Size = UDim2.new(1, 0, 1, 0)
 
 --== WHAT HAPPENED: under the pages, on every one of them ==--
 local status = Instance.new("TextLabel")
@@ -825,6 +919,114 @@ end)
 paintScope()
 
 --==============================================================================
+-- SECRET ITEMS (2026-10-02)
+--
+-- What is chosen here is only a request; the server checks the allowlist, the
+-- recipient (you), the species, the form, its cooldown and the bag's room, and
+-- grants exactly one item or none. GRANT TO BAG is locked from the press to the
+-- answer. A request that never got an answer keeps its id: pressed again for
+-- the same item, the server answers it instead of granting a second one.
+--==============================================================================
+local SECRET_CHOICES = {
+	{ id = "snarlbloom", button = pickSnarlbloom, note = "SNARLBLOOM: GREENHOLLOW'S SECRET" },
+	{ id = "petalfawn", button = pickPetalfawn, note = "PETALFAWN: STARBLOOM'S SECRET" },
+}
+local LOCKED_GRANT_TOP, LOCKED_GRANT_BOTTOM = Color3.fromRGB(96, 92, 80), Color3.fromRGB(64, 60, 52)
+local secretSpecies = "snarlbloom"
+local secretKind = "pod"
+local secretEquip = false
+local granting = false
+-- The last request whose answer never arrived, to send again unchanged.
+local unanswered: { species: string, kind: string, equip: boolean, request: string }? = nil
+
+local function relabel(b: GuiObject, text: string)
+	local label = b:FindFirstChild("Label")
+	if label and label:IsA("TextLabel") then
+		label.Text = text
+	end
+end
+
+local function paintSecret()
+	for _, choice in ipairs(SECRET_CHOICES) do
+		local on = choice.id == secretSpecies
+		paint(choice.button, if on then SCOPE_ON_TOP else SCOPE_OFF_TOP, if on then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
+		if on then
+			creatureNote.Text = choice.note
+		end
+	end
+	local pod = secretKind == "pod"
+	paint(pickPod, if pod then SCOPE_ON_TOP else SCOPE_OFF_TOP, if pod then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
+	paint(pickPlant, if pod then SCOPE_OFF_TOP else SCOPE_ON_TOP, if pod then SCOPE_OFF_BOTTOM else SCOPE_ON_BOTTOM)
+	paint(equipToggle, if secretEquip then SCOPE_ON_TOP else SCOPE_OFF_TOP,
+		if secretEquip then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
+	relabel(equipToggle, if secretEquip then "EQUIP NOW: ON" else "EQUIP NOW: OFF")
+	paint(grantButton, if granting then LOCKED_GRANT_TOP else GRANT_TOP, if granting then LOCKED_GRANT_BOTTOM else GRANT_BOTTOM)
+	relabel(grantButton, if granting then "GRANTING…" else "GRANT TO BAG")
+	grantButton.AutoButtonColor = not granting
+	recipientLine.Text = string.format("RECIPIENT: %s (YOU). Only you, in this version.", player.Name)
+end
+
+local function grantSecret()
+	if busy or granting then
+		return
+	end
+	local request = unanswered
+	if not (request and request.species == secretSpecies and request.kind == secretKind
+		and request.equip == secretEquip) then
+		request = {
+			species = secretSpecies,
+			kind = secretKind,
+			equip = secretEquip,
+			request = HttpService:GenerateGUID(false),
+		}
+	end
+	busy = true
+	granting = true
+	paintSecret()
+	setStatus("Granting…", MUTED)
+	local ok, reply = pcall(function()
+		return remote:InvokeServer("GrantSecret", player.UserId, request, nil)
+	end)
+	busy = false
+	granting = false
+	paintSecret()
+	if not ok or type(reply) ~= "table" then
+		-- No answer: maybe nothing happened, maybe it did. The same press sends
+		-- the same id, which the server answers rather than granting again.
+		unanswered = request
+		setStatus("No answer from the server. Check your Bag; pressing again resends the same request.", BAD)
+		return
+	end
+	unanswered = nil
+	local message = if type(reply.message) == "string" then reply.message else "No answer."
+	local colour = if reply.ok ~= true then BAD elseif reply.saved == false then GOLD else GOOD
+	setStatus(message, colour)
+end
+
+pickSnarlbloom.Activated:Connect(function()
+	secretSpecies = "snarlbloom"
+	paintSecret()
+end)
+pickPetalfawn.Activated:Connect(function()
+	secretSpecies = "petalfawn"
+	paintSecret()
+end)
+pickPod.Activated:Connect(function()
+	secretKind = "pod"
+	paintSecret()
+end)
+pickPlant.Activated:Connect(function()
+	secretKind = "plant"
+	paintSecret()
+end)
+equipToggle.Activated:Connect(function()
+	secretEquip = not secretEquip
+	paintSecret()
+end)
+grantButton.Activated:Connect(grantSecret)
+paintSecret()
+
+--==============================================================================
 -- THE PHASE, AS THE CLOCK READS IT
 --
 -- The two attributes WorldCycleService publishes, read the way WorldClock
@@ -853,6 +1055,76 @@ end
 Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(drawPhase)
 Workspace:GetAttributeChangedSignal(ATTR.WorldPhaseEndsAt):Connect(drawPhase)
 
+--==============================================================================
+-- WEATHER (2026-10-02)
+--
+-- The line reads WeatherService's attributes the way the phase line reads the
+-- clock's, and is redrawn with it once a second while the panel is open. The
+-- two buttons only ask; the server refuses anyone but the owner.
+--==============================================================================
+local RAIN_ATTR = WEATHER.Attributes
+
+local function drawRain()
+	local state = Workspace:GetAttribute(RAIN_ATTR.State)
+	local endsAt = Workspace:GetAttribute(RAIN_ATTR.EndsAt)
+	if type(state) ~= "string" or type(endsAt) ~= "number" then
+		rainLabel.Text = "RAIN: OFF"
+		rainLabel.TextColor3 = MUTED
+		return
+	end
+	local name = if Workspace:GetAttribute(RAIN_ATTR.Mode) == "thunder" then "THUNDERSTORM" else "RAIN"
+	if state == "closing" then
+		rainLabel.Text = name .. ": ENDING  •  THE BIOME IS FADING"
+	else
+		rainLabel.Text = string.format("%s: %s  •  %s LEFT", name,
+			if state == "active" then "ACTIVE, BIOME OPEN" else "STARTING", mmss(endsAt - Workspace:GetServerTimeNow()))
+	end
+	rainLabel.TextColor3 = NIGHT_INK
+end
+Workspace:GetAttributeChangedSignal(RAIN_ATTR.State):Connect(drawRain)
+Workspace:GetAttributeChangedSignal(RAIN_ATTR.EndsAt):Connect(drawRain)
+Workspace:GetAttributeChangedSignal(RAIN_ATTR.Mode):Connect(drawRain)
+
+local function askWeather(verb: string, seconds: number?)
+	if busy then
+		return
+	end
+	busy = true
+	setStatus(if verb == "start" then "Starting the rain…"
+		elseif verb == "thunder" then "Starting the thunderstorm…"
+		else "Ending the weather…", MUTED)
+	local ok, reply = pcall(function()
+		return remote:InvokeServer("Weather", verb, seconds, nil)
+	end)
+	busy = false
+	if not ok or type(reply) ~= "table" then
+		setStatus("Couldn't reach the server.", BAD)
+		return
+	end
+	local message = if type(reply.message) == "string" then reply.message else "No answer."
+	setStatus(message, if reply.ok == true then GOOD else BAD)
+end
+
+local function startWeather(verb: string)
+	local cleaned = (string.gsub(durationBox.Text, "[,%s_]", ""))
+	local seconds = tonumber(cleaned)
+	if not seconds then
+		setStatus("Type the duration in whole seconds first.", BAD)
+		return
+	end
+	askWeather(verb, seconds)
+end
+startRain.Activated:Connect(function()
+	startWeather("start")
+end)
+startThunder.Activated:Connect(function()
+	startWeather("thunder")
+end)
+endRain.Activated:Connect(function()
+	askWeather("end", nil)
+end)
+drawRain()
+
 local phaseTicker = 0
 local function tickPhase(want: boolean)
 	phaseTicker += 1
@@ -865,6 +1137,7 @@ local function tickPhase(want: boolean)
 			return
 		end
 		drawPhase()
+		drawRain()
 		task.delay(1, step)
 	end
 	step()

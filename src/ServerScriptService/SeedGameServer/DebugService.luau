@@ -182,6 +182,20 @@ ACTIONS.SpawnPod = function(player, payload)
 	return string.format("spawned %s at %d tier", (species :: SeedData.Species).Name, tier)
 end
 
+--==============================================================================
+-- A SECRET POD, ON DEMAND (2026-10-01)
+--
+-- The one way to see a secret encounter while natural spawning is switched off
+-- (GameConfig.Secret.Enabled): the same spawn NestService's own roll would make,
+-- at the biome's dedicated spot, platform, toast and all. Refused while that
+-- spot is occupied, exactly as the roll is.
+--==============================================================================
+ACTIONS.SpawnSecret = function(_player, payload)
+	local biome = if type(payload.biome) == "string" then payload.biome else "greenhollow"
+	local ok, why = NestService.SpawnSecret(biome, "debug")
+	return string.format("SpawnSecret %s: %s", biome, if ok then "spawned" else ("refused: " .. tostring(why)))
+end
+
 ACTIONS.SetMill = function(player, payload)
 	local tier = num(payload.tier, 1, #GameConfig.Mill.Tiers)
 	local over = num(payload.overclock, 0, GameConfig.Mill.Overclock.MaxLevel)

@@ -155,10 +155,15 @@ end
 -- cannot reach into anybody's hands. A planted one is `Planted`, and is not in
 -- this set either.
 --==============================================================================
+--
+-- EXCEPT A RUNNING RAIN EVENT'S (2026-10-02): its pods -- in its nest or on
+-- the ground -- belong to the event, which lays one batch and clears it itself
+-- when it ends (WeatherService). Dusk taking them would empty a batch nothing
+-- restocks.
 local function clearLoosePods(): number
 	local removed = 0
 	for _, pod in ipairs(CollectionService:GetTagged(GameConfig.Tags.SeedPod)) do
-		if pod.Parent then
+		if pod.Parent and not CarryService.IsLiveEventPod(pod) then
 			pod:Destroy()
 			removed += 1
 		end

@@ -231,10 +231,10 @@ local function stand(name: string, userId: number, character: Model): any
 	}
 end
 
-local provokes: { { nest: string, who: string } } = {}
+local provokes: { { nest: string, who: string, secret: string? } } = {}
 local realProvoke = NestService.Provoke
-;(NestService :: any).Provoke = function(nestId: string, thief: any): boolean
-	table.insert(provokes, { nest = nestId, who = thief.Name })
+;(NestService :: any).Provoke = function(nestId: string, thief: any, secretId: string?): boolean
+	table.insert(provokes, { nest = nestId, who = thief.Name, secret = secretId })
 	return true
 end
 
@@ -410,6 +410,57 @@ local ok, err = pcall(function()
 		.. tostring(own) .. ")")
 	knock(alice, aliceBody)
 	newPods()
+
+	--== 3i. A SECRET POD: ONE ENCOUNTER, ONE DRAW (2026-10-01) =================
+	-- The secret encounter's id rides on the pod the way GuardianAbandoned does,
+	-- and the owner's rule for it is the same one draw per pod: an abandoned
+	-- secret taken back is never rolled again, by any guardian.
+	local SECRET_ID = ORIGIN_NEST .. ":secret:spec"
+	place(aliceBody, ORIGIN)
+	place(bobBody, ORIGIN + Vector3.new(10, 0, 0))
+	local secretPod = CarryService.SpawnLoose("petalfawn", 1,
+		CFrame.new(ORIGIN + Vector3.new(0, 0, -2)), ORIGIN_NEST, nil, true) :: Model
+	seen[secretPod] = true
+	secretPod:SetAttribute("SecretId", SECRET_ID)
+	check(CarryService.TryTake(alice, secretPod), "secret: alice takes a loose secret pod")
+	local sHeld = CarryService.GetCarried(alice) :: any
+	check(sHeld ~= nil and sHeld.secretId == SECRET_ID and sHeld.model:GetAttribute("SecretId") == SECRET_ID,
+		"secret: the encounter rides in her hands, record and model")
+	check(provokes[#provokes] ~= nil and provokes[#provokes].secret == SECRET_ID,
+		"secret: the take tells the nest which encounter")
+	check(CarryService.ResolveGuardianCatch(alice, false, 0.10) == "left", "secret: caught, rolled once, left")
+	check(knock(alice, aliceBody), "secret: the throw drops it")
+	local sDrop = newPods()
+	check(#sDrop == 1 and sDrop[1]:GetAttribute("SecretId") == SECRET_ID
+		and sDrop[1]:GetAttribute(ATTR.GuardianAbandoned) == true,
+		("secret: one loose pod, the same encounter, abandoned (got %d)"):format(#sDrop))
+	if sDrop[1] then
+		place(bobBody, sDrop[1]:GetPivot().Position + Vector3.new(0, 0, 2))
+		check(CarryService.TryTake(bob, sDrop[1]), "secret: bob takes the abandoned secret back")
+		local bHeld = CarryService.GetCarried(bob) :: any
+		check(bHeld ~= nil and bHeld.secretId == SECRET_ID and bHeld.guardianAbandoned == true,
+			"secret: same encounter, still abandoned")
+		check(provokes[#provokes] ~= nil and provokes[#provokes].secret == SECRET_ID,
+			"secret: the retake names the encounter too")
+		local o, h = CarryService.ResolveGuardianCatch(bob, false, 0.99)
+		check(o == "abandoned" and h == nil, "secret: caught again at 0.99 -> abandoned (not rolled, not taken)")
+		check(knock(bob, bobBody), "secret: dropped again")
+		local again = newPods()
+		check(#again == 1 and again[1]:GetAttribute("SecretId") == SECRET_ID,
+			"secret: still one pod, still the same encounter")
+	end
+	place(aliceBody, ORIGIN)
+	place(bobBody, ORIGIN + Vector3.new(10, 0, 0))
+	-- A fresh secret, confiscated: the haul carries the encounter home with it.
+	local secret2 = CarryService.SpawnLoose("petalfawn", 1,
+		CFrame.new(ORIGIN + Vector3.new(0, 0, -2)), ORIGIN_NEST, nil, true) :: Model
+	seen[secret2] = true
+	secret2:SetAttribute("SecretId", SECRET_ID)
+	check(CarryService.TryTake(alice, secret2), "secret: alice takes a fresh secret")
+	local co, ch = CarryService.ResolveGuardianCatch(alice, false, 0.90)
+	check(co == "confiscated" and ch ~= nil and (ch :: any).secretId == SECRET_ID,
+		"secret: confiscated, and the haul carries the encounter")
+	check(#newPods() == 0, "secret: a confiscation leaves nothing on the ground")
 end)
 
 ;(NestService :: any).Provoke = realProvoke

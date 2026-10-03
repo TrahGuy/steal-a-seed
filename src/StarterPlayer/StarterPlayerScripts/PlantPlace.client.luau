@@ -33,6 +33,11 @@
 -- ray deliberately ignores the Plants folder. Without that, a big Bellchime
 -- would shadow the soil behind it and there would be a patch of your own bed
 -- you could no longer reach.
+--
+-- For EVERYTHING, Secrets included (the owner's rule, 2026-10-02): an item is
+-- placed by its BASE, one small circle the same for all, and how far the model
+-- reaches -- over other plants, the owner's own fence, gate, signs or mill --
+-- is never a reason to refuse it. See A DISC WHERE IT WILL LAND.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -50,6 +55,7 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local PadInput = require(Shared:WaitForChild("PadInput"))
 local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
+local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 
 local Remotes = SeedGame:WaitForChild("Remotes")
 local channel = Remotes:WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEvent
@@ -260,9 +266,16 @@ end
 -- faith, and the one place it is NOT exact -- the rim of the bed, where the
 -- server pulls the point inside -- would read as the click being ignored.
 --
--- Sized to the thing's own footprint and tinted by its weight band, so the disc
--- is also the answer to "will this fit here" and "what have I got".
+-- ONE SMALL CIRCLE, THE SAME FOR EVERYTHING (the owner's rule, 2026-10-02). It
+-- marks where the BASE goes -- GameConfig.Plant.BaseCircleStuds across for a
+-- pod, a plant or a Secret alike, whatever its species, rarity, size or model --
+-- never how far the model will reach. It used to be sized to the thing's own
+-- footprint, which made a big plant's disc look like a promise that it would
+-- fit; nothing is refused for fitting any more. Tinted by what is in the hands
+-- (PlantInfo.SizeColour: its weight band, or a Secret's rarity colour).
 --==============================================================================
+local BASE_CIRCLE = PLANTING.BaseCircleStuds
+
 local ghost = Instance.new("Part")
 ghost.Name = "PlantGhost"
 ghost.Shape = Enum.PartType.Cylinder
@@ -272,17 +285,9 @@ ghost.CanQuery = false
 ghost.CanTouch = false
 ghost.Material = Enum.Material.Neon
 ghost.Transparency = 0.72
-ghost.Size = Vector3.new(0.12, 2, 2)
+-- Set once: a cylinder's height runs along its X axis, its width is Y and Z.
+ghost.Size = Vector3.new(0.12, BASE_CIRCLE, BASE_CIRCLE)
 ghost.Parent = workspace
-
--- How wide the thing in your hands will stand. A pod is its shell; a creature
--- is its head, which is the widest part of every form the builder makes.
-local function footprint(species: SeedData.Species, tier: number, hatched: boolean): number
-	if not hatched then
-		return SeedData.PodDiameter(tier)
-	end
-	return SeedData.FrameHeight(species, tier) * 0.46 * SeedData.Girth(tier) * 1.5
-end
 
 local function hideGhost()
 	if ghost.Transparency < 1 then
@@ -749,15 +754,13 @@ RunService.RenderStepped:Connect(function()
 	local tier = math.clamp(
 		tonumber(tool:GetAttribute(ATTR.CarryingKg)) or species.Tier,
 		1, SeedData.TierCount)
-	local hatched = tool:GetAttribute("Hatched") == true
-	local width = footprint(species, tier, hatched)
 	local on = landingOf(point, soil)
 
-	ghost.Size = Vector3.new(0.12, width, width)
+	-- The one base circle, never resized: only where it lies and its tint change.
 	-- A cylinder's height runs along its X axis, so it has to be tipped on its
 	-- side to lie flat on the soil.
 	ghost.CFrame = on * CFrame.Angles(0, 0, math.rad(90))
-	ghost.Color = SeedData.ColorForTier(tier)
+	ghost.Color = PlantInfo.SizeColour(species.Id, tier)
 	ghost.Transparency = 0.72
 
 	if pad then

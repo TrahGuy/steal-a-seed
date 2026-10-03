@@ -50,6 +50,8 @@ local EmberrootForms = require(Shared:WaitForChild("EmberrootForms"))
 local StarbloomForms = require(Shared:WaitForChild("StarbloomForms"))
 local DustbowlForms = require(Shared:WaitForChild("DustbowlForms"))
 local GreenhollowForms = require(Shared:WaitForChild("GreenhollowForms"))
+local SecretForms = require(Shared:WaitForChild("SecretForms"))
+local SecretModel = require(Shared:WaitForChild("SecretModel"))
 
 local CreatureModel = {}
 
@@ -1302,6 +1304,26 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 	-- so it fell through the whole thing and shipped with no flower: a stem, seven
 	-- clods, four leaves and a face. It answers here now, before any of that.
 	--==========================================================================
+	--==========================================================================
+	-- THE TWO SECRETS ANSWER FIRST, BY ID -- 2026-10-01
+	--
+	-- Snarlbloom and Petalfawn are the owner's hand-inserted rigs, replayed by
+	-- SecretModel at their authored size with their Motor6Ds and Welds intact.
+	-- Routed by SecretForms having an entry for the id -- not by rarity, so a
+	-- future Secret-rarity species built the ordinary way is not caught here.
+	-- No face, no footing, no scaling by H: the geometry carries all of it.
+	--==========================================================================
+	-- The Rain event's eight supplied forms (2026-10-02) answer here too, by the
+	-- same question: SecretModel holds a replayed form for the id.
+	if SecretModel.HasPlant(sp.Id) then
+		-- One size: the plate is sized from the tier's frame above, and a tier-7
+		-- plate would be 81 studs across under a 32-stud plant, inflating every
+		-- bounding box (the carry reach, the pick radius, the hatch silhouette).
+		base.Size = Vector3.new(6, 0.06, 6)
+		SecretModel.BuildPlant(sp.Id, cf, model)
+		return finish()
+	end
+
 	local greenSpecs = GreenhollowForms.Plants[sp.Id]
 	if greenSpecs then
 		local hs = H / GreenhollowForms.PreviewHeight[sp.Id]
@@ -2018,6 +2040,24 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	model:SetAttribute("Tier", tier)
 	model:SetAttribute("Stage", CreatureModel.STAGE_POD)
 	model.Parent = parent
+
+	--==========================================================================
+	-- A SECRET'S POD IS ITS OWN MODEL -- 2026-10-01
+	--
+	-- The species row names the SecretForms pod (the owner's hand-inserted
+	-- shell), replayed at its authored size with an invisible Shell at the BASE
+	-- as the PrimaryPart. No tier colour, crown, seam or aura: it is one size and
+	-- one look, and the look is the species -- which is the owner's call for a
+	-- secret, and only a secret.
+	--==========================================================================
+	-- The Rain event's three pods (2026-10-02) are replayed the same way: one
+	-- shell per POD, whichever creature it holds.
+	local secretPod = (sp :: any).Pod
+	if type(secretPod) == "string" and SecretModel.HasPod(secretPod) then
+		local shell = SecretModel.BuildPod(secretPod, cf, model)
+		model.PrimaryPart = shell
+		return model
+	end
 
 	-- THE CFRAME IS THE BASE, not the centre -- same contract as BuildCreature,
 	-- because two builders in one file meaning different things by the same

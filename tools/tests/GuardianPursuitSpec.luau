@@ -118,6 +118,22 @@ local ok, err = pcall(function()
 	check(through == 0 and not usable(T, A, bodyA, V(0, 0, 0), V(100, 0, 0), 10.12),
 		"a teleport straight through the guardian would sweep a hit, and is refused instead")
 
+	-- A GUARDIAN BUILT FASTER THAN ANY PLAYER (2026-10-02): Stormstrider at
+	-- SpeedScale 2.5 runs 30-45 studs a tick; its own allowance is widened by
+	-- that factor (40 x 2.5 = 100), the target's is not.
+	local function fast(sample, target, body, parentNow, targetNow, now)
+		return GP.sampleUsable(sample, target, body, parentNow, targetNow, now, 40, 0.5, 100)
+	end
+	check(not usable(S, A, bodyA, V(0, 0, 44), V(0, 0, 17), 10.12) and fast(S, A, bodyA, V(0, 0, 44), V(0, 0, 17), 10.12),
+		"a 44-stud guardian tick: a 'teleport' at the old allowance, an ordinary sweep for a 2.5x guardian")
+	check(not fast(S, A, bodyA, V(0, 0, 6.8), V(0, 0, 72), 10.12),
+		"the TARGET's allowance is not widened: a thief teleported 60 studs is still refused")
+	check(not fast(S, A, bodyA, V(0, 0, 130), V(0, 0, 17), 10.12),
+		"a guardian moved further than even its widened allowance (put back home) is still refused")
+	check(GP.sampleUsable(S, A, bodyA, V(0, 0, 6.8), V(0, 0, 17), 10.12, 40, 0.5, nil)
+			and not GP.sampleUsable(S, A, bodyA, V(0, 0, 50), V(0, 0, 17), 10.12, 40, 0.5, nil),
+		"without an allowance of its own every guardian is exactly as before")
+
 	--==========================================================================
 	-- 3. WHICH WAY IT RUNS
 	--==========================================================================

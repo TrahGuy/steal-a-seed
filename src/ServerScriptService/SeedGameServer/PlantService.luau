@@ -646,9 +646,17 @@ local function standCF(entry: Planted): CFrame?
 		return nil
 	end
 	local base = topOf(soil, entry.offset)
+	-- A secret POD stands at the fixed facing whatever its record says: face,
+	-- the narrow side, to the gate (GameConfig.Secret.PodFacing, the owner's
+	-- option 2). Which way it stands only -- never where it may. Every replayed
+	-- pod (a species with a Pod form: the Secrets' and, from 2026-10-02, the
+	-- Rain event's, whose Pod 3 has an eye) stands the same way.
+	local facing = if entry.stage == CreatureModel.STAGE_POD and entry.species.Pod ~= nil
+		then GameConfig.Secret.PodFacing
+		else entry.facing
 	return CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
 		* entry.plot:GetPivot().Rotation
-		* CFrame.Angles(0, entry.facing, 0)
+		* CFrame.Angles(0, facing, 0)
 end
 
 local function render(entry: Planted)
@@ -1083,6 +1091,40 @@ function PlantService.usePrompt(fn: ((Player, number) -> ())?): boolean
 	end
 	promptFn = fn
 	return true
+end
+
+--==============================================================================
+-- A STUDIO TEST'S READY POD (2026-10-02): the test-only timestamp override the
+-- owner asked for in place of ever shortening a production wait. Ends the wait
+-- of every unhatched pod in this player's garden -- the same three writes the
+-- storage-full instant hatch makes: the deadline, the save, the prompt -- and
+-- answers how many. Studio only; nothing in a live server calls it, and no
+-- remote reaches it.
+--==============================================================================
+function PlantService.DebugReady(player: Player): number
+	if not game:GetService("RunService"):IsStudio() then
+		return 0
+	end
+	local now = os.time()
+	local count = 0
+	for plot, byPlot in pairs(growing) do
+		if PlotService.OwnerOf(plot) == player then
+			for _, entry in pairs(byPlot) do
+				if entry.stage == CreatureModel.STAGE_POD and not isReady(entry, now) then
+					entry.hatchAt = now
+					if entry.model then
+						entry.model:SetAttribute("HatchAt", entry.hatchAt)
+					end
+					attachHatchPrompt(entry)
+					count += 1
+				end
+			end
+			if count > 0 then
+				persisted(plot)
+			end
+		end
+	end
+	return count
 end
 
 function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId: number): boolean
@@ -1619,7 +1661,10 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- them from anywhere else.
 	--==========================================================================
 	local now = Workspace:GetServerTimeNow()
-	local revealAt = HatchRoll.revealAt(now)
+	-- NO ROLL FOR THE RAIN EVENT'S PODS (the owner's rule, 2026-10-02): their
+	-- creature is revealed and handed over straight away, exactly as a hatch
+	-- with the roll switched off -- which every other pod still has on.
+	local revealAt = if entry.species.SkipHatchRoll == true then now else HatchRoll.revealAt(now)
 	local rolled = math.max(revealAt - now, 0)
 	--==========================================================================
 	-- THE EQUIP WAITS FOR THE REVEAL, THE TOOL DOES NOT
@@ -1899,6 +1944,18 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		return refuse(player, "BED_FULL")
 	end
 
+	--==========================================================================
+	-- NOTHING ELSE IS ASKED (the owner's placement rule, 2026-10-02)
+	--
+	-- Every pod, plant and Secret is placed by its BASE: one small circle
+	-- (GameConfig.Plant.BaseCircleStuds), the same for all, which the clamp
+	-- above has already put on this player's own soil. How far the MODEL
+	-- reaches is never asked -- it may overlap other plants, the owner's own
+	-- fence, gate, signs and mill, and nothing is refused for that. A base can
+	-- never stand on another player's plot, the road or the hub, because the
+	-- point was pulled onto one of THIS plot's beds. No spacing rule takes the
+	-- old footprint's place.
+	--==========================================================================
 	local id = (nextId[plot] or 0) + 1
 	nextId[plot] = id
 	local now = os.time()
@@ -1911,12 +1968,14 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		plantedAt = now,
 		-- The whole wait, once, off the approved ladder. A grown plant gets the
 		-- same field with the time already past, because nothing reads it.
-		hatchAt = now + (if hatched then 0 else SeedData.GrowSeconds(tier)),
+		hatchAt = now + (if hatched then 0 else SeedData.GrowSecondsFor(species, tier)),
 		stage = if hatched then CreatureModel.STAGE_GROWN else CreatureModel.STAGE_POD,
 		-- Off the placement id, so consecutive plantings come out scattered.
 		-- Re-placing a plant you picked up gives it a NEW bearing, which is the
-		-- honest answer: you put it down again, facing a different way.
-		facing = facingFor(id),
+		-- honest answer: you put it down again, facing a different way. A secret
+		-- POD is the exception: its face, the narrow side, to the gate (the
+		-- owner's option 2; standCF holds it).
+		facing = if species.Pod ~= nil and not hatched then GameConfig.Secret.PodFacing else facingFor(id),
 		model = nil,
 		prompt = nil,
 	}
@@ -1940,7 +1999,7 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		log(string.format("%s planted a %d tier %s.", player.Name, tier, species.Name))
 	else
 		log(string.format("%s buried a %d tier %s pod (%.0fs until it can be hatched).",
-			player.Name, tier, species.Name, SeedData.GrowSeconds(tier)))
+			player.Name, tier, species.Name, SeedData.GrowSecondsFor(species, tier)))
 	end
 	return true, nil
 end
@@ -2330,6 +2389,10 @@ local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: nu
 	for _, entry in pairs(byPlot) do
 		local model = entry.model
 		if entry.stage == CreatureModel.STAGE_GROWN and model and model.Parent then
+			-- The rung it walks on: its own tier's, or its species' (a Secret walks
+			-- the Colossal rung for its authored size, SeedData.WanderTierOf). Its
+			-- legs step to the leg it is handed on every client (SecretIdle).
+			local walkTier = SeedData.WanderTierOf(entry.species, entry.tier) or entry.tier
 			local rng = entry.rng
 			if not rng then
 				-- Seeded off the placement id so a plot restored on join does
@@ -2350,7 +2413,7 @@ local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: nu
 				entry.offset = entry.legTo or entry.offset
 				entry.legEnd = nil
 				entry.restUntil = srvNow
-					+ SeedData.WanderPause(entry.tier) * rng:NextNumber(0.7, 1.7)
+					+ SeedData.WanderPause(walkTier) * rng:NextNumber(0.7, 1.7)
 				persist(plot)
 			end
 
@@ -2359,17 +2422,17 @@ local function stepWander(plot: Model, byPlot: { [number]: Planted }, srvNow: nu
 					region = PlantWander.RegionFor(plot)
 				end
 				local to, how = PlantWander.Choose(region :: PlantWander.Region,
-					entry.offset, entry.tier, byPlot :: any, entry.id, rng)
+					entry.offset, walkTier, byPlot :: any, entry.id, rng)
 				local fromW = wanderWorld(plot, entry.offset)
 				local toW = wanderWorld(plot, to)
 				if how == "stay" then
 					-- Nowhere on the plot is a walk worth taking from here. Rest
 					-- again rather than publish a leg that goes nowhere.
-					entry.restUntil = srvNow + SeedData.WanderPause(entry.tier)
+					entry.restUntil = srvNow + SeedData.WanderPause(walkTier)
 				elseif fromW and toW then
 					local dist = (toW - fromW).Magnitude
 					local t0 = srvNow
-					local t1 = t0 + PlantWander.LegSeconds(entry.tier, dist)
+					local t1 = t0 + PlantWander.LegSeconds(walkTier, dist)
 					entry.legFrom = entry.offset
 					entry.legTo = to
 					entry.legStart = t0

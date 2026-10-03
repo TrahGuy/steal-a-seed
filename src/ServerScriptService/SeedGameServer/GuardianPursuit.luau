@@ -78,9 +78,14 @@ end
 --   * either body covered more than `maxTravel` since -- a teleport, a throw, a
 --     CarryGuard put-back, a guardian reset. Sweeping across that would be a line
 --     over half the map, and everything near it would count as a hit.
+--
+-- `parentMaxTravel` (2026-10-02), when given, is the GUARDIAN's own allowance in
+-- place of `maxTravel`: a guardian built faster than any player (Stormstrider,
+-- SpeedScale 2.5, 30-45 studs a tick) would otherwise throw its own ordinary
+-- ticks away as "teleports" and lose the sweep. The target keeps `maxTravel`.
 --==============================================================================
 function GuardianPursuit.sampleUsable(sample: Sample?, target: any, body: any, parentNow: Vector3,
-	targetNow: Vector3, now: number, maxTravel: number, maxAge: number): boolean
+	targetNow: Vector3, now: number, maxTravel: number, maxAge: number, parentMaxTravel: number?): boolean
 	if not sample then
 		return false
 	end
@@ -94,7 +99,7 @@ function GuardianPursuit.sampleUsable(sample: Sample?, target: any, body: any, p
 	if flat(targetNow - sample.targetAt).Magnitude > maxTravel then
 		return false
 	end
-	if flat(parentNow - sample.parentAt).Magnitude > maxTravel then
+	if flat(parentNow - sample.parentAt).Magnitude > (parentMaxTravel or maxTravel) then
 		return false
 	end
 	return true

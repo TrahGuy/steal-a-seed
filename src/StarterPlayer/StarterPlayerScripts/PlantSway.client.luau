@@ -239,6 +239,13 @@ local LOOK_AMP = math.rad(28)
 -- look like it turned and then set off -- and long enough that the turn itself
 -- is visible rather than a snap on one frame.
 local TURN_TAU = 0.22
+-- A Secret turns like the giant it is (2026-10-02): it gathers itself, swings
+-- round at a steady pace and settles -- a damped turn of this natural rate,
+-- never faster than SECRET_TURN_MAX radians a second -- so its legs (SecretIdle,
+-- which measures the turn) are stepping through the whole of it rather than
+-- catching up after the quickest part.
+local SECRET_TURN_RATE = 2.2
+local SECRET_TURN_MAX = 1.2
 -- How far a leg swings fore and aft at the top of a stride. Bigger than the
 -- leaf swing because a leg is doing the walking and a leaf is only reacting to
 -- it; small enough that the foot does not visibly scythe through the soil.
@@ -388,6 +395,11 @@ type Sway = {
 	headHeight: number,
 	-- A pod, rather than a placed creature. Only pods react to the two below.
 	pod: boolean,
+	-- A Secret's replayed rig (SeedData Animator = "secret", 2026-10-02): this
+	-- script moves and turns the WHOLE model along its leg and SecretIdle owns
+	-- every joint -- the stepping, the body's bob and sway, the looking around --
+	-- so none of those is drawn here a second time.
+	secret: boolean,
 	-- The clock has run out and the hatch prompt is up.
 	ready: boolean,
 	-- Somebody is holding E on it right now.
@@ -476,6 +488,9 @@ type Sway = {
 	-- from its rest bearing. Eased rather than assigned: it is the difference
 	-- between a plant turning to walk and a plant snapping to a heading.
 	facing: number,
+	-- A Secret's turning speed, radians a second (its damped turn); zero on
+	-- everything else.
+	turnVel: number,
 	lookRate: number,
 	-- The clock the last time this entry was touched, so the phase can advance
 	-- by real elapsed time. apply() is called on a slice, so the gap between two
@@ -696,6 +711,18 @@ local function remember(instance: Instance)
 		if not species then
 			return
 		end
+		--==================================================================
+		-- A SECRET'S LIMBS ARE NOT THIS SCRIPT'S -- 2026-10-01
+		--
+		-- Snarlbloom and Petalfawn (SeedData Animator = "secret") are replayed
+		-- rigs: SecretIdle poses their joint tree every frame on the client. They
+		-- carry parts called Thigh, Shin, Hoof, Leaf and Eye, exactly the names
+		-- the rigs below are resolved by, and two scripts writing one part's
+		-- CFrame is a fight nobody wins. So for them this script does what it
+		-- does for a pod: the whole-model lean and bob, the hatching rattle, the
+		-- glow and the aura -- and no leaves, legs, roots, gaze or lids.
+		--==================================================================
+		local secretRig = (species :: any).Animator == "secret"
 		-- Before a single measurement: see THE REST POSE LIVES ON THE PARTS.
 		restoreRest(model)
 
@@ -766,6 +793,7 @@ local function remember(instance: Instance)
 			phase = (tonumber(model:GetAttribute("PlacementId")) or 0) * 0.9,
 			headHeight = headHeight,
 			pod = stage == STAGE_POD,
+			secret = secretRig,
 			ready = model:GetAttribute("Ready") == true,
 			hatching = model:GetAttribute("Hatching") == true,
 			hatchStart = os.clock(),
@@ -781,7 +809,8 @@ local function remember(instance: Instance)
 			-- own height. Small things patter, big things thud. Recomputed each
 			-- leg once the leg's real speed is known.
 			strideHz = 1,
-			bob = math.min(headHeight * BOB_FRACTION, BOB_CEILING),
+			-- A Secret's bob is its gait's, in SecretIdle.
+			bob = if secretRig then 0 else math.min(headHeight * BOB_FRACTION, BOB_CEILING),
 			leaves = {},
 			legs = {},
 			roots = {},
@@ -789,6 +818,7 @@ local function remember(instance: Instance)
 			-- same way at the same moment.
 			lookPhase = (tonumber(model:GetAttribute("PlacementId")) or 0) * 1.7,
 			facing = 0,
+			turnVel = 0,
 			lookRate = lookRate(tier),
 			-- NOT zero. A plant registered ten minutes into a session would
 			-- otherwise take its first `dt` as ten minutes and snap to an
@@ -825,7 +855,9 @@ local function remember(instance: Instance)
 			-- them.
 			entry.from = anchor.Position
 			entry.to = anchor.Position
-
+		end
+		-- The rigs: never for a pod, never for a secret (see secretRig above).
+		if not entry.pod and not secretRig then
 			local pivot = model:GetPivot()
 			local inverse = pivot:Inverse()
 			for _, d in ipairs(model:GetChildren()) do
@@ -1517,8 +1549,11 @@ local function apply(entry: Sway, now: number)
 			math.abs(math.sin(stride * math.pi)) * entry.bob * moveT, 0)
 		base = CFrame.new(pos)
 		-- Rolls with the stride. The anchor is a pure translation so this is a
-		-- world-axis tip, exactly like the lean it is added to.
-		az += math.sin(stride * math.pi * 2) * ROLL_AMP * moveT
+		-- world-axis tip, exactly like the lean it is added to. Not a Secret's:
+		-- its weight shifts from leg to leg in SecretIdle's gait instead.
+		if not entry.secret then
+			az += math.sin(stride * math.pi * 2) * ROLL_AMP * moveT
+		end
 	end
 
 	--==========================================================================
@@ -1541,7 +1576,9 @@ local function apply(entry: Sway, now: number)
 	local dt = math.max(now - entry.lastNow, 0)
 	entry.lastNow = now
 	local yaw = 0
-	if not entry.pod then
+	-- A Secret looks around with its own head and eyes (SecretIdle), not by
+	-- turning its whole body.
+	if not entry.pod and not entry.secret then
 		entry.lookPhase += dt * entry.lookRate * (1 - moveT)
 		yaw = math.sin(entry.lookPhase) * LOOK_AMP
 	end
@@ -1572,7 +1609,10 @@ local function apply(entry: Sway, now: number)
 	-- and it is cheaper than a special case to zero it.
 	--==========================================================================
 	if not entry.pod then
-		local heading = yaw
+		-- A standing Secret keeps facing the way it last walked rather than
+		-- turning back to its planted bearing after every leg: a giant swinging
+		-- round on the spot twice a walk is a lot of turning for nothing.
+		local heading = if entry.secret then entry.facing else yaw
 		local walking = entry.to and entry.from and entry.legEnd > 0
 			and serverNow < entry.legEnd
 		if walking then
@@ -1594,7 +1634,15 @@ local function apply(entry: Sway, now: number)
 		-- Wrap into (-pi, pi] before easing, or a plant turning past the seam
 		-- takes the long way round -- 359 degrees of spin to correct one.
 		local delta = (heading - entry.facing + math.pi) % (math.pi * 2) - math.pi
-		entry.facing += delta * (1 - math.exp(-dt / TURN_TAU))
+		if entry.secret then
+			local step = math.min(dt, 0.1)
+			local rate = SECRET_TURN_RATE
+			entry.turnVel = math.clamp(entry.turnVel + (rate * rate * delta - 2 * rate * entry.turnVel) * step,
+				-SECRET_TURN_MAX, SECRET_TURN_MAX)
+			entry.facing += entry.turnVel * step
+		else
+			entry.facing += delta * (1 - math.exp(-dt / TURN_TAU))
+		end
 		yaw = entry.facing
 	end
 

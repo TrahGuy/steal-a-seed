@@ -272,7 +272,7 @@ local function build(model: Model): Panel?
 	-- A pod built before the server stamped deadlines -- or a model seen in the
 	-- one frame before the attribute replicates -- falls back to the ladder.
 	local hatchAt = tonumber(model:GetAttribute("HatchAt"))
-		or (plantedAt + SeedData.GrowSeconds(tier))
+		or (plantedAt + SeedData.GrowSecondsFor(species, tier))
 
 	--==========================================================================
 	-- A FIXED GAP ABOVE THE REAL TOP -- UNDER A CEILING

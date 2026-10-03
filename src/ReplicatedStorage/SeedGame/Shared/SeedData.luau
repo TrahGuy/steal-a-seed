@@ -108,6 +108,10 @@ SeedData.BiomeMultiplier = {
 	tanglemire = 1.20,
 	emberroot = 1.30,
 	starbloom = 1.40,
+	-- The Rain event's temporary biome (2026-10-02). Its creatures pay a FIXED
+	-- income that no multiplier touches; this entry exists only because every
+	-- registered species must name a biome that has one.
+	rain = 1.00,
 }
 
 --==============================================================================
@@ -184,6 +188,53 @@ export type Species = {
 	-- and the x2 Earn pass still doubles the TOTAL once, further down the
 	-- economy, exactly as it always did.
 	IncomeBonus: number?,
+	--==========================================================================
+	-- THE SECRET SPECIES' FLAGS (2026-10-01) -- absent on every listed species.
+	-- See SeedData.SecretSpecies below for what a secret is.
+	--==========================================================================
+	-- "secret": SecretIdle (client) drives the replayed rig by forward kinematics
+	-- and PlantSway leaves the limbs, eyes and lids alone.
+	Animator: string?,
+	-- "overhead": carried over the head in both hands, pod and plant alike.
+	Carry: string?,
+	-- Which rung of the walk ladder (SeedData.WanderLadder) a planted one walks
+	-- on when it is not its own tier's (SeedData.WanderTierOf). The Secrets carry
+	-- one internal tier (SecretTier) but stand at their authored, Colossal-scale
+	-- size, so they walk the Colossal rung -- reach, shortest leg, speed and pause
+	-- -- like every other creature their size (2026-10-02). Implementation only:
+	-- never shown, never a size. Absent on every listed species.
+	WanderTier: number?,
+	-- The SecretForms pod replayed for this species' pod, by form id.
+	Pod: string?,
+	-- True for a species that is in no biome pool, no Index shelf, no hatch-roll
+	-- silhouette and no Biome Harvest. Reachable by id only.
+	Secret: boolean?,
+	-- A FIXED income in $/s (the Secrets, the owner's approved rates of
+	-- 2026-10-02): IncomePerSecond answers exactly this, whatever the tier, with
+	-- no tier, rarity or biome factor on top. Boosts still apply once, later, in
+	-- EconomyService (the x2 pass, the chest, the sacrifice). Absent on every
+	-- listed species, whose income is unchanged.
+	FixedIncome: number?,
+	--==========================================================================
+	-- THE RAIN EVENT'S FLAGS (2026-10-02) -- absent on every other species.
+	-- See SeedData.RainSpecies below.
+	--==========================================================================
+	-- Which weather event's nest hands this one out ("rain"). Unlisted: in no
+	-- biome pool, no Index shelf, no hatch-roll silhouette, no reward pool.
+	Event: string?,
+	-- A FIXED growth time in seconds for its pod (GrowSecondsFor), whatever the
+	-- tier. Absent: the tier's ladder (GrowSeconds), as every species has.
+	FixedGrowSeconds: number?,
+	-- While an UNBANKED pod of this species is carried, movement is exactly this
+	-- share of the carrier's earned speed, in place of the ordinary carry
+	-- multiplier, before traps and Walk Mode (CarryService.RefreshWalkSpeed).
+	CarrySpeedFactor: number?,
+	-- Shows no size word or size colour anywhere, like a Secret (Unsized): one
+	-- authored size, and its tier is implementation only.
+	Unsized: boolean?,
+	-- Hatches straight into the reveal with no silhouette roll (PlantService
+	-- hatch); every other species rolls as before.
+	SkipHatchRoll: boolean?,
 }
 
 local LEAF = Color3.fromRGB(86, 150, 66)
@@ -963,6 +1014,14 @@ function SeedData.WanderPause(tier: number?): number
 	return math.clamp(1.2 + tierValue(tier) ^ 0.10, 1.4, 4.5)
 end
 
+-- The tier whose rung a planted creature WALKS on: its species' WanderTier when
+-- it has one (the Secrets: the Colossal rung for their authored size), its own
+-- tier otherwise -- so every listed species walks exactly as it always has.
+function SeedData.WanderTierOf(species: Species?, tier: number?): number?
+	local own = if species then species.WanderTier else nil
+	return if type(own) == "number" then own else tier
+end
+
 SeedData.SellSeconds = 30
 
 --==============================================================================
@@ -987,6 +1046,22 @@ SeedData.Sacrifice = {
 	DurationSeconds = 45,
 	CooldownSeconds = 180,
 }
+
+--==============================================================================
+-- THE RAIN (2026-10-02; WeatherService)
+--
+-- The owner's approved +25% on ONLINE planted income while it rains: one
+-- factor, applied once, in EconomyService.RateFor -- on the pass and the
+-- temporary boosts, like a weather multiplier on the whole garden, Secrets
+-- included. Sale prices, base rates, offline earnings, growth, size and rarity
+-- never see it. GameConfig.Weather holds everything about the event that is
+-- not this number.
+--==============================================================================
+SeedData.Rain = {
+	IncomeFactor = 1.25,
+}
+assert(SeedData.Rain.IncomeFactor > 1 and SeedData.Rain.IncomeFactor <= 2,
+	"SeedData.Rain.IncomeFactor must be a bonus, and a modest one")
 -- Checked on load, like the chest's: a boost that outlived its cooldown would
 -- let a second sacrifice land on top of the first.
 assert(SeedData.Sacrifice.Multiplier > 1, "the sacrifice must raise income")
@@ -1080,10 +1155,199 @@ end
 --==============================================================================
 -- LOOKUPS, AND THE CHECKS THAT RUN AT REQUIRE
 --==============================================================================
+--==============================================================================
+-- THE SECRET SPECIES -- 2026-10-01
+--
+-- Two plants the owner inserted by hand, one per biome, replayed from
+-- SecretForms at their authored size (SecretModel). They are NOT in
+-- SeedData.Species: that list is the biome pools, the Index shelves, the hatch
+-- roll's silhouettes, the wheel's pod pools and the Biome Harvest, and the
+-- owner's rule is that a secret joins none of them -- it spawns by NestService's
+-- own 5% roll, in addition to the regular pods. They ARE reachable by id
+-- (SeedData.Get), which is what planting, carrying, hatching and the Tool need.
+--
+-- Height is the model's authored height, recorded for the carry camera; the
+-- builder does not scale by it. The colours only feed
+-- the UI and the invisible Base plate -- the geometry carries its own.
+--==============================================================================
+SeedData.SecretSpecies = {
+	{
+		Id = "snarlbloom", Name = "Snarlbloom", Rarity = "Secret", Biome = "greenhollow",
+		Height = 47.26, Form = "secret",
+		Body = Color3.fromRGB(60, 118, 62),
+		Crown = Color3.fromRGB(196, 255, 110),
+		Accent = Color3.fromRGB(255, 120, 190), Leaf = LEAF, Stem = STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "greenhollowsecretpod",
+		Secret = true,
+		-- The owner's approved fixed rate (2026-10-02): $155,000/s, $310,000/s under the x2 pass.
+		FixedIncome = 155000,
+	},
+	{
+		Id = "petalfawn", Name = "Petalfawn", Rarity = "Secret", Biome = "starbloom",
+		Height = 38.76, Form = "secret",
+		Body = Color3.fromRGB(39, 37, 82),
+		Crown = Color3.fromRGB(170, 120, 255),
+		Accent = Color3.fromRGB(110, 224, 255),
+		Leaf = Color3.fromRGB(91, 70, 164), Stem = Color3.fromRGB(58, 42, 112), Soil = Color3.fromRGB(40, 28, 84),
+		Animator = "secret", Carry = "overhead", WanderTier = SeedData.TierCount, Pod = "starbloomsecretpod",
+		Secret = true,
+		-- The owner's approved fixed rate (2026-10-02): $189,000/s, $378,000/s under the x2 pass.
+		FixedIncome = 189000,
+	},
+} :: { Species }
+
+--==============================================================================
+-- THE ONE TIER EVERY SECRET CARRIES, WHEREVER IT CAME FROM (2026-10-02)
+--
+-- IMPLEMENTATION ONLY. A Secret has its Secret rarity and no size tier: one
+-- authored size, and a FIXED income (FixedIncome) that no tier touches. The
+-- engine still keeps a tier on every Tool, saved row and planted entry, so the
+-- Secrets carry this one -- NestService's spawn builds its pod at it and the
+-- admin grant (AdminService, SECRET ITEMS) gives it -- and it decides only what
+-- is not size or money: how long a Secret pod grows (GrowSeconds) and what a
+-- carried one weighs. No screen shows it as a size word or colour.
+--==============================================================================
+SeedData.SecretTier = 1
+
+-- Which secret a biome's nest may spawn, by biome id. Absent means none.
+SeedData.SecretByBiome = {
+	greenhollow = "snarlbloom",
+	starbloom = "petalfawn",
+} :: { [string]: string }
+
+--==============================================================================
+-- THE RAIN EVENT'S CREATURES -- 2026-10-02
+--
+-- Eight forms the owner supplied in the Podnappers Workspace folder "Rain
+-- Event", replayed from RainForms part for part at the size they were
+-- supplied (SecretModel). Like the Secrets they are in SeedData.Species' place
+-- nowhere -- no biome pool, Index shelf, hatch-roll silhouette, wheel pool,
+-- reward pool or Biome Harvest -- and reachable by id, which is all planting,
+-- carrying, hatching, the Tool and the save need. Only the Rain event's own
+-- nest lays their pods (NestService's event nest, stocked by WeatherService).
+--
+-- THE MAPPING (the supplied model -> the species id; RainForms holds the same
+-- table), and the owner's fixed, final, UNBOOSTED rates:
+--
+--   Pod 1  "pod1"  Mythic, no size word, 3 h (10,800 s)
+--          Puddlepod POD1 -> puddlepod            $80,000/s
+--          Drizzlet POD1  -> drizzlet             $85,000/s
+--          Lotusling POD1 -> lotusling            $90,000/s
+--   Pod 2  "pod2"  Mythic, shows Colossal, 6 h (21,600 s)
+--          Puddlepod POD2 -> puddlepod_colossal  $120,000/s
+--          Drizzlet POD 3 -> drizzlet_colossal   $135,000/s  (labelled POD 3;
+--                                                  the owner confirmed Pod 2)
+--          Lotusling POD2 -> lotusling_colossal  $150,000/s
+--   Pod 3  "pod3"  Divine, no size word, 9 h (32,400 s)
+--          Tempestoak POD 3 -> tempestoak        $250,000/s
+--          Thundermaw POD 3 -> thundermaw        $265,000/s
+--          (the owner's approved pool is exactly these two, 1/2 each)
+--
+-- RATES FOLLOW THE CREATURE, AND THE CREATURE'S SIZE. Pod 1's three rise with
+-- how much creature each one is (drawn bounding volume: Puddlepod 587,
+-- Drizzlet 1,045, Lotusling 2,248 cubic studs), and Pod 2 keeps the SAME order
+-- by name, so Puddlepod is the low rate in both pods and Lotusling the high
+-- one. Pod 3 likewise: Tempestoak (89,600) below Thundermaw (107,600).
+--
+-- Pod 2's three are the SAME three creatures (Name) in their larger supplied
+-- forms; their own ids only because their form, income and growth differ.
+-- "Colossal" is what they SHOW (tier 7) -- nothing builds them bigger: every
+-- form is replayed at scale 1 whatever the tier. Pod 1's and Pod 3's tier is
+-- implementation only (Unsized): no size word, no size colour.
+--
+-- Income is FixedIncome, the whole answer (IncomePerSecond): no tier, rarity
+-- or biome factor ever multiplies it; the pass, the chest, the sacrifice and
+-- the weather apply once, in EconomyService, as they do for every plant. The
+-- sale price follows from it (SellPrice), as every plant's does.
+--==============================================================================
+local RAIN_SOIL = Color3.fromRGB(58, 70, 86)
+local function rainSpecies(id: string, name: string, rarity: string, tier: number, height: number,
+	pod: string, income: number, grow: number, walkTier: number, body: Color3, crown: Color3, accent: Color3): Species
+	return {
+		Id = id, Name = name, Rarity = rarity, Biome = "rain",
+		Height = height, Form = "secret",
+		Body = body, Crown = crown, Accent = accent,
+		Leaf = Color3.fromRGB(46, 104, 72), Stem = Color3.fromRGB(70, 134, 122), Soil = RAIN_SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = walkTier, Pod = pod,
+		Event = "rain", Unsized = tier ~= SeedData.TierCount or nil, SkipHatchRoll = true,
+		FixedIncome = income, FixedGrowSeconds = grow,
+		-- Pod 3 only: half speed while its pod is carried unbanked.
+		CarrySpeedFactor = if pod == "rainpod3" then 0.5 else nil,
+	} :: any
+end
+
+local PUDDLE = { Color3.fromRGB(74, 170, 150), Color3.fromRGB(118, 204, 176), Color3.fromRGB(232, 110, 140) }
+local DRIZZLE = { Color3.fromRGB(86, 164, 230), Color3.fromRGB(242, 246, 252), Color3.fromRGB(84, 176, 92) }
+local LOTUS = { Color3.fromRGB(140, 200, 130), Color3.fromRGB(250, 190, 214), Color3.fromRGB(230, 246, 220) }
+local TEMPEST = { Color3.fromRGB(74, 58, 48), Color3.fromRGB(138, 112, 86), Color3.fromRGB(112, 120, 150) }
+local THUNDER = { Color3.fromRGB(58, 92, 80), Color3.fromRGB(84, 92, 116), Color3.fromRGB(104, 136, 116) }
+
+-- Heights are each form's DRAWN height in studs (RainForms Size.Y), recorded
+-- like the Secrets' for the carry camera; the builder never scales by them.
+SeedData.RainSpecies = {
+	rainSpecies("puddlepod", "Puddlepod", "Mythic", 1, 9.99, "rainpod1", 80000, 10800, 5, PUDDLE[1], PUDDLE[2], PUDDLE[3]),
+	rainSpecies("drizzlet", "Drizzlet", "Mythic", 1, 16.01, "rainpod1", 85000, 10800, 5, DRIZZLE[1], DRIZZLE[2], DRIZZLE[3]),
+	rainSpecies("lotusling", "Lotusling", "Mythic", 1, 13.23, "rainpod1", 90000, 10800, 5, LOTUS[1], LOTUS[2], LOTUS[3]),
+	rainSpecies("puddlepod_colossal", "Puddlepod", "Mythic", 7, 35.43, "rainpod2", 120000, 21600, 7,
+		PUDDLE[1], PUDDLE[2], PUDDLE[3]),
+	rainSpecies("drizzlet_colossal", "Drizzlet", "Mythic", 7, 48.15, "rainpod2", 135000, 21600, 7,
+		DRIZZLE[1], DRIZZLE[2], DRIZZLE[3]),
+	rainSpecies("lotusling_colossal", "Lotusling", "Mythic", 7, 30.10, "rainpod2", 150000, 21600, 7,
+		LOTUS[1], LOTUS[2], LOTUS[3]),
+	rainSpecies("tempestoak", "Tempestoak", "Divine", 1, 70.88, "rainpod3", 250000, 32400, 7,
+		TEMPEST[1], TEMPEST[2], TEMPEST[3]),
+	rainSpecies("thundermaw", "Thundermaw", "Divine", 1, 51.77, "rainpod3", 265000, 32400, 7,
+		THUNDER[1], THUNDER[2], THUNDER[3]),
+} :: { Species }
+
+--==============================================================================
+-- THE THREE RAIN PODS: what each holds, and how a nest is stocked with them
+--
+-- A pod's creature is drawn ON THE SERVER, once, when the pod is laid in the
+-- event nest (RollRainPod): every creature in its roster equally likely. From
+-- then on it is simply that pod's species id, carried, dropped, retaken,
+-- banked, planted and saved like every pod's -- nothing draws again, and the
+-- shell shows only which pod it is (PlantInfo), never which creature.
+--
+-- `Tier` is what its items carry: 7 for Pod 2, which SHOWS Colossal; 1 for the
+-- unsized two (never shown). `Sized` says whether the size word shows.
+--==============================================================================
+export type RainPod = {
+	Id: string,
+	Name: string,
+	Rarity: string,
+	Tier: number,
+	Sized: boolean,
+	GrowSeconds: number,
+	Species: { string },
+}
+
+SeedData.RainPods = {
+	rainpod1 = { Id = "rainpod1", Name = "Rain pod", Rarity = "Mythic", Tier = 1, Sized = false,
+		GrowSeconds = 10800, Species = { "puddlepod", "drizzlet", "lotusling" } },
+	rainpod2 = { Id = "rainpod2", Name = "Rain pod", Rarity = "Mythic", Tier = 7, Sized = true,
+		GrowSeconds = 21600, Species = { "puddlepod_colossal", "drizzlet_colossal", "lotusling_colossal" } },
+	rainpod3 = { Id = "rainpod3", Name = "Thunderstorm pod", Rarity = "Divine", Tier = 1, Sized = false,
+		GrowSeconds = 32400, Species = { "tempestoak", "thundermaw" } },
+} :: { [string]: RainPod }
+
+--==============================================================================
+-- ONE BATCH PER EVENT (the owner's rule): an ordinary Rain lays exactly three
+-- pods, each slot on its own a coin flip between Pod 1 and Pod 2 (three of a
+-- kind is a valid batch); a Thunderstorm lays exactly one Pod 3. Nothing ever
+-- restocks it -- not a theft, a banking, a catch or a pickup.
+--==============================================================================
+SeedData.RainBatches = {
+	rain = { Slots = 3, Choices = { "rainpod1", "rainpod2" } },
+	thunder = { Slots = 1, Choices = { "rainpod3" } },
+} :: { [string]: { Slots: number, Choices: { string } } }
+
 local byId: { [string]: Species } = {}
 local byBiome: { [string]: { Species } } = {}
 
-for _, species in ipairs(SeedData.Species) do
+-- The same checks for a listed species and a secret one; only a listed species
+-- joins its biome's pool.
+local function register(species: Species, listed: boolean)
 	assert(byId[species.Id] == nil, "duplicate species id: " .. species.Id)
 	assert(GameConfig.RarityTier[species.Rarity] ~= nil,
 		string.format("species %q has unknown rarity %q", species.Id, species.Rarity))
@@ -1106,6 +1370,36 @@ for _, species in ipairs(SeedData.Species) do
 	-- of the same plant; a negative would make a species pay less than its own
 	-- rarity says; a NaN would poison every sum the garden panel adds it into.
 	--======================================================================
+	-- A fixed income is paid as it stands, so it is checked the same way a
+	-- bonus is: whole, finite, and here more than nothing.
+	local fixedIncome = (species :: any).FixedIncome
+	if fixedIncome ~= nil then
+		assert(type(fixedIncome) == "number" and fixedIncome == fixedIncome and fixedIncome ~= math.huge
+				and fixedIncome > 0 and math.floor(fixedIncome) == fixedIncome,
+			string.format("species %q has a FixedIncome of %s: it must be a whole, finite, positive number of "
+				.. "dollars per second", species.Id, tostring(fixedIncome)))
+	end
+	-- A fixed growth time is a whole, positive number of seconds; a carry speed
+	-- factor a share of the carrier's speed, more than nothing and at most all.
+	local grow = (species :: any).FixedGrowSeconds
+	if grow ~= nil then
+		assert(type(grow) == "number" and grow == grow and grow ~= math.huge and grow > 0 and math.floor(grow) == grow,
+			string.format("species %q has a FixedGrowSeconds of %s: it must be a whole, positive number of seconds",
+				species.Id, tostring(grow)))
+	end
+	local carryFactor = (species :: any).CarrySpeedFactor
+	if carryFactor ~= nil then
+		assert(type(carryFactor) == "number" and carryFactor > 0 and carryFactor <= 1,
+			string.format("species %q has a CarrySpeedFactor of %s: it must be in (0, 1]", species.Id,
+				tostring(carryFactor)))
+	end
+	local walkTier = (species :: any).WanderTier
+	if walkTier ~= nil then
+		assert(type(walkTier) == "number" and walkTier >= 1 and walkTier <= SeedData.TierCount
+				and math.floor(walkTier) == walkTier,
+			string.format("species %q has a WanderTier of %s: it must name a rung of the walk ladder", species.Id,
+				tostring(walkTier)))
+	end
 	local bonus = (species :: any).IncomeBonus
 	if bonus ~= nil then
 		assert(type(bonus) == "number" and bonus == bonus and bonus ~= math.huge
@@ -1115,6 +1409,9 @@ for _, species in ipairs(SeedData.Species) do
 				species.Id, tostring(bonus)))
 	end
 	byId[species.Id] = species
+	if not listed then
+		return
+	end
 	local list = byBiome[species.Biome]
 	if not list then
 		list = {}
@@ -1123,11 +1420,84 @@ for _, species in ipairs(SeedData.Species) do
 	table.insert(list, species)
 end
 
+for _, species in ipairs(SeedData.Species) do
+	register(species, true)
+end
+for _, species in ipairs(SeedData.SecretSpecies) do
+	assert(species.Secret == true, "a secret species must say so: " .. species.Id)
+	register(species, false)
+end
+for biomeId, speciesId in pairs(SeedData.SecretByBiome) do
+	local species = byId[speciesId]
+	assert(species and species.Secret and species.Biome == biomeId,
+		string.format("SecretByBiome.%s names %q, which is not that biome's secret", biomeId, speciesId))
+end
+-- The Rain event's eight: unlisted, like the Secrets, and every one in exactly
+-- one pod's roster at that pod's tier, rarity and growth time.
+for _, species in ipairs(SeedData.RainSpecies) do
+	assert(species.Event == "rain" and species.Secret ~= true, "a rain species is an event species: " .. species.Id)
+	register(species, false)
+end
+for podId, pod in pairs(SeedData.RainPods) do
+	assert(pod.Id == podId and #pod.Species >= 1, "RainPods." .. podId .. " is malformed")
+	assert(pod.Sized == (pod.Tier == SeedData.TierCount), "RainPods." .. podId .. ": only a Colossal pod is sized")
+	for _, speciesId in ipairs(pod.Species) do
+		local species = byId[speciesId] :: any
+		assert(species and species.Event == "rain" and species.Pod == podId and species.Rarity == pod.Rarity
+				and (species.Unsized == true) == not pod.Sized and species.FixedGrowSeconds == pod.GrowSeconds,
+			string.format("RainPods.%s lists %q, which is not one of its creatures", podId, speciesId))
+	end
+end
+for mode, batch in pairs(SeedData.RainBatches) do
+	assert(batch.Slots >= 1 and #batch.Choices >= 1, "RainBatches." .. mode .. " is empty")
+	for _, podId in ipairs(batch.Choices) do
+		assert(SeedData.RainPods[podId], string.format("RainBatches.%s names an unknown pod %q", mode, podId))
+	end
+end
+
 SeedData.ById = byId
 SeedData.ByBiome = byBiome
 
 function SeedData.Get(id: string): Species?
 	return byId[id]
+end
+
+--==============================================================================
+-- THE RAIN PODS' DRAWS (server). `rng` is the caller's Random; a spec passes a
+-- seeded one, the event nest the server's own.
+--==============================================================================
+-- The pod a species hatches from, or nil for every species that is not the
+-- Rain event's.
+function SeedData.RainPodOf(species: Species?): RainPod?
+	local podId = if type(species) == "table" and (species :: any).Event == "rain" then (species :: any).Pod else nil
+	return if type(podId) == "string" then SeedData.RainPods[podId] else nil
+end
+
+-- The creature a newly laid pod holds: one of its roster, each equally likely.
+function SeedData.RollRainPod(podId: string, rng: Random): Species
+	local pod = SeedData.RainPods[podId]
+	assert(pod, "RollRainPod: unknown pod " .. tostring(podId))
+	return byId[pod.Species[rng:NextInteger(1, #pod.Species)]]
+end
+
+-- One event's whole batch, slot by slot: { pod id, species, tier }. Each slot
+-- chooses its pod on its own, then its creature.
+function SeedData.RollRainBatch(mode: string, rng: Random): { { pod: string, species: Species, tier: number } }
+	local batch = SeedData.RainBatches[mode]
+	assert(batch, "RollRainBatch: unknown mode " .. tostring(mode))
+	local out = {}
+	for _ = 1, batch.Slots do
+		local podId = batch.Choices[rng:NextInteger(1, #batch.Choices)]
+		local species = SeedData.RollRainPod(podId, rng)
+		table.insert(out, { pod = podId, species = species, tier = SeedData.RainPods[podId].Tier })
+	end
+	return out
+end
+
+-- True for anything that shows NO size word or size colour: a Secret, and the
+-- Rain event's Pod 1 and Pod 3 forms. Their tier is implementation only.
+function SeedData.Unsized(species: Species?): boolean
+	return type(species) == "table" and ((species :: any).Secret == true or (species :: any).Unsized == true)
 end
 
 function SeedData.InBiome(biomeId: string): { Species }
@@ -1190,6 +1560,15 @@ local function bonusFor(species: Species?): number
 end
 
 function SeedData.IncomePerSecond(species: Species?, tier: number?): number
+	-- A FIXED rate is the whole answer (the Secrets, 2026-10-02): the owner's
+	-- final unboosted $/s, never multiplied again by a tier, rarity or biome
+	-- factor. Validated at load: a whole, positive number.
+	if type(species) == "table" then
+		local fixed = (species :: Species).FixedIncome
+		if type(fixed) == "number" then
+			return fixed
+		end
+	end
 	local base = SeedData.Tier(tier).value * GameConfig.Carry.CashPerValue
 	local rarity, biome = factorsFor(species)
 	-- AFTER the rounding, and multiplied by nothing: the bonus is the same dollar
@@ -1247,6 +1626,18 @@ end
 
 function SeedData.GrowSeconds(tier: number?): number
 	return GROW_SECONDS[SeedData.Tier(tier).index]
+end
+
+-- How long THIS species' pod grows: its FixedGrowSeconds when it has one (the
+-- Rain event's pods, 2026-10-02: 3 h, 6 h and 9 h), else its tier's rung of
+-- the ladder above, exactly as before. PlantService stamps the deadline from
+-- this once, at planting, and saves it.
+function SeedData.GrowSecondsFor(species: Species?, tier: number?): number
+	local fixed = if type(species) == "table" then (species :: any).FixedGrowSeconds else nil
+	if type(fixed) == "number" and fixed > 0 then
+		return fixed
+	end
+	return SeedData.GrowSeconds(tier)
 end
 
 --==============================================================================

@@ -506,8 +506,11 @@ local function label(folder: Folder, host: BasePart, species: SeedData.Species,
 	local rarityColour = GameConfig.RarityColor[species.Rarity] or Color3.fromRGB(220, 220, 220)
 	local nameLabel = line("Species", LABEL.NameSize,
 		SeedData.FormColor(species), species.Name:upper(), 1)
+	-- A Secret has its rarity and no size tier (2026-10-02): "SECRET" alone. So
+	-- do the Rain event's unsized forms: "MYTHIC", "DIVINE".
 	line("Rarity", LABEL.LineSize, rarityColour,
-		string.format("%s • %s", species.Rarity:upper(), SeedData.TierName(tier):upper()), 2)
+		if SeedData.Unsized(species) then species.Rarity:upper()
+			else string.format("%s • %s", species.Rarity:upper(), SeedData.TierName(tier):upper()), 2)
 	line("Income", LABEL.IncomeSize, Color3.fromRGB(142, 214, 86),
 		string.format("+$%s/s", GameConfig.compact(income)), 3)
 	if discovery then

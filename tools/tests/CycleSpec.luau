@@ -418,6 +418,10 @@ do
 			IsCarrying = function()
 				return false
 			end,
+			-- A running Rain event's pod (2026-10-02): dusk leaves it to the event.
+			IsLiveEventPod = function(pod: Instance)
+				return pod:GetAttribute("EventId") ~= nil
+			end,
 		},
 		BiomeGateService = {
 			OrderAt = function()
@@ -468,6 +472,11 @@ do
 		pod.Name = "LoosePod"
 		pod.Parent = fixture
 		CollectionService:AddTag(pod, LOOSE_TAG)
+		local eventPod = Instance.new("Part")
+		eventPod.Name = "EventPod"
+		eventPod:SetAttribute("EventId", 1)
+		eventPod.Parent = fixture
+		CollectionService:AddTag(eventPod, LOOSE_TAG)
 		local forcedAt = os.clock()
 		done, why = W.StartNight()
 		ok("Start Night by day starts the night",
@@ -475,6 +484,8 @@ do
 		ok("the normal dusk, in its order: the wall, the road, the nests, the parents",
 			#trail == 4 and inOrder({ "Shut", "Sweep", "Clear", "Parents" }))
 		ok("and the pods lying loose are gone", pod.Parent == nil)
+		ok("but a running Rain event's pod is the event's, and stays", eventPod.Parent == fixture)
+		eventPod:Destroy()
 		local left = W.SecondsLeft()
 		ok("the night's deadline is the configured night, not what was left of the day",
 			left > C.NightSeconds - 0.25 and left <= C.NightSeconds, string.format("%.2fs", left))

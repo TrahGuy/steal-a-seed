@@ -1310,6 +1310,13 @@ function MapDecor.dressSegment(biome: BiomeData.Biome, model: Model)
 		if cradle then
 			cradle(folder, nestCF, ctx.rng)
 		end
+		-- The secret pod's spot (2026-10-01), across the road from the nest, is
+		-- claimed too, so no prop stands where NestService raises its platform.
+		local secret = (biome :: any).Secret
+		if secret then
+			local spotX = if nestCF.X < 0 then secret.SpotX else -secret.SpotX
+			table.insert(ctx.taken, { x = spotX, z = nestCF.Z, r = NEST_CLEAR - 8 })
+		end
 	end
 
 	kit(ctx, biome)

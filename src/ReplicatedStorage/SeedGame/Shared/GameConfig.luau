@@ -2755,6 +2755,33 @@ GameConfig.Parent = {
 }
 
 --==============================================================================
+-- STORMSTRIDER, THE RAIN EVENT'S GUARDIAN (2026-10-02)
+--
+-- The owner's rule: its chase-speed targets are SpeedScale x the Starbloom
+-- guardian's under equivalent player conditions, the ramp logic preserved --
+-- 1.15 at first, then 1.80, and 2.5 since the owner found even that too slow
+-- (2026-10-02). So it carries Astralmaw's profile number for number, plus
+-- SpeedScale (ITS OWN knob; no other profile has one), which NestService
+-- applies to the WHOLE chase speed it works out -- the ramp, the rage and the
+-- shortfall, the shortfall measured against Starbloom's own recommendation (the
+-- event nest's) -- so against any one player, at any moment of the ramp, it
+-- runs exactly 2.5 x what Astralmaw would: 195 at the opening, 240 at the top,
+-- the same 3.4 s ramp, before rage and shortfall. At that speed it covers 30
+-- to 45 studs a tick, so NestService widens ITS OWN sweep allowance by the same
+-- factor (every other guardian keeps 40).
+-- The walk home, the throw and its aim are Astralmaw's, unscaled: the owner
+-- named the chase. Its catch radius, its hitbox and the player's movement are
+-- every guardian's. CatchLightning: each confirmed catch stamps one VISUAL
+-- strike for the clients (ParentAnim); nothing about the catch changes.
+--==============================================================================
+do
+	local storm = table.clone(GameConfig.Parent.Guardians.astralmaw)
+	storm.SpeedScale = 2.5
+	storm.CatchLightning = true
+	GameConfig.Parent.Guardians.stormstrider = storm
+end
+
+--==============================================================================
 -- WHERE THIS BIOME'S GUARDIAN PUTS A CONFISCATED POD, OR NOTHING
 --
 -- Nothing for Greenhollow and Dustbowl, and that absence is load-bearing in
@@ -2900,6 +2927,17 @@ GameConfig.Plant = {
 	-- than refused: "exactly where I clicked" should stop being exact only at
 	-- the rim, and a refusal there reads as the game being broken.
 	EdgeMarginStuds = 1.6,
+	--==========================================================================
+	-- ONE SMALL CIRCLE FOR EVERYTHING (the owner's rule, 2026-10-02)
+	--
+	-- The preview disc's width, the same for every pod, plant and Secret
+	-- whatever its species, rarity, size or model. It marks where the BASE goes,
+	-- not how far the model reaches: a big model may overhang its neighbours,
+	-- its own fence, gate, signs and mill, and nothing is refused for that. The
+	-- base itself stays on the owner's own soil -- the clamp above keeps the
+	-- whole circle on it, because EdgeMarginStuds is more than its radius.
+	--==========================================================================
+	BaseCircleStuds = 2,
 	--==========================================================================
 	-- WANDERING, WHICH THE SERVER DECIDES AND THE CLIENT ONLY DRAWS
 	--
@@ -3828,8 +3866,439 @@ GameConfig.Carry = {
 	--==========================================================================
 	GripForwardBase = 0.85,
 	GripDrop = -0.35,
+	--==========================================================================
+	-- THE OVERHEAD CARRY -- 2026-10-01, the owner's approved pose for the secret
+	-- pods and plants (SeedData species with Carry = "overhead"): both arms
+	-- straight up, the model's BASE this far above the HumanoidRootPart, which is
+	-- a quarter-stud over the raised hands' top (measured 2.77 on the R15 rig)
+	-- and clear of the head (2.08). Nothing in front of the chest, no forward
+	-- offset. CarryService welds by it; CarryPose and SecretCarryCamera read it.
+	--==========================================================================
+	OverheadLift = 3.0,
 
 }
+
+--==============================================================================
+-- THE SECRET POD AND PLANT -- 2026-10-01
+--
+-- The switch and the structure; the numbers are BiomeData's (per biome) and
+-- SeedData's (the species). NOTHING SPAWNS NATURALLY UNTIL THE OWNER FLIPS
+-- Enabled: with it off, NestService's roll never runs and the only secret pod
+-- in a server is one the Studio-only DebugService `SpawnSecret` action asked for.
+--==============================================================================
+GameConfig.Secret = {
+	Enabled = false,
+	-- The spawn toast: everyone in the server, once per actual spawn, never on a
+	-- return, a respawn or across servers.
+	Toast = {
+		Title = "SECRET POD SPAWNED IN %s!",
+		-- The word the renderer styles: italic, silver, dark outline, a grey
+		-- sweep (static under reduced motion).
+		Word = "SECRET",
+		SweepSeconds = 1.6,
+	},
+	-- The guardian's "POD LEFT BEHIND!" after a catch that did not take a secret.
+	LeftBehind = {
+		Text = "POD LEFT BEHIND!",
+		Seconds = 2.2,
+	},
+	-- The dedicated spot's platform: a cradle in the biome's colours.
+	Platform = {
+		Radius = 26,
+		Thickness = 0.16,
+		Stones = 10,
+	},
+	--==========================================================================
+	-- WHICH WAY A PLANTED SECRET POD STANDS (the owner's option 2, 2026-10-02)
+	--
+	-- PlantService's `facing` for a secret pod, on top of the plot's own
+	-- rotation: pi turns the pod's face -- its narrow side -- to the gate. It
+	-- says only which way the pod stands, never where it may: the footprint
+	-- rules it was chosen for are gone (2026-10-02, the owner's placement rule --
+	-- one small base circle for everything, GameConfig.Plant.BaseCircleStuds,
+	-- and overlap is allowed), and the facing was kept as it was.
+	--==========================================================================
+	PodFacing = math.pi,
+}
+
+--==============================================================================
+-- RAIN (2026-10-02): THE OWNER'S WEATHER EVENT, AND THE BIOME IT UNCOVERS
+--
+-- Names, structure, geometry and the look. The one balance number -- what the
+-- rain pays -- is SeedData.Rain's. WeatherService (server) owns the ONE event:
+-- its id, state and deadline, published here as workspace attributes; it
+-- builds the temporary terrain (RainBiome) and takes it down. Weather.client
+-- draws the rain and the fog, WeatherUI the income chip, WorldClock the darker
+-- light, ActionToastUI the toasts. Nothing here starts on its own: the owner's
+-- console does, for this server only. The guardian, the Secret Egg and the
+-- plant are supplied later; the clearing at the far end is kept for them
+-- (RainBiome's EncounterSite) and nothing stands in it yet.
+--==============================================================================
+GameConfig.Weather = {
+	-- Workspace attributes, the server's to write and every client's to read.
+	-- `State` is "opening" (rain falling, the entrance not yet open), "active"
+	-- (the entrance open) or "closing" (the bonus over, the biome fading), and
+	-- absent while no rain falls. Times are workspace:GetServerTimeNow(). A
+	-- player who joins mid-event reads these and is right on their first frame.
+	Attributes = {
+		State = "RainState",
+		EventId = "RainEventId",
+		StartedAt = "RainStartedAt",
+		EndsAt = "RainEndsAt",
+		OpenedAt = "RainOpenedAt",
+		ClosingAt = "RainClosingAt",
+		-- The income factor in force: SeedData.Rain.IncomeFactor while the rain
+		-- pays, 1 otherwise. Displays read this; the faucet asks the service.
+		Factor = "RainFactor",
+		-- Which weather it is (2026-10-02): "rain" or "thunder" -- the same
+		-- event, the same biome and the same ONE income factor; a Thunderstorm
+		-- only looks and stocks differently. Absent while no event runs.
+		Mode = "RainMode",
+	},
+	-- GameEvent actions, server to client. `Opened` goes to everyone in the
+	-- server at the moment the entrance opens -- never to a late joiner;
+	-- `Warning` and `Evacuated` go to those inside the biome.
+	Events = {
+		Opened = "RainBiomeOpened",
+		Warning = "RainClosingSoon",
+		Evacuated = "RainEvacuated",
+	},
+	-- The console's duration box starts at this. A knob, not a rule.
+	DefaultSeconds = 180,
+	MinSeconds = 20,
+	MaxSeconds = 1800,
+	-- The opening toast comes this long after the rain begins, and never before
+	-- the entrance is open.
+	ToastDelaySeconds = 3,
+	-- Those inside are warned this long before a timed end.
+	WarnSeconds = 5,
+	-- The closing, in order: the fog thickens over the biome (ThickenSeconds),
+	-- then the biome and its fog fade away together (FadeSeconds). The terrain
+	-- is removed only after both, and only once nobody is standing on it.
+	ThickenSeconds = 2,
+	FadeSeconds = 4,
+	-- How long the rain and the fog take to fade in, and out, on a client.
+	RainFadeSeconds = 2.5,
+	--==========================================================================
+	-- THE WHITE CLOUDS (2026-10-02, second pass): billowing banks of
+	-- overlapping balls, built by EVERY CLIENT for itself from one seeded
+	-- recipe (Shared/RainClouds) the moment it sees the rain's state -- so a
+	-- late joiner has them on its first frame and the server holds no part of
+	-- them -- and faded from one number per zone. Round the island, down the
+	-- road outside its walls, and thickest along the temporary biome. Nothing
+	-- here shortens the world's visibility: FogEnd and Atmosphere are
+	-- MapService's and untouched.
+	--==========================================================================
+	Clouds = {
+		Seed = 20261004,
+		-- Round the island: a bank every Spacing studs along each edge, Inset
+		-- studs outside it; the road's mouth left open; the bank the bridge
+		-- passes through is the entrance's.
+		Inset = 16,
+		Spacing = 52,
+		-- Down the road, outside its walls and above them, every RoadSpacing
+		-- studs from the island to the last biome's end.
+		RoadSpacing = 150,
+		RoadOffset = 34,
+		-- Along the temporary biome's route, either side beyond the walls, and
+		-- over its wide rooms: closer together and bigger.
+		RouteSpacing = 60,
+		RouteOffset = 20,
+		RouteScale = 1.2,
+		-- A bank: Puffs balls of Diameter studs, overlapping along the bank's
+		-- Length and rising to its middle, with one or two riding on top.
+		Puffs = { Min = 5, Max = 7 },
+		Diameter = { Min = 14, Max = 30 },
+		Length = { Min = 44, Max = 64 },
+		-- The height of a bank's centre line above the ground, by zone.
+		Height = { Perimeter = 14, Road = 52, Biome = 54, Room = 70, Entrance = 20 },
+		-- Transparency per zone while it rains; the biome's while it opens
+		-- (concealing what emerges) and until it has emerged; the entrance's
+		-- at the start of the opening; and how solid the biome's banks get as
+		-- it closes.
+		Perimeter = 0.42,
+		Road = 0.55,
+		Biome = 0.6,
+		BiomeConceal = 0.12,
+		EmergeSeconds = 5,
+		Entrance = 0.8,
+		EntranceConceal = 0.3,
+		Thick = 0.1,
+		-- Gentle movement: each bank bobs this far over this long (none under
+		-- reduced motion).
+		Bob = { Studs = 1.4, Seconds = 9 },
+		-- Day: lit white plastic. Night: a dim self-lit grey-blue, readable
+		-- without glare.
+		Day = { Color = Color3.fromRGB(246, 249, 253), Material = Enum.Material.SmoothPlastic },
+		Night = { Color = Color3.fromRGB(132, 142, 166), Material = Enum.Material.Neon },
+		-- At most this many balls on a client. RainEventSpec holds it.
+		PartBudget = 800,
+	},
+	--==========================================================================
+	-- THE LOOK OF THE RAIN (WorldClock, the one owner of Lighting): overcast,
+	-- not dark, laid over whatever the day/night blend already is and read off
+	-- one number, so when the rain ends the live phase simply comes back and
+	-- nothing is restored from a snapshot. The fraction of the brightness
+	-- kept, the exposure taken off, how far the two ambients move toward the
+	-- rain's cool grey (its day pair, or its night pair, blended like the
+	-- rest), softer shadows, less glint, a restrained cool tone through one
+	-- ColorCorrection WorldClock owns, and the sky's cloud layer (a Terrain
+	-- Clouds instance, WorldClock's own, client-local).
+	--==========================================================================
+	Light = {
+		-- By day the brightness drops to this fraction; by night it hardly
+		-- does (NightBrightness), because the night is already the floor of
+		-- what stays readable, and its ambient pair sits a touch ABOVE the
+		-- plain night's so a rainy night is never darker than a clear one.
+		Brightness = 0.78,
+		NightBrightness = 0.97,
+		Exposure = -0.12,
+		Ambient = Color3.fromRGB(112, 122, 142),
+		OutdoorAmbient = Color3.fromRGB(138, 150, 172),
+		NightAmbient = Color3.fromRGB(74, 84, 114),
+		NightOutdoorAmbient = Color3.fromRGB(88, 102, 138),
+		AmbientMix = 0.5,
+		ShadowSoftness = 0.7,
+		SpecularScale = 0.6,
+		Tint = Color3.fromRGB(226, 234, 246),
+		Saturation = -0.1,
+		Contrast = 0.03,
+		Sky = {
+			Cover = 0.86,
+			Density = 0.6,
+			DayColor = Color3.fromRGB(216, 222, 232),
+			NightColor = Color3.fromRGB(92, 100, 124),
+		},
+		-- How long the look takes to come in; and to go when the rain ends,
+		-- which is as long as the white clouds and the biome take to fade
+		-- (ThickenSeconds + FadeSeconds).
+		FadeSeconds = 2.5,
+		FadeOutSeconds = 6,
+	},
+	-- The rain itself (Weather.client): streaks over the camera, following it
+	-- everywhere -- a near sheet over Area studs and a sparser far sheet of
+	-- bigger drops over FarArea. A phone gets the near sheet at ReducedRate
+	-- and no far sheet; Reduced FX gets none.
+	Rain = { Rate = 720, ReducedRate = 240, FarRate = 180, Area = 100, FarArea = 220 },
+	Toast = {
+		Title = "A mysterious biome has emerged through the rain!",
+		-- %d is the percentage, from SeedData.Rain.IncomeFactor.
+		Detail = "+%d%% plant income while it rains",
+	},
+	Warning = { Title = "THE RAIN IS PASSING", Detail = "The biome closes in %d s. Make for the bridge." },
+	Evacuated = { Title = "BACK AT THE ENTRANCE", Detail = "The rain has stopped and the biome is fading away." },
+	-- The chip over the hotbar (WeatherUI): this, then the time left.
+	Chip = { Text = "+%d%% INCOME" },
+	Tags = { Terrain = "RainTerrain", Fog = "RainFog", Gate = "RainGate", Site = "RainEncounterSite" },
+	--==========================================================================
+	-- THE TWO MODES (2026-10-02). The console starts either by its verb; only
+	-- one event runs at a time, whichever it is.
+	--==========================================================================
+	Modes = {
+		rain = { Name = "Rain" },
+		thunder = { Name = "Thunderstorm" },
+	},
+	ThunderToast = {
+		Title = "A thunderstorm has rolled in! A mysterious biome has emerged!",
+		Detail = "+%d%% plant income while it storms",
+	},
+	--==========================================================================
+	-- THE THUNDERSTORM'S LOOK (2026-10-02): heavier rain, thicker white clouds,
+	-- a darker overcast and the odd flash of lightning, laid over the Rain's own
+	-- (every number not named here is the Rain's). Readable: the darkest it
+	-- gets still keeps most of the day's light, and the night barely moves.
+	-- Phones keep their reduced sheet; Reduced FX draws no streaks and no flash
+	-- (a dim bolt only).
+	--==========================================================================
+	Thunder = {
+		Rain = { Rate = 1100, ReducedRate = 320, FarRate = 320 },
+		-- Every cloud bank's transparency times this: thicker banks.
+		CloudTransparency = 0.55,
+		Light = {
+			Brightness = 0.62,
+			NightBrightness = 0.93,
+			Exposure = -0.3,
+			Ambient = Color3.fromRGB(96, 104, 124),
+			OutdoorAmbient = Color3.fromRGB(116, 126, 148),
+			NightAmbient = Color3.fromRGB(66, 74, 102),
+			NightOutdoorAmbient = Color3.fromRGB(80, 92, 124),
+			AmbientMix = 0.6,
+			Tint = Color3.fromRGB(208, 216, 234),
+			Saturation = -0.2,
+			Sky = { Cover = 0.96, Density = 0.85, DayColor = Color3.fromRGB(186, 192, 206),
+				NightColor = Color3.fromRGB(76, 84, 108) },
+		},
+		-- The lightning: a flash every Min..Max seconds, the same moments on
+		-- every client (drawn from the event's id), Seconds long, at most
+		-- Exposure brighter for an instant, with a jagged bolt of BoltParts
+		-- segments striking somewhere within Radius studs of the viewer.
+		Lightning = { Min = 7, Max = 15, Seconds = 0.32, Exposure = 0.7, Radius = 320, BoltParts = 7,
+			Color = Color3.fromRGB(236, 240, 255) },
+	},
+	--==========================================================================
+	-- THE EVENT NEST (2026-10-02): where the supplied pods stand and where the
+	-- guardian sleeps. The nest platform was grown to hold them (Biome.Nest.
+	-- Radius); nothing is resized. Three Pod 2s, 27 studs across, stand on a
+	-- ring of PodRing studs about its centre with room between them; a lone
+	-- pod stands at the centre. Stormstrider sleeps in the open ring beside it,
+	-- Guard.Distance from the centre at Guard.Bearing degrees (0 = +X, 90 =
+	-- +Z, as the biome's own dressing is placed), lying across the way in.
+	-- Strike: the one visual bolt a catch makes (ParentAnim): how long it shows,
+	-- how far above the catch it starts, how many jagged segments, its colour.
+	--==========================================================================
+	EventNest = {
+		PodRing = 19,
+		Guard = { Distance = 70, Bearing = 195 },
+		Strike = { Seconds = 0.28, Height = 90, Parts = 6, Color = Color3.fromRGB(236, 240, 255) },
+	},
+	--==========================================================================
+	-- THE SAFE LINE AT THE BRIDGE (2026-10-02): the road's own red line, painted
+	-- across the deck where the safe zone ends (MapService.IsInSafeZone: the
+	-- field's edge, x = Map.FieldWidth / 2), its outer edge on the boundary
+	-- itself. The island side is safe: crossing it banks a carried pod by the
+	-- ordinary flow, and a guardian stops at it as at the road's.
+	--==========================================================================
+	SafeLine = { Text = "SAFE ZONE", TextSize = 60 },
+	--==========================================================================
+	-- AUDIO (2026-10-02): the cue rows the weather plays (Sfx.Cues has the ids,
+	-- levels and ranges). The rain's music is Music.RainTracks.
+	--   StormAmbience       RainAmbience's level times this in a Thunderstorm
+	--                       (the same loop, a little louder; never a second one)
+	--   OpeningSeconds      a Thunderstorm's opening sound plays only for an
+	--                       event this client SAW start, at most this long after
+	--                       its StartedAt -- never for a late joiner
+	--   MaxStrikeSounds     weather strikes sounding at once, at most; the
+	--                       oldest is cut if another lands
+	--==========================================================================
+	Audio = {
+		ThunderClap = "ThunderClap",
+		StormstriderStrike = "StormstriderStrike",
+		RainAmbience = "RainAmbience",
+		ThunderstormOpening = "ThunderstormOpening",
+		StormAmbience = 1.3,
+		OpeningSeconds = 5,
+		MaxStrikeSounds = 2,
+	},
+	--==========================================================================
+	-- THE TEMPORARY BIOME: OFF THE ISLAND'S EAST EDGE, SQUARE TO THE ROAD
+	--
+	-- +X, perpendicular to the -Z road: no part of Starbloom and no sixth
+	-- segment. World studs, the ground at Map.GroundY. A bridge rises from the
+	-- grass inside the hedge line, crosses the hedges and the gap, and comes down
+	-- into a walled corridor that ends in a wider clearing kept empty for the
+	-- assets that come later.
+	--
+	-- CLEARANCE, checked by RainEventSpec against the built map and the plots'
+	-- top-level footprints: the nearest plot's wing (Plot 5 at Level 5) reaches
+	-- x 206; the obby's entrance stands at z -24 and its course floats at
+	-- z <= 10, thirty studs up; the field's hedges run along x 262..268, which
+	-- the deck clears at 9 studs. Nothing of the island is moved or rebuilt.
+	--==========================================================================
+	Biome = {
+		FolderName = "SeedRainBiome",
+		-- A working label. Not an approved name.
+		Label = "Rain Biome",
+		-- Where evacuees land: a grid on the grass before the ramp, facing the
+		-- biome, Spread studs apart -- permanent island ground, never the ramp.
+		Landing = { X = 232, Z = 70, Spread = 5, Columns = 7, Rows = 3 },
+		-- The bridge: 60 wide, so the road's full width opens off it without a
+		-- bottleneck; the landing grid stays west of its foot.
+		Ramp = { X0 = 240, X1 = 258, Rise = 9 },
+		Deck = { X0 = 258, X1 = 304, Y = 9, Z = 70, Width = 60, Thickness = 1.2 },
+		Descent = { X0 = 304, X1 = 330 },
+		-- The entrance: a curtain across the top of the ramp, solid while the
+		-- biome is opening and closing, gone while it is open.
+		Gate = { X = 257, Width = 76, Height = 28 },
+		--======================================================================
+		-- THE ROUTE (third pass, 2026-10-02): round rooms joined by straight
+		-- corridors, from the foot of the descent to the nest. Each entry is a
+		-- room (x, z, radius r) and the width w of the corridor leaving it for
+		-- the next; the last is the nest clearing. Every corridor is the ROAD'S
+		-- OWN USABLE WIDTH -- Map.CorridorWidth, the clear floor between a
+		-- biome's walls, 140 studs -- and the route runs north of the obby's
+		-- course (its walls stay past z 20). It bends gently, widens at the
+		-- pond and the clearing, and is about as long as Greenhollow and
+		-- Dustbowl together (Map.SegmentLength twice): RainBiome.RouteLength()
+		-- measures it and RainEventSpec holds it. Four sections, named for the
+		-- scenery each carries. A room's radius exceeds every corridor's
+		-- half-width plus half a wall, so the ring geometry always closes.
+		--======================================================================
+		-- Four rooms, because a room must be wider than the road and two of
+		-- them must not overlap: the mouth, the pond, the passage's hollow and
+		-- the clearing, with three long corridors between.
+		Route = {
+			{ x = 362, z = 104, r = 76, w = GameConfig.Map.CorridorWidth, section = "Entrance" },
+			{ x = 540, z = 168, r = 96, w = GameConfig.Map.CorridorWidth, section = "Garden" },
+			{ x = 720, z = 146, r = 80, w = GameConfig.Map.CorridorWidth, section = "Passage" },
+			{ x = 872, z = 186, r = 110, w = 0, section = "Nest" },
+		},
+		-- The nest: an empty, visible platform at the clearing's CENTRE with
+		-- the EncounterSite marker at its own centre; an open ring of floor
+		-- round it for the guardian (ClearRing: distances from the centre,
+		-- from beyond the nest's own foliage to the rim's dressing). Nothing
+		-- is placed on it here.
+		--
+		-- GROWN FOR THE SUPPLIED PODS (2026-10-02): the radius was 18, and the
+		-- Rain event's Pod 2 is 27 studs across -- three of them stand on a ring
+		-- of EventNest.PodRing about the centre, so the platform is twice the
+		-- width and its own foliage and the open ring moved out with it. The
+		-- pods are never resized to fit; the nest was.
+		Nest = { X = 872, Z = 186, Radius = 36, Stones = 30, ClearRing = { Inner = 56, Outer = 94 } },
+		-- The road's own wall height.
+		WallHeight = 46,
+		WallThickness = 6,
+		-- A room's ring is panels of at most this length, a pillar at each joint.
+		PanelLength = 28,
+		RailHeight = 3.2,
+		-- How far above or below the ground still counts as on the terrain (the
+		-- bridge is 9 up; a fall off it is not on it), and how far outside a
+		-- corridor's or a room's wall does.
+		Height = { Below = 8, Above = 80 },
+		Reach = 2,
+		EncounterSiteName = "EncounterSite",
+		-- Parts in the event folder, at most. RainEventSpec holds it.
+		PartBudget = 1500,
+		-- Rain-soaked: deep greens, muted teal foliage, slate, moss, pale blue
+		-- flowers and one restrained cyan accent.
+		Colours = {
+			Floor = Color3.fromRGB(54, 96, 84),
+			Room = Color3.fromRGB(48, 88, 78),
+			Wall = Color3.fromRGB(78, 92, 108),
+			Pillar = Color3.fromRGB(64, 76, 92),
+			Deck = Color3.fromRGB(82, 56, 38),
+			Rail = Color3.fromRGB(60, 40, 28),
+			Gate = Color3.fromRGB(170, 184, 204),
+			Fog = Color3.fromRGB(174, 184, 198),
+			Leaf = Color3.fromRGB(46, 104, 72),
+			LeafDeep = Color3.fromRGB(34, 80, 60),
+			Teal = Color3.fromRGB(70, 134, 122),
+			TealPale = Color3.fromRGB(112, 166, 154),
+			Moss = Color3.fromRGB(96, 142, 84),
+			MossPale = Color3.fromRGB(134, 172, 110),
+			Root = Color3.fromRGB(62, 46, 38),
+			Bark = Color3.fromRGB(78, 58, 44),
+			Stone = Color3.fromRGB(92, 104, 118),
+			StoneDark = Color3.fromRGB(64, 74, 88),
+			Water = Color3.fromRGB(118, 150, 172),
+			Wet = Color3.fromRGB(58, 70, 86),
+			Flower = Color3.fromRGB(182, 208, 236),
+			FlowerDeep = Color3.fromRGB(140, 176, 220),
+			Accent = Color3.fromRGB(92, 196, 206),
+			Reed = Color3.fromRGB(90, 128, 92),
+			NestBed = Color3.fromRGB(74, 118, 82),
+			NestBowl = Color3.fromRGB(56, 90, 66),
+		},
+		-- The scenery's jitter is seeded: every server builds the same biome.
+		Scenery = { Seed = 20261003 },
+	},
+}
+
+-- Display only: the Rain factor in force, as WeatherService publishes it. 1
+-- while no rain pays. Never a number of its own: the server's attribute.
+function GameConfig.rainIncomeFactor(): number
+	local factor = tonumber(workspace:GetAttribute(GameConfig.Weather.Attributes.Factor))
+	return if factor and factor > 1 then factor else 1
+end
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.
 function GameConfig.carryMultiplierFor(tier: number): number
@@ -5013,8 +5482,11 @@ end
 function GameConfig.incomeMultiplier(player: Player?): number
 	-- Temporary income bonuses add their percentages before the pass. A chest
 	-- +25% and a sacrifice +50% therefore mean +75%, never a hidden compound.
+	-- THE RAIN (2026-10-02) is the weather's own factor, not a player's boost:
+	-- one x1.25 on the whole, exactly as EconomyService.RateFor applies it.
 	return GameConfig.cashMultiplier(player)
 		* (GameConfig.chestIncomeBoost(player) + GameConfig.sacrificeIncomeBoost(player) - 1)
+		* GameConfig.rainIncomeFactor()
 end
 
 -- Checked on load, like the Speed anchors: a boost that outlived the cooldown
@@ -5615,6 +6087,23 @@ GameConfig.Music = {
 	-- track that is leaving.
 	--==========================================================================
 	PhaseFadeSeconds = 3.0,
+
+	--==========================================================================
+	-- THE RAIN EVENT'S BED (2026-10-02)
+	--
+	-- While a Rain or a Thunderstorm falls (Weather.Attributes.State "opening"
+	-- or "active") this ONE track takes the place of the day or night bed: the
+	-- same Sound on the same Music bus, so the MUSIC slider and mute move it and
+	-- it never plays over another bed. It comes in over RainFadeSeconds (half
+	-- the old bed out, half the rain bed in) and leaves the same way the moment
+	-- the weather starts closing; a player who joins mid-event starts on it.
+	-- If the id does not load for this client the day/night bed carries on --
+	-- an asset that cannot play is never silence where the music was.
+	--==========================================================================
+	RainTracks = {
+		"rbxassetid://70930849303265",  -- Rain Event BGM (CrazyCozy Games upload)
+	},
+	RainFadeSeconds = 4.0,
 }
 
 --==============================================================================
@@ -6352,6 +6841,46 @@ GameConfig.Sfx = {
 			id = "rbxassetid://70521588661081",
 			volume = 1.24, clip = 0.78, range = 80, group = "World",
 		},
+
+		--======================================================================
+		-- THE RAIN EVENT (2026-10-02). The ids are the owner's CrazyCozy Games
+		-- uploads, each load-tested in Podnappers before it was wired; the two
+		-- Stormstrider voice rows still wait for their recordings (silent).
+		-- All ride the World bus: the SOUND FX slider and mute move them, the
+		-- MUSIC mute does not.
+		--
+		--   StormstriderWake    the guardian robbed and rising (ParentVoices.rain)
+		--   StormstriderHit     its catch landing (ParentVoices.rain)
+		--   StormstriderStrike  the bolt a catch calls down: the server's ONE
+		--                       emit per confirmed catch, at the guardian
+		--                       (NestService), heard with distance
+		--   ThunderClap         a Thunderstorm's weather strike: one per bolt,
+		--                       at the bolt's foot (Weather.client), heard with
+		--                       distance
+		--   ThunderstormOpening a Thunderstorm starting: once, 2D (Weather.client)
+		--   RainAmbience        the rain itself: ONE 2D loop under a Rain or a
+		--                       Thunderstorm, faded with the rain, a little
+		--                       louder in a storm (Weather.Audio.StormAmbience)
+		-- The two strikes are one recording. A catch is not a weather strike and
+		-- a weather strike is not a catch, so no moment plays it twice. The old
+		-- ThunderstormBed hook (a second, storm-only rain loop) is RainAmbience
+		-- now: one loop, never two.
+		--======================================================================
+		-- The guardian's own two (2026-10-02, group uploads, load-tested). Measured
+		-- off sfx/: AWAKE ANGRY is 2.88 s, mean -11.8 dB, peak 0 dB (a hot render)
+		-- -> 0.35, about -21 dB at the guardian, the warning a thief hears, once
+		-- per real wake (NestService's roar). SLEEPING is 11.88 s, mean -35.5 dB,
+		-- peak -19.4 dB (a quiet one) -> 0.45, about -42 dB at arm's length: a
+		-- touch under the rain's bed and well under the music, heard only near
+		-- it (range 70, the other sleeps' reach), looped by SoundCues while
+		-- ParentState is "asleep". Neither is pitched: speed 1.
+		StormstriderWake = { id = "rbxassetid://113193227101300", volume = 0.35, range = 220, group = "World" },
+		StormstriderSleep = { id = "rbxassetid://82607848172654", volume = 0.45, range = 70, looped = true, group = "World" },
+		StormstriderHit = { id = "", volume = 1, range = 160, group = "World" },
+		StormstriderStrike = { id = "rbxassetid://79835427265580", volume = 0.45, range = 320, group = "World" },
+		ThunderClap = { id = "rbxassetid://79835427265580", volume = 0.35, range = 640, group = "World" },
+		ThunderstormOpening = { id = "rbxassetid://110362720818059", volume = 0.4, group = "World" },
+		RainAmbience = { id = "rbxassetid://138018201261517", volume = 0.16, looped = true, group = "World" },
 	},
 
 	--==========================================================================
@@ -6411,6 +6940,16 @@ GameConfig.Sfx = {
 			Sleep = "ParentSleepStarbloom",
 			Return = "ParentReturnStarbloom",
 		},
+		-- The Rain event's Stormstrider (2026-10-02): its own growl when it wakes
+		-- and its own breathing while it sleeps (in place of the generic one);
+		-- Hit is still a hook waiting for a recording, so a catch keeps the
+		-- generic claw it has today (and the lightning strike, which is not a
+		-- voice).
+		rain = {
+			Wake = "StormstriderWake",
+			Sleep = "StormstriderSleep",
+			Hit = "StormstriderHit",
+		},
 	},
 
 	-- When a guardian's walk-home cue plays: "leave", the moment it gives up and
@@ -6418,6 +6957,17 @@ GameConfig.Sfx = {
 	-- the recordings (2026-09-27): short vocal one-shots, none shaped like a
 	-- settle. One word to move them.
 	ReturnCueAt = "leave",
+
+	--==========================================================================
+	-- A ONE-SHOT IS FOR WHOEVER WAS THERE (2026-10-02)
+	--
+	-- A server one-shot (SoundKit.emit) stands in the world for twelve seconds
+	-- after it played. A client that receives it LATER than this -- a guardian
+	-- streamed in mid-chase, a player who joined a moment after a roar -- does
+	-- not replay a moment it never witnessed: its own copy is stopped. Ordinary
+	-- replication lands well inside this.
+	--==========================================================================
+	LateCueSeconds = 1.0,
 
 	-- THE ACCENT ON A REVEAL, by the same FORM rarity as RevealFor below: only
 	-- the rarities named here, so recording another is a line in this table and

@@ -48,6 +48,8 @@ local BramblebackModel = require(script.Parent:WaitForChild("BramblebackModel"))
 local MiremawModel = require(script.Parent:WaitForChild("MiremawModel"))
 local ForgemawModel = require(script.Parent:WaitForChild("ForgemawModel"))
 local AstralmawModel = require(script.Parent:WaitForChild("AstralmawModel"))
+-- The Rain event's guardian (2026-10-02): the owner's supplied Stormstrider.
+local StormstriderModel = require(script.Parent:WaitForChild("StormstriderModel"))
 
 -- Sampled from the sheet.
 local BARK = Color3.fromRGB(96, 76, 54)
@@ -219,6 +221,9 @@ local BY_BIOME: { [string]: (CFrame, number, Instance) -> Model } = {
 	tanglemire = MiremawModel.Build,
 	emberroot = ForgemawModel.Build,
 	starbloom = AstralmawModel.Build,
+	-- Not a biome on the road: the Rain event's temporary one (NestService's
+	-- event nest, 2026-10-02).
+	rain = StormstriderModel.Build,
 }
 
 function ParentModel.Build(cf: CFrame, height: number, biomeId: string, parent: Instance): Model

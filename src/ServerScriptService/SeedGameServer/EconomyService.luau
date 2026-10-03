@@ -72,6 +72,7 @@ local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local PassService = require(script.Parent:WaitForChild("PassService"))
 local BonusChestService = require(script.Parent:WaitForChild("BonusChestService"))
 local SacrificeService = require(script.Parent:WaitForChild("SacrificeService"))
+local WeatherService = require(script.Parent:WaitForChild("WeatherService"))
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 
 local EconomyService = {}
@@ -186,8 +187,15 @@ function EconomyService.RateFor(player: Player): number
 	-- +50% are +75%: x1.75, and x3.5 under the pass. 1 whenever neither is
 	-- running, which is nearly always, so the sum is whole again the moment
 	-- they end.
+	--
+	-- AND THE RAIN (2026-10-02), LAST AND ONCE: the weather's own factor on the
+	-- whole garden -- SeedData.Rain.IncomeFactor while WeatherService says the
+	-- rain pays, 1 otherwise. Not a player's boost, so it multiplies rather than
+	-- joining the sum; GameConfig.incomeMultiplier shows the same product. It
+	-- reaches nothing that comes through withPass alone: not the offline claim,
+	-- not a sale, not a reward.
 	--==========================================================================
-	return withPass(player, rate) * temporaryBoost(player)
+	return withPass(player, rate) * temporaryBoost(player) * WeatherService.IncomeFactor()
 end
 
 --==============================================================================

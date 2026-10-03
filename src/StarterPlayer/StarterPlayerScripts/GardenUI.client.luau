@@ -694,7 +694,7 @@ local function occupants(plot: Model): { Occupant }
 					plantedAt = plantedAt,
 					-- Absent only on a model from before deadlines were stamped.
 					hatchAt = tonumber(model:GetAttribute("HatchAt"))
-						or (plantedAt + SeedData.GrowSeconds(tier)),
+						or (plantedAt + SeedData.GrowSecondsFor(species, tier)),
 					stage = stage,
 					id = id,
 				})
@@ -913,8 +913,13 @@ local function refresh(paint: boolean)
 				-- This is the Garden, so it is ColorForKg on the name AND on
 				-- the border. FormColor belongs to the Index and stays there.
 				--==========================================================
-				local band = SeedData.ColorForTier(occupant.tier)
-				local kgFormatted = GameConfig.compact(occupant.tier) .. " tier"
+				-- A Secret has no size tier (2026-10-02): the Secret colour, and no
+				-- weight tag at all (setWeightTag(nil) hides it). The Rain event's
+				-- unsized Pod 1 and Pod 3 forms read the same way, in their
+				-- rarity's colour; its Pod 2 forms show their tier like any other.
+				local band = PlantInfo.SizeColour(species.Id, occupant.tier)
+				local kgFormatted = if SeedData.Unsized(species) then nil
+					else GameConfig.compact(occupant.tier) .. " tier"
 
 				if stage == STAGE_GROWN then
 					slot.setEmpty(false)
@@ -958,7 +963,11 @@ local function refresh(paint: boolean)
 					slot.setSubPill(true, GameConfig.RarityColor[rarity])
 				else
 					slot.setEmpty(false)
-					slot.setModel("pod:" .. SeedData.RarityForTier(occupant.tier),
+					-- A replayed pod (a Secret's, a Rain pod) is its own model,
+					-- cached under its POD's key: every creature a Rain pod can
+					-- hold shares one shell, and nothing here may tell them apart.
+					slot.setModel(if species.Pod then "secretpod:" .. species.Pod
+						else "pod:" .. SeedData.RarityForTier(occupant.tier),
 						function(into)
 							return CreatureModel.BuildPod(species, occupant.tier,
 								CFrame.new(), into)

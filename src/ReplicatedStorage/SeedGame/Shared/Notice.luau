@@ -49,7 +49,9 @@
 
 local Notice = {}
 
-export type Kind = "blocked" | "success" | "warning" | "info"
+-- "secret" (2026-10-01): the SECRET POD SPAWNED toast -- silver headline, no
+-- sound of its own, the word SECRET styled by the renderer (ActionToastUI).
+export type Kind = "blocked" | "success" | "warning" | "info" | "secret"
 
 export type Post = {
 	kind: Kind,
@@ -114,6 +116,8 @@ Notice.Styles = {
 	success = { tint = Color3.fromRGB(126, 228, 98), sound = "NoticeSuccess", seconds = 2.6 },
 	warning = { tint = Color3.fromRGB(255, 190, 64), sound = "NoticeWarning", seconds = 3.0 },
 	info = { tint = Color3.fromRGB(176, 220, 255), sound = "NoticeInfo", seconds = 2.6 },
+	-- No sound: the owner has not approved one (2026-10-01).
+	secret = { tint = Color3.fromRGB(236, 236, 244), sound = nil, seconds = 4.0 },
 } :: { [Kind]: Style }
 
 Notice.DetailColour = Color3.fromRGB(248, 246, 238)
@@ -154,7 +158,7 @@ Notice.MaxShownCompact = 2
 Notice.SoundGapSeconds = 0.3
 Notice.KindGapSeconds = 0.9
 
-local KINDS: { [string]: boolean } = { blocked = true, success = true, warning = true, info = true }
+local KINDS: { [string]: boolean } = { blocked = true, success = true, warning = true, info = true, secret = true }
 
 function Notice.isKind(kind: any): boolean
 	return type(kind) == "string" and KINDS[kind] == true

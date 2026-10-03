@@ -206,6 +206,13 @@ local ok, err = pcall(function()
 				return 1
 			end,
 		},
+		-- The Rain event's factor (2026-10-02), neutral here: the offline claim
+		-- never carries it anyway (RainEventSpec checks that).
+		WeatherService = {
+			IncomeFactor = function()
+				return 1
+			end,
+		},
 		Metrics = {
 			income = function() end,
 		},

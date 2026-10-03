@@ -438,9 +438,12 @@ local function show(payload: { [string]: any })
 
 	local info = PlantInfo.Describe(speciesId, tier, true, GameConfig.incomeMultiplier(player))
 	nameLabel.Text = string.upper(info.title)
-	metaLabel.Text = string.format('<font color="%s">%s</font>  •  <font color="%s">%s</font>',
-		hex(info.rarityColour), string.upper(info.rarity),
-		hex(info.sizeColour), string.upper(info.size))
+	-- A Secret has no size tier (2026-10-02): its rarity alone.
+	metaLabel.Text = if info.sized
+		then string.format('<font color="%s">%s</font>  •  <font color="%s">%s</font>',
+			hex(info.rarityColour), string.upper(info.rarity),
+			hex(info.sizeColour), string.upper(info.size))
+		else string.format('<font color="%s">%s</font>', hex(info.rarityColour), string.upper(info.rarity))
 	incomeLabel.Text = string.format("Earning %s right now", info.income)
 	question.Text = string.format("Sell this %s for $%s?", species.Name, withCommas(price))
 

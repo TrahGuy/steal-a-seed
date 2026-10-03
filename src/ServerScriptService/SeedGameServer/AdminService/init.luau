@@ -3,7 +3,9 @@
 --
 -- A small developer console for two accounts: add cash, add Speed, and reset a
 -- player's saved progress to a fresh account, on anybody in this server; and
--- start the night or the day for the whole server. Nothing else, and nobody else.
+-- start the night or the day for the whole server; announce; and (2026-10-02,
+-- SECRET ITEMS) grant a Secret pod or grown plant into the admin's OWN bag.
+-- Nothing else, and nobody else.
 --
 --==============================================================================
 -- WHY THIS IS NOT DebugService
@@ -44,7 +46,9 @@
 --
 --   1. the sender is one of the two UserIds
 --   2. one request a second per admin, whatever it is
---   3. the action is one of the six
+--   3. the action is one of the seven (GrantSecret has its own checks after
+--      this, in grantSecret: the recipient is the sender, the request's shape,
+--      the two species, a cooldown, the bag's room)
 --   4. Start Night and Start Day go to WorldCycleService from here: they act
 --      on the whole server and name nobody; Announce goes to
 --      AnnouncementService.Send (2026-10-01), which checks its own words
@@ -66,6 +70,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
@@ -76,6 +81,7 @@ local CombatService = require(script.Parent:WaitForChild("CombatService"))
 local WeaponShopService = require(script.Parent:WaitForChild("WeaponShopService"))
 local WorldCycleService = require(script.Parent:WaitForChild("WorldCycleService"))
 local AnnouncementService = require(script.Parent:WaitForChild("AnnouncementService"))
+local WeatherService = require(script.Parent:WaitForChild("WeatherService"))
 
 local SAVE = GameConfig.Save
 
@@ -102,6 +108,19 @@ AdminService.Config = {
 	MinInterval = 1,
 	MaxMoney = 1e12,
 	MaxSpeed = 1e12,
+	--==========================================================================
+	-- SECRET ITEMS (2026-10-02): the owner approved authorized admins granting
+	-- the two Secrets on live servers. ITS OWN SWITCH, on the server: natural
+	-- spawning stays off (GameConfig.Secret.Enabled), and no grant reads that
+	-- switch -- only the Ready line names it.
+	--==========================================================================
+	SecretGrants = true,
+	-- Between two Secret grants by one admin, on top of MinInterval. Every grant
+	-- ends in a save, and a DataStore key takes one write in six seconds.
+	SecretCooldown = 6,
+	-- How long a request's answer is remembered, so the same request sent twice
+	-- -- a double press, a resend -- is answered again and never granted twice.
+	SecretAnswerSeconds = 300,
 }
 
 local GUI_NAME = "SeedAdmin"
@@ -119,6 +138,30 @@ local ACTIONS: { [string]: boolean } = {
 	-- past this file's -- the words, the cooldown, the filter -- are
 	-- AnnouncementService.Send's; it is reached from nowhere but here.
 	Announce = true,
+	-- 2026-10-02: a Secret pod or plant into the admin's own bag (SECRET ITEMS).
+	GrantSecret = true,
+	-- 2026-10-02: the Rain event, for THIS server, by the OWNER's account alone
+	-- (WeatherService). The second word is "start" (rain), "thunder" (a
+	-- Thunderstorm) or "end", the third the duration in seconds.
+	Weather = true,
+}
+
+-- The only Secrets the console may grant, and the two forms: by species id and
+-- by kind. Anything else is refused before anything is looked up.
+local SECRET_ITEMS: { [string]: boolean } = {
+	snarlbloom = true,
+	petalfawn = true,
+}
+local SECRET_KINDS: { [string]: boolean } = {
+	pod = true,
+	plant = true,
+}
+-- A grant request is exactly these four fields.
+local SECRET_FIELDS: { [string]: boolean } = {
+	species = true,
+	kind = true,
+	equip = true,
+	request = true,
 }
 -- The two that act on the whole server rather than on a player: no target.
 local WHOLE_SERVER: { [string]: boolean } = {
@@ -126,7 +169,9 @@ local WHOLE_SERVER: { [string]: boolean } = {
 	StartDay = true,
 }
 
-export type Reply = { ok: boolean, message: string, added: number? }
+-- `saved` is a Secret grant's: false when the item was granted in this server
+-- but its save has not landed yet (the autosave keeps trying).
+export type Reply = { ok: boolean, message: string, added: number?, saved: boolean? }
 export type AuditEntry = {
 	at: string,
 	admin: number,
@@ -139,6 +184,12 @@ export type AuditEntry = {
 local lastRequest: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
 local lastStranger: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
 local resetting: { [any]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+-- SECRET ITEMS: a grant running per admin, the last accepted grant's time, and
+-- every request id answered lately with its answer (nil while still running).
+local secretBusy: { [any]: boolean } = setmetatable({}, { __mode = "k" }) :: any
+local lastSecret: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
+local secretAnswers: { [any]: { [string]: { at: number, reply: Reply? } } } =
+	setmetatable({}, { __mode = "k" }) :: any
 local audit: { AuditEntry } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 
@@ -474,6 +525,256 @@ local function changePhase(admin: any, action: string): Reply
 end
 
 --==============================================================================
+-- SECRET ITEMS: A SECRET POD OR GROWN PLANT INTO THE ADMIN'S OWN BAG (2026-10-02)
+--
+-- The owner approved authorized admins granting the two Secrets on live
+-- servers. NOT the natural spawn: no nest, no platform, no guardian, no world
+-- toast and no day/night change -- the item goes straight into the bag through
+-- CarryService's own givers, GivePod and GiveHatched with onRecord, which count
+-- the storage limit and write the saved row, or give nothing. Always at
+-- SeedData.SecretTier, the weight the natural spawn gives, so it pays the same.
+--
+-- CHECKED IN THIS ORDER, after Handle's allowlist and one-a-second limit:
+--   1. SecretGrants is on (the console's own switch, not the spawn's)
+--   2. the request is exactly { species, kind, equip, request } of those types
+--   3. one of the two species, as a POD or a GROWN PLANT
+--   4. the recipient is the sender: this version grants to yourself only
+--   5. a request id answered lately gets that answer again, and nothing more is
+--      granted; one still running is refused
+--   6. no grant already running for this admin; SecretCooldown since the last
+--   7. the profile is loaded and SAVING, and the bag has room (HeldRoom)
+--   8. exactly one item, counted and recorded -- or nothing at all
+--   9. EQUIP NOW: into free hands only (CarryService.EquipIfFree); otherwise
+--      the item stays in the bag and the answer says why
+--  10. "saved" only when the save landed
+--==============================================================================
+local NO_EQUIP = -1
+local EQUIP_WHY: { [string]: string } = {
+	CARRYING = "you are carrying a pod home.",
+	HANDS_FULL = "your hands are already holding something.",
+	NO_CHARACTER = "you have no character right now.",
+	NO_TOOL = "it could not be found in your Bag to equip.",
+	FAILED = "the equip did not take.",
+}
+
+local function malformed(): Reply
+	return refuse("Malformed request. Nothing was granted.")
+end
+
+local function toolsOf(player: any): { [Instance]: boolean }
+	local set: { [Instance]: boolean } = {}
+	local containers = { player:FindFirstChildOfClass("Backpack"), player.Character }
+	for i = 1, 2 do
+		local container = containers[i]
+		if container then
+			for _, child in ipairs(container:GetChildren()) do
+				if child:IsA("Tool") then
+					set[child] = true
+				end
+			end
+		end
+	end
+	return set
+end
+
+-- The one Tool the grant made: in the bag or the hands now, and not before it.
+local function newToolOf(player: any, before: { [Instance]: boolean }, speciesId: string): Tool?
+	for tool in pairs(toolsOf(player)) do
+		if not before[tool] and tool:GetAttribute("SpeciesId") == speciesId then
+			return tool :: Tool
+		end
+	end
+	return nil
+end
+
+local function fullBag(count: number): Reply
+	return refuse(string.format("Plant storage full (%d/%d). Plant or sell one to make room. Nothing was granted.",
+		count, SAVE.MaxHeld))
+end
+
+-- 8 to 10, once every check has passed. Its own function so a failure inside
+-- it is caught by the caller and the pending flag always comes down.
+local function giveSecret(admin: any, target: Player, species: SeedData.Species, kind: string, equip: boolean): Reply
+	local before = toolsOf(target)
+	local given, why
+	if kind == "pod" then
+		given = CarryService.GivePod(target, species.Id, SeedData.SecretTier)
+	else
+		given, why = CarryService.GiveHatched(target, species, SeedData.SecretTier, NO_EQUIP, nil, true)
+	end
+	if not given then
+		if why == "STORAGE_FULL" then
+			local _, count = CarryService.HeldRoom(target)
+			return fullBag(count)
+		end
+		return refuse("The grant was refused; nothing changed.")
+	end
+	local item = species.Name .. (if kind == "pod" then " pod" else " (grown plant)")
+	record(admin, target, "GrantSecret:" .. species.Id .. ":" .. kind, nil, nil)
+
+	local equipLine = ""
+	if equip then
+		local tool = newToolOf(target, before, species.Id)
+		local equipped, reason = false, "NO_TOOL"
+		if tool then
+			equipped, reason = CarryService.EquipIfFree(target :: any, tool)
+		end
+		equipLine = if equipped
+			then " Equipped."
+			else " Not equipped, kept in your Bag: " .. (EQUIP_WHY[reason or "FAILED"] or EQUIP_WHY.FAILED)
+	end
+
+	local saved = PlayerDataService.Save(target)
+	if not saved then
+		return {
+			ok = true,
+			saved = false,
+			message = string.format("Granted a %s to your Bag in this server, but the SAVE HAS NOT LANDED yet; "
+				.. "the autosave keeps trying.%s", item, equipLine),
+		}
+	end
+	return { ok = true, saved = true, message = string.format("Granted a %s to your Bag and saved.%s", item, equipLine) }
+end
+
+local function grantSecret(admin: any, targetId: any, request: any): Reply
+	--== 1 ==--
+	if AdminService.Config.SecretGrants ~= true then
+		return refuse("Secret grants are switched off on this server. Nothing was granted.")
+	end
+	--== 2: exactly four fields, each of its type ==--
+	if type(request) ~= "table" then
+		return malformed()
+	end
+	local fields = 0
+	for key in pairs(request) do
+		if type(key) ~= "string" or SECRET_FIELDS[key] ~= true then
+			return malformed()
+		end
+		fields += 1
+	end
+	local speciesId, kind, equip, requestId = request.species, request.kind, request.equip, request.request
+	if fields ~= 4 or type(speciesId) ~= "string" or type(kind) ~= "string" or type(equip) ~= "boolean"
+		or type(requestId) ~= "string" or #requestId < 8 or #requestId > 64
+		or not string.match(requestId, "^[%w%-_]+$")
+	then
+		return malformed()
+	end
+	--== 3 ==--
+	local species = if SECRET_ITEMS[speciesId] == true then SeedData.Get(speciesId) else nil
+	if not (species and species.Secret == true) or SECRET_KINDS[kind] ~= true then
+		return refuse("Only a Snarlbloom or a Petalfawn, as a POD or a GROWN PLANT, can be granted. Nothing was granted.")
+	end
+	--== 4: yourself, and only yourself ==--
+	local own = userIdOf(admin)
+	if own == nil or type(targetId) ~= "number" or targetId ~= own then
+		return refuse("In this version a Secret can only be granted to yourself. Nothing was granted.")
+	end
+	local target = AdminService.FindPlayer(targetId)
+	if target == nil or target ~= admin or target.Parent ~= Players then
+		return refuse("You are not in this server any more. Nothing was granted.")
+	end
+	--== 5: the same request again ==--
+	local answers = secretAnswers[admin]
+	if not answers then
+		answers = {}
+		secretAnswers[admin] = answers
+	end
+	local now = os.clock()
+	for id, entry in pairs(answers) do
+		if entry.reply ~= nil and now - entry.at > AdminService.Config.SecretAnswerSeconds then
+			answers[id] = nil
+		end
+	end
+	local seen = answers[requestId]
+	if seen then
+		if seen.reply then
+			return { ok = seen.reply.ok, saved = seen.reply.saved,
+				message = "Already answered, nothing more granted: " .. seen.reply.message }
+		end
+		return refuse("That grant is still being made. Nothing more was granted.")
+	end
+	--== 6 ==--
+	if secretBusy[admin] then
+		return refuse("A Secret grant is already being made. Wait for it to finish.")
+	end
+	local last = lastSecret[admin]
+	if last and now - last < AdminService.Config.SecretCooldown then
+		return refuse(string.format("Wait %d s between Secret grants. Nothing was granted.",
+			math.ceil(AdminService.Config.SecretCooldown - (now - last))))
+	end
+	--== 7 ==--
+	if not PlayerDataService.IsReady(target) then
+		return refuse("Your profile has not loaded yet. Nothing was granted.")
+	end
+	if not PlayerDataService.IsPersistent(target) then
+		return refuse("Your profile is not saving in this session, so nothing can be granted.")
+	end
+	local room, count, known = CarryService.HeldRoom(target)
+	if not known then
+		return refuse("Your bag has not loaded yet. Nothing was granted.")
+	end
+	if room < 1 then
+		return fullBag(count)
+	end
+	--== 8 to 10, with the request marked as running ==--
+	answers[requestId] = { at = now, reply = nil }
+	secretBusy[admin] = true
+	local ran, reply = pcall(giveSecret, admin, target, species, kind, equip)
+	secretBusy[admin] = nil
+	if not ran then
+		warn("[Seed/AdminService] a Secret grant failed: " .. tostring(reply))
+		reply = refuse("The server hit an error during the grant. Check your Bag and the log before trying again.")
+	end
+	local answer = reply :: Reply
+	answers[requestId] = { at = os.clock(), reply = answer }
+	if answer.ok then
+		lastSecret[admin] = os.clock()
+	end
+	return answer
+end
+
+--==============================================================================
+-- THE WEATHER: THE OWNER'S, FOR THIS SERVER (2026-10-02)
+--
+-- Rain, through WeatherService. Not every admin: the owner's own account, by
+-- UserId (IsOwner), checked here on the server for every request -- the client
+-- names no identity and is believed about nothing. `verb` is "start" (rain) or
+-- "thunder" (a Thunderstorm, 2026-10-02), each with a whole number of seconds,
+-- or "end", which ends whichever is running. One event at a time and the rest
+-- of its rules are WeatherService's; what it answers is what the console shows.
+--==============================================================================
+local function weather(admin: any, verb: any, seconds: any): Reply
+	if not AdminService.IsOwner(admin) then
+		return refuse("Owner only: the weather is the owner's account's to change. Nothing changed.")
+	end
+	if verb == "start" or verb == "thunder" then
+		local W = GameConfig.Weather
+		if type(seconds) ~= "number" or seconds ~= seconds or seconds ~= math.floor(seconds)
+			or seconds < W.MinSeconds or seconds > W.MaxSeconds then
+			return refuse(string.format("Duration must be a whole number of seconds from %d to %d. Nothing changed.",
+				W.MinSeconds, W.MaxSeconds))
+		end
+		local ok, message
+		if verb == "thunder" then
+			ok, message = WeatherService.StartThunderstorm(admin, seconds)
+		else
+			ok, message = WeatherService.StartRain(admin, seconds)
+		end
+		if ok then
+			record(admin, nil, "Weather:" .. verb .. ":" .. tostring(seconds), nil, nil)
+		end
+		return { ok = ok, message = message }
+	elseif verb == "end" then
+		local ok, message, ended = WeatherService.EndRain(admin)
+		if ended then
+			record(admin, nil, "Weather:end", nil, nil)
+		end
+		return { ok = ok, message = message }
+	end
+	return refuse("Unknown weather request. Nothing changed.")
+end
+
+--==============================================================================
 -- ONE REQUEST
 --
 -- The whole of the server's side of the console, and the only thing the
@@ -506,6 +807,16 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 			record(sender, nil, "Announce:" .. tostring(targetId) .. (if sent then "" else ":here-only"), nil, nil)
 		end
 		return { ok = sent, message = message }
+	end
+	-- SECRET ITEMS carries its own checks (grantSecret): the recipient must be
+	-- the sender, and the third word is the request table.
+	if action == "GrantSecret" then
+		return grantSecret(sender, targetId, amount)
+	end
+	-- WEATHER is the owner's alone: the second word is the verb, the third the
+	-- duration (weather).
+	if action == "Weather" then
+		return weather(sender, targetId, amount)
 	end
 	if type(targetId) ~= "number" or targetId ~= targetId or targetId <= 0
 		or targetId ~= math.floor(targetId) then
@@ -605,8 +916,11 @@ function AdminService.Start()
 		count += 1
 	end
 	log(string.format("Ready. %d account(s) on the allowlist; up to %s cash and %s Speed a request, "
-		.. "progress resets saved or refused, night and day for the whole server, one request a second.", count,
-		commas(AdminService.Config.MaxMoney), commas(AdminService.Config.MaxSpeed)))
+		.. "progress resets saved or refused, night and day for the whole server, one request a second; "
+		.. "Secret grants to yourself %s (natural spawning %s); the Rain event by the owner's account only.", count,
+		commas(AdminService.Config.MaxMoney), commas(AdminService.Config.MaxSpeed),
+		if AdminService.Config.SecretGrants == true then "ON" else "off",
+		if GameConfig.Secret.Enabled then "ON" else "off"))
 end
 
 return AdminService

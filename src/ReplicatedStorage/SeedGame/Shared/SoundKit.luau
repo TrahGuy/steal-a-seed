@@ -71,6 +71,7 @@ local Debris = game:GetService("Debris")
 local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 
@@ -120,6 +121,10 @@ local GROUP_NAMES: { [string]: string } = {
 -- own bus. See routeServerCue.
 local BUS_ATTRIBUTE = "SeedBus"
 local BASE_VOLUME_ATTRIBUTE = "SeedBaseVolume"
+-- When the server played it (workspace:GetServerTimeNow()): a client that
+-- receives it later than Sfx.LateCueSeconds does not replay it. See
+-- routeServerCue.
+local EMITTED_ATTRIBUTE = "SeedEmittedAt"
 
 --==============================================================================
 -- THE PLAYER'S OWN LEVELS
@@ -512,6 +517,9 @@ function SoundKit.emit(name: string, at: BasePart, options: PlayOptions?): Sound
 		-- the Sound through its own bus, where the player's settings are.
 		sound:SetAttribute(BUS_ATTRIBUTE, bus)
 		sound:SetAttribute(BASE_VOLUME_ATTRIBUTE, opts.volume or cue.volume or 0.5)
+		-- And when, so a client that only receives it later (streamed in, joined
+		-- after) does not replay it.
+		sound:SetAttribute(EMITTED_ATTRIBUTE, Workspace:GetServerTimeNow())
 		CollectionService:AddTag(sound, GameConfig.Tags.ServerCue)
 	end
 
@@ -745,6 +753,22 @@ end
 --==============================================================================
 function SoundKit.routeServerCue(sound: Instance)
 	if not sound:IsA("Sound") then
+		return
+	end
+	--==========================================================================
+	-- A ONE-SHOT THIS CLIENT DID NOT WITNESS IS NOT REPLAYED (2026-10-02)
+	--
+	-- It stays in the world for twelve seconds after it played (emit's Debris),
+	-- and a Sound that replicates to a client while still marked playing is
+	-- started there from the top: a guardian streamed in mid-chase, or a player
+	-- who joined just after a roar, would hear a growl from seconds ago. Arriving
+	-- later than Sfx.LateCueSeconds after the server played it, this client's
+	-- copy is silenced and stopped -- locally; nobody else's moves.
+	--==========================================================================
+	local emitted = sound:GetAttribute(EMITTED_ATTRIBUTE)
+	if type(emitted) == "number" and Workspace:GetServerTimeNow() - emitted > (SFX.LateCueSeconds or 1) then
+		sound.Volume = 0
+		sound:Stop()
 		return
 	end
 	local bus = sound:GetAttribute(BUS_ATTRIBUTE)

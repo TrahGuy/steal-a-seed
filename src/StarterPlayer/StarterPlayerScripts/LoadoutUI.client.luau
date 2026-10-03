@@ -2480,6 +2480,11 @@ local function paintInfo()
 		local value = values[keyName]
 		row.value.Text = value[1]
 		row.value.TextColor3 = value[2]
+		-- A Secret has no size tier (2026-10-02): no Size row for it at all.
+		local holder = row.key.Parent
+		if holder and holder:IsA("GuiObject") then
+			holder.Visible = keyName ~= "Size" or details.sized
+		end
 	end
 end
 
@@ -2800,9 +2805,10 @@ local function refreshBag()
 				else nil
 			card.income.Visible = base ~= nil
 			card.income.Text = if base then "$" .. GameConfig.compact(base) .. "/s" else ""
-			-- A plant's name wears its size band, the way the Garden prints it.
+			-- A plant's name wears its size band, the way the Garden prints it --
+			-- and a Secret, which has no size tier, the Secret colour (PlantInfo).
 			card.name.TextColor3 = if row.kind == "plant" and row.tier
-				then SeedData.ColorForTier(row.tier)
+				then PlantInfo.SizeColour(row.speciesId, row.tier)
 				else CREAM
 			card.state.Text = row.state
 			fitPill(card, row.state)

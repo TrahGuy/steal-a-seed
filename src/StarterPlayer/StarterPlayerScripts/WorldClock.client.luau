@@ -52,6 +52,9 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 -- Only for its TV scale (UIKit.tenFoot).
 local UIKit = require(Shared:WaitForChild("UIKit"))
+-- A Thunderstorm's lightning schedule, and whether this player asked for less.
+local RainClouds = require(Shared:WaitForChild("RainClouds"))
+local StatusText = require(Shared:WaitForChild("StatusText"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -59,6 +62,21 @@ local playerGui = player:WaitForChild("PlayerGui")
 local CYCLE = GameConfig.WorldCycle
 local ATTR = GameConfig.Attributes
 local NIGHT = CYCLE.Night
+-- THE RAIN (2026-10-02): slightly darker while it falls, laid over the blend
+-- below -- this script stays Lighting's one owner. See applyLight.
+local RAIN_LIGHT = GameConfig.Weather.Light
+-- A THUNDERSTORM'S (2026-10-02): the rain's look with Weather.Thunder.Light's
+-- darker numbers laid over it. RAIN is whichever is falling.
+local THUNDER_LIGHT = table.clone(RAIN_LIGHT) :: any
+for key, value in pairs(GameConfig.Weather.Thunder.Light) do
+	THUNDER_LIGHT[key] = value
+end
+local RAIN = RAIN_LIGHT
+local RAIN_STATE = GameConfig.Weather.Attributes.State
+local RAIN_MODE = GameConfig.Weather.Attributes.Mode
+local RAIN_ID = GameConfig.Weather.Attributes.EventId
+local RAIN_STARTED = GameConfig.Weather.Attributes.StartedAt
+local LIGHTNING = GameConfig.Weather.Thunder.Lightning
 local SCREEN = CYCLE.Barrier.Screen
 
 local INK = Color3.fromRGB(26, 24, 30)
@@ -539,31 +557,134 @@ CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.BiomeFog):Connect(fun
 	fogParts[part] = nil
 end)
 
+--==============================================================================
+-- THE RAIN, OVER THE BLEND (2026-10-02)
+--
+-- A second number, `rain`, 0 to 1, eased toward WeatherService's state the way
+-- `blend` is eased toward the phase, and laid over the day/night result of the
+-- same call: OVERCAST, not dark -- a fraction of the brightness kept, some
+-- exposure taken off, the ambients moved part way toward the rain's cool grey
+-- (its day pair by day, its night pair by night, blended like everything
+-- else), softer shadows, less glint, a restrained cool tone through the one
+-- ColorCorrection this script owns, and the sky's own cloud layer (a Terrain
+-- Clouds instance, this client's, created here if the place has none and
+-- blended from the place's own values if it has). Day or night underneath,
+-- the rain neither forces a phase nor pauses the cycle, and when it stops
+-- there is no stale value to put back -- the blend is simply recomputed with
+-- rain at 0, so the light that comes back is the CURRENT phase's. It comes in
+-- over FadeSeconds and goes over FadeOutSeconds, as long as the white clouds
+-- and the biome take to fade. A player who joins while it rains starts at 1.
+--==============================================================================
+local rain = 0
+-- A Thunderstorm's flash of light: extra exposure for an instant, on the moments
+-- RainClouds.lightning names (none under reduced motion or Reduced FX). The bolt
+-- itself is Weather.client's.
+local flash = 0
+
+local baseShadow = Lighting.ShadowSoftness
+local baseSpecular = Lighting.EnvironmentSpecularScale
+
+local tone = Instance.new("ColorCorrectionEffect")
+tone.Name = "RainTone"
+tone.Enabled = false
+tone.Parent = Lighting
+
+local sky = Workspace.Terrain:FindFirstChildOfClass("Clouds")
+local skyBase = { Cover = 0, Density = 0, Color = Color3.new(1, 1, 1), Enabled = false }
+if sky then
+	skyBase = { Cover = sky.Cover, Density = sky.Density, Color = sky.Color, Enabled = sky.Enabled }
+else
+	sky = Instance.new("Clouds")
+	sky.Name = "RainSky"
+	sky.Cover = 0
+	sky.Density = 0
+	sky.Enabled = false
+	sky.Parent = Workspace.Terrain
+end
+
 local function applyLight(t: number)
+	local r = rain
 	Lighting.ClockTime = day.ClockTime + (night.ClockTime - day.ClockTime) * t
-	Lighting.Brightness = day.Brightness + (night.Brightness - day.Brightness) * t
+	local kept = RAIN.Brightness + (RAIN.NightBrightness - RAIN.Brightness) * t
+	Lighting.Brightness = (day.Brightness + (night.Brightness - day.Brightness) * t)
+		* (1 - (1 - kept) * r)
 	Lighting.Ambient = day.Ambient:Lerp(night.Ambient, t)
+		:Lerp(RAIN.Ambient:Lerp(RAIN.NightAmbient, t), RAIN.AmbientMix * r)
 	Lighting.OutdoorAmbient = day.OutdoorAmbient:Lerp(night.OutdoorAmbient, t)
+		:Lerp(RAIN.OutdoorAmbient:Lerp(RAIN.NightOutdoorAmbient, t), RAIN.AmbientMix * r)
 	Lighting.EnvironmentDiffuseScale = day.EnvironmentDiffuseScale
 		+ (night.EnvironmentDiffuseScale - day.EnvironmentDiffuseScale) * t
 	Lighting.ExposureCompensation = day.ExposureCompensation
 		+ (night.ExposureCompensation - day.ExposureCompensation) * t
+		+ RAIN.Exposure * r
+		+ flash
+	Lighting.ShadowSoftness = baseShadow + (RAIN.ShadowSoftness - baseShadow) * r
+	Lighting.EnvironmentSpecularScale = baseSpecular * (1 - (1 - RAIN.SpecularScale) * r)
+	tone.TintColor = Color3.new(1, 1, 1):Lerp(RAIN.Tint, r)
+	tone.Saturation = RAIN.Saturation * r
+	tone.Contrast = RAIN.Contrast * r
+	tone.Enabled = r > 0.001
+	sky.Cover = skyBase.Cover + (RAIN.Sky.Cover - skyBase.Cover) * r
+	sky.Density = skyBase.Density + (RAIN.Sky.Density - skyBase.Density) * r
+	sky.Color = skyBase.Color:Lerp(RAIN.Sky.DayColor:Lerp(RAIN.Sky.NightColor, t), r)
+	sky.Enabled = skyBase.Enabled or r > 0.001
 	applyFog(t)
 end
 
 RunService.RenderStepped:Connect(function(dt)
 	draw()
 
+	local changed = false
+	local state = Workspace:GetAttribute(RAIN_STATE)
+	local wantRain = if state == "opening" or state == "active" then 1 else 0
+	-- Which look is falling: the mode is kept until the next event names one,
+	-- so the fade out after a Thunderstorm is a Thunderstorm's.
+	local mode = Workspace:GetAttribute(RAIN_MODE)
+	if mode ~= nil then
+		local look = if mode == "thunder" then THUNDER_LIGHT else RAIN_LIGHT
+		if RAIN ~= look then
+			RAIN = look
+			changed = true
+		end
+	end
+	local nextFlash = 0
+	if mode == "thunder" and wantRain == 1 and not StatusText.reducedMotion() then
+		local id, started = Workspace:GetAttribute(RAIN_ID), Workspace:GetAttribute(RAIN_STARTED)
+		if type(id) == "number" and type(started) == "number" then
+			local bright = RainClouds.lightning(id, started, Workspace:GetServerTimeNow())
+			nextFlash = bright * LIGHTNING.Exposure * rain
+		end
+	end
+	if math.abs(nextFlash - flash) > 1e-4 then
+		flash = nextFlash
+		changed = true
+	end
+	if rain ~= wantRain then
+		local seconds = if wantRain > rain then RAIN.FadeSeconds else RAIN.FadeOutSeconds
+		local step = dt / math.max(0.05, seconds)
+		rain = if wantRain > rain
+			then math.min(wantRain, rain + step)
+			else math.max(wantRain, rain - step)
+		changed = true
+	end
 	local want = if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0
 	if blend ~= want then
 		local step = dt / math.max(0.05, NIGHT.FadeSeconds)
 		blend = if want > blend
 			then math.min(want, blend + step)
 			else math.max(want, blend - step)
+		changed = true
+	end
+	if changed then
 		applyLight(blend)
 	end
 end)
 
 draw()
+-- A late joiner sees the rain's light at once, not faded in.
+do
+	local state = Workspace:GetAttribute(RAIN_STATE)
+	rain = if state == "opening" or state == "active" then 1 else 0
+end
 applyLight(if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0)
 blend = if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0

@@ -675,6 +675,231 @@ local ok, err = pcall(function()
 	world.phase = "Day"
 
 	--==========================================================================
+	-- 8b. SECRET ITEMS (2026-10-02): A SECRET INTO THE ADMIN'S OWN BAG
+	--
+	-- The real CarryService givers (GivePod, GiveHatched with onRecord) and the
+	-- real PlayerDataService, on stand-ins; SaveService stubbed as above, so the
+	-- saves counted here are MOCKED -- the throwaway-store Play is the real one.
+	--==========================================================================
+	say("\n-- secret items --")
+	local SeedData = require(Shared.SeedData)
+	local kept = { cooldown = admin.Config.SecretCooldown, grants = admin.Config.SecretGrants }
+	admin.Config.SecretCooldown = 0
+	local requests = 0
+	local function ask(species, kind, equip, id)
+		requests += 1
+		return { species = species, kind = kind, equip = equip == true,
+			request = id or string.format("spec-secret-%04d", requests) }
+	end
+	local function rowsOf(p)
+		local prof = data.Get(p)
+		return if prof then #prof.Held else -1
+	end
+	local function lastRowOf(p)
+		local prof = data.Get(p)
+		return if prof and #prof.Held > 0 then prof.Held[#prof.Held] else nil
+	end
+	local function snapshot()
+		return { a = rowsOf(adminA), b = rowsOf(adminB), t = rowsOf(target),
+			ta = toolsIn(adminA), tb = toolsIn(adminB), tt = toolsIn(target), saves = #savedPayloads }
+	end
+	local function same(x, y)
+		return x.a == y.a and x.b == y.b and x.t == y.t and x.ta == y.ta and x.tb == y.tb and x.tt == y.tt
+			and x.saves == y.saves
+	end
+	local secretMark = #calls
+	local phaseBefore = world.phase
+
+	local s0 = snapshot()
+	local strangersRefused = true
+	for _, s in ipairs({ target, { UserId = 1 }, { UserId = 5551, Name = "nicnicniccoal" }, nil, "x" }) do
+		local r = admin.Handle(s, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod"))
+		if r.ok or r.message ~= "Not authorized." then
+			strangersRefused = false
+		end
+	end
+	check(strangersRefused and same(s0, snapshot()),
+		"a non-admin's GrantSecret -- even naming an admin as the recipient -- is \"Not authorized.\" and grants nothing")
+
+	local forged = {
+		admin.Handle(adminA, "GrantSecret", target.UserId, ask("snarlbloom", "pod")),
+		admin.Handle(adminA, "GrantSecret", ADMIN_B, ask("petalfawn", "plant")),
+		admin.Handle(adminA, "GrantSecret", tostring(ADMIN_A), ask("petalfawn", "plant")),
+		admin.Handle(adminA, "GrantSecret", nil, ask("petalfawn", "plant")),
+	}
+	local forgedRefused = true
+	for _, r in ipairs(forged) do
+		if r.ok or not string.find(r.message, "only be granted to yourself", 1, true) then
+			forgedRefused = false
+		end
+	end
+	check(forgedRefused and same(s0, snapshot()),
+		"an admin cannot grant to anybody else -- another player, the other admin, a string id, nobody", forged[1].message)
+
+	local wrongItems = { { "nubkin", "pod" }, { "supernovus", "plant" }, { "Snarlbloom", "pod" }, { "snarlbloom ", "pod" },
+		{ "snarlbloom", "seed" }, { "petalfawn", "POD" }, { "petalfawn", "grown" } }
+	local wrongRefused = true
+	for _, w in ipairs(wrongItems) do
+		local r = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask(w[1], w[2]))
+		if r.ok or not string.find(r.message, "Only a Snarlbloom or a Petalfawn", 1, true) then
+			wrongRefused = false
+		end
+	end
+	check(wrongRefused and same(s0, snapshot()), "any other species or form is refused and nothing is granted")
+
+	local good = function()
+		return { species = "snarlbloom", kind = "pod", equip = false, request = "spec-shape-0001" }
+	end
+	local shapes = { nil, "snarlbloom:pod", { "snarlbloom", "pod" } }
+	local missing = good()
+	missing.request = nil
+	table.insert(shapes, missing)
+	local extra = good()
+	extra.target = ADMIN_B
+	table.insert(shapes, extra)
+	local typed = good()
+	typed.equip = "yes"
+	table.insert(shapes, typed)
+	for _, id in ipairs({ "short", string.rep("a", 65), "bad id!", "" }) do
+		local r = good()
+		r.request = id
+		table.insert(shapes, r)
+	end
+	local malformedRefused = true
+	for i = 1, #shapes + 1 do
+		local r = admin.Handle(adminA, "GrantSecret", ADMIN_A, shapes[i])
+		if r.ok or r.message ~= "Malformed request. Nothing was granted." then
+			malformedRefused = false
+		end
+	end
+	check(malformedRefused and same(s0, snapshot()),
+		"a malformed request -- not a table, a missing or extra field, a wrong type, a bad request id -- grants nothing")
+
+	admin.Config.SecretGrants = false
+	local off = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod"))
+	admin.Config.SecretGrants = true
+	check(not off.ok and string.find(off.message, "switched off", 1, true) and same(s0, snapshot()),
+		"with the console's own switch off, nothing is granted", off.message)
+
+	local exact = true
+	for _, combo in ipairs({ { "snarlbloom", "pod" }, { "snarlbloom", "plant" }, { "petalfawn", "pod" }, { "petalfawn", "plant" } }) do
+		local before = snapshot()
+		local r = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask(combo[1], combo[2]))
+		local row = lastRowOf(adminA)
+		local after = snapshot()
+		local fine = r.ok and r.saved == true and string.find(r.message, "saved", 1, true) ~= nil
+			and after.a == before.a + 1 and after.ta == before.ta + 1 and after.saves == before.saves + 1
+			and after.b == before.b and after.t == before.t
+			and row and row.Id == combo[1] and row.Hatched == (combo[2] == "plant") and row.Tier == SeedData.SecretTier
+		check(fine, string.format("%s as a %s: exactly one item into the admin's own bag, its saved row at the Secret tier, "
+			.. "one save", combo[1], combo[2]), r.message)
+		exact = exact and fine
+	end
+
+	local once = ask("petalfawn", "pod", false, "spec-repeat-0001")
+	local first = admin.Handle(adminA, "GrantSecret", ADMIN_A, once)
+	local afterFirst = snapshot()
+	local again = admin.Handle(adminA, "GrantSecret", ADMIN_A, once)
+	local againCopy = admin.Handle(adminA, "GrantSecret", ADMIN_A, table.clone(once))
+	check(first.ok and again.ok and againCopy.ok and string.find(again.message, "Already answered", 1, true) ~= nil
+			and same(afterFirst, snapshot()),
+		"the same request sent again is answered again and grants nothing more", again.message)
+
+	slowSave = true
+	local pendingReply = nil
+	local beforePending = snapshot()
+	task.spawn(function()
+		pendingReply = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod", false, "spec-pending-0001"))
+	end)
+	local during = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod", false, "spec-pending-0002"))
+	local duringSame = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod", false, "spec-pending-0001"))
+	task.wait(0.8)
+	slowSave = false
+	local afterPending = snapshot()
+	check(pendingReply ~= nil and pendingReply.ok and not during.ok
+			and string.find(during.message, "already being made", 1, true) ~= nil
+			and not duringSame.ok and string.find(duringSame.message, "still being made", 1, true) ~= nil
+			and afterPending.a == beforePending.a + 1,
+		"while a grant is still saving, a second press (new id or the same) is refused: one item, not two",
+		during.message .. " / " .. duringSame.message)
+
+	admin.Config.SecretCooldown = 6
+	local c1 = admin.Handle(adminB, "GrantSecret", ADMIN_B, ask("petalfawn", "plant"))
+	local c2 = admin.Handle(adminB, "GrantSecret", ADMIN_B, ask("petalfawn", "plant"))
+	admin.Config.SecretCooldown = 0
+	check(c1.ok and not c2.ok and string.find(c2.message, "between Secret grants", 1, true) ~= nil and rowsOf(adminB) == 1,
+		"the other admin's first grant works, and a second inside the cooldown is refused", c2.message)
+
+	local fill = {}
+	for _ = 1, SAVE.MaxHeld do
+		table.insert(fill, { Id = "nubkin", Tier = 1, Hatched = false })
+	end
+	data.SetHeld(adminB, fill)
+	local beforeFull = snapshot()
+	local full = admin.Handle(adminB, "GrantSecret", ADMIN_B, ask("snarlbloom", "plant"))
+	check(not full.ok and string.find(full.message, string.format("Plant storage full (%d/%d)", SAVE.MaxHeld, SAVE.MaxHeld),
+			1, true) ~= nil and same(beforeFull, snapshot()),
+		"a full bag refuses with the storage line, and nothing is granted or lost", full.message)
+	data.SetHeld(adminB, {})
+
+	local equipBefore = snapshot()
+	local equipped = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("petalfawn", "pod", true))
+	local inBag = false
+	for _, t in ipairs(adminA._backpack:GetChildren()) do
+		if t:IsA("Tool") and t:GetAttribute("SpeciesId") == "petalfawn" then
+			inBag = true
+		end
+	end
+	check(equipped.ok and string.find(equipped.message, "Not equipped, kept in your Bag: you have no character right now", 1, true)
+			~= nil and inBag and snapshot().a == equipBefore.a + 1,
+		"EQUIP NOW on a body that cannot take it: granted, kept in the Bag, and the answer says why", equipped.message)
+
+	saveOk = false
+	local unsaved = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod"))
+	saveOk = true
+	check(unsaved.ok and unsaved.saved == false and string.find(unsaved.message, "SAVE HAS NOT LANDED", 1, true) ~= nil,
+		"a grant whose save does not land is never reported as saved", unsaved.message)
+
+	local tempAdmin = join("AdminBTemp", ADMIN_B, { Cash = 0 }, "unavailable")
+	local beforeTemp = rowsOf(tempAdmin)
+	local temporary = admin.Handle(tempAdmin, "GrantSecret", ADMIN_B, ask("snarlbloom", "pod"))
+	byId[ADMIN_B] = adminB
+	check(not temporary.ok and string.find(temporary.message, "not saving", 1, true) ~= nil
+			and rowsOf(tempAdmin) == beforeTemp,
+		"a profile that is not saving this session is refused before anything is granted", temporary.message)
+
+	check(callsOf("StartNight", secretMark) == 0 and callsOf("StartDay", secretMark) == 0 and world.phase == phaseBefore,
+		"no grant asked for a night or a day")
+	local adminSrc = sourceOf(Server.AdminService) or ""
+	local grantSrc = string.match(adminSrc, "SECRET ITEMS: A SECRET POD OR GROWN PLANT(.-)ONE REQUEST") or ""
+	check(grantSrc ~= "" and not string.find(grantSrc, "NestService", 1, true)
+			and not string.find(grantSrc, "SpawnSecret", 1, true) and not string.find(grantSrc, "WorldCycleService", 1, true)
+			and not string.find(grantSrc, "FireAllClients", 1, true) and not string.find(grantSrc, "Secret.Enabled", 1, true),
+		"the grant never touches a nest, the day and night, a world toast, or the natural-spawn switch")
+	check(string.find(grantSrc, "CarryService.GivePod(", 1, true) ~= nil
+			and string.find(grantSrc, "CarryService.GiveHatched(", 1, true) ~= nil
+			and string.find(grantSrc, "CarryService.EquipIfFree(", 1, true) ~= nil
+			and string.find(grantSrc, "PlayerDataService.Save(", 1, true) ~= nil,
+		"it grants through CarryService's own givers, equips through EquipIfFree, and saves through PlayerDataService")
+	local nestSrc = sourceOf(Server.NestService) or ""
+	check(SeedData.SecretTier == 1 and string.find(nestSrc, "BuildPod(species, SeedData.SecretTier,", 1, true) ~= nil,
+		"the natural spawn and the grant use the one Secret tier")
+	trail = admin.Audit()
+	check(trail[#trail] and string.sub(trail[#trail].action, 1, 12) == "GrantSecret:" and trail[#trail].target == ADMIN_A,
+		"a grant is on the record, by species and form")
+	-- The panel's side, from its source: checked here because the console section below cannot run under
+	-- Studio's assistant sandbox (it parents a LocalScript into a stand-in PlayerGui).
+	local ui = sourceOf(Server.AdminService:FindFirstChild("AdminConsoleUI")) or ""
+	check(string.find(ui, 'InvokeServer("GrantSecret", player.UserId, request, nil)', 1, true) ~= nil
+			and string.find(ui, "GRANT TO BAG", 1, true) ~= nil and string.find(ui, "EQUIP NOW", 1, true) ~= nil
+			and string.find(ui, "GRANTING…", 1, true) ~= nil and string.find(ui, "HttpService:GenerateGUID(false)", 1, true) ~= nil
+			and string.find(ui, "unanswered = request", 1, true) ~= nil,
+		"SECRET ITEMS names only the admin as recipient, locks GRANT TO BAG while a grant is pending, and gives every "
+			.. "press an id -- resent unchanged when no answer came")
+	admin.Config.SecretCooldown = kept.cooldown
+	admin.Config.SecretGrants = kept.grants
+
+	--==========================================================================
 	-- 9. THE CONSOLE REACHES ADMINS AND NOBODY ELSE
 	--==========================================================================
 	say("\n-- the console --")

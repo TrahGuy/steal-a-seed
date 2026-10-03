@@ -160,8 +160,10 @@ say("\n-- the fall-through --")
 -- Rows that exist with a blank id because their recording is waiting for an
 -- upload. A row here plays nothing and replaces nothing until its id is pasted
 -- in; this list is the only place a blank row is allowed. Empty since the seven
--- 2026-09-24 recordings were uploaded and wired, 2026-09-27.
-local PENDING = {}
+-- 2026-09-24 recordings were uploaded and wired, 2026-09-27; the Rain event's
+-- Stormstrider had two hooks waiting (2026-10-02) -- its wake is recorded now,
+-- its hit still waits.
+local PENDING = { StormstriderHit = true }
 
 local EXPECTED = {
 	-- biome, role, cue name or false for "nothing"
@@ -201,6 +203,14 @@ local EXPECTED = {
 	{ "tanglemire", "Return", "ParentReturnTanglemire" },
 	-- Greenhollow's brute has no walk-home recording: it goes home in silence.
 	{ "greenhollow", "Return", false },
+
+	-- The Rain event's Stormstrider (2026-10-02): its own growl and its own
+	-- sleeping breath; its hit is still a hook, so a catch keeps the generic claw.
+	{ "rain", "Wake", "StormstriderWake" },
+	{ "rain", "Sleep", "StormstriderSleep" },
+	{ "rain", "Hit", "ParentHit" },
+	{ "rain", "Step", "ChaseStep" },
+	{ "rain", "Return", false },
 
 	-- A biome that does not exist, and a parent whose attribute never arrived.
 	{ "not_a_biome", "Hit", "ParentHit" },
@@ -495,7 +505,7 @@ local star = CUES.ParentSleepStarbloom
 check(star ~= nil and star.looped == true and star.loopStart == nil and (star.range or 0) <= 80,
 	"Starbloom's hum loops as it is, close by, like every other sleep")
 local shortRange = true
-for _, name in ipairs({ "ParentSleepEmberroot", "ParentSleepStarbloom" }) do
+for _, name in ipairs({ "ParentSleepEmberroot", "ParentSleepStarbloom", "StormstriderSleep" }) do
 	local cue = CUES[name]
 	if not cue or (cue.range or 999) > (CUES.ParentSleep.range or 70) then
 		shortRange = false
@@ -529,6 +539,10 @@ local UPLOADS = {
 	{ "ParentReturnTanglemire", "95499040809968", 2.28 },
 	{ "ParentReturnDustbowl", "107688968177239", 2.28 },
 	{ "ParentRageStarbloom", "108747837024365", 6.00 },
+	-- Stormstrider's two (2026-10-02): group uploads, loaded in Podnappers at
+	-- exactly the WAVs' lengths (Studio Edit load test).
+	{ "StormstriderWake", "113193227101300", 2.88 },
+	{ "StormstriderSleep", "82607848172654", 11.88 },
 }
 -- The first uploads, on the owner's own account: Podnappers may not use them
 -- (refused even after a grant, 2026-09-28), and a row that names one plays
