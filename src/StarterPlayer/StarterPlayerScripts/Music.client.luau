@@ -131,6 +131,39 @@ local function rainFalling(): boolean
 	return state == "opening" or state == "active"
 end
 
+--==============================================================================
+-- AND A FOURTH, WHILE THE DISCO PLAYS (2026-10-03)
+--
+-- Music.DiscoTracks (the owner's disco track), while a disco mode of the global
+-- mini event runs here (MiniEventState "running", a mode with Disco: Ticket
+-- Disco and Disco Only, never Ticket Shower Only) -- ahead of the rain, night
+-- and day beds, on this same one Sound, so never two beds at once; looping
+-- (one id loops itself in the engine); and STARTED AT THE GLOBAL EVENT'S OWN
+-- POSITION -- (server time - MiniEventStartedAt) wrapped by its length -- so a
+-- late joiner, or a server that heard about the event late, plays the bar
+-- everyone else is on. When it ends the bed the world asks for (the rain's in
+-- a storm, else night or day) fades back. Never the rain BGM. An id that will
+-- not load is probed, reported and skipped the way the rain's is.
+--==============================================================================
+local discoTracks: { string } = usable((MUSIC :: any).DiscoTracks)
+local MINI = GameConfig.MiniEvent
+local MINI_MODES: { [string]: any } = MINI.Modes :: any
+local discoOk: boolean? = nil
+local DISCO_PROBE = "SeedMusicDiscoProbe"
+for _, stale in ipairs(SoundService:GetChildren()) do
+	if stale.Name == DISCO_PROBE then
+		stale:Destroy()
+	end
+end
+
+local function discoPlaying(): boolean
+	if Workspace:GetAttribute(MINI.Attributes.State) ~= "running" then
+		return false
+	end
+	local mode = MINI_MODES[Workspace:GetAttribute(MINI.Attributes.Mode) or ""]
+	return mode ~= nil and mode.Disco == true
+end
+
 if #tracks == 0 then
 	warn("[Seed/Music] No ids in GameConfig.Music.Tracks, so there is no music. "
 		.. "The pieces in sfx/ are files on disk and Roblox can only play "
@@ -210,7 +243,11 @@ local current: { string } = tracks
 -- No remote, no clock of this script's own, and nothing to drift.
 --==============================================================================
 local function listFor(): { string }
-	-- The rain first: a storm at night is still a storm.
+	-- The disco first, once it has a track that loads (2026-10-03).
+	if #discoTracks > 0 and discoOk ~= false and discoPlaying() then
+		return discoTracks
+	end
+	-- The rain next: a storm at night is still a storm.
 	if #rainTracks > 0 and rainOk ~= false and rainFalling() then
 		return rainTracks
 	end
@@ -272,6 +309,9 @@ playTrack(listFor(), 1)
 -- leaving a fade-in scheduled for a track that is no longer the one playing.
 --==============================================================================
 local swap = 0
+-- Declared here, written with the disco's clock below: a swap calls it, and a
+-- local function written after applyPhase would be a nil global to it.
+local alignDisco: () -> ()
 
 local function fadeSound(to: number, seconds: number)
 	TweenService:Create(sound, TweenInfo.new(seconds, Enum.EasingStyle.Sine), {
@@ -288,7 +328,9 @@ local function applyPhase()
 	local token = swap
 	-- The rain's bed comes and goes over its own, gentler fade; dusk and dawn
 	-- keep the sky's.
-	local seconds = if want == rainTracks or current == rainTracks
+	local seconds = if want == discoTracks or current == discoTracks
+		then tonumber((MUSIC :: any).DiscoFadeSeconds) or 3.0
+		elseif want == rainTracks or current == rainTracks
 		then tonumber((MUSIC :: any).RainFadeSeconds) or 4.0
 		else tonumber((MUSIC :: any).PhaseFadeSeconds) or 3.0
 	local half = math.max(0.15, seconds * 0.5)
@@ -298,11 +340,41 @@ local function applyPhase()
 			return
 		end
 		playTrack(want, 1)
+		alignDisco()
 		fadeSound(1, half)
 	end)
 end
 
 Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(applyPhase)
+
+--==============================================================================
+-- THE DISCO ON THE EVENT'S CLOCK (2026-10-03)
+--
+-- The track's length is only known once it has loaded, so this waits for it
+-- (a few seconds at most) and then moves the playhead to where the global event
+-- is: every client starting from the same MiniEventStartedAt lands on the same
+-- bar. Dropped if anything else has started playing meanwhile.
+--==============================================================================
+function alignDisco()
+	local started = Workspace:GetAttribute(MINI.Attributes.StartedAt)
+	if type(started) ~= "number" or current ~= discoTracks then
+		return
+	end
+	local token = swap
+	task.spawn(function()
+		local waited = 0
+		while sound.TimeLength <= 0 and waited < 10 do
+			waited += task.wait(0.1)
+			if swap ~= token or current ~= discoTracks or not sound.Parent then
+				return
+			end
+		end
+		local length = sound.TimeLength
+		if length > 0 and swap == token and current == discoTracks then
+			sound.TimePosition = math.max(0, Workspace:GetServerTimeNow() - started) % length
+		end
+	end)
+end
 
 -- The rain's probe: one preload of the id, its answer kept, the bed re-chosen.
 local probing = false
@@ -340,6 +412,45 @@ Workspace:GetAttributeChangedSignal(WEATHER_STATE):Connect(function()
 	applyPhase()
 end)
 probeRain()
+
+-- The disco's probe, the rain's shape; it does nothing while the hook is empty.
+local probingDisco = false
+local function probeDisco()
+	if #discoTracks == 0 or probingDisco then
+		return
+	end
+	probingDisco = true
+	task.spawn(function()
+		local probe = Instance.new("Sound")
+		probe.Name = DISCO_PROBE
+		probe.SoundId = discoTracks[1]
+		probe.Volume = 0
+		probe.Parent = SoundService
+		pcall(function()
+			ContentProvider:PreloadAsync({ probe })
+		end)
+		local loaded = probe.IsLoaded
+		probe:Destroy()
+		probingDisco = false
+		if not loaded and discoOk ~= false then
+			warn(string.format("[Seed/Music] The disco bed %s did not load, so the bed that was playing carries on "
+				.. "through the disco.", discoTracks[1]))
+		end
+		discoOk = loaded
+		applyPhase()
+	end)
+end
+local function onDisco()
+	if discoOk == false and discoPlaying() then
+		probeDisco()
+	end
+	applyPhase()
+end
+Workspace:GetAttributeChangedSignal(MINI.Attributes.State):Connect(onDisco)
+Workspace:GetAttributeChangedSignal(MINI.Attributes.Mode):Connect(onDisco)
+probeDisco()
+-- Joined during a disco: the first track chosen above was the disco's.
+alignDisco()
 
 -- Through SoundKit rather than a tween of its own. The chase duck and the
 -- settings panel move this bus too, and all three have to aim at one number:

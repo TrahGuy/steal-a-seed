@@ -2,26 +2,30 @@
 --==============================================================================
 -- Steal a Seed :: HotbarSpec
 --
--- The hotbar rework (2026-10-01, the owner's brief): the slots are ROLES --
--- bat, trap, Spin Tickets, the active plant or pod, the previous one -- the
--- two plant shortcuts are pointers into the Bag, the Bag's count is plant
--- storage, and the look is the owner's reference. Edit mode:
+-- The freely assignable hotbar (2026-10-03, the owner's spec), replacing the
+-- fixed roles of 2026-10-01: any eligible item in any slot, ten on a desktop
+-- (keys 1-9 and 0), five on a phone, saved by item id on the server; the look
+-- is still the owner's reference. Edit mode:
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
 --     print(run("HotbarSpec"))
 --
---   1. the roles      HotbarRoles with stand-in Tools: fixed positions, the
---                     newest plant into an empty active slot only, choosing,
---                     two identical copies as two items, a respawn's re-lease,
---                     a sold plant let go, the storage count
+--   1. the count      ten and five, from HudLayout
 --   2. the card       HotbarCard on a throwaway ScreenGui: the plain number,
 --                     the thin edge, the faint empty state, the held state, the
---                     hidden name, no lift or pop under reduced motion
---   3. the layout     HudLayout's name band over the strip, clear of notices
---   4. the wiring     LoadoutUI's source: five keys, HOLD chooses, the equip
---                     guards kept, the count from the profile, TutorialUI's
---                     pointer still finds a slot by its name
+--                     hidden name, a faint slot's word, restoring, a pending
+--                     equip, assign mode's target; no lift or pop under reduced
+--                     motion
+--   3. the layout     HudLayout's name band over the strip, clear of notices,
+--                     on every listed screen
+--   4. the wiring     LoadoutUI's source: ten keys gated by what is shown, one
+--                     sender for the bar and one for the hearts, arrivals read
+--                     off the profile, a silent equip refusal, the equip guards
+--                     kept, a local budget, TutorialUI's pointer
+--
+-- The grammar is HotbarSlotsSpec's; the server's half InventorySpec's; what the
+-- Bag shows InventoryModelSpec's.
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -31,7 +35,6 @@ local TextService = game:GetService("TextService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
-local HotbarRoles = require(Shared:WaitForChild("HotbarRoles"))
 local HotbarCard = require(Shared:WaitForChild("HotbarCard"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local Scripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
@@ -72,6 +75,33 @@ local function times(src, needle)
 		at = found + #needle
 	end
 end
+-- Names a chunk declares at its top level: every `local` at column 0, each name
+-- of a `local a, b` counted (commas inside braces or brackets are a type's).
+local function topLevelNames(src)
+	local n = 0
+	for line in string.gmatch(src, "[^\n]+") do
+		if string.sub(line, 1, 6) == "local " then
+			if string.sub(line, 1, 15) == "local function " then
+				n += 1
+			else
+				local decl = string.match(line, "^local%s+(.-)%s*=") or string.sub(line, 7)
+				local depth, names = 0, 1
+				for i = 1, #decl do
+					local c = string.sub(decl, i, i)
+					if c == "{" or c == "(" or c == "<" then
+						depth += 1
+					elseif c == "}" or c == ")" or c == ">" then
+						depth -= 1
+					elseif c == "," and depth == 0 then
+						names += 1
+					end
+				end
+				n += names
+			end
+		end
+	end
+	return n
+end
 
 local layer = Instance.new("ScreenGui")
 layer.Name = "ZZHotbarSpec"
@@ -79,123 +109,13 @@ layer.Archivable = false
 
 local ok, err = pcall(function()
 	--==========================================================================
-	-- 1. THE ROLES
+	-- 1. THE COUNT
 	--==========================================================================
-	say("-- the roles --")
-	local R = HotbarRoles.Roles
-	check(#R == 5 and R[1] == "bat" and R[2] == "trap" and R[3] == "ticket" and R[4] == "active"
-			and R[5] == "previous" and HotbarRoles.roleOf(6) == nil,
-		"five roles in a fixed order: bat, trap, tickets, the active plant, the previous one")
-	check(HudLayout.Config.DesktopSlots == 5 and HudLayout.Config.MobileSlots == 4,
-		"a desktop shows all five and the Bag; a phone the first four and the Bag")
-
-	local function tool(name)
-		return { Name = name }
-	end
-	local KEY = "p:nubkin:1:true"
-	local function plant(t, key, order)
-		return { tool = t, key = key, kind = "plant", order = order }
-	end
-	local bat = { tool = tool("Rootwood Bat"), key = "w:rootwood", kind = "bat", order = 1 }
-	local trap = { tool = tool("Bramblejaw Trap"), key = "w:bramblejaw", kind = "trap", order = 2 }
-	local ticket = { tool = tool("Spin Ticket"), key = "t:spin", kind = "ticket", order = 3 }
-	-- Two identical Nubkins: two items.
-	local n1, n2 = tool("Nubkin"), tool("Nubkin")
-	local live = { bat, trap, ticket, plant(n1, KEY, 4), plant(n2, KEY, 5) }
-
-	local state = {}
-	local waiting = HotbarRoles.reconcile(state, live, 100)
-	local e = function(st, lv, i)
-		return HotbarRoles.entryFor(st, lv, i)
-	end
-	check(not waiting and e(state, live, 1).kind == "bat" and e(state, live, 2).kind == "trap"
-			and e(state, live, 3).kind == "ticket",
-		"slots 1 to 3 are the bat, the trap and the tickets, by what the Tool is")
-	check(state.active ~= nil and state.active.tool == n2 and state.previous == nil
-			and e(state, live, 4).tool == n2 and e(state, live, 5) == nil,
-		"an empty active slot takes the NEWEST plant; the previous slot waits for a choice")
-
-	local noBat = { trap, ticket, plant(n1, KEY, 4) }
-	local bare = {}
-	HotbarRoles.reconcile(bare, noBat, 100)
-	check(e(bare, noBat, 1) == nil and e(bare, noBat, 2).kind == "trap" and e(bare, noBat, 3).kind == "ticket"
-			and e(bare, noBat, 4).tool == n1,
-		"no bat owned: slot 1 is empty IN ITS PLACE, and nothing renumbers")
-
-	-- Choosing.
-	HotbarRoles.choose(state, KEY, n1)
-	check(state.active.tool == n1 and state.previous.tool == n2,
-		"choosing a plant in the Bag makes it the active one; the old active becomes the previous")
-	HotbarRoles.choose(state, KEY, n2)
-	check(state.active.tool == n2 and state.previous.tool == n1, "choosing the previous one swaps the two")
-	HotbarRoles.choose(state, KEY, n2)
-	check(state.active.tool == n2 and state.previous.tool == n1, "choosing the active one again changes nothing")
-	HotbarRoles.reconcile(state, live, 101)
-	check(state.active.tool == n2 and state.previous.tool == n1 and state.active.tool ~= state.previous.tool,
-		"two identical copies are two items: one on each shortcut, the same copy never twice")
-	local dup = { active = { key = KEY, tool = n1 }, previous = { key = KEY, tool = n1 } }
-	HotbarRoles.reconcile(dup, live, 102)
-	check(dup.active.tool == n1 and (dup.previous == nil or dup.previous.tool ~= n1),
-		"the same copy set in both by hand: the previous is dropped")
-
-	-- Arrivals never take a chosen shortcut.
-	local n3 = tool("Bellchime")
-	local more = { bat, trap, ticket, plant(n1, KEY, 4), plant(n2, KEY, 5), plant(n3, "p:bellchime:1:true", 9) }
-	HotbarRoles.reconcile(state, more, 103)
-	check(state.active.tool == n2 and state.previous.tool == n1,
-		"a new plant arriving does not replace a chosen shortcut")
-	local fresh = {}
-	HotbarRoles.reconcile(fresh, more, 104)
-	check(fresh.active.tool == n3 and fresh.previous == nil,
-		"with nothing chosen, the newest arrival is what the active slot takes")
-	check(HotbarRoles.holding(state, n2) == "active" and HotbarRoles.holding(state, n1) == "previous"
-			and HotbarRoles.holding(state, n3) == nil,
-		"holding says which shortcut has a copy, if any")
-
-	-- A respawn: the Tools vanish, then come back as new instances with the same keys.
-	local gone = { bat, trap, ticket }
-	local wait1 = HotbarRoles.reconcile(state, gone, 105)
-	check(wait1 and state.active ~= nil and state.active.tool == nil and state.previous ~= nil
-			and state.previous.tool == nil and e(state, gone, 4) == nil,
-		"in a respawn's gap both shortcuts wait with their keys, and show empty")
-	local n1b, n2b = tool("Nubkin"), tool("Nubkin")
-	local rebuilt = { bat, trap, ticket, plant(n1b, KEY, 11), plant(n2b, KEY, 12) }
-	local wait2 = HotbarRoles.reconcile(state, rebuilt, 106)
-	local a, p = state.active.tool, state.previous.tool
-	check(not wait2 and a ~= nil and p ~= nil and a ~= p and (a == n1b or a == n2b) and (p == n1b or p == n2b),
-		"and re-lease the rebuilt copies by key within the grace, one copy each")
-
-	-- Sold: one copy never comes back.
-	local sold = { bat, trap, ticket, plant(n2b, KEY, 12) }
-	HotbarRoles.reconcile(state, sold, 107)
-	local lostOne = (state.active and state.active.tool == nil) or (state.previous and state.previous.tool == nil)
-	HotbarRoles.reconcile(state, sold, 107 + HotbarRoles.Grace + 1)
-	check(lostOne and state.active ~= nil and state.active.tool == n2b and state.previous == nil,
-		"a plant sold stays gone: after the grace its shortcut is let go, and the last plant steps up to active")
-
-	-- The previous slot by a drop, and a swap.
-	local two = { bat, trap, ticket, plant(n1b, KEY, 11), plant(n2b, KEY, 12) }
-	HotbarRoles.reconcile(state, two, 120)
-	HotbarRoles.setPrevious(state, KEY, n1b)
-	check(state.active.tool == n2b and state.previous.tool == n1b, "a plant dropped on slot 5 is the previous one")
-	HotbarRoles.setPrevious(state, KEY, n2b)
-	check(state.active.tool == n1b and state.previous.tool == n2b,
-		"dropping the active one on slot 5 swaps the two rather than doubling it")
-	HotbarRoles.swap(state)
-	check(state.active.tool == n2b and state.previous.tool == n1b, "a slot dropped on the other slot swaps them")
-	HotbarRoles.clear(state, "previous")
-	HotbarRoles.reconcile(state, two, 121)
-	check(state.active.tool == n2b and state.previous == nil, "clearing the previous slot leaves the active one alone")
-
-	-- Storage, as the Bag cell shows it.
-	local t0, f0, k0 = HotbarRoles.storage(nil, false, 24)
-	local t1, f1, k1 = HotbarRoles.storage(7, false, 24)
-	local t2, f2, k2 = HotbarRoles.storage(23, true, 24)
-	local t3, f3 = HotbarRoles.storage(24, false, 24)
-	check(t0 == "…" and not f0 and not k0, "before the profile arrives there is no number, not a misleading 0/24")
-	check(t1 == "7/24" and not f1 and k1 and t2 == "24/24" and f2 and k2 and t3 == "24/24" and f3,
-		"the count is the saved rows plus the raid pod in both arms, out of Save.MaxHeld; full at the limit")
-	check(GameConfig.Save.MaxHeld == 24, "the limit is the one the server enforces")
+	say("-- the count --")
+	check(HudLayout.Config.DesktopSlots == 10 and HudLayout.Config.MobileSlots == 5
+			and GameConfig.Inventory.Slots == 10,
+		"ten slots on a desktop (keys 1-9 and 0), five on a phone, ten saved")
+	check(not Shared:FindFirstChild("HotbarRoles"), "the fixed roles are gone")
 
 	--==========================================================================
 	-- 2. THE CARD
@@ -227,21 +147,38 @@ local ok, err = pcall(function()
 	check(math.abs(card.button.BackgroundTransparency - HOT.EmptyPlateTransparency) < 1e-4
 			and math.abs(card.stroke.Transparency - HOT.EmptyEdgeTransparency) < 1e-4
 			and math.abs(card.number.TextTransparency - HOT.EmptyNumeralTransparency) < 1e-4
-			and card.number.Text == "4" and not card.stack.Visible and not card.accent.Visible,
+			and card.number.Text == "4" and not card.stack.Visible and not card.accent.Visible
+			and not card.ghost.Visible,
 		"an empty slot is barely there, its number faint and in place")
+	HotbarCard.paint(card, HOT, { empty = true, held = false, number = "0", name = "", ghost = HOT.Tags.bat.text })
+	check(card.ghost.Visible and card.ghost.Text == "BAT" and card.number.Text == "0"
+			and math.abs(card.ghost.TextTransparency - HOT.EmptyNumeralTransparency) < 1e-4,
+		"a FAINT slot says, quietly, what it waits for; the tenth slot is numbered 0")
+	check(HOT.Tags.ticket and HOT.Tags.trap and TextService:GetTextSize(HOT.Tags.ticket.text, HOT.Compact.NumeralSize,
+		Enum.Font.FredokaOne, Vector2.new(400, 40)).X <= HOT.Compact.SlotWidth - 6,
+		"every faint word fits a phone's slot")
 	local rarity = Color3.fromRGB(200, 120, 255)
 	HotbarCard.paint(card, HOT, { empty = false, held = true, number = "4", stack = "x5", accent = rarity, name = "Nubkin" })
 	check(card.ringTint.Enabled and card.stroke.Thickness == HOT.LitThickness and card.stroke.Transparency == 0
 			and card.number.TextColor3 == HOT.NumeralLit
 			and math.abs(card.button.BackgroundTransparency - HOT.LitPlateTransparency) < 1e-4
 			and card.stack.Visible and card.stack.Text == "x5" and card.accent.Visible
-			and card.accent.BackgroundColor3 == rarity and card.name.Text == "Nubkin" and not card.name.Visible,
+			and card.accent.BackgroundColor3 == rarity and card.name.Text == "Nubkin" and not card.name.Visible
+			and not card.ghost.Visible,
 		"in hand: the warm edge, a lighter plate, an amber number; the stack count and the rarity bar where they apply")
 	HotbarCard.paint(card, HOT, { empty = false, held = false, number = "4", name = "Nubkin" })
 	check(not card.ringTint.Enabled and card.stroke.Thickness == HOT.CardStroke
 			and math.abs(card.stroke.Transparency - HOT.EdgeTransparency) < 1e-4 and not card.stack.Visible
-			and not card.accent.Visible,
+			and not card.accent.Visible and card.preview.hero.ImageTransparency == 0,
 		"and back to plain")
+	HotbarCard.paint(card, HOT, { empty = false, held = false, number = "4", name = "Nubkin", restoring = true })
+	check(card.preview.hero.ImageTransparency > 0.5, "restoring after a respawn: the item is drawn dimmed")
+	HotbarCard.paint(card, HOT, { empty = false, held = false, number = "1", name = "Rootwood Bat", pending = true })
+	check(card.stroke.Color == HOT.LitTop and card.stroke.Transparency < HOT.EdgeTransparency,
+		"a weapon asked of the server wears a soft amber edge until it lands")
+	HotbarCard.paint(card, HOT, { empty = true, held = false, number = "4", name = "", target = true })
+	check(card.stroke.Color == Color3.new(1, 1, 1) and card.stroke.Transparency == 0 and not card.ringTint.Enabled,
+		"while a phone assigns, every slot wears a bright edge, empty ones too")
 	HotbarCard.lift(card, true, true, HOT)
 	HotbarCard.bump(card, true, HOT)
 	check(card.wrap.Position.Y.Offset == 0 and card.bumpScale.Scale == 1,
@@ -266,7 +203,7 @@ local ok, err = pcall(function()
 	local function screen(w, h, opts)
 		opts = opts or {}
 		return {
-			safe = Vector2.new(w, h - 58),
+			safe = Vector2.new(w - (opts.sides or 0) * 2, h - 58),
 			viewport = Vector2.new(w, h),
 			-- The topbar's free span, as HudLayout.measure reports it.
 			topbar = { x = 110, y = 0, w = w - 110, h = 58 },
@@ -275,24 +212,32 @@ local ok, err = pcall(function()
 			keyboard = opts.keyboard ~= false,
 		}
 	end
-	-- HudLayoutSpec's listed phones and three desktops. (Studio's 705 x 338
-	-- emulation is not a listed phone: its weapon chooser meets the jump
-	-- button at any belt height, which the layout reports as not fitting.)
-	local bands = 0
-	for _, size in ipairs({ { 1280, 720, false }, { 1920, 1080, false }, { 1000, 609, false },
-		{ 801, 392, true }, { 896, 414, true }, { 772, 360, true }, { 874, 402, true } }) do
-		local L = HudLayout.solve(screen(size[1], size[2], { touch = size[3] }))
+	-- HudLayoutSpec's listed phones, the three it added for the free hotbar --
+	-- Studio's 705 x 338 among them, which only failed before for the chooser --
+	-- and three desktops.
+	local bands, cases = 0, {
+		{ 1280, 720, false }, { 1920, 1080, false }, { 1000, 609, false }, { 1366, 768, false },
+		{ 801, 392, true }, { 896, 414, true }, { 772, 360, true }, { 874, 402, true },
+		{ 705, 338, true }, { 640, 360, true }, { 844, 390, true, 47 },
+	}
+	local bad = {}
+	for _, size in ipairs(cases) do
+		local L = HudLayout.solve(screen(size[1], size[2], { touch = size[3], sides = size[4] }))
 		local band = L.namePopup
 		local okBand = band.x == L.hotbar.x and band.w == L.hotbar.w and band.h == HOT.NamePopupHeight
 			and band.y + band.h + HOT.NamePopupGap == L.hotbar.y
 			and (L.toastTop or L.toast.y + L.toast.h + 8 <= band.y)
-			and HudLayout.gap(band, L.cash) >= 8 and HudLayout.gap(band, L.equipment) >= 8
+			and HudLayout.gap(band, L.cash) >= 8
 			and #HudLayout.problems(L) == 0
+			and L.slots == (if size[3] then 5 else 10)
 		if okBand then
 			bands += 1
+		else
+			table.insert(bad, size[1] .. "x" .. size[2] .. ": " .. table.concat(HudLayout.problems(L), "; "))
 		end
 	end
-	check(bands == 7, "on every listed screen the name band stands over the strip, clear of the notices, the cash and BAT/TRAP, with nothing overlapping", bands)
+	check(bands == #cases, "on every listed screen the name band stands over the strip, clear of the notices and the "
+		.. "cash, with nothing overlapping, and the count is ten or five", table.concat(bad, " | "))
 
 	--==========================================================================
 	-- 4. THE WIRING
@@ -300,15 +245,21 @@ local ok, err = pcall(function()
 	say("\n-- the wiring --")
 	local lo = sourceOf(Scripts, "LoadoutUI")
 	local keys = string.match(lo, "local KEYS = {(.-)}") or ""
-	check(has(keys, "Enum.KeyCode.Five") and not has(keys, "Enum.KeyCode.Six") and not has(keys, "Enum.KeyCode.Zero")
+	check(has(keys, "Enum.KeyCode.Nine") and has(keys, "Enum.KeyCode.Zero") and times(keys, "Enum.KeyCode.") == 10
 			and has(lo, "if i <= activeSlots then"),
-		"keys 1 to 5, bound to the slots' positions; 6 to 0 are not bound")
-	check(has(lo, "if row.kind == \"plant\" then\n\t\t\t\tchooseShortcut(row.tool)\n\t\t\tend\n\t\t\tholdTool(row.tool)")
-			and has(lo, "HotbarRoles.choose(shortcuts, data.key, data.tool)"),
-		"HOLD on a Bag card makes the plant the active shortcut, then puts it in the hands, through the one equip path")
-	check(not has(lo, "returnToBag") and not has(lo, "DOUBLE_WINDOW") and not has(lo, "claimed[")
-			and has(lo, "if slot.kind == \"plant\" then\n\t\t\t\tlocal tier"),
-		"no double-tap return: every stored plant stays listed in the Bag, the two on the strip included")
+		"keys 1-9 and 0, bound to the slots' positions, and only for slots on screen")
+	check(has(lo, 'return if i == 10 then "0" else tostring(i)'), "the tenth slot is numbered 0")
+	check(times(lo, "FireServer(INV.SetAction") == 1 and times(lo, "FireServer(INV.FavouriteAction") == 1
+			and times(lo, "FireServer(W.EquipAction") == 1,
+		"one sender for the bar, one for the hearts, and the shop's one equip verb")
+	check(has(lo, "HotbarSlots.arrivals(before, now)") and has(lo, "HotbarSlots.arrive(working, ref, activeSlots)")
+			and has(lo, "local before = prof.owned"),
+		"arrivals are what the profile owns now and did not before; the first packet is only the baseline")
+	local refusal = string.match(lo, "if action == W%.EquipAction and ok == false(.-)\nend") or ""
+	check(refusal ~= "" and not has(refusal, "SoundKit"),
+		"an equip refusal only clears the wait -- MarigoldShopUI already plays Denied")
+	check(has(lo, "bar.pending = nil") and has(lo, "task.delay(2, function()"),
+		"an edit the server does not answer within two seconds gives way to the server's bar")
 	local holdAt = string.find(lo, "local function holdTool(", 1, true)
 	local carryAt = holdAt and string.find(lo, 'raise("CARRYING_POD")', holdAt, true)
 	local sealedAt = holdAt and string.find(lo, "if HatchRoll.sealed(tool) then", holdAt, true)
@@ -316,25 +267,43 @@ local ok, err = pcall(function()
 	check(carryAt ~= nil and sealedAt ~= nil and equipAt ~= nil and carryAt < equipAt and sealedAt < equipAt
 			and times(lo, "EquipTool(tool)") == 1 and times(lo, 'raise("CARRYING_POD")') == 1,
 		"the equip guards are kept: a plant is refused while a pod is carried or its roll runs, and holdTool is the only equip")
-	check(has(lo, "HotbarRoles.storage(heldRows,") and has(lo, "heldRows = #profile.Held")
-			and has(lo, "player:GetAttribute(ATTR.CarryingSpecies) ~= nil, GameConfig.Save.MaxHeld)")
+	local activate = string.match(lo, "activateKey = function(.-)\nend\n") or ""
+	local holdCall = string.find(activate, "holdRef(ref)", 1, true)
+	local arriveCall = string.find(activate, "HotbarSlots.arrive(", 1, true)
+	check(holdCall ~= nil and arriveCall ~= nil and holdCall < arriveCall
+			and has(activate, "if not (done and ref) or HotbarSlots.slotOf(shownBar(), ref) then"),
+		"a tile press holds first, through the guards, and assigns only what was held and has no slot")
+	check(has(lo, "HotbarSlots.storage(rows,") and has(lo, "player:GetAttribute(ATTR.CarryingSpecies) ~= nil, GameConfig.Save.MaxHeld)")
 			and has(lo, "HOT.CountLoading"),
 		"the Bag cell counts the profile's saved rows plus a carried pod against Save.MaxHeld, and says nothing before the profile")
-	check(has(lo, "announce(held.Name, false)") and has(lo, "button.MouseEnter:Connect(") and has(lo, "ReducedMotionEnabled")
+	check(has(lo, "announce(if item then visibleName(item) else HatchRoll.shownName(held), false)")
+			and has(lo, "button.MouseEnter:Connect(") and has(lo, "ReducedMotionEnabled")
 			and has(lo, 'player:GetAttribute("SeedAfterimageQuality") == "Off"'),
-		"the name shows over the strip on an equip and under a mouse, and reduced motion is honoured")
-	check(has(lo, "pendingArrivals[child] = true") and has(lo, "quietUntil = os.clock() + 3")
-			and has(lo, "HotbarCard.bump(shown.card, still, HOT)"),
-		"an arrival pops its slot or the Bag, and a spawn's rebuild is not an arrival")
+		"the visible name (never ???) shows over the strip on an equip and under a mouse, and reduced motion is honoured")
 	check(has(lo, "PadInput.nextSlot(occupiedSlots()") and has(lo, 'BindAction("SeedHotbarCycle"'),
 		"LB and RB still walk the occupied slots")
 	check(not has(lo, "HotbarTray") and has(lo, "HotbarCard.build(hotbar, index, HOT, 4)")
-			and times(lo, 'hotbar.Name = "Hotbar"') == 1,
-		"one strip, no tray, every slot a HotbarCard")
+			and times(lo, 'hotbar.Name = "Hotbar"') == 1 and not has(lo, "HotbarRoles"),
+		"one strip, no tray, every slot a HotbarCard, and no roles")
+	check(not has(lo, "chooser") and not has(lo, "sideSlots") and not has(lo, "layout.equipment"),
+		"no BAT/TRAP column, no phone sidebar, no chooser")
+	local names = topLevelNames(lo)
+	check(names <= 150, "LoadoutUI's top level stays well inside Luau's 200 locals", names)
+	local quiet = true
+	for _, module in ipairs({ "HotbarSlots", "InventoryModel", "PressGesture", "InventoryTile", "ItemArt",
+		"InventoryPanel", "RarityFX" }) do
+		local src = sourceOf(Shared, module)
+		if src == "" or has(src, "RenderStepped") or has(src, "Heartbeat") or has(src, "BindToRenderStep")
+			or has(src, "while true") then
+			quiet = false
+		end
+	end
+	check(quiet, "no new module runs per frame")
 	local tut = sourceOf(Scripts, "TutorialUI")
 	check(has(tut, 'loadout:FindFirstChild("Hotbar")') and has(tut, "for _, kid in slot:GetDescendants() do")
-			and has(tut, 'kid:IsA("TextLabel") and string.upper(kid.Text) == want') and has(cardSrc, 'name.Name = "Name"'),
-		"the guide's pointer still finds a plant's slot by the hidden name label")
+			and has(tut, 'kid:IsA("TextLabel") and string.upper(kid.Text) == want') and has(cardSrc, 'name.Name = "Name"')
+			and has(lo, "name = if item and item.tool then HatchRoll.shownName(item.tool)"),
+		"the guide's pointer still finds a plant's slot by the hidden name label, the Tool's own")
 end)
 
 layer:Destroy()

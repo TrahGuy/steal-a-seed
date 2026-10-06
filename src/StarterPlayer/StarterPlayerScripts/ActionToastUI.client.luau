@@ -128,6 +128,13 @@ local SMALL: Metrics = { head = 21, headMin = 16, detail = 13, detailMin = 11, i
 -- screen. A size smaller again than a small window's (18 and 12), and the same
 -- words, colours, icons, sounds and rules. Everywhere else the stack stands on
 -- the belt, as it did.
+--
+-- BACK OVER THE BELT, SMALL (2026-10-04, the owner's order for every screen:
+-- the hotbar, the active icons right over it, the short notices just over
+-- those). HudLayout no longer says `toastTop`; a phone's stack stands on the
+-- toast rect over the icon row and keeps this size -- one notice at a time on
+-- a short phone, so it never climbs over the character (noticeStack's middle
+-- band).
 --==============================================================================
 local PHONE: Metrics = { head = 18, headMin = 14, detail = 12, detailMin = 11, icon = 17, gap = 1, between = 4 }
 -- What the stack keeps between its foot and the middle of the screen.
@@ -275,6 +282,23 @@ local function build(post: Notice.Post, key: string): Drawn
 	local headH = if wrapped
 		then TextService:GetTextSize(post.title, hs, HEAD_FONT, Vector2.new(room, 10000)).Y
 		else hs
+	-- The Secret toast's word (2026-10-05) stands wherever the sentence puts it
+	-- -- "A SECRET EGG SPAWNED ON ..." -- so its headline is broken into lines
+	-- here rather than by the engine, and the word's place on its line is known.
+	local span: Notice.WordSpan? = nil
+	if post.kind == "secret" then
+		local found = Notice.wordSpan(post.title, GameConfig.Secret.Toast.Word, room, function(text: string): number
+			return textWidth(text, hs, HEAD_FONT)
+		end)
+		if found.line then
+			span = found
+			headW = found.width
+			wrapped = #found.lines > 1
+			headH = if wrapped
+				then TextService:GetTextSize(table.concat(found.lines, "\n"), hs, HEAD_FONT, Vector2.new(10000, 10000)).Y
+				else hs
+		end
+	end
 	local rowW = iconSize + 8 + headW
 	local rowH = math.max(iconSize, headH + 4)
 
@@ -287,7 +311,8 @@ local function build(post: Notice.Post, key: string): Drawn
 	row.BorderSizePixel = 0
 	row.Parent = body
 
-	local icon = StatusText.icon(row, post.kind, style.tint, iconSize)
+	-- The kind's glyph, or the picture of where it came from once uploaded.
+	local icon = StatusText.icon(row, post.kind, style.tint, iconSize, post.icon)
 	icon.AnchorPoint = Vector2.new(0, 0.5)
 	icon.Position = UDim2.new(0, 0, 0.5, 0)
 
@@ -311,52 +336,66 @@ local function build(post: Notice.Post, key: string): Drawn
 
 	--==========================================================================
 	-- THE WORD "SECRET" (2026-10-01): italic, silver, a strong dark outline and a
-	-- smooth grey sweep -- on the SECRET POD SPAWNED toast only, to the owner's
+	-- smooth grey sweep -- on the Secret egg toast only, to the owner's
 	-- reference. The headline keeps the word as INVISIBLE text so the row is
 	-- measured and centred as one; this label draws the word over it. Under
 	-- reduced motion the sweep is a still silver-to-white.
+	--
+	-- WHEREVER IT STANDS (2026-10-05). The sentence now starts "A SECRET ...",
+	-- so the word's place is wordSpan's: its line, and its left edge with each
+	-- line centred. The label is centred on the invisible word, so the italic
+	-- face spreads evenly either side of where the headline's word would be.
 	--==========================================================================
-	if post.kind == "secret" then
+	if span then
 		local word = GameConfig.Secret.Toast.Word
-		if string.sub(post.title, 1, #word) == word then
-			head.RichText = true
-			head.Text = string.format('<font transparency="1">%s</font>%s', word, string.sub(post.title, #word + 1))
-			local wordW = textWidth(word, hs, HEAD_FONT) + 4
-			local secret = Instance.new("TextLabel")
-			secret.Name = "SecretWord"
-			secret.AnchorPoint = Vector2.new(0, 0.5)
-			secret.Position = UDim2.new(0, 0, 0.5, 0)
-			secret.Size = UDim2.fromOffset(wordW, rowH)
-			secret.BackgroundTransparency = 1
-			secret.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Heavy, Enum.FontStyle.Italic)
-			secret.TextSize = hs
-			secret.TextColor3 = Color3.fromRGB(255, 255, 255)
-			secret.TextXAlignment = Enum.TextXAlignment.Left
-			secret.Text = word
-			secret.Parent = head
-			local edge = UIKit.stroke(secret, Notice.Outline, 2.5, 0)
-			track(d, secret, "TextTransparency")
-			track(d, edge, "Transparency")
-			local sweep = Instance.new("UIGradient")
-			if reducedMotion() then
-				sweep.Color = ColorSequence.new(Color3.fromRGB(196, 196, 208), Color3.fromRGB(255, 255, 255))
-			else
-				-- Silver at rest; a dark edge leading a white light crosses it.
-				sweep.Color = ColorSequence.new({
-					ColorSequenceKeypoint.new(0, Color3.fromRGB(186, 186, 198)),
-					ColorSequenceKeypoint.new(0.36, Color3.fromRGB(58, 58, 68)),
-					ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-					ColorSequenceKeypoint.new(0.64, Color3.fromRGB(186, 186, 198)),
-					ColorSequenceKeypoint.new(1, Color3.fromRGB(186, 186, 198)),
-				})
-				-- A looping tween, not a per-frame hook: a toast is an event, and
-				-- the tween ends with the label it moves.
-				sweep.Offset = Vector2.new(-1, 0)
-				TweenService:Create(sweep, TweenInfo.new(GameConfig.Secret.Toast.SweepSeconds,
-					Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), { Offset = Vector2.new(1, 0) }):Play()
-			end
-			sweep.Parent = secret
+		local line = span.line :: number
+		local lines = table.clone(span.lines)
+		lines[line] = string.sub(lines[line], 1, span.at - 1)
+			.. string.format('<font transparency="1">%s</font>', word)
+			.. string.sub(lines[line], span.at + #word)
+		head.TextWrapped = false
+		head.RichText = true
+		head.Text = table.concat(lines, "\n")
+		-- Each line's band: the text stands centred in the row, one line height
+		-- per line.
+		local lineH = headH / #span.lines
+		local centreY = (rowH - headH) / 2 + (line - 0.5) * lineH
+		local secret = Instance.new("TextLabel")
+		secret.Name = "SecretWord"
+		secret.AnchorPoint = Vector2.new(0.5, 0.5)
+		-- The headline label is 2 px wider than its widest line, the lines
+		-- centred in it: 1 px in.
+		secret.Position = UDim2.fromOffset(1 + span.x + span.w / 2, centreY)
+		secret.Size = UDim2.fromOffset(span.w + 4, lineH)
+		secret.BackgroundTransparency = 1
+		secret.FontFace = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Heavy, Enum.FontStyle.Italic)
+		secret.TextSize = hs
+		secret.TextColor3 = Color3.fromRGB(255, 255, 255)
+		secret.TextXAlignment = Enum.TextXAlignment.Center
+		secret.Text = word
+		secret.Parent = head
+		local edge = UIKit.stroke(secret, Notice.Outline, 2.5, 0)
+		track(d, secret, "TextTransparency")
+		track(d, edge, "Transparency")
+		local sweep = Instance.new("UIGradient")
+		if reducedMotion() then
+			sweep.Color = ColorSequence.new(Color3.fromRGB(196, 196, 208), Color3.fromRGB(255, 255, 255))
+		else
+			-- Silver at rest; a dark edge leading a white light crosses it.
+			sweep.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, Color3.fromRGB(186, 186, 198)),
+				ColorSequenceKeypoint.new(0.36, Color3.fromRGB(58, 58, 68)),
+				ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+				ColorSequenceKeypoint.new(0.64, Color3.fromRGB(186, 186, 198)),
+				ColorSequenceKeypoint.new(1, Color3.fromRGB(186, 186, 198)),
+			})
+			-- A looping tween, not a per-frame hook: a toast is an event, and
+			-- the tween ends with the label it moves.
+			sweep.Offset = Vector2.new(-1, 0)
+			TweenService:Create(sweep, TweenInfo.new(GameConfig.Secret.Toast.SweepSeconds,
+				Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), { Offset = Vector2.new(1, 0) }):Play()
 		end
+		sweep.Parent = secret
 	end
 
 	local total = rowH
@@ -398,7 +437,7 @@ local function build(post: Notice.Post, key: string): Drawn
 	-- with the notice; show() connects the press.
 	--==========================================================================
 	if post.dismissible == true then
-		local PANEL = GameConfig.Panel
+		local LOOK = GameConfig.BagLook
 		local close = Instance.new("TextButton")
 		close.Name = "Close"
 		close.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -424,7 +463,10 @@ local function build(post: Notice.Post, key: string): Drawn
 		plate.Parent = close
 		UIKit.corner(plate, 6)
 		local plateEdge = UIKit.stroke(plate, Notice.Outline, 1.5)
-		UIKit.gradient(plate, PANEL.CloseTop, PANEL.CloseBottom)
+		-- The menus' own close red (the global UI pass, 2026-10-04): coral to red
+		-- over its darker foot, the same on every close.
+		local tint = UIKit.gradient(plate, LOOK.CloseTop, LOOK.CloseBottom)
+		tint.Color = UIKit.footColours(LOOK.CloseTop, LOOK.CloseBottom, LOOK.CloseShade)
 		local mark = UIKit.outlined(plate, "Mark", math.max(10, math.floor(iconSize * 0.7)), Color3.new(1, 1, 1), 1.5)
 		mark.Size = UDim2.fromScale(1, 1)
 		mark.ZIndex = 5
@@ -445,6 +487,8 @@ local function build(post: Notice.Post, key: string): Drawn
 			track(d, part, "Transparency")
 		elseif part:IsA("Frame") and part.BackgroundTransparency < 1 then
 			track(d, part, "BackgroundTransparency")
+		elseif part:IsA("ImageLabel") then
+			track(d, part, "ImageTransparency")
 		end
 	end
 
@@ -579,6 +623,21 @@ local function show(post: Notice.Post)
 	end
 	local now = Notice.now()
 	local key = Notice.keyOf(post)
+
+	-- A notice that FOLLOWS another (2026-10-05: a storm's Secret egg after the
+	-- storm's own opening) waits while going up would put that one out before
+	-- it is read -- a stack with room for one, on a short phone -- and goes up
+	-- as it starts to leave. Once: the copy that waited follows nothing.
+	local after = post.after
+	if after then
+		local wait = Notice.waitAfter(stack, after, now, maxShown)
+		if wait > 0 then
+			local later = table.clone(post)
+			later.after = nil
+			task.delay(secs(wait), show, later)
+			return
+		end
+	end
 
 	-- ONE KEY, ONE NOTICE, and the screen is what decides it: the same notice
 	-- still up is refreshed where it is -- its clock restarts, it nudges, it
@@ -731,7 +790,8 @@ local function place()
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local small = layout.compact or layout.sidebar
 	fromTop = layout.toastTop
-	metrics = if fromTop then PHONE elseif small then SMALL else FULL
+	-- A phone's notices are the phone's size wherever they stand.
+	metrics = if fromTop or layout.sidebar then PHONE elseif small then SMALL else FULL
 	width = math.max(160, layout.toast.w)
 	-- The window's middle, in this gui's safe space: the reticle's band.
 	local camera = workspace.CurrentCamera
@@ -761,9 +821,14 @@ local function place()
 	restack(nil)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
--- The rain chip (2026-10-02) stands where the toast line did and the line
--- steps up over it: asked again as the rain starts and stops.
-game:GetService("Workspace"):GetAttributeChangedSignal(GameConfig.Weather.Attributes.State):Connect(place)
+-- The active-boost icon row (BoostIconsUI, 2026-10-04) stands over the belt
+-- and the toast line steps up over it: asked again whenever its count changes.
+Players.LocalPlayer:GetAttributeChangedSignal(GameConfig.BoostIcons.Attribute):Connect(place)
+-- And a trap's REMOVE row (LoadoutUI, 2026-10-04): the toast steps up over it too.
+Players.LocalPlayer:GetAttributeChangedSignal(GameConfig.Hotbar.RemoveRowAttribute):Connect(place)
+-- And the x2 card coming or going (2026-10-05): on a narrow phone the belt keeps
+-- 8 px off it beside the cash line, and the toast stands over the belt.
+Players.LocalPlayer:GetAttributeChangedSignal(GameConfig.Pass.MultiplierAttribute):Connect(place)
 -- On a phone the stack hangs under the clock's row, which moves with the
 -- topbar's free span (Roblox's own buttons coming and going).
 GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
@@ -773,6 +838,22 @@ place()
 -- THE TWO WAYS A NOTICE ARRIVES
 --==============================================================================
 Notice.setRenderer(show)
+
+-- The Secret egg toast's biome names: the biomes' own, and the weather's
+-- biome's label. Anything else has no name to show (Notice.secretPost).
+local function biomeName(id: string): string?
+	if id == GameConfig.Weather.Biome.Id then
+		return GameConfig.Weather.Biome.Label
+	end
+	for _, biome in ipairs(BiomeData.Biomes) do
+		if biome.Id == id then
+			return biome.DisplayName
+		end
+	end
+	return nil
+end
+-- The spawns this client has shown, for the session (the script runs once).
+local seenSecrets: { [string]: boolean } = {}
 
 task.spawn(function()
 	local remotes = SeedGame:WaitForChild("Remotes", 20)
@@ -787,21 +868,29 @@ task.spawn(function()
 			if post then
 				show(post)
 			end
-		elseif action == "SecretSpawned" and type(code) == "string" then
-			-- Once per actual spawn, to everyone in this server (NestService);
-			-- never on a return, a respawn or from another server.
-			local name = string.upper(code)
-			for _, biome in ipairs(BiomeData.Biomes) do
-				if biome.Id == code then
-					name = string.upper(biome.DisplayName)
+		--==================================================================
+		-- A SECRET EGG SPAWNED (2026-10-05; NestService)
+		--
+		-- Once per actual spawn, to everyone in this server at that moment --
+		-- never on a return, a rebuilt guardian, a respawn, from another
+		-- server or to a late joiner. Each spawn has its own id: the same one
+		-- delivered twice is shown once, a later one in the same biome is
+		-- shown. A storm's egg follows the storm's own opening toast, and
+		-- goes if the storm does.
+		--==================================================================
+		elseif action == "SecretSpawned" then
+			local news = Notice.readSecret(code)
+			local post = if news then Notice.secretPost(news, GameConfig.Secret.Toast, biomeName, seenSecrets) else nil
+			if news and post then
+				local event = news.event
+				if event then
+					post.after = "rain:" .. tostring(event)
+					post.stillTrue = function(): boolean
+						return game:GetService("Workspace"):GetAttribute(GameConfig.Weather.Attributes.EventId) == event
+					end
 				end
+				show(post)
 			end
-			show({
-				kind = "secret",
-				title = string.format(GameConfig.Secret.Toast.Title, name),
-				key = "secret:" .. code,
-				quiet = true,
-			})
 		--==================================================================
 		-- THE RAIN (2026-10-02; WeatherService)
 		--
@@ -814,15 +903,15 @@ task.spawn(function()
 		elseif action == GameConfig.Weather.Events.Opened and type(code) == "number" then
 			local W = GameConfig.Weather
 			-- A Thunderstorm says so (2026-10-02): the same event, the same one
-			-- percentage, its own words.
-			local words = if game:GetService("Workspace"):GetAttribute(W.Attributes.Mode) == "thunder"
-				then W.ThunderToast
-				else W.Toast
+			-- percentage, its own words -- and its own picture (2026-10-03).
+			local thunder = game:GetService("Workspace"):GetAttribute(W.Attributes.Mode) == "thunder"
+			local words = if thunder then W.ThunderToast else W.Toast
 			show({
 				kind = "info",
 				title = words.Title,
 				detail = string.format(words.Detail, math.round((SeedData.Rain.IncomeFactor - 1) * 100)),
 				key = "rain:" .. tostring(code),
+				icon = if thunder then "thunder" else "rain",
 			})
 		elseif action == GameConfig.Weather.Events.Warning and type(code) == "number" then
 			local W = GameConfig.Weather
@@ -831,6 +920,8 @@ task.spawn(function()
 				title = W.Warning.Title,
 				detail = string.format(W.Warning.Detail, math.max(1, math.floor(code))),
 				key = "rain:warning",
+				icon = if game:GetService("Workspace"):GetAttribute(W.Attributes.Mode) == "thunder"
+					then "thunder" else "rain",
 			})
 		elseif action == GameConfig.Weather.Events.Evacuated then
 			local W = GameConfig.Weather
@@ -840,6 +931,8 @@ task.spawn(function()
 				detail = W.Evacuated.Detail,
 				key = "rain:evacuated:" .. tostring(code),
 				quiet = true,
+				icon = if game:GetService("Workspace"):GetAttribute(W.Attributes.Mode) == "thunder"
+					then "thunder" else "rain",
 			})
 		end
 	end)

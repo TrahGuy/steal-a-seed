@@ -787,33 +787,47 @@ local function body()
 		local scripts = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
 
 		--== THE HOTBAR AND THE BAG ==--
+		-- Since 2026-10-03 the Bag's and the strip's faces are InventoryModel's,
+		-- so they are checked by what they SAY of a Tool whose roll still runs.
+		local InventoryModel = require(game:GetService("ReplicatedStorage").SeedGame.Shared.InventoryModel)
+		local rollAttribute = require(game:GetService("ReplicatedStorage").SeedGame.Shared.HatchRoll).Attribute
+		local now = workspace:GetServerTimeNow()
+		local function stand(revealAt)
+			return { GetAttribute = function(_, name)
+				local attrs = { SpeciesId = "nubkin", CarryingKg = 3, Hatched = true, ItemId = "7",
+					[rollAttribute] = revealAt }
+				return attrs[name]
+			end }
+		end
+		local held = { { Id = "nubkin", Tier = 3, Hatched = true, Item = "7" } }
+		local sealed = InventoryModel.collect({ held = held, tools = { stand(now + 2) }, sealedUntil = {}, now = now })[1]
+		local face = InventoryModel.face(sealed)
+		local species = SeedData.Get("nubkin")
+		local said = string.lower(face.name .. " " .. face.search .. " " .. face.visual .. " " .. face.variant)
+		check(sealed.kind == "pod" and sealed.sealed and face.category == "pods" and face.art.kind == "pod"
+				and not string.find(said, string.lower(species.Name), 1, true)
+				and not string.find(face.visual, "nubkin", 1, true),
+			"a plant mid-roll is a pod in the Bag and on the strip: its name, picture, search words and key say nothing of it")
+		local key = InventoryModel.groupKey(sealed, face)
+		check(string.find(key, "|sealed", 1, true) ~= nil and not string.find(key, "nubkin", 1, true),
+			"and it is grouped by its shell, never by its species", key)
+		local shown = InventoryModel.collect({ held = held, tools = { stand(now - 1) }, sealedUntil = {}, now = now })[1]
+		check(shown.kind == "plant" and InventoryModel.face(shown).name == species.Name,
+			"once its time comes off it is the plant")
 		local loadout = sourceOf(scripts and scripts:FindFirstChild("LoadoutUI"))
 		check(loadout ~= nil, "LoadoutUI is there to be read")
 		if loadout then
-			local sealedAt = loadout:find("if HatchRoll.sealed(tool) then", 1, true)
-			local rawAt = loadout:find('tool:GetAttribute("Hatched") == true', 1, true)
-			check(sealedAt ~= nil and loadout:find("label = HatchRoll.Unknown", 1, true) ~= nil
-					and loadout:find('"p:~%s:%d:sealed"', 1, true) ~= nil,
-				"a plant mid-roll is classified as ???, sorted by its pod and never by its species")
-			check(times(loadout, 'GetAttribute("Hatched")') == 1 and rawAt ~= nil and sealedAt ~= nil
-					and rawAt > sealedAt,
-				"the one place the hotbar reads Hatched straight off a Tool is after that test",
-				times(loadout, 'GetAttribute("Hatched")'))
-			check(loadout:find("local hatched = HatchRoll.shownHatched(slot.tool)", 1, true) ~= nil,
-				"its picture is the pod's")
-			check(loadout:find("if not HatchRoll.shownHatched(data.tool) then", 1, true) ~= nil,
-				"its chip says POD, not a size edged in its rarity's colour")
-			check(loadout:find("HatchRoll.shownHatched(tool),", 1, true) ~= nil
-					and loadout:find("hatched = HatchRoll.shownHatched(slot.tool),", 1, true) ~= nil,
-				"and the Bag's card and details are a pod's")
+			check(times(loadout, 'GetAttribute("Hatched")') == 0,
+				"the hotbar never reads Hatched straight off a Tool: InventoryModel decides what is shown")
 			local holdAt = loadout:find("local function holdTool(", 1, true)
 			local guardAt = holdAt and loadout:find("if HatchRoll.sealed(tool) then", holdAt, true)
 			local equipAt = holdAt and loadout:find("humanoid:EquipTool(tool)", holdAt, true)
 			check(holdAt ~= nil and guardAt ~= nil and equipAt ~= nil and guardAt < equipAt
 					and times(loadout, "EquipTool(tool)") == 1,
 				"it cannot be taken in the hands until its time, which is the only place a client equips anything")
-			check(loadout:find("or name == HatchRoll.Attribute then", 1, true) ~= nil,
-				"and the card repaints as the plant the moment the Tool's time comes off")
+			check(loadout:find("or name == HatchRoll.Attribute then", 1, true) ~= nil
+					and loadout:find("name = if item and item.tool then HatchRoll.shownName(item.tool)", 1, true) ~= nil,
+				"and the slot repaints as the plant the moment the Tool's time comes off; its hidden name is ??? till then")
 		end
 
 		--== THE WORLD ==--

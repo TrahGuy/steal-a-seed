@@ -57,6 +57,7 @@ local FloatingSign = require(Shared:WaitForChild("FloatingSign"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
 
 local CONFIG = GameConfig.Sacrifice
 local ATTR = CONFIG.Attributes
@@ -84,14 +85,11 @@ local MUTED = Color3.fromRGB(206, 188, 160)
 local READY = Color3.fromRGB(142, 220, 86)
 local CASH_GREEN = Color3.fromRGB(38, 255, 0)
 local WARN = Color3.fromRGB(255, 196, 150)
--- The yes is the pedestal's own colour, not the shop's green: green is what
--- this game says yes to a purchase with, and this is not one.
-local YES_FACE = Color3.fromRGB(150, 100, 184)
-local YES_SHADE = Color3.fromRGB(104, 64, 136)
-local YES_FOOT = Color3.fromRGB(62, 36, 84)
-local NO_FACE = Color3.fromRGB(112, 90, 74)
-local NO_SHADE = Color3.fromRGB(72, 54, 44)
-local NO_FOOT = Color3.fromRGB(44, 32, 26)
+-- The panel is the menus' light studded one (the global UI pass, 2026-10-04):
+-- SACRIFICE destroys the pod, so it wears MenuKit's red `danger`; KEEP POD the
+-- blue secondary. Its words are dark and plain; the world's signs keep CREAM.
+local LOOK = GameConfig.BagLook
+local WARN_TEXT = Color3.fromRGB(176, 52, 40)
 
 --==============================================================================
 -- TWO SIZES, BECAUSE A PHONE HELD SIDEWAYS IS 300 PIXELS TALL
@@ -152,7 +150,18 @@ local modal = UIKit.modal(gui, {
 	title = "SACRIFICE POD",
 	maxWidth = 380,
 	maxHeight = 340,
+	theme = MenuKit.rimTheme(),
 })
+-- The pedestal's own approved picture beside the title, on the rim.
+do
+	local titleBar = modal.title.Parent :: Frame
+	local icon = MenuKit.picture(titleBar, GameConfig.SourceIcons.sacrifice, nil, modal.title.ZIndex + 1)
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 0, 0.5, 0)
+	icon.Size = UDim2.fromOffset(34, 34)
+	modal.title.Position = UDim2.new(0, 38, 0.5, 0)
+	modal.title.Size = UDim2.new(1, -90, 1, 0)
+end
 modal.followMenuSize()
 
 local rows = Instance.new("Frame")
@@ -198,9 +207,10 @@ local picture = UIKit.itemPreview(podRow, {
 	fit = 0.92,
 })
 
-local function word(parent: Instance, name: string, size: number, colour: Color3, outline: number,
+-- Plain words on the light panel (FredokaOne; `body` the clean body face).
+local function word(parent: Instance, name: string, size: number, colour: Color3, body: boolean,
 	position: UDim2, extent: UDim2): TextLabel
-	local label = UIKit.outlined(parent, name, size, colour, outline)
+	local label = if body then MenuKit.body(parent, name, size, colour, 4) else MenuKit.text(parent, name, size, colour, 4)
 	label.Position = position
 	label.Size = extent
 	label.TextYAlignment = Enum.TextYAlignment.Center
@@ -209,19 +219,19 @@ local function word(parent: Instance, name: string, size: number, colour: Color3
 	return label
 end
 
-local nameLabel = word(podRow, "Name", 24, WHITE, 2.5, UDim2.new(0, PICTURE_W + 8, 0.09, 0),
+local nameLabel = word(podRow, "Name", 24, LOOK.Text, false, UDim2.new(0, PICTURE_W + 8, 0.09, 0),
 	UDim2.new(1, -(PICTURE_W + 8), 0.47, 0))
 nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 nameLabel.Text = "UNHATCHED POD"
-local sizeLabel = word(podRow, "Size", 16, CREAM, 1.5, UDim2.new(0, PICTURE_W + 8, 0.56, 0),
+local sizeLabel = word(podRow, "Size", 16, LOOK.Muted, true, UDim2.new(0, PICTURE_W + 8, 0.56, 0),
 	UDim2.new(1, -(PICTURE_W + 8), 0.35, 0))
 sizeLabel.TextXAlignment = Enum.TextXAlignment.Left
 sizeLabel.RichText = true
 
-local offerLabel = word(rows, "Offer", 17, CASH_GREEN, 2, UDim2.new(), UDim2.new(1, -8, 0, REGULAR.offer))
+local offerLabel = word(rows, "Offer", 17, LOOK.Money, false, UDim2.new(), UDim2.new(1, -8, 0, REGULAR.offer))
 offerLabel.LayoutOrder = 2
 offerLabel.TextXAlignment = Enum.TextXAlignment.Center
-local warnLabel = word(rows, "Warning", 14, WARN, 1.5, UDim2.new(), UDim2.new(1, -8, 0, REGULAR.warn))
+local warnLabel = word(rows, "Warning", 14, WARN_TEXT, true, UDim2.new(), UDim2.new(1, -8, 0, REGULAR.warn))
 warnLabel.LayoutOrder = 3
 warnLabel.TextXAlignment = Enum.TextXAlignment.Center
 warnLabel.TextWrapped = true
@@ -247,62 +257,21 @@ type Button = {
 	label: TextLabel,
 }
 
-local function makeButton(name: string, text: string, face: Color3, shade: Color3,
-	foot: Color3, anchorX: number): Button
-	local b = Instance.new("TextButton")
-	b.Name = name
+local function makeButton(name: string, text: string, face: string, anchorX: number): Button
+	-- MenuKit's button (the global UI pass, 2026-10-04): the family's faces,
+	-- foot, keyline and press, in the one language every menu speaks.
+	local made = MenuKit.button(buttonsRow, name, 5, text, 18)
+	made.style(face)
+	local b = made.hit
 	b.AnchorPoint = Vector2.new(anchorX, 0.5)
 	b.Position = UDim2.new(anchorX, 0, 0.5, 0)
-	-- As tall as its row, which is 46 or 44.
-	b.Size = UDim2.new(0.5, -6, 1, 0)
-	b.BackgroundTransparency = 1
-	b.BorderSizePixel = 0
-	b.AutoButtonColor = false
-	b.Text = ""
-	b.ZIndex = 5
-	b.Parent = buttonsRow
+	b.Size = UDim2.new(0.5, -6, 0, REGULAR.button)
 	UIKit.clicks(b)
-
-	local plate = Instance.new("Frame")
-	plate.Name = "Plate"
-	plate.AnchorPoint = Vector2.new(0.5, 0.5)
-	plate.Position = UDim2.fromScale(0.5, 0.5)
-	plate.Size = UDim2.new(1, -4, 1, -4)
-	plate.BorderSizePixel = 0
-	plate.Active = false
-	plate.ZIndex = 6
-	plate.Parent = b
-	UIKit.corner(plate, 10)
-	UIKit.stroke(plate, PANEL.Outline, RAIL.OutlineThickness)
-	UIKit.gradient(plate, face, shade)
-
-	local footFrame = Instance.new("Frame")
-	footFrame.Name = "Shade"
-	footFrame.AnchorPoint = Vector2.new(0.5, 1)
-	footFrame.Position = UDim2.new(0.5, 0, 1, 0)
-	footFrame.Size = UDim2.new(1, 0, 0, 5)
-	footFrame.BackgroundColor3 = foot
-	footFrame.BorderSizePixel = 0
-	footFrame.Active = false
-	footFrame.ZIndex = 7
-	footFrame.Parent = plate
-	UIKit.corner(footFrame, 10)
-
-	local label = UIKit.outlined(plate, "Label", 18, WHITE, 2.5)
-	label.Size = UDim2.fromScale(1, 1)
-	label.Position = UDim2.fromOffset(0, -2)
-	label.Text = text
-	label.ZIndex = 8
-
-	local scale = Instance.new("UIScale")
-	scale.Parent = b
-	UIKit.cardPop(b, scale, { hoverScale = 1.06, pressScale = 0.94, sound = false })
-
-	return { button = b, plate = plate, label = label }
+	return { button = b, plate = made.plate, label = made.label }
 end
 
-local keepButton = makeButton("Keep", "KEEP POD", NO_FACE, NO_SHADE, NO_FOOT, 0)
-local yesButton = makeButton("Sacrifice", "SACRIFICE", YES_FACE, YES_SHADE, YES_FOOT, 1)
+local keepButton = makeButton("Keep", "KEEP POD", "sky", 0)
+local yesButton = makeButton("Sacrifice", "SACRIFICE", "danger", 1)
 
 -- Where a controller's selection starts when this opens (PadFocus reads it).
 local padFirst = Instance.new("ObjectValue")
@@ -651,6 +620,7 @@ channel.OnClientEvent:Connect(function(action: any, payload: any)
 			title = CONFIG.SuccessTitle,
 			detail = GameConfig.sacrificeOffer(multiplier, seconds) .. ".",
 			key = "sacrifice:done",
+			icon = "sacrifice",
 		})
 	elseif phase == "refused" then
 		if openToken then

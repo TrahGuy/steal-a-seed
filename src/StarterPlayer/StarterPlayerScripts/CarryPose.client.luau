@@ -56,6 +56,8 @@ local RunService = game:GetService("RunService")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+-- Which carries ride over the head (2026-10-03): PlantForms.CarriedOverhead.
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
 
 local CARRYING_KG = GameConfig.Attributes.CarryingKg
 
@@ -101,6 +103,35 @@ type Rig = {
 local rigs: { [Player]: Rig } = {}
 
 --==============================================================================
+-- THE NEUTRAL IS NEVER READ OFF A PLAYING ANIMATION (2026-10-03)
+--
+-- `rest` used to be whatever the joint held the frame the rig was built. After
+-- a death the character comes back and the Bag hands the held Tool straight
+-- back into the hand, so the rig was often built WHILE the tool-hold animation
+-- had the right arm raised forward -- and every carry after that was posed on
+-- top of it: the overhead right arm came out low and behind (the left, which
+-- that animation does not move, stayed right). Measured 2026-10-03, the same
+-- for a hatched plant and a Secret pod.
+--
+--   AnimationConstraint  identity, its true neutral: the animator writes an
+--                        absolute local Transform every frame (WeaponFX uses
+--                        the same convention).
+--   Motor6D              C0 is not animated, but THIS script writes it, so the
+--                        authored C0 is kept on the joint the first time it is
+--                        seen and read back from there -- a restarted script
+--                        never takes a posed C0 for rest.
+--==============================================================================
+local REST_C0 = "SeedCarryRestC0"
+local function motorRest(m: Motor6D): CFrame
+	local kept = m:GetAttribute(REST_C0)
+	if typeof(kept) == "CFrame" then
+		return kept
+	end
+	m:SetAttribute(REST_C0, m.C0)
+	return m.C0
+end
+
+--==============================================================================
 -- FINDING WHATEVER THE SHOULDERS ARE
 --==============================================================================
 local function buildRig(character: Model): Rig?
@@ -114,7 +145,7 @@ local function buildRig(character: Model): Rig?
 		if joint and joint:IsA("AnimationConstraint") then
 			table.insert(sides, {
 				constraint = joint, motor = nil,
-				rest = joint.Transform, sign = entry[3] :: number,
+				rest = CFrame.identity, sign = entry[3] :: number,
 			})
 		end
 	end
@@ -127,7 +158,7 @@ local function buildRig(character: Model): Rig?
 			local part = character:FindFirstChild(entry[1])
 			local joint = part and part:FindFirstChild(entry[2])
 			if joint and joint:IsA("AnimationConstraint") then
-				table.insert(straight, { constraint = joint, motor = nil, rest = joint.Transform, sign = 0 })
+				table.insert(straight, { constraint = joint, motor = nil, rest = CFrame.identity, sign = 0 })
 			end
 		end
 		return { sides = sides, straight = straight, kind = "constraint", weight = 0, overhead = 0, released = true }
@@ -141,7 +172,7 @@ local function buildRig(character: Model): Rig?
 			local m = upper:FindFirstChild(entry[1] :: string)
 			if m and m:IsA("Motor6D") then
 				table.insert(sides, {
-					constraint = nil, motor = m, rest = m.C0, sign = entry[2] :: number,
+					constraint = nil, motor = m, rest = motorRest(m), sign = entry[2] :: number,
 				})
 			end
 		end
@@ -152,7 +183,7 @@ local function buildRig(character: Model): Rig?
 				local part = character:FindFirstChild(entry[1])
 				local m = part and part:FindFirstChild(entry[2])
 				if m and m:IsA("Motor6D") then
-					table.insert(straight, { constraint = nil, motor = m, rest = m.C0, sign = 0 })
+					table.insert(straight, { constraint = nil, motor = m, rest = motorRest(m), sign = 0 })
 				end
 			end
 			return { sides = sides, straight = straight, kind = "motor6d-r15", weight = 0, overhead = 0, released = true }
@@ -167,7 +198,7 @@ local function buildRig(character: Model): Rig?
 			local m = torso:FindFirstChild(entry[1] :: string)
 			if m and m:IsA("Motor6D") then
 				table.insert(sides, {
-					constraint = nil, motor = m, rest = m.C0, sign = entry[2] :: number,
+					constraint = nil, motor = m, rest = motorRest(m), sign = entry[2] :: number,
 				})
 			end
 		end
@@ -191,20 +222,25 @@ local OVERHEAD_SPREAD = math.rad(8)
 -- Below this much overhead weight the lower arms are the animator's alone.
 local STRAIGHT_FLOOR = 0.001
 
--- Whether what the player carries is one of the overhead species: the raid
--- pod's species is a player attribute, a Tool's is on the Tool.
+-- Whether what the player carries rides over the head: the raid pod's species
+-- is a player attribute (a pod, never hatched), a Tool's is on the Tool with
+-- whether it is the hatched plant. PlantForms.CarriedOverhead decides: the
+-- Secrets and Rain forms, pod and plant, and since 2026-10-03 every hatched
+-- plant built from the owner's supplied rigs -- not their pods.
 local function carriesOverhead(player: Player, character: Model): boolean
 	local id = player:GetAttribute(GameConfig.Attributes.CarryingSpecies)
+	local hatched = false
 	if type(id) ~= "string" then
 		for _, d in ipairs(character:GetChildren()) do
 			if d:IsA("Tool") then
 				id = d:GetAttribute("SpeciesId")
+				hatched = d:GetAttribute("Hatched") == true
 				break
 			end
 		end
 	end
 	local species = if type(id) == "string" then SeedData.Get(id) else nil
-	return species ~= nil and (species :: any).Carry == "overhead"
+	return PlantForms.CarriedOverhead(species, hatched)
 end
 
 --==============================================================================
@@ -240,9 +276,51 @@ local function anglesFor(reach: number?): (number, number)
 	return math.rad(lift), math.rad(spread)
 end
 
+--==============================================================================
+-- THE HAND WELD THIS CLIENT KEEPS (2026-10-03)
+--
+-- CarryService destroys the engine's RightGrip on the SERVER and welds the
+-- Handle to the root instead (CarryWeld). Measured in Play: now and then the
+-- local client still has a RightGrip of its own for that handle -- the server
+-- never sees it, so never removes it -- and it drags the right hand onto the
+-- handle: for the overhead carry, up onto the plant's base instead of beside
+-- the head where the pose puts it. A grip on a handle the carry owns (it has a
+-- CarryWeld) is removed here, on this client, for its own character only. The
+-- server's state, which every other player sees, is already this.
+--==============================================================================
+local function clearHandGrip(character: Model)
+	for _, tool in ipairs(character:GetChildren()) do
+		if tool:IsA("Tool") then
+			local handle = tool:FindFirstChild("Handle")
+			if handle and handle:FindFirstChild("CarryWeld") then
+				for _, d in ipairs(character:GetDescendants()) do
+					if d:IsA("JointInstance") and d.Name ~= "CarryWeld" and (d :: any).Part1 == handle then
+						d:Destroy()
+					end
+				end
+			end
+		end
+	end
+end
+
+-- The local character's grip watch: one at a time, cut when the character
+-- changes, so a respawn never leaves the old body's connection running.
+local gripWatch: RBXScriptConnection? = nil
+
 local function track(player: Player)
 	local function onCharacter(character: Model)
 		rigs[player] = nil
+		if player == Players.LocalPlayer then
+			if gripWatch then
+				gripWatch:Disconnect()
+			end
+			-- Part1 may not be set yet when a joint arrives: checked a moment later.
+			gripWatch = character.DescendantAdded:Connect(function(d)
+				if d:IsA("JointInstance") then
+					task.delay(0.1, clearHandGrip, character)
+				end
+			end)
+		end
 		task.spawn(function()
 			local deadline = os.clock() + 12
 			local rig = buildRig(character)
@@ -326,6 +404,18 @@ RunService.Stepped:Connect(function(_, dt)
 	local alpha = math.min(1, dt * BLEND)
 	for player, rig in pairs(rigs) do
 		local character = player.Character
+		-- A shoulder that is no longer on this character (the avatar's limbs
+		-- were rebuilt after spawn, or the joint was replaced) means a rig of
+		-- dead references: built again from what is there now.
+		local first = rig.sides[1]
+		local joint: Instance? = if first then (first.constraint or first.motor) else nil
+		if character and character.Parent and not (joint and joint:IsDescendantOf(character)) then
+			local fresh = buildRig(character)
+			if fresh then
+				rigs[player] = fresh
+				rig = fresh
+			end
+		end
 		if not character or not character.Parent then
 			rigs[player] = nil
 		else

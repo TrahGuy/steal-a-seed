@@ -365,6 +365,11 @@ local function placeBanner()
 end
 table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBanner))
 table.insert(connections, GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placeBanner))
+-- A trap's REMOVE row over the strip (LoadoutUI, 2026-10-04): a phone's guide
+-- keeps clear of the band, which it raises.
+table.insert(connections, player:GetAttributeChangedSignal(Config.Hotbar.RemoveRowAttribute):Connect(placeBanner))
+-- And the x2 card beside a phone's cash line (2026-10-05), which the belt keeps off.
+table.insert(connections, player:GetAttributeChangedSignal(Config.Pass.MultiplierAttribute):Connect(placeBanner))
 placeBanner()
 
 --==============================================================================

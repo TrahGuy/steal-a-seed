@@ -162,12 +162,14 @@ local function step()
 			or not entry.adorn.Parent then
 			clear(player)
 		else
-			if kind == "slow" then
-				entry.text.TextColor3 = AMBER
-				local stroke = entry.text:FindFirstChildOfClass("UIStroke")
-				if stroke then
-					stroke.Color = AMBER_OUTLINE
-				end
+			-- Both ways (2026-10-04): a label that was amber for a slow goes red
+			-- again for a root on the same head, rather than keeping the colour of
+			-- whatever held them last.
+			local slow = kind == "slow"
+			entry.text.TextColor3 = if slow then AMBER else RED
+			local stroke = entry.text:FindFirstChildOfClass("UIStroke")
+			if stroke then
+				stroke.Color = if slow then AMBER_OUTLINE else OUTLINE
 			end
 			local left = endsAt - now
 			if left <= 0 then

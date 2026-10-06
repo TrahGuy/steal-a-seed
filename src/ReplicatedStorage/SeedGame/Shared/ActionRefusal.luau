@@ -58,12 +58,15 @@
 
 local GameConfig = require(script.Parent:WaitForChild("GameConfig"))
 local Notice = require(script.Parent:WaitForChild("Notice"))
+local WeaponData = require(script.Parent:WaitForChild("WeaponData"))
 
 local ActionRefusal = {}
 
 -- How many plants and pods the saved record holds: the number in the storage
 -- lines below.
 local MAX_HELD: number = GameConfig.Save.MaxHeld
+-- How many placed traps one player may have out at once (2026-10-04).
+local MAX_TRAPS: number = WeaponData.Trap.MaxActivePerPlayer
 
 -- Server -> client, on the GameEvent remote every client already listens to,
 -- carrying one code from `Text` and nothing else.
@@ -88,8 +91,14 @@ ActionRefusal.Text = {
 	-- Something the carry rule blocks while a raided pod is in your arms: taking
 	-- a second pod, or putting a plant in your hands.
 	CARRYING_POD = "Bank your pod before doing that.",
-	-- Trying to set a trap before the last one's placement cooldown is over.
-	TRAP_COOLDOWN = "Trap recharging…",
+	-- A fourth trap while three are already out, any mix of types (2026-10-04).
+	-- Nothing is spent and none of the three is touched.
+	TRAP_LIMIT = string.format("You already have %d traps out.", MAX_TRAPS),
+	-- A trap set inside its owner's trigger cooldown (2026-10-05): one of their
+	-- traps caught somebody less than WeaponData.Trap.TriggerCooldownSeconds
+	-- ago. Every trap type, every slot and the Bag share the one wait; the
+	-- hotbar counts it down on each trap slot.
+	TRAP_COOLDOWN = "Your traps are cooling down.",
 
 	--==========================================================================
 	-- TELEPORT TO PLOT (PlotService.TeleportHome), 2026-09-23
@@ -149,7 +158,10 @@ ActionRefusal.Text = {
 	-- credit spent.
 	--==========================================================================
 	STORAGE_FULL = string.format("Plant storage full (%d/%d).", MAX_HELD, MAX_HELD),
-	STORAGE_FULL_BANK = string.format("Plant storage full (%d/%d).", MAX_HELD, MAX_HELD),
+	-- The owner's approved wording (2026-10-03), "Storage full — free a slot
+	-- to bank this pod.", held to forty characters; the toast's own detail
+	-- below says it whole.
+	STORAGE_FULL_BANK = "Storage full. Free a slot to bank it.",
 	STORAGE_FULL_READY = "Pod ready. Make room to hatch it free.",
 	STORAGE_FULL_CREDIT = "Instant Hatch saved: next one is free.",
 	INSTANT_CREDIT_NO_POD = "Instant Hatch saved for later.",
@@ -166,9 +178,9 @@ ActionRefusal.Text = {
 -- out under the crosshair as a live reason, which is a different job.
 --
 -- Where no next step is true for every player who can hit the refusal, there is
--- no detail line rather than a hopeful one: TRAP_COOLDOWN, TELEPORT_COOLDOWN,
--- TELEPORT_NO_PLOT (queued behind a full server) and TELEPORT_BLOCKED (a spawn
--- with nothing to stand on) have nothing the player can do but wait.
+-- no detail line rather than a hopeful one: TELEPORT_COOLDOWN, TELEPORT_NO_PLOT
+-- (queued behind a full server) and TELEPORT_BLOCKED (a spawn with nothing to
+-- stand on) have nothing the player can do but wait.
 --
 -- A FULL PLOT has four, because what makes room depends on the plot:
 --
@@ -191,7 +203,12 @@ ActionRefusal.Notices = {
 	PLOT_FULL_GROWING = { title = "GARDEN FULL", detail = "Upgrade your plot for more room." },
 	PLOT_FULL_WAIT = { title = "GARDEN FULL", detail = "Pick one up once it has grown." },
 	CARRYING_POD = { title = "CARRYING A POD", detail = "Bank it at your plot first." },
-	TRAP_COOLDOWN = { title = "TRAP RECHARGING" },
+	-- Traps stay until their owner takes them back (2026-10-04): REMOVE over the
+	-- trap's hotbar slot, or in its Bag details.
+	TRAP_LIMIT = { title = "TRAP LIMIT", detail = "Press REMOVE to take one back." },
+	-- The trigger cooldown (2026-10-05): the countdown on the trap's slot says
+	-- how long, so the words need not.
+	TRAP_COOLDOWN = { title = "TRAP COOLING DOWN", detail = "Ready when the countdown on your trap ends." },
 	TELEPORT_OUTSIDE = { title = "CAN'T TELEPORT HERE", detail = "Teleport works only in the Safe Zone." },
 	TELEPORT_NO_PLOT = { title = "NO PLOT YET" },
 	TELEPORT_STUNNED = { title = "CAN'T TELEPORT YET", detail = "Wait until you can move again." },
@@ -211,11 +228,11 @@ ActionRefusal.Notices = {
 		detail = string.format("%d/%d. Plant or sell one to make room.", MAX_HELD, MAX_HELD),
 	},
 	-- A pod at the red line: it stays in the arms, and is banked by itself the
-	-- moment there is room. It does not say "make room": with a pod in the
-	-- arms nothing can be planted or sold, so that is not theirs to do yet.
+	-- moment there is room. Since 2026-10-03 (the owner's approved wording) it
+	-- says what makes that room: a free slot in the plant storage.
 	STORAGE_FULL_BANK = {
 		title = "PLANT STORAGE FULL",
-		detail = string.format("%d/%d. Your pod is banked when there is room.", MAX_HELD, MAX_HELD),
+		detail = string.format("%d/%d. Free a slot to bank this pod.", MAX_HELD, MAX_HELD),
 	},
 	-- THE PURCHASE WAS USED: it ended the pod's wait. Not a refusal, so not red:
 	-- the player is told the storage is full AND what they now have.

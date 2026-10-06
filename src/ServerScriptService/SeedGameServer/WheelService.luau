@@ -876,6 +876,134 @@ function WheelService.GrantCommunity(player: Player): string
 end
 
 --==============================================================================
+-- A GLOBAL MINI EVENT'S TICKET (2026-10-03, TICKET DISCO; MiniEventService)
+--
+-- Called by MiniEventService once IT has decided a collection is real: the
+-- ticket exists and has landed, nobody took it first, and the body stood on
+-- it. ONE free spin on the EARNED balance -- the hotbar's Spin Ticket, spent
+-- at the wheel like any other -- AND the claim, in one synchronous step:
+--   * the claim is the profile's own (EventClaims, by the GLOBAL event's id):
+--     at `cap` already, nothing ("CAP"). The profile is session-locked to one
+--     server at a time and saved with the spin, so leaving, dying, rejoining or
+--     moving to another server meets the same count -- per event, not per
+--     server, and never a temporary counter somewhere else;
+--   * not the obby's allowance: WheelDayAt and WheelDayCount are neither read
+--     nor written; no once-per-profile marker (HatchBonusClaimed,
+--     CommunityClaimed) either -- every event may give its tickets again;
+--   * a balance already at MaxEarnedHeld takes nothing ("FULL"): it is capped
+--     on load, so a spin past it would vanish on the next join;
+--   * a profile that is not saving takes nothing ("NOT_SAVED"), rather than a
+--     spin that vanishes with the server.
+-- The claims list stays bounded: the newest ClaimsKept events, oldest dropped.
+-- Accepted, it is the hatch bonus's convention: changed in memory and marked
+-- dirty (UpdateWheel), then saved -- one coalesced save per player however
+-- quickly the tickets come. A save that does not land leaves the profile
+-- dirty: the autosave and the leave save keep trying, and the write warns;
+-- the claim and its spin are in the same table, so they land or are lost
+-- together, never one without the other. Nothing is ever granted twice: the
+-- caller grants once per ticket, and the ticket is gone in the same step.
+-- Answers true and the new count, or false, why ("DISABLED", "NOT_SAVED",
+-- "BAD_EVENT", "CAP", "FULL") and the count as it stands.
+--==============================================================================
+local saveQueued: { [Player]: boolean } = {}
+local saveAgain: { [Player]: boolean } = {}
+
+local function saveSoon(player: Player)
+	if saveQueued[player] then
+		saveAgain[player] = true
+		return
+	end
+	saveQueued[player] = true
+	task.spawn(function()
+		repeat
+			saveAgain[player] = nil
+			if player.Parent ~= Players then
+				break
+			end
+			if not PlayerDataService.Save(player) then
+				warn(string.format("[Seed/WheelService] %s's event spin save did not land yet; the profile stays "
+					.. "dirty and the autosave keeps trying.", player.Name))
+			end
+		until not saveAgain[player]
+		saveQueued[player] = nil
+		saveAgain[player] = nil
+	end)
+end
+
+local function claimRow(p: Profile, eventId: string): { Id: string, Count: number, At: number }?
+	for _, row in ipairs((p :: any).EventClaims or {}) do
+		if row.Id == eventId then
+			return row
+		end
+	end
+	return nil
+end
+
+-- How many tickets this player has collected in that global event (0 if none),
+-- or nil while their profile is not loaded.
+function WheelService.EventClaimCount(player: Player, eventId: string): number?
+	local profile = PlayerDataService.Get(player)
+	if not profile then
+		return nil
+	end
+	local row = claimRow(profile, eventId)
+	return if row then row.Count else 0
+end
+
+function WheelService.GrantEventSpin(player: Player, eventId: string, cap: number, source: string):
+	(boolean, string?, number)
+	if not WheelData.Enabled then
+		return false, "DISABLED", 0
+	end
+	if type(eventId) ~= "string" or #eventId == 0 or #eventId > 40 or type(cap) ~= "number" or cap < 1 then
+		return false, "BAD_EVENT", 0
+	end
+	if player.Parent ~= Players or not PlayerDataService.IsPersistent(player) then
+		return false, "NOT_SAVED", WheelService.EventClaimCount(player, eventId) or 0
+	end
+	local why: string? = nil
+	local count = 0
+	local granted = PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+		local claims = (p :: any).EventClaims
+		if type(claims) ~= "table" then
+			claims = {}
+			;(p :: any).EventClaims = claims
+		end
+		local row = claimRow(p, eventId)
+		count = if row then row.Count else 0
+		if count >= cap then
+			why = "CAP"
+			return false
+		end
+		if p.WheelEarned >= WheelData.MaxEarnedHeld then
+			why = "FULL"
+			return false
+		end
+		if not row then
+			row = { Id = eventId, Count = 0, At = 0 }
+			table.insert(claims, row)
+			while #claims > GameConfig.MiniEvent.Tickets.ClaimsKept do
+				table.remove(claims, 1)
+			end
+		end
+		local claim = row :: { Id: string, Count: number, At: number }
+		claim.Count += 1
+		claim.At = os.time()
+		count = claim.Count
+		p.WheelEarned += 1
+		return true
+	end)
+	if not granted then
+		return false, why or "NOT_SAVED", count
+	end
+	log(string.format("%s collected a free spin (%s): %d/%d this global event.", player.Name, tostring(source),
+		count, cap))
+	publish(player)
+	saveSoon(player)
+	return true, nil, count
+end
+
+--==============================================================================
 -- BOUGHT SPINS, CALLED BY StoreService's RECEIPT HANDLER AND BY NOTHING ELSE
 --
 -- Returns whether they landed; StoreService writes the ledger and saves, and
@@ -1004,6 +1132,8 @@ function WheelService.Init()
 	table.clear(paidOk)
 	table.clear(policyKnown)
 	table.clear(prompted)
+	table.clear(saveQueued)
+	table.clear(saveAgain)
 	channel = nil
 	local unhook = unhookReveal
 	unhookReveal = nil
@@ -1061,6 +1191,7 @@ function WheelService.Start()
 		policyKnown[player] = nil
 		prompted[player] = nil
 		forced[player] = nil
+		saveAgain[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do
 		task.spawn(watch, player, gen)

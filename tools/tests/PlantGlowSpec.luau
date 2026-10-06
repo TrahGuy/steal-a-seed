@@ -2,7 +2,9 @@
 --==============================================================================
 -- Steal a Seed :: PlantGlowSpec
 --
--- A planted creature's lights and its Colossal crackle belong to the night.
+-- A planted creature's lights belong to the night. Its Colossal crackle
+-- strikes day and night, and only the crackle's flash light is the night's
+-- (2026-10-05, the owner's ask; it used to be night only).
 -- Edit mode:
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
@@ -221,21 +223,40 @@ local ok, err = pcall(function()
 	PlantGlow.SetNight(false)
 	check(point.Enabled == true, "after reset the phase reaches nothing")
 
-	--== 10. THE COLOSSAL CRACKLE ===============================================
-	local colossal = Instance.new("Model")
-	colossal.Name = "Colossal"
-	local cbody = part("Trunk", colossal, Vector3.new(0, 0, 80), Vector3.new(4, 12, 4))
-	part("Arm", colossal, Vector3.new(3, 4, 80), Vector3.new(2, 1, 1))
-	part("Crown", colossal, Vector3.new(0, 8, 80), Vector3.new(5, 3, 5))
-	colossal.PrimaryPart = cbody
-	colossal:SetAttribute("Tier", 7)
-	colossal.Parent = fixture
+	--== 10. THE COLOSSAL CRACKLE: BOLTS DAY AND NIGHT, THE FLASH AT NIGHT ====
+	-- (2026-10-05, the owner's ask.) It used to be night only, bolts and all.
+	-- Now the pooled bolts strike in every phase on the same pacing, the one
+	-- flash light per pulse is the night's, and a phase change neither queues
+	-- a wave nor silences a bed.
+	local HIDDEN = require(Shared.PlantVisibility).Marker
 	local camPos = ORIGIN + Vector3.new(0, 4, 95)
 
+	local function standIn(name: string, x: number, tier: number): Model
+		local m = Instance.new("Model")
+		m.Name = name
+		local trunk = part("Trunk", m, Vector3.new(x, 0, 80), Vector3.new(4, 12, 4))
+		part("Arm", m, Vector3.new(x + 3, 4, 80), Vector3.new(2, 1, 1))
+		part("Crown", m, Vector3.new(x, 8, 80), Vector3.new(5, 3, 5))
+		m.PrimaryPart = trunk
+		m:SetAttribute("Tier", tier)
+		m.Parent = fixture
+		return m
+	end
+
 	PlantAura.SetQuality("Full")
+	PlantAura.SetNight(false, 0)
 	local now = 0
+	local titan = standIn("Titan", -60, 6)
+	check(PlantAura.Prepare(titan, 12, "starbloom", 7, now, Random.new(7)) == nil,
+		"a Titan gets no aura state: the crackle is still Colossal only")
+	local colossal = standIn("Colossal", 0, 7)
 	local state = PlantAura.Prepare(colossal, 12, "starbloom", 7, now, Random.new(20260914))
 	check(state ~= nil, "a Colossal gets an aura state")
+
+	-- Every state being watched, so a frame's STARTS can be counted: a pulse
+	-- begins where `pulsing` turns true.
+	local watched: { any } = { state }
+	local was: { [any]: boolean } = {}
 
 	local function auraLights(): (number, number)
 		local folder = Workspace:FindFirstChild("SeedPlantAura")
@@ -252,75 +273,302 @@ local ok, err = pcall(function()
 		return parented, visible
 	end
 
-	local function run(seconds: number): (number, number, number)
-		local peakActive, peakLights, peakVisible = 0, 0, 0
+	type Run = { active: number, lights: number, visible: number, parented: number,
+		starts: number, maxStarts: number, firstStarts: number, struck: { [any]: number },
+		thickLo: number, thickHi: number, core: boolean }
+	-- The lit segments' stroke: the thinnest and thickest, and whether any is
+	-- the palette's near-white core (only one palette is in play where it is read).
+	local coreColour = PlantAura.Palette.starbloom.core
+	local function strokes(r: Run)
+		local folder = Workspace:FindFirstChild("SeedPlantAura")
+		if not folder then
+			return
+		end
+		for _, d in ipairs(folder:GetChildren()) do
+			if d:IsA("BasePart") and d.Transparency < 1 then
+				r.thickLo = math.min(r.thickLo, d.Size.X)
+				r.thickHi = math.max(r.thickHi, d.Size.X)
+				if d.Color == coreColour then
+					r.core = true
+				end
+			end
+		end
+	end
+	local function step(r: Run, frame: number)
 		local dt = 1 / 30
-		for _ = 1, math.floor(seconds / dt) do
-			now += dt
-			PlantAura.Tick(now, dt, camPos, nil)
-			local _, active, _, _, lightsOut = PlantAura.Stats()
-			local _, visible = auraLights()
-			peakActive = math.max(peakActive, active)
-			peakLights = math.max(peakLights, lightsOut)
-			peakVisible = math.max(peakVisible, visible)
-		end
-		return peakActive, peakLights, peakVisible
-	end
-
-	PlantAura.SetNight(false, now)
-	local a0, l0, v0 = run(8)
-	check(a0 == 0 and l0 == 0 and v0 == 0, "day: eight seconds and not one pulse, light or lit segment")
-
-	local cycleOk = true
-	local madeAfterFirst = -1
-	for cycle = 1, 5 do
-		PlantAura.SetNight(true, now)
-		local a1, l1 = run(6)
-		if a1 == 0 or l1 == 0 then
-			cycleOk = false
-		end
-		-- Dawn lands mid-strike on purpose: run until something is lit, then end
-		-- the night on that frame.
-		local guard = 0
-		repeat
-			now += 1 / 30
-			PlantAura.Tick(now, 1 / 30, camPos, nil)
-			local _, active = PlantAura.Stats()
-			guard += 1
-		until active > 0 or guard > 600
-		PlantAura.SetNight(false, now)
-		local plantsN, active, _, made, lightsOut = PlantAura.Stats()
+		now += dt
+		PlantAura.Tick(now, dt, camPos, nil)
+		local _, active, _, _, lightsOut = PlantAura.Stats()
 		local parented, visible = auraLights()
-		if active ~= 0 or lightsOut ~= 0 or parented ~= 0 or visible ~= 0 or plantsN ~= 1 then
-			cycleOk = false
+		r.active = math.max(r.active, active)
+		r.lights = math.max(r.lights, lightsOut)
+		r.visible = math.max(r.visible, visible)
+		r.parented = math.max(r.parented, parented)
+		strokes(r)
+		local started = 0
+		for _, st in ipairs(watched) do
+			if st.pulsing and not was[st] then
+				started += 1
+				r.struck[st] = (r.struck[st] or 0) + 1
+			end
+			was[st] = st.pulsing
 		end
-		local a2, l2, v2 = run(3)
-		if a2 ~= 0 or l2 ~= 0 or v2 ~= 0 then
-			cycleOk = false
-		end
-		if cycle == 1 then
-			madeAfterFirst = made
+		r.starts += started
+		r.maxStarts = math.max(r.maxStarts, started)
+		if frame == 1 then
+			r.firstStarts = started
 		end
 	end
-	local _, _, _, madeEnd = PlantAura.Stats()
-	check(cycleOk, "five cycles: strikes at night, and dawn retires every segment and flash light at once")
+	local function run(seconds: number): Run
+		local r: Run = { active = 0, lights = 0, visible = 0, parented = 0, starts = 0,
+			maxStarts = 0, firstStarts = 0, struck = {}, thickLo = math.huge, thickHi = 0, core = false }
+		for frame = 1, math.floor(seconds / (1 / 30) + 0.5) do
+			step(r, frame)
+		end
+		return r
+	end
+	-- Ticks until `want` holds, so a phase change can be made to land mid-strike.
+	local function until_(want: () -> boolean): boolean
+		local r = run(0)
+		for frame = 1, 900 do
+			if want() then
+				return true
+			end
+			step(r, frame)
+		end
+		return want()
+	end
+	local function lightsOut(): number
+		local _, _, _, _, l = PlantAura.Stats()
+		return l
+	end
+	local function activeNow(): number
+		local _, a = PlantAura.Stats()
+		return a
+	end
+
+	--== 10a. BY DAY: BOLTS, NO FLASH ==
+	local day = run(8)
+	check(day.starts >= 3 and day.visible > 0,
+		("day: the Colossal strikes (%d pulses in 8 s, %d lit segment(s) at most)"):format(day.starts, day.visible))
+	check(day.lights == 0 and day.parented == 0, "day: no flash light is ever taken or parented")
+	local dayThick = state.thick * PlantAura.Config.DayThickScale
+	check(math.abs(day.thickLo - dayThick) < 1e-4 and math.abs(day.thickHi - dayThick) < 1e-4 and not day.core,
+		string.format("day: every lit segment is the bolder stroke (%.3f, x%.1f the night's) and none is the near-white core",
+			dayThick, PlantAura.Config.DayThickScale), string.format("%.3f-%.3f core %s", day.thickLo, day.thickHi, tostring(day.core)))
+
+	--== 10b. AT NIGHT: BOLTS AND THE FLASH ==
+	PlantAura.SetNight(true, now)
+	local night = run(6)
+	check(night.starts >= 2 and night.lights > 0 and night.parented > 0,
+		("night: strikes with a flash light (%d pulses, %d light(s) at most)"):format(night.starts, night.lights))
+	-- The pulse begun by day, if one is still fading, is the only bold one: the first strikes of the night set the look.
+	local nightLook = run(2)
+	check(math.abs(nightLook.thickLo - state.thick) < 1e-4 and math.abs(nightLook.thickHi - state.thick) < 1e-4
+		and nightLook.core,
+		string.format("night: the approved look -- the %.3f stroke with its near-white core segments", state.thick),
+		string.format("%.3f-%.3f core %s", nightLook.thickLo, nightLook.thickHi, tostring(nightLook.core)))
+
+	--== 10c. DAWN MID-FLASH: THE LIGHT GOES, THE BOLT FINISHES, THE BED GOES ON ==
+	check(until_(function()
+		return lightsOut() > 0
+	end), "night: a pulse with a flash light comes up")
+	-- Two frames on, so the new pulse's segments have been placed and lit (a
+	-- pulse is drawn from the Tick after the one that starts it).
+	run(2 / 30)
+	check(lightsOut() > 0, "night: the flash is still lit two frames in")
+	local activeBefore = activeNow()
+	PlantAura.SetNight(false, now)
+	local parentedAfter, visibleAfter = auraLights()
+	check(lightsOut() == 0 and parentedAfter == 0,
+		"dawn mid-strike: every flash light is back in its pool at once")
+	check(activeNow() == activeBefore and visibleAfter > 0,
+		"dawn mid-strike: the bolt itself is not cut off -- it finishes its own fade")
+	local afterDawn = run(3)
+	check(afterDawn.starts >= 1 and afterDawn.lights == 0 and afterDawn.parented == 0,
+		("after dawn: still striking (%d), never with a light"):format(afterDawn.starts))
+
+	--== 10d. DUSK MID-STRIKE: A DAYTIME PULSE TAKES NO LIGHT; THE NEXT MAY ==
+	check(until_(function()
+		return activeNow() > 0
+	end), "day: a pulse comes up")
+	PlantAura.SetNight(true, now)
+	check(lightsOut() == 0, "dusk mid-strike: no light is hung on a pulse that began by day")
+	local afterDusk = run(6)
+	check(afterDusk.starts >= 2 and afterDusk.lights > 0,
+		("after dusk: striking (%d) and the flash is back"):format(afterDusk.starts))
+
+	--== 10e. FIVE CYCLES, EACH CHANGE LANDING MID-STRIKE ==
+	local cycleOk = true
+	local cycleNote = ""
+	for cycle = 1, 5 do
+		until_(function()
+			return lightsOut() > 0
+		end)
+		PlantAura.SetNight(false, now)
+		local p0 = auraLights()
+		if lightsOut() ~= 0 or p0 ~= 0 then
+			cycleOk = false
+			cycleNote ..= (" c%d: light left at dawn"):format(cycle)
+		end
+		local d = run(4)
+		if d.starts == 0 or d.lights ~= 0 then
+			cycleOk = false
+			cycleNote ..= (" c%d: day %d starts %d lights"):format(cycle, d.starts, d.lights)
+		end
+		until_(function()
+			return activeNow() > 0
+		end)
+		PlantAura.SetNight(true, now)
+		local n = run(4)
+		if n.starts == 0 or n.lights == 0 then
+			cycleOk = false
+			cycleNote ..= (" c%d: night %d starts %d lights"):format(cycle, n.starts, n.lights)
+		end
+	end
+	check(cycleOk, "five day/night cycles: strikes in every phase, a flash only at night, none left at dawn" .. cycleNote)
+	local plantsN, _, _, madeOne = PlantAura.Stats()
 	-- One plant pulses at most once at a time, so its whole lifetime of strikes
 	-- can never need more segments than one near pulse holds.
 	local ceiling = PlantAura.Config.ArcsNear * PlantAura.Config.Segments
-	check(madeAfterFirst > 0 and madeEnd <= ceiling,
-		("five cycles: the pool is reused -- %d segment(s) ever made, ceiling %d"):format(madeEnd, ceiling))
+	check(plantsN == 1 and madeOne > 0 and madeOne <= ceiling,
+		("cycles: one state, and the pool is reused -- %d segment(s) ever made, ceiling %d"):format(madeOne, ceiling))
 
-	-- Reduced effects are untouched by the phase: Off still means nothing, at night.
-	PlantAura.SetQuality("Off")
+	--== 10f. A BED: NO WAVE AT A CHANGE, NOBODY GOES QUIET ==
+	-- Under the old rule a bed that sat out the day was all due at dusk; this
+	-- is the check that it never is now. Ten Colossals, a long day, then both
+	-- changes. Every plant strikes within any 3 s (its gap is at most 1.9 s).
+	PlantAura.SetNight(false, now)
+	local bed: { any } = {}
+	for i = 1, 10 do
+		local m = standIn("Bed" .. i, -40 + i * 8, 7)
+		m:PivotTo(m:GetPivot() + Vector3.new(0, 0, -20))
+		local st = PlantAura.Prepare(m, 12, "greenhollow", 7, now, Random.new(4100 + i))
+		table.insert(bed, st)
+		table.insert(watched, st)
+	end
+	local longDay = run(30)
+	local function everyone(r: Run): boolean
+		for _, st in ipairs(bed) do
+			if (r.struck[st] or 0) == 0 then
+				return false
+			end
+		end
+		return true
+	end
 	PlantAura.SetNight(true, now)
-	local aOff = run(6)
-	check(aOff == 0, "night with effects Off: still no pulses")
+	local dusk = run(3)
+	PlantAura.SetNight(false, now)
+	local dawn = run(3)
+	check(longDay.lights == 0 and dusk.firstStarts <= 2 and dawn.firstStarts <= 2,
+		("bed: no wave on the frame of a change (dusk %d, dawn %d start(s); steady max %d a frame)")
+			:format(dusk.firstStarts, dawn.firstStarts, longDay.maxStarts))
+	check(dusk.maxStarts <= math.max(3, longDay.maxStarts) and dawn.maxStarts <= math.max(3, longDay.maxStarts),
+		("bed: the frames after a change are no busier than the day (%d / %d vs %d)")
+			:format(dusk.maxStarts, dawn.maxStarts, longDay.maxStarts))
+	check(everyone(dusk) and everyone(dawn),
+		"bed: every Colossal strikes in the 3 s after dusk and in the 3 s after dawn")
+	check(longDay.active <= PlantAura.Config.MaxConcurrent and dusk.active <= PlantAura.Config.MaxConcurrent,
+		"bed: never more pulses than the client-wide budget")
+
+	--== 10g. QUALITY: OFF IS OFF IN BOTH PHASES; REDUCED NEVER FLASHES ==
+	PlantAura.SetQuality("Off")
+	local offDay = run(4)
+	PlantAura.SetNight(true, now)
+	local offNight = run(4)
+	check(offDay.starts == 0 and offNight.starts == 0 and offNight.lights == 0,
+		"effects Off: no pulse by day or by night")
+	PlantAura.SetQuality("Reduced")
+	local reduced = run(4)
+	check(reduced.starts > 0 and reduced.lights == 0
+		and reduced.active <= math.floor(PlantAura.Config.MaxConcurrent * 0.5),
+		("Reduced at night: strikes (%d), no flash, within half the budget"):format(reduced.starts))
+	PlantAura.SetQuality("Full")
+
+	--== 10h. A BUSY BED STAYS INSIDE BOTH BUDGETS ==
+	local crowd: { any } = {}
+	for i = 1, 30 do
+		local m = standIn("Crowd" .. i, -45 + (i % 10) * 10, 7)
+		m:PivotTo(m:GetPivot() + Vector3.new(0, 0, -math.floor(i / 10) * 14))
+		local st = PlantAura.Prepare(m, 12, "dustbowl", 7, now, Random.new(9000 + i))
+		table.insert(crowd, st)
+		table.insert(watched, st)
+	end
+	local busyNight = run(6)
+	PlantAura.SetQuality("Reduced")
+	-- Pulses begun at Full finish their own 0.32 s first; only then is every
+	-- lit pulse one the halved budget let start.
+	run(0.5)
+	local busyReduced = run(6)
 	PlantAura.SetQuality("Full")
 	PlantAura.SetNight(false, now)
+	local busyDay = run(6)
+	local _, _, _, madeBusy = PlantAura.Stats()
+	local cap = PlantAura.Config.MaxConcurrent * PlantAura.Config.ArcsNear * PlantAura.Config.Segments
+	check(busyNight.active <= PlantAura.Config.MaxConcurrent and busyDay.active <= PlantAura.Config.MaxConcurrent
+		and busyNight.lights <= PlantAura.Config.MaxLights and busyDay.lights == 0,
+		("41 Colossals: at most %d pulses (night %d, day %d) and %d lights (night %d, day %d)")
+			:format(PlantAura.Config.MaxConcurrent, busyNight.active, busyDay.active,
+				PlantAura.Config.MaxLights, busyNight.lights, busyDay.lights))
+	check(busyReduced.active == math.floor(PlantAura.Config.MaxConcurrent * 0.5),
+		("41 Colossals on Reduced: the halved budget binds (%d)"):format(busyReduced.active))
+	check(madeBusy <= cap, ("41 Colossals: %d segment(s) ever made, ceiling %d"):format(madeBusy, cap))
+	for _, st in ipairs(crowd) do
+		PlantAura.Forget(st)
+	end
 
+	--== 10i. OTHER PLANTS: OFF -- A HIDDEN COLOSSAL TAKES ITS BOLTS AND LIGHT ==
+	-- Only the one Colossal: the bed is set aside first.
+	for _, st in ipairs(bed) do
+		PlantAura.Forget(st)
+	end
+	PlantAura.SetNight(true, now)
+	check(until_(function()
+		return lightsOut() > 0
+	end), "night: the Colossal is lit again")
+	colossal:SetAttribute(HIDDEN, true)
+	local hiddenRun = run(0.1)
+	local pH, vH = auraLights()
+	check(activeNow() == 0 and lightsOut() == 0 and pH == 0 and vH == 0,
+		"hidden mid-strike: the bolt and its light go at once")
+	local hiddenNight = run(3)
+	PlantAura.SetNight(false, now)
+	local hiddenDay = run(3)
+	check(hiddenRun.starts + hiddenNight.starts + hiddenDay.starts == 0,
+		"hidden: nothing starts, by night or by day")
+	colossal:SetAttribute(HIDDEN, nil)
+	local shown = run(3)
+	check(shown.starts >= 1, "shown again: it strikes on its own gap")
+
+	--== 10j. REMOVAL MID-STRIKE RETURNS EVERYTHING ==
+	PlantAura.SetNight(true, now)
+	check(until_(function()
+		return lightsOut() > 0
+	end), "night: lit once more before the removal")
 	PlantAura.Forget(state)
-	local plantsLeft = PlantAura.Stats()
-	check(plantsLeft == 0, "forget drops the aura state")
+	local pR, vR = auraLights()
+	local plantsLeft, activeLeft, poolLeft, madeAll, lightsLeft = PlantAura.Stats()
+	check(plantsLeft == 0 and activeLeft == 0 and lightsLeft == 0 and pR == 0 and vR == 0,
+		"forget mid-strike: the state, its bolt and its light are all gone at once")
+	check(poolLeft == madeAll, ("every segment ever made is parked in the pool (%d of %d)"):format(poolLeft, madeAll))
+
+	--== 10k. A MODEL THAT LEAVES MID-STRIKE ==
+	local leaver = standIn("Leaver", 30, 7)
+	local leaverState = PlantAura.Prepare(leaver, 12, "emberroot", 7, now, Random.new(55))
+	check(until_(function()
+		return activeNow() > 0
+	end), "the leaver strikes")
+	leaver.Parent = nil
+	run(0.1)
+	local pL, vL = auraLights()
+	check(activeNow() == 0 and lightsOut() == 0 and pL == 0 and vL == 0,
+		"a model gone mid-strike: the next tick takes its bolt and light back")
+	PlantAura.Forget(leaverState)
+	leaver:Destroy()
+	PlantAura.SetNight(false, now)
+	local plantsEnd, activeEnd, poolEnd, madeEnd, lightsEnd = PlantAura.Stats()
+	check(plantsEnd == 0 and activeEnd == 0 and lightsEnd == 0 and poolEnd == madeEnd,
+		"at the end: no state, no pulse, no light, every segment in the pool")
 end)
 
 fixture:Destroy()

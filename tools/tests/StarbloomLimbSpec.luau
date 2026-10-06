@@ -431,6 +431,22 @@ local SPEC = {
 	},
 }
 
+--==============================================================================
+-- 2026-10-03: A species built from the owner's supplied rig (PlantForms) has
+-- none of these limbs -- SecretIdle poses its own joints and PlantSway leaves
+-- them alone -- so it is measured by PlantRigsSpec instead and dropped here.
+-- All five Starbloom species are, today; this file measures whatever is left.
+--==============================================================================
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
+local rigged = {}
+for id in pairs(SPEC) do
+	if PlantForms.Has(id) then
+		SPEC[id] = nil
+		table.insert(rigged, id)
+	end
+end
+table.sort(rigged)
+
 -- The named body masses of one built model, by exact name.
 local function bodiesOf(model: Model, spec): { BasePart }
 	local list = {}
@@ -469,6 +485,14 @@ end
 -- 1. THE RIG
 --==============================================================================
 say("-- rig --")
+check(#rigged + (function()
+	local n = 0
+	for _ in pairs(SPEC) do
+		n += 1
+	end
+	return n
+end)() == 5, string.format("the five Starbloom species: %d built from supplied rigs (PlantRigsSpec), the rest measured here",
+	#rigged), table.concat(rigged, ","))
 say(string.format("   PlantSway vocabulary: %s", table.concat(LEG_WORDS, " ")))
 say(string.format("   LEG_SWING %.1f deg", math.deg(LEG_SWING)))
 
@@ -572,8 +596,10 @@ end
 --==============================================================================
 say("")
 say("-- pose --")
-do
-	local entry = rigs.cosmospire[1]
+-- Measured on whichever species is still built here (none, once all five are rigs).
+local poseId = next(rigs)
+if poseId then
+	local entry = rigs[poseId][1]
 	local at = posed(entry.model, entry.rig, 0, 0)
 	local worst = 0
 	for part, cf in pairs(at) do

@@ -196,9 +196,9 @@ local ok, err = pcall(function()
 		"and the caps already on screen re-label when the controller is picked up or put down")
 	check(PadInput.short(Enum.KeyCode.ButtonX) == "X" and PadInput.short(Enum.KeyCode.ButtonY) == "Y",
 		"the short names the caps print")
-	check(has(gardenSrc, '"HOLD [" .. PadInput.short(Enum.KeyCode.ButtonX) .. "] IN FIELD"')
-			and has(gardenSrc, '"HOLD [E] IN FIELD"'),
-		"a ready pod's Garden card says X on a controller and E at a keyboard")
+	check(has(gardenSrc, '"HOLD [" .. PadInput.short(Enum.KeyCode.ButtonX) .. "] AT THE POD"')
+			and has(gardenSrc, '"HOLD [E] AT THE POD"'),
+		"a ready pod in MY PLANTS says X on a controller and E at a keyboard (2026-10-04)")
 
 	--==========================================================================
 	-- 5. LB / RB WIRING
@@ -208,8 +208,8 @@ local ok, err = pcall(function()
 		"LB and RB are bound on the hotbar")
 	check(has(loadoutSrc, "if PadInput.panelOpen() then\n\t\t\treturn Enum.ContextActionResult.Pass"),
 		"and do nothing while any panel is open")
-	check(has(loadoutSrc, "PadInput.nextSlot(occupiedSlots()") and has(loadoutSrc, "holdTool(slot.tool)"),
-		"they walk the strip with nextSlot and equip through holdTool, the number row's path")
+	check(has(loadoutSrc, "PadInput.nextSlot(occupiedSlots()") and has(loadoutSrc, "holdRef(slot.ref)"),
+		"they walk the strip with nextSlot and hold through holdRef, the number row's path")
 
 	--==========================================================================
 	-- 6. PANELS ON A CONTROLLER
@@ -282,29 +282,14 @@ local ok, err = pcall(function()
 	check(UIKit.scrollToShow(0, VIEW, 500, 700, CANVAS) == CANVAS - VIEW,
 		"and a reveal never scrolls past the end of the canvas")
 
-	check(has(gardenSrc, "list.Selectable = false"), "the Garden list is never a pad stop -- its cards are")
-	local pad = tonumber(string.match(gardenSrc, "local EDGE_PAD = (%d+)") or "")
-	check(pad ~= nil and pad >= 9 and has(gardenSrc, "listPad.PaddingBottom = UDim.new(0, EDGE_PAD)")
-			and has(gardenSrc, "2 * EDGE_PAD + FOOTER_HEIGHT"),
-		"room under the last row for the ring (9 px on a TV), and the panel is sized for it", pad)
-	check(not has(gardenSrc, 'GetPropertyChangedSignal("CanvasPosition"):Connect(function()\n\tclearSelection()\nend)'),
-		"a scroll no longer drops the selection unconditionally")
-	check(has(gardenSrc, "if focus and slotIndexOf[focus] == index then\n\t\treturn")
-			and has(gardenSrc, "if not UIKit.spanShown(list.CanvasPosition.Y, viewHeight(),"),
-		"it drops it only when the PICK UP leaves the window, and never while the pad's focus is on that card")
-	local clearing = string.match(gardenSrc, "local function clearSelection%(%)(.-)\nend") or ""
-	check(before(clearing, "GuiService.SelectedObject = slot.button", "slot.setSelected(false)"),
-		"after a pick-up the focus is handed to the same card BEFORE its button hides")
-	check(has(gardenSrc, "slot.button.NextSelectionDown = slot.action")
-			and has(gardenSrc, "slot.action.NextSelectionUp = slot.button"),
-		"down from a selected card is its own PICK UP, and up is back to the card")
+	-- MY PLANTS (2026-10-04) replaced the Garden's list: its cards are the stops.
+	check(has(gardenSrc, "grid.Selectable = false") and has(gardenSrc, "padFirst.Value = if first then cards[first.key].button"),
+		"the MY PLANTS grid is never a pad stop -- its cards are, the first one first")
 	check(has(gardenSrc, 'GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(')
-			and has(gardenSrc, "if open and index then\n\t\treveal(index)"),
+			and has(gardenSrc, "UIKit.scrollToShow(grid.CanvasPosition.Y, view, top - 6, bottom + 6, total)"),
 		"a card that takes the pad's focus is scrolled into view whole")
-	check(has(gardenSrc, "GuiService.SelectedObject = slotAt(n).button"),
-		"a card hidden by a shrinking list hands the focus to the last card that stays")
-	check(has(gardenSrc, "if selectedSlot == slot or not placementId then"),
-		"a pod or an empty hole offers no PICK UP, so pressing it selects nothing")
+	check(has(gardenSrc, 'MenuKit.bindBumpers("SeedPlantsPad",') and has(gardenSrc, 'MenuKit.bindBack("SeedPlantsConfirm",'),
+		"LB / RB switch PLANTED and STORED; B leaves the UNEQUIP ALL question before it closes the panel")
 end)
 
 if not ok then

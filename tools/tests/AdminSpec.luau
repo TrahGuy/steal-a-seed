@@ -472,9 +472,12 @@ local ok, err = pcall(function()
 		HighestBiomeOrder = 3, Almanac = { nubkin = true }, Mastery = { greenhollow = true },
 		Weapons = { rootwood_bat = true }, EquippedBat = "rootwood_bat",
 		Plants = { { SpeciesId = "nubkin", Tier = 1, X = 0, Z = 0, PlantedAt = 1, Stage = 1, Facing = 0 } },
-		Held = { { Id = "nubkin", Tier = 2, Hatched = false } },
+		Held = { { Id = "nubkin", Tier = 2, Hatched = false, Item = "8" } }, NextItem = 9,
 		Receipts = { "receipt-1", "receipt-2" }, WalkMode = true, MenuSize = "large", CreatedAt = 1700000000,
 		OfflineCash = 1234, OfflineSeconds = 60, OfflineAway = 120,
+		-- The hotbar and the hearts (2026-10-03): progress, so not kept.
+		Hotbar = { "w:rootwood_bat", "", "", "i:8", "", "", "", "", "", "" },
+		Favourites = { ["i:8"] = true, ["w:rootwood_bat"] = true },
 	})
 	local plot = Instance.new("Model")
 	plot.Name = "SpecRichPlot"
@@ -508,7 +511,6 @@ local ok, err = pcall(function()
 
 	say("\n-- reset: done, and saved --")
 	local sameTable = data.Get(rich)
-	local startedAt = os.time()
 	-- The window the order is read from starts HERE, after every join above.
 	callsBefore = #calls
 	reply = admin.Handle(adminB, "ResetPlayerProgress", rich.UserId, nil, "  specrich ")
@@ -527,13 +529,17 @@ local ok, err = pcall(function()
 	check(p.OfflineCash == 0 and p.OfflineSeconds == 0 and p.OfflineAway == 0,
 		"and the offline claim is gone")
 	check(p.Tutorial ~= tutorialBefore and type(p.Tutorial) == "table"
-			and p.TrainingCharge == fresh.TrainingCharge and p.TrainingChargeAt >= startedAt,
-		"tutorial progress and the training charge start over")
+			and p.TrainingCharge == nil and p.TrainingChargeAt == nil,
+		"tutorial progress starts over (and a reset profile carries no training charge: the Rush is gone, 2026-10-05)")
 	check(#p.Receipts == 2 and p.Receipts[1] == "receipt-1" and p.Receipts[2] == "receipt-2",
 		"the Robux receipts are KEPT, so nothing already bought can be granted twice")
 	check(p.CreatedAt == 1700000000 and p.WalkMode == true and p.Version == SAVE.CurrentVersion,
 		"and so are when the account was made and the Walk Mode setting")
 	check(p.MenuSize == "large", "and the chosen menu size, a setting like Walk Mode", p.MenuSize)
+	check(table.concat(p.Hotbar, ",") == table.concat(fresh.Hotbar, ",") and next(p.Favourites) == nil,
+		"the hotbar is a new player's three faint slots again, and no item wears a heart",
+		table.concat(p.Hotbar, ","))
+	check(p.NextItem == 9, "but NextItem is KEPT: no item id is ever handed out twice", p.NextItem)
 	local shape = true
 	for key in pairs(fresh) do
 		if p[key] == nil then
@@ -960,9 +966,11 @@ local ok, err = pcall(function()
 		"the day and night buttons are labelled as the whole server's, under the phase read off the clock's attribute")
 	check(string.find(ui, "Enum.KeyCode.ButtonB", 1, true) and string.find(ui, "UnbindAction(BACK_ACTION)", 1, true),
 		"B steps back on a controller, bound only while the panel is open")
-	local _, fits = string.gsub(ui, "fitPanel%(%)", "")
-	check(string.find(ui, 'screen:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitPanel)', 1, true) ~= nil
-			and fits >= 2,
+	-- The compact console (2026-10-04) lays itself out from MenuLayout in its own gui (`deck`), on every
+	-- change of that gui's size and on every open.
+	local openBlock = string.match(ui, "\nsetOpen = function%(want: boolean%)(.-)\nend\n") or ""
+	check(string.find(ui, 'deck:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)', 1, true) ~= nil
+			and string.find(openBlock, "relayout()", 1, true) ~= nil,
 		"the panel is fitted to the screen again when it changes shape and on every open (a phone once kept the "
 			.. "desktop height it measured at startup: title and X off the top)")
 	check(string.find(ui, "typedMatches()", 1, true) and string.find(ui, "TYPE %s TO CONFIRM", 1, true),

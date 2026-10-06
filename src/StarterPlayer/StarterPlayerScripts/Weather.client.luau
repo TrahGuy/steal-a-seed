@@ -8,7 +8,7 @@
 -- server's attributes (GameConfig.Weather.Attributes); nothing here decides
 -- anything, and a player who joins mid-event is right on their first frame.
 -- The sky's cloud layer and the overcast light are WorldClock's (Lighting has
--- one owner); the chip is WeatherUI's.
+-- one owner); its icon over the hotbar is BoostIconsUI's.
 --
 --==============================================================================
 -- THE RAIN, OVER THE CAMERA, EVERYWHERE

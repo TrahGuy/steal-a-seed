@@ -109,7 +109,21 @@ local function bar(box: Frame, name: string, cx: number, cy: number, w: number, 
 	return f
 end
 
-function StatusText.icon(parent: GuiObject, kind: string, tint: Color3, size: number): Frame
+--==============================================================================
+-- OR A PICTURE OF WHERE IT CAME FROM (2026-10-03)
+--
+-- `source` names one of GameConfig.SourceIcons (rain, thunder, chest, wheel,
+-- sacrifice, income, training, community). Its uploaded picture is drawn in
+-- the same box INSTEAD of the glyph -- and until its id is filled in, the glyph
+-- `kind` is drawn exactly as before. The box keeps its name, "Icon", which is
+-- what RewardSplash flies a reward to.
+--==============================================================================
+function StatusText.sourceImage(source: string?): string?
+	local id = if source then (GameConfig.SourceIcons :: any)[source] else nil
+	return if type(id) == "string" and id ~= "" then id else nil
+end
+
+function StatusText.icon(parent: GuiObject, kind: string, tint: Color3, size: number, source: string?): Frame
 	local box = Instance.new("Frame")
 	box.Name = "Icon"
 	box.Size = UDim2.fromOffset(size, size)
@@ -117,6 +131,39 @@ function StatusText.icon(parent: GuiObject, kind: string, tint: Color3, size: nu
 	box.BorderSizePixel = 0
 	box.Active = false
 	box.Parent = parent
+	local picture = StatusText.sourceImage(source)
+	if picture then
+		-- The glyph stays underneath, in its own frame, until the picture has
+		-- loaded here -- and for good if it never does (UIKit.whenPictureLoads).
+		local fallback = Instance.new("Frame")
+		fallback.Name = "Fallback"
+		fallback.AnchorPoint = Vector2.new(0.5, 0.5)
+		fallback.Position = UDim2.fromScale(0.5, 0.5)
+		fallback.Size = UDim2.fromScale(1, 1)
+		fallback.BackgroundTransparency = 1
+		fallback.BorderSizePixel = 0
+		fallback.Active = false
+		fallback.Parent = box
+		StatusText.icon(fallback, kind, tint, size).Size = UDim2.fromScale(1, 1)
+		local image = Instance.new("ImageLabel")
+		image.Name = "Picture"
+		image.Size = UDim2.fromScale(1, 1)
+		image.BackgroundTransparency = 1
+		image.BorderSizePixel = 0
+		image.Active = false
+		image.Image = picture
+		image.ScaleType = Enum.ScaleType.Fit
+		image.ZIndex = 3
+		image.Parent = box
+		-- The glyph goes once the picture has loaded; the picture is never
+		-- hidden (an unloaded one draws nothing, the glyph shows through).
+		UIKit.whenPictureLoads(image, function(loaded: boolean)
+			if loaded then
+				fallback.Visible = false
+			end
+		end)
+		return box
+	end
 	if kind == "blocked" then
 		ring(box, tint, false, size)
 		bar(box, "Bar", 0.5, 0.5, 0.64, 0.16, tint, -45)
@@ -206,6 +253,9 @@ export type Options = {
 	-- A glyph from the family above, drawn at about the headline's size.
 	icon: string?,
 	iconTint: Color3?,
+	-- Where it came from (GameConfig.SourceIcons): its picture replaces the
+	-- glyph once uploaded; until then the glyph is drawn. Needs `icon`.
+	source: string?,
 	-- A second, smaller part after the headline -- drawn only when this is set.
 	detailSize: number?,
 	detailFont: Enum.Font?,
@@ -230,17 +280,25 @@ export type Line = {
 	size: () -> Vector2,
 	-- Drawn this much smaller or larger, about its top middle (StatusText.SmallScale).
 	setScale: (scale: number) -> (),
+	-- A new glyph and source for a line built with an icon (the Rain line when
+	-- its event turns out to be a Thunderstorm); the same size and place.
+	setIcon: (kind: string, source: string?) -> (),
 	destroy: () -> (),
 }
 
 function StatusText.new(opts: Options): Line
 	local size = opts.size
-	local iconSize = if opts.icon then math.floor(size * 0.92 + 0.5) else 0
+	local glyphSize = if opts.icon then math.floor(size * 0.92 + 0.5) else 0
 	local gap = math.max(4, math.floor(size * 0.3 + 0.5))
 	local detailSize = opts.detailSize
 	local detailFont = opts.detailFont or StatusText.DetailFont
 	local headFont = opts.headFont or StatusText.HeadFont
-	local rowH = math.max(iconSize, size + 6)
+	local rowH = math.max(glyphSize, size + 6)
+	-- A source PICTURE is drawn a little larger than a glyph (2026-10-03): a
+	-- detailed picture at a phone's 13/17 scale was ~12 px and mush. It grows
+	-- only into the row's own height, so no band, rect or line moves for it.
+	local pictureSize = math.min(rowH, math.floor(size * 1.18 + 0.5))
+	local iconSize = glyphSize
 
 	-- Anchored at its top middle: owners centre it on a HudLayout rect.
 	local frame = Instance.new("Frame")
@@ -280,8 +338,10 @@ function StatusText.new(opts: Options): Line
 	end
 
 	local icon: Frame? = nil
-	if opts.icon then
-		local drawn = StatusText.icon(body, opts.icon, opts.iconTint or opts.tint, iconSize)
+	local iconKey = ""
+	local function drawIcon(kind: string, source: string?)
+		iconSize = if StatusText.sourceImage(source) then pictureSize else glyphSize
+		local drawn = StatusText.icon(body, kind, opts.iconTint or opts.tint, iconSize, source)
 		drawn.AnchorPoint = Vector2.new(0, 0.5)
 		drawn.Position = UDim2.new(0, 0, 0.5, 0)
 		for _, part in ipairs(drawn:GetDescendants()) do
@@ -289,9 +349,15 @@ function StatusText.new(opts: Options): Line
 				track(part, "Transparency")
 			elseif part:IsA("Frame") and part.BackgroundTransparency < 1 then
 				track(part, "BackgroundTransparency")
+			elseif part:IsA("ImageLabel") then
+				track(part, "ImageTransparency")
 			end
 		end
 		icon = drawn
+		iconKey = kind .. "|" .. tostring(StatusText.sourceImage(source))
+	end
+	if opts.icon then
+		drawIcon(opts.icon, opts.source)
 	end
 
 	local head = Instance.new("TextLabel")
@@ -485,6 +551,22 @@ function StatusText.new(opts: Options): Line
 		end,
 		setScale = function(k: number)
 			frameScale.Scale = k
+		end,
+		setIcon = function(kind: string, source: string?)
+			local old = icon
+			if not old or iconKey == kind .. "|" .. tostring(StatusText.sourceImage(source)) then
+				return
+			end
+			-- Its fades go with it; the new one starts at the line's own alpha.
+			for i = #fades, 1, -1 do
+				local target = fades[i].target
+				if target == old or target:IsDescendantOf(old) then
+					table.remove(fades, i)
+				end
+			end
+			old:Destroy()
+			drawIcon(kind, source)
+			apply()
 		end,
 		destroy = destroy,
 	}

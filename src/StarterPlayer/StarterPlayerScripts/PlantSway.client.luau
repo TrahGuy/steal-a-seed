@@ -112,6 +112,7 @@ local PlantAura = require(Shared:WaitForChild("PlantAura"))
 -- part has streamed in, so a light is caught on the frame it arrives.
 --==============================================================================
 local PlantGlow = require(Shared:WaitForChild("PlantGlow"))
+local PlantVisibility = require(Shared:WaitForChild("PlantVisibility"))
 
 local PLANTED = GameConfig.Tags.Planted
 
@@ -579,6 +580,17 @@ end
 --==============================================================================
 local watching: { [Model]: { RBXScriptConnection } } = {}
 local building: { [Model]: boolean } = {}
+--==============================================================================
+-- OTHER PLANTS: OFF (2026-10-05, PlantVisibility)
+--
+-- A plant this screen hides is not walked, leaned or blinked: the slice passes
+-- it by, so it costs nothing while nobody can see it. Its lights go off with it
+-- (PlantGlow), and its Colossal arcs (PlantAura). Shown again, it is put where
+-- the server's leg and the clock say it is NOW, on the next Heartbeat rather
+-- than at its turn in the slice -- never a frozen pose.
+--==============================================================================
+local HIDDEN = PlantVisibility.Marker
+local wake: { [Model]: boolean } = {}
 
 -- The tag or the model is gone: drop the sway, and the watch with it.
 local function release(instance: Instance)
@@ -687,6 +699,14 @@ local function remember(instance: Instance)
 				PlantGlow.Add(model, d)
 			end),
 			model.DescendantRemoving:Connect(PlantGlow.Remove),
+			-- Hidden or shown on this screen (PlantVisibility): the lights again,
+			-- and a plant shown again is posed on the next Heartbeat.
+			model:GetAttributeChangedSignal(HIDDEN):Connect(function()
+				PlantGlow.Refresh(model)
+				if model:GetAttribute(HIDDEN) ~= true then
+					wake[model] = true
+				end
+			end),
 		}
 		PlantGlow.Watch(model)
 	end
@@ -722,7 +742,13 @@ local function remember(instance: Instance)
 		-- does for a pod: the whole-model lean and bob, the hatching rattle, the
 		-- glow and the aura -- and no leaves, legs, roots, gaze or lids.
 		--==================================================================
-		local secretRig = (species :: any).Animator == "secret"
+		--
+		-- The ordinary plants built from the owner's supplied rigs (PlantForms,
+		-- 2026-10-03) are the same kind of replayed rig, so the same goes for
+		-- them: asked of the MODEL (its SecretForm attribute), not the species,
+		-- because a species the rigs do not build yet keeps its old body and
+		-- its old limbs here.
+		local secretRig = (species :: any).Animator == "secret" or model:GetAttribute("SecretForm") ~= nil
 		-- Before a single measurement: see THE REST POSE LIVES ON THE PARTS.
 		restoreRest(model)
 
@@ -742,19 +768,32 @@ local function remember(instance: Instance)
 		--==================================================================
 		local lo = Vector3.new(math.huge, math.huge, math.huge)
 		local hi = -lo
+		-- The lowest DRAWN point, for a replayed rig's soil (2026-10-03): five of
+		-- the ordinary plants' supplied rigs (the root-legged lotus forms) keep an
+		-- invisible root plate that reaches below their feet, and standing them on
+		-- it lifted them off the soil. No Secret or Rain form has one, so for them
+		-- this is the same number as before.
+		local drawnLow = math.huge
 		for _, d in ipairs(model:GetDescendants()) do
 			if d:IsA("BasePart") then
 				local h = d.Size * 0.5
+				local drawn = d.Transparency < 0.999
 				for sx = -1, 1, 2 do
 					for sy = -1, 1, 2 do
 						for sz = -1, 1, 2 do
 							local q = (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
 							lo = Vector3.new(math.min(lo.X, q.X), math.min(lo.Y, q.Y), math.min(lo.Z, q.Z))
 							hi = Vector3.new(math.max(hi.X, q.X), math.max(hi.Y, q.Y), math.max(hi.Z, q.Z))
+							if drawn and q.Y < drawnLow then
+								drawnLow = q.Y
+							end
 						end
 					end
 				end
 			end
+		end
+		if secretRig and drawnLow < math.huge then
+			lo = Vector3.new(lo.X, drawnLow, lo.Z)
 		end
 		local headHeight = math.max(hi.Y - lo.Y, 0.5)
 		-- The base of the model, dead centre. This is the soil, and it is what
@@ -775,6 +814,24 @@ local function remember(instance: Instance)
 		--==================================================================
 		local travel = math.clamp(0.75 / (tierValue(tier) ^ 0.16), 0.30, 0.75)
 		local amp = math.clamp(travel / (2 * headHeight), 0.006, math.rad(14))
+		--==================================================================
+		-- A SUPPLIED RIG LEANS NO DEEPER THAN ITS FEET ALLOW (2026-10-03)
+		--
+		-- The lean tips the whole model about its footprint's centre, so the
+		-- footprint's edge dips by half its length x sin(amp) -- nothing on a
+		-- compact plant, but the owner's long, low rigs (a Tiny Snapmoss is
+		-- 6.74 long and 1.56 tall) were given 11 degrees by the height rule and
+		-- pushed their snouts and feet half a stud into the soil in Play. For a
+		-- PlantForms rig (RigScale) the edge may dip at most 1% of the plant's
+		-- height; its own idle does the swaying. Secrets and Rain forms keep
+		-- theirs as approved.
+		--==================================================================
+		if model:GetAttribute("RigScale") ~= nil then
+			local halfFoot = math.max(hi.X - lo.X, hi.Z - lo.Z) * 0.5
+			if halfFoot > 1e-3 then
+				amp = math.min(amp, math.asin(math.clamp(0.01 * headHeight / halfFoot, 0, 1)))
+			end
+		end
 
 		local entry: Sway = {
 			model = model,
@@ -1922,7 +1979,9 @@ end
 --
 -- ONE listener for both effects, set BEFORE the bed is indexed below, so a plant
 -- already standing in the garden is gated on the frame it is watched rather
--- than lit for a frame and switched off at the first change.
+-- than lit for a frame and switched off at the first change. Since 2026-10-05
+-- the phase gates only the Colossal crackle's flash light; its bolts strike by
+-- day as well (PlantAura's header).
 --==============================================================================
 local function applyPhase()
 	local isNight = Workspace:GetAttribute(GameConfig.Attributes.WorldPhase)
@@ -1998,6 +2057,17 @@ table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 			apply(entry, clock)
 		end
 	end
+	-- Shown again since the last frame (OTHER PLANTS): posed now.
+	if next(wake) ~= nil then
+		for model in pairs(wake) do
+			local at = index[model]
+			local entry = if at then list[at] else nil
+			if entry and model.Parent and model:GetAttribute(HIDDEN) ~= true then
+				apply(entry, clock)
+			end
+		end
+		table.clear(wake)
+	end
 
 	local slice = math.min(n, math.max(1, math.ceil(n * TARGET_HZ * dt)))
 	for _ = 1, slice do
@@ -2014,6 +2084,9 @@ table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 		elseif entry.hatching then
 			-- Already done above, and applying twice in a frame just costs a
 			-- PivotTo.
+			cursor += 1
+		elseif entry.model:GetAttribute(HIDDEN) == true then
+			-- Not drawn on this screen (OTHER PLANTS: OFF): passed by.
 			cursor += 1
 		else
 			apply(entry, clock)
@@ -2040,6 +2113,7 @@ script.Destroying:Connect(function()
 		end
 	end
 	table.clear(watching)
+	table.clear(wake)
 	-- Both modules outlive this script in the require cache. When this handler
 	-- gets to run, they are emptied here; on a measured re-run it did not, which
 	-- is why the copy that replaces this one resets them again at startup (see

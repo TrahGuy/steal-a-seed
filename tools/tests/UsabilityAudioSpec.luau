@@ -263,13 +263,13 @@ do
 	}
 	for _, case in ipairs(cases) do
 		local L = HudLayout.solve(case[2])
-		for _, plants in ipairs({ true, false }) do
-			local base = { hotTop = L.hotbar.y, stripHidden = L.touch, plants = plants, sideWidth = 64 }
+		do
+			local base = { hotTop = L.hotbar.y, stripHidden = L.touch }
 			local one = HudLayout.bag(L, base)
 			local bigIn = table.clone(base) :: any
 			bigIn.scale = 1.3
 			local big = HudLayout.bag(L, bigIn)
-			local tag = case[1] .. (if plants then " Plants" else " Equipment")
+			local tag = case[1]
 			check(one.scale == 1, tag .. ": no menu size is scale 1")
 			check(big.panel.x == one.panel.x and big.panel.y == one.panel.y
 					and big.panel.w == one.panel.w and big.panel.h == one.panel.h,
@@ -277,14 +277,14 @@ do
 			check(big.scale >= 1 and big.scale <= 1.3, tag .. ": drawn at the chosen size or less", big.scale)
 			check(big.panel.w / big.scale >= B.MinW - 0.01 and big.panel.h / big.scale >= B.MinH - 0.01,
 				tag .. ": never below the panel's minimum at its logical size", big.scale)
-			check(big.tray.h - big.note - B.PadY * 2 >= big.card.Y or one.tray.h - one.note - B.PadY * 2 < big.card.Y,
-				tag .. ": a whole card row still fits under the note", string.format("tray %.1f scale %.2f",
-					big.tray.h, big.scale))
+			check((big.rows >= 1 and big.catH >= B.CatMinH) or one.rows < 1,
+				tag .. ": a whole row of tiles and the five category buttons still fit", string.format(
+					"grid %.1f rows %d scale %.2f", big.grid.h, big.rows, big.scale))
 		end
 	end
 	table.insert(notes, "Bag scale on the owner's phone at LARGER: " .. string.format("%.2f",
 		HudLayout.bag(HudLayout.solve(screen(801, 392, true)), { hotTop = 0, stripHidden = true,
-			plants = true, sideWidth = 64, scale = 1.3 }).scale))
+			scale = 1.3 }).scale))
 end
 
 -- A menu gui carrying the menu size's UIScale is not a TV to HudLayout.
@@ -338,6 +338,14 @@ do
 	-- Behaviour, with the real bed: Edit plays sounds, but tweens do not advance.
 	local kit = SoundKit :: any
 	local realPlay, realStop = kit.play, kit.stop
+	-- The real play below parents a SeedCue_ChaseBed to SoundService (Edit counts
+	-- as a client), and every run's fresh SoundKit makes a new one: whatever this
+	-- block adds is removed at its end, so runs leave nothing behind (2026-10-03:
+	-- 57 had piled up).
+	local before: { [Instance]: boolean } = {}
+	for _, child in ipairs(SoundService:GetChildren()) do
+		before[child] = true
+	end
 	local plays, stops = 0, 0
 	kit.play = function(name: string, opts: any): any
 		plays += 1
@@ -367,7 +375,21 @@ do
 	end)
 	kit.play, kit.stop = realPlay, realStop
 	realStop("ChaseBed")
+	local left = 0
+	for _, child in ipairs(SoundService:GetChildren()) do
+		if not before[child] and child:IsA("Sound") and string.sub(child.Name, 1, 8) == "SeedCue_" then
+			child:Destroy()
+			left += 1
+		end
+	end
 	check(ok, "the chase bed calls ran clean", err)
+	local stray = 0
+	for _, child in ipairs(SoundService:GetChildren()) do
+		if not before[child] and child:IsA("Sound") then
+			stray += 1
+		end
+	end
+	check(stray == 0, "and the bed it started is gone again: no Sound left in SoundService", "removed " .. left)
 	check(has(sourceOf(Shared:FindFirstChild("SoundKit")), "if state == Enum.PlaybackState.Completed and token == chaseToken then"),
 		"a fade that finishes stops the bed only if nothing has called since")
 end
@@ -399,25 +421,20 @@ end
 --==============================================================================
 do
 	local bag = client("LoadoutUI")
-	local scan = string.match(bag, "local function scanTools%(%)(.-)\nend") or ""
-	check(has(bag, "PlantInfo.Sort(rows, bagSort.mode, function(row: Row): PlantInfo.SortKey")
-			and has(bag, "id = if row.tool then toolOrder[row.tool] or 0 else 0,")
-			and not has(scan, "PlantInfo.Sort")
-			and has(scan, "return (toolOrder[a.tool] or 0) < (toolOrder[b.tool] or 0)"),
-		"the Bag sorts its cards only -- what the hotbar fills from keeps its own order")
-	check(has(bag, "sortButton.button.Visible = activeTab == \"plants\"")
-			and has(bag, "PlantInfo.BaseIncome(row.speciesId, row.tier, row.hatched == true)")
-			and has(bag, "is its base income, before boosts"),
-		"Plants tab only: the Sort button, a base $/s on grown cards, and one line saying so")
+	local model = string.match(sourceOf(Shared:FindFirstChild("InventoryModel")) or "", "function InventoryModel%.sort(.-)\nend\n") or ""
+	check(has(model, "PlantInfo.BaseIncome(item.speciesId, item.tier, true)") and has(model, "rank[g] = { if g.favourite then 0 else 1")
+			and not has(bag, "SORT") and not has(bag, "PlantInfo.Sort("),
+		"the Bag's one fixed order (2026-10-03): favourites first, plants by base income -- no SORT button")
 	check(has(bag, "scale = UIKit.menuScale(),") and has(bag, "modal.setUserScale(bag.scale)")
 			and has(bag, "UIKit.onMenuSize(layoutBag)"),
 		"the Bag takes the menu size on its own panel and re-lays out when it changes")
 	local garden = client("GardenUI")
-	check(has(garden, "PlantInfo.Sort(here, gardenSort, function(o: Occupant): PlantInfo.SortKey")
-			and has(garden, "hatched = o.stage ~= STAGE_POD, id = o.id")
-			and has(garden, "selectSlot(slotAt(foundAt), id, foundAt)")
-			and has(garden, "GuiService.SelectedObject = if focusOnAction and selectedSlot == slot"),
-		"the Garden sorts by PlacementId ties, pods unread, and the selection and the pad's focus follow the plant")
+	-- MY PLANTS (2026-10-04): earners first by income (placement id on a tie),
+	-- pods after by their clock; a selection that has gone is let go.
+	check(has(garden, "if a.rate ~= b.rate then\n\t\t\treturn a.rate > b.rate")
+			and has(garden, "return (a.id or 0) < (b.id or 0)")
+			and has(garden, "if selectedKey and not byKey[selectedKey :: string] then"),
+		"MY PLANTS orders by income with stable ties, pods by their clock, and drops a stale selection")
 	for _, name in ipairs({ "GardenUI", "IndexUI", "ShopUI", "MarigoldShopUI", "SettingsUI" }) do
 		check(has(client(name), "UIKit.menuGui(gui"), name .. " takes the menu size on its own gui")
 	end

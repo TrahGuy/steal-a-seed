@@ -483,8 +483,11 @@ check(ObbyData.onCourse(someone({ [ObbyData.Attributes.Stage] = "sunpetal", [Obb
 for _, row in ipairs({
 	{ name = "SpeedFX", want = "local want = tier ~= nil and not onCourse and not teleported and inRange",
 		clears = { "entry.trailMain:Clear()", "entry.trailCore:Clear()", "entry.particles:Clear()" } },
+	-- 2026-10-04: the Bloomrunner's two ribbons, petals and flowers go through
+	-- one clearAir, which clears each ribbon; the way in must call it.
 	{ name = "TrailFX", want = "local want = near and not onCourse and not teleported and running(entry)",
-		clears = { "entry.ribbon:Clear()", "entry.petals:Clear()" } },
+		clears = { "r.trail:Clear()", "local function clearAir(entry: Entry)" },
+		entering = "if onCourse then\n\t\t\t\t\tclearAir(entry)" },
 }) do
 	local src = code(sourceOf(row.name))
 	check(src ~= "" and count(src, "local onCourse = ObbyData.onCourse(who)") == 1 and src:find(row.want, 1, true) ~= nil,
@@ -493,7 +496,8 @@ for _, row in ipairs({
 	for _, line in ipairs(row.clears) do
 		cleared = cleared and count(src, line) == 1
 	end
-	check(cleared and src:find("if onCourse ~= entry.onCourse then", 1, true) ~= nil,
+	check(cleared and src:find("if onCourse ~= entry.onCourse then", 1, true) ~= nil
+			and (row.entering == nil or src:find(row.entering, 1, true) ~= nil),
 		row.name .. " clears what is already in the air, once, on the way in")
 	check(not src:find("SetAttribute", 1, true) and not src:find("FireServer", 1, true)
 			and not src:find("InvokeServer", 1, true) and not src:find("Cosmetics", 1, true)

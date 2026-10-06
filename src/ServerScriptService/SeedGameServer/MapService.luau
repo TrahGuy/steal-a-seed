@@ -35,7 +35,11 @@ local BiomeData = require(Shared:WaitForChild("BiomeData"))
 -- try to start it -- MapService calls it during its own build.
 local MapDecor = require(script.Parent:WaitForChild("MapDecor"))
 local HubFairy = require(script.Parent:WaitForChild("HubFairy"))
+-- The SAFE ZONE words and shields on the grass (2026-10-04), dressing too.
+local SafeZoneMarking = require(script.Parent:WaitForChild("SafeZoneMarking"))
 local WeatherTeaser = require(Shared:WaitForChild("WeatherTeaser"))
+-- The TOP CREATURES board's wood (2026-10-05); its words are each client's.
+local PlotShowcase = require(Shared:WaitForChild("PlotShowcase"))
 
 local MapService = {}
 -- First. Every other service reads the world this builds.
@@ -85,38 +89,11 @@ local function build(o: PartOpts): BasePart
 	return p
 end
 
--- Flat text painted ON the ground. The reference game's SAFE ZONE marking is a
--- floor decal, and that is the whole reason it works: it is readable at thirty
--- studs while sprinting, from any angle, with no billboard turning to face you.
-local function floorText(part: BasePart, text: string, color: Color3, size: number)
-	local gui = Instance.new("SurfaceGui")
-	gui.Name = "FloorText"
-	gui.Face = Enum.NormalId.Top
-	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-	gui.PixelsPerStud = 24
-	gui.LightInfluence = 0
-	gui.Parent = part
-
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.FredokaOne
-	label.Text = text
-	label.TextScaled = true
-	label.TextColor3 = color
-	label.Parent = gui
-
-	local cap = Instance.new("UITextSizeConstraint")
-	cap.MaxTextSize = size
-	cap.Parent = label
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Thickness = 3
-	stroke.Color = Color3.fromRGB(28, 22, 26)
-	stroke.Transparency = 0.25
-	stroke.Parent = label
-	return label
-end
+-- Flat text painted ON the ground is SafeZoneMarking's now (2026-10-04): the
+-- SAFE ZONE words were this file's only floor text. The reference game's
+-- marking is a floor decal, and that is the whole reason it works: it is
+-- readable at thirty studs while sprinting, with no billboard turning to face
+-- you. (The rain biome paints its own line with its own copy.)
 
 --==============================================================================
 -- A PLOT
@@ -1481,18 +1458,11 @@ function MapService.Init()
 	})
 	line.CanQuery = false
 
-	local plate = build({
-		name = "SafeLineText",
-		size = Vector3.new(150, 0.3, 22),
-		cframe = CFrame.new(0, Y + 0.15, -MAP.FieldFront + 16),
-		color = Color3.fromRGB(112, 200, 84),
-		collide = false,
-		transparency = 1,
-		studs = false,
-		parent = props,
-	})
-	plate.CanQuery = false
-	floorText(plate, "SAFE ZONE", Color3.fromRGB(255, 255, 255), 90)
+	-- THE SAFE ZONE MARKING (2026-10-04, the owner's reference): the words and
+	-- a shield each side, ACROSS the entrance and upright for a player walking
+	-- in, on an invisible plate that takes no collision, query or touch. Where
+	-- it stands is unchanged; SafeZoneMarking says why the plate is turned.
+	SafeZoneMarking.build(props, CFrame.new(0, Y + 0.15, -MAP.FieldFront + 16))
 
 	--== OVERFLOW SPAWN ==--
 	-- Where a player goes when every plot is taken. Named and findable rather
@@ -1746,6 +1716,23 @@ function MapService.Init()
 		--==================================================================
 		CollectionService:RemoveTag(plotSign, GameConfig.Tags.MillSign)
 		CollectionService:AddTag(plotSign, GameConfig.Tags.PlotSign)
+
+		--==================================================================
+		-- THE TOP CREATURES BOARD, BESIDE THE UPGRADE BOARD (2026-10-05)
+		--
+		-- The upgrade board's rules: parented to `plots`, placed once off the
+		-- front edge that never moves (GameConfig.plotShowcaseBase), on that
+		-- board's OUTER side so the gate and the walk up to it stay clear.
+		-- What it shows is PlotShowcaseService's to publish and each client's
+		-- to draw. ATOMIC, so a client holds the whole board or none of it:
+		-- its plank and the attributes it is drawn from arrive together.
+		--==================================================================
+		local showcase = PlotShowcase.build(
+			GameConfig.plotShowcaseBase(cf, GameConfig.StartingPlotTier), plots)
+		showcase.Name = string.format("PlotShowcase%02d", id)
+		showcase.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+		showcase:SetAttribute(GameConfig.Attributes.PlotId, id)
+		CollectionService:AddTag(showcase, GameConfig.Tags.PlotShowcase)
 	end
 
 	--== FIELD DRESSING ==--

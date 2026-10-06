@@ -296,6 +296,79 @@ GameConfig.Plot = {
 		YawDegrees = 0,
 	},
 
+	--==========================================================================
+	-- THE TOP CREATURES BOARD (2026-10-05, the owner's brief)
+	--
+	-- Beside the upgrade board, on its OUTER side -- away from the gate, so the
+	-- way in and the walk up to it stay as they were: the plot OWNER's two best
+	-- grown creatures (the creature itself, its rarity, name, size and what it
+	-- earns a second). Everybody sees every plot's board.
+	--
+	-- BUILT ONCE BY MapService (PlotShowcase.build), parented to the plots
+	-- folder like the upgrade board -- ResizePlot clears a plot's children --
+	-- and placed off the gate, which never moves: right at every level.
+	--
+	-- THE X IS ARITHMETIC (GameConfig.plotShowcaseBase): the upgrade board is
+	-- MillModel.BuildSign's, 9 x Mill.Sign.Scale = 6.84 wide, centred at
+	-- Sign.OffsetX -11.12, so its outer edge is at -14.54. Gap past that is
+	-- this board's rim, and its centre is the rim and half the plank further
+	-- out: -19.06, the rim's outer edge at -22.78 -- inside the fence run,
+	-- short of its corner at -Width/2 = -24. The same Standoff off
+	-- the fence and the same facing as the upgrade board, and its top at that
+	-- board's top (7.75), so the two read as a pair. PlotShowcaseSpec measures
+	-- the built board against the gate, the walk, the mill and its belt at
+	-- every tier, every fence at every level and the neighbours on the ring.
+	--
+	-- WHAT IT SHOWS is published by PlotShowcaseService (plain attributes, only
+	-- when the plot's planted creatures change) and drawn on every client by
+	-- PlotShowcaseUI / PlotShowcaseView: the words are PlantLabel.content at
+	-- the owner's rate. Its pictures exist only while the camera is near.
+	--==========================================================================
+	Showcase = {
+		Slots = 2,
+		-- Studs between the upgrade board's outer edge and this board's rim.
+		Gap = 0.8,
+		GroundY = 0,
+		Standoff = 1.6,
+		YawDegrees = 0,
+		BoardSize = Vector3.new(7.2, 5.6, 0.46),
+		-- The plank's top edge over the post's foot: the upgrade board's top
+		-- (7.4 + 2.8) x Mill.Sign.Scale = 7.75.
+		BoardTopY = 7.75,
+		RimStuds = 0.12,
+		PostWidth = 0.61,
+		-- How far the post reaches up into the plank's lower edge, and how far
+		-- its front face stands behind the lettered one (it is the thicker).
+		PostOverlap = 0.45,
+		PostInset = 0.02,
+		-- The face's resolution: a 432 x 336 canvas on the 7.2 x 5.6 plank.
+		PixelsPerStud = 60,
+		-- Not drawn past this (the upgrade board's own 90).
+		MaxDistance = 90,
+		-- THE PICTURES: built when the camera comes within PreviewNearStuds of
+		-- the board, freed past PreviewFarStuds (the gap is the hysteresis, so a
+		-- camera on the edge never builds and frees every check), checked every
+		-- CheckSeconds -- never a frame's work.
+		PreviewNearStuds = 60,
+		PreviewFarStuds = 75,
+		CheckSeconds = 0.25,
+		-- The server folds a burst (EQUIP BEST, an upgrade's re-render, a
+		-- garden restored) into one publish this long after its first change.
+		PublishDelaySeconds = 0.25,
+		Title = "TOP CREATURES",
+		-- A claimed plot with nothing grown in it (once its garden is known).
+		EmptyTitle = "NO CREATURES YET",
+		EmptyLine = "Grown creatures show up here",
+		-- The second card while only one creature stands.
+		EmptySlot = "EMPTY",
+		-- The plain attributes PlotShowcaseService writes on the board, per slot.
+		Attributes = {
+			Species = { "Top1Species", "Top2Species" },
+			Tier = { "Top1Tier", "Top2Tier" },
+			Placement = { "Top1Placement", "Top2Placement" },
+		},
+	},
+
 	SpawnHeightOffset = 4,
 
 	--==========================================================================
@@ -615,6 +688,11 @@ GameConfig.Weapon = {
 	-- exactly like a trap tool that is broken. Same shape as the mill's refusal
 	-- and for the same reason -- the verb and `false`, no reason attached.
 	DeniedAction = "WeaponDenied",
+	-- Client -> server: REMOVE, carrying the id of the newest trap the owner's
+	-- own records show (2026-10-04, the reusable-trap brief). CombatService
+	-- removes it only if it is still the sender's newest remaining trap; a repeat
+	-- finds it gone, and an id of somebody else's trap is dropped.
+	TrapRemoveAction = "TrapRemove",
 	--==========================================================================
 	-- WHAT THE PROMPT SAYS, AND HOW LONG IT IS HELD
 	--
@@ -672,6 +750,8 @@ GameConfig.SellOne = {
 	-- everything that is not a grown plant in the hands gets the one line that
 	-- says what would work.
 	EmptyHandsText = "Hold a grown plant to sell it.",
+	-- An Invite a Friend reward in the hands (2026-10-06): never sold.
+	UnsellableText = "Invite rewards can't be sold.",
 	-- The plant left the hands, or was sold another way, between the quote and
 	-- the answer. Nothing else is ever put in its place.
 	ChangedText = "That plant is no longer in your hands.",
@@ -695,6 +775,13 @@ GameConfig.SellAll = {
 	-- Nothing is sold; the player presses the sign again for a fresh count.
 	ChangedText = "Your bag changed. Press SELL ALL again.",
 	TooFarText = "Stand at the SELL ALL sign to sell.",
+	-- FAVOURITES ARE KEPT (2026-10-03): SELL ALL never sells an item with a
+	-- heart (SELL ONE still does). Said when nothing but favourites is left,
+	-- and counted on the quote ("%d favourite(s) kept").
+	FavouritesText = "Only favourites left. SELL ALL keeps them.",
+	-- Nothing left but Invite a Friend rewards, which no stall buys (2026-10-06).
+	InviteOnlyText = "Only invite rewards left. They can't be sold.",
+	KeptText = "%d favourite%s kept",
 }
 
 --==============================================================================
@@ -809,6 +896,354 @@ GameConfig.Sacrifice = {
 	},
 }
 
+--==============================================================================
+-- INVITE A FRIEND (2026-10-06, the owner's track)
+--
+-- A friend who joins the game through a player's invite counts once for that
+-- player, forever; at 1, 5, 10 and 20 such friends the player is GIVEN a grown,
+-- placeable, unsellable plant (SeedData.InviteSpecies: Dustthorn, Thornbrute,
+-- Pharaothorn, Heliothorn). InviteService counts and grants -- server only --
+-- and publishes the confirmed count; everything a client draws (the hub
+-- pedestal and its sign, the INVITE button and its "!", the INVITE panel) is
+-- InviteRewards' pure answer for that count. The balance -- rarities and
+-- incomes -- is SeedData's; this is the structure, the words and the place.
+--==============================================================================
+GameConfig.InviteRewards = {
+	Enabled = true,
+	-- Friends needed for each form, in order; Forms[i] is given at Thresholds[i].
+	Thresholds = { 1, 5, 10, 20 },
+	Forms = { "dustthorn", "thornbrute", "pharaothorn", "heliothorn" },
+	--==========================================================================
+	-- WHO COUNTS
+	--
+	-- A join counts when the joining player's GetJoinData().ReferredByPlayerId
+	-- names the inviter, the two are different players, and the joiner's save
+	-- was NEW this session (a first-time player of the game). The owner was
+	-- asked whether a returning player may count; until answered, they may not.
+	--==========================================================================
+	CountReturningPlayers = false,
+	-- The most invited ids one save remembers (each counted once, forever).
+	MaxRemembered = 200,
+	-- Credit for an inviter who is not in the joiner's server waits in the
+	-- inviter's inbox (SaveService) and is taken on their next join, and every
+	-- InboxPollSeconds while they play. At most InboxMax ids wait.
+	InboxPollSeconds = 60,
+	InboxMax = 200,
+	-- A tier owed while the Bag is full is tried again this often.
+	RetrySeconds = 5,
+	-- Player attributes the server writes and every client screen reads.
+	Attributes = {
+		-- Friends counted (confirmed, saved).
+		Count = "InviteCount",
+		-- Forms given: 0 .. #Forms. A tier is shown only once it is given.
+		Granted = "InviteGranted",
+		-- The INVITE panel has been opened since the last form was given.
+		Seen = "InviteSeen",
+	},
+	-- client -> server on GameEvent, carrying nothing: "the INVITE panel opened".
+	OpenedAction = "InviteOpened",
+	-- server -> client on GameEvent: what InviteService tells one player (a
+	-- friend joined, a form given, the Bag full, WELCOME!), read by InviteNews.
+	NoticeAction = "InviteNotice",
+	-- client -> server, carrying nothing: this client is listening now. What the
+	-- server had to say before then -- a join's WELCOME!, a form given while the
+	-- profile loaded -- is held for it and sent then (InviteService).
+	ReadyAction = "InviteReady",
+	-- The most a server holds for one player before READY.
+	HeldMax = 20,
+	--==========================================================================
+	-- WHERE THE PEDESTAL STANDS (2026-10-06; scored offline against every
+	-- prompt, plot path, the obby's path and the straight walks from all six
+	-- spawn pads to the stall, both sell boards, the wheel and the road mouth;
+	-- re-surveyed in Play -- KB/HANDOFF.md has the numbers)
+	--
+	-- On the deck's south-south-west rim, by the road mouth: the Sacrifice
+	-- pedestal's mirror across the road. The brief's first idea, the east rim
+	-- at (40, -6), stands ON the obby's path (2 studs off its line) and on the
+	-- straight walk from the south-east pad to the wheel, and inside the mini
+	-- events' drop sector. Its front (-Z) is turned to face the deck's centre.
+	--==========================================================================
+	Position = Vector3.new(-11, 0.9, -35),
+	FacingDegrees = -162.5,
+	FolderName = "SeedInvitePedestal",
+	PromptDistance = 10,
+	PromptAction = "INVITE A FRIEND",
+	PromptObject = "Invite Friends",
+	-- The pedestal, stone like the Sacrifice pedestal's, its top studded.
+	Pedestal = {
+		Foot = Vector3.new(8.4, 0.5, 8.4),
+		Column = Vector3.new(6.6, 1.1, 6.6),
+		Top = Vector3.new(7.6, 0.4, 7.6),
+		Stone = Color3.fromRGB(83, 83, 76),
+		TopColour = Color3.fromRGB(58, 112, 66),
+	},
+	-- The sign: a studded plate (the Shop's baseplate look) over the pedestal,
+	-- resting on two pillars. `Bottom` is its lower edge above the pedestal's
+	-- base, clear of the tallest form's aura.
+	--
+	-- READ FROM THE NEAREST SPAWN PAD (the owner, 2026-10-06). Plot 1's pad sees
+	-- the plate's back 55 degrees from the side, its follow camera ~91 studs off:
+	-- on a 705 x 338 phone the old 14 x 7.4 plate's title was 2.9 px tall and
+	-- 0.8 px a letter. The owner chose a bigger plate with a far view: 20 x 11,
+	-- on the same two pillars -- their feet where they stood beside the old
+	-- plate, so the deck and every prompt clearance are as measured; they end
+	-- under it now -- and past FarFrom studs (camera to plate) it shows only
+	-- SignFar, two lines as large as the plate allows: ~13 px tall and ~4 px a
+	-- letter from that pad. Nearer, the whole sign, every line Height / 7.4
+	-- (~1.5x) what it was.
+	Sign = {
+		Width = 20,
+		Height = 11,
+		Depth = 0.5,
+		Bottom = 14.2,
+		PillarWidth = 0.9,
+		-- The pillars' centres either side of the pedestal's: where they stood
+		-- beside the old 14-stud plate (7 + half their width).
+		PillarHalf = 7.45,
+		-- The dark keyline round the plate, studs.
+		Keyline = 0.35,
+		-- Its face, in pixels a stud (SurfaceGui CanvasSize: Width x Height x
+		-- this). Coarse on purpose: TextScaled stops at 100 px, so the far
+		-- view's 5-stud letters need 20 or fewer.
+		PixelsPerStud = 20,
+		-- The far view from this many studs, camera to plate, and the whole sign
+		-- again under FarFrom - FarBand (no flicker on the line); the far words'
+		-- margin, canvas pixels.
+		FarFrom = 45,
+		FarBand = 4,
+		FarPad = 10,
+		-- The whole sign's rows, { top, height }, in the old 700 x 370 canvas's
+		-- units (InviteHub multiplies them by the canvas's height over 370): the
+		-- header band and the title in it, the name, the rarity and $/s, NEXT,
+		-- and the bar with its count in it. NEXT stands well clear of the bar
+		-- -- more than any other two rows are apart -- and the count sits inset
+		-- in the bar: in p18b (2026-10-06) the count's numerals rose past the
+		-- bar's top edge into NEXT.
+		Rows = {
+			Header = { 12, 66 },
+			Title = { 6, 54 },
+			Name = { 86, 82 },
+			Info = { 170, 46 },
+			Next = { 220, 38 },
+			Bar = { 284, 66 },
+			Count = { 12, 42 },
+		},
+		-- Readable from across the deck, and gone beyond it (the farthest pad is
+		-- 140 studs off).
+		MaxDistance = 160,
+	},
+	-- How big each form stands ON THE PEDESTAL (the owner, 2026-10-06: "the
+	-- plant must not look small" under the 20 x 11 plate). The pedestal's
+	-- DISPLAY copy only -- never the source model or a granted plant -- scaled
+	-- whole (InviteRewards.displayScale) so its highest point at rest stands
+	-- DisplayFill of the way from the pedestal's top to the plate's keyline;
+	-- and never, even at the top of an aura's flare (the sphere swells to
+	-- AuraSwell -- PlantIdles: 1 + 0.03 breath + 0.10 flare), closer than
+	-- DisplayClear studs to the keyline or the pillars. Its lights scale with
+	-- it, never past DisplayLightMax. The copy collides with nothing and the
+	-- prompt is drawn on top, so neither the prompt nor the deck is crowded:
+	-- the plate stays where it is.
+	DisplayFill = 0.94,
+	DisplayClear = 0.25,
+	AuraSwell = 1.13,
+	DisplayLightMax = 60,
+	-- The evolve moment, under 2 s: the old form shrinks away, a burst, the new
+	-- one grows in. No animation on join.
+	Evolve = {
+		Shrink = 0.45,
+		Hold = 0.15,
+		Grow = 0.75,
+		-- The burst's sound: the owner's invite_evolve, on the pedestal (a SoundKit cue).
+		Sound = "InviteEvolve",
+		Sparks = 40,
+	},
+	--==========================================================================
+	-- THE OWNER'S TEN INVITE SOUNDS (uploaded 2026-10-06; economy details: Audio,
+	-- CrazyCozy Games, names as below). The ONLY ids these moments use. Each is
+	-- also a SoundKit cue (GameConfig.Sfx.Cues, Invite*), so it plays through the
+	-- player's own UI or World bus and the Settings volume and mute apply. Volume
+	-- is the one number to tune by ear; the clips are never trimmed or pitched.
+	--
+	--   Send      INVITE FRIENDS opened Roblox's invite dialog (never on refusal)
+	--   Joined    with the "+1 INVITE" notice (a refreshed one stays silent)
+	--   Tick      the bar filling one step (the panel open, or the sign in view);
+	--             at most TickRun in a row, then silent until TickQuiet passes
+	--   BadgePop  the "!" coming up for a form earned live (never on join, never
+	--             for the never-opened call to action)
+	--   Welcome   the invited friend's "WELCOME!" notice, once
+	--   Evolve    the pedestal's evolve moment, 3D on the pedestal (EvolveRange)
+	--   Unlock*   the reward popup's entrance, by the form's rarity -- in place of
+	--             a generic fanfare, for invite rewards only
+	--==========================================================================
+	Sounds = {
+		Send = { Id = "rbxassetid://77331637660005", Volume = 0.6 },
+		Joined = { Id = "rbxassetid://89247518748364", Volume = 0.65 },
+		Tick = { Id = "rbxassetid://83632422237204", Volume = 0.45 },
+		BadgePop = { Id = "rbxassetid://91054387401588", Volume = 0.55 },
+		Welcome = { Id = "rbxassetid://111245625596729", Volume = 0.6 },
+		Evolve = { Id = "rbxassetid://118129555423964", Volume = 0.7 },
+		UnlockEpic = { Id = "rbxassetid://70816923180534", Volume = 0.7 },
+		UnlockLegendary = { Id = "rbxassetid://79976838694273", Volume = 0.7 },
+		UnlockMythic = { Id = "rbxassetid://88512685687885", Volume = 0.7 },
+		UnlockSecret = { Id = "rbxassetid://116733502135083", Volume = 0.75 },
+	},
+	-- Which unlock sound a form's rarity plays (the four the track uses).
+	UnlockCue = {
+		Epic = "InviteUnlockEpic",
+		Legendary = "InviteUnlockLegendary",
+		Mythic = "InviteUnlockMythic",
+		Secret = "InviteUnlockSecret",
+	},
+	-- How far the evolve sound carries from the pedestal: the deck, not the map.
+	EvolveRange = 70,
+	-- The progress tick: at most this many in a row, then silent for this long.
+	TickRun = 3,
+	TickQuiet = 4,
+	-- Two "+1 INVITE"s this close together are one notice, and the second is silent.
+	JoinedQuiet = 4,
+	--==========================================================================
+	-- THE REWARD POPUP (InviteRewardUI): a card per form given, upper middle,
+	-- never modal, no dimmer -- the player can walk away; the plant is already in
+	-- the Bag. Rect: MenuLayout.rewardPopup. Every animation is decoration.
+	--==========================================================================
+	Popup = {
+		Ribbon = "NEW FORM UNLOCKED!",
+		FinalRibbon = "FINAL FORM!",
+		-- "Invite reward: 20 friends \u{2022} Unsellable"
+		Line = "Invite reward: %d %s \u{2022} %s",
+		Friend = "friend",
+		Friends = "friends",
+		Place = "PLACE IT",
+		Later = "LATER",
+		-- Untouched, it closes itself after this long (the final form's longer).
+		AutoClose = 8,
+		FinalAutoClose = 12,
+		-- In: 0.6 -> 1.08 -> 1.0; out: shrink and fade.
+		InSeconds = 0.35,
+		OutSeconds = 0.2,
+		-- Between two cards of one grant.
+		Gap = 0.6,
+		-- At join, nothing for this long: the offline earnings card may still be
+		-- on its way, and WHILE YOU WERE AWAY and the cards come after it.
+		JoinSettle = 3,
+		-- WHILE YOU WERE AWAY stands this long before the first card.
+		AwayLead = 2.5,
+		-- How often the queue looks again while another moment is up.
+		Wait = 0.5,
+		-- The rays' turn, degrees a second.
+		RaySpin = 12,
+		-- The whole card's grey for LATER and its ring.
+		LaterFace = Color3.fromRGB(150, 156, 160),
+		-- INTENSITY BY RARITY (values, not branches): rays' brightness (0..1, the
+		-- rays' transparency is 1 minus it), sparkles round the model (count and
+		-- size), an edge glow on the screen, confetti, the burst's length, the rim
+		-- (nil: the rarity's own colour).
+		Intensity = {
+			Epic = { rays = 0.45, sparkles = 0, sparkleSize = 0, edge = false, confetti = 0, burst = 0.6 },
+			Legendary = { rays = 0.55, sparkles = 8, sparkleSize = 10, edge = false, confetti = 0, burst = 0.8 },
+			Mythic = { rays = 0.75, sparkles = 12, sparkleSize = 14, edge = true, confetti = 0, burst = 1.0 },
+			Secret = { rays = 0.85, sparkles = 14, sparkleSize = 14, edge = true, confetti = 36, burst = 1.6,
+				rim = Color3.fromRGB(255, 205, 64) },
+		},
+	},
+	--==========================================================================
+	-- THE WORDS (the sign, the panel and the notices)
+	--==========================================================================
+	Words = {
+		Title = "INVITE FRIENDS",
+		-- The hub sign's far view (Sign.FarFrom): the title on two lines.
+		SignFar = { "INVITE", "FRIENDS" },
+		-- NEXT: Thornbrute (Legendary) at 5 invites
+		Next = "NEXT: %s (%s) at %d %s",
+		One = "invite",
+		Many = "invites",
+		Final = "FINAL FORM REACHED",
+		Bar = "%d / %d",
+		Income = "$%s/s",
+		Unsellable = "Unsellable",
+		Claimed = "CLAIMED",
+		-- A card's own line under its name: "5 invites".
+		Needs = "%d %s",
+		Button = "INVITE FRIENDS",
+		How = "Friends count when they join the game from your invite.",
+		-- THE NOTICES (Notice.post; InviteRewards.notice words each server
+		-- payload; the owner's notices brief, 2026-10-06). A name is a player's
+		-- DisplayName, or SomeFriend -- never a UserId.
+		-- Invites cannot be sent (CanSendGameInviteAsync false or failed): blocked.
+		CantSend = "CAN'T SEND INVITES",
+		CantSendDetail = "Invites aren't available on this account",
+		-- A friend joined through your invite and counts: success.
+		-- "<DisplayName> joined! <count>/<next threshold>"
+		Joined = "+1 INVITE",
+		JoinedDetail = "%s joined! %d/%d",
+		-- A friend joined through your invite and does not count: info, the
+		-- headline "<DisplayName> joined", the line why.
+		NotCounted = "%s joined",
+		NotCountedWhy = {
+			returning = "Already played, so it doesn't count",
+			known = "Already counted from an earlier invite",
+		},
+		-- The invited friend's own notice, once, only for a referral the server
+		-- confirmed: info. "You joined from <inviter DisplayName>'s invite".
+		Welcome = "WELCOME!",
+		WelcomeDetail = "You joined from %s's invite",
+		-- Friends credited while the inviter was away, told on their next join:
+		-- info, once, after the offline earnings card and before the reward cards.
+		Away = "WHILE YOU WERE AWAY",
+		AwayDetail = "%d %s joined from your invites",
+		Friend = "friend",
+		Friends = "friends",
+		-- Whoever's name is not known.
+		SomeFriend = "a friend",
+		Earned = "INVITE REWARD: %s",
+		EarnedDetail = "%s, %s -- in your Bag, ready to place.",
+		Full = "PLANT STORAGE FULL",
+		FullDetail = "Make room in your Bag for your invite reward.",
+	},
+	--==========================================================================
+	-- THE INVITE PANEL (InviteUI): what is not MenuKit's look or a rarity's
+	-- own colour. Its rects are MenuLayout.Invite's.
+	--==========================================================================
+	Panel = {
+		-- The road the four cards stand on, and its dashed middle line.
+		Road = Color3.fromRGB(62, 56, 50),
+		RoadLine = Color3.fromRGB(246, 232, 178),
+		RoadDash = 10,
+		RoadDashGap = 8,
+		-- The bar's raised studs (the hub sign's), every StudPitch px.
+		StudPitch = 16,
+		StudSize = 8,
+		StudTransparency = 0.72,
+		-- How much of its window a form fills: the hero's, a card's.
+		HeroFill = 0.78,
+		CardFill = 0.8,
+		-- A card given while the panel is open: it pops, sparks fly, CLAIMED
+		-- comes up. Decoration: the card is right without it.
+		BurstSparks = 10,
+		BurstSeconds = 0.6,
+		PopScale = 1.12,
+		-- The bar filling one friend at a time while the panel is open.
+		StepSeconds = 0.15,
+		-- The words' smallest drawn size (after the menu's scale).
+		MinText = 10,
+		TinyText = 9,
+	},
+	-- Heliothorn's card rim, at every state, and the final sign's trim.
+	Gold = Color3.fromRGB(255, 205, 64),
+	-- An earned card's tick.
+	Tick = Color3.fromRGB(110, 220, 96),
+	-- A locked card's silhouette (ViewportFrame.ImageColor3).
+	Silhouette = Color3.fromRGB(18, 22, 20),
+	-- The next card's slow pulse: its rim breathes this often.
+	PulseSeconds = 1.6,
+	-- The hero picture's slow turn, degrees a second.
+	TurnDegrees = 18,
+	-- The income gold (the garden plaque's), the words' cream and the ink line.
+	Income = Color3.fromRGB(255, 214, 92),
+	Cream = Color3.fromRGB(248, 240, 214),
+	Ink = Color3.fromRGB(16, 30, 22),
+}
+
 -- The boost row's words, in one place: BonusChestUI draws them and
 -- HudLayoutSpec measures them against every listed phone.
 function GameConfig.sacrificeBoostTitle(multiplier: number): string
@@ -891,6 +1326,13 @@ GameConfig.Attributes = {
 	-- the wrong one.
 	CarryingSpecies = "CarryingSpecies",
 	CarryingKg = "CarryingKg",
+	-- On a plant or pod TOOL (2026-10-03): which saved row it is -- profile.Held's
+	-- `Item`. Two identical Nubkins are two items, and a hotbar shortcut names one.
+	ItemId = "ItemId",
+	-- On the PLAYER (2026-10-03): true once the server has put back everything the
+	-- save holds and is recording the bag again (CarryService's rebuild); false
+	-- while a body or Backpack is being replaced. The hotbar waits on it.
+	HeldRestored = "HeldRestored",
 	-- On a POD (the carried model and the loose pod): a confiscating guardian
 	-- chose to leave it behind, so no confiscating guardian will ever take it.
 	-- The pod's, never a player's. See GuardianCatch.
@@ -935,19 +1377,6 @@ GameConfig.Attributes = {
 	-- PLAYER, so it replicates to everybody for free -- which is what lets each
 	-- client play the run cycle on somebody else's character without a remote.
 	OnTreadmill = "OnTreadmill",
-	--==========================================================================
-	-- WHAT TRAINING RUSH IS DOING, PUBLISHED READ-ONLY
-	--
-	-- The multiplier the SERVER actually paid on, and the rested charge left, so
-	-- the HUD can show both without computing either. A client that derived them
-	-- would be a client that could disagree with its own payout -- and one that
-	-- could be talked into showing 4x forever.
-	--
-	-- On the player, written only when the rounded value changes, so a training
-	-- session is a handful of replications rather than one per tick.
-	--==========================================================================
-	TrainingRush = "TrainingRush",
-	TrainingCharge = "TrainingCharge",
 	--==========================================================================
 	-- PARKED ON YOUR OWN MILL
 	--
@@ -1120,6 +1549,9 @@ GameConfig.Attributes = {
 	-- "pending" (earned with the hatch bonus, not yet shown), "shown", or nil
 	-- (GameConfig.HatchBonus). Read by HatchBonusUI.
 	LikeReminder = "LikeReminder",
+	-- Disco dancing on or off (2026-10-03), stamped from the profile the same
+	-- way: true unless the player switched it off. Read by DiscoDance.client.
+	DiscoDance = "DiscoDance",
 }
 
 --==============================================================================
@@ -1153,6 +1585,27 @@ GameConfig.WalkMode = {
 }
 
 --==============================================================================
+-- OTHER PLANTS: A DISPLAY PREFERENCE, THIS SCREEN ONLY (2026-10-05)
+--
+-- OTHER PLANTS: ON shows every garden, as it always did; OFF hides OTHER
+-- players' GROWN plants in their plots -- the models, their labels, income pops
+-- and effects -- on this player's screen and nobody else's (PlantVisibility,
+-- OtherPlantsUI). Their own plants, every pod still in the ground, a carried or
+-- loose pod, players, guardians, plots and the map stay. Nothing on the server
+-- changes: income, ownership, collisions, pickups, spawns and saves are exactly
+-- what they were.
+--
+-- Kept for the session and through every respawn as a LOCAL attribute on the
+-- player -- written by the client, never replicated, never saved. Default ON.
+--==============================================================================
+GameConfig.OtherPlants = {
+	Attribute = "ShowOtherPlants",
+	Label = "OTHER PLANTS",
+	OnText = "ON",
+	OffText = "OFF",
+}
+
+--==============================================================================
 -- MENU SIZE: A READING PREFERENCE, SAVED LIKE WALK MODE (2026-09-26)
 --
 -- How big the menus are drawn -- panels, their text and their controls -- for a
@@ -1179,6 +1632,30 @@ GameConfig.MenuSize = {
 		{ Id = "large", Label = "LARGE", Scale = 1.15 },
 		{ Id = "larger", Label = "LARGER", Scale = 1.3 },
 	},
+}
+
+--==============================================================================
+-- THE FREELY ASSIGNABLE HOTBAR AND THE BAG'S HEARTS (2026-10-03, the owner's
+-- compact Bag + free hotbar; HotbarSlots is the grammar)
+--
+-- The profile keeps both: `Hotbar`, ten shortcuts saved by item id, and
+-- `Favourites`, a set of the same ids. Two verbs on the GameEvent remote the HUD
+-- already owns, the way MenuSize is saved: SetAction sends the whole bar (ten
+-- strings), FavouriteAction a list of refs and on/off. InventoryService checks
+-- each against what the player owns, and a token bucket per player -- Burst
+-- requests at once, RefillPerSecond after -- is charged before the payload is
+-- even read, so a flood of junk costs the sender and nothing else.
+--==============================================================================
+GameConfig.Inventory = {
+	SetAction = "HotbarSet",
+	FavouriteAction = "Favourite",
+	Slots = 10,
+	-- Longest ref accepted: "i:" plus an Item id of at most 24 characters fits.
+	MaxRefLength = 32,
+	-- Most refs one Favourite request may name; a bigger group is split.
+	MaxPerRequest = 32,
+	Burst = 12,
+	RefillPerSecond = 8,
 }
 
 --==============================================================================
@@ -1303,17 +1780,29 @@ GameConfig.Community = {
 -- server publishes the two notices on (AnnouncementService writes them,
 -- AnnouncementUI reads them -- so a player who joins or respawns late reads
 -- the same state), and the restart notice's wording. Who may announce, the
--- cooldown, the messaging topic and the filter live on the server
+-- safeguards, the messaging topic and the filter live on the server
 -- (AnnouncementService, AdminService), where no client reads them.
+--
+-- ONE AFTER ANOTHER (2026-10-03): there is no wait between an admin's
+-- announcements any more. Consecutive ones queue on the server and show in
+-- the order they were accepted: the one up gives way after MinShowSeconds,
+-- the last stays ShowSeconds. The queue is published as Attributes.Queue.
 --
 -- Everything a notice carries is TEXT: drawn in a TextLabel with RichText off,
 -- never run, required or parsed for anything.
 --==============================================================================
 GameConfig.Announce = {
 	MaxChars = 180,
-	-- How long an admin announcement stays up.
+	-- How long an admin announcement stays up -- the last one queued.
 	ShowSeconds = 12,
+	-- How long one stays up, at least, before the next in the queue replaces it.
+	MinShowSeconds = 5,
 	Attributes = {
+		-- The queue (2026-10-03): JSON, a list of { i = id, t = words, f = sender,
+		-- s = start, e = end } in server time, in the order shown. What the
+		-- banner draws.
+		Queue = "AnnounceQueue",
+		-- The newest announcement, one attribute each (kept for older readers).
 		Id = "AnnounceId",
 		Text = "AnnounceText",
 		-- The sending admin's DisplayName, read off their Player by the server.
@@ -1483,6 +1972,9 @@ GameConfig.Tags = {
 	-- see.
 	--==========================================================================
 	PlotSign = "PlotSign",
+	-- The TOP CREATURES board beside it (2026-10-05): built by MapService,
+	-- published by PlotShowcaseService, drawn by PlotShowcaseUI.
+	PlotShowcase = "PlotShowcase",
 	MillJaw = "MillJaw",
 	MillHolo = "MillHolo",
 	MillWing = "MillWing",
@@ -1560,6 +2052,75 @@ GameConfig.RarityColor = {
 	Mythic    = Color3.fromRGB(232, 92, 132),
 	Secret    = Color3.fromRGB(120, 240, 236),
 	Divine    = Color3.fromRGB(255, 246, 194),
+}
+
+--==============================================================================
+-- THE THREE RAREST, IN MOTION (2026-10-03, the owner's inventory pass)
+--
+-- How Mythic, Divine and Secret read in the Bag and on the strip, wherever
+-- their rarity is already shown: the rarity WORD carries a slow light, and the
+-- card's thin edge takes the rarity's colour with a small light travelling
+-- round it. Not new rarities and not new world colours -- RarityColor above
+-- still colours pods, the Index and the Garden; this is the inventory's own
+-- reading of three of its words, keyed by the same ids.
+--
+--   Text / Glow     the word at rest, and the light that crosses it
+--   StillTop/Bottom the word under reduced motion: a still two-tone, top down
+--   Outline         the word's keyline (Secret's is LIGHT: its sheen runs dark)
+--   Edge            the card's edge at rest
+--   Glint / Tail    the light going round the edge, and what trails it
+--
+-- One cycle every CycleSeconds, on every card at once, never faster: slow
+-- motion, no flashing. Drawn by RarityFX; stepped by the strip's cooldown tick
+-- in LoadoutUI, at most every StepSeconds.
+--==============================================================================
+GameConfig.RarityFX = {
+	CycleSeconds = 3.6,
+	StepSeconds = 1 / 30,
+	-- How thick the travelling light is, and how much of the card it lights.
+	GlintThickness = 1.5,
+	GlintSpan = 0.22,
+	Mythic = {
+		Text = Color3.fromRGB(238, 54, 70), -- crimson, lit enough for dark slate
+		Glow = Color3.fromRGB(255, 150, 132),
+		StillTop = Color3.fromRGB(250, 86, 96),
+		StillBottom = Color3.fromRGB(208, 34, 54),
+		Outline = Color3.fromRGB(40, 6, 12),
+		Edge = Color3.fromRGB(204, 34, 54),
+		Glint = Color3.fromRGB(255, 150, 104), -- an ember
+		Tail = Color3.fromRGB(255, 70, 64),
+	},
+	Divine = {
+		Text = Color3.fromRGB(255, 247, 224), -- ivory
+		Glow = Color3.fromRGB(255, 200, 70), -- gold
+		StillTop = Color3.fromRGB(255, 249, 232),
+		StillBottom = Color3.fromRGB(240, 196, 92),
+		Outline = Color3.fromRGB(92, 62, 8),
+		Edge = Color3.fromRGB(230, 182, 70), -- gold
+		Glint = Color3.fromRGB(255, 252, 236), -- an ivory glint
+		Tail = Color3.fromRGB(255, 224, 140),
+	},
+	-- The SECRET POD SPAWNED toast's italic heavy word and its palette, turned
+	-- for the dark Bag: BLACK letters inside a crisp light-silver keyline, a
+	-- silver band leading a white sheen across them. (Silver letters in a light
+	-- keyline blurred into one grey shape at tile size -- measured 2026-10-03.)
+	-- `Halo`: the keyline is drawn by a twin label BEHIND the word, because a
+	-- label's UIGradient tints its own UIStroke too (measured: a light keyline
+	-- under a black gradient came out black).
+	Secret = {
+		Text = Color3.fromRGB(22, 22, 28), -- black
+		Glow = Color3.fromRGB(255, 255, 255),
+		Dark = Color3.fromRGB(196, 198, 212), -- the silver band before the light
+		StillTop = Color3.fromRGB(236, 236, 244),
+		StillBottom = Color3.fromRGB(40, 40, 50),
+		Outline = Color3.fromRGB(214, 216, 228),
+		OutlineTransparency = 0,
+		Halo = true,
+		Italic = true,
+		Edge = Color3.fromRGB(196, 198, 212), -- silver
+		Glint = Color3.fromRGB(255, 255, 255),
+		Tail = Color3.fromRGB(26, 26, 34),
+	},
 }
 
 --==============================================================================
@@ -1696,11 +2257,20 @@ GameConfig.Speed = {
 GameConfig.WorldCycle = {
 	DaySeconds = 420,
 	NightSeconds = 15,
-	-- How long before dusk the HUD starts saying so.
+	-- How long before dusk the HUD starts saying so -- and the one window its
+	-- countdown is red in (WorldClock, 2026-10-04): by day only, never at night.
 	WarnSeconds = 45,
 
 	PhaseDay = "Day",
 	PhaseNight = "Night",
+
+	-- THE HUD CLOCK'S CYCLE ICONS (2026-10-04): the moon and cloud beside the
+	-- countdown to night, the sun and cloud beside the countdown to dawn. The
+	-- approved art is art/icons/hud-cycle-2026-10-04 (cycle-moon-cloud-v1.png,
+	-- cycle-sun-cloud-v1.png), uploaded by the owner the same day. Until a
+	-- picture has actually loaded here -- or for good, if it never does --
+	-- WorldClock keeps UIKit.cycleIcon's native pair under it.
+	ClockIcons = { Moon = "rbxassetid://123862305697349", Sun = "rbxassetid://138878981553342" },
 
 	--==========================================================================
 	-- THE ROAD IS SHUT BY A WALL, NOT BY THE DARK
@@ -2752,6 +3322,33 @@ GameConfig.Parent = {
 	-- seconds.
 	--======================================================================
 	HaulSeconds = 90,
+
+	--======================================================================
+	-- A LOST GUARDIAN IS REBUILT (2026-10-04, the owner's report: a live
+	-- server that had been up for hours had no guardian at any nest, and a
+	-- restart brought them all back)
+	--
+	-- A guardian is built once, when its nest is raised, and before this
+	-- nothing rebuilt one whose rig went away mid-session -- dusk's
+	-- ResetParents only moves a guardian whose root still exists. NestService
+	-- now checks the SERVER's rig every tick and rebuilds it through the same
+	-- builder when it is genuinely gone, dead or out of the world:
+	--
+	--   FallStuds          below its nest's floor by this much, it has left
+	--                      the world (FallenPartsDestroyHeight is -500; the
+	--                      road and the rain biome are flat)
+	--   RetrySeconds       the waits after a failed rebuild, the last repeated
+	--   WarnEverySeconds   a failing rebuild is warned about at most this often
+	--   BusyCapSeconds     a throw holds its nest (`busy`) for at most a few
+	--                      seconds and is waited for; past this a lost rig is
+	--                      rebuilt anyway
+	--======================================================================
+	Recovery = {
+		FallStuds = 150,
+		RetrySeconds = { 2, 4, 8, 16, 30, 60 },
+		WarnEverySeconds = 60,
+		BusyCapSeconds = 20,
+	},
 }
 
 --==============================================================================
@@ -3270,6 +3867,32 @@ GameConfig.Plant = {
 	PickUpAction = "PickUp",
 
 	--==========================================================================
+	-- MY PLANTS (2026-10-04, the owner's menu): four more verbs on the same
+	-- remote, each a request the server settles (PlantService) and answers on
+	-- it with `Reply` and a table { op, ok, code, planted, returned }.
+	--
+	--   Plant    an item id: a stored, fully hatched creature into the ground,
+	--            on a spot of the player's own soil the server picks
+	--   Return   a placement id: a planted grown creature back to the Bag
+	--   Best     nothing: EQUIP BEST -- the best earners in, weaker ones out
+	--   Clear    nothing: UNEQUIP ALL -- every grown creature back to the Bag,
+	--            refused whole if the Bag cannot hold them all
+	--
+	-- `Cooldown` is how soon one player's next request is heard: repeated
+	-- presses are answered once. `SpotStep` is the grid newcomers' spots are
+	-- picked from (GardenPlan.spots), in studs.
+	--==========================================================================
+	MyPlants = {
+		Plant = "MyPlantsPlant",
+		Return = "MyPlantsReturn",
+		Best = "MyPlantsBest",
+		Clear = "MyPlantsClear",
+		Reply = "MyPlantsResult",
+		Cooldown = 0.6,
+		SpotStep = 2.5,
+	},
+
+	--==========================================================================
 	-- WHERE THE PICK UP BUTTON STANDS
 	--
 	-- It used to float `height + 0.8` above the plant's base. Measured off the
@@ -3720,71 +4343,6 @@ GameConfig.Mill = {
 		Label = "Overclock",
 	},
 
-	--==========================================================================
-	-- TRAINING RUSH: A REASON TO LEAVE THE MILL
-	--
-	-- Standing on a belt for an hour is not the loop this game wants. The loop
-	-- is: train briefly, raid, plant, come back to a mill that is fresh again.
-	-- Training Rush is what makes the fourth step worth anything -- a rested
-	-- charge that pays up to four times the base rate while it lasts and
-	-- nothing extra once it is spent.
-	--
-	-- IT IS NOT A SECOND FAUCET. TreadmillService still mints every point of
-	-- Speed in the game; this is one more multiplier inside the product it
-	-- already computes, alongside Overclock:
-	--
-	--     paid = tier.speed x Multiplier^overclock x rebirth x rush
-	--
-	-- AND IT IS NOT OVERCLOCK. Overclock is bought once and is permanent, which
-	-- is why it is a profile field and a price list. This is spent and refills,
-	-- which is why it is a clock. They multiply; neither replaces the other, and
-	-- an overclocked mill rushes exactly as hard as a fresh one.
-	--
-	--==========================================================================
-	-- WHY THESE FIVE NUMBERS
-	--
-	-- A full charge is 90 seconds of boosted training. The first 30 of those are
-	-- spent climbing from 1x to 4x, so a full charge is worth about 315 seconds
-	-- of base rate rather than 360 -- the ramp is a real cost, and it is what
-	-- stops a player tapping on and off the belt to skim only the peak.
-	--
-	-- Refilling a full charge takes 180 seconds AWAY from the belt, which is
-	-- roughly one raid and one planting round. That ratio is the whole design:
-	-- three minutes of game earns ninety seconds of boosted mill.
-	--
-	-- The ramp DECAYS off the belt at the rate it builds, so a player who steps
-	-- off for a moment keeps most of their climb and one who leaves to raid
-	-- comes back at 1x. Nothing here can be gamed by remounting: charge is
-	-- restored from a timestamp against real elapsed time, so the only way to
-	-- gain charge is to actually spend time not training.
-	--==========================================================================
-	Training = {
-		-- Seconds of boosted training a full charge is worth. New profiles start
-		-- full, so a player's first mill session is their fastest.
-		MaxChargeSeconds = 90,
-		-- What the multiplier reaches at the top of the ramp.
-		PeakMultiplier = 4,
-		-- How long the climb from 1x to PeakMultiplier takes, in seconds of
-		-- boosted training.
-		RampSeconds = 30,
-		-- Charge restored per second spent off the belt. Half real time, so a
-		-- full 90 costs 180 seconds away.
-		RestorePerSecond = 0.5,
-		-- The ramp falls at this per second off the belt. Equal to the rate it
-		-- builds, so leaving costs exactly what it bought.
-		RampDecayPerSecond = 1,
-		--======================================================================
-		-- THE OFFLINE CLAMP
-		--
-		-- Charge is capped at MaxChargeSeconds, so a week away cannot buy more
-		-- than three minutes away could -- there is no unbounded offline Speed
-		-- here even without this. It exists so the ARITHMETIC is bounded too: an
-		-- absent or corrupted timestamp must not produce a multi-million-second
-		-- elapsed to multiply, and a documented ceiling is easier to reason
-		-- about than one that happens to be safe.
-		--======================================================================
-		MaxOfflineRestoreSeconds = 8 * 3600,
-	},
 }
 
 --==============================================================================
@@ -3873,6 +4431,8 @@ GameConfig.Carry = {
 	-- a quarter-stud over the raised hands' top (measured 2.77 on the R15 rig)
 	-- and clear of the head (2.08). Nothing in front of the chest, no forward
 	-- offset. CarryService welds by it; CarryPose and SecretCarryCamera read it.
+	-- Since 2026-10-03 also every HATCHED plant built from the owner's supplied
+	-- rigs (PlantForms.CarriedOverhead) -- their pods keep the chest carry.
 	--==========================================================================
 	OverheadLift = 3.0,
 
@@ -3891,11 +4451,18 @@ GameConfig.Secret = {
 	-- The spawn toast: everyone in the server, once per actual spawn, never on a
 	-- return, a respawn or across servers.
 	Toast = {
-		Title = "SECRET POD SPAWNED IN %s!",
-		-- The word the renderer styles: italic, silver, dark outline, a grey
-		-- sweep (static under reduced motion).
+		-- The owner's words (2026-10-05), with the biome's display name.
+		Title = "A SECRET EGG SPAWNED ON %s!",
+		-- A biome with no display name is told without one, never by its id.
+		TitleNoName = "A SECRET EGG SPAWNED!",
+		-- The word the renderer styles wherever it stands in the title: italic,
+		-- silver, dark outline, a grey sweep (static under reduced motion).
 		Word = "SECRET",
 		SweepSeconds = 1.6,
+		-- The weather's special eggs that get the same toast when their event's
+		-- biome opens: the Thunderstorm's Pod 3 only -- its real rarity (Divine),
+		-- hatch pool and rewards are untouched; this is the notice alone.
+		WeatherEggs = { rainpod3 = true },
 	},
 	-- The guardian's "POD LEFT BEHIND!" after a catch that did not take a secret.
 	LeftBehind = {
@@ -3928,9 +4495,10 @@ GameConfig.Secret = {
 -- rain pays -- is SeedData.Rain's. WeatherService (server) owns the ONE event:
 -- its id, state and deadline, published here as workspace attributes; it
 -- builds the temporary terrain (RainBiome) and takes it down. Weather.client
--- draws the rain and the fog, WeatherUI the income chip, WorldClock the darker
--- light, ActionToastUI the toasts. Nothing here starts on its own: the owner's
--- console does, for this server only. The guardian, the Secret Egg and the
+-- draws the rain and the fog, BoostIconsUI the event's icon (2026-10-04; it was
+-- WeatherUI's income chip), WorldClock the darker
+-- light, ActionToastUI the toasts. It starts from the owner's console, for this
+-- server only -- and, since 2026-10-05, on its own (Weather.Auto, below). The guardian, the Secret Egg and the
 -- plant are supplied later; the clearing at the far end is kept for them
 -- (RainBiome's EncounterSite) and nothing stands in it yet.
 --==============================================================================
@@ -3967,6 +4535,41 @@ GameConfig.Weather = {
 	DefaultSeconds = 180,
 	MinSeconds = 20,
 	MaxSeconds = 1800,
+	--==========================================================================
+	-- AUTOMATIC WEATHER (2026-10-05, the owner's approved settings; briefs:
+	-- art/references/automatic-weather-2026-10-05/CLAUDE_PROMPT.md, and
+	-- LOWER_RATE_FOLLOWUP.md, which made it rarer the same day: 5% a check, not
+	-- 15%; 90/10, not 80/20; sure at 60 minutes, not 30)
+	--
+	-- WeatherService's own scheduler, per server, inside its one loop. While
+	-- the weather is FULLY clear (no event in any state) and at least one player
+	-- is here, it checks every CheckSeconds: each check starts weather with
+	-- probability Chance, and the mode is then drawn from ModeWeights (weights
+	-- after a start, not separate rolls). At GuaranteeSeconds of continuously
+	-- populated clear weather a start is made whatever the draws said. Started
+	-- weather runs DurationSeconds, opening included.
+	--
+	-- The quiet window starts when the first player arrives, or when the last
+	-- weather -- automatic OR the console's -- has finished all its cleanup; an
+	-- empty server resets it. No roll at startup, none during an event, and at
+	-- most one attempt per check however late the loop runs.
+	--
+	-- TWO DRAWS, NOT ONE PER MODE: an ordinary check is weather 5 times in 100,
+	-- and that weather is Rain 9 times in 10 -- so 4.5% Rain, 0.5% Thunderstorm,
+	-- 95% nothing. The 60-minute check skips the first draw, not the second: a
+	-- sure start is Rain or a Thunderstorm 90/10 as well. With these numbers
+	-- the eleven draws at 5 .. 55 minutes all miss in about 57% of windows, and
+	-- the expected clear wait is about 46.0 minutes (starts about 49 minutes
+	-- apart with the three-minute weather) -- an average, not a timer.
+	--==========================================================================
+	Auto = {
+		Enabled = true,
+		CheckSeconds = 300,
+		Chance = 0.05,
+		ModeWeights = { rain = 0.9, thunder = 0.1 },
+		DurationSeconds = 180,
+		GuaranteeSeconds = 3600,
+	},
 	-- The opening toast comes this long after the rain begins, and never before
 	-- the entrance is open.
 	ToastDelaySeconds = 3,
@@ -4087,8 +4690,6 @@ GameConfig.Weather = {
 	},
 	Warning = { Title = "THE RAIN IS PASSING", Detail = "The biome closes in %d s. Make for the bridge." },
 	Evacuated = { Title = "BACK AT THE ENTRANCE", Detail = "The rain has stopped and the biome is fading away." },
-	-- The chip over the hotbar (WeatherUI): this, then the time left.
-	Chip = { Text = "+%d%% INCOME" },
 	Tags = { Terrain = "RainTerrain", Fog = "RainFog", Gate = "RainGate", Site = "RainEncounterSite" },
 	--==========================================================================
 	-- THE TWO MODES (2026-10-02). The console starts either by its verb; only
@@ -4198,6 +4799,9 @@ GameConfig.Weather = {
 		FolderName = "SeedRainBiome",
 		-- A working label. Not an approved name.
 		Label = "Rain Biome",
+		-- The event nest's biome id (NestService), which a client turns back into
+		-- Label for the Secret egg toast -- never shown itself.
+		Id = "rain",
 		-- Where evacuees land: a grid on the grass before the ramp, facing the
 		-- biome, Spread studs apart -- permanent island ground, never the ramp.
 		Landing = { X = 232, Z = 70, Spread = 5, Columns = 7, Rows = 3 },
@@ -4299,6 +4903,569 @@ function GameConfig.rainIncomeFactor(): number
 	local factor = tonumber(workspace:GetAttribute(GameConfig.Weather.Attributes.Factor))
 	return if factor and factor > 1 then factor else 1
 end
+
+--==============================================================================
+-- MINI EVENTS: TICKET DISCO (2026-10-03, the owner's brief; GLOBAL the same day)
+--
+-- A small admin event for EVERY server of this place, started from the
+-- console's MINI EVENTS section (START GLOBAL EVENT / END GLOBAL EVENT) by
+-- either allowlisted account (AdminService.IsAdmin, checked on the server).
+-- Three modes of ONE event -- only one runs at a time, everywhere, and it is
+-- independent of the weather: it never touches a weather timer, the income
+-- factor, the biome, pods, guardians or the evacuation, and it does not make
+-- Rain or Thunderstorm global.
+--
+-- ONE SHARED RECORD (Global, below): a DataStore key holds the authoritative
+-- event -- a unique id, the mode, a revision, absolute start and end times
+-- (workspace:GetServerTimeNow(), the same epoch clock on every server) and
+-- the admin who started it -- written by UpdateAsync, so two presses on two
+-- servers make one event. MessagingService tells the other servers at once,
+-- best-effort; every server also re-reads the record on a timer, so a missed
+-- message is caught up and a server that starts mid-event joins it for what
+-- is LEFT of it. Each server drops its OWN tickets; nothing per-ticket or
+-- per-frame crosses servers. The per-player cap is per GLOBAL event, saved on
+-- the player's profile with the spins (EventClaims), so switching servers
+-- never resets it.
+--
+--   ticketdisco   Golden Spinwheel Tickets fall round the hub AND the disco
+--   disco         the disco alone: a temporary ball over the hub, soft colour
+--   tickets       the ticket shower alone
+--
+-- MiniEventService owns the event, every ticket, the proximity check and the
+-- limits; a client sends nothing (there is no remote for picking up -- the
+-- server sees who stands on a landed ticket). Each collected ticket is ONE free
+-- EARNED wheel spin through WheelService.GrantEventSpin -- the same saved
+-- balance the obby and the community chest fill, shown as the Spin Ticket in
+-- the hotbar -- never the obby's daily allowance, never a once-per-profile
+-- reward, and never spun automatically. Spins collected stay after the event.
+--
+-- What every client may read: the attributes, the modes' names and words, the
+-- look. Times are workspace:GetServerTimeNow().
+--==============================================================================
+GameConfig.MiniEvent = {
+	-- Workspace attributes (each server writes its own, every client reads).
+	-- `State` is "running", or "ending" for the FadeSeconds the effects take to
+	-- fade out, and absent while no mini event exists here. EventId is the
+	-- GLOBAL event's id (a string); StartedAt and EndsAt are the shared record's
+	-- absolute times, the same on every server.
+	Attributes = {
+		State = "MiniEventState",
+		Mode = "MiniEventMode",
+		EventId = "MiniEventId",
+		StartedAt = "MiniEventStartedAt",
+		EndsAt = "MiniEventEndsAt",
+		EndingAt = "MiniEventEndingAt",
+		-- The per-player limit in force for this event (ticket modes only).
+		Cap = "MiniEventCap",
+		-- "global" (shared by every server of this place), or "local" (Studio
+		-- without the throwaway test store: this server only).
+		Scope = "MiniEventScope",
+		-- On each PLAYER: how many tickets they collected in the current GLOBAL
+		-- event (ticket modes only), read off their own profile (EventClaims),
+		-- so a death, a rejoin or another server never resets it.
+		PlayerTickets = "MiniEventTickets",
+	},
+	-- GameEvent actions, server to client.
+	Events = {
+		-- Once per event per server, AnnounceDelaySeconds in, to everyone here
+		-- then -- never to a late joiner or a server that caught up late.
+		-- Payload { id, mode }.
+		Opened = "MiniEventOpened",
+		-- To the collector: { id, count, cap, at } -- `at` is where the ticket lay.
+		Collected = "MiniEventTicket",
+		-- To a player standing on a ticket who cannot take it: { id, reason,
+		-- count, cap } with reason "CAP", "FULL" (spin balance full) or
+		-- "UNAVAILABLE" (their profile is not saving). At most once per
+		-- NoticeGapSeconds.
+		Refused = "MiniEventRefused",
+	},
+	--==========================================================================
+	-- THE MODES, BY THE ID THE SHARED RECORD CARRIES (never renamed: a record
+	-- names its mode by this id, and a server reading one must understand it).
+	-- What each mode switches on:
+	--   Disco        the disco: music, the map's lights, the ball, the
+	--                dancers, avatars dancing (the clients read this)
+	--   Tickets      ticket rain (MiniEventService drops them)
+	--   Mill         the giant Disco Mill, x10 training (TreadmillService)
+	--   SpeedFactor  movement speed for EVERYBODY while it runs (CarryService,
+	--                the one writer of WalkSpeed; 2026-10-04)
+	--
+	--   ticketdisco  TICKET DISCO        disco + tickets + mill
+	--   disco        DISCO + MILL        disco + mill (shown as "DISCO ONLY" until
+	--                                    2026-10-04: the same id and behaviour,
+	--                                    a clearer name)
+	--   party        DISCO ONLY          disco + x1.5 movement for everyone; no
+	--                                    mill, no tickets (new 2026-10-04)
+	--   tickets      TICKET SHOWER ONLY  tickets only
+	--==========================================================================
+	Modes = {
+		ticketdisco = {
+			Name = "TICKET DISCO",
+			Tickets = true,
+			Disco = true,
+			Mill = true,
+			-- The notice's picture is its source icon (SourceIcons.tickets or
+			-- .disco), not an emoji (2026-10-04).
+			Announce = { Title = "TICKET DISCO!", Detail = "Free Spin Tickets are falling all over the map!",
+				Icon = "tickets" },
+		},
+		disco = {
+			Name = "DISCO + MILL",
+			Tickets = false,
+			Disco = true,
+			Mill = true,
+			Announce = { Title = "DISCO TIME!", Detail = "Hop on the giant Disco Mill for \u{00D7}10 training!",
+				Icon = "disco" },
+		},
+		party = {
+			Name = "DISCO ONLY",
+			Tickets = false,
+			Disco = true,
+			Mill = false,
+			-- Movement speed only: never treadmill training, never the saved Speed
+			-- score (GameConfig.miniEventSpeedFactor, CarryService).
+			SpeedFactor = 1.5,
+			-- "Up to" (the owner's words, 2026-10-04): MaxWalkSpeed caps the
+			-- boosted speed, so a player already above 100 gains less than +50%.
+			Announce = { Title = "DISCO PARTY!", Detail = "Up to +50% movement speed for everyone!", Icon = "disco" },
+		},
+		tickets = {
+			Name = "TICKET SHOWER",
+			Tickets = true,
+			Disco = false,
+			Mill = false,
+			Announce = { Title = "TICKET SHOWER!", Detail = "Free Spin Tickets are falling all over the map!",
+				Icon = "tickets" },
+		},
+	},
+	-- The console's duration box starts at this; whole seconds in Min..Max.
+	DefaultSeconds = 90,
+	MinSeconds = 30,
+	MaxSeconds = 300,
+	-- The announcement comes this long after the start (one per event).
+	AnnounceDelaySeconds = 2,
+	-- Manual END and the timer share ONE close: drops stop, unclaimed tickets
+	-- go, and the effects fade out over this long before the event is gone.
+	FadeSeconds = 3,
+	-- The server's tick for drops, expiry and the timer (pickups are checked
+	-- every Heartbeat, swept along each body's path since the last one).
+	TickSeconds = 0.1,
+	Tickets = {
+		-- About one every DropSeconds (± DropJitter), while fewer than
+		-- MaxUnclaimed lie unclaimed. The owner's budget for tickets all over the
+		-- map (2026-10-04; was 12 and 15 s, sized for the hub): 20 at most, 30 s
+		-- each. At this drop rate about 15 lie at once per server, so 20 is the
+		-- ceiling, not the usual count; DropSeconds is the knob for more.
+		DropSeconds = 2,
+		DropJitter = 0.3,
+		MaxUnclaimed = 20,
+		-- From the drop: FallSeconds in the air (not yet collectable), gone
+		-- ExpireSeconds after the drop if nobody takes it.
+		FallSeconds = 1.3,
+		ExpireSeconds = 30,
+		-- Collected tickets per player per GLOBAL event (across every server),
+		-- each one free earned spin.
+		PerPlayerCap = 3,
+		-- A body whose root passes within PickupRadius studs (flat distance) of a
+		-- landed ticket, no higher than PickupHeight above it, takes it. A move
+		-- longer than TeleportStuds in one frame is a teleport, not a sweep.
+		PickupRadius = 4,
+		PickupHeight = 8,
+		TeleportStuds = 40,
+		-- Unclaimed tickets keep this far apart, for readability.
+		MinSpacing = 5,
+		-- A profile remembers its claims for this many global events (newest
+		-- kept, oldest dropped): enough for any event still running.
+		ClaimsKept = 8,
+		-- A refusal (cap, full balance) is said at most this often per player.
+		NoticeGapSeconds = 6,
+	},
+	--==========================================================================
+	-- WHERE THEY FALL: the hub's open east side, on the deck (radius 46), clear
+	-- of everything people go there for. Polar about the hub's centre: a
+	-- radius band, and sectors in degrees measured from +X toward +Z (0 = east,
+	-- 90 = the wheel's side, -90 = the road's). A drop is refused within
+	-- KeepClear of anything below or of the Bonus Chest, the community chest,
+	-- the sacrifice pedestal, the wheel and the obby's entrance (positions read
+	-- from their own configs), and on any spot whose ground is not the floor
+	-- or where something solid stands.
+	--==========================================================================
+	Area = {
+		Centre = Vector3.new(0, 0, 0),
+		MinRadius = 16,
+		MaxRadius = 41,
+		Sectors = { { From = -50, To = 32 } },
+		-- Studs past each keep-clear thing's own radius.
+		Clearance = 3,
+		-- The floor's walking surface lies within this of GroundY.
+		FloorTolerance = 2,
+	},
+	-- Things on the deck that are not in another config: Marigold's stall and
+	-- its two sell boards, and the overflow spawn at the hub's centre.
+	KeepClear = {
+		{ Name = "Stall", At = Vector3.new(0, 0, 16), Radius = 15 },
+		{ Name = "SellBoardEast", At = Vector3.new(15.5, 0, 18), Radius = 4 },
+		{ Name = "SellBoardWest", At = Vector3.new(-15.5, 0, 18), Radius = 4 },
+		{ Name = "Spawn", At = Vector3.new(0, 0, 0), Radius = 9 },
+	},
+	--==========================================================================
+	-- ALL OVER THE MAP (2026-10-04, the owner's ask). Each drop first picks a
+	-- ZONE, by Weight among the zones open right now, then a spot in it --
+	-- Area above stays the hub's own zone, exactly as it was:
+	--
+	--   Hub     the deck's open east side (Area, KeepClear)
+	--   Field   the grass ring between the deck's rim and the plot gates,
+	--           every direction, never inside a plot (PlotMargin)
+	--   Front   the open ground in front of the hub, from the deck to the
+	--           SAFE line (the Disco Mill and anything standing kept clear)
+	--   Biomes  each of the five permanent biomes' racing line (HalfWidth of
+	--           its centre, where MapDecor puts no tall prop), never within
+	--           NestClear of a nest or the Secret pod's spot -- BY DAY only,
+	--           while the road is open (GameConfig.isDay)
+	--   Rain    the rain biome's own floors, while it is OPEN ("active") and
+	--           only then; its tickets go when it starts to close
+	--
+	-- A zone a player is standing in weighs (1 + PresenceBoost) times as much,
+	-- so tickets fall where people are without leaving any zone out. Every spot
+	-- is checked against the real map: on the walking floor (FloorAt), nothing
+	-- solid there, no prop (anything over a stud tall, collidable or not,
+	-- PropMargin away -- MapDecor's props cannot be hit by a query, so the
+	-- service measures them once and keeps a grid), clear of every KeepClear,
+	-- the Disco Mill, a disco's dancers and every other unclaimed ticket.
+	-- The amounts, the cap, the drop rate and the expiry are unchanged.
+	--==========================================================================
+	Zones = {
+		{ Name = "Hub", Kind = "area", Weight = 2 },
+		{ Name = "Field", Kind = "ring", Weight = 3, MinRadius = 56, MaxRadius = 98 },
+		{ Name = "Front", Kind = "box", Weight = 2, X0 = -62, X1 = 62, Z0 = -160, Z1 = -54 },
+		{ Name = "Biomes", Kind = "biomes", Weight = 1, HalfWidth = 20, NearMargin = 14, FarMargin = 10,
+			NestClear = 44 },
+		{ Name = "Rain", Kind = "rain", Weight = 2, Inset = 0.75 },
+	},
+	PresenceBoost = 2,
+	PlotMargin = 4,
+	PropMargin = 1.5,
+	--==========================================================================
+	-- THE DISCO MILL (2026-10-04, the owner's ask): while a mode with a Mill runs
+	-- (Ticket Disco, DISCO + MILL -- never the pure DISCO ONLY or Ticket Shower
+	-- Only), one giant shared treadmill stands in front of the hub, west of the
+	-- road to the biomes, on open grass clear of the plots, their mills, the
+	-- SAFE line and the weather screen. Built by TreadmillService on every server the event reaches
+	-- (keyed by the event's id, so a repeated notice never makes a second),
+	-- taken down when the event ends.
+	--
+	-- Several players run on it at once, each on a spot of their own (Spots, in
+	-- the belt's frame as fractions of its half size). Each earns their OWN
+	-- normal training -- tier, overclock, rebirth and any training boost,
+	-- exactly what their own mill pays this second -- times Multiplier,
+	-- composed once on the one line that mints Speed. The same 1-second tick,
+	-- one AddSpeed. Mounted only: standing on it unmounted earns nothing.
+	--
+	-- Off by a jump, a death, a reset or leaving, as on any mill. When the
+	-- event ends everybody on it is set down on the grass beside it (ExitOut
+	-- studs off its road-side edge), walking again; nobody else is moved.
+	--==========================================================================
+	DiscoMill = {
+		Enabled = true,
+		Multiplier = 10,
+		-- The look: the top tier's (Astral Singularity, rainbow bands), this
+		-- much bigger, its deck sunk Sink studs so the belt is a short step up.
+		Tier = 10,
+		Scale = 2.5,
+		Sink = 2.05,
+		-- The deck's centre on the ground, and the console facing +Z (the hub):
+		-- runners face the hub.
+		At = Vector3.new(-40, 0, -95),
+		Spots = {
+			{ -0.6, -0.5 }, { 0, -0.5 }, { 0.6, -0.5 },
+			{ -0.6, 0 }, { 0, 0 }, { 0.6, 0 },
+			{ -0.6, 0.5 }, { 0, 0.5 }, { 0.6, 0.5 },
+		},
+		-- The belt's surface speed (studs/s) while anybody runs on it; idle is
+		-- Mill.IdleStuds.
+		BeltStuds = 24,
+		ExitOut = 5,
+		-- Kept clear of tickets and dancers (a circle round its centre).
+		KeepClearRadius = 35,
+		ModelName = "SeedDiscoMill",
+		-- To a player who stepped on it with every spot taken.
+		FullAction = "DiscoMillFull",
+	},
+	-- The non-archivable folder of ticket records (ReplicatedStorage), and the
+	-- client's own folder for what it draws (Workspace, never replicated).
+	FolderName = "SeedMiniEventTickets",
+	FxFolderName = "SeedMiniEventFX",
+	--==========================================================================
+	-- GLOBAL: WHERE THE SHARED RECORD LIVES AND HOW SERVERS KEEP UP
+	--
+	-- Live servers: the DataStore `Store`, key `KeyPrefix` .. PlaceId, and the
+	-- MessagingService topic `TopicPrefix` .. PlaceId -- this place only, so
+	-- no other place or game hears it. STUDIO NEVER USES THESE: with the
+	-- throwaway test store switched on (ServerStorage.SeedTestStore) it uses
+	-- that throwaway DataStore and a topic named after it; without it, a mini
+	-- event in Studio is this server's alone. Nothing a Studio test does can
+	-- start a live event or reach a live player's rewards.
+	--
+	-- Re-read every PollSeconds while an event runs, IdlePollSeconds when none
+	-- does (± PollJitter, so servers spread out), with failures backing off to
+	-- MaxBackoffSeconds. EndedKept ids of ended events are remembered (in the
+	-- record and on each server) so a late START can never bring one back.
+	--==========================================================================
+	Global = {
+		Store = "SeedMiniEvent_v1",
+		KeyPrefix = "place_",
+		TopicPrefix = "SeedMiniEvent_v1_",
+		TestKeyPrefix = "MiniEvent_place_",
+		TestTopicSuffix = "_MiniEvent",
+		PollSeconds = 15,
+		IdlePollSeconds = 45,
+		PollJitter = 0.2,
+		MaxBackoffSeconds = 300,
+		EndedKept = 6,
+		-- A server that learns of an event this long after its announcement was
+		-- due (a new server, a late read) joins silently: no announcement.
+		AnnounceGraceSeconds = 8,
+	},
+	--==========================================================================
+	-- THE LOOK (MiniEventFX.client builds it locally on every client; the
+	-- light is WorldClock's, the music Music.client's)
+	--==========================================================================
+	Ticket = {
+		-- The golden ticket (ItemArt's Spin Ticket, at this scale), hovering
+		-- over a soft gold ring once it lands.
+		Scale = 0.75,
+		Hover = 2.4,
+		FallHeight = 34,
+		SpinDegreesPerSecond = 70,
+		Ring = { Diameter = 4.4, Colour = Color3.fromRGB(255, 214, 92), Transparency = 0.35 },
+		-- Faded for a player who already has their PerPlayerCap.
+		CappedTransparency = 0.6,
+		-- The last seconds before it expires, it fades.
+		FadeOutSeconds = 2,
+	},
+	Disco = {
+		-- The ball, over the hub's centre.
+		BallAt = Vector3.new(0, 30, 0),
+		BallDiameter = 6,
+		BallSpinDegreesPerSecond = 18,
+		-- Soft beams from the ball to the deck, sweeping slowly round it.
+		-- Desktop count, and a phone's.
+		Beams = 6,
+		PhoneBeams = 3,
+		BeamTransparency = 0.78,
+		BeamReach = 30,
+		BeamSweepDegreesPerSecond = 10,
+		-- Restrained sparkles round the ball (none on reduced motion; a
+		-- phone's rate is PhoneSparkleRate).
+		SparkleRate = 6,
+		PhoneSparkleRate = 2,
+		-- One full turn of the colour wheel takes this long: gentle, never a
+		-- flash.
+		HueSeconds = 16,
+		Saturation = 0.55,
+		-- Laid over the light by WorldClock (Lighting's one owner): a fraction
+		-- of the brightness kept, a little exposure off, and a soft tint drifting
+		-- through the colour wheel -- the map stays readable. Comes in and goes
+		-- over FadeSeconds.
+		Light = {
+			Brightness = 0.82,
+			Exposure = -0.12,
+			TintMix = 0.14,
+			-- MAP-WIDE (2026-10-03): the ambient light everywhere is moved this
+			-- far toward the palette's colour (scaled by AmbientValue, so it
+			-- tints without darkening or washing out) -- the cheap, light-free
+			-- part of the disco every player gets, Reduced FX included.
+			AmbientMix = 0.3,
+			AmbientValue = 0.78,
+			FadeSeconds = 3,
+		},
+		--======================================================================
+		-- THE PALETTE (2026-10-03): the disco's colours, in the order the light
+		-- moves through them, blended smoothly -- a whole turn in CycleSeconds,
+		-- so a colour holds for seconds and never flashes. Every disco light
+		-- uses it: WorldClock's tint and ambient, the ball, the beams and the
+		-- map's pools and spots (DiscoLights.colourAt).
+		--======================================================================
+		Palette = {
+			Color3.fromRGB(150, 84, 255), -- purple
+			Color3.fromRGB(255, 92, 196), -- pink
+			Color3.fromRGB(255, 192, 74), -- warm gold
+			Color3.fromRGB(86, 232, 140), -- green
+			Color3.fromRGB(70, 222, 255), -- cyan
+			Color3.fromRGB(76, 122, 255), -- blue
+		},
+		CycleSeconds = 30,
+		--======================================================================
+		-- THE MAP'S LIGHTS (2026-10-03, DiscoLights): pools of coloured light and
+		-- slow spotlights at STATIONS laid out from the map itself -- a ring
+		-- round the hub, the field, the road, every player plot, every
+		-- permanent biome's segment (BiomeData.SegmentBounds) and the rain
+		-- biome's floors while it stands. Only the nearest stations within
+		-- ActivationRadius of the player are lit, at most Budget[quality] of
+		-- each kind (Full / Reduced; Reduced FX lights none), every light with
+		-- shadows off. Reassigned every ReassignSeconds, faded in and out over
+		-- SwapSeconds so nothing pops.
+		--======================================================================
+		Map = {
+			ActivationRadius = 230,
+			ReassignSeconds = 0.5,
+			SwapSeconds = 0.8,
+			Budget = {
+				Full = { Pools = 10, Spots = 3 },
+				Reduced = { Pools = 5, Spots = 1 },
+			},
+			-- The hub keeps its ball; these pools ring the deck round it.
+			HubPools = 4,
+			HubRadiusFraction = 0.72,
+			-- A ring between the deck and the plots, clear of the road's gap.
+			FieldPools = 6,
+			FieldRadius = 74,
+			-- Down the road to the corridor's mouth, alternating sides.
+			RoadSpacing = 55,
+			RoadOffset = 18,
+			-- Per biome segment: pools at these fractions of its length,
+			-- alternating sides at SideFraction of the corridor's half width;
+			-- spots on the centreline at SpotAt.
+			PoolsAt = { 1 / 6, 1 / 2, 5 / 6 },
+			SpotsAt = { 1 / 3, 2 / 3 },
+			SideFraction = 0.5,
+			-- The rain biome: a pool on every room floor and every RainSpacing
+			-- studs along each corridor floor, a spot on every room.
+			RainSpacing = 70,
+			Pool = { Height = 7, Range = 30, Brightness = 2.2 },
+			Spot = {
+				Height = 26,
+				Range = 48,
+				Angle = 46,
+				Brightness = 3,
+				-- The cone leans this far off vertical and turns round at a
+				-- walking pace: a lit patch circling slowly on the floor.
+				TiltDegrees = 18,
+				SweepDegreesPerSecond = 14,
+				-- A faint shaft of light down the cone (none on reduced motion).
+				BeamTransparency = 0.86,
+			},
+		},
+	},
+	--==========================================================================
+	-- DISCO DANCING (DiscoDance.client): while a disco mode runs, each player's
+	-- own avatar dances in the hub area -- Roblox's own R15/R6 dance animations,
+	-- the variant and the beat taken from the event's shared start time, so the
+	-- hub dances together on every server. It stops at once for anything more
+	-- important: carrying a pod or a plant, holding any Tool (a bat, the trap, the
+	-- Spin Ticket), walking, jumping, falling, sitting or being thrown. Saved
+	-- opt-out in Settings (DISCO DANCING), the GameEvent verb `Action`; reduced
+	-- motion (Reduced FX or Roblox's own) never dances.
+	--==========================================================================
+	Dance = {
+		Action = "DiscoDance",
+		-- Only within this many studs of the hub's centre (flat).
+		Radius = 70,
+		-- Standing still this long before it starts again after a move.
+		SettleSeconds = 0.6,
+		-- Each variant plays this long before the next, all in step.
+		VariantSeconds = 16,
+		FadeSeconds = 0.3,
+		R15 = { "rbxassetid://507771019", "rbxassetid://507776043", "rbxassetid://507777268" },
+		R6 = { "rbxassetid://182435998", "rbxassetid://182491037", "rbxassetid://182491065" },
+	},
+	--==========================================================================
+	-- THE DANCERS (DiscoDancers.client, 2026-10-03): while Ticket Disco or Disco
+	-- Only runs, about Count of the owner's eight dancers (DancerForms) stand
+	-- round the hub dancing (DancerMoves), all on the event's beat. COSMETIC and
+	-- LOCAL: each client builds its own anchored, non-colliding, untouchable,
+	-- unqueryable copies; nothing is sent anywhere and nothing is collected.
+	--
+	-- THE SAME ON EVERY SCREEN. The picks -- which dancer, where, facing which
+	-- way, at what size -- come from a Random seeded by the event's id and from
+	-- this table alone, never from what a client happens to have streamed in,
+	-- so a server's players all see the same troupe (a phone draws the first
+	-- PhoneCount of the same list). Only the height of the ground under each
+	-- spot is read locally (a ray, GroundY if it misses).
+	--
+	-- WHERE: polar about the hub's centre, degrees from +X toward +Z (0 = east,
+	-- 90 = the wheel's side, -90 = the road's), as Area above. The DECK zone is
+	-- the deck's quiet west and south-west arcs and a sliver past the ticket
+	-- band (never the ticket band itself); the FIELD zone is the grass ring
+	-- between the deck's rim (48.5) and the plot gates (Map.PlotRingInner 100),
+	-- leaving the road's arc empty. A dancer's whole footprint must clear every
+	-- KeepClear circle and every Corridor (the road, each plot's walk from the
+	-- hub to its gate, and the way east to the obby), and stand Gap studs from
+	-- every other dancer. Sizes are uniform: the whole model and rig at one
+	-- factor, ScaleMin to ScaleMax of its authored size.
+	--==========================================================================
+	Dancers = {
+		Count = 18,
+		PhoneCount = 10,
+		ScaleMin = 0.7,
+		ScaleMax = 1.3,
+		Gap = 2.5,
+		Attempts = 900,
+		-- Each faces the hub's centre, turned by up to this many degrees.
+		FacingJitterDegrees = 75,
+		Zones = {
+			{
+				Name = "Deck", Weight = 0.25, MinRadius = 27, MaxRadius = 43, GroundY = 0.85,
+				Sectors = { { From = 128, To = 176 }, { From = 220, To = 242 }, { From = 36, To = 50 } },
+			},
+			{
+				Name = "Field", Weight = 0.75, MinRadius = 56, MaxRadius = 86, GroundY = 0,
+				Sectors = { { From = -52, To = 232 } },
+			},
+		},
+		KeepClear = {
+			{ Name = "Spawn", At = Vector3.new(0, 0, 0), Radius = 14 },
+			{ Name = "Stall", At = Vector3.new(0, 0, 17), Radius = 21 },
+			{ Name = "Wheel", At = Vector3.new(0, 0, 38), Radius = 9 },
+			{ Name = "BonusChest", At = Vector3.new(-40, 0, -6), Radius = 8 },
+			{ Name = "CommunityChest", At = Vector3.new(-31, 0, -22), Radius = 8 },
+			{ Name = "Pedestal", At = Vector3.new(14, 0, -38), Radius = 8 },
+			-- The Disco Mill (DiscoMill above), while it stands and while not.
+			{ Name = "DiscoMill", At = Vector3.new(-40, 0, -95), Radius = 35 },
+			-- The deck's rim step: nobody stands half on it.
+			{ Name = "RimInside", At = Vector3.new(0, 0, 0), Radius = 0, Ring = { 44.5, 53 } },
+		},
+		Corridors = {
+			{ Name = "Road", From = Vector3.new(0, 0, -40), To = Vector3.new(0, 0, -200), HalfWidth = 40 },
+			{ Name = "Plot_05", From = Vector3.new(0, 0, 0), To = Vector3.new(96.5, 0, 26.4), HalfWidth = 12 },
+			{ Name = "Plot_04", From = Vector3.new(0, 0, 0), To = Vector3.new(41.6, 0, 90.9), HalfWidth = 12 },
+			{ Name = "Plot_03", From = Vector3.new(0, 0, 0), To = Vector3.new(-41.6, 0, 90.9), HalfWidth = 12 },
+			{ Name = "Plot_02", From = Vector3.new(0, 0, 0), To = Vector3.new(-96.5, 0, 26.4), HalfWidth = 12 },
+			{ Name = "Plot_01", From = Vector3.new(0, 0, 0), To = Vector3.new(-82.7, 0, -56.2), HalfWidth = 12 },
+			{ Name = "Plot_06", From = Vector3.new(0, 0, 0), To = Vector3.new(82.7, 0, -56.2), HalfWidth = 12 },
+			{ Name = "Obby", From = Vector3.new(0, 0, 0), To = Vector3.new(246, 0, -24), HalfWidth = 14 },
+		},
+		-- Faded in from the event's start (a late joiner sees them at once) and
+		-- out over the event's own FadeSeconds as it ends.
+		FadeInSeconds = 1.5,
+		-- Danced every frame within NearStuds of the camera, every other frame
+		-- out to FarStuds, every fourth beyond.
+		NearStuds = 120,
+		FarStuds = 260,
+		FolderName = "SeedDiscoDancers",
+	},
+	-- The short notices (Notice.post). The status line that said "Tickets: 2/3
+	-- · 0:42" / "Disco · 0:42" is gone (2026-10-04): the event's icons over the
+	-- hotbar say it (GameConfig.BoostIcons), and each ticket taken shows the
+	-- "+1" pop over the collector instead of a notice. The limit is said ONCE
+	-- per event (Capped on the last one taken, or AtCap if that was missed).
+	Notices = {
+		Capped = { Title = "ALL %d TICKETS COLLECTED!", Detail = "Your free spins are in the hotbar · spin them at the Wheel" },
+		AtCap = { Title = "TICKET LIMIT REACHED", Detail = "%d/%d this event · leave the rest for others" },
+		Full = { Title = "SPIN TICKETS FULL", Detail = "Spin some at the Wheel to collect more" },
+		Unavailable = { Title = "TICKET NOT SAVED", Detail = "Your progress isn't saving right now · try again soon" },
+		MillFull = { Title = "DISCO MILL FULL", Detail = "Every spot is taken · try again in a moment" },
+	},
+	--==========================================================================
+	-- "+1 [ticket]" OVER THE COLLECTOR (2026-10-04, the owner's ask): drawn by
+	-- MiniEventUI on the collector's own screen when the server CONFIRMS a
+	-- ticket (the Collected event, sent only after the grant saved) -- never on
+	-- a prediction, a refusal, a rejoin or the count arriving -- and once per
+	-- ticket (event id + count). It rises Rise studs and fades over Seconds;
+	-- with reduced motion it only fades. Cosmetic: it grants nothing.
+	--==========================================================================
+	Pop = { Text = "+1", Seconds = 1.4, Rise = 3, Above = 3.2, Width = 120, Height = 50 },
+}
 
 -- What a carried weight does to your WalkSpeed, as a multiplier.
 function GameConfig.carryMultiplierFor(tier: number): number
@@ -4402,6 +5569,33 @@ function GameConfig.isDay(): boolean
 end
 
 --==============================================================================
+-- THE MINI EVENT'S MOVEMENT FACTOR, FOR EVERYBODY HERE, RIGHT NOW (2026-10-04)
+--
+-- A mode's SpeedFactor (DISCO ONLY's 1.5) while the global mini event RUNS on
+-- this server -- the state MiniEventService publishes from the shared record,
+-- so every server the event reaches answers the same, a late joiner included --
+-- and exactly 1 otherwise: no event, another mode, or the event ENDING (its
+-- fade) or gone. Read fresh on every recompute and never stored, so a repeated
+-- START, a respawn or a re-read can never stack it, and an ending takes it
+-- away by the next recompute. CarryService.RefreshWalkSpeed is the one place
+-- it is applied; it is movement only, never training or the saved Speed score.
+--==============================================================================
+function GameConfig.miniEventSpeedFactor(): number
+	local M = GameConfig.MiniEvent
+	if workspace:GetAttribute(M.Attributes.State) ~= "running" then
+		return 1
+	end
+	local modes: { [string]: any } = M.Modes :: any
+	local id = workspace:GetAttribute(M.Attributes.Mode)
+	local mode = if type(id) == "string" then modes[id] else nil
+	local factor = if mode then tonumber(mode.SpeedFactor) else nil
+	if not factor or factor ~= factor or factor <= 0 then
+		return 1
+	end
+	return factor
+end
+
+--==============================================================================
 -- REBIRTH, WHICH DOES NOT EXIST YET
 --
 -- A SEAM, not a stub with a TODO. Everything that computes a training rate
@@ -4470,45 +5664,6 @@ end
 -- player attribute so that every client can render every OTHER player without
 -- being handed their profile.
 --==============================================================================
---==============================================================================
--- WHAT A RAMP IS WORTH
---
--- Linear from 1x at a cold start to PeakMultiplier at RampSeconds, and flat
--- after that. Shared rather than server-private because the HUD prints the same
--- number the payout uses, and a multiplier derived twice is a display that
--- disagrees with the score the first time either half is touched.
---
--- The CLIENT still never decides it: the server publishes the ramp it actually
--- paid on. This function only spares both sides from writing the same line.
---==============================================================================
-function GameConfig.trainingRushMultiplier(rampSeconds: number): number
-	local T = GameConfig.Mill.Training
-	local r = tonumber(rampSeconds)
-	if r == nil or r ~= r or r <= 0 or T.RampSeconds <= 0 then
-		return 1
-	end
-	local t = math.clamp(r / T.RampSeconds, 0, 1)
-	return 1 + (T.PeakMultiplier - 1) * t
-end
-
---==============================================================================
--- A TICK THE CHARGE RAN OUT IN IS ONLY PARTLY BOOSTED
---
--- The mill pays a whole tick, `dt` seconds, at one multiplier. When the charge
--- runs dry partway through, only `spend` of those seconds were boosted and the
--- rest were ordinary training -- but the tick was paid at the boosted rate for
--- all of it, so the last tick of every charge over-paid. This is that tick's
--- honest multiplier: boosted seconds at `boosted`, the remainder at 1x.
--- Anything but a partial tick comes back as `boosted` exactly.
---==============================================================================
-function GameConfig.trainingRushBlend(boosted: number, spend: number, dt: number): number
-	if not (dt > 0) or spend >= dt then
-		return boosted
-	end
-	local s = math.max(0, spend)
-	return (s * boosted + (dt - s)) / dt
-end
-
 --==============================================================================
 -- IS THIS CHANGE IN THE BALANCE A LUMP, OR MORE OF THE SAME
 --
@@ -4663,6 +5818,30 @@ GameConfig.Rail = {
 	-- Red, and one of the few things allowed outside ink / paper / accent: the
 	-- job of a badge is to be what the eye finds before it has decided to look.
 	Badge = Color3.fromRGB(226, 76, 76),
+	--==========================================================================
+	-- INVITE'S BADGE IS AN EXCLAMATION POINT (the owner, 2026-10-06)
+	--
+	-- Not the red circle every other button keeps: a bold "!" (plain ASCII) in
+	-- bright yellow-gold with a thick dark ink line, the display font, no plate
+	-- behind it -- in the same corner and the same box as the other badges
+	-- (HudLayout.badges). A small wiggle every PulseEvery seconds while it shows,
+	-- drawn over a glyph that is already in its place: nothing positions it.
+	--==========================================================================
+	InviteBadge = {
+		Glyph = "!",
+		Fill = Color3.fromRGB(255, 214, 64),
+		Ink = Color3.fromRGB(26, 20, 6),
+		Stroke = 3,
+		Font = Enum.Font.LuckiestGuy,
+		-- The glyph's height, of the badge box's.
+		Scale = 1.15,
+		PulseEvery = 3.2,
+		PulseSeconds = 0.5,
+		PulseDegrees = 14,
+		-- Its pop (invite_badge_pop) is for a form given while playing: none
+		-- in this many seconds after the player's numbers first arrive.
+		QuietAfterJoin = 10,
+	},
 
 	--==========================================================================
 	-- THE FOUR RAIL ICONS, WHICH ARE UPLOADED NOW
@@ -4707,6 +5886,32 @@ GameConfig.Rail = {
 	--==========================================================================
 	ShopArt = "rbxassetid://100314547854118",
 	IndexArt = "rbxassetid://107928181966123",
+	--==========================================================================
+	-- THE OWNER'S STUDDED PICTURES (2026-10-05)
+	--
+	-- Shop (wide: the picture is 2094 x 751), Index and Settings (square), each
+	-- a whole button -- outline, studded face, icon and word -- drawn as it is,
+	-- never stretched (UIKit.railPicture). Uploaded to the group by the owner;
+	-- economy details read Image, CrazyCozy Games, named shop-lime-studded-v1,
+	-- index-sky-blue-studded-v1 and settings-silver-studded-v1. Sources in
+	-- art/ui-buttons/shop-index-2026-10-05. Index draws its picture on every
+	-- screen and Shop wherever its slot is wide -- a desktop's and a TV's rail
+	-- (since 2026-10-06), a phone's corner; a small window's square keeps
+	-- ShopArt. Settings draws its picture on a phone only.
+	--==========================================================================
+	StuddedShopArt = "rbxassetid://82894505272456",
+	StuddedShopAspect = 2094 / 751,
+	StuddedIndexArt = "rbxassetid://91015160762668",
+	StuddedSettingsArt = "rbxassetid://131108200114897",
+	--==========================================================================
+	-- THE INVITE BUTTON'S PICTURE (2026-10-06, owner-designated; economy
+	-- details: Image, CrazyCozy Games). Measured in Studio Edit: 1024 x 1024,
+	-- its opaque body 939 x 915 -- SQUARE, so like Index it is the button on
+	-- every screen (UIKit.railPicture). Source drawn by Codex:
+	-- art/ui-buttons/invite-friend-2026-10-06.
+	--==========================================================================
+	StuddedInviteArt = "rbxassetid://87744294855846",
+	StuddedInviteAspect = 1024 / 1024,
 	--==========================================================================
 	-- THE SHOP'S RAINBOW RIM
 	--
@@ -4789,6 +5994,84 @@ GameConfig.Rail = {
 	ShopTileTop = Color3.fromRGB(52, 140, 76),
 	ShopTileBottom = Color3.fromRGB(20, 82, 46),
 	ShopEdge = Color3.fromRGB(162, 236, 96),
+	--==========================================================================
+	-- EVENTS (2026-10-04): NO ARTWORK YET, SO ITS WORD ON A SLAB
+	--
+	-- Index and Shop are the owner's square pictures; there is no EVENTS one.
+	-- Until there is, EventsUI draws a slab (UIKit.railButton) in this violet
+	-- -- apart from the blue, green and amber faces -- with "EVENTS" on it in
+	-- outlined white. MISSING ASSET: an approved EVENTS button picture in the
+	-- rail-buttons style (art/ui/rail-buttons, 256 px). Its id goes in
+	-- EventsArt, and the button becomes an ART button like Index and Shop.
+	--==========================================================================
+	EventsFace = Color3.fromRGB(150, 96, 224),
+	EventsShade = Color3.fromRGB(96, 56, 170),
+	EventsArt = "",
+	--==========================================================================
+	-- WHAT'S NEW (2026-10-05, UpdateLogUI): NO ARTWORK, SO A SLAB AND ITS WORD
+	--
+	-- The EVENTS button's family: a square slab, a scroll drawn from frames
+	-- (UIKit.scrollIcon, a native stand-in) and its word in outlined white. The
+	-- face is the menus' sky -- secondary, navigation (BagLook.SkyBottom /
+	-- SkyEdge, written out here because the Rail is read before the BagLook) --
+	-- apart from EVENTS' violet beside it. MISSING ASSET: an approved WHAT'S NEW
+	-- button picture in the rail-buttons style. The NEW dot is the rail badge's
+	-- red (Badge, above), UpdatesDot px across.
+	--==========================================================================
+	UpdatesFace = Color3.fromRGB(76, 166, 222),
+	UpdatesShade = Color3.fromRGB(22, 66, 100),
+	UpdatesWord = "UPDATES",
+	UpdatesDot = 14,
+}
+
+--==============================================================================
+-- THE EVENTS PANEL (2026-10-04, EventsUI and EventsModel)
+--
+-- The experience events the owner has POSTED on Roblox, read on the client
+-- with SocialService -- nothing here names an event, a date or a picture --
+-- and the native reminder prompt. It only advertises: no event's schedule
+-- starts, ends or announces anything in the game.
+--
+--   CacheSeconds   the list is asked for again on opening once it is older
+--   Retries        how many more tries a failed list request gets, after
+--   RetryDelays    these pauses -- then the panel says it failed, with RETRY
+--   RsvpSeconds    a reminder status read is trusted this long
+--   TickSeconds    how often an open panel re-reads the clock (countdowns, an
+--                  event starting or ending while it is open)
+--   TrustSlack     how far the times may disagree with Roblox's own started /
+--                  ended flags at fetch before the times are not shown
+--==============================================================================
+GameConfig.ExperienceEvents = {
+	CacheSeconds = 120,
+	Retries = 2,
+	RetryDelays = { 2, 5 },
+	RsvpSeconds = 60,
+	TickSeconds = 1,
+	TrustSlack = 120,
+}
+
+--==============================================================================
+-- WHAT'S NEW (2026-10-05, UpdateLog / UpdateLogUI)
+--
+-- The words are Shared/UpdateLog's, the owner's to edit; these are the panel's
+-- and the button's rules:
+--
+--   Shown       how many of the newest entries the panel lists
+--   NewDays     the button wears its NEW dot while the newest entry's date is
+--               fewer than this many days old -- and only until the player
+--               opens the panel this session. A "seen" that survived a rejoin
+--               would need a saved profile field: deliberately NOT added.
+--   TitleMax / BulletMax / MinBullets / MaxBullets
+--               the shape every entry keeps (UpdateLogSpec): a short title and
+--               2 to 5 one-line bullets
+--==============================================================================
+GameConfig.UpdateLog = {
+	Shown = 6,
+	NewDays = 3,
+	TitleMax = 32,
+	BulletMax = 64,
+	MinBullets = 2,
+	MaxBullets = 5,
 }
 
 --==============================================================================
@@ -4986,13 +6269,15 @@ GameConfig.Store = {
 		-- purchase rather than a Developer Product. A permanent entitlement goes
 		-- first; that is the point of it.
 		--======================================================================
-		{ id = "Passes", heading = "PASSES", layout = "pass",
+		-- `studs` (2026-10-04): the shelf's colour as one of the owner's studded
+		-- card uploads (BagLook.Studs), worn by every card on it.
+		{ id = "Passes", heading = "PASSES", layout = "pass", studs = "gold",
 			colour = Color3.fromRGB(255, 214, 64),
 			top = Color3.fromRGB(255, 232, 117), bottom = Color3.fromRGB(202, 110, 8) },
-		{ id = "Speed", heading = "SPEED",
+		{ id = "Speed", heading = "SPEED", studs = "sky",
 			colour = Color3.fromRGB(64, 226, 250),
 			top = Color3.fromRGB(94, 231, 252), bottom = Color3.fromRGB(8, 126, 196) },
-		{ id = "Cash", heading = "CASH",
+		{ id = "Cash", heading = "CASH", studs = "lime",
 			colour = Color3.fromRGB(86, 232, 46),
 			top = Color3.fromRGB(118, 245, 86), bottom = Color3.fromRGB(24, 138, 16) },
 		--======================================================================
@@ -5002,7 +6287,7 @@ GameConfig.Store = {
 		-- unchanged -- only what the header prints. The approved mockup gives it
 		-- no colour of its own, so its tiles keep their gold.
 		--======================================================================
-		{ id = "Pods", heading = "???",
+		{ id = "Pods", heading = "???", studs = "gold",
 			colour = Color3.fromRGB(252, 220, 96),
 			top = Color3.fromRGB(255, 238, 130), bottom = Color3.fromRGB(238, 170, 20) },
 		--======================================================================
@@ -5314,8 +6599,9 @@ GameConfig.Obby = {
 --             the x2 pass multiplies, so the two MULTIPLY: x2 becomes x2.5.
 --             Not sales, not Robux cash packs, not the offline claim, not a
 --             Biome Harvest: none of those come through RateFor.
---   training  TreadmillService's payout -- Speed earned on the belt, after the
---             rush. Not purchases, not admin grants, not WalkSpeed directly.
+--   training  TreadmillService's payout -- Speed earned on the belt, on the
+--             mill's own rate. Not purchases, not admin grants, not WalkSpeed
+--             directly.
 --==============================================================================
 GameConfig.BonusChest = {
 	Enabled = true,
@@ -5489,6 +6775,27 @@ function GameConfig.incomeMultiplier(player: Player?): number
 		* GameConfig.rainIncomeFactor()
 end
 
+--==============================================================================
+-- THE MULTIPLIER A PLOT'S OWN PLANTS ARE PAID AT, FOR WHOEVER IS LOOKING
+-- (2026-10-04, the overhead labels)
+--
+-- incomeMultiplier above is the LOOKER's: their pass, their chest, their
+-- sacrifice. A plant in somebody else's bed is paid at its OWNER's, so a
+-- label or a pop over it reads the plot's GardenBoost -- withPass x the
+-- temporary boosts, which EconomyService publishes from the very tick that
+-- pays -- times the rain's factor, which is the whole server's. Each once,
+-- exactly as RateFor multiplies them. No profile is exposed: one number on the
+-- plot, already there for the garden sign. Missing (x1, or the owner's garden
+-- not back yet) reads as 1.
+--==============================================================================
+function GameConfig.gardenIncomeMultiplier(plot: Instance?): number
+	local boost = if plot then tonumber(plot:GetAttribute(GameConfig.Attributes.GardenBoost)) else nil
+	if not boost or boost ~= boost or boost < 1 then
+		boost = 1
+	end
+	return (boost :: number) * GameConfig.rainIncomeFactor()
+end
+
 -- Checked on load, like the Speed anchors: a boost that outlived the cooldown
 -- would let two stack, and a reward with a bad weight would skew the 50/50 the
 -- chest promises.
@@ -5590,13 +6897,23 @@ GameConfig.Almanac = {
 	GoldShade = Color3.fromRGB(140, 90, 8),
 	SlateShade = Color3.fromRGB(30, 38, 34),
 
-	-- The tab strip's badges, in road order.
-	TabIcons = {
-		greenhollow = "🌱",
-		dustbowl = "🏜️",
-		tanglemire = "🍄",
-		emberroot = "🌋",
-		starbloom = "✨",
+	--==========================================================================
+	-- EACH BIOME'S PICTURE, BY ITS STABLE ID (2026-10-04, uploaded by the owner)
+	--
+	-- Replaces the generic emoji the biome selector used to wear (TabIcons).
+	-- Drawn beside the biome's NAME -- the sidebar, the dropdown and its list,
+	-- the progress row's heading, a detail page's biome line, a search card's
+	-- corner -- square, Fit, on no plate. A picture that never loads leaves the
+	-- name on its own (never the emoji back) and is reported once in the log
+	-- (MenuKit.picture).
+	--==========================================================================
+	BiomeIcons = {
+		greenhollow = "rbxassetid://93127507617364",
+		dustbowl = "rbxassetid://116633509157008",
+		tanglemire = "rbxassetid://122688457196300",
+		-- Corrected 2026-10-04 (the owner's transcription: ...990 was a typo and 404s).
+		emberroot = "rbxassetid://107859867107909",
+		starbloom = "rbxassetid://118655354256131",
 	},
 }
 
@@ -5625,19 +6942,23 @@ GameConfig.Hotbar = {
 	-- A compact row of nearly square slots: a translucent charcoal plate with
 	-- small rounded corners and a thin light-grey edge, the item large in the
 	-- middle, a small white number in the top-left corner as plain text, narrow
-	-- even spacing, and no tray, no shadow and no name on the slot. The slots
-	-- are ROLES (HotbarRoles): bat, trap, Spin Tickets, the active plant or
-	-- pod, the previous one; the BAG cell is one more square at the end. Drawn
-	-- by HotbarCard; placed by HudLayout; owned by LoadoutUI.
+	-- even spacing, and no tray, no shadow and no name on the slot. Since
+	-- 2026-10-03 the slots are FREELY ASSIGNED shortcuts (HotbarSlots): ten on
+	-- a desktop, five on a phone, saved by item id; the BAG cell is one more
+	-- square at the end. Drawn by HotbarCard; placed by HudLayout; owned by
+	-- LoadoutUI.
 	--
-	-- Colours keep the slate-and-ink family: the charcoal is the Shop's slate,
-	-- the in-hand edge the warm amber-to-green keyline, the stack count the
-	-- tickets' gold, the Bag's count the chest's green and amber.
+	-- Colours keep the slate-and-ink family: the in-hand edge the warm
+	-- amber-to-green keyline, the stack count the tickets' gold, the Bag's
+	-- count the chest's green and amber. Since 2026-10-03 (the owner's approved
+	-- inventory mockup) the plate is the Bag's dark FOREST slate rather than the
+	-- Shop's blue charcoal, the edge a light sage slate, the number cream -- one
+	-- set with the Bag (GameConfig.BagLook).
 	--==========================================================================
 	Ink = Color3.fromRGB(16, 21, 28), -- #10151C
-	Plate = Color3.fromRGB(34, 40, 50), -- charcoal slate #222832
+	Plate = Color3.fromRGB(28, 40, 35), -- forest slate #1C2823
 	PlateTransparency = 0.38,
-	Edge = Color3.fromRGB(176, 186, 200), -- light grey #B0BAC8
+	Edge = Color3.fromRGB(170, 192, 178), -- light sage slate #AAC0B2
 	EdgeTransparency = 0.45,
 	CardCorner = 6,
 	CardStroke = 1,
@@ -5659,14 +6980,19 @@ GameConfig.Hotbar = {
 	LitPlate = Color3.fromRGB(54, 68, 52),
 	LitPlateTransparency = 0.22,
 	HeldLift = 3,
+	-- And a small amber diamond on the top-right corner (2026-10-03): the same
+	-- "in hand" mark on a slot and on a Bag tile, so a rarity's coloured edge
+	-- is never mistaken for the selection.
+	Marker = Color3.fromRGB(255, 200, 64),
+	MarkerSize = 8,
 	-- The cooldown shade's transparency: deep, because the plate is dark.
 	CooldownShade = 0.25,
 	-- The preview's ambient light, a step brighter than the Bag's card light.
 	PreviewAmbient = Color3.fromRGB(160, 164, 180),
 
-	-- The number: plain white text top left, amber while held, with a hairline
+	-- The number: plain cream text top left, amber while held, with a hairline
 	-- of ink so it reads over a light item.
-	Numeral = Color3.fromRGB(255, 255, 255),
+	Numeral = Color3.fromRGB(246, 242, 222),
 	NumeralLit = Color3.fromRGB(255, 208, 92),
 	NumeralSize = 12,
 	NumeralInset = 4,
@@ -5689,12 +7015,14 @@ GameConfig.Hotbar = {
 	FlashArrived = Color3.fromRGB(150, 220, 96),
 	FlashCleared = Color3.fromRGB(226, 118, 92),
 
-	-- The side tiles' edge colours (refreshSide), and the Bag's count colours:
-	-- green while there is room, a calm amber when storage is full, slate while
-	-- the profile is still loading.
+	-- The words a FAINT slot shows (2026-10-03: a placeholder waiting for the
+	-- first bat, trap or Spin Tickets), and the Bag's count colours: green while
+	-- there is room, a calm amber when storage is full, slate while the profile
+	-- is still loading.
 	Tags = {
 		bat = { text = "BAT", colour = Color3.fromRGB(255, 191, 36) }, -- amber #FFBF24
 		trap = { text = "TRAP", colour = Color3.fromRGB(251, 146, 60) }, -- orange #FB923C
+		ticket = { text = "TICKETS", colour = Color3.fromRGB(255, 206, 84) }, -- the tickets' gold
 		pod = { text = "POD", colour = Color3.fromRGB(170, 182, 198) }, -- quiet slate
 	},
 	CountOpen = Color3.fromRGB(126, 214, 72),
@@ -5718,7 +7046,11 @@ GameConfig.Hotbar = {
 	PreviewHeight = 56,
 	-- The silhouette's limiting axis spans this much of the glass.
 	PreviewFit = 0.96,
-	-- The Bag cell's icon and its count.
+	-- The Bag cell's icon and its count. BagIconImage (2026-10-03): the approved
+	-- satchel, art/icons/inventory/bag-256.png; the rail's own Bag artwork
+	-- (Rail.BagIcon) stands in until it loads, and stays if it never does or
+	-- this is "".
+	BagIconImage = "rbxassetid://129734693384327",
 	BagIcon = 34,
 	BagIconTop = 5,
 	BagCountTop = 43,
@@ -5733,6 +7065,48 @@ GameConfig.Hotbar = {
 	NamePopupGap = 4,
 	NamePopupText = 13,
 	NamePopupSeconds = 1.2,
+
+	--==========================================================================
+	-- A TRAP'S PLACEMENTS, AND ITS REMOVE BUTTON (2026-10-04, reusable traps)
+	--
+	-- The count of placements still available ("3x" .. "0x") stands under a
+	-- trap's picture on every trap slot, bottom centre, in cream -- a warm red
+	-- at 0x. It is the server's count (WeaponData.Trap.PlacedAttribute), shared
+	-- by every trap type.
+	--
+	-- REMOVE is a small button just over the trap's own slot while at least one
+	-- trap is out. HudLayout reserves a row for it between the strip and the
+	-- item name's band (the band, the boost icons and the notices step up over
+	-- it) only while it stands: RemoveHeight drawn, RemoveTouch tall as a
+	-- touch screen's target, RemoveGap over the slot. LoadoutUI publishes that
+	-- it stands on the local player's RemoveRowAttribute, which every HUD owner
+	-- placed over the strip re-reads (HudLayout.measure).
+	--==========================================================================
+	TrapCountSize = 13,
+	TrapCountBottom = 2,
+	TrapCountColour = Color3.fromRGB(246, 242, 222),
+	TrapCountEmpty = Color3.fromRGB(255, 132, 108),
+	--==========================================================================
+	-- THE TRIGGER COOLDOWN ON A TRAP SLOT (2026-10-05)
+	--
+	-- While one of the owner's traps has caught somebody in the last
+	-- WeaponData.Trap.TriggerCooldownSeconds, EVERY trap slot is dimmed -- its
+	-- picture at TrapCoolDim, the shade over it shrinking as the wait runs --
+	-- and the seconds left stand over the picture, white with a dark keyline,
+	-- above the "3x" (which keeps saying how many may go down once it ends).
+	--==========================================================================
+	TrapCoolSize = 18,
+	TrapCoolColour = Color3.fromRGB(255, 255, 255),
+	TrapCoolDim = 0.55,
+	RemoveHeight = 18,
+	RemoveTouch = 40,
+	-- 8, not 4: a slot in the hands rises HeldLift and wears its in-hand
+	-- diamond on its top corner, which met the plate at 4 (seen in Play).
+	RemoveGap = 8,
+	RemoveText = 11,
+	RemoveWords = "REMOVE",
+	RemoveEdge = Color3.fromRGB(226, 118, 92),
+	RemoveRowAttribute = "SeedTrapRemoveRow",
 
 	--==========================================================================
 	-- THE COMPACT BELT: A PHONE
@@ -5759,6 +7133,488 @@ GameConfig.Hotbar = {
 		HeldLift = 2,
 		HoverLift = 1,
 		NamePopupText = 12,
+		MarkerSize = 7,
+		TrapCountSize = 12,
+		TrapCountBottom = 1,
+		TrapCoolSize = 15,
+		RemoveText = 10,
+	},
+}
+
+--==============================================================================
+-- THE SLATE LOOK: the Bag's palette of 2026-10-03, kept whole
+--
+-- Botanical Slate & Ink, from the owner's approved mockup
+-- (output/imagegen/podnappers-inventory-hotbar-style-v1.png): a cool, very dark
+-- forest slate, warm cream type, a restrained green for what is chosen, amber
+-- only where something is chosen. The compact menus and the Bag wore it until
+-- the bright recolor below. It stays for what is NOT a menu -- the boost icons
+-- and their popover on the HUD (BoostIconsUI) -- so the recolor never reaches
+-- the HUD.
+--==============================================================================
+GameConfig.SlateLook = {
+	Ink = Color3.fromRGB(9, 14, 12),
+	Title = Color3.fromRGB(246, 242, 222),
+	Well = Color3.fromRGB(13, 20, 17),
+	WellTransparency = 0.12,
+	WellEdge = Color3.fromRGB(72, 96, 84),
+	Cream = Color3.fromRGB(246, 242, 222),
+	Muted = Color3.fromRGB(176, 186, 166),
+	Sheet = Color3.fromRGB(15, 23, 20),
+	SheetEdge = Color3.fromRGB(100, 128, 112),
+}
+
+--==============================================================================
+-- THE BAG'S LOOK -- AND EVERY COMPACT MENU'S (MenuKit) -- BRIGHT SINCE
+-- 2026-10-04 (the owner's recolor brief, art/references/ui-recolor-2026-10-04)
+--
+-- Light and playful in place of the dark forest slate: a mint-to-cream shell
+-- with a gentle vertical gradient; a fresh leaf-green header and green for
+-- what is chosen; lively green main actions; calm sky-blue secondary controls;
+-- warm gold for owned and done; a coral close; clean dark keylines; dark
+-- forest type on the light plates. One copy, so the menus and the Bag cannot
+-- drift apart. The Bag's TILES keep the hotbar's slate (GameConfig.Hotbar), as
+-- they always have, so the Bag and the strip still read as one set.
+--
+-- WHICH TYPE IS WHICH. `Text` and `Muted` are for words ON these light plates.
+-- `Cream` is still cream: the words on a DARK plate -- a Bag tile, the count
+-- pill, a dark display window. A word that sits on something light never reads
+-- Cream.
+--==============================================================================
+GameConfig.BagLook = {
+	Ink = Color3.fromRGB(16, 30, 22),
+	-- The shell (#F1FFF6 to #DCEEDF), its header band (#91E849 to #47B63B),
+	-- the title (white, ink-outlined) and its sprout.
+	ShellTop = Color3.fromRGB(241, 255, 246),
+	ShellBottom = Color3.fromRGB(220, 238, 223),
+	HeaderTop = Color3.fromRGB(145, 232, 73),
+	HeaderBottom = Color3.fromRGB(71, 182, 59),
+	Title = Color3.fromRGB(255, 255, 255),
+	Leaf = Color3.fromRGB(126, 200, 92),
+	Stem = Color3.fromRGB(86, 150, 66),
+	-- The shell's texture: the house lattice, faint (UIKit.modal draws it).
+	Lattice = Color3.fromRGB(150, 196, 162),
+	LatticeTransparency = 0.72,
+	-- The wells: the search box, the heart and the grid, a shade deeper than
+	-- the shell, with a clear green keyline.
+	Well = Color3.fromRGB(226, 241, 230),
+	WellTransparency = 0,
+	WellEdge = Color3.fromRGB(86, 132, 98),
+	Placeholder = Color3.fromRGB(104, 126, 110),
+	-- A category, a tab, a quiet button: pale and calm, a dark keyline; chosen,
+	-- leaf green with white type, and the narrow amber mark.
+	CatTop = Color3.fromRGB(252, 255, 253),
+	CatBottom = Color3.fromRGB(220, 235, 226),
+	CatEdge = Color3.fromRGB(56, 92, 68),
+	CatOnTop = Color3.fromRGB(145, 232, 73),
+	CatOnBottom = Color3.fromRGB(71, 182, 59),
+	CatOnEdge = Color3.fromRGB(22, 70, 28),
+	CatMark = Color3.fromRGB(255, 196, 64),
+	CatText = Color3.fromRGB(30, 56, 40),
+	CatTextOn = Color3.fromRGB(255, 255, 255),
+	-- The count pill: a dark plate, so cream type.
+	Count = Color3.fromRGB(38, 72, 48),
+	CountTransparency = 0,
+	-- The type (see WHICH TYPE IS WHICH): dark forest on the light plates, a
+	-- softer forest for what is secondary, cream on the dark ones.
+	Text = Color3.fromRGB(26, 50, 34),
+	Muted = Color3.fromRGB(84, 108, 92),
+	Cream = Color3.fromRGB(246, 242, 222),
+	-- An amount on a light plate: income green, and the premium gold, both
+	-- dark enough to read without an outline.
+	Money = Color3.fromRGB(28, 140, 40),
+	Premium = Color3.fromRGB(196, 124, 8),
+	-- A Speed amount (the almanac's harvest), the shoe's blue taken down.
+	Speed = Color3.fromRGB(28, 116, 196),
+	-- The storage bar beside the footer's words.
+	BarTrack = Color3.fromRGB(196, 218, 202),
+	BarWidth = 120,
+	BarHeight = 6,
+	-- The tooltip, the menu, a sheet over a list.
+	Sheet = Color3.fromRGB(250, 255, 251),
+	SheetEdge = Color3.fromRGB(64, 104, 76),
+	-- The main action (PLANT, EQUIP BEST, an eligible CLAIM): bright green on
+	-- top, deeper below.
+	ButtonTop = Color3.fromRGB(132, 230, 78),
+	ButtonBottom = Color3.fromRGB(52, 162, 48),
+	ButtonEdge = Color3.fromRGB(20, 72, 26),
+	-- A secondary or navigating control: sky blue, kept apart from the green.
+	SkyTop = Color3.fromRGB(172, 226, 250),
+	SkyBottom = Color3.fromRGB(76, 166, 222),
+	SkyEdge = Color3.fromRGB(22, 66, 100),
+	-- Owned, done, claimed: warm gold (#FFD96B to #E5A82E), dark type.
+	GoldTop = Color3.fromRGB(255, 217, 107),
+	GoldBottom = Color3.fromRGB(229, 168, 46),
+	GoldEdge = Color3.fromRGB(112, 70, 0),
+	GoldText = Color3.fromRGB(58, 38, 4),
+	-- Not pressable: flat and grey, never a colour any state uses. Its words
+	-- dark enough to read (about 4.7:1 on the grey), still plainly muted.
+	OffTop = Color3.fromRGB(226, 231, 228),
+	OffBottom = Color3.fromRGB(200, 208, 204),
+	OffEdge = Color3.fromRGB(140, 152, 146),
+	OffText = Color3.fromRGB(78, 88, 84),
+	-- A reward to take (CLAIM): a deeper, warmer gold than the owned state,
+	-- so white words with an ink line stand on it.
+	ClaimTop = Color3.fromRGB(255, 200, 64),
+	ClaimBottom = Color3.fromRGB(232, 136, 16),
+	ClaimEdge = Color3.fromRGB(104, 52, 0),
+	-- The close: coral to red, a white X, a dark keyline.
+	CloseTop = Color3.fromRGB(255, 122, 104),
+	CloseBottom = Color3.fromRGB(222, 50, 50),
+	CloseShade = Color3.fromRGB(150, 22, 30),
+	-- A menu card: white to a breath of mint, a dark keyline; a grown plant's
+	-- card takes a little of its rarity's colour at the top (MenuKit.cardTint),
+	-- never so much that the creature or the rarity's own word fades into it.
+	CardTop = Color3.fromRGB(255, 255, 255),
+	CardBottom = Color3.fromRGB(232, 245, 236),
+	CardEdge = Color3.fromRGB(44, 78, 56),
+	CardEdgeTransparency = 0.25,
+	CardTint = 0.24,
+	-- The dark display window an almanac plant stands in: dark enough that an
+	-- undiscovered plant's silhouette shows no more than it did.
+	Window = Color3.fromRGB(20, 32, 25),
+	--==========================================================================
+	-- THE GLOBAL UI ART PASS (2026-10-04, art/references/global-ui-pass-
+	-- 2026-10-04): one studded family for every menu.
+	--
+	-- THE RIM: a white to pale-cream header with faint raised studs and an ink
+	-- rule, the title in white LuckiestGuy ON its top edge (`RimLift` px of the
+	-- panel stand above the shell for it), the menu's own icon beside it, and a
+	-- red studded close. The body below is clean: studs are an accent, never
+	-- behind words.
+	--==========================================================================
+	RimTop = Color3.fromRGB(255, 255, 255),
+	RimBottom = Color3.fromRGB(241, 246, 236),
+	-- One stud scale everywhere (UIKit.studs): pitch and face in gui px.
+	StudPitch = 18,
+	StudSize = 9,
+	-- On the white rim: a white face over a soft grey-green bevel.
+	RimStud = Color3.fromRGB(255, 255, 255),
+	RimStudShade = Color3.fromRGB(214, 224, 210),
+	-- On the red close: a lighter red face over a deep red bevel.
+	CloseStud = Color3.fromRGB(255, 112, 100),
+	CloseStudShade = Color3.fromRGB(170, 28, 34),
+	CloseStudPitch = 10,
+	CloseStudSize = 5,
+	-- On a primary (green) button, faint.
+	GoStud = Color3.fromRGB(150, 236, 96),
+	GoStudShade = Color3.fromRGB(40, 140, 40),
+	-- An uploaded, SEAMLESS stud tile for the rim, when there is one (see
+	-- UIKit.studs): "" draws the studs in frames. NOT the atlas crops as they
+	-- are -- their rows were measured not to wrap.
+	RimStudImage = "",
+	--==========================================================================
+	-- THE COLOURFUL STUDDED CARDS (2026-10-04, the owner's six uploads,
+	-- art/textures/colorful-studs-2026-10-04; MenuKit.studCard)
+	--
+	-- Group-owned Images, stored by Roblox at StudSource x StudSource (the
+	-- 1254-px originals come back 1024). NOT seamless: a card shows a CROPPED
+	-- window of one, with the card's own aspect, so a stud is StudCardPitch gui
+	-- px across whatever the upload's spacing (`pitch`, measured, in stored px)
+	-- -- the reference's fine studs, about seven across a Bag tile; never
+	-- stretched, never tiled. A card wider than the picture allows that for (a
+	-- Shop card, a phone's Shop row) gets larger studs rather than a seam.
+	-- `top` / `bottom` (or `stops`, across) is the solid fallback drawn under
+	-- the picture until it has loaded -- or for good, if it never does.
+	--
+	-- sky's id as sent (9169659369702) is no asset; 91696569369702 is the
+	-- group's own studs-sky-blue-v1 from the same upload (found by name).
+	--==========================================================================
+	StudSource = 1024,
+	StudCardPitch = 14,
+	Studs = {
+		sky = { image = "rbxassetid://91696569369702", pitch = 78.2,
+			top = Color3.fromRGB(12, 209, 249), bottom = Color3.fromRGB(23, 155, 253) },
+		gold = { image = "rbxassetid://106730544656733", pitch = 86.1,
+			top = Color3.fromRGB(240, 210, 17), bottom = Color3.fromRGB(249, 155, 7) },
+		purple = { image = "rbxassetid://103172630669031", pitch = 86.1,
+			top = Color3.fromRGB(203, 45, 239), bottom = Color3.fromRGB(151, 27, 247) },
+		coral = { image = "rbxassetid://133079221497449", pitch = 86.1,
+			top = Color3.fromRGB(234, 73, 64), bottom = Color3.fromRGB(223, 31, 42) },
+		lime = { image = "rbxassetid://134570572143730", pitch = 86.1,
+			top = Color3.fromRGB(118, 236, 17), bottom = Color3.fromRGB(33, 203, 55) },
+		-- The spectrum runs ACROSS: a card shows all of it (`wide`), and is used
+		-- sparingly -- the one featured Shop pack and the Bloomrunner Trail.
+		rainbow = { image = "rbxassetid://118707369966787", pitch = 71.7, wide = true,
+			stops = { Color3.fromRGB(247, 61, 66), Color3.fromRGB(248, 180, 29), Color3.fromRGB(62, 238, 76),
+				Color3.fromRGB(81, 128, 248), Color3.fromRGB(225, 39, 244) } },
+	},
+	-- A creature's card wears the upload NEAREST ITS RARITY'S OWN COLOUR
+	-- (GameConfig.RarityColor) -- the colour it already had, not a new meaning.
+	-- Common's own colour is the cream card itself, so a Common keeps it.
+	StudsByRarity = { Uncommon = "lime", Rare = "sky", Epic = "purple", Legendary = "gold", Mythic = "coral",
+		Secret = "sky", Divine = "gold" },
+	-- The Bag's things that have no rarity: tickets the Shop's ticket violet,
+	-- bats and traps coral, the jackpot trail the rainbow.
+	StudsByKind = { tickets = "purple", equipment = "coral", trail = "rainbow" },
+	-- The Shop's featured pack: the only rainbow card in it.
+	StudsFeatured = { spin10 = true },
+	-- On a studded card the words stand on a quiet ink backing (StudWords,
+	-- StudWordsTransparency); an income there is this brighter green.
+	StudWords = Color3.fromRGB(10, 20, 16),
+	StudWordsTransparency = 0.42,
+	StudMoney = Color3.fromRGB(132, 240, 96),
+	--==========================================================================
+	-- THE BASEPLATE (2026-10-06, the owner: "a better studded texture
+	-- background behind the products so it will not look plain white"): the
+	-- Shop's and the Index's cards stand on a green studded plate, its studs
+	-- raised the way the menus' rims are (UIKit.studs: a lighter face over a
+	-- darker shade), PlatePitch apart, under a dark keyline. Drawn, not an
+	-- upload: the six studded uploads are gradients that do not tile. A deep
+	-- forest green: the light green tried first (122, 196, 108) left the lime
+	-- cash cards green on green in Play; on this every card colour stands out.
+	--==========================================================================
+	PlateFill = Color3.fromRGB(58, 112, 66),
+	PlateEdge = Color3.fromRGB(24, 52, 30),
+	PlateStud = Color3.fromRGB(76, 140, 84),
+	PlateStudShade = Color3.fromRGB(38, 80, 44),
+	PlatePitch = 22,
+	PlateStudSize = 12,
+	--==========================================================================
+	-- TYPE (the readability brief, art/references/ui-readability-2026-10-04)
+	--
+	-- Small words on a light plate are PLAIN: dark, no outline, in a clean
+	-- medium face. FredokaOne is for names, labels and buttons; LuckiestGuy
+	-- with a heavy ink outline is for a menu's title only. White on a coloured
+	-- face keeps a thin ink line.
+	--==========================================================================
+	BodyFont = Enum.Font.GothamMedium,
+	BodyBoldFont = Enum.Font.GothamBold,
+	-- Card titles and labels.
+	LabelFont = Enum.Font.FredokaOne,
+	-- A menu title, by screen.
+	TitleSize = 28,
+	TitleSizeShort = 23,
+	TitleStroke = 3,
+	--==========================================================================
+	-- THE BAG'S TILES (the readability brief): opaque, deeper emerald slate in
+	-- place of the hotbar's see-through plate, so the light names read and the
+	-- silhouettes keep their dark ground. The hotbar keeps its own plate.
+	--==========================================================================
+	TileTop = Color3.fromRGB(40, 74, 58),
+	TileBottom = Color3.fromRGB(22, 44, 34),
+	TileEdge = Color3.fromRGB(12, 26, 18),
+	TileHeld = Color3.fromRGB(58, 98, 64),
+	--==========================================================================
+	-- MORE FACES: remove / destroy (red), premium (violet), and the controller's
+	-- focus ring (gold, thick, on every light or dark plate).
+	--==========================================================================
+	DangerTop = Color3.fromRGB(255, 112, 100),
+	DangerBottom = Color3.fromRGB(214, 44, 48),
+	DangerEdge = Color3.fromRGB(96, 12, 18),
+	PremiumTop = Color3.fromRGB(196, 150, 255),
+	PremiumBottom = Color3.fromRGB(126, 74, 206),
+	PremiumEdge = Color3.fromRGB(58, 24, 110),
+	Focus = Color3.fromRGB(255, 204, 40),
+	-- A button's darker foot under its lit face (the close's three reds).
+	FootShare = 0.16,
+	-- THE APPROVED CATEGORY ART (2026-10-03): art/icons/inventory/<name>-256.png,
+	-- cropped from output/imagegen/podnappers-inventory-category-icons-v1.png.
+	-- Uploaded by the owner 2026-10-03. A picture shows once it has actually
+	-- LOADED here (UIKit.whenPictureLoads); until then, or if it never does, the
+	-- frame-drawn icon below stays, and "" keeps it for good -- never a blank.
+	--   all = all_items-256.png   plants = plants-256.png   pods = pods-256.png
+	--   equipment = equipment-256.png   tickets = spin_tickets-256.png
+	IconImages = {
+		all = "rbxassetid://97250543670622",
+		plants = "rbxassetid://113964771900247",
+		pods = "rbxassetid://88009836282641",
+		equipment = "rbxassetid://136563245084953",
+		tickets = "rbxassetid://112516668911937",
+	},
+	-- An uploaded picture's size in a category button (a drawn icon is 18): 20
+	-- keeps all five labels on one line at the shared size (fitLabels).
+	IconImageSize = 20,
+	-- The drawn fallbacks: the pod and leaf greens, the bat's woods, the
+	-- tickets' gold.
+	IconLeaf = Color3.fromRGB(132, 204, 96),
+	IconVein = Color3.fromRGB(58, 112, 46),
+	IconWood = Color3.fromRGB(176, 124, 76),
+	IconGrip = Color3.fromRGB(92, 60, 38),
+	IconTicket = Color3.fromRGB(255, 206, 84),
+	IconTicketInk = Color3.fromRGB(107, 74, 0),
+}
+
+--==============================================================================
+-- EVERY MENU'S TITLE PICTURE (2026-10-04, the global UI art pass)
+--
+-- The approved uploads that stand beside each menu's title on the studded rim
+-- -- chosen from art the owner already approved, never a new upload -- and,
+-- written down, the two menus that have none of their own:
+--
+--   shop       the rail's former cart picture (Rail.ShopIcon), superseded ON THE
+--              RAIL by the whole-button art and approved artwork all the same
+--   almanac    the Bag's plants category picture, as before
+--   plants     MY PLANTS: the rail's Garden pot
+--   bag        the rail's satchel
+--   settings   the rail's gear
+--   admin      NO ADMIN ART: the Settings gear stands in (unchanged)
+--   events     NO EVENTS ART (Rail.EventsArt is ""): a calendar drawn from
+--              frames (UIKit.calendarIcon) stands in -- an asset gap
+--   marigold   NO MARIGOLD ART: the Bag's equipment picture (a bat) stands in
+--   sell       the cash pack's picture
+--   sacrifice  the pedestal's own source icon
+--==============================================================================
+GameConfig.MenuIcons = {
+	shop = GameConfig.Rail.ShopIcon,
+	almanac = GameConfig.BagLook.IconImages.plants,
+	plants = GameConfig.Rail.GardenIcon,
+	bag = GameConfig.Rail.BagIcon,
+	settings = GameConfig.Rail.SettingsIcon,
+	admin = GameConfig.Rail.SettingsIcon,
+	events = "",
+	marigold = GameConfig.BagLook.IconImages.equipment,
+}
+
+--==============================================================================
+-- WHERE A BOOST OR A REWARD CAME FROM, AS A PICTURE (2026-10-03)
+--
+-- The approved source icons, art/icons/boosts/<file>-256.png, cropped from
+-- output/imagegen/podnappers-boost-weather-icons-v1.png, uploaded by the owner
+-- 2026-10-03. StatusText draws one before a line's words (`source`) and
+-- ActionToastUI before a notice's (`Notice.Post.icon`) once it has LOADED
+-- here (UIKit.whenPictureLoads): until then, if it never does, or for an id of
+-- "", the frame-drawn glyph the line or notice always had -- never a blank. Pictures only -- every amount, duration and stacking rule is
+-- the server's, exactly as before, and the Rain and the Thunderstorm are one
+-- +25% event showing one icon, whichever picture it wears (BoostIcons reads the
+-- authoritative Workspace RainMode).
+--
+--   rain      rain-256.png             the Rain event's line and notices
+--   thunder   thunderstorm-256.png     the same, while its mode is "thunder"
+--   chest     free_chest-256.png       a Bonus Chest claim's notice
+--   wheel     reward_wheel-256.png     the Reward Wheel's prize and claim notices
+--   sacrifice sacrifice-256.png        the pedestal's boost line and its notice
+--   income    plant_income-256.png     a +plant-income boost line (chest or wheel)
+--   training  speed_training-256.png   a +training boost line (chest or wheel)
+--   community community_reward-256.png the community chest's claimed notice only
+--   tickets   spin_tickets-256.png     the Ticket Shower's icon, its notices and
+--                                      the "+1" over a player who took one: the
+--                                      Bag's own Spin Ticket picture (BagLook)
+--   disco     disco-256.png            the Disco's icon and its notices: the
+--                                      owner's upload of art/icons/boosts/disco-
+--                                      256.png (cropped from output/imagegen/
+--                                      podnappers-disco-event-icon-v1.png), id given
+--                                      2026-10-04 -- an Image, "disco-256", by the
+--                                      CrazyCozy Games group. Never the disco AUDIO id.
+--==============================================================================
+GameConfig.SourceIcons = {
+	rain = "rbxassetid://130178353004540",
+	thunder = "rbxassetid://97835526705727",
+	chest = "rbxassetid://134062175986179",
+	wheel = "rbxassetid://120181822443205",
+	sacrifice = "rbxassetid://120984862343497",
+	income = "rbxassetid://131924246776637",
+	training = "rbxassetid://96656510808947",
+	community = "rbxassetid://139312630119333",
+	tickets = "rbxassetid://112516668911937",
+	disco = "rbxassetid://129016824458756",
+}
+
+--==============================================================================
+-- THE WHEEL'S POD SILHOUETTES, AS UPLOADED (2026-10-04)
+--
+-- WheelDraw draws every pod prize as black silhouettes of the real pods its
+-- species pool can give. A biome with an id here is drawn as the owner's
+-- upload of its crop in art/icons/wheel/ (cut from the approved
+-- podnappers-spinwheel-actual-pod-silhouettes-v2.png; each picture carries its
+-- own ivory rim and "?"); a biome without one keeps its frame-drawn silhouette
+-- -- POD BY POD, so a prize mixes the two. Never an id that is not the owner's
+-- upload of that crop, and never another biome's picture standing in.
+--
+--   greenhollow  wheel_pod_greenhollow-512.png, uploaded by the owner 2026-10-04
+--   tanglemire   wheel_pod_tanglemire-512.png, uploaded by the owner 2026-10-04
+--   starbloom    wheel_pod_starbloom-512.png, uploaded by the owner 2026-10-04
+--   dustbowl     no picture yet: drawn in frames
+--   emberroot    no picture yet (no wheel prize shows it today): frames
+--==============================================================================
+GameConfig.WheelPodArt = {
+	greenhollow = "rbxassetid://121294253348295",
+	dustbowl = "",
+	tanglemire = "rbxassetid://122381169752786",
+	emberroot = "",
+	starbloom = "rbxassetid://106800317033952",
+}
+
+--==============================================================================
+-- THE ACTIVE BOOST AND EVENT ICONS (2026-10-04, the owner's ask)
+--
+-- One compact row of round icons directly over the hotbar (HudLayout's `icons`
+-- rect, above the item name's band), one per thing running for this player:
+--
+--   weather    the Rain or the Thunderstorm -- ONE icon for the event and its
+--              +25% (its picture follows the server's RainMode)
+--   disco      a Disco mode: the Disco Mill's x10 (Ticket Disco, DISCO + MILL)
+--              or, for the pure DISCO ONLY, its movement boost
+--   tickets    a Ticket mode (Ticket Disco, Ticket Shower Only), with this
+--              player's count of the per-event limit on a small badge
+--   income     a +plant-income boost (the Bonus Chest's or the Reward Wheel's --
+--   training   a +training boost        one slot, the two cannot be told apart)
+--   sacrifice  the Sacrifice Pedestal's garden-income boost
+--
+-- Read-only: every one is drawn from the server's own attributes and its
+-- authoritative deadline, and no icon, tap or popover changes any modifier.
+-- A tap (a click, or the controller's PadKey) opens a small popover ABOVE the
+-- icon -- where it comes from, exactly what it does, the time left and what to
+-- do -- one at a time; the same icon again, a tap anywhere else, B or the
+-- PadKey past the last icon closes it. A faint ring round each icon empties as
+-- its time runs out, a step a second (reduced motion drops only the popover's
+-- rise). BoostIconsUI draws it; Shared/BoostIcons is the pure part.
+--==============================================================================
+GameConfig.BoostIcons = {
+	-- Left to right.
+	Order = { "weather", "disco", "tickets", "income", "training", "sacrifice" },
+	-- The drawn icon (px, safe space) by HUD mode; never smaller than Min,
+	-- however many there are. Gap between two.
+	Size = { Desktop = 40, Compact = 34, Phone = 30, Min = 24 },
+	Gap = 6,
+	-- The player attribute BoostIconsUI keeps at how many icons stand in the
+	-- row (nil for none), LOCAL to this client: HudLayout.measure reads it so
+	-- the toast line steps up over the row, and ActionToastUI re-places on it.
+	Attribute = "HudIcons",
+	-- Opens the first icon's popover, then the next; past the last it closes.
+	-- Free on every controller path (DPadUp TELEPORT, DPadLeft BIOMES, DPadRight
+	-- OBBY).
+	PadKey = Enum.KeyCode.DPadDown,
+	-- The popover over the icon.
+	Popover = { Width = 250, PhoneWidth = 214, Gap = 8 },
+	Tints = {
+		weather = Color3.fromRGB(150, 196, 255),
+		disco = Color3.fromRGB(255, 160, 232),
+		tickets = Color3.fromRGB(255, 214, 92),
+		income = Color3.fromRGB(38, 255, 0),
+		training = Color3.fromRGB(25, 144, 255),
+		sacrifice = Color3.fromRGB(38, 255, 0),
+	},
+	-- What each popover says. %d / %s are filled in from the configs the
+	-- servers pay by, never typed here.
+	Words = {
+		Rain = "Rain",
+		Thunder = "Thunderstorm",
+		WeatherEffect = "+%d%% plant income while it lasts",
+		WeatherOpening = "A temporary biome is about to open east of the hub.",
+		WeatherOpen = "A temporary biome is open east of the hub, over the bridge.",
+		Disco = "Disco",
+		-- The owner's own words (2026-10-04).
+		DiscoEffect = "Disco Mill: \u{00D7}10 your normal treadmill training while mounted.",
+		DiscoHint = "The giant Disco Mill stands in front of the hub, beside the road.",
+		-- DISCO ONLY, the pure disco (2026-10-04, the owner's words): no mill, so
+		-- never the x10 above; %d is the mode's own SpeedFactor as a percentage.
+		-- "Up to" because MaxWalkSpeed (150) caps the boosted speed: a player
+		-- already above 100 gains less (the owner's label, the same day).
+		Party = "Disco Party",
+		PartyEffect = "Up to +%d%% movement speed",
+		Tickets = "Ticket Shower",
+		TicketsEffect = "Free Spin Tickets are falling all over the map.",
+		TicketsProgress = "Collected %d/%d this event. Walk over one to take it.",
+		TicketsCapped = "All %d collected this event. Leave the rest for others.",
+		Boost = "Bonus Chest or Reward Wheel",
+		IncomeEffect = "+%d%% plant income",
+		TrainingEffect = "+%d%% treadmill training",
+		BoostHint = "Claim the Bonus Chest again when it is ready.",
+		Sacrifice = "Sacrifice Pedestal",
+		SacrificeEffect = "+%d%% garden income",
+		SacrificeHint = "Sacrifice at the pedestal again when it is ready.",
+		EndsIn = "Ends in %s",
 	},
 }
 
@@ -6104,6 +7960,26 @@ GameConfig.Music = {
 		"rbxassetid://70930849303265",  -- Rain Event BGM (CrazyCozy Games upload)
 	},
 	RainFadeSeconds = 4.0,
+
+	--==========================================================================
+	-- THE DISCO'S BED (2026-10-03; every mode with Disco: TICKET DISCO, DISCO +
+	-- MILL and, from 2026-10-04, the pure DISCO ONLY)
+	--
+	-- The owner's disco track (supplied 2026-10-03; an Audio asset uploaded by
+	-- CrazyCozy Games, the group that owns this place, 172.95 s). While a disco
+	-- mode runs (GameConfig.MiniEvent State "running" and a mode with Disco --
+	-- never TICKET SHOWER ONLY) it takes the bed's place the way the rain's
+	-- does -- ahead of the rain, night and day beds -- on the same one Sound and
+	-- Music bus (the player's music level), looping, faded in and out over
+	-- DiscoFadeSeconds, and started at the global event's own position so a
+	-- late joiner hears the same bar as everyone else. An id that does not load
+	-- is reported and skipped: the bed that was playing carries on. Never the
+	-- rain BGM.
+	--==========================================================================
+	DiscoTracks = {
+		"rbxassetid://118716691317783", -- disco event sfx (CrazyCozy Games upload)
+	},
+	DiscoFadeSeconds = 3.0,
 }
 
 --==============================================================================
@@ -6822,6 +8698,31 @@ GameConfig.Sfx = {
 			id = "rbxassetid://125982914448542",
 			volume = 0.60, clip = 1.10, range = 90, group = "World",
 		},
+		--======================================================================
+		-- INVITE A FRIEND (2026-10-06): the owner's ten, ids and volumes from
+		-- GameConfig.InviteRewards.Sounds (above), never retyped here.
+		--======================================================================
+		InviteSend = { id = GameConfig.InviteRewards.Sounds.Send.Id,
+			volume = GameConfig.InviteRewards.Sounds.Send.Volume, group = "UI" },
+		InviteJoined = { id = GameConfig.InviteRewards.Sounds.Joined.Id,
+			volume = GameConfig.InviteRewards.Sounds.Joined.Volume, group = "UI" },
+		InviteTick = { id = GameConfig.InviteRewards.Sounds.Tick.Id,
+			volume = GameConfig.InviteRewards.Sounds.Tick.Volume, group = "UI" },
+		InviteBadgePop = { id = GameConfig.InviteRewards.Sounds.BadgePop.Id,
+			volume = GameConfig.InviteRewards.Sounds.BadgePop.Volume, group = "UI" },
+		InviteWelcome = { id = GameConfig.InviteRewards.Sounds.Welcome.Id,
+			volume = GameConfig.InviteRewards.Sounds.Welcome.Volume, group = "UI" },
+		InviteEvolve = { id = GameConfig.InviteRewards.Sounds.Evolve.Id,
+			volume = GameConfig.InviteRewards.Sounds.Evolve.Volume, group = "World",
+			range = GameConfig.InviteRewards.EvolveRange },
+		InviteUnlockEpic = { id = GameConfig.InviteRewards.Sounds.UnlockEpic.Id,
+			volume = GameConfig.InviteRewards.Sounds.UnlockEpic.Volume, group = "UI" },
+		InviteUnlockLegendary = { id = GameConfig.InviteRewards.Sounds.UnlockLegendary.Id,
+			volume = GameConfig.InviteRewards.Sounds.UnlockLegendary.Volume, group = "UI" },
+		InviteUnlockMythic = { id = GameConfig.InviteRewards.Sounds.UnlockMythic.Id,
+			volume = GameConfig.InviteRewards.Sounds.UnlockMythic.Volume, group = "UI" },
+		InviteUnlockSecret = { id = GameConfig.InviteRewards.Sounds.UnlockSecret.Id,
+			volume = GameConfig.InviteRewards.Sounds.UnlockSecret.Volume, group = "UI" },
 		-- The paid pulse, and the only cue in this group that is NOT positional:
 		-- it is a receipt for something you bought, it plays on your screen, and
 		-- nobody else in the world has any business hearing it.
@@ -7222,6 +9123,66 @@ GameConfig.Labels = {
 		--======================================================================
 		Hatching = "HATCHING",
 		Growing = "GROWING",
+	},
+
+	--==========================================================================
+	-- A GROWN CREATURE'S OVERHEAD LABEL (2026-10-04, the owner's brief)
+	--
+	-- SUPERSEDES "a grown plant carries no plate" (PlantUI's banner said why it
+	-- was cut: twelve three-line cards over one bed). The owner asked for them
+	-- back, after the reference: three outlined lines, no plate --
+	--
+	--     RARE                     the rarity word, in its own colour or RarityFX
+	--     FROSTROOT                the name, the largest line
+	--     HUGE • $1.46K/s          the size word in its tier colour (TITAN and
+	--                              COLOSSAL in the wheel's own lettering), the
+	--                              owner's income per second in the reveal's green
+	--
+	-- -- no kg anywhere, and no size for a Secret or an unsized event form. Held
+	-- in check the way the old cards were not: a fixed pixel size whatever the
+	-- creature's size, faded out between NearStuds and FarStuds from the camera
+	-- and gone past that, out of the way while the plant is selected for PICK UP,
+	-- and the cash pop starts above it instead of through it.
+	--
+	-- The faces are the game's own: LuckiestGuy is money (the name and the
+	-- income, as the hatch reveal draws them) and FredokaOne the Bag's words
+	-- (the rarity and the size).
+	--==========================================================================
+	Plant = {
+		RarityFont = Enum.Font.FredokaOne,
+		RaritySize = 14,
+		NameFont = Enum.Font.LuckiestGuy,
+		NameSize = 22,
+		InfoFont = Enum.Font.FredokaOne,
+		InfoSize = 14,
+		IncomeFont = Enum.Font.LuckiestGuy,
+		IncomeSize = 15,
+		Width = 240,
+		Name = Color3.fromRGB(255, 255, 255),
+		Separator = Color3.fromRGB(242, 238, 206),
+		-- The hatch reveal's income green.
+		Income = Color3.fromRGB(142, 214, 86),
+		Outline = Color3.fromRGB(16, 21, 28),
+		NameOutline = 2,
+		LineOutline = 1.5,
+		-- Studs over the creature's measured top, where the label's bottom edge sits.
+		GapStuds = 0.5,
+		-- Camera distance, measured FLAT (across the ground, height ignored):
+		-- whole within NearStuds, gone at FarStuds. Flat because a Colossal's
+		-- label rides 40+ studs up -- measured to its base in 3D it had started
+		-- fading by the time a player stood back far enough to see it (Play,
+		-- 2026-10-04: 38 / 58 in 3D became 45 / 70 flat).
+		NearStuds = 45,
+		FarStuds = 70,
+		-- Drawn this much smaller on a touch screen (its pixels are dearer).
+		PhoneScale = 0.85,
+		-- CLIENT-ONLY attributes on the planted model (never replicated):
+		-- PlantPickUI marks the plant it has selected, and PlantUI hides that
+		-- plant's label while PICK UP stands where the label would be; PlantUI
+		-- publishes the label's drawn height in pixels (0 while it is not shown)
+		-- so CashPop starts a pop above it.
+		SelectedAttribute = "SeedPickSelected",
+		HeightAttribute = "SeedLabelPx",
 	},
 
 	--==========================================================================
@@ -7700,6 +9661,31 @@ function GameConfig.plotSignBase(plotCF: CFrame, level: number?): CFrame
 	return plotCF
 		* CFrame.new(S.OffsetX, S.GroundY, -halfD - S.Standoff)
 		* CFrame.Angles(0, math.rad(S.YawDegrees), 0)
+end
+
+--==============================================================================
+-- WHERE THE TOP CREATURES BOARD STANDS (2026-10-05)
+--
+-- Beside the upgrade board, on its outer side (Plot.Showcase): the upgrade
+-- board's outer edge, then Gap, then this board's rim, then half its plank.
+-- Off the same front edge as plotSignBase, so it is placed once and is still
+-- right at Level 5. The 9 is MillModel.BuildSign's board width before
+-- Mill.Sign.Scale -- PlotShowcaseSpec measures the built upgrade board and
+-- holds the gap to what this says.
+--==============================================================================
+function GameConfig.plotShowcaseX(): number
+	local P = GameConfig.Plot
+	local SC = P.Showcase
+	local signHalf = 9 * GameConfig.Mill.Sign.Scale * 0.5
+	return P.Sign.OffsetX - signHalf - SC.Gap - SC.RimStuds - SC.BoardSize.X * 0.5
+end
+
+function GameConfig.plotShowcaseBase(plotCF: CFrame, level: number?): CFrame
+	local SC = GameConfig.Plot.Showcase
+	local halfD = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(level)) * 0.5
+	return plotCF
+		* CFrame.new(GameConfig.plotShowcaseX(), SC.GroundY, -halfD - SC.Standoff)
+		* CFrame.Angles(0, math.rad(SC.YawDegrees), 0)
 end
 
 function GameConfig.plotSlotsFor(rows: number): number

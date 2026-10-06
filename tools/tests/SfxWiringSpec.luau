@@ -238,13 +238,25 @@ say("\n-- the borrowed sounds are given back --")
 
 local combat = sourceOf(server and server:FindFirstChild("CombatService"))
 local sell = sourceOf(server and server:FindFirstChild("SellService"))
+--==============================================================================
+-- A HIDDEN TRAP'S OWN TWO SOUNDS ARE ITS OWNER'S (2026-10-04)
+--
+-- A placed trap is drawn for its owner alone (TrapMarks.client), so the
+-- set-down and the arming are played THERE, on the drawn trap, for the one
+-- player who can see it -- a sound the whole road heard would give the trap
+-- away. The spring is public, and stays on the server.
+--==============================================================================
+local marks = sourceOf(StarterPlayer:FindFirstChild("StarterPlayerScripts")
+	and StarterPlayer.StarterPlayerScripts:FindFirstChild("TrapMarks"))
 
-check(combat ~= nil and combat:find('SoundKit.emit("TrapPlace"', 1, true) ~= nil,
-	"a trap going down plays the placement, not TakePod")
-check(combat ~= nil and combat:find('SoundKit.emit("TrapArmed"', 1, true) ~= nil,
-	"and says once when it arms")
-check(combat ~= nil and combat:find('SoundKit.emit(spec.SpringCue or "Grab"', 1, true) ~= nil,
-	"and springs with its own cue")
+check(marks ~= nil and marks:find('SoundKit.emit("TrapPlace", base)', 1, true) ~= nil
+		and combat ~= nil and combat:find('SoundKit.emit("TrapPlace"', 1, true) == nil,
+	"a trap going down plays the placement, not TakePod -- for its owner, on the trap they see")
+check(marks ~= nil and marks:find('SoundKit.emit("TrapArmed", base)', 1, true) ~= nil
+		and combat ~= nil and combat:find('SoundKit.emit("TrapArmed"', 1, true) == nil,
+	"and says once when it arms, to the same one player")
+check(combat ~= nil and combat:find('SoundKit.emit(trap.spec.SpringCue or "Grab"', 1, true) ~= nil,
+	"and springs with its own cue, heard by everybody")
 check(combat ~= nil and combat:find('SoundKit.emit("BatSwing"', 1, true) ~= nil,
 	"the bat has a whoosh")
 check(combat ~= nil and combat:find('SoundKit.emit("BatImpact"', 1, true) ~= nil,
@@ -270,16 +282,19 @@ check(CUES.PanelClose ~= nil and CUES.PanelClose.pitch == nil,
 --==============================================================================
 -- 7. THE ARMING TICK IS AN EDGE, NOT A STATE
 --
--- The branch it sits in runs every frame for the whole life of the trap. Without
--- the flag it would be a sixty-hertz buzz for twenty seconds -- the kind of bug
--- that is obvious in Play and invisible in a diff.
+-- The branch it sits in runs every frame while the trap arms -- after it is set
+-- and again after every catch, now that traps re-arm (2026-10-04). Without the
+-- flag it would be a sixty-hertz buzz -- the kind of bug that is obvious in Play
+-- and invisible in a diff.
 --==============================================================================
 say("\n-- said once --")
-check(combat ~= nil and combat:find("if not trap.armed then", 1, true) ~= nil
-		and combat:find("trap.armed = true", 1, true) ~= nil,
-	"the arming cue is gated on an edge the trap remembers")
-check(combat ~= nil and combat:find("armed = false,", 1, true) ~= nil,
-	"and every trap starts having not said it")
+check(marks ~= nil and marks:find("if not d.armed then", 1, true) ~= nil
+		and marks:find("d.armed = true", 1, true) ~= nil,
+	"the arming cue is gated on an edge the drawn trap remembers")
+check(marks ~= nil and marks:find("armed = false,", 1, true) ~= nil
+		and marks:find("d.armed = not hide and f >= 1", 1, true) ~= nil,
+	"and every trap starts having not said it -- one already armed when drawn stays silent, and a "
+		.. "re-arm after a catch says it once more")
 
 if #fails > 0 then
 	return ("SfxWiringSpec: %d passed, %d FAILED\n  %s"):format(pass, #fails,

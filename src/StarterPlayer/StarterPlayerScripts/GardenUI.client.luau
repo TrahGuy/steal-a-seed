@@ -1,58 +1,44 @@
 --!strict
--- Steal a Seed :: GardenUI
+-- Steal a Seed :: GardenUI -- MY PLANTS
 --
--- What is in YOUR dirt, right now, one row per slot. Its button is top-right;
--- the panel opens in the middle of the screen.
---
---==============================================================================
--- THE SHAPE IS THE CLIP'S ACTIVE LIST. THE CONTENT IS NOT.
---
--- At 0:58 of the reference recording the owner opens a right-docked panel: tall,
--- a collapse chevron on its inner edge, a `7/9 Active` header, one row per
--- occupant with a square thumbnail and a name and a rate, and a fat button at
--- the bottom. That SHAPE is what this borrows.
---
--- What it does not borrow is the idea underneath it. That panel is a LOADOUT --
--- nine slots, seven equipped, UNEQUIP and Equip Best and +1 EQUIP for $75M. This
--- game has no loadout. Plants go in the ground and stay there; there is nothing
--- to equip, nothing to bench, and nothing to buy a tenth slot for.
---
--- So the count means something different and better: `GARDEN 3/12` is three
--- things planted in twelve holes of actual dirt, and the empty rows are real
--- empty slots you can walk over and fill. The clip's 7/9 is inventory
--- management; this is a window onto a place.
---
--- Deliberately absent, all of it in the recording: UNEQUIP, Equip Best,
--- +1 EQUIP, Grow All, place-from-menu, sell, drag, wood-plank texture, paw and
--- egg icons.
+-- The player's creatures: the ones standing on their plot, and the ones stored
+-- in their Bag. Its button is the pot on the right of the HUD (HudLayout's
+-- `garden` rect); the panel opens in the middle of the screen.
 --
 --==============================================================================
--- WHY THIS IS NOT THE INDEX
+-- MY PLANTS (2026-10-04, the owner's menu) REPLACES THE GARDEN PANEL
 --
--- Two panels, two jobs:
+-- The Garden panel was a window onto the bed: one row per occupant, clocks
+-- running, a PICK UP, and -- deliberately -- no Equip / Unequip / Equip Best.
+-- The owner has asked for exactly that pattern now, adapted to this game's
+-- plots rather than to a pet that follows you:
 --
---   Index    every species in the biome, ??? until you have grown it. An
---            almanac, and it does not change while you watch it.
---   Garden   the twelve holes in front of you and what is in them this second,
---            with the clocks still running.
+--   EQUIPPED   planted on the player's own plot: walking, earning
+--   STORED     a fully hatched creature in the Bag: earning nothing
+--   a hotbar shortcut is only a shortcut for holding something; it is not a
+--   third place a creature can be
 --
--- They used to be allowed open at once, because one docked left and the other
--- docked right. Both open in the CENTRE now, so they take turns -- see OPEN AND
--- SHUT. What that costs is the side-by-side read; what it buys is one panel
--- shape instead of two and a phone screen that is not half panel.
+-- One compact panel in the approved inventory's look (MenuKit): a short header
+-- with the title, PLANTED / STORED, the plot's count (occupied / capacity) and
+-- the close; small creature cards (picture, name, size or rarity, income per
+-- second -- a pod's own countdown instead); and a footer that never scrolls
+-- away: the garden's income right now, the selected card's ONE action (PLANT
+-- for a stored creature, RETURN TO BAG for a planted one), EQUIP BEST and
+-- UNEQUIP ALL (with a confirmation).
 --
--- The Index used to carry a one-line `Nubkin x2  Petalpip x1` footer, which was
--- a stopgap for exactly this panel. It is gone now that the real thing exists.
+-- A GROWING POD is shown with its clock and is never moved by any of this: it
+-- is hatched where it stands, by hand, as it always was.
 --
 --==============================================================================
--- NO REMOTE, NO SERVER CALL
+-- THE CLIENT ONLY ASKS
 --
--- Everything on this panel is read off the plants themselves. PlantService tags
--- every model it renders and stamps SpeciesId, Stage, Kg, PlantedAt and
--- PlacementId on it, and PlotService stamps the owner on the plot -- so the tag
--- plus two
--- parents is the whole query. It cannot disagree with what is standing in the
--- ground, because it IS what is standing in the ground.
+-- Four verbs on GameEvent (GameConfig.Plant.MyPlants), each a request the
+-- SERVER settles (PlantService: its checks, its order, its answer). What the
+-- panel shows is read off the world and the profile the server already pushes:
+-- the tagged plant models in the player's plot (PlacementId, SpeciesId, Tier,
+-- Stage, HatchAt, ItemId), the plot's Capacity and GardenIncome attributes
+-- (EconomyService: the rate actually paid, the pass, boosts and rain inside
+-- it), and the profile's Held rows, favourites and hotbar.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -60,17 +46,26 @@ local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
-local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
--- A ready pod's card names the hatch button, and on a controller that is X.
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
+local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
+local InventoryModel = require(Shared:WaitForChild("InventoryModel"))
+local InventoryTile = require(Shared:WaitForChild("InventoryTile"))
+local ItemArt = require(Shared:WaitForChild("ItemArt"))
+local RarityFX = require(Shared:WaitForChild("RarityFX"))
+local HotbarSlots = require(Shared:WaitForChild("HotbarSlots"))
+local Notice = require(Shared:WaitForChild("Notice"))
+local SoundKit = require(Shared:WaitForChild("SoundKit"))
+-- A ready pod's card names the hatch, and on a controller that is X.
 local PadInput = require(Shared:WaitForChild("PadInput"))
-local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -78,45 +73,19 @@ local playerGui = player:WaitForChild("PlayerGui")
 local RAIL = GameConfig.Rail
 local ATTR = GameConfig.Attributes
 local PLANTING = GameConfig.Plant
+local MY = PLANTING.MyPlants
+local LOOK = MenuKit.Look
+local HOT = GameConfig.Hotbar
+local PL = MenuLayout.Plants
+-- The OpenPanel name is the Garden's: every panel takes turns by it.
 local PANEL_NAME = "Garden"
 
---==============================================================================
--- THE ONE MESSAGE THIS PANEL SENDS
---
--- Everything else here is read straight off the tagged models in the world. The
--- unequip cannot be: the server owns ownership and the economy (Rule 3), so all
--- the client may do is name a plant and ask.
---
--- GameEvent already existed and already carries PlantAt. Same remote, second
--- verb -- see GameConfig.Plant.PickUpAction.
---==============================================================================
-local gameEvent: RemoteEvent? = nil
-
-local function fire(action: string, payload: any)
-	if gameEvent then
-		gameEvent:FireServer(action, payload)
-	end
-end
-
--- The same vocabulary as PromptUI, PlantUI and CashUI.
-local INK = Color3.fromRGB(26, 24, 30)
-local PAPER = Color3.fromRGB(248, 246, 240)
-local ACCENT = Color3.fromRGB(142, 196, 62)
-local GHOST = Color3.fromRGB(150, 148, 154)
--- No card fill here any more: UIKit.plantCard owns the stage a plant stands on,
--- and this file owns what the card says. See IndexUI for why the flat rectangle
--- went.
-
---==============================================================================
--- IT OPENS IN THE MIDDLE NOW, NOT OFF THE RIGHT EDGE
---
--- This docked on the right rail and the Index docked on the left, which is why
--- the two were allowed to be open at once. A modal has no side, so the argument
--- goes with it: all three panels share one rectangle and take turns. UIKit.modal
--- owns the geometry; this is only the cap it may grow to.
---==============================================================================
-local MAX_WIDTH = 480
-local MAX_HEIGHT = 560
+local WHITE = Color3.fromRGB(255, 255, 255)
+-- The studded cards' own numbers (GameConfig.BagLook: StudWords, StudMoney).
+local STUD_LOOK = GameConfig.BagLook
+local Z = 6
+-- How long a request waits for the server's answer before letting go.
+local PATIENCE = 4
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -129,44 +98,13 @@ end
 local gui = Instance.new("ScreenGui")
 gui.Name = "SeedGarden"
 gui.ResetOnSpawn = false
--- ONE ABOVE THE HOTBAR'S 30. Level with it, the engine was free to draw the strip
--- over the open panel, and did: the panel is 82% of the screen tall, so on a
--- landscape phone or a 720-px window its bottom sits behind the hotbar. Above
--- it, the panel and its dimmer cover the strip as the Shop (32) always has.
+-- ONE ABOVE THE HOTBAR'S 30, so the panel and its dimmer cover the strip.
 gui.DisplayOrder = 31
 gui.Parent = playerGui
 
-local function corner(parent: Instance, radius: number)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, radius)
-	c.Parent = parent
-end
-
-local function stroke(parent: Instance, color: Color3, thickness: number, transparency: number)
-	local s = Instance.new("UIStroke")
-	s.Color = color
-	s.Thickness = thickness
-	s.Transparency = transparency
-	s.Parent = parent
-end
-
 --==============================================================================
--- THE BUTTON
---
--- Square and top-right, mirroring the Index button's 12px inset on the left. The
--- clip hangs an egg and a paw down that edge and a moon timer in the corner; we
--- have one button and nothing under it.
---
--- Amber, so three buttons read as three things. There is no Garden button in the
--- owner's reference to crop even if cropping were still the plan, so this one
--- was always going to be drawn -- and now the other two are drawn beside it.
---==============================================================================
---==============================================================================
--- BARE, UNLIKE INDEX AND SHOP
---
--- No plate behind it: the sprout artwork is the button. Which is also why the
--- icon is filled rather than the hollow outline it briefly was -- with no slab
--- to clash with, a knocked-out icon just showed the world through itself.
+-- THE BUTTON: the pot, bare, top right (HudLayout's `garden`), and its badge
+-- counting the pods still growing.
 --==============================================================================
 local button = UIKit.railButton(playerGui, {
 	name = "GardenButton",
@@ -177,28 +115,9 @@ local button = UIKit.railButton(playerGui, {
 button.AnchorPoint = Vector2.new(1, 0)
 button.Position = UDim2.new(1, -RAIL.Inset, 0, RAIL.Inset)
 
---==============================================================================
--- THE BADGE COUNTS WHAT IS STILL COOKING
---
--- Hatching plants only. A grown one does not badge: it is already announcing
--- itself in the world with a `+$N` popping off it every second, and a badge that
--- never clears is a badge you stop reading.
---
--- On the button's LEFT corner, not its right -- the button is already against
--- the right edge of the screen and a badge hung off that corner would be half
--- off it. Which is also why no slab clips its descendants.
---==============================================================================
 local badge, badgeLabel = UIKit.badge(button, RAIL.Badge)
 badge.Position = UDim2.new(0, 0, 0, 0)
 
---==============================================================================
--- WHERE IT SITS IS ASKED OF HudLayout AND APPLIED HERE
---
--- Top right on a desktop, as it always was. In the compact top row it is the
--- inner of the two right-hand squares, the Bag in the corner beside it, and
--- the badge tucked into its left corner rather than hung half off it -- the
--- row sits 8 px under the topbar, and half a badge would leave the glass.
---==============================================================================
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
@@ -212,904 +131,994 @@ placeButton()
 
 --==============================================================================
 -- THE PANEL
---
--- The collapse chevron is gone with the dock. It hung off the panel's inner edge
--- as a tab, which is a right-docked idea: a centred panel has no inner edge, and
--- the modal already carries the red X every other panel closes with.
 --==============================================================================
-local modal = UIKit.modal(gui, {
-	name = PANEL_NAME,
-	title = "GARDEN",
-	maxWidth = MAX_WIDTH,
-	maxHeight = MAX_HEIGHT,
-})
--- This gui holds only the panel, so it takes the player's menu size whole.
-UIKit.menuGui(gui)
+local menu = MenuKit.modal(gui, PANEL_NAME, "MY PLANTS", RAIL.GardenIcon, nil)
+UIKit.menuGui(gui, Vector2.new(300, 220))
+local modal = menu.modal
+local body = menu.body
 
-local titleBar = modal.title.Parent :: Frame
-UIKit.sproutIcon(titleBar, 30, SeedData.Stem, SeedData.Leaf).Position =
-	UDim2.new(0, 24, 0.5, 0)
-modal.title.Position = UDim2.new(0, 46, 0.5, 0)
-modal.title.Size = UDim2.new(1, -98, 1, 0)
-
-local header = modal.title
+local padFirst = Instance.new("ObjectValue")
+padFirst.Name = "PadFirst"
+padFirst.Parent = modal.shell
 
 --==============================================================================
--- SORT, IN THE TITLE BAR (2026-09-26)
---
--- Left of the close button, where it costs the list no height: on a landscape
--- phone a row across the top of the panel would have left less than one card
--- row showing. Out of the body, so a pad still opens on the first card, and one
--- press up from the first row reaches it. The title gives it the room: it
--- shrinks to fit rather than running under the button on a narrow panel.
---
--- One press, the next order -- PlantInfo's, the same sort the Bag offers. It
--- orders the cards and nothing else: nothing in the bed moves, and empty slots
--- stay after every plant.
+-- STATE
 --==============================================================================
-local SORT_W = 104
-local gardenSort = "default"
-local sortButton = UIKit.cycleButton(modal.title.Parent :: Frame, "SORT", 4)
-sortButton.button.AnchorPoint = Vector2.new(1, 0.5)
-sortButton.button.Position = UDim2.new(1, -52, 0.5, 0)
-sortButton.button.Size = UDim2.fromOffset(SORT_W, 36)
-sortButton.set(PlantInfo.SortLabels[gardenSort])
-header.Size = UDim2.new(1, -(98 + SORT_W + 8), 1, 0)
-header.TextScaled = true
+local open = false
+local tab = "planted"
+local selectedKey: string? = nil
+-- The request at the server, if any: one at a time.
+local pending: string? = nil
+local pendingToken = 0
+-- The profile's parts this reads (the server's push).
+local prof = { held = nil :: { any }?, favourites = {} :: { [string]: boolean }, hotbar = {} :: { string } }
+
+local refresh: () -> ()
+
+--==============================================================================
+-- THE HEADER: PLANTED / STORED, and the plot's count
+--==============================================================================
+local tabs = MenuKit.segmented(body, Z, { "planted", "stored" }, { planted = "PLANTED", stored = "STORED" })
+local count = MenuKit.frame(body, "Count", Z, LOOK.Well, LOOK.WellTransparency, 9)
+MenuKit.keyline(count, LOOK.WellEdge, 1, 0.3)
+local countLabel = MenuKit.text(count, "Label", 15, LOOK.Text, Z + 1)
+countLabel.Size = UDim2.fromScale(1, 1)
+countLabel.RichText = true
+
+--==============================================================================
+-- THE GRID
+--==============================================================================
+local grid = Instance.new("ScrollingFrame")
+grid.Name = "Creatures"
+grid.BackgroundColor3 = LOOK.Well
+grid.BackgroundTransparency = LOOK.WellTransparency
+grid.BorderSizePixel = 0
+grid.ScrollingDirection = Enum.ScrollingDirection.Y
+grid.ScrollBarThickness = 5
+grid.ScrollBarImageColor3 = LOOK.WellEdge
+grid.CanvasSize = UDim2.new()
+grid.AutomaticCanvasSize = Enum.AutomaticSize.Y
+grid.ElasticBehavior = Enum.ElasticBehavior.Always
+grid.Selectable = false
+grid.ZIndex = Z
+grid.Parent = body
+UIKit.corner(grid, 10)
+MenuKit.keyline(grid, LOOK.WellEdge, 1, 0.3)
+local gridPad = Instance.new("UIPadding")
+gridPad.Parent = grid
+local gridLayout = Instance.new("UIGridLayout")
+gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+gridLayout.Parent = grid
+
+local emptyLabel = MenuKit.body(body, "Empty", 15, LOOK.Muted, Z + 3)
+emptyLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+emptyLabel.TextWrapped = true
+emptyLabel.Visible = false
+
+--==============================================================================
+-- THE FOOTER: outside the scroll, always there
+--==============================================================================
+local income = MenuKit.frame(body, "Income", Z, LOOK.Well, LOOK.WellTransparency, 9)
+MenuKit.keyline(income, LOOK.WellEdge, 1, 0.3)
+local incomeLabel = MenuKit.text(income, "Label", 15, LOOK.Text, Z + 1)
+incomeLabel.Position = UDim2.fromOffset(10, 0)
+incomeLabel.Size = UDim2.new(1, -16, 1, 0)
+incomeLabel.TextXAlignment = Enum.TextXAlignment.Left
+incomeLabel.RichText = true
+incomeLabel.TextScaled = true
 do
 	local fit = Instance.new("UITextSizeConstraint")
-	fit.MaxTextSize = 26
-	fit.MinTextSize = 12
-	fit.Parent = header
+	fit.MaxTextSize = 15
+	fit.MinTextSize = 10
+	fit.Parent = incomeLabel
+end
+local action = MenuKit.button(body, "Action", Z, "SELECT A PLANT", 14)
+-- The panel's call to action wears the studs (the global UI pass, 2026-10-04).
+local best = MenuKit.button(body, "EquipBest", Z, "EQUIP BEST", 14, { studs = true })
+best.style("go")
+local clear = MenuKit.button(body, "UnequipAll", Z, "UNEQUIP ALL", 14)
+clear.style("sky")
+
+--==============================================================================
+-- UNEQUIP ALL ASKS FIRST: a small sheet over the grid, its own two buttons.
+--==============================================================================
+local confirm = MenuKit.frame(body, "Confirm", Z + 8, LOOK.Sheet, 0.02, 10)
+confirm.Active = true
+confirm.Visible = false
+MenuKit.keyline(confirm, LOOK.SheetEdge, 1.5, 0.15)
+local confirmText = MenuKit.body(confirm, "Text", 16, LOOK.Text, Z + 9)
+confirmText.Position = UDim2.fromOffset(14, 10)
+confirmText.Size = UDim2.new(1, -28, 0, 56)
+confirmText.TextWrapped = true
+local confirmNo = MenuKit.button(confirm, "Cancel", Z + 9, "CANCEL", 15)
+confirmNo.style("sky")
+-- Taking every plant off the plot: the red remove face.
+local confirmYes = MenuKit.button(confirm, "Yes", Z + 9, "UNEQUIP ALL", 15)
+confirmYes.style("danger")
+
+--==============================================================================
+-- ONE CARD PER CREATURE, POOLED BY KEY ("p:<placementId>", "i:<item>")
+--==============================================================================
+type Card = {
+	holder: Frame,
+	button: TextButton,
+	edge: UIStroke,
+	-- The face's white-to-mint gradient, tinted by a grown plant's rarity.
+	tint: UIGradient,
+	ring: UIStroke,
+	innerRing: UIStroke,
+	preview: UIKit.ItemPreview,
+	name: TextLabel,
+	variant: TextLabel,
+	rate: TextLabel,
+	heart: InventoryTile.Heart,
+	slot: TextLabel,
+	-- The studded background and the quiet backing under the words (2026-10-04).
+	studs: UIKit.StudCard,
+	words: Frame,
+	fxText: RarityFX.Handle,
+	fxEdge: RarityFX.Handle,
+	shownKey: string,
+	art: any,
+	artKey: string,
+}
+local cards: { [string]: Card } = {}
+local cardW, cardH, previewH = 130, 130, 72
+
+type Entry = {
+	key: string,
+	kind: string, -- "planted" | "pod" | "stored"
+	item: any,
+	face: any,
+	id: number?, -- a placement id
+	itemId: string?,
+	hatchAt: number?,
+	rate: number,
+	restoring: boolean,
+	ref: string?,
+}
+local entries: { Entry } = {}
+local byKey: { [string]: Entry } = {}
+
+local function shapeCard(c: Card)
+	c.preview.holder.Position = UDim2.fromOffset(4, 4)
+	c.preview.holder.Size = UDim2.fromOffset(cardW - 8, previewH)
+	c.name.Position = UDim2.fromOffset(5, 4 + previewH + 2)
+	c.name.Size = UDim2.fromOffset(cardW - 10, 18)
+	c.variant.Position = UDim2.fromOffset(5, 4 + previewH + 20)
+	c.variant.Size = UDim2.fromOffset(cardW - 10, 15)
+	c.rate.Position = UDim2.fromOffset(5, 4 + previewH + 36)
+	c.rate.Size = UDim2.fromOffset(cardW - 10, 16)
+	c.words.Position = UDim2.fromOffset(3, 4 + previewH + 1)
+	c.words.Size = UDim2.fromOffset(cardW - 6, 53)
+	c.heart.frame.Position = UDim2.fromOffset(cardW - 18, previewH - 12)
 end
 
-local FOOTER_HEIGHT = 32
-
--- The cards carry a rotated lattice, which a ScrollingFrame will not clip -- a
--- half-scrolled card was drawing its diamonds straight over the footer below.
--- See UIKit.rotationSafeClip.
-local clip = UIKit.rotationSafeClip(modal.body, "SlotsClip",
-	UDim2.new(1, 0, 1, -FOOTER_HEIGHT))
-
-local list = Instance.new("ScrollingFrame")
-list.Name = "Slots"
-list.Size = UDim2.fromScale(1, 1)
-list.BackgroundTransparency = 1
-list.BorderSizePixel = 0
-list.ScrollBarThickness = 4
-list.ScrollBarImageColor3 = GameConfig.Panel.Edge
-list.CanvasSize = UDim2.new()
-list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-list.ZIndex = 3
--- The cards are what a pad lands on, never the list around them: a selected
--- ScrollingFrame puts the ring round the whole bed, and the Index's almanac is
--- set the same way for the same reason.
-list.Selectable = false
-list.Parent = clip
-
---==============================================================================
--- ROOM FOR THE RING ABOVE THE FIRST ROW AND BELOW THE LAST
---
--- PadFocus draws its gold ring up to 9 px outside the control it marks (on a
--- TV; 7 elsewhere), and the list clips at its own edge. Flush, the first row's
--- ring lost its top and the last row's PICK UP lost its bottom -- on the one
--- row where you most need to see which of the two has the focus.
---==============================================================================
-local EDGE_PAD = 10
-local listPad = Instance.new("UIPadding")
-listPad.PaddingTop = UDim.new(0, EDGE_PAD)
-listPad.PaddingBottom = UDim.new(0, EDGE_PAD)
-listPad.Parent = list
-
-local grid = Instance.new("UIGridLayout")
-grid.FillDirection = Enum.FillDirection.Horizontal
-grid.SortOrder = Enum.SortOrder.LayoutOrder
-grid.HorizontalAlignment = Enum.HorizontalAlignment.Center
-grid.Parent = list
-
---==============================================================================
--- THREE COLUMNS WHEN THERE IS ROOM, TWO ON A PHONE
---
--- Measured off the panel rather than typed, the same way the Index measures its
--- almanac -- the modal is a fraction of the screen with a cap, so one script has
--- to lay out at 248 pixels and at 480.
---
--- Never one column. A single stack of cards is the row list this panel just
--- stopped being.
---==============================================================================
-local GUTTER = 8
-local CARD_ASPECT = 1.30
-local shownSlots = 0
--- The grid as last laid out, kept so a card's place on the canvas can be worked
--- out by arithmetic -- see cellSpan.
-local columnsNow = 2
-local cellHeightNow = 0
-
-local function relayout()
-	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
-	local width = list.AbsoluteSize.X / UIKit.scaleOf(gui)
-	if width <= 0 then
-		return
-	end
-	local columns = if width >= 400 then 3 else 2
-	local cell = math.floor((width - GUTTER * (columns - 1) - 6) / columns)
-	local cellHeight = math.floor(cell * CARD_ASPECT)
-	grid.CellSize = UDim2.fromOffset(cell, cellHeight)
-	grid.CellPadding = UDim2.fromOffset(GUTTER, GUTTER)
-	columnsNow = columns
-	cellHeightNow = cellHeight
-
-	local rows = math.max(1, math.ceil(math.max(shownSlots, 1) / columns))
-	modal.fitContent(rows * cellHeight + (rows - 1) * GUTTER + 2 * EDGE_PAD + FOOTER_HEIGHT)
-end
-
---==============================================================================
--- WHERE A CARD IS ON THE CANVAS, AND WHAT THE LIST SHOWS
---
--- Worked out from the grid rather than read off AbsolutePosition: the reveal
--- below writes CanvasPosition and then asks again in the same breath, and a
--- child's AbsolutePosition is not promised to have caught up with that write.
--- The grid's own arithmetic has nothing to catch up with. All of it in the
--- gui's own units, as CanvasPosition is.
---==============================================================================
-local function cellSpan(index: number): (number, number)
-	local row = (index - 1) // columnsNow
-	local top = EDGE_PAD + row * (cellHeightNow + GUTTER)
-	return top, top + cellHeightNow
-end
-
-local function viewHeight(): number
-	return list.AbsoluteSize.Y / UIKit.scaleOf(gui)
-end
-
-local function canvasHeight(): number
-	local rows = math.max(1, math.ceil(math.max(shownSlots, 1) / columnsNow))
-	return rows * cellHeightNow + (rows - 1) * GUTTER + 2 * EDGE_PAD
-end
-
--- The whole card -- its PICK UP included, and the ring's margin round both --
--- scrolled into the window, the least distance that does it.
-local function reveal(index: number)
-	if cellHeightNow <= 0 then
-		return
-	end
-	local top, bottom = cellSpan(index)
-	local now = list.CanvasPosition.Y
-	local want = UIKit.scrollToShow(now, viewHeight(), top - EDGE_PAD, bottom + EDGE_PAD,
-		canvasHeight())
-	if math.abs(want - now) > 0.5 then
-		list.CanvasPosition = Vector2.new(list.CanvasPosition.X, want)
+local function select(key: string?)
+	if selectedKey ~= key then
+		selectedKey = key
+		SoundKit.play("CardClick")
+		refresh()
 	end
 end
 
-list:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
--- The scroll handler is further down, under the selection it tests: a closure
--- up here would name locals that are not declared yet, and those compile to
--- globals, which are nil. Same shape of bug PlantService documents on
--- `attachPickup`.
-
---==============================================================================
--- THE FOOTER IS A NUMBER, NOT A BUTTON
---
--- The clip's fat footer is `Equip Best`. There is nothing to equip, so the space
--- goes to the one number the panel is otherwise not saying out loud: what this
--- plot earns per second, all its grown plants added up.
---
--- Summed on the client from the same tagged models EconomyService pays from --
--- no remote, no second faucet. It is a readout of the server's arithmetic, not
--- a second copy of it.
---
--- Empty rather than `$0/s` when nothing has finished. Zero is a number; nothing
--- growing yet is an absence, and printing the first as the second makes a new
--- plot look broken.
---==============================================================================
-local footer = UIKit.outlined(modal.body, "Footer", 19, ACCENT, 2.5)
-footer.AnchorPoint = Vector2.new(0, 1)
-footer.Position = UDim2.new(0, 0, 1, 0)
-footer.Size = UDim2.new(1, 0, 0, 28)
-footer.TextXAlignment = Enum.TextXAlignment.Left
-footer.TextYAlignment = Enum.TextYAlignment.Center
-footer.ZIndex = 4
-
---==============================================================================
--- MINI CARDS, IN THE PANEL AND NOWHERE ELSE
---
--- These were 44-pixel rows with a 28-pixel coloured square. The square had to be
--- the species CROWN because Body put two identical creams side by side, which is
--- a workaround for the fact that a swatch cannot show a plant. A card can: the
--- same still 3D CreatureModel the Index shows and the plot builds, so a
--- Bellchime in your bed, on your card and in the almanac are one thing.
---
--- IN THE PANEL. Grown plants in the plot still carry NO billboard -- what they
--- earn is the `+$N` popping off them, and twelve name cards stacked over one
--- patch of dirt is the wall the owner cut. This is the panel you open, not
--- something bolted to the world.
---
--- WHAT A CARD SAYS IS NOT WHAT AN INDEX CARD SAYS. The almanac lists shapes and
--- spells the FORM rarity; this lists the twelve holes in front of you and tints
--- by ColorForKg, the WEIGHT band. Same drawing, different question, and the two
--- vocabularies never cross.
---
---==============================================================================
--- POOLED AND REFILLED, AND THE ART IS KEYED
---
--- A tier-4 plot is thirty cards and the panel refreshes once a second while
--- open. The frames were always pooled; the PORTRAIT has to be too, or every
--- second would tear down thirty plants of thirty frames each and build them
--- again. `drawn` holds what the art currently depicts and the portrait is only
--- rebuilt when that string changes -- which is a hatch, a pickup or a plant,
--- not a clock tick.
---==============================================================================
-type Slot = UIKit.PlantCard
-
-local pool: { Slot } = {}
-
---==============================================================================
--- ONE CARD AT A TIME, AND IT SAYS WHAT THE WORLD SAYS
---
--- The clip this panel borrowed its shape from unequips into an inventory. This
--- game has no inventory: plants live in the dirt and the only place they can go
--- is your hands.
---
--- So the button says PICK UP, which is exactly what the prompt on the plant
--- says out in the field, because it is exactly the same act -- the same server
--- call, handing over the same Tool the hatch does. It read UNEQUIP for a pass
--- and that was a word borrowed from a game with a loadout: two names for one
--- action is how a player ends up looking for the difference between them.
---
--- WHICH CARDS OFFER IT
---
---   grown, your plot   yes
---   pod / hatching     no. That is HATCH, and it happens in the world.
---   ready              no, for the same reason.
---   empty              no.
---   no plot            no.
---
--- SELECTING IS NOT DOING. A click selects; only the button underneath acts.
--- Anything that would make the selection stale -- another card, the dimmer, a
--- scroll that takes its PICK UP out of sight, the panel closing, or the slot's
--- own contents changing -- drops it.
---
--- A CARD THAT OFFERS NOTHING IS NOT SELECTED. It was, and its button came up
--- anyway: blank on a card that had never held a plant, and on a pooled card
--- that had, still saying the PICK UP it said last -- a live-looking button
--- whose handler then ignored it. Pressing a pod or an empty hole now only
--- drops whatever else was selected.
---==============================================================================
-local selectedId: number? = nil
-local selectedSlot: Slot? = nil
-local selectedIndex: number? = nil
-
--- Which card a control belongs to -- its body or its PICK UP -- by index.
-local slotIndexOf: { [GuiObject]: number } = {}
-
---==============================================================================
--- THE PAD'S FOCUS STAYS IN THE CARD IT WAS IN
---
--- Hide the control that has the selection and the engine re-homes it at once,
--- onto whatever selectable is nearest (PadFocus, THE ENGINE MOVES THE SELECTION
--- FIRST) -- from a PICK UP just pressed, that can be a card two rows away. So
--- the focus is handed to the card's own body BEFORE its button hides: after a
--- pick-up it stays where the plant was, and the next plant slides in under it.
---==============================================================================
-local function clearSelection()
-	local slot = selectedSlot
-	if slot then
-		if GuiService.SelectedObject == slot.action then
-			GuiService.SelectedObject = slot.button
+local function cardFor(key: string): Card
+	local made = cards[key]
+	if made then
+		return made
+	end
+	local holder = MenuKit.frame(grid, "Card_" .. key, Z + 1)
+	local face = Instance.new("TextButton")
+	face.Name = "Face"
+	face.AnchorPoint = Vector2.new(0.5, 0.5)
+	face.Position = UDim2.fromScale(0.5, 0.5)
+	face.Size = UDim2.fromScale(1, 1)
+	face.BorderSizePixel = 0
+	face.AutoButtonColor = false
+	face.Text = ""
+	face.ZIndex = Z + 1
+	face.Parent = holder
+	UIKit.corner(face, 8)
+	local tint = MenuKit.cardFace(face)
+	local edge = MenuKit.keyline(face, LOOK.CardEdge, 1, LOOK.CardEdgeTransparency)
+	-- THE COLOURFUL STUDDED CARD (2026-10-04): a grown creature's card wears the
+	-- upload nearest its rarity's own colour (InventoryModel.face's `studs`;
+	-- UIKit.studCard, the solid colour until the picture has loaded), its words
+	-- on a quiet ink backing so the name, the rarity's own word and the income
+	-- read on any colour. A Common and a pod keep the plain card.
+	local studs = UIKit.studCard(face, 8, Z + 1)
+	local words = MenuKit.frame(face, "Words", Z + 4, STUD_LOOK.StudWords, STUD_LOOK.StudWordsTransparency, 6)
+	words.Visible = false
+	-- The selection: a lit ring standing just outside the card.
+	local ringFrame = MenuKit.frame(face, "Selected", Z + 6)
+	ringFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	ringFrame.Position = UDim2.fromScale(0.5, 0.5)
+	ringFrame.Size = UDim2.new(1, 4, 1, 4)
+	UIKit.corner(ringFrame, 10)
+	local ring = MenuKit.keyline(ringFrame, HOT.LitTop, 2.5)
+	ring.Enabled = false
+	-- And a white line ON the card's edge (2026-10-04): the gold ring outside
+	-- reads on the light panel, the white one on any studded colour -- the gold
+	-- card's too -- so a selection is never colour on colour.
+	local innerFrame = MenuKit.frame(face, "SelectedInner", Z + 6)
+	innerFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	innerFrame.Position = UDim2.fromScale(0.5, 0.5)
+	innerFrame.Size = UDim2.new(1, -2, 1, -2)
+	UIKit.corner(innerFrame, 7)
+	local innerRing = MenuKit.keyline(innerFrame, WHITE, 2)
+	innerRing.Enabled = false
+	local preview = UIKit.itemPreview(face, { name = "Preview", scrim = 1, fit = 0.9 })
+	preview.hero.Ambient = LOOK.PreviewAmbient
+	for _, d in ipairs(preview.holder:GetDescendants()) do
+		if d:IsA("GuiObject") then
+			d.ZIndex = math.max(d.ZIndex, Z + 2)
 		end
-		slot.button.NextSelectionDown = nil
-		slot.action.NextSelectionUp = nil
-		slot.setSelected(false)
 	end
-	selectedSlot = nil
-	selectedId = nil
-	selectedIndex = nil
+	local name = MenuKit.text(face, "Name", 14, LOOK.Text, Z + 5)
+	name.TextScaled = true
+	do
+		local fit = Instance.new("UITextSizeConstraint")
+		fit.MaxTextSize = 14
+		fit.MinTextSize = 10
+		fit.Parent = name
+	end
+	local variant = MenuKit.text(face, "Variant", 12, LOOK.Muted, Z + 5)
+	variant.TextTruncate = Enum.TextTruncate.AtEnd
+	-- A size or rarity word keeps its ink line whatever its colour (a gold
+	-- Legendary on white needs it); RarityFX tunes that same line.
+	MenuKit.keepInk(variant)
+	local rate = MenuKit.text(face, "Rate", 13, LOOK.Money, Z + 5)
+	rate.TextTruncate = Enum.TextTruncate.AtEnd
+	local heart = InventoryTile.heart(face, 12, Z + 6)
+	heart.frame.Visible = false
+	-- The hotbar slot a stored creature is a shortcut on, top left.
+	local slot = MenuKit.text(face, "Slot", 12, HOT.NumeralLit, Z + 6)
+	slot.Position = UDim2.fromOffset(4, 3)
+	slot.Size = UDim2.fromOffset(18, 16)
+	slot.BackgroundColor3 = LOOK.Ink
+	slot.BackgroundTransparency = 0.2
+	UIKit.corner(slot, 5)
+	slot.Visible = false
+	local scale = Instance.new("UIScale")
+	scale.Parent = face
+	UIKit.cardPop(face, scale, { hoverScale = 1.04, pressScale = 0.97, sound = false })
+	local c: Card = {
+		holder = holder,
+		button = face,
+		edge = edge,
+		tint = tint,
+		ring = ring,
+		innerRing = innerRing,
+		preview = preview,
+		name = name,
+		variant = variant,
+		rate = rate,
+		heart = heart,
+		slot = slot,
+		studs = studs,
+		words = words,
+		fxText = RarityFX.text(variant, variant:FindFirstChildOfClass("UIStroke")),
+		fxEdge = RarityFX.edge(face, 8, Z + 4),
+		shownKey = "",
+		art = nil,
+		artKey = "",
+	}
+	shapeCard(c)
+	MenuKit.tap(face, grid, function()
+		select(if selectedKey == key then nil else key)
+	end)
+	cards[key] = c
+	return c
 end
 
-local function selectSlot(slot: Slot, placementId: number?, index: number)
-	if selectedSlot == slot or not placementId then
-		clearSelection()
-		return
+-- A card's picture, built only once it has been on screen with the panel open;
+-- its rarity light moving only while it is in view.
+local function buildVisible()
+	local at, size = grid.AbsolutePosition, grid.AbsoluteSize
+	for _, c in pairs(cards) do
+		local p, s = c.holder.AbsolutePosition, c.holder.AbsoluteSize
+		local shown = open and grid.Visible and c.holder.Visible
+		local near = shown and p.Y + s.Y >= at.Y - 40 and p.Y <= at.Y + size.Y + 40
+		if near and c.art and c.shownKey ~= c.artKey then
+			local builder, kind = ItemArt.builder(c.artKey, c.art)
+			c.preview.setModel(c.artKey, builder, kind)
+			c.shownKey = c.artKey
+		end
+		local inView = shown and p.Y + s.Y > at.Y and p.Y < at.Y + size.Y
+		RarityFX.setActive(c.fxText, inView)
+		RarityFX.setActive(c.fxEdge, inView)
 	end
-	clearSelection()
-	selectedSlot = slot
-	selectedId = placementId
-	selectedIndex = index
-	slot.setSelected(true, "PICK UP")
-	-- Down from the card is its own PICK UP and up from that is the card, not
-	-- whichever neighbour the engine happens to measure as nearer.
-	slot.button.NextSelectionDown = slot.action
-	slot.action.NextSelectionUp = slot.button
-	-- The button is the card's bottom strip, and on the lowest row that strip
-	-- can be under the list's edge -- so the card comes up whole, for a tap as
-	-- much as for a pad.
-	reveal(index)
 end
+grid:GetPropertyChangedSignal("CanvasPosition"):Connect(buildVisible)
+gridLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	task.defer(buildVisible)
+end)
 
---==============================================================================
--- A SCROLL DROPS THE SELECTION ONLY WHEN IT TAKES THE BUTTON AWAY
---
--- This dropped it on ANY scroll: "a button that has slid half out of the list
--- is a button nobody meant to be aiming at". Right about a scroll away, and
--- exactly wrong about a scroll toward. On the lowest row the PICK UP sits under
--- the list's edge, so moving a pad's focus onto it makes the engine scroll to
--- it; the scroll dropped the selection, the button hid, and the engine threw
--- the focus somewhere else. Reported from a console on 2026-09-26: the bottom
--- row's plants could not be picked up at all.
---
--- So it is tested rather than assumed. The selection goes when its PICK UP is
--- no longer wholly in the window -- and never while the pad's focus is on that
--- card or its button, because then whatever scrolled was bringing it in.
---==============================================================================
-list:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-	local index = selectedIndex
-	if not (selectedSlot and index) then
+-- A card that takes a controller's focus is scrolled into view whole.
+GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
+	local sel = GuiService.SelectedObject
+	if not (open and sel and sel:IsDescendantOf(grid)) then
 		return
 	end
-	local focus = GuiService.SelectedObject
-	if focus and slotIndexOf[focus] == index then
-		return
-	end
-	local _, bottom = cellSpan(index)
-	if not UIKit.spanShown(list.CanvasPosition.Y, viewHeight(),
-		bottom - GameConfig.Card.ActionHeight, bottom) then
-		clearSelection()
-	end
+	local k = UIKit.scaleOf(gui)
+	local top = (sel.AbsolutePosition.Y - grid.AbsolutePosition.Y) / k + grid.CanvasPosition.Y
+	local bottom = top + sel.AbsoluteSize.Y / k
+	local view = grid.AbsoluteSize.Y / k
+	local total = gridLayout.AbsoluteContentSize.Y / k + PL.GridInset * 2
+	grid.CanvasPosition = Vector2.new(0, UIKit.scrollToShow(grid.CanvasPosition.Y, view, top - 6, bottom + 6, total))
 end)
 
 --==============================================================================
--- WHAT A CARD IS OFFERING, IF ANYTHING
---
--- Set by the painter every time it fills a card in. nil means this card cannot
--- be picked up -- an empty hole, a pod, somebody's missing plot.
---==============================================================================
-local offers: { [number]: number? } = {}
--- Every card's plant, pods included, by PlacementId: what the pad's focus is
--- kept on when the order changes under it (see refresh).
-local shownIds: { [number]: number? } = {}
-
-local function buildSlot(index: number): Slot
-	local slot = UIKit.plantCard(list, {
-		name = "Slot" .. index,
-		layoutOrder = index,
-		nameSize = 14,
-		subSize = 12,
-	})
-	pool[index] = slot
-	slotIndexOf[slot.button] = index
-	slotIndexOf[slot.action] = index
-
-	slot.button.Activated:Connect(function()
-		local placementId = offers[index]
-		selectSlot(slot, placementId, index)
-	end)
-
-	slot.action.Activated:Connect(function()
-		local placementId = offers[index]
-		if not placementId or selectedId ~= placementId then
-			return
-		end
-		--==================================================================
-		-- THE SERVER TAKES THE PLANT OUT, NOT THIS
-		--
-		-- Nothing is destroyed here and nothing is assumed. The plant leaves
-		-- the bed when PlantService says it does, and PlantService only says
-		-- so after CarryService has actually put the Tool in the backpack --
-		-- so a full hotbar leaves the plant standing where it was.
-		--
-		-- The panel finds out the same way it finds out about everything
-		-- else: the Planted tag disappears and refresh() repaints. There is
-		-- no reply to wait for and no local copy to keep in step.
-		--==================================================================
-		fire(PLANTING.PickUpAction, placementId)
-		clearSelection()
-	end)
-
-	return slot
-end
-
-local function slotAt(index: number): Slot
-	return pool[index] or buildSlot(index)
-end
-
-
---==============================================================================
--- READING THE DIRT
+-- READING THE DIRT AND THE BAG
 --==============================================================================
 local function serverNow(): number
-	-- pcall because GetServerTimeNow throws while the client is still syncing,
-	-- which is exactly when this first runs. Same guard PlantUI uses.
-	local ok, t = pcall(function()
-		return workspace:GetServerTimeNow()
-	end)
-	return if ok then t else os.time()
+	return Workspace:GetServerTimeNow()
 end
 
 local function clock(seconds: number): string
 	local s = math.max(0, math.ceil(seconds))
+	if s >= 3600 then
+		return string.format("%d:%02d:%02d", s // 3600, (s % 3600) // 60, s % 60)
+	end
 	return string.format("%d:%02d", s // 60, s % 60)
 end
 
 local function myPlot(): Model?
 	for _, instance in ipairs(CollectionService:GetTagged(GameConfig.Tags.Plot)) do
-		if instance:IsA("Model")
-			and instance:GetAttribute(ATTR.OwnerUserId) == player.UserId then
+		if instance:IsA("Model") and instance:GetAttribute(ATTR.OwnerUserId) == player.UserId then
 			return instance
 		end
 	end
 	return nil
 end
 
-type Occupant = {
-	species: SeedData.Species,
-	-- What THIS one weighs. Every row number that is not the name comes from
-	-- here: the clock, the rate, and the colour the name is printed in. Two
-	-- Nubkins in the same bed at 4 kg and 900 kg have to read as $4/s and
-	-- $900/s, which they cannot if the sheet is consulted.
-	tier: number,
-	plantedAt: number,
-	-- The server's deadline for this pod, off the model: the row counts down to it
-	-- instead of re-deriving a wait, so the row, the plate over the pod and the
-	-- prompt all agree, including for a pod planted under an older timer.
-	hatchAt: number,
-	-- STAGE_POD or STAGE_GROWN, off the model. Not derived from the clock any
-	-- more: a pod whose timer ran out an hour ago is STILL a pod until somebody
-	-- hatches it, and a creature you placed a second ago is already grown.
-	stage: number,
-	-- Placement order, which is the only order there is now that plants do not
-	-- live in numbered holes.
-	id: number,
-}
+local function passMultiplier(): number
+	local m = tonumber(player:GetAttribute(GameConfig.Pass.MultiplierAttribute))
+	return if m and m == m and m >= 1 then m else 1
+end
 
---==============================================================================
--- A LIST, NOT A GRID
---
--- This was keyed by slot index, and a row in the panel WAS slot N -- so an
--- empty row meant "hole N is free" and the panel was a map of the bed. There
--- are no holes any more; you put plants where you click.
---
--- So the rows are just what you own, in the order you planted it, and the empty
--- ones at the bottom are how much room is left. Same panel, and the number of
--- rows still equals the tier's capacity -- it has just stopped pretending to be
--- a floor plan.
---==============================================================================
-local function occupants(plot: Model): { Occupant }
-	local out: { Occupant } = {}
-	local plants = plot:FindFirstChild(GameConfig.Plot.PlantsFolderName)
-	if not plants then
-		return out
+-- The Bag-style item for a creature, so its face (name, size or rarity, art)
+-- is the Bag's own (InventoryModel.face).
+local function creature(speciesId: string, tier: number, hatched: boolean): any
+	return {
+		ref = nil,
+		kind = if hatched then "plant" else "pod",
+		tool = nil,
+		restoring = false,
+		speciesId = speciesId,
+		tier = tier,
+		hatched = hatched,
+		sealed = false,
+		weaponId = nil,
+		count = 1,
+		worn = false,
+		favourite = false,
+		order = 0,
+	}
+end
+
+local function plantedEntries(plot: Model?): ({ Entry }, number, number)
+	local out: { Entry } = {}
+	local growingPods, grown = 0, 0
+	local folder = plot and plot:FindFirstChild(GameConfig.Plot.PlantsFolderName)
+	if not folder then
+		return out, 0, 0
 	end
-	for _, model in ipairs(plants:GetChildren()) do
+	local now = serverNow()
+	for _, model in ipairs(folder:GetChildren()) do
 		if model:IsA("Model") and CollectionService:HasTag(model, GameConfig.Tags.Planted) then
 			local species = SeedData.Get(tostring(model:GetAttribute("SpeciesId")))
-			local plantedAt = model:GetAttribute("PlantedAt")
 			local tier = tonumber(model:GetAttribute("Tier"))
 			local id = tonumber(model:GetAttribute("PlacementId"))
 			local stage = tonumber(model:GetAttribute("Stage"))
-			if species and tier and id and stage and type(plantedAt) == "number" then
+			if species and tier and id and stage then
+				local isGrown = stage ~= 1
+				local item = creature(species.Id, tier, isGrown)
+				local hatchAt = tonumber(model:GetAttribute("HatchAt"))
+				local itemId = model:GetAttribute(ATTR.ItemId)
+				if isGrown then
+					grown += 1
+				elseif hatchAt and hatchAt > now then
+					growingPods += 1
+				end
 				table.insert(out, {
-					species = species,
-					tier = tier,
-					plantedAt = plantedAt,
-					-- Absent only on a model from before deadlines were stamped.
-					hatchAt = tonumber(model:GetAttribute("HatchAt"))
-						or (plantedAt + SeedData.GrowSecondsFor(species, tier)),
-					stage = stage,
+					key = "p:" .. id,
+					kind = if isGrown then "planted" else "pod",
+					item = item,
+					face = InventoryModel.face(item),
 					id = id,
+					itemId = if type(itemId) == "string" then itemId else nil,
+					hatchAt = hatchAt,
+					rate = if isGrown then SeedData.IncomePerSecond(species, tier) * passMultiplier() else 0,
+					restoring = false,
+					ref = if type(itemId) == "string" then HotbarSlots.item(itemId) else nil,
 				})
 			end
 		end
 	end
-	-- GetChildren is in creation order, which is close but not guaranteed, and a
-	-- list that reshuffles itself between ticks would make the panel flicker.
-	table.sort(out, function(a: Occupant, b: Occupant): boolean
-		return a.id < b.id
+	-- Earners first, best first; then the pods, soonest first.
+	table.sort(out, function(a: Entry, b: Entry): boolean
+		if (a.kind == "pod") ~= (b.kind == "pod") then
+			return a.kind ~= "pod"
+		end
+		if a.kind == "pod" then
+			return (a.hatchAt or 0) < (b.hatchAt or 0)
+		end
+		if a.rate ~= b.rate then
+			return a.rate > b.rate
+		end
+		return (a.id or 0) < (b.id or 0)
+	end)
+	return out, growingPods, grown
+end
+
+local function toolsNow(): { Instance }
+	local list: { Instance } = {}
+	for _, container in ipairs({ player:FindFirstChildOfClass("Backpack"), player.Character }) do
+		if container then
+			for _, child in ipairs((container :: Instance):GetChildren()) do
+				if child:IsA("Tool") then
+					table.insert(list, child)
+				end
+			end
+		end
+	end
+	return list
+end
+
+-- Every stored, fully hatched creature the profile has -- shortcut or not.
+local function storedEntries(): { Entry }
+	local out: { Entry } = {}
+	if prof.held == nil then
+		return out
+	end
+	local items = InventoryModel.collect({
+		held = prof.held,
+		tools = toolsNow(),
+		weapons = nil,
+		tickets = 0,
+		trailOwned = false,
+		trailWorn = false,
+		favourites = prof.favourites,
+		sealedUntil = {},
+		now = serverNow(),
+	} :: any)
+	for _, item in ipairs(items) do
+		local ref = item.ref
+		if item.kind == "plant" and item.hatched and not item.sealed and ref then
+			local _, itemId = HotbarSlots.parse(ref)
+			local species = SeedData.Get(item.speciesId or "")
+			if species and itemId then
+				table.insert(out, {
+					key = "i:" .. itemId,
+					kind = "stored",
+					item = item,
+					face = InventoryModel.face(item),
+					id = nil,
+					itemId = itemId,
+					hatchAt = nil,
+					rate = SeedData.IncomePerSecond(species, item.tier) * passMultiplier(),
+					restoring = item.restoring,
+					ref = ref,
+				})
+			end
+		end
+	end
+	table.sort(out, function(a: Entry, b: Entry): boolean
+		if a.rate ~= b.rate then
+			return a.rate > b.rate
+		end
+		return (tonumber(a.itemId) or 0) < (tonumber(b.itemId) or 0)
 	end)
 	return out
 end
 
---==============================================================================
--- WHAT IT IS COMES FROM THE SERVER; WHEN IT IS READY COMES FROM THE CLOCK
---
--- Those used to be one question and the clock answered both -- a plant's stage
--- WAS how far through its timer it was. Manual hatching split them: a pod whose
--- clock ran out an hour ago is still a pod, and the only thing that turns it
--- into a creature is somebody holding E. So the STAGE is read off the model and
--- the countdown is still computed here.
---
--- The countdown does the identical sum PlantUI does, so a row and the plate over
--- the plant it names can never show different clocks.
---
--- READY is a display state, not a server one -- there is no fourth stage. It is
--- simply a pod whose remaining time has reached zero, which is exactly when
--- PlantService hangs the prompt on it.
---==============================================================================
-local STAGE_POD, STAGE_GROWN = 1, 3
-local STAGE_READY = -1
-
-local function stageOf(occupant: Occupant, now: number): (number, number)
-	if occupant.stage ~= STAGE_POD then
-		return STAGE_GROWN, 0
+local function slotOf(ref: string?): number?
+	if not ref then
+		return nil
 	end
-	local remaining = occupant.hatchAt - now
-	if remaining > 0 then
-		return STAGE_POD, remaining
-	end
-	return STAGE_READY, 0
-end
-
---==============================================================================
--- HOW MANY THINGS FIT
---==============================================================================
-local plotTier = GameConfig.StartingPlotTier
-
---==============================================================================
--- CAPACITY, AND WHERE IT IS READ FROM
---
--- The PLOT is asked first and the profile is the fallback. Both are written by
--- the server and they agree in the steady state, but they do not update in the
--- same instant: an upgrade rebuilds the plot immediately and the profile packet
--- that carries the new PlotTier follows up to a quarter second later. Reading
--- the plot means the panel grows the moment the bed does.
---
--- It used to be plotSlotsFor(rows) -- the invisible planting grid. That has not
--- equalled the number of plants a level holds since the ladder was re-cut, and
--- reading it here would have drawn 21 rows for a level that holds 7.
---==============================================================================
-local function capacityOf(plot: Model?): number
-	if plot then
-		local n = tonumber(plot:GetAttribute("Capacity"))
-		if n and n == n and n > 0 then
-			return math.floor(n)
+	for i, r in ipairs(prof.hotbar) do
+		if r == ref then
+			return i
 		end
 	end
-	return GameConfig.plotCapacityForTier(plotTier)
+	return nil
 end
 
 --==============================================================================
 -- PAINTING
 --==============================================================================
-local open = false
-
-local function setSlotCount(n: number)
-	-- A card about to hide gives up the selection and the pad's focus first --
-	-- hidden with it, the engine would throw the focus to whatever is nearest.
-	-- The last card that stays takes the focus. (An over-full migrated garden
-	-- shrinks by one row when its last plant is picked up.)
-	if selectedIndex and selectedIndex > n then
-		clearSelection()
-	end
-	local focus = GuiService.SelectedObject
-	local focusIndex = if focus then slotIndexOf[focus] else nil
-	if focusIndex and focusIndex > n and n >= 1 then
-		GuiService.SelectedObject = slotAt(n).button
-	end
-	for i = 1, math.max(n, shownSlots) do
-		local slot = pool[i]
-		if i <= n then
-			slot = slotAt(i)
-			slot.holder.Visible = true
-		elseif slot then
-			slot.holder.Visible = false
-		end
-	end
-	if shownSlots ~= n then
-		shownSlots = n
-		-- The panel is as tall as the bed it is showing, so a tier change is a
-		-- resize as well as a repaint.
-		relayout()
-	end
+local function money(n: number): string
+	return "$" .. GameConfig.compact(n) .. "/s"
 end
 
-local function refresh(paint: boolean)
+local function paintCard(c: Card, e: Entry, order: number)
+	local face = e.face
+	local selected = e.key == selectedKey
+	c.holder.Visible = true
+	c.holder.LayoutOrder = order
+	c.name.Text = face.name
+	c.art = face.art
+	c.artKey = face.visual
+	c.ring.Enabled = selected
+	c.innerRing.Enabled = selected
+	if e.kind == "pod" then
+		RarityFX.setText(c.fxText, nil, face.variantColour or LOOK.Muted)
+		c.variant.Text = face.variant
+		local left = (e.hatchAt or 0) - serverNow()
+		c.rate.Text = if left > 0 then "Growing " .. clock(left) else "READY TO HATCH"
+		c.rate.TextColor3 = if left > 0 then LOOK.Muted else LOOK.Premium
+		RarityFX.setEdge(c.fxEdge, nil, false)
+		c.edge.Color = LOOK.CardEdge
+		-- A pod's card stays plain: it says nothing a pod does not.
+		MenuKit.cardTint(c.tint, nil)
+		c.studs.set(nil)
+		c.words.Visible = false
+		MenuKit.ink(c.name, LOOK.Text)
+	else
+		c.variant.Text = face.variant
+		RarityFX.setText(c.fxText, if face.variantIsRarity then face.rarity else nil, face.variantColour or LOOK.Muted)
+		c.rate.Text = if e.restoring then "Restoring…" else money(e.rate)
+		local studded = c.studs.set(face.studs) ~= nil
+		c.words.Visible = studded
+		MenuKit.ink(c.name, if studded then WHITE else LOOK.Text)
+		c.rate.TextColor3 = if e.restoring then (if studded then LOOK.Cream else LOOK.Muted)
+			elseif studded then STUD_LOOK.StudMoney
+			else LOOK.Money
+		RarityFX.setEdge(c.fxEdge, face.rarity, not selected)
+		local rare = RarityFX.edgeColour(face.rarity)
+		c.edge.Color = rare or (if studded then LOOK.Ink else LOOK.CardEdge)
+		MenuKit.cardTint(c.tint, if face.rarity then GameConfig.RarityColor[face.rarity] else nil)
+	end
+	c.heart.frame.Visible = e.ref ~= nil and prof.favourites[e.ref :: string] == true
+	local slot = slotOf(e.ref)
+	c.slot.Visible = slot ~= nil
+	c.slot.Text = if slot then (if slot == 10 then "0" else tostring(slot)) else ""
+end
+
+-- The server's answer, said IN the panel for a few seconds where the income
+-- line is: the notices are drawn under an open panel, so a player looking at
+-- MY PLANTS would otherwise never see why a press did nothing.
+local sayText: string? = nil
+local sayUntil = 0
+
+local function paintFooter(plot: Model?, total: number, capacity: number)
+	local rate = if plot then tonumber(plot:GetAttribute(ATTR.GardenIncome)) else nil
+	if sayText and os.clock() < sayUntil then
+		incomeLabel.Text = sayText :: string
+	else
+		sayText = nil
+		incomeLabel.Text = string.format('Garden <font color="#%s">%s</font>', LOOK.Money:ToHex(),
+			money(rate or 0))
+	end
+	countLabel.Text = string.format('Plot <font color="#%s">%d/%d</font>',
+		(if total >= capacity then LOOK.Premium else LOOK.Money):ToHex(), total, capacity)
+	local sel = if selectedKey then byKey[selectedKey :: string] else nil
+	-- A button that cannot do anything now is flat grey (`off`), the main
+	-- actions green, UNEQUIP ALL the secondary sky blue.
+	if pending then
+		action.style("off")
+		action.set("WORKING...")
+	elseif not sel then
+		action.style("off")
+		action.set(if tab == "stored" then "SELECT TO PLANT" else "SELECT A PLANT")
+	elseif sel.kind == "stored" then
+		action.style(if sel.restoring then "off" else "go")
+		action.set(if sel.restoring then "RESTORING..." else "PLANT")
+	elseif sel.kind == "planted" then
+		action.style("go")
+		action.set("RETURN TO BAG")
+	else
+		local left = (sel.hatchAt or 0) - serverNow()
+		action.style("off")
+		-- A ready pod is hatched by hand AT the pod, as it always was: the
+		-- key that works there, on this device.
+		action.set(if left > 0 then "GROWING " .. clock(left)
+			elseif PadInput.active() then "HOLD [" .. PadInput.short(Enum.KeyCode.ButtonX) .. "] AT THE POD"
+			elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then "HOLD AT THE POD"
+			else "HOLD [E] AT THE POD")
+	end
+	best.style(if pending then "off" else "go")
+	clear.style(if pending then "off" else "sky")
+end
+
+local function paintBadge(growingPods: number)
+	badge.Visible = growingPods > 0
+	badgeLabel.Text = tostring(growingPods)
+end
+
+refresh = function()
 	local plot = myPlot()
-	local now = serverNow()
-
-	--== NO PLOT: the overflow queue still gets a panel that opens ==--
-	if not plot then
-		badge.Visible = false
-		if not paint then
-			return
-		end
-		header.Text = "GARDEN  —"
-		footer.Text = ""
-		setSlotCount(1)
-		local slot = slotAt(1)
-		slot.setEmpty(true)
-		slot.setModel("noplot", nil)
-		slot.setBackdrop(nil)
-		offers[1] = nil
-		slot.name.Text = "No Plot"
-		slot.name.TextColor3 = GHOST
-		slot.setSubPill(false)
-		slot.sub.Text = "Claim one first"
-		slot.sub.TextColor3 = GHOST
+	local planted, growingPods, _grown = plantedEntries(plot)
+	paintBadge(growingPods)
+	local capacity = tonumber(plot and plot:GetAttribute("Capacity")) or 0
+	if not open then
+		paintFooter(plot, #planted, capacity)
 		return
 	end
+	local stored = storedEntries()
+	entries = if tab == "planted" then planted else stored
+	table.clear(byKey)
+	for _, e in ipairs(planted) do
+		byKey[e.key] = e
+	end
+	for _, e in ipairs(stored) do
+		byKey[e.key] = e
+	end
+	-- A selection that has gone (planted, returned, sold) is let go.
+	if selectedKey and not byKey[selectedKey :: string] then
+		selectedKey = nil
+	end
+	local seen: { [string]: boolean } = {}
+	for i, e in ipairs(entries) do
+		local c = cardFor(e.key)
+		paintCard(c, e, i)
+		seen[e.key] = true
+	end
+	for key, c in pairs(cards) do
+		if not seen[key] then
+			c.holder.Visible = false
+			RarityFX.setActive(c.fxText, false)
+			RarityFX.setActive(c.fxEdge, false)
+		end
+	end
+	local first = entries[1]
+	padFirst.Value = if first then cards[first.key].button else tabs.buttons[tab]
+	emptyLabel.Visible = #entries == 0
+	emptyLabel.Text = if tab == "planted"
+		then "Nothing planted yet. Plant a creature from STORED, or press EQUIP BEST."
+		else "No hatched creatures in your Bag."
+	paintFooter(plot, #planted, capacity)
+	task.defer(buildVisible)
+end
 
-	local here = occupants(plot)
-	local capacity = capacityOf(plot)
-	-- The chosen order, if one has been chosen. Pods count as unhatched however
-	-- ripe: a sort never reads the species inside one. Ties fall to PlacementId.
-	PlantInfo.Sort(here, gardenSort, function(o: Occupant): PlantInfo.SortKey
-		return { speciesId = o.species.Id, tier = o.tier, hatched = o.stage ~= STAGE_POD, id = o.id }
+--==============================================================================
+-- LAYOUT: MenuLayout's answer, applied (the gui's own units)
+--==============================================================================
+local function relayout()
+	local k = UIKit.scaleOf(gui)
+	local safe = gui.AbsoluteSize / UIKit.scaleOf(gui)
+	if safe.X < 100 or safe.Y < 100 then
+		return
+	end
+	local hud = HudLayout.solve(HudLayout.measure(gui))
+	local camera = Workspace.CurrentCamera
+	local hudScale = if HudLayout.isTenFoot() and camera then HudLayout.tenFootScale(camera.ViewportSize) else 1
+	local f = k / hudScale
+	local p = MenuLayout.plantsPanel({
+		safe = safe,
+		compact = hud.compact,
+		railRight = hud.railRight / f,
+		rightLeft = hud.rightLeft / f,
+		keyboardTop = nil,
+	}, RAIL.OutlineThickness)
+	menu.place(p)
+	local b = MenuLayout.blocks(p)
+	local gap = MenuLayout.Config.Gap
+	local touch = MenuLayout.Config.Touch
+	local rowY = math.floor((p.header - touch) / 2)
+	local row = MenuLayout.plantsHeader(p, MenuKit.titleWidth(menu, p.short))
+	local tr = row.tabs
+	tabs.frame.Position = UDim2.fromOffset(tr.x, rowY + 2)
+	tabs.frame.Size = UDim2.fromOffset(tr.w, touch - 4)
+	local cr = row.count
+	count.Visible = cr ~= nil
+	if cr then
+		count.Position = UDim2.fromOffset(cr.x, rowY + 4)
+		count.Size = UDim2.fromOffset(cr.w, touch - 8)
+	end
+	-- The grid over the footer; the footer at the main block's foot.
+	local main = b.main
+	local footerY = main.y + main.h - PL.FooterH
+	grid.Position = UDim2.fromOffset(main.x, main.y)
+	grid.Size = UDim2.fromOffset(main.w, main.h - PL.FooterH - gap)
+	local cg = MenuLayout.plantsCards(p, main.w - grid.ScrollBarThickness)
+	cardW, cardH, previewH = cg.cardW, cg.cardH, cg.previewH
+	gridLayout.CellSize = UDim2.fromOffset(cardW, cardH)
+	gridLayout.CellPadding = UDim2.fromOffset(PL.CardGap, PL.CardGap)
+	gridPad.PaddingLeft = UDim.new(0, PL.GridInset)
+	gridPad.PaddingRight = UDim.new(0, PL.GridInset)
+	gridPad.PaddingTop = UDim.new(0, PL.GridInset)
+	gridPad.PaddingBottom = UDim.new(0, PL.GridInset)
+	for _, c in pairs(cards) do
+		shapeCard(c)
+	end
+	emptyLabel.Position = UDim2.fromOffset(main.x + main.w / 2, main.y + math.min((main.h - PL.FooterH) * 0.4, 70))
+	emptyLabel.Size = UDim2.fromOffset(math.max(80, main.w - 40), 50)
+	local foot = MenuLayout.plantsFooter(main.w)
+	local function put(obj: GuiObject, r: MenuLayout.Rect)
+		obj.Position = UDim2.fromOffset(main.x + r.x, footerY)
+		obj.Size = UDim2.fromOffset(r.w, PL.FooterH)
+	end
+	put(income, foot.income)
+	income.Size = UDim2.fromOffset(foot.income.w, PL.FooterH - 8)
+	income.Position = UDim2.fromOffset(main.x + foot.income.x, footerY + 4)
+	put(action.hit, foot.action)
+	put(best.hit, foot.best)
+	put(clear.hit, foot.clear)
+	-- The confirmation over the grid, centred.
+	local cw, ch = math.min(main.w - 24, 380), 132
+	confirm.Position = UDim2.fromOffset(main.x + (main.w - cw) / 2, main.y + math.max(4, (main.h - PL.FooterH - ch) / 2))
+	confirm.Size = UDim2.fromOffset(cw, ch)
+	confirmNo.hit.Position = UDim2.fromOffset(14, ch - 56)
+	confirmNo.hit.Size = UDim2.fromOffset((cw - 40) / 2, 44)
+	confirmYes.hit.Position = UDim2.fromOffset(26 + (cw - 40) / 2, ch - 56)
+	confirmYes.hit.Size = UDim2.fromOffset((cw - 40) / 2, 44)
+	UIKit.coverRail(playerGui, PANEL_NAME, open and p.covers)
+	task.defer(buildVisible)
+end
+
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+UIKit.onMenuSize(relayout)
+relayout()
+
+--==============================================================================
+-- ASKING THE SERVER
+--==============================================================================
+local gameEvent: RemoteEvent? = nil
+
+local function ask(op: string, payload: any)
+	local channel = gameEvent
+	if pending or not channel then
+		SoundKit.play("Denied")
+		return
+	end
+	pending = op
+	pendingToken += 1
+	local token = pendingToken
+	SoundKit.play("CardClick")
+	channel:FireServer(op, payload)
+	refresh()
+	task.delay(PATIENCE, function()
+		if pendingToken == token and pending then
+			pending = nil
+			refresh()
+		end
 	end)
-
-	--==========================================================================
-	-- THE PAD'S FOCUS STAYS ON ITS PLANT
-	--
-	-- Cards are pooled by position, so when the order changes -- a new sort, a
-	-- hatch or a pick-up inside one -- the focus ring would otherwise stay on the
-	-- slot and land on a different plant. Noted by PlacementId here, put back on
-	-- that plant's new card once the paint is done.
-	--==========================================================================
-	local focusObject = GuiService.SelectedObject
-	local focusIndex = if focusObject then slotIndexOf[focusObject] else nil
-	local focusId = if focusIndex then shownIds[focusIndex] else nil
-	local focusOnAction = focusIndex ~= nil and pool[focusIndex] ~= nil
-		and focusObject == pool[focusIndex].action
-
-	--==========================================================================
-	-- EVERY PLANT GETS A ROW, EVEN THE ONES THAT DO NOT FIT
-	--
-	-- A garden can legitimately hold more than its level's capacity: the ladder
-	-- was re-cut under live saves, so an old profile migrates in over its new
-	-- limit and PlantService restores all of it rather than discarding the
-	-- overflow. Capacity blocks PLANTING, not owning.
-	--
-	-- So the row count is whichever is larger. Drawing only `capacity` rows
-	-- would hide plants the player owns, can see standing in their own bed, and
-	-- cannot select or pick up from the one panel that lists them -- which reads
-	-- as the game having eaten them.
-	--
-	-- Below capacity the extra rows are empty and mean "room left". There are
-	-- none beyond it: at or over capacity the list stops at the last real plant.
-	--==========================================================================
-	local rows = math.max(capacity, #here)
-	local planted, waiting, rate = 0, 0, 0
-	--==========================================================================
-	-- WHAT THIS PLAYER EARNS, NOT WHAT THE PLANT IS WORTH
-	--
-	-- IncomePerSecond is the plant's intrinsic rate and stays that way -- the
-	-- Index prints it for species nobody owns. This panel is the player's OWN
-	-- garden, so every figure on it is multiplied by their cash passes. Without
-	-- this the x2 Money pass would pay double while the garden reported half of
-	-- it, which reads as the pass being broken.
-	--
-	-- Read once per paint rather than per slot, so all ten rows and the footer
-	-- can never disagree with each other.
-	--==========================================================================
-	-- The pass times a running Bonus Chest income boost -- what RateFor pays.
-	local mult = GameConfig.incomeMultiplier(player)
-
-	if paint then
-		setSlotCount(rows)
-	end
-
-	for index = 1, rows do
-		local occupant = here[index]
-		shownIds[index] = if occupant then occupant.id else nil
-		if occupant then
-			planted += 1
-			local stage, remaining = stageOf(occupant, now)
-			if stage == STAGE_GROWN then
-				rate += SeedData.IncomePerSecond(occupant.species, occupant.tier)
-			else
-				waiting += 1
-			end
-
-			if paint then
-				local slot = slotAt(index)
-				local species = occupant.species
-				--==========================================================
-				-- TINTED BY WHAT IT WEIGHS, NOT BY WHAT SHAPE IT IS
-				--
-				-- The sheet's rarity is the FORM's drop rate -- how often a
-				-- cube turns up against a bell -- and it says nothing about
-				-- the prize. Printing an 8,000 kg Nubkin in Common white
-				-- would call the best thing in the garden ordinary.
-				--
-				-- This is the Garden, so it is ColorForKg on the name AND on
-				-- the border. FormColor belongs to the Index and stays there.
-				--==========================================================
-				-- A Secret has no size tier (2026-10-02): the Secret colour, and no
-				-- weight tag at all (setWeightTag(nil) hides it). The Rain event's
-				-- unsized Pod 1 and Pod 3 forms read the same way, in their
-				-- rarity's colour; its Pod 2 forms show their tier like any other.
-				local band = PlantInfo.SizeColour(species.Id, occupant.tier)
-				local kgFormatted = if SeedData.Unsized(species) then nil
-					else GameConfig.compact(occupant.tier) .. " tier"
-
-				if stage == STAGE_GROWN then
-					slot.setEmpty(false)
-					slot.setStageTheme("grown")
-					slot.setReadyPulse(false)
-					slot.setProgress(nil)
-					slot.setWeightTag(kgFormatted, band)
-					slot.setStatusTag("+$" .. GameConfig.compact(
-						SeedData.IncomePerSecond(occupant.species, occupant.tier) * mult) .. "/s",
-						Color3.fromRGB(142, 220, 68), Color3.fromRGB(20, 36, 16))
-
-					slot.setModel("grown:" .. species.Id, function(into)
-						return CreatureModel.Build(species, occupant.tier,
-							CreatureModel.STAGE_GROWN, CFrame.new(), into)
-					end, species.Form or species.Id)
-					slot.setBackdrop(species.Id)
-					slot.border.Color = band
-
-					offers[index] = occupant.id
-					slot.name.Text = species.Name
-					slot.name.TextColor3 = band
-					--==================================================
-					-- THE PILL NAMES THE RARITY, NOT THE TIER
-					--
-					-- This line printed RarityForTier, which despite its
-					-- name returns the TIER -- "COLOSSAL", "GIANT". The
-					-- weight tag in the corner already says "7 tier", so
-					-- the card was spending both of its word slots on the
-					-- same fact and never once said whether the thing was
-					-- Common or Mythic.
-					--
-					-- So it carries the SPECIES rarity now, in the rarity
-					-- palette the Index already uses, boxed so it reads as
-					-- a label rather than as a caption. Nothing is lost:
-					-- the tier is still on the tag above it.
-					--==================================================
-					local rarity = species.Rarity or "Common"
-					slot.sub.Text = string.upper(rarity)
-					slot.sub.TextColor3 = GameConfig.RarityColor[rarity]
-						or Color3.fromRGB(220, 218, 225)
-					slot.setSubPill(true, GameConfig.RarityColor[rarity])
-				else
-					slot.setEmpty(false)
-					-- A replayed pod (a Secret's, a Rain pod) is its own model,
-					-- cached under its POD's key: every creature a Rain pod can
-					-- hold shares one shell, and nothing here may tell them apart.
-					slot.setModel(if species.Pod then "secretpod:" .. species.Pod
-						else "pod:" .. SeedData.RarityForTier(occupant.tier),
-						function(into)
-							return CreatureModel.BuildPod(species, occupant.tier,
-								CFrame.new(), into)
-						end, if stage == STAGE_READY then "ready" else "pod")
-					slot.setBackdrop(nil)
-					slot.border.Color = band
-					offers[index] = nil
-					slot.setWeightTag(kgFormatted, band)
-
-					if stage == STAGE_READY then
-						slot.setStageTheme("ready")
-						slot.setReadyPulse(true)
-						slot.setProgress(1.0, Color3.fromRGB(255, 215, 0))
-						slot.setStatusTag("READY!", Color3.fromRGB(255, 235, 80), Color3.fromRGB(48, 40, 12))
-
-						slot.name.Text = "Ready to Hatch"
-						slot.name.TextColor3 = band
-						slot.setSubPill(false)
-						-- The hatch prompt's own keys (PlantService): E, and the
-						-- default X on a pad -- an Xbox has no E to hold.
-						slot.sub.Text = if PadInput.active()
-							then "HOLD [" .. PadInput.short(Enum.KeyCode.ButtonX) .. "] IN FIELD"
-							else "HOLD [E] IN FIELD"
-						slot.sub.TextColor3 = ACCENT
-					else
-						slot.setStageTheme("pod")
-						slot.setReadyPulse(false)
-						-- This pod's own full wait, so the bar fills over the time
-						-- it was actually planted with.
-						local totalSec = math.max(occupant.hatchAt - occupant.plantedAt, 1)
-						local frac = math.clamp(1 - (remaining / totalSec), 0, 1)
-						slot.setProgress(frac, band)
-						slot.setStatusTag("⏱ " .. clock(remaining), Color3.fromRGB(250, 205, 75))
-
-						slot.name.Text = "Hatching..."
-						slot.name.TextColor3 = GHOST
-						slot.setSubPill(false)
-						slot.sub.Text = string.format("%d%% Grown", math.floor(frac * 100))
-						slot.sub.TextColor3 = GHOST
-					end
-				end
-			end
-		elseif paint then
-			local slot = slotAt(index)
-			slot.setEmpty(true)
-			slot.setModel("empty", nil)
-			slot.setBackdrop(nil)
-			offers[index] = nil
-			slot.name.Text = "Empty Slot"
-			slot.name.TextColor3 = GHOST
-			slot.setSubPill(false)
-			slot.sub.Text = "+ Plant"
-			slot.sub.TextColor3 = Color3.fromRGB(130, 175, 95)
-		end
-	end
-
-	--==========================================================================
-	-- A SELECTION THAT NO LONGER NAMES ANYTHING IS DROPPED
-	--
-	-- The plant may have been picked up, stolen, or grown out from under the
-	-- card while the panel was open. Rather than trust the click that made it,
-	-- the selection is re-tested against what the bed actually holds on every
-	-- repaint -- so the button can never outlive the plant it would act on.
-	--==========================================================================
-	--==========================================================================
-	-- ...AND A SELECTION THAT MOVED GOES WITH ITS PLANT
-	--
-	-- The plant can be somewhere else in the list now: a new sort, a hatch that
-	-- re-ranked it, a pick-up above it. It used to stay on the SLOT, showing a
-	-- different plant under the ring and a PICK UP that refused. Now it follows
-	-- the plant to its new card, and so does the pad's focus if it was on it.
-	--==========================================================================
-	if paint and selectedId then
-		local foundAt: number? = nil
-		for index, id in pairs(offers) do
-			if id == selectedId then
-				foundAt = index
-				break
-			end
-		end
-		if not foundAt then
-			clearSelection()
-		elseif foundAt ~= selectedIndex then
-			local id = selectedId
-			clearSelection()
-			selectSlot(slotAt(foundAt), id, foundAt)
-		end
-	end
-	if paint and focusId then
-		for index, id in pairs(shownIds) do
-			if id == focusId then
-				if index ~= focusIndex then
-					local slot = slotAt(index)
-					GuiService.SelectedObject = if focusOnAction and selectedSlot == slot
-						then slot.action
-						else slot.button
-				end
-				break
-			end
-		end
-	end
-
-	badge.Visible = waiting > 0
-	badgeLabel.Text = tostring(waiting)
-
-	if paint then
-		-- Reads "GARDEN 8/10" normally and "GARDEN 23/20" for a migrated garden
-		-- that is over its level. The second one looks wrong and is not: it is
-		-- the honest description of a bed holding more than it can be planted
-		-- with, and hiding it would not make the plants go away.
-		header.Text = string.format("GARDEN  %d/%d", planted, capacity)
-		footer.Text = if rate > 0 then "PLOT INCOME:  +$" .. GameConfig.compact(rate * mult) .. "/s" else ""
-		footer.TextColor3 = Color3.fromRGB(145, 235, 75)
-	end
 end
 
---==============================================================================
--- THE PROFILE, FOR THE TIER ONLY
---
--- No Almanac writes from this file, and nothing here is trusted with cash. The
--- one field it wants is PlotTier, because that is how many holes there are.
---==============================================================================
-local function receive(profile: any)
-	if type(profile) ~= "table" or type(profile.PlotTier) ~= "number" then
+-- The server's answer, in words. A refusal changed nothing; say what would help.
+local WORDS: { [string]: { kind: string, title: string, detail: string? } } = {
+	PLANTED = { kind = "success", title = "PLANTED", detail = "It's earning on your plot." },
+	RETURNED = { kind = "success", title = "RETURNED TO BAG", detail = "It's stored and no longer earning." },
+	UNCHANGED = { kind = "info", title = "ALREADY YOUR BEST", detail = "Your best earners are already planted." },
+	NOTHING = { kind = "info", title = "NOTHING TO UNEQUIP", detail = "No grown plants on your plot." },
+	PLOT_FULL = { kind = "blocked", title = "GARDEN FULL", detail = "Return a plant or upgrade your plot." },
+	STORAGE_FULL = { kind = "blocked", title = "PLANT STORAGE FULL", detail = "Not enough Bag room for that swap." },
+	STORAGE_FULL_ALL = { kind = "blocked", title = "NOT ENOUGH BAG ROOM",
+		detail = "Your Bag can't hold every plant. Nothing was moved." },
+	NOT_READY = { kind = "blocked", title = "PLOT NOT READY", detail = "Try again in a moment." },
+	NO_PLOT = { kind = "blocked", title = "NO PLOT YET" },
+	NOT_STORED = { kind = "blocked", title = "NOT IN YOUR BAG", detail = "It may have been planted or sold." },
+	NOT_PLANTED = { kind = "blocked", title = "NOT ON YOUR PLOT" },
+	GROWING = { kind = "blocked", title = "STILL A POD", detail = "Hatch it at your plot first." },
+	INCOMPLETE = { kind = "warning", title = "NOT EVERYTHING MOVED", detail = "Nothing was lost; some stayed where they were." },
+	NOT_RECORDED = { kind = "blocked", title = "NOT SAVED YET", detail = "Nothing was moved. Try again." },
+}
+
+local SAY_COLOURS: { [string]: Color3 } = {
+	success = LOOK.Money,
+	info = LOOK.Text,
+	warning = LOOK.Premium,
+	blocked = Color3.fromRGB(196, 52, 40),
+}
+
+local function say(kind: string, title: string, detail: string?)
+	Notice.post({ kind = kind :: any, title = title, detail = detail, key = "myplants:" .. title })
+	sayText = string.format('<font color="#%s">%s</font>%s', (SAY_COLOURS[kind] or LOOK.Text):ToHex(), title,
+		if detail then "  " .. detail else "")
+	sayUntil = os.clock() + 3.5
+	task.delay(3.6, refresh)
+end
+
+local function onReply(reply: any)
+	if type(reply) ~= "table" then
 		return
 	end
-	local tier = math.floor(profile.PlotTier)
-	if tier ~= plotTier then
-		plotTier = tier
-		refresh(open)
+	pending = nil
+	local code = tostring(reply.code)
+	local words = WORDS[code]
+	if code == "EQUIPPED" then
+		local planted, returned = tonumber(reply.planted) or 0, tonumber(reply.returned) or 0
+		say("success", "BEST PLANTS EQUIPPED", string.format("%d in, %d to your Bag.", planted, returned))
+	elseif code == "UNEQUIPPED" then
+		say("success", "ALL PLANTS RETURNED",
+			string.format("%d to your Bag. Pods stay planted.", tonumber(reply.returned) or 0))
+	elseif words then
+		say(words.kind, words.title, words.detail)
 	end
+	if reply.ok == true then
+		selectedKey = nil
+	end
+	refresh()
 end
 
-local remotes = SeedGame:WaitForChild("Remotes", 20)
-if remotes then
-	-- WaitForChild, not FindFirstChild: the folder replicates before the events
-	-- inside it, which is how CashUI once sat blank for a whole session.
+MenuKit.tap(action.hit, nil, function()
+	local sel = if selectedKey then byKey[selectedKey :: string] else nil
+	if not sel or pending then
+		SoundKit.play("Denied")
+		return
+	end
+	if sel.kind == "stored" and not sel.restoring and sel.itemId then
+		ask(MY.Plant, sel.itemId)
+	elseif sel.kind == "planted" and sel.id then
+		ask(MY.Return, sel.id)
+	else
+		SoundKit.play("Denied")
+	end
+end)
+MenuKit.tap(best.hit, nil, function()
+	ask(MY.Best, nil)
+end)
+
+local function showConfirm(want: boolean)
+	confirm.Visible = want
+	if want then
+		local _, _, grown = plantedEntries(myPlot())
+		confirmText.Text = string.format("Return all %d grown plant%s to your Bag? Growing pods stay planted.",
+			grown, if grown == 1 then "" else "s")
+		MenuKit.bindBack("SeedPlantsConfirm", function()
+			showConfirm(false)
+		end)
+		if MenuKit.onPad() then
+			GuiService.SelectedObject = confirmNo.hit
+		end
+	else
+		MenuKit.unbind("SeedPlantsConfirm")
+		if MenuKit.onPad() then
+			GuiService.SelectedObject = clear.hit
+		end
+	end
+end
+MenuKit.tap(clear.hit, nil, function()
+	if pending then
+		SoundKit.play("Denied")
+		return
+	end
+	SoundKit.play("CardClick")
+	showConfirm(true)
+end)
+MenuKit.tap(confirmNo.hit, nil, function()
+	SoundKit.play("CardClick")
+	showConfirm(false)
+end)
+MenuKit.tap(confirmYes.hit, nil, function()
+	showConfirm(false)
+	ask(MY.Clear, nil)
+end)
+
+tabs.changed(function(id: string)
+	tab = id
+	selectedKey = nil
+	grid.CanvasPosition = Vector2.zero
+	refresh()
+end)
+
+--==============================================================================
+-- OPEN AND SHUT (the OpenPanel mutex; LB / RB switch the tabs)
+--==============================================================================
+local function setOpen(want: boolean)
+	if open == want then
+		return
+	end
+	open = want
+	if want then
+		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
+		MenuKit.bindBumpers("SeedPlantsPad", function()
+			tab = if tab == "planted" then "stored" else "planted"
+			tabs.set(tab)
+			selectedKey = nil
+			grid.CanvasPosition = Vector2.zero
+			SoundKit.play("CardClick")
+			refresh()
+		end)
+	else
+		if player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
+			player:SetAttribute(ATTR.OpenPanel, nil)
+		end
+		showConfirm(false)
+		selectedKey = nil
+		MenuKit.unbind("SeedPlantsPad")
+		for _, c in pairs(cards) do
+			RarityFX.setActive(c.fxText, false)
+			RarityFX.setActive(c.fxEdge, false)
+		end
+	end
+	relayout()
+	refresh()
+	modal.setOpen(want)
+end
+
+button.Activated:Connect(function()
+	setOpen(not open)
+end)
+modal.close.Activated:Connect(function()
+	setOpen(false)
+end)
+modal.dimmer.Activated:Connect(function()
+	setOpen(false)
+end)
+player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
+	if open and player:GetAttribute(ATTR.OpenPanel) ~= PANEL_NAME then
+		setOpen(false)
+	end
+end)
+gui.Destroying:Connect(function()
+	UIKit.coverRail(playerGui, PANEL_NAME, false)
+	MenuKit.unbind("SeedPlantsPad")
+	MenuKit.unbind("SeedPlantsConfirm")
+end)
+
+--==============================================================================
+-- KEEPING UP
+--
+-- The plant tags arriving and leaving, the plot's attributes, the Bag's Tools
+-- and the profile's push each repaint at once; the pods' clocks once a second,
+-- and only the badge while the panel is shut.
+--==============================================================================
+local since = 0
+RunService.Heartbeat:Connect(function(dt)
+	since += dt
+	if since < PLANTING.TickSeconds then
+		return
+	end
+	since = 0
+	refresh()
+end)
+
+local function soon()
+	task.defer(refresh)
+end
+CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Planted):Connect(soon)
+CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.Planted):Connect(soon)
+
+local function watchContainer(container: Instance?)
+	if container then
+		container.ChildAdded:Connect(soon)
+		container.ChildRemoved:Connect(soon)
+	end
+end
+watchContainer(player:FindFirstChildOfClass("Backpack"))
+player.ChildAdded:Connect(function(child)
+	if child:IsA("Backpack") then
+		watchContainer(child)
+		soon()
+	end
+end)
+if player.Character then
+	watchContainer(player.Character)
+end
+player.CharacterAdded:Connect(function(character)
+	watchContainer(character)
+	soon()
+end)
+
+local function receive(profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	if type(profile.Held) == "table" then
+		prof.held = profile.Held
+	end
+	if type(profile.Favourites) == "table" then
+		prof.favourites = profile.Favourites
+	end
+	if type(profile.Hotbar) == "table" then
+		prof.hotbar = profile.Hotbar
+	end
+	soon()
+end
+
+task.spawn(function()
+	local remotes = SeedGame:WaitForChild("Remotes", 20)
+	if not remotes then
+		warn("[Seed/GardenUI] No Remotes folder; MY PLANTS cannot ask for anything.")
+		return
+	end
 	local updated = remotes:WaitForChild(GameConfig.Remotes.ProfileUpdated, 20)
 	if updated and updated:IsA("RemoteEvent") then
 		updated.OnClientEvent:Connect(receive)
-	else
-		warn("[Seed/GardenUI] No ProfileUpdated; the garden will assume a starting plot.")
 	end
 	local ready = remotes:WaitForChild(GameConfig.Remotes.ProfileReady, 20)
 	if ready and ready:IsA("RemoteEvent") then
@@ -1119,134 +1128,33 @@ if remotes then
 			end
 		end)
 	end
-end
-
---==============================================================================
--- OPEN AND SHUT
---
--- THE GARDEN IS IN THE MUTEX NOW. It used to be deliberately outside it: this
--- docked on the right rail, the Index and Shop docked on the left, and the whole
--- point of two rails was being able to read your own dirt while looking at a
--- price. A centred modal has no rail, so the three of them share one rectangle
--- and one at a time is the only arrangement left.
---
--- Each writes its own name to the OpenPanel attribute and closes itself on
--- seeing a name that is not its own, so no script has to know the others exist.
---==============================================================================
-local function setOpen(want: boolean)
-	if open == want then
-		return
-	end
-	open = want
-	if want then
-		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
-		-- Painted before it is shown: the clocks tick once a second and an
-		-- unpainted first frame is a panel full of last minute's numbers.
-		refresh(true)
-	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
-		player:SetAttribute(ATTR.OpenPanel, nil)
-	end
-	if not want then
-		clearSelection()
-	end
-	modal.setOpen(want)
-end
-
---==============================================================================
--- THE PANEL BACKGROUND DELIBERATELY DOES NOT CLEAR THE SELECTION
---
--- It did for one pass, on shell.InputBegan, and that is a race: InputBegan is
--- mouse-DOWN and Activated is mouse-UP, so a press on UNEQUIP cleared the
--- selection a frame before the button it was pressed on could act on it. The
--- guard in the handler then read a nil selection and did nothing. It happened
--- to work in testing, which is the worst way for a race to behave.
---
--- Nothing is lost. A selection is dropped by the things that actually make it
--- stale -- the same card again, another card, an empty one, a scroll that
--- takes its button out of sight, the panel closing, or the plant no longer
--- being there -- and the dimmer closes the panel, which is already one of those.
---==============================================================================
-
-button.Activated:Connect(function()
-	setOpen(not open)
-end)
-sortButton.button.Activated:Connect(function()
-	gardenSort = PlantInfo.NextSort(gardenSort)
-	sortButton.set(PlantInfo.SortLabels[gardenSort])
-	refresh(open)
-end)
-modal.close.Activated:Connect(function()
-	setOpen(false)
-end)
-modal.dimmer.Activated:Connect(function()
-	setOpen(false)
-end)
-
-player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
-	local holder = player:GetAttribute(ATTR.OpenPanel)
-	if open and holder ~= PANEL_NAME then
-		setOpen(false)
-	end
-end)
-
---==============================================================================
--- WHERE THE PAD'S FOCUS GOES, THE LIST FOLLOWS
---
--- The engine scrolls a list only as far as the control it has just selected:
--- land on a card and its bottom strip -- where PICK UP comes up -- can still be
--- under the edge. So a card that takes the focus comes up whole, and the
--- button it is about to offer is already in sight. This panel's cards only,
--- and only while it is open; a mouse never sets SelectedObject, so this is the
--- pad's path alone.
---==============================================================================
-GuiService:GetPropertyChangedSignal("SelectedObject"):Connect(function()
-	local focus = GuiService.SelectedObject
-	local index = if focus then slotIndexOf[focus] else nil
-	if open and index then
-		reveal(index)
-	end
-end)
-
---==============================================================================
--- KEEPING UP
---
--- Once a second for the clocks, and immediately on a tag arriving or leaving.
--- PlantService destroys and rebuilds a model at every stage change, so without
--- the tag signals a row would sit on HATCHING for up to a second after the thing
--- it names had already become a sprout.
---
--- The BADGE is refreshed on the same tick whether the panel is open or not --
--- that is the whole point of a badge -- but the rows are only painted when
--- somebody is looking at them.
---==============================================================================
-local since = 0
-
-RunService.Heartbeat:Connect(function(dt)
-	since += dt
-	if since < PLANTING.TickSeconds then
-		return
-	end
-	since = 0
-	refresh(open)
-end)
-
-do
-	local remotes = SeedGame:WaitForChild("Remotes", 20)
-	local channel = if remotes
-		then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20)
-		else nil
+	local channel = remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20)
 	if channel and channel:IsA("RemoteEvent") then
 		gameEvent = channel
+		channel.OnClientEvent:Connect(function(verb: any, payload: any)
+			if verb == MY.Reply then
+				onReply(payload)
+			end
+		end)
 	else
-		warn("[Seed/GardenUI] No GameEvent remote; UNEQUIP will do nothing.")
+		warn("[Seed/GardenUI] No GameEvent remote; MY PLANTS cannot ask for anything.")
 	end
-end
+end)
 
-local function onTagChanged()
-	refresh(open)
-end
+-- The plot's own numbers change under the panel (a hatch, an upgrade, a boost).
+task.spawn(function()
+	local watched: Model? = nil
+	while gui.Parent do
+		local plot = myPlot()
+		if plot ~= watched then
+			watched = plot
+			if plot then
+				plot:GetAttributeChangedSignal(ATTR.GardenIncome):Connect(soon)
+				plot:GetAttributeChangedSignal("Capacity"):Connect(soon)
+			end
+		end
+		task.wait(2)
+	end
+end)
 
-CollectionService:GetInstanceAddedSignal(GameConfig.Tags.Planted):Connect(onTagChanged)
-CollectionService:GetInstanceRemovedSignal(GameConfig.Tags.Planted):Connect(onTagChanged)
-
-refresh(false)
+refresh()

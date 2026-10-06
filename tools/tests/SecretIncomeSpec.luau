@@ -183,16 +183,29 @@ local ok, err = pcall(function()
 			and not SeedData.Unsized(SeedData.Get("nubkin")),
 		"the hatch reveal's line says SECRET, with no size word")
 	local gardenSrc = sourceOf(Scripts, "GardenUI")
-	check(string.find(gardenSrc, "local kgFormatted = if SeedData.Unsized(species) then nil", 1, true) ~= nil
-			and string.find(gardenSrc, '"secretpod:" .. species.Pod', 1, true) ~= nil,
-		"the Garden shows no weight tag for a Secret and pictures its own pod")
+	-- MY PLANTS (2026-10-04) draws every card with the Bag's own face, so a
+	-- Secret's card reads its rarity and no size, and its pod its own shell
+	-- (InventoryModel, checked just below).
+	check(string.find(gardenSrc, "face = InventoryModel.face(item)", 1, true) ~= nil
+			and string.find(gardenSrc, "local function creature(speciesId: string, tier: number, hatched: boolean)", 1, true) ~= nil,
+		"MY PLANTS shows a Secret through the Bag's face: no weight tag, its own pod")
 	local sellSrc = sourceOf(Scripts, "SellUI")
 	check(string.find(sellSrc, "metaLabel.Text = if info.sized", 1, true) ~= nil,
 		"SELL ONE's line shows a Secret's rarity alone")
-	local bagSrc = sourceOf(Scripts, "LoadoutUI")
-	check(string.find(bagSrc, 'holder.Visible = keyName ~= "Size" or details.sized', 1, true) ~= nil
-			and string.find(bagSrc, "PlantInfo.SizeColour(row.speciesId, row.tier)", 1, true) ~= nil,
-		"the Bag hides a Secret's Size row and colours its name by rarity")
+	-- The compact Bag (2026-10-03): its tiles and details come from InventoryModel.
+	local InventoryModel = require(game:GetService("ReplicatedStorage").SeedGame.Shared.InventoryModel)
+	local secretItem = { ref = "i:1", kind = "plant", speciesId = "snarlbloom", tier = 1, hatched = true, sealed = false,
+		restoring = false, count = 1, worn = false, favourite = false, order = 1 }
+	local secretFace = InventoryModel.face(secretItem)
+	local sizeLine = false
+	for _, line in ipairs(InventoryModel.details(secretItem, secretFace, nil, nil, false)) do
+		if line.key == "Size" then
+			sizeLine = true
+		end
+	end
+	check(not sizeLine and secretFace.variant == "Secret"
+			and secretFace.variantColour == PlantInfo.SizeColour("snarlbloom", 1),
+		"the Bag shows a Secret no Size line, and names its rarity in the rarity's colour")
 
 	--==========================================================================
 	say("5. A saved Secret comes back as itself")

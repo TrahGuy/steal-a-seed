@@ -16,7 +16,14 @@
 --   build     the instances, once per slot
 --   restyle   the sizes again, on a change of face
 --   paint     the state: empty or not, held or not, the number, a stack count,
---             a rarity accent, the hidden name
+--             a rarity accent, the hidden name -- and since 2026-10-03 (the
+--             freely assignable hotbar) four more: a FAINT slot's word (a
+--             placeholder waiting for the first bat, trap or tickets), an item
+--             being RESTORED after a respawn, a TARGET as a phone assigns, and
+--             a weapon whose equip is PENDING at the server -- and since
+--             2026-10-04 a trap's PLACEMENTS still available ("3x" .. "0x")
+--   cool      a trap's TRIGGER COOLDOWN (2026-10-05): the picture dimmed, the
+--             shade shrinking, the seconds left over it
 --   lift      the in-hand lift (none under reduced motion)
 --   bump      a brief pop on equip or arrival (none under reduced motion)
 --   flash     the edge takes a colour for a third of a second
@@ -28,6 +35,17 @@
 --   hover     a brighter edge (UIKit.cardPop drives it)
 --   held      the warm amber-to-green edge, a lighter plate, an amber number,
 --             a small lift
+--   ghost     the empty plate with a faint word in the middle ("BAT")
+--   restoring the item dimmed: it is coming back after a respawn
+--   pending   the item, its edge a soft amber: asked of the server, not here yet
+--   target    a bright white edge on every slot as a phone assigns
+--
+-- AND A RARITY (2026-10-03, the owner's inventory pass): a Mythic, Divine or
+-- Secret the player can already see takes its colour on the edge and a small
+-- light travelling round it (RarityFX) -- the quietest of these, so held,
+-- target, pending, restoring and a flash all put the light out for as long as
+-- they last. In hand also shows the Bag's small amber diamond on the top-right
+-- corner, so a coloured edge is never read as the selection.
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -35,6 +53,8 @@ local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local RarityFX = require(Shared:WaitForChild("RarityFX"))
+local InventoryTile = require(Shared:WaitForChild("InventoryTile"))
 
 local HotbarCard = {}
 
@@ -53,9 +73,21 @@ export type Card = {
 	number: TextLabel,
 	numberEdge: UIStroke,
 	stack: TextLabel,
+	-- A trap's placements still available, bottom centre (2026-10-04).
+	uses: TextLabel,
+	-- The trigger cooldown's seconds, over the picture (2026-10-05), and
+	-- whether it is running (the picture's dim is then cool's, not paint's).
+	timer: TextLabel,
+	cooling: boolean,
+	timerText: string,
 	accent: Frame,
 	-- Hidden: carries the Tool's whole name, which TutorialUI's pointer reads.
 	name: TextLabel,
+	-- A faint slot's word, centred (2026-10-03).
+	ghost: TextLabel,
+	-- The rarest rarities' travelling light, and the in-hand diamond.
+	fxEdge: RarityFX.Handle,
+	marker: Frame,
 	pop: UIKit.CardPop,
 	bumpScale: UIScale,
 	faceCorner: UICorner,
@@ -77,6 +109,17 @@ export type Paint = {
 	stack: string?,
 	accent: Color3?,
 	name: string,
+	-- 2026-10-03: a faint slot's word; restoring; a pending equip; assign mode.
+	ghost: string?,
+	restoring: boolean?,
+	pending: boolean?,
+	target: boolean?,
+	-- The rarity the player may see (InventoryModel's face), or nil.
+	rarity: string?,
+	-- 2026-10-04: a trap's placements still available ("3x"; WeaponData.TrapsLeftText),
+	-- and whether that is none (drawn in TrapCountEmpty). nil for everything else.
+	uses: string?,
+	usesEmpty: boolean?,
 }
 
 function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: number): Card
@@ -122,6 +165,10 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 	button.Parent = wrap
 	local faceCorner = UIKit.corner(button, H.CardCorner)
 	local stroke = UIKit.stroke(button, H.Edge, H.CardStroke, H.EdgeTransparency)
+	-- Border, said out loud: on a TextButton the default (Contextual) strokes
+	-- the TEXT, which is empty, so the keyline, the flashes and assign mode's
+	-- targets never drew at all.
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 	-- The warm keyline is a gradient on the stroke: a held slot sets the stroke
 	-- white and enables this; every other state disables it.
@@ -203,6 +250,45 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 	stack.Parent = button
 	UIKit.stroke(stack, H.Ink, H.NumeralOutline)
 
+	-- A trap's placements still available (2026-10-04, the reusable-trap brief):
+	-- "3x" .. "0x" under its picture, bottom centre, read off the server's count
+	-- by LoadoutUI. Cream with a dark keyline over any picture; a warm red at 0x.
+	local uses = Instance.new("TextLabel")
+	uses.Name = "Uses"
+	uses.AnchorPoint = Vector2.new(0.5, 1)
+	uses.Position = UDim2.new(0.5, 0, 1, -H.TrapCountBottom)
+	uses.Size = UDim2.new(1, -4, 0, H.TrapCountSize + 3)
+	uses.BackgroundTransparency = 1
+	uses.Font = Enum.Font.FredokaOne
+	uses.TextSize = H.TrapCountSize
+	uses.TextColor3 = H.TrapCountColour
+	uses.TextXAlignment = Enum.TextXAlignment.Center
+	uses.TextYAlignment = Enum.TextYAlignment.Bottom
+	uses.Text = ""
+	uses.Visible = false
+	uses.ZIndex = zIndex + 5
+	uses.Parent = button
+	UIKit.stroke(uses, H.Ink, H.NumeralOutline + 0.3)
+
+	-- A trap's trigger cooldown (2026-10-05): the seconds left, centred over the
+	-- picture, white on a dark keyline, above the count. Hidden the rest of the
+	-- time.
+	local timer = Instance.new("TextLabel")
+	timer.Name = "CoolTimer"
+	timer.AnchorPoint = Vector2.new(0.5, 0.5)
+	timer.Position = UDim2.fromScale(0.5, 0.45)
+	timer.Size = UDim2.new(1, -4, 0, H.TrapCoolSize + 4)
+	timer.BackgroundTransparency = 1
+	timer.Font = Enum.Font.FredokaOne
+	timer.TextSize = H.TrapCoolSize
+	timer.TextColor3 = H.TrapCoolColour
+	timer.TextXAlignment = Enum.TextXAlignment.Center
+	timer.Text = ""
+	timer.Visible = false
+	timer.ZIndex = zIndex + 6
+	timer.Parent = button
+	UIKit.stroke(timer, H.Ink, H.NumeralOutline + 0.6)
+
 	-- The rarity accent: a thin bar on the bottom edge, in the form's colour.
 	local accent = Instance.new("Frame")
 	accent.Name = "Accent"
@@ -226,6 +312,27 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 	name.Visible = false
 	name.ZIndex = zIndex + 1
 	name.Parent = button
+
+	-- A faint slot's word: what the slot is waiting for, small and quiet.
+	local ghost = Instance.new("TextLabel")
+	ghost.Name = "Ghost"
+	ghost.AnchorPoint = Vector2.new(0.5, 0.5)
+	ghost.Position = UDim2.fromScale(0.5, 0.56)
+	ghost.Size = UDim2.new(1, -6, 0, H.NumeralSize + 4)
+	ghost.BackgroundTransparency = 1
+	ghost.Font = Enum.Font.FredokaOne
+	ghost.TextSize = H.NumeralSize
+	ghost.TextColor3 = H.Numeral
+	ghost.TextTransparency = H.EmptyNumeralTransparency
+	ghost.Text = ""
+	ghost.Visible = false
+	ghost.ZIndex = zIndex + 3
+	ghost.Parent = button
+
+	-- A Mythic, Divine or Secret's light on the border, under the number and
+	-- the stack; the in-hand diamond on the corner, over everything.
+	local fxEdge = RarityFX.edge(button, H.CardCorner, zIndex + 3)
+	local marker = InventoryTile.marker(button, H.MarkerSize, H.Marker, H.Ink, zIndex + 6)
 
 	-- Hover and press: UIKit.cardPop, silent, with the rim as its glow.
 	local pressScale = Instance.new("UIScale")
@@ -252,8 +359,15 @@ function HotbarCard.build(parent: Instance, index: number, H: any, zIndex: numbe
 		number = number,
 		numberEdge = numberEdge,
 		stack = stack,
+		uses = uses,
+		timer = timer,
+		cooling = false,
+		timerText = "",
 		accent = accent,
 		name = name,
+		ghost = ghost,
+		fxEdge = fxEdge,
+		marker = marker,
 		pop = pop,
 		bumpScale = bumpScale,
 		faceCorner = faceCorner,
@@ -281,8 +395,17 @@ function HotbarCard.restyle(card: Card, H: any)
 	card.stack.Position = UDim2.new(1, -H.StackInset, 1, -H.StackInset + 1)
 	card.stack.Size = UDim2.fromOffset(H.SlotWidth - H.StackInset * 2, H.StackSize + 3)
 	card.stack.TextSize = H.StackSize
+	card.uses.Position = UDim2.new(0.5, 0, 1, -H.TrapCountBottom)
+	card.uses.Size = UDim2.new(1, -4, 0, H.TrapCountSize + 3)
+	card.uses.TextSize = H.TrapCountSize
+	card.timer.Size = UDim2.new(1, -4, 0, H.TrapCoolSize + 4)
+	card.timer.TextSize = H.TrapCoolSize
 	card.accent.Position = UDim2.new(0.5, 0, 1, -H.AccentBottom)
 	card.accent.Size = UDim2.new(H.AccentShare, 0, 0, H.AccentHeight)
+	card.ghost.Size = UDim2.new(1, -6, 0, H.NumeralSize + 4)
+	card.ghost.TextSize = H.NumeralSize
+	RarityFX.setRadius(card.fxEdge, H.CardCorner)
+	card.marker.Size = UDim2.fromOffset(H.MarkerSize, H.MarkerSize)
 end
 
 function HotbarCard.paint(card: Card, H: any, p: Paint)
@@ -297,11 +420,27 @@ function HotbarCard.paint(card: Card, H: any, p: Paint)
 	if stackText then
 		card.stack.Text = stackText
 	end
+	local usesText = p.uses
+	card.uses.Visible = usesText ~= nil and not empty
+	if usesText then
+		card.uses.Text = usesText
+		card.uses.TextColor3 = if p.usesEmpty then H.TrapCountEmpty else H.TrapCountColour
+	end
 	local accent = p.accent
 	card.accent.Visible = accent ~= nil and not empty
 	if accent then
 		card.accent.BackgroundColor3 = accent
 	end
+	local ghostText = p.ghost
+	card.ghost.Visible = ghostText ~= nil and empty
+	if ghostText then
+		card.ghost.Text = ghostText
+	end
+	-- Coming back after a respawn: the item is there, dimmed, and waits. A trap
+	-- in its trigger cooldown is dimmed by cool(), which owns it until it ends.
+	card.preview.hero.ImageTransparency = if p.restoring then 0.6
+		elseif card.cooling then H.TrapCoolDim
+		else 0
 
 	-- The plate: nearly gone when empty, lighter when held.
 	card.button.BackgroundColor3 = if held then H.LitPlate else H.Plate
@@ -309,16 +448,61 @@ function HotbarCard.paint(card: Card, H: any, p: Paint)
 		elseif held then H.LitPlateTransparency
 		else H.PlateTransparency
 
-	-- The edge, unless a flash owns it.
-	if os.clock() >= card.flashUntil then
-		card.ringTint.Enabled = held
-		card.stroke.Color = if held then WHITE else H.Edge
-		card.stroke.Thickness = if held then H.LitThickness else H.CardStroke
-		card.stroke.Transparency = if held then 0
+	-- The edge, unless a flash owns it. Assign mode's target outranks
+	-- everything but a flash; a pending equip is a soft amber; a rarest
+	-- rarity's colour is the quietest, under all of them.
+	local target, pending = p.target == true, p.pending == true and not held
+	local rarity = if empty then nil else p.rarity
+	local rare = RarityFX.edgeColour(rarity)
+	local flashing = os.clock() < card.flashUntil
+	if not flashing then
+		card.ringTint.Enabled = held and not target
+		card.stroke.Color = if target or held then WHITE elseif pending then H.LitTop elseif rare then rare else H.Edge
+		card.stroke.Thickness = if target or held then H.LitThickness else H.CardStroke
+		card.stroke.Transparency = if target or held then 0
+			elseif pending then 0.3
 			elseif empty then H.EmptyEdgeTransparency
+			elseif rare then 0.05
 			else H.EdgeTransparency
 	end
+	card.marker.Visible = held
+	RarityFX.setEdge(card.fxEdge, rarity,
+		not (held or target or pending or p.restoring == true or flashing))
 	card.lit = held
+end
+
+--==============================================================================
+-- A TRAP'S TRIGGER COOLDOWN (2026-10-05)
+--
+-- `left` seconds of `total` still to wait, or 0 for none. Called every frame
+-- by LoadoutUI's strip loop. The shade shrinks with the wait (as a bat's recovery
+-- does), the picture stays dimmed and the whole seconds left stand over it --
+-- "10" down to "1" -- written only when the number changes. Ended, everything
+-- goes back at once: the dim, the shade and the number.
+--==============================================================================
+function HotbarCard.cool(card: Card, H: any, left: number, total: number)
+	local running = left > 0 and total > 0
+	if running then
+		local share = math.min(1, left / total)
+		card.cooldown.Size = UDim2.fromScale(1, share)
+		local text = tostring(math.max(1, math.ceil(left - 1e-6)))
+		if text ~= card.timerText then
+			card.timerText = text
+			card.timer.Text = text
+		end
+		if not card.cooling then
+			card.cooling = true
+			card.timer.Visible = true
+			card.preview.hero.ImageTransparency = H.TrapCoolDim
+		end
+	elseif card.cooling then
+		card.cooling = false
+		card.timerText = ""
+		card.timer.Text = ""
+		card.timer.Visible = false
+		card.cooldown.Size = UDim2.fromScale(1, 0)
+		card.preview.hero.ImageTransparency = 0
+	end
 end
 
 -- The in-hand lift: a few pixels up, tweened once per change; none at all
@@ -370,6 +554,7 @@ function HotbarCard.flash(card: Card, colour: Color3, H: any): number
 	local seconds = H.FlashSeconds
 	card.flashUntil = os.clock() + seconds + 0.02
 	card.ringTint.Enabled = false
+	RarityFX.setEdge(card.fxEdge, card.fxEdge.rarity, false)
 	card.stroke.Transparency = 0
 	card.stroke.Color = colour
 	card.stroke.Thickness = H.CardStroke + 1.5

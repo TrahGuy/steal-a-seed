@@ -153,6 +153,7 @@ local real = {
 	IsReady = PlayerDataService.IsReady,
 	Get = PlayerDataService.Get,
 	SetHeld = PlayerDataService.SetHeld,
+	MintItem = PlayerDataService.MintItem,
 }
 local patience = CarryService.HeldRestorePatience
 local ready: { [any]: boolean } = {}
@@ -171,6 +172,16 @@ end
 		profiles[p].Held = rows
 	end
 	return true
+end
+-- Item ids (2026-10-03), one counter for every stand-in: unique is all a row's
+-- id has to be.
+local minted = 1000
+;(PlayerDataService :: any).MintItem = function(p: any): string?
+	if not ready[p] then
+		return nil
+	end
+	minted += 1
+	return tostring(minted)
 end
 
 local function writesFor(name: string): { number }
@@ -700,11 +711,137 @@ local ok, err = pcall(function()
 		check(toolsOwned(newPack, newBodyModel) == #NINE - 1,
 			("disarmed sale: eight come back, not nine (%d)"):format(toolsOwned(newPack, newBodyModel)))
 	end
+
+	--==========================================================================
+	-- 24-27. EVERY ROW IS ONE ITEM, BY NAME (2026-10-03)
+	--
+	-- A Tool carries its row's Item id; a hotbar shortcut and a heart name it.
+	-- So twins must stay two different items through a respawn, a sale must
+	-- take exactly its own row, an arrival's id must be on the record when it
+	-- is handed over, and an arrival must never take over the row of a plant
+	-- the void just ate (B3).
+	--==========================================================================
+	local ITEM = "ItemId"
+	local function idsIn(pack: Instance?, body: Instance?): { [string]: number }
+		local set: { [string]: number } = {}
+		for _, container in ipairs({ pack, body }) do
+			if container then
+				for _, t in ipairs(container:GetChildren()) do
+					local id = t:GetAttribute(ITEM)
+					if t:IsA("Tool") and type(id) == "string" then
+						set[id] = (set[id] or 0) + 1
+					end
+				end
+			end
+		end
+		return set
+	end
+	local function rowIds(p: any): string
+		local list = {}
+		for _, row in ipairs(profiles[p].Held) do
+			table.insert(list, tostring(row.Item))
+		end
+		table.sort(list)
+		return table.concat(list, ",")
+	end
+	local function setText(set: { [string]: number }): string
+		local list = {}
+		for id, n in pairs(set) do
+			table.insert(list, if n == 1 then id else id .. "x" .. n)
+		end
+		table.sort(list)
+		return table.concat(list, ",")
+	end
+	local TWINS = {
+		{ Id = "nubkin", Tier = 1, Hatched = true, Item = "a1" },
+		{ Id = "nubkin", Tier = 1, Hatched = true, Item = "a2" },
+		{ Id = "novaorb", Tier = 4, Hatched = true, Item = "a3" },
+	}
+
+	--== 24. TWINS ARE REBUILT AS THEMSELVES ===================================
+	do
+		local p, pack, body = spawnWith("NamedTwins", -224, TWINS)
+		check(setText(idsIn(pack, body)) == "a1,a2,a3", "ids: every rebuilt Tool carries its own row's id ("
+			.. setText(idsIn(pack, body)) .. ")")
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(setText(idsIn(newPack, newBodyModel)) == "a1,a2,a3" and rowIds(p) == "a1,a2,a3",
+			"ids: after a respawn the twins are still a1 and a2, each once (" .. setText(idsIn(newPack, newBodyModel))
+				.. ")")
+	end
+
+	--== 25. SELLING ONE TWIN TAKES EXACTLY ITS OWN ROW ========================
+	do
+		local p, pack, body = spawnWith("SoldOneTwin", -225, TWINS)
+		local sold: Tool? = nil
+		for _, t in ipairs(pack:GetChildren()) do
+			if t:GetAttribute(ITEM) == "a2" then
+				sold = t :: Tool
+			end
+		end
+		check(sold ~= nil, "ids: the second twin is in the bag")
+		if sold then
+			sold:Destroy()
+			CarryService.SyncHeldNow(p, { sold })
+		end
+		check(rowIds(p) == "a1,a3", "ids: selling twin a2 takes a2's row, never a1's (" .. rowIds(p) .. ")")
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(setText(idsIn(newPack, newBodyModel)) == "a1,a3",
+			"ids: and the respawn brings back a1 and the novaorb, not a2")
+	end
+
+	--== 26. A GIFT AND A HATCH ARE ON THE RECORD BY NAME ======================
+	do
+		local p, pack, body = spawnWith("GiftedByName", -226, {})
+		local gave = CarryService.GivePod(p, "nubkin", 2)
+		local podTool: Tool? = nil
+		for _, t in ipairs(pack:GetChildren()) do
+			if t:IsA("Tool") and t:GetAttribute("SpeciesId") == "nubkin" then
+				podTool = t :: Tool
+			end
+		end
+		local podId = if podTool then podTool:GetAttribute(ITEM) else nil
+		check(gave == true and type(podId) == "string" and rowIds(p) == podId,
+			"ids: a given pod's Tool knows its id, and that id is the record's row (" .. rowIds(p) .. ")")
+		local ok2 = CarryService.GiveHatched(p, SeedData.Get("petalpip") :: any, 3, 5, nil, true)
+		task.wait(0.1)
+		local plantTool: Tool? = nil
+		for _, container in ipairs({ pack, body }) do
+			for _, t in ipairs(container:GetChildren()) do
+				if t:IsA("Tool") and t:GetAttribute("SpeciesId") == "petalpip" then
+					plantTool = t :: Tool
+				end
+			end
+		end
+		local plantId = if plantTool then plantTool:GetAttribute(ITEM) else nil
+		check(ok2 == true and type(plantId) == "string" and plantId ~= podId and #profiles[p].Held == 2
+				and string.find("," .. rowIds(p) .. ",", "," .. tostring(plantId) .. ",", 1, true) ~= nil,
+			"ids: a hatch on the record gets a row of its own, named on its Tool (" .. rowIds(p) .. ")")
+	end
+
+	--== 27. AN ARRIVAL NEVER TAKES THE ROW OF A PLANT THE VOID ATE (B3) =======
+	do
+		local p, pack, body = spawnWith("ArrivedAfterVoid", -227,
+			{ { Id = "petalpip", Tier = 5, Hatched = true, Item = "b1" } })
+		voidTheHeld(p, pack, body, function(t)
+			return t:GetAttribute("SpeciesId") == "petalpip"
+		end)
+		check(rowIds(p) == "b1", "B3: the void took the petalpip's Tool and left its row")
+		CarryService.GiveHatched(p, SeedData.Get("petalpip") :: any, 5, 5, nil, true)
+		task.wait(0.15)
+		local live = idsIn(pack, body)
+		check(#profiles[p].Held == 2 and live.b1 == nil and next(live) ~= nil,
+			"B3: the new petalpip gets a row of its own, never b1's (" .. rowIds(p) .. " / live " .. setText(live) .. ")")
+		local newPack, newBodyModel = respawnAfter(p, pack, body)
+		check(countKey(newPack, "petalpip", 5, true) + countKey(newBodyModel, "petalpip", 5, true) == 2
+				and idsIn(newPack, newBodyModel).b1 == 1,
+			"B3: and the respawn brings back both: the one the void ate, and the new one")
+	end
 end)
 
 ;(PlayerDataService :: any).IsReady = real.IsReady
 ;(PlayerDataService :: any).Get = real.Get
 ;(PlayerDataService :: any).SetHeld = real.SetHeld
+;(PlayerDataService :: any).MintItem = real.MintItem
 CarryService.HeldRestorePatience = patience
 fixture:Destroy()
 

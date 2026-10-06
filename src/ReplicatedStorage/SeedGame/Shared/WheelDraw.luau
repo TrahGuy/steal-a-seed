@@ -52,6 +52,12 @@
 -- are turned the same way.
 --
 --==============================================================================
+-- THE PRIZE ART (2026-10-04): coins on the cash slices, the owner's Speed
+-- icon, real pod silhouettes, and the Titan and Colossal lettering -- see THE
+-- PRIZE ART below. Decoration only: every prize, amount, weight and landing is
+-- still WheelData's, untouched.
+--
+--==============================================================================
 -- THE RAINBOW IS COLOUR ONLY
 --
 -- The Bloomrunner Trail's sector and star cycle the mockup's rainbow.
@@ -63,6 +69,8 @@
 --==============================================================================
 
 local Shared = script.Parent
+local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
 
 local WheelDraw = {}
@@ -247,13 +255,704 @@ local function glyph(box: Frame, text: string, x: number, y: number, units: numb
 	return t
 end
 
--- Pod shells: the plain pod is the mockup's green seed; the Rare pod lilac for
--- the species it promises, the Titan warm gold against its red sector.
-local POD_SHELL: { [string]: { Color3 } } = {
-	pod_common = { rgb(199, 240, 138), rgb(52, 81, 26) },
-	pod_rare = { rgb(236, 206, 255), rgb(75, 31, 102) },
-	pod_titan = { rgb(255, 212, 130), rgb(107, 42, 18) },
+--==============================================================================
+-- THE PRIZE ART (2026-10-04, the owner's spin-wheel brief)
+--
+-- Every picture below is drawn in frames, in the same outlined cartoon style as
+-- the rest of the face, except the Speed icon, which is the owner's upload.
+--
+--   cash    small stacks of gold coins near the rim -- one stack for the small
+--           prize, two for the middle one, three for the jackpot -- and a
+--           scatter of muted coins across the slice behind the words
+--           (coinLayout). Both grow with the amount; both are capped.
+--   speed   GameConfig.SourceIcons.training, the uploaded winged shoe the Shop
+--           already uses as the one Speed icon: one for the small prize, a tidy
+--           cluster of three for the large one. Decoration, not a multiplier --
+--           the amount is in the words. Until the picture has loaded, the old
+--           bolt stands in, so a slice is never blank.
+--   pods    black silhouettes of REAL game pods with an ivory rim, a soft
+--           outline in the pod's size colour and one "?". The silhouettes are
+--           the pool's own biomes (podCluster): a prize whose species come
+--           from Greenhollow and Dustbowl shows those two pods, and the Rare
+--           pod, whose pool spans all five biomes, shows three different ones
+--           -- so no prize promises a biome it cannot give. A Titan's pods
+--           wear the split crown, a Colossal's are cracked open with light
+--           inside, as the models are. The creature is never shown.
+--           POD BY POD, the owner's uploaded silhouette replaces the frames
+--           wherever its biome has one (GameConfig.WheelPodArt: Greenhollow,
+--           Tanglemire and Starbloom since 2026-10-04). Each picture carries
+--           its own rim and "?", so none gets a second one; a biome with no
+--           upload yet (Dustbowl) keeps its frames, never another's picture.
+--
+-- TITAN AND COLOSSAL LETTERING (prestige): warm red to gold with a slow light
+-- travelling along it, and violet to gold with a brighter sheen and a soft
+-- glow round the letters. The light is a precomputed list of colour frames
+-- stepped by the CALLER (glint) -- nothing here runs per frame, and only the
+-- words' own gradients change: the sector fills' gradients, which cut the
+-- slices, are never touched. Reduced motion holds the plain ramp still.
+--
+-- KEEPING INSIDE THE SLICE. A decoration hangs on its sector's own arm, so it
+-- turns with the sector and can never drift into a neighbour while the wheel
+-- spins. Each one is laid out inside the wedge: clear of both dividers, of the
+-- hub and of the rim (WheelArtSpec measures every frame against its wedge).
+-- An icon that must stay readable turns over as a whole (Icon.upright) when
+-- its sector passes through the lower half, like the words do.
+--==============================================================================
+local SPEED_ICON = GameConfig.SourceIcons.training
+
+-- How the art learns a picture has loaded: set by a client before it draws
+-- (WheelUI hands in UIKit.whenPictureLoads). Nil on the server.
+WheelDraw.whenLoaded = nil :: ((ImageLabel, (boolean) -> ()) -> ())?
+
+-- Mockup units: the coloured fill ends 136.75 from the centre, the hub's gold
+-- ring at 50; an icon stands at 116, its box 24 across; the words run from 54
+-- to 104 along the middle; a divider is 2.5 wide.
+local FILL_R = 136.75
+local ICON_R = 116
+local DIVIDER_HALF = 1.25
+local EDGE_MARGIN = 0.9
+
+local COIN = {
+	Ink = rgb(107, 74, 0),
+	Rim = rgb(214, 146, 30),
+	Face = rgb(255, 206, 72),
+	Top = rgb(255, 226, 120),
+	Shine = rgb(255, 246, 204),
 }
+
+-- How rich a cash prize's art is: 1 the small prize, 2, 3 the jackpot.
+function WheelDraw.cashTier(amount: number?): number
+	local a = amount or 0
+	if a >= 50000 then
+		return 3
+	elseif a >= 10000 then
+		return 2
+	end
+	return 1
+end
+
+-- The background coins at most, and the coins in each stack, by cash tier.
+WheelDraw.CoinPattern = { 6, 9, 12 }
+WheelDraw.CoinStacks = { { 3 }, { 4, 3 }, { 3, 5, 4 } }
+
+-- How many Speed icons: one for a small prize, three for a large one.
+function WheelDraw.speedCount(amount: number?): number
+	local a = amount or 0
+	if a >= 10000 then
+		return 3
+	elseif a >= 5000 then
+		return 2
+	end
+	return 1
+end
+
+--==============================================================================
+-- WHERE A SLICE'S BACKGROUND COINS GO (pure; WheelArtSpec checks it)
+--
+-- A polar lattice inside the wedge: rows every 11 units out from the hub,
+-- staggered, each coin kept a divider's half-width and a margin inside both
+-- edges, clear of the icon's box. Coins clear of the words come first; only a
+-- slice too narrow for that puts the rest behind the words, where the dark
+-- outline of the amount keeps it readable. Then an even pick of `want`.
+-- `r` and the lateral `x` are mockup units; `a` is degrees from the middle.
+--==============================================================================
+export type Coin = { r: number, x: number, a: number, d: number }
+
+function WheelDraw.coinLayout(span: number, tier: number, wordsHalf: number?): { Coin }
+	local t = math.clamp(tier, 1, 3)
+	local want = WheelDraw.CoinPattern[t]
+	local d = if t >= 3 then 6.2 else 7.2
+	local step = d + 3.4
+	local half = math.rad(span / 2)
+	local wordsW = wordsHalf or 8
+	local clear: { Coin } = {}
+	local behind: { Coin } = {}
+	local row = 0
+	local r = 62
+	while r + d / 2 <= FILL_R - 1.5 do
+		row += 1
+		local room = (d / 2 + DIVIDER_HALF + EDGE_MARGIN) / r
+		if room < 1 and half > math.asin(room) then
+			local lateral = r * math.sin(half - math.asin(room))
+			local offset = if row % 2 == 0 then step / 2 else 0
+			for j = -6, 6 do
+				local x = offset + j * step
+				if math.abs(x) <= lateral then
+					local inIcon = r > ICON_R - 13 - d / 2 and r < ICON_R + 13 + d / 2 and math.abs(x) < 13 + d / 2
+					if not inIcon then
+						local coin = { r = r, x = x, a = math.deg(math.asin(x / r)), d = d }
+						local inWords = r < 104 + d / 2 and r > 54 - d / 2 and math.abs(x) < wordsW + d / 2
+						table.insert(if inWords then behind else clear, coin)
+					end
+				end
+			end
+		end
+		r += 11
+	end
+	local function spread(list: { Coin }, n: number): { Coin }
+		if #list <= n then
+			return list
+		end
+		local out: { Coin } = {}
+		for i = 1, n do
+			table.insert(out, list[math.floor(1 + (i - 1) * (#list - 1) / math.max(1, n - 1) + 0.5)])
+		end
+		return out
+	end
+	local picked = spread(clear, want)
+	if #picked < want then
+		for _, c in ipairs(spread(behind, want - #picked)) do
+			table.insert(picked, c)
+		end
+	end
+	return picked
+end
+
+--==============================================================================
+-- SMALL PIECES OF THE ART
+--==============================================================================
+-- A frame centred at (x, y) in the 24-unit icon box, `w` x `h` units, rounded
+-- by `radius` units (math.huge: a pill or a circle), turned by `rot`.
+local function blob(box: GuiObject, name: string, x: number, y: number, w: number, h: number, radius: number,
+	rot: number, colour: Color3, z: number, transparency: number?): Frame
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromScale(0.5 + x / 24, 0.5 + y / 24)
+	f.Size = UDim2.fromScale(math.max(0.05, w) / 24, math.max(0.05, h) / 24)
+	f.BackgroundColor3 = colour
+	f.BackgroundTransparency = transparency or 0
+	f.BorderSizePixel = 0
+	f.Active = false
+	f.Rotation = rot
+	f.ZIndex = z
+	f.Parent = box
+	if radius > 0 then
+		local c = Instance.new("UICorner")
+		c.CornerRadius = UDim.new(math.min(0.5, radius / math.max(0.05, math.min(w, h))), 0)
+		c.Parent = f
+	end
+	return f
+end
+
+-- One coin seen from the side, in a stack: its edge, its milled side and its
+-- lit top, each coin drawn over the one under it.
+local function stackCoin(box: GuiObject, x: number, y: number, w: number, z: number)
+	local h = w * 0.46
+	blob(box, "CoinEdge", x, y, w + 1.3, h + 1.3, math.huge, 0, COIN.Ink, z)
+	blob(box, "CoinSide", x, y, w, h, math.huge, 0, COIN.Rim, z + 1)
+	blob(box, "CoinTop", x, y - h * 0.16, w * 0.86, h * 0.56, math.huge, 0, COIN.Top, z + 2)
+end
+
+local function coinIcon(box: Frame, reward: WheelData.Reward, px: number)
+	local tier = WheelDraw.cashTier(reward.amount)
+	local stacks = WheelDraw.CoinStacks[tier]
+	local w = 8.6
+	local xs = if #stacks == 1 then { -2.6 } elseif #stacks == 2 then { -4.6, 4.6 } else { -7.6, 0, 7.6 }
+	-- Where each stack sits in the drawing order: the middle one in front.
+	local order = if #stacks == 3 then { 1, 3, 2 } else { 1, 2, 3 }
+	local base = 6.4
+	for rank, s in ipairs(order) do
+		local n = stacks[s]
+		if n then
+			for i = 0, n - 1 do
+				stackCoin(box, xs[s], base - i * 2.4, w, rank * 30 + i * 3)
+			end
+		end
+	end
+	if tier == 1 then
+		-- One coin face-on beside the stack, a "$" on it.
+		blob(box, "LooseEdge", 6.4, 2.6, 10, 10, math.huge, 0, COIN.Ink, 100)
+		blob(box, "LooseFace", 6.4, 2.6, 8.2, 8.2, math.huge, 0, COIN.Face, 101)
+		local mark = glyph(box, "$", 6.4, 3.0, 8, px, COIN.Ink)
+		mark.ZIndex = 102
+	elseif tier == 3 then
+		-- The jackpot's glint: a four-point sparkle over the stacks.
+		for i, rot in ipairs({ 0, 90 }) do
+			blob(box, "Sparkle" .. i, 8.4, -6.6, 1.4, 7, 0.7, rot + 45, COIN.Shine, 120)
+		end
+		blob(box, "SparkleHeart", 8.4, -6.6, 2.4, 2.4, math.huge, 0, WHITE, 121)
+	end
+end
+
+local function speedIcon(box: Frame, reward: WheelData.Reward)
+	-- The bolt the wheel always had, until the owner's picture has loaded.
+	local fallback = Instance.new("Frame")
+	fallback.Name = "Fallback"
+	fallback.Size = UDim2.fromScale(1, 1)
+	fallback.BackgroundTransparency = 1
+	fallback.BorderSizePixel = 0
+	fallback.Active = false
+	fallback.ZIndex = 1
+	fallback.Parent = box
+	local fill, ink = rgb(255, 210, 63), rgb(107, 74, 0)
+	shape(fallback, "BoltTop", -1.6, -4.4, 5.6, 15.4, fill, ink, 1.8, 0.8, 35)
+	shape(fallback, "BoltLow", 1.6, 4.2, 5.6, 15.4, fill, ink, 1.8, 0.8, 32)
+
+	local count = WheelDraw.speedCount(reward.amount)
+	-- Back to front: x, y, size in units.
+	local spots = if count >= 3 then { { -6.8, -3.6, 13 }, { 6.8, -3.6, 13 }, { 0, 2.6, 16.5 } }
+		elseif count == 2 then { { 4.6, -2, 14 }, { -3.8, 1.8, 15.5 } }
+		else { { 0, 0, 22 } }
+	local pictures: { ImageLabel } = {}
+	for i, spot in ipairs(spots) do
+		local image = Instance.new("ImageLabel")
+		image.Name = "Speed" .. i
+		image.AnchorPoint = Vector2.new(0.5, 0.5)
+		image.Position = UDim2.fromScale(0.5 + spot[1] / 24, 0.5 + spot[2] / 24)
+		image.Size = UDim2.fromScale(spot[3] / 24, spot[3] / 24)
+		image.BackgroundTransparency = 1
+		image.ScaleType = Enum.ScaleType.Fit
+		image.Image = SPEED_ICON
+		image.ZIndex = 10 + i
+		image.Active = false
+		image.Parent = box
+		table.insert(pictures, image)
+	end
+	-- IsLoaded raises no change event to rely on, so a client hands in its
+	-- watcher (WheelUI: UIKit.whenPictureLoads, which polls); without one, the
+	-- bolt goes only if the picture is already here.
+	local watch = WheelDraw.whenLoaded
+	local left = #pictures
+	for _, image in ipairs(pictures) do
+		if image.IsLoaded then
+			left -= 1
+		elseif watch then
+			watch(image, function(ok: boolean)
+				if ok then
+					left -= 1
+					if left <= 0 then
+						fallback.Visible = false
+					end
+				end
+			end)
+		end
+	end
+	if left <= 0 then
+		fallback.Visible = false
+	end
+end
+
+--==============================================================================
+-- THE POD SILHOUETTES, FROM THE MODELS (CreatureModel.BuildPod)
+--
+-- Each in the 24-unit box with its base at y = 8.5, after the models and the
+-- owner's approved reference silhouettes (output/imagegen/podnappers-spinwheel-
+-- actual-pod-silhouettes-v2.png): `{ "c", x, y, d }` a circle, `{ "r", x, y, w,
+-- h, radius, rot }` a rounded block. `bands` are drawn a lighter charcoal over
+-- the black (a belt, a clay ring). `body` is where the "?" sits.
+--
+--   greenhollow  a squat ball, a belt round its waist, a bent stem on top
+--   dustbowl     a squat clay urn: a ring round it, a neck, a lip, a jagged crown
+--   tanglemire   two stacked lobes, a bulb, an angled plate and two little arms
+--   emberroot    a furnace nut: chamber, flat collar, two shoulder facets
+--   starbloom    a round seed with a second lobe, a bent antenna and its bulb,
+--                and a rod out to each side
+--
+-- The two biomes the Titan and Colossal prizes come from have those tiers'
+-- crowns too: split for a Titan, lifted off a glowing core for a Colossal.
+--==============================================================================
+type Shape = { any }
+type Silhouette = {
+	body: { number },
+	common: { Shape },
+	titan: { Shape }?,
+	colossal: { Shape }?,
+	core: { Shape }?,
+	bands: { Shape }?,
+}
+
+local GREENHOLLOW_BODY: { Shape } = { { "r", 0, 1.4, 15.4, 14.2, 7.1, 0 }, { "r", 0, 2.8, 16.8, 2.6, 1.3, 0 } }
+local DUSTBOWL_BODY: { Shape } = { { "r", 0, 3.6, 13.6, 9.8, 4.6, 0 }, { "r", 0, -2.4, 8.6, 4.6, 2, 0 } }
+
+local function with(base: { Shape }, more: { Shape }): { Shape }
+	local out = table.clone(base)
+	for _, sh in ipairs(more) do
+		table.insert(out, sh)
+	end
+	return out
+end
+
+local SILHOUETTES: { [string]: Silhouette } = {
+	greenhollow = {
+		body = { 0, 1.2, 13 },
+		common = with(GREENHOLLOW_BODY, { { "r", 1.1, -7, 1.6, 4, 0.8, 22 }, { "r", -0.8, -9.3, 1.5, 4.2, 0.75, -58 } }),
+		titan = with(GREENHOLLOW_BODY, { { "c", -3.4, -5.2, 5.4 }, { "c", 3.4, -5.2, 5.4 } }),
+		colossal = with(GREENHOLLOW_BODY, { { "r", 1.8, -8.6, 9.6, 4.6, 2.3, 16 } }),
+		core = { { "c", -0.2, -5.6, 4.6 } },
+		bands = { { "r", 0, 2.8, 16.2, 1.5, 0.75, 0 } },
+	},
+	dustbowl = {
+		body = { 0, 3.4, 10 },
+		common = with(DUSTBOWL_BODY, {
+			{ "r", 0, -4.9, 10.6, 2.2, 1.1, 0 }, { "r", -2.2, -7, 3.4, 3.4, 0.5, 45 }, { "r", 1, -7.4, 3, 3, 0.5, 30 },
+		}),
+		titan = with(DUSTBOWL_BODY, {
+			{ "r", 0, -4.9, 10.6, 2.2, 1.1, 0 }, { "r", -3.6, -6.8, 5.2, 2, 1, -28 }, { "r", 3.6, -6.8, 5.2, 2, 1, 28 },
+		}),
+		colossal = with(DUSTBOWL_BODY, { { "r", 1.2, -8.6, 8.2, 2.6, 1.2, -12 } }),
+		core = { { "c", 0, -5.8, 4.4 } },
+		bands = { { "r", 0, 3.2, 13.8, 1.7, 0.85, 0 } },
+	},
+	tanglemire = {
+		body = { 0.6, 2.6, 10.5 },
+		common = {
+			{ "c", 0.6, 2.5, 12 }, { "c", -0.6, -3.2, 9.4 }, { "c", -0.8, -8.6, 4.6 }, { "r", 4.6, -6.6, 4.6, 4.6, 0.5, 45 },
+			{ "r", -7.2, 1.6, 1.6, 5.2, 0.8, 0 }, { "r", -7.2, -1.4, 2.8, 2.8, 0.6, 0 },
+			{ "r", 7.4, 3.6, 1.6, 4.8, 0.8, 0 }, { "r", 7.4, 0.8, 2.8, 2.8, 0.6, 0 },
+		},
+	},
+	emberroot = {
+		body = { 0, 3, 10.5 },
+		common = {
+			{ "r", 0, 3, 12, 11, 4.8, 0 }, { "r", 0, -3, 9.4, 3.2, 1.4, 0 },
+			{ "r", -4.6, -2, 3.6, 4, 0.8, -18 }, { "r", 4.6, -2, 3.6, 4, 0.8, 18 },
+		},
+		bands = { { "r", 0, 3, 12.2, 1.5, 0.75, 0 } },
+	},
+	starbloom = {
+		body = { -0.4, 3, 10.5 },
+		common = {
+			{ "c", -0.4, 2.8, 11.4 }, { "c", 2.4, -1.4, 7.4 }, { "r", 2.6, -6.4, 1.5, 5.4, 0.75, 14 },
+			{ "r", 4, -9.8, 1.2, 4, 0.6, -38 }, { "c", 5.4, -11.4, 3.6 },
+			{ "r", 7.4, 1, 5.6, 1.4, 0.7, -8 }, { "c", 10.2, 0.6, 2.8 }, { "r", -7.4, 4.2, 5, 1.4, 0.7, 10 },
+		},
+	},
+}
+
+local POD = {
+	Fill = rgb(24, 20, 28),
+	Band = rgb(68, 60, 78),
+	Rim = rgb(255, 247, 222),
+	Core = rgb(255, 214, 120),
+	Mark = rgb(255, 247, 222),
+	RimUnits = 0.9,
+	-- The size colour's outline round the ivory rim: thin, and opaque, so where
+	-- two pods' outlines meet it stays one even band.
+	GlowUnits = 2.2,
+	GlowTransparency = 0,
+}
+
+-- Which biomes' pods a pod prize shows: the biomes its pool really draws from,
+-- in the game's road order; more than three are spread to first, middle, last.
+function WheelDraw.podBiomes(reward: WheelData.Reward): { string }
+	local seen: { [string]: boolean } = {}
+	for _, id in ipairs(WheelData.Pools[reward.pool or ""] or {}) do
+		local species = SeedData.Get(id)
+		if species and SILHOUETTES[species.Biome] then
+			seen[species.Biome] = true
+		end
+	end
+	local order: { string } = {}
+	for _, biome in ipairs({ "greenhollow", "dustbowl", "tanglemire", "emberroot", "starbloom" }) do
+		if seen[biome] then
+			table.insert(order, biome)
+		end
+	end
+	if #order > 3 then
+		order = { order[1], order[math.floor((#order + 1) / 2)], order[#order] }
+	end
+	return order
+end
+
+-- Back to front: { biome, x, y, scale }. The first biome stands in front.
+function WheelDraw.podCluster(reward: WheelData.Reward): { { any } }
+	local biomes = WheelDraw.podBiomes(reward)
+	if #biomes == 0 then
+		biomes = { "greenhollow" }
+	end
+	if #biomes == 1 then
+		return { { biomes[1], 0, 0.4, 0.92 } }
+	elseif #biomes == 2 then
+		return { { biomes[2], 5, 0.4, 0.62 }, { biomes[1], -3.9, 1.4, 0.7 } }
+	end
+	return { { biomes[2], -6.8, 0.4, 0.56 }, { biomes[3], 6.4, 0.6, 0.56 }, { biomes[1], 0, 2.2, 0.62 } }
+end
+
+-- An uploaded pod picture, in the 24-unit box: its square's side at a member's
+-- scale 1 (the pod fills about 88% of the square's height, so it stands as
+-- tall as its frame-drawn silhouette), and how far above the member's point
+-- its centre sits -- the frame silhouette's own middle, base at 8.5.
+local POD_IMAGE_UNITS = 22
+local POD_IMAGE_CENTRE: { [string]: number } = { greenhollow = -1.55, tanglemire = -1.2, starbloom = -2.35 }
+
+local function podArtId(biome: string): string?
+	local art = (GameConfig :: any).WheelPodArt
+	local id = if type(art) == "table" then art[biome] else nil
+	return if type(id) == "string" and string.match(id, "^rbxassetid://%d+$") then id else nil
+end
+
+local function podIcon(box: Frame, reward: WheelData.Reward, px: number)
+	local tier = reward.tier or 2
+	local variant = if tier >= 7 then "colossal" elseif tier == 6 then "titan" else "common"
+	local glowColour = SeedData.ColorForTier(tier)
+	local cluster = WheelDraw.podCluster(reward)
+
+	local function drawShapes(target: GuiObject, shapes: { Shape }, ox: number, oy: number, s: number, grow: number,
+		colour: Color3, z: number, transparency: number?, name: string)
+		for _, sh in ipairs(shapes) do
+			local x, y = ox + sh[2] * s, oy + sh[3] * s
+			if sh[1] == "c" then
+				local d = sh[4] * s + grow * 2
+				blob(target, name, x, y, d, d, math.huge, 0, colour, z, transparency)
+			else
+				blob(target, name, x, y, sh[4] * s + grow * 2, sh[5] * s + grow * 2, sh[6] * s + grow, sh[7], colour, z,
+					transparency)
+			end
+		end
+	end
+	-- One pod in frames: its rim, its black, its lighter bands, a Colossal's core.
+	local function drawFrames(target: GuiObject, member: { any }, z: number)
+		local sil = SILHOUETTES[member[1]]
+		local shapes = (sil :: any)[variant] or sil.common
+		drawShapes(target, shapes, member[2], member[3], member[4], POD.RimUnits, POD.Rim, z, nil, "Rim")
+		drawShapes(target, shapes, member[2], member[3], member[4], 0, POD.Fill, z + 1, nil, "Shell")
+		if sil.bands then
+			drawShapes(target, sil.bands :: { Shape }, member[2], member[3], member[4], 0, POD.Band, z + 2, nil, "Band")
+		end
+		if variant == "colossal" and sil.core then
+			drawShapes(target, sil.core :: { Shape }, member[2], member[3], member[4], 0, POD.Core, z + 3, nil, "Core")
+		end
+	end
+	-- The "?" on the pod in front.
+	local function drawMark(target: Frame, member: { any })
+		local sil = SILHOUETTES[member[1]]
+		local scale = member[4]
+		local mark = glyph(target, "?", member[2] + sil.body[1] * scale, member[3] + sil.body[2] * scale + 0.6 * scale,
+			sil.body[3] * scale * 0.95, px, POD.Mark)
+		mark.Name = "Mark"
+		mark.ZIndex = 40
+	end
+	local front = cluster[#cluster]
+
+	-- The size's outline under every pod drawn in frames. An uploaded picture
+	-- carries its own ivory rim, and nothing is drawn round it.
+	for _, member in ipairs(cluster) do
+		if not podArtId(member[1]) then
+			local sil = SILHOUETTES[member[1]]
+			local shapes = (sil :: any)[variant] or sil.common
+			drawShapes(box, shapes, member[2], member[3], member[4], POD.GlowUnits, glowColour, 1, POD.GlowTransparency,
+				"Glow")
+		end
+	end
+	-- POD BY POD (2026-10-04): the owner's picture where the biome has one
+	-- (GameConfig.WheelPodArt), the frames where it has not -- the Dustbowl urn
+	-- beside an uploaded Greenhollow egg is one prize drawn both ways.
+	for i, member in ipairs(cluster) do
+		local z = 2 + i * 4
+		local id = podArtId(member[1])
+		if id then
+			-- Its frames stand in until the picture has loaded, so a pod is never
+			-- a blank; the picture goes over them, its transparent background kept.
+			-- The front pod's frames carry their "?", which goes with them: the
+			-- loaded picture shows its own.
+			local fallback = Instance.new("Frame")
+			fallback.Name = "Fallback"
+			fallback.Size = UDim2.fromScale(1, 1)
+			fallback.BackgroundTransparency = 1
+			fallback.BorderSizePixel = 0
+			fallback.Active = false
+			fallback.ZIndex = z
+			fallback.Parent = box
+			drawFrames(fallback, member, 1)
+			if member == front then
+				drawMark(fallback, member)
+			end
+			local units = POD_IMAGE_UNITS * member[4]
+			local image = Instance.new("ImageLabel")
+			image.Name = "Pod_" .. member[1]
+			image.AnchorPoint = Vector2.new(0.5, 0.5)
+			image.Position = UDim2.fromScale(0.5 + member[2] / 24,
+				0.5 + (member[3] + (POD_IMAGE_CENTRE[member[1]] or 0) * member[4]) / 24)
+			image.Size = UDim2.fromScale(units / 24, units / 24)
+			image.BackgroundTransparency = 1
+			image.ScaleType = Enum.ScaleType.Fit
+			image.Image = id
+			image.ZIndex = z + 1
+			image.Active = false
+			image.Parent = box
+			if image.IsLoaded then
+				fallback.Visible = false
+			else
+				local watch = WheelDraw.whenLoaded
+				if watch then
+					watch(image, function(ok: boolean)
+						if ok then
+							fallback.Visible = false
+						end
+					end)
+				end
+			end
+		else
+			drawFrames(box, member, z)
+		end
+	end
+	-- One "?" on the pod in front -- unless that pod is a picture, which has its
+	-- own: never two on one pod.
+	if not podArtId(front[1]) then
+		drawMark(box, front)
+	end
+end
+
+--==============================================================================
+-- TITAN AND COLOSSAL LETTERING (prestige) -- see the header above
+--==============================================================================
+export type Glint = {
+	gradient: UIGradient,
+	frames: { ColorSequence },
+	still: ColorSequence,
+	seconds: number,
+	shown: number,
+}
+
+type Ramp = { { any } }
+
+-- A ramp's colour at t (0..1), between its stops.
+local function rampAt(ramp: Ramp, t: number): Color3
+	for i = 1, #ramp - 1 do
+		local a, b = ramp[i], ramp[i + 1]
+		if t <= b[1] then
+			local span = b[1] - a[1]
+			return (a[2] :: Color3):Lerp(b[2] :: Color3, if span > 0 then math.clamp((t - a[1]) / span, 0, 1) else 0)
+		end
+	end
+	return ramp[#ramp][2]
+end
+
+-- Frame k puts a soft light toward `toward` k/count of the way along the ramp;
+-- the light enters before one end and leaves past the other. Built once.
+local function sheenFrames(ramp: Ramp, toward: Color3, lift: number, width: number, count: number): { ColorSequence }
+	local out: { ColorSequence } = {}
+	for k = 0, count - 1 do
+		local at = -width + (1 + 2 * width) * (k / count)
+		local times: { number } = {}
+		for _, stop in ipairs(ramp) do
+			table.insert(times, stop[1])
+		end
+		for _, t in ipairs({ at - width, at, at + width }) do
+			if t > 0.002 and t < 0.998 then
+				table.insert(times, t)
+			end
+		end
+		table.sort(times)
+		local keys: { ColorSequenceKeypoint } = {}
+		local last = -1
+		for _, t in ipairs(times) do
+			if t - last > 0.001 then
+				local glow = lift * math.max(0, 1 - math.abs(t - at) / width)
+				table.insert(keys, ColorSequenceKeypoint.new(t, rampAt(ramp, t):Lerp(toward, glow)))
+				last = t
+			end
+		end
+		out[k + 1] = ColorSequence.new(keys)
+	end
+	return out
+end
+
+local function plainRamp(ramp: Ramp): ColorSequence
+	local keys: { ColorSequenceKeypoint } = {}
+	for _, stop in ipairs(ramp) do
+		table.insert(keys, ColorSequenceKeypoint.new(stop[1], stop[2]))
+	end
+	return ColorSequence.new(keys)
+end
+
+local TITAN_RAMP: Ramp = { { 0, rgb(255, 92, 52) }, { 0.5, rgb(255, 150, 44) }, { 1, rgb(255, 214, 84) } }
+local COLOSSAL_RAMP: Ramp = { { 0, rgb(180, 112, 255) }, { 0.5, rgb(228, 150, 255) }, { 1, rgb(255, 214, 96) } }
+
+WheelDraw.Prestige = {
+	titan = {
+		frames = sheenFrames(TITAN_RAMP, rgb(255, 246, 214), 0.5, 0.16, 32),
+		still = plainRamp(TITAN_RAMP),
+		seconds = 2.8,
+		lift = 0.5,
+	},
+	colossal = {
+		frames = sheenFrames(COLOSSAL_RAMP, rgb(255, 250, 238), 0.62, 0.2, 32),
+		still = plainRamp(COLOSSAL_RAMP),
+		seconds = 3.4,
+		lift = 0.62,
+		-- The soft glow round the letters: a pale twin behind, edged in light.
+		glow = rgb(226, 196, 255),
+	},
+}
+
+-- Which lettering a prize's name wears: "titan", "colossal" or nil. By size
+-- tier -- these are pod SIZES, not a rarity.
+function WheelDraw.prestigeOf(reward: WheelData.Reward?): string?
+	if reward and reward.kind == "pod" then
+		if (reward.tier or 0) >= 7 then
+			return "colossal"
+		elseif reward.tier == 6 then
+			return "titan"
+		end
+	end
+	return nil
+end
+
+-- A glint for a gradient that already exists (WheelUI's line under the wheel).
+function WheelDraw.glintOf(gradient: UIGradient, style: string): Glint?
+	local p = (WheelDraw.Prestige :: any)[style]
+	if not p then
+		return nil
+	end
+	gradient.Color = p.still
+	return { gradient = gradient, frames = p.frames, still = p.still, seconds = p.seconds, shown = 0 }
+end
+
+-- Puts a style's lettering on a label (its text white under the gradient; its
+-- dark outline stays dark). `glow` adds Colossal's soft twin behind it, kept
+-- on the label's size, place, words and visibility.
+function WheelDraw.prestige(label: TextLabel, style: string, glow: boolean?): Glint?
+	local p = (WheelDraw.Prestige :: any)[style]
+	if not p then
+		return nil
+	end
+	label.TextColor3 = WHITE
+	local gradient = Instance.new("UIGradient")
+	gradient.Name = "Prestige"
+	gradient.Color = p.still
+	gradient.Parent = label
+	if glow and p.glow then
+		local twin = label:Clone()
+		-- Its own light edge and no gradient; its size cap stays, so the twin
+		-- is drawn at exactly the size the word is.
+		for _, child in ipairs(twin:GetChildren()) do
+			if child:IsA("UIStroke") or child:IsA("UIGradient") then
+				child:Destroy()
+			end
+		end
+		twin.Name = label.Name .. "Glow"
+		twin.TextColor3 = p.glow
+		twin.TextTransparency = 0.5
+		twin.ZIndex = math.max(0, label.ZIndex - 1)
+		local edge = Instance.new("UIStroke")
+		edge.Color = p.glow
+		edge.Thickness = math.max(2, label.TextSize * 0.2)
+		edge.Transparency = 0.55
+		edge.LineJoinMode = Enum.LineJoinMode.Round
+		edge.Parent = twin
+		twin.Parent = label.Parent
+		for _, property in ipairs({ "Text", "TextSize", "Size", "Position", "Visible", "Rotation", "AnchorPoint" }) do
+			label:GetPropertyChangedSignal(property):Connect(function()
+				(twin :: any)[property] = (label :: any)[property]
+			end)
+		end
+	end
+	return { gradient = gradient, frames = p.frames, still = p.still, seconds = p.seconds, shown = 0 }
+end
+
+-- Steps every glint to time `t` (seconds); `still` holds the plain ramp. A
+-- gradient is written only when its frame changes.
+function WheelDraw.glint(list: { Glint }, t: number, still: boolean?)
+	for _, g in ipairs(list) do
+		local k = if still then 0 else math.floor(((t / g.seconds) % 1) * #g.frames) + 1
+		if k ~= g.shown then
+			g.shown = k
+			g.gradient.Color = if k == 0 then g.still else g.frames[math.clamp(k, 1, #g.frames)]
+		end
+	end
+end
 
 function WheelDraw.icon(parent: Instance, reward: WheelData.Reward, px: number): Icon
 	local box = Instance.new("Frame")
@@ -268,25 +967,11 @@ function WheelDraw.icon(parent: Instance, reward: WheelData.Reward, px: number):
 	local rainbow: { UIGradient } = {}
 
 	if reward.kind == "cash" then
-		-- A note with a "$" on it; the jackpot's is gold.
-		local gold = reward.id == "cash_jackpot"
-		local fill = if gold then rgb(255, 222, 120) else rgb(223, 245, 200)
-		local ink = if gold then rgb(107, 74, 0) else rgb(29, 90, 44)
-		shape(box, "Note", 0, 0, 22, 14, fill, ink, 2, 3)
-		table.insert(upright, glyph(box, "$", 0, 0.6, 11, px, ink))
+		coinIcon(box, reward, px)
 	elseif reward.kind == "speed" then
-		-- The lightning bolt: two slanted bars meeting in the middle.
-		local fill, ink = rgb(255, 210, 63), rgb(107, 74, 0)
-		shape(box, "BoltTop", -1.6, -4.4, 5.6, 15.4, fill, ink, 1.8, 0.8, 35)
-		shape(box, "BoltLow", 1.6, 4.2, 5.6, 15.4, fill, ink, 1.8, 0.8, 32)
-	elseif reward.kind == "pod" and reward.id == "pod_colossal" then
-		-- A dark pod with a white "?": the species is the hatch's to reveal.
-		shape(box, "Shell", 0, 0, 23, 30, rgb(18, 11, 24), rgb(185, 163, 214), 1.6, math.huge)
-		table.insert(upright, glyph(box, "?", 0, 0.8, 16, px, WHITE))
+		speedIcon(box, reward)
 	elseif reward.kind == "pod" then
-		local colours = POD_SHELL[reward.id] or POD_SHELL.pod_common
-		shape(box, "Shell", 0, 0, 17, 22, colours[1], colours[2], 2, math.huge)
-		shape(box, "Vein", 0, 0.5, 1.6, 13, colours[2], nil, 0, math.huge, nil, 1)
+		podIcon(box, reward, px)
 	elseif reward.kind == "boost" and reward.boost == "training" then
 		-- A dumbbell: a brown bar through two white plates.
 		local ink = rgb(90, 59, 26)
@@ -324,6 +1009,9 @@ function WheelDraw.icon(parent: Instance, reward: WheelData.Reward, px: number):
 		g.Parent = star
 		table.insert(rainbow, g)
 	end
+	-- Every icon turns over as a whole on the lower half of the wheel, so none
+	-- is ever upside down -- the income arrow never points down (2026-10-04).
+	table.insert(upright, box)
 	return { box = box, upright = upright, rainbow = rainbow }
 end
 
@@ -416,6 +1104,11 @@ export type Drawn = {
 	angle: () -> number,
 	-- The rainbow's hue, turned by `shift` (0..1): the trail's sector and star.
 	setRainbow: (shift: number) -> (),
+	-- The Titan and Colossal lettering's light at time `t` (seconds), or the
+	-- plain ramp held still (`still`: reduced motion). The caller steps it --
+	-- only while the wheel is open or near (WheelUI).
+	setGlint: (t: number, still: boolean?) -> (),
+	glints: { Glint },
 	-- The world's hub, when the options asked for one.
 	hub: Hub?,
 }
@@ -441,6 +1134,30 @@ local function splitWords(label: string): (string, string?)
 		return first, rest
 	end
 	return label, nil
+end
+
+--==============================================================================
+-- NARROW WORDS (2026-10-04): a word on a slice under 14 degrees -- COLOSSAL --
+-- one line from 64 to 103 out, as thick as the wedge allows at its inner end
+-- less a divider and a margin each side. Only where the letters would come out
+-- at least MinPx tall at this wheel's size; otherwise the slice keeps its icon
+-- alone, as the mockup drew it. `px` is in mockup units.
+--==============================================================================
+WheelDraw.NarrowWords = { Inner = 64, Outer = 103, MinPx = 9, Advance = 0.78 }
+
+function WheelDraw.narrowWords(span: number, k: number, text: string): { r: number, length: number, thick: number, px: number }?
+	local N = WheelDraw.NarrowWords
+	local half = math.rad(span / 2)
+	local thick = 2 * (N.Inner * math.tan(half) - DIVIDER_HALF - EDGE_MARGIN)
+	local length = N.Outer - N.Inner
+	if thick <= 2 then
+		return nil
+	end
+	local px = math.min(thick - 1.5, length / math.max(1, #text * N.Advance))
+	if px * k < N.MinPx then
+		return nil
+	end
+	return { r = (N.Inner + N.Outer) / 2, length = length, thick = thick, px = thick - 1.5 }
 end
 
 function WheelDraw.build(parent: Instance, size: number, options: Options?): Drawn
@@ -532,6 +1249,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 
 	local turning: { Turning } = {}
 	local starGradients: { UIGradient } = {}
+	local glints: { Glint } = {}
 	local lineW = math.max(2, math.floor(2.5 * k + 0.5))
 
 	for _, sector in ipairs(sectors) do
@@ -552,7 +1270,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 		local entry: Turning = { mid = sector.mid, words = nil, upright = {} }
 
 		-- The icon near the rim, pointing out.
-		local iconPx = 24 * k * (if reward.kind == "trail" then 1.05 elseif reward.id == "pod_colossal" then 1 else 0.95)
+		local iconPx = 24 * k * (if reward.kind == "trail" then 1.05 else 0.95)
 		local icon = WheelDraw.icon(arm, reward, iconPx)
 		icon.box.Position = UDim2.new(0.5, 0, 0.5, -116 * k)
 		for _, g in ipairs(icon.upright) do
@@ -561,10 +1279,40 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 		for _, g in ipairs(icon.rainbow) do
 			table.insert(starGradients, g)
 		end
+		local style = WheelDraw.prestigeOf(reward)
+
+		-- A cash slice's background coins, under its words and icon (THE PRIZE
+		-- ART): muted toward the slice's own colour so the amount stays in front.
+		if reward.kind == "cash" then
+			local twoLines = select(2, splitWords(reward.label)) ~= nil
+			local wordsHalf = (if twoLines then 12.5 else 8) + 1
+			local face = COIN.Face:Lerp(reward.colour, 0.15)
+			local inner = COIN.Top:Lerp(reward.colour, 0.15)
+			local ink = COIN.Ink:Lerp(reward.colour, 0.12)
+			local shine = COIN.Shine:Lerp(reward.colour, 0.15)
+			for i, coin in ipairs(WheelDraw.coinLayout(span, WheelDraw.cashTier(reward.amount), wordsHalf)) do
+				local y = -math.sqrt(coin.r * coin.r - coin.x * coin.x)
+				local holder = Instance.new("Frame")
+				holder.Name = "Coin" .. i
+				holder.AnchorPoint = Vector2.new(0.5, 0.5)
+				holder.Position = UDim2.new(0.5, coin.x * k, 0.5, y * k)
+				holder.Size = UDim2.fromOffset(coin.d * k, coin.d * k)
+				holder.BackgroundTransparency = 1
+				holder.BorderSizePixel = 0
+				holder.Active = false
+				holder.ZIndex = 0
+				holder.Parent = arm
+				disc(holder, "Edge", 1, ink, 1)
+				disc(holder, "Face", 1 - 1.4 / coin.d, face, 2)
+				disc(holder, "Inner", 1 - 3.4 / coin.d, inner, 3)
+				disc(holder, "Shine", 0.22, shine, 4, -0.18, -0.18)
+			end
+		end
 
 		-- The words toward the centre, along the radius, where the sector is wide
-		-- enough to hold them (the two narrowest, the Colossal pod and the trail,
-		-- are icon-only, as in the mockup).
+		-- enough to hold them. The two narrowest, the Colossal pod and the trail,
+		-- are icon-only, as in the mockup -- except that COLOSSAL is set on its
+		-- slice wherever the wheel is big enough (NARROW WORDS, 2026-10-04).
 		if opts.labels ~= false and span >= 14 then
 			local first, second = splitWords(reward.label)
 			local bigPx = (if second then 12.5 else 14) * k
@@ -593,11 +1341,58 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 				fit.Parent = l
 				return l
 			end
-			wordLine("Big", first, bigPx, 0)
-			if second then
-				wordLine("Small", second, smallPx, bigPx + 1 * k)
+			local big = wordLine("Big", first, bigPx, 0)
+			local small = if second then wordLine("Small", second, smallPx, bigPx + 1 * k) else nil
+			if reward.kind == "cash" then
+				-- The amount in front of its coins: a heavier outline.
+				for _, l in ipairs({ big, small }) do
+					local stroke = l and l:FindFirstChildOfClass("UIStroke")
+					if stroke then
+						stroke.Thickness = math.max(1, 2 * k)
+					end
+				end
+			end
+			if style then
+				for _, l in ipairs({ big, small }) do
+					if l then
+						local g = WheelDraw.prestige(l, style, style == "colossal")
+						if g then
+							table.insert(glints, g)
+						end
+					end
+				end
 			end
 			entry.words = holder
+		elseif opts.labels ~= false and style == "colossal" then
+			-- COLOSSAL on its own narrow slice, where the wheel is big enough to
+			-- set it readably (NARROW WORDS): further out, one line, kept inside
+			-- the wedge.
+			local fit = WheelDraw.narrowWords(span, k, reward.label)
+			if fit then
+				local holder = Instance.new("Frame")
+				holder.Name = "Words"
+				holder.AnchorPoint = Vector2.new(0.5, 0.5)
+				holder.Position = UDim2.new(0.5, 0, 0.5, -fit.r * k)
+				holder.Size = UDim2.fromOffset(fit.length * k, fit.thick * k)
+				holder.BackgroundTransparency = 1
+				holder.BorderSizePixel = 0
+				holder.Active = false
+				holder.ZIndex = 3
+				holder.Parent = arm
+				local l = words(holder, "Big", fit.px * k, WHITE, P.WordInk, 1.5 * k, 3)
+				l.Text = reward.label
+				l.Size = UDim2.fromScale(1, 1)
+				l.TextScaled = true
+				local cap = Instance.new("UITextSizeConstraint")
+				cap.MaxTextSize = math.max(6, math.floor(fit.px * k + 0.5))
+				cap.MinTextSize = 6
+				cap.Parent = l
+				local g = WheelDraw.prestige(l, style, true)
+				if g then
+					table.insert(glints, g)
+				end
+				entry.words = holder
+			end
 		end
 		table.insert(turning, entry)
 	end
@@ -715,6 +1510,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 	end
 
 	paint(0)
+	WheelDraw.glint(glints, 0, true)
 
 	return {
 		root = root,
@@ -733,6 +1529,10 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 				g.Color = star
 			end
 		end,
+		setGlint = function(t: number, still: boolean?)
+			WheelDraw.glint(glints, t, still)
+		end,
+		glints = glints,
 		hub = hub,
 	}
 end

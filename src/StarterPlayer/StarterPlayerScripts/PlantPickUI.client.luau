@@ -49,6 +49,7 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local ReachPoint = require(Shared:WaitForChild("ReachPoint"))
 
@@ -58,12 +59,9 @@ local channel = Remotes:WaitForChild(GameConfig.Remotes.GameEvent) :: RemoteEven
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local ATTR = GameConfig.Attributes
-local PANEL = GameConfig.Panel
 local PLANTING = GameConfig.Plant
 local REACH = PLANTING.Reach
 
-local CREAM = Color3.fromRGB(242, 238, 206)
-local BLACK = Color3.fromRGB(0, 0, 0)
 local LIME = Color3.fromRGB(150, 220, 96)
 
 -- A clean click: ten pixels and half a second. Anything that moves further or
@@ -126,30 +124,14 @@ billboard.Size = UDim2.fromOffset(112, 40)
 billboard.Enabled = false
 billboard.Parent = playerGui
 
-local button = Instance.new("TextButton")
-button.Name = "PickUp"
+-- The family's green action button (the global UI pass, 2026-10-04): MenuKit's
+-- go face with its darker foot and dark keyline -- the old outline sat on an
+-- empty-text button and never drew -- and the word white with an ink line.
+local pickFace = MenuKit.button(billboard, "PickUp", 2, "PICK UP", 16)
+pickFace.style("go")
+local button = pickFace.hit
 button.Size = UDim2.fromScale(1, 1)
-button.AutoButtonColor = false
-button.BorderSizePixel = 0
-button.BackgroundTransparency = 0.12
-button.Text = ""
-button.Parent = billboard
-UIKit.corner(button, 10)
-UIKit.gradient(button, PANEL.Fill, PANEL.Shade)
-UIKit.stroke(button, BLACK, 2.5)
-
-local ring = Instance.new("Frame")
-ring.Name = "Ring"
-ring.Position = UDim2.fromOffset(3, 3)
-ring.Size = UDim2.new(1, -6, 1, -6)
-ring.BackgroundTransparency = 1
-ring.Parent = button
-UIKit.corner(ring, 8)
-UIKit.stroke(ring, LIME, 1.5)
-
-local label = UIKit.outlined(button, "Word", 16, CREAM, 2)
-label.Size = UDim2.fromScale(1, 1)
-label.Text = "PICK UP"
+pickFace.plate.Size = UDim2.new(1, -4, 1, -4)
 
 --==============================================================================
 -- WHAT IS SELECTED
@@ -322,6 +304,12 @@ local function clearSelection()
 		c:Disconnect()
 	end
 	table.clear(watching)
+	-- The plant's overhead label comes back (PlantUI hides it while PICK UP
+	-- stands where it would be). A client-only mark: it never replicates.
+	local was = selected
+	if was and was.model.Parent then
+		was.model:SetAttribute(GameConfig.Labels.Plant.SelectedAttribute, nil)
+	end
 	selected = nil
 	highlight.Parent = nil
 	billboard.Enabled = false
@@ -394,6 +382,9 @@ local function select(model: Model, marker: BasePart)
 		return
 	end
 	selected = { model = model, marker = marker }
+	-- PICK UP floats over the plant, where its overhead label stands: the label
+	-- steps aside until the selection ends (PlantUI reads this mark).
+	model:SetAttribute(GameConfig.Labels.Plant.SelectedAttribute, true)
 
 	highlight.Parent = model
 

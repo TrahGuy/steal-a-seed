@@ -74,6 +74,9 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+-- The reveal of the player's own plant is a reward moment (2026-10-06): the
+-- Invite a Friend reward popup waits for it.
+local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 -- Which silhouette stands where the pod was at each moment of a roll.
 local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
@@ -582,6 +585,10 @@ local function playReveal(payload: any)
 	local color = SeedData.ColorForTier(tier)
 	local diameter = SeedData.PodDiameter(tier)
 	local isOwner = payload.owner == player
+	if isOwner then
+		-- The roll, the reveal and its fanfare: a reward popup waits this long.
+		RewardMoments.begin("hatch", 7)
+	end
 
 	local folder = Instance.new("Folder")
 	folder.Name = string.format("Reveal_%d", token)

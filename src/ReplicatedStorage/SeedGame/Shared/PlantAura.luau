@@ -44,24 +44,34 @@
 -- different proposition from the per-arc version this paragraph refuses.
 --
 --==============================================================================
--- NIGHT ONLY
+-- THE BOLTS STRIKE DAY AND NIGHT; THE FLASH IS THE NIGHT'S (2026-10-05)
 --
--- A strike is a flash of light, and by day it joined every plant's own glow in
--- washing a garden out. So the crackle belongs to the night the same way
--- PlantGlow's lights do, and is told the phase the same way: PlantSway reads
+-- This used to be night only, bolts and all, and the owner asked for the
+-- crackle by day as well. What washed a garden out by day was never the bolts:
+-- it was the LIGHT, which joined every plant's own glow in a white pool at
+-- midday. So the two are separated. The pooled Neon segments strike on the
+-- same pacing in every phase, and only the one-per-pulse PointLight below is
+-- held back to the night, which is the same rule PlantGlow keeps for a plant's
+-- own lights.
+--
+-- The phase arrives the way PlantGlow's does: PlantSway reads
 -- `Workspace.WorldPhase` and calls SetNight. Nothing here looks at
 -- Lighting.ClockTime, which WorldClock blends over three seconds and which
 -- would disagree with the rest of the game about when night starts.
 --
--- By day no new pulse begins. The moment night ends, every pulse still lit is
--- ended and its segments and flash light go back to their pools. At the next
--- dusk every Colossal is re-armed on its first-gap spread, so a bed that has
--- been due all day does not fire as one wave the instant it gets dark. Timing,
--- distance bands, quality, palettes and the light budget are untouched.
+-- A phase change does not touch the schedule. Every Colossal keeps striking on
+-- its own gap through dusk and dawn, so nothing is ever left overdue to fire as
+-- one wave, and nothing is silenced. Dawn only takes back the flash lights
+-- still lit: their bolts finish their own fade. A pulse that began by day
+-- carries no light into the night; the next one may take one. Timing, distance
+-- bands, quality, palettes and both budgets are untouched.
 --==============================================================================
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
+
+-- OTHER PLANTS: OFF's marker on a plant this screen hides (2026-10-05).
+local HIDDEN = require(script.Parent:WaitForChild("PlantVisibility")).Marker
 
 local PlantAura = {}
 
@@ -195,6 +205,19 @@ PlantAura.Config = {
 	-- How far off the surface the arc floats. Enough to read as separate from
 	-- the plastic, small enough to still be "around the silhouette".
 	Standoff = 0.22,
+	--==========================================================================
+	-- BY DAY, A BOLDER STROKE (2026-10-05)
+	--
+	-- Seen in Play at midday the bolts were there -- up to sixty segments lit
+	-- across two Colossals -- and hard to SEE: a near-white Neon stroke under
+	-- half a stud wide against a pale sky, white cloud and the pale bodies
+	-- several Colossals have. At night the same stroke is the brightest thing
+	-- on the screen. So by day only, a strike's segments are drawn this much
+	-- thicker, and its near-white core segments take the palette's own arc
+	-- colour, the one with a hue to it. The palettes, the pacing and the night
+	-- are exactly as they were.
+	--==========================================================================
+	DayThickScale = 1.6,
 
 	--== how bright ==--
 	-- Was 0.18, and the old comment called it "the single biggest lever on
@@ -251,6 +274,10 @@ PlantAura.Config = {
 	-- anything OTHER than the bolt: the plant, the soil and the fence all catch
 	-- the flash, which is what sells it as a discharge happening in the world
 	-- rather than a decal drawn on top of one.
+	--
+	-- AT NIGHT ONLY (2026-10-05). By day the sun is already lighting the soil,
+	-- and four extra lights on a bed of Colossals is the white pool this module
+	-- was once made night-only to avoid. See the header.
 	--==========================================================================
 	LightStuds = 60,
 	MaxLights = 4,
@@ -314,8 +341,8 @@ local lightsOut = 0
 local folder: Folder? = nil
 local quality = "Full"
 local made = 0
--- Unset means day, the same rule as GameConfig.isDay: nothing strikes until
--- somebody says it is night.
+-- Unset means day, the same rule as GameConfig.isDay: no flash light is lit
+-- until somebody says it is night. The bolts do not wait for it.
 local night = false
 
 --==============================================================================
@@ -529,8 +556,11 @@ local function buildArc(state: State, anchor: BasePart, arcs: { Arc })
 			--==============================================================
 			local hot = (i == 2) or (i == 4 and n >= 5)
 			local p = take()
-			p.Size = Vector3.new(state.thick, state.thick, len)
-			p.Color = if hot then state.palette.core else state.palette.arc
+			-- By day a bolder stroke with no near-white in it (DayThickScale);
+			-- a strike keeps the look it began with to its end.
+			local thick = if night then state.thick else state.thick * CFG.DayThickScale
+			p.Size = Vector3.new(thick, thick, len)
+			p.Color = if hot and night then state.palette.core else state.palette.arc
 			table.insert(segs, {
 				part = p,
 				localCF = CFrame.lookAt((a + b) * 0.5, b),
@@ -644,29 +674,27 @@ function PlantAura.Forget(state: State?)
 end
 
 --==============================================================================
--- THE PHASE
+-- THE PHASE, WHICH NOW DECIDES ONLY THE FLASH
 --
--- `now` is the same clock Tick is given, so a re-armed strike is scheduled on
--- the timeline that will actually fire it.
+-- No pulse is ended and no strike is re-armed: the bolts keep the pacing they
+-- had, so a phase change can neither queue a wave nor leave a bed quiet. The
+-- second argument (PlantSway's clock) is no longer needed and is accepted so
+-- the caller did not have to change.
 --==============================================================================
-function PlantAura.SetNight(isNight: boolean, now: number)
+function PlantAura.SetNight(isNight: boolean, _now: number?)
 	if night == isNight then
 		return
 	end
 	night = isNight
 	if not isNight then
-		-- Dawn: nothing may stay lit into the day. Every pulse ends here, now,
-		-- rather than finishing its fade on the next few frames.
-		for i = #active, 1, -1 do
-			endPulse(active[i])
-			active[i] = nil
+		-- Dawn: no flash stays lit into the day. Each one goes back to its pool
+		-- now; the bolt it was lighting finishes its own fade.
+		for _, pulse in ipairs(active) do
+			if pulse.light then
+				giveLight(pulse.light)
+				pulse.light = nil
+			end
 		end
-		return
-	end
-	-- Dusk: spread the first strike exactly as Prepare does for a bed that
-	-- streams in together.
-	for _, state in ipairs(plants) do
-		state.nextAt = now + state.rng:NextNumber(0.2, CFG.FirstGapMax)
 	end
 end
 
@@ -687,7 +715,9 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 		local pulse = active[i]
 		pulse.t += dt
 		local k = pulse.t / CFG.Life
-		if k >= 1 or not pulse.state.model.Parent then
+		-- A plant hidden on this screen (OTHER PLANTS: OFF) takes its arcs
+		-- with it at once.
+		if k >= 1 or not pulse.state.model.Parent or pulse.state.model:GetAttribute(HIDDEN) == true then
 			endPulse(pulse)
 			table.remove(active, i)
 		else
@@ -727,11 +757,7 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 	end
 
 	--== decide what lights next ==--
-	-- By day nothing begins and nothing is rescheduled: SetNight re-arms the
-	-- whole bed at dusk, so a day costs this loop nothing at all.
-	if not night then
-		return
-	end
+	-- In every phase: the bolts are not the night's (see the header).
 	local free = budget() - #active
 	if free <= 0 then
 		--======================================================================
@@ -755,6 +781,12 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 		if now >= state.nextAt and not state.pulsing then
 			local model = state.model
 			if not model.Parent then
+				continue
+			end
+			-- Hidden on this screen: nothing starts, re-armed on the normal gap
+			-- so it strikes again once shown.
+			if model:GetAttribute(HIDDEN) == true then
+				state.nextAt = now + state.rng:NextNumber(CFG.GapMin, CFG.GapMax)
 				continue
 			end
 			-- The pivot is the ground plate, which is good enough for a range
@@ -804,16 +836,17 @@ function PlantAura.Tick(now: number, dt: number, camPos: Vector3, camera: Camera
 				--==========================================================
 				-- ONE FLASH, IF THERE IS ONE GOING SPARE
 				--
-				-- Close pulses only, four at a time, and never on Reduced --
-				-- which is the touch-device default, and a phone is the one
-				-- place a handful of dynamic lights is actually felt.
+				-- At night, close pulses only, four at a time, and never on
+				-- Reduced -- which is the touch-device default, and a phone is
+				-- the one place a handful of dynamic lights is actually felt.
 				--
 				-- A pulse that misses out is not delayed or downgraded: it
 				-- draws its bolts exactly as it would have anyway. The light
-				-- is a bonus on the nearest few, never a requirement.
+				-- is a bonus on the nearest few, never a requirement -- which
+				-- is also why a daytime strike is a whole strike without it.
 				--==========================================================
 				local light: PointLight? = nil
-				if quality == "Full" and d <= CFG.LightStuds and lightsOut < CFG.MaxLights then
+				if night and quality == "Full" and d <= CFG.LightStuds and lightsOut < CFG.MaxLights then
 					local host = arcs[1].segs[1].part
 					local l = takeLight()
 					l.Color = state.palette.core

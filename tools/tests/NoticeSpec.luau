@@ -287,12 +287,12 @@ do
 			and not string.find(string.lower(ActionRefusal.Notices.PLOT_FULL_GROWING.detail), "pick up")
 			and not string.find(string.lower(ActionRefusal.Notices.PLOT_FULL_WAIT.detail), "upgrade"),
 		"no variant offers a step its situation rules out")
-	local post = ActionRefusal.notice("TRAP_COOLDOWN")
-	check(post ~= nil and post.kind == "blocked" and post.key == "refusal:TRAP_COOLDOWN"
-			and post.title == "TRAP RECHARGING",
+	local post = ActionRefusal.notice("TELEPORT_COOLDOWN")
+	check(post ~= nil and post.kind == "blocked" and post.key == "refusal:TELEPORT_COOLDOWN"
+			and post.title == "TELEPORT RECHARGING",
 		"a code becomes a blocked notice keyed by its code")
 	check(ActionRefusal.notice("NOPE") == nil and ActionRefusal.notice(nil) == nil, "an unknown code is nothing")
-	for _, code in ipairs({ "TRAP_COOLDOWN", "TELEPORT_COOLDOWN", "TELEPORT_NO_PLOT", "TELEPORT_BLOCKED" }) do
+	for _, code in ipairs({ "TELEPORT_COOLDOWN", "TELEPORT_NO_PLOT", "TELEPORT_BLOCKED" }) do
 		check(ActionRefusal.Notices[code].detail == nil, code .. ": nothing to do but wait, so no next step")
 	end
 end

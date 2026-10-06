@@ -1,8 +1,9 @@
 --!strict
 -- Steal a Seed :: WeatherService
 --
--- The Rain event (2026-10-02): the owner starts it from the console, this
--- server's garden earns a quarter more while it falls, fog closes round the
+-- The Rain event (2026-10-02): the owner starts it from the console -- or,
+-- since 2026-10-05, this file's own scheduler does (AUTOMATIC WEATHER, below);
+-- this server's garden earns a quarter more while it falls, fog closes round the
 -- island, a temporary biome is uncovered off the east edge, and when the rain
 -- stops everyone inside is put back at its entrance and it fades away.
 --
@@ -51,8 +52,9 @@
 -- differently.
 --
 -- THE BATCH. When the terrain is built, NestService raises the event's nest at
--- its centre with ONE batch (SeedData.RollRainBatch: three pods, each a coin
--- flip between Pod 1 and Pod 2, for the rain; one Pod 3 for a thunderstorm),
+-- its centre with ONE batch (SeedData.RollRainBatch: three pods, each on its
+-- own Pod 1 90% or the Colossal Pod 2 10%, for the rain; one Pod 3 for a
+-- thunderstorm),
 -- guarded by Stormstrider. Nothing restocks it. When the event closes, the
 -- unclaimed pods -- in the nest and on the ground -- and the guardian go with
 -- it (the nest seam); a pod in somebody's arms is evacuated with them and
@@ -164,6 +166,9 @@ local terrainMaker: Terrain = realTerrain
 export type NestSeam = {
 	open: (eventId: number, mode: string, terrain: Instance?) -> number,
 	close: (eventId: number) -> number,
+	-- At the opening (2026-10-05): the Secret egg toast for a special egg the
+	-- batch laid (the Thunderstorm's Pod 3), once; the nest decides.
+	announce: ((eventId: number) -> boolean)?,
 }
 local realNest: NestSeam = {
 	open = function(eventId: number, mode: string, terrain: Instance?): number
@@ -178,6 +183,9 @@ local realNest: NestSeam = {
 	end,
 	close = function(eventId: number): number
 		return NestService.CloseEventNest(eventId) + CarryService.ClearEventPods(eventId)
+	end,
+	announce = function(eventId: number): boolean
+		return NestService.AnnounceEventEgg(eventId)
 	end,
 }
 local nestMaker: NestSeam = realNest
@@ -447,6 +455,12 @@ function WeatherService.Step(now: number)
 			pcall(terrainMaker.setEntry, event.terrain, true)
 			publish(event)
 			broadcast(EVENTS.Opened, event.id, nil)
+			-- Then its special egg's toast, after the opening's (2026-10-05): the
+			-- same moment for the console's storm and an automatic one.
+			local announce = nestMaker.announce
+			if announce then
+				pcall(announce, event.id)
+			end
 			log(string.format("The rain biome is open (%s, event %d), %s left.", event.mode, event.id,
 				mmss(event.endsAt - now)))
 		end
@@ -480,9 +494,10 @@ end
 --==============================================================================
 -- START AND END
 --
--- Both are reached from AdminService alone, after ITS checks: the allowlist,
--- the one-a-second limit and -- for these two -- the owner's own account. What
--- is checked here is the event's own rule: one at a time.
+-- Reached from AdminService, after ITS checks: the allowlist, the one-a-second
+-- limit and -- for these -- the owner's own account; and StartWeather from
+-- this file's own scheduler (AutoStep), which no client can reach. What is
+-- checked here is the event's own rule, whoever asks: one at a time.
 --==============================================================================
 function WeatherService.StartWeather(by: any, seconds: any, mode: any): (boolean, string)
 	if type(mode) ~= "string" or not W.Modes[mode] then
@@ -574,6 +589,225 @@ function WeatherService.EndRain(by: any): (boolean, string, boolean)
 end
 
 --==============================================================================
+-- AUTOMATIC WEATHER (2026-10-05, the owner's approved settings; GameConfig
+-- .Weather.Auto)
+--
+-- A scheduler, not a second event: state here, advanced by AutoStep from the
+-- SAME loop that steps the event (so a re-run, a Stop or an Init can never
+-- leave two of them), and it starts weather through StartWeather -- the
+-- console's own path, with its one-at-a-time rule, terrain, nest, toasts,
+-- attributes, icons, bonus and cleanup. Nothing a client can send reaches it,
+-- and it is no admin: its starts are logged as "automatic weather".
+--
+--   THE QUIET WINDOW opens on the first step that finds the weather FULLY
+--   clear (no event in any state) with a player here: the first arrival, or
+--   the step after the last weather -- automatic or the console's -- finished
+--   all its cleanup. An event in any state, or an empty server, closes it, so
+--   nothing is ever rolled during weather or for nobody, and a fresh window
+--   starts over.
+--   A CHECK every CheckSeconds of the window, on the window's own grid: one
+--   draw against Chance; a start draws the mode from ModeWeights. At
+--   GuaranteeSeconds the check starts weather whatever the draws said.
+--   AT MOST ONE ATTEMPT PER STEP, however late the step: the next check is the
+--   window's next grid point after now -- no catch-up rolls.
+--   A START THAT FAILS waits for the next check, with one warning per attempt
+--   (so at most one per CheckSeconds). A start whose biome does not build is
+--   not a failure: the existing event runs and cleans up as it always has.
+--
+-- The draw and the settings are seams (useRandom, useAutoConfig) so
+-- AutoWeatherSpec can walk hours of windows on its own clock.
+--==============================================================================
+export type AutoConfig = {
+	Enabled: boolean,
+	CheckSeconds: number,
+	Chance: number,
+	ModeWeights: { [string]: number },
+	DurationSeconds: number,
+	GuaranteeSeconds: number,
+}
+
+-- What a start by the scheduler is logged as: a name, not a player or an admin.
+local AUTOMATIC = { Name = "automatic weather" }
+
+local random = Random.new()
+local draw: () -> number = function()
+	return random:NextNumber()
+end
+local autoConfig: AutoConfig = W.Auto :: any
+
+-- The window: when it opened, the next check, and what the last attempts did.
+local auto = {
+	quietSince = nil :: number?,
+	nextCheckAt = nil :: number?,
+	rolls = 0,
+	failures = 0,
+	lastFailure = nil :: string?,
+}
+
+local function finiteNumber(v: any): boolean
+	return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+end
+
+-- Whether `cfg` is usable, and why not. Pure.
+function WeatherService.ValidateAuto(cfg: any): (boolean, string)
+	if type(cfg) ~= "table" then
+		return false, "no settings"
+	end
+	if type(cfg.Enabled) ~= "boolean" then
+		return false, "Enabled must be true or false"
+	end
+	if not finiteNumber(cfg.CheckSeconds) or cfg.CheckSeconds <= 0 then
+		return false, "CheckSeconds must be a positive number"
+	end
+	if not finiteNumber(cfg.Chance) or cfg.Chance < 0 or cfg.Chance > 1 then
+		return false, "Chance must be from 0 to 1"
+	end
+	if type(cfg.ModeWeights) ~= "table" then
+		return false, "ModeWeights must be a table"
+	end
+	local total = 0
+	for mode, weight in pairs(cfg.ModeWeights) do
+		if type(mode) ~= "string" or not W.Modes[mode] then
+			return false, "ModeWeights names an unknown weather: " .. tostring(mode)
+		end
+		if not finiteNumber(weight) or weight < 0 then
+			return false, "every ModeWeights weight must be a number of 0 or more"
+		end
+		total += weight
+	end
+	if total <= 0 then
+		return false, "ModeWeights must give some weather a weight"
+	end
+	local d = cfg.DurationSeconds
+	if not finiteNumber(d) or d ~= math.floor(d) or d < W.MinSeconds or d > W.MaxSeconds then
+		return false, string.format("DurationSeconds must be a whole number from %d to %d", W.MinSeconds, W.MaxSeconds)
+	end
+	if not finiteNumber(cfg.GuaranteeSeconds) or cfg.GuaranteeSeconds < cfg.CheckSeconds then
+		return false, "GuaranteeSeconds must be a number no smaller than CheckSeconds"
+	end
+	return true, "ok"
+end
+
+local autoValid, autoWhy = WeatherService.ValidateAuto(autoConfig)
+
+local function resetWindow()
+	auto.quietSince = nil
+	auto.nextCheckAt = nil
+end
+
+function WeatherService.useRandom(fn: (() -> number)?)
+	draw = fn or function()
+		return random:NextNumber()
+	end
+end
+
+function WeatherService.useAutoConfig(cfg: AutoConfig?)
+	autoConfig = cfg or (W.Auto :: any)
+	autoValid, autoWhy = WeatherService.ValidateAuto(autoConfig)
+	resetWindow()
+	auto.rolls, auto.failures, auto.lastFailure = 0, 0, nil
+end
+
+-- A copy of the scheduler's state, for the spec and the command bar.
+function WeatherService.AutoState(): { [string]: any }
+	return {
+		enabled = autoValid and autoConfig.Enabled == true,
+		valid = autoValid,
+		why = autoWhy,
+		quietSince = auto.quietSince,
+		nextCheckAt = auto.nextCheckAt,
+		rolls = auto.rolls,
+		failures = auto.failures,
+		lastFailure = auto.lastFailure,
+	}
+end
+
+-- The mode for a draw in [0, 1): the weights in a fixed order, so one draw is
+-- always the same mode.
+function WeatherService.PickMode(r: number, weights: { [string]: number }?): string
+	local w = weights or autoConfig.ModeWeights
+	local modes: { string } = {}
+	local total = 0
+	for mode, weight in pairs(w) do
+		if W.Modes[mode] and weight > 0 then
+			table.insert(modes, mode)
+			total += weight
+		end
+	end
+	table.sort(modes)
+	local at = r * total
+	local acc = 0
+	for _, mode in ipairs(modes) do
+		acc += w[mode]
+		if at < acc then
+			return mode
+		end
+	end
+	return modes[#modes]
+end
+
+-- One step of the scheduler at `now`. Answers what it did: nil (nothing),
+-- "armed", "clear" (a check that drew no weather), "started:<mode>" or
+-- "failed".
+function WeatherService.AutoStep(now: number): string?
+	local cfg = autoConfig
+	if not (autoValid and cfg.Enabled) then
+		resetWindow()
+		return nil
+	end
+	if current ~= nil or #playersNow() == 0 then
+		-- Weather in any state, or nobody here: no window. It opens afresh once
+		-- the weather has gone completely and somebody is present.
+		resetWindow()
+		return nil
+	end
+	local since = auto.quietSince
+	if since == nil then
+		auto.quietSince = now
+		auto.nextCheckAt = now + math.min(cfg.CheckSeconds, cfg.GuaranteeSeconds)
+		return "armed"
+	end
+	local due = auto.nextCheckAt or (since + cfg.CheckSeconds)
+	if now < due then
+		return nil
+	end
+	-- ONE attempt, however overdue; the next check is the window's next grid
+	-- point after now, and never later than the guarantee while that is ahead.
+	local function nextCheck(): number
+		local k = math.floor((now - since) / cfg.CheckSeconds) + 1
+		local at = since + k * cfg.CheckSeconds
+		local guarantee = since + cfg.GuaranteeSeconds
+		if guarantee > now then
+			at = math.min(at, guarantee)
+		end
+		return at
+	end
+	local quiet = now - since
+	local forced = quiet >= cfg.GuaranteeSeconds
+	auto.rolls += 1
+	if not forced and not (draw() < cfg.Chance) then
+		auto.nextCheckAt = nextCheck()
+		log(string.format("Automatic weather: clear for %s; no weather this check, the next in %s.", mmss(quiet),
+			mmss(auto.nextCheckAt - now)))
+		return "clear"
+	end
+	local mode = WeatherService.PickMode(draw(), cfg.ModeWeights)
+	local ok, started, message = pcall(WeatherService.StartWeather, AUTOMATIC, cfg.DurationSeconds, mode)
+	if ok and started then
+		resetWindow()
+		log(string.format("Automatic weather: %s after %s of clear weather%s.", W.Modes[mode].Name, mmss(quiet),
+			if forced then " (the guarantee)" else ""))
+		return "started:" .. mode
+	end
+	auto.failures += 1
+	auto.lastFailure = tostring(if ok then message else started)
+	auto.nextCheckAt = nextCheck()
+	warn(string.format("[Seed/WeatherService] automatic %s did not start (%s); the next try in %s.",
+		string.lower(W.Modes[mode].Name), auto.lastFailure, mmss(auto.nextCheckAt - now)))
+	return "failed"
+end
+
+--==============================================================================
 -- LIFECYCLE
 --==============================================================================
 function WeatherService.Init()
@@ -585,30 +819,51 @@ function WeatherService.Init()
 	pcall(NestService.CloseEventNest, nil)
 	current = nil
 	publish(nil)
+	-- Nor any of its scheduler's window.
+	resetWindow()
 end
 
 function WeatherService.Start()
 	generation += 1
 	local mine = generation
 	running = true
+	resetWindow()
+	if not autoValid then
+		warn("[Seed/WeatherService] automatic weather is OFF: GameConfig.Weather.Auto is not usable -- " .. autoWhy)
+	end
+	-- ONE loop for the event and its scheduler: a new generation retires the
+	-- old one, so a re-run never runs two.
 	task.spawn(function()
+		local warnedAt = -math.huge
 		while running and mine == generation do
-			local ok, err = pcall(WeatherService.Step, clock())
+			local now = clock()
+			local ok, err = pcall(WeatherService.Step, now)
 			if not ok then
 				warn("[Seed/WeatherService] step failed: " .. tostring(err))
+			end
+			local okAuto, errAuto = pcall(WeatherService.AutoStep, now)
+			if not okAuto and os.clock() - warnedAt >= 60 then
+				warnedAt = os.clock()
+				warn("[Seed/WeatherService] automatic weather step failed: " .. tostring(errAuto))
 			end
 			task.wait(TICK)
 		end
 	end)
+	local A = autoConfig
 	log(string.format("Ready. Rain is the owner's to start, %d to %d s, %d s by default; +%d%% online plant income "
-		.. "while it falls; the biome opens %d s in and fades %d s after the end.",
+		.. "while it falls; the biome opens %d s in and fades %d s after the end. Automatic weather %s.",
 		W.MinSeconds, W.MaxSeconds, W.DefaultSeconds, math.round((SeedData.Rain.IncomeFactor - 1) * 100),
-		W.ToastDelaySeconds, W.ThickenSeconds + W.FadeSeconds))
+		W.ToastDelaySeconds, W.ThickenSeconds + W.FadeSeconds,
+		if autoValid and A.Enabled
+			then string.format("ON: a %d%% check every %s of populated clear weather, sure at %s; %s each",
+				math.round(A.Chance * 100), mmss(A.CheckSeconds), mmss(A.GuaranteeSeconds), mmss(A.DurationSeconds))
+			else "OFF"))
 end
 
 function WeatherService.Stop()
 	running = false
 	generation += 1
+	resetWindow()
 end
 
 return WeatherService

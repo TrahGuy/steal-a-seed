@@ -69,8 +69,10 @@ local WeaponModel = require(Shared:WaitForChild("WeaponModel"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local PANEL = GameConfig.Panel
 local RAIL = GameConfig.Rail
+local LOOK = GameConfig.BagLook
 local ATTR = GameConfig.Attributes
 local W = GameConfig.Weapon
 local PANEL_NAME = "Marigold"
@@ -84,11 +86,10 @@ local MONEY = Color3.fromRGB(112, 240, 96)
 local COIN = Color3.fromRGB(250, 198, 48)
 local COIN_RIM = Color3.fromRGB(186, 130, 20)
 local MUTED = Color3.fromRGB(198, 176, 152)
-local EQUIPPED_FACE = Color3.fromRGB(86, 182, 72)
-local EQUIPPED_SHADE = Color3.fromRGB(46, 126, 44)
-local LOCKED = Color3.fromRGB(104, 90, 78)
 
-local HEADER_H = 54
+-- The studded rim's band (UIKit.modal: 58 less the rim's lift), and what sits
+-- under it: both set once the panel is built.
+local HEADER_H = 44
 local FILTER_H = 38
 local BODY_TOP = HEADER_H + 10 + FILTER_H + 8
 -- Below this the card stacks its price and button under the stats instead of
@@ -123,149 +124,39 @@ local modal = UIKit.modal(gui, {
 	title = "Marigold's Garden Goods",
 	maxWidth = 520,
 	maxHeight = 640,
+	theme = MenuKit.rimTheme(),
 })
+HEADER_H = 58 - modal.lift
+BODY_TOP = HEADER_H + 10 + FILTER_H + 8
 -- This gui holds only the panel, so it takes the player's menu size whole.
 UIKit.menuGui(gui)
 
 --==============================================================================
--- THE HEADER
+-- THE HEADER (the global UI pass, 2026-10-04)
 --
--- A green plate across the top of the panel with the title on it and the red X
--- at its right. The modal's own title bar is re-used rather than rebuilt -- its
--- close button already carries the click sound and the outline -- and simply
--- moved onto the plate.
+-- Every menu's white studded rim (MenuKit.rimTheme): the title on its top edge
+-- in white with a heavy ink line, the shop's picture beside it -- the approved
+-- equipment icon, the Bag's own (Marigold has none of her own) -- and the red
+-- studded close. Her old green plate and its leaves gave way to it.
 --
--- ROUNDED AT THE TOP ONLY. A UICorner rounds all four, so a second rectangle
--- covers the bottom half of the plate and squares it off against the filter row.
+-- TRUNCATE, DO NOT SCALE: the shop's own name shrinks one step on a narrow
+-- panel and truncates below that -- an ellipsis is a legible failure.
 --==============================================================================
-local header = Instance.new("Frame")
-header.Name = "Header"
-header.Size = UDim2.new(1, 0, 0, HEADER_H)
-header.BackgroundColor3 = RAIL.ShopFace
-header.BorderSizePixel = 0
-header.ZIndex = 4
-header.Parent = modal.shell
-UIKit.corner(header, 14)
-UIKit.gradient(header, RAIL.ShopFace, RAIL.ShopShade)
-
-local headerFoot = Instance.new("Frame")
-headerFoot.Name = "Foot"
-headerFoot.AnchorPoint = Vector2.new(0, 1)
-headerFoot.Position = UDim2.fromScale(0, 1)
-headerFoot.Size = UDim2.new(1, 0, 0, 16)
-headerFoot.BackgroundColor3 = RAIL.ShopShade
-headerFoot.BorderSizePixel = 0
-headerFoot.ZIndex = 4
-headerFoot.Parent = header
-
--- The line that separates the plate from the wood under it. Black, like every
--- other edge in this HUD.
-local headerEdge = Instance.new("Frame")
-headerEdge.Name = "Edge"
-headerEdge.AnchorPoint = Vector2.new(0, 1)
-headerEdge.Position = UDim2.fromScale(0, 1)
-headerEdge.Size = UDim2.new(1, 0, 0, 3)
-headerEdge.BackgroundColor3 = BLACK
-headerEdge.BorderSizePixel = 0
-headerEdge.ZIndex = 6
-headerEdge.Parent = header
-
---==============================================================================
--- LEAVES, AND WHY THEY ARE NOT A LATTICE
---
--- The header wants a pattern and the obvious one is the diamond lattice every
--- other surface in this HUD carries. It is not used here for one reason: a
--- lattice is drawn from ROTATED frames, and this plate sits directly above a
--- ScrollingFrame -- the exact arrangement written up in UIKit that threw
--- diamonds three hundred pixels past their own box and over the panel below.
---
--- So the pattern is a handful of leaves, each small enough that its rotated
--- footprint stays inside the plate at every panel width, and each one placed
--- rather than tiled. Six of them, on the two ends, out from behind the title.
---==============================================================================
---
--- ALL OF THEM TO THE RIGHT OF THE TITLE, which is where the empty half of the
--- plate is. The first pass put three on the LEFT and they landed underneath
--- "Marigold's" -- behind it, at a lower ZIndex, so what actually rendered was
--- pale slivers showing through the gaps between letters. Measured off the
--- screenshot rather than reasoned about: the title is left-aligned and about
--- half the plate wide, so everything from 0.58 out is clear space.
---
--- They hide entirely on a narrow panel, where the title takes the whole plate.
-local LEAVES = {
-	{ x = 0.600, y = 0.68, w = 22, h = 11, r = 20, t = 0.74 },
-	{ x = 0.660, y = 0.28, w = 16, h = 8, r = -14, t = 0.82 },
-	{ x = 0.722, y = 0.66, w = 26, h = 13, r = 26, t = 0.72 },
-	{ x = 0.790, y = 0.30, w = 19, h = 10, r = -20, t = 0.78 },
-	{ x = 0.845, y = 0.70, w = 15, h = 8, r = 12, t = 0.86 },
-	{ x = 0.895, y = 0.32, w = 21, h = 11, r = -8, t = 0.80 },
-}
-local leafFrames: { Frame } = {}
-for i, leaf in ipairs(LEAVES) do
-	local f = Instance.new("Frame")
-	f.Name = "Leaf" .. i
-	f.AnchorPoint = Vector2.new(0.5, 0.5)
-	f.Position = UDim2.fromScale(leaf.x, leaf.y)
-	f.Size = UDim2.fromOffset(leaf.w, leaf.h)
-	f.Rotation = leaf.r
-	f.BackgroundColor3 = CREAM
-	f.BackgroundTransparency = leaf.t
-	f.BorderSizePixel = 0
-	f.ZIndex = 5
-	f.Parent = header
-	local c = Instance.new("UICorner")
-	-- A leaf is a lens: fully rounded on the short axis, so the corner radius is
-	-- half the height rather than a fixed pixel count.
-	c.CornerRadius = UDim.new(0, math.floor(leaf.h * 0.5))
-	c.Parent = f
-	-- The vein. One line, off-centre, which is what stops it reading as a pill.
-	local vein = Instance.new("Frame")
-	vein.Name = "Vein"
-	vein.AnchorPoint = Vector2.new(0.5, 0.5)
-	vein.Position = UDim2.fromScale(0.5, 0.42)
-	vein.Size = UDim2.new(0.74, 0, 0, 1)
-	vein.BackgroundColor3 = RAIL.ShopShade
-	vein.BackgroundTransparency = math.min(0.9, leaf.t + 0.05)
-	vein.BorderSizePixel = 0
-	vein.ZIndex = 6
-	vein.Parent = f
-	table.insert(leafFrames, f)
-end
-
 local titleBar = modal.title.Parent :: Frame
-titleBar.Parent = header
-titleBar.Position = UDim2.fromOffset(14, 0)
-titleBar.Size = UDim2.new(1, -28, 0, HEADER_H)
-titleBar.ZIndex = 7
+local TITLE_ICON = 34
+do
+	local icon = MenuKit.picture(titleBar, GameConfig.MenuIcons.marigold, nil, modal.title.ZIndex + 1)
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 0, 0.5, 0)
+	icon.Size = UDim2.fromOffset(TITLE_ICON, TITLE_ICON)
+end
 modal.title.Text = "Marigold's Garden Goods"
-modal.title.TextColor3 = CREAM
-modal.title.TextSize = 22
+modal.title.TextSize = 24
 modal.title.TextScaled = false
---==============================================================================
--- TRUNCATE, DO NOT SCALE
---
--- TextScaled on a title makes the shop's own name a different size on every
--- screen, which is the one label that should not move. It shrinks one step on a
--- narrow panel and truncates below that -- an ellipsis is a legible failure and
--- text spilling past a green plate is not.
---==============================================================================
 modal.title.TextTruncate = Enum.TextTruncate.AtEnd
 modal.title.TextXAlignment = Enum.TextXAlignment.Left
-modal.title.Size = UDim2.new(1, -50, 1, 0)
-modal.title.ZIndex = 7
---==============================================================================
--- THE CLOSE BUTTON'S SIZE IS NOT THIS PANEL'S BUSINESS ANY MORE
---
--- This shrank it to 34 so it sat neatly against a green header. That was already
--- the smallest close button in the game and it is now the one thing that would
--- defeat the shared 44-pixel touch target -- a phone player would find every
--- panel comfortable to close except Marigold's.
---
--- The ZIndex raise stays: this header genuinely stacks above the default, and
--- UIKit.modal now carries the plate and glyph up with the button when a caller
--- does this.
---==============================================================================
-modal.close.ZIndex = 8
+modal.title.Position = UDim2.new(0, TITLE_ICON + 4, 0.5, 0)
+modal.title.Size = UDim2.new(1, -(TITLE_ICON + 4 + 50), 1, 0)
 
 --==============================================================================
 -- THE FILTER ROW
@@ -297,27 +188,20 @@ local tabButtons: { [string]: TextButton } = {}
 -- off the first mobile screenshot, not reasoned about. The row divides itself
 -- now, so it cannot overflow at any width the modal allows.
 local tabFrames: { TextButton } = {}
+-- MenuKit's faces (the global UI pass): pale and quiet, green once chosen.
+local tabFaces: { [string]: MenuKit.Button } = {}
 for i, tab in ipairs(TABS) do
-	local b = Instance.new("TextButton")
-	b.Name = "Tab" .. tab.id
+	local face = MenuKit.button(filterRow, "Tab" .. tab.id, 5, tab.label, 15)
+	face.style("idle")
+	-- A 38-px row: the plate fills it (MenuKit's plate is the hit less 8).
+	face.plate.Size = UDim2.new(1, 0, 1, 0)
+	local b = face.hit
 	b.Position = UDim2.fromOffset((i - 1) * 62, 2)
 	b.Size = UDim2.fromOffset(58, 34)
-	b.BackgroundColor3 = PANEL.Shade
-	b.BorderSizePixel = 0
-	b.AutoButtonColor = false
-	b.Text = ""
-	b.ZIndex = 5
 	UIKit.clicks(b)
-	b.Parent = filterRow
-	UIKit.corner(b, 9)
-	UIKit.stroke(b, BLACK, 2)
-
-	local label = UIKit.outlined(b, "Label", 15, CREAM, 2)
-	label.Size = UDim2.fromScale(1, 1)
-	label.Text = tab.label
-	label.ZIndex = 6
 	tabButtons[tab.id] = b
 	tabFrames[i] = b
+	tabFaces[tab.id] = face
 end
 
 --== THE BALANCE ==--
@@ -326,12 +210,14 @@ cashPill.Name = "Cash"
 cashPill.AnchorPoint = Vector2.new(1, 0)
 cashPill.Position = UDim2.new(1, 0, 0, 2)
 cashPill.Size = UDim2.fromOffset(112, 34)
-cashPill.BackgroundColor3 = PANEL.Shade
+-- A light well on the light panel (the global UI pass): the coin and a plain
+-- dark amount.
+cashPill.BackgroundColor3 = LOOK.Well
 cashPill.BorderSizePixel = 0
 cashPill.ZIndex = 5
 cashPill.Parent = filterRow
 UIKit.corner(cashPill, 9)
-UIKit.stroke(cashPill, BLACK, 2)
+MenuKit.keyline(cashPill, LOOK.WellEdge, 1.5)
 
 --==============================================================================
 -- THE COIN
@@ -361,7 +247,7 @@ end
 local cashCoin = coin(cashPill, 18)
 cashCoin.Position = UDim2.new(0, 8, 0.5, 0)
 
-local cashLabel = UIKit.outlined(cashPill, "Amount", 16, MONEY, 2)
+local cashLabel = MenuKit.text(cashPill, "Amount", 16, LOOK.Money, 6)
 cashLabel.Position = UDim2.fromOffset(30, 0)
 cashLabel.Size = UDim2.new(1, -38, 1, 0)
 cashLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -415,7 +301,7 @@ list.ScrollingDirection = Enum.ScrollingDirection.Y
 -- VISIBLE, and thick enough to grab with a thumb. The default 12 is a desktop
 -- number and 4 -- what the plot shop uses -- is a hairline on a phone.
 list.ScrollBarThickness = 7
-list.ScrollBarImageColor3 = PANEL.Edge
+list.ScrollBarImageColor3 = LOOK.WellEdge
 list.ScrollBarImageTransparency = 0.1
 list.ElasticBehavior = Enum.ElasticBehavior.Always
 list.ZIndex = 4
@@ -457,7 +343,7 @@ type Card = {
 	priceText: TextLabel,
 	action: TextButton,
 	actionLabel: TextLabel,
-	actionShade: Frame,
+	actionFace: MenuKit.Button,
 	textLeft: number,
 }
 
@@ -717,38 +603,17 @@ local function buildCard(item: WeaponData.Item): Card
 	priceText.Text = WeaponData.PriceText(item)
 	priceText.ZIndex = 8
 
-	local action = Instance.new("TextButton")
-	action.Name = "Action"
+	-- MenuKit's button (the global UI pass): BUY and EQUIP green, EQUIPPED the
+	-- owned gold, "not yet" and "..." the grey that cannot be pressed. A 44-px
+	-- target round the 112 x 36 plate the card always had, where it stood.
+	local actionFace = MenuKit.button(fill, "Action", 7, "BUY", 16)
+	actionFace.style("go")
+	local action = actionFace.hit
 	action.AnchorPoint = Vector2.new(1, 0)
-	action.Position = UDim2.new(1, -10, 0, 62)
-	-- 112 x 36. Comfortably over the 44-pixel touch minimum on its short axis
-	-- once the card padding round it is counted, and wide enough for EQUIPPED.
-	action.Size = UDim2.fromOffset(112, 36)
-	action.BackgroundColor3 = GameConfig.Shop.Buy
-	action.BorderSizePixel = 0
-	action.AutoButtonColor = false
-	action.Text = ""
-	action.ZIndex = 7
+	action.Position = UDim2.new(1, -10, 0, 58)
+	action.Size = UDim2.fromOffset(112, 44)
 	UIKit.clicks(action)
-	action.Parent = fill
-	UIKit.corner(action, 9)
-	UIKit.stroke(action, BLACK, 3)
-
-	local actionShade = Instance.new("Frame")
-	actionShade.Name = "Shade"
-	actionShade.AnchorPoint = Vector2.new(0.5, 1)
-	actionShade.Position = UDim2.new(0.5, 0, 1, 0)
-	actionShade.Size = UDim2.new(1, 0, 0, 7)
-	actionShade.BackgroundColor3 = GameConfig.Shop.BuyShade
-	actionShade.BorderSizePixel = 0
-	actionShade.ZIndex = 7
-	actionShade.Parent = action
-	UIKit.corner(actionShade, 9)
-
-	local actionLabel = UIKit.outlined(action, "Label", 16, WHITE, 2)
-	actionLabel.Size = UDim2.fromScale(1, 1)
-	actionLabel.Text = "BUY"
-	actionLabel.ZIndex = 9
+	local actionLabel = actionFace.label
 
 	return {
 		item = item,
@@ -763,7 +628,7 @@ local function buildCard(item: WeaponData.Item): Card
 		priceText = priceText,
 		action = action,
 		actionLabel = actionLabel,
-		actionShade = actionShade,
+		actionFace = actionFace,
 		textLeft = 98,
 	}
 end
@@ -794,10 +659,7 @@ local function relayout()
 	end
 	local narrow = width < NARROW_AT
 
-	modal.title.TextSize = if narrow then 17 else 22
-	for _, leaf in ipairs(leafFrames) do
-		leaf.Visible = not narrow
-	end
+	modal.title.TextSize = if narrow then 19 else 24
 
 	for _, card in ipairs(cards) do
 		--======================================================================
@@ -851,9 +713,10 @@ local function relayout()
 			card.priceRow.AnchorPoint = Vector2.new(0, 0)
 			card.priceRow.Position = UDim2.fromOffset(10, 122)
 			card.action.AnchorPoint = Vector2.new(1, 0)
-			card.action.Position = UDim2.new(1, -10, 0, 120)
+			-- A 44-px target round the 36-px plate where the button stood.
+			card.action.Position = UDim2.new(1, -10, 0, 116)
 			local btnW = math.floor(math.clamp(width * 0.42, 96, 124))
-			card.action.Size = UDim2.fromOffset(btnW, 36)
+			card.action.Size = UDim2.fromOffset(btnW, 44)
 			-- Whatever the button does not take, minus a gap it cannot close.
 			card.priceRow.Size = UDim2.fromOffset(math.max(60, width - btnW - 30), 30)
 			card.holder.Size = UDim2.new(1, 0, 0, 168)
@@ -862,8 +725,8 @@ local function relayout()
 			card.priceRow.Position = UDim2.new(1, -10, 0, 32)
 			card.priceRow.Size = UDim2.fromOffset(rightW, 24)
 			card.action.AnchorPoint = Vector2.new(1, 0)
-			card.action.Position = UDim2.new(1, -10, 0, 62)
-			card.action.Size = UDim2.fromOffset(rightW, 36)
+			card.action.Position = UDim2.new(1, -10, 0, 58)
+			card.action.Size = UDim2.fromOffset(rightW, 44)
 			card.holder.Size = UDim2.new(1, 0, 0, 120)
 		end
 	end
@@ -916,13 +779,7 @@ local function paint()
 	cashLabel.Text = "$" .. GameConfig.money(cash)
 
 	for _, tab in ipairs(TABS) do
-		local b = tabButtons[tab.id]
-		local on = activeFilter == tab.id
-		b.BackgroundColor3 = if on then RAIL.ShopFace else PANEL.Shade
-		local label = b:FindFirstChild("Label")
-		if label and label:IsA("TextLabel") then
-			label.TextColor3 = if on then WHITE else MUTED
-		end
+		tabFaces[tab.id].style(if activeFilter == tab.id then "on" else "idle")
 	end
 
 	for _, card in ipairs(cards) do
@@ -934,20 +791,17 @@ local function paint()
 
 		if pending == item.Id then
 			card.actionLabel.Text = "..."
-			card.action.BackgroundColor3 = GameConfig.Shop.BuyShade
-			card.actionShade.BackgroundColor3 = GameConfig.Shop.BuyShade
+			card.actionFace.style("off")
 			card.priceText.Text = WeaponData.PriceText(item)
 			card.priceText.TextColor3 = MUTED
 		elseif isEquipped then
 			card.actionLabel.Text = "EQUIPPED"
-			card.action.BackgroundColor3 = EQUIPPED_FACE
-			card.actionShade.BackgroundColor3 = EQUIPPED_SHADE
+			card.actionFace.style("done")
 			card.priceText.Text = "OWNED"
 			card.priceText.TextColor3 = CREAM
 		elseif isOwned then
 			card.actionLabel.Text = "EQUIP"
-			card.action.BackgroundColor3 = GameConfig.Shop.Buy
-			card.actionShade.BackgroundColor3 = GameConfig.Shop.BuyShade
+			card.actionFace.style("go")
 			card.priceText.Text = "OWNED"
 			card.priceText.TextColor3 = CREAM
 		else
@@ -961,10 +815,7 @@ local function paint()
 			-- they want off the button is "not yet".
 			--==============================================================
 			local can = affordable(item) and heard
-			card.action.BackgroundColor3 = if can then GameConfig.Shop.Buy else LOCKED
-			card.actionShade.BackgroundColor3 = if can
-				then GameConfig.Shop.BuyShade
-				else LOCKED:Lerp(BLACK, 0.35)
+			card.actionFace.style(if can then "go" else "off")
 			card.priceText.Text = WeaponData.PriceText(item)
 			card.priceText.TextColor3 = MONEY
 		end

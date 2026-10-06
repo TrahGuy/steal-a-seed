@@ -33,6 +33,13 @@
 --   6. Studs on the body, smooth on the face and the wet things.
 --   7. Bellchime and Suncrown, the two species this pass did not touch, still
 --      build to their part counts, and every other species still builds.
+--
+-- 2026-10-03: ALL EIGHT ARE NOW BUILT FROM THE OWNER'S SUPPLIED RIGS
+-- (PlantForms), and so are Bellchime and Suncrown. Pin 1 still runs -- the
+-- builders are kept, and a species the rigs stop building falls back to them --
+-- but pins 2-6 measure the production body, which for a rigged species is the
+-- rig: PlantRigsSpec measures that, and this file skips it. Pin 7 counts a
+-- rigged species' replayed parts.
 --==============================================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,6 +50,7 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local GreenhollowForms = require(Shared:WaitForChild("GreenhollowForms"))
 local DustbowlForms = require(Shared:WaitForChild("DustbowlForms"))
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
 
 local out = {}
 local pass, fail = 0, 0
@@ -235,6 +243,10 @@ for _, spec in ipairs(SPECIES) do
 	--======================================================================
 	-- 2. THE CONTRACT AT EVERY TIER
 	--======================================================================
+	if PlantForms.Has(id) then
+		say("  (built from the owner's supplied rig since 2026-10-03: pins 2-6 are PlantRigsSpec's)")
+		continue
+	end
 	local tierParts = nil
 	for tier = 1, SeedData.TierCount do
 		local at = CFrame.new(tier * 60, 10, 0)
@@ -465,6 +477,11 @@ end
 say("")
 say("-- untouched --")
 for _, expect in ipairs({ { "bellchime", 47 }, { "suncrown", 64 } }) do
+	-- A rigged species builds its supplied parts and the Base.
+	local rigSpec = if PlantForms.Has(expect[1]) then PlantForms.Plants[expect[1]] else nil
+	if rigSpec then
+		expect = { expect[1], rigSpec.PartCount + 1 }
+	end
 	local m = build(expect[1], 1)
 	local n = #m:GetChildren()
 	check(n == expect[2], expect[1] .. " still builds to its part count", n)

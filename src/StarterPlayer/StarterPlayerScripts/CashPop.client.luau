@@ -63,6 +63,9 @@ local POP = GameConfig.Pops.Cash
 -- every stage change and stamps the stage on it, so the attribute IS the
 -- server's answer and a second calculation here could only ever disagree.
 local STAGE_GROWN = 3
+-- OTHER PLANTS: OFF (2026-10-05): a plant hidden on this screen pops nothing,
+-- and a pop already rising over it is put away.
+local PlantVisibility = require(Shared:WaitForChild("PlantVisibility"))
 
 -- One second, matching EconomyService's TICK. Not shared through GameConfig
 -- because they are two different facts that happen to agree -- one is how often
@@ -74,12 +77,18 @@ local TICK = GameConfig.Plant.TickSeconds
 -- BACK DOWN ONTO THE PLANT
 --
 -- This was briefly 2.4, pushed up to clear a three-line plate over grown plants.
--- That plate is gone -- a finished plant carries no billboard at all now -- so
--- there is nothing left to clear, and a number floating two and a half studs
--- above a creature with empty air between them reads as belonging to nothing.
+-- That plate went, and a number floating two and a half studs above a creature
+-- with empty air between them reads as belonging to nothing.
 --
 -- Half a stud above the measured top: close enough to be that plant's number,
 -- high enough not to start inside its own head.
+--
+-- AND THE LABEL IS BACK (2026-10-04, the owner's overhead labels): while
+-- PlantUI shows a grown creature's three lines, standing on the same half stud,
+-- a pop starts ABOVE them instead of rising through them -- raised by the
+-- label's drawn height in pixels (the model's client-only HeightAttribute) as
+-- a SizeOffset, the one billboard offset measured in pixels. With no label
+-- showing (far away, selected for PICK UP) it starts where it always did.
 --==============================================================================
 local POP_START_ABOVE = 0.5
 local RISE_STUDS = 2.5
@@ -213,6 +222,9 @@ end
 -- again is the stage change. Nothing here has to be kept in step by hand.
 --==============================================================================
 type Tracked = {
+	model: Model,
+	-- The bed's plot: its GardenBoost is the OWNER's rate (2026-10-04).
+	plot: Instance?,
 	anchor: BasePart,
 	species: SeedData.Species,
 	-- What THIS plant weighs, stamped on the model when it was built. The pop is
@@ -250,7 +262,18 @@ local function add(instance: Instance)
 		if tracked[model] then
 			return
 		end
+		local plot: Instance? = nil
+		local at = model.Parent
+		while at and at ~= workspace do
+			if CollectionService:HasTag(at, GameConfig.Tags.Plot) then
+				plot = at
+				break
+			end
+			at = at.Parent
+		end
 		tracked[model] = {
+			model = model,
+			plot = plot,
 			anchor = anchor,
 			species = species,
 			tier = tier,
@@ -291,12 +314,15 @@ local function pop(entry: Tracked)
 	-- The same shared calculation the server pays from -- see SeedData. This is
 	-- display only; the number it prints is the number already banked.
 	--
-	-- Times the player's cash passes, because "already banked" is the whole
-	-- claim this label makes. EconomyService multiplies the faucet by the same
-	-- figure, so a x2 Money owner watching a pop is watching what they got.
+	-- Times the OWNER'S multiplier, because "already banked" is the whole claim
+	-- this label makes: their pass and boosts as EconomyService publishes them
+	-- on the plot, and the rain, each once -- exactly what RateFor pays. It was
+	-- the LOOKER'S (incomeMultiplier(player)) until 2026-10-04, which showed a
+	-- visitor their own pass over somebody else's plant; the owner's own pops
+	-- read the same as before.
 	label.Text = "+$" .. GameConfig.compact(
 		SeedData.IncomePerSecond(entry.species, entry.tier)
-			* GameConfig.incomeMultiplier(player))
+			* GameConfig.gardenIncomeMultiplier(entry.plot))
 	label.TextTransparency = 0
 	if stroke then
 		stroke.Transparency = 0
@@ -318,6 +344,9 @@ local function pop(entry: Tracked)
 	local start = Vector3.new(drift, entry.top + POP_START_ABOVE, 0)
 	billboard.Adornee = entry.anchor
 	billboard.StudsOffset = start
+	-- Above a showing label, never through it (see BACK DOWN ONTO THE PLANT).
+	local labelPx = tonumber(entry.model:GetAttribute(GameConfig.Labels.Plant.HeightAttribute)) or 0
+	billboard.SizeOffset = if labelPx > 0 then Vector2.new(0, labelPx / POP.Height + 0.5) else Vector2.zero
 	billboard.Enabled = true
 	active[billboard] = entry.anchor
 
@@ -375,7 +404,7 @@ RunService.Heartbeat:Connect(function(dt)
 	-- Hand back anything whose plant was destroyed mid-flight. Cheap: `active`
 	-- holds only what is in the air right now.
 	for billboard, anchor in pairs(active) do
-		if not anchor.Parent then
+		if not anchor.Parent or PlantVisibility.isHidden(anchor) then
 			release(billboard)
 		end
 	end
@@ -392,7 +421,7 @@ RunService.Heartbeat:Connect(function(dt)
 	for model, entry in pairs(tracked) do
 		if not (model.Parent and entry.anchor.Parent) then
 			tracked[model] = nil
-		elseif model:GetAttribute("Stage") == STAGE_GROWN then
+		elseif model:GetAttribute("Stage") == STAGE_GROWN and model:GetAttribute(PlantVisibility.Marker) ~= true then
 			-- Pods and sprouts pop nothing. They are not earning yet.
 			if not eye or (entry.anchor.Position - eye).Magnitude <= POP_RANGE then
 				pop(entry)

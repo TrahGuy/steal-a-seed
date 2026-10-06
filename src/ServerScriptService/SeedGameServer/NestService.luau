@@ -167,6 +167,39 @@ type Nest = {
 	event: number?,
 	route: { Vector3 }?,
 	setDown: Vector3?,
+	--==========================================================================
+	-- THE RIG'S OWN RECIPE, AND A REBUILD IN PROGRESS (2026-10-04; see A LOST
+	-- GUARDIAN IS REBUILT)
+	--
+	-- `buildAt` and `rigId` are what the nest was raised with, so a rebuild is
+	-- the same guardian at the same spot; a record without them (a spec's, built
+	-- by hand) is never rebuilt. `lastSeen` is its root at the last healthy
+	-- tick, for the log. `recovery` is a loss being dealt with. `busySince` is
+	-- when the throw in flight took the nest. `spec` marks a record a spec
+	-- handed to SpecStep / SpecProvoke.
+	--==========================================================================
+	buildAt: CFrame?,
+	rigId: string?,
+	lastSeen: Vector3?,
+	recovery: Recovery?,
+	busySince: number?,
+	spec: boolean?,
+}
+
+-- One loss, from the tick that found it to the rebuild that ends it.
+type Recovery = {
+	reason: string,
+	-- The state and the root's last healthy position when it was found, for the log.
+	previous: string,
+	lastAt: Vector3?,
+	since: number,
+	-- Set once an awake guardian's chase has been let go of (target, sample, pursuit).
+	settled: boolean,
+	failures: number,
+	nextAt: number,
+	warnedAt: number,
+	-- Why it will not be rebuilt (said once), or nil.
+	refused: string?,
 }
 
 --==============================================================================
@@ -467,15 +500,44 @@ local function buildPlatform(nest: Nest, spot: CFrame): Folder
 	return folder
 end
 
--- The spawn toast: everybody in THIS server, once, on a fresh spawn only.
-local function announceSecret(nest: Nest)
+--==============================================================================
+-- THE SECRET EGG TOAST (2026-10-05): ONE ROUTE FOR EVERY ANNOUNCEMENT
+--
+-- "A SECRET EGG SPAWNED ON {BIOME}!" to everybody in THIS server, once per
+-- actual new egg: a road Secret's fresh spawn (spawnSecret), and a weather
+-- event's special egg (GameConfig.Secret.Toast.WeatherEggs, the Thunderstorm's
+-- Pod 3) when its biome opens (AnnounceEventEgg, asked by WeatherService, so
+-- the console's storms and the automatic ones are told alike). Each carries a
+-- stable spawn id: a client shows a spawn once, and a later spawn in the same
+-- biome still shows. Never on a confiscated pod walked back, a guardian rebuilt,
+-- a pickup, a respawn or a refused START, and nothing is replayed to a late
+-- joiner. The biome goes as its id; the client shows the display name.
+--==============================================================================
+local announcer: ((string, string, number?) -> ())? = nil
+
+-- `eventId`: the weather event whose egg it is, so a client can hold the toast
+-- back until that storm's own opening toast has been read (ActionToastUI).
+local function announceSecretEgg(spawnId: string, biomeId: string, eventId: number?)
+	local seam = announcer
+	if seam then
+		seam(spawnId, biomeId, eventId)
+		return
+	end
 	local remotes = SeedGame:FindFirstChild("Remotes")
 	local remote = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if remote and remote:IsA("RemoteEvent") then
 		pcall(function()
-			remote:FireAllClients("SecretSpawned", nest.biome.Id)
+			remote:FireAllClients("SecretSpawned", { id = spawnId, biome = biomeId, event = eventId })
 		end)
 	end
+end
+
+-- Studio specs: catch the announcements instead of firing them.
+function NestService.SpecAnnouncer(fn: ((string, string, number?) -> ())?)
+	if not RunService:IsStudio() then
+		return
+	end
+	announcer = fn
 end
 
 -- The pod on the spot: the species' own pod (SecretForms), the loot tag, the
@@ -527,7 +589,7 @@ local function spawnSecret(nest: Nest, why: string): (boolean, string?)
 		nest.secret = nil
 		return false, "unknown species " .. speciesId
 	end
-	announceSecret(nest)
+	announceSecretEgg(secret.id, nest.biome.Id)
 	log(string.format("%s spawned its secret %s (%s): %s.", nest.id, speciesId, secret.id, why))
 	return true, nil
 end
@@ -583,9 +645,9 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 	-- Facing the middle of the road: a nest against the left wall should have
 	-- its parent looking out at traffic, not at the wall.
 	local outward = if centre.X < 0 then math.pi * 0.5 else -math.pi * 0.5
-	local parentModel = ParentModel.Build(
-		CFrame.new(centre) * CFrame.Angles(0, outward, 0),
-		PARENT_HEIGHT, biome.Id, folder)
+	-- Kept on the nest: a lost guardian is rebuilt from exactly this.
+	local buildAt = CFrame.new(centre) * CFrame.Angles(0, outward, 0)
+	local parentModel = ParentModel.Build(buildAt, PARENT_HEIGHT, biome.Id, folder)
 	local humanoid = parentModel:FindFirstChildOfClass("Humanoid")
 	local root = parentModel.PrimaryPart
 	if not (humanoid and root) then
@@ -617,6 +679,9 @@ local function buildNest(site: BasePart, biome: BiomeData.Biome): Nest?
 		thieves = {},
 		secret = nil,
 		marked = {},
+		buildAt = buildAt,
+		rigId = biome.Id,
+		lastSeen = root.Position,
 	}
 	for i = 1, biome.PodsPerNest do
 		growPod(nest, i)
@@ -2762,7 +2827,292 @@ local function walkHome(nest: Nest): boolean
 	return false
 end
 
+--==============================================================================
+-- A LOST GUARDIAN IS REBUILT (2026-10-04)
+--
+-- The owner found a live server -- hours old, on the patch before -- with no
+-- guardian at any nest, and a restart brought every one back. That is what
+-- this file did: a guardian was built once, when its nest was raised, and
+-- nothing rebuilt one whose rig went away. Dusk's ResetParents moves a guardian
+-- home only while its root still exists, so a rig that fell out of the world
+-- (the engine deletes parts under FallenPartsDestroyHeight), died or was
+-- removed stayed gone until the server shut down. WHAT took them on that
+-- server is not known: its own log is not on any machine we have.
+--
+-- So every tick checks the SERVER'S rig, never whether a client can see it:
+--
+--   gone     the model, its root or its Humanoid is no longer where the builder
+--            put them (out of the Workspace counts)
+--   dead     its Humanoid has died. Nothing in this game damages a guardian
+--            (three rigs have unlimited health; Miremaw and Forgemaw keep the
+--            default 100), but a Humanoid can still die, and a dead one never
+--            moves again
+--   fallen   its root is GameConfig.Parent.Recovery.FallStuds under its own
+--            nest's floor, or somewhere no number can say
+--
+-- Far away, chasing, hauling, mid-throw and asleep are none of those, and a
+-- guardian that is any of them is never touched.
+--
+-- WHAT A REBUILD IS, AND IS NOT
+--
+--   * ONLY THE RIG: the same builder (ParentModel.Build) at the same spot with
+--     the same id the nest was raised with (`buildAt`, `rigId`). Never
+--     buildNest, Start or OpenEventNest -- those roll pods. The pods, the secret
+--     encounter and its serial, the rage and the event id are the nest's and are
+--     not touched, so the one batch per weather cannot be broken from here.
+--   * A HAUL GOES HOME FIRST, through depositHaul (the only way a haul ends):
+--     the pod is a record on the nest, so it goes back to its ring, its secret
+--     spot or the ground exactly once -- never lost, never twice, never rolled
+--     again -- whether or not the rebuild then succeeds.
+--   * ONE RIG PER NEST: the new one is built and checked; then any other
+--     NestParent in the folder and the old rig are destroyed; then the record
+--     points at the new one -- all without a yield.
+--   * A CLEAN START: server ownership; no sweep sample (one taken from the old
+--     body would be a line across the map, and a catch along it a teleport
+--     catch); no target; not busy; the body's reach measured again. A guardian
+--     that was up (waking, chasing, returning, hauling) starts `returning` at
+--     its own nest: its last target is remembered as a thief while still
+--     eligible, the thieves are pruned, and the walk home turns on the next one
+--     or lies down -- the ordinary rules. One that was asleep stays asleep. The
+--     pursuit counts are published at once, so nobody keeps a warning about a
+--     guardian that is not there.
+--   * THE WEATHER'S GUARDIAN ONLY WHILE ITS WEATHER STANDS: Stormstrider is
+--     rebuilt only while its nest is registered, its terrain is in the world and
+--     the weather still names its event as opening or active. Closing the
+--     event, removing the terrain or stopping this service always wins.
+--   * IDEMPOTENT, WITH A BACKOFF: a healthy rig is never rebuilt. A rebuild that
+--     fails waits RetrySeconds (2, 4, 8 ... 60) and warns at most every
+--     WarnEverySeconds; a refusal is said once.
+--   * A THROW IN FLIGHT IS WAITED FOR: `busy` owns the nest until the throw lets
+--     go (THROW_TIMEOUT). Past BusyCapSeconds a lost rig is rebuilt anyway.
+--==============================================================================
+local RECOVER = P.Recovery
+
+-- The builder a rebuild calls. A spec may swap in one that fails (SpecRigBuilder).
+local rigBuilder: (CFrame, number, string, Instance) -> Model = ParentModel.Build
+-- A spec's weather, for the records it hands in (SpecWeather). Nil: closed.
+local specWeather: ((any) -> boolean)? = nil
+
+-- Pure: the weather publishes this event as standing.
+function NestService.EventOpenFor(eventId: number?, publishedId: any, publishedState: any): boolean
+	return eventId ~= nil and publishedId == eventId
+		and (publishedState == "opening" or publishedState == "active")
+end
+
+local function eventStands(nest: Nest): boolean
+	if nest.spec then
+		local f = specWeather
+		return f ~= nil and f(nest) == true
+	end
+	local W = GameConfig.Weather.Attributes
+	return table.find(nests, nest) ~= nil
+		and NestService.EventOpenFor(nest.event, Workspace:GetAttribute(W.EventId), Workspace:GetAttribute(W.State))
+end
+
+local function finite(v: Vector3): boolean
+	return v.X == v.X and v.Y == v.Y and v.Z == v.Z
+		and math.abs(v.X) < 1e7 and math.abs(v.Y) < 1e7 and math.abs(v.Z) < 1e7
+end
+
+-- Why this nest's guardian is lost, or nil when it is not.
+local function lostGuardian(nest: Nest): string?
+	local model: any = nest.parent
+	if typeof(model) ~= "Instance" or not model:IsDescendantOf(Workspace) then
+		return "its rig is gone"
+	end
+	local root: any = nest.root
+	if typeof(root) ~= "Instance" or not root:IsDescendantOf(model) then
+		return "its root is gone"
+	end
+	local humanoid: any = nest.humanoid
+	if typeof(humanoid) ~= "Instance" or humanoid.Parent ~= model then
+		return "its Humanoid is gone"
+	end
+	if humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead then
+		return "it died"
+	end
+	local at = root.Position
+	if not finite(at) then
+		return "its position is not a number"
+	end
+	if at.Y < nest.origin.Y - RECOVER.FallStuds then
+		return string.format("it fell out of the world, %d studs under its nest", math.floor(nest.origin.Y - at.Y))
+	end
+	return nil
+end
+
+local function where(v: Vector3?): string
+	return if v then string.format("(%d, %d, %d)", math.floor(v.X), math.floor(v.Y), math.floor(v.Z)) else "(unknown)"
+end
+
+local function refuseRebuild(nest: Nest, rec: Recovery, why: string)
+	if rec.refused == why then
+		return
+	end
+	rec.refused = why
+	warn(string.format("[Seed/NestService] %s lost its guardian (%s; it was %s at %s%s) and will not rebuild it: %s.",
+		nest.id, rec.reason, rec.previous, where(rec.lastAt),
+		if nest.event ~= nil then string.format(", event %d", nest.event) else "", why))
+end
+
+-- True once a new rig stands in the record; false while deferred, refused or failed.
+local function recoverGuardian(nest: Nest, reason: string, now: number): boolean
+	local rec = nest.recovery
+	if not rec then
+		rec = {
+			reason = reason,
+			previous = nest.state,
+			lastAt = nest.lastSeen,
+			since = now,
+			settled = false,
+			failures = 0,
+			nextAt = now,
+			warnedAt = -math.huge,
+			refused = nil,
+		}
+		nest.recovery = rec
+	end
+	local r = rec :: Recovery
+	-- Nothing outlives its service, its nest or its weather.
+	if not (running or nest.spec) then
+		refuseRebuild(nest, r, "the nest service has stopped")
+		return false
+	end
+	local folder: any = nest.folder
+	if typeof(folder) ~= "Instance" or not folder:IsDescendantOf(Workspace) then
+		refuseRebuild(nest, r, "its nest is gone")
+		return false
+	end
+	if nest.event ~= nil and not eventStands(nest) then
+		refuseRebuild(nest, r, string.format("its weather (event %d) is over", nest.event :: number))
+		return false
+	end
+	-- A throw in flight owns the nest until it lets go.
+	if nest.busy and now - (nest.busySince or now) < RECOVER.BusyCapSeconds then
+		return false
+	end
+	-- The pod in its fist goes home now, whatever the rebuild does.
+	if nest.haul then
+		depositHaul(nest, "its guardian was lost")
+	end
+	-- Up when it went: it lets go of the chase now, so nobody is warned about a
+	-- guardian that is not there. Its target is remembered, if still a thief.
+	if not r.settled then
+		r.settled = true
+		if nest.state ~= "asleep" then
+			local target = nest.target
+			if target and eligibleThief(nest, target) then
+				nest.thieves[target] = nest.thieves[target] or now
+			end
+			nest.target = nil
+			nest.sample = nil
+			nest.busy = false
+			nest.busySince = nil
+			nest.state = "returning"
+			nest.stateUntil = 0
+			pcall(publishPursuit)
+		end
+	end
+	if now < r.nextAt then
+		return false
+	end
+
+	local ok, built = pcall(rigBuilder, nest.buildAt :: CFrame, PARENT_HEIGHT, nest.rigId :: string, folder)
+	local model: Model? = if ok and typeof(built) == "Instance" and (built :: Instance):IsA("Model")
+		then built :: Model else nil
+	local humanoid = if model then model:FindFirstChildOfClass("Humanoid") else nil
+	local root = if model then model.PrimaryPart else nil
+	if not (model and humanoid and root) then
+		if model then
+			pcall(model.Destroy, model)
+		end
+		r.failures += 1
+		local waits = RECOVER.RetrySeconds
+		local pause = waits[math.min(r.failures, #waits)] or 60
+		r.nextAt = now + pause
+		if now - r.warnedAt >= RECOVER.WarnEverySeconds then
+			r.warnedAt = now
+			warn(string.format("[Seed/NestService] %s could not rebuild its guardian (%s, try %d): %s. Next try in %d s.",
+				nest.id, tostring(nest.rigId), r.failures,
+				if ok then "the rig had no Humanoid or root" else tostring(built), pause))
+		end
+		return false
+	end
+
+	-- One rig per nest: any stray, then the old rig, then the record.
+	for _, child in ipairs(folder:GetChildren()) do
+		if child ~= model and child:IsA("Model") and CollectionService:HasTag(child, GameConfig.Tags.NestParent) then
+			child:Destroy()
+		end
+	end
+	local old: any = nest.parent
+	if typeof(old) == "Instance" and old ~= model and old.Parent then
+		old:Destroy()
+	end
+	nest.parent = model
+	nest.humanoid = humanoid
+	nest.root = root
+	nest.homeCFrame = root.CFrame
+	nest.reach = nil
+	nest.sample = nil
+	nest.target = nil
+	nest.busy = false
+	nest.busySince = nil
+	nest.stateUntil = 0
+	GuardianPursuit.prune(nest.thieves, function(player: Player): Vector3?
+		return eligibleThief(nest, player)
+	end)
+	if nest.state == "asleep" then
+		humanoid.WalkSpeed = 0
+		model:SetAttribute("Asleep", true)
+	else
+		nest.state = "returning"
+		model:SetAttribute("Asleep", false)
+	end
+	pinToServer(nest)
+	nest.lastSeen = root.Position
+	nest.recovery = nil
+	pcall(publishPursuit)
+	log(string.format("%s (%s) lost its guardian -- %s; it was %s at %s%s. Rebuilt at its nest%s.",
+		nest.id, nest.biome.Id, r.reason, r.previous, where(r.lastAt),
+		if nest.event ~= nil then string.format(", event %d", nest.event :: number) else "",
+		if r.failures > 0 then string.format(" after %d failed try(s)", r.failures) else ""))
+	return true
+end
+
+-- Studio only: the builder a rebuild uses (nil puts ParentModel.Build back),
+-- and the weather a spec's records answer to.
+function NestService.SpecRigBuilder(fn: ((CFrame, number, string, Instance) -> Model)?)
+	if not RunService:IsStudio() then
+		return
+	end
+	rigBuilder = fn or ParentModel.Build
+end
+
+function NestService.SpecWeather(fn: ((any) -> boolean)?)
+	if not RunService:IsStudio() then
+		return
+	end
+	specWeather = fn
+end
+
 local function step(nest: Nest, now: number)
+	--==========================================================================
+	-- A LOST GUARDIAN FIRST (above). Only on a nest this file raised itself: a
+	-- spec's hand-built record has no rig id and is left exactly as it was.
+	--==========================================================================
+	if nest.rigId ~= nil then
+		local lost = lostGuardian(nest)
+		if lost then
+			if not recoverGuardian(nest, lost, now) then
+				return
+			end
+		else
+			nest.lastSeen = nest.root.Position
+			nest.recovery = nil
+		end
+	end
+
 	--==========================================================================
 	-- THE STATE IS PUBLISHED, ONCE, WHENEVER IT CHANGES
 	--
@@ -2905,6 +3255,7 @@ local function step(nest: Nest, now: number)
 		if reach <= P.GrabStuds then
 			local victim = nest.target
 			nest.busy = true
+			nest.busySince = now
 			--==============================================================
 			-- ONE BOLT PER CATCH, AND ONLY TO LOOK AT (2026-10-02)
 			--
@@ -3202,6 +3553,9 @@ local function specRecord(nest: any)
 	if nest.marked == nil then
 		nest.marked = {}
 	end
+	-- A spec's record: its rebuilds (when it gives a rig id) answer to the spec's
+	-- weather and need no running service. See A LOST GUARDIAN IS REBUILT.
+	nest.spec = true
 end
 
 function NestService.SpecProvoke(nest: any, thief: any, fromNest: boolean?, secretId: string?)
@@ -3218,6 +3572,16 @@ function NestService.SpecStep(nest: any, now: number)
 	end
 	specRecord(nest)
 	step(nest, now)
+end
+
+-- Studio specs: a fresh Secret at a nest the spec raised -- spawnSecret
+-- itself, its refusals and its announcement (THE SECRET EGG TOAST).
+function NestService.SpecSpawnSecret(nest: any, why: string?): (boolean, string?)
+	if not RunService:IsStudio() then
+		return false, "Studio only"
+	end
+	specRecord(nest)
+	return spawnSecret(nest, why or "spec")
 end
 
 --==============================================================================
@@ -3715,8 +4079,9 @@ end
 --            so a catch throws and the pod drops by the ordinary loose-pod path
 --            for anybody to take; no secret.
 --   pods     ONE batch, rolled here on the server (SeedData.RollRainBatch:
---            three slots each a coin flip between Pod 1 and Pod 2 for the
---            rain, one Pod 3 for a thunderstorm; each pod's creature drawn
+--            three slots each drawn on its own for the rain -- Pod 1 90%,
+--            the Colossal Pod 2 10% since 2026-10-05 (SeedData.RainBatches)
+--            -- one Pod 3 for a thunderstorm; each pod's creature drawn
 --            when it is laid). Stamped with the event's id. Never restocked
 --            (StockAll), cleared at dusk (ClearForNight) or reset (ResetParents).
 --   layout   the pods on the grown nest platform (GameConfig.Weather.EventNest:
@@ -3740,10 +4105,40 @@ export type EventSite = {
 
 local EVENT_NEST_NAME = "Nest_rain_event"
 
+-- Each event's special eggs still to be announced (laid by OpenEventNest, told
+-- once by AnnounceEventEgg, forgotten by CloseEventNest).
+local eventEggs: { [number]: number } = {}
+
+-- How many of these laid pods are a weather egg the Secret toast names. Pure.
+function NestService.WeatherEggCount(podIds: { string }): number
+	local special: { [string]: boolean } = (GameConfig.Secret.Toast.WeatherEggs :: any) or {}
+	local n = 0
+	for _, id in ipairs(podIds) do
+		if special[id] then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- At the event's opening (WeatherService): announces its special egg, once.
+-- Answers whether it announced. Nothing laid, nothing special, or said
+-- already: nothing.
+function NestService.AnnounceEventEgg(eventId: number): boolean
+	local n = eventEggs[eventId]
+	if not n or n <= 0 then
+		return false
+	end
+	eventEggs[eventId] = nil
+	announceSecretEgg("event:" .. tostring(eventId), GameConfig.Weather.Biome.Id, eventId)
+	log(string.format("The event's special egg is announced (event %d).", eventId))
+	return true
+end
+
 local function eventBiome(pods: number): BiomeData.Biome
 	local starbloom = BiomeData.ById.starbloom
 	return {
-		Id = "rain",
+		Id = GameConfig.Weather.Biome.Id,
 		DisplayName = GameConfig.Weather.Biome.Label,
 		Mood = "",
 		Order = if starbloom then starbloom.Order + 1 else #BiomeData.Biomes + 1,
@@ -3780,7 +4175,9 @@ function NestService.OpenEventNest(eventId: number, mode: string, site: EventSit
 	local folder = Instance.new("Folder")
 	folder.Name = EVENT_NEST_NAME
 	folder.Parent = site.parent
-	local parentModel = ParentModel.Build(CFrame.lookAt(home, home + across), PARENT_HEIGHT, "rain", folder)
+	-- Kept on the nest: a lost Stormstrider is rebuilt from exactly this, while its weather stands.
+	local buildAt = CFrame.lookAt(home, home + across)
+	local parentModel = ParentModel.Build(buildAt, PARENT_HEIGHT, "rain", folder)
 	local humanoid = parentModel:FindFirstChildOfClass("Humanoid")
 	local root = parentModel.PrimaryPart
 	if not (humanoid and root) then
@@ -3832,6 +4229,9 @@ function NestService.OpenEventNest(eventId: number, mode: string, site: EventSit
 		event = eventId,
 		route = route,
 		setDown = site.setDown,
+		buildAt = buildAt,
+		rigId = "rain",
+		lastSeen = root.Position,
 	}
 	local laid = {}
 	for i, roll in ipairs(batch) do
@@ -3845,6 +4245,7 @@ function NestService.OpenEventNest(eventId: number, mode: string, site: EventSit
 	end
 	pinToServer(nest)
 	table.insert(nests, nest)
+	eventEggs[eventId] = NestService.WeatherEggCount(laid)
 	log(string.format("The %s event's nest is up (event %d): %d pod(s) [%s], guarded by %s.", mode, eventId,
 		#laid, table.concat(laid, ", "), tostring(parentModel:GetAttribute("Species"))))
 	return #laid, nil
@@ -3855,6 +4256,12 @@ end
 -- Answers how many pods went.
 function NestService.CloseEventNest(eventId: number?): number
 	local removed = 0
+	-- An egg not yet announced is never announced once its event is down.
+	if eventId == nil then
+		table.clear(eventEggs)
+	else
+		eventEggs[eventId] = nil
+	end
 	for i = #nests, 1, -1 do
 		local nest = nests[i]
 		if nest.event ~= nil and (eventId == nil or nest.event == eventId) then

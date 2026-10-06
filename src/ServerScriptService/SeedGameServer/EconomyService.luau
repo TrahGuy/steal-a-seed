@@ -65,6 +65,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+-- Which items wear a heart, and so stay out of SELL ALL (2026-10-03).
+local HotbarSlots = require(Shared:WaitForChild("HotbarSlots"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlantService = require(script.Parent:WaitForChild("PlantService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
@@ -330,10 +332,23 @@ local function stallPrice(tool: Instance): number?
 	-- what prices it, so a Mythic out of Starbloom sells for what it was worth
 	-- standing up.
 	local species = if type(id) == "string" then SeedData.Get(id) else nil
-	if species and tier and tier >= 1 then
+	-- An invite reward is never bought (SeedData.Sellable, 2026-10-06): it stays
+	-- in the bag, counted apart on the quote (`locked`).
+	if species and tier and tier >= 1 and SeedData.Sellable(species) then
 		return SeedData.SellPrice(species, tier)
 	end
 	return nil
+end
+
+-- A Tool naming a species the stall never buys (an invite reward): what SELL ALL
+-- leaves in the bag, apart from the favourites it keeps.
+local function lockedTool(tool: Instance): boolean
+	if not tool:IsA("Tool") then
+		return false
+	end
+	local id = tool:GetAttribute("SpeciesId")
+	local species = if type(id) == "string" then SeedData.Get(id) else nil
+	return species ~= nil and not SeedData.Sellable(species)
 end
 
 -- Listed one by one rather than as `{ backpack, character }`: ipairs stops at a
@@ -355,19 +370,42 @@ export type HeldQuote = {
 	total: number,
 	pods: number,
 	plants: number,
+	-- Favourites left in the bag (2026-10-03).
+	kept: number,
+	-- Invite rewards left in the bag: no stall buys one (2026-10-06).
+	locked: number,
 }
 
+--==============================================================================
+-- A HEART KEEPS AN ITEM OUT OF SELL ALL (2026-10-03, the owner's decision)
+--
+-- The Tool's item, favourited on the profile. A Tool that has not learned its
+-- id is never protected -- there is nothing to name it by. SELL ONE does not ask:
+-- a favourite can still be sold one at a time, on purpose. The quote and the
+-- sale both ask this, with the profile read once each, so they cannot disagree.
+--==============================================================================
+local function keptBack(profile: any, tool: Instance): boolean
+	local item = tool:GetAttribute(GameConfig.Attributes.ItemId)
+	return type(item) == "string" and item ~= "" and HotbarSlots.isFavourite(profile, HotbarSlots.item(item))
+end
+
 -- Everything SellHeld would sell right now and what it would pay, without
--- selling anything. `pods` are unhatched, `plants` are hatched.
+-- selling anything. `pods` are unhatched, `plants` are hatched; `kept` counts
+-- the favourites it leaves.
 function EconomyService.QuoteHeld(player: Player): HeldQuote
-	local quote: HeldQuote = { tools = {}, total = 0, pods = 0, plants = 0 }
+	local quote: HeldQuote = { tools = {}, total = 0, pods = 0, plants = 0, kept = 0, locked = 0 }
 	if player.Parent ~= Players then
 		return quote
 	end
+	local profile = PlayerDataService.Get(player)
 	for _, container in ipairs(stallContainers(player)) do
 		for _, tool in ipairs(container:GetChildren()) do
 			local price = stallPrice(tool)
-			if price then
+			if price and keptBack(profile, tool) then
+				quote.kept += 1
+			elseif not price and lockedTool(tool) then
+				quote.locked += 1
+			elseif price then
 				table.insert(quote.tools, tool :: Tool)
 				quote.total += price
 				if tool:GetAttribute("Hatched") == true then
@@ -388,13 +426,14 @@ function EconomyService.SellHeld(player: Player): (number, number)
 
 	local sold, total = 0, 0
 	local gone: { Instance } = {}
+	local profile = PlayerDataService.Get(player)
 	local function take(container: Instance?)
 		if not container then
 			return
 		end
 		for _, tool in ipairs(container:GetChildren()) do
 			local price = stallPrice(tool)
-			if price then
+			if price and not keptBack(profile, tool) then
 				total += price
 				sold += 1
 				tool:Destroy()
@@ -483,6 +522,10 @@ function EconomyService.QuoteOne(player: Player, tool: Instance?): (OneQuote?, s
 	end
 	if tool:GetAttribute("Hatched") ~= true then
 		return nil, "UNHATCHED"
+	end
+	-- An invite reward: earned by inviting friends, never sold (2026-10-06).
+	if not SeedData.Sellable(species) then
+		return nil, "UNSELLABLE"
 	end
 	local whole = math.floor(tier)
 	return {

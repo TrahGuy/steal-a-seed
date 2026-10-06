@@ -140,15 +140,33 @@ local throwRemote: RemoteEvent? = nil
 
 -- Per player, all keyed off os.clock().
 local swingReadyAt: { [Player]: number } = {}
--- The swing animation currently playing on each player, so a second swing stops
--- the first rather than blending two half-swings together.
-local swingTracks: { [Player]: AnimationTrack } = {}
--- One Animation instance per asset id, shared by every player. LoadAnimation
--- caches per Animator on top of this, so a swing costs no allocation at all
--- after the first one.
+--==============================================================================
+-- ONE SWING TRACK PER BODY, LOADED ONCE (2026-10-04)
+--
+-- This loaded a NEW AnimationTrack and connected a NEW Stopped handler on every
+-- single swing, and neither was ever let go: an Animator keeps every track it
+-- has loaded, and complains past 256 of them. Now each body loads the swing
+-- once, plays that same track on every swing, and the entry is dropped when the
+-- body or the asset changes. No per-swing connection exists any more.
+--==============================================================================
+type SwingTrack = { animator: Animator, track: AnimationTrack, id: string }
+local swingTracks: { [Player]: SwingTrack } = {}
+-- One Animation instance per asset id, shared by every player.
 local animationCache: { [string]: Animation } = {}
 local immuneUntil: { [Player]: number } = {}
-local placeReadyAt: { [Player]: number } = {}
+--==============================================================================
+-- NO PLACEMENT COOLDOWN (2026-10-04, the reusable-trap brief)
+--
+-- There was one per trap type; it went with the traps' lifetime. An owner sets
+-- their three as fast as the placement rules allow -- floor, slope, the Safe
+-- Zone, the clearances and the separation -- and the three-trap limit is the
+-- whole budget. What stops one owner holding one victim is the victim's
+-- immunity (asserted in WeaponData), never a recharge.
+--
+-- The one clock kept per player here is REMOVE's request gap: protection
+-- against a flood of requests, not a recharge (WeaponData.Trap.RemoveGapSeconds).
+--==============================================================================
+local removeReadyAt: { [Player]: number } = {}
 --==============================================================================
 -- WHO IS MID-KNOCKBACK, AND WHICH LAUNCH IT IS
 --
@@ -189,22 +207,89 @@ local launchSeq = 0
 -- would be a Bramblejaw that turns into a Starlock because somebody changed
 -- weapons while walking away from it.
 --==============================================================================
+--==============================================================================
+-- AND IT IS STATE, NOT A MODEL (2026-10-04, the owner's brief)
+--
+-- A placed trap is HIDDEN from everybody but its owner. So the server keeps no
+-- model in the world at all: a trap is this record -- where, which, since when
+-- -- and the tick tests bodies against it, exactly as it always tested them
+-- against `at`. The owner's client is handed a copy of the record in its OWN
+-- PlayerGui (`mark`, which replicates to that player alone) and draws the trap
+-- locally from it (TrapMarks.client). Nobody else receives anything to draw,
+-- and no client decides who is caught.
+--
+-- Up to MaxActivePerPlayer per owner, any mix, keyed by a server-minted id
+-- that only ever rises -- so the highest id an owner has is their NEWEST trap,
+-- which is the one REMOVE takes.
+--
+-- NO LIFETIME (2026-10-04), AND ONE CATCH (2026-10-05, the owner's brief): an
+-- untriggered trap stays until its owner REMOVEs it. The catch CONSUMES it --
+-- its record goes, its slot comes back, the public snap shows for
+-- Trap.SprungSeconds -- and its owner may set no trap for the trigger cooldown
+-- (placeCooldownUntil). It never re-arms in place: that superseded behaviour
+-- (2026-10-04's reusable traps) is gone.
+--==============================================================================
 type Trap = {
+	id: number,
 	owner: Player,
 	item: WeaponData.Item,
 	spec: WeaponData.TrapSpec,
-	model: Model,
-	base: BasePart,
 	at: Vector3,
+	-- The part it was set on. A floor that leaves the world -- the Rain event's
+	-- temporary biome is destroyed whole when the rain ends -- takes the trap
+	-- with it, so no trap is ever left floating where a floor used to be.
+	ground: Instance?,
 	placedAt: number,
-	-- The arming SOUND has been played. Not "is armed", which is a
-	-- comparison against the clock the tick already makes -- this is the
-	-- edge, because the tick passes through that branch every frame for the
-	-- rest of the trap's life and one of those frames is the interesting one.
-	armed: boolean,
-	sprung: boolean,
+	-- When it first bites (os.clock): ArmSeconds after it is set. Nothing bites
+	-- before it.
+	armsAt: number,
+	-- The owner's copy, in their PlayerGui; nil for a player without one.
+	mark: Instance?,
 }
-local traps: { [Player]: Trap } = {}
+local traps: { [number]: Trap } = {}
+local trapSeq = 0
+
+--==============================================================================
+-- THE TRIGGER COOLDOWN (2026-10-05, the owner's brief)
+--
+-- When one of an owner's traps catches somebody, that owner may set NO trap --
+-- of any kind, from any slot or the Bag -- until this deadline (os.clock,
+-- WeaponData.Trap.TriggerCooldownSeconds after the catch). One deadline per
+-- OWNER: switching traps finds the same answer, so nothing bypasses it, and
+-- their other traps already down stay live and may catch as usual. A later
+-- catch moves it to ten seconds after itself -- the later of the two, never a
+-- sum. Their REMOVE, a death and a respawn leave it running; leaving the
+-- server and a service restart drop it, and it is dropped the tick it runs out.
+-- The owner's client reads it as a SERVER-time deadline on the records' gui
+-- (publishCooldown), the same clock the arming is drawn on.
+--==============================================================================
+local placeCooldownUntil: { [Player]: number } = {}
+
+--==============================================================================
+-- A SWING IS LIVE FOR A SHORT WINDOW, NOT ONE INSTANT (2026-10-04)
+--
+-- Registered at the press and swept by the one Heartbeat while its window is
+-- open (WeaponData.Combat.HitWindow*): `seen` is where each body was on the
+-- previous frame of the window, so the next frame can test the path between,
+-- and `struck` is who this swing has already hit -- one hit per target per
+-- swing, by construction.
+--==============================================================================
+type ActiveSwing = {
+	tool: Tool,
+	item: WeaponData.Item,
+	opensAt: number,
+	closesAt: number,
+	-- How far the targets' own motion is wound back toward what the swinger saw.
+	rewind: number,
+	lastClock: number?,
+	selfAt: Vector3?,
+	seen: { [Player]: Vector3 },
+	struck: { [Player]: boolean },
+	hits: { string },
+	spared: boolean,
+	landed: boolean,
+}
+local activeSwings: { [Player]: ActiveSwing } = {}
 
 --==============================================================================
 -- A RESTRAINT KNOWS WHICH BODY IT BELONGS TO
@@ -251,6 +336,19 @@ type Hold = {
 }
 local holds: { [Player]: Hold } = {}
 local nextToken = 0
+
+--==============================================================================
+-- A ROOT STOPS A SWING; A SLOW DOES NOT (2026-10-04)
+--
+-- This refused a swing to anybody under ANY restraint, which made every slow a
+-- stun in disguise -- and the snare's own design (WeaponData), TrapUI's amber
+-- SLOWED and the owner's brief all say a slowed player is still walking,
+-- steering and swinging. Placing a trap stays refused under either kind.
+--==============================================================================
+local function rooted(player: Player): boolean
+	local hold = holds[player]
+	return hold ~= nil and hold.kind == "root"
+end
 
 local function log(message: string)
 	print("[Seed/CombatService] " .. message)
@@ -332,11 +430,22 @@ end
 -- animated with, and for the publishing blocker behind the placeholder id.
 --==============================================================================
 local function stopSwing(player: Player)
-	local track = swingTracks[player]
-	if track then
-		swingTracks[player] = nil
+	local entry = swingTracks[player]
+	if entry then
 		pcall(function()
-			track:Stop(0.08)
+			entry.track:Stop(0.08)
+		end)
+	end
+end
+
+-- The body (or the asset) changed: the old track goes with the old Animator.
+local function dropSwingTrack(player: Player)
+	local entry = swingTracks[player]
+	swingTracks[player] = nil
+	if entry then
+		pcall(function()
+			entry.track:Stop(0)
+			entry.track:Destroy()
 		end)
 	end
 end
@@ -354,23 +463,34 @@ local function playSwing(player: Player, body: Body, item: WeaponData.Item)
 		return
 	end
 
-	stopSwing(player)
-
-	local anim = animationCache[id]
-	if not anim then
-		anim = Instance.new("Animation")
-		anim.AnimationId = id
-		animationCache[id] = anim
+	local entry = swingTracks[player]
+	if entry and (entry.animator ~= animator or entry.id ~= id or not animator:IsDescendantOf(Workspace)) then
+		dropSwingTrack(player)
+		entry = nil
 	end
-
-	local ok, track = pcall(function()
-		return animator:LoadAnimation(anim)
-	end)
-	if not ok or not track then
-		return
+	if not entry then
+		local anim = animationCache[id]
+		if not anim then
+			anim = Instance.new("Animation")
+			anim.AnimationId = id
+			animationCache[id] = anim
+		end
+		local ok, loaded = pcall(function()
+			return animator:LoadAnimation(anim)
+		end)
+		if not ok or not loaded then
+			return
+		end
+		loaded.Priority = Enum.AnimationPriority.Action4
+		loaded.Looped = false
+		entry = { animator = animator, track = loaded, id = id }
+		swingTracks[player] = entry
 	end
-	track.Priority = Enum.AnimationPriority.Action4
-	track.Looped = false
+	local track = (entry :: SwingTrack).track
+	-- A second swing restarts the one track rather than blending two halves.
+	if track.IsPlaying then
+		track:Stop(0)
+	end
 
 	--==========================================================================
 	-- STRETCH IT OVER THE REAL SWING
@@ -424,15 +544,6 @@ local function playSwing(player: Player, body: Body, item: WeaponData.Item)
 	-- message, so what every other player sees is the speed this side chose.
 	--==========================================================================
 	track:Play(0.06, 1, speed)
-	swingTracks[player] = track
-
-	-- Let go of it once it is done, so nothing holds a track belonging to a
-	-- character that has since been rebuilt.
-	track.Stopped:Connect(function()
-		if swingTracks[player] == track then
-			swingTracks[player] = nil
-		end
-	end)
 end
 
 --==============================================================================
@@ -656,12 +767,35 @@ end
 -- post-recovery immunity. A trap cannot get any of that subtly wrong, because it
 -- does not implement any of it.
 --==============================================================================
+--==============================================================================
+-- THE POD COMES OFF FIRST: ONE CALL FOR A BAT AND FOR EVERY TRAP (2026-10-04)
+--
+-- Through CarryService.DropHeldPod and nothing else -- the authoritative drop
+-- for a raid carry and for a banked pod held as a Tool -- at the feet the
+-- victim is standing on, BEFORE any knockback, ragdoll, root, slow or pull
+-- begins. Idempotent by construction (each source is emptied first), so a
+-- second hit landing in the same frame drops nothing twice.
+--==============================================================================
+local function dropPodFrom(victim: Player, at: Vector3): boolean
+	local ok, dropped, kind = pcall(CarryService.DropHeldPod, victim, at)
+	if not ok then
+		warn("[Seed/CombatService] drop failed: " .. tostring(dropped))
+		return false
+	end
+	if dropped then
+		log(string.format("%s's pod came loose (%s).", victim.Name, tostring(kind)))
+	end
+	return dropped == true
+end
+
 type Launch = {
 	speed: number,
 	lift: number,
 	-- The floor on how long the victim sees themselves down. Nil takes the bat's.
 	minLimp: number?,
-	-- Whether a carried pod comes off first. A bat always takes it; a trap says.
+	-- Whether a carried pod comes off first. A bat takes it here; a trap has
+	-- already taken it before its effect began (applyTrapEffect), so it passes
+	-- false and nothing is asked twice.
 	dropPod: boolean,
 	-- For the log on both ends: "bat" or "trap".
 	kind: string,
@@ -708,16 +842,15 @@ local function launch(victim: Player, body: Body, dir: Vector3, opts: Launch)
 	-- travel inside CarryService and this file never sees them, which is how
 	-- "do not create a second pod ownership system" is kept true rather than
 	-- promised.
+	--
+	-- AND IT IS EVERY POD IN THE HANDS (2026-10-04): DropHeldPod takes a raid
+	-- carry OR a banked pod held as a Tool. Asking IsCarrying -- the raid carry
+	-- alone -- is why a player holding a banked pod was hit and kept it.
 	--==========================================================================
 	local stood = body.root.Position
 	local dropped = false
-	if opts.dropPod and CarryService.IsCarrying(victim) then
-		local ok, result = pcall(CarryService.Drop, victim, stood)
-		if ok then
-			dropped = result == true
-		else
-			warn("[Seed/CombatService] drop failed: " .. tostring(result))
-		end
+	if opts.dropPod then
+		dropped = dropPodFrom(victim, stood)
 	end
 
 	local loosened = NestService.RagdollOn(body.character)
@@ -998,25 +1131,30 @@ end
 --
 --   1. the immunity is set FIRST, from the effect's own length, so no second
 --      trap and no bat can land inside this one;
---   2. any restraint already on the victim is released before a launch begins --
---      a rooted player who is then blasted must not be launched at WalkSpeed 0
---      with their jump disabled;
---   3. the pod comes off, inside `launch`, through CarryService.Drop and nothing
---      else, and only for the trap whose spec says so;
---   4. and then the effect itself.
+--   2. the pod comes off -- EVERY trap's, since 2026-10-04 -- through
+--      CarryService.DropHeldPod and nothing else, at the feet the victim is
+--      still standing on, before anything roots, trips, slows, blasts or
+--      pulls them;
+--   3. any restraint already on the victim is released before a launch or a
+--      pull begins -- a rooted player who is then blasted must not be launched
+--      at WalkSpeed 0 with their jump disabled;
+--   4. and then the effect itself, whose deadline -- the countdown over the
+--      victim -- is `EffectSeconds` from now.
 --==============================================================================
 local function applyTrapEffect(trap: Trap, victim: Player, body: Body)
 	local spec = trap.spec
 	--==========================================================================
 	-- IMMUNITY FROM THE TRIGGER, NOT FROM THE RELEASE
 	--
-	-- Set here so it covers the effect AND the four seconds after it, which is
+	-- Set here so it covers the effect AND the five seconds after it, which is
 	-- what stops two owners standing two traps side by side. releaseHold extends
 	-- it again when a restraint ends, so a root that is cut short by a bat still
-	-- leaves its four seconds behind.
+	-- leaves its five seconds behind.
 	--==========================================================================
 	immuneUntil[victim] = math.max(immuneUntil[victim] or 0,
 		now() + spec.EffectSeconds + T.ImmunitySeconds)
+
+	dropPodFrom(victim, body.root.Position)
 
 	if spec.Effect == "root" or spec.Effect == "slow" then
 		holdPlayer(victim, body, spec)
@@ -1029,6 +1167,13 @@ local function applyTrapEffect(trap: Trap, victim: Player, body: Body)
 	-- The same handshake a bat and a guardian use, and for the same reason: a
 	-- launch on a body that is pinned at zero with no jump is a launch that ends
 	-- with a player sliding upright at the wrong speed.
+	--
+	-- AND THEN THE REST OF THE WINDOW IS A SLOW (2026-10-04). The knockdown
+	-- keeps its own short floor (LaunchMinLimp) and ends when the body lands,
+	-- exactly as before; the slow is put on at the same moment, so the one
+	-- countdown runs from the trigger for the whole EffectSeconds. A body on the
+	-- floor cannot walk anyway, and the moment it stands the launch's own
+	-- recompute reads the slow -- nobody is held in a ragdoll for five seconds.
 	--==========================================================================
 	if spec.Effect == "trip" or spec.Effect == "blast" then
 		releaseHold(victim, "a trap launched them")
@@ -1043,10 +1188,11 @@ local function applyTrapEffect(trap: Trap, victim: Player, body: Body)
 			speed = spec.LaunchSpeed or 0,
 			lift = spec.LaunchLift or 0,
 			minLimp = spec.LaunchMinLimp,
-			dropPod = spec.DropsPod,
+			dropPod = false,
 			kind = "trap",
 			why = trap.item.Name,
 		})
+		holdPlayer(victim, body, spec)
 		return
 	end
 
@@ -1064,22 +1210,19 @@ local function applyTrapEffect(trap: Trap, victim: Player, body: Body)
 end
 
 --==============================================================================
--- WHO IS IN THE ARC
+-- A CLEAR LINE, FROM WHERE THE SWING IS TO WHERE IT MET THE BODY
 --
--- Flat distance, a height tolerance, an angle, and a clear line -- in that
--- order, cheapest first, because this runs once per swing per player on the
--- server and the first test throws away almost everybody.
+-- Cast between the swinger's root and the contact point, ignoring both bodies.
 --==============================================================================
-local function lineIsClear(from: BasePart, to: BasePart): boolean
+local sightParams = RaycastParams.new()
+sightParams.FilterType = Enum.RaycastFilterType.Exclude
+sightParams.IgnoreWater = true
+
+local function lineIsClear(from: Vector3, to: Vector3, a: Instance, b: Instance): boolean
 	if not C.RequireLineOfSight then
 		return true
 	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { from.Parent :: Instance, to.Parent :: Instance }
-	params.IgnoreWater = true
-	local delta = to.Position - from.Position
-	local hit = Workspace:Raycast(from.Position, delta, params)
+	sightParams.FilterDescendantsInstances = { a, b }
 	--==========================================================================
 	-- A WALL STOPS A BAT. A POD DOES NOT.
 	--
@@ -1089,61 +1232,7 @@ local function lineIsClear(from: BasePart, to: BasePart): boolean
 	-- ground. That is exactly the set that should block a swing, and it is why
 	-- this needs no allow-list of its own.
 	--==========================================================================
-	return hit == nil
-end
-
---==============================================================================
--- WHO THIS SWING STRIKES, AND WHETHER THE SAFE ZONE SPARED ANYBODY
---
--- The second answer is only ever a caption. `spared` is true when somebody the
--- swing reached -- in reach, in the arc, at the right height, with a clear line
--- -- was withheld because they, or the swinger (`swingerSafe`), stand in the
--- field. It says nothing about a miss or a wall, because neither of those spared
--- anybody. Who is struck is exactly the old test: the geometry, then the field,
--- then the line; the line is now also cast for a target in the field, which
--- only decides the caption.
---==============================================================================
-local function targetsFor(swinger: Player, from: Body, item: WeaponData.Item,
-	swingerSafe: boolean): ({ { player: Player, body: Body } }, boolean)
-	local out = {}
-	local spared = false
-	local origin = from.root.Position
-	local look = from.root.CFrame.LookVector
-	local flatLook = Vector3.new(look.X, 0, look.Z)
-	if flatLook.Magnitude < 0.01 then
-		return out, false
-	end
-	flatLook = flatLook.Unit
-	local cosLimit = math.cos(math.rad(C.ArcDegrees))
-	local clock = now()
-
-	for _, other in ipairs(Players:GetPlayers()) do
-		if other ~= swinger and (immuneUntil[other] or 0) <= clock and not flying[other]
-			and not onCourse(other) then
-			local body = bodyOf(other)
-			if body and not body.humanoid.PlatformStand then
-				local delta = body.root.Position - origin
-				local flat = Vector3.new(delta.X, 0, delta.Z)
-				if flat.Magnitude <= item.Reach
-					and math.abs(delta.Y) <= C.HeightTolerance
-					and flat.Magnitude > 0.01
-					and flat.Unit:Dot(flatLook) >= cosLimit then
-					-- SAFE IS SAFE. A player standing in the field cannot be
-					-- hit, whatever the geometry says -- and neither can anybody
-					-- be hit FROM it.
-					local safe = swingerSafe or MapService.IsInSafeZone(body.root.Position)
-					if lineIsClear(from.root, body.root) then
-						if safe then
-							spared = true
-						else
-							table.insert(out, { player = other, body = body })
-						end
-					end
-				end
-			end
-		end
-	end
-	return out, spared
+	return Workspace:Raycast(from, to - from, sightParams) == nil
 end
 
 --==============================================================================
@@ -1153,10 +1242,12 @@ end
 -- contact, so what a card calls a cooldown is the real rate of fire and is
 -- always at least as long as the swing it gates (asserted in WeaponData).
 --
--- ONE HIT PER TARGET PER SWING falls out of the shape rather than being
--- enforced: the arc is resolved exactly once, in a single pass, after the
--- wind-up. There is no loop, no Touched event and no window during which a
--- second contact could register.
+-- THE HIT IS A SHORT WINDOW NOW, NOT ONE INSTANT (2026-10-04). The press only
+-- registers the swing; the one Heartbeat sweeps it while its window is open
+-- -- HitWindowLead before the visible contact at `Windup`, HitWindowTrail after
+-- it, while the bat crosses the front of its arc -- and resolves nothing
+-- before or after. One hit per target per swing is still by construction: a
+-- body struck once is in `struck` for the rest of this swing.
 --==============================================================================
 local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 	local clock = now()
@@ -1167,8 +1258,9 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 	if not body or body.humanoid.PlatformStand then
 		return
 	end
-	-- A player who is held, or mid-flight themselves, does not get to swing.
-	if holds[player] or flying[player] then
+	-- A player who is ROOTED, or mid-flight themselves, does not get to swing.
+	-- A slowed one does: see `rooted`.
+	if rooted(player) or flying[player] then
 		return
 	end
 	swingReadyAt[player] = clock + item.Cooldown
@@ -1181,7 +1273,8 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 	-- rather than the impact -- the same contract ParentAnim animates the
 	-- guardian's AttackWindup / AttackSwipe pair on. A wind-up nobody can see is
 	-- not a wind-up, it is lag, and Cindercrack's 0.6 seconds only reads as a
-	-- risk if the person about to be hit can watch it happen.
+	-- risk if the person about to be hit can watch it happen. WeaponFX draws the
+	-- visible contact at exactly SwingAt + Windup, the middle of the window.
 	--==========================================================================
 	tool:SetAttribute(SWING_WINDUP, item.Windup)
 	tool:SetAttribute(SWING_RECOVER, item.Recovery)
@@ -1190,115 +1283,235 @@ local function trySwing(player: Player, item: WeaponData.Item, tool: Tool)
 	--==========================================================================
 	-- THE WHOOSH, WHICH WAS THE ONE CUE AWAY
 	--
-	-- This block used to say there was no swing audio, and that borrowing a
-	-- footstep for it would be a wrong sound rather than a placeholder. The
-	-- recording arrived on 2026-09-17, so the swing plays HERE, on the wind-up,
-	-- beside the tell that is published a few lines above for the same reason:
-	-- a coil nobody can see or hear is not a wind-up, it is lag.
-	--
 	-- ON THE HANDLE, so it comes from the bat rather than from the middle of the
 	-- swinger, and unconditionally -- a swing that misses still cost a cooldown
-	-- and still made a noise. The IMPACT is a different cue, played below and
-	-- only when something was actually struck.
+	-- and still made a noise. The IMPACT is a different cue, played when
+	-- something is actually struck.
 	--==========================================================================
 	local swungHandle = tool:FindFirstChild("Handle")
 	if swungHandle and swungHandle:IsA("BasePart") then
 		SoundKit.emit("BatSwing", swungHandle)
 	end
 
-	task.spawn(function()
-		if item.Windup > 0 then
-			task.wait(item.Windup)
-		end
-		--======================================================================
-		-- EVERYTHING RE-CHECKED AFTER THE COIL
-		--
-		-- Half a second is a long time on a road where the top speed is 150.
-		-- The swinger can have died, respawned, been thrown, crossed the red
-		-- line or put the bat away inside the wind-up, and every one of those
-		-- has to cost them the hit rather than landing one from a body that is
-		-- no longer there.
-		--======================================================================
-		if player.Parent ~= Players or tool.Parent == nil then
-			return
-		end
-		local live = bodyOf(player)
-		if not live or live.humanoid.PlatformStand or holds[player] or onCourse(player) then
-			return
-		end
-		if tool.Parent ~= live.character then
-			-- Unequipped mid-swing: no hit, and the arm stops swinging a bat it
-			-- is no longer holding.
-			stopSwing(player)
-			return
-		end
-		local inField = MapService.IsInSafeZone(live.root.Position)
-		local hits, spared = targetsFor(player, live, item, inField)
-		if inField or #hits == 0 then
-			-- Nothing struck. Said out loud only when the Safe Zone is why: a
-			-- miss and a wall stay as silent as they always were.
-			local code = ActionRefusal.forSwing(#hits, spared)
-			if code then
-				deny(player, code)
-			end
-			return
-		end
+	--==========================================================================
+	-- HOW FAR BACK THE SWINGER'S VIEW IS
+	--
+	-- Their screen draws a target a little behind where the server has it: half
+	-- their own round trip, plus the interpolation every client draws others
+	-- through. Bounded either way, and read off the engine, never off a remote.
+	--==========================================================================
+	local ping = 0
+	pcall(function()
+		ping = tonumber((player :: any):GetNetworkPing()) or 0
+	end)
+	local contact = clock + item.Windup
+	activeSwings[player] = {
+		tool = tool,
+		item = item,
+		opensAt = contact - C.HitWindowLead,
+		closesAt = contact + C.HitWindowTrail,
+		rewind = math.clamp(C.HitRewindBaseSeconds + ping * 0.5, 0, C.HitRewindMaxSeconds),
+		lastClock = nil,
+		selfAt = nil,
+		seen = {},
+		struck = {},
+		hits = {},
+		spared = false,
+		landed = false,
+	}
+end
 
-		tool:SetAttribute(HIT_AT, Workspace:GetServerTimeNow())
-		local handle = tool:FindFirstChild("Handle")
+--==============================================================================
+-- ONE BODY STRUCK BY ONE SWING
+--==============================================================================
+local function landHit(swing: ActiveSwing, live: Body, victim: Player, body: Body)
+	swing.struck[victim] = true
+	--==========================================================================
+	-- THE TRAP LETS GO BEFORE THE BAT LAUNCHES
+	--
+	-- Launching a body that is still pinned at WalkSpeed 0 with Jumping disabled
+	-- means the release lands mid-flight and hands a flying player a recomputed
+	-- walk speed they cannot use. Freeing first makes the knockback the only
+	-- thing happening to them, and grants trap immunity on the way out, which
+	-- is what stops a bat and a trap from being a loop.
+	--==========================================================================
+	if holds[victim] then
+		releaseHold(victim, "hit by a bat")
+	end
+
+	--==========================================================================
+	-- AWAY FROM THE SWINGER, THEN TURNED BY THE WEAPON'S OWN YAW
+	--
+	-- Away is the direction the arm just travelled, so the launch and the
+	-- visible strike agree -- the rule the guardian throw follows for the same
+	-- reason. The yaw is what makes six bats six weapons: Rootwood shoves you
+	-- back, the Paddle sweeps you across, the Comet sends you off at an angle.
+	--==========================================================================
+	local delta = body.root.Position - live.root.Position
+	local flat = Vector3.new(delta.X, 0, delta.Z)
+	local look = live.root.CFrame.LookVector
+	local away = if flat.Magnitude > 0.05
+		then flat.Unit
+		else Vector3.new(look.X, 0, look.Z).Unit
+	local item = swing.item
+	local dir = if item.Yaw ~= 0
+		then (CFrame.Angles(0, math.rad(item.Yaw), 0) * away).Unit
+		else away
+
+	immuneUntil[victim] = math.max(immuneUntil[victim] or 0, now() + C.HitImmunitySeconds)
+	local had = CarryService.HoldsPod(victim)
+	-- The pod comes off inside the launch, before the ragdoll (dropPodFrom).
+	knockBack(victim, body, dir, item)
+
+	if not swing.landed then
+		-- The first body this swing struck is the visible impact.
+		swing.landed = true
+		swing.tool:SetAttribute(HIT_AT, Workspace:GetServerTimeNow())
+		local handle = swing.tool:FindFirstChild("Handle")
 		if handle and handle:IsA("BasePart") then
 			-- Was Grab -- the parent's hand closing on somebody -- which was the
 			-- closest thing in the table to wood landing on a person. It has its
 			-- own recording now, and it carries further than the swing does.
 			SoundKit.emit("BatImpact", handle)
 		end
+	end
+	table.insert(swing.hits, victim.Name .. (if had then " (dropped their pod)" else ""))
+end
 
-		local names = {}
-		for _, hit in ipairs(hits) do
-			--==================================================================
-			-- THE TRAP LETS GO BEFORE THE BAT LAUNCHES
-			--
-			-- Required by the brief and correct on its own: launching a body
-			-- that is still pinned at WalkSpeed 0 with Jumping disabled means
-			-- the release lands mid-flight and hands a flying player a
-			-- recomputed walk speed they cannot use. Freeing first makes the
-			-- knockback the only thing happening to them.
-			--
-			-- It also grants trap immunity on the way out, which is what stops
-			-- a bat and a trap from being a loop.
-			--==================================================================
-			if holds[hit.player] then
-				releaseHold(hit.player, "hit by a bat")
-			end
+--==============================================================================
+-- ONE FRAME OF AN OPEN WINDOW
+--
+-- For every other body: where it was on the previous frame and where it is
+-- now, BOTH relative to the swinger at those moments -- so the segment between
+-- is both players' motion at once -- tested against the swing's reach, arc and
+-- height by WeaponData.SweepContact, plus a little of what the swinger saw.
+-- Then the field and the line, in that order, exactly as the instant test did.
+--
+-- NO HIT ALONG A JUMP: a body (either one) that moved further than a frame
+-- could carry it is tested where it is now, never along the way there.
+--==============================================================================
+local MAX_WALK = GameConfig.Speed.MaxWalkSpeed
 
-			--==================================================================
-			-- AWAY FROM THE SWINGER, THEN TURNED BY THE WEAPON'S OWN YAW
-			--
-			-- Away is the direction the arm just travelled, so the launch and
-			-- the visible strike agree -- the rule the guardian throw follows
-			-- for the same reason. The yaw is what makes six bats six weapons:
-			-- Rootwood shoves you back, the Paddle sweeps you across, the Comet
-			-- sends you off at an angle.
-			--==================================================================
-			local delta = hit.body.root.Position - live.root.Position
-			local flat = Vector3.new(delta.X, 0, delta.Z)
-			local away = if flat.Magnitude > 0.05
-				then flat.Unit
-				else Vector3.new(live.root.CFrame.LookVector.X, 0,
-					live.root.CFrame.LookVector.Z).Unit
-			local dir = if item.Yaw ~= 0
-				then (CFrame.Angles(0, math.rad(item.Yaw), 0) * away).Unit
-				else away
+local function sweepFrame(swinger: Player, swing: ActiveSwing, live: Body, clock: number)
+	local origin = live.root.Position
+	local dt = if swing.lastClock then clock - (swing.lastClock :: number) else 0
+	swing.lastClock = clock
+	local jumpLimit = math.max(C.SweepTeleportStuds, MAX_WALK * dt * 2)
+	local prevOrigin = swing.selfAt
+	swing.selfAt = origin
+	local selfJumped = prevOrigin == nil or (origin - (prevOrigin :: Vector3)).Magnitude > jumpLimit
 
-			immuneUntil[hit.player] = now() + C.HitImmunitySeconds
-			local wasCarrying = CarryService.IsCarrying(hit.player)
-			knockBack(hit.player, hit.body, dir, item)
-			table.insert(names, hit.player.Name ..
-				(if wasCarrying then " (dropped their pod)" else ""))
+	local look = live.root.CFrame.LookVector
+	local flatLook = Vector3.new(look.X, 0, look.Z)
+	if flatLook.Magnitude < 0.01 then
+		return
+	end
+	flatLook = flatLook.Unit
+	-- SAFE IS SAFE, for both ends of a swing (see the banner at the top).
+	local swingerSafe = MapService.IsInSafeZone(origin)
+	local item = swing.item
+	local reach = item.Reach + C.HitReachSlack
+	local cosLimit = math.cos(math.rad(math.min(89, C.ArcDegrees + C.HitArcSlack)))
+
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other == swinger or swing.struck[other] then
+			continue
 		end
+		local body = bodyOf(other)
+		if not body then
+			swing.seen[other] = nil
+			continue
+		end
+		local at = body.root.Position
+		local before = swing.seen[other]
+		swing.seen[other] = at
+		if (immuneUntil[other] or 0) > clock or flying[other] or onCourse(other)
+			or body.humanoid.PlatformStand then
+			continue
+		end
+
+		local jumped = before == nil or (at - (before :: Vector3)).Magnitude > jumpLimit
+		local relBefore: Vector3? = nil
+		if not jumped and not selfJumped then
+			relBefore = (before :: Vector3) - (prevOrigin :: Vector3)
+		end
+		local rewind = Vector3.zero
+		if not jumped then
+			local v = body.root.AssemblyLinearVelocity
+			local flatV = Vector3.new(v.X, 0, v.Z)
+			-- A body moving faster than anybody can run is being thrown, not
+			-- running: nothing of that is wound back.
+			if flatV.Magnitude <= MAX_WALK * 1.6 then
+				rewind = flatV * swing.rewind
+				if rewind.Magnitude > C.HitRewindMaxStuds then
+					rewind = rewind.Unit * C.HitRewindMaxStuds
+				end
+			end
+		end
+
+		local rel = WeaponData.SweepContact(relBefore, at - origin, rewind, flatLook, reach,
+			cosLimit, C.HeightTolerance, C.SweepSubSamples)
+		if rel then
+			local point = origin + (rel :: Vector3)
+			if lineIsClear(origin, point, live.character, body.character) then
+				if swingerSafe or MapService.IsInSafeZone(at) or MapService.IsInSafeZone(point) then
+					-- Withheld by the field: only a caption, if nothing else lands.
+					swing.spared = true
+				else
+					landHit(swing, live, other, body)
+				end
+			end
+		end
+	end
+end
+
+local function finishSwing(player: Player, swing: ActiveSwing)
+	if activeSwings[player] == swing then
+		activeSwings[player] = nil
+	end
+	if swing.landed then
 		log(string.format("%s swung a %s and hit %s.",
-			player.Name, item.Id, table.concat(names, ", ")))
-	end)
+			player.Name, swing.item.Id, table.concat(swing.hits, ", ")))
+		return
+	end
+	-- Nothing struck. Said out loud only when the Safe Zone is why: a miss and a
+	-- wall stay as silent as they always were.
+	local code = ActionRefusal.forSwing(0, swing.spared)
+	if code and player.Parent == Players then
+		deny(player, code)
+	end
+end
+
+--==============================================================================
+-- EVERY OPEN WINDOW, ONE FRAME (on the one Heartbeat)
+--
+-- Nothing at all while nobody is mid-swing: the table is empty and this is one
+-- `pairs` over nothing. A window that has not opened yet is skipped; the
+-- swinger is re-checked every frame of it -- dead, thrown, rooted, gone onto
+-- the course, or the bat put away, and the swing is void with no hit and no
+-- caption.
+--==============================================================================
+local function stepSwings(clock: number)
+	for player, swing in pairs(activeSwings) do
+		if clock < swing.opensAt then
+			continue
+		end
+		local live = if player.Parent == Players then bodyOf(player) else nil
+		if not live or live.humanoid.PlatformStand or rooted(player) or flying[player]
+			or onCourse(player) or swing.tool.Parent ~= live.character then
+			if live and swing.tool.Parent ~= live.character then
+				-- Unequipped mid-swing: no hit, and the arm stops swinging a bat
+				-- it is no longer holding.
+				stopSwing(player)
+			end
+			activeSwings[player] = nil
+			continue
+		end
+		sweepFrame(player, swing, live, clock)
+		if clock >= swing.closesAt then
+			finishSwing(player, swing)
+		end
+	end
 end
 
 --==============================================================================
@@ -1373,16 +1586,232 @@ local function nearProtectedGround(at: Vector3): boolean
 	return false
 end
 
-local function removeTrap(owner: Player, why: string)
-	local trap = traps[owner]
+--==============================================================================
+-- THE OWNER'S COPY OF THEIR OWN TRAPS (2026-10-04)
+--
+-- One ScreenGui in the owner's PlayerGui -- disabled, it draws nothing itself
+-- -- holding a Configuration per trap: its id, which item, where, when it was
+-- set, and when its arming runs (ArmFrom to ArmsAt), in SERVER time. A catch
+-- removes the record (2026-10-05): there is no re-arming to stamp. A PlayerGui replicates
+-- to its own player alone, so this is the whole of "visible only to its owner":
+-- TrapMarks.client draws each trap from its record, and nobody else is sent
+-- anything to draw. ResetOnSpawn is off, so an owner's traps stay drawn through
+-- their own death. Nothing here is ever read back: the server's own `traps`
+-- table is the trap.
+--
+-- THE GUI ITSELF CARRIES THE COUNT (2026-10-04): Placed, Capacity and Newest
+-- (WeaponData.Trap), written by syncSlots whenever a trap is set or goes --
+-- and on joining, so the hotbar's "3x" is the server's from the first frame.
+-- And the trigger cooldown's deadline (2026-10-05, CooldownAttribute),
+-- written by publishCooldown when a catch starts it and when it runs out.
+--==============================================================================
+local function marksFor(owner: Player, create: boolean): Instance?
+	local gui = owner:FindFirstChildOfClass("PlayerGui")
+	if not gui then
+		return nil
+	end
+	local marks = gui:FindFirstChild(T.MarksGuiName)
+	if not marks and create then
+		local holder = Instance.new("ScreenGui")
+		holder.Name = T.MarksGuiName
+		holder.ResetOnSpawn = false
+		holder.Enabled = false
+		holder.Parent = gui
+		marks = holder
+	end
+	return marks
+end
+
+-- A moment on this side's clock, as the SERVER time every client counts in.
+local function serverTime(clock: number): number
+	return Workspace:GetServerTimeNow() - (now() - clock)
+end
+
+-- The record's arming clock: from ArmFrom (the placement) to ArmsAt, in
+-- server time.
+local function stampArming(trap: Trap)
+	local mark = trap.mark
+	if not mark then
+		return
+	end
+	mark:SetAttribute("ArmFrom", serverTime(trap.placedAt))
+	mark:SetAttribute("ArmsAt", serverTime(trap.armsAt))
+end
+
+local function markTrap(trap: Trap)
+	local marks = marksFor(trap.owner, true)
+	if not marks then
+		return
+	end
+	local mark = Instance.new("Configuration")
+	mark.Name = "Trap" .. tostring(trap.id)
+	mark:SetAttribute("Id", trap.id)
+	mark:SetAttribute("ItemId", trap.item.Id)
+	mark:SetAttribute("At", trap.at)
+	mark:SetAttribute("PlacedAt", serverTime(trap.placedAt))
+	trap.mark = mark
+	stampArming(trap)
+	mark.Parent = marks
+end
+
+local function trapCount(owner: Player): number
+	local n = 0
+	for _, trap in pairs(traps) do
+		if trap.owner == owner then
+			n += 1
+		end
+	end
+	return n
+end
+
+-- The owner's newest remaining trap: the highest id they hold, or 0.
+local function newestOf(owner: Player): number
+	local newest = 0
+	for id, trap in pairs(traps) do
+		if trap.owner == owner and id > newest then
+			newest = id
+		end
+	end
+	return newest
+end
+
+--==============================================================================
+-- THE COUNT, WHERE THE OWNER'S CLIENT READS IT (2026-10-04)
+--
+-- Written after every placement and every removal, so the hotbar's count and
+-- its REMOVE button change on the server's word and at once. A catch is a
+-- removal (2026-10-05): the consumed trap's slot comes back the same way.
+--==============================================================================
+local function syncSlots(owner: Player)
+	if owner.Parent ~= Players then
+		return
+	end
+	local marks = marksFor(owner, true)
+	if not marks then
+		return
+	end
+	marks:SetAttribute(T.CapacityAttribute, T.MaxActivePerPlayer)
+	marks:SetAttribute(T.PlacedAttribute, trapCount(owner))
+	marks:SetAttribute(T.NewestAttribute, newestOf(owner))
+end
+
+-- The trigger cooldown's deadline where the owner's hotbar reads it: SERVER
+-- time while it runs, nothing once it has run out or never started.
+local function publishCooldown(owner: Player)
+	if owner.Parent ~= Players then
+		return
+	end
+	local marks = marksFor(owner, true)
+	if not marks then
+		return
+	end
+	local untilAt = placeCooldownUntil[owner]
+	marks:SetAttribute(T.CooldownAttribute, if untilAt and untilAt > now() then serverTime(untilAt) else nil)
+end
+
+-- How long this owner must still wait before setting a trap, in seconds; 0 when
+-- they may. For the specs and the Studio probe; the game reads the deadline.
+local function cooldownLeft(owner: Player): number
+	return math.max(0, (placeCooldownUntil[owner] or -math.huge) - now())
+end
+
+--==============================================================================
+-- THE ONE WAY A TRAP GOES
+--
+-- Its owner's REMOVE, the owner leaving, a progress reset, the floor under it
+-- going away, a service restart -- and its catch (consumeTrap, 2026-10-05):
+-- each removes the record, which frees the owner's slot at once, takes the
+-- owner's copy with it and rewrites the count. Never an expiry -- there is
+-- none -- and never the trigger cooldown: a REMOVE leaves it running.
+-- Idempotent by the first line.
+--
+-- NOTHING HERE TOUCHES A VICTIM. An effect this trap already put on somebody
+-- is a hold of its own, and runs to its own deadline whatever happens to the
+-- trap that caused it.
+--==============================================================================
+local function removeTrap(id: number, why: string)
+	local trap = traps[id]
 	if not trap then
 		return
 	end
-	traps[owner] = nil
-	if trap.model.Parent then
-		trap.model:Destroy()
+	traps[id] = nil
+	local mark = trap.mark
+	trap.mark = nil
+	if mark and mark.Parent then
+		mark:Destroy()
 	end
-	log(string.format("%s's trap removed (%s).", owner.Name, why))
+	syncSlots(trap.owner)
+	log(string.format("%s's %s #%d removed (%s).", trap.owner.Name, trap.item.Name, id, why))
+end
+
+local function removeTrapsOf(owner: Player, why: string)
+	for id, trap in pairs(traps) do
+		if trap.owner == owner then
+			removeTrap(id, why)
+		end
+	end
+end
+
+--==============================================================================
+-- THE MOMENT IT GOES OFF, FOR EVERYBODY TO SEE
+--
+-- A hidden trap stops being a secret the instant it catches somebody: the
+-- snap, the burst and the sound are the impact, and the victim and everybody
+-- near them should see what had them. So the model is built HERE, on the
+-- server, for the first time, already sprung -- seen by everyone for a moment
+-- and gone. It is never a trap: nothing tests a body against it.
+--
+-- Trap.SprungSeconds, and then nothing: the catch consumed the trap
+-- (2026-10-05), so its owner's own drawing went with its record at that moment
+-- (TrapMarks.client) and they never see two of it.
+--==============================================================================
+local SPRUNG_SECONDS = T.SprungSeconds
+
+local function showSprung(trap: Trap)
+	local ok, err = pcall(function()
+		local map = MapService.GetMap() or Workspace
+		local model = WeaponModel.BuildTrapWorld(trap.item,
+			CFrame.new(trap.at + Vector3.new(0, 0.06, 0)), map)
+		WeaponModel.SetTrapArming(model, 1)
+		WeaponModel.SpringTrap(model)
+		local base = model.PrimaryPart
+		if base then
+			-- Its own, named in its own spec. Jaws, a plate, a snare, a mine and
+			-- an anchor do not sound alike.
+			SoundKit.emit(trap.spec.SpringCue or "Grab", base)
+		end
+		task.delay(SPRUNG_SECONDS, function()
+			if model.Parent then
+				model:Destroy()
+			end
+		end)
+	end)
+	if not ok then
+		warn("[Seed/CombatService] the sprung trap could not be shown: " .. tostring(err))
+	end
+end
+
+--==============================================================================
+-- A CATCH CONSUMES THE TRAP (2026-10-05, the owner's brief)
+--
+-- It replaces the re-arm. Claimed FIRST -- out of the records before anything
+-- else happens, so no other body, frame or path can spring it again -- through
+-- the one removal every other way out uses: the owner's slot back, their copy
+-- gone, the count rewritten. Then the owner's trigger cooldown (the later of
+-- the one running and ten seconds from now) and its deadline published, then
+-- the public snap. Nothing is granted and nothing is equipped: the trap is
+-- still the owner's item, in their hotbar, ready again once the cooldown ends.
+-- The victim's effect is applied after this by the caller and is a hold of its
+-- own: the trap being gone never shortens it. One function, so the tick's
+-- catch and the Studio hook below are the same few lines.
+--==============================================================================
+local function consumeTrap(trap: Trap, clock: number)
+	removeTrap(trap.id, "sprung -- consumed by its catch")
+	local owner = trap.owner
+	placeCooldownUntil[owner] = math.max(placeCooldownUntil[owner] or -math.huge,
+		clock + T.TriggerCooldownSeconds)
+	publishCooldown(owner)
+	showSprung(trap)
 end
 
 local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
@@ -1405,15 +1834,27 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		deny(player, "TRAP_OBBY")
 		return
 	end
-	if (placeReadyAt[player] or 0) > clock then
+	--==========================================================================
+	-- NOT DURING THE OWNER'S TRIGGER COOLDOWN (2026-10-05)
+	--
+	-- One deadline for every trap they own, so a different or rarer trap, another
+	-- hotbar slot or the Bag finds the same refusal -- and asked before the count,
+	-- so the answer names the wait rather than a limit the catch just freed.
+	-- Nothing else about a placement has a recharge.
+	--==========================================================================
+	if (placeCooldownUntil[player] or -math.huge) > clock then
 		deny(player, "TRAP_COOLDOWN")
 		return
 	end
-	if traps[player] then
-		-- ONE ACTIVE TRAP PER OWNER. Not a balance choice so much as the thing
-		-- that makes every other rule in here bounded: one trap means one timer,
-		-- one cooldown and one cleanup path per player.
-		deny(player)
+	--==========================================================================
+	-- THREE OUT AT ONCE, ANY MIX (2026-10-04)
+	--
+	-- The fourth press is refused with its reason and touches none of the three
+	-- already down. Every trap out counts -- arming or armed -- until it goes:
+	-- REMOVEd, or consumed by its catch (2026-10-05). Nothing expires.
+	--==========================================================================
+	if trapCount(player) >= T.MaxActivePerPlayer then
+		deny(player, "TRAP_LIMIT")
 		return
 	end
 	local body = bodyOf(player)
@@ -1458,12 +1899,13 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 		return
 	end
 	--==========================================================================
-	-- AND NOT ON TOP OF SOMEBODY ELSE'S TRAP
+	-- AND NOT ON TOP OF ANOTHER TRAP -- ANYBODY'S, THE OWNER'S OWN INCLUDED
 	--
 	-- Measured against the WIDER of the two triggers, so a small plate cannot be
 	-- tucked inside a snare's radius. Two effects on one step is the thing every
 	-- stacking rule in this file exists to prevent, and this is where it is
-	-- cheapest to prevent it.
+	-- cheapest to prevent it. Hidden traps change nothing here: the server knows
+	-- where every one of them is.
 	--==========================================================================
 	for _, other in pairs(traps) do
 		local reach = math.max(spec.TriggerRadius, other.spec.TriggerRadius)
@@ -1476,96 +1918,84 @@ local function tryPlace(player: Player, item: WeaponData.Item, tool: Tool)
 	end
 
 	--==========================================================================
-	-- THE COOLDOWN STARTS NOW, NOT WHEN IT FIRES
+	-- THE SPECIFICATION IT WAS SET WITH IS THE ONE IT KEEPS
 	--
-	-- So a trap that catches somebody in the first second and one that sits
-	-- there for its full twenty cost the same fifteen. Timing it from the SPRING
-	-- would reward a lucky placement with a faster next one.
+	-- Copied here, with the item: the owner switching traps, selling one or
+	-- holding something else when it fires changes nothing about a trap already
+	-- down. A Bramblejaw never turns into a Starlock because somebody changed
+	-- weapons while walking away from it.
+	--
+	-- No cooldown is started and nothing is stamped on the Tool: setting a trap
+	-- costs no wait. The one wait is the trigger cooldown, the OWNER'S, started
+	-- by a catch (consumeTrap) and drawn on every trap slot from the records.
 	--==========================================================================
-	placeReadyAt[player] = clock + spec.PlaceCooldownSeconds
-	tool:SetAttribute(READY_AT,
-		Workspace:GetServerTimeNow() + spec.PlaceCooldownSeconds)
-
-	local map = MapService.GetMap() or Workspace
-	local cf = CFrame.new(landing + Vector3.new(0, 0.06, 0))
-	local model = WeaponModel.BuildTrapWorld(item, cf, map)
-	model:SetAttribute("OwnerUserId", player.UserId)
-	CollectionService:AddTag(model, GameConfig.Tags.Trap)
-
-	traps[player] = {
+	trapSeq += 1
+	local trap: Trap = {
+		id = trapSeq,
 		owner = player,
 		item = item,
-		spec = spec,
-		model = model,
-		base = model.PrimaryPart :: BasePart,
+		spec = table.clone(spec),
 		at = landing,
+		ground = hit.Instance,
 		placedAt = clock,
-		armed = false,
-		sprung = false,
+		armsAt = clock + spec.ArmSeconds,
+		mark = nil,
 	}
-	-- It used to borrow TakePod, which is a shell coming free of a nest and not
-	-- a thing being set down on a road. There is a recording now.
-	SoundKit.emit("TrapPlace", model.PrimaryPart :: BasePart)
-	log(string.format("%s set a %s at %.0f, %.0f, %.0f (%s, arms in %.1fs).",
+	traps[trap.id] = trap
+	markTrap(trap)
+	syncSlots(player)
+	-- No sound from here: the placement and arming cues are the OWNER'S now
+	-- (TrapMarks.client plays both on the trap it draws). A sound the whole road
+	-- could hear would hand a hidden trap away.
+	log(string.format("%s set a %s at %.0f, %.0f, %.0f (%s, arms in %.1fs; %d of %d out).",
 		player.Name, item.Name, landing.X, landing.Y, landing.Z,
-		spec.Effect, spec.ArmSeconds))
+		spec.Effect, spec.ArmSeconds, trapCount(player), T.MaxActivePerPlayer))
 end
 
 --==============================================================================
 -- THE TRAP: ONE TICK FOR ALL OF THEM
 --
--- Arming, expiry and catching, on one Heartbeat over at most one trap per
--- player. A connection per trap would be a connection to leak.
+-- Catching, on one Heartbeat over every trap down -- at most three per player.
+-- A connection per trap would be a connection to leak.
 --
--- THE JAWS OPEN ON THE SERVER, which is the one place in this project where a
--- cosmetic joint is written server-side on purpose. The opening IS the arming
--- window -- the second in which a player can still walk away -- and a client
--- drawing it locally could show a trap wide open while this side still had it
--- shut, or the reverse. Everybody has to be looking at the same second. It is
--- one Motor6D on one model for one second, so the cost of being right is
--- nothing.
+-- THE ARMING IS DRAWN BY THE OWNER, NOT HERE (2026-10-04). It used to be the
+-- one cosmetic joint this project wrote server-side on purpose, so everybody
+-- saw the same second of it; a hidden trap has exactly one viewer, who draws it
+-- from the record's own ArmFrom and ArmsAt. What has not changed is that
+-- nothing bites before it is armed, and that this side alone decides who is
+-- caught.
+--
+-- NO EXPIRY (2026-10-04, the reusable-trap brief). What this tick still takes
+-- away is a trap nobody can own any more -- its owner gone -- and a trap with
+-- nothing under it: the part it was set on has left the world, which is how
+-- the Rain event's temporary biome goes when the rain ends. A trap is never
+-- left floating or orphaned. And a catch consumes its trap (2026-10-05).
+--
+-- THE TRIGGER COOLDOWNS RUN OUT HERE TOO: a deadline passed is dropped and its
+-- owner's published copy cleared, so no stale deadline is left on anybody's
+-- screen.
 --==============================================================================
 local function stepTraps(clock: number)
-	for owner, trap in pairs(traps) do
-		if not trap.model.Parent or owner.Parent ~= Players then
-			removeTrap(owner, "the owner or the model went away")
+	for owner, untilAt in pairs(placeCooldownUntil) do
+		if clock >= untilAt then
+			placeCooldownUntil[owner] = nil
+			publishCooldown(owner)
+		end
+	end
+	for id, trap in pairs(traps) do
+		local owner = trap.owner
+		if owner.Parent ~= Players then
+			removeTrap(id, "the owner went away")
+			continue
+		end
+		local ground = trap.ground
+		if ground and not ground:IsDescendantOf(Workspace) then
+			removeTrap(id, "the floor under it went away")
 			continue
 		end
 		local spec = trap.spec
-		local age = clock - trap.placedAt
-		if age < spec.ArmSeconds then
-			-- Arming. The jaw really does open a little further every frame; every
-			-- other trap writes its armed look once and this call is free. See
-			-- WeaponModel.SetTrapArming.
-			WeaponModel.SetTrapArming(trap.model, age / spec.ArmSeconds)
-			continue
-		end
-		if not trap.sprung then
-			WeaponModel.SetTrapArming(trap.model, 1)
-			if not trap.armed then
-				--==========================================================
-				-- LIVE, SAID ONCE
-				--
-				-- The first tick past ArmSeconds and never again: this
-				-- branch runs every frame until the trap springs or expires,
-				-- so without the flag the arming tick would be a sixty-hertz
-				-- buzz for twenty seconds.
-				--
-				-- Heard from 50 studs, the shortest range of any cue in the
-				-- game. A trap announcing itself across the road would hand
-				-- away the ambush; announcing itself to somebody already
-				-- standing over it is the warning they earned by being close
-				-- enough to see it.
-				--==========================================================
-				trap.armed = true
-				SoundKit.emit("TrapArmed", trap.base)
-			end
-		end
-		if age > spec.ExpireSeconds then
-			removeTrap(owner, "expired")
-			continue
-		end
-		if trap.sprung then
+		-- Set and still arming: nothing bites until armsAt.
+		if clock < trap.armsAt then
 			continue
 		end
 
@@ -1576,6 +2006,10 @@ local function stepTraps(clock: number)
 			-- Not out of politeness: a trap you can stand in is a trap you
 			-- cannot place in a doorway and then defend, and every fight over
 			-- it would be somebody catching themselves backing away.
+			--
+			-- AND AN IMMUNE, HELD OR FLYING VICTIM DOES NOT USE IT UP: the trap
+			-- stays exactly where it is, armed, for the next body, and no
+			-- cooldown starts.
 			--==================================================================
 			if victim ~= owner
 				and (immuneUntil[victim] or 0) <= clock
@@ -1586,26 +2020,26 @@ local function stepTraps(clock: number)
 					local delta = body.root.Position - trap.at
 					local flat = Vector3.new(delta.X, 0, delta.Z)
 					-- FLAT, plus a ceiling. Jumping over a trap clears it, which
-					-- is the counterplay a visible trap is entitled to -- and it
-					-- is each trap's OWN radius and ceiling, because a snare is a
-					-- wider pool than a mine is a plate.
+					-- is the counterplay a trap is entitled to -- and it is each
+					-- trap's OWN radius and ceiling, because a snare is a wider
+					-- pool than a mine is a plate.
 					if flat.Magnitude <= spec.TriggerRadius
 						and delta.Y >= -2 and delta.Y <= spec.TriggerHeight then
-						trap.sprung = true
-						WeaponModel.SpringTrap(trap.model)
-						-- Its own, named in its own spec. Jaws, a plate, a
-						-- snare, a mine and an anchor do not sound alike, and
-						-- until tonight all five shared the parent's Grab.
-						SoundKit.emit(spec.SpringCue or "Grab", trap.base)
+						--==========================================================
+						-- ONE TRAP, ONE CATCH -- AND THEN IT IS GONE (2026-10-05)
+						--
+						-- Claimed first (consumeTrap): out of the records, its
+						-- slot back, its owner's cooldown started, the snap shown
+						-- -- so the next body in its radius, this frame or any
+						-- later one, finds nothing to step on. Then the victim's
+						-- effect, pod first, and the immunity after it. `break`:
+						-- one victim for one trap.
+						--==========================================================
+						consumeTrap(trap, clock)
 						applyTrapEffect(trap, victim, body)
-						log(string.format("%s's %s caught %s (%s).",
-							owner.Name, trap.item.Name, victim.Name, spec.Effect))
-						-- ONE TRAP, ONE CATCH. It is destroyed on the next tick
-						-- by the branch below rather than here, so the shut jaws
-						-- are on screen for a moment before it goes.
-						task.delay(0.6, function()
-							removeTrap(owner, "sprung")
-						end)
+						log(string.format("%s's %s caught %s (%s, %.1fs); consumed, %s may set a trap again in %.0fs.",
+							owner.Name, trap.item.Name, victim.Name, spec.Effect, spec.EffectSeconds,
+							owner.Name, cooldownLeft(owner)))
 						break
 					end
 				end
@@ -1655,17 +2089,24 @@ end
 -- THE ONE THING A CLIENT SENDS: A BUTTON PRESS ON AN EQUIPPED TOOL
 --
 -- `Tool.Activated` fires on the server, carries nothing, and cannot be raised
--- for a Tool the engine does not consider equipped. So there is no remote here
--- at all, and nothing to validate beyond "what is this, and may they use it" --
--- both of which are read on this side.
+-- for a Tool the engine does not consider equipped. So no remote swings a bat
+-- or sets a trap, and there is nothing to validate beyond "what is this, and
+-- may they use it" -- both of which are read on this side: the holder is a
+-- character the engine names, the item is re-read off the profile's ownership
+-- (HeldItem), and the Tool that fired must be the very Tool in that
+-- character's hands. No client ever names a target: the swing finds its own,
+-- on this side. (REMOVE is the one request with a payload; see tryRemove.)
 --==============================================================================
 local function bindTool(tool: Tool)
 	if toolConnections[tool] then
 		return
 	end
-	if not WeaponData.Get(tool:GetAttribute(WeaponModel.ItemAttribute)) then
+	local boundItem = WeaponData.Get(tool:GetAttribute(WeaponModel.ItemAttribute))
+	if not boundItem then
 		return
 	end
+	-- A trap Tool carries no recharge of its own: the one wait, the trigger
+	-- cooldown (2026-10-05), is its OWNER'S, the same for every trap Tool.
 	local conn = tool.Activated:Connect(function()
 		--==================================================================
 		-- ACTIVATED MEANS EQUIPPED, AND EQUIPPED MEANS PARENTED TO A CHARACTER
@@ -1681,8 +2122,8 @@ local function bindTool(tool: Tool)
 		if not player then
 			return
 		end
-		local item = WeaponShopService.HeldItem(player)
-		if not item then
+		local item, held = WeaponShopService.HeldItem(player)
+		if not item or held ~= tool then
 			return
 		end
 		if item.Category == "trap" then
@@ -1702,15 +2143,64 @@ local function bindTool(tool: Tool)
 end
 
 --==============================================================================
+-- REMOVE: THE OWNER TAKES THEIR NEWEST TRAP BACK (2026-10-04)
+--
+-- The one client request in this file. It carries ONE number -- the id of the
+-- newest trap the owner's own records show -- and every part of it is checked
+-- here, because everything off the wire is a lie until it is:
+--
+--   a whole positive number, or it is dropped;
+--   no sooner than RemoveGapSeconds after this player's last request, or it is
+--     dropped unanswered (protection, not a recharge);
+--   a trap that exists and is THIS PLAYER'S, or nothing happens -- an id of
+--     somebody else's trap never removes it, however it was found;
+--   and their NEWEST remaining trap, or nothing happens -- newest first, always.
+--
+-- IDEMPOTENT: the same press arriving twice names a trap the first one already
+-- took, and the second finds nothing. Each accepted press removes exactly one
+-- trap and gives back exactly one slot (removeTrap rewrites the count).
+--
+-- AN EFFECT ALREADY ON A VICTIM IS NOT TOUCHED: it is their hold, not the
+-- trap's, and it ends on its own deadline.
+--==============================================================================
+local function tryRemove(player: Player, id: any): boolean
+	if type(id) ~= "number" or id ~= id or id < 1 or id > trapSeq or id % 1 ~= 0 then
+		return false
+	end
+	local clock = now()
+	if (removeReadyAt[player] or -math.huge) > clock then
+		return false
+	end
+	removeReadyAt[player] = clock + T.RemoveGapSeconds
+	local trap = traps[id]
+	if not trap or trap.owner ~= player then
+		return false
+	end
+	if newestOf(player) ~= id then
+		return false
+	end
+	removeTrap(id, "its owner removed it")
+	return true
+end
+
+--==============================================================================
 -- LIFECYCLE
+--
+-- A DEATH OR A RESPAWN TAKES NO TRAP (2026-10-04): the traps are the owner's
+-- records, not their body's. Nothing here listens for one to remove them, the
+-- records' gui survives the respawn (ResetOnSpawn off), and TrapMarks.client
+-- keeps drawing them on the new body's screen. Leaving does take them.
 --==============================================================================
 local function forget(player: Player)
-	stopSwing(player)
+	activeSwings[player] = nil
+	dropSwingTrack(player)
 	releaseHold(player, "left")
-	removeTrap(player, "the owner left")
+	removeTrapsOf(player, "the owner left")
+	-- Their trigger cooldown goes with them; a rejoin starts clean.
+	placeCooldownUntil[player] = nil
 	swingReadyAt[player] = nil
 	immuneUntil[player] = nil
-	placeReadyAt[player] = nil
+	removeReadyAt[player] = nil
 	-- Both halves of the handshake, or a rejoining player inherits a token for
 	-- a launch that ended before they left.
 	flying[player] = nil
@@ -1731,18 +2221,21 @@ function CombatService.Init()
 		toolConnections[tool] = nil
 	end
 	for player in pairs(swingTracks) do
-		stopSwing(player)
+		dropSwingTrack(player)
 	end
+	table.clear(activeSwings)
 	table.clear(animationCache)
 	for player in pairs(holds) do
 		releaseHold(player, "service restart")
 	end
-	for owner in pairs(traps) do
-		removeTrap(owner, "service restart")
+	for id in pairs(traps) do
+		removeTrap(id, "service restart")
 	end
+	trapSeq = 0
+	table.clear(placeCooldownUntil)
 	table.clear(swingReadyAt)
 	table.clear(immuneUntil)
-	table.clear(placeReadyAt)
+	table.clear(removeReadyAt)
 	table.clear(flying)
 	table.clear(acked)
 	channel = nil
@@ -1754,6 +2247,18 @@ function CombatService.Start()
 	local found = if remotes then remotes:FindFirstChild(GameConfig.Remotes.GameEvent) else nil
 	if found and found:IsA("RemoteEvent") then
 		channel = found
+		--======================================================================
+		-- REMOVE, ON THE REMOTE EVERY CLIENT ALREADY LISTENS TO (2026-10-04)
+		--
+		-- One verb and one number; tryRemove checks all of it. Every other verb
+		-- on GameEvent belongs to another service and is ignored here.
+		--======================================================================
+		table.insert(serviceConnections, found.OnServerEvent:Connect(function(player: Player, action: any,
+			payload: any)
+			if action == W.TrapRemoveAction then
+				tryRemove(player, payload)
+			end
+		end))
 	end
 
 	--==========================================================================
@@ -1846,7 +2351,9 @@ function CombatService.Start()
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function(character)
 			-- The old Animator died with the old character; drop the track that
 			-- belonged to it rather than leaving a dead reference in the table.
-			swingTracks[player] = nil
+			-- A swing still in its window died with that body too.
+			dropSwingTrack(player)
+			activeSwings[player] = nil
 			watchContainer(character)
 			local bag = player:FindFirstChildOfClass("Backpack")
 			if bag then
@@ -1858,10 +2365,21 @@ function CombatService.Start()
 		--
 		-- Same trap CarryService documents: the connections above are to an
 		-- instance the engine destroys, so the new one has to be picked up.
+		--
+		-- AND THE COUNT IS WRITTEN AS SOON AS THERE IS A PLAYERGUI TO WRITE IT
+		-- TO (2026-10-04): 3x before the first trap is ever set, read off the
+		-- server rather than assumed by the hotbar.
 		--======================================================================
+		if player:FindFirstChildOfClass("PlayerGui") then
+			syncSlots(player)
+			publishCooldown(player)
+		end
 		table.insert(serviceConnections, player.ChildAdded:Connect(function(child)
 			if child:IsA("Backpack") then
 				watchContainer(child)
+			elseif child:IsA("PlayerGui") then
+				syncSlots(player)
+				publishCooldown(player)
 			end
 		end))
 	end
@@ -1876,6 +2394,7 @@ function CombatService.Start()
 		local clock = now()
 		stepHolds(clock)
 		stepTraps(clock)
+		stepSwings(clock)
 	end)
 
 	local bats, trapList = 0, {}
@@ -1891,9 +2410,11 @@ function CombatService.Start()
 	end
 	log(string.format(
 		"Ready. %d bat(s) and %d trap(s): %s. Hits are knockback only, %.1fs of " ..
-		"immunity after one, and %.1fs after any trap effect.",
+		"immunity after one, and %.1fs after any trap effect; up to %d reusable traps out " ..
+		"per player (no recharge, no expiry, REMOVE newest first), drawn for their owner " ..
+		"alone; a swing is live for %.2fs around its contact.",
 		bats, #trapList, table.concat(trapList, ", "), C.HitImmunitySeconds,
-		T.ImmunitySeconds))
+		T.ImmunitySeconds, T.MaxActivePerPlayer, C.HitWindowLead + C.HitWindowTrail))
 end
 
 --==============================================================================
@@ -1911,7 +2432,11 @@ end
 -- required by a client and no remote reaches them.
 --
 -- What a spec gets from this is the whole of the trap system under test: place,
--- arm, catch, hold, expire, cool down and clean up, on a controllable clock.
+-- arm, catch (and consume), the trigger cooldown, hold, remove and clean up, on
+-- a controllable clock.
+--
+-- RequestRemove is the same: the very function the REMOVE remote calls, with
+-- the payload exactly as it would arrive off the wire (2026-10-04).
 --==============================================================================
 function CombatService.RequestPlace(player: Player, item: WeaponData.Item, tool: Tool)
 	tryPlace(player, item, tool)
@@ -1921,29 +2446,130 @@ function CombatService.RequestSwing(player: Player, item: WeaponData.Item, tool:
 	trySwing(player, item, tool)
 end
 
--- AdminService's Reset Player Progress: the trap a player has down goes with the
--- rest of what they had out in the world. The same removal a trap's expiry uses.
+function CombatService.RequestRemove(player: Player, id: any): boolean
+	return tryRemove(player, id)
+end
+
+-- AdminService's Reset Player Progress: the traps a player has down go with the
+-- rest of what they had out in the world -- the same removal REMOVE uses.
 function CombatService.ClearTrap(player: Player)
-	removeTrap(player, "progress reset")
+	removeTrapsOf(player, "progress reset")
+end
+
+-- How many traps this owner has out right now (arming and armed).
+-- For the specs and the Studio probe; the game reads the records' count.
+function CombatService.TrapCount(owner: Player): number
+	return trapCount(owner)
+end
+
+-- Seconds this owner must still wait to set a trap (the trigger cooldown); 0
+-- when they may. For the specs and the Studio probe only.
+function CombatService.TrapCooldown(owner: Player): number
+	return cooldownLeft(owner)
+end
+
+-- This owner's trap ids, oldest first, and whether each bites right now. For
+-- the specs and the Studio probe only.
+function CombatService.TrapsOf(owner: Player): { { id: number, itemId: string, armed: boolean } }
+	local list = {}
+	local clock = now()
+	for id, trap in pairs(traps) do
+		if trap.owner == owner then
+			table.insert(list, { id = id, itemId = trap.item.Id, armed = clock >= trap.armsAt })
+		end
+	end
+	table.sort(list, function(a, b)
+		return a.id < b.id
+	end)
+	return list
+end
+
+--==============================================================================
+-- A TRAP SPRUNG ON A PLAYER IN STUDIO, AS IF THEY HAD STEPPED ON IT
+--
+-- Play Solo has one player and a trap never catches its owner, so the one way
+-- to run a real trap EFFECT on a real body in Studio is to spring one here: the
+-- same applyTrapEffect the tick calls -- the pod drop, the root, slow, trip,
+-- blast or pull, the countdown, the immunity -- on an anonymous trap of the
+-- named kind at the player's feet. Refused outside Studio, and for a victim
+-- the tick itself would leave alone (immune, held, flying, knocked flat).
+--==============================================================================
+function CombatService.StudioSpring(victim: Player, itemId: string): (boolean, string)
+	if not RunService:IsStudio() then
+		return false, "Studio only"
+	end
+	local item = WeaponData.Get(itemId)
+	local spec = if item then WeaponData.TrapSpec(item) else nil
+	local body = bodyOf(victim)
+	if not (item and spec) then
+		return false, "not a trap: " .. tostring(itemId)
+	end
+	if not body or body.humanoid.PlatformStand then
+		return false, "no standing body"
+	end
+	if (immuneUntil[victim] or 0) > now() or holds[victim] or flying[victim] then
+		return false, "immune, held or flying"
+	end
+	local trap: Trap = {
+		id = 0,
+		owner = victim,
+		item = item :: WeaponData.Item,
+		spec = table.clone(spec :: WeaponData.TrapSpec),
+		at = body.root.Position - Vector3.new(0, 2.5, 0),
+		ground = nil,
+		placedAt = now(),
+		armsAt = now(),
+		mark = nil,
+	}
+	showSprung(trap)
+	applyTrapEffect(trap, victim, body)
+	return true, string.format("%s sprung on %s (%s, %.1fs)", (item :: WeaponData.Item).Name,
+		victim.Name, (spec :: WeaponData.TrapSpec).Effect, (spec :: WeaponData.TrapSpec).EffectSeconds)
+end
+
+--==============================================================================
+-- A PLACED TRAP SPRUNG IN STUDIO, WITH NOBODY ON IT (2026-10-04)
+--
+-- Play Solo cannot catch anybody in its owner's own trap, so a catch's effect
+-- on the TRAP -- consumed, its slot back, the owner's trigger cooldown, the
+-- public snap (2026-10-05) -- is shown here on the owner's REAL placed trap:
+-- the same consumeTrap the tick runs at a catch, minus a victim. Refused
+-- outside Studio, for a trap that is not this owner's, and for one still arming.
+--==============================================================================
+function CombatService.StudioSpringTrap(owner: Player, id: number): (boolean, string)
+	if not RunService:IsStudio() then
+		return false, "Studio only"
+	end
+	local trap = traps[id]
+	if not trap or trap.owner ~= owner then
+		return false, "not this owner's trap: " .. tostring(id)
+	end
+	local clock = now()
+	if clock < trap.armsAt then
+		return false, "still arming"
+	end
+	consumeTrap(trap, clock)
+	return true, string.format("#%d %s sprung and consumed; %s may set a trap again in %.1fs", id,
+		trap.item.Name, owner.Name, cooldownLeft(owner))
 end
 
 function CombatService.Snapshot(): string
 	local lines = { "CombatService" }
 	local clock = now()
-	local trapCount = 0
+	local downCount = 0
 	for _ in pairs(traps) do
-		trapCount += 1
+		downCount += 1
 	end
 	local heldCount = 0
 	for _ in pairs(holds) do
 		heldCount += 1
 	end
 	table.insert(lines, string.format("  %d trap(s) down, %d player(s) held",
-		trapCount, heldCount))
-	for owner, trap in pairs(traps) do
-		table.insert(lines, string.format("    %s: %s, %s, %.1fs old%s",
-			owner.Name, trap.item.Name, trap.spec.Effect, clock - trap.placedAt,
-			if trap.sprung then ", sprung" else ""))
+		downCount, heldCount))
+	for id, trap in pairs(traps) do
+		table.insert(lines, string.format("    #%d %s: %s, %s, %.1fs old, %s",
+			id, trap.owner.Name, trap.item.Name, trap.spec.Effect, clock - trap.placedAt,
+			if clock >= trap.armsAt then "armed" else string.format("arms in %.1fs", trap.armsAt - clock)))
 	end
 	for player, hold in pairs(holds) do
 		table.insert(lines, string.format("    %s: %s at x%.2f, %.1fs left%s",
@@ -1954,11 +2580,12 @@ function CombatService.Snapshot(): string
 	for _, player in ipairs(Players:GetPlayers()) do
 		local item = WeaponShopService.HeldItem(player)
 		table.insert(lines, string.format(
-			"  %s: holding %s, swing in %.2fs, immune for %.2fs, trap in %.1fs",
+			"  %s: holding %s, swing in %.2fs, immune for %.2fs, %d of %d trap(s) out, newest #%d, "
+				.. "trap cooldown %.1fs",
 			player.Name, if item then item.Id else "-",
 			math.max(0, (swingReadyAt[player] or 0) - clock),
 			math.max(0, (immuneUntil[player] or 0) - clock),
-			math.max(0, (placeReadyAt[player] or 0) - clock)))
+			trapCount(player), T.MaxActivePerPlayer, newestOf(player), cooldownLeft(player)))
 	end
 	return table.concat(lines, "\n")
 end

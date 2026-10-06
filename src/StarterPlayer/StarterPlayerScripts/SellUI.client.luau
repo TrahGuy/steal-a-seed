@@ -59,20 +59,15 @@ local Notice = require(Shared:WaitForChild("Notice"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local SELL = GameConfig.SellOne
 local RAIL = GameConfig.Rail
-local PANEL = GameConfig.Panel
+local LOOK = GameConfig.BagLook
 
 local WHITE = Color3.fromRGB(255, 255, 255)
-local CREAM = Color3.fromRGB(242, 238, 206)
--- The same two pairs SettingsUI's toggle uses: the shop's green for the yes,
--- the panel's soil for the no, each with the darker foot every button here has.
-local YES_FACE = RAIL.ShopFace
-local YES_SHADE = RAIL.ShopShade
-local YES_FOOT = Color3.fromRGB(30, 92, 30)
-local NO_FACE = Color3.fromRGB(112, 90, 74)
-local NO_SHADE = Color3.fromRGB(72, 54, 44)
-local NO_FOOT = Color3.fromRGB(44, 32, 26)
+-- The question sits on the menus' light studded panel now (the global UI pass,
+-- 2026-10-04): its words are dark and plain; SELL is MenuKit's green, CANCEL
+-- the blue secondary.
 
 -- Roblox's touch guidance is 44; the Bag's compact action button is 44 too.
 local BUTTON_H = 46
@@ -122,7 +117,18 @@ local modal = UIKit.modal(gui, {
 	title = "SELL ONE",
 	maxWidth = PANEL_W,
 	maxHeight = 340,
+	theme = MenuKit.rimTheme(),
 })
+-- The cash pack's picture beside the title, on the rim.
+do
+	local titleBar = modal.title.Parent :: Frame
+	local icon = MenuKit.picture(titleBar, GameConfig.Store.Icons.cash1, nil, modal.title.ZIndex + 1)
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 0, 0.5, 0)
+	icon.Size = UDim2.fromOffset(34, 34)
+	modal.title.Position = UDim2.new(0, 38, 0.5, 0)
+	modal.title.Size = UDim2.new(1, -90, 1, 0)
+end
 -- This gui also carries the sale notice, so the menu size goes on the panel.
 modal.followMenuSize()
 
@@ -149,9 +155,11 @@ local function fitText(label: TextLabel, maxSize: number)
 	limit.Parent = label
 end
 
+-- Plain words on the light panel: a name and the question in FredokaOne, the
+-- details in the clean body face (`body`).
 local function row(name: string, size: number, colour: Color3, height: number,
-	order: number, outline: number): TextLabel
-	local label = UIKit.outlined(rows, name, size, colour, outline)
+	order: number, body: boolean?): TextLabel
+	local label = if body then MenuKit.body(rows, name, size, colour, 4) else MenuKit.text(rows, name, size, colour, 4)
 	label.Size = UDim2.new(1, -8, 0, height)
 	label.LayoutOrder = order
 	label.TextXAlignment = Enum.TextXAlignment.Center
@@ -161,11 +169,11 @@ local function row(name: string, size: number, colour: Color3, height: number,
 	return label
 end
 
-local nameLabel = row("Name", 26, WHITE, 32, 1, 2.5)
-local metaLabel = row("Meta", 15, CREAM, 20, 2, 1.5)
+local nameLabel = row("Name", 26, LOOK.Text, 32, 1)
+local metaLabel = row("Meta", 15, LOOK.Muted, 20, 2, true)
 metaLabel.RichText = true
-local incomeLabel = row("Income", 15, CREAM, 20, 3, 1.5)
-local question = row("Question", 18, WHITE, 48, 4, 2)
+local incomeLabel = row("Income", 15, LOOK.Money, 20, 3, true)
+local question = row("Question", 18, LOOK.Text, 48, 4)
 question.TextWrapped = true
 
 local buttonsRow = Instance.new("Frame")
@@ -193,61 +201,21 @@ type Button = {
 	label: TextLabel,
 }
 
-local function makeButton(name: string, text: string, face: Color3, shade: Color3,
-	foot: Color3, anchorX: number): Button
-	local b = Instance.new("TextButton")
-	b.Name = name
+local function makeButton(name: string, text: string, face: string, anchorX: number): Button
+	-- MenuKit's button (the global UI pass, 2026-10-04): the family's faces,
+	-- foot, keyline and press, in the one language every menu speaks.
+	local made = MenuKit.button(buttonsRow, name, 5, text, 18)
+	made.style(face)
+	local b = made.hit
 	b.AnchorPoint = Vector2.new(anchorX, 0.5)
 	b.Position = UDim2.new(anchorX, 0, 0.5, 0)
 	b.Size = UDim2.new(0.5, -6, 0, BUTTON_H)
-	b.BackgroundTransparency = 1
-	b.BorderSizePixel = 0
-	b.AutoButtonColor = false
-	b.Text = ""
-	b.ZIndex = 5
-	b.Parent = buttonsRow
 	UIKit.clicks(b)
-
-	local plate = Instance.new("Frame")
-	plate.Name = "Plate"
-	plate.AnchorPoint = Vector2.new(0.5, 0.5)
-	plate.Position = UDim2.fromScale(0.5, 0.5)
-	plate.Size = UDim2.new(1, -4, 1, -4)
-	plate.BorderSizePixel = 0
-	plate.Active = false
-	plate.ZIndex = 6
-	plate.Parent = b
-	UIKit.corner(plate, 10)
-	UIKit.stroke(plate, PANEL.Outline, RAIL.OutlineThickness)
-	UIKit.gradient(plate, face, shade)
-
-	local footFrame = Instance.new("Frame")
-	footFrame.Name = "Shade"
-	footFrame.AnchorPoint = Vector2.new(0.5, 1)
-	footFrame.Position = UDim2.new(0.5, 0, 1, 0)
-	footFrame.Size = UDim2.new(1, 0, 0, 5)
-	footFrame.BackgroundColor3 = foot
-	footFrame.BorderSizePixel = 0
-	footFrame.Active = false
-	footFrame.ZIndex = 7
-	footFrame.Parent = plate
-	UIKit.corner(footFrame, 10)
-
-	local label = UIKit.outlined(plate, "Label", 18, WHITE, 2.5)
-	label.Size = UDim2.fromScale(1, 1)
-	label.Position = UDim2.fromOffset(0, -2)
-	label.Text = text
-	label.ZIndex = 8
-
-	local scale = Instance.new("UIScale")
-	scale.Parent = b
-	UIKit.cardPop(b, scale, { hoverScale = 1.06, pressScale = 0.94, sound = false })
-
-	return { button = b, plate = plate, label = label }
+	return { button = b, plate = made.plate, label = made.label }
 end
 
-local cancelButton = makeButton("Cancel", "CANCEL", NO_FACE, NO_SHADE, NO_FOOT, 0)
-local sellButton = makeButton("Sell", "SELL", YES_FACE, YES_SHADE, YES_FOOT, 1)
+local cancelButton = makeButton("Cancel", "CANCEL", "sky", 0)
+local sellButton = makeButton("Sell", "SELL", "go", 1)
 
 -- Where a controller's selection starts when this opens (PadFocus reads it):
 -- the safe answer, not the sale.
@@ -504,7 +472,13 @@ local function showAll(payload: { [string]: any })
 	end
 	nameLabel.Text = "YOUR WHOLE BAG"
 	metaLabel.Text = table.concat(parts, "  •  ")
-	incomeLabel.Text = "Garden plants, bats and traps are kept."
+	-- FAVOURITES ARE KEPT (2026-10-03): the server leaves every item with a
+	-- heart out of the count, and says how many it left.
+	local kept = math.max(0, math.floor(tonumber(payload.kept) or 0))
+	incomeLabel.Text = if kept > 0
+		then string.format(GameConfig.SellAll.KeptText, kept, if kept == 1 then "" else "s")
+			.. ", with garden plants, bats and traps."
+		else "Favourites, garden plants, bats and traps are kept."
 	question.Text = string.format("Sell %s for $%s?",
 		if plants + pods == 1 then "it" else "all " .. (plants + pods), withCommas(total))
 

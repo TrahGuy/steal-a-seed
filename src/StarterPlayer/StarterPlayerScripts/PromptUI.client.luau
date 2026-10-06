@@ -486,10 +486,13 @@ local function build(prompt: ProximityPrompt): Panel?
 	corner.CornerRadius = UDim.new(0, 12)
 	corner.Parent = panel
 
+	-- On the BORDER (2026-10-04): the panel is a text-less button, and a stroke
+	-- in its default mode outlines the text -- none -- so this never drew.
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = ACCENT
 	stroke.Thickness = 2
 	stroke.Transparency = 0.25
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	stroke.Parent = panel
 
 	--== THE HOLD FILL ==--

@@ -65,6 +65,16 @@ local PROMPT_NAME = "MarigoldShopPrompt"
 local serviceConnections: { RBXScriptConnection } = {}
 local toolConnections: { [Player]: { RBXScriptConnection } } = {}
 local busy: { [Player]: boolean } = {}
+--==============================================================================
+-- A SILENT GAP BETWEEN EQUIPS (2026-10-03)
+--
+-- Pressing a hotbar slot whose weapon is not out now asks for it here, so this
+-- verb is a hot path, and each yes rebuilds a Tool. An equip sooner than this
+-- after the last one is dropped without a word: the client's own wait for the
+-- Tool simply runs out. Never a Denied -- it was not refused, only too soon.
+--==============================================================================
+local EQUIP_GAP = 0.15
+local lastEquip: { [Player]: number } = {}
 local channel: RemoteEvent? = nil
 
 local function log(message: string)
@@ -444,6 +454,7 @@ end
 --==============================================================================
 local function forget(player: Player)
 	busy[player] = nil
+	lastEquip[player] = nil
 	local conns = toolConnections[player]
 	if conns then
 		for _, c in ipairs(conns) do
@@ -485,6 +496,7 @@ function WeaponShopService.Init()
 		forget(player)
 	end
 	table.clear(busy)
+	table.clear(lastEquip)
 	channel = nil
 end
 
@@ -514,6 +526,11 @@ function WeaponShopService.Start()
 						end)
 					end
 				elseif action == W.EquipAction then
+					local now = os.clock()
+					if now - (lastEquip[player] or -math.huge) < EQUIP_GAP then
+						return
+					end
+					lastEquip[player] = now
 					if not WeaponShopService.TryEquip(player, payload, extra) then
 						pcall(function()
 							(found :: RemoteEvent):FireClient(player, W.EquipAction, false)

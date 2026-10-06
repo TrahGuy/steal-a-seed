@@ -60,11 +60,39 @@
 -- straight off the base or the body and are carried to each step themselves.
 --==============================================================================
 
+--==============================================================================
+-- AND THE ORDINARY PLANTS (2026-10-03)
+--
+-- The twenty-five biome species built from the owner's supplied rigs
+-- (PlantForms) are the same kind of rig, built at their tier's size
+-- (SecretModel.SCALE_ATTRIBUTE). Their idles and walks are PlantIdles'; this
+-- file plays them with three more things the rigs need:
+--
+--   * Their WELDS can be posed by name too. Voidpetal's and Astralhorn's feet
+--     are welded to the base and their legs grow up from them, so the weld is
+--     the joint that steps.
+--   * Their joints are posed THROUGH EACH JOINT'S OWN FRAME. The walk is worked
+--     out as if every joint frame were square to the model, which the Secrets'
+--     and the Rain forms' are; the lotus forms' root legs are authored at an
+--     angle, so each leg pose is turned into its joint's frame first. A rig
+--     whose frames are square comes out exactly as before.
+--   * Two more kinds of leg: a SWING leg, one joint at the hip turned to put
+--     its sole on the step, and a foot whose leg grows up from it, BRACED at
+--     its foot to keep leaning toward where its top stood.
+--==============================================================================
+
 local SecretIdle = {}
 
 -- The supplied forms' recorded sizes: a Pod 2 form's size over its Pod 1
 -- form's is the scale its walk and its idle's distances are taken at.
 local RainForms = require(script.Parent:WaitForChild("RainForms"))
+-- The ordinary plants' rigs and their idles and walks (2026-10-03).
+local PlantForms = require(script.Parent:WaitForChild("PlantForms"))
+local PlantIdles = require(script.Parent:WaitForChild("PlantIdles"))
+-- The Invite a Friend rewards' rigs (2026-10-06): replayed at their supplied size
+-- (SecretModel.BuildPlant), and played exactly as PlantForms' rigs are -- their
+-- idles and walks are PlantIdles', from InviteForms' per-species numbers.
+local InviteForms = require(script.Parent:WaitForChild("InviteForms"))
 
 type Node = {
 	part: BasePart,
@@ -123,6 +151,13 @@ type Leg = {
 	-- Whether the foot's joint hangs off the BODY, which the walk bobs and
 	-- leans, or off the base, which the walk never moves.
 	onBody: boolean,
+	-- PlantForms (2026-10-03). A "swing" leg's ankle, turned back flat, if it
+	-- has one; a foot's brace (the joint its leg grows up from), where that
+	-- joint and the leg's top stand at rest.
+	swingAnkle: string?,
+	brace: string?,
+	braceAt: Vector3?,
+	topAt: Vector3?,
 }
 
 -- One leg as a profile names it: a chain (hip, knee, ankle) or a foot, with
@@ -134,6 +169,11 @@ type LegSpec = {
 	foot: string?,
 	aim: string?,
 	offset: number,
+	-- PlantForms: a swing leg's hip joint (its `ankle`, if any, is turned back
+	-- flat); a foot's brace joint and the joint at its leg's top.
+	swing: string?,
+	brace: string?,
+	top: string?,
 }
 
 -- A form's walk, as numbers. `reach`: how far a planted foot travels either side
@@ -206,6 +246,11 @@ type Gait = {
 	lastYaw: number?,
 	lastT: number?,
 	lastMoveT: number?,
+	-- PlantForms (2026-10-03): each posed joint's rest frame turned into the
+	-- model's (its rotation) and which side of it the tree hangs, so a walk
+	-- pose worked out square is applied through the joint's own frame. Nil for
+	-- every other rig, whose frames are square.
+	frames: { [string]: { rot: CFrame, forward: boolean } }?,
 }
 
 export type Rig = {
@@ -252,6 +297,8 @@ export type Rig = {
 	lights: { [string]: PointLight },
 	lightRest: { [PointLight]: number },
 	lastEvent: number,
+	-- An ordinary plant's eyes, glows, lights and tints (PlantIdles.Scan), or nil.
+	plant: PlantIdles.Plant?,
 }
 
 -- The pose key of a virtual body (see WalkProfile.virtual): no Motor6D is ever
@@ -550,10 +597,11 @@ local FOOT_SWING = rad(14)
 -- The walk for a rig, or nil when its form has none or a joint it needs is not
 -- there (a rig half streamed in is rebuilt when the rest arrives).
 local function buildGait(form: string, nodes: { Node }, order: { number }, scale: number): Gait?
-	local profile = WALKS[form]
+	local profile = WALKS[form] or (PlantIdles.Walks[form] :: WalkProfile?)
 	if not profile then
 		return nil
 	end
+	local plantForm = PlantForms.Plants[form] ~= nil or InviteForms.Plants[form] ~= nil
 	local joints = restJoints(nodes, order)
 	-- The body: the joint called Root, or (virtual) the rig's own root part,
 	-- which the walk then moves with the whole tree.
@@ -579,6 +627,55 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 	local names: { string } = { bodyKey }
 	local radius = 0
 	for _, spec in ipairs(profile.legs) do
+		local swingName = spec.swing
+		if swingName then
+			-- A SWING LEG: one joint at the hip, its sole straight under it (or
+			-- under its ankle joint), turned onto each step.
+			local hip = joints[swingName]
+			local ankleName = spec.ankle
+			local ankle = if ankleName then joints[ankleName] else nil
+			if not hip or (ankleName and not ankle) then
+				return nil
+			end
+			local child = motorChild(nodes, swingName)
+			local parent = if child then nodes[child].parent else nil
+			local h = hip.Position
+			local a = if ankle then ankle.Position else Vector3.new(h.X, 0, h.Z)
+			table.insert(legs, {
+				hip = swingName,
+				knee = swingName,
+				ankle = ankleName or swingName,
+				offset = spec.offset,
+				hipAt = h,
+				ankleAt = a,
+				l1 = 0,
+				l2 = 0,
+				thigh0 = 0,
+				shin0 = 0,
+				bend = 1,
+				walkHip = IDENTITY,
+				walkKnee = IDENTITY,
+				walkAnkle = IDENTITY,
+				swing = 0,
+				down = true,
+				planted = nil,
+				plantedYaw = 0,
+				liftFrom = nil,
+				liftYaw = 0,
+				home = true,
+				kind = "swing",
+				foot = nil,
+				aim = nil,
+				onBody = parent ~= nil and parent == bodyNode,
+				swingAnkle = ankleName,
+			})
+			table.insert(names, swingName)
+			if ankleName then
+				table.insert(names, ankleName)
+			end
+			radius += math.sqrt(a.X * a.X + a.Z * a.Z)
+			continue
+		end
 		local footName = spec.foot
 		if footName then
 			-- A FOOT: one joint, carried to each step itself.
@@ -617,10 +714,26 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 				foot = footName,
 				aim = aimName,
 				onBody = parent ~= nil and parent == bodyNode,
+				brace = nil,
+				braceAt = nil,
+				topAt = nil,
 			})
 			table.insert(names, footName)
 			if aimName then
 				table.insert(names, aimName)
+			end
+			-- A leg that grows UP from this foot: braced at its foot joint.
+			local braceName, topName = spec.brace, spec.top
+			if braceName and topName then
+				local brace, top = joints[braceName], joints[topName]
+				if not (brace and top) then
+					return nil
+				end
+				local leg = legs[#legs]
+				leg.brace = braceName
+				leg.braceAt = brace.Position
+				leg.topAt = top.Position
+				table.insert(names, braceName)
 			end
 			radius += math.sqrt(a.X * a.X + a.Z * a.Z)
 			continue
@@ -669,6 +782,19 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		table.insert(names, ankleName)
 		radius += math.sqrt(a.X * a.X + a.Z * a.Z)
 	end
+	-- Every posed joint's rest frame, for a PlantForms rig (see Gait.frames).
+	local frames: { [string]: { rot: CFrame, forward: boolean } }? = nil
+	if plantForm then
+		local list: { [string]: { rot: CFrame, forward: boolean } } = {}
+		for _, name in ipairs(names) do
+			local frame = joints[name]
+			local child = motorChild(nodes, name)
+			if frame and child then
+				list[name] = { rot = frame.Rotation, forward = nodes[child].forward }
+			end
+		end
+		frames = list
+	end
 	return {
 		profile = profile,
 		legs = legs,
@@ -676,7 +802,9 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		scale = scale,
 		joints = names,
 		rootAt = rootAt,
-		turnRadius = radius / math.max(#legs, 1),
+		-- A legless hop, or feet that all hang from the middle (Crookreed's
+		-- root feet), still turns as if it had a stance to turn on.
+		turnRadius = if radius > 1e-3 then radius / math.max(#legs, 1) else 0.3 * scale,
 		stride = 2 * profile.reach * scale / profile.duty,
 		phase = 0,
 		weight = 0,
@@ -692,6 +820,7 @@ local function buildGait(form: string, nodes: { Node }, order: { number }, scale
 		lastYaw = nil,
 		lastT = nil,
 		lastMoveT = nil,
+		frames = frames,
 	}
 end
 
@@ -859,6 +988,18 @@ local function walkPose(rig: Rig, gait: Gait)
 	local key = gait.bodyKey
 	local body = (pose[key] or IDENTITY):Lerp(CFrame.new(0, bob, 0) * CFrame.Angles(lean, 0, roll), w)
 	pose[key] = body
+	-- A leg joint's pose, worked out square, laid over the idle's by `weight`:
+	-- through the joint's own frame when the rig has one on record.
+	local frames = gait.frames
+	local function put(name: string, square: CFrame, weight: number)
+		local value = square
+		local frame = if frames then frames[name] else nil
+		if frame then
+			local r = frame.rot
+			value = r:Inverse() * (if frame.forward then square else square:Inverse()) * r
+		end
+		pose[name] = (pose[name] or IDENTITY):Lerp(value, weight)
+	end
 	if lw > 0 then
 		--======================================================================
 		-- THE LEGS, SQUARE TO THE WORLD
@@ -938,12 +1079,52 @@ local function walkPose(rig: Rig, gait: Gait)
 					* CFrame.Angles(footPitch, 0, 0)
 				leg.swing = math.clamp((rest.Z - goal.Z) / math.max(reachFull, 1e-3), -1, 1) * FOOT_SWING
 				local footName = leg.foot :: string
-				pose[footName] = (pose[footName] or IDENTITY):Lerp(leg.walkAnkle, lw)
+				put(footName, leg.walkAnkle, lw)
 				local aimName = leg.aim
 				if aimName then
 					local toward = (if leg.onBody then moved:Inverse() * goal else goal) - leg.hipAt
 					leg.walkHip = turnBetween(rest - leg.hipAt, toward)
-					pose[aimName] = (pose[aimName] or IDENTITY):Lerp(leg.walkHip, lw)
+					put(aimName, leg.walkHip, lw)
+				end
+				--==============================================================
+				-- A BRACED LEG grows up from this foot (PlantForms): where the
+				-- foot went, its leg's foot joint went too, and the leg is turned
+				-- there to lean toward where its top stood -- with the body, which
+				-- it holds up.
+				--==============================================================
+				local braceName, braceAt, topAt = leg.brace, leg.braceAt, leg.topAt
+				if braceName and braceAt and topAt then
+					local footMove = CFrame.new(goal) * CFrame.Angles(0, footYaw, 0) * CFrame.Angles(footPitch, 0, 0)
+						* CFrame.new(-rest)
+					local turn = turnBetween(topAt - braceAt, moved * topAt - footMove * braceAt)
+					local footTurn = footMove.Rotation
+					put(braceName, footTurn:Inverse() * turn * footTurn, lw)
+				end
+				continue
+			end
+			if leg.kind == "swing" then
+				--==============================================================
+				-- A SWING LEG (PlantForms) is turned at the hip so its sole comes
+				-- down on the goal, and moved along whatever is left -- a leg
+				-- with no knee lengthens or shortens a hair rather than leave
+				-- the soil. Its ankle, if it has one, turns back flat. The hip's
+				-- frame rides the body when it hangs off it, so the turn undoes
+				-- the body's own.
+				--==============================================================
+				local hipNow = if leg.onBody then moved * leg.hipAt else leg.hipAt
+				local rel = goal - hipNow
+				local restRel = rest - leg.hipAt
+				local theta = pitchOf(-rel.Z, rel.Y) - pitchOf(-restRel.Z, restRel.Y)
+				local turn = CFrame.Angles(theta, 0, 0)
+				local sole = hipNow + turn:VectorToWorldSpace(restRel)
+				local joint = if leg.onBody then moved * CFrame.new(leg.hipAt) else CFrame.new(leg.hipAt)
+				leg.walkHip = joint:Inverse() * CFrame.new(hipNow + (goal - sole)) * turn
+				leg.swing = theta
+				put(leg.hip, leg.walkHip, lw)
+				local ankleName = leg.swingAnkle
+				if ankleName then
+					leg.walkAnkle = CFrame.Angles(-theta, 0, 0) * CFrame.Angles(0, footYaw, 0) * CFrame.Angles(footPitch, 0, 0)
+					put(ankleName, leg.walkAnkle, lw)
 				end
 				continue
 			end
@@ -966,9 +1147,9 @@ local function walkPose(rig: Rig, gait: Gait)
 			leg.walkAnkle = CFrame.Angles(-knee, 0, 0) * CFrame.Angles(0, 0, -side) * CFrame.Angles(0, footYaw, 0)
 				* CFrame.Angles(footPitch, 0, 0)
 			leg.swing = hip
-			pose[leg.hip] = (pose[leg.hip] or IDENTITY):Lerp(leg.walkHip, lw)
-			pose[leg.knee] = (pose[leg.knee] or IDENTITY):Lerp(leg.walkKnee, lw)
-			pose[leg.ankle] = (pose[leg.ankle] or IDENTITY):Lerp(leg.walkAnkle, lw)
+			put(leg.hip, leg.walkHip, lw)
+			put(leg.knee, leg.walkKnee, lw)
+			put(leg.ankle, leg.walkAnkle, lw)
 		end
 	end
 	for _, arm in ipairs(p.arms) do
@@ -1054,6 +1235,9 @@ function SecretIdle.Rig(model: Model): Rig?
 		nodes[i] = { part = part, parent = nil, forward = true, c0 = IDENTITY, c1 = IDENTITY, motor = nil,
 			rel = pivot:ToObjectSpace(part.CFrame) }
 	end
+	local form = tostring(model:GetAttribute("SecretForm"))
+	-- An ordinary plant's supplied rig (PlantForms, 2026-10-03), or nil.
+	local plantSpec = PlantForms.Plants[form] or InviteForms.Plants[form]
 	-- Every joint, as an edge both ways.
 	type Edge = { other: number, joint: Instance, forward: boolean }
 	local edges: { [number]: { Edge } } = {}
@@ -1114,7 +1298,9 @@ function SecretIdle.Rig(model: Model): Rig?
 					node.forward = edge.forward
 					node.c0 = j.C0
 					node.c1 = j.C1
-					node.motor = if edge.joint:IsA("Motor6D") then edge.joint.Name else nil
+					-- A PlantForms rig's welds are named poses too (a braced foot steps
+					-- on its weld); nothing poses a weld unless a walk names it.
+					node.motor = if edge.joint:IsA("Motor6D") or plantSpec then edge.joint.Name else nil
 					table.insert(queue, edge.other)
 				end
 			end
@@ -1123,7 +1309,6 @@ function SecretIdle.Rig(model: Model): Rig?
 	-- A Rain form plays its Pod 1 creature's idle and walk; a Pod 2 form at its
 	-- own size over that one's (every Pod 2 form is its Pod 1 form scaled
 	-- whole, so one ratio is the lot).
-	local form = tostring(model:GetAttribute("SecretForm"))
 	local idleKey, scale = form, 1
 	if RainForms.Plants[form] then
 		local base = string.gsub(form, "_colossal$", "")
@@ -1132,8 +1317,11 @@ function SecretIdle.Rig(model: Model): Rig?
 			scale = big.Size.Y / small.Size.Y
 		end
 		idleKey = base
+	elseif plantSpec then
+		-- Built at its tier's size: the walk's distances grow with it.
+		scale = tonumber(model:GetAttribute("RigScale")) or 1
 	end
-	local profile = WALKS[idleKey]
+	local profile = WALKS[idleKey] or (PlantIdles.Walks[idleKey] :: WalkProfile?)
 	local top = order[1]
 	local rig: Rig = {
 		model = model,
@@ -1162,11 +1350,15 @@ function SecretIdle.Rig(model: Model): Rig?
 		lights = {},
 		lightRest = {},
 		lastEvent = -1,
+		plant = nil,
 	}
 	rig.gait = buildGait(idleKey, nodes, order, scale)
 	local seed = tonumber(model:GetAttribute("PlacementId"))
 		or math.floor(math.abs(pivot.Position.X * 13 + pivot.Position.Z * 7))
 	rig.phase = (seed % 97) / 97 * 10
+	if plantSpec then
+		rig.plant = PlantIdles.Scan(form, model, parts, plantSpec.Unit or 1, plantSpec.ModelScale or 1, scale, seed)
+	end
 	for _, part in ipairs(parts) do
 		if part.Name == "Gullet" then
 			rig.gullet = part
@@ -1753,7 +1945,7 @@ function SecretIdle.Step(rig: Rig, now: number)
 			rig.pose[name] = nil
 		end
 	end
-	local idle = IDLES[rig.idle]
+	local idle = IDLES[rig.idle] or (if rig.plant then PlantIdles.Idles[rig.idle] else nil)
 	if idle then
 		idle(rig, now + rig.phase)
 	end

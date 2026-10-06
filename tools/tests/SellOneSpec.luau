@@ -111,6 +111,8 @@ end
 
 local MAX_CASH = GameConfig.Save.MaxCash or 1e15
 local cash = 0
+-- The profile's hearts (2026-10-03): SELL ALL keeps what is in here.
+local favourites = {}
 local PlayerDataService = {
 	AddCash = function(player, amount)
 		record("AddCash", player, amount)
@@ -121,7 +123,7 @@ local PlayerDataService = {
 		return true
 	end,
 	Get = function()
-		return { Cash = cash }
+		return { Cash = cash, Favourites = favourites }
 	end,
 	RecordTutorial = function() end,
 }
@@ -612,6 +614,65 @@ check(count("SyncHeldNow") == 1 and count("Sound") == 1 and lastArgs("Sound")[1]
 	"one bag re-sync, one till")
 check(confirmAll({ token = r.token, accept = true }, 201) == nil and count("AddCash") == 1,
 	"the same yes again pays nothing")
+
+--==============================================================================
+-- 10. FAVOURITES ARE KEPT BY SELL ALL (2026-10-03, the owner's decision)
+--
+-- A Tool whose item wears a heart is left out of SELL ALL's count and its sale,
+-- and counted as kept. A Tool that never learned its id is never protected.
+-- A heart toggled between the quote and the yes changes the bag. SELL ONE
+-- still sells a favourite, on purpose.
+--==============================================================================
+say("\n-- favourites are kept --")
+table.clear(trace)
+clearHands()
+cash = 0
+root.CFrame = NEAR
+local ITEM = GameConfig.Attributes.ItemId
+local favPlant = plantTool("spiretip", 2, true, backpack)
+favPlant:SetAttribute(ITEM, "11")
+local plain = plantTool("toadcap", 1, true, backpack)
+plain:SetAttribute(ITEM, "12")
+local noId = plantTool("nubkin", 1, false, backpack)
+favourites["i:11"] = true
+favourites["i:13"] = true
+local expectKept = SeedData.SellPrice(SeedData.Get("toadcap"), 1) + SeedData.SellPrice(SeedData.Get("nubkin"), 1)
+local held0 = EconomyService.QuoteHeld(seller)
+check(#held0.tools == 2 and held0.kept == 1 and held0.total == expectKept,
+	"QuoteHeld leaves the favourite out and counts it kept; a Tool with no id is never protected",
+	string.format("%d tools, %s kept", #held0.tools, tostring(held0.kept)))
+r = quoteAll(200)
+check(r.phase == "quoteAll" and r.kept == 1 and r.plants == 1 and r.pods == 1 and r.total == expectKept,
+	"the quote says how many favourites it keeps", r.kept)
+favourites["i:12"] = true
+local toggled = confirmAll({ token = r.token, accept = true }, 201)
+check(toggled ~= nil and toggled.reason == "CHANGED" and plain.Parent == backpack and count("AddCash") == 0,
+	"a heart put on between the quote and the yes changes the bag: nothing sold")
+favourites["i:12"] = nil
+r = quoteAll(200)
+favourites["i:11"] = nil
+local untoggled = confirmAll({ token = r.token, accept = true }, 201)
+check(untoggled ~= nil and untoggled.reason == "CHANGED" and favPlant.Parent == backpack,
+	"and so does a heart taken off")
+favourites["i:11"] = true
+r = quoteAll(200)
+local soldFav = confirmAll({ token = r.token, accept = true }, 201)
+check(soldFav ~= nil and soldFav.phase == "soldAll" and soldFav.sold == 2 and soldFav.paid == expectKept
+		and favPlant.Parent == backpack and plain.Parent == nil and noId.Parent == nil,
+	"a yes sells everything but the favourite", soldFav and soldFav.sold)
+r = quoteAll(200)
+check(r.phase == "refused" and r.reason == "FAVOURITES" and r.text == GameConfig.SellAll.FavouritesText
+		and r.kept == 1 and SellService.PendingAllFor(seller) == nil,
+	"only favourites left: refused with its own line, nothing on the table", r.reason)
+local soldNone, paidNone = EconomyService.SellHeld(seller)
+check(soldNone == 0 and paidNone == 0 and favPlant.Parent == backpack, "SellHeld itself skips a favourite")
+favPlant.Parent = character
+table.clear(trace)
+r = quote(300)
+local oneFav = confirm({ token = r.token, accept = true }, 301)
+check(oneFav ~= nil and oneFav.phase == "sold" and favPlant.Parent == nil and count("AddCash") == 1,
+	"SELL ONE still sells a favourite, on purpose")
+table.clear(favourites)
 
 scratch:Destroy()
 

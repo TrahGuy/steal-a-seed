@@ -37,6 +37,8 @@ local PlantInfo = {}
 PlantInfo.Unknown = "???"
 PlantInfo.PodTitle = "Unhatched pod"
 PlantInfo.PodIncome = "After it hatches"
+-- An Invite a Friend reward's Sell line (2026-10-06): no stall buys one.
+PlantInfo.NoSale = "Can't be sold"
 
 local QUIET = Color3.fromRGB(198, 176, 152)
 
@@ -143,8 +145,14 @@ function PlantInfo.Describe(speciesId: any, tier: any, hatched: boolean,
 		-- is inside -- and so its income and price -- stays for the hatch.
 		local pod = rainPod :: SeedData.RainPod
 		info.title = pod.Name
-		info.rarity = pod.Rarity
-		info.rarityColour = GameConfig.RarityColor[pod.Rarity] or QUIET
+		-- The second family's creatures differ in rarity (2026-10-05), so its
+		-- pods carry none and the line stays ???, like an ordinary pod's: a
+		-- rarity there would name the creature inside. Its size still shows.
+		local rarity = pod.Rarity
+		if rarity then
+			info.rarity = rarity
+			info.rarityColour = GameConfig.RarityColor[rarity] or QUIET
+		end
 	end
 	if not (hatched and species) then
 		return info
@@ -152,15 +160,20 @@ function PlantInfo.Describe(speciesId: any, tier: any, hatched: boolean,
 
 	local known = species :: SeedData.Species
 	local rate = SeedData.IncomePerSecond(known, band.index) * displayMultiplier(multiplier)
-	local price = SeedData.SellPrice(known, band.index)
 	info.title = known.Name
 	info.stage = "Grown"
 	info.rarity = known.Rarity
 	info.rarityColour = GameConfig.RarityColor[known.Rarity] or QUIET
 	info.income = "+$" .. GameConfig.compact(rate) .. "/s"
 	info.incomePerSecond = rate
-	info.sell = "$" .. GameConfig.compact(price)
-	info.sellValue = price
+	if SeedData.Sellable(known) then
+		local price = SeedData.SellPrice(known, band.index)
+		info.sell = "$" .. GameConfig.compact(price)
+		info.sellValue = price
+	else
+		-- No price: what the stall pays for it is nothing, because it never buys it.
+		info.sell = PlantInfo.NoSale
+	end
 	return info
 end
 

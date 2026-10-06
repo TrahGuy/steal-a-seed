@@ -46,6 +46,7 @@ local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 local CollectionService = game:GetService("CollectionService")
 local GuiService = game:GetService("GuiService")
+local TextService = game:GetService("TextService")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -55,6 +56,8 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 -- A Thunderstorm's lightning schedule, and whether this player asked for less.
 local RainClouds = require(Shared:WaitForChild("RainClouds"))
 local StatusText = require(Shared:WaitForChild("StatusText"))
+-- The disco's palette (2026-10-03): the same colours as every disco light.
+local DiscoLights = require(Shared:WaitForChild("DiscoLights"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -77,12 +80,31 @@ local RAIN_MODE = GameConfig.Weather.Attributes.Mode
 local RAIN_ID = GameConfig.Weather.Attributes.EventId
 local RAIN_STARTED = GameConfig.Weather.Attributes.StartedAt
 local LIGHTNING = GameConfig.Weather.Thunder.Lightning
+-- THE DISCO (2026-10-03, TICKET DISCO / DISCO ONLY): a little dimmer and a
+-- soft drifting tint while a disco mode runs, laid over everything else here
+-- -- this script stays Lighting's one owner. See applyLight and THE DISCO.
+local MINI = GameConfig.MiniEvent
+local DISCO_LIGHT = MINI.Disco.Light
+local MINI_MODES: { [string]: any } = MINI.Modes :: any
 local SCREEN = CYCLE.Barrier.Screen
 
 local INK = Color3.fromRGB(26, 24, 30)
-local PAPER = Color3.fromRGB(248, 246, 240)
-local WARN = Color3.fromRGB(255, 186, 84)
-local NIGHT_INK = Color3.fromRGB(150, 196, 255)
+-- THE COUNTDOWN'S TWO COLOURS (the owner, 2026-10-04): white, and red only by
+-- day inside WarnSeconds -- never at night, whose fifteen seconds are all under
+-- that window, and never on the icons.
+local WHITE = Color3.fromRGB(255, 255, 255)
+local WARN = Color3.fromRGB(255, 76, 64)
+-- The cycle icon's sizes are HudLayout's (its spec measures the chip's words
+-- against them); its uploaded pictures are GameConfig's, "" until uploaded.
+local LAYOUT = HudLayout.Config
+local ICON_IMAGES = CYCLE.ClockIcons
+local FONT = Enum.Font.GothamBlack
+-- The bar's words: as large as this, and never under the least, sized once per
+-- layout off the longest thing the bar says, so they never change size when
+-- the warning starts.
+local BAR_TEXT = 20
+local BAR_TEXT_LEAST = 12
+local LONGEST = "BIOMES CLOSE IN 0:00"
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -137,14 +159,17 @@ edge.Color = INK
 edge.Thickness = 2.5
 edge.Parent = plate
 
+-- The words stand beside the cycle icon, the two centred on the plate as one
+-- group (arrangeBar), so their size is set rather than scaled: fitBar.
 local text = Instance.new("TextLabel")
 text.Name = "Text"
-text.Size = UDim2.new(1, -16, 1, -8)
-text.Position = UDim2.fromOffset(8, 4)
+text.AnchorPoint = Vector2.new(0, 0.5)
+text.Position = UDim2.new(0.5, 0, 0.5, 0)
+text.Size = UDim2.new(0, 0, 1, -8)
 text.BackgroundTransparency = 1
-text.Font = Enum.Font.GothamBlack
-text.TextScaled = true
-text.TextColor3 = PAPER
+text.Font = FONT
+text.TextSize = BAR_TEXT
+text.TextColor3 = WHITE
 text.Text = ""
 text.Parent = plate
 
@@ -152,6 +177,54 @@ local textEdge = Instance.new("UIStroke")
 textEdge.Color = INK
 textEdge.Thickness = 2
 textEdge.Parent = text
+
+--==============================================================================
+-- THE CYCLE ICON (the owner, 2026-10-04)
+--
+-- What comes next, beside the words that count down to it: a moon and cloud
+-- while the day runs out, a sun and cloud through the night. Decorative -- the
+-- words say the same thing -- and not a weather sign: the clouds are part of
+-- the picture whatever the sky is doing.
+--
+-- The approved pictures have no upload id yet (GameConfig.WorldCycle
+-- .ClockIcons), so each is drawn from frames (UIKit.cycleIcon); a picture,
+-- once one is set, is laid over its drawing and replaces it only once it has
+-- actually loaded here (UIKit.whenPictureLoads), never a blank square.
+--==============================================================================
+local icon = Instance.new("Frame")
+icon.Name = "Icon"
+icon.AnchorPoint = Vector2.new(0, 0.5)
+icon.Position = UDim2.new(0.5, 0, 0.5, 0)
+icon.Size = UDim2.fromOffset(LAYOUT.ClockIcon, LAYOUT.ClockIcon)
+icon.BackgroundTransparency = 1
+icon.Parent = plate
+
+local function cycleIcon(kind: "moon" | "sun", image: string): Frame
+	local stack = Instance.new("Frame")
+	stack.Name = if kind == "sun" then "Dawn" else "Night"
+	stack.BackgroundTransparency = 1
+	stack.Size = UDim2.fromScale(1, 1)
+	stack.Visible = false
+	stack.Parent = icon
+	local drawn = UIKit.cycleIcon(stack, kind, 2)
+	if image ~= "" then
+		local picture = Instance.new("ImageLabel")
+		picture.Name = "Picture"
+		picture.BackgroundTransparency = 1
+		picture.Size = UDim2.fromScale(1, 1)
+		picture.Image = image
+		picture.ScaleType = Enum.ScaleType.Fit
+		picture.ZIndex = 8
+		picture.Parent = stack
+		UIKit.whenPictureLoads(picture, function(loaded: boolean)
+			drawn.Visible = not loaded
+		end)
+	end
+	return stack
+end
+-- Shown while the day counts down to night, and through the night to dawn.
+local toNight = cycleIcon("moon", ICON_IMAGES.Moon)
+local toDawn = cycleIcon("sun", ICON_IMAGES.Sun)
 
 --==============================================================================
 -- THE CHIP: A PHONE'S CLOCK (2026-09-29)
@@ -162,22 +235,26 @@ textEdge.Parent = text
 -- `clockChip`, 124 px where the bar was 273 on the owner's screen) and says the
 -- same three things on two short lines -- the words over the time:
 --
---     DAY                    BIOMES CLOSE IN        NIGHT • PODS RETURN
---     06:59                  00:45                  00:14
+--     NIGHT IN               BIOMES CLOSE IN        DAWN IN
+--     6:59                   0:45                   0:14
+--
+-- (2026-10-04: with the cycle icon at its left end, and the bar's words.)
 --
 -- Still a different SENTENCE for each as well as a different colour, so nothing
 -- is said by colour alone. The width never changes with the words, so nothing
 -- beside it on the row moves when the day turns. A desktop, a console and a TV
 -- keep the bar exactly as it was.
 --==============================================================================
+-- Both lines stand right of the chip's icon (HudLayout's Phone.ClockIcon).
+local CHIP_TEXT_X = 5 + LAYOUT.Phone.ClockIcon + LAYOUT.Phone.ClockIconGap
 local chipWords = Instance.new("TextLabel")
 chipWords.Name = "Words"
-chipWords.Position = UDim2.fromOffset(5, 3)
-chipWords.Size = UDim2.new(1, -10, 0, 11)
+chipWords.Position = UDim2.fromOffset(CHIP_TEXT_X, 3)
+chipWords.Size = UDim2.new(1, -(CHIP_TEXT_X + 5), 0, 11)
 chipWords.BackgroundTransparency = 1
 chipWords.Font = Enum.Font.GothamBlack
 chipWords.TextScaled = true
-chipWords.TextColor3 = PAPER
+chipWords.TextColor3 = WHITE
 chipWords.Text = ""
 chipWords.Visible = false
 chipWords.Parent = plate
@@ -192,12 +269,12 @@ chipWordsEdge.Parent = chipWords
 
 local chipTime = Instance.new("TextLabel")
 chipTime.Name = "Time"
-chipTime.Position = UDim2.fromOffset(5, 14)
-chipTime.Size = UDim2.new(1, -10, 0, 18)
+chipTime.Position = UDim2.fromOffset(CHIP_TEXT_X, 14)
+chipTime.Size = UDim2.new(1, -(CHIP_TEXT_X + 5), 0, 18)
 chipTime.BackgroundTransparency = 1
 chipTime.Font = Enum.Font.GothamBlack
 chipTime.TextSize = 17
-chipTime.TextColor3 = PAPER
+chipTime.TextColor3 = WHITE
 chipTime.Text = ""
 chipTime.Visible = false
 chipTime.Parent = plate
@@ -208,6 +285,43 @@ chipTimeEdge.Parent = chipTime
 
 -- Which face is up: the chip's two lines, or the bar's one.
 local chip = false
+
+--==============================================================================
+-- THE BAR'S GROUP: THE ICON, THEN THE WORDS, CENTRED AS ONE
+--
+-- fitBar picks the words' size once per layout -- the largest up to BAR_TEXT
+-- at which the longest sentence and the icon fit the plate -- and arrangeBar
+-- centres icon and words on the plate's middle each time the words change,
+-- off their measured width (TextService), so the icon always stands right
+-- beside them. The chip's are fixed: the icon at its left end, the two lines
+-- right of it.
+--==============================================================================
+local barWords = ""
+
+local function wordsWidth(words: string, size: number): number
+	return TextService:GetTextSize(words, size, FONT, Vector2.new(4000, 100)).X
+end
+
+local function arrangeBar(words: string)
+	barWords = words
+	if chip then
+		return
+	end
+	local w = math.ceil(wordsWidth(words, text.TextSize)) + 4
+	local left = -math.floor((LAYOUT.ClockIcon + LAYOUT.ClockIconGap + w) / 2)
+	icon.Position = UDim2.new(0.5, left, 0.5, 0)
+	text.Position = UDim2.new(0.5, left + LAYOUT.ClockIcon + LAYOUT.ClockIconGap, 0.5, 0)
+	text.Size = UDim2.new(0, w, 1, -8)
+end
+
+local function fitBar(plateWidth: number)
+	local room = plateWidth - 16 - LAYOUT.ClockIcon - LAYOUT.ClockIconGap
+	local size = BAR_TEXT
+	while size > BAR_TEXT_LEAST and wordsWidth(LONGEST, size) > room do
+		size -= 1
+	end
+	text.TextSize = size
+end
 
 --==============================================================================
 -- CENTRED, AND NEVER UNDER A ROBLOX BUTTON
@@ -240,6 +354,16 @@ local function placePlate()
 	text.Visible = not chip
 	chipWords.Visible = chip
 	chipTime.Visible = chip
+	if chip then
+		local size = LAYOUT.Phone.ClockIcon
+		icon.Size = UDim2.fromOffset(size, size)
+		icon.Position = UDim2.new(0, 5, 0.5, 0)
+	else
+		icon.Size = UDim2.fromOffset(LAYOUT.ClockIcon, LAYOUT.ClockIcon)
+		-- The plate is as wide as HudLayout's rect wherever the cap allows it.
+		fitBar(math.min(r.w, cap.MaxSize.X))
+		arrangeBar(barWords)
+	end
 	-- r.y is GameConfig's 8 everywhere but a TV, whose clock row comes down to
 	-- the title-safe edge.
 	plate.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - viewport.X / 2), 0, r.y)
@@ -252,19 +376,28 @@ end)
 placePlate()
 
 --==============================================================================
--- THE THREE THINGS IT CAN SAY
+-- THE THREE THINGS IT CAN SAY (the owner's wording, 2026-10-04)
 --
---     DAY • 06:59                 the ordinary case
---     BIOMES CLOSE IN 00:45       the last 45 seconds of the day
---     NIGHT • PODS RETURN IN 00:14  the whole (fifteen-second) night
+--     (moon) NIGHT IN 6:59          the ordinary day, in white
+--     (moon) BIOMES CLOSE IN 0:45   the last WarnSeconds of the day, in RED
+--     (sun)  DAWN IN 0:14           the whole (fifteen-second) night, in white
 --
--- The warning is a different SENTENCE and a different colour, not a colour
--- change alone -- a player who is colourblind or looking at their plot rather
--- than the top of the screen gets the same information from the words.
+-- Each says what comes next. The warning is a different SENTENCE as well as
+-- the one red, not a colour change alone -- a player who is colourblind or
+-- looking at their plot rather than the top of the screen gets the same
+-- information from the words. Red is the day's warning only: a night is all
+-- inside WarnSeconds and stays white, and dawn starts white again.
 --==============================================================================
+-- The wall's countdown (mm:ss), which this does not restyle.
 local function clock(seconds: number): string
 	local whole = math.max(0, math.floor(seconds))
 	return string.format("%02d:%02d", math.floor(whole / 60), whole % 60)
+end
+
+-- The HUD's (m:ss).
+local function shortClock(seconds: number): string
+	local whole = math.max(0, math.floor(seconds))
+	return string.format("%d:%02d", math.floor(whole / 60), whole % 60)
 end
 
 --==============================================================================
@@ -336,10 +469,12 @@ local function drawBigTimer(phase: string?, left: number)
 end
 
 local lastText = ""
-local lastColour = PAPER
+local lastColour = WHITE
 -- The chip's own two lines, written only when they change, like the bar's.
 local lastWords, lastTime = "", ""
-local lastChipColour = PAPER
+local lastChipColour = WHITE
+-- Which icon stands: what the countdown is counting down to.
+local lastNext = ""
 
 --==============================================================================
 -- A PHASE AND ITS DEADLINE ARE TWO ATTRIBUTES, AND THEY MOVE TOGETHER
@@ -399,23 +534,34 @@ local function draw()
 	local colour: Color3
 	-- The same three, as the chip says them: the words, and the time under them.
 	local words: string
+	-- What it counts down to, which is the icon beside it.
+	local nextUp: string
 
 	if phase == CYCLE.PhaseNight then
-		wording = "NIGHT  •  PODS RETURN IN " .. clock(left)
-		words = "NIGHT • PODS RETURN"
-		colour = NIGHT_INK
-	elseif left <= CYCLE.WarnSeconds then
-		wording = "BIOMES CLOSE IN " .. clock(left)
+		wording = "DAWN IN " .. shortClock(left)
+		words = "DAWN IN"
+		colour = WHITE
+		nextUp = "dawn"
+	elseif phase == CYCLE.PhaseDay and left <= CYCLE.WarnSeconds then
+		wording = "BIOMES CLOSE IN " .. shortClock(left)
 		words = "BIOMES CLOSE IN"
 		colour = WARN
+		nextUp = "night"
 	else
-		wording = "DAY  •  " .. clock(left)
-		words = "DAY"
-		colour = PAPER
+		wording = "NIGHT IN " .. shortClock(left)
+		words = "NIGHT IN"
+		colour = WHITE
+		nextUp = "night"
+	end
+
+	if nextUp ~= lastNext then
+		lastNext = nextUp
+		toNight.Visible = nextUp == "night"
+		toDawn.Visible = nextUp == "dawn"
 	end
 
 	if chip then
-		local time = clock(left)
+		local time = shortClock(left)
 		if words ~= lastWords then
 			lastWords = words
 			chipWords.Text = words
@@ -436,6 +582,7 @@ local function draw()
 	if wording ~= lastText then
 		lastText = wording
 		text.Text = wording
+		arrangeBar(wording)
 	end
 	if colour ~= lastColour then
 		lastColour = colour
@@ -581,6 +728,62 @@ local rain = 0
 -- itself is Weather.client's.
 local flash = 0
 
+--==============================================================================
+-- THE DISCO, OVER BOTH (2026-10-03)
+--
+-- A third number, `disco`, 0 to 1, eased toward "a disco mode is running"
+-- (MiniEventService's attributes) over Disco.Light.FadeSeconds: a fraction of
+-- the brightness kept and a little exposure off -- laid over the day/night
+-- blend and the rain in the same call -- and a soft tint, through a
+-- ColorCorrection of this script's own, drifting slowly round the colour
+-- wheel from the event's shared start time (steady under reduced motion). No
+-- flash, no strobe: it moves a full turn in Disco.HueSeconds. When the disco
+-- ends the light is simply recomputed with disco at 0, so what comes back is
+-- whatever weather, day or night is live NOW -- nothing is restored from a
+-- snapshot taken when it began.
+--
+-- MAP-WIDE (2026-10-03): the colour is the disco PALETTE's (DiscoLights,
+-- purple / pink / gold / green / cyan / blue, blended over CycleSeconds), and
+-- the ambient light everywhere leans toward it too (Disco.Light.AmbientMix),
+-- so the whole map -- hub, plots, every biome, the rain biome -- moves through
+-- the disco's colours without a single extra light. That part is all Reduced
+-- FX keeps. While the disco shows, the light is recomputed every frame (the
+-- colour drifts); the local pools and spots are MiniEventFX's.
+--==============================================================================
+local disco = 0
+-- The palette's colour this frame (white while no disco shows).
+local discoColour = Color3.new(1, 1, 1)
+-- Re-run safe: a Rojo re-sync leaves the last run's tone behind otherwise.
+for _, staleTone in ipairs(Lighting:GetChildren()) do
+	if staleTone.Name == "DiscoTone" and staleTone:IsA("ColorCorrectionEffect") then
+		staleTone:Destroy()
+	end
+end
+local discoTone = Instance.new("ColorCorrectionEffect")
+discoTone.Name = "DiscoTone"
+discoTone.Enabled = false
+discoTone.Parent = Lighting
+
+local function discoWanted(): number
+	if Workspace:GetAttribute(MINI.Attributes.State) ~= "running" then
+		return 0
+	end
+	local mode = MINI_MODES[Workspace:GetAttribute(MINI.Attributes.Mode) or ""]
+	return if mode and mode.Disco then 1 else 0
+end
+
+local function applyDiscoTone()
+	if disco <= 0.001 then
+		discoTone.Enabled = false
+		return
+	end
+	local startedAt = tonumber(Workspace:GetAttribute(MINI.Attributes.StartedAt)) or 0
+	local t = if StatusText.reducedMotion() then 0 else Workspace:GetServerTimeNow() - startedAt
+	discoColour = DiscoLights.colourAt(t, 0)
+	discoTone.TintColor = Color3.new(1, 1, 1):Lerp(discoColour, DISCO_LIGHT.TintMix * disco)
+	discoTone.Enabled = true
+end
+
 local baseShadow = Lighting.ShadowSoftness
 local baseSpecular = Lighting.EnvironmentSpecularScale
 
@@ -608,15 +811,24 @@ local function applyLight(t: number)
 	local kept = RAIN.Brightness + (RAIN.NightBrightness - RAIN.Brightness) * t
 	Lighting.Brightness = (day.Brightness + (night.Brightness - day.Brightness) * t)
 		* (1 - (1 - kept) * r)
+		* (1 - (1 - DISCO_LIGHT.Brightness) * disco)
+	-- The disco's ambient: toward the palette's colour, scaled so it tints
+	-- rather than brightens or blackens (Disco.Light.AmbientMix, AmbientValue).
+	local discoAmbient = Color3.new(discoColour.R * DISCO_LIGHT.AmbientValue, discoColour.G * DISCO_LIGHT.AmbientValue,
+		discoColour.B * DISCO_LIGHT.AmbientValue)
+	local discoMix = DISCO_LIGHT.AmbientMix * disco
 	Lighting.Ambient = day.Ambient:Lerp(night.Ambient, t)
 		:Lerp(RAIN.Ambient:Lerp(RAIN.NightAmbient, t), RAIN.AmbientMix * r)
+		:Lerp(discoAmbient, discoMix)
 	Lighting.OutdoorAmbient = day.OutdoorAmbient:Lerp(night.OutdoorAmbient, t)
 		:Lerp(RAIN.OutdoorAmbient:Lerp(RAIN.NightOutdoorAmbient, t), RAIN.AmbientMix * r)
+		:Lerp(discoAmbient, discoMix)
 	Lighting.EnvironmentDiffuseScale = day.EnvironmentDiffuseScale
 		+ (night.EnvironmentDiffuseScale - day.EnvironmentDiffuseScale) * t
 	Lighting.ExposureCompensation = day.ExposureCompensation
 		+ (night.ExposureCompensation - day.ExposureCompensation) * t
 		+ RAIN.Exposure * r
+		+ DISCO_LIGHT.Exposure * disco
 		+ flash
 	Lighting.ShadowSoftness = baseShadow + (RAIN.ShadowSoftness - baseShadow) * r
 	Lighting.EnvironmentSpecularScale = baseSpecular * (1 - (1 - RAIN.SpecularScale) * r)
@@ -667,6 +879,17 @@ RunService.RenderStepped:Connect(function(dt)
 			else math.max(wantRain, rain - step)
 		changed = true
 	end
+	local wantDisco = discoWanted()
+	if disco ~= wantDisco then
+		local step = dt / math.max(0.05, DISCO_LIGHT.FadeSeconds)
+		disco = if wantDisco > disco then math.min(wantDisco, disco + step) else math.max(wantDisco, disco - step)
+		changed = true
+	end
+	if disco > 0 or discoTone.Enabled then
+		applyDiscoTone()
+		-- The palette drifts every frame, and the ambient follows it.
+		changed = true
+	end
 	local want = if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0
 	if blend ~= want then
 		local step = dt / math.max(0.05, NIGHT.FadeSeconds)
@@ -685,6 +908,9 @@ draw()
 do
 	local state = Workspace:GetAttribute(RAIN_STATE)
 	rain = if state == "opening" or state == "active" then 1 else 0
+	-- And the disco's, likewise (2026-10-03).
+	disco = discoWanted()
+	applyDiscoTone()
 end
 applyLight(if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0)
 blend = if Workspace:GetAttribute(ATTR.WorldPhase) == CYCLE.PhaseNight then 1 else 0

@@ -93,6 +93,8 @@ local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local PlantWander = require(script.Parent:WaitForChild("PlantWander"))
+-- What MY PLANTS' EQUIP BEST ranks and where its newcomers stand: arithmetic only.
+local GardenPlan = require(Shared:WaitForChild("GardenPlan"))
 
 local PLOT = GameConfig.Plot
 
@@ -162,6 +164,11 @@ type Planted = {
 	-- PLANT IS".
 	anchor: BasePart?,
 	anchorLift: number?,
+	-- A GROWN creature's item id (2026-10-04, MY PLANTS): the id its row had in
+	-- the Bag, kept while it stands here and handed back with it, so its hotbar
+	-- shortcut and its heart are still its own. nil for a pod, and for a plant
+	-- saved before ids were kept in the ground.
+	item: string?,
 }
 
 -- plot -> placementId -> Planted
@@ -193,6 +200,7 @@ local BURST = PLANTING.BurstSeconds
 local HATCH = PLANTING.Hatch
 local PLACE_ACTION = PLANTING.PlaceAction
 local PICKUP_ACTION = PLANTING.PickUpAction
+local MY_PLANTS = PLANTING.MyPlants
 local INSTANT = PLANTING.InstantHatch
 
 -- The Robux product the Instant Hatch prompt sells, off the store manifest.
@@ -650,8 +658,9 @@ local function standCF(entry: Planted): CFrame?
 	-- the narrow side, to the gate (GameConfig.Secret.PodFacing, the owner's
 	-- option 2). Which way it stands only -- never where it may. Every replayed
 	-- pod (a species with a Pod form: the Secrets' and, from 2026-10-02, the
-	-- Rain event's, whose Pod 3 has an eye) stands the same way.
-	local facing = if entry.stage == CreatureModel.STAGE_POD and entry.species.Pod ~= nil
+	-- Rain event's, whose Pod 3 has an eye; from 2026-10-05 its second family's
+	-- seven sized shells) stands the same way.
+	local facing = if entry.stage == CreatureModel.STAGE_POD and SeedData.PodFormOf(entry.species, entry.tier) ~= nil
 		then GameConfig.Secret.PodFacing
 		else entry.facing
 	return CFrame.new(base.Position) * CFrame.Angles(0, math.rad(180), 0)
@@ -727,6 +736,8 @@ local function render(entry: Planted)
 	-- the prompt can never disagree about when a pod is ready. PlantedAt stays for
 	-- identity and for the progress ring's full length.
 	model:SetAttribute("HatchAt", entry.hatchAt)
+	-- Which item it is (MY PLANTS): read by the panel, never trusted by the server.
+	model:SetAttribute(GameConfig.Attributes.ItemId, entry.item)
 	--==========================================================================
 	-- HATCHING, NOT LOOT
 	--
@@ -786,6 +797,7 @@ local function record(plot: Model): { any }
 				Z = entry.offset.Z,
 				Stage = entry.stage,
 				Facing = entry.facing,
+				Item = if entry.stage == CreatureModel.STAGE_GROWN then entry.item else nil,
 			})
 		end
 	end
@@ -818,7 +830,7 @@ local function isReady(entry: Planted, now: number): boolean
 end
 
 local hatch: (Player, Planted, boolean?) -> (boolean, string?)
-local pickUp: (Player, Planted) -> (boolean, string?)
+local pickUp: (Player, Planted, boolean?) -> (boolean, string?)
 
 local function attachHatchPrompt(entry: Planted)
 	-- The clock has run out, so there is no wait left to pay for. The free
@@ -1771,7 +1783,7 @@ end
 -- The freed capacity is not bookkeeping -- it is the point. A full bed used to
 -- be permanent.
 --==============================================================================
-function pickUp(player: Player, entry: Planted): (boolean, string?)
+function pickUp(player: Player, entry: Planted, bagOnly: boolean?): (boolean, string?)
 	local byPlot = growing[entry.plot]
 	if not byPlot or byPlot[entry.id] ~= entry then
 		return false, nil
@@ -1793,7 +1805,13 @@ function pickUp(player: Player, entry: Planted): (boolean, string?)
 	-- it "must not hand over an item that cannot be saved. Preserve the item in
 	-- its prior safe state" -- so the plant STAYS PLANTED, earning as it was,
 	-- and the reason rides back for the caller to say.
-	local given, why = CarryService.GiveHatched(player, entry.species, entry.tier, nil, nil, true)
+	--
+	-- AS ITSELF (2026-10-04, MY PLANTS): its own item id goes back on the Tool, so
+	-- the row the Bag writes for it is the row it had -- its shortcut and heart
+	-- with it. `bagOnly` (the MY PLANTS panel) puts it in the Bag and not in the
+	-- hands; the world's PICK UP still hands it over, as it always has.
+	local given, why = CarryService.GiveHatched(player, entry.species, entry.tier,
+		if bagOnly then -1 else nil, nil, true, entry.item)
 	if not given then
 		return false, why
 	end
@@ -1978,6 +1996,10 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 		facing = if species.Pod ~= nil and not hatched then GameConfig.Secret.PodFacing else facingFor(id),
 		model = nil,
 		prompt = nil,
+		-- The Tool's own item id, for a creature (MY PLANTS): it is the same item
+		-- in the ground, and comes back to the Bag as itself.
+		item = if hatched and type(tool:GetAttribute(GameConfig.Attributes.ItemId)) == "string"
+			then tool:GetAttribute(GameConfig.Attributes.ItemId) :: string else nil,
 	}
 	byPlot[id] = entry
 	render(entry)
@@ -2002,6 +2024,399 @@ function PlantService.PlaceAt(player: Player, worldPos: Vector3): (boolean, stri
 			player.Name, tier, species.Name, SeedData.GrowSecondsFor(species, tier)))
 	end
 	return true, nil
+end
+
+--==============================================================================
+-- MY PLANTS (2026-10-04, the owner's menu)
+--
+-- EQUIPPED MEANS PLANTED: standing on the player's own plot, walking and
+-- earning. STORED means a fully hatched creature in the Bag, earning nothing.
+-- There is no second inventory, ownership table or income here: a creature is a
+-- row in profile.Held (with its Tool) or an entry in this file's `growing`
+-- (saved in profile.Plants), and these four verbs only move one between the two
+-- the way placing and picking up always have -- by its own item id, so its
+-- shortcut and its heart go with it.
+--
+--   PLANT        one stored creature, onto a spot of the player's own beds this
+--                server picks (GardenPlan.spots, the small base circle only)
+--   RETURN       one planted creature back to the Bag (pickUp, Bag only)
+--   EQUIP BEST   GardenPlan.best: the highest earners stand, weaker planted
+--                ones come back to the Bag, newcomers get spread-out spots;
+--                kept plants never move; growing pods are never touched and
+--                keep their slots
+--   UNEQUIP ALL  every grown creature back to the Bag, or none
+--
+-- SAFE BY CONSTRUCTION, NOT BY CLEAN-UP:
+--   * every check first -- the garden restored, the Bag's record armed (its
+--     Tools are the record's), every newcomer's Tool found by its id and not
+--     sealed by a running hatch roll, and the plot AND the Bag after the
+--     whole change counted (a raid pod in the arms keeps its place) -- and a
+--     change that does not fit is refused whole, before anything moves;
+--   * then the moves, in the one order that never needs more room than there
+--     is: newcomers INTO the ground first (their Bag rows come off, by id),
+--     then the displaced OUT through pickUp, which hands a creature over
+--     before it leaves the bed -- so a swap with a full Bag works, and a
+--     creature the Bag would not take simply stays where it stood;
+--   * no yield anywhere in a verb: nothing else (a hatch, a pickup, a sale, a
+--     save) can run in the middle of one, and one player's requests are heard
+--     at most once per MyPlants.Cooldown.
+--==============================================================================
+local MY = PLANTING.MyPlants
+local ITEM_ID = GameConfig.Attributes.ItemId
+
+-- The plant Tool that is item `item`, in the Backpack or in the hands.
+local function toolOfItem(player: Player, item: string): Tool?
+	for _, container in ipairs({ player:FindFirstChildOfClass("Backpack"), player.Character }) do
+		if container then
+			for _, child in ipairs((container :: Instance):GetChildren()) do
+				if child:IsA("Tool") and child:GetAttribute(ITEM_ID) == item then
+					return child
+				end
+			end
+		end
+	end
+	return nil
+end
+
+type Stored = { item: string, species: SeedData.Species, tier: number, tool: Tool }
+
+-- Every stored creature that may go into the ground: a Bag row that is hatched,
+-- with its live Tool, the Tool itself a creature whose reveal is over.
+local function storedGrown(player: Player): { Stored }
+	local out: { Stored } = {}
+	local profile = PlayerDataService.Get(player)
+	if not (profile and type(profile.Held) == "table") then
+		return out
+	end
+	for _, row in ipairs(profile.Held) do
+		if type(row) == "table" and row.Hatched == true and type(row.Item) == "string" then
+			local species = SeedData.Get(tostring(row.Id))
+			local tool = toolOfItem(player, row.Item)
+			if species and tool and tool:GetAttribute("Hatched") == true
+				and tool:GetAttribute(HatchRoll.Attribute) == nil then
+				local tier = math.clamp(math.floor(tonumber(tool:GetAttribute(GameConfig.Attributes.CarryingKg))
+					or tonumber(row.Tier) or 1), 1, SeedData.TierCount)
+				table.insert(out, { item = row.Item, species = species, tier = tier, tool = tool })
+			end
+		end
+	end
+	return out
+end
+
+-- The player's own plot, with its saved garden back in it -- or why not.
+local function ownGarden(player: Player): (Model?, string?)
+	local plot = PlotService.PlotOf(player)
+	if not plot or PlotService.OwnerOf(plot) ~= player then
+		return nil, "NO_PLOT"
+	end
+	if restoredFor[plot] ~= player or not soilOf(plot) then
+		return nil, "NOT_READY"
+	end
+	return plot, nil
+end
+
+-- Every bed as a rectangle in the plot's frame (the main bed's object space),
+-- the edge margin off, for GardenPlan.spots.
+local function bedRects(plot: Model): { GardenPlan.Bed }
+	local out: { GardenPlan.Bed } = {}
+	local main = soilOf(plot)
+	if not main then
+		return out
+	end
+	for _, bed in ipairs(bedsOf(plot)) do
+		local rel = main.CFrame:ToObjectSpace(bed.CFrame)
+		local half = bed.Size * 0.5
+		local hx = math.abs(rel.RightVector.X) * half.X + math.abs(rel.UpVector.X) * half.Y
+			+ math.abs(rel.LookVector.X) * half.Z
+		local hz = math.abs(rel.RightVector.Z) * half.X + math.abs(rel.UpVector.Z) * half.Y
+			+ math.abs(rel.LookVector.Z) * half.Z
+		table.insert(out, {
+			cx = rel.Position.X,
+			cz = rel.Position.Z,
+			hx = math.max(0, hx - EDGE_MARGIN),
+			hz = math.max(0, hz - EDGE_MARGIN),
+		})
+	end
+	return out
+end
+
+-- `count` spread-out spots on this plot's beds, plot frame; never fewer (a bed
+-- with no room left in its grid repeats its first spot -- overlap is allowed).
+local function spotsFor(plot: Model, count: number): { Vector3 }
+	local taken: { Vector2 } = {}
+	for _, entry in pairs(growing[plot] or {}) do
+		table.insert(taken, Vector2.new(entry.offset.X, entry.offset.Z))
+	end
+	local found = GardenPlan.spots(bedRects(plot), taken, count, MY.SpotStep)
+	local out: { Vector3 } = {}
+	for i = 1, count do
+		local p = found[i] or found[1] or Vector2.zero
+		table.insert(out, Vector3.new(p.X, 0, p.Y))
+	end
+	return out
+end
+
+-- A creature into the ground at `offset` (plot frame), as PlaceAt plants one --
+-- a new placement id, a golden-angle bearing, rendered, its pickup marker on.
+local function plantCreature(plot: Model, species: SeedData.Species, tier: number, offset: Vector3,
+	item: string): Planted
+	local byPlot = growing[plot]
+	if not byPlot then
+		byPlot = {}
+		growing[plot] = byPlot
+	end
+	local id = (nextId[plot] or 0) + 1
+	nextId[plot] = id
+	local now = os.time()
+	local entry: Planted = {
+		plot = plot,
+		id = id,
+		species = species,
+		tier = tier,
+		offset = offset,
+		plantedAt = now,
+		hatchAt = now,
+		stage = CreatureModel.STAGE_GROWN,
+		facing = facingFor(id),
+		model = nil,
+		prompt = nil,
+		item = item,
+	}
+	byPlot[id] = entry
+	render(entry)
+	return entry
+end
+
+-- One request per player per cooldown; a second press inside it is not heard.
+local lastMyPlants: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: any
+
+local function grownEntries(plot: Model): ({ Planted }, number)
+	local grown: { Planted } = {}
+	local pods = 0
+	for _, entry in pairs(growing[plot] or {}) do
+		if entry.stage == CreatureModel.STAGE_GROWN then
+			table.insert(grown, entry)
+		else
+			pods += 1
+		end
+	end
+	table.sort(grown, function(a, b)
+		return a.id < b.id
+	end)
+	return grown, pods
+end
+
+-- PLANT: one stored creature, by its item id.
+function PlantService.PlantFromBag(player: Player, item: string): (boolean, string)
+	local plot, why = ownGarden(player)
+	if not plot then
+		return false, why :: string
+	end
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY"
+	end
+	if countIn(plot) >= capacityOf(plot) then
+		return false, "PLOT_FULL"
+	end
+	local pick: Stored? = nil
+	for _, s in ipairs(storedGrown(player)) do
+		if s.item == item then
+			pick = s
+			break
+		end
+	end
+	if not pick then
+		return false, "NOT_STORED"
+	end
+	local s = pick :: Stored
+	plantCreature(plot, s.species, s.tier, spotsFor(plot, 1)[1], s.item)
+	persist(plot)
+	-- Its Bag row comes off by its own id (A SNAPSHOT MAY ADD, a transaction takes).
+	s.tool:Destroy()
+	CarryService.SyncHeldNow(player, { s.tool })
+	PlayerDataService.RecordTutorial(player, "plant")
+	log(string.format("%s planted a %d tier %s from MY PLANTS (item %s). %d/%d in the bed.", player.Name,
+		s.tier, s.species.Name, s.item, countIn(plot), capacityOf(plot)))
+	return true, "PLANTED"
+end
+
+-- RETURN TO BAG: one planted creature, by its placement id.
+function PlantService.ReturnToBag(player: Player, placementId: number): (boolean, string)
+	local plot, why = ownGarden(player)
+	if not plot then
+		return false, why :: string
+	end
+	local entry = (growing[plot] or {})[placementId]
+	if not entry then
+		return false, "NOT_PLANTED"
+	end
+	if entry.stage ~= CreatureModel.STAGE_GROWN then
+		return false, "GROWING"
+	end
+	local ok, code = pickUp(player, entry, true)
+	if not ok then
+		return false, code or "NOT_RETURNED"
+	end
+	return true, "RETURNED"
+end
+
+-- EQUIP BEST. Answers ok, a code, how many went in and how many came out.
+function PlantService.EquipBest(player: Player): (boolean, string, number, number)
+	local plot, why = ownGarden(player)
+	if not plot then
+		return false, why :: string, 0, 0
+	end
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY", 0, 0
+	end
+	local byPlot = growing[plot] or {}
+	local grown, pods = grownEntries(plot)
+	local candidates: { GardenPlan.Candidate } = {}
+	for _, entry in ipairs(grown) do
+		table.insert(candidates, {
+			key = "p:" .. entry.id,
+			income = SeedData.IncomePerSecond(entry.species, entry.tier),
+			planted = true,
+			item = entry.item,
+			placementId = entry.id,
+		})
+	end
+	local stored: { [string]: Stored } = {}
+	for _, s in ipairs(storedGrown(player)) do
+		stored[s.item] = s
+		table.insert(candidates, {
+			key = "i:" .. s.item,
+			income = SeedData.IncomePerSecond(s.species, s.tier),
+			planted = false,
+			item = s.item,
+			placementId = nil,
+		})
+	end
+	local plan = GardenPlan.best(candidates, capacityOf(plot), pods)
+	if not GardenPlan.changes(plan) then
+		return true, "UNCHANGED", 0, 0
+	end
+	-- The Bag after the whole change, before anything moves.
+	local profile = PlayerDataService.Get(player)
+	local heldRows = if profile and type(profile.Held) == "table" then #profile.Held else 0
+	if not GardenPlan.fits(heldRows, CarryService.IsCarrying(player), #plan.plant, #plan.ret,
+		GameConfig.Save.MaxHeld) then
+		return false, "STORAGE_FULL", 0, 0
+	end
+
+	-- 1. Newcomers into the ground, at spread-out spots; their rows off the Bag.
+	local spots = spotsFor(plot, #plan.plant)
+	local consumed: { Instance } = {}
+	local planted = 0
+	for i, c in ipairs(plan.plant) do
+		local s = stored[c.item :: string]
+		if s and s.tool.Parent then
+			local ok = pcall(plantCreature, plot, s.species, s.tier, spots[i], s.item)
+			if ok then
+				planted += 1
+				s.tool:Destroy()
+				table.insert(consumed, s.tool)
+			else
+				-- Never half in: a newcomer that would not build stays in the Bag.
+				for id, entry in pairs(byPlot) do
+					if entry.item == s.item and entry.model == nil then
+						byPlot[id] = nil
+					end
+				end
+			end
+		end
+	end
+	persist(plot)
+	if #consumed > 0 then
+		CarryService.SyncHeldNow(player, consumed)
+	end
+
+	-- 2. The displaced out, weakest first, only as many as the newcomers that
+	-- actually went in need room for. pickUp hands each over before it leaves.
+	local need = math.max(0, #plan.ret - (#plan.plant - planted))
+	local returned = 0
+	for i = #plan.ret, 1, -1 do
+		if returned >= need then
+			break
+		end
+		local entry = byPlot[plan.ret[i].placementId :: number]
+		if entry then
+			local ok, picked = pcall(pickUp, player, entry, true)
+			if ok and picked then
+				returned += 1
+			end
+		end
+	end
+	persist(plot)
+	local complete = planted == #plan.plant and returned == #plan.ret
+	log(string.format("%s: EQUIP BEST put %d in and %d back in the Bag%s. %d/%d in the bed.", player.Name,
+		planted, returned, if complete then "" else " (INCOMPLETE: nothing was lost; some stayed where they were)",
+		countIn(plot), capacityOf(plot)))
+	return complete, if complete then "EQUIPPED" else "INCOMPLETE", planted, returned
+end
+
+-- UNEQUIP ALL: every grown creature back to the Bag, or none.
+function PlantService.UnequipAll(player: Player): (boolean, string, number)
+	local plot, why = ownGarden(player)
+	if not plot then
+		return false, why :: string, 0
+	end
+	if not CarryService.IsHeldRestored(player) then
+		return false, "NOT_READY", 0
+	end
+	local grown = grownEntries(plot)
+	if #grown == 0 then
+		return true, "NOTHING", 0
+	end
+	local profile = PlayerDataService.Get(player)
+	local heldRows = if profile and type(profile.Held) == "table" then #profile.Held else 0
+	if not GardenPlan.fits(heldRows, CarryService.IsCarrying(player), 0, #grown, GameConfig.Save.MaxHeld) then
+		return false, "STORAGE_FULL_ALL", 0
+	end
+	local returned = 0
+	for _, entry in ipairs(grown) do
+		local ok, picked = pcall(pickUp, player, entry, true)
+		if ok and picked then
+			returned += 1
+		end
+	end
+	persist(plot)
+	local complete = returned == #grown
+	return complete, if complete then "UNEQUIPPED" else "INCOMPLETE", returned
+end
+
+-- The verbs off the wire: every argument a claim, one request per cooldown.
+local function onMyPlants(player: Player, action: string, payload: any)
+	local now = os.clock()
+	if now - (lastMyPlants[player] or -math.huge) < MY.Cooldown then
+		return
+	end
+	lastMyPlants[player] = now
+	local reply: { [string]: any } = { op = action }
+	if action == MY.Plant then
+		if type(payload) ~= "string" or #payload == 0 or #payload > 24 then
+			return
+		end
+		reply.ok, reply.code = PlantService.PlantFromBag(player, payload)
+		reply.planted = if reply.ok then 1 else 0
+	elseif action == MY.Return then
+		if type(payload) ~= "number" or payload ~= payload or payload < 1 or payload > 1e9
+			or math.floor(payload) ~= payload then
+			return
+		end
+		reply.ok, reply.code = PlantService.ReturnToBag(player, payload)
+		reply.returned = if reply.ok then 1 else 0
+	elseif action == MY.Best then
+		reply.ok, reply.code, reply.planted, reply.returned = PlantService.EquipBest(player)
+	elseif action == MY.Clear then
+		reply.ok, reply.code, reply.returned = PlantService.UnequipAll(player)
+	else
+		return
+	end
+	local channel = revealChannel
+	if channel and player.Parent == Players then
+		channel:FireClient(player, MY.Reply, reply)
+	end
 end
 
 --==============================================================================
@@ -2201,6 +2616,8 @@ local function restore(player: Player, plot: Model)
 					facing = facing or facingFor(id),
 					model = nil,
 					prompt = nil,
+					item = if stage == CreatureModel.STAGE_GROWN and row and type(row.Item) == "string"
+						then row.Item else nil,
 				}
 				byPlot[id] = entry
 				render(entry)
@@ -2789,6 +3206,9 @@ function PlantService.Start()
 							ActionRefusal.send(player, reason)
 						end
 					end
+				elseif action == MY_PLANTS.Plant or action == MY_PLANTS.Return or action == MY_PLANTS.Best
+					or action == MY_PLANTS.Clear then
+					onMyPlants(player, action, payload)
 				elseif action == PICKUP_ACTION then
 					--==========================================================
 					-- AN ID IS A CLAIM TOO

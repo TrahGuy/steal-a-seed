@@ -363,7 +363,10 @@ function SellService.QuoteOne(player: Player, board: BasePart, now: number?): { 
 	local quote, reason = EconomyService.QuoteOne(player, tool)
 	if not quote then
 		log(string.format("%s pressed sell-one with nothing to sell (%s)", player.Name, reason))
-		return { phase = "refused", text = SELL_ONE.EmptyHandsText, reason = reason }
+		-- An invite reward in the hands is said as such (2026-10-06): it IS a grown
+		-- plant, so "hold a grown plant" would be the wrong advice.
+		local text = if reason == "UNSELLABLE" then SELL_ONE.UnsellableText else SELL_ONE.EmptyHandsText
+		return { phase = "refused", text = text, reason = reason }
 	end
 	nextToken += 1
 	pending[player] = {
@@ -481,6 +484,17 @@ function SellService.QuoteAll(player: Player, board: BasePart, now: number?): { 
 	pendingAll[player] = nil
 	local quote = EconomyService.QuoteHeld(player)
 	if #quote.tools == 0 then
+		-- Only favourites left (2026-10-03): said as such, so a full bag that
+		-- will not sell is not a mystery.
+		if quote.kept > 0 then
+			log(string.format("%s pressed sell-all with only %d favourite(s) left", player.Name, quote.kept))
+			return { phase = "refused", text = SELL_ALL.FavouritesText, reason = "FAVOURITES", kept = quote.kept }
+		end
+		-- Only invite rewards left (2026-10-06): no stall buys one.
+		if quote.locked > 0 then
+			log(string.format("%s pressed sell-all with only %d invite reward(s) left", player.Name, quote.locked))
+			return { phase = "refused", text = SELL_ALL.InviteOnlyText, reason = "UNSELLABLE" }
+		end
 		log(string.format("%s pressed sell-all with nothing to sell", player.Name))
 		return { phase = "refused", text = SELL_ALL.EmptyText, reason = "EMPTY" }
 	end
@@ -505,6 +519,7 @@ function SellService.QuoteAll(player: Player, board: BasePart, now: number?): { 
 		plants = quote.plants,
 		pods = quote.pods,
 		total = quote.total,
+		kept = quote.kept,
 	}
 end
 

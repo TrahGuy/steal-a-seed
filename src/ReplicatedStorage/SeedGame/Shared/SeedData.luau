@@ -196,6 +196,8 @@ export type Species = {
 	-- and PlantSway leaves the limbs, eyes and lids alone.
 	Animator: string?,
 	-- "overhead": carried over the head in both hands, pod and plant alike.
+	-- (A hatched plant built from the owner's supplied rigs is carried overhead
+	-- too, without this flag: PlantForms.CarriedOverhead, 2026-10-03.)
 	Carry: string?,
 	-- Which rung of the walk ladder (SeedData.WanderLadder) a planted one walks
 	-- on when it is not its own tier's (SeedData.WanderTierOf). The Secrets carry
@@ -204,7 +206,10 @@ export type Species = {
 	-- -- like every other creature their size (2026-10-02). Implementation only:
 	-- never shown, never a size. Absent on every listed species.
 	WanderTier: number?,
-	-- The SecretForms pod replayed for this species' pod, by form id.
+	-- The SecretForms pod replayed for this species' pod, by form id. A Rain
+	-- species' Pod is also its pod in RainPods (the same name, for the first
+	-- family's three); the second family's is RainPods' rainpod4, and its shell
+	-- is the size's own, PodForms below (PodFormOf answers both).
 	Pod: string?,
 	-- True for a species that is in no biome pool, no Index shelf, no hatch-roll
 	-- silhouette and no Biome Harvest. Reachable by id only.
@@ -235,6 +240,31 @@ export type Species = {
 	-- Hatches straight into the reveal with no silhouette roll (PlantService
 	-- hatch); every other species rolls as before.
 	SkipHatchRoll: boolean?,
+	--==========================================================================
+	-- THE RAIN EVENT'S SECOND FAMILY (2026-10-05) -- absent on every other
+	-- species. Squallsnapper, Monsoad, Thundershell and Torrentacle: one species
+	-- each at all seven sizes. See SeedData.RainSpecies below.
+	--==========================================================================
+	-- The owner's unboosted $/s at each size, Tiny .. Colossal: IncomePerSecond
+	-- answers exactly TierIncome[tier] -- no tier, rarity or biome factor on top;
+	-- the pass, the chest, the sacrifice and the weather apply once, later, in
+	-- EconomyService. Never alongside FixedIncome or IncomeBonus.
+	TierIncome: { number }?,
+	-- Its pod's growth time in seconds at each size, Tiny .. Colossal
+	-- (GrowSecondsFor). Never alongside FixedGrowSeconds.
+	TierGrowSeconds: { number }?,
+	-- The replayed pod shell at each size, Tiny .. Colossal: the owner's seven
+	-- supplied pods (RainForms.Pods), each ALREADY at its size and never scaled
+	-- again (PodFormOf). Absent: the one `Pod` form, whatever the size.
+	PodForms: { string }?,
+	--==========================================================================
+	-- THE INVITE A FRIEND REWARDS' FLAGS (2026-10-06) -- absent on every other
+	-- species. See SeedData.InviteSpecies below.
+	--==========================================================================
+	-- An invite reward: given by InviteService and by nothing else; unlisted.
+	Invite: boolean?,
+	-- No stall buys it and no screen prices it (SeedData.Sellable).
+	Unsellable: boolean?,
 }
 
 local LEAF = Color3.fromRGB(86, 150, 66)
@@ -1081,6 +1111,14 @@ function SeedData.sacrificeMultiplier(endsAt: any, now: number): number
 	return SeedData.Sacrifice.Multiplier
 end
 
+-- Whether a stall may buy it (2026-10-06): every plant and pod but an invite
+-- reward, which was earned by inviting friends and cannot be earned again. SELL
+-- ONE refuses one, SELL ALL leaves it in the bag, and no screen prices it --
+-- every one of them asks this, never the flag.
+function SeedData.Sellable(species: Species?): boolean
+	return type(species) == "table" and (species :: any).Unsellable ~= true
+end
+
 function SeedData.SellPrice(species: Species?, tier: number?): number
 	-- Exactly SellSeconds of what the same plant pays standing up, and it takes
 	-- the same species so the two can never drift apart. Income is already a
@@ -1301,6 +1339,74 @@ SeedData.RainSpecies = {
 } :: { Species }
 
 --==============================================================================
+-- THE RAIN EVENT'S SECOND FAMILY -- 2026-10-05 (the owner's "Rain Event 2")
+--
+-- Four creatures the owner supplied in the Podnappers Workspace folder "Rain
+-- Event 2", each ONE species at all seven sizes, built whole from its supplied
+-- rig (PlantForms.Supplied: the supplied model is its Tiny, and every size is
+-- that times the tier ladder, 1 .. 7.6). They come out of the same Rain nest as
+-- the first family, and are in no biome pool, shelf or reward either.
+--
+--   supplied model                    species        rarity     $/s Tiny / Big / Huge / Mega / Giant / Titan / Colossal
+--   SquallsnapLow (epic) (Tiny)    -> squallsnapper  Epic       20,000 / 23,000 / 26,000 / 30,000 / 36,000 / 43,000 / 50,000
+--   Monsoad (Legendary) (tiny)     -> monsoad        Legendary  30,000 / 34,500 / 39,000 / 45,000 / 54,000 / 64,500 / 75,000
+--   Thundershell (tiny)(Legendary) -> thundershell   Legendary  35,000 / 40,250 / 45,500 / 52,500 / 63,000 / 75,250 / 87,500
+--   Torrentacle (tiny)(Mythic)     -> torrentacle    Mythic     60,000 / 69,000 / 78,000 / 90,000 / 108,000 / 129,000 / 150,000
+--
+-- (The Epic model is "SquallsnapLow" in Studio; the owner's brief and rates
+-- name it Squallsnapper.)
+--
+-- THE RATES ARE THE OWNER'S, SIZE BY SIZE (TierIncome): an event earning
+-- ladder of 1 / 1.15 / 1.3 / 1.5 / 1.8 / 2.15 / 2.5 off each Tiny. Not the size
+-- multipliers, not tier.value, and no rarity or biome factor. The pass, the
+-- chest, the sacrifice and the weather apply once, in EconomyService, and the
+-- sale price is SellSeconds of the rate (SellPrice), as for every plant.
+--
+-- THEIR PODS are the owner's seven supplied shells, one per size and each
+-- already at that size (PodForms; RainForms.Pods). A shell shows its size and
+-- nothing of the creature or its rarity.
+--
+-- GROWTH, the owner's choice (2026-10-05): 3 h Tiny .. Titan, 6 h Colossal --
+-- the first family's times.
+--==============================================================================
+local RAIN2_GROW = { 10800, 10800, 10800, 10800, 10800, 10800, 21600 }
+local RAIN2_PODS = {
+	"rain2pod_tiny", "rain2pod_big", "rain2pod_huge", "rain2pod_mega",
+	"rain2pod_giant", "rain2pod_titan", "rain2pod_colossal",
+}
+local function rain2Species(id: string, name: string, rarity: string, height: number, income: { number },
+	body: Color3, crown: Color3, accent: Color3): Species
+	return {
+		Id = id, Name = name, Rarity = rarity, Biome = "rain",
+		Height = height, Form = "secret",
+		Body = body, Crown = crown, Accent = accent,
+		Leaf = Color3.fromRGB(46, 104, 72), Stem = Color3.fromRGB(70, 134, 122), Soil = RAIN_SOIL,
+		Animator = "secret", Carry = "overhead", Pod = "rainpod4",
+		Event = "rain", SkipHatchRoll = true,
+		TierIncome = income, TierGrowSeconds = RAIN2_GROW, PodForms = RAIN2_PODS,
+	} :: any
+end
+
+-- Heights: each supplied model's DRAWN height in studs (its Tiny; PlantForms
+-- Size.Y). The colours are its own body, crown and accent parts'.
+for _, species in ipairs({
+	rain2Species("squallsnapper", "Squallsnapper", "Epic", 4.94,
+		{ 20000, 23000, 26000, 30000, 36000, 43000, 50000 },
+		Color3.fromRGB(70, 118, 172), Color3.fromRGB(172, 186, 212), Color3.fromRGB(255, 226, 80)),
+	rain2Species("monsoad", "Monsoad", "Legendary", 4.99,
+		{ 30000, 34500, 39000, 45000, 54000, 64500, 75000 },
+		Color3.fromRGB(92, 66, 150), Color3.fromRGB(116, 194, 72), Color3.fromRGB(255, 146, 66)),
+	rain2Species("thundershell", "Thundershell", "Legendary", 4.97,
+		{ 35000, 40250, 45500, 52500, 63000, 75250, 87500 },
+		Color3.fromRGB(66, 134, 80), Color3.fromRGB(66, 56, 128), Color3.fromRGB(255, 232, 110)),
+	rain2Species("torrentacle", "Torrentacle", "Mythic", 4.47,
+		{ 60000, 69000, 78000, 90000, 108000, 129000, 150000 },
+		Color3.fromRGB(78, 90, 118), Color3.fromRGB(150, 164, 190), Color3.fromRGB(255, 108, 98)),
+}) do
+	table.insert(SeedData.RainSpecies, species)
+end
+
+--==============================================================================
 -- THE THREE RAIN PODS: what each holds, and how a nest is stocked with them
 --
 -- A pod's creature is drawn ON THE SERVER, once, when the pod is laid in the
@@ -1311,16 +1417,45 @@ SeedData.RainSpecies = {
 --
 -- `Tier` is what its items carry: 7 for Pod 2, which SHOWS Colossal; 1 for the
 -- unsized two (never shown). `Sized` says whether the size word shows.
+--
+-- AND THE SECOND FAMILY'S TWO (2026-10-05). Its four creatures come in two
+-- pods: rainpod4 draws its size, Tiny .. Titan, on the global ladder's own
+-- relative weights (Tiers); rainpod5 is the same family at Colossal (Family).
+-- They are two slots in the batch so that whether a slot is Colossal is the
+-- BATCH's call alone, made once -- never a second Colossal roll inside a pod.
+-- Their creatures differ in rarity, so neither shell names one (no Rarity: it
+-- reads ??? until the hatch, like an ordinary pod), and they come up 40 / 25 /
+-- 25 / 10 (Weights), the owner's odds.
 --==============================================================================
 export type RainPod = {
 	Id: string,
 	Name: string,
-	Rarity: string,
-	Tier: number,
+	-- Every creature's rarity, shown on the shell; absent for a pod whose
+	-- creatures differ in rarity, where it would name what is inside.
+	Rarity: string?,
+	-- The one tier its items carry; absent for a pod that draws its size.
+	Tier: number?,
+	-- A pod that draws its size: relative weights, Tiny first. Never Colossal.
+	Tiers: { number }?,
 	Sized: boolean,
 	GrowSeconds: number,
 	Species: { string },
+	-- Relative odds of its creatures, in Species order; absent: each equally.
+	Weights: { number }?,
+	-- The pod whose creatures this one holds at Colossal (rainpod5 -> rainpod4).
+	Family: string?,
 }
+
+-- The second family's sizes below Colossal, weighted exactly as the global
+-- ladder weighs them (the owner's choice: those weights, normalised over Tiny ..
+-- Titan -- Tiny 53.5%, Big 16.0%, Huge 10.1%, Mega 7.9%, Giant 6.0%, Titan 6.5%).
+local RAIN2_TIERS: { number } = {}
+for i = 1, SeedData.TierCount - 1 do
+	RAIN2_TIERS[i] = SeedData.Tiers[i].weight
+end
+local RAIN2_ROSTER = { "squallsnapper", "monsoad", "thundershell", "torrentacle" }
+-- Epic, Legendary, Legendary, Mythic: the owner's 40 / 25 / 25 / 10.
+local RAIN2_ODDS = { 40, 25, 25, 10 }
 
 SeedData.RainPods = {
 	rainpod1 = { Id = "rainpod1", Name = "Rain pod", Rarity = "Mythic", Tier = 1, Sized = false,
@@ -1329,18 +1464,127 @@ SeedData.RainPods = {
 		GrowSeconds = 21600, Species = { "puddlepod_colossal", "drizzlet_colossal", "lotusling_colossal" } },
 	rainpod3 = { Id = "rainpod3", Name = "Thunderstorm pod", Rarity = "Divine", Tier = 1, Sized = false,
 		GrowSeconds = 32400, Species = { "tempestoak", "thundermaw" } },
+	rainpod4 = { Id = "rainpod4", Name = "Rain pod", Tiers = RAIN2_TIERS, Sized = true,
+		GrowSeconds = 10800, Species = RAIN2_ROSTER, Weights = RAIN2_ODDS },
+	rainpod5 = { Id = "rainpod5", Name = "Rain pod", Tier = SeedData.TierCount, Sized = true, Family = "rainpod4",
+		GrowSeconds = 21600, Species = RAIN2_ROSTER, Weights = RAIN2_ODDS },
 } :: { [string]: RainPod }
 
 --==============================================================================
 -- ONE BATCH PER EVENT (the owner's rule): an ordinary Rain lays exactly three
--- pods, each slot on its own a coin flip between Pod 1 and Pod 2 (three of a
--- kind is a valid batch); a Thunderstorm lays exactly one Pod 3. Nothing ever
--- restocks it -- not a theft, a banking, a catch or a pickup.
+-- pods, each slot drawn on its own; a Thunderstorm lays exactly one Pod 3.
+-- Nothing ever restocks it -- not a theft, a banking, a catch, a pickup, a
+-- rebuilt guardian or a second START. Rolled once, on the server, when the
+-- event's nest is laid (NestService.OpenEventNest), for the console's weather
+-- and the automatic weather alike.
+--
+-- THE WEIGHTS (2026-10-05, the owner's odds): each Rain slot is ordinary 90
+-- times in 100 and Colossal 10 -- slot by slot, so a Rain has at least one
+-- Colossal about 27.1% of the time (it was a coin flip, 87.5%), 0.3 Colossals
+-- a batch on average, all three 0.1%. No cap and no guarantee.
+--
+-- THE SECOND FAMILY SPLITS BOTH HALVES EVENLY (the owner's choice, the same
+-- day): the old Pod 1 45 and the new family's Tiny .. Titan pod 45; the old
+-- Colossal Pod 2 5 and the new family's Colossal 5. The two Colossal pods
+-- still add up to 10 in 100, so the Colossal chance did not move; 87.5% of
+-- Rains lay at least one of the new family.
+--
+-- Relative weights, any positive total; a weight of 0 never draws. Checked
+-- when this loads (validRainWeights).
 --==============================================================================
+export type RainBatch = { Slots: number, Weights: { [string]: number } }
+
 SeedData.RainBatches = {
-	rain = { Slots = 3, Choices = { "rainpod1", "rainpod2" } },
-	thunder = { Slots = 1, Choices = { "rainpod3" } },
-} :: { [string]: { Slots: number, Choices: { string } } }
+	rain = { Slots = 3, Weights = { rainpod1 = 45, rainpod2 = 5, rainpod4 = 45, rainpod5 = 5 } },
+	thunder = { Slots = 1, Weights = { rainpod3 = 1 } },
+} :: { [string]: RainBatch }
+
+--==============================================================================
+-- THE INVITE A FRIEND REWARDS -- 2026-10-06
+--
+-- Four forms the owner supplied in the Podnappers Workspace, replayed from
+-- InviteForms part for part at the size they were supplied (SecretModel). A
+-- player is GIVEN one -- grown, ready to place -- when their count of friends
+-- who joined through their invites reaches its threshold (InviteService;
+-- GameConfig.InviteRewards holds the thresholds, 1 / 5 / 10 / 20). Like the
+-- Secrets they are in SeedData.Species' place nowhere -- no biome pool, Index
+-- shelf, hatch-roll silhouette, wheel pool, reward pool, Rain nest or Biome
+-- Harvest -- and reachable by id, which is all planting, carrying, the Tool
+-- and the save need.
+--
+-- THE OWNER'S NUMBERS (2026-10-06), fixed, final and UNBOOSTED:
+--
+--     invites  species      rarity      $/s
+--     1        Dustthorn    Epic          5,000
+--     5        Thornbrute   Legendary    25,000
+--     10       Pharaothorn  Mythic       75,000
+--     20       Heliothorn   Secret      175,000
+--
+-- Income is FixedIncome, the whole answer (IncomePerSecond): no tier, rarity
+-- or biome factor ever multiplies it; the pass, the chest, the sacrifice and
+-- the weather apply once, in EconomyService, as they do for every plant.
+--
+-- UNSELLABLE (the owner's rule): earned by inviting friends and never earned
+-- again, so no stall buys one -- SELL ONE refuses it, SELL ALL leaves it in
+-- the bag, and no screen prices it (SeedData.Sellable).
+--
+-- ONE SIZE, NO SIZE WORD (Unsized): its tier is implementation only, like a
+-- Secret's (SeedData.InviteTier). WALKS on the rung its height matches (a
+-- typical Tiny is 3.7-8.9 studs tall, x1.38 .. x7.6 up the ladder): Dustthorn
+-- 4.06 Tiny, Thornbrute 9.26 Huge, Pharaothorn 15.20 Mega, Heliothorn 26.57
+-- Titan. Carried overhead like the Secrets. Biome: Dustbowl, whose sand and
+-- sun their art wears; it decides nothing else here.
+--==============================================================================
+SeedData.InviteSpecies = {
+	{
+		Id = "dustthorn", Name = "Dustthorn", Rarity = "Epic", Biome = "dustbowl",
+		Height = 4.06, Form = "secret",
+		Body = Color3.fromRGB(122, 150, 88),
+		Crown = Color3.fromRGB(222, 140, 80),
+		Accent = Color3.fromRGB(222, 196, 140),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = 1,
+		Invite = true, Unsellable = true, Unsized = true,
+		FixedIncome = 5000,
+	},
+	{
+		Id = "thornbrute", Name = "Thornbrute", Rarity = "Legendary", Biome = "dustbowl",
+		Height = 9.26, Form = "secret",
+		Body = Color3.fromRGB(118, 148, 86),
+		Crown = Color3.fromRGB(212, 140, 150),
+		Accent = Color3.fromRGB(226, 200, 144),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = 3,
+		Invite = true, Unsellable = true, Unsized = true,
+		FixedIncome = 25000,
+	},
+	{
+		Id = "pharaothorn", Name = "Pharaothorn", Rarity = "Mythic", Biome = "dustbowl",
+		Height = 15.2, Form = "secret",
+		Body = Color3.fromRGB(110, 150, 92),
+		Crown = Color3.fromRGB(44, 92, 176),
+		Accent = Color3.fromRGB(226, 200, 148),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = 4,
+		Invite = true, Unsellable = true, Unsized = true,
+		FixedIncome = 75000,
+	},
+	{
+		Id = "heliothorn", Name = "Heliothorn", Rarity = "Secret", Biome = "dustbowl",
+		Height = 26.57, Form = "secret",
+		Body = Color3.fromRGB(122, 150, 84),
+		Crown = Color3.fromRGB(255, 214, 92),
+		Accent = Color3.fromRGB(196, 48, 40),
+		Leaf = DUST_LEAF, Stem = DUST_STEM, Soil = SOIL,
+		Animator = "secret", Carry = "overhead", WanderTier = 6,
+		Invite = true, Unsellable = true, Unsized = true,
+		FixedIncome = 175000,
+	},
+} :: { Species }
+
+-- IMPLEMENTATION ONLY, like SecretTier: the one tier every invite reward
+-- carries on its Tool, saved row and planted entry. No screen shows it.
+SeedData.InviteTier = 1
 
 local byId: { [string]: Species } = {}
 local byBiome: { [string]: { Species } } = {}
@@ -1387,6 +1631,51 @@ local function register(species: Species, listed: boolean)
 			string.format("species %q has a FixedGrowSeconds of %s: it must be a whole, positive number of seconds",
 				species.Id, tostring(grow)))
 	end
+	-- The second family's per-size numbers (2026-10-05): one whole, finite,
+	-- positive rate and growth time for EVERY size, and a pod shell named for
+	-- every size, no two alike -- a short list or a repeated shell would build
+	-- some size at another size's pod. Never alongside the one-number flags
+	-- they replace, so no species can answer two ways.
+	local function wholeLadder(list: any): boolean
+		if type(list) ~= "table" or #list ~= SeedData.TierCount then
+			return false
+		end
+		for i = 1, SeedData.TierCount do
+			local x = list[i]
+			if not (type(x) == "number" and x == x and x ~= math.huge and x > 0 and math.floor(x) == x) then
+				return false
+			end
+		end
+		return true
+	end
+	local tierIncome = (species :: any).TierIncome
+	if tierIncome ~= nil then
+		assert(wholeLadder(tierIncome) and fixedIncome == nil and (species :: any).IncomeBonus == nil,
+			string.format("species %q has a bad TierIncome: one whole, finite, positive $/s per size (%d), and never "
+				.. "with FixedIncome or IncomeBonus", species.Id, SeedData.TierCount))
+	end
+	local tierGrow = (species :: any).TierGrowSeconds
+	if tierGrow ~= nil then
+		assert(wholeLadder(tierGrow) and grow == nil,
+			string.format("species %q has a bad TierGrowSeconds: one whole, positive time per size (%d), and never "
+				.. "with FixedGrowSeconds", species.Id, SeedData.TierCount))
+	end
+	local podForms = (species :: any).PodForms
+	if podForms ~= nil then
+		local seen = {}
+		local good = type(podForms) == "table" and #podForms == SeedData.TierCount
+		if good then
+			for i = 1, SeedData.TierCount do
+				local form = podForms[i]
+				good = good and type(form) == "string" and form ~= "" and not seen[form]
+				if type(form) == "string" then
+					seen[form] = true
+				end
+			end
+		end
+		assert(good, string.format("species %q has bad PodForms: one distinct shell per size (%d)", species.Id,
+			SeedData.TierCount))
+	end
 	local carryFactor = (species :: any).CarrySpeedFactor
 	if carryFactor ~= nil then
 		assert(type(carryFactor) == "number" and carryFactor > 0 and carryFactor <= 1,
@@ -1432,27 +1721,126 @@ for biomeId, speciesId in pairs(SeedData.SecretByBiome) do
 	assert(species and species.Secret and species.Biome == biomeId,
 		string.format("SecretByBiome.%s names %q, which is not that biome's secret", biomeId, speciesId))
 end
--- The Rain event's eight: unlisted, like the Secrets, and every one in exactly
--- one pod's roster at that pod's tier, rarity and growth time.
+-- The Rain event's twelve: unlisted, like the Secrets, and every one in its
+-- pod's roster at that pod's tier (or tiers), rarity and growth time. The
+-- first family's eight each sit in exactly one pod; the second family's four
+-- sit in rainpod4 and in rainpod5, its Colossal pod.
 for _, species in ipairs(SeedData.RainSpecies) do
 	assert(species.Event == "rain" and species.Secret ~= true, "a rain species is an event species: " .. species.Id)
 	register(species, false)
 end
+-- The Invite a Friend rewards' four (2026-10-06): unlisted, like the Secrets;
+-- each an invite reward that no stall buys, one size, a fixed rate, and built
+-- from its own supplied form -- never a Secret's flags or an event's.
+for _, species in ipairs(SeedData.InviteSpecies) do
+	local s = species :: any
+	assert(s.Invite == true and s.Unsellable == true and s.Unsized == true and s.Secret ~= true and s.Event == nil
+			and type(s.FixedIncome) == "number" and s.Carry == "overhead",
+		"an invite reward is unlisted, unsellable, unsized, fixed-rate and carried overhead: " .. species.Id)
+	register(species, false)
+end
+-- Relative weights: finite, none below 0, some above; exactly `n` when given.
+local function goodWeights(list: any, n: number?): boolean
+	if type(list) ~= "table" or #list == 0 or (n ~= nil and #list ~= n) then
+		return false
+	end
+	local total = 0
+	for _, w in ipairs(list) do
+		if type(w) ~= "number" or w ~= w or w < 0 or w == math.huge then
+			return false
+		end
+		total += w
+	end
+	return total > 0
+end
+local inRoster: { [string]: boolean } = {}
 for podId, pod in pairs(SeedData.RainPods) do
 	assert(pod.Id == podId and #pod.Species >= 1, "RainPods." .. podId .. " is malformed")
-	assert(pod.Sized == (pod.Tier == SeedData.TierCount), "RainPods." .. podId .. ": only a Colossal pod is sized")
+	-- One size, or sizes to draw from -- never both, never neither.
+	assert((pod.Tier ~= nil) ~= (pod.Tiers ~= nil), "RainPods." .. podId .. ": one Tier, or Tiers to draw, not both")
+	local lays: { number } = {}
+	if pod.Tier ~= nil then
+		assert(pod.Sized == (pod.Tier == SeedData.TierCount), "RainPods." .. podId .. ": only a Colossal pod is sized")
+		lays = { pod.Tier :: number }
+	else
+		-- A pod that draws its size shows it, and never draws Colossal: whether a
+		-- slot is Colossal is the batch's call alone, made once.
+		local tiers = pod.Tiers :: { number }
+		assert(pod.Sized == true and goodWeights(tiers) and #tiers < SeedData.TierCount,
+			"RainPods." .. podId .. ": a pod that draws its size shows it, and draws only below Colossal")
+		for t, w in ipairs(tiers) do
+			if w > 0 then
+				table.insert(lays, t)
+			end
+		end
+	end
+	if pod.Weights ~= nil then
+		assert(goodWeights(pod.Weights, #pod.Species), "RainPods." .. podId .. ": one odds weight per creature")
+	end
+	-- A family's Colossal pod: its family's creatures, odds, name and rarity, at Colossal.
+	local home = pod.Family or podId
+	if pod.Family ~= nil then
+		local base = SeedData.RainPods[pod.Family]
+		assert(base ~= nil and base.Family == nil and base.Name == pod.Name and base.Rarity == pod.Rarity
+				and pod.Tier == SeedData.TierCount
+				and table.concat(base.Species, ",") == table.concat(pod.Species, ",")
+				and table.concat(base.Weights or {}, ",") == table.concat(pod.Weights or {}, ","),
+			"RainPods." .. podId .. ": a family's Colossal pod holds that family's creatures, at Colossal")
+	end
+	local rarities, kinds = {}, 0
 	for _, speciesId in ipairs(pod.Species) do
 		local species = byId[speciesId] :: any
-		assert(species and species.Event == "rain" and species.Pod == podId and species.Rarity == pod.Rarity
-				and (species.Unsized == true) == not pod.Sized and species.FixedGrowSeconds == pod.GrowSeconds,
+		-- Its growth at every size this pod lays is the pod's.
+		local growOk = species ~= nil
+		if species then
+			for _, t in ipairs(lays) do
+				local grows = if species.TierGrowSeconds then species.TierGrowSeconds[t] else species.FixedGrowSeconds
+				growOk = growOk and grows == pod.GrowSeconds
+			end
+		end
+		assert(species and species.Event == "rain" and species.Pod == home
+				and (pod.Rarity == nil or species.Rarity == pod.Rarity)
+				and (species.Unsized == true) == not pod.Sized and growOk,
 			string.format("RainPods.%s lists %q, which is not one of its creatures", podId, speciesId))
+		inRoster[speciesId] = true
+		if not rarities[species.Rarity] then
+			rarities[species.Rarity] = true
+			kinds += 1
+		end
 	end
+	-- No rarity on the shell only where there is no single one to show.
+	assert(pod.Rarity ~= nil or kinds > 1, "RainPods." .. podId .. ": a pod whose creatures share one rarity shows it")
 end
-for mode, batch in pairs(SeedData.RainBatches) do
-	assert(batch.Slots >= 1 and #batch.Choices >= 1, "RainBatches." .. mode .. " is empty")
-	for _, podId in ipairs(batch.Choices) do
-		assert(SeedData.RainPods[podId], string.format("RainBatches.%s names an unknown pod %q", mode, podId))
+for _, species in ipairs(SeedData.RainSpecies) do
+	assert(inRoster[species.Id], "the rain species " .. species.Id .. " is in no pod's roster")
+end
+-- A batch's pod weights: each names a Rain pod with a finite weight of 0 or
+-- more, and at least one is above 0. Answers why not, for the assert and the spec.
+function SeedData.ValidRainWeights(weights: any): (boolean, string?)
+	if type(weights) ~= "table" then
+		return false, "no weights"
 	end
+	local total = 0
+	for podId, weight in pairs(weights) do
+		if type(podId) ~= "string" or not SeedData.RainPods[podId] then
+			return false, string.format("an unknown pod %q", tostring(podId))
+		end
+		if type(weight) ~= "number" or weight ~= weight or weight < 0 or weight == math.huge then
+			return false, string.format("%s has a bad weight %s", podId, tostring(weight))
+		end
+		total += weight
+	end
+	if total <= 0 then
+		return false, "no pod has any weight"
+	end
+	return true, nil
+end
+
+for mode, batch in pairs(SeedData.RainBatches) do
+	assert(type(batch.Slots) == "number" and batch.Slots >= 1 and batch.Slots == math.floor(batch.Slots),
+		"RainBatches." .. mode .. " has no slots")
+	local ok, why = SeedData.ValidRainWeights(batch.Weights)
+	assert(ok, string.format("RainBatches.%s: %s", mode, tostring(why)))
 end
 
 SeedData.ById = byId
@@ -1473,23 +1861,92 @@ function SeedData.RainPodOf(species: Species?): RainPod?
 	return if type(podId) == "string" then SeedData.RainPods[podId] else nil
 end
 
--- The creature a newly laid pod holds: one of its roster, each equally likely.
+-- The index a draw `r` in [0, 1) lands on in a list of relative weights, laid
+-- end to end in order; a weight of 0 is never drawn. Pure, like PickRainPod.
+function SeedData.PickWeighted(weights: { number }, r: number): number
+	local total = 0
+	for _, w in ipairs(weights) do
+		total += w
+	end
+	local at = math.clamp(r, 0, 1) * total
+	local acc, last = 0, 1
+	for i, w in ipairs(weights) do
+		if w > 0 then
+			acc += w
+			last = i
+			if at < acc then
+				return i
+			end
+		end
+	end
+	-- r at (or rounding to) 1: the last entry that can be drawn.
+	return last
+end
+
+-- The creature a newly laid pod holds: one of its roster, each equally likely
+-- -- or, for a pod with Weights (the second family), at those odds.
 function SeedData.RollRainPod(podId: string, rng: Random): Species
 	local pod = SeedData.RainPods[podId]
 	assert(pod, "RollRainPod: unknown pod " .. tostring(podId))
+	if pod.Weights then
+		return byId[pod.Species[SeedData.PickWeighted(pod.Weights, rng:NextNumber())]]
+	end
 	return byId[pod.Species[rng:NextInteger(1, #pod.Species)]]
 end
 
+-- The size a newly laid pod is: its one Tier, or (rainpod4) a draw from its
+-- Tiers, Tiny .. Titan. Drawn once, here, and from then on carried on the
+-- item like every pod's tier -- nothing draws it again.
+function SeedData.RollRainTier(podId: string, rng: Random): number
+	local pod = SeedData.RainPods[podId]
+	assert(pod, "RollRainTier: unknown pod " .. tostring(podId))
+	if pod.Tiers then
+		return SeedData.PickWeighted(pod.Tiers, rng:NextNumber())
+	end
+	return pod.Tier :: number
+end
+
+-- The pod a draw `r` in [0, 1) lands on: the weights laid end to end in pod
+-- id order, so the same draw always gives the same pod (rain: below 0.45 Pod
+-- 1, then Pod 2 to 0.50, rainpod4 to 0.95 and rainpod5 from 0.95). A pod
+-- weighted 0 is never drawn. Pure.
+function SeedData.PickRainPod(weights: { [string]: number }, r: number): string
+	local ids: { string } = {}
+	local total = 0
+	for podId, weight in pairs(weights) do
+		table.insert(ids, podId)
+		total += weight
+	end
+	table.sort(ids)
+	local at = math.clamp(r, 0, 1) * total
+	local acc = 0
+	local last = ids[1]
+	for _, podId in ipairs(ids) do
+		local weight = weights[podId]
+		if weight > 0 then
+			acc += weight
+			last = podId
+			if at < acc then
+				return podId
+			end
+		end
+	end
+	-- r at (or rounding to) 1: the last pod that can be drawn.
+	return last
+end
+
 -- One event's whole batch, slot by slot: { pod id, species, tier }. Each slot
--- chooses its pod on its own, then its creature.
+-- draws its pod on its own (the batch's weights), then its creature, then --
+-- for the one pod that draws its size -- its size. A one-tier pod draws no
+-- size, so the first family's slots use the draws they always did.
 function SeedData.RollRainBatch(mode: string, rng: Random): { { pod: string, species: Species, tier: number } }
 	local batch = SeedData.RainBatches[mode]
 	assert(batch, "RollRainBatch: unknown mode " .. tostring(mode))
 	local out = {}
 	for _ = 1, batch.Slots do
-		local podId = batch.Choices[rng:NextInteger(1, #batch.Choices)]
+		local podId = SeedData.PickRainPod(batch.Weights, rng:NextNumber())
 		local species = SeedData.RollRainPod(podId, rng)
-		table.insert(out, { pod = podId, species = species, tier = SeedData.RainPods[podId].Tier })
+		table.insert(out, { pod = podId, species = species, tier = SeedData.RollRainTier(podId, rng) })
 	end
 	return out
 end
@@ -1498,6 +1955,23 @@ end
 -- Rain event's Pod 1 and Pod 3 forms. Their tier is implementation only.
 function SeedData.Unsized(species: Species?): boolean
 	return type(species) == "table" and ((species :: any).Secret == true or (species :: any).Unsized == true)
+end
+
+-- The replayed shell for this species' pod at this size: the size's own
+-- supplied pod (PodForms, the second family's seven, each already at its size)
+-- or the species' one Pod form; nil for every species with no replayed pod.
+-- What CreatureModel builds, PlantService turns to face the gate and the carry
+-- camera sizes -- one answer, so the three can never disagree.
+function SeedData.PodFormOf(species: Species?, tier: number?): string?
+	if type(species) ~= "table" then
+		return nil
+	end
+	local forms = (species :: any).PodForms
+	if type(forms) == "table" then
+		return forms[SeedData.Tier(tier).index]
+	end
+	local pod = (species :: any).Pod
+	return if type(pod) == "string" then pod else nil
 end
 
 function SeedData.InBiome(biomeId: string): { Species }
@@ -1564,6 +2038,13 @@ function SeedData.IncomePerSecond(species: Species?, tier: number?): number
 	-- final unboosted $/s, never multiplied again by a tier, rarity or biome
 	-- factor. Validated at load: a whole, positive number.
 	if type(species) == "table" then
+		-- And so is the owner's rate for THIS size, for a species that has one
+		-- per size (the Rain event's second family, 2026-10-05). Validated at
+		-- load: seven whole, positive numbers.
+		local bySize = (species :: Species).TierIncome
+		if type(bySize) == "table" then
+			return bySize[SeedData.Tier(tier).index]
+		end
 		local fixed = (species :: Species).FixedIncome
 		if type(fixed) == "number" then
 			return fixed
@@ -1629,10 +2110,15 @@ function SeedData.GrowSeconds(tier: number?): number
 end
 
 -- How long THIS species' pod grows: its FixedGrowSeconds when it has one (the
--- Rain event's pods, 2026-10-02: 3 h, 6 h and 9 h), else its tier's rung of
--- the ladder above, exactly as before. PlantService stamps the deadline from
--- this once, at planting, and saves it.
+-- Rain event's pods, 2026-10-02: 3 h, 6 h and 9 h), its time for this size
+-- when it has one per size (the second family, 2026-10-05: 3 h Tiny .. Titan,
+-- 6 h Colossal), else its tier's rung of the ladder above, exactly as before.
+-- PlantService stamps the deadline from this once, at planting, and saves it.
 function SeedData.GrowSecondsFor(species: Species?, tier: number?): number
+	local bySize = if type(species) == "table" then (species :: any).TierGrowSeconds else nil
+	if type(bySize) == "table" then
+		return bySize[SeedData.Tier(tier).index]
+	end
 	local fixed = if type(species) == "table" then (species :: any).FixedGrowSeconds else nil
 	if type(fixed) == "number" and fixed > 0 then
 		return fixed

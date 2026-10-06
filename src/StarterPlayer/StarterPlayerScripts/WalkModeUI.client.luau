@@ -4,9 +4,11 @@
 --==============================================================================
 -- A SWITCH THAT SAYS WHETHER YOU ARE WALKING
 --
--- One compact slab directly under the Settings gear, in the same rail layer, with
--- the word WALK MODE and a pill that reads ON or OFF. Pressing it asks the server;
--- the server answers by changing an attribute; this file draws the attribute.
+-- A compact horizontal switch in the rail layer (the owner's reference,
+-- 2026-10-04): the words WALK MODE: OFF over a slim light track, the thumb red
+-- at its LEFT end -- and WALK MODE: ON with the thumb green at its RIGHT end.
+-- Pressing anywhere on it asks the server; the server answers by changing an
+-- attribute; this file draws the attribute.
 --
 -- IT IS NOT IN THE SETTINGS PANEL, and that is the whole design. This is used
 -- mid-stride -- lining a plant up, reading a sign, walking beside somebody who is
@@ -19,31 +21,28 @@
 -- The button sends a verb and a boolean on the GameEvent remote and then does
 -- NOTHING to its own state: no optimistic flip, no local attribute write, no
 -- guessing. CarryService validates the request, PlayerDataService writes the
--- profile and stamps the replicated attribute, and the label follows that.
+-- profile and stamps the replicated attribute, and the switch follows that.
 --
--- So a client that fakes the attribute changes its own word for one frame and its
--- own speed never, because the speed is computed on the other side. And a refusal
--- -- mid-respawn, no profile yet -- leaves the label telling the truth rather than
--- showing ON over a player who is still sprinting.
+-- So a client that fakes the attribute changes its own words for one frame and
+-- its own speed never, because the speed is computed on the other side. And a
+-- refusal -- mid-respawn, no profile yet -- leaves the switch telling the truth
+-- rather than showing ON over a player who is still sprinting.
 --
 --==============================================================================
 -- WHERE IT SITS, AND WHAT IT MUST NOT COVER
 --
--- Left rail, fourth row: Index, Shop, Settings, then this. The left column is the
--- only part of the HUD that stacks downward, and it ends here -- the cash and
--- Speed readouts are top-right, the hotbar is bottom-centre, the Bag's column is
--- right, and the joystick and jump button are bottom-left and bottom-right of the
--- touch layer, which this never reaches.
---
--- 130 x 46, so the touch target clears the 44-pixel floor in both axes on the
--- narrowest phone this game supports, and the same width as the rail buttons above
--- it so the column reads as one column.
+-- HudLayout's `walk`. On a desktop: the left rail's fourth row, under Settings,
+-- 130 x 46 -- the rail's own width, so the column reads as one column. Off a
+-- desktop the switch is as wide as its words (HudLayout's WalkCompact), in a
+-- small window left of EVENTS under the top row, 46 tall, so the whole switch
+-- -- not just the thumb -- is a 44-px-plus target for a finger. On a phone
+-- (2026-10-05) a see-through 128 x 28 row under OTHER PLANTS, under Shop in
+-- the top-left corner, the owner's smaller switch, well clear of the stick.
 --==============================================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -55,21 +54,40 @@ local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 -- Only for ObbyData.onCourse: the switch is put away on the Floating Garden.
 local ObbyData = require(Shared:WaitForChild("ObbyData"))
+-- Only for reducedMotion: the thumb's slide is motion, and nothing else here is.
+local StatusText = require(Shared:WaitForChild("StatusText"))
 
 local RAIL = GameConfig.Rail
 local WALK = GameConfig.WalkMode
 local ATTR = GameConfig.Attributes
+local LOOK = GameConfig.BagLook
 
-local SIZE = Vector2.new(RAIL.WideSize.X, 46)
--- Under Settings, which is the third row: inset plus three rows of the rail's own
--- height and gap. Read off GameConfig rather than written down, so a change to the
--- rail moves this with it.
-local ROW = 3
-local FACE = Color3.fromRGB(46, 52, 62)
-local SHADE = Color3.fromRGB(28, 32, 40)
-local ON_FACE = Color3.fromRGB(96, 178, 96)
-local OFF_FACE = Color3.fromRGB(78, 84, 96)
-local CREAM = Color3.fromRGB(242, 238, 222)
+local WHITE = Color3.fromRGB(255, 255, 255)
+-- The track: a light groove, a little deeper at the top, with the rail's ink
+-- line round it -- light on any ground, as the label's outline is.
+local TRACK_TOP = Color3.fromRGB(210, 220, 212)
+local TRACK_BOTTOM = Color3.fromRGB(250, 252, 248)
+-- The two thumbs: the family's red (remove, close) and its green (go), each
+-- with its darker foot and its own dark keyline.
+local OFF_FACE = { LOOK.DangerTop, LOOK.DangerBottom, LOOK.DangerEdge }
+local ON_FACE = { LOOK.ButtonTop, LOOK.ButtonBottom, LOOK.ButtonEdge }
+
+-- The parts, in gui px: the words' line, the track under it, and a thumb a
+-- little taller than the track so it reads as the thing that moves.
+local LABEL_H = 18
+local TRACK_H = 20
+local THUMB = Vector2.new(26, 24)
+local TRACK_Y = LABEL_H + 3 + (THUMB.Y - TRACK_H) / 2
+-- The track's length: the desktop's wide row, and the narrower switch.
+local TRACK_WIDE = 64
+local TRACK_NARROW = 58
+local SLIDE_SECONDS = 0.14
+-- A PHONE'S ROW (the owner, 2026-10-05; HudLayout's switchInline and
+-- Phone.Switch): see-through, under Shop in the top-left corner -- no plate,
+-- the words outlined as every HUD word is -- the words inline at the row's
+-- left, a small switch at its right, the state's word inside the track beside
+-- the thumb. The whole row is the press.
+local ROW = HudLayout.Config.Phone.Switch
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -84,59 +102,114 @@ if stale then
 	stale:Destroy()
 end
 
-local slab = UIKit.slab(layer, {
-	size = UDim2.fromOffset(SIZE.X, SIZE.Y),
-	face = FACE,
-	shade = SHADE,
-	radius = RAIL.Radius,
-})
+-- The whole switch is the button: an ImageButton with no image (no text pass),
+-- transparent, so the words and the track stand on the world as the
+-- reference's do. The rail's click and the family's press (UIKit.pressPop: a
+-- small grow under the mouse, a sink under a press, still under Reduced
+-- Effects) are on it; the controller's gold ring (PadFocus) is drawn round it.
+local slab = Instance.new("ImageButton")
 slab.Name = "WalkModeSwitch"
-slab.Position = UDim2.new(0, RAIL.Inset, 0,
-	RAIL.Inset + (RAIL.WideSize.Y + RAIL.Gap) * ROW)
+slab.AnchorPoint = Vector2.new(0.5, 0.5)
+slab.Size = UDim2.fromOffset(RAIL.WideSize.X, 46)
+slab.BackgroundTransparency = 1
+slab.BorderSizePixel = 0
+slab.Image = ""
+slab.AutoButtonColor = false
+slab.ZIndex = 5
+slab.Parent = layer
+UIKit.clicks(slab)
+UIKit.pressPop(slab, 1.04, 0.95)
 
-local label = UIKit.outlined(slab, "Label", 13, CREAM, 2)
-label.Position = UDim2.fromOffset(10, 4)
-label.Size = UDim2.new(1, -20, 0, 18)
+local label = UIKit.outlined(slab, "Label", 13, WHITE, 2)
+local labelLine = label:FindFirstChildOfClass("UIStroke")
+label.Position = UDim2.fromOffset(2, 0)
+label.Size = UDim2.new(1, -4, 0, LABEL_H)
 label.TextXAlignment = Enum.TextXAlignment.Left
-label.Text = WALK.Label
-label.ZIndex = 6
+label.Text = WALK.Label .. ": " .. WALK.OffText
+label.ZIndex = 7
 
 --==============================================================================
--- THE PILL IS THE STATE, AND IT IS THE PART THAT CANNOT BE DECORATIVE
+-- THE THUMB IS THE STATE, AND IT IS THE PART THAT CANNOT BE DECORATIVE
 --
--- Reduced Effects turns the hover and the press animation off, because those are
--- decoration. The pill is not: it is the only thing on screen that says which way
--- the switch is, so it changes colour and word under every setting.
+-- Reduced Effects (and the device's reduced motion) take the slide away,
+-- because that is motion. The thumb and the words are not decoration: they
+-- are what says which way the switch is, so they change -- side, colour and
+-- word -- under every setting. Never colour alone: the words say ON or OFF.
 --==============================================================================
-local pill = Instance.new("Frame")
-pill.Name = "State"
-pill.Position = UDim2.new(0, 10, 0, 24)
-pill.Size = UDim2.new(1, -20, 0, 16)
-pill.BackgroundColor3 = OFF_FACE
-pill.BorderSizePixel = 0
-pill.ZIndex = 6
-pill.Parent = slab
-UIKit.corner(pill, 8)
+local track = Instance.new("Frame")
+track.Name = "Track"
+track.Size = UDim2.fromOffset(TRACK_WIDE, TRACK_H)
+track.Position = UDim2.fromOffset(3, TRACK_Y)
+track.BackgroundColor3 = WHITE
+track.BorderSizePixel = 0
+track.ZIndex = 6
+track.Parent = slab
+UIKit.corner(track, 8)
+do
+	local shade = Instance.new("UIGradient")
+	shade.Rotation = 90
+	shade.Color = ColorSequence.new(TRACK_TOP, TRACK_BOTTOM)
+	shade.Parent = track
+	local line = Instance.new("UIStroke")
+	line.Color = RAIL.Outline
+	line.Thickness = 2
+	line.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	line.Parent = track
+end
 
-local state = UIKit.outlined(pill, "Text", 12, CREAM, 1.6)
-state.Size = UDim2.new(1, 0, 1, 0)
-state.Text = WALK.OffText
-state.ZIndex = 7
+local thumb = Instance.new("Frame")
+thumb.Name = "Thumb"
+thumb.AnchorPoint = Vector2.new(0, 0.5)
+thumb.Size = UDim2.fromOffset(THUMB.X, THUMB.Y)
+thumb.Position = UDim2.new(0, 0, 0.5, 0)
+thumb.BackgroundColor3 = WHITE
+thumb.BorderSizePixel = 0
+thumb.ZIndex = 8
+thumb.Parent = track
+UIKit.corner(thumb, 7)
+local thumbFace = Instance.new("UIGradient")
+thumbFace.Rotation = 90
+thumbFace.Parent = thumb
+local thumbLine = Instance.new("UIStroke")
+thumbLine.Thickness = 2
+thumbLine.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+thumbLine.Parent = thumb
+do
+	-- The shine across its top, as the reference's thumb has.
+	local shine = Instance.new("Frame")
+	shine.Name = "Shine"
+	shine.Position = UDim2.new(0.18, 0, 0, 3)
+	shine.Size = UDim2.new(0.5, 0, 0, 4)
+	shine.BackgroundColor3 = WHITE
+	shine.BackgroundTransparency = 0.45
+	shine.BorderSizePixel = 0
+	shine.ZIndex = 9
+	shine.Parent = thumb
+	UIKit.corner(shine, 2)
+end
+
+-- ON or OFF in the compact row's track, on the side the thumb is not.
+local stateWord = UIKit.outlined(track, "State", ROW.Word, WHITE, 1)
+stateWord.Size = UDim2.new(0, ROW.Track.X - ROW.Thumb - 2, 1, 0)
+stateWord.TextXAlignment = Enum.TextXAlignment.Center
+stateWord.ZIndex = 7
+stateWord.Visible = false
 
 --==============================================================================
--- TWO SHAPES, ONE SWITCH
+-- ONE SWITCH, EVERY LAYOUT
 --
--- A desktop keeps the 130 x 46 slab under Settings. HudLayout's compact top
--- row makes it a 50 x 50 square like its three neighbours, and it still says
--- both halves of what it is: WALK over MODE in two short lines, and under them
--- the pill -- OFF, or ON 16 -- which is the state and is never decoration. The
--- same slab, label and pill are re-laid rather than rebuilt, so the colour and
--- the words paint() gives them carry straight across a relayout.
+-- A desktop keeps the 130 x 46 row under Settings; off a desktop HudLayout
+-- hands the narrower WalkCompact. Either way the words stand over the track on
+-- one line -- WALK MODE: OFF, never broken over two -- and both lean to the
+-- side the switch stands on: the left rail's left, the right edge's right. The
+-- same slab, label, track and thumb are re-laid rather than rebuilt, so what
+-- paint() gave them carries straight across a relayout.
 --
 -- The rail layer is shared and outlives this script, so the connection to it
 -- is dropped when this switch is: a re-run's new switch brings its own.
 --==============================================================================
-local STACKED_LABEL = (string.gsub(WALK.Label, " ", "\n"))
+local inlineRow = false
+local paint: () -> ()
 
 local function placeSwitch()
 	if layer.AbsoluteSize.X <= 0 then
@@ -145,25 +218,40 @@ local function placeSwitch()
 	local layout = HudLayout.solve(HudLayout.measure(layer))
 	local r = layout.walk
 	slab.Size = UDim2.fromOffset(r.w, r.h)
-	slab.Position = HudLayout.place(r, Vector2.zero, layout.safe)
-	if layout.compact then
-		label.Text = STACKED_LABEL
-		label.TextSize = 11
-		label.TextXAlignment = Enum.TextXAlignment.Center
-		label.Position = UDim2.fromOffset(2, 3)
-		label.Size = UDim2.new(1, -4, 0, 24)
-		pill.Position = UDim2.new(0, 4, 0, 29)
-		pill.Size = UDim2.new(1, -8, 0, 17)
-		state.TextSize = 11
-	else
-		label.Text = WALK.Label
-		label.TextSize = 13
+	slab.Position = HudLayout.place(r, slab.AnchorPoint, layout.safe)
+	-- On a phone a compact row (`switchInline`, 2026-10-05), OTHER PLANTS' twin.
+	local inline = layout.switchInline == true
+	stateWord.Visible = inline
+	if labelLine then
+		-- A thinner outline on the row's smaller words, so their counters stay open.
+		labelLine.Thickness = if inline then 1.5 else 2
+	end
+	if inline then
+		label.TextSize = ROW.Label
 		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Position = UDim2.fromOffset(10, 4)
-		label.Size = UDim2.new(1, -20, 0, 18)
-		pill.Position = UDim2.new(0, 10, 0, 24)
-		pill.Size = UDim2.new(1, -20, 0, 16)
-		state.TextSize = 12
+		label.Position = UDim2.fromOffset(ROW.PadLeft, 0)
+		label.Size = UDim2.new(1, -(ROW.PadLeft + ROW.PadRight + 4 + ROW.Track.X), 1, 0)
+		track.Size = UDim2.fromOffset(ROW.Track.X, ROW.Track.Y)
+		track.AnchorPoint = Vector2.new(1, 0.5)
+		track.Position = UDim2.new(1, -ROW.PadRight, 0.5, 0)
+		thumb.Size = UDim2.fromOffset(ROW.Thumb, ROW.Thumb)
+	else
+		local wide = r.w >= RAIL.WideSize.X
+		local right = r.x + r.w / 2 > layout.safe.X / 2
+		label.TextSize = if wide then 13 else 12
+		label.TextXAlignment = if right then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
+		label.Position = UDim2.fromOffset(2, 0)
+		label.Size = UDim2.new(1, -4, 0, LABEL_H)
+		track.Size = UDim2.fromOffset(if wide then TRACK_WIDE else TRACK_NARROW, TRACK_H)
+		track.AnchorPoint = Vector2.new(if right then 1 else 0, 0)
+		track.Position = if right then UDim2.new(1, -3, 0, TRACK_Y) else UDim2.fromOffset(3, TRACK_Y)
+		thumb.Size = UDim2.fromOffset(THUMB.X, THUMB.Y)
+	end
+	if inline ~= inlineRow then
+		inlineRow = inline
+		if paint then
+			paint()
+		end
 	end
 end
 local relayout = layer:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSwitch)
@@ -174,46 +262,82 @@ placeSwitch()
 
 --==============================================================================
 -- WHAT THE SERVER SAYS, DRAWN
+--
+-- The thumb's two places are the track's two ends (UDim2 scale, so a relayout
+-- that changes the track's length keeps the thumb at its end). It slides
+-- between them in a seventh of a second -- or jumps, under reduced motion and
+-- on the first paint, where there is nothing to slide from.
 --==============================================================================
-local function paint()
+local slide: Tween? = nil
+local painted = false
+local paintedRow = false
+
+function paint()
 	local on = player:GetAttribute(ATTR.WalkMode) == true
-	pill.BackgroundColor3 = if on then ON_FACE else OFF_FACE
-	state.Text = if on then WALK.OnText else WALK.OffText
-	--==========================================================================
-	-- AND THE CAP ITSELF, SPELLED OUT WHILE IT IS ON
-	--
-	-- "ON 16" rather than "ON", because the number is the entire content of the
-	-- feature and a player who has never seen Roblox's default walk speed has no
-	-- way to know what they just asked for.
-	--==========================================================================
-	if on then
-		state.Text = string.format("%s  %d", WALK.OnText, WALK.CapStuds)
+	label.Text = WALK.Label .. ": " .. (if on then WALK.OnText else WALK.OffText)
+	-- The compact row says the state in its switch, on the thumb's other side.
+	if inlineRow then
+		label.Text = WALK.Label
 	end
+	stateWord.Text = if on then WALK.OnText else WALK.OffText
+	stateWord.AnchorPoint = Vector2.new(if on then 0 else 1, 0)
+	stateWord.Position = if on then UDim2.fromOffset(2, 0) else UDim2.new(1, -2, 0, 0)
+	local face = if on then ON_FACE else OFF_FACE
+	thumbFace.Color = UIKit.footColours(face[1], face[2], face[3])
+	thumbLine.Color = face[3]
+	local thumbW = thumb.Size.X.Offset
+	local goal = if on then UDim2.new(1, -thumbW, 0.5, 0) else UDim2.new(0, 0, 0.5, 0)
+	if slide then
+		slide:Cancel()
+		slide = nil
+	end
+	-- A new shape of switch jumps, as the first paint does: nothing to slide from.
+	local reshaped = paintedRow ~= inlineRow
+	paintedRow = inlineRow
+	if not painted or reshaped or StatusText.reducedMotion() then
+		thumb.Position = goal
+	elseif thumb.Position ~= goal then
+		local tween = TweenService:Create(thumb,
+			TweenInfo.new(SLIDE_SECONDS, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = goal })
+		slide = tween
+		tween:Play()
+	end
+	painted = true
 end
 
 paint()
 player:GetAttributeChangedSignal(ATTR.WalkMode):Connect(paint)
 
 --==============================================================================
--- ON A PHONE, PUT AWAY ON THE FLOATING GARDEN (2026-09-29)
+-- PUT AWAY ON THE FLOATING GARDEN ON A PHONE (2026-09-29), AND OUT OF AN OPEN
+-- PANEL'S WAY OFF A DESKTOP (2026-10-04)
 --
 -- The course runs everybody at its own fixed speed -- "Weight and Walk Mode do
 -- not apply up there" (CarryService) -- so the switch does nothing on it, and on
 -- a phone it stood beside the way ahead doing that nothing. On a touch screen
 -- (HudLayout's sidebars) it is hidden while the server says this player is on
--- the course and shown again the moment they are not. Only hidden: what the
--- switch is SET to is the server's and is not touched, so a player who walks
--- onto the course in Walk Mode walks off it in Walk Mode. A desktop, a console
--- and a TV keep the switch where it always was, on the course too.
+-- the course and shown again the moment they are not. A desktop, a console and
+-- a TV keep the switch where it always was, on the course too.
+--
+-- Off a desktop an open panel can be under the switch -- the Bag's panel takes
+-- the whole width -- so it steps aside while OpenPanel names a panel, as EVENTS
+-- and the phone's panel do, and comes back when the panel closes.
+--
+-- Only hidden, both: what the switch is SET to is the server's and is not
+-- touched, so a player who walks onto the course in Walk Mode walks off it in
+-- Walk Mode.
 --==============================================================================
 local function showSwitch()
-	local phone = false
+	local phone, away = false, false
 	if layer.AbsoluteSize.X > 0 then
-		phone = HudLayout.solve(HudLayout.measure(layer)).sidebar == true
+		local layout = HudLayout.solve(HudLayout.measure(layer))
+		phone = layout.sidebar == true
+		away = layout.compact and player:GetAttribute(ATTR.OpenPanel) ~= nil
 	end
-	slab.Visible = not (phone and ObbyData.onCourse(player))
+	slab.Visible = not (phone and ObbyData.onCourse(player)) and not away
 end
 player:GetAttributeChangedSignal(ObbyData.Attributes.Course):Connect(showSwitch)
+player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(showSwitch)
 local reshow = layer:GetPropertyChangedSignal("AbsoluteSize"):Connect(showSwitch)
 slab.Destroying:Once(function()
 	reshow:Disconnect()
@@ -256,52 +380,3 @@ slab.Activated:Connect(function()
 	lastSent = now
 	rem:FireServer(WALK.Action, not (player:GetAttribute(ATTR.WalkMode) == true))
 end)
-
---==============================================================================
--- THE POP, WHICH IS THE ONLY DECORATION HERE
---
--- Desktop hover lifts it a little; a touch press squashes it. Both are the
--- house cues -- UIKit.slab already carries the click sound and
--- UIKit.popOnHover is what every other rail button uses -- and both are skipped
--- entirely under Reduced Effects, which is the one setting allowed to remove
--- animation and never allowed to remove the pill above.
---==============================================================================
-local scale = Instance.new("UIScale")
-scale.Parent = slab
-
-local function reduced(): boolean
-	return player:GetAttribute("SeedAfterimageQuality") == "Off"
-end
-
-local function animateTo(target: number)
-	if reduced() then
-		scale.Scale = 1
-		return
-	end
-	local start = scale.Scale
-	local began = os.clock()
-	local connection: RBXScriptConnection? = nil
-	connection = RunService.RenderStepped:Connect(function()
-		local t = math.clamp((os.clock() - began) / 0.12, 0, 1)
-		scale.Scale = start + (target - start) * t
-		if t >= 1 and connection then
-			connection:Disconnect()
-		end
-	end)
-end
-
-if UserInputService.TouchEnabled then
-	slab.MouseButton1Down:Connect(function()
-		animateTo(0.94)
-	end)
-	slab.MouseButton1Up:Connect(function()
-		animateTo(1)
-	end)
-else
-	slab.MouseEnter:Connect(function()
-		animateTo(1.04)
-	end)
-	slab.MouseLeave:Connect(function()
-		animateTo(1)
-	end)
-end

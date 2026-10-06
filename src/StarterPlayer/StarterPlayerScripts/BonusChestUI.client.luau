@@ -16,25 +16,22 @@
 --                server refuses anything early regardless.
 --   THE RESULT   a claim the server confirmed: the reward splash (RewardSplash,
 --                2026-10-01) -- the reward's icon, name and amount near the
---                middle, then the icon flies to its line in THE ROW -- once per
---                claim. A refusal: a blocked notice saying why (Notice,
---                ActionToastUI). One sound either way, the notice's.
---   THE ROW      a compact line per running reward -- its title and the time
---                left, as text with no plate (StatusText) -- in HudLayout's
---                boost band under the clock's column, so it keeps clear of every
---                HUD control and of the chase warning above it.
+--                middle, then the icon flies to the boost's own ICON over the
+--                hotbar -- once per claim. A refusal: a blocked notice saying
+--                why (Notice, ActionToastUI). One sound either way, the notice's.
 --
--- THE ROW IS ALSO THE SACRIFICE PEDESTAL'S (2026-09-28). Its boost stands in the
--- same band beside the chest's, so the two are laid out by one owner and can
--- never be placed on top of each other. That is why this script keeps running
--- with the chest switched off: the row still has the pedestal to serve.
+-- THE RUNNING BOOST IS AN ICON NOW (2026-10-04). The text row this script drew
+-- under the clock's column -- the chest's boost and the Sacrifice Pedestal's,
+-- each with its time left -- became two of BoostIconsUI's icons over the hotbar,
+-- drawn from the same attributes. This script keeps the sign, the prompt and
+-- the splash.
 --
 -- DRAWN FROM THE ATTRIBUTES, NOT THE REPLY. If the server's answer is lost the
--- attributes still arrive, and the row and sign show the reward anyway.
+-- attributes still arrive, and the sign and the icon show the reward anyway.
 --==============================================================================
 
-local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
@@ -43,7 +40,6 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local FloatingSign = require(Shared:WaitForChild("FloatingSign"))
-local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local Notice = require(Shared:WaitForChild("Notice"))
 local RewardSplash = require(Shared:WaitForChild("RewardSplash"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
@@ -213,7 +209,10 @@ local function build(chest: Model): Built
 end
 
 --==============================================================================
--- THE SCREEN: THE BOOST ROW
+-- THE SCREEN: THE SPLASH'S LAYER
+--
+-- Over every HUD group (46), so a reward's splash and its flight stand over
+-- the hotbar and the icon row it flies to.
 --==============================================================================
 local existing = playerGui:FindFirstChild("SeedBonusChest")
 if existing then
@@ -226,119 +225,22 @@ gui.IgnoreGuiInset = true
 gui.DisplayOrder = 46
 gui.Parent = playerGui
 
---==============================================================================
--- TEXT, NOT A PILL (2026-09-27)
---
--- Each running boost is one line: the up-arrow glyph and its title in the
--- colour of the number it raises -- cash green for plant income, speed blue for
--- training, the Cash and Speed readout's own two colours -- and the time left
--- after it, smaller, in warm white and a monospaced face so the line never
--- jiggles as it counts. No plate, no capsule, no border (StatusText). It comes
--- in on the notices' short rise; after that the clock only changes its digits --
--- no motion, no sound -- and the line fades when the boost ends.
---
--- IN HudLayout's BOOST BAND: one row under the teleport slot and the biome
--- name's band (statusRows), the same place with or without a chase, a biome
--- name or TELEPORT TO PLOT, so nothing here moves when any of those comes or
--- goes. More than one boost stands side by side in it, centred; the chest
--- grants one at a time today, and the row does not mind either way.
---==============================================================================
+-- The colour of the number each reward raises: cash green for plant income,
+-- speed blue for training (the Cash and Speed readout's own two).
 local CASH_GREEN = Color3.fromRGB(38, 255, 0)
 local SPEED_BLUE = Color3.fromRGB(25, 144, 255)
--- The pedestal's boost raises the same number the chest's income reward does.
-local BOOST_TINT: { [string]: Color3 } = { income = CASH_GREEN, training = SPEED_BLUE,
-	sacrifice = CASH_GREEN }
--- Between two boosts in the row, at the desktop size.
-local BOOST_GAP = 18
+local BOOST_TINT: { [string]: Color3 } = { income = CASH_GREEN, training = SPEED_BLUE }
 
-type Entry = { line: StatusText.Line, order: number }
-local entries: { [string]: Entry } = {}
-
-local function placeBoosts()
-	if gui.AbsoluteSize.X <= 0 then
-		return
+-- The running boost's icon over the hotbar (BoostIconsUI names each icon by
+-- its id), while it is on screen; nil otherwise.
+local function boostIcon(id: string): Frame?
+	local icons = playerGui:FindFirstChild("SeedBoostIcons")
+	local row = icons and icons:FindFirstChild("Row")
+	local icon = row and row:FindFirstChild(id)
+	if not (row and row:IsA("GuiObject") and row.Visible and icon and icon:IsA("Frame")) then
+		return nil
 	end
-	local input = HudLayout.measure(gui)
-	local layout = HudLayout.solve(input)
-	local inset = input.insetTop or 0
-	--==========================================================================
-	-- ON A PHONE: THE SLIM ROW RIGHT UNDER THE TOP ROW (2026-09-29)
-	--
-	-- The owner's report, from a phone: the boosts' names and timers stood in
-	-- the middle of the screen -- and, measured the same day with the guide up,
-	-- the row had been pushed down onto the belt. On a phone the row is the
-	-- first thing under the clock's row (HudLayout's centre column), its lines
-	-- drawn at 13 where a small window draws them at 15, and the guide's words
-	-- stand in the left column, so nothing pushes it anywhere. Everywhere else
-	-- it is where it was.
-	--==========================================================================
-	local phone = layout.sidebar and layout.columnTop ~= nil
-	local k = if phone then StatusText.PhoneScale.boost
-		elseif layout.compact or layout.sidebar then StatusText.SmallScale.boost
-		else 1
-	local _, _, band = HudLayout.statusRows(layout, inset)
-	-- 8 under the guide's own words while they are up (TutorialUI publishes how
-	-- far down they reach): the chest opens only after the guide, but the reward
-	-- wheel can hand a new player a boost in the middle of it (2026-09-27). Not on
-	-- a phone, whose guide stands beside the column rather than in it.
-	local reach = player:GetAttribute(GameConfig.Attributes.TutorialReach)
-	if not phone and type(reach) == "number" and band.y < reach + 8 then
-		band = HudLayout.rect(band.x, reach + 8, band.w, band.h)
-	end
-	-- Every line still on screen, a fading one included, so a boost that ends
-	-- keeps its place while it goes and the rest close up after it.
-	local standing: { Entry } = {}
-	for _, e in pairs(entries) do
-		e.line.setScale(k)
-		if e.line.frame.Visible then
-			table.insert(standing, e)
-		end
-	end
-	table.sort(standing, function(a: Entry, b: Entry): boolean
-		return a.order < b.order
-	end)
-	local widths: { number } = {}
-	for i, e in ipairs(standing) do
-		widths[i] = e.line.size().X
-	end
-	-- Side by side on the band's middle; on a phone too narrow for that, drawn a
-	-- little smaller, and stacked only where even that will not fit.
-	local rows, shrink = HudLayout.boostRows(layout, band, widths, BOOST_GAP * k)
-	for i, e in ipairs(standing) do
-		local r = rows[i]
-		if shrink ~= 1 then
-			e.line.setScale(k * shrink)
-		end
-		local s = e.line.size()
-		e.line.frame.Position = UDim2.new(0.5, math.round(r.x + r.w / 2 - layout.safe.X / 2),
-			0, math.round(r.y + (r.h - s.Y) / 2 + inset))
-	end
-end
-gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeBoosts)
--- The row stands under the clock's slot, which moves with the topbar's free span.
-GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placeBoosts)
-player:GetAttributeChangedSignal(GameConfig.Attributes.TutorialReach):Connect(placeBoosts)
-
-local nextOrder = 0
-local function entryFor(id: string): Entry
-	local e = entries[id]
-	if not e then
-		nextOrder += 1
-		local line = StatusText.new({
-			name = "Boost_" .. id,
-			parent = gui,
-			size = StatusText.Size.boost,
-			tint = BOOST_TINT[id] or GOLD,
-			icon = "boost",
-			detailSize = StatusText.Size.boostClock,
-			detailFont = StatusText.ClockFont,
-		})
-		local made: Entry = { line = line, order = nextOrder }
-		line.frame:GetPropertyChangedSignal("Visible"):Connect(placeBoosts)
-		entries[id] = made
-		e = made
-	end
-	return e :: Entry
+	return icon
 end
 
 --==============================================================================
@@ -351,8 +253,6 @@ local function paint()
 	local now = Workspace:GetServerTimeNow()
 	local unlocked = player:GetAttribute(ATTR.Unlocked) == true
 	local nextAt = tonumber(player:GetAttribute(ATTR.NextAt)) or 0
-	local boost = GameConfig.bonusChestReward(player:GetAttribute(ATTR.Boost))
-	local endsAt = tonumber(player:GetAttribute(ATTR.EndsAt)) or 0
 	if pending and now - pendingSince > 8 then
 		-- The answer never came. The attributes are the truth either way.
 		pending = false
@@ -399,45 +299,7 @@ local function paint()
 		end
 		b.words.setShown(unlocked)
 	end
-
-	-- The boosts running now, by id: the chest's one today.
-	local running: { [string]: boolean } = {}
-	if boost ~= nil and now < endsAt then
-		running[boost.Id] = true
-		local e = entryFor(boost.Id)
-		local before = e.line.size()
-		-- Words only: a tick of the clock moves nothing and sounds nothing.
-		e.line.set(boost.Title, StatusText.clock(endsAt - now))
-		if not e.line.isShown() then
-			e.line.show()
-			placeBoosts()
-		elseif e.line.size() ~= before then
-			placeBoosts()
-		end
-	end
-	-- The sacrifice pedestal's boost (2026-09-28), in the same row: its own
-	-- line and its own clock beside the chest's, because the two end at
-	-- different times. Drawn from the attributes SacrificeService publishes,
-	-- like the chest's, so it is right after a rejoin with no reply to wait for.
-	local sacrifice = GameConfig.sacrificeIncomeBoost(player)
-	local sacrificeEnds = tonumber(player:GetAttribute(GameConfig.Sacrifice.Attributes.EndsAt)) or 0
-	if sacrifice > 1 and now < sacrificeEnds then
-		running.sacrifice = true
-		local e = entryFor("sacrifice")
-		local before = e.line.size()
-		e.line.set(GameConfig.sacrificeBoostTitle(sacrifice), StatusText.clock(sacrificeEnds - now))
-		if not e.line.isShown() then
-			e.line.show()
-			placeBoosts()
-		elseif e.line.size() ~= before then
-			placeBoosts()
-		end
-	end
-	for id, e in pairs(entries) do
-		if not running[id] then
-			e.line.hide()
-		end
-	end
+	-- The boost itself is BoostIconsUI's icon, drawn from the same attributes.
 end
 
 --==============================================================================
@@ -511,17 +373,22 @@ local function splash(reward: any): boolean
 					else "BOOST FOR " .. clock(CHEST.BoostSeconds),
 				tint = BOOST_TINT[id] or GOLD,
 				destination = function(): GuiObject?
-					local e = entries[id]
-					if not (e and e.line.isShown()) then
+					local icon = boostIcon(id)
+					if not icon then
 						return nil
 					end
-					local mark = e.line.frame:FindFirstChild("Icon", true)
-					return if mark and mark:IsA("GuiObject") then mark else e.line.frame
+					local mark = icon:FindFirstChild("Icon", true)
+					return if mark and mark:IsA("GuiObject") then mark else icon
 				end,
 				landed = function()
-					local e = entries[id]
-					if e then
-						e.line.nudge()
+					-- A short bump of the icon it landed on.
+					local icon = boostIcon(id)
+					local pop = icon and icon:FindFirstChild("Pop")
+					if pop and pop:IsA("UIScale") and not StatusText.reducedMotion() then
+						local rest = pop.Scale
+						pop.Scale = rest * 1.25
+						TweenService:Create(pop, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+							{ Scale = rest }):Play()
 					end
 				end,
 			},
@@ -552,6 +419,7 @@ if channel:IsA("RemoteEvent") then
 				if not (reward and splash(reward)) then
 					Notice.post({
 						kind = "success",
+						icon = "chest",
 						title = if reward then reward.Title else "BONUS CHEST",
 						detail = string.format("Bonus Chest reward for %s.", clock(CHEST.BoostSeconds)),
 						key = "chest:ok",
@@ -577,9 +445,6 @@ if channel:IsA("RemoteEvent") then
 end
 
 for _, name in pairs(ATTR) do
-	player:GetAttributeChangedSignal(name):Connect(paint)
-end
-for _, name in pairs(GameConfig.Sacrifice.Attributes) do
 	player:GetAttributeChangedSignal(name):Connect(paint)
 end
 task.spawn(function()

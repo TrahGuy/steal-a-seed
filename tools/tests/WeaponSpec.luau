@@ -437,21 +437,24 @@ local T = WeaponData.Trap
 local jaw = WeaponData.TrapSpec("bramblejaw_trap")
 check(jaw ~= nil, "the Bramblejaw has a specification of its own")
 check(jaw.ArmSeconds == 1.0, "arms in one second", jaw.ArmSeconds)
-check(jaw.EffectSeconds == 2.0, "holds for two seconds", jaw.EffectSeconds)
+-- Five seconds since 2026-10-04 (the owner's brief: every trap effect at least
+-- five; it was two), and five of immunity after it (it was four).
+check(jaw.EffectSeconds == 5.0, "holds for five seconds", jaw.EffectSeconds)
 check(jaw.Effect == "root" and jaw.MoveMultiplier == 0,
 	"and the hold is a complete root, not a slow")
-check(T.ImmunitySeconds == 4.0, "four seconds of immunity after release", T.ImmunitySeconds)
-check(jaw.ExpireSeconds == 20, "expires after twenty seconds", jaw.ExpireSeconds)
-check(jaw.PlaceCooldownSeconds == 15, "fifteen-second placement cooldown",
-	jaw.PlaceCooldownSeconds)
+check(T.ImmunitySeconds == 5.0, "five seconds of immunity after release", T.ImmunitySeconds)
+-- No lifetime and no placement recharge since 2026-10-04 (the reusable-trap
+-- brief): it stays until its owner removes it, and re-arms after every catch.
+check(jaw.ExpireSeconds == nil and jaw.PlaceCooldownSeconds == nil,
+	"no expiry and no placement cooldown any more: reusable until removed")
 check(jaw.TriggerRadius == 4.0 and jaw.TriggerHeight == 4.5,
 	"the same trigger size it always had",
 	string.format("%.1f / %.1f", jaw.TriggerRadius, jaw.TriggerHeight))
-check(jaw.ExpireSeconds > jaw.ArmSeconds + jaw.EffectSeconds,
-	"a trap outlives its own arming and hold")
-check(jaw.PlaceCooldownSeconds >= jaw.EffectSeconds + T.ImmunitySeconds,
-	"the cooldown outlasts a full catch, so one owner cannot re-trap a victim",
-	string.format("%.0f >= %.0f", jaw.PlaceCooldownSeconds,
+check(T.SprungSeconds + jaw.ArmSeconds < jaw.EffectSeconds + T.ImmunitySeconds
+		and T.ImmunitySeconds * GameConfig.Speed.BaseWalkSpeed >= 4 * jaw.TriggerRadius * T.SeparationRadiusScale,
+	"it re-arms long before its victim is free, so the immunity is what stops it re-trapping them -- "
+		.. "and five seconds at base speed walks well clear of it",
+	string.format("re-arm %.1fs, effect + immunity %.0fs", T.SprungSeconds + jaw.ArmSeconds,
 		jaw.EffectSeconds + T.ImmunitySeconds))
 
 local lines = WeaponData.StatLines(trap)
@@ -460,9 +463,10 @@ for _, l in ipairs(lines) do
 	said ..= string.format(" %s=%s", l.label, l.value)
 end
 check(#lines == 4 and string.find(said, "ROOT", 1, true) ~= nil
-	and string.find(said, "2.0s", 1, true) ~= nil
-	and string.find(said, "15s", 1, true) ~= nil,
-	"the card states the effect, the two-second hold and the fifteen-second cooldown",
+	and string.find(said, "5.0s", 1, true) ~= nil
+	and string.find(said, "PLACE=3 at once", 1, true) ~= nil
+	and string.find(said, "COOLDOWN", 1, true) == nil,
+	"the card states the effect, the five-second hold and three at once -- and no cooldown",
 	said)
 check(string.find(said, "POWER", 1, true) == nil
 	and string.find(said, "REACH", 1, true) == nil,

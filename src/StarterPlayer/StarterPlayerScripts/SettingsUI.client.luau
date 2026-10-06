@@ -55,36 +55,31 @@ local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local RAIL = GameConfig.Rail
 local PANEL = GameConfig.Panel
+local LOOK = GameConfig.BagLook
 local ATTR = GameConfig.Attributes
 local QUALITY = GameConfig.Afterimage.QualityAttribute
 local PANEL_NAME = "Settings"
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 local BLACK = Color3.fromRGB(0, 0, 0)
-local CREAM = Color3.fromRGB(242, 238, 206)
-local MUTED = Color3.fromRGB(198, 176, 152)
+-- The panel is the menus' light studded one now (the global UI pass,
+-- 2026-10-04): a row's words are dark and plain (CREAM is the live state's,
+-- MUTED the muted one's), and the slider's knob is white, grey when muted.
+local CREAM = LOOK.Text
+local MUTED = LOOK.Muted
+local KNOB_FILL = WHITE
+local KNOB_FILL_MUTED = LOOK.OffBottom
 
 --==============================================================================
--- ON IS THE SHOP'S GREEN; OFF IS THE PANEL'S OWN SOIL
---
--- Green already means "this one is on" on this HUD -- an equipped bat, the tab
--- you are on -- so ON borrows the shop slab's pair rather than inventing another
--- green. OFF is the panel's soil lifted a step: unlit, and not a second colour
--- arguing with the first. Each gets a darker foot, like every other button here.
+-- ON IS THE MENUS' GREEN; OFF IS THEIR PALE FACE (the global UI pass,
+-- 2026-10-04): MenuKit's `go` and `idle`, each with the family's darker foot.
+-- A slider's fill is the same green, grey while muted.
 --==============================================================================
-local ON_FACE = RAIL.ShopFace
-local ON_SHADE = RAIL.ShopShade
-local ON_FOOT = Color3.fromRGB(30, 92, 30)
-local OFF_FACE = Color3.fromRGB(112, 90, 74)
-local OFF_SHADE = Color3.fromRGB(72, 54, 44)
-local OFF_FOOT = Color3.fromRGB(44, 32, 26)
-local TRACK = Color3.fromRGB(24, 16, 12)
-
 local TARGET = 44
 local TOGGLE_W = 64
-local PLATE_H = 38
 local ROW_H = 52
 local ROW_GAP = 8
 local ROW_PAD = 10
@@ -93,7 +88,7 @@ local KNOB = 24
 local NUDGE = 0.1
 
 local MAX_WIDTH = 440
-local MAX_HEIGHT = 320
+local MAX_HEIGHT = 380
 
 -- One slider, three buses: everything that is not the music bed.
 local FX_BUSES = { "Chase", "UI", "World" }
@@ -166,30 +161,27 @@ UIKit.lattice(plate, {
 })
 
 -- Third on the rail, from HudLayout. See IndexUI's placeButton. On a touch
--- screen, the dock's bottom tile: the gear over the word on the slate tile
--- UIKit.railShape lays over it, so this plate stands down there.
+-- screen the last square of the panel under the Bag (2026-10-05), drawn as the
+-- owner's studded picture, which hides the gear, the plate and any stand-in.
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	local iconSize = if layout.compact then COMPACT_GEAR else RAIL.IconBare
-	UIKit.railShape(button, Vector2.new(layout.settings.w, layout.settings.h), iconSize,
-		if layout.sidebar
-			then { label = "SETTINGS", top = RAIL.TileTop, bottom = RAIL.TileBottom, edge = RAIL.SettingsEdge }
-			else nil)
-	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
-	button.Position = HudLayout.place(layout.settings, Vector2.zero, layout.safe)
+	UIKit.railShape(button, Vector2.new(layout.settings.w, layout.settings.h), iconSize)
+	-- On a phone in the panel under the Bag's scrolling canvas (2026-10-06).
+	UIKit.placeRail(button, layout, layout.settings, playerGui)
 	plate.Visible = layout.compact and not layout.sidebar
-	-- The drawn stand-in, if the artwork never loaded, follows the same size --
-	-- and on a tile, the icon's place above the word.
+	-- The drawn stand-in, if the artwork never loaded, follows the same size.
 	local drawn = button:FindFirstChild("GearDrawn")
 	if drawn and drawn:IsA("GuiObject") then
-		local side = if layout.sidebar then HudLayout.Config.Dock.Icon else iconSize - 8
+		local side = iconSize - 8
 		drawn.Size = UDim2.fromOffset(side, side)
-		drawn.AnchorPoint = if layout.sidebar then Vector2.new(0.5, 0) else Vector2.new(0.5, 0.5)
-		drawn.Position = if layout.sidebar then UDim2.new(0.5, 0, 0, 4) else UDim2.fromScale(0.5, 0.5)
+		drawn.AnchorPoint = Vector2.new(0.5, 0.5)
+		drawn.Position = UDim2.fromScale(0.5, 0.5)
 	end
+	UIKit.railPicture(button, if layout.sidebar then RAIL.StuddedSettingsArt else nil, 1)
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
 placeButton()
@@ -267,10 +259,11 @@ local modal = UIKit.modal(gui, {
 	title = "SETTINGS",
 	maxWidth = MAX_WIDTH,
 	maxHeight = MAX_HEIGHT,
+	theme = MenuKit.rimTheme(),
 })
 -- This gui holds only the panel, so it takes the player's menu size whole --
 -- clamped so all three rows still fit, since they do not scroll.
-UIKit.menuGui(gui, Vector2.new(248, ROW_H * 3 + ROW_GAP * 2 + 82))
+UIKit.menuGui(gui, Vector2.new(248, ROW_H * 4 + ROW_GAP * 3 + 82))
 
 local titleBar = modal.title.Parent :: Frame
 local titleGear = Instance.new("ImageLabel")
@@ -364,15 +357,18 @@ task.spawn(function()
 	drawGear(button, railIcon.Size.X.Offset - 8, 3)
 	titleGear.Image = ""
 	drawGear(titleGear, 30, 3)
+	-- On a phone the studded picture stands where the gear would: placed again,
+	-- it hides the stand-in just drawn.
+	placeButton()
 end)
 
 --==============================================================================
--- THREE ROWS, NO SCROLL
+-- FOUR ROWS, NO SCROLL
 --
 -- Not a ScrollingFrame, on purpose: a ScrollingFrame takes a touch drag for
 -- itself once it has moved a few pixels, and two of these rows are things a
--- thumb drags sideways. Three 52-pixel rows fit a landscape phone with room to
--- spare, so there is nothing to scroll to anyway.
+-- thumb drags sideways. Four 52-pixel rows (DISCO DANCING joined 2026-10-03)
+-- still fit a landscape phone, so there is nothing to scroll to anyway.
 --==============================================================================
 local rowsFrame = Instance.new("Frame")
 rowsFrame.Name = "Rows"
@@ -407,15 +403,15 @@ local function makeRow(order: number, name: string, titleText: string): Row
 	frame.Name = name
 	frame.LayoutOrder = order
 	frame.Size = UDim2.new(1, 0, 0, ROW_H)
-	frame.BackgroundColor3 = PANEL.Shade
-	frame.BackgroundTransparency = 0.3
 	frame.BorderSizePixel = 0
 	frame.ZIndex = 3
 	frame.Parent = rowsFrame
 	UIKit.corner(frame, 12)
-	UIKit.stroke(frame, BLACK, 2, 0.35)
+	-- A light card with a clear thin keyline (the menus' cards), dark words.
+	MenuKit.cardFace(frame)
+	MenuKit.keyline(frame, LOOK.CardEdge, 1.5, LOOK.CardEdgeTransparency)
 
-	local title = UIKit.outlined(frame, "Title", 19, WHITE, 2)
+	local title = MenuKit.text(frame, "Title", 18, LOOK.Text, 4)
 	title.AnchorPoint = Vector2.new(0, 1)
 	title.Position = UDim2.new(0, ROW_PAD, 0.5, 3)
 	title.TextXAlignment = Enum.TextXAlignment.Left
@@ -423,7 +419,7 @@ local function makeRow(order: number, name: string, titleText: string): Row
 	title.ZIndex = 4
 	fitText(title, 19)
 
-	local detail = UIKit.outlined(frame, "Detail", 14, CREAM, 1.5)
+	local detail = MenuKit.body(frame, "Detail", 14, CREAM, 4)
 	detail.Position = UDim2.new(0, ROW_PAD, 0.5, 4)
 	detail.TextXAlignment = Enum.TextXAlignment.Left
 	detail.ZIndex = 4
@@ -441,68 +437,24 @@ end
 --==============================================================================
 type Toggle = {
 	button: TextButton,
-	fill: UIGradient,
-	foot: Frame,
-	label: TextLabel,
+	face: MenuKit.Button,
 }
 
+-- MenuKit's button (the global UI pass): the green face ON, the pale one OFF --
+-- the word says which as well as the colour.
 local function makeToggle(row: Row): Toggle
-	local b = Instance.new("TextButton")
-	b.Name = "Toggle"
+	local face = MenuKit.button(row.frame, "Toggle", 5, "ON", 18)
+	local b = face.hit
 	b.AnchorPoint = Vector2.new(1, 0.5)
 	b.Position = UDim2.new(1, -4, 0.5, 0)
 	b.Size = UDim2.fromOffset(TOGGLE_W, TARGET)
-	b.BackgroundTransparency = 1
-	b.BorderSizePixel = 0
-	b.AutoButtonColor = false
-	b.Text = ""
-	b.ZIndex = 5
-	b.Parent = row.frame
 	UIKit.clicks(b)
-
-	local plate = Instance.new("Frame")
-	plate.Name = "Plate"
-	plate.AnchorPoint = Vector2.new(0.5, 0.5)
-	plate.Position = UDim2.fromScale(0.5, 0.5)
-	plate.Size = UDim2.new(1, -8, 0, PLATE_H)
-	plate.BorderSizePixel = 0
-	plate.Active = false
-	plate.ZIndex = 6
-	plate.Parent = b
-	UIKit.corner(plate, 10)
-	UIKit.stroke(plate, PANEL.Outline, RAIL.OutlineThickness)
-	local fill = UIKit.gradient(plate, ON_FACE, ON_SHADE)
-
-	local foot = Instance.new("Frame")
-	foot.Name = "Shade"
-	foot.AnchorPoint = Vector2.new(0.5, 1)
-	foot.Position = UDim2.new(0.5, 0, 1, 0)
-	foot.Size = UDim2.new(1, 0, 0, 5)
-	foot.BackgroundColor3 = ON_FOOT
-	foot.BorderSizePixel = 0
-	foot.Active = false
-	foot.ZIndex = 7
-	foot.Parent = plate
-	UIKit.corner(foot, 10)
-
-	local label = UIKit.outlined(plate, "Label", 18, WHITE, 2.5)
-	label.Size = UDim2.fromScale(1, 1)
-	label.Position = UDim2.fromOffset(0, -2)
-	label.ZIndex = 8
-
-	local scale = Instance.new("UIScale")
-	scale.Parent = b
-	UIKit.cardPop(b, scale, { hoverScale = 1.06, pressScale = 0.94, sound = false })
-
-	return { button = b, fill = fill, foot = foot, label = label }
+	return { button = b, face = face }
 end
 
 local function paintToggle(t: Toggle, on: boolean)
-	t.fill.Color = if on then ColorSequence.new(ON_FACE, ON_SHADE)
-		else ColorSequence.new(OFF_FACE, OFF_SHADE)
-	t.foot.BackgroundColor3 = if on then ON_FOOT else OFF_FOOT
-	t.label.Text = if on then "ON" else "OFF"
-	t.label.TextColor3 = if on then WHITE else MUTED
+	t.face.style(if on then "go" else "idle")
+	t.face.set(if on then "ON" else "OFF")
 end
 
 --==============================================================================
@@ -561,13 +513,13 @@ local function makeSlider(row: Row, set: (number) -> ()): Slider
 	track.AnchorPoint = Vector2.new(0, 0.5)
 	track.Position = UDim2.new(0, KNOB / 2, 0.5, 0)
 	track.Size = UDim2.new(1, -KNOB, 0, TRACK_H)
-	track.BackgroundColor3 = TRACK
+	track.BackgroundColor3 = LOOK.BarTrack
 	track.BorderSizePixel = 0
 	track.Active = false
 	track.ZIndex = 6
 	track.Parent = hit
 	UIKit.corner(track, TRACK_H / 2)
-	UIKit.stroke(track, BLACK, 2)
+	MenuKit.keyline(track, LOOK.WellEdge, 1.5)
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
@@ -577,19 +529,19 @@ local function makeSlider(row: Row, set: (number) -> ()): Slider
 	fill.ZIndex = 7
 	fill.Parent = track
 	UIKit.corner(fill, TRACK_H / 2)
-	local tint = UIKit.gradient(fill, ON_FACE, ON_SHADE)
+	local tint = UIKit.gradient(fill, LOOK.ButtonTop, LOOK.ButtonBottom)
 
 	local knob = Instance.new("Frame")
 	knob.Name = "Knob"
 	knob.AnchorPoint = Vector2.new(0.5, 0.5)
 	knob.Size = UDim2.fromOffset(KNOB, KNOB)
-	knob.BackgroundColor3 = CREAM
+	knob.BackgroundColor3 = KNOB_FILL
 	knob.BorderSizePixel = 0
 	knob.Active = false
 	knob.ZIndex = 8
 	knob.Parent = hit
 	UIKit.corner(knob, KNOB / 2)
-	UIKit.stroke(knob, BLACK, 2.5)
+	UIKit.stroke(knob, LOOK.Ink, 2)
 
 	local s: Slider = {
 		hit = hit,
@@ -662,9 +614,9 @@ local function placeSlider(s: Slider, level: number, muted: boolean)
 	s.knob.Position = UDim2.new(level, KNOB / 2 - level * KNOB, 0.5, 0)
 	s.fill.Size = UDim2.fromScale(level, 1)
 	s.fill.Visible = level > 0.005
-	s.tint.Color = if muted then ColorSequence.new(OFF_FACE, OFF_SHADE)
-		else ColorSequence.new(ON_FACE, ON_SHADE)
-	s.knob.BackgroundColor3 = if muted then MUTED else CREAM
+	s.tint.Color = if muted then ColorSequence.new(LOOK.OffTop, LOOK.OffBottom)
+		else ColorSequence.new(LOOK.ButtonTop, LOOK.ButtonBottom)
+	s.knob.BackgroundColor3 = if muted then KNOB_FILL_MUTED else KNOB_FILL
 end
 
 --==============================================================================
@@ -673,10 +625,12 @@ end
 local musicRow = makeRow(1, "Music", "MUSIC")
 local fxRow = makeRow(2, "SoundFx", "SOUND FX")
 local reducedRow = makeRow(3, "ReducedFx", "REDUCED FX")
+local danceRow = makeRow(4, "DiscoDance", "DISCO DANCING")
 
 local musicToggle = makeToggle(musicRow)
 local fxToggle = makeToggle(fxRow)
 local reducedToggle = makeToggle(reducedRow)
+local danceToggle = makeToggle(danceRow)
 
 local function paintAudio(row: Row, s: Slider, t: Toggle, kind: string)
 	local level, muted = SoundKit.level(kind)
@@ -764,6 +718,35 @@ end)
 player:GetAttributeChangedSignal(QUALITY):Connect(paintReduced)
 
 --==============================================================================
+-- DISCO DANCING (2026-10-03)
+--
+-- Whether this player's avatar dances at the hub while a disco runs
+-- (DiscoDance.client). ON unless switched off; saved on the profile by the
+-- server (the GameEvent verb GameConfig.MiniEvent.Dance.Action), which stamps
+-- the DiscoDance attribute this paints from. Drawn at once on a press, then
+-- put right by the attribute if the server said otherwise.
+--==============================================================================
+local function paintDance(override: boolean?)
+	local on = if override ~= nil then override else player:GetAttribute(ATTR.DiscoDance) ~= false
+	paintToggle(danceToggle, on)
+	danceRow.detail.Text = if on then "DANCE AT THE HUB DURING A DISCO" else "NO DANCING DURING A DISCO"
+	danceRow.detail.TextColor3 = if on then CREAM else MUTED
+end
+
+danceToggle.button.Activated:Connect(function()
+	local want = player:GetAttribute(ATTR.DiscoDance) == false
+	paintDance(want)
+	local channel = gameEvent
+	if channel then
+		channel:FireServer(GameConfig.MiniEvent.Dance.Action, want)
+	end
+end)
+
+player:GetAttributeChangedSignal(ATTR.DiscoDance):Connect(function()
+	paintDance(nil)
+end)
+
+--==============================================================================
 -- LAYOUT
 --
 -- Off the panel's real width, which is 90% of the screen up to the cap: the name
@@ -790,7 +773,9 @@ local function relayout()
 	end
 	reducedRow.title.Size = UDim2.new(1, -(ROW_PAD + sliderRight), 0, 22)
 	reducedRow.detail.Size = UDim2.new(1, -(ROW_PAD + sliderRight), 0, 16)
-	modal.fitContent(ROW_H * 3 + ROW_GAP * 2)
+	danceRow.title.Size = UDim2.new(1, -(ROW_PAD + sliderRight), 0, 22)
+	danceRow.detail.Size = UDim2.new(1, -(ROW_PAD + sliderRight), 0, 16)
+	modal.fitContent(ROW_H * 4 + ROW_GAP * 3)
 end
 
 rowsFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
@@ -815,6 +800,7 @@ local function setOpen(want: boolean)
 		paintMusic()
 		paintFx()
 		paintReduced()
+		paintDance(nil)
 	else
 		dragging = nil
 		local selected = GuiService.SelectedObject
@@ -828,7 +814,9 @@ local function setOpen(want: boolean)
 	modal.setOpen(want)
 end
 
-button.Activated:Connect(function()
+-- A tap presses it; a drag on a phone's scrolling panel under the Bag scrolls
+-- and never presses it (2026-10-06, MenuKit.tap).
+MenuKit.tap(button, UIKit.railDockScroll(playerGui), function()
 	setOpen(not open)
 end)
 modal.close.Activated:Connect(function()
@@ -847,4 +835,5 @@ end)
 paintMusic()
 paintFx()
 paintReduced()
+paintDance(nil)
 relayout()

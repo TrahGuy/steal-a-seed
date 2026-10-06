@@ -1,38 +1,52 @@
 --!strict
 -- Steal a Seed :: IndexUI
 --
--- THE PLANT ALMANAC. Every species in the game, one biome at a time, and which
--- of them you have actually grown.
+-- THE PLANT ALMANAC. Every species in the game, biome by biome on one page, and
+-- which of them you have actually grown.
 --
 -- What is in your dirt right now is GardenUI. This is the sheet.
 --
 --==============================================================================
--- THREE PANELS, FROM THE OWNER'S APPROVED MOCKUP (2026-09-11)
+-- COMPACT, IN THE INVENTORY'S LOOK (2026-10-03, the owner's redesign)
 --
--- Biome tabs across the top pick a shelf. On the left, that biome's card: its
--- scenery, its name and how much of it is grown. In the middle, the shelf: the
--- biome's five species on sunlit rarity cards, a sixth slot for the Biome
--- Mastery trophy, and a five-step progress bar. On the right, the showcase for
--- whichever card was tapped: a large still 3D copy of the plant on a moss
--- pedestal, its name, rarity and base Garden Yield, and the biome's one-time
--- harvest reward with its CLAIM button. A footer counts the whole kingdom.
+-- It was three panels from the 2026-09-11 mockup: wide biome tabs across the
+-- top, a scenery banner, a shelf of five sunlit cards with a trophy slot, and a
+-- permanent showcase with a large 3D plant. On a landscape phone the header,
+-- the tabs and the banner took most of the height and the collection got what
+-- was left. Now, in the approved inventory's forest slate (MenuKit, BagLook):
 --
--- It was one scrolling grid of all twenty-five cards. Twenty-five is a wall;
--- five is a shelf you can read at a glance, and the tabs are the road.
+--   header    one short row: the title, a search box, All / Grown / Missing,
+--             the close
+--   the page  ONE scrolling page since 2026-10-06 (the owner: the Shop's one
+--             page, "also apply it on index too"): every biome down it in road
+--             order, over the studded baseplate (MenuKit.baseplate). Each
+--             biome's heading is its slim row -- "Starbloom · 2/5 Grown", a
+--             bar, the biome's harvest (cash + speed) and its own CLAIM -- and
+--             under it its small, roughly square cards: the plant (or its
+--             silhouette), its name over at most two lines, its rarity, a check
+--             once grown. Columns from the width and a readable minimum card
+--             (MenuLayout.grid), never a fixed count. A search keeps the biomes
+--             it found something in; a filter shows every heading. From
+--             2026-10-03 to 2026-10-06 it showed one biome at a time, chosen in
+--             a dropdown or a sidebar
+--   detail    a tap opens the plant's page IN the panel, with Back: the still
+--             3D plant on its moss pedestal, name, rarity, biome, whether it is
+--             grown, its base Garden Yield. Back returns to the same filter,
+--             search and scroll
 --
--- NARROW SCREENS STACK. Below WIDE_AT the three panels become one column --
--- banner, shelf, showcase, footer -- in the same scroll, so a phone keeps every
--- card at a thumb's width instead of squeezing three columns into it.
+-- WHERE IT STANDS is MenuLayout's: between the rails on a desktop (they stay
+-- pressable), the whole safe area on a phone -- and then the rail layer steps
+-- under the panel while it is open (UIKit.coverRail), so Walk Mode, the
+-- Garden and Bag buttons and the admin button never stand over it or take its
+-- taps. They come back as they were when it closes.
 --
 --==============================================================================
--- A CARD WEARS ITS RARITY, GROWN OR NOT
+-- A CARD WEARS ITS RARITY, GROWN OR NOT (the approved rule, 2026-09-11)
 --
--- This file used to hold the opposite rule: nothing on a locked card carried the
--- tier, because Epic means Bellchime in Greenhollow. The approved mockup reverses
--- that on purpose. An undiscovered card shows its rarity colour and word, a dark
--- silhouette and "???", so a player can see what KIND of find a shelf is still
--- missing. The name, the scenery and the plant's own colours stay hidden until
--- it has been grown.
+-- An undiscovered card shows its rarity colour and word and a dark silhouette,
+-- so a player can see what KIND of find a biome is still missing. The name and
+-- the plant's own colours stay hidden until it has been grown -- and a search
+-- never finds a plant by a name the player has not seen (AlmanacView).
 --
 -- The rarity still means the FORM -- how often that shape drops -- and never
 -- ColorForKg, which is what one pod happens to weigh.
@@ -55,7 +69,8 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -63,10 +78,15 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local BiomeData = require(Shared:WaitForChild("BiomeData"))
 local AlmanacData = require(Shared:WaitForChild("AlmanacData"))
+local AlmanacView = require(Shared:WaitForChild("AlmanacView"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
+local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
+local RarityFX = require(Shared:WaitForChild("RarityFX"))
+local ShopCatalog = require(Shared:WaitForChild("ShopCatalog"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -75,126 +95,33 @@ local ALMANAC = GameConfig.Almanac
 local RAIL = GameConfig.Rail
 local CARD = GameConfig.Card
 local ATTR = GameConfig.Attributes
+local LOOK = MenuKit.Look
 local PANEL_NAME = "Index"
 
 local WHITE = Color3.fromRGB(255, 255, 255)
-local BLACK = Color3.fromRGB(0, 0, 0)
-local INK = ALMANAC.Ink
 
 --==============================================================================
--- THE MEASUREMENTS
---
--- Gui pixels. The two side columns are fixed and the shelf takes what is left,
--- because the shelf is the one with something to gain from width: every pixel
--- there is card. Every control a finger presses is at least 44 tall.
+-- THE MEASUREMENTS (logical units; where the blocks go is MenuLayout's)
 --==============================================================================
-local MAX_WIDTH = 740
-local MAX_HEIGHT = 620
--- Content width at which the three columns fit side by side.
-local WIDE_AT = 600
-local GAP = 10
-local TOP_PAD = 8
-local BOTTOM_PAD = 4
--- Room for the scroll bar, which draws over the content rather than beside it.
-local SCROLL_GUTTER = 8
-local TAB_HEIGHT = 44
-local TAB_STRIP = TAB_HEIGHT + 8
-local TAB_GAP = 6
-local TAB_NARROW = 138
-local LEFT_WIDTH = 124
-local RIGHT_WIDTH = 214
-local BANNER_HEIGHT = 84
-local CARD_GUTTER = 8
-local CARD_PAD = 6
--- A card is its diorama plus the name strip above it and the rarity tag below.
-local CARD_CHROME = 56
-local PROGRESS_HEIGHT = 36
-local HARVEST_HEIGHT = 136
-local FOOTER_WIDE = 56
-local FOOTER_NARROW = 84
--- How much of its viewport a creature fills. A shelf diorama crops into its soil
--- the way the Garden's cards do; the showcase leaves room for the whole pedestal.
-local CARD_FILL = 0.8
+local IDX = MenuLayout.Index
+local CARD_GAP = IDX.CardGap
+local GRID_INSET = IDX.GridInset
+-- How much of its viewport a creature fills on a card and on the detail stage.
+local CARD_FILL = 0.84
 local STAGE_FILL = 0.6
 -- How long a CLAIM waits for the server's answer before letting go.
 local CLAIM_PATIENCE = 5
 
--- ZIndexBehavior is GLOBAL on these ScreenGuis, so these are compared across the
--- whole panel. The modal's own chrome sits at 1-3 and its click blocker at 2.
-local Z_SCROLL = 3
-local Z_PANEL = 4
-local Z_FACE = 5
-local Z_INSET = 6
-local Z_VIEW = 7
-local Z_TEXT = 8
-local Z_RING = 9
+-- ZIndexBehavior is GLOBAL on this ScreenGui. The modal's chrome is 1-3 (its
+-- close 4-7); everything here sits above it.
+local Z = 6
 
---==============================================================================
--- THE ROAD, READ ONCE
---
--- Tab order is road order and a shelf is commonest first; both come from
--- AlmanacData, which the server's claim reads too.
---==============================================================================
-local road = AlmanacData.Biomes()
-local shelves: { [string]: { any } } = {}
-local SEGMENTS = 0
-for _, biome in ipairs(road) do
-	shelves[biome.Id] = AlmanacData.SpeciesIn(biome.Id)
-	SEGMENTS = math.max(SEGMENTS, #shelves[biome.Id])
-end
-
---==============================================================================
--- SMALL BUILDERS
---==============================================================================
-local function label(parent: Instance, name: string, size: number, colour: Color3,
-	z: number): TextLabel
-	local l = Instance.new("TextLabel")
-	l.Name = name
-	l.BackgroundTransparency = 1
-	l.BorderSizePixel = 0
-	l.Font = Enum.Font.FredokaOne
-	l.TextSize = size
-	l.TextColor3 = colour
-	l.Text = ""
-	l.ZIndex = z
-	l.Parent = parent
-	return l
-end
-
--- The house display face (UIKit.outlined), keylined in this panel's ink.
-local function display(parent: Instance, name: string, size: number, colour: Color3,
-	z: number, thickness: number?): TextLabel
-	local l = UIKit.outlined(parent, name, size, colour, thickness or 2)
-	local line = l:FindFirstChildOfClass("UIStroke")
-	if line then
-		line.Color = INK
-	end
-	l.ZIndex = z
-	return l
-end
-
--- Scales a label down to fit its box, never up past `largest`. Names run from
--- "Nubkin" to "Supernovus" in the same card.
-local function shrinkToFit(l: TextLabel, largest: number, smallest: number)
-	l.TextScaled = true
-	local limit = Instance.new("UITextSizeConstraint")
-	limit.MaxTextSize = largest
-	limit.MinTextSize = smallest
-	limit.Parent = l
-end
-
-local function well(parent: Instance, name: string, z: number, fill: Color3,
-	transparency: number?, radius: number?): Frame
-	local f = Instance.new("Frame")
-	f.Name = name
-	f.BackgroundColor3 = fill
-	f.BackgroundTransparency = transparency or 0
-	f.BorderSizePixel = 0
-	f.ZIndex = z
-	f.Parent = parent
-	UIKit.corner(f, radius or 12)
-	return f
-end
+local road = AlmanacView.road()
+-- Each biome's uploaded picture, by its stable id (2026-10-04): beside its name
+-- wherever the Almanac names a biome. A picture that never loads leaves the
+-- name alone, and MenuKit.picture reports its id once.
+local BIOME_ICONS: { [string]: string } = ALMANAC.BiomeIcons
+local ICON = 20
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -208,9 +135,8 @@ local gui = Instance.new("ScreenGui")
 gui.Name = "SeedIndex"
 gui.ResetOnSpawn = false
 -- ONE ABOVE THE HOTBAR'S 30. Level with it, the engine was free to draw the strip
--- over the open panel, and did: the panel is 82% of the screen tall, so on a
--- landscape phone or a 720-px window its bottom sits behind the hotbar. Above
--- it, the panel and its dimmer cover the strip as the Shop (32) always has.
+-- over the open panel, and did. Above it, the panel and its dimmer cover the
+-- strip as the Shop (32) always has.
 gui.DisplayOrder = 31
 gui.Parent = playerGui
 
@@ -232,17 +158,13 @@ local badge, badgeCount = UIKit.badge(button, RAIL.Badge)
 --==============================================================================
 -- WHERE IT SITS IS ASKED OF HudLayout AND APPLIED HERE
 --
--- The top of the left rail on a desktop, exactly where it always was. On a
--- phone -- any touch screen, or a window the desktop rail does not fit -- the
--- first square of the compact top row: the book alone, and the badge tucked
--- into its corner so the row can sit 8 px under the topbar without pushing it
--- off the glass. Asked again only when this ScreenGui's size changes, which is
--- every viewport, inset and rotation change and nothing else.
---
--- ON A TOUCH SCREEN it is the top tile of the dock (HudLayout, THE PHONE'S
--- SIDEBARS), standing in the frame RailDrawerUI slides, still this script's
--- button and this script's badge. The artwork is its own tile there too, so no
--- slate plate or word goes over it.
+-- Drawn as the owner's studded picture on every screen (a phone's since
+-- 2026-10-05, the rest since 2026-10-06). The top of the left rail on a
+-- desktop; on a touch screen the top-right row's left end, beside Garden
+-- (HudLayout, THE PHONE'S SIDEBARS), standing in the frame RailDrawerUI hides
+-- while a centre panel is open -- still this script's button and badge. The
+-- badge is tucked into its top-LEFT corner there, Garden's being just right of
+-- it. Asked again only when this ScreenGui's size changes.
 --==============================================================================
 local function placeButton()
 	if gui.AbsoluteSize.X <= 0 then
@@ -250,1002 +172,524 @@ local function placeButton()
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
 	UIKit.railShape(button, Vector2.new(layout.index.w, layout.index.h))
+	UIKit.railPicture(button, RAIL.StuddedIndexArt, 1)
 	button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
 	button.Position = HudLayout.place(layout.index, Vector2.zero, layout.safe)
-	UIKit.railBadge(badge, layout.compact, "right")
+	UIKit.railBadge(badge, layout.compact, if layout.sidebar then "left" else "right")
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
 placeButton()
 
 --==============================================================================
--- THE PANEL
---
--- The shop's chrome in the almanac's colours: a leaf-green header banner, a red
--- close plate, and a deep moss body. Every colour is GameConfig.Almanac.
+-- THE PANEL: the Bag's shell, a short header, the plants' own icon by the title
 --==============================================================================
-local modal = UIKit.modal(gui, {
-	name = PANEL_NAME,
-	title = "Plant Almanac",
-	maxWidth = MAX_WIDTH,
-	maxHeight = MAX_HEIGHT,
-	titleColour = WHITE,
-	theme = {
-		fill = ALMANAC.BodyTop,
-		shade = ALMANAC.BodyBottom,
-		outline = INK,
-		lattice = ALMANAC.BodyLattice,
-		latticeTransparency = ALMANAC.BodyLatticeTransparency,
-		latticeZIndex = 1,
-		headerTop = ALMANAC.HeaderTop,
-		headerBottom = ALMANAC.HeaderBottom,
-		headerRule = INK,
-		titleStroke = INK,
-		titleStrokeThickness = 2,
-		closeTop = ALMANAC.CloseTop,
-		closeBottom = ALMANAC.CloseBottom,
-		closeShade = ALMANAC.CloseShade,
-		closeRadius = 8,
-	},
-})
+local menu = MenuKit.modal(gui, PANEL_NAME, "Plant Almanac", GameConfig.BagLook.IconImages.plants, nil)
 -- This gui holds only the panel, so it takes the player's menu size whole.
-UIKit.menuGui(gui)
+UIKit.menuGui(gui, Vector2.new(300, 220))
+local modal = menu.modal
+local body = menu.body
 
-local titleBar = modal.title.Parent :: Frame
-modal.title.TextSize = 28
-modal.title.Position = UDim2.new(0, 50, 0.5, 0)
-modal.title.Size = UDim2.new(1, -104, 1, 0)
-
--- The open book, on a leaf tile of its own so it reads against the banner.
-local mark = well(titleBar, "AlmanacMark", 4, WHITE, 0, 10)
-mark.AnchorPoint = Vector2.new(0, 0.5)
-mark.Position = UDim2.new(0, 0, 0.5, 0)
-mark.Size = UDim2.fromOffset(38, 38)
-UIKit.stroke(mark, INK, 2)
-UIKit.gradient(mark, ALMANAC.MarkTop, ALMANAC.MarkBottom)
-local markGlyph = label(mark, "Glyph", 22, WHITE, 5)
-markGlyph.Size = UDim2.fromScale(1, 1)
-markGlyph.Text = "📖"
+-- A controller's selection starts on the first card (PadFocus reads this).
+local padFirst = Instance.new("ObjectValue")
+padFirst.Name = "PadFirst"
+padFirst.Parent = modal.shell
 
 --==============================================================================
--- STUDS ON THE MOSS
---
--- One tiled texture instead of the modal's lattice, which is diagonal lines and
--- not the dotted ground the mockup has. Tiled means one instance for the whole
--- body however large the panel is. With no upload recorded, the lattice stays.
+-- STATE
 --==============================================================================
-if ALMANAC.DotTexture ~= "" then
-	local lattice = modal.shell:FindFirstChild("Lattice")
-	if lattice and lattice:IsA("GuiObject") then
-		lattice.Visible = false
-	end
-	local studs = Instance.new("ImageLabel")
-	studs.Name = "Studs"
-	studs.Size = UDim2.fromScale(1, 1)
-	studs.BackgroundTransparency = 1
-	studs.BorderSizePixel = 0
-	studs.Image = ALMANAC.DotTexture
-	studs.ImageColor3 = ALMANAC.DotColour
-	studs.ImageTransparency = ALMANAC.DotTransparency
-	studs.ScaleType = Enum.ScaleType.Tile
-	studs.TileSize = UDim2.fromOffset(ALMANAC.DotTile, ALMANAC.DotTile)
-	studs.ZIndex = 1
-	studs.Parent = modal.shell
-	UIKit.corner(studs, 16)
+local almanac: { [string]: boolean } = {}
+local mastery: { [string]: boolean } = {}
+-- Biomes whose CLAIM has been sent and not yet answered.
+local pending: { [string]: boolean } = {}
+
+local activeBiome: string = road[1].Id
+local filterNow: AlmanacView.Filter = "all"
+local queryNow = ""
+local detailId: string? = nil
+local panelOpen = false
+local openedBefore = false
+local current: { AlmanacView.Entry } = {}
+local searching = false
+
+local function stateOf(biomeId: string): string
+	return AlmanacData.ClaimState(almanac, mastery, biomeId)
 end
 
-local scroll = Instance.new("ScrollingFrame")
-scroll.Name = "Almanac"
-scroll.Size = UDim2.fromScale(1, 1)
-scroll.BackgroundTransparency = 1
-scroll.BorderSizePixel = 0
-scroll.ScrollingDirection = Enum.ScrollingDirection.Y
-scroll.ScrollBarThickness = 5
-scroll.ScrollBarImageColor3 = ALMANAC.WellEdge
-scroll.VerticalScrollBarInset = Enum.ScrollBarInset.None
-scroll.CanvasSize = UDim2.new()
-scroll.Selectable = false
-scroll.ZIndex = Z_SCROLL
-scroll.Parent = modal.body
+--==============================================================================
+-- THE HEADER'S CONTROLS (the title and the close are the modal's own)
+--==============================================================================
+local paint: () -> ()
+local relayout: () -> ()
+local resetScroll: () -> ()
+local requestClaim: (string) -> ()
 
-local content = Instance.new("Frame")
-content.Name = "Content"
-content.BackgroundTransparency = 1
-content.BorderSizePixel = 0
-content.ZIndex = Z_SCROLL
-content.Parent = scroll
+local search = MenuKit.search(body, Z, "Search")
+local filter = MenuKit.segmented(body, Z, AlmanacView.Filters :: { string }, AlmanacView.FilterLabels)
 
 --==============================================================================
--- THE BIOME TABS
+-- THE PAGE (2026-10-06): every biome, one list, over the baseplate
 --
--- A strip that scrolls sideways when it has to: five equal tabs on a wide panel,
--- and fixed-width tabs a thumb can drag through on a phone.
+-- A biome is its heading -- the row that was the one chosen biome's progress
+-- row: its picture, "Starbloom · 2/5 Grown", a bar, its harvest (the same two
+-- numbers AlmanacService pays, with the cash pack's coins and the catalogue's
+-- speed shoe) and its own CLAIM -- and under it a grid of its cards. The
+-- biomes follow one another down one scrolling list, in road order. Behind
+-- the list, still while it scrolls, the studded baseplate where a plain light
+-- well stood.
 --==============================================================================
-local tabStrip = well(content, "Biomes", Z_PANEL, ALMANAC.Well, 0.1, 12)
-UIKit.stroke(tabStrip, ALMANAC.WellEdge, 1.5)
+local plate = MenuKit.baseplate(body, Z - 1)
+local grid = Instance.new("ScrollingFrame")
+grid.Name = "Almanac"
+grid.BackgroundTransparency = 1
+grid.BorderSizePixel = 0
+grid.ScrollingDirection = Enum.ScrollingDirection.Y
+grid.ScrollBarThickness = 5
+grid.ScrollBarImageColor3 = LOOK.PlateEdge
+grid.CanvasSize = UDim2.new()
+grid.AutomaticCanvasSize = Enum.AutomaticSize.Y
+grid.ElasticBehavior = Enum.ElasticBehavior.Always
+-- The cards are the controller's stops, never the list behind them.
+grid.Selectable = false
+grid.ZIndex = Z
+grid.Parent = body
+local gridPad = Instance.new("UIPadding")
+gridPad.Parent = grid
+local pageList = Instance.new("UIListLayout")
+pageList.SortOrder = Enum.SortOrder.LayoutOrder
+pageList.Padding = UDim.new(0, IDX.SectionGap)
+pageList.Parent = grid
 
-local tabScroll = Instance.new("ScrollingFrame")
-tabScroll.Name = "Tabs"
-tabScroll.Position = UDim2.fromOffset(4, 4)
-tabScroll.Size = UDim2.new(1, -8, 1, -8)
-tabScroll.BackgroundTransparency = 1
-tabScroll.BorderSizePixel = 0
-tabScroll.ScrollingDirection = Enum.ScrollingDirection.X
-tabScroll.ScrollBarThickness = 0
-tabScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
-tabScroll.CanvasSize = UDim2.new()
-tabScroll.Selectable = false
-tabScroll.ZIndex = Z_PANEL
-tabScroll.Parent = tabStrip
-
-local tabList = Instance.new("UIListLayout")
-tabList.FillDirection = Enum.FillDirection.Horizontal
-tabList.VerticalAlignment = Enum.VerticalAlignment.Center
-tabList.SortOrder = Enum.SortOrder.LayoutOrder
-tabList.Padding = UDim.new(0, TAB_GAP)
-tabList.Parent = tabScroll
-
-type Tab = {
-	button: TextButton,
-	tint: UIGradient,
-	edge: UIStroke,
+type Section = {
+	frame: Frame,
+	heading: Frame,
 	text: TextLabel,
-	textLine: UIStroke,
-	ready: Frame,
+	icon: Frame?,
+	bar: Frame,
+	barFill: Frame,
+	reward: Frame,
+	cashIcon: Frame,
+	cashValue: TextLabel,
+	speedIcon: Frame,
+	speedValue: TextLabel,
+	claim: MenuKit.Button,
+	shake: () -> (),
+	shelf: Frame,
+	cells: UIGridLayout,
 }
-local tabs: { [string]: Tab } = {}
+local sections: { [string]: Section } = {}
 
-for _, biome in ipairs(road) do
-	local hit = Instance.new("TextButton")
-	hit.Name = biome.Id
-	hit.LayoutOrder = biome.Order
-	hit.Size = UDim2.fromOffset(TAB_NARROW, TAB_HEIGHT)
-	hit.BackgroundTransparency = 1
-	hit.BorderSizePixel = 0
-	hit.AutoButtonColor = false
-	hit.Text = ""
-	hit.ZIndex = Z_FACE
-	hit.Parent = tabScroll
-
-	local face = well(hit, "Face", Z_FACE, WHITE, 0, 10)
-	face.Size = UDim2.fromScale(1, 1)
-	face.Active = false
-	local tint = UIKit.gradient(face, ALMANAC.TabIdleTop, ALMANAC.TabIdleBottom)
-	local edge = UIKit.stroke(face, ALMANAC.WellEdge, 2)
-
-	local text = label(face, "Label", 15, ALMANAC.Cream, Z_TEXT)
-	text.Position = UDim2.fromOffset(6, 0)
-	text.Size = UDim2.new(1, -12, 1, 0)
-	text.Text = string.format("%s %d. %s", ALMANAC.TabIcons[biome.Id] or "", biome.Order,
-		biome.DisplayName)
-	shrinkToFit(text, 15, 10)
-	local textLine = UIKit.stroke(text, INK, 1.5)
-
-	-- A harvest waiting on this biome: a gold dot on its corner, so the tab says
-	-- so even while another shelf is on show.
-	local ready = well(face, "Ready", Z_RING, ALMANAC.Gold, 0, 6)
-	ready.AnchorPoint = Vector2.new(0.5, 0.5)
-	ready.Position = UDim2.new(1, -7, 0, 7)
-	ready.Size = UDim2.fromOffset(12, 12)
-	ready.Visible = false
-	UIKit.stroke(ready, INK, 2)
-
-	UIKit.clicks(hit)
-	tabs[biome.Id] = {
-		button = hit,
-		tint = tint,
-		edge = edge,
+for order, biome in ipairs(road) do
+	local frame = MenuKit.frame(grid, "Biome_" .. biome.Id, Z + 1)
+	frame.LayoutOrder = order
+	frame.Size = UDim2.new(1, 0, 0, 0)
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, IDX.HeadingGap)
+	list.Parent = frame
+	local heading = MenuKit.frame(frame, "Heading", Z + 1, LOOK.Well, LOOK.WellTransparency, 9)
+	heading.LayoutOrder = 1
+	MenuKit.keyline(heading, LOOK.WellEdge, 1, 0.3)
+	local text = MenuKit.text(heading, "Count", 15, LOOK.Text, Z + 2)
+	text.TextXAlignment = Enum.TextXAlignment.Left
+	text.RichText = true
+	local image = BIOME_ICONS[biome.Id]
+	local icon: Frame? = nil
+	if image then
+		local pic = MenuKit.picture(heading, image, nil, Z + 3)
+		pic.Name = "BiomeIcon"
+		pic.AnchorPoint = Vector2.new(0, 0.5)
+		pic.Size = UDim2.fromOffset(ICON, ICON)
+		icon = pic
+	end
+	local bar = MenuKit.frame(heading, "Bar", Z + 2, LOOK.Bar, 0, 4)
+	bar.AnchorPoint = Vector2.new(0, 0.5)
+	MenuKit.keyline(bar, LOOK.WellEdge, 1, 0.4)
+	local barFill = MenuKit.frame(bar, "Fill", Z + 3, LOOK.Green, 0, 4)
+	barFill.Size = UDim2.fromScale(0, 1)
+	local reward = MenuKit.frame(heading, "Harvest", Z + 2)
+	local cashIcon = MenuKit.picture(reward, GameConfig.Store.Icons.cash2, nil, Z + 3)
+	cashIcon.AnchorPoint = Vector2.new(0, 0.5)
+	cashIcon.Size = UDim2.fromOffset(20, 20)
+	local cashValue = MenuKit.text(reward, "Cash", 14, LOOK.Money, Z + 3)
+	cashValue.TextXAlignment = Enum.TextXAlignment.Left
+	local speedIcon = MenuKit.picture(reward, ShopCatalog.SpeedIcon, GameConfig.Store.Icons.speed1, Z + 3)
+	speedIcon.AnchorPoint = Vector2.new(0, 0.5)
+	speedIcon.Size = UDim2.fromOffset(20, 20)
+	local speedValue = MenuKit.text(reward, "Speed", 14, LOOK.Speed, Z + 3)
+	speedValue.TextXAlignment = Enum.TextXAlignment.Left
+	-- A reward to take: the studded gold CLAIM (the global UI pass, 2026-10-04),
+	-- each biome's its own.
+	local claim = MenuKit.button(heading, "Claim", Z + 2, "CLAIM", 15, { studs = true })
+	local shake = UIKit.shake(claim.plate)
+	local biomeId = biome.Id
+	claim.hit.Activated:Connect(function()
+		requestClaim(biomeId)
+	end)
+	local shelf = MenuKit.frame(frame, "Shelf", Z + 1)
+	shelf.LayoutOrder = 2
+	shelf.Size = UDim2.new(1, 0, 0, 0)
+	shelf.AutomaticSize = Enum.AutomaticSize.Y
+	local cells = Instance.new("UIGridLayout")
+	cells.SortOrder = Enum.SortOrder.LayoutOrder
+	cells.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	cells.Parent = shelf
+	sections[biome.Id] = {
+		frame = frame,
+		heading = heading,
 		text = text,
-		textLine = textLine,
-		ready = ready,
+		icon = icon,
+		bar = bar,
+		barFill = barFill,
+		reward = reward,
+		cashIcon = cashIcon,
+		cashValue = cashValue,
+		speedIcon = speedIcon,
+		speedValue = speedValue,
+		claim = claim,
+		shake = shake,
+		shelf = shelf,
+		cells = cells,
 	}
 end
 
---==============================================================================
--- THE BIOME CARD
---
--- The biome's own painted backdrop -- the same plate its species' cards stand
--- in front of in the Garden -- darkened at both ends so the words on it read.
---==============================================================================
-local biomeCard = well(content, "Biome", Z_PANEL, ALMANAC.Well, 0, 14)
-UIKit.stroke(biomeCard, INK, 2.5)
+local emptyLabel = MenuKit.body(body, "Empty", 15, LOOK.Muted, Z + 3)
+emptyLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+emptyLabel.TextWrapped = true
+emptyLabel.Visible = false
 
-local biomeArt = Instance.new("ImageLabel")
-biomeArt.Name = "Scenery"
-biomeArt.Size = UDim2.fromScale(1, 1)
-biomeArt.BackgroundTransparency = 1
-biomeArt.BorderSizePixel = 0
-biomeArt.ScaleType = Enum.ScaleType.Crop
-biomeArt.ImageColor3 = CARD.ArtTint
-biomeArt.ZIndex = Z_FACE
-biomeArt.Parent = biomeCard
-UIKit.corner(biomeArt, 14)
-
-local biomeShade = well(biomeCard, "Shade", Z_INSET, BLACK, 0, 14)
-biomeShade.Size = UDim2.fromScale(1, 1)
-local biomeFade = Instance.new("UIGradient")
-biomeFade.Rotation = 90
-biomeFade.Transparency = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 0.2),
-	NumberSequenceKeypoint.new(0.35, 0.82),
-	NumberSequenceKeypoint.new(0.65, 0.82),
-	NumberSequenceKeypoint.new(1, 0.2),
-})
-biomeFade.Parent = biomeShade
-
-local biomeKicker = label(biomeCard, "Kicker", 13, ALMANAC.Lime, Z_TEXT)
-UIKit.stroke(biomeKicker, INK, 1.5)
-local biomeName = display(biomeCard, "Name", 22, WHITE, Z_TEXT, 2)
-shrinkToFit(biomeName, 22, 12)
-
-local biomeStatus = well(biomeCard, "Harvested", Z_VIEW, ALMANAC.Well, 0.15, 10)
-UIKit.stroke(biomeStatus, ALMANAC.Lime, 2, 0.1)
-local statusTitle = label(biomeStatus, "Title", 11, ALMANAC.Cream, Z_TEXT)
-statusTitle.Position = UDim2.fromOffset(4, 7)
-statusTitle.Size = UDim2.new(1, -8, 0, 14)
-shrinkToFit(statusTitle, 11, 8)
-local statusValue = label(biomeStatus, "Value", 16, ALMANAC.Lime, Z_TEXT)
-statusValue.Position = UDim2.fromOffset(4, 23)
-statusValue.Size = UDim2.new(1, -8, 0, 24)
-shrinkToFit(statusValue, 16, 10)
-UIKit.stroke(statusValue, INK, 1.5)
-
-local function layoutBiome(wide: boolean)
-	-- Dark at both ends of the long axis: top and bottom on the column, left and
-	-- right on the phone's banner.
-	biomeFade.Rotation = if wide then 90 else 0
-	if wide then
-		biomeKicker.Position = UDim2.fromOffset(6, 12)
-		biomeKicker.Size = UDim2.new(1, -12, 0, 16)
-		biomeKicker.TextXAlignment = Enum.TextXAlignment.Center
-		biomeName.Position = UDim2.fromOffset(6, 30)
-		biomeName.Size = UDim2.new(1, -12, 0, 28)
-		biomeName.TextXAlignment = Enum.TextXAlignment.Center
-		biomeStatus.AnchorPoint = Vector2.new(0.5, 1)
-		biomeStatus.Position = UDim2.new(0.5, 0, 1, -10)
-		biomeStatus.Size = UDim2.new(1, -16, 0, 54)
-	else
-		biomeKicker.Position = UDim2.fromOffset(14, 16)
-		biomeKicker.Size = UDim2.new(1, -170, 0, 16)
-		biomeKicker.TextXAlignment = Enum.TextXAlignment.Left
-		biomeName.Position = UDim2.fromOffset(14, 34)
-		biomeName.Size = UDim2.new(1, -170, 0, 32)
-		biomeName.TextXAlignment = Enum.TextXAlignment.Left
-		biomeStatus.AnchorPoint = Vector2.new(1, 0.5)
-		biomeStatus.Position = UDim2.new(1, -12, 0.5, 0)
-		biomeStatus.Size = UDim2.fromOffset(136, 54)
-	end
+resetScroll = function()
+	grid.CanvasPosition = Vector2.zero
 end
 
---==============================================================================
--- THE SHELF
---==============================================================================
-local shelf = Instance.new("Frame")
-shelf.Name = "Shelf"
-shelf.BackgroundTransparency = 1
-shelf.BorderSizePixel = 0
-shelf.ZIndex = Z_PANEL
-shelf.Parent = content
-
---==============================================================================
--- FIVE CARDS, BUILT ONCE, REFILLED PER TAB
---
--- A slot never changes shape, only what it shows, so the tabs repaint five cards
--- rather than building five more. Each slot keeps ONE ViewportFrame for its whole
--- life and the plants move in and out of it -- see showPortrait.
---==============================================================================
-type Card = {
-	holder: Frame,
-	button: ImageButton,
-	tint: UIGradient,
-	name: TextLabel,
-	inset: Frame,
-	art: ImageLabel,
-	view: ViewportFrame,
-	hidden: TextLabel,
-	rarity: TextLabel,
-	ring: Frame,
-	shown: string?,
-	species: any,
-}
-local cards: { Card } = {}
-
-for slot = 1, SEGMENTS do
-	local holder = Instance.new("Frame")
-	holder.Name = "Card" .. slot
-	holder.AnchorPoint = Vector2.new(0.5, 0.5)
-	holder.BackgroundTransparency = 1
-	holder.BorderSizePixel = 0
-	holder.ZIndex = Z_PANEL
-	holder.Parent = shelf
-
-	local pop = Instance.new("UIScale")
-	pop.Scale = 1
-	pop.Parent = holder
-
-	local shadow = well(holder, "Shadow", Z_PANEL, BLACK, 0.55, 12)
-	shadow.Size = UDim2.fromScale(1, 1)
-	shadow.Position = UDim2.fromOffset(0, 4)
-
-	local face = Instance.new("ImageButton")
-	face.Name = "Face"
-	face.Size = UDim2.fromScale(1, 1)
-	face.BorderSizePixel = 0
-	face.AutoButtonColor = false
-	face.ZIndex = Z_FACE
-	face.Parent = holder
-	UIKit.corner(face, 12)
-	local edge = UIKit.stroke(face, INK, 2.5)
-	local tint = UIKit.gradient(face, ALMANAC.Rarity.Common[1], ALMANAC.Rarity.Common[2])
-
-	-- Sun on the top half of the card: a white wash that fades out by the middle.
-	local sheen = well(face, "Sheen", Z_FACE, WHITE, 0, 12)
-	sheen.Size = UDim2.new(1, 0, 0.5, 0)
-	sheen.Active = false
-	local sheenFade = Instance.new("UIGradient")
-	sheenFade.Rotation = 90
-	sheenFade.Transparency = NumberSequence.new(0.7, 1)
-	sheenFade.Parent = sheen
-
-	local name = display(face, "Name", 15, WHITE, Z_TEXT, 2)
-	name.AnchorPoint = Vector2.new(0.5, 0)
-	name.Position = UDim2.new(0.5, 0, 0, 5)
-	name.Size = UDim2.new(1, -8, 0, 20)
-	shrinkToFit(name, 15, 9)
-
-	local inset = well(face, "Diorama", Z_INSET, ALMANAC.Well, 0, 10)
-	inset.AnchorPoint = Vector2.new(0.5, 0)
-	inset.Position = UDim2.new(0.5, 0, 0, 27)
-	inset.Active = false
-	UIKit.stroke(inset, INK, 2)
-
-	local art = Instance.new("ImageLabel")
-	art.Name = "Scenery"
-	art.Size = UDim2.fromScale(1, 1)
-	art.BackgroundTransparency = 1
-	art.BorderSizePixel = 0
-	art.ScaleType = Enum.ScaleType.Crop
-	art.ImageColor3 = CARD.ArtTint
-	art.Visible = false
-	art.ZIndex = Z_INSET
-	art.Parent = inset
-	UIKit.corner(art, 10)
-
-	-- Inset a few pixels so a pedestal edge never paints over the rounded corner.
-	local view = Instance.new("ViewportFrame")
-	view.Name = "Plant"
-	view.AnchorPoint = Vector2.new(0.5, 0.5)
-	view.Position = UDim2.fromScale(0.5, 0.5)
-	view.Size = UDim2.new(1, -6, 1, -6)
-	view.BackgroundTransparency = 1
-	view.BorderSizePixel = 0
-	view.Ambient = CARD.Ambient
-	view.LightColor = CARD.LightColour
-	view.LightDirection = CARD.LightDirection
-	view.ZIndex = Z_VIEW
-	view.Parent = inset
-
-	local hidden = label(inset, "Undiscovered", 10, ALMANAC.Cream, Z_TEXT)
-	hidden.AnchorPoint = Vector2.new(0.5, 1)
-	hidden.Position = UDim2.new(0.5, 0, 1, -3)
-	hidden.Size = UDim2.new(1, -6, 0, 13)
-	hidden.Text = "UNDISCOVERED"
-	shrinkToFit(hidden, 10, 6)
-	UIKit.stroke(hidden, INK, 1.5)
-
-	-- The rarity tag: a dark pill sized to its word, the word in the rarity's
-	-- own light colour.
-	local tag = well(face, "Tag", Z_INSET, INK, 0.3, 6)
-	tag.AnchorPoint = Vector2.new(0.5, 1)
-	tag.Position = UDim2.new(0.5, 0, 1, -5)
-	tag.Size = UDim2.fromOffset(0, 18)
-	tag.AutomaticSize = Enum.AutomaticSize.X
-	tag.Active = false
-	local tagPad = Instance.new("UIPadding")
-	tagPad.PaddingLeft = UDim.new(0, 7)
-	tagPad.PaddingRight = UDim.new(0, 7)
-	tagPad.Parent = tag
-	local rarity = label(tag, "Rarity", 12, WHITE, Z_TEXT)
-	rarity.Size = UDim2.fromScale(0, 1)
-	rarity.AutomaticSize = Enum.AutomaticSize.X
-
-	local ring = Instance.new("Frame")
-	ring.Name = "Selected"
-	ring.AnchorPoint = Vector2.new(0.5, 0.5)
-	ring.Position = UDim2.fromScale(0.5, 0.5)
-	ring.Size = UDim2.new(1, 8, 1, 8)
-	ring.BackgroundTransparency = 1
-	ring.BorderSizePixel = 0
-	ring.Visible = false
-	ring.ZIndex = Z_RING
-	ring.Parent = holder
-	UIKit.corner(ring, 15)
-	UIKit.stroke(ring, ALMANAC.Gold, 3)
-
-	UIKit.clicks(face)
-	UIKit.popOnHover(holder, pop, { stroke = edge })
-
-	cards[slot] = {
-		holder = holder,
-		button = face,
-		tint = tint,
-		name = name,
-		inset = inset,
-		art = art,
-		view = view,
-		hidden = hidden,
-		rarity = rarity,
-		ring = ring,
-		shown = nil,
-		species = nil,
-	}
-end
-
---==============================================================================
--- THE SIXTH SLOT: BIOME MASTERY
---
--- A gold dashed outline around a trophy. Roblox strokes have no dash pattern, so
--- the dashes are short frames laid along the four straight edges, rebuilt only
--- when the slot changes size.
---==============================================================================
-local trophy = Instance.new("Frame")
-trophy.Name = "Mastery"
-trophy.AnchorPoint = Vector2.new(0.5, 0.5)
-trophy.BackgroundTransparency = 1
-trophy.BorderSizePixel = 0
-trophy.ZIndex = Z_PANEL
-trophy.Parent = shelf
-
-local trophyFace = well(trophy, "Face", Z_FACE, ALMANAC.Well, 0.3, 12)
-trophyFace.Size = UDim2.fromScale(1, 1)
-
-local trophyDashes = Instance.new("Frame")
-trophyDashes.Name = "Dashes"
-trophyDashes.Size = UDim2.fromScale(1, 1)
-trophyDashes.BackgroundTransparency = 1
-trophyDashes.BorderSizePixel = 0
-trophyDashes.ZIndex = Z_INSET
-trophyDashes.Parent = trophy
-
-local trophyCup = label(trophy, "Cup", 30, WHITE, Z_TEXT)
-trophyCup.AnchorPoint = Vector2.new(0.5, 0)
-trophyCup.Position = UDim2.fromScale(0.5, 0.07)
-trophyCup.Size = UDim2.fromScale(1, 0.26)
-trophyCup.Text = "🏆"
-shrinkToFit(trophyCup, 30, 16)
-
-local trophyTitle = label(trophy, "Title", 14, ALMANAC.Gold, Z_TEXT)
-trophyTitle.AnchorPoint = Vector2.new(0.5, 0)
-trophyTitle.Position = UDim2.fromScale(0.5, 0.35)
-trophyTitle.Size = UDim2.new(1, -10, 0.14, 0)
-trophyTitle.Text = "Biome Mastery"
-shrinkToFit(trophyTitle, 14, 8)
-UIKit.stroke(trophyTitle, INK, 1.5)
-
-local trophyStatus = label(trophy, "Status", 11, ALMANAC.Cream, Z_TEXT)
-trophyStatus.AnchorPoint = Vector2.new(0.5, 0)
-trophyStatus.Position = UDim2.fromScale(0.5, 0.52)
-trophyStatus.Size = UDim2.new(1, -14, 0.42, 0)
-trophyStatus.TextWrapped = true
-trophyStatus.TextYAlignment = Enum.TextYAlignment.Top
-shrinkToFit(trophyStatus, 11, 7)
-
-local trophyHit = Instance.new("TextButton")
-trophyHit.Name = "Hit"
-trophyHit.Size = UDim2.fromScale(1, 1)
-trophyHit.BackgroundTransparency = 1
-trophyHit.BorderSizePixel = 0
-trophyHit.AutoButtonColor = false
-trophyHit.Text = ""
-trophyHit.ZIndex = Z_RING
-trophyHit.Parent = trophy
-
-local dashedFor = Vector2.zero
-
-local function dashTrophy(width: number, height: number)
-	if math.abs(dashedFor.X - width) < 1 and math.abs(dashedFor.Y - height) < 1 then
+-- The page scrolled so a biome's heading stands at its top.
+local function scrollToBiome(biomeId: string)
+	local section = sections[biomeId]
+	if not section or not section.frame.Visible then
 		return
 	end
-	dashedFor = Vector2.new(width, height)
-	trophyDashes:ClearAllChildren()
-
-	local DASH, SPACE, THICK, CORNER = 9, 6, 3, 12
-	local function run(horizontal: boolean, fixed: number, from: number, length: number)
-		local count = math.max(1, math.floor((length + SPACE) / (DASH + SPACE)))
-		local at = from + math.floor((length - (count * DASH + (count - 1) * SPACE)) * 0.5)
-		for _ = 1, count do
-			local dash = Instance.new("Frame")
-			dash.Name = "Dash"
-			dash.BackgroundColor3 = ALMANAC.Gold
-			dash.BorderSizePixel = 0
-			dash.ZIndex = Z_INSET
-			if horizontal then
-				dash.Position = UDim2.fromOffset(at, fixed)
-				dash.Size = UDim2.fromOffset(DASH, THICK)
-			else
-				dash.Position = UDim2.fromOffset(fixed, at)
-				dash.Size = UDim2.fromOffset(THICK, DASH)
-			end
-			dash.Parent = trophyDashes
-			at += DASH + SPACE
-		end
-	end
-	run(true, 0, CORNER, width - CORNER * 2)
-	run(true, height - THICK, CORNER, width - CORNER * 2)
-	run(false, 0, CORNER, height - CORNER * 2)
-	run(false, width - THICK, CORNER, height - CORNER * 2)
+	local k = math.max(HudLayout.scaleOf(grid), 1e-3)
+	local y = (section.frame.AbsolutePosition.Y - grid.AbsolutePosition.Y) / k + grid.CanvasPosition.Y - GRID_INSET
+	grid.CanvasPosition = Vector2.new(0, math.max(0, y))
 end
 
 --==============================================================================
--- THE PROGRESS BAR UNDER THE SHELF
---==============================================================================
-local progressWell = well(shelf, "Progress", Z_PANEL, ALMANAC.Well, 0.05, 12)
-UIKit.stroke(progressWell, ALMANAC.WellEdge, 1.5)
-
-local track = Instance.new("Frame")
-track.Name = "Track"
-track.AnchorPoint = Vector2.new(0, 0.5)
-track.Position = UDim2.new(0, 10, 0.5, 0)
-track.Size = UDim2.new(1, -80, 0, 14)
-track.BackgroundTransparency = 1
-track.BorderSizePixel = 0
-track.ZIndex = Z_FACE
-track.Parent = progressWell
-
-local trackList = Instance.new("UIListLayout")
-trackList.FillDirection = Enum.FillDirection.Horizontal
-trackList.SortOrder = Enum.SortOrder.LayoutOrder
-trackList.Padding = UDim.new(0, 5)
-trackList.Parent = track
-
-local segments: { UIGradient } = {}
-for i = 1, SEGMENTS do
-	local step = well(track, "Step" .. i, Z_FACE, WHITE, 0, 5)
-	step.LayoutOrder = i
-	-- Equal shares of the track once the gaps between them are paid for.
-	step.Size = UDim2.new(1 / SEGMENTS, -math.ceil(5 * (SEGMENTS - 1) / SEGMENTS), 1, 0)
-	segments[i] = UIKit.gradient(step, ALMANAC.SlateDeep, ALMANAC.SlateDeep)
-end
-
-local progressText = label(progressWell, "Count", 17, WHITE, Z_TEXT)
-progressText.AnchorPoint = Vector2.new(1, 0.5)
-progressText.Position = UDim2.new(1, -10, 0.5, 0)
-progressText.Size = UDim2.fromOffset(60, 24)
-progressText.TextXAlignment = Enum.TextXAlignment.Right
-UIKit.stroke(progressText, INK, 1.5)
-
---==============================================================================
--- THE SHOWCASE
---==============================================================================
-local showcase = well(content, "Showcase", Z_PANEL, ALMANAC.Well, 0.1, 14)
-UIKit.stroke(showcase, ALMANAC.WellEdge, 2)
-
-local stage = well(showcase, "Stage", Z_FACE, ALMANAC.BodyTop, 0, 12)
-stage.ClipsDescendants = true
-UIKit.stroke(stage, ALMANAC.WellEdge, 2)
-
-local stageArt = Instance.new("ImageLabel")
-stageArt.Name = "Scenery"
-stageArt.Size = UDim2.fromScale(1, 1)
-stageArt.BackgroundTransparency = 1
-stageArt.BorderSizePixel = 0
-stageArt.ScaleType = Enum.ScaleType.Crop
-stageArt.ImageColor3 = CARD.ArtTint
-stageArt.ImageTransparency = 0.35
-stageArt.Visible = false
-stageArt.ZIndex = Z_FACE
-stageArt.Parent = stage
-UIKit.corner(stageArt, 12)
-
--- A soft lime pool of light where the pedestal stands.
-local glow = well(stage, "Glow", Z_INSET, ALMANAC.Lime, 0, 999)
-glow.AnchorPoint = Vector2.new(0.5, 0.5)
-glow.Position = UDim2.fromScale(0.5, 0.8)
-local glowFade = Instance.new("UIGradient")
-glowFade.Rotation = 90
-glowFade.Transparency = NumberSequence.new({
-	NumberSequenceKeypoint.new(0, 1),
-	NumberSequenceKeypoint.new(0.5, 0.55),
-	NumberSequenceKeypoint.new(1, 1),
-})
-glowFade.Parent = glow
-
-local stageView = Instance.new("ViewportFrame")
-stageView.Name = "Plant"
-stageView.AnchorPoint = Vector2.new(0.5, 0.5)
-stageView.Position = UDim2.fromScale(0.5, 0.5)
-stageView.BackgroundTransparency = 1
-stageView.BorderSizePixel = 0
-stageView.Ambient = CARD.Ambient
-stageView.LightColor = CARD.LightColour
-stageView.LightDirection = CARD.LightDirection
-stageView.ZIndex = Z_VIEW
-stageView.Parent = stage
-
---==============================================================================
--- SPARKLES, AND THE ONLY THINGS HERE THAT MOVE
+-- ONE CARD PER SPECIES, BUILT THE FIRST TIME IT IS SHOWN
 --
--- Four glints breathing in and out, each on its own period so they never pulse
--- together. Engine tweens made once and only played while the panel is open, so
--- nothing is allocated per frame and nothing runs behind a closed panel.
---==============================================================================
-local SPARKLES = {
-	{ x = 0.12, y = 0.17, size = 16, period = 1.4 },
-	{ x = 0.88, y = 0.22, size = 13, period = 1.9 },
-	{ x = 0.84, y = 0.72, size = 11, period = 1.6 },
-	{ x = 0.18, y = 0.68, size = 10, period = 2.2 },
-}
-local twinkles: { Tween } = {}
-for i, spot in ipairs(SPARKLES) do
-	local glint = label(stage, "Sparkle" .. i, spot.size, WHITE, Z_RING)
-	glint.AnchorPoint = Vector2.new(0.5, 0.5)
-	glint.Position = UDim2.fromScale(spot.x, spot.y)
-	glint.Size = UDim2.fromOffset(spot.size + 8, spot.size + 8)
-	glint.Text = "✨"
-	glint.TextTransparency = 0.2
-	table.insert(twinkles, TweenService:Create(glint,
-		TweenInfo.new(spot.period, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{ TextTransparency = 0.75 }))
-end
-
-local showName = display(showcase, "Name", 22, WHITE, Z_TEXT, 2)
-shrinkToFit(showName, 22, 12)
-
-local showRarity = label(showcase, "Rarity", 15, WHITE, Z_TEXT)
-UIKit.stroke(showRarity, INK, 1.5)
-
-local yieldRow = well(showcase, "Yield", Z_FACE, ALMANAC.BodyBottom, 0, 10)
-UIKit.stroke(yieldRow, ALMANAC.WellEdge, 1.5)
-local yieldKey = label(yieldRow, "Key", 13, ALMANAC.Lime, Z_TEXT)
-yieldKey.Position = UDim2.fromOffset(10, 0)
-yieldKey.Size = UDim2.new(0.55, -10, 1, 0)
-yieldKey.TextXAlignment = Enum.TextXAlignment.Left
-yieldKey.Text = "Garden Yield:"
-shrinkToFit(yieldKey, 13, 9)
-local yieldValue = label(yieldRow, "Value", 16, WHITE, Z_TEXT)
-yieldValue.AnchorPoint = Vector2.new(1, 0)
-yieldValue.Position = UDim2.new(1, -10, 0, 0)
-yieldValue.Size = UDim2.new(0.45, -4, 1, 0)
-yieldValue.TextXAlignment = Enum.TextXAlignment.Right
-shrinkToFit(yieldValue, 16, 9)
-UIKit.stroke(yieldValue, INK, 1.5)
-
---==============================================================================
--- THE BIOME HARVEST BOX
---
--- What finishing this biome pays, read off BiomeData through AlmanacData -- the
--- same numbers AlmanacService pays -- and the button that asks for it.
---==============================================================================
-local harvest = well(showcase, "Harvest", Z_FACE, ALMANAC.BodyTop, 0, 12)
-UIKit.stroke(harvest, ALMANAC.Lime, 2, 0.35)
-
-local harvestTitle = label(harvest, "Title", 13, ALMANAC.Cream, Z_TEXT)
-harvestTitle.Position = UDim2.fromOffset(10, 6)
-harvestTitle.Size = UDim2.new(1, -76, 0, 20)
-harvestTitle.TextXAlignment = Enum.TextXAlignment.Left
-harvestTitle.Text = "🌾 BIOME HARVEST"
-shrinkToFit(harvestTitle, 13, 8)
-
-local harvestCount = label(harvest, "Count", 14, ALMANAC.Gold, Z_TEXT)
-harvestCount.AnchorPoint = Vector2.new(1, 0)
-harvestCount.Position = UDim2.new(1, -10, 0, 6)
-harvestCount.Size = UDim2.fromOffset(60, 20)
-harvestCount.TextXAlignment = Enum.TextXAlignment.Right
-UIKit.stroke(harvestCount, INK, 1.5)
-
-local function rewardTile(name: string, right: boolean, icon: string, key: string,
-	colour: Color3): TextLabel
-	local tile = well(harvest, name, Z_INSET, ALMANAC.Well, 0, 8)
-	tile.AnchorPoint = Vector2.new(if right then 1 else 0, 0)
-	tile.Position = if right then UDim2.new(1, -8, 0, 30) else UDim2.fromOffset(8, 30)
-	tile.Size = UDim2.new(0.5, -11, 0, 46)
-	UIKit.stroke(tile, ALMANAC.WellEdge, 1.5)
-
-	local image = Instance.new("ImageLabel")
-	image.Name = "Icon"
-	image.AnchorPoint = Vector2.new(0, 0.5)
-	image.Position = UDim2.new(0, 4, 0.5, 0)
-	image.Size = UDim2.fromOffset(30, 30)
-	image.BackgroundTransparency = 1
-	image.Image = icon
-	image.ScaleType = Enum.ScaleType.Fit
-	image.ZIndex = Z_TEXT
-	image.Parent = tile
-
-	local keyLabel = label(tile, "Key", 10, ALMANAC.Muted, Z_TEXT)
-	keyLabel.Position = UDim2.fromOffset(38, 6)
-	keyLabel.Size = UDim2.new(1, -42, 0, 12)
-	keyLabel.TextXAlignment = Enum.TextXAlignment.Left
-	keyLabel.Text = key
-
-	local value = label(tile, "Value", 15, colour, Z_TEXT)
-	value.Position = UDim2.fromOffset(38, 19)
-	value.Size = UDim2.new(1, -42, 0, 20)
-	value.TextXAlignment = Enum.TextXAlignment.Left
-	shrinkToFit(value, 15, 8)
-	UIKit.stroke(value, INK, 1.5)
-	return value
-end
-
-local cashValue = rewardTile("Cash", false, GameConfig.Store.Icons.cash2, "CASH", ALMANAC.Lime)
-local speedValue = rewardTile("Speed", true, GameConfig.Store.Icons.speed1, "SPEED", ALMANAC.Sky)
-
---==============================================================================
--- THE CLAIM BUTTON
---
--- The house button -- lit face, darker foot, ink keyline -- in three states:
--- lime when there is something to take, slate while there is not (or while the
--- server is answering), and gold once it has been taken. The target is the full
--- width of the box and 44 tall.
---==============================================================================
-local claimButton = Instance.new("TextButton")
-claimButton.Name = "Claim"
-claimButton.Position = UDim2.fromOffset(8, 84)
-claimButton.Size = UDim2.new(1, -16, 0, 44)
-claimButton.BackgroundTransparency = 1
-claimButton.BorderSizePixel = 0
-claimButton.AutoButtonColor = false
-claimButton.Text = ""
-claimButton.ZIndex = Z_INSET
-claimButton.Parent = harvest
-
-local claimPlate = well(claimButton, "Plate", Z_INSET, WHITE, 0, 10)
-claimPlate.Size = UDim2.fromScale(1, 1)
-claimPlate.Active = false
-UIKit.stroke(claimPlate, INK, 2.5)
-local claimTint = UIKit.gradient(claimPlate, ALMANAC.Slate, ALMANAC.SlateDeep)
-
-local claimFoot = well(claimPlate, "Shade", Z_INSET, ALMANAC.SlateShade, 0, 10)
-claimFoot.AnchorPoint = Vector2.new(0.5, 1)
-claimFoot.Position = UDim2.fromScale(0.5, 1)
-claimFoot.Size = UDim2.new(1, 0, 0, 5)
-claimFoot.Active = false
-
-local claimText = display(claimPlate, "Label", 18, WHITE, Z_TEXT, 2)
-claimText.Position = UDim2.fromOffset(6, 0)
-claimText.Size = UDim2.new(1, -12, 1, -5)
-shrinkToFit(claimText, 18, 10)
-
-local shakeClaim = UIKit.shake(claimButton)
-
-local function styleClaim(top: Color3, bottom: Color3, foot: Color3, words: string,
-	colour: Color3)
-	claimTint.Color = ColorSequence.new(top, bottom)
-	claimFoot.BackgroundColor3 = foot
-	claimText.Text = words
-	claimText.TextColor3 = colour
-end
-
---==============================================================================
--- THE FOOTER: THE WHOLE KINGDOM
---==============================================================================
-local footer = well(content, "Kingdom", Z_PANEL, ALMANAC.Well, 0.05, 12)
-UIKit.stroke(footer, ALMANAC.WellEdge, 1.5)
-
-local sproutTile = well(footer, "Sprout", Z_FACE, WHITE, 0, 9)
-sproutTile.Position = UDim2.fromOffset(10, 10)
-sproutTile.Size = UDim2.fromOffset(36, 36)
-UIKit.stroke(sproutTile, INK, 2)
-UIKit.gradient(sproutTile, ALMANAC.Lime, ALMANAC.LimeDeep)
-local sproutGlyph = label(sproutTile, "Glyph", 20, WHITE, Z_TEXT)
-sproutGlyph.Size = UDim2.fromScale(1, 1)
-sproutGlyph.Text = "🌱"
-
-local footerKicker = label(footer, "Kicker", 11, ALMANAC.Lime, Z_TEXT)
-footerKicker.TextXAlignment = Enum.TextXAlignment.Left
-footerKicker.Text = "TOTAL KINGDOM FLORA"
-
-local footerLine = label(footer, "Discovered", 16, WHITE, Z_TEXT)
-footerLine.TextXAlignment = Enum.TextXAlignment.Left
-shrinkToFit(footerLine, 16, 10)
-
-local footerTrack = well(footer, "Track", Z_FACE, ALMANAC.SlateDeep, 0, 7)
-local footerFill = well(footerTrack, "Fill", Z_INSET, WHITE, 0, 7)
-footerFill.Size = UDim2.fromScale(0, 1)
-local footerTint = Instance.new("UIGradient")
-footerTint.Color = ColorSequence.new(ALMANAC.Lime, ALMANAC.Gold)
-footerTint.Parent = footerFill
-
-local function layoutFooter(width: number, wide: boolean): number
-	if wide then
-		local bar = math.floor(math.min(280, width * 0.38))
-		footerKicker.Position = UDim2.fromOffset(56, 10)
-		footerKicker.Size = UDim2.fromOffset(width - 86 - bar, 14)
-		footerLine.Position = UDim2.fromOffset(56, 25)
-		footerLine.Size = UDim2.fromOffset(width - 86 - bar, 22)
-		footerTrack.AnchorPoint = Vector2.new(1, 0.5)
-		footerTrack.Position = UDim2.new(1, -14, 0.5, 0)
-		footerTrack.Size = UDim2.fromOffset(bar, 14)
-		return FOOTER_WIDE
-	end
-	footerKicker.Position = UDim2.fromOffset(56, 10)
-	footerKicker.Size = UDim2.fromOffset(width - 66, 14)
-	footerLine.Position = UDim2.fromOffset(56, 25)
-	footerLine.Size = UDim2.fromOffset(width - 66, 22)
-	footerTrack.AnchorPoint = Vector2.zero
-	footerTrack.Position = UDim2.fromOffset(12, 58)
-	footerTrack.Size = UDim2.fromOffset(width - 24, 14)
-	return FOOTER_NARROW
-end
-
---==============================================================================
--- LAYOUT
---
--- Measured off the scroll rather than typed, because the modal is a fraction of
--- the screen with a cap on it. Every block is placed by offset from the top, and
--- the total is what the modal is asked to fit.
---==============================================================================
-local function layoutShelf(width: number, height: number?): number
-	local cellW = math.max(64, math.floor((width - CARD_PAD * 2 - CARD_GUTTER * 2) / 3))
-	local side = cellW - 14
-	local cellH = side + CARD_CHROME
-	if height then
-		local room = height - CARD_PAD * 2 - PROGRESS_HEIGHT - GAP
-		local tallest = math.floor((room - CARD_GUTTER) / 2)
-		if cellH > tallest then
-			cellH = tallest
-			side = cellH - CARD_CHROME
-		end
-	end
-
-	local function place(holder: Frame, index: number)
-		local column = (index - 1) % 3
-		local row = math.floor((index - 1) / 3)
-		holder.Size = UDim2.fromOffset(cellW, cellH)
-		holder.Position = UDim2.fromOffset(
-			CARD_PAD + column * (cellW + CARD_GUTTER) + math.floor(cellW / 2),
-			CARD_PAD + row * (cellH + CARD_GUTTER) + math.floor(cellH / 2))
-	end
-	for index, card in ipairs(cards) do
-		place(card.holder, index)
-		card.inset.Size = UDim2.fromOffset(side, side)
-	end
-	place(trophy, #cards + 1)
-	dashTrophy(cellW, cellH)
-
-	local total = height or (CARD_PAD + cellH * 2 + CARD_GUTTER + GAP + PROGRESS_HEIGHT + CARD_PAD)
-	progressWell.Position = UDim2.fromOffset(CARD_PAD, total - CARD_PAD - PROGRESS_HEIGHT)
-	progressWell.Size = UDim2.fromOffset(width - CARD_PAD * 2, PROGRESS_HEIGHT)
-	return total
-end
-
-local function layoutShowcase(width: number, wide: boolean): number
-	local pad = 8
-	local inner = width - pad * 2
-	local stageH = if wide then 138 else math.clamp(math.floor(inner * 0.56), 120, 190)
-	stage.Position = UDim2.fromOffset(pad, pad)
-	stage.Size = UDim2.fromOffset(inner, stageH)
-	local viewSide = stageH - 6
-	stageView.Size = UDim2.fromOffset(viewSide, viewSide)
-	glow.Size = UDim2.fromOffset(math.floor(viewSide * 1.05), math.floor(viewSide * 0.34))
-
-	local y = pad + stageH + 6
-	showName.Position = UDim2.fromOffset(pad, y)
-	showName.Size = UDim2.fromOffset(inner, 26)
-	y += 26
-	showRarity.Position = UDim2.fromOffset(pad, y)
-	showRarity.Size = UDim2.fromOffset(inner, 18)
-	y += 22
-	yieldRow.Position = UDim2.fromOffset(pad, y)
-	yieldRow.Size = UDim2.fromOffset(inner, 34)
-	y += 40
-	harvest.Position = UDim2.fromOffset(pad, y)
-	harvest.Size = UDim2.fromOffset(inner, HARVEST_HEIGHT)
-	return y + HARVEST_HEIGHT + pad
-end
-
-local function relayout()
-	-- In the gui's own units: its pixels / its TV scale (1 off a TV).
-	local width = math.floor(scroll.AbsoluteSize.X / UIKit.scaleOf(gui)) - SCROLL_GUTTER
-	if width < 200 then
-		return
-	end
-	local wide = width >= WIDE_AT
-	local y = TOP_PAD
-
-	tabStrip.Position = UDim2.fromOffset(0, y)
-	tabStrip.Size = UDim2.fromOffset(width, TAB_STRIP)
-	local tabWidth = if wide
-		then math.floor((width - 8 - TAB_GAP * (#road - 1)) / #road)
-		else TAB_NARROW
-	for _, tab in pairs(tabs) do
-		tab.button.Size = UDim2.fromOffset(tabWidth, TAB_HEIGHT)
-	end
-	y += TAB_STRIP + GAP
-
-	layoutBiome(wide)
-	if wide then
-		local mainHeight = layoutShowcase(RIGHT_WIDTH, true)
-		biomeCard.Position = UDim2.fromOffset(0, y)
-		biomeCard.Size = UDim2.fromOffset(LEFT_WIDTH, mainHeight)
-		showcase.Position = UDim2.fromOffset(width - RIGHT_WIDTH, y)
-		showcase.Size = UDim2.fromOffset(RIGHT_WIDTH, mainHeight)
-		local shelfWidth = width - LEFT_WIDTH - RIGHT_WIDTH - GAP * 2
-		shelf.Position = UDim2.fromOffset(LEFT_WIDTH + GAP, y)
-		shelf.Size = UDim2.fromOffset(shelfWidth, mainHeight)
-		layoutShelf(shelfWidth, mainHeight)
-		y += mainHeight + GAP
-	else
-		biomeCard.Position = UDim2.fromOffset(0, y)
-		biomeCard.Size = UDim2.fromOffset(width, BANNER_HEIGHT)
-		y += BANNER_HEIGHT + GAP
-		local shelfHeight = layoutShelf(width, nil)
-		shelf.Position = UDim2.fromOffset(0, y)
-		shelf.Size = UDim2.fromOffset(width, shelfHeight)
-		y += shelfHeight + GAP
-		local showHeight = layoutShowcase(width, false)
-		showcase.Position = UDim2.fromOffset(0, y)
-		showcase.Size = UDim2.fromOffset(width, showHeight)
-		y += showHeight + GAP
-	end
-
-	local footerHeight = layoutFooter(width, wide)
-	footer.Position = UDim2.fromOffset(0, y)
-	footer.Size = UDim2.fromOffset(width, footerHeight)
-	y += footerHeight + BOTTOM_PAD
-
-	content.Size = UDim2.fromOffset(width, y)
-	scroll.CanvasSize = UDim2.fromOffset(0, y)
-	modal.fitContent(y)
-end
-
-scroll:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
--- A screen that only got taller or shorter leaves the scroll's width alone but
--- moves the modal's ceiling, so the fit is asked again.
-gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
-relayout()
-
---==============================================================================
--- THE PLANTS ARE BUILT WHEN THE PANEL IS OPEN, NOT WHEN THE GAME STARTS
---
--- A real CreatureModel is 29 to 74 parts. Nothing is built at join: a shelf's
--- five are built the first time that shelf is shown with the panel open, and
--- kept, so flicking back to a tab costs nothing. Opening every tab once is the
--- same twenty-five models the old grid built on its first open, and no more.
---
--- A SLOT KEEPS ITS VIEWPORT; THE PLANTS MOVE. A species always sits in the same
--- slot of its own shelf, so swapping tabs parents the new species' model and
--- camera into the slot's ViewportFrame and takes the old ones out. The frame
--- itself never changes, which keeps the hover lift and every ZIndex stable.
+-- A card never changes species, so a search or a filter only shows and orders
+-- cards that already exist. Its plant -- a real CreatureModel, 29 to 74 parts
+-- -- is built the first time the card is ON SCREEN with the panel open, and
+-- kept: the same twenty-five models the old shelf built, and never more.
 --
 -- THE SILHOUETTE IS A TINT. An undiscovered plant is the same model with the
 -- viewport's ImageColor3 taken down to near black, so growing one costs no
 -- rebuild -- the tint lifts.
 --==============================================================================
-type Portrait = { model: Model, camera: Camera }
-local portraits: { [string]: Portrait } = {}
+type Card = {
+	holder: Frame,
+	button: TextButton,
+	edge: UIStroke,
+	-- The face's white-to-mint gradient, tinted by the species' rarity.
+	tint: UIGradient,
+	well: Frame,
+	accent: Frame,
+	view: ViewportFrame,
+	name: TextLabel,
+	nameFit: UITextSizeConstraint,
+	rarity: TextLabel,
+	check: Frame,
+	place: Frame,
+	fxText: RarityFX.Handle,
+	fxEdge: RarityFX.Handle,
+	species: any,
+	built: boolean,
+}
+local cards: { [string]: Card } = {}
+local cardW, cardH, previewH = 130, 130, 78
+
+local openDetail: (any) -> ()
 
 local function tintView(view: ViewportFrame, known: boolean)
 	view.ImageColor3 = if known then WHITE else ALMANAC.Silhouette
 	view.ImageTransparency = if known then 0 else 0.1
 end
 
-local function showPortrait(card: Card, species: any)
-	if card.shown == species.Id then
-		return
-	end
-	local previous = if card.shown then portraits[card.shown :: string] else nil
-	if previous then
-		previous.model.Parent = nil
-		previous.camera.Parent = nil
-	end
-	card.shown = species.Id
-
-	local entry = portraits[species.Id]
-	if entry then
-		entry.model.Parent = card.view
-		entry.camera.Parent = card.view
-	else
-		local model = CreatureModel.Build(species, SeedData.BaseTier,
-			CreatureModel.STAGE_GROWN, CFrame.new(), card.view)
-		local camera = UIKit.framePlant(card.view, model, species.Form, CARD_FILL)
-		entry = { model = model, camera = camera }
-		portraits[species.Id] = entry
-	end
-	card.view.CurrentCamera = entry.camera
+local function shapeCard(c: Card)
+	c.well.Position = UDim2.fromOffset(4, 4)
+	c.well.Size = UDim2.fromOffset(cardW - 8, previewH)
+	c.name.Position = UDim2.fromOffset(5, 4 + previewH + 3)
+	c.name.Size = UDim2.fromOffset(cardW - 10, 30)
+	c.rarity.Position = UDim2.fromOffset(5, cardH - 19)
+	c.rarity.Size = UDim2.fromOffset(cardW - 10, 15)
 end
 
+local function cardFor(species: any): Card
+	local made = cards[species.Id]
+	if made then
+		return made
+	end
+	local home = sections[species.Biome] or sections[road[1].Id]
+	local holder = MenuKit.frame(home.shelf, "Card_" .. species.Id, Z + 1)
+	local face = Instance.new("TextButton")
+	face.Name = "Face"
+	face.AnchorPoint = Vector2.new(0.5, 0.5)
+	face.Position = UDim2.fromScale(0.5, 0.5)
+	face.Size = UDim2.fromScale(1, 1)
+	face.BorderSizePixel = 0
+	face.AutoButtonColor = false
+	face.Text = ""
+	face.ZIndex = Z + 1
+	face.Parent = holder
+	UIKit.corner(face, 8)
+	local tint = MenuKit.cardFace(face)
+	local edge = MenuKit.keyline(face, LOOK.CardEdge, 1, LOOK.CardEdgeTransparency)
+	-- The plant stands in a DARK display window on the light card, as dark as
+	-- the old preview, so an undiscovered plant's silhouette shows no more than
+	-- it did.
+	local well = MenuKit.frame(face, "Preview", Z + 2, LOOK.Window, 0, 6)
+	well.ClipsDescendants = true
+	local accent = MenuKit.frame(well, "Accent", Z + 4, WHITE, 0, 1)
+	accent.AnchorPoint = Vector2.new(0.5, 1)
+	accent.Position = UDim2.new(0.5, 0, 1, -2)
+	accent.Size = UDim2.new(0.5, 0, 0, 2)
+	local view = Instance.new("ViewportFrame")
+	view.Name = "Plant"
+	view.AnchorPoint = Vector2.new(0.5, 0.5)
+	view.Position = UDim2.fromScale(0.5, 0.5)
+	view.Size = UDim2.new(1, -4, 1, -4)
+	view.BackgroundTransparency = 1
+	view.Ambient = CARD.Ambient
+	view.LightColor = CARD.LightColour
+	view.LightDirection = CARD.LightDirection
+	view.ZIndex = Z + 3
+	view.Parent = well
+	local name = MenuKit.text(face, "Name", 13, LOOK.Text, Z + 5)
+	name.TextWrapped = true
+	name.TextScaled = true
+	name.TextYAlignment = Enum.TextYAlignment.Top
+	local nameFit = Instance.new("UITextSizeConstraint")
+	nameFit.MaxTextSize = 14
+	nameFit.MinTextSize = 10
+	nameFit.Parent = name
+	local rarity = MenuKit.text(face, "Rarity", 12, WHITE, Z + 5)
+	rarity.TextTruncate = Enum.TextTruncate.AtEnd
+	local rarityLine = rarity:FindFirstChildOfClass("UIStroke")
+	-- Grown: a small green disc with a check, top right.
+	local check = MenuKit.frame(face, "Grown", Z + 6, LOOK.Green, 0, 8)
+	check.AnchorPoint = Vector2.new(1, 0)
+	check.Position = UDim2.new(1, -3, 0, 3)
+	check.Size = UDim2.fromOffset(16, 16)
+	MenuKit.keyline(check, LOOK.Ink, 1.25)
+	local tick = MenuKit.text(check, "Tick", 12, WHITE, Z + 7)
+	tick.Size = UDim2.fromScale(1, 1)
+	tick.Text = "\u{2713}"
+	-- In a search across biomes: the card's biome, top left.
+	local place = MenuKit.picture(face, BIOME_ICONS[species.Biome] or "", nil, Z + 6)
+	place.Name = "Biome"
+	place.Position = UDim2.fromOffset(5, 5)
+	place.Size = UDim2.fromOffset(18, 18)
+	place.Visible = false
+	local fxText = RarityFX.text(rarity, rarityLine)
+	local fxEdge = RarityFX.edge(face, 8, Z + 4)
+	local scale = Instance.new("UIScale")
+	scale.Parent = face
+	UIKit.cardPop(face, scale, { hoverScale = 1.04, pressScale = 0.97, sound = false })
+	local c: Card = {
+		holder = holder,
+		button = face,
+		edge = edge,
+		tint = tint,
+		well = well,
+		accent = accent,
+		view = view,
+		name = name,
+		nameFit = nameFit,
+		rarity = rarity,
+		check = check,
+		place = place,
+		fxText = fxText,
+		fxEdge = fxEdge,
+		species = species,
+		built = false,
+	}
+	shapeCard(c)
+	MenuKit.tap(face, grid, function()
+		SoundKit.play("CardClick")
+		openDetail(species)
+	end)
+	cards[species.Id] = c
+	return c
+end
+
+local function paintCard(c: Card, entry: AlmanacView.Entry, order: number)
+	local known = entry.known
+	local face = AlmanacView.face(entry.species, known)
+	local colours = ALMANAC.Rarity[face.rarity] or ALMANAC.Rarity.Common
+	c.holder.Visible = true
+	c.holder.LayoutOrder = order
+	c.name.Text = face.name
+	c.name.TextColor3 = if known then LOOK.Text else LOOK.Muted
+	c.rarity.Text = face.rarity
+	RarityFX.setText(c.fxText, face.rarity, colours[1])
+	RarityFX.setEdge(c.fxEdge, face.rarity, true)
+	local rare = RarityFX.edgeColour(face.rarity)
+	c.edge.Color = rare or LOOK.CardEdge
+	c.edge.Transparency = if rare then 0.05 else LOOK.CardEdgeTransparency
+	c.accent.BackgroundColor3 = colours[1]
+	-- The rarity is already written on every card, found or not: the tint
+	-- says nothing more.
+	MenuKit.cardTint(c.tint, GameConfig.RarityColor[face.rarity])
+	c.check.Visible = known
+	c.place.Visible = searching
+	if c.built then
+		tintView(c.view, known)
+	end
+end
+
+-- A card's plant, built only once the card has been on screen with the panel
+-- open; its rarity light moving only while it is in view (RarityFX).
+local function buildVisible()
+	local at, size = grid.AbsolutePosition, grid.AbsoluteSize
+	local listing = grid.Visible and panelOpen and detailId == nil
+	for _, c in pairs(cards) do
+		local p, s = c.holder.AbsolutePosition, c.holder.AbsoluteSize
+		local shown = listing and c.holder.Visible
+		local near = shown and p.Y + s.Y >= at.Y - 40 and p.Y <= at.Y + size.Y + 40
+		if near and not c.built then
+			c.built = true
+			local species = c.species
+			local ok, model = pcall(CreatureModel.Build, species, SeedData.BaseTier,
+				CreatureModel.STAGE_GROWN, CFrame.new(), c.view)
+			if ok and model then
+				local camera = UIKit.framePlant(c.view, model, species.Form, CARD_FILL)
+				c.view.CurrentCamera = camera
+			end
+			tintView(c.view, almanac[species.Id] == true)
+		end
+		local inView = shown and p.Y + s.Y > at.Y and p.Y < at.Y + size.Y
+		RarityFX.setActive(c.fxText, inView)
+		RarityFX.setActive(c.fxEdge, inView)
+	end
+end
+grid:GetPropertyChangedSignal("CanvasPosition"):Connect(buildVisible)
+pageList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	task.defer(buildVisible)
+end)
+grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+	task.defer(buildVisible)
+end)
+
 --==============================================================================
--- THE SHOWCASE PEDESTAL
+-- THE DETAIL PAGE: in the panel, over the page
+--==============================================================================
+local detail = MenuKit.frame(body, "Detail", Z + 8, LOOK.Sheet, 0.02, 10)
+detail.Active = true
+detail.Visible = false
+MenuKit.keyline(detail, LOOK.WellEdge, 1, 0.3)
+local back = MenuKit.button(detail, "Back", Z + 9, "< BACK", 15)
+back.style("sky")
+local stage = MenuKit.frame(detail, "Stage", Z + 9, ALMANAC.BodyTop, 0, 10)
+stage.ClipsDescendants = true
+MenuKit.keyline(stage, LOOK.WellEdge, 1)
+local stageArt = Instance.new("ImageLabel")
+stageArt.Name = "Scenery"
+stageArt.Size = UDim2.fromScale(1, 1)
+stageArt.BackgroundTransparency = 1
+stageArt.ScaleType = Enum.ScaleType.Crop
+stageArt.ImageColor3 = CARD.ArtTint
+stageArt.ImageTransparency = 0.35
+stageArt.Visible = false
+stageArt.ZIndex = Z + 9
+stageArt.Parent = stage
+UIKit.corner(stageArt, 10)
+local stageView = Instance.new("ViewportFrame")
+stageView.Name = "Plant"
+stageView.AnchorPoint = Vector2.new(0.5, 0.5)
+stageView.Position = UDim2.fromScale(0.5, 0.5)
+stageView.Size = UDim2.new(1, -6, 1, -6)
+stageView.BackgroundTransparency = 1
+stageView.Ambient = CARD.Ambient
+stageView.LightColor = CARD.LightColour
+stageView.LightDirection = CARD.LightDirection
+stageView.ZIndex = Z + 10
+stageView.Parent = stage
+
+local info = MenuKit.frame(detail, "Info", Z + 9)
+local infoList = Instance.new("UIListLayout")
+infoList.SortOrder = Enum.SortOrder.LayoutOrder
+infoList.Padding = UDim.new(0, 4)
+infoList.Parent = info
+-- Dark type on the light sheet (2026-10-04): plain, no outline.
+local showName = MenuKit.text(info, "Name", 24, LOOK.Text, Z + 10)
+showName.LayoutOrder = 1
+showName.Size = UDim2.new(1, 0, 0, 30)
+showName.TextXAlignment = Enum.TextXAlignment.Left
+showName.TextScaled = true
+showName.ZIndex = Z + 10
+do
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 26
+	fit.MinTextSize = 14
+	fit.Parent = showName
+end
+local showRarity = MenuKit.text(info, "Rarity", 16, WHITE, Z + 10)
+showRarity.LayoutOrder = 2
+showRarity.Size = UDim2.new(1, 0, 0, 20)
+showRarity.TextXAlignment = Enum.TextXAlignment.Left
+local showRarityFX = RarityFX.text(showRarity, showRarity:FindFirstChildOfClass("UIStroke"))
+showRarityFX.gate = detail
+local biomeRow = MenuKit.frame(info, "BiomeRow", Z + 10)
+biomeRow.LayoutOrder = 3
+biomeRow.Size = UDim2.new(1, 0, 0, ICON)
+local showBiome = MenuKit.text(biomeRow, "Biome", 14, LOOK.Muted, Z + 10)
+showBiome.Position = UDim2.fromOffset(ICON + 6, 0)
+showBiome.Size = UDim2.new(1, -(ICON + 6), 1, 0)
+showBiome.TextXAlignment = Enum.TextXAlignment.Left
+local biomeIcon: Frame? = nil
+local biomeIconFor: string? = nil
+
+-- A biome's picture in `holder`, square, Fit, kept while it is the same biome.
+local function biomePicture(holder: Instance, current: Frame?, currentFor: string?, biomeId: string): (Frame?, string?)
+	if current and currentFor == biomeId then
+		return current, currentFor
+	end
+	if current then
+		current:Destroy()
+	end
+	local image = BIOME_ICONS[biomeId]
+	if not image then
+		return nil, nil
+	end
+	local pic = MenuKit.picture(holder, image, nil, Z + 11)
+	pic.Name = "BiomeIcon"
+	pic.AnchorPoint = Vector2.new(0, 0.5)
+	pic.Position = UDim2.new(0, 0, 0.5, 0)
+	pic.Size = UDim2.fromOffset(ICON, ICON)
+	return pic, biomeId
+end
+local showState = MenuKit.body(info, "State", 14, LOOK.Money, Z + 10)
+showState.LayoutOrder = 4
+showState.Size = UDim2.new(1, 0, 0, 18)
+showState.AutomaticSize = Enum.AutomaticSize.Y
+showState.TextWrapped = true
+showState.TextXAlignment = Enum.TextXAlignment.Left
+local yieldRow = MenuKit.frame(info, "Yield", Z + 10, LOOK.Well, LOOK.WellTransparency, 8)
+yieldRow.LayoutOrder = 5
+yieldRow.Size = UDim2.new(1, 0, 0, 32)
+MenuKit.keyline(yieldRow, LOOK.WellEdge, 1, 0.3)
+local yieldKey = MenuKit.text(yieldRow, "Key", 13, LOOK.Money, Z + 11)
+yieldKey.Position = UDim2.fromOffset(10, 0)
+yieldKey.Size = UDim2.new(0.6, -10, 1, 0)
+yieldKey.TextXAlignment = Enum.TextXAlignment.Left
+yieldKey.Text = "Garden Yield (Tiny):"
+local yieldValue = MenuKit.text(yieldRow, "Value", 15, LOOK.Text, Z + 11)
+yieldValue.AnchorPoint = Vector2.new(1, 0)
+yieldValue.Position = UDim2.new(1, -10, 0, 0)
+yieldValue.Size = UDim2.new(0.4, 0, 1, 0)
+yieldValue.TextXAlignment = Enum.TextXAlignment.Right
+
+--==============================================================================
+-- THE STAGE'S PEDESTAL
 --
 -- Moss on a stone foot with a lime ring of Neon between them, which a viewport
 -- draws as flat bright colour: the glow without a light. Built before the camera
@@ -1256,7 +700,6 @@ local function mossPedestal(model: Model)
 	local pivot, size = model:GetBoundingBox()
 	local groundY = pivot.Position.Y - size.Y * 0.5
 	local radius = math.max(size.X, size.Z) * 0.62 + 0.4
-
 	local base = Instance.new("Model")
 	base.Name = "Pedestal"
 	local function disc(name: string, height: number, r: number, y: number, colour: Color3,
@@ -1265,8 +708,7 @@ local function mossPedestal(model: Model)
 		part.Name = name
 		part.Shape = Enum.PartType.Cylinder
 		part.Size = Vector3.new(height, r * 2, r * 2)
-		part.CFrame = CFrame.new(pivot.Position.X, y, pivot.Position.Z)
-			* CFrame.Angles(0, 0, math.pi * 0.5)
+		part.CFrame = CFrame.new(pivot.Position.X, y, pivot.Position.Z) * CFrame.Angles(0, 0, math.pi * 0.5)
 		part.Color = colour
 		part.Material = material
 		part.Anchored = true
@@ -1289,167 +731,37 @@ local function showStage(species: any)
 	stageShown = species.Id
 	stageView:ClearAllChildren()
 	stageView.CurrentCamera = nil
-	local model = CreatureModel.Build(species, SeedData.BaseTier,
+	local ok, model = pcall(CreatureModel.Build, species, SeedData.BaseTier,
 		CreatureModel.STAGE_GROWN, CFrame.new(), stageView)
-	mossPedestal(model)
-	UIKit.framePlant(stageView, model, species.Form, STAGE_FILL)
-end
-
---==============================================================================
--- WHAT THE PROFILE SAYS
---==============================================================================
-local almanac: { [string]: boolean } = {}
-local mastery: { [string]: boolean } = {}
--- Biomes whose CLAIM has been sent and not yet answered.
-local pending: { [string]: boolean } = {}
-
-local activeBiome: string = road[1].Id
-local chosenIn: { [string]: string } = {}
-local panelOpen = false
-local openedBefore = false
-
-local function stateOf(biomeId: string): string
-	return AlmanacData.ClaimState(almanac, mastery, biomeId)
-end
-
--- The card the showcase is about: the one tapped on this shelf, else the first
--- one grown, else the first one.
-local function chosenSpecies(): any
-	local list = shelves[activeBiome]
-	local want = chosenIn[activeBiome]
-	for _, species in ipairs(list) do
-		if species.Id == want then
-			return species
-		end
-	end
-	local pick = list[1]
-	for _, species in ipairs(list) do
-		if almanac[species.Id] then
-			pick = species
-			break
-		end
-	end
-	chosenIn[activeBiome] = pick.Id
-	return pick
-end
-
---==============================================================================
--- PAINTING
---
--- Words, colours and states are pennies and always repaint. The models are the
--- expensive half and are only touched while somebody is looking; opening the
--- panel repaints, which builds whatever the shelf on show still owes.
---==============================================================================
-local function paintTabs()
-	for _, biome in ipairs(road) do
-		local tab = tabs[biome.Id]
-		local active = biome.Id == activeBiome
-		tab.tint.Color = if active
-			then ColorSequence.new(ALMANAC.HeaderTop, ALMANAC.LimeDeep)
-			else ColorSequence.new(ALMANAC.TabIdleTop, ALMANAC.TabIdleBottom)
-		tab.edge.Color = if active then INK else ALMANAC.WellEdge
-		tab.text.TextColor3 = if active then WHITE else ALMANAC.Cream
-		tab.textLine.Transparency = if active then 0 else 1
-		tab.ready.Visible = stateOf(biome.Id) == "ready"
+	if ok and model then
+		mossPedestal(model)
+		UIKit.framePlant(stageView, model, species.Form, STAGE_FILL)
 	end
 end
 
-local function paintBiome()
-	local biome = BiomeData.ById[activeBiome]
-	local list = shelves[activeBiome]
-	biomeArt.Image = if list[1] then (CARD.Art[list[1].Id] or "") else ""
-	biomeKicker.Text = string.format("🌿 BIOME %d", biome.Order)
-	biomeName.Text = biome.DisplayName
-	local grown, total = AlmanacData.Progress(almanac, activeBiome)
-	statusTitle.Text = if stateOf(activeBiome) == "claimed" then "🏆 MASTERED" else "HARVESTED"
-	statusValue.Text = string.format("%d / %d Grown", grown, total)
-	statusValue.TextColor3 = if total > 0 and grown >= total then ALMANAC.Gold else ALMANAC.Lime
-end
-
-local function paintShelf()
-	local list = shelves[activeBiome]
-	local chosen = chosenSpecies()
-	for slot, card in ipairs(cards) do
-		local species = list[slot]
-		card.species = species
-		card.holder.Visible = species ~= nil
-		if species then
-			local known = almanac[species.Id] == true
-			local colours = ALMANAC.Rarity[species.Rarity] or ALMANAC.Rarity.Common
-			card.tint.Color = ColorSequence.new(colours[1], colours[2])
-			card.name.Text = if known then species.Name else "???"
-			card.rarity.Text = string.upper(species.Rarity)
-			card.rarity.TextColor3 = colours[1]
-			-- Grown: the biome's scenery behind the plant. Not yet: the card's own
-			-- colour, darkened, behind a silhouette.
-			card.inset.BackgroundColor3 = if known then ALMANAC.Well else BLACK
-			card.inset.BackgroundTransparency = if known then 0 else 0.5
-			card.art.Image = if known then (CARD.Art[species.Id] or "") else ""
-			card.art.Visible = known
-			card.hidden.Visible = not known
-			card.ring.Visible = species.Id == chosen.Id
-			if panelOpen then
-				showPortrait(card, species)
-				tintView(card.view, known)
-			end
-		end
+local function paintDetail()
+	local id = detailId
+	if not id then
+		return
 	end
-
-	local grown, total = AlmanacData.Progress(almanac, activeBiome)
-	for i, step in ipairs(segments) do
-		local frame = step.Parent :: Frame
-		frame.Visible = i <= total
-		step.Color = if i <= grown
-			then ColorSequence.new(ALMANAC.Lime, ALMANAC.LimeDeep)
-			else ColorSequence.new(ALMANAC.SlateDeep, ALMANAC.SlateDeep)
+	local species = SeedData.ById[id]
+	if not species then
+		return
 	end
-	progressText.Text = string.format("%d / %d", grown, total)
-
-	local state = stateOf(activeBiome)
-	if state == "claimed" then
-		trophyStatus.Text = "Harvest claimed!"
-		trophyStatus.TextColor3 = ALMANAC.Gold
-	elseif state == "ready" then
-		trophyStatus.Text = if pending[activeBiome]
-			then "Claiming..."
-			else "All grown! Tap to claim the harvest"
-		trophyStatus.TextColor3 = ALMANAC.Gold
-	else
-		trophyStatus.Text = string.format("Collect all %d to claim harvest bonus!", total)
-		trophyStatus.TextColor3 = ALMANAC.Cream
-	end
-	trophyFace.BackgroundTransparency = if state == "ready" then 0.05 else 0.3
-end
-
-local function paintHarvest()
-	local cash, speed = AlmanacData.Reward(activeBiome)
-	cashValue.Text = "$" .. GameConfig.compact(cash)
-	speedValue.Text = "+" .. GameConfig.compact(speed)
-	local grown, total = AlmanacData.Progress(almanac, activeBiome)
-	harvestCount.Text = string.format("%d/%d", grown, total)
-
-	local state = stateOf(activeBiome)
-	if pending[activeBiome] and state == "ready" then
-		styleClaim(ALMANAC.Slate, ALMANAC.SlateDeep, ALMANAC.SlateShade, "CLAIMING...", ALMANAC.Cream)
-	elseif state == "claimed" then
-		styleClaim(ALMANAC.Gold, ALMANAC.GoldDeep, ALMANAC.GoldShade, "✓ CLAIMED", WHITE)
-	elseif state == "ready" then
-		styleClaim(ALMANAC.Lime, ALMANAC.LimeDeep, ALMANAC.LimeShade, "CLAIM", WHITE)
-	else
-		styleClaim(ALMANAC.Slate, ALMANAC.SlateDeep, ALMANAC.SlateShade,
-			string.format("CLAIM (%d/%d)", grown, total), ALMANAC.Cream)
-	end
-end
-
-local function paintShowcase()
-	local species = chosenSpecies()
-	local known = almanac[species.Id] == true
-	local colours = ALMANAC.Rarity[species.Rarity] or ALMANAC.Rarity.Common
-	showName.Text = if known then species.Name else "???"
-	showRarity.Text = species.Rarity
-	showRarity.TextColor3 = colours[1]
-	stageArt.Image = if known then (CARD.Art[species.Id] or "") else ""
-	stageArt.Visible = known
+	local known = almanac[id] == true
+	local face = AlmanacView.face(species, known)
+	local colours = ALMANAC.Rarity[face.rarity] or ALMANAC.Rarity.Common
+	showName.Text = face.name
+	showRarity.Text = face.rarity
+	RarityFX.setText(showRarityFX, face.rarity, colours[1])
+	RarityFX.setActive(showRarityFX, panelOpen)
+	local biome = BiomeData.ById[species.Biome] or BiomeData.ById[activeBiome]
+	local biomeId = biome and biome.Id or ""
+	biomeIcon, biomeIconFor = biomePicture(biomeRow, biomeIcon, biomeIconFor, biomeId)
+	showBiome.Text = string.format("%s \u{00B7} Biome %d", biome and biome.DisplayName or "", biome and biome.Order or 0)
+	showState.Text = if known then "\u{2713} Grown on your plot"
+		else "Not grown yet: hatch one on your own plot to discover it."
+	showState.TextColor3 = if known then LOOK.Money else LOOK.Muted
 	--==========================================================================
 	-- THE YIELD AT THE BASE TIER, AND UNMULTIPLIED
 	--
@@ -1461,19 +773,102 @@ local function paintShowcase()
 	yieldValue.Text = if known
 		then "+$" .. GameConfig.compact(SeedData.IncomePerSecond(species, SeedData.BaseTier)) .. "/s"
 		else "???"
+	stageArt.Image = if known then (CARD.Art[id] or "") else ""
+	stageArt.Visible = known
 	if panelOpen then
 		showStage(species)
 		tintView(stageView, known)
 	end
-	paintHarvest()
 end
 
-local function paintFooter()
-	local grown, total = AlmanacData.TotalProgress(almanac)
-	footerLine.Text = string.format("Discovered: %d / %d Species", grown, total)
-	local share = if total > 0 then grown / total else 0
-	footerFill.Size = UDim2.fromScale(share, 1)
-	footerFill.Visible = share > 0
+--==============================================================================
+-- PAINTING
+--
+-- Words, colours and states are pennies and always repaint. The models are the
+-- expensive half and are only built while somebody is looking.
+--==============================================================================
+local function paintHeadings()
+	for _, biome in ipairs(road) do
+		local s = sections[biome.Id]
+		if s then
+			local grown, total = AlmanacData.Progress(almanac, biome.Id)
+			local cash, speed = AlmanacData.Reward(biome.Id)
+			s.cashValue.Text = "$" .. GameConfig.compact(cash)
+			s.speedValue.Text = "+" .. GameConfig.compact(speed)
+			s.text.Text = string.format("%s \u{00B7} <font color=\"#%s\">%d/%d Grown</font>", biome.DisplayName,
+				(if total > 0 and grown >= total then LOOK.Premium else LOOK.Money):ToHex(), grown, total)
+			s.barFill.Size = UDim2.fromScale(if total > 0 then grown / total else 0, 1)
+			s.barFill.BackgroundColor3 = if total > 0 and grown >= total then ALMANAC.Gold else LOOK.Green
+			local state = stateOf(biome.Id)
+			-- CLAIM: the warm gold reward face when it can be claimed, the owned gold
+			-- with a check once claimed, flat grey while it cannot (not every plant
+			-- grown, or the claim on its way).
+			local claim = s.claim
+			if pending[biome.Id] and state == "ready" then
+				claim.style("off")
+				claim.set("CLAIMING...")
+			elseif state == "claimed" then
+				claim.style("done")
+				claim.set("\u{2713} CLAIMED")
+			elseif state == "ready" then
+				claim.style("claim")
+				claim.set("CLAIM")
+			else
+				claim.style("off")
+				claim.set(string.format("CLAIM %d/%d", grown, total))
+			end
+			s.bar.Visible = s.bar.Size.X.Offset > 0
+			s.reward.Visible = s.reward.Size.X.Offset > 0
+		end
+	end
+end
+
+local function paintGrid()
+	searching = AlmanacView.normalise(queryNow) ~= ""
+	local list: { AlmanacView.Entry } = {}
+	if searching then
+		-- A search spans every biome (AlmanacView), each card still on its biome.
+		list = (AlmanacView.list(almanac, road[1].Id, filterNow, queryNow))
+	else
+		for _, biome in ipairs(road) do
+			for _, entry in ipairs((AlmanacView.list(almanac, biome.Id, filterNow, ""))) do
+				table.insert(list, entry)
+			end
+		end
+	end
+	current = list
+	local seen: { [string]: boolean } = {}
+	local found: { [string]: number } = {}
+	for i, entry in ipairs(list) do
+		local c = cardFor(entry.species)
+		paintCard(c, entry, i)
+		seen[entry.species.Id] = true
+		found[entry.biomeId] = (found[entry.biomeId] or 0) + 1
+	end
+	for id, c in pairs(cards) do
+		if not seen[id] then
+			c.holder.Visible = false
+			RarityFX.setActive(c.fxText, false)
+			RarityFX.setActive(c.fxEdge, false)
+		end
+	end
+	-- Every biome's heading stands, whatever the filter; a search keeps only the
+	-- biomes it found something in.
+	for _, biome in ipairs(road) do
+		local s = sections[biome.Id]
+		if s then
+			s.frame.Visible = not searching or (found[biome.Id] or 0) > 0
+		end
+	end
+	local first = list[1]
+	padFirst.Value = if first then cards[first.species.Id].button else nil
+	if searching and #list == 0 then
+		emptyLabel.Text = "No matches. Only plants you have grown can be found by name."
+		emptyLabel.Visible = detailId == nil
+	else
+		emptyLabel.Visible = false
+	end
+	task.defer(buildVisible)
 end
 
 --==============================================================================
@@ -1498,44 +893,235 @@ local function paintBadge()
 	badge.Visible = total - grown > 0
 end
 
-local function paint()
-	paintTabs()
-	paintBiome()
-	paintShelf()
-	paintShowcase()
-	paintFooter()
+paint = function()
+	paintGrid()
+	paintHeadings()
+	paintDetail()
 	paintBadge()
 end
 
-paint()
+--==============================================================================
+-- LAYOUT: MenuLayout's answer, applied
+--
+-- In the gui's own units: its pixels divided by its scale. HudLayout answers
+-- the rails in ITS units (the window's, or a TV's canvas), which the menu size
+-- divides once more.
+--==============================================================================
+local layoutNow: MenuLayout.Panel? = nil
 
--- Keeps the active tab inside the strip when the strip has to scroll.
-local function revealTab()
-	local tab = tabs[activeBiome]
-	if not tab then
+local function keyboardTop(): number?
+	if not UserInputService.OnScreenKeyboardVisible then
+		return nil
+	end
+	local ok, at = pcall(function()
+		return UserInputService.OnScreenKeyboardPosition
+	end)
+	if not ok or typeof(at) ~= "Vector2" or at.Y <= 0 then
+		return nil
+	end
+	local inset = GuiService:GetGuiInset().Y
+	return (at.Y - inset) / UIKit.scaleOf(gui)
+end
+
+relayout = function()
+	local k = UIKit.scaleOf(gui)
+	local safe = gui.AbsoluteSize / UIKit.scaleOf(gui)
+	if safe.X < 100 or safe.Y < 100 then
 		return
 	end
-	local canvasX = tabScroll.CanvasPosition.X
-	-- CanvasPosition is in the gui's own units; the pixels read beside it are
-	-- that times its TV scale (1 off a TV).
-	local k = UIKit.scaleOf(gui)
-	local left = (tab.button.AbsolutePosition.X - tabScroll.AbsolutePosition.X) / k + canvasX
-	local right = left + tab.button.AbsoluteSize.X / k
-	local view = tabScroll.AbsoluteSize.X / k
-	if left < canvasX then
-		canvasX = left
-	elseif right > canvasX + view then
-		canvasX = right - view
+	local hud = HudLayout.solve(HudLayout.measure(gui))
+	local camera = workspace.CurrentCamera
+	local hudScale = if HudLayout.isTenFoot() and camera then HudLayout.tenFootScale(camera.ViewportSize) else 1
+	local f = k / hudScale
+	-- The whole page's size, whatever the filter: every biome's every plant.
+	local counts: { number } = {}
+	for _, biome in ipairs(road) do
+		table.insert(counts, #AlmanacView.shelf(biome.Id))
 	end
-	tabScroll.CanvasPosition = Vector2.new(math.max(0, canvasX), 0)
+	local p = MenuLayout.indexPanel({
+		safe = safe,
+		compact = hud.compact,
+		railRight = hud.railRight / f,
+		rightLeft = hud.rightLeft / f,
+		keyboardTop = keyboardTop(),
+	}, RAIL.OutlineThickness, counts)
+	layoutNow = p
+	menu.place(p)
+	local b = MenuLayout.blocks(p)
+	local gap = MenuLayout.Config.Gap
+	local touch = MenuLayout.Config.Touch
+	local rowY = math.floor((p.header - touch) / 2)
+
+	-- THE HEADER: after the title, before the close button.
+	local function header(titleWidth: number): { [string]: MenuLayout.Rect }
+		return MenuLayout.indexHeader(p, titleWidth)
+	end
+	modal.title.Text = "Plant Almanac"
+	local row = header(MenuKit.titleWidth(menu, p.short))
+	if not row.search then
+		modal.title.Text = "Almanac"
+		row = header(MenuKit.titleWidth(menu, p.short))
+	end
+	menu.place(p)
+	local function put(obj: GuiObject, r: MenuLayout.Rect?, inset: number)
+		obj.Visible = r ~= nil
+		if r then
+			obj.Position = UDim2.fromOffset(r.x, rowY + inset)
+			obj.Size = UDim2.fromOffset(r.w, touch - inset * 2)
+		end
+	end
+	put(search.frame, row.search, 2)
+	put(filter.frame, row.filter, 2)
+
+	-- THE PAGE, over the baseplate.
+	local main = b.main
+	plate.Position = UDim2.fromOffset(main.x, main.y)
+	plate.Size = UDim2.fromOffset(main.w, main.h)
+	grid.Position = UDim2.fromOffset(main.x, main.y)
+	grid.Size = UDim2.fromOffset(main.w, main.h)
+	gridPad.PaddingLeft = UDim.new(0, GRID_INSET)
+	gridPad.PaddingRight = UDim.new(0, GRID_INSET)
+	gridPad.PaddingTop = UDim.new(0, GRID_INSET)
+	gridPad.PaddingBottom = UDim.new(0, GRID_INSET)
+	local cg = MenuLayout.indexCards(p, main.w - grid.ScrollBarThickness)
+	cardW, cardH, previewH = cg.cardW, cg.cardH, cg.previewH
+	for _, c in pairs(cards) do
+		shapeCard(c)
+	end
+
+	-- EVERY BIOME'S HEADING: its picture before its words, then the bar, the
+	-- harvest and CLAIM, across the page's own width.
+	local ph = if p.short then IDX.ProgressShort else IDX.ProgressTall
+	local headW = main.w - grid.ScrollBarThickness - GRID_INSET * 2
+	local textW = math.ceil(MenuKit.textWidth("Greenhollow \u{00B7} 5/5 Grown", 15)) + 4 + ICON + 6
+	local cashW = math.ceil(MenuKit.textWidth("$250M", 14)) + 2
+	local speedW = math.ceil(MenuKit.textWidth("+1B", 14)) + 2
+	local rewardW = 22 + cashW + 10 + 22 + speedW
+	local inner = MenuLayout.pack(8, headW - 4, 10, {
+		{ id = "text", w = textW },
+		{ id = "bar", grow = true, minW = 40, maxW = 220, drop = 2 },
+		{ id = "reward", w = rewardW, drop = 1 },
+		{ id = "claim", w = 112 },
+	})
+	local mid = ph / 2
+	for _, s in pairs(sections) do
+		s.heading.Size = UDim2.new(1, 0, 0, ph)
+		s.cells.CellSize = UDim2.fromOffset(cardW, cardH)
+		s.cells.CellPadding = UDim2.fromOffset(CARD_GAP, CARD_GAP)
+		local t = inner.text
+		local icon = s.icon
+		if icon then
+			icon.Position = UDim2.new(0, t.x, 0.5, 0)
+		end
+		s.text.Position = UDim2.fromOffset(t.x + ICON + 6, 0)
+		s.text.Size = UDim2.fromOffset(t.w - ICON - 6, ph)
+		local br = inner.bar
+		s.bar.Size = UDim2.fromOffset(if br then br.w else 0, 8)
+		if br then
+			s.bar.Position = UDim2.fromOffset(br.x, mid)
+		end
+		local rw = inner.reward
+		s.reward.Size = UDim2.fromOffset(if rw then rw.w else 0, ph)
+		if rw then
+			s.reward.Position = UDim2.fromOffset(rw.x, 0)
+			s.cashIcon.Position = UDim2.new(0, 0, 0.5, 0)
+			s.cashValue.Position = UDim2.fromOffset(22, 0)
+			s.cashValue.Size = UDim2.fromOffset(cashW, ph)
+			s.speedIcon.Position = UDim2.new(0, 22 + cashW + 10, 0.5, 0)
+			s.speedValue.Position = UDim2.fromOffset(22 + cashW + 10 + 22, 0)
+			s.speedValue.Size = UDim2.fromOffset(speedW, ph)
+		end
+		local cr = inner.claim
+		s.claim.hit.Position = UDim2.fromOffset(cr.x, math.floor((ph - 44) / 2))
+		s.claim.hit.Size = UDim2.fromOffset(cr.w, 44)
+		s.claim.plate.Size = UDim2.new(1, 0, 0, math.min(30, ph - 4))
+	end
+	emptyLabel.Position = UDim2.fromOffset(main.x + main.w / 2, main.y + math.min(main.h * 0.4, 70))
+	emptyLabel.Size = UDim2.fromOffset(math.max(80, main.w - 40), 50)
+
+	-- THE DETAIL PAGE: over the page.
+	detail.Position = UDim2.fromOffset(main.x, main.y)
+	detail.Size = UDim2.fromOffset(main.w, main.h)
+	back.hit.Position = UDim2.fromOffset(6, 2)
+	back.hit.Size = UDim2.fromOffset(104, 44)
+	local wide = main.w >= 420
+	local top = 50
+	if wide then
+		local side = math.max(80, math.min(main.h - top - 8, math.floor(main.w * 0.46)))
+		stage.Position = UDim2.fromOffset(8, top)
+		stage.Size = UDim2.fromOffset(side, main.h - top - 8)
+		info.Position = UDim2.fromOffset(8 + side + 14, top)
+		info.Size = UDim2.fromOffset(main.w - side - 30, main.h - top - 8)
+	else
+		local side = math.max(80, math.min(math.floor((main.h - top) * 0.5), main.w - 16))
+		stage.Position = UDim2.fromOffset(8, top)
+		stage.Size = UDim2.fromOffset(main.w - 16, side)
+		info.Position = UDim2.fromOffset(10, top + side + 8)
+		info.Size = UDim2.fromOffset(main.w - 20, main.h - top - side - 14)
+	end
+	UIKit.coverRail(playerGui, PANEL_NAME, panelOpen and p.covers)
+	paintHeadings()
+	task.defer(buildVisible)
 end
+
+gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+UserInputService:GetPropertyChangedSignal("OnScreenKeyboardVisible"):Connect(function()
+	task.defer(relayout)
+end)
+UIKit.onMenuSize(relayout)
+relayout()
+
+--==============================================================================
+-- THE DETAIL PAGE, OPEN AND SHUT
+--
+-- The page is hidden, never rebuilt or scrolled, so Back finds it exactly as it
+-- was: the same filter, search and scroll.
+--==============================================================================
+local backName = "SeedIndexBack"
+
+local function closeDetail()
+	local id = detailId
+	if not id then
+		return
+	end
+	detailId = nil
+	detail.Visible = false
+	plate.Visible = true
+	grid.Visible = true
+	RarityFX.setActive(showRarityFX, false)
+	MenuKit.unbind(backName)
+	paintGrid()
+	local c = cards[id]
+	if c and MenuKit.onPad() and c.holder.Visible then
+		GuiService.SelectedObject = c.button
+	end
+end
+
+openDetail = function(species: any)
+	detailId = species.Id
+	plate.Visible = false
+	grid.Visible = false
+	emptyLabel.Visible = false
+	detail.Visible = true
+	paintDetail()
+	buildVisible()
+	MenuKit.bindBack(backName, closeDetail)
+	if MenuKit.onPad() then
+		GuiService.SelectedObject = back.hit
+	end
+end
+
+MenuKit.tap(back.hit, nil, function()
+	SoundKit.play("CardClick")
+	closeDetail()
+end)
 
 --==============================================================================
 -- WHERE THE PANEL OPENS
 --
--- The first open of a session goes where the action is: a biome with a harvest
--- waiting, else the furthest biome with anything grown in it. After that the
--- panel remembers the tab it was left on.
+-- The first open of a session scrolls the page to where the action is: a biome
+-- with a harvest waiting, else the furthest biome with anything grown in it.
+-- After that the page stays where it was left.
 --==============================================================================
 local function openingBiome(): string
 	for _, biome in ipairs(road) do
@@ -1558,8 +1144,8 @@ end
 --==============================================================================
 local gameEvent: RemoteEvent? = nil
 
-local function requestClaim()
-	local biomeId = activeBiome
+requestClaim = function(biomeId: string)
+	local section = sections[biomeId]
 	local state = stateOf(biomeId)
 	if state == "claimed" then
 		SoundKit.play("CardClick")
@@ -1568,7 +1154,9 @@ local function requestClaim()
 	local channel = gameEvent
 	if state ~= "ready" or pending[biomeId] or not channel then
 		SoundKit.play("Denied")
-		shakeClaim()
+		if section then
+			section.shake()
+		end
 		return
 	end
 	pending[biomeId] = true
@@ -1605,39 +1193,113 @@ local function onReply(action: any, biomeId: any, ok: any, reason: any)
 	paint()
 end
 
+
+--==============================================================================
+-- THE SEARCH AND THE FILTER
+--==============================================================================
+search.changed(function(text: string)
+	if queryNow ~= text then
+		queryNow = text
+		resetScroll()
+		paintGrid()
+		paintHeadings()
+	end
+end)
+filter.changed(function(id: string)
+	filterNow = id :: AlmanacView.Filter
+	resetScroll()
+	paintGrid()
+	paintHeadings()
+end)
+
 --==============================================================================
 -- OPEN AND SHUT
 --
 -- ONE CENTRE PANEL AT A TIME. Each panel writes its own name to the OpenPanel
 -- attribute and closes itself on seeing a name that is not its own, so no script
--- has to know the others exist.
+-- has to know the others exist. While open, LB / RB jump the page to the
+-- previous or next biome's heading (one page since 2026-10-06; they stepped the
+-- chosen biome before), with that biome's first card selected.
 --==============================================================================
+local function stepBiome(step: number)
+	if detailId ~= nil then
+		return
+	end
+	local shown: { any } = {}
+	for _, biome in ipairs(road) do
+		local s = sections[biome.Id]
+		if s and s.frame.Visible then
+			table.insert(shown, biome)
+		end
+	end
+	if #shown == 0 then
+		return
+	end
+	-- The biome the view is in: the last whose heading is at or above its top.
+	local at = 1
+	for i, biome in ipairs(shown) do
+		if sections[biome.Id].frame.AbsolutePosition.Y <= grid.AbsolutePosition.Y + 2 then
+			at = i
+		end
+	end
+	local target = shown[(at - 1 + step) % #shown + 1]
+	activeBiome = target.Id
+	scrollToBiome(target.Id)
+	SoundKit.play("CardClick")
+	if MenuKit.onPad() then
+		local pick: Card? = nil
+		for _, c in pairs(cards) do
+			if c.species.Biome == target.Id and c.holder.Visible
+				and (pick == nil or c.holder.LayoutOrder < (pick :: Card).holder.LayoutOrder) then
+				pick = c
+			end
+		end
+		if pick then
+			GuiService.SelectedObject = pick.button
+		end
+	end
+end
+
 local function setOpen(want: boolean)
 	if panelOpen == want then
 		return
 	end
 	panelOpen = want
+	local first = false
 	if want then
 		if not openedBefore then
 			openedBefore = true
+			first = true
 			activeBiome = openingBiome()
 		end
-		-- Before the panel shows, so the first frame of the open is the finished
-		-- shelf rather than empty dioramas filling in behind it.
-		paint()
-		task.defer(revealTab)
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
-	elseif player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
-		player:SetAttribute(ATTR.OpenPanel, nil)
-	end
-	for _, twinkle in ipairs(twinkles) do
-		if want then
-			twinkle:Play()
-		else
-			twinkle:Pause()
+		MenuKit.bindBumpers("SeedIndexPad", stepBiome)
+	else
+		if player:GetAttribute(ATTR.OpenPanel) == PANEL_NAME then
+			player:SetAttribute(ATTR.OpenPanel, nil)
 		end
+		closeDetail()
+		search.box:ReleaseFocus()
+		MenuKit.unbind("SeedIndexPad")
+	end
+	-- Laid out and painted before the panel shows, so its first frame is the
+	-- finished grid; the rail steps under it (or back) in the same pass.
+	relayout()
+	paint()
+	if not want then
+		for _, c in pairs(cards) do
+			RarityFX.setActive(c.fxText, false)
+			RarityFX.setActive(c.fxEdge, false)
+		end
+		RarityFX.setActive(showRarityFX, false)
 	end
 	modal.setOpen(want)
+	if first then
+		-- Once the page has its size: the biome that opened it at the top.
+		task.defer(function()
+			scrollToBiome(activeBiome)
+		end)
+	end
 end
 
 button.Activated:Connect(function()
@@ -1656,39 +1318,11 @@ player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(function()
 		setOpen(false)
 	end
 end)
-
-for _, biome in ipairs(road) do
-	local id = biome.Id
-	tabs[id].button.Activated:Connect(function()
-		if activeBiome == id then
-			return
-		end
-		activeBiome = id
-		paint()
-		task.defer(revealTab)
-	end)
-end
-
-for _, card in ipairs(cards) do
-	card.button.Activated:Connect(function()
-		local species = card.species
-		if not species or chosenIn[activeBiome] == species.Id then
-			return
-		end
-		chosenIn[activeBiome] = species.Id
-		paintShelf()
-		paintShowcase()
-	end)
-end
-
-trophyHit.Activated:Connect(function()
-	if stateOf(activeBiome) == "ready" then
-		requestClaim()
-	else
-		SoundKit.play("CardClick")
-	end
+gui.Destroying:Connect(function()
+	UIKit.coverRail(playerGui, PANEL_NAME, false)
+	MenuKit.unbind("SeedIndexPad")
+	MenuKit.unbind(backName)
 end)
-claimButton.Activated:Connect(requestClaim)
 
 --==============================================================================
 -- THE PROFILE
@@ -1746,6 +1380,8 @@ local function receive(profile: any)
 	end
 end
 
+paint()
+
 local remotes = SeedGame:WaitForChild("Remotes", 20)
 if remotes then
 	-- WaitForChild, not FindFirstChild: the folder replicates before the events
@@ -1775,6 +1411,6 @@ else
 	warn("[Seed/IndexUI] No Remotes folder; the almanac will stay unfilled.")
 end
 
--- No tick. Nothing here changes on its own except the sparkles, which are engine
--- tweens: the almanac moves when a profile packet or a claim answer says so, and
--- each of those repaints.
+-- No tick of its own. A Mythic's light is stepped by the one RarityFX clock
+-- (LoadoutUI), and only while its card is in view with the panel open; the
+-- almanac moves when a profile packet or a claim answer says so.

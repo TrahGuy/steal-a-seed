@@ -1308,10 +1308,13 @@ local function body()
 	--
 	-- A snapshot may only add to the record, so a Tool the void took -- anything
 	-- that is not a sale or a planting -- leaves its row behind until the next
-	-- body puts the plant back. A hatch of that same plant at that same size is
-	-- a Tool that row already answers for: it IS on the record, the next body
-	-- would build exactly it, and it is handed over. Refusing it would be
-	-- refusing a hatch that loses nothing.
+	-- body puts the plant back.
+	--
+	-- SINCE 2026-10-03 (item ids, B3) a hatch of that same plant at that same
+	-- size gets a row OF ITS OWN. It used to be matched by kind into the row the
+	-- void left, and the two plants then had one row between them: the next body
+	-- built one, and the other was gone. Now the record holds both, and the next
+	-- body builds both. It is handed over while there is room, as before.
 	--==========================================================================
 	say("\n-- a row whose Tool has gone --")
 	do
@@ -1330,17 +1333,20 @@ local function body()
 			string.format("%d tools, %d rows", #plantsOf(v), #vProfile.Held))
 		local answered, why, payload = w.byHand(v, vPlot, 1)
 		check(answered == true and why == nil and payload ~= nil and payload.species == "nubkin",
-			"a hatch of that same plant is handed over: the row that was left answers for it",
-			tostring(answered) .. " / " .. tostring(why))
-		check(#plantsOf(v) == 2 and #vProfile.Held == 2
-				and census(vProfile.Held, rowKey) == census(plantsOf(v), toolKey)
+			"a hatch of that same plant is handed over", tostring(answered) .. " / " .. tostring(why))
+		local nubkinRows = 0
+		for _, row in ipairs(vProfile.Held) do
+			if rowKey(row) == "nubkin:1:true" then
+				nubkinRows += 1
+			end
+		end
+		check(#plantsOf(v) == 2 and #vProfile.Held == 3 and nubkinRows == 2
 				and modelFor(vPlot, 1) == nil and #vProfile.Plants == 1,
-			"two Tools and the same two rows, the pod out of the garden: nothing held is off the record",
+			"with a row of its own: the void's nubkin keeps its row for the next body, so neither is lost",
 			string.format("%d tools, %d rows", #plantsOf(v), #vProfile.Held))
 		local second = w.byHand(v, vPlot, 2)
-		check(second == true and #plantsOf(v) == 3 and #vProfile.Held == 3
-				and census(vProfile.Held, rowKey) == census(plantsOf(v), toolKey),
-			"and the next one has a row of its own",
+		check(second == true and #plantsOf(v) == 3 and #vProfile.Held == 4,
+			"and the next one has a row of its own too",
 			string.format("%d tools, %d rows", #plantsOf(v), #vProfile.Held))
 	end
 
@@ -2252,7 +2258,7 @@ local function body()
 		local roomAt = string.find(give, "CarryService.HeldRoom(player)", 1, true)
 		local refuseAt = string.find(give, "return false, \"STORAGE_FULL\"", 1, true)
 		local buildAt = string.find(give, "CreatureModel.BuildCreature", 1, true)
-		local recordAt = string.find(give, "CarryService.RecordHatched(player, species, tier)", 1, true)
+		local recordAt = string.find(give, "CarryService.RecordHatched(player, species, tier, tool)", 1, true)
 		local backAt = string.find(give, "tool:Destroy()", 1, true)
 		check(roomAt ~= nil and refuseAt ~= nil and buildAt ~= nil and roomAt < refuseAt and refuseAt < buildAt,
 			"GiveHatched counts the room, and refuses, before it builds anything")

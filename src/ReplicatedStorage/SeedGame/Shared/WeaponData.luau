@@ -1,7 +1,7 @@
 --!strict
 -- Steal a Seed :: WeaponData
 --
--- Marigold's stock: six knockback bats and one reusable trap. Every number a
+-- Marigold's stock: six knockback bats and five reusable traps. Every number a
 -- swing, a fling or a price depends on lives here (Rule 7) -- GameConfig holds
 -- structure and curves, never what a thing is worth.
 --
@@ -14,8 +14,10 @@
 --
 -- Bought once with cash, owned forever, saved in the profile as a set. There is
 -- no quantity, no restock, no consumable and no scarcity, and there must not
--- be: the trap in particular is a TOOL that re-arms on a cooldown, so "buying
--- traps" would be a second currency loop nobody asked for.
+-- be: the trap in particular is a TOOL that sets up to three traps at once
+-- (2026-10-04) -- each stays until it catches somebody or its owner takes it
+-- back, and a catch hands its slot back after a short cooldown (2026-10-05) --
+-- so "buying traps" would be a second currency loop nobody asked for.
 --
 --==============================================================================
 -- KNOCKBACK ONLY. NO DAMAGE, EVER.
@@ -28,9 +30,10 @@
 -- unwalkable for anybody below the top of the ladder.
 --
 -- Bats also never take, delete or confiscate a pod. Being knocked over drops
--- what you were carrying exactly as a guardian's hit does, through the SAME
--- PlatformStand watcher in CarryService, and the pod lands on the road for
--- whoever gets to it first. Nothing here reaches into CarryService to move it.
+-- what you were carrying -- a raid carry, or a banked pod held in the hands
+-- (2026-10-04) -- through CarryService.DropHeldPod BEFORE the launch, and the
+-- pod lands on the road for whoever gets to it first. Nothing here reaches
+-- into CarryService to move it.
 --
 --==============================================================================
 -- POWER IS AN ABSTRACT RATING, AND THAT IS THE SECOND ATTEMPT
@@ -383,7 +386,7 @@ WeaponData.Items = {
 		Category = "trap",
 		Order = 7,
 		Price = 150000,
-		Blurb = "Curved roots and thorn teeth around a glowing seed. Holds the next thief who steps in.",
+		Blurb = "Hidden thorn jaws that spring once, then return to you. Knocks loose any pod and holds the thief still.",
 		Badge = "TRAP",
 		-- A trap never swings, and CombatService never reads these off it. They
 		-- are zero rather than absent so every card can print the same three
@@ -424,7 +427,7 @@ WeaponData.Items = {
 		Category = "trap",
 		Order = 8,
 		Price = 750000,
-		Blurb = "A cracked sandstone plate. Stand on it and the sand goes out from under you.",
+		Blurb = "A hidden sandstone plate that springs once, then returns to you. Knocks loose any pod, trips the thief, then slows them.",
 		Badge = "TRAP",
 		Reach = 0,
 		Power = 0,
@@ -448,7 +451,7 @@ WeaponData.Items = {
 		Category = "trap",
 		Order = 9,
 		Price = 3500000,
-		Blurb = "A shallow mud pool ringed with live vine. They tighten, and the road turns to wading.",
+		Blurb = "A hidden mud pool that springs once, then returns to you. Knocks loose any pod and turns the road to wading.",
 		Badge = "TRAP",
 		Reach = 0,
 		Power = 0,
@@ -472,7 +475,7 @@ WeaponData.Items = {
 		Category = "trap",
 		Order = 10,
 		Price = 15000000,
-		Blurb = "Volcanic plate, glowing seams. It takes the pod out of their arms and them off their feet.",
+		Blurb = "A hidden volcanic mine that springs once, then returns to you. Blasts the pod loose and the thief down, then slows them.",
 		Badge = "TRAP",
 		Reach = 0,
 		Power = 0,
@@ -496,7 +499,7 @@ WeaponData.Items = {
 		Category = "trap",
 		Order = 11,
 		Price = 60000000,
-		Blurb = "A cosmic anchor on a violet base. It pulls the thief back to it, then lets them crawl away.",
+		Blurb = "A hidden cosmic anchor that springs once, then returns to you. Knocks loose any pod, pulls the thief back, then slows them.",
 		Badge = "TRAP",
 		Reach = 0,
 		Power = 0,
@@ -785,6 +788,47 @@ WeaponData.Combat = {
 	-- an aura -- but it is a swing with a wide arc, and 75 either side is what
 	-- makes a moving target hittable without pointing at them exactly.
 	ArcDegrees = 75,
+	--==========================================================================
+	-- THE ACTIVE WINDOW, NOT ONE INSTANT (2026-10-04, the owner's brief)
+	--
+	-- The hit used to be resolved ONCE, at the exact moment the bat's wind-up
+	-- ended, against where two running players happened to be on that one
+	-- server frame. At road speed that is a coin toss: a player crossing in
+	-- front of the swing at 60 studs a second is inside the arc for a tenth of
+	-- a second and the single sample could land either side of it.
+	--
+	-- Now the swing is LIVE for a short window around the visible contact --
+	-- HitWindowLead before it, HitWindowTrail after it, while the bat sweeps
+	-- through the front of its arc -- and every server frame in it tests the
+	-- PATH both bodies took since the previous frame, not just where they
+	-- ended up. A body that crossed the arc between two frames is hit; one
+	-- that jumped further than SweepTeleportStuds in a frame is tested where
+	-- it landed, never along the jump.
+	--
+	-- AND A LITTLE OF WHAT THE SWINGER SAW. Their screen shows a target a
+	-- little behind where the server has it, so the target's own motion is
+	-- also wound back by HitRewindBaseSeconds plus half the swinger's ping,
+	-- never more than HitRewindMaxSeconds or HitRewindMaxStuds. Modest on
+	-- purpose: fair to the attacker without a huge invisible range.
+	--
+	-- What does NOT change: each bat's Reach, Windup, Recovery and Cooldown,
+	-- the arc, the height tolerance, the line of sight, the safe field, the hit
+	-- immunity and one hit per target per swing.
+	--==========================================================================
+	HitWindowLead = 0.05,
+	HitWindowTrail = 0.12,
+	-- Extra flat reach on the swept test, in studs: a body's half-width.
+	HitReachSlack = 1.5,
+	-- Extra arc on the swept test, in degrees either side.
+	HitArcSlack = 5,
+	HitRewindBaseSeconds = 0.05,
+	HitRewindMaxSeconds = 0.15,
+	HitRewindMaxStuds = 6,
+	-- A body that moved further than this in one server frame (or than twice
+	-- MaxWalkSpeed allows, on a long frame) teleported: no sweep across it.
+	SweepTeleportStuds = 12,
+	-- Points tested along each frame's path, past its start.
+	SweepSubSamples = 4,
 }
 
 --==============================================================================
@@ -803,8 +847,69 @@ WeaponData.Combat = {
 --==============================================================================
 WeaponData.Trap = {
 	-- After ANY trap effect ends, and after any bat hit. Nothing can catch you
-	-- during it, which is what stops a corridor of traps being a corridor.
-	ImmunitySeconds = 4.0,
+	-- during it, which is what stops a corridor of traps being a corridor. Five
+	-- seconds for every trap since 2026-10-04 (the owner's brief; it was four).
+	-- It is the same window CombatService checks before a SWING lands, so a
+	-- player under a trap effect, and for this long after it, cannot be batted
+	-- either -- unchanged behaviour, now on the longer clock.
+	ImmunitySeconds = 5.0,
+	--==========================================================================
+	-- THREE TRAPS OUT AT ONCE, ANY MIX (2026-10-04, the owner's brief)
+	--
+	-- Counted per OWNER across every trap type -- three in total, not three of
+	-- each -- and a trap still arming counts. The fourth placement is refused
+	-- (TRAP_LIMIT) and touches none of the three already down.
+	--
+	-- NO LIFETIME (2026-10-04): an untriggered trap stays where it was set until
+	-- its owner's REMOVE (newest first), the owner leaving, a progress reset, the
+	-- floor it stands on going away (the Rain event's temporary biome) or a
+	-- service restart. A death or a respawn takes nothing.
+	--
+	-- ONE CATCH, THEN IT COMES BACK (2026-10-05, the owner's brief; it replaces
+	-- 2026-10-04's re-arm in place). A trap that catches somebody is CONSUMED:
+	-- its effect once, its public snap, and it is gone from the map -- its slot
+	-- back at once (the count goes up), nothing granted and nothing equipped.
+	-- Then its OWNER may set no trap of any kind for TriggerCooldownSeconds: one
+	-- deadline across every trap type, enforced by the server, so switching
+	-- traps, slots or the Bag cannot get round it. Their other traps already
+	-- down stay live; a later catch moves the deadline to ten seconds after
+	-- itself. REMOVE never cancels it, and a death or a respawn keeps it. A
+	-- placement itself still costs no wait.
+	--==========================================================================
+	MaxActivePerPlayer = 3,
+	TriggerCooldownSeconds = 10,
+	-- The deadline, in SERVER time, on the owner's MarksGuiName gui while it
+	-- runs (absent otherwise): every trap slot on their hotbar dims and counts
+	-- down from it against GetServerTimeNow.
+	CooldownAttribute = "CooldownUntil",
+	-- How long the public sprung picture stands: the one moment anybody but its
+	-- owner can see a trap, kept brief. The trap is already gone from the records.
+	SprungSeconds = 0.6,
+	--==========================================================================
+	-- THE OWNER'S COUNT, ON THE RECORDS' OWN GUI
+	--
+	-- CombatService writes three attributes on the owner's MarksGuiName gui
+	-- whenever a trap is set or goes: how many are out, the limit, and the id of
+	-- the newest one (0 for none). The hotbar's "3x" and its REMOVE button read
+	-- these and nothing else, so they show the server's count, never a guess.
+	--==========================================================================
+	PlacedAttribute = "Placed",
+	CapacityAttribute = "Capacity",
+	NewestAttribute = "Newest",
+	-- REMOVE requests closer together than this, per player, are dropped
+	-- unanswered: request protection, not a recharge (a press a person makes is
+	-- slower than this).
+	RemoveGapSeconds = 0.2,
+	--==========================================================================
+	-- HIDDEN FROM EVERYBODY BUT THE OWNER (2026-10-04)
+	--
+	-- The server builds no trap in the world. It keeps each trap as state and
+	-- hands the OWNER a copy -- one Configuration per trap inside this ScreenGui
+	-- in their own PlayerGui, which replicates to them alone -- and
+	-- TrapMarks.client draws it locally. Once it springs, the snap is shown to
+	-- everyone (CombatService builds it, sprung, for a moment).
+	--==========================================================================
+	MarksGuiName = "SeedTrapMarks",
 	-- Refused this close to a pod or a nest marker. A trap sitting on the one
 	-- tile everybody has to stand on to take a pod is not a play, it is a tax.
 	NestClearanceStuds = 16,
@@ -839,38 +944,49 @@ WeaponData.Trap = {
 --
 -- EFFECTS, and what each one costs the victim:
 --
---   root   WalkSpeed 0 and no jump, for a fixed time. The Bramblejaw, unchanged.
---   trip   a short ragdoll with almost no push. You are down, not thrown.
+--   root   WalkSpeed 0 and no jump, for a fixed time. The Bramblejaw.
+--   trip   a short ragdoll with almost no push, then a slow for the rest of
+--          the window. You are down, not thrown, and up again quickly.
 --   slow   a movement MULTIPLIER for a time, with jumping locked for the first
 --          second only. You can still steer, still swing, still fight.
---   blast  the carried pod comes off, then a launch down the bat pipeline --
---          weaker than the weakest bat, and backward rather than up.
+--   blast  a launch down the bat pipeline -- weaker than the weakest bat, and
+--          backward rather than up -- then a slow for the rest of the window.
 --   pull   one yank toward the trap, obstruction-checked, then a slow.
+--
+-- EVERY TRAP TAKES THE POD (2026-10-04, the owner's brief; until then only the
+-- Cinderburst did). A carried pod -- a raid carry, or a banked pod held in the
+-- hands -- comes off at the victim's feet through CarryService.DropHeldPod
+-- BEFORE the effect begins, whatever the effect is.
+--
+-- AND EVERY EFFECT LASTS AT LEAST FIVE SECONDS (the same brief): the countdown
+-- over the victim is `EffectSeconds` from the trigger, the server's own
+-- deadline. A trip and a blast keep their knockdown short (LaunchMinLimp) and
+-- spend the rest of the window as a slow, so nobody lies ragdolled for five
+-- seconds.
 --
 -- WHY THE DURATIONS CLIMB WITH PRICE AND THE STOPPING POWER DOES NOT: a root is
 -- the harshest thing that can happen to somebody carrying a Colossal pod, and it
 -- is the cheapest trap on the shelf. What the money buys is reach into the rest
--- of the fight -- a pod on the floor, a body dragged back to you, four seconds of
--- wading -- and a longer window in which to use it.
+-- of the fight -- a body dragged back to you, a longer crawl -- and a longer
+-- window in which to use it.
 --==============================================================================
 export type TrapSpec = {
 	Effect: string,
 	-- Opens, glows, heats up. It only bites once it is armed, which is the second
-	-- a player gets to walk away.
+	-- a player gets to walk away after it is set. No lifetime and no placement
+	-- recharge; one catch consumes it (2026-10-05) and starts its owner's
+	-- trigger cooldown (Trap.TriggerCooldownSeconds).
 	ArmSeconds: number,
-	-- How long an untriggered trap sits there before it gives up.
-	ExpireSeconds: number,
-	-- From the moment it is PLACED, not from when it fires.
-	PlaceCooldownSeconds: number,
 	-- How close a foot has to be, measured FLAT, plus how far above the trap it
 	-- may be. Flat because jumping over a trap has to clear it.
 	TriggerRadius: number,
 	TriggerHeight: number,
-	-- How long the effect lasts on the victim. For a launch it is how long they
-	-- are counted as being in it, which is what the immunity is measured from.
+	-- How long the effect lasts on the victim, from the trigger: the server's
+	-- own deadline and the countdown over them. For a trip or a blast it is the
+	-- knockdown AND the slow after it. The immunity is measured from its end.
 	EffectSeconds: number,
 	-- Movement as a FRACTION of whatever the victim's speed would otherwise be.
-	-- 0 for a root. nil for anything that does not touch movement.
+	-- 0 for a root; for a trip or a blast, the slow after the knockdown.
 	MoveMultiplier: number?,
 	-- Jumping is disabled for this long, from the trigger. A root locks it for
 	-- the whole hold; a slow locks the first second so the answer to mud is not
@@ -885,8 +1001,9 @@ export type TrapSpec = {
 	LaunchMinLimp: number?,
 	-- Pull numbers, for `pull` only.
 	PullStuds: number?,
-	-- Whether the victim's carried pod is dropped, through CarryService.Drop and
-	-- nothing else.
+	-- Whether the victim's carried pod is dropped first, through
+	-- CarryService.DropHeldPod and nothing else. True for every trap since
+	-- 2026-10-04 (asserted below); kept as a field so the rule is written down.
 	DropsPod: boolean,
 	-- Which geometry WeaponModel builds, and how it poses while arming.
 	Model: string,
@@ -904,24 +1021,24 @@ export type TrapSpec = {
 
 WeaponData.TrapSpecs = {
 	--==========================================================================
-	-- THE BRAMBLEJAW, UNCHANGED
+	-- THE BRAMBLEJAW: A ROOT
 	--
-	-- Every number here is the number this trap has always had. It is written
-	-- down per-trap now instead of as "the trap", and that is the whole of the
-	-- change: 1.0 to arm, 2.0 held, 20 to expire, 15 to place again, 4.0 flat and
-	-- 4.5 up. Anything different would be a balance change nobody asked for.
+	-- Its placement numbers are the ones this trap has always had: 1.0 to arm,
+	-- 4.0 flat and 4.5 up (its 20-second lifetime and 15-second recharge went
+	-- with the reusable-trap brief, 2026-10-04). The HOLD is five
+	-- seconds since 2026-10-04 (the owner's brief: every effect at least five;
+	-- it was two), with the jump gone for all of it, and it knocks a carried pod
+	-- loose first like every trap.
 	--==========================================================================
 	bramblejaw_trap = {
 		Effect = "root",
 		ArmSeconds = 1.0,
-		ExpireSeconds = 20,
-		PlaceCooldownSeconds = 15,
 		TriggerRadius = 4.0,
 		TriggerHeight = 4.5,
-		EffectSeconds = 2.0,
+		EffectSeconds = 5.0,
 		MoveMultiplier = 0,
-		JumpLockSeconds = 2.0,
-		DropsPod = false,
+		JumpLockSeconds = 5.0,
+		DropsPod = true,
 		Model = "jaw",
 		Status = "root",
 		EffectText = "ROOT",
@@ -931,55 +1048,56 @@ WeaponData.TrapSpecs = {
 	-- DUNESNAP: THE SAND GOES OUT FROM UNDER YOU
 	--
 	-- A trip, not a throw. The launch numbers are deliberately tiny -- 7 studs a
-	-- second with barely any lift -- because what this trap sells is the 1.1
-	-- seconds on the floor, and a plate that flung people would be a cheap
-	-- Cinderburst. It does NOT take the pod: a thief who trips over a plate gets
-	-- up still holding it, which is what keeps this the entry-level answer.
+	-- second with barely any lift -- because what this trap sells is the moment
+	-- on the floor, and a plate that flung people would be a cheap Cinderburst.
+	--
+	-- THE KNOCKDOWN STAYS SHORT (2026-10-04): 1.1 seconds on the floor, exactly
+	-- as before, and the rest of its five-second window is a 60% slow -- sand in
+	-- the shoes, the mildest slow on the shelf. Nobody lies ragdolled for five
+	-- seconds. The pod comes loose first, like every trap's.
 	--==========================================================================
 	dunesnap_trap = {
 		Effect = "trip",
 		ArmSeconds = 0.8,
-		ExpireSeconds = 24,
-		PlaceCooldownSeconds = 16,
 		TriggerRadius = 4.4,
 		TriggerHeight = 4.5,
-		-- The window the victim is counted as being in the trip, which is what
-		-- the four seconds of immunity is measured from. The ragdoll itself ends
-		-- when the body reports landing, exactly as a bat's does.
-		EffectSeconds = 1.1,
+		-- The whole window, knockdown and slow: the countdown over the victim
+		-- and what the five seconds of immunity is measured from. The ragdoll
+		-- inside it ends when the body reports landing, exactly as a bat's does.
+		EffectSeconds = 5.0,
+		MoveMultiplier = 0.60,
 		JumpLockSeconds = 0,
 		LaunchSpeed = 7,
 		LaunchLift = 0.30,
 		LaunchMinLimp = 1.1,
-		DropsPod = false,
+		DropsPod = true,
 		Model = "plate",
-		EffectText = "TRIP",
+		Status = "slow",
+		EffectText = "TRIP/SLOW",
 		SpringCue = "TrapSpringDunesnap",
 	},
 	--==========================================================================
 	-- MIRECOIL: THE ROAD TURNS TO WADING
 	--
-	-- 35% of whatever they would otherwise be doing, for four seconds, and the
-	-- multiplier is the point: it is a fraction of the SPEED THEY HAVE, so a
-	-- billionaire sprinting past at 90 is cut to 31 and a beginner at 20 is cut
-	-- to 7. A flat number would be a nerf to the rich and a root to everybody
-	-- else.
+	-- 35% of whatever they would otherwise be doing, for six seconds (four
+	-- until 2026-10-04), and the multiplier is the point: it is a fraction of
+	-- the SPEED THEY HAVE, so a billionaire sprinting past at 90 is cut to 31
+	-- and a beginner at 20 is cut to 7. A flat number would be a nerf to the
+	-- rich and a root to everybody else. The pod comes loose first.
 	--
-	-- JUMP LOCKED FOR ONE SECOND, NOT FOUR. Long enough that the first instinct
+	-- JUMP LOCKED FOR ONE SECOND, NOT SIX. Long enough that the first instinct
 	-- -- hop out of it -- does not work; short enough that a player who is being
 	-- chased through mud still has their best move back while it matters.
 	--==========================================================================
 	mirecoil_trap = {
 		Effect = "slow",
 		ArmSeconds = 1.2,
-		ExpireSeconds = 26,
-		PlaceCooldownSeconds = 19,
 		TriggerRadius = 4.6,
 		TriggerHeight = 4.5,
-		EffectSeconds = 4.0,
+		EffectSeconds = 6.0,
 		MoveMultiplier = 0.35,
 		JumpLockSeconds = 1.0,
-		DropsPod = false,
+		DropsPod = true,
 		Model = "pool",
 		Status = "slow",
 		EffectText = "SLOW 35%",
@@ -988,57 +1106,63 @@ WeaponData.TrapSpecs = {
 	--==========================================================================
 	-- CINDERBURST: THE POD COMES OFF FIRST
 	--
-	-- The only trap that touches a carry, and the order is not negotiable: the
-	-- pod is dropped through CarryService.Drop at the feet they are still
-	-- standing on, and only then does the launch begin. Backward and up, down the
-	-- same handshake a bat uses -- one token, one ragdoll, one backstop.
+	-- The first trap that ever touched a carry, and the order is not
+	-- negotiable: the pod is dropped through CarryService.DropHeldPod at the
+	-- feet they are still standing on, and only then does the launch begin.
+	-- Backward and up, down the same handshake a bat uses -- one token, one
+	-- ragdoll, one backstop. Every trap drops the pod since 2026-10-04.
 	--
 	-- WEAKER THAN THE ROOTWOOD, which is asserted at load below. The cheapest bat
 	-- launches at 25 studs a second; this is 16 with more of it turned upward, so
 	-- the victim goes over rather than away. A trap that out-flung the weakest bat
 	-- would make the bat pointless at a fortieth of the price.
+	--
+	-- SIX SECONDS, MOSTLY ON THEIR FEET (2026-10-04): the knockdown keeps its
+	-- 1.4-second floor and the rest of the window is a 50% slow, so a mine
+	-- costs more than a plate without becoming a stun.
 	--==========================================================================
 	cinderburst_trap = {
 		Effect = "blast",
 		ArmSeconds = 1.4,
-		ExpireSeconds = 26,
-		PlaceCooldownSeconds = 25,
 		TriggerRadius = 4.2,
 		TriggerHeight = 4.5,
-		EffectSeconds = 1.4,
+		EffectSeconds = 6.0,
+		MoveMultiplier = 0.50,
 		JumpLockSeconds = 0,
 		LaunchSpeed = 16,
 		LaunchLift = 0.85,
 		LaunchMinLimp = 1.4,
 		DropsPod = true,
 		Model = "mine",
-		EffectText = "BLAST/DROP",
+		Status = "slow",
+		EffectText = "BLAST/SLOW",
 		SpringCue = "TrapSpringCinderburst",
 	},
 	--==========================================================================
 	-- STARLOCK: IT BRINGS THEM BACK TO YOU
 	--
-	-- One yank of up to eight studs toward the anchor, then 40% for three
-	-- seconds. The pull is a SINGLE obstruction-checked move and not a
+	-- One yank of up to eight studs toward the anchor, then 40% for the rest of
+	-- seven seconds (three until 2026-10-04 -- the top of the shelf gets the
+	-- longest window). The pull is a SINGLE obstruction-checked move and not a
 	-- constraint: an AlignPosition strong enough to drag a player is a thing that
 	-- can survive a death, a respawn, a streaming-out or a service restart, and
 	-- four of those five are how a permanent restraint becomes a permanent bug.
 	--
-	-- It does not take the pod. Dragging somebody back into the fight WITH their
-	-- pod is the point -- the owner wanted a chance to hit them, not the loot.
+	-- IT TAKES THE POD NOW. It used not to -- dragging somebody back WITH their
+	-- pod was the point -- and the owner's 2026-10-04 brief makes every trap drop
+	-- it first. The pod comes loose where they stood, then they are dragged back
+	-- toward the anchor, away from it.
 	--==========================================================================
 	starlock_trap = {
 		Effect = "pull",
 		ArmSeconds = 1.5,
-		ExpireSeconds = 28,
-		PlaceCooldownSeconds = 30,
 		TriggerRadius = 4.2,
 		TriggerHeight = 4.5,
-		EffectSeconds = 3.0,
+		EffectSeconds = 7.0,
 		MoveMultiplier = 0.40,
 		JumpLockSeconds = 0.6,
 		PullStuds = 8,
-		DropsPod = false,
+		DropsPod = true,
 		Model = "anchor",
 		Status = "slow",
 		EffectText = "PULL/SLOW",
@@ -1201,6 +1325,62 @@ function WeaponData.BatThrowStyle(token: string, serverNow: number): { [string]:
 end
 
 --==============================================================================
+-- WHERE A SWEPT SWING MEETS A BODY (2026-10-04)
+--
+-- Pure, here rather than in CombatService for the reason AcceptsAck is: the
+-- server calls it, a spec feeds it numbers, and there is no second copy.
+--
+-- Positions are RELATIVE -- the target minus the swinger -- so both bodies'
+-- motion is in one segment: where the target was on the previous frame
+-- relative to where the swinger was then (`relBefore`; nil on the first frame
+-- of a window, or when either body jumped further than a frame can carry it),
+-- and where it is now (`relNow`). `rewind` winds the target's own motion back
+-- toward what the swinger saw. Returns the first relative point on that path
+-- inside the swing -- flat distance within `reach`, height within `height`,
+-- inside the arc around the flat unit `look` -- or nil.
+--
+-- No table, no closure: a handful of vector maths per body per frame of an
+-- open window, and nothing at all outside one.
+--==============================================================================
+local function insideSwing(r: Vector3, look: Vector3, reach: number, cosLimit: number,
+	height: number): boolean
+	if math.abs(r.Y) > height then
+		return false
+	end
+	local flat = Vector3.new(r.X, 0, r.Z)
+	local d = flat.Magnitude
+	if d > reach then
+		return false
+	end
+	-- Standing inside the swinger: there is no angle to be outside of.
+	return d < 0.01 or (flat / d):Dot(look) >= cosLimit
+end
+
+function WeaponData.SweepContact(relBefore: Vector3?, relNow: Vector3, rewind: Vector3,
+	look: Vector3, reach: number, cosLimit: number, height: number, samples: number): Vector3?
+	if relBefore then
+		local n = math.max(1, math.floor(samples))
+		for i = 1, n do
+			local r = relBefore:Lerp(relNow, i / n)
+			if insideSwing(r, look, reach, cosLimit, height) then
+				return r
+			end
+		end
+	elseif insideSwing(relNow, look, reach, cosLimit, height) then
+		return relNow
+	end
+	if rewind.Magnitude > 0.01 then
+		for i = 1, 2 do
+			local r = relNow - rewind * (i / 2)
+			if insideSwing(r, look, reach, cosLimit, height) then
+				return r
+			end
+		end
+	end
+	return nil
+end
+
+--==============================================================================
 -- WHAT A GUARDIAN'S THROW WOULD BE, IN THE SAME UNITS
 --
 -- The guardians ARE described by an arc, so comparing a bat to one means
@@ -1228,9 +1408,11 @@ function WeaponData.StatLines(item: Item): { StatLine }
 		--
 		-- A trap has no power and no reach, and printing either would be the card
 		-- lying about what it sells. What a buyer actually compares is WHAT it
-		-- does, HOW LONG for, how long they have to wait for it to arm, and how
-		-- long until they can set another -- in that order, because the first two
-		-- are the purchase and the last two are the cost of using it.
+		-- does, HOW LONG for, how long it takes to arm, and how many can be out --
+		-- the first two are the purchase, the last two how it is used. Four
+		-- chips are what the card's row holds; the trigger cooldown after a catch
+		-- (2026-10-05) is told where it runs -- the hotbar's countdown, the
+		-- Bag's details and the refusal -- not as a fifth chip.
 		--======================================================================
 		local spec = WeaponData.TrapSpec(item)
 		if not spec then
@@ -1240,7 +1422,7 @@ function WeaponData.StatLines(item: Item): { StatLine }
 			{ label = "EFFECT", value = spec.EffectText },
 			{ label = "DURATION", value = string.format("%.1fs", spec.EffectSeconds) },
 			{ label = "ARMS IN", value = string.format("%.1fs", spec.ArmSeconds) },
-			{ label = "COOLDOWN", value = string.format("%.0fs", spec.PlaceCooldownSeconds) },
+			{ label = "PLACE", value = string.format("%d at once", WeaponData.Trap.MaxActivePerPlayer) },
 		}
 	end
 	return {
@@ -1257,6 +1439,31 @@ end
 
 function WeaponData.PriceText(item: Item): string
 	return "$" .. GameConfig.compact(item.Price)
+end
+
+--==============================================================================
+-- HOW MANY MORE TRAPS CAN GO DOWN (2026-10-04, the reusable-trap brief)
+--
+-- Available PLACEMENTS, not a stock: 3x with none out, 0x with all three out.
+-- `placed` and `capacity` are the server's own (Trap.PlacedAttribute and
+-- CapacityAttribute on the owner's records gui); anything unreadable counts as
+-- nothing placed against the shelf's own limit, never as a negative or NaN.
+-- The text is what the hotbar prints under a trap's picture.
+--==============================================================================
+function WeaponData.TrapsLeft(placed: any, capacity: any): number
+	local cap = tonumber(capacity)
+	if not cap or cap ~= cap or cap < 0 then
+		cap = WeaponData.Trap.MaxActivePerPlayer
+	end
+	local out = tonumber(placed)
+	if not out or out ~= out or out < 0 then
+		out = 0
+	end
+	return math.max(0, math.floor(cap :: number) - math.floor(out :: number))
+end
+
+function WeaponData.TrapsLeftText(left: number): string
+	return string.format("%d\u{00D7}", math.max(0, math.floor(left)))
 end
 
 --==============================================================================
@@ -1317,6 +1524,34 @@ assert(WeaponData.Combat.VictimPostRecoverySeconds > 0,
 	"they stand up")
 
 --==============================================================================
+-- THE ACTIVE WINDOW IS SHORT, AND IT SITS INSIDE EVERY SWING (2026-10-04)
+--
+-- A window that opened before the fastest bat's wind-up began, or ran past its
+-- recovery, would accept a hit the swing never drew. And a generous slack is
+-- how a "fair" tolerance turns into an invisible aura, so its size is held here.
+--==============================================================================
+do
+	local C = WeaponData.Combat
+	assert(C.HitWindowLead >= 0 and C.HitWindowTrail > 0
+		and C.HitWindowLead + C.HitWindowTrail <= 0.25, string.format(
+		"the active window %.2f + %.2f must stay a short burst around the contact",
+		C.HitWindowLead, C.HitWindowTrail))
+	for _, item in ipairs(WeaponData.Items) do
+		if item.Category == "bat" then
+			assert(C.HitWindowLead < item.Windup and C.HitWindowTrail <= item.Recovery, string.format(
+				"%s: the active window (-%.2f, +%.2f) must fit inside its %.2f wind-up and %.2f recovery",
+				item.Id, C.HitWindowLead, C.HitWindowTrail, item.Windup, item.Recovery))
+		end
+	end
+	assert(C.HitReachSlack >= 0 and C.HitReachSlack <= 2.5
+		and C.HitArcSlack >= 0 and C.HitArcSlack <= 10, string.format(
+		"hit slack %.1f studs / %.0f degrees is more than modest", C.HitReachSlack, C.HitArcSlack))
+	assert(C.HitRewindBaseSeconds >= 0 and C.HitRewindMaxSeconds <= 0.2
+		and C.HitRewindMaxStuds <= 8, "the rewind toward what the swinger saw must stay small")
+	assert(C.SweepTeleportStuds > 0 and C.SweepSubSamples >= 1, "the sweep needs a teleport bound and samples")
+end
+
+--==============================================================================
 -- AND EVERY TRAP HAS TO BE A TRAP
 --
 -- Five specifications, one per trap on the shelf, and every one of them is read
@@ -1368,8 +1603,6 @@ do
 
 		for field, value in pairs({
 			ArmSeconds = s.ArmSeconds,
-			ExpireSeconds = s.ExpireSeconds,
-			PlaceCooldownSeconds = s.PlaceCooldownSeconds,
 			TriggerRadius = s.TriggerRadius,
 			TriggerHeight = s.TriggerHeight,
 			EffectSeconds = s.EffectSeconds,
@@ -1381,27 +1614,24 @@ do
 		end
 
 		--======================================================================
-		-- ARMING MUST FIT INSIDE THE TRAP'S OWN LIFE
+		-- WHAT STOPS ONE OWNER HOLDING ONE VICTIM FOREVER (2026-10-04)
 		--
-		-- A trap that took longer to arm than it lasts would sit there, never
-		-- bite, and expire -- a purchase that does nothing, with no error.
+		-- The catching trap is consumed now (2026-10-05), but the owner's
+		-- OTHER traps stay live, and a pull drags a victim toward a spot where
+		-- a second trap may stand. So it is still the IMMUNITY: counted from
+		-- the trigger over the whole effect and five seconds past it, inside
+		-- which no trap catches them (CombatService's tick). Those five seconds
+		-- must carry a released victim at base speed well clear of any
+		-- neighbouring trigger.
 		--======================================================================
-		assert(s.ArmSeconds < s.ExpireSeconds, string.format(
-			"trap %s arms in %.1fs but expires after %.1fs", item.Id,
-			s.ArmSeconds, s.ExpireSeconds))
-		--======================================================================
-		-- AND THE EFFECT MUST END BEFORE THE NEXT TRAP CAN BE SET
-		--
-		-- Cooldown longer than effect plus immunity is what stops one owner
-		-- keeping one victim permanently under a trap effect. It is the single
-		-- most important number in this table and the least visible.
-		--======================================================================
-		assert(s.PlaceCooldownSeconds > s.EffectSeconds + WeaponData.Trap.ImmunitySeconds,
-			string.format(
-			"trap %s: a %.0fs cooldown does not outlast its own %.1fs effect plus " ..
-			"%.1fs of immunity, so one owner could hold one victim forever",
-			item.Id, s.PlaceCooldownSeconds, s.EffectSeconds,
-			WeaponData.Trap.ImmunitySeconds))
+		local clearStuds = WeaponData.Trap.ImmunitySeconds * GameConfig.Speed.BaseWalkSpeed
+		assert(clearStuds >= 4 * s.TriggerRadius * WeaponData.Trap.SeparationRadiusScale, string.format(
+			"trap %s: %.1fs of immunity at base speed is %.0f studs, not enough to walk clear of a "
+				.. "neighbouring %.1f-stud trigger, so one owner could hold one victim forever",
+			item.Id, WeaponData.Trap.ImmunitySeconds, clearStuds, s.TriggerRadius))
+		assert(WeaponData.Trap.SprungSeconds > 0 and WeaponData.Trap.SprungSeconds <= 1, string.format(
+			"the sprung picture stands %.2fs; it is the only public sight of a hidden trap and stays brief",
+			WeaponData.Trap.SprungSeconds))
 		assert(s.JumpLockSeconds >= 0 and s.JumpLockSeconds <= s.EffectSeconds,
 			string.format(
 			"trap %s locks jumping for %.1fs, which is outside its own %.1fs effect",
@@ -1412,7 +1642,22 @@ do
 				"trap %s has a movement multiplier of %s: a trap may slow or stop a " ..
 				"player and may never speed one up", item.Id, tostring(s.MoveMultiplier)))
 		end
-		if s.Effect == "slow" or s.Effect == "pull" then
+		--======================================================================
+		-- FIVE SECONDS AT LEAST, AND THE POD COMES OFF FIRST (2026-10-04)
+		--
+		-- The owner's brief, for every trap on the shelf: a countdown of at least
+		-- five seconds that the server's own deadline keeps, and a carried pod
+		-- dropped before the effect begins. A trap that broke either would be a
+		-- trap the shop card and the countdown describe wrongly.
+		--======================================================================
+		assert(s.EffectSeconds >= 5, string.format(
+			"trap %s lasts %.1fs; every trap effect lasts at least five seconds",
+			item.Id, s.EffectSeconds))
+		assert(s.DropsPod == true, string.format(
+			"trap %s keeps the victim's pod; every trap drops it before its effect", item.Id))
+		-- A trip, a blast and a pull all END as a slow, so all three need the
+		-- fraction and the amber label, exactly as the snare does.
+		if s.Effect == "slow" or s.Effect == "pull" or s.Effect == "trip" or s.Effect == "blast" then
 			assert(s.MoveMultiplier ~= nil and s.MoveMultiplier > 0, string.format(
 				"trap %s slows without a multiplier", item.Id))
 			assert(s.Status == "slow", string.format(
@@ -1437,6 +1682,18 @@ do
 			assert((s.LaunchSpeed :: number) < weakestBat, string.format(
 				"trap %s launches at %.1f, which is not under the cheapest bat's %.1f",
 				item.Id, s.LaunchSpeed, weakestBat))
+			--==================================================================
+			-- THE KNOCKDOWN IS THE SHORT PART OF THE WINDOW
+			--
+			-- A five-second ragdoll is a stun the owner ruled out: the body is
+			-- down for its own floor (about a bat's) and the rest of the window is
+			-- spent on its feet, slowed.
+			--==================================================================
+			assert(type(s.LaunchMinLimp) == "number" and (s.LaunchMinLimp :: number) <= 1.5
+				and (s.LaunchMinLimp :: number) < s.EffectSeconds - 2, string.format(
+				"trap %s keeps its victim down %.1fs of a %.1fs window; the knockdown " ..
+				"must stay brief and the slow must be most of it", item.Id,
+				tonumber(s.LaunchMinLimp) or -1, s.EffectSeconds))
 		end
 		if s.Effect == "pull" then
 			assert(type(s.PullStuds) == "number" and (s.PullStuds :: number) > 0
@@ -1449,6 +1706,13 @@ do
 	end
 	assert(trapCount == 5, string.format(
 		"the approved shelf has five traps, one per biome; this file has %d", trapCount))
+	local cap = WeaponData.Trap.MaxActivePerPlayer
+	assert(type(cap) == "number" and cap >= 1 and cap == math.floor(cap), string.format(
+		"MaxActivePerPlayer must be a whole number of traps, not %s", tostring(cap)))
+	-- The trigger cooldown (2026-10-05): a real wait, and finite.
+	local cool = WeaponData.Trap.TriggerCooldownSeconds
+	assert(type(cool) == "number" and cool > 0 and cool == cool and cool < math.huge, string.format(
+		"TriggerCooldownSeconds must be a positive number of seconds, not %s", tostring(cool)))
 end
 
 --==============================================================================

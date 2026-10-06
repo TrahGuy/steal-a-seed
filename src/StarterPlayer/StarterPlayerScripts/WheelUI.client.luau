@@ -107,6 +107,9 @@ local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local PadInput = require(Shared:WaitForChild("PadInput"))
 -- What Roblox would charge THIS player for a spin product (the buy card).
 local RobuxPrice = require(Shared:WaitForChild("RobuxPrice"))
+-- The Speed icon's picture on the wheel: the bolt under it goes once it has
+-- loaded, which UIKit watches for (2026-10-04).
+WheelDraw.whenLoaded = UIKit.whenPictureLoads
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -177,7 +180,44 @@ local C = {
 	-- game's own (the owner's call, 2026-09-27).
 	EpicText = rgb(212, 155, 255),
 }
-local SCRIM_SEEN = 0.45
+-- See-through, as every panel's dimmer is (the owner, 2026-10-06; it was 0.45):
+-- still a button, so the tap outside the wheel is taken, not passed to the world.
+local SCRIM_SEEN = 1
+
+--==============================================================================
+-- THE PRIZE ART'S MOVING PARTS (2026-10-04, the owner's spin-wheel brief)
+--
+-- The Titan and Colossal lettering's slow light (WheelDraw.prestige): on the
+-- panel's wheel, its Reward info rows and the line under the wheel, stepped by
+-- the one RenderStepped the panel keeps while it is open; on the world wheel's
+-- two faces only while this camera is near enough to see them and the panel
+-- is shut. Reduced motion holds the plain ramp still. And the picture of a
+-- prize just won, beside its words in the line. One table: Luau allows a chunk
+-- 200 locals, and this script is close.
+--==============================================================================
+local art = {
+	glints = {} :: { WheelDraw.Glint },
+	worldFaces = {} :: { WheelDraw.Drawn },
+	lineGlint = nil :: WheelDraw.Glint?,
+	lineGlints = {} :: { WheelDraw.Glint },
+	lineRainbow = false,
+	lineIcon = nil :: Frame?,
+	-- The prize drawn beside the line, by id ("" until something is).
+	lineReward = "",
+	still = false,
+	stillAt = 0,
+}
+
+-- FX Off, or Roblox's reduced motion: the lettering stands still.
+local function lettersStill(): boolean
+	if player:GetAttribute("SeedAfterimageQuality") == "Off" then
+		return true
+	end
+	local ok, on = pcall(function()
+		return (GuiService :: any).ReducedMotionEnabled
+	end)
+	return ok and on == true
+end
 
 --==============================================================================
 -- RE-RUN SAFE
@@ -490,14 +530,36 @@ lineText.LayoutOrder = 1
 local lineGradient = Instance.new("UIGradient")
 lineGradient.Enabled = false
 lineGradient.Parent = lineText
+do
+	-- The picture of the prize just won, before its words (2026-10-04): the
+	-- wheel's own icon for it, the Speed icon or the coins or the pods.
+	local holder = Instance.new("Frame")
+	holder.Name = "Prize"
+	holder.BackgroundTransparency = 1
+	holder.BorderSizePixel = 0
+	holder.Active = false
+	holder.Size = UDim2.fromOffset(25, 25)
+	holder.LayoutOrder = 0
+	holder.Visible = false
+	holder.ZIndex = 1
+	holder.Parent = lineRow
+	art.lineIcon = holder
+end
 local claimButton = blank(lineRow, "Claim", 2)
 claimButton.LayoutOrder = 2
 claimButton.Selectable = true
 claimButton.Visible = false
 claimButton.BackgroundTransparency = 0
-claimButton.BackgroundColor3 = C.Header
 UIKit.corner(claimButton, 8)
-ink(claimButton, PAL.Gold, 2).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+do
+	-- A reward to take wears the family's claim gold (the global UI pass,
+	-- 2026-10-04): warm gold over its darker foot, a deep amber keyline, the
+	-- word white and ink-lined.
+	local LOOK = GameConfig.BagLook
+	UIKit.gradient(claimButton, LOOK.ClaimTop, LOOK.ClaimBottom).Color =
+		UIKit.footColours(LOOK.ClaimTop, LOOK.ClaimBottom, LOOK.ClaimEdge)
+	ink(claimButton, LOOK.ClaimEdge, 2).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+end
 local claimWords = WheelDraw.words(claimButton, "Words", 14, C.White, PAL.Ink, 1.5, 2)
 claimWords.Size = UDim2.fromScale(1, 1)
 claimWords.Text = "CLAIM"
@@ -519,6 +581,23 @@ local function wordButton(parent: Instance, name: string, words: string, colour:
 	b.BackgroundTransparency = 0
 	b.BackgroundColor3 = colour
 	UIKit.corner(b, 8)
+	-- The family's lit face over a darker foot (the global UI pass, 2026-10-04),
+	-- drawn as a SHADING -- white at the top, darker to the foot -- so the colour
+	-- stays BackgroundColor3's and the paints below (GET SPINS busy, a choice on
+	-- or off sale) still set it alone.
+	do
+		local foot = 1 - GameConfig.BagLook.FootShare
+		local shade = Instance.new("UIGradient")
+		shade.Name = "Shade"
+		shade.Rotation = 90
+		shade.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, C.White),
+			ColorSequenceKeypoint.new(foot - 0.02, Color3.new(0.86, 0.86, 0.86)),
+			ColorSequenceKeypoint.new(foot, Color3.new(0.64, 0.64, 0.64)),
+			ColorSequenceKeypoint.new(1, Color3.new(0.6, 0.6, 0.6)),
+		})
+		shade.Parent = b
+	end
 	local edge = ink(b, PAL.Ink, 2)
 	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 	local w = WheelDraw.words(b, "Words", 14, C.White, PAL.Ink, 1.5, 3)
@@ -527,8 +606,11 @@ local function wordButton(parent: Instance, name: string, words: string, colour:
 	UIKit.clicks(b)
 	return b
 end
-local confirmYes = wordButton(confirm, "Yes", "USE PURCHASED", rgb(214, 150, 46))
-local confirmNo = wordButton(confirm, "No", "CANCEL", PAL.HubGrey)
+-- The functional colours (the global UI pass, 2026-10-04): spending a bought spin
+-- is the main action, green; CANCEL is secondary, sky blue -- grey reads as a
+-- button that cannot be pressed.
+local confirmYes = wordButton(confirm, "Yes", "USE PURCHASED", rgb(67, 176, 79))
+local confirmNo = wordButton(confirm, "No", "CANCEL", C.Blue)
 
 --==============================================================================
 -- BUYING SPINS (2026-09-29): GET SPINS, AND THE CARD IT OPENS
@@ -572,7 +654,9 @@ local shop: { [string]: any } = {
 	returnTo = "",
 	-- The last bought balance seen, so a purchase landing can be said out loud.
 	bought = 0,
-	button = wordButton(stage, "GetSpins", "GET SPINS", rgb(214, 150, 46)),
+	-- Buying is the family's green (the global UI pass, 2026-10-04), as the
+	-- Shop's own price buttons are.
+	button = wordButton(stage, "GetSpins", "GET SPINS", rgb(67, 176, 79)),
 	card = panel(stage, "BuySpins", C.Sheet, 14, 8),
 	choices = {} :: { ShopChoice },
 	-- The word under the round "?", where a purchase can be made: Roblox asks
@@ -621,7 +705,7 @@ do
 	ink(note, C.NameInk, 1, 0.3)
 	shop.note = note
 	shop.odds = wordButton(shop.card, "Odds", "REWARDS & ODDS", C.Blue)
-	shop.close = wordButton(shop.card, "Close", "CLOSE", PAL.HubGrey)
+	shop.close = wordButton(shop.card, "Close", "CLOSE", C.Blue)
 
 	for i, product in ipairs(WheelData.Products) do
 		local b = blank(shop.card, "Buy_" .. product.key, 2)
@@ -630,6 +714,20 @@ do
 		b.BackgroundColor3 = rgb(67, 176, 79)
 		UIKit.corner(b, 10)
 		ink(b, PAL.Ink, 2).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		do
+			-- The word buttons' shading: a lit face over a darker foot.
+			local foot = 1 - GameConfig.BagLook.FootShare
+			local shade = Instance.new("UIGradient")
+			shade.Name = "Shade"
+			shade.Rotation = 90
+			shade.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, C.White),
+				ColorSequenceKeypoint.new(foot - 0.02, Color3.new(0.88, 0.88, 0.88)),
+				ColorSequenceKeypoint.new(foot, Color3.new(0.66, 0.66, 0.66)),
+				ColorSequenceKeypoint.new(1, Color3.new(0.62, 0.62, 0.62)),
+			})
+			shade.Parent = b
+		end
 		UIKit.clicks(b)
 		local icon = Instance.new("ImageLabel")
 		icon.Name = "Icon"
@@ -922,6 +1020,15 @@ local function buildRow(pair: Frame, reward: WheelData.Reward, column: number): 
 	name.Text = reward.short
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.TextTruncate = Enum.TextTruncate.AtEnd
+	-- TITAN POD and COLOSSAL POD in their own lettering (2026-10-04); the rarity
+	-- word under the name is the prize's own and is not changed.
+	local style = WheelDraw.prestigeOf(reward)
+	if style then
+		local glint = WheelDraw.prestige(name, style, style == "colossal")
+		if glint then
+			table.insert(art.glints, glint)
+		end
+	end
 	local line = panel(frame, "RarityLine", C.Black, 0, 3)
 	line.BackgroundTransparency = 1
 	local lineList = Instance.new("UIListLayout")
@@ -1105,17 +1212,17 @@ local waiting = false
 local skip = false
 
 -- A win or a refusal held in the line under the wheel for a while.
-type LineNote = { words: string, colour: Color3, rainbow: boolean, untilAt: number }
+type LineNote = { words: string, colour: Color3, rainbow: boolean, untilAt: number, reward: WheelData.Reward? }
 local lineNote: LineNote? = nil
 
-local function lineState(): (string, Color3, boolean, boolean)
-	-- words, colour, CLAIM shown, rainbow
+local function lineState(): (string, Color3, boolean, boolean, WheelData.Reward?)
+	-- words, colour, CLAIM shown, rainbow, the prize the words are about
 	if spinning or waiting then
 		return "", PAL.Cream, false, false
 	end
 	local held = lineNote
 	if held and os.clock() < held.untilAt then
-		return held.words, held.colour, false, held.rainbow
+		return held.words, held.colour, false, held.rainbow, held.reward
 	end
 	local pending = num(A.Pending)
 	if pending > 0 then
@@ -1198,10 +1305,43 @@ local function paint()
 	hubButton.AutoButtonColor = false
 	hubButton.Selectable = ready and not busy and not behind
 
-	local words, colour, claim, rainbow = lineState()
+	local words, colour, claim, rainbow, prize = lineState()
+	-- The prize's picture before its words, and TITAN or COLOSSAL lettering for
+	-- those two (2026-10-04). Rebuilt only when the prize shown changes.
+	local shown = if words ~= "" then prize else nil
+	local holder = art.lineIcon
+	local id = if shown then shown.id else ""
+	-- As tall as the line's words plus a little (their size is the layout's).
+	local prizePx = lineText.TextSize + 10
+	if holder and holder.Size.X.Offset ~= prizePx then
+		holder.Size = UDim2.fromOffset(prizePx, prizePx)
+		art.lineReward = "resize"
+	end
+	if holder and id ~= art.lineReward then
+		art.lineReward = id
+		for _, child in ipairs(holder:GetChildren()) do
+			child:Destroy()
+		end
+		if shown then
+			local icon = WheelDraw.icon(holder, shown, holder.Size.X.Offset)
+			icon.box.Position = UDim2.fromScale(0.5, 0.5)
+		end
+		local style = WheelDraw.prestigeOf(shown)
+		art.lineGlint = if style and not rainbow then WheelDraw.glintOf(lineGradient, style) else nil
+		table.clear(art.lineGlints)
+		local glint = art.lineGlint
+		if glint then
+			table.insert(art.lineGlints, glint)
+		end
+	end
+	if holder then
+		holder.Visible = shown ~= nil
+	end
+	local lettered = art.lineGlint ~= nil and shown ~= nil
+	art.lineRainbow = rainbow
 	lineText.Text = words
-	lineText.TextColor3 = if rainbow then C.White else colour
-	lineGradient.Enabled = rainbow
+	lineText.TextColor3 = if rainbow or lettered then C.White else colour
+	lineGradient.Enabled = rainbow or lettered
 	lineText.Visible = words ~= ""
 	claimButton.Visible = claim
 	claimButton.Selectable = claim and not behind
@@ -1212,7 +1352,7 @@ local function paint()
 	getSpins.Visible = may
 	getSpins.Active = may and not busy
 	getSpins.Selectable = may and not busy and not behind
-	getSpins.BackgroundColor3 = if busy then PAL.HubGrey else rgb(214, 150, 46)
+	getSpins.BackgroundColor3 = if busy then PAL.HubGrey else rgb(67, 176, 79)
 	shop.infoWord.Visible = may
 	if may then
 		shop.watch()
@@ -1245,10 +1385,11 @@ local function paint()
 end
 
 local noteToken = 0
-local function holdLine(words: string, colour: Color3, seconds: number, rainbow: boolean?)
+local function holdLine(words: string, colour: Color3, seconds: number, rainbow: boolean?, reward: WheelData.Reward?)
 	noteToken += 1
 	local mine = noteToken
-	lineNote = { words = words, colour = colour, rainbow = rainbow == true, untilAt = os.clock() + seconds }
+	lineNote = { words = words, colour = colour, rainbow = rainbow == true, untilAt = os.clock() + seconds,
+		reward = reward }
 	paint()
 	task.delay(seconds + 0.05, function()
 		if noteToken == mine then
@@ -1776,15 +1917,29 @@ local function motionOff(): boolean
 end
 
 local function rainbowTick()
-	local shift = (os.clock() / RAINBOW_SECONDS) % 1
+	local now = os.clock()
+	local shift = (now / RAINBOW_SECONDS) % 1
+	if now >= art.stillAt then
+		art.stillAt = now + 1
+		art.still = lettersStill()
+	end
 	local d = drawn
 	if d then
 		d.setRainbow(shift)
+		d.setGlint(now, art.still)
 	end
 	local lit = sheetOpen
-	if lit or lineGradient.Enabled then
+	if lit then
+		WheelDraw.glint(art.glints, now, art.still)
+	end
+	if art.lineGlint then
+		WheelDraw.glint(art.lineGlints, now, art.still)
+	end
+	if lit or art.lineRainbow then
 		local surface = WheelDraw.rainbow(shift)
-		lineGradient.Color = surface
+		if art.lineRainbow then
+			lineGradient.Color = surface
+		end
 		if lit then
 			for _, g in ipairs(textRainbows) do
 				g.Color = surface
@@ -1804,6 +1959,14 @@ local function refreshRainbows()
 	elseif not want and rainbowConn then
 		rainbowConn:Disconnect()
 		rainbowConn = nil
+		-- Nothing steps the lettering now: leave it on its plain ramp, not
+		-- stopped halfway through a light.
+		local d = drawn
+		if d then
+			d.setGlint(0, true)
+		end
+		WheelDraw.glint(art.glints, 0, true)
+		WheelDraw.glint(art.lineGlints, 0, true)
 	end
 end
 player:GetAttributeChangedSignal("SeedAfterimageQuality"):Connect(refreshRainbows)
@@ -1842,6 +2005,7 @@ task.spawn(function()
 			-- The same face, its rainbow standing still, and the green hub round
 			-- the model's gold cap.
 			local face = WheelDraw.build(surface, 600, { labels = true, hub = true })
+			table.insert(art.worldFaces, face)
 			if name == "FaceFront" then
 				worldFace = face
 			end
@@ -1877,6 +2041,17 @@ task.spawn(function()
 		if near and g then
 			drift = (drift + (now - last) / 14) % 1
 			g.Offset = Vector2.new(drift * 2 - 1, 0)
+		end
+		-- The world faces' TITAN and COLOSSAL lettering: only near, and not while
+		-- the panel is up in front of them (2026-10-04).
+		if near and not open then
+			if now >= art.stillAt then
+				art.stillAt = now + 1
+				art.still = lettersStill()
+			end
+			for _, face in ipairs(art.worldFaces) do
+				face.setGlint(now, art.still)
+			end
 		end
 		last = now
 		task.wait(if near then 0.1 else 1)
@@ -2324,14 +2499,15 @@ local function showResult(payload: { [string]: any })
 		note = "Your bag is full, so it's waiting here. Make room, then press CLAIM."
 		line = string.format("You won: %s! It waits for bag space", prize.short)
 	end
-	holdLine(line, rarityText(prize.rarity), RESULT_SECONDS, prize.rainbow == true)
+	holdLine(line, rarityText(prize.rarity), RESULT_SECONDS, prize.rainbow == true, prize)
 	-- The rarest four get the hatch's own rare sting instead of the notice chime.
 	local rare = rolled.weight <= 250
 	if rare then
 		SoundKit.play("RevealAccentRare")
 	end
+	-- A Speed prize's notice wears the one Speed icon (2026-10-04); the rest the wheel's.
 	Notice.post({ kind = "success", title = "WHEEL: " .. string.upper(prize.title), detail = note,
-		key = "wheel:won", quiet = rare })
+		key = "wheel:won", quiet = rare, icon = if prize.kind == "speed" then "training" else "wheel" })
 end
 
 -- Turn the panel's wheel and this player's copy of the world wheel onto the
@@ -2428,7 +2604,7 @@ task.spawn(function()
 			if payload.ok == true then
 				local n = tonumber(payload.landed) or 1
 				Notice.post({ kind = "success", title = if n == 1 then "PRIZE CLAIMED" else "PRIZES CLAIMED",
-					detail = "It's in your bag.", key = "wheel:claim" })
+					detail = "It's in your bag.", key = "wheel:claim", icon = "wheel" })
 			else
 				refused("NO_ROOM")
 			end

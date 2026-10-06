@@ -311,6 +311,75 @@ function SaveService.Save(userId: number, payload: { [string]: any }, release: b
 	return false
 end
 
+--==============================================================================
+-- THE INBOX: WHAT ANOTHER SERVER LEFT FOR A PLAYER (2026-10-06)
+--
+-- One small blob per player under its own key (i_<userId>), in the SAME store
+-- as the profiles -- so the Studio test store holds it too, and no test ever
+-- reaches the real one (test_store_off clears every key there). Any server may
+-- change it (UpdateAsync: the transform is the whole change, and there is no
+-- lock, because nobody holds an inbox); the player's own server reads it and
+-- takes what it used. Like the profiles, this knows nothing of what is inside:
+-- InviteService puts an invited friend's id there for an inviter who is not in
+-- the friend's server.
+--
+-- Answers false for "not written" -- unavailable, refused or failed -- so the
+-- caller keeps what it had and tries again later.
+--==============================================================================
+local function inboxKey(userId: number): string
+	return "i_" .. tostring(userId)
+end
+SaveService.InboxKey = inboxKey
+
+function SaveService.UpdateInbox(userId: number, transform: (any) -> any): boolean
+	if available == false then
+		return false
+	end
+	local ds = getStore()
+	if not ds then
+		return false
+	end
+	local maxAttempts = math.max(1, SAVE.RetryAttempts or 1)
+	local backoff = SAVE.RetryBackoff or 1
+	for attempt = 1, maxAttempts do
+		local ok, err = pcall(function()
+			ds:UpdateAsync(inboxKey(userId), transform)
+		end)
+		if ok then
+			return true
+		end
+		local message = tostring(err)
+		if isPermanent(message) then
+			warn(string.format("[Seed/SaveService] inbox %d: permanent failure: %s", userId, message))
+			return false
+		end
+		warn(string.format("[Seed/SaveService] inbox %d: attempt %d/%d failed: %s", userId, attempt, maxAttempts, message))
+		if attempt < maxAttempts then
+			task.wait(backoff * attempt)
+		end
+	end
+	return false
+end
+
+-- The inbox as it stands (nil when empty), and whether it could be read at all.
+function SaveService.ReadInbox(userId: number): (boolean, any)
+	if available == false then
+		return false, nil
+	end
+	local ds = getStore()
+	if not ds then
+		return false, nil
+	end
+	local ok, value = pcall(function()
+		return ds:GetAsync(inboxKey(userId))
+	end)
+	if not ok then
+		warn(string.format("[Seed/SaveService] inbox %d: read failed: %s", userId, tostring(value)))
+		return false, nil
+	end
+	return true, value
+end
+
 -- Has this player been written recently enough that another write would be
 -- wasting a DataStore request? Autosave asks; a final save on leave does not,
 -- because the last few seconds of a session are exactly what must not be lost.

@@ -790,49 +790,29 @@ local ok, err = pcall(function()
 	end
 
 	--==========================================================================
-	say("8. The chip over the hotbar, and the toast line over it")
+	say("8. The weather's icon over the hotbar (2026-10-04; it was the chip)")
 	--==========================================================================
-	local function screen(w, h, touch, rain)
-		return { safe = Vector2.new(w, h), touch = touch, keyboard = not touch, rain = rain,
-			viewport = Vector2.new(w, h + 58), topbar = HudLayout.rect(0, 0, w, 58), insetTop = 58 }
+	-- The "+25% INCOME · 2:59" chip became ONE icon in BoostIconsUI's row: the
+	-- Rain's picture or the Thunderstorm's, the same +25%, the time left and what
+	-- to do in its popover. The row's own placing is BoostIconsSpec's.
+	local BoostIcons = require(Shared.BoostIcons)
+	local function weather(state, mode)
+		local list = BoostIcons.entries({ now = 100, rainState = state, rainMode = mode, rainStartedAt = 40,
+			rainEndsAt = 220 })
+		return list[1]
 	end
-	local rainClear, toastMoved = {}, {}
-	for _, case in ipairs({ { "desktop 1920x1080", 1920, 1080, false }, { "small window 800x600", 800, 600, false },
-		{ "phone 801x392", 801, 392, true }, { "phone 640x480", 640, 480, true }, { "phone 956x440", 956, 440, true } }) do
-		local dry = HudLayout.solve(screen(case[2], case[3], case[4], nil))
-		local wet = HudLayout.solve(screen(case[2], case[3], case[4], true))
-		local chip = wet.rain
-		local band = HudLayout.hotbarBand(wet.hotbar)
-		local okCase = chip ~= nil and dry.rain == nil and chip.y + chip.h <= band.y - 8
-			and chip.x >= 8 and chip.x + chip.w <= case[2] - 8
-		if chip then
-			for _, g in ipairs(HudLayout.groups(wet, true)) do
-				if g.name ~= "rain" and HudLayout.gap(chip, g.rect) < 8 then
-					okCase = false
-				end
-			end
-			for _, zone in ipairs({ wet.thumb, wet.jump }) do
-				if zone and HudLayout.gap(chip, zone) < 8 then
-					okCase = false
-				end
-			end
-			if wet.toastTop then
-				okCase = okCase and wet.toast.x == dry.toast.x and wet.toast.y == dry.toast.y
-			else
-				okCase = okCase and HudLayout.gap(wet.toast, chip) >= 8 and wet.toast.y + wet.toast.h <= chip.y
-				table.insert(toastMoved, case[1])
-			end
-			okCase = okCase and dry.toast.w >= 200 and dry.hotbar.x == wet.hotbar.x and dry.cash.y == wet.cash.y
-		end
-		if not okCase then
-			table.insert(rainClear, case[1])
-		end
-	end
-	check(#rainClear == 0, "on every screen the chip stands just over the strip's name band, 8 px clear of every group "
-		.. "and both thumbs; the toast line steps up over it where it stands above the belt, and nothing else moves",
-		table.concat(rainClear, ", "))
-	check(#toastMoved == 2, "the toast steps up on the desktop and in a small window; on a phone it is in the column anyway",
-		table.concat(toastMoved, ", "))
+	local pct = math.round((SeedData.Rain.IncomeFactor - 1) * 100)
+	local opening, active, thunder, closing = weather("opening", "rain"), weather("active", "rain"),
+		weather("active", "thunder"), weather("closing", "rain")
+	check(opening ~= nil and active ~= nil and thunder ~= nil and closing == nil
+			and active.id == "weather" and active.source == "rain" and thunder.source == "thunder"
+			and thunder.title == "Thunderstorm" and active.title == "Rain"
+			and string.find(active.effect, "+" .. pct .. "%", 1, true) ~= nil
+			and active.effect == thunder.effect and active.total == 180 and active.endsAt == 220,
+		"ONE weather icon while the rain pays (opening or open): the rain's picture or the thunder's, the same +"
+			.. pct .. "%, its whole run for the ring; none while it closes")
+	check(opening.hint ~= active.hint and string.find(active.hint, "open", 1, true) ~= nil,
+		"its popover says whether the biome is about to open or open now")
 
 	--==========================================================================
 	say("9. Wiring")
@@ -852,15 +832,18 @@ local ok, err = pcall(function()
 	check(string.find(consoleSrc, '"START RAIN"', 1, true) ~= nil and string.find(consoleSrc, '"END RAIN"', 1, true) ~= nil
 			and string.find(consoleSrc, "durationBox.Text = tostring(WEATHER.DefaultSeconds)", 1, true) ~= nil
 			and string.find(consoleSrc, 'remote:InvokeServer("Weather", verb, seconds, nil)', 1, true) ~= nil
-			and string.find(consoleSrc, "local CONTENT = 1056", 1, true) ~= nil,
-		"the console has a WEATHER category: START RAIN, an editable duration starting at the default, END RAIN, and the status line")
+			-- Its own WEATHER section (its own since 2026-10-03; the compact console's since 2026-10-04).
+			and string.find(consoleSrc, "local page = pages.weather", 1, true) ~= nil
+			and string.find(consoleSrc, '{ "StartRain", "START RAIN" }, { "StartThunder", "START THUNDERSTORM" }, { "EndRain", "END RAIN" }', 1, true) ~= nil
+			and string.find(consoleSrc, 'ui.rainLabel, ui.rainDot = build.state(page, "Rain")', 1, true) ~= nil,
+		"the console has a WEATHER section: START RAIN, an editable duration starting at the default, END RAIN, and the state line")
 	check(W.DefaultSeconds == 180 and W.MinSeconds <= 20 and W.ToastDelaySeconds == 3,
 		"180 s is the default, adjustable from 20 s; the toast comes 3 s in")
 	local toastSrc = sourceOf(Scripts, "ActionToastUI")
 	check(string.find(toastSrc, "action == GameConfig.Weather.Events.Opened", 1, true) ~= nil
 			and string.find(toastSrc, 'key = "rain:" .. tostring(code)', 1, true) ~= nil
-			and string.find(toastSrc, "GetAttributeChangedSignal(GameConfig.Weather.Attributes.State):Connect(place)", 1, true) ~= nil,
-		"ActionToastUI shows the opening toast once per event id and re-solves its line when the rain starts and stops")
+			and string.find(toastSrc, "GetAttributeChangedSignal(GameConfig.BoostIcons.Attribute):Connect(place)", 1, true) ~= nil,
+		"ActionToastUI shows the opening toast once per event id and re-solves its line when the icon row changes")
 	local clockSrc = sourceOf(Scripts, "WorldClock")
 	check(string.find(clockSrc, "local kept = RAIN.Brightness + (RAIN.NightBrightness - RAIN.Brightness) * t", 1, true) ~= nil
 			and string.find(clockSrc, "* (1 - (1 - kept) * r)", 1, true) ~= nil
@@ -873,8 +856,8 @@ local ok, err = pcall(function()
 			and string.find(weatherClient, "UserInputService.TouchEnabled", 1, true) ~= nil
 			and string.find(weatherClient, "anchor.Parent = camera", 1, true) ~= nil,
 		"the client's rain respects reduced motion, is lighter on a touch screen, and lives under the camera")
-	check(string.find(sourceOf(Scripts, "WeatherUI"), "layout.rain", 1, true) ~= nil,
-		"WeatherUI places the chip in HudLayout's rain rect")
+	check(Scripts:FindFirstChild("WeatherUI") == nil,
+		"the chip's own script is gone: the weather is an icon in BoostIconsUI's row")
 
 	--==========================================================================
 	say("10. The white clouds, the overcast sky and the rain everywhere")

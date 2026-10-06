@@ -265,7 +265,7 @@ local function onResult(payload: any)
 		paint()
 	elseif outcome == "granted" then
 		Notice.post({ kind = "success", title = COMMUNITY.ClaimedNotice.Title,
-			detail = COMMUNITY.ClaimedNotice.Detail, key = "CommunityClaimed" })
+			detail = COMMUNITY.ClaimedNotice.Detail, key = "CommunityClaimed", icon = "community" })
 	elseif outcome == "notmember" then
 		-- A cancelled prompt says nothing; a join Roblox has not shown yet, or a
 		-- request waiting for approval, says when to try again.

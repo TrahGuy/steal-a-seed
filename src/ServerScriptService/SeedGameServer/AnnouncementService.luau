@@ -8,19 +8,33 @@
 -- AN ANNOUNCEMENT
 --
 -- Asked for through the admin console only: AdminService.Handle checks the
--- sender against its allowlist and its one-a-second limit, and only then calls
--- Send. Nothing else reaches Send -- no remote of this service's own exists.
--- Send then checks, in order, before anything is shown:
+-- sender against its allowlist, and only then calls Send. Nothing else reaches
+-- Send -- no remote of this service's own exists. Send then checks, in order,
+-- before anything is shown:
 --
 --   1. THIS SERVER ("server") or ALL SERVERS ("all"); "all" only confirmed
 --   2. the words: text, trimmed, not empty, at most MaxChars characters
---   3. the cooldown: one announcement per admin every CooldownSeconds,
---      started by an announcement that goes out
+--   3. the SAFEGUARDS (2026-10-03), which replaced the old 15-second wait
+--      between one admin's announcements -- none of them holds up an admin
+--      sending one announcement after another:
+--        * the same words to the same scope again within DuplicateSeconds
+--          (a double press, a resend) are not sent twice
+--        * a burst of Burst announcements, then one more every RefillSeconds
+--          (a forged client flooding the remote; the filter's and
+--          MessagingService's own limits are far above that)
+--        * no more than MaxWaiting announcements waiting to be shown here
 --   4. Roblox's text filter, for public display (GetNonChatStringForBroadcast)
 --      -- a filter that fails, or leaves nothing but #s, sends NOTHING
 --
--- Then it is shown here at once (the Workspace attributes every client reads),
--- and for ALL SERVERS published once through MessagingService with an id, the
+-- Then it joins this server's QUEUE (2026-10-03): announcements are shown one
+-- after another in the order they were accepted, never one over another. The
+-- one up stays at least MinShowSeconds before the next takes its place; the
+-- last one in the queue stays ShowSeconds. The queue -- each one's words,
+-- sender and start and end, in server time -- is published as one Workspace
+-- attribute every client reads, so every screen and every late joiner shows
+-- the same one at the same moment. The single-slot attributes (Id, Text,
+-- From, Until) still name the newest. For ALL SERVERS it is also published
+-- once through MessagingService with an id, the
 -- filtered words, the sender's DisplayName (read off their Player, never sent
 -- by a client), when it was sent and when it stops mattering. Every server
 -- -- this one too -- gets it back through its subscription: Receive validates
@@ -64,9 +78,19 @@ local AnnouncementService = {}
 -- Before AdminService (95), whose console asks this.
 AnnouncementService.Priority = 90
 
--- Server only. Exposed so AnnouncementSpec can shorten the cooldown.
+-- Server only. Exposed so AnnouncementSpec can tighten the safeguards.
 AnnouncementService.Config = {
-	CooldownSeconds = 15,
+	-- THE SAFEGUARDS (2026-10-03; no wait between an admin's announcements).
+	-- The same words, to the same scope, from the same admin, again within
+	-- this long: a double press or a resend, answered without a second send.
+	DuplicateSeconds = 10,
+	-- Spam: this many announcements at once per admin, then one more every
+	-- RefillSeconds (at most 20 a minute an admin, inside MessagingService's
+	-- per-topic budget of 40 + 80 x servers a minute).
+	Burst = 5,
+	RefillSeconds = 3,
+	-- At most this many accepted announcements waiting to be shown here.
+	MaxWaiting = 6,
 	-- A cross-server announcement older than this is dropped on arrival.
 	TtlSeconds = 60,
 	-- Clock skew allowed between two servers' idea of "now".
@@ -76,7 +100,10 @@ AnnouncementService.Config = {
 }
 
 local serviceConnections: { RBXScriptConnection } = {}
-local lastSent: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any
+-- Per admin: the spam guard's bucket, and the words lately accepted (or on
+-- their way through the filter) with when.
+local buckets: { [any]: { tokens: number, at: number } } = setmetatable({}, { __mode = "k" }) :: any
+local recent: { [any]: { [string]: number } } = setmetatable({}, { __mode = "k" }) :: any
 -- Every announcement id this server has shown or sent, until it expires.
 local seen: { [string]: number } = {}
 local subscription: RBXScriptConnection? = nil
@@ -114,7 +141,13 @@ local function robloxPublish(topic: string, payload: { [string]: any }): (boolea
 	return ok, if ok then nil else tostring(err)
 end
 
+local function serverNow(): number
+	return Workspace:GetServerTimeNow()
+end
+
 local clock: () -> number = unixNow
+-- The clock the queue is scheduled on: the one every client reads.
+local showClock: () -> number = serverNow
 local filter: (string, number) -> (boolean, string?) = robloxFilter
 local publish: (string, { [string]: any }) -> (boolean, string?) = robloxPublish
 local board: Instance = Workspace
@@ -124,6 +157,14 @@ function AnnouncementService.useClock(fn: (() -> number)?): boolean
 		return false
 	end
 	clock = fn or unixNow
+	return true
+end
+
+function AnnouncementService.useShowClock(fn: (() -> number)?): boolean
+	if not RunService:IsStudio() then
+		return false
+	end
+	showClock = fn or serverNow
 	return true
 end
 
@@ -180,15 +221,76 @@ local function cut(text: string, limit: number): string
 end
 
 --==============================================================================
--- SHOWING ONE, HERE
+-- SHOWING ONE, HERE: THE QUEUE (2026-10-03)
+--
+-- In the order accepted. A new one waits for the one before it, and the one
+-- before it gives way once it has been up MinShowSeconds (at once if it has
+-- already been up that long); the last stays ShowSeconds. Nothing is ever
+-- drawn over another, and nothing is dropped once it is in.
 --==============================================================================
--- The sender's name before the id: the client chimes on a new id, and the
--- name and words it reads then must already be this announcement's.
-local function showHere(id: string, text: string, from: string)
+type Entry = { id: string, text: string, from: string, startAt: number, endAt: number }
+local queue: { Entry } = {}
+
+local function trim(now: number)
+	while queue[1] and queue[1].endAt <= now do
+		table.remove(queue, 1)
+	end
+end
+
+-- How many are accepted but not up yet, and how long until one of them is.
+local function waiting(now: number): (number, number)
+	local count, soonest = 0, math.huge
+	for _, e in ipairs(queue) do
+		if e.startAt > now then
+			count += 1
+			soonest = math.min(soonest, e.startAt - now)
+		end
+	end
+	return count, if count > 0 then soonest else 0
+end
+
+local function publishQueue()
+	local list = {}
+	for _, e in ipairs(queue) do
+		table.insert(list, { i = e.id, t = e.text, f = e.from, s = e.startAt, e = e.endAt })
+	end
+	board:SetAttribute(ATTR.Queue, HttpService:JSONEncode(list))
+end
+
+-- Queued, or false when MaxWaiting are already waiting. Also how many were
+-- ahead of it and in how many seconds it comes up.
+local function showHere(id: string, text: string, from: string): (boolean, number, number)
+	local now = showClock()
+	trim(now)
+	local ahead = #queue
+	if waiting(now) >= AnnouncementService.Config.MaxWaiting then
+		return false, ahead, 0
+	end
+	local startAt = now
+	local last = queue[#queue]
+	if last then
+		last.endAt = math.min(last.endAt, math.max(last.startAt + ANNOUNCE.MinShowSeconds, now))
+		startAt = last.endAt
+	end
+	local entry = { id = id, text = text, from = from, startAt = startAt, endAt = startAt + ANNOUNCE.ShowSeconds }
+	table.insert(queue, entry)
+	publishQueue()
+	-- The newest, on the single-slot attributes (the name before the id).
 	board:SetAttribute(ATTR.From, from)
 	board:SetAttribute(ATTR.Text, text)
-	board:SetAttribute(ATTR.Until, Workspace:GetServerTimeNow() + ANNOUNCE.ShowSeconds)
+	board:SetAttribute(ATTR.Until, entry.endAt)
 	board:SetAttribute(ATTR.Id, id)
+	return true, ahead, startAt - now
+end
+
+-- What is up or waiting, in order, for AnnouncementSpec.
+function AnnouncementService.Queue(): { Entry }
+	trim(showClock())
+	local copy = {}
+	for i, e in ipairs(queue) do
+		copy[i] = table.clone(e)
+	end
+	return copy
 end
 
 -- A sender's name as shown: one line of plain text, 1 to MaxNameChars
@@ -229,6 +331,33 @@ local function forgetOld(now: number)
 	end
 end
 
+-- The spam guard's bucket: Burst at once, one more every RefillSeconds.
+-- Whether one was taken, or how long until one can be.
+local function takeToken(sender: any, now: number): (boolean, number)
+	local cfg = AnnouncementService.Config
+	local b = buckets[sender]
+	if not b then
+		b = { tokens = cfg.Burst, at = now }
+		buckets[sender] = b
+	end
+	b.tokens = math.min(cfg.Burst, b.tokens + math.max(0, now - b.at) / cfg.RefillSeconds)
+	b.at = now
+	if b.tokens < 1 then
+		return false, (1 - b.tokens) * cfg.RefillSeconds
+	end
+	b.tokens -= 1
+	return true, 0
+end
+
+-- Where it stands in the queue, for the console's line.
+local function queuedLine(ahead: number, startsIn: number): string
+	if ahead <= 0 or startsIn <= 0.05 then
+		return ""
+	end
+	return string.format(" Queued after %d earlier announcement%s; up in about %d s.", ahead, if ahead == 1 then "" else "s",
+		math.ceil(startsIn))
+end
+
 --==============================================================================
 -- SEND: reached only through AdminService.Handle, after its allowlist
 --==============================================================================
@@ -252,12 +381,35 @@ function AnnouncementService.Send(sender: any, scope: any, text: any, confirmed:
 	if scope == "all" and confirmed ~= true then
 		return false, "Confirm ALL SERVERS first. Nothing was sent."
 	end
+	local cfg = AnnouncementService.Config
 	local now = clock()
-	local last = lastSent[sender]
-	local cooldown = AnnouncementService.Config.CooldownSeconds
-	if last and now - last < cooldown then
-		return false, string.format("Wait %d s before another announcement.", math.ceil(cooldown - (now - last)))
+	-- THE SAFEGUARDS, before the filter is asked (see the top of this file).
+	local mine = recent[sender]
+	if not mine then
+		mine = {}
+		recent[sender] = mine
 	end
+	for k, at in pairs(mine) do
+		if now - at >= cfg.DuplicateSeconds then
+			mine[k] = nil
+		end
+	end
+	local key = scope .. "\0" .. words
+	if mine[key] then
+		return false, "That exact message was just sent, so it wasn't sent again."
+	end
+	local backlog, freesIn = waiting(showClock())
+	if backlog >= cfg.MaxWaiting then
+		return false, string.format("%d announcements are already waiting to be shown. Try again in %d s. Nothing was sent.",
+			backlog, math.max(1, math.ceil(freesIn)))
+	end
+	local okToken, wait = takeToken(sender, now)
+	if not okToken then
+		return false, string.format("Too many announcements at once. Try again in %d s. Nothing was sent.",
+			math.max(1, math.ceil(wait)))
+	end
+	-- Held while the filter answers, so a resend in the meantime is caught.
+	mine[key] = now
 
 	local userId = 0
 	pcall(function()
@@ -265,26 +417,32 @@ function AnnouncementService.Send(sender: any, scope: any, text: any, confirmed:
 	end)
 	local okFilter, filtered = filter(words, userId)
 	if not okFilter or type(filtered) ~= "string" then
+		mine[key] = nil
 		warn("[Seed/AnnouncementService] the text filter failed; nothing was announced: " .. tostring(filtered))
 		return false, "Roblox's text filter couldn't check the message, so nothing was sent."
 	end
 	local shown = clean(filtered) or ""
 	if (string.gsub(shown, "[#%s]", "")) == "" then
+		mine[key] = nil
 		return false, "Roblox's text filter blocked this message. Nothing was sent."
 	end
-	-- The cooldown starts with an announcement that is going out: a filter that
-	-- failed or blocked it costs no wait (AdminService's one request a second
-	-- still paces the filter).
-	lastSent[sender] = now
 
 	local id = HttpService:GenerateGUID(false)
 	local from = senderName(sender)
-	seen[id] = now + AnnouncementService.Config.TtlSeconds
+	local queued, ahead, startsIn = showHere(id, shown, from)
+	if not queued then
+		-- Filled while the filter answered.
+		mine[key] = nil
+		return false, string.format("%d announcements are already waiting to be shown. Try again shortly. Nothing was sent.",
+			cfg.MaxWaiting)
+	end
+	seen[id] = now + cfg.TtlSeconds
 	forgetOld(now)
-	showHere(id, shown, from)
+	local place = queuedLine(ahead, startsIn)
 	if scope == "server" then
-		log(string.format("announcement %s shown in this server (%d characters).", id, utf8.len(shown) or 0))
-		return true, "Shown to everyone in this server.", id
+		log(string.format("announcement %s queued in this server (%d characters, %d ahead).", id, utf8.len(shown) or 0, ahead))
+		return true, if place == "" then "Shown to everyone in this server." else "Accepted for everyone in this server." .. place,
+			id
 	end
 	local okPublish, err = publish(AnnouncementService.Config.Topic, {
 		id = id,
@@ -295,17 +453,18 @@ function AnnouncementService.Send(sender: any, scope: any, text: any, confirmed:
 	})
 	if not okPublish then
 		warn("[Seed/AnnouncementService] announcement " .. id .. " shown here, not published: " .. tostring(err))
-		return false, "Shown in THIS server only: sending to other servers failed (" .. tostring(err) .. ").", id
+		return false, "Shown in THIS server only: sending to other servers failed (" .. tostring(err) .. ")." .. place, id
 	end
-	log(string.format("announcement %s shown here and published to every server (best-effort).", id))
-	return true, "Shown here and sent to the other servers. Delivery to every server is best-effort, not guaranteed.",
-		id
+	log(string.format("announcement %s queued here and published to every server (best-effort).", id))
+	return true, (if place == "" then "Shown here" else "Accepted here")
+		.. " and sent to the other servers. Delivery to every server is best-effort, not guaranteed." .. place, id
 end
 
 --==============================================================================
 -- RECEIVE: one MessagingService message's Data, from any server
 --
--- "shown", or why not: "invalid", "duplicate", "expired". Nothing about it is
+-- "shown" (queued here), or why not: "invalid", "duplicate", "expired", or
+-- "busy" when MaxWaiting are already waiting here. Nothing about it is
 -- trusted -- the shape, the id, the text, the sender's name and both times are
 -- checked here.
 --==============================================================================
@@ -339,9 +498,11 @@ function AnnouncementService.Receive(data: any): string
 	if seen[id] then
 		return "duplicate"
 	end
+	if not (showHere(id, words, from)) then
+		return "busy"
+	end
 	seen[id] = expiresAt
 	forgetOld(now)
-	showHere(id, words, from)
 	return "shown"
 end
 
@@ -410,6 +571,9 @@ function AnnouncementService.Init()
 		subscription = nil
 	end
 	table.clear(seen)
+	table.clear(queue)
+	table.clear(buckets)
+	table.clear(recent)
 end
 
 function AnnouncementService.Start()
@@ -426,7 +590,8 @@ function AnnouncementService.Start()
 		warn("[Seed/AnnouncementService] no ServerRestartScheduled here: " .. tostring(err))
 	end
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(function(player: Player)
-		lastSent[player] = nil
+		buckets[player] = nil
+		recent[player] = nil
 	end))
 	-- Never waited for in Start.
 	task.spawn(subscribe)

@@ -36,7 +36,11 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
+-- The offline earnings card is a reward moment (2026-10-06): the Invite a Friend
+-- reward popup waits until it shuts.
+local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
@@ -81,15 +85,16 @@ local COIN_FACE = Color3.fromRGB(255, 208, 64)
 local COIN_RIM = Color3.fromRGB(176, 118, 0)
 local COIN_INK = Color3.fromRGB(150, 96, 0)
 
-local NIGHT_THEME: UIKit.ModalTheme = {
-	fill = Color3.fromRGB(34, 36, 80),
-	shade = Color3.fromRGB(18, 18, 48),
-	lattice = Color3.fromRGB(82, 88, 158),
-	latticeTransparency = 0.74,
-	headerTop = Color3.fromRGB(104, 82, 206),
-	headerBottom = Color3.fromRGB(60, 44, 146),
-	headerRule = BLACK,
-}
+--==============================================================================
+-- THE FAMILY'S FRAME, THE CARD'S OWN NIGHT (the global UI pass, 2026-10-04)
+--
+-- Every menu's white studded rim with the title on it (MenuKit.rimTheme) over
+-- the card's night body, which is its subject -- the sky turning to morning --
+-- and keeps the cream words, the bright amount and the chips readable.
+--==============================================================================
+local NIGHT_THEME: UIKit.ModalTheme = MenuKit.rimTheme()
+NIGHT_THEME.fill = Color3.fromRGB(34, 36, 80)
+NIGHT_THEME.shade = Color3.fromRGB(18, 18, 48)
 
 --==============================================================================
 -- THE GEOMETRY
@@ -414,12 +419,23 @@ plate.Position = UDim2.fromScale(0.5, 0.5)
 plate.Active = false
 UIKit.corner(plate, 12)
 UIKit.stroke(plate, PANEL.Outline, RAIL.OutlineThickness)
-UIKit.gradient(plate, RAIL.ShopFace, RAIL.ShopShade)
-local foot = frame(plate, "Shade", UDim2.new(1, 0, 0, 6), Color3.fromRGB(30, 92, 30), 7)
-foot.AnchorPoint = Vector2.new(0.5, 1)
-foot.Position = UDim2.fromScale(0.5, 1)
-foot.Active = false
-UIKit.corner(foot, 12)
+-- CLAIM is the family's reward face (the global UI pass): warm gold with its
+-- darker foot in the same gradient, and the studs of a call to action.
+do
+	local look = GameConfig.BagLook
+	local tint = UIKit.gradient(plate, look.ClaimTop, look.ClaimBottom)
+	tint.Color = MenuKit.faceColours(look.ClaimTop, look.ClaimBottom, look.ClaimEdge)
+	UIKit.studs(plate, {
+		pitch = look.StudPitch,
+		size = look.StudSize,
+		face = look.ClaimTop:Lerp(look.ClaimBottom, 0.45):Lerp(WHITE, 0.16),
+		shade = look.ClaimBottom:Lerp(look.ClaimEdge, 0.3),
+		inset = 7,
+		insetTop = 5,
+		insetBottom = 9,
+		zIndex = 6,
+	})
+end
 
 local face = Instance.new("Frame")
 face.Name = "Face"
@@ -648,6 +664,7 @@ local function close()
 	end
 	isOpen = false
 	claiming = false
+	RewardMoments.finish("offline")
 	if countConn then
 		countConn:Disconnect()
 		countConn = nil
@@ -668,6 +685,7 @@ local function open()
 	end
 	isOpen = true
 	claiming = false
+	RewardMoments.begin("offline")
 	resetScene()
 	buildPlant()
 	fillWords()

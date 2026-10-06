@@ -42,6 +42,9 @@ export type PartSpec = {
 	cs: boolean?, -- CastShadow unless false
 	cc: boolean?, -- CanCollide as supplied (the Rain Event forms record it; none of these four do)
 	a: { [string]: any }?, -- attributes
+	-- Every face's SurfaceType by name -- Top, Bottom, Left, Right, Front, Back -- when they are not all
+	-- one kind (PlantForms, 2026-10-03: an Inlet underside, a smooth eye front). Absent: `st` decides.
+	sf: { string }?,
 }
 
 export type JointSpec = {
@@ -52,6 +55,7 @@ export type JointSpec = {
 	b: number, -- Part1 (index)
 	c0: CFrame,
 	c1: CFrame,
+	at: { [string]: any }?, -- the joint's own attributes (PlantForms: a Thornwhorl guard's Outward)
 }
 
 export type AttachmentSpec = { n: string, p: number, cf: CFrame }
@@ -68,6 +72,8 @@ export type EmitterSpec = { [string]: any }
 -- billboard is a BillboardGui on a part with its TextLabels.
 export type TrailSpec = { [string]: any }
 export type BillboardSpec = { [string]: any }
+-- Added for the ordinary plants' supplied rigs (PlantForms, 2026-10-03): a Texture on a part by INDEX.
+export type TextureSpec = { [string]: any }
 
 export type FormSpec = {
 	Source: string,
@@ -88,6 +94,12 @@ export type FormSpec = {
 	-- A per-joint pose (CFrame attributes of a supplied Configuration) and its
 	-- numbers, e.g. the guardian's SleepPose.
 	Pose: { [string]: any }?,
+	-- PlantForms (2026-10-03): the supplied model's `Unit` attribute, which its idle's distances are
+	-- written in, and the scale the owner's Scale tool left it at (Model:GetScale()) -- that Unit was set
+	-- before the rescale, so a distance is Unit x ModelScale at the size the form was supplied.
+	Unit: number?,
+	ModelScale: number?,
+	Textures: { TextureSpec }?,
 }
 
 local SecretForms = {}

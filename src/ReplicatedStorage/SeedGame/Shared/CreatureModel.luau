@@ -52,6 +52,7 @@ local DustbowlForms = require(Shared:WaitForChild("DustbowlForms"))
 local GreenhollowForms = require(Shared:WaitForChild("GreenhollowForms"))
 local SecretForms = require(Shared:WaitForChild("SecretForms"))
 local SecretModel = require(Shared:WaitForChild("SecretModel"))
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
 
 local CreatureModel = {}
 
@@ -1324,6 +1325,23 @@ function CreatureModel.BuildCreature(sp: SeedData.Species, tier: number, stage: 
 		return finish()
 	end
 
+	--==========================================================================
+	-- THE ORDINARY PLANTS' SUPPLIED RIGS -- 2026-10-03
+	--
+	-- The owner's rigged models for the biome species (PlantForms), replayed
+	-- whole at this one's size: the species' Tiny height before the swap (its
+	-- longest side, for Snapmoss and Emberquill), times the tier ladder every
+	-- plant uses, times the sprout factor for a sprout. The invisible Base above
+	-- keeps the size it always had, so the pivot, the carry grip and every
+	-- prompt that hangs off it stay where they were. A species PlantForms does
+	-- not build falls through to the builder that already serves it.
+	--==========================================================================
+	local rigScale = PlantForms.Scale(sp.Id, SeedData.SizeScale(tier))
+	if rigScale then
+		SecretModel.BuildPlantForm(sp.Id, cf, model, rigScale * scale)
+		return finish()
+	end
+
 	local greenSpecs = GreenhollowForms.Plants[sp.Id]
 	if greenSpecs then
 		local hs = H / GreenhollowForms.PreviewHeight[sp.Id]
@@ -2051,8 +2069,11 @@ function CreatureModel.BuildPod(sp: SeedData.Species, tier: number, cf: CFrame,
 	-- secret, and only a secret.
 	--==========================================================================
 	-- The Rain event's three pods (2026-10-02) are replayed the same way: one
-	-- shell per POD, whichever creature it holds.
-	local secretPod = (sp :: any).Pod
+	-- shell per POD, whichever creature it holds. Its second family's
+	-- (2026-10-05) is one shell per SIZE: the owner's seven supplied pods, each
+	-- already at its size, replayed as supplied and never scaled by the tier --
+	-- which shell is the item's saved size's (SeedData.PodFormOf).
+	local secretPod = SeedData.PodFormOf(sp, tier)
 	if type(secretPod) == "string" and SecretModel.HasPod(secretPod) then
 		local shell = SecretModel.BuildPod(secretPod, cf, model)
 		model.PrimaryPart = shell

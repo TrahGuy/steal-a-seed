@@ -576,56 +576,22 @@ button.Visible = false
 button.Parent = gui
 UIKit.clicks(button)
 
-local plate = Instance.new("TextLabel")
-plate.Name = "Plate"
-plate.AnchorPoint = Vector2.new(0.5, 0.5)
-plate.Position = UDim2.fromScale(0.5, 0.5)
-plate.Size = UDim2.fromScale(1, 1)
-plate.BackgroundColor3 = WHITE
-plate.BorderSizePixel = 0
-plate.Text = ""
-plate.Active = false
-plate.Parent = button
-UIKit.corner(plate, 12)
-UIKit.stroke(plate, BLACK, 2.5)
-UIKit.gradient(plate, RAIL.ShopTileTop, RAIL.ShopTileBottom)
-local plateScale = Instance.new("UIScale")
-plateScale.Parent = plate
+-- The HUD's plate button (UIKit.hudPlate, the global UI pass 2026-10-04): the
+-- outline on the BORDER (it never drew on the old text-less label), the
+-- family's darker foot, the inner rim, the icon and the outlined word.
+local hud = UIKit.hudPlate(button, {
+	top = RAIL.ShopTileTop,
+	bottom = RAIL.ShopTileBottom,
+	rim = RAIL.ShopEdge,
+	image = RAIL.GardenIcon,
+	text = "RETURN TO PLOT",
+})
+local plate = hud.plate
+local plateScale = hud.scale
+local rim = hud.rim
+local icon = hud.icon
+local label = hud.label
 
-local rim = Instance.new("Frame")
-rim.Name = "Rim"
-rim.AnchorPoint = Vector2.new(0.5, 0.5)
-rim.Position = UDim2.fromScale(0.5, 0.5)
-rim.Size = UDim2.new(1, -5, 1, -5)
-rim.BackgroundTransparency = 1
-rim.BorderSizePixel = 0
-rim.Active = false
-rim.Parent = plate
-UIKit.corner(rim, 10)
-UIKit.stroke(rim, RAIL.ShopEdge, 1.5, 0.2)
-
-local icon = Instance.new("ImageLabel")
-icon.Name = "Icon"
-icon.AnchorPoint = Vector2.new(0, 0.5)
-icon.Position = UDim2.new(0, 8, 0.5, 0)
-icon.Size = UDim2.fromOffset(28, 28)
-icon.BackgroundTransparency = 1
-icon.Image = RAIL.GardenIcon
-icon.ScaleType = Enum.ScaleType.Fit
-icon.Active = false
-icon.Parent = plate
-
-local label = UIKit.outlined(plate, "Label", 16, WHITE, 2)
-label.AnchorPoint = Vector2.new(0, 0.5)
-label.Position = UDim2.new(0, 42, 0.5, 1)
-label.Size = UDim2.new(1, -50, 0, 22)
-label.TextScaled = true
-label.TextXAlignment = Enum.TextXAlignment.Center
-label.Text = "RETURN TO PLOT"
-local fit = Instance.new("UITextSizeConstraint")
-fit.MaxTextSize = 16
-fit.MinTextSize = 10
-fit.Parent = label
 
 local scale = Instance.new("UIScale")
 scale.Parent = button
@@ -636,12 +602,23 @@ local function placeButton()
 		return
 	end
 	local layout = HudLayout.solve(HudLayout.measure(gui))
-	local r = layout.teleport
+	-- TELEPORT's place everywhere but a phone's even row (2026-10-05), where the
+	-- span BIOMES and PLOT take -- both hidden on the course -- holds the words
+	-- alone (HudLayout's returnPlot, returnPlate, returnWide).
+	local r = layout.returnPlot
 	button.Position = HudLayout.place(r, button.AnchorPoint, layout.safe)
 	button.Size = UDim2.fromOffset(r.w, r.h)
 	-- The plate's own size, before its scale, as PlotTeleportUI's.
-	plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)
+	plate.Size = UDim2.fromOffset(layout.returnPlate.X, layout.returnPlate.Y)
 	plateScale.Scale = layout.teleportScale
+	icon.Visible = layout.returnWide
+	if layout.returnWide then
+		label.Position = UDim2.new(0, 42, 0.5, 1)
+		label.Size = UDim2.new(1, -50, 0, 22)
+	else
+		label.Position = UDim2.new(0, 6, 0.5, 1)
+		label.Size = UDim2.new(1, -12, 0, 22)
+	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)
 GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(function()

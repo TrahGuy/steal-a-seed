@@ -302,9 +302,9 @@ amount.Size = UDim2.fromOffset(style.CashW, style.CashSize + 4)
 -- numbers and the buff card, and nothing is drawn over the world above it.
 --
 -- Removed, not hidden: no label, no rotation clock and no 4 Hz rebuild are
--- left behind. Every value it printed is still computed where it always was
--- -- TreadmillService still pays Training Rush and still publishes it -- so
--- a readout for any of them can come back without anything upstream moving.
+-- left behind. The values it printed are still computed where they always
+-- were, so a readout can come back without anything upstream moving -- all
+-- but the Training Rush, which has left the mill itself (2026-10-05).
 --==============================================================================
 -- The colour secondary text on this HUD has always used, and the one thing
 -- still drawn in it: the buff card's sentence.
@@ -330,9 +330,12 @@ local SECONDARY_TEXT = Color3.fromRGB(226, 238, 250)
 -- time the text changes, which is the only thing here that is responsive -- the
 -- shoe, the speed line and the cash line do not move at all.
 --
--- ON A TOUCH SCREEN it is not beside the cash line at all: it stands on the
--- top-right row, left of Garden and the Bag, the same card reparented there by
--- placeCorner (the approved mobile redesign, 2026-09-23).
+-- ON A TOUCH SCREEN TOO, since the owner's mobile corrections (2026-10-05). It
+-- stood on the top-right row as a button from 2026-09-23; now it rides the cash
+-- text there as everywhere else, never nearer the thumbstick's zone than
+-- HudLayout's `buffMinX`, and is drawn with NO PLATE on a touch screen: the
+-- artwork alone -- no tile, no border, no backplate. Its press, its message and
+-- when it shows are exactly what they were.
 --==============================================================================
 local PASS = GameConfig.Pass
 local BUFF_EMERALD = Color3.fromRGB(12, 58, 34)
@@ -355,12 +358,13 @@ buff.ZIndex = 4
 buff.Parent = root
 local buffCorner = corner(buff, style.BuffCorner)
 
-do
-	local edge = Instance.new("UIStroke")
-	edge.Color = BUFF_GOLD
-	edge.Thickness = 1.5
-	edge.Parent = buff
-end
+-- On the BORDER (the global UI pass, 2026-10-04): the card is a text-less
+-- button, and a stroke in its default mode outlines the text -- none.
+local buffEdge = Instance.new("UIStroke")
+buffEdge.Color = BUFF_GOLD
+buffEdge.Thickness = 1.5
+buffEdge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+buffEdge.Parent = buff
 
 --==============================================================================
 -- THE PRESS LANDS ON A SQUARE AT LEAST AS BIG AS A THUMB
@@ -432,9 +436,10 @@ tipEdge.Parent = tip
 
 local tipWidth = 0
 
--- Where the card stands on a phone: HudLayout's `boost`, the top-right row's
--- first button. nil everywhere else, where it rides beside the cash text.
-local boostAt: HudLayout.Rect? = nil
+-- The card's leftmost place off the cash text on a touch screen: HudLayout's
+-- `buffMinX`, which keeps its press 8 px off the thumbstick's zone. nil
+-- elsewhere, where the face's own BuffMinX decides, as it always did.
+local layoutMinX: number? = nil
 
 --==============================================================================
 -- WHERE THE CARD SITS
@@ -477,13 +482,8 @@ local function steadyWidth(): number
 end
 
 local function placeBuff()
-	if boostAt then
-		-- Standing on the top-right row, where placeCorner put it; a longer
-		-- balance moves nothing there.
-		return
-	end
 	local textWidth = math.max(steadyWidth(), 0)
-	local x = math.max(style.BuffMinX, math.floor(textWidth) + style.BuffGap)
+	local x = math.max(layoutMinX or style.BuffMinX, math.floor(textWidth) + style.BuffGap)
 	buff.Position = UDim2.new(0, x, 1, style.BuffDrop)
 
 	--==========================================================================
@@ -587,44 +587,22 @@ local function placeCorner()
 	root.Position = HudLayout.place(layout.cashRoot, root.AnchorPoint, layout.safe)
 
 	--==========================================================================
-	-- ON A PHONE THE x2 CARD IS A BUTTON ON THE TOP-RIGHT ROW
+	-- THE x2 CARD, BESIDE THE CASH LINE ON EVERY SCREEN (the owner's mobile
+	-- corrections, 2026-10-05)
 	--
-	-- The approved mobile redesign moves it off the cash line to the left of
-	-- Garden and the Bag (HudLayout's `boost`). It is the SAME card -- the one
-	-- instance, shown on the same attribute, saying the same sentence on a
-	-- press -- reparented and resized to the row's 50 x 50, with its message
-	-- hung under it, right-aligned to it so it stays on the glass. Everywhere
-	-- else it goes back beside the cash text exactly as it was.
+	-- It was the top-right row's first button on a phone from 2026-09-23. Now it
+	-- rides the cash text there as everywhere else: off the text by placeBuff,
+	-- never nearer the thumbstick's zone than HudLayout's `buffMinX`, which the
+	-- belt keeps 8 px off. On a touch screen it is the artwork alone -- the card
+	-- transparent, no border, the picture the whole card -- and its press, its
+	-- message and when it shows are exactly what they were.
 	--==========================================================================
-	local at = if layout.sidebar then layout.boost else nil
-	boostAt = at
-	if at then
-		buff.Parent = gui
-		buff.AnchorPoint = Vector2.new(1, 0)
-		buff.Position = HudLayout.place(at, buff.AnchorPoint, layout.safe)
-		buff.Size = UDim2.fromOffset(at.w, at.h)
-		buffHit.Size = UDim2.fromOffset(math.max(at.w, style.BuffHit), math.max(at.h, style.BuffHit))
-		buffCorner.CornerRadius = UDim.new(0, GameConfig.Rail.Radius)
-		tip.Parent = gui
-		tip.AnchorPoint = Vector2.new(1, 0)
-		tip.TextXAlignment = Enum.TextXAlignment.Right
-		local width, height = tip.Size.X.Offset, tip.Size.Y.Offset
-		-- Under the TELEPORT TO PLOT button's line too, which on a narrow
-		-- phone reaches under this row's left end.
-		local below = math.max(at.y + at.h, layout.teleport.y + layout.teleport.h)
-		tip.Position = HudLayout.place(HudLayout.rect(at.x + at.w - width, below + 6, width, height),
-			tip.AnchorPoint, layout.safe)
-	elseif buff.Parent ~= root then
-		buff.Parent = root
-		buff.AnchorPoint = Vector2.new(0, 1)
-		buff.Size = UDim2.fromOffset(style.BuffSize, style.BuffSize)
-		buffHit.Size = UDim2.fromOffset(style.BuffHit, style.BuffHit)
-		buffCorner.CornerRadius = UDim.new(0, style.BuffCorner)
-		tip.Parent = root
-		tip.AnchorPoint = Vector2.new(0, 1)
-		tip.TextXAlignment = Enum.TextXAlignment.Left
-		placeBuff()
-	end
+	layoutMinX = layout.buffMinX
+	local plain = layout.sidebar == true
+	buff.BackgroundTransparency = if plain then 1 else 0.08
+	buffEdge.Enabled = not plain
+	buffIcon.Size = if plain then UDim2.fromScale(1, 1) else UDim2.new(1, -8, 1, -8)
+	placeBuff()
 end
 
 table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeCorner))
@@ -633,6 +611,10 @@ table.insert(connections, gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(p
 table.insert(connections, UserInputService:GetPropertyChangedSignal("TouchEnabled")
 	:Connect(placeCorner))
 table.insert(connections, UserInputService:GetPropertyChangedSignal("KeyboardEnabled")
+	:Connect(placeCorner))
+-- A trap's REMOVE row over the strip (LoadoutUI, 2026-10-04) raises the band
+-- the block steps over where it shares the strip's columns.
+table.insert(connections, player:GetAttributeChangedSignal(GameConfig.Hotbar.RemoveRowAttribute)
 	:Connect(placeCorner))
 placeCorner()
 

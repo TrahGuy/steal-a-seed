@@ -85,7 +85,6 @@ do
 		PLANT_OUT_OF_RANGE = "Move closer to your plot.",
 		PLOT_FULL = "Your plot is full.",
 		CARRYING_POD = "Bank your pod before doing that.",
-		TRAP_COOLDOWN = "Trap recharging…",
 	}
 	local wrong = {}
 	for code, line in pairs(BRIEF) do
@@ -94,7 +93,15 @@ do
 		end
 	end
 	table.sort(wrong)
-	check(#wrong == 0, "the six lines from the brief, word for word", table.concat(wrong, ", "))
+	check(#wrong == 0, "the brief's lines, word for word", table.concat(wrong, ", "))
+	-- Its sixth, "Trap recharging...", went with the placement recharge
+	-- (2026-10-04); the code came back for the TRIGGER cooldown (2026-10-05),
+	-- with its own words.
+	check(TEXT.TRAP_COOLDOWN == "Your traps are cooling down."
+			and ActionRefusal.Notices.TRAP_COOLDOWN ~= nil
+			and ActionRefusal.Notices.TRAP_COOLDOWN.title == "TRAP COOLING DOWN"
+			and not string.find(TEXT.TRAP_COOLDOWN, "recharg", 1, true),
+		"and TRAP_COOLDOWN is the trigger cooldown's (2026-10-05), not the old placement recharge's")
 
 	local bag, belongs, long = {}, {}, {}
 	for code, line in pairs(TEXT) do
@@ -177,7 +184,7 @@ do
 	local mash, shows = {}, 0
 	local sounds, played = Notice.newSoundState(), 0
 	for i = 0, 59 do
-		local cooldown = ActionRefusal.notice("TRAP_COOLDOWN")
+		local cooldown = ActionRefusal.notice("TELEPORT_COOLDOWN")
 		local verb = Notice.step(mash, cooldown, 200 + i / 30, 3)
 		if verb == "show" then
 			shows += 1
@@ -271,10 +278,16 @@ function fakePlayers:GetPlayers()
 	return roster
 end
 
+-- The Heartbeat is captured (2026-10-04): a swing is resolved by it now, over a
+-- short window, so the swing cases below step it on the spec's clock.
+local heartbeat: (() -> ())? = nil
 local fakeRun = {
 	Heartbeat = {
-		Connect = function()
-			return { Disconnect = function() end }
+		Connect = function(_, fn)
+			heartbeat = fn
+			return { Disconnect = function()
+				heartbeat = nil
+			end }
 		end,
 	},
 }
@@ -390,14 +403,12 @@ local function tool(item, parent)
 	return t
 end
 
+-- How many traps the trap-setter has down. A placed trap is server state now,
+-- drawn for its owner alone (2026-10-04), so it is counted by the service.
+local CombatService = nil
+local trapsFor = nil
 local function trapsDown()
-	local n = 0
-	for _, d in ipairs(fixture:GetDescendants()) do
-		if d:IsA("Model") and CollectionService:HasTag(d, GameConfig.Tags.Trap) then
-			n += 1
-		end
-	end
-	return n
+	return if trapsFor then CombatService.TrapCount(trapsFor) else 0
 end
 
 local MapStub = {
@@ -409,7 +420,6 @@ local MapStub = {
 	end,
 }
 
-local CombatService = nil
 local PlantService = nil
 local plantPlot = nil
 
@@ -420,6 +430,12 @@ local function combat()
 			CarryService = {
 				IsCarrying = function()
 					return false
+				end,
+				HoldsPod = function()
+					return false
+				end,
+				DropHeldPod = function()
+					return false, nil
 				end,
 				Drop = function()
 					return false
@@ -448,12 +464,12 @@ local function combat()
 	end
 
 	--==========================================================================
-	-- 5. TRAPS: THE SAFE ZONE vs THE COOLDOWN
+	-- 5. TRAPS: THE SAFE ZONE AND THE LIMIT (no recharge since 2026-10-04)
 	--==========================================================================
 	say("\n-- traps --")
 	local jaw = WeaponData.Get("bramblejaw_trap")
-	local jawSpec = WeaponData.TrapSpec("bramblejaw_trap")
 	local setter = makePlayer("RefusalTrapper", 5101, Vector3.new(EDGE - 20, GY + 3, 4900))
+	trapsFor = setter
 
 	local mark = #captured
 	CombatService.RequestPlace(setter, jaw, tool(jaw))
@@ -469,29 +485,37 @@ local function combat()
 	check(trapsDown() == 1 and #got == 0, "on the road it goes down, and says nothing",
 		table.concat(got, ","))
 
-	mark = #captured
-	CombatService.RequestPlace(setter, jaw, tool(jaw))
-	got = codesFor(setter, mark)
-	check(#got == 1 and got[1] == "TRAP_COOLDOWN" and trapsDown() == 1,
-		"another straight away is refused: \"Trap recharging…\"", table.concat(got, ","))
-
 	standAt(setter, Vector3.new(EDGE - 20, GY + 3, 4900))
 	mark = #captured
 	CombatService.RequestPlace(setter, jaw, tool(jaw))
 	got = codesFor(setter, mark)
-	check(#got == 1 and got[1] == "TRAP_COOLDOWN",
-		"in the field AND recharging it says recharging: the cooldown guard is first, as it was",
+	check(#got == 1 and got[1] == "TRAP_SAFE_ZONE" and trapsDown() == 1,
+		"straight back into the field, it says the field -- there is no recharge to say first (2026-10-04)",
 		table.concat(got, ","))
 
-	-- The cooldown is over but the first trap is still down (nothing ticks here,
-	-- so it cannot expire): one trap per owner, which is not a line.
-	clock += jawSpec.PlaceCooldownSeconds + 0.1
+	--==========================================================================
+	-- THREE PER OWNER, AND THEN A LINE (2026-10-04)
+	--
+	-- No placement recharge since the reusable-trap brief: the next two go down
+	-- at once, at the same instant, as long as each stands clear of the last.
+	-- The fourth is refused WITH a reason -- TRAP_LIMIT -- because "nothing
+	-- happened" is not an answer a player can act on.
+	--==========================================================================
 	standAt(setter, Vector3.new(EDGE + 60, GY + 3, 4900))
 	mark = #captured
 	CombatService.RequestPlace(setter, jaw, tool(jaw))
 	got = codesFor(setter, mark)
-	check(#got == 0 and trapsDown() == 1,
-		"cooldown over, first trap still down: refused, and silent", table.concat(got, ","))
+	check(#got == 0 and trapsDown() == 2,
+		"another Bramblejaw straight away, a few steps on: it goes down (no recharge), silently",
+		table.concat(got, ","))
+	standAt(setter, Vector3.new(EDGE + 90, GY + 3, 4900))
+	CombatService.RequestPlace(setter, jaw, tool(jaw))
+	standAt(setter, Vector3.new(EDGE + 110, GY + 3, 4900))
+	mark = #captured
+	CombatService.RequestPlace(setter, jaw, tool(jaw))
+	got = codesFor(setter, mark)
+	check(#got == 1 and got[1] == "TRAP_LIMIT" and trapsDown() == 3,
+		"a FOURTH while three are down: \"You already have 3 traps out.\"", table.concat(got, ","))
 
 	local neighbour = makePlayer("RefusalNeighbour", 5102, Vector3.new(EDGE + 30, GY + 3, 4960))
 	local spawnPad = Instance.new("Part")
@@ -507,7 +531,7 @@ local function combat()
 	mark = #captured
 	CombatService.RequestPlace(neighbour, jaw, tool(jaw))
 	got = codesFor(neighbour, mark)
-	check(#got == 0 and trapsDown() == 1,
+	check(#got == 0 and CombatService.TrapCount(neighbour) == 0,
 		"beside a plot's spawn pad: refused, and silent -- that is not the Safe Zone",
 		table.concat(got, ","))
 	spawnPad:Destroy()
@@ -517,7 +541,7 @@ local function combat()
 	mark = #captured
 	CombatService.RequestPlace(ghost, jaw, tool(jaw))
 	got = codesFor(ghost, mark)
-	check(#got == 0 and trapsDown() == 1,
+	check(#got == 0 and CombatService.TrapCount(ghost) == 0,
 		"a dead body's trap: refused, and silent -- a respawn is not a player's action",
 		table.concat(got, ","))
 
@@ -531,11 +555,22 @@ local function combat()
 	local target = makePlayer("RefusalTarget", 5112, Vector3.new(EDGE - 2, GY + 3, SZ))
 	local batTool = tool(bat, swinger.Character)
 
+	-- The swing's window, frame by frame on the spec's clock (2026-10-04).
+	local function frames(seconds)
+		local t0 = clock
+		while clock - t0 < seconds do
+			clock += 1 / 60
+			if heartbeat then
+				heartbeat()
+			end
+		end
+	end
+
 	local function swing()
 		clock += bat.Cooldown + 0.05
 		local before = #captured
 		CombatService.RequestSwing(swinger, bat, batTool)
-		task.wait(bat.Windup + 0.15)
+		frames(bat.Windup + WeaponData.Combat.HitWindowTrail + 0.05)
 		return codesFor(swinger, before)
 	end
 
@@ -548,7 +583,7 @@ local function combat()
 
 	mark = #captured
 	CombatService.RequestSwing(swinger, bat, batTool)
-	task.wait(bat.Windup + 0.15)
+	frames(bat.Windup + WeaponData.Combat.HitWindowTrail + 0.05)
 	got = codesFor(swinger, mark)
 	check(#got == 0, "the same swing again inside its cooldown never starts, and says nothing",
 		table.concat(got, ","))

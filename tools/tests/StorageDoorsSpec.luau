@@ -1717,7 +1717,7 @@ local function body()
 		local bankBody = string.match(carry, "local function bank(.-)\nend\n") or ""
 		local askAt = string.find(bankBody, "CarryService.HeldRoom(player, true)", 1, true)
 		local buildAt = string.find(bankBody, "CreatureModel.BuildPod", 1, true)
-		local recordAt = string.find(bankBody, "CarryService.RecordPod(player, species, tier)", 1, true)
+		local recordAt = string.find(bankBody, "CarryService.RecordPod(player, species, tier, tool)", 1, true)
 		local clearAt = string.find(bankBody, "carried[player] = nil", 1, true)
 		check(askAt ~= nil and buildAt ~= nil and recordAt ~= nil and clearAt ~= nil
 				and askAt < buildAt and buildAt < recordAt and recordAt < clearAt,
@@ -1729,8 +1729,11 @@ local function body()
 
 		local plant = sourceOf(Server:FindFirstChild("PlantService")) or ""
 		local pick = string.match(plant, "\nfunction pickUp(.-)\nend\n") or ""
+		-- 2026-10-04 (MY PLANTS): the same handover, now with the plant's own item
+		-- id and the panel's Bag-only form; still on the record (`true`).
 		local giveAt = string.find(pick,
-			"CarryService.GiveHatched(player, entry.species, entry.tier, nil, nil, true)", 1, true)
+			"CarryService.GiveHatched(player, entry.species, entry.tier,\n\t\tif bagOnly then -1 else nil, nil, true, entry.item)",
+			1, true)
 		local goneAt = string.find(pick, "byPlot[entry.id] = nil", 1, true)
 		local savedAt = string.find(pick, "persist(entry.plot)", 1, true)
 		check(giveAt ~= nil and goneAt ~= nil and savedAt ~= nil and giveAt < goneAt and goneAt < savedAt,
@@ -1739,16 +1742,24 @@ local function body()
 		local givePod = string.match(carry, "function CarryService%.GivePod(.-)\nend\n") or ""
 		local podRoomAt = string.find(givePod, "CarryService.HeldRoom(player)", 1, true)
 		local podToolAt = string.find(givePod, "givePodTool(player, species, size)", 1, true)
-		local podRecordAt = string.find(givePod, "CarryService.RecordPod(player, species, size)", 1, true)
+		local podRecordAt = string.find(givePod, "CarryService.RecordPod(player, species, size, tool)", 1, true)
 		local podBackAt = string.find(givePod, "tool:Destroy()", 1, true)
 		check(podRoomAt ~= nil and podToolAt ~= nil and podRecordAt ~= nil and podBackAt ~= nil
 				and podRoomAt < podToolAt and podToolAt < podRecordAt and podRecordAt < podBackAt,
 			"GivePod counts the room before it builds, writes the row in the same call, and takes the Tool back if "
 				.. "it cannot")
+		-- Since ebc9db8 the console gives a Secret pod or plant -- through the
+		-- counted givers only, so nothing there can go past the limit either.
 		local admin = sourceOf(Server:FindFirstChild("AdminService")) or ""
-		check(#admin > 0 and string.find(admin, "GivePod", 1, true) == nil
-				and string.find(admin, "GiveHatched", 1, true) == nil and string.find(admin, "SpawnLoose", 1, true) == nil,
-			"the admin console hands out no pod or plant, so nothing there can go past the limit")
+		local adminHatched = 0
+		for args in string.gmatch(admin, "CarryService%.GiveHatched%(([^\n]-)%)\n") do
+			adminHatched += if string.find(args, ", true$") then 1 else 100
+		end
+		check(#admin > 0 and string.find(admin, "SpawnLoose", 1, true) == nil
+				and string.find(admin, "CarryService.HeldRoom(target)", 1, true) ~= nil
+				and adminHatched == 1 and string.find(admin, "CarryService.GivePod(target,", 1, true) ~= nil,
+			"the admin console gives only through GivePod and GiveHatched on the record, after HeldRoom",
+			adminHatched)
 	end
 
 	--==========================================================================
@@ -1766,9 +1777,9 @@ local function body()
 		local line = ActionRefusal.notice("STORAGE_FULL_BANK")
 		local words = string.lower(line and line.detail or "")
 		check(line ~= nil and line.kind == "blocked" and line.title == "PLANT STORAGE FULL"
-				and string.find(words, count, 1, true) ~= nil and string.find(words, "room", 1, true) ~= nil
-				and string.find(words, "banked", 1, true) ~= nil and full ~= nil and line.key ~= full.key,
-			"at the red line: PLANT STORAGE FULL, the limit's own number, and that room banks the pod",
+				and string.find(words, count, 1, true) ~= nil and string.find(words, "free a slot", 1, true) ~= nil
+				and string.find(words, "bank this pod", 1, true) ~= nil and full ~= nil and line.key ~= full.key,
+			"at the red line: PLANT STORAGE FULL, the limit's own number, and that a free slot banks the pod",
 			line and (line.title .. " / " .. tostring(line.detail)))
 	end
 end

@@ -42,6 +42,8 @@ local OfflineEarnings = require(script.Parent:WaitForChild("OfflineEarnings"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
+-- The hotbar's grammar: what a shortcut or a heart may name (2026-10-03).
+local HotbarSlots = require(SeedGame:WaitForChild("Shared"):WaitForChild("HotbarSlots"))
 -- Launch analytics: told what already happened, never asked anything.
 local Metrics = require(script.Parent:WaitForChild("Metrics"))
 -- The external new-player traffic feed (off by default): loaded and called
@@ -69,6 +71,9 @@ type Entry = {
 	-- second, lock-KEEPING write racing the lock-RELEASING one could land last
 	-- and hold the player out of their next server for two minutes.
 	leaving: boolean?,
+	-- The load found NOTHING saved ("new"): a first-time player of the game
+	-- (InviteService counts an invited friend only then, 2026-10-06).
+	isNew: boolean?,
 }
 
 local entries: { [Player]: Entry } = {}
@@ -198,6 +203,40 @@ end
 function PlayerDataService.WalkModeOf(player: Player): boolean
 	local entry = entries[player]
 	return entry ~= nil and entry.profile.WalkMode == true
+end
+
+--==============================================================================
+-- DISCO DANCING (2026-10-03): THE THIRD SAVED SETTING, WALK MODE'S THREE MOVES
+--
+-- The profile holds it (ON by default), this stamps the attribute the dancing
+-- client reads, and the one GameEvent verb in Start changes it -- a boolean
+-- and nothing else. Only the player's own avatar is affected, on their screen
+-- and (because a character's animation replicates) on everybody else's.
+--==============================================================================
+function PlayerDataService.PublishDiscoDance(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local on = (entry.profile :: any).DiscoDance ~= false
+	if player:GetAttribute(GameConfig.Attributes.DiscoDance) ~= on then
+		player:SetAttribute(GameConfig.Attributes.DiscoDance, on)
+	end
+end
+
+function PlayerDataService.SetDiscoDance(player: Player, on: any): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players or type(on) ~= "boolean" then
+		return false
+	end
+	local profile = entry.profile :: any
+	if (profile.DiscoDance ~= false) == on then
+		return false
+	end
+	profile.DiscoDance = on
+	touch(player)
+	PlayerDataService.PublishDiscoDance(player)
+	return true
 end
 
 --==============================================================================
@@ -335,10 +374,54 @@ function PlayerDataService.UpdateWheel(player: Player, change: (Profile) -> bool
 		return false
 	end
 	if change(entry.profile) then
+		-- Every WheelEarned write passes here, so a ticket stack spent to 0
+		-- loses its shortcut (the slot turns faint) and its heart here too.
+		HotbarSlots.prune(entry.profile)
 		touch(player)
 		return true
 	end
 	return false
+end
+
+--==============================================================================
+-- INVITE A FRIEND'S FIELDS, CHANGED TOGETHER (2026-10-06)
+--
+-- InviteService changes InviteIds, InviteGranted and InviteSeen inside
+-- `change`, synchronously -- a form's grant and its Held row in one
+-- resumption -- and returns whether it changed anything; only then is the
+-- profile marked for saving and the three attributes published.
+--==============================================================================
+function PlayerDataService.UpdateInvites(player: Player, change: (Profile) -> boolean): boolean
+	local entry = entries[player]
+	if not entry then
+		return false
+	end
+	if change(entry.profile) then
+		touch(player)
+		PlayerDataService.PublishInvites(player)
+		return true
+	end
+	return false
+end
+
+-- Whether this session's load found nothing saved: a first-time player.
+function PlayerDataService.IsNewProfile(player: Player): boolean
+	local entry = entries[player]
+	return entry ~= nil and entry.isNew == true
+end
+
+-- The three numbers every invite screen reads (GameConfig.InviteRewards.Attributes):
+-- friends counted, forms given, and whether the panel has been seen since.
+function PlayerDataService.PublishInvites(player: Player)
+	local entry = entries[player]
+	if not entry then
+		return
+	end
+	local A = GameConfig.InviteRewards.Attributes
+	local p = entry.profile :: any
+	player:SetAttribute(A.Count, #(p.InviteIds or {}))
+	player:SetAttribute(A.Granted, p.InviteGranted or 0)
+	player:SetAttribute(A.Seen, p.InviteSeen == true)
 end
 
 --==============================================================================
@@ -564,14 +647,126 @@ end
 -- Written on change instead, exactly like Plants. The save then serialises what
 -- was already true rather than asking a question at the worst possible moment.
 --==============================================================================
+--==============================================================================
+-- EVERY ROW WRITTEN HAS ITS OWN ITEM ID (2026-10-03)
+--
+-- CarryService gives a row its id as it makes it (MintItem), so the Tool and the
+-- row share it. This is the backstop: a row handed in without one, or with an
+-- id an earlier row in the same list already has, is given the next number
+-- here -- the list is never written with two rows of one name.
+--==============================================================================
+local function mint(profile: any): string
+	local n = math.floor(tonumber(profile.NextItem) or 1)
+	if n < 1 then
+		n = 1
+	end
+	profile.NextItem = n + 1
+	return tostring(n)
+end
+
+function PlayerDataService.MintItem(player: Player): string?
+	local entry = entries[player]
+	if not entry then
+		return nil
+	end
+	local item = mint(entry.profile)
+	touch(player)
+	return item
+end
+
 function PlayerDataService.SetHeld(player: Player, held: { any }): boolean
 	local entry = entries[player]
 	if not entry or type(held) ~= "table" then
 		return false
 	end
+	local taken: { [string]: boolean } = {}
+	for _, row in ipairs(held) do
+		if type(row) == "table" then
+			local item = row.Item
+			if type(item) ~= "string" or item == "" or taken[item] then
+				local was = item
+				item = mint(entry.profile)
+				while taken[item] do
+					item = mint(entry.profile)
+				end
+				row.Item = item
+				-- Every writer gives its rows their ids; reaching here is a writer
+				-- that did not, and a shortcut or a heart on the old id is lost.
+				warn(string.format("[Seed/PlayerDataService] %s: a held row came in %s; it is item %s now.",
+					player.Name, if was == nil then "without an id" else "with a taken id " .. tostring(was), item))
+			end
+			taken[item] = true
+		end
+	end
 	entry.profile.Held = held
+	--==========================================================================
+	-- EVERY BAG REMOVAL ENDS HERE (2026-10-03): planting, SELL ALL and SELL ONE,
+	-- a sacrifice, the admin's clear -- so an item that is gone loses its
+	-- shortcut and its heart in the same write. Prune only removes.
+	--==========================================================================
+	HotbarSlots.prune(entry.profile)
 	touch(player)
 	return true
+end
+
+--==============================================================================
+-- THE HOTBAR, AS THE CLIENT ARRANGED IT (2026-10-03; InventoryService is the verb)
+--
+-- The whole bar, cleaned against the profile as it is NOW -- so an edit that
+-- raced a sale cannot bring the sold item back -- and allowed only the faint
+-- slots already on the bar: a client may move or clear one, never make one. A
+-- bar that comes out the same as the saved one changes nothing and saves
+-- nothing. Answers whether it changed.
+--==============================================================================
+function PlayerDataService.SetHotbar(player: Player, list: any): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players or type(list) ~= "table" then
+		return false
+	end
+	local profile = entry.profile :: any
+	local current = if type(profile.Hotbar) == "table" then profile.Hotbar else HotbarSlots.empty()
+	local cleaned = HotbarSlots.clean(profile, list, HotbarSlots.placeholdersIn(current))
+	if HotbarSlots.same(cleaned, current) then
+		return false
+	end
+	profile.Hotbar = cleaned
+	touch(player)
+	return true
+end
+
+--==============================================================================
+-- THE HEARTS (2026-10-03)
+--
+-- `refs` names up to Inventory.MaxPerRequest refs -- a group's every copy -- and
+-- `on` says which way. Only owned refs, never a faint slot. No total cap:
+-- hearts are bounded by what the player owns, and a cap would silently drop the
+-- SELL ALL protection a heart promises. Answers how many changed; saves only
+-- if some did.
+--==============================================================================
+function PlayerDataService.SetFavourite(player: Player, refs: any, on: any): number
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players or type(refs) ~= "table" or type(on) ~= "boolean" then
+		return 0
+	end
+	local profile = entry.profile :: any
+	if type(profile.Favourites) ~= "table" then
+		profile.Favourites = {}
+	end
+	local owned = HotbarSlots.owned(profile)
+	local changed = 0
+	for i = 1, GameConfig.Inventory.MaxPerRequest do
+		local ref = refs[i]
+		if type(ref) == "string" and owned[ref] and not HotbarSlots.isPlaceholder(ref) then
+			if (profile.Favourites[ref] == true) ~= on then
+				profile.Favourites[ref] = if on then true else nil
+				changed += 1
+			end
+		end
+	end
+	if changed > 0 then
+		touch(player)
+	end
+	return changed
 end
 
 function PlayerDataService.SetPlants(player: Player, plants: { any }): boolean
@@ -864,7 +1059,7 @@ end
 --
 -- KEPT: Receipts, the record that stops a Robux purchase being granted a second
 -- time; CreatedAt, when this save first existed; WalkMode, a setting rather than
--- progress. Game passes are not in the profile at all -- PassService asks
+-- progress; NextItem, so no item id is ever handed out twice. Game passes are not in the profile at all -- PassService asks
 -- Roblox -- so nothing here can touch them. Everything else is the schema's
 -- default, HighestBiomeOrder included: the one deliberate exception to "nothing
 -- in the game lowers it".
@@ -896,11 +1091,24 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,
 		-- And the community chest's spins stay claimed (2026-10-01).
 		CommunityClaimed = profile.CommunityClaimed == true,
+		-- And Invite a Friend's count and the forms it gave (2026-10-06): a reset
+		-- must not hand the forms out again, nor forget who was invited.
+		InviteIds = table.clone(profile.InviteIds or {}),
+		InviteGranted = profile.InviteGranted or 0,
+		InviteSeen = profile.InviteSeen == true,
+		-- And a global mini event's tickets stay counted (2026-10-03): a reset
+		-- mid-event must not reopen its per-player cap. A setting stays too.
+		EventClaims = table.clone(profile.EventClaims or {}),
+		DiscoDance = profile.DiscoDance ~= false,
 		LikeReminder = if profile.LikeReminder == "pending" or profile.LikeReminder == "shown"
 			then profile.LikeReminder else "",
 		WheelPending = table.clone(profile.WheelPending or {}),
 		Cosmetics = table.clone(profile.Cosmetics or {}),
 		EquippedTrail = profile.EquippedTrail or "",
+		-- Item ids are never reused (2026-10-03): restarting them at 1 would let
+		-- a shortcut or a heart a client still holds attach to the next new item.
+		-- The bar and the hearts themselves are progress, and go.
+		NextItem = math.max(1, math.floor(tonumber(profile.NextItem) or 1)),
 	}
 	local fresh = ProfileSchema.Default() :: any
 	table.clear(profile)
@@ -915,7 +1123,9 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 	PlayerDataService.PublishSpeedTier(player)
 	PlayerDataService.PublishWalkMode(player)
 	PlayerDataService.PublishMenuSize(player)
+	PlayerDataService.PublishDiscoDance(player)
 	PlayerDataService.PublishOffline(player)
+	PlayerDataService.PublishInvites(player)
 	log(string.format("%s's progress was reset in memory (%d receipt(s) kept).", player.Name,
 		#keep.Receipts))
 	return true
@@ -1040,6 +1250,7 @@ local function onPlayerAdded(player: Player)
 			persistent = persistent,
 			dirty = status == "new" or offlineAdded > 0,
 			loadedAt = os.clock(),
+			isNew = status == "new",
 		}
 		-- A brand-new save ("new") in the new-player cohort opens the onboarding
 		-- funnel; a returning or temporary profile never does (Metrics).
@@ -1073,13 +1284,19 @@ local function onPlayerAdded(player: Player)
 		-- And the saved menu size, so the first menu opened is already the size
 		-- the player chose.
 		PlayerDataService.PublishMenuSize(player)
+		-- And the saved disco-dancing choice (2026-10-03).
+		PlayerDataService.PublishDiscoDance(player)
 		-- And the like reminder's state: a reminder still pending from an earlier
 		-- visit is shown at a calm moment of this one (HatchBonusUI).
 		PlayerDataService.PublishLikeReminder(player)
+		-- And Invite a Friend's count, forms and "!" (2026-10-06): the pedestal shows
+		-- the right form from the first frame, with no evolve.
+		PlayerDataService.PublishInvites(player)
 		table.insert(serviceConnections, player.CharacterAdded:Connect(function()
 			PlayerDataService.PublishSpeedTier(player)
 			PlayerDataService.PublishWalkMode(player)
 			PlayerDataService.PublishMenuSize(player)
+			PlayerDataService.PublishDiscoDance(player)
 		end))
 		-- The player-list columns, off the profile that just loaded.
 		stats[player] = PlayerDataService.MountStats(player, profile)
@@ -1209,6 +1426,14 @@ function PlayerDataService.Start()
 					if PlayerDataService.MarkLikeReminderShown(player) then
 						log(string.format("%s was shown the like reminder.", player.Name))
 						task.spawn(PlayerDataService.Save, player)
+					end
+					return
+				end
+				-- Disco dancing on or off (2026-10-03): one boolean, kept by the
+				-- autosave like the menu size.
+				if action == GameConfig.MiniEvent.Dance.Action then
+					if PlayerDataService.SetDiscoDance(player, payload) then
+						log(string.format("%s turned disco dancing %s.", player.Name, if payload then "on" else "off"))
 					end
 					return
 				end

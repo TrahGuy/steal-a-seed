@@ -1434,6 +1434,73 @@ local ok, err = pcall(function()
 		check(rowsOf(b, "nubkin", 2, false) == 1 and rowsOf(b) == before.rows - 1 and sac.Multiplier(b) == 1.5,
 			"its row was taken off directly -- one row, not both twins -- and the boost runs", rowsOf(b))
 
+		--======================================================================
+		-- TWINS KEEP THEIR OWN SHORTCUT AND HEART (2026-10-03, B1)
+		--
+		-- Two identical pods, each on the bar and each favourited. The one
+		-- sacrificed is the SECOND row, so a fallback that took "the first pod
+		-- of that kind" would take the twin's row -- and the twin's Tool would
+		-- then be re-stamped with the sacrificed pod's id, its shortcut and
+		-- heart. By name, on the normal path and with the sync throwing.
+		--======================================================================
+		local ITEM = GameConfig.Attributes.ItemId
+		local function twinBag()
+			return {
+				Held = { { Id = "nubkin", Tier = 2, Hatched = false, Item = "1" },
+					{ Id = "nubkin", Tier = 2, Hatched = false, Item = "2" } },
+				NextItem = 3,
+				Hotbar = { "", "", "", "i:1", "i:2", "", "", "", "", "" },
+				Favourites = { ["i:1"] = true, ["i:2"] = true },
+			}
+		end
+		local function holdItem(p, item)
+			emptyHands(p)
+			for _, candidate in ipairs(podTools(p, "nubkin", 2)) do
+				if candidate:GetAttribute(ITEM) == item then
+					candidate.Parent = p.Character
+					task.wait()
+					return candidate
+				end
+			end
+			error("no pod named " .. item)
+		end
+		for _, throws in ipairs({ false, true }) do
+			local userId = if throws then -7111 else -7110
+			seed(userId, twinBag())
+			local t = enter(if throws then "TwinsThrow" else "Twins", userId)
+			garden(t, GARDEN)
+			local twin = nil
+			for _, candidate in ipairs(podTools(t, "nubkin", 2)) do
+				if candidate:GetAttribute(ITEM) == "1" then
+					twin = candidate
+				end
+			end
+			local given = holdItem(t, "2")
+			r = quote(t)
+			local inner = carry.SyncHeldNow
+			if throws then
+				carry.SyncHeldNow = function()
+					error("spec: the sync threw")
+				end
+			end
+			local gave = yes(t, r.token)
+			carry.SyncHeldNow = inner
+			local profile = data.Get(t)
+			local how = if throws then " (the sync threw)" else ""
+			check(gave ~= nil and gave.phase == "sacrificed" and destroyed(given)
+					and #profile.Held == 1 and profile.Held[1].Item == "1",
+				"the sacrificed twin's own row comes off, the other's stays" .. how,
+				profile and profile.Held[1] and profile.Held[1].Item)
+			check(profile.Hotbar[4] == "i:1" and profile.Hotbar[5] == "" and profile.Favourites["i:1"] == true
+					and profile.Favourites["i:2"] == nil,
+				"its shortcut and heart go; the twin keeps its own" .. how, table.concat(profile.Hotbar, ","))
+			check(twin ~= nil and twin.Parent ~= nil and twin:GetAttribute(ITEM) == "1",
+				"and the twin's Tool is still item 1" .. how)
+			carry.SyncHeldNow(t)
+			check(#profile.Held == 1 and profile.Held[1].Item == "1" and twin:GetAttribute(ITEM) == "1",
+				"a later snapshot moves no identity" .. how)
+		end
+
 		-- The bag will not give the row up at all.
 		seed(-7109, { Held = { { Id = "nubkin", Tier = 2, Hatched = false } } })
 		local c = enter("RowStays", -7109)
@@ -1864,10 +1931,20 @@ local ok, err = pcall(function()
 		check(table.concat(closer, ", ") == "772x360, 801x392",
 			"the two shortest phones get the closer rows at the normal menu size; every other screen the full ones",
 			table.concat(closer, ", "))
-		check(string.find(row, "GameConfig.sacrificeIncomeBoost(player)", 1, true) ~= nil
-				and string.find(row, "GameConfig.sacrificeBoostTitle(sacrifice)", 1, true) ~= nil
-				and string.find(row, 'entryFor("sacrifice")', 1, true) ~= nil,
-			"the boost row draws the pedestal's line beside the chest's, off the published attributes")
+		-- The row became icons (2026-10-04): the pedestal's own, off the same
+		-- published attributes, beside the chest's.
+		local BoostIcons = require(game:GetService("ReplicatedStorage").SeedGame.Shared.BoostIcons)
+		local list = BoostIcons.entries({ now = 10, sacrificeMultiplier = SeedData.Sacrifice.Multiplier,
+			sacrificeEndsAt = 40, chestBoost = "income", chestEndsAt = 50 })
+		local ids = {}
+		for i, e in ipairs(list) do
+			ids[i] = e.id
+		end
+		local pedestal = list[#list]
+		check(table.concat(ids, ",") == "income,sacrifice" and pedestal.effect == string.format("+%d%% garden income",
+				math.floor((SeedData.Sacrifice.Multiplier - 1) * 100 + 0.5))
+				and pedestal.total == SeedData.Sacrifice.DurationSeconds,
+			"the pedestal's boost is its own icon beside the chest's, off the published attributes", table.concat(ids, ","))
 	end)
 end)
 

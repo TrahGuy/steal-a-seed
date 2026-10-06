@@ -2,6 +2,8 @@
 -- Steal a Seed :: PlantUI
 --
 -- The hatch timer over anything growing in a plot: two outlined words, no box.
+-- And, since 2026-10-04, the overhead label over every grown creature in a bed
+-- (see A LABEL ONCE IT IS GROWN, below, and PlantLabel).
 --
 --==============================================================================
 -- WHY THIS EXISTS AT ALL
@@ -17,40 +19,41 @@
 -- just a plot of objects that ignore you.
 --
 --==============================================================================
--- A CLOCK WHILE IT WAITS, AND NOTHING ONCE IT IS DONE
+-- A CLOCK WHILE IT WAITS, AND A LABEL ONCE IT IS GROWN
 --
 --   HATCHING   it is still a pod      + m:ss
 --   GROWING    it is a sprout         + m:ss
---   <grown>    no billboard at all
+--   <grown>    RARITY / NAME / SIZE • $INCOME/s  (2026-10-04)
 --
--- The label on a FINISHED plant went through three shapes -- name + rate, then
--- rate alone, then rarity + name + rate off the uncorrupted reference clip --
--- and the owner cut it at the sight of a real bed. The reason is arithmetic: a
--- starting plot is twelve holes, so a full one was twelve three-line cards
--- stacked over one patch of dirt, with a `+$N` rising through each of them. In a
--- screenshot one card looks good. Twelve is a wall.
+-- HISTORY, KEPT BECAUSE IT IS WHY THE NEW LABEL IS SHAPED AS IT IS. The label
+-- on a finished plant went through three shapes -- name + rate, then rate
+-- alone, then rarity + name + rate -- and the owner cut it at the sight of a
+-- real bed: twelve three-line cards stacked over one patch of dirt, a `+$N`
+-- rising through each of them, and for a while grown plants carried nothing.
 --
--- So a grown plant now carries no plate. What it earns is said by the `+$N`
--- popping off it every second, which is the loud element in the reference
--- footage too, and WHAT IT IS is said by the Garden panel on the right rail --
--- a row per slot, name, rarity, rate, without walking the bed.
+-- THE OWNER ASKED FOR IT BACK ON 2026-10-04, after a reference shot, and that
+-- brief SUPERSEDES "grown plants have no overhead labels". It comes back with
+-- what the old cards lacked (PlantLabel): no plate; a fixed pixel size from a
+-- Tiny to an oversized Secret; faded out with flat camera distance and switched
+-- off past it; out of the way while the plant is selected for PICK UP; and the
+-- `+$N` now starts above it
+-- (CashPop). No kg anywhere. The income is the OWNER'S rate, not the viewer's.
 --
--- The billboard is DISABLED rather than destroyed. Stage is recomputed from the
--- clock every tick, so a sprout crosses into grown here a moment before the
--- server rebuilds the model, and this has to be able to switch off mid-life.
+-- The pod's billboard is DISABLED rather than destroyed. Stage is re-read every
+-- tick, so a model can cross into grown here mid-life; its label is made then,
+-- once, and dropped with the model.
 --
 --==============================================================================
--- THE WAIT STILL GETS A LABEL, AND ONLY THE WAIT
+-- THE WAIT GETS A CLOCK; THE GROWN CREATURE GETS ITS LABEL
 --
--- A pod or a sprout is the one case where the world genuinely has nothing to
--- say for itself: it is a shell, it is not paying, and the only fact anybody
--- wants off it is how long is left. That is worth a label. A grown creature is
--- already a distinct silhouette doing a visible thing.
+-- A pod is a shell, it is not paying, and the only fact anybody wants off it is
+-- how long is left: its label is the clock and nothing else.
 --
--- No rarity word here either, at any stage. A pod is COLOURED by rarity, so the
+-- No rarity word on a POD, at any stage. A pod is COLOURED by rarity, so the
 -- word would be a caption on a photograph -- and worse, it would spend the
--- reveal early, since two Commons arrive in identical shells. The word lives in
--- the Index; the Garden tints a grown row's name with the colour.
+-- reveal early, since two Commons arrive in identical shells. Only a GROWN
+-- creature -- already revealed, standing in its bed -- wears the word, in
+-- PlantLabel's top line (2026-10-04).
 --==============================================================================
 --
 --==============================================================================
@@ -82,8 +85,14 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local ReachPoint = require(Shared:WaitForChild("ReachPoint"))
+-- The grown creature's three lines (2026-10-04).
+local PlantLabel = require(Shared:WaitForChild("PlantLabel"))
+local HudLayout = require(Shared:WaitForChild("HudLayout"))
 
 local PLANTING = GameConfig.Plant
+local GROWN_LABEL = GameConfig.Labels.Plant
+-- OTHER PLANTS: OFF's marker on a plant this screen hides (PlantVisibility).
+local HIDDEN = require(Shared:WaitForChild("PlantVisibility")).Marker
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -167,7 +176,7 @@ do
 		legacy:Destroy()
 	end
 	for _, child in ipairs(playerGui:GetChildren()) do
-		if child:IsA("BillboardGui") and child.Name == BILLBOARD_NAME then
+		if child:IsA("BillboardGui") and (child.Name == BILLBOARD_NAME or child.Name == "SeedPlantLabel") then
 			child:Destroy()
 		end
 	end
@@ -236,9 +245,49 @@ type Panel = {
 	hatchAt: number,
 	stage: number,
 	lastText: string,
+	-- THE GROWN CREATURE'S LABEL (2026-10-04): made the first time the model is
+	-- seen grown, dropped with the model. `plot` is the bed's plot, whose
+	-- GardenBoost is the owner's rate; `selected` mirrors PlantPickUI's mark;
+	-- `published` the height last told to CashPop.
+	grown: PlantLabel.Label?,
+	plot: Instance?,
+	grownConns: { RBXScriptConnection },
+	selected: boolean,
+	published: number,
+	-- Hidden on this screen (OTHER PLANTS: OFF, PlantVisibility's marker): its
+	-- label is off, as for a plant out of range.
+	hidden: boolean,
 }
 
 local panels: { [Model]: Panel } = {}
+-- The grown ones, for the one per-frame update.
+local grownPanels: { [Panel]: boolean } = {}
+
+-- The label's scale on this screen: a phone's PhoneScale, a TV's own, else 1.
+local function labelScale(): number
+	if TOUCH then
+		return GROWN_LABEL.PhoneScale
+	end
+	if HudLayout.isTenFoot() then
+		local camera = Workspace.CurrentCamera
+		if camera then
+			return HudLayout.tenFootScale(camera.ViewportSize)
+		end
+	end
+	return 1
+end
+
+-- The plot a planted model stands in: its nearest ancestor tagged Plot.
+local function plotOf(model: Model): Instance?
+	local at = model.Parent
+	while at and at ~= Workspace do
+		if CollectionService:HasTag(at, GameConfig.Tags.Plot) then
+			return at
+		end
+		at = at.Parent
+	end
+	return nil
+end
 
 local function serverNow(): number
 	-- pcall because GetServerTimeNow throws if the client has not finished
@@ -428,7 +477,85 @@ local function build(model: Model): Panel?
 		hatchAt = hatchAt,
 		stage = tonumber(model:GetAttribute("Stage")) or STAGE_POD,
 		lastText = "",
+		grown = nil,
+		plot = nil,
+		grownConns = {},
+		selected = false,
+		published = -1,
+		hidden = false,
 	}
+end
+
+--==============================================================================
+-- THE GROWN CREATURE'S LABEL (2026-10-04)
+--
+-- Made the first time a model is seen grown and kept for its life: the
+-- creature's top measured ONCE (GameConfig.topOfModel, the same measure the
+-- cash pop uses, so the two agree where a plant ends), the label's bottom edge
+-- GapStuds over it, adorned to the creature's base so it walks with it.
+--
+-- Painted from the species, the model's own Tier, and the plot's rate
+-- multiplier -- re-painted on the second tick (a write only when a word
+-- changes) and at once when the owner's boost or the rain changes. Its fade,
+-- its switch and its TITAN / COLOSSAL light are the per-frame update's, below.
+--==============================================================================
+local function paintGrown(panel: Panel)
+	local label = panel.grown
+	if not label then
+		return
+	end
+	local content = PlantLabel.content(tostring(panel.model:GetAttribute("SpeciesId")), panel.tier,
+		GameConfig.gardenIncomeMultiplier(panel.plot))
+	if content then
+		PlantLabel.paint(label, content)
+	end
+end
+
+local function dropGrown(panel: Panel)
+	for _, c in ipairs(panel.grownConns) do
+		c:Disconnect()
+	end
+	table.clear(panel.grownConns)
+	grownPanels[panel] = nil
+	local label = panel.grown
+	panel.grown = nil
+	if label then
+		PlantLabel.destroy(label)
+	end
+	if panel.published ~= 0 and panel.model.Parent then
+		panel.model:SetAttribute(GROWN_LABEL.HeightAttribute, nil)
+	end
+	panel.published = -1
+end
+
+local function ensureGrown(panel: Panel)
+	if panel.grown then
+		return
+	end
+	local model, anchor = panel.model, panel.anchor
+	local lift = GameConfig.topOfModel(model, anchor) + GROWN_LABEL.GapStuds
+	panel.plot = plotOf(model)
+	panel.selected = model:GetAttribute(GROWN_LABEL.SelectedAttribute) == true
+	panel.grown = PlantLabel.new(playerGui, anchor, lift, labelScale())
+	grownPanels[panel] = true
+	-- PlantPickUI's selection: PICK UP stands where the label would.
+	table.insert(panel.grownConns, model:GetAttributeChangedSignal(GROWN_LABEL.SelectedAttribute):Connect(function()
+		panel.selected = model:GetAttribute(GROWN_LABEL.SelectedAttribute) == true
+	end))
+	-- OTHER PLANTS: OFF (2026-10-05): the plant hidden on this screen takes its
+	-- label with it -- and its rarity light, and the height CashPop reads.
+	panel.hidden = model:GetAttribute(HIDDEN) == true
+	table.insert(panel.grownConns, model:GetAttributeChangedSignal(HIDDEN):Connect(function()
+		panel.hidden = model:GetAttribute(HIDDEN) == true
+	end))
+	-- The owner's boost changing: the rate changes now, not at the next tick.
+	local plot = panel.plot
+	if plot then
+		table.insert(panel.grownConns, plot:GetAttributeChangedSignal(GameConfig.Attributes.GardenBoost):Connect(function()
+			paintGrown(panel)
+		end))
+	end
+	paintGrown(panel)
 end
 
 --==============================================================================
@@ -497,7 +624,20 @@ local function refresh(panel: Panel, now: number)
 
 	if panel.stage ~= STAGE_POD then
 		hide()
+		-- GROWN: the creature's label (2026-10-04), made once and re-painted.
+		if panel.stage == STAGE_GROWN then
+			if panel.grown then
+				paintGrown(panel)
+			else
+				ensureGrown(panel)
+			end
+		elseif panel.grown then
+			dropGrown(panel)
+		end
 		return
+	end
+	if panel.grown then
+		dropGrown(panel)
 	end
 	local remaining = panel.hatchAt - now
 
@@ -606,6 +746,9 @@ end
 local function remove(instance: Instance)
 	local panel = panels[instance :: Model]
 	if panel then
+		-- Picked up, sold, replaced by a hatch, the plot released: the label
+		-- and every connection it holds go with the model.
+		dropGrown(panel)
 		if panel.readyConn then
 			panel.readyConn:Disconnect()
 		end
@@ -713,5 +856,47 @@ RunService:BindToRenderStep(BIND, Enum.RenderPriority.Camera.Value + 1, function
 		if camera then
 			placeOnTouch(camera)
 		end
+	end
+
+	--==========================================================================
+	-- THE GROWN LABELS (2026-10-04): ONE PASS A FRAME, OVER THE GROWN ONLY
+	--
+	-- Each label's strength off the camera's FLAT distance (PlantLabel.fade), its
+	-- switch, the height CashPop starts a pop above, and a TITAN / COLOSSAL
+	-- word's light -- each written only when it changes, nothing measured but
+	-- one distance. A label selected for PICK UP, or out of range, is off, and
+	-- off means its rarity light stops too (RarityFX runs shown labels only).
+	--==========================================================================
+	local camera = Workspace.CurrentCamera
+	if camera and next(grownPanels) ~= nil then
+		local eye = camera.CFrame.Position
+		local t = os.clock()
+		for panel in pairs(grownPanels) do
+			local label = panel.grown
+			if label then
+				local alpha = 0
+				if not panel.selected and not panel.hidden and panel.anchor.Parent then
+					-- FLAT distance (see Labels.Plant): a tall creature's label is
+					-- as strong as a short one's from the same spot on the ground.
+					local d = panel.anchor.Position - eye
+					alpha = PlantLabel.fade(math.sqrt(d.X * d.X + d.Z * d.Z))
+				end
+				PlantLabel.setAlpha(label, alpha)
+				PlantLabel.setShown(label, label.alpha > 0)
+				PlantLabel.step(label, t)
+				local h = PlantLabel.drawnHeight(label)
+				if h ~= panel.published then
+					panel.published = h
+					panel.model:SetAttribute(GROWN_LABEL.HeightAttribute, if h > 0 then h else nil)
+				end
+			end
+		end
+	end
+end)
+
+-- The rain starting or stopping changes every bed's rate at once.
+Workspace:GetAttributeChangedSignal(GameConfig.Weather.Attributes.Factor):Connect(function()
+	for panel in pairs(grownPanels) do
+		paintGrown(panel)
 	end
 end)

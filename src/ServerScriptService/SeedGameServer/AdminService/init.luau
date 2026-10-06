@@ -3,9 +3,10 @@
 --
 -- A small developer console for two accounts: add cash, add Speed, and reset a
 -- player's saved progress to a fresh account, on anybody in this server; and
--- start the night or the day for the whole server; announce; and (2026-10-02,
--- SECRET ITEMS) grant a Secret pod or grown plant into the admin's OWN bag.
--- Nothing else, and nobody else.
+-- start the night or the day for the whole server; announce; (2026-10-02,
+-- SECRET ITEMS) grant a Secret pod or grown plant into the admin's OWN bag;
+-- the weather (the owner's account only); and (2026-10-03, MINI EVENTS) start
+-- or end a Ticket Disco for this server. Nothing else, and nobody else.
 --
 --==============================================================================
 -- WHY THIS IS NOT DebugService
@@ -45,13 +46,20 @@
 -- EVERY REQUEST, CHECKED IN THIS ORDER, BEFORE ANYTHING CHANGES
 --
 --   1. the sender is one of the two UserIds
---   2. one request a second per admin, whatever it is
+--   2. one request a second per admin, whatever it is -- except Announce
+--      (2026-10-03): consecutive announcements go without waiting, under
+--      AnnouncementService's own safeguards (a resend is not sent twice, a
+--      flood is capped, the queue is bounded). An announcement still counts
+--      as this admin's last request, so every other action's limit is as it was
 --   3. the action is one of the seven (GrantSecret has its own checks after
 --      this, in grantSecret: the recipient is the sender, the request's shape,
 --      the two species, a cooldown, the bag's room)
 --   4. Start Night and Start Day go to WorldCycleService from here: they act
 --      on the whole server and name nobody; Announce goes to
---      AnnouncementService.Send (2026-10-01), which checks its own words
+--      AnnouncementService.Send (2026-10-01), which checks its own words;
+--      Weather is the owner's account's alone (IsOwner) and goes to
+--      WeatherService; MiniEvent (2026-10-03) goes to MiniEventService for
+--      either account, with its verb and whole-seconds duration checked here
 --   5. otherwise the target is a UserId of a player in THIS server, now
 --   6. the target's profile has loaded
 --   7. for cash and Speed, a finite whole number from 1 to the limit; for a
@@ -82,6 +90,7 @@ local WeaponShopService = require(script.Parent:WaitForChild("WeaponShopService"
 local WorldCycleService = require(script.Parent:WaitForChild("WorldCycleService"))
 local AnnouncementService = require(script.Parent:WaitForChild("AnnouncementService"))
 local WeatherService = require(script.Parent:WaitForChild("WeatherService"))
+local MiniEventService = require(script.Parent:WaitForChild("MiniEventService"))
 
 local SAVE = GameConfig.Save
 
@@ -135,7 +144,7 @@ local ACTIONS: { [string]: boolean } = {
 	StartNight = true,
 	StartDay = true,
 	-- 2026-10-01: an announcement, to this server or every server. The checks
-	-- past this file's -- the words, the cooldown, the filter -- are
+	-- past this file's -- the words, the safeguards, the filter -- are
 	-- AnnouncementService.Send's; it is reached from nowhere but here.
 	Announce = true,
 	-- 2026-10-02: a Secret pod or plant into the admin's own bag (SECRET ITEMS).
@@ -144,6 +153,19 @@ local ACTIONS: { [string]: boolean } = {
 	-- (WeatherService). The second word is "start" (rain), "thunder" (a
 	-- Thunderstorm) or "end", the third the duration in seconds.
 	Weather = true,
+	-- 2026-10-03: a GLOBAL mini event (Ticket Disco) for every server of this
+	-- place, by EITHER allowlisted account (MiniEventService). The second word
+	-- is the mode -- "ticketdisco", "disco" (DISCO + MILL), "party" (the pure
+	-- DISCO ONLY, 2026-10-04) or "tickets" -- or "end"; the third the duration.
+	MiniEvent = true,
+}
+
+-- The mini event's verbs: each start verb names its mode, and "end".
+local MINI_STARTS: { [string]: boolean } = {
+	ticketdisco = true,
+	disco = true,
+	party = true,
+	tickets = true,
 }
 
 -- The only Secrets the console may grant, and the two forms: by species id and
@@ -170,8 +192,10 @@ local WHOLE_SERVER: { [string]: boolean } = {
 }
 
 -- `saved` is a Secret grant's: false when the item was granted in this server
--- but its save has not landed yet (the autosave keeps trying).
-export type Reply = { ok: boolean, message: string, added: number?, saved: boolean? }
+-- but its save has not landed yet (the autosave keeps trying). `shown` is an
+-- announcement's: whether it was queued in this server at all (false: nothing
+-- went anywhere, so the console gives the words back).
+export type Reply = { ok: boolean, message: string, added: number?, saved: boolean?, shown: boolean? }
 export type AuditEntry = {
 	at: string,
 	admin: number,
@@ -775,6 +799,42 @@ local function weather(admin: any, verb: any, seconds: any): Reply
 end
 
 --==============================================================================
+-- MINI EVENTS: TICKET DISCO, FOR EVERY SERVER (2026-10-03, GLOBAL)
+--
+-- Either allowlisted account -- the allowlist is Handle's first check, by the
+-- UserId the engine stamped; nothing new is added to it and no other identity
+-- is read. `verb` is a mode ("ticketdisco", "disco", "party", "tickets") with
+-- a whole number of seconds, or "end". One event at a time across every server, a
+-- duplicate START that changes nothing and a harmless second END are
+-- MiniEventService's rules (the shared record decides); what it answers --
+-- including whether the other servers could be told -- is what the console
+-- shows. Unlike the weather this is not the owner's alone: the owner asked
+-- for both accounts to run it. The weather stays this server's.
+--==============================================================================
+local function miniEvent(admin: any, verb: any, seconds: any): Reply
+	if type(verb) == "string" and MINI_STARTS[verb] == true then
+		local M = GameConfig.MiniEvent
+		if type(seconds) ~= "number" or seconds ~= seconds or seconds ~= math.floor(seconds)
+			or seconds < M.MinSeconds or seconds > M.MaxSeconds then
+			return refuse(string.format("Duration must be a whole number of seconds from %d to %d. Nothing changed.",
+				M.MinSeconds, M.MaxSeconds))
+		end
+		local ok, message = MiniEventService.StartGlobal(admin, verb, seconds)
+		if ok then
+			record(admin, nil, "MiniEvent:" .. verb .. ":" .. tostring(seconds), nil, nil)
+		end
+		return { ok = ok, message = message }
+	elseif verb == "end" then
+		local ok, message, ended = MiniEventService.EndGlobal(admin)
+		if ended then
+			record(admin, nil, "MiniEvent:end", nil, nil)
+		end
+		return { ok = ok, message = message }
+	end
+	return refuse("Unknown mini event request. Nothing changed.")
+end
+
+--==============================================================================
 -- ONE REQUEST
 --
 -- The whole of the server's side of the console, and the only thing the
@@ -787,6 +847,19 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 		return refuse("Not authorized.")
 	end
 	local now = os.clock()
+	-- Announce rides the same remote with its own three words: the scope
+	-- ("server" or "all"), the message, and whether ALL SERVERS was confirmed.
+	-- No one-a-second wait for it (2026-10-03, the owner's ask): its own
+	-- safeguards are AnnouncementService.Send's. It is still this admin's last
+	-- request, so the limit on everything else is unchanged.
+	if action == "Announce" then
+		lastRequest[sender] = now
+		local sent, message, shownId = AnnouncementService.Send(sender, targetId, amount, confirmName)
+		if shownId then
+			record(sender, nil, "Announce:" .. tostring(targetId) .. (if sent then "" else ":here-only"), nil, nil)
+		end
+		return { ok = sent, message = message, shown = shownId ~= nil }
+	end
 	local last = lastRequest[sender]
 	if last and now - last < AdminService.Config.MinInterval then
 		return refuse("Too fast. Wait a second and try again.")
@@ -799,15 +872,6 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 	if WHOLE_SERVER[action] then
 		return changePhase(sender, action)
 	end
-	-- Announce rides the same remote with its own three words: the scope
-	-- ("server" or "all"), the message, and whether ALL SERVERS was confirmed.
-	if action == "Announce" then
-		local sent, message, shownId = AnnouncementService.Send(sender, targetId, amount, confirmName)
-		if shownId then
-			record(sender, nil, "Announce:" .. tostring(targetId) .. (if sent then "" else ":here-only"), nil, nil)
-		end
-		return { ok = sent, message = message }
-	end
 	-- SECRET ITEMS carries its own checks (grantSecret): the recipient must be
 	-- the sender, and the third word is the request table.
 	if action == "GrantSecret" then
@@ -817,6 +881,11 @@ function AdminService.Handle(sender: any, action: any, targetId: any, amount: an
 	-- duration (weather).
 	if action == "Weather" then
 		return weather(sender, targetId, amount)
+	end
+	-- MINI EVENTS are any allowlisted admin's (checked above): the second word
+	-- is the verb, the third the duration (miniEvent).
+	if action == "MiniEvent" then
+		return miniEvent(sender, targetId, amount)
 	end
 	if type(targetId) ~= "number" or targetId ~= targetId or targetId <= 0
 		or targetId ~= math.floor(targetId) then
@@ -872,6 +941,11 @@ function AdminService.ProvideConsole(player: any): ScreenGui?
 	gui.DisplayOrder = 60
 	gui:SetAttribute("MaxMoney", AdminService.Config.MaxMoney)
 	gui:SetAttribute("MaxSpeed", AdminService.Config.MaxSpeed)
+	-- How the console DRAWS two of its controls (2026-10-04): the weather locked for an
+	-- account that is not the owner's, the Secret grant locked while its switch is off.
+	-- Display only: Handle still decides every press exactly as before.
+	gui:SetAttribute("IsOwner", AdminService.IsOwner(player))
+	gui:SetAttribute("SecretGrants", AdminService.Config.SecretGrants == true)
 
 	local remote = Instance.new("RemoteFunction")
 	remote.Name = REMOTE_NAME
@@ -903,7 +977,38 @@ function AdminService.Init()
 	table.clear(serviceConnections)
 end
 
+-- The global mini event's status line, for the console's MINI EVENTS
+-- section: written once a second onto each admin's own SeedAdmin gui -- which
+-- only that admin's client receives -- and only when it changed.
+local statusRunning = 0
+local function keepStatus()
+	statusRunning += 1
+	local mine = statusRunning
+	task.spawn(function()
+		while mine == statusRunning do
+			local line: string? = nil
+			for _, player in ipairs(Players:GetPlayers()) do
+				if AdminService.IsAdmin(player) then
+					local playerGui = player:FindFirstChildOfClass("PlayerGui")
+					local gui = if playerGui then playerGui:FindFirstChild(GUI_NAME) else nil
+					if gui then
+						if line == nil then
+							local ok, text = pcall(MiniEventService.StatusLine)
+							line = if ok and type(text) == "string" then text else "status unavailable"
+						end
+						if gui:GetAttribute("MiniStatus") ~= line then
+							gui:SetAttribute("MiniStatus", line)
+						end
+					end
+				end
+			end
+			task.wait(1)
+		end
+	end)
+end
+
 function AdminService.Start()
+	keepStatus()
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(function(player)
 		task.spawn(AdminService.ProvideConsole, player)
 	end))
@@ -917,7 +1022,8 @@ function AdminService.Start()
 	end
 	log(string.format("Ready. %d account(s) on the allowlist; up to %s cash and %s Speed a request, "
 		.. "progress resets saved or refused, night and day for the whole server, one request a second; "
-		.. "Secret grants to yourself %s (natural spawning %s); the Rain event by the owner's account only.", count,
+		.. "Secret grants to yourself %s (natural spawning %s); the Rain event by the owner's account only; "
+		.. "mini events by either account.", count,
 		commas(AdminService.Config.MaxMoney), commas(AdminService.Config.MaxSpeed),
 		if AdminService.Config.SecretGrants == true then "ON" else "off",
 		if GameConfig.Secret.Enabled then "ON" else "off"))

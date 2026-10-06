@@ -40,7 +40,11 @@
 --   NOTHING WAITS       a notice is shown the moment it arrives or not at all,
 --                       so nothing can turn up late about a moment that has
 --                       passed. `stillTrue`, where a notice has one, takes it
---                       down early the moment its situation ends.
+--                       down early the moment its situation ends. The one
+--                       exception is a notice that FOLLOWS another (`after`,
+--                       2026-10-05: a storm's Secret egg after the storm's own
+--                       opening): on a stack with no room for both it waits
+--                       until that one starts to leave, and no longer.
 --
 -- SOUNDS ARE THROTTLED SEPARATELY (soundFor): only a notice that goes up new
 -- may play, never within SoundGapSeconds of any notice sound, and never within
@@ -49,8 +53,9 @@
 
 local Notice = {}
 
--- "secret" (2026-10-01): the SECRET POD SPAWNED toast -- silver headline, no
--- sound of its own, the word SECRET styled by the renderer (ActionToastUI).
+-- "secret" (2026-10-01): the Secret egg toast -- silver headline, no sound of
+-- its own, the word SECRET styled by the renderer (ActionToastUI) wherever it
+-- stands in the sentence (2026-10-05: "A SECRET EGG SPAWNED ON ...").
 export type Kind = "blocked" | "success" | "warning" | "info" | "secret"
 
 export type Post = {
@@ -66,6 +71,10 @@ export type Post = {
 	-- True when the action already made its own sound (a purchase chime, a
 	-- chest opening): the notice then adds none.
 	quiet: boolean?,
+	-- Where it came from (2026-10-03), a key of GameConfig.SourceIcons: its
+	-- picture is drawn in place of the kind's glyph once uploaded, and until
+	-- then the glyph is. Changes nothing else -- not the kind, timing or sound.
+	icon: string?,
 	-- How long it stays up, when the default for its kind is wrong for it.
 	seconds: number?,
 	-- Asked before it goes up and while it is up; false takes it down at once.
@@ -77,6 +86,10 @@ export type Post = {
 	-- `onDismissed` runs once if the player takes it down.
 	dismissible: boolean?,
 	onDismissed: (() -> ())?,
+	-- The key of a notice this one follows (2026-10-05: a storm's Secret egg
+	-- after the storm's own opening): while going up would put that one out
+	-- before its time, this one waits for it (waitAfter) rather than replace it.
+	after: string?,
 }
 
 export type Shown = {
@@ -210,7 +223,13 @@ function Notice.valid(post: any): boolean
 	if post.dismissible ~= nil and type(post.dismissible) ~= "boolean" then
 		return false
 	end
+	if post.icon ~= nil and type(post.icon) ~= "string" then
+		return false
+	end
 	if post.onDismissed ~= nil and type(post.onDismissed) ~= "function" then
+		return false
+	end
+	if post.after ~= nil and type(post.after) ~= "string" then
 		return false
 	end
 	local still = post.stillTrue
@@ -287,6 +306,164 @@ function Notice.remove(stack: { Shown }, key: string): boolean
 		end
 	end
 	return false
+end
+
+-- How long a post that follows `key` (Post.after) waits before going up, in
+-- the renderer's clock: until `key` starts to leave, when going up now would
+-- put it out -- it is up, the stack is full, and it is the one step() would
+-- evict. 0 otherwise: room for both, or `key` not up (2026-10-05).
+function Notice.waitAfter(stack: { Shown }, key: string, now: number, maxShown: number): number
+	local live = 0
+	local soonest: Shown? = nil
+	local target: Shown? = nil
+	for _, shown in ipairs(stack) do
+		if now < shown.hideAt then
+			live += 1
+			if soonest == nil or shown.hideAt < soonest.hideAt then
+				soonest = shown
+			end
+			if shown.key == key then
+				target = shown
+			end
+		end
+	end
+	if target == nil or live < math.max(1, maxShown) or soonest ~= target then
+		return 0
+	end
+	return target.hideAt - now
+end
+
+--==============================================================================
+-- THE SECRET EGG TOAST (2026-10-05)
+--
+-- "A SECRET EGG SPAWNED ON {BIOME}!" when a Secret egg actually spawns -- a
+-- road Secret, or a storm's special egg as its biome opens (NestService). The
+-- server sends { id, biome, event? }: the spawn's own id, its biome's id, and
+-- for a storm's egg the event it belongs to. Plain functions, so the specs
+-- check them with no screen:
+--
+--   readSecret   the payload, or nil; an older server's bare biome id still reads
+--   secretPost   the post for it -- ONCE per spawn id on this client, however
+--                often it is delivered; a later spawn in the same biome has its
+--                own id and is shown. The biome is told by its display name,
+--                never its id.
+--   wordSpan     where the styled word stands in the centred headline, wherever
+--                it is in the sentence (it used to have to lead), on one line
+--                or broken over more
+--==============================================================================
+export type SecretNews = { id: string?, biome: string, event: number? }
+
+function Notice.readSecret(payload: any): SecretNews?
+	if type(payload) == "string" then
+		return if payload ~= "" then { id = nil, biome = payload, event = nil } else nil
+	end
+	if type(payload) ~= "table" then
+		return nil
+	end
+	local id, biome, event = payload.id, payload.biome, payload.event
+	if type(id) ~= "string" or id == "" or type(biome) ~= "string" or biome == "" then
+		return nil
+	end
+	return { id = id, biome = biome, event = if type(event) == "number" then event else nil }
+end
+
+export type SecretWords = { Title: string, TitleNoName: string }
+
+-- `seen` is this client's record of the spawns it has shown, filled in here.
+-- Nil: shown already. `nameOf` answers a biome's display name, or nil.
+function Notice.secretPost(news: SecretNews, words: SecretWords, nameOf: (string) -> string?,
+	seen: { [string]: boolean }): Post?
+	local id = news.id
+	if id then
+		if seen[id] then
+			return nil
+		end
+		seen[id] = true
+	end
+	local name = nameOf(news.biome)
+	-- The name stays on one line (2026-10-05, seen in Play: "RAIN / BIOME!"): its
+	-- own spaces are no-break spaces, which LuckiestGuy draws exactly as a space
+	-- (measured: the same 100 px), so a headline too wide for the stack breaks
+	-- before the name rather than inside it.
+	local title = if type(name) == "string" and name ~= ""
+		then string.format(words.Title, (string.gsub(string.upper(name), " ", "\u{00A0}")))
+		else words.TitleNoName
+	return {
+		kind = "secret",
+		title = title,
+		key = "secret:" .. (id or news.biome),
+		quiet = true,
+	}
+end
+
+export type WordSpan = {
+	-- The headline's lines, top first: one where it fits `room`, otherwise
+	-- broken at spaces with as many words on each line as fit.
+	lines: { string },
+	-- The widest line: what the label is measured to.
+	width: number,
+	-- The word's line (1 at the top; nil when the headline has no such word),
+	-- where it starts in that line's text, its left edge from the label's left
+	-- with every line centred in `width`, and its own width.
+	line: number?,
+	at: number,
+	x: number,
+	w: number,
+}
+
+-- A whole word only: "SECRET" in "A SECRET EGG", never inside "SECRETS".
+local function findWord(line: string, word: string): number?
+	local from = 1
+	while true do
+		local a, b = string.find(line, word, from, true)
+		if not a or not b then
+			return nil
+		end
+		local before = if a > 1 then string.sub(line, a - 1, a - 1) else ""
+		local after = string.sub(line, b + 1, b + 1)
+		if (before == "" or before == " ") and not string.match(after, "%w") then
+			return a
+		end
+		from = a + 1
+	end
+end
+
+-- `measure(text)` is the text's width at the headline's size and font.
+function Notice.wordSpan(title: string, word: string, room: number, measure: (string) -> number): WordSpan
+	local lines: { string } = {}
+	if measure(title) <= room then
+		lines = { title }
+	else
+		local current = ""
+		for piece in string.gmatch(title, "%S+") do
+			local try = if current == "" then piece else current .. " " .. piece
+			if current ~= "" and measure(try) > room then
+				table.insert(lines, current)
+				current = piece
+			else
+				current = try
+			end
+		end
+		if current ~= "" then
+			table.insert(lines, current)
+		end
+	end
+	local width = 0
+	for _, line in ipairs(lines) do
+		width = math.max(width, measure(line))
+	end
+	for i, line in ipairs(lines) do
+		local at = findWord(line, word)
+		if at then
+			local before = string.sub(line, 1, at - 1)
+			local left = (width - measure(line)) / 2
+			-- The words before it measured WITH the word and less it, so the space
+			-- in front of it counts however the measure treats a trailing space.
+			local x = if before == "" then left else left + measure(before .. word) - measure(word)
+			return { lines = lines, width = width, line = i, at = at, x = x, w = measure(word) }
+		end
+	end
+	return { lines = lines, width = width, line = nil, at = 0, x = 0, w = 0 }
 end
 
 --==============================================================================
@@ -399,6 +576,14 @@ function Notice.setRenderer(fn: ((Post) -> ())?)
 			fn(post)
 		end
 	end)
+end
+
+-- Whether a renderer is listening (2026-10-06): a post made before then is
+-- dropped, so a poster with something to say at join (InviteUI's WELCOME!)
+-- waits for this first.
+function Notice.ready(): boolean
+	local live = link
+	return signal ~= nil and live ~= nil and live.Connected
 end
 
 function Notice.post(post: Post)

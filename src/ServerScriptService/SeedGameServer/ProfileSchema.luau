@@ -40,6 +40,9 @@ local WeaponData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WeaponD
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
 -- So a saved wheel prize or cosmetic can be checked against the real list.
 local WheelData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WheelData"))
+-- The hotbar's shortcuts and the Bag's hearts are cleaned against what the
+-- profile owns, by the same grammar the server and the client edit with.
+local HotbarSlots = require(SeedGame:WaitForChild("Shared"):WaitForChild("HotbarSlots"))
 local SAVE = GameConfig.Save
 
 local ProfileSchema = {}
@@ -85,6 +88,41 @@ export type Profile = {
 	-- Set in the same step as WheelEarned's +Spins and saved with it
 	-- (WheelService.GrantCommunity); kept by a progress reset. Old saves: false.
 	CommunityClaimed: boolean,
+	--==========================================================================
+	-- INVITE A FRIEND (2026-10-06; InviteService, GameConfig.InviteRewards)
+	--
+	-- InviteIds: the UserIds of friends who joined the game through this
+	-- player's invites -- each once, forever (the newest MaxRemembered). Its
+	-- length IS the count every screen shows.
+	-- InviteGranted: how many of the track's forms have been given (0 .. the
+	-- track's length), raised in the SAME step as the plant's Held row is
+	-- written (CarryService.GiveHatched with onRecord), so a save holds both
+	-- or neither and a rejoin never gives a form twice.
+	-- InviteSeen: the INVITE panel was opened since the last form was given --
+	-- false shows INVITE's "!" (never opened at all included).
+	-- Kept by a progress reset: a reset must not hand the forms out again.
+	-- Old saves have none: {}, 0, false.
+	--==========================================================================
+	InviteIds: { number },
+	InviteGranted: number,
+	InviteSeen: boolean,
+	--==========================================================================
+	-- GLOBAL MINI-EVENT TICKETS (2026-10-03; MiniEventService, GameConfig.MiniEvent)
+	--
+	-- Tickets collected per GLOBAL event, by its id: Count of them (never past
+	-- the event's per-player cap) and At, when the last one was taken. Written
+	-- in the SAME step as WheelEarned's +1 (WheelService.GrantEventSpin), so a
+	-- save holds each spin with its claim or neither -- and a player who
+	-- leaves, dies, rejoins or moves to another server meets the same count.
+	-- Bounded: the newest Tickets.ClaimsKept events only, oldest dropped. Kept
+	-- by a progress reset, so a reset cannot reopen a running event's cap.
+	-- Old saves have none.
+	--==========================================================================
+	EventClaims: { { Id: string, Count: number, At: number } },
+	-- DISCO DANCING (2026-10-03): the third stored setting -- dance at the hub
+	-- while a disco runs. ON unless the player switched it off; an old save
+	-- with no key reads ON. Kept by a progress reset, like Walk Mode.
+	DiscoDance: boolean,
 	Version: number,
 	Cash: number,
 	Speed: number,
@@ -102,25 +140,6 @@ export type Profile = {
 	-- load would be losing hours.
 	--==========================================================================
 	MillOverclock: number,
-	--==========================================================================
-	-- THE RESTED TRAINING CHARGE, AND WHEN IT WAS LAST TRUE
-	--
-	-- Seconds of boosted training left, and the os.time() at which that number
-	-- was correct. Two fields rather than one because charge REFILLS while the
-	-- player is not here, and the only honest way to credit that is to store a
-	-- clock and subtract, never to store a rate and trust the session.
-	--
-	-- It is also why remounting cannot duplicate charge: the restore is a
-	-- function of real elapsed time, so stepping off and straight back on is
-	-- worth the fraction of a second it actually took.
-	--
-	-- The RAMP is deliberately NOT here. It is worth at most thirty seconds, it
-	-- decays whenever the player is off the belt, and persisting it would mean a
-	-- rejoin handed back a climb the player had already left behind. It lives in
-	-- TreadmillService for the length of a session and no longer.
-	--==========================================================================
-	TrainingCharge: number,
-	TrainingChargeAt: number,
 	--==========================================================================
 	-- THE HIGHEST BIOME SPEED MILESTONE THIS PLAYER HAS EARNED
 	--
@@ -151,8 +170,33 @@ export type Profile = {
 	-- The raid carry is deliberately NOT in here. A pod welded to your head on
 	-- the wrong side of the red line is a bet you have not settled yet, and
 	-- logging out is not a way to bank it.
+	--
+	-- EACH ROW IS ONE ITEM, BY NAME (2026-10-03). `Item` is a string id unique on
+	-- this profile and never reused, so two identical Nubkins are told apart: the
+	-- Tool carries it (GameConfig.Attributes.ItemId), a hotbar shortcut remembers
+	-- it across a respawn, and a sale takes exactly that row off. Minted from
+	-- NextItem below; a row saved without one (any save from before this) is
+	-- given one on load, and nothing is dropped for lacking it.
 	--==========================================================================
 	Held: { any },
+	-- The next Item id to hand out. Only ever raised -- a progress reset keeps
+	-- it too, so an old shortcut can never attach to a new item.
+	NextItem: number,
+	--==========================================================================
+	-- THE HOTBAR AND THE HEARTS (2026-10-03, the owner's compact Bag + free
+	-- hotbar; HotbarSlots)
+	--
+	-- Hotbar: exactly ten strings, slot 1 first, each a ref ("i:<Item>",
+	-- "w:<weapon>", "ticket"), a faint "+bat" / "+trap" / "+ticket" waiting for
+	-- the first of its kind, or "" for empty. Shortcuts, never copies: an item on
+	-- the bar is still in Held. Favourites: a set of the same refs.
+	--
+	-- Both migrate by being ABSENT: an old save seeds the bar from what it has
+	-- out (1 bat, 2 trap, 3 tickets) and starts with no hearts; a new player's
+	-- bar is the three faint slots. Every load cleans both against what is owned.
+	--==========================================================================
+	Hotbar: { string },
+	Favourites: { [string]: boolean },
 	--==========================================================================
 	-- WHAT THEY HAVE SEEN GROW
 	--
@@ -318,22 +362,26 @@ function ProfileSchema.Default(): Profile
 		HatchBonusClaimed = false,
 		LikeReminder = "",
 		CommunityClaimed = false,
+		InviteIds = {},
+		InviteGranted = 0,
+		InviteSeen = false,
+		EventClaims = {},
+		DiscoDance = true,
 		Version = SAVE.CurrentVersion,
 		Cash = 0,
 		Speed = 0,
 		PlotTier = GameConfig.StartingPlotTier,
 		MillTier = GameConfig.Mill.StartingTier,
 		MillOverclock = 0,
-		-- A NEW PLAYER STARTS RESTED. Their first mill session is their fastest,
-		-- which is the moment the mechanic is most worth teaching.
-		TrainingCharge = GameConfig.Mill.Training.MaxChargeSeconds,
-		TrainingChargeAt = now,
 		-- Greenhollow is on record from the first second. It is the biome the
 		-- spawn is in, and a player who could be pushed out of it would have
 		-- nowhere legal to stand.
 		HighestBiomeOrder = 1,
 		Plants = {},
 		Held = {},
+		NextItem = 1,
+		Hotbar = HotbarSlots.seed(nil),
+		Favourites = {},
 		Almanac = {},
 		Mastery = {},
 		Weapons = {},
@@ -406,22 +454,14 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.MillOverclock = math.floor(
 		number(raw.MillOverclock, 0, 0, GameConfig.Mill.Overclock.MaxLevel))
 	--==========================================================================
-	-- AN OLD SAVE ARRIVES RESTED, NOT EMPTY
+	-- THE MILL'S OLD TRAINING CHARGE IS NOT CARRIED FORWARD (2026-10-05)
 	--
-	-- Absent reads as the Default's full charge rather than zero. Both readings
-	-- are defensible and this one is kinder: a player returning after the
-	-- feature ships has been off the belt for weeks, which is exactly the state
-	-- a full charge describes. Zero would have punished them for the update.
-	--
-	-- The timestamp is clamped to a real date like every other clock here, so a
-	-- garbage value cannot produce an elapsed of centuries for the restore to
-	-- multiply.
+	-- Records saved before the Training Rush was removed hold TrainingCharge and
+	-- TrainingChargeAt. Nothing reads them any more, and like any field this
+	-- schema no longer knows they are simply not copied: an old record loads
+	-- whole -- Speed, mill tier and overclock untouched -- and its next save
+	-- leaves them behind. They can never pay anything again.
 	--==========================================================================
-	p.TrainingCharge = number(raw.TrainingCharge,
-		GameConfig.Mill.Training.MaxChargeSeconds,
-		0, GameConfig.Mill.Training.MaxChargeSeconds)
-	p.TrainingChargeAt = math.floor(
-		number(raw.TrainingChargeAt, p.TrainingChargeAt, 0, MAX_TIME))
 	p.HighestBiomeOrder = math.floor(
 		number(raw.HighestBiomeOrder, 1, 1, #BiomeData.Biomes))
 	p.CreatedAt = math.floor(number(raw.CreatedAt, p.CreatedAt, 0, MAX_TIME))
@@ -565,6 +605,14 @@ function ProfileSchema.Sanitise(raw: any): Profile
 					end
 				end
 				if tier >= 1 then
+					-- A GROWN creature's item id (2026-10-04, MY PLANTS): the same
+					-- id it had in the Bag, kept while it stands in the ground, so
+					-- its shortcut and its heart are its own when it comes back.
+					-- Checked against the Bag's ids below, once those are read.
+					local item = row.Item
+					if math.floor(stage) ~= 3 or type(item) ~= "string" or item == "" or #item > 24 then
+						item = nil
+					end
 					table.insert(p.Plants, {
 						SpeciesId = row.SpeciesId,
 						PlantedAt = math.floor(plantedAt),
@@ -574,6 +622,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 						Z = z,
 						Stage = math.floor(stage),
 						Facing = facing,
+						Item = item,
 					})
 				end
 			end
@@ -597,17 +646,82 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- and is full until its owner has sold or planted it back under. What it
 	-- costs to rebuild is bounded by what was saved.
 	--==========================================================================
+	--==========================================================================
+	-- EVERY ROW LEAVES HERE WITH ITS OWN ITEM ID (2026-10-03)
+	--
+	-- A saved id is kept when it is a short string no earlier row took; a row
+	-- without one -- every save from before item ids, or one written by an older
+	-- server, which does not know the field -- or with a duplicate is given the
+	-- next number. NextItem ends past every number in use, so nothing minted later
+	-- can collide. Ids are labels, not counts: nothing is ever dropped for one.
+	--==========================================================================
+	p.NextItem = math.floor(number(raw.NextItem, 1, 1, 1e12))
 	if type(raw.Held) == "table" then
+		local taken: { [string]: boolean } = {}
 		for _, row in ipairs(raw.Held) do
 			if type(row) == "table" and type(row.Id) == "string"
 				and SeedData.Get(row.Id) then
 				local tier = number(row.Tier, 0, 1, SeedData.TierCount)
 				if tier >= 1 then
+					local item = row.Item
+					if type(item) ~= "string" or item == "" or #item > 24 or taken[item] then
+						item = nil
+					end
+					if item then
+						taken[item] = true
+						local n = tonumber(item)
+						if n and n == n and n >= p.NextItem and n < 1e12 then
+							p.NextItem = math.floor(n) + 1
+						end
+					end
 					table.insert(p.Held, {
 						Id = row.Id,
 						Tier = math.floor(tier),
 						Hatched = row.Hatched == true,
+						Item = item,
 					})
+				end
+			end
+		end
+		for _, row in ipairs(p.Held) do
+			if row.Item == nil then
+				local item = tostring(p.NextItem)
+				while taken[item] do
+					p.NextItem += 1
+					item = tostring(p.NextItem)
+				end
+				row.Item = item
+				taken[item] = true
+				p.NextItem += 1
+			end
+		end
+	end
+	--==========================================================================
+	-- A PLANTED ID IS NEVER ALSO A BAG ID (2026-10-04, MY PLANTS)
+	--
+	-- One item is in the Bag or in the ground, never both: a planted row whose id
+	-- a Bag row (or an earlier planted row) already has loses the id -- the plant
+	-- itself is kept, only its shortcut and heart are not its to claim. NextItem
+	-- ends past every planted id too, so nothing minted later collides.
+	--==========================================================================
+	do
+		local used: { [string]: boolean } = {}
+		for _, row in ipairs(p.Held) do
+			if type(row.Item) == "string" then
+				used[row.Item] = true
+			end
+		end
+		for _, row in ipairs(p.Plants) do
+			local item = row.Item
+			if type(item) == "string" then
+				if used[item] then
+					row.Item = nil
+				else
+					used[item] = true
+					local n = tonumber(item)
+					if n and n == n and n >= p.NextItem and n < 1e12 then
+						p.NextItem = math.floor(n) + 1
+					end
 				end
 			end
 		end
@@ -829,6 +943,68 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
 	p.LikeReminder = if raw.LikeReminder == "pending" or raw.LikeReminder == "shown" then raw.LikeReminder else ""
 	p.CommunityClaimed = raw.CommunityClaimed == true
+	-- Invite a Friend (2026-10-06): whole, positive ids, each once, the newest
+	-- MaxRemembered; the forms given, whole and within the track; the panel's
+	-- seen flag only when saved true.
+	p.InviteIds = {}
+	if type(raw.InviteIds) == "table" then
+		local seenIds: { [number]: boolean } = {}
+		for _, id in ipairs(raw.InviteIds) do
+			if type(id) == "number" and id == id and id >= 1 and id < 2 ^ 53 and math.floor(id) == id
+				and not seenIds[id] then
+				seenIds[id] = true
+				table.insert(p.InviteIds, id)
+			end
+		end
+		while #p.InviteIds > GameConfig.InviteRewards.MaxRemembered do
+			table.remove(p.InviteIds, 1)
+		end
+	end
+	p.InviteGranted = math.floor(number(raw.InviteGranted, 0, 0, #GameConfig.InviteRewards.Forms))
+	p.InviteSeen = raw.InviteSeen == true
+	-- Global mini-event claims: well-formed rows only, one per id, counts
+	-- whole and within the cap, the newest ClaimsKept kept.
+	p.EventClaims = {}
+	if type(raw.EventClaims) == "table" then
+		local T = GameConfig.MiniEvent.Tickets
+		local seen: { [string]: boolean } = {}
+		local rows: { { Id: string, Count: number, At: number } } = {}
+		for _, row in ipairs(raw.EventClaims) do
+			if #rows >= 64 then
+				break
+			end
+			if type(row) == "table" and type(row.Id) == "string" and #row.Id > 0 and #row.Id <= 40
+				and string.match(row.Id, "^[%w_%-]+$") ~= nil and not seen[row.Id] then
+				seen[row.Id] = true
+				table.insert(rows, {
+					Id = row.Id,
+					Count = math.floor(number(row.Count, 0, 0, T.PerPlayerCap)),
+					At = math.floor(number(row.At, 0, 0, MAX_TIME)),
+				})
+			end
+		end
+		while #rows > T.ClaimsKept do
+			table.remove(rows, 1)
+		end
+		p.EventClaims = rows
+	end
+	-- ON unless saved false: an old save with no key dances.
+	p.DiscoDance = raw.DiscoDance ~= false
+
+	--==========================================================================
+	-- THE HOTBAR AND THE HEARTS, AGAINST WHAT IS OWNED NOW
+	--
+	-- Here because everything they name is clean by now: Held with its ids,
+	-- Weapons, both equipped slots (the legacy one sorted in), WheelEarned. A
+	-- saved bar keeps its positions and loses whatever is no longer owned; a
+	-- faint slot whose kind is owned and placed nowhere is filled (HotbarSlots.
+	-- fill). No saved bar: seeded from what they have out. Junk is CLEANED, not
+	-- re-seeded -- an emptied bar was the player's choice.
+	--==========================================================================
+	p.Hotbar = if type(raw.Hotbar) == "table"
+		then HotbarSlots.fill(p, HotbarSlots.clean(p, raw.Hotbar))
+		else HotbarSlots.seed(p)
+	p.Favourites = HotbarSlots.cleanFavourites(p, raw.Favourites)
 
 	p.Tutorial = TutorialData.Sanitise(raw.Tutorial, p)
 	-- Unknown keys are dropped by construction: everything above copies FROM

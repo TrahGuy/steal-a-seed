@@ -33,6 +33,7 @@
 --==============================================================================
 
 local RunService = game:GetService("RunService")
+local ContentProvider = game:GetService("ContentProvider")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -438,6 +439,174 @@ function UIKit.lattice(parent: GuiObject, options: LatticeOptions?): Frame
 end
 
 --==============================================================================
+-- RAISED SQUARE STUDS, DRAWN (2026-10-04, the global UI art pass)
+--
+-- The owner's studded look -- the white header rim, the red close, a primary
+-- button -- as a quiet accent: small raised squares at ONE fixed pitch, each a
+-- face over a shade nudged down and left, so it reads as the reference's soft
+-- "L" bevel. Never stretched: the grid keeps its pitch on any surface and only
+-- whole studs are drawn, centred, inside `inset`.
+--
+-- FRAMES, NOT A PICTURE, because the twelve-colour atlas (art/textures/ui-studs-
+-- 2026-10-04) is not uploaded and its cells were measured NOT seamless (rows one
+-- and two jump 60-112 levels across their wrap). `image` takes a verified,
+-- seamless upload when there is one: then it is ONE tiled ImageLabel at the
+-- same pitch (the tile holds `tileStuds` studs a side) and no frames at all.
+--
+-- Built once and again only when the surface's size settles, like the lattice:
+-- no per-frame work. Two frames a stud; a 900 x 36 rim at pitch 20 is ~88.
+--==============================================================================
+export type StudOptions = {
+	pitch: number?,
+	size: number?,
+	face: Color3,
+	shade: Color3,
+	faceTransparency: number?,
+	shadeTransparency: number?,
+	-- Kept clear of the surface's edges (a rounded corner, a keyline).
+	inset: number?,
+	-- Separate insets for the top and the bottom (a rim's rule, a button's foot).
+	insetTop: number?,
+	insetBottom: number?,
+	zIndex: number?,
+	image: string?,
+	tileStuds: number?,
+}
+
+function UIKit.studs(parent: GuiObject, options: StudOptions): Frame
+	local pitch = math.max(4, options.pitch or 20)
+	local size = math.clamp(options.size or math.floor(pitch * 0.5), 2, pitch - 1)
+	local inset = options.inset or 4
+	local top = options.insetTop or inset
+	local bottom = options.insetBottom or inset
+	local layer = options.zIndex or parent.ZIndex
+	local bevel = math.max(1, math.floor(size * 0.14 + 0.5))
+
+	local holder = Instance.new("Frame")
+	holder.Name = "Studs"
+	-- The colours live on the holder, so a rebuild and UIKit.paintStuds agree.
+	holder:SetAttribute("Face", options.face)
+	holder:SetAttribute("Shade", options.shade)
+	holder.Position = UDim2.fromOffset(inset, top)
+	holder.Size = UDim2.new(1, -inset * 2, 1, -(top + bottom))
+	holder.BackgroundTransparency = 1
+	holder.BorderSizePixel = 0
+	holder.ClipsDescendants = true
+	holder.Active = false
+	holder.ZIndex = layer
+	holder.Parent = parent
+
+	local image = options.image
+	if image and image ~= "" then
+		local tile = Instance.new("ImageLabel")
+		tile.Name = "Tile"
+		tile.Size = UDim2.fromScale(1, 1)
+		tile.BackgroundTransparency = 1
+		tile.BorderSizePixel = 0
+		tile.Image = image
+		tile.ScaleType = Enum.ScaleType.Tile
+		local span = pitch * (options.tileStuds or 8)
+		tile.TileSize = UDim2.fromOffset(span, span)
+		tile.ImageTransparency = options.faceTransparency or 0
+		tile.Active = false
+		tile.ZIndex = layer
+		tile.Parent = holder
+		return holder
+	end
+
+	-- The studs follow their holder's ZIndex (a close button re-stacked later).
+	holder:GetPropertyChangedSignal("ZIndex"):Connect(function()
+		for _, child in ipairs(holder:GetChildren()) do
+			if child:IsA("GuiObject") then
+				child.ZIndex = holder.ZIndex
+			end
+		end
+	end)
+
+	local builtFor = Vector2.new(-1, -1)
+	local function build(area: Vector2)
+		builtFor = area
+		holder:ClearAllChildren()
+		layer = holder.ZIndex
+		local faceColour = (holder:GetAttribute("Face") :: Color3?) or options.face
+		local shadeColour = (holder:GetAttribute("Shade") :: Color3?) or options.shade
+		local cols = math.floor((area.X - size) / pitch) + 1
+		local rows = math.floor((area.Y - size) / pitch) + 1
+		if area.X < size or area.Y < size or cols < 1 or rows < 1 then
+			return
+		end
+		-- Centred, so a surface's left and right margins match.
+		local x0 = math.floor((area.X - ((cols - 1) * pitch + size)) / 2)
+		local y0 = math.floor((area.Y - ((rows - 1) * pitch + size)) / 2)
+		for r = 0, rows - 1 do
+			for c = 0, cols - 1 do
+				local x, y = x0 + c * pitch, y0 + r * pitch
+				local shade = Instance.new("Frame")
+				shade.Name = "Shade"
+				shade.Position = UDim2.fromOffset(x - bevel, y + bevel)
+				shade.Size = UDim2.fromOffset(size, size)
+				shade.BackgroundColor3 = shadeColour
+				shade.BackgroundTransparency = options.shadeTransparency or 0
+				shade.BorderSizePixel = 0
+				shade.Active = false
+				shade.ZIndex = layer
+				shade.Parent = holder
+				local face = Instance.new("Frame")
+				face.Name = "Stud"
+				face.Position = UDim2.fromOffset(x, y)
+				face.Size = UDim2.fromOffset(size, size)
+				face.BackgroundColor3 = faceColour
+				face.BackgroundTransparency = options.faceTransparency or 0
+				face.BorderSizePixel = 0
+				face.Active = false
+				face.ZIndex = layer
+				face.Parent = holder
+			end
+		end
+	end
+
+	-- In the gui's own units (a TV's AbsoluteSize is that many times bigger),
+	-- and rebuilt on the trailing edge of a resize, never through an open pop.
+	local function area(): Vector2
+		return holder.AbsoluteSize / HudLayout.scaleOf(holder)
+	end
+	local pending = false
+	local function request()
+		if pending then
+			return
+		end
+		pending = true
+		task.delay(0.12, function()
+			pending = false
+			if holder.Parent == nil then
+				return
+			end
+			local now = area()
+			if math.abs(now.X - builtFor.X) < 1 and math.abs(now.Y - builtFor.Y) < 1 then
+				return
+			end
+			build(now)
+		end)
+	end
+	holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(request)
+	if holder.AbsoluteSize.X > 0 and holder.AbsoluteSize.Y > 0 then
+		build(area())
+	end
+	return holder
+end
+
+-- New colours for a stud field already drawn (a button changing its face).
+function UIKit.paintStuds(holder: Frame, face: Color3, shade: Color3)
+	holder:SetAttribute("Face", face)
+	holder:SetAttribute("Shade", shade)
+	for _, child in ipairs(holder:GetChildren()) do
+		if child:IsA("Frame") then
+			child.BackgroundColor3 = if child.Name == "Shade" then shade else face
+		end
+	end
+end
+
+--==============================================================================
 -- THE SLAB
 --
 -- A rounded rectangle, a thick black outline, a vertical gradient and a lattice
@@ -579,6 +748,121 @@ function UIKit.cartIcon(parent: GuiObject, size: number, ink: Color3): Frame
 end
 
 --==============================================================================
+-- A CALENDAR PAGE (2026-10-04, the global UI pass) -- A TEMPORARY ICON
+--
+-- No approved EVENTS picture exists (GameConfig.Rail.EventsArt is ""), so the
+-- Events button and the panel's title draw this from frames: a white page with
+-- an ink keyline, a red binding band with two rings, and six days, one gold.
+-- Fills `parent` (scale coordinates), so it works at any size. It is a native
+-- stand-in, listed as an asset gap -- never the final icon.
+--==============================================================================
+function UIKit.calendarIcon(parent: GuiObject, z: number): Frame
+	local box = Instance.new("Frame")
+	box.Name = "Calendar"
+	box.BackgroundTransparency = 1
+	box.BorderSizePixel = 0
+	box.Size = UDim2.fromScale(1, 1)
+	box.Active = false
+	box.ZIndex = z
+	box.Parent = parent
+	local red = Color3.fromRGB(232, 72, 70)
+	local page = piece(box, "Page", 0.5, 0.58, 0.84, 0.70, WHITE, 0.16, nil, z)
+	local edge = UIKit.stroke(page, BLACK, 1.5)
+	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local band = piece(box, "Band", 0.5, 0.31, 0.84, 0.20, red, 0.3, nil, z + 1)
+	local bandEdge = UIKit.stroke(band, BLACK, 1.5)
+	bandEdge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	piece(box, "RingL", 0.33, 0.19, 0.10, 0.20, BLACK, 0.5, nil, z + 2)
+	piece(box, "RingR", 0.67, 0.19, 0.10, 0.20, BLACK, 0.5, nil, z + 2)
+	for r = 0, 1 do
+		for c = 0, 2 do
+			local today = r == 1 and c == 2
+			piece(box, "Day", 0.30 + c * 0.20, 0.57 + r * 0.19, 0.14, 0.12,
+				if today then Color3.fromRGB(255, 196, 48) else Color3.fromRGB(176, 186, 182), 0.3, nil, z + 1)
+		end
+	end
+	return box
+end
+
+--==============================================================================
+-- A SCROLL OF NOTES (2026-10-05, WHAT'S NEW) -- A TEMPORARY ICON
+--
+-- No approved WHAT'S NEW picture exists, so its button and its panel's title
+-- draw this from frames: a cream page between two rolled ends, an ink keyline
+-- round each, and three written lines -- the last one short. Nothing is thinner
+-- than 0.09 of the box (the open book's lesson above). Fills `parent` (scale
+-- coordinates), so it works at any size. A native stand-in, listed as an asset
+-- gap -- never the final icon.
+--==============================================================================
+function UIKit.scrollIcon(parent: GuiObject, z: number): Frame
+	local box = Instance.new("Frame")
+	box.Name = "Scroll"
+	box.BackgroundTransparency = 1
+	box.BorderSizePixel = 0
+	box.Size = UDim2.fromScale(1, 1)
+	box.Active = false
+	box.ZIndex = z
+	box.Parent = parent
+	local cream = Color3.fromRGB(255, 246, 222)
+	local roll = Color3.fromRGB(226, 190, 128)
+	local ink = Color3.fromRGB(140, 104, 64)
+	local page = piece(box, "Page", 0.5, 0.53, 0.70, 0.66, cream, 0.08, nil, z)
+	UIKit.stroke(page, BLACK, 1.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	for _, at in ipairs({ { "RollTop", 0.17 }, { "RollBottom", 0.88 } }) do
+		local end_ = piece(box, at[1] :: string, 0.5, at[2] :: number, 0.86, 0.17, roll, 0.5, nil, z + 1)
+		UIKit.stroke(end_, BLACK, 1.5).ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	end
+	piece(box, "Line", 0.5, 0.40, 0.46, 0.09, ink, 0.5, nil, z + 1)
+	piece(box, "Line", 0.5, 0.53, 0.46, 0.09, ink, 0.5, nil, z + 1)
+	piece(box, "Line", 0.42, 0.66, 0.30, 0.09, ink, 0.5, nil, z + 1)
+	return box
+end
+
+--==============================================================================
+-- THE CYCLE'S TWO ICONS (2026-10-04) -- NATIVE STAND-INS
+--
+-- The HUD clock's moon and cloud (counting down to night) and sun and cloud
+-- (counting down to dawn). The approved art (art/icons/hud-cycle-2026-10-04)
+-- has no upload id yet (GameConfig.WorldCycle.ClockIcons), so until it has,
+-- these draw from frames: a round badge with an ink keyline -- night blue
+-- under the moon, sky blue under the sun -- the body, and a cloud in front.
+-- The crescent is the moon with a bite of the badge's own blue taken out of
+-- it. Fills `parent` (scale coordinates), every piece inside the badge's
+-- circle. No red in either: the clock's warning is its words' colour, never
+-- the icon's.
+--==============================================================================
+function UIKit.cycleIcon(parent: GuiObject, kind: "moon" | "sun", z: number): Frame
+	local sun = kind == "sun"
+	local box = Instance.new("Frame")
+	box.Name = if sun then "SunCloud" else "MoonCloud"
+	box.BackgroundTransparency = 1
+	box.BorderSizePixel = 0
+	box.Size = UDim2.fromScale(1, 1)
+	box.Active = false
+	box.ZIndex = z
+	box.Parent = parent
+	local sky = if sun then Color3.fromRGB(96, 176, 238) else Color3.fromRGB(38, 52, 104)
+	local badge = piece(box, "Badge", 0.5, 0.5, 1, 1, sky, 0.5, nil, z)
+	local edge = UIKit.stroke(badge, BLACK, 1.5)
+	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	if sun then
+		local disc = piece(box, "Sun", 0.40, 0.40, 0.50, 0.50, Color3.fromRGB(255, 204, 52), 0.5, nil, z + 1)
+		local rim = UIKit.stroke(disc, Color3.fromRGB(226, 128, 18), 1)
+		rim.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		piece(box, "Glint", 0.33, 0.32, 0.14, 0.14, Color3.fromRGB(255, 244, 190), 0.5, nil, z + 2)
+	else
+		piece(box, "Moon", 0.40, 0.42, 0.54, 0.54, Color3.fromRGB(246, 246, 236), 0.5, nil, z + 1)
+		piece(box, "Bite", 0.55, 0.31, 0.46, 0.46, sky, 0.5, nil, z + 2)
+	end
+	local cloud = if sun then WHITE else Color3.fromRGB(182, 194, 226)
+	piece(box, "Cloud", 0.64, 0.73, 0.52, 0.20, cloud, 0.5, nil, z + 3)
+	piece(box, "Puff", 0.52, 0.66, 0.24, 0.24, cloud, 0.5, nil, z + 3)
+	piece(box, "Puff", 0.68, 0.60, 0.30, 0.30, cloud, 0.5, nil, z + 3)
+	piece(box, "Puff", 0.82, 0.69, 0.18, 0.18, cloud, 0.5, nil, z + 3)
+	return box
+end
+
+--==============================================================================
 -- A SPROUT, WHICH IS THE ONE ICON THAT WAS ALREADY DRAWN
 --
 -- GardenUI built this out of frames back when the rail was gold plate, and it
@@ -602,6 +886,72 @@ function UIKit.sproutIcon(parent: GuiObject, size: number, stem: Color3,
 	piece(box, "Leaf", 0.71, 0.42, 0.36, 0.17, leaf, 0.5, 26, 4)
 	piece(box, "Leaflet", 0.66, 0.24, 0.24, 0.12, leaf, 0.5, -18, 4)
 	return box
+end
+
+--==============================================================================
+-- AN UPLOADED PICTURE THAT MAY NOT LOAD HERE (2026-10-03)
+--
+-- An upload alone proves nothing: an id can be mistyped, held in moderation or
+-- not usable by this experience. So the picture is preloaded through its OWN
+-- ImageLabel -- PreloadAsync's string form answered Failure for art that drew
+-- fine (measured 2026-09-11) -- and `onResult(true)` is said once it has
+-- loaded, `onResult(false)` if it has not within PICTURE_WAIT seconds; a load
+-- that comes later still says true.
+--
+-- THE CALLER NEVER HIDES THE PICTURE. It lays the old icon UNDER it and hides
+-- the old icon on true -- nothing else. Measured 2026-10-03 in Play: a label at
+-- ImageTransparency 1 (a status line built hidden, before its fade-in) never
+-- reports IsLoaded while a visible twin of the same id loads in 3 s, so a
+-- picture hidden on a timeout would never get the chance to load. Unloaded, a
+-- picture draws nothing, and the old icon under it is what shows.
+--
+-- IsLoaded IS POLLED, NOT WATCHED: its changed signal never fired in Play
+-- (2026-10-03) -- a closed Bag's pictures loaded on opening and the drawn icons
+-- under them stayed. One shared check every half second, running only while
+-- some picture is still waiting, stopped when none is; a picture taken away
+-- stops being asked about.
+--==============================================================================
+local PICTURE_WAIT = 8
+local PICTURE_POLL = 0.5
+type PictureWait = { picture: ImageLabel, onResult: (boolean) -> (), since: number, told: boolean }
+local waitingPictures: { PictureWait } = {}
+local pictureLoopRunning = false
+
+local function checkPictures()
+	pictureLoopRunning = true
+	while #waitingPictures > 0 do
+		task.wait(PICTURE_POLL)
+		local now = os.clock()
+		for i = #waitingPictures, 1, -1 do
+			local w = waitingPictures[i]
+			if w.picture.Parent == nil then
+				table.remove(waitingPictures, i)
+			elseif w.picture.IsLoaded then
+				table.remove(waitingPictures, i)
+				w.onResult(true)
+			elseif not w.told and now - w.since >= PICTURE_WAIT then
+				w.told = true
+				w.onResult(false)
+			end
+		end
+	end
+	pictureLoopRunning = false
+end
+
+function UIKit.whenPictureLoads(picture: ImageLabel, onResult: (boolean) -> ())
+	if picture.IsLoaded then
+		onResult(true)
+		return
+	end
+	table.insert(waitingPictures, { picture = picture, onResult = onResult, since = os.clock(), told = false })
+	task.spawn(function()
+		pcall(function()
+			ContentProvider:PreloadAsync({ picture })
+		end)
+	end)
+	if not pictureLoopRunning then
+		task.spawn(checkPictures)
+	end
 end
 
 --==============================================================================
@@ -920,6 +1270,109 @@ function UIKit.railDock(playerGui: Instance): Frame
 end
 
 --==============================================================================
+-- THE PANEL UNDER THE BAG SCROLLS AND SHUTS (the owner, 2026-10-06)
+--
+-- On a phone the panel's four squares -- INVITE, EVENTS, WHAT'S NEW, Settings --
+-- stand in one shared ScrollingFrame inside a clipping frame that slides shut,
+-- both in the dock frame. RailDrawerUI owns their place, size, slide and fade
+-- (HudLayout's `dockView` and `handle`); each square's own script places it in
+-- the canvas at its HudLayout rect less the viewport's corner (placeRail).
+--==============================================================================
+local DOCK_CLIP, DOCK_SCROLL = "DockClip", "DockScroll"
+
+function UIKit.railDockScroll(playerGui: Instance): ScrollingFrame
+	local dock = UIKit.railDock(playerGui)
+	local clip = dock:FindFirstChild(DOCK_CLIP)
+	if not (clip and clip:IsA("Frame")) then
+		local made = Instance.new("Frame")
+		made.Name = DOCK_CLIP
+		made.BackgroundTransparency = 1
+		made.BorderSizePixel = 0
+		made.ClipsDescendants = true
+		made.Active = false
+		made.Parent = dock
+		clip = made
+	end
+	local existing = (clip :: Frame):FindFirstChild(DOCK_SCROLL)
+	if existing and existing:IsA("ScrollingFrame") then
+		return existing
+	end
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Name = DOCK_SCROLL
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel = 0
+	scroll.Size = UDim2.fromScale(1, 1)
+	scroll.ScrollingDirection = Enum.ScrollingDirection.Y
+	scroll.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
+	scroll.CanvasSize = UDim2.new()
+	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	scroll.ScrollBarThickness = 3
+	scroll.ScrollBarImageTransparency = 0.3
+	scroll.VerticalScrollBarInset = Enum.ScrollBarInset.None
+	scroll.Selectable = false
+	scroll.Parent = clip
+	-- The squares are placed with the top padding in their rects; the bottom's
+	-- is the canvas's own, so AutomaticCanvasSize ends a pad under the last square.
+	local pad = Instance.new("UIPadding")
+	pad.PaddingBottom = UDim.new(0, HudLayout.Config.Phone.Panel.Pad)
+	pad.Parent = scroll
+	return scroll
+end
+
+-- Where a rail button stands on this screen: on a phone whose panel scrolls, in
+-- its canvas at its place there; elsewhere in the rail layer (the dock frame on
+-- a phone) at HudLayout's place, as every rail button always stood.
+function UIKit.placeRail(button: GuiObject, layout: any, r: any, playerGui: Instance)
+	local view = layout.dockView
+	if layout.sidebar and view then
+		button.Parent = UIKit.railDockScroll(playerGui)
+		button.Position = UDim2.fromOffset(r.x - view.x, r.y - view.y)
+	else
+		button.Parent = if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)
+		button.Position = HudLayout.place(r, Vector2.zero, layout.safe)
+	end
+end
+
+-- A square in that panel tells its handle it wears a badge (2026-10-06): "bang"
+-- for INVITE's "!", "dot" for a red dot, nil for none. Client-local attributes on
+-- the local player; RailDrawerUI shows one on the handle while the panel is shut.
+UIKit.DockBadgePrefix = "SeedDockBadge_"
+function UIKit.dockBadge(name: string, kind: string?)
+	local me = game:GetService("Players").LocalPlayer
+	if me then
+		me:SetAttribute(UIKit.DockBadgePrefix .. name, kind)
+	end
+end
+
+--==============================================================================
+-- A PANEL THAT COVERS THE RAIL (2026-10-03, the compact Index and Shop)
+--
+-- The rail layer draws above every panel so its buttons stay pressable -- right
+-- on a desktop, where those panels stand between the rails. On a phone (or any
+-- window too narrow for that) they take the whole safe area instead, and then
+-- Walk Mode, Garden, the Bag and the x2 card would stand over the panel's header
+-- and take its taps. So while such a panel is open the layer steps BELOW the
+-- panels' dimmers (RAIL_COVERED_ORDER: under the hotbar's 30 too): its buttons
+-- are behind the dimmer, unpressable, and the dimmer's tap still closes the
+-- panel. A set of owners, so the Index closing as the Shop opens (OpenPanel)
+-- leaves it covered; the last owner out puts it back at 40. The layer's
+-- `Covered` attribute says so for a button that is not in the layer (the admin
+-- console's, DisplayOrder 60, hides itself while it is true).
+--==============================================================================
+local RAIL_COVERED_ORDER = 29
+local railCover: { [string]: boolean } = {}
+
+function UIKit.coverRail(playerGui: Instance, owner: string, on: boolean)
+	railCover[owner] = if on then true else nil
+	local layer = UIKit.railLayer(playerGui)
+	local covered = next(railCover) ~= nil
+	layer.DisplayOrder = if covered then RAIL_COVERED_ORDER else 40
+	if layer:GetAttribute("Covered") ~= covered then
+		layer:SetAttribute("Covered", covered)
+	end
+end
+
+--==============================================================================
 -- THE UPLOADED ICON
 --
 -- An ImageLabel, and deliberately NOT a button. The slab underneath is still the
@@ -1093,6 +1546,9 @@ export type CardPopOptions = {
 	-- so it must be an element whose parent is NOT a layout -- the hotbar lifts
 	-- the plate inside its cell, and the cell never moves. nil lifts nothing.
 	lift: number?,
+	-- Asked on every change (2026-10-04): false holds the target at rest -- a
+	-- disabled button neither grows under the mouse nor sinks under a press.
+	active: (() -> boolean)?,
 }
 
 export type CardPop = {
@@ -1121,8 +1577,10 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 	local restPosition = target.Position
 	local conns: { RBXScriptConnection } = {}
 
+	local isActive = opts.active
 	local function apply(instant: boolean?)
-		local goal = if motionOff() then 1
+		local live = isActive == nil or isActive()
+		local goal = if motionOff() or not live then 1
 			elseif pressed then pressScale
 			elseif hovered then hoverScale
 			else 1
@@ -1142,7 +1600,7 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 		-- The lift is motion too, so reduced effects keep it at rest, and a
 		-- press sinks rather than rises.
 		if lift then
-			local rise = if hovered and not pressed and not motionOff() then lift else 0
+			local rise = if hovered and not pressed and not motionOff() and live then lift else 0
 			local want = restPosition + UDim2.fromOffset(0, -rise)
 			if liftTween then
 				liftTween:Cancel()
@@ -1158,7 +1616,7 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 			end
 		end
 		if glow then
-			local want = if hovered or pressed then glowHover else glowRest
+			local want = if (hovered or pressed) and live then glowHover else glowRest
 			if glowTween then
 				glowTween:Cancel()
 				glowTween = nil
@@ -1185,8 +1643,13 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 		apply()
 	end))
 	table.insert(conns, target.MouseLeave:Connect(function()
-		if hovered then
+		-- A mouse press (no pressedAt) released off the target never ends on it.
+		local mousePress = pressed and pressedAt == nil
+		if hovered or mousePress then
 			hovered = false
+			if mousePress then
+				pressed = false
+			end
 			apply()
 		end
 	end))
@@ -1194,6 +1657,11 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 		if input.UserInputType == Enum.UserInputType.Touch and not pressed then
 			pressed = true
 			pressedAt = input.Position
+			apply()
+		elseif input.UserInputType == Enum.UserInputType.MouseButton1 and not pressed then
+			-- A mouse press sinks too (2026-10-04): a brief, separate pressed state.
+			pressed = true
+			pressedAt = nil
 			apply()
 		end
 	end))
@@ -1206,7 +1674,8 @@ function UIKit.cardPop(target: GuiObject, scale: UIScale, options: CardPopOption
 		end
 	end))
 	table.insert(conns, target.InputEnded:Connect(function(input: InputObject)
-		if input.UserInputType == Enum.UserInputType.Touch and pressed then
+		local kind = input.UserInputType
+		if (kind == Enum.UserInputType.Touch or kind == Enum.UserInputType.MouseButton1) and pressed then
 			pressed = false
 			pressedAt = nil
 			apply()
@@ -1500,6 +1969,257 @@ function UIKit.railButton(playerGui: Instance, options: RailOptions): ImageButto
 end
 
 --==============================================================================
+-- A FACE WITH ITS FOOT (2026-10-04, the global UI pass)
+--
+-- The lit face top to bottom, then a darker foot -- the bottom FootShare -- in
+-- ONE gradient, so rounded corners stay exact and no extra frame stands at the
+-- edge. Every button of the family is drawn with it (MenuKit.faceColours is
+-- this, by another name).
+--==============================================================================
+function UIKit.footColours(top: Color3, bottom: Color3, edge: Color3): ColorSequence
+	local foot = bottom:Lerp(edge, 0.38)
+	local cut = 1 - GameConfig.BagLook.FootShare
+	return ColorSequence.new({
+		ColorSequenceKeypoint.new(0, top),
+		ColorSequenceKeypoint.new(cut - 0.02, bottom),
+		ColorSequenceKeypoint.new(cut, foot),
+		ColorSequenceKeypoint.new(1, foot),
+	})
+end
+
+--==============================================================================
+-- A STUDDED CARD (2026-10-04, the owner's six colourful uploads; BagLook.Studs)
+--
+-- Behind a card's content: a solid fallback in the upload's own colours, and
+-- over it the picture -- which draws nothing until it has loaded, so the
+-- fallback is what shows until then, or for good if it never loads.
+--
+-- CROPPED, NEVER STRETCHED OR TILED. The picture's ImageRect is a window with
+-- the card's own aspect, `pitch` / StudCardPitch picture px per gui px (one
+-- stud size on every card, whatever the upload's own spacing), clamped to the
+-- picture and centred; a `wide` one (the rainbow) shows its whole width.
+-- Worked out in the card's own gui units -- its size undone of every UIScale
+-- over it -- so a hover pop, a panel opening or the menu size scales the studs
+-- WITH the card rather than sliding them.
+--
+-- Under the content (`z`, the face's own) and never interactive. `set(nil)`
+-- hides both, and the card's own plain face shows. Answers the spec in use.
+--==============================================================================
+export type StudCard = {
+	set: (key: string?) -> any,
+	image: ImageLabel,
+	fallback: Frame,
+}
+
+local function unscaledSize(object: GuiObject): Vector2
+	local k = 1
+	local node: Instance? = object
+	while node do
+		for _, child in ipairs(node:GetChildren()) do
+			if child:IsA("UIScale") then
+				k *= child.Scale
+			end
+		end
+		if node:IsA("LayerCollector") then
+			break
+		end
+		node = node.Parent
+	end
+	return object.AbsoluteSize / math.max(k, 1e-3)
+end
+
+function UIKit.studCard(face: GuiObject, radius: number, z: number): StudCard
+	local LOOK = GameConfig.BagLook
+	local specs: { [string]: any } = LOOK.Studs :: any
+	local fallback = Instance.new("Frame")
+	fallback.Name = "StudsFallback"
+	fallback.Size = UDim2.fromScale(1, 1)
+	fallback.BackgroundColor3 = WHITE
+	fallback.BorderSizePixel = 0
+	fallback.Active = false
+	fallback.Visible = false
+	fallback.ZIndex = z
+	fallback.Parent = face
+	UIKit.corner(fallback, radius)
+	local shade = Instance.new("UIGradient")
+	shade.Parent = fallback
+
+	local image = Instance.new("ImageLabel")
+	image.Name = "Studs"
+	image.Size = UDim2.fromScale(1, 1)
+	image.BackgroundTransparency = 1
+	image.BorderSizePixel = 0
+	image.Active = false
+	image.Visible = false
+	image.ScaleType = Enum.ScaleType.Stretch
+	image.ZIndex = z
+	image.Parent = face
+	UIKit.corner(image, radius)
+
+	local current: string? = nil
+	local function window()
+		local spec = if current then specs[current] else nil
+		if not spec then
+			return
+		end
+		local size = unscaledSize(face)
+		if size.X < 1 or size.Y < 1 then
+			return
+		end
+		local source = LOOK.StudSource
+		local k = if spec.wide then source / size.X else spec.pitch / LOOK.StudCardPitch
+		k = math.min(k, source / size.X, source / size.Y)
+		local w, h = math.floor(size.X * k), math.floor(size.Y * k)
+		local rect = Vector2.new(w, h)
+		if image.ImageRectSize ~= rect then
+			image.ImageRectSize = rect
+			image.ImageRectOffset = Vector2.new(math.floor((source - w) / 2), math.floor((source - h) / 2))
+		end
+	end
+	face:GetPropertyChangedSignal("AbsoluteSize"):Connect(window)
+
+	local function set(key: string?): any
+		local spec = if key then specs[key] else nil
+		current = if spec then key else nil
+		fallback.Visible = spec ~= nil
+		image.Visible = spec ~= nil
+		if not spec then
+			return nil
+		end
+		local stops = spec.stops
+		if stops then
+			local points = {}
+			for i, c in ipairs(stops) do
+				table.insert(points, ColorSequenceKeypoint.new((i - 1) / (#stops - 1), c))
+			end
+			shade.Color = ColorSequence.new(points)
+			shade.Rotation = 0
+		else
+			shade.Color = ColorSequence.new(spec.top, spec.bottom)
+			shade.Rotation = 90
+		end
+		-- Not loaded yet, it draws nothing and the fallback under it shows; no
+		-- watch is needed (a closed panel's picture may only load once shown).
+		if image.Image ~= spec.image then
+			image.Image = spec.image
+		end
+		window()
+		return spec
+	end
+
+	return { set = set, image = image, fallback = fallback }
+end
+
+--==============================================================================
+-- THE HUD'S PLATE BUTTON (2026-10-04, the global UI pass)
+--
+-- TELEPORT TO PLOT, OBBY, BIOMES and the obby's RETURN TO PLOT were the same
+-- plate written four times -- and each one's thick black outline never drew:
+-- a UIStroke on a TextLabel with no text strokes the (empty) TEXT. One builder
+-- now: a Frame plate with the outline on its BORDER, the family's darker foot
+-- in its gradient, the thin inner rim, an icon (an uploaded picture, or an
+-- empty box the caller draws into) and the outlined word. The caller keeps
+-- its button (the touch area), its colours and where it stands.
+--==============================================================================
+export type HudPlateOptions = {
+	top: Color3,
+	bottom: Color3,
+	rim: Color3,
+	image: string?,
+	text: string,
+	textSize: number?,
+}
+
+export type HudPlate = {
+	plate: Frame,
+	scale: UIScale,
+	rim: Frame,
+	icon: GuiObject,
+	label: TextLabel,
+	gradient: UIGradient,
+}
+
+function UIKit.hudPlate(button: GuiObject, o: HudPlateOptions): HudPlate
+	local plate = Instance.new("Frame")
+	plate.Name = "Plate"
+	plate.AnchorPoint = Vector2.new(0.5, 0.5)
+	plate.Position = UDim2.fromScale(0.5, 0.5)
+	plate.Size = UDim2.fromScale(1, 1)
+	plate.BorderSizePixel = 0
+	plate.Active = false
+	plate.Parent = button
+	UIKit.corner(plate, 12)
+	local edge = UIKit.stroke(plate, BLACK, 2.5)
+	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	local gradient = UIKit.gradient(plate, o.top, o.bottom)
+	gradient.Color = UIKit.footColours(o.top, o.bottom, BLACK)
+	local scale = Instance.new("UIScale")
+	scale.Parent = plate
+
+	local rim = Instance.new("Frame")
+	rim.Name = "Rim"
+	rim.AnchorPoint = Vector2.new(0.5, 0.5)
+	rim.Position = UDim2.fromScale(0.5, 0.5)
+	rim.Size = UDim2.new(1, -5, 1, -5)
+	rim.BackgroundTransparency = 1
+	rim.BorderSizePixel = 0
+	rim.Active = false
+	rim.Parent = plate
+	UIKit.corner(rim, 10)
+	UIKit.stroke(rim, o.rim, 1.5, 0.2)
+
+	local icon: GuiObject
+	if o.image and o.image ~= "" then
+		local picture = Instance.new("ImageLabel")
+		picture.Image = o.image
+		picture.ScaleType = Enum.ScaleType.Fit
+		icon = picture
+	else
+		icon = Instance.new("Frame")
+	end
+	icon.Name = "Icon"
+	icon.AnchorPoint = Vector2.new(0, 0.5)
+	icon.Position = UDim2.new(0, 8, 0.5, 0)
+	icon.Size = UDim2.fromOffset(28, 28)
+	icon.BackgroundTransparency = 1
+	icon.Active = false
+	icon.Parent = plate
+
+	local size = o.textSize or 16
+	local label = UIKit.outlined(plate, "Label", size, WHITE, 2)
+	label.AnchorPoint = Vector2.new(0, 0.5)
+	label.Position = UDim2.new(0, 42, 0.5, 1)
+	label.Size = UDim2.new(1, -50, 0, 22)
+	label.TextScaled = true
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.Text = o.text
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = size
+	fit.MinTextSize = 10
+	fit.Parent = label
+	return { plate = plate, scale = scale, rim = rim, icon = icon, label = label, gradient = gradient }
+end
+
+--==============================================================================
+-- THE FAMILY'S PRESS, FOR ANY BUTTON (2026-10-04, the global UI pass)
+--
+-- A small grow under the mouse and a sink under a press or a touch, through a
+-- UIScale on the target itself (cardPop) -- the one response every HUD button
+-- and menu control shares; still under reduced motion. Answers the pop.
+--==============================================================================
+function UIKit.pressPop(target: GuiObject, hover: number?, press: number?): CardPop
+	local scale = target:FindFirstChild("PressPop")
+	if not (scale and scale:IsA("UIScale")) then
+		local made = Instance.new("UIScale")
+		made.Name = "PressPop"
+		made.Parent = target
+		scale = made
+	end
+	return UIKit.cardPop(target, scale :: UIScale, { hoverScale = hover or 1.05, pressScale = press or 0.95,
+		sound = false })
+end
+
+--==============================================================================
 -- ONE RAIL BUTTON, TWO SHAPES
 --
 -- HudLayout decides which and where; the owner applies it, through this. A wide
@@ -1616,6 +2336,76 @@ function UIKit.railShape(button: GuiObject, size: Vector2, iconSize: number?, ti
 	local label = button:FindFirstChild("Label")
 	if label and label:IsA("GuiObject") then
 		label.Visible = wide
+	end
+end
+
+--==============================================================================
+-- A WHOLE-BUTTON PICTURE (2026-10-05, the owner's studded Shop, Index and
+-- Settings on a phone)
+--
+-- The picture IS the button -- outline, studded face, icon and word -- so while
+-- it shows nothing of ours is drawn with it: the art box, the icon, the tile
+-- and every word a rail button can carry are hidden, and the picture stands in
+-- a box of its own `aspect`, centred and as large as fits, never stretched. It
+-- draws under the badge (6) and is not Active: the press is still the
+-- button's. `image` nil puts the button back as railShape left it -- the
+-- picture hidden, the art box and the icon shown -- so call it after railShape.
+--==============================================================================
+local PICTURE_Z = 5
+
+function UIKit.railPicture(button: GuiObject, image: string?, aspect: number?)
+	local box = button:FindFirstChild("PictureBox")
+	if not image then
+		if box and box:IsA("GuiObject") then
+			box.Visible = false
+		end
+		for _, name in ipairs({ "ArtBox", "Icon", "GearDrawn" }) do
+			local child = button:FindFirstChild(name)
+			if child and child:IsA("GuiObject") then
+				child.Visible = true
+			end
+		end
+		return
+	end
+	if not (box and box:IsA("Frame")) then
+		local made = Instance.new("Frame")
+		made.Name = "PictureBox"
+		made.AnchorPoint = Vector2.new(0.5, 0.5)
+		made.Position = UDim2.fromScale(0.5, 0.5)
+		made.Size = UDim2.fromScale(1, 1)
+		made.BackgroundTransparency = 1
+		made.BorderSizePixel = 0
+		made.Active = false
+		made.ZIndex = PICTURE_Z
+		made.Parent = button
+		local shape = Instance.new("UIAspectRatioConstraint")
+		shape.Parent = made
+		local picture = Instance.new("ImageLabel")
+		picture.Name = "Picture"
+		picture.Size = UDim2.fromScale(1, 1)
+		picture.BackgroundTransparency = 1
+		picture.BorderSizePixel = 0
+		picture.ScaleType = Enum.ScaleType.Fit
+		picture.Active = false
+		picture.ZIndex = PICTURE_Z
+		picture.Parent = made
+		box = made
+	end
+	local frame = box :: Frame
+	frame.Visible = true
+	local shape = frame:FindFirstChildOfClass("UIAspectRatioConstraint")
+	if shape then
+		shape.AspectRatio = aspect or 1
+	end
+	local picture = frame:FindFirstChild("Picture")
+	if picture and picture:IsA("ImageLabel") then
+		picture.Image = image
+	end
+	for _, name in ipairs({ "ArtBox", "Icon", "GearDrawn", "Label", "Tile", "TileLabel", "Plate" }) do
+		local child = button:FindFirstChild(name)
+		if child and child:IsA("GuiObject") then
+			child.Visible = false
+		end
 	end
 end
 
@@ -3500,6 +4290,29 @@ export type ModalTheme = {
 	closeBottom: Color3?,
 	closeShade: Color3?,
 	closeRadius: number?,
+	--==========================================================================
+	-- THE STUDDED RIM (2026-10-04, the global UI art pass)
+	--
+	-- `rim`: the header band becomes the owner's white rim -- `rimTop` to
+	-- `rimBottom`, faint raised studs (UIKit.studs, `studs`), a keyline rule
+	-- under it -- in place of the coloured banner.
+	--
+	-- `lift`: the visible shell starts this many px BELOW the panel's top, and
+	-- the title row stands on its top edge -- the title, its icon and the close
+	-- sit ON the rim, as in the reference, and still inside the panel's own
+	-- rect (a CanvasGroup draws nothing outside it, and nothing may reach the
+	-- topbar). The body keeps exactly the rect it had: only the rim's visible
+	-- height gives the lift up.
+	--
+	-- `closeStuds`: the close's red plate wears studs of its own.
+	--==========================================================================
+	rim: boolean?,
+	rimTop: Color3?,
+	rimBottom: Color3?,
+	studs: StudOptions?,
+	lift: number?,
+	closeStuds: StudOptions?,
+	titleSize: number?,
 }
 
 export type ModalOptions = {
@@ -3509,6 +4322,15 @@ export type ModalOptions = {
 	maxHeight: number?,
 	titleColour: Color3?,
 	theme: ModalTheme?,
+	-- A panel that is never placed under the rail (2026-10-03, the compact
+	-- Index and Shop: between the rails on a desktop, or covering the rail
+	-- layer with UIKit.coverRail while open): its header is never padded clear
+	-- of a rail button, because none can be over it.
+	fixedHeader: boolean?,
+	-- Under reduced motion (the game's REDUCED FX "Off", or Roblox's own
+	-- setting) the panel opens and shuts without its pop -- the fade only
+	-- (2026-10-05, WHAT'S NEW; opt-in, so no other panel changes).
+	stillWhenReduced: boolean?,
 }
 
 export type Modal = {
@@ -3533,9 +4355,16 @@ export type Modal = {
 	-- How tall content may be on this screen before fitContent has to cut the
 	-- panel short. For a panel that can lay itself out smaller instead.
 	contentRoom: () -> number,
+	-- The studded rim's lift (theme.lift): a panel that lays its own shell out
+	-- in fixed numbers takes it back off them (InventoryPanel). 0 without one.
+	lift: number,
 }
 
-local DIM = 0.45
+-- The dimmer's transparency while a panel is open: 1, see-through (the owner,
+-- 2026-10-06: "remove the dimmer on any ui"; it was 0.45). It is still there,
+-- a button over the world, so a tap outside the panel closes it and never
+-- reaches the world behind.
+local DIM = 1
 local FADE = 0.16
 -- What the shell puts round a panel's content: the title bar, the body's own
 -- margins and the outline. fitContent adds it; contentRoom takes it off.
@@ -3592,9 +4421,17 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 
 	local shell = Instance.new("Frame")
 	shell.Name = "Shell"
-	shell.AnchorPoint = Vector2.new(0.5, 0.5)
-	shell.Position = UDim2.fromScale(0.5, 0.5)
-	shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2)
+	-- A lifted rim (theme.lift) starts the shell that much lower; its foot stays.
+	local lift = math.max(0, theme.lift or 0)
+	if lift > 0 then
+		shell.AnchorPoint = Vector2.new(0.5, 1)
+		shell.Position = UDim2.new(0.5, 0, 1, -outline)
+		shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2 - lift)
+	else
+		shell.AnchorPoint = Vector2.new(0.5, 0.5)
+		shell.Position = UDim2.fromScale(0.5, 0.5)
+		shell.Size = UDim2.new(1, -outline * 2, 1, -outline * 2)
+	end
 	-- Overwritten by UIKit.gradient below, which needs the surface white to
 	-- multiply against. Set anyway so the shell is never momentarily the
 	-- default grey if the gradient is ever dropped.
@@ -3639,14 +4476,17 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- desktop, and a lattice built for the larger one overhangs the smaller by
 	-- ninety pixels in every direction.
 	--==========================================================================
-	UIKit.lattice(shell, {
-		spacing = PANEL.LatticeSpacing,
-		thickness = 2,
-		colour = theme.lattice or PANEL.Lattice,
-		transparency = theme.latticeTransparency or PANEL.LatticeTransparency,
-		inset = 6,
-		zIndex = theme.latticeZIndex,
-	})
+	-- The studded rim is the texture now: a rimmed panel's body stays clean.
+	if not theme.rim then
+		UIKit.lattice(shell, {
+			spacing = PANEL.LatticeSpacing,
+			thickness = 2,
+			colour = theme.lattice or PANEL.Lattice,
+			transparency = theme.latticeTransparency or PANEL.LatticeTransparency,
+			inset = 6,
+			zIndex = theme.latticeZIndex,
+		})
+	end
 
 	--==========================================================================
 	-- THE HEADER BANNER, WHEN A THEME ASKS FOR ONE
@@ -3660,8 +4500,13 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	-- Not Active and not a button, so a press on it still lands on the click
 	-- blocker and never closes the panel.
 	--==========================================================================
-	local HEADER_HEIGHT = 58
+	-- A lifted rim's visible band is the lift shorter; the body below keeps its rect.
+	local HEADER_HEIGHT = 58 - lift
 	local headerTop, headerBottom = theme.headerTop, theme.headerBottom
+	if theme.rim then
+		headerTop = theme.rimTop or WHITE
+		headerBottom = theme.rimBottom or WHITE
+	end
 	if headerTop and headerBottom then
 		local banner = Instance.new("Frame")
 		banner.Name = "HeaderBanner"
@@ -3702,12 +4547,25 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		rule.Active = false
 		rule.ZIndex = 3
 		rule.Parent = banner
+
+		-- The rim's studs, quiet, clear of the rounded corners and the rule.
+		local rimStuds = theme.studs
+		if theme.rim and rimStuds then
+			local studOptions = table.clone(rimStuds)
+			studOptions.inset = studOptions.inset or 10
+			studOptions.insetTop = studOptions.insetTop or 5
+			studOptions.insetBottom = studOptions.insetBottom or 6
+			studOptions.zIndex = 2
+			UIKit.studs(banner, studOptions)
+		end
 	end
 
 	local titleBar = Instance.new("Frame")
 	titleBar.Name = "TitleBar"
 	titleBar.Size = UDim2.new(1, -24, 0, 40)
-	titleBar.Position = UDim2.fromOffset(12, 10)
+	-- On a lifted rim the row stands ON the rim's top edge: its middle 8 px
+	-- below it, so the title, icon and close overhang into the lift.
+	titleBar.Position = if lift > 0 then UDim2.fromOffset(12, 8 - 20) else UDim2.fromOffset(12, 10)
 	titleBar.BackgroundTransparency = 1
 	titleBar.ZIndex = 3
 	titleBar.Parent = shell
@@ -3752,6 +4610,9 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	local HEADER_GAP = 8
 
 	local function layoutHeader()
+		if options.fixedHeader then
+			return
+		end
 		local camera = Workspace.CurrentCamera
 		if not camera then
 			return
@@ -3802,7 +4663,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	titleBar:GetPropertyChangedSignal("AbsoluteSize"):Connect(layoutHeader)
 	layoutHeader()
 
-	local title = UIKit.outlined(titleBar, "Title", 26,
+	local title = UIKit.outlined(titleBar, "Title", theme.titleSize or 26,
 		options.titleColour or PANEL.Title, theme.titleStrokeThickness or 3)
 	local titleStroke = theme.titleStroke
 	if titleStroke then
@@ -3931,6 +4792,18 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 	closeShade.Parent = closePlate
 	UIKit.corner(closeShade, theme.closeRadius or 10)
 
+	-- The red plate's own studs (the reference's studded X), between the face
+	-- and the X, clear of the foot.
+	local closeStudsOptions = theme.closeStuds
+	local closeStuds: Frame? = nil
+	if closeStudsOptions then
+		local o = table.clone(closeStudsOptions)
+		o.inset = o.inset or 4
+		o.insetTop = o.insetTop or 4
+		o.insetBottom = o.insetBottom or 7
+		closeStuds = UIKit.studs(closePlate, o)
+	end
+
 	local closeMark = UIKit.outlined(closePlate, "Mark", 22, WHITE, 2.5)
 	closeMark.Size = UDim2.fromScale(1, 1)
 	-- Two up, so the glyph is centred in the LIT face rather than in the whole
@@ -3958,17 +4831,46 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		closePlate.ZIndex = close.ZIndex + 1
 		closeShade.ZIndex = close.ZIndex + 2
 		closeMark.ZIndex = close.ZIndex + 3
+		local studField = closeStuds
+		if studField then
+			studField.ZIndex = close.ZIndex + 1
+		end
 	end
 	stackClose()
 	close:GetPropertyChangedSignal("ZIndex"):Connect(stackClose)
 
+	-- The body keeps the panel-space rect it always had, lifted rim or not: the
+	-- shell starts `lift` lower and is `lift` shorter, so both give it back.
 	local body = Instance.new("Frame")
 	body.Name = "Body"
-	body.Position = UDim2.fromOffset(12, 58)
-	body.Size = UDim2.new(1, -24, 1, -70)
+	body.Position = UDim2.fromOffset(12, 58 - lift)
+	body.Size = UDim2.new(1, -24, 1, -70 + lift)
 	body.BackgroundTransparency = 1
 	body.ZIndex = 3
 	body.Parent = shell
+
+	--==========================================================================
+	-- WHAT OVERHANGS THE RIM STILL HOLDS A PRESS
+	--
+	-- The title and its icon stand partly ABOVE the shell, where only the
+	-- dimmer is under them -- and a press there would close the panel. A
+	-- transparent button the height of the lift, across the panel, swallows it,
+	-- exactly like the click blocker inside.
+	--==========================================================================
+	if lift > 0 then
+		local overhang = Instance.new("TextButton")
+		overhang.Name = "RimBlocker"
+		overhang.AnchorPoint = Vector2.new(0, 1)
+		overhang.Position = UDim2.fromOffset(0, 0)
+		overhang.Size = UDim2.new(1, 0, 0, lift + outline)
+		overhang.BackgroundTransparency = 1
+		overhang.BorderSizePixel = 0
+		overhang.AutoButtonColor = false
+		overhang.Text = ""
+		overhang.Selectable = false
+		overhang.ZIndex = 2
+		overhang.Parent = shell
+	end
 
 	local open = false
 
@@ -4007,24 +4909,36 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		-- exactly what OpenPanel does when the Index and the Shop trade places
 		-- -- is the case this protects.
 		SoundKit.play(if want then "PanelOpen" else "PanelClose")
+		-- The pop is motion; the fade is not (stillWhenReduced).
+		local still = options.stillWhenReduced == true and (motionOff() or (select(2, pcall(function()
+			return game:GetService("GuiService").ReducedMotionEnabled
+		end)) == true))
+		if still and scaleTween then
+			scaleTween:Cancel()
+			scaleTween = nil
+		end
 		if want then
 			dimmer.Visible = true
 			dimmer.BackgroundTransparency = 1
 			group.GroupTransparency = 1
-			scale.Scale = 0.92 * userScale
+			scale.Scale = if still then userScale else 0.92 * userScale
 			TweenService:Create(dimmer, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
 				Enum.EasingDirection.Out), { BackgroundTransparency = DIM }):Play()
 			TweenService:Create(group, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
 				Enum.EasingDirection.Out), { GroupTransparency = 0 }):Play()
-			scaleTween = TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Back,
-				Enum.EasingDirection.Out), { Scale = userScale })
-			scaleTween:Play()
+			if not still then
+				scaleTween = TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Back,
+					Enum.EasingDirection.Out), { Scale = userScale })
+				scaleTween:Play()
+			end
 		else
 			TweenService:Create(dimmer, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
 				Enum.EasingDirection.In), { BackgroundTransparency = 1 }):Play()
-			scaleTween = TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
-				Enum.EasingDirection.In), { Scale = 0.92 * userScale })
-			scaleTween:Play()
+			if not still then
+				scaleTween = TweenService:Create(scale, TweenInfo.new(FADE, Enum.EasingStyle.Quad,
+					Enum.EasingDirection.In), { Scale = 0.92 * userScale })
+				scaleTween:Play()
+			end
 			local fade = TweenService:Create(group, TweenInfo.new(FADE,
 				Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 				{ GroupTransparency = 1 })
@@ -4140,6 +5054,7 @@ function UIKit.modal(gui: ScreenGui, options: ModalOptions): Modal
 		end,
 		followMenuSize = followMenuSize,
 		contentRoom = contentRoom,
+		lift = lift,
 	}
 end
 
@@ -4205,21 +5120,29 @@ function UIKit.cycleButton(parent: Instance, captionText: string, zIndex: number
 	b.ZIndex = z
 	UIKit.clicks(b)
 	b.Parent = parent
-	UIKit.corner(b, 9)
-	UIKit.stroke(b, BLACK, 2)
-	UIKit.gradient(b, PANEL.Fill, PANEL.Shade)
-
-	local shade = Instance.new("Frame")
-	shade.Name = "Shade"
-	shade.AnchorPoint = Vector2.new(0.5, 1)
-	shade.Position = UDim2.new(0.5, 0, 1, 0)
-	shade.Size = UDim2.new(1, 0, 0, 4)
-	shade.BackgroundColor3 = Color3.fromRGB(26, 17, 13)
-	shade.BorderSizePixel = 0
-	shade.Active = false
-	shade.ZIndex = z
-	shade.Parent = b
-	UIKit.corner(shade, 9)
+	UIKit.corner(b, 10)
+	--==========================================================================
+	-- THE SECONDARY FACE (2026-10-04, the global UI pass): sky blue with the
+	-- family's darker foot in the same gradient and a dark keyline on the
+	-- BORDER (a default stroke on this empty-text button outlined nothing), so
+	-- it reads as a setting on the white rim, where the dark soil stood.
+	--==========================================================================
+	local look = GameConfig.BagLook
+	local edge = UIKit.stroke(b, look.SkyEdge, 2)
+	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	UIKit.gradient(b, look.SkyTop, look.SkyBottom)
+	do
+		local tint = b:FindFirstChildOfClass("UIGradient")
+		local cut = 1 - look.FootShare
+		if tint then
+			tint.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0, look.SkyTop),
+				ColorSequenceKeypoint.new(cut - 0.02, look.SkyBottom),
+				ColorSequenceKeypoint.new(cut, look.SkyBottom:Lerp(look.SkyEdge, 0.38)),
+				ColorSequenceKeypoint.new(1, look.SkyBottom:Lerp(look.SkyEdge, 0.38)),
+			})
+		end
+	end
 
 	local caption = Instance.new("TextLabel")
 	caption.Name = "Caption"
@@ -4228,12 +5151,13 @@ function UIKit.cycleButton(parent: Instance, captionText: string, zIndex: number
 	caption.Size = UDim2.new(1, 0, 0, 11)
 	caption.Font = Enum.Font.FredokaOne
 	caption.TextSize = 10
-	caption.TextColor3 = Color3.fromRGB(198, 176, 152)
+	caption.TextColor3 = WHITE
 	caption.Text = captionText
 	caption.ZIndex = z + 1
 	caption.Parent = b
+	UIKit.stroke(caption, look.Ink, 1)
 
-	local value = UIKit.outlined(b, "Value", 14, Color3.fromRGB(242, 238, 206), 1.5)
+	local value = UIKit.outlined(b, "Value", 14, WHITE, 1.5)
 	value.Position = UDim2.new(0, 5, 0, 13)
 	value.Size = UDim2.new(1, -10, 1, -18)
 	value.TextScaled = true

@@ -58,6 +58,27 @@ RainForms.Pods = {
 	rainpod1 = load("rainpod1"),
 	rainpod2 = load("rainpod2"),
 	rainpod3 = load("rainpod3"),
+	--==========================================================================
+	-- RAIN EVENT 2'S SEVEN POD SHELLS (2026-10-05)
+	--
+	-- The owner's folder "Rain Event 2" holds one pod per size, each already
+	-- at that size, matched to the tiers BY NAME (Mega is tier 4, Giant 5):
+	--
+	--     Pod (Tiny)  Pod (big)  Pod (huge)  Pod (Mega)  Pod (Giant)
+	--     Pod (Titan)  Pod (Colossal)
+	--
+	-- Each is replayed at the size it was supplied -- never times the tier
+	-- ladder, which would make a Colossal pod twice Colossal. Which size uses
+	-- which is the species' PodForms (SeedData). The creatures they hatch are
+	-- PlantForms' (Squallsnapper, Monsoad, Thundershell, Torrentacle).
+	--==========================================================================
+	rain2pod_tiny = load("rain2pod_tiny"),
+	rain2pod_big = load("rain2pod_big"),
+	rain2pod_huge = load("rain2pod_huge"),
+	rain2pod_mega = load("rain2pod_mega"),
+	rain2pod_giant = load("rain2pod_giant"),
+	rain2pod_titan = load("rain2pod_titan"),
+	rain2pod_colossal = load("rain2pod_colossal"),
 } :: { [string]: SecretForms.FormSpec }
 
 RainForms.Guardian = load("stormstrider")

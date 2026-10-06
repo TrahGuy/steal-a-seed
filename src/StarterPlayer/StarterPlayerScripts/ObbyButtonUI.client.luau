@@ -99,43 +99,21 @@ button.Visible = false
 button.Parent = gui
 UIKit.clicks(button)
 
-local plate = Instance.new("TextLabel")
-plate.Name = "Plate"
-plate.AnchorPoint = Vector2.new(0.5, 0.5)
-plate.Position = UDim2.fromScale(0.5, 0.5)
-plate.Size = UDim2.fromScale(1, 1)
-plate.BackgroundColor3 = WHITE
-plate.BorderSizePixel = 0
-plate.Text = ""
-plate.Active = false
-plate.Parent = button
-UIKit.corner(plate, 12)
-UIKit.stroke(plate, BLACK, 2.5)
-UIKit.gradient(plate, RAIL.TileTop, RAIL.TileBottom)
-local plateScale = Instance.new("UIScale")
-plateScale.Parent = plate
-
-local rim = Instance.new("Frame")
-rim.Name = "Rim"
-rim.AnchorPoint = Vector2.new(0.5, 0.5)
-rim.Position = UDim2.fromScale(0.5, 0.5)
-rim.Size = UDim2.new(1, -5, 1, -5)
-rim.BackgroundTransparency = 1
-rim.BorderSizePixel = 0
-rim.Active = false
-rim.Parent = plate
-UIKit.corner(rim, 10)
-UIKit.stroke(rim, RAIL.IndexEdge, 1.5, 0.2)
-
+-- The HUD's plate button (UIKit.hudPlate, the global UI pass 2026-10-04): the
+-- outline on the BORDER (it never drew on the old text-less label), the
+-- family's darker foot, the inner rim, the icon and the outlined word.
+local hud = UIKit.hudPlate(button, {
+	top = RAIL.TileTop,
+	bottom = RAIL.TileBottom,
+	rim = RAIL.IndexEdge,
+	text = "OBBY",
+})
+local plate = hud.plate
+local plateScale = hud.scale
+local rim = hud.rim
+local icon = hud.icon
+local label = hud.label
 -- Three rising platforms and a pennant on the highest: an obby, in 28 px.
-local icon = Instance.new("Frame")
-icon.Name = "Icon"
-icon.AnchorPoint = Vector2.new(0, 0.5)
-icon.Position = UDim2.new(0, 8, 0.5, 0)
-icon.Size = UDim2.fromOffset(28, 28)
-icon.BackgroundTransparency = 1
-icon.Active = false
-icon.Parent = plate
 for i, at in ipairs({ { 0.2, 0.8 }, { 0.5, 0.58 }, { 0.8, 0.36 } }) do
 	local step = UIKit.piece(icon, "Step" .. i, at[1], at[2], 0.34, 0.17, GRASS, 0.3)
 	UIKit.stroke(step, BLACK, 1.5)
@@ -145,15 +123,6 @@ UIKit.stroke(pole, BLACK, 1)
 local pennant = UIKit.piece(icon, "Pennant", 0.74, 0.06, 0.22, 0.13, PENNANT, 0.2)
 UIKit.stroke(pennant, BLACK, 1)
 
-local label = UIKit.outlined(plate, "Label", 16, WHITE, 2)
-label.AnchorPoint = Vector2.new(0, 0.5)
-label.TextScaled = true
-label.TextXAlignment = Enum.TextXAlignment.Center
-label.Text = "OBBY"
-local fit = Instance.new("UITextSizeConstraint")
-fit.MaxTextSize = 16
-fit.MinTextSize = 10
-fit.Parent = label
 
 local scale = Instance.new("UIScale")
 scale.Parent = button
@@ -178,6 +147,11 @@ local function place()
 		button.Size = UDim2.fromOffset(r.w, r.h)
 	end
 	plateScale.Scale = layout.teleportScale
+	-- The plate before its scale (2026-10-05): its touch area's own size, but on a
+	-- phone's even row exactly its touch area once drawn (HudLayout's obbyPlate).
+	if roomy then
+		plate.Size = UDim2.fromOffset(layout.obbyPlate.X, layout.obbyPlate.Y)
+	end
 	icon.Visible = layout.obbyWide
 	if layout.obbyWide then
 		label.Position = UDim2.new(0, 42, 0.5, 1)

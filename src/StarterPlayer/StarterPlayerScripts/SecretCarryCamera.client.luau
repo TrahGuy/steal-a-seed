@@ -15,6 +15,10 @@
 --
 -- APPROVED AS A PROTOTYPE (the owner, 2026-10-01): walls and phone framing are
 -- part of the test, not assumed.
+--
+-- 2026-10-03: a hatched plant built from the owner's supplied rigs is carried
+-- overhead too (PlantForms.CarriedOverhead), at its tier's size, so the same
+-- framing applies to it; its pod is not, and is left alone.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -23,6 +27,7 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local SecretModel = require(Shared:WaitForChild("SecretModel"))
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
 
 local player = Players.LocalPlayer
 local CARRYING_SPECIES = GameConfig.Attributes.CarryingSpecies
@@ -36,25 +41,38 @@ local FEET = 3
 type Saved = { min: number, max: number, offset: Vector3, humanoid: Humanoid }
 local saved: Saved? = nil
 
--- The secret form in the player's hands right now, or nil: a raid pod by the
--- player attribute, a Tool by its SpeciesId and Hatched.
-local function carriedForm(character: Model?): string?
+-- How big the overhead carry in the player's hands is right now, or nil: a raid
+-- pod by the player attributes, a Tool by its SpeciesId, Hatched and tier. A
+-- secret or Rain form is its authored size; a rigged plant its tier's; the
+-- Rain event's second family's pod its size's own supplied shell (2026-10-05).
+local function carriedSize(character: Model?): Vector3?
 	local id = player:GetAttribute(CARRYING_SPECIES)
 	local hatched = false
+	local tier: any = player:GetAttribute(GameConfig.Attributes.CarryingKg)
 	if type(id) ~= "string" and character then
 		for _, d in ipairs(character:GetChildren()) do
 			if d:IsA("Tool") then
 				id = d:GetAttribute("SpeciesId")
 				hatched = d:GetAttribute("Hatched") == true
+				tier = d:GetAttribute(GameConfig.Attributes.CarryingKg)
 				break
 			end
 		end
 	end
 	local species = if type(id) == "string" then SeedData.Get(id) else nil
-	if not species or (species :: any).Carry ~= "overhead" then
+	if not species or not PlantForms.CarriedOverhead(species, hatched) then
 		return nil
 	end
-	return if hatched then species.Id else (species :: any).Pod
+	-- A plant built from a supplied rig is its tier's size -- the second
+	-- family's as much as the road's.
+	if hatched and PlantForms.Has(species.Id) then
+		return PlantForms.SizeAt(species.Id, SeedData.SizeScale(tonumber(tier)))
+	end
+	if (species :: any).Carry == "overhead" then
+		local form = if hatched then species.Id else SeedData.PodFormOf(species, tonumber(tier))
+		return if form then SecretModel.Size(form) else nil
+	end
+	return PlantForms.SizeAt(species.Id, SeedData.SizeScale(tonumber(tier)))
 end
 
 local function restore()
@@ -72,8 +90,7 @@ local function restore()
 	player:SetAttribute(ATTR_MAX, nil)
 end
 
-local function fit(formId: string, humanoid: Humanoid)
-	local size = SecretModel.Size(formId)
+local function fit(size: Vector3?, humanoid: Humanoid)
 	if not size then
 		restore()
 		return
@@ -108,9 +125,9 @@ end
 local function evaluate()
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local form = carriedForm(character)
-	if form and humanoid and humanoid.Health > 0 then
-		fit(form, humanoid)
+	local size = carriedSize(character)
+	if size and humanoid and humanoid.Health > 0 then
+		fit(size, humanoid)
 	else
 		restore()
 	end

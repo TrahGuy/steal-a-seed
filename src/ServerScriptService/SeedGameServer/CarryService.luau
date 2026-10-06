@@ -47,6 +47,8 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+-- The ordinary plants' supplied rigs (2026-10-03): giveTool drops their joints in the hands.
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
 local ObbyData = require(Shared:WaitForChild("ObbyData"))
@@ -63,6 +65,13 @@ local SAVE = GameConfig.Save
 -- be shown (HatchRoll). Never saved: rowOf reads three attributes and this is
 -- not one of them.
 local REVEAL_AT: string = GameConfig.Plant.Hatch.Roll.Attribute
+-- On a plant or pod Tool (2026-10-03): its saved row's `Item` id. Stamped when
+-- the row is made (or the Tool rebuilt from it), read back by rowOf, so every
+-- comparison between the record and the hands can be by name.
+local ITEM_ID: string = ATTR.ItemId
+-- On the player: whether the record is armed (THE GATE, below) -- what the
+-- hotbar waits on before it lets a shortcut go.
+local HELD_RESTORED: string = ATTR.HeldRestored
 
 local CarryService = {}
 -- After NestService (40), which owns the pods being taken.
@@ -343,6 +352,31 @@ function CarryService.RefreshWalkSpeed(player: Player)
 	end
 	local profile = PlayerDataService.Get(player)
 	local base = GameConfig.walkSpeedFor(if profile then profile.Speed else 0)
+	--==========================================================================
+	-- A DISCO PARTY'S x1.5, FOR EVERYBODY (2026-10-04, the owner's brief)
+	--
+	-- The pure DISCO ONLY mini event's SpeedFactor, read FRESH from the event's
+	-- published state on every call (GameConfig.miniEventSpeedFactor) and
+	-- multiplied into the earned speed -- never stored, never applied to a
+	-- WalkSpeed somebody wrote down -- so a repeated START, a respawn or a
+	-- second refresh cannot stack it, and the first recompute after the event
+	-- stops RUNNING (ending, expiry, replacement) is the normal speed again.
+	-- Movement only: the Speed score, training and the mills never see it.
+	--
+	-- Below the three states that set a speed of their own (a trap's hold and a
+	-- mill are zero, the obby's course its one fixed speed), and ahead of
+	-- everything that still applies to everybody: the weight (Pod 3's half in
+	-- place of it), a trap's slow and Walk Mode's ceiling multiply or cap the
+	-- boosted speed exactly as they would the normal one.
+	--
+	-- Never past MaxWalkSpeed: the curve stops there for the engine's sake (see
+	-- GameConfig.Speed), so a player already near the top gains only what is
+	-- left under it.
+	--==========================================================================
+	local party = GameConfig.miniEventSpeedFactor()
+	if party ~= 1 then
+		base = math.min(base * party, math.max(base, GameConfig.Speed.MaxWalkSpeed))
+	end
 	local speed = base * multiplier
 
 	--==========================================================================
@@ -1089,6 +1123,131 @@ function CarryService.Drop(player: Player, at: Vector3?): boolean
 end
 
 --==============================================================================
+-- A POD KNOCKED OUT OF THE HANDS, WHICHEVER KIND OF HANDS (2026-10-04)
+--
+-- The owner's report: a player carrying a pod was hit by a bat and kept it.
+-- The cause was the question every hit asked -- IsCarrying, which is the RAID
+-- carry alone. A pod banked at the red line is a Tool, and a player who takes
+-- it back out of the bag holds it in exactly the same two-handed pose: it
+-- looks carried, it is carried, and nothing that hit them ever looked at it.
+--
+-- So a bat and every trap ask THIS, which knows both, before their effect:
+--
+--   a raid carry        Drop, unchanged: the shell comes off at their feet
+--                       with its species, size, nest, owner, encounter and
+--                       weather event intact.
+--   a banked pod Tool   the UNHATCHED pod in the hands -- never a hatched
+--                       plant, a weapon, the tickets, or anything still in the
+--                       Backpack. Out of the hands, its row off the saved
+--                       record through SyncHeldNow (the one call that may
+--                       shrink it, exactly as the pedestal takes one), then
+--                       the same loose pod Drop lays: same species, same size.
+--
+-- AT MOST ONE, AND ONLY ONCE. A raid carry puts every plant away (TryTake), so
+-- the two never coexist; and each branch empties its own source before it lays
+-- anything, so a second hit in the same frame finds nothing left to drop.
+--
+-- NOTHING IS LOST ON THE WAY: a Tool is only taken off the record when there
+-- is a map and a spot to lay its pod on, so a failure keeps it in the hands.
+-- Returns whether a pod came off, and which kind ("carry" or "tool").
+--==============================================================================
+local function heldPodTool(character: Model): Tool?
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("Tool") then
+			local id = child:GetAttribute("SpeciesId")
+			if type(id) == "string" and SeedData.Get(id) ~= nil
+				and child:GetAttribute("Hatched") == false
+				and type(child:GetAttribute(ATTR.CarryingKg)) == "number" then
+				return child
+			end
+			-- One Tool in the hands at a time: the first one settles it.
+			return nil
+		end
+	end
+	return nil
+end
+
+-- Whether a hit would knock a pod loose right now: a raid carry, or an
+-- unhatched pod Tool in the hands. Read-only, for logs and specs.
+function CarryService.HoldsPod(player: Player): boolean
+	if carried[player] then
+		return true
+	end
+	local character = player.Character
+	return character ~= nil and heldPodTool(character) ~= nil
+end
+
+function CarryService.DropHeldPod(player: Player, at: Vector3?): (boolean, string?)
+	if carried[player] then
+		return CarryService.Drop(player, at), "carry"
+	end
+	local character = player.Character
+	if not character then
+		return false, nil
+	end
+	local tool = heldPodTool(character)
+	if not tool then
+		return false, nil
+	end
+	local species = SeedData.Get(tool:GetAttribute("SpeciesId"))
+	local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
+	local where = at
+	if not where then
+		local root = character:FindFirstChild("HumanoidRootPart")
+		where = if root and root:IsA("BasePart") then root.Position else nil
+	end
+	local map = workspace:FindFirstChild(GameConfig.Map.FolderName)
+	if not (species and tier and where and map) then
+		-- Nowhere to lay it: the pod stays in the hands rather than vanishing.
+		return false, nil
+	end
+	local item = tool:GetAttribute(ITEM_ID)
+
+	--==========================================================================
+	-- NO YIELD FROM HERE TO THE RETURN
+	--
+	-- Out of the hands FIRST, because the sync records whatever the hands still
+	-- hold; then the row comes off by its own name; then the Tool is destroyed
+	-- and the loose pod laid. A second call in the same frame finds no Tool.
+	--==========================================================================
+	tool.Parent = nil
+	local synced, syncError = pcall(CarryService.SyncHeldNow, player, { tool })
+	if not synced then
+		warn(string.format("[Seed/CarryService] %s: the bag sync threw while a pod was knocked loose: %s",
+			player.Name, tostring(syncError)))
+	end
+	-- THE PROOF, BY NAME: the row that was this Tool is gone, or is taken off now.
+	if type(item) == "string" and item ~= "" then
+		local profile = PlayerDataService.Get(player)
+		local rows = if profile then profile.Held else nil
+		if type(rows) == "table" then
+			local kept = {}
+			local stale = false
+			for _, row in ipairs(rows) do
+				if not stale and type(row) == "table" and row.Item == item then
+					stale = true
+				else
+					table.insert(kept, row)
+				end
+			end
+			if stale then
+				warn(string.format("[Seed/CarryService] %s: the sync left a knocked-loose pod's row; "
+					.. "taking it off directly.", player.Name))
+				PlayerDataService.SetHeld(player, kept)
+			end
+		end
+	end
+	tool:Destroy()
+
+	local ground = groundUnder(where, { character })
+	spawnLoose(species :: SeedData.Species, math.floor(tier :: number),
+		CFrame.new(ground + Vector3.new(0, 0.05, 0)), map, nil, nil, nil, nil)
+	log(string.format("%s dropped a banked %d tier %s from their hands.", player.Name,
+		math.floor(tier :: number), (species :: SeedData.Species).Name))
+	return true, "tool"
+end
+
+--==============================================================================
 -- CROSSING THE RED LINE BANKS IT
 --
 -- Reaching the safe zone is the moment a raid PAYS, and until now nothing
@@ -1174,13 +1333,17 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	-- A Secret has its rarity and no size tier (the owner's rule, 2026-10-02):
 	-- its tier is implementation-only (SeedData.SecretTier) and never shown.
 	-- A Rain pod names its POD and that pod's rarity, never the creature
-	-- inside; Pod 1 and Pod 3 have no size tier, Pod 2 shows its own.
+	-- inside; Pod 1 and Pod 3 have no size tier, Pod 2 shows its own. The
+	-- second family's pods (2026-10-05) have no one rarity to name -- theirs
+	-- would name the creature -- so they say their pod and their size only.
 	local rainPod = SeedData.RainPodOf(species)
+	local podRarity = if rainPod then rainPod.Rarity else nil
 	tool.ToolTip = if species.Secret == true
 		then (if hatched then "Secret" else "Secret pod")
+		elseif rainPod and not hatched and not podRarity then string.format("%s  ·  %d tier", rainPod.Name, tier)
 		elseif rainPod and not hatched then (if rainPod.Sized
-			then string.format("%s  ·  %s  ·  %d tier", rainPod.Name, rainPod.Rarity, tier)
-			else string.format("%s  ·  %s", rainPod.Name, rainPod.Rarity))
+			then string.format("%s  ·  %s  ·  %d tier", rainPod.Name, podRarity, tier)
+			else string.format("%s  ·  %s", rainPod.Name, podRarity))
 		elseif hatched and SeedData.Unsized(species) then species.Rarity
 		elseif hatched then string.format("%s  ·  %d tier", species.Rarity, tier)
 		else string.format("Unhatched pod  ·  %d tier", tier)
@@ -1203,6 +1366,26 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	--==========================================================================
 	if hatched and revealAt then
 		tool:SetAttribute(REVEAL_AT, revealAt)
+	end
+
+	--==========================================================================
+	-- A SUPPLIED RIG IS HELD AS ONE PIECE (2026-10-03)
+	--
+	-- An ordinary plant built from the owner's rig (PlantForms) arrives with
+	-- its Motor6Ds and Welds. In the hands they hold nothing the WeldConstraints
+	-- below do not -- every part is welded to the Handle where it stands -- and
+	-- a Tool is inside the character, where the character's own Animator looks
+	-- for joints by part name: ten of these rigs have a part called Head. So
+	-- the held copy keeps its parts and drops its joints. The planted copy is
+	-- always rebuilt from data and keeps them.
+	--==========================================================================
+	local form = model:GetAttribute("SecretForm")
+	if type(form) == "string" and PlantForms.Plants[form] then
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("Motor6D") or d:IsA("Weld") then
+				d:Destroy()
+			end
+		end
 	end
 
 	handle.Name = "Handle"
@@ -1283,6 +1466,30 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 	end
 
 	local watching: RBXScriptConnection? = nil
+	-- The body this Tool was last equipped on, for the clean-up on Unequipped.
+	local heldBy: Model? = nil
+
+	--==========================================================================
+	-- A GRIP THAT ARRIVES AFTER THE TOOL HAS GONE (2026-10-03)
+	--
+	-- The engine builds its RightGrip a beat after Equipped, and when a Tool is
+	-- equipped and put away quickly -- the Bag's restore after a death or a
+	-- join does exactly that -- the grip can land after the Tool is already in
+	-- the Backpack: measured, seven of them on one character, each holding a
+	-- Backpack handle. Inert, but the next equip of that Tool starts with a
+	-- weld to the hand. Only joints on THIS Tool's own Handle are touched, so a
+	-- weapon's grip (WeaponModel relies on the engine's RightGrip) never is.
+	--==========================================================================
+	local function dropStaleGrips(character: Model?)
+		if not character or tool.Parent == character then
+			return
+		end
+		for _, d in ipairs(character:GetDescendants()) do
+			if d:IsA("JointInstance") and d.Name ~= "CarryWeld" and (d :: any).Part1 == handle then
+				d:Destroy()
+			end
+		end
+	end
 
 	table.insert(serviceConnections, tool.Equipped:Connect(function()
 		local character = tool.Parent
@@ -1290,6 +1497,7 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 			return
 		end
 		local asModel = character :: Model
+		heldBy = asModel
 		if watching then
 			watching:Disconnect()
 		end
@@ -1334,6 +1542,19 @@ local function giveTool(player: Player, model: Model, species: SeedData.Species,
 		if weld then
 			weld:Destroy()
 		end
+		-- Now, and again once the engine has had its beat (see dropStaleGrips).
+		local character = heldBy
+		dropStaleGrips(character)
+		task.delay(0.5, dropStaleGrips, character)
+	end))
+	-- A Tool destroyed in the hands (a death, a reset) may never see
+	-- Unequipped: its watch on the body is cut here instead.
+	table.insert(serviceConnections, tool.Destroying:Connect(function()
+		if watching then
+			watching:Disconnect()
+			watching = nil
+		end
+		heldBy = nil
 	end))
 	tool.Parent = backpack
 	return tool
@@ -1452,8 +1673,10 @@ end
 -- `onRecord` and is handed over as it always was: it is the record being put
 -- back, and refusing it would be the record losing a plant.
 --==============================================================================
+-- `item` (2026-10-03) is the rebuild's: the saved row's id, stamped on the Tool
+-- as it is made, so the plant put back after a respawn is the same item it was.
 function CarryService.GiveHatched(player: Player, species: SeedData.Species,
-	tier: number, equipAfter: number?, revealAt: number?, onRecord: boolean?): (boolean, string?)
+	tier: number, equipAfter: number?, revealAt: number?, onRecord: boolean?, item: string?): (boolean, string?)
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false, nil
@@ -1504,9 +1727,11 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- at chest level in front of you, and a 35-stud Bellchime is visibly lifted
 	-- clear of the ground rather than planted in it.
 	--==========================================================================
-	-- A secret plant goes over the head like its pod (gripFor); every other
-	-- creature is held low in front, by its base.
-	local grip = if (species :: any).Carry == "overhead"
+	-- A secret plant goes over the head like its pod (gripFor); so does every
+	-- plant built from the owner's supplied rigs (2026-10-03, the owner's
+	-- approved carry -- its POD keeps the old grip, which gripFor still gives);
+	-- any other creature is held low in front, by its base.
+	local grip = if PlantForms.CarriedOverhead(species, true)
 		then CFrame.new(0, GameConfig.Carry.OverheadLift, 0)
 		else CFrame.new(0, GameConfig.Carry.GripDrop - 1.0, -reach)
 	-- Read as a claim, like everything that is a time: not a number, already
@@ -1522,6 +1747,9 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	if not tool then
 		return false, nil
 	end
+	if type(item) == "string" and item ~= "" then
+		tool:SetAttribute(ITEM_ID, item)
+	end
 	-- `onRecord` is the hatch's and the pickup's: this plant is new to the
 	-- hands, and its row is written now, in the same call that made its Tool. A
 	-- rebuild passes none -- a rebuilt plant is on the record already, which is
@@ -1530,7 +1758,7 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	-- NOT WRITTEN, NOT GIVEN. The room was counted before the Tool was built, so
 	-- this is the write itself failing -- the profile gone in between -- and the
 	-- Tool goes back before anybody has been told a plant hatched.
-	if onRecord == true and not CarryService.RecordHatched(player, species, tier) then
+	if onRecord == true and not CarryService.RecordHatched(player, species, tier, tool) then
 		tool:Destroy()
 		return false, "NOT_RECORDED"
 	end
@@ -1669,7 +1897,7 @@ local function bank(player: Player): boolean
 	-- ON THE RECORD, OR NOT HANDED OVER: the row is written now, in the call
 	-- that made the Tool, and a row that cannot be written takes the Tool back
 	-- and leaves the pod in the arms.
-	if not CarryService.RecordPod(player, species, tier) then
+	if not CarryService.RecordPod(player, species, tier, tool) then
 		tool:Destroy()
 		return false
 	end
@@ -2064,10 +2292,13 @@ local function rowOf(tool: Instance): { any }?
 	local id = tool:GetAttribute("SpeciesId")
 	local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
 	if type(id) == "string" and SeedData.Get(id) and tier and tier >= 1 then
+		local item = tool:GetAttribute(ITEM_ID)
 		return {
 			Id = id,
 			Tier = math.floor(tier),
 			Hatched = tool:GetAttribute("Hatched") == true,
+			-- Which saved row this Tool is, when it has been told (2026-10-03).
+			Item = if type(item) == "string" and item ~= "" then item else nil,
 		}
 	end
 	return nil
@@ -2091,6 +2322,9 @@ local function heldSnapshot(player: Player): { any }
 		for _, tool in ipairs(container:GetChildren()) do
 			local row = rowOf(tool)
 			if row and #rows < SAVE.MaxHeld then
+				-- The Tool rides along (never saved): a row the merge makes for it
+				-- stamps its new id back onto it (2026-10-03).
+				row.tool = tool
 				table.insert(rows, row)
 			end
 		end
@@ -2159,6 +2393,18 @@ local function armedFor(player: Player): boolean
 		and player.Character == record.character
 end
 
+-- Every arming and disarming goes through here, so the player's HeldRestored
+-- attribute (2026-10-03) is the gate itself, told to the client: true from the
+-- moment a rebuild has put the saved bag back, false the moment a body or a
+-- Backpack starts being replaced. The hotbar keeps a shortcut whose item is
+-- missing for as long as it is false, and lets it go once it is true.
+local function setArmed(player: Player, record: Armed?)
+	armed[player] = record
+	if player.Parent == Players then
+		player:SetAttribute(HELD_RESTORED, record ~= nil)
+	end
+end
+
 --==============================================================================
 -- A SNAPSHOT MAY ADD TO THE RECORD. ONLY A TRANSACTION MAY TAKE FROM IT.
 --
@@ -2192,30 +2438,124 @@ local function heldKey(id: string, tier: number, hatched: boolean): string
 	return id .. ":" .. tostring(tier) .. ":" .. tostring(hatched)
 end
 
-local function mergeHeld(saved: { any }?, live: { any }): { any }
+--==============================================================================
+-- BY NAME FIRST, THEN BY KIND (2026-10-03)
+--
+-- Every saved row has an `Item` id and so does every Tool made from one, so a
+-- Tool is matched to ITS row: two identical Nubkins are two rows, each with its
+-- own Tool. A Tool that has no id yet -- or names no row any more -- is matched
+-- the old way, to a row of its kind no named Tool claimed, and takes that row's
+-- id; only a Tool left over after both is a new row (with its own id, if it had
+-- one nobody else uses, or a fresh one). So the counting is exactly what it was
+-- -- a kind's rows still cover a kind's Tools -- and only WHICH row is which has
+-- become exact. Still additions only: every saved row is kept.
+--
+-- Answers the rows and the ids to stamp on Tools that are learning theirs.
+--
+-- A NEW ARRIVAL IS NEVER MATCHED BY KIND (2026-10-03). `fresh` is the Tool a
+-- hatch, a pickup, a bank or a gift has just made (recordOne): it skips pass 2
+-- and gets a row of its own. Matched by kind it could take over a row whose
+-- Tool the void had just eaten -- that row's id, its shortcut and its heart --
+-- and one of the two plants would be gone at the next respawn.
+--==============================================================================
+type Stamp = { tool: Instance, item: string }
+
+local function mergeHeld(saved: { any }?, live: { any }, mint: () -> string?, fresh: Instance?): ({ any }, { Stamp })
 	local merged = {}
-	local owed: { [string]: number } = {}
+	local stamps: { Stamp } = {}
+	local byItem: { [string]: number } = {}
 	if type(saved) == "table" then
 		for _, row in ipairs(saved) do
 			if type(row) == "table" then
 				table.insert(merged, row)
-				local key = heldKey(tostring(row.Id), math.floor(tonumber(row.Tier) or 0), row.Hatched == true)
-				owed[key] = (owed[key] or 0) + 1
+				if type(row.Item) == "string" and byItem[row.Item] == nil then
+					byItem[row.Item] = #merged
+				end
 			end
 		end
 	end
+	local claimed: { [number]: boolean } = {}
+	local pending = {}
+	-- 1. A Tool that names a saved row is that row.
 	for _, row in ipairs(live) do
-		local key = heldKey(row.Id, row.Tier, row.Hatched)
-		if (owed[key] or 0) > 0 then
-			owed[key] -= 1
-		elseif #merged < SAVE.MaxHeld then
-			table.insert(merged, row)
+		local index = if row.Item then byItem[row.Item] else nil
+		if index and not claimed[index] then
+			claimed[index] = true
+		else
+			table.insert(pending, row)
 		end
 	end
-	return merged
+	-- 2. The rest, by kind, against rows nobody named: the old count.
+	local leftover = {}
+	for _, row in ipairs(pending) do
+		local key = heldKey(row.Id, row.Tier, row.Hatched)
+		local found: number? = nil
+		for i, other in ipairs(merged) do
+			if fresh ~= nil and row.tool == fresh then
+				break
+			end
+			if not claimed[i] and heldKey(tostring(other.Id), math.floor(tonumber(other.Tier) or 0),
+				other.Hatched == true) == key then
+				found = i
+				break
+			end
+		end
+		if found then
+			claimed[found] = true
+			local item = merged[found].Item
+			if type(item) == "string" and row.tool and row.Item ~= item then
+				table.insert(stamps, { tool = row.tool, item = item })
+			end
+		else
+			table.insert(leftover, row)
+		end
+	end
+	-- 3. What is left is new: a row of its own, while there is room.
+	for _, row in ipairs(leftover) do
+		if #merged >= SAVE.MaxHeld then
+			break
+		end
+		local item = if row.Item and byItem[row.Item] == nil then row.Item else mint()
+		local fresh = { Id = row.Id, Tier = row.Tier, Hatched = row.Hatched, Item = item }
+		table.insert(merged, fresh)
+		claimed[#merged] = true
+		if item then
+			byItem[item] = #merged
+			if row.tool and row.Item ~= item then
+				table.insert(stamps, { tool = row.tool, item = item })
+			end
+		end
+	end
+	return merged, stamps
 end
 
-local function syncHeld(player: Player, consumed: { Instance }?)
+-- Tells each Tool its row's id, once the record holding it has been written.
+local function applyStamps(stamps: { Stamp })
+	for _, stamp in ipairs(stamps) do
+		if stamp.tool.Parent ~= nil and stamp.tool:GetAttribute(ITEM_ID) ~= stamp.item then
+			stamp.tool:SetAttribute(ITEM_ID, stamp.item)
+		end
+	end
+end
+
+-- Every Item a live Tool names, in both containers and with no row cap: the
+-- rows NOT in here are orphans, whose Tool the void or a teardown took.
+local function liveItems(player: Player): { [string]: boolean }
+	local set: { [string]: boolean } = {}
+	for _, container in ipairs({ player:FindFirstChildOfClass("Backpack"), player.Character }) do
+		if container then
+			for _, tool in ipairs(container:GetChildren()) do
+				local item = tool:GetAttribute(ITEM_ID)
+				if type(item) == "string" and item ~= "" then
+					set[item] = true
+				end
+			end
+		end
+	end
+	return set
+end
+
+local function syncHeld(player: Player, consumed: { Instance }?, fresh: Instance?)
 	local profile = PlayerDataService.Get(player)
 	local saved = if profile then profile.Held else nil
 	--==========================================================================
@@ -2230,12 +2570,41 @@ local function syncHeld(player: Player, consumed: { Instance }?)
 		for _, tool in ipairs(consumed) do
 			local row = rowOf(tool)
 			if row then
-				local key = heldKey(row.Id, row.Tier, row.Hatched)
-				for i, r in ipairs(kept) do
-					if type(r) == "table"
-						and heldKey(tostring(r.Id), math.floor(tonumber(r.Tier) or 0), r.Hatched == true) == key then
-						table.remove(kept, i)
-						break
+				-- ITS OWN ROW, BY NAME (2026-10-03): a sold Nubkin takes off the row
+				-- that is that Nubkin, never its twin's. A Tool that was never told
+				-- its id takes off one row of its kind, as it always did.
+				local removed = false
+				if row.Item then
+					for i, r in ipairs(kept) do
+						if type(r) == "table" and r.Item == row.Item then
+							table.remove(kept, i)
+							removed = true
+							break
+						end
+					end
+				end
+				if not removed then
+					-- An ORPHAN of its kind first (2026-10-03): a row no live Tool
+					-- names. Taking a named row would leave its Tool to be re-stamped
+					-- with the orphan's id at the next merge, and an identity -- a
+					-- shortcut, a heart -- would move from one plant to another.
+					local key = heldKey(row.Id, row.Tier, row.Hatched)
+					local named = liveItems(player)
+					local first: number? = nil
+					local orphan: number? = nil
+					for i, r in ipairs(kept) do
+						if type(r) == "table"
+							and heldKey(tostring(r.Id), math.floor(tonumber(r.Tier) or 0), r.Hatched == true) == key then
+							first = first or i
+							if not (type(r.Item) == "string" and named[r.Item]) then
+								orphan = i
+								break
+							end
+						end
+					end
+					local at = orphan or first
+					if at then
+						table.remove(kept, at)
 					end
 				end
 			end
@@ -2249,7 +2618,12 @@ local function syncHeld(player: Player, consumed: { Instance }?)
 	if not armedFor(player) then
 		return
 	end
-	PlayerDataService.SetHeld(player, mergeHeld(saved, heldSnapshot(player)))
+	local merged, stamps = mergeHeld(saved, heldSnapshot(player), function(): string?
+		return PlayerDataService.MintItem(player)
+	end, fresh)
+	if PlayerDataService.SetHeld(player, merged) then
+		applyStamps(stamps)
+	end
 end
 
 function CarryService.IsHeldRestored(player: Player): boolean
@@ -2386,15 +2760,36 @@ local function toolsOfKind(player: Player, key: string): number
 	return n
 end
 
-local function recordOne(player: Player, species: SeedData.Species, tier: number, hatched: boolean): boolean
+--==============================================================================
+-- AND WITH THE TOOL IN HAND, BY NAME (2026-10-03)
+--
+-- The caller passes the Tool it just made. Armed, the snapshot gives it its row
+-- and its id (mergeHeld), and the question is simply whether THAT id is on the
+-- record now. Disarmed, the row is written directly with a fresh id and the Tool
+-- is told it. Without a Tool (an old caller) the kind count above answers, as
+-- it always did.
+--==============================================================================
+local function recordOne(player: Player, species: SeedData.Species, tier: number, hatched: boolean,
+	tool: Instance?): boolean
 	local profile = PlayerDataService.Get(player)
 	if not profile then
 		return false
 	end
 	if armedFor(player) then
-		recordHeld(player)
+		-- The snapshot, told which Tool is the new one (mergeHeld's `fresh`).
+		syncPending[player] = nil
+		syncHeld(player, nil, tool)
 		local after = PlayerDataService.Get(player)
 		if not (after and type(after.Held) == "table") then
+			return false
+		end
+		local item = if tool then tool:GetAttribute(ITEM_ID) else nil
+		if type(item) == "string" then
+			for _, row in ipairs(after.Held) do
+				if type(row) == "table" and row.Item == item then
+					return true
+				end
+			end
 			return false
 		end
 		local key = heldKey(species.Id, math.floor(tier), hatched)
@@ -2411,19 +2806,29 @@ local function recordOne(player: Player, species: SeedData.Species, tier: number
 	if #kept >= SAVE.MaxHeld then
 		return false
 	end
-	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = hatched })
-	return PlayerDataService.SetHeld(player, kept) == true
+	local item = PlayerDataService.MintItem(player)
+	table.insert(kept, { Id = species.Id, Tier = math.floor(tier), Hatched = hatched, Item = item })
+	if PlayerDataService.SetHeld(player, kept) ~= true then
+		return false
+	end
+	if tool and item then
+		tool:SetAttribute(ITEM_ID, item)
+	end
+	return true
 end
 
-function CarryService.RecordHatched(player: Player, species: SeedData.Species, tier: number): boolean
-	return recordOne(player, species, tier, true)
+-- `tool` (2026-10-03): the plant's Tool, so its row is matched to it by name.
+function CarryService.RecordHatched(player: Player, species: SeedData.Species, tier: number,
+	tool: Instance?): boolean
+	return recordOne(player, species, tier, true, tool)
 end
 
 -- The same, for a pod that has just been banked or given: its row is written as
 -- its Tool is made, and the bank or the gift is refused if it cannot be (see
 -- bank and GivePod).
-function CarryService.RecordPod(player: Player, species: SeedData.Species, tier: number): boolean
-	return recordOne(player, species, tier, false)
+function CarryService.RecordPod(player: Player, species: SeedData.Species, tier: number,
+	tool: Instance?): boolean
+	return recordOne(player, species, tier, false, tool)
 end
 
 local function requestSync(player: Player)
@@ -2477,7 +2882,7 @@ local function watchHeld(player: Player)
 	-- The old body is about to take its Tools with it. Disarm now rather than
 	-- trust anything that tries to record while it goes.
 	table.insert(serviceConnections, player.CharacterRemoving:Connect(function()
-		armed[player] = nil
+		setArmed(player, nil)
 		syncPending[player] = nil
 	end))
 
@@ -2516,7 +2921,7 @@ CarryService.WatchHeld = watchHeld
 --==============================================================================
 -- A pod's Tool in the bag: the same builder, grip and reach as every other pod.
 -- Answers the Tool, or nil with nothing left behind.
-local function givePodTool(player: Player, species: SeedData.Species, tier: number): Tool?
+local function givePodTool(player: Player, species: SeedData.Species, tier: number, item: string?): Tool?
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return nil
@@ -2528,11 +2933,15 @@ local function givePodTool(player: Player, species: SeedData.Species, tier: numb
 	end
 	-- The same number CarryPose reads off a banked pod anywhere else.
 	tool:SetAttribute("GripReach", SeedData.GripForward(tier))
+	-- A rebuilt pod is the same item it was (2026-10-03).
+	if type(item) == "string" and item ~= "" then
+		tool:SetAttribute(ITEM_ID, item)
+	end
 	return tool
 end
 
 local function restoreOne(player: Player, species: SeedData.Species, tier: number,
-	hatched: boolean): boolean
+	hatched: boolean, item: string?): boolean
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false
@@ -2545,13 +2954,13 @@ local function restoreOne(player: Player, species: SeedData.Species, tier: numbe
 		local given: boolean
 		if sealedUntil then
 			given = CarryService.GiveHatched(player, species, tier,
-				math.max(sealedUntil - workspace:GetServerTimeNow(), 0.05), sealedUntil)
+				math.max(sealedUntil - workspace:GetServerTimeNow(), 0.05), sealedUntil, nil, item)
 		else
-			given = CarryService.GiveHatched(player, species, tier)
+			given = CarryService.GiveHatched(player, species, tier, nil, nil, nil, item)
 		end
 		return given
 	end
-	return givePodTool(player, species, tier) ~= nil
+	return givePodTool(player, species, tier, item) ~= nil
 end
 
 --==============================================================================
@@ -2593,7 +3002,7 @@ function CarryService.GivePod(player: Player, speciesId: string, tier: number): 
 	if not tool then
 		return false
 	end
-	if not CarryService.RecordPod(player, species, size) then
+	if not CarryService.RecordPod(player, species, size, tool) then
 		tool:Destroy()
 		return false
 	end
@@ -2660,20 +3069,26 @@ local function rebuildOnce(player: Player): boolean
 		-- Nothing has been torn down since the last pass armed this pair.
 		return true
 	end
-	armed[player] = nil
+	setArmed(player, nil)
 
 	--== WHAT IS ALREADY HERE, SO NOTHING IS BUILT TWICE ==--
+	-- By name first (2026-10-03): a Tool that names a saved row IS that row. A
+	-- Tool without a name stands for a row of its kind, as it always did, and is
+	-- told that row's id.
 	local backpack = player:FindFirstChildOfClass("Backpack") :: Backpack
-	local present: { [string]: number } = {}
+	local named: { [string]: Instance } = {}
+	local unnamed: { [string]: { Instance } } = {}
 	for _, container in ipairs({ backpack, player.Character }) do
 		if container then
 			for _, tool in ipairs(container:GetChildren()) do
-				if tool:IsA("Tool") then
-					local id = tool:GetAttribute("SpeciesId")
-					local tier = tonumber(tool:GetAttribute(ATTR.CarryingKg))
-					if type(id) == "string" and tier then
-						local key = heldKey(id, math.floor(tier), tool:GetAttribute("Hatched") == true)
-						present[key] = (present[key] or 0) + 1
+				local row = rowOf(tool)
+				if row then
+					if row.Item and named[row.Item] == nil then
+						named[row.Item] = tool
+					else
+						local key = heldKey(row.Id, row.Tier, row.Hatched)
+						unnamed[key] = unnamed[key] or {}
+						table.insert(unnamed[key], tool)
 					end
 				end
 			end
@@ -2682,21 +3097,46 @@ local function rebuildOnce(player: Player): boolean
 
 	local restored, kept, dropped = 0, 0, 0
 	if type(profile.Held) == "table" then
+		-- Rows whose Tool is here by name, first, so a twin never takes its place.
+		local done: { [any]: boolean } = {}
 		for _, row in ipairs(profile.Held) do
-			local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
-			local tier = if type(row) == "table" then tonumber(row.Tier) else nil
-			if species and tier and tier >= 1 then
-				local key = heldKey(species.Id, math.floor(tier), row.Hatched == true)
-				if (present[key] or 0) > 0 then
-					present[key] -= 1
-					kept += 1
-				elseif restoreOne(player, species, tier, row.Hatched == true) then
-					restored += 1
+			if type(row) == "table" and type(row.Item) == "string" and named[row.Item] then
+				named[row.Item] = nil
+				done[row] = true
+				kept += 1
+			end
+		end
+		-- A named Tool whose row is gone stands for a row of its kind.
+		for _, tool in pairs(named) do
+			local row = rowOf(tool)
+			if row then
+				local key = heldKey(row.Id, row.Tier, row.Hatched)
+				unnamed[key] = unnamed[key] or {}
+				table.insert(unnamed[key], tool)
+			end
+		end
+		for _, row in ipairs(profile.Held) do
+			if not done[row] then
+				local species = if type(row) == "table" then SeedData.Get(tostring(row.Id)) else nil
+				local tier = if type(row) == "table" then tonumber(row.Tier) else nil
+				local item = if type(row) == "table" and type(row.Item) == "string" then row.Item else nil
+				if species and tier and tier >= 1 then
+					local key = heldKey(species.Id, math.floor(tier), row.Hatched == true)
+					local spare = unnamed[key]
+					if spare and #spare > 0 then
+						local tool = table.remove(spare, 1)
+						if item and tool:GetAttribute(ITEM_ID) ~= item then
+							tool:SetAttribute(ITEM_ID, item)
+						end
+						kept += 1
+					elseif restoreOne(player, species, tier, row.Hatched == true, item) then
+						restored += 1
+					else
+						dropped += 1
+					end
 				else
 					dropped += 1
 				end
-			else
-				dropped += 1
 			end
 		end
 	end
@@ -2709,7 +3149,7 @@ local function rebuildOnce(player: Player): boolean
 	-- The world matches the save now, so recording may begin: armed for exactly
 	-- this Backpack and this body, then one snapshot -- which also records
 	-- anything banked or bought while the pass was waiting.
-	armed[player] = { backpack = backpack, character = player.Character }
+	setArmed(player, { backpack = backpack, character = player.Character })
 	recordHeld(player)
 	return true
 end
@@ -2746,7 +3186,7 @@ function CarryService.FreezeHeld(player: Player)
 	if armedFor(player) then
 		recordHeld(player)
 	end
-	armed[player] = nil
+	setArmed(player, nil)
 	syncPending[player] = nil
 end
 
@@ -2910,6 +3350,55 @@ function CarryService.Start()
 							if payload then "on" else "off"))
 					end
 				end))
+		end
+	end
+
+	--==========================================================================
+	-- A DISCO PARTY STARTING OR STOPPING RECOMPUTES EVERYBODY (2026-10-04)
+	--
+	-- MiniEventService publishes the event's state and mode on Workspace from
+	-- the shared record, so they read the same on every server the event
+	-- reaches, one that caught up late included. Either changing recomputes
+	-- every player here from the truth of the moment -- once, at the next
+	-- resumption point, so a publish of several attributes is one pass over a
+	-- consistent state. A body knocked flat (PlatformStand) is left alone: the
+	-- throw and the knockback recompute it themselves the moment they let go,
+	-- and this must never be what stands somebody up early. A new body (a
+	-- respawn, a late joiner) recomputes in onCharacterAdded and reads the
+	-- event there.
+	--==========================================================================
+	do
+		local EVENT_ATTR = GameConfig.MiniEvent.Attributes
+		local pending = false
+		local lastFactor = GameConfig.miniEventSpeedFactor()
+		local function refreshAll()
+			pending = false
+			local factor = GameConfig.miniEventSpeedFactor()
+			local count = 0
+			for _, player in ipairs(Players:GetPlayers()) do
+				local character = player.Character
+				local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+				if humanoid and not humanoid.PlatformStand then
+					local ok, err = pcall(CarryService.RefreshWalkSpeed, player)
+					if ok then
+						count += 1
+					else
+						warn("[Seed/CarryService] a mini event recompute failed: " .. tostring(err))
+					end
+				end
+			end
+			if factor ~= lastFactor then
+				lastFactor = factor
+				log(string.format("mini event movement factor x%s: recomputed %d player(s).", tostring(factor), count))
+			end
+		end
+		for _, name in ipairs({ EVENT_ATTR.State, EVENT_ATTR.Mode }) do
+			table.insert(serviceConnections, workspace:GetAttributeChangedSignal(name):Connect(function()
+				if not pending then
+					pending = true
+					task.defer(refreshAll)
+				end
+			end))
 		end
 	end
 

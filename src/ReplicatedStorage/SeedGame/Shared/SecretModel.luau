@@ -24,6 +24,14 @@
 -- ONE SIZE. The spec is replayed at scale 1 whatever the tier: random sizes are
 -- a later feature. The CFrame handed in is the BASE, the same contract as both
 -- CreatureModel builders.
+--
+-- EXCEPT THE ORDINARY PLANTS (2026-10-03). PlantForms' supplied rigs are built
+-- at their tier's size: Replay takes a whole-model factor and applies it to
+-- every part's size and offset, every joint's C0/C1 offset, every attachment,
+-- every light's range and every emitter's size, speed and acceleration -- so
+-- the rig is the same rig, bigger. Surface studs and stud textures are left at
+-- the world's size, as every other plant's are. Secret and Rain forms pass no
+-- factor and replay at 1, exactly as before.
 --==============================================================================
 
 local CollectionService = game:GetService("CollectionService")
@@ -34,11 +42,17 @@ local SecretForms = require(Shared:WaitForChild("SecretForms"))
 -- The Rain Event's supplied pods, creatures and guardian (2026-10-02): the same
 -- kind of data, replayed by the same code. A form id is looked up in both.
 local RainForms = require(Shared:WaitForChild("RainForms"))
+-- The ordinary plants' supplied rigs (2026-10-03): built by BuildPlantForm only,
+-- never by the Secret/Rain lookups below, so HasPlant still means those two sets.
+local PlantForms = require(Shared:WaitForChild("PlantForms"))
+-- The Invite a Friend rewards' supplied rigs (2026-10-06): one size each, like the
+-- Secrets and the Rain event's first forms, so they replay through BuildPlant at 1.
+local InviteForms = require(Shared:WaitForChild("InviteForms"))
 
 local SecretModel = {}
 
 local function plantSpec(formId: string): SecretForms.FormSpec?
-	return SecretForms.Plants[formId] or RainForms.Plants[formId]
+	return SecretForms.Plants[formId] or RainForms.Plants[formId] or InviteForms.Plants[formId]
 end
 
 local function podSpec(formId: string): SecretForms.FormSpec?
@@ -52,6 +66,9 @@ SecretModel.RIG_TAG = "SecretRig"
 SecretModel.FORM_ATTRIBUTE = "SecretForm"
 -- The attribute on the one part a plant's joint tree is rooted at (BuildPlant).
 SecretModel.ROOT_ATTRIBUTE = "RigRoot"
+-- The whole-model factor a PlantForms rig was built at (BuildPlantForm), for the
+-- client animator, whose distances grow with it. Absent means 1.
+SecretModel.SCALE_ATTRIBUTE = "RigScale"
 
 local SHAPES: { [string]: Enum.PartType } = {
 	Block = Enum.PartType.Block,
@@ -69,9 +86,37 @@ local function surfaces(part: BasePart, studs: boolean)
 	part.BackSurface = kind
 end
 
+-- Every face by name, when the supplied part mixed them (PartSpec.sf).
+local FACES = { "TopSurface", "BottomSurface", "LeftSurface", "RightSurface", "FrontSurface", "BackSurface" }
+local function faces(part: BasePart, names: { string })
+	for i, prop in ipairs(FACES) do
+		local kind = (Enum.SurfaceType :: any)[names[i]]
+		if kind then
+			(part :: any)[prop] = kind
+		end
+	end
+end
+
+-- An offset at `scale`: the position grows, the rotation does not.
+local function scaled(c: CFrame, scale: number): CFrame
+	if scale == 1 then
+		return c
+	end
+	return CFrame.new(c.Position * scale) * c.Rotation
+end
+
+local function scaledSequence(seq: NumberSequence, scale: number): NumberSequence
+	local points = {}
+	for _, k in ipairs(seq.Keypoints) do
+		table.insert(points, NumberSequenceKeypoint.new(k.Time, k.Value * scale, k.Envelope * scale))
+	end
+	return NumberSequence.new(points)
+end
+
 -- `loose`: unanchored and massless, for a rig a Humanoid moves (the Rain Event's
 -- guardian). Everything else is anchored, the plant contract.
-local function makePart(spec: SecretForms.PartSpec, cf: CFrame, parent: Instance, loose: boolean?): BasePart
+local function makePart(spec: SecretForms.PartSpec, cf: CFrame, parent: Instance, loose: boolean?,
+	scale: number): BasePart
 	local part: BasePart
 	if spec.s == "Wedge" then
 		part = Instance.new("WedgePart")
@@ -81,14 +126,17 @@ local function makePart(spec: SecretForms.PartSpec, cf: CFrame, parent: Instance
 		part = p
 	end
 	part.Name = spec.n
-	part.Size = spec.z
-	part.CFrame = cf * spec.cf
+	part.Size = spec.z * scale
+	part.CFrame = cf * scaled(spec.cf, scale)
 	part.Color = spec.c
 	part.Material = spec.m
 	part.Transparency = spec.t or 0
 	part.Reflectance = spec.r or 0
 	part.CastShadow = spec.cs ~= false
 	surfaces(part, spec.st ~= false)
+	if spec.sf then
+		faces(part, spec.sf)
+	end
 	part.Anchored = loose ~= true
 	if loose == true then
 		part.Massless = true
@@ -125,10 +173,12 @@ local EMITTER_FIELDS: { { string } } = {
 -- the parts they were authored in, then attachments, lights and emitters, then
 -- the model's own attributes. Returns the parts, index-aligned with the spec.
 --==============================================================================
-function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model, loose: boolean?): { BasePart }
+function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model, loose: boolean?,
+	scale: number?): { BasePart }
+	local s = scale or 1
 	local parts: { BasePart } = table.create(#spec.Parts)
 	for i, p in ipairs(spec.Parts) do
-		parts[i] = makePart(p, cf, model, loose)
+		parts[i] = makePart(p, cf, model, loose, s)
 	end
 	for _, j in ipairs(spec.Joints) do
 		local a, b = parts[j.a], parts[j.b]
@@ -137,8 +187,13 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 			joint.Name = j.n
 			joint.Part0 = a
 			joint.Part1 = b
-			joint.C0 = j.c0
-			joint.C1 = j.c1
+			joint.C0 = scaled(j.c0, s)
+			joint.C1 = scaled(j.c1, s)
+			if j.at then
+				for key, value in pairs(j.at) do
+					joint:SetAttribute(key, value)
+				end
+			end
 			joint.Parent = parts[j.h] or model
 		end
 	end
@@ -148,7 +203,7 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 		if host then
 			local inst = Instance.new("Attachment")
 			inst.Name = at.n
-			inst.CFrame = at.cf
+			inst.CFrame = scaled(at.cf, s)
 			inst.Parent = host
 			attachments[i] = inst
 		end
@@ -158,7 +213,7 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 		if host then
 			local light = Instance.new("PointLight")
 			light.Name = l.n
-			light.Range = l.range
+			light.Range = l.range * s
 			light.Brightness = l.brightness
 			light.Color = l.color
 			light.Shadows = l.shadows
@@ -181,6 +236,11 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 				if value ~= nil then
 					emitter[pair[2]] = value
 				end
+			end
+			if s ~= 1 then
+				emitter.Size = scaledSequence(emitter.Size, s)
+				emitter.Speed = NumberRange.new(emitter.Speed.Min * s, emitter.Speed.Max * s)
+				emitter.Acceleration = emitter.Acceleration * s
 			end
 			emitter.Parent = host
 		end
@@ -245,6 +305,25 @@ function SecretModel.Replay(spec: SecretForms.FormSpec, cf: CFrame, model: Model
 			gui.Parent = host
 		end
 	end
+	-- Stud textures (PlantForms): drawn at the world's stud size, like the
+	-- surface studs under them, whatever the factor.
+	for _, tx in ipairs(spec.Textures or {}) do
+		local host = parts[tx.p]
+		if host then
+			local texture = Instance.new("Texture")
+			texture.Name = tx.n
+			texture.Face = tx.face
+			texture.Texture = tx.texture
+			texture.StudsPerTileU = tx.u
+			texture.StudsPerTileV = tx.v
+			texture.OffsetStudsU = tx.ou
+			texture.OffsetStudsV = tx.ov
+			texture.Color3 = tx.color
+			texture.Transparency = tx.t
+			texture.ZIndex = tx.z
+			texture.Parent = host
+		end
+	end
 	for key, value in pairs(spec.Attributes) do
 		model:SetAttribute(key, value)
 	end
@@ -256,12 +335,9 @@ end
 -- already made at `cf`; the authored plate is a part called Footing. Tagged for
 -- the client animator LAST, like every tag in this project.
 --==============================================================================
-function SecretModel.BuildPlant(formId: string, cf: CFrame, model: Model): boolean
-	local spec = plantSpec(formId)
-	if not spec then
-		return false
-	end
-	local parts = SecretModel.Replay(spec, cf, model)
+-- The rig contract every replayed plant keeps: its authored root marked, its form
+-- id written, the animator's tag added last.
+local function tagRig(spec: SecretForms.FormSpec, parts: { BasePart }, formId: string, model: Model)
 	-- THE AUTHORED ROOT, MARKED (2026-10-02). SecretIdle builds its joint tree
 	-- from this part. It used to look for a part called Footing and otherwise take
 	-- the first jointed part in GetDescendants order -- an order a client receives
@@ -273,6 +349,61 @@ function SecretModel.BuildPlant(formId: string, cf: CFrame, model: Model): boole
 	end
 	model:SetAttribute(SecretModel.FORM_ATTRIBUTE, formId)
 	CollectionService:AddTag(model, SecretModel.RIG_TAG)
+end
+
+function SecretModel.BuildPlant(formId: string, cf: CFrame, model: Model): boolean
+	local spec = plantSpec(formId)
+	if not spec then
+		return false
+	end
+	local parts = SecretModel.Replay(spec, cf, model)
+	tagRig(spec, parts, formId, model)
+	return true
+end
+
+--==============================================================================
+-- AN ORDINARY PLANT FROM ITS SUPPLIED RIG (2026-10-03): the same replay and the
+-- same rig contract, at `scale` (PlantForms.Scale for the tier). The factor is
+-- written on the model for the client animator before the tag goes on.
+--==============================================================================
+function SecretModel.BuildPlantForm(formId: string, cf: CFrame, model: Model, scale: number): boolean
+	local spec = PlantForms.Plants[formId]
+	if not spec then
+		return false
+	end
+	local parts = SecretModel.Replay(spec, cf, model, nil, scale)
+	model:SetAttribute(SecretModel.SCALE_ATTRIBUTE, scale)
+	tagRig(spec, parts, formId, model)
+	return true
+end
+
+--==============================================================================
+-- A DISPLAY COPY AT ANY SIZE (2026-10-06): the Invite a Friend pedestal's form,
+-- built by each client for itself, scaled whole to its display height. The same
+-- replay, rig contract and scale attribute as BuildPlantForm (lights' ranges
+-- scale with it, and the animator's distances read RigScale), for any plant
+-- form this file knows. Its PrimaryPart is an invisible plate at the base, so a
+-- PivotTo stands it there. Never a garden plant: no Planted tag, so it never walks.
+--==============================================================================
+function SecretModel.BuildDisplay(formId: string, cf: CFrame, model: Model, scale: number): boolean
+	local spec = plantSpec(formId) or PlantForms.Plants[formId]
+	if not spec then
+		return false
+	end
+	local base = Instance.new("Part")
+	base.Name = "Base"
+	base.Size = Vector3.new(1, 0.05, 1)
+	base.CFrame = cf
+	base.Transparency = 1
+	base.Anchored = true
+	base.CanCollide = false
+	base.CanQuery = false
+	base.CanTouch = false
+	base.Parent = model
+	model.PrimaryPart = base
+	local parts = SecretModel.Replay(spec, cf, model, nil, scale)
+	model:SetAttribute(SecretModel.SCALE_ATTRIBUTE, scale)
+	tagRig(spec, parts, formId, model)
 	return true
 end
 

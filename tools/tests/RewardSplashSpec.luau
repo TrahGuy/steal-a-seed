@@ -205,9 +205,9 @@ local ok, err = pcall(function()
 		"once per claim: the same answer delivered again shows nothing")
 	check(has(chest, "reduced = StatusText.reducedMotion(),") and has(chest, "layer = gui,"),
 		"it honours reduced motion, and draws in the row's own gui, so the flight and the row share one space")
-	check(has(chest, "local e = entries[id]") and has(chest, "e.line.isShown()") and has(chest, "e.line.nudge()")
-			and has(chest, "WheelDraw.icon(parent, icon, px)"),
-		"the icon is the wheel's own for that boost, and it lands on that reward's line in the row")
+	check(has(chest, "local icon = boostIcon(id)") and has(chest, 'icon:FindFirstChild("Icon", true)')
+			and has(chest, 'icon:FindFirstChild("Pop")') and has(chest, "WheelDraw.icon(parent, icon, px)"),
+		"the icon is the wheel's own for that boost, and it lands on that boost's ICON over the hotbar (2026-10-04)")
 	check(has(okBlock, "if not (reward and splash(reward)) then") and has(okBlock, "Notice.post({"),
 		"if it cannot draw, the old success notice says it instead")
 	local service = sourceOf(Server, "BonusChestService")

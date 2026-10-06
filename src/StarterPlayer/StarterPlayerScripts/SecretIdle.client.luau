@@ -18,6 +18,10 @@ local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SecretIdle = require(Shared:WaitForChild("SecretIdle"))
 local SecretModel = require(Shared:WaitForChild("SecretModel"))
+-- OTHER PLANTS: OFF (2026-10-05): a planted rig this screen hides does not step
+-- -- its idle, blinks, rates and bursts wait -- and steps on from the clock the
+-- moment it is shown.
+local HIDDEN = require(Shared:WaitForChild("PlantVisibility")).Marker
 
 local TAG = SecretModel.RIG_TAG
 -- Only a planted Secret walks (2026-10-02): its legs step to the leg PlantService
@@ -108,6 +112,9 @@ RunService.RenderStepped:Connect(function()
 			entry.rig = SecretIdle.Rig(model)
 		end
 		local rig = entry.rig
+		if rig and model:GetAttribute(HIDDEN) == true then
+			continue
+		end
 		if rig then
 			rig.walks = CollectionService:HasTag(model, PLANTED)
 			local far = (model:GetPivot().Position - eye).Magnitude > NEAR

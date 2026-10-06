@@ -41,6 +41,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -71,179 +72,18 @@ local lastPaid: { [Player]: number } = {}
 local granted: { [Player]: number } = {}
 
 --==============================================================================
--- TRAINING RUSH
+-- ONE RATE (2026-10-05, the owner's ask)
 --
--- A rested charge that pays up to 4x while it lasts, so the loop is train
--- briefly -> raid -> plant -> come back to a fresh mill, rather than stand on a
--- belt for an hour. The design and the five numbers are in GameConfig.Mill.
---
--- THIS IS NOT A SECOND FAUCET. AddSpeed below is still the only call that mints
--- Speed in the game; this multiplies the rate that call is handed, exactly as
--- Overclock does.
---
--- TWO PIECES OF STATE, IN TWO PLACES, ON PURPOSE:
---
---   * The CHARGE is in the profile, because it refills while the player is not
---     here and has to survive a rejoin. It is stored as a value PLUS the time
---     that value was true, so the restore is always a subtraction against a
---     real clock -- which is why stepping off the belt and straight back on is
---     worth the fraction of a second it actually took, and nothing more.
---
---   * The RAMP is here and dies with the session. It is worth at most thirty
---     seconds, it decays whenever the player is off the belt, and persisting it
---     would hand a rejoining player back a climb they had already walked away
---     from.
+-- The mill used to carry a TRAINING RUSH: a rested charge that paid up to 4x
+-- while it lasted, climbed to it over thirty seconds, refilled off the belt and
+-- dropped back to the base rate when it ran out. It is gone from the payout,
+-- not only from the screen. A belt pays the mill's own rate -- tier, overclock,
+-- rebirth -- times the boosts that are still real (the Bonus Chest's training
+-- reward, the Disco Mill's x10), the same every tick: fresh or rested, on the
+-- first tick or the hundredth, after stepping off, a respawn or a rejoin.
+-- Nothing is charged, refilled, published or saved for it, and the charge an
+-- old record still carries is dropped by ProfileSchema without ever being read.
 --==============================================================================
-local TRAIN = LADDER.Training
--- Seconds of boosted training accumulated, which is what the multiplier reads.
-local ramp: { [Player]: number } = {}
--- When `ramp` was last correct, so a tick decays it by real elapsed time rather
--- than by an assumed tick length.
-local rampAt: { [Player]: number } = {}
---==============================================================================
--- WAS THIS PLAYER ALREADY TRAINING LAST TICK
---
--- Rest is credited by comparing the profile's stamp against now -- and while
--- training, that stamp is rewritten every tick BY the training. Crediting it
--- unconditionally therefore refunds rest for the very seconds being spent: at
--- 0.5 restored against 1.0 spent, a ninety second charge lasted a hundred and
--- eighty. This is the flag that says "the stamp you are looking at is a
--- training stamp, not a resting one".
---==============================================================================
-local wasTraining: { [Player]: boolean } = {}
-
---==============================================================================
--- THE CHARGE, BROUGHT UP TO NOW
---
--- Nothing is written while a player is off the belt: the pair in the profile
--- says "this much, as of then", and the restore is computed when it is next
--- needed. That is what makes an idle player free, and it is also what makes
--- remounting worthless -- there is no event here that could fire twice.
---==============================================================================
-local function restoredCharge(profile: any): number
-	local stored = tonumber(profile.TrainingCharge)
-	if stored == nil or stored ~= stored then
-		stored = TRAIN.MaxChargeSeconds
-	end
-	local at = tonumber(profile.TrainingChargeAt)
-	if at == nil or at ~= at then
-		-- A missing stamp is not a licence to invent time. Treat it as now, which
-		-- credits nothing and lets the next tick stamp it properly.
-		at = os.time()
-	end
-	local elapsed = math.clamp(os.time() - at, 0, TRAIN.MaxOfflineRestoreSeconds)
-	return math.clamp(stored + elapsed * TRAIN.RestorePerSecond,
-		0, TRAIN.MaxChargeSeconds)
-end
-
---==============================================================================
--- SPEND A SLICE OF CHARGE, AND SAY WHAT IT WAS WORTH
---
--- Returns the multiplier to pay this slice at, sampled at the MIDDLE of the
--- slice rather than at either end. Paying a whole tick at the ramp it finished
--- on over-pays every tick of the climb; paying it at the ramp it started on
--- under-pays every one of them. The midpoint is the exact average of a linear
--- ramp and costs one addition.
---==============================================================================
-local function consumeRush(player: Player, dt: number, now: number): number
-	local profile = PlayerDataService.Get(player)
-	rampAt[player] = now
-	if not profile then
-		return 1
-	end
-	-- Only the FIRST tick of a visit credits rest. Every tick after it is
-	-- reading a stamp this loop wrote a second ago.
-	local charge
-	if wasTraining[player] then
-		charge = tonumber(profile.TrainingCharge) or 0
-		if charge ~= charge then
-			charge = 0
-		end
-		charge = math.clamp(charge, 0, TRAIN.MaxChargeSeconds)
-	else
-		charge = restoredCharge(profile)
-	end
-	wasTraining[player] = true
-	local r = ramp[player] or 0
-	local multiplier = 1
-	if charge > 0 then
-		local spend = math.min(charge, dt)
-		charge -= spend
-		local before = r
-		r = math.min(TRAIN.RampSeconds, r + spend)
-		-- Boosted for `spend` of this tick's `dt` only: the tick the charge
-		-- runs out in pays the rest of itself at 1x. It used to pay all of it
-		-- boosted, so the last tick of every charge over-paid.
-		multiplier = GameConfig.trainingRushBlend(
-			GameConfig.trainingRushMultiplier((before + r) * 0.5), spend, dt)
-	else
-		-- Spent. The mill pays its base rate from this tick on: the payout drops
-		-- straight back to 1x, which is the 80-then-20 a level-1 player sees at
-		-- the end of a charge. (This comment used to say the fall-off was
-		-- gradual. It never was.) What unwinds gradually is the RAMP, so a
-		-- charge restored soon after resumes partway up the climb rather than
-		-- from the bottom.
-		r = math.max(0, r - dt * TRAIN.RampDecayPerSecond)
-	end
-	ramp[player] = r
-	profile.TrainingCharge = charge
-	profile.TrainingChargeAt = os.time()
-	return multiplier
-end
-
---==============================================================================
--- OFF THE BELT: THE CLIMB UNWINDS, THE CHARGE LOOKS AFTER ITSELF
---
--- Only the ramp is touched here. The charge needs no write -- its stamp is
--- already the moment training stopped, so it has been refilling ever since.
---==============================================================================
-local function decayRush(player: Player, now: number)
-	-- Off the belt: the next mount credits the rest that starts accruing now.
-	wasTraining[player] = nil
-	local r = ramp[player]
-	if r == nil or r <= 0 then
-		ramp[player] = nil
-		rampAt[player] = nil
-		return
-	end
-	local since = rampAt[player]
-	rampAt[player] = now
-	if since then
-		local dt = now - since
-		if dt > 0 then
-			r -= dt * TRAIN.RampDecayPerSecond
-		end
-	end
-	ramp[player] = if r > 0 then r else nil
-end
-
---==============================================================================
--- WHAT THE HUD IS ALLOWED TO KNOW
---
--- The multiplier the server ACTUALLY PAID ON, and the charge left. Published
--- rather than derivable, because a client that worked the multiplier out for
--- itself is a client that could disagree with its own payout -- and one that
--- could be talked into showing 4x forever.
---
--- Rounded, and written only when the rounded value moves: a full charge is a
--- couple of dozen replications rather than one per tick, and a player nowhere
--- near a mill replicates nothing at all.
---==============================================================================
-local function publishRush(player: Player, multiplier: number?, charge: number?)
-	local m = if multiplier then math.floor(multiplier * 100 + 0.5) / 100 else nil
-	if m == 1 then
-		-- 1x is not a rush. Clearing it rather than writing it keeps the
-		-- attribute meaning "something is happening".
-		m = nil
-	end
-	if player:GetAttribute(ATTR.TrainingRush) ~= m then
-		player:SetAttribute(ATTR.TrainingRush, m)
-	end
-	local c = if charge then math.floor(charge + 0.5) else nil
-	if player:GetAttribute(ATTR.TrainingCharge) ~= c then
-		player:SetAttribute(ATTR.TrainingCharge, c)
-	end
-end
 
 --==============================================================================
 -- MOUNTING, WHICH IS THE OTHER HALF OF OCCUPANCY
@@ -285,6 +125,21 @@ local mountConns: { [Player]: { RBXScriptConnection } } = {}
 --==============================================================================
 local mountBlocked: { [Player]: boolean } = {}
 local running = false
+--==============================================================================
+-- THE DISCO MILL'S STATE (2026-10-04; see THE DISCO MILL below)
+--==============================================================================
+local DISCO = GameConfig.MiniEvent.DiscoMill
+local EVENT = GameConfig.MiniEvent.Attributes
+local EVENT_MODES: { [string]: any } = GameConfig.MiniEvent.Modes :: any
+type Disco = { model: Model?, belt: BasePart?, eventId: string? }
+local disco: Disco = { model = nil, belt = nil, eventId = nil }
+local discoConns: { RBXScriptConnection } = {}
+-- The spot (an index into DISCO.Spots) each player mounted on it stands on.
+local discoSpot: { [Player]: number } = {}
+-- Where each player was paid last tick: "own", "disco" or nil. Their own belt
+-- spins only while they run on IT.
+local paidOn: { [Player]: string } = {}
+local fullToldAt: { [Player]: number } = {}
 local serviceConnections: { RBXScriptConnection } = {}
 -- PlotService.OnReleased hands back an unsubscribe function, not a connection,
 -- so it is kept apart from the connections Init disconnects.
@@ -331,6 +186,43 @@ local function standingOn(root: BasePart, belt: BasePart): boolean
 end
 
 --==============================================================================
+-- THE DISCO MILL, AS THE PAYOUT SEES IT (2026-10-04)
+--
+-- Up only while the mini event that built it is still RUNNING, in a disco
+-- mode, with the same id: the moment it starts ending, or another event takes
+-- its place, nobody on it is paid. Mounted only -- on a spot of their own --
+-- and standing on its belt.
+--==============================================================================
+local function discoWanted(): string?
+	if not DISCO.Enabled or Workspace:GetAttribute(EVENT.State) ~= "running" then
+		return nil
+	end
+	-- A mode with a MILL (Ticket Disco, DISCO + MILL): the pure DISCO ONLY has
+	-- the disco but no mill (2026-10-04), and Ticket Shower Only neither.
+	local mode = EVENT_MODES[Workspace:GetAttribute(EVENT.Mode) or ""]
+	if not (mode and mode.Mill == true) then
+		return nil
+	end
+	local id = Workspace:GetAttribute(EVENT.EventId)
+	return if type(id) == "string" and id ~= "" then id else nil
+end
+
+local function discoLive(): boolean
+	local id = disco.eventId
+	return disco.belt ~= nil and id ~= nil and discoWanted() == id
+end
+
+function TreadmillService.OnDiscoMill(player: Player): boolean
+	local belt = disco.belt
+	if not (belt and discoSpot[player] and mounted[player] == belt and discoLive()) then
+		return false
+	end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	return root ~= nil and root:IsA("BasePart") and standingOn(root :: BasePart, belt)
+end
+
+--==============================================================================
 -- WHO IS EARNING, AND HOW FAST
 --==============================================================================
 function TreadmillService.RateFor(player: Player): number
@@ -343,6 +235,11 @@ function TreadmillService.RateFor(player: Player): number
 	-- Alive. A ragdolled or dead player on the belt is not training.
 	if not (humanoid and humanoid.Health > 0 and root and root:IsA("BasePart")) then
 		return 0
+	end
+	-- On the Disco Mill: their OWN rate, whoever's plot is nearest. Its x10 is
+	-- not here but on the payout line, the one place it is composed.
+	if TreadmillService.OnDiscoMill(player) then
+		return TreadmillService.RateOf(player)
 	end
 	local plot = PlotService.PlotOf(player)
 	if not plot or PlotService.OwnerOf(plot) ~= player then
@@ -466,6 +363,7 @@ function TreadmillService.Unmount(player: Player)
 		return
 	end
 	mounted[player] = nil
+	discoSpot[player] = nil
 	for _, c in ipairs(mountConns[player] or {}) do
 		c:Disconnect()
 	end
@@ -475,7 +373,9 @@ function TreadmillService.Unmount(player: Player)
 	CarryService.RefreshWalkSpeed(player)
 end
 
-function TreadmillService.Mount(player: Player, belt: BasePart): boolean
+-- `spot`, for the Disco Mill: where on the belt to stand, in studs off its
+-- middle along its own X and Z. Nil is the middle, as on every own mill.
+function TreadmillService.Mount(player: Player, belt: BasePart, spot: Vector2?): boolean
 	if mounted[player] or mountBlocked[player] then
 		return false
 	end
@@ -505,7 +405,8 @@ function TreadmillService.Mount(player: Player, belt: BasePart): boolean
 	-- placed in the middle and immediately slide out of it.
 	--==========================================================================
 	local lift = belt.Size.Y * 0.5 + humanoid.HipHeight + root.Size.Y * 0.5
-	local stand = belt.Position + Vector3.new(0, lift, 0)
+	local stand = if spot then belt.CFrame:PointToWorldSpace(Vector3.new(spot.X, lift, spot.Y))
+		else belt.Position + Vector3.new(0, lift, 0)
 	root.CFrame = CFrame.lookAt(stand, stand + belt.CFrame.LookVector)
 	root.AssemblyLinearVelocity = Vector3.zero
 
@@ -570,34 +471,41 @@ local function payEveryone()
 			local belt = ownBeltOf(player)
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
-			local still = belt ~= nil
-				and root ~= nil
+			local discoBelt = disco.belt
+			local still = root ~= nil
 				and root:IsA("BasePart")
-				and standingOn(root :: BasePart, belt :: BasePart)
+				and ((belt ~= nil and standingOn(root :: BasePart, belt :: BasePart))
+					or (discoBelt ~= nil and standingOn(root :: BasePart, discoBelt :: BasePart)))
 			if not still then
 				mountBlocked[player] = nil
 			end
 		end
 		local rate = TreadmillService.RateFor(player)
+		local onDisco = rate > 0 and TreadmillService.OnDiscoMill(player)
 		-- ON THE PLAYER, so it replicates to everybody. That is what lets each
 		-- client play the run cycle on somebody else's character, and it is why
 		-- this needs no remote.
 		local on = rate > 0
 		if (player:GetAttribute(ATTR.OnTreadmill) == true) ~= on then
 			player:SetAttribute(ATTR.OnTreadmill, on or nil)
-			--==============================================================
-			-- THE BELT SPEEDS UP WHEN SOMEBODY IS ON IT
-			--
-			-- Written HERE, inside the state-change branch, so it costs one
-			-- attribute write per step-on and one per step-off rather than
-			-- one per tick per belt. Everything that moves on a mill reads
-			-- this one number.
-			--==============================================================
+		end
+		--==================================================================
+		-- THE BELT SPEEDS UP WHEN SOMEBODY IS ON IT
+		--
+		-- Written only when where they are paid CHANGES, so it costs one
+		-- attribute write per step-on and one per step-off rather than one
+		-- per tick per belt. Everything that moves on a mill reads this one
+		-- number. Their own belt runs only while they run on it -- not while
+		-- they are on the Disco Mill (2026-10-04), whose belt is set below.
+		--==================================================================
+		local where = if not on then nil elseif onDisco then "disco" else "own"
+		if paidOn[player] ~= where then
+			paidOn[player] = where
 			local plot = PlotService.PlotOf(player)
 			local plotId = plot and plot:GetAttribute(ATTR.PlotId)
 			local belt = if type(plotId) == "number" then beltFor(plotId) else nil
 			if belt then
-				setBeltSpeed(belt, on, TreadmillService.TierOf(player))
+				setBeltSpeed(belt, where == "own", TreadmillService.TierOf(player))
 			end
 		end
 		if rate > 0 then
@@ -610,27 +518,30 @@ local function payEveryone()
 				-- means they stepped off and came back.
 				if dt > 0 and dt < 30 then
 					--==========================================================
-					-- THE RATE IS A PRODUCT, AND THE RUSH IS ITS LAST TERM
+					-- THE RATE IS A PRODUCT
 					--
-					--     tier x Multiplier^overclock x rebirth x rush x chest
+					--     tier x Multiplier^overclock x rebirth x chest x disco
 					--
-					-- Charge is spent for `dt` whether or not the payout lands,
-					-- because the time was spent standing on the belt either way.
+					-- The first three are `rate` (RateFor). The chest is the Bonus
+					-- Chest's training reward (2026-09-27), 1 unless one is
+					-- running. HERE because this is the only line that mints Speed
+					-- from the belt: purchases, admin grants and WalkSpeed never
+					-- pass it.
 					--
-					-- The chest is the Bonus Chest's training reward (2026-09-27),
-					-- 1 unless one is running. HERE because this is the only line
-					-- that mints Speed from the belt: purchases, admin grants and
-					-- WalkSpeed never pass it.
+					-- The Disco Mill (2026-10-04) is its last factor: x10 of
+					-- everything before it -- tier, overclock, rebirth, chest --
+					-- while they run on it, and 1 everywhere else. Composed here
+					-- and nowhere else: the same tick, one AddSpeed. (The Training
+					-- Rush that sat between rebirth and chest is gone: see ONE
+					-- RATE at the top of this file.)
 					--==========================================================
-					local rush = consumeRush(player, dt, now)
-					local paid = rate * rush * BonusChestService.Multiplier(player, "training") * dt
+					local discoFactor = if onDisco then DISCO.Multiplier else 1
+					local paid = rate * BonusChestService.Multiplier(player, "training") * discoFactor * dt
 					if PlayerDataService.AddSpeed(player, paid) then
 						granted[player] = (granted[player] or 0) + paid
 						-- CarryService owns WalkSpeed. Ask, do not write.
 						CarryService.RefreshWalkSpeed(player)
 					end
-					local profile = PlayerDataService.Get(player)
-					publishRush(player, rush, profile and profile.TrainingCharge)
 				end
 			end
 		else
@@ -638,8 +549,21 @@ local function payEveryone()
 			-- away for a minute from being paid for the minute when they
 			-- step back on.
 			lastPaid[player] = nil
-			decayRush(player, now)
-			publishRush(player, nil, nil)
+		end
+	end
+	-- The Disco Mill's belt runs while anybody is paid on it.
+	local discoBelt = disco.belt
+	if discoBelt then
+		local busy = false
+		for _, where in pairs(paidOn) do
+			if where == "disco" then
+				busy = true
+				break
+			end
+		end
+		local want = if busy then DISCO.BeltStuds else LADDER.IdleStuds
+		if discoBelt:GetAttribute("BeltSpeed") ~= want then
+			discoBelt:SetAttribute("BeltSpeed", want)
 		end
 	end
 end
@@ -652,10 +576,241 @@ local function forget(player: Player)
 	mountConns[player] = nil
 	lastPaid[player] = nil
 	granted[player] = nil
-	ramp[player] = nil
-	rampAt[player] = nil
-	wasTraining[player] = nil
+	discoSpot[player] = nil
+	paidOn[player] = nil
+	fullToldAt[player] = nil
 end
+
+--==============================================================================
+-- THE DISCO MILL (2026-10-04, the owner's ask; GameConfig.MiniEvent.DiscoMill)
+--
+-- While a mode with a Mill runs (Ticket Disco, DISCO + MILL -- never the pure
+-- DISCO ONLY or Ticket Shower Only: discoWanted), one giant shared treadmill
+-- stands in front of the hub, west of the road to the biomes. Built here, on every server the event reaches, from the
+-- Workspace attributes MiniEventService publishes -- the same state, id and
+-- deadline as the rest of the event -- so a server that joins late builds it
+-- for the time left, a late-joining player simply sees it, and a repeated
+-- notice for the same id never builds a second one.
+--
+-- The top tier's mill (its rainbow bands) at DISCO.Scale, its deck sunk so the
+-- belt is a short step up. Tagged Treadmill like every belt -- Ambience moves
+-- it, SpeedFX matches the legs to it, a trap cannot be set on it -- but with
+-- no PlotId and no sign, so nothing that serves a plot's own mill ever takes
+-- it for one, and bindBelt's "your mill only" never mounts anybody on it.
+--
+-- Its own way on: a touch of its belt mounts the player on the first free
+-- spot (DISCO.Spots) -- everybody runs at once, each on their own spot and
+-- each paid their own training x DISCO.Multiplier (the payout line in
+-- payEveryone). Every spot taken: the player is told so, at most every few
+-- seconds. Off as off any mill: a jump, a death, a reset, leaving.
+--
+-- WHEN THE EVENT ENDS (or starts ending, or another takes its place) the pay
+-- stops at once, everybody mounted on it is set down on the grass beside it,
+-- on the road side, walking again, and it is taken down. Nobody else is
+-- moved; nobody's own mill is touched.
+--==============================================================================
+local function setDown(player: Player, spot: number, model: Model?)
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and root and root:IsA("BasePart")) or humanoid.Health <= 0 then
+		return
+	end
+	-- Clear of everything it is built from -- the top tier's wings reach past
+	-- its deck -- on the road side.
+	local half = 10 * DISCO.Scale
+	if model then
+		local _, size = model:GetBoundingBox()
+		half = size.X / 2
+	end
+	local column, row = (spot - 1) % 3, (spot - 1) // 3
+	local x = DISCO.At.X + half + DISCO.ExitOut + column * 4
+	local z = DISCO.At.Z + (row - 1) * 8
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local ignore: { Instance } = { character }
+	if model then
+		table.insert(ignore, model)
+	end
+	params.FilterDescendantsInstances = ignore
+	params.RespectCanCollide = true
+	local hit = Workspace:Raycast(Vector3.new(x, 40, z), Vector3.new(0, -80, 0), params)
+	local ground = if hit then hit.Position.Y else GameConfig.Map.GroundY
+	local stand = Vector3.new(x, ground + humanoid.HipHeight + (root :: BasePart).Size.Y * 0.5 + 0.2, z)
+	local r = root :: BasePart
+	r.CFrame = CFrame.lookAt(stand, stand + Vector3.new(0, 0, 1))
+	r.AssemblyLinearVelocity = Vector3.zero
+end
+
+local function teardownDisco(why: string)
+	local model = disco.model
+	for _, c in ipairs(discoConns) do
+		c:Disconnect()
+	end
+	table.clear(discoConns)
+	local riders: { { player: Player, spot: number } } = {}
+	for player, spot in pairs(discoSpot) do
+		table.insert(riders, { player = player, spot = spot })
+	end
+	for _, rider in ipairs(riders) do
+		TreadmillService.Unmount(rider.player)
+		setDown(rider.player, rider.spot, model)
+		-- Set down off the belt: nothing to land back on.
+		mountBlocked[rider.player] = nil
+	end
+	for player, where in pairs(paidOn) do
+		if where == "disco" then
+			paidOn[player] = nil
+		end
+	end
+	disco = { model = nil, belt = nil, eventId = nil }
+	if model then
+		model:Destroy()
+		log(string.format("Disco Mill taken down (%s); %d rider(s) set down beside it.", why, #riders))
+	end
+end
+
+local function discoMount(player: Player)
+	local belt = disco.belt
+	if not (belt and discoLive()) or mounted[player] or mountBlocked[player] then
+		return
+	end
+	local taken: { [number]: boolean } = {}
+	for _, spot in pairs(discoSpot) do
+		taken[spot] = true
+	end
+	local free: number? = nil
+	for i = 1, #DISCO.Spots do
+		if not taken[i] then
+			free = i
+			break
+		end
+	end
+	if not free then
+		local now = os.clock()
+		if upgradeChannel and now - (fullToldAt[player] or -math.huge) > 4 then
+			fullToldAt[player] = now
+			upgradeChannel:FireClient(player, DISCO.FullAction)
+		end
+		return
+	end
+	local s = DISCO.Spots[free]
+	local half = belt.Size * 0.5
+	if TreadmillService.Mount(player, belt, Vector2.new(s[1] * half.X, s[2] * half.Z)) then
+		discoSpot[player] = free
+	end
+end
+
+local function buildDisco(eventId: string)
+	local at = DISCO.At
+	local facing = CFrame.lookAt(Vector3.new(at.X, 0, at.Z), Vector3.new(at.X, 0, at.Z + 1))
+	-- Built and scaled before it is parented, so nothing replicates half done.
+	local holder = Instance.new("Folder")
+	local model, belt = MillModel.Build(DISCO.Tier, facing, holder)
+	model:ScaleTo(DISCO.Scale)
+	-- The deck's foot DISCO.Sink under the ground (its pivot is the deck's centre).
+	local deck = model.PrimaryPart
+	local halfY = if deck then deck.Size.Y / 2 else 0.6 * DISCO.Scale
+	model:PivotTo(CFrame.new(at.X, GameConfig.Map.GroundY - DISCO.Sink + halfY, at.Z) * facing.Rotation)
+	-- The chevrons and bands wrap over the belt's length, which grew with it.
+	for _, d in ipairs(model:GetDescendants()) do
+		local span = d:GetAttribute("ChevronSpan")
+		if type(span) == "number" then
+			d:SetAttribute("ChevronSpan", span * DISCO.Scale)
+		end
+	end
+	model.Name = DISCO.ModelName
+	model.Archivable = false
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	model:SetAttribute("DiscoMill", eventId)
+	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
+	belt:SetAttribute("BeltSpeed", LADDER.IdleStuds)
+
+	-- Its name over the console end, readable from the hub.
+	if deck then
+		local board = Instance.new("BillboardGui")
+		board.Name = "DiscoMillSign"
+		board.Size = UDim2.fromOffset(240, 70)
+		board.StudsOffsetWorldSpace = Vector3.new(0, 12, deck.Size.Z * 0.5)
+		board.MaxDistance = 260
+		board.LightInfluence = 0
+		board.Parent = deck
+		local title = Instance.new("TextLabel")
+		title.Name = "Title"
+		title.BackgroundTransparency = 1
+		title.Size = UDim2.fromScale(1, 0.6)
+		title.Font = Enum.Font.LuckiestGuy
+		title.TextScaled = true
+		title.Text = "DISCO MILL"
+		title.TextColor3 = Color3.fromRGB(255, 160, 232)
+		title.Parent = board
+		local edge = Instance.new("UIStroke")
+		edge.Thickness = 2.5
+		edge.Color = Color3.fromRGB(34, 18, 48)
+		edge.Parent = title
+		local sub = Instance.new("TextLabel")
+		sub.Name = "Sub"
+		sub.BackgroundTransparency = 1
+		sub.Position = UDim2.fromScale(0, 0.6)
+		sub.Size = UDim2.fromScale(1, 0.4)
+		sub.Font = Enum.Font.FredokaOne
+		sub.TextScaled = true
+		sub.Text = string.format("\u{00D7}%d TRAINING", DISCO.Multiplier)
+		sub.TextColor3 = Color3.fromRGB(120, 230, 255)
+		sub.Parent = board
+		local subEdge = Instance.new("UIStroke")
+		subEdge.Thickness = 2
+		subEdge.Color = Color3.fromRGB(34, 18, 48)
+		subEdge.Parent = sub
+	end
+
+	model.Parent = Workspace
+	holder:Destroy()
+	disco = { model = model, belt = belt, eventId = eventId }
+	table.insert(discoConns, belt.Touched:Connect(function(hit: BasePart)
+		local character = hit:FindFirstAncestorOfClass("Model")
+		local player = if character then Players:GetPlayerFromCharacter(character) else nil
+		if player then
+			discoMount(player)
+		end
+	end))
+	log(string.format("Disco Mill up for event %s: %d spots, x%d training.", string.sub(eventId, 1, 8),
+		#DISCO.Spots, DISCO.Multiplier))
+end
+
+-- Brought in line with the event: built for a disco that runs, taken down for
+-- one that stopped running, rebuilt for a new id. Safe to call any number of
+-- times.
+function TreadmillService.SyncDiscoMill()
+	local want = discoWanted()
+	local model = disco.model
+	if want and disco.eventId == want and model and model.Parent then
+		return
+	end
+	if model or next(discoSpot) ~= nil then
+		teardownDisco(if want then "a new event" else "the event ended")
+	end
+	if want then
+		local ok, err = pcall(buildDisco, want)
+		if not ok then
+			warn("[Seed/TreadmillService] the Disco Mill could not be built: " .. tostring(err))
+			teardownDisco("the build failed")
+		end
+	end
+end
+
+function TreadmillService.DiscoMill(): Model?
+	return disco.model
+end
+
+-- For the spec: the mount a touch of its belt makes, and the spot it gave.
+function TreadmillService.MountDisco(player: Player): number?
+	discoMount(player)
+	return discoSpot[player]
+end
+
+-- For the spec: one pay tick, exactly the loop's.
+TreadmillService.PayTick = payEveryone
 
 --==============================================================================
 -- THE MILL A PLOT IS WEARING
@@ -850,10 +1005,11 @@ local function refreshSign(plotId: number, tier: number)
 	-- "BASE", BECAUSE BOTH NUMBERS ARE BASE RATES
 	--
 	-- The line is "what you have > what the upgrade gives", both before the
-	-- training rush. Unlabelled, "20/s > 100/s" was read as "this mill pays
-	-- 100" by a level-1 player who was watching +20, then +80 a second pop off
-	-- their head -- the base, then the base at the rush's x4 (reported
-	-- 2026-09-26). The pop now names the rush; this names the base.
+	-- boosts that come and go (a Bonus Chest's training reward, the Disco
+	-- Mill). It was labelled when a level-1 mill popped +20 and then +80 under a
+	-- sign that read 20/s > 100/s (2026-09-26) -- the Training Rush's x4, gone
+	-- since 2026-10-05 -- and it stays labelled: the number is the mill's own
+	-- rate, which is what BASE says.
 	--==========================================================================
 	local rateText: string
 	if stepInfo and stepInfo.kind == "overclock" then
@@ -1159,6 +1315,14 @@ function TreadmillService.Init()
 		end
 	end
 	table.clear(mountConns)
+	teardownDisco("a restart")
+	table.clear(discoSpot)
+	table.clear(paidOn)
+	table.clear(fullToldAt)
+	local stale = Workspace:FindFirstChild(DISCO.ModelName)
+	if stale then
+		stale:Destroy()
+	end
 	-- Nobody is on a belt across a restart, and a stale attribute would leave a
 	-- character running on the spot forever.
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -1366,6 +1530,23 @@ function TreadmillService.Start()
 	end
 
 	running = true
+	-- THE DISCO MILL follows the mini event's own attributes (MiniEventService
+	-- writes the state last), once per change however many change together.
+	local discoQueued = false
+	local function discoSoon()
+		if discoQueued then
+			return
+		end
+		discoQueued = true
+		task.defer(function()
+			discoQueued = false
+			TreadmillService.SyncDiscoMill()
+		end)
+	end
+	for _, name in ipairs({ EVENT.State, EVENT.Mode, EVENT.EventId }) do
+		table.insert(serviceConnections, Workspace:GetAttributeChangedSignal(name):Connect(discoSoon))
+	end
+	TreadmillService.SyncDiscoMill()
 	task.spawn(function()
 		while running do
 			task.wait(TICK)
@@ -1405,10 +1586,9 @@ function TreadmillService.Start()
 	end)
 
 	log(string.format(
-		"Ready. The only faucet for Speed. %d mill(s), %d tiers, +%s/sec at tier 1 up to +%s/sec at tier %d, x%d rush at full charge.",
+		"Ready. The only faucet for Speed. %d mill(s), %d tiers, +%s/sec at tier 1 up to +%s/sec at tier %d, one rate (no rush).",
 		mills, #LADDER.Tiers, GameConfig.compact(LADDER.Tiers[1].speed),
-		GameConfig.compact(LADDER.Tiers[#LADDER.Tiers].speed), #LADDER.Tiers,
-		TRAIN.PeakMultiplier))
+		GameConfig.compact(LADDER.Tiers[#LADDER.Tiers].speed), #LADDER.Tiers))
 end
 
 function TreadmillService.Snapshot(): string

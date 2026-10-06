@@ -119,12 +119,13 @@ ObbyData.Actions = {
 -- belt tick applies) is never in it. Paid through TreadmillService.PayReward,
 -- the one Speed faucet.
 --
--- WHY THESE SECONDS. A full training rush is ~315 base-rate seconds for 90 s
--- on the belt, and takes 180 s off the belt to recharge. A ~75 s main run pays
--- 90 base-seconds -- a little better than walking the belt at 1x for the same
--- time, far short of a rush -- and the rush refills while you run. So the
--- course is worth doing between rushes and while pods hatch, never instead of
--- training. The challenge route's extra ~30 s of harder play adds 60.
+-- WHY THESE SECONDS. A ~75 s main run pays 90 base-seconds -- a little better
+-- than standing on the belt for the same time -- and the challenge route's
+-- extra ~30 s of harder play adds 60. They were sized beside the Training
+-- Rush (~315 base-seconds for a 90 s charge), which made the course the thing
+-- to do between rushes; the Rush left the mill on 2026-10-05 and these numbers
+-- were deliberately not changed with it, so the course is now slightly the
+-- better use of a minute than the belt.
 --==============================================================================
 ObbyData.Reward = {
 	MainSeconds = 90,

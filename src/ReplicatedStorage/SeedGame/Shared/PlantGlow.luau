@@ -66,10 +66,16 @@
 -- Brightness, Range, Color, Shadows and the parent are never read or written.
 --==============================================================================
 
+local PlantVisibility = require(script.Parent:WaitForChild("PlantVisibility"))
+
 local PlantGlow = {}
 
 -- Client-local and private to this file. Never set by the server.
 local AUTHORED = "SeedGlowAuthored"
+-- OTHER PLANTS: OFF (2026-10-05): a plant this screen hides carries this local
+-- marker, and its lights are off while it does -- one more reason for off, read
+-- here rather than written over this file's own switch.
+local HIDDEN = PlantVisibility.Marker
 
 local night = false
 
@@ -98,7 +104,8 @@ local function apply(light: Light)
 	-- and the next dusk would read back the `false` this file had just written --
 	-- a plant that never lights again. PlantGlowSpec caught exactly that.
 	local authored = authoredOf(light)
-	local want = night and authored
+	local model = ownerOf[light]
+	local want = night and authored and not (model ~= nil and model:GetAttribute(HIDDEN) == true)
 	-- Only when it differs: an unconditional write on every light at every
 	-- phase change is a property change the renderer has to process for nothing.
 	if light.Enabled ~= want then
@@ -152,6 +159,20 @@ end
 function PlantGlow.Watch(model: Model)
 	for _, d in ipairs(model:GetDescendants()) do
 		PlantGlow.Add(model, d)
+	end
+end
+
+-- The model's hidden marker changed (PlantSway hears it): its lights again,
+-- each from its authored value.
+function PlantGlow.Refresh(model: Model)
+	local set = held[model]
+	if not set then
+		return
+	end
+	for light in pairs(set) do
+		if light.Parent then
+			apply(light)
+		end
 	end
 end
 

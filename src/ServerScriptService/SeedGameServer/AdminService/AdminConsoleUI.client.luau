@@ -2,11 +2,29 @@
 -- Steal a Seed :: AdminConsoleUI
 --
 -- The developer console's client: an ADMIN button in the topbar beside the
--- clock, and a small panel behind it -- a target, an amount, ADD MONEY, ADD
--- SPEED and RESET PLAYER PROGRESS; the current phase with START NIGHT and START
--- DAY for the whole server; an announcement; SECRET ITEMS (2026-10-02), a
--- Secret pod or grown plant into your own bag; and one line saying what the
--- server did.
+-- clock, and behind it the ADMIN CONSOLE -- compact, in the inventory's look
+-- (MenuKit, MenuLayout), one section at a time (2026-10-04, the owner's ask):
+--
+--   BROADCAST     an announcement: THIS SERVER or ALL SERVERS (asked once
+--                 more), the words and their count, SEND, the outbox
+--   EVENTS        the GLOBAL mini event: TICKET DISCO, DISCO ONLY or TICKET
+--                 SHOWER ONLY, the duration, START / END GLOBAL EVENT, its
+--                 state and its sync -- every server of this place, either admin
+--   WEATHER       Rain or a Thunderstorm for THIS server: the duration, START
+--                 RAIN, START THUNDERSTORM, END RAIN, its state -- the owner's
+--                 account only (the server refuses anyone else)
+--   ITEM GRANTS   SECRET ITEMS: a Snarlbloom or a Petalfawn, a pod or a grown
+--                 plant, into YOUR OWN bag, EQUIP NOW or not
+--   PLAYER TOOLS  a target in this server, an amount, ADD MONEY, ADD SPEED
+--   ADVANCED      the whole server's day and night; RESET PLAYER PROGRESS,
+--                 behind its typed confirmation
+--
+-- Every command it had before, and nothing new: only how they are laid out
+-- changed. A narrow sidebar picks the section on a desktop, a dropdown in the
+-- header on a phone; each section scrolls under it, and what the server
+-- answered stands in a line under every section. Switching sections starts,
+-- stops and resets nothing, and keeps whatever was typed; reopening shows the
+-- section it was left on, as the server has it now.
 --
 --==============================================================================
 -- IT DOES NOT SHIP TO ANYBODY ELSE
@@ -18,16 +36,19 @@
 -- the server checks the sender, the target, the action, the amount and the
 -- typed confirmation, rate-limits them, and answers with the line the status
 -- row shows. A reset is reported done only when the server says it saved.
+-- The two flags the server puts on that gui (IsOwner, SecretGrants) only change
+-- how a control LOOKS; the server decides every press as before.
 --
 --==============================================================================
 -- MOUSE, TOUCH AND CONTROLLER
 --
 -- Every control is a GuiButton or a text box, and every one is Selectable, so a
 -- controller reaches the ADMIN button through Roblox's own UI selection and
--- moves between the panel's controls with the D-pad. Opening a page with a
--- controller selects its first control; B steps back -- out of the player list
--- or the reset confirmation, then out of the panel -- and is bound only while
--- the panel is open. The text boxes open the platform's keyboard.
+-- moves between the panel's controls with the D-pad; LB and RB step through the
+-- sections. B steps back -- out of the player list, the ALL SERVERS question or
+-- the reset confirmation, then out of the panel -- and is bound only while the
+-- panel is open. The text boxes open the platform's keyboard, and the panel
+-- stands above it while it shows.
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -40,10 +61,14 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("SeedGame"):WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local SeedData = require(Shared:WaitForChild("SeedData"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local MenuKit = require(Shared:WaitForChild("MenuKit"))
+local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 local parentGui = script.Parent
 if not (parentGui and parentGui:IsA("ScreenGui")) then
 	return
@@ -56,37 +81,45 @@ if not (found and found:IsA("RemoteFunction")) then
 end
 local remote = found :: RemoteFunction
 
+local LOOK = MenuKit.Look
 local INK = Color3.fromRGB(26, 24, 30)
 local PLATE = Color3.fromRGB(24, 26, 32)
-local FIELD = Color3.fromRGB(34, 38, 48)
 local GOLD = Color3.fromRGB(255, 200, 64)
 local WHITE = Color3.fromRGB(255, 255, 255)
-local MUTED = Color3.fromRGB(190, 196, 210)
-local GOOD = Color3.fromRGB(126, 214, 72)
-local BAD = Color3.fromRGB(255, 118, 100)
-local DANGER_TOP = Color3.fromRGB(232, 96, 72)
-local DANGER_BOTTOM = Color3.fromRGB(160, 40, 30)
-local LOCKED_TOP = Color3.fromRGB(96, 70, 70)
-local LOCKED_BOTTOM = Color3.fromRGB(64, 46, 46)
-local NIGHT_INK = Color3.fromRGB(150, 196, 255)
+-- THE CONSOLE'S WORDS ON ITS LIGHT PANEL (the menus' bright recolor,
+-- 2026-10-04): dark type, a dark gold, and the good / bad / night colours
+-- taken down until they read on white. GOLD and WHITE stay for the HUD's ADMIN
+-- button and the coloured faces' words.
+local TEXT = LOOK.Text
+local GOLD_TEXT = LOOK.Premium
+local GOOD = LOOK.Money
+local BAD = Color3.fromRGB(196, 52, 40)
+local NIGHT_INK = Color3.fromRGB(44, 74, 170)
 local BACK_ACTION = "SeedAdminBack"
+local PAD_ACTION = "SeedAdminPad"
 local CYCLE = GameConfig.WorldCycle
 local ATTR = GameConfig.Attributes
+local ANNOUNCE = GameConfig.Announce
+local WEATHER = GameConfig.Weather
+local MINI = GameConfig.MiniEvent
+local Z = 6
 
 --==============================================================================
 -- THE BUTTON, BESIDE THE CLOCK
 --
 -- The clock's own plate with a gold word on it. Placed from HudLayout's
 -- `admin`, in window space (this gui ignores the inset), and asked again only
--- when the screen or the topbar changes shape. Above the panel's dimmer, so it
--- also shuts the panel.
+-- when the screen or the topbar changes shape. In a gui above the console's,
+-- so it also shuts the console.
 --==============================================================================
 local button = Instance.new("TextButton")
 button.Name = "AdminButton"
 button.BackgroundColor3 = PLATE
 button.BackgroundTransparency = 0.25
 button.BorderSizePixel = 0
-button.AutoButtonColor = true
+-- The family's press (the global UI pass): a small grow under the mouse and a
+-- sink under a press, never the engine's colour flash.
+button.AutoButtonColor = false
 button.Text = ""
 button.Selectable = true
 button.Visible = false
@@ -96,6 +129,7 @@ UIKit.corner(button, 10)
 local buttonEdge = UIKit.stroke(button, INK, 2.5)
 buttonEdge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 UIKit.clicks(button)
+UIKit.pressPop(button)
 
 local buttonWord = UIKit.outlined(button, "Word", 16, GOLD, 2)
 buttonWord.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -104,11 +138,18 @@ buttonWord.Size = UDim2.new(1, -10, 1, -8)
 buttonWord.TextScaled = true
 buttonWord.Text = "ADMIN"
 buttonWord.ZIndex = 11
-local wordFit = Instance.new("UITextSizeConstraint")
-wordFit.MaxTextSize = 16
-wordFit.MinTextSize = 10
-wordFit.Parent = buttonWord
+do
+	local wordFit = Instance.new("UITextSizeConstraint")
+	wordFit.MaxTextSize = 16
+	wordFit.MinTextSize = 10
+	wordFit.Parent = buttonWord
+end
 
+-- STEPS ASIDE WHILE A MENU COVERS THE RAIL (2026-10-03): the compact Index and
+-- Shop take a phone's whole safe area and put the rail layer under their dimmer
+-- (UIKit.coverRail); this button is in its own gui above both, so it hides for
+-- as long as the layer says Covered, and comes back where it was.
+local railLayer = UIKit.railLayer(playerGui)
 local function place()
 	if screen.AbsoluteSize.X <= 0 then
 		return
@@ -121,131 +162,206 @@ local function place()
 	end
 	button.Position = UDim2.fromOffset(math.round(r.x), math.round(r.y))
 	button.Size = UDim2.fromOffset(r.w, r.h)
-	button.Visible = true
+	button.Visible = railLayer:GetAttribute("Covered") ~= true
 end
 screen:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
 local topbarWatch = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)
-screen.Destroying:Once(function()
-	topbarWatch:Disconnect()
-	ContextActionService:UnbindAction(BACK_ACTION)
-end)
+local coverWatch = railLayer:GetAttributeChangedSignal("Covered"):Connect(place)
 place()
 
 --==============================================================================
--- THE PANEL: THE GAME'S OWN MODAL
+-- THE CONSOLE: ITS OWN GUI, IN THE SAFE AREA, UNDER THE BUTTON'S
 --
--- Three pages in its body, one showing at a time: the form, the list the
--- target is picked from, and the reset confirmation. Each scrolls, so a short
--- phone keeps every control reachable -- and a controller's selection scrolls
--- with it.
+-- MenuLayout works in the safe area, so the console stands in a gui that keeps
+-- the inset (the button's ignores it, to stand in the topbar). One below the
+-- button's DisplayOrder, so the button still shuts it; over the HUD and every
+-- other panel. Gone with the button's gui.
 --==============================================================================
-local modal = UIKit.modal(screen, { name = "Admin", title = "ADMIN", maxWidth = 380, maxHeight = 500 })
+local stale = playerGui:FindFirstChild("SeedAdminPanel")
+if stale then
+	stale:Destroy()
+end
+local deck = Instance.new("ScreenGui")
+deck.Name = "SeedAdminPanel"
+deck.ResetOnSpawn = false
+deck.IgnoreGuiInset = false
+deck.DisplayOrder = 59
+deck.Parent = playerGui
+screen.Destroying:Once(function()
+	topbarWatch:Disconnect()
+	coverWatch:Disconnect()
+	ContextActionService:UnbindAction(BACK_ACTION)
+	ContextActionService:UnbindAction(PAD_ACTION)
+	deck:Destroy()
+end)
+
+-- The header's picture: the Settings gear (no admin art has been uploaded).
+local menu = MenuKit.modal(deck, "Admin", "ADMIN CONSOLE", GameConfig.Rail.SettingsIcon, nil)
+local modal = menu.modal
+local body = menu.body
 modal.dimmer.Selectable = false
-local blocker = modal.shell:FindFirstChild("ClickBlocker")
-if blocker and blocker:IsA("GuiButton") then
-	blocker.Selectable = false
+do
+	local blocker = modal.shell:FindFirstChild("ClickBlocker")
+	if blocker and blocker:IsA("GuiButton") then
+		blocker.Selectable = false
+	end
 end
 modal.close.Selectable = true
 
--- The form runs to WEATHER's START THUNDERSTORM row (2026-10-02); it scrolls.
-local CONTENT = 1056
-local CONFIRM_CONTENT = 332
--- The status line lives under the pages, not in them, so what the server said
--- is on screen whichever page is showing and however far the form is scrolled.
-local STATUS_H = 40
-
-local function page(name: string, height: number): ScrollingFrame
-	local scroller = Instance.new("ScrollingFrame")
-	scroller.Name = name
-	scroller.Size = UDim2.new(1, 0, 1, -(STATUS_H + 6))
-	scroller.BackgroundTransparency = 1
-	scroller.BorderSizePixel = 0
-	scroller.ScrollBarThickness = 6
-	scroller.ScrollBarImageColor3 = MUTED
-	scroller.CanvasSize = UDim2.fromOffset(0, height)
-	scroller.ScrollingDirection = Enum.ScrollingDirection.Y
-	scroller.Selectable = false
-	scroller.ZIndex = 4
-	scroller.Parent = modal.body
-	return scroller
-end
-
-local form = page("Form", CONTENT)
-local list = page("Players", CONTENT)
-list.Visible = false
-local confirmPage = page("ConfirmReset", CONFIRM_CONTENT)
-confirmPage.Visible = false
-
-local function caption(parent: Instance, text: string, y: number): TextLabel
-	local label = Instance.new("TextLabel")
-	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
-	label.TextSize = 13
-	label.TextColor3 = MUTED
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Size = UDim2.new(1, -8, 0, 16)
-	label.Position = UDim2.fromOffset(0, y)
-	label.Text = text
-	label.ZIndex = 5
-	label.Parent = parent
-	return label
-end
-
-local function paint(b: GuiObject, top: Color3, bottom: Color3)
-	local gradient = b:FindFirstChildOfClass("UIGradient")
-	if gradient then
-		gradient.Color = ColorSequence.new(top, bottom)
+--==============================================================================
+-- THE PIECES EVERY SECTION IS BUILT FROM
+--
+-- A section is a page that scrolls: a heading with its HELP (folded away until
+-- asked for), lines, text boxes, and rows of buttons that stand two or three
+-- abreast where the width allows and one per row where it does not.
+--==============================================================================
+-- The faces a button wears beyond MenuKit's own: a locked control dark, the
+-- weather its own two colours, the night its blue. END and anything
+-- destructive wear MenuKit's red `danger`. Each with the family's darker foot
+-- and a dark keyline (the global UI pass); a locked one never presses.
+local FACES: { [string]: { Color3 } } = {
+	locked = { Color3.fromRGB(96, 70, 70), Color3.fromRGB(64, 46, 46), Color3.fromRGB(34, 22, 22),
+		Color3.fromRGB(214, 196, 196) },
+	rain = { Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170), Color3.fromRGB(14, 46, 96), WHITE },
+	thunder = { Color3.fromRGB(128, 104, 214), Color3.fromRGB(70, 52, 146), Color3.fromRGB(34, 22, 86), WHITE },
+	night = { Color3.fromRGB(70, 92, 170), Color3.fromRGB(34, 44, 104), Color3.fromRGB(14, 20, 64), WHITE },
+	speed = { Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170), Color3.fromRGB(14, 46, 96), WHITE },
+}
+local function face(b: MenuKit.Button, id: string)
+	local f = FACES[id]
+	if f then
+		-- MenuKit's own state first (pressable or not), then these colours.
+		b.style(if id == "locked" then "off" else "go")
+		b.tint.Color = MenuKit.faceColours(f[1], f[2], f[3])
+		b.edge.Color = f[3]
+		b.label.TextColor3 = f[4]
+	else
+		b.style(id)
 	end
 end
 
-local function pill(parent: Instance, name: string, text: string, top: Color3, bottom: Color3): TextButton
-	local b = Instance.new("TextButton")
-	b.Name = name
-	b.AutoButtonColor = true
-	b.BorderSizePixel = 0
-	b.Text = ""
-	b.Selectable = true
-	b.ZIndex = 5
-	UIKit.corner(b, 10)
-	local edge = UIKit.stroke(b, INK, 2.5)
-	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	UIKit.gradient(b, top, bottom)
-	local word = UIKit.outlined(b, "Label", 18, WHITE, 2)
-	word.AnchorPoint = Vector2.new(0.5, 0.5)
-	word.Position = UDim2.fromScale(0.5, 0.5)
-	word.Size = UDim2.new(1, -12, 1, -10)
-	word.TextScaled = true
-	word.Text = text
-	word.ZIndex = 6
-	local fit = Instance.new("UITextSizeConstraint")
-	fit.MaxTextSize = 18
-	fit.MinTextSize = 10
-	fit.Parent = word
-	UIKit.clicks(b)
-	b.Parent = parent
-	return b
+type Grid = { grid: UIGridLayout, max: number, min: number }
+local grids: { Grid } = {}
+local pages: { [string]: ScrollingFrame } = {}
+local order: { [Instance]: number } = {}
+
+local function nextIn(holder: Instance): number
+	local n = (order[holder] or 0) + 1
+	order[holder] = n
+	return n
 end
 
-local function field(parent: Instance, name: string, y: number, placeholder: string): TextBox
+local build = {}
+
+function build.page(id: string): ScrollingFrame
+	local s = Instance.new("ScrollingFrame")
+	s.Name = "Page_" .. id
+	s.BackgroundTransparency = 1
+	s.BorderSizePixel = 0
+	s.ScrollBarThickness = 5
+	s.ScrollBarImageColor3 = LOOK.WellEdge
+	s.CanvasSize = UDim2.new()
+	s.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	s.ScrollingDirection = Enum.ScrollingDirection.Y
+	s.Selectable = false
+	s.Visible = false
+	s.ZIndex = Z
+	s.Parent = body
+	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, 7)
+	list.Parent = s
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 2)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 9)
+	pad.Parent = s
+	pages[id] = s
+	return s
+end
+
+-- A block inside a page that comes and goes as one (the reset's question).
+function build.block(page: Instance, name: string): Frame
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.BackgroundTransparency = 1
+	f.Size = UDim2.new(1, 0, 0, 0)
+	f.AutomaticSize = Enum.AutomaticSize.Y
+	f.LayoutOrder = nextIn(page)
+	f.Parent = page
+	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, 7)
+	list.Parent = f
+	return f
+end
+
+-- Words that wrap and take the height they need.
+function build.line(holder: Instance, name: string, size: number, colour: Color3?): TextLabel
+	-- Sentences: the clean body face (the readability brief).
+	local l = MenuKit.body(holder, name, size, colour, Z + 1)
+	l.LayoutOrder = nextIn(holder)
+	l.Size = UDim2.new(1, 0, 0, size + 4)
+	l.AutomaticSize = Enum.AutomaticSize.Y
+	l.TextWrapped = true
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	return l
+end
+
+-- The section's own heading, and its help folded under a "?".
+function build.heading(page: Instance, text: string, help: string)
+	local row = Instance.new("Frame")
+	row.Name = "Heading"
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 32)
+	row.LayoutOrder = nextIn(page)
+	row.Parent = page
+	local title = MenuKit.text(row, "Title", 17, TEXT, Z + 1)
+	title.Font = Enum.Font.FredokaOne
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Size = UDim2.new(1, -44, 1, 0)
+	title.TextScaled = true
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 17
+	fit.MinTextSize = 11
+	fit.Parent = title
+	title.Text = text
+	local toggle = MenuKit.button(row, "Help", Z + 1, "?", 15)
+	toggle.hit.AnchorPoint = Vector2.new(1, 0.5)
+	toggle.hit.Position = UDim2.new(1, 0, 0.5, 0)
+	toggle.hit.Size = UDim2.fromOffset(40, 40)
+	toggle.style("dark")
+	local words = build.line(page, "HelpText", 13, LOOK.Muted)
+	words.Text = help
+	words.Visible = false
+	toggle.hit.Activated:Connect(function()
+		words.Visible = not words.Visible
+		toggle.set(if words.Visible then "\u{00D7}" else "?")
+	end)
+end
+
+-- A text box in the panel's wells.
+function build.box(holder: Instance, name: string, placeholder: string, height: number?): TextBox
 	local box = Instance.new("TextBox")
 	box.Name = name
-	box.Position = UDim2.fromOffset(0, y)
-	box.Size = UDim2.new(1, -8, 0, 44)
-	box.BackgroundColor3 = FIELD
+	box.LayoutOrder = nextIn(holder)
+	box.Size = UDim2.new(1, 0, 0, height or 44)
+	box.BackgroundColor3 = LOOK.Well
+	box.BackgroundTransparency = LOOK.WellTransparency
 	box.BorderSizePixel = 0
 	box.ClearTextOnFocus = false
-	box.Font = Enum.Font.GothamBold
-	box.TextSize = 18
-	box.TextColor3 = WHITE
-	box.PlaceholderColor3 = MUTED
+	box.Font = LOOK.BodyFont
+	box.TextSize = 16
+	box.TextColor3 = TEXT
+	box.PlaceholderColor3 = LOOK.Placeholder
 	box.PlaceholderText = placeholder
+	box.TextXAlignment = Enum.TextXAlignment.Left
 	box.Text = ""
 	box.Selectable = true
-	box.ZIndex = 5
-	box.Parent = parent
-	UIKit.corner(box, 10)
-	local edge = UIKit.stroke(box, INK, 2)
-	edge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	box.ZIndex = Z + 1
+	box.Parent = holder
+	UIKit.corner(box, 9)
+	MenuKit.keyline(box, LOOK.WellEdge, 1)
 	local pad = Instance.new("UIPadding")
 	pad.PaddingLeft = UDim.new(0, 12)
 	pad.PaddingRight = UDim.new(0, 12)
@@ -253,280 +369,102 @@ local function field(parent: Instance, name: string, y: number, placeholder: str
 	return box
 end
 
---== THE FORM: TARGET ==--
-caption(form, "TARGET", 0)
-local targetButton = Instance.new("TextButton")
-targetButton.Name = "Target"
-targetButton.Position = UDim2.fromOffset(0, 18)
-targetButton.Size = UDim2.new(1, -8, 0, 44)
-targetButton.BackgroundColor3 = FIELD
-targetButton.BorderSizePixel = 0
-targetButton.AutoButtonColor = true
-targetButton.Text = ""
-targetButton.Selectable = true
-targetButton.ZIndex = 5
-targetButton.Parent = form
-UIKit.corner(targetButton, 10)
-local targetEdge = UIKit.stroke(targetButton, INK, 2)
-targetEdge.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-UIKit.clicks(targetButton)
-
-local targetName = Instance.new("TextLabel")
-targetName.Name = "Username"
-targetName.BackgroundTransparency = 1
-targetName.Font = Enum.Font.GothamBlack
-targetName.TextColor3 = WHITE
-targetName.TextScaled = true
-targetName.TextXAlignment = Enum.TextXAlignment.Left
-targetName.Position = UDim2.fromOffset(12, 7)
-targetName.Size = UDim2.new(1, -96, 1, -14)
-targetName.ZIndex = 6
-targetName.Parent = targetButton
-local nameFit = Instance.new("UITextSizeConstraint")
-nameFit.MaxTextSize = 20
-nameFit.MinTextSize = 11
-nameFit.Parent = targetName
-
-local change = Instance.new("TextLabel")
-change.Name = "Change"
-change.BackgroundTransparency = 1
-change.Font = Enum.Font.GothamBold
-change.TextSize = 13
-change.TextColor3 = GOLD
-change.TextXAlignment = Enum.TextXAlignment.Right
-change.AnchorPoint = Vector2.new(1, 0.5)
-change.Position = UDim2.new(1, -12, 0.5, 0)
-change.Size = UDim2.fromOffset(76, 20)
-change.Text = "CHANGE"
-change.ZIndex = 6
-change.Parent = targetButton
-
---== THE FORM: AMOUNT, AND THE THREE ACTIONS ==--
-caption(form, "AMOUNT (FOR MONEY OR SPEED)", 70)
-local amountBox = field(form, "Amount", 88, "Whole number, e.g. 1000000")
-
-local actions = Instance.new("Frame")
-actions.Name = "Actions"
-actions.BackgroundTransparency = 1
-actions.Position = UDim2.fromOffset(0, 142)
-actions.Size = UDim2.new(1, -8, 0, 44)
-actions.ZIndex = 5
-actions.Parent = form
-
-local addMoney = pill(actions, "AddMoney", "ADD MONEY", Color3.fromRGB(96, 186, 72), Color3.fromRGB(46, 120, 42))
-addMoney.Size = UDim2.new(0.5, -4, 1, 0)
-local addSpeed = pill(actions, "AddSpeed", "ADD SPEED", Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170))
-addSpeed.AnchorPoint = Vector2.new(1, 0)
-addSpeed.Position = UDim2.fromScale(1, 0)
-addSpeed.Size = UDim2.new(0.5, -4, 1, 0)
-
-local resetButton = pill(form, "ResetPlayerProgress", "RESET PLAYER PROGRESS", DANGER_TOP, DANGER_BOTTOM)
-resetButton.Position = UDim2.fromOffset(0, 194)
-resetButton.Size = UDim2.new(1, -8, 0, 44)
-
---== THE FORM: DAY AND NIGHT, FOR THE WHOLE SERVER ==--
--- Set apart by a rule and said in so many words: these two change the world for
--- everybody in this server, not for the target above.
-local rule = Instance.new("Frame")
-rule.Name = "Rule"
-rule.BorderSizePixel = 0
-rule.BackgroundColor3 = MUTED
-rule.BackgroundTransparency = 0.6
-rule.Position = UDim2.fromOffset(0, 250)
-rule.Size = UDim2.new(1, -8, 0, 2)
-rule.ZIndex = 5
-rule.Parent = form
-local worldCaption = caption(form, "WHOLE SERVER: DAY AND NIGHT FOR EVERYONE HERE", 260)
-worldCaption.TextColor3 = GOLD
-
-local phaseLabel = Instance.new("TextLabel")
-phaseLabel.Name = "Phase"
-phaseLabel.BackgroundTransparency = 1
-phaseLabel.Font = Enum.Font.GothamBlack
-phaseLabel.TextSize = 17
-phaseLabel.TextColor3 = WHITE
-phaseLabel.TextXAlignment = Enum.TextXAlignment.Left
-phaseLabel.Position = UDim2.fromOffset(0, 278)
-phaseLabel.Size = UDim2.new(1, -8, 0, 24)
-phaseLabel.Text = ""
-phaseLabel.ZIndex = 5
-phaseLabel.Parent = form
-
-local world = Instance.new("Frame")
-world.Name = "World"
-world.BackgroundTransparency = 1
-world.Position = UDim2.fromOffset(0, 306)
-world.Size = UDim2.new(1, -8, 0, 44)
-world.ZIndex = 5
-world.Parent = form
-local startNight = pill(world, "StartNight", "START NIGHT", Color3.fromRGB(70, 92, 170), Color3.fromRGB(34, 44, 104))
-startNight.Size = UDim2.new(0.5, -4, 1, 0)
-local startDay = pill(world, "StartDay", "START DAY", Color3.fromRGB(236, 176, 60), Color3.fromRGB(176, 112, 24))
-startDay.AnchorPoint = Vector2.new(1, 0)
-startDay.Position = UDim2.fromScale(1, 0)
-startDay.Size = UDim2.new(0.5, -4, 1, 0)
-
---== THE FORM: AN ANNOUNCEMENT (2026-10-01) ==--
--- Who hears it -- THIS SERVER unless ALL SERVERS is picked, and ALL SERVERS
--- asks once more -- the words, how many are left, and SEND. The server checks
--- every part again: the allowlist, the length, the cooldown, the filter.
-local ANNOUNCE = GameConfig.Announce
-local announceRule = rule:Clone()
-announceRule.Position = UDim2.fromOffset(0, 362)
-announceRule.Parent = form
-local announceCaption = caption(form, "ANNOUNCEMENT TO PLAYERS", 372)
-announceCaption.TextColor3 = GOLD
-
-local scopeRow = Instance.new("Frame")
-scopeRow.Name = "Scope"
-scopeRow.BackgroundTransparency = 1
-scopeRow.Position = UDim2.fromOffset(0, 392)
-scopeRow.Size = UDim2.new(1, -8, 0, 40)
-scopeRow.ZIndex = 5
-scopeRow.Parent = form
-local SCOPE_ON_TOP, SCOPE_ON_BOTTOM = Color3.fromRGB(96, 186, 72), Color3.fromRGB(46, 120, 42)
-local SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM = Color3.fromRGB(70, 78, 96), Color3.fromRGB(44, 50, 64)
-local thisServer = pill(scopeRow, "ThisServer", "THIS SERVER", SCOPE_ON_TOP, SCOPE_ON_BOTTOM)
-thisServer.Size = UDim2.new(0.5, -4, 1, 0)
-local allServers = pill(scopeRow, "AllServers", "ALL SERVERS", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
-allServers.AnchorPoint = Vector2.new(1, 0)
-allServers.Position = UDim2.fromScale(1, 0)
-allServers.Size = UDim2.new(0.5, -4, 1, 0)
-
-local messageBox = field(form, "Message", 440, string.format("Message, up to %d characters", ANNOUNCE.MaxChars))
-messageBox.Size = UDim2.new(1, -8, 0, 72)
-messageBox.TextSize = 16
-messageBox.TextWrapped = true
-messageBox.TextXAlignment = Enum.TextXAlignment.Left
-messageBox.TextYAlignment = Enum.TextYAlignment.Top
-local counter = caption(form, "", 516)
-
-local sendRow = Instance.new("Frame")
-sendRow.Name = "SendRow"
-sendRow.BackgroundTransparency = 1
-sendRow.Position = UDim2.fromOffset(0, 538)
-sendRow.Size = UDim2.new(1, -8, 0, 44)
-sendRow.ZIndex = 5
-sendRow.Parent = form
-local sendAnnouncement = pill(sendRow, "SendAnnouncement", "SEND", Color3.fromRGB(236, 176, 60),
-	Color3.fromRGB(176, 112, 24))
-sendAnnouncement.Size = UDim2.fromScale(1, 1)
-local cancelAll = pill(sendRow, "CancelAll", "CANCEL", Color3.fromRGB(120, 128, 146), Color3.fromRGB(72, 78, 94))
-cancelAll.Size = UDim2.new(0.4, -4, 1, 0)
-cancelAll.Visible = false
-local confirmAll = pill(sendRow, "ConfirmAll", "YES, ALL SERVERS", DANGER_TOP, DANGER_BOTTOM)
-confirmAll.AnchorPoint = Vector2.new(1, 0)
-confirmAll.Position = UDim2.fromScale(1, 0)
-confirmAll.Size = UDim2.new(0.6, -4, 1, 0)
-confirmAll.Visible = false
-
---== THE FORM: SECRET ITEMS (2026-10-02) ==--
--- A Snarlbloom or a Petalfawn, as a POD or a GROWN PLANT, into YOUR OWN bag --
--- this version names no other recipient, and the server refuses any other.
--- EQUIP NOW puts it in your hands only if they are free. GRANT TO BAG is locked
--- while a grant is on its way. Every press carries its own request id, so the
--- server never grants the same request twice.
-local secretRule = rule:Clone()
-secretRule.Position = UDim2.fromOffset(0, 594)
-secretRule.Parent = form
-local secretCaption = caption(form, "SECRET ITEMS: INTO YOUR OWN BAG", 604)
-secretCaption.TextColor3 = GOLD
-
-local function row(name: string, y: number, h: number): Frame
-	local f = Instance.new("Frame")
-	f.Name = name
-	f.BackgroundTransparency = 1
-	f.Position = UDim2.fromOffset(0, y)
-	f.Size = UDim2.new(1, -8, 0, h)
-	f.ZIndex = 5
-	f.Parent = form
-	return f
+-- A row of buttons, `most` abreast where each can be `min` wide, fewer where
+-- not -- one per row on the narrowest screens. Every one a 44-px target.
+function build.buttons(holder: Instance, most: number, min: number, specs: { { string } }): { MenuKit.Button }
+	local frame = Instance.new("Frame")
+	frame.Name = "Buttons_" .. specs[1][1]
+	frame.BackgroundTransparency = 1
+	frame.Size = UDim2.new(1, 0, 0, 0)
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	frame.LayoutOrder = nextIn(holder)
+	frame.Parent = holder
+	local grid = Instance.new("UIGridLayout")
+	grid.SortOrder = Enum.SortOrder.LayoutOrder
+	grid.CellPadding = UDim2.fromOffset(6, 4)
+	grid.CellSize = UDim2.fromOffset(min, MenuLayout.Config.Touch)
+	grid.Parent = frame
+	table.insert(grids, { grid = grid, max = most, min = min })
+	local made: { MenuKit.Button } = {}
+	for i, spec in ipairs(specs) do
+		local b = MenuKit.button(frame, spec[1], Z + 1, spec[2], 15)
+		b.hit.LayoutOrder = i
+		b.hit.Selectable = true
+		made[i] = b
+	end
+	return made
 end
 
-local creatureRow = row("SecretCreature", 624, 40)
-local pickSnarlbloom = pill(creatureRow, "Snarlbloom", "SNARLBLOOM", SCOPE_ON_TOP, SCOPE_ON_BOTTOM)
-pickSnarlbloom.Size = UDim2.new(0.5, -4, 1, 0)
-local pickPetalfawn = pill(creatureRow, "Petalfawn", "PETALFAWN", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
-pickPetalfawn.AnchorPoint = Vector2.new(1, 0)
-pickPetalfawn.Position = UDim2.fromScale(1, 0)
-pickPetalfawn.Size = UDim2.new(0.5, -4, 1, 0)
-local creatureNote = caption(form, "", 668)
+-- A small coloured dot and a line of state beside it.
+function build.state(holder: Instance, name: string): (TextLabel, Frame)
+	local row = Instance.new("Frame")
+	row.Name = name
+	row.BackgroundColor3 = LOOK.Well
+	row.BackgroundTransparency = LOOK.WellTransparency
+	row.Size = UDim2.new(1, 0, 0, 34)
+	row.AutomaticSize = Enum.AutomaticSize.Y
+	row.LayoutOrder = nextIn(holder)
+	row.Parent = holder
+	UIKit.corner(row, 9)
+	MenuKit.keyline(row, LOOK.WellEdge, 1)
+	local dot = MenuKit.frame(row, "Dot", Z + 1, LOOK.Muted, 0, 6)
+	dot.AnchorPoint = Vector2.new(0, 0.5)
+	dot.Position = UDim2.new(0, 11, 0, 17)
+	dot.Size = UDim2.fromOffset(12, 12)
+	local words = MenuKit.body(row, "Words", 15, TEXT, Z + 1)
+	words.Position = UDim2.fromOffset(30, 0)
+	words.Size = UDim2.new(1, -38, 0, 34)
+	words.AutomaticSize = Enum.AutomaticSize.Y
+	words.TextWrapped = true
+	words.TextXAlignment = Enum.TextXAlignment.Left
+	return words, dot
+end
 
-local kindRow = row("SecretKind", 688, 40)
-local pickPod = pill(kindRow, "Pod", "POD", SCOPE_ON_TOP, SCOPE_ON_BOTTOM)
-pickPod.Size = UDim2.new(0.5, -4, 1, 0)
-local pickPlant = pill(kindRow, "GrownPlant", "GROWN PLANT", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
-pickPlant.AnchorPoint = Vector2.new(1, 0)
-pickPlant.Position = UDim2.fromScale(1, 0)
-pickPlant.Size = UDim2.new(0.5, -4, 1, 0)
+--==============================================================================
+-- THE SECTIONS AND THEIR PICTURES
+--
+-- Uploaded pictures only (no emoji): the Spin Ticket for EVENTS, the rain
+-- cloud for WEATHER, the Bag's pods for ITEM GRANTS, the shop's cash for
+-- PLAYER TOOLS, the Settings gear for ADVANCED. BROADCAST has no art uploaded
+-- for it; it shows its name alone.
+--==============================================================================
+local SECTIONS = {
+	{ id = "broadcast", label = "BROADCAST", icon = nil },
+	{ id = "events", label = "EVENTS", icon = GameConfig.SourceIcons.tickets },
+	{ id = "weather", label = "WEATHER", icon = GameConfig.SourceIcons.rain },
+	{ id = "grants", label = "ITEM GRANTS", icon = GameConfig.BagLook.IconImages.pods },
+	{ id = "players", label = "PLAYER TOOLS", icon = GameConfig.Store.Icons.cash1 },
+	{ id = "advanced", label = "ADVANCED", icon = GameConfig.Rail.SettingsIcon },
+}
+for _, s in ipairs(SECTIONS) do
+	build.page(s.id)
+end
 
-local recipientLine = caption(form, "", 734)
-recipientLine.TextWrapped = true
-recipientLine.Size = UDim2.new(1, -8, 0, 32)
-
-local grantRow = row("SecretGrant", 772, 44)
-local equipToggle = pill(grantRow, "EquipNow", "EQUIP NOW: OFF", SCOPE_OFF_TOP, SCOPE_OFF_BOTTOM)
-equipToggle.Size = UDim2.new(0.42, -4, 1, 0)
-local GRANT_TOP, GRANT_BOTTOM = Color3.fromRGB(236, 176, 60), Color3.fromRGB(176, 112, 24)
-local grantButton = pill(grantRow, "GrantToBag", "GRANT TO BAG", GRANT_TOP, GRANT_BOTTOM)
-grantButton.AnchorPoint = Vector2.new(1, 0)
-grantButton.Position = UDim2.fromScale(1, 0)
-grantButton.Size = UDim2.new(0.58, -4, 1, 0)
-
---== THE FORM: WEATHER (2026-10-02) ==--
--- Rain for THIS server, by the OWNER's account alone: the server checks the
--- sender's UserId against its own owner identity on every request, and another
--- admin's press is refused there. START RAIN takes the duration box, in whole
--- seconds; END RAIN ends it early. The line between reads the server's own
--- attributes, the way the phase line reads the clock's.
-local WEATHER = GameConfig.Weather
-local weatherRule = rule:Clone()
-weatherRule.Position = UDim2.fromOffset(0, 826)
-weatherRule.Parent = form
-local weatherCaption = caption(form, "WEATHER FOR THIS SERVER (OWNER ONLY)", 836)
-weatherCaption.TextColor3 = GOLD
-
-local rainLabel = phaseLabel:Clone()
-rainLabel.Name = "Rain"
-rainLabel.Position = UDim2.fromOffset(0, 854)
-rainLabel.Text = ""
-rainLabel.Parent = form
-
-caption(form, "DURATION (SECONDS)", 882)
-local durationBox = field(form, "RainSeconds", 900,
-	string.format("Whole seconds, %d to %d", WEATHER.MinSeconds, WEATHER.MaxSeconds))
-durationBox.Text = tostring(WEATHER.DefaultSeconds)
-
-local weatherRow = row("Weather", 952, 44)
-local startRain = pill(weatherRow, "StartRain", "START RAIN", Color3.fromRGB(74, 156, 232), Color3.fromRGB(36, 92, 170))
-startRain.Size = UDim2.new(0.5, -4, 1, 0)
-local endRain = pill(weatherRow, "EndRain", "END RAIN", Color3.fromRGB(120, 128, 146), Color3.fromRGB(72, 78, 94))
-endRain.AnchorPoint = Vector2.new(1, 0)
-endRain.Position = UDim2.fromScale(1, 0)
-endRain.Size = UDim2.new(0.5, -4, 1, 0)
--- The Thunderstorm (2026-10-02): the same event in its heavier mode, the same
--- duration box; END RAIN ends whichever is running.
-local thunderRow = row("Thunder", 1004, 44)
-local startThunder = pill(thunderRow, "StartThunder", "START THUNDERSTORM", Color3.fromRGB(128, 104, 214),
-	Color3.fromRGB(70, 52, 146))
-startThunder.Size = UDim2.new(1, 0, 1, 0)
-
---== WHAT HAPPENED: under the pages, on every one of them ==--
-local status = Instance.new("TextLabel")
-status.Name = "Status"
-status.BackgroundTransparency = 1
-status.Font = Enum.Font.GothamBold
-status.TextSize = 15
+--==============================================================================
+-- WHAT HAPPENED: under every section, whichever is showing
+--==============================================================================
+local status = MenuKit.text(body, "Status", 14, LOOK.Muted, Z + 1)
+status.Font = Enum.Font.FredokaOne
+status.BackgroundColor3 = LOOK.Well
+status.BackgroundTransparency = LOOK.WellTransparency
 status.TextWrapped = true
-status.TextColor3 = MUTED
+status.TextScaled = true
 status.TextXAlignment = Enum.TextXAlignment.Left
-status.TextYAlignment = Enum.TextYAlignment.Top
-status.AnchorPoint = Vector2.new(0, 1)
-status.Position = UDim2.fromScale(0, 1)
-status.Size = UDim2.new(1, -8, 0, STATUS_H)
-status.Text = "Choose a target, then an action."
-status.ZIndex = 5
-status.Parent = modal.body
+status.Text = "Choose a section, then an action."
+do
+	local fit = Instance.new("UITextSizeConstraint")
+	fit.MaxTextSize = 14
+	fit.MinTextSize = 10
+	fit.Parent = status
+	UIKit.corner(status, 9)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.PaddingTop = UDim.new(0, 4)
+	pad.PaddingBottom = UDim.new(0, 4)
+	pad.Parent = status
+end
+local STATUS_H = 46
 
 local function setStatus(text: string, colour: Color3)
 	status.Text = text
@@ -534,91 +472,365 @@ local function setStatus(text: string, colour: Color3)
 end
 
 --==============================================================================
--- THE RESET CONFIRMATION
+-- BROADCAST
 --
--- The exact username and UserId it will erase, what goes and what stays, and a
--- box the admin must type that username into. The button stays locked until
--- the box matches, and the server checks the typed name again anyway.
+-- Who hears it -- THIS SERVER unless ALL SERVERS is picked, and ALL SERVERS
+-- asks once more -- the words, how many are used, and SEND. The server checks
+-- every part again: the allowlist, the length, its safeguards, the filter.
 --==============================================================================
-caption(confirmPage, "RESET PLAYER PROGRESS", 0)
-local confirmName = Instance.new("TextLabel")
-confirmName.Name = "Username"
-confirmName.BackgroundTransparency = 1
-confirmName.Font = Enum.Font.GothamBlack
-confirmName.TextColor3 = WHITE
-confirmName.TextScaled = true
-confirmName.TextXAlignment = Enum.TextXAlignment.Left
-confirmName.Position = UDim2.fromOffset(0, 18)
-confirmName.Size = UDim2.new(1, -8, 0, 28)
-confirmName.ZIndex = 5
-confirmName.Parent = confirmPage
-local confirmNameFit = Instance.new("UITextSizeConstraint")
-confirmNameFit.MaxTextSize = 24
-confirmNameFit.MinTextSize = 12
-confirmNameFit.Parent = confirmName
-
-local confirmId = caption(confirmPage, "", 46)
-
-local warning = Instance.new("TextLabel")
-warning.Name = "Erases"
-warning.BackgroundTransparency = 1
-warning.Font = Enum.Font.GothamMedium
-warning.TextSize = 13
-warning.TextWrapped = true
-warning.TextColor3 = WHITE
-warning.TextXAlignment = Enum.TextXAlignment.Left
-warning.TextYAlignment = Enum.TextYAlignment.Top
-warning.Position = UDim2.fromOffset(0, 66)
-warning.Size = UDim2.new(1, -8, 0, 96)
-warning.Text = "ERASES, AND SAVES: cash, Speed, every plant and pod, the bag, bought weapons, "
-	.. "plot and mill upgrades, the Almanac and biome harvests, tutorial progress and offline "
-	.. "earnings. KEPT: game passes, Robux purchase records and the Walk Mode setting. "
-	.. "This cannot be undone."
-warning.ZIndex = 5
-warning.Parent = confirmPage
-
-local typeCaption = caption(confirmPage, "", 170)
-local typedBox = field(confirmPage, "TypedUsername", 188, "Username")
-
-local confirmActions = Instance.new("Frame")
-confirmActions.Name = "Actions"
-confirmActions.BackgroundTransparency = 1
-confirmActions.Position = UDim2.fromOffset(0, 242)
-confirmActions.Size = UDim2.new(1, -8, 0, 44)
-confirmActions.ZIndex = 5
-confirmActions.Parent = confirmPage
-local cancelReset = pill(confirmActions, "Cancel", "CANCEL", Color3.fromRGB(120, 128, 146), Color3.fromRGB(72, 78, 94))
-cancelReset.Size = UDim2.new(0.4, -4, 1, 0)
-local confirmReset = pill(confirmActions, "ConfirmReset", "RESET PROGRESS", LOCKED_TOP, LOCKED_BOTTOM)
-confirmReset.AnchorPoint = Vector2.new(1, 0)
-confirmReset.Position = UDim2.fromScale(1, 0)
-confirmReset.Size = UDim2.new(0.6, -4, 1, 0)
-
-local confirmHint = caption(confirmPage, "", 294)
-confirmHint.TextWrapped = true
-confirmHint.Size = UDim2.new(1, -8, 0, 34)
-
--- Asked again whenever the screen changes shape and every time the panel opens:
--- fitContent sizes the panel against the screen it measures AT THAT MOMENT, and
--- the screen this script starts on is not always the one it is used on -- a
--- phone reported a desktop-sized screen at startup, and the panel stood 472 px
--- tall in a 413-px window with its title and X off the top. Short screens get a
--- shorter panel; the pages scroll.
-local PANEL_CONTENT = math.max(CONTENT, CONFIRM_CONTENT) + STATUS_H + 6
-local function fitPanel()
-	modal.fitContent(PANEL_CONTENT)
+local ui: any = {}
+do
+	local page = pages.broadcast
+	build.heading(page, "BROADCAST", string.format("Up to %d characters, filtered by Roblox before anybody sees "
+		.. "them. THIS SERVER shows it here at once; ALL SERVERS asks once more, then sends it to every server of "
+		.. "this place (best effort). Nothing waits between announcements: each one queues and shows after the last.",
+		ANNOUNCE.MaxChars))
+	local scopeRow = build.buttons(page, 2, 140, { { "ThisServer", "THIS SERVER" }, { "AllServers", "ALL SERVERS" } })
+	ui.thisServer, ui.allServers = scopeRow[1], scopeRow[2]
+	ui.messageBox = build.box(page, "Message", string.format("Message, up to %d characters", ANNOUNCE.MaxChars), 84)
+	ui.messageBox.TextSize = 16
+	ui.messageBox.TextWrapped = true
+	ui.messageBox.TextYAlignment = Enum.TextYAlignment.Top
+	ui.messageBox.MultiLine = true
+	ui.counter = build.line(page, "Counter", 13, LOOK.Muted)
+	ui.counter.TextXAlignment = Enum.TextXAlignment.Right
+	local send = build.buttons(page, 1, 140, { { "SendAnnouncement", "SEND TO THIS SERVER" } })
+	ui.sendAnnouncement = send[1]
+	ui.sendAnnouncement.style("done")
+	local confirm = build.buttons(page, 2, 140, { { "CancelAll", "CANCEL" }, { "ConfirmAll", "YES, ALL SERVERS" } })
+	ui.cancelAll, ui.confirmAll = confirm[1], confirm[2]
+	ui.cancelAll.style("idle")
+	face(ui.confirmAll, "danger")
+	ui.confirmRow = ui.cancelAll.hit.Parent
+	ui.confirmRow.Visible = false
 end
-screen:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitPanel)
-fitPanel()
+
+--==============================================================================
+-- EVENTS: THE GLOBAL MINI EVENT (2026-10-03)
+--
+-- For EVERY server of this place, by either admin -- the server checks the
+-- allowlist (by the UserId the engine stamps) on every press. One global event
+-- at a time: a second START is refused and changes nothing, and END is
+-- harmless when nothing runs. The first line reads this server's attributes
+-- (the mode and the time left); the second is the server's own account of the
+-- shared record and its sync.
+--
+-- Four modes (2026-10-04): the pure DISCO ONLY ("party": the disco and x1.5
+-- movement, no mill, no tickets) is new; DISCO + MILL is the mode this button
+-- row called DISCO ONLY before, under the same verb ("disco").
+--==============================================================================
+-- A mode's movement factor as a percentage (1.5 -> 50); DISCO ONLY's by default.
+local function partyPercent(factor: number?): number
+	local f = factor or tonumber((MINI.Modes :: any).party.SpeedFactor) or 1
+	return math.floor((f - 1) * 100 + 0.5)
+end
+
+-- "Up to" (the owner's label, 2026-10-04): the boosted speed never passes
+-- MaxWalkSpeed, so whoever already runs faster than this gains less.
+local function partyFullBelow(): number
+	local f = tonumber((MINI.Modes :: any).party.SpeedFactor) or 1
+	return math.floor(GameConfig.Speed.MaxWalkSpeed / math.max(f, 1) + 0.5)
+end
+
+do
+	local page = pages.events
+	build.heading(page, "EVENTS", string.format("One global mini event at a time, for every server of this place. "
+		.. "DISCO ONLY: the disco and up to +%d%% movement speed for everyone -- speed is capped at %d, so a player "
+		.. "already above %d gains less (no mill, no tickets). DISCO + MILL: the "
+		.. "disco and the giant Disco Mill (\u{00D7}%d training while mounted). TICKET DISCO: the disco, the mill "
+		.. "and free Spin Tickets all over the map. TICKET SHOWER ONLY: the tickets alone. Each ticket is one free "
+		.. "spin, up to %d per player per event (across servers); collected spins stay after it ends. A second START "
+		.. "is refused; END ends it everywhere.", partyPercent(), GameConfig.Speed.MaxWalkSpeed, partyFullBelow(),
+		MINI.DiscoMill.Multiplier, MINI.Tickets.PerPlayerCap))
+	ui.miniLabel, ui.miniDot = build.state(page, "MiniStatus")
+	ui.miniSync = build.line(page, "MiniSync", 12, LOOK.Muted)
+	build.line(page, "ModeCaption", 13, LOOK.Muted).Text = "MODE"
+	local modes = build.buttons(page, 2, 150, {
+		{ "DiscoOnly", "DISCO ONLY" }, { "DiscoMill", "DISCO + MILL" },
+		{ "TicketDisco", "TICKET DISCO" }, { "TicketShowerOnly", "TICKET SHOWER ONLY" },
+	})
+	ui.miniChoices = {
+		{ verb = "party", button = modes[1] },
+		{ verb = "disco", button = modes[2] },
+		{ verb = "ticketdisco", button = modes[3] },
+		{ verb = "tickets", button = modes[4] },
+	}
+	build.line(page, "DurationCaption", 13, LOOK.Muted).Text =
+		string.format("DURATION (SECONDS, %d TO %d)", MINI.MinSeconds, MINI.MaxSeconds)
+	ui.miniDurationBox = build.box(page, "MiniSeconds", string.format("Whole seconds, %d to %d", MINI.MinSeconds,
+		MINI.MaxSeconds))
+	local scope = build.line(page, "Scope", 13, GOLD_TEXT)
+	scope.Text = "SCOPE: EVERY SERVER OF THIS PLACE \u{00B7} EITHER ADMIN"
+	local go = build.buttons(page, 2, 160, { { "StartGlobalEvent", "START GLOBAL EVENT" }, { "EndGlobalEvent", "END GLOBAL EVENT" } })
+	ui.startGlobal, ui.endGlobal = go[1], go[2]
+	ui.startGlobal.style("go")
+	face(ui.endGlobal, "danger")
+end
+local miniDurationBox: TextBox = ui.miniDurationBox
+miniDurationBox.Text = tostring(MINI.DefaultSeconds)
+
+--==============================================================================
+-- WEATHER (2026-10-02)
+--
+-- Rain for THIS server, by the OWNER's account alone: the server checks the
+-- sender's UserId against its own owner identity on every request. START RAIN
+-- and START THUNDERSTORM take the duration box, in whole seconds; END RAIN
+-- ends whichever is running. The state line reads the server's attributes.
+--==============================================================================
+do
+	local page = pages.weather
+	build.heading(page, "WEATHER", string.format("Rain or a Thunderstorm on THIS server: +%d%% plant income while "
+		.. "it falls, and a temporary biome that opens a few seconds in. The owner's account only -- the server "
+		.. "checks every press. END RAIN ends whichever is running.",
+		math.round((SeedData.Rain.IncomeFactor - 1) * 100)))
+	ui.rainLabel, ui.rainDot = build.state(page, "Rain")
+	build.line(page, "DurationCaption", 13, LOOK.Muted).Text =
+		string.format("DURATION (SECONDS, %d TO %d)", WEATHER.MinSeconds, WEATHER.MaxSeconds)
+	ui.durationBox = build.box(page, "RainSeconds", string.format("Whole seconds, %d to %d", WEATHER.MinSeconds,
+		WEATHER.MaxSeconds))
+	ui.weatherScope = build.line(page, "Scope", 13, GOLD_TEXT)
+	local go = build.buttons(page, 3, 150, {
+		{ "StartRain", "START RAIN" }, { "StartThunder", "START THUNDERSTORM" }, { "EndRain", "END RAIN" },
+	})
+	ui.startRain, ui.startThunder, ui.endRain = go[1], go[2], go[3]
+end
+local durationBox: TextBox = ui.durationBox
+durationBox.Text = tostring(WEATHER.DefaultSeconds)
+
+--==============================================================================
+-- ITEM GRANTS: SECRET ITEMS (2026-10-02)
+--
+-- A Snarlbloom or a Petalfawn, as a POD or a GROWN PLANT, into YOUR OWN bag --
+-- this version names no other recipient, and the server refuses any other.
+-- EQUIP NOW puts it in your hands only if they are free. GRANT TO BAG is locked
+-- while a grant is on its way. Every press carries its own request id, so the
+-- server never grants the same request twice. These are the only items the
+-- console grants.
+--==============================================================================
+do
+	local page = pages.grants
+	build.heading(page, "ITEM GRANTS", "A Secret pod or grown plant into YOUR OWN bag -- the only items this "
+		.. "console grants. EQUIP NOW puts it in your hands only if they are free. Every press carries its own "
+		.. "request id, so pressing again after no answer never grants twice.")
+	build.line(page, "CreatureCaption", 13, LOOK.Muted).Text = "SECRET"
+	local creature = build.buttons(page, 2, 140, { { "Snarlbloom", "SNARLBLOOM" }, { "Petalfawn", "PETALFAWN" } })
+	ui.pickSnarlbloom, ui.pickPetalfawn = creature[1], creature[2]
+	ui.creatureNote = build.line(page, "CreatureNote", 13, LOOK.Muted)
+	build.line(page, "KindCaption", 13, LOOK.Muted).Text = "FORM"
+	local kind = build.buttons(page, 2, 140, { { "Pod", "POD" }, { "GrownPlant", "GROWN PLANT" } })
+	ui.pickPod, ui.pickPlant = kind[1], kind[2]
+	ui.recipientLine = build.line(page, "Recipient", 13, GOLD_TEXT)
+	local grant = build.buttons(page, 2, 150, { { "EquipNow", "EQUIP NOW: OFF" }, { "GrantToBag", "GRANT TO BAG" } })
+	ui.equipToggle, ui.grantButton = grant[1], grant[2]
+	ui.grantsOff = build.line(page, "GrantsOff", 13, BAD)
+	ui.grantsOff.Text = "SECRET GRANTS ARE SWITCHED OFF ON THIS SERVER."
+	ui.grantsOff.Visible = false
+end
+
+--==============================================================================
+-- PLAYER TOOLS: A TARGET IN THIS SERVER, AN AMOUNT, CASH OR SPEED
+--==============================================================================
+do
+	local page = pages.players
+	build.heading(page, "PLAYER TOOLS", string.format("Cash and Speed go to the target through the game's own "
+		.. "faucets -- up to %s cash and %s Speed a request, read back off their profile, so a grant the save cap "
+		.. "cut short says so. The target is always somebody in this server; yourself by default.",
+		GameConfig.compact(tonumber(screen:GetAttribute("MaxMoney")) or 1e12),
+		GameConfig.compact(tonumber(screen:GetAttribute("MaxSpeed")) or 1e12)))
+	local target = build.buttons(page, 1, 140, { { "Target", "TARGET" } })
+	ui.targetButton = target[1]
+	ui.targetButton.style("dark")
+	build.line(page, "AmountCaption", 13, LOOK.Muted).Text = "AMOUNT (FOR MONEY OR SPEED)"
+	ui.amountBox = build.box(page, "Amount", "Whole number, e.g. 1000000")
+	local adds = build.buttons(page, 2, 140, { { "AddMoney", "ADD MONEY" }, { "AddSpeed", "ADD SPEED" } })
+	ui.addMoney, ui.addSpeed = adds[1], adds[2]
+	ui.addMoney.style("go")
+	face(ui.addSpeed, "speed")
+end
+
+--==============================================================================
+-- ADVANCED: THE WHOLE SERVER'S DAY AND NIGHT, AND THE RESET
+--
+-- Set apart and said in so many words: START NIGHT and START DAY change the
+-- world for everybody in this server, not for a target. RESET PLAYER PROGRESS
+-- shows the exact username and UserId it will erase, what goes and what stays,
+-- and a box the admin must type that username into; the button stays locked
+-- until the box matches, and the server checks the typed name again anyway.
+--==============================================================================
+do
+	local page = pages.advanced
+	build.heading(page, "ADVANCED", "START NIGHT and START DAY change the world for everybody in this server. "
+		.. "RESET PLAYER PROGRESS erases the target's progress and saves it; it asks for their username first and "
+		.. "cannot be undone. It acts on the target chosen here or in PLAYER TOOLS (the same one).")
+	local world = build.line(page, "WorldCaption", 13, GOLD_TEXT)
+	world.Text = "WHOLE SERVER: DAY AND NIGHT FOR EVERYONE HERE"
+	ui.phaseLabel, ui.phaseDot = build.state(page, "Phase")
+	local day = build.buttons(page, 2, 140, { { "StartNight", "START NIGHT" }, { "StartDay", "START DAY" } })
+	ui.startNight, ui.startDay = day[1], day[2]
+	face(ui.startNight, "night")
+	ui.startDay.style("done")
+	local danger = build.line(page, "DangerCaption", 13, BAD)
+	danger.Text = "DANGER: ERASES A PLAYER'S PROGRESS"
+	local target = build.buttons(page, 1, 140, { { "ResetTarget", "TARGET" } })
+	ui.resetTarget = target[1]
+	ui.resetTarget.style("dark")
+	local reset = build.buttons(page, 1, 140, { { "ResetPlayerProgress", "RESET PLAYER PROGRESS" } })
+	ui.resetButton = reset[1]
+	face(ui.resetButton, "danger")
+
+	local ask = build.block(page, "ConfirmReset")
+	ask.Visible = false
+	ui.confirmBlock = ask
+	ui.confirmName = build.line(ask, "Username", 20, TEXT)
+	ui.confirmId = build.line(ask, "UserId", 13, LOOK.Muted)
+	local erases = build.line(ask, "Erases", 13, TEXT)
+	erases.Text = "ERASES, AND SAVES: cash, Speed, every plant and pod, the bag, bought weapons, "
+		.. "plot and mill upgrades, the Almanac and biome harvests, tutorial progress and offline "
+		.. "earnings. KEPT: game passes, Robux purchase records and the Walk Mode setting. "
+		.. "This cannot be undone."
+	ui.typeCaption = build.line(ask, "TypeCaption", 13, GOLD_TEXT)
+	ui.typedBox = build.box(ask, "TypedUsername", "Username")
+	local actions = build.buttons(ask, 2, 140, { { "Cancel", "CANCEL" }, { "ConfirmReset", "RESET PROGRESS" } })
+	ui.cancelReset, ui.confirmReset = actions[1], actions[2]
+	ui.cancelReset.style("idle")
+	ui.confirmHint = build.line(ask, "Hint", 13, LOOK.Muted)
+end
+
+--==============================================================================
+-- THE PLAYER LIST: OVER THE SECTION, UNTIL A PLAYER IS PICKED OR BACK
+--==============================================================================
+local sheet = Instance.new("ScrollingFrame")
+sheet.Name = "Players"
+sheet.BackgroundColor3 = LOOK.Sheet
+sheet.BackgroundTransparency = 0.02
+sheet.BorderSizePixel = 0
+sheet.ScrollBarThickness = 5
+sheet.ScrollBarImageColor3 = LOOK.WellEdge
+sheet.CanvasSize = UDim2.new()
+sheet.AutomaticCanvasSize = Enum.AutomaticSize.Y
+sheet.Selectable = false
+sheet.Visible = false
+sheet.ZIndex = Z + 3
+sheet.Parent = body
+UIKit.corner(sheet, 9)
+do
+	local list = Instance.new("UIListLayout")
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Padding = UDim.new(0, 6)
+	list.Parent = sheet
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 8)
+	pad.PaddingRight = UDim.new(0, 12)
+	pad.Parent = sheet
+end
+local sheetBack = MenuKit.button(sheet, "Back", Z + 4, "BACK", 15)
+sheetBack.hit.LayoutOrder = 0
+sheetBack.hit.Size = UDim2.new(0, 120, 0, MenuLayout.Config.Touch)
+sheetBack.style("dark")
+local sheetCaption = MenuKit.text(sheet, "Caption", 13, LOOK.Muted, Z + 4)
+sheetCaption.Font = Enum.Font.FredokaOne
+sheetCaption.LayoutOrder = 1
+sheetCaption.Size = UDim2.new(1, 0, 0, 18)
+sheetCaption.TextXAlignment = Enum.TextXAlignment.Left
+sheetCaption.Text = "CHOOSE A PLAYER IN THIS SERVER"
+
+--==============================================================================
+-- THE CHOOSER: THE SIDEBAR ON A DESKTOP, A DROPDOWN IN THE HEADER ON A PHONE
+--==============================================================================
+local section = "broadcast"
+local setSection: (string) -> ()
+local chooser = MenuKit.chooser(deck, body, Z, function(id: string)
+	setSection(id)
+end)
+do
+	local items: { MenuKit.ChooserItem } = {}
+	for _, s in ipairs(SECTIONS) do
+		table.insert(items, { id = s.id, label = s.label, icon = s.icon })
+	end
+	chooser.setItems(items)
+	chooser.setSelected(section)
+end
+
+--==============================================================================
+-- LAYOUT: MenuLayout's answer, applied -- the safe width AND height, no shrink
+--==============================================================================
+local open = false
+
+local function keyboardTop(): number?
+	if not UserInputService.OnScreenKeyboardVisible then
+		return nil
+	end
+	local ok, at = pcall(function()
+		return UserInputService.OnScreenKeyboardPosition
+	end)
+	if not ok or typeof(at) ~= "Vector2" or at.Y <= 0 then
+		return nil
+	end
+	return at.Y - GuiService:GetGuiInset().Y
+end
+
+local function relayout()
+	local safe = deck.AbsoluteSize
+	if safe.X < 100 or safe.Y < 100 then
+		return
+	end
+	local hud = HudLayout.solve(HudLayout.measure(deck))
+	local p = MenuLayout.panel({
+		safe = safe,
+		compact = hud.compact,
+		railRight = hud.railRight,
+		rightLeft = hud.rightLeft,
+		keyboardTop = keyboardTop(),
+	}, 860, 600, GameConfig.Rail.OutlineThickness)
+	menu.place(p)
+	local b = MenuLayout.blocks(p)
+	local gap = MenuLayout.Config.Gap
+	local touch = MenuLayout.Config.Touch
+	chooser.setMode(p.sidebar)
+	if p.sidebar then
+		chooser.layoutColumn(b.sidebar, touch)
+	else
+		local x = p.pad + MenuKit.titleWidth(menu, p.short) + 12
+		local w = math.clamp(p.shell.X - x - p.pad - touch - 10, 110, 240)
+		chooser.layoutDropdown({ x = x, y = math.floor((p.header - touch) / 2), w = w, h = touch })
+	end
+	local main = b.main
+	local pageH = math.max(60, main.h - STATUS_H - gap)
+	for _, page in pairs(pages) do
+		page.Position = UDim2.fromOffset(main.x, main.y)
+		page.Size = UDim2.fromOffset(main.w, pageH)
+	end
+	sheet.Position = UDim2.fromOffset(main.x, main.y)
+	sheet.Size = UDim2.fromOffset(main.w, pageH)
+	status.Position = UDim2.fromOffset(main.x, main.y + pageH + gap)
+	status.Size = UDim2.fromOffset(main.w - 9, STATUS_H)
+	-- Two or three abreast only where each still has its room.
+	local w = main.w - 9
+	for _, g in ipairs(grids) do
+		local cols = math.clamp(math.floor((w + 6) / (g.min + 6)), 1, g.max)
+		g.grid.CellSize = UDim2.fromOffset(math.floor((w - (cols - 1) * 6) / cols), touch)
+	end
+end
+deck:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+UserInputService:GetPropertyChangedSignal("OnScreenKeyboardVisible"):Connect(function()
+	task.defer(relayout)
+end)
+relayout()
 
 --==============================================================================
 -- THE TARGET: A USERID, ALWAYS SOMEBODY IN THIS SERVER
 --
 -- Yourself by default. What goes to the server is the UserId; the name on the
--- button is only what is shown. If the chosen player leaves, the target is you
+-- buttons is only what is shown. If the chosen player leaves, the target is you
 -- again -- and a request already on its way for them is refused by the server.
 --==============================================================================
 local targetId = player.UserId
+local listOpen = false
+local confirming = false
+local busy = false
+local confirmFor: Player? = nil
 
 local function labelFor(p: Player): string
 	return if p == player then p.Name .. "  (you)" else p.Name
@@ -634,14 +846,10 @@ local function showTarget()
 		targetId = player.UserId
 		p = player
 	end
-	targetName.Text = labelFor(p :: Player)
+	local name = labelFor(p :: Player)
+	ui.targetButton.set("TARGET: " .. name .. "   \u{00B7}   CHANGE")
+	ui.resetTarget.set("RESET TARGET: " .. name .. "   \u{00B7}   CHANGE")
 end
-
-local listOpen = false
-local confirming = false
-local open = false
-local busy = false
-local confirmFor: Player? = nil
 
 local function usingGamepad(): boolean
 	return string.find(UserInputService:GetLastInputType().Name, "Gamepad", 1, true) ~= nil
@@ -653,50 +861,52 @@ local function selectIfPad(target: GuiObject?)
 	end
 end
 
+-- Which page shows: the section's, or the player list over it.
+local function showPages()
+	for id, page in pairs(pages) do
+		page.Visible = open and id == section and not listOpen
+	end
+	sheet.Visible = open and listOpen
+end
+
 local function typedMatches(): boolean
 	local who = confirmFor
 	if not who then
 		return false
 	end
-	local trimmed = string.match(typedBox.Text, "^%s*(.-)%s*$") or ""
+	local trimmed = string.match(ui.typedBox.Text, "^%s*(.-)%s*$") or ""
 	return trimmed ~= "" and string.lower(trimmed) == string.lower(who.Name)
 end
 
 local function paintConfirm()
-	local ready = typedMatches()
-	if ready then
-		paint(confirmReset, DANGER_TOP, DANGER_BOTTOM)
-		confirmHint.Text = "Press RESET PROGRESS to erase and save."
-		confirmHint.TextColor3 = GOLD
+	if typedMatches() then
+		face(ui.confirmReset, "danger")
+		ui.confirmHint.Text = "Press RESET PROGRESS to erase and save."
+		ui.confirmHint.TextColor3 = GOLD_TEXT
 	else
-		paint(confirmReset, LOCKED_TOP, LOCKED_BOTTOM)
-		confirmHint.Text = "Locked until the username matches."
-		confirmHint.TextColor3 = MUTED
+		face(ui.confirmReset, "locked")
+		ui.confirmHint.Text = "Locked until the username matches."
+		ui.confirmHint.TextColor3 = LOOK.Muted
 	end
 end
-typedBox:GetPropertyChangedSignal("Text"):Connect(paintConfirm)
+ui.typedBox:GetPropertyChangedSignal("Text"):Connect(paintConfirm)
 
 local function setConfirm(want: boolean)
 	confirming = want
+	ui.confirmBlock.Visible = want
+	ui.resetButton.hit.Visible = not want
 	if want then
 		local who = currentTarget() or player
 		confirmFor = who
-		confirmName.Text = who.Name
-		confirmId.Text = string.format("UserId %d%s", who.UserId, if who == player then "  (you)" else "")
-		typeCaption.Text = string.format("TYPE %s TO CONFIRM", string.upper(who.Name))
-		typedBox.Text = ""
+		ui.confirmName.Text = who.Name
+		ui.confirmId.Text = string.format("UserId %d%s", who.UserId, if who == player then "  (you)" else "")
+		ui.typeCaption.Text = string.format("TYPE %s TO CONFIRM", string.upper(who.Name))
+		ui.typedBox.Text = ""
 		paintConfirm()
-		form.Visible = false
-		list.Visible = false
-		confirmPage.Visible = true
-		confirmPage.CanvasPosition = Vector2.zero
-		selectIfPad(typedBox)
+		selectIfPad(ui.typedBox)
 	else
 		confirmFor = nil
-		typedBox.Text = ""
-		confirmPage.Visible = false
-		form.Visible = not listOpen
-		list.Visible = listOpen
+		ui.typedBox.Text = ""
 	end
 end
 
@@ -716,60 +926,96 @@ local function buildList(): GuiObject?
 		end
 		return string.lower(a.Name) < string.lower(b.Name)
 	end)
-	table.insert(rows, caption(list, "CHOOSE A PLAYER IN THIS SERVER", 0))
-	local y = 20
 	local first: GuiObject? = nil
-	for _, p in ipairs(everyone) do
+	for i, p in ipairs(everyone) do
 		local chosen = p.UserId == targetId
-		local row = pill(list, "Player_" .. tostring(p.UserId), labelFor(p),
-			if chosen then Color3.fromRGB(96, 186, 72) else Color3.fromRGB(70, 78, 96),
-			if chosen then Color3.fromRGB(46, 120, 42) else Color3.fromRGB(44, 50, 64))
-		row.Position = UDim2.fromOffset(0, y)
-		row.Size = UDim2.new(1, -8, 0, 40)
+		local row = MenuKit.button(sheet, "Player_" .. tostring(p.UserId), Z + 4, labelFor(p), 15)
+		row.hit.LayoutOrder = 1 + i
+		row.hit.Size = UDim2.new(1, 0, 0, MenuLayout.Config.Touch)
+		row.style(if chosen then "on" else "idle")
 		local id = p.UserId
-		row.Activated:Connect(function()
+		row.hit.Activated:Connect(function()
+			if id ~= targetId and confirming then
+				-- The question names one player; a new target closes it.
+				setConfirm(false)
+				setStatus("The target changed, so the reset question was closed. Nothing was reset.", LOOK.Muted)
+			end
 			targetId = id
 			showTarget()
 			listOpen = false
-			list.Visible = false
-			form.Visible = true
-			setStatus("Target: " .. labelFor(Players:GetPlayerByUserId(id) or player), MUTED)
-			selectIfPad(targetButton)
+			showPages()
+			setStatus("Target: " .. labelFor(Players:GetPlayerByUserId(id) or player), LOOK.Muted)
+			selectIfPad(if section == "advanced" then ui.resetTarget.hit else ui.targetButton.hit)
 		end)
-		table.insert(rows, row)
+		table.insert(rows, row.hit)
 		if not first then
-			first = row
+			first = row.hit
 		end
-		y += 46
 	end
-	list.CanvasSize = UDim2.fromOffset(0, y)
 	return first
 end
 
 local function setList(want: boolean)
 	listOpen = want
 	if want then
-		setConfirm(false)
 		local first = buildList()
-		form.Visible = false
-		list.Visible = true
-		list.CanvasPosition = Vector2.zero
+		sheet.CanvasPosition = Vector2.zero
+		showPages()
 		selectIfPad(first)
 	else
-		list.Visible = false
-		form.Visible = not confirming
-		selectIfPad(targetButton)
+		showPages()
+		selectIfPad(if section == "advanced" then ui.resetTarget.hit else ui.targetButton.hit)
 	end
+end
+sheetBack.hit.Activated:Connect(function()
+	setList(false)
+end)
+
+-- The first control a controller lands on in each section.
+local FIRST: { [string]: () -> GuiObject } = {
+	broadcast = function()
+		return ui.messageBox
+	end,
+	events = function()
+		return ui.startGlobal.hit
+	end,
+	weather = function()
+		return ui.durationBox
+	end,
+	grants = function()
+		return ui.grantButton.hit
+	end,
+	players = function()
+		return ui.targetButton.hit
+	end,
+	advanced = function()
+		return ui.startNight.hit
+	end,
+}
+
+-- A section chosen: that page, from its top. Nothing starts, stops or resets,
+-- and whatever was typed anywhere stays; only the player list closes.
+setSection = function(want: string)
+	if not pages[want] then
+		return
+	end
+	listOpen = false
+	section = want
+	chooser.setSelected(want)
+	pages[want].CanvasPosition = Vector2.zero
+	showPages()
+	selectIfPad(FIRST[want]())
 end
 
 --==============================================================================
 -- ASKING
 --
 -- One request at a time from here; the server allows one a second whatever
--- this does. What the server said is what the status row says.
+-- this does (an announcement excepted, 2026-10-03). What the server said is
+-- what the status row says.
 --==============================================================================
 local function amountFromBox(): number?
-	local cleaned = (string.gsub(amountBox.Text, "[,%s_]", ""))
+	local cleaned = (string.gsub(ui.amountBox.Text, "[,%s_]", ""))
 	return tonumber(cleaned)
 end
 
@@ -778,7 +1024,7 @@ local function send(action: string, amount: number?, typed: string?)
 		return
 	end
 	busy = true
-	setStatus(if action == "ResetPlayerProgress" then "Resetting and saving…" else "Working…", MUTED)
+	setStatus(if action == "ResetPlayerProgress" then "Resetting and saving…" else "Working…", LOOK.Muted)
 	local ok, reply = pcall(function()
 		return remote:InvokeServer(action, targetId, amount, typed)
 	end)
@@ -791,36 +1037,39 @@ local function send(action: string, amount: number?, typed: string?)
 	setStatus(message, if reply.ok == true then GOOD else BAD)
 end
 
-addMoney.Activated:Connect(function()
+ui.addMoney.hit.Activated:Connect(function()
 	send("AddMoney", amountFromBox(), nil)
 end)
-addSpeed.Activated:Connect(function()
+ui.addSpeed.hit.Activated:Connect(function()
 	send("AddSpeed", amountFromBox(), nil)
 end)
-resetButton.Activated:Connect(function()
+ui.resetButton.hit.Activated:Connect(function()
 	setConfirm(true)
 end)
-cancelReset.Activated:Connect(function()
+ui.cancelReset.hit.Activated:Connect(function()
 	setConfirm(false)
-	setStatus("Reset cancelled. Nothing changed.", MUTED)
-	selectIfPad(resetButton)
+	setStatus("Reset cancelled. Nothing changed.", LOOK.Muted)
+	selectIfPad(ui.resetButton.hit)
 end)
-confirmReset.Activated:Connect(function()
+ui.confirmReset.hit.Activated:Connect(function()
 	if busy or not typedMatches() then
 		return
 	end
-	local typed = typedBox.Text
+	local typed = ui.typedBox.Text
 	setConfirm(false)
-	selectIfPad(resetButton)
+	selectIfPad(ui.resetButton.hit)
 	send("ResetPlayerProgress", nil, typed)
 end)
-targetButton.Activated:Connect(function()
+ui.targetButton.hit.Activated:Connect(function()
 	setList(true)
 end)
-startNight.Activated:Connect(function()
+ui.resetTarget.hit.Activated:Connect(function()
+	setList(true)
+end)
+ui.startNight.hit.Activated:Connect(function()
 	send("StartNight", nil, nil)
 end)
-startDay.Activated:Connect(function()
+ui.startDay.hit.Activated:Connect(function()
 	send("StartDay", nil, nil)
 end)
 
@@ -831,24 +1080,34 @@ end)
 -- YES, ALL SERVERS -- the server refuses an unconfirmed one anyway. The box
 -- keeps to MaxChars and the counter says how many are used. What the server
 -- answered is the status line: a best-effort cross-server send says so.
+--
+-- NO WAITING BETWEEN THEM (2026-10-03): SEND takes the words into a small
+-- OUTBOX and empties the box at once, so the next can be typed and sent while
+-- the last is still on its way. The outbox goes to the server one at a time,
+-- in order, and the server queues them for the screen in that same order.
+-- Each answer is the status line; one the server did not take at all (the
+-- filter, a safeguard, no connection) says so and gives its words back to
+-- the box if the box is empty, and the line never ends on a success while an
+-- earlier one in the same run was not sent.
 --==============================================================================
 local scope = "server"
 local confirmingAll = false
+local messageBox: TextBox = ui.messageBox
 
 local function paintScope()
 	local all = scope == "all"
-	paint(thisServer, if all then SCOPE_OFF_TOP else SCOPE_ON_TOP, if all then SCOPE_OFF_BOTTOM else SCOPE_ON_BOTTOM)
-	paint(allServers, if all then SCOPE_ON_TOP else SCOPE_OFF_TOP, if all then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
+	ui.thisServer.style(if all then "idle" else "on")
+	ui.allServers.style(if all then "on" else "idle")
+	ui.sendAnnouncement.set(if all then "SEND TO ALL SERVERS" else "SEND TO THIS SERVER")
 end
 
 local function setAllConfirm(want: boolean)
 	confirmingAll = want
-	sendAnnouncement.Visible = not want
-	cancelAll.Visible = want
-	confirmAll.Visible = want
+	ui.sendAnnouncement.hit.Visible = not want
+	ui.confirmRow.Visible = want
 	if want then
-		setStatus("Send this to EVERY server? Press YES, ALL SERVERS to confirm.", GOLD)
-		selectIfPad(cancelAll)
+		setStatus("Send this to EVERY server? Press YES, ALL SERVERS to confirm.", GOLD_TEXT)
+		selectIfPad(ui.cancelAll.hit)
 	end
 end
 
@@ -862,58 +1121,136 @@ local function paintCounter()
 			return
 		end
 	end
-	counter.Text = string.format("%d / %d", length, ANNOUNCE.MaxChars)
-	counter.TextColor3 = if length == 0 then MUTED elseif length >= ANNOUNCE.MaxChars then GOLD else WHITE
+	ui.counter.Text = string.format("%d / %d", length, ANNOUNCE.MaxChars)
+	ui.counter.TextColor3 = if length == 0 then LOOK.Muted elseif length >= ANNOUNCE.MaxChars then GOLD_TEXT else TEXT
 end
 messageBox:GetPropertyChangedSignal("Text"):Connect(paintCounter)
 paintCounter()
 
-local function announce(confirmed: boolean)
-	if busy then
-		return
-	end
-	busy = true
-	setStatus(if scope == "all" then "Sending to every server…" else "Sending…", MUTED)
-	local ok, reply = pcall(function()
-		return remote:InvokeServer("Announce", scope, messageBox.Text, confirmed)
+-- With a phone's keyboard up, the words and SEND stay in view over it: the
+-- panel stands above the keyboard (relayout) and the page brings the box up.
+messageBox.Focused:Connect(function()
+	task.delay(0.25, function()
+		local page = pages.broadcast
+		local top = messageBox.AbsolutePosition.Y - page.AbsolutePosition.Y + page.CanvasPosition.Y
+		page.CanvasPosition = Vector2.new(0, math.max(0, top - 6))
 	end)
-	busy = false
-	if not ok or type(reply) ~= "table" then
-		setStatus("Couldn't reach the server. Nothing was sent.", BAD)
-		return
+end)
+
+type Outgoing = { scope: string, text: string, confirmed: boolean }
+-- In a block of its own: the console keeps well under Luau's 200 locals.
+local announce: (confirmed: boolean) -> ()
+do
+	local outbox: { Outgoing } = {}
+	local draining = false
+	-- At most this many waiting here: more is a stuck connection, not typing.
+	local OUTBOX_MAX = 8
+
+	-- The first words of a message, to say which one an answer is about.
+	local function excerpt(text: string): string
+		local flat = string.match((string.gsub(text, "%s+", " ")), "^%s*(.-)%s*$") or ""
+		if (utf8.len(flat) or 0) <= 24 then
+			return "\"" .. flat .. "\""
+		end
+		local stop = utf8.offset(flat, 25) or (#flat + 1)
+		return "\"" .. string.sub(flat, 1, stop - 1) .. "…\""
 	end
-	local message = if type(reply.message) == "string" then reply.message else "No answer."
-	setStatus(message, if reply.ok == true then GOOD else BAD)
-	if reply.ok == true then
+
+	local function drain()
+		if draining then
+			return
+		end
+		draining = true
+		local sent, missed, lastMiss = 0, 0, ""
+		while #outbox > 0 do
+			-- Another action's request first, if one is on its way.
+			while busy do
+				task.wait(0.05)
+			end
+			local item = table.remove(outbox, 1) :: Outgoing
+			busy = true
+			local more = #outbox
+			setStatus((if item.scope == "all" then "Sending to every server…" else "Sending…")
+				.. (if more > 0 then string.format(" (%d more queued)", more) else ""), LOOK.Muted)
+			local ok, reply = pcall(function()
+				return remote:InvokeServer("Announce", item.scope, item.text, item.confirmed)
+			end)
+			busy = false
+			local message: string, good: boolean, shown: boolean
+			if not ok or type(reply) ~= "table" then
+				message, good, shown = "Couldn't reach the server. Nothing was sent.", false, false
+			else
+				message = if type(reply.message) == "string" then reply.message else "No answer."
+				good = reply.ok == true
+				shown = good or reply.shown == true
+			end
+			if good then
+				sent += 1
+			else
+				missed += 1
+				lastMiss = excerpt(item.text) .. ": " .. message
+				-- Nothing went anywhere: the words come back to be fixed or resent.
+				if not shown and messageBox.Text == "" then
+					messageBox.Text = item.text
+					lastMiss ..= " It's back in the box."
+				end
+			end
+			if #outbox > 0 then
+				setStatus((if good then message else lastMiss) .. string.format(" (%d more queued)", #outbox),
+					if good then GOOD else BAD)
+			elseif good and missed > 0 then
+				setStatus(string.format("%d sent; %d not: %s", sent, missed, lastMiss), BAD)
+			else
+				setStatus(if good then message else lastMiss, if good then GOOD else BAD)
+			end
+		end
+		draining = false
+	end
+
+	function announce(confirmed: boolean)
+		local text = messageBox.Text
+		if not string.find(text, "%S") then
+			setStatus("Type a message first.", BAD)
+			return
+		end
+		if #outbox >= OUTBOX_MAX then
+			setStatus(string.format("%d announcements are still on their way. This one is still in the box.", #outbox), BAD)
+			return
+		end
+		table.insert(outbox, { scope = scope, text = text, confirmed = confirmed })
 		messageBox.Text = ""
+		if draining then
+			setStatus(string.format("Queued to send (%d waiting).", #outbox), LOOK.Muted)
+		end
+		task.spawn(drain)
 	end
 end
 
-thisServer.Activated:Connect(function()
+ui.thisServer.hit.Activated:Connect(function()
 	scope = "server"
 	setAllConfirm(false)
 	paintScope()
 end)
-allServers.Activated:Connect(function()
+ui.allServers.hit.Activated:Connect(function()
 	scope = "all"
 	setAllConfirm(false)
 	paintScope()
 end)
-sendAnnouncement.Activated:Connect(function()
+ui.sendAnnouncement.hit.Activated:Connect(function()
 	if scope == "all" then
 		setAllConfirm(true)
 	else
 		announce(false)
 	end
 end)
-cancelAll.Activated:Connect(function()
+ui.cancelAll.hit.Activated:Connect(function()
 	setAllConfirm(false)
-	setStatus("Not sent.", MUTED)
-	selectIfPad(sendAnnouncement)
+	setStatus("Not sent.", LOOK.Muted)
+	selectIfPad(ui.sendAnnouncement.hit)
 end)
-confirmAll.Activated:Connect(function()
+ui.confirmAll.hit.Activated:Connect(function()
 	setAllConfirm(false)
-	selectIfPad(sendAnnouncement)
+	selectIfPad(ui.sendAnnouncement.hit)
 	announce(true)
 end)
 paintScope()
@@ -928,10 +1265,9 @@ paintScope()
 -- the same item, the server answers it instead of granting a second one.
 --==============================================================================
 local SECRET_CHOICES = {
-	{ id = "snarlbloom", button = pickSnarlbloom, note = "SNARLBLOOM: GREENHOLLOW'S SECRET" },
-	{ id = "petalfawn", button = pickPetalfawn, note = "PETALFAWN: STARBLOOM'S SECRET" },
+	{ id = "snarlbloom", button = ui.pickSnarlbloom, note = "SNARLBLOOM: GREENHOLLOW'S SECRET" },
+	{ id = "petalfawn", button = ui.pickPetalfawn, note = "PETALFAWN: STARBLOOM'S SECRET" },
 }
-local LOCKED_GRANT_TOP, LOCKED_GRANT_BOTTOM = Color3.fromRGB(96, 92, 80), Color3.fromRGB(64, 60, 52)
 local secretSpecies = "snarlbloom"
 local secretKind = "pod"
 local secretEquip = false
@@ -939,35 +1275,41 @@ local granting = false
 -- The last request whose answer never arrived, to send again unchanged.
 local unanswered: { species: string, kind: string, equip: boolean, request: string }? = nil
 
-local function relabel(b: GuiObject, text: string)
-	local label = b:FindFirstChild("Label")
-	if label and label:IsA("TextLabel") then
-		label.Text = text
-	end
+-- The server's own switch, said here; the server refuses either way.
+local function grantsOn(): boolean
+	return screen:GetAttribute("SecretGrants") ~= false
 end
 
 local function paintSecret()
 	for _, choice in ipairs(SECRET_CHOICES) do
 		local on = choice.id == secretSpecies
-		paint(choice.button, if on then SCOPE_ON_TOP else SCOPE_OFF_TOP, if on then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
+		choice.button.style(if on then "on" else "idle")
 		if on then
-			creatureNote.Text = choice.note
+			ui.creatureNote.Text = choice.note
 		end
 	end
 	local pod = secretKind == "pod"
-	paint(pickPod, if pod then SCOPE_ON_TOP else SCOPE_OFF_TOP, if pod then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
-	paint(pickPlant, if pod then SCOPE_OFF_TOP else SCOPE_ON_TOP, if pod then SCOPE_OFF_BOTTOM else SCOPE_ON_BOTTOM)
-	paint(equipToggle, if secretEquip then SCOPE_ON_TOP else SCOPE_OFF_TOP,
-		if secretEquip then SCOPE_ON_BOTTOM else SCOPE_OFF_BOTTOM)
-	relabel(equipToggle, if secretEquip then "EQUIP NOW: ON" else "EQUIP NOW: OFF")
-	paint(grantButton, if granting then LOCKED_GRANT_TOP else GRANT_TOP, if granting then LOCKED_GRANT_BOTTOM else GRANT_BOTTOM)
-	relabel(grantButton, if granting then "GRANTING…" else "GRANT TO BAG")
-	grantButton.AutoButtonColor = not granting
-	recipientLine.Text = string.format("RECIPIENT: %s (YOU). Only you, in this version.", player.Name)
+	ui.pickPod.style(if pod then "on" else "idle")
+	ui.pickPlant.style(if pod then "idle" else "on")
+	ui.equipToggle.style(if secretEquip then "on" else "idle")
+	ui.equipToggle.set(if secretEquip then "EQUIP NOW: ON" else "EQUIP NOW: OFF")
+	local locked = granting or not grantsOn()
+	if locked then
+		face(ui.grantButton, "locked")
+	else
+		ui.grantButton.style("done")
+	end
+	ui.grantButton.set(if granting then "GRANTING…" else "GRANT TO BAG")
+	ui.grantsOff.Visible = not grantsOn()
+	ui.recipientLine.Text = string.format("RECIPIENT: %s (YOU). Only you, in this version.", player.Name)
 end
 
 local function grantSecret()
 	if busy or granting then
+		return
+	end
+	if not grantsOn() then
+		setStatus("Secret grants are switched off on this server. Nothing was asked.", BAD)
 		return
 	end
 	local request = unanswered
@@ -983,7 +1325,7 @@ local function grantSecret()
 	busy = true
 	granting = true
 	paintSecret()
-	setStatus("Granting…", MUTED)
+	setStatus("Granting…", LOOK.Muted)
 	local ok, reply = pcall(function()
 		return remote:InvokeServer("GrantSecret", player.UserId, request, nil)
 	end)
@@ -999,31 +1341,32 @@ local function grantSecret()
 	end
 	unanswered = nil
 	local message = if type(reply.message) == "string" then reply.message else "No answer."
-	local colour = if reply.ok ~= true then BAD elseif reply.saved == false then GOLD else GOOD
+	local colour = if reply.ok ~= true then BAD elseif reply.saved == false then GOLD_TEXT else GOOD
 	setStatus(message, colour)
 end
 
-pickSnarlbloom.Activated:Connect(function()
+ui.pickSnarlbloom.hit.Activated:Connect(function()
 	secretSpecies = "snarlbloom"
 	paintSecret()
 end)
-pickPetalfawn.Activated:Connect(function()
+ui.pickPetalfawn.hit.Activated:Connect(function()
 	secretSpecies = "petalfawn"
 	paintSecret()
 end)
-pickPod.Activated:Connect(function()
+ui.pickPod.hit.Activated:Connect(function()
 	secretKind = "pod"
 	paintSecret()
 end)
-pickPlant.Activated:Connect(function()
+ui.pickPlant.hit.Activated:Connect(function()
 	secretKind = "plant"
 	paintSecret()
 end)
-equipToggle.Activated:Connect(function()
+ui.equipToggle.hit.Activated:Connect(function()
 	secretEquip = not secretEquip
 	paintSecret()
 end)
-grantButton.Activated:Connect(grantSecret)
+ui.grantButton.hit.Activated:Connect(grantSecret)
+screen:GetAttributeChangedSignal("SecretGrants"):Connect(paintSecret)
 paintSecret()
 
 --==============================================================================
@@ -1031,8 +1374,8 @@ paintSecret()
 --
 -- The two attributes WorldCycleService publishes, read the way WorldClock
 -- reads them. Redrawn when either changes -- a forced dusk shows at once -- and
--- once a second while the panel is open for the time left, by a task.delay
--- chain that stops as soon as the panel shuts.
+-- once a second while the console is open for the time left, by a task.delay
+-- chain that stops as soon as it shuts.
 --==============================================================================
 local function mmss(seconds: number): string
 	local whole = math.max(0, math.floor(seconds))
@@ -1043,14 +1386,16 @@ local function drawPhase()
 	local phase = Workspace:GetAttribute(ATTR.WorldPhase)
 	local endsAt = Workspace:GetAttribute(ATTR.WorldPhaseEndsAt)
 	if type(phase) ~= "string" or type(endsAt) ~= "number" then
-		phaseLabel.Text = "NOW: THE CYCLE HAS NOT STARTED"
-		phaseLabel.TextColor3 = MUTED
+		ui.phaseLabel.Text = "NOW: THE CYCLE HAS NOT STARTED"
+		ui.phaseLabel.TextColor3 = LOOK.Muted
+		ui.phaseDot.BackgroundColor3 = LOOK.Muted
 		return
 	end
 	local night = phase == CYCLE.PhaseNight
 	local left = endsAt - Workspace:GetServerTimeNow()
-	phaseLabel.Text = string.format("NOW: %s  •  %s LEFT", if night then "NIGHT" else "DAY", mmss(left))
-	phaseLabel.TextColor3 = if night then NIGHT_INK else WHITE
+	ui.phaseLabel.Text = string.format("NOW: %s  \u{2022}  %s LEFT", if night then "NIGHT" else "DAY", mmss(left))
+	ui.phaseLabel.TextColor3 = if night then NIGHT_INK else TEXT
+	ui.phaseDot.BackgroundColor3 = if night then NIGHT_INK else GOLD
 end
 Workspace:GetAttributeChangedSignal(ATTR.WorldPhase):Connect(drawPhase)
 Workspace:GetAttributeChangedSignal(ATTR.WorldPhaseEndsAt):Connect(drawPhase)
@@ -1059,40 +1404,64 @@ Workspace:GetAttributeChangedSignal(ATTR.WorldPhaseEndsAt):Connect(drawPhase)
 -- WEATHER (2026-10-02)
 --
 -- The line reads WeatherService's attributes the way the phase line reads the
--- clock's, and is redrawn with it once a second while the panel is open. The
--- two buttons only ask; the server refuses anyone but the owner.
+-- clock's. The buttons only ask; the server refuses anyone but the owner -- and
+-- an account the server says is not the owner's sees them locked, with why.
 --==============================================================================
 local RAIN_ATTR = WEATHER.Attributes
+
+-- nil: not said (the server decides at the press); false: not the owner.
+local function ownerAccount(): boolean?
+	local v = screen:GetAttribute("IsOwner")
+	return if type(v) == "boolean" then v else nil
+end
+
+local function paintWeather()
+	local restricted = ownerAccount() == false
+	ui.weatherScope.Text = if restricted
+		then "RESTRICTED: THE OWNER'S ACCOUNT ONLY. The server refuses weather from this account."
+		else "SCOPE: THIS SERVER ONLY \u{00B7} THE OWNER'S ACCOUNT ONLY"
+	ui.weatherScope.TextColor3 = if restricted then BAD else GOLD_TEXT
+	face(ui.startRain, if restricted then "locked" else "rain")
+	face(ui.startThunder, if restricted then "locked" else "thunder")
+	face(ui.endRain, if restricted then "locked" else "danger")
+end
 
 local function drawRain()
 	local state = Workspace:GetAttribute(RAIN_ATTR.State)
 	local endsAt = Workspace:GetAttribute(RAIN_ATTR.EndsAt)
 	if type(state) ~= "string" or type(endsAt) ~= "number" then
-		rainLabel.Text = "RAIN: OFF"
-		rainLabel.TextColor3 = MUTED
+		ui.rainLabel.Text = "RAIN: OFF"
+		ui.rainLabel.TextColor3 = LOOK.Muted
+		ui.rainDot.BackgroundColor3 = LOOK.Muted
 		return
 	end
 	local name = if Workspace:GetAttribute(RAIN_ATTR.Mode) == "thunder" then "THUNDERSTORM" else "RAIN"
 	if state == "closing" then
-		rainLabel.Text = name .. ": ENDING  •  THE BIOME IS FADING"
+		ui.rainLabel.Text = name .. ": ENDING  \u{2022}  THE BIOME IS FADING"
 	else
-		rainLabel.Text = string.format("%s: %s  •  %s LEFT", name,
+		ui.rainLabel.Text = string.format("%s: %s  \u{2022}  %s LEFT", name,
 			if state == "active" then "ACTIVE, BIOME OPEN" else "STARTING", mmss(endsAt - Workspace:GetServerTimeNow()))
 	end
-	rainLabel.TextColor3 = NIGHT_INK
+	ui.rainLabel.TextColor3 = NIGHT_INK
+	ui.rainDot.BackgroundColor3 = if state == "closing" then LOOK.Muted else GOOD
 end
 Workspace:GetAttributeChangedSignal(RAIN_ATTR.State):Connect(drawRain)
 Workspace:GetAttributeChangedSignal(RAIN_ATTR.EndsAt):Connect(drawRain)
 Workspace:GetAttributeChangedSignal(RAIN_ATTR.Mode):Connect(drawRain)
+screen:GetAttributeChangedSignal("IsOwner"):Connect(paintWeather)
 
 local function askWeather(verb: string, seconds: number?)
 	if busy then
 		return
 	end
+	if ownerAccount() == false then
+		setStatus("Weather is the owner's account's alone. Nothing was asked.", BAD)
+		return
+	end
 	busy = true
 	setStatus(if verb == "start" then "Starting the rain…"
 		elseif verb == "thunder" then "Starting the thunderstorm…"
-		else "Ending the weather…", MUTED)
+		else "Ending the weather…", LOOK.Muted)
 	local ok, reply = pcall(function()
 		return remote:InvokeServer("Weather", verb, seconds, nil)
 	end)
@@ -1114,16 +1483,106 @@ local function startWeather(verb: string)
 	end
 	askWeather(verb, seconds)
 end
-startRain.Activated:Connect(function()
+ui.startRain.hit.Activated:Connect(function()
 	startWeather("start")
 end)
-startThunder.Activated:Connect(function()
+ui.startThunder.hit.Activated:Connect(function()
 	startWeather("thunder")
 end)
-endRain.Activated:Connect(function()
+ui.endRain.hit.Activated:Connect(function()
 	askWeather("end", nil)
 end)
+paintWeather()
 drawRain()
+
+--==============================================================================
+-- GLOBAL MINI EVENTS (2026-10-03)
+--
+-- The first line reads MiniEventService's attributes on this server: which
+-- mode is running here and its time left (from the shared absolute end, so
+-- every server shows the same clock). The second is the server's own account
+-- of the shared record and its sync, written onto this admin's gui alone.
+-- The buttons only ask; what the server could confirm is the status row.
+--==============================================================================
+local MINI_ATTR = MINI.Attributes
+local miniMode = "ticketdisco"
+
+local function paintMiniModes()
+	for _, choice in ipairs(ui.miniChoices) do
+		choice.button.style(if choice.verb == miniMode then "on" else "idle")
+	end
+end
+
+local function drawMini()
+	local state = Workspace:GetAttribute(MINI_ATTR.State)
+	local endsAt = Workspace:GetAttribute(MINI_ATTR.EndsAt)
+	local mode = (MINI.Modes :: any)[Workspace:GetAttribute(MINI_ATTR.Mode) or ""]
+	local where = if Workspace:GetAttribute(MINI_ATTR.Scope) == "local" then "THIS SERVER" else "GLOBAL"
+	if type(state) ~= "string" or type(endsAt) ~= "number" or not mode then
+		ui.miniLabel.Text = "NO GLOBAL EVENT RUNNING HERE"
+		ui.miniLabel.TextColor3 = LOOK.Muted
+		ui.miniDot.BackgroundColor3 = LOOK.Muted
+	elseif state == "ending" then
+		ui.miniLabel.Text = string.format("%s %s: ENDING", where, mode.Name)
+		ui.miniLabel.TextColor3 = LOOK.Muted
+		ui.miniDot.BackgroundColor3 = LOOK.Muted
+	else
+		-- The pure DISCO ONLY says what it gives everybody (2026-10-04).
+		local factor = tonumber(mode.SpeedFactor)
+		local boost = if factor and factor > 1 then string.format(" (UP TO +%d%% SPEED)", partyPercent(factor)) else ""
+		ui.miniLabel.Text = string.format("%s %s%s  \u{2022}  %s LEFT", where, mode.Name, boost,
+			mmss(endsAt - Workspace:GetServerTimeNow()))
+		ui.miniLabel.TextColor3 = GOLD_TEXT
+		ui.miniDot.BackgroundColor3 = GOOD
+	end
+	local line = screen:GetAttribute("MiniStatus")
+	ui.miniSync.Text = if type(line) == "string" then line else "Waiting for the server's sync status…"
+end
+for _, name in ipairs({ MINI_ATTR.State, MINI_ATTR.EndsAt, MINI_ATTR.Mode, MINI_ATTR.Scope }) do
+	Workspace:GetAttributeChangedSignal(name):Connect(drawMini)
+end
+screen:GetAttributeChangedSignal("MiniStatus"):Connect(drawMini)
+
+local function askMini(verb: string, seconds: number?)
+	if busy then
+		return
+	end
+	busy = true
+	setStatus(if verb == "end" then "Ending the global event (shared storage, then a notice to the other servers)…"
+		else "Starting the global event (shared storage, then a notice to the other servers)…", LOOK.Muted)
+	local ok, reply = pcall(function()
+		return remote:InvokeServer("MiniEvent", verb, seconds, nil)
+	end)
+	busy = false
+	if not ok or type(reply) ~= "table" then
+		setStatus("Couldn't reach this server. Nothing is confirmed.", BAD)
+		return
+	end
+	local message = if type(reply.message) == "string" then reply.message else "No answer."
+	setStatus(message, if reply.ok == true then GOOD else BAD)
+	drawMini()
+end
+
+for _, choice in ipairs(ui.miniChoices) do
+	choice.button.hit.Activated:Connect(function()
+		miniMode = choice.verb
+		paintMiniModes()
+	end)
+end
+ui.startGlobal.hit.Activated:Connect(function()
+	local cleaned = (string.gsub(miniDurationBox.Text, "[,%s_]", ""))
+	local seconds = tonumber(cleaned)
+	if not seconds then
+		setStatus("Type the duration in whole seconds first.", BAD)
+		return
+	end
+	askMini(miniMode, seconds)
+end)
+ui.endGlobal.hit.Activated:Connect(function()
+	askMini("end", nil)
+end)
+paintMiniModes()
+drawMini()
 
 local phaseTicker = 0
 local function tickPhase(want: boolean)
@@ -1138,6 +1597,7 @@ local function tickPhase(want: boolean)
 		end
 		drawPhase()
 		drawRain()
+		drawMini()
 		task.delay(1, step)
 	end
 	step()
@@ -1151,6 +1611,7 @@ local setOpen: (boolean) -> ()
 local function bindBack(want: boolean)
 	if not want then
 		ContextActionService:UnbindAction(BACK_ACTION)
+		ContextActionService:UnbindAction(PAD_ACTION)
 		return
 	end
 	ContextActionService:BindActionAtPriority(BACK_ACTION, function(_, state: Enum.UserInputState)
@@ -1161,17 +1622,35 @@ local function bindBack(want: boolean)
 			setList(false)
 		elseif confirmingAll then
 			setAllConfirm(false)
-			setStatus("Not sent.", MUTED)
-			selectIfPad(sendAnnouncement)
+			setStatus("Not sent.", LOOK.Muted)
+			selectIfPad(ui.sendAnnouncement.hit)
 		elseif confirming then
 			setConfirm(false)
-			setStatus("Reset cancelled. Nothing changed.", MUTED)
-			selectIfPad(resetButton)
+			setStatus("Reset cancelled. Nothing changed.", LOOK.Muted)
+			selectIfPad(ui.resetButton.hit)
 		else
 			setOpen(false)
 		end
 		return Enum.ContextActionResult.Sink
 	end, false, 3000, Enum.KeyCode.ButtonB)
+	-- LB and RB step through the sections, as they do through the Shop's.
+	ContextActionService:BindActionAtPriority(PAD_ACTION, function(_, state: Enum.UserInputState, input: InputObject)
+		if state ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		if chooser.isOpen() then
+			return Enum.ContextActionResult.Sink
+		end
+		local at = 1
+		for i, s in ipairs(SECTIONS) do
+			if s.id == section then
+				at = i
+			end
+		end
+		local step = if input.KeyCode == Enum.KeyCode.ButtonR1 then 1 else -1
+		setSection(SECTIONS[(at - 1 + step) % #SECTIONS + 1].id)
+		return Enum.ContextActionResult.Sink
+	end, false, 2600, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1)
 end
 
 setOpen = function(want: boolean)
@@ -1179,25 +1658,23 @@ setOpen = function(want: boolean)
 		return
 	end
 	open = want
-	if want then
-		fitPanel()
-	end
 	modal.setOpen(want)
 	tickPhase(want)
 	if want then
+		relayout()
 		showTarget()
-		setList(false)
-		setConfirm(false)
+		paintSecret()
+		paintWeather()
+		-- The section it was left on, from the top, with what was typed in it.
+		setSection(section)
 		bindBack(true)
-		selectIfPad(targetButton)
 	else
 		listOpen = false
-		setConfirm(false)
-		list.Visible = false
-		form.Visible = true
+		chooser.close()
+		showPages()
 		bindBack(false)
 		local selected = GuiService.SelectedObject
-		if selected and selected:IsDescendantOf(screen) then
+		if selected and (selected:IsDescendantOf(screen) or selected:IsDescendantOf(deck)) then
 			GuiService.SelectedObject = nil
 		end
 	end
@@ -1219,12 +1696,12 @@ end)
 Players.PlayerRemoving:Connect(function(leaving: Player)
 	if confirming and confirmFor == leaving then
 		setConfirm(false)
-		setStatus(leaving.Name .. " left the server. Nothing was reset.", MUTED)
+		setStatus(leaving.Name .. " left the server. Nothing was reset.", LOOK.Muted)
 	end
 	if leaving.UserId == targetId and leaving ~= player then
 		targetId = player.UserId
 		showTarget()
-		setStatus(leaving.Name .. " left the server. The target is you again.", MUTED)
+		setStatus(leaving.Name .. " left the server. The target is you again.", LOOK.Muted)
 	end
 	if listOpen then
 		-- After the leaver is actually gone from GetPlayers.
@@ -1242,3 +1719,4 @@ Players.PlayerAdded:Connect(function()
 end)
 
 showTarget()
+showPages()

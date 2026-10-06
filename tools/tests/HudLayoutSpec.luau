@@ -102,7 +102,6 @@ local OLD = {
 	walk = UDim2.new(0, I, 0, I + (W.Y + G6) * 3),
 	garden = UDim2.new(1, -I, 0, I),
 	bag = UDim2.new(1, -I, 0, I + S.Y + G6),
-	equipment = UDim2.new(1, -I, 0, I + (S.Y + G6) * 2 + 6),
 	hotbar = UDim2.new(0.5, 0, 1, -HOT.BottomGap),
 	cash = UDim2.new(0, 12, 1, -10),
 	banner = UDim2.new(0.5, 0, 0, 84),
@@ -112,29 +111,28 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 	Vector2.new(1920, 1080), Vector2.new(2560, 1440) }) do
 	local L = HudLayout.solve(screen(size.X, size.Y))
 	local tag = string.format("%dx%d", size.X, size.Y)
-	local same = not L.compact and L.slots == 5
+	local same = not L.compact and L.slots == 10
 		and udimEq(HudLayout.place(L.index, Vector2.zero, L.safe), OLD.index)
 		and udimEq(HudLayout.place(L.shop, Vector2.zero, L.safe), OLD.shop)
 		and udimEq(HudLayout.place(L.settings, Vector2.zero, L.safe), OLD.settings)
 		and udimEq(HudLayout.place(L.walk, Vector2.zero, L.safe), OLD.walk)
 		and udimEq(HudLayout.place(L.garden, Vector2.new(1, 0), L.safe), OLD.garden)
 		and udimEq(HudLayout.place(L.bag, Vector2.new(1, 0), L.safe), OLD.bag)
-		and udimEq(HudLayout.place(L.equipment, Vector2.new(1, 0), L.safe), OLD.equipment)
 		and udimEq(HudLayout.place(L.hotbar, Vector2.new(0.5, 1), L.safe), OLD.hotbar)
 		and udimEq(HudLayout.place(L.cashRoot, Vector2.new(0, 1), L.safe), OLD.cash)
 		and udimEq(HudLayout.place(L.banner, Vector2.new(0.5, 0), L.safe), OLD.banner)
 		and udimEq(HudLayout.place(L.skip, Vector2.new(0.5, 0), L.safe), OLD.skip)
-	check(same, tag .. ": desktop, five slots, and every group at the UDim2 it always had")
+	check(same, tag .. ": desktop, ten slots (2026-10-03), and every group at the UDim2 it always had")
 	check(L.hot == HOT and L.cashStyle == CFG.CashStyle.Desktop
-			and L.hotbar.w == 410 and L.hotbar.h == 64
+			and L.hotbar.w == 750 and L.hotbar.h == 64
 			and L.cashRoot.w == 316 and L.cashRoot.h == 108 and L.cash.h == 110,
-		tag .. ": the shipped faces -- GameConfig.Hotbar itself, the 410 x 64 strip (2026-10-01), the 316 x 108 cash block",
+		tag .. ": the shipped faces -- GameConfig.Hotbar itself, the 750 x 64 strip (ten slots, 2026-10-03), the 316 x 108 cash block",
 		r2s(L.hotbar) .. " " .. r2s(L.cashRoot))
-	check(L.index.w == S.X and L.index.h == S.Y and L.shop.w == S.X and L.shop.h == S.Y
+	check(L.index.w == S.X and L.index.h == S.Y and L.shop.w == W.X and L.shop.h == W.Y
 			and L.walk.w == W.X and L.walk.h == 46 and L.settings.w == S.X
-			and L.equipSlot == 68 and L.equipGap == 8 and L.banner.w == 560,
-		tag .. ": the same sizes too -- Index and Shop the owner's 50x50 artwork (2026-09-24), "
-			.. "a 130x46 switch, 64x68 BAT/TRAP, a 560 banner")
+			and L.banner.w == 560 and L.equipment == nil and L.chooser == nil,
+		tag .. ": the same sizes too -- Index the owner's 50x50 square (2026-09-24), Shop the rail's 130x50 "
+			.. "for its wide picture (2026-10-06), a 130x46 switch, a 560 banner -- and no BAT/TRAP column (2026-10-03)")
 	check(L.clock and math.abs((L.clock.x + L.clock.w / 2) - size.X / 2) < 0.01
 			and math.abs(L.clock.w - math.clamp(size.X * 0.44, 190, 360)) < 0.01,
 		tag .. ": the clock is its old width, centred", L.clock and r2s(L.clock))
@@ -142,11 +140,11 @@ for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.
 	check(#problems == 0, tag .. ": nothing overlaps", table.concat(problems, "; "))
 end
 
--- A console has no keyboard: the desktop arrangement with five slots, as before.
+-- A console has no keyboard: the desktop arrangement with ten slots (LB / RB).
 local console = HudLayout.solve(screen(1920, 1080, { keyboard = false }))
-check(not console.compact and console.slots == 5 and console.hot == HOT
+check(not console.compact and console.slots == 10 and console.hot == HOT
 		and console.cashStyle == CFG.CashStyle.Desktop,
-	"no keyboard and no touch keeps the desktop arrangement, its faces and five slots, as before")
+	"no keyboard and no touch keeps the desktop arrangement, its faces and ten slots")
 
 --==============================================================================
 -- THE DESKTOP FACES ARE THE NUMBERS THAT SHIPPED
@@ -175,8 +173,8 @@ for key, want in pairs(SHIPPED_HOT) do
 	end
 end
 check(#hotDiff == 0 and HudLayout.hotMetrics(false) == HOT
-		and HudLayout.hotbarWidth(5, true) == 410 and HudLayout.hotbarHeight() == 64,
-	"the desktop card's numbers are the approved look's, read from GameConfig.Hotbar itself: five squares and the Bag, 410 x 64",
+		and HudLayout.hotbarWidth(10, true) == 750 and HudLayout.hotbarHeight() == 64,
+	"the desktop card's numbers are the approved look's, read from GameConfig.Hotbar itself: ten squares and the Bag, 750 x 64",
 	table.concat(hotDiff, ", "))
 check(HOT.PlateTransparency > 0.2 and HOT.PlateTransparency < 0.6 and HOT.EmptyPlateTransparency >= 0.8
 		and HOT.EmptyEdgeTransparency >= 0.8 and HOT.EmptyNumeralTransparency >= 0.5
@@ -206,15 +204,24 @@ check(#cashDiff == 0 and DESK.Root == Vector2.new(316, 108) and CFG.CashRoot == 
 
 -- A narrow desktop window: the old overlap is the cash block beside the strip.
 local narrow = HudLayout.solve(screen(1000, 609))
-check(not narrow.compact and narrow.slots == 5
+check(not narrow.compact and narrow.slots == 10
 		and (narrow.cash.y + narrow.cash.h + CFG.Gap <= narrow.hotbar.y or narrow.cash.x + narrow.cash.w + CFG.Gap <= narrow.hotbar.x)
 		and #HudLayout.problems(narrow) == 0,
-	"a 1000x609 desktop window keeps its rail and five slots, and the cash block clears the strip",
+	"a 1000x609 desktop window keeps its rail and ten slots, and the cash block clears the strip",
 	r2s(narrow.cash) .. " vs " .. r2s(narrow.hotbar))
 check(HudLayout.solve(screen(1268, 720)).cash.y == HudLayout.solve(screen(1920, 720)).cash.y,
 	"from 1268 px wide the cash block never moves off its corner")
+-- With the ten-slot strip the cash block lifts over the name band below about
+-- 1254 px -- 1024 x 600 among them -- and still clears everything.
+do
+	local small = HudLayout.solve(screen(1024, 600))
+	check(not small.compact and small.slots == 10 and small.cash.y + small.cash.h + CFG.Gap <= small.namePopup.y
+			and #HudLayout.problems(small) == 0,
+		"a 1024x600 desktop keeps ten slots, the cash block lifted over the name band, nothing overlapping",
+		r2s(small.cash) .. " " .. table.concat(HudLayout.problems(small), "; "))
+end
 local short = HudLayout.solve(screen(1400, 400))
-check(short.compact and short.slots == 5 and #HudLayout.problems(short) == 0,
+check(short.compact and short.slots == 10 and #HudLayout.problems(short) == 0,
 	"a desktop window too short for the column rail goes compact, clean",
 	table.concat(HudLayout.problems(short), "; "))
 check(HudLayout.solve(screen(899, 700)).compact,
@@ -226,6 +233,9 @@ check(HudLayout.solve(screen(899, 700)).compact,
 say("-- phones --")
 local PHONES = {
 	{ 640, 480 }, { 772, 360 }, { 874, 402 }, { 896, 414 }, { 956, 440 }, { 1000, 609 },
+	-- Listed 2026-10-03, with the chooser gone: Studio's 705 x 338 emulation, which
+	-- only failed for the chooser, and a 640 x 360 phone.
+	{ 705, 338 }, { 640, 360 },
 }
 -- The same screens with the notch and home-indicator insets a real iPhone
 -- takes off in landscape: 62/62/21 on the 16 Pro and Pro Max, 48/48/21 on the
@@ -234,6 +244,7 @@ local NOTCHED = {
 	{ 874, 402, 62, 21, "iPhone 16 Pro" },
 	{ 956, 440, 62, 21, "iPhone 16 Pro Max" },
 	{ 896, 414, 48, 21, "iPhone 11" },
+	{ 844, 390, 47, 21, "iPhone 12/13/14" },
 }
 local cases = {}
 for _, p in ipairs(PHONES) do
@@ -252,82 +263,91 @@ table.insert(cases, { tag = "801x392 the owner's session",
 	input = screen(801, 392, { touch = true, keyboard = true }) })
 
 local worstGap = math.huge
--- The phones too narrow for the guide's block to end Guide.Clear short of the middle.
+-- The phones too narrow for the guide's block to end Guide.Clear short of the middle,
+-- and those where its least width reaches past Reach or 20 px short of the middle.
 local guideNear = {}
+local guidePast = {}
 -- How wide each phone's row draws BIOMES and OBBY, and where ADMIN stands.
 local rowTiers = {}
+-- How large each phone's panel under the Bag draws its squares.
+local panelTiles = {}
 for _, case in ipairs(cases) do
 	local L = HudLayout.solve(case.input)
 	local tag = case.tag
 	local sw, sh = L.safe.X, L.safe.Y
 	local problems = HudLayout.problems(L)
-	check(L.compact and L.slots == 4 and L.fits and #problems == 0,
-		tag .. ": compact, four slots, every group clear by 8 px and inside the margin",
+	check(L.compact and L.slots == 5 and L.fits and #problems == 0,
+		tag .. ": compact, five slots, every group clear by 8 px and inside the margin",
 		table.concat(problems, "; "))
 
-	-- the rail: on a touch screen, the dock's column and Walk Mode beside it
-	check(L.sidebar and L.dock ~= nil and L.handle ~= nil and L.handleShut ~= nil
-			and L.boost ~= nil and L.chooser ~= nil,
-		tag .. ": a touch screen gets the sidebars -- the dock, its handle, the x2 button and the chooser")
-	local D = CFG.Dock
-	local dock = L.dock
-	local tiles = { L.index, L.shop, L.settings }
-	local column = dock ~= nil
+	-- the rail on a touch screen: Shop top-left with the two switches under it,
+	-- Index on the top-right row, and the panel under the Bag -- since 2026-10-06
+	-- INVITE, EVENTS, WHAT'S NEW and Settings in that order, under its handle,
+	-- scrolling rather than going under MinTile (InviteHudSpec holds the rest).
+	local PP = CFG.Phone.Panel
+	local dock, view = L.dock, L.dockView
+	local tiles = { L.invite, L.events, L.updates, L.settings }
+	local column = L.sidebar and dock ~= nil and view ~= nil and L.handle ~= nil and L.boost == nil
+		and L.chooser == nil and L.equipment == nil
 	for i, c in ipairs(tiles) do
-		column = column and c.w == tiles[1].w and c.h == tiles[1].h and c.w >= 44 and c.h >= 44
-			and c.x == dock.x + D.Pad and c.x + c.w == dock.x + dock.w - D.Pad
-		if i > 1 then
-			column = column and c.y - (tiles[i - 1].y + tiles[i - 1].h) == D.Gap
-		end
+		column = column and c.w == tiles[1].w and c.w >= PP.MinTile and c.w <= PP.Tile
+			and (i == 1 or c.y - (tiles[i - 1].y + tiles[i - 1].h) == PP.Gap)
 	end
-	column = column and L.index.y == dock.y + D.Pad
-		and L.settings.y + L.settings.h == dock.y + dock.h - D.Pad
-		and dock.x == CFG.Margin and dock.y == CFG.Margin
-	check(column, tag .. ": Index, Shop and Settings stand in one column in the dock, same size, 44+",
+	check(column and L.invite.y == view.y + PP.Pad and L.handle.y == L.bag.y + L.bag.h + CFG.Gap,
+		tag .. ": the panel under the Bag: its handle 8 px under the row, INVITE first, never under MinTile",
 		dock and r2s(dock))
-	check(dock ~= nil and dock.y + dock.h + 8 <= L.thumb.y,
-		tag .. ": the dock ends 8 px above the thumbstick", dock and (L.thumb.y - dock.y - dock.h))
-	check(L.walk.w >= 44 and L.walk.h >= 44 and L.walk.y == CFG.Margin
-			and L.walk.x >= dock.x + dock.w + 8,
-		tag .. ": WALK MODE stands on the top row beside the dock, where the dock shutting never moves it",
-		r2s(L.walk))
+	check(dock ~= nil and dock.y + dock.h + 8 <= L.jump.y,
+		tag .. ": the panel ends 8 px above the jump button", dock and (L.jump.y - dock.y - dock.h))
+	panelTiles[tag] = L.events.w
+	check(L.shop.x == CFG.Margin and L.shop.y == CFG.Margin and L.shop.w == CFG.Phone.Shop.X
+			and L.shop.h == CFG.Phone.Shop.Y,
+		tag .. ": Shop stands in the top-left corner at its picture's own size", r2s(L.shop))
+	-- OTHER PLANTS and WALK MODE (the owner, 2026-10-05): see-through rows under
+	-- Shop, OTHER PLANTS first, a group's 8 px apart, at the margin -- and up
+	-- where a thumb on the movement stick never reaches, 8 px over its zone.
+	do
+		local SW = CFG.Phone.Switch
+		check(L.switchInline == true and L.others.x == CFG.Margin and L.walk.x == CFG.Margin
+				and L.others.w == SW.W and L.others.h == SW.H and L.walk.w == SW.W and L.walk.h == SW.H
+				and L.others.y == L.shop.y + L.shop.h + CFG.Gap and L.walk.y == L.others.y + L.others.h + SW.Gap
+				and SW.Gap >= 8 and L.walk.y + L.walk.h + 8 <= L.thumb.y
+				and HudLayout.gap(L.walk, L.jump) >= 8,
+			tag .. ": OTHER PLANTS and WALK MODE are see-through rows under Shop, OTHER PLANTS first, 8 px "
+				.. "apart, ending 8 px above the thumbstick",
+			r2s(L.others) .. " " .. r2s(L.walk))
+	end
 	check(L.garden.w >= 44 and L.bag.w >= 44 and L.garden.y == L.bag.y
 			and L.bag.x + L.bag.w == sw - CFG.Margin,
 		tag .. ": Garden and the Bag in one row, the Bag in the corner")
-	local boost = L.boost
-	check(boost ~= nil and boost.y == L.garden.y and boost.w == L.garden.w and boost.h == L.garden.h
-			and boost.x + boost.w + CFG.BoostGap == L.garden.x,
-		tag .. ": the x2 button stands immediately left of Garden, the same size, on the same row",
-		boost and r2s(boost))
+	-- Index stands where WHAT'S NEW stood (2026-10-05): the row's left end,
+	-- BoostGap off Garden, centred on the row -- the band the row bounds unchanged.
+	check(L.index.w == CFG.Phone.Index and L.index.h == CFG.Phone.Index
+			and L.index.x + L.index.w + CFG.BoostGap == L.garden.x
+			and math.abs((L.index.y + L.index.h / 2) - (L.garden.y + L.garden.h / 2)) < 1e-6
+			and L.rightLeft == L.index.x,
+		tag .. ": Index stands immediately left of Garden, where WHAT'S NEW stood, centred on the row -- and "
+			.. "the row's band ends there",
+		r2s(L.index))
 	local indexBadge, gardenBadge = HudLayout.badges(L)
-	check(indexBadge.y >= 0 and gardenBadge.y >= 0 and indexBadge.y + indexBadge.h < L.shop.y
-			and HudLayout.gap(indexBadge, L.walk) >= 8 and HudLayout.gap(gardenBadge, boost) > 0,
-		tag .. ": both badges on the glass, Index's clear of Shop and WALK MODE, Garden's clear of x2",
+	check(indexBadge.y >= 0 and gardenBadge.y >= 0 and indexBadge.x < L.index.x
+			and HudLayout.gap(indexBadge, gardenBadge) >= 8 and HudLayout.gap(gardenBadge, L.index) > 0,
+		tag .. ": both badges on the glass -- Index's tucked into its top-LEFT corner, 8 px clear of Garden's, "
+			.. "and Garden's clear of Index",
 		r2s(indexBadge) .. " " .. r2s(gardenBadge))
-
-	-- the handle: a 44 x 44 press on the dock's edge, level with Shop; shut, on
-	-- the safe area's edge at the same height
-	local handle, shut = L.handle, L.handleShut
-	local shopMid = L.shop.y + L.shop.h / 2
-	check(handle.w >= 44 and handle.h >= 44 and handle.x == dock.x + dock.w
-			and math.abs(handle.y + handle.h / 2 - shopMid) <= 1
-			and shut.x == 0 and shut.y == handle.y and shut.w == handle.w,
-		tag .. ": the dock's handle is a 44 x 44 press on its edge, level with Shop, and on the safe edge when shut",
-		r2s(handle) .. " / " .. r2s(shut))
 
 	-- the hotbar
 	local thumb, jump = L.thumb, L.jump
 	check(thumb ~= nil and jump ~= nil, tag .. ": the thumbstick and jump button are reserved")
-	check(L.hot == COMPACT_HOT and L.slots == 4 and L.hotbar.w == HudLayout.hotbarWidth(4, L.chip, true)
+	check(L.hot == COMPACT_HOT and L.slots == 5 and L.hotbar.w == HudLayout.hotbarWidth(5, L.chip, true)
 			and L.hotbar.h == HudLayout.hotbarHeight(true)
 			and L.hot.SlotWidth >= 44 and L.hot.SlotHeight >= 44
 			and L.hotbar.y + L.hotbar.h == sh - HOT.BottomGap,
-		tag .. ": the strip is the compact belt, four 52-px squares on the bottom edge", r2s(L.hotbar))
+		tag .. ": the strip is the compact belt, five 52-px squares on the bottom edge", r2s(L.hotbar))
 	check(L.namePopup.x == L.hotbar.x and L.namePopup.w == L.hotbar.w
 			and L.namePopup.y + L.namePopup.h + HOT.NamePopupGap == L.hotbar.y
 			and (L.toastTop or L.toast.y + L.toast.h + 8 <= L.namePopup.y)
-			and HudLayout.gap(L.namePopup, L.cash) >= 8 and HudLayout.gap(L.namePopup, L.equipment) >= 8,
-		tag .. ": the item name's band stands over the belt, clear of the notices, the cash and BATS/TRAPS",
+			and HudLayout.gap(L.namePopup, L.cash) >= 8,
+		tag .. ": the item name's band stands over the belt, clear of the notices and the cash",
 		r2s(L.namePopup))
 	check(math.abs((L.hotbar.x + L.hotbar.w / 2) - sw / 2) <= 8,
 		tag .. ": and within 8 px of the middle",
@@ -346,8 +366,9 @@ for _, case in ipairs(cases) do
 			and L.cash.h == face.Root.Y + face.Drop
 			and L.cashRoot.w == face.Root.X and L.cashRoot.h == face.Root.Y
 			and (inCorner or overBelt) and HudLayout.gap(L.cash, L.hotbar) >= 8
-			and L.cash.y >= dock.y + dock.h + 8,
-		tag .. ": the cash block wears the phone's face in the bottom-left corner, clear of the belt and under the dock",
+			and L.cash.y >= L.walk.y + L.walk.h + 8,
+		tag .. ": the cash block wears the phone's face in the bottom-left corner, clear of the belt and under "
+			.. "the switches",
 		r2s(L.cash))
 	-- The cash line's outline draws left of the root: measured live, the "$"
 	-- reached x = 5 when the root sat on the plain 8 px margin. 3 px is the
@@ -358,16 +379,8 @@ for _, case in ipairs(cases) do
 	check(HudLayout.gap(L.cash, jump) >= 8 and not table.find(HudLayout.problems(L), "cash is 0.0 px from a touch control"),
 		tag .. ": the cash block may stand on the thumbstick, never near the jump button",
 		r2s(L.cash) .. " / " .. r2s(jump))
-	-- The x2 card is the button on the top row now; its message hangs under it,
-	-- right-aligned to it, on the glass and off the right sidebar.
-	local tipW = TextService:GetTextSize(GameConfig.Pass.BuffMessage, face.TipSize,
-		Enum.Font.GothamMedium, Vector2.new(1000, 100)).X + 4
-	local tipTop = math.max(boost.y + boost.h, L.teleport.y + L.teleport.h) + 6
-	local tip = rect(boost.x + boost.w - tipW, tipTop, tipW, face.TipSize + 3)
-	check(tip.x >= 0 and tip.y + tip.h <= sh and HudLayout.gap(tip, L.equipment) >= 0
-			and HudLayout.gap(tip, L.teleport) >= 0,
-		tag .. ": the x2 card's message, under its button, stays inside the safe area, off BATS/TRAPS and off TELEPORT",
-		r2s(tip))
+	-- (The x2 card rides the cash line since 2026-10-05: THE x2 CARD BESIDE THE
+	-- CASH, after this loop, holds it on every phone with the pass and without.)
 
 	--======================================================================
 	-- THE FOOTPRINT
@@ -390,35 +403,6 @@ for _, case in ipairs(cases) do
 	check(hotShare + cashShare <= 0.20,
 		tag .. ": the two together cover at most a fifth of the screen",
 		string.format("%.1f%%", (hotShare + cashShare) * 100))
-
-	-- BATS/TRAPS: the right sidebar
-	local S = CFG.Side
-	local tileW = L.equipment.w - L.equipPad * 2
-	check(L.equipment.x + L.equipment.w == sw - CFG.Margin
-			and L.equipment.y + L.equipment.h + 8 <= jump.y
-			and L.equipment.y >= L.railBottom + 8 and L.equipSlot >= S.MinTile
-			and tileW >= 44 and L.equipPad == S.Pad
-			and L.equipment.h == L.equipSlot * 2 + L.equipGap + L.equipPad * 2,
-		tag .. ": BATS over TRAPS in the right sidebar, against the edge, above the jump button, 44+",
-		r2s(L.equipment) .. " tile " .. tileW .. "x" .. L.equipSlot)
-
-	-- the chooser, at its widest: out of the sidebar's left side toward the
-	-- middle and no further, one card at the least, a title and a row tall
-	local C = CFG.Chooser
-	local chooser = L.chooser
-	check(chooser.x + chooser.w + 8 == L.equipment.x and chooser.x >= sw / 2 + 8
-			and chooser.w >= C.Pad + C.Card.X + C.Spine
-			and chooser.h == C.Pad * 2 + C.Title + C.Card.Y,
-		tag .. ": the chooser opens leftward from the sidebar, never past the middle, at least one card wide",
-		r2s(chooser))
-	local clearOfChooser = HudLayout.gap(chooser, L.hotbar) >= 8 and HudLayout.gap(chooser, jump) >= 8
-		and HudLayout.gap(chooser, thumb) >= 8 and HudLayout.gap(chooser, L.cash) >= 8
-		and chooser.y >= L.railBottom + 8
-	for _, group in ipairs(HudLayout.groups(L, true)) do
-		clearOfChooser = clearOfChooser and HudLayout.gap(chooser, group.rect) >= 8
-	end
-	check(clearOfChooser,
-		tag .. ": open, it covers none of the belt, cash, the top rows, the thumbs or the sidebars", r2s(chooser))
 
 	-- the clock: on a phone a chip (2026-09-29), where it was 44% of the window --
 	-- and since 2026-09-30 at the top row's RIGHT end, the owner's screenshot
@@ -446,10 +430,13 @@ for _, case in ipairs(cases) do
 	check(clearOfAll and L.banner.x >= 8 and L.banner.x + L.banner.w <= sw - 8,
 		tag .. ": the tutorial banner and its skip line touch nothing", r2s(L.banner))
 	-- Its words drawn smaller on a phone (owner, 2026-09-24), and since
-	-- 2026-09-29 in the LEFT COLUMN rather than under the clock: from the dock
-	-- handle's right edge, under WALK MODE, never past Guide.Reach of the width
-	-- -- so the player's own forward view has nothing written across it. The
-	-- step counter and Skip stand on one row above the words.
+	-- 2026-09-29 in the LEFT COLUMN rather than under the clock: right of Shop
+	-- and the switches under it (until 2026-10-05, of the dock's handle), never
+	-- past Guide.Reach of the width -- so the player's own forward view has
+	-- nothing written across it. The step counter and Skip stand on one row
+	-- above the words. Where that row is wider than the room it leaves (the
+	-- 640-px phones) the block keeps its least width and may reach 8 px past
+	-- the middle, no further.
 	local ts = CFG.TutorialPhoneScale
 	local GUIDE = CFG.Phone.Guide
 	-- Under WALK MODE's row, and under the passing lines' band where the column
@@ -458,19 +445,23 @@ for _, case in ipairs(cases) do
 	-- The row above the words needs this much; the block is never narrower, and
 	-- wider only while it ends Guide.Clear short of the middle of the screen.
 	local leastGuide = CFG.Phone.Counter + 8 + CFG.Phone.Skip.X
+	local atLeast = L.banner.w == leastGuide
+	local within = L.banner.x + L.banner.w <= sw * GUIDE.Reach and L.banner.x + L.banner.w <= sw / 2 - 20
 	check(ts < 1 and L.tutorialScale == ts and L.guide == true
 			and L.banner.h == GUIDE.Height and L.banner.w <= GUIDE.Width
 			and L.banner.w >= leastGuide
-			and L.banner.x == L.handle.x + L.handle.w + 8 and L.banner.y == guideTop
-			and L.banner.x + L.banner.w <= sw * GUIDE.Reach
-			and L.banner.x + L.banner.w <= sw / 2 - 20
-			and (L.banner.w == leastGuide or L.banner.x + L.banner.w <= sw / 2 - GUIDE.Clear),
+			and L.banner.x == L.railRight + 8 and L.railRight == L.walk.x + L.walk.w and L.banner.y == guideTop
+			and (within or (atLeast and L.banner.x + L.banner.w <= sw / 2 + 8))
+			and (atLeast or L.banner.x + L.banner.w <= sw / 2 - GUIDE.Clear),
 		tag .. string.format(": the guide's words stand in the left column, drawn at %.2f, %g px wide at most, "
 			.. "never past %.0f%% of the width, and %g px short of the middle wherever the row above them allows",
 			ts, GUIDE.Width, GUIDE.Reach * 100, GUIDE.Clear),
 		r2s(L.banner))
 	if L.banner.w == leastGuide and L.banner.x + L.banner.w > sw / 2 - GUIDE.Clear then
 		table.insert(guideNear, string.format("%s (%g px short)", tag, sw / 2 - L.banner.x - L.banner.w))
+	end
+	if not within then
+		table.insert(guidePast, tag)
 	end
 	check(L.skip.w == CFG.Phone.Skip.X and L.skip.h == CFG.Phone.Skip.Y and L.skip.h == CFG.SkipSize.Y
 			and L.skip.y == L.banner.y and L.skip.h <= GUIDE.Row
@@ -489,11 +480,13 @@ for _, case in ipairs(cases) do
 			string.format("%.1f needed, %g there", lines, drawn))
 	end
 
-	-- THE TOP ROW (2026-09-29; in the owner's order since 2026-09-30): BIOMES,
-	-- TELEPORT and OBBY from the row's left end, 8 px after Roblox's buttons and
-	-- 8 px apart; ADMIN just left of the clock where the row has room for it; the
-	-- clock at the right end -- all in the topbar's band, inside its free span
-	-- and the safe area across.
+	-- THE TOP ROW (2026-09-29; in the owner's order since 2026-09-30; one even
+	-- row since the owner's mobile corrections of 2026-10-05): BIOMES, PLOT and
+	-- OBBY Phone.RowGap apart with PLOT on the screen's centre line (the owner,
+	-- 2026-10-05 evening) -- every listed phone has the room -- each touch area
+	-- exactly its plate drawn; ADMIN just left of the clock where the row has
+	-- room for it, 8 px off it and off OBBY; the clock at the right end -- all
+	-- in the topbar's band, inside its free span and the safe area across.
 	do
 		local originX = (case.input.viewport.X - sw) / 2
 		local items = {
@@ -518,40 +511,54 @@ for _, case in ipairs(cases) do
 				note ..= " " .. item[1] .. " " .. r2s(r) .. " leaves the row"
 			end
 			for j = i + 1, #items do
-				if HudLayout.gap(r, items[j][2]) < 8 - 1e-6 then
+				-- The three buttons are the one even row, RowGap apart; everything
+				-- else keeps its 8 px.
+				local least = if i <= 3 and j <= 3 then CFG.Phone.RowGap else 8
+				if HudLayout.gap(r, items[j][2]) < least - 1e-6 then
 					rowOk = false
 					note ..= " " .. item[1] .. " meets " .. items[j][1]
 				end
 			end
 		end
-		-- In the owner's order: each button 8 px after the last from the row's
+		-- In the owner's order: each button RowGap after the last from the row's
 		-- start; the clock ending at the row's end; ADMIN, on the row, 8 px before it.
 		local b, p, o = L.biomes, L.teleport, L.obby
 		local c = items[#items][2]
-		local ordered = rowOk and math.abs(b.x - lo) < 1e-6
-			and math.abs(p.x - (b.x + b.w + 8)) < 1e-6
-			and math.abs(o.x - (p.x + p.w + 8)) < 1e-6
+		local RG = CFG.Phone.RowGap
+		local ordered = rowOk and b.x >= lo - 1e-6 and math.abs(p.x + p.w / 2 - sw / 2) < 1e-6
+			and math.abs(p.x - (b.x + b.w + RG)) < 1e-6
+			and math.abs(o.x - (p.x + p.w + RG)) < 1e-6
 			and math.abs(c.x + c.w - hi) < 1e-6
 			and (hung or (a ~= nil and math.abs(a.x - originX + a.w + 8 - c.x) < 1e-6))
 		if not ordered then
 			rowOk = false
 			note ..= " not in the owner's order"
 		end
-		-- The two short buttons are drawn alike: icon and word, the word, or the
-		-- word a little smaller -- the widest the row holds.
-		local B, O = CFG.Biomes, CFG.Obby
-		local tier = if b.w == B.Size.X and o.w == O.Size.X and L.biomesWide and L.obbyWide then "icons and words"
-			elseif b.w == B.Narrow and o.w == O.Narrow and not L.biomesWide and not L.obbyWide then "words"
-			elseif b.w == B.Tight and o.w == O.Tight and not L.biomesWide and not L.obbyWide then "tight words"
+		-- One even row: the words alone, each plate drawn exactly its touch area,
+		-- all three at the row's size or all three at the tight size.
+		local k = L.teleportScale
+		-- Each plate inset by its outline (RowStroke): drawn, the outline ends at the touch area's edge.
+		local e = CFG.Phone.RowStroke * 2
+		local function tierOf(sizes)
+			return L.biomesPlate == Vector2.new(sizes.Biomes - e, 44 - e)
+				and L.teleportPlate == Vector2.new(sizes.Plot - e, 44 - e)
+				and L.obbyPlate == Vector2.new(sizes.Obby - e, 44 - e)
+				and math.abs(b.w - sizes.Biomes * k) < 1e-6 and math.abs(p.w - sizes.Plot * k) < 1e-6
+				and math.abs(o.w - sizes.Obby * k) < 1e-6
+		end
+		local tier = if L.biomesWide or L.obbyWide or not L.teleportShort then nil
+			elseif tierOf(CFG.Phone.Row) then "words"
+			elseif tierOf(CFG.Phone.RowTight) then "tight words"
 			else nil
 		if tier == nil then
 			rowOk = false
-			note ..= string.format(" widths %g / %g match no tier", b.w, o.w)
+			note ..= string.format(" widths %g / %g / %g match no tier", b.w, p.w, o.w)
 		end
 		rowTiers[tag] = (tier or "?") .. (if hung then ", ADMIN hung" else ", ADMIN on the row")
-		check(rowOk, tag .. ": the top row -- BIOMES, TELEPORT, OBBY" .. (if hung then "" else ", ADMIN")
+		check(rowOk, tag .. ": the top row -- BIOMES, PLOT, OBBY" .. (if hung then "" else ", ADMIN")
 			.. ", the clock -- stands in the owner's order in the topbar's band, inside its free span and the "
-			.. "safe area, 8 px apart", note)
+			.. "safe area, the three buttons one even row " .. RG .. " px apart with PLOT on the screen's centre "
+			.. "line, the rest 8", note)
 
 		-- THE VIEW. What the owner asked for: "keeps the central play area
 		-- clear". Nothing permanent stands in the middle third of the screen
@@ -620,15 +627,28 @@ do
 		"the owner's session draws the row as the screenshot does: BIOMES and OBBY as words, ADMIN on the row",
 		rowTiers["801x392 the owner's session"])
 end
+do
+	local lines = {}
+	for _, case in ipairs(cases) do
+		table.insert(lines, case.tag .. ": " .. tostring(panelTiles[case.tag]))
+	end
+	say("  (the panel's squares under the Bag, by phone -- " .. table.concat(lines, "; ") .. ")")
+end
 say("  (the guide's block is at its least width, and nearer the middle than Guide.Clear, on: "
 	.. (if #guideNear > 0 then table.concat(guideNear, ", ") else "none") .. ")")
 do
 	local only = true
 	for _, tag in ipairs(guideNear) do
-		only = only and string.find(tag, "640x480", 1, true) ~= nil
+		only = only and (string.find(tag, "^640x") ~= nil or string.find(tag, "^705x") ~= nil)
 	end
-	check(only, "only the 640-px-wide phones have the guide's block nearer the middle than Guide.Clear",
+	check(only, "only the 640- and 705-px-wide phones have the guide's block nearer the middle than Guide.Clear",
 		table.concat(guideNear, ", "))
+	local past = true
+	for _, tag in ipairs(guidePast) do
+		past = past and string.find(tag, "^640x") ~= nil
+	end
+	check(past, "only the 640-px-wide phones have it reach past the middle (by 8 px at most)",
+		table.concat(guidePast, ", "))
 end
 
 --==============================================================================
@@ -641,14 +661,15 @@ end
 say("-- the compact faces --")
 local C = COMPACT_HOT
 local tray = HudLayout.hotbarHeight(true)
--- THE APPROVED LOOK'S PHONE FACE (2026-10-01): four squares and the Bag, no tray.
+-- THE APPROVED LOOK'S PHONE FACE (2026-10-01): five squares since 2026-10-03, and
+-- the Bag, no tray.
 check(C.SlotWidth >= 48 and C.SlotWidth <= 56 and C.SlotHeight == C.SlotWidth and tray == C.SlotHeight
 		and C.Gap >= 3 and C.Gap <= 4 and C.NumeralSize >= 9 and C.NumeralSize <= 11
 		and C.PreviewHeight >= 42 and C.PreviewHeight <= 48 and C.ChipWidth == C.SlotWidth
-		and HudLayout.hotbarWidth(4, true, true) <= 300,
-	"the compact belt is in the brief's bands: 48-56 px squares, no tray, 3-4 gaps, a 9-11 number, a 42-48 preview, a Bag cell the slot's size, under 300 wide",
+		and HudLayout.hotbarWidth(5, true, true) <= 340,
+	"the compact belt is in the brief's bands: 48-56 px squares, no tray, 3-4 gaps, a 9-11 number, a 42-48 preview, a Bag cell the slot's size, five and the Bag under 340 wide",
 	string.format("%dx%d tray %d gap %d number %d preview %d bag %d width %d", C.SlotWidth, C.SlotHeight,
-		tray, C.Gap, C.NumeralSize, C.PreviewHeight, C.ChipWidth, HudLayout.hotbarWidth(4, true, true)))
+		tray, C.Gap, C.NumeralSize, C.PreviewHeight, C.ChipWidth, HudLayout.hotbarWidth(5, true, true)))
 check(C.TrayPad == 0 and C.CardStroke == HOT.CardStroke and C.CardCorner == HOT.CardCorner
 		and C.PlateTransparency == HOT.PlateTransparency,
 	"no tray, and the desktop's thin edge, small corners and translucent plate")
@@ -725,8 +746,8 @@ local counts = {}
 for _, case in ipairs(cases) do
 	counts[HudLayout.solve(case.input).slots] = true
 end
-check(counts[4] and not counts[5],
-	"every phone case is four slots, so resizing or rotating one never moves a key")
+check(counts[5] and not counts[4] and not counts[10],
+	"every phone case is five slots, so resizing or rotating one never moves a key")
 
 -- Without touch, a small window keeps its cash block in the corner when there is room.
 local window = HudLayout.solve(screen(860, 700, { touch = false }))
@@ -788,12 +809,14 @@ end
 check(centred, "the widest name stays centred on every listed phone -- at the top of the centre column there", noteMiss)
 check(clear, "and clears both top rows and the teleport button by 8 px on all of them", noteMiss)
 -- A top band too narrow for the widest name: a small desktop window's compact
--- rows, and a phone just too narrow for it -- sized off the measured name, so
--- centring it is impossible and sliding it between the rows is not. (A 560 x
+-- rows, and a phone just too narrow for it -- both sized off the measured name,
+-- so centring it is impossible and sliding it between the rows is not. (A 560 x
 -- 320 PHONE is no longer such a case: its top-left row is only Walk Mode now,
--- and the name stays centred.)
+-- and the name stays centred. Nor, since 2026-10-04, a 560 x 320 WINDOW: its
+-- row is three squares now, Walk Mode's switch standing left of EVENTS.)
 local squeezed = math.floor(widest + 336)
-for _, input in ipairs({ screen(560, 320, { touch = false }), screen(squeezed, 400, { touch = true }) }) do
+local squeezedWindow = math.floor(widest + 330)
+for _, input in ipairs({ screen(squeezedWindow, 320, { touch = false }), screen(squeezed, 400, { touch = true }) }) do
 	local tiny = HudLayout.solve(input)
 	local dx, top = HudLayout.notice(tiny, widest, 30, 50 - TOPBAR)
 	local box = rect(tiny.safe.X / 2 + dx - widest / 2, top, widest, 30)
@@ -821,9 +844,10 @@ check(c and c.x >= 258 and c.x + c.w <= 632 and c.w == CFG.Phone.Clock,
 	c and r2s(c))
 -- A free span that starts past the middle: the chip slides the least it can.
 do
-	local slid = HudLayout.solve(screen(772, 360, { touch = true, barLeft = 400 }))
+	-- (Out to 500: since the even row of 2026-10-05 a span from 408 holds the row.)
+	local slid = HudLayout.solve(screen(772, 360, { touch = true, barLeft = 500 }))
 	local s = slid.clock
-	check(s and s.x == 408 and s.w == CFG.Phone.Clock and s.x + s.w <= 772 - 8,
+	check(s and s.x == 508 and s.w == CFG.Phone.Clock and s.x + s.w <= 772 - 8 and not slid.topRow,
 		"with Roblox buttons out past the middle the chip slides to the free span's edge and keeps its width",
 		s and r2s(s))
 end
@@ -844,66 +868,24 @@ check(wide.cash.w == 300 and #HudLayout.problems(wide) == 0,
 	table.concat(HudLayout.problems(wide), "; "))
 
 --==============================================================================
--- 5b. THE BAG PANEL
+-- 5b. THE BAG PANEL: THE COMPACT GRID (2026-10-03, the owner's spec)
 --
--- Found by the owner 2026-09-18 on an emulated iPhone 11: equipment cards cut
--- off under the Bag's header. Measured on the owner's 801 x 392 phone, the grid
--- was 128 px tall and a card row 158 + 16, so no card could ever show whole.
--- HudLayout.bag is the arithmetic LoadoutUI applies; this drives it at every
--- screen the owner listed and pins the desktop to what shipped.
+-- HudLayout.bag is the arithmetic LoadoutUI applies, `hotTop` the name band's
+-- top as layoutBag passes it. On every desktop size, every listed phone and a
+-- small window: the panel inside the safe area; five category buttons 34 px or
+-- taller down the left; at least one whole row of tiles; the search box 140 px
+-- or wider and clear of the title, the heart and the close button; the footer
+-- inside the body. And every name the game shows on a tile fits it in two lines
+-- at the smallest size it is drawn.
 --==============================================================================
 say("-- the bag --")
 local BAGC = CFG.Bag
 local OUTLINE = RAIL.OutlineThickness
-
--- The shipped layoutBag's panel arithmetic, verbatim, as the desktop oracle.
-local function shippedBag(safe, hotTop, sideWidth)
-	local railBottom = RAIL.Inset + RAIL.WideSize.Y * 2 + RAIL.Gap
-	local leftEdge = RAIL.Inset + RAIL.WideSize.X + 8
-	local rightEdge = safe.X - RAIL.Inset - sideWidth - 8
-	local top, bottom = 8, hotTop - 8
-	if rightEdge - leftEdge < 420 then
-		leftEdge = 8
-		top = railBottom + 8
-	end
-	local height = math.max(160, math.min(600, bottom - top))
-	local half = safe.X * 0.5
-	local symmetric = 2 * math.min(half - leftEdge, rightEdge - half)
-	local width, centreX
-	if symmetric >= 600 or symmetric >= rightEdge - leftEdge - 40 then
-		width = math.max(240, math.min(780, symmetric))
-		centreX = half
-	else
-		width = math.max(240, math.min(780, rightEdge - leftEdge))
-		centreX = (leftEdge + rightEdge) * 0.5
-	end
-	return math.floor(centreX), math.floor(top + (bottom - top) * 0.5),
-		math.floor(width), math.floor(height)
-end
-
-for _, size in ipairs({ Vector2.new(1169, 609), Vector2.new(1280, 720), Vector2.new(1366, 768),
-	Vector2.new(1920, 1080), Vector2.new(1000, 609) }) do
-	local L = HudLayout.solve(screen(size.X, size.Y))
-	local tag = string.format("%dx%d desktop", size.X, size.Y)
-	local same = true
-	for _, plants in ipairs({ false, true }) do
-		local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = L.touch,
-			plants = plants, sideWidth = 64 })
-		local cx, cy, w, h = shippedBag(L.safe, L.hotbar.y, 64)
-		same = same and not L.compact and not bag.horizontal and bag.rows == 0
-			and bag.centre.X == cx and bag.centre.Y == cy and bag.panel.w == w and bag.panel.h == h
-			and bag.card == BAGC.Card
-	end
-	local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = false, plants = false, sideWidth = 64 })
-	check(same, tag .. ": the Bag is exactly the shipped panel, the 104x158 card and the vertical grid",
-		string.format("centre %d,%d size %dx%d", bag.centre.X, bag.centre.Y, bag.panel.w, bag.panel.h))
-	check(bag.panel.y + bag.panel.h + 8 <= L.hotbar.y,
-		tag .. ": and it still stops 8 px above the ten-slot strip, which stays", r2s(bag.panel))
-end
+local titleWidth = TextService:GetTextSize("Bag", 26, Enum.Font.LuckiestGuy, Vector2.new(1000, 100)).X
 
 -- The header rule UIKit.modal applies: the title bar pads clear of the rail
--- band it shares rows with, and the close button moves in with it.
-local titleWidth = TextService:GetTextSize("Bag", 26, Enum.Font.LuckiestGuy, Vector2.new(1000, 100)).X
+-- band it shares rows with, and the close button moves in with it. The search
+-- row is HudLayout.bagSearch's, as InventoryPanel places it.
 local function header(L, bag)
 	local shell = rect(bag.panel.x + OUTLINE, bag.panel.y + OUTLINE,
 		bag.panel.w - OUTLINE * 2, bag.panel.h - OUTLINE * 2)
@@ -915,33 +897,74 @@ local function header(L, bag)
 	end
 	local titleRect = rect(bar.x + padLeft, bar.y, titleWidth, bar.h)
 	local close = rect(bar.x + bar.w - padRight - 44, bar.y + bar.h / 2 - 22, 44, 44)
-	local tabs
-	if bag.compactHeader then
-		local reserve = math.max(72, math.ceil(titleWidth) + padLeft + 16)
-		tabs = rect(shell.x + 12 + reserve, shell.y + 13, shell.w - (24 + reserve + 52 + padRight), 34)
-	else
-		tabs = rect(shell.x + 12, shell.y + 58, shell.w - 24, 34)
+	local s, h = HudLayout.bagSearch(bag, shell.w, titleWidth, padLeft, padRight)
+	return shell, titleRect, rect(shell.x + s.x, shell.y + s.y, s.w, s.h),
+		rect(shell.x + h.x, shell.y + h.y, h.w, h.h), close
+end
+
+local function bagHolds(tag, L, bag)
+	local sw, sh = L.safe.X, L.safe.Y
+	local p = bag.panel
+	-- Half a pixel: the panel is centred on a whole pixel, so an odd size starts
+	-- half a pixel inside the margin (the shipped arithmetic, unchanged).
+	check(p.x >= 7.5 and p.y >= 7.5 and p.x + p.w <= sw - 7.5 and p.y + p.h <= sh - 7.5,
+		tag .. ": the panel is inside the safe area", r2s(p))
+	local col = bag.column
+	check(bag.catH >= BAGC.CatMinH and 5 * bag.catH + 4 * bag.catGap <= col.h and col.w >= 100,
+		tag .. ": five category buttons, 34 px or taller, down the left", string.format("%d tall in %s", bag.catH, r2s(col)))
+	local tall = bag.rows * bag.tile.Y + (bag.rows - 1) * bag.gap + bag.pad * 2
+	check(bag.rows >= 1 and tall <= bag.grid.h + 1e-6 and bag.columns >= 1
+			and bag.grid.x >= col.x + col.w + 4 and bag.grid.x + bag.grid.w <= bag.body.w + 1e-6,
+		tag .. ": at least one whole row of tiles beside the column", string.format("grid %s rows %d across %.1f",
+			r2s(bag.grid), bag.rows, bag.columns))
+	local f = bag.footer
+	check(f.y >= bag.grid.y + bag.grid.h and f.y + f.h <= bag.body.h + 1e-6 and f.x + f.w <= bag.body.w + 1e-6
+			and f.h >= 14,
+		tag .. ": the storage line is a footer inside the body, under the grid", r2s(f))
+	local _, title, search, heart, close = header(L, bag)
+	local bodyTop = bag.body.y
+	local clear = search.w >= BAGC.SearchMinW and search.h >= 34 and heart.w >= 34
+		and HudLayout.gap(title, search) >= 4 and HudLayout.gap(search, heart) >= 4
+		and HudLayout.gap(heart, close) >= 0 and HudLayout.gap(search, close) >= 4
+		and search.y + search.h + 8 <= bodyTop + 1e-6
+	-- On a phone the switch rows and the panel under the Bag step aside while a
+	-- centre panel is open (WalkModeUI, OtherPlantsUI, RailDrawerUI): only the
+	-- top-right row stays over its header.
+	for _, g in ipairs(HudLayout.groups(L, true)) do
+		if g.name == "garden+bag" or (g.name == "rail" and not L.sidebar) then
+			clear = clear and HudLayout.gap(title, g.rect) >= 0 and HudLayout.gap(search, g.rect) >= 0
+				and HudLayout.gap(heart, g.rect) >= 0 and HudLayout.gap(close, g.rect) >= 0
+		end
 	end
-	return shell, titleRect, tabs, close
+	check(clear, tag .. ": the search box (140+) and the heart stand clear of the title, the close button and the rail rows",
+		string.format("title %s search %s heart %s close %s", r2s(title), r2s(search), r2s(heart), r2s(close)))
+	say(string.format("    %s: panel %s  %s header  body %s  grid %s  %d row(s), %.1f across, buttons %d",
+		tag, r2s(p), if bag.compactHeader then "one-row" else "two-row", r2s(bag.body), r2s(bag.grid),
+		bag.rows, bag.columns, bag.catH))
 end
 
--- The longest names the game ships, in the compact name box at 12 pt: two
--- lines at most, which is what fitName checks before it would truncate.
-local LONG_NAMES = { "SUNFLOWER BONKER", "BRAMBLEJAW TRAP", "CINDERBURST MINE", "CINDERCRACK BAT",
-	"STARLOCK ANCHOR", "MIREWOOD PADDLE", "THORNWHORL", "GLOOMLOTUS", "ASTRALHORN" }
-local namesFit = true
-for _, name in ipairs(LONG_NAMES) do
-	local at14 = TextService:GetTextSize(name, 14, Enum.Font.LuckiestGuy,
-		Vector2.new(BAGC.CardCompact.X - 14, 1000))
-	namesFit = namesFit and at14.Y <= 32
+-- Desktops: downward, above the strip and its name band; the review's numbers.
+local DESKTOP_GRIDS = {
+	{ 1366, 768, 6, 4 }, { 1280, 720, 6, 3 }, { 1024, 600, 5, 2 }, { 1169, 609, nil, nil },
+	{ 1920, 1080, nil, nil }, { 1000, 609, nil, nil },
+}
+for _, case in ipairs(DESKTOP_GRIDS) do
+	local L = HudLayout.solve(screen(case[1], case[2]))
+	local tag = string.format("%dx%d desktop", case[1], case[2])
+	local bag = HudLayout.bag(L, { hotTop = L.namePopup.y, stripHidden = L.touch })
+	bagHolds(tag, L, bag)
+	check(not L.compact and not bag.horizontal and bag.tile == BAGC.Tile and bag.panel.w <= BAGC.MaxW
+			and bag.panel.h <= BAGC.MaxH and bag.panel.y + bag.panel.h + 8 <= L.namePopup.y,
+		tag .. ": downward, 96 x 100 tiles, at most 860 x 600, 8 px above the strip's name band", r2s(bag.panel))
+	if case[3] then
+		check(math.floor(bag.columns) == case[3] and bag.rows == case[4],
+			tag .. string.format(": %d tiles across and %d whole rows", case[3], case[4]),
+			string.format("%.2f across, %d rows", bag.columns, bag.rows))
+	end
 end
-check(namesFit, "every long shipped name is two lines at 14 pt in the compact card's 98 x 32 name box")
-local pillWord = TextService:GetTextSize("TAP TO EQUIP", 15, Enum.Font.FredokaOne, Vector2.new(400, 40)).X
-check(BAGC.ActionH >= 44 and pillWord <= BAGC.CardCompact.X - 12,
-	"the compact action button is the whole 44 px strip and TAP TO EQUIP fits it at 15 pt", pillWord)
-check(84 + 32 <= 120 and 120 + BAGC.ActionH <= BAGC.CardCompact.Y - 4,
-	"inside a 112x170 card the name (84-116) and the button (120-164) never touch")
 
+-- Phones: the strip hidden, the panel down to the safe area's edge, sideways in
+-- whole rows of the phone's taller tile.
 local BAG_CASES = {
 	{ tag = "iPhone 11 896x414", input = screen(896, 414, { touch = true }) },
 	{ tag = "iPhone 11 896x414 notched", input = screen(896, 414, { touch = true, left = 48, right = 48, bottom = 21 }) },
@@ -949,65 +972,57 @@ local BAG_CASES = {
 	{ tag = "Galaxy S22 Ultra 772x360", input = screen(772, 360, { touch = true }) },
 	{ tag = "VGA 640x480", input = screen(640, 480, { touch = true }) },
 	{ tag = "the owner's 801x392", input = screen(801, 392, { touch = true }) },
+	{ tag = "Studio 705x338", input = screen(705, 338, { touch = true }) },
+	{ tag = "844x390 notched", input = screen(844, 390, { touch = true, left = 47, right = 47, bottom = 21 }) },
+	{ tag = "640x360", input = screen(640, 360, { touch = true }) },
 }
 for _, case in ipairs(BAG_CASES) do
 	local L = HudLayout.solve(case.input)
-	local sw, sh = L.safe.X, L.safe.Y
-	for _, plants in ipairs({ false, true }) do
-		local tab = if plants then "Plants" else "Equipment"
-		local tag = case.tag .. " " .. tab
-		local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = L.touch,
-			plants = plants, sideWidth = 64 })
-		local p = bag.panel
-		check(p.x >= 8 and p.y >= 8 and p.x + p.w <= sw - 8 and p.y + p.h <= sh - 8
-				and p.x + p.w + 8 <= L.equipment.x,
-			tag .. ": the panel is inside the safe area and clear of BAT/TRAP", r2s(p))
-		check(p.y + p.h > L.hotbar.y,
-			tag .. ": it runs over where the hidden strip was -- no strip-shaped hole", r2s(p))
-		-- whole rows only, centred in the tray: nothing cut at the top or bottom
-		local rowsTall = bag.rows * bag.card.Y + (bag.rows - 1) * BAGC.CardGap
-		-- The Plants tab's note strip sits over the grid, inside the tray.
-		check(bag.note == (if plants then BAGC.NoteH else 0), tag .. ": the note strip is the Plants tab's alone", bag.note)
-		local slack = bag.tray.h - bag.note - BAGC.PadY * 2 - rowsTall
-		local cardTop = bag.tray.y + bag.note + BAGC.PadY + slack / 2
-		check(bag.horizontal and bag.rows >= 1 and slack >= 0 and bag.card == BAGC.CardCompact,
-			tag .. ": sideways, in whole 112x170 rows that fit the tray", string.format(
-				"tray %s rows %d slack %.1f", r2s(bag.tray), bag.rows, slack))
-		local _, title, tabs, close = header(L, bag)
-		local headerBottom = tabs.y + tabs.h
-		check(cardTop >= headerBottom + 8 and bag.tray.y >= headerBottom + 8,
-			tag .. ": the first card starts below the header and tabs with room to spare",
-			string.format("header ends %.1f, tray %.1f, card %.1f", headerBottom, bag.tray.y, cardTop))
-		check(cardTop + rowsTall <= bag.tray.y + bag.tray.h - BAGC.PadY,
-			tag .. ": and the last row ends inside the tray", cardTop + rowsTall)
-		-- title, tabs and close apart, and none under a rail button. 4 px, not
-		-- 8: the two-row header's 44 px close target has always stood 6 px
-		-- above its tab row, by design, and apart is the requirement.
-		local clear = HudLayout.gap(title, tabs) >= 4 and HudLayout.gap(tabs, close) >= 4
-			and HudLayout.gap(title, close) >= 4 and (tabs.w - BAGC.SortW - BAGC.SortGap) / 2 >= 120
-			and BAGC.SortW >= 88
-		for _, g in ipairs(HudLayout.groups(L, true)) do
-			if g.name == "rail" or g.name == "garden+bag" then
-				clear = clear and HudLayout.gap(title, g.rect) >= 0 and HudLayout.gap(tabs, g.rect) >= 0
-					and HudLayout.gap(close, g.rect) >= 0
-			end
-		end
-		check(clear, tag .. ": title, both tabs (120+ each beside the Sort button) and the close button stand apart and clear of the rail rows",
-			string.format("title %s tabs %s close %s", r2s(title), r2s(tabs), r2s(close)))
-		local shown = (bag.tray.w - BAGC.PadX * 2 + BAGC.CardGap) / (bag.card.X + BAGC.CardGap)
-		say(string.format("    %s: panel %s  %s header  tray %s  %d row(s), %.1f cards across, card top %.1f",
-			tag, r2s(p), if bag.compactHeader then "one-row" else "two-row", r2s(bag.tray),
-			bag.rows, shown, cardTop))
-	end
+	local bag = HudLayout.bag(L, { hotTop = L.namePopup.y, stripHidden = L.touch })
+	bagHolds(case.tag, L, bag)
+	check(bag.horizontal and bag.rows >= 1 and bag.tile == BAGC.TileCompact and bag.panel.y + bag.panel.h > L.hotbar.y,
+		case.tag .. ": sideways, in whole rows of 96 x 116 tiles, over where the hidden strip was", r2s(bag.panel))
 end
 
 -- A small desktop window is compact without touch: the strip stays, so the Bag
 -- still stops above it.
 do
 	local L = HudLayout.solve(screen(860, 700, { touch = false }))
-	local bag = HudLayout.bag(L, { hotTop = L.hotbar.y, stripHidden = L.touch, plants = false, sideWidth = 64 })
-	check(L.compact and not L.touch and bag.panel.y + bag.panel.h + 8 <= L.hotbar.y and bag.rows >= 1,
-		"a small desktop window keeps its strip, and the Bag stops above it", r2s(bag.panel))
+	local bag = HudLayout.bag(L, { hotTop = L.namePopup.y, stripHidden = L.touch })
+	bagHolds("860x700 window", L, bag)
+	check(L.compact and not L.touch and L.slots == 10 and bag.panel.y + bag.panel.h + 8 <= L.namePopup.y,
+		"a small desktop window keeps its strip, ten slots of it, and the Bag stops above it", r2s(bag.panel))
+end
+
+-- Every name a tile shows, in two lines at the smallest size it is drawn: 10 pt
+-- in the desktop's 88 x 26 box, 11 pt in the phone's 88 x 30. A pod is named by
+-- its shell, never its species -- PlantInfo's titles.
+do
+	local WeaponData = require(Shared:WaitForChild("WeaponData"))
+	local WheelData = require(Shared:WaitForChild("WheelData"))
+	local PlantInfo = require(Shared:WaitForChild("PlantInfo"))
+	local names = { PlantInfo.PodTitle, "Secret pod", GameConfig.Community.TicketName .. "s", WheelData.Trail.Name }
+	for _, list in ipairs({ SeedData.Species, SeedData.SecretSpecies, SeedData.RainSpecies }) do
+		for _, species in ipairs(list) do
+			table.insert(names, species.Name)
+		end
+	end
+	for _, pod in pairs(SeedData.RainPods) do
+		table.insert(names, pod.Name)
+	end
+	for _, item in ipairs(WeaponData.Items) do
+		table.insert(names, item.Name)
+	end
+	local tooLong = {}
+	for _, name in ipairs(names) do
+		local desk = TextService:GetTextSize(name, 10, Enum.Font.FredokaOne, Vector2.new(88, 1000))
+		local phone = TextService:GetTextSize(name, 11, Enum.Font.FredokaOne, Vector2.new(88, 1000))
+		if desk.Y > 26 or phone.Y > 30 then
+			table.insert(tooLong, string.format("%s (%d / %d)", name, desk.Y, phone.Y))
+		end
+	end
+	check(#tooLong == 0, "every shipped visible name fits a tile in two lines at its smallest size ("
+		.. #names .. " names)", table.concat(tooLong, ", "))
 end
 
 --==============================================================================
@@ -1026,7 +1041,9 @@ check(not layoutSource:find("Instance.new", 1, true) and not layoutSource:find("
 
 -- Per-frame hooks, counted before this change; none may be added.
 local FRAME_HOOKS = {
-	CashUI = 2, IndexUI = 0, ShopUI = 0, SettingsUI = 0, WalkModeUI = 1, GardenUI = 1,
+	-- WalkModeUI 1 -> 0 (2026-10-04): its pop is UIKit.pressPop's and its slide a
+	-- tween, neither a per-frame hook of its own.
+	CashUI = 2, IndexUI = 0, ShopUI = 0, SettingsUI = 0, WalkModeUI = 0, GardenUI = 1,
 	LoadoutUI = 2, WorldClock = 1, TutorialUI = 1, BiomeGuideUI = 0, RailDrawerUI = 0,
 	ActionToastUI = 0, PlotTeleportUI = 0,
 }
@@ -1067,9 +1084,10 @@ check(not loadout:find("HotbarTray", 1, true) and loadout:find("HotbarCard.build
 check(loadout:find("activeSlots = want\n\tredraw()", 1, true) ~= nil and not loadout:find("assigned[", 1, true),
 	"a change of slot count hides and empties the slots past it and releases nothing: the roles never renumber")
 local walk = sourceOf("WalkModeUI") or ""
-check(walk:find("STACKED_LABEL", 1, true) and walk:find("WALK.OnText", 1, true)
-		and walk:find("WALK.OffText", 1, true) and walk:find("relayout:Disconnect()", 1, true),
-	"the compact switch still says WALK MODE and ON or OFF, and drops its hook on the shared layer with itself")
+check(walk:find('label.Text = WALK.Label .. ": " .. (if on then WALK.OnText else WALK.OffText)', 1, true)
+		and not walk:find("STACKED_LABEL", 1, true) and walk:find("relayout:Disconnect()", 1, true),
+	"the switch says WALK MODE: ON or OFF on one line over its track in every layout (2026-10-04), and drops its "
+		.. "hook on the shared layer with itself")
 local settings = sourceOf("SettingsUI") or ""
 check(settings:find("plate.Visible = layout.compact and not layout.sidebar", 1, true) ~= nil,
 	"Settings stands on a plate in the compact row, and only there -- on a phone the dock's tile replaces it")
@@ -1123,14 +1141,17 @@ check(loadout:find("hotbar.Visible = not (bagOpen and not lifted and layout ~= n
 	"on touch the strip hides while the Bag is open, shows while a card is in the air, and returns on close")
 check(loadout:find("stripHidden = layout.touch", 1, true) ~= nil,
 	"and the Bag grows into its space on exactly that condition")
+local panelSrc = Shared:FindFirstChild("InventoryPanel") and Shared:FindFirstChild("InventoryPanel").Source or ""
 check(loadout:find("HudLayout.bag(layout,", 1, true) ~= nil
-		and select(2, loadout:gsub("grid.CanvasPosition = Vector2.zero", "")) >= 3,
-	"LoadoutUI places the Bag from HudLayout.bag and resets the scroll on a tab switch, a side slot and a new direction")
-check(loadout:find("padRight), 0, 34)", 1, true) ~= nil,
-	"the one-row tabs stop short of the close button wherever the header has moved it")
-check(select(2, loadout:gsub('Instance.new%("ScrollingFrame"%)', "")) == 2
-		and select(2, loadout:gsub('Instance.new%("UIGridLayout"%)', "")) == 2,
-	"still one Bag grid and one info grid, and the chooser's one row -- nothing rebuilt")
+		and select(2, panelSrc:gsub("grid.CanvasPosition = Vector2.zero", "")) >= 3,
+	"LoadoutUI places the Bag from HudLayout.bag; the panel resets the scroll on a new search, the heart and a new direction")
+check(layoutSource:find("right = shellW - 12 - 52 - padRight", 1, true) ~= nil
+		and panelSrc:find("HudLayout.bagSearch(bag, shellW, titleWidth, padLeft, padRight)", 1, true) ~= nil,
+	"the search row stops short of the close button wherever the header has moved it")
+check(select(2, loadout:gsub('Instance.new%("ScrollingFrame"%)', "")) == 0
+		and select(2, panelSrc:gsub('Instance.new%("ScrollingFrame"%)', "")) == 1
+		and select(2, panelSrc:gsub('Instance.new%("UIGridLayout"%)', "")) == 1,
+	"one Bag grid, InventoryPanel's, built once -- nothing rebuilt")
 
 local kit = Shared:FindFirstChild("UIKit").Source
 check(kit:find("function UIKit.railShape", 1, true) and kit:find("function UIKit.railBadge", 1, true)
@@ -1143,7 +1164,8 @@ check(kit:find("function UIKit.railShape", 1, true) and kit:find("function UIKit
 -- The approved mobile redesign of 2026-09-23, read from the owners that draw
 -- it: every control still has exactly the owner it had, the dock is a frame
 -- they stand in rather than a controller, the belt drops the weapons on a phone
--- only, and the chooser equips through the verb that already existed.
+-- only. (The BATS / TRAPS sidebar and its chooser went 2026-10-03: a bat is any
+-- slot's, equipped through the shop's own verb.)
 --==============================================================================
 say("-- the sidebars, wired --")
 
@@ -1153,7 +1175,7 @@ for _, input in ipairs({ screen(1920, 1080), screen(1000, 609), screen(860, 700,
 	screen(700, 400, { touch = false }), screen(1920, 1080, { keyboard = false }) }) do
 	local L = HudLayout.solve(input)
 	plain = plain and not L.sidebar and L.dock == nil and L.handle == nil and L.handleShut == nil
-		and L.boost == nil and L.chooser == nil and L.equipPad == 0
+		and L.boost == nil and L.chooser == nil
 end
 check(plain, "no desktop, console or narrow non-touch window gets a dock, an x2 button or a chooser")
 check(HudLayout.solve(screen(700, 400, { touch = false })).compact,
@@ -1169,7 +1191,7 @@ for _, case in ipairs({
 		table.concat(problems, "; "))
 end
 
-for _, name in ipairs({ "IndexUI", "ShopUI", "SettingsUI" }) do
+for _, name in ipairs({ "IndexUI", "ShopUI" }) do
 	local src = sourceOf(name) or ""
 	check(src:find("if layout.sidebar then UIKit.railDock(playerGui) else UIKit.railLayer(playerGui)", 1, true) ~= nil
 			and src:find("UIKit.railShape(button,", 1, true) ~= nil
@@ -1192,6 +1214,33 @@ do
 			and string.match(RAIL.IndexArt or "", "^rbxassetid://%d+$") ~= nil
 			and RAIL.Rim ~= nil and RAIL.Rim.Speed == 90 and #RAIL.Rim.Colours == 6,
 		"both artworks are uploaded ids in GameConfig.Rail, and the rim is the reference's six colours at 90 degrees a second")
+	-- The owner's studded pictures (2026-10-05): a phone's Index, Shop and
+	-- Settings, each drawn whole at its own aspect, nothing of ours over it.
+	local settingsSrc = sourceOf("SettingsUI") or ""
+	check(indexSrc:find("UIKit.railPicture(button, RAIL.StuddedIndexArt, 1)", 1, true) ~= nil
+			and shopSrc:find("UIKit.railPicture(button, if layout.shop.w > layout.shop.h then RAIL.StuddedShopArt else nil,\n"
+				.. "\t\tRAIL.StuddedShopAspect)", 1, true) ~= nil
+			and settingsSrc:find("UIKit.railPicture(button, if layout.sidebar then RAIL.StuddedSettingsArt else nil, 1)",
+				1, true) ~= nil
+			and indexSrc:find("UIKit.railBadge(badge, layout.compact, if layout.sidebar then \"left\" else \"right\")",
+				1, true) ~= nil
+			and string.match(RAIL.StuddedShopArt or "", "^rbxassetid://%d+$") ~= nil
+			and string.match(RAIL.StuddedIndexArt or "", "^rbxassetid://%d+$") ~= nil
+			and string.match(RAIL.StuddedSettingsArt or "", "^rbxassetid://%d+$") ~= nil
+			and math.abs((RAIL.StuddedShopAspect or 0) - 2094 / 751) < 1e-9
+			and math.abs(CFG.Phone.Shop.X - CFG.Phone.Shop.Y * RAIL.StuddedShopAspect) <= 1,
+		"Index draws the owner's studded picture on every screen, Shop wherever its slot is wide, Settings on a "
+			.. "phone (uploaded ids in GameConfig.Rail); a phone's Shop at its picture's own aspect to the pixel, "
+			.. "Index's badge on its left corner there")
+	do
+		local from = kit:find("function UIKit.railPicture", 1, true)
+		local body = if from then kit:sub(from, (kit:find("\nend\n", from, true) or #kit)) else ""
+		check(body:find("picture.ScaleType = Enum.ScaleType.Fit", 1, true) ~= nil
+				and body:find("shape.AspectRatio = aspect or 1", 1, true) ~= nil
+				and body:find("\"ArtBox\", \"Icon\", \"GearDrawn\", \"Label\", \"Tile\", \"TileLabel\", \"Plate\"", 1, true) ~= nil
+				and body:find("made.Active = false", 1, true) ~= nil and body:find("picture.Active = false", 1, true) ~= nil,
+			"UIKit.railPicture draws the picture whole at its aspect, hides everything of ours under it, and takes no press")
+	end
 	check(kit:find("function UIKit.rainbowRim", 1, true) ~= nil
 			and select(2, kit:gsub("RunService%.RenderStepped:Connect%(step%)", "")) == 1
 			and kit:find("local run = onScreen() and not motionOff()", 1, true) ~= nil
@@ -1199,32 +1248,30 @@ do
 		"the rim spins on one connection, only while seen and motion is allowed; no dock plate ever covers an art button")
 end
 
-local drawer = sourceOf("RailDrawerUI") or ""
-check(drawer:find("UIKit.railDock(playerGui)", 1, true) ~= nil
-		and drawer:find("player:GetAttribute(ATTR.OpenPanel) ~= nil", 1, true) ~= nil
-		and drawer:find("layout.handleShut", 1, true) ~= nil
-		and not drawer:find("IndexButton", 1, true) and not drawer:find("ShopButton", 1, true)
-		and not drawer:find("SettingsButton", 1, true),
-	"RailDrawerUI owns the dock's panel, handle and open/shut, steps aside for a panel, and touches no tile")
+-- RailDrawerUI, and EVENTS / WHAT'S NEW / Settings in the panel: InviteHudSpec (2026-10-06).
 check(kit:find("function UIKit.railDock", 1, true) ~= nil
 		and kit:find("layer:FindFirstChild(options.name, true)", 1, true) ~= nil,
 	"the dock is one shared frame, and a re-run rail button finds its old self inside it")
 
-check(loadout:find("HotbarRoles.entryFor(shortcuts, entries, i)", 1, true) ~= nil
-		and not loadout:find("plantsOnly", 1, true),
-	"the belt is five roles, the same on a phone's four: the bat and the trap are on it everywhere (2026-10-01)")
-check(loadout:find("chooser.toggle(category)", 1, true) ~= nil
-		and loadout:find("equipRequest(item)", 1, true) ~= nil
-		and count(loadout, "FireServer(W.EquipAction") == 2
-		and loadout:find("if item.Category == category and owned[item.Id] then", 1, true) ~= nil,
-	"BATS and TRAPS open a chooser of what the profile says is owned, which equips through the one equip verb")
+check(not loadout:find("HotbarRoles", 1, true) and not loadout:find("plantsOnly", 1, true)
+		and loadout:find("HotbarSlots.arrive(shownBar(), ref, activeSlots)", 1, true) ~= nil,
+	"the belt is freely assigned shortcuts (2026-10-03): ten on a desktop, the first five on a phone")
+check(not loadout:find("chooser", 1, true) and not loadout:find("sideSlots", 1, true)
+		and count(loadout, "FireServer(W.EquipAction") == 1,
+	"no BATS / TRAPS chooser: a bat or a trap not out is equipped through the one equip verb, from its slot or tile")
 check(loadout:find("UserInputService.InputBegan:Connect(", 1, true) ~= nil
-		and loadout:find("chooser.close()", 1, true) ~= nil
-		and loadout:find("player.CharacterRemoving:Connect(function()\n\tchooser.close()", 1, true) ~= nil,
-	"the chooser shuts on an outside tap (without swallowing it), a panel opening and the character going")
-check(count(cash, 'buff.Name = "MoneyBuff"') == 1 and cash:find("local at = if layout.sidebar then layout.boost else nil", 1, true) ~= nil
-		and cash:find("buff.Parent = root", 1, true) ~= nil,
-	"one x2 card: on a phone it stands on the top-right row, elsewhere it goes back beside the cash")
+		and loadout:find("endAssign()", 1, true) ~= nil
+		and loadout:find("player.CharacterRemoving:Connect(function()\n\tcancelDrag()", 1, true) ~= nil,
+	"a phone's assignment ends on an outside tap (without swallowing it), a panel closing and the character going")
+-- Since the owner's mobile corrections (2026-10-05) the card rides the cash line
+-- on a phone too, the artwork alone there, never nearer the stick than buffMinX.
+check(count(cash, 'buff.Name = "MoneyBuff"') == 1 and not cash:find("layout.boost", 1, true)
+		and cash:find("buff.Parent = root", 1, true) ~= nil and cash:find("layoutMinX = layout.buffMinX", 1, true) ~= nil
+		and cash:find("math.max(layoutMinX or style.BuffMinX, math.floor(textWidth) + style.BuffGap)", 1, true) ~= nil
+		and cash:find("buff.BackgroundTransparency = if plain then 1 else 0.08", 1, true) ~= nil
+		and cash:find("buffEdge.Enabled = not plain", 1, true) ~= nil,
+	"one x2 card, beside the cash line on every screen: on a phone the artwork alone -- no plate, no border -- and "
+		.. "never nearer the thumbstick's zone than HudLayout's buffMinX")
 
 --==============================================================================
 -- 8. THE TOAST AND THE TELEPORT BUTTON, ON EVERY SCREEN
@@ -1293,6 +1340,8 @@ do
 end
 local teleportWords = TextService:GetTextSize("TELEPORT TO PLOT", 10, Enum.Font.LuckiestGuy,
 	Vector2.new(4000, 100)).X
+-- A phone's word (the owner's mobile corrections, 2026-10-05), at the plate's own 16.
+local plotWord = TextService:GetTextSize("PLOT", 16, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
 local noticeBottom = CFG.NoticeTop + CFG.NoticeHeight - TOPBAR
 -- The screens whose row is full, where ADMIN hangs under the clock.
 local hungAdmin = {}
@@ -1324,24 +1373,18 @@ for _, case in ipairs(everyScreen) do
 	for _, zone in ipairs(zones) do
 		toastClear = toastClear and HudLayout.gap(t, zone) >= 8
 	end
-	-- On a phone the notices hang from the top of the centre column (2026-09-29):
-	-- over the belt they stood on the character's own feet. Everywhere else they
-	-- are over the belt, as they were.
-	local onTop = L.sidebar == true
-	if onTop then
-		-- On the clock's centre wherever the room between the top rows allows,
-		-- and slid inside that room where it does not (centreIn's own answer).
-		local band = rect(L.columnCentre - TOAST.Width / 2, L.columnTop + CFG.Phone.NoticeTop, TOAST.Width, TOAST.Height)
-		local want = HudLayout.centreIn(L, band, TOAST.Width)
-		toastClear = toastClear and L.toastTop == true and t.y == band.y
-			and t.x == want.x and t.w == want.w
-			and (t.w < TOAST.Width or math.abs(t.x + t.w / 2 - L.columnCentre) < 0.01)
-			and t.y + t.h < case.input.viewport.Y / 2 - TOPBAR
-	else
-		toastClear = toastClear and L.toastTop == false
+	-- Over the belt on EVERY screen again (2026-10-04, the owner's order: the
+	-- hotbar, the active icons, the short notices just over them). A phone's
+	-- notices hung from the top of the centre column from 2026-09-29 until then.
+	local onTop = false
+	local beltTop = HudLayout.hotbarBand(L.hotbar).y
+	toastClear = toastClear and L.toastTop == false and t.y + t.h <= beltTop - 8 + 0.01
+	if not toastClear then
+		toastNote ..= string.format(" (toastTop %s, bottom %.0f, belt band %.0f)", tostring(L.toastTop),
+			t.y + t.h, beltTop)
 	end
-	check(toastClear, tag .. ": the toast is " .. (if onTop then "at the top of the centre column" else "over the belt")
-		.. ", 200-340 wide, clear of every group and both thumbs", toastNote)
+	check(toastClear, tag .. ": the toast is over the belt, 200-340 wide, clear of every group and both thumbs",
+		toastNote)
 	check(t.w >= longestHead,
 		tag .. ": every refusal headline fits one line at 16 px -- the longest is \"" .. longestTitle .. "\"",
 		string.format("%.0f of %d", longestHead, t.w))
@@ -1398,10 +1441,11 @@ for _, case in ipairs(everyScreen) do
 	end
 
 	-- On a phone it stands BESIDE the clock, on the clock's row (2026-09-29; it
-	-- stood right under the clock from 2026-09-24): the plate still Teleport.Size
-	-- drawn at PhoneScale -- 147 x 33, the owner's size -- inside a touch area
-	-- Phone.Touch wide and 44 tall, up in the topbar's free span. Everywhere
-	-- else it is under the notice band, drawn at 1, exactly as it was.
+	-- stood right under the clock from 2026-09-24), and since the owner's mobile
+	-- corrections (2026-10-05) it says just PLOT: the Phone.Row plate drawn at
+	-- PhoneScale, its touch area exactly that plate, 44 tall, up in the topbar's
+	-- free span. Everywhere else it is under the notice band, drawn at 1,
+	-- exactly as it was.
 	local phone = L.sidebar == true
 	local inset = p.h * (1 - L.teleportScale) / 2
 	local wantTop = noticeBottom + 8
@@ -1412,10 +1456,15 @@ for _, case in ipairs(everyScreen) do
 	local originX = (case.input.viewport.X - sw) / 2
 	local inFreeSpan = p.y >= 0 or (bar ~= nil and p.x + originX >= bar.x + 8
 		and p.x + p.w + originX <= bar.x + bar.w - 8)
-	local teleClear = p.h >= 44 and p.w == (if phone then CFG.Phone.Touch else TELE.Size.X)
+	local rowEdge = CFG.Phone.RowStroke * 2
+	local plotPlates = L.teleportPlate == Vector2.new(CFG.Phone.Row.Plot - rowEdge, TELE.Size.Y - rowEdge)
+		or L.teleportPlate == Vector2.new(CFG.Phone.RowTight.Plot - rowEdge, TELE.Size.Y - rowEdge)
+	local teleClear = p.h >= 44 and p.w >= 44
+		and p.w == (if phone then (L.teleportPlate.X + rowEdge) * TELE.PhoneScale else TELE.Size.X)
 		and (if phone then p.y == wantTop else p.y >= wantTop)
 		and L.teleportScale == (if phone then TELE.PhoneScale else 1)
-		and L.teleportPlate == TELE.Size and L.topRow == phone
+		and (if phone then plotPlates and L.teleportShort else L.teleportPlate == TELE.Size and not L.teleportShort)
+		and L.topRow == phone
 		and L.teleportPlate.X * L.teleportScale <= p.w and L.teleportPlate.Y * L.teleportScale <= p.h
 		and p.x >= 8 and p.x + p.w <= sw - 8 and p.y + p.h <= sh - 8
 		and (p.y >= 8 or (phone and inFreeSpan))
@@ -1431,27 +1480,27 @@ for _, case in ipairs(everyScreen) do
 		teleClear = teleClear and HudLayout.gap(p, zone) >= 8
 	end
 	check(teleClear, tag .. ": TELEPORT TO PLOT is 44+ tall, "
-			.. (if phone then string.format("on the clock's row, its 147 x 33 plate drawn at %.2f inside a %d-px touch area",
-					TELE.PhoneScale, CFG.Phone.Touch)
+			.. (if phone then string.format("on the clock's row, PLOT's plate drawn at %.2f and its touch area exactly that",
+					TELE.PhoneScale)
 				else "under the notice band")
 			.. ", clear of every group, the thumbs and the toast",
 		teleNote)
 	local clock = L.clock
 	local viewport = case.input.viewport
 	if phone and clock then
-		-- On the clock's row, 8 px after BIOMES (the owner's order, 2026-09-30),
-		-- the drawn plate level with the clock and inside the topbar's band; up
-		-- there only inside the topbar's free span; and nothing of it under the
-		-- topbar, where the player's view begins.
+		-- On the clock's row, Phone.RowGap after BIOMES (the owner's order,
+		-- 2026-09-30; one even row, 2026-10-05), the drawn plate level with the
+		-- clock and inside the topbar's band; up there only inside the topbar's
+		-- free span; and nothing of it under the topbar, where the view begins.
 		local c = rect(clock.x - originX, clock.y - TOPBAR, clock.w, clock.h)
 		local drawnTop, drawnBottom = p.y + inset, p.y + p.h - inset
 		local b = L.biomes
-		local beside = b.w > 0 and math.abs(p.x - (b.x + b.w + 8)) < 1e-6 and p.y == b.y
+		local beside = b.w > 0 and math.abs(p.x - (b.x + b.w + CFG.Phone.RowGap)) < 1e-6 and p.y == b.y
 		check(beside and HudLayout.gap(p, c) >= 8 - 1e-6 and inFreeSpan
 				and math.abs((drawnTop + drawnBottom) / 2 - (c.y + c.h / 2)) <= 0.5
 				and drawnTop >= c.y - 0.5 and drawnBottom <= c.y + c.h + 0.5 and p.y + p.h <= 0,
-			tag .. ": the phone's button stands on the clock's row, 8 px after BIOMES and level with the clock, "
-				.. "in the topbar's free span",
+			tag .. ": the phone's button stands on the clock's row, " .. CFG.Phone.RowGap .. " px after BIOMES and "
+				.. "level with the clock, in the topbar's free span",
 			string.format("%s after %s, clock %s, drawn %.1f to %.1f", r2s(p), r2s(b), r2s(c), drawnTop, drawnBottom))
 	end
 	-- The ADMIN button (window space) keeps 8 px off the whole touch area.
@@ -1477,11 +1526,18 @@ for _, case in ipairs(everyScreen) do
 	if chooser then
 		check(HudLayout.gap(p, chooser) >= 8, tag .. ": an open chooser keeps 8 px off it", r2s(chooser))
 	end
-	-- Its words are laid out in the plate, which is 196 wide before its scale
-	-- whatever the touch area round it.
-	check(L.teleportPlate.X - 50 >= teleportWords,
-		tag .. ": its words fit beside the sprout at 10 px",
-		string.format("%.0f of %d", teleportWords, L.teleportPlate.X - 50))
+	-- Its words are laid out in the plate before its scale: TELEPORT TO PLOT
+	-- beside the sprout in 196 off a phone; on a phone PLOT alone, 6 px in from
+	-- either side (the mobile corrections, 2026-10-05).
+	if phone then
+		check(L.teleportPlate.X - 12 >= plotWord,
+			tag .. ": PLOT fits its plate whole at 16 px, no icon beside it",
+			string.format("%.0f of %d", plotWord, L.teleportPlate.X - 12))
+	else
+		check(L.teleportPlate.X - 50 >= teleportWords,
+			tag .. ": its words fit beside the sprout at 10 px",
+			string.format("%.0f of %d", teleportWords, L.teleportPlate.X - 50))
+	end
 
 	-- THE ADMIN BUTTON (two accounts only): WINDOW space, in the topbar beside
 	-- the clock, level with it, inside the free span, never on top of it. On a
@@ -1540,9 +1596,9 @@ say("  (ADMIN hangs under the row, the row being full, on: "
 do
 	local only = true
 	for _, tag in ipairs(hungAdmin) do
-		only = only and string.find(tag, "640x480", 1, true) ~= nil
+		only = only and (string.find(tag, "^640x") ~= nil or string.find(tag, "^705x") ~= nil)
 	end
-	check(only, "only the 640-px-wide phones hang ADMIN under the row; every other listed screen has it on the row",
+	check(only, "only the 640- and 705-px-wide phones hang ADMIN under the row; every other listed screen has it on the row",
 		table.concat(hungAdmin, ", "))
 end
 
@@ -1598,13 +1654,23 @@ end
 -- had is hidden: the differential sweep of 2026-09-29 (6,990 touch screens
 -- against the module at HEAD) found no screen that lost a button.
 do
-	local input = screen(772, 360, { touch = true, barLeft = 400 })
+	-- (Roblox's buttons out to 500: since the even row of 2026-10-05 a span from
+	-- 408 holds the row. PLOT keeps its phone plate under the clock as well, its
+	-- touch area that plate drawn.)
+	local input = screen(772, 360, { touch = true, barLeft = 500 })
 	local blocked = HudLayout.solve(input)
 	local t, o = blocked.teleport, blocked.obby
-	check(blocked.sidebar and t.y == 8 and t.w == TELE.Size.X and blocked.teleportScale == TELE.PhoneScale
-			and o.w > 0 and o.y == t.y and o.h == t.h and HudLayout.gap(o, t) >= 8 - 1e-6,
-		"a phone whose topbar free span cannot hold the row gets both buttons under the topbar, at the margin, "
-			.. "as they stood",
+	-- Under the clock as it stood before the row: raised into the topbar only
+	-- inside its free span (PLOT's narrow plate fits there now), else at the
+	-- margin; OBBY beside it, or under the topbar at the margin where the span
+	-- has no room beside it (obbyBeside).
+	local bar = input.topbar
+	local raised = t.y < 0 and t.x >= bar.x + 8 and t.x + t.w <= bar.x + bar.w - 8
+	check(blocked.sidebar and (t.y == 8 or raised) and t.w == CFG.Phone.Row.Plot * TELE.PhoneScale
+			and blocked.teleportScale == TELE.PhoneScale and blocked.teleportShort
+			and o.w > 0 and (o.y == t.y or o.y == 8) and o.h == t.h and HudLayout.gap(o, t) >= 8 - 1e-6,
+		"a phone whose topbar free span cannot hold the row stands PLOT under the clock and OBBY beside it, as "
+			.. "they stood before the row -- PLOT as narrow as its plate",
 		r2s(t) .. " / " .. r2s(o))
 	check(blocked.topRow == false and blocked.columnTop == nil and blocked.columnCentre == nil
 			and blocked.rowLo == nil and blocked.rowHi == nil and blocked.toastTop == false
@@ -1621,61 +1687,74 @@ do
 		r2s(status) .. " " .. r2s(notice) .. " " .. r2s(boosts))
 	local rows, k = HudLayout.boostRows(blocked, boosts, { 150, 160 }, 16)
 	local row = HudLayout.centreIn(blocked, boosts, 150 + 16 + 160)
-	check(k == 1 and #rows == 2 and rows[1].x == row.x and rows[2].x == row.x + 150 + 16
-			and rows[1].y == boosts.y and rows[2].y == boosts.y,
-		"and two boosts stand side by side in that row, as BonusChestUI always put them",
+	-- Side by side, as BonusChestUI always put them -- or, where the panel under
+	-- the Bag (taller since it holds four squares, 2026-10-06) narrows the row,
+	-- one over the other, each clear of the panel.
+	local sideBySide = k == 1 and #rows == 2 and rows[1].x == row.x and rows[2].x == row.x + 150 + 16
+		and rows[1].y == boosts.y and rows[2].y == boosts.y
+	local stacked = #rows == 2 and rows[1].y == boosts.y and rows[2].y > rows[1].y
+		and HudLayout.gap(rows[1], blocked.dock) >= 8 - 1e-6 and HudLayout.gap(rows[2], blocked.dock) >= 8 - 1e-6
+	check(sideBySide or stacked,
+		"and two boosts stand side by side in that row (or one over the other, clear of the panel under the Bag)",
 		r2s(rows[1]) .. " " .. r2s(rows[2]))
 	check(blocked.toast.y + blocked.toast.h <= blocked.hotbar.y - 8
 			and blocked.toast.y > input.viewport.Y / 2 - TOPBAR,
 		"and the toast is over the belt", r2s(blocked.toast))
 
-	-- ALL OR NOTHING: a row with room for TELEPORT and none for OBBY is not
-	-- used. 600 wide with the free span from 260 holds the clock and TELEPORT
-	-- (124 + 8 + 156) and not OBBY's 64 after them.
-	local short = HudLayout.solve(screen(600, 338, { touch = true, barLeft = 260 }))
-	check(short.topRow == false and short.obby.w > 0 and short.teleport.w == TELE.Size.X
-			and short.obby.y == short.teleport.y,
-		"a row with room for TELEPORT and none for OBBY is not used: OBBY stays on screen, beside TELEPORT",
+	-- ALL OR NOTHING: a row with room for BIOMES and PLOT and none for OBBY is
+	-- not used. 600 wide with the free span from 324 holds the clock and those
+	-- two drawn tight (124 + 8 + 54 + 5 + 45) and not OBBY's 48 after them.
+	local short = HudLayout.solve(screen(600, 338, { touch = true, barLeft = 324 }))
+	check(short.topRow == false and short.obby.w > 0 and short.teleport.w == CFG.Phone.Row.Plot * TELE.PhoneScale
+			and (short.obby.y == short.teleport.y or short.obby.y == 8),
+		"a row with room for BIOMES and PLOT and none for OBBY is not used: OBBY stays on screen, beside PLOT",
 		r2s(short.teleport) .. " / " .. r2s(short.obby))
-	-- The narrowest free span that holds the row (2026-09-30): BIOMES, TELEPORT
-	-- and OBBY with the two words drawn tight, and the chip, 8 px apart -- 416 px,
-	-- a 640-px phone's -- and one pixel less does not.
-	local need = CFG.Biomes.Tight + 8 + CFG.Phone.Touch + 8 + CFG.Obby.Tight + 8 + CFG.Phone.Clock
+	-- The narrowest free span that holds the row (2026-09-30; the even row of
+	-- 2026-10-05): BIOMES, PLOT and OBBY at the tight size RowGap apart, and the
+	-- chip 8 px after them -- and one pixel less does not.
+	local RT, k = CFG.Phone.RowTight, TELE.PhoneScale
+	local RG = CFG.Phone.RowGap
+	local need = RT.Biomes * k + RG + RT.Plot * k + RG + RT.Obby * k + 8 + CFG.Phone.Clock
 	local just = HudLayout.solve(screen(772, 360, { touch = true, barLeft = 772 - 8 - need - 8 }))
 	local less = HudLayout.solve(screen(772, 360, { touch = true, barLeft = 772 - 8 - need - 8 + 1 }))
 	check(just.topRow == true and just.obbyWide == false and just.biomesWide == false
-			and just.obby.w == CFG.Obby.Tight and just.biomes.w == CFG.Biomes.Tight
+			and just.obbyPlate == Vector2.new(RT.Obby - CFG.Phone.RowStroke * 2, 44 - CFG.Phone.RowStroke * 2)
+			and just.biomesPlate == Vector2.new(RT.Biomes - CFG.Phone.RowStroke * 2, 44 - CFG.Phone.RowStroke * 2)
 			and just.rowHi - just.rowLo == need and less.topRow == false,
-		string.format("the row needs %d px of free span: BIOMES, TELEPORT, OBBY drawn tight and the chip, 8 px apart",
-			need),
+		string.format("the row needs %d px of free span: BIOMES, PLOT, OBBY drawn tight and the chip", need),
 		string.format("%s..%s / %s", tostring(just.rowLo), tostring(just.rowHi), tostring(less.topRow)))
-	-- And the words fit even drawn tight. A label's least size is a DRAWN size
-	-- (measured in Play, 2026-09-30: a label at the phone's 0.75 clipped a word
-	-- that fitted it unscaled), so the room is the plate's label area at the
-	-- phone's scale: BIOMES' less its 4 px sides at 9 px, OBBY's less 6 at 10.
-	local biomes9 = TextService:GetTextSize("BIOMES", 9, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
-	local obby10 = TextService:GetTextSize("OBBY", 10, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
-	local bRoom = (CFG.Biomes.Tight - 8) * TELE.PhoneScale
-	local oRoom = (CFG.Obby.Tight - 12) * TELE.PhoneScale
-	check(bRoom >= biomes9 and oRoom >= obby10,
-		"drawn tight at the phone's scale, BIOMES still fits its word at 9 px and OBBY at 10",
-		string.format("%.0f of %.1f, %.0f of %.1f", biomes9, bRoom, obby10, oRoom))
+	-- And every word fits whole even drawn tight, at the plate's own 16 px: a
+	-- label's least size is a DRAWN size (measured in Play, 2026-09-30: a label
+	-- at the phone's 0.75 clipped a word that fitted it unscaled), and here none
+	-- has to shrink. BIOMES' label has 4 px sides, PLOT's and OBBY's 6.
+	local function word16(text)
+		return TextService:GetTextSize(text, 16, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	end
+	local RE = CFG.Phone.RowStroke * 2
+	check(RT.Biomes - RE - 8 >= word16("BIOMES") and RT.Plot - RE - 12 >= word16("PLOT")
+			and RT.Obby - RE - 12 >= word16("OBBY")
+			and RT.Biomes * k >= 44 and RT.Plot * k >= 44 and RT.Obby * k >= 44,
+		"drawn tight, BIOMES, PLOT and OBBY still fit their words whole at the plates' 16 px, and every touch area "
+			.. "is 44 or wider",
+		string.format("%d/%d %d/%d %d/%d", word16("BIOMES"), RT.Biomes - RE - 8, word16("PLOT"), RT.Plot - RE - 12,
+			word16("OBBY"), RT.Obby - RE - 12))
 	local biomesSrc0 = sourceOf("BiomesButtonUI") or ""
 	check(biomesSrc0:find("fit.MinTextSize = 9", 1, true) ~= nil
 			and biomesSrc0:find("label.Position = UDim2.new(0, 4, 0.5, 1)", 1, true) ~= nil
 			and biomesSrc0:find("label.Size = UDim2.new(1, -8, 0, 22)", 1, true) ~= nil,
 		"and BiomesButtonUI draws the word alone that way: 4 px sides, 9 px at the least")
 
-	-- ADMIN hung under a clock with no room beside it: TELEPORT keeps 8 px under it.
+	-- ADMIN hung under a clock with no room beside it: TELEPORT keeps 8 px off it.
+	-- Under it until 2026-10-04; since Walk Mode's switch left the phone's top
+	-- row, the button may stand where the switch stood, beside the dock.
 	local narrow = HudLayout.solve(screen(430, 500, { touch = true, barLeft = 250 }))
 	local a, clock = narrow.admin, narrow.clock
 	local under = a ~= nil and clock ~= nil and a.y >= clock.y + clock.h and narrow.topRow == false
 	if under and a then
 		local ax = a.x - (430 - narrow.safe.X) / 2
 		under = HudLayout.gap(rect(ax, a.y - TOPBAR, a.w, a.h), narrow.teleport) >= 8
-			and narrow.teleport.y >= a.y + a.h - TOPBAR + 8 - 1e-6
 	end
-	check(under, "a phone too narrow for ADMIN beside the clock: the button keeps 8 px under it",
+	check(under, "a phone too narrow for ADMIN beside the clock: the button keeps 8 px off it",
 		a and (r2s(a) .. " / " .. r2s(narrow.teleport)))
 end
 
@@ -1727,8 +1806,10 @@ do
 			local bar = case.input.topbar
 			local inFreeSpan = o.y >= 0 or (bar ~= nil and o.x + originX >= bar.x + 8
 				and o.x + o.w + originX <= bar.x + bar.w - 8)
-			local onRight = math.abs(o.x - (p.x + p.w + 8)) < 1e-6
-			local onLeft = math.abs(o.x + o.w + 8 - p.x) < 1e-6
+			-- A phone's row is one even row, RowGap apart (2026-10-05); 8 elsewhere.
+			local apart = if L.topRow then CFG.Phone.RowGap else 8
+			local onRight = math.abs(o.x - (p.x + p.w + apart)) < 1e-6
+			local onLeft = math.abs(o.x + o.w + apart - p.x) < 1e-6
 			if onRight then
 				right += 1
 			elseif onLeft then
@@ -1751,9 +1832,14 @@ do
 				sameRow = true
 				table.insert(lowered, tag)
 			end
-			local ok = sameRow and o.h == p.h and o.h >= 44 and (onRight or onLeft)
-				and (o.w == (if L.obbyWide then OBBY.Size.X else OBBY.Narrow)
-					or (L.topRow and not L.obbyWide and o.w == OBBY.Tight))
+			-- Off a phone's row its own widths; on the row the words alone, its plate
+			-- drawn exactly its touch area.
+			local e = CFG.Phone.RowStroke * 2
+			local rowPlate = L.obbyPlate == Vector2.new(CFG.Phone.Row.Obby - e, 44 - e)
+				or L.obbyPlate == Vector2.new(CFG.Phone.RowTight.Obby - e, 44 - e)
+			local ok = sameRow and o.h == p.h and o.h >= 44 and o.w >= 44 and (onRight or onLeft)
+				and (if L.topRow then not L.obbyWide and rowPlate and o.w == (L.obbyPlate.X + e) * L.teleportScale
+					else o.w == (if L.obbyWide then OBBY.Size.X else OBBY.Narrow))
 				and o.x >= 8 and o.x + o.w <= sw - 8 and o.y + o.h <= sh - 8 and inFreeSpan
 			local note = r2s(o) .. " beside " .. r2s(p)
 			local others = { { "the toast", L.toast }, { "the tutorial banner", L.banner }, { "its skip line", L.skip } }
@@ -1798,9 +1884,9 @@ do
 					note ..= " meets the clock"
 				end
 			end
-			check(ok, tag .. ": OBBY stands on TELEPORT's row, 8 px beside it, clear of everything", note)
+			check(ok, tag .. ": OBBY stands on TELEPORT's row, " .. apart .. " px beside it, clear of everything", note)
 			-- The DRAWN room: a label's least size is a drawn size (2026-09-30).
-			local room = (if L.obbyWide then o.w - 50 else o.w - 12) * L.teleportScale
+			local room = (if L.obbyWide then L.obbyPlate.X - 50 else L.obbyPlate.X - 12) * L.teleportScale
 			check(room >= word, tag .. ": its word fits at 10 px drawn" .. (if L.obbyWide then " beside its icon" else ""),
 				string.format("%.0f of %.1f", word, room))
 		end
@@ -1811,20 +1897,24 @@ do
 		if #lowered > 0 then table.concat(lowered, ", ") else "none"))
 	-- A free span that ends early (something of Roblox's on the right): the row
 	-- keeps its order inside it -- the clock at the span's end, the buttons from
-	-- its start -- and the warning still runs LEFT from TELEPORT's right edge.
+	-- its start -- and the warning runs from the row's start over the buttons'
+	-- empty slots, never past the row's free end (the mobile corrections).
 	do
 		local input = screen(956, 440, { touch = true })
 		input.topbar = rect(40, 0, 956 / 2 + CFG.Phone.Clock / 2 + 8 - 40, TOPBAR)
 		local L = HudLayout.solve(input)
 		local c, o, p, b = L.clock, L.obby, L.teleport, L.biomes
+		local RG = CFG.Phone.RowGap
+		local originX = (956 - L.safe.X) / 2
 		check(L.topRow == true and c ~= nil and c.x + c.w == input.topbar.x + input.topbar.w - 8
-				and b.x == input.topbar.x + 8 and p.x == b.x + b.w + 8 and o.x == p.x + p.w + 8
-				and o.x + o.w + 8 <= c.x,
-			"where the free span ends early the row keeps its order inside it: BIOMES, TELEPORT, OBBY, the clock",
+				and b.x == input.topbar.x + 8 and p.x == b.x + b.w + RG and o.x == p.x + p.w + RG
+				and o.x + o.w + 8 <= c.x - originX,
+			"where the free span ends early the row keeps its order inside it: BIOMES, PLOT, OBBY, the clock",
 			r2s(b) .. " / " .. r2s(p) .. " / " .. r2s(o) .. " / " .. (if c then r2s(c) else "nil"))
 		local line = HudLayout.statusLine(L, TOPBAR, 179)
-		check(line.w == 179 and line.x + line.w == p.x + p.w and line.x >= L.rowLo,
-			"and there the warning runs LEFT from TELEPORT's right edge, over BIOMES' slot", r2s(line))
+		check(line.w == 179 and line.x == L.rowLo and L.rowEnd ~= nil and line.x + line.w <= L.rowEnd,
+			"and there the warning runs from the row's start over the three slots, inside the row's free span",
+			r2s(line))
 	end
 	-- A screen with no room either side gets an empty rect, and the button stays hidden.
 	local tiny = HudLayout.solve(screen(330, 500, { touch = true }))
@@ -1880,12 +1970,18 @@ do
 			local bar = case.input.topbar
 			local inFreeSpan = b.y >= 0 or (bar ~= nil and b.x + originX >= bar.x + 8
 				and b.x + b.w + originX <= bar.x + bar.w - 8)
-			local onLeft = math.abs(b.x + b.w + 8 - p.x) < 1e-6
-			local onRight = math.abs(b.x - (p.x + p.w + 8)) < 1e-6
+			-- A phone's row is one even row, RowGap apart (2026-10-05); 8 elsewhere.
+			local apart = if L.topRow then CFG.Phone.RowGap else 8
+			local onLeft = math.abs(b.x + b.w + apart - p.x) < 1e-6
+			local onRight = math.abs(b.x - (p.x + p.w + apart)) < 1e-6
 			sides[if onLeft then "left" else "right"] += 1
 			local otherSide = o.w <= 0 or ((o.x > p.x) ~= (b.x > p.x))
-			local widthOk = b.w == (if L.biomesWide then B.Size.X else B.Narrow)
-				or (L.topRow and not L.biomesWide and b.w == B.Tight)
+			local e = CFG.Phone.RowStroke * 2
+			local rowPlate = L.biomesPlate == Vector2.new(CFG.Phone.Row.Biomes - e, 44 - e)
+				or L.biomesPlate == Vector2.new(CFG.Phone.RowTight.Biomes - e, 44 - e)
+			local widthOk = if L.topRow
+				then not L.biomesWide and rowPlate and b.w == (L.biomesPlate.X + e) * L.teleportScale
+				else b.w == (if L.biomesWide then B.Size.X else B.Narrow)
 			if not L.biomesWide then
 				table.insert(wordOnly, tag)
 			end
@@ -1900,8 +1996,7 @@ do
 			local indexBadge, gardenBadge = HudLayout.badges(L)
 			table.insert(others, { "the Index badge", indexBadge })
 			table.insert(others, { "the Garden badge", gardenBadge })
-			for _, maybe in ipairs({ { "the thumbstick", L.thumb }, { "the jump button", L.jump },
-				{ "the chooser", L.chooser } }) do
+			for _, maybe in ipairs({ { "the thumbstick", L.thumb }, { "the jump button", L.jump } }) do
 				if maybe[2] then
 					table.insert(others, maybe)
 				end
@@ -1920,18 +2015,21 @@ do
 			table.insert(others, { "the boost row", boosts })
 			for _, other in ipairs(others) do
 				local r = other[2]
-				if r.w > 0 and HudLayout.gap(b, r) < 8 - 1e-6 then
+				-- OBBY is the row's own neighbour on a phone, RowGap off it.
+				local least = if other[1] == "OBBY" and L.topRow then apart else 8
+				if r.w > 0 and HudLayout.gap(b, r) < least - 1e-6 then
 					ok = false
 					note ..= " meets " .. other[1]
 				end
 			end
-			check(ok, tag .. ": BIOMES stands on TELEPORT's row, 8 px on OBBY's other side, clear of everything", note)
+			check(ok, tag .. ": BIOMES stands on TELEPORT's row, " .. apart .. " px on OBBY's other side, clear of "
+				.. "everything", note)
 			-- The DRAWN room (a label's least size is a drawn size): at 10 px, or 9
-			-- where the row draws it tight.
-			local room = (if L.biomesWide then b.w - 50 else b.w - 8) * L.teleportScale
-			local least = if b.w == B.Tight then word9 else word
-			check(room >= least, tag .. ": its word fits at " .. (if b.w == B.Tight then "9" else "10") .. " px drawn"
-					.. (if L.biomesWide then " beside its icon" else ""),
+			-- where an old row drew it tight -- on its plate, before the scale.
+			local room = (if L.biomesWide then L.biomesPlate.X - 50 else L.biomesPlate.X - 8) * L.teleportScale
+			local least = if L.biomesPlate.X == B.Tight then word9 else word
+			check(room >= least, tag .. ": its word fits at " .. (if L.biomesPlate.X == B.Tight then "9" else "10")
+					.. " px drawn" .. (if L.biomesWide then " beside its icon" else ""),
 				string.format("%.0f of %.1f", least, room))
 			-- A desktop's is the full button, icon and word, left of TELEPORT.
 			if not L.compact then
@@ -2144,21 +2242,19 @@ for _, case in ipairs(columnCases) do
 	local middle = case.input.viewport.Y / 2 - TOPBAR
 	local w
 	if phone then
-		-- ON THE CLOCK'S ROW (the owner's order, 2026-09-30): from TELEPORT's
-		-- right edge, LEFT, whole inside the two slots -- BIOMES' and TELEPORT's,
-		-- both empty while a chase is on -- and never within 8 px of OBBY's slot,
-		-- the clock or ADMIN.
+		-- ON THE CLOCK'S ROW (the owner's order, 2026-09-30): since the even row
+		-- of 2026-10-05, from the row's start, RIGHT, over all three buttons'
+		-- slots -- every one empty while a chase is on, the buttons being for the
+		-- Safe Zone only -- whole, inside the row's free span (rowEnd) and never
+		-- within 8 px of the clock or ADMIN.
 		w = HudLayout.statusLine(L, TOPBAR, warnW * ks)
 		phoneColumns += 1
 		if w.w < warnW * ks - 0.5 then
 			bad(tag, string.format("the warning needs %d px and has %d", math.ceil(warnW * ks), math.floor(w.w)))
 		end
-		local slots = HudLayout.union(L.biomes, tp)
-		if w.x < slots.x - 1e-6 or w.x + w.w > slots.x + slots.w + 1e-6 then
-			bad(tag, "the warning runs past BIOMES' and TELEPORT's slots " .. r2s(w) .. " / " .. r2s(slots))
-		end
-		if HudLayout.gap(w, L.obby) < 8 - 1e-6 then
-			bad(tag, "the warning comes within 8 px of OBBY's slot")
+		if math.abs(w.x - L.rowLo) > 1e-6 or L.rowEnd == nil or w.x + w.w > L.rowEnd + 1e-6 then
+			bad(tag, "the warning does not start at the row's start or runs past its free span " .. r2s(w)
+				.. " / " .. tostring(L.rowEnd))
 		end
 		if w.x < L.rowLo - 1e-6 or w.x + w.w > L.rowHi + 1e-6 then
 			bad(tag, "the warning leaves the row")
@@ -2248,10 +2344,12 @@ for _, case in ipairs(columnCases) do
 			or notice.y < boosts.y + boosts.h + CFG.Phone.NoticeGap - 1e-6 then
 			bad(tag, "the passing lines' band is not NoticeGap under the boost row " .. r2s(notice))
 		end
+		-- The biome name still stands in that band; the toast is over the belt
+		-- now (2026-10-04), not up here.
 		local _, nameTop = HudLayout.notice(L, nameW, CFG.NoticeHeight, CFG.NoticeTop - TOPBAR)
-		if nameTop ~= notice.y or L.toast.y ~= notice.y then
-			bad(tag, string.format("the biome name (%g) and the toast (%g) are not in the band (%g)", nameTop,
-				L.toast.y, notice.y))
+		if nameTop ~= notice.y or L.toast.y <= notice.y + notice.h then
+			bad(tag, string.format("the biome name (%g) is not in the band (%g), or the toast (%g) is up in it",
+				nameTop, notice.y, L.toast.y))
 		end
 		if tp.y + tp.h > top + 1e-6 or L.obby.y + L.obby.h > top + 1e-6
 			or L.biomes.y + L.biomes.h > top + 1e-6 then
@@ -2325,10 +2423,9 @@ local chestSrc = sourceOf("BonusChestUI") or ""
 local obbySrc = sourceOf("ObbyUI") or ""
 local PLACED_BY = {
 	AlertUI = "HudLayout.statusLine(layout, inset,",
-	BonusChestUI = "HudLayout.boostRows(layout, band,",
 	ObbyUI = "HudLayout.centreIn(layout,",
 }
-for name, src in pairs({ AlertUI = alertSrc, BonusChestUI = chestSrc, ObbyUI = obbySrc }) do
+for name, src in pairs({ AlertUI = alertSrc, ObbyUI = obbySrc }) do
 	check(src:find("HudLayout.statusRows(layout, inset)", 1, true) ~= nil
 			and src:find(PLACED_BY[name], 1, true) ~= nil
 			and src:find("StatusText.new({", 1, true) ~= nil
@@ -2336,18 +2433,23 @@ for name, src in pairs({ AlertUI = alertSrc, BonusChestUI = chestSrc, ObbyUI = o
 			and not src:find("HudLayout.notice(", 1, true),
 		name .. " draws its indicator as a StatusText line in its statusRows band: no corner, no padding, no plate")
 end
--- The phone's own, each read from the layout and nothing else.
-check(chestSrc:find("local phone = layout.sidebar and layout.columnTop ~= nil", 1, true) ~= nil
-		and chestSrc:find("if phone then StatusText.PhoneScale.boost", 1, true) ~= nil
-		and chestSrc:find("e.line.setScale(k * shrink)", 1, true) ~= nil
-		and chestSrc:find("if not phone and type(reach) == \"number\"", 1, true) ~= nil,
-	"BonusChestUI draws a phone's boosts at the phone's size in the column, smaller only by boostRows' word, and "
-		.. "is not pushed down by the guide there")
+-- The boosts are icons over the hotbar now (2026-10-04): BoostIconsUI places
+-- them in the layout's own `icons` rect, publishes how many stand, and the
+-- chest's script draws no line of its own.
+local iconsSrc = sourceOf("BoostIconsUI") or ""
+check(iconsSrc:find("local r = L.icons", 1, true) ~= nil
+		and iconsSrc:find("size = L.iconSize", 1, true) ~= nil
+		and iconsSrc:find("player:SetAttribute(CFG.Attribute, want)", 1, true) ~= nil
+		and iconsSrc:find("-- Published BEFORE placing: the layout reads it.\n\t\tpublishCount(#list)\n\t\tplace()", 1, true) ~= nil
+		and not chestSrc:find("StatusText.new(", 1, true) and not chestSrc:find("HudLayout.", 1, true),
+	"BoostIconsUI places the icon row in HudLayout's icons rect at its iconSize, and publishes its count before "
+		.. "it places; BonusChestUI draws no status line any more")
 check(obbySrc:find("local slot = layout.run", 1, true) ~= nil
 		and obbySrc:find("local alone = layout.sidebar and slot.w > 0", 1, true) ~= nil
 		and obbySrc:find("runTime.setScale(StatusText.PhoneScale.runClock)", 1, true) ~= nil
 		and obbySrc:find("headFont = StatusText.ClockFont", 1, true) ~= nil
-		and obbySrc:find("plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)", 1, true) ~= nil
+		and obbySrc:find("plate.Size = UDim2.fromOffset(layout.returnPlate.X, layout.returnPlate.Y)", 1, true) ~= nil
+		and obbySrc:find("local r = layout.returnPlot", 1, true) ~= nil
 		and obbySrc:find("key = \"obby:stage\", quiet = true", 1, true) ~= nil
 		and obbySrc:find("return if clockAlone then seconds else nil", 1, true) ~= nil,
 	"ObbyUI: on a phone the run's clock alone in HudLayout's `run` slot, each stage's name said once as a quiet "
@@ -2355,20 +2457,24 @@ check(obbySrc:find("local slot = layout.run", 1, true) ~= nil
 do
 	local walkSrc = sourceOf("WalkModeUI") or ""
 	local clockSrc = sourceOf("WorldClock") or ""
-	check(walkSrc:find("slab.Visible = not (phone and ObbyData.onCourse(player))", 1, true) ~= nil
-			and walkSrc:find("phone = HudLayout.solve(HudLayout.measure(layer)).sidebar == true", 1, true) ~= nil
-			and walkSrc:find("GetAttributeChangedSignal(ObbyData.Attributes.Course)", 1, true) ~= nil,
-		"WalkModeUI puts its switch away on the course on a touch screen only -- a desktop keeps it, there too")
+	check(walkSrc:find("slab.Visible = not (phone and ObbyData.onCourse(player)) and not away", 1, true) ~= nil
+			and walkSrc:find("phone = layout.sidebar == true", 1, true) ~= nil
+			and walkSrc:find("away = layout.compact and player:GetAttribute(ATTR.OpenPanel) ~= nil", 1, true) ~= nil
+			and walkSrc:find("GetAttributeChangedSignal(ObbyData.Attributes.Course)", 1, true) ~= nil
+			and walkSrc:find("GetAttributeChangedSignal(ATTR.OpenPanel)", 1, true) ~= nil,
+		"WalkModeUI puts its switch away on the course on a touch screen only -- a desktop keeps it, there too -- "
+			.. "and off a desktop steps it aside while a panel is open, as EVENTS does")
 	check(clockSrc:find("chip = layout.clockChip", 1, true) ~= nil,
 		"WorldClock draws the chip's face where HudLayout says the clock is a chip")
 	-- The chip's words, read from WorldClock's own source: each fits the chip's
-	-- line (its width less 5 px a side) at the smallest size TextScaled may take
-	-- it to, and the time under it at its own.
+	-- line (its width less 5 px a side, less the cycle icon and its gap since
+	-- 2026-10-04) at the smallest size TextScaled may take it to, and the time
+	-- under it at its own.
 	local said = {}
 	for words in string.gmatch(clockSrc, '\n\t\twords = "([^"]+)"') do
 		table.insert(said, words)
 	end
-	local room = CFG.Phone.Clock - 10
+	local room = CFG.Phone.Clock - 10 - CFG.Phone.ClockIcon - CFG.Phone.ClockIconGap
 	local tooWide = {}
 	for _, words in ipairs(said) do
 		local w = TextService:GetTextSize(words, 7, Enum.Font.GothamBlack, Vector2.new(4000, 100)).X
@@ -2379,8 +2485,9 @@ do
 	local timeW = TextService:GetTextSize("00:00", 17, Enum.Font.GothamBlack, Vector2.new(4000, 100)).X
 	check(#said == 3 and #tooWide == 0 and timeW <= room
 			and clockSrc:find("chipWordsCap.MinTextSize = 7", 1, true) ~= nil
-			and clockSrc:find("chipTime.TextSize = 17", 1, true) ~= nil,
-		"the chip's three sentences fit its line at 7 px or more, and the time under them at 17",
+			and clockSrc:find("chipTime.TextSize = 17", 1, true) ~= nil
+			and clockSrc:find("local CHIP_TEXT_X = 5 + LAYOUT.Phone.ClockIcon + LAYOUT.Phone.ClockIconGap", 1, true) ~= nil,
+		"the chip's three sentences fit its line beside the cycle icon at 7 px or more, and the time under them at 17",
 		string.format("%d read; too wide: %s; time %d of %d", #said, table.concat(tooWide, ", "), timeW, room))
 end
 check(not chestSrc:find("DangerPill", 1, true),
@@ -2426,12 +2533,13 @@ check(teleSrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(p
 check(teleSrc:find("plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)", 1, true) ~= nil,
 	"PlotTeleportUI draws its plate at HudLayout's teleportPlate, whatever the touch area round it")
 check(toastSrc:find("fromTop = layout.toastTop", 1, true) ~= nil
-		and toastSrc:find("metrics = if fromTop then PHONE elseif small then SMALL else FULL", 1, true) ~= nil
+		and toastSrc:find("metrics = if fromTop or layout.sidebar then PHONE elseif small then SMALL else FULL", 1, true) ~= nil
 		and toastSrc:find("Notice.setReach(if fromTop and y > 0 then", 1, true) ~= nil
 		and toastSrc:find("local depth = math.max(stackDepth, middle - CONFIG_GAP - stackTop)", 1, true) ~= nil
+		and toastSrc:find("GetAttributeChangedSignal(GameConfig.BoostIcons.Attribute):Connect(place)", 1, true) ~= nil
 		and toastSrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)', 1, true) ~= nil,
-	"ActionToastUI hangs a phone's notices from the top where HudLayout says toastTop, never deeper than the "
-		.. "middle of the screen, says how far down they reach, and follows the topbar's free span")
+	"ActionToastUI draws a phone's notices at the phone's size wherever they stand (over the belt since "
+		.. "2026-10-04), re-places when the icon row's count changes, and follows the topbar's free span")
 check(tutorialSrc:find("guide = layout.guide", 1, true) ~= nil
 		and tutorialSrc:find("words.Visible = not (guide and Notice.reach() ~= nil)", 1, true) ~= nil
 		and tutorialSrc:find("Notice.onReach(coverWords)", 1, true) ~= nil
@@ -2655,7 +2763,7 @@ for _, case in ipairs(tvCases) do
 			tag .. ": the tutorial banner keeps 8 px under TELEPORT TO PLOT", r2s(L.banner))
 		-- The Bag panel inside the frame too.
 		local bag = HudLayout.bag(L, {
-			hotTop = L.hotbar.y, stripHidden = false, plants = true, sideWidth = L.equipment.w,
+			hotTop = L.hotbar.y, stripHidden = false,
 		})
 		local p = bag.panel
 		check(p.x >= frame.x and p.y >= frame.y and p.x + p.w <= frame.x + frame.w
@@ -2690,10 +2798,10 @@ do
 		{ "TutorialUI", "UIKit.tenFoot(gui)" }, { "TutorialUI", "target.AbsolutePosition / k" },
 		{ "PlantPlace", "UIKit.tenFoot(padGui)" },
 		{ "SellUI", "notice.AbsoluteSize.X / UIKit.scaleOf(gui)" },
-		{ "ShopUI", "body.AbsoluteSize.X / UIKit.scaleOf(gui)" },
-		{ "IndexUI", "scroll.AbsoluteSize.X / UIKit.scaleOf(gui)" },
+		{ "ShopUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },
+		{ "IndexUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },
 		{ "SettingsUI", "rowsFrame.AbsoluteSize.X / UIKit.scaleOf(gui)" },
-		{ "GardenUI", "list.AbsoluteSize.X / UIKit.scaleOf(gui)" },
+		{ "GardenUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },
 		{ "MarigoldShopUI", "list.AbsoluteSize.X / UIKit.scaleOf(gui)" },
 		{ "OfflineUI", "modal.body.AbsoluteSize.X / k" },
 		{ "PromptUI", "label.TextBounds.X / tv" },
@@ -2714,6 +2822,882 @@ do
 			and kitSrc:find("gui.AbsoluteSize.Y / HudLayout.scaleOf(gui)", 1, true) ~= nil
 			and kitSrc:find("if not (camera and HudLayout.isTenFoot()) then", 1, true) ~= nil,
 		"every panel and the rail are scaled, a panel fits in the gui's own units, and off a TV no UIScale is made")
+end
+
+
+--==============================================================================
+-- THE REMOVE ROW (2026-10-04, the reusable-trap brief)
+--
+-- While a trap is out, a small REMOVE stands just over the trap's own slot --
+-- any slot. HudLayout reserves a strip-wide row for it right over the strip
+-- (removeRow), and the item name's band, the boost icons and the notices all
+-- stand over that row. Checked on every listed screen and every slot: the
+-- button over its own slot, inside the strip's columns, clear of the name
+-- band, the icons, the toast and the thumbs, a 44 px target on a touch screen,
+-- and nothing else moved when no trap is out.
+--==============================================================================
+say("\n-- the REMOVE row --")
+do
+	local GAP = HOT.RemoveGap
+	local noRowSame, rowShape, bandOver, iconsOver, toastOver, fitsAll = true, true, true, true, true, true
+	local slotsOk, touchBig, wordsFit, countFits = true, true, true, true
+	local notes = {}
+	local function note(tag, what)
+		if #notes < 12 then
+			table.insert(notes, tag .. ": " .. what)
+		end
+	end
+	local screens = {}
+	for _, case in ipairs(everyScreen) do
+		table.insert(screens, case)
+	end
+	for _, tv in ipairs(tvCases) do
+		table.insert(screens, { tag = tv.tag .. " TV", input = (tvCase(tv.w, tv.h, tv.inset, tv.keyboard)) })
+	end
+	for _, case in ipairs(screens) do
+		local tag = case.tag
+		local plain = HudLayout.solve(case.input)
+		if plain.removeRow ~= nil then
+			noRowSame = false
+			note(tag, "a row with no trap out")
+		end
+		local withRow = table.clone(case.input)
+		withRow.removeRow = true
+		local L = HudLayout.solve(withRow)
+		local row = L.removeRow
+		local H = L.hot
+		local rowH = HudLayout.removeRowHeight(L.touch)
+		-- The strip itself never moves for the row.
+		if L.hotbar.x ~= plain.hotbar.x or L.hotbar.y ~= plain.hotbar.y or L.hotbar.w ~= plain.hotbar.w
+			or L.slots ~= plain.slots then
+			noRowSame = false
+			note(tag, "the strip moved for the row " .. r2s(L.hotbar) .. " vs " .. r2s(plain.hotbar))
+		end
+		if not row or math.abs(row.x - L.hotbar.x) > 0.01 or math.abs(row.w - L.hotbar.w) > 0.01
+			or math.abs(row.y + row.h + GAP - L.hotbar.y) > 0.01 or math.abs(row.h - rowH) > 0.01 then
+			rowShape = false
+			note(tag, "row " .. (if row then r2s(row) else "nil"))
+		end
+		if row and math.abs(L.namePopup.y + L.namePopup.h + HOT.NamePopupGap - row.y) > 0.01 then
+			bandOver = false
+			note(tag, "name band " .. r2s(L.namePopup) .. " not over row " .. r2s(row))
+		end
+		if #HudLayout.problems(plain) == 0 and #HudLayout.problems(L) > 0 then
+			fitsAll = false
+			note(tag, table.concat(HudLayout.problems(L), "; "))
+		end
+		-- With four boost icons standing too: icons over the band, the toast over both.
+		local busy = table.clone(withRow)
+		busy.icons = 4
+		local B = HudLayout.solve(busy)
+		local icons = B.icons
+		if not icons or icons.y + icons.h > B.namePopup.y - 8 + 0.01 or HudLayout.gap(icons, B.removeRow) < 8 then
+			iconsOver = false
+			note(tag, "icons " .. (if icons then r2s(icons) else "nil") .. " band " .. r2s(B.namePopup))
+		end
+		local t = B.toast
+		local under = if icons then math.min(icons.y, B.namePopup.y) else B.namePopup.y
+		if t.y + t.h > under - 8 + 0.01 or HudLayout.gap(t, B.removeRow) < 8 then
+			toastOver = false
+			note(tag, "toast " .. r2s(t) .. " over " .. tostring(under))
+		end
+		-- Every slot's button.
+		for i = 1, L.slots do
+			local press, plate = HudLayout.removeButton(L, i)
+			local slot = HudLayout.slotRect(L, i)
+			local okSlot = press ~= nil and plate ~= nil
+				and math.abs(plate.x - slot.x) < 0.01 and math.abs(plate.w - slot.w) < 0.01
+				and math.abs(plate.y + plate.h + GAP - slot.y) < 0.01 and plate.h == HOT.RemoveHeight
+				and press.x <= plate.x + 0.01 and press.x + press.w >= plate.x + plate.w - 0.01
+				and press.y <= plate.y + 0.01 and math.abs(press.y + press.h - L.hotbar.y) < 0.01
+				and press.x >= L.hotbar.x - 0.01 and press.x + press.w <= L.hotbar.x + L.hotbar.w + 0.01
+				and HudLayout.gap(press, L.namePopup) >= HOT.NamePopupGap - 0.01
+			for _, zone in ipairs({ L.thumb, L.jump }) do
+				okSlot = okSlot and (zone == nil or HudLayout.gap(press :: any, zone) >= 8)
+			end
+			if not okSlot then
+				slotsOk = false
+				note(tag, string.format("slot %d press %s plate %s", i, if press then r2s(press) else "nil",
+					if plate then r2s(plate) else "nil"))
+			end
+			if L.touch and press and (press.h < 44 or press.w < 44) then
+				touchBig = false
+				note(tag, string.format("slot %d target %s", i, r2s(press)))
+			end
+		end
+		-- The words on the plate, and the count under a trap's picture.
+		local words = TextService:GetTextSize(HOT.RemoveWords, H.RemoveText, Enum.Font.FredokaOne, Vector2.new(400, 100))
+		if words.X > H.SlotWidth - 6 or words.Y > HOT.RemoveHeight then
+			wordsFit = false
+			note(tag, string.format("REMOVE %dx%d on a %d-wide plate", words.X, words.Y, H.SlotWidth))
+		end
+		local count = TextService:GetTextSize("3\u{00D7}", H.TrapCountSize, Enum.Font.FredokaOne, Vector2.new(400, 100))
+		if count.X > H.SlotWidth / 2 or H.TrapCountSize + 3 + H.TrapCountBottom > H.SlotHeight / 3 then
+			countFits = false
+			note(tag, string.format("3x %dx%d in a %d slot", count.X, count.Y, H.SlotWidth))
+		end
+	end
+	check(noRowSame, "no trap out, no row: the strip and everything over it are exactly where they were",
+		table.concat(notes, " | "))
+	check(rowShape, "a trap out: a strip-wide row RemoveGap over the strip, the drawn button's height on a "
+		.. "mouse screen and RemoveTouch on a touch screen", table.concat(notes, " | "))
+	check(bandOver, "the item name's band stands just over the row", table.concat(notes, " | "))
+	check(fitsAll, "every screen that fit without the row fits with it -- nothing within 8 px of anything",
+		table.concat(notes, " | "))
+	check(iconsOver, "four boost icons stand over the name band, 8 px clear of the row", table.concat(notes, " | "))
+	check(toastOver, "and the notices over the icons, clear of the row", table.concat(notes, " | "))
+	check(slotsOk, "over EVERY slot: the plate just over that slot, the press on the whole row over it, inside "
+		.. "the strip's columns, clear of the name band and 8 px from both thumbs", table.concat(notes, " | "))
+	check(touchBig, "on every touch screen the press is at least 44 x 44", table.concat(notes, " | "))
+	check(wordsFit, "REMOVE fits its plate in every face", table.concat(notes, " | "))
+	check(countFits, "and \"3x\" fits under a trap's picture, bottom centre, in every face", table.concat(notes, " | "))
+
+	-- The owners re-place when the row starts or stops (it is a measured fact).
+	local loadout = sourceOf("LoadoutUI") or ""
+	local toastSrc = sourceOf("ActionToastUI") or ""
+	local iconsSrc2 = sourceOf("BoostIconsUI") or ""
+	local cashSrc = sourceOf("CashUI") or ""
+	local tutorialSrc = sourceOf("TutorialUI") or ""
+	check(loadout:find("GetAttributeChangedSignal(GameConfig.Hotbar.RemoveRowAttribute):Connect(layoutHud)", 1, true)
+			and toastSrc:find("GetAttributeChangedSignal(GameConfig.Hotbar.RemoveRowAttribute):Connect(place)", 1, true)
+			and iconsSrc2:find("GetAttributeChangedSignal(GameConfig.Hotbar.RemoveRowAttribute):Connect(place)", 1, true)
+			and cashSrc:find("GetAttributeChangedSignal(GameConfig.Hotbar.RemoveRowAttribute)", 1, true)
+			and tutorialSrc:find("GetAttributeChangedSignal(Config.Hotbar.RemoveRowAttribute):Connect(placeBanner)", 1, true),
+		"LoadoutUI, the notices, the icon row, the cash block and the guide each re-place when the row comes or goes")
+	check(loadout:find("hotTop = layout.namePopup.y", 1, true) ~= nil,
+		"and the Bag's foot stands over the name band the layout placed -- over the row while it stands")
+end
+
+
+--==============================================================================
+-- THE EVENTS BUTTON (2026-10-04, EventsUI)
+--
+-- Placed where nothing that shipped moves. On a desktop (and a TV) it stands
+-- beside Settings, inside the band the 130-wide slabs left, so the rail's
+-- footprint -- and everything placed round it -- is what it was. In compact and
+-- on a phone it stands under the Bag at the right edge, 8 px under the top
+-- row, a group of its own: the compact row and the phone's top row keep their
+-- ends, so TELEPORT, the boosts and the notices are centred where they were.
+-- (Measured on the way: a fifth compact cell put TELEPORT 38 px off the
+-- clock's centre in a 700 x 400 window; beside WALK MODE, the boosts stacked on
+-- a 640-px phone; a fourth dock tile has no 44-px room on the 772 x 360,
+-- 705 x 338 and 640 x 360 phones.)
+--==============================================================================
+say("-- the walk mode switch --")
+do
+	-- 2026-10-04, the horizontal switch: label-wide (WalkCompact) off a desktop.
+	-- In compact it stands LEFT OF EVENTS, 8 px off it and 8 px under the row --
+	-- in the row it pushed TELEPORT off the clock's centre, under Index a short
+	-- window's lifted cash block met it -- a group of its own, clear of all.
+	local ok, notes = true, {}
+	local windows = { { 860, 700 }, { 700, 400 }, { 1400, 400 }, { 899, 700 }, { 560, 320 }, { 640, 400 } }
+	for _, size in ipairs(windows) do
+		local L = HudLayout.solve(screen(size[1], size[2], { touch = false }))
+		local w, e = L.walk, L.events
+		local named = false
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			if g.name == "walk" and g.rect == w then
+				named = true
+			end
+		end
+		local placed = L.compact and w.w == CFG.WalkCompact.X and w.h == CFG.WalkCompact.Y
+			and w.x + w.w + CFG.Gap == e.x and w.y == e.y and w.y == L.railBottom + CFG.Gap
+		local clear = #HudLayout.problems(L) == 0
+		if not (placed and named and clear) then
+			ok = false
+			table.insert(notes, string.format("%dx%d %s%s%s", size[1], size[2], r2s(w),
+				if named then "" else " (no walk group)",
+				if clear then "" else " " .. table.concat(HudLayout.problems(L), "; ")))
+		end
+	end
+	check(ok, "compact: WALK MODE's switch stands left of EVENTS, 8 px off it and 8 px under the row, label-wide, "
+		.. "a group of its own, and nothing overlaps", table.concat(notes, "; "))
+end
+
+say("-- the events button --")
+do
+	-- Fresh names: I, W and S are reused for other things further up.
+	local I, W, S, G6 = RAIL.Inset, RAIL.WideSize, RAIL.SquareSize, RAIL.Gap
+	local row = W.Y + G6
+	local deskOk, deskNotes = true, {}
+	for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.new(1600, 900),
+		Vector2.new(1920, 1080), Vector2.new(2560, 1440) }) do
+		local L = HudLayout.solve(screen(size.X, size.Y))
+		local e = L.events
+		local beside = e.x == I + S.X + G6 and e.y == I + row * 2 and e.w == S.X and e.h == S.Y
+		local inBand = e.x + e.w <= L.railRight and e.y + e.h <= L.railBottom
+			and L.railRight == I + W.X and L.railBottom == L.walk.y + L.walk.h
+		local apart = true
+		for _, other in ipairs({ L.index, L.shop, L.settings, L.walk }) do
+			if HudLayout.gap(e, other) < G6 - 1e-6 then
+				apart = false
+			end
+		end
+		if not (beside and inBand and apart) then
+			deskOk = false
+			table.insert(deskNotes, string.format("%dx%d %s", size.X, size.Y, r2s(e)))
+		end
+	end
+	check(deskOk, "desktop: EVENTS is a 50 x 50 square beside Settings, inside the rail's band, the rail's 6 px "
+		.. "from Shop, Settings and WALK MODE -- the band (railRight, railBottom) exactly as it shipped",
+		table.concat(deskNotes, "; "))
+
+	local offOk, offNotes = true, {}
+	local PP = CFG.Phone.Panel
+	for _, case in ipairs(everyScreen) do
+		local L = HudLayout.solve(case.input)
+		if L.compact then
+			local e = L.events
+			local M8 = CFG.Margin
+			-- On a phone the SECOND square of the panel under the Bag (INVITE first
+			-- since 2026-10-06), which is its group -- in its scrolling canvas; in a
+			-- small window 50 x 50 under the Bag.
+			local view = L.dockView
+			local placed = if L.sidebar
+				then view ~= nil and e.x == view.x + PP.Pad and e.y == view.y + PP.Pad + e.h + PP.Gap and e.w == e.h
+					and e.w <= PP.Tile and e.w >= PP.MinTile
+				else e.w == S.X and e.h == S.Y and e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
+			-- A square scrolled out of the viewport is clipped by it: only the part that
+			-- shows is measured (the viewport itself is the dock's group).
+			if L.sidebar and view and e.y + e.h > view.y + view.h then
+				e = { x = e.x, y = e.y, w = e.w, h = math.max(0, view.y + view.h - e.y) }
+			end
+			local own = if L.sidebar then "dock" else "events"
+			local inside = e.x >= M8 and e.y >= M8 and e.x + e.w <= L.safe.X - M8 and e.y + e.h <= L.safe.Y - M8
+			local clear = true
+			for _, g in ipairs(HudLayout.groups(L, true)) do
+				if g.name ~= own and HudLayout.gap(e, g.rect) < CFG.Gap - 1e-6 then
+					clear = false
+					table.insert(offNotes, case.tag .. " near " .. g.name)
+				end
+			end
+			for _, zone in ipairs({ L.thumb, L.jump }) do
+				if zone and HudLayout.gap(e, zone) < CFG.Gap - 1e-6 then
+					clear = false
+					table.insert(offNotes, case.tag .. " near a thumb")
+				end
+			end
+			for _, b in ipairs({ L.teleport, L.obby, L.biomes }) do
+				if b.w > 0 and HudLayout.gap(e, b) < CFG.Gap - 1e-6 then
+					clear = false
+					table.insert(offNotes, case.tag .. " near TELEPORT / OBBY / BIOMES")
+				end
+			end
+			-- Since 2026-10-04 Walk Mode's switch is off the row (left of EVENTS in
+			-- compact): the row ends at Settings. A phone's left column (2026-10-05)
+			-- ends at the switch rows under Shop, its right one at Index.
+			local ends = if L.sidebar
+				then L.railRight == L.walk.x + L.walk.w and L.rightLeft == L.index.x
+				else L.railRight == L.settings.x + L.settings.w and L.rightLeft == L.garden.x
+			if not (placed and inside and clear and ends) then
+				offOk = false
+				table.insert(offNotes, case.tag .. " " .. r2s(e))
+			end
+		end
+	end
+	check(offOk, "compact: EVENTS stands 50 x 50 under the Bag, 8 px under the row; every phone: the second square "
+		.. "of the panel under the Bag -- inside the margin, 8 px clear of every other group, both thumbs, TELEPORT, "
+		.. "OBBY and BIOMES, and the rows ending where the layout says", table.concat(offNotes, "; "))
+
+	local tvOk, tvNotes = true, {}
+	for _, case in ipairs(tvCases) do
+		local input = tvCase(case.w, case.h, case.inset, case.keyboard)
+		local L = HudLayout.solve(input)
+		local e = L.events
+		local ok = if L.compact
+			then e.x == L.bag.x and e.y == L.bag.y + L.bag.h + CFG.Gap
+			else e.x == L.settings.x + S.X + G6 and e.y == L.settings.y
+		if not (ok and e.w == S.X and e.h == S.Y) then
+			tvOk = false
+			table.insert(tvNotes, case.tag .. " " .. r2s(e) .. " settings " .. r2s(L.settings))
+		end
+	end
+	check(tvOk, "a TV's title-safe canvas carries EVENTS with the rest of the rail", table.concat(tvNotes, "; "))
+
+	local src = sourceOf("EventsUI") or ""
+	check(count(src, "UIKit.railButton(") == 2 and src:find('name = "EventsButton"', 1, true) ~= nil
+			and src:find("local r = layout.events", 1, true) ~= nil
+			and src:find("UIKit.railShape(button, Vector2.new(r.w, r.h))", 1, true) ~= nil
+			and src:find("UIKit.placeRail(button, layout, r, playerGui)", 1, true) ~= nil,
+		"EventsUI owns its one rail button (art, or the violet slab until there is art), placed from "
+			.. "layout.events -- in the rail layer, or on a phone in the canvas of the panel under the Bag")
+	check(src:find("local away = layout.compact and player:GetAttribute(ATTR.OpenPanel) ~= nil", 1, true) ~= nil
+			and src:find("player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(placeButton)", 1, true) ~= nil,
+		"off a desktop it steps aside while a centre panel is open, as the dock does")
+end
+
+--==============================================================================
+-- THE OTHER PLANTS SWITCH (2026-10-05): WALK MODE'S TWIN, A DISPLAY PREFERENCE
+--
+-- A desktop's rail row under WALK MODE, the rail's 130 x 46 and its 6 px; in
+-- compact OthersCompact, as wide as its 12-px label, at the right edge under
+-- EVENTS (under WALK MODE in a window too short for that); on a phone a
+-- see-through row under Shop, over WALK MODE's (2026-10-05). A trap's REMOVE
+-- row never moves it.
+--==============================================================================
+say("-- the other plants switch --")
+do
+	local OC = CFG.OthersCompact
+	local I, W, G6, M8, G8 = RAIL.Inset, RAIL.WideSize, RAIL.Gap, CFG.Margin, CFG.Gap
+	local function labelW(text, size)
+		return TextService:GetTextSize(text, size, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	end
+	local widest = math.max(labelW("OTHER PLANTS: OFF", 13), labelW("OTHER PLANTS: ON", 13))
+	local widestSmall = math.max(labelW("OTHER PLANTS: OFF", 12), labelW("OTHER PLANTS: ON", 12))
+	check(widest + 4 <= W.X and widestSmall + 6 <= OC.X and OC.X >= 44 and OC.Y >= 44 and OC.Y == CFG.WalkHeight,
+		string.format("its longer words fit one line: %d px at 13 in the rail's %d, %d px at 12 in OthersCompact's %d; "
+			.. "46 tall, a full touch target", widest, W.X, widestSmall, OC.X))
+
+	local function same(a, b)
+		return math.abs(a.x - b.x) < 1e-6 and math.abs(a.y - b.y) < 1e-6 and a.w == b.w and a.h == b.h
+	end
+	local function named(L, name, r)
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			if g.name == name and same(g.rect, r) then
+				return true
+			end
+		end
+		return false
+	end
+
+	local deskOk, deskNotes = true, {}
+	for _, size in ipairs({ Vector2.new(1280, 720), Vector2.new(1366, 768), Vector2.new(1600, 900),
+		Vector2.new(1920, 1080), Vector2.new(2560, 1440), Vector2.new(1000, 609) }) do
+		local L = HudLayout.solve(screen(size.X, size.Y))
+		local o, w = L.others, L.walk
+		local placed = not L.compact and o.x == I and o.y == w.y + w.h + G6 and o.w == W.X and o.h == CFG.WalkHeight
+			and L.railBottom == w.y + w.h
+		local inRail = false
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			if g.name == "rail" and g.rect.x <= o.x and g.rect.y + g.rect.h >= o.y + o.h then
+				inRail = true
+			end
+		end
+		local problems = HudLayout.problems(L)
+		if not (placed and inRail and #problems == 0) then
+			deskOk = false
+			table.insert(deskNotes, string.format("%dx%d %s %s", size.X, size.Y, r2s(o), table.concat(problems, "; ")))
+		end
+	end
+	check(deskOk, "desktop: OTHER PLANTS is the rail's fifth row -- under WALK MODE, the rail's 6 px, 130 x 46 -- "
+		.. "inside the rail's group; the band (railBottom) as it shipped", table.concat(deskNotes, "; "))
+
+	-- Off a desktop: every listed phone and window, and the compact windows the
+	-- walk check lists, each with and without a trap's REMOVE row.
+	local offCases = {}
+	for _, case in ipairs(everyScreen) do
+		table.insert(offCases, case)
+	end
+	-- 600 x 348: the window where the band with a trap's REMOVE row up decides --
+	-- under EVENTS clears the belt's band without the row, not with it.
+	for _, size in ipairs({ { 899, 700 }, { 560, 320 }, { 640, 400 }, { 1400, 400 }, { 600, 348 } }) do
+		table.insert(offCases, { tag = string.format("%dx%d window", size[1], size[2]),
+			input = screen(size[1], size[2], { touch = false }) })
+	end
+	local offOk, offNotes, spots = true, {}, { underShop = 0, walkCompact = 0, eventsCompact = 0 }
+	local SW = CFG.Phone.Switch
+	for _, case in ipairs(offCases) do
+		local L = HudLayout.solve(case.input)
+		if L.compact then
+			local withRow = table.clone(case.input)
+			withRow.removeRow = true
+			local R = HudLayout.solve(withRow)
+			local o, w, e, sw = L.others, L.walk, L.events, L.safe.X
+			local bad = {}
+			-- On a phone a see-through row since the owner's layout of 2026-10-05;
+			-- in a small window OthersCompact as it was.
+			local rowSize = o.h == SW.H and o.w == SW.W
+			if not (if L.sidebar then rowSize and L.switchInline else o.w == OC.X and o.h == OC.Y) then
+				table.insert(bad, "size")
+			end
+			if not same(o, R.others) then
+				table.insert(bad, "moved for the REMOVE row " .. r2s(R.others))
+			end
+			if not named(L, "others", o) then
+				table.insert(bad, "no group of its own")
+			end
+			if o.x < M8 or o.y < M8 or o.x + o.w > sw - M8 or o.y + o.h > L.safe.Y - M8 then
+				table.insert(bad, "outside the margin")
+			end
+			for _, g in ipairs(HudLayout.groups(L, true)) do
+				if g.name ~= "others" and HudLayout.gap(o, g.rect) < G8 - 1e-6 then
+					table.insert(bad, "near " .. g.name)
+				end
+			end
+			if HudLayout.gap(o, L.namePopup) < G8 - 1e-6 and case.tag ~= "560x320 window" then
+				table.insert(bad, "near the name band")
+			end
+			-- And with a trap out: the lifted name band and the REMOVE row, on
+			-- every screen but the one too short for any spot (560 x 320).
+			if case.tag ~= "560x320 window" and (HudLayout.gap(R.others, R.namePopup) < G8 - 1e-6
+				or (R.removeRow and HudLayout.gap(R.others, R.removeRow) < G8 - 1e-6)) then
+				table.insert(bad, "near the lifted name band or the REMOVE row")
+			end
+			if L.sidebar then
+				if HudLayout.gap(o, L.jump) < G8 or HudLayout.gap(o, L.thumb) < G8 then
+					table.insert(bad, "within 8 px of a touch control")
+				end
+				if HudLayout.gap(R.others, R.namePopup) < G8 - 1e-6 or (R.removeRow and HudLayout.gap(R.others, R.removeRow) < G8 - 1e-6) then
+					table.insert(bad, "near the lifted name band or the REMOVE row")
+				end
+				if not (o.x >= sw * 2 / 3 or o.x + o.w <= sw / 3) then
+					table.insert(bad, "in the middle third")
+				end
+				-- Under Shop at the margin, WALK MODE under it in one column.
+				local shop = L.shop
+				if o.x == M8 and o.y == shop.y + shop.h + G8 and w.y == o.y + o.h + SW.Gap and w.x == o.x
+					and w.w == o.w then
+					spots.underShop += 1
+				else
+					table.insert(bad, "not under Shop, over WALK MODE")
+				end
+			else
+				if o.x + o.w == sw - M8 and o.y == e.y + e.h + G8 then
+					spots.eventsCompact += 1
+				elseif o.x + o.w == w.x + w.w and o.y == w.y + w.h + G8 then
+					spots.walkCompact += 1
+				else
+					table.insert(bad, "neither under EVENTS nor under WALK MODE")
+				end
+			end
+			if #bad > 0 then
+				offOk = false
+				table.insert(offNotes, case.tag .. " " .. r2s(o) .. ": " .. table.concat(bad, ", "))
+			end
+		end
+	end
+	check(offOk, "off a desktop: a see-through row under Shop on a phone (OthersCompact in a window), a group of "
+		.. "its own, 8 px clear of every group, the name band and both thumbs, out of a phone's middle third, never "
+		.. "moved by the REMOVE row", table.concat(offNotes, "; "))
+	say(string.format("        phones: %d under Shop; windows: %d under EVENTS, %d under WALK MODE",
+		spots.underShop, spots.eventsCompact, spots.walkCompact))
+	check(spots.underShop > 0 and spots.eventsCompact > 0,
+		"the phone's spot and the window's are in use on the listed screens")
+
+	local tvOk, tvNotes = true, {}
+	for _, case in ipairs(tvCases) do
+		local input = tvCase(case.w, case.h, case.inset, case.keyboard)
+		local L = HudLayout.solve(input)
+		local o, w, f = L.others, L.walk, L.frame
+		if not (f and o.x == w.x and o.y == w.y + w.h + G6 and o.x >= f.x and o.y + o.h <= f.y + f.h) then
+			tvOk = false
+			table.insert(tvNotes, case.tag .. " " .. r2s(o))
+		end
+	end
+	check(tvOk, "a TV's title-safe canvas carries OTHER PLANTS under WALK MODE with the rest of the rail",
+		table.concat(tvNotes, "; "))
+
+	local src = sourceOf("OtherPlantsUI") or ""
+	local walkSrc = sourceOf("WalkModeUI") or ""
+	local look = true
+	for _, line in ipairs({ "local LABEL_H = 18", "local TRACK_H = 20", "local THUMB = Vector2.new(26, 24)",
+		"local TRACK_WIDE = 64", "local TRACK_NARROW = 58", "local SLIDE_SECONDS = 0.14",
+		"local OFF_FACE = { LOOK.DangerTop, LOOK.DangerBottom, LOOK.DangerEdge }",
+		"local ON_FACE = { LOOK.ButtonTop, LOOK.ButtonBottom, LOOK.ButtonEdge }",
+		"UIKit.pressPop(slab, 1.04, 0.95)", "label.TextSize = if wide then 13 else 12" }) do
+		look = look and src:find(line, 1, true) ~= nil and walkSrc:find(line, 1, true) ~= nil
+	end
+	check(look and src:find("local r = layout.others", 1, true) ~= nil
+			and src:find("slab.Visible = not (phone and ObbyData.onCourse(player)) and not away", 1, true) ~= nil
+			and not src:find("FireServer", 1, true) and not src:find("GameEvent", 1, true),
+		"OtherPlantsUI: Walk Mode's look number for number, placed from layout.others, put away where Walk Mode is, "
+			.. "and no remote: the preference is this client's")
+	-- (Until 2026-10-05 the x2 button's message hung under the top-right row and
+	-- stepped left of this switch; the card rides the cash line now, its message
+	-- over the cash block, as everywhere else.)
+	local cashSrc = sourceOf("CashUI") or ""
+	check(not cashSrc:find("hung = HudLayout.rect(", 1, true) and not cashSrc:find("tip.Parent = gui", 1, true),
+		"the x2 card's message no longer hangs under a phone's top row: it stays with the card, over the cash block")
+end
+
+--==============================================================================
+-- THE OWNER'S MOBILE CORRECTIONS (2026-10-05; art/mockups/mobile-hud-2026-10-05)
+--
+-- On every touch screen: the top row one even row -- BIOMES | PLOT | OBBY 4 to 6
+-- px apart, PLOT the word alone (held above, THE TOP ROW and the button's own
+-- checks); the x2 card off the top-right row and beside the cash line, the
+-- artwork alone, its press never nearer the thumbstick's zone, the jump button
+-- or the belt than 8 px -- whatever the balance -- and the belt moving for it
+-- only for a player who has the card, on a screen with no other room. Since
+-- the owner's layout of that evening: PLOT on the screen's centre line, Shop in
+-- the top-left corner with OTHER PLANTS and WALK MODE as see-through rows under
+-- it whose words fit them inline, Index in the x2 card's old place, and EVENTS,
+-- WHAT'S NEW and Settings in a panel under the Bag (the phones' checks above,
+-- and THE WHAT'S NEW BUTTON below). A desktop and a small window are exactly
+-- what they were (section 1 and every desktop check above still hold).
+--==============================================================================
+say("-- the mobile corrections --")
+do
+	local P = CFG.Phone
+	check(P.RowGap >= 4 and P.RowGap <= 6,
+		string.format("the top row's three buttons stand %d px apart: the owner's 4 to 6", P.RowGap))
+	-- What is SEEN is that far apart too: the plates' black edge draws outside
+	-- them (measured in Play 2026-10-05: full-size plates left 1 px between the
+	-- outlines), and each row plate is inset by exactly that edge (RowStroke).
+	local kitSrc = Shared:FindFirstChild("UIKit").Source
+	check(P.RowStroke == 2.5 and kitSrc:find("local edge = UIKit.stroke(plate, BLACK, 2.5)\n\tedge.ApplyStrokeMode = "
+			.. "Enum.ApplyStrokeMode.Border", 1, true) ~= nil,
+		"each row plate is inset by UIKit.hudPlate's 2.5-px edge, so the outlines, not just the touch areas, stand "
+			.. P.RowGap .. " px apart")
+
+	-- THE x2 CARD BESIDE THE CASH. Placed as CashUI places it: off the cash text
+	-- at the face's BuffGap, never left of the layout's buffMinX, bottom-anchored
+	-- BuffDrop under the cash block's root; its press BuffHit square round it.
+	local face = CFG.CashStyle.Phone
+	local function textW(text)
+		return TextService:GetTextSize(text, face.CashSize, Enum.Font.LuckiestGuy, Vector2.new(4000, 200)).X
+	end
+	local short, long = textW("$0"), textW("$9.99Qa")
+	local hang = (face.BuffHit - face.BuffSize) / 2
+	local function press(L, width)
+		local x = math.max(L.buffMinX or face.BuffMinX, math.floor(width) + face.BuffGap)
+		local root = L.cashRoot
+		local bottom = root.y + root.h + face.BuffDrop
+		return rect(root.x + x - hang, bottom - face.BuffSize - hang, face.BuffHit, face.BuffHit)
+	end
+	local phones = {}
+	for _, case in ipairs(cases) do
+		table.insert(phones, case)
+	end
+	for _, c in ipairs({ { 772, 360, 400 }, { 600, 338, 260 }, { 640, 480, 250 }, { 430, 500, 250 } }) do
+		table.insert(phones, { tag = string.format("%dx%d phone, Roblox buttons to %d", c[1], c[2], c[3]),
+			input = screen(c[1], c[2], { touch = true, barLeft = c[3] }) })
+	end
+	table.insert(phones, { tag = "768x1024 portrait tablet", input = screen(768, 1024, { touch = true, keyboard = false }) })
+	table.insert(phones, { tag = "1366x1024 landscape tablet",
+		input = screen(1366, 1024, { touch = true, keyboard = false }) })
+	local ok, notes, slid, dropped = true, {}, {}, {}
+	for _, case in ipairs(phones) do
+		local L = HudLayout.solve(case.input)
+		local withCard = table.clone(case.input)
+		withCard.buff = true
+		local C = HudLayout.solve(withCard)
+		local trapped = table.clone(withCard)
+		trapped.removeRow = true
+		local T = HudLayout.solve(trapped)
+		local bad = {}
+		-- No x2 row button any more, and the card's leftmost place known. (Without
+		-- the card the belt is where it stood: centred, the phones' checks above.)
+		if L.boost ~= nil or L.buffMinX == nil then
+			table.insert(bad, "no buffMinX, or an x2 row button")
+		end
+		for _, width in ipairs({ short, long }) do
+			for _, X in ipairs({ C, T }) do
+				local p = press(X, width)
+				local worst = HudLayout.hotbarBand(X.hotbar, HudLayout.removeRowHeight(true) + HOT.RemoveGap)
+				if HudLayout.gap(p, X.thumb) < 8 - 1e-6 or HudLayout.gap(p, X.jump) < 8 - 1e-6 then
+					table.insert(bad, string.format("its press %s within 8 px of a thumb", r2s(p)))
+				end
+				if HudLayout.gap(p, worst) < 8 - 1e-6 then
+					table.insert(bad, string.format("its press %s within 8 px of the belt's band %s", r2s(p), r2s(worst)))
+				end
+				if p.x < 0 or p.y < 0 or p.x + p.w > X.safe.X or p.y + p.h > X.safe.Y then
+					table.insert(bad, "its press leaves the safe area " .. r2s(p))
+				end
+				if X.cash.x + X.cash.w < p.x + p.w - 1e-6 then
+					table.insert(bad, "the cash block's reservation stops short of the card")
+				end
+			end
+		end
+		-- The belt moves for the card only where it must: noted by screen.
+		if r2s(C.hotbar) ~= r2s(L.hotbar) then
+			if C.chip ~= L.chip then
+				table.insert(dropped, case.tag)
+			else
+				table.insert(slid, string.format("%s (%+.0f px)", case.tag, (C.hotbar.x + C.hotbar.w / 2)
+					- (L.hotbar.x + L.hotbar.w / 2)))
+			end
+		end
+		local problems = HudLayout.problems(C)
+		if not C.fits or #problems > 0 then
+			table.insert(bad, "with the card: " .. table.concat(problems, "; "))
+		end
+		if #bad > 0 then
+			ok = false
+			table.insert(notes, case.tag .. ": " .. table.concat(bad, ", "))
+		end
+	end
+	check(ok, "every phone and tablet: the x2 card rides the cash line -- from \"$0\" to \"$9.99Qa\" its 44-px press "
+		.. "keeps 8 px off the thumbstick, the jump button and the belt's band (a trap's REMOVE row up too), inside "
+		.. "the cash block's reservation -- and with the card nothing overlaps", table.concat(notes, "; "))
+	say("        the belt slides over for the card on: " .. (if #slid > 0 then table.concat(slid, ", ") else "none")
+		.. "; drops its Bag cell for it on: " .. (if #dropped > 0 then table.concat(dropped, ", ") else "none"))
+
+	-- THE SWITCH ROWS (the owner's layout, 2026-10-05 evening): see-through
+	-- rows under Shop. The words inline fit at Label px between PadLeft and the
+	-- switch, 4 px before it, the switch PadRight from the row's end; the thumb
+	-- a little taller than the track; ON or OFF in the track at Word px.
+	local SW = P.Switch
+	local function labelW(text, size)
+		return TextService:GetTextSize(text, size, Enum.Font.LuckiestGuy, Vector2.new(4000, 100)).X
+	end
+	local oth, walkW = GameConfig.OtherPlants.Label, GameConfig.WalkMode.Label
+	local onW = math.max(labelW(GameConfig.WalkMode.OnText, SW.Word), labelW(GameConfig.WalkMode.OffText, SW.Word),
+		labelW(GameConfig.OtherPlants.OnText, SW.Word), labelW(GameConfig.OtherPlants.OffText, SW.Word))
+	check(SW.PadLeft + labelW(oth, SW.Label) + 4 + SW.Track.X + SW.PadRight <= SW.W
+			and SW.PadLeft + labelW(walkW, SW.Label) + 4 + SW.Track.X + SW.PadRight <= SW.W
+			and SW.Thumb >= SW.Track.Y and SW.Thumb <= SW.H and onW <= SW.Track.X - SW.Thumb - 2
+			and SW.Label >= 10 and SW.Word >= 8 and SW.Gap >= CFG.Gap,
+		string.format("the see-through rows hold their words inline: OTHER PLANTS %d px and WALK MODE %d at %d, "
+			.. "beside a %d x %d switch whose ON / OFF (%d px at %d) fits beside its thumb, in %d x %d rows a group's "
+			.. "8 px apart", labelW(oth, SW.Label), labelW(walkW, SW.Label), SW.Label, SW.Track.X, SW.Track.Y, onW,
+			SW.Word, SW.W, SW.H))
+	local walkSrc, othersSrc = sourceOf("WalkModeUI") or "", sourceOf("OtherPlantsUI") or ""
+	local rowLines = true
+	for _, line in ipairs({ "local ROW = HudLayout.Config.Phone.Switch", "local inline = layout.switchInline == true",
+		"stateWord.Visible = inline", "label.TextSize = ROW.Label",
+		"track.Size = UDim2.fromOffset(ROW.Track.X, ROW.Track.Y)", "thumb.Size = UDim2.fromOffset(ROW.Thumb, ROW.Thumb)",
+		"local stateWord = UIKit.outlined(track, \"State\", ROW.Word, WHITE, 1)" }) do
+		rowLines = rowLines and walkSrc:find(line, 1, true) ~= nil and othersSrc:find(line, 1, true) ~= nil
+	end
+	check(rowLines and walkSrc:find("label.Text = WALK.Label\n", 1, true) ~= nil
+			and othersSrc:find("label.Text = OTHERS.Label\n", 1, true) ~= nil
+			and not walkSrc:find("RowPlate", 1, true) and not othersSrc:find("RowPlate", 1, true),
+		"both switches draw the see-through row alike on a phone: no plate behind it, the words inline, the small "
+			.. "switch with ON or OFF in it")
+	local teleSrc, returnSrc = sourceOf("PlotTeleportUI") or "", sourceOf("ObbyUI") or ""
+	check(teleSrc:find('label.Text = if short then "PLOT" else "TELEPORT TO PLOT"', 1, true) ~= nil
+			and teleSrc:find("icon.Visible = not short", 1, true) ~= nil
+			and teleSrc:find("remote:FireServer(PLOT.TeleportAction)", 1, true) ~= nil
+			and returnSrc:find("icon.Visible = layout.returnWide", 1, true) ~= nil,
+		"on a touch screen the button says PLOT with no icon and sends the same teleport; RETURN TO PLOT keeps its "
+			.. "words on the course, over BIOMES' and PLOT's span")
+end
+
+--==============================================================================
+-- THE WHAT'S NEW BUTTON (2026-10-05, UpdateLogUI)
+--
+-- The update log's square, placed where nothing that shipped moves: every
+-- check above holds to the pixel with it standing. On a desktop and a TV under
+-- the Bag at the right edge, 8 px under it, where no desktop panel reaches; in
+-- compact under OTHER PLANTS or under EVENTS at the right edge, else under
+-- Index -- a group of its own in both, 50 x 50, or the touch floor's 44 where
+-- only that fits; on a phone the middle square of the panel under the Bag (the
+-- owner's layout of 2026-10-05 evening), part of that panel's group; 8 px
+-- clear of every other group and badge, both thumbs, TELEPORT, OBBY and
+-- BIOMES, ADMIN, the tutorial banner and its skip line, the toast and the icon
+-- row; out of a phone's middle third; and never moved by a trap's REMOVE row,
+-- nor passed over by the lifted name band. Where no spot clears all of that
+-- the rect is empty and the button stays hidden, as OBBY does -- on the screens
+-- HIDDEN names and no others: none since the top-right row took it.
+--==============================================================================
+say("-- the what's new button --")
+do
+	local U, M8, G8 = CFG.Updates, CFG.Margin, CFG.Gap
+	local function same(a, b)
+		return math.abs(a.x - b.x) < 1e-6 and math.abs(a.y - b.y) < 1e-6 and a.w == b.w and a.h == b.h
+	end
+	local function holds(outer, inner)
+		return inner.x >= outer.x - 1e-6 and inner.y >= outer.y - 1e-6 and inner.x + inner.w <= outer.x + outer.w + 1e-6
+			and inner.y + inner.h <= outer.y + outer.h + 1e-6
+	end
+	local HIDDEN: { [string]: boolean } = {}
+	local all = {}
+	for _, case in ipairs(everyScreen) do
+		table.insert(all, case)
+	end
+	table.insert(all, { tag = "1024x600 desktop", input = screen(1024, 600) })
+	table.insert(all, { tag = "1920x1080 console", input = screen(1920, 1080, { keyboard = false }) })
+	for _, size in ipairs({ { 1400, 400 }, { 899, 700 }, { 560, 320 }, { 640, 400 }, { 600, 348 }, { 640, 480 },
+		{ 430, 500 } }) do
+		table.insert(all, { tag = string.format("%dx%d window", size[1], size[2]),
+			input = screen(size[1], size[2], { touch = false }) })
+	end
+	table.insert(all, { tag = "640x480 window, Roblox buttons to 250",
+		input = screen(640, 480, { touch = false, barLeft = 250 }) })
+	for _, c in ipairs({ { 772, 360, 400 }, { 600, 338, 260 }, { 640, 480, 250 }, { 430, 500, 250 } }) do
+		table.insert(all, { tag = string.format("%dx%d phone, Roblox buttons to %d", c[1], c[2], c[3]),
+			input = screen(c[1], c[2], { touch = true, barLeft = c[3] }) })
+	end
+	table.insert(all, { tag = "768x1024 portrait tablet", input = screen(768, 1024, { touch = true, keyboard = false }) })
+	table.insert(all, { tag = "1366x1024 landscape tablet",
+		input = screen(1366, 1024, { touch = true, keyboard = false }) })
+	for _, tv in ipairs(tvCases) do
+		table.insert(all, { tag = tv.tag .. " TV", input = (tvCase(tv.w, tv.h, tv.inset, tv.keyboard)) })
+	end
+
+	local ok, notes = true, {}
+	local spots = { bag = 0, others = 0, events = 0, index = 0, panel = 0 }
+	local shown, small, hiddenOn = 0, 0, {}
+	for _, case in ipairs(all) do
+		local L = HudLayout.solve(case.input)
+		local u = L.updates
+		local bad = {}
+		-- On a phone the square may stand below the panel's viewport, where its
+		-- canvas scrolls (2026-10-06): the viewport clips it, so its clearances are
+		-- measured on the part that shows.
+		local seen = u
+		local view = L.dockView
+		if L.sidebar and view and u.w > 0 and u.y + u.h > view.y + view.h then
+			seen = rect(u.x, math.min(u.y, view.y + view.h), u.w, math.max(0, view.y + view.h - u.y))
+		end
+		-- Its group: on a phone the panel's under the Bag; anywhere else its own.
+		local inPanel = L.sidebar and u.w > 0
+		local home = if inPanel then "dock" else "updates"
+		local listed = false
+		for _, g in ipairs(HudLayout.groups(L, true)) do
+			if g.name == home then
+				listed = if inPanel then holds(g.rect, seen) else same(g.rect, u)
+			end
+		end
+		if u.w <= 0 or u.h <= 0 then
+			table.insert(hiddenOn, case.tag)
+			if not HIDDEN[case.tag] then
+				table.insert(bad, "hidden where HIDDEN does not say it has no room")
+			end
+			if listed then
+				table.insert(bad, "an empty rect listed as a group")
+			end
+		else
+			shown += 1
+			if HIDDEN[case.tag] then
+				table.insert(bad, "stands where HIDDEN says it has no room")
+			end
+			local full = u.w == U.Size and u.h == U.Size
+			local tight = u.w == U.Tight and u.h == U.Tight
+			-- On a phone the panel's square, the size EVENTS and Settings are.
+			local square = inPanel and u.w == u.h and u.w == L.events.w and u.w == L.settings.w
+			if not (full or tight or square) or U.Tight < 44 or U.Size ~= RAIL.SquareSize.X then
+				table.insert(bad, string.format("size %gx%g", u.w, u.h))
+			end
+			if tight then
+				small += 1
+			end
+			if not listed then
+				table.insert(bad, "not in its group (" .. home .. ")")
+			end
+			local box = L.frame or rect(0, 0, L.safe.X, L.safe.Y)
+			if seen.x < box.x + M8 or seen.y < box.y + M8 or seen.x + seen.w > box.x + box.w - M8
+				or seen.y + seen.h > box.y + box.h - M8 then
+				table.insert(bad, "outside the margin")
+			end
+			for _, g in ipairs(HudLayout.groups(L, true)) do
+				if g.name ~= home and HudLayout.gap(seen, g.rect) < G8 - 1e-6 then
+					table.insert(bad, "near " .. g.name)
+				end
+			end
+			local indexBadge, gardenBadge = HudLayout.badges(L)
+			if HudLayout.gap(seen, indexBadge) < G8 - 1e-6 or HudLayout.gap(seen, gardenBadge) < G8 - 1e-6 then
+				table.insert(bad, "near a badge")
+			end
+			for _, zone in ipairs({ L.thumb, L.jump }) do
+				if zone and HudLayout.gap(seen, zone) < G8 - 1e-6 then
+					table.insert(bad, "near a thumb")
+				end
+			end
+			for _, b in ipairs({ L.teleport, L.obby, L.biomes, L.banner, L.skip, L.toast }) do
+				if b.w > 0 and HudLayout.gap(seen, b) < G8 - 1e-6 then
+					table.insert(bad, "near TELEPORT, OBBY, BIOMES, the banner, SKIP or the toast " .. r2s(b))
+				end
+			end
+			-- ADMIN, in window space like the clock (a TV's is the canvas's own).
+			local admin = L.admin
+			if admin and not L.frame then
+				local viewport = case.input.viewport
+				local originX = if viewport then (viewport.X - L.safe.X) / 2 else 0
+				local a = rect(admin.x - originX, admin.y - (case.input.insetTop or 0), admin.w, admin.h)
+				if HudLayout.gap(u, a) < G8 - 1e-6 then
+					table.insert(bad, "near ADMIN")
+				end
+			end
+			if L.sidebar and HudLayout.gap(u, rect(L.safe.X / 3, 0, L.safe.X / 3, L.safe.Y)) < G8 - 1e-6 then
+				table.insert(bad, "in or by the middle third")
+			end
+			-- A trap out: the same spot, clear of the lifted name band and the row.
+			local withRow = table.clone(case.input)
+			withRow.removeRow = true
+			local R = HudLayout.solve(withRow)
+			if not same(u, R.updates) then
+				table.insert(bad, "moved for the REMOVE row " .. r2s(R.updates))
+			end
+			if HudLayout.gap(R.updates, R.namePopup) < G8 - 1e-6
+				or (R.removeRow and HudLayout.gap(R.updates, R.removeRow) < G8 - 1e-6) then
+				table.insert(bad, "near the lifted name band or the REMOVE row")
+			end
+			-- Four boosts running: the same spot, clear of the icon row and the toast over it.
+			local busy = table.clone(case.input)
+			busy.icons = 4
+			local B = HudLayout.solve(busy)
+			if not same(u, B.updates) or (B.icons and HudLayout.gap(B.updates, B.icons) < G8 - 1e-6)
+				or HudLayout.gap(B.updates, B.toast) < G8 - 1e-6 then
+				table.insert(bad, "moved for, or near, the icon row and the toast over it")
+			end
+			-- Its place, by name.
+			local where: string? = nil
+			if not L.compact then
+				if full and u.x + u.w == L.bag.x + L.bag.w and u.y == L.bag.y + L.bag.h + G8 then
+					where = "bag"
+				end
+			elseif L.sidebar then
+				if square and u.x == L.events.x and u.y == L.events.y + L.events.h + CFG.Phone.Panel.Gap
+					and L.settings.y == u.y + u.h + CFG.Phone.Panel.Gap
+					and u.y + u.h <= L.dockView.y + L.dockCanvas then
+					where = "panel"
+				end
+			else
+				if u.x + u.w == L.others.x + L.others.w and u.y == L.others.y + L.others.h + G8 then
+					where = "others"
+				elseif u.x + u.w == L.events.x + L.events.w and u.y == L.events.y + L.events.h + G8 then
+					where = "events"
+				elseif u.x == L.index.x and u.y == L.index.y + L.index.h + G8 then
+					where = "index"
+				end
+			end
+			if where then
+				spots[where] += 1
+			else
+				table.insert(bad, "not in one of its places")
+			end
+			-- The rows keep their ends: everything placed round them is where it was.
+			local ends = if L.sidebar
+				then L.railRight == L.walk.x + L.walk.w and L.rightLeft == L.index.x
+				elseif L.compact then L.railRight == L.settings.x + L.settings.w and L.rightLeft == L.garden.x
+				else L.railRight == L.index.x + RAIL.WideSize.X and L.rightLeft == L.garden.x
+					and L.railBottom == L.walk.y + L.walk.h
+			if not ends then
+				table.insert(bad, "the rows' ends moved")
+			end
+		end
+		if #bad > 0 then
+			ok = false
+			table.insert(notes, case.tag .. " " .. r2s(u) .. ": " .. table.concat(bad, ", "))
+		end
+	end
+	check(ok, "WHAT'S NEW: 50 x 50 or 44 x 44 in one of its places -- under the Bag; under OTHER PLANTS, under "
+		.. "EVENTS or under Index (a group of its own); on a phone between EVENTS and Settings in the panel under the "
+		.. "Bag (that panel's group) -- inside the margin, 8 px clear of every other group and badge, both thumbs, "
+		.. "TELEPORT, OBBY, "
+		.. "BIOMES, ADMIN, the banner, SKIP, the toast and the icon row, out of a phone's middle third, never moved "
+		.. "by the REMOVE row or the icons; the rows' ends as they were; hidden on HIDDEN's screens and nowhere else",
+		table.concat(notes, "; "))
+	say(string.format("        stands on %d of %d screens: %d under the Bag, %d under OTHER PLANTS, %d under EVENTS, "
+		.. "%d under Index, %d in a phone's panel under the Bag (%d at 44 x 44); hidden on: %s",
+		shown, #all, spots.bag, spots.others, spots.events, spots.index, spots.panel, small,
+		if #hiddenOn > 0 then table.concat(hiddenOn, ", ") else "none"))
+	check(spots.bag > 0 and spots.others > 0 and spots.events > 0 and spots.index > 0 and spots.panel > 0,
+		"every one of its places is in use on the listed screens")
+
+	local src = sourceOf("UpdateLogUI") or ""
+	local hooks = count(src, "RenderStepped") + count(src, "Heartbeat") + count(src, "BindToRenderStep")
+		+ count(src, "RunService.Stepped")
+	check(count(src, "UIKit.railButton(") == 1 and src:find('name = "UpdatesButton"', 1, true) ~= nil
+			and src:find("local layout = HudLayout.solve(HudLayout.measure(gui))", 1, true) ~= nil
+			and src:find("local r = layout.updates", 1, true) ~= nil
+			and src:find("UIKit.railShape(button, Vector2.new(r.w, r.h))", 1, true) ~= nil
+			and src:find("UIKit.placeRail(button, layout, r, playerGui)", 1, true) ~= nil
+			and src:find('gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeButton)', 1, true) ~= nil,
+		"UpdateLogUI owns its one rail button, placed from layout.updates -- in the rail layer, or on a phone in the "
+			.. "canvas of the panel under the Bag -- and asks again when its ScreenGui's size changes")
+	check(src:find("local away = layout.compact and player:GetAttribute(ATTR.OpenPanel) ~= nil", 1, true) ~= nil
+			and src:find("player:GetAttributeChangedSignal(ATTR.OpenPanel):Connect(placeButton)", 1, true) ~= nil
+			and src:find("if r.w <= 0 or r.h <= 0 or away then", 1, true) ~= nil,
+		"off a desktop it steps aside while a centre panel is open, and an empty rect hides it")
+	check(hooks == 0 and count(src, 'Instance.new("ScreenGui")') == 1
+			and not src:find('Instance.new("RemoteEvent")', 1, true) and not src:find("FireServer", 1, true)
+			and not src:find("InvokeServer", 1, true),
+		"one ScreenGui, no per-frame hook, no remote: the log is this client's", hooks)
+	check(not (sourceOf("RailDrawerUI") or ""):find("Updates", 1, true),
+		"RailDrawerUI is untouched: the dock is still Index, Shop and Settings")
 end
 
 end)

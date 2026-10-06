@@ -18,10 +18,16 @@
 --                       same rounded cartoon face and size, outlined dark. A
 --                       long message flows on under the line, left-aligned in
 --                       the centred block, its first words always beside the
---                       name. Up for ShowSeconds. One chime
---                       (GameConfig.announceChime) when a new one appears, on
---                       the UI bus -- the player's SOUND FX level and mute
---                       decide it -- and never twice for one id.
+--                       name. One chime (GameConfig.announceChime) when a new
+--                       one appears, on the UI bus -- the player's SOUND FX
+--                       level and mute decide it -- and never twice for one id.
+--   ONE AFTER ANOTHER   (2026-10-03) consecutive announcements no longer
+--                       replace each other: the server queues them and
+--                       publishes the queue (GameConfig.Announce.Attributes
+--                       .Queue) with each one's start and end in server time.
+--                       This draws the one whose time it is -- each in turn,
+--                       in order, at least MinShowSeconds, the last for
+--                       ShowSeconds -- and chimes as each comes up.
 --
 -- Both are read from Workspace attributes AnnouncementService publishes, so a
 -- player who joins late reads the same notice and the same time left as
@@ -38,6 +44,7 @@
 --==============================================================================
 
 local GuiService = game:GetService("GuiService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService = game:GetService("TextService")
@@ -454,6 +461,51 @@ end
 local heard: { [string]: boolean } = {}
 local starting = true
 
+-- THE QUEUE, as the server published it: decoded once per change, every field
+-- checked, at most 16 kept. Text in, text out -- nothing in it is run.
+type Entry = { id: string, text: string, from: string, s: number, e: number }
+local queueRaw: string? = nil
+local entries: { Entry } = {}
+
+local function readQueue(): { Entry }
+	local raw = Workspace:GetAttribute(ATTR.Queue)
+	local key = if type(raw) == "string" then raw else nil
+	if key == queueRaw then
+		return entries
+	end
+	queueRaw = key
+	entries = {}
+	if key == nil or #key > 20000 then
+		return entries
+	end
+	local ok, list = pcall(function()
+		return HttpService:JSONDecode(key :: string)
+	end)
+	if not ok or type(list) ~= "table" then
+		return entries
+	end
+	for _, v in ipairs(list) do
+		if type(v) == "table" and type(v.i) == "string" and type(v.t) == "string" and v.t ~= ""
+			and type(v.s) == "number" and type(v.e) == "number" and v.e > v.s then
+			table.insert(entries, {
+				id = v.i,
+				text = v.t,
+				from = if type(v.f) == "string" and v.f ~= "" then v.f else ANNOUNCE.Title,
+				s = v.s,
+				e = v.e,
+			})
+		end
+		if #entries >= 16 then
+			break
+		end
+	end
+	return entries
+end
+
+-- How long the ticker may sleep: to the next start or end in the queue, a
+-- second at most (the restart countdown's tick).
+local wakeIn = 1
+
 local function paint(): boolean
 	if guideUp() ~= guided then
 		place()
@@ -468,15 +520,25 @@ local function paint(): boolean
 	end
 	restartFrame.Visible = restarting
 
-	local text = Workspace:GetAttribute(ATTR.Text)
-	local untilAt = Workspace:GetAttribute(ATTR.Until)
-	local announcing = type(text) == "string" and text ~= "" and type(untilAt) == "number" and now < untilAt
-	if announcing then
-		local from = Workspace:GetAttribute(ATTR.From)
-		draw(if type(from) == "string" and from ~= "" then from else ANNOUNCE.Title, text :: string)
+	-- The one whose time it is, and when the queue next changes on screen.
+	local current: Entry? = nil
+	local nextAt = math.huge
+	for _, entry in ipairs(readQueue()) do
+		if entry.s <= now and now < entry.e then
+			if current == nil then
+				current = entry
+			end
+			nextAt = math.min(nextAt, entry.e)
+		elseif entry.s > now then
+			nextAt = math.min(nextAt, entry.s)
+		end
+	end
+	local announcing = current ~= nil
+	if current then
+		draw(current.from, current.text)
 		-- One chime per broadcast: a new id, never one this client has already
 		-- heard, never the one already up when it started.
-		if GameConfig.announceChime(heard, Workspace:GetAttribute(ATTR.Id), starting) then
+		if GameConfig.announceChime(heard, current.id, starting) then
 			SoundKit.play(ANNOUNCE.Chime)
 		end
 	end
@@ -484,7 +546,8 @@ local function paint(): boolean
 	if announcing then
 		drift()
 	end
-	return restarting or announcing
+	wakeIn = math.clamp(nextAt - now, 0.05, 1)
+	return restarting or announcing or nextAt < math.huge
 end
 
 local ticking = false
@@ -495,7 +558,7 @@ local function refresh()
 	ticking = true
 	task.spawn(function()
 		while gui.Parent and paint() do
-			task.wait(1)
+			task.wait(wakeIn)
 		end
 		ticking = false
 	end)

@@ -10,7 +10,12 @@
 --
 --   authorization     only the allowlist reaches Send, a forged name included
 --   filtering         a filter that fails or blocks sends nothing anywhere
---   cooldown          one announcement per admin per CooldownSeconds
+--   one after another (2026-10-03, replacing the 15 s cooldown) consecutive
+--                     announcements from one admin go at once, even with the
+--                     live one-a-second admin limit on; they queue and show
+--                     in order, never over each other; a resend, a flood and
+--                     an overfull queue are still refused; every other
+--                     action's one-a-second limit is unchanged
 --   duplicates        an id is shown once, this server's own included;
 --                     expired and malformed cross-server messages are dropped
 --   restart notice    the custom message or the default, the time, the
@@ -19,6 +24,7 @@
 -- Not here: real delivery between servers, a real restart, and the banner on
 -- a screen -- the Play check covers the banner and a late join.
 --==============================================================================
+local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local StarterPlayer = game:GetService("StarterPlayer")
@@ -66,6 +72,10 @@ local ok, err = pcall(function()
 	Announce.useClock(function()
 		return now
 	end)
+	-- The queue runs on the same moved clock, so moving it moves the screen.
+	Announce.useShowClock(function()
+		return now
+	end)
 	Announce.useFilter(function(text, userId)
 		table.insert(filterCalls, { text = text, userId = userId })
 		if filterMode == "fail" then
@@ -104,13 +114,23 @@ local ok, err = pcall(function()
 			and #filterCalls == 0 and #published == 0 and board:GetAttribute(ATTR.Text) == nil,
 		"anybody off the allowlist -- a borrowed name included -- is refused before the filter, the publisher or the "
 			.. "screen", r.message)
+	-- With the wait gone, a stranger hammering the remote is still refused every time.
+	local refusedAll = true
+	for i = 1, 12 do
+		local again = send(stranger, "server", "spam " .. i)
+		if again.ok or again.message ~= "Not authorized." or again.shown then
+			refusedAll = false
+		end
+	end
+	check(refusedAll and #filterCalls == 0 and #Announce.Queue() == 0 and board:GetAttribute(ATTR.Queue) == nil,
+		"twelve in a row from a stranger: twelve refusals, nothing filtered, queued or shown")
 	local adminA = person(ADMIN_A, "SpecAdminA")
 	r = send(adminA, "server", "  Welcome to the\nupdate!  ")
 	check(r.ok and r.message == "Shown to everyone in this server." and board:GetAttribute(ATTR.Text) == "Welcome to the update!"
 			and #published == 0,
 		"an admin's THIS SERVER message is shown here, on one tidy line, and published nowhere", r.message)
 	local untilAt = board:GetAttribute(ATTR.Until)
-	check(type(untilAt) == "number" and math.abs(untilAt - (Workspace:GetServerTimeNow() + A.ShowSeconds)) < 2
+	check(type(untilAt) == "number" and math.abs(untilAt - (now + A.ShowSeconds)) < 1e-6
 			and filterCalls[1].userId == ADMIN_A and filterCalls[1].text == "Welcome to the update!",
 		"for ShowSeconds, after the filter saw the cleaned words with the admin's UserId")
 
@@ -158,31 +178,152 @@ local ok, err = pcall(function()
 	check(not r.ok and string.find(r.message, "blocked", 1, true) ~= nil
 			and board:GetAttribute(ATTR.Id) == shownBefore and #published == 0,
 		"a filter that leaves only #s: nothing shown, nothing published", r.message)
+	check(not r.shown, "and the console is told nothing went anywhere, so it gives the words back")
 	filterMode = "pass"
 	r = send(adminC, "server", "after the outage")
-	check(r.ok, "and neither started the cooldown: the next good message goes at once", r.message)
+	check(r.ok, "the next good message goes at once", r.message)
 
 	--==========================================================================
-	-- 4. THE COOLDOWN
+	-- 4. ONE AFTER ANOTHER (2026-10-03): no wait between announcements; a
+	-- queue, in order; the safeguards that replaced the cooldown
 	--==========================================================================
-	say("\n-- the cooldown --")
-	now += 5
-	r = send(adminC, "server", "too soon")
-	check(not r.ok and string.find(r.message, "Wait 10 s", 1, true) ~= nil and board:GetAttribute(ATTR.Text) == "after the outage",
-		"five seconds later the same admin waits ten more", r.message)
+	say("\n-- one after another --")
+	now += 100
+	-- The live one-a-second admin limit, on: it must not hold announcements.
+	Admin.Config.MinInterval = 1
+	local burst = {}
+	for i = 1, 3 do
+		table.insert(burst, send(adminC, "server", "Consecutive " .. i))
+	end
+	local q = Announce.Queue()
+	check(burst[1].ok and burst[2].ok and burst[3].ok and #q == 3 and q[1].text == "Consecutive 1"
+			and q[2].text == "Consecutive 2" and q[3].text == "Consecutive 3",
+		"three from one admin back to back, no time passing, the one-a-second limit on: all three accepted, queued in "
+			.. "the order sent", burst[2].message .. " | " .. burst[3].message)
+	check(burst[1].message == "Shown to everyone in this server."
+			and string.find(burst[2].message, "Queued after 1 earlier announcement; up in about 5 s.", 1, true) ~= nil
+			and string.find(burst[3].message, "Queued after 2 earlier announcements; up in about 10 s.", 1, true) ~= nil
+			and burst[2].shown and burst[3].shown,
+		"each answer says where it stands: up now, or queued and when it comes up", burst[3].message)
+	check(q[1].startAt == now and q[1].endAt == now + A.MinShowSeconds and q[2].startAt == q[1].endAt
+			and q[2].endAt == q[2].startAt + A.MinShowSeconds and q[3].startAt == q[2].endAt
+			and q[3].endAt == q[3].startAt + A.ShowSeconds,
+		"one after another, never two at once: MinShowSeconds each while another waits, the last ShowSeconds")
+	-- What a screen shows over the next half minute, read the way AnnouncementUI
+	-- reads it: the published queue, the entry whose time it is.
+	local function upAt(list, t)
+		local found = nil
+		for _, e in ipairs(list) do
+			if e.s <= t and t < e.e then
+				if found then
+					return "OVERLAP"
+				end
+				found = e.t
+			end
+		end
+		return found
+	end
+	local list = HttpService:JSONDecode(board:GetAttribute(ATTR.Queue))
+	local seenOrder, overlap = {}, false
+	for t = now, now + 30, 0.25 do
+		local up = upAt(list, t)
+		if up == "OVERLAP" then
+			overlap = true
+		elseif up and seenOrder[#seenOrder] ~= up then
+			table.insert(seenOrder, up)
+		end
+	end
+	check(not overlap and table.concat(seenOrder, ",") == "Consecutive 1,Consecutive 2,Consecutive 3"
+			and board:GetAttribute(ATTR.Text) == "Consecutive 3",
+		"a screen reading the published queue shows 1, then 2, then 3 -- each once, none over another, nothing lost",
+		table.concat(seenOrder, ","))
+	-- Another action straight after an announcement: the one-a-second limit on it
+	-- is exactly as it was (a harmless one: a player who isn't here).
+	local rushed = Admin.Handle(adminC, "AddMoney", 987654321, 10)
+	check(not rushed.ok and string.find(rushed.message, "Too fast", 1, true) ~= nil,
+		"every other admin action keeps its one-a-second limit, counted from the announcement too", rushed.message)
+	check(send(adminC, "server", "Consecutive 4").ok, "and an announcement right after that still goes")
+	Admin.Config.MinInterval = 0
+
+	-- The one up gives way after MinShowSeconds -- not before, and at once if it
+	-- has been up longer.
+	now += 100
+	send(adminA, "server", "First of two")
+	now += 2
+	send(adminA, "server", "Second of two")
+	q = Announce.Queue()
+	local held = q[1].endAt == q[1].startAt + A.MinShowSeconds and q[2].startAt == q[1].endAt
+	now += 10
+	send(adminA, "server", "Third, later")
+	local after = HttpService:JSONDecode(board:GetAttribute(ATTR.Queue))
+	local prev, last = after[#after - 1], after[#after]
+	check(held and prev and prev.t == "Second of two" and prev.e == now and last.t == "Third, later" and last.s == now
+			and last.e == now + A.ShowSeconds,
+		"one sent 2 s into another waits until the first has had MinShowSeconds; one sent after that replaces it at once")
+
+	-- THE SAFEGUARDS
+	now += 100
+	local filtered = #filterCalls
+	r = send(adminC, "server", "Only once please")
+	local dup = send(adminC, "server", "Only once please")
+	check(r.ok and not dup.ok and string.find(dup.message, "just sent", 1, true) ~= nil and not dup.shown
+			and #filterCalls == filtered + 1 and #Announce.Queue() == 1,
+		"the same words twice in a row (a double press, a resend): sent once, the second answered without a send",
+		dup.message)
+	check(send(adminC, "all", "Only once please", true).ok,
+		"the same words to the other scope are a different announcement and go")
+	now += Announce.Config.DuplicateSeconds
+	check(send(adminC, "server", "Only once please").ok, "and the same words again after DuplicateSeconds go")
+
+	now += 100
+	local flood = person(ADMIN_B, "SpecFlood")
+	local accepted, refusal = 0, nil
+	filtered = #filterCalls
+	for i = 1, Announce.Config.Burst + 2 do
+		local reply = send(flood, "server", "flood " .. i)
+		if reply.ok then
+			accepted += 1
+		elseif not refusal then
+			refusal = reply.message
+		end
+	end
+	check(accepted == Announce.Config.Burst and refusal ~= nil and string.find(refusal, "Too many announcements at once", 1, true)
+			~= nil and #filterCalls == filtered + Announce.Config.Burst,
+		string.format("a flood from a forged client: the first %d go, the rest are refused before the filter",
+			Announce.Config.Burst), refusal)
+	now += Announce.Config.RefillSeconds
+	check(send(flood, "server", "after a breath").ok, "one more goes every RefillSeconds")
+
+	now += 100
+	local realBurst = Announce.Config.Burst
+	Announce.Config.Burst = 100
+	local full = nil
+	for i = 1, Announce.Config.MaxWaiting + 3 do
+		local reply = send(adminA, "server", "queue " .. i)
+		if not reply.ok then
+			full = reply.message
+			break
+		end
+	end
+	Announce.Config.Burst = realBurst
+	q = Announce.Queue()
+	check(full ~= nil and string.find(full, "already waiting to be shown", 1, true) ~= nil
+			and #q == Announce.Config.MaxWaiting + 1,
+		string.format("one up and %d waiting is the most the queue holds; the next is refused, nothing dropped",
+			Announce.Config.MaxWaiting), full)
 	local other = person(ADMIN_B, "SpecAdminB2")
-	check(send(other, "server", "the other admin").ok, "another admin is not held by it")
-	now += Announce.Config.CooldownSeconds
-	check(send(adminC, "server", "now it goes").ok, "and after the cooldown it goes")
+	now += 100
+	check(send(other, "server", "the other admin").ok, "and once it has played out, announcements go again")
 
 	--==========================================================================
 	-- 5. ALL SERVERS
 	--==========================================================================
 	say("\n-- all servers --")
 	now += 100
+	local publishedBefore = #published
 	r = send(adminA, "all", "Double cash this weekend", true)
 	local sent = published[#published]
-	check(r.ok and #published == 1 and sent.topic == Announce.Config.Topic and type(sent.payload.id) == "string"
+	check(r.ok and #published == publishedBefore + 1 and sent.topic == Announce.Config.Topic and type(sent.payload.id) == "string"
 			and sent.payload.text == "Double cash this weekend" and sent.payload.sentAt == now
 			and sent.payload.expiresAt == now + Announce.Config.TtlSeconds,
 		"confirmed, it is published once: an id, the filtered words, when it was sent and when it stops mattering")
@@ -330,8 +471,10 @@ local ok, err = pcall(function()
 			and not GameConfig.announceChime({}, 42, false), "nothing that is not an id chimes")
 	local untilBefore = board:GetAttribute(ATTR.Until)
 	local idBefore = board:GetAttribute(ATTR.Id)
+	local queueBefore = board:GetAttribute(ATTR.Queue)
 	local echo = Announce.Receive({ id = idBefore, text = "hello", from = "Far Admin", sentAt = now, expiresAt = now + 30 })
-	check(echo == "duplicate" and board:GetAttribute(ATTR.Until) == untilBefore and board:GetAttribute(ATTR.Id) == idBefore,
+	check(echo == "duplicate" and board:GetAttribute(ATTR.Until) == untilBefore and board:GetAttribute(ATTR.Id) == idBefore
+			and board:GetAttribute(ATTR.Queue) == queueBefore,
 		"a duplicate delivery touches nothing a client watches, so nothing can replay")
 	local cue = GameConfig.Sfx.Cues[A.Chime]
 	local info = GameConfig.Sfx.Cues.NoticeInfo
@@ -359,9 +502,27 @@ local ok, err = pcall(function()
 	check(string.find(ui, "Active = true", 1, true) == nil and string.find(ui, "TextButton", 1, true) == nil,
 		"and nothing in it takes input")
 	local _, plays = string.gsub(ui, "SoundKit%.play%(", "")
-	check(plays == 1 and string.find(ui, "if GameConfig.announceChime(heard, Workspace:GetAttribute(ATTR.Id), starting) then\n"
+	check(plays == 1 and string.find(ui, "if GameConfig.announceChime(heard, current.id, starting) then\n"
 			.. "\t\t\tSoundKit.play(ANNOUNCE.Chime)", 1, true) ~= nil,
-		"the banner plays one sound, only where announceChime says a new broadcast arrived")
+		"the banner plays one sound, only where announceChime says a new broadcast came up")
+	check(string.find(ui, "local raw = Workspace:GetAttribute(ATTR.Queue)", 1, true) ~= nil
+			and string.find(ui, "if entry.s <= now and now < entry.e then", 1, true) ~= nil
+			and string.find(ui, "task.wait(wakeIn)", 1, true) ~= nil
+			and string.find(ui, "Workspace:GetAttribute(ATTR.Text)", 1, true) == nil,
+		"the banner draws the server's queue, the one whose time it is, waking for the next -- not the single slot")
+	local console = Server.AdminService:FindFirstChild("AdminConsoleUI").Source
+	local handler = Server.AdminService.Source
+	check(string.find(service, "CooldownSeconds", 1, true) == nil and string.find(service, "Wait %d s", 1, true) == nil
+			and string.find(console, "Wait %d s", 1, true) == nil
+			and string.find(handler, "if action == \"Announce\" then\n\t\tlastRequest[sender] = now", 1, true) ~= nil
+			and string.find(handler, "if not AdminService.IsAdmin(sender) then", 1, true) ~= nil,
+		"no announcement wait left anywhere: not in the service, not in the console; the handler's allowlist still "
+			.. "comes first")
+	check(string.find(console, "table.insert(outbox, { scope = scope, text = text, confirmed = confirmed })\n"
+			.. "\t\tmessageBox.Text = \"\"", 1, true) ~= nil
+			and string.find(console, "local item = table.remove(outbox, 1) :: Outgoing", 1, true) ~= nil
+			and string.find(console, "if not shown and messageBox.Text == \"\" then", 1, true) ~= nil,
+		"the console takes each SEND into an outbox at once, sends them in order, and gives back words that went nowhere")
 	check(string.find(ui, "broadcast.BackgroundTransparency = 1", 1, true) ~= nil
 			and string.find(ui, "block.BackgroundTransparency = 1", 1, true) ~= nil
 			and string.find(ui, "local FACE = Enum.Font.FredokaOne", 1, true) ~= nil
@@ -378,6 +539,7 @@ end)
 
 Announce.useBoard(nil)
 Announce.useClock(nil)
+Announce.useShowClock(nil)
 Announce.useFilter(nil)
 Announce.usePublisher(nil)
 Announce.Init()

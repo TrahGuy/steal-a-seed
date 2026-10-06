@@ -101,60 +101,35 @@ button.Visible = false
 button.Parent = gui
 UIKit.clicks(button)
 
-local plate = Instance.new("TextLabel")
-plate.Name = "Plate"
-plate.AnchorPoint = Vector2.new(0.5, 0.5)
-plate.Position = UDim2.fromScale(0.5, 0.5)
-plate.Size = UDim2.fromScale(1, 1)
-plate.BackgroundColor3 = WHITE
-plate.BorderSizePixel = 0
-plate.Text = ""
-plate.Active = false
-plate.Parent = button
-UIKit.corner(plate, 12)
-UIKit.stroke(plate, BLACK, 2.5)
-UIKit.gradient(plate, SKY_TOP, SKY_BOTTOM)
-local plateScale = Instance.new("UIScale")
-plateScale.Parent = plate
-
-local rim = Instance.new("Frame")
-rim.Name = "Rim"
-rim.AnchorPoint = Vector2.new(0.5, 0.5)
-rim.Position = UDim2.fromScale(0.5, 0.5)
-rim.Size = UDim2.new(1, -5, 1, -5)
-rim.BackgroundTransparency = 1
-rim.BorderSizePixel = 0
-rim.Active = false
-rim.Parent = plate
-UIKit.corner(rim, 10)
-UIKit.stroke(rim, SKY_EDGE, 1.5, 0.2)
-
+-- The HUD's plate button (UIKit.hudPlate, the global UI pass 2026-10-04): the
+-- outline on the BORDER (it never drew on the old text-less label), the
+-- family's darker foot, the inner rim, the icon and the outlined word.
+local hud = UIKit.hudPlate(button, {
+	top = SKY_TOP,
+	bottom = SKY_BOTTOM,
+	rim = SKY_EDGE,
+	text = "BIOMES",
+})
+local plate = hud.plate
+local plateScale = hud.scale
+local rim = hud.rim
+local icon = hud.icon
+local label = hud.label
+-- 9 at the least, drawn: the word alone on a 640-px phone's row (HudLayout's
+-- `Tight`, drawn at the phone's 0.75) has 36 px for its 33.
+do
+	local fit = label:FindFirstChildOfClass("UITextSizeConstraint")
+	if fit then
+		fit.MinTextSize = 9
+	end
+end
 -- A small round tree on its trunk: the green start of the road, in 28 px.
-local icon = Instance.new("Frame")
-icon.Name = "Icon"
-icon.AnchorPoint = Vector2.new(0, 0.5)
-icon.Position = UDim2.new(0, 8, 0.5, 0)
-icon.Size = UDim2.fromOffset(28, 28)
-icon.BackgroundTransparency = 1
-icon.Active = false
-icon.Parent = plate
 local trunk = UIKit.piece(icon, "Trunk", 0.5, 0.8, 0.16, 0.34, BARK, 0.3)
 UIKit.stroke(trunk, BLACK, 1.5)
 local crown = UIKit.piece(icon, "Crown", 0.5, 0.4, 0.72, 0.62, LEAF_DARK, 1)
 UIKit.stroke(crown, BLACK, 1.5)
 UIKit.piece(icon, "Shine", 0.4, 0.32, 0.3, 0.26, LEAF, 1, nil, 3)
 
-local label = UIKit.outlined(plate, "Label", 16, WHITE, 2)
-label.AnchorPoint = Vector2.new(0, 0.5)
-label.TextScaled = true
-label.TextXAlignment = Enum.TextXAlignment.Center
-label.Text = "BIOMES"
--- 9 at the least, drawn: the word alone on a 640-px phone's row (HudLayout's
--- `Tight`, drawn at the phone's 0.75) has 36 px for its 33.
-local fit = Instance.new("UITextSizeConstraint")
-fit.MaxTextSize = 16
-fit.MinTextSize = 9
-fit.Parent = label
 
 local scale = Instance.new("UIScale")
 scale.Parent = button
@@ -179,6 +154,11 @@ local function place()
 		button.Size = UDim2.fromOffset(r.w, r.h)
 	end
 	plateScale.Scale = layout.teleportScale
+	-- The plate before its scale (2026-10-05): its touch area's own size, but on a
+	-- phone's even row exactly its touch area once drawn (HudLayout's biomesPlate).
+	if roomy then
+		plate.Size = UDim2.fromOffset(layout.biomesPlate.X, layout.biomesPlate.Y)
+	end
 	icon.Visible = layout.biomesWide
 	if layout.biomesWide then
 		label.Position = UDim2.new(0, 42, 0.5, 1)

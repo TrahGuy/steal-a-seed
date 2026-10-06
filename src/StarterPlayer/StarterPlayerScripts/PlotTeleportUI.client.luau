@@ -86,9 +86,10 @@ gui.Parent = playerGui
 -- exactly HudLayout's `teleport` rect, the thing a click, a tap and the
 -- controller's selection land on -- and draws nothing itself. Everything seen
 -- is the PLATE inside it, drawn at HudLayout's `teleportScale`: 1 everywhere,
--- so a desktop's button is the pixels it always was; smaller on a phone, so
--- the smaller-looking button keeps its whole 196 x 44 target (HudLayout,
--- TELEPORT TO PLOT ON A PHONE). The plate is the old button's own set-up
+-- so a desktop's button is the pixels it always was; smaller on a phone, where
+-- since the owner's mobile corrections (2026-10-05) the target is only as
+-- wide as the plate drawn -- PLOT, 51 x 44 (HudLayout, TELEPORT TO PLOT ON A
+-- PHONE). The plate is the old button's own set-up
 -- moved one level down -- a text object with no text, the same corner,
 -- gradient and stroke -- so it renders exactly as the button did.
 --==============================================================================
@@ -104,56 +105,22 @@ button.Visible = false
 button.Parent = gui
 UIKit.clicks(button)
 
-local plate = Instance.new("TextLabel")
-plate.Name = "Plate"
-plate.AnchorPoint = Vector2.new(0.5, 0.5)
-plate.Position = UDim2.fromScale(0.5, 0.5)
-plate.Size = UDim2.fromScale(1, 1)
-plate.BackgroundColor3 = WHITE
-plate.BorderSizePixel = 0
-plate.Text = ""
-plate.Active = false
-plate.Parent = button
-UIKit.corner(plate, 12)
-UIKit.stroke(plate, BLACK, 2.5)
-UIKit.gradient(plate, RAIL.ShopTileTop, RAIL.ShopTileBottom)
-local plateScale = Instance.new("UIScale")
-plateScale.Parent = plate
+-- The HUD's plate button (UIKit.hudPlate, the global UI pass 2026-10-04): the
+-- outline on the BORDER (it never drew on the old text-less label), the
+-- family's darker foot, the inner rim, the icon and the outlined word.
+local hud = UIKit.hudPlate(button, {
+	top = RAIL.ShopTileTop,
+	bottom = RAIL.ShopTileBottom,
+	rim = RAIL.ShopEdge,
+	image = RAIL.GardenIcon,
+	text = "TELEPORT TO PLOT",
+})
+local plate = hud.plate
+local plateScale = hud.scale
+local rim = hud.rim
+local icon = hud.icon
+local label = hud.label
 
-local rim = Instance.new("Frame")
-rim.Name = "Rim"
-rim.AnchorPoint = Vector2.new(0.5, 0.5)
-rim.Position = UDim2.fromScale(0.5, 0.5)
-rim.Size = UDim2.new(1, -5, 1, -5)
-rim.BackgroundTransparency = 1
-rim.BorderSizePixel = 0
-rim.Active = false
-rim.Parent = plate
-UIKit.corner(rim, 10)
-UIKit.stroke(rim, RAIL.ShopEdge, 1.5, 0.2)
-
-local icon = Instance.new("ImageLabel")
-icon.Name = "Icon"
-icon.AnchorPoint = Vector2.new(0, 0.5)
-icon.Position = UDim2.new(0, 8, 0.5, 0)
-icon.Size = UDim2.fromOffset(28, 28)
-icon.BackgroundTransparency = 1
-icon.Image = RAIL.GardenIcon
-icon.ScaleType = Enum.ScaleType.Fit
-icon.Active = false
-icon.Parent = plate
-
-local label = UIKit.outlined(plate, "Label", 16, WHITE, 2)
-label.AnchorPoint = Vector2.new(0, 0.5)
-label.Position = UDim2.new(0, 42, 0.5, 1)
-label.Size = UDim2.new(1, -50, 0, 22)
-label.TextScaled = true
-label.TextXAlignment = Enum.TextXAlignment.Center
-label.Text = "TELEPORT TO PLOT"
-local fit = Instance.new("UITextSizeConstraint")
-fit.MaxTextSize = 16
-fit.MinTextSize = 10
-fit.Parent = label
 
 local scale = Instance.new("UIScale")
 scale.Parent = button
@@ -177,11 +144,22 @@ local function place()
 	button.Position = HudLayout.place(r, button.AnchorPoint, layout.safe)
 	button.Size = UDim2.fromOffset(r.w, r.h)
 	-- The plate's own size, before its scale: the touch area's everywhere but a
-	-- phone, where the touch area beside the clock is narrower than the plate's
-	-- 196 x 44 (HudLayout, THE PHONE'S TOP ROW) and the plate is drawn the same
-	-- 147 x 33 it always was.
+	-- phone, where each of the top row's plates, drawn at its scale, is exactly
+	-- its touch area (HudLayout, THE PHONE'S TOP ROW).
 	plate.Size = UDim2.fromOffset(layout.teleportPlate.X, layout.teleportPlate.Y)
 	plateScale.Scale = layout.teleportScale
+	-- THE OWNER'S MOBILE CORRECTIONS (2026-10-05): on a touch screen the button
+	-- says exactly PLOT, with no icon -- the same button and the same press.
+	local short = layout.teleportShort
+	label.Text = if short then "PLOT" else "TELEPORT TO PLOT"
+	icon.Visible = not short
+	if short then
+		label.Position = UDim2.new(0, 6, 0.5, 1)
+		label.Size = UDim2.new(1, -12, 0, 22)
+	else
+		label.Position = UDim2.new(0, 42, 0.5, 1)
+		label.Size = UDim2.new(1, -50, 0, 22)
+	end
 end
 gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(place)
 local topbarWatch = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)

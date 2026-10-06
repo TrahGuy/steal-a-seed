@@ -418,12 +418,29 @@ function SacrificeService.Confirm(player: Player, payload: any): { [string]: any
 	if left > had - 1 then
 		warn(string.format("[Seed/SacrificeService] %s: the saved bag still holds %d of that pod after "
 			.. "the sync; taking the row off directly.", player.Name, left))
+		-- ITS OWN ROW, BY NAME (2026-10-03): with a twin in the bag, the first
+		-- pod of the same species and size may be the twin's -- and the twin's
+		-- Tool would then be re-stamped with this pod's id, taking its shortcut
+		-- and its heart. The kind is only for a Tool that never learned its id.
+		local item = tool:GetAttribute(GameConfig.Attributes.ItemId)
+		local at: number? = nil
+		for i, row in ipairs(profile.Held) do
+			if type(item) == "string" and item ~= "" and type(row) == "table" and row.Item == item then
+				at = i
+				break
+			end
+		end
+		if not at then
+			for i, row in ipairs(profile.Held) do
+				if isSavedPod(row, id, tier) then
+					at = i
+					break
+				end
+			end
+		end
 		local kept = {}
-		local taken = false
-		for _, row in ipairs(profile.Held) do
-			if not taken and isSavedPod(row, id, tier) then
-				taken = true
-			else
+		for i, row in ipairs(profile.Held) do
+			if i ~= at then
 				table.insert(kept, row)
 			end
 		end
