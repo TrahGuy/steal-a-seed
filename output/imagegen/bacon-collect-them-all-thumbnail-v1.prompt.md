@@ -1,0 +1,15 @@
+# COLLECT THEM ALL! thumbnail
+
+Built-in image generation; visually inspected. Preview only, not uploaded or published.
+
+References: `C:/Users/Maykel/AppData/Local/Temp/codex-clipboard-953e0a79-4f00-45ea-93b0-fb4f7b8cc0e9.png` and `D:/KAPE/Steal an Artifact/output/imagegen/bacon-beat-the-obby-thumbnail-v1.png`.
+
+## Exact prompt
+
+Create one finished 16:9 landscape Roblox Podnappers collection thumbnail.
+Reference image 1 is the authoritative in-game collection interface and card art. Reference image 2 provides the classic Bacon avatar, minimal bright game-thumbnail style and the thin white outlined hand-lettered headline font; do not use its jumping course.
+Exact headline: "COLLECT THEM ALL!" in a single line across the top. Match reference 2's regular-weight rounded loose hand-lettered uppercase font: white fill, neat black outline, subtle dark shadow, open counters. Not heavy bubble type, not Impact, not extruded 3D text. Fully visible with safe margins.
+Composition: smiling classic Bacon on the left, orange-brown bacon hair, white block head and hands, black jacket over blue shirt, black trousers. He gestures toward a large clear fan of collectible plant cards occupying the right two-thirds. Only one avatar. Cards are the focus, large and readable, using the rounded colored UI framing of reference 1.
+There are exactly FIVE collection cards: one unlocked cyan/blue RARE COSMOSPIRE card forward in the center, and four undiscovered cards staggered behind/beside it: cyan RARE, violet EPIC, yellow/gold LEGENDARY, rose-pink MYTHIC. The five colors and types follow reference 1. The unlocked card has the same slim angular purple/black studded CosmosPire plant on a tiny mossy circular platform against purple cosmic mist as in reference 1; preserve its recognizable narrow spire silhouette, tiny upper pale glow and thin lower limbs, do not invent a new monster or a generic wizard. Its name is "COSMOSPIRE", uppercase, above its artwork. The other four cards show only dark plant silhouettes and a clear "???" heading, with the rarity label in the lower strip. Use the silhouette shapes and flat muted artwork panels of reference 1, never reveal the mystery creatures. The main unlocked card and two adjacent mystery cards can be almost fully visible, with the other two partly behind; keep the arrangement tidy, not a dense grid.
+Background: bright simple cyan sky above green studded grass, a low brown garden fence at the horizon, simplified so the cards and Bacon stand out. Cards look like enlarged flat game UI illustrations, not physical trading-card packaging. Simple Roblox plastic on Bacon, minimal in-game lighting, no photorealistic hair or skin, no muscular avatar.
+Do not include the Biome Mastery instruction panel, reward promises, floating coins, arrows, confetti, sparkles, glare, badges or other decorative clutter. No wheel, chest, obby, carrots or Nubkins. Use restrained colors and clear negative space around the subjects. No screenshot borders, carousel controls, watermark, extra slogans or logos. Image should read immediately as discovering and collecting the game's plants.

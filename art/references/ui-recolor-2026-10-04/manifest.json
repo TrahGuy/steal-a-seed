@@ -1,0 +1,87 @@
+{
+  "created": "2026-10-04",
+  "purpose": "Owner-provided current UI screenshots and bright style references for a Claude visual-only recolor pass",
+  "folder": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04",
+  "images": [
+    {
+      "Name": "01-current-my-plants-planted.png",
+      "Role": "Current My Plants — Planted",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-11435c69-0281-44a2-93c7-66cabb201556.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\01-current-my-plants-planted.png",
+      "Width": 948,
+      "Height": 568,
+      "Bytes": 106576,
+      "SHA256": "CCC6CE89D10C995D4420DC5C4562CFCA1EDFA30E01A32E575E5022D132FF687B",
+      "ByteEqual": true
+    },
+    {
+      "Name": "02-current-my-plants-stored.png",
+      "Role": "Current My Plants — Stored",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-f9b66ccc-3d42-4a14-865e-1069273f4d28.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\02-current-my-plants-stored.png",
+      "Width": 972,
+      "Height": 570,
+      "Bytes": 147015,
+      "SHA256": "038933A7CD4ED29BA688FC7FAF0ABD3C482D33CCF47F847E30B8A7EF46D851FC",
+      "ByteEqual": true
+    },
+    {
+      "Name": "03-current-shop-passes.png",
+      "Role": "Current Shop — Passes",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-dd143110-1c38-4dfe-afd5-5c224cdccab1.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\03-current-shop-passes.png",
+      "Width": 923,
+      "Height": 408,
+      "Bytes": 78752,
+      "SHA256": "C765E72A8B88DF4645108B946A4D323CE346166015288356A77532A121D71AE6",
+      "ByteEqual": true
+    },
+    {
+      "Name": "04-current-plant-almanac.png",
+      "Role": "Current Plant Almanac",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-b7f91557-68ed-4240-9e05-a0582bbd95e3.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\04-current-plant-almanac.png",
+      "Width": 1035,
+      "Height": 489,
+      "Bytes": 189833,
+      "SHA256": "B5C7D7EB48CFDB97C5DD7B1D7549DA81F85C5C76A7AC0EABFAE266377EE077BA",
+      "ByteEqual": true
+    },
+    {
+      "Name": "05-style-active-animals-bright-cards.png",
+      "Role": "Style reference — colorful active-animal cards",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-45a45688-2eab-4147-9573-0428631a1ea8.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\05-style-active-animals-bright-cards.png",
+      "Width": 512,
+      "Height": 593,
+      "Bytes": 291681,
+      "SHA256": "FCC73A6C09A3C6B4DBD3699D16C74F1E121E946A7F04E596B2C25EFF5D533C0A",
+      "ByteEqual": true
+    },
+    {
+      "Name": "06-style-index-studded-panel.png",
+      "Role": "Style reference — bright studded Index",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-c681acb8-19c3-4aad-b2f3-ee17c2204696.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\06-style-index-studded-panel.png",
+      "Width": 833,
+      "Height": 531,
+      "Bytes": 368166,
+      "SHA256": "4C4B865F30234C65BF4764994FB2A4850C7B54FED0CD2E5D1BF5A62FD7585B50",
+      "ByteEqual": true
+    },
+    {
+      "Name": "07-style-growing-eggs-buttons.png",
+      "Role": "Style reference — growing eggs / bright buttons",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-6714be30-cdcf-4d47-a0f1-98694a79e218.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-recolor-2026-10-04\\07-style-growing-eggs-buttons.png",
+      "Width": 503,
+      "Height": 634,
+      "Bytes": 262414,
+      "SHA256": "B869F37572AECB8BCF1A98AF23283845ADDE7BD1287C5D7F3959479EFAC3138F",
+      "ByteEqual": true
+    }
+  ],
+  "sourceImagesModified": false,
+  "uiImplementationPerformed": false
+}
+

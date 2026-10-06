@@ -1,0 +1,22 @@
+# Triggered trap returns with cooldown — Claude follow-up
+
+Change the trap lifecycle: when one placed trap successfully catches another player, fire its existing effect once, remove that trap from the placed world records, and return its placement availability to the owner's existing trap inventory/hotbar. It no longer re-arms itself in place after a catch. Use a configurable10-second cooldown starting at the successful trigger.
+
+Anti-spam policy for this brief: the owner has one shared SERVER-enforced placement cooldown across all trap types. During those10 seconds they cannot place any new trap, including a different or rarer type or through a different hotbar slot/Bag path. Other traps already placed remain present and may trigger normally; a later successful trigger extends the owner's deadline to at least10 seconds after that trigger. Do not duplicate timers/items or stack arbitrary cooldown multiples. Once the deadline expires, normal placement is allowed up to the existing shared maximum3 active traps.
+
+Untriggered placed traps keep their current no-expiry behavior until the owner uses REMOVE. Manual removal frees that slot without starting a new trigger cooldown, but must not clear a cooldown already running. Failed contacts, owner walking over their own trap, immune victims, rejected placements or repeated handling of the same consumed trap do not consume it/start extra cooldowns. Claim the trigger once before processing further overlapping victims so one trap cannot catch multiple players in the same frame.
+
+Keep victim logic intact: successfully drop a carried pod before the trap debuff applies, preserve existing effects/durations and post-effect immunity, and allow a started victim debuff to finish after the trap is removed. Preserve rare trap effects and the brief public catch FX; only the owner sees the idle placed trap. Other owners' traps/cooldowns are unaffected.
+
+Read AGENTS.md / KB/HANDOFF.md, CombatService springTrap/trigger/removal/placement paths, WeaponData.Trap, TrapMarks, TrapRemove, HotbarCard, LoadoutUI and existing trap tests first. Current source re-arms sprung traps after SprungSeconds + ArmSeconds and Capacity-Placed does not change on catch; this request explicitly supersedes that triggered re-arm behavior. Reuse the existing common removal/count publication rather than adding a second tracker. Keep balancing cooldown config in WeaponData, and ensure the service's internal and client-visible timebases remain consistent.
+
+Hotbar:
+- Keep the trap icon/ownership and assignment; returning means ready to use later, not granting another owned copy. Do not forcibly equip a trap or interrupt whatever the owner is carrying/doing.
+- Show a dimmed cooldown overlay/countdown on the affected trap icons using a replicated server deadline and GetServerTimeNow. All owned trap icons reflect the shared placement cooldown so switching cannot suggest a bypass.
+- Keep the existing capacity indicator accurate:3x when none out,2x with one out,etc. A consumed trap decreases placed count, but the returned slot is still unusable until cooldown expires; show count and cooldown distinctly.
+- REMOVE continues to act on the newest remaining placed trap, and hides when none remain. Remove stale owner markers/models and do not render re-arming state for a consumed record. Bag placement obeys the same guard.
+
+Cooldown survives unequip, hotbar reordering, death/respawn and manual removal within the server session. Keep authoritative state per player, clean it on departure/service reset, and do not alter saved ownership. Lifecycle restarts must not duplicate countdown hooks or leave stale deadlines. Update related help/status text and obsolete no-recharge/rearm assertions to describe post-trigger cooldown correctly; initial placements still have no ordinary recharge beyond the new trigger window.
+
+Verify focused fake-time cases: one trigger consumes exactly one trap and starts10s; no rearm; duplicate/overlapping contact catches once; other2traps remain; all trap types/Bag placements denied beforedeadline and accepted after; later trigger refreshesdeadline; owner isolation; REMOVE does not clearcooldown; respawn preservesdeadline; poddrop/debuff/immunity andpublicFX staycorrect; counts/REMOVE/UIcountdown matchserver. If Play is needed, use one guarded throwaway-store session per AGENTS.md and clean up. Update handoff and report what was tested. Do not commit, push or publish.
+

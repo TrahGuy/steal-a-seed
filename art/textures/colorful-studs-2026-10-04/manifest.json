@@ -1,0 +1,46 @@
+{
+  "tool": "built-in image_gen",
+  "reference": "reference-colorful-shop.png",
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "seamless": false,
+  "uploaded": true,
+  "uploadEvidence": "Owner screenshot 33dc0ec8-ef8a-4ee5-bdda-66851e68f48e; IDs transcribed, runtime loading and permissions unverified.",
+  "robloxImageIds": {"sky-blue":"rbxassetid://91696569369702","gold":"rbxassetid://106730544656733","royal-purple":"rbxassetid://103172630669031","coral-red":"rbxassetid://133079221497449","lime-green":"rbxassetid://134570572143730","rainbow":"rbxassetid://118707369966787"},
+  "blueCorrectionEvidence": "Claude report 2da9ec74-80e9-4a67-8141-7ed081aada33 identifies group studs-sky-blue-v1 as 91696569369702 and reports Studio load success. Local GameConfig and saved Speed screenshot agree. Earlier prompt ID 9169659369702 is superseded; no independent online asset or runtime verification by Codex.",
+  "assets": [
+    {
+      "file": "studs-lime-green-v1.png",
+      "source": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-529a0b77-6549-4045-9643-5dae0ae760e8.png",
+      "palette": "vibrant lime green upper area softly transitioning to rich grass green below"
+    },
+    {
+      "file": "studs-sky-blue-v1.png",
+      "source": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-1e6d196d-45c6-4b45-bd67-a2d19d6c08eb.png",
+      "palette": "bright cyan upper area softly transitioning to saturated sky blue below"
+    },
+    {
+      "file": "studs-royal-purple-v1.png",
+      "source": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-2d47420f-d115-4b32-b621-4a6d31776085.png",
+      "palette": "bright orchid violet upper area softly transitioning to royal purple below"
+    },
+    {
+      "file": "studs-gold-v1.png",
+      "source": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-3b1ca4f5-4dae-416d-8984-ca3940b9a66f.png",
+      "palette": "warm lemon gold upper area softly transitioning to rich golden amber below"
+    },
+    {
+      "file": "studs-coral-red-v1.png",
+      "source": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-0c4feb47-dee1-4a78-92d1-f95e0392bcce.png",
+      "palette": "bright coral red upper area softly transitioning to saturated cherry red below"
+    },
+    {
+      "file": "studs-rainbow-v1.png",
+      "source": "C:\\Users\\Maykel\\.codex\\generated_images\\01a041d8-8273-7f31-885d-87e3bd28a713\\exec-bf4201bb-9bd9-4b1f-81e2-b333f1c6691d.png",
+      "palette": "smooth horizontal spectrum from coral red through golden yellow, lime green, cyan blue and violet, vibrant but balanced"
+    }
+  ]
+}
+

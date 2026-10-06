@@ -1,0 +1,32 @@
+{
+  "sourceAttachment": "C:/Users/Maykel/AppData/Local/Temp/codex-clipboard-b15ea569-2175-4c97-ae07-89edea1fe9ea.png",
+  "sourceCopy": "reference-shop-header-full.png",
+  "width": 755,
+  "height": 106,
+  "cropConvention": "Zero-based x/y, width/height. Exact rectangular crops, no resampling/repainting.",
+  "crops": [
+    {
+      "file": "reference-header-title-and-icon.png",
+      "x": 25,
+      "y": 39,
+      "width": 385,
+      "height": 66
+    },
+    {
+      "file": "reference-red-close-button.png",
+      "x": 686,
+      "y": 30,
+      "width": 69,
+      "height": 74
+    },
+    {
+      "file": "reference-white-stud-strip.png",
+      "x": 419,
+      "y": 66,
+      "width": 253,
+      "height": 38
+    }
+  ],
+  "status": "Reference-only crops; no alpha cleanup, image uploads, seam validation or in-game application."
+}
+

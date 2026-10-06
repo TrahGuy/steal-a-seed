@@ -1,0 +1,14 @@
+# Colossal lightning visible during daytime
+
+Fix the Colossal plant lightning so it is visibly active in BOTH daytime and nighttime. The owner reports it currently only shows at night and authorizes changing that restriction for this specific effect.
+
+Current source diagnosis: Shared/PlantAura.luau has an explicit NIGHT ONLY policy. PlantSway's applyPhase calls PlantGlow.SetNight(isNight) and PlantAura.SetNight(isNight, clock). PlantAura.SetNight(false) ends every active pulse at dawn; Tick also gates new pulses on night. Fix the actual gating and transition behavior first, not only brightness/transparency. Keep normal plant lights' existing PlantGlow day/night behavior; only Colossal crackle eligibility changes.
+
+Read current AGENTS.md / KB/HANDOFF.md, project art/tooling skills as applicable, PlantAura, PlantSway, PlantGlow and relevant tests before editing. Preserve one PlantSway Heartbeat, existing pooled jagged Neon segments, Colossal-only filtering, palette/scale, quality settings and client budgets. Update the obsolete night-only comments/tests to match the owner's new request; do not keep a stale test by preventing the requested daytime effect.
+
+Keep the arcs recognizable against bright sky, green studded ground and pale plant surfaces at ordinary viewing distances and lower graphics settings. Start with existing segment appearance, then make a small targeted daytime contrast/width/opacity adjustment only if visual checking shows washout. Do not solve it by changing the game's Lighting, exposure, bloom, time of day or weather. Separate visible lightning segments from their optional PointLight flash: allow arcs all day while keeping that daytime flash restrained/disabled as appropriate so many Colossals do not wash out the garden. Existing nighttime look should remain consistent with the approved effect. Do not add per-arc lights, increase existing concurrent/distance budgets or make pulses continuous.
+
+Day/night changes must not cause a burst of queued pulses, duplicate states, flicker or an effect that goes permanently quiet after dawn. Planting, pickup/removal, streaming, Reduced/Off quality and local Other Plants OFF must continue to stop/restore the appropriate effect. If the Other Plants switch is in progress, integrate with its actual shared visibility preference rather than inventing a conflicting flag.
+
+Verify a Colossal produces visible arcs under actual daytime lighting, at night and through both transitions; lower tiers never get the effect; Off stays off; hidden other-player plants emit no stray bolts; removal returns pooled segments/lights; repeated changes do not leak or blow budgets. Use focused fake-time/state tests and a single guarded throwaway-store Play if visual confirmation is needed, following AGENTS.md cleanup. Provide matched daytime/night screenshots and state whether phone/low graphics was really tested. Update handoff. Do not commit, push or publish.
+

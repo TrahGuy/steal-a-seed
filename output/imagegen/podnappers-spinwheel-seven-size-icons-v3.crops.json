@@ -1,0 +1,114 @@
+{
+  "image": "podnappers-spinwheel-seven-size-icons-v3.png",
+  "width": 1774,
+  "height": 887,
+  "format": "RGBA PNG",
+  "cells": [
+    {
+      "tier": 1,
+      "key": "tiny",
+      "x": 0,
+      "y": 0,
+      "width": 443,
+      "height": 443,
+      "runtimeTierColorRGB": [
+        170,
+        175,
+        180
+      ]
+    },
+    {
+      "tier": 2,
+      "key": "big",
+      "x": 443,
+      "y": 0,
+      "width": 444,
+      "height": 443,
+      "runtimeTierColorRGB": [
+        120,
+        200,
+        110
+      ]
+    },
+    {
+      "tier": 3,
+      "key": "huge",
+      "x": 887,
+      "y": 0,
+      "width": 443,
+      "height": 443,
+      "runtimeTierColorRGB": [
+        90,
+        170,
+        240
+      ]
+    },
+    {
+      "tier": 4,
+      "key": "mega",
+      "x": 1330,
+      "y": 0,
+      "width": 444,
+      "height": 443,
+      "runtimeTierColorRGB": [
+        170,
+        120,
+        240
+      ]
+    },
+    {
+      "tier": 5,
+      "key": "giant",
+      "x": 0,
+      "y": 443,
+      "width": 443,
+      "height": 444,
+      "runtimeTierColorRGB": [
+        255,
+        160,
+        60
+      ]
+    },
+    {
+      "tier": 6,
+      "key": "titan",
+      "x": 443,
+      "y": 443,
+      "width": 444,
+      "height": 444,
+      "runtimeTierColorRGB": [
+        240,
+        80,
+        70
+      ]
+    },
+    {
+      "tier": 7,
+      "key": "colossal",
+      "x": 887,
+      "y": 443,
+      "width": 443,
+      "height": 444,
+      "runtimeTierColorRGB": [
+        255,
+        215,
+        90
+      ]
+    }
+  ],
+  "emptyCell": {
+    "x": 1330,
+    "y": 443,
+    "width": 444,
+    "height": 444
+  },
+  "notes": [
+    "Row 1: Tiny, Big, Huge, Mega. Row 2: Giant, Titan, Colossal, empty.",
+    "Owner-approved improvisations based on three screenshot pod shapes; not new physical model definitions.",
+    "Do not auto-trim/recenter every icon to the same occupied size if preserving visible size progression.",
+    "Render names, coloured glowing text and reward details separately in UI.",
+    "Keep the existing in-game Jackpot Trail and its icon unchanged.",
+    "No Mythic or Secret rarity icon is implied by these size-tier images."
+  ]
+}
+

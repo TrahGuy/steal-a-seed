@@ -1,0 +1,15 @@
+# Giant Paddlehop money thumbnail
+
+Built-in image generator. Visually checked. Preview only; not uploaded or published.
+
+Reference 1: `C:/Users/Maykel/AppData/Local/Temp/codex-clipboard-e64d484a-ed6d-41b5-8cf4-b1903bde455a.png`
+
+Reference 2: `C:/Users/Maykel/AppData/Local/Temp/codex-clipboard-db6ae7d8-da22-44a1-9283-6b4a3deeae31.png`
+
+## Exact prompt
+
+Use case: ads-marketing, reference-guided Roblox thumbnail edit. Create one 16:9 landscape game thumbnail, using image 1 as the composition/edit reference and image 2 as the authoritative Paddlehop creature design.
+Preserve image 1's scene concept and layout: a small classic orange-brown bacon-haired Roblox avatar seen from behind at the lower left, black clothes and white block hands, looking up at an enormous subject occupying the central and right part of a brown rectangular garden plot. Green studded ground, simple bright cyan sky and pale stylized clouds. KEEP the exact headline "$95,643,734,647" across the top, matching the original reference's irregular rounded regular-weight lettering, black outline, subtle shadow and rainbow color progression (pink/purple/cyan on left, green/yellow/orange toward middle, orange/red at right). Make all numerals exact and easily readable.
+Replace the entire giant yellow flower with ONE gigantic PADDLEHOP, faithfully based on image 2. Paddlehop is not a frog or a generic cactus. Its main body is a vertical muted light-olive/sage-green rectangular studded slab, with a dark olive rounded paddle/lobe protruding above and below it, two broad circular pale-green paddle hands at its sides, two small glossy black low-set eyes, pink cheeks and a tiny black smiling mouth set directly on the front slab. A curved segmented green cactus growth rises behind its upper left shoulder, ending in a tiny coral-orange flower; small cream pointed spines occur on the upper side growth. Two thin cream angular jointed legs with flat splayed feet support the bottom. Reproduce this unusual silhouette, geometry, stud pattern and gentle sleepy-cute face. No human arms, no huge cartoon frog eyes, no yellow petals, no spherical creature torso, no additional plant species.
+Scale Paddlehop to immense size, many times the height of the Bacon avatar, standing on the garden plot and almost filling the image beneath the number headline. Its face and both paddle hands must read clearly. Show the full essential silhouette including cactus flower crown and angular feet; adjust its pose minimally for a clear front-facing view while Bacon looks toward it.
+Style: simple authentic Roblox in-game render, low-poly studded plastic, blocky avatar proportions, saturated thumbnail background but Paddlehop retains the muted olive/sage colors in the screenshot. Crisp clear outlines, simple game lighting and shadows. No realistic skin or hair, no cinematic light rays, no excessive bloom, no particles or extra graphics. No overlays from screenshots: remove carousel dots, expand button, HUD, plot labels and name tags. Full-bleed thumbnail with no border or watermark. No added text besides the exact money headline.

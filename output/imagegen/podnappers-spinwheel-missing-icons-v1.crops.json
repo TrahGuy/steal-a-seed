@@ -1,0 +1,65 @@
+{
+  "image": "podnappers-spinwheel-missing-icons-v1.png",
+  "width": 1536,
+  "height": 1024,
+  "format": "RGBA PNG",
+  "background": "transparent; sampled corners and grid intersections alpha 0",
+  "order": "row-major; labels and animation implemented separately in UI",
+  "cells": [
+    {
+      "key": "mystery_pod",
+      "x": 0,
+      "y": 0,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "key": "giant_pod",
+      "x": 512,
+      "y": 0,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "key": "titan_pod",
+      "x": 1024,
+      "y": 0,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "key": "colossal_pod",
+      "x": 0,
+      "y": 512,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "key": "mythical_pod",
+      "x": 512,
+      "y": 512,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "key": "jackpot_trail",
+      "x": 1024,
+      "y": 512,
+      "width": 512,
+      "height": 512
+    }
+  ],
+  "reuseExisting": {
+    "speed": "96656510808947",
+    "spinTickets": "112516668911937",
+    "cash": "131924246776637",
+    "chest": "134062175986179"
+  },
+  "notes": [
+    "Colours distinguish reward categories, not new plant rarities.",
+    "No creature or species revealed by the pod reward icons.",
+    "Jackpot Trail is a proposed cosmetic reward; this image is not an implemented trail effect.",
+    "Reuse the existing icon catalog for income boosts; do not infer an effect multiplier from an icon."
+  ]
+}
+

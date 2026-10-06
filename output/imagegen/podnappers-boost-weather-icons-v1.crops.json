@@ -1,0 +1,74 @@
+{
+  "source": "podnappers-boost-weather-icons-v1.png",
+  "width": 1774,
+  "height": 887,
+  "columns": 4,
+  "rows": 2,
+  "rectangles": [
+    {
+      "name": "rain",
+      "x": 0,
+      "y": 0,
+      "width": 443,
+      "height": 443
+    },
+    {
+      "name": "thunderstorm",
+      "x": 443,
+      "y": 0,
+      "width": 444,
+      "height": 443
+    },
+    {
+      "name": "free-chest",
+      "x": 887,
+      "y": 0,
+      "width": 443,
+      "height": 443
+    },
+    {
+      "name": "reward-wheel",
+      "x": 1330,
+      "y": 0,
+      "width": 444,
+      "height": 443
+    },
+    {
+      "name": "sacrifice",
+      "x": 0,
+      "y": 443,
+      "width": 443,
+      "height": 444
+    },
+    {
+      "name": "plant-income",
+      "x": 443,
+      "y": 443,
+      "width": 444,
+      "height": 444
+    },
+    {
+      "name": "speed-training",
+      "x": 887,
+      "y": 443,
+      "width": 443,
+      "height": 444
+    },
+    {
+      "name": "community-reward",
+      "x": 1330,
+      "y": 443,
+      "width": 444,
+      "height": 444
+    }
+  ],
+  "notes": [
+    "Coordinates use origin top-left, width/height extents (right and bottom exclusive).",
+    "Generated dimensions differ from requested 2048x1024; use these measured dimensions.",
+    "Crop cells first, then trim each icon's alpha bounds gently and add equal transparent padding; preserve edge antialiasing and highlights.",
+    "Do not rescale the entire sheet before using these rectangles.",
+    "Static graphics only. Use existing server weather/boost state and amounts; these icons do not create boosts or events.",
+    "Show rain versus thunderstorm icon according to actual event mode; never show two copies of the same weather income bonus.",
+    "Community reward is a proposed source icon, not a new income buff."
+  ]
+}

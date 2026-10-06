@@ -1,0 +1,39 @@
+{
+  "image": "podnappers-spinwheel-actual-pod-silhouettes-v2.png",
+  "width": 2172,
+  "height": 724,
+  "format": "RGBA PNG",
+  "cells": [
+    {
+      "key": "reference_pod_1",
+      "source": "codex-clipboard-1c716c8b-b250-44d4-83b5-47c8ce78e40c.png",
+      "x": 0,
+      "y": 0,
+      "width": 724,
+      "height": 724
+    },
+    {
+      "key": "reference_pod_2",
+      "source": "codex-clipboard-81b365d6-823f-4927-9cca-31d423d5f43a.png",
+      "x": 724,
+      "y": 0,
+      "width": 724,
+      "height": 724
+    },
+    {
+      "key": "reference_pod_3",
+      "source": "codex-clipboard-d8386aa2-240b-471c-9b82-4b0a92c883ac.png",
+      "x": 1448,
+      "y": 0,
+      "width": 724,
+      "height": 724
+    }
+  ],
+  "notes": [
+    "Names, reward quantities and coloured name glows belong in runtime UI, not baked into these icons.",
+    "No definitive mapping from reference images to reward categories was supplied; do not infer species/size/rarity from image order.",
+    "Keep the current production Jackpot Trail behavior and icon unchanged.",
+    "Raster silhouettes are generated interpretations of small screenshots, not pixel-exact cutouts or new model geometry."
+  ]
+}
+

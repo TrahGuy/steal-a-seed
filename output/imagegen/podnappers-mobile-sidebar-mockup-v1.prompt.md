@@ -1,0 +1,14 @@
+# Podnappers mobile sidebar mockup v1
+
+Built-in image edit of the owner's annotated mobile screenshot. Approval concept only; no game UI was changed.
+
+Reference: `C:/Users/Maykel/AppData/Local/Temp/codex-clipboard-58121a30-ad53-4dcd-99fd-7b1358c97697.png`
+
+## Image prompt
+
+Use case: ui-mockup. Edit the attached landscape phone screenshot of Podnappers into a clear, concrete MOBILE HUD REDESIGN CONCEPT for owner approval. Preserve the game scene, phone frame, day clock, avatar, plots, money/speed block at bottom left, hotbar, bat/trap buttons on right, seed and bag icons at top right, and simple Roblox screenshot rendering. Do not remake the world. Remove ALL hand drawn red arrows, red circles, underline and red box markings from the input.
+
+ONLY redesign the upper-left navigation area. Remove the current horizontal blue Index tile, green emoji Shop tile and gear tile from under the Roblox menu. In their place, at the far LEFT EDGE of the game viewport, just below the Roblox topbar, put a slim premium collapsible dark navy/slate sidebar/dock. Show its OPEN state in this mockup: a narrow vertical rounded dark translucent tray about 54 logical pixels wide that projects only slightly into the game, subtle teal edging, small controlled highlights and a soft shadow. Three stacked 44px touch-size tiles aligned vertically with breathing room: INDEX (a clean custom outlined book icon in icy blue, tiny red notification badge showing '5'), SHOP (a beautiful polished custom drawn 3D miniature storefront/garden-market stall icon: warm wooden counter, striped cream-and-green awning, small plant on shelf, gold trim and tasteful emerald background; it must NOT look like a generic emoji or clipart), SETTINGS (a matching designed silver gear icon, not emoji). Tiny short labels INDEX, SHOP, SETTINGS below or beside icons only if clearly legible at phone size; no huge text buttons. Shop tile can be slightly more prominent than other tiles, but consistent in size. A small matching rounded chevron tab on the right edge of the sidebar at midheight, visually communicates tapping to COLLAPSE it; use cream/teal chevron, not handdrawn red square or arrow.
+
+Keep the existing WALK MODE control as its own compact small dark tile just to the right of the new sidebar near the top, visible but not covering day clock or avatar. Keep its exact purpose and OFF state. Ensure none of the sidebar tiles overlap the Roblox menu, day clock, money/speed HUD, or hotbar. Sidebar ends above the money/speed region. Respect the left side safe area and touch zone. Premium feel means crisp illustrated icons, carefully consistent corners, restrained border and depth—not elaborate glass, shiny bloom, gradients everywhere, neon streaks or cinematic graphics. Show the new layout as an honest screenshot-like UI mockup at the screenshot's landscape aspect and dimensions. Do not add any panels or gameplay systems.
+

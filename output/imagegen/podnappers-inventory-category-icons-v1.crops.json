@@ -1,0 +1,58 @@
+{
+  "source": "podnappers-inventory-category-icons-v1.png",
+  "width": 1536,
+  "height": 1024,
+  "columns": 3,
+  "rows": 2,
+  "rectangles": [
+    {
+      "name": "all-items",
+      "x": 0,
+      "y": 0,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "name": "plants",
+      "x": 512,
+      "y": 0,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "name": "pods",
+      "x": 1024,
+      "y": 0,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "name": "equipment",
+      "x": 0,
+      "y": 512,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "name": "spin-tickets",
+      "x": 512,
+      "y": 512,
+      "width": 512,
+      "height": 512
+    },
+    {
+      "name": "bag",
+      "x": 1024,
+      "y": 512,
+      "width": 512,
+      "height": 512
+    }
+  ],
+  "notes": [
+    "Crop the six 512x512 cells preserving alpha; then normalize padding/optical size without clipping outlines.",
+    "Sampled corner and row/column gutters all have alpha 0. Dark coloured RGB may exist underneath fully transparent pixels; preserve alpha rather than flattening.",
+    "Check actual 24–32px UI rendering before upload.",
+    "Replace graphic category icons only; preserve categories/counts/filters and do not replace actual in-game pod models.",
+    "Roblox asset uploads and game wiring have not been performed."
+  ]
+}

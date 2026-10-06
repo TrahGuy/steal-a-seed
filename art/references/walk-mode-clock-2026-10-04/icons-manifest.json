@@ -1,0 +1,27 @@
+{
+  "tool": "Built-in image_gen",
+  "icons": [
+    {
+      "file": "cycle-moon-cloud-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "cornerAlpha": 0,
+      "centerAlpha": 251,
+      "sha256": "A100CD99E93DDB063ED656EC9CCE28256A6C5DD2148305DE9FE733F38CA538A5"
+    },
+    {
+      "file": "cycle-sun-cloud-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "cornerAlpha": 0,
+      "centerAlpha": 253,
+      "sha256": "4A57AB0DA08B1CF6D2C726977DA54DFA59F9CE63BD63220BEE6EC83610067879"
+    }
+  ],
+  "robloxImageIds": {
+    "Moon": "rbxassetid://123862305697349",
+    "Sun": "rbxassetid://138878981553342"
+  },
+  "status": "Upload IDs supplied by owner screenshot on 2026-10-04. Asset identity, permissions, wiring and runtime loading not independently verified."
+}
+

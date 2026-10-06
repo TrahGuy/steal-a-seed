@@ -1,0 +1,56 @@
+{
+  "created": "2026-10-04",
+  "generator": "Built-in image-generation tool",
+  "styleReference": "../podnappers-boost-weather-icons-v1.png",
+  "assetType": "Image",
+  "uploaded": true,
+  "uploadEvidence": "Owner-provided Roblox Asset Manager screenshot, 2026-10-04",
+  "verifiedInGame": false,
+  "images": [
+    {
+      "biomeId": "greenhollow",
+      "displayName": "Greenhollow",
+      "file": "greenhollow-biome-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "hasTransparency": true,
+      "robloxAssetId": "93127507617364"
+    },
+    {
+      "biomeId": "dustbowl",
+      "displayName": "Dustbowl",
+      "file": "dustbowl-biome-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "hasTransparency": true,
+      "robloxAssetId": "116633509157008"
+    },
+    {
+      "biomeId": "tanglemire",
+      "displayName": "Tanglemire",
+      "file": "tanglemire-biome-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "hasTransparency": true,
+      "robloxAssetId": "122688457196300"
+    },
+    {
+      "biomeId": "emberroot",
+      "displayName": "Emberroot",
+      "file": "emberroot-biome-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "hasTransparency": true,
+      "robloxAssetId": "107859867107909"
+    },
+    {
+      "biomeId": "starbloom",
+      "displayName": "Starbloom",
+      "file": "starbloom-biome-v1.png",
+      "width": 1254,
+      "height": 1254,
+      "hasTransparency": true,
+      "robloxAssetId": "118655354256131"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "created": "2026-10-04",
+  "purpose": "Owner screenshots of readability problems after bright UI recolor",
+  "images": [
+    {
+      "Name": "01-shop-passes-readability.png",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-29f5a60a-c7b5-4fb2-b58f-c23914ae043a.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-readability-2026-10-04\\01-shop-passes-readability.png",
+      "SHA256": "66078FD473251AF26713926566A1FE76ADE10603D38D0D517DA0D1F413F20D4F",
+      "ByteEqual": true
+    },
+    {
+      "Name": "02-shop-speed-cards-readability.png",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-ec7cc83e-80d4-45b7-8706-6c7f6ac0d5b0.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-readability-2026-10-04\\02-shop-speed-cards-readability.png",
+      "SHA256": "C8D3134360433860540B4DD6D00DAF5A2CE944827B7B4E770384986C12002BA6",
+      "ByteEqual": true
+    },
+    {
+      "Name": "03-shop-cash-cards-readability.png",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-a8578507-4cb0-40d4-9c23-73a249bd7ddc.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-readability-2026-10-04\\03-shop-cash-cards-readability.png",
+      "SHA256": "2D513D95A097A1ED61C9C98AC450899F922E93AE4769F71F13CAD146835EADF5",
+      "ByteEqual": true
+    },
+    {
+      "Name": "04-shop-ticket-cards-readability.png",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-9be1df71-3b15-45df-aaf6-087846bc344a.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-readability-2026-10-04\\04-shop-ticket-cards-readability.png",
+      "SHA256": "943C6DF0FB3679577714031BE6CF0B70A1FA2D8A46A86F3A286885F6E7BAA091",
+      "ByteEqual": true
+    },
+    {
+      "Name": "05-bag-categories-and-tiles-readability.png",
+      "Source": "C:\\Users\\Maykel\\AppData\\Local\\Temp\\codex-clipboard-98822f6d-7ac5-4cc8-9b72-da8a5117d8de.png",
+      "Destination": "D:\\KAPE\\Steal an Artifact\\art\\references\\ui-readability-2026-10-04\\05-bag-categories-and-tiles-readability.png",
+      "SHA256": "AF2DC4DEC3682C0F8F808DCE36A5EDDE698715A78033352F5D2E15E2602F6015",
+      "ByteEqual": true
+    }
+  ],
+  "uiChangesImplemented": false
+}
+
