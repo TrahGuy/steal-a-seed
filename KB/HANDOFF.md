@@ -1,6 +1,15 @@
 # Steal a Seed — Session Handoff
 
-## Invite a Friend: the owner's four rigs as invite rewards, the hub pedestal, INVITE + its "!", the phone panel, the INVITE panel, the reward card, the owner's ten sounds, the invite notices — 2026-10-06 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; INVITE SPECS GREEN, SUITE 110/111 (RainAudioSpec, pre-existing); FIVE GUARDED PLAYS ON `SeedTest_20261005`: TWO AT DESKTOP 1009×716 / 905×716, THREE ON STUDIO'S EMULATOR AT 705×338 WITH TOUCH (THE LAST TWO RE-SHOT THE PHONE FIXES AND THE BIGGER PEDESTAL FORM); NO REAL PHONE; NO REAL INVITE SENT; SOUNDS NOT HEARD BY EAR)
+## Batch committed and pushed: e57380e + 10a84b8 on origin/wip — 2026-10-06 (CLAUDE)
+
+At the owner's word ("commit and push everything"; scope chosen: all but captures and videos):
+- `e57380e`: every change to the game code, specs, AGENTS.md and this handoff since c06ad53. Every entry below marked UNCOMMITTED is in it.
+- `10a84b8`: the assets — art/, sfx/, the pod and plant-monster reference packs, output/imagegen, and game thumbnails/ images (the old ones moved into folders).
+- Pushed with this note. The two earlier local-only commits, ebc9db8 and c06ad53, went up with it.
+- Left untracked by the owner's choice: the output/ capture, preview and backup folders (as in every earlier batch) and the two 67.8 MB .mp4 videos in game thumbnails/.
+- The D:/KAPE root repo (no remote) was not touched. Specs before the commit: 110 of 111 (RainAudioSpec, pre-existing); Studio matched disk.
+
+## Invite a Friend: the owner's four rigs as invite rewards, the hub pedestal, INVITE + its "!", the phone panel, the INVITE panel, the reward card, the owner's ten sounds, the invite notices — 2026-10-06 (CLAUDE)  (COMMITTED e57380e; NOT PUBLISHED; INVITE SPECS GREEN, SUITE 110/111 (RainAudioSpec, pre-existing); FIVE GUARDED PLAYS ON `SeedTest_20261005`: TWO AT DESKTOP 1009×716 / 905×716, THREE ON STUDIO'S EMULATOR AT 705×338 WITH TOUCH (THE LAST TWO RE-SHOT THE PHONE FIXES AND THE BIGGER PEDESTAL FORM); NO REAL PHONE; NO REAL INVITE SENT; SOUNDS NOT HEARD BY EAR)
 
 **Open for the owner:**
 - Heliothorn's body stands 10.14 studs on the pedestal; the other three stand 11.14.
