@@ -1,5 +1,826 @@
 # Steal a Seed — Session Handoff
 
+## Batch committed and pushed: 849fa7a + a001e27 on origin/wip, published as v1038 — 2026-10-08 (CLAUDE)
+
+- **Published.** The owner published v1038 at 2026-10-08 08:43 UTC (Studio log, "Add publish notes to v1038"). It shipped the working tree. Just before the commit, the probe found Studio and disk equal: 289 scripts, 0 differ, 0 ZZ, test-store marker absent.
+- **849fa7a: code and specs.** It covers every entry from "Rain Colossal" (2026-10-06) up to the WHEEL entry below.
+  - Those entries still say UNCOMMITTED / NOT PUBLISHED. They are now committed, and live in v1038.
+  - That includes the other session's hotbar fix.
+- **a001e27: assets.** The art thumbnails, the training and tutorial art, the UI buttons, and the two alarm sounds.
+- **Not committed, as before:** the `output/` test captures and backups.
+- **Also left out:** the owner's `game thumbnails/` changes: two 71 MB videos, three images, and `update 1` deleted.
+- **Workspace cleanup:** the 2026-10-07 cleanup was never Rojo-synced, so it lived only in the open place. This publish shipped it.
+
+## WHEEL SCALES WITH THE PLAYER, INVITE PLANTS ON THE WHEEL, THE INVITE RULES ON SIGN AND PANEL, A RETURNING-FRIEND SPIN — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SPECS GREEN; SUITE 119/119 RUN, FAILING ONLY RainAudioSpec (pre-existing) AND HotbarSpec (THE PEER'S HOTBAR CHANGE, MID-EDIT DURING THE RUN); TWO GUARDED PLAYS ON FRESH THROWAWAY STORES, BOTH CLEARED)
+
+From Michael's suggestions; the owner approved the brief on 2026-10-08.
+
+**1. Cash and Speed prizes scale with the player; the old amounts are floors.**
+- Each pays the larger of its old amount and a scaled one. The seconds are the brief's proposal:
+  - cash_small: 2 min of garden income. cash_medium: 6 min. cash_jackpot: 20 min.
+  - speed_small: 60 s of the mill tier's rate. speed_large: 5 min. The tier rate only, no boosts.
+- Amounts are rounded DOWN to two figures (`WheelData.niceDown`), so "$1.2M" is exactly what is paid.
+- The server works them out from its own numbers: `EconomyService.RateFor` and `GameConfig.Mill.Tiers[MillTier].speed`.
+- It publishes them as the player attribute `WheelAmounts`:
+  - on join;
+  - when the panel opens (`WheelOpen`, at most twice a second);
+  - after every spin.
+- The roll pays the published amount and saves it on the row (`WheelPending[].Amount`).
+- The wheel's sectors, Reward info, the result line and the world wheel (drawn per client) all show this player's amounts.
+
+| profile (WheelScaleSpec) | cash_small | cash_medium | cash_jackpot | speed_small | speed_large |
+|---|---|---|---|---|---|
+| new: $0/s, mill tier 1 (20/s) | $5,000 | $20,000 | $75,000 | +1,200 | +10,000 |
+| mid: $25K/s, tier 7 (2M/s) | $3M | $9M | $30M | +120M | +600M |
+| late: $5M/s, tier 13 (80B/s) | $600M | $1.8B | $6B | +4.8T | +24T |
+
+- **new:** the floors, except speed_small. 60 s of a tier-1 mill is 1,200, above the old 1,000.
+- **mid:** about fifteen Legendary/Epic plants at plot level 4.
+- **late:** plot level 7's thirty slots of Secrets ($155K-$189K/s each), no pass.
+- **In Play:** the late test profile earned $10M/s, because the owner's test account has the x2 pass. It paid $1.2B / $3.6B / $12B and +4.8T / +24T. A forced jackpot showed $12B and paid 12B (server log).
+
+**2. Invite plants on the wheel.**
+- **New prize `invite`:** Mythic, weight 20 (0.2%), taken from cash_small (2200 to 2180, now 21.8%). Every other weight is unchanged; the total is still 10,000.
+- **The odds now:**
+  - $ small 21.8%, +Speed 20%, Pod 13%, $ medium 10%;
+  - +25% Income 9.5%, +25% Training 8.5%, +Speed large 7%;
+  - Rare Pod 5%, $ Jackpot 2.5%, Titan Pod 1.5%, Colossal Pod 0.6%;
+  - Bloomrunner Trail 0.4%, Invite Plant 0.2%.
+- **What it gives:** the first invite plant of the track not yet owned (Dustthorn, then Thornbrute, Pharaothorn, Heliothorn). It is handed over as InviteService does: `GiveHatched` with onRecord, so grown, placeable, unsellable. The Bag's room is counted; if the Bag is full, the plant is owed until there is room.
+- **Every plant owned:** it pays its swap, cash_jackpot, at this player's amount. Reward info says so: "all owned: pays $X Jackpot instead". This also holds if the last plant was given while the prize waited for Bag room.
+- **NEVER TWICE.** New saved set `InviteOwned`: every invite plant ever given, by the wheel or a milestone. Old saves fill it from the forms InviteGranted gave.
+  - A milestone gives the next plant not yet owned.
+  - A milestone reached with every plant owned gives nothing.
+- **Every screen names the plant that really comes.** The INVITE panel, the hub sign, the pedestal and the reward card now pass the owned set or the server's given form (`InviteRewards.content/cards(…, owned)`, `popup(tier, form)`).
+  - After a wheel win, later milestones each give the next missing plant.
+  - When the wheel gave some, an owned card's line says "owned", not its threshold. Which milestone gave which plant is not saved.
+  - With nothing won on the wheel, all words are exactly as before (InviteRewardsSpec compares 26 counts).
+
+**3. The rules, on the sign and in the panel** (`InviteRewards.Words.Rules`, title "HOW INVITES WORK"):
+- "A friend counts once: their first time playing" / "1 - 5 - 10 - 20 friends: 4 invite plants" / "Played before? You still get 1 free spin".
+- **INVITE panel:** one line under INVITE FRIENDS, turning every 4 s. Every line fits at its smallest drawn size on all 23 screens, including the 705x338 phone (InvitePanelSpec).
+- **Hub sign:** the rules view for 6 s of every 18 s, never in the far view. Rule 1 wraps to two lines inside its row (seen in Play).
+
+**4. A returning friend's spin.**
+- A friend who joins through the invite having played before gives the inviter 1 free earned spin. That is once per friend, ever: `InviteReturnIds`, capped at 200.
+- It never counts toward the plants, and never to yourself.
+- **Inviter in another server:** the inbox gains a `Returning` list beside `Ids`. It is taken, spin and set saved together, on the inviter's next read.
+- **Notices:** "+1 FREE SPIN" / "A friend came back from your invite". The same friend again: "A friend joined" / "Already played, so it doesn't count".
+
+**Files**
+- Shared: WheelData, WheelDraw (the gift icon, per-player labels), InviteRewards, GameConfig (InviteRewards words, attributes, timings).
+- Server: WheelService, InviteService, ProfileSchema, PlayerDataService.
+- Client: WheelUI, InviteUI, InviteHub, InviteRewardUI.
+- Specs: WheelScaleSpec (new), WheelSpec, WheelArtSpec, InviteRewardsSpec, InvitePanelSpec. SpinPurchaseSpec and CommunitySpec gained an `EconomyService.RateFor` stand-in.
+
+**Saves.** New fields default safely on old saves:
+- `InviteOwned`: the forms already given.
+- `InviteReturnIds`: empty.
+- `WheelPending[].Amount`: absent means the floor; clamped from the floor to MaxCash / MaxSpeedScore.
+- An invite row keeps only an invite species.
+
+**Specs.** WheelScaleSpec (new) 22/0, WheelSpec 162/0, WheelArtSpec 82/0, InviteRewardsSpec 173/0, InvitePanelSpec 393/0, InviteHudSpec 415/0, InviteAudioSpec 66/0, SpinPurchaseSpec 49/0, CommunitySpec 25/0. The suite ran 119/119 specs in 541 s. Only RainAudioSpec (pre-existing) and HotbarSpec 34/1 failed. HotbarSpec is the peer session's hotbar rule change: its LoadoutUI arrival pin was mid-edit while the suite ran, not this work. HatchRollSpec was 166/0 in that run.
+
+**Guarded Plays.** The owner's account; desktop 1065x716 and 1169x716; emulator off. Simulated friend ids 90,000,000,101 / 102 / 201.
+- **Play 1, `SeedTest_wheelinvite_20261008`:**
+  - **New profile:** the wheel and Reward info at the floors (+1,200 Speed), with the pink gift slice.
+  - **Forced invite win** (`WheelService.DebugForce`, then a real SPIN click): the wheel stopped on the gift. "You won: Dustthorn, an invite plant!" Dustthorn arrived grown in the Bag.
+  - **Returning friend 101:** +1 spin and "+1 FREE SPIN". Again: no spin, "Already played".
+  - **First-time friend 102:** count 1/5. The milestone gave Thornbrute, not Dustthorn again.
+  - **FOUND:** the reward card said DUSTTHORN. The panel and sign said "NEXT: Thornbrute at 5", with cards labelled by position. Fixed by item 2's last bullet.
+  - **Late profile:** 29 Secrets planted on plot 7, mill tier 13, $10M/s. The wheel, Reward info and the world wheel showed the amounts. A forced jackpot showed $12B, paid 12B, and the line said "You won: $12B Jackpot!".
+- **Play 2, `SeedTest_wheelinvite2_20261008` (the fix):**
+  - The card showed THORNBRUTE.
+  - The panel and sign showed THORNBRUTE, "NEXT: Pharaothorn (Mythic) at 5 invites", cards owned / owned / 5 / 10.
+  - The pedestal stood Thornbrute.
+- **Cleanup:** both stores cleared (1 key each). Probe: 289 scripts, 0 differ, 0 ZZ, marker absent.
+- Captures and both consoles are in `output/wheel-invite-2026-10-08/play/`.
+
+**Owner calls.** Each proposal stays in force until the owner says otherwise.
+1. The seconds: 2 / 6 / 20 min of income; 60 s / 5 min of the mill.
+2. Cash scales with income AS PAID: the x2 pass, timed boosts (chest +25%, sacrifice +50%) and rain (+25%) are included, so a spin during a boost pays more. Speed uses the bare tier rate. Option: the bare garden rate for cash too.
+3. The invite slice's swap is cash_jackpot, at the player's amount.
+4. The wheel gives the NEXT plant of the track, so Heliothorn (Secret) comes last. Random among the missing plants is a one-line change.
+5. A milestone reached with every plant owned gives nothing. This can only happen after wheel wins. Option: a consolation such as free spins.
+6. The rules' words and timings: 4 s in the panel; 6 of 18 s on the sign.
+7. Owned cards say "owned" when the wheel gave some. Option: save which plants the wheel gave, and say "wheel prize".
+
+**Not verified:**
+- A phone. Fit is measured on 23 screens in specs only; there was no emulator or phone Play (the MCP can't switch the emulator).
+- The inbox paths (a returning friend; a plant owed across servers): spec only.
+- The invite prize with a full Bag, and both swaps: spec only.
+- Two players at once. A real invite: INVITE FRIENDS was never pressed.
+- One INVITE click in Play 1, right after the reward card left, did not open the panel. The "!" cleared, so it may have opened and shut at once. Play 2 did not reproduce it; the cause was not found.
+- Bag prizes land at the roll, so the hotbar shows the plant (or pod) while the wheel still spins. This already happened with pods.
+
+## Hotbar: a plant always lands on the bar; the oldest slides off — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; EDIT SPECS GREEN; NO FULL SUITE ON THE FINAL CODE; NO PLAY)
+
+From Michael's report: on a phone, a pod he stole went to the Bag, not the hotbar. The owner decided twice on 2026-10-08: option A, then "when you pick up a plant, it must go to hotbar, then when newly banked pods will also show to hotbar, the old items that occupied the hotbar will go to inventory". On the options asked: the oldest leaves and the rest slide left; hearts are not spared.
+
+**The cause.** A phone shows five slots, and slots 1-3 are the bat, the trap and the Spin Tickets, so only slots 4 and 5 take plants.
+- Since MY PLANTS (2026-10-04), a creature planted in the garden keeps its slot while it earns (`HotbarSlots.owned` counts `profile.Plants`).
+- Nothing of it is drawn there: the Bag model has no planted rows, so the slot paints EMPTY.
+- `HotbarSlots.arrive` only took a TRULY empty shown slot, and with none it sent the pod to the Bag.
+
+**The rule now** (`HotbarSlots.arrive(bar, ref, shown, planted?, slide?)` returns the bar, the slot, and the ref pushed off):
+1. Already on the bar: nothing moves (a creature that kept its slot while planted).
+2. Its own faint slot (bat, trap, tickets).
+3. The first empty SHOWN slot.
+4. The first shown slot a PLANTED creature keeps (option A; `HotbarSlots.planted(profile)` = in `Plants`, not in `Held`).
+5. With `slide`, a plant or pod only: the shown slots holding plants or pods SLIDE. The left-most (the oldest: the bar fills left to right) leaves for the Bag, each other moves one plant slot left, and the newcomer takes the right-most. Weapons, tickets and faint slots never move and are never pushed off.
+6. Else the Bag (a weapon with no room).
+
+- ARRIVALS from the profile packet slide (`LoadoutUI` passes `true`): banked or stolen pods, the wheel's, the Shop's, AND creatures picked up out of the garden. Those come from the new pure `HotbarSlots.pickedUp(wasPlanted, nowPlanted, owned)`.
+- A Bag tile pressed to hold does NOT slide (steps 1-4 only): browsing the Bag never reshuffles the bar.
+- A push-off pops the Bag cell. Each newcomer flashes where it stands after every slide.
+- The server is unchanged: `HotbarSlots.clean` already accepts an edit that drops an owned ref. The bar is still client-placed.
+
+**Specs (Edit, spec_direct):**
+- HotbarSlotsSpec 81/0, with 11 new checks. They cover the phone and desktop slides, a weapon between plants, faint slots, planted-first, empty-first, shown-only, a weapon with no room, already placed, and pickedUp.
+- HotbarSpec and HudLayoutSpec each have one source pin updated.
+- Option A's run was green: HotbarSlotsSpec 70/0, HotbarSpec 35/0, HudLayoutSpec 1452/0, InventorySpec 47/0, InventoryModelSpec 42/0.
+- Final code, rerun 2026-10-08: HotbarSlotsSpec 81/0, HotbarSpec 35/0, HudLayoutSpec 1452/0, InventorySpec 47/0, InventoryModelSpec 42/0.
+- The peer session's full suite (119 run) ran while these files were mid-edit. Its one non-Rain failure was HotbarSpec's stale pin, since updated (35/0 above).
+
+**Not verified:**
+- No Play. The MCP cannot switch the emulator to a phone.
+- No full suite.
+- Michael's own bar is not known.
+
+## HATCH TARGET LOCK: a hold never jumps to another pod — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SPECS GREEN; SUITE 118/118 RUN, FAILING ONLY RainAudioSpec (pre-existing); ONE GUARDED PLAY ON `SeedTest_hatchlock_20261008`, CLEARED)
+
+From Michael's report; the owner approved it on 2026-10-08.
+
+**The bug.** Roblox shows ONE prompt per key, the best-placed one. With ready pods close together, walking or turning mid-hold made another pod's Hatch the best one. The held prompt was hidden, the hold dropped, and the next press landed on the other pod. Levels 6-7 pack more pods, so it happened more.
+
+**The fix: client-side and local only.** No server change; PlantService still checks every hatch.
+- New `Shared/PromptHoldLock.luau` (the rules and the bookkeeping) and `StarterPlayerScripts/HatchHoldLock.client.luau` (the events).
+- Once a hold begins on a pod's `HatchPrompt` (keyboard E, a controller button, or a finger on PromptUI's panel, which calls InputHoldBegin), every OTHER prompt that could be shown while the player stays in that pod's 26-stud range is put out of reach on this client.
+  - Out of reach means its MaxActivationDistance is set to 0, locally. This covers other pods' Hatch, Instant Hatch, the mill's sign, and anything else there.
+  - Nothing can take the key, and PromptUI's panel cannot move.
+  - A pod appearing or moving into range mid-hold is put out of reach on the next frame.
+- **It lets go** on every end, and every prompt gets its reach back:
+  - the hold let go, or completed;
+  - the pod's prompt hidden: out of range, the panel hiding, a teleport away;
+  - the held prompt leaving the game: the pod hatching, the prompt destroyed, the plot resizing;
+  - a death or a respawn;
+  - and, as a last guard, the hold's length plus 1.5 s.
+- **Why the reach, not Enabled:** the server and two client scripts switch prompts on and off with Enabled (mill and plot boards, Bonus Chest, obby finish). Nothing writes a reach after a prompt is made.
+  - So a reach the lock didn't write is somebody else's. It is kept and given back.
+  - Enabled is never touched.
+- **Deferred signals:** this place DEFERS property signals (measured). The watcher therefore treats a reach of 0 as the lock's own write.
+  - A was-it-me flag would have kept 0 as the value to give back, leaving every prompt out of reach after the first hold.
+  - HatchLockSpec has that case.
+- Picking a target before a hold starts is unchanged. Hatch times, Instant Hatch prices and who may hatch are unchanged.
+
+**Specs:**
+- HatchLockSpec (new) 35/0: real ProximityPrompts on parts, attachments and models.
+  - The lock holds through a nearer pod appearing and a prompt moving into range.
+  - It releases on every end; nothing stays out of reach.
+  - A server's mid-hold write is kept; Enabled is untouched.
+  - Instant Hatch never locks and is out of reach during a lock.
+  - The client wires every end.
+- HatchBonus 41, HatchReveal 74, HatchTimer 38, HatchRoll 166, HatchStorage 208, HatchDelivery 62, InstantHatch 57, TutorialSpotlight 44: all green.
+- Suite 118/118 run; only RainAudioSpec fails (pre-existing).
+
+**Guarded Play.**
+- Setup:
+  - A fresh throwaway store, `SeedTest_hatchlock_20261008`, cleared afterwards (1 key). The probe after: 289 scripts, 0 differ, 0 ZZ, marker absent.
+  - The owner's account, plot 1 at Level 7 (DebugService `SetPlotTier`).
+  - Nubkin pods 2.8 studs apart, planted with the player's own `PlaceAt` and made ready with `PlantService.DebugReady`.
+  - A real E held through the MCP keyboard, and real D / W keys to walk and turn.
+- **Three holds while walking across the row: the HELD pod hatched every time.**
+  - Trial 1, id2: walked 13 studs past four pods. At 0.56 s pod id3 was 2.8 studs away against id2's 5.1, and was out of reach.
+  - Trial 2, id4.
+  - Trial 3, id3: walked across id11 at 2.8 studs, then turned (W) and walked off.
+  - Every other pod's Hatch went out of reach within one frame of the hold beginning. All were back at 26 the frame after the trigger.
+- **Control:** the same walk with HatchHoldLock switched off. The hold jumped at 0.52 s (id11 hidden, id13 shown) and nothing hatched. That is Michael's bug.
+- **A death mid-hold:** the hold ended, and after the respawn no prompt was out of reach. After every hold: 0 prompts out of reach.
+- **Harness finding, not a game path:** a hold during a SERVER-side `Humanoid:MoveTo` walk always ended part-way (0.6-0.9 s), even with nothing competing.
+  - A teleport, turning in place and walking with real keys don't end it.
+  - Only the fairy and the guardians use MoveTo; players never do.
+  - The first trials used MoveTo. They are left in the log and not counted.
+- Captures are in `output/hatch-lock-2026-10-08/play/`. PromptUI's desktop panels are always-on-top billboards that MCP captures don't draw, so the per-frame log (each prompt's reach and distance, every prompt event) is the evidence.
+
+**Not verified:**
+- Touch (a finger on PromptUI's panel) and a controller: spec only. Both arrive as the same PromptButtonHoldBegan the lock listens to.
+- A teleport mid-hold and a plot resize mid-hold: spec only (the held prompt hidden or gone).
+- A real phone. Two players at once.
+
+## TREADMILL FUN: walk-speed pops, a Speed-milestone bar with prizes, a catch game on the belt — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SPECS GREEN; SUITE 117/117 RUN, FAILING ONLY RainAudioSpec (pre-existing); TWO GUARDED PLAYS ON FRESH THROWAWAY STORES, BOTH CLEARED)
+
+The belt's Speed rate is UNTOUCHED. Nothing new adds Speed or multiplies it; everything is feedback or a prize in cash or spin tickets.
+
+**A1. "+1 WALK SPEED · NOW 19"** (new `Shared/SpeedMilestones.luau`, `TreadmillFunUI.client.luau`)
+- Fires whenever the WalkSpeed the SCORE walks at (walkSpeedFor, never the carry-slowed figure) passes a whole number.
+- Several in one gain, or in a row while one shows, are ONE pop ("+3 · NOW 22").
+- Drawn off the profile packet, as SpeedFX is: no remote.
+- One row over the owner's GOLD BURST (138957621639655), turning slowly: the Speed shoe and the gold words. The existing cue InviteBadgePop.
+- Projected into a gui at DisplayOrder 11, under the notices (13) and the HUD (20): never over a button or a notice. Since run 3 it is also never UNDER one (below).
+
+**A2. The milestone bar and its prizes**
+- A slim bar over the front of the player's OWN belt, for them only: "NEXT: 5K SPEED · CASH" / "NEXT: 1M SPEED · 1 SPIN TICKET", filling from the last milestone to the next.
+- "BELT TICKET 0/1 TODAY" beside it, with the game's own ticket picture.
+- The Speed shoe rides the fill's leading edge.
+- A passed milestone shows the owner's MILESTONE BADGE (101850589009212) with the shoe and the number in its centre, the bar flashes, and the cue MillUpgrade plays.
+- 17 milestones: 100, 500, 1K, 5K, 10K, 50K, 100K, 1M, 10M, 100M, 1B, 10B, 100B, 1T, 10T, 100T, 1Qa.
+- One free spin ticket at 1K, 1M, 1B, 1T and 1Qa (5 ever). Cash at the other 12.
+- **Cash = 60 s of garden income at that moment, never under the floor, never over a tenth of the NEXT plot level's cost** (the top level's at Level 7); the cap wins.
+
+| milestone | floor (proposed) | milestone | floor | milestone | floor |
+|---|---|---|---|---|---|
+| 100 | $100 | 50K | $5K | 10B | $1M |
+| 500 | $250 | 100K | $10K | 100B | $2.5M |
+| 5K | $1K | 10M | $50K | 10T | $10M |
+| 10K | $2K | 100M | $250K | 100T | $25M |
+
+- Each floor is at most a tenth of the plot level a player usually faces at that point (25K .. 2.5B). The cap: Level 1 → $2.5K, Level 4 → $2.5M, Level 7 → $250M.
+- Paid ONCE PER PROFILE, EVER. The profile keeps the highest milestone passed (`SpeedMilestone`, a Speed value), and a reset keeps it.
+- Every source counts except admin and debug Speed, which pass milestones unpaid. Sources are told apart by a `source` on `PlayerDataService.AddSpeed` / `TreadmillService.PayReward`.
+- One gain crossing several pays them all in ONE notice: "MILESTONE! 1K Speed" / "+$350 · +1 Spin Ticket".
+- A ticket with no room on the earned balance (500) is OWED (`MilestoneSpinsOwed`) and paid at the next gain with room.
+- EXISTING PLAYERS: a save with no key starts at the highest milestone under its Speed. No back pay.
+
+**Clear of the HUD** (`SpeedMilestones.clearOf`)
+- In run 2 a close camera put the bar's anchor (11.5 studs over the belt) at the top edge. The bar sat behind the clock and the top row (`play/run2/01..09`).
+- Now the bar (with its badge's room) and the pop each stand at the NEAREST spot clear of HudLayout's own rects, 8 px off each, inside the safe area.
+  - The rects: `occupied`, the status/notice/boost bands, the clock and ADMIN.
+  - Going up costs double, so the bar settles under the top row.
+  - The pop also stands clear of the bar.
+- The first version stepped out one rect at a time and looped between two strip bands (800 of 1,995 spots hid the bar). It is now a search over the rects' edges.
+- TreadmillFunSpec sweeps 1,995 spots on the Play's desktop, and every spot on 11 HudLayoutSpec screens (2 desktops, 9 phones incl. notched). Every spot finds a clear place.
+
+**B. The catch game** (new `Shared/BeltCatch.luau`, `TreadmillFunService.luau`)
+- On their OWN belt only: an item every 8–12 s, from in front of them, past them, at jump height. Jumping as it passes catches it; a miss drifts away.
+- SEED COIN: 15 s of garden income, floor $10 (proposed); the owner's art 97002362837712, also its notice icon.
+- GOLDEN TICKET: 1 in 8, one free spin, at most ONE PER ROLLING 24 h. That is its own window (`BeltTicketAt` / `BeltTicketCount`, WheelData.Daily's pattern); the obby's allowance is untouched. Once used, or with a full balance, only coins come.
+- THE SERVER DECIDES: records under Workspace.BeltItems (MiniEventService's ticket pattern).
+  - The catch is the replicated root within 2.6 studs, risen 1.6 studs over its standing height, tested now and 0.35 s ago.
+  - There is no remote, so a client claim has nothing to go through.
+- Never while carrying, dead, off their belt, on the Disco Mill, or during a Ticket Disco or Ticket Shower.
+- The path was MEASURED. A path from the console end hit tiers 8, 10, 11 and 14's front parts and tier 7's banners. So it starts 42% of the half-length in front of the middle and keeps within 0.8 studs of the centre line. It is clear on all 14 tiers × 6 plots (6,300 samples, Level 7 plots, plot 6 softened).
+- A catch jump unmounts the mill (its own rule: Jump is the way off). The player keeps earning while standing on the belt.
+
+**Icons (the owner's addenda and re-uploads, relayed by the peer session).**
+- THE SPEED SHOE is the game's one Speed icon: `SourceIcons.speed` = the owner's transparent re-upload 99714577637458 (512 px).
+  - Its small version 114664524232030 (32 px) is used wherever the shoe DRAWS at 40 px or less. That is `GameConfig.SmallIcons` plus the new `Shared/SizedIcon.luau`, measured off the drawn size after every UIScale.
+  - Both were proven IsLoaded in Edit, with transparent corners.
+- Where it is drawn:
+  - the HUD's Speed number: CashUI, the same 50 x 38 box, so no HUD rect moves. The frame sneaker stays under it until it loads, and the gold plus badge stays (the owner's call).
+  - the Shop's Speed shelf, cards and detail, and the Index's Speed reward (20 px): all via MenuKit.picture;
+  - the wheel's Speed prizes (WheelDraw);
+  - notices with the Speed source (StatusText);
+  - SpeedFX's "+N" (22 px, the small one);
+  - TREADMILL FUN's pop, bar and badge.
+- `SourceIcons.training` = the BOOSTED SHOE 113941145748388: the +25% boost only (BoostIcons, the wheel's boost slice and its line).
+- The OLD winged shoe 96656510808947 is NO LONGER USED anywhere (TreadmillFunSpec checks). The two first uploads, on opaque black (87020355715502, 137016623960738), are drawn nowhere.
+- `Store.Icons` speed1-6 are untouched.
+- `SourceIcons.coin` = the seed coin; `SourceIcons.milestone` = the badge. Server notices may now carry an `icon` key and `quiet`.
+- At 33-40 px the 32-px small shoe is drawn slightly upscaled (the desktop HUD draws it at 38). That is the owner's 40 px rule, applied as written.
+
+**Saves.** All new fields default safely: `SpeedMilestone` (migrated as above), `MilestoneSpinsOwed`, `BeltTicketAt`, `BeltTicketCount`. A full existing profile loads the same apart from the milestones marked passed (TreadmillFunSpec).
+
+**Specs:**
+- TreadmillFunSpec (new) 110/0.
+- WheelArtSpec 82/0: the new ids, and small vs plain by drawn size. CompactMenusSpec 46/0.
+- FirstMinuteSpec 117/0.
+- Mill, Wheel, MiniEvent, Speed, SourceIcons, BoostIcons, Notice, HudLayout, Admin and Store specs green.
+- Suite 117/117 run; only RainAudioSpec fails (pre-existing).
+
+**Guarded Plays** (the owner's account, plot 1, desktop, emulator off; captures in `output/treadmill-fun-2026-10-08/play/`):
+- Two fresh throwaway stores: `SeedTest_treadmill2_20261008` (run 2) and `SeedTest_treadmill3_20261008` (run 3).
+  - Each was cleared with test_store_off (1 key each). Run 2's marker was lost in a power loss and was set again only to clear it.
+  - The probe after: 287 scripts, 0 differ, 0 ZZ, marker absent.
+- Run 2 (`play/run2/`):
+  - the pops;
+  - milestones 100 (+$100), 500 (+$600 = 60 s × $10/s) and 1K (+1 spin), then 1M and 10M in a batch (capped at $2.5K at Level 1);
+  - a golden ticket caught with a real Space press (window 1/1);
+  - a capped "ticket" came as a coin and was caught (+$150);
+  - an upgrade to tier 8.
+  - Its captures show the bar behind the clock: the bug fixed above.
+- Run 3 (`play/01..08`, about 1065 x 716):
+  - The bar sits under the top row, and the pop sits under the bar, with a close camera and with a 30-stud camera. `under HUD: none` was measured each time.
+  - The Speed shoe was read off the client's own ImageLabels (id, drawn size, IsLoaded):
+    - in the pop, on the bar's fill, and in the badge with the number;
+    - on the HUD: small, 38 px;
+    - in the Shop: small at 26 px on the shelf heading, plain at 56 px on the cards;
+    - in the Index rewards: small, 20 px;
+    - on SpeedFX's +N: small, 20 px.
+  - The Shop and Index open and close with their own buttons.
+- Console: no script errors.
+  - Four `[Seed/MenuKit] a picture did not load` warnings came from Index rows below the fold (the Starbloom and Emberroot headings).
+  - The small shoe, the cash icon and two biome icons warned alike: those rows were not drawn yet.
+- After run 3: the first pop came up without its burst (capture 01). The pictures are now preloaded at start; that change is not seen in Play.
+
+**The owner's calls:**
+- the floor table and the 10% cap;
+- the coin floor ($10);
+- that coins are 15 s of income each. Catching every one (about 7 of 8 items, one per ~10 s) adds roughly 1.3× the garden's income while standing on the belt;
+- a catch jump unmounts the mill (no auto re-park);
+- the gold plus badge over the HUD's new shoe (kept from the reference; one line removes it).
+
+**Not verified:**
+- Phones, tablets, TV and controllers: no device and no emulator this time. The bar's placement is swept in the spec on 11 HudLayoutSpec screens, not seen on them.
+- A real human's catch timing, and a touch jump.
+- The wheel's Speed prizes and the wheel's Speed notice with the new shoe. WheelArtSpec builds the face and checks small vs plain by drawn size; not captured in Play.
+- Two players at once.
+- The HUD shoe's contrast on grass: the green shoe at 38 px reads lighter than the old blue sneaker (for the owner's eye).
+- The 32-px small shoe drawn at 33-40 px is upscaled (the owner's 40 px rule as written).
+
+## FIRST MINUTE: a starter pod, a 400 Speed goal, a fair first raid, a Big first catch — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SPECS GREEN; SUITE 116/116 RUN, FAILING ONLY RainAudioSpec (pre-existing); GUARDED PLAYS ON FRESH THROWAWAY STORES)
+
+**1. The starter pod (new `Shared/FirstMinute.luau`; PlantService):**
+- A brand-new profile gets ONE Tiny Petalpip, a Greenhollow Common, planted on the first free bed spot when its garden is restored. It runs on the ladder's 30 s.
+  - Brand-new means no Plants, Held or Almanac; Speed 0; no step done; StarterAt 0.
+  - Petalpip, not Nubkin: Nubkin is the reserved pod, so the guide's own hatch can still say NEW DISCOVERY.
+- No prompts (no Hatch, no Instant Hatch). The tick hatches it in place (`hatchStarter`), in this order:
+  - Stage 3 and an item id, saved first;
+  - the Almanac;
+  - the normal roll reveal, sent to the clients only;
+  - the notice "Your first plant hatched!" / "It earns $5/s" when the plant comes up;
+  - the real creature stands up as the reveal fades.
+  From then on it is an ordinary plant: it earns, walks, can be lifted and sold.
+- NEVER progress:
+  - no RecordTutorial;
+  - `TutorialData.Sanitise` reads no possessions as proof once `StarterAt > 0` (every older save reads exactly as before);
+  - `HasOutstandingPod` skips the starter row (`starterAt`, passed by TutorialPodService), so the reserved pod is still offered;
+  - the Bonus Chest stays LOCKED (FirstLoopDone);
+  - it pays no hatch-bonus spin (no OnRevealed listener hears it);
+  - `travel` is unaffected;
+  - Metrics' funnel step 6 still waits for this session's own hatch.
+- Profile `StarterAt` (0, or the row's PlantedAt) is set once by `PlayerDataService.RecordStarter`, in the same step as the row, and a progress reset KEEPS it.
+- Steps 1–2 of the guide say "Your first pod is growing!" while the player attribute `StarterHatchAt` is set.
+
+**2. `Tutorial.SpeedTarget` 1,000 → 400.**
+- Title "Reach 400 speed!" and its detail come from `SpeedTargetText`.
+- TutorialUI counts "/ 400 SPEED"; the spotlight says "YOUR SPEED · GET 400".
+- Sanitise credits `speed` at 400 or more.
+
+**3. A fair first raid.**
+- BiomeData Greenhollow `FirstRaidChaseSpeed = 19`, the chase's whole speed with the theft's own rage stack included.
+- NestService: a theft from a CALM nest (rage 0) by a thief whose `steal` is not done, and not a Secret, sets `nest.firstRaid`.
+  - While that thief is the target and the rage is that one theft, the chase is `min(19, the usual)`.
+  - A second theft (25), anybody else (20), the Secret (19 + rage), other biomes and the event nest are unchanged.
+- The arithmetic (CarryService's multiplier of the size), in walk speed and margin over the guardian:
+
+| Speed and pod | walks at | margin |
+|---|---|---|
+| 400 with a Big | 21.11 | +2.11 at 19 |
+| 400 with a Colossal | 21.01 | +2.01 at 19 |
+| today's beginner: 1,000 with a Tiny | 21.94 | +1.94 at 20 |
+| 0 Speed | 15.93 | caught |
+
+- BiomeData's old "light pod" reading gives +1.74 at 400 (at 19) against +1.51 at 1,000 (at 20).
+
+**4. The first catch.**
+- `CarryService.TryTake` while `steal` is not done makes the pod `max(size, Big)` (`FirstMinute.catchTier`). A Secret's or event pod is never changed.
+- The profile notes `FirstCatchSpecies` / `FirstCatchTier`.
+- The first hatch of that species at that size sets the reveal's `firstCatch`. HatchFX then adds the top line "BIG! Your first catch." in gold (words only), and the note clears.
+
+**Saves:**
+- `StarterAt`, `FirstCatchSpecies` and `FirstCatchTier` default to 0, "" and 0, and junk reads the same.
+- A v3 record with a full garden loads identically (FirstMinuteSpec).
+
+**Measured, in seconds from the join, on fresh throwaway stores.**
+- The runs were harness-driven: MoveTo at the real WalkSpeed, the game's own TryTake / HatchByHand / BIOMES / TELEPORT paths, and no prompt hold time. The harness began about 7 s after the join.
+
+| | run 3 | run 4 |
+|---|---|---|
+| first income (the starter hatched) | 31.5 | 31.9 |
+| 400 Speed | 34.5 | 34.0 |
+| first steal | 51.7 | 52.1 |
+| first stolen pod hatched | 125.8 | 127.1 |
+
+- Training to 400 took about 20 s on the tier-1 mill.
+- The raid home took 12.6–12.8 s. The guardian chased at no more than 19.00 and was never closer than 23.8 studs.
+- Runs 1–2 were harness dry runs: a walk got stuck, and a capture fired too early. Run 5 took photos only (with a Speed shortcut).
+- Captures are in `output/first-minute-2026-10-08/play/` 01–04: 01 and 03 from run 4, 02 and 04 from run 5. The reveal labels in 02 and 04 are the test client's screen copies of the real billboards, because MCP captures never draw AlwaysOnTop.
+- Each store's test key was removed afterwards. Probe: 282 scripts, 0 differ, 0 ZZ, marker absent.
+
+**Specs:**
+- FirstMinuteSpec (new) 117/0, on the real PlantService, NestService, BonusChestService and ProfileSchema.
+- TutorialSpec 119/0.
+- SecretFormsSpec pins `carriedTier`.
+- The HatchReveal, InstantHatch and HatchRoll stand-ins gained `TakeFirstCatch`.
+
+**The owner's calls:**
+- The starter species, Petalpip.
+- Whether its hatch should pay the hatch-bonus spin (today it waits for the player's own first hatch).
+- The number 19.
+- A beginner's first raid on a nest still angry from SOMEONE ELSE's theft gets no cap (25, as today).
+- An admin RESET of a profile that never had a starter makes it brand-new, so it gets its one starter at the next join.
+- A first take of a Secret or an event pod is not made Big, yet still records `steal`.
+- Income starts at the hatch, about 3.8 s before the roll shows the plant.
+
+**Not verified:**
+- Phone and TV: the label's fifth line, and "Your first pod is growing!" in a phone banner.
+- A real controller.
+- Human prompt holds.
+- Two beginners on one nest in a live server.
+
+## Spotlight tutorial: the owner's pointing hand, one spotlight per step, step 7 `travel` — DONE 2026-10-08 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SPECS GREEN; SUITE 115/115 RUN, FAILING ONLY RainAudioSpec (pre-existing); ONE GUARDED PLAY ON `SeedTest_20261008`, A FRESH PROFILE ON THE OWNER'S ACCOUNT, PLOT 1, DESKTOP 905x716, EMULATOR OFF)
+
+**The 7 steps (TutorialData Version 3):**
+- train, speed, steal, bank, place, hatch: ids, titles and server milestones unchanged.
+- 7 `travel` "Get around fast!": OBBY, then TELEPORT TO PLOT.
+  - The server records it only on a SUCCESSFUL `PlotService.TeleportHome` (new `OnTeleportedHome`, subscribed by PlayerDataService), and only while `hatch` is done (`TutorialData.Needs`). A teleport home before the hatch records nothing. The client never claims it.
+- Sanitise credits `travel` ONLY to records saved before Version 3 that are past the hatch (the owner's call, 2026-10-08): a complete v2 save stays complete. A v3 record with `hatch` done and `travel` not done keeps step 7 open, so a player who hatches and leaves before teleporting home meets step 7 on their return (TutorialSpec).
+- `TutorialData.FirstLoopDone` (train through hatch) is what BonusChestService (both checks) and Metrics' TutorialCompleted now read. The chest still opens at the hatch, and TutorialCompleted is still counted there.
+- `travel` is reported as its own TutorialStepDone. The onboarding funnel keeps its six steps and their numbers (KB/ANALYTICS.md).
+
+**The hand:**
+- The owner's image 77822355284810 (IsLoaded in Edit; fingertip measured at (0.589, 0.013) of the 1024 px upload) replaced the gold ▶ pointer and the green ▼ finger.
+- On the HUD it points up from below a top-row button and down from above a bottom one, turned so the fingertip meets the window's edge, and taps about once a second.
+- World targets (the belt, a pod, free soil, the plot's spawn) get the same glove pointing down. It is drawn as a projected ScreenGui marker (DisplayOrder 12, under the HUD) instead of an AlwaysOnTop billboard, so captures show it. Words beside it: HOLD HATCH, READY IN Ns.
+
+**The spotlight (new `Shared/TutorialSpotlight.luau`, drawn by TutorialUI):**
+- At most once per step per HUD target:
+  - SPEED: "YOUR SPEED · GET 1,000" ("GET 400" since FIRST MINUTE, the entry above); a tap anywhere closes it.
+  - BIOMES: "TAP BIOMES".
+  - The pod's hotbar slot: "EQUIP YOUR POD".
+  - OBBY: "TAP OBBY".
+  - TELEPORT: "TAP TO GO HOME", lit only after the 3 s cooldown it shares with OBBY.
+- 65% black: an enormous UIStroke round a rounded window, padded 8 px but only halfway to a neighbouring button, with a pulsing gold ring.
+- Its own gui: ScreenInsets None (covers the notch and the topbar), DisplayOrder 61, over the ADMIN button's 60. While it shows, the guide's gui rises to 62, so Skip guide stays above it.
+- Only buttons are blocked: one transparent blocker over each other button, never Roblox's TouchGui or the guide's own. Movement is never blocked.
+- NEVER shown (and dropped at once if it becomes true): the guide not up, dead, outside the Safe Zone, carrying, a chase, a panel, modal or reward moment, a notice up (new `Notice.showing`), the target hidden.
+- It waits for 1.5 s of nothing in the way (`Settle`, found in Play: the hatch's notices burned both step-7 lights inside one second).
+- It fades after 15 s; the hand stays. A pressed button is not pointed at again in its step.
+- Controller: the selection goes on the lit button (A presses it), trapped there and marked `GuideLit`. While lit, the button's own D-pad key presses it (Up / Left / Right), through an InputBegan listener in PlotTeleportUI, BiomesButtonUI and ObbyButtonUI, because the engine takes the D-pad before ContextActionService while something is selected. A push of the stick hands the selection back.
+- On a desktop the guide's banner steps down under a hand pointing up at the top row (found in Play).
+
+**Specs:**
+- TutorialSpotlightSpec (new) 43/0: 15 screens (desktops, Studio's 705x338 phone with notches and home bar, notched phones, TVs), 75 placements, the NEVER list, the once-per-step life, the wiring.
+- TutorialSpec 112/0, including a real `BonusChestService.Claim`: LOCKED before the hatch, OK at it.
+- MetricsSpec 58/0; PlotTeleportSpec 68/0 (`OnTeleportedHome` hears the success only).
+- HudLayoutSpec 1452/0: three pins moved from the old pointer to the hand.
+- TutorialPodSpec 263, ObbySpec 69, ControllerSpec 63, HatchBonusSpec 41, NoticeSpec 100.
+
+**Play (Ready line "STUDIO TEST STORE"; fresh v3 profile; every step by the game's own path):**
+- Steps: AddSpeed (train, speed), `TryTake` (steal), a walk across the red line (bank), `PlaceAt`, DebugReady + `HatchByHand`, and real clicks on OBBY and TELEPORT.
+- Captures 01-10 are in `output/spotlight-2026-10-08/play/`.
+- What was seen:
+  - SPEED lit, and a tap on empty ground closed it.
+  - BIOMES: holding W 0.7 s moved the player 15.8 studs under the dim; a click on OBBY under it did nothing; pressing BIOMES lifted the dim and landed the player at the entrance.
+  - Slot: Skip guide clicked twice over the dim asked, then skipped; GUIDE resumed; pressing the slot equipped the pod and the hand moved over the soil.
+  - HOLD HATCH over the pod.
+  - OBBY pressed: the obby entrance. TELEPORT lit after the cooldown; pressing it recorded `travel`, 7/7, then the "Plant it to earn cash!" hint.
+  - A TELEPORT before the hatch moved the player (server log) and recorded nothing.
+- Harness only: a test-only verb re-armed SPEED, the slot and step 7 for their pictures (SPEED had faded before the capture, the slot during a slow walk home, step 7's lights were burned by the notices).
+- Teardown: test store off (1 key removed, marker gone), ZZ hosts deleted, probe 281 / 0 differ / 0 ZZ.
+
+**Not verified:**
+- Phone and TV (spec only; the emulator was not switched).
+- A real controller: A, the D-pad keys, the stick handing the selection back (spec and source only).
+- The touch thumbstick and jump under the dim (no touch device).
+- Blockers over prompt-billboard buttons (no prompt was on screen).
+- The 1.5 s Settle in Play (the running Play had the module cached; spec only).
+
+**The owner's calls on the report (2026-10-08), done the same day:**
+- `travel` is credited at load only to pre-Version-3 records past the hatch (above).
+- The locked chest now says "Hatch your first plant to open it." (BonusChestUI). It fits a notice on all 7 listed phones, in two lines at most at the phone's size (TutorialSpotlightSpec).
+- An old server (Version 2 code) drops `travel` and saves v2. The new code then credits it at load, because the record is pre-v3 and past the hatch. Harmless.
+
+**QUEUED by the owner (2026-10-08).** FIRST MINUTE, TREADMILL FUN, HATCH TARGET LOCK and WHEEL SCALES / INVITE PLANTS ON THE WHEEL / INVITE SIGN / RETURNING-FRIEND PRIZE are all DONE (the entries above): this queue is empty. Original queue note: FIRST MINUTE (starter pod, SpeedTarget 400, a fair first raid, a Big first pod). The brief is in this session's scratchpad (`first_minute_brief.txt`). After it, QUEUED: TREADMILL FUN (walk-speed pops, a milestone bar with prizes, a catch game on the belt; brief in the scratchpad, `treadmill_fun_brief.txt`), which runs only after FIRST MINUTE is integrated and its specs pass. Then HATCH TARGET LOCK (`hatch_lock_brief.txt`), then WHEEL SCALES / INVITE PLANTS ON THE WHEEL / INVITE SIGN / RETURNING-FRIEND PRIZE (`wheel_invite_brief.txt`), in that order.
+
+## Plot Levels 6-7 — DONE 2026-10-07 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; PLOT/MILL/GARDEN SPECS GREEN; SUITE 114/114 RUN, FAILING: RainAudioSpec (pre-existing) + HatchRollSpec timing (not plot code, below); ONE GUARDED PLAY ON `SeedTest_20261007`, ONE PLAYER (THE OWNER'S ACCOUNT, PLOT 1))
+
+**The levels:**
+- Level 6: 25 slots for 250,000,000.
+- Level 7: 30 slots for 2,500,000,000.
+- Both live in `GameConfig.PlotTiers`, the same on every plot.
+- Levels 1-5 are bit-identical to before. A one-time proof against the pre-change code covered 6 plots at L1-5 (2,514 part/attribute lines) and 97,980 saved points, which restore identically.
+
+**Plots 1-5:**
+- The wing grows forward into the old mill strip.
+- L6: Level 5's main bed plus 6 side rows. The wing fence sits 13.2 behind the gate line (was 37.6).
+- L7: 8 main rows (108.4 deep) plus 7 side rows, wing front still 13.2.
+- Settings: `SideBed.ForwardFromLevel` 6, `MinBehindGate` 10. The gate is unchanged.
+
+**Plot 6's shape (`Plot.Beside`; mill beside it):**
+- It keeps Level 5's wing (37.6-96.2 behind the gate, behind the mill) and grows deeper: L6 is 9 rows (120.6), L7 is 11 rows (145.0).
+- The wing ends before the back fence. The new plot attribute `WingBackZ` records that; PlantWander and MiniEventService.InPlot read it.
+- It never has less room than plots 1-5:
+  - fenced ground: 8,133 vs 7,938 at L6; 9,304 vs 9,011 at L7;
+  - soil: 5,120 vs 5,023 at L6; 5,950 vs 5,804 at L7.
+- The shape is chosen by the plot model's PlotId (`GameConfig.plotLayoutFor`).
+
+**Saves:**
+- New `SeedGameServer/GardenFrame.luau`: a garden is always saved in plots 1-5's frame. Plot 6 at L6-7 converts (the forward wing maps to plot 6's extra depth), so a garden moved between plot 6 and the others stays on its owner's ground. It comes back within the 4.5-stud fence margin.
+- PlotTier clamps to 1..7, and nobody's level changes on load.
+- The v1 migration stays capped at L5. Uncapped, deep old gardens would have migrated straight to L7 for free.
+
+**Field decor:**
+- The scatter is pinned at Level 5's reach (`Plot.DecorReach`).
+- Props on any plot's ground at any level are built and then removed. That removes 4: a coral bell, a daisy cluster and a fern behind plot 6, and the oak at plot 4's back (it already overlapped the Level 5 corner).
+- The other 64 are exactly as before (the bare field equals the pre-change export).
+
+**MapService:** the boot fit check is now per plot and per level, replacing the MaxReach/FieldBack check.
+
+**Specs:**
+- New PlotLevelsSpec 34/0.
+- PlotSpec 73/0.
+- MillPlacementSpec 20/0 (fixture plots now use real ids; L6-7 included).
+- PlantWanderSpec 133/0 (L6-7, both shapes).
+- PlotShowcasePlacement 16/0, PlotRelease 42/0, MapDecor 93/0, WeatherTeaser 186/0.
+- HatchRollSpec 162/4: the four question-mark reveal checks run 0.19 s over a 0.1 s tolerance. It was the same with the plot save code reverted, and it passed this morning, so it is treated as a timing flake, not plot code.
+
+**Play (Ready line "STUDIO TEST STORE"):**
+- Plot 1 was set through `DebugService.SetPlotTier` 5, then 6, then 7.
+- Plot 6 was resized with `MapService.ResizePlot` as an unowned plot. There is no debug path for a plot the player does not own.
+- Boards read:
+  - at 5: "LEVEL 5 > LEVEL 6 · 20 > 25 SLOTS · $250M";
+  - at 6: "LEVEL 6 > LEVEL 7 · 25 > 30 · $2.5B";
+  - at 7: "LEVEL 7 · 30 SLOTS · MAX", with no prompt.
+- The stats plaque read 0/20, 0/25 and 0/30.
+- 30 grown creatures were planted (admin Spawn, then planted from the bag); the 31st was refused with PLOT_FULL. 12 were mid-walk and 14 in the wing. The profile saved PlotTier 7 with 30 plants.
+- Captures are in `output/plot-levels-2026-10-07/play/`: plots 1 and 6 at L5/6/7 from above and from the gate, and the full L7 bed.
+- The Play was stopped from outside after the first pair of bed captures. The two shots taken after that were in Edit and were deleted.
+- Teardown: test store off (1 key removed, marker gone), ZZPlotHost deleted, probe 280 / 0 differ / 0 ZZ.
+
+**Pre-existing, unchanged:**
+- Plot 6's wing corner reaches into the road's empty arc: 6.5 studs at L3-4, 1.35 at L5 and at L6-7.
+- Plot 1's front-left fence corner is 1.17 inside the Disco Mill's keep-clear circle.
+- The wing's front moves back 12.2 from L4 to L5 on every plot.
+- Plot 5's wing crosses the dancers' obby corridor.
+
+**Not verified:**
+- Owning plot 6 at L6-7 at runtime (the one player gets plot 1; spec only).
+- A reload across a rejoin (spec only: ProfileSchema plus GardenFrame round trip).
+- About 4% of pods moved from plots 1-5 onto plot 6 land on lawn at the seams (spec).
+- Phone; real players.
+
+**PUBLISH WARNING:** a server still running the OLD version clamps PlotTier to 5 and saves it, so a Level 6/7 player who joins one loses the level. Shut down or migrate old servers when this ships.
+
+## Admin console: SPAWN + save-limit grants, the redesign, a third admin — DONE 2026-10-07 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SPECS + SUITE GREEN BUT RainAudioSpec (pre-existing); TWO GUARDED PLAYS ON `SeedTest_20261007`, ONE PLAYER (THE OWNER'S ACCOUNT), DESKTOP 1009x716, EMULATOR OFF)
+
+**Third admin (owner, 2026-10-07):** TappedYou `1139904972` (display "Villager") added to `ALLOWED`. Confirmed both ways
+that day (GET users/1139904972 -> "TappedYou"; POST usernames -> 1139904972). Michael's powers; NOT the owner: no rainbow
+title (OwnerTitleService asks IsOwner); the weather was owner-only too until the line below. Staff for TrafficLog/Metrics through IsAdmin.
+**Weather for all three admins (owner, 2026-10-07, later):** Rain/Thunderstorm/Stop are any allowlisted admin's (IsOwner gate on weather removed, WORLD tab shows them to all three, still confirmed in place, this server only, audited by admin; IsOwner now only the title; AdminSpec 125/0, AdminConsoleSpec 37/0; spec only, no Play).
+**SPAWN chip row fix (the other session, 2026-10-07; their report, not re-run here):**
+- The owner found the search box covering the group chips from EMBERROOT on.
+- Fix: the search has its own row; the chips wrap where a full card row still fits, else one row with < > arrows.
+- Code: `ConsoleModel.layout()` takes a 4th arg `chipWidths`; new `ConsoleModel.chipPlaces`; Metrics `ChipGap` and `ChipArrowW`.
+- Files: AdminConsoleUI.client.luau, ConsoleModel.luau, AdminConsoleSpec.
+- Results: AdminConsoleSpec 38/0 (all 8 groups in view on 12 of 18 screens, arrows on the other 6), AdminSpec 125/0. Probe 0 differ / 0 ZZ.
+
+**Brief A (the expansion), in `AdminService/init.luau`:**
+- `Config.MaxMoney = SAVE.MaxCash`, `MaxSpeed = SAVE.MaxSpeedScore` (read, not copied; 1e15). Refusals and the console show
+  the limit; a capped grant still says what landed. Save limits untouched.
+- `GrantSecret` -> **`Spawn`**: `Handle(sender, "Spawn", targetId, {species, form, size, quantity, request}, confirmName)`.
+  - Any species SeedData has, `pod` or `plant`, a size it really comes in (new `AdminService/SpawnCatalog.luau`: listed
+    1-7; Secrets/Invite one tier; Rain by RainPods -- rainpod4 Tiny..Titan, Colossal = rainpod5), 1..24.
+  - Any player in the server; anybody but the sender needs their username as the 4th word (the console's confirm) and
+    is told "An admin gave you <item>!" (new GameEvent verb `Notice.ServerNotice`, drawn by ActionToastUI -- the words
+    are the server's, so no client carries admin code).
+  - Whole quantity or nothing (bag room checked first; a mid-way failure takes back what it gave via SyncHeldNow), ONE
+    save per request, remembered answers (`SpawnAnswerSeconds` 300), `SpawnCooldown` 6, audited (who, target, species,
+    size, form, quantity). `Config.SecretGrants` -> `Config.Spawning` (default true). Natural Secret spawning untouched.
+  - Items built by CarryService's own givers (GivePod = a banked pod; GiveHatched onRecord = an invite reward), so the
+    shell, growth, income, hatch rules and Unsellable all follow the species id + tier, as for an earned one.
+- `ProvideConsole` also clones `SpawnCatalog` + `ConsoleModel` into the admin's gui and sets Spawning, SpawnCooldown,
+  SpawnAnswerSeconds, MinInterval; `keepStatus` writes `Roster` (JSON: every player's cash, Speed, bag rows/room, ready).
+
+**Brief B (the redesign), `AdminConsoleUI.client.luau` rewritten (old copy: `output/admin-console-2026-10-07/orig/`):**
+- MenuKit rim, title in the owner's rainbow badge, thin red keyline, see-through dimmer, X. Tabs PLAYER / SPAWN / WORLD /
+  ANNOUNCE in the header row (scrolls where narrow). One target bar (headshot, display name, @username, live cash /
+  Speed / bag from Roster; the player list with headshots). Log strip: last 5 answers, green / red / grey, with time.
+- PLAYER: amount box with K/M/B/T/Qd (exact; full number shown before sending), chips 1M 1B 1T 1Qd MAX, the limit;
+  RESET PROGRESS in its red box with the typed username. SPAWN: group chips + search, species cards with pictures
+  (ItemArt viewports, built on first show), POD/GROWN, size chips (invalid dimmed, no picker for a fixed size), qty
+  -/+ up to the bag room, preview "3x Colossal Lanterncap pod -> you", SPAWN (WAIT n / RESEND m:ss countdowns). WORLD:
+  night/day, weather (owner only), mini events (mode words restored). ANNOUNCE: unchanged outbox.
+- Reset, giving to another player, weather and events confirm IN PLACE. OpenPanel "Admin"; Escape / B / X close; LB/RB
+  tabs; PadFirst = the tab's main button; last tab and target kept this session. New `AdminService/ConsoleModel.luau`
+  holds the parser, tabs, payloads and the per-screen rects (AdminConsoleSpec).
+
+**Verified:**
+- Specs: AdminSpec 123/0 (rewritten: 3 ids, 1e15, every one of 43 species x every valid size x pod/grown = 434 spawns,
+  every Rain pod type, invite unsellable, rain rules, confirm, notice, one save, rollback, repeats, cooldown, full bag),
+  AdminConsoleSpec 37/0 (new: parser, chips, tabs, payloads, 18 screens incl. 705x338 = 2 grid columns, TVs).
+  Console source pins updated: CompactMenusSpec 46/0 (new §7), MiniEventSpec 90/0, RainEventSpec 88/0, RainPodsSpec
+  67/0, AnnouncementSpec 62/0. Suite: 113 specs, only RainAudioSpec fails (pre-existing).
+- Play 1 (Ready "STUDIO TEST STORE"; the owner's account): ADD MONEY "1Qd" -> $1e15, ADD SPEED 1Qd -> 1e15 (log + live
+  bar); SPAWN 3x Colossal Lanterncap pods by clicks (preview, WAIT 6, bag 3/24); 15 more through the console's remote
+  with ConsoleModel payloads: Lanterncap grown, Snarlbloom pod+grown, rainpod1-5 pod+grown, Dustthorn pod+grown -- all
+  saved, 18/24 rows = Tools; planted a spawned Lanterncap pod, DebugReady, hatched -> grown in hand; the Bag shows the
+  shells as earned ones; weather confirm + CANCEL; the player list; the Bag/console mutex; X. No game errors.
+- Play 2: the four tweaks after Play 1 (log placeholder, the Speed limit words, list headshots, grey for "nothing done").
+- Captures: `output/admin-console-2026-10-07/play/` (01-13).
+
+**NOT verified (spec only):** another player as target (one player in Play: the confirm, the notice); phone / compact /
+TV sizes (emulator off, not switched); controller, B and Escape (MCP cannot send them); TappedYou's own console.
+
+**Owner decisions / notes:** EQUIP NOW is gone (spawns go to the bag). A spawned GROWN plant does not mark the Almanac
+(as the invite reward and the old grant); hatching a spawned pod does. Rain spawns are creature-first (the pod type
+follows the size). Switching tabs closes an open question. Start Night/Day still carry the target id, unread.
+**ACCEPTED by the owner, 2026-10-07** -- relayed by the other session (not typed here): "accept all, proceed to plot
+levels 6-7".
+
+## Workspace cleanup DONE — 2026-10-07 (CLAUDE): deleted exactly `Workspace.MillTier11AbyssalTrench`, `MillTier12VolcanicForge`, `MillTier13FrozenAurora`, `MillTier14EventHorizon` and the empty `Workspace["Invite friends"]` Folder. Before deleting: the game copies fingerprinted MATCH; src and Studio grep found only MillForms provenance text; .rbxm backups reopened IDENTICAL in `output/workspace-backups-2026-10-06/`; Edit, no Play. After: MillPlacementSpec, the mill rate specs, InviteRewardsSpec 159/0 and BoostIconsSpec 41/0 all pass, and a guarded Play built a tier-13 mill and the hub pedestal's form. NOT ROJO-SYNCED: the deletion lives only in the open place until the owner saves or publishes, and the next Publish ships it.
+
+## Mill tiers 11-14 + Overclock removal: DONE, verified in two guarded Plays — 2026-10-07 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; MILL SPECS GREEN; SUITE 112/112 RUN, 2 FAIL: BoostIconsSpec (the Workspace originals) and RainAudioSpec (pre-existing); PLAYS ON `SeedTest_20261006`; WORKSPACE ORIGINALS UNTOUCHED)
+
+**The owner's decisions (2026-10-06):**
+- Plots 1-5: option B, gate × (37.5, Lift, -24.5) × yaw 90, for all 14 tiers.
+- Plot 6 keeps its mill beside its right fence. Its side strip is NOT free for the plot-upgrade brief.
+- Tiers 12-14 may overhang on plot 6 as its one exception, on two conditions:
+  - everything past the gate line or in the road's empty arc is CanCollide false (CanQuery false where safe);
+  - tier 13's spire must clear plot 6's fence by 0.5 through the smallest nudge, or else be made non-colliding.
+- Port the Brain scripts to Ambience.
+- Disco Mill question (report only), answered **no**: the road's empty arc alone blocks a front mill on either road-side lobe. Six front mills need six inter-plot gaps; only five exist.
+
+**Found while integrating:**
+- **No nudge works.** 252,601 poses searched (dx 0..3, dz -2..3, yaw ±10).
+  - The spire needs 1.02 out. That pushes tiers 12-13 into the arc unless the mill also goes at least 2.3 back.
+  - Every tier's step has only 1.00 before the Level 3-4 wing's front fence.
+  - Fallback applied:
+    - The spire is already CanCollide false as supplied.
+    - On plot 6 it, plus a snow bank (collides) and an ice boulder in the L3-4 wing fence, get CanCollide/CanQuery false.
+    - They are listed in `Mill.Place.BesideTouch`.
+- **Plot 6 overhang, pinned in MillPlacementSpec (visible or colliding parts):**
+  - T12: 3.90 past the gate line, 1.28 into the arc.
+  - T13: 3.90 past, 1.49 into the arc.
+  - T14: 7.22 past, no arc. The invisible DiskField reaches 7.26 and is softened too.
+- **Sign spots** (GameConfig `Mill.Sign`, measured against all 14 tiers with parts grown 0.25):
+  - Front, all tiers: `FrontOffset (-14.5, -0.6, -4.5)`, 15.2 from a mounted player, prompt 39.1 from the nearest plot board.
+  - Plot 6, tiers 1-11: unchanged.
+  - Plot 6, tiers 12-14: `BesideTallOffset (1, -0.6, -15.8)`, 4.0 past the gate line, non-colliding. It is the only spot within reach: the left is the plot, the right the arc, the back the L3-4 wing fence.
+  - The old candidate (-14.5, -11.6) was 18.6 from the belt, out of reach.
+- **Board text, every tier:** the step line now names the mill on sale ("ABYSSAL TRENCH") instead of "LEVEL n > LEVEL n+1".
+  - Reason: the brief's "UPGRADE → Abyssal Trench". "LEVEL n · NAME" overflows the 360-px face.
+  - The "BASE a > b" line now carries rebirths on both sides. At 14 it reads "LEVEL 14 · MAX" / "EVENT HORIZON · 450B/s" / MAX.
+  - **Owner may veto.**
+- **Pre-existing, not a check:** the MiniEvent corridor "the way east to the obby" crosses plot 5's mill, at the old beside spot as well as at the front.
+- MiniEvent tickets and dancers avoid the mills: their props grid is measured at each event's start, so an upgrade mid-event is only seen next event.
+
+**Done in source (lcheck OK; probe 0 differ / 0 ZZ):**
+- `GameConfig`:
+  - Tiers 11-14 at the addendum prices.
+  - `Mill.Place` gains Front, Beside, BesidePlots {6} and BesideTouch.
+  - New `millStandsBeside`, `millPlacementFor`, `millCFrameFor(gate, plotId)` and `millGateFor` (inverse).
+  - Belt rows 11-14 inert (Shimmer had repainted the owner's belts).
+  - Sign spots; Attribute `MillOverclockBecame`.
+  - Overclock table, helpers and asserts deleted; history note kept.
+  - `trainingRateFor(tier, profile)`.
+- `MillForms` (+4 generated forms, fidelity MATCH) and `MillFormMotion`, a line-for-line port of the 4 Brains. Its differences:
+  - arrows run on Ambience's real belt clock;
+  - only on screen, within 320;
+  - missed hammer blows are skipped.
+- `MillModel`: tiers 11-14 built from the forms (Atomic streaming); `SignBase(cf, tier, beside)`; `Soften`.
+- TreadmillService: Overclock gone; board at 10 offers 11, at 14 MAX; Rebuild softens plot 6 and uses the spots.
+- MapService: `millCFrameFor(gate, id)`, sign spot, soften.
+- ProfileSchema: `MillOverclock` clamped 0..10; `convertOverclock` maps L1-2→11, 3-5→12, 6-7→13, 8-10→14, below tier 10 just zeroed; idempotent.
+- PlayerDataService: runs the conversion at load, marks dirty, sets the attribute; `SetMillOverclock` deleted.
+- New `MillNotice.client`: "Your Overclock became <name>!" once.
+- DebugService `SetMill`: tier only, now also rebuilds the plot's mill.
+- SpeedFX, Ambience: hook into MillFormMotion.
+- Comments: ObbyData, ObbyService, BiomeGateService.
+- MillMockupRunner: 14 tiers; plinths sized to footprint; placards 11-14.
+
+**Verified 2026-10-07:**
+- **Specs:**
+  - MillPlacementSpec 20/0, MillSignSpec 8/0, MillOverclockSpec (new) 17/0.
+  - MillTrainingSpec 16/0, SpeedSpec 336/0, BalanceSpec 27/0.
+  - PlotShowcasePlacementSpec 16/0, AdminSpec 103/0, ObbySpec 69/0, ObbyViewSpec 112/0.
+  - BoostIconsSpec 40/1: its Disco Mill check hits the owner's Workspace originals MillTier11/12, which stand on the Disco Mill's ground. The cleanup removes them.
+- **Suite:** 112 of 112 run. Failing: BoostIconsSpec (the originals) and RainAudioSpec (pre-existing).
+- **Play A** (TEST store `SeedTest_20261006`, Ready line seen, desktop, no emulator). Driven by gated hosts ZZMillHost/ZZMillView, since deleted:
+  - Tiers 11-14 set through DebugService `SetMill` on plot 1 (front). Each builds Atomic and animates; the player mounts and runs (tier 11 belt at 45).
+  - Boards:
+    - At 10: "UPGRADE / ABYSSAL TRENCH / BASE 400M/S > 2.5B/S / $400B" (green with $400B).
+    - At 14: "LEVEL 14 · MAX / EVENT HORIZON · 450B/S / MAX".
+  - Six plots at tier 14: all six tracked by MillFormMotion, and one step of all six costs 0.113 ms. The frame rate was NOT measured: Studio was unfocused (rendering throttled to 15/s; Heartbeat 59.4/s).
+  - Plot 6 at tiers 12-14:
+    - The softened sets match the rule. Only the Deck, Step and belt collide at 14. At 13 the spire, three ice boulders, four snow banks and the bases in the arc are soft.
+    - Three routes were walked at WalkSpeed 125 and at 16: across the front at 2.5 and 5.5 past the gate line, and the road run along the arc's edge at 149.5°. Every leg was reached with no stalls.
+- **Play B:**
+  - The saved TEST profile (tier 10 + overclock 4) loaded as tier 12, overclock 0, with the log line.
+  - "Your Overclock became Volcanic Forge!" captured. The test host held MillNotice back and restarted it for the shot.
+  - The mill rebuilt as Volcanic Forge, and the board offers Frozen Aurora at $1T.
+- **Captures:** `output/mill-tiers-2026-10-07/play/`:
+  - t11-t14 empty and running;
+  - board_t10/t14;
+  - six_t14_overview;
+  - plot6_t12-14_road;
+  - conversion_notice and converted_t12.
+- **Teardown:** test store off (1 key removed, marker gone); ZZ hosts deleted; probe 277 / 0 differ / 0 ZZ; Edit camera Fixed.
+
+**Not verified:**
+- The frame rate (unfocused Studio).
+- A phone or the emulator; real players.
+- The motion of 11-14 beyond still captures.
+- An unowned plot's board shows tier 1's offer whatever mill stands there. Expected: unowned plots only ever hold the tier-1 mill.
+- MiniEvent ticket and dancer spots re-measure props per event, so a mid-event upgrade is seen at the next event.
+
+**Open for the owner:**
+- The board's step line now names the mill on sale at every tier. Veto?
+- Plot 6's tier 12-14 sign stands 4.0 past the gate line.
+- On plot 6, a snow bank and an ice boulder are softened as well as the spire.
+- The obby corridor crosses plot 5's mill (pre-existing).
+
+**NEXT:**
+1. The Workspace cleanup brief: DONE 2026-10-07 (one-line entry above).
+2. Plot levels 6-7: the mill specs pass, so it can start.
+
+**POSTPONED by the owner (2026-10-07), do not start unasked: a TEASER SCENE.** Character still undecided (proposed: the owner's own avatar as the hero, plain blank-description rigs as other players, never another user's avatar). The owner's answers so far:
+- **For recording only:** a Studio-only staged set plus a scripted camera. The owner records with OBS. Nothing ships.
+- **Length:** 30-45 s.
+- **Content:** plots and creatures (fly over the ring: plants growing and walking, full plots), then stealing a pod (sneak into a biome, grab a pod, the guardian wakes and chases, the run home).
+
+## Mill tiers 11-14 (+ Overclock removal): inspection done; the owner chose MILLS AT THE FRONT of each plot; FRONT PLACEMENT STUDY done, STOPPED for the owner's choice — 2026-10-06 (CLAUDE)  (SUPERSEDED BY THE ENTRY ABOVE)
+
+**The owner's answers so far:** port the supplied scripts to Ambience (later). Trim nothing and integrate nothing yet: the mills move to the FRONT of each plot, and the side strip they stand in now becomes a plot upgrade later (its own brief).
+
+**Front placement study** (scratchpad `mills/solver.py`, `check.py`, `analyze.py`; Edit probe `hatch/mutants/MillFrontProbe.luau`). Diagrams and captures are in `output/mill-front-study-2026-10-06/`.
+- **What stands in front of a gate:** the gate line is at r 100 and the deck rim (44.5-53) is 47 studs in.
+  - The plot's boards sit on the fence line: upgrade board x -11.12, TOP CREATURES x -19.1, the client's stats sign x +11.12, all 1.6 in front.
+  - Prompts: hub prompts reach 9-12 (hub-deck prompt map); plot boards and mill signs reach 18, so 36 between them.
+  - Walk lines: GameConfig's corridors from the hub centre to each gate (half-width 12) and the road corridor (half-width 40).
+  - Also the road's empty arc (MillPlacementSpec), and the Disco Mill at (-40, -95) with keep-clear radius 35, in front of plot 1's road side.
+  - A plot grows backwards, so the front is the same at every level (checked at L1-5).
+- **No single formula fits all six plots.** Each walk line leaves a lobe either side of its gate. A mill as large as tiers 12-14 (32×23.5) needs the space between two plots' walk lines. Six mills need six such gaps, and the sixth gap is the road mouth.
+  - Every mill on its plot's RIGHT: plot 6's mill stands in the road's empty arc and road corridor, at every tier, even tier 1.
+  - Every mill on its LEFT: plot 1's stands in the Disco Mill's circle, the arc and the road corridor.
+  - Mirrored (away from the road) puts two mills in one gap: plots 3|4, or 5|6 / 1|2 for a single exception. They touch (196 tier pairs) and their sign prompts are 5.5-7.8 studs apart.
+- **Best two, both right side** (gate frame: x to the plot's right, z negative toward the hub; Lift 0.6). Both are 3D-checked CLEAR on plots 1-5 for all 14 tiers, at every level, against everything above, the neighbours and each other.
+  - **A:** gate × (33.5, 0.6, -19.5), facing the hub (yaw 0), like today's mills. Origin slack +3.75/-9.75 x, ±3 z. Sign prompts 62.5 apart, 39.9 from the nearest board, 21.2 beyond the nearest hub prompt's reach.
+  - **B:** gate × (37.5, 0.6, -24.5), facing sideways (yaw 90, console toward the plot's own walk line). Twice the room (slack 5.25-9.25). Prompts 71.4 / 40.9 / 32.4.
+  - Plot 6 fails in both. No board has to move for plots 1-5.
+- **Guarded Play** (SeedTest_20261006, Ready line seen): local copies of tiers 10 and 14 at A's spot on plots 1 and 6, captured from above and from the gate (8 PNGs), then removed. No errors in the log; test store off; probe 0 differ / 0 ZZ.
+  - The overhead shots near plot 1 also show the owner's four Workspace originals, which stand there today.
+- **Queued:** the owner's Workspace cleanup brief (delete the four mill originals and Invite friends after tiers 11-14 are finished and verified).
+
+### Step 1 inspection (earlier the same day)
+
+- **Backups:** `output/model-backups/2026-10-06-mill-originals/` (4 .rbxm, Studio's serializer, each reopened and fingerprinted IDENTICAL to the live original).
+- **What the four Workspace models are:** the mill chassis of tiers 1-10, exactly.
+  - Deck 11×1.2×19 at the pivot (PrimaryPart). `Treadmill` 8×1.4×16 at (0, 0.4, 0) is the belt, where the player stands, facing -Z. Rollers at z ±8; Console/Readout at the front (z -8.4); Step at the back (z +10.4). 8 chevron pairs (ChevL/R01-08), like tier 10.
+  - All plain Parts: no MeshParts, Decals or Textures. All anchored, Atomic streaming, attribute VisualBeltSpeed=8.
+  - The only content ids are Roblox's built-in particle textures (`rbxasset://textures/particles/smoke_main.dds`, `sparkles_main.dds`).
+
+| tier | model | box (studs) | parts (tier 10: 108) | lights / emitters | script (RunContext Client) | fit (MillPlacementSpec's test, every plot and level) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 11 | MillTier11AbyssalTrench | 18.6×15.2×21.4 | 163 (1.5x) | 1 PointLight (r 44), 2 emitters | AbyssBrain, 6,464 chars | FITS: plots, neighbours, gate line (2.18 behind), sign, road arc all clear |
+| 12 | MillTier12VolcanicForge | 23.0×17.8×32.0 | 127 (1.2x) | 1 PointLight (r 44), 4 emitters | ForgeBrain, 4,338 | NO: 29 parts past the gate line (to 3.9 studs); hammer and anvil through the sign; road arc on plot 6 |
+| 13 | MillTier13FrozenAurora | 23.5×18.2×32.0 | 210 (1.9x) | 1 PointLight (r 46), 3 emitters | GlacierBrain, 4,684 | NO: 52 parts past the gate line (to 3.9); aurora through the sign; Spire crosses the plot fence at EVERY level (also IceBoulder/SnowBank at L3-4); road arc on plot 6 |
+| 14 | MillTier14EventHorizon | 16.2×15.2×30.9 | 185 (1.7x) | 1 PointLight (r 38), 1 emitter | SingularityBrain, 5,560 | NO: 88 parts past the gate line (to 7.2); disk and debris through the sign |
+
+- **The scripts:** cosmetic client animators. Each Heartbeat they move and recolour the decor (kelp, jellyfish, lure; hammer, lava; aurora, shards; accretion disk, debris) and scroll the chevrons at VisualBeltSpeed.
+  - They use no require, network, players or remotes, but run on every client every frame, unthrottled.
+  - As Workspace scripts they also run in any Play of this place today.
+- **Asked the owner:** what to do with the scripts, how tiers 12-14 should fit, and whether the part counts are fine. Step 2 and the Overclock addendum wait for the answers. The conversion maps overclock levels onto tiers 11-14, so it needs all four.
+
+## WeatherTeaser brief #2 DONE: the owner's two pictures on the road-mouth screen, creatures breathing, A/B crossfade, SOON — 2026-10-06 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; WeatherTeaserSpec 186/0; SUITE 111/111 RUN, only RainAudioSpec (pre-existing) fails; ONE GUARDED PLAY ON `SeedTest_20261006` AT 1009×716 (THE EMULATOR WAS OFF), LOAD CHECK 10/10)
+
+- **Ids (all checked):** a_bg `108987983355390`, b_bg `112662331303116` (sent later; stored 1023×576), a_1..b_5 as below. Economy details: the right names, Image, CrazyCozy Games. Stored sizes equal the cut sizes.
+- **Play (guarded; Ready line named the test store):**
+  - Load check: `PreloadAsync` on the ten ImageLabels gave Success for all; `IsLoaded` was true for all ten with the screen in view during a fade. A clear label (ImageTransparency 1) reports IsLoaded only once drawn, so the check must see the screen.
+  - Captures in `output/event-teaser-2026-10-06/play/`: t02/t03 A at u 1.9 and 5.4; t04 mid-fade (u 8.65); t05/t06 B at u 11.4 and 14.9; t07 from 56 studs at eye height with the HUD on. t01 is A with the HUD over the close-up. The HUD and plot owner badges were hidden locally for the close-ups.
+  - Afterwards: test store off (1 key removed, marker removed); probe 0 differ, 0 ZZ; the Edit camera left Fixed.
+- **Built:**
+  - `GameConfig.WeatherTeaser`: the ids, rects, feet and badges from layers.json; periods and phases; Hold 8, Fade 1.5, EaseIn 2; Breath 0.025 (X x0.6), Sway 1.5° (period x1.6), the spiky one's Bob 0.03 (period x1.3, upward only); the "?" haze (GlowMax 0.25); SOON's word; the scene colours.
+  - `Shared/WeatherTeaser.luau`: the storm, UPDATE SOON and StrikeAt/Period/Drops are gone. Back to front: A's background, B's (clear while A holds), A's creatures, B's creatures, SOON.
+  - Each creature is an ImageLabel at its rect with its AnchorPoint at the feet. The pure `Teaser.Pose` gives size and rotation, and the label is shifted so the feet stay put although the engine turns about the centre. A 10-disc white haze over each "?" follows the breath.
+  - `Teaser.Mix` is the crossfade and `Teaser.Ease` makes time 0 the picture at rest. SOON: LuckiestGuy 100 x UIScale 1.2, white, an ink edge, and three glow copies in the scene colour, blended in the fade. Reduced FX is the still card.
+  - `WeatherTeaser.client.luau`: also preloads the ten pictures once on bind (PreloadAsync on the labels).
+- **Measured on the cut-outs (Python):** at every extreme of breath, lean and hover the silhouettes stay on the screen and never touch a neighbour. The closest is 3 px (B serpent–robot); only rim glows meet.
+  - The fade draws both backgrounds under both creature sets, with no CanvasGroup. Fading A as separate layers would hide B's creatures behind green ghosts mid-fade.
+
+### Phase 1 (done earlier the same day)
+
+- **Files** in `output/event-teaser-2026-10-06/` (untracked, like every output/ folder):
+  - `a_bg.png` + `a_1.png`..`a_3.png` (A, green, `rbxassetid://78853705766857`) and `b_bg.png` + `b_1.png`..`b_5.png` (B, blue, `rbxassetid://133117897857537`); creatures numbered left to right.
+  - `layers.json`: each layer's rect (x, y, w, h) and feet point in the 1672×941 source, its "?" badge circle, each scene's recompose diff.
+  - `contact_sheet.png`, `*_recomposed.png`, `*_diff_x16.png`, `*_compare_original_recomposed_diffx16.png`.
+  - `scripts/`: the split (Pillow + numpy; nothing installed) and copies of the two pictures. To redo it from full-size originals, put them in `scripts/` as 5.webp (A) and 6.webp (B), run `python -B split.py a b` there (~1.5 min a scene), then `python -B contact.py`.
+- **Layers:**
+  - Each is a dark silhouette + rim glow + "?" badge: tight-cropped, anti-aliased alpha, holes filled.
+  - Colours are un-premultiplied against the scene beneath. Recomposed, A is within 0.48 of 255 levels and B within 0.44; no pixel is off by more than 2.
+  - The backgrounds have the creatures inpainted away and the ground shadows kept.
+  - Feet are the AnchorPoints for Phase 2. The bird's is its standing foot, not under its tail; the spiky one's is its tentacle tips.
+- **Checked by eye:** posed at the brief's motion extremes (breath 1.025 Y, sway ±1.5°, the spiky one bobbing 2%): no holes, no visible halos.
+- **The owner answered:** no larger originals; the 1672×941 cut stands. The eight creature layers were uploaded to the group; the two backgrounds are still to come (above).
+
+## Rain Colossal: exactly 5% PER RAIN, one Colossal draw a batch — 2026-10-06 (CLAUDE)  (UNCOMMITTED; NOT PUBLISHED; SUITE 110/111 (RainAudioSpec, pre-existing); NO PLAY NEEDED)
+
+The owner's rule replaces the per-slot odds (and any per-slot 5% brief, never applied).
+- **New:** each Rain makes ONE Colossal draw on the server when its nest is laid, 5 in 100. A hit makes exactly one of its three slots, picked at random, a Colossal pod (rainpod2 or rainpod5, 50/50); the other two are ordinary. A miss makes all three ordinary. Ordinary slots are rainpod1 or rainpod4, 50/50, each on its own.
+- **Odds:** at least one Colossal 5% of Rains (was 27.1%); 0.05 a batch (was 0.3); two or three in one Rain never happen (were 2.7% and 0.1%). Per egg, a Colossal is 1.67% (was 10%); the second family is still 50% of eggs and Squallsnapper 20%.
+- **Data** (`SeedData.RainBatches.rain`): `{ Slots = 3, ColossalChance = 0.05, Weights = { rainpod1 = 1, rainpod4 = 1 }, ColossalWeights = { rainpod2 = 1, rainpod5 = 1 } }`. Was `Weights = { rainpod1 = 45, rainpod2 = 5, rainpod4 = 45, rainpod5 = 5 }`.
+- **Code:**
+  - `RainBatch` gains `ColossalChance?` / `ColossalWeights?`.
+  - `SeedData.ValidRainBatch`, checked at load, refuses: a chance outside [0, 1]; a chance with no Colossal weights; a Colossal pod among `Weights`; an ordinary or unknown pod in `ColossalWeights`.
+  - `RollRainBatch` takes the batch's one draw (and the slot pick) from the same server `Random` NestService.OpenEventNest passes in. The console's weather and the automatic weather share it.
+  - A batch with no Colossal weights (the Thunderstorm's) takes exactly the draws it always did.
+- **Kept:** the Thunderstorm batch, RAIN2_ODDS 40/25/25/10, RAIN2_TIERS, the automatic weather, incomes, grow times, pods, nests. Pods already laid or saved are untouched.
+- **Specs:**
+  - RainPodsSpec 67/0: the rule's numbers; boundaries; batch validation; a scripted hit (one Colossal, on the picked slot) and miss (none); thunder's draws unchanged.
+  - The RainPodsSpec seeded sample (four-standard-error tolerances, so no seed can flake them): 20,000 Rains, a Colossal in 4.98%, never two, Pod 2 48.1% / rainpod5 51.9%.
+  - RainFamilySpec 38/0: its per-egg table recomputed, Tiny Squallsnapper 10.527% .. Colossal Torrentacle 0.083%, was 9.635% .. 0.5%. SecretToastSpec 61/0.
+- **Files:** `SeedData.luau` (THE WEIGHTS comment with its 2026-10-05 history, the type, the data, ValidRainBatch, RollRainBatch, PickRainPod's comment); the WeatherService and NestService comments; `tools/tests/RainPodsSpec.luau` §2, `RainFamilySpec.luau` header and §7. The dated 2026-10-05 entries and briefs below and in `art/references/` are left as history.
+
 ## Batch committed and pushed: e57380e + 10a84b8 on origin/wip — 2026-10-06 (CLAUDE)
 
 At the owner's word ("commit and push everything"; scope chosen: all but captures and videos):

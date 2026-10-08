@@ -109,8 +109,14 @@ the bank.
 
 | Event | When | Fields | Deduplication |
 | --- | --- | --- | --- |
-| `TutorialStepDone` | A guide step recorded for the first time | 01 = `train` / `speed` / `steal` / `bank` / `place` / `hatch` | Once per step per session; the save already guarantees "first time ever" |
-| `TutorialCompleted` | The step that finishes the guide | none | Once |
+| `TutorialStepDone` | A guide step recorded for the first time | 01 = `train` / `speed` / `steal` / `bank` / `place` / `hatch` / `travel` | Once per step per session; the save already guarantees "first time ever" |
+| `TutorialCompleted` | The guide's first loop finished: the step that completes train through hatch | none | Once |
+
+**Step 7, `travel` (2026-10-08).** The guide gained a last step after the hatch: the first successful
+TELEPORT TO PLOT (`PlotService.TeleportHome`) once the hatch is done. It is reported only as
+`TutorialStepDone` 01 = `travel`. `TutorialCompleted` stays where it always was, at the hatch (the first
+loop, which is also when the Bonus Chest opens), so the series keeps its meaning across the update.
+The onboarding funnel keeps its six steps and their numbers; `travel` is not in it.
 | `TutorialSkipped` | The player hid the guide (Skip) | none | Once per session; Resume is not counted |
 
 These are sent only for the new-player cohort.

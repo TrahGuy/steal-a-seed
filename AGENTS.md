@@ -221,7 +221,10 @@ src/
                                 `dismissible` post gets a close button (the like reminder); the
                                 Secret egg toast's pure parts (2026-10-05): readSecret /
                                 secretPost (once per spawn id), wordSpan (SECRET's place in a
-                                centred headline), waitAfter (a post that follows another)
+                                centred headline), waitAfter (a post that follows another); the
+                                GameEvent verb ServerNotice (2026-10-07): an info line the server
+                                worded, cut to length (readServerNotice); `showing` (2026-10-08): how
+                                many notices stand on any screen, which the guide's spotlight waits out
     Shared/PlantVisibility.luau OTHER PLANTS: OFF on THIS screen (2026-10-05): the rule (another
                                 owner's GROWN plant in a plot, owner known), the one local
                                 preference attribute, the reversible hide (LocalTransparency
@@ -257,11 +260,30 @@ src/
     Shared/HotbarCard.luau      how one hotbar slot is drawn to the owner's reference: a square
                                 translucent charcoal plate, a thin light edge, a plain white number
                                 top left, a big preview, a stack count, a rarity bar, a hidden Name
-                                label for TutorialUI's pointer, a trap's "3x" under its picture
+                                label for TutorialUI's hand, a trap's "3x" under its picture
                                 (2026-10-04), a trap's trigger cooldown (cool: dimmed, a shrinking
                                 shade, the seconds over the picture; 2026-10-05); lift, bump and
                                 flash (none under reduced motion).
                                 Numbers in GameConfig.Hotbar
+    Shared/TutorialSpotlight.luau  the guide's pointing hand and its spotlight as arithmetic (2026-10-08):
+                                the owner's glove (Hand.Image, the one asset), the window on one real
+                                button (padded, never lighting a neighbour), the side the hand points
+                                from and its words, the NEVER list (blocked) and each spotlight's one
+                                life per step (advance) -- numbers only (TutorialSpotlightSpec)
+    Shared/FirstMinute.luau     a new player's first minute (2026-10-08): who is owed the STARTER pod
+                                (owed: no plants/bag/Almanac, Speed 0, nothing done, StarterAt 0 --
+                                once per profile ever, kept by a reset), which one (a Tiny Petalpip),
+                                its words, and the FIRST CATCH (catchTier: at least Big; catchWords;
+                                takeCatch). PlantService plants and hatches the starter; it is NEVER
+                                tutorial progress (FirstMinuteSpec)
+    Shared/SpeedMilestones.luau TREADMILL FUN (2026-10-08): the 17 Speed milestones (cash at 12, one
+                                spin ticket at 1K/1M/1B/1T/1Qa), the cash rule (60 s of income, a
+                                floor, never over a tenth of the next plot level), the bar's words,
+                                and the "+1 WALK SPEED" pop's whole-number crossings of walkSpeedFor
+    Shared/BeltCatch.luau       the catch game on the belt: 8-12 s gaps, coin (15 s of income, $10
+                                floor) or golden ticket (1 in 8, one per rolling 24 h), the path
+                                (measured clear of every tier's parts) and the catch test the
+                                server runs (TreadmillFunSpec)
     Shared/RewardSplash.luau    a granted reward made obvious: a brief card (icon, name, amount)
                                 near the middle, then each icon flies to its HUD destination or
                                 fades; reduced motion shows it without the flight. The Bonus
@@ -314,7 +336,9 @@ src/
                                 NOT a *Service): a Top-face canvas runs along the plate's Z, so its plate is
                                 turned a quarter -- presentation only, inert
     PlotService.luau            who owns which plot, puts them on it, TELEPORT TO PLOT, and
-                                BIOMES' one landing (the Greenhollow entrance)
+                                BIOMES' one landing (the Greenhollow entrance); OnTeleportedHome
+                                (2026-10-08): a SUCCESSFUL teleport home, which records the guide's
+                                travel step (PlayerDataService; TutorialData refuses it before the hatch)
     ProfileSchema.luau          what a profile is, and the validator (NOT a *Service). It
                                 drops a held row that is not a plant and never cuts the list
                                 to Save.MaxHeld: a record saved with more comes back whole
@@ -328,7 +352,11 @@ src/
                                 later thieves remembered and chased next; a lost guardian (rig
                                 gone, dead, fallen) is rebuilt by the tick from its nest's own
                                 recipe -- the rig only, never the nest or its pods
-                                (GameConfig.Parent.Recovery; GuardianRecoverySpec)
+                                (GameConfig.Parent.Recovery; GuardianRecoverySpec). A beginner's
+                                FIRST RAID (2026-10-08): a theft from a calm nest by a thief whose
+                                `steal` is not done is chased at most at the biome's
+                                FirstRaidChaseSpeed (Greenhollow 19) while the rage is that one
+                                theft; everybody else, a second theft and the Secret unchanged
     GuardianPursuit.luau        the chase's pure parts: the both-bodies contact sweep, the
                                 sample rules, the close-range lead, the thief memory, and the
                                 way home through the road's mouth (routeHome) (NOT a *Service)
@@ -343,7 +371,10 @@ src/
                                 too, or not given; a rebuild is not counted. The limit stops a
                                 row being added, never cuts one off. Also the ONE writer of
                                 WalkSpeed (RefreshWalkSpeed), a running DISCO ONLY mini event's
-                                x1.5 for everybody included (2026-10-04). DropHeldPod is the
+                                x1.5 for everybody included (2026-10-04). The FIRST CATCH (a take
+                                while `steal` is not done, never a Secret's or an event's pod)
+                                comes away at least Big and is noted for its reveal's words
+                                (FirstMinute, 2026-10-08). DropHeldPod is the
                                 one drop a hit asks for: a raid carry OR a banked pod held as
                                 a Tool (its row comes off through SyncHeldNow), never a plant
     PlantService.luau           place by click, hatch by hand, pick back up. A hatch or a
@@ -358,7 +389,15 @@ src/
                                 KEPT AS A CREDIT (profile.InstantCredits, 2026-09-30), shown as
                                 a price-less "Free Instant Hatch" and spent by the next Instant
                                 Hatch press, only once that hatch has succeeded (KB/HANDOFF.md,
-                                the plant-storage entry)
+                                the plant-storage entry). A brand-new profile's garden gets the
+                                STARTER pod at restore (FirstMinute, 2026-10-08): no prompts, it
+                                hatches ITSELF in place on the tick (hatchStarter: Stage 3, an item
+                                id, a reveal to the clients only -- no OnRevealed listener, no
+                                RecordTutorial -- and the "Your first plant hatched!" notice)
+    GardenFrame.luau            where a SAVED garden's X/Z are measured (2026-10-07, plot Levels 6-7): always
+                                plots 1-5's shape; plot 6 at Levels 6-7 (deeper, Level 5's wing) converts, so a
+                                garden means the same ground on whichever plot its owner gets (pure;
+                                PlotLevelsSpec). Levels 1-5 and plots 1-5: saved = live, bit for bit
     EconomyService.luau         THE FAUCET -- grown plants pay kg/sec, nothing else mints
     PlotShowcaseService.luau    each plot's TOP CREATURES (2026-10-05): its two best grown creatures,
                                 written as plain attributes on its board only when the Planted tag or
@@ -367,6 +406,11 @@ src/
                                 shared Disco Mill a mode with a Mill builds in front of the hub
                                 (TICKET DISCO, DISCO + MILL -- never the pure DISCO ONLY; its
                                 riders paid their own training x10, composed once, 2026-10-04)
+    TreadmillFunService.luau    TREADMILL FUN (2026-10-08): pays the Speed milestones (PlayerDataService
+                                .OnSpeedGained; admin/debug Speed passes them unpaid; once per profile,
+                                SpeedMilestone) and runs the belt's catch game: per player on their own
+                                belt, server records under Workspace.BeltItems, the catch decided from
+                                the replicated root -- no remote. Never touches the belt's rate
     SellService.luau            the sell-all board beside the stall
     InviteService.luau          INVITE A FRIEND (2026-10-06): a first-time joiner whose ReferredByPlayerId
                                 names an inviter counts once for them, forever (profile.InviteIds); an
@@ -374,13 +418,27 @@ src/
                                 CarryService.GiveHatched (InviteGranted, InviteSeen); notices held until
                                 the client's READY; builds the hub pedestal; SimulateJoin is Studio-only
     DebugService.luau           Studio-only server test helpers; no UI or remote
-    AdminService/               the dev console for two allowlisted UserIds, live servers
-      init.luau                   every request checked here; grants, progress reset, night/day,
-                                  and Announce (handed to AnnouncementService after the allowlist)
-      AdminConsoleUI.client.luau  its panel -- cloned ONLY into an admin's PlayerGui, never shipped;
-                                  the compact ADMIN CONSOLE (2026-10-04): BROADCAST, EVENTS, WEATHER,
-                                  ITEM GRANTS, PLAYER TOOLS, ADVANCED -- a sidebar on a desktop, a
-                                  dropdown on a phone (MenuKit + MenuLayout, its own gui SeedAdminPanel)
+    AdminService/               the dev console for THREE allowlisted UserIds (nicnicniccoal the owner,
+                                Teambarnze825, TappedYou since 2026-10-07), live servers; the weather is all
+                                three admins' (2026-10-07; this server only); the rainbow title stays the
+                                owner's alone (IsOwner)
+      init.luau                   every request checked here; money and Speed up to the SAVE limits (read
+                                  from GameConfig.Save), SPAWN (2026-10-07: any species as a pod or grown, in
+                                  every size it really comes in, to anybody in the server -- anybody else
+                                  confirmed by username and told "An admin gave you ..."; the whole quantity
+                                  or nothing, one save, remembered answers, a cooldown, audited), progress
+                                  reset, night/day, the weather, mini events, and Announce (handed to
+                                  AnnouncementService after the allowlist); Roster on the admins' guis
+      SpawnCatalog.luau           what SPAWN can make, read off SeedData: the groups, the sizes each species
+                                  comes in (Rain pods by their real rules), the words -- the server refuses
+                                  what it does not allow and the console draws from it
+      ConsoleModel.luau           the console's pure arithmetic: the K/M/B/T/Qd amount box (exact), the tabs,
+                                  every button's payload, the rects on every screen (AdminConsoleSpec)
+      AdminConsoleUI.client.luau  its panel -- cloned ONLY into an admin's PlayerGui with the two modules, never
+                                  shipped; the ADMIN CONSOLE (redesigned 2026-10-07): PLAYER, SPAWN, WORLD and
+                                  ANNOUNCE tabs in the header, one target bar, a log strip of the last five
+                                  answers, dangerous actions confirmed in place (its own gui SeedAdminPanel;
+                                  OpenPanel "Admin")
     AnnouncementService.luau    admin announcements (filtered, cooldown, THIS SERVER or ALL SERVERS
                                 through MessagingService, deduped, expiring; never published from
                                 Studio) and game.ServerRestartScheduled's notice, both as Workspace
@@ -515,6 +573,10 @@ src/StarterPlayer/StarterPlayerScripts/
                                 MenuLayout.rewardPopup (tall on a desktop, wide on a phone) clear of
                                 HudLayout.occupied; queued lowest first behind every reward moment
     SpeedFX.client.luau         +N pops on Speed gain, and the run streak (off on the obby course)
+    TreadmillFunUI.client.luau  TREADMILL FUN's screen: the "+1 WALK SPEED" pop over a gold burst,
+                                the milestone bar over the own belt (badge on a milestone, BELT TICKET
+                                0/1 TODAY), the belt items -- projected at DisplayOrder 11, under the
+                                notices and the HUD; draws only, sends nothing
     BiomeGuideUI.client.luau    advisory Speed banner on biome entry
     CarryPose.client.luau       both arms under the pod while carrying
     MarigoldShopUI.client.luau  Marigold's Garden Goods -- opened by her prompt
@@ -559,6 +621,12 @@ src/StarterPlayer/StarterPlayerScripts/
                                 non-member sees GroupService:PromptJoinAsync, then a verify
     SacrificeUI.client.luau     the pedestal's confirmation (the pod, what it buys, KEEP POD /
                                 SACRIFICE), its two signs' own line and its prompt
+    TutorialUI.client.luau      Marigold's guide: seven steps (TutorialData; step 7 `travel`, OBBY then
+                                TELEPORT TO PLOT, since 2026-10-08), the ground arrows, the owner's
+                                pointing hand on the HUD and over world targets, and once per step a
+                                SPOTLIGHT on a HUD button (TutorialSpotlight): 65% dim in its own
+                                no-insets gui (61), blockers over every other button only (movement
+                                never blocked), a controller's selection on the lit button (GuideLit)
     PlotTeleportUI.client.luau  TELEPORT TO PLOT under the clock (on a phone's top row, where it
                                 says just PLOT with no icon, 2026-10-05), alive and in the Safe Zone
     ObbyUI.client.luau          the obby's moving platforms (from server time), crumbles and
