@@ -7,7 +7,10 @@
 -- TreadmillService, its siblings stood in and its clock scripted, pays every
 -- tick exactly
 --
---     tier x 2^overclock x rebirth  x  the Bonus Chest's training reward  x  the Disco Mill's 10  x  the tick
+--     tier x rebirth  x  the Bonus Chest's training reward  x  the Disco Mill's 10  x  the tick
+--
+-- (an overclock factor sat after the tier until 2026-10-06; a save that still
+-- carries overclock levels is paid its tier's rate alone)
 --
 -- for a fresh profile, a "rested" one, a "depleted" one and one carrying the
 -- old saved charge fields alike, for longer than the old 90 s charge and 30 s
@@ -239,7 +242,8 @@ local ok, err = pcall(function()
 		p.Character.HumanoidRootPart.CFrame = CFrame.new(p.Character.HumanoidRootPart.Position + Vector3.new(0, 0, 60))
 	end
 	local now = os.time()
-	-- Six own-mill trainees, one charge story each, and a tier-5, overclocked one.
+	-- Six own-mill trainees, one charge story each, and a tier-5 one whose save
+	-- still carries two overclock levels -- which pay nothing now.
 	local fresh = fakePlayer("Fresh", 951, 1, 0)
 	local rested = fakePlayer("Rested", 952, 1, 0, { TrainingCharge = 90, TrainingChargeAt = now - 8 * 3600 })
 	local depleted = fakePlayer("Depleted", 953, 1, 0, { TrainingCharge = 0, TrainingChargeAt = now })
@@ -288,15 +292,15 @@ local ok, err = pcall(function()
 			table.insert(samples, string.format("t%d %s", t, tostring(got[fresh])))
 		end
 	end
-	check(#wrong == 0, "130 one-second ticks: fresh, rested 8 h, depleted, nonsense-charged, overclocked and chest-boosted "
+	check(#wrong == 0, "130 one-second ticks: fresh, rested 8 h, depleted, nonsense-charged, old-overclock and chest-boosted "
 		.. "trainees each earn their own rate every tick -- no climb, no plateau, no drop at 90 s ("
 		.. table.concat(samples, ", ") .. ")", table.concat(wrong, ", "):sub(1, 400))
 	check(once, "and each is handed Speed exactly once a tick")
-	check(near(Treadmill.RateOf(fresh), GameConfig.trainingRateFor(1, 0, nil)) and Treadmill.RateOf(fresh) == 20
-		and near(Treadmill.RateOf(big), GameConfig.trainingRateFor(5, 2, nil))
-		and near(Treadmill.RateOf(big), GameConfig.Mill.Tiers[5].speed * GameConfig.Mill.Overclock.Multiplier ^ 2),
-		string.format("the rate is the mill's own: tier 1 %s/s; tier 5 at overclock 2 %s/s (tier x 2^2)",
-			tostring(Treadmill.RateOf(fresh)), tostring(Treadmill.RateOf(big))))
+	check(near(Treadmill.RateOf(fresh), GameConfig.trainingRateFor(1, nil)) and Treadmill.RateOf(fresh) == 20
+		and near(Treadmill.RateOf(big), GameConfig.trainingRateFor(5, nil))
+		and near(Treadmill.RateOf(big), GameConfig.Mill.Tiers[5].speed),
+		string.format("the rate is the mill's own: tier 1 %s/s; tier 5 %s/s with two old overclock levels in its save "
+			.. "-- the tier's rate, no overclock factor", tostring(Treadmill.RateOf(fresh)), tostring(Treadmill.RateOf(big))))
 	local got = tick(1)
 	check(near(got[chest] or 0, (got[fresh] or 0) * 1.25),
 		"the Bonus Chest's +25% training reward applies once, on the same rate", string.format("%s vs %s",

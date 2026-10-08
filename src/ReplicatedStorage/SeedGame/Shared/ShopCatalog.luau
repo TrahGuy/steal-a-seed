@@ -23,8 +23,9 @@
 -- manifest's `robux` is never read.
 --
 -- SPEED WEARS THE CATALOGUE'S SPEED ICON (2026-10-03, the owner's ask: one
--- speed icon everywhere): GameConfig.SourceIcons.training, the uploaded winged
--- shoe the boost row already shows -- on every Speed pack and on the category.
+-- speed icon everywhere): GameConfig.SourceIcons.speed (2026-10-08: split from
+-- `training`, which is the +25% boost's own shoe now), the uploaded winged shoe
+-- -- on every Speed pack and on the category.
 -- The pack's own shoe stays as the fallback until that picture has loaded.
 --==============================================================================
 local Shared = script.Parent
@@ -38,7 +39,7 @@ local STORE = GameConfig.Store
 local ICONS: { [string]: string } = (STORE.Icons :: any) or {}
 local CARDS: { [string]: string } = (STORE.Cards :: any) or {}
 
-ShopCatalog.SpeedIcon = GameConfig.SourceIcons.training
+ShopCatalog.SpeedIcon = GameConfig.SourceIcons.speed
 ShopCatalog.TicketsId = "Tickets"
 
 export type Category = {

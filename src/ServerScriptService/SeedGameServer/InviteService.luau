@@ -36,6 +36,17 @@
 -- and InviteGranted is raised in the SAME resumption, so a save holds the
 -- plant and its marker together or neither. A full Bag gives nothing: the form
 -- waits, the player is told once, and it is tried again every RetrySeconds.
+--
+-- NEVER TWICE (2026-10-08): the wheel can give an invite plant too (WheelData's
+-- "invite" prize). Every plant ever given, by either, is in InviteOwned, and a
+-- milestone gives the next plant of the track NOT yet owned -- so a plant won
+-- on the wheel is never given again, and a milestone with every plant already
+-- owned has nothing left to give.
+--
+-- A RETURNING FRIEND (2026-10-08): a friend who comes through the invite
+-- having played before is not a count -- never toward the plants -- but gives
+-- the inviter ONE free spin, once per friend, ever: its own saved set
+-- (InviteReturnIds), here or through the same inbox (its Returning list).
 --==============================================================================
 
 local Players = game:GetService("Players")
@@ -95,6 +106,13 @@ InviteService.Hooks = {
 	-- A person's DisplayName for the notices: theirs if they are in this
 	-- server, else Roblox's (UserService), else nil -- the client then says
 	-- "a friend". Never a UserId.
+	-- One free spin for a returning friend (WheelService.GrantInviteSpin),
+	-- answering how many landed. Required here, not at the top: WheelService
+	-- starts first, and a spec stands this in.
+	grantSpin = function(player: Player): number
+		local WheelService = require(script.Parent:WaitForChild("WheelService")) :: any
+		return WheelService.GrantInviteSpin(player)
+	end,
 	displayName = function(id: number): string?
 		local here = Players:GetPlayerByUserId(id)
 		if here then
@@ -210,6 +228,45 @@ local function countOf(player: Player): number
 	return if profile then #(profile.InviteIds or {}) else 0
 end
 
+-- The first plant of the track this profile has never been given, or nil.
+local function nextUnowned(profile: any): string?
+	local owned: { [string]: boolean } = {}
+	for _, id in ipairs(profile.InviteOwned or {}) do
+		owned[id] = true
+	end
+	for _, form in ipairs(CONFIG.Forms) do
+		if not owned[form] then
+			return form
+		end
+	end
+	return nil
+end
+
+-- Returning friends added to a profile in this server: each id once, never the
+-- player's own; answers the new ones.
+local function addReturning(player: Player, ids: { number }): { number }
+	local fresh: { number } = {}
+	PlayerDataService.UpdateInvites(player, function(profile: any): boolean
+		local list = profile.InviteReturnIds
+		local seen: { [number]: boolean } = {}
+		for _, id in ipairs(list) do
+			seen[id] = true
+		end
+		for _, id in ipairs(ids) do
+			if id ~= player.UserId and not seen[id] then
+				seen[id] = true
+				table.insert(list, id)
+				table.insert(fresh, id)
+			end
+		end
+		while #list > CONFIG.MaxRemembered do
+			table.remove(list, 1)
+		end
+		return #fresh > 0
+	end)
+	return fresh
+end
+
 --==============================================================================
 -- 2. WHAT THE COUNT HAS EARNED, GIVEN ONCE (see WHAT IS GIVEN, ONCE)
 --==============================================================================
@@ -222,7 +279,20 @@ local function grantOwed(player: Player): number
 	local given = 0
 	while (profile.InviteGranted or 0) < earned do
 		local tier = (profile.InviteGranted or 0) + 1
-		local species = SeedData.Get(CONFIG.Forms[tier])
+		-- The next plant of the track not yet owned (NEVER TWICE): the tier's
+		-- own, unless the wheel gave it first.
+		local form = nextUnowned(profile)
+		if not form then
+			-- Every plant owned already: this milestone has nothing left to give.
+			PlayerDataService.UpdateInvites(player, function(p: any): boolean
+				p.InviteGranted = tier
+				return true
+			end)
+			log(string.format("%s reached milestone %d owning every invite plant: nothing left to give.",
+				player.Name, tier))
+			continue
+		end
+		local species = SeedData.Get(form)
 		if not species then
 			break
 		end
@@ -240,11 +310,12 @@ local function grantOwed(player: Player): number
 		PlayerDataService.UpdateInvites(player, function(p: any): boolean
 			p.InviteGranted = tier
 			p.InviteSeen = false
+			table.insert(p.InviteOwned, species.Id)
 			return true
 		end)
 		given += 1
 		fullTold[player] = nil
-		log(string.format("%s was given %s (form %d) for %d invite(s).", player.Name, species.Name, tier,
+		log(string.format("%s was given %s (milestone %d) for %d invite(s).", player.Name, species.Name, tier,
 			#(profile.InviteIds or {})))
 		tell(player, { kind = "granted", tier = tier, form = species.Id })
 	end
@@ -274,6 +345,20 @@ local function idsIn(box: any): { number }
 	return out
 end
 
+-- The inbox's returning friends (A RETURNING FRIEND), beside its Ids.
+local function returningIn(box: any): { number }
+	local out: { number } = {}
+	if type(box) == "table" and type(box.Returning) == "table" then
+		for _, value in ipairs(box.Returning) do
+			local id = userId(value)
+			if id then
+				table.insert(out, id)
+			end
+		end
+	end
+	return out
+end
+
 -- `atJoin`: the take as the player arrives -- friends credited while they were
 -- away, told once as WHILE YOU WERE AWAY. Later takes (every InboxPollSeconds)
 -- are friends joining elsewhere while they play: a +1 INVITE each, by name.
@@ -287,10 +372,21 @@ local function takeInbox(player: Player, atJoin: boolean?): number
 		return 0
 	end
 	local ids = idsIn(box)
-	if #ids == 0 then
+	local back = returningIn(box)
+	if #ids == 0 and #back == 0 then
 		return 0
 	end
-	local added, fresh = addIds(player, ids)
+	local added, fresh = 0, {}
+	if #ids > 0 then
+		added, fresh = addIds(player, ids)
+	end
+	-- Returning friends: the set and each one's spin, in the profile before the
+	-- save below, so the save holds both or neither.
+	local freshBack = if #back > 0 then addReturning(player, back) else {}
+	local spinsFor: { [number]: number } = {}
+	for _, id in ipairs(freshBack) do
+		spinsFor[id] = InviteService.Hooks.grantSpin(player)
+	end
 	-- In the profile now; saved, and only then out of the inbox.
 	if not PlayerDataService.Save(player) then
 		return added
@@ -299,6 +395,10 @@ local function takeInbox(player: Player, atJoin: boolean?): number
 	for _, id in ipairs(ids) do
 		taken[id] = true
 	end
+	local takenBack: { [number]: boolean } = {}
+	for _, id in ipairs(back) do
+		takenBack[id] = true
+	end
 	SaveService.UpdateInbox(player.UserId, function(old: any): any
 		local keep: { number } = {}
 		for _, id in ipairs(idsIn(old)) do
@@ -306,8 +406,19 @@ local function takeInbox(player: Player, atJoin: boolean?): number
 				table.insert(keep, id)
 			end
 		end
-		return { Ids = keep }
+		local keepBack: { number } = {}
+		for _, id in ipairs(returningIn(old)) do
+			if not takenBack[id] then
+				table.insert(keepBack, id)
+			end
+		end
+		return { Ids = keep, Returning = keepBack }
 	end)
+	for _, id in ipairs(freshBack) do
+		log(string.format("%s: a friend (%d) came back through their invite: %d free spin.", player.Name, id,
+			spinsFor[id] or 0))
+		tell(player, { kind = "returning", name = nameOf(id), spins = spinsFor[id] or 0 })
+	end
 	if added > 0 then
 		local count = countOf(player)
 		log(string.format("%s took %d invited friend(s) from their inbox (now %d).", player.Name, added, count))
@@ -322,14 +433,6 @@ local function takeInbox(player: Player, atJoin: boolean?): number
 	return added
 end
 InviteService.TakeInbox = takeInbox
-
--- A friend's join that did not count, told to the inviter if they are here.
-local function notCounted(inviterId: number, name: string?, why: string)
-	local here = InviteService.Hooks.playerById(inviterId)
-	if here then
-		tell(here, { kind = "notcounted", name = name, why = why })
-	end
-end
 
 --==============================================================================
 -- 4. A CREDIT: inviter `inviterId` gets friend `inviteeId`
@@ -369,10 +472,57 @@ function InviteService.Credit(inviterId: number, inviteeId: number, inviteeName:
 		while #ids > CONFIG.InboxMax do
 			table.remove(ids, 1)
 		end
-		return { Ids = ids }
+		return { Ids = ids, Returning = returningIn(old) }
 	end)
 	if wrote then
 		log(string.format("A friend (%d) of %d joined; the credit waits in their inbox.", invitee, inviter))
+	end
+	return if wrote then "inbox" else "failed"
+end
+
+--==============================================================================
+-- 4b. A RETURNING FRIEND: inviter `inviterId` gets one free spin for friend
+-- `inviteeId`, who had played before (see A RETURNING FRIEND)
+--
+-- Answers "here", "inbox", "known" (here, and already paid for) or "failed",
+-- as Credit does. Never toward the plants; never to yourself.
+--==============================================================================
+function InviteService.CreditReturning(inviterId: number, inviteeId: number, inviteeName: string?): string
+	local inviter = userId(inviterId)
+	local invitee = userId(inviteeId)
+	if not inviter or not invitee or inviter == invitee then
+		return "failed"
+	end
+	local here = InviteService.Hooks.playerById(inviter)
+	if here and PlayerDataService.IsReady(here) and PlayerDataService.IsPersistent(here) then
+		local fresh = addReturning(here, { invitee })
+		if #fresh == 0 then
+			tell(here, { kind = "notcounted", name = inviteeName or nameOf(invitee), why = "returning" })
+			return "known"
+		end
+		local spins = InviteService.Hooks.grantSpin(here)
+		log(string.format("%s's invite brought back a friend (%d) who had played before: %d free spin.",
+			here.Name, invitee, spins))
+		tell(here, { kind = "returning", name = inviteeName or nameOf(invitee), spins = spins })
+		task.spawn(PlayerDataService.Save, here)
+		return "here"
+	end
+	local wrote = SaveService.UpdateInbox(inviter, function(old: any): any
+		local back = returningIn(old)
+		for _, id in ipairs(back) do
+			if id == invitee then
+				-- Already waiting: nothing to write.
+				return nil
+			end
+		end
+		table.insert(back, invitee)
+		while #back > CONFIG.InboxMax do
+			table.remove(back, 1)
+		end
+		return { Ids = idsIn(old), Returning = back }
+	end)
+	if wrote then
+		log(string.format("A returning friend (%d) of %d joined; the spin waits in their inbox.", invitee, inviter))
 	end
 	return if wrote then "inbox" else "failed"
 end
@@ -391,7 +541,9 @@ function InviteService.CreditJoin(joiner: Player): string
 	end
 	if not CONFIG.CountReturningPlayers and not PlayerDataService.IsNewProfile(joiner) then
 		log(string.format("%s joined from %d's invite but has played before: not counted.", joiner.Name, inviter))
-		notCounted(inviter, joiner.DisplayName, "returning")
+		-- Not a count, never toward the plants -- but one free spin for the
+		-- inviter, once per friend (A RETURNING FRIEND).
+		InviteService.CreditReturning(inviter, joiner.UserId, joiner.DisplayName)
 		return "returning"
 	end
 	local result = InviteService.Credit(inviter, joiner.UserId, joiner.DisplayName)
@@ -429,7 +581,7 @@ function InviteService.SimulateJoin(inviteeId: number, inviterId: number, firstT
 		return "self"
 	end
 	if not CONFIG.CountReturningPlayers and not firstTime then
-		notCounted(inviterId, nameOf(inviteeId), "returning")
+		InviteService.CreditReturning(inviterId, inviteeId)
 		return "returning"
 	end
 	return InviteService.Credit(inviterId, inviteeId)

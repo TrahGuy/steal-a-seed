@@ -389,7 +389,11 @@ function Metrics.milestone(player: any, milestone: string, progress: any)
 		local who = audience(player)
 		if who == "count" then
 			send("custom", player, Metrics.Events.TutorialStep, 1, { [F1] = milestone })
-			if TutorialData.IsComplete(progress) then
+			-- THE FIRST LOOP, train through hatch (2026-10-08): Version 2's whole
+			-- guide, so the series keeps its meaning and nothing is renumbered.
+			-- The guide's step 7, `travel`, goes out as its own TutorialStepDone
+			-- above and never sends this a second time.
+			if TutorialData.InFirstLoop(milestone) and TutorialData.FirstLoopDone(progress) then
 				send("custom", player, Metrics.Events.TutorialCompleted, 1)
 			end
 		elseif who == "validate" then

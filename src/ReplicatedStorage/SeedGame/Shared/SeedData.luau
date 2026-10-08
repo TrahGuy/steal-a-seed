@@ -1472,30 +1472,53 @@ SeedData.RainPods = {
 
 --==============================================================================
 -- ONE BATCH PER EVENT (the owner's rule): an ordinary Rain lays exactly three
--- pods, each slot drawn on its own; a Thunderstorm lays exactly one Pod 3.
+-- pods -- one Colossal draw for the whole batch, then each ordinary slot drawn
+-- on its own; a Thunderstorm lays exactly one Pod 3.
 -- Nothing ever restocks it -- not a theft, a banking, a catch, a pickup, a
 -- rebuilt guardian or a second START. Rolled once, on the server, when the
 -- event's nest is laid (NestService.OpenEventNest), for the console's weather
 -- and the automatic weather alike.
 --
--- THE WEIGHTS (2026-10-05, the owner's odds): each Rain slot is ordinary 90
--- times in 100 and Colossal 10 -- slot by slot, so a Rain has at least one
--- Colossal about 27.1% of the time (it was a coin flip, 87.5%), 0.3 Colossals
--- a batch on average, all three 0.1%. No cap and no guarantee.
+-- THE WEIGHTS (2026-10-06, the owner's odds): EXACTLY 5% PER RAIN. A Rain
+-- makes ONE Colossal draw, 5 in 100 (ColossalChance). A hit makes exactly one
+-- of its three slots -- picked at random -- a Colossal pod (ColossalWeights:
+-- the old family's Pod 2 or the new family's Colossal, 50/50) and the other
+-- two ordinary; a miss makes all three ordinary. An ordinary slot is Pod 1 or
+-- the new family's Tiny .. Titan pod, 50/50, each drawn on its own (Weights).
+-- So at most one Colossal a Rain: at least one in 5% of Rains, 0.05 a batch
+-- on average; two or three in one Rain never happen. The draw and the slot
+-- pick come from the batch roll's own server RNG (RollRainBatch, called by
+-- NestService.OpenEventNest for the console's weather and the automatic
+-- weather alike). A pod already laid or saved keeps what it was laid as.
 --
--- THE SECOND FAMILY SPLITS BOTH HALVES EVENLY (the owner's choice, the same
--- day): the old Pod 1 45 and the new family's Tiny .. Titan pod 45; the old
--- Colossal Pod 2 5 and the new family's Colossal 5. The two Colossal pods
--- still add up to 10 in 100, so the Colossal chance did not move; 87.5% of
--- Rains lay at least one of the new family.
+-- HISTORY. 2026-10-05: each slot drawn on its own, ordinary 90 in 100 and
+-- Colossal 10 -- a Rain with at least one Colossal 27.1% of the time (it had
+-- been a coin flip a slot, 87.5%), 0.3 a batch, all three 0.1%. The same day
+-- the second family split both halves evenly: Pod 1 45 / Pod 2 5 / rainpod4
+-- 45 / rainpod5 5.
 --
--- Relative weights, any positive total; a weight of 0 never draws. Checked
--- when this loads (validRainWeights).
+-- Relative weights, any positive total; a weight of 0 never draws. A batch
+-- without ColossalWeights (the Thunderstorm's) makes no Colossal draw at all.
+-- Checked when this loads (ValidRainBatch): ColossalChance in [0, 1], every
+-- pod named exists, a Colossal pod never among the ordinary Weights and only
+-- Colossal pods among the ColossalWeights.
 --==============================================================================
-export type RainBatch = { Slots: number, Weights: { [string]: number } }
+export type RainBatch = {
+	Slots: number,
+	Weights: { [string]: number },
+	-- The batch's one Colossal draw: this chance, and the Colossal pods the hit
+	-- slot draws from. Both absent: no Colossal draw.
+	ColossalChance: number?,
+	ColossalWeights: { [string]: number }?,
+}
 
 SeedData.RainBatches = {
-	rain = { Slots = 3, Weights = { rainpod1 = 45, rainpod2 = 5, rainpod4 = 45, rainpod5 = 5 } },
+	rain = {
+		Slots = 3,
+		ColossalChance = 0.05,
+		Weights = { rainpod1 = 1, rainpod4 = 1 },
+		ColossalWeights = { rainpod2 = 1, rainpod5 = 1 },
+	},
 	thunder = { Slots = 1, Weights = { rainpod3 = 1 } },
 } :: { [string]: RainBatch }
 
@@ -1836,10 +1859,56 @@ function SeedData.ValidRainWeights(weights: any): (boolean, string?)
 	return true, nil
 end
 
-for mode, batch in pairs(SeedData.RainBatches) do
-	assert(type(batch.Slots) == "number" and batch.Slots >= 1 and batch.Slots == math.floor(batch.Slots),
-		"RainBatches." .. mode .. " has no slots")
+-- A pod always laid at the Colossal size.
+local function colossalPod(podId: string): boolean
+	local pod = SeedData.RainPods[podId]
+	return pod ~= nil and pod.Tier == SeedData.TierCount
+end
+
+-- A whole batch (2026-10-06): its slots, its ordinary Weights -- no Colossal
+-- pod among them -- and, where it has one, its Colossal draw: a ColossalChance
+-- in [0, 1] and ColossalWeights naming only Colossal pods (a chance above 0
+-- needs them; the Thunderstorm has neither). Every pod named exists. Answers
+-- why not, for the assert and the spec.
+function SeedData.ValidRainBatch(batch: any): (boolean, string?)
+	if type(batch) ~= "table" then
+		return false, "no batch"
+	end
+	if type(batch.Slots) ~= "number" or batch.Slots < 1 or batch.Slots ~= math.floor(batch.Slots) then
+		return false, "no slots"
+	end
 	local ok, why = SeedData.ValidRainWeights(batch.Weights)
+	if not ok then
+		return false, "Weights: " .. tostring(why)
+	end
+	for podId in pairs(batch.Weights) do
+		if colossalPod(podId) then
+			return false, string.format("the Colossal pod %s is among the ordinary Weights", podId)
+		end
+	end
+	local chance = batch.ColossalChance
+	if chance ~= nil and (type(chance) ~= "number" or chance ~= chance or chance < 0 or chance > 1) then
+		return false, string.format("ColossalChance %s is not in [0, 1]", tostring(chance))
+	end
+	local colossal = batch.ColossalWeights
+	if colossal ~= nil then
+		local cok, cwhy = SeedData.ValidRainWeights(colossal)
+		if not cok then
+			return false, "ColossalWeights: " .. tostring(cwhy)
+		end
+		for podId in pairs(colossal) do
+			if not colossalPod(podId) then
+				return false, string.format("%s among the ColossalWeights is not a Colossal pod", podId)
+			end
+		end
+	elseif chance ~= nil and chance > 0 then
+		return false, "a ColossalChance with no ColossalWeights"
+	end
+	return true, nil
+end
+
+for mode, batch in pairs(SeedData.RainBatches) do
+	local ok, why = SeedData.ValidRainBatch(batch)
 	assert(ok, string.format("RainBatches.%s: %s", mode, tostring(why)))
 end
 
@@ -1907,9 +1976,9 @@ function SeedData.RollRainTier(podId: string, rng: Random): number
 end
 
 -- The pod a draw `r` in [0, 1) lands on: the weights laid end to end in pod
--- id order, so the same draw always gives the same pod (rain: below 0.45 Pod
--- 1, then Pod 2 to 0.50, rainpod4 to 0.95 and rainpod5 from 0.95). A pod
--- weighted 0 is never drawn. Pure.
+-- id order, so the same draw always gives the same pod (a Rain's ordinary
+-- slot: below 0.5 Pod 1, rainpod4 from 0.5; its Colossal slot: below 0.5 Pod
+-- 2, rainpod5 from 0.5). A pod weighted 0 is never drawn. Pure.
 function SeedData.PickRainPod(weights: { [string]: number }, r: number): string
 	local ids: { string } = {}
 	local total = 0
@@ -1935,16 +2004,25 @@ function SeedData.PickRainPod(weights: { [string]: number }, r: number): string
 	return last
 end
 
--- One event's whole batch, slot by slot: { pod id, species, tier }. Each slot
--- draws its pod on its own (the batch's weights), then its creature, then --
--- for the one pod that draws its size -- its size. A one-tier pod draws no
--- size, so the first family's slots use the draws they always did.
+-- One event's whole batch, slot by slot: { pod id, species, tier }. First the
+-- batch's ONE Colossal draw, where it has one (2026-10-06): a hit picks one
+-- slot at random to draw its pod from the ColossalWeights; every other slot
+-- draws its pod on its own from the Weights. Then each slot's creature and --
+-- for the one pod that draws its size -- its size. Every draw is `rng`'s, the
+-- caller's (the server's own, at the nest); a batch with no Colossal draw (the
+-- Thunderstorm's) takes exactly the draws it always did.
 function SeedData.RollRainBatch(mode: string, rng: Random): { { pod: string, species: Species, tier: number } }
 	local batch = SeedData.RainBatches[mode]
 	assert(batch, "RollRainBatch: unknown mode " .. tostring(mode))
+	local chance, colossal = batch.ColossalChance, batch.ColossalWeights
+	local colossalSlot = 0
+	if colossal and chance and chance > 0 and rng:NextNumber() < chance then
+		colossalSlot = rng:NextInteger(1, batch.Slots)
+	end
 	local out = {}
-	for _ = 1, batch.Slots do
-		local podId = SeedData.PickRainPod(batch.Weights, rng:NextNumber())
+	for slot = 1, batch.Slots do
+		local weights = if slot == colossalSlot and colossal then colossal else batch.Weights
+		local podId = SeedData.PickRainPod(weights, rng:NextNumber())
 		local species = SeedData.RollRainPod(podId, rng)
 		table.insert(out, { pod = podId, species = species, tier = SeedData.RollRainTier(podId, rng) })
 	end

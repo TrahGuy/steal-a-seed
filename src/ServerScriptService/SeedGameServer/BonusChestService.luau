@@ -11,7 +11,9 @@
 -- ProximityPrompt is the request, and Triggered carries no arguments:
 --
 --   1. refuse anything not allowed: the chest off, no profile, a profile that
---      cannot be saved at all, the guide unfinished, the cooldown still
+--      cannot be saved at all, the guide's first loop unfinished (train through
+--      the first hatch -- TutorialData.FirstLoopDone, never IsComplete: the
+--      guide's step 7 comes after the chest opens), the cooldown still
 --      running, or another claim for this player already in flight;
 --   2. roll one reward, server-side;
 --   3. write the cooldown, the reward and its expiry to the profile, together;
@@ -133,7 +135,9 @@ local function publish(player: Player)
 		put(player, ATTR.EndsAt, nil)
 		return
 	end
-	put(player, ATTR.Unlocked, if TutorialData.IsComplete(profile.Tutorial) then true else nil)
+	-- The first loop, train through hatch (2026-10-08): the guide's step 7, the
+	-- travel lesson, comes after the chest opens and never delays it.
+	put(player, ATTR.Unlocked, if TutorialData.FirstLoopDone(profile.Tutorial) then true else nil)
 	put(player, ATTR.NextAt, profile.ChestNextAt)
 	local active = GameConfig.bonusChestMultiplier(profile.ChestBoost, profile.ChestBoostEndsAt,
 		os.time(), profile.ChestBoost) > 1
@@ -194,7 +198,7 @@ function BonusChestService.Claim(player: Player): (boolean, string, string?)
 	if not PlayerDataService.IsPersistent(player) then
 		return false, "NOT_SAVED", nil
 	end
-	if not TutorialData.IsComplete(profile.Tutorial) then
+	if not TutorialData.FirstLoopDone(profile.Tutorial) then
 		return false, "LOCKED", nil
 	end
 	local now = os.time()

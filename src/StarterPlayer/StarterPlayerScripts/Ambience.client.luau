@@ -33,6 +33,7 @@ local RunService = game:GetService("RunService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
+local MillFormMotion = require(SeedGame:WaitForChild("Shared"):WaitForChild("MillFormMotion"))
 
 local FAIRY_TAG = GameConfig.Tags.Fairy
 
@@ -771,6 +772,11 @@ end
 local beltClocks: { [BasePart]: number } = {}
 local steamClock = 0
 
+-- How far a belt's surface has travelled, for MillFormMotion's arrows.
+local function beltClockOf(belt: BasePart): number
+	return beltClocks[belt] or 0
+end
+
 --==============================================================================
 -- THE LADDER
 --
@@ -824,6 +830,12 @@ local function refreshBelts(dt: number)
 			end
 			if beltClocks[belt] == nil then
 				beltClocks[belt] = 0
+			end
+			-- The owner's mills (11-14) carry a MillForm and move as their own
+			-- scripts moved them (MillFormMotion), off this belt's clock.
+			if model and model:IsA("Model") and model:GetAttribute("MillForm") ~= nil
+				and not MillFormMotion.tracked(model) then
+				MillFormMotion.track(model, belt)
 			end
 
 			--==================================================================
@@ -995,6 +1007,7 @@ RunService.Heartbeat:Connect(function(dt)
 	end
 	spinMillParts(dt)
 	animateExtras(dt)
+	MillFormMotion.step(dt, workspace.CurrentCamera, beltClockOf)
 
 	--==========================================================================
 	-- EMITTERS ARE CHECKED FOUR TIMES A SECOND, NOT SIXTY

@@ -33,6 +33,9 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local GameConfig = require(SeedGame:WaitForChild("Shared"):WaitForChild("GameConfig"))
 -- Only for ObbyData.onCourse: no ribbon behind a runner (THE TRAIL, below).
 local ObbyData = require(SeedGame:WaitForChild("Shared"):WaitForChild("ObbyData"))
+-- The owner's Speed shoe at its size, and its load (THE SHOE, below).
+local SizedIcon = require(SeedGame:WaitForChild("Shared"):WaitForChild("SizedIcon"))
+local UIKit = require(SeedGame:WaitForChild("Shared"):WaitForChild("UIKit"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -172,6 +175,25 @@ for i = 1, POOL_SIZE do
 	soleCorner.CornerRadius = UDim.new(0, 3)
 	soleCorner.Parent = sole
 
+	-- THE OWNER'S SPEED SHOE since 2026-10-08 (TREADMILL FUN addendum 3: the one
+	-- Speed icon everywhere) -- its small version, at this size. The two frames
+	-- above stay until it has loaded, and for good if it never does.
+	local picture = Instance.new("ImageLabel")
+	picture.Name = "Picture"
+	picture.Size = UDim2.fromScale(1, 1)
+	picture.BackgroundTransparency = 1
+	picture.ScaleType = Enum.ScaleType.Fit
+	picture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, 20)
+	picture.ZIndex = 2
+	picture.Parent = shoe
+	SizedIcon.follow(picture)
+	UIKit.whenPictureLoads(picture, function(loaded: boolean)
+		if loaded then
+			upper.Visible = false
+			sole.Visible = false
+		end
+	end)
+
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = POP.OutlineThickness
 	-- A cooler ink than the cash pop's, so even the outline is a different
@@ -205,11 +227,11 @@ local function pop(amount: number)
 
 	local label = billboard:FindFirstChild("Label") :: TextLabel
 	--==========================================================================
-	-- COMPACTED, BECAUSE AN OVERCLOCKED MILL PAYS 52,428,800 A SECOND
+	-- COMPACTED, BECAUSE A TIER-14 MILL PAYS 450,000,000,000 A SECOND
 	--
 	-- This printed the raw integer, which was fine while the top tier paid 50
-	-- and became unreadable the moment overclocking existed: a nine-digit number
-	-- in a 90-pixel billboard, once a second, forever. `+52.4M` is the same fact
+	-- and became unreadable the moment rates did not fit: a twelve-digit number
+	-- in a 90-pixel billboard, once a second, forever. `+450B` is the same fact
 	-- in five characters.
 	--
 	-- Still floored to at least 1, so a fractional tick never pops "+0".
@@ -255,6 +277,9 @@ local function pop(amount: number)
 			if piece:IsA("Frame") then
 				piece.BackgroundTransparency = 0
 				TweenService:Create(piece, fade, { BackgroundTransparency = 1 }):Play()
+			elseif piece:IsA("ImageLabel") then
+				piece.ImageTransparency = 0
+				TweenService:Create(piece, fade, { ImageTransparency = 1 }):Play()
 			end
 		end
 	end
@@ -298,7 +323,7 @@ local lastPacket: number? = nil
 --==============================================================================
 local function cappedPayout(profile: any, elapsed: number): number
 	local tier = tonumber(profile.MillTier) or 1
-	local rate = GameConfig.trainingRateFor(tier, tonumber(profile.MillOverclock) or 0, profile)
+	local rate = GameConfig.trainingRateFor(tier, profile)
 	return rate * elapsed
 end
 

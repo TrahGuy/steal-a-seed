@@ -264,6 +264,62 @@ local ok, err = pcall(function()
 	check(at == nil and got[1] == "", "already placed: nothing moves")
 	got, at = HotbarSlots.arrive(bar("+bat", "+trap", "+ticket"), "ticket", 5)
 	check(at == 3, "the next ticket comes back to its faint slot")
+
+	-- A PLANTED creature's slot gives way (option A, the owner's call 2026-10-08):
+	-- on a phone two creatures planted from slots 4 and 5 sent every pod stolen
+	-- after them to the Bag, past two slots that looked empty.
+	local grown = { Held = { { Item = "3" } }, Plants = { { Item = "1" }, { Item = "2" }, { Item = "3" }, { Item = "" }, "junk" } }
+	local planted = HotbarSlots.planted(grown)
+	check(planted["i:1"] and planted["i:2"] and not planted["i:3"] and planted["i:"] == nil,
+		"planted: the creatures in the ground and not in the Bag")
+	check(next(HotbarSlots.planted({ Held = {} })) == nil and next(HotbarSlots.planted(nil)) == nil, "planted: nothing in the ground, nothing")
+	local phone = bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:1", "i:2")
+	got, at = HotbarSlots.arrive(phone, "i:9", 5, planted)
+	check(at == 4 and got[4] == "i:9" and got[5] == "i:2", "a stolen pod takes the first shown slot a planted creature keeps", show(got))
+	got, at = HotbarSlots.arrive(phone, "i:9", 5)
+	check(at == nil and got[4] == "i:1", "without the planted set and without sliding (a Bag tile press): the grid")
+	got, at = HotbarSlots.arrive(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:1", ""), "i:9", 5, planted)
+	check(at == 5 and got[4] == "i:1", "a truly empty slot first: a planted shortcut gives way only when it must")
+	got, at = HotbarSlots.arrive(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:3", "i:4", "i:1"), "i:9", 5, planted)
+	check(at == nil and got[6] == "i:1", "only a SHOWN slot: a planted shortcut past the phone's five stays")
+	got, at = HotbarSlots.arrive(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:3", "i:4"), "i:9", 5, planted)
+	check(at == nil, "without sliding, a creature in the Bag keeps its slot: only the ground gives way")
+
+	-- A PLANT ALWAYS LANDS ON THE BAR (the owner, 2026-10-08): with no room the
+	-- shown plant slots slide -- the left-most (oldest) leaves for the Bag, the
+	-- newcomer takes the right-most. Hearts are not spared; weapons never move.
+	local pushed
+	got, at, pushed = HotbarSlots.arrive(phone, "i:9", 5, {}, true)
+	check(at == 5 and got[4] == "i:2" and got[5] == "i:9" and pushed == "i:1" and got[1] == "w:" .. BAT1,
+		"phone, slots 4-5 full: the oldest leaves, the other slides to 4, the new pod lands on 5", show(got))
+	local desk = bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:1", "i:2", "i:3", "i:4", "i:5", "i:6", "i:7")
+	got, at, pushed = HotbarSlots.arrive(desk, "i:9", 10, {}, true)
+	check(at == 10 and pushed == "i:1" and show(got) == show(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket",
+		"i:2", "i:3", "i:4", "i:5", "i:6", "i:7", "i:9")), "desktop, 4-0 full: every plant slides one left", show(got))
+	got, at, pushed = HotbarSlots.arrive(bar("w:" .. BAT1, "i:1", "w:" .. TRAP1, "i:2", "ticket"), "i:9", 5, {}, true)
+	check(pushed == "i:1" and show(got) == show(bar("w:" .. BAT1, "i:2", "w:" .. TRAP1, "i:9", "ticket")),
+		"a weapon between plants stays put: only the plant slots slide", show(got))
+	got, at, pushed = HotbarSlots.arrive(bar("+bat", "+trap", "+ticket", "i:1", "i:2"), "i:9", 5, {}, true)
+	check(pushed == "i:1" and got[1] == "+bat" and got[3] == "+ticket" and got[4] == "i:2" and got[5] == "i:9",
+		"faint slots never slide and are never taken by a plant")
+	got, at, pushed = HotbarSlots.arrive(phone, "i:9", 5, planted, true)
+	check(at == 4 and pushed == "i:1" and got[5] == "i:2", "a planted creature's slot still goes first: nothing slides")
+	got, at, pushed = HotbarSlots.arrive(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:1", ""), "i:9", 5, {}, true)
+	check(at == 5 and pushed == nil, "an empty shown slot first: nothing pushed")
+	got, at, pushed = HotbarSlots.arrive(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:3", "i:4", "i:1"), "i:9", 5, {}, true)
+	check(pushed == "i:3" and got[4] == "i:4" and got[5] == "i:9" and got[6] == "i:1", "only the SHOWN plant slots slide")
+	got, at = HotbarSlots.arrive(bar("i:1", "i:2", "i:3", "i:4", "i:5", "+trap"), "w:" .. BAT1, 5, {}, true)
+	check(at == nil and got[1] == "i:1", "a weapon with no room never pushes a plant off: the grid")
+	got, at = HotbarSlots.arrive(bar("w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:7", ""), "i:9", 5, {}, true)
+	got, at, pushed = HotbarSlots.arrive(got, "i:7", 5, {}, true)
+	check(at == nil and pushed == nil and got[4] == "i:7", "already on the bar (a creature that kept its slot): nothing moves")
+
+	-- Picked up out of the garden: an arrival too.
+	local back = HotbarSlots.pickedUp({ ["i:1"] = true, ["i:2"] = true, ["i:5"] = true }, { ["i:2"] = true },
+		{ ["i:1"] = true, ["i:2"] = true })
+	check(#back == 1 and back[1] == "i:1", "pickedUp: out of the ground and still owned (one sold from the garden is gone)",
+		table.concat(back, " "))
+	check(#HotbarSlots.pickedUp(nil, {}, { ["i:1"] = true }) == 0, "pickedUp: no last packet, nothing")
 	local list = HotbarSlots.arrivals({ ["i:2"] = true }, { ["i:2"] = true, ["i:10"] = true, ["i:9"] = true, ticket = true,
 		["w:" .. TRAP1] = true, ["w:" .. BAT1] = true })
 	check(table.concat(list, " ") == table.concat({ "w:" .. BAT1, "w:" .. TRAP1, "ticket", "i:9", "i:10" }, " "),

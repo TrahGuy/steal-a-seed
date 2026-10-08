@@ -444,12 +444,12 @@ local ok, err = pcall(function()
 	local cash = ShopCatalog.entries("Cash")
 	local icons = #speed > 0
 	for _, e in ipairs(speed) do
-		icons = icons and e.icon == GameConfig.SourceIcons.training and e.fallback == GameConfig.Store.Icons[e.key]
+		icons = icons and e.icon == GameConfig.SourceIcons.speed and e.fallback == GameConfig.Store.Icons[e.key]
 	end
 	for _, e in ipairs(cash) do
 		icons = icons and e.icon == GameConfig.Store.Icons[e.key]
 	end
-	check(icons and catsPaid[2].icon == GameConfig.SourceIcons.training,
+	check(icons and catsPaid[2].icon == GameConfig.SourceIcons.speed,
 		"every Speed card and the category wear the catalogue's one speed icon; cash its own packs")
 	check(speed[1].benefit == "Adds 150,000 Speed" and cash[1].benefit == "Adds $24,000 cash"
 			and ShopCatalog.group(1e9) == "1,000,000,000",
@@ -544,83 +544,39 @@ local ok, err = pcall(function()
 		"a picture is Fit, on no plate, never takes a press, and one that never loads is reported by id")
 
 	--==========================================================================
-	-- 7. THE ADMIN CONSOLE (2026-10-04, the owner's ask): compact, sectioned
+	-- 7. THE ADMIN CONSOLE (redesigned 2026-10-07: tabs, one target bar, a log)
+	--
+	-- Its arithmetic is AdminConsoleSpec's -- every listed screen, every button's
+	-- payload, the amount box. Here: that it keeps the compact menus' rules.
 	--==========================================================================
 	say("\n-- the admin console --")
 	local console = sourceOf(ServerScriptService, "AdminConsoleUI")
 	local service = sourceOf(ServerScriptService, "AdminService")
-	-- Where it stands, on every screen: the console's own MenuLayout.panel.
-	local layoutBad, keyboardBad = {}, {}
-	for _, case in ipairs(cases) do
-		local L = HudLayout.solve(case.input)
-		local s = { safe = L.safe, compact = L.compact, railRight = L.railRight, rightLeft = L.rightLeft }
-		local pnl = MenuLayout.panel(s, 860, 600, OUTLINE)
-		local b = MenuLayout.blocks(pnl)
-		local r = pnl.rect
-		local pageH = b.main.h - 46 - MenuLayout.Config.Gap
-		local tw = titleW("ADMIN CONSOLE", pnl.short, true)
-		local dropW = pnl.shell.X - (pnl.pad + tw + 12) - pnl.pad - 44 - 10
-		local why = {}
-		if r.x < 8 or r.y < 8 or r.x + r.w > L.safe.X - 8 + 1 or r.y + r.h > L.safe.Y - 8 + 1 then
-			table.insert(why, "leaves the safe area")
-		end
-		-- A phone in landscape takes the dropdown; a touch screen as big as a small
-		-- desktop window (1000 x 609) has the room for the sidebar, as the Index does.
-		if case.phone and case.input.viewport.Y <= 450 and pnl.sidebar then
-			table.insert(why, "a phone gets the sidebar")
-		end
-		if not case.phone and case.input.viewport.X >= 1280 and not pnl.sidebar then
-			table.insert(why, "a desktop gets no sidebar")
-		end
-		if not pnl.sidebar and dropW < 110 then
-			table.insert(why, string.format("the dropdown has %d px", dropW))
-		end
-		if pageH < 120 then
-			table.insert(why, string.format("the section shows %d px", pageH))
-		end
-		-- Two buttons abreast only where each keeps 140 px.
-		local w = b.main.w - 9
-		local cols = math.clamp(math.floor((w + 6) / (140 + 6)), 1, 2)
-		if (w - (cols - 1) * 6) / cols < 140 - 0.01 then
-			table.insert(why, "a button narrower than 140")
-		end
-		if #why > 0 then
-			table.insert(layoutBad, case.tag .. ": " .. table.concat(why, ", "))
-		end
-		-- With a phone's keyboard over the bottom half, the panel stands above it.
-		if case.phone then
-			local s2 = table.clone(s)
-			s2.keyboardTop = math.floor(L.safe.Y * 0.55)
-			local k = MenuLayout.panel(s2, 860, 600, OUTLINE)
-			if k.rect.y + k.rect.h > s2.keyboardTop - 8 + 1 then
-				table.insert(keyboardBad, case.tag)
-			end
-		end
-	end
-	check(#layoutBad == 0, "on every desktop and phone the console stands inside the safe area at its full size (no "
-		.. "shrink): a sidebar on a desktop, a dropdown of 110+ px on a phone, 120+ px of section, buttons 140+ px",
-		table.concat(layoutBad, "; "))
-	check(#keyboardBad == 0, "with a phone's keyboard up the console stands above it", table.concat(keyboardBad, "; "))
+	local model = sourceOf(ServerScriptService, "ConsoleModel")
+	check(has(console, "local L = Model.layout({") and has(model, "local p = MenuLayout.panel(s, M.MaxW, M.MaxH, outline)")
+			and has(console, "menu.place(L.panel)"),
+		"it stands where ConsoleModel puts it, on MenuLayout's panel (AdminConsoleSpec checks every screen)")
 	check(not has(code(console), "UIKit.menuGui(") and not has(code(console), 'Instance.new("UIScale")')
 			and has(console, "keyboardTop = keyboardTop(),") and has(console, "deck.IgnoreGuiInset = false"),
 		"no UIScale shrinks it: it is laid out in the safe area itself, and above the keyboard")
-	-- Its sections, in the owner's order, with uploaded pictures only.
-	check(has(console, '{ id = "broadcast", label = "BROADCAST", icon = nil },\n'
-			.. '\t{ id = "events", label = "EVENTS", icon = GameConfig.SourceIcons.tickets },\n'
-			.. '\t{ id = "weather", label = "WEATHER", icon = GameConfig.SourceIcons.rain },\n'
-			.. '\t{ id = "grants", label = "ITEM GRANTS", icon = GameConfig.BagLook.IconImages.pods },\n'
-			.. '\t{ id = "players", label = "PLAYER TOOLS", icon = GameConfig.Store.Icons.cash1 },\n'
-			.. '\t{ id = "advanced", label = "ADVANCED", icon = GameConfig.Rail.SettingsIcon },'),
-		"six sections in order -- BROADCAST, EVENTS, WEATHER, ITEM GRANTS, PLAYER TOOLS, ADVANCED -- with uploaded pictures")
-	-- Every command the server takes, still asked for: nothing dropped, nothing new.
+	-- Its tabs, in the owner's order.
+	check(has(model, '{ id = "player", label = "PLAYER" },\n\t{ id = "spawn", label = "SPAWN" },\n'
+			.. '\t{ id = "world", label = "WORLD" },\n\t{ id = "announce", label = "ANNOUNCE" },'),
+		"four tabs in order -- PLAYER, SPAWN, WORLD, ANNOUNCE")
+	-- Every command the server takes, still asked for: nothing dropped.
 	local actionBlock = string.match(service, "local ACTIONS: { %[string%]: boolean } = {(.-)\n}") or ""
 	local actions = {}
 	for name in string.gmatch(actionBlock, "\n\t(%u%a+) = true,") do
 		table.insert(actions, name)
 	end
+	local BUILDER = { AddMoney = "addMoney", AddSpeed = "addSpeed", ResetPlayerProgress = "reset",
+		StartNight = "startNight", StartDay = "startDay", Announce = "announce", Spawn = "spawn",
+		Weather = "weather", MiniEvent = "miniEvent" }
 	local missing = {}
 	for _, action in ipairs(actions) do
-		local asked = has(console, 'InvokeServer("' .. action .. '"') or has(console, 'send("' .. action .. '"')
+		local builder = BUILDER[action]
+		local asked = builder ~= nil and has(console, "Model.args." .. builder .. "(")
+			and has(model, 'args("' .. action .. '"')
 		if not asked then
 			table.insert(missing, action)
 		end
@@ -637,27 +593,26 @@ local ok, err = pcall(function()
 		end
 	end
 	check(#doubled == 0, "every control has exactly one handler", table.concat(doubled, ", "))
-	-- Switching sections starts, stops and resets nothing.
-	local setSec = string.match(console, "\nsetSection = function%(want: string%)(.-)\nend\n") or ""
-	check(setSec ~= "" and not has(setSec, "InvokeServer") and not has(setSec, "send(") and not has(setSec, ".Text = ")
-			and not has(setSec, "setConfirm") and not has(setSec, "setAllConfirm"),
-		"choosing a section only shows it: no request, no text cleared, no question closed")
+	-- Switching tabs starts and clears nothing; a question left open on the last tab goes with it.
+	local setTab = string.match(console, "\nlocal function setTab%(id: string%)(.-)\nend\n") or ""
+	check(setTab ~= "" and not has(setTab, "InvokeServer") and not has(setTab, "send(") and not has(setTab, ".Text = ")
+			and has(setTab, "setAsking(nil, nil)"),
+		"choosing a tab only shows it: no request, no text cleared; a question left open on the tab it left is closed")
 	-- The states: pending, restricted, unavailable.
-	check(has(service, 'gui:SetAttribute("IsOwner", AdminService.IsOwner(player))')
-			and has(service, 'gui:SetAttribute("SecretGrants", AdminService.Config.SecretGrants == true)')
-			and has(console, 'face(ui.startRain, if restricted then "locked" else "rain")')
-			and has(console, "if ownerAccount() == false then")
-			and has(console, 'ui.grantButton.set(if granting then "GRANTING…" else "GRANT TO BAG")')
-			and has(console, "local locked = granting or not grantsOn()"),
-		"weather locked with why for an account the server says is not the owner's, GRANTING… while a grant is "
-			.. "pending, the grant locked while the server's switch is off; the server still decides every press")
-	check(has(console, "SCOPE: EVERY SERVER OF THIS PLACE") and has(console, "SCOPE: THIS SERVER ONLY")
+	-- The weather is every admin's since 2026-10-07: nothing about the owner is on the gui any more.
+	check(not has(service, 'gui:SetAttribute("IsOwner"')
+			and has(service, 'gui:SetAttribute("Spawning", AdminService.Config.Spawning == true)')
+			and has(console, 'Model.sections("world")') and has(console, 'word = "\u{2026}"')
+			and has(console, 'word = "SPAWNING IS OFF"'),
+		"the weather shown to every admin, \"\u{2026}\" while a request is on its way, SPAWN locked while the "
+			.. "server's switch is off; the server still decides every press")
+	check(has(console, '"MINI EVENTS \\u{00B7} EVERY SERVER"') and has(console, '"WEATHER \\u{00B7} THIS SERVER"')
 			and has(console, '"SEND TO ALL SERVERS" else "SEND TO THIS SERVER"')
-			and has(console, '"TARGET: " .. name') and has(console, "RECIPIENT: %s (YOU)")
-			and has(console, "WHOLE SERVER: DAY AND NIGHT FOR EVERYONE HERE"),
-		"each action says whom it reaches beside it: every server, this server, a target, yourself, everyone here")
-	check(has(console, 'face(ui.endGlobal, "danger")') and has(console, 'ui.startGlobal.style("go")')
-			and has(console, 'ui.sendAnnouncement.style("done")') and has(console, 'face(ui.resetButton, "danger")'),
+			and has(console, '"TARGET: %s (@%s, UserId %d)%s"') and has(model, '" -> " .. (targetName or "you")')
+			and has(console, '"DAY & NIGHT \\u{00B7} WHOLE SERVER"'),
+		"each action says whom it reaches: every server, this server, the target bar's player, you, everyone here")
+	check(has(console, 'face(ui.endMini, "danger")') and has(console, 'ui.startMini.style("go")')
+			and has(console, 'ui.send.style("done")') and has(console, 'lockable(ui.resetButton, match and not state.busy, "danger"'),
 		"START, END and SEND look different: green, red, gold; the reset red")
 end)
 

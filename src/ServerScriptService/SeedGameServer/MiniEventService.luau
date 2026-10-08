@@ -847,8 +847,10 @@ function MiniEventService.InPlot(at: Vector3): boolean
 			end
 			local wing = tonumber(plot:GetAttribute("WingWidth")) or 0
 			local front = tonumber(plot:GetAttribute("WingFrontZ")) or halfD
+			-- The back fence, but on plot 6 at Levels 6-7 (GameConfig.Plot.Beside).
+			local back = math.min(tonumber(plot:GetAttribute("WingBackZ")) or halfD, halfD)
 			if wing > 0 and p.X >= halfW - margin and p.X <= halfW + wing + margin
-				and p.Z >= front - margin and p.Z <= halfD + margin then
+				and p.Z >= front - margin and p.Z <= back + margin then
 				return true
 			end
 		end

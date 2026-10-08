@@ -14,6 +14,12 @@
 -- This is a pure geometry fixture: it builds real mills and real signs and
 -- measures them. No plot, no profile, no Play session. Run it with
 -- tools/tests/run.luau in Edit for fresh source throughout.
+--
+-- Since 2026-10-06 the sign has three spots in the mill's frame
+-- (GameConfig.Mill.Sign): FrontOffset for a mill in front of its plot (plots
+-- 1-5, every tier), Offset beside a plot below BesideTallFrom, and
+-- BesideTallOffset beside a plot from there (plot 6's tiers 12-14, whose decor
+-- fills Offset). Every placement below runs at each spot its tiers use.
 --==============================================================================
 local Shared = game.ReplicatedStorage.SeedGame.Shared
 local MillModel = require(Shared.MillModel)
@@ -63,8 +69,9 @@ check(typeof(MillModel.SignBase) == "function", "MillModel exposes the shared pl
 --==============================================================================
 -- IDEMPOTENCE, WHICH IS THE WHOLE POINT
 --
--- Ten tiers, six rotations including the awkward ones a real plot uses, and nine
--- placements each -- the first build plus eight rebuilds of the SAME tier, which
+-- Every tier at both places (in front of a plot, beside one), six rotations
+-- including the awkward ones a real plot uses, and nine placements each -- the
+-- first build plus eight rebuilds of the SAME tier, which
 -- is the case that used to climb fastest because nothing about it looks like a
 -- change.
 --==============================================================================
@@ -76,12 +83,13 @@ local worstMill, worstMillAt = 0, ""
 local worstReach, worstReachAt = 0, ""
 local placements = 0
 
+for _, beside in { false, true } do
 for tier = 1, #MILL.Tiers do
 	for _, yaw in YAWS do
 		local millCF = CFrame.new(0, 0, 0) * CFrame.Angles(0, math.rad(yaw), 0)
 		local model, belt = MillModel.Build(tier, millCF, holder)
-		local sign = MillModel.BuildSign(MillModel.SignBase(millCF), model)
-		local base0 = MillModel.SignBase(millCF).Position
+		local sign = MillModel.BuildSign(MillModel.SignBase(millCF, tier, beside), model)
+		local base0 = MillModel.SignBase(millCF, tier, beside).Position
 		local belt0, deck0 = belt.Position, model.PrimaryPart.Position
 
 		for r = 0, REBUILDS do
@@ -90,12 +98,13 @@ for tier = 1, #MILL.Tiers do
 				local cf = model:GetPivot()
 				model:Destroy()
 				model, belt = MillModel.Build(tier, cf, holder)
-				sign = MillModel.BuildSign(MillModel.SignBase(cf), model)
+				sign = MillModel.BuildSign(MillModel.SignBase(cf, tier, beside), model)
 			end
 			placements += 1
-			local where = string.format("tier %d, yaw %.0f, placement %d", tier, yaw, r)
+			local where = string.format("%s, tier %d, yaw %.0f, placement %d", if beside then "beside" else "front",
+				tier, yaw, r)
 
-			local drift = (MillModel.SignBase(model:GetPivot()).Position - base0).Magnitude
+			local drift = (MillModel.SignBase(model:GetPivot(), tier, beside).Position - base0).Magnitude
 			if drift > worstDrift then worstDrift, worstDriftAt = drift, where end
 
 			local post = sign:FindFirstChild("Post")
@@ -116,6 +125,7 @@ for tier = 1, #MILL.Tiers do
 		end
 		model:Destroy()
 	end
+end
 end
 
 check(worstDrift < 1e-3, string.format(
@@ -145,63 +155,68 @@ check(math.abs(climbed - 2.6 * S) < 1e-3, string.format(
 	"a sign's pivot still sits %.4f above its base (post half-height); measured %.4f", 2.6 * S, climbed))
 
 --==============================================================================
--- CLEARANCE AT THE CHOSEN PLACE
+-- CLEARANCE AT EVERY SPOT
 --
--- The board is off the front-left corner. It must not end up inside the machine
--- on any tier, and it must not cross the plot fence, whose outer face stands
--- Place.Side less half the fence's 1.6 thickness to the mill's -X on every plot
--- (11.2 since the mill moved a stud out, 2026-09-30).
+-- The sign must not end up inside the machine: every part of it, grown 0.25
+-- (MillPlacementSpec's clearance), against every visible or colliding part of
+-- every tier that stands at that spot -- Workspace:GetPartsInPart, real
+-- shapes, the way MillPlacementSpec asks. Beside a plot it must also not cross
+-- the plot fence, whose outer face stands Place.Beside.Side less half the
+-- fence's 1.6 thickness to the mill's -X (11.2 since 2026-09-30).
 --==============================================================================
-local FENCE_X = -(MILL.Place.Side - 0.8)
-local halfBoard = 9 * S * 0.5
-local boardMinX = SIGN.Offset.X - halfBoard
-check(boardMinX > FENCE_X, string.format(
-	"the board must stay inside the fence line: %.2f vs %.2f", boardMinX, FENCE_X))
-
--- The board's face nearest the machine.
-local boardFaceZ = SIGN.Offset.Z + 0.6 * S * 0.5
-local tightest, tightestAt, emptyTiers = math.huge, "", 0
-for tier = 1, #MILL.Tiers do
-	local model = MillModel.Build(tier, CFrame.new(0, 0, 0), holder)
-	-- How far forward (toward -Z) does this tier reach, anywhere across the
-	-- board's own X span? math.huge means it does not reach into that span at
-	-- all, which is unlimited clearance rather than none -- getting that
-	-- backwards is what made the first cut of this check report -inf.
-	local reachZ = math.huge
-	for _, d in model:GetDescendants() do
-		if d:IsA("BasePart") then
-			local h = d.Size * 0.5
-			for _, sx in { -1, 1 } do for _, sy in { -1, 1 } do for _, sz in { -1, 1 } do
-				local p = (d.CFrame * CFrame.new(h.X * sx, h.Y * sy, h.Z * sz)).Position
-				if p.X >= boardMinX and p.X <= SIGN.Offset.X + halfBoard then
-					reachZ = math.min(reachZ, p.Z)
+local CLEAR = 0.25
+local hitsAt = {}
+local spots = 0
+for _, beside in { false, true } do
+	for tier = 1, #MILL.Tiers do
+		local model = MillModel.Build(tier, CFrame.new(0, 0, 0), holder)
+		local sign = MillModel.BuildSign(MillModel.SignBase(CFrame.new(0, 0, 0), tier, beside), holder)
+		local params = OverlapParams.new()
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { model }
+		params.RespectCanCollide = false
+		for _, part in sign:GetDescendants() do
+			if part:IsA("BasePart") then
+				local probe = Instance.new("Part")
+				probe.Anchored = true
+				probe.CanCollide = false
+				probe.CanTouch = false
+				probe.Transparency = 1
+				probe.Size = part.Size + Vector3.new(CLEAR * 2, CLEAR * 2, CLEAR * 2)
+				probe.CFrame = part.CFrame
+				probe.Parent = holder
+				for _, hit in workspace:GetPartsInPart(probe, params) do
+					if hit.Transparency < 1 or hit.CanCollide then
+						table.insert(hitsAt, string.format("%s T%d %s x %s", if beside then "beside" else "front",
+							tier, part.Name, hit.Name))
+					end
 				end
-			end end end
+				probe:Destroy()
+			end
 		end
+		spots += 1
+		sign:Destroy()
+		model:Destroy()
 	end
-	if reachZ == math.huge then
-		emptyTiers += 1
-	else
-		local clearance = reachZ - boardFaceZ
-		if clearance < tightest then
-			tightest, tightestAt = clearance, "tier " .. tier
-		end
-	end
-	model:Destroy()
 end
-check(tightest > 0, string.format(
-	"the board must stand clear in front of every tier -- tightest %.2f studs at %s",
-	tightest, tightestAt))
+check(#hitsAt == 0, string.format("every spot stands %.2f clear of every tier that uses it -- %d tier-spots -- %s",
+	CLEAR, spots, table.concat(hitsAt, ", ", 1, math.min(#hitsAt, 6))))
+
+local FENCE_X = -(MILL.Place.Beside.Side - 0.8)
+local halfBoard = 9 * S * 0.5
+local boardMinX = math.min(SIGN.Offset.X, SIGN.BesideTallOffset.X) - halfBoard
+check(boardMinX > FENCE_X, string.format(
+	"beside a plot, the board must stay inside the fence line: %.2f vs %.2f", boardMinX, FENCE_X))
 
 holder:Destroy()
 
 return string.format(
-	"MillSignSpec: %d passed, 0 failed. %d placements (10 tiers x %d rotations x %d builds).\n" ..
+	"MillSignSpec: %d passed, 0 failed. %d placements (%d tiers x 2 places x %d rotations x %d builds).\n" ..
 	"  sign drift %.6f | post-to-ground %.6f | mill/deck/belt movement %.6f\n" ..
-	"  board reach %.2f of %d studs | tightest front clearance %.2f (%d tiers reach into its span)\n" ..
-	"  board inner edge %.2f, fence at %.2f -> %.2f studs of daylight\n" ..
+	"  board reach %.2f of %d studs (worst %s) | %d tier-spots clear by %.2f\n" ..
+	"  beside a plot: board inner edge %.2f, fence at %.2f -> %.2f studs of daylight\n" ..
 	"Pure geometry: no plot, profile or Play session.",
-	passed, placements, #YAWS, REBUILDS + 1,
+	passed, placements, #MILL.Tiers, #YAWS, REBUILDS + 1,
 	worstDrift, worstGround, worstMill,
-	worstReach, SIGN.PromptRange, tightest, #MILL.Tiers - emptyTiers,
+	worstReach, SIGN.PromptRange, worstReachAt, spots, CLEAR,
 	boardMinX, FENCE_X, boardMinX - FENCE_X)

@@ -165,9 +165,14 @@ end
 -- the one that knows which children are geometry and which are the garden.
 --
 -- `cf` is the plot CENTRE. Local -Z faces the hub, which is where the gate is.
+--
+-- THE PLOT'S ID DECIDES ITS SHAPE AT LEVELS 6-7 (GameConfig.plotLayoutFor):
+-- read off the model, where buildPlot stamps it before the first dressing and
+-- every resize finds it again. A model without one is dressed as a Front plot.
 --==============================================================================
 function dressPlot(model: Model, cf: CFrame, level: number)
-	local rows = GameConfig.plotRowsForTier(level)
+	local plotId = tonumber(model:GetAttribute(GameConfig.Attributes.PlotId))
+	local rows = GameConfig.plotRowsFor(level, plotId)
 	local width = PLOT.Width
 	local depth = GameConfig.plotDepthFor(rows)
 	local halfW, halfD = width * 0.5, depth * 0.5
@@ -217,18 +222,26 @@ function dressPlot(model: Model, cf: CFrame, level: number)
 	--
 	-- `wingZ0` is where the fence steps out: far enough behind the bed's front
 	-- edge to leave grass, and always well behind the gate: 25.4 studs back from
-	-- the front fence on Levels 3 and 4, 37.6 on Level 5. The mill beside the
-	-- plot ends 23.6 back (GameConfig.Mill.Place).
+	-- the front fence on Levels 3 and 4, 37.6 on Level 5, 13.2 on plots 1-5 at
+	-- Levels 6-7 (their mills stand in front now). Plot 6's mill, the one still
+	-- beside its plot, ends 23.6 back (GameConfig.Mill.Place), so plot 6 keeps
+	-- its Level 5 wing at Levels 6-7 and grows deeper instead.
+	--
+	-- `wingZ1` is where the wing ends: the back fence, but on plot 6 at Levels
+	-- 6-7, where it is Level 5's wing and the plot goes on behind it.
 	--==========================================================================
 	local SIDE = PLOT.SideBed
-	local sideRows = GameConfig.plotSideRowsForTier(level)
+	local sideRows = GameConfig.plotSideRowsForTier(level, plotId)
 	local wingW = if sideRows > 0 then SIDE.WingWidth else 0
-	local sideFrontZ, sideBackZ = GameConfig.plotSideBedZ(level)
+	local sideFrontZ, sideBackZ = GameConfig.plotSideBedZ(level, plotId)
 	local wingZ0 = if sideFrontZ
 		then sideFrontZ - SIDE.WingMargin - PLOT.BedFrameWidth
 		else 0
+	local _, wingBack = GameConfig.plotWingZ(level, plotId)
+	local wingZ1 = if wingBack and wingBack < halfD - 1e-6 then wingBack else halfD
 	model:SetAttribute("WingWidth", wingW)
 	model:SetAttribute("WingFrontZ", wingZ0)
+	model:SetAttribute("WingBackZ", wingZ1)
 
 	--== THE PLOT HAS NO GROUND OF ITS OWN ==--
 	--
@@ -370,11 +383,16 @@ function dressPlot(model: Model, cf: CFrame, level: number)
 	-- Seven runs instead of five when there is a wing. Without one the geometry
 	-- collapses back to exactly the original five, because wingW is zero and
 	-- both wing runs are shorter than fenceRun's half-stud minimum.
+	--
+	-- Nine on plot 6 at Levels 6-7, whose wing stops short of the back fence
+	-- (`wingShort`): the back fence spans the main bed only, the wing gets a
+	-- back of its own, and the right-hand fence carries on behind it.
 	--==========================================================================
 	local gateHalf = PLOT.GateWidth * 0.5
 	local outerW = halfW + wingW
+	local wingShort = wingW > 0 and wingZ1 < halfD
 
-	fenceRun(true, halfD, -halfW, outerW)     -- back, across the wing too
+	fenceRun(true, halfD, -halfW, if wingShort then halfW else outerW) -- back, across the wing too
 	fenceRun(false, -halfW, -halfD, halfD)    -- left, full depth
 	fenceRun(true, -halfD, -halfW, -gateHalf) -- front, left of the gate
 	fenceRun(true, -halfD, gateHalf, halfW)   -- front, right of the gate
@@ -384,7 +402,11 @@ function dressPlot(model: Model, cf: CFrame, level: number)
 		-- then a return across the step, then the wing's own outer edge.
 		fenceRun(false, halfW, -halfD, wingZ0)  -- right, up to the step
 		fenceRun(true, wingZ0, halfW, outerW)   -- the step itself
-		fenceRun(false, outerW, wingZ0, halfD)  -- the wing's outer edge
+		fenceRun(false, outerW, wingZ0, wingZ1) -- the wing's outer edge
+		if wingShort then
+			fenceRun(true, wingZ1, outerW, halfW) -- the wing's own back
+			fenceRun(false, halfW, wingZ1, halfD) -- right again, behind the wing
+		end
 	else
 		fenceRun(false, halfW, -halfD, halfD)   -- right, full depth
 	end
@@ -689,15 +711,18 @@ function MapService.ResizePlot(plot: Model, level: number): CFrame
 	assert(n and n == n, "ResizePlot: bad level")
 	n = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
 
+	-- THIS plot's depth: plot 6 is deeper than the rest at Levels 6-7
+	-- (GameConfig.plotDepthForPlot), and the same at every other level.
+	local plotId = tonumber(plot:GetAttribute(GameConfig.Attributes.PlotId))
 	local oldDepth = tonumber(plot:GetAttribute("Depth"))
-		or GameConfig.plotDepthFor(GameConfig.plotRowsForTier(plot:GetAttribute("Level")))
+		or GameConfig.plotDepthForPlot(plot:GetAttribute("Level"), plotId)
 
 	-- The stored centre, never GetPivot() -- see "AND THE CENTRE ITSELF" in
 	-- dressPlot for why the two differ and why using the pivot drifts.
 	local stored = plot:GetAttribute("PlotCF")
 	local oldCF = if typeof(stored) == "CFrame" then stored else plot:GetPivot()
 	local gateCF = oldCF * CFrame.new(0, 0, -oldDepth * 0.5)
-	local newDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(n))
+	local newDepth = GameConfig.plotDepthForPlot(n, plotId)
 	local newCF = gateCF * CFrame.new(0, 0, newDepth * 0.5)
 
 	-- Geometry goes; the garden stays. Named explicitly rather than by class,
@@ -754,14 +779,20 @@ local function buildTreadmill(id: number, cf: CFrame, parent: Instance): Model
 	CollectionService:AddTag(belt, GameConfig.Tags.Treadmill)
 
 	--==========================================================================
-	-- BESIDE THE FENCE, TURNED TO FACE WHOEVER IS COMING
+	-- THE SIGN, OFF THE MILL'S OWN FRAME
 	--
-	-- Both numbers live in GameConfig.Mill.Sign, with the working for the yaw --
-	-- it is the bearing from the sign to this plot's spawn pad, not a taste
-	-- decision. Placed off the mill's own CFrame, so it swings round with the
-	-- plot and needs no angle maths here.
+	-- Its spots live in GameConfig.Mill.Sign, measured against every tier --
+	-- one in front of a plot, two beside one (MillModel.SignBase). Placed off
+	-- the mill's own CFrame, so it swings round with the plot and needs no angle
+	-- maths here. Beside a plot, the tall tiers' overhang is softened too
+	-- (MillModel.Soften; nothing at the starting tier, but the same call
+	-- TreadmillService makes on every rebuild).
 	--==========================================================================
-	local sign = MillModel.BuildSign(MillModel.SignBase(cf), model)
+	local beside = GameConfig.millStandsBeside(id)
+	if beside then
+		MillModel.Soften(model, GameConfig.millGateFor(cf, id), GameConfig.Mill.StartingTier)
+	end
+	local sign = MillModel.BuildSign(MillModel.SignBase(cf, GameConfig.Mill.StartingTier, beside), model)
 	sign:SetAttribute(GameConfig.Attributes.PlotId, id)
 
 	return model
@@ -1677,19 +1708,22 @@ function MapService.Init()
 		local cf = CFrame.lookAt(pos, Vector3.new(0, Y, 0))
 		buildPlot(id, cf, GameConfig.StartingPlotTier, plots)
 
-		-- BESIDE THE PLOT, NOT IN FRONT OF IT. It used to sit on the ring's
-		-- inner walkway directly outside the gate, which is the one patch of
-		-- ground every single run passes through -- an obstacle parked in your
-		-- own doorway. Alongside the right-hand fence it is out of the way and
-		-- still obviously yours.
+		-- IN FRONT OF THE PLOT, TO ITS RIGHT, NOT IN ITS DOORWAY (2026-10-06,
+		-- the owner's choice). It once sat on the ring's inner walkway directly
+		-- outside the gate -- the one patch of ground every single run passes
+		-- through. Then it stood alongside the right-hand fence; plots 1-5's
+		-- now stand in front, in the gap between two plots' walk lines, turned
+		-- to face their own, and the strip beside the fence is free for the
+		-- plot. Plot 6's stays beside its fence: its right side is the road's
+		-- mouth (GameConfig.Mill.Place).
 		--
-		-- Placed off the plot's GATE (GameConfig.Mill.Place, millCFrameFor), so
-		-- it swings round with the plot, needs no angle maths of its own, and
-		-- stands in the same place at every level: the gate never moves. Moved
-		-- forward and a stud out on 2026-09-30, clear of every fence a plot of
-		-- any level builds (MillPlacementSpec).
+		-- Placed off the plot's GATE (millCFrameFor, by plot), so it swings
+		-- round with the plot, needs no angle maths of its own, and stands in
+		-- the same place at every level: the gate never moves. Clear of every
+		-- fence, walk line, board and neighbour a plot of any level has
+		-- (MillPlacementSpec).
 		local startDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(GameConfig.StartingPlotTier))
-		buildTreadmill(id, GameConfig.millCFrameFor(cf * CFrame.new(0, 0, -startDepth * 0.5)), plots)
+		buildTreadmill(id, GameConfig.millCFrameFor(cf * CFrame.new(0, 0, -startDepth * 0.5), id), plots)
 
 		--==================================================================
 		-- THE PLOT'S UPGRADE BOARD, BESIDE ITS GATE
@@ -1772,13 +1806,40 @@ function MapService.Init()
 			n, arcAtGate, PLOT.Width))
 	end
 
-	-- Nothing may reach into the road's mouth.
-	local reach = PLOT.MaxReach
-	if reach + 20 > MAP.FieldBack then
-		warn(string.format(
-			"[Seed/MapService] Tier %d plots reach %.0f studs from the hub but the field only " ..
-			"extends %d back. Raise FieldBack.",
-			#GameConfig.PlotTiers, reach, MAP.FieldBack))
+	--== EVERY PLOT, AT EVERY LEVEL, STANDS ON THE FIELD ==--
+	-- Plot by plot since 2026-10-07. This was one number -- the deepest level's
+	-- reach against FieldBack -- and the deepest plot now points at the field's
+	-- FRONT (plot 6 at Level 7, GameConfig.Plot.Beside), so it is every corner
+	-- of every level's footprint, fence and all, from each plot's own gate.
+	local halfField = MAP.FieldWidth * 0.5
+	local pad = FENCE_THICK * 0.5
+	for _, plotModel in ipairs(plots:GetChildren()) do
+		local plotId = tonumber(plotModel:GetAttribute(GameConfig.Attributes.PlotId))
+		local stored = plotModel:GetAttribute("PlotCF")
+		local depthNow = tonumber(plotModel:GetAttribute("Depth"))
+		if CollectionService:HasTag(plotModel, GameConfig.Tags.Plot) and plotId and typeof(stored) == "CFrame"
+			and depthNow then
+			local gateCF = (stored :: CFrame) * CFrame.new(0, 0, -depthNow * 0.5)
+			local worst, worstLevel = math.huge, 0
+			for level = 1, #GameConfig.PlotTiers do
+				for _, r in ipairs(GameConfig.plotFootprint(level, plotId)) do
+					for _, x in ipairs({ r.x0 - pad, r.x1 + pad }) do
+						for _, d in ipairs({ r.d0 - pad, r.d1 + pad }) do
+							local w = gateCF:PointToWorldSpace(Vector3.new(x, 0, d))
+							local margin = math.min(halfField - math.abs(w.X), w.Z + MAP.FieldFront, MAP.FieldBack - w.Z)
+							if margin < worst then
+								worst, worstLevel = margin, level
+							end
+						end
+					end
+				end
+			end
+			if worst < 0 then
+				warn(string.format(
+					"[Seed/MapService] Plot %d at Level %d reaches %.1f studs past the field's edge. Raise the " ..
+					"field or shorten that level (GameConfig.PlotTiers / Plot.Beside).", plotId, worstLevel, -worst))
+			end
+		end
 	end
 	if MAP.CorridorWidth > MAP.FieldWidth then
 		warn(string.format(

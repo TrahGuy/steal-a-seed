@@ -13,7 +13,7 @@
 --      chased or waking a guardian, carrying a raided pod, trapped, knocked
 --      down or dead -- each with the line that says what to do about it.
 --      The reward basis is SNAPSHOT now: TreadmillService.RateOf, the belt's
---      1x rate for this player's mill tier, overclock and rebirth. The Bonus
+--      1x rate for this player's mill tier and rebirth. The Bonus
 --      Chest's training boost is never in it -- only the belt's own tick
 --      applies that -- and an upgrade bought mid-run changes nothing.
 --   2. ON THE COURSE. The Course attribute fixes the walk speed (CarryService)

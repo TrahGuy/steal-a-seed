@@ -398,8 +398,8 @@ local ok, err = pcall(function()
 	local beltC = ownMill(902, 3040)
 	local A = fakePlayer("A", 901, 1, 0)
 	local B = fakePlayer("B", 903, 1, 0)
-	local C = fakePlayer("C", 902, 5, 1)
-	local D = fakePlayer("D", 904, 5, 1)
+	local C = fakePlayer("C", 902, 5, 0)
+	local D = fakePlayer("D", 904, 5, 0)
 	local function standOn(p, belt)
 		p.Character.HumanoidRootPart.CFrame = belt.CFrame * CFrame.new(0, belt.Size.Y / 2 + 1, 0)
 	end
@@ -483,7 +483,7 @@ local ok, err = pcall(function()
 	end
 	check(#paid == 4 and a > 0 and c > 0 and near(b, a * DISCO.Multiplier) and near(d, c * DISCO.Multiplier),
 		"in the same tick each rider earns exactly x10 what the same player earns on their own mill -- tier 1 with a "
-			.. "+25% training boost, and tier 5 overclocked: their own progression, composed once",
+			.. "+25% training boost, and tier 5: their own progression, composed once",
 		string.format("A %.4f B %.4f C %.4f D %.4f", a, b, c, d))
 	check(near(a / (Treadmill.RateOf(A) * 1.25), c / Treadmill.RateOf(C)) and b ~= d,
 		"own mills are paid exactly as before (rate x boost x the tick), and the riders' pay differs by "

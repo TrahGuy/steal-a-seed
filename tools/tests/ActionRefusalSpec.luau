@@ -689,6 +689,7 @@ local function planting()
 			PlayerDataService = DataStub,
 			CarryService = CarryStub,
 			PlantWander = PlantWander,
+			GardenFrame = require(Server:WaitForChild("GardenFrame")),
 		}, nil)
 		PlantService.Init()
 		PlantService.Start()

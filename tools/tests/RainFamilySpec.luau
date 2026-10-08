@@ -8,9 +8,9 @@
 -- times the tier ladder; the owner's seven supplied pods, one per size, matched
 -- BY NAME and never scaled again; the owner's 28 unboosted rates, paid once
 -- through EconomyService with every boost applied once; 3 h / 6 h growth; and
--- the owner's even split -- Pod 1 45 / rainpod4 45 / Pod 2 5 / rainpod5 5, a
--- Colossal still exactly 10 in 100 -- with the family's creatures 40 / 25 / 25
--- / 10. Edit mode:
+-- the owner's even split -- an ordinary slot Pod 1 / rainpod4 1:1, the one
+-- Colossal a Rain (5% of Rains since 2026-10-06; it was 10 in 100 a slot)
+-- Pod 2 / rainpod5 1:1 -- with the family's creatures 40 / 25 / 25 / 10. Edit mode:
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
@@ -475,44 +475,56 @@ local ok, err = pcall(function()
 		"and, like the first family, straight into the reveal (no silhouette roll)")
 
 	--==========================================================================
-	say("7. The draw: Colossal still 10 in 100, the even split, the creatures 40/25/25/10")
+	say("7. The draw: a Colossal in 5% of Rains, the even split, the creatures 40/25/25/10")
 	--==========================================================================
-	local W = SeedData.RainBatches.rain.Weights
-	local total = 0
+	local batch = SeedData.RainBatches.rain
+	local W, CW = batch.Weights, batch.ColossalWeights or {}
+	local total, ctotal = 0, 0
 	for _, w in pairs(W) do
 		total += w
 	end
+	for _, w in pairs(CW) do
+		ctotal += w
+	end
+	-- Per egg (the owner, 2026-10-06): ONE Colossal draw a Rain, 5 in 100, on one
+	-- slot of three -- so a slot is the Colossal one 5% / 3 of the time.
+	local colossalSlot = (batch.ColossalChance or 0) / batch.Slots
+	local share4 = (1 - colossalSlot) * (W.rainpod4 or 0) / total
+	local share5 = colossalSlot * (CW.rainpod5 or 0) / math.max(ctotal, 1)
 	local p4, p5 = SeedData.RainPods.rainpod4, SeedData.RainPods.rainpod5
 	local tierTotal = 0
 	for t = 1, #p4.Tiers do
 		tierTotal += p4.Tiers[t]
 	end
 	local oddsTotal = 40 + 25 + 25 + 10
-	-- The owner's table, per egg, in % (Tiny .. Titan, then Colossal).
+	-- Per egg, in % (Tiny .. Titan, then Colossal), under the rule of 2026-10-06:
+	-- 5% a Rain on one slot of three, each half 50/50, the creatures 40/25/25/10,
+	-- the sizes the global ladder's. Under the old per-slot rule (2026-10-05) the
+	-- owner's table ran from Tiny Squallsnapper 9.635% to Colossal Torrentacle 0.5%.
 	local TABLE = {
-		squallsnapper = { 9.635, 2.882, 1.822, 1.428, 1.071, 1.162, 2.000 },
-		monsoad = { 6.022, 1.801, 1.139, 0.892, 0.669, 0.726, 1.250 },
-		thundershell = { 6.022, 1.801, 1.139, 0.892, 0.669, 0.726, 1.250 },
-		torrentacle = { 2.409, 0.721, 0.456, 0.357, 0.268, 0.290, 0.500 },
+		squallsnapper = { 10.527, 3.149, 1.991, 1.560, 1.170, 1.269, 0.333 },
+		monsoad = { 6.580, 1.968, 1.244, 0.975, 0.731, 0.793, 0.208 },
+		thundershell = { 6.580, 1.968, 1.244, 0.975, 0.731, 0.793, 0.208 },
+		torrentacle = { 2.632, 0.787, 0.498, 0.390, 0.293, 0.317, 0.083 },
 	}
 	local oddsBad = {}
 	for i, id in ipairs(IDS) do
 		local share = p4.Weights[i] / oddsTotal
 		for tier = 1, 6 do
-			local got = W.rainpod4 / total * share * p4.Tiers[tier] / tierTotal * 100
+			local got = share4 * share * p4.Tiers[tier] / tierTotal * 100
 			if not near(got, TABLE[id][tier], 0.0006) then
 				table.insert(oddsBad, string.format("%s@%d %.4f", id, tier, got))
 			end
 		end
-		local gotC = W.rainpod5 / total * p5.Weights[i] / oddsTotal * 100
+		local gotC = share5 * p5.Weights[i] / oddsTotal * 100
 		if not near(gotC, TABLE[id][7], 0.0006) then
 			table.insert(oddsBad, string.format("%s@7 %.4f", id, gotC))
 		end
 	end
 	check(#oddsBad == 0 and table.concat(p4.Weights, ",") == "40,25,25,10" and table.concat(p5.Weights, ",") == "40,25,25,10"
-		and #p4.Tiers == 6 and p5.Tier == 7,
-		"per egg, exactly the approved table: Squallsnapper 20%, Monsoad 12.5%, Thundershell 12.5%, Torrentacle 5% "
-			.. "(Tiny Squallsnapper 9.635% .. Colossal Torrentacle 0.5%), the old family 50%", table.concat(oddsBad, ", "))
+		and #p4.Tiers == 6 and p5.Tier == 7 and near(share4 + share5, 0.5, 1e-12),
+		"per egg, exactly the table: Squallsnapper 20%, Monsoad 12.5%, Thundershell 12.5%, Torrentacle 5% "
+			.. "(Tiny Squallsnapper 10.527% .. Colossal Torrentacle 0.083%), the old family 50%", table.concat(oddsBad, ", "))
 	local tierW = {}
 	for t = 1, 6 do
 		tierW[t] = p4.Tiers[t] == SeedData.Tiers[t].weight
@@ -537,25 +549,34 @@ local ok, err = pcall(function()
 		and PW(p4.Tiers, cuts[5] + 1e-7) == 6 and PW(p4.Tiers, 1) == 6
 	check(tierOk, string.format("the size draw: Tiny below %.4f, then Big, Huge, Mega, Giant, Titan to 1 -- never Colossal",
 		cuts[1]))
-	-- Scripted: a slot that lands on rainpod4 draws its creature, then its size; rainpod5 its creature only.
-	local draws, used = { 0.70, 0.66, 0.99, 0.96, 0.95, 0.10, 0.0 }, 0
+	-- Scripted: the batch's Colossal draw first (0.01, a hit; the pick slot 2).
+	-- Slot 1 lands on rainpod4 and draws its creature, then its size; slot 2,
+	-- the Colossal one, lands on rainpod5 and draws its creature only; slot 3 is
+	-- an old Rain pod.
+	local draws, used, ints = { 0.01, 0.70, 0.66, 0.99, 0.96, 0.95, 0.10 }, 0, 0
 	local scripted = {
 		NextNumber = function()
 			used += 1
 			return draws[used]
 		end,
 		NextInteger = function(_, lo)
-			return lo
+			ints += 1
+			return if ints == 1 then 2 else lo
 		end,
 	}
 	local seq = SeedData.RollRainBatch("rain", scripted)
 	check(#seq == 3 and seq[1].pod == "rainpod4" and seq[1].species.Id == "thundershell" and seq[1].tier == 6
 		and seq[2].pod == "rainpod5" and seq[2].species.Id == "torrentacle" and seq[2].tier == 7
-		and seq[3].pod == "rainpod1" and seq[3].tier == 1 and used == 6,
-		"draws 0.70 / 0.66 / 0.99 lay a Titan Thundershell in rainpod4; 0.96 / 0.95 a Colossal Torrentacle in rainpod5; "
-			.. "0.10 an old Rain pod", string.format("%s %s %s, %d draws", tostring(seq[1].species.Id),
-			tostring(seq[2].species.Id), tostring(seq[3].pod), used))
-	local rng = Random.new(20261005)
+		and seq[3].pod == "rainpod1" and seq[3].tier == 1 and used == 7 and ints == 2,
+		"a hit (0.01) on slot 2: draws 0.70 / 0.66 / 0.99 lay a Titan Thundershell in rainpod4; the Colossal slot "
+			.. "0.96 / 0.95 a Colossal Torrentacle in rainpod5; 0.10 an old Rain pod",
+		string.format("%s %s %s, %d draws", tostring(seq[1].species.Id), tostring(seq[2].species.Id),
+			tostring(seq[3].pod), used))
+	-- A seeded sample; every tolerance four standard errors of its own sample size.
+	local function close(share, p, n)
+		return n > 0 and math.abs(share - p) <= 4 * math.sqrt(p * (1 - p) / n) + 1e-9
+	end
+	local rng = Random.new(20261006)
 	local N, slots, colossal, perSpecies, perTier = 8000, 0, 0, {}, {}
 	for _ = 1, N do
 		for _, roll in ipairs(SeedData.RollRainBatch("rain", rng)) do
@@ -573,14 +594,15 @@ local ok, err = pcall(function()
 	for _, n in pairs(perSpecies) do
 		fam += n
 	end
-	check(math.abs(colossal / slots - 0.10) < 0.01 and math.abs(fam / slots - 0.5) < 0.015
-		and math.abs((perSpecies.squallsnapper or 0) / fam - 0.40) < 0.02
-		and math.abs((perSpecies.torrentacle or 0) / fam - 0.10) < 0.015
-		and math.abs((perTier[1] or 0) / fam - 0.9 * 0.53528) < 0.02 and (perTier[6] or 0) > 0,
-		string.format("seeded sample of %d slots: Colossal %.1f%%, the family %.1f%%, Squallsnapper %.1f%% of it, "
-			.. "Torrentacle %.1f%%, Tiny %.1f%%", slots, colossal / slots * 100, fam / slots * 100,
-			(perSpecies.squallsnapper or 0) / fam * 100, (perSpecies.torrentacle or 0) / fam * 100,
-			(perTier[1] or 0) / fam * 100))
+	local tinyShare = share4 / (share4 + share5) * p4.Tiers[1] / tierTotal
+	check(close(colossal / slots, colossalSlot, slots) and close(fam / slots, 0.5, slots)
+		and close((perSpecies.squallsnapper or 0) / math.max(fam, 1), 0.40, fam)
+		and close((perSpecies.torrentacle or 0) / math.max(fam, 1), 0.10, fam)
+		and close((perTier[1] or 0) / math.max(fam, 1), tinyShare, fam) and (perTier[6] or 0) > 0,
+		string.format("seeded sample of %d slots: Colossal %.2f%% (%.2f%% asked), the family %.1f%%, Squallsnapper "
+			.. "%.1f%% of it, Torrentacle %.1f%%, Tiny %.1f%%", slots, colossal / slots * 100, colossalSlot * 100,
+			fam / slots * 100, (perSpecies.squallsnapper or 0) / math.max(fam, 1) * 100,
+			(perSpecies.torrentacle or 0) / math.max(fam, 1) * 100, (perTier[1] or 0) / math.max(fam, 1) * 100))
 
 	--==========================================================================
 	say("8. At the nest: laid once by the server, in its size's own shell")

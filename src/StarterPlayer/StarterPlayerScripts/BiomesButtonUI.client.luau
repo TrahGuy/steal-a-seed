@@ -41,6 +41,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -191,6 +192,16 @@ local function request()
 end
 
 button.Activated:Connect(request)
+
+-- LIT BY THE GUIDE, ITS D-PAD KEY STILL PRESSES IT (2026-10-08): D-pad Left,
+-- only while TutorialUI's spotlight has it lit (GuideLit) and selected --
+-- PlotTeleportUI's listener, and its reasons, word for word.
+UserInputService.InputBegan:Connect(function(input: InputObject)
+	if input.KeyCode == Enum.KeyCode.DPadLeft and button.Visible and button:GetAttribute(ATTR.GuideLit) == true
+		and GuiService.SelectedObject == button and not PadInput.panelOpen() then
+		request()
+	end
+end)
 
 task.spawn(function()
 	local remotes = SeedGame:WaitForChild("Remotes", 20)

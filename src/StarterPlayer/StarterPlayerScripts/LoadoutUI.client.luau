@@ -235,6 +235,8 @@ local prof = {
 	tickets = 0,
 	favourites = {} :: { [string]: boolean },
 	owned = nil :: { [string]: boolean }?,
+	-- Creatures in the ground: their slots give way to an arrival (HotbarSlots.arrive).
+	planted = {} :: { [string]: boolean },
 	waiting = 0,
 }
 local bar = { server = HotbarSlots.empty(), pending = nil :: { string }?, seq = 0, queued = false }
@@ -1245,7 +1247,7 @@ activateKey = function(key: string, by: string)
 	if not (done and ref) or HotbarSlots.slotOf(shownBar(), ref) then
 		return
 	end
-	local new, at = HotbarSlots.arrive(shownBar(), ref, activeSlots)
+	local new, at = HotbarSlots.arrive(shownBar(), ref, activeSlots, prof.planted)
 	if at then
 		editBar(new)
 		flashSlot(at, HOT.FlashArrived)
@@ -1544,8 +1546,11 @@ end
 --
 -- ARRIVALS are what is owned now and was not in the last packet (the first
 -- packet is only the baseline, and a respawn changes no rows): each goes to its
--- kind's faint slot or the first empty shown one (HotbarSlots.arrive), or into
--- the grid, where the Bag cell pops.
+-- kind's faint slot or the first empty shown one, else a shown slot a planted
+-- creature keeps (HotbarSlots.arrive, option A, 2026-10-08); a plant or a pod
+-- that still finds no room slides the plant slots and pushes the oldest off
+-- (the owner, 2026-10-08). Only a weapon with no room goes into the grid, where
+-- the Bag cell pops. A creature picked up out of the garden is an arrival too.
 --==============================================================================
 local function receive(profile: any)
 	if type(profile) ~= "table" then
@@ -1590,31 +1595,45 @@ local function receive(profile: any)
 	end
 	local now = HotbarSlots.owned(profile)
 	local before = prof.owned
+	local wasPlanted = prof.planted
 	prof.owned = now
+	prof.planted = HotbarSlots.planted(profile)
 	if before then
 		local arrived = HotbarSlots.arrivals(before, now)
+		-- A creature picked up out of the garden comes to the bar like a banked
+		-- pod (the owner, 2026-10-08).
+		for _, ref in ipairs(HotbarSlots.pickedUp(wasPlanted, prof.planted, now)) do
+			table.insert(arrived, ref)
+		end
 		if #arrived > 0 then
 			local working = shownBar()
-			local landed: { number } = {}
+			local landed: { string } = {}
 			for _, ref in ipairs(arrived) do
-				local new, at = HotbarSlots.arrive(working, ref, activeSlots)
+				local new, at, pushed = HotbarSlots.arrive(working, ref, activeSlots, prof.planted, true)
 				if at then
 					working = new
-					table.insert(landed, at)
-				else
+					table.insert(landed, ref)
+				end
+				-- Into the grid, or one pushed off the bar to make room: the Bag pops.
+				if not at or pushed then
 					bumpChip()
 				end
 			end
 			if #landed > 0 then
 				editBar(working)
 				local still = player:GetAttribute("SeedAfterimageQuality") == "Off"
+				local final = working
 				task.defer(function()
-					for _, at in ipairs(landed) do
-						local slot = hotSlots[at]
-						if slot then
-							HotbarCard.bump(slot.card, still, HOT)
+					-- Where each one stands once every slide is done.
+					for _, ref in ipairs(landed) do
+						local at = HotbarSlots.slotOf(final, ref)
+						if at then
+							local slot = hotSlots[at]
+							if slot then
+								HotbarCard.bump(slot.card, still, HOT)
+							end
+							flashSlot(at, HOT.FlashArrived)
 						end
-						flashSlot(at, HOT.FlashArrived)
 					end
 				end)
 			end

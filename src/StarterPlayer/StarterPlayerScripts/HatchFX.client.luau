@@ -80,6 +80,8 @@ local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 -- Which silhouette stands where the pod was at each moment of a roll.
 local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
+-- The first catch's words (2026-10-08).
+local FirstMinute = require(Shared:WaitForChild("FirstMinute"))
 
 local PLANT = GameConfig.Plant
 local HATCH = PLANT.Hatch
@@ -475,7 +477,7 @@ local SHIMMERS: { [string]: boolean } = {
 }
 
 local function label(folder: Folder, host: BasePart, species: SeedData.Species,
-	tier: number, income: number, discovery: boolean): (BillboardGui, TextLabel?)
+	tier: number, income: number, discovery: boolean, catchWords: string?): (BillboardGui, TextLabel?)
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "HatchReveal"
 	gui.Adornee = host
@@ -518,6 +520,11 @@ local function label(folder: Folder, host: BasePart, species: SeedData.Species,
 		string.format("+$%s/s", GameConfig.compact(income)), 3)
 	if discovery then
 		line("New", LABEL.LineSize, Color3.fromRGB(255, 226, 120), LABEL.NewText, 4)
+	end
+	-- THE FIRST CATCH (FirstMinute, 2026-10-08): "BIG! Your first catch." on
+	-- top, in the NEW line's gold. Words only.
+	if catchWords then
+		line("FirstCatch", LABEL.LineSize, Color3.fromRGB(255, 226, 120), catchWords, 0)
 	end
 
 	return gui, if SHIMMERS[species.Rarity] then nameLabel else nil
@@ -948,7 +955,8 @@ local function playReveal(payload: any)
 		local height = creature:GetExtentsSize().Y
 		local rise = height * REVEAL.RiseShare
 		local gui, shimmer = label(folder, primary, species, tier,
-			tonumber(payload.income) or 0, payload.discovery == true)
+			tonumber(payload.income) or 0, payload.discovery == true,
+			if payload.firstCatch == true then FirstMinute.catchWords(tier) else nil)
 		gui.Enabled = false
 
 		local began = os.clock()

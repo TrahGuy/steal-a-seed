@@ -7,7 +7,7 @@
 
 local GameConfig = {}
 
-GameConfig.ProjectName = "Steal a Seed"
+GameConfig.ProjectName = "Steal a Sprout"
 GameConfig.Version = "0.1.0"
 GameConfig.Phase = 1
 
@@ -437,9 +437,9 @@ GameConfig.Plot = {
 	-- THE SIDE BED: ROOM, NOT CAPACITY
 	--
 	-- From Level 3 a plot grows a wing on ONE side. It holds a second bed and
-	-- adds no slots whatsoever -- capacity stays 10 / 15 / 20 and lives in
-	-- PlotTiers. This is floor space for twenty walking creatures, which a
-	-- single 34-stud strip does not have.
+	-- adds no slots whatsoever -- capacity stays 10 / 15 / 20 (25 / 30 at
+	-- Levels 6-7) and lives in PlotTiers. This is floor space for twenty
+	-- walking creatures, which a single 34-stud strip does not have.
 	--
 	-- ALWAYS THE SAME LOCAL SIDE, on every plot. Two neighbours flaring toward
 	-- each other would meet in the gap between them; flaring the same way makes
@@ -461,12 +461,14 @@ GameConfig.Plot = {
 	SideBed = {
 		-- How much wider the plot gets, on the +X local side.
 		--
-		-- WIDE RATHER THAN LONG, and that is the treadmill's doing. The mill
-		-- stands on this same side, in the plot's front: since 2026-09-30 from
-		-- 0.9 to 23.6 studs behind the gate (Mill.Place). A wing reaching
-		-- forward past that fences the mill in: the first build of this came
-		-- out with 0.93 studs between plot and treadmill, and until 2026-09-30
-		-- the wing's fence on Levels 3 and 4 ran through the mill's back.
+		-- WIDE RATHER THAN LONG, and that was the treadmill's doing. The mill
+		-- stood on this same side, in the plot's front: from 2026-09-30 0.9 to
+		-- 23.6 studs behind the gate (Mill.Place). A wing reaching forward past
+		-- that fenced the mill in: the first build of this came out with 0.93
+		-- studs between plot and treadmill, and until 2026-09-30 the wing's
+		-- fence on Levels 3 and 4 ran through the mill's back. Since
+		-- 2026-10-06 plots 1-5's mills stand IN FRONT of their plots and only
+		-- plot 6's still stands here (Mill.Place.BesidePlots).
 		-- MillPlacementSpec holds every tier clear of every level's fences.
 		--
 		-- So the wing starts BEHIND the mill and takes its area back across
@@ -477,23 +479,67 @@ GameConfig.Plot = {
 		-- Grass inside the wing's fence before the bed's frame starts.
 		WingMargin = 3,
 		--==================================================================
-		-- THE WING'S FENCE MAY NOT REACH FORWARD OF THIS
+		-- THE WING'S FENCE MAY NOT REACH FORWARD OF THIS -- LEVELS 1-5
 		--
 		-- In the LEVEL'S OWN frame, so on its own it only kept the mill clear at
 		-- Level 5, where it was measured (the plot grows back from a fixed gate
 		-- and the mill does not move). The mill's forward placement (Mill.Place)
-		-- is what keeps Levels 3 and 4 clear; MillPlacementSpec checks both.
+		-- is what keeps Levels 3 and 4 clear of plot 6's mill, the one that
+		-- still stands beside its plot; MillPlacementSpec checks both.
 		--==================================================================
 		WingFrontZ = -15,
+		--==================================================================
+		-- FROM LEVEL 6 THE WING GROWS FORWARD (owner, 2026-10-07)
+		--
+		-- Into the strip plots 1-5's mills stood in (0.9 to 23.6 studs behind
+		-- the gate) until they moved in front of their plots. WingFrontZ stops
+		-- applying from ForwardFromLevel; the wing's front fence then only has
+		-- to stay MinBehindGate studs behind the gate line, and the gate itself
+		-- stays exactly as narrow as it is. Six side rows at Level 6 and seven
+		-- at Level 7 put that fence 13.2 behind the line on both, the rows still
+		-- lined up with the main bed's. Plot 6 is not one of these plots: its
+		-- mill still stands in that strip (Plot.Beside).
+		--==================================================================
+		ForwardFromLevel = 6,
+		MinBehindGate = 10,
 		-- Physical soil rows per level. Nothing below Level 3 has a wing.
 		--
-		-- Rear-anchored and capped by WingFrontZ, which is why these are 2/3/4
-		-- rather than the 2/4/7 a plot with no mill beside it could carry:
+		-- Rear-anchored and capped by WingFrontZ, which is why Levels 3-5 are
+		-- 2/3/4 rather than the 2/4/7 a plot with no mill beside it could carry:
 		-- at Level 5 the bed may span 52.1 studs and five rows need 59.8.
-		RowsByLevel = { 0, 0, 2, 3, 4 },
+		-- Levels 6-7 are capped by MinBehindGate instead (above).
+		RowsByLevel = { 0, 0, 2, 3, 4, 6, 7 },
 		-- Named so PlantService can find it, and so a save can say where a
 		-- plant stands without the name being a position.
 		Name = "SoilSide",
+	},
+	--==========================================================================
+	-- PLOT 6 AT LEVELS 6-7: DEEPER, NEVER THROUGH OR AROUND ITS MILL
+	--
+	-- The owner's decision (2026-10-06): plot 6 keeps its mill beside its
+	-- right-hand fence, so the strip the other plots' wings grow forward into
+	-- (SideBed.ForwardFromLevel) is its mill's. A plot whose mill stands
+	-- beside it (Mill.Place.BesidePlots) therefore keeps its Level 5 wing as it
+	-- is -- the same fences, the same bed, at the same distance from the gate --
+	-- and grows its MAIN bed deeper instead: Rows replaces PlotTiers' rows at
+	-- the levels it names. The wing could not go further either way: forward is
+	-- the mill and the road's empty arc, which Level 5's front corner already
+	-- touches (1.4 studs); back is the field's front edge, 5.7 studs from that
+	-- wing's back corner at Level 5.
+	--
+	-- THE SAME CAPACITY AND NO LESS ROOM (owner: "no plot is worse to own"):
+	-- capacity is PlotTiers' at every level on every plot; the rows are chosen
+	-- so plot 6's fenced ground and its soil are never smaller than plots
+	-- 1-5's at the same level (Level 6: 8,133 against 7,938 square studs fenced,
+	-- 5,120 against 5,023 of soil; Level 7: 9,304 against 9,011 and 5,950
+	-- against 5,804). Its extra depth is exactly the other plots' forward wing
+	-- (and, at Level 7, the wing's last row), which is what lets a garden move
+	-- between the two shapes without a plant going anywhere it was not --
+	-- GardenFrame.
+	--==========================================================================
+	Beside = {
+		Rows = { [6] = 9, [7] = 11 },
+		WingLevel = 5,
 	},
 	--==========================================================================
 	-- THE FENCE IS A REAL BOUNDARY NOW
@@ -629,12 +675,23 @@ GameConfig.Plot = {
 -- A planted pod and a grown creature each take one space. A creature being
 -- carried takes none -- it is not in the ground.
 --==============================================================================
+--==============================================================================
+-- LEVELS 6 AND 7 (owner, 2026-10-07)
+--
+-- On the ground the moved mills freed: plots 1-5's wings grow forward into the
+-- strip their mills stood in (Plot.SideBed), and Level 7 is a row deeper as
+-- well. `rows` is THOSE plots' main bed; plot 6, whose mill still stands in
+-- that strip, is deeper instead (Plot.Beside). Capacity and cost are the same
+-- on every plot. Levels 1-5 are exactly what they were.
+--==============================================================================
 GameConfig.PlotTiers = {
 	{ capacity = 5,  rows = 2, cost = 0 },
 	{ capacity = 7,  rows = 3, cost = 25000 },
 	{ capacity = 10, rows = 4, cost = 250000 },
 	{ capacity = 15, rows = 5, cost = 2500000 },
 	{ capacity = 20, rows = 7, cost = 25000000 },
+	{ capacity = 25, rows = 7, cost = 250000000 },
+	{ capacity = 30, rows = 8, cost = 2500000000 },
 }
 
 --==============================================================================
@@ -931,6 +988,11 @@ GameConfig.InviteRewards = {
 	InboxMax = 200,
 	-- A tier owed while the Bag is full is tried again this often.
 	RetrySeconds = 5,
+	-- The rules line (Words.Rules) turns this often in the INVITE panel, and the
+	-- hub sign shows the rules for RulesSignSeconds in every RulesSignCycle.
+	RulesSeconds = 4,
+	RulesSignSeconds = 6,
+	RulesSignCycle = 18,
 	-- Player attributes the server writes and every client screen reads.
 	Attributes = {
 		-- Friends counted (confirmed, saved).
@@ -939,6 +1001,9 @@ GameConfig.InviteRewards = {
 		Granted = "InviteGranted",
 		-- The INVITE panel has been opened since the last form was given.
 		Seen = "InviteSeen",
+		-- The invite plants ever given, by the track or the wheel (2026-10-08):
+		-- their ids, comma-separated. A card shows EARNED for a plant owned.
+		Owned = "InviteOwned",
 	},
 	-- client -> server on GameEvent, carrying nothing: "the INVITE panel opened".
 	OpenedAction = "InviteOpened",
@@ -1164,8 +1229,25 @@ GameConfig.InviteRewards = {
 		Claimed = "CLAIMED",
 		-- A card's own line under its name: "5 invites".
 		Needs = "%d %s",
+		-- ... and an owned card's, when the wheel gave some of the plants and
+		-- which milestone gave which is not known (InviteRewards.cards, 2026-10-08).
+		Owned = "owned",
 		Button = "INVITE FRIENDS",
 		How = "Friends count when they join the game from your invite.",
+		-- THE RULES, IN SHORT WORDS (2026-10-08, the owner's brief): the INVITE
+		-- panel shows them one at a time under its button, and the hub sign
+		-- between its progress views. Each fits one line on a phone
+		-- (InvitePanelSpec measures them).
+		RulesTitle = "HOW INVITES WORK",
+		Rules = {
+			"A friend counts once: their first time playing",
+			"1 - 5 - 10 - 20 friends: 4 invite plants",
+			"Played before? You still get 1 free spin",
+		},
+		-- A friend who had played before came back through your invite: 1 free
+		-- spin, once per friend, ever (InviteService.CreditReturning).
+		Returning = "+1 FREE SPIN",
+		ReturningDetail = "%s came back from your invite",
 		-- THE NOTICES (Notice.post; InviteRewards.notice words each server
 		-- payload; the owner's notices brief, 2026-10-06). A name is a player's
 		-- DisplayName, or SomeFriend -- never a UserId.
@@ -1358,6 +1440,18 @@ GameConfig.Attributes = {
 	-- stands its boost row under it: the chest opens only after the guide, but
 	-- the reward wheel (2026-09-27) can hand a new player a boost in the middle.
 	TutorialReach = "TutorialReach",
+	-- On a HUD button, client-local, set by TutorialUI's spotlight (2026-10-08)
+	-- while it lights that button and holds a controller's selection on it:
+	-- the button's own D-pad key presses it then (PlotTeleportUI, BiomesButtonUI,
+	-- ObbyButtonUI). The engine's GUI navigation takes the D-pad before any
+	-- ContextActionService binding while something is selected, so only an
+	-- InputBegan listener can hear it. Absent (nil) every other moment.
+	GuideLit = "GuideLit",
+	-- On a player, set by PlantService (2026-10-08, FirstMinute) while the
+	-- starter pod the game planted for them is still a pod: its deadline,
+	-- os.time(). TutorialUI's training steps say "Your first pod is growing!"
+	-- while it is set. nil before it is planted and once it has hatched.
+	StarterHatchAt = "StarterHatchAt",
 	-- Bumped every time a pod is banked at the red line. A COUNTER rather than a
 	-- flag, because two banks in a row have to be two events -- setting a flag
 	-- true twice changes nothing and the second one would go unnoticed. The
@@ -1386,6 +1480,10 @@ GameConfig.Attributes = {
 	-- anyway -- but so that every client can see who is training without a remote.
 	--==========================================================================
 	MillMounted = "MillMounted",
+	-- On the PLAYER, set once by PlayerDataService at load when an old Overclock
+	-- became a mill (ProfileSchema.convertOverclock, 2026-10-06): the tier it
+	-- became. MillNotice.client says so, once.
+	MillOverclockBecame = "MillOverclockBecame",
 	--==========================================================================
 	-- HOW MANY GUARDIANS ARE RUNNING AT THIS PLAYER RIGHT NOW
 	--
@@ -1691,7 +1789,7 @@ GameConfig.HatchBonus = {
 	-- the notice: they read as two moments, not one crowd.
 	BeatSeconds = 0.6,
 	Reminder = {
-		Title = "ENJOYING PODNAPPERS?",
+		Title = "ENJOYING STEAL A SPROUT?",
 		Detail = "Leave us a like!",
 		-- Up this long unless dismissed sooner (Notice's `dismissible`).
 		Seconds = 10,
@@ -3971,7 +4069,7 @@ GameConfig.Treadmill = {
 }
 
 --==============================================================================
--- THE MILL, IN TEN STEPS
+-- THE MILL, IN FOURTEEN STEPS
 --
 -- One per plot, and yours only.
 --
@@ -3988,8 +4086,17 @@ GameConfig.Treadmill = {
 --     T7      2M/s   3B in 25 min       Emberroot
 --     T8     12M/s   10B in 14 min      Starbloom
 --     T9     70M/s                      post-Starbloom
---     T10   400M/s   1e15 in 29 days    post-Starbloom, and why Overclock
---                                       still exists
+--     T10   400M/s                      post-Starbloom
+--     T11   2.5B/s   costs 400B         the endgame, which Overclock used to
+--     T12    15B/s   costs 600B         be: four more machines covering the
+--     T13    80B/s   costs 1T           range its ten levels covered
+--     T14   450B/s   costs 1.5T         the cap (1e15) in 37 minutes
+--
+-- THE TOP FOUR ARE THE OWNER'S OWN MILLS (2026-10-06): supplied models, Abyssal
+-- Trench, Volcanic Forge, Frozen Aurora and Event Horizon, replayed part for
+-- part by MillForms. Overclock ran 800M to 410B a second for 125B to 850B a
+-- level; these run 2.5B to 450B for 400B to 1.5T. A tier-10 mill's next step is
+-- an upgrade like every other step (OVERCLOCK, below, is history now).
 --
 -- THE OLD LADDER RAN 2 TO 160 AND WAS NOT A LADDER. It spanned 80x while the
 -- score ladder it feeds spans a QUADRILLION, so every tier past the third was
@@ -4032,28 +4139,75 @@ GameConfig.Mill = {
 		{ name = "Inferno Forge", speed = 12000000, cost = 1000000000, beltStuds = 31 },
 		{ name = "Celestial Ascent", speed = 70000000, cost = 10000000000, beltStuds = 35 },
 		{ name = "Astral Singularity", speed = 400000000, cost = 100000000000, beltStuds = 40 },
+		-- The owner's supplied mills (2026-10-06; MillForms). Prices from the
+		-- owner's Overclock-removal addendum, which replaced the first proposal.
+		{ name = "Abyssal Trench", speed = 2500000000, cost = 400000000000, beltStuds = 45 },
+		{ name = "Volcanic Forge", speed = 15000000000, cost = 600000000000, beltStuds = 50 },
+		{ name = "Frozen Aurora", speed = 80000000000, cost = 1000000000000, beltStuds = 56 },
+		{ name = "Event Horizon", speed = 450000000000, cost = 1500000000000, beltStuds = 63 },
 	},
 	StartingTier = 1,
 
 	--==========================================================================
-	-- WHERE EACH PLOT'S MILL STANDS (moved 2026-09-30, the owner's choice)
+	-- WHERE EACH PLOT'S MILL STANDS (moved to the FRONT 2026-10-06, the owner's
+	-- choice; GameConfig.millCFrameFor is the one formula)
 	--
-	-- Beside the plot's right-hand fence, measured from the GATE, which never
-	-- moves (MapService.ResizePlot): `Side` studs out past the plot's half
-	-- width, `Behind` studs back from the gate line, `Lift` up; the plot's own
-	-- facing. GameConfig.millCFrameFor is the one formula.
+	-- Measured from the plot's GATE, which never moves (MapService.ResizePlot):
+	-- in its frame x runs to the plot's right and -z toward the hub.
 	--
-	-- It stood 11 out and 17.6 back. On a Level 3 or 4 plot the side wing's
-	-- fence, 25.4 back from the gate, then ran through the back 4.5 studs of
-	-- every tier, and tier 1's compost bin cut 0.18 into the right fence at every
-	-- level. Measured over all ten tiers (MillPlacementSpec): every tier's rear
-	-- is its step, 11.5 behind the centre (tier 2's stones now lie beside it),
-	-- and its front-most decor 11.2 ahead. So at 12.1 back the mill spans 0.9 to
-	-- 23.6 behind the gate: 1 stud short of the wing fence's front face on
-	-- Levels 3 and 4, and behind the gate line. 12 out puts tier 1's bin, the
-	-- widest thing on the plot's side below fence height, 0.8 off the fence.
+	-- PLOTS 1-5: IN FRONT, off the plot's right-hand side -- `Front.Out` studs
+	-- right of the plot's centre line, `Front.Ahead` in front of the gate line,
+	-- `Lift` up, turned `Front.Yaw` degrees so the console looks along the front
+	-- of the plot, toward its own walk line. Chosen by the owner from the front
+	-- placement study (KB/HANDOFF.md, 2026-10-06): every mill sits in the gap
+	-- between two plots' walk lines (the hub-to-gate corridors, MiniEvent.Disco's
+	-- Corridors), wholly in front of the gate line, and every tier 1-14 clears
+	-- the walk lines, the deck and its rim, the Disco Mill, the road's empty arc,
+	-- every board and prompt, both neighbours and their mills (MillPlacementSpec).
+	--
+	-- PLOT 6: BESIDE ITS RIGHT-HAND FENCE, where every mill stood before -- its
+	-- right side meets the road mouth, so the gap a front mill would need is the
+	-- road's empty arc. `Beside.Side` studs out past the plot's half width,
+	-- `Beside.Behind` back from the gate line, the plot's own facing. Its strip
+	-- is therefore NOT free for a plot upgrade, as plots 1-5's now are. Tiers
+	-- 12-14 overhang there by the owner's leave (2026-10-06); MillPlacementSpec
+	-- pins exactly how far, and MillModel.Soften makes every overhanging part
+	-- non-colliding.
+	--
+	-- The beside numbers' history: it stood 11 out and 17.6 back until
+	-- 2026-09-30, when a Level 3-4 wing fence (25.4 back from the gate) ran
+	-- through the back of every tier and tier 1's compost bin cut 0.18 into the
+	-- right fence. At 12.1 back a tier 1-11 mill spans 0.9 to 23.6 behind the
+	-- gate; 12 out puts tier 1's bin 0.8 off the fence.
 	--==========================================================================
-	Place = { Side = 12, Behind = 12.1, Lift = 0.6 },
+	Place = {
+		Lift = 0.6,
+		Front = { Out = 37.5, Ahead = 24.5, Yaw = 90 },
+		Beside = { Side = 12, Behind = 12.1, Yaw = 0 },
+		BesidePlots = { [6] = true } :: { [number]: boolean },
+		--======================================================================
+		-- WHAT TOUCHES PLOT 6'S OWN FENCE (tier 13 only)
+		--
+		-- The owner asked for the smallest nudge of plot 6's mill that clears
+		-- tier 13's left front spire from the right-hand fence by 0.5 without a
+		-- bigger road overhang. There is none (searched 2026-10-06, 252,601
+		-- poses): the spire needs 1.02 out, which pushes tiers 12-13 into the
+		-- road's empty arc unless the mill also goes at least 2.3 back -- and
+		-- every tier's step has 1.00 before the Level 3-4 wing's front fence.
+		-- So these parts stay where the owner put them and are softened with the
+		-- overhang (MillModel.Soften): the spire at every level, and at Levels
+		-- 3-4 a snow bank and an ice boulder behind the step, in the wing's front
+		-- fence. Named by part AND by where each stands in the mill's frame,
+		-- because the names repeat.
+		--======================================================================
+		BesideTouch = {
+			[13] = {
+				{ Name = "Spire", At = Vector3.new(-10.262, 2.897, -7.982) },
+				{ Name = "SnowBank", At = Vector3.new(5.649, -0.695, 13.271) },
+				{ Name = "IceBoulder", At = Vector3.new(-5.808, -0.507, 13.408) },
+			},
+		} :: { [number]: { { Name: string, At: Vector3 } } },
+	},
 
 	-- What the belt creeps at with nobody on it. Not zero: a dead mill reads as
 	-- broken, and a slow drift says "this is a machine and it is waiting".
@@ -4121,6 +4275,16 @@ GameConfig.Mill = {
 		{ Arrows = 7, Bands = 0, Neon = true, Breathe = 0.65, Chase = 0.95, Rake = 0.35, Bloom = 1.20, Bob = 0.80, Shimmer = 0.90, Rainbow = 0 },
 		{ Arrows = 8, Bands = 0, Neon = true, Breathe = 0.60, Chase = 0.80, Rake = 0.20, Bloom = 1.00, Bob = 0.50, Shimmer = 0.80, Rainbow = 0 },
 		{ Arrows = 8, Bands = 12, Neon = true, Breathe = 0.70, Chase = 0.95, Rake = 0.25, Bloom = 1.00, Bob = 0.80, Shimmer = 1.00, Rainbow = 1 },
+		-- 11-14, the owner's supplied mills (MillForms): their own eight
+		-- chevron pairs, scrolled and coloured by MillFormMotion as their
+		-- scripts did, at this belt's real speed -- not by the rungs above.
+		-- These rows keep one row per tier for anything that reads the ladder,
+		-- and are INERT: no rung paints those belts or their arrows (Ambience
+		-- glints a plate with Shimmer, which would repaint the owner's belt).
+		{ Arrows = 8, Bands = 0, Neon = true, Breathe = 0, Chase = 0, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0, Supplied = true },
+		{ Arrows = 8, Bands = 0, Neon = true, Breathe = 0, Chase = 0, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0, Supplied = true },
+		{ Arrows = 8, Bands = 0, Neon = true, Breathe = 0, Chase = 0, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0, Supplied = true },
+		{ Arrows = 8, Bands = 0, Neon = true, Breathe = 0, Chase = 0, Rake = 0, Bloom = 0, Bob = 0, Shimmer = 0, Rainbow = 0, Supplied = true },
 	},
 
 	--==========================================================================
@@ -4194,6 +4358,34 @@ GameConfig.Mill = {
 		-- studs of daylight.
 		--======================================================================
 		Offset = Vector3.new(-5.5, -0.6, -11.6),
+		--======================================================================
+		-- THE OTHER TWO SPOTS (2026-10-06)
+		--
+		-- Offset is where the sign stands BESIDE a plot (plot 6, Place.Beside)
+		-- for tiers 1-11. Tiers 12-14's decor -- an anvil and hammer, aurora
+		-- rays, lens arcs -- fills that corner, and plots 1-5's mills now stand
+		-- in front of their plots, turned. Measured over every tier with each
+		-- part grown 0.25, and kept within reach of a player standing on the
+		-- belt (MillSignSpec):
+		--
+		--   FrontOffset       in front of a plot (plots 1-5), every tier: on the
+		--                     mill's left, between it and its plot, facing the
+		--                     walk line. 1.4 studs of room toward the mill; the
+		--                     prompt 15.2 from a mounted player and 39.1 from
+		--                     the nearest plot board's (each reaches 18).
+		--
+		--   BesideTallOffset  beside a plot, tiers BesideTallFrom and up: in
+		--                     front of the mill, its face 4.0 past the gate line
+		--                     -- the one spot in reach. Behind the step is the
+		--                     Level 3-4 wing's fence, the left is the plot and
+		--                     the right is the road's empty arc. It does not
+		--                     collide (no mill sign does), so it stands with the
+		--                     overhang the owner allowed there; the prompt is
+		--                     15.9 from a mounted player.
+		--======================================================================
+		FrontOffset = Vector3.new(-14.5, -0.6, -4.5),
+		BesideTallOffset = Vector3.new(1, -0.6, -15.8),
+		BesideTallFrom = 12,
 		YawDegrees = 0,
 		--======================================================================
 		-- SLIGHTLY SMALLER
@@ -4222,126 +4414,17 @@ GameConfig.Mill = {
 	},
 
 	--==========================================================================
-	-- OVERCLOCK: WHAT A TIER-TEN MILL DOES NEXT
+	-- OVERCLOCK, WHICH IS HISTORY (removed 2026-10-06, the owner's addendum)
 	--
-	-- Overclock is the ladder that continues past the last machine, and it is
-	-- deliberately NOT more tiers: ten mills are ten distinct silhouettes with
-	-- ten sets of particles, and an eleventh would have to be built, not typed.
-	-- An overclock is the SAME Astral Singularity running harder. No new model,
-	-- no new art, no new belt.
-	--
-	--     TrainingRate = tier.speed * Multiplier^level * rebirth
-	--
+	-- From 2026-09-17 a tier-10 mill bought OVERCLOCK levels instead of a next
+	-- tier: the same Astral Singularity running x2 per level, ten levels, 800M
+	-- to 410B a second, for 125B to 850B a level. Tiers 11-14 -- the owner's own
+	-- mills -- replaced it and cover the same range as machines. Nothing sells
+	-- an overclock any more and the training rate has no overclock factor
+	-- (trainingRateFor). A save's MillOverclock is kept so old saves still load,
+	-- and a tier-10 save with levels converts ONCE to the lowest of tiers 11-14
+	-- paying at least what it did (ProfileSchema.convertOverclock).
 	--==========================================================================
-	-- TWO PER LEVEL, NOT FOUR, AND THAT IS A CONSEQUENCE OF THE RATE PASS
-	--
-	-- Four was correct when the tier ladder spanned 2 to 160. It had to be:
-	-- eighty times was nothing against a score ladder that runs to a
-	-- quadrillion, so ALL of the pacing lived here and 4^10 = 1,048,576x was
-	-- what carried it.
-	--
-	-- The tiers now span 20 to 400,000,000 -- twenty million times -- and carry
-	-- their own pacing. Left at four, this would multiply a rate that is already
-	-- correct by another million: tier 10 overclocked would pay 4.19e14 a
-	-- second and cross the entire score ladder, quadrillion and all, in TWO AND
-	-- A HALF SECONDS. Every biome recommendation, every trail threshold and the
-	-- whole WalkSpeed curve would be consumed between two ticks.
-	--
-	-- Two per level is 2^10 = 1,024x, which puts a fully overclocked tier 10 at
-	-- 409.6 billion a second -- the cap in about forty minutes, which is what an
-	-- endgame ceiling should cost.
-	--
-	-- It also keeps the ladder worth climbing to the end rather than finishing in
-	-- one purchase. Two per level means each overclock doubles the rate for about
-	-- 1.2x the previous price; at four per level a single level outran every price
-	-- on the list and the rest were decoration.
-	--
-	--     level  0    400M / sec         level  6   25.6B / sec
-	--     level  1    800M / sec         level  7   51.2B / sec
-	--     level  2    1.6B / sec         level  8    102B / sec
-	--     level  3    3.2B / sec         level  9    205B / sec
-	--     level  4    6.4B / sec         level 10    410B / sec
-	--     level  5   12.8B / sec
-	--
-	--==========================================================================
-	-- CASH IS THE ONLY REQUIREMENT
-	--
-	-- Levels 6-10 used to need a biome ON RECORD before they could be bought --
-	-- level 6 wanted Dustbowl -- and the sign advertised that by printing the
-	-- biome's name where the price goes until you had been there. That gate is
-	-- gone. Every level is on sale the moment the ladder reaches it, and the
-	-- price is the whole of the requirement.
-	--
-	-- It went because it made the upgrade board REFUSE MONEY. A player standing
-	-- at the sign holding the exact price of the next level was being told to go
-	-- and do something else, and a board that sends you away is not doing the job
-	-- an upgrade board exists for. Robux is the second currency this ladder will
-	-- take, when it takes one. A biome is not a currency.
-	--
-	-- The pacing that gate was doing is already in the Costs below, which climb
-	-- faster than the rates they buy -- see the note under this one.
-	--
-	--==========================================================================
-	-- EVERY OVERCLOCK COSTS MORE THAN THE MILL IT RUNS ON
-	--
-	-- Re-priced by the owner on 2026-09-17. The old ladder ran 3M to 4.5B, which
-	-- was sized when a garden earned 80-150K/sec -- and it left the FIRST
-	-- overclock at 3M against a tier-10 mill at 100B, so the whole endgame ladder
-	-- was loose change beside the machine it upgraded. A player who could afford
-	-- the last mill could buy all ten overclocks thirty thousand times over.
-	--
-	-- The floor is now the tier-10 mill's own price. Level 1 is 1.25x it, and the
-	-- ladder climbs to 850B:
-	--
-	--     1   125B      6   330B
-	--     2   150B      7   400B
-	--     3   180B      8   500B
-	--     4   220B      9   650B
-	--     5   270B     10   850B
-	--
-	-- Cumulative, all ten: 3.675T -- which is the point. Cash comes from grown
-	-- plants (a size-tier base rate scaled by the species' rarity, by how deep
-	-- its biome sits, and by that species' own flat bonus -- see
-	-- SeedData.IncomePerSecond), so this ladder is paced against a mature garden
-	-- and the Robux cash packs rather than against the first hour.
-	--
-	-- THE SHAPE IS GENTLE ON PURPOSE: about 1.2x per level at the bottom easing
-	-- to 1.3x at the top, so no single step is a wall. The RATE each level buys
-	-- DOUBLES, so every purchase is better value than the one before it.
-	--
-	-- Asserted below the Mill table: strictly increasing, and every rung above
-	-- the tier-10 cost. Those two rules are the balance decision; the exact
-	-- numbers are the owner's.
-	--
-	-- BALANCE, so this is the exception Rule 7 already carries for the tier
-	-- ladder directly above it -- the two are one price list and splitting them
-	-- across two files would be worse.
-	--==========================================================================
-	Overclock = {
-		-- Multiplier ^ level, applied to the tier's own rate. See the note
-		-- above before changing it: this number is sized against the SPREAD of
-		-- the tier ladder, not chosen on its own.
-		Multiplier = 2,
-		MaxLevel = 10,
-		-- Level N costs Costs[N], and that is the entire requirement. Approved by
-		-- the owner on 2026-09-17; see the note above this table for why they all
-		-- start above the tier-10 mill.
-		Costs = {
-			125_000_000_000,
-			150_000_000_000,
-			180_000_000_000,
-			220_000_000_000,
-			270_000_000_000,
-			330_000_000_000,
-			400_000_000_000,
-			500_000_000_000,
-			650_000_000_000,
-			850_000_000_000,
-		},
-		-- Shown on the mill sign in place of the tier name once the tier ladder
-		-- is finished.
-		Label = "Overclock",
-	},
 
 }
 
@@ -4358,29 +4441,26 @@ assert(GameConfig.Treadmill.SpeedPerSecond == GameConfig.Mill.Tiers[1].speed,
 	"GameConfig.Treadmill.SpeedPerSecond must equal GameConfig.Mill.Tiers[1].speed")
 
 --==============================================================================
--- AND AN OVERCLOCK IS NEVER CHEAPER THAN THE MILL IT RUNS ON
+-- AND EVERY STEP UP IS A STEP UP
 --
--- Two rules, both balance decisions rather than typo guards, and the ladder this
--- replaced broke both: an overclock may not cost less than the tier-10 mill, and
--- the prices must climb. A cheap rung in here is the endgame handed out as
--- change, and it is invisible -- everything still works, it is just free.
+-- Two rules, both balance decisions rather than typo guards: every tier pays
+-- more than the one below it and costs more than it, so no step is a skip and
+-- none is a downgrade; and the belt ladder has one row per tier. (The same rule
+-- guarded Overclock's prices against the tier-10 mill until it was removed,
+-- 2026-10-06.)
 --==============================================================================
 do
-	local O = GameConfig.Mill.Overclock
-	local topMill = GameConfig.Mill.Tiers[#GameConfig.Mill.Tiers].cost
-	assert(#O.Costs == O.MaxLevel,
-		"GameConfig.Mill.Overclock needs exactly MaxLevel prices")
-	for level, cost in ipairs(O.Costs) do
-		assert(type(cost) == "number" and cost == cost and cost > 0
-				and math.floor(cost) == cost,
-			string.format("Overclock %d has a price that is not a whole number", level))
-		assert(cost > topMill,
-			string.format("Overclock %d costs %d, which is not more than the tier-%d "
-				.. "mill at %d", level, cost, #GameConfig.Mill.Tiers, topMill))
-		if level > 1 then
-			assert(cost > O.Costs[level - 1],
-				string.format("Overclock %d costs %d, which is not more than Overclock "
-					.. "%d at %d", level, cost, level - 1, O.Costs[level - 1]))
+	local M = GameConfig.Mill
+	assert(#M.Belt == #M.Tiers, "GameConfig.Mill.Belt needs exactly one row per tier")
+	for i, tier in ipairs(M.Tiers) do
+		assert(type(tier.speed) == "number" and tier.speed > 0 and type(tier.cost) == "number" and tier.cost >= 0
+				and math.floor(tier.cost) == tier.cost,
+			string.format("Mill tier %d needs a positive speed and a whole cost", i))
+		if i > 1 then
+			local prev = M.Tiers[i - 1]
+			assert(tier.speed > prev.speed and tier.cost > prev.cost,
+				string.format("Mill tier %d (%s) must pay and cost more than tier %d (%s)",
+					i, tier.name, i - 1, prev.name))
 		end
 	end
 end
@@ -4489,7 +4569,7 @@ GameConfig.Secret = {
 }
 
 --==============================================================================
--- RAIN (2026-10-02): THE OWNER'S WEATHER EVENT, AND THE BIOME IT UNCOVERS
+-- RAIN (2026-10-02): THE ADMINS' WEATHER EVENT, AND THE BIOME IT UNCOVERS
 --
 -- Names, structure, geometry and the look. The one balance number -- what the
 -- rain pays -- is SeedData.Rain's. WeatherService (server) owns the ONE event:
@@ -4497,7 +4577,8 @@ GameConfig.Secret = {
 -- builds the temporary terrain (RainBiome) and takes it down. Weather.client
 -- draws the rain and the fog, BoostIconsUI the event's icon (2026-10-04; it was
 -- WeatherUI's income chip), WorldClock the darker
--- light, ActionToastUI the toasts. It starts from the owner's console, for this
+-- light, ActionToastUI the toasts. It starts from the admin console -- any of the
+-- three admin accounts since 2026-10-07, the owner's alone before -- for this
 -- server only -- and, since 2026-10-05, on its own (Weather.Auto, below). The guardian, the Secret Egg and the
 -- plant are supplied later; the clearing at the far end is kept for them
 -- (RainBiome's EncounterSite) and nothing stands in it yet.
@@ -5614,47 +5695,21 @@ function GameConfig.rebirthMultiplierFor(profile: any): number
 end
 
 --==============================================================================
--- WHAT AN OVERCLOCK LEVEL IS WORTH, AND WHAT IT COSTS
---
--- Level 0 is "no overclock" and is always valid. Anything outside 0..MaxLevel
--- is clamped rather than refused: this is read on the payout path, and a rate
--- of nil once a second is worse than a rate that is merely wrong.
---==============================================================================
-function GameConfig.overclockMultiplierFor(level: number): number
-	local O = GameConfig.Mill.Overclock
-	if type(level) ~= "number" or level ~= level or level <= 0 then
-		return 1
-	end
-	return O.Multiplier ^ math.clamp(math.floor(level), 0, O.MaxLevel)
-end
-
--- nil when there is no such level to buy, which is also how the caller learns
--- the ladder is finished.
-function GameConfig.overclockCostFor(level: number): number?
-	local O = GameConfig.Mill.Overclock
-	if type(level) ~= "number" or level ~= level then
-		return nil
-	end
-	return O.Costs[math.floor(level)]
-end
-
---==============================================================================
 -- THE ONE PLACE A TRAINING RATE IS DECIDED
 --
---     rate = tier.speed * Multiplier^overclock * rebirth
+--     rate = tier.speed * rebirth
 --
 -- Here rather than in TreadmillService because the mill SIGN, the shop and any
 -- future UI all want to show the same number the payout uses, and a rate that
 -- is computed twice is a rate that reads differently in two places the first
--- time either is touched.
+-- time either is touched. It carried an overclock factor (Multiplier^level)
+-- until Overclock was removed (2026-10-06): tiers 11-14 are that range now.
 --==============================================================================
-function GameConfig.trainingRateFor(tierIndex: number, overclock: number, profile: any): number
+function GameConfig.trainingRateFor(tierIndex: number, profile: any): number
 	local tiers = GameConfig.Mill.Tiers
 	local i = math.clamp(math.floor(if type(tierIndex) == "number" and tierIndex == tierIndex
 		then tierIndex else 1), 1, #tiers)
-	return tiers[i].speed
-		* GameConfig.overclockMultiplierFor(overclock)
-		* GameConfig.rebirthMultiplierFor(profile)
+	return tiers[i].speed * GameConfig.rebirthMultiplierFor(profile)
 end
 
 --==============================================================================
@@ -6577,7 +6632,9 @@ GameConfig.Obby = {
 -- A free chest in the safe hub. The owner's launch configuration, kept in one
 -- block so the feature has one switch and one place to read:
 --
---   * the first claim opens when the guide is finished (TutorialData.IsComplete);
+--   * the first claim opens when the guide's first loop is done, at the first
+--     hatch (TutorialData.FirstLoopDone; the guide's step 7, the travel lesson,
+--     comes after it, 2026-10-08);
 --   * after a claim the next one opens CooldownSeconds later;
 --   * each claim grants ONE reward below, weighted equally -- a 50/50 that the
 --     chest shows before anybody claims;
@@ -6709,6 +6766,93 @@ GameConfig.StarbloomTeaser = {
 	Above = 17,
 	OffWall = 10,
 	Distance = 320,
+}
+
+--==============================================================================
+-- THE WEATHER TEASER'S PICTURES (2026-10-06, the owner's brief)
+--
+-- The screen at the road mouth (Shared/WeatherTeaser) teases the next event
+-- with the owner's two pictures in turn -- A, green, three silhouettes; B,
+-- blue, five -- and the creatures in them slowly breathing. Each picture was
+-- cut into layers (output/event-teaser-2026-10-06/layers.json, from the
+-- 1672 x 941 copies): a background with the creatures painted out (the ground
+-- shadows kept) and one cut-out per creature, left to right, each made against
+-- what lies beneath it, so the layers drawn at rest ARE the picture. Every id
+-- is the owner's upload to the CrazyCozy Games group.
+--
+--   Source            the pictures' size in pixels; every Rect, Feet and Badge
+--                     is in these pixels, and the screen shows all of it
+--   Rect              x, y, w, h of the cut-out in its picture
+--   Feet              the point that stays put: the middle of the cut-out's
+--                     lowest band (the bird's standing foot, not its tail; the
+--                     spiky one floats, so its tentacle tips)
+--   Badge             the "?": centre x, y, and its radius plus 8 pixels
+--   Period, Phase     the breath's cycle in seconds (3.5 to 6, no two alike)
+--                     and where in it the creature is at time 0, as a fraction
+--   Bob               the hover, a fraction of the height, upward only; only
+--                     the one that floats -- every other one stands on the floor
+--   Hold, Fade        seconds each picture holds, and the crossfade between
+--   EaseIn            the clock's first seconds ease in from rest, so time 0
+--                     is each picture exactly as drawn (the server's frame)
+--   Breath, BreathX   the breath: height x (1 + Breath); width x (1 + Breath x
+--                     BreathX), slightly less
+--   Sway              the lean, in degrees either way, about the feet
+--   SwayPeriod        the lean's cycle, as a multiple of the breath's
+--   BobPeriod         the hover's cycle, likewise
+--   GlowMax           how white the soft haze over the "?" gets at the top of
+--                     a breath; GlowReach its radius, x the "?"'s own
+--   Glow              each picture's colour, behind SOON
+--
+-- Measured on the cut-outs at every extreme of breath, lean and hover: the
+-- silhouettes stay inside the screen and never touch a neighbour (closest
+-- 3 pixels, B's serpent and robot, 11 apart at rest; only rim glows meet).
+--==============================================================================
+GameConfig.WeatherTeaser = {
+	Source = Vector2.new(1672, 941),
+	Hold = 8,
+	Fade = 1.5,
+	EaseIn = 2,
+	Breath = 0.025,
+	BreathX = 0.6,
+	Sway = 1.5,
+	SwayPeriod = 1.6,
+	BobPeriod = 1.3,
+	GlowMax = 0.25,
+	GlowReach = 1.45,
+	Words = { Soon = "SOON" },
+	Ink = Color3.fromRGB(16, 21, 28),
+	Scenes = {
+		{
+			Name = "A",
+			Background = "rbxassetid://108987983355390",
+			Glow = Color3.fromRGB(64, 232, 150),
+			Creatures = {
+				{ Image = "rbxassetid://89476211121024", Rect = { 52, 21, 699, 807 }, Feet = { 368.5, 818 },
+					Badge = { 481, 540.5, 66.5 }, Period = 5.6, Phase = 0.1 },
+				{ Image = "rbxassetid://139403382929852", Rect = { 772, 175, 377, 660 }, Feet = { 957, 826 },
+					Badge = { 961.5, 495.5, 62.5 }, Period = 4.4, Phase = 0.55 },
+				{ Image = "rbxassetid://94766727026749", Rect = { 1185, 246, 428, 604 }, Feet = { 1391, 841 },
+					Badge = { 1398, 579, 90 }, Period = 4.9, Phase = 0.8 },
+			},
+		},
+		{
+			Name = "B",
+			Background = "rbxassetid://112662331303116",
+			Glow = Color3.fromRGB(64, 156, 255),
+			Creatures = {
+				{ Image = "rbxassetid://124789383294317", Rect = { 16, 165, 409, 624 }, Feet = { 211, 779 },
+					Badge = { 230.5, 455.5, 44.5 }, Period = 5.2, Phase = 0.3 },
+				{ Image = "rbxassetid://105049401486153", Rect = { 355, 317, 401, 460 }, Feet = { 567, 768 },
+					Badge = { 563, 526.5, 62.5 }, Period = 4.1, Phase = 0.05 },
+				{ Image = "rbxassetid://85864328194602", Rect = { 672, 208, 355, 404 }, Feet = { 834, 599 },
+					Badge = { 846.5, 373.5, 41.5 }, Period = 5.9, Phase = 0.65, Bob = 0.03 },
+				{ Image = "rbxassetid://99819334779640", Rect = { 885, 268, 492, 525 }, Feet = { 1139, 784 },
+					Badge = { 1148.5, 549.5, 57.5 }, Period = 3.7, Phase = 0.45 },
+				{ Image = "rbxassetid://126484898711252", Rect = { 1289, 204, 370, 550 }, Feet = { 1431.5, 745 },
+					Badge = { 1425.5, 487.5, 44.5 }, Period = 4.7, Phase = 0.9 },
+			},
+		},
+	},
 }
 
 --==============================================================================
@@ -7485,7 +7629,9 @@ GameConfig.MenuIcons = {
 --   wheel     reward_wheel-256.png     the Reward Wheel's prize and claim notices
 --   sacrifice sacrifice-256.png        the pedestal's boost line and its notice
 --   income    plant_income-256.png     a +plant-income boost line (chest or wheel)
---   training  speed_training-256.png   a +training boost line (chest or wheel)
+--   training  the BOOSTED SHOE (2026-10-08; was speed_training-256.png, which
+--             stays the Speed icon as `speed` -- see below): a +training boost
+--             line (chest or wheel)
 --   community community_reward-256.png the community chest's claimed notice only
 --   tickets   spin_tickets-256.png     the Ticket Shower's icon, its notices and
 --                                      the "+1" over a player who took one: the
@@ -7497,6 +7643,25 @@ GameConfig.MenuIcons = {
 --                                      2026-10-04 -- an Image, "disco-256", by the
 --                                      CrazyCozy Games group. Never the disco AUDIO id.
 --==============================================================================
+--==============================================================================
+-- SPEED AND TRAINING ARE TWO ICONS NOW (2026-10-08, the owner's TREADMILL FUN
+-- addenda, relayed by the peer session)
+--
+--   speed      every place that SHOWS Speed: the HUD's Speed number, the Shop's
+--              Speed shelf and items, the Index's Speed reward, the wheel's Speed
+--              prizes and their notice, SpeedFX's "+N", and TREADMILL FUN's pop,
+--              bar and badge. The owner's PLAIN SPEED SHOE, re-uploaded on
+--              transparent (99714577637458, 512 x 512), with its SMALL version
+--              (SmallIcons below) wherever it draws at 40 px or less. The first
+--              two uploads (87020355715502, 137016623960738) were on opaque
+--              black and are drawn nowhere; the old winged shoe 96656510808947
+--              is no longer used.
+--   training   the +25% TRAINING BOOST only (BoostIcons' training slot, the
+--              wheel's boost_training sector and its line): the owner's BOOSTED
+--              SHOE, green with flames, transparent.
+--   coin       the belt's SEED COIN (BeltCatch), on its catch notices.
+--   milestone  the MILESTONE BADGE (SpeedMilestones), on milestone notices.
+--==============================================================================
 GameConfig.SourceIcons = {
 	rain = "rbxassetid://130178353004540",
 	thunder = "rbxassetid://97835526705727",
@@ -7504,11 +7669,27 @@ GameConfig.SourceIcons = {
 	wheel = "rbxassetid://120181822443205",
 	sacrifice = "rbxassetid://120984862343497",
 	income = "rbxassetid://131924246776637",
-	training = "rbxassetid://96656510808947",
+	speed = "rbxassetid://99714577637458",
+	training = "rbxassetid://113941145748388",
 	community = "rbxassetid://139312630119333",
 	tickets = "rbxassetid://112516668911937",
 	disco = "rbxassetid://129016824458756",
+	coin = "rbxassetid://97002362837712",
+	milestone = "rbxassetid://101850589009212",
 }
+
+--==============================================================================
+-- THE OWNER'S SMALL VERSIONS (2026-10-08)
+--
+-- A picture with an entry here is drawn as its small upload wherever it draws
+-- at SmallIconMax px or less -- the owner's rule for the plain Speed shoe. Keyed
+-- by the big upload's id; SizedIcon picks between the two by the drawn size.
+--==============================================================================
+GameConfig.SmallIconMax = 40
+GameConfig.SmallIcons = {
+	-- The plain Speed shoe's small version, stored at 32 x 32.
+	[GameConfig.SourceIcons.speed] = "rbxassetid://114664524232030",
+} :: { [string]: string }
 
 --==============================================================================
 -- THE WHEEL'S POD SILHOUETTES, AS UPLOADED (2026-10-04)
@@ -9551,11 +9732,81 @@ function GameConfig.plotDepthFor(rows: number): number
 end
 
 -- Where a plot's mill stands, from the plot's GATE frame (the gate line's
--- middle, the plot's own facing): GameConfig.Mill.Place. The gate never moves,
--- so neither does the mill, at any level.
-function GameConfig.millCFrameFor(gateCF: CFrame): CFrame
+-- middle, the plot's own facing): GameConfig.Mill.Place -- in front of plots
+-- 1-5, beside plot 6's right-hand fence. The gate never moves, so neither does
+-- the mill, at any level.
+function GameConfig.millStandsBeside(plotId: number?): boolean
+	return plotId ~= nil and GameConfig.Mill.Place.BesidePlots[plotId] == true
+end
+
+-- The mill's frame in its plot's gate frame.
+function GameConfig.millPlacementFor(plotId: number?): CFrame
 	local P = GameConfig.Mill.Place
-	return gateCF * CFrame.new(GameConfig.Plot.Width * 0.5 + P.Side, P.Lift, P.Behind)
+	if GameConfig.millStandsBeside(plotId) then
+		local B = P.Beside
+		return CFrame.new(GameConfig.Plot.Width * 0.5 + B.Side, P.Lift, B.Behind)
+			* CFrame.Angles(0, math.rad(B.Yaw), 0)
+	end
+	local F = P.Front
+	return CFrame.new(F.Out, P.Lift, -F.Ahead) * CFrame.Angles(0, math.rad(F.Yaw), 0)
+end
+
+function GameConfig.millCFrameFor(gateCF: CFrame, plotId: number?): CFrame
+	return gateCF * GameConfig.millPlacementFor(plotId)
+end
+
+-- And back: the gate frame a mill stands off, from the mill's own frame (its
+-- pivot) -- what TreadmillService has when it rebuilds one.
+function GameConfig.millGateFor(millCF: CFrame, plotId: number?): CFrame
+	return millCF * GameConfig.millPlacementFor(plotId):Inverse()
+end
+
+--==============================================================================
+-- A LEVEL, CLAMPED TO THE LADDER
+--
+-- What every lookup below does with what it is handed: a number from a future
+-- build, a corrupted one or none at all must still name a real level.
+--==============================================================================
+local function clampLevel(tier: number?): number
+	local n = tonumber(tier)
+	if n == nil or n ~= n then
+		n = GameConfig.StartingPlotTier
+	end
+	return math.clamp(math.floor(n :: number), 1, #GameConfig.PlotTiers)
+end
+
+--==============================================================================
+-- WHICH SHAPE A PLOT GROWS INTO (2026-10-07)
+--
+-- "Front" for a plot whose mill stands in front of it (plots 1-5), "Beside"
+-- for one whose mill stands beside its right-hand fence (plot 6). The two are
+-- the same plot at Levels 1-5; from Level 6 the Front plots' wing grows forward
+-- (Plot.SideBed) and the Beside plot grows deeper (Plot.Beside). Asked by plot
+-- ID -- the PlotId every plot model carries -- and nil, or an id no plot has,
+-- is a Front plot.
+--==============================================================================
+function GameConfig.plotLayoutFor(plotId: number?): string
+	return if GameConfig.millStandsBeside(plotId) then "Beside" else "Front"
+end
+
+-- Whether this plot, at this level, has the Beside shape's own rows.
+local function besideAt(level: number, plotId: number?): boolean
+	return GameConfig.millStandsBeside(plotId) and GameConfig.Plot.Beside.Rows[level] ~= nil
+end
+
+-- The main bed's rows on THIS plot: PlotTiers' (plotRowsForTier) everywhere
+-- but where Plot.Beside names its own.
+function GameConfig.plotRowsFor(tier: number?, plotId: number?): number
+	local level = clampLevel(tier)
+	if besideAt(level, plotId) then
+		return GameConfig.Plot.Beside.Rows[level]
+	end
+	return GameConfig.PlotTiers[level].rows
+end
+
+-- How deep THIS plot is at this level, gate to back fence.
+function GameConfig.plotDepthForPlot(tier: number?, plotId: number?): number
+	return GameConfig.plotDepthFor(GameConfig.plotRowsFor(tier, plotId))
 end
 
 --==============================================================================
@@ -9563,18 +9814,20 @@ end
 --
 -- Levels 1 and 2 are the plain rectangle they have always been. From Level 3
 -- the footprint is an L: full width at the front, wider across the back half.
+-- From Level 6 a Front plot's L reaches nearly to the gate, and the Beside plot
+-- keeps Level 5's wing (Plot.Beside). `plotId` is optional: without it the
+-- answer is a Front plot's.
 --==============================================================================
-function GameConfig.plotSideRowsForTier(tier: number?): number
-	local n = tonumber(tier)
-	if n == nil or n ~= n then
-		n = GameConfig.StartingPlotTier
+function GameConfig.plotSideRowsForTier(tier: number?, plotId: number?): number
+	local level = clampLevel(tier)
+	if besideAt(level, plotId) then
+		level = GameConfig.Plot.Beside.WingLevel
 	end
-	local level = math.clamp(math.floor(n), 1, #GameConfig.PlotTiers)
 	return GameConfig.Plot.SideBed.RowsByLevel[level] or 0
 end
 
-function GameConfig.plotHasSideBed(tier: number?): boolean
-	return GameConfig.plotSideRowsForTier(tier) > 0
+function GameConfig.plotHasSideBed(tier: number?, plotId: number?): boolean
+	return GameConfig.plotSideRowsForTier(tier, plotId) > 0
 end
 
 --==============================================================================
@@ -9586,22 +9839,87 @@ end
 --
 -- The main bed spans `rows * RowDepth + (rows - 1) * RowGap` centred on the
 -- plot, so its back edge is at half that. The wing shares it.
+--
+-- THE BESIDE PLOT AT LEVELS 6-7 is the one exception: its wing is Level 5's
+-- bed, the same distance behind the gate, written in this level's own frame --
+-- so it stops short of the plot's back fence (plotWingZ).
 --==============================================================================
-function GameConfig.plotSideBedZ(tier: number?): (number?, number?)
-	local sideRows = GameConfig.plotSideRowsForTier(tier)
+function GameConfig.plotSideBedZ(tier: number?, plotId: number?): (number?, number?)
+	local level = clampLevel(tier)
+	local P = GameConfig.Plot
+	if besideAt(level, plotId) then
+		local wingLevel = P.Beside.WingLevel
+		local front, back = GameConfig.plotSideBedZ(wingLevel)
+		if not (front and back) then
+			return nil, nil
+		end
+		-- The frame's centre sits half the depth behind the gate, so a bed that
+		-- stays put moves by half the difference in this level's numbers.
+		local shift = (GameConfig.plotDepthForPlot(wingLevel) - GameConfig.plotDepthForPlot(level, plotId)) * 0.5
+		return front + shift, back + shift
+	end
+	local sideRows = GameConfig.plotSideRowsForTier(level)
 	if sideRows <= 0 then
 		return nil, nil
 	end
-	local P = GameConfig.Plot
-	local mainRows = GameConfig.plotRowsForTier(tier)
+	local mainRows = GameConfig.plotRowsForTier(level)
 	local backZ = (mainRows * P.RowDepth + (mainRows - 1) * P.RowGap) * 0.5
 	local span = sideRows * P.RowDepth + (sideRows - 1) * P.RowGap
 	-- Capped so the wing's FENCE -- which stands WingMargin + a frame width
 	-- forward of the bed -- can never reach past the treadmill. RowsByLevel is
 	-- already chosen to satisfy this; the clamp is here so that changing a row
-	-- count can shorten a bed but can never fence in the mill.
-	local minBedFront = P.SideBed.WingFrontZ + P.SideBed.WingMargin + P.BedFrameWidth
+	-- count can shorten a bed but can never fence in the mill. From
+	-- ForwardFromLevel the mill is in front of the plot and the cap is the gate
+	-- line instead: MinBehindGate studs behind it, in this level's own frame.
+	local minBedFront = if level < P.SideBed.ForwardFromLevel
+		then P.SideBed.WingFrontZ + P.SideBed.WingMargin + P.BedFrameWidth
+		else -GameConfig.plotDepthFor(mainRows) * 0.5 + P.SideBed.MinBehindGate + P.SideBed.WingMargin
+			+ P.BedFrameWidth
 	return math.max(backZ - span, minBedFront), backZ
+end
+
+--==============================================================================
+-- THE WING'S OWN FENCE LINES, IN PLOT-LOCAL Z
+--
+-- Front: WingMargin and a frame width ahead of its bed. Back: BedMargin behind
+-- it, which is the plot's back fence on every plot but the Beside one at Levels
+-- 6-7, whose wing ends where Level 5's did. Nil when the level has no wing.
+-- MapService builds the fences on these and stamps them as WingFrontZ and
+-- WingBackZ; PlantWander and MiniEventService read them back off the plot.
+--==============================================================================
+function GameConfig.plotWingZ(tier: number?, plotId: number?): (number?, number?)
+	local front, back = GameConfig.plotSideBedZ(tier, plotId)
+	if not (front and back) then
+		return nil, nil
+	end
+	local P = GameConfig.Plot
+	return front - P.SideBed.WingMargin - P.BedFrameWidth, back + P.BedMargin
+end
+
+--==============================================================================
+-- EVERYTHING A PLOT FENCES IN, FROM ITS GATE
+--
+-- Rectangles on the fence lines, in the GATE's frame: x across (+x the wing's
+-- side), d behind the gate line. The main rectangle, and the wing when the
+-- level has one. Read by MapDecor (nothing is dressed where a plot will ever
+-- stand), MapService's fit check and the plot specs -- the shape at every
+-- level of every plot, without building one.
+--==============================================================================
+function GameConfig.plotFootprint(tier: number?, plotId: number?): { { x0: number, x1: number, d0: number, d1: number } }
+	local P = GameConfig.Plot
+	local depth = GameConfig.plotDepthForPlot(tier, plotId)
+	local halfW = P.Width * 0.5
+	local out = { { x0 = -halfW, x1 = halfW, d0 = 0, d1 = depth } }
+	local front, back = GameConfig.plotWingZ(tier, plotId)
+	if front and back then
+		table.insert(out, {
+			x0 = halfW,
+			x1 = halfW + P.SideBed.WingWidth,
+			d0 = front + depth * 0.5,
+			d1 = math.min(back + depth * 0.5, depth),
+		})
+	end
+	return out
 end
 
 --==============================================================================
@@ -9654,10 +9972,12 @@ end
 -- corner is at Width/2 = 24, so it sits in the middle of the fence run with
 -- room on both sides.
 --==============================================================================
-function GameConfig.plotSignBase(plotCF: CFrame, level: number?): CFrame
+-- `plotId` (2026-10-07): plot 6 is deeper than the rest at Levels 6-7, so a
+-- centre at one of those levels needs the plot's own depth to find its gate.
+function GameConfig.plotSignBase(plotCF: CFrame, level: number?, plotId: number?): CFrame
 	local P = GameConfig.Plot
 	local S = P.Sign
-	local halfD = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(level)) * 0.5
+	local halfD = GameConfig.plotDepthForPlot(level, plotId) * 0.5
 	return plotCF
 		* CFrame.new(S.OffsetX, S.GroundY, -halfD - S.Standoff)
 		* CFrame.Angles(0, math.rad(S.YawDegrees), 0)
@@ -9680,9 +10000,9 @@ function GameConfig.plotShowcaseX(): number
 	return P.Sign.OffsetX - signHalf - SC.Gap - SC.RimStuds - SC.BoardSize.X * 0.5
 end
 
-function GameConfig.plotShowcaseBase(plotCF: CFrame, level: number?): CFrame
+function GameConfig.plotShowcaseBase(plotCF: CFrame, level: number?, plotId: number?): CFrame
 	local SC = GameConfig.Plot.Showcase
-	local halfD = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(level)) * 0.5
+	local halfD = GameConfig.plotDepthForPlot(level, plotId) * 0.5
 	return plotCF
 		* CFrame.new(GameConfig.plotShowcaseX(), SC.GroundY, -halfD - SC.Standoff)
 		* CFrame.Angles(0, math.rad(SC.YawDegrees), 0)
@@ -9745,17 +10065,30 @@ GameConfig.Map.FieldDepth = GameConfig.Map.FieldFront + GameConfig.Map.FieldBack
 -- itself needs this. The ROAD side stays at -FieldFront regardless.
 GameConfig.Map.FieldCenterZ = (GameConfig.Map.FieldBack - GameConfig.Map.FieldFront) * 0.5
 
--- The deepest tier's back edge. MapService checks the field actually contains
--- it -- a reservation nobody verified is not a reservation.
+-- The deepest tier's back edge, on any plot -- the Beside plot's rows count
+-- (Plot.Beside). Whether every plot's every level stands on the field is
+-- MapService's fit check, plot by plot (plotFootprint), since 2026-10-07: the
+-- deepest plot points at the field's FRONT, not at FieldBack.
 do
 	local deepest = 0
-	for _, tier in ipairs(GameConfig.PlotTiers) do
-		deepest = math.max(deepest, GameConfig.plotDepthFor(tier.rows))
+	for level, tier in ipairs(GameConfig.PlotTiers) do
+		deepest = math.max(deepest, GameConfig.plotDepthFor(tier.rows),
+			GameConfig.plotDepthFor(GameConfig.Plot.Beside.Rows[level] or tier.rows))
 	end
 	GameConfig.Plot.MaxDepth = deepest
 	-- How far from the hub the deepest tier reaches. The ring equivalent of the
-	-- old MaxBackZ, and what the field has to contain.
+	-- old MaxBackZ.
 	GameConfig.Plot.MaxReach = GameConfig.Map.PlotRingInner + deepest
+	--==========================================================================
+	-- THE FIELD'S SCATTER STAYS WHERE IT WAS ROLLED (2026-10-07)
+	--
+	-- MapDecor dresses the field outside this radius (+18), and it was rolled
+	-- around Level 5 plots: MaxReach then. Levels 6-7 reach further, and letting
+	-- the radius follow would re-roll every daisy, fern and oak on the field. So
+	-- it is pinned at Level 5's reach, and the few props a Level 6-7 plot would
+	-- stand on are taken out instead (MapDecor's clearOfPlots).
+	--==========================================================================
+	GameConfig.Plot.DecorReach = GameConfig.Map.PlotRingInner + GameConfig.plotDepthFor(GameConfig.PlotTiers[5].rows)
 end
 
 local function deepFreeze(target: { [any]: any }): { [any]: any }

@@ -58,7 +58,9 @@ local function roadMouthZ(): number
 end
 
 -- This is a progression milestone, not permission to enter. It remains
--- permanent so rebirth cannot revoke mill overclocks a player already earned.
+-- permanent so rebirth cannot revoke a milestone a player already earned.
+-- (It once also kept mill overclocks earned; Overclock is history since
+-- 2026-10-06.)
 function BiomeGateService.EarnedBy(speedScore: number): number
 	if type(speedScore) ~= "number" or speedScore ~= speedScore then
 		return 1

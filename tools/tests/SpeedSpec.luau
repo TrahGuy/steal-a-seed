@@ -198,8 +198,8 @@ do
 	end
 	table.insert(lines, string.format("  %d formatting cases", #cases))
 
-	-- Every gate and every overclock cost has to be printable, since both are
-	-- on signs.
+	-- Every gate has to be printable, since gates are on signs (and so is every
+	-- mill price: section 6).
 	for _, biome in ipairs(BiomeData.Biomes) do
 		table.insert(lines, string.format("  gate %-12s %s",
 			biome.DisplayName, GameConfig.compact(biome.RecommendedSpeed)))
@@ -239,7 +239,9 @@ do
 	}
 	for _, case in ipairs(junk) do
 		local p = ProfileSchema.Sanitise({ MillOverclock = case[2], HighestBiomeOrder = case[2] })
-		local maxOC = GameConfig.Mill.Overclock.MaxLevel
+		-- The ten levels there ever were: the field is kept for old saves only
+		-- (Overclock is history since 2026-10-06; ProfileSchema.convertOverclock).
+		local maxOC = 10
 		ok("overclock survives " .. case[1],
 			p.MillOverclock >= 0 and p.MillOverclock <= maxOC
 				and p.MillOverclock == math.floor(p.MillOverclock),
@@ -257,98 +259,56 @@ do
 end
 
 --==============================================================================
--- 6. THE TRAINING RATE
+-- 6. THE TRAINING RATE: tier x rebirth (Overclock is history since 2026-10-06)
+--
+-- Fourteen tiers, the top four the owner's own mills. Typed as literals,
+-- because a test that computes what it is checking with the formula it is
+-- checking cannot fail -- and this table is exactly where a retune should
+-- have to stop and think. (Until 2026-10-06 this section walked the top tier
+-- through ten overclock levels, 800M to 410B a second; tiers 11-14 cover that
+-- range now, as machines.)
 --==============================================================================
-section("overclock rates")
+section("training rates")
 do
-	local O = GameConfig.Mill.Overclock
-	local top = #GameConfig.Mill.Tiers
-
-	--==========================================================================
-	-- THE TOP TIER, AT SIX OVERCLOCK LEVELS
-	--
-	-- These were 51200 .. 52428800, which is the ladder as it stood when the top
-	-- mill ran at 1600/s. It runs at 400M/s now and the mill has ten tiers rather
-	-- than seven, so every one of the six was out by a factor of 250,000 -- and
-	-- because the spec threw further up, not one of them had been reported since.
-	--
-	-- Two literals rather than six: the BASE and the DOUBLING are the contract,
-	-- and the six expectations follow from them arithmetically. Typed as a table
-	-- of literals below all the same, because a test that computes what it is
-	-- checking with the formula it is checking cannot fail -- and this pair of
-	-- lines is exactly where a retune should have to stop and think.
-	--==========================================================================
-	ok("the top mill runs at 400M/s", GameConfig.Mill.Tiers[top].speed == 400e6,
-		tostring(GameConfig.Mill.Tiers[top].speed))
-	ok("each overclock level doubles it", O.Multiplier == 2, tostring(O.Multiplier))
-	ok("the ladder is ten tiers deep", top == 10, tostring(top))
-	local want: { [number]: number } = {
-		[5] = 12.8e9, [6] = 25.6e9, [7] = 51.2e9,
-		[8] = 102.4e9, [9] = 204.8e9, [10] = 409.6e9,
+	local tiers = GameConfig.Mill.Tiers
+	local top = #tiers
+	ok("the ladder is fourteen tiers deep", top == 14, tostring(top))
+	local want: { [number]: { number } } = {
+		[10] = { 400e6, 100e9 }, [11] = { 2.5e9, 400e9 }, [12] = { 15e9, 600e9 },
+		[13] = { 80e9, 1e12 }, [14] = { 450e9, 1.5e12 },
 	}
-	for level = 0, O.MaxLevel do
-		local rate = GameConfig.trainingRateFor(top, level, nil)
-		if want[level] then
-			ok("the top tier at overclock " .. level, near(rate, want[level]),
-				string.format("want %.0f got %.0f", want[level], rate))
+	for tier = 1, top do
+		local rate = GameConfig.trainingRateFor(tier, nil)
+		local w = want[tier]
+		if w then
+			ok(string.format("tier %d runs at %s/s for $%s", tier, GameConfig.compact(w[1]), GameConfig.compact(w[2])),
+				rate == w[1] and tiers[tier].cost == w[2],
+				string.format("got %.0f/s for %.0f", rate, tiers[tier].cost))
 		end
-		local cost = GameConfig.overclockCostFor(level)
-		-- No biome column: overclock has no biome gate. GameConfig.Mill.Overclock
-		-- says it outright -- "Level N costs Costs[N], and that is the entire
-		-- requirement" -- and the call that used to print one here was to
-		-- overclockUnlockOrderFor, a function that does not exist. It threw, and
-		-- the throw took the whole spec with it.
-		table.insert(lines, string.format("  L%-2d %10s/s   %s",
-			level, GameConfig.compact(rate),
-			if cost then "$" .. GameConfig.compact(cost) else "-"))
+		table.insert(lines, string.format("  T%-2d %-18s %10s/s   %s", tier, tiers[tier].name,
+			GameConfig.compact(rate), if tiers[tier].cost > 0 then "$" .. GameConfig.compact(tiers[tier].cost) else "free"))
 	end
-
-	ok("rate is strictly increasing in level", (function()
-		local prev = -1
-		for level = 0, O.MaxLevel do
-			local r = GameConfig.trainingRateFor(top, level, nil)
-			if r <= prev then
+	ok("rate and cost strictly increase, tier on tier", (function()
+		for tier = 2, top do
+			if tiers[tier].speed <= tiers[tier - 1].speed or tiers[tier].cost <= tiers[tier - 1].cost then
 				return false
 			end
-			prev = r
 		end
 		return true
 	end)())
-	ok("cost is strictly increasing", (function()
-		local prev = -1
-		for level = 1, O.MaxLevel do
-			local c = O.Costs[level]
-			if not c or c <= prev then
-				return false
-			end
-			prev = c
-		end
-		return true
-	end)())
-	ok("there is a cost for every level", #O.Costs == O.MaxLevel)
-	--==========================================================================
-	-- THREE MORE CHECKS ON A GATE THAT IS NOT THERE
-	--
-	-- These read O.UnlockedBy -- an unlock order per overclock level -- and
-	-- asserted it had one entry per level, named a biome that exists, and never
-	-- went backwards. GameConfig.Mill.Overclock has no such table: it is
-	-- Multiplier, MaxLevel, Costs and Label, and its own comment says "Level N
-	-- costs Costs[N], and that is the entire requirement".
-	--
-	-- Indexing a nil threw rather than failed, which is why this spec has been
-	-- reporting an ERROR rather than a failure and why nothing after this line
-	-- has run for however long the table has been gone. Cost IS the ladder now,
-	-- and the two checks either side of this -- every level has a cost, costs
-	-- strictly increase -- are what guard it.
-	--==========================================================================
-	ok("level 11 is not for sale", GameConfig.overclockCostFor(11) == nil)
+	-- No overclock factor: a profile still carrying old levels pays its tier.
+	ok("an old save's overclock levels pay nothing",
+		GameConfig.trainingRateFor(10, { MillOverclock = 4 }) == 400e6)
+	ok("the Overclock table and its helpers are gone",
+		(GameConfig.Mill :: any).Overclock == nil and (GameConfig :: any).overclockCostFor == nil
+			and (GameConfig :: any).overclockMultiplierFor == nil)
 	ok("rebirth seam returns 1", GameConfig.rebirthMultiplierFor(nil) == 1
 		and GameConfig.rebirthMultiplierFor({}) == 1)
 
 	-- Bad input on the payout path must produce a number, not a nil.
 	for _, bad in ipairs({ 0 / 0, -3, 1e9, math.huge }) do
-		local r = GameConfig.trainingRateFor(top, bad, nil)
-		ok("rate stays finite for " .. tostring(bad),
+		local r = GameConfig.trainingRateFor(bad, nil)
+		ok("rate stays finite for tier " .. tostring(bad),
 			type(r) == "number" and r == r and r < math.huge, tostring(r))
 	end
 end
@@ -366,12 +326,12 @@ end
 --==============================================================================
 section("one rate, no rush")
 do
-	local base = GameConfig.trainingRateFor(1, 0, nil)
+	local base = GameConfig.trainingRateFor(1, nil)
 	ok("tier 1's base is 20/s", base == 20, tostring(base))
 	ok("tier 2's base -- the sign's other number -- is 100/s",
-		GameConfig.trainingRateFor(2, 0, nil) == 100)
+		GameConfig.trainingRateFor(2, nil) == 100)
 	ok("and that is all a tier-1 tick pays now: 20 a second, the first tick as the ninety-first",
-		base * 1 == 20 and GameConfig.trainingRateFor(1, 0, nil) * 91 == 20 * 91)
+		base * 1 == 20 and GameConfig.trainingRateFor(1, nil) * 91 == 20 * 91)
 	ok("GameConfig carries no Training block and no rush helpers",
 		GameConfig.Mill.Training == nil and (GameConfig :: any).trainingRushMultiplier == nil
 			and (GameConfig :: any).trainingRushBlend == nil)
@@ -383,8 +343,9 @@ do
 	ok("the payout is the rate x the chest's training reward x the Disco Mill x the tick -- no rush term",
 		string.find(src, 'local paid = rate * BonusChestService.Multiplier(player, "training") * discoFactor * dt', 1, true)
 			~= nil and string.find(src, "consumeRush(", 1, true) == nil and string.find(src, "publishRush(", 1, true) == nil)
+	-- One format since 2026-10-06: the overclock branch that had the other is gone.
 	ok("and the upgrade sign still labels both of its rates as BASE",
-		select(2, string.gsub(src, 'string.format%("BASE %%s/s  >  %%s/s"', "")) == 2)
+		select(2, string.gsub(src, 'string.format%("BASE %%s/s  >  %%s/s"', "")) == 1)
 	local speedFX = game:GetService("StarterPlayer"):WaitForChild("StarterPlayerScripts")
 		:FindFirstChild("SpeedFX")
 	local fx = if speedFX then (speedFX :: any).Source else ""
@@ -461,18 +422,18 @@ do
 	--==========================================================================
 	do
 		local veteran = ProfileSchema.Sanitise({
-			Speed = 10e9, HighestBiomeOrder = 5, MillOverclock = 8,
+			Speed = 10e9, HighestBiomeOrder = 5, MillTier = 12,
 		})
 		ok("a veteran profile keeps its biome", veteran.HighestBiomeOrder == 5)
 
 		local rebirthed = ProfileSchema.Sanitise({
 			Speed = 0, HighestBiomeOrder = veteran.HighestBiomeOrder,
-			MillOverclock = veteran.MillOverclock,
+			MillTier = veteran.MillTier,
 		})
 		ok("zeroing Speed does not take the biome back",
 			rebirthed.HighestBiomeOrder == 5, tostring(rebirthed.HighestBiomeOrder))
-		ok("zeroing Speed does not take the overclock back",
-			rebirthed.MillOverclock == 8, tostring(rebirthed.MillOverclock))
+		ok("zeroing Speed does not take the mill back (tier 12, one of the owner's)",
+			rebirthed.MillTier == 12, tostring(rebirthed.MillTier))
 		ok("but the score really is zero", rebirthed.Speed == 0)
 
 		--==================================================================
@@ -480,8 +441,8 @@ do
 		--
 		-- This asserted that "an overclock unlocked by a biome stays unlocked"
 		-- through a rebirth, via GameConfig.overclockUnlockOrderFor. No such
-		-- function exists and no such gate does either: Overclock's own config
-		-- says "Level N costs Costs[N], and that is the entire requirement".
+		-- function existed and no such gate did either -- and since 2026-10-06
+		-- there is no Overclock at all.
 		--
 		-- The assertion was testing a design that was either dropped or never
 		-- built, and because it CALLED a nil it did not fail -- it threw, and

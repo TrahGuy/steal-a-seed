@@ -22,6 +22,15 @@
 -- screen and nobody else's -- that is what makes "visible only to the relevant
 -- player" a property of where the code runs rather than a filter to maintain.
 -- All of it is anchored, non-colliding, non-query, non-touch and non-archivable.
+--
+--==============================================================================
+-- THE HAND AND THE SPOTLIGHT (the owner's brief, 2026-10-08)
+--
+-- The owner's pointing glove replaced the HUD's gold pointer and the world's
+-- green finger. Once per step a HUD target is SPOTLIT -- the screen dimmed round
+-- one real button, which alone takes a press, movement untouched -- and a
+-- seventh step, `travel`, teaches OBBY and TELEPORT TO PLOT after the hatch.
+-- TutorialSpotlight holds the rules and the arithmetic (TutorialSpotlightSpec).
 --==============================================================================
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -39,9 +48,22 @@ local SeedData = require(Shared:WaitForChild("SeedData"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
--- Only for where the notices stand on a phone, beside the guide's words.
+-- Where the notices stand on a phone, beside the guide's words; and whether one
+-- is up at all, which the spotlight waits out.
 local Notice = require(Shared:WaitForChild("Notice"))
 local TextService = game:GetService("TextService")
+local UserInputService = game:GetService("UserInputService")
+-- THE SPOTLIGHT AND THE POINTING HAND (the owner's brief, 2026-10-08): the rules
+-- and the arithmetic are TutorialSpotlight's; this file draws them.
+local Spot = require(Shared:WaitForChild("TutorialSpotlight"))
+-- A controller in hand (the selection goes on a lit button only then), and a
+-- panel or a reward moment up (no spotlight over either).
+local PadInput = require(Shared:WaitForChild("PadInput"))
+local RewardMoments = require(Shared:WaitForChild("RewardMoments"))
+-- Only for the note the OBBY button leaves when it is pressed (EntranceAsked).
+local ObbyData = require(Shared:WaitForChild("ObbyData"))
+-- The starter pod's words on the training steps (2026-10-08).
+local FirstMinute = require(Shared:WaitForChild("FirstMinute"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -84,6 +106,13 @@ local TICK = 0.2             -- state refresh, 5Hz
 local existing = playerGui:FindFirstChild("SeedBeginnerGuide")
 if existing then
 	existing:Destroy()
+end
+-- The spotlight's and the world hand's own guis (below), from an earlier run.
+for _, name in ipairs({ "SeedGuideSpotlight", "SeedGuideMarker" }) do
+	local old = playerGui:FindFirstChild(name)
+	if old then
+		old:Destroy()
+	end
 end
 
 local gui = Instance.new("ScreenGui")
@@ -148,6 +177,9 @@ words.BackgroundTransparency = 1
 words.BorderSizePixel = 0
 words.Active = false
 words.Parent = gui
+-- How far the words have stepped down for the pointing hand (THE BANNER MAKES
+-- ROOM, below), in this gui's units; 0 almost always.
+local wordsShift = 0
 
 local banner = Instance.new("Frame")
 banner.Name = "Instruction"
@@ -373,30 +405,98 @@ table.insert(connections, player:GetAttributeChangedSignal(Config.Pass.Multiplie
 placeBanner()
 
 --==============================================================================
--- THE UI POINTER
+-- THE POINTING HAND AND THE SPOTLIGHT (the owner's brief, 2026-10-08)
 --
--- Anchored to whatever is actually on screen -- the real Speed label, the real
--- hotbar slot -- by reading its AbsolutePosition and AbsoluteSize. Nothing here
--- knows a desktop coordinate, so GUI inset, phone widths and UIScale are all
--- somebody else's problem and it still lands on the thing.
+-- The owner's glove (TutorialSpotlight.Hand.Image) replaced the gold pointer
+-- that stood here. On the HUD it points at a real, rendered element, read off
+-- its AbsolutePosition and AbsoluteSize every frame -- nothing here knows a
+-- desktop coordinate, so the inset, the notch, a phone's widths and a TV's
+-- UIScale are all somebody else's problem and it still lands on the thing.
+--
+-- ONCE PER STEP a HUD target is SPOTLIT: the screen goes 65% black round a
+-- rounded window on it, a gold ring pulses on the window's edge, and only that
+-- button takes a press.
+--
+-- ITS OWN GUI, WITH NO SCREEN INSETS. The dim has to cover the notch and the
+-- topbar, which the guide's own gui (IgnoreGuiInset false, a TV's UIScale)
+-- cannot reach. Every rect is measured in this gui's own pixels -- a target's
+-- AbsolutePosition less this gui's -- which is what lands the window exactly on
+-- a button that lives under a different inset. DisplayOrder 61, over every HUD
+-- button (ADMIN is 60), so its blockers are what a tap meets; while the dim
+-- shows, the guide's gui is raised over it, so the words and "Skip guide" stay
+-- readable and pressable.
+--
+-- MOVEMENT IS NEVER BLOCKED. Nothing here lays anything that takes input over
+-- the screen: the dim is a stroke, the hand and its words are labels. What
+-- stops every OTHER button is a transparent blocker laid over each one, so a
+-- thumb on the empty screen still reaches the touch thumbstick, the jump button
+-- and the camera, and the keyboard and the stick are never touched at all.
 --==============================================================================
-local pointer = Instance.new("Frame")
-pointer.Name = "UIPointer"
-pointer.BackgroundTransparency = 1
-pointer.Size = UDim2.fromOffset(230, 46)
-pointer.Visible = false
-pointer.ZIndex = 5
-pointer.Parent = gui
--- Drawn at `tutorialScale` from its top-left corner (pointAt).
-local pointerScale = Instance.new("UIScale")
-pointerScale.Parent = pointer
-local pointerArrow = outlined(pointer, "Arrow", 30, GOLD, 3)
-pointerArrow.Size = UDim2.fromOffset(34, 46)
-pointerArrow.Text = "\u{25B6}" -- solid right-pointing triangle; renders in this font
-local pointerText = outlined(pointer, "Text", 22, CREAM, 3)
-pointerText.Position = UDim2.fromOffset(36, 0)
-pointerText.Size = UDim2.fromOffset(194, 46)
-pointerText.TextXAlignment = Enum.TextXAlignment.Left
+local SPOT_ORDER = 61
+local GUIDE_ORDER = gui.DisplayOrder
+local spotGui = Instance.new("ScreenGui")
+spotGui.Name = "SeedGuideSpotlight"
+spotGui.ResetOnSpawn = false
+spotGui.IgnoreGuiInset = true
+spotGui.ScreenInsets = Enum.ScreenInsets.None
+spotGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+spotGui.DisplayOrder = SPOT_ORDER
+spotGui.Parent = playerGui
+
+-- Transparent sinks over every other button while the dim shows (placeBlockers).
+local blockerFolder = Instance.new("Folder")
+blockerFolder.Name = "Blockers"
+blockerFolder.Parent = spotGui
+
+-- The window. It draws nothing itself: its enormous stroke IS the dim, which is
+-- how the hole gets its rounded corners.
+local hole = Instance.new("Frame")
+hole.Name = "Window"
+hole.BackgroundTransparency = 1
+hole.BorderSizePixel = 0
+hole.Active = false
+hole.Visible = false
+hole.ZIndex = 2
+hole.Parent = spotGui
+UIKit.corner(hole, Spot.Corner)
+local shade = Instance.new("UIStroke")
+shade.Name = "Dim"
+shade.Color = BLACK
+shade.Thickness = 4000
+shade.Transparency = 1 - Spot.Dim
+shade.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+shade.LineJoinMode = Enum.LineJoinMode.Round
+shade.Parent = hole
+
+local ring = Instance.new("Frame")
+ring.Name = "Ring"
+ring.BackgroundTransparency = 1
+ring.BorderSizePixel = 0
+ring.Active = false
+ring.Visible = false
+ring.ZIndex = 3
+ring.Parent = spotGui
+UIKit.corner(ring, Spot.Corner)
+local ringStroke = UIKit.stroke(ring, GOLD, Spot.Ring.Thickness)
+
+local hand = Instance.new("ImageLabel")
+hand.Name = "Hand"
+hand.BackgroundTransparency = 1
+hand.Image = Spot.Hand.Image
+hand.ScaleType = Enum.ScaleType.Fit
+hand.AnchorPoint = Vector2.new(0.5, 0.5)
+hand.Active = false
+hand.Visible = false
+hand.ZIndex = 5
+hand.Parent = spotGui
+
+-- Its words, and under them a controller's key while a button is lit.
+local handWords = outlined(spotGui, "Words", Spot.Words.Size, CREAM, 3)
+handWords.Visible = false
+handWords.ZIndex = 6
+local handKey = outlined(spotGui, "Key", Spot.Words.KeySize, GOLD, 2)
+handKey.Visible = false
+handKey.ZIndex = 6
 
 --==============================================================================
 -- THE CELEBRATION
@@ -441,7 +541,7 @@ local function publishReach()
 	-- clock has to step round them there.
 	if banner.Visible and not guide then
 		local layout = HudLayout.solve(HudLayout.measure(gui))
-		reach = layout.skip.y + layout.skip.h
+		reach = layout.skip.y + layout.skip.h + wordsShift
 	end
 	if party.Visible then
 		-- Centred at 34% of the gui, 150 tall at its full scale (celebrate).
@@ -533,53 +633,60 @@ highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 highlight.Enabled = false
 highlight.Parent = gui
 
--- The bouncing marker over a destination, and the pointing hand over soil. Both
--- are billboards on a tiny invisible anchor part; neither is ever a real object.
-local function billboardOn(name: string, glyph: string, colour: Color3, size: number)
-	local anchor = Instance.new("Part")
-	anchor.Name = name .. "Anchor"
-	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
-	anchor.Transparency = 1
-	anchor.Anchored = true
-	anchor.CanCollide = false
-	anchor.CanQuery = false
-	anchor.CanTouch = false
-	anchor.CastShadow = false
-	anchor.Archivable = false
-	anchor.Parent = world
-	local bb = Instance.new("BillboardGui")
-	bb.Name = name
-	bb.Adornee = anchor
-	bb.AlwaysOnTop = true
-	-- Studs, not pixels: a waypoint has to stay readable from across a lane, and
-	-- an offset-sized billboard shrinks with distance until it is a speck.
-	bb.Size = UDim2.fromScale(4, 4)
-	bb.LightInfluence = 0
-	bb.Enabled = false
-	--==========================================================================
-	-- THESE TWO ARE NOT IN THE SCREENSHOTS, AND THAT IS THE TOOLING
-	--
-	-- Parented the way CashPop and PromptUI already do it -- BillboardGui inside
-	-- the ScreenGui, Adornee on the world part -- because both of those ship and
-	-- work.
-	--
-	-- They cannot be photographed here. Studio's MCP screen_capture does not
-	-- include BillboardGui layers at all: proven by standing next to a pod with
-	-- the game's OWN `SeedPrompt` enabled and adorned, and getting a picture with
-	-- no prompt in it. So the beacon and the finger below are verified by state
-	-- -- enabled, adorned, positioned, sized -- and NOT by a picture, and nobody
-	-- should read their absence from a capture as them being broken.
-	--==========================================================================
-	bb.Parent = gui
-	local label = outlined(bb, "Glyph", size, colour, 3)
-	label.Size = UDim2.fromScale(1, 1)
-	label.Text = glyph
-	return anchor, bb
+--==============================================================================
+-- THE HAND IN THE WORLD (2026-10-08; it replaced the gold beacon and the green
+-- finger, which were AlwaysOnTop billboards)
+--
+-- Over a world target -- the mill's belt, a pod, a free spot of soil, the plot's
+-- spawn -- the same glove points DOWN at it and taps. No dim: the ground arrows
+-- carry the route. Drawn as a marker in a ScreenGui at the target's projected
+-- point, the way PromptUI stands its prompts: in front of the world like the
+-- billboards were, under every HUD layer (DisplayOrder 12), sized as a sign
+-- WorldHand.Studs tall at that distance within readable bounds -- and, unlike an
+-- AlwaysOnTop billboard, it shows up in a Studio capture.
+--
+-- `worldPoint` is where the FINGERTIP goes; nil hides it. Set by refresh
+-- through handOver, drawn every frame by drawFrame.
+--==============================================================================
+local WorldHand = { Studs = 3.2, Least = 40, Most = 96, Bob = 0.7 }
+-- How far above what refresh hands it the fingertip stops, in studs: where the
+-- old beacon's and finger's tips stood.
+local BELT_TIP = 3.2
+local POD_TIP = 2.8
+local SOIL_TIP = 2.2
+local SPAWN_TIP = 3
+-- A little past the teleport cooldown OBBY and TELEPORT share before TELEPORT is
+-- lit: the server counts it from the moment it moved the player, one trip after
+-- this client pressed.
+local COOL_MARGIN = 0.4
+local markGui = Instance.new("ScreenGui")
+markGui.Name = "SeedGuideMarker"
+markGui.ResetOnSpawn = false
+-- Its pixels are the camera's viewport's, which WorldToViewportPoint answers in.
+markGui.IgnoreGuiInset = true
+markGui.DisplayOrder = 12
+markGui.Parent = playerGui
+local worldHand = Instance.new("ImageLabel")
+worldHand.Name = "WorldHand"
+worldHand.BackgroundTransparency = 1
+worldHand.Image = Spot.Hand.Image
+worldHand.ScaleType = Enum.ScaleType.Fit
+worldHand.AnchorPoint = Vector2.new(0.5, 0.5)
+-- Drawn pointing up; turned to point down at the target.
+worldHand.Rotation = 180
+worldHand.Visible = false
+worldHand.Parent = markGui
+local worldWords = outlined(markGui, "Words", 20, CREAM, 3)
+worldWords.TextXAlignment = Enum.TextXAlignment.Left
+worldWords.Visible = false
+
+local worldPoint: Vector3? = nil
+local worldText = ""
+-- The world hand's fingertip at `point` (nil: none), with `text` beside it.
+local function handOver(point: Vector3?, text: string?)
+	worldPoint = point
+	worldText = text or ""
 end
--- Down-pointing triangle and a pointing hand. Both were already in use in this
--- project's UI, which is the only reason they are trusted to render.
-local beaconAnchor, beacon = billboardOn("Beacon", "\u{25BC}", GOLD, 58)
-local fingerAnchor, finger = billboardOn("Finger", "\u{25BC}", Color3.fromRGB(120, 255, 140), 64)
 
 --==============================================================================
 -- WHAT THE GUIDE IS LOOKING AT
@@ -865,61 +972,698 @@ local function hotbarSlotFor(tool: Tool?): GuiObject?
 	return hotbar
 end
 
--- Sits to the LEFT of the target and points right at it, unless that would run
--- off screen, in which case it sits to the right and points left.
-local function pointAt(target: GuiObject?, text: string)
-	if not target then
-		pointer.Visible = false
-		return
+--==============================================================================
+-- ON SCREEN: every ancestor visible up to the PlayerGui, its gui enabled, and
+-- a real size -- what "the target hidden, or with no rect on this screen"
+-- means, and what a blocker has to cover.
+--==============================================================================
+local function shown(object: GuiObject?): boolean
+	if object == nil then
+		return false
 	end
-	-- Real pixels / this gui's TV scale = the Offsets the pointer is placed in
-	-- (1 off a TV).
-	local k = UIKit.scaleOf(gui)
-	local pos, size = target.AbsolutePosition / k, target.AbsoluteSize / k
-	--==========================================================================
-	-- MEASURE THE GLYPHS, NOT THE BOX
-	--
-	-- The HUD's Speed label is a 260px box holding about 110px of text, because
-	-- it has to fit "139.88T" as well as "620". Anchoring to the box put the
-	-- pointer a finger-width of empty space away from the number it was pointing
-	-- at. TextBounds is what is actually on screen.
-	--==========================================================================
-	if target:IsA("TextLabel") and target.TextBounds.X > 4 then
-		local glyphs = math.min(size.X, target.TextBounds.X / k + 6)
-		if target.TextXAlignment == Enum.TextXAlignment.Left then
-			size = Vector2.new(glyphs, size.Y)
-		elseif target.TextXAlignment == Enum.TextXAlignment.Right then
-			pos = Vector2.new(pos.X + size.X - glyphs, pos.Y)
-			size = Vector2.new(glyphs, size.Y)
-		else
-			pos = Vector2.new(pos.X + (size.X - glyphs) * 0.5, pos.Y)
-			size = Vector2.new(glyphs, size.Y)
+	local size = object.AbsoluteSize
+	if size.X < 2 or size.Y < 2 then
+		return false
+	end
+	local node: Instance? = object
+	while node and node ~= playerGui do
+		if node:IsA("GuiObject") and not node.Visible then
+			return false
+		end
+		if node:IsA("LayerCollector") and not node.Enabled then
+			return false
+		end
+		node = node.Parent
+	end
+	return node == playerGui
+end
+
+-- A HUD button by its gui and its name, while it is on screen; else nil.
+local function hudButton(guiName: string, name: string): GuiButton?
+	local holder = playerGui:FindFirstChild(guiName)
+	local found = if holder then holder:FindFirstChild(name) else nil
+	if found and found:IsA("GuiButton") and shown(found) then
+		return found
+	end
+	return nil
+end
+
+-- The pressable face of the hotbar slot holding `tool` (HotbarCard's
+-- Slot<n>.Wrap.Face), or nil when the strip has no slot for it.
+local function slotFaceFor(tool: Tool?): GuiButton?
+	local slot = hotbarSlotFor(tool)
+	if slot and slot.Name ~= "Hotbar" then
+		local face = slot:FindFirstChild("Face", true)
+		if face and face:IsA("GuiButton") then
+			return face
 		end
 	end
-	local camera = workspace.CurrentCamera
-	local screen = (if camera then camera.ViewportSize else Vector2.new(1280, 720)) / k
-	-- Drawn at `tutorialScale` from its top-left corner: its 230 x 46 and every
-	-- offset measured off it shrink with it. The words inside are laid out at 1.
-	local s = tutorialScale
-	pointerScale.Scale = s
-	local drawn = pointer.Size.X.Offset * s
-	local midY = pos.Y + size.Y * 0.5 - pointer.Size.Y.Offset * s / 2
-	local left = pos.X - drawn - 6
-	if left < 8 then
-		pointer.Position = UDim2.fromOffset(math.min(pos.X + size.X + 6, screen.X - drawn - 6), midY)
-		pointerArrow.Text = "\u{25C0}"
-		pointerArrow.Position = UDim2.fromOffset(0, 0)
-		pointerText.Position = UDim2.fromOffset(36, 0)
-		pointerText.TextXAlignment = Enum.TextXAlignment.Left
-	else
-		pointer.Position = UDim2.fromOffset(left, midY)
-		pointerArrow.Text = "\u{25B6}"
-		pointerArrow.Position = UDim2.fromOffset(196, 0)
-		pointerText.Position = UDim2.fromOffset(0, 0)
-		pointerText.TextXAlignment = Enum.TextXAlignment.Right
+	return nil
+end
+
+--==============================================================================
+-- WHAT THE HAND POINTS AT, THIS PASS
+--
+-- `target` is the real element; `button` the one that takes the press (nil for
+-- a label: SPEED); `key` names the target's spotlight (TutorialSpotlight.
+-- Targets), nil where it is never dimmed for; `text` is written beside the hand
+-- while no spotlight is up -- a lit target says its own words. refresh says it
+-- again five times a second; the hand follows the target every frame.
+--==============================================================================
+type Aim = { target: GuiObject?, button: GuiButton?, key: string?, text: string }
+local aim: Aim = { target = nil, button = nil, key = nil, text = "" }
+
+local function pointAt(target: GuiObject?, text: string, key: string?, button: GuiButton?)
+	aim.target = target
+	aim.text = text
+	aim.key = key
+	aim.button = button
+end
+
+-- An element's rect in the spotlight gui's own pixels (THE POINTING HAND).
+local function rectOf(object: GuiObject): Spot.Rect
+	local origin = spotGui.AbsolutePosition
+	local p, s = object.AbsolutePosition, object.AbsoluteSize
+	return { x = p.X - origin.X, y = p.Y - origin.Y, w = s.X, h = s.Y }
+end
+
+--==============================================================================
+-- MEASURE THE GLYPHS, NOT THE BOX
+--
+-- The HUD's Speed label is a 260px box holding about 110px of text, because it
+-- has to fit "139.88T" as well as "620". Anchoring to the box put the pointer a
+-- finger-width of empty space away from the number it was pointing at.
+-- TextBounds is what is actually on screen.
+--==============================================================================
+local function targetRect(object: GuiObject): Spot.Rect
+	local r = rectOf(object)
+	if object:IsA("TextLabel") and object.TextBounds.X > 4 then
+		local glyphs = math.min(r.w, object.TextBounds.X + 6 * UIKit.scaleOf(object))
+		if object.TextXAlignment == Enum.TextXAlignment.Right then
+			return { x = r.x + r.w - glyphs, y = r.y, w = glyphs, h = r.h }
+		elseif object.TextXAlignment == Enum.TextXAlignment.Center then
+			return { x = r.x + (r.w - glyphs) * 0.5, y = r.y, w = glyphs, h = r.h }
+		end
+		return { x = r.x, y = r.y, w = glyphs, h = r.h }
 	end
-	pointerText.Text = text
-	pointer.Visible = true
+	return r
+end
+
+--==============================================================================
+-- THE SPOTLIGHT, LIVE
+--
+-- `lights` holds this step's Light per target (TutorialSpotlight.advance), made
+-- new only when the STEP changes -- a respawn is not a new life. `lit*` is the
+-- one on screen now, if any.
+--==============================================================================
+local lights: { [string]: Spot.Light } = {}
+local lightsStep = ""
+local litKey: string? = nil
+local litTarget: GuiObject? = nil
+local litButton: GuiButton? = nil
+local litConnections: { RBXScriptConnection } = {}
+local fading = false
+-- When each of this step's targets was pressed, lit or not. A pressed button
+-- has done its job and is not pointed at again in the step (the hand stays on
+-- one only while it is still waiting to be pressed); and after OBBY, TELEPORT
+-- waits out the teleport cooldown the two share before it is lit.
+local pressedAt: { [string]: number } = {}
+
+-- A controller's selection held on the lit button, and what had it before.
+local selectedButton: GuiButton? = nil
+local selectionBefore: GuiObject? = nil
+local selectionSaved: { GuiObject? } = {}
+
+local blockers: { TextButton } = {}
+local candidates: { GuiObject } = {}
+local lastScan = 0
+local SCAN_EVERY = 0.5
+
+-- Each lit button's own D-pad key (its words name it); and what closes the
+-- SPEED spotlight, which lights a label and takes a tap anywhere.
+local PAD_KEYS: { [string]: Enum.KeyCode } = {
+	biomes = Enum.KeyCode.DPadLeft,
+	obby = Enum.KeyCode.DPadRight,
+	teleport = Enum.KeyCode.DPadUp,
+}
+local TAP_INPUTS: { [Enum.UserInputType]: boolean } = {
+	[Enum.UserInputType.MouseButton1] = true,
+	[Enum.UserInputType.Touch] = true,
+}
+local TAP_KEYS: { [Enum.KeyCode]: boolean } = {
+	[Enum.KeyCode.ButtonA] = true,
+	[Enum.KeyCode.ButtonB] = true,
+	[Enum.KeyCode.ButtonX] = true,
+	[Enum.KeyCode.ButtonY] = true,
+}
+-- Guis whose buttons are never blocked: this guide's own (Skip guide), its two
+-- drawing layers, and Roblox's touch controls.
+local NEVER_BLOCKED: { [string]: boolean } = {
+	SeedBeginnerGuide = true,
+	SeedGuideSpotlight = true,
+	SeedGuideMarker = true,
+	TouchGui = true,
+}
+
+local function anyAButtonDown(): boolean
+	for _, pad in ipairs(UserInputService:GetConnectedGamepads()) do
+		if UserInputService:IsGamepadButtonDown(pad, Enum.KeyCode.ButtonA) then
+			return true
+		end
+	end
+	return false
+end
+
+--==============================================================================
+-- A CONTROLLER'S SELECTION, BY PADFOCUS'S RULES
+--
+-- Only with a controller in hand, and only once an A that may still be down is
+-- let go. Trapped on the button -- each NextSelection points back at it -- so
+-- the D-pad cannot walk it off, and marked GuideLit, so the button's own D-pad
+-- key presses it as well (the engine's navigation takes the D-pad first while
+-- something is selected). Handed back the moment the light ends: to what had
+-- it, if that is still there to select, else to nobody. A push of the left
+-- stick hands it back at once -- the stick is the character's, and movement is
+-- never blocked.
+--==============================================================================
+local function takeSelection(button: GuiButton)
+	if selectedButton == button then
+		return
+	end
+	selectedButton = button
+	local before = GuiService.SelectedObject
+	selectionBefore = if before ~= button then before else nil
+	selectionSaved = { button.NextSelectionUp, button.NextSelectionDown, button.NextSelectionLeft,
+		button.NextSelectionRight }
+	button.NextSelectionUp = button
+	button.NextSelectionDown = button
+	button.NextSelectionLeft = button
+	button.NextSelectionRight = button
+	button:SetAttribute(ATTR.GuideLit, true)
+	GuiService.SelectedObject = button
+end
+
+local function releaseSelection()
+	local button = selectedButton
+	if not button then
+		return
+	end
+	selectedButton = nil
+	button.NextSelectionUp = selectionSaved[1]
+	button.NextSelectionDown = selectionSaved[2]
+	button.NextSelectionLeft = selectionSaved[3]
+	button.NextSelectionRight = selectionSaved[4]
+	table.clear(selectionSaved)
+	button:SetAttribute(ATTR.GuideLit, nil)
+	if GuiService.SelectedObject == button then
+		local back = selectionBefore
+		GuiService.SelectedObject = if back and PadInput.active() and back.Selectable and shown(back)
+			then back
+			else nil
+	end
+	selectionBefore = nil
+end
+
+--==============================================================================
+-- THE BLOCKERS: ONE TRANSPARENT SINK OVER EVERY OTHER BUTTON
+--
+-- Gathered every SCAN_EVERY seconds while a dim shows (a prompt comes and goes
+-- as the player walks) and laid over their buttons every frame. Never over the
+-- lit button, its parts or what holds it; never over the guide's own guis or
+-- Roblox's touch controls; nothing in a SurfaceGui, which is in the world.
+--==============================================================================
+local function blockerAt(i: number): TextButton
+	local made = blockers[i]
+	if made then
+		return made
+	end
+	local b = Instance.new("TextButton")
+	b.Name = "Blocker"
+	b.Text = ""
+	b.BackgroundTransparency = 1
+	b.BorderSizePixel = 0
+	b.AutoButtonColor = false
+	b.Selectable = false
+	b.Active = true
+	b.ZIndex = 1
+	b.Visible = false
+	b.Parent = blockerFolder
+	blockers[i] = b
+	return b
+end
+
+local function hideBlockers()
+	for _, b in ipairs(blockers) do
+		b.Visible = false
+	end
+end
+
+local function rescan(litObject: GuiObject?)
+	table.clear(candidates)
+	for _, holder in ipairs(playerGui:GetChildren()) do
+		if holder:IsA("ScreenGui") and holder.Enabled and not NEVER_BLOCKED[holder.Name] then
+			for _, d in ipairs(holder:GetDescendants()) do
+				if (d:IsA("GuiButton") or d:IsA("TextBox")) and d ~= litObject
+					and not (litObject and (d:IsDescendantOf(litObject) or litObject:IsDescendantOf(d)))
+					and d:FindFirstAncestorWhichIsA("SurfaceGui") == nil and shown(d) then
+					table.insert(candidates, d)
+				end
+			end
+		end
+	end
+	lastScan = os.clock()
+end
+
+local function placeBlockers(litRect: Spot.Rect?)
+	local used = 0
+	for _, object in ipairs(candidates) do
+		if object.Parent and shown(object) then
+			local r = rectOf(object)
+			if not (litRect and Spot.overlaps(r, litRect)) then
+				used += 1
+				local b = blockerAt(used)
+				b.Position = UDim2.fromOffset(r.x, r.y)
+				b.Size = UDim2.fromOffset(r.w, r.h)
+				b.Visible = true
+			end
+		end
+	end
+	for i = used + 1, #blockers do
+		blockers[i].Visible = false
+	end
+end
+
+--==============================================================================
+-- THE FACTS THE NEVER LIST READS (TutorialSpotlight.blocked), into one table
+-- filled in place: it is asked every frame while a dim shows.
+--==============================================================================
+local facts: Spot.Facts = {
+	guide = false,
+	alive = false,
+	safe = false,
+	carrying = false,
+	chased = false,
+	panel = false,
+	notice = false,
+	moment = false,
+	target = false,
+}
+
+local function spotFacts(): Spot.Facts
+	local character = player.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	facts.guide = banner.Visible and words.Visible and not hidden and not confirmSkip
+	facts.alive = humanoid ~= nil and humanoid.Health > 0 and root ~= nil
+	facts.safe = player:GetAttribute(ATTR.InSafeZone) == true
+	facts.carrying = type(player:GetAttribute(ATTR.CarryingSpecies)) == "string"
+	facts.chased = (tonumber(player:GetAttribute(ATTR.PursuedBy)) or 0) > 0
+		or (tonumber(player:GetAttribute(ATTR.WakingBy)) or 0) > 0
+	facts.panel = PadInput.panelOpen() or RewardMoments.busy(player, ATTR.OpenPanel)
+	facts.notice = Notice.showing() > 0
+	facts.moment = party.Visible
+	facts.target = shown(aim.target)
+	return facts
+end
+
+--==============================================================================
+-- ONE LIGHT'S LIFE: on, pressed, dropped, faded
+--==============================================================================
+-- The light is over: the dim, the ring and the blockers gone, the selection
+-- handed back, the guide's gui back at its own order. The hand stays.
+local function endLight()
+	for _, c in ipairs(litConnections) do
+		c:Disconnect()
+	end
+	table.clear(litConnections)
+	releaseSelection()
+	hole.Visible = false
+	ring.Visible = false
+	shade.Transparency = 1 - Spot.Dim
+	ringStroke.Transparency = 0
+	ringStroke.Thickness = Spot.Ring.Thickness
+	hideBlockers()
+	table.clear(candidates)
+	litKey, litTarget, litButton = nil, nil, nil
+	fading = false
+	gui.DisplayOrder = GUIDE_ORDER
+end
+
+-- The step's target `key` was pressed -- lit or not -- so its spotlight is
+-- spent, and one that is up lifts the instant it is.
+local function press(key: string)
+	pressedAt[key] = os.clock()
+	local light = lights[key]
+	if not light then
+		light = Spot.newLight()
+		lights[key] = light
+	end
+	light.phase = "spent"
+	if litKey == key then
+		endLight()
+	end
+end
+
+local function startLight(key: string)
+	local target, button = aim.target, aim.button
+	litKey, litTarget, litButton = key, target, button
+	fading = false
+	gui.DisplayOrder = SPOT_ORDER + 1
+	shade.Transparency = 1 - Spot.Dim
+	ringStroke.Transparency = 0
+	hole.Visible = true
+	ring.Visible = true
+	rescan(button or target)
+	if button then
+		table.insert(litConnections, button.Activated:Connect(function()
+			press(key)
+		end))
+	end
+	local padKey = PAD_KEYS[key]
+	table.insert(litConnections, UserInputService.InputBegan:Connect(function(input: InputObject)
+		if litKey ~= key then
+			return
+		end
+		if key == "speed" then
+			if TAP_INPUTS[input.UserInputType] or TAP_KEYS[input.KeyCode] then
+				press(key)
+			end
+		elseif padKey and input.KeyCode == padKey then
+			press(key)
+		end
+	end))
+	table.insert(litConnections, UserInputService.InputChanged:Connect(function(input: InputObject)
+		if input.KeyCode == Enum.KeyCode.Thumbstick1 and input.Position.Magnitude > 0.5 then
+			local held = selectedButton
+			if held and GuiService.SelectedObject == held then
+				GuiService.SelectedObject = nil
+			end
+		end
+	end))
+	if button and PadInput.active() then
+		task.spawn(function()
+			local waited = 0
+			while anyAButtonDown() and waited < 1 do
+				waited += task.wait()
+			end
+			if litKey == key and litButton == button and not fading then
+				takeSelection(button)
+			end
+		end)
+	end
+end
+
+-- Unpressed for FadeAfter: the blockers and the selection go at once, the dim
+-- fades, and the hand stays until the step moves on.
+local function fadeLight()
+	fading = true
+	hideBlockers()
+	table.clear(candidates)
+	releaseSelection()
+	local info = TweenInfo.new(Spot.FadeSeconds, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	TweenService:Create(shade, info, { Transparency = 1 }):Play()
+	local out = TweenService:Create(ringStroke, info, { Transparency = 1 })
+	local key = litKey
+	out.Completed:Once(function()
+		if litKey == key and fading then
+			endLight()
+		end
+	end)
+	out:Play()
+end
+
+-- Every button the hand has aimed at, heard from then on: a press counts whether
+-- or not its spotlight was up at the time (only while it is still the target).
+local hooked: { [GuiButton]: string } = setmetatable({}, { __mode = "k" }) :: any
+
+-- Five times a second, after refresh has said what the hand points at.
+local function spotTick()
+	local key = aim.key
+	local aimed = aim.button
+	if aimed and key and hooked[aimed] == nil then
+		hooked[aimed] = key
+		table.insert(connections, aimed.Activated:Connect(function()
+			if aim.button == aimed then
+				press(hooked[aimed])
+			end
+		end))
+	end
+	-- What the step points at has moved on -- the pod equipped, OBBY done, the
+	-- step finished, the guide hidden: a light that was up ends where it stands.
+	if litKey and (litKey ~= key or aim.button ~= litButton) then
+		local light = lights[litKey :: string]
+		if light then
+			light.phase = "spent"
+		end
+		endLight()
+	end
+	if not key then
+		return
+	end
+	local light = lights[key]
+	if not light then
+		light = Spot.newLight()
+		lights[key] = light
+	end
+	local event = Spot.advance(light, Spot.blocked(spotFacts()), false, os.clock())
+	if event == "show" then
+		startLight(key)
+	elseif event == "drop" or event == "lift" then
+		endLight()
+	elseif event == "fade" then
+		fadeLight()
+	end
+end
+
+--==============================================================================
+-- DRAWING THE HANDS
+--
+-- The hand's place is worked out when what it points at could have moved --
+-- every frame while a spotlight shows (the window follows its button frame by
+-- frame), five times a second otherwise -- and only TAPPED every frame.
+--==============================================================================
+local function measurer(): (string, number) -> Vector2
+	local lastText, lastSize, last = "", -1, Vector2.zero
+	return function(text: string, size: number): Vector2
+		if text ~= lastText or size ~= lastSize then
+			lastText, lastSize = text, size
+			last = TextService:GetTextSize(text, size, Enum.Font.LuckiestGuy, Vector2.new(4000, 400))
+		end
+		return last
+	end
+end
+local measureWords, measureKey, measureWorld = measurer(), measurer(), measurer()
+
+local placed: Spot.Hand? = nil
+
+--==============================================================================
+-- THE BANNER MAKES ROOM (2026-10-08)
+--
+-- Under a button in the top row the hand points up, as drawn -- and on a
+-- desktop the guide's own banner stands right there, under that row. So while
+-- the hand or its words would stand on the banner, the guide's words step down
+-- below them, Skip guide with them, and come back when the hand moves on. On a
+-- phone the words stand in the left column and never meet it. `wordsShift`
+-- (declared with the words, above) is in the guide gui's own units.
+--==============================================================================
+local function makeRoom(h: Spot.Hand?, at: Spot.Rect?)
+	local shift = 0
+	if h and not guide and banner.Visible then
+		local k = UIKit.scaleOf(gui)
+		local b = rectOf(banner)
+		local top = b.y - wordsShift * k
+		local unshifted: Spot.Rect = { x = b.x, y = top, w = b.w, h = b.h }
+		local foot = -math.huge
+		for _, r in ipairs({ h.rect, h.tapped, at }) do
+			if r and Spot.overlaps(r, unshifted) then
+				foot = math.max(foot, r.y + r.h)
+			end
+		end
+		if foot > top then
+			shift = math.ceil((foot + 4 - top) / k)
+		end
+	end
+	if shift ~= wordsShift then
+		wordsShift = shift
+		words.Position = UDim2.fromOffset(0, shift)
+		publishReach()
+	end
+end
+
+local function hideHand()
+	placed = nil
+	hand.Visible = false
+	handWords.Visible = false
+	handKey.Visible = false
+	makeRoom(nil, nil)
+end
+
+local function placeHand()
+	local target = aim.target
+	if not (target and shown(target)) then
+		hideHand()
+		return
+	end
+	local k = UIKit.scaleOf(gui)
+	local lit = litKey ~= nil and not fading and litTarget == target
+	-- Lit: the window stops short of a neighbouring button rather than light it.
+	local others: { Spot.Rect }? = nil
+	if lit and #candidates > 0 then
+		local list: { Spot.Rect } = {}
+		for _, o in ipairs(candidates) do
+			if shown(o) then
+				table.insert(list, rectOf(o))
+			end
+		end
+		others = list
+	end
+	local window = Spot.window(targetRect(target), others)
+	local view = spotGui.AbsoluteSize
+	local screen: Spot.Rect = { x = 0, y = 0, w = view.X, h = view.Y }
+	-- The window first: it lands on its button whatever the hand can do.
+	if lit then
+		hole.Position = UDim2.fromOffset(window.x, window.y)
+		hole.Size = UDim2.fromOffset(window.w, window.h)
+		ring.Position = hole.Position
+		ring.Size = hole.Size
+		shade.Thickness = math.max(view.X, view.Y) * 1.5
+	end
+	local size = Spot.Hand.Size * tutorialScale * k
+	local h = Spot.handFor(window, screen, size)
+	if not h then
+		hideHand()
+		return
+	end
+	placed = h
+	hand.Size = UDim2.fromOffset(size, size)
+	hand.Rotation = h.rotation
+
+	local spec = if lit then Spot.Targets[litKey :: string] else nil
+	local text = if spec then spec.words else aim.text
+	local keyText = if spec and spec.key and PadInput.active() then spec.key :: string else ""
+	local wordsAt: Spot.Rect? = nil
+	if text == "" then
+		handWords.Visible = false
+		handKey.Visible = false
+	else
+		local wordSize = math.floor(Spot.Words.Size * tutorialScale * k + 0.5)
+		local keySize = math.floor(Spot.Words.KeySize * tutorialScale * k + 0.5)
+		local a = measureWords(text, wordSize)
+		local b = if keyText ~= "" then measureKey(keyText, keySize) else Vector2.zero
+		local edge = math.ceil(6 * k)
+		local w = math.max(a.X, b.X) + edge
+		local tall = a.Y + edge + (if keyText ~= "" then b.Y + 2 else 0)
+		local at = Spot.wordsFor(h, window, screen, w, tall)
+		wordsAt = at
+		-- Read from the hand outward: left-aligned to its right, right-aligned to
+		-- its left, centred over or under it.
+		local align = if at.x >= h.rect.x + h.rect.w then Enum.TextXAlignment.Left
+			elseif at.x + at.w <= h.rect.x then Enum.TextXAlignment.Right
+			else Enum.TextXAlignment.Center
+		handWords.TextSize = wordSize
+		handWords.Text = text
+		handWords.TextXAlignment = align
+		handWords.Position = UDim2.fromOffset(at.x, at.y)
+		handWords.Size = UDim2.fromOffset(w, a.Y + edge)
+		handWords.Visible = true
+		if keyText ~= "" then
+			handKey.TextSize = keySize
+			handKey.Text = keyText
+			handKey.TextXAlignment = align
+			handKey.Position = UDim2.fromOffset(at.x, at.y + a.Y + edge - 2)
+			handKey.Size = UDim2.fromOffset(w, b.Y + 4)
+			handKey.Visible = true
+		else
+			handKey.Visible = false
+		end
+	end
+	makeRoom(h, wordsAt)
+end
+
+-- 0 at rest, 1 at the top of a tap, once every Hand.Period seconds.
+local function tapAt(clock: number): number
+	local t = (clock % Spot.Hand.Period) / Spot.Hand.Period
+	return (1 - math.cos(t * math.pi * 2)) * 0.5
+end
+
+local function drawWorld(clock: number)
+	local point = worldPoint
+	local camera = workspace.CurrentCamera
+	if not (point and camera) then
+		worldHand.Visible = false
+		worldWords.Visible = false
+		return
+	end
+	local tip = point + Vector3.new(0, WorldHand.Bob * (1 - tapAt(clock)), 0)
+	local v = camera:WorldToViewportPoint(tip)
+	local view = camera.ViewportSize
+	if v.Z <= 0.1 then
+		worldHand.Visible = false
+		worldWords.Visible = false
+		return
+	end
+	local k = UIKit.scaleOf(gui)
+	local px = WorldHand.Studs * view.Y / (2 * v.Z * math.tan(math.rad(camera.FieldOfView) * 0.5))
+	local size = math.clamp(px, WorldHand.Least * k, WorldHand.Most * k)
+	-- Its fingertip, pointing down, ON the projected point.
+	local off = Spot.tipOffset(180, size)
+	local cx, cy = v.X - off.X, v.Y - off.Y
+	worldHand.Size = UDim2.fromOffset(size, size)
+	worldHand.Position = UDim2.fromOffset(cx, cy)
+	local onScreen = cx > -size and cx < view.X + size and cy > -size and cy < view.Y + size
+	worldHand.Visible = onScreen
+	if onScreen and worldText ~= "" then
+		local ws = math.floor(20 * tutorialScale * k + 0.5)
+		local m = measureWorld(worldText, ws)
+		local w = m.X + 8
+		-- Beside the hand on its right, or on its left where the right would run
+		-- off the screen.
+		local x = cx + size * 0.5 + 2
+		local left = x + w > view.X - 4
+		if left then
+			x = cx - size * 0.5 - 2 - w
+		end
+		worldWords.TextSize = ws
+		worldWords.Text = worldText
+		worldWords.TextXAlignment = if left then Enum.TextXAlignment.Right else Enum.TextXAlignment.Left
+		worldWords.Size = UDim2.fromOffset(w, m.Y + 6)
+		worldWords.Position = UDim2.fromOffset(x, cy - (m.Y + 6) * 0.5)
+		worldWords.Visible = true
+	else
+		worldWords.Visible = false
+	end
+end
+
+local warnedDraw = false
+local function drawFrame(clock: number)
+	if litKey and not fading then
+		-- DROPPED AT ONCE when a NEVER comes true, not at the next tick.
+		if Spot.blocked(spotFacts()) ~= nil then
+			local light = lights[litKey :: string]
+			if light then
+				light.phase = "spent"
+			end
+			endLight()
+		else
+			if clock - lastScan >= SCAN_EVERY then
+				rescan(litButton or litTarget)
+			end
+			placeHand()
+			local own = litButton or litTarget
+			placeBlockers(if own then rectOf(own) else nil)
+			local p = tapAt(clock * Spot.Hand.Period / Spot.Ring.Period)
+			ringStroke.Thickness = Spot.Ring.Thickness * (1 + 0.6 * p)
+			ringStroke.Transparency = 0.35 * (1 - p)
+		end
+	end
+	local h = placed
+	if h then
+		local bob = Spot.Hand.Bob * (h.size / Spot.Hand.Size) * tapAt(clock)
+		hand.Position = UDim2.fromOffset(h.rect.x + h.rect.w * 0.5 + h.push.X * bob,
+			h.rect.y + h.rect.h * 0.5 + h.push.Y * bob)
+		hand.Visible = true
+	end
+	drawWorld(clock)
 end
 
 --==============================================================================
@@ -935,9 +1679,8 @@ local function clearWorld()
 	routeFrom = Vector3.new(1e6, 1e6, 1e6)
 	highlight.Enabled = false
 	highlight.Adornee = nil
-	beacon.Enabled = false
-	finger.Enabled = false
-	pointer.Visible = false
+	handOver(nil)
+	pointAt(nil, "")
 end
 
 --==============================================================================
@@ -998,8 +1741,6 @@ local function celebrate()
 		out.Completed:Wait()
 		party.Visible = false
 	end)
-	-- The hint that follows is optional, brief, and never places anything.
-	hintUntil = os.clock() + 45
 end
 
 --==============================================================================
@@ -1009,22 +1750,27 @@ local function receive(state: any)
 	if type(state) ~= "table" or type(state.Done) ~= "table" then
 		return
 	end
-	local before = if progress then (select(1, Data.Current(progress))) else nil
+	local had = progress
+	local before = if had then (select(1, Data.Current(had))) else nil
+	-- The first loop, train through hatch, before this packet (nil: the first).
+	local loopBefore: boolean? = if had then Data.FirstLoopDone(had) else nil
 	progress = state :: Data.Progress
 	local now = select(1, Data.Current(progress :: Data.Progress))
 	local finished = now > #Data.Steps
-	if before and before <= #Data.Steps and finished and not state.Skipped then
-		-- Crossed the line THIS SESSION. A player who joins already finished
-		-- takes the branch below and gets no fanfare for old news.
-		clearWorld()
+	local loopDone = Data.FirstLoopDone(progress :: Data.Progress)
+	if loopBefore == false and loopDone and not state.Skipped then
+		-- THE FIRST HATCH, crossed THIS SESSION: the congratulations, as they
+		-- always were -- the guide's step 7, the travel lesson, comes after them
+		-- (2026-10-08). A player who joins past the hatch takes the branch below
+		-- and gets no fanfare for old news.
 		--======================================================================
 		-- AFTER THE HATCH'S OWN REVEAL, NOT BEFORE IT (2026-09-29)
 		--
-		-- The last step is the first hatch, and a hatch now shows its plant
-		-- three seconds after it happens, where the pod stood (HatchRoll): the
-		-- plant's Tool says until when. Congratulations for a plant nobody has
-		-- seen yet would be early, so they wait for the plant to have come up.
-		-- With no roll running there is nothing to wait for.
+		-- A hatch shows its plant three seconds after it happens, where the pod
+		-- stood (HatchRoll): the plant's Tool says until when. Congratulations
+		-- for a plant nobody has seen yet would be early, so they wait for the
+		-- plant to have come up. With no roll running there is nothing to wait
+		-- for.
 		--======================================================================
 		local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
 		local shownAt = HatchRoll.pendingUntil(player)
@@ -1039,8 +1785,18 @@ local function receive(state: any)
 		else
 			celebrate()
 		end
-	elseif not before and finished then
+	elseif loopBefore == nil and loopDone then
 		celebrated = true
+	end
+	if before and before <= #Data.Steps and finished then
+		-- The whole guide finished THIS SESSION -- the travel lesson was its last
+		-- step. The hint that follows is optional, brief, and never places
+		-- anything: the plant from the first hatch, if it is still in the Bag.
+		clearWorld()
+		if not state.Skipped then
+			hintUntil = os.clock() + 45
+		end
+	elseif not before and finished then
 		hidden = true
 	end
 end
@@ -1094,6 +1850,9 @@ local function refresh()
 	if not state then
 		return
 	end
+	-- Every pass says again what the two hands point at; nothing carries over.
+	pointAt(nil, "")
+	handOver(nil)
 	local index = select(1, Data.Current(state))
 	local complete = index > #Data.Steps
 
@@ -1130,8 +1889,7 @@ local function refresh()
 			if plot and soil and soil:IsA("BasePart") and live then
 				local spot = freeSpot(plot, soil, (root :: BasePart).Position)
 				if spot then
-					fingerAnchor.Position = spot + Vector3.new(0, 4.2, 0)
-					finger.Enabled = true
+					handOver(spot + Vector3.new(0, SOIL_TIP, 0))
 				end
 			end
 			pointAt(hotbarSlotFor(hatchling), "This one")
@@ -1149,6 +1907,13 @@ local function refresh()
 		-- Every step change starts from nothing on screen.
 		clearWorld()
 		lastStep = step.Id
+	end
+	if step.Id ~= lightsStep then
+		-- A new step: each of its spotlights gets its one life (a respawn, which
+		-- clears lastStep above, is not a new step).
+		lightsStep = step.Id
+		table.clear(lights)
+		table.clear(pressedAt)
 	end
 
 	instruction.Text = step.Title
@@ -1188,21 +1953,28 @@ local function refresh()
 		local stand = beltStand(belt)
 		highlight.Adornee = belt
 		highlight.Enabled = true
-		beaconAnchor.Position = stand + Vector3.new(0, 5.2, 0)
-		beacon.Enabled = true
+		-- The hand over the belt -- in front of the gate on plots 1-5, beside it
+		-- on plot 6: myBelt finds whichever this plot has.
+		handOver(stand + Vector3.new(0, BELT_TIP, 0))
 		if id == "speed" then
-			-- Point at the REAL speed readout and count toward the target.
+			-- Point at the REAL speed readout and count toward the target --
+			-- after its one spotlight, "YOUR SPEED · GET 400", which a tap
+			-- anywhere closes (it never stops the run).
 			--==============================================================
 			-- The CURRENT value uses the HUD's own compactor, so it reads the
 			-- same way the number it is pointing at does. The TARGET is written
-			-- out in full: compact() turns 1000 into "1K", and "620 / 1K" is a
-			-- worse goal to read than "620 / 1,000" -- which is also the number
-			-- the step title just said out loud.
+			-- out in full (Data.SpeedTargetText): compact() would turn a target
+			-- of 1000 into "1K", and "620 / 1K" is a worse goal to read than
+			-- "620 / 1,000" -- the same words the step title just said.
 			--==============================================================
-			pointAt(hudSpeedLabel(), Config.compact(speedScore) .. " / 1,000 SPEED")
+			pointAt(hudSpeedLabel(), Config.compact(speedScore) .. " / " .. Data.SpeedTargetText .. " SPEED", "speed")
 			subline.Text = "Keep running on your mill."
-		else
-			pointer.Visible = false
+		end
+		-- THE STARTER POD (FirstMinute, 2026-10-08): while the pod the game
+		-- planted for a new player is still growing, the training steps say so.
+		-- The server sets StarterHatchAt for exactly that long.
+		if player:GetAttribute(Config.Attributes.StarterHatchAt) ~= nil then
+			subline.Text = FirstMinute.GrowingWords
 		end
 		if (here - stand).Magnitude > 12 then
 			requestRoute(here, stand)
@@ -1258,8 +2030,7 @@ local function refresh()
 				local stand = beltStand(belt)
 				highlight.Adornee = belt
 				highlight.Enabled = true
-				beaconAnchor.Position = stand + Vector3.new(0, 5.2, 0)
-				beacon.Enabled = true
+				handOver(stand + Vector3.new(0, BELT_TIP, 0))
 				if (here - stand).Magnitude > 12 then
 					requestRoute(here, stand)
 				else
@@ -1273,6 +2044,24 @@ local function refresh()
 		if workspace:GetAttribute(ATTR.WorldPhase) == "Night" then
 			waitAtTheMill("The nests are closed for the night!")
 			return
+		end
+		--==================================================================
+		-- BIOMES, LIT ONCE (2026-10-08): its teleport lands at the Greenhollow
+		-- entrance, where the arrows to the nest take over -- and walking there
+		-- is just as good. Only while the guide is sending them to Greenhollow:
+		-- never at night or to a stripped nest, which send them to the mill.
+		-- From the Safe Zone only, where the button stands at all.
+		--==================================================================
+		local function biomesHand()
+			-- Pressed once, it has done its job: from the entrance (still the Safe
+			-- Zone) the arrows take over, and the hand does not ask again.
+			if pressedAt.biomes then
+				return
+			end
+			local biomes = hudButton("SeedBiomesButton", "TeleportToBiomes")
+			if biomes then
+				pointAt(biomes, "TAP BIOMES", "biomes", biomes)
+			end
 		end
 		--==================================================================
 		-- THE ONE WITH THEIR NAME ON IT COMES FIRST
@@ -1326,7 +2115,7 @@ local function refresh()
 			if nestFar then
 				subline.Text = "Heading to Greenhollow..."
 				highlight.Enabled = false
-				beacon.Enabled = false
+				biomesHand()
 				requestRoute(here, Vector3.new(0, Config.Map.GroundY, -Config.Map.FieldFront - 60))
 			else
 				waitAtTheMill("Greenhollow is picked clean!")
@@ -1335,8 +2124,8 @@ local function refresh()
 		end
 		highlight.Adornee = best
 		highlight.Enabled = true
-		beaconAnchor.Position = bestPos + Vector3.new(0, 5, 0)
-		beacon.Enabled = true
+		handOver(bestPos + Vector3.new(0, POD_TIP, 0))
+		biomesHand()
 		requestRoute(here, bestPos)
 		return
 	end
@@ -1344,7 +2133,11 @@ local function refresh()
 	--== 4: home, through the real banking boundary ==========================
 	if id == "bank" then
 		local carrying = type(player:GetAttribute(ATTR.CarryingSpecies)) == "string"
-		if not carrying then
+		if carrying then
+			-- No dim here: true to the letter, TeleportHome refuses a raided pod
+			-- (CARRYING_POD), and the button stands only in the Safe Zone anyway.
+			subline.Text = "Run back! Teleport won't work while you carry a pod."
+		else
 			subline.Text = if toolOf(false) then "Head to your soil." else "Go and take another pod."
 		end
 		-- Aim at the player's own plot spawn: it is inside the field, past the
@@ -1357,8 +2150,7 @@ local function refresh()
 			end
 		end
 		goal = goal or (plot:GetPivot().Position + Vector3.new(0, 2, 0))
-		beaconAnchor.Position = goal + Vector3.new(0, 5, 0)
-		beacon.Enabled = true
+		handOver(goal + Vector3.new(0, SPAWN_TIP, 0))
 		requestRoute(here, goal)
 		return
 	end
@@ -1389,14 +2181,19 @@ local function refresh()
 			clearWorld()
 			return
 		end
-		fingerAnchor.Position = spot + Vector3.new(0, 4.2, 0)
-		finger.Enabled = true
 		highlight.Adornee = soil
 		highlight.Enabled = true
 		if not pod.Parent or pod.Parent ~= player.Character then
-			pointAt(hotbarSlotFor(pod), "Equip this")
+			-- Not in the hand yet: its hotbar slot, lit once -- "EQUIP YOUR POD".
+			local face = slotFaceFor(pod)
+			if face then
+				pointAt(face, "EQUIP YOUR POD", "slot", face)
+			else
+				pointAt(hotbarSlotFor(pod), "EQUIP YOUR POD")
+			end
 		else
-			pointer.Visible = false
+			-- In the hand: the hand over a free spot of soil (the old finger's job).
+			handOver(spot + Vector3.new(0, SOIL_TIP, 0))
 		end
 		if (here - spot).Magnitude > 14 then
 			requestRoute(here, spot)
@@ -1418,8 +2215,6 @@ local function refresh()
 		local point = pod:GetPivot().Position
 		highlight.Adornee = pod
 		highlight.Enabled = true
-		beaconAnchor.Position = point + Vector3.new(0, 4.6, 0)
-		beacon.Enabled = true
 		local ready = tonumber(pod:GetAttribute("HatchAt"))
 			or ((tonumber(pod:GetAttribute("PlantedAt")) or os.time())
 				+ SeedData.GrowSeconds(pod:GetAttribute("Tier")))
@@ -1429,10 +2224,46 @@ local function refresh()
 		else
 			subline.Text = "Hold the Hatch prompt."
 		end
+		-- The hand over the pod: "HOLD HATCH" once it can be.
+		handOver(point + Vector3.new(0, POD_TIP, 0), if left > 0 then "READY IN " .. left .. "s" else "HOLD HATCH")
 		if (here - point).Magnitude > 14 then
 			requestRoute(here, point)
 		else
 			hideTrail()
+		end
+		return
+	end
+
+	--== 7: the travel buttons (owner, 2026-10-08) ============================
+	if id == "travel" then
+		--======================================================================
+		-- TWO SPOTLIGHTS IN A ROW: OBBY, then TELEPORT TO PLOT
+		--
+		-- a. OBBY, "TAP OBBY": to the Floating Garden's entrance -- unless OBBY is
+		--    off, hidden or has no rect on this screen, when it is straight to b.
+		-- b. TELEPORT TO PLOT, "TAP TO GO HOME" -- lit only once the teleport
+		--    cooldown the two buttons share has run out since OBBY was pressed, so
+		--    the press it asks for is never refused. The server records the step
+		--    on that teleport's success (PlotService.TeleportHome), and nothing
+		--    here claims it.
+		-- Both stand only in the Safe Zone; outside it the words say so.
+		--======================================================================
+		local obby = hudButton("SeedObbyButton", "TeleportToObby")
+		local home = hudButton("SeedPlotTeleport", "TeleportToPlot")
+		local obbyLight = lights.obby
+		local obbyDone = pressedAt.obby ~= nil or (obbyLight ~= nil and obbyLight.phase == "spent")
+		if obby and not obbyDone then
+			subline.Text = "OBBY takes you to the Floating Garden."
+			pointAt(obby, "TAP OBBY", "obby", obby)
+		elseif home then
+			subline.Text = "TELEPORT TO PLOT takes you home."
+			local pressed = pressedAt.obby
+			local cooling = pressed ~= nil and os.clock() - pressed < PLOT.TeleportCooldownSeconds + COOL_MARGIN
+			if not cooling then
+				pointAt(home, "TAP TO GO HOME", "teleport", home)
+			end
+		else
+			subline.Text = "OBBY and TELEPORT TO PLOT work from the Safe Zone."
 		end
 		return
 	end
@@ -1441,10 +2272,11 @@ end
 --==============================================================================
 -- TWO LOOPS: STATE AT 5Hz, MOTION EVERY FRAME
 --
--- The per-frame half only reads a clock and writes transparencies and one
--- position on a fixed pool. It never searches the world, allocates or rebuilds
--- a path -- that is the 5Hz half's job, and even there the route is throttled
--- again on top.
+-- The per-frame half reads a clock, taps the two hands and projects the world
+-- one's point; while a spotlight shows it also follows the lit button and lays
+-- the blockers, for at most FadeAfter seconds. It never searches the world or
+-- rebuilds a path -- that is the 5Hz half's job, and even there the route is
+-- throttled again on top.
 --==============================================================================
 local since = 0
 table.insert(connections, RunService.Heartbeat:Connect(function(dt)
@@ -1455,15 +2287,28 @@ table.insert(connections, RunService.Heartbeat:Connect(function(dt)
 		if not ok then
 			warn("[Seed/TutorialUI] " .. tostring(err))
 		end
+		local lightOk, lightErr = pcall(spotTick)
+		if not lightOk then
+			warn("[Seed/TutorialUI] spotlight: " .. tostring(lightErr))
+		end
+		if not (litKey and not fading) then
+			pcall(placeHand)
+		end
 	end
-	local clock = os.clock()
 	-- The trail animates itself: the arrow texture scrolls from TextureSpeed, so
 	-- there is deliberately nothing here for it.
-	if beacon.Enabled then
-		beacon.StudsOffset = Vector3.new(0, math.sin(clock * 3.4) * 0.42, 0)
+	local drawn, drawErr = pcall(drawFrame, os.clock())
+	if not drawn and not warnedDraw then
+		warnedDraw = true
+		warn("[Seed/TutorialUI] draw: " .. tostring(drawErr))
 	end
-	if finger.Enabled then
-		finger.StudsOffset = Vector3.new(0, math.abs(math.sin(clock * 3.1)) * 0.7, 0)
+end))
+
+-- OBBY pressed, lit or not (the note ObbyButtonUI leaves for ObbyCamera): in the
+-- travel step that is part a done, and TELEPORT waits out the shared cooldown.
+table.insert(connections, player:GetAttributeChangedSignal(ObbyData.LocalAttributes.EntranceAsked):Connect(function()
+	if lightsStep == "travel" then
+		press("obby")
 	end
 end))
 
@@ -1480,9 +2325,13 @@ gui.Destroying:Connect(function()
 		connection:Disconnect()
 	end
 	table.clear(connections)
-	-- The billboards live under `gui` and go with it; the anchors and the
-	-- trail node pool lives under `world` and has to be taken down by hand.
+	-- A light that was up hands the selection back and takes its blockers.
+	endLight()
+	-- The trail node pool lives under `world`, and the hands and the dim in
+	-- their own guis: all of it has to be taken down by hand.
 	world:Destroy()
+	spotGui:Destroy()
+	markGui:Destroy()
 end)
 
 task.spawn(function()

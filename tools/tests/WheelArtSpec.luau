@@ -15,7 +15,8 @@
 --      pool, swap, product and the drawn order are what they were; the
 --      Colossal pod is still the second-rarest prize after the trail, and
 --      there is no Titan-and-Colossal prize.
---   2. THE ASSETS: the Speed icon is GameConfig.SourceIcons.training and the
+--   2. THE ASSETS: the Speed icon is GameConfig.SourceIcons.speed (split from
+--      `training` 2026-10-08: that key is the +25% boost's own shoe now) and the
 --      only id the art uses; no other id is written in WheelDraw; the pod
 --      upload slots are empty, so the pods are drawn in frames.
 --   3. THE FACE, built at the panel's phone and desktop sizes and the world's:
@@ -42,6 +43,7 @@ local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
 local WheelDraw = require(Shared:WaitForChild("WheelDraw"))
+local SizedIcon = require(Shared:WaitForChild("SizedIcon"))
 local ItemArt = require(Shared:WaitForChild("ItemArt"))
 local Scripts = StarterPlayer:WaitForChild("StarterPlayerScripts")
 
@@ -91,8 +93,11 @@ local ok, err = pcall(function()
 -- 1. NOTHING ABOUT A PRIZE CHANGED
 --==============================================================================
 say("-- 1. the prizes, unchanged --")
+-- WHEEL SCALES WITH THE PLAYER and INVITE PLANTS ON THE WHEEL (the owner's
+-- brief, 2026-10-08) changed exactly this: cash_small 2200 -> 2180, and the
+-- invite plant at 20 after the trail. The amounts are now each prize's FLOOR.
 local EXPECT = {
-	{ "cash_small", "cash", 5000, 2200, nil, nil },
+	{ "cash_small", "cash", 5000, 2180, nil, nil },
 	{ "speed_small", "speed", 1000, 2000, nil, nil },
 	{ "pod_common", "pod", nil, 1300, 2, "common" },
 	{ "boost_income", "boost", nil, 950, nil, nil },
@@ -104,6 +109,7 @@ local EXPECT = {
 	{ "cash_jackpot", "cash", 75000, 250, nil, nil },
 	{ "pod_colossal", "pod", nil, 60, 7, "common" },
 	{ "trail", "trail", nil, 40, nil, nil },
+	{ "invite", "invite", nil, 20, nil, nil },
 }
 local same = #WheelData.Rewards == #EXPECT
 for i, e in ipairs(EXPECT) do
@@ -113,15 +119,17 @@ for i, e in ipairs(EXPECT) do
 		same = false
 	end
 end
-check(same and WheelData.TotalWeight == 10000 and WheelData.ById.trail.swap == "cash_jackpot",
-	"every prize's id, kind, amount, weight, size and pool, in wheel order; the trail still swaps to the jackpot")
+check(same and WheelData.TotalWeight == 10000 and WheelData.ById.trail.swap == "cash_jackpot"
+		and WheelData.ById.invite.swap == "cash_jackpot",
+	"every prize's id, kind, floor, weight, size and pool, in wheel order (the brief's two changes only); "
+		.. "the trail and the invite plant swap to the jackpot")
 check(table.concat(WheelData.Pools.common, ",") == "nubkin,petalpip,spiretip,dunebud,paddlehop"
 		and table.concat(WheelData.Pools.rare, ",") == "toadcap,thornwhorl,bogbonnet,crookreed,cinderpaw,emberquill,novaorb,cosmospire",
 	"both species pools as they were")
 check(table.concat(WheelData.DisplayOrder, ",")
-		== "cash_small,speed_small,pod_common,pod_colossal,boost_income,pod_rare,cash_medium,trail,speed_large,pod_titan,boost_training,cash_jackpot"
+		== "cash_small,speed_small,pod_common,pod_colossal,boost_income,pod_rare,cash_medium,trail,speed_large,pod_titan,invite,boost_training,cash_jackpot"
 		and WheelData.DisplayFloor == 12,
-	"the drawn order and sizes as they were (so every landing is where it was)")
+	"the drawn order as it was, the invite plant drawn between the Titan pod and the training boost")
 local productsSame = #WheelData.Products == 3 and WheelData.Products[1].productId == 3715745320
 	and WheelData.Products[2].productId == 3715745407 and WheelData.Products[3].productId == 3715745552
 	and WheelData.Products[1].spins == 1 and WheelData.Products[2].spins == 5 and WheelData.Products[3].spins == 10
@@ -130,8 +138,9 @@ local byWeight = table.clone(WheelData.Rewards)
 table.sort(byWeight, function(a, b)
 	return a.weight < b.weight
 end)
-check(byWeight[1].id == "trail" and byWeight[2].id == "pod_colossal" and byWeight[3].id == "pod_titan",
-	"the Bloomrunner Trail is the rarest prize, the Colossal pod the second-rarest, then the Titan")
+check(byWeight[1].id == "invite" and byWeight[2].id == "trail" and byWeight[3].id == "pod_colossal"
+		and byWeight[4].id == "pod_titan",
+	"the invite plant is the rarest prize, then the Bloomrunner Trail, the Colossal pod and the Titan")
 local titans, colossals, both = 0, 0, 0
 for _, r in ipairs(WheelData.Rewards) do
 	if r.kind == "pod" and r.tier == 6 then
@@ -154,7 +163,9 @@ check(WheelData.ById.pod_titan.rarity == "Legendary" and WheelData.ById.pod_colo
 say("\n-- 2. the assets --")
 local drawSource = Shared:FindFirstChild("WheelDraw").Source
 local drawCode = code(drawSource)
-check(GameConfig.SourceIcons.training == "rbxassetid://96656510808947", "the Speed icon is the owner's upload, rbxassetid://96656510808947")
+check(GameConfig.SourceIcons.speed == "rbxassetid://99714577637458"
+		and GameConfig.SmallIcons[GameConfig.SourceIcons.speed] == "rbxassetid://114664524232030",
+	"the Speed icon is the owner's plain shoe, rbxassetid://99714577637458, with its small upload 114664524232030")
 check(not string.find(drawCode, "rbxassetid://%d") and not string.find(drawCode, "rbxasset://", 1, true),
 	"WheelDraw writes no asset id of its own: the Speed icon comes from SourceIcons, the pods' from WheelPodArt")
 local slots, bad = 0, {}
@@ -364,7 +375,12 @@ for _, size in ipairs({ 296, 520, 600 }) do
 		for _, d in ipairs(arms[id]:GetDescendants()) do
 			if d:IsA("ImageLabel") then
 				n += 1
-				right = right and d.Image == GameConfig.SourceIcons.training
+				-- The plain shoe, or its small version where it draws at 40 px or less.
+				right = right and SizedIcon.bigOf(d.Image) == GameConfig.SourceIcons.speed
+				local px = math.min(d.AbsoluteSize.X, d.AbsoluteSize.Y)
+				if px > 0 and d.Image ~= SizedIcon.at(GameConfig.SourceIcons.speed, px) then
+					right = false
+				end
 			end
 		end
 		return n, right
@@ -717,7 +733,7 @@ do
 		"when nothing steps it any more, the lettering is left on its plain ramp")
 	check(ui:find("ReducedMotionEnabled", 1, true) ~= nil and ui:find("art.still = lettersStill()", 1, true) ~= nil,
 		"reduced motion (Roblox's or FX Off) holds it still")
-	check(ui:find('icon = if prize.kind == "speed" then "training" else "wheel"', 1, true) ~= nil
+	check(ui:find('icon = if prize.kind == "speed" then "speed" else "wheel"', 1, true) ~= nil
 			and ui:find("holdLine(line, rarityText(prize.rarity), RESULT_SECONDS, prize.rainbow == true, prize)", 1, true) ~= nil
 			and ui:find("WheelDraw.icon(holder, shown, holder.Size.X.Offset)", 1, true) ~= nil,
 		"a won prize's line shows its picture, and a Speed win's notice wears the Speed icon")

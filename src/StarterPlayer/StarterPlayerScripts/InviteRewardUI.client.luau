@@ -688,8 +688,13 @@ local function enter(up: Up, c: InviteRewards.PopupCard)
 end
 
 -- One card, start to finish. Yields until it is gone.
+-- The plant the server says each tier gave (the "granted" payload's form): not
+-- the tier's own when the wheel gave that one first (InviteRewards, THE TRACK
+-- WITH THE WHEEL, 2026-10-08).
+local givenForm: { [number]: string } = {}
+
 local function show(tier: number)
-	local c = InviteRewards.popup(tier)
+	local c = InviteRewards.popup(tier, givenForm[tier])
 	paint(c)
 	if not placeCard() then
 		-- No clear spot on this screen at all: the notice says it instead.
@@ -850,6 +855,9 @@ local function pump()
 end
 
 InviteNews.subscribe(function(payload: InviteNews.Payload)
+	if payload.kind == "granted" and type(payload.form) == "string" then
+		givenForm[math.floor(tonumber(payload.tier) or 0)] = payload.form
+	end
 	if payload.kind == "granted" and InviteRewards.enqueue(queue, payload.tier) then
 		pump()
 	elseif payload.kind == "away" then

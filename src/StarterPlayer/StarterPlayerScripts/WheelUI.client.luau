@@ -120,6 +120,33 @@ end
 
 local ATTR = GameConfig.Attributes
 local A = WheelData.Attributes
+--==============================================================================
+-- THIS PLAYER'S PRIZES (2026-10-08: THE PRIZES SCALE WITH THE PLAYER, INVITE
+-- PLANTS ON THE WHEEL): the cash and Speed amounts the server published for the
+-- next spin (A.Amounts) -- never this script's own numbers, and the floors
+-- until they arrive -- and whether every invite plant is owned (the invite
+-- prize then pays its swap). One table: this script is close to Luau's 200.
+--==============================================================================
+local prizeWords: any = {}
+function prizeWords.amounts(): { [string]: number }
+	return WheelData.decodeAmounts(player:GetAttribute(A.Amounts))
+end
+function prizeWords.of(reward: WheelData.Reward): (string, string, string)
+	return WheelData.wordsFor(reward, prizeWords.amounts()[reward.id])
+end
+function prizeWords.label(reward: WheelData.Reward): string?
+	return (prizeWords.of(reward))
+end
+function prizeWords.ownsEveryInvite(): boolean
+	local text = player:GetAttribute(GameConfig.InviteRewards.Attributes.Owned)
+	local owned: { [string]: boolean } = {}
+	if type(text) == "string" then
+		for id in string.gmatch(text, "[^,]+") do
+			owned[id] = true
+		end
+	end
+	return WheelData.nextInvite(owned) == nil
+end
 local ACT = WheelData.Actions
 local OA = ObbyData.Attributes
 local ALMANAC = GameConfig.Almanac
@@ -145,8 +172,10 @@ local CARD_WIDTH = 104
 local CARD_ASPECT = 1.3
 local CARD_GAP = 8
 local CARD_FILL = 0.8
--- Reward info's rows: all twelve, in six pairs, fit a landscape phone's sheet
--- (229 of its 231) without a scroll until a pod row is opened.
+-- Reward info's rows: twelve, in six pairs, fitted a landscape phone's sheet
+-- (229 of its 231) without a scroll until a pod row was opened; the invite
+-- plant (2026-10-08) makes thirteen in seven, which layoutSheet draws smaller
+-- (no further than 28 of 34) and the list scrolls past that.
 local ROW_HEIGHT = 34
 local ROW_GAP = 5
 
@@ -1017,7 +1046,7 @@ local function buildRow(pair: Frame, reward: WheelData.Reward, column: number): 
 
 	local colour = rarityText(reward.rarity)
 	local name = WheelDraw.words(frame, "Name", 17, colour, C.NameInk, 1.5, 3)
-	name.Text = reward.short
+	name.Text = select(2, prizeWords.of(reward))
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.TextTruncate = Enum.TextTruncate.AtEnd
 	-- TITAN POD and COLOSSAL POD in their own lettering (2026-10-04); the rarity
@@ -1268,7 +1297,16 @@ local function paintFooter()
 	if trail then
 		local swap = WheelData.ById[WheelData.ById.trail.swap or ""]
 		trail.note.Visible = ownsTrail()
-		trail.note.Text = string.format("owned: pays %s instead", if swap then swap.short else "cash")
+		trail.note.Text = string.format("owned: pays %s instead", if swap then select(2, prizeWords.of(swap)) else "cash")
+	end
+	-- And the invite prize's row, once every invite plant is owned.
+	local invite = rowFor(WheelData.ById.invite.id)
+	if invite then
+		local swap = WheelData.ById[WheelData.ById.invite.swap or ""]
+		invite.note.Visible = true
+		invite.note.Text = if prizeWords.ownsEveryInvite()
+			then string.format("all owned: pays %s instead", if swap then select(2, prizeWords.of(swap)) else "cash")
+			else WheelData.ById.invite.note or ""
 	end
 end
 
@@ -1601,8 +1639,8 @@ end
 --==============================================================================
 -- LAYOUT: everything in the gui's own units (pixels / its TV and menu scale)
 --==============================================================================
-local function buildWheel(d: number)
-	if drawn and drawnSize == d then
+local function buildWheel(d: number, force: boolean?)
+	if drawn and drawnSize == d and not force then
 		return
 	end
 	local angle = if drawn then drawn.angle() else 0
@@ -1613,7 +1651,7 @@ local function buildWheel(d: number)
 		hubFace.root:Destroy()
 	end
 	drawnSize = d
-	local w = WheelDraw.build(wheelHolder, d, { labels = true })
+	local w = WheelDraw.build(wheelHolder, d, { labels = true, labelFor = prizeWords.label })
 	w.setAngle(angle)
 	drawn = w
 	local hub = WheelDraw.hub(stage, math.floor(d * 100 / 296 + 0.5))
@@ -1985,9 +2023,20 @@ task.spawn(function()
 	if not model then
 		return
 	end
+	local holders: { { name: string, part: BasePart } } = {}
 	for _, name in ipairs({ "FaceFront", "FaceBack" }) do
 		local faceHolder = model:WaitForChild(name, 30)
 		if faceHolder and faceHolder:IsA("BasePart") then
+			table.insert(holders, { name = name, part = faceHolder })
+		end
+	end
+	-- Built now, and again with this player's amounts whenever they change
+	-- (prizeWords.repaint), at the angle they stood at.
+	prizeWords.rebuildWorld = function()
+		local angle = if worldFace then worldFace.angle() else 0
+		table.clear(art.worldFaces)
+		for _, holder in ipairs(holders) do
+			local name, faceHolder = holder.name, holder.part
 			local old = faceHolder:FindFirstChild("WheelFace")
 			if old then
 				old:Destroy()
@@ -2004,13 +2053,15 @@ task.spawn(function()
 			surface.Parent = faceHolder
 			-- The same face, its rainbow standing still, and the green hub round
 			-- the model's gold cap.
-			local face = WheelDraw.build(surface, 600, { labels = true, hub = true })
+			local face = WheelDraw.build(surface, 600, { labels = true, hub = true, labelFor = prizeWords.label })
+			face.setAngle(angle)
 			table.insert(art.worldFaces, face)
 			if name == "FaceFront" then
 				worldFace = face
 			end
 		end
 	end
+	prizeWords.rebuildWorld()
 	local anchor = model:WaitForChild("SignAnchor", 30)
 	local board = anchor and anchor:FindFirstChild("SpinSign")
 	local words = board and board:FindFirstChild("Words")
@@ -2207,6 +2258,11 @@ setOpen = function(want: boolean)
 	SoundKit.play(if want then "PanelOpen" else "PanelClose")
 	if want then
 		player:SetAttribute(ATTR.OpenPanel, PANEL_NAME)
+		-- This player's prize amounts, worked out again now (THE PRIZES SCALE).
+		local ask = prizeWords.askAmounts
+		if ask then
+			ask()
+		end
 		bindClosers()
 		sheet.Visible = false
 		sheetOpen = false
@@ -2316,6 +2372,35 @@ end)
 -- SPINNING
 --==============================================================================
 local channel: RemoteEvent? = nil
+-- The panel opened: ask the server for this player's amounts again.
+prizeWords.askAmounts = function()
+	local remote = channel
+	if remote then
+		remote:FireServer(ACT.Open)
+	end
+end
+-- The amounts changed: the Reward info names, the panel's wheel and the world's,
+-- and the notes -- never mid-spin, where the wheel would jump: right after it.
+prizeWords.repaint = function()
+	if spinning then
+		prizeWords.stale = true
+		return
+	end
+	prizeWords.stale = false
+	for _, row in ipairs(rows) do
+		row.name.Text = select(2, prizeWords.of(row.reward))
+	end
+	if drawn then
+		buildWheel(drawnSize, true)
+	end
+	local rebuild = prizeWords.rebuildWorld
+	if rebuild then
+		rebuild()
+	end
+	paintFooter()
+end
+player:GetAttributeChangedSignal(A.Amounts):Connect(prizeWords.repaint)
+player:GetAttributeChangedSignal(GameConfig.InviteRewards.Attributes.Owned):Connect(paintFooter)
 task.spawn(function()
 	local remotes = SeedGame:WaitForChild("Remotes", 20)
 	local found = if remotes then remotes:WaitForChild(GameConfig.Remotes.GameEvent, 20) else nil
@@ -2477,6 +2562,8 @@ local function describe(prize: WheelData.Reward): string
 		return "Running now. A new boost replaces one already running."
 	elseif prize.kind == "trail" then
 		return "Yours for good, and on now. Wear or remove it from your Bag."
+	elseif prize.kind == "invite" then
+		return "Grown and unsellable -- in your Bag, ready to place."
 	elseif prize.kind == "speed" then
 		return "Added to your Speed."
 	end
@@ -2490,14 +2577,23 @@ local function showResult(payload: { [string]: any })
 		return
 	end
 	local note = describe(prize)
-	local line = string.format("You won: %s!", prize.short)
+	-- What was paid: this spin's own amount (THE PRIZES SCALE), or the invite
+	-- plant handed over.
+	local _, short, title = WheelData.wordsFor(prize, tonumber(payload.amount))
+	local plant = if prize.kind == "invite" then SeedData.Get(tostring(payload.species)) else nil
+	if plant then
+		short = string.format("%s, an invite plant", plant.Name)
+		title = string.format("%s (invite plant)", plant.Name)
+	end
+	local line = string.format("You won: %s!", short)
 	if payload.swapped == true then
-		note = string.format("You own the %s already, so it paid %s instead.", rolled.title, prize.title)
-		line = string.format("Trail slice! You own it, so: %s", prize.short)
+		note = string.format("You own %s already, so it paid %s instead.",
+			if rolled.kind == "invite" then "every invite plant" else "the " .. rolled.title, title)
+		line = string.format("%s slice! You own it, so: %s", if rolled.kind == "invite" then "Invite" else "Trail", short)
 	end
 	if payload.owed == true then
 		note = "Your bag is full, so it's waiting here. Make room, then press CLAIM."
-		line = string.format("You won: %s! It waits for bag space", prize.short)
+		line = string.format("You won: %s! It waits for bag space", short)
 	end
 	holdLine(line, rarityText(prize.rarity), RESULT_SECONDS, prize.rainbow == true, prize)
 	-- The rarest four get the hatch's own rare sting instead of the notice chime.
@@ -2506,8 +2602,8 @@ local function showResult(payload: { [string]: any })
 		SoundKit.play("RevealAccentRare")
 	end
 	-- A Speed prize's notice wears the one Speed icon (2026-10-04); the rest the wheel's.
-	Notice.post({ kind = "success", title = "WHEEL: " .. string.upper(prize.title), detail = note,
-		key = "wheel:won", quiet = rare, icon = if prize.kind == "speed" then "training" else "wheel" })
+	Notice.post({ kind = "success", title = "WHEEL: " .. string.upper(title), detail = note,
+		key = "wheel:won", quiet = rare, icon = if prize.kind == "speed" then "speed" else "wheel" })
 end
 
 -- Turn the panel's wheel and this player's copy of the world wheel onto the
@@ -2579,6 +2675,9 @@ local function animate(payload: { [string]: any })
 			spinning = false
 			paint()
 			showResult(payload)
+			if prizeWords.stale then
+				prizeWords.repaint()
+			end
 		end
 	end)
 end

@@ -42,6 +42,8 @@ local OfflineEarnings = require(script.Parent:WaitForChild("OfflineEarnings"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeData"))
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
+-- The first catch's note (2026-10-08): which hatch takes it back.
+local FirstMinute = require(SeedGame:WaitForChild("Shared"):WaitForChild("FirstMinute"))
 -- The hotbar's grammar: what a shortcut or a heart may name (2026-10-03).
 local HotbarSlots = require(SeedGame:WaitForChild("Shared"):WaitForChild("HotbarSlots"))
 -- Launch analytics: told what already happened, never asked anything.
@@ -155,6 +157,59 @@ function PlayerDataService.RecordTutorial(player: Player, milestone: string): bo
 	touch(player)
 	-- The first time ever, and only then: Record said so.
 	Metrics.milestone(player, milestone, entry.profile.Tutorial)
+	return true
+end
+
+-- Whether a guide step is done: nil while the record has not arrived, which a
+-- caller must read as "do not know" -- never as "not done".
+function PlayerDataService.TutorialDone(player: Player, milestone: string): boolean?
+	local entry = entries[player]
+	if not entry then
+		return nil
+	end
+	return entry.profile.Tutorial.Done[milestone] == true
+end
+
+--==============================================================================
+-- THE FIRST MINUTE (2026-10-08; FirstMinute)
+--
+-- RecordStarter: the starter pod went into this profile's garden, planted at
+-- `plantedAt`. Once ever -- refused when one was already given -- and called by
+-- PlantService in the same step that puts the row in the bed, so a save holds
+-- the flag and the pod together or neither.
+--
+-- RecordFirstCatch / TakeFirstCatch: CarryService writes down the pod taken
+-- while `steal` is not done; the first hatch of that species at that size takes
+-- the note back, once, and its reveal says so. Words ride on it and nothing
+-- else, so a note nobody ever hatches costs nothing.
+--==============================================================================
+function PlayerDataService.RecordStarter(player: Player, plantedAt: number): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then return false end
+	if type(plantedAt) ~= "number" or plantedAt ~= plantedAt or plantedAt <= 0 then return false end
+	local profile = entry.profile :: any
+	if (tonumber(profile.StarterAt) or 0) > 0 then return false end
+	profile.StarterAt = math.floor(plantedAt)
+	touch(player)
+	return true
+end
+
+function PlayerDataService.RecordFirstCatch(player: Player, speciesId: string, tier: number): boolean
+	local entry = entries[player]
+	if not entry or player.Parent ~= Players then return false end
+	if type(speciesId) ~= "string" or type(tier) ~= "number" then return false end
+	local profile = entry.profile :: any
+	profile.FirstCatchSpecies = speciesId
+	profile.FirstCatchTier = tier
+	touch(player)
+	return true
+end
+
+function PlayerDataService.TakeFirstCatch(player: Player, speciesId: string, tier: number): boolean
+	local entry = entries[player]
+	if not entry then return false end
+	if not FirstMinute.takeCatch(entry.profile, speciesId, tier) then return false end
+	touch(player)
 	return true
 end
 
@@ -421,6 +476,8 @@ function PlayerDataService.PublishInvites(player: Player)
 	local p = entry.profile :: any
 	player:SetAttribute(A.Count, #(p.InviteIds or {}))
 	player:SetAttribute(A.Granted, p.InviteGranted or 0)
+	-- The invite plants ever given, by the track or the wheel (2026-10-08).
+	player:SetAttribute(A.Owned, table.concat(p.InviteOwned or {}, ","))
 	player:SetAttribute(A.Seen, p.InviteSeen == true)
 end
 
@@ -488,11 +545,33 @@ function PlayerDataService.AddCash(player: Player, amount: number): number?
 	return entry.profile.Cash
 end
 
-function PlayerDataService.AddSpeed(player: Player, amount: number): number?
+--==============================================================================
+-- WHO HEARS A SPEED GAIN (2026-10-08, TREADMILL FUN)
+--
+-- After the score moves up, every listener is told (player, before, after,
+-- source). `source` is what the CALLER said the Speed was: nil for earned Speed
+-- (the belt, a Biome Harvest, a Speed pack, a wheel prize), "admin" or "debug"
+-- for the two consoles -- which is how a milestone is passed without a prize.
+-- Pcall'd: a listener can never be the thing that loses a payout.
+--==============================================================================
+local onSpeedGained: { (Player, number, number, string?) -> () } = {}
+
+function PlayerDataService.OnSpeedGained(fn: (Player, number, number, string?) -> ()): () -> ()
+	table.insert(onSpeedGained, fn)
+	return function()
+		local i = table.find(onSpeedGained, fn)
+		if i then
+			table.remove(onSpeedGained, i)
+		end
+	end
+end
+
+function PlayerDataService.AddSpeed(player: Player, amount: number, source: string?): number?
 	local entry = entries[player]
 	if not entry or type(amount) ~= "number" or amount ~= amount then
 		return nil
 	end
+	local before = entry.profile.Speed
 	entry.profile.Speed = math.clamp(entry.profile.Speed + amount, 0, SAVE.MaxSpeedScore)
 	touch(player)
 	PlayerDataService.PublishSpeedTier(player)
@@ -514,7 +593,40 @@ function PlayerDataService.AddSpeed(player: Player, amount: number): number?
 			PlayerDataService.RecordTutorial(player, "speed")
 		end
 	end
-	return entry.profile.Speed
+	local after = entry.profile.Speed
+	if after > before then
+		for _, fn in ipairs(onSpeedGained) do
+			local ok, err = pcall(fn, player, before, after, source)
+			if not ok then
+				warn("[Seed/PlayerDataService] a Speed listener failed: " .. tostring(err))
+			end
+		end
+	end
+	return after
+end
+
+--==============================================================================
+-- TREADMILL FUN'S MARKS (2026-10-08): the highest Speed milestone passed, and
+-- the milestone tickets still owed. Server-only, like every writer here.
+--==============================================================================
+function PlayerDataService.SetSpeedMilestone(player: Player, milestone: number): boolean
+	local entry = entries[player]
+	if not entry or type(milestone) ~= "number" or milestone ~= milestone then return false end
+	local profile = entry.profile :: any
+	if milestone <= (tonumber(profile.SpeedMilestone) or 0) then return false end
+	profile.SpeedMilestone = milestone
+	touch(player)
+	return true
+end
+
+function PlayerDataService.AddMilestoneSpinsOwed(player: Player, delta: number): number?
+	local entry = entries[player]
+	if not entry or type(delta) ~= "number" or delta ~= delta or delta ~= math.floor(delta) then return nil end
+	local profile = entry.profile :: any
+	local owed = math.clamp((tonumber(profile.MilestoneSpinsOwed) or 0) + delta, 0, 5)
+	profile.MilestoneSpinsOwed = owed
+	touch(player)
+	return owed
 end
 
 --==============================================================================
@@ -926,28 +1038,6 @@ function PlayerDataService.SetMillTier(player: Player, tier: number): boolean
 end
 
 --==============================================================================
--- THE OVERCLOCK
---
--- Set rather than incremented, and clamped to the ladder's length, so a caller
--- that computes the next level wrongly cannot walk a player past the top of it.
--- Returns false when nothing changed, which is what keeps a repeated purchase
--- from dirtying the save.
---==============================================================================
-function PlayerDataService.SetMillOverclock(player: Player, level: number): boolean
-	local entry = entries[player]
-	if not entry or type(level) ~= "number" or level ~= level then
-		return false
-	end
-	local clamped = math.floor(math.clamp(level, 0, GameConfig.Mill.Overclock.MaxLevel))
-	if entry.profile.MillOverclock == clamped then
-		return false
-	end
-	entry.profile.MillOverclock = clamped
-	touch(player)
-	return true
-end
-
---==============================================================================
 -- THE BIOME HIGH-WATER MARK
 --
 -- RAISES ONLY. Not a setter with a clamp -- a setter that can also go DOWN is
@@ -1091,11 +1181,23 @@ function PlayerDataService.ResetProgress(player: Player): boolean
 		HatchBonusClaimed = profile.HatchBonusClaimed == true,
 		-- And the community chest's spins stay claimed (2026-10-01).
 		CommunityClaimed = profile.CommunityClaimed == true,
+		-- And the starter pod stays given (2026-10-08): one per profile, ever.
+		StarterAt = math.max(0, math.floor(tonumber(profile.StarterAt) or 0)),
+		-- And treadmill fun's marks (2026-10-08): a milestone is paid once ever,
+		-- an owed ticket stays owed, and the belt ticket window keeps running.
+		SpeedMilestone = math.max(0, tonumber(profile.SpeedMilestone) or 0),
+		MilestoneSpinsOwed = math.max(0, math.floor(tonumber(profile.MilestoneSpinsOwed) or 0)),
+		BeltTicketAt = math.max(0, math.floor(tonumber(profile.BeltTicketAt) or 0)),
+		BeltTicketCount = math.max(0, math.floor(tonumber(profile.BeltTicketCount) or 0)),
 		-- And Invite a Friend's count and the forms it gave (2026-10-06): a reset
 		-- must not hand the forms out again, nor forget who was invited.
 		InviteIds = table.clone(profile.InviteIds or {}),
 		InviteGranted = profile.InviteGranted or 0,
 		InviteSeen = profile.InviteSeen == true,
+		-- And every invite plant given, and the returning friends paid for
+		-- (2026-10-08): neither is ever paid twice.
+		InviteOwned = table.clone(profile.InviteOwned or {}),
+		InviteReturnIds = table.clone(profile.InviteReturnIds or {}),
 		-- And a global mini event's tickets stay counted (2026-10-03): a reset
 		-- mid-event must not reopen its per-player cap. A setting stays too.
 		EventClaims = table.clone(profile.EventClaims or {}),
@@ -1232,6 +1334,17 @@ local function onPlayerAdded(player: Player)
 		local profile = ProfileSchema.Sanitise(raw)
 
 		--======================================================================
+		-- AN OLD OVERCLOCK BECOMES A MILL, ONCE (2026-10-06)
+		--
+		-- ProfileSchema.convertOverclock: a tier-10 save with overclock levels
+		-- becomes the lowest of tiers 11-14 paying at least what it did, for
+		-- nothing; any other tier just loses the levels. Dirty, so the normal
+		-- save path keeps it; told to the player once (the attribute below).
+		--======================================================================
+		local hadOverclock = profile.MillOverclock > 0
+		local becameTier = ProfileSchema.convertOverclock(profile)
+
+		--======================================================================
 		-- THE ABSENCE IS CREDITED HERE, AND ONLY HERE
 		--
 		-- LastSeen is when the last session was saved, and the first write of
@@ -1248,7 +1361,7 @@ local function onPlayerAdded(player: Player)
 		entries[player] = {
 			profile = profile,
 			persistent = persistent,
-			dirty = status == "new" or offlineAdded > 0,
+			dirty = status == "new" or offlineAdded > 0 or hadOverclock,
 			loadedAt = os.clock(),
 			isNew = status == "new",
 		}
@@ -1261,6 +1374,12 @@ local function onPlayerAdded(player: Player)
 			pcall((TrafficLog :: any).classified, player, status == "new", persistent)
 		end
 		PlayerDataService.PublishOffline(player)
+		if becameTier then
+			-- Read once by MillNotice.client, which says it.
+			player:SetAttribute(GameConfig.Attributes.MillOverclockBecame, becameTier)
+			log(string.format("%s's overclock became mill tier %d (%s).",
+				player.Name, becameTier, GameConfig.Mill.Tiers[becameTier].name))
+		end
 		if offlineAdded > 0 then
 			log(string.format("%s was away %.0f min: garden credited %s for %.0f min (claim now %s).",
 				player.Name, profile.OfflineAway / 60, GameConfig.compact(offlineAdded),
@@ -1380,11 +1499,26 @@ PlayerDataService.Leave = onPlayerRemoving
 --==============================================================================
 -- LIFECYCLE
 --==============================================================================
+--==============================================================================
+-- THE GUIDE'S TRAVEL STEP, RECORDED WHERE THE TELEPORT HOME SUCCEEDS (2026-10-08)
+--
+-- PlotService fires OnTeleportedHome after TELEPORT TO PLOT has moved the
+-- player, and only then -- never on a refusal, never for OBBY, BIOMES or the
+-- obby's RETURN TO PLOT. RecordTutorial goes through TutorialData.Record, which
+-- refuses `travel` until the hatch is done, so a teleport home before the hatch
+-- records nothing. Unhooked in Init, so a re-run Start never adds a second one.
+--==============================================================================
+local unhookTravel: (() -> ())? = nil
+
 function PlayerDataService.Init()
 	for _, c in ipairs(serviceConnections) do
 		c:Disconnect()
 	end
 	table.clear(serviceConnections)
+	if unhookTravel then
+		unhookTravel()
+		unhookTravel = nil
+	end
 	table.clear(entries)
 	table.clear(replicateDirty)
 	table.clear(leavingSaves)
@@ -1445,6 +1579,14 @@ function PlayerDataService.Start()
 				end
 			end))
 	end
+
+	-- The guide's step 7 (see THE GUIDE'S TRAVEL STEP above Init).
+	if unhookTravel then
+		unhookTravel()
+	end
+	unhookTravel = PlotService.OnTeleportedHome(function(player: Player)
+		PlayerDataService.RecordTutorial(player, "travel")
+	end)
 
 	table.insert(serviceConnections, Players.PlayerAdded:Connect(onPlayerAdded))
 	table.insert(serviceConnections, Players.PlayerRemoving:Connect(onPlayerRemoving))

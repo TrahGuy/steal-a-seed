@@ -33,6 +33,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local SizedIcon = require(Shared:WaitForChild("SizedIcon"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local PressGesture = require(Shared:WaitForChild("PressGesture"))
 local MenuLayout = require(Shared:WaitForChild("MenuLayout"))
@@ -414,6 +415,8 @@ function MenuKit.picture(parent: Instance, image: string, fallback: string?, z: 
 	pic.Active = false
 	pic.ZIndex = z + 1
 	pic.Parent = holder
+	-- A picture with a small version (the Speed shoe) draws it at 40 px or less.
+	SizedIcon.follow(pic)
 	watchPicture(pic, function()
 		local f = back
 		if f then

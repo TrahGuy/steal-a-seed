@@ -518,10 +518,12 @@ local ok, err = pcall(function()
 			and string.find(handler, "if not AdminService.IsAdmin(sender) then", 1, true) ~= nil,
 		"no announcement wait left anywhere: not in the service, not in the console; the handler's allowlist still "
 			.. "comes first")
-	check(string.find(console, "table.insert(outbox, { scope = scope, text = text, confirmed = confirmed })\n"
+	-- The redesigned console (2026-10-07) keeps the same outbox.
+	check(string.find(console, "table.insert(outbox, { scope = state.scope, text = text, confirmed = confirmed })\n"
 			.. "\t\tmessageBox.Text = \"\"", 1, true) ~= nil
 			and string.find(console, "local item = table.remove(outbox, 1) :: Outgoing", 1, true) ~= nil
-			and string.find(console, "if not shown and messageBox.Text == \"\" then", 1, true) ~= nil,
+			and string.find(console, "if reply == nil or (reply.ok ~= true and reply.shown ~= true) then", 1, true) ~= nil
+			and string.find(console, "if messageBox.Text == \"\" then\n\t\t\t\t\tmessageBox.Text = item.text", 1, true) ~= nil,
 		"the console takes each SEND into an outbox at once, sends them in order, and gives back words that went nowhere")
 	check(string.find(ui, "broadcast.BackgroundTransparency = 1", 1, true) ~= nil
 			and string.find(ui, "block.BackgroundTransparency = 1", 1, true) ~= nil

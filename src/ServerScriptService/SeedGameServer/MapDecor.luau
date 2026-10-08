@@ -1380,10 +1380,74 @@ function MapDecor.dressField(parent: Instance)
 		end
 	end
 
+	--== NOTHING WHERE A PLOT WILL EVER STAND (2026-10-07) ==--
+	--
+	-- Every plot's every level (GameConfig.plotFootprint), from each plot's own
+	-- gate -- the plots are built before this runs. A prop is BUILT FIRST, as
+	-- rolled, and taken out again if any of its parts comes within CLEAR_OF_PLOTS
+	-- of a fence: building it is what spends the random numbers, so every prop
+	-- after it lands exactly where it always did. Until Levels 6-7 the radius
+	-- below was the only rule, measured from each prop's anchor alone.
+	local CLEAR_OF_PLOTS = 1
+	local gates: { { cf: CFrame, prints: { { x0: number, x1: number, d0: number, d1: number } } } } = {}
+	local plotsFolder = if parent.Parent then parent.Parent:FindFirstChild(MAP.PlotsFolderName) else nil
+	if plotsFolder then
+		for _, plot in ipairs(plotsFolder:GetChildren()) do
+			local id = tonumber(plot:GetAttribute(GameConfig.Attributes.PlotId))
+			local plotCF = plot:GetAttribute("PlotCF")
+			local depth = tonumber(plot:GetAttribute("Depth"))
+			if plot:IsA("Model") and id and typeof(plotCF) == "CFrame" and depth then
+				local prints = {}
+				for level = 1, #GameConfig.PlotTiers do
+					for _, r in ipairs(GameConfig.plotFootprint(level, id)) do
+						table.insert(prints, r)
+					end
+				end
+				table.insert(gates, { cf = (plotCF :: CFrame) * CFrame.new(0, 0, -depth * 0.5), prints = prints })
+			end
+		end
+	end
+	-- The fence boards are 1.6 thick on the footprint's lines.
+	local pad = 0.8 + CLEAR_OF_PLOTS
+	local function onAPlot(prop: Instance): boolean
+		for _, part in ipairs(prop:GetDescendants()) do
+			if part:IsA("BasePart") then
+				local h = part.Size * 0.5
+				for _, g in ipairs(gates) do
+					local x0, x1, d0, d1 = math.huge, -math.huge, math.huge, -math.huge
+					for _, sx in ipairs({ -1, 1 }) do
+						for _, sy in ipairs({ -1, 1 }) do
+							for _, sz in ipairs({ -1, 1 }) do
+								local p = g.cf:PointToObjectSpace(part.CFrame:PointToWorldSpace(
+									Vector3.new(h.X * sx, h.Y * sy, h.Z * sz)))
+								x0, x1 = math.min(x0, p.X), math.max(x1, p.X)
+								d0, d1 = math.min(d0, p.Z), math.max(d1, p.Z)
+							end
+						end
+					end
+					for _, r in ipairs(g.prints) do
+						if x1 >= r.x0 - pad and x0 <= r.x1 + pad and d1 >= r.d0 - pad and d0 <= r.d1 + pad then
+							return true
+						end
+					end
+				end
+			end
+		end
+		return false
+	end
+	local removed: { string } = {}
+	local function keepClear(prop: Instance?)
+		if prop and onAPlot(prop) then
+			table.insert(removed, prop.Name)
+			prop:Destroy()
+		end
+	end
+
 	-- Corner trees, well clear of the plots and the run.
 	for _, sx in ipairs({ -1, 1 }) do
 		for _, z in ipairs({ front + 22, back - 22 }) do
-			oak(folder, CFrame.new(sx * (halfW - 24), Y, z) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0), 2.2, rng)
+			keepClear(oak(folder, CFrame.new(sx * (halfW - 24), Y, z) * CFrame.Angles(0, rng:NextNumber(0, TAU), 0),
+				2.2, rng))
 		end
 	end
 
@@ -1395,11 +1459,13 @@ function MapDecor.dressField(parent: Instance)
 	--
 	-- So decoration is placed by RADIUS. Nothing inside the ring's outer reach,
 	-- and nothing in the arc the road comes out of -- which is the one direction
-	-- a player is looking when they sprint in.
-	local outer = GameConfig.Plot.MaxReach + 18
+	-- a player is looking when they sprint in. The reach is Level 5's, pinned
+	-- (GameConfig.Plot.DecorReach), so Levels 6-7 do not re-roll the field;
+	-- keepClear takes out what would stand on one of their plots.
+	local outer = GameConfig.Plot.DecorReach + 18
 	local roadHalf = RAD(MAP.RoadGapDegrees * 0.5)
 
-	local function outsideTheRing(count: number, place: (CFrame, number) -> ())
+	local function outsideTheRing(count: number, place: (CFrame, number) -> Instance)
 		for _ = 1, count do
 			for _ = 1, 14 do
 				local x = rng:NextNumber(-halfW + 20, halfW - 20)
@@ -1411,9 +1477,9 @@ function MapDecor.dressField(parent: Instance)
 					local a = math.atan2(x, z)
 					local toRoad = math.abs((a - math.pi + math.pi) % TAU - math.pi)
 					if toRoad > roadHalf or z > 0 then
-						place(CFrame.new(x, Y, z)
+						keepClear(place(CFrame.new(x, Y, z)
 							* CFrame.Angles(0, rng:NextNumber(0, TAU), 0),
-							rng:NextNumber(0.9, 1.35))
+							rng:NextNumber(0.9, 1.35)))
 						break
 					end
 				end
@@ -1422,20 +1488,24 @@ function MapDecor.dressField(parent: Instance)
 	end
 
 	outsideTheRing(7, function(cf, s2)
-		daisyCluster(folder, cf, s2 * 1.6, rng)
+		return daisyCluster(folder, cf, s2 * 1.6, rng)
 	end)
 	outsideTheRing(4, function(cf, s2)
-		coralBells(folder, cf, s2 * 1.6, rng)
+		return coralBells(folder, cf, s2 * 1.6, rng)
 	end)
 	outsideTheRing(7, function(cf, s2)
-		shrub(folder, cf, s2 * 1.6, rng, GH.LeafDeep, GH.Leaf)
+		return shrub(folder, cf, s2 * 1.6, rng, GH.LeafDeep, GH.Leaf)
 	end)
 	outsideTheRing(6, function(cf, s2)
-		fern(folder, cf, s2 * 1.7, rng, GH.Fern)
+		return fern(folder, cf, s2 * 1.7, rng, GH.Fern)
 	end)
 	outsideTheRing(5, function(cf, s2)
-		oak(folder, cf, s2 * 1.9, rng)
+		return oak(folder, cf, s2 * 1.9, rng)
 	end)
+	if #removed > 0 then
+		print(string.format("[Seed/MapDecor] field: %d prop(s) left out where a plot will stand: %s.", #removed,
+			table.concat(removed, ", ")))
+	end
 end
 
 --==============================================================================

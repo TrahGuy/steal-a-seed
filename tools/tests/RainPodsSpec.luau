@@ -189,56 +189,52 @@ local ok, err = pcall(function()
 		"only Pod 3's carry is half speed")
 
 	--==========================================================================
-	say("2. One batch: three slots, Colossal 10 in 100, half of each half the second family's; one Pod 3 for a thunderstorm")
+	say("2. One batch: three slots and ONE Colossal draw, 5% a Rain; one Pod 3 for a thunderstorm")
 	--==========================================================================
-	-- The owner's odds (2026-10-05): each Rain slot is Colossal 10 in 100 -- a
-	-- Rain with at least one Colossal 27.1% of the time, not the coin flip's
-	-- 87.5% -- and, the same day, the second family takes half of each half:
-	-- Pod 1 45, rainpod4 (its Tiny .. Titan) 45, Pod 2 5, rainpod5 (its
-	-- Colossal) 5. RainFamilySpec holds the second family's own numbers.
+	-- The owner's odds (2026-10-06): exactly 5% PER RAIN. One Colossal draw a
+	-- batch, 5 in 100: a hit makes one slot, picked at random, a Colossal pod
+	-- (Pod 2 or the second family's Colossal, 50/50) and the other two ordinary;
+	-- a miss makes all three ordinary. An ordinary slot is Pod 1 or rainpod4,
+	-- 50/50, each on its own. History (2026-10-05): each slot 90/10 on its own,
+	-- a Colossal in 27.1% of Rains, 0.3 a batch. RainFamilySpec holds the second
+	-- family's own numbers.
 	local RB = SeedData.RainBatches
-	local rainW, thunderW = RB.rain.Weights, RB.thunder.Weights
-	local wCount = 0
-	for _ in pairs(rainW) do
-		wCount += 1
-	end
-	check(RB.rain.Slots == 3 and wCount == 4 and rainW.rainpod1 == 45 and rainW.rainpod2 == 5 and rainW.rainpod4 == 45
-		and rainW.rainpod5 == 5 and RB.rain.Choices == nil,
-		"the rain's batch: three slots, weights Pod 1 45 / Pod 2 5 / rainpod4 45 / rainpod5 5, kept in SeedData")
-	local tCount = 0
-	for _ in pairs(thunderW) do
-		tCount += 1
-	end
-	check(RB.thunder.Slots == 1 and tCount == 1 and thunderW.rainpod3 ~= nil and thunderW.rainpod3 > 0,
-		"the thunderstorm's batch is unchanged: one slot, Pod 3 alone")
-	-- A slot is Colossal exactly when its pod's one tier is Colossal (a pod that
-	-- draws its size never draws Colossal: SeedData refuses one at load).
-	local total, colossalW = 0, 0
-	for podId, w in pairs(rainW) do
-		total += w
-		if SeedData.RainPods[podId].Tier == SeedData.TierCount then
-			colossalW += w
+	local rain, thunder = RB.rain, RB.thunder
+	local rainW, colW, thunderW = rain.Weights, rain.ColossalWeights or {}, thunder.Weights
+	local function count(t)
+		local n = 0
+		for _ in pairs(t) do
+			n += 1
 		end
+		return n
 	end
-	local share2 = colossalW / total
-	local atLeastOne = 1 - (1 - share2) ^ 3
-	check(near(share2, 0.10, 1e-12) and near(atLeastOne, 0.271, 1e-9) and near(3 * share2, 0.3, 1e-9)
-		and near(share2 ^ 3, 0.001, 1e-12),
-		string.format("so a slot is Colossal %.1f%% of the time (both Colossal pods together), a Rain has at least one "
-			.. "%.1f%% of the time (was 87.5%%), %.1f a batch, all three %.1f%%", share2 * 100, atLeastOne * 100,
-			3 * share2, share2 ^ 3 * 100))
-	check(near((rainW.rainpod1 + rainW.rainpod2) / total, 0.5, 1e-12)
-		and near(rainW.rainpod2 / (rainW.rainpod1 + rainW.rainpod2), 0.1, 1e-12)
-		and near(rainW.rainpod5 / (rainW.rainpod4 + rainW.rainpod5), 0.1, 1e-12)
-		and SeedData.RainPods.rainpod4.Tier == nil and SeedData.RainPods.rainpod4.Tiers ~= nil,
-		"the old family is half of every Rain slot, and each family keeps 90/10 inside itself")
+	check(rain.Slots == 3 and rain.ColossalChance == 0.05 and count(rainW) == 2 and rainW.rainpod1 == 1
+			and rainW.rainpod4 == 1 and count(colW) == 2 and colW.rainpod2 == 1 and colW.rainpod5 == 1
+			and rain.Choices == nil,
+		"the rain's batch: three slots, ColossalChance 0.05, ordinary Pod 1 / rainpod4 1:1, Colossal Pod 2 / rainpod5 1:1")
+	check(thunder.Slots == 1 and count(thunderW) == 1 and thunderW.rainpod3 ~= nil and thunderW.rainpod3 > 0
+			and thunder.ColossalChance == nil and thunder.ColossalWeights == nil,
+		"the thunderstorm's batch is unchanged: one slot, Pod 3 alone, no Colossal draw")
+	-- No Colossal pod among the ordinary weights; only Colossal pods in the draw.
+	local ordinaryOk, colossalOk = true, true
+	for podId in pairs(rainW) do
+		ordinaryOk = ordinaryOk and SeedData.RainPods[podId].Tier ~= SeedData.TierCount
+	end
+	for podId in pairs(colW) do
+		colossalOk = colossalOk and SeedData.RainPods[podId].Tier == SeedData.TierCount
+	end
+	local chance = rain.ColossalChance :: number
+	check(ordinaryOk and colossalOk and near(chance, 0.05, 1e-12),
+		string.format("so a Rain has a Colossal %.0f%% of the time (was 27.1%%), %.2f a batch on average (was 0.3); "
+			.. "the ordinary slots never draw one", chance * 100, chance))
 
 	-- The draw: the weights end to end in pod id order, the same draw always the same pod.
 	local P = SeedData.PickRainPod
-	check(P(rainW, 0) == "rainpod1" and P(rainW, 0.4499999) == "rainpod1" and P(rainW, 0.45) == "rainpod2"
-		and P(rainW, 0.4999999) == "rainpod2" and P(rainW, 0.5) == "rainpod4" and P(rainW, 0.9499999) == "rainpod4"
-		and P(rainW, 0.95) == "rainpod5" and P(rainW, 0.9999999) == "rainpod5" and P(rainW, 1) == "rainpod5",
-		"the boundaries: below 0.45 Pod 1, to 0.50 Pod 2, to 0.95 rainpod4, from 0.95 (1 included) rainpod5")
+	check(P(rainW, 0) == "rainpod1" and P(rainW, 0.4999999) == "rainpod1" and P(rainW, 0.5) == "rainpod4"
+			and P(rainW, 0.9999999) == "rainpod4" and P(rainW, 1) == "rainpod4" and P(colW, 0) == "rainpod2"
+			and P(colW, 0.4999999) == "rainpod2" and P(colW, 0.5) == "rainpod5" and P(colW, 1) == "rainpod5",
+		"the boundaries: an ordinary slot below 0.5 Pod 1, from 0.5 (1 included) rainpod4; the Colossal slot below "
+			.. "0.5 Pod 2, from 0.5 rainpod5")
 	check(P(thunderW, 0) == "rainpod3" and P(thunderW, 0.5) == "rainpod3" and P(thunderW, 0.9999999) == "rainpod3",
 		"a thunderstorm's draw is Pod 3 whatever it is")
 	check(P({ rainpod1 = 0, rainpod2 = 1 }, 0) == "rainpod2" and P({ rainpod1 = 1, rainpod2 = 0 }, 0.9999999) == "rainpod1"
@@ -257,36 +253,96 @@ local ok, err = pcall(function()
 			table.insert(let, case[2])
 		end
 	end
-	check(#let == 0 and V(rainW) and V(thunderW) and V({ rainpod1 = 0, rainpod2 = 1 }),
+	check(#let == 0 and V(rainW) and V(colW) and V(thunderW) and V({ rainpod1 = 0, rainpod2 = 1 }),
 		"the weights are validated when SeedData loads: nil, empty, negative, NaN, infinite, unknown pods, "
 			.. "strings and an all-zero table are refused", table.concat(let, ", "))
-
-	-- Slot by slot: a scripted draw sequence. One draw per slot for the pod; a
-	-- first-family pod's creature is an integer draw, as it always was; a
-	-- second-family pod takes one more draw for its creature (and rainpod4 one
-	-- for its size).
-	local draws, used, integers = { 0.47, 0.10, 0.97, 0.0 }, 0, 0
-	local scripted = {
-		NextNumber = function()
-			used += 1
-			return draws[used]
-		end,
-		NextInteger = function(_, lo)
-			integers += 1
-			return lo
-		end,
+	local VB = SeedData.ValidRainBatch
+	local one, big = { rainpod1 = 1 }, { rainpod2 = 1 }
+	local badBatches = {
+		{ { Slots = 3, Weights = { rainpod1 = 1, rainpod2 = 1 } }, "a Colossal pod among the ordinary weights" },
+		{ { Slots = 3, Weights = one, ColossalChance = 1.5, ColossalWeights = big }, "a chance above 1" },
+		{ { Slots = 3, Weights = one, ColossalChance = -0.1, ColossalWeights = big }, "a negative chance" },
+		{ { Slots = 3, Weights = one, ColossalChance = 0 / 0, ColossalWeights = big }, "a NaN chance" },
+		{ { Slots = 3, Weights = one, ColossalChance = "0.05", ColossalWeights = big }, "a string chance" },
+		{ { Slots = 3, Weights = one, ColossalChance = 0.05 }, "a chance with no Colossal weights" },
+		{ { Slots = 3, Weights = one, ColossalChance = 0.05, ColossalWeights = { rainpod1 = 1 } },
+			"an ordinary pod in the Colossal draw" },
+		{ { Slots = 3, Weights = one, ColossalChance = 0.05, ColossalWeights = { nope = 1 } }, "an unknown Colossal pod" },
+		{ { Slots = 0, Weights = one }, "no slots" },
+		{ { Slots = 3, Weights = { nope = 1 } }, "an unknown ordinary pod" },
 	}
-	local seq = SeedData.RollRainBatch("rain", scripted)
-	check(#seq == 3 and used == 4 and integers == 2 and seq[1].pod == "rainpod2" and seq[2].pod == "rainpod1"
-		and seq[3].pod == "rainpod5" and seq[1].tier == POD.rainpod2.tier and seq[2].tier == POD.rainpod1.tier
-		and seq[3].tier == SeedData.TierCount and seq[3].species.Id == "squallsnapper",
-		"each slot draws its own pod: draws 0.47, 0.10, 0.97 lay the old Colossal, the old ordinary and the new "
-			.. "Colossal; the first family's creatures still take one integer draw each", used .. "/" .. integers)
+	local letB = {}
+	for _, case in ipairs(badBatches) do
+		if VB(case[1]) then
+			table.insert(letB, case[2])
+		end
+	end
+	check(#letB == 0 and VB(rain) and VB(thunder)
+			and VB({ Slots = 3, Weights = one, ColossalChance = 0, ColossalWeights = big })
+			and VB({ Slots = 3, Weights = one, ColossalChance = 1, ColossalWeights = { rainpod5 = 1 } }),
+		"the batches are validated when SeedData loads: a chance outside [0, 1], NaN or a string, a chance with no "
+			.. "Colossal weights, a Colossal pod among the ordinary ones, an ordinary or unknown pod in the Colossal "
+			.. "draw and no slots are refused; 0 and 1 are fine", table.concat(letB, ", "))
 
-	-- A seeded sanity sample, with room for chance: not an exact 10%.
-	local rng = Random.new(20261005)
-	local N = 6000
-	local slots, colossal, old, anyBig, allBig, wrong = 0, 0, 0, 0, 0, 0
+	-- Scripted draws. The batch's Colossal draw comes first; a hit then picks
+	-- its slot (an integer draw); each slot then draws its pod, its creature (an
+	-- integer draw for the first family, a number for the second) and rainpod4
+	-- its size.
+	local function scripted(numbers, integers)
+		local used, ints = 0, 0
+		return {
+			NextNumber = function()
+				used += 1
+				return numbers[used]
+			end,
+			NextInteger = function(_, lo)
+				ints += 1
+				return integers[ints] or lo
+			end,
+		}, function()
+			return used, ints
+		end
+	end
+	-- A hit: 0.01 is under 0.05 and the pick is slot 2. Slot 1 draws 0.10 (Pod
+	-- 1); slot 2, the Colossal one, 0.97 (rainpod5) and its creature 0.0; slot 3
+	-- 0.60 (rainpod4), its creature 0.95 and its size 0.0.
+	local rngHit, usedHit = scripted({ 0.01, 0.10, 0.97, 0.0, 0.60, 0.95, 0.0 }, { 2 })
+	local hit = SeedData.RollRainBatch("rain", rngHit)
+	local nHit, iHit = usedHit()
+	check(#hit == 3 and hit[1].pod == "rainpod1" and hit[1].tier == POD.rainpod1.tier and hit[2].pod == "rainpod5"
+			and hit[2].tier == SeedData.TierCount and hit[2].species.Id == "squallsnapper" and hit[3].pod == "rainpod4"
+			and hit[3].species.Id == "torrentacle" and hit[3].tier == 1 and nHit == 7 and iHit == 2,
+		"a hit (0.01, under 0.05) makes the picked slot -- the second -- Colossal and only it: Pod 1, a Colossal "
+			.. "Squallsnapper, a Tiny Torrentacle", string.format("%d numbers, %d integers", nHit, iHit))
+	-- A miss: 0.05 itself is not under 0.05. No slot pick; three ordinary slots,
+	-- the last at 0.9999999.
+	local rngMiss, usedMiss = scripted({ 0.05, 0.4999999, 0.5, 0.0, 0.0, 0.9999999, 0.5, 0.5 }, {})
+	local miss = SeedData.RollRainBatch("rain", rngMiss)
+	local nMiss, iMiss = usedMiss()
+	local missBig = false
+	for _, roll in ipairs(miss) do
+		missBig = missBig or roll.tier == SeedData.TierCount
+	end
+	check(#miss == 3 and not missBig and miss[1].pod == "rainpod1" and miss[2].pod == "rainpod4"
+			and miss[3].pod == "rainpod4" and nMiss == 8 and iMiss == 1,
+		"a miss (0.05 itself) picks no slot and lays three ordinary pods -- no Colossal at any draw",
+		string.format("%d numbers, %d integers", nMiss, iMiss))
+	local rngThunder, usedThunder = scripted({ 0.5 }, {})
+	local storm1 = SeedData.RollRainBatch("thunder", rngThunder)
+	local nThunder, iThunder = usedThunder()
+	check(#storm1 == 1 and storm1[1].pod == "rainpod3" and nThunder == 1 and iThunder == 1,
+		"a thunderstorm takes exactly the draws it always did: its pod, then its creature -- no Colossal draw",
+		string.format("%d numbers, %d integers", nThunder, iThunder))
+
+	-- A seeded sample. Every tolerance is four standard errors of its own sample
+	-- size, so no seed of this size lands outside it by chance; the seed makes it
+	-- repeatable as well.
+	local function close(share, p, n)
+		return n > 0 and math.abs(share - p) <= 4 * math.sqrt(p * (1 - p) / n) + 1e-9
+	end
+	local rng = Random.new(20261006)
+	local N = 20000
+	local slots, withBig, twoBig, big2, big5, ordinary, ord1, wrong = 0, 0, 0, 0, 0, 0, 0, 0
 	local creature = {}
 	for _ = 1, N do
 		local batch = SeedData.RollRainBatch("rain", rng)
@@ -297,16 +353,24 @@ local ok, err = pcall(function()
 		for _, roll in ipairs(batch) do
 			slots += 1
 			local pod = SeedData.RainPods[roll.pod]
-			if not pod or rainW[roll.pod] == nil then
+			if not pod or (rainW[roll.pod] == nil and colW[roll.pod] == nil) then
 				wrong += 1
 				continue
 			end
 			if roll.tier == SeedData.TierCount then
-				colossal += 1
 				bigs += 1
-			end
-			if roll.pod == "rainpod1" or roll.pod == "rainpod2" then
-				old += 1
+				if roll.pod == "rainpod2" then
+					big2 += 1
+				elseif roll.pod == "rainpod5" then
+					big5 += 1
+				else
+					wrong += 1
+				end
+			else
+				ordinary += 1
+				if roll.pod == "rainpod1" then
+					ord1 += 1
+				end
 			end
 			local tierOk = if pod.Tier then roll.tier == pod.Tier else roll.tier >= 1 and roll.tier < SeedData.TierCount
 			if roll.species.Pod ~= (pod.Family or roll.pod) or not tierOk then
@@ -314,19 +378,23 @@ local ok, err = pcall(function()
 			end
 			creature[roll.species.Id] = (creature[roll.species.Id] or 0) + 1
 		end
-		if bigs > 0 then
-			anyBig += 1
+		if bigs >= 1 then
+			withBig += 1
 		end
-		if bigs == 3 then
-			allBig += 1
+		if bigs >= 2 then
+			twoBig += 1
 		end
 	end
 	check(wrong == 0 and slots == 3 * N,
 		"every rain batch is exactly three pods, each one of the four with its own creature and tier", wrong)
-	check(math.abs(colossal / slots - 0.10) < 0.015 and math.abs(anyBig / N - 0.271) < 0.025 and allBig / N < 0.005
-		and math.abs(old / slots - 0.5) < 0.02,
-		string.format("seeded sample: a Colossal in %.1f%% of %d slots and %.1f%% of %d batches, all three in %d; the old "
-			.. "family %.1f%% of slots", colossal / slots * 100, slots, anyBig / N * 100, N, allBig, old / slots * 100))
+	local bigs = big2 + big5
+	check(twoBig == 0 and bigs == withBig and close(withBig / N, 0.05, N),
+		string.format("seeded sample of %d Rains: a Colossal in %.2f%% of them (5%% asked), never two in one Rain",
+			N, withBig / N * 100), string.format("%d with two or more", twoBig))
+	check(close(big2 / math.max(bigs, 1), 0.5, bigs) and close(ord1 / math.max(ordinary, 1), 0.5, ordinary),
+		string.format("a Colossal is Pod 2 %.1f%% / rainpod5 %.1f%% of the time (%d of them); an ordinary slot Pod 1 "
+			.. "%.1f%%", big2 / math.max(bigs, 1) * 100, big5 / math.max(bigs, 1) * 100, bigs,
+			ord1 / math.max(ordinary, 1) * 100))
 	local even = true
 	for _, podId in ipairs({ "rainpod1", "rainpod2" }) do
 		local total3 = 0
@@ -334,7 +402,7 @@ local ok, err = pcall(function()
 			total3 += creature[row[1]] or 0
 		end
 		for _, row in ipairs(MAPPING[podId]) do
-			even = even and math.abs((creature[row[1]] or 0) / total3 - 1 / 3) < 0.04
+			even = even and close((creature[row[1]] or 0) / math.max(total3, 1), 1 / 3, total3)
 		end
 	end
 	check(even, "each pod still holds one of its three creatures, a third each")
@@ -842,9 +910,11 @@ local ok, err = pcall(function()
 	local consoleSrc = sourceOf(Server.AdminService, "AdminConsoleUI")
 	check(string.find(adminSrc, 'if verb == "start" or verb == "thunder" then', 1, true) ~= nil
 		and string.find(adminSrc, "WeatherService.StartThunderstorm(admin, seconds)", 1, true) ~= nil
-		and string.find(consoleSrc, '"START THUNDERSTORM"', 1, true) ~= nil
-		and string.find(consoleSrc, 'startWeather("thunder")', 1, true) ~= nil,
-		"the console's WEATHER section has START THUNDERSTORM, behind the same owner-only check")
+		-- The redesigned console (2026-10-07): THUNDERSTORM beside START RAIN and STOP, asked in place.
+		and string.find(consoleSrc, '{ "StartThunder", "THUNDERSTORM" }', 1, true) ~= nil
+		and string.find(consoleSrc, 'askWeather("thunder")', 1, true) ~= nil
+		and string.find(consoleSrc, 'setAsking("weather", verb)', 1, true) ~= nil,
+		"the console's WEATHER section has THUNDERSTORM, asked in place like the rest (every admin's since 2026-10-07)")
 	check(GameConfig.Secret.Enabled == false, "natural Secret spawning is still switched off")
 end)
 

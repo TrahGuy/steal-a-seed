@@ -80,7 +80,9 @@ end
 -- Why nothing happened, as a headline and the next step that works for it.
 -- COOLDOWN's time is filled in from the server's answer.
 local REFUSED: { [string]: { title: string, detail: string? } } = {
-	LOCKED = { title = "CHEST LOCKED", detail = "Finish the guide to open it." },
+	-- It opens at the first hatch (TutorialData.FirstLoopDone), not at the end of
+	-- the guide, whose step 7 comes after (the owner's words, 2026-10-08).
+	LOCKED = { title = "CHEST LOCKED", detail = "Hatch your first plant to open it." },
 	COOLDOWN = { title = "CHEST NOT READY" },
 	BUSY = { title = "CHEST OPENING", detail = "One moment." },
 	NOT_READY = { title = "CHEST NOT READY", detail = "Still loading. Try again in a moment." },

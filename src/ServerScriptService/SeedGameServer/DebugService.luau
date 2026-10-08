@@ -20,6 +20,7 @@ local NestService = require(script.Parent:WaitForChild("NestService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local PassService = require(script.Parent:WaitForChild("PassService"))
+local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
 
 local DebugService = {}
 
@@ -75,7 +76,8 @@ ACTIONS.SetSpeed = function(player, payload)
 	end
 	-- There is only AddSpeed, so a SET is a delta. Reading first also means the
 	-- clamp inside PlayerDataService still owns the ceiling.
-	PlayerDataService.AddSpeed(player, target - (tonumber(profile.Speed) or 0))
+	-- "debug": a milestone this crosses is passed with no prize (TREADMILL FUN).
+	PlayerDataService.AddSpeed(player, target - (tonumber(profile.Speed) or 0), "debug")
 	-- CarryService owns WalkSpeed and recomputes only when asked. Without this
 	-- the new score showed on the HUD and the legs ignored it until a mill or a
 	-- pod -- the same gap a bought Speed pack had.
@@ -89,7 +91,7 @@ ACTIONS.AddSpeed = function(player, payload)
 	if not delta then
 		return "AddSpeed: not a number"
 	end
-	PlayerDataService.AddSpeed(player, delta)
+	PlayerDataService.AddSpeed(player, delta, "debug")
 	CarryService.RefreshWalkSpeed(player)
 	local now = PlayerDataService.Get(player)
 	return string.format("Speed = %s", GameConfig.compact(now and now.Speed or 0))
@@ -196,17 +198,25 @@ ACTIONS.SpawnSecret = function(_player, payload)
 	return string.format("SpawnSecret %s: %s", biome, if ok then "spawned" else ("refused: " .. tostring(why)))
 end
 
+--==============================================================================
+-- THE MILL, BOTH HALVES (2026-10-06)
+--
+-- The tier in the profile AND the mill on the plot, as SetPlotTier does for the
+-- plot: a profile at tier 12 beside the tier-1 mill it started with is a test
+-- of nothing. Overclock is history (GameConfig), so there is no level to set.
+--==============================================================================
 ACTIONS.SetMill = function(player, payload)
 	local tier = num(payload.tier, 1, #GameConfig.Mill.Tiers)
-	local over = num(payload.overclock, 0, GameConfig.Mill.Overclock.MaxLevel)
-	if tier then
-		PlayerDataService.SetMillTier(player, math.floor(tier))
+	if not tier then
+		return "SetMill: not a number"
 	end
-	if over then
-		PlayerDataService.SetMillOverclock(player, math.floor(over))
+	local level = math.floor(tier)
+	PlayerDataService.SetMillTier(player, level)
+	local plot = PlotService.PlotOf(player)
+	if plot and PlotService.OwnerOf(plot) == player then
+		TreadmillService.Rebuild(plot, level)
 	end
-	return string.format("mill tier %s, overclock %s",
-		tostring(tier and math.floor(tier)), tostring(over and math.floor(over)))
+	return string.format("mill tier %d (%s)", level, GameConfig.Mill.Tiers[level].name)
 end
 
 ACTIONS.SetPlotTier = function(player, payload)

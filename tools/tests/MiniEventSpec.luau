@@ -18,7 +18,7 @@
 -- crossing the store or the bus goes through JSON, as the real ones do.
 --
 -- Checked: the admins (the real AdminService.Handle: who may, what is
--- refused, the weather still owner-only); one event at a time and a duplicate
+-- refused, the weather still this server's own); one event at a time and a duplicate
 -- START that changes nothing; concurrent STARTs and ENDs; END everywhere and
 -- its tombstone against late STARTs; duplicate and out-of-order messages;
 -- missed messages caught up by the poll; a new server joining for what is left;
@@ -360,9 +360,13 @@ local ok, err = pcall(function()
 	check(r.ok == false and adminStore.value.id == firstId and adminStore.value.rev == 1
 			and string.find(r.message, "already running", 1, true) ~= nil,
 		"a second START, by either admin, is refused and changes nothing", r.message)
-	r = AdminService.Handle(adminB, "Weather", "start", 60)
-	check(r.ok == false and string.find(r.message, "Owner only", 1, true) ~= nil,
-		"the weather is still the owner's alone (the mini event made nothing else global)", r.message)
+	-- The weather is every admin's since 2026-10-07, and still its own: this
+	-- server's WeatherService, not the global store. An unknown verb reaches it
+	-- (nothing real starts in Edit) and leaves the global record as it was.
+	r = AdminService.Handle(adminB, "Weather", "monsoon", 60)
+	check(r.ok == false and string.find(r.message, "Unknown weather request", 1, true) ~= nil
+			and adminStore.value.id == firstId and adminStore.value.rev == 1,
+		"the weather still goes its own way, this server's (the mini event made nothing else global)", r.message)
 	r = AdminService.Handle(adminA, "MiniEvent", "end", nil)
 	r2 = AdminService.Handle(adminA, "MiniEvent", "end", nil)
 	check(r.ok and adminStore.value.state == "ended" and adminStore.value.rev == 2 and r2.ok
@@ -941,16 +945,22 @@ local ok, err = pcall(function()
 	local adminSrc = sourceOf(Server, "AdminService")
 	check(string.find(adminSrc, 'if action == "MiniEvent" then', 1, true) ~= nil
 			and string.find(adminSrc, "MiniEventService.StartGlobal(admin, verb, seconds)", 1, true) ~= nil
-			and string.find(adminSrc, "if not AdminService.IsOwner(admin) then", 1, true) ~= nil,
-		"AdminService routes MiniEvent after the allowlist; the weather keeps its owner check")
+			and string.find(adminSrc, "WeatherService.StartRain(admin, seconds)", 1, true) ~= nil,
+		"AdminService routes MiniEvent after the allowlist; the weather keeps its own door, this server's "
+			.. "(every admin's since 2026-10-07)")
 	local consoleSrc = sourceOf(Server.AdminService, "AdminConsoleUI")
-	check(string.find(consoleSrc, '"START GLOBAL EVENT"', 1, true) ~= nil
-			and string.find(consoleSrc, '"END GLOBAL EVENT"', 1, true) ~= nil
-			and string.find(consoleSrc, '{ id = "events", label = "EVENTS"', 1, true) ~= nil
-			and string.find(consoleSrc, '{ id = "weather", label = "WEATHER"', 1, true) ~= nil
-			and string.find(consoleSrc, "miniDurationBox.Text = tostring(MINI.DefaultSeconds)", 1, true) ~= nil
-			and string.find(consoleSrc, 'remote:InvokeServer("MiniEvent", verb, seconds, nil)', 1, true) ~= nil,
-		"the console: EVENTS and WEATHER sections (2026-10-04, the compact console), START/END GLOBAL EVENT, the "
+	-- The console redesigned 2026-10-07: WORLD's MINI EVENTS and WEATHER sections; what each button sends is
+	-- ConsoleModel's (AdminConsoleSpec).
+	local consoleModelSrc = sourceOf(Server.AdminService, "ConsoleModel")
+	check(string.find(consoleSrc, '{ "StartGlobalEvent", "START EVENT" }', 1, true) ~= nil
+			and string.find(consoleSrc, '{ "EndGlobalEvent", "END EVENT" }', 1, true) ~= nil
+			and string.find(consoleSrc, '"MINI EVENTS \\u{00B7} EVERY SERVER"', 1, true) ~= nil
+			and string.find(consoleSrc, '"WEATHER \\u{00B7} THIS SERVER"', 1, true) ~= nil
+			and string.find(consoleSrc, "ui.miniBox.Text = tostring(MINI.DefaultSeconds)", 1, true) ~= nil
+			and string.find(consoleSrc, "Model.args.miniEvent(verb, if verb == \"end\" then nil else seconds(ui.miniBox))",
+				1, true) ~= nil
+			and string.find(consoleModelSrc, 'return args("MiniEvent", verb, seconds, nil)', 1, true) ~= nil,
+		"the console: MINI EVENTS and WEATHER sections (the 2026-10-07 redesign's WORLD tab), START/END EVENT, the "
 			.. "90 s duration box")
 	check(M.DefaultSeconds == 90 and M.MinSeconds == 30 and M.MaxSeconds == 300 and T.PerPlayerCap == 3
 			and T.DropSeconds == 2 and T.MaxUnclaimed == 20 and T.ExpireSeconds == 30,

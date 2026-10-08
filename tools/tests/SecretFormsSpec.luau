@@ -281,7 +281,9 @@ local ok, err = pcall(function()
 	local carrySrc = sourceOf(Server, "CarryService")
 	check(string.find(carrySrc, 'Carry == "overhead"', 1, true) ~= nil and string.find(carrySrc, "OverheadLift", 1, true) ~= nil,
 		"CarryService grips an overhead species at OverheadLift")
-	check(string.find(carrySrc, "attachInFront(model, root, takenTier, taken)", 1, true) ~= nil,
+	-- carriedTier since 2026-10-08: the size it is carried at (a first catch is
+	-- at least Big, FirstMinute); the species is what this pins.
+	check(string.find(carrySrc, "attachInFront(model, root, carriedTier, taken)", 1, true) ~= nil,
 		"a taken pod is attached with its species")
 	local poseSrc = sourceOf(Scripts, "CarryPose")
 	check(string.find(poseSrc, "OVERHEAD_LIFT", 1, true) ~= nil and string.find(poseSrc, "carriesOverhead", 1, true) ~= nil,

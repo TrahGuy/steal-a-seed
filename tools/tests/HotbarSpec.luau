@@ -252,9 +252,10 @@ local ok, err = pcall(function()
 	check(times(lo, "FireServer(INV.SetAction") == 1 and times(lo, "FireServer(INV.FavouriteAction") == 1
 			and times(lo, "FireServer(W.EquipAction") == 1,
 		"one sender for the bar, one for the hearts, and the shop's one equip verb")
-	check(has(lo, "HotbarSlots.arrivals(before, now)") and has(lo, "HotbarSlots.arrive(working, ref, activeSlots)")
-			and has(lo, "local before = prof.owned"),
-		"arrivals are what the profile owns now and did not before; the first packet is only the baseline")
+	check(has(lo, "HotbarSlots.arrivals(before, now)") and has(lo, "HotbarSlots.arrive(working, ref, activeSlots, prof.planted, true)")
+			and has(lo, "local before = prof.owned") and has(lo, "prof.planted = HotbarSlots.planted(profile)")
+			and has(lo, "HotbarSlots.pickedUp(wasPlanted, prof.planted, now)"),
+		"arrivals are what the profile owns now and did not before, and creatures picked up out of the garden; the first packet is only the baseline; they slide the bar")
 	local refusal = string.match(lo, "if action == W%.EquipAction and ok == false(.-)\nend") or ""
 	check(refusal ~= "" and not has(refusal, "SoundKit"),
 		"an equip refusal only clears the wait -- MarigoldShopUI already plays Denied")

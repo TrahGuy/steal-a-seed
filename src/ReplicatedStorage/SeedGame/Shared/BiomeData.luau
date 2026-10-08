@@ -77,6 +77,16 @@ export type Biome = {
 	--==========================================================================
 	GuardianChaseSpeed: number?,
 	--==========================================================================
+	-- A BEGINNER'S FIRST RAID, CAPPED (2026-10-08, the owner's FIRST MINUTE)
+	--
+	-- Absent on every biome but Greenhollow. The most this segment's guardian
+	-- runs -- rage included -- for ONE chase: the theft that woke a calm nest by
+	-- a thief whose guide `steal` step is not done (NestService.provoke and
+	-- firstRaidSpeedFor). A second theft, anybody else and the Secret keep the
+	-- numbers above. See the Greenhollow row for the arithmetic.
+	--==========================================================================
+	FirstRaidChaseSpeed: number?,
+	--==========================================================================
 	-- THE HEAD START FOR A THIEF BELOW THE RECOMMENDATION
 	--
 	-- Absent everywhere but Dustbowl, and absent is the shipped rule: a thief
@@ -181,6 +191,31 @@ BiomeData.Biomes = {
 		-- No other biome sets this; every one of them keeps parentWalkSpeedFor.
 		--======================================================================
 		GuardianChaseSpeed = 15,
+		--======================================================================
+		-- THE FIRST RAID AT THE GUIDE'S NEW TARGET: 19 (2026-10-08, FIRST MINUTE)
+		--
+		-- The guide's goal dropped from 1,000 Speed to 400, and 400 walks at
+		-- 21.21 on GameConfig.Speed's log curve, not 22. Carried, by the
+		-- multiplier CarryService applies (carryMultiplierFor of the size, 1-7),
+		-- with the first catch at least Big:
+		--
+		--                       walks    first raid at 19   at the usual 20
+		--   400, a Big pod      21.11        +2.11              +1.11
+		--   400, a Colossal     21.01        +2.01              +1.01
+		--   1,000, a Tiny       21.94        (today's beginner: +1.94 at 20)
+		--   0, a Big pod        15.93        -3.07, caught
+		--
+		-- Read the old way -- a "light pod" of 30 kg, 0.978, the figure behind
+		-- the 21.5 and the 1.5 studs a second above -- 400 carries at 20.74:
+		-- +1.74 at 19, against today's +1.51 at 1,000. Either way the beginner
+		-- at exactly the target gains at least what today's does, over the same
+		-- 245 studs, and a player who never trained is still run down.
+		--
+		-- ONE chase only. A second theft before the nest calms runs at 25 as
+		-- before, anybody whose `steal` is done meets 20, and the Secret keeps
+		-- its own 19 + rage. TutorialSpec and FirstMinuteSpec hold the margins.
+		--======================================================================
+		FirstRaidChaseSpeed = 19,
 		GroundColor = Color3.fromRGB(104, 190, 88),
 		WallColor = Color3.fromRGB(126, 92, 62),
 		AccentColor = Color3.fromRGB(74, 148, 66),

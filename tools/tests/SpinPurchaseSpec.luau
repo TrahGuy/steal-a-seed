@@ -218,6 +218,11 @@ local EconomyService = {
 		profiles[player].Cash += amount
 		return true
 	end,
+	-- The garden's income, which the wheel's scaled prizes read (2026-10-08):
+	-- none here, so every cash prize is its floor.
+	RateFor = function(_player)
+		return 0
+	end,
 }
 local TreadmillService = {
 	PayReward = function(player, amount, reason)

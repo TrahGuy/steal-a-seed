@@ -180,6 +180,16 @@ check(count(function(e) return e.name == "TutorialCompleted" and e.player == p1 
 	"the guide's completion is its own event, once, when the last step is done")
 check(count(function(e) return e.name == "TutorialStepDone" and e.player == p1 end) == 4,
 	"each guide step is counted once (place, steal, bank, hatch)")
+-- The guide's step 7 (2026-10-08), recorded after the hatch: its own
+-- TutorialStepDone, no second TutorialCompleted, nothing in the funnel moved.
+done.travel = true
+Metrics.milestone(p1, "travel", progress(done))
+check(count(function(e) return e.name == "TutorialStepDone" and e.player == p1 and e.fields ~= nil
+		and e.fields.CustomField01 == "travel" end) == 1
+		and count(function(e) return e.name == "TutorialCompleted" and e.player == p1 end) == 1
+		and onboardingSteps(p1) == "1,2,3,4,5,6",
+	"the travel step is counted as its own guide step: TutorialCompleted stays at the hatch, the funnel's six steps "
+		.. "keep their numbers", onboardingSteps(p1))
 
 -- A new player who left mid-guide comes back (a new session, the same save).
 fresh()

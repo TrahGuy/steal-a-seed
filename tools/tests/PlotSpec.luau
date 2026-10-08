@@ -1,5 +1,6 @@
 --!nocheck
--- Steal a Seed :: the five-level plot ladder, and the v1 -> v2 save migration
+-- Steal a Seed :: the seven-level plot ladder (Levels 6-7 since 2026-10-07, in
+-- two shapes: plots 1-5 and plot 6), and the v1 -> v2 save migration
 --
 --   python -m http.server 8731        (repo root)
 --   local run = loadstring(game:GetService("HttpService"):GetAsync(
@@ -54,33 +55,79 @@ local SPECIES = next(SeedData.ById)
 say("\n-- ladder --")
 
 local T = GameConfig.PlotTiers
-check(#T == 5, "five levels", #T)
+-- Levels 6 and 7 (the owner, 2026-10-07): 25 slots for 250M, 30 for 2.5B.
+check(#T == 7, "seven levels", #T)
 
-local wantCap = { 5, 7, 10, 15, 20 }
-local wantCost = { 0, 25000, 250000, 2500000, 25000000 }
+local wantCap = { 5, 7, 10, 15, 20, 25, 30 }
+local wantCost = { 0, 25000, 250000, 2500000, 25000000, 250000000, 2500000000 }
 local capOk, costOk = true, true
-for i = 1, 5 do
+for i = 1, 7 do
 	if not T[i] or T[i].capacity ~= wantCap[i] then capOk = false end
 	if not T[i] or T[i].cost ~= wantCost[i] then costOk = false end
 end
-check(capOk, "capacities 5 / 7 / 10 / 15 / 20")
-check(costOk, "costs 0 / 25k / 250k / 2.5M / 25M")
+check(capOk, "capacities 5 / 7 / 10 / 15 / 20 / 25 / 30")
+check(costOk, "costs 0 / 25k / 250k / 2.5M / 25M / 250M / 2.5B")
+
+-- The two shapes (GameConfig.plotLayoutFor): plots 1-5 ("Front": their mills
+-- stand in front) and plot 6 ("Beside": its mill beside its fence). The same
+-- plot at Levels 1-5; from Level 6 the Front plots' wing grows forward and the
+-- Beside plot deeper.
+local SHAPES = { { name = "Front", id = 1 }, { name = "Beside", id = 6 } }
+check(GameConfig.plotLayoutFor(1) == "Front" and GameConfig.plotLayoutFor(5) == "Front"
+		and GameConfig.plotLayoutFor(6) == "Beside" and GameConfig.plotLayoutFor(nil) == "Front"
+		and GameConfig.plotLayoutFor(99) == "Front",
+	"plots 1-5 are the Front shape, plot 6 (its mill beside it) the Beside one; no id is a Front plot")
 
 local depths = {}
-local rising = true
-for i = 1, #T do
-	depths[i] = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(i))
-	if i > 1 and depths[i] <= depths[i - 1] then rising = false end
+local rising, never, same15 = true, true, true
+local report = {}
+for _, shape in ipairs(SHAPES) do
+	depths[shape.name] = {}
+	for i = 1, #T do
+		local d = GameConfig.plotDepthForPlot(i, shape.id)
+		depths[shape.name][i] = d
+		if i > 1 and i <= 5 and d <= depths[shape.name][i - 1] then rising = false end
+		if i > 1 and d < depths[shape.name][i - 1] then never = false end
+		if i <= 5 and d ~= GameConfig.plotDepthFor(GameConfig.plotRowsForTier(i)) then same15 = false end
+	end
+	table.insert(report, shape.name .. " " .. table.concat(depths[shape.name], " "))
 end
-check(rising, "depth strictly increases with level",
-	table.concat(depths, " "))
+check(rising and same15, "depth strictly increases through Level 5, the same on every plot",
+	table.concat(report, " | "))
+check(never, "and no level is ever shallower than the one below, on either shape", table.concat(report, " | "))
 
--- Every level must fit between the ring and the back of the field, or the
--- biggest plot silently overlaps whatever is behind it.
-local reach = GameConfig.Map.PlotRingInner + depths[#depths]
-check(reach < GameConfig.Map.FieldBack,
-	"level 5 fits the field",
-	string.format("reach %.1f vs back %d", reach, GameConfig.Map.FieldBack))
+-- Every plot, every level, on the field: each footprint corner, fence and all,
+-- from its own gate on the ring, inside the field's edges with room to spare.
+-- (One reach against FieldBack said this once; the deepest plot now points at
+-- the field's FRONT.) The gate's frame faces the hub, so +Z runs back into the
+-- plot and +X toward the wing.
+do
+	local MAP = GameConfig.Map
+	local gapR = math.rad(MAP.RoadGapDegrees)
+	local stepR = (math.pi * 2 - gapR) / GameConfig.MaxPlots
+	local worst, worstAt = math.huge, ""
+	for id = 1, GameConfig.MaxPlots do
+		local angle = math.pi + gapR * 0.5 + (id - 0.5) * stepR
+		local pos = Vector3.new(math.sin(angle) * MAP.PlotRingInner, 0, math.cos(angle) * MAP.PlotRingInner)
+		local gate = CFrame.lookAt(pos, Vector3.new(0, 0, 0))
+		for level = 1, #T do
+			for _, r in ipairs(GameConfig.plotFootprint(level, id)) do
+				for _, x in ipairs({ r.x0 - 0.8, r.x1 + 0.8 }) do
+					for _, d in ipairs({ r.d0 - 0.8, r.d1 + 0.8 }) do
+						local w = (gate * CFrame.new(x, 0, d)).Position
+						local m = math.min(MAP.FieldWidth * 0.5 - math.abs(w.X), w.Z + MAP.FieldFront, MAP.FieldBack - w.Z)
+						if m < worst then
+							worst, worstAt = m, string.format("plot %d L%d", id, level)
+						end
+					end
+				end
+			end
+		end
+	end
+	check(worst >= 5, "every plot at every level stands on the field, 5 studs or more inside its edges",
+		string.format("closest %.1f (%s)", worst, worstAt))
+	say(string.format("  (closest to the field's edge: %.1f studs, %s)", worst, worstAt))
+end
 
 --==============================================================================
 -- 2. CAPACITY LOOKUPS
@@ -89,13 +136,15 @@ say("\n-- capacity --")
 
 check(GameConfig.plotCapacityForTier(1) == 5, "level 1 holds 5")
 check(GameConfig.plotCapacityForTier(5) == 20, "level 5 holds 20")
+check(GameConfig.plotCapacityForTier(6) == 25 and GameConfig.plotCapacityForTier(7) == 30,
+	"level 6 holds 25 and level 7 holds 30")
 check(GameConfig.plotCapacityForTier(nil) == 5, "nil level falls back to start")
 check(GameConfig.plotCapacityForTier(0 / 0) == 5, "NaN level falls back to start")
-check(GameConfig.plotCapacityForTier(99) == 20, "over-max level clamps to 5")
+check(GameConfig.plotCapacityForTier(99) == 30, "over-max level clamps to 7")
 check(GameConfig.plotCapacityForTier(-3) == 5, "under-min level clamps to 1")
 
 local lvlWant = { [0] = 1, [5] = 1, [6] = 2, [7] = 2, [8] = 3, [12] = 4,
-	[15] = 4, [16] = 5, [20] = 5, [23] = 5, [500] = 5 }
+	[15] = 4, [16] = 5, [20] = 5, [21] = 6, [23] = 6, [25] = 6, [26] = 7, [30] = 7, [31] = 7, [500] = 7 }
 local lvlOk, lvlBad = true, ""
 for n, want in pairs(lvlWant) do
 	local got = GameConfig.plotLevelForPlants(n)
@@ -172,6 +221,30 @@ do
 		string.format("L%d, %d plants", p.PlotTier, #p.Plants))
 	check(#p.Plants > GameConfig.plotCapacityForTier(p.PlotTier),
 		"over capacity is allowed to persist")
+end
+
+-- 3c2. Levels 6-7 (2026-10-07) are bought, never migrated into: a v1 garden of
+-- more than twenty, or one reaching past every v2 bed, lands on Level 5 exactly
+-- as it did before they existed.
+do
+	local zs = {}
+	for i = 1, 40 do zs[i] = 0 end
+	local big = ProfileSchema.Sanitise(v1(1, zs))
+	local od = oldDepthOf(4)
+	local deep = ProfileSchema.Sanitise(v1(4, { od * 0.5 - 1, od * 0.5 - 2 }))
+	check(big.PlotTier == 5 and #big.Plants == 40 and deep.PlotTier == 5,
+		"a v1 garden never migrates above Level 5: forty plants, or plants at the back of an old ten-row bed",
+		string.format("40 plants -> L%d, deep -> L%d", big.PlotTier, deep.PlotTier))
+end
+
+-- 3c3. A current save keeps its level, 1..7: nobody's level changes on load.
+do
+	local got = {}
+	for _, tier in ipairs({ 5, 6, 7, 9, 0 }) do
+		table.insert(got, ProfileSchema.Sanitise({ Version = 2, PlotTier = tier, Plants = {} }).PlotTier)
+	end
+	check(table.concat(got, ",") == "5,6,7,7,1", "PlotTier loads as saved from 1 to 7 (a Level 5 profile can buy 6), "
+		.. "and a number outside the ladder is clamped to it", table.concat(got, ","))
 end
 
 -- 3d. THE PLANTS DO NOT MOVE -- as far as the new ladder can reach.
@@ -315,56 +388,98 @@ say("\n-- resize geometry --")
 do
 	local worstGate, worstBack = 0, 0
 	local grew = true
-	for from = 1, #T do
-		for to = 1, #T do
-			local oldDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(from))
-			local newDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(to))
+	for _, shape in ipairs(SHAPES) do
+		for from = 1, #T do
+			for to = 1, #T do
+				-- Each shape's own depths (plot 6 is deeper at Levels 6-7).
+				local oldDepth = GameConfig.plotDepthForPlot(from, shape.id)
+				local newDepth = GameConfig.plotDepthForPlot(to, shape.id)
 
-			-- A plot on the ring, facing the hub: local -Z at the gate.
-			local centreR = GameConfig.Map.PlotRingInner + oldDepth * 0.5
-			local oldCF = CFrame.lookAt(
-				Vector3.new(0, 0, centreR), Vector3.new(0, 0, 0))
+				-- A plot on the ring, facing the hub: local -Z at the gate.
+				local centreR = GameConfig.Map.PlotRingInner + oldDepth * 0.5
+				local oldCF = CFrame.lookAt(
+					Vector3.new(0, 0, centreR), Vector3.new(0, 0, 0))
 
-			local gateCF = oldCF * CFrame.new(0, 0, -oldDepth * 0.5)
-			local newCF = gateCF * CFrame.new(0, 0, newDepth * 0.5)
-			local newGate = newCF * CFrame.new(0, 0, -newDepth * 0.5)
+				local gateCF = oldCF * CFrame.new(0, 0, -oldDepth * 0.5)
+				local newCF = gateCF * CFrame.new(0, 0, newDepth * 0.5)
+				local newGate = newCF * CFrame.new(0, 0, -newDepth * 0.5)
 
-			local moved = (newGate.Position - gateCF.Position).Magnitude
-			if moved > worstGate then worstGate = moved end
+				local moved = (newGate.Position - gateCF.Position).Magnitude
+				if moved > worstGate then worstGate = moved end
 
-			-- And the back edge must move outward exactly the depth difference.
-			local oldBack = (oldCF * CFrame.new(0, 0, oldDepth * 0.5)).Position
-			local newBack = (newCF * CFrame.new(0, 0, newDepth * 0.5)).Position
-			local grewBy = (newBack - oldBack).Magnitude
-			local wantGrew = math.abs(newDepth - oldDepth)
-			if math.abs(grewBy - wantGrew) > worstBack then
-				worstBack = math.abs(grewBy - wantGrew)
+				-- And the back edge must move outward exactly the depth difference.
+				local oldBack = (oldCF * CFrame.new(0, 0, oldDepth * 0.5)).Position
+				local newBack = (newCF * CFrame.new(0, 0, newDepth * 0.5)).Position
+				local grewBy = (newBack - oldBack).Magnitude
+				local wantGrew = math.abs(newDepth - oldDepth)
+				if math.abs(grewBy - wantGrew) > worstBack then
+					worstBack = math.abs(grewBy - wantGrew)
+				end
+
+				if to > from and newDepth < oldDepth then grew = false end
 			end
-
-			if to > from and newDepth <= oldDepth then grew = false end
 		end
 	end
-	check(worstGate <= 1e-3, "the gate never moves, at any level pair",
+	check(worstGate <= 1e-3, "the gate never moves, at any level pair, on either shape",
 		string.format("worst %.5f", worstGate))
 	check(worstBack <= 1e-3, "the back edge moves by exactly the depth change",
 		string.format("worst %.5f", worstBack))
-	check(grew, "a higher level is always a deeper plot")
+	check(grew, "a higher level is never a shallower plot (plots 1-5's Level 6 is Level 5's depth: its wing grows "
+		.. "forward instead)")
 end
 
 -- Reach has to grow with the level too, or an upgrade could strand a plant
--- that was legal a moment ago.
+-- that was legal a moment ago. Plots 1-5's Level 6 keeps Level 5's main bed and
+-- grows its wing forward instead (below), so it is "never less" there.
 do
-	local rising = true
-	local prev = -1
+	local rising, never = true, true
 	local report = {}
-	for i = 1, #T do
-		local nearR, farR = GameConfig.plotGateReach(GameConfig.plotRowsForTier(i))
-		if farR <= prev then rising = false end
-		prev = farR
-		table.insert(report, string.format("L%d %.1f-%.1f", i, nearR, farR))
+	for _, shape in ipairs(SHAPES) do
+		local prev = -1
+		for i = 1, #T do
+			local nearR, farR = GameConfig.plotGateReach(GameConfig.plotRowsFor(i, shape.id))
+			if i <= 5 and farR <= prev then rising = false end
+			if farR < prev then never = false end
+			prev = farR
+			table.insert(report, string.format("%s L%d %.1f-%.1f", shape.name, i, nearR, farR))
+		end
 	end
-	check(rising, "plantable reach grows with the level",
+	check(rising and never, "plantable reach grows through Level 5 and never shrinks after it, on either shape",
 		table.concat(report, "  "))
+end
+
+-- EVERY LEVEL'S GROUND HOLDS THE LEVEL BELOW'S, from Level 5 up, on both
+-- shapes: in gate distances (the gate never moves), so nothing an upgrade to 6
+-- or 7 rebuilds can strand a plant. (Level 4's wing reaches 12.2 further forward
+-- than Level 5's on every plot -- as it always has; the rebase moves anything
+-- standing there, and Levels 6-7 on plots 1-5 take that ground back.)
+do
+	local function inside(rects, x, d)
+		for _, r in ipairs(rects) do
+			if x >= r.x0 - 1e-6 and x <= r.x1 + 1e-6 and d >= r.d0 - 1e-6 and d <= r.d1 + 1e-6 then
+				return true
+			end
+		end
+		return false
+	end
+	local bad = {}
+	for _, shape in ipairs(SHAPES) do
+		for level = 5, #T - 1 do
+			local lower = GameConfig.plotFootprint(level, shape.id)
+			local upper = GameConfig.plotFootprint(level + 1, shape.id)
+			for _, r in ipairs(lower) do
+				for x = r.x0, r.x1, (r.x1 - r.x0) / 8 do
+					for d = r.d0, r.d1, (r.d1 - r.d0) / 16 do
+						if not inside(upper, x, d) then
+							table.insert(bad, string.format("%s L%d (%.1f, %.1f)", shape.name, level, x, d))
+						end
+					end
+				end
+			end
+		end
+	end
+	check(#bad == 0, "Level 6's ground holds all of Level 5's, and Level 7's all of Level 6's, on both shapes",
+		table.concat(bad, ", ", 1, math.min(#bad, 4)))
 end
 
 -- The near edge is the same at every level: the bed always starts the same
@@ -401,7 +516,8 @@ do
 	for i = 2, #T do
 		total += T[i].cost
 	end
-	check(total == 27775000, "the whole ladder costs 27,775,000", total)
+	check(total == 2777775000, "the whole ladder costs 2,777,775,000 (27,775,000 to Level 5, then 250M and 2.5B)",
+		total)
 end
 
 --==============================================================================
@@ -600,17 +716,19 @@ do
 	check(rows[1] == 0 and rows[2] == 0,
 		"levels 1 and 2 have no side bed",
 		string.format("L1=%d L2=%d", rows[1], rows[2]))
-	check(rows[3] > 0 and rows[4] > 0 and rows[5] > 0,
-		"levels 3, 4 and 5 all have one",
-		string.format("L3=%d L4=%d L5=%d", rows[3], rows[4], rows[5]))
-	check(rows[3] <= rows[4] and rows[4] <= rows[5],
-		"it never gets shorter as the plot grows",
+	check(rows[3] > 0 and rows[4] > 0 and rows[5] > 0 and rows[6] > 0 and rows[7] > 0,
+		"levels 3 to 7 all have one",
 		table.concat(rows, " "))
+	local longer = true
+	for lvl = 2, #T do
+		if rows[lvl] < rows[lvl - 1] then longer = false end
+	end
+	check(longer, "it never gets shorter as the plot grows", table.concat(rows, " "))
 	check(GameConfig.plotHasSideBed(2) == false and GameConfig.plotHasSideBed(3) == true,
 		"plotHasSideBed agrees with the row table")
 
 	-- Rear-anchored: the back edge lines up with the main bed's, and the front
-	-- never reaches the gate.
+	-- never reaches the gate. Plots 1-5 (no plot id is a Front plot).
 	local aligned, clears = true, true
 	local detail = ""
 	for lvl = 3, #T do
@@ -620,26 +738,54 @@ do
 			+ (mainRows - 1) * GameConfig.Plot.RowGap) * 0.5
 		if math.abs((b :: number) - mainBack) > 1e-3 then aligned = false end
 		-- The fence steps out WingMargin + a frame width ahead of the bed, and
-		-- that step may never pass the treadmill line.
+		-- that step may never pass the treadmill line at Levels 1-5. From Level 6
+		-- (2026-10-07) the mills of plots 1-5 stand in front of their plots and
+		-- the wing grows forward, up to MinBehindGate studs behind the gate line.
 		local fence = (f :: number) - SIDE.WingMargin - GameConfig.Plot.BedFrameWidth
-		if fence < SIDE.WingFrontZ - 1e-3 then clears = false end
+		local halfD = GameConfig.plotDepthFor(mainRows) * 0.5
+		local limit = if lvl < SIDE.ForwardFromLevel then SIDE.WingFrontZ else -halfD + SIDE.MinBehindGate
+		if fence < limit - 1e-3 then clears = false end
 		detail ..= string.format(" L%d[%.1f..%.1f fence %.1f]", lvl, f, b, fence)
 	end
 	check(aligned, "the side bed's back edge lines up with the main bed's", detail)
-	check(clears, "its fence never reaches forward of the treadmill line",
+	check(clears, string.format("its fence never reaches forward of the treadmill line at Levels 3-5, nor closer "
+		.. "than %d studs to the gate line at Levels 6-7", SIDE.MinBehindGate),
 		string.format("limit %.1f;%s", SIDE.WingFrontZ, detail))
 
+	-- PLOT 6 (the Beside shape) at Levels 6-7: Level 5's wing, the same bed the
+	-- same distance from the gate, short of a back fence that has moved on.
+	local same, short = true, true
+	local f5, b5 = GameConfig.plotSideBedZ(5)
+	local d5 = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(5)) * 0.5
+	local p6 = ""
+	for lvl = 6, #T do
+		local f, b = GameConfig.plotSideBedZ(lvl, 6)
+		local half = GameConfig.plotDepthForPlot(lvl, 6) * 0.5
+		if not (f and b) or math.abs((f + half) - ((f5 :: number) + d5)) > 1e-6
+			or math.abs((b + half) - ((b5 :: number) + d5)) > 1e-6
+			or GameConfig.plotSideRowsForTier(lvl, 6) ~= GameConfig.plotSideRowsForTier(5) then
+			same = false
+		end
+		local _, wingBack = GameConfig.plotWingZ(lvl, 6)
+		if not (wingBack and wingBack < half - 1) then short = false end
+		p6 ..= string.format(" L%d[%.1f..%.1f behind the gate]", lvl, (f or 0) + half, (b or 0) + half)
+	end
+	check(same and short, "plot 6 keeps Level 5's side bed at Levels 6-7 -- the same rows, the same distance from "
+		.. "the gate -- and its wing ends before its deeper back fence", p6)
+
 	-- The wing must not eat the gate. The front fence is at -depth/2, and the
-	-- step-out has to sit well behind it.
+	-- step-out has to sit well behind it -- on both shapes.
 	local behind = true
 	local gap = ""
-	for lvl = 3, #T do
-		local f = GameConfig.plotSideBedZ(lvl)
-		local fence = (f :: number) - SIDE.WingMargin - GameConfig.Plot.BedFrameWidth
-		local halfD = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(lvl)) * 0.5
-		local behindGate = fence + halfD
-		gap ..= string.format(" L%d=%.1f", lvl, behindGate)
-		if behindGate < 10 then behind = false end
+	for _, shape in ipairs(SHAPES) do
+		for lvl = 3, #T do
+			local f = GameConfig.plotSideBedZ(lvl, shape.id)
+			local fence = (f :: number) - SIDE.WingMargin - GameConfig.Plot.BedFrameWidth
+			local halfD = GameConfig.plotDepthForPlot(lvl, shape.id) * 0.5
+			local behindGate = fence + halfD
+			gap ..= string.format(" %s L%d=%.1f", shape.name, lvl, behindGate)
+			if behindGate < 10 then behind = false end
+		end
 	end
 	check(behind, "the wing starts at least 10 studs behind the gate", gap)
 end

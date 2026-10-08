@@ -254,6 +254,8 @@ local function garden()
 			PlayerDataService = PlayerDataService,
 			CarryService = CarryService,
 			PlantWander = PlantWander,
+			-- The saved garden's frame (2026-10-07): pure, so the real one.
+			GardenFrame = require(Server:WaitForChild("GardenFrame")),
 		})
 		PlantService.Init()
 		PlantService.Start()

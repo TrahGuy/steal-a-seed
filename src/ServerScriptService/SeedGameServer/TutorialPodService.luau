@@ -65,9 +65,11 @@ TutorialPodService.Priority = 75
 -- WHAT IS RESERVED
 --
 -- A Tiny Common, which is the floor of the loot table: the tutorial owes a
--- beginner a first pod, not a good one. `nubkin` is a registered Greenhollow
--- Common -- looked up rather than assumed, so deleting it from SeedData turns
--- this feature off instead of spawning a nil.
+-- beginner a first pod, not a good one. (It stands here Tiny; taken as a first
+-- catch it comes away Big -- CarryService.TryTake, FirstMinute, 2026-10-08.)
+-- `nubkin` is a registered Greenhollow Common -- looked up rather than
+-- assumed, so deleting it from SeedData turns this feature off instead of
+-- spawning a nil.
 --==============================================================================
 -- The lane the guide sends a beginner down, and the only one this touches.
 local BIOME_ID = "greenhollow"
@@ -194,6 +196,9 @@ local function hasOutstandingPod(player: Player): boolean
 		inWorld = worldPodFor(player.UserId) ~= nil,
 		held = profile.Held,
 		plants = profile.Plants,
+		-- The starter pod still growing is a gift, not a pod they found
+		-- (FirstMinute, 2026-10-08): it never stands in for this one.
+		starterAt = (profile :: any).StarterAt,
 	})
 end
 

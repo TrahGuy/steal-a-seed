@@ -519,16 +519,21 @@ end
 
 local function restack(newest: Drawn?)
 	local y = 0
+	local standing = 0
 	for i = #drawn, 1, -1 do
 		local d = drawn[i]
 		if not d.leaving then
 			slotTween(d, y, d == newest)
 			y += d.height + metrics.between
+			standing += 1
 		end
 	end
 	-- Where the stack's foot is, for what shares its band on a phone (Notice,
 	-- WHERE THE STACK STANDS); nothing to say where it stands on the belt.
 	Notice.setReach(if fromTop and y > 0 then stackTop + y - metrics.between else nil)
+	-- And how many stand, on every screen: the guide's spotlight waits while any
+	-- does (Notice, HOW MANY NOTICES ARE STANDING, 2026-10-08).
+	Notice.setShowing(standing)
 end
 
 local function forget(d: Drawn)
@@ -934,6 +939,15 @@ task.spawn(function()
 				icon = if game:GetService("Workspace"):GetAttribute(W.Attributes.Mode) == "thunder"
 					then "thunder" else "rain",
 			})
+		--==================================================================
+		-- A LINE THE SERVER WORDED (2026-10-07; Notice.readServerNotice):
+		-- always information, its words cut to length before they show.
+		--==================================================================
+		elseif action == Notice.ServerNotice then
+			local post = Notice.readServerNotice(code)
+			if post then
+				show(post)
+			end
 		end
 	end)
 end)

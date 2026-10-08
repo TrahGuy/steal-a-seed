@@ -37,6 +37,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
@@ -191,6 +192,24 @@ local function request()
 end
 
 button.Activated:Connect(request)
+
+--==============================================================================
+-- LIT BY THE GUIDE, ITS D-PAD KEY STILL PRESSES IT (2026-10-08)
+--
+-- While TutorialUI's spotlight lights this button it holds a controller's
+-- selection here and marks it (GameConfig.Attributes.GuideLit), so A presses it
+-- -- and its words name D-pad Up as well. The engine's GUI navigation takes the
+-- D-pad before any ContextActionService binding while something is selected, so
+-- the binding below never hears it then; this listener does. Only while the
+-- button is lit AND selected: any other time D-pad Up on a selected HUD button
+-- is the UI's own navigation, and one press must not do two things.
+--==============================================================================
+UserInputService.InputBegan:Connect(function(input: InputObject)
+	if input.KeyCode == Enum.KeyCode.DPadUp and button.Visible and button:GetAttribute(ATTR.GuideLit) == true
+		and GuiService.SelectedObject == button and not PadInput.panelOpen() then
+		request()
+	end
+end)
 
 task.spawn(function()
 	local remotes = SeedGame:WaitForChild("Remotes", 20)

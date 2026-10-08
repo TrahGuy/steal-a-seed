@@ -38,6 +38,10 @@ local BiomeData = require(SeedGame:WaitForChild("Shared"):WaitForChild("BiomeDat
 -- dropped rather than carried forever.
 local WeaponData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WeaponData"))
 local TutorialData = require(SeedGame:WaitForChild("Shared"):WaitForChild("TutorialData"))
+-- Treadmill fun's saved marks (2026-10-08): the milestone a save starts at, and
+-- the belt ticket window's limit.
+local SpeedMilestones = require(SeedGame:WaitForChild("Shared"):WaitForChild("SpeedMilestones"))
+local BeltCatch = require(SeedGame:WaitForChild("Shared"):WaitForChild("BeltCatch"))
 -- So a saved wheel prize or cosmetic can be checked against the real list.
 local WheelData = require(SeedGame:WaitForChild("Shared"):WaitForChild("WheelData"))
 -- The hotbar's shortcuts and the Bag's hearts are cleaned against what the
@@ -84,6 +88,42 @@ export type Profile = {
 	--==========================================================================
 	HatchBonusClaimed: boolean,
 	LikeReminder: string,
+	--==========================================================================
+	-- THE FIRST MINUTE (2026-10-08; FirstMinute)
+	--
+	-- StarterAt: os.time() the game planted this profile's starter pod -- the
+	-- PlantedAt of that row, which is how PlantService knows it while it grows
+	-- -- or 0 if it never did. Set once (PlayerDataService.RecordStarter), in
+	-- the same step the row goes into the garden, and KEPT by a progress reset:
+	-- one starter per profile, ever. Non-zero also tells TutorialData.Sanitise
+	-- that this profile's possessions prove no tutorial step.
+	-- FirstCatchSpecies / FirstCatchTier: the pod taken while `steal` was not
+	-- done (CarryService), waiting for the hatch whose reveal says "BIG! Your
+	-- first catch." -- cleared by that hatch. "" and 0 when nothing is waiting.
+	-- Old saves have none: 0, "", 0.
+	--==========================================================================
+	StarterAt: number,
+	FirstCatchSpecies: string,
+	FirstCatchTier: number,
+	--==========================================================================
+	-- TREADMILL FUN (2026-10-08; SpeedMilestones, BeltCatch)
+	--
+	-- SpeedMilestone: the highest Speed milestone this profile has PASSED (a
+	-- Speed value, 0 for none). Every milestone at or below it is spent: paid
+	-- once, ever, or passed with no prize (admin and debug Speed). A save from
+	-- before this shipped has no key and starts at the highest milestone under
+	-- its Speed -- no back pay.
+	-- MilestoneSpinsOwed: milestone tickets won while the earned spin balance
+	-- was full, paid as soon as it has room (0..5).
+	-- BeltTicketAt / BeltTicketCount: the belt's golden-ticket window -- its own
+	-- rolling 24 h, opened by the first ticket caught (WheelData.Daily's
+	-- pattern, never the obby's allowance) -- and how many it has given (0..1).
+	-- All four are KEPT by a progress reset. New saves: 0, 0, 0, 0.
+	--==========================================================================
+	SpeedMilestone: number,
+	MilestoneSpinsOwed: number,
+	BeltTicketAt: number,
+	BeltTicketCount: number,
 	-- THE COMMUNITY CHEST'S SPINS WERE GIVEN (2026-10-01; GameConfig.Community).
 	-- Set in the same step as WheelEarned's +Spins and saved with it
 	-- (WheelService.GrantCommunity); kept by a progress reset. Old saves: false.
@@ -100,12 +140,20 @@ export type Profile = {
 	-- or neither and a rejoin never gives a form twice.
 	-- InviteSeen: the INVITE panel was opened since the last form was given --
 	-- false shows INVITE's "!" (never opened at all included).
+	-- InviteOwned (2026-10-08): every invite plant this player has ever been
+	-- GIVEN, by an invite milestone or by the wheel, so neither gives one twice.
+	-- Old saves: the first InviteGranted forms of the track.
+	-- InviteReturnIds (2026-10-08): friends who came back through this
+	-- player's invite having played before -- each paid one free spin, once,
+	-- forever; never counted toward the plants. Old saves: {}.
 	-- Kept by a progress reset: a reset must not hand the forms out again.
 	-- Old saves have none: {}, 0, false.
 	--==========================================================================
 	InviteIds: { number },
 	InviteGranted: number,
 	InviteSeen: boolean,
+	InviteOwned: { string },
+	InviteReturnIds: { number },
 	--==========================================================================
 	-- GLOBAL MINI-EVENT TICKETS (2026-10-03; MiniEventService, GameConfig.MiniEvent)
 	--
@@ -132,20 +180,20 @@ export type Profile = {
 	-- what gets built on YOUR ground.
 	MillTier: number,
 	--==========================================================================
-	-- HOW HARD THAT MILL IS BEING RUN
+	-- WHAT IS LEFT OF OVERCLOCK (history since 2026-10-06)
 	--
-	-- Separate from MillTier because it is a separate purchase and because the
-	-- tier ladder ENDS -- seven mills, seven models -- while this one continues.
-	-- Saved rather than derived: it is bought with cash and losing it to a bad
-	-- load would be losing hours.
+	-- A tier-10 mill used to buy overclock levels, saved here. Tiers 11-14
+	-- replaced them: the field stays so a save from then loads exactly, and
+	-- convertOverclock turns its levels into a tier on the first load after.
+	-- Nothing sets it above 0 any more.
 	--==========================================================================
 	MillOverclock: number,
 	--==========================================================================
 	-- THE HIGHEST BIOME SPEED MILESTONE THIS PLAYER HAS EARNED
 	--
-	-- A HIGH-WATER MARK, not access permission. Biome entrances are open, but
-	-- overclock progression uses the same Speed targets. A future rebirth may set
-	-- live Speed back to zero and must not confiscate milestones already earned.
+	-- A HIGH-WATER MARK, not access permission. Biome entrances are open; this
+	-- records the Speed milestones reached. A future rebirth may set live Speed
+	-- back to zero and must not confiscate milestones already earned.
 	--
 	-- Only ever raised. Nothing in the game lowers it.
 	--==========================================================================
@@ -346,6 +394,9 @@ export type WheelPrize = {
 	Species: string,
 	Source: string,
 	At: number,
+	-- A scaled cash or Speed prize's amount as published and rolled (2026-10-08);
+	-- nil on rows from before, which pay the prize's floor.
+	Amount: number?,
 }
 
 -- Year 2100, as a sanity ceiling on stored timestamps. A clock-skewed or
@@ -361,10 +412,19 @@ function ProfileSchema.Default(): Profile
 		InstantCredits = 0,
 		HatchBonusClaimed = false,
 		LikeReminder = "",
+		StarterAt = 0,
+		FirstCatchSpecies = "",
+		FirstCatchTier = 0,
+		SpeedMilestone = 0,
+		MilestoneSpinsOwed = 0,
+		BeltTicketAt = 0,
+		BeltTicketCount = 0,
 		CommunityClaimed = false,
 		InviteIds = {},
 		InviteGranted = 0,
 		InviteSeen = false,
+		InviteOwned = {},
+		InviteReturnIds = {},
 		EventClaims = {},
 		DiscoDance = true,
 		Version = SAVE.CurrentVersion,
@@ -431,6 +491,13 @@ end
 
 ProfileSchema.number = number
 
+-- The ten levels Overclock ever had (see convertOverclock).
+local OVERCLOCK_LEVELS = 10
+
+-- The top of the plot ladder the v1 -> v2 migration was written against
+-- (Levels 1-5). Levels 6-7 (2026-10-07) are bought, never migrated into.
+local MIGRATION_TOP_LEVEL = 5
+
 function ProfileSchema.Sanitise(raw: any): Profile
 	local p = ProfileSchema.Default()
 	if type(raw) ~= "table" then
@@ -450,9 +517,12 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- so a v1 save written before either field existed reads nil and lands on
 	-- overclock 0 and Greenhollow -- which is exactly the state such a player is
 	-- in. No version bump, no migration pass, no branch.
+	--
+	-- The overclock is kept as saved, within the ten levels there ever were;
+	-- what it was worth becomes a tier in convertOverclock, which the load runs
+	-- after this (2026-10-06).
 	--==========================================================================
-	p.MillOverclock = math.floor(
-		number(raw.MillOverclock, 0, 0, GameConfig.Mill.Overclock.MaxLevel))
+	p.MillOverclock = math.floor(number(raw.MillOverclock, 0, 0, OVERCLOCK_LEVELS))
 	--==========================================================================
 	-- THE MILL'S OLD TRAINING CHARGE IS NOT CARRIED FORWARD (2026-10-05)
 	--
@@ -549,12 +619,23 @@ function ProfileSchema.Sanitise(raw: any): Profile
 							speciesOk = true
 						end
 					end
+				elseif prize and prize.kind == "invite" then
+					-- An invite plant: one of the track's forms, and nothing else.
+					speciesOk = table.find(GameConfig.InviteRewards.Forms, species) ~= nil
 				else
 					species = ""
 				end
-				-- What was paid is what was rolled, or the trail's own replacement.
+				-- What was paid is what was rolled, or the trail's or the invite
+				-- prize's own replacement.
 				local consistent = prize ~= nil and rolled ~= nil
-					and (prize == rolled or (rolled.kind == "trail" and rolled.swap == prize.id))
+					and (prize == rolled or ((rolled.kind == "trail" or rolled.kind == "invite") and rolled.swap == prize.id))
+				-- A scaled amount: whole, never under the prize's floor, never over
+				-- what a balance can hold. Absent on older rows (the floor is paid).
+				local amount: number? = nil
+				if prize and prize.scale and type(row.Amount) == "number" and row.Amount == row.Amount then
+					local cap = if prize.kind == "speed" then SAVE.MaxSpeedScore else SAVE.MaxCash
+					amount = math.floor(math.clamp(row.Amount, prize.amount or 0, cap))
+				end
 				if consistent and prize and rolled and speciesOk and (source == "earned" or source == "bought") then
 					table.insert(p.WheelPending, {
 						Id = row.Id,
@@ -563,6 +644,7 @@ function ProfileSchema.Sanitise(raw: any): Profile
 						Species = species,
 						Source = source,
 						At = math.floor(number(row.At, now, 0, MAX_TIME)),
+						Amount = amount,
 					})
 				end
 			end
@@ -885,8 +967,14 @@ function ProfileSchema.Sanitise(raw: any): Profile
 		-- Capacity first because that is the promise the level makes; reach
 		-- second because a plant beyond the bed gets clamped to its back edge,
 		-- and a row of plants all clamped to the same line is a visible loss.
-		local level = math.max(p.PlotTier, GameConfig.plotLevelForPlants(#p.Plants))
-		while level < #GameConfig.PlotTiers do
+		--
+		-- ON THE LADDER AS IT STOOD (2026-10-07): Levels 1-5, the ones version 2
+		-- was written against. Levels 6 and 7 are bought, never handed out by a
+		-- migration, so a v1 save lands exactly where it always did -- without
+		-- this cap a deep old garden would have migrated straight to Level 7.
+		local top = math.min(MIGRATION_TOP_LEVEL, #GameConfig.PlotTiers)
+		local level = math.min(math.max(p.PlotTier, GameConfig.plotLevelForPlants(#p.Plants)), top)
+		while level < top do
 			local _, far = GameConfig.plotGateReach(GameConfig.plotRowsForTier(level))
 			if deepest <= far then
 				break
@@ -942,6 +1030,26 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- True only when saved true; the reminder only one of its three words.
 	p.HatchBonusClaimed = raw.HatchBonusClaimed == true
 	p.LikeReminder = if raw.LikeReminder == "pending" or raw.LikeReminder == "shown" then raw.LikeReminder else ""
+	-- The first minute (2026-10-08): a whole timestamp or 0; a caught species
+	-- only if the sheet still has it, with a real size, else nothing waiting.
+	p.StarterAt = math.floor(number(raw.StarterAt, 0, 0, MAX_TIME))
+	local caught = if type(raw.FirstCatchSpecies) == "string" then SeedData.Get(raw.FirstCatchSpecies) else nil
+	local caughtTier = math.floor(number(raw.FirstCatchTier, 0, 0, SeedData.TierCount))
+	if caught and caughtTier >= 1 then
+		p.FirstCatchSpecies = caught.Id
+		p.FirstCatchTier = caughtTier
+	end
+	-- Treadmill fun (2026-10-08). A save with NO milestone key is from before
+	-- they existed: every milestone under its Speed is passed, unpaid. A key
+	-- that is there is read as it stands.
+	p.SpeedMilestone = if type(raw.SpeedMilestone) == "number"
+		then number(raw.SpeedMilestone, 0, 0, SAVE.MaxSpeedScore)
+		else SpeedMilestones.highestAtOrBelow(p.Speed)
+	p.MilestoneSpinsOwed = math.floor(number(raw.MilestoneSpinsOwed, 0, 0, 5))
+	p.BeltTicketAt = math.floor(number(raw.BeltTicketAt, 0, 0, now))
+	p.BeltTicketCount = if p.BeltTicketAt > 0
+		then math.floor(number(raw.BeltTicketCount, 0, 0, BeltCatch.TicketsPerWindow))
+		else 0
 	p.CommunityClaimed = raw.CommunityClaimed == true
 	-- Invite a Friend (2026-10-06): whole, positive ids, each once, the newest
 	-- MaxRemembered; the forms given, whole and within the track; the panel's
@@ -962,6 +1070,37 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	end
 	p.InviteGranted = math.floor(number(raw.InviteGranted, 0, 0, #GameConfig.InviteRewards.Forms))
 	p.InviteSeen = raw.InviteSeen == true
+	-- The invite plants ever given (2026-10-08): the track's own form ids, each
+	-- once. A save from before has none written: the forms its milestones gave.
+	p.InviteOwned = {}
+	local forms = GameConfig.InviteRewards.Forms
+	if type(raw.InviteOwned) == "table" then
+		for _, id in ipairs(raw.InviteOwned) do
+			if type(id) == "string" and table.find(forms, id) and not table.find(p.InviteOwned, id) then
+				table.insert(p.InviteOwned, id)
+			end
+		end
+	else
+		for i = 1, p.InviteGranted do
+			table.insert(p.InviteOwned, forms[i])
+		end
+	end
+	-- Returning friends already paid for (2026-10-08): whole, positive ids,
+	-- each once, the newest MaxRemembered.
+	p.InviteReturnIds = {}
+	if type(raw.InviteReturnIds) == "table" then
+		local seenBack: { [number]: boolean } = {}
+		for _, id in ipairs(raw.InviteReturnIds) do
+			if type(id) == "number" and id == id and id >= 1 and id < 2 ^ 53 and math.floor(id) == id
+				and not seenBack[id] then
+				seenBack[id] = true
+				table.insert(p.InviteReturnIds, id)
+			end
+		end
+		while #p.InviteReturnIds > GameConfig.InviteRewards.MaxRemembered do
+			table.remove(p.InviteReturnIds, 1)
+		end
+	end
 	-- Global mini-event claims: well-formed rows only, one per id, counts
 	-- whole and within the cap, the newest ClaimsKept kept.
 	p.EventClaims = {}
@@ -1011,6 +1150,51 @@ function ProfileSchema.Sanitise(raw: any): Profile
 	-- raw INTO a fresh default, so a field removed from the schema stops being
 	-- carried the moment it stops being read here.
 	return p
+end
+
+--==============================================================================
+-- AN OLD OVERCLOCK BECOMES A MILL (the owner's addendum, 2026-10-06)
+--
+-- Overclock ran a tier-10 mill at 400M x 2^level a second. Tiers 11-14 replaced
+-- it, so a tier-10 save with levels becomes the LOWEST of those tiers paying at
+-- least what it did -- levels 1-2 Abyssal Trench, 3-5 Volcanic Forge, 6-7
+-- Frozen Aurora, 8-10 Event Horizon -- for nothing, and its overclock goes to
+-- 0. A save at any other tier keeps its tier and loses the levels: they were
+-- only ever sold at 10.
+--
+-- Run by PlayerDataService on every load, after Sanitise, and saved through
+-- the normal path. Idempotent: a second run finds overclock 0 and does
+-- nothing. Returns the tier the overclock became, or nil when no tier changed.
+--==============================================================================
+local OVERCLOCK_TIER = 10
+local OVERCLOCK_BASE = 400000000
+local OVERCLOCK_MULTIPLIER = 2
+
+-- What a tier-10 mill at `level` paid a second, before rebirths.
+function ProfileSchema.overclockRate(level: number): number
+	return OVERCLOCK_BASE * OVERCLOCK_MULTIPLIER ^ level
+end
+
+function ProfileSchema.convertOverclock(p: Profile): number?
+	local level = p.MillOverclock
+	if type(level) ~= "number" or level <= 0 then
+		return nil
+	end
+	p.MillOverclock = 0
+	if p.MillTier ~= OVERCLOCK_TIER then
+		return nil
+	end
+	local paid = ProfileSchema.overclockRate(level)
+	local tiers = GameConfig.Mill.Tiers
+	local became = #tiers
+	for tier = OVERCLOCK_TIER + 1, #tiers do
+		if tiers[tier].speed >= paid then
+			became = tier
+			break
+		end
+	end
+	p.MillTier = became
+	return became
 end
 
 return ProfileSchema

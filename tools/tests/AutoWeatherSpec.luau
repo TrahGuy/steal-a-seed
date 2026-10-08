@@ -566,10 +566,14 @@ local ok, err = pcall(function()
 		end
 	end
 	check(#reached == 0, "no other server script calls the scheduler or its seams", table.concat(reached, ", "))
+	-- Every admin's since 2026-10-07 (the owner's before): the allowlist is
+	-- Handle's first check, and the weather is routed only after it.
 	local admin = sourceOf(Server, "AdminService")
-	check(string.find(admin, 'if not AdminService.IsOwner(admin) then\n\t\treturn refuse("Owner only: the weather', 1, true)
-			~= nil,
-		"the console's weather still checks the owner's account first")
+	local handleAt = string.find(admin, "function AdminService.Handle(", 1, true)
+	local gateAt = handleAt and string.find(admin, "if not AdminService.IsAdmin(sender) then", handleAt, true)
+	local routeAt = gateAt
+		and string.find(admin, 'if action == "Weather" then\n\t\treturn weather(sender, targetId, amount)', gateAt, true)
+	check(routeAt ~= nil, "the console's weather still passes AdminService's allowlist first, and only then the event's")
 end)
 if not ok then
 	fail += 1

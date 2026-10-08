@@ -185,8 +185,8 @@ local ok, err = pcall(function()
 	check(BONUS.FirstTitle == "FIRST HATCH BONUS!" and BONUS.WelcomeTitle == "WELCOME BACK BONUS!"
 			and BONUS.Detail == "You earned 1 free wheel spin.",
 		"FIRST HATCH BONUS! and WELCOME BACK BONUS!, both saying \"You earned 1 free wheel spin.\"")
-	check(REMIND.Title .. " " .. REMIND.Detail == "ENJOYING PODNAPPERS? Leave us a like!",
-		"the reminder says \"Enjoying Podnappers? Leave us a like!\"", REMIND.Title .. " " .. REMIND.Detail)
+	check(REMIND.Title .. " " .. REMIND.Detail == "ENJOYING STEAL A SPROUT? Leave us a like!",
+		"the reminder says \"Enjoying Steal a Sprout? Leave us a like!\"", REMIND.Title .. " " .. REMIND.Detail)
 	local words = string.lower(REMIND.Title .. " " .. REMIND.Detail)
 	check(not words:find("reward") and not words:find("spin") and not words:find("free")
 			and not words:find("get ") and not words:find("win"),

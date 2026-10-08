@@ -106,6 +106,7 @@ type Face = {
 	gui: SurfaceGui,
 	near: Frame,
 	far: Frame,
+	rules: Frame,
 	trim: UIStroke,
 	farTrim: UIStroke,
 	name: TextLabel,
@@ -117,6 +118,8 @@ type Face = {
 
 -- The far view or the whole sign (see the switch under THE SIGN FROM AFAR).
 local farNow = false
+-- The near sign's rules in place of its progress (THE RULES ON THE SIGN).
+local rulesNow = false
 
 -- The final form's gold trim round a view (off until then).
 local function goldTrim(parent: Frame): UIStroke
@@ -238,11 +241,40 @@ local function face(plate: BasePart, normal: Enum.NormalId): Face
 		line.Text = word
 	end
 
+	-- THE RULES (2026-10-08, the owner's brief): in the near view's place for a
+	-- few seconds in every cycle -- who counts, the four plants, a returning
+	-- friend's spin (Words.Rules), each on its own line, as large as it fits.
+	local rules = Instance.new("Frame")
+	rules.Name = "Rules"
+	rules.BackgroundTransparency = 1
+	rules.Size = UDim2.fromScale(1, 1)
+	rules.Visible = false
+	rules.Parent = gui
+	local rulesHeader = Instance.new("Frame")
+	rulesHeader.Name = "Header"
+	rulesHeader.BackgroundColor3 = GameConfig.BagLook.PlateEdge
+	rulesHeader.BackgroundTransparency = 0.1
+	rulesHeader.Position = UDim2.fromOffset(70 * K, 12 * K)
+	rulesHeader.Size = UDim2.fromOffset(W - 140 * K, 66 * K)
+	rulesHeader.Parent = rules
+	local rulesCorner = Instance.new("UICorner")
+	rulesCorner.CornerRadius = UDim.new(0, 18 * K)
+	rulesCorner.Parent = rulesHeader
+	local rulesTitle = label(rulesHeader, "Title", 16 * K, 6 * K, W - 172 * K, 54 * K, Enum.Font.LuckiestGuy,
+		Color3.new(1, 1, 1), 3 * K)
+	rulesTitle.Text = WORDS.RulesTitle
+	for i, line in ipairs(WORDS.Rules) do
+		local l = label(rules, "Rule" .. i, 24 * K, (92 + (i - 1) * 84) * K, W - 48 * K, 70 * K, Enum.Font.GothamBold,
+			CONFIG.Cream, 2.5 * K)
+		l.Text = line
+	end
+
 	gui.Parent = player:WaitForChild("PlayerGui")
 	return {
 		gui = gui,
 		near = root,
 		far = far,
+		rules = rules,
 		trim = trim,
 		farTrim = farTrim,
 		name = name,
@@ -260,16 +292,34 @@ local signPlate: BasePart? = nil
 -- THE SIGN FROM AFAR: past FarFrom studs between the camera and the plate the
 -- far view, back under FarFrom - FarBand -- asked four times a second.
 --==============================================================================
+local function showViews()
+	for _, f in ipairs(faces) do
+		f.near.Visible = not farNow and not rulesNow
+		f.rules.Visible = not farNow and rulesNow
+		f.far.Visible = farNow
+	end
+end
+
 local function setFar(want: boolean)
 	if want == farNow then
 		return
 	end
 	farNow = want
-	for _, f in ipairs(faces) do
-		f.near.Visible = not want
-		f.far.Visible = want
-	end
+	showViews()
 end
+
+-- THE RULES ON THE SIGN: the progress for most of each cycle, the rules for
+-- RulesSignSeconds of it. The far view is unchanged.
+task.spawn(function()
+	while folder.Parent do
+		task.wait(CONFIG.RulesSignCycle - CONFIG.RulesSignSeconds)
+		rulesNow = true
+		showViews()
+		task.wait(CONFIG.RulesSignSeconds)
+		rulesNow = false
+		showViews()
+	end
+end)
 
 task.spawn(function()
 	while folder.Parent do
@@ -317,19 +367,22 @@ end
 -- THE FORM AND ITS EVOLVE MOMENT
 --==============================================================================
 local display: Model? = nil
-local shownTier: number? = nil
-local wantTier: number? = nil
+-- What stands, and what is wanted: content.shown's form at content.tier. The
+-- form is the last plant of the track owned -- one won on the wheel too
+-- (2026-10-08) -- so a new form or a new tier is each an evolve moment.
+local shownKey: string? = nil
+local wantKey: string? = nil
+local wantForm: string? = nil
 local evolving = false
 
 local function ease(x: number): number
 	return x * x * (3 - 2 * x)
 end
 
-local function stand(tier: number): Model
-	local form = InviteRewards.formOfTier(tier)
+local function stand(form: string): Model
 	local model = Instance.new("Model")
 	model.Name = "InviteForm"
-	model:SetAttribute("InviteTier", tier)
+	model:SetAttribute("InviteForm", form)
 	SecretModel.BuildDisplay(form, InviteRewards.standFrame(), model, InviteRewards.displayScale(form))
 	-- Its lights grew with it (range x scale); never past DisplayLightMax.
 	for _, d in ipairs(model:GetDescendants()) do
@@ -403,7 +456,7 @@ local function scaleOver(model: Model, from: number, to: number, seconds: number
 	end
 end
 
-local function evolveTo(tier: number)
+local function evolveTo(form: string, key: string)
 	evolving = true
 	local old = display
 	if old then
@@ -412,9 +465,9 @@ local function evolveTo(tier: number)
 		scaleOver(old, 1, 0.02, E.Shrink)
 		old:Destroy()
 	end
-	burst(InviteRewards.reward(math.max(tier, 1)).colour)
+	burst(InviteRewards.reward(1, form).colour)
 	task.wait(E.Hold)
-	local new = stand(tier)
+	local new = stand(form)
 	CollectionService:RemoveTag(new, SecretModel.RIG_TAG)
 	pcall(function()
 		new:ScaleTo(0.02)
@@ -426,12 +479,12 @@ local function evolveTo(tier: number)
 	-- Whole and at rest: the animator takes it again.
 	CollectionService:AddTag(new, SecretModel.RIG_TAG)
 	display = new
-	shownTier = tier
+	shownKey = key
 	evolving = false
 	-- A later change while this one ran: straight to it, once.
-	local later = wantTier
-	if later and later ~= tier then
-		evolveTo(later)
+	local later, laterForm = wantKey, wantForm
+	if later and laterForm and later ~= key then
+		evolveTo(laterForm, later)
 	end
 end
 
@@ -453,7 +506,9 @@ local function refresh()
 	if count == nil or granted == nil then
 		return
 	end
-	local content = InviteRewards.content(count, granted)
+	-- The plants owned, the wheel's too: the sign and the pedestal name the
+	-- plant each milestone really gives (InviteRewards, THE TRACK WITH THE WHEEL).
+	local content = InviteRewards.content(count, granted, InviteRewards.ownedSet(player:GetAttribute(A.Owned)))
 	drawSign(content)
 	local before = lastCount
 	lastCount = content.count
@@ -462,16 +517,17 @@ local function refresh()
 			task.delay((step - 1) * 0.15, InviteSounds.play, "tick")
 		end
 	end
-	local tier = content.tier
-	wantTier = tier
-	if shownTier == nil then
+	local form = content.shown.form
+	local key = form .. "@" .. tostring(content.tier)
+	wantKey, wantForm = key, form
+	if shownKey == nil then
 		-- On join: the form simply stands.
-		shownTier = tier
-		display = stand(tier)
+		shownKey = key
+		display = stand(form)
 		return
 	end
-	if tier ~= shownTier and not evolving then
-		task.spawn(evolveTo, tier)
+	if key ~= shownKey and not evolving then
+		task.spawn(evolveTo, form, key)
 	end
 end
 
@@ -501,3 +557,4 @@ end)
 
 player:GetAttributeChangedSignal(A.Count):Connect(refresh)
 player:GetAttributeChangedSignal(A.Granted):Connect(refresh)
+player:GetAttributeChangedSignal(A.Owned):Connect(refresh)

@@ -2,16 +2,17 @@
 --==============================================================================
 -- Steal a Seed :: BalanceSpec
 --
--- Two owner-approved price lists, pinned: what every plant earns, and what an
--- Overclock costs. Edit mode:
+-- Two owner-approved price lists, pinned: what every plant earns, and what the
+-- top of the mill ladder costs (tiers 11-14; Overclock until 2026-10-06). Edit
+-- mode:
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
 --     print(run("BalanceSpec"))
 --
 -- WHY A SPEC AND NOT A COMMENT. Both lists are numbers a player feels and nobody
--- reads: a plant that pays a dollar less than approved looks fine, and an
--- Overclock priced below the mill it upgrades still works -- it is just free.
+-- reads: a plant that pays a dollar less than approved looks fine, and a mill
+-- priced below the one it replaces still works -- it is just a skip.
 -- The whole of the protection is that these tables are written down twice, here
 -- and in the source, and that a change has to agree with both.
 --
@@ -292,104 +293,69 @@ do
 end
 
 --==============================================================================
--- 7, 8 AND 9. THE OVERCLOCK LADDER
+-- 7, 8 AND 9. THE TOP OF THE MILL LADDER (the owner's addendum, 2026-10-06)
+--
+-- Overclock -- ten levels on the tier-10 mill, $125B to $850B, 2^level -- is
+-- history. Tiers 11-14, the owner's own mills, replaced it at these prices and
+-- rates. The tier-10 mill keeps its $100B, and the save conversion maps old
+-- overclock levels onto these four (ProfileSchema.convertOverclock).
 --==============================================================================
-say("\n-- overclock prices --")
+say("\n-- the top of the mill ladder --")
 local APPROVED = {
-	125_000_000_000, 150_000_000_000, 180_000_000_000, 220_000_000_000,
-	270_000_000_000, 330_000_000_000, 400_000_000_000, 500_000_000_000,
-	650_000_000_000, 850_000_000_000,
+	[11] = { name = "Abyssal Trench", speed = 2_500_000_000, cost = 400_000_000_000, beltStuds = 45 },
+	[12] = { name = "Volcanic Forge", speed = 15_000_000_000, cost = 600_000_000_000, beltStuds = 50 },
+	[13] = { name = "Frozen Aurora", speed = 80_000_000_000, cost = 1_000_000_000_000, beltStuds = 56 },
+	[14] = { name = "Event Horizon", speed = 450_000_000_000, cost = 1_500_000_000_000, beltStuds = 63 },
 }
 do
 	local tiers = GameConfig.Mill.Tiers
-	local topMill = tiers[#tiers].cost
-	check(#tiers == 10 and topMill == 100_000_000_000,
-		"the tier-10 mill still costs exactly $100B", topMill)
+	check(#tiers == 14, "the mill ladder is fourteen tiers", #tiers)
+	check(tiers[10].cost == 100_000_000_000 and tiers[10].speed == 400_000_000,
+		"the tier-10 mill still costs exactly $100B and runs 400M/s", tiers[10].cost)
 
-	local O = GameConfig.Mill.Overclock
-	check(O.MaxLevel == 10, "there are ten overclock levels", O.MaxLevel)
-	check(#O.Costs == 10, "and ten prices", #O.Costs)
-	check(O.Multiplier == 2, "each one still doubles the rate", O.Multiplier)
-
-	local exactOk, aboveOk, risingOk = true, true, true
-	local detail = ""
-	for level, want in ipairs(APPROVED) do
-		local got = O.Costs[level]
-		if got ~= want then
+	local exactOk, detail = true, ""
+	for tier, want in pairs(APPROVED) do
+		local got = tiers[tier]
+		if not got or got.name ~= want.name or got.speed ~= want.speed or got.cost ~= want.cost
+			or got.beltStuds ~= want.beltStuds then
 			exactOk = false
-			detail ..= string.format(" %d=%s want %d", level, tostring(got), want)
+			detail ..= string.format(" T%d", tier)
 		end
-		if not (got and got > topMill) then
-			aboveOk = false
-			detail ..= string.format(" %d not above the mill", level)
-		end
-		if level > 1 and not (got and O.Costs[level - 1] and got > O.Costs[level - 1]) then
+	end
+	check(exactOk, "11-14: Abyssal Trench 2.5B/s $400B, Volcanic Forge 15B/s $600B, Frozen Aurora 80B/s $1T, "
+		.. "Event Horizon 450B/s $1.5T (belts 45/50/56/63)", detail)
+
+	local risingOk = true
+	for tier = 2, #tiers do
+		if tiers[tier].cost <= tiers[tier - 1].cost or tiers[tier].speed <= tiers[tier - 1].speed then
 			risingOk = false
-			detail ..= string.format(" %d not above %d", level, level - 1)
 		end
 	end
-	check(exactOk, "125 / 150 / 180 / 220 / 270 / 330 / 400 / 500 / 650 / 850 billion", detail)
-	check(aboveOk, "every level costs more than the mill it runs on", detail)
-	check(risingOk, "and more than the level before it", detail)
-
-	local total = 0
-	for _, cost in ipairs(O.Costs) do
-		total += cost
-	end
-	check(total == 3_675_000_000_000,
-		string.format("all ten cost $%s together", GameConfig.compact(total)), total)
-
-	-- The purchase path and the sign read these and nothing else.
-	local costOk = true
-	for level = 1, 10 do
-		if GameConfig.overclockCostFor(level) ~= APPROVED[level] then
-			costOk = false
-		end
-	end
-	check(costOk, "overclockCostFor answers the same list")
-	check(GameConfig.overclockCostFor(11) == nil and GameConfig.overclockCostFor(0) == nil,
-		"and nothing past the end of it")
+	check(risingOk, "every tier costs and pays more than the one below it")
+	check((GameConfig.Mill :: any).Overclock == nil and (GameConfig :: any).overclockCostFor == nil
+			and (GameConfig :: any).overclockMultiplierFor == nil,
+		"and nothing sells an overclock: the table and its helpers are gone")
 
 	-- WHAT THE MILL SIGN WILL SAY. TreadmillService prints
-	-- "$" .. GameConfig.compact(stepInfo.cost), so this is the text itself.
-	local signs = {}
-	for level = 1, 10 do
-		signs[level] = "$" .. GameConfig.compact(O.Costs[level])
+	-- "$" .. GameConfig.compact(next_.cost) and compact rates, so this is the text itself.
+	local prices, rates = {}, {}
+	for tier = 11, 14 do
+		table.insert(prices, "$" .. GameConfig.compact(tiers[tier].cost))
+		table.insert(rates, GameConfig.compact(tiers[tier].speed) .. "/s")
 	end
-	check(signs[1] == "$125B" and signs[10] == "$850B",
-		"the sign reads $125B on the first overclock and $850B on the last",
-		signs[1] .. " .. " .. signs[10])
-	check(table.concat(signs, " ") == "$125B $150B $180B $220B $270B $330B $400B $500B $650B $850B",
-		"and every rung in between", table.concat(signs, " "))
-end
+	check(table.concat(prices, " ") == "$400B $600B $1T $1.5T", "the sign reads $400B, $600B, $1T and $1.5T",
+		table.concat(prices, " "))
+	check(table.concat(rates, " ") == "2.5B/s 15B/s 80B/s 450B/s", "and 2.5B/s, 15B/s, 80B/s and 450B/s",
+		table.concat(rates, " "))
 
---==============================================================================
--- 10. WHAT AN OVERCLOCK BUYS IS UNCHANGED
---==============================================================================
-say("\n-- overclock rates --")
-do
-	local multOk, rateOk = true, true
-	local detail = ""
-	local topSpeed = GameConfig.Mill.Tiers[10].speed
-	for level = 0, 10 do
-		local want = 2 ^ level
-		local got = GameConfig.overclockMultiplierFor(level)
-		if got ~= want then
-			multOk = false
-			detail ..= string.format(" L%d=%s want %s", level, tostring(got), tostring(want))
-		end
-		if GameConfig.trainingRateFor(10, level, nil) ~= topSpeed * want then
+	-- The rate is tier x rebirth and nothing else.
+	local rateOk = true
+	for tier = 1, #tiers do
+		if GameConfig.trainingRateFor(tier, nil) ~= tiers[tier].speed then
 			rateOk = false
-			detail ..= string.format(" rate L%d", level)
 		end
 	end
-	check(multOk, "the multiplier is still 2^level, 1x to 1024x", detail)
-	check(rateOk, string.format("so a tier-10 mill still runs %s/s to %s/s",
-		GameConfig.compact(topSpeed), GameConfig.compact(topSpeed * 1024)), detail)
-	check(GameConfig.overclockMultiplierFor(0) == 1
-			and GameConfig.overclockMultiplierFor(-3) == 1
-			and GameConfig.overclockMultiplierFor(99) == 1024,
-		"and a junk level reads as no overclock, or as the last one")
+	check(rateOk, "and each tier trains at exactly its own speed, with no overclock factor")
 end
 
 say(string.format("\nBalanceSpec: %d passed, %d failed", pass, fail))

@@ -683,6 +683,7 @@ local function makeWorld()
 		PlayerDataService = PlayerDataService,
 		CarryService = w.CarryService,
 		PlantWander = PlantWander,
+		GardenFrame = require(Server:WaitForChild("GardenFrame")),
 	}, { GameConfig = config, HatchRoll = w.HatchRoll }, fakeGame, { os = clock })
 	w.PlantService.Init()
 	w.PlantService.Start()

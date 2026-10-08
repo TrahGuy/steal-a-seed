@@ -2,26 +2,29 @@
 --==============================================================================
 -- Steal a Seed :: AdminSpec
 --
--- The two-account admin console, on the server: who may ask, what may be
+-- The admin console's three accounts, on the server: who may ask, what may be
 -- asked, and what each action does to a profile. Edit mode:
 --
 --     local run = loadstring(game:GetService("HttpService"):GetAsync(
 --         "http://127.0.0.1:8731/tools/tests/run.luau", true))()
 --     print(run("AdminSpec"))
 --
--- The REAL AdminService, PlayerDataService, EconomyService and TreadmillService,
--- fresh-required, with stand-in players joined the way AlmanacClaimSpec joins
--- them: SaveService's Load and Save are stubbed -- so no DataStore is read or
--- written, and no real profile is touched -- and the calls a progress reset
--- makes into the world (the garden, the plot, the mill, the bag, the trap, the
--- respawn) are recorded rather than performed, so their ORDER can be checked.
--- The allowlisted UserIds appear here only on stand-in tables.
+-- The REAL AdminService, PlayerDataService, EconomyService, TreadmillService and
+-- CarryService, fresh-required, with stand-in players joined the way
+-- AlmanacClaimSpec joins them: SaveService's Load and Save are stubbed -- so no
+-- DataStore is read or written, and no real profile is touched -- and the calls
+-- a progress reset makes into the world (the garden, the plot, the mill, the
+-- bag, the trap, the respawn) are recorded rather than performed, so their
+-- ORDER can be checked. The allowlisted UserIds appear here only on stand-in
+-- tables.
 --
--- Not here: the round trip over the RemoteFunction, the panel, and a real
--- respawn rebuilding a real bag (Play, on a throwaway store). Start Night and
--- Start Day reach stand-ins for WorldCycleService's two doors here -- this is
--- about who may press them and what they are told; CycleSpec runs the real
--- transitions.
+-- Not here: the round trip over the RemoteFunction, the panel (AdminConsoleSpec
+-- has its arithmetic), and a real respawn rebuilding a real bag (Play, on a
+-- throwaway store). Start Night and Start Day reach stand-ins for
+-- WorldCycleService's two doors here -- this is about who may press them and
+-- what they are told; CycleSpec runs the real transitions. The weather's three
+-- doors (WeatherService) are stand-ins too, for the same reason: RainEventSpec
+-- runs the real event, terrain and all.
 --==============================================================================
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
@@ -31,6 +34,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage.SeedGame.Shared
 local GameConfig = require(Shared.GameConfig)
+local SeedData = require(Shared.SeedData)
 local Server = game:GetService("ServerScriptService").SeedGameServer
 local SaveService = require(Server.SaveService)
 local PlotService = require(Server.PlotService)
@@ -43,10 +47,13 @@ local CarryService = require(Server.CarryService)
 local CombatService = require(Server.CombatService)
 local WeaponShopService = require(Server.WeaponShopService)
 local WorldCycleService = require(Server.WorldCycleService)
+local WeatherService = require(Server.WeatherService)
 local AdminService = require(Server.AdminService)
+local SpawnCatalog = require(Server.AdminService.SpawnCatalog)
 
 local SAVE = GameConfig.Save
-local ADMIN_A, ADMIN_B = 4119740186, 11607308004
+-- The owner, Teambarnze825, and TappedYou (the third, 2026-10-07).
+local ADMIN_A, ADMIN_B, ADMIN_C = 4119740186, 11607308004, 1139904972
 
 local out = {}
 local pass, fail = 0, 0
@@ -84,17 +91,19 @@ local saves: any, plots: any, data: any = SaveService, PlotService, PlayerDataSe
 local treads: any, plants: any, carry: any = TreadmillService, PlantService, CarryService
 local combat: any, shop: any, admin: any = CombatService, WeaponShopService, AdminService
 local cycle: any = WorldCycleService
+local weatherSvc: any = WeatherService
 local real = {
 	StartNight = cycle.StartNight, StartDay = cycle.StartDay,
+	StartRain = weatherSvc.StartRain, StartThunderstorm = weatherSvc.StartThunderstorm, EndRain = weatherSvc.EndRain,
 	Load = saves.Load, Save = saves.Save, Forget = saves.Forget,
 	SetDesiredLevel = plots.SetDesiredLevel, PlotOf = plots.PlotOf,
 	MountStats = data.MountStats,
 	Unmount = treads.Unmount, Rebuild = treads.Rebuild,
 	ClearGarden = plants.ClearGarden,
 	ForfeitCarry = carry.ForfeitCarry, SyncHeldNow = carry.SyncHeldNow,
-	RefreshWalkSpeed = carry.RefreshWalkSpeed,
+	RefreshWalkSpeed = carry.RefreshWalkSpeed, GivePod = carry.GivePod,
 	ClearTrap = combat.ClearTrap, RefreshTools = shop.RefreshTools,
-	FindPlayer = admin.FindPlayer, MinInterval = admin.Config.MinInterval,
+	FindPlayer = admin.FindPlayer, TellPlayer = admin.TellPlayer, MinInterval = admin.Config.MinInterval,
 }
 
 local calls: { { name: string, args: { any } } } = {}
@@ -194,6 +203,33 @@ cycle.StartDay = function()
 	world.phase = "Day"
 	return true, "OK", 5, 5
 end
+-- WeatherService's three doors, answering the way the real ones do: one event
+-- at a time, and an END with nothing running harmless and ending nothing.
+local sky = { mode = nil }
+weatherSvc.StartRain = function(by, seconds)
+	note("StartRain", by, seconds)
+	if sky.mode then
+		return false, "Rain is already falling. Nothing changed."
+	end
+	sky.mode = "rain"
+	return true, "Rain started."
+end
+weatherSvc.StartThunderstorm = function(by, seconds)
+	note("StartThunderstorm", by, seconds)
+	if sky.mode then
+		return false, "A thunderstorm is already raging. Nothing changed."
+	end
+	sky.mode = "thunder"
+	return true, "Thunderstorm started."
+end
+weatherSvc.EndRain = function(by)
+	note("EndRain", by)
+	if not sky.mode then
+		return true, "No rain or thunderstorm is running. Nothing changed.", false
+	end
+	sky.mode = nil
+	return true, "Ended.", true
+end
 local function callsOf(name, from)
 	local n = 0
 	for i = from + 1, #calls do
@@ -214,6 +250,11 @@ admin.FindPlayer = function(userId)
 		return p
 	end
 	return nil
+end
+-- What a player was told (AdminService.TellPlayer), instead of the wire.
+local told = {}
+admin.TellPlayer = function(p, title, detail, key)
+	table.insert(told, { p = p, title = title, detail = detail, key = key })
 end
 
 local function stand(name, userId, parent)
@@ -301,18 +342,23 @@ local ok, err = pcall(function()
 	admin.Config.MinInterval = 0
 	local adminA = join("AdminA", ADMIN_A, { Cash = 0, Speed = 0 })
 	local adminB = join("AdminB", ADMIN_B, { Cash = 0, Speed = 0 })
+	local adminC = join("AdminC", ADMIN_C, { Cash = 0, Speed = 0 })
 	local target, profile = join("SpecTarget", 5551, { Cash = 1000, Speed = 2000 })
 
 	--==========================================================================
-	-- 1. WHO MAY ASK: TWO NUMERIC USER IDS
+	-- 1. WHO MAY ASK: THREE NUMERIC USER IDS
 	--==========================================================================
 	say("-- the allowlist --")
-	check(admin.IsAdmin(adminA) and admin.IsAdmin(adminB), "both verified UserIds are admins")
+	check(admin.IsAdmin(adminA) and admin.IsAdmin(adminB) and admin.IsAdmin(adminC),
+		"all three verified UserIds are admins: nicnicniccoal, Teambarnze825 and TappedYou")
 	local strangers = {
 		{ UserId = 1, Name = "nicnicniccoal" },
 		{ UserId = 5551, Name = "Teambarnze825", DisplayName = "nicnicniccoal" },
+		{ UserId = 5551, Name = "TappedYou", DisplayName = "Villager" },
+		{ UserId = 1139904973 }, { UserId = 1139904971 }, { UserId = ADMIN_C + 0.5 }, { UserId = tostring(ADMIN_C) },
 		{ UserId = 0 }, { UserId = -ADMIN_A }, { UserId = ADMIN_A + 0.5 },
-		{ UserId = tostring(ADMIN_A) }, { Name = "nicnicniccoal" }, {}, "nicnicniccoal", ADMIN_A, nil,
+		{ UserId = tostring(ADMIN_A) }, { Name = "nicnicniccoal" }, { Name = "TappedYou" }, {}, "nicnicniccoal",
+		ADMIN_A, ADMIN_C, nil,
 	}
 	local anyAdmin = false
 	for _, s in ipairs(strangers) do
@@ -320,8 +366,8 @@ local ok, err = pcall(function()
 			anyAdmin = true
 		end
 	end
-	check(not anyAdmin,
-		"nobody else: not by username, display name, a string id, a negated or fractional id, or a bare number")
+	check(not anyAdmin, "nobody else -- a fourth id beside TappedYou's included: not by username, display name, a "
+		.. "string id, a negated or fractional id, or a bare number")
 	local src = sourceOf(Server.AdminService) or ""
 	local list = string.match(src, "local ALLOWED[^\n]*=%s*{(.-)}")
 	local ids = {}
@@ -329,8 +375,10 @@ local ok, err = pcall(function()
 		table.insert(ids, tonumber(id))
 	end
 	table.sort(ids)
-	check(#ids == 2 and ids[1] == ADMIN_A and ids[2] == ADMIN_B,
-		"the allowlist in the source is exactly 4119740186 and 11607308004", table.concat(ids, ","))
+	check(#ids == 3 and ids[1] == ADMIN_C and ids[2] == ADMIN_A and ids[3] == ADMIN_B,
+		"the allowlist in the source holds exactly 1139904972, 4119740186 and 11607308004", table.concat(ids, ","))
+	check(admin.IsOwner(adminA) and not admin.IsOwner(adminB) and not admin.IsOwner(adminC),
+		"the owner is nicnicniccoal alone: TappedYou and Teambarnze825 are admins, not the owner")
 	local isAdminBody = string.match(src, "function AdminService%.IsAdmin(.-)\nend") or ""
 	check(isAdminBody ~= "" and not string.find(isAdminBody, "Name", 1, true)
 			and not string.find(isAdminBody, "Attribute", 1, true)
@@ -339,6 +387,50 @@ local ok, err = pcall(function()
 	check((GameConfig :: any).Admin == nil and (GameConfig :: any).Debug == nil
 			and (GameConfig.Remotes :: any).AdminRequest == nil,
 		"nothing about admins is in GameConfig, which every client can read")
+	-- THE WEATHER IS ALL THREE ADMINS' (owner, 2026-10-07): each starts the rain,
+	-- stops it, starts a thunderstorm and stops that, and each change is audited
+	-- under the admin who made it.
+	local weatherBad = {}
+	for _, who in ipairs({ adminA, adminB, adminC }) do
+		local from = #calls
+		local auditFrom = #admin.Audit()
+		local rain = admin.Handle(who, "Weather", "start", 300)
+		local stopRain = admin.Handle(who, "Weather", "end")
+		local thunder = admin.Handle(who, "Weather", "thunder", 300)
+		local stopThunder = admin.Handle(who, "Weather", "end")
+		local asked = callsOf("StartRain", from) == 1 and callsOf("StartThunderstorm", from) == 1
+			and callsOf("EndRain", from) == 2
+		local entries = admin.Audit()
+		local mine, actions = true, {}
+		for i = auditFrom + 1, #entries do
+			table.insert(actions, entries[i].action)
+			mine = mine and entries[i].admin == who.UserId
+		end
+		local auditedAll = table.concat(actions, ",") == "Weather:start:300,Weather:end,Weather:thunder:300,Weather:end"
+		if not (rain.ok and stopRain.ok and thunder.ok and stopThunder.ok and asked and mine and auditedAll) then
+			table.insert(weatherBad, string.format("%s: %s / %s / %s / %s; audit %s", who.Name, rain.message,
+				stopRain.message, thunder.message, stopThunder.message, table.concat(actions, ",")))
+		end
+	end
+	check(#weatherBad == 0, "the weather is all three admins': nicnicniccoal, Teambarnze825 and TappedYou each start "
+		.. "the rain, stop it, start a thunderstorm and stop it -- each change in the audit under who made it",
+		table.concat(weatherBad, " | "))
+	local fourth = { UserId = 1139904973, Name = "NotAnAdmin" }
+	local fromFourth = #calls
+	local refusedFourth = admin.Handle(fourth, "Weather", "start", 300)
+	check(not refusedFourth.ok and refusedFourth.message == "Not authorized." and callsOf("StartRain", fromFourth) == 0
+			and sky.mode == nil,
+		"a fourth id is refused before WeatherService is asked", refusedFourth.message)
+	local adminSrcCode = string.gsub(src, "%-%-[^\n]*", "")
+	check(string.find(adminSrcCode, "IsOwner(admin)", 1, true) == nil and string.find(adminSrcCode, "Owner only", 1, true) == nil,
+		"and the weather has no owner gate left on the server: the allowlist is its door, as for every other action")
+	local titleSrc = sourceOf(Server:FindFirstChild("OwnerTitleService")) or ""
+	check(string.find(titleSrc, "AdminService.IsOwner(player)", 1, true) ~= nil
+			and string.find(titleSrc, "IsAdmin(", 1, true) == nil,
+		"and so is the rainbow ADMIN title: OwnerTitleService asks IsOwner, never IsAdmin")
+	local trafficSrc = sourceOf(Server:FindFirstChild("TrafficLogService")) or ""
+	check(string.find(trafficSrc, "admin.IsAdmin", 1, true) ~= nil,
+		"staff everywhere admins already are: the traffic log leaves out whoever IsAdmin names, now three")
 
 	--==========================================================================
 	-- 2. A FORGED REQUEST FROM ANYBODY ELSE CHANGES NOTHING
@@ -347,7 +439,7 @@ local ok, err = pcall(function()
 	local before = #calls
 	local refusedAll = true
 	for _, s in ipairs({ target, { UserId = 1 }, { UserId = 5551, Name = "nicnicniccoal" }, nil, "x" }) do
-		for _, action in ipairs({ "AddMoney", "AddSpeed", "ResetPlayerProgress", "StartNight", "StartDay" }) do
+		for _, action in ipairs({ "AddMoney", "AddSpeed", "ResetPlayerProgress", "StartNight", "StartDay", "Spawn" }) do
 			local reply = admin.Handle(s, action, ADMIN_A, 1000, "nicnicniccoal")
 			if reply.ok or reply.message ~= "Not authorized." then
 				refusedAll = false
@@ -378,6 +470,9 @@ local ok, err = pcall(function()
 			and last.amount == 3000 and type(last.at) == "string"
 			and string.match(last.at, "^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%d") ~= nil,
 		"each success is recorded: admin, target, action, amount and an ISO time", last and last.at)
+	reply = admin.Handle(adminC, "AddMoney", target.UserId, 1)
+	check(reply.ok and profile.Cash == 6001, "TappedYou adds cash like any admin", reply.message)
+	profile.Cash = 6000
 
 	-- The cap: the grant is cut short and says so.
 	profile.Cash = SAVE.MaxCash - 50
@@ -394,11 +489,19 @@ local ok, err = pcall(function()
 	profile.Cash = 6000
 
 	--==========================================================================
-	-- 4. AMOUNTS
+	-- 4. AMOUNTS, UP TO THE SAVE LIMITS (2026-10-07)
 	--==========================================================================
 	say("\n-- amounts --")
+	check(admin.Config.MaxMoney == SAVE.MaxCash and admin.Config.MaxSpeed == SAVE.MaxSpeedScore
+			and admin.Config.MaxMoney == 1e15 and admin.Config.MaxSpeed == 1e15,
+		"one request may add up to the save limits: 1e15 cash and 1e15 Speed")
+	local configBlock = string.match(src, "AdminService%.Config = {(.-)\n}") or ""
+	check(string.find(configBlock, "MaxMoney = SAVE.MaxCash", 1, true) ~= nil
+			and string.find(configBlock, "MaxSpeed = SAVE.MaxSpeedScore", 1, true) ~= nil
+			and string.find(configBlock, "1e15", 1, true) == nil and string.find(configBlock, "1e12", 1, true) == nil,
+		"and they are READ from GameConfig.Save, never copied")
 	local bad = { 0, -5, 1.5, 0 / 0, math.huge, -math.huge, "1000", true, {}, nil,
-		admin.Config.MaxMoney + 1, 2 ^ 53 }
+		admin.Config.MaxMoney + 1, 2 ^ 53, 1e15 - 0.5 }
 	local allRefused = true
 	for _, value in ipairs(bad) do
 		local r1 = admin.Handle(adminA, "AddMoney", target.UserId, value)
@@ -408,7 +511,19 @@ local ok, err = pcall(function()
 		end
 	end
 	check(allRefused and profile.Cash == 6000 and profile.Speed == 5000,
-		"zero, negative, fractional, NaN, both infinities, strings, nil and over-limit are all refused, and nothing moved")
+		"zero, negative, fractional, NaN, both infinities, strings, nil, 1e15 + 1 and 2^53 are all refused, and "
+			.. "nothing moved")
+	local over = admin.Handle(adminA, "AddMoney", target.UserId, 1e15 + 1)
+	check(not over.ok and string.find(over.message, "1,000,000,000,000,000", 1, true) ~= nil,
+		"the refusal shows the new limit", over.message)
+	local richest, richestProfile = join("SpecRichest", 5570, { Cash = 0, Speed = 0 })
+	reply = admin.Handle(adminA, "AddMoney", richest.UserId, 1e15)
+	local speedReply = admin.Handle(adminC, "AddSpeed", richest.UserId, 1e15)
+	check(reply.ok and reply.added == 1e15 and richestProfile.Cash == 1e15 and speedReply.ok
+			and speedReply.added == 1e15 and richestProfile.Speed == 1e15
+			and string.find(reply.message, "$1,000,000,000,000,000", 1, true) ~= nil,
+		"1e15 cash and 1e15 Speed land whole in one request each, said in full", reply.message)
+	profile.Cash = 0
 	reply = admin.Handle(adminA, "AddMoney", target.UserId, admin.Config.MaxMoney)
 	check(reply.ok and reply.added == admin.Config.MaxMoney, "the limit itself is allowed", reply.message)
 	profile.Cash = 6000
@@ -418,12 +533,12 @@ local ok, err = pcall(function()
 	--==========================================================================
 	say("\n-- actions and targets --")
 	local unknown = true
-	for _, action in ipairs({ "ResetCharacter", "SetCash", "Kick", "", 42, nil, {} }) do
+	for _, action in ipairs({ "ResetCharacter", "SetCash", "Kick", "GrantSecret", "", 42, nil, {} }) do
 		if admin.Handle(adminA, action, target.UserId, 1000, target.Name).ok then
 			unknown = false
 		end
 	end
-	check(unknown, "anything but the five actions is refused -- including the old ResetCharacter")
+	check(unknown, "anything but ACTIONS is refused -- including the old ResetCharacter and the old GrantSecret")
 	reply = admin.Handle(adminA, "AddMoney", 999999, 1000)
 	check(not reply.ok and string.find(reply.message, "no longer", 1, true) ~= nil,
 		"a UserId nobody in this server has: refused", reply.message)
@@ -681,144 +796,354 @@ local ok, err = pcall(function()
 	world.phase = "Day"
 
 	--==========================================================================
-	-- 8b. SECRET ITEMS (2026-10-02): A SECRET INTO THE ADMIN'S OWN BAG
+	-- 8b. SPAWN (2026-10-07): ANY PLANT OR POD, INTO ANYBODY'S BAG
 	--
 	-- The real CarryService givers (GivePod, GiveHatched with onRecord) and the
 	-- real PlayerDataService, on stand-ins; SaveService stubbed as above, so the
 	-- saves counted here are MOCKED -- the throwaway-store Play is the real one.
 	--==========================================================================
-	say("\n-- secret items --")
-	local SeedData = require(Shared.SeedData)
-	local kept = { cooldown = admin.Config.SecretCooldown, grants = admin.Config.SecretGrants }
-	admin.Config.SecretCooldown = 0
+	say("\n-- spawn --")
+	local kept = { cooldown = admin.Config.SpawnCooldown, spawning = admin.Config.Spawning }
+	admin.Config.SpawnCooldown = 0
 	local requests = 0
-	local function ask(species, kind, equip, id)
+	local function ask(species, form, size, quantity, id)
 		requests += 1
-		return { species = species, kind = kind, equip = equip == true,
-			request = id or string.format("spec-secret-%04d", requests) }
+		return { species = species, form = form, size = size, quantity = quantity or 1,
+			request = id or string.format("spec-spawn-%05d", requests) }
 	end
-	local function rowsOf(p)
-		local prof = data.Get(p)
+	local function rowsOf(who)
+		local prof = data.Get(who)
 		return if prof then #prof.Held else -1
 	end
-	local function lastRowOf(p)
-		local prof = data.Get(p)
-		return if prof and #prof.Held > 0 then prof.Held[#prof.Held] else nil
-	end
 	local function snapshot()
-		return { a = rowsOf(adminA), b = rowsOf(adminB), t = rowsOf(target),
-			ta = toolsIn(adminA), tb = toolsIn(adminB), tt = toolsIn(target), saves = #savedPayloads }
+		return { a = rowsOf(adminA), b = rowsOf(adminB), c = rowsOf(adminC), t = rowsOf(target),
+			ta = toolsIn(adminA), tb = toolsIn(adminB), tc = toolsIn(adminC), tt = toolsIn(target),
+			saves = #savedPayloads }
 	end
 	local function same(x, y)
-		return x.a == y.a and x.b == y.b and x.t == y.t and x.ta == y.ta and x.tb == y.tb and x.tt == y.tt
-			and x.saves == y.saves
+		return x.a == y.a and x.b == y.b and x.c == y.c and x.t == y.t and x.ta == y.ta and x.tb == y.tb
+			and x.tc == y.tc and x.tt == y.tt and x.saves == y.saves
 	end
-	local secretMark = #calls
+	local function clearBag(who)
+		for _, c in ipairs({ who._backpack, who.Character }) do
+			for _, x in ipairs(c:GetChildren()) do
+				if x:IsA("Tool") then
+					x:Destroy()
+				end
+			end
+		end
+		data.SetHeld(who, {})
+	end
+	local function newTools(who)
+		local found = {}
+		for _, c in ipairs({ who._backpack, who.Character }) do
+			for _, x in ipairs(c:GetChildren()) do
+				if x:IsA("Tool") then
+					table.insert(found, x)
+				end
+			end
+		end
+		return found
+	end
+	local spawnMark = #calls
 	local phaseBefore = world.phase
+	for _, who in ipairs({ adminA, adminB, adminC, target }) do
+		clearBag(who)
+	end
 
 	local s0 = snapshot()
 	local strangersRefused = true
-	for _, s in ipairs({ target, { UserId = 1 }, { UserId = 5551, Name = "nicnicniccoal" }, nil, "x" }) do
-		local r = admin.Handle(s, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod"))
+	for _, s in ipairs({ target, { UserId = 1 }, { UserId = 5551, Name = "nicnicniccoal" }, { UserId = 1139904973 },
+		nil, "x" }) do
+		local r = admin.Handle(s, "Spawn", ADMIN_A, ask("nubkin", "pod", 1))
 		if r.ok or r.message ~= "Not authorized." then
 			strangersRefused = false
 		end
 	end
 	check(strangersRefused and same(s0, snapshot()),
-		"a non-admin's GrantSecret -- even naming an admin as the recipient -- is \"Not authorized.\" and grants nothing")
-
-	local forged = {
-		admin.Handle(adminA, "GrantSecret", target.UserId, ask("snarlbloom", "pod")),
-		admin.Handle(adminA, "GrantSecret", ADMIN_B, ask("petalfawn", "plant")),
-		admin.Handle(adminA, "GrantSecret", tostring(ADMIN_A), ask("petalfawn", "plant")),
-		admin.Handle(adminA, "GrantSecret", nil, ask("petalfawn", "plant")),
-	}
-	local forgedRefused = true
-	for _, r in ipairs(forged) do
-		if r.ok or not string.find(r.message, "only be granted to yourself", 1, true) then
-			forgedRefused = false
-		end
-	end
-	check(forgedRefused and same(s0, snapshot()),
-		"an admin cannot grant to anybody else -- another player, the other admin, a string id, nobody", forged[1].message)
-
-	local wrongItems = { { "nubkin", "pod" }, { "supernovus", "plant" }, { "Snarlbloom", "pod" }, { "snarlbloom ", "pod" },
-		{ "snarlbloom", "seed" }, { "petalfawn", "POD" }, { "petalfawn", "grown" } }
-	local wrongRefused = true
-	for _, w in ipairs(wrongItems) do
-		local r = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask(w[1], w[2]))
-		if r.ok or not string.find(r.message, "Only a Snarlbloom or a Petalfawn", 1, true) then
-			wrongRefused = false
-		end
-	end
-	check(wrongRefused and same(s0, snapshot()), "any other species or form is refused and nothing is granted")
+		"a non-admin's Spawn -- even naming an admin as the target -- is \"Not authorized.\" and gives nothing")
 
 	local good = function()
-		return { species = "snarlbloom", kind = "pod", equip = false, request = "spec-shape-0001" }
+		return { species = "nubkin", form = "pod", size = 1, quantity = 1, request = "spec-shape-0001" }
 	end
-	local shapes = { nil, "snarlbloom:pod", { "snarlbloom", "pod" } }
-	local missing = good()
-	missing.request = nil
-	table.insert(shapes, missing)
+	local shapes = { nil, "nubkin:pod", { "nubkin", "pod", 1, 1 } }
+	for _, field in ipairs({ "species", "form", "size", "quantity", "request" }) do
+		local r = good()
+		r[field] = nil
+		table.insert(shapes, r)
+	end
 	local extra = good()
 	extra.target = ADMIN_B
 	table.insert(shapes, extra)
-	local typed = good()
-	typed.equip = "yes"
-	table.insert(shapes, typed)
-	for _, id in ipairs({ "short", string.rep("a", 65), "bad id!", "" }) do
+	local equip = good()
+	equip.equip = true
+	table.insert(shapes, equip)
+	for field, value in pairs({ species = 5, form = true, size = "7", quantity = "3" }) do
+		local r = good()
+		r[field] = value
+		table.insert(shapes, r)
+	end
+	for _, id in ipairs({ "short", string.rep("a", 65), "bad id!", "", 12345678 }) do
 		local r = good()
 		r.request = id
 		table.insert(shapes, r)
 	end
 	local malformedRefused = true
 	for i = 1, #shapes + 1 do
-		local r = admin.Handle(adminA, "GrantSecret", ADMIN_A, shapes[i])
-		if r.ok or r.message ~= "Malformed request. Nothing was granted." then
+		local r = admin.Handle(adminA, "Spawn", ADMIN_A, shapes[i])
+		if r.ok or r.message ~= "Malformed request. Nothing was spawned." then
 			malformedRefused = false
 		end
 	end
 	check(malformedRefused and same(s0, snapshot()),
-		"a malformed request -- not a table, a missing or extra field, a wrong type, a bad request id -- grants nothing")
+		"a malformed request -- not a table, a missing or extra field (the old EQUIP NOW too), a wrong type, a bad "
+			.. "request id -- gives nothing")
 
-	admin.Config.SecretGrants = false
-	local off = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod"))
-	admin.Config.SecretGrants = true
-	check(not off.ok and string.find(off.message, "switched off", 1, true) and same(s0, snapshot()),
-		"with the console's own switch off, nothing is granted", off.message)
-
-	local exact = true
-	for _, combo in ipairs({ { "snarlbloom", "pod" }, { "snarlbloom", "plant" }, { "petalfawn", "pod" }, { "petalfawn", "plant" } }) do
-		local before = snapshot()
-		local r = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask(combo[1], combo[2]))
-		local row = lastRowOf(adminA)
-		local after = snapshot()
-		local fine = r.ok and r.saved == true and string.find(r.message, "saved", 1, true) ~= nil
-			and after.a == before.a + 1 and after.ta == before.ta + 1 and after.saves == before.saves + 1
-			and after.b == before.b and after.t == before.t
-			and row and row.Id == combo[1] and row.Hatched == (combo[2] == "plant") and row.Tier == SeedData.SecretTier
-		check(fine, string.format("%s as a %s: exactly one item into the admin's own bag, its saved row at the Secret tier, "
-			.. "one save", combo[1], combo[2]), r.message)
-		exact = exact and fine
+	local unknownRefused = true
+	for _, id in ipairs({ "unicorn", "Nubkin", "nubkin ", "", "SNARLBLOOM", string.rep("a", 100), "rainpod4" }) do
+		local r = admin.Handle(adminA, "Spawn", ADMIN_A, ask(id, "pod", 1))
+		if r.ok or not string.find(r.message, "No species has that id", 1, true) then
+			unknownRefused = false
+		end
 	end
+	check(unknownRefused and same(s0, snapshot()),
+		"an id SeedData does not know -- by case, a space, a pod's id instead of a creature's -- gives nothing")
 
-	local once = ask("petalfawn", "pod", false, "spec-repeat-0001")
-	local first = admin.Handle(adminA, "GrantSecret", ADMIN_A, once)
+	local formsRefused = true
+	for _, form in ipairs({ "seed", "POD", "grown", "Plant", "" }) do
+		local r = admin.Handle(adminA, "Spawn", ADMIN_A, ask("nubkin", form, 1))
+		if r.ok or not string.find(r.message, "POD or GROWN PLANT", 1, true) then
+			formsRefused = false
+		end
+	end
+	check(formsRefused and same(s0, snapshot()), "a form other than pod or plant gives nothing")
+
+	local badSizes = { { "nubkin", 0 }, { "nubkin", 8 }, { "nubkin", 1.5 }, { "nubkin", 0 / 0 }, { "nubkin", -1 },
+		{ "nubkin", math.huge }, { "snarlbloom", 7 }, { "petalfawn", 2 }, { "puddlepod", 2 },
+		{ "puddlepod_colossal", 1 }, { "tempestoak", 7 }, { "thundermaw", 3 }, { "dustthorn", 2 },
+		{ "heliothorn", 7 }, { "squallsnapper", 0 }, { "torrentacle", 8 } }
+	local sizesRefused, sizeLeak = true, {}
+	for _, b in ipairs(badSizes) do
+		local r = admin.Handle(adminA, "Spawn", ADMIN_A, ask(b[1], "pod", b[2]))
+		if r.ok or not string.find(r.message, "does not come in that size", 1, true) then
+			sizesRefused = false
+			table.insert(sizeLeak, b[1] .. "@" .. tostring(b[2]))
+		end
+	end
+	check(sizesRefused and same(s0, snapshot()),
+		"a size the species does not come in gives nothing: off the ladder, fractional, NaN, a Secret, Pod 1, 2 or 3, "
+			.. "an Invite reward away from its one size", table.concat(sizeLeak, ", "))
+
+	local qtyRefused = true
+	for _, q in ipairs({ 0, -1, 1.5, SAVE.MaxHeld + 1, 0 / 0, math.huge }) do
+		local r = admin.Handle(adminA, "Spawn", ADMIN_A, ask("nubkin", "pod", 1, q))
+		if r.ok or not string.find(r.message, "quantity must be a whole number", 1, true) then
+			qtyRefused = false
+		end
+	end
+	check(qtyRefused and same(s0, snapshot()), "a quantity outside 1 .. " .. SAVE.MaxHeld .. " gives nothing")
+
+	admin.Config.Spawning = false
+	local off = admin.Handle(adminA, "Spawn", ADMIN_A, ask("nubkin", "pod", 1))
+	admin.Config.Spawning = true
+	check(not off.ok and string.find(off.message, "switched off", 1, true) and same(s0, snapshot()),
+		"with the console's own switch off, nothing is spawned", off.message)
+	check(admin.Config.Spawning == true and kept.spawning == true and GameConfig.Secret.Enabled ~= true,
+		"the switch is on by default, on the server; natural Secret spawning stays off")
+
+	local targetsRefused = true
+	for _, id in ipairs({ "5551", 0, -5551, 5551.5, nil, {} }) do
+		local r = admin.Handle(adminA, "Spawn", id, ask("nubkin", "pod", 1), "SpecTarget")
+		if r.ok or not string.find(r.message, "Choose a player first", 1, true) then
+			targetsRefused = false
+		end
+	end
+	local gone = admin.Handle(adminA, "Spawn", 999999, ask("nubkin", "pod", 1), "Nobody")
+	local left = admin.Handle(adminA, "Spawn", 5552, ask("nubkin", "pod", 1), "SpecLeaver")
+	check(targetsRefused and not gone.ok and string.find(gone.message, "no longer in this server", 1, true)
+			and not left.ok and same(s0, snapshot()),
+		"a target that is not somebody in this server -- a bad id, a stranger, a leaver -- gets nothing", gone.message)
+
+	-- ANOTHER PLAYER: confirmed by their username, and told.
+	local unconfirmed = admin.Handle(adminA, "Spawn", target.UserId, ask("lanterncap", "pod", 7, 3))
+	local misnamed = admin.Handle(adminA, "Spawn", target.UserId, ask("lanterncap", "pod", 7, 3), "SpecTargt")
+	local otherAdmin = admin.Handle(adminA, "Spawn", ADMIN_B, ask("lanterncap", "pod", 7, 3))
+	check(not unconfirmed.ok and string.find(unconfirmed.message, "needs the confirm", 1, true)
+			and not misnamed.ok and not otherAdmin.ok and same(s0, snapshot()) and #told == 0,
+		"giving to anybody but yourself -- another admin too -- needs their username, the console's confirm",
+		unconfirmed.message)
+	local beforeGift = snapshot()
+	local gift = admin.Handle(adminA, "Spawn", target.UserId, ask("lanterncap", "pod", 7, 3), "  spectarget ")
+	local afterGift = snapshot()
+	local giftRows = data.Get(target).Held
+	local allLantern = #giftRows == 3
+	for _, row in ipairs(giftRows) do
+		if row.Id ~= "lanterncap" or row.Tier ~= 7 or row.Hatched ~= false then
+			allLantern = false
+		end
+	end
+	check(gift.ok and gift.saved == true and gift.given == 3 and afterGift.t == beforeGift.t + 3
+			and afterGift.tt == beforeGift.tt + 3 and afterGift.a == beforeGift.a and allLantern
+			and afterGift.saves == beforeGift.saves + 1
+			and string.find(gift.message, "Gave 3 Colossal Lanterncap pods to SpecTarget and saved", 1, true) ~= nil,
+		"confirmed, three Colossal Lanterncap pods go into THEIR bag, three saved rows, ONE save", gift.message)
+	local tell = told[#told]
+	check(#told == 1 and tell and tell.p == target and tell.title == "An admin gave you 3 Colossal Lanterncap pods!"
+			and type(tell.key) == "string",
+		"and they are told: \"An admin gave you 3 Colossal Lanterncap pods!\"", tell and tell.title)
+	trail = admin.Audit()
+	local entry = trail[#trail]
+	check(entry and entry.action == "Spawn" and entry.admin == ADMIN_A and entry.target == 5551
+			and entry.species == "lanterncap" and entry.size == 7 and entry.form == "pod" and entry.quantity == 3,
+		"on the record: who, the target, the species, the size, the form and how many")
+	local ownTold = #told
+	local own = admin.Handle(adminC, "Spawn", ADMIN_C, ask("nubkin", "plant", 2))
+	check(own.ok and own.saved == true and #told == ownTold and rowsOf(adminC) == 1
+			and string.find(own.message, "into your Bag", 1, true) ~= nil,
+		"TappedYou spawns into their own bag like any admin; nobody else is told", own.message)
+	clearBag(target)
+	clearBag(adminC)
+
+	-- EVERY SPECIES AND POD TYPE, IN EVERY SIZE IT COMES IN, AS A POD AND GROWN.
+	local combos, wrongCombos = 0, {}
+	local podsReached = {}
+	local started = os.clock()
+	for _, species in ipairs(SpawnCatalog.all()) do
+		for _, size in ipairs(SpawnCatalog.sizesOf(species)) do
+			for _, form in ipairs({ "pod", "plant" }) do
+				combos += 1
+				clearBag(adminA)
+				local savesBefore = #savedPayloads
+				local r = admin.Handle(adminA, "Spawn", ADMIN_A, ask(species.Id, form, size, 1))
+				local rows = data.Get(adminA).Held
+				local tools = newTools(adminA)
+				local row, t = rows[1], tools[1]
+				local fine = r.ok and r.saved == true and #rows == 1 and #tools == 1 and #savedPayloads == savesBefore + 1
+					and row.Id == species.Id and row.Tier == size and row.Hatched == (form == "plant")
+					and t:GetAttribute("SpeciesId") == species.Id and t:GetAttribute("CarryingKg") == size
+					and (t:GetAttribute("Hatched") == true) == (form == "plant")
+				if not fine then
+					table.insert(wrongCombos, string.format("%s@%d/%s: %s", species.Id, size, form, tostring(r.message)))
+				end
+				local pod = SpawnCatalog.podOf(species, size)
+				if pod and form == "pod" then
+					podsReached[pod.Id] = true
+				end
+			end
+		end
+	end
+	clearBag(adminA)
+	local allPods = true
+	for podId in pairs(SeedData.RainPods) do
+		if not podsReached[podId] then
+			allPods = false
+		end
+	end
+	local speciesCount = 0
+	for _ in pairs(SeedData.ById) do
+		speciesCount += 1
+	end
+	check(#wrongCombos == 0 and #SpawnCatalog.all() == speciesCount,
+		string.format("every one of the %d species, in every size it comes in, as a pod and grown: %d spawns, each "
+			.. "exactly one Tool and one saved row of that species and size, one save (%.1f s)", speciesCount, combos,
+			os.clock() - started), table.concat(wrongCombos, "; "))
+	check(allPods and podsReached.rainpod4 and podsReached.rainpod5,
+		"every Rain pod type was spawned: rainpod1, 2 and 3, rainpod4 (Tiny .. Titan) and rainpod5 (Colossal)")
+
+	-- A SPAWNED INVITE REWARD IS UNSELLABLE; A SPAWNED RAIN POD KEEPS ITS EVENT RULES.
+	local invite = admin.Handle(adminA, "Spawn", ADMIN_A, ask("dustthorn", "plant", SeedData.InviteTier))
+	local inviteRow = data.Get(adminA).Held[1]
+	local inviteTool = newTools(adminA)[1]
+	check(invite.ok and inviteRow and inviteRow.Id == "dustthorn" and inviteTool
+			and SeedData.Sellable(SeedData.Get(inviteTool:GetAttribute("SpeciesId"))) == false
+			and SeedData.Sellable(SeedData.Get(inviteRow.Id)) == false,
+		"a spawned Invite reward is the reward itself: its row and Tool name Dustthorn, which no stall buys")
+	clearBag(adminA)
+	local rainWrong = {}
+	for _, species in ipairs(SeedData.RainSpecies) do
+		for _, size in ipairs(SpawnCatalog.sizesOf(species)) do
+			local pod = SpawnCatalog.podOf(species, size)
+			local shell = SeedData.PodFormOf(species, size)
+			local wantShell = if species.PodForms then species.PodForms[size] else species.Pod
+			local fine = pod ~= nil and SeedData.GrowSecondsFor(species, size) == pod.GrowSeconds
+				and shell == wantShell and species.SkipHatchRoll == true and species.Event == "rain"
+				and SeedData.RainPodOf(species) ~= nil and table.find(pod.Species, species.Id) ~= nil
+				and (pod.Tier == size or (pod.Tiers and (pod.Tiers[size] or 0) > 0))
+				and (if pod.Id == "rainpod4" then size < SeedData.TierCount elseif pod.Id == "rainpod5"
+					then size == SeedData.TierCount else true)
+			if not fine then
+				table.insert(rainWrong, species.Id .. "@" .. size)
+			end
+		end
+	end
+	check(#rainWrong == 0, "a spawned Rain pod keeps its event rules: its pod's growth time, its own shell (the size's "
+		.. "own for the second family), the skipped roll; rainpod4 only below Colossal, rainpod5 only at it",
+		table.concat(rainWrong, ", "))
+
+	-- THE BAG'S ROOM: for the whole quantity, or nothing.
+	local fill = {}
+	for _ = 1, SAVE.MaxHeld do
+		table.insert(fill, { Id = "nubkin", Tier = 1, Hatched = false })
+	end
+	data.SetHeld(adminB, fill)
+	local beforeFull = snapshot()
+	local full = admin.Handle(adminB, "Spawn", ADMIN_B, ask("snarlbloom", "plant", SeedData.SecretTier))
+	check(not full.ok and string.find(full.message, "Not enough room", 1, true) ~= nil
+			and string.find(full.message, string.format("(%d/%d)", SAVE.MaxHeld, SAVE.MaxHeld), 1, true) ~= nil
+			and same(beforeFull, snapshot()),
+		"a full bag refuses with the storage line, and nothing is given or lost", full.message)
+	local nearlyFull = table.clone(fill)
+	table.remove(nearlyFull)
+	table.remove(nearlyFull)
+	data.SetHeld(adminB, nearlyFull)
+	local beforeShort = snapshot()
+	local short = admin.Handle(adminB, "Spawn", ADMIN_B, ask("nubkin", "pod", 3, 3))
+	check(not short.ok and string.find(short.message, "2 free", 1, true) ~= nil and same(beforeShort, snapshot()),
+		"room for 2 and 3 asked: refused whole -- not two of the three", short.message)
+	data.SetHeld(adminB, {})
+
+	-- ONE ITEM CANNOT BE GIVEN: THOSE ALREADY GIVEN GO BACK.
+	local gives = 0
+	carry.GivePod = function(...)
+		gives += 1
+		if gives == 2 then
+			return false
+		end
+		return real.GivePod(...)
+	end
+	local recordedSync = carry.SyncHeldNow
+	carry.SyncHeldNow = function(who, consumed)
+		note("SyncHeldNow", who, consumed and #consumed or 0)
+		real.SyncHeldNow(who, consumed)
+	end
+	local beforeRollback = snapshot()
+	local broken = admin.Handle(adminA, "Spawn", ADMIN_A, ask("nubkin", "pod", 2, 3))
+	carry.GivePod = real.GivePod
+	carry.SyncHeldNow = recordedSync
+	check(not broken.ok and string.find(broken.message, "nothing was spawned", 1, true) ~= nil
+			and same(beforeRollback, snapshot()) and gives == 2,
+		"the second of three cannot be given: the first is taken back with its row, and nothing at all is spawned",
+		broken.message)
+
+	-- THE SAME REQUEST TWICE.
+	local once = ask("petalfawn", "pod", SeedData.SecretTier, 1, "spec-repeat-0001")
+	local firstSpawn = admin.Handle(adminA, "Spawn", ADMIN_A, once)
 	local afterFirst = snapshot()
-	local again = admin.Handle(adminA, "GrantSecret", ADMIN_A, once)
-	local againCopy = admin.Handle(adminA, "GrantSecret", ADMIN_A, table.clone(once))
-	check(first.ok and again.ok and againCopy.ok and string.find(again.message, "Already answered", 1, true) ~= nil
+	local again = admin.Handle(adminA, "Spawn", ADMIN_A, once)
+	local againCopy = admin.Handle(adminA, "Spawn", ADMIN_A, table.clone(once))
+	check(firstSpawn.ok and again.ok and againCopy.ok and string.find(again.message, "Already answered", 1, true) ~= nil
 			and same(afterFirst, snapshot()),
-		"the same request sent again is answered again and grants nothing more", again.message)
+		"the same request sent again is answered again and gives nothing more", again.message)
+	clearBag(adminA)
 
 	slowSave = true
 	local pendingReply = nil
 	local beforePending = snapshot()
 	task.spawn(function()
-		pendingReply = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod", false, "spec-pending-0001"))
+		pendingReply = admin.Handle(adminA, "Spawn", ADMIN_A, ask("snarlbloom", "pod", 1, 1, "spec-pending-0001"))
 	end)
-	local during = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod", false, "spec-pending-0002"))
-	local duringSame = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod", false, "spec-pending-0001"))
+	local during = admin.Handle(adminA, "Spawn", ADMIN_A, ask("snarlbloom", "pod", 1, 1, "spec-pending-0002"))
+	local duringSame = admin.Handle(adminA, "Spawn", ADMIN_A, ask("snarlbloom", "pod", 1, 1, "spec-pending-0001"))
 	task.wait(0.8)
 	slowSave = false
 	local afterPending = snapshot()
@@ -826,93 +1151,64 @@ local ok, err = pcall(function()
 			and string.find(during.message, "already being made", 1, true) ~= nil
 			and not duringSame.ok and string.find(duringSame.message, "still being made", 1, true) ~= nil
 			and afterPending.a == beforePending.a + 1,
-		"while a grant is still saving, a second press (new id or the same) is refused: one item, not two",
+		"while a spawn is still saving, a second press (new id or the same) is refused: one item, not two",
 		during.message .. " / " .. duringSame.message)
+	clearBag(adminA)
 
-	admin.Config.SecretCooldown = 6
-	local c1 = admin.Handle(adminB, "GrantSecret", ADMIN_B, ask("petalfawn", "plant"))
-	local c2 = admin.Handle(adminB, "GrantSecret", ADMIN_B, ask("petalfawn", "plant"))
-	admin.Config.SecretCooldown = 0
-	check(c1.ok and not c2.ok and string.find(c2.message, "between Secret grants", 1, true) ~= nil and rowsOf(adminB) == 1,
-		"the other admin's first grant works, and a second inside the cooldown is refused", c2.message)
-
-	local fill = {}
-	for _ = 1, SAVE.MaxHeld do
-		table.insert(fill, { Id = "nubkin", Tier = 1, Hatched = false })
-	end
-	data.SetHeld(adminB, fill)
-	local beforeFull = snapshot()
-	local full = admin.Handle(adminB, "GrantSecret", ADMIN_B, ask("snarlbloom", "plant"))
-	check(not full.ok and string.find(full.message, string.format("Plant storage full (%d/%d)", SAVE.MaxHeld, SAVE.MaxHeld),
-			1, true) ~= nil and same(beforeFull, snapshot()),
-		"a full bag refuses with the storage line, and nothing is granted or lost", full.message)
-	data.SetHeld(adminB, {})
-
-	local equipBefore = snapshot()
-	local equipped = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("petalfawn", "pod", true))
-	local inBag = false
-	for _, t in ipairs(adminA._backpack:GetChildren()) do
-		if t:IsA("Tool") and t:GetAttribute("SpeciesId") == "petalfawn" then
-			inBag = true
-		end
-	end
-	check(equipped.ok and string.find(equipped.message, "Not equipped, kept in your Bag: you have no character right now", 1, true)
-			~= nil and inBag and snapshot().a == equipBefore.a + 1,
-		"EQUIP NOW on a body that cannot take it: granted, kept in the Bag, and the answer says why", equipped.message)
+	admin.Config.SpawnCooldown = 6
+	local c1 = admin.Handle(adminB, "Spawn", ADMIN_B, ask("petalfawn", "plant", 1))
+	local c2 = admin.Handle(adminB, "Spawn", ADMIN_B, ask("petalfawn", "plant", 1))
+	admin.Config.SpawnCooldown = 0
+	check(c1.ok and not c2.ok and string.find(c2.message, "between spawns", 1, true) ~= nil and rowsOf(adminB) == 1,
+		"the other admin's first spawn works, and a second inside the cooldown is refused", c2.message)
+	clearBag(adminB)
 
 	saveOk = false
-	local unsaved = admin.Handle(adminA, "GrantSecret", ADMIN_A, ask("snarlbloom", "pod"))
+	local unsaved = admin.Handle(adminA, "Spawn", ADMIN_A, ask("snarlbloom", "pod", 1))
 	saveOk = true
 	check(unsaved.ok and unsaved.saved == false and string.find(unsaved.message, "SAVE HAS NOT LANDED", 1, true) ~= nil,
-		"a grant whose save does not land is never reported as saved", unsaved.message)
+		"a spawn whose save does not land is never reported as saved", unsaved.message)
+	clearBag(adminA)
 
 	local tempAdmin = join("AdminBTemp", ADMIN_B, { Cash = 0 }, "unavailable")
 	local beforeTemp = rowsOf(tempAdmin)
-	local temporary = admin.Handle(tempAdmin, "GrantSecret", ADMIN_B, ask("snarlbloom", "pod"))
+	local temporary = admin.Handle(tempAdmin, "Spawn", ADMIN_B, ask("snarlbloom", "pod", 1))
 	byId[ADMIN_B] = adminB
 	check(not temporary.ok and string.find(temporary.message, "not saving", 1, true) ~= nil
 			and rowsOf(tempAdmin) == beforeTemp,
-		"a profile that is not saving this session is refused before anything is granted", temporary.message)
+		"a profile that is not saving this session is refused before anything is spawned", temporary.message)
+	local loadingTarget = admin.Handle(adminA, "Spawn", 5553, ask("nubkin", "pod", 1), "SpecLoading")
+	check(not loadingTarget.ok and string.find(loadingTarget.message, "has not loaded", 1, true) ~= nil,
+		"a target whose profile has not loaded gets nothing", loadingTarget.message)
 
-	check(callsOf("StartNight", secretMark) == 0 and callsOf("StartDay", secretMark) == 0 and world.phase == phaseBefore,
-		"no grant asked for a night or a day")
+	check(callsOf("StartNight", spawnMark) == 0 and callsOf("StartDay", spawnMark) == 0 and world.phase == phaseBefore,
+		"no spawn asked for a night or a day")
 	local adminSrc = sourceOf(Server.AdminService) or ""
-	local grantSrc = string.match(adminSrc, "SECRET ITEMS: A SECRET POD OR GROWN PLANT(.-)ONE REQUEST") or ""
-	check(grantSrc ~= "" and not string.find(grantSrc, "NestService", 1, true)
-			and not string.find(grantSrc, "SpawnSecret", 1, true) and not string.find(grantSrc, "WorldCycleService", 1, true)
-			and not string.find(grantSrc, "FireAllClients", 1, true) and not string.find(grantSrc, "Secret.Enabled", 1, true),
-		"the grant never touches a nest, the day and night, a world toast, or the natural-spawn switch")
-	check(string.find(grantSrc, "CarryService.GivePod(", 1, true) ~= nil
-			and string.find(grantSrc, "CarryService.GiveHatched(", 1, true) ~= nil
-			and string.find(grantSrc, "CarryService.EquipIfFree(", 1, true) ~= nil
-			and string.find(grantSrc, "PlayerDataService.Save(", 1, true) ~= nil,
-		"it grants through CarryService's own givers, equips through EquipIfFree, and saves through PlayerDataService")
-	local nestSrc = sourceOf(Server.NestService) or ""
-	check(SeedData.SecretTier == 1 and string.find(nestSrc, "BuildPod(species, SeedData.SecretTier,", 1, true) ~= nil,
-		"the natural spawn and the grant use the one Secret tier")
-	trail = admin.Audit()
-	check(trail[#trail] and string.sub(trail[#trail].action, 1, 12) == "GrantSecret:" and trail[#trail].target == ADMIN_A,
-		"a grant is on the record, by species and form")
-	-- The panel's side, from its source: checked here because the console section below cannot run under
-	-- Studio's assistant sandbox (it parents a LocalScript into a stand-in PlayerGui).
-	local ui = sourceOf(Server.AdminService:FindFirstChild("AdminConsoleUI")) or ""
-	check(string.find(ui, 'InvokeServer("GrantSecret", player.UserId, request, nil)', 1, true) ~= nil
-			and string.find(ui, "GRANT TO BAG", 1, true) ~= nil and string.find(ui, "EQUIP NOW", 1, true) ~= nil
-			and string.find(ui, "GRANTING…", 1, true) ~= nil and string.find(ui, "HttpService:GenerateGUID(false)", 1, true) ~= nil
-			and string.find(ui, "unanswered = request", 1, true) ~= nil,
-		"SECRET ITEMS names only the admin as recipient, locks GRANT TO BAG while a grant is pending, and gives every "
-			.. "press an id -- resent unchanged when no answer came")
-	admin.Config.SecretCooldown = kept.cooldown
-	admin.Config.SecretGrants = kept.grants
+	local spawnSrc = string.match(adminSrc, "SPAWN: ANY PLANT OR POD, INTO ANYBODY'S BAG(.-)THE WEATHER: EVERY ADMIN'S") or ""
+	-- What RUNS, without the comments that explain what it leaves alone.
+	local spawnCode = string.gsub(spawnSrc, "%-%-[^\n]*", "")
+	check(spawnSrc ~= "" and not string.find(spawnCode, "NestService", 1, true)
+			and not string.find(spawnCode, "SpawnSecret", 1, true) and not string.find(spawnCode, "WorldCycleService", 1, true)
+			and not string.find(spawnCode, "FireAllClients", 1, true) and not string.find(spawnCode, "Secret.Enabled", 1, true),
+		"a spawn never touches a nest, the day and night, a world toast, or the natural-spawn switch")
+	local _, saveCalls = string.gsub(spawnSrc, "PlayerDataService%.Save%(", "")
+	check(string.find(spawnSrc, "CarryService.GivePod(", 1, true) ~= nil
+			and string.find(spawnSrc, "CarryService.GiveHatched(", 1, true) ~= nil
+			and string.find(spawnSrc, "CarryService.SyncHeldNow(", 1, true) ~= nil
+			and string.find(spawnSrc, "SpawnCatalog.allows(", 1, true) ~= nil and saveCalls == 1,
+		"it gives through CarryService's own givers, takes back through SyncHeldNow, checks sizes with SpawnCatalog, "
+			.. "and saves exactly once")
+	admin.Config.SpawnCooldown = kept.cooldown
+	admin.Config.Spawning = kept.spawning
 
 	--==========================================================================
 	-- 9. THE CONSOLE REACHES ADMINS AND NOBODY ELSE
 	--==========================================================================
 	say("\n-- the console --")
-	local function playerGuiFor(p)
+	local function playerGuiFor(who)
 		local pg = Instance.new("Folder")
 		pg.Name = "PlayerGui"
-		pg.Parent = p._holder
+		pg.Parent = who._holder
 		return pg
 	end
 	local adminGui = playerGuiFor(adminA)
@@ -921,8 +1217,21 @@ local ok, err = pcall(function()
 			and built.IgnoreGuiInset,
 		"an admin gets the SeedAdmin gui in their own PlayerGui, kept across respawns")
 	check(built and built:FindFirstChild("AdminRequest") and built.AdminRequest:IsA("RemoteFunction")
-			and built:FindFirstChild("AdminConsoleUI") and built.AdminConsoleUI:IsA("LocalScript"),
-		"holding its RemoteFunction and a copy of the console script")
+			and built:FindFirstChild("AdminConsoleUI") and built.AdminConsoleUI:IsA("LocalScript")
+			and built:FindFirstChild("SpawnCatalog") and built.SpawnCatalog:IsA("ModuleScript")
+			and built:FindFirstChild("ConsoleModel") and built.ConsoleModel:IsA("ModuleScript"),
+		"holding its RemoteFunction, a copy of the console script and its two modules")
+	check(built and built:GetAttribute("MaxMoney") == SAVE.MaxCash and built:GetAttribute("MaxSpeed") == SAVE.MaxSpeedScore
+			and built:GetAttribute("Spawning") == true
+			and built:GetAttribute("SpawnCooldown") == admin.Config.SpawnCooldown
+			and built:GetAttribute("SpawnAnswerSeconds") == admin.Config.SpawnAnswerSeconds
+			and built:GetAttribute("MinInterval") == admin.Config.MinInterval,
+		"told the limits, the switch and its waits (how it draws, not what it may do)")
+	local cGui = playerGuiFor(adminC)
+	local builtC = admin.ProvideConsole(adminC)
+	check(builtC and builtC.Parent == cGui and builtC:GetAttribute("IsOwner") == nil and built:GetAttribute("IsOwner") == nil,
+		"TappedYou gets the console too, the same as the owner's: no console is told who the owner is any more -- "
+			.. "the weather is every admin's (2026-10-07) and the title is OwnerTitleService's")
 	local rebuilt = admin.ProvideConsole(adminA)
 	local count = 0
 	for _, c in ipairs(adminGui:GetChildren()) do
@@ -939,40 +1248,47 @@ local ok, err = pcall(function()
 	local leaked = {}
 	for _, root in ipairs({ StarterPlayer, StarterGui, ReplicatedStorage }) do
 		for _, d in ipairs(root:GetDescendants()) do
-			if d.Name == "AdminConsoleUI" or d.Name == "SeedAdmin" or d.Name == "AdminRequest" then
+			if d.Name == "AdminConsoleUI" or d.Name == "SeedAdmin" or d.Name == "AdminRequest"
+				or d.Name == "SpawnCatalog" or d.Name == "ConsoleModel" then
 				table.insert(leaked, d:GetFullName())
 			end
 		end
 	end
-	check(#leaked == 0, "and nothing of it is anywhere a client receives by default", table.concat(leaked, ", "))
+	check(#leaked == 0, "and nothing of it -- script, remote or module -- is anywhere a client receives by default",
+		table.concat(leaked, ", "))
+	local roster = game:GetService("HttpService"):JSONDecode(admin.RosterLine())
+	check(type(roster) == "table", "the target bar's roster is one JSON line of everybody here")
 
 	--==========================================================================
-	-- 10. THE CLIENT, FROM ITS SOURCE
+	-- 10. THE CLIENT, FROM ITS SOURCE (the redesign: AdminConsoleSpec has the rest)
 	--==========================================================================
 	say("\n-- the client --")
 	local ui = sourceOf(template) or ""
+	local modelSrc = sourceOf(Server.AdminService:FindFirstChild("ConsoleModel")) or ""
 	check(string.find(ui, "layout.admin", 1, true) ~= nil and string.find(ui, "button.Selectable = true", 1, true) ~= nil,
 		"the ADMIN button is placed by HudLayout and is selectable for a controller")
-	check(string.find(ui, "InvokeServer(action, targetId, amount, typed)", 1, true) ~= nil
+	check(string.find(ui, "remote:InvokeServer(a[1], a[2], a[3], a[4])", 1, true) ~= nil
 			and string.find(ui, "FireServer", 1, true) == nil,
 		"it only ever asks, through the one RemoteFunction")
-	check(string.find(ui, "\"AddMoney\"", 1, true) and string.find(ui, "\"AddSpeed\"", 1, true)
-			and string.find(ui, "\"ResetPlayerProgress\"", 1, true)
-			and string.find(ui, "\"StartNight\"", 1, true) and string.find(ui, "\"StartDay\"", 1, true)
-			and not string.find(ui, "\"ResetCharacter\"", 1, true),
-		"it names the server's five actions, and not the old ResetCharacter")
+	check(string.find(modelSrc, "\"AddMoney\"", 1, true) and string.find(modelSrc, "\"AddSpeed\"", 1, true)
+			and string.find(modelSrc, "\"ResetPlayerProgress\"", 1, true)
+			and string.find(modelSrc, "\"StartNight\"", 1, true) and string.find(modelSrc, "\"StartDay\"", 1, true)
+			and string.find(modelSrc, "\"Spawn\"", 1, true) and string.find(modelSrc, "\"Weather\"", 1, true)
+			and string.find(modelSrc, "\"MiniEvent\"", 1, true) and string.find(modelSrc, "\"Announce\"", 1, true)
+			and not string.find(modelSrc, "\"ResetCharacter\"", 1, true)
+			and not string.find(modelSrc .. ui, "GrantSecret", 1, true),
+		"it names the server's actions (through ConsoleModel) -- SPAWN, not the old GrantSecret or ResetCharacter")
 	check(string.find(ui, "WHOLE SERVER", 1, true) and string.find(ui, "GetAttribute(ATTR.WorldPhase)", 1, true)
-			and string.find(ui, "GetAttributeChangedSignal(ATTR.WorldPhase)", 1, true),
+			and string.find(ui, "ATTR.WorldPhase, ATTR.WorldPhaseEndsAt", 1, true),
 		"the day and night buttons are labelled as the whole server's, under the phase read off the clock's attribute")
 	check(string.find(ui, "Enum.KeyCode.ButtonB", 1, true) and string.find(ui, "UnbindAction(BACK_ACTION)", 1, true),
 		"B steps back on a controller, bound only while the panel is open")
-	-- The compact console (2026-10-04) lays itself out from MenuLayout in its own gui (`deck`), on every
-	-- change of that gui's size and on every open.
+	-- The console lays itself out from ConsoleModel in its own gui (`deck`), on every change of that gui's size
+	-- and on every open.
 	local openBlock = string.match(ui, "\nsetOpen = function%(want: boolean%)(.-)\nend\n") or ""
 	check(string.find(ui, 'deck:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)', 1, true) ~= nil
 			and string.find(openBlock, "relayout()", 1, true) ~= nil,
-		"the panel is fitted to the screen again when it changes shape and on every open (a phone once kept the "
-			.. "desktop height it measured at startup: title and X off the top)")
+		"the panel is fitted to the screen again when it changes shape and on every open")
 	check(string.find(ui, "typedMatches()", 1, true) and string.find(ui, "TYPE %s TO CONFIRM", 1, true),
 		"the reset asks for the username to be typed, and stays locked until it matches")
 	check(string.find(ui, "while true", 1, true) == nil and string.find(ui, "Heartbeat", 1, true) == nil,
@@ -990,9 +1306,13 @@ treads.Unmount, treads.Rebuild = real.Unmount, real.Rebuild
 plants.ClearGarden = real.ClearGarden
 carry.ForfeitCarry, carry.SyncHeldNow, carry.RefreshWalkSpeed = real.ForfeitCarry, real.SyncHeldNow,
 	real.RefreshWalkSpeed
+carry.GivePod = real.GivePod
 combat.ClearTrap, shop.RefreshTools = real.ClearTrap, real.RefreshTools
 cycle.StartNight, cycle.StartDay = real.StartNight, real.StartDay
+weatherSvc.StartRain, weatherSvc.StartThunderstorm, weatherSvc.EndRain = real.StartRain, real.StartThunderstorm,
+	real.EndRain
 admin.FindPlayer = real.FindPlayer
+admin.TellPlayer = real.TellPlayer
 admin.Config.MinInterval = real.MinInterval
 fixture:Destroy()
 

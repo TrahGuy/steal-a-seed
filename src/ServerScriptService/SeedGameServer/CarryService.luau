@@ -47,6 +47,8 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
 local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
+-- The first catch's size (2026-10-08): TryTake.
+local FirstMinute = require(Shared:WaitForChild("FirstMinute"))
 -- The ordinary plants' supplied rigs (2026-10-03): giveTool drops their joints in the hands.
 local PlantForms = require(Shared:WaitForChild("PlantForms"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
@@ -195,8 +197,8 @@ end
 --==============================================================================
 -- INTO FREE HANDS, OR NOT AT ALL (2026-10-02)
 --
--- The hatch's delayed equip, as one function the admin console's EQUIP NOW asks
--- too. Never over a raid pod (two channels, one pair of hands), never over
+-- The hatch's delayed equip, as one function (the admin console's EQUIP NOW asked
+-- it too, until 2026-10-07). Never over a raid pod (two channels, one pair of hands), never over
 -- anything already in the hands -- that was the player's choice, and nothing
 -- is ever unequipped for this -- and never on a body that is gone. A refusal
 -- leaves the Tool in the Backpack, where the hotbar and the Bag show it, and
@@ -982,12 +984,27 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 
 	local taken = species :: SeedData.Species
 	local takenTier = math.clamp(podTier or taken.Tier, 1, SeedData.TierCount)
+	--==========================================================================
+	-- THE FIRST CATCH IS AT LEAST BIG (2026-10-08, the owner's FIRST MINUTE)
+	--
+	-- The pod a player takes while their `steal` step is not done -- the
+	-- reserved pod or a nest's -- comes away at least Big: a Tiny becomes Big
+	-- here, anything bigger stays as it rolled. From this line the size IS the
+	-- pod's: the model in the arms, the weight, the banked row, Big's 60 s on
+	-- the owner's ladder. Once per profile, because `steal` is recorded below.
+	-- Never a Secret's pod or a weather event's, whose sizes are their own; and
+	-- never while the record is unknown (nil is not "not done").
+	-- `takenTier` stays what the pod was: a take that fails puts THAT pod back.
+	--==========================================================================
+	local firstCatch = PlayerDataService.TutorialDone(player, "steal") == false
+		and secretId == nil and eventId == nil
+	local carriedTier = if firstCatch then FirstMinute.catchTier(takenTier) else takenTier
 	local ok, err = pcall(function()
 		-- Found and checked above, not re-found and cast here. The `:: BasePart`
 		-- that used to be on this line asserted away exactly the nil that was
 		-- destroying pods.
-		local model = CreatureModel.BuildPod(taken, takenTier, root.CFrame, character)
-		attachInFront(model, root, takenTier, taken)
+		local model = CreatureModel.BuildPod(taken, carriedTier, root.CFrame, character)
+		attachInFront(model, root, carriedTier, taken)
 		-- CarriedPod ONLY. It used to inherit SeedPod from the builder as well,
 		-- so the pod on your own head wore a Take prompt.
 		CollectionService:AddTag(model, GameConfig.Tags.CarriedPod)
@@ -1002,7 +1019,7 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		end
 		carried[player] = {
 			species = taken,
-			tier = takenTier,
+			tier = carriedTier,
 			model = model,
 			fromNest = fromNest,
 			reservedFor = reservedFor,
@@ -1064,6 +1081,13 @@ function CarryService.TryTake(player: Player, pod: Model): boolean
 		SoundKit.emit(if type(pickupCue) == "string" and SoundKit.has(pickupCue)
 			then pickupCue
 			else "TakePod", thiefRoot)
+	end
+	-- What was caught, for the hatch whose reveal will say so -- written before
+	-- `steal` is, so the two never disagree about which take was the first.
+	if firstCatch then
+		PlayerDataService.RecordFirstCatch(player, taken.Id, carriedTier)
+		log(string.format("%s's first catch: a %s %s%s.", player.Name, SeedData.TierName(carriedTier),
+			taken.Name, if carriedTier ~= takenTier then " (taken as " .. SeedData.TierName(takenTier) .. ")" else ""))
 	end
 	PlayerDataService.RecordTutorial(player, "steal")
 	if nestTheft then
@@ -1814,16 +1838,16 @@ function CarryService.GiveHatched(player: Player, species: SeedData.Species,
 	--
 	-- NOTHING IS EVER UNEQUIPPED for this. A player who chose a bat during the
 	-- reveal keeps the bat.
-	-- The checks live in EquipIfFree (2026-10-02), which the admin console's
-	-- EQUIP NOW asks too: the same rules for both, unchanged here.
+	-- The checks live in EquipIfFree (2026-10-02; the admin console's EQUIP NOW
+	-- asked it too until SPAWN replaced that grant, 2026-10-07), unchanged here.
 	local function equipNow()
 		CarryService.EquipIfFree(player, tool)
 	end
 
 	local wait = tonumber(equipAfter) or 0
 	if wait < 0 then
-		-- Not equipped at all: into the Bag only. The admin console's grant with
-		-- EQUIP NOW off (2026-10-02) is the only caller that asks for this.
+		-- Not equipped at all: into the Bag only. The Invite a Friend rewards
+		-- and the admin console's SPAWN (2026-10-07) ask for this.
 	elseif wait > 0 then
 		task.delay(wait, equipNow)
 	else

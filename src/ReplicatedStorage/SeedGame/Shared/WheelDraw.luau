@@ -71,6 +71,7 @@
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SeedData = require(Shared:WaitForChild("SeedData"))
+local SizedIcon = require(Shared:WaitForChild("SizedIcon"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
 
 local WheelDraw = {}
@@ -265,11 +266,12 @@ end
 --           prize, two for the middle one, three for the jackpot -- and a
 --           scatter of muted coins across the slice behind the words
 --           (coinLayout). Both grow with the amount; both are capped.
---   speed   GameConfig.SourceIcons.training, the uploaded winged shoe the Shop
---           already uses as the one Speed icon: one for the small prize, a tidy
---           cluster of three for the large one. Decoration, not a multiplier --
---           the amount is in the words. Until the picture has loaded, the old
---           bolt stands in, so a slice is never blank.
+--   speed   GameConfig.SourceIcons.speed, the owner's plain Speed shoe that
+--           the Shop also uses as the one Speed icon (its small version
+--           wherever a picture draws at 40 px or less, SizedIcon): one for the
+--           small prize, a tidy cluster of three for the large one. Decoration,
+--           not a multiplier -- the amount is in the words. Until the picture
+--           has loaded, the old bolt stands in, so a slice is never blank.
 --   pods    black silhouettes of REAL game pods with an ivory rim, a soft
 --           outline in the pod's size colour and one "?". The silhouettes are
 --           the pool's own biomes (podCluster): a prize whose species come
@@ -298,7 +300,7 @@ end
 -- An icon that must stay readable turns over as a whole (Icon.upright) when
 -- its sector passes through the lower half, like the words do.
 --==============================================================================
-local SPEED_ICON = GameConfig.SourceIcons.training
+local SPEED_ICON = GameConfig.SourceIcons.speed
 
 -- How the art learns a picture has loaded: set by a client before it draws
 -- (WheelUI hands in UIKit.whenPictureLoads). Nil on the server.
@@ -507,6 +509,8 @@ local function speedIcon(box: Frame, reward: WheelData.Reward)
 		image.ZIndex = 10 + i
 		image.Active = false
 		image.Parent = box
+		-- The owner's small shoe wherever this draws at 40 px or less.
+		SizedIcon.follow(image)
 		table.insert(pictures, image)
 	end
 	-- IsLoaded raises no change event to rely on, so a client hands in its
@@ -973,11 +977,55 @@ function WheelDraw.icon(parent: Instance, reward: WheelData.Reward, px: number):
 	elseif reward.kind == "pod" then
 		podIcon(box, reward, px)
 	elseif reward.kind == "boost" and reward.boost == "training" then
+		--======================================================================
+		-- THE OWNER'S BOOSTED SHOE (2026-10-08, TREADMILL FUN addendum 1;
+		-- GameConfig.SourceIcons.training), over the dumbbell the wheel always
+		-- drew -- which stays, under it, until the picture has loaded, so the
+		-- slice and the Reward list are never blank.
+		--======================================================================
+		local fallback = Instance.new("Frame")
+		fallback.Name = "Fallback"
+		fallback.Size = UDim2.fromScale(1, 1)
+		fallback.BackgroundTransparency = 1
+		fallback.BorderSizePixel = 0
+		fallback.Active = false
+		fallback.Parent = box
 		-- A dumbbell: a brown bar through two white plates.
 		local ink = rgb(90, 59, 26)
-		shape(box, "Bar", 0, 0, 20, 4, ink, nil, 0, 2)
-		shape(box, "PlateL", -9.5, 0, 5, 14, WHITE, ink, 1.8, 2, nil, 1)
-		shape(box, "PlateR", 9.5, 0, 5, 14, WHITE, ink, 1.8, 2, nil, 1)
+		shape(fallback, "Bar", 0, 0, 20, 4, ink, nil, 0, 2)
+		shape(fallback, "PlateL", -9.5, 0, 5, 14, WHITE, ink, 1.8, 2, nil, 1)
+		shape(fallback, "PlateR", 9.5, 0, 5, 14, WHITE, ink, 1.8, 2, nil, 1)
+		local shoe = Instance.new("ImageLabel")
+		shoe.Name = "TrainingShoe"
+		shoe.AnchorPoint = Vector2.new(0.5, 0.5)
+		shoe.Position = UDim2.fromScale(0.5, 0.5)
+		shoe.Size = UDim2.fromScale(1.15, 1.15)
+		shoe.BackgroundTransparency = 1
+		shoe.ScaleType = Enum.ScaleType.Fit
+		shoe.Image = GameConfig.SourceIcons.training
+		shoe.ZIndex = 11
+		shoe.Active = false
+		shoe.Parent = box
+		local watch = WheelDraw.whenLoaded
+		if shoe.IsLoaded then
+			fallback.Visible = false
+		elseif watch then
+			watch(shoe, function(ok: boolean)
+				if ok then
+					fallback.Visible = false
+				end
+			end)
+		end
+	elseif reward.kind == "invite" then
+		-- An invite plant (2026-10-08): a gift in the prize's own pink, its gold
+		-- ribbon and bow. Drawn from frames, like every icon here.
+		local ink = rgb(110, 30, 70)
+		local gold = rgb(255, 214, 92)
+		shape(box, "Box", 0, 3, 18, 13, rgb(255, 128, 190), ink, 1.8, 2)
+		shape(box, "Lid", 0, -4.5, 21, 5, reward.colour, ink, 1.8, 2, nil, 1)
+		shape(box, "Ribbon", 0, 1, 4, 20, gold, nil, 0, 1, nil, 2)
+		shape(box, "BowL", -3.6, -8.6, 6.4, 4.6, gold, ink, 1.4, math.huge, -25, 3)
+		shape(box, "BowR", 3.6, -8.6, 6.4, 4.6, gold, ink, 1.4, math.huge, 25, 3)
 	elseif reward.kind == "boost" then
 		-- Income: a gold coin with an arrow going up.
 		local ink = rgb(107, 74, 0)
@@ -1116,6 +1164,10 @@ export type Drawn = {
 export type Options = {
 	-- Words on the sectors (default on).
 	labels: boolean?,
+	-- THIS player's words for a sector (2026-10-08, THE PRIZES SCALE WITH THE
+	-- PLAYER: "$1.2M" for the amount the next spin pays), or the prize's own
+	-- label when this is absent or answers nil.
+	labelFor: ((WheelData.Reward) -> string?)?,
 	-- The still green hub, without words (the world's face, round WheelModel's
 	-- gold cap; the panel lays its own SPIN button over WheelDraw.hub).
 	hub: boolean?,
@@ -1267,6 +1319,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 		local reward = sector.reward
 		local span = sector.finish - sector.start
 		local arm = spoke("Sector_" .. reward.id, sector.mid, 2)
+		local text = (if opts.labelFor then opts.labelFor(reward) else nil) or reward.label
 		local entry: Turning = { mid = sector.mid, words = nil, upright = {} }
 
 		-- The icon near the rim, pointing out.
@@ -1284,7 +1337,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 		-- A cash slice's background coins, under its words and icon (THE PRIZE
 		-- ART): muted toward the slice's own colour so the amount stays in front.
 		if reward.kind == "cash" then
-			local twoLines = select(2, splitWords(reward.label)) ~= nil
+			local twoLines = select(2, splitWords(text)) ~= nil
 			local wordsHalf = (if twoLines then 12.5 else 8) + 1
 			local face = COIN.Face:Lerp(reward.colour, 0.15)
 			local inner = COIN.Top:Lerp(reward.colour, 0.15)
@@ -1314,7 +1367,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 		-- are icon-only, as in the mockup -- except that COLOSSAL is set on its
 		-- slice wherever the wheel is big enough (NARROW WORDS, 2026-10-04).
 		if opts.labels ~= false and span >= 14 then
-			local first, second = splitWords(reward.label)
+			local first, second = splitWords(text)
 			local bigPx = (if second then 12.5 else 14) * k
 			local smallPx = 10.5 * k
 			local thick = if second then bigPx + smallPx + 2 * k else bigPx + 2 * k
@@ -1367,7 +1420,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 			-- COLOSSAL on its own narrow slice, where the wheel is big enough to
 			-- set it readably (NARROW WORDS): further out, one line, kept inside
 			-- the wedge.
-			local fit = WheelDraw.narrowWords(span, k, reward.label)
+			local fit = WheelDraw.narrowWords(span, k, text)
 			if fit then
 				local holder = Instance.new("Frame")
 				holder.Name = "Words"
@@ -1380,7 +1433,7 @@ function WheelDraw.build(parent: Instance, size: number, options: Options?): Dra
 				holder.ZIndex = 3
 				holder.Parent = arm
 				local l = words(holder, "Big", fit.px * k, WHITE, P.WordInk, 1.5 * k, 3)
-				l.Text = reward.label
+				l.Text = text
 				l.Size = UDim2.fromScale(1, 1)
 				l.TextScaled = true
 				local cap = Instance.new("UITextSizeConstraint")

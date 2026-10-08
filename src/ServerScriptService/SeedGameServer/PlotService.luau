@@ -134,6 +134,12 @@ local onReleased: { Listener } = {}
 -- THIS -- so the dependency is inverted into these two lists.
 local onResizing: { Listener } = {}
 local onResized: { Listener } = {}
+-- Fired after a SUCCESSFUL TELEPORT TO PLOT (TeleportHome) and nothing else --
+-- never on a refusal, never for the OBBY or BIOMES buttons (TeleportTo) or the
+-- obby's RETURN TO PLOT. PlayerDataService records the guide's `travel` step
+-- from it (2026-10-08); PlotService cannot require the profiles, which require
+-- THIS, so the dependency is inverted here as it is for the four lists above.
+local onTeleportedHome: { Listener } = {}
 
 local function fire(listeners: { Listener }, player: Player, plot: Model)
 	for _, fn in ipairs(listeners) do
@@ -268,6 +274,8 @@ function PlotService.TeleportHome(player: Player): (boolean, string?)
 	root.AssemblyLinearVelocity = Vector3.zero
 	root.AssemblyAngularVelocity = Vector3.zero
 	log(string.format("%s teleported to %s.", player.Name, plot.Name))
+	-- The guide's travel lesson hears it here, and only here (OnTeleportedHome).
+	fire(onTeleportedHome, player, plot)
 	return true, nil
 end
 
@@ -432,6 +440,18 @@ function PlotService.OnResized(fn: Listener): () -> ()
 		local i = table.find(onResized, fn)
 		if i then
 			table.remove(onResized, i)
+		end
+	end
+end
+
+-- Called with the player and their plot the moment TELEPORT TO PLOT has moved
+-- them (TeleportHome succeeded), after the move.
+function PlotService.OnTeleportedHome(fn: Listener): () -> ()
+	table.insert(onTeleportedHome, fn)
+	return function()
+		local i = table.find(onTeleportedHome, fn)
+		if i then
+			table.remove(onTeleportedHome, i)
 		end
 	end
 end

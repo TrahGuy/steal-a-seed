@@ -74,8 +74,9 @@ local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local SoundKit = require(Shared:WaitForChild("SoundKit"))
 local HudLayout = require(Shared:WaitForChild("HudLayout"))
--- Only for its TV scale (UIKit.tenFoot / UIKit.scaleOf).
+-- For its TV scale (UIKit.tenFoot / UIKit.scaleOf) and the shoe's load.
 local UIKit = require(Shared:WaitForChild("UIKit"))
+local SizedIcon = require(Shared:WaitForChild("SizedIcon"))
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -169,12 +170,16 @@ root.Parent = gui
 --==============================================================================
 -- THE SHOE
 --
--- Drawn from frames, not set as a glyph. Most of Gotham's symbol range renders
--- as tofu boxes in this engine -- SpeedFX paid for that with a trainer emoji,
--- and both rail icons are built the same way for the same reason.
+-- THE OWNER'S SPEED SHOE SINCE 2026-10-08 (TREADMILL FUN, addendum 3: the one
+-- Speed icon everywhere): GameConfig.SourceIcons.speed in this same 50 x 38
+-- box, so no HUD rect moves. It draws at 38 px on a desktop and smaller on the
+-- compact faces -- the owner's small version there (SizedIcon, 40 px or less).
+-- The gold plus badge stays over its bottom-right, as in the reference.
 --
--- A sneaker pointing LEFT: white sole, blue upper with a taller heel, a pale
--- stripe across it, and the gold badge overlapping its bottom-right.
+-- The sneaker drawn from frames below (a glyph would come out a tofu box) is
+-- what this showed before. It stays underneath until the picture has loaded,
+-- and for good if it never does: white sole, blue upper with a taller heel, a
+-- pale stripe across it.
 --==============================================================================
 local shoe = Instance.new("Frame")
 shoe.Name = "Shoe"
@@ -190,13 +195,20 @@ local shoeScale = Instance.new("UIScale")
 shoeScale.Scale = style.ShoeScale
 shoeScale.Parent = shoe
 
+-- The frame sneaker, all in one holder so it can go as one once the picture is in.
+local drawn = Instance.new("Frame")
+drawn.Name = "Drawn"
+drawn.Size = UDim2.fromScale(1, 1)
+drawn.BackgroundTransparency = 1
+drawn.Parent = shoe
+
 local sole = Instance.new("Frame")
 sole.Name = "Sole"
 sole.Position = UDim2.fromOffset(0, 26)
 sole.Size = UDim2.fromOffset(42, 11)
 sole.BackgroundColor3 = WHITE
 sole.BorderSizePixel = 0
-sole.Parent = shoe
+sole.Parent = drawn
 corner(sole, 5)
 
 local heel = Instance.new("Frame")
@@ -205,7 +217,7 @@ heel.Position = UDim2.fromOffset(15, 4)
 heel.Size = UDim2.fromOffset(27, 24)
 heel.BackgroundColor3 = SPEED_BLUE
 heel.BorderSizePixel = 0
-heel.Parent = shoe
+heel.Parent = drawn
 corner(heel, 9)
 
 local toe = Instance.new("Frame")
@@ -214,7 +226,7 @@ toe.Position = UDim2.fromOffset(0, 14)
 toe.Size = UDim2.fromOffset(23, 14)
 toe.BackgroundColor3 = SPEED_BLUE
 toe.BorderSizePixel = 0
-toe.Parent = shoe
+toe.Parent = drawn
 corner(toe, 7)
 
 local stripe = Instance.new("Frame")
@@ -224,8 +236,25 @@ stripe.Size = UDim2.fromOffset(26, 5)
 stripe.Rotation = -10
 stripe.BackgroundColor3 = SHOE_LIGHT
 stripe.BorderSizePixel = 0
-stripe.Parent = shoe
+stripe.Parent = drawn
 corner(stripe, 2)
+
+-- The owner's shoe: square, at the box's left so the badge covers as little of
+-- it as it covered of the sneaker.
+local shoePicture = Instance.new("ImageLabel")
+shoePicture.Name = "Picture"
+shoePicture.Size = UDim2.fromOffset(38, 38)
+shoePicture.BackgroundTransparency = 1
+shoePicture.ScaleType = Enum.ScaleType.Fit
+shoePicture.Image = SizedIcon.at(GameConfig.SourceIcons.speed, 38 * style.ShoeScale)
+shoePicture.ZIndex = 2
+shoePicture.Parent = shoe
+SizedIcon.follow(shoePicture)
+UIKit.whenPictureLoads(shoePicture, function(loaded: boolean)
+	if loaded then
+		drawn.Visible = false
+	end
+end)
 
 --== the gold plus badge ==--
 local badge = Instance.new("Frame")
@@ -234,6 +263,7 @@ badge.Position = UDim2.fromOffset(26, 15)
 badge.Size = UDim2.fromOffset(23, 23)
 badge.BackgroundColor3 = BADGE_GOLD
 badge.BorderSizePixel = 0
+badge.ZIndex = 3
 badge.Parent = shoe
 corner(badge, 6)
 
@@ -253,6 +283,7 @@ for _, bar in ipairs({
 	piece.Size = UDim2.fromOffset(bar.w, bar.h)
 	piece.BackgroundColor3 = WHITE
 	piece.BorderSizePixel = 0
+	piece.ZIndex = 4
 	piece.Parent = badge
 	corner(piece, 1)
 end

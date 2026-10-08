@@ -247,6 +247,10 @@ local PlayerDataService = {
 	RecordTutorial = function(playerArg, step)
 		record("RecordTutorial", playerArg, step)
 	end,
+	-- The first catch's note (2026-10-08, FirstMinuteSpec): none waiting here.
+	TakeFirstCatch = function()
+		return false
+	end,
 }
 
 local giveWorks = true
@@ -381,6 +385,7 @@ local function body()
 			PlayerDataService = PlayerDataService,
 			CarryService = CarryService,
 			PlantWander = PlantWander,
+			GardenFrame = require(Server:WaitForChild("GardenFrame")),
 		}, { GameConfig = liveConfig, HatchRoll = rollOff })
 		PlantService.Init()
 		PlantService.Start()

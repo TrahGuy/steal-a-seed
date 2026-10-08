@@ -79,18 +79,26 @@ local TAU = math.pi * 2
 --==============================================================================
 -- THE REGION, FROM THE NUMBERS A PLOT REPLICATES ABOUT ITSELF
 --
--- `depth`, `wingWidth` and `wingFrontZ` are exactly what MapService stamps as
--- the plot's Depth, WingWidth and WingFrontZ attributes. A wing whose front is
--- at or behind its back has no room in it and is left out.
+-- `depth`, `wingWidth`, `wingFrontZ` and `wingBackZ` are exactly what
+-- MapService stamps as the plot's Depth, WingWidth, WingFrontZ and WingBackZ
+-- attributes. A wing whose front is at or behind its back has no room in it and
+-- is left out.
+--
+-- `wingBackZ` (2026-10-07) is the back fence on every plot but plot 6 at Levels
+-- 6-7, whose wing is Level 5's and ends before the plot does
+-- (GameConfig.Plot.Beside); the main rectangle then carries on behind it, and
+-- the two still share the edge the wing stands on. Left out, it is the back
+-- fence, as it always was.
 --==============================================================================
-function PlantWander.RegionOf(depth: number, wingWidth: number, wingFrontZ: number): Region
+function PlantWander.RegionOf(depth: number, wingWidth: number, wingFrontZ: number, wingBackZ: number?): Region
 	local halfW = PLOT.Width * 0.5
 	local halfD = depth * 0.5
 	local m = WANDER.FenceMargin
 	local main: Box = { x0 = -halfW + m, x1 = halfW - m, z0 = -halfD + m, z1 = halfD - m }
+	local wingEnd = math.min(wingBackZ or halfD, halfD) - m
 	local wing: Box? = nil
-	if wingWidth > 0 and wingFrontZ + m < halfD - m then
-		wing = { x0 = halfW - m, x1 = halfW + wingWidth - m, z0 = wingFrontZ + m, z1 = halfD - m }
+	if wingWidth > 0 and wingFrontZ + m < wingEnd then
+		wing = { x0 = halfW - m, x1 = halfW + wingWidth - m, z0 = wingFrontZ + m, z1 = wingEnd }
 	end
 	local gateHalf = PLOT.GateWidth * 0.5 + 2
 	local gate: Box = { x0 = -gateHalf, x1 = gateHalf, z0 = -math.huge, z1 = -halfD + WANDER.GateMargin }
@@ -99,10 +107,12 @@ end
 
 function PlantWander.RegionFor(plot: Model): Region
 	local depth = tonumber(plot:GetAttribute("Depth"))
-		or GameConfig.plotDepthFor(GameConfig.plotRowsForTier(plot:GetAttribute("Level")))
+		or GameConfig.plotDepthForPlot(plot:GetAttribute("Level"),
+			tonumber(plot:GetAttribute(GameConfig.Attributes.PlotId)))
 	return PlantWander.RegionOf(depth,
 		tonumber(plot:GetAttribute("WingWidth")) or 0,
-		tonumber(plot:GetAttribute("WingFrontZ")) or 0)
+		tonumber(plot:GetAttribute("WingFrontZ")) or 0,
+		tonumber(plot:GetAttribute("WingBackZ")))
 end
 
 --==============================================================================

@@ -469,14 +469,62 @@ function HotbarSlots.remove(bar: { string }, slot: number): Bar
 	return out
 end
 
+--==============================================================================
+-- planted: the refs of grown creatures IN THE GROUND and not in the Bag. Each
+-- keeps its slot while it earns (MY PLANTS, 2026-10-04) -- but nothing of it is
+-- drawn there, so the slot LOOKS empty. An arrival may take it (below).
+--==============================================================================
+function HotbarSlots.planted(profile: any): { [string]: boolean }
+	local set: { [string]: boolean } = {}
+	if type(profile) ~= "table" or type(profile.Plants) ~= "table" then
+		return set
+	end
+	local inBag: { [string]: boolean } = {}
+	if type(profile.Held) == "table" then
+		for _, row in ipairs(profile.Held) do
+			if type(row) == "table" and type(row.Item) == "string" and row.Item ~= "" then
+				inBag["i:" .. row.Item] = true
+			end
+		end
+	end
+	for _, row in ipairs(profile.Plants) do
+		if type(row) == "table" and type(row.Item) == "string" and row.Item ~= "" then
+			local ref = "i:" .. row.Item
+			if not inBag[ref] then
+				set[ref] = true
+			end
+		end
+	end
+	return set
+end
+
 -- Where an ARRIVAL goes: nowhere new if it is already placed; else its own
 -- category's faint slot, wherever that is (a bat replaces +bat, even in a
--- slot a phone does not show); else the first empty shown slot; else the grid
--- (nil, and the bar unchanged).
-function HotbarSlots.arrive(bar: { string }, ref: string, shown: number): (Bar, number?)
+-- slot a phone does not show); else the first empty shown slot; else the first
+-- shown slot a PLANTED creature keeps (`planted`, HotbarSlots.planted); else,
+-- for a plant or a pod, the plant slots SLIDE; else the grid (nil, and the bar
+-- unchanged). The third answer is the ref pushed off the bar, if one was.
+--
+-- THE PLANTED SLOT GIVES WAY (the owner's call, 2026-10-08, option A): on a
+-- phone only slots 4 and 5 hold plants, and two creatures planted from there
+-- sent every pod stolen after them to the Bag past two slots that looked
+-- empty. The planted creature loses only its shortcut.
+--
+-- A PLANT ALWAYS LANDS ON THE BAR (the owner, 2026-10-08): a banked pod, and a
+-- creature picked up out of the garden (HotbarSlots.pickedUp), go to the bar
+-- and the old ones go to the Bag. With every shown slot taken, the shown slots
+-- holding plants or pods slide: the LEFT-MOST (the oldest -- the bar fills
+-- left to right) leaves for the Bag, every other one moves one plant slot to
+-- the left, and the newcomer takes the right-most. Hearts are not spared (the
+-- owner's call). A bat, a trap or the tickets never move and are never pushed
+-- off, and a weapon that finds no room still goes to the grid. Only with
+-- `slide`: an arrival from the profile slides the bar, a Bag tile pressed to
+-- hold does not (browsing the Bag never reshuffles the bar).
+function HotbarSlots.arrive(bar: { string }, ref: string, shown: number,
+	planted: { [string]: boolean }?, slide: boolean?): (Bar, number?, string?)
 	local out = HotbarSlots.normalise(bar)
 	if HotbarSlots.slotOf(out, ref) then
-		return out, nil
+		return out, nil, nil
 	end
 	local category = HotbarSlots.categoryOf(ref)
 	local faint = if category then HotbarSlots.Placeholder[category] else nil
@@ -484,11 +532,58 @@ function HotbarSlots.arrive(bar: { string }, ref: string, shown: number): (Bar, 
 	if not at then
 		at = HotbarSlots.firstEmpty(out, shown)
 	end
+	if not at and planted then
+		for i = 1, math.min(shown, HotbarSlots.Slots) do
+			if planted[out[i]] then
+				local pushed = out[i]
+				out[i] = ref
+				return out, i, pushed
+			end
+		end
+	end
+	if not at and slide and category == "item" then
+		local slots: { number } = {}
+		for i = 1, math.min(shown, HotbarSlots.Slots) do
+			if HotbarSlots.categoryOf(out[i]) == "item" then
+				table.insert(slots, i)
+			end
+		end
+		if #slots > 0 then
+			local pushed = out[slots[1]]
+			for n = 1, #slots - 1 do
+				out[slots[n]] = out[slots[n + 1]]
+			end
+			at = slots[#slots]
+			out[at] = ref
+			return out, at, pushed
+		end
+	end
 	if not at then
-		return out, nil
+		return out, nil, nil
 	end
 	out[at] = ref
-	return out, at
+	return out, at, nil
+end
+
+--==============================================================================
+-- pickedUp: the creatures that were in the ground in the last packet and are
+-- back in the Bag now -- owned still, planted no longer -- in a stable order.
+-- Each is an arrival like a banked pod (HotbarSlots.arrive): one that kept its
+-- slot while it earned stays where it is.
+--==============================================================================
+function HotbarSlots.pickedUp(wasPlanted: { [string]: boolean }?, nowPlanted: { [string]: boolean },
+	owned: { [string]: boolean }): { string }
+	local list: { string } = {}
+	if not wasPlanted then
+		return list
+	end
+	for ref in pairs(wasPlanted) do
+		if owned[ref] and not nowPlanted[ref] then
+			table.insert(list, ref)
+		end
+	end
+	table.sort(list, HotbarSlots.before)
+	return list
 end
 
 --==============================================================================

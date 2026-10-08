@@ -251,7 +251,10 @@ for _, p in ipairs(fieldParts) do
 end
 check(fieldSolid == 0, "every field prop is anchored and non-collidable", fieldSolid)
 check(#fieldParts <= FIELD_BUDGET, string.format("the field's scenery is %d parts, within %d", #fieldParts, FIELD_BUDGET))
-local outer = GameConfig.Plot.MaxReach + 4
+-- The ring MapDecor scatters outside: Level 5's reach, pinned (Plot.DecorReach).
+-- Levels 6-7's plots, which reach further, are PlotLevelsSpec's: it dresses
+-- the field around the real ring and holds every prop off every footprint.
+local outer = GameConfig.Plot.DecorReach + 4
 local inRing = 0
 for _, p in ipairs(fieldParts) do
 	if p.Name ~= "Hedge" and heightOf(p) > 1 and math.sqrt(p.Position.X ^ 2 + p.Position.Z ^ 2) < outer then

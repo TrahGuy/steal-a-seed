@@ -391,6 +391,7 @@ local function body()
 			PlayerDataService = PlayerDataService,
 			CarryService = CarryService,
 			PlantWander = PlantWander,
+			GardenFrame = require(Server:WaitForChild("GardenFrame")),
 		}, { GameConfig = liveConfig })
 		PlantService.Init()
 		PlantService.Start()

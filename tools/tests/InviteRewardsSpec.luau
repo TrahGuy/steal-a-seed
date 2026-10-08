@@ -153,6 +153,12 @@ local byId = {}
 invite.Hooks.playerById = function(id)
 	return byId[id]
 end
+-- A returning friend's free spin (2026-10-08), heard: { UserId, ... } in order.
+local spinsFor = {}
+invite.Hooks.grantSpin = function(p)
+	table.insert(spinsFor, p.UserId)
+	return 1
+end
 local joinFor = {}
 invite.Hooks.joinData = function(p)
 	return joinFor[p]
@@ -423,6 +429,82 @@ section("3. The sign, the panel's cards and the badge", function()
 		"Heliothorn's card is gold at every state; each card says its threshold and rate")
 	check(InviteRewards.badge(nil) and InviteRewards.badge(false) and not InviteRewards.badge(true),
 		"the \"!\" shows until the panel is seen")
+	-- THE TRACK WITH THE WHEEL (2026-10-08): the wheel and the milestones both
+	-- give the first plant not owned, so every screen names the plant each
+	-- milestone really gives. With nothing won on the wheel: exactly as before.
+	local F = CONFIG.Forms
+	local function ownedOf(...)
+		local set = {}
+		for _, form in ipairs({ ... }) do
+			set[form] = true
+		end
+		return set
+	end
+	local function track(n, g, owned)
+		local s = {}
+		for _, card in ipairs(InviteRewards.cards(n, g, owned)) do
+			table.insert(s, string.format("%s:%s:%s", card.form, card.state, if card.won then "owned" else tostring(card.at)))
+		end
+		return table.concat(s, ",")
+	end
+	local same = true
+	for n = 0, 25 do
+		local g = InviteRewards.tierFor(n)
+		local given = {}
+		for i = 1, g do
+			given[F[i]] = true
+		end
+		local a, b = InviteRewards.content(n, g), InviteRewards.content(n, g, given)
+		if a.shown.form ~= b.shown.form or a.nextText ~= b.nextText or a.barText ~= b.barText or a.final ~= b.final
+			or track(n, g) ~= track(n, g, given) then
+			same = false
+		end
+	end
+	check(same, "nothing won on the wheel: the sign, the panel and the cards say exactly what they said (26 counts)")
+	-- The wheel gave Dustthorn before any friend joined.
+	local w0 = InviteRewards.content(0, 0, ownedOf(F[1]))
+	check(w0.shown.form == F[1] and w0.next ~= nil and w0.next.form == F[2] and w0.next.at == 1
+			and w0.nextText == "NEXT: Thornbrute (Legendary) at 1 invite" and w0.barText == "0 / 1",
+		"Dustthorn won on the wheel at 0 friends: NEXT is Thornbrute at 1 invite", w0.nextText)
+	local t0 = track(0, 0, ownedOf(F[1]))
+	check(t0 == string.format("%s:earned:owned,%s:next:1,%s:locked:5,%s:locked:10", F[1], F[2], F[3], F[4]),
+		"its cards: Dustthorn owned; Thornbrute at 1 invite, Pharaothorn at 5, Heliothorn at 10", t0)
+	-- ... then its first friend's milestone gave Thornbrute (the guarded Play's state).
+	local w1 = InviteRewards.content(1, 1, ownedOf(F[1], F[2]))
+	check(w1.shown.form == F[2] and w1.nextText == "NEXT: Pharaothorn (Mythic) at 5 invites" and w1.barText == "1 / 5",
+		"then 1 friend gave Thornbrute: it stands, NEXT is Pharaothorn at 5 invites", w1.nextText)
+	local t1 = track(1, 1, ownedOf(F[1], F[2]))
+	check(t1 == string.format("%s:earned:owned,%s:earned:owned,%s:next:5,%s:locked:10", F[1], F[2], F[3], F[4]),
+		"its cards: two owned (which milestone gave which is not said), Pharaothorn at 5, Heliothorn at 10", t1)
+	-- Every plant owned before the last milestone: the track is complete.
+	local wAll = InviteRewards.content(10, 3, ownedOf(F[1], F[2], F[3], F[4]))
+	check(wAll.final and wAll.nextText == nil and wAll.shown.form == F[4] and wAll.fraction == 1,
+		"every plant owned at 10 friends: FINAL, Heliothorn stands, no NEXT")
+	-- The reward card names the plant the server gave, not the tier's own.
+	local given1 = InviteRewards.popup(1, F[2])
+	local plain1 = InviteRewards.popup(1)
+	check(given1.form == F[2] and given1.name == "Thornbrute" and given1.line == plain1.line and plain1.form == F[1]
+			and InviteRewards.reward(2, "not-a-form").form == F[2],
+		"the reward card shows the plant given (Thornbrute at 1 friend), its line still the tier's; a stray form is ignored",
+		given1.name .. " / " .. given1.line)
+	-- The three screens read the owned set; the card reads the payload's form.
+	local function src(name)
+		local found = game:GetService("StarterPlayer"):FindFirstChild(name, true)
+		local ok, text = pcall(function()
+			return found.Source
+		end)
+		return if ok and type(text) == "string" then text else ""
+	end
+	local ui, hub, card = src("InviteUI"), src("InviteHub"), src("InviteRewardUI")
+	local function has(text, needle)
+		return string.find(text, needle, 1, true) ~= nil
+	end
+	check(has(ui, "InviteRewards.content(count, granted, owned)") and has(ui, "if c.won then WORDS.Owned")
+			and has(hub, "InviteRewards.content(count, granted, InviteRewards.ownedSet(player:GetAttribute(A.Owned)))")
+			and has(hub, "player:GetAttributeChangedSignal(A.Owned):Connect(refresh)")
+			and has(card, "InviteRewards.popup(tier, givenForm[tier])")
+			and has(card, "givenForm[math.floor(tonumber(payload.tier) or 0)] = payload.form"),
+		"wired: the panel and the sign pass the owned set, the pedestal follows it, the card shows the plant given")
 end)
 
 --==============================================================================
@@ -503,9 +585,13 @@ section("3b. The sign, read from the nearest spawn pad", function()
 		return string.find(hub, needle, 1, true) ~= nil
 	end
 	check(has('far.Name = "Far"') and has("if d < S.FarFrom - S.FarBand then") and has("elseif d > S.FarFrom then")
-			and has("f.near.Visible = not want") and has("f.far.Visible = want") and has("local K = H / 370")
-			and has("f.farTrim.Enabled = content.final"),
+			and has("f.near.Visible = not farNow and not rulesNow") and has("f.far.Visible = farNow")
+			and has("local K = H / 370") and has("f.farTrim.Enabled = content.final"),
 		"InviteHub: the far view past FarFrom, the whole sign back under FarFrom - FarBand, the gold trim on both")
+	check(has("f.rules.Visible = not farNow and rulesNow") and has("rulesTitle.Text = WORDS.RulesTitle")
+			and has("for i, line in ipairs(WORDS.Rules) do") and CONFIG.RulesSignSeconds < CONFIG.RulesSignCycle,
+		"InviteHub: the rules (who counts, the four plants, a returning friend's spin) in the near view's place "
+			.. "for a few seconds of every cycle; never in the far view")
 	-- NEXT clear of the bar (the owner, 2026-10-06: in p18b the bar's count rose into it).
 	local R = S.Rows
 	local function gap(a, b)
@@ -758,15 +844,47 @@ section("5c. The notices (the owner's notices brief)", function()
 	local rowan = enter("Rowan", 43003)
 	invite.Ready(rowan)
 	joinFor[rowan] = { ReferredByPlayerId = host.UserId }
-	check(invite.CreditJoin(rowan) == "returning", "a friend who has played before: not counted")
-	local r = last("notcounted", "Hostess")
+	local countBefore = #data.Get(host).InviteIds
+	check(invite.CreditJoin(rowan) == "returning", "a friend who has played before: not a count")
+	-- 2026-10-08 (A RETURNING FRIEND): one free spin for the inviter, once per
+	-- friend, never toward the plants.
+	local r = last("returning", "Hostess")
 	local rw = r and InviteRewards.notice(r)
-	check(r ~= nil and r.name == "Rowan" and r.why == "returning" and rw.kind == "info" and rw.title == "Rowan joined"
-			and rw.detail == "Already played, so it doesn't count" and last("welcome", "Rowan") == nil,
-		"played before: info \"Rowan joined\", \"Already played, so it doesn't count\"; no WELCOME! for them",
+	check(r ~= nil and r.name == "Rowan" and rw.kind == "success" and rw.title == WORDS.Returning
+			and rw.detail == "Rowan came back from your invite" and last("welcome", "Rowan") == nil
+			and spinsFor[#spinsFor] == host.UserId and #data.Get(host).InviteIds == countBefore
+			and table.find(data.Get(host).InviteReturnIds, 43003) ~= nil,
+		"played before: success +1 FREE SPIN, \"Rowan came back from your invite\", one spin, never a count; no WELCOME!",
 		rw and rw.detail)
-	check(invite.SimulateJoin(43004, host.UserId, false) == "returning" and last("notcounted", "Hostess").why == "returning",
-		"the Studio test path tells the same not-counted notice")
+	local spinsNow = #spinsFor
+	check(invite.CreditReturning(host.UserId, 43003, "Rowan") == "known" and #spinsFor == spinsNow
+			and last("notcounted", "Hostess").why == "returning",
+		"the same returning friend again: \"known\", no second spin -- once per friend, ever")
+	check(invite.CreditReturning(host.UserId, host.UserId) == "failed" and #spinsFor == spinsNow,
+		"never to yourself")
+	check(invite.SimulateJoin(43004, host.UserId, false) == "returning" and #spinsFor == spinsNow + 1
+			and last("returning", "Hostess") ~= nil and #data.Get(host).InviteIds == countBefore,
+		"the Studio test path pays a returning friend the same way")
+	-- Elsewhere: the inbox's own Returning list, beside its Ids, taken on the next read.
+	inbox[77001] = { Ids = { 77100 } }
+	check(invite.CreditReturning(77001, 77200) == "inbox" and inbox[77001].Returning[1] == 77200
+			and inbox[77001].Ids[1] == 77100 and invite.CreditReturning(77001, 77200) == "inbox"
+			and #inbox[77001].Returning == 1,
+		"an inviter in another server: the friend waits in their inbox (Returning), the Ids beside it untouched, once")
+	-- NEVER TWICE (2026-10-08): a plant won on the wheel is not given again by a
+	-- milestone, which gives the next plant not yet owned instead.
+	local winner = enter("Wheelwinner", 43030)
+	invite.Ready(winner)
+	data.UpdateInvites(winner, function(pr)
+		pr.InviteOwned = { CONFIG.Forms[1] }
+		return true
+	end)
+	check(invite.Credit(winner.UserId, 43031, "Ivy") == "here", "a wheel winner's first friend counts")
+	local g = last("granted", "Wheelwinner")
+	check(g ~= nil and g.form == CONFIG.Forms[2] and data.Get(winner).InviteGranted == 1
+			and table.find(data.Get(winner).InviteOwned, CONFIG.Forms[2]) ~= nil and #data.Get(winner).InviteOwned == 2,
+		"their 1-friend milestone gives the next plant NOT owned (" .. CONFIG.Forms[2] .. "), never the wheel's "
+			.. CONFIG.Forms[1] .. " again", g and g.form)
 	-- Friends from other servers: Roblox's DisplayName, else "a friend" -- never a UserId.
 	displayNames[880001] = "Faraway Fox"
 	check(invite.Credit(host.UserId, 880001) == "here", "a friend from another server counts here")

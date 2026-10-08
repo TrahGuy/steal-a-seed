@@ -82,6 +82,10 @@ local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local WheelData = require(Shared:WaitForChild("WheelData"))
+-- The invite prize's plant (2026-10-08).
+local SeedData = require(Shared:WaitForChild("SeedData"))
+-- The belt's golden-ticket window (TREADMILL FUN, 2026-10-08).
+local BeltCatch = require(Shared:WaitForChild("BeltCatch"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local TreadmillService = require(script.Parent:WaitForChild("TreadmillService"))
@@ -121,6 +125,14 @@ local channel: RemoteEvent? = nil
 local running = false
 local generation = 0
 local rng = Random.new()
+-- THE PRIZES SCALE WITH THE PLAYER (2026-10-08): each player's cash and Speed
+-- amounts as last published (Attributes.Amounts) -- what the next spin pays.
+local published: { [Player]: { [string]: number } } = {}
+-- os.clock() of each player's last WheelOpen, so a client cannot make the
+-- server work the amounts out every frame.
+local openedAt: { [Player]: number } = {}
+-- A grant into the Bag, never into the hands (InviteService's NO_EQUIP).
+local NO_EQUIP = -1
 
 local function log(message: string)
 	print("[Seed/WheelService] " .. message)
@@ -299,6 +311,42 @@ local function publish(player: Player)
 end
 WheelService.Publish = publish
 
+--==============================================================================
+-- THE PRIZES SCALE WITH THE PLAYER (WheelData.amountFor, 2026-10-08)
+--
+-- From the server's own numbers only: the garden's income (EconomyService.
+-- RateFor, as it pays) and the mill tier's rate (GameConfig.Mill, no boosts).
+-- Published when the profile is ready, when the panel opens (WheelOpen) and
+-- after every spin; the roll pays the published amount, so the words the wheel
+-- showed are the amount paid.
+--==============================================================================
+local function millRateOf(profile: Profile): number
+	local tiers = GameConfig.Mill.Tiers
+	local tier = tiers[math.clamp(math.floor(tonumber((profile :: any).MillTier) or 1), 1, #tiers)]
+	return if tier then tier.speed else 0
+end
+
+local function publishAmounts(player: Player): { [string]: number }
+	local profile = PlayerDataService.Get(player)
+	if not profile or not WheelData.Enabled then
+		return {}
+	end
+	local amounts = WheelData.amountsFor(EconomyService.RateFor(player), millRateOf(profile))
+	published[player] = amounts
+	put(player, A.Amounts, WheelData.encodeAmounts(amounts))
+	return amounts
+end
+WheelService.PublishAmounts = publishAmounts
+
+-- The invite plants this player has ever been given, as a set.
+local function invitesOwned(profile: Profile): { [string]: boolean }
+	local owned: { [string]: boolean } = {}
+	for _, id in ipairs((profile :: any).InviteOwned or {}) do
+		owned[id] = true
+	end
+	return owned
+end
+
 local function reply(player: Player, payload: { [string]: any })
 	local hook = replyFn
 	if hook then
@@ -367,10 +415,41 @@ local function deliverOne(player: Player, profile: Profile, row: Prize): boolean
 	if not prize then
 		return false
 	end
+	-- A scaled amount as it was rolled; a row from before pays the floor.
 	if prize.kind == "cash" then
-		return EconomyService.PayReward(player, prize.amount or 0, "the reward wheel")
+		return EconomyService.PayReward(player, row.Amount or prize.amount or 0, "the reward wheel")
 	elseif prize.kind == "speed" then
-		return TreadmillService.PayReward(player, prize.amount or 0, "the reward wheel")
+		return TreadmillService.PayReward(player, row.Amount or prize.amount or 0, "the reward wheel")
+	elseif prize.kind == "invite" then
+		-- The plant rolled, unless an invite milestone gave it meanwhile: then the
+		-- next one not owned. Every one given meanwhile: the prize's own swap,
+		-- at this player's amount now -- what the odds list says it pays. Handed
+		-- over as an invite gives it -- the Bag's room counted and the Held row
+		-- written, or nothing (owed, tried again).
+		local owned = invitesOwned(profile)
+		local form = if row.Species ~= "" and not owned[row.Species] then row.Species
+			else WheelData.nextInvite(owned)
+		if not form then
+			local swap = WheelData.ById[prize.swap or ""]
+			if not swap then
+				return false
+			end
+			local amount = WheelData.amountFor(swap, EconomyService.RateFor(player), millRateOf(profile))
+			if swap.kind == "speed" then
+				return TreadmillService.PayReward(player, amount, "the reward wheel")
+			end
+			return EconomyService.PayReward(player, amount, "the reward wheel")
+		end
+		local species = SeedData.Get(form)
+		if not species then
+			return false
+		end
+		local given = CarryService.GiveHatched(player, species, SeedData.InviteTier, NO_EQUIP, nil, true)
+		if given then
+			table.insert((profile :: any).InviteOwned, form)
+			PlayerDataService.PublishInvites(player)
+		end
+		return given
 	elseif prize.kind == "boost" then
 		return BonusChestService.GrantBoost(player, prize.boost or "")
 	elseif prize.kind == "trail" then
@@ -424,8 +503,9 @@ local function deliverPending(player: Player): (number, number)
 		if ok then
 			landed += 1
 			local prize = WheelData.ById[row.Prize]
-			log(string.format("%s was paid %s (spin %s, %s).", player.Name, prize and prize.title or row.Prize,
-				row.Id, row.Source))
+			-- In the words of the amount paid (THE PRIZES SCALE WITH THE PLAYER).
+			local paid = if prize then select(3, WheelData.wordsFor(prize, row.Amount)) else row.Prize
+			log(string.format("%s was paid %s (spin %s, %s).", player.Name, paid, row.Id, row.Source))
 		else
 			index += 1
 		end
@@ -447,7 +527,8 @@ local function roll(player: Player, profile: Profile, source: string)
 	forced[player] = nil
 	local rolled = if force then WheelData.ById[force.prize]
 		else WheelData.prizeAt(rng:NextInteger(1, WheelData.TotalWeight))
-	local prize, swapped = WheelData.resolve(rolled, profile.Cosmetics[TRAIL] == true)
+	local nextInvite = WheelData.nextInvite(invitesOwned(profile))
+	local prize, swapped = WheelData.resolve(rolled, profile.Cosmetics[TRAIL] == true, nextInvite == nil)
 	local species = ""
 	if prize.kind == "pod" then
 		local pool = WheelData.Pools[prize.pool or ""] or {}
@@ -455,6 +536,15 @@ local function roll(player: Player, profile: Profile, source: string)
 		if force and force.species and table.find(pool, force.species) then
 			species = force.species
 		end
+	elseif prize.kind == "invite" then
+		species = nextInvite or ""
+	end
+	-- What the wheel showed this player, as last published (THE PRIZES SCALE
+	-- WITH THE PLAYER); worked out now if nothing was published yet.
+	local amount: number? = nil
+	if prize.scale then
+		local amounts = published[player] or publishAmounts(player)
+		amount = amounts[prize.id] or WheelData.amountFor(prize, EconomyService.RateFor(player), millRateOf(profile))
 	end
 	local within = rng:NextNumber()
 
@@ -475,6 +565,7 @@ local function roll(player: Player, profile: Profile, source: string)
 			Species = species,
 			Source = source,
 			At = now(),
+			Amount = amount,
 		})
 		return true
 	end)
@@ -510,9 +601,14 @@ local function roll(player: Player, profile: Profile, source: string)
 		end
 	end
 	publish(player)
+	-- The next spin's amounts: a garden that grew since the panel opened, or a
+	-- Speed prize that changed nothing, alike.
+	publishAmounts(player)
 	Metrics.wheelSpun(player, prize.id, source)
-	log(string.format("%s spent a%s spin: %s%s%s.", player.Name, if source == "bought" then " BOUGHT" else "n earned",
-		rolled.title, if swapped then " -> " .. prize.title else "", if still then " (owed: no room yet)" else ""))
+	-- The prize in the words of its amount (THE PRIZES SCALE WITH THE PLAYER).
+	local paidTitle = select(3, WheelData.wordsFor(prize, amount))
+	log(string.format("%s spent a%s spin: %s%s.", player.Name, if source == "bought" then " BOUGHT" else "n earned",
+		if swapped then rolled.title .. " -> " .. paidTitle else paidTitle, if still then " (owed: no room yet)" else ""))
 	reply(player, {
 		ok = true,
 		id = id,
@@ -522,6 +618,9 @@ local function roll(player: Player, profile: Profile, source: string)
 		within = within,
 		source = source,
 		owed = still,
+		-- What was paid: a scaled amount, or the invite plant given.
+		amount = amount,
+		species = if prize.kind == "invite" then species else nil,
 	})
 	-- The delivery's own save; the prize is safe on the profile either way.
 	task.spawn(PlayerDataService.Save, player)
@@ -1004,6 +1103,108 @@ function WheelService.GrantEventSpin(player: Player, eventId: string, cap: numbe
 end
 
 --==============================================================================
+-- TREADMILL FUN'S FREE SPINS (2026-10-08; TreadmillFunService)
+--
+-- MILESTONE SPINS: up to `n` onto the EARNED balance, as many as it has room
+-- for under MaxEarnedHeld (capped on load, so past it a spin would vanish).
+-- Answers how many landed; the caller keeps the rest owed and pays them when
+-- there is room (MilestoneSpinsOwed). Not the obby's allowance -- WheelDayAt and
+-- WheelDayCount are neither read nor written.
+--
+-- THE BELT'S GOLDEN TICKET: its OWN rolling 24 h window (BeltTicketAt /
+-- BeltTicketCount, BeltCatch's limit), opened by the first ticket caught and
+-- running whether or not they play -- WheelData.Daily's pattern, never its
+-- fields. In one UpdateWheel step: a closed window reopens, a full one says
+-- "CAP", a full balance says "FULL", otherwise the count and the spin together.
+-- `BeltTicketOpen` asks the same question without granting, so the server only
+-- ever SENDS a ticket a player could take.
+-- Both: a profile that is not saving takes nothing, rather than a spin that
+-- vanishes with the server; accepted spins are published and saved soon, as
+-- GrantEventSpin's are.
+--==============================================================================
+function WheelService.GrantMilestoneSpins(player: Player, n: number, why: string): number
+	if not WheelData.Enabled or player.Parent ~= Players or not PlayerDataService.IsPersistent(player) then
+		return 0
+	end
+	if type(n) ~= "number" or n < 1 or n ~= math.floor(n) then
+		return 0
+	end
+	local landed = 0
+	PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+		landed = math.clamp(WheelData.MaxEarnedHeld - p.WheelEarned, 0, n)
+		if landed <= 0 then
+			return false
+		end
+		p.WheelEarned += landed
+		return true
+	end)
+	if landed > 0 then
+		log(string.format("%s earned %d free spin(s) for %s.", player.Name, landed, tostring(why)))
+		publish(player)
+		saveSoon(player)
+	end
+	return landed
+end
+
+-- A returning friend's free spin (InviteService.CreditReturning, 2026-10-08):
+-- one earned spin onto the balance, as a milestone's.
+function WheelService.GrantInviteSpin(player: Player): number
+	return WheelService.GrantMilestoneSpins(player, 1, "a friend who came back through their invite")
+end
+
+local function beltWindow(p: Profile, at: number): (number, number)
+	local q = p :: any
+	local opened = tonumber(q.BeltTicketAt) or 0
+	if opened <= 0 or at >= opened + BeltCatch.TicketWindowSeconds then
+		return 0, 0
+	end
+	return opened, tonumber(q.BeltTicketCount) or 0
+end
+
+function WheelService.BeltTicketOpen(player: Player): boolean
+	local profile = PlayerDataService.Get(player)
+	if not WheelData.Enabled or not profile or not PlayerDataService.IsPersistent(player) then
+		return false
+	end
+	local _, count = beltWindow(profile, now())
+	return count < BeltCatch.TicketsPerWindow and profile.WheelEarned < WheelData.MaxEarnedHeld
+end
+
+function WheelService.GrantBeltTicket(player: Player): (boolean, string?)
+	if not WheelData.Enabled then
+		return false, "DISABLED"
+	end
+	if player.Parent ~= Players or not PlayerDataService.IsPersistent(player) then
+		return false, "NOT_SAVED"
+	end
+	local why: string? = nil
+	local granted = PlayerDataService.UpdateWheel(player, function(p: Profile): boolean
+		local at = now()
+		local opened, count = beltWindow(p, at)
+		if count >= BeltCatch.TicketsPerWindow then
+			why = "CAP"
+			return false
+		end
+		if p.WheelEarned >= WheelData.MaxEarnedHeld then
+			why = "FULL"
+			return false
+		end
+		local q = p :: any
+		q.BeltTicketAt = if opened > 0 then opened else at
+		q.BeltTicketCount = count + 1
+		p.WheelEarned += 1
+		return true
+	end)
+	if not granted then
+		return false, why or "NOT_SAVED"
+	end
+	log(string.format("%s caught a golden ticket on their belt: one free spin.", player.Name))
+	publish(player)
+	saveSoon(player)
+	return true, nil
+end
+
+--==============================================================================
 -- BOUGHT SPINS, CALLED BY StoreService's RECEIPT HANDLER AND BY NOTHING ELSE
 --
 -- Returns whether they landed; StoreService writes the ledger and saves, and
@@ -1097,6 +1298,7 @@ local function watch(player: Player, gen: number)
 		return
 	end
 	publish(player)
+	publishAmounts(player)
 	-- A new body comes with an empty Backpack: its Spin Ticket goes straight back
 	-- (SPIN TICKETS) rather than at the loop's next pass.
 	table.insert(serviceConnections, player.CharacterAdded:Connect(function()
@@ -1179,6 +1381,13 @@ function WheelService.Start()
 				equip(player, payload)
 			elseif action == ACT.Buy then
 				buy(player, payload)
+			elseif action == ACT.Open then
+				-- The panel opened: this player's amounts again, at most twice a second.
+				local last = openedAt[player]
+				if not last or os.clock() - last >= 0.5 then
+					openedAt[player] = os.clock()
+					publishAmounts(player)
+				end
 			end
 		end))
 	end
@@ -1192,6 +1401,8 @@ function WheelService.Start()
 		prompted[player] = nil
 		forced[player] = nil
 		saveAgain[player] = nil
+		published[player] = nil
+		openedAt[player] = nil
 	end))
 	for _, player in ipairs(Players:GetPlayers()) do
 		task.spawn(watch, player, gen)

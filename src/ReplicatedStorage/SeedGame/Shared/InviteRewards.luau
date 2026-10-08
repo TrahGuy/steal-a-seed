@@ -20,6 +20,17 @@
 -- server's count, and never from its own input: both numbers are attributes
 -- the server writes (GameConfig.InviteRewards.Attributes).
 --==============================================================================
+-- THE TRACK WITH THE WHEEL (2026-10-08)
+--
+-- The wheel can give an invite plant too, and it and the milestones both give
+-- the first plant of the track not owned yet (InviteService, NEVER TWICE). So
+-- a milestone to come gives the next plant still missing -- not always its
+-- own: one won on the wheel moves the rest up a milestone. Given the plants
+-- owned (Attributes.Owned), every answer here names the plant that really
+-- comes: the card the plant given, the sign and the panel the plant each
+-- milestone will give. With nothing won on the wheel, or no owned set passed,
+-- every answer is exactly what it was before.
+--==============================================================================
 
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
@@ -101,13 +112,15 @@ export type Reward = {
 }
 
 -- One form's row: its name, rarity and colour, its fixed rate and its threshold.
-function InviteRewards.reward(tier: number): Reward
-	local form = InviteRewards.formOfTier(tier)
-	local species = SeedData.Get(form) :: SeedData.Species
+-- `form`, when it is one of the track's, stands in for the tier's own (THE
+-- TRACK WITH THE WHEEL); the threshold stays the tier's.
+function InviteRewards.reward(tier: number, form: string?): Reward
+	local own = if form ~= nil and table.find(CONFIG.Forms, form) then form else InviteRewards.formOfTier(tier)
+	local species = SeedData.Get(own) :: SeedData.Species
 	local income = SeedData.IncomePerSecond(species, SeedData.InviteTier)
 	return {
 		tier = math.clamp(tier, 1, InviteRewards.Count),
-		form = form,
+		form = own,
 		name = species.Name,
 		rarity = species.Rarity,
 		colour = GameConfig.RarityColor[species.Rarity] or Color3.new(1, 1, 1),
@@ -135,12 +148,30 @@ export type Content = {
 	finalText: string?,
 }
 
--- Everything the sign and the panel's hero say, for a count and the forms given.
-function InviteRewards.content(count: any, granted: any): Content
+-- Whether form `i` of the track is owned: within the milestones shown, or in
+-- the owned set (THE TRACK WITH THE WHEEL).
+local function holds(i: number, tier: number, owned: { [string]: boolean }?): boolean
+	return i <= tier or (owned ~= nil and owned[CONFIG.Forms[i]] == true)
+end
+
+-- Everything the sign and the panel's hero say, for a count, the forms given
+-- and (optional) the plants owned.
+function InviteRewards.content(count: any, granted: any, owned: { [string]: boolean }?): Content
 	local n = whole(count)
 	local tier = InviteRewards.shownTier(n, granted)
-	local final = tier >= InviteRewards.Count
-	local shown = InviteRewards.reward(math.max(tier, 1))
+	-- The plant standing for the player: the last of the track they own (the
+	-- first, as the goal, while they own none); and the first still missing,
+	-- which the next milestone gives.
+	local last, missing = 0, nil
+	for i = 1, InviteRewards.Count do
+		if holds(i, tier, owned) then
+			last = i
+		elseif missing == nil then
+			missing = CONFIG.Forms[i]
+		end
+	end
+	local final = tier >= InviteRewards.Count or missing == nil
+	local shown = InviteRewards.reward(math.max(last, 1))
 	if final then
 		return {
 			tier = tier,
@@ -156,7 +187,7 @@ function InviteRewards.content(count: any, granted: any): Content
 			finalText = WORDS.Final,
 		}
 	end
-	local nxt = InviteRewards.reward(tier + 1)
+	local nxt = InviteRewards.reward(tier + 1, missing)
 	-- A form earned but not yet given (the Bag was full) shows a full bar: the
 	-- count has reached it; the form follows the grant.
 	local shownCount = math.min(n, nxt.at)
@@ -176,16 +207,53 @@ function InviteRewards.content(count: any, granted: any): Content
 end
 
 export type CardState = "earned" | "next" | "locked"
-export type Card = Reward & { state: CardState, gold: boolean }
+-- `won`: an earned card that says "Owned" for its threshold (see cards).
+export type Card = Reward & { state: CardState, gold: boolean, won: boolean }
 
--- The track's four cards: EARNED once given, NEXT the one after the last given,
+-- The invite plants ever given (GameConfig.InviteRewards.Attributes.Owned:
+-- ids, comma-separated) as a set of the track's own forms; anything else is
+-- dropped.
+function InviteRewards.ownedSet(text: any): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	if type(text) ~= "string" then
+		return out
+	end
+	for id in string.gmatch(text, "[^,]+") do
+		if table.find(CONFIG.Forms, id) then
+			out[id] = true
+		end
+	end
+	return out
+end
+
+-- The track's four cards: EARNED once owned, NEXT the first still missing,
 -- LOCKED beyond -- never hidden. The final form's card is gold at every state.
-function InviteRewards.cards(count: any, granted: any): { Card }
+-- A card still missing says the milestone that will give it: the next one
+-- missing comes with the next milestone, and so on (THE TRACK WITH THE WHEEL).
+-- An earned card says its own threshold -- unless more plants are owned than
+-- milestones reached: some came from the wheel and which milestone gave which
+-- is not known, so it says "Owned" (`won`), never a count that was not the one.
+function InviteRewards.cards(count: any, granted: any, owned: { [string]: boolean }?): { Card }
 	local tier = InviteRewards.shownTier(count, granted)
+	local held = 0
+	for i = 1, InviteRewards.Count do
+		if holds(i, tier, owned) then
+			held += 1
+		end
+	end
 	local out: { Card } = {}
+	local rank = 0
 	for i = 1, InviteRewards.Count do
 		local r = InviteRewards.reward(i) :: any
-		r.state = if i <= tier then "earned" elseif i == tier + 1 then "next" else "locked"
+		if holds(i, tier, owned) then
+			r.state = "earned"
+			r.won = held > tier
+		else
+			rank += 1
+			r.state = if rank == 1 then "next" else "locked"
+			r.won = false
+			r.at = CONFIG.Thresholds[math.min(tier + rank, InviteRewards.Count)]
+		end
 		r.gold = i == InviteRewards.Count
 		table.insert(out, r :: Card)
 	end
@@ -287,6 +355,17 @@ function InviteRewards.notice(payload: any): NoticeWords?
 	elseif kind == "full" then
 		return { kind = "warning", title = WORDS.Full, detail = WORDS.FullDetail, key = "InviteFull", quiet = false,
 			sound = nil }
+	elseif kind == "returning" then
+		-- A friend who had played before came back through the invite: one free
+		-- spin (2026-10-08), never a count.
+		return {
+			kind = "success",
+			title = WORDS.Returning,
+			detail = string.format(WORDS.ReturningDetail, capital(InviteRewards.who(payload.name))),
+			key = "InviteReturning",
+			quiet = true,
+			sound = "joined",
+		}
 	end
 	return nil
 end
@@ -321,10 +400,12 @@ export type PopupCard = Reward & {
 }
 
 -- The card for a tier: its words, its rim, how long it stays untouched, and how
--- loud it looks (GameConfig.InviteRewards.Popup.Intensity, by rarity).
-function InviteRewards.popup(tier: number): PopupCard
+-- loud it looks (GameConfig.InviteRewards.Popup.Intensity, by rarity). `form`:
+-- the plant the server says it gave (the "granted" payload's), which is not
+-- the tier's own when one was won on the wheel first (THE TRACK WITH THE WHEEL).
+function InviteRewards.popup(tier: number, form: string?): PopupCard
 	local P = CONFIG.Popup
-	local card = InviteRewards.reward(tier) :: any
+	local card = InviteRewards.reward(tier, form) :: any
 	local final = card.tier >= InviteRewards.Count
 	local look = (P.Intensity[card.rarity] or P.Intensity.Epic) :: Intensity
 	card.final = final

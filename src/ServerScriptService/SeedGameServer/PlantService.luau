@@ -89,10 +89,16 @@ local CreatureModel = require(Shared:WaitForChild("CreatureModel"))
 local ActionRefusal = require(Shared:WaitForChild("ActionRefusal"))
 -- When a hatch's roll runs and when its plant may be shown: arithmetic only.
 local HatchRoll = require(Shared:WaitForChild("HatchRoll"))
+-- The starter pod and the first catch's words (2026-10-08).
+local FirstMinute = require(Shared:WaitForChild("FirstMinute"))
+-- The verb a server-worded notice rides on (Notice.ServerNotice).
+local Notice = require(Shared:WaitForChild("Notice"))
 local PlotService = require(script.Parent:WaitForChild("PlotService"))
 local PlayerDataService = require(script.Parent:WaitForChild("PlayerDataService"))
 local CarryService = require(script.Parent:WaitForChild("CarryService"))
 local PlantWander = require(script.Parent:WaitForChild("PlantWander"))
+-- What frame a SAVED garden's X/Z are in, and plot 6's at Levels 6-7: arithmetic only.
+local GardenFrame = require(script.Parent:WaitForChild("GardenFrame"))
 -- What MY PLANTS' EQUIP BEST ranks and where its newcomers stand: arithmetic only.
 local GardenPlan = require(Shared:WaitForChild("GardenPlan"))
 
@@ -169,6 +175,12 @@ type Planted = {
 	-- shortcut and its heart are still its own. nil for a pod, and for a plant
 	-- saved before ids were kept in the ground.
 	item: string?,
+	-- THE STARTER POD (2026-10-08, FirstMinute): true on the one pod the game
+	-- planted for a brand-new profile, while it is still a pod. It carries no
+	-- prompt -- it hatches by itself, in place (hatchStarter) -- and is nil
+	-- from then on: the plant it becomes is an ordinary one. Not saved; a
+	-- restore knows it again by the profile's StarterAt.
+	starter: boolean?,
 }
 
 -- plot -> placementId -> Planted
@@ -780,12 +792,22 @@ end
 -- X and Z rather than a slot index, because there are no slots any more. Stage
 -- as well, because a planted thing is no longer derivable from its clock: a pod
 -- whose timer finished an hour ago is still a pod until somebody hatches it.
+--
+-- X and Z IN THE FRONT SHAPE'S FRAME (2026-10-07): the same numbers as the
+-- live offset on every plot at Levels 1-5 and on plots 1-5 at every level;
+-- plot 6 at Levels 6-7 is another shape and converts (GardenFrame), so the
+-- garden means the same ground whichever plot its owner is given next.
 --==============================================================================
 local function record(plot: Model): { any }
 	local list = {}
 	local byPlot = growing[plot]
 	if byPlot then
+		-- The level the soil was BUILT at (MapService stamps it with the
+		-- geometry): the frame the live offsets are in.
+		local level = tonumber(plot:GetAttribute("Level"))
+		local plotId = tonumber(plot:GetAttribute(GameConfig.Attributes.PlotId))
 		for _, entry in pairs(byPlot) do
+			local saved = GardenFrame.ToSaved(level, plotId, entry.offset)
 			table.insert(list, {
 				SpeciesId = entry.species.Id,
 				PlantedAt = entry.plantedAt,
@@ -793,8 +815,8 @@ local function record(plot: Model): { any }
 				-- starting the wait again or applying today's ladder to it.
 				HatchAt = entry.hatchAt,
 				Tier = entry.tier,
-				X = entry.offset.X,
-				Z = entry.offset.Z,
+				X = saved.X,
+				Z = saved.Z,
 				Stage = entry.stage,
 				Facing = entry.facing,
 				Item = if entry.stage == CreatureModel.STAGE_GROWN then entry.item else nil,
@@ -833,6 +855,10 @@ local hatch: (Player, Planted, boolean?) -> (boolean, string?)
 local pickUp: (Player, Planted, boolean?) -> (boolean, string?)
 
 local function attachHatchPrompt(entry: Planted)
+	-- The starter pod hatches itself (hatchStarter): no prompt, free or paid.
+	if entry.starter then
+		return
+	end
 	-- The clock has run out, so there is no wait left to pay for. The free
 	-- prompt replaces the paid one rather than standing beside it.
 	if entry.instant then
@@ -964,6 +990,10 @@ local function attachInstantPrompt(entry: Planted)
 	local model = entry.model
 	local handle = if model then model.PrimaryPart else nil
 	if not (model and handle and INSTANT_ITEM) or entry.stage ~= CreatureModel.STAGE_POD then
+		return
+	end
+	-- Nothing is sold to skip a free 30 s gift that hatches itself.
+	if entry.starter then
 		return
 	end
 	-- No product, no prompt: a dead button is worse than no button. Every tier is
@@ -1152,7 +1182,8 @@ function PlantService.OfferInstantHatch(player: Player, plot: Model, placementId
 	end
 	-- A ready pod hatches for free on E. The tick swaps this prompt out within a
 	-- second of the clock running out, so this only catches a press in between.
-	if entry.stage ~= CreatureModel.STAGE_POD or isReady(entry, os.time()) then
+	-- The starter pod is never offered one: it hatches itself.
+	if entry.stage ~= CreatureModel.STAGE_POD or isReady(entry, os.time()) or entry.starter then
 		return false
 	end
 	--==========================================================================
@@ -1595,13 +1626,10 @@ function PlantService.OnRevealed(fn: (any) -> ()): () -> ()
 	end
 end
 
-local function announceReveal(payload: any)
-	for _, fn in ipairs(onRevealed) do
-		local ok, err = pcall(fn, payload)
-		if not ok then
-			warn("[Seed/PlantService] reveal listener failed: " .. tostring(err))
-		end
-	end
+-- The animation's one message, to every client. The starter pod's reveal is
+-- sent through here ALONE: it is a gift the player did not hatch, so it earns
+-- nothing a listener pays for a hatch (the hatch bonus) -- see hatchStarter.
+local function revealToClients(payload: any)
 	local channel = revealChannel
 	if channel then
 		-- pcall because a cosmetic message is never worth an error inside the
@@ -1610,6 +1638,16 @@ local function announceReveal(payload: any)
 			channel:FireAllClients(HATCH.Action, payload)
 		end)
 	end
+end
+
+local function announceReveal(payload: any)
+	for _, fn in ipairs(onRevealed) do
+		local ok, err = pcall(fn, payload)
+		if not ok then
+			warn("[Seed/PlantService] reveal listener failed: " .. tostring(err))
+		end
+	end
+	revealToClients(payload)
 end
 
 --==============================================================================
@@ -1658,6 +1696,11 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- pod in this player's own plot.
 	--==========================================================================
 	if entry.stage ~= CreatureModel.STAGE_POD then
+		return false, nil
+	end
+	-- The starter pod is nobody's to hatch: it hatches itself, in place, and
+	-- into the garden rather than the Bag (hatchStarter).
+	if entry.starter then
 		return false, nil
 	end
 	if not early and not isReady(entry, os.time()) then
@@ -1735,6 +1778,9 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 	-- every load re-derives it from the Almanac, the bag and the garden): what
 	-- the hatch bonus names a FIRST hatch rather than a welcome back (2026-10-01).
 	local firstHatch = PlayerDataService.RecordTutorial(player, "hatch")
+	-- THE FIRST CATCH COMING UP (FirstMinute): the pod taken while `steal` was
+	-- not done, at the size it was taken at. True once, and only words ride on it.
+	local firstCatch = PlayerDataService.TakeFirstCatch(player, entry.species.Id, entry.tier)
 
 	-- Everything from here is decoration. The plant is theirs and the garden is
 	-- saved; step 7 of the order above.
@@ -1755,6 +1801,8 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 		paid = early == true,
 		discovery = discovered,
 		firstHatch = firstHatch == true,
+		-- "BIG! Your first catch." over the plant (HatchFX), in its size's word.
+		firstCatch = firstCatch == true,
 		-- Server time, so every client starts the same animation at the same
 		-- moment without being told each frame.
 		at = now,
@@ -1767,6 +1815,133 @@ function hatch(player: Player, entry: Planted, early: boolean?): (boolean, strin
 		burst(model, entry.tier)
 	end
 	return true, nil
+end
+
+--==============================================================================
+-- THE STARTER POD, ON THE OWNER (2026-10-08; FirstMinute)
+--
+-- StarterHatchAt on the player while their starter pod is still a pod -- its
+-- deadline, os.time() -- and nil otherwise. TutorialUI adds "Your first pod is
+-- growing!" to the training steps while it is set. A spec's stand-in owner is
+-- a table and is left alone.
+--==============================================================================
+local function publishStarter(player: any, hatchAt: number?)
+	if typeof(player) == "Instance" and player:IsA("Player") then
+		player:SetAttribute(GameConfig.Attributes.StarterHatchAt, hatchAt)
+	end
+end
+
+--==============================================================================
+-- THE STARTER POD HATCHES ITSELF, WHERE IT STANDS (2026-10-08; FirstMinute)
+--
+-- Called by the tick once its 30 s are up. hatch()'s order, with the one
+-- difference a gift needs: the creature stays IN THE GARDEN instead of going to
+-- the Bag, because a player in their first minute has not been taught to place
+-- one yet -- the point is to see it earning.
+--
+--   1. the guards      -- still the starter, still a pod, still in this garden,
+--                         whose owner's garden is restored here
+--   2. the plant       -- the same entry becomes the grown creature (Stage 3,
+--                         an item id of its own) and is SAVED before anything is
+--                         drawn; from here it earns like any other
+--   3. the Almanac     -- a discovery is a discovery. No tutorial milestone.
+--   4. the decoration  -- the shell bursts, the roll runs where it stood, the
+--                         notice lands with the reveal, and the real creature
+--                         stands up as the reveal's own fades out
+--
+-- NOTHING ELSE: no RecordTutorial, no Tool, and no OnRevealed listener -- the
+-- hatch bonus belongs to the first hatch the player makes themselves.
+-- Answers whether it hatched; a refusal leaves it a ready pod for the next tick.
+--==============================================================================
+local function hatchStarter(entry: Planted): boolean
+	local byPlot = growing[entry.plot]
+	if not (entry.starter and byPlot and byPlot[entry.id] == entry)
+		or entry.stage ~= CreatureModel.STAGE_POD then
+		return false
+	end
+	local owner = PlotService.OwnerOf(entry.plot)
+	if not owner or restoredFor[entry.plot] ~= owner then
+		return false
+	end
+	local item = PlayerDataService.MintItem(owner)
+	if not item then
+		return false
+	end
+	local now = Workspace:GetServerTimeNow()
+	local revealAt = if entry.species.SkipHatchRoll == true then now else HatchRoll.revealAt(now)
+	local rolled = math.max(revealAt - now, 0)
+
+	-- 2. The plant, in the table and on the record, before a frame is drawn.
+	stopWander(entry)
+	local pod = entry.model
+	entry.model = nil
+	if entry.prompt then
+		entry.prompt:Destroy()
+		entry.prompt = nil
+	end
+	if entry.instant then
+		entry.instant:Destroy()
+		entry.instant = nil
+	end
+	dropAnchor(entry)
+	entry.starter = nil
+	entry.stage = CreatureModel.STAGE_GROWN
+	entry.item = item
+	persist(entry.plot)
+	-- 3. Seen, never recorded.
+	local discovered = PlayerDataService.MarkSeen(owner, entry.species.Id)
+	publishStarter(owner, nil)
+	local income = SeedData.IncomePerSecond(entry.species, entry.tier)
+	log(string.format("%s's starter %s hatched by itself in their garden (+$%s/s).",
+		tostring((owner :: any).Name), entry.species.Name, GameConfig.compact(income)))
+
+	-- 4. The decoration, exactly as a hatch's, at the spot the pod stood on.
+	revealToken += 1
+	revealToClients({
+		token = revealToken,
+		species = entry.species.Id,
+		tier = entry.tier,
+		rarity = entry.species.Rarity,
+		income = income,
+		cf = standCF(entry),
+		owner = owner,
+		paid = false,
+		discovery = discovered,
+		firstHatch = false,
+		starter = true,
+		at = now,
+		revealAt = revealAt,
+	})
+	if pod and pod.Parent then
+		burst(pod, entry.tier)
+	end
+	-- When the plant comes up out of the roll (with the roll off: after the
+	-- burst), as HatchFX draws it.
+	local risen = (if rolled > 0 then rolled else BURST) + HATCH.Reveal.Seconds
+	task.delay(risen, function()
+		local channel = revealChannel
+		if channel then
+			-- pcall: a player who left in between is no error worth having.
+			pcall(function()
+				channel:FireClient(owner :: any, Notice.ServerNotice, {
+					title = FirstMinute.HatchedTitle,
+					detail = FirstMinute.hatchedDetail(income, GameConfig.compact),
+					key = FirstMinute.NoticeKey,
+				})
+			end)
+		end
+	end)
+	-- The real creature stands up as the reveal's label and figure fade, so the
+	-- garden shows one plant, not two. Only if it is still this garden's plant:
+	-- a pickup, a release or a second restore in between leaves nothing to show.
+	task.delay(risen + HATCH.Label.Seconds + HATCH.Label.FadeSeconds, function()
+		local live = growing[entry.plot]
+		if live and live[entry.id] == entry and entry.stage == CreatureModel.STAGE_GROWN
+			and not entry.model and entry.plot.Parent then
+			render(entry)
+		end
+	end)
+	return true
 end
 
 --==============================================================================
@@ -2454,6 +2629,54 @@ local function slotOffsets(plot: Model): { [number]: Vector3 }
 	return out
 end
 
+--==============================================================================
+-- THE STARTER POD GOES IN (2026-10-08; FirstMinute)
+--
+-- Into the garden of a profile FirstMinute.owed says is brand-new, once its
+-- (empty) garden is restored: one Tiny Petalpip pod on the beds' first free
+-- spot, on the ladder's normal Tiny wait, with no prompt -- it hatches itself
+-- (hatchStarter). The flag goes on the record FIRST and in the same step as the
+-- row (RecordStarter refuses a second), so a save holds both or neither: a
+-- server that dies before saving owes the starter again, and one that saved
+-- never gives another. The caller's persist() writes the row.
+--==============================================================================
+local function plantStarter(player: Player, plot: Model, profile: any): Planted?
+	if not FirstMinute.owed(profile) then
+		return nil
+	end
+	local species = FirstMinute.starter()
+	local byPlot = growing[plot]
+	if not (species and byPlot) or countIn(plot) >= capacityOf(plot) then
+		return nil
+	end
+	local tier = FirstMinute.StarterTier
+	local now = os.time()
+	if not PlayerDataService.RecordStarter(player, now) then
+		return nil
+	end
+	local id = (nextId[plot] or 0) + 1
+	nextId[plot] = id
+	local entry: Planted = {
+		plot = plot,
+		id = id,
+		species = species,
+		tier = tier,
+		offset = spotsFor(plot, 1)[1],
+		plantedAt = now,
+		hatchAt = now + SeedData.GrowSecondsFor(species, tier),
+		stage = CreatureModel.STAGE_POD,
+		facing = facingFor(id),
+		model = nil,
+		prompt = nil,
+		starter = true,
+	}
+	byPlot[id] = entry
+	render(entry)
+	log(string.format("%s is new: a starter %s pod is growing in their garden (%ds).",
+		player.Name, species.Name, entry.hatchAt - now))
+	return entry
+end
+
 local function restore(player: Player, plot: Model)
 	task.spawn(function()
 		-- For as long as they stay (GameConfig.Plot.RestorePatienceSeconds is
@@ -2493,6 +2716,13 @@ local function restore(player: Player, plot: Model)
 		local cap = capacityOf(plot)
 		local restored, dropped = 0, 0
 		local now = os.time()
+		-- Saved X/Z are the Front shape's (GardenFrame); this plot's own frame
+		-- is the same but on plot 6 at Levels 6-7. The level the soil was built
+		-- at, off the plot: resized to its owner's before this ever runs.
+		local level = tonumber(plot:GetAttribute("Level"))
+		local plotId = tonumber(plot:GetAttribute(GameConfig.Attributes.PlotId))
+		-- When this profile's starter pod was planted, or 0 (FirstMinute).
+		local starterAt = tonumber((profile :: any).StarterAt) or 0
 
 		for _, saved in ipairs(profile.Plants) do
 			local row = if type(saved) == "table" then saved else nil
@@ -2520,7 +2750,11 @@ local function restore(player: Player, plot: Model)
 
 			local x = if row then tonumber(row.X) else nil
 			local z = if row then tonumber(row.Z) else nil
-			if not (x and z) then
+			if x and z then
+				local live = GardenFrame.FromSaved(level, plotId, Vector3.new(x, 0, z))
+				x, z = live.X, live.Z
+			else
+				-- A slot index is this plot's own grid, already in its frame.
 				local index = if row then tonumber(row.Slot) else nil
 				local off = if index then legacy[index] else nil
 				if off then
@@ -2618,10 +2852,17 @@ local function restore(player: Player, plot: Model)
 					prompt = nil,
 					item = if stage == CreatureModel.STAGE_GROWN and row and type(row.Item) == "string"
 						then row.Item else nil,
+					-- The starter pod still growing (FirstMinute): the row the
+					-- game planted at the profile's StarterAt. It hatches itself
+					-- on the next tick if its time is already up.
+					starter = if stage == CreatureModel.STAGE_POD and starterAt > 0 and at == starterAt
+						then true else nil,
 				}
 				byPlot[id] = entry
 				render(entry)
-				if isReady(entry, now) then
+				if entry.starter then
+					-- No prompt of either kind: the tick hatches it.
+				elseif isReady(entry, now) then
 					attachHatchPrompt(entry)
 				else
 					attachInstantPrompt(entry)
@@ -2643,6 +2884,15 @@ local function restore(player: Player, plot: Model)
 		end
 		-- The garden is in. From here the bed is this owner's to save and plant.
 		restoredFor[plot] = player
+		-- A brand-new profile's first garden: one pod, planted now (FirstMinute).
+		plantStarter(player, plot, profile)
+		local growingStarter: number? = nil
+		for _, entry in pairs(byPlot) do
+			if entry.starter then
+				growingStarter = entry.hatchAt
+			end
+		end
+		publishStarter(player, growingStarter)
 		-- Write back, so anything dropped stops being carried forever and any
 		-- migrated position is saved in the new shape.
 		persist(plot)
@@ -3067,6 +3317,8 @@ function PlantService.ClearGarden(player: Player, plot: Model): number
 	end
 	wanted[player.UserId] = nil
 	lastOffer[player.UserId] = nil
+	-- A starter pod that was still growing went with the rest.
+	publishStarter(player, nil)
 	log(string.format("%s's garden was cleared for a progress reset (%d plant(s)).", player.Name,
 		cleared))
 	return cleared
@@ -3252,7 +3504,13 @@ function PlantService.Start()
 					nextId[plot] = nil
 				else
 					for _, entry in pairs(byPlot) do
-						if isReady(entry, now) then
+						if entry.starter then
+							-- The starter pod: no prompt ever; its own hatch the
+							-- moment its time is up (FirstMinute).
+							if isReady(entry, now) then
+								hatchStarter(entry)
+							end
+						elseif isReady(entry, now) then
 							-- Also takes the Instant Hatch prompt off.
 							if not entry.prompt then
 								attachHatchPrompt(entry)

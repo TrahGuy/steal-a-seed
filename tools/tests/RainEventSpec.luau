@@ -3,7 +3,8 @@
 -- Steal a Seed :: RainEventSpec
 --
 -- The Rain event (2026-10-02; WeatherService, RainBiome, the console's WEATHER
--- category): the owner's account alone may start or end it, and a malformed
+-- category): any of the three admin accounts may start or end it (the owner's
+-- alone until 2026-10-07), nobody else may, and a malformed
 -- request starts nothing; one event at a time, a second START changes nothing
 -- and a second END is harmless; exactly one x1.25 on online planted income,
 -- on top of the pass and the temporary boosts, gone the moment it ends, and
@@ -180,7 +181,7 @@ local real = {
 local ok, err = pcall(function()
 	WeatherService.Init()
 	--==========================================================================
-	say("1. The owner's account alone, and nothing malformed starts anything")
+	say("1. Every admin account, nobody else, and nothing malformed starts anything")
 	--==========================================================================
 	local function ask(who, verb, seconds)
 		return AdminService.Handle(who, "Weather", verb, seconds, nil)
@@ -188,13 +189,19 @@ local ok, err = pcall(function()
 	local r = ask(stranger, "start", 60)
 	check(r.ok == false and r.message == "Not authorized." and WeatherService.State() == nil and builds == 0,
 		"a stranger's request is refused before anything is looked at, and no event exists", r.message)
-	r = ask(otherAdmin, "start", 60)
-	check(r.ok == false and string.find(r.message, "Owner only", 1, true) ~= nil and WeatherService.State() == nil
+	-- Every admin's since 2026-10-07: the OTHER allowlisted account is admitted.
+	-- Asked here without making an event (the event below is the owner's):
+	-- its zero-second START is refused for the duration alone, and its END
+	-- with nothing running is the harmless one.
+	r = ask(otherAdmin, "start", 0)
+	check(r.ok == false and string.find(r.message, "Duration must be", 1, true) ~= nil and WeatherService.State() == nil
 			and builds == 0,
-		"the OTHER allowlisted admin is refused: weather is the owner's account's alone", r.message)
+		"the OTHER allowlisted admin is admitted -- the weather is every admin's: its zero-second START is refused "
+			.. "for the duration alone", r.message)
 	r = ask(otherAdmin, "end", nil)
-	check(r.ok == false and string.find(r.message, "Owner only", 1, true) ~= nil,
-		"...and may not end it either")
+	check(r.ok == true and string.find(r.message, "No rain or thunderstorm", 1, true) ~= nil
+			and WeatherService.State() == nil,
+		"...and may end it too (with nothing running, the harmless END)", r.message)
 	local refused = 0
 	local bad = { "60", 0 / 0, 2.5, 0, -30, W.MinSeconds - 1, W.MaxSeconds + 1, 1e12, true, {} }
 	for _, seconds in ipairs(bad) do
@@ -824,19 +831,24 @@ local ok, err = pcall(function()
 		end)
 		adminSrc = if okRead and type(src) == "string" then src else ""
 	end
-	check(string.find(adminSrc, "if not AdminService.IsOwner(admin) then", 1, true) ~= nil
-			and string.find(adminSrc, 'if action == "Weather" then', 1, true) ~= nil
+	local handleAt = string.find(adminSrc, "function AdminService.Handle(", 1, true)
+	local gateAt = handleAt and string.find(adminSrc, "if not AdminService.IsAdmin(sender) then", handleAt, true)
+	check(gateAt ~= nil and string.find(adminSrc, 'if action == "Weather" then', gateAt, true) ~= nil
 			and string.find(adminSrc, "Weather = true,", 1, true) ~= nil,
-		"AdminService routes the Weather action and checks the owner's identity on the server")
+		"AdminService routes the Weather action after checking the sender is on the allowlist, on the server")
 	local consoleSrc = sourceOf(Server.AdminService, "AdminConsoleUI")
-	check(string.find(consoleSrc, '"START RAIN"', 1, true) ~= nil and string.find(consoleSrc, '"END RAIN"', 1, true) ~= nil
-			and string.find(consoleSrc, "durationBox.Text = tostring(WEATHER.DefaultSeconds)", 1, true) ~= nil
-			and string.find(consoleSrc, 'remote:InvokeServer("Weather", verb, seconds, nil)', 1, true) ~= nil
-			-- Its own WEATHER section (its own since 2026-10-03; the compact console's since 2026-10-04).
-			and string.find(consoleSrc, "local page = pages.weather", 1, true) ~= nil
-			and string.find(consoleSrc, '{ "StartRain", "START RAIN" }, { "StartThunder", "START THUNDERSTORM" }, { "EndRain", "END RAIN" }', 1, true) ~= nil
-			and string.find(consoleSrc, 'ui.rainLabel, ui.rainDot = build.state(page, "Rain")', 1, true) ~= nil,
-		"the console has a WEATHER section: START RAIN, an editable duration starting at the default, END RAIN, and the state line")
+	local consoleModelSrc = sourceOf(Server.AdminService, "ConsoleModel")
+	-- Its WEATHER section in the WORLD tab (the 2026-10-07 redesign: Rain / Thunderstorm / Stop, each asked in
+	-- place); what the buttons send is ConsoleModel's (AdminConsoleSpec).
+	check(string.find(consoleSrc, '{ { "StartRain", "START RAIN" },\n\t\t{ "StartThunder", "THUNDERSTORM" }, { "EndRain", "STOP" } }',
+				1, true) ~= nil
+			and string.find(consoleSrc, "ui.rainBox.Text = tostring(WEATHER.DefaultSeconds)", 1, true) ~= nil
+			and string.find(consoleSrc, "Model.args.weather(verb, if verb == \"end\" then nil else seconds(ui.rainBox))", 1, true) ~= nil
+			and string.find(consoleModelSrc, 'return args("Weather", verb, seconds, nil)', 1, true) ~= nil
+			and string.find(consoleSrc, 'ui.rainLabel, ui.rainDot = build.state(wCard, "Rain")', 1, true) ~= nil
+			and string.find(consoleSrc, 'setAsking("weather", verb)', 1, true) ~= nil,
+		"the console has a WEATHER section: START RAIN, THUNDERSTORM, STOP (each confirmed in place), an editable "
+			.. "duration starting at the default, and the state line")
 	check(W.DefaultSeconds == 180 and W.MinSeconds <= 20 and W.ToastDelaySeconds == 3,
 		"180 s is the default, adjustable from 20 s; the toast comes 3 s in")
 	local toastSrc = sourceOf(Scripts, "ActionToastUI")

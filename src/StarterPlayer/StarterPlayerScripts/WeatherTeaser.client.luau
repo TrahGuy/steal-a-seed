@@ -1,8 +1,11 @@
 --!strict
--- One 15 Hz cosmetic player for the world screen. No video decoding, network
--- traffic, per-frame instance creation, or gameplay. Streaming is retryable.
+-- One 15 Hz cosmetic player for the world screen. No video decoding, per-frame
+-- network traffic or instance creation, or gameplay. Streaming is retryable.
+-- The screen's pictures are preloaded once when it binds, so the picture that
+-- waits clear under the other is ready before its first fade.
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
+local ContentProvider = game:GetService("ContentProvider")
 local RunService = game:GetService("RunService")
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("SeedGame"):WaitForChild("Shared")
 local Teaser = require(Shared:WaitForChild("WeatherTeaser"))
@@ -15,7 +18,7 @@ local cleanupEvent = Instance.new("BindableEvent")
 cleanupEvent.Name = "WeatherTeaserCleanup"
 cleanupEvent.Parent = owner
 
-type Record = { state: Teaser.ScreenState?, pending: RBXScriptConnection?, paused: boolean? }
+type Record = { state: Teaser.ScreenState?, pending: RBXScriptConnection?, paused: boolean?, preloaded: boolean? }
 local records: { [Model]: Record } = {}
 local connections: { RBXScriptConnection } = {}
 local stopped = false
@@ -27,11 +30,19 @@ end
 local function track(instance: Instance)
 	if not instance:IsA("Model") or records[instance] then return end
 	local model = instance
-	local record: Record = { state = nil, pending = nil, paused = nil }
+	local record: Record = { state = nil, pending = nil, paused = nil, preloaded = nil }
 	records[model] = record
 	local function bind()
-		record.state = Teaser.Bind(model)
-		if record.state and record.pending then record.pending:Disconnect(); record.pending = nil end
+		local state = Teaser.Bind(model)
+		record.state = state
+		if state and record.pending then record.pending:Disconnect(); record.pending = nil end
+		if state and not record.preloaded then
+			record.preloaded = true
+			local pictures = Teaser.Pictures(state)
+			task.spawn(function()
+				pcall(function() ContentProvider:PreloadAsync(pictures) end)
+			end)
+		end
 	end
 	record.pending = model.DescendantAdded:Connect(bind)
 	bind()

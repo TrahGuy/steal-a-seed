@@ -10,7 +10,9 @@
 --     print(run("PlantWanderSpec"))
 --
 -- The real PlantWander, fresh-required, choosing thousands of legs on plots
--- dressed by the real MapService.ResizePlot at Levels 1, 3 and 5, with the
+-- dressed by the real MapService.ResizePlot at Levels 1, 3, 5, 6 and 7 -- and
+-- plot 6's own Levels 6 and 7 (2026-10-07: deeper, its wing Level 5's and
+-- short of the back fence) -- with the
 -- server's own pacing: a 1 s tick, SeedData's pause stretched 0.7-1.7x, and
 -- PlantWander.LegSeconds. Walkers start in the middle, in every corner, against
 -- the fences, beside the gateway and at the wing's junction, alone and in beds
@@ -116,37 +118,57 @@ end
 -- Dressed by MapService.ResizePlot exactly as PlotSpec's handover does, far above
 -- the map, and read back through the same attributes the server reads.
 --==============================================================================
-local plotModel = Instance.new("Model")
-plotModel.Name = "PlantWanderSpecPlot"
-plotModel.Archivable = false
-plotModel:SetAttribute("PreviewOnly", true)
-plotModel:SetAttribute(GameConfig.Attributes.PlotId, 98)
-plotModel.Parent = workspace
-do
+-- Two plots: a Front one (any id but 6) and plot 6, whose Levels 6-7 are
+-- deeper with Level 5's wing (GameConfig.plotLayoutFor).
+local function newSpecPlot(name, id, y)
+	local model = Instance.new("Model")
+	model.Name = name
+	model.Archivable = false
+	model:SetAttribute("PreviewOnly", true)
+	model:SetAttribute(GameConfig.Attributes.PlotId, id)
+	model.Parent = workspace
 	local startDepth = GameConfig.plotDepthFor(GameConfig.plotRowsForTier(1))
 	local centreR = GameConfig.Map.PlotRingInner + startDepth * 0.5
-	plotModel:SetAttribute("PlotCF",
-		CFrame.lookAt(Vector3.new(0, 700, centreR), Vector3.new(0, 700, 0)))
-	plotModel:SetAttribute("Depth", startDepth)
+	model:SetAttribute("PlotCF",
+		CFrame.lookAt(Vector3.new(0, y, centreR), Vector3.new(0, y, 0)))
+	model:SetAttribute("Depth", startDepth)
+	return model
 end
+local plotModel = newSpecPlot("PlantWanderSpecPlot", 98, 700)
+local plot6Model = newSpecPlot("PlantWanderSpecPlot6", 6, 760)
+
+-- Every case this spec walks: a key for the messages, the level and the plot.
+local CASES = {
+	{ key = "L1", level = 1, model = plotModel },
+	{ key = "L3", level = 3, model = plotModel },
+	{ key = "L5", level = 5, model = plotModel },
+	{ key = "L6", level = 6, model = plotModel },
+	{ key = "L7", level = 7, model = plotModel },
+	{ key = "plot 6 L6", level = 6, model = plot6Model },
+	{ key = "plot 6 L7", level = 7, model = plot6Model },
+}
 
 -- Everything this spec knows about a level's plot, measured off the built parts.
-local function survey(level)
-	MapService.ResizePlot(plotModel, level)
-	local cf = plotModel:GetAttribute("PlotCF")
-	local depth = plotModel:GetAttribute("Depth")
+local function survey(model, level, key)
+	MapService.ResizePlot(model, level)
+	local cf = model:GetAttribute("PlotCF")
+	local depth = model:GetAttribute("Depth")
 	local g = {
+		key = key,
 		level = level,
 		depth = depth,
 		halfW = PLOT.Width * 0.5,
 		halfD = depth * 0.5,
-		wingW = plotModel:GetAttribute("WingWidth") or 0,
-		wingZ0 = plotModel:GetAttribute("WingFrontZ") or 0,
-		capacity = plotModel:GetAttribute("Capacity"),
-		region = PlantWander.RegionFor(plotModel),
+		wingW = model:GetAttribute("WingWidth") or 0,
+		wingZ0 = model:GetAttribute("WingFrontZ") or 0,
+		capacity = model:GetAttribute("Capacity"),
+		region = PlantWander.RegionFor(model),
 		fence = {},
 	}
 	g.outerW = g.halfW + g.wingW
+	-- The wing's back: the back fence, but on plot 6 at Levels 6-7.
+	g.wingZ1 = math.min(model:GetAttribute("WingBackZ") or g.halfD, g.halfD)
+	local plotModel = model
 
 	-- The ruler: every plant offset is measured in the main soil's space, so the
 	-- fences are only comparable if the soil is centred on the plot and square to
@@ -186,7 +208,7 @@ local function insideRegion(g, x, z)
 	local inMain = x >= -g.halfW + m - tol and x <= g.halfW - m + tol
 		and z >= -g.halfD + m - tol and z <= g.halfD - m + tol
 	local inWing = g.wingW > 0 and x >= g.halfW - m - tol and x <= g.outerW - m + tol
-		and z >= g.wingZ0 + m - tol and z <= g.halfD - m + tol
+		and z >= g.wingZ0 + m - tol and z <= g.wingZ1 - m + tol
 	if not (inMain or inWing) then
 		return false
 	end
@@ -199,7 +221,7 @@ local function ownGround(g, x, z)
 	if x < -g.halfW or x > g.outerW or z < -g.halfD or z > g.halfD then
 		return false
 	end
-	return not (x > g.halfW and z < g.wingZ0)
+	return not (x > g.halfW and (z < g.wingZ0 or z > g.wingZ1))
 end
 
 local function segDistance(ax, az, bx, bz, px, pz)
@@ -384,10 +406,17 @@ local function startsFor(g)
 	}
 	if g.wingW > 0 then
 		local wz0 = g.wingZ0 + m
+		local wz1 = g.wingZ1 - m
 		table.insert(list, { "the L's inside corner", Vector3.new(x1, 0, wz0) })
 		table.insert(list, { "just in front of the step", Vector3.new(x1, 0, wz0 - 0.5) })
 		table.insert(list, { "wing front-outer corner", Vector3.new(g.outerW - m, 0, wz0) })
-		table.insert(list, { "wing back-outer corner", Vector3.new(g.outerW - m, 0, z1) })
+		table.insert(list, { "wing back-outer corner", Vector3.new(g.outerW - m, 0, wz1) })
+		if g.wingZ1 < g.halfD then
+			-- Plot 6 at Levels 6-7: the wing ends and the main bed goes on.
+			table.insert(list, { "the wing's back inside corner", Vector3.new(x1, 0, wz1) })
+			table.insert(list, { "just behind the wing", Vector3.new(x1, 0, wz1 + 0.5) })
+			table.insert(list, { "back-right corner", Vector3.new(x1, 0, z1) })
+		end
 	else
 		table.insert(list, { "back-right corner", Vector3.new(x1, 0, z1) })
 	end
@@ -400,15 +429,17 @@ local function body()
 --==============================================================================
 local levels = {}
 local ok, err = pcall(function()
-	for _, level in ipairs({ 1, 3, 5 }) do
-		levels[level] = survey(level)
+	for _, case in ipairs(CASES) do
+		levels[case.key] = survey(case.model, case.level, case.key)
 	end
 end)
-check(ok, "plots dressed at Levels 1, 3 and 5", err)
+check(ok, "plots dressed at Levels 1, 3, 5, 6 and 7, and plot 6 at its own Levels 6 and 7", err)
 
 say("\n-- region --")
 if ok then
-	-- The clamp that shipped before this change, verbatim, as the reference.
+	-- The clamp that shipped before this change, verbatim, as the reference --
+	-- with the wing's own back (2026-10-07), which is the back fence on every
+	-- plot but plot 6 at Levels 6-7.
 	local function legacyClamp(g, x, z)
 		local m = W.FenceMargin
 		local mainX = math.clamp(x, -g.halfW + m, g.halfW - m)
@@ -416,7 +447,7 @@ if ok then
 		local bx, bz = mainX, mainZ
 		if g.wingW > 0 then
 			local wx = math.clamp(x, g.halfW - m, g.halfW + g.wingW - m)
-			local wz = math.clamp(z, g.wingZ0 + m, g.halfD - m)
+			local wz = math.clamp(z, g.wingZ0 + m, g.wingZ1 - m)
 			local dMain = (Vector2.new(x, z) - Vector2.new(mainX, mainZ)).Magnitude
 			local dWing = (Vector2.new(x, z) - Vector2.new(wx, wz)).Magnitude
 			if dWing < dMain then bx, bz = wx, wz end
@@ -427,11 +458,12 @@ if ok then
 		return bx, bz
 	end
 
-	for _, level in ipairs({ 1, 3, 5 }) do
-		local g = levels[level]
-		check(g.soilAligned, string.format("L%d: the main soil is centred on the plot and square to it", level))
+	for _, case in ipairs(CASES) do
+		local g = levels[case.key]
+		local level = g.key
+		check(g.soilAligned, string.format("%s: the main soil is centred on the plot and square to it", level))
 		check(#g.fence >= (if g.wingW > 0 then 14 else 10),
-			string.format("L%d: the fence was found (%d boards and posts)", level, #g.fence), #g.fence)
+			string.format("%s: the fence was found (%d boards and posts)", level, #g.fence), #g.fence)
 
 		-- Every corner of the walkable region stands FenceMargin off the real fence.
 		local worst = math.huge
@@ -447,10 +479,10 @@ if ok then
 			end
 		end
 		check(worst >= W.FenceMargin - 1e-3,
-			string.format("L%d: the region's corners keep FenceMargin off every board", level),
+			string.format("%s: the region's corners keep FenceMargin off every board", level),
 			string.format("closest %.3f", worst))
 
-		local rng = Random.new(level * 31)
+		local rng = Random.new(g.level * 31 + (if case.model == plot6Model then 7 else 0))
 		local same, legal, bad = 0, 0, ""
 		for _ = 1, 4000 do
 			local x = rng:NextNumber(-g.halfW - 30, g.outerW + 30)
@@ -469,8 +501,8 @@ if ok then
 				legal += 1
 			end
 		end
-		check(same == 4000, string.format("L%d: Clamp is exactly the clamp that shipped, 4000 points", level), bad)
-		check(legal == 4000, string.format("L%d: every clamped point is legal", level), legal)
+		check(same == 4000, string.format("%s: Clamp is exactly the clamp that shipped, 4000 points", level), bad)
+		check(legal == 4000, string.format("%s: every clamped point is legal", level), legal)
 
 		-- Inside agrees with the independent test away from the boundary.
 		local agree, total = 0, 0
@@ -482,7 +514,7 @@ if ok then
 				agree += 1
 			end
 		end
-		check(agree == total, string.format("L%d: Inside agrees with the independent region test", level),
+		check(agree == total, string.format("%s: Inside agrees with the independent region test", level),
 			string.format("%d of %d", agree, total))
 
 		-- Room: the stretch it reports is inside all the way, and it is the
@@ -505,8 +537,8 @@ if ok then
 				maximal += 1
 			end
 		end
-		check(clean == rays, string.format("L%d: every stretch Room reports is inside end to end (%d rays)", level, rays), fault)
-		check(maximal >= rays * 0.995, string.format("L%d: Room reports the whole stretch", level),
+		check(clean == rays, string.format("%s: every stretch Room reports is inside end to end (%d rays)", level, rays), fault)
+		check(maximal >= rays * 0.995, string.format("%s: Room reports the whole stretch", level),
 			string.format("%d of %d end at the boundary", maximal, rays))
 	end
 end
@@ -518,8 +550,9 @@ local stats = {}
 if ok then
 	say("\n-- legs --")
 	local SOLO_SECONDS, CROWD_RUNS, CROWD_SECONDS = 300, 3, 900
-	for _, level in ipairs({ 1, 3, 5 }) do
-		local g = levels[level]
+	for _, case in ipairs(CASES) do
+		local g = levels[case.key]
+		local level = g.key
 		local legs = {}
 		local seed = 0
 		for tier = 1, TIERS do
@@ -531,7 +564,7 @@ if ok then
 		-- A bed of twenty, whatever the level holds.
 		local crowdSamples = {}
 		for run = 1, CROWD_RUNS do
-			local rng = Random.new(level * 1000 + run)
+			local rng = Random.new(g.level * 1000 + run + (if case.model == plot6Model then 500 else 0))
 			local walkers = {}
 			for i = 1, 20 do
 				table.insert(walkers, { id = i, tier = (i - 1) % TIERS + 1, offset = randomInside(g, rng), seed = run * 17 })
@@ -541,7 +574,7 @@ if ok then
 		-- And a bed at the level's own capacity.
 		local capSamples = {}
 		for run = 1, CROWD_RUNS do
-			local rng = Random.new(level * 2000 + run)
+			local rng = Random.new(g.level * 2000 + run + (if case.model == plot6Model then 700 else 0))
 			local walkers = {}
 			for i = 1, g.capacity do
 				table.insert(walkers, { id = i, tier = (i - 1) % TIERS + 1, offset = randomInside(g, rng), seed = run * 29 })
@@ -576,7 +609,7 @@ if ok then
 			end
 		end
 
-		say(string.format("\n  Level %d  (%d x %.1f plot, wing %d)", level, PLOT.Width, g.depth, g.wingW))
+		say(string.format("\n  %s  (%d x %.1f plot, wing %d)", level, PLOT.Width, g.depth, g.wingW))
 		say("  tier        reach  min leg     legs   min   median   max    speed  median time  max time")
 		local levelStats = {}
 		for tier = 1, TIERS do
@@ -599,9 +632,9 @@ if ok then
 				row.min, row.median, row.max, SeedData.WanderSpeed(tier), row.medDur, row.maxDur,
 				if row.longest + row.stay > 0 then string.format("  (%d fallback, %d stay)", row.longest, row.stay) else ""))
 		end
-		stats[level] = levelStats
+		stats[g.key] = levelStats
 
-		check(faults == 0, string.format("L%d: every route inside the region, off the fence, out of the gateway, on its own plot (%d legs)", level, #legs), firstFault)
+		check(faults == 0, string.format("%s: every route inside the region, off the fence, out of the gateway, on its own plot (%d legs)", level, #legs), firstFault)
 
 		local twitch, belowMin, fallbacks, total = 0, 0, 0, 0
 		for tier = 1, TIERS do
@@ -611,9 +644,9 @@ if ok then
 			fallbacks += row.longest + row.stay
 			total += row.n + row.stay
 		end
-		check(twitch == 0, string.format("L%d: no leg shorter than the stall floor", level), twitch)
-		check(belowMin == 0, string.format("L%d: no normal leg shorter than its tier's minimum", level), belowMin)
-		check(fallbacks <= total * 0.01, string.format("L%d: fallbacks are rare", level),
+		check(twitch == 0, string.format("%s: no leg shorter than the stall floor", level), twitch)
+		check(belowMin == 0, string.format("%s: no normal leg shorter than its tier's minimum", level), belowMin)
+		check(fallbacks <= total * 0.01, string.format("%s: fallbacks are rare", level),
 			string.format("%d of %d", fallbacks, total))
 
 		local rising, detail = true, ""
@@ -621,10 +654,10 @@ if ok then
 			detail ..= string.format(" %.1f", levelStats[tier].median)
 			if tier > 1 and levelStats[tier].median <= levelStats[tier - 1].median then rising = false end
 		end
-		check(rising, string.format("L%d: the median leg climbs with every tier", level), detail)
+		check(rising, string.format("%s: the median leg climbs with every tier", level), detail)
 		local ratio = levelStats[TIERS].median / levelStats[1].median
-		if level >= 3 then
-			check(ratio >= 1.7, string.format("L%d: a Colossal's median leg is at least 1.7x a Tiny's", level),
+		if g.level >= 3 then
+			check(ratio >= 1.7, string.format("%s: a Colossal's median leg is at least 1.7x a Tiny's", level),
 				string.format("%.2fx", ratio))
 		else
 			say(string.format("  (L1 is a %.0f by %.0f stud bed: Colossal/Tiny median %.2fx)",
@@ -634,7 +667,7 @@ if ok then
 		for tier = 1, TIERS do
 			slowest = math.max(slowest, levelStats[tier].medDur)
 		end
-		check(slowest <= 20, string.format("L%d: no tier's median leg takes longer than 20 s", level),
+		check(slowest <= 20, string.format("%s: no tier's median leg takes longer than 20 s", level),
 			string.format("%.1f s", slowest))
 
 		-- Spreading out. Measured on where each plant rests or is headed, against
@@ -649,7 +682,7 @@ if ok then
 			return median(nns), piles / math.max(#samples, 1)
 		end
 		local function scatter(count)
-			local rng = Random.new(level * 77 + count)
+			local rng = Random.new(g.level * 77 + count + (if case.model == plot6Model then 3 else 0))
 			local nns, piles = {}, 0
 			for _ = 1, 300 do
 				local list = {}
@@ -669,10 +702,10 @@ if ok then
 		say(string.format("  spacing with twenty: nearest %.1f studs (random %.1f), in a pile %.1f%% (random %.1f%%)",
 			crowdNN, crowdRandNN, crowdPiles * 100, crowdRandPiles * 100))
 		check(capNN >= capRandNN * 1.25 and capPiles <= 0.02,
-			string.format("L%d: a bed at capacity spreads out rather than piling up", level),
+			string.format("%s: a bed at capacity spreads out rather than piling up", level),
 			string.format("nearest %.1f vs random %.1f, piles %.1f%%", capNN, capRandNN, capPiles * 100))
 		check(crowdNN >= crowdRandNN * 1.1,
-			string.format("L%d: a bed of twenty stays better spread than a random scatter", level),
+			string.format("%s: a bed of twenty stays better spread than a random scatter", level),
 			string.format("nearest %.1f vs random %.1f", crowdNN, crowdRandNN))
 	end
 end
@@ -682,7 +715,7 @@ end
 --==============================================================================
 if ok then
 	say("\n-- edges --")
-	local g = levels[3]
+	local g = levels["L3"]
 
 	-- The same walker, the same seed: the same walk.
 	local a, b = {}, {}

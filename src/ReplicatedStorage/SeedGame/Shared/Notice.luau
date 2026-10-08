@@ -396,6 +396,63 @@ function Notice.secretPost(news: SecretNews, words: SecretWords, nameOf: (string
 	}
 end
 
+--==============================================================================
+-- A NOTICE THE SERVER WORDED (2026-10-07)
+--
+-- The GameEvent verb ServerNotice carries an information line whose words the
+-- server wrote -- { title, detail?, key? } -- for a moment no client script
+-- knows the words of (first: an item the server put in this player's Bag).
+-- Always kind "info": a server line is never a refusal, a warning or a toast
+-- with a sound of its own. The words are cut to ServerTitleMax / ServerDetailMax
+-- characters, so a long name never runs off the screen, and the key folds a
+-- repeat of the same line into one notice, as every notice's does.
+--==============================================================================
+Notice.ServerNotice = "ServerNotice"
+Notice.ServerTitleMax = 90
+Notice.ServerDetailMax = 120
+
+-- At most `most` characters, cut on a character; nil for anything not a string.
+local function cutWords(text: any, most: number): string?
+	if type(text) ~= "string" then
+		return nil
+	end
+	local trimmed = string.match(text, "^%s*(.-)%s*$") or ""
+	if (utf8.len(trimmed) or #trimmed) <= most then
+		return trimmed
+	end
+	local stop = utf8.offset(trimmed, most + 1)
+	return if stop then string.sub(trimmed, 1, stop - 1) else string.sub(trimmed, 1, most)
+end
+
+function Notice.readServerNotice(payload: any): Post?
+	if type(payload) ~= "table" then
+		return nil
+	end
+	local title = cutWords(payload.title, Notice.ServerTitleMax)
+	if not title or title == "" then
+		return nil
+	end
+	local detail = cutWords(payload.detail, Notice.ServerDetailMax)
+	local key = if type(payload.key) == "string" and payload.key ~= "" and #payload.key <= 100
+		then "server:" .. payload.key
+		else nil
+	-- Optional (2026-10-08, TREADMILL FUN): a GameConfig.SourceIcons key -- a
+	-- short word, never a path or an id -- drawn as every notice's icon is, and
+	-- `quiet` when the moment made its own sound.
+	local icon = if type(payload.icon) == "string" and #payload.icon <= 24
+			and string.match(payload.icon, "^[%w_]+$") ~= nil
+		then payload.icon
+		else nil
+	return {
+		kind = "info",
+		title = title,
+		detail = if detail and detail ~= "" then detail else nil,
+		key = key,
+		icon = icon,
+		quiet = if payload.quiet == true then true else nil,
+	}
+end
+
 export type WordSpan = {
 	-- The headline's lines, top first: one where it fits `room`, otherwise
 	-- broken at spaces with as many words on each line as fit.
@@ -638,6 +695,41 @@ end
 function Notice.onReach(fn: () -> ()): RBXScriptConnection
 	local event = reachSignal or Instance.new("BindableEvent")
 	reachSignal = event
+	return event.Event:Connect(fn)
+end
+
+--==============================================================================
+-- HOW MANY NOTICES ARE STANDING (2026-10-08)
+--
+-- The guide's spotlight (TutorialUI) never dims the screen over a notice: it
+-- waits while one is up and drops the moment one arrives. `showing` is how many
+-- stand right now on every screen -- one already fading out is not counted. The
+-- renderer says it as it restacks (setShowing); anybody may read it (showing)
+-- and hear it change (onShowing). A count, and nothing else: what a notice SAID
+-- is still read back by nobody. Made on first use, like `reach`.
+--==============================================================================
+local showingCount = 0
+local showingSignal: BindableEvent? = nil
+
+function Notice.showing(): number
+	return showingCount
+end
+
+function Notice.setShowing(value: number?)
+	local clean = if type(value) == "number" and value == value and value > 0 then math.floor(value) else 0
+	if clean == showingCount then
+		return
+	end
+	showingCount = clean
+	local event = showingSignal
+	if event then
+		event:Fire()
+	end
+end
+
+function Notice.onShowing(fn: () -> ()): RBXScriptConnection
+	local event = showingSignal or Instance.new("BindableEvent")
+	showingSignal = event
 	return event.Event:Connect(fn)
 end
 

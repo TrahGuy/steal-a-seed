@@ -1,8 +1,9 @@
 --!strict
 -- Steal a Seed :: WeatherService
 --
--- The Rain event (2026-10-02): the owner starts it from the console -- or,
--- since 2026-10-05, this file's own scheduler does (AUTOMATIC WEATHER, below);
+-- The Rain event (2026-10-02): an admin starts it from the console -- any of
+-- the three allowlisted accounts since 2026-10-07, the owner's alone before --
+-- or, since 2026-10-05, this file's own scheduler does (AUTOMATIC WEATHER, below);
 -- this server's garden earns a quarter more while it falls, fog closes round the
 -- island, a temporary biome is uncovered off the east edge, and when the rain
 -- stops everyone inside is put back at its entrance and it fades away.
@@ -29,7 +30,8 @@
 --
 -- A second START while an event exists is refused and changes nothing: no
 -- second terrain, no restart, no bonus on a bonus. A second END is harmless.
--- The owner leaving changes nothing either: the deadline is the server's.
+-- The admin who started it leaving changes nothing either: the deadline is the
+-- server's.
 --
 -- THE INCOME is one factor, SeedData.Rain.IncomeFactor, answered by
 -- IncomeFactor() while the rain pays and 1 otherwise. EconomyService.RateFor
@@ -52,9 +54,9 @@
 -- differently.
 --
 -- THE BATCH. When the terrain is built, NestService raises the event's nest at
--- its centre with ONE batch (SeedData.RollRainBatch: three pods, each on its
--- own Pod 1 90% or the Colossal Pod 2 10%, for the rain; one Pod 3 for a
--- thunderstorm),
+-- its centre with ONE batch (SeedData.RollRainBatch: for the rain three pods
+-- and one Colossal draw, 5% a Rain since 2026-10-06 -- a hit makes one slot
+-- Colossal, the others ordinary; one Pod 3 for a thunderstorm),
 -- guarded by Stormstrider. Nothing restocks it. When the event closes, the
 -- unclaimed pods -- in the nest and on the ground -- and the guardian go with
 -- it (the nest seam); a pod in somebody's arms is evacuated with them and
@@ -494,8 +496,9 @@ end
 --==============================================================================
 -- START AND END
 --
--- Reached from AdminService, after ITS checks: the allowlist, the one-a-second
--- limit and -- for these -- the owner's own account; and StartWeather from
+-- Reached from AdminService, after ITS checks: the allowlist -- any of its
+-- accounts since 2026-10-07, the owner's alone before -- and the one-a-second
+-- limit; and StartWeather from
 -- this file's own scheduler (AutoStep), which no client can reach. What is
 -- checked here is the event's own rule, whoever asks: one at a time.
 --==============================================================================
@@ -850,7 +853,7 @@ function WeatherService.Start()
 		end
 	end)
 	local A = autoConfig
-	log(string.format("Ready. Rain is the owner's to start, %d to %d s, %d s by default; +%d%% online plant income "
+	log(string.format("Ready. Rain is any admin's to start, %d to %d s, %d s by default; +%d%% online plant income "
 		.. "while it falls; the biome opens %d s in and fades %d s after the end. Automatic weather %s.",
 		W.MinSeconds, W.MaxSeconds, W.DefaultSeconds, math.round((SeedData.Rain.IncomeFactor - 1) * 100),
 		W.ToastDelaySeconds, W.ThickenSeconds + W.FadeSeconds,

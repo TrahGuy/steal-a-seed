@@ -5,7 +5,7 @@
 -- The obby reward wheel (2026-09-27), everything that can be driven without a
 -- Play session:
 --
---   1. the prizes    WheelData: twelve prizes, their weights and sectors, the
+--   1. the prizes    WheelData: thirteen prizes, their weights and sectors, the
 --                    roll, the trail's swap, the landing point, every final
 --                    outcome's exact odds, and the words each sector prints
 --                    against what it pays; and the wheel as DRAWN (the approved
@@ -95,21 +95,26 @@ for _, r in ipairs(R) do
 	total += r.weight
 	kinds[r.kind] = (kinds[r.kind] or 0) + 1
 end
-check(#R == 12 and total == 10000 and WheelData.TotalWeight == 10000,
-	"twelve prizes whose weights add to exactly 10,000 -- 100%", string.format("%d prizes, %d", #R, total))
-check(kinds.cash == 3 and kinds.speed == 2 and kinds.pod == 4 and kinds.boost == 2 and kinds.trail == 1,
-	"three cash prizes, two Speed, four pods (regular, Rare, Titan, Colossal), two boosts and the trail")
+check(#R == 13 and total == 10000 and WheelData.TotalWeight == 10000,
+	"thirteen prizes whose weights add to exactly 10,000 -- 100%", string.format("%d prizes, %d", #R, total))
+check(kinds.cash == 3 and kinds.speed == 2 and kinds.pod == 4 and kinds.boost == 2 and kinds.trail == 1
+		and kinds.invite == 1,
+	"three cash prizes, two Speed, four pods (regular, Rare, Titan, Colossal), two boosts, the trail and the invite plant")
+check(B.invite.weight == 20 and B.cash_small.weight == 2180,
+	"the invite plant's 20 in 10,000 (0.2%) came off the small cash prize (2200 -> 2180)")
 check(B.cash_small.amount < B.cash_medium.amount and B.cash_medium.amount < B.cash_jackpot.amount
 	and B.speed_small.amount < B.speed_large.amount, "small, medium and jackpot cash; small and large Speed")
 check(B.pod_colossal.weight < B.pod_titan.weight, "the Colossal pod is rarer than the Titan pod",
 	B.pod_colossal.weight .. " vs " .. B.pod_titan.weight)
 local rarest = true
 for _, r in ipairs(R) do
-	if r ~= B.trail and r.weight <= B.trail.weight then
+	if (r ~= B.invite and r.weight <= B.invite.weight)
+		or (r ~= B.trail and r ~= B.invite and r.weight <= B.trail.weight) then
 		rarest = false
 	end
 end
-check(rarest, "and the Bloomrunner Trail is the rarest prize of all", B.trail.weight)
+check(rarest, "the invite plant is the rarest prize of all (0.2%), then the Bloomrunner Trail (0.4%)",
+	B.invite.weight .. " / " .. B.trail.weight)
 check(B.pod_titan.tier == 6 and B.pod_colossal.tier == 7 and SeedData.Tier(6).name == "Titan"
 	and SeedData.Tier(7).name == "Colossal", "the Titan and Colossal pods carry their size tiers, 6 and 7")
 
@@ -190,7 +195,7 @@ check(WheelData.MaxBoughtHeld >= 10 and WheelData.Daily.Limit == 5,
 
 -- The sectors: in prize order, each exactly its share of the circle.
 local sectors = WheelData.sectors()
-local shapeOk = #sectors == 12 and math.abs(sectors[1].start) < 1e-9 and math.abs(sectors[12].finish - 360) < 1e-9
+local shapeOk = #sectors == #R and math.abs(sectors[1].start) < 1e-9 and math.abs(sectors[#R].finish - 360) < 1e-9
 for i, s in ipairs(sectors) do
 	if s.reward ~= R[i] or math.abs((s.finish - s.start) - s.reward.weight / 10000 * 360) > 1e-9
 		or (i > 1 and math.abs(s.start - sectors[i - 1].finish) > 1e-9) then
@@ -198,7 +203,8 @@ for i, s in ipairs(sectors) do
 	end
 end
 check(shapeOk, string.format("the sectors run round the wheel in prize order, each exactly its share of 360 degrees "
-	.. "(the trail a %.2f-degree sliver, never an equal slice)", sectors[12].finish - sectors[12].start))
+	.. "(the trail a %.2f-degree sliver, never an equal slice)",
+	sectors[table.find(R, B.trail) or 1].finish - sectors[table.find(R, B.trail) or 1].start))
 
 -- The roll: every whole pick 1..10,000 lands on one prize, each on its weight.
 local counts = {}
@@ -213,11 +219,12 @@ for _, r in ipairs(R) do
 	end
 end
 check(exact, "each of the 10,000 picks lands on exactly one prize, and each prize on exactly its weight")
-check(WheelData.prizeAt(2200) == B.cash_small and WheelData.prizeAt(2201) == B.speed_small
-	and WheelData.prizeAt(9960) == B.pod_colossal and WheelData.prizeAt(9961) == B.trail
-	and WheelData.prizeAt(10000) == B.trail, "the boundaries fall where the weights put them")
+check(WheelData.prizeAt(2180) == B.cash_small and WheelData.prizeAt(2181) == B.speed_small
+	and WheelData.prizeAt(9940) == B.pod_colossal and WheelData.prizeAt(9941) == B.trail
+	and WheelData.prizeAt(9980) == B.trail and WheelData.prizeAt(9981) == B.invite
+	and WheelData.prizeAt(10000) == B.invite, "the boundaries fall where the weights put them")
 check(WheelData.prizeAt(0) == B.cash_small and WheelData.prizeAt(-7) == B.cash_small
-	and WheelData.prizeAt(10001) == B.trail, "a pick out of range is clamped onto the wheel, never nothing")
+	and WheelData.prizeAt(10001) == B.invite, "a pick out of range is clamped onto the wheel, never nothing")
 
 -- The trail's swap, for its owners only.
 local paid, swapped = WheelData.resolve(B.trail, true)
@@ -559,9 +566,16 @@ local PlayerDataService = {
 		end
 		return saveWorks
 	end,
+	-- The invite plants' attribute (2026-10-08): heard, not drawn.
+	PublishInvites = function(player)
+		record("PublishInvites", player)
+	end,
 }
 local payThrows = false
 local EconomyService = {
+	-- A garden's income per second, per player (THE PRIZES SCALE WITH THE
+	-- PLAYER): 0 unless a section sets it, so the floors are what is paid.
+	rates = {},
 	PayReward = function(player, amount, reason)
 		record("PayCash", player, amount, reason)
 		if payThrows then
@@ -571,6 +585,9 @@ local EconomyService = {
 		return true
 	end,
 }
+function EconomyService.RateFor(player)
+	return EconomyService.rates[player] or 0
+end
 local TreadmillService = {
 	PayReward = function(player, amount, reason)
 		record("PaySpeed", player, amount, reason)
@@ -593,6 +610,18 @@ local CarryService = {
 	GivePod = function(player, species, tier)
 		record("GivePod", player, species, tier)
 		table.insert(profiles[player].Held, { Id = species, Tier = tier, Hatched = false })
+		return true
+	end,
+	-- An invite plant, grown, onto the record (2026-10-08): the Bag's room
+	-- counted, or nothing.
+	GiveHatched = function(player, species, tier, equipAfter, revealAt, onRecord)
+		local count = #profiles[player].Held + (if carryingPod then 1 else 0)
+		if onRecord and GameConfig.Save.MaxHeld - count < 1 then
+			record("GiveHatchedFull", player, species.Id)
+			return false, "STORAGE_FULL"
+		end
+		record("GiveHatched", player, species.Id, tier)
+		table.insert(profiles[player].Held, { Id = species.Id, Tier = tier, Hatched = true })
 		return true
 	end,
 }
@@ -868,20 +897,24 @@ for _, r in ipairs(R) do
 	local rep = last()
 	local good = rep.ok == true and rep.rolled == r.id and rep.prize == r.id and rep.swapped == false
 		and rep.owed == false and rep.source == "earned" and type(rep.within) == "number"
-		and rep.within >= 0 and rep.within < 1 and rep.species == nil
+		and rep.within >= 0 and rep.within < 1
+		and rep.species == (if r.kind == "invite" then GameConfig.InviteRewards.Forms[1] else nil)
 		and pr.WheelEarned == before.earned - 1 and #pr.WheelPending == 0 and count("Save") >= 1
 		and count("wheelSpun") == 1 and lastArgs("wheelSpun")[2] == r.id
 	local how = r.kind
+	-- What a new player's spin pays (THE PRIZES SCALE): no garden income here,
+	-- so the cash floors; a tier-1 mill, so 60 s of it where that beats a floor.
+	local expect = WheelData.amountFor(r, 0, GameConfig.Mill.Tiers[1].speed)
 	if r.kind == "cash" then
 		local pay = lastArgs("PayCash")
-		good = good and count("PayCash") == 1 and pay[2] == r.amount and pr.Cash == before.cash + r.amount
-			and count("PaySpeed") == 0
-		how = "the cash faucet, $" .. WheelData.commas(r.amount)
+		good = good and count("PayCash") == 1 and pay[2] == expect and pr.Cash == before.cash + expect
+			and count("PaySpeed") == 0 and rep.amount == expect
+		how = "the cash faucet, $" .. WheelData.commas(expect)
 	elseif r.kind == "speed" then
 		local pay = lastArgs("PaySpeed")
-		good = good and count("PaySpeed") == 1 and pay[2] == r.amount and pr.Speed == before.speed + r.amount
-			and count("PayCash") == 0
-		how = "the Speed faucet, +" .. WheelData.commas(r.amount)
+		good = good and count("PaySpeed") == 1 and pay[2] == expect and pr.Speed == before.speed + expect
+			and count("PayCash") == 0 and rep.amount == expect
+		how = "the Speed faucet, +" .. WheelData.commas(expect)
 	elseif r.kind == "boost" then
 		good = good and count("GrantBoost") == 1 and lastArgs("GrantBoost")[2] == r.boost
 		how = "the Bonus Chest's " .. r.boost .. " boost"
@@ -894,6 +927,11 @@ for _, r in ipairs(R) do
 		good = good and pr.Cosmetics.bloomrunner == true and pr.EquippedTrail == "bloomrunner"
 			and sp:GetAttribute(A.TrailOwned) == true and sp:GetAttribute(A.Trail) == "bloomrunner"
 		how = "owned, and worn at once"
+	elseif r.kind == "invite" then
+		local first = GameConfig.InviteRewards.Forms[1]
+		good = good and count("GiveHatched") == 1 and lastArgs("GiveHatched")[2] == first
+			and table.find(pr.InviteOwned, first) ~= nil and #pr.Held == before.held + 1
+		how = "the first invite plant not owned, grown, onto the record"
 	end
 	check(good, string.format("%s: recorded, saved, delivered once (%s), answered", r.title, how),
 		string.format("ok=%s rolled=%s prize=%s", tostring(rep.ok), tostring(rep.rolled), tostring(rep.prize)))
@@ -1483,9 +1521,10 @@ check(ui ~= "" and not ui:find("PromptProductPurchase", 1, true) and not ui:find
 check(ui:find("remote:FireServer(ACT.Spin, source)", 1, true) ~= nil and ui:find("send(\"bought\")", 1, true) ~= nil
 	and ui:find("showConfirm(true)", 1, true) ~= nil
 	and ui:find("remote:FireServer(ACT.Buy, choice.product.key)", 1, true) ~= nil
-	and ui:find("remote:FireServer(ACT.Claim)", 1, true) ~= nil and fires == 3,
-	"it sends one word to spin -- \"bought\" only from the yes of the question naming it -- CLAIM, and to buy "
-		.. "a product's key and nothing else", fires)
+	and ui:find("remote:FireServer(ACT.Claim)", 1, true) ~= nil
+	and ui:find("remote:FireServer(ACT.Open)", 1, true) ~= nil and fires == 4,
+	"it sends one word to spin -- \"bought\" only from the yes of the question naming it -- CLAIM, OPEN (carrying "
+		.. "nothing: the server works the amounts out), and to buy a product's key and nothing else", fires)
 -- BUYING, IN THE PANEL (2026-09-29).
 check(ui:find("local may = paidAllowed()", 1, true) ~= nil and ui:find("getSpins.Visible = may", 1, true) ~= nil
 		and ui:find("if shop.open and not may then", 1, true) ~= nil

@@ -150,6 +150,16 @@ type Nest = {
 	--==========================================================================
 	secret: Secret?,
 	marked: { [Player]: boolean },
+	--==========================================================================
+	-- A BEGINNER'S FIRST RAID (2026-10-08, the owner's FIRST MINUTE)
+	--
+	-- The thief whose theft woke this nest from calm (rage 0) while their guide's
+	-- `steal` step was not done -- on a biome that names a FirstRaidChaseSpeed
+	-- (Greenhollow) and never for a Secret. While that thief is the target and
+	-- the rage is still that one theft, the chase runs no faster than the named
+	-- speed (firstRaidSpeedFor). Re-decided at every theft from calm.
+	--==========================================================================
+	firstRaid: Player?,
 	-- How far its colliding body reaches from its root on the ground plane:
 	-- what a wall has to be cleared by on the way home. Measured once, on the
 	-- first walk home (bodyReach).
@@ -780,7 +790,7 @@ end
 -- Squared, so most of the acceleration happens in the second half of the ramp:
 -- the opening is survivable and it is the third second that is frightening.
 --==============================================================================
-local function chaseSpeedFor(nest: Nest, now: number): number
+local function ruleSpeedFor(nest: Nest, now: number): number
 	local prof = profileOf(nest)
 	if not prof then
 		return speedFor(nest)
@@ -819,6 +829,71 @@ local function chaseSpeedFor(nest: Nest, now: number): number
 	local scale = tonumber(prof.SpeedScale) or 1
 	return (opening + (top - opening) * u * u
 		+ rage + shortfall) * scale
+end
+
+--==============================================================================
+-- A BEGINNER'S FIRST RAID IS FAIR AT THE GUIDE'S TARGET (2026-10-08)
+--
+-- The guide now asks for 400 Speed, not 1,000, and 400 walks at 21.2. Its
+-- promise -- train to the target and you get the pod home -- is kept HERE, for
+-- exactly one chase: the theft that woke a calm nest (rage 0 before it) by a
+-- thief whose `steal` step was not done, on a biome naming FirstRaidChaseSpeed
+-- (Greenhollow: 19, against the 20 its first theft runs at; the arithmetic is
+-- in BiomeData). The chase is CAPPED at that number, never raised to it.
+--
+-- EVERYTHING ELSE IS GREENHOLLOW AS IT WAS. A second theft before the nest
+-- calms (rage 2, the same thief or anybody) runs at 25; anybody else is chased
+-- at 20; a Secret's thief at the Secret's numbers; another biome or the weather
+-- event's nest has no number to cap with. And the cap is a NUMBER, not the
+-- thief's own speed less a margin: a player at Speed 0 walks 16 against 19 and
+-- is still caught -- the lesson survives.
+--
+-- The guide's record is read through `stealDone` so a spec can say what it is
+-- without a profile (SpecStealDone). nil -- no record yet -- is not a beginner.
+--==============================================================================
+local stealDoneFn: ((any) -> boolean?)? = nil
+
+local function stealDone(player: any): boolean?
+	local fn = stealDoneFn
+	if fn then
+		return fn(player)
+	end
+	if typeof(player) ~= "Instance" then
+		return nil
+	end
+	return PlayerDataService.TutorialDone(player, "steal")
+end
+
+-- Whether a theft from calm by `thief` starts a beginner's first raid here.
+local function startsFirstRaid(nest: Nest, thief: Player, secretId: string?): boolean
+	local fair = tonumber((nest.biome :: any).FirstRaidChaseSpeed)
+	if not (fair and fair == fair and fair > 0) then
+		return false
+	end
+	if secretId ~= nil or nest.marked[thief] then
+		return false
+	end
+	return stealDone(thief) == false
+end
+
+-- The cap, while it applies: the first raid's thief is the target, the rage is
+-- still that one theft, and no Secret is being chased.
+local function firstRaidSpeedFor(nest: Nest): number?
+	local thief = nest.firstRaid
+	if thief == nil or thief ~= nest.target or nest.rage > 1 or secretPursuit(nest) ~= nil then
+		return nil
+	end
+	local fair = tonumber((nest.biome :: any).FirstRaidChaseSpeed)
+	if not (fair and fair == fair and fair > 0) then
+		return nil
+	end
+	return fair
+end
+
+local function chaseSpeedFor(nest: Nest, now: number): number
+	local speed = ruleSpeedFor(nest, now)
+	local fair = firstRaidSpeedFor(nest)
+	return if fair then math.min(fair, speed) else speed
 end
 
 local function returnSpeedFor(nest: Nest): number
@@ -961,6 +1036,15 @@ local function provoke(nest: Nest, thief: Player, fromNest: boolean, secretId: s
 	-- type): the secret numbers, and a chase that outlives the pod in their arms.
 	if secretId and nest.secret and nest.secret.id == secretId then
 		nest.marked[thief] = true
+	end
+	-- A BEGINNER'S FIRST RAID (firstRaidSpeedFor): decided by a theft from calm,
+	-- and only there -- a theft into an angry nest is never one.
+	if nest.rage <= 0 then
+		nest.firstRaid = if startsFirstRaid(nest, thief, secretId) then thief else nil
+		if nest.firstRaid then
+			log(string.format("%s's first raid on %s: chased at no more than %s.",
+				tostring((thief :: any).Name), nest.id, tostring((nest.biome :: any).FirstRaidChaseSpeed)))
+		end
 	end
 	-- EVERY theft stacks, including picking a dropped pod back up. Losing a pod
 	-- and strolling back for it is the obvious way to farm a nest safely, so the
@@ -3574,6 +3658,24 @@ function NestService.SpecStep(nest: any, now: number)
 	step(nest, now)
 end
 
+-- Studio specs (2026-10-08, FIRST MINUTE): what a thief's guide record says
+-- about `steal` -- the stand-ins have no profile -- and the speed a nest would
+-- chase at right now. nil puts the real record back.
+function NestService.SpecStealDone(fn: ((any) -> boolean?)?)
+	if not RunService:IsStudio() then
+		return
+	end
+	stealDoneFn = fn
+end
+
+function NestService.SpecChaseSpeed(nest: any): number?
+	if not RunService:IsStudio() then
+		return nil
+	end
+	specRecord(nest)
+	return chaseSpeedFor(nest, os.clock())
+end
+
 -- Studio specs: a fresh Secret at a nest the spec raised -- spawnSecret
 -- itself, its refusals and its announcement (THE SECRET EGG TOAST).
 function NestService.SpecSpawnSecret(nest: any, why: string?): (boolean, string?)
@@ -4078,11 +4180,12 @@ end
 --            the same no-head-start-below-it rule) and no Confiscate profile,
 --            so a catch throws and the pod drops by the ordinary loose-pod path
 --            for anybody to take; no secret.
---   pods     ONE batch, rolled here on the server (SeedData.RollRainBatch:
---            three slots each drawn on its own for the rain -- Pod 1 90%,
---            the Colossal Pod 2 10% since 2026-10-05 (SeedData.RainBatches)
---            -- one Pod 3 for a thunderstorm; each pod's creature drawn
---            when it is laid). Stamped with the event's id. Never restocked
+--   pods     ONE batch, rolled here on the server (SeedData.RollRainBatch,
+--            with this server's Random: for the rain three slots and ONE
+--            Colossal draw, 5% a Rain since 2026-10-06 -- a hit makes one
+--            slot, at random, Colossal (SeedData.RainBatches) -- one Pod 3 for
+--            a thunderstorm; each pod's creature drawn when it is laid).
+--            Stamped with the event's id. Never restocked
 --            (StockAll), cleared at dusk (ClearForNight) or reset (ResetParents).
 --   layout   the pods on the grown nest platform (GameConfig.Weather.EventNest:
 --            a ring of PodRing studs, or its centre for one); the guardian

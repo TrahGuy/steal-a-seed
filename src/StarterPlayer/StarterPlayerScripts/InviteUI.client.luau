@@ -616,7 +616,18 @@ end)
 local how = MenuKit.body(page, "How", 13, CONFIG.Cream, Z + 2)
 MenuKit.keepInk(how)
 fitText(how, 14, PANEL.MinText)
-how.Text = WORDS.How
+how.Text = WORDS.Rules[1]
+-- THE RULES, ONE LINE AT A TIME (2026-10-08, the owner's brief): who counts,
+-- the four plants, the returning friend's spin -- each short enough for a
+-- phone's line (InviteRulesSpec), turning every RulesSeconds.
+task.spawn(function()
+	local at = 1
+	while how.Parent do
+		task.wait(CONFIG.RulesSeconds)
+		at = at % #WORDS.Rules + 1
+		how.Text = WORDS.Rules[at]
+	end
+end)
 
 --==============================================================================
 -- THE FORMS IN THEIR WINDOWS
@@ -745,7 +756,9 @@ local function paintCard(i: number, c: InviteRewards.Card, animate: boolean)
 	ui.rarity.Text = string.upper(c.rarity)
 	RarityFX.setText(ui.rarityFX, c.rarity, c.colour)
 	ui.income.Text = c.incomeText
-	ui.needs.Text = string.format(WORDS.Needs, c.at, InviteRewards.plural(c.at))
+	-- Its milestone -- or "owned" when the wheel gave some and which milestone
+	-- gave which is not known (InviteRewards.cards).
+	ui.needs.Text = if c.won then WORDS.Owned else string.format(WORDS.Needs, c.at, InviteRewards.plural(c.at))
 	ui.tick.Visible = earned
 	ui.claimed.Visible = earned
 	-- The rim: gold for the final form at every state; the next form's colour
@@ -772,7 +785,10 @@ local function paint(animate: boolean)
 	if type(count) ~= "number" or type(granted) ~= "number" then
 		return
 	end
-	local content = InviteRewards.content(count, granted)
+	-- The plants owned, wherever they came from (the wheel too, 2026-10-08):
+	-- the hero, NEXT and the cards name the plant each milestone really gives.
+	local owned = InviteRewards.ownedSet(player:GetAttribute(A.Owned))
+	local content = InviteRewards.content(count, granted, owned)
 	local shown = content.shown
 	if state.open and hero.form ~= shown.form then
 		buildHero(shown.form)
@@ -799,7 +815,8 @@ local function paint(animate: boolean)
 			string.format('<font color="%s">%s</font>', hex(nxt.colour), nxt.rarity), nxt.at,
 			InviteRewards.plural(nxt.at))
 	end
-	for i, c in ipairs(InviteRewards.cards(count, granted)) do
+	-- A plant won on the wheel shows EARNED on its card (2026-10-08).
+	for i, c in ipairs(InviteRewards.cards(count, granted, owned)) do
 		paintCard(i, c, animate)
 	end
 end
@@ -1032,6 +1049,7 @@ local function onNumbers()
 end
 player:GetAttributeChangedSignal(A.Count):Connect(onNumbers)
 player:GetAttributeChangedSignal(A.Granted):Connect(onNumbers)
+player:GetAttributeChangedSignal(A.Owned):Connect(onNumbers)
 player:GetAttributeChangedSignal(A.Seen):Connect(refreshBadge)
 player:GetAttributeChangedSignal(PIN):Connect(refreshBadge)
 onNumbers()

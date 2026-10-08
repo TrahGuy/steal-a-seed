@@ -230,9 +230,18 @@ local function body()
 	-- running start is something the teleport can be seen to take away.
 	a.root.AssemblyLinearVelocity = Vector3.new(0, 0, 80)
 
+	-- THE GUIDE'S TRAVEL STEP HEARS ONLY A SUCCESS (2026-10-08): what
+	-- OnTeleportedHome tells, across the move below and the refused presses after.
+	local heard = {}
+	local unhookHome = PlotService.OnTeleportedHome(function(who, plot)
+		table.insert(heard, { who = who, plot = plot })
+	end)
 	local moved, code = PlotService.TeleportHome(a)
 	check(moved == true and code == nil, "a press in the Safe Zone with a plot moves the player",
 		tostring(code))
+	check(#heard == 1 and heard[1].who == a and heard[1].plot == plotA,
+		"and the move is told once, with the player and their plot -- the guide's travel step is recorded from it",
+		#heard)
 	check(onPad(a, padA), "onto their own plot's spawn pad, spawn height up, facing the way it faces",
 		tostring(at(a)))
 	check(held.Parent == a.body and a:GetAttribute("SpecKeep") == 7 and leases[a] == plotA,
@@ -260,6 +269,8 @@ local function body()
 		end
 	end
 	check(refusedAll, "ten more presses straight away are all refused: \"Teleport recharging…\"")
+	check(#heard == 1, "and not one refused press is told to the guide's travel step", #heard)
+	unhookHome()
 	check(stayed, "and none of them moved anybody")
 
 	task.wait(PLOT.TeleportCooldownSeconds * 0.5)

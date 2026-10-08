@@ -86,7 +86,8 @@ end
 local function newPlot(id, level)
 	local model = Instance.new("Model")
 	model.Name = string.format("SpecPlot%02d", id)
-	model:SetAttribute(GameConfig.Attributes.PlotId, 900 + id)
+	-- Its real id: the id decides its shape at Levels 6-7 (GameConfig.plotLayoutFor).
+	model:SetAttribute(GameConfig.Attributes.PlotId, id)
 	model:SetAttribute(GameConfig.Attributes.OwnerUserId, 0)
 	model:SetAttribute(GameConfig.Attributes.Claimed, false)
 	model:SetAttribute("PlotCF", centres[id])
@@ -119,13 +120,16 @@ local function upgradeSignFor(id)
 	return model
 end
 
+-- Placed as MapService and TreadmillService place them: by plot (in front of
+-- plots 1-5, beside plot 6), the sign at the spot its tier and place use.
 local function millsFor(id)
-	local cf = GameConfig.millCFrameFor(gateOf(id))
+	local cf = GameConfig.millCFrameFor(gateOf(id), id)
+	local beside = GameConfig.millStandsBeside(id)
 	local mills = {}
 	for tier = 1, #MILL.Tiers do
 		local model = MillModel.Build(tier, cf, fixture)
 		model.Name = string.format("SpecMill%02d_T%02d", id, tier)
-		local sign = MillModel.BuildSign(MillModel.SignBase(cf), model)
+		local sign = MillModel.BuildSign(MillModel.SignBase(cf, tier, beside), model)
 		sign.Name = "SpecSign"
 		mills[tier] = model
 	end

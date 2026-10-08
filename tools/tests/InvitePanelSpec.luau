@@ -238,11 +238,18 @@ local ok, err = pcall(function()
 		fits("NEXT", widest(NEXTS, MIN, LOOK.LabelFont), b.nextLine.w)
 		fits("FINAL", width(WORDS.Final, MIN, LOOK.LabelFont), b.nextLine.w)
 		fits("how", width(WORDS.How, MIN, LOOK.BodyFont), b.how.w)
+		-- The rules, one line at a time under the button (2026-10-08): each must
+		-- fit the same line, on every screen listed (the phones included).
+		for i, rule in ipairs(WORDS.Rules) do
+			fits("rule " .. i, width(rule, MIN, LOOK.BodyFont), b.how.w)
+		end
 		fits("button", width(WORDS.Button, 9, LOOK.LabelFont), b.button.w - 10)
 		fits("card name", widest(NAMES, MIN, LOOK.LabelFont), c.name.w)
 		fits("card rarity", widest(RARITIES, TINY, LOOK.LabelFont), c.rarity.w)
 		fits("card income", widest(INCOMES, TINY, LOOK.BodyFont), c.income.w)
 		fits("card needs", width(string.format(WORDS.Needs, 20, WORDS.Many), TINY, LOOK.BodyFont), c.needs.w)
+		-- An owned card's line when the wheel gave some (InviteRewards.cards, 2026-10-08).
+		fits("card owned", width(WORDS.Owned, TINY, LOOK.BodyFont), c.needs.w)
 		fits("CLAIMED", width(WORDS.Claimed, TINY, LOOK.LabelFont), c.claimed.w)
 		check(#tight == 0, tag .. ": every word fits at its smallest drawn size", table.concat(tight, "; "))
 		local kind = (if b.split then "side by side" elseif b.dense then "dense" else "stacked")
@@ -313,9 +320,11 @@ local ok, err = pcall(function()
 			and has(server, "InviteService.MarkSeen(player)") and has(server, "profile.InviteSeen = true"),
 		"opening it clears the \"!\": the server's seen flag, through the save's own path")
 	local fires = select(2, code(ui):gsub("FireServer%(", ""))
-	check(fires == 1 and not has(ui, "Thresholds") and has(ui, "InviteRewards.content(count, granted)")
-			and has(ui, "InviteRewards.cards(count, granted)"),
-		"it counts and grants nothing: one call to the server (opened), every number InviteRewards' answer")
+	check(fires == 1 and not has(ui, "Thresholds") and has(ui, "InviteRewards.content(count, granted, owned)")
+			and has(ui, "InviteRewards.cards(count, granted, owned)")
+			and has(ui, "InviteRewards.ownedSet(player:GetAttribute(A.Owned))"),
+		"it counts and grants nothing: one call to the server (opened), every number InviteRewards' answer "
+			.. "(the plants owned, the wheel's included, the server's attribute)")
 	check(has(ui, 'ui.view.ImageColor3 = if c.state == "locked" then CONFIG.Silhouette else WHITE')
 			and has(ui, "gui.Parent = playerGui"),
 		"a LOCKED form is its own model as a dark silhouette; every ViewportFrame in the PlayerGui")

@@ -40,6 +40,7 @@ local TweenService = game:GetService("TweenService")
 local Shared = script.Parent
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
 local Notice = require(Shared:WaitForChild("Notice"))
+local SizedIcon = require(Shared:WaitForChild("SizedIcon"))
 local UIKit = require(Shared:WaitForChild("UIKit"))
 
 local StatusText = {}
@@ -151,10 +152,13 @@ function StatusText.icon(parent: GuiObject, kind: string, tint: Color3, size: nu
 		image.BackgroundTransparency = 1
 		image.BorderSizePixel = 0
 		image.Active = false
-		image.Image = picture
+		-- A picture with a small version (the Speed shoe) draws it at 40 px or
+		-- less: chosen at the box's size, then kept to the size it is drawn at.
+		image.Image = SizedIcon.at(picture, size)
 		image.ScaleType = Enum.ScaleType.Fit
 		image.ZIndex = 3
 		image.Parent = box
+		SizedIcon.follow(image)
 		-- The glyph goes once the picture has loaded; the picture is never
 		-- hidden (an unloaded one draws nothing, the glyph shows through).
 		UIKit.whenPictureLoads(image, function(loaded: boolean)

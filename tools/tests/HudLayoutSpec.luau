@@ -1049,6 +1049,10 @@ local FRAME_HOOKS = {
 }
 -- The two owners that draw into the shared rail layer and make no ScreenGui.
 local LAYER_ONLY = { WalkModeUI = true, RailDrawerUI = true }
+-- An owner with more than its one: TutorialUI's spotlight (2026-10-08) needs a
+-- gui with no screen insets over every button (the dim covers the notch and
+-- the topbar), and its world hand one under every HUD layer.
+local GUIS = { TutorialUI = 3 }
 local function count(text, needle)
 	local n, at = 0, 1
 	while true do
@@ -1070,9 +1074,10 @@ for name, hooks in pairs(FRAME_HOOKS) do
 	check(found == hooks, name .. " has no new per-frame hook", found)
 	check(src ~= nil and src:find('GetPropertyChangedSignal("AbsoluteSize"):Connect(', 1, true) ~= nil,
 		name .. " asks again only when a ScreenGui's size changes")
-	check(src ~= nil and count(src, 'Instance.new("ScreenGui")') == (if LAYER_ONLY[name] then 0 else 1)
+	check(src ~= nil and count(src, 'Instance.new("ScreenGui")') == (if LAYER_ONLY[name] then 0 else GUIS[name] or 1)
 			and not src:find('Instance.new("RemoteEvent")', 1, true),
-		name .. " made no second ScreenGui and no remote")
+		name .. " made no ScreenGui beyond its own (TutorialUI: its own, the spotlight's and the world hand's) "
+			.. "and no remote")
 end
 local loadout = sourceOf("LoadoutUI") or ""
 check(loadout:find("return layout.slots", 1, true) ~= nil
@@ -1254,7 +1259,7 @@ check(kit:find("function UIKit.railDock", 1, true) ~= nil
 	"the dock is one shared frame, and a re-run rail button finds its old self inside it")
 
 check(not loadout:find("HotbarRoles", 1, true) and not loadout:find("plantsOnly", 1, true)
-		and loadout:find("HotbarSlots.arrive(shownBar(), ref, activeSlots)", 1, true) ~= nil,
+		and loadout:find("HotbarSlots.arrive(shownBar(), ref, activeSlots, prof.planted)", 1, true) ~= nil,
 	"the belt is freely assigned shortcuts (2026-10-03): ten on a desktop, the first five on a phone")
 check(not loadout:find("chooser", 1, true) and not loadout:find("sideSlots", 1, true)
 		and count(loadout, "FireServer(W.EquipAction") == 1,
@@ -2514,14 +2519,16 @@ check(teleSrc:find("layout.teleport", 1, true) ~= nil
 		and not teleSrc:find("while true", 1, true),
 	"the teleport button sends its verb and nothing else, shows off the server's two flags, answers a controller, and runs no loop")
 -- The phone's smaller tutorial (owner, 2026-09-24): one number from HudLayout,
--- applied to the banner, the pointer and the celebration.
+-- applied to the banner, the pointing hand and its words (the gold pointer's
+-- successor, 2026-10-08) and the celebration.
 local tutorialSrc = sourceOf("TutorialUI") or ""
 check(tutorialSrc:find("tutorialScale = layout.tutorialScale", 1, true) ~= nil
 		and tutorialSrc:find("bannerScale.Scale = tutorialScale", 1, true) ~= nil
 		and tutorialSrc:find("layout.banner.w / tutorialScale", 1, true) ~= nil
-		and tutorialSrc:find("pointerScale.Scale = s", 1, true) ~= nil
+		and tutorialSrc:find("local size = Spot.Hand.Size * tutorialScale * k", 1, true) ~= nil
+		and tutorialSrc:find("math.floor(Spot.Words.Size * tutorialScale * k + 0.5)", 1, true) ~= nil
 		and tutorialSrc:find("{ Scale = full }", 1, true) ~= nil,
-	"TutorialUI draws the banner, the pointer and the celebration at HudLayout's tutorialScale")
+	"TutorialUI draws the banner, the hand and its words, and the celebration at HudLayout's tutorialScale")
 -- Both stand under the clock, which moves with the topbar's free span: placed
 -- again when it changes, as WorldClock is -- the stale button the owner saw.
 check(teleSrc:find('GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(place)', 1, true) ~= nil
@@ -2795,7 +2802,11 @@ do
 		{ "ObbyButtonUI", "UIKit.tenFoot(gui)" }, { "WheelUI", "UIKit.tenFoot(gui)" },
 		{ "WheelUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },
 		{ "BiomeGuideUI", "UIKit.tenFoot(gui)" }, { "BiomeGuideUI", "label.AbsoluteSize.X / UIKit.scaleOf(gui)" },
-		{ "TutorialUI", "UIKit.tenFoot(gui)" }, { "TutorialUI", "target.AbsolutePosition / k" },
+		-- TutorialUI's hand and spotlight live in a gui with NO UIScale (it has to
+		-- cover the notch, 2026-10-08): its pixel reads stay pixels, and what it
+		-- draws is multiplied by the TV scale instead.
+		{ "TutorialUI", "UIKit.tenFoot(gui)" }, { "TutorialUI", "local k = UIKit.scaleOf(gui)" },
+		{ "TutorialUI", "Spot.Hand.Size * tutorialScale * k" },
 		{ "PlantPlace", "UIKit.tenFoot(padGui)" },
 		{ "SellUI", "notice.AbsoluteSize.X / UIKit.scaleOf(gui)" },
 		{ "ShopUI", "gui.AbsoluteSize / UIKit.scaleOf(gui)" },

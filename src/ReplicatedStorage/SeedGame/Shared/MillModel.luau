@@ -1,7 +1,8 @@
 --!strict
 -- Steal a Seed :: MillModel
 --
--- The seven mills, built from parts. NOT a *Service -- no lifecycle, just
+-- The mills, built from parts: tiers 1-10 here, tiers 11-14 -- the owner's own
+-- models -- replayed by MillForms. NOT a *Service -- no lifecycle, just
 -- geometry, same as CreatureModel and ParentModel.
 --
 --==============================================================================
@@ -37,6 +38,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SeedGame = ReplicatedStorage:WaitForChild("SeedGame")
 local Shared = SeedGame:WaitForChild("Shared")
 local GameConfig = require(Shared:WaitForChild("GameConfig"))
+local MillForms = require(Shared:WaitForChild("MillForms"))
 
 local MillModel = {}
 
@@ -205,7 +207,13 @@ local DRESSING: { Dressing } = {
 	},
 }
 
-MillModel.TierCount = #DRESSING
+-- Every tier has a look: a dressing and a signature here (1-10), or one of the
+-- owner's supplied mills (11-14, MillForms).
+MillModel.TierCount = #MILL.Tiers
+for tier = 1, MillModel.TierCount do
+	assert(DRESSING[tier] ~= nil or MillForms.FormOf(tier) ~= nil,
+		string.format("MillModel: tier %d has neither a dressing nor a supplied form", tier))
+end
 
 --==============================================================================
 -- STUDS ON EVERY SIX FACES, NOT JUST THE TOP
@@ -3456,8 +3464,49 @@ local SIGNATURE: { (Signature) -> () } = {
 	infernoForge, celestialAscent, astralSingularity,
 }
 
+--==============================================================================
+-- TIERS 11-14: THE OWNER'S OWN MILLS
+--
+-- Replayed part for part by MillForms -- not restyled, rebuilt or rescaled --
+-- and built on the same chassis as every tier above: the Deck at `cf` and the
+-- PrimaryPart, the belt named Treadmill, the step at the back. So everything
+-- that finds a mill by its belt, mounts a player on it or rebuilds it at its
+-- pivot works on them unchanged. Their motion is MillFormMotion's, on each
+-- client, as their own scripts played it.
+--
+-- ATOMIC, because those clients animate them part against part from rest
+-- frames taken off the Deck, and a model that streamed in a piece at a time
+-- would be measured half-built.
+--==============================================================================
+local function buildSupplied(index: number, formId: string, cf: CFrame, parent: Instance): (Model, BasePart)
+	local spec = MILL.Tiers[index]
+	local model = Instance.new("Model")
+	model.Name = "Mill"
+	model.ModelStreamingMode = Enum.ModelStreamingMode.Atomic
+	model:SetAttribute("MillTier", index)
+	local deck: BasePart? = nil
+	local belt: BasePart? = nil
+	for _, p in ipairs(MillForms.Build(formId, cf, model)) do
+		if p.Name == "Deck" then
+			deck = p
+		elseif p.Name == PLOT.TreadmillName then
+			belt = p
+		end
+	end
+	assert(deck and belt, "MillModel: supplied form " .. formId .. " has no Deck or belt")
+	model.PrimaryPart = deck
+	model:SetAttribute("MillSpeed", spec.speed)
+	model:SetAttribute("MillName", spec.name)
+	model.Parent = parent
+	return model, belt
+end
+
 function MillModel.Build(tier: number, cf: CFrame, parent: Instance): (Model, BasePart)
-	local index = math.clamp(math.floor(tier), 1, #DRESSING)
+	local index = math.clamp(math.floor(tier), 1, MillModel.TierCount)
+	local formId = MillForms.FormOf(index)
+	if formId then
+		return buildSupplied(index, formId, cf, parent)
+	end
 	local look = DRESSING[index]
 	local currentMill = GameConfig.Mill
 	local spec = currentMill.Tiers[index] or { name = 'Tier ' .. index, speed = index * 10, cost = 0, beltStuds = 16 }
@@ -3779,6 +3828,65 @@ function MillModel.Build(tier: number, cf: CFrame, parent: Instance): (Model, Ba
 end
 
 --==============================================================================
+-- PLOT 6'S OVERHANG, SOFTENED (the owner's condition, 2026-10-06)
+--
+-- Plot 6's mill stands beside its plot (GameConfig.Mill.Place), where tiers
+-- 12-14 reach past the gate line and a stud or so into the road's empty arc.
+-- The owner allowed that on one condition: decor there may be seen but never
+-- block, bump or trap a player or a carried pod. So every part of a mill that
+-- reaches past its gate line, or into the arc, stops colliding and stops
+-- answering queries (raycasts, clicks, the camera) -- and so do the parts that
+-- touch the plot's own fence (Mill.Place.BesideTouch). The Deck, the belt and
+-- the step stay as they are: they are where a player stands.
+--
+-- Measured at rest, as the owner's models stand. What their motion moves on
+-- each client is decor that never collided to begin with.
+--
+-- `gateCF` is the plot's gate frame (GameConfig.millGateFor). Returns how many
+-- parts it softened.
+--==============================================================================
+local CORNERS = {
+	Vector3.new(-1, -1, -1), Vector3.new(-1, -1, 1), Vector3.new(-1, 1, -1), Vector3.new(-1, 1, 1),
+	Vector3.new(1, -1, -1), Vector3.new(1, -1, 1), Vector3.new(1, 1, -1), Vector3.new(1, 1, 1),
+}
+
+function MillModel.Soften(model: Model, gateCF: CFrame, tier: number): number
+	local half = math.rad(GameConfig.Map.RoadGapDegrees) * 0.5
+	local touch = MILL.Place.BesideTouch[tier]
+	local millCF = model:GetPivot()
+	local softened = 0
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") and d ~= model.PrimaryPart and d.Name ~= PLOT.TreadmillName and d.Name ~= "Step" then
+			local reaches = false
+			local h = d.Size * 0.5
+			for _, c in ipairs(CORNERS) do
+				local w = d.CFrame:PointToWorldSpace(h * c)
+				local a = math.atan2(w.X, w.Z) % (math.pi * 2)
+				if gateCF:PointToObjectSpace(w).Z < 0 or half - math.abs(a - math.pi) > 0 then
+					reaches = true
+					break
+				end
+			end
+			if not reaches and touch then
+				local at = millCF:PointToObjectSpace(d.Position)
+				for _, t in ipairs(touch) do
+					if d.Name == t.Name and (at - t.At).Magnitude < 0.05 then
+						reaches = true
+						break
+					end
+				end
+			end
+			if reaches then
+				d.CanCollide = false
+				d.CanQuery = false
+				softened += 1
+			end
+		end
+	end
+	return softened
+end
+
+--==============================================================================
 -- THE UPGRADE SIGN
 --
 -- A post and a board beside the mill, not a floating panel. The layout is the
@@ -3840,10 +3948,18 @@ end
 -- Both callers -- MapService at build time and TreadmillService on every
 -- upgrade -- go through here, so there is one place the offset is applied and
 -- no way for the two to disagree.
+--
+-- WHICH SPOT depends on where the mill stands (2026-10-06; GameConfig.Mill.Sign):
+-- FrontOffset in front of a plot, at every tier; beside a plot, Offset below
+-- BesideTallFrom and BesideTallOffset from it up. `beside` is
+-- GameConfig.millStandsBeside(plotId), so a mill with no plot is a front one.
 --==============================================================================
-function MillModel.SignBase(millCF: CFrame): CFrame
+function MillModel.SignBase(millCF: CFrame, tier: number?, beside: boolean?): CFrame
 	local SIGN = MILL.Sign
-	return millCF * CFrame.new(SIGN.Offset) * CFrame.Angles(0, math.rad(SIGN.YawDegrees), 0)
+	local offset = if not beside then SIGN.FrontOffset
+		elseif (tier or MILL.StartingTier) >= SIGN.BesideTallFrom then SIGN.BesideTallOffset
+		else SIGN.Offset
+	return millCF * CFrame.new(offset) * CFrame.Angles(0, math.rad(SIGN.YawDegrees), 0)
 end
 
 function MillModel.BuildSign(cf: CFrame, parent: Instance): (Model, SignFace)

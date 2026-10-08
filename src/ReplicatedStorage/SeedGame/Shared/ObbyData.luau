@@ -113,8 +113,8 @@ ObbyData.Actions = {
 --==============================================================================
 -- THE REWARD: SECONDS OF THE PLAYER'S OWN MILL, SNAPSHOT AT THE START
 --
--- The basis is TreadmillService.RateOf -- the mill tier, overclock and rebirth
--- product the belt pays at 1x -- read once when the run starts, so upgrading
+-- The basis is TreadmillService.RateOf -- the mill tier and rebirth product
+-- the belt pays at 1x -- read once when the run starts, so upgrading
 -- mid-run changes nothing and the Bonus Chest's training boost (which only the
 -- belt tick applies) is never in it. Paid through TreadmillService.PayReward,
 -- the one Speed faucet.
