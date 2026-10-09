@@ -1,9 +1,11 @@
 # Steal a Seed — Session Handoff
 
-## Tonight's tree goes to the owner's Publish — 2026-10-10 (CLAUDE)
+## PUBLISHED AS v1047 — 2026-10-09 16:31 UTC (00:31 on 2026-10-10, the owner's time) (CLAUDE)
 
-- The owner publishes tonight's tree themselves: the batch (aad1639, 22b9fff, 56530ea), Pod Rush's audio (8f7f7a0) and the HUD layout below. No agent publishes.
-- The published version number goes here once the other session says it is out (the Studio log's "Add publish notes to v...").
+- The owner published the tree themselves: the batch (aad1639, 22b9fff, 56530ea), Pod Rush's audio (8f7f7a0) and the HUD layout below (74dfc7e, committed 3 minutes earlier). No agent published.
+- From the Studio log `0.742.0.7421053_20261009T103233Z_Studio_A93E1_last.log`, line 55345: "Add publish notes to v1047" at 2026-10-09T16:31:14Z. The probe just before it read Studio equal to disk (336 scripts, 0 differ, 0 ZZ, test-store marker absent).
+- So rebirth, Sprout Dash, Pod Rush, the Pod Guide, the owner's 25 pods, hatching in the Bag and the new HUD are LIVE from v1047. The previous publish was v1038 (2026-10-08).
+- Studio updated afterwards (0.742.0 to 0.742.590, 2026-10-09 23:25 UTC). This Claude Code's Studio MCP connection then failed ("Server's protocol version is not supported: 2026-07-28").
 
 ## THE HUD LAYOUT: THE PHONE'S PANEL AS A ROW WITH INDEX, GARDEN AND THE BAG UNDER IT; THE DESKTOP'S THREE AT THE RIGHT EDGE — DONE 2026-10-09 (CLAUDE)  (COMMITTED ON wip, ITS OWN COMMIT; NOT PUBLISHED BY AN AGENT -- THE OWNER PUBLISHES TONIGHT'S TREE; HudLayoutSpec 1458/0, InviteHudSpec 416/0, InvitePanelSpec 395/0, RebirthCelebrationSpec 76/0 AND 22 NEIGHBOURING SPECS GREEN; FULL SUITE 132 OF 132 RUN ONCE, ITS TWO FAILURES (THE LAYOUT'S KNOCK-ONS) FIXED AND THOSE SPECS RERUN; NO MUTANTS (THE OWNER'S LEAN RULES); TWO GUARDED PLAYS, CLEARED (probe 336 / 0 differ / 0 ZZ / marker absent): THE PHONE (705 x 338) ON `SeedTest_layout_20261009`, THE DESKTOP (1148 x 716, AND A FORCED PHONE LOOK) ON `SeedTest_layout2_20261009`)
 
